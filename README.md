@@ -1,9 +1,9 @@
 # Colony Sim
 
 *Working title.* A top-down colony simulation game written in C17 with
-[SDL3](https://libsdl.org): guide a small group of settlers, manage their needs
-and moods, gather resources, build a base and survive whatever the world throws
-at them.
+[SDL3](https://libsdl.org): guide a small group of settlers from the stone age
+onwards, manage their needs and moods, gather resources, build a base and
+survive whatever the world throws at them.
 
 > **Status: pre-alpha (milestone M1, colonists).** A procedurally generated
 > map, a day/night cycle, and a small group of colonists who wander, eat

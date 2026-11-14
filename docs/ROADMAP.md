@@ -29,43 +29,58 @@ Tick items as they land and add newly discovered tasks.
 
 ## M2: Work (next)
 
+- [ ] Thirst: drink from shallow water or a lake shore
 - [ ] Designations: chop trees, mine rock, harvest plants
-- [ ] Job system with reservations
+- [ ] Job system with reservations (including food: two colonists no longer walk to the same bush)
 - [ ] Items on the ground (wood, stone, food), stacking
-- [ ] Food reservations (two colonists no longer walk to the same bush)
 - [ ] Hauling and stockpile zones with filters
 - [ ] Work priorities grid UI
 
 ## M3: Building
 
 - [ ] Blueprints, construction jobs, materials
-- [ ] Walls, doors, floors; furniture (bed, table, storage)
+- [ ] Walls, doors, floors; furniture (bed, storage) in stone age materials
 - [ ] Room detection, roofs
 - [ ] UI framework: buttons, panels, tooltips (all translatable, layout adapts to text length)
 
 ## M4: Survival
 
-- [ ] Seasons affect temperature and plant growth
-- [ ] Temperature simulation (outdoor, rooms)
-- [ ] Farming zones, sowing and harvesting
-- [ ] Cooking, meals, spoilage
+- [ ] Fire: campfires, light and heat, fuel
+- [ ] Temperature simulation per tile: diffusion, wall insulation, doors, caves
+- [ ] Seasons affect temperature and plant growth; weather
+- [ ] Bladder and bowel needs, hygiene, latrines
+- [ ] Containers (buckets) and roles: water carrier filling buckets near dwellings
+- [ ] Gathering, cooking on fire, spoilage
 - [ ] Mood system with modifiers, mental breaks
 
-## M5: Events and danger
+## M5: Vision and exploration
+
+- [ ] Field of view per settler, walls block sight, peeking around corners
+- [ ] Fog of war: unexplored map hidden, explored areas shown as last seen
+- [ ] Wildlife, hunting
+
+## M6: Danger
 
 - [ ] Event director
-- [ ] Wildlife, hunting, animal attacks
-- [ ] Health: injuries, treatment, disease; consequences of starvation and exhaustion
-- [ ] Combat basics, raids
+- [ ] Health: injuries, treatment, disease; consequences of hunger, thirst and exhaustion
+- [ ] Combat basics (line of sight, cover), raids, animal attacks
 
-## M6: Persistence and polish
+## M7: Persistence and polish
 
 - [ ] Save/load (versioned), autosave
 - [ ] Settings menu (language, resolution, volume, key bindings) persisted in the user preferences folder
 - [ ] Main menu, new game options (seed, map size, difficulty)
 - [ ] Sound and music
-- [ ] Sprites/texture atlas instead of colored tiles
+- [ ] Pixel art sprites (64 × 64 tiles) and texture atlas instead of colored tiles, with mipmaps for zoomed-out views
 - [ ] Data-driven definitions (terrain, plants, items) + mod loading
+
+## Later
+
+- [ ] Social life: relationships, sexual needs (abstract representation)
+- [ ] Skills and traits
+- [ ] Era progression system; bronze age, then the following eras
+- [ ] Pregnancy, children, aging
+- [ ] Religion, spirituality levels, "inner peace" ending; other endings
 
 ## Technical backlog
 
