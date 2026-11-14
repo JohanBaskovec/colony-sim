@@ -93,8 +93,10 @@ static void shrink_bounds(Stockpiles *stockpiles, int index)
     }
 }
 
-int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
-                     int y1)
+/* Adds the free, coverable tiles of a rectangle that `blocked` (a layer the
+ * size of the map, may be NULL) leaves open. */
+static int extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
+                  int y1, const uint8_t *blocked)
 {
     if (!is_valid(stockpiles, index)) {
         return 0;
@@ -104,8 +106,10 @@ int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, 
     int added = 0;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y)];
-            if (*zone == 0 && stockpile_can_cover(map, x, y)) {
+            size_t i = index_of(stockpiles, x, y);
+            uint8_t *zone = &stockpiles->zone[i];
+            if (*zone == 0 && (blocked == NULL || blocked[i] == 0) &&
+                stockpile_can_cover(map, x, y)) {
                 *zone = (uint8_t)(index + 1);
                 added++;
                 grow_bounds(&stockpiles->list[index], x, y);
@@ -119,7 +123,14 @@ int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, 
     return added;
 }
 
-int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1)
+int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
+                     int y1)
+{
+    return extend(stockpiles, map, index, x0, y0, x1, y1, NULL);
+}
+
+static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
+                  const uint8_t *blocked)
 {
     int index = STOCKPILE_NONE;
     for (int i = 0; i < STOCKPILE_MAX; i++) {
@@ -139,13 +150,18 @@ int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int
                              .hit_points = {0, 100},
                              .priority = STOCKPILE_PRIORITY_DEFAULT};
     clear_bounds(stockpile);
-    if (stockpile_extend(stockpiles, map, index, x0, y0, x1, y1) == 0) {
+    if (extend(stockpiles, map, index, x0, y0, x1, y1, blocked) == 0) {
         stockpile->used = false;
         return STOCKPILE_NONE;
     }
     stockpiles->used_count++;
     stockpiles->next_number++;
     return index;
+}
+
+int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1)
+{
+    return create(stockpiles, map, x0, y0, x1, y1, NULL);
 }
 
 /* Moves every tile of `from` to `into` and deletes `from`. */
@@ -171,7 +187,7 @@ static void merge(Stockpiles *stockpiles, int into, int from)
 }
 
 int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
-                        int preferred)
+                        int preferred, const uint8_t *blocked)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(stockpiles, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
@@ -192,14 +208,14 @@ int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, 
         }
     }
     if (into == STOCKPILE_NONE) {
-        return stockpile_create(stockpiles, map, x0, y0, x1, y1);
+        return create(stockpiles, map, x0, y0, x1, y1, blocked);
     }
     for (int zone = 0; zone < STOCKPILE_MAX; zone++) {
         if (overlapped[zone] && zone != into) {
             merge(stockpiles, into, zone);
         }
     }
-    stockpile_extend(stockpiles, map, into, x0, y0, x1, y1);
+    extend(stockpiles, map, into, x0, y0, x1, y1, blocked);
     return into;
 }
 

@@ -3,6 +3,8 @@
 
 #include "test_framework.h"
 
+#include <stdlib.h>
+
 /* 16 x 16 soil map with water at x = 0 and a rock wall at (5, 5). */
 static bool init_world(Map *map, Stockpiles *stockpiles)
 {
@@ -305,15 +307,15 @@ static void test_overlapping_rectangle_merges_stockpiles(void)
     Stockpiles s;
     REQUIRE(init_world(&map, &s));
     /* Nothing there: a new stockpile. */
-    int a = stockpiles_add_rect(&s, &map, 1, 1, 3, 3, STOCKPILE_NONE);
+    int a = stockpiles_add_rect(&s, &map, 1, 1, 3, 3, STOCKPILE_NONE, NULL);
     REQUIRE(a != STOCKPILE_NONE);
-    int b = stockpiles_add_rect(&s, &map, 8, 1, 10, 3, STOCKPILE_NONE);
+    int b = stockpiles_add_rect(&s, &map, 8, 1, 10, 3, STOCKPILE_NONE, NULL);
     REQUIRE(b != STOCKPILE_NONE && b != a);
     stockpile_set_priority(&s, b, 2);
     CHECK_EQ_INT(s.used_count, 2);
 
     /* Over both: one stockpile, the oldest, with every tile. */
-    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 3, 2, 8, 2, STOCKPILE_NONE), a);
+    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 3, 2, 8, 2, STOCKPILE_NONE, NULL), a);
     CHECK_EQ_INT(s.used_count, 1);
     CHECK(stockpile_get(&s, b) == NULL);
     const Stockpile *merged = stockpile_get(&s, a);
@@ -324,19 +326,44 @@ static void test_overlapping_rectangle_merges_stockpiles(void)
     CHECK_EQ_INT(merged->max_x, 10);
 
     /* The selected stockpile wins over an older one and keeps its settings. */
-    int c = stockpiles_add_rect(&s, &map, 1, 10, 2, 11, STOCKPILE_NONE);
+    int c = stockpiles_add_rect(&s, &map, 1, 10, 2, 11, STOCKPILE_NONE, NULL);
     REQUIRE(c != STOCKPILE_NONE);
     stockpile_set_priority(&s, c, 9);
-    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 2, 3, 2, 10, c), c);
+    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 2, 3, 2, 10, c, NULL), c);
     CHECK(stockpile_get(&s, a) == NULL);
     CHECK_EQ_INT(stockpile_get(&s, c)->priority, 9);
     CHECK_EQ_INT(stockpile_get(&s, c)->cell_count, 22 + 4 + 6);
     CHECK_EQ_INT(stockpile_at(&s, 9, 2), c);
 
     /* Away from any stockpile, the selected one grows (it is not touched otherwise). */
-    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 13, 13, 13, 13, c), c);
+    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 13, 13, 13, 13, c, NULL), c);
     CHECK_EQ_INT(stockpile_at(&s, 13, 13), c);
     CHECK_EQ_INT(s.used_count, 1);
+    free_world(&map, &s);
+}
+
+static void test_blocked_tiles_are_left_out(void)
+{
+    Map map;
+    Stockpiles s;
+    REQUIRE(init_world(&map, &s));
+    uint8_t *blocked = calloc(map_tile_count(&map), 1);
+    REQUIRE(blocked != NULL);
+    for (int x = 1; x <= 4; x++) {
+        blocked[map_index(&map, x, 2)] = 1;
+    }
+    int a = stockpiles_add_rect(&s, &map, 1, 1, 4, 3, STOCKPILE_NONE, blocked);
+    REQUIRE(a != STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_get(&s, a)->cell_count, 8);
+    CHECK_EQ_INT(stockpile_at(&s, 2, 2), STOCKPILE_NONE);
+    /* Only blocked tiles: nothing is created. */
+    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 2, 2, 3, 2, STOCKPILE_NONE, blocked),
+                 STOCKPILE_NONE);
+    CHECK_EQ_INT(s.used_count, 1);
+    /* Without the layer, they can be covered (here by the selected stockpile). */
+    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 2, 2, 3, 2, a, NULL), a);
+    CHECK_EQ_INT(stockpile_get(&s, a)->cell_count, 10);
+    free(blocked);
     free_world(&map, &s);
 }
 
@@ -351,5 +378,6 @@ int main(void)
     RUN_TEST(test_list_full);
     RUN_TEST(test_hash);
     RUN_TEST(test_overlapping_rectangle_merges_stockpiles);
+    RUN_TEST(test_blocked_tiles_are_left_out);
     return test_summary();
 }

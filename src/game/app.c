@@ -579,8 +579,8 @@ static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
         stockpiles_remove_rect(stockpiles, x0, y0, x1, y1);
         prune_stockpile_selection(app);
     } else {
-        select_stockpile(app, stockpiles_add_rect(stockpiles, &app->game.map, x0, y0, x1, y1,
-                                                  app->selected_stockpile));
+        select_stockpile(app, game_add_stockpile_rect(&app->game, x0, y0, x1, y1,
+                                                      app->selected_stockpile));
     }
 }
 
@@ -594,8 +594,8 @@ static void apply_gather_tool(App *app, float screen_x, float screen_y)
         gather_zones_remove_rect(zones, x0, y0, x1, y1);
         prune_gather_zone_selection(app);
     } else {
-        select_gather_zone(app, gather_zones_add_rect(zones, &app->game.map, x0, y0, x1, y1,
-                                                      app->selected_gather_zone));
+        select_gather_zone(app, game_add_gather_zone_rect(&app->game, x0, y0, x1, y1,
+                                                          app->selected_gather_zone));
     }
 }
 

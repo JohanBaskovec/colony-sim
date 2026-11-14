@@ -180,8 +180,10 @@ static void clip_rect(const GatherZones *zones, int x0, int y0, int x1, int y1, 
     *max_y = clampi(y0 < y1 ? y1 : y0, 0, zones->height - 1);
 }
 
-int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
-                       int y1)
+/* Adds the free tiles of a rectangle a zone may cover and that `blocked` (a
+ * layer the size of the map, may be NULL) leaves open. */
+static int extend(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1, int y1,
+                  const uint8_t *blocked)
 {
     if (!is_valid(zones, index)) {
         return 0;
@@ -192,7 +194,8 @@ int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, in
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
             size_t i = index_of(zones, x, y);
-            if (zones->zone[i] == 0 && gather_zone_can_cover(map, x, y)) {
+            if (zones->zone[i] == 0 && (blocked == NULL || blocked[i] == 0) &&
+                gather_zone_can_cover(map, x, y)) {
                 zones->zone[i] = (uint8_t)(index + 1);
                 clear_progress(zones, i);
                 added++;
@@ -206,7 +209,14 @@ int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, in
     return added;
 }
 
-int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1)
+int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
+                       int y1)
+{
+    return extend(zones, map, index, x0, y0, x1, y1, NULL);
+}
+
+static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
+                  const uint8_t *blocked)
 {
     int index = GATHER_ZONE_NONE;
     for (int i = 0; i < GATHER_ZONE_MAX; i++) {
@@ -225,7 +235,7 @@ int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x
                                         .mode = GATHER_UNTIL,
                                         .target = GATHER_TARGET_DEFAULT};
     }
-    if (gather_zone_extend(zones, map, index, x0, y0, x1, y1) == 0) {
+    if (extend(zones, map, index, x0, y0, x1, y1, blocked) == 0) {
         zone->used = false;
         return GATHER_ZONE_NONE;
     }
@@ -234,8 +244,13 @@ int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x
     return index;
 }
 
+int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1)
+{
+    return create(zones, map, x0, y0, x1, y1, NULL);
+}
+
 int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
-                          int preferred)
+                          int preferred, const uint8_t *blocked)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(zones, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
@@ -255,7 +270,7 @@ int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, in
         }
     }
     if (into == GATHER_ZONE_NONE) {
-        return gather_zone_create(zones, map, x0, y0, x1, y1);
+        return create(zones, map, x0, y0, x1, y1, blocked);
     }
     bool merged = false;
     size_t count = (size_t)zones->width * (size_t)zones->height;
@@ -276,7 +291,7 @@ int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, in
     if (merged) {
         changed(zones);
     }
-    gather_zone_extend(zones, map, into, x0, y0, x1, y1);
+    extend(zones, map, into, x0, y0, x1, y1, blocked);
     return into;
 }
 

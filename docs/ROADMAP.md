@@ -60,7 +60,8 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Bills: worker level filter (minimum/maximum knowledge level), ingredient search radius, pausing a bill; "until N in stock" counting only stored items, once hauling keeps up
 - [ ] Workstations and blueprints on plants: clear the plant first (today a station may be placed on a bush or grass)
 - [x] Zone editing: a rectangle over zones of the same kind merges them (the selected one, else the oldest, keeps its settings); removal tools in the build menu take tiles out of zones (Shift+drag still works)
-- [ ] Gathering zones: forbid tiles under stockpiles and workstations, or decide how they mix; a zone priority; show the job under way when hovering a tile
+- [x] Zones of different kinds never overlap: a gathering zone drawn over a stockpile (or the other way round) leaves its tiles out
+- [ ] Gathering zones: forbid tiles under workstations, or decide how they mix; a zone priority; show the job under way when hovering a tile
 - [ ] Tools (next): speed factors on orders and recipes, grade factor, wear and breaking (a cobble used as a hammer does not wear yet: cobbles are not damageable); swapping for a better tool; the detour in job search
 - [ ] Starting settlers get 1 to 30 points in a few related knowledges (once non-starting knowledges exist)
 - [x] Construction sites: blueprints of structures with several materials, builders fetching each material and working from a neighboring tile, cancelling gives the materials back, a *take apart* order (half the materials back)

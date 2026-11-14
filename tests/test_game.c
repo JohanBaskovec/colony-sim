@@ -335,6 +335,47 @@ static void test_plant_stocks_grow_back(void)
     game_shutdown(&game);
 }
 
+static void test_zones_of_different_kinds_never_overlap(void)
+{
+    Game game;
+    REQUIRE(init_small_game(&game, 4));
+    for (int y = 10; y <= 20; y++) {
+        for (int x = 10; x <= 20; x++) {
+            map_set_rock(&game.map, x, y, ROCK_NONE);
+            map_set_terrain(&game.map, x, y, TERRAIN_SOIL);
+        }
+    }
+    int pile = game_add_stockpile_rect(&game, 10, 10, 12, 12, STOCKPILE_NONE);
+    REQUIRE(pile != STOCKPILE_NONE);
+
+    /* A gathering zone drawn over the stockpile gets the other tiles only. */
+    int zone = game_add_gather_zone_rect(&game, 11, 11, 14, 14, GATHER_ZONE_NONE);
+    REQUIRE(zone != GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_get(&game.gather_zones, zone)->cell_count, 16 - 4);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 12, 12), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 12), zone);
+
+    /* And the other way round: the stockpile grows around the zone. */
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 12, 10, 16, 10, pile), pile);
+    CHECK_EQ_INT(stockpile_get(&game.stockpiles, pile)->cell_count, 9 + 4);
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 13, 13, 14, 14, STOCKPILE_NONE), STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 13, 13), STOCKPILE_NONE);
+
+    /* Merging zones of the same kind still works across the other kind. */
+    int other = game_add_gather_zone_rect(&game, 18, 18, 19, 19, GATHER_ZONE_NONE);
+    REQUIRE(other != GATHER_ZONE_NONE);
+    CHECK_EQ_INT(game_add_gather_zone_rect(&game, 13, 10, 18, 18, GATHER_ZONE_NONE), zone);
+    CHECK_EQ_INT(game.gather_zones.used_count, 1);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 10), GATHER_ZONE_NONE); /* Stockpile. */
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 17, 17), zone);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 19, 19), zone);
+
+    for (size_t i = 0; i < map_tile_count(&game.map); i++) {
+        CHECK(game.stockpiles.zone[i] == 0 || game.gather_zones.zone[i] == 0);
+    }
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_and_shutdown);
@@ -349,5 +390,6 @@ int main(void)
     RUN_TEST(test_hash_covers_knowledge_and_carried_condition);
     RUN_TEST(test_fresh_grass_dries_on_the_ground);
     RUN_TEST(test_plant_stocks_grow_back);
+    RUN_TEST(test_zones_of_different_kinds_never_overlap);
     return test_summary();
 }

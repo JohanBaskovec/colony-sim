@@ -579,8 +579,8 @@ static void test_overlapping_rectangle_merges_zones(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, GATHER_ZONE_NONE);
-    int b = gather_zones_add_rect(&zones, &map, 6, 0, 8, 2, GATHER_ZONE_NONE);
+    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, GATHER_ZONE_NONE, NULL);
+    int b = gather_zones_add_rect(&zones, &map, 6, 0, 8, 2, GATHER_ZONE_NONE, NULL);
     REQUIRE(a != GATHER_ZONE_NONE && b != GATHER_ZONE_NONE && a != b);
     order(&zones, &items, a, GATHER_TWIGS, GATHER_FOREVER);
     order(&zones, &items, b, GATHER_COBBLES, GATHER_FOREVER);
@@ -589,7 +589,7 @@ static void test_overlapping_rectangle_merges_zones(void)
                                 NULL));
 
     /* Over both: the oldest takes everything, with its orders. */
-    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 2, 1, 6, 1, GATHER_ZONE_NONE), a);
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 2, 1, 6, 1, GATHER_ZONE_NONE, NULL), a);
     CHECK_EQ_INT(zones.used_count, 1);
     CHECK(gather_zone_get(&zones, b) == NULL);
     const GatherZone *merged = gather_zone_get(&zones, a);
@@ -601,13 +601,33 @@ static void test_overlapping_rectangle_merges_zones(void)
     CHECK_NEAR(zones.progress[map_index(&map, 7, 1)], 100.0, 1e-4); /* Kept. */
 
     /* The selected zone wins and keeps its orders. */
-    int c = gather_zones_add_rect(&zones, &map, 0, 12, 1, 13, GATHER_ZONE_NONE);
+    int c = gather_zones_add_rect(&zones, &map, 0, 12, 1, 13, GATHER_ZONE_NONE, NULL);
     REQUIRE(c != GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 2, 1, 12, c), c);
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 2, 1, 12, c, NULL), c);
     CHECK(gather_zone_get(&zones, a) == NULL);
     CHECK(!gather_zone_get(&zones, c)->orders[GATHER_TWIGS].enabled);
     CHECK_EQ_INT(gather_zone_get(&zones, c)->cell_count, 21 + 4 + 9);
     CHECK_EQ_INT(zones.used_count, 1);
+    free_world(&map, &zones, &items);
+}
+
+static void test_blocked_tiles_are_left_out(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    uint8_t *blocked = calloc(map_tile_count(&map), 1);
+    REQUIRE(blocked != NULL);
+    blocked[map_index(&map, 1, 1)] = 3;
+    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, GATHER_ZONE_NONE, blocked);
+    REQUIRE(a != GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_get(&zones, a)->cell_count, 8);
+    CHECK_EQ_INT(gather_zone_at(&zones, 1, 1), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 1, 1, 1, GATHER_ZONE_NONE, blocked),
+                 GATHER_ZONE_NONE);
+    CHECK_EQ_INT(zones.used_count, 1);
+    free(blocked);
     free_world(&map, &zones, &items);
 }
 
@@ -631,5 +651,6 @@ int main(void)
     RUN_TEST(test_plants_growing_wake_settlers);
     RUN_TEST(test_hash);
     RUN_TEST(test_overlapping_rectangle_merges_zones);
+    RUN_TEST(test_blocked_tiles_are_left_out);
     return test_summary();
 }

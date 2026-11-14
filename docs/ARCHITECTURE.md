@@ -220,7 +220,11 @@ The zone tools (stockpiles and gathering zones alike) add a dragged rectangle
 with `stockpiles_add_rect()` / `gather_zones_add_rect()`: the selected zone and
 every zone of the same kind the rectangle overlaps are merged into one, which
 keeps the settings of the selected zone, else of the oldest; work under way on
-gathering tiles is kept. With no zone involved, a new one is created. Tiles
+gathering tiles is kept. With no zone involved, a new one is created. Zones of
+different kinds never overlap: the tools go through `game_add_stockpile_rect()`
+/ `game_add_gather_zone_rect()`, which pass the other kind's tile layer as a
+`blocked` layer, so its tiles are left out (the low-level `*_create()` /
+`*_extend()` do not check, for tests and benchmark scenarios). Tiles
 are taken out of zones with Shift+drag or the removal tools of the build menu;
 a zone that keeps some tiles stays, even in several pieces.
 

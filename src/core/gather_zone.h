@@ -171,11 +171,13 @@ int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, in
  * overlaps become one zone, which gets the free tiles of the rectangle it may
  * cover. The merged zone keeps the orders of `preferred`, else of the oldest
  * one; work under way on its tiles is kept. With no zone involved, a new one
- * is created. Returns the zone's index, or GATHER_ZONE_NONE when nothing could
- * be added.
+ * is created. Tiles where `blocked` (a layer the size of the map, or NULL) is
+ * not 0 are left out: the game passes the other kinds of zones, which may not
+ * overlap. Returns the zone's index, or GATHER_ZONE_NONE when nothing could be
+ * added.
  */
 int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
-                          int preferred);
+                          int preferred, const uint8_t *blocked);
 
 /* Removes every tile of a rectangle from its zone; zones left without tiles
  * are deleted. Returns the number of tiles removed. */

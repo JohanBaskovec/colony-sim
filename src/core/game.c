@@ -609,6 +609,20 @@ int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationT
     return designations_set_rect(&game->designations, &game->map, x0, y0, x1, y1, type);
 }
 
+/* ---- Zones --------------------------------------------------------------- */
+
+int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int preferred)
+{
+    return stockpiles_add_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, preferred,
+                               game->gather_zones.zone);
+}
+
+int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int preferred)
+{
+    return gather_zones_add_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, preferred,
+                                 game->stockpiles.zone);
+}
+
 /* ---- Picking ------------------------------------------------------------- */
 
 EntityId game_colonist_at(const Game *game, float world_x, float world_y)
