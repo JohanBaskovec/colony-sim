@@ -147,6 +147,102 @@ static void test_builder_brings_materials_and_builds_a_wall(void)
     game_shutdown(&game);
 }
 
+/* Only one kind of work: the others disabled. */
+static void only_work(Colonist *colonist, WorkType type)
+{
+    for (int t = 0; t < WORK_TYPE_COUNT; t++) {
+        colonist_set_work_priority(colonist, (WorkType)t,
+                                   t == (int)type ? WORK_PRIORITY_HIGHEST
+                                                  : WORK_PRIORITY_DISABLED);
+    }
+}
+
+static int promised(const Game *game, int index)
+{
+    const ConstructionSite *site = construction_get(&game->constructions, index);
+    return site != NULL ? site->promised[0] + site->promised[1] : -1;
+}
+
+/* Haulers bring the materials; a builder only has the work left. */
+static void test_haulers_bring_materials(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *hauler = spawn_rested(&game, 10, 10);
+    REQUIRE(hauler != NULL);
+    only_work(hauler, WORK_HAULING);
+    items_add(&game.items, 12, 10, item_stack_pristine(ITEM_BRANCHES, 6));
+    items_add(&game.items, 14, 10, item_stack_pristine(ITEM_GRASS, 30));
+    int index = game_place_structure(&game, STRUCTURE_WALL, 10, 14, DIRECTION_SOUTH);
+    REQUIRE(index != CONSTRUCTION_NONE);
+
+    game_tick(&game);
+    CHECK_EQ_INT(hauler->task, TASK_SUPPLY);
+    CHECK(promised(&game, index) > 0);
+    const ConstructionSite *site = construction_get(&game.constructions, index);
+    for (int i = 0; i < 4 * TICKS_PER_HOUR && !construction_materials_complete(site); i++) {
+        game_tick(&game);
+    }
+    CHECK(construction_materials_complete(site));
+    run_ticks(&game, 10);
+    CHECK(hauler->task != TASK_SUPPLY);
+    CHECK_EQ_INT(promised(&game, index), 0);
+    /* Exactly what the wall needs, and it is not built without a builder. */
+    CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 1);
+    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 6);
+    CHECK_EQ_INT(map_structure(&game.map, 10, 14), STRUCTURE_NONE);
+
+    Colonist *builder = spawn_rested(&game, 20, 20);
+    REQUIRE(builder != NULL);
+    only_work(builder, WORK_CONSTRUCTION);
+    CHECK(run_until_built(&game, 10, 14, 4 * TICKS_PER_HOUR));
+    game_shutdown(&game);
+}
+
+/* Two haulers share the work: nobody goes for what another brings, and
+ * promises are given up with the task. */
+static void test_haulers_share_a_site(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *first = spawn_rested(&game, 10, 10);
+    Colonist *second = spawn_rested(&game, 10, 11);
+    REQUIRE(first != NULL && second != NULL);
+    only_work(first, WORK_HAULING);
+    only_work(second, WORK_HAULING);
+    /* Two stacks of branches: the second hauler could fetch the other one. */
+    items_add(&game.items, 12, 10, item_stack_pristine(ITEM_BRANCHES, 3));
+    items_add(&game.items, 11, 12, item_stack_pristine(ITEM_BRANCHES, 3));
+    items_add(&game.items, 14, 10, item_stack_pristine(ITEM_GRASS, 30));
+    int index = game_place_structure(&game, STRUCTURE_WALL, 10, 14, DIRECTION_SOUTH);
+    REQUIRE(index != CONSTRUCTION_NONE);
+
+    game_tick(&game);
+    const ConstructionSite *site = construction_get(&game.constructions, index);
+    CHECK_EQ_INT(first->task, TASK_SUPPLY);
+    CHECK_EQ_INT(second->task, TASK_SUPPLY);
+    CHECK(first->supply_slot != second->supply_slot); /* Branches and grass. */
+    CHECK_EQ_INT(site->promised[0], 5);
+    CHECK(site->promised[1] > 0 && site->promised[1] <= 24);
+
+    /* The one bringing branches stops hauling: its promise is released. */
+    Colonist *branches = first->supply_slot == 0 ? first : second;
+    colonist_set_work_priority(branches, WORK_HAULING, WORK_PRIORITY_DISABLED);
+    for (int i = 0; i < 200 && branches->task == TASK_SUPPLY; i++) {
+        game_tick(&game); /* Noticed on the next tile. */
+    }
+    CHECK(branches->task != TASK_SUPPLY);
+    CHECK_EQ_INT(site->promised[0], 0);
+    colonist_set_work_priority(branches, WORK_HAULING, WORK_PRIORITY_HIGHEST);
+    for (int i = 0; i < 4 * TICKS_PER_HOUR && !construction_materials_complete(site); i++) {
+        game_tick(&game);
+    }
+    CHECK(construction_materials_complete(site));
+    CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 1);
+    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 6);
+    game_shutdown(&game);
+}
+
 static void test_a_bush_is_cleared_before_building(void)
 {
     Game game;
@@ -464,6 +560,8 @@ int main(void)
     RUN_TEST(test_placing);
     RUN_TEST(test_cancelling_gives_materials_back);
     RUN_TEST(test_builder_brings_materials_and_builds_a_wall);
+    RUN_TEST(test_haulers_bring_materials);
+    RUN_TEST(test_haulers_share_a_site);
     RUN_TEST(test_a_bush_is_cleared_before_building);
     RUN_TEST(test_no_building_without_materials_or_knowledge);
     RUN_TEST(test_colonist_steps_out_of_a_new_wall);

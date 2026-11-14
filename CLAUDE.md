@@ -41,7 +41,7 @@ cmake --preset debug && cmake --build --preset debug && ctest --preset debug    
 ctest --preset debug -R i18n          # only one test (regex on the test name)
 ctest --preset debug -L i18n          # translation checks only (label)
 ./build/headless/bench/bench_pathfinding 200 2000   # benchmark (use an optimized build for real numbers)
-./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times + state hash
+./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times + state hash (3: construction)
 python3 tools/generate_sprites.py --preview /tmp/sheet.png  # redraw assets/sprites/*.png (Pillow + numpy)
 ```
 

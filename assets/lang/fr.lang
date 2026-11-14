@@ -185,6 +185,7 @@ colonist.task.cut_grass = Coupe de l’herbe
 colonist.task.build = Construit un poste de travail
 colonist.task.craft = Fabrique
 colonist.task.construct = Construit
+colonist.task.supply = Apporte des matériaux
 colonist.task.clean = Nettoie
 colonist.task.haul = Transport
 

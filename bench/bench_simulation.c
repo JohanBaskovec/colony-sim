@@ -9,7 +9,11 @@
  * berries gathered, forever), a zone gathering stones forever next to the
  * colony, two stockpiles (work, hauling, and many jobs that cannot be reached);
  * 2 = only jobs that nobody can reach: a zone gathering the branches of the
- * trees growing where the colonists cannot walk to (other islands).
+ * trees growing where the colonists cannot walk to (other islands);
+ * 3 = construction: an enclosure of grass walls with a branch screen and
+ * beds inside, planned next to the colony, with a gathering zone around it
+ * (grass, branches, twigs) and a stockpile: gathering, drying, hauling to the
+ * sites, building, sleeping in the beds and refreshing them.
  */
 #include "core/game.h"
 
@@ -100,7 +104,27 @@ int main(int argc, char **argv)
             }
         }
     }
+    if (scenario == 3) {
+        const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
+        if (first != NULL) {
+            int x = first->x, y = first->y;
+            stockpile_create(&game.stockpiles, &game.map, x - 8, y - 3, x - 3, y + 3);
+            int land = gather_zone_create(&game.gather_zones, &game.map, x - 30, y - 30, x + 30,
+                                          y + 30);
+            gather_forever(&game, land, GATHER_GRASS);
+            gather_forever(&game, land, GATHER_BRANCHES);
+            gather_forever(&game, land, GATHER_TWIGS);
+            /* The screen first, then the walls around it (7 × 6 tiles), then
+             * two rows of beds inside. */
+            game_place_structure(&game, STRUCTURE_DOOR, x + 7, y + 3, DIRECTION_SOUTH);
+            game_place_structure_rect(&game, STRUCTURE_WALL, DIRECTION_SOUTH, x + 4, y - 2,
+                                      x + 10, y + 3);
+            game_place_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_EAST, x + 5, y - 1,
+                                      x + 8, y + 1);
+        }
+    }
     int orders = zone_tiles(&game);
+    int sites = game.constructions.used_count;
 
     long ticks = (long)days * TICKS_PER_DAY;
     long slow_ticks = 0; /* Ticks over one millisecond. */
@@ -130,6 +154,9 @@ int main(int argc, char **argv)
         }
     }
     printf("\n");
+    printf("  construction sites %d planned, %d left; structure tiles %d\n", sites,
+           game.constructions.used_count,
+           (int)map_tile_count(&game.map) - game.map.structure_counts[STRUCTURE_NONE]);
     printf("  state hash %016llx\n", (unsigned long long)game_hash(&game));
 
     game_shutdown(&game);

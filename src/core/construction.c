@@ -228,6 +228,40 @@ int construction_missing(const ConstructionSite *site, int slot)
     return missing > 0 ? missing : 0;
 }
 
+int construction_unpromised(const ConstructionSite *site, int slot)
+{
+    if (slot < 0 || slot >= STRUCTURE_MATERIAL_SLOTS) {
+        return 0;
+    }
+    int left = construction_missing(site, slot) - (int)site->promised[slot];
+    return left > 0 ? left : 0;
+}
+
+int construction_promise(Constructions *constructions, int index, int slot, int count)
+{
+    ConstructionSite *site = site_get(constructions, index);
+    if (site == NULL || slot < 0 || slot >= STRUCTURE_MATERIAL_SLOTS || count <= 0) {
+        return 0;
+    }
+    int left = construction_unpromised(site, slot);
+    int promised = count < left ? count : left;
+    site->promised[slot] = (uint16_t)(site->promised[slot] + promised);
+    return promised;
+}
+
+void construction_release_promise(Constructions *constructions, int index, int number, int slot,
+                                  int count)
+{
+    ConstructionSite *site = site_get(constructions, index);
+    if (site == NULL || site->number != number || slot < 0 || slot >= STRUCTURE_MATERIAL_SLOTS ||
+        count <= 0) {
+        return;
+    }
+    int promised = site->promised[slot];
+    site->promised[slot] = (uint16_t)(count < promised ? promised - count : 0);
+    constructions->revision++; /* Something may be left to bring. */
+}
+
 bool construction_materials_complete(const ConstructionSite *site)
 {
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
@@ -380,7 +414,8 @@ uint64_t constructions_hash(const Constructions *constructions, uint64_t hash)
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
             ItemStack stack = site->delivered[slot];
-            int32_t fields[4] = {stack.type, stack.quality, stack.count, stack.hit_points};
+            int32_t fields[5] = {stack.type, stack.quality, stack.count, stack.hit_points,
+                                 site->promised[slot]};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
         }
         hash = hash_fnv1a64(hash, &site->progress, sizeof(site->progress));

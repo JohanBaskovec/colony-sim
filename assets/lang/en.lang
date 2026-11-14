@@ -213,6 +213,7 @@ colonist.task.cut_grass = Cutting grass
 colonist.task.build = Building a workstation
 colonist.task.craft = Crafting
 colonist.task.construct = Building
+colonist.task.supply = Bringing materials
 colonist.task.clean = Cleaning
 colonist.task.haul = Hauling
 

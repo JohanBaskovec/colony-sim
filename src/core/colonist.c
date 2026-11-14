@@ -419,6 +419,7 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
     case TASK_IDLE:
     case TASK_WANDER:
     case TASK_HAUL:
+    case TASK_SUPPLY:
     case TASK_SLEEP:
     case TASK_COUNT: break;
     }
@@ -460,6 +461,7 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_BUILD] = N_("colonist.task.build"),
         [TASK_CRAFT] = N_("colonist.task.craft"),
         [TASK_CONSTRUCT] = N_("colonist.task.construct"),
+        [TASK_SUPPLY] = N_("colonist.task.supply"),
         [TASK_CLEAN] = N_("colonist.task.clean"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
@@ -512,6 +514,17 @@ static TilePos current_tile(const Colonist *colonist)
     return (TilePos){(int16_t)colonist->x, (int16_t)colonist->y};
 }
 
+/* Gives up the materials a colonist promised to bring to a site. */
+static void release_promise(Colonist *colonist, const ColonistContext *context)
+{
+    if (colonist->supply_promised > 0) {
+        construction_release_promise(context->constructions, colonist->site,
+                                     colonist->site_number, colonist->supply_slot,
+                                     colonist->supply_promised);
+        colonist->supply_promised = 0;
+    }
+}
+
 /* Every task change goes through here: whatever the colonist had reserved
  * (job, food) is released, so reservations never outlive the task that made
  * them. The path is kept: callers set it before or clear it after. */
@@ -523,6 +536,7 @@ static void begin_task(Colonist *colonist, const ColonistContext *context, Colon
         colonist->carried = (ItemStack){.type = ITEM_NONE};
     }
     reservations_release_all(context->reservations, context->worker_id);
+    release_promise(colonist, context);
     colonist->haul_delivering = false;
     colonist->task = task;
     colonist->timer = 0;
@@ -999,6 +1013,7 @@ static bool try_haul_job(Colonist *colonist, const ColonistContext *context)
 
 static bool try_station_job(Colonist *colonist, const ColonistContext *context, bool build);
 static bool try_construction_job(Colonist *colonist, const ColonistContext *context);
+static bool try_supply_job(Colonist *colonist, const ColonistContext *context);
 static uint32_t construction_stamp(const ColonistContext *context);
 
 /*
@@ -1025,6 +1040,10 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
         (search_allowed(colonist, SEARCH_CONSTRUCTION) ||
          colonist->construction_search_stamp != construction_stamp(context));
     bool searched_constructions = false;
+    bool supply_allowed = context->constructions->used_count > 0 &&
+                          (search_allowed(colonist, SEARCH_SUPPLY) ||
+                           colonist->supply_search_stamp != construction_stamp(context));
+    bool searched_supply = false;
     bool gathering_allowed =
         context->gather_zones->wanting_cells > 0 &&
         (search_allowed(colonist, SEARCH_GATHER) ||
@@ -1086,6 +1105,13 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
                 }
                 break;
             case WORK_HAULING:
+                /* Construction sites waiting for materials first. */
+                if (supply_allowed) {
+                    searched_supply = true;
+                    if (try_supply_job(colonist, context)) {
+                        FOUND(SEARCH_SUPPLY);
+                    }
+                }
                 if (hauling_allowed) {
                     searched_hauling = true;
                     if (try_haul_job(colonist, context)) {
@@ -1128,6 +1154,10 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
     if (searched_constructions) {
         search_failed(colonist, SEARCH_CONSTRUCTION);
         colonist->construction_search_stamp = construction_stamp(context);
+    }
+    if (searched_supply) {
+        search_failed(colonist, SEARCH_SUPPLY);
+        colonist->supply_search_stamp = construction_stamp(context);
     }
     if (searched_gathering) {
         search_failed(colonist, SEARCH_GATHER);
@@ -1910,14 +1940,35 @@ static bool next_to(int x, int y, TilePos tile)
     return abs(x - tile.x) + abs(y - tile.y) == 1;
 }
 
-/* Whether a site offers work to this colonist: free, buildable by it, and
- * either ready for work or missing a material that lies somewhere. */
 /* A site is reserved on its head, whichever of its tiles a builder works by. */
 static TilePos site_origin(const ConstructionSite *site)
 {
     return (TilePos){site->x, site->y};
 }
 
+/* A refresh site is only worth it while its structure stands. */
+static bool site_still_wanted(const ColonistContext *context, const ConstructionSite *site)
+{
+    return !site->refresh || (map_structure_is_origin(context->map, site->x, site->y) &&
+                              map_structure(context->map, site->x, site->y) ==
+                                  (StructureType)site->type);
+}
+
+/* Whether some material of a site is still to bring, nobody brings it yet,
+ * and some lies about. */
+static bool site_wants_material(const ColonistContext *context, const ConstructionSite *site)
+{
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        if (construction_unpromised(site, slot) > 0 &&
+            items_exist(context->items, ITEM_TYPE_BIT(construction_material(site, slot)), 1)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Whether a site offers work to this colonist: free, buildable by it, and
+ * either ready for work or missing a material it can go for. */
 static bool site_has_job(const ColonistContext *context, const Colonist *worker, int x, int y)
 {
     const ConstructionSite *site =
@@ -1927,12 +1978,24 @@ static bool site_has_job(const ColonistContext *context, const Colonist *worker,
                                     site_origin(site), context->worker_id)) {
         return false;
     }
-    if (construction_materials_complete(site)) {
-        return true;
-    }
-    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-        if (construction_missing(site, slot) > 0 &&
-            items_exist(context->items, ITEM_TYPE_BIT(construction_material(site, slot)), 1)) {
+    return construction_materials_complete(site) || site_wants_material(context, site);
+}
+
+/* Cheap check before searching the map: whether some site offers a job,
+ * to a builder (`worker`: ready for work and free, or missing a material it
+ * can go for) or to a hauler (NULL: missing a material). */
+static bool any_site_job(const ColonistContext *context, const Colonist *worker)
+{
+    for (int index = 0; index < CONSTRUCTION_MAX; index++) {
+        const ConstructionSite *site = construction_get(context->constructions, index);
+        if (site == NULL || !site_still_wanted(context, site)) {
+            continue;
+        }
+        if (worker == NULL) {
+            if (site_wants_material(context, site)) {
+                return true;
+            }
+        } else if (site_has_job(context, worker, site->x, site->y)) {
             return true;
         }
     }
@@ -1985,20 +2048,10 @@ static bool go_to_site(Colonist *colonist, const ColonistContext *context)
                                    COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot);
 }
 
-/* Material slot of the site for an item type, -1 if none. */
-static int site_slot(const ConstructionSite *site, ItemType type)
-{
-    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-        if (type != ITEM_NONE && construction_material(site, slot) == type) {
-            return slot;
-        }
-    }
-    return -1;
-}
-
-/* Next step: fetch more of what is in hand (or the first missing material),
- * else go to the site to deliver or work. False when a material is missing
- * and none can be found. */
+/* Next step of a trip, or the next trip: fetch more for the trip under way,
+ * else deliver what is in hand, else go for the first material nobody brings
+ * yet (promising it); once every material is in, a builder goes to work.
+ * False when there is nothing left to do. */
 static bool plan_construction(Colonist *colonist, const ColonistContext *context)
 {
     const ConstructionSite *site = job_site(colonist, context);
@@ -2006,11 +2059,10 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
         return false;
     }
     if (colonist->carried.count > 0) {
-        int slot = site_slot(site, (ItemType)colonist->carried.type);
-        int missing = slot >= 0 ? construction_missing(site, slot) - colonist->carried.count : 0;
+        int wanted = colonist->supply_promised - colonist->carried.count;
         int room = colonist_carry_capacity(colonist, (ItemType)colonist->carried.type) -
                    colonist->carried.count;
-        if (missing > 0 && room > 0) {
+        if (wanted > 0 && room > 0) {
             FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(colonist->carried.type));
             search.match = colonist->carried;
             if (start_fetch(colonist, context, &search, current_tile(colonist),
@@ -2020,30 +2072,40 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
         }
         return go_to_site(colonist, context); /* Deliver what is in hand. */
     }
-    bool missing_any = false;
+    release_promise(colonist, context); /* Nothing in hand: a new trip. */
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-        if (construction_missing(site, slot) <= 0) {
+        int left = construction_unpromised(site, slot);
+        if (left <= 0) {
             continue;
         }
-        missing_any = true;
-        ItemTypeMask wanted = ITEM_TYPE_BIT(construction_material(site, slot));
-        FetchSearch search = fetch_search(context, wanted);
+        ItemType type = construction_material(site, slot);
+        FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(type));
         if (start_fetch(colonist, context, &search, current_tile(colonist),
                         COLONIST_WORK_SEARCH_MAX_COST, false)) {
+            int load = colonist_carry_capacity(colonist, type);
+            colonist->supply_slot = slot;
+            colonist->supply_promised = construction_promise(
+                context->constructions, colonist->site, slot, left < load ? left : load);
             return true;
         }
     }
-    return !missing_any && go_to_site(colonist, context);
+    return colonist->task == TASK_CONSTRUCT && construction_materials_complete(site) &&
+           go_to_site(colonist, context);
+}
+
+
+static bool supply_job_still_valid(const Colonist *colonist, const ColonistContext *context)
+{
+    const ConstructionSite *site = job_site(colonist, context);
+    return site != NULL && site_still_wanted(context, site) &&
+           colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED;
 }
 
 static bool construction_job_still_valid(const Colonist *colonist,
                                          const ColonistContext *context)
 {
     const ConstructionSite *site = job_site(colonist, context);
-    return site != NULL &&
-           (!site->refresh || (map_structure_is_origin(context->map, site->x, site->y) &&
-                               map_structure(context->map, site->x, site->y) ==
-                                   (StructureType)site->type)) &&
+    return site != NULL && site_still_wanted(context, site) &&
            reservations_owner(context->reservations, RESERVATION_CONSTRUCTION,
                               site_origin(site)) == context->worker_id &&
            colonist->work_priorities[WORK_CONSTRUCTION] != WORK_PRIORITY_DISABLED &&
@@ -2058,7 +2120,7 @@ static uint32_t construction_stamp(const ColonistContext *context)
 
 static bool try_construction_job(Colonist *colonist, const ColonistContext *context)
 {
-    if (context->constructions->used_count == 0) {
+    if (context->constructions->used_count == 0 || !any_site_job(context, colonist)) {
         return false;
     }
     SiteSearch search = {context, colonist};
@@ -2085,17 +2147,66 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
     return true;
 }
 
-/* At the stack being fetched: takes what the site still misses of it. */
+/* First site next to (x, y), in a fixed order, missing a material nobody
+ * brings yet that lies about. */
+static bool find_supply_site(const ColonistContext *context, int x, int y, TilePos *out)
+{
+    for (int i = 0; i < 4; i++) {
+        int nx = x + NEIGHBOR_DX[i], ny = y + NEIGHBOR_DY[i];
+        const ConstructionSite *site = construction_get(
+            context->constructions, construction_at(context->constructions, nx, ny));
+        if (site != NULL && site_still_wanted(context, site) &&
+            site_wants_material(context, site)) {
+            *out = (TilePos){(int16_t)nx, (int16_t)ny};
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool is_supply_spot(const Map *map, int x, int y, void *userdata)
+{
+    TilePos unused;
+    return map_is_passable(map, x, y) && find_supply_site(userdata, x, y, &unused);
+}
+
+/* A hauler brings materials to the nearest site that waits for some. */
+static bool try_supply_job(Colonist *colonist, const ColonistContext *context)
+{
+    if (context->constructions->used_count == 0 || !any_site_job(context, NULL)) {
+        return false;
+    }
+    TilePos spot, target;
+    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                 is_supply_spot, (void *)context, COLONIST_WORK_SEARCH_MAX_COST,
+                                 NULL, &spot)) {
+        return false;
+    }
+    find_supply_site(context, spot.x, spot.y, &target);
+    int index = construction_at(context->constructions, target.x, target.y);
+    begin_task(colonist, context, TASK_SUPPLY);
+    colonist->site = index;
+    colonist->site_number = construction_get(context->constructions, index)->number;
+    colonist->target = target;
+    if (!plan_construction(colonist, context)) {
+        set_idle(colonist, context, 0);
+        path_clear(&colonist->path);
+        return false;
+    }
+    return true;
+}
+
+/* At the stack being fetched: takes what is left of the trip's promise. */
 static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
                              const ConstructionSite *site)
 {
     ItemStack stack = items_get(context->items, colonist->x, colonist->y);
-    int slot = site_slot(site, (ItemType)stack.type);
-    if (slot < 0 ||
+    if (colonist->supply_promised <= 0 ||
+        construction_material(site, colonist->supply_slot) != stack.type ||
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
         return false;
     }
-    int wanted = construction_missing(site, slot) - colonist->carried.count;
+    int wanted = colonist->supply_promised - colonist->carried.count;
     int room = colonist_carry_capacity(colonist, (ItemType)stack.type) - colonist->carried.count;
     wanted = wanted < room ? wanted : room;
     if (wanted <= 0) {
@@ -2137,9 +2248,13 @@ static bool clear_site_first(Colonist *colonist, const ColonistContext *context,
     return false;
 }
 
+/* TASK_CONSTRUCT and TASK_SUPPLY: fetching and delivering materials; a
+ * builder then works on the site. */
 static void construction_job(Colonist *colonist, const ColonistContext *context)
 {
-    if (!construction_job_still_valid(colonist, context)) {
+    bool supplying = colonist->task == TASK_SUPPLY;
+    if (supplying ? !supply_job_still_valid(colonist, context)
+                  : !construction_job_still_valid(colonist, context)) {
         set_idle(colonist, context, 0);
         return;
     }
@@ -2160,11 +2275,14 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
             int taken = construction_deliver(context->constructions, colonist->site,
                                              colonist->carried);
             colonist->carried.count = (uint16_t)(colonist->carried.count - taken);
-            if (colonist->carried.count == 0) {
-                colonist->carried = (ItemStack){.type = ITEM_NONE};
+            release_promise(colonist, context);
+            if (colonist->carried.count > 0) {
+                set_idle(colonist, context, 0); /* No longer wanted: put down here. */
+                return;
             }
+            colonist->carried = (ItemStack){.type = ITEM_NONE};
         }
-        if (!construction_materials_complete(site)) {
+        if (supplying || !construction_materials_complete(site)) {
             if (!plan_construction(colonist, context)) { /* More to bring. */
                 set_idle(colonist, context, 0);
             }
@@ -2294,6 +2412,11 @@ static void decide(Colonist *colonist, const ColonistContext *context)
         break;
     case TASK_CONSTRUCT:
         if (!construction_job_still_valid(colonist, context)) {
+            set_idle(colonist, context, 0);
+        }
+        break;
+    case TASK_SUPPLY:
+        if (!supply_job_still_valid(colonist, context)) {
             set_idle(colonist, context, 0);
         }
         break;
@@ -2445,7 +2568,8 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     case TASK_HAUL: haul(colonist, context); break;
     case TASK_BUILD:
     case TASK_CRAFT: station_job(colonist, context); break;
-    case TASK_CONSTRUCT: construction_job(colonist, context); break;
+    case TASK_CONSTRUCT:
+    case TASK_SUPPLY: construction_job(colonist, context); break;
     case TASK_CLEAN: clean(colonist, context); break;
     case TASK_SLEEP:
     case TASK_COUNT: break;

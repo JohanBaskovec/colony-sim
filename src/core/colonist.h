@@ -149,6 +149,7 @@ typedef enum ColonistTask {
     /* Bringing materials to a construction site, then building it from a
      * neighboring tile. */
     TASK_CONSTRUCT,
+    TASK_SUPPLY, /* Bringing materials to a construction site (hauling work). */
     TASK_CLEAN, /* Walking to a dirty tile, then cleaning it. */
     TASK_COUNT
 } ColonistTask;
@@ -170,6 +171,7 @@ typedef enum SearchKind {
     SEARCH_GATHER,  /* Gathering zones. */
     SEARCH_CONSTRUCTION, /* Construction sites. */
     SEARCH_CLEAN,        /* Dirty tiles. */
+    SEARCH_SUPPLY,       /* Construction sites missing materials, for haulers. */
     SEARCH_COUNT
 } SearchKind;
 
@@ -240,6 +242,8 @@ typedef struct Colonist {
     uint32_t construction_search_stamp;
     /* Dirt revision + reservation releases at the last failed cleaning search. */
     uint32_t clean_search_stamp;
+    /* Same as construction_search_stamp, for the last failed supply search. */
+    uint32_t supply_search_stamp;
     ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
     TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
@@ -256,11 +260,15 @@ typedef struct Colonist {
     uint8_t station_phase; /* StationJobPhase */
     TilePos fetch;
     bool fetch_tool;
-    /* TASK_CONSTRUCT: the site (index, and number to notice a replacement);
-     * `target` is its tile, the phase and fetch fields are shared with
-     * station jobs. */
+    /* TASK_CONSTRUCT, TASK_SUPPLY: the site (index, and number to notice a
+     * replacement); `target` is the tile of the site worked or delivered by,
+     * the phase and fetch fields are shared with station jobs. The material
+     * slot of the trip under way, and the items of it promised to the site
+     * (construction_promise(), released when the task changes). */
     int site;
     int site_number;
+    int supply_slot;
+    int supply_promised;
     /* Ticks left of slower work after a night on the ground. */
     int ground_sleep_ticks;
     /* Tools carried (one per type, count 1; empty slots have type ITEM_NONE). */

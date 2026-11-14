@@ -2,8 +2,8 @@
  * Construction sites: blueprints of structures (core/structure.h) placed by
  * the player and waiting to be built.
  *
- * A builder brings the materials, one kind at a time, then does the work,
- * always from a neighboring tile (as for walls, which cannot be stood on once
+ * Builders and haulers bring the materials, one kind at a time; a builder
+ * then does the work, always from a neighboring tile (as for walls, which cannot be stood on once
  * built). When the work is done the structure appears on the map
  * (map_set_structure()) and the site is gone. A blocking structure (wall)
  * pushes the items lying on its tile to a neighboring open tile.
@@ -17,9 +17,15 @@
  * StructureDef.refresh_*, and finishing it brings the structure back to full
  * hit points. Structures worn down to 0 fall apart.
  *
+ * Several settlers may bring materials at once: each one first promises the
+ * items it goes for (construction_promise()), so that nobody brings what
+ * another is already bringing, and releases the promise once they are
+ * delivered or given up.
+ *
  * A site takes every tile of its structure (a bed: its head and its foot);
  * its position is the structure's head. Sites are kept in a fixed list with
- * a dense layer of indices the size of the map. Removing a site gives its delivered materials back.
+ * a dense layer of indices the size of the map. Removing a site gives its
+ * delivered materials back.
  */
 #ifndef COLONY_CORE_CONSTRUCTION_H
 #define COLONY_CORE_CONSTRUCTION_H
@@ -44,6 +50,8 @@ typedef struct ConstructionSite {
     /* Materials brought so far, per slot of the structure's definition (a
      * slot keeps the lowest grade delivered). */
     ItemStack delivered[STRUCTURE_MATERIAL_SLOTS];
+    /* Items of each slot on their way: promised by settlers fetching them. */
+    uint16_t promised[STRUCTURE_MATERIAL_SLOTS];
     float progress; /* Work done, once every material is in. */
     float clear_progress; /* Work done clearing the plant of a tile, before building. */
     bool refresh; /* Refreshing the built structure of the tile, not building one. */
@@ -109,6 +117,19 @@ float construction_work_needed(const ConstructionSite *site);
 
 /* Items of a material slot still to bring (0 for an unused slot). */
 int construction_missing(const ConstructionSite *site, int slot);
+
+/* Items of a slot still to bring that nobody has promised (0 for an unused
+ * slot). */
+int construction_unpromised(const ConstructionSite *site, int slot);
+
+/* Promises up to `count` items of a slot, at most what nobody has promised
+ * yet. Returns how many were promised. */
+int construction_promise(Constructions *constructions, int index, int slot, int count);
+
+/* Releases a promise of `count` items of a slot, if the site at `index` is
+ * still the one numbered `number` (the site may be gone). */
+void construction_release_promise(Constructions *constructions, int index, int number, int slot,
+                                  int count);
 
 /* Whether every material is in: the work can start. */
 bool construction_materials_complete(const ConstructionSite *site);

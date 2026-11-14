@@ -461,6 +461,37 @@ static void test_bed_sites(void)
     free_world(&map, &constructions, &items);
 }
 
+static void test_promises(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    int index = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2, DIRECTION_SOUTH);
+    REQUIRE(index != CONSTRUCTION_NONE);
+    const ConstructionSite *site = construction_get(&constructions, index);
+    uint64_t hash = constructions_hash(&constructions, 0);
+    CHECK_EQ_INT(construction_unpromised(site, 1), 24);
+    /* At most what nobody promised yet. */
+    CHECK_EQ_INT(construction_promise(&constructions, index, 1, 20), 20);
+    CHECK_EQ_INT(construction_promise(&constructions, index, 1, 20), 4);
+    CHECK_EQ_INT(construction_promise(&constructions, index, 1, 1), 0);
+    CHECK_EQ_INT(construction_unpromised(site, 1), 0);
+    CHECK_EQ_INT(construction_unpromised(site, 0), 5);
+    CHECK_EQ_INT(construction_promise(&constructions, index, 5, 1), 0); /* No such slot. */
+    CHECK(constructions_hash(&constructions, 0) != hash);
+    /* Delivered items are no longer missing; a released promise frees the rest. */
+    construction_deliver(&constructions, index, item_stack_pristine(ITEM_GRASS, 20));
+    construction_release_promise(&constructions, index, site->number, 1, 20);
+    CHECK_EQ_INT(construction_unpromised(site, 1), 0); /* The other 4 are still coming. */
+    construction_release_promise(&constructions, index, site->number + 1, 1, 4); /* Not it. */
+    CHECK_EQ_INT(site->promised[1], 4);
+    construction_release_promise(&constructions, index, site->number, 1, 10);
+    CHECK_EQ_INT(site->promised[1], 0);
+    CHECK_EQ_INT(construction_unpromised(site, 1), 4);
+    free_world(&map, &constructions, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -475,5 +506,6 @@ int main(void)
     RUN_TEST(test_beds_wear_by_the_day);
     RUN_TEST(test_long_structures);
     RUN_TEST(test_bed_sites);
+    RUN_TEST(test_promises);
     return test_summary();
 }

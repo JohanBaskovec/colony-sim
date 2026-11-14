@@ -619,9 +619,10 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));
-        int32_t job[10] = {c->station,  c->station_number, c->bill,       c->recipe,
-                           c->station_phase, c->fetch.x,   c->fetch.y,     c->fetch_tool,
-                           c->work_type, c->gathering};
+        int32_t job[14] = {c->station,     c->station_number, c->bill,       c->recipe,
+                           c->station_phase, c->fetch.x,        c->fetch.y,     c->fetch_tool,
+                           c->work_type,     c->gathering,      c->site,        c->site_number,
+                           c->supply_slot,   c->supply_promised};
         hash = hash_fnv1a64(hash, job, sizeof(job));
         for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
             ItemStack tool = c->tools[i];

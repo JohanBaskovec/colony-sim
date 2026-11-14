@@ -451,10 +451,22 @@ tile's plant. Blueprints are **construction sites** (`core/construction.h`,
 owned by `Game`, at most `CONSTRUCTION_MAX`, a dense index layer): the
 player places them (`game_place_structure_rect()`: along the edges of the
 rectangle for walls, filling it otherwise; refused on stockpiles,
-workstations and trees). A colonist with the construction work type
-and the knowledge (`TASK_CONSTRUCT`, `RESERVATION_CONSTRUCTION`) fetches each
-material in turn, as much as it can carry, delivers it from a neighboring
-tile, then works from there: a wall cannot be stood on once built. Grass
+workstations and trees). Materials come two ways: a hauler (hauling work,
+`TASK_SUPPLY`, searched before stockpile hauling) brings what the nearest
+site waiting for materials misses, and a colonist with the construction
+work type and the knowledge (`TASK_CONSTRUCT`, `RESERVATION_CONSTRUCTION`
+on the site's head) fetches what is still missing, then works from a
+neighboring tile: a wall cannot be stood on once built. Each trip is for
+one material, as much as the colonist can carry; before going, it promises
+those items to the site (`ConstructionSite.promised`,
+`construction_promise()`), so that several settlers never bring the same
+items; the promise is released on delivery, and by `begin_task()` when the
+task changes for any reason (like reservations). A builder only takes a site
+that is ready for work or misses a material nobody brings yet. Before
+searching the map, both check the list of sites (`any_site_job()`): the
+search stamp moves with every item added anywhere, and a site waiting for a
+material that does not exist yet (grass still drying) must not cost a
+search each time. Grass
 or a bush on the tile is cleared first (see *Clearing plants* below). When it
 is done the site is gone, the structure appears; a blocking one pushes the
 items of its tile next door and takes the tile out of stockpiles and
@@ -670,7 +682,9 @@ final state hash. An optimization that is not supposed to change behavior
 must leave that hash unchanged. Reference (Release, 200 × 200, 64 colonists,
 10 in-game days): about 8 µs per tick left alone, 10 µs with every tree, rock
 and bush designated; long food searches when berries run out are the
-remaining spikes (1 to 4 ms).
+remaining spikes (1 to 4 ms). Scenario 3 (construction, 16 colonists, 10
+days): about 23 µs per tick, 20 µs of it without the sites (the gathering
+zone and the small stockpile alone, still to profile).
 
 ## Randomness
 

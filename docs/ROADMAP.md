@@ -44,7 +44,8 @@ Tick items as they land and add newly discovered tasks.
 - [x] Skill learning: work on an order gives experience in its skill, each level takes longer (one in-game hour of work for level 1, twenty for level 20); progress shown in the colonist inspector, levels in the work priorities grid
 - [x] Skills also change work speed: ×0.5 at level 0, ×1 at level 10, ×1.5 at level 20 (shown in the colonist inspector)
 - [x] Haul more than one stack per trip: after a pickup, a hauler with room left collects nearby matching stacks bound for the same storage tile (one type and grade per load)
-- [ ] Haul towards construction sites (M3); loads of mixed items once containers exist
+- [x] Haul towards construction sites (M3)
+- [ ] Loads of mixed items once containers exist
 - [x] Strength (1 to 20, rolled at creation, lower past 40): sets the weight a colonist carries without slowing down (22 to 60 kg, 40 kg at 10); shown in the colonist inspector
 - [ ] Carrying capacity also from health (M6); containers (baskets, sledges) and worn equipment adding bulk and weight, once they can be made
 
@@ -76,7 +77,9 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Built things, later: comfort by bed grade and the "slept on old bedding" mood (with moods); damage from fire, weather and animals; repairing walls and screens
 - [x] Beds owned by one settler (taken the first night, kept, freed when the bed or the settler goes; the owner in the tile inspector, the bed in the colonist inspector); beds of 1 × 2 tiles, head and foot, turned with a key (F on QWERTY and AZERTY), laid side by side when a rectangle is dragged
 - [ ] Beds, later: the player assigns a bed to a settler (or frees it); double beds for couples (with relationships)
-- [ ] Haulers bring materials to construction sites (today the builder fetches them); a construction scenario in `bench_simulation`
+- [x] Haulers bring materials to construction sites (builders still fetch what nobody brings); items promised to a site so that several settlers never bring the same ones; a construction scenario in `bench_simulation` (scenario 3)
+- [ ] Profile `bench_simulation` scenario 3 without sites (about 20 µs per tick, worst ticks around 30 ms with 16 colonists: the gathering zone and a full stockpile)
+- [ ] Haulers bring materials to workstation blueprints too (or workstations built through construction sites, below)
 - [ ] Lean-to (roof), cave floor clearing; workstations built through construction sites
 - [ ] Room detection, roofs (lean-to, natural rock roof over caves)
 - [ ] Knowledge spreading: conversation, apprenticeship, fading and loss; only discovered knowledges shown in the colonist inspector
