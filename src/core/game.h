@@ -13,6 +13,7 @@
 #include "core/map.h"
 #include "core/pathfinding.h"
 #include "core/pool.h"
+#include "core/reservation.h"
 #include "core/rng.h"
 #include "core/worldgen.h"
 
@@ -36,6 +37,7 @@ typedef struct Game {
     uint64_t seed;
     Map map;
     Designations designations; /* Player orders (chop, mine...), same size as the map. */
+    Reservations reservations; /* Who is busy with which job or food. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */
     Pathfinder pathfinder;

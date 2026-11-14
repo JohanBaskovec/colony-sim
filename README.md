@@ -18,7 +18,7 @@ survive whatever the world throws at them.
 - In-game calendar (days, seasons, years) and day/night lighting
 - Plant growth that depends on terrain fertility
 - Colonists with needs (food, water, rest) who decide on their own: eat berries, drink, sleep, wander
-- Work orders (designations): chop trees and mine rock; idle colonists pick the nearest job, one worker per tile
+- Work orders (designations): chop trees and mine rock; idle colonists pick jobs by work priority then distance, and reserve their job or food so that nobody else takes it
 - A* pathfinding with terrain movement costs
 - Selection (click, Shift+click, box) and a colonist inspector
 - Pan/zoom camera, tile inspector

@@ -33,6 +33,10 @@ designation.chop = Couper les arbres
 designation.mine = Miner la roche
 tool.cancel = Annuler les ordres
 
+# Types de travail
+work.mining = Minage
+work.woodcutting = Bûcheronnage
+
 # Saisons
 season.spring = Printemps
 season.summer = Été

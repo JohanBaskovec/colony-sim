@@ -3,14 +3,15 @@
  * mine this rock). They are kept apart from the Map, which only describes
  * the physical world.
  *
- * Each designated tile also stores who reserved it (so that two settlers
- * never work on the same tile) and how much work has been done (so that
- * interrupted work resumes where it stopped).
+ * Each designated tile also stores how much work has been done, so that
+ * interrupted work resumes where it stopped. Who works on which tile is
+ * tracked by the reservations (core/reservation.h).
  */
 #ifndef COLONY_CORE_DESIGNATION_H
 #define COLONY_CORE_DESIGNATION_H
 
 #include "core/map.h"
+#include "core/work.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -22,26 +23,23 @@ typedef enum DesignationType {
     DESIGNATION_COUNT
 } DesignationType;
 
-/* Reservation owner meaning "not reserved". Owners are 1..255 (e.g. colonist slot + 1). */
-#define DESIGNATION_NO_OWNER 0
-
 typedef struct DesignationDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key; /* Order name, e.g. "Chop trees". */
     const char *activity_key; /* What a settler doing it is busy with, e.g. "Chopping a tree". */
+    WorkType work_type;
 } DesignationDef;
 
 typedef struct Designations {
     int width;
     int height;
     uint8_t *type; /* DesignationType per tile. */
-    uint8_t *reserved_by; /* Owner per tile, DESIGNATION_NO_OWNER when free. */
     float *progress; /* Work done so far, in work ticks. */
     int count; /* Designated tiles. */
-    int available; /* Designated tiles that nobody reserved. */
+    int count_by_work[WORK_TYPE_COUNT]; /* Designated tiles per work type. */
     /* Incremented whenever work may have become available (new designation,
-     * released reservation, completed work that opens access...), so that
-     * settlers who found nothing to do know when to look again. */
+     * completed work that opens access...), so that settlers who found
+     * nothing to do know when to look again. */
     uint32_t revision;
 } Designations;
 
@@ -68,16 +66,8 @@ bool designation_set(Designations *designations, const Map *map, int x, int y,
 int designations_set_rect(Designations *designations, const Map *map, int x0, int y0, int x1,
                           int y1, DesignationType type);
 
-/* Designated and not reserved. */
-bool designation_is_available(const Designations *designations, int x, int y);
-
-uint8_t designation_owner(const Designations *designations, int x, int y);
-
-/* Reserves an available tile for `owner` (non-zero). Returns false if not available. */
-bool designation_reserve(Designations *designations, int x, int y, uint8_t owner);
-
-/* Releases the tile if `owner` holds it. */
-void designation_release(Designations *designations, int x, int y, uint8_t owner);
+/* Designated tiles whose work type is in `mask`. */
+int designations_count_for_work(const Designations *designations, WorkTypeMask mask);
 
 /* Total work needed to complete the order on this tile (0 if none). */
 float designation_work_needed(const Designations *designations, const Map *map, int x, int y);

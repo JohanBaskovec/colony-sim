@@ -87,6 +87,9 @@ Prefer the `headless` preset while working on the simulation core.
 - Before declaring a task done: build with `-Werror` (headless preset) and make `ctest` pass.
 - Frontend code (`src/game/`) is not unit-tested: keep logic out of it and move
   anything testable into the core.
+- Visual checks of the running game: use a virtual display, never the user's
+  desktop (`Xvfb :99 -screen 0 1280x800x24 &`, then `DISPLAY=:99` for the game,
+  `xdotool` and `import -window root shot.png`).
 
 ## Workflow
 

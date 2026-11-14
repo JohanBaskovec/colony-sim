@@ -49,6 +49,13 @@ static void add_water_band(Map *map, int x0)
     }
 }
 
+/* Owner of the work reservation on a tile (RESERVATION_NO_OWNER if free). */
+static uint8_t work_owner(const Game *game, int x, int y)
+{
+    return reservations_owner(&game->reservations, RESERVATION_WORK,
+                              (TilePos){(int16_t)x, (int16_t)y});
+}
+
 static void run_ticks(Game *game, int ticks)
 {
     for (int i = 0; i < ticks; i++) {
@@ -413,7 +420,7 @@ static void test_idle_colonist_chops_designated_tree(void)
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK_EQ_INT(colonist->target.x, 26);
-    CHECK_EQ_INT(designation_owner(&game.designations, 26, 20), 1);
+    CHECK_EQ_INT(work_owner(&game, 26, 20), 1);
     CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.chop");
 
     float work = designation_work_needed(&game.designations, &game.map, 26, 20);
@@ -495,7 +502,7 @@ static void test_hungry_worker_leaves_work_and_resumes_later(void)
     colonist->needs[NEED_FOOD] = 0.2f;
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_EAT);
-    CHECK(designation_is_available(&game.designations, 22, 20)); /* Reservation released. */
+    CHECK_EQ_INT(work_owner(&game, 22, 20), RESERVATION_NO_OWNER); /* Released. */
     CHECK(designation_progress_fraction(&game.designations, &game.map, 22, 20) >= progress);
 
     /* Back to work after eating, from where it stopped. */
@@ -534,11 +541,11 @@ static void test_removed_worker_releases_its_job(void)
     game_designate_rect(&game, 22, 20, 22, 20, DESIGNATION_CHOP);
     game_tick(&game);
     REQUIRE(game_colonist(&game, id)->task == TASK_WORK);
-    CHECK(!designation_is_available(&game.designations, 22, 20));
+    CHECK(work_owner(&game, 22, 20) != RESERVATION_NO_OWNER);
 
     game_remove_colonist(&game, id);
-    CHECK(designation_is_available(&game.designations, 22, 20));
-    CHECK_EQ_INT(game.designations.available, 1);
+    CHECK_EQ_INT(work_owner(&game, 22, 20), RESERVATION_NO_OWNER);
+    CHECK_EQ_INT(game.reservations.count, 0);
     game_shutdown(&game);
 }
 
@@ -567,34 +574,113 @@ static void test_new_order_is_noticed_despite_backoff(void)
     game_shutdown(&game);
 }
 
-/* Every reservation belongs to a colonist working on that tile, and the
- * designation counters match the layer contents. */
+static void test_hungry_colonists_go_to_different_bushes(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    for (int i = 0; i < 2; i++) {
+        Plant *bush = &game.map.plants[map_index(&game.map, 25, 20 + 10 * i)];
+        bush->type = PLANT_BUSH;
+        bush->growth = 1.0f;
+    }
+    Colonist *a = spawn_rested(&game, 20, 20);
+    Colonist *b = spawn_rested(&game, 20, 21);
+    REQUIRE(a != NULL && b != NULL);
+    a->needs[NEED_FOOD] = 0.2f;
+    b->needs[NEED_FOOD] = 0.2f;
+
+    game_tick(&game);
+    CHECK_EQ_INT(a->task, TASK_EAT);
+    CHECK_EQ_INT(b->task, TASK_EAT);
+    CHECK_EQ_INT(a->target.y, 20);
+    CHECK_EQ_INT(b->target.y, 30); /* The closer bush is already taken. */
+    CHECK_EQ_INT(game.reservations.count_by_kind[RESERVATION_FOOD], 2);
+
+    /* Once both have eaten, nothing stays reserved. */
+    run_ticks(&game, walk_ticks(12) + COLONIST_EAT_TICKS);
+    CHECK(a->needs[NEED_FOOD] > 0.5f && b->needs[NEED_FOOD] > 0.5f);
+    CHECK_EQ_INT(game.reservations.count_by_kind[RESERVATION_FOOD], 0);
+    game_shutdown(&game);
+}
+
+static void test_disabled_work_type_is_never_done(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    game.map.rock[map_index(&game.map, 23, 20)] = ROCK_SANDSTONE;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_MINING] = WORK_PRIORITY_DISABLED;
+    game_designate_rect(&game, 23, 20, 23, 20, DESIGNATION_MINE);
+    run_ticks(&game, 200);
+    CHECK(colonist->task != TASK_WORK);
+    CHECK_EQ_INT(game.reservations.count, 0);
+
+    /* Enabling the work type is noticed on the next retry. */
+    colonist->work_priorities[WORK_MINING] = WORK_PRIORITY_LOWEST;
+    for (int i = 0; i < COLONIST_SEARCH_RETRY_TICKS + 100 && colonist->task != TASK_WORK; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    game_shutdown(&game);
+}
+
+static void test_priority_beats_distance(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_tree(&game.map, 22, 20);
+    game.map.rock[map_index(&game.map, 32, 20)] = ROCK_SANDSTONE;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_MINING] = WORK_PRIORITY_HIGHEST;
+    colonist->work_priorities[WORK_WOODCUTTING] = WORK_PRIORITY_LOWEST;
+    game_designate_rect(&game, 0, 0, 47, 47, DESIGNATION_CHOP);
+    game_designate_rect(&game, 0, 0, 47, 47, DESIGNATION_MINE);
+
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_EQ_INT(colonist->target.x, 32); /* Farther, but mining comes first. */
+    CHECK_EQ_INT(colonist->work_type, DESIGNATION_MINE);
+
+    /* With mining done (cancelled here), the lower priority work is picked up. */
+    game_designate_rect(&game, 32, 20, 32, 20, DESIGNATION_NONE);
+    for (int i = 0; i < walk_ticks(2) && colonist->work_type != DESIGNATION_CHOP; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_EQ_INT(colonist->target.x, 22);
+    game_shutdown(&game);
+}
+
+/* Every reservation belongs to a live colonist whose current task targets
+ * that tile (work: TASK_WORK, food: TASK_EAT), each colonist holds at most
+ * one, and the per-kind counters match. */
 static bool reservations_consistent(const Game *game)
 {
-    const Designations *d = &game->designations;
-    int count = 0, available = 0;
-    for (int y = 0; y < d->height; y++) {
-        for (int x = 0; x < d->width; x++) {
-            if (designation_get(d, x, y) == DESIGNATION_NONE) {
-                if (designation_owner(d, x, y) != DESIGNATION_NO_OWNER) {
-                    return false;
-                }
-                continue;
-            }
-            count++;
-            uint8_t owner = designation_owner(d, x, y);
-            if (owner == DESIGNATION_NO_OWNER) {
-                available++;
-                continue;
-            }
-            const Colonist *c = &game->colonists[owner - 1];
-            if (entity_id_is_none(game_colonist_id_at(game, owner - 1u)) ||
-                c->task != TASK_WORK || c->target.x != x || c->target.y != y) {
-                return false;
-            }
+    const Reservations *r = &game->reservations;
+    int by_kind[RESERVATION_KIND_COUNT] = {0};
+    int held[COLONIST_MAX + 1] = {0};
+    for (int i = 0; i < r->count; i++) {
+        const Reservation *entry = &r->entries[i];
+        by_kind[entry->kind]++;
+        uint32_t slot = entry->owner - 1u;
+        if (entry->owner == RESERVATION_NO_OWNER || slot >= COLONIST_MAX ||
+            entity_id_is_none(game_colonist_id_at(game, slot)) || ++held[entry->owner] > 1) {
+            return false;
+        }
+        const Colonist *c = &game->colonists[slot];
+        ColonistTask expected = entry->kind == RESERVATION_WORK ? TASK_WORK : TASK_EAT;
+        if (c->task != expected || c->target.x != entry->tile.x || c->target.y != entry->tile.y) {
+            return false;
         }
     }
-    return count == d->count && available == d->available;
+    for (int kind = 0; kind < RESERVATION_KIND_COUNT; kind++) {
+        if (by_kind[kind] != r->count_by_kind[kind]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 static void test_reservations_stay_consistent_over_a_long_run(void)
@@ -716,6 +802,9 @@ int main(void)
     RUN_TEST(test_cancelled_order_stops_the_worker);
     RUN_TEST(test_removed_worker_releases_its_job);
     RUN_TEST(test_new_order_is_noticed_despite_backoff);
+    RUN_TEST(test_hungry_colonists_go_to_different_bushes);
+    RUN_TEST(test_disabled_work_type_is_never_done);
+    RUN_TEST(test_priority_beats_distance);
     RUN_TEST(test_reservations_stay_consistent_over_a_long_run);
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);

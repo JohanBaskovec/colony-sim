@@ -53,7 +53,6 @@ static void test_orders_need_a_valid_target(void)
     CHECK_EQ_INT(designation_get(&d, 8, 8), DESIGNATION_NONE);
     CHECK_EQ_INT(designation_get(&d, -1, 0), DESIGNATION_NONE);
     CHECK_EQ_INT(d.count, 1);
-    CHECK_EQ_INT(d.available, 1);
     free_world(&map, &d);
 }
 
@@ -68,40 +67,30 @@ static void test_rectangle_only_marks_valid_tiles(void)
     CHECK_EQ_INT(d.count, 3);
     CHECK_EQ_INT(designations_set_rect(&d, &map, 0, 0, 15, 15, DESIGNATION_NONE), 3);
     CHECK_EQ_INT(d.count, 0);
-    CHECK_EQ_INT(d.available, 0);
     free_world(&map, &d);
 }
 
-static void test_reservations(void)
+static void test_counts_per_work_type(void)
 {
     Map map;
     Designations d;
     REQUIRE(init_world(&map, &d));
-    CHECK(!designation_reserve(&d, 3, 3, 1)); /* Not designated. */
-    REQUIRE(designation_set(&d, &map, 3, 3, DESIGNATION_CHOP));
-    uint32_t revision = d.revision;
+    designation_set(&d, &map, 3, 3, DESIGNATION_CHOP);
+    designation_set(&d, &map, 5, 5, DESIGNATION_MINE);
+    designation_set(&d, &map, 6, 5, DESIGNATION_MINE);
+    CHECK_EQ_INT(d.count_by_work[WORK_WOODCUTTING], 1);
+    CHECK_EQ_INT(d.count_by_work[WORK_MINING], 2);
+    CHECK_EQ_INT(designations_count_for_work(&d, WORK_TYPE_BIT(WORK_MINING)), 2);
+    CHECK_EQ_INT(designations_count_for_work(
+                     &d, WORK_TYPE_BIT(WORK_MINING) | WORK_TYPE_BIT(WORK_WOODCUTTING)),
+                 3);
+    CHECK_EQ_INT(designations_count_for_work(&d, 0), 0);
 
-    CHECK(!designation_reserve(&d, 3, 3, DESIGNATION_NO_OWNER));
-    CHECK(designation_reserve(&d, 3, 3, 1));
-    CHECK(!designation_is_available(&d, 3, 3));
-    CHECK(!designation_reserve(&d, 3, 3, 2)); /* Two workers never share a tile. */
-    CHECK_EQ_INT(designation_owner(&d, 3, 3), 1);
-    CHECK_EQ_INT(d.available, 0);
-    CHECK_EQ_UINT(d.revision, revision); /* Reserving makes nothing new available. */
-
-    designation_release(&d, 3, 3, 2); /* Not the owner: ignored. */
-    CHECK_EQ_INT(designation_owner(&d, 3, 3), 1);
-    designation_release(&d, 3, 3, 1);
-    CHECK(designation_is_available(&d, 3, 3));
-    CHECK_EQ_INT(d.available, 1);
-    CHECK(d.revision != revision);
-
-    /* Removing a reserved order frees the reservation and keeps counters right. */
-    REQUIRE(designation_reserve(&d, 3, 3, 1));
-    CHECK(designation_set(&d, &map, 3, 3, DESIGNATION_NONE));
-    CHECK_EQ_INT(designation_owner(&d, 3, 3), DESIGNATION_NO_OWNER);
-    CHECK_EQ_INT(d.count, 0);
-    CHECK_EQ_INT(d.available, 0);
+    designation_add_work(&d, &map, 5, 5, rock_def(ROCK_GRANITE)->mine_work);
+    designation_set(&d, &map, 3, 3, DESIGNATION_NONE);
+    CHECK_EQ_INT(d.count_by_work[WORK_WOODCUTTING], 0);
+    CHECK_EQ_INT(d.count_by_work[WORK_MINING], 1);
+    CHECK_EQ_INT(d.count, 1);
     free_world(&map, &d);
 }
 
@@ -149,15 +138,13 @@ static void test_mining_opens_the_wall(void)
     free_world(&map, &d);
 }
 
-static void test_progress_survives_reservation_changes(void)
+static void test_progress_is_kept_until_cancelled(void)
 {
     Map map;
     Designations d;
     REQUIRE(init_world(&map, &d));
     REQUIRE(designation_set(&d, &map, 5, 5, DESIGNATION_MINE));
-    REQUIRE(designation_reserve(&d, 5, 5, 3));
     designation_add_work(&d, &map, 5, 5, 1000.0f);
-    designation_release(&d, 5, 5, 3);
     CHECK_NEAR(designation_progress_fraction(&d, &map, 5, 5),
                1000.0 / rock_def(ROCK_GRANITE)->mine_work, 1e-4);
 
@@ -177,7 +164,7 @@ static void test_hash_detects_changes(void)
     designation_set(&d, &map, 3, 3, DESIGNATION_CHOP);
     uint64_t designated = designations_hash(&d, HASH_FNV1A64_INIT);
     CHECK(designated != empty);
-    designation_reserve(&d, 3, 3, 1);
+    designation_add_work(&d, &map, 3, 3, 10.0f);
     CHECK(designations_hash(&d, HASH_FNV1A64_INIT) != designated);
     free_world(&map, &d);
 }
@@ -190,6 +177,7 @@ static void test_definitions(void)
         CHECK(def->id != NULL);
         CHECK(i18n_is_valid_key(def->name_key));
         CHECK(i18n_is_valid_key(def->activity_key));
+        CHECK(work_type_def(def->work_type) != NULL);
     }
     CHECK(designation_def(DESIGNATION_COUNT) == NULL);
 }
@@ -199,10 +187,10 @@ int main(void)
     RUN_TEST(test_init_rejects_invalid_sizes);
     RUN_TEST(test_orders_need_a_valid_target);
     RUN_TEST(test_rectangle_only_marks_valid_tiles);
-    RUN_TEST(test_reservations);
+    RUN_TEST(test_counts_per_work_type);
     RUN_TEST(test_chopping_removes_the_tree);
     RUN_TEST(test_mining_opens_the_wall);
-    RUN_TEST(test_progress_survives_reservation_changes);
+    RUN_TEST(test_progress_is_kept_until_cancelled);
     RUN_TEST(test_hash_detects_changes);
     RUN_TEST(test_definitions);
     return test_summary();

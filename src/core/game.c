@@ -101,12 +101,19 @@ EntityId game_spawn_colonist(Game *game, int x, int y)
 }
 
 /* Reservation owners are colonist slots + 1 and must fit in a byte. */
-_Static_assert(COLONIST_MAX < 255, "colonist slots must fit in designation owners");
+_Static_assert(COLONIST_MAX < 255, "colonist slots must fit in reservation owners");
 
 static ColonistContext colonist_context(Game *game, uint32_t slot)
 {
-    ColonistContext context = {&game->map,          &game->designations, &game->pathfinder,
-                               &game->rng,          game->clock.tick,    (uint8_t)(slot + 1)};
+    ColonistContext context = {
+        .map = &game->map,
+        .designations = &game->designations,
+        .reservations = &game->reservations,
+        .pathfinder = &game->pathfinder,
+        .rng = &game->rng,
+        .tick = game->clock.tick,
+        .worker_id = (uint8_t)(slot + 1),
+    };
     return context;
 }
 
@@ -228,6 +235,7 @@ bool game_init(Game *game, const NewGameParams *params)
         return false;
     }
     game->seed = params->world.seed;
+    reservations_init(&game->reservations);
     game_clock_init(&game->clock);
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
     spawn_starting_colonists(game, params->colonist_count);
@@ -304,6 +312,7 @@ uint64_t game_hash(const Game *game)
 {
     uint64_t hash = map_hash(&game->map);
     hash = designations_hash(&game->designations, hash);
+    hash = reservations_hash(&game->reservations, hash);
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {

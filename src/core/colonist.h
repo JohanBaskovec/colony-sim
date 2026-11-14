@@ -15,7 +15,9 @@
 #include "core/game_clock.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
+#include "core/reservation.h"
 #include "core/rng.h"
+#include "core/work.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -108,7 +110,9 @@ typedef struct Colonist {
     uint8_t work_type; /* DesignationType being worked on (TASK_WORK). */
     int search_cooldown[SEARCH_COUNT]; /* Ticks before searching again. */
     int search_failures[SEARCH_COUNT]; /* Consecutive failed searches. */
-    uint32_t work_search_revision; /* Designations revision at the last failed work search. */
+    /* Designations revision + reservation releases at the last failed work search. */
+    uint32_t work_search_stamp;
+    uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */
     float needs[NEED_COUNT];
 } Colonist;
 
@@ -116,10 +120,11 @@ typedef struct Colonist {
 typedef struct ColonistContext {
     Map *map;
     Designations *designations;
+    Reservations *reservations;
     Pathfinder *pathfinder;
     Rng *rng;
     uint64_t tick;
-    uint8_t worker_id; /* Reservation owner for this colonist (slot + 1). */
+    uint8_t worker_id; /* Reservation owner for this colonist (slot + 1), never 0. */
 } ColonistContext;
 
 void colonist_init(Colonist *colonist, const char *name, int age, int x, int y);

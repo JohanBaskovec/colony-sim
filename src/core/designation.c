@@ -11,9 +11,10 @@
 #define CHOP_GROWTH_WORK 1600.0f
 
 static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
-    [DESIGNATION_NONE] = {"none", NULL, NULL},
-    [DESIGNATION_CHOP] = {"chop", N_("designation.chop"), N_("colonist.task.chop")},
-    [DESIGNATION_MINE] = {"mine", N_("designation.mine"), N_("colonist.task.mine")},
+    [DESIGNATION_NONE] = {"none", NULL, NULL, WORK_TYPE_COUNT},
+    [DESIGNATION_CHOP] = {"chop", N_("designation.chop"), N_("colonist.task.chop"),
+                          WORK_WOODCUTTING},
+    [DESIGNATION_MINE] = {"mine", N_("designation.mine"), N_("colonist.task.mine"), WORK_MINING},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -29,10 +30,8 @@ bool designations_init(Designations *designations, int width, int height)
     }
     size_t count = (size_t)width * (size_t)height;
     designations->type = calloc(count, sizeof(*designations->type));
-    designations->reserved_by = calloc(count, sizeof(*designations->reserved_by));
     designations->progress = calloc(count, sizeof(*designations->progress));
-    if (designations->type == NULL || designations->reserved_by == NULL ||
-        designations->progress == NULL) {
+    if (designations->type == NULL || designations->progress == NULL) {
         designations_free(designations);
         return false;
     }
@@ -44,7 +43,6 @@ bool designations_init(Designations *designations, int width, int height)
 void designations_free(Designations *designations)
 {
     free(designations->type);
-    free(designations->reserved_by);
     free(designations->progress);
     memset(designations, 0, sizeof(*designations));
 }
@@ -84,15 +82,13 @@ DesignationType designation_get(const Designations *designations, int x, int y)
 /* Removes the order on a tile, keeping the counters in sync. */
 static void clear_tile(Designations *designations, size_t index)
 {
-    if (designations->type[index] == DESIGNATION_NONE) {
+    DesignationType type = (DesignationType)designations->type[index];
+    if (type == DESIGNATION_NONE) {
         return;
     }
     designations->count--;
-    if (designations->reserved_by[index] == DESIGNATION_NO_OWNER) {
-        designations->available--;
-    }
+    designations->count_by_work[DESIGNATION_DEFS[type].work_type]--;
     designations->type[index] = DESIGNATION_NONE;
-    designations->reserved_by[index] = DESIGNATION_NO_OWNER;
     designations->progress[index] = 0.0f;
 }
 
@@ -113,7 +109,7 @@ bool designation_set(Designations *designations, const Map *map, int x, int y,
     if (type != DESIGNATION_NONE) {
         designations->type[index] = (uint8_t)type;
         designations->count++;
-        designations->available++;
+        designations->count_by_work[DESIGNATION_DEFS[type].work_type]++;
         designations->revision++;
     }
     return true;
@@ -135,42 +131,15 @@ int designations_set_rect(Designations *designations, const Map *map, int x0, in
     return changed;
 }
 
-bool designation_is_available(const Designations *designations, int x, int y)
+int designations_count_for_work(const Designations *designations, WorkTypeMask mask)
 {
-    if (!in_bounds(designations, x, y)) {
-        return false;
+    int total = 0;
+    for (int type = 0; type < WORK_TYPE_COUNT; type++) {
+        if (mask & WORK_TYPE_BIT(type)) {
+            total += designations->count_by_work[type];
+        }
     }
-    size_t index = index_of(designations, x, y);
-    return designations->type[index] != DESIGNATION_NONE &&
-           designations->reserved_by[index] == DESIGNATION_NO_OWNER;
-}
-
-uint8_t designation_owner(const Designations *designations, int x, int y)
-{
-    if (!in_bounds(designations, x, y)) {
-        return DESIGNATION_NO_OWNER;
-    }
-    return designations->reserved_by[index_of(designations, x, y)];
-}
-
-bool designation_reserve(Designations *designations, int x, int y, uint8_t owner)
-{
-    if (owner == DESIGNATION_NO_OWNER || !designation_is_available(designations, x, y)) {
-        return false;
-    }
-    designations->reserved_by[index_of(designations, x, y)] = owner;
-    designations->available--;
-    return true;
-}
-
-void designation_release(Designations *designations, int x, int y, uint8_t owner)
-{
-    if (owner == DESIGNATION_NO_OWNER || designation_owner(designations, x, y) != owner) {
-        return;
-    }
-    designations->reserved_by[index_of(designations, x, y)] = DESIGNATION_NO_OWNER;
-    designations->available++;
-    designations->revision++;
+    return total;
 }
 
 float designation_work_needed(const Designations *designations, const Map *map, int x, int y)
@@ -237,7 +206,6 @@ uint64_t designations_hash(const Designations *designations, uint64_t hash)
 {
     size_t count = (size_t)designations->width * (size_t)designations->height;
     hash = hash_fnv1a64(hash, designations->type, count);
-    hash = hash_fnv1a64(hash, designations->reserved_by, count);
     hash = hash_fnv1a64(hash, designations->progress, count * sizeof(*designations->progress));
     return hash;
 }

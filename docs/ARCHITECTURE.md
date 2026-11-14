@@ -14,7 +14,8 @@
 │ src/core/  (static library colony_core, pure C17, no SDL)    │
 │                                                              │
 │  game ─► colonist ─► pathfinding ─► map                      │
-│    │        └─────► designation ─────► map                   │
+│    │        ├─────► designation ─────► map, work             │
+│    │        └─────► reservation                              │
 │    ├──► pool, game_clock, worldgen ─► noise, rng             │
 │  i18n   camera   cli   log   util                            │
 └──────────────────────────────────────────────────────────────┘
@@ -42,7 +43,9 @@ simulation:
 |--------------|------------------------------------------------------------------------------|
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work            |
-| `designation`| Player work orders per tile (chop, mine), reservations, work progress        |
+| `designation`| Player work orders per tile (chop, mine) and their work progress             |
+| `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
+| `work`       | Work types (mining, woodcutting) and work priority helpers                   |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
@@ -104,8 +107,7 @@ temperature, fog of war.
 
 Player orders are not part of the map (which only describes the physical
 world): `Designations` (`core/designation.h`, owned by `Game`) has its own
-dense layers of the same size: order type, reservation owner and work
-progress per tile.
+dense layers of the same size: order type and work progress per tile.
 
 Static definitions (`TerrainDef`, `RockDef`, `PlantDef`) carry a stable `id`
 (used by save files, never translated) and a `name_key` (translation key).
@@ -149,30 +151,42 @@ reach.
 Decisions only happen on tile centers, so a colonist never jumps back when it
 changes its mind.
 
-### Work on designations
+### Work and reservations
 
-When nothing more urgent is needed, an idle or wandering colonist looks for
-work: a Dijkstra search for the nearest passable tile next to an available
-(designated, unreserved) tile, 4-neighborhood, with a fixed neighbor order.
-It reserves that tile (owner = colonist slot + 1), walks there and adds
+Every designation belongs to a **work type** (`core/work.h`: mining,
+woodcutting...). Each colonist has a **priority** per work type: 0 = never,
+otherwise 1 (highest) to 4 (default 3).
+
+When nothing more urgent is needed, an idle or wandering colonist looks for a
+job, one priority level at a time (1 first): a Dijkstra search for the nearest
+passable tile next to an open job (designated, work type at that level, not
+reserved), 4-neighborhood, fixed neighbor order. Priority therefore beats
+distance. The colonist reserves the job, walks there and adds
 `COLONIST_WORK_SPEED` work per tick. When the work needed is reached the order
 is carried out on the map (tree removed, rock dug out, leaving the rough stone
 floor) and the designation disappears.
 
-- Every task change goes through one function (`begin_task()`), which releases
-  the reservation: a colonist that leaves to eat or sleep frees its job, and
-  the work done stays on the tile, so the next worker resumes it.
-- A worker checks every tick that it still owns its tile; cancelling or
-  replacing an order therefore stops it cleanly. Removing a colonist releases
-  its reservation.
-- `Designations.available` counts unreserved orders: when it is zero, idle
-  colonists skip the search entirely. Failed searches back off like food and
-  water searches, but `Designations.revision` (bumped when work may have become
-  available: new order, released reservation, completed work) lets them look
-  again at once.
+**Reservations** (`core/reservation.h`, owned by `Game`) record who is busy with
+what: (kind, tile, owner), at most one owner per tile and kind. Kinds today:
+work (a designated tile) and food (a bush about to be eaten), so two colonists
+never walk to the same job or the same bush. Owners are colonist slot + 1.
 
-This is the first step towards the job system (next M2 item): other job
-sources (hauling, construction) and work priorities will build on it.
+- Every task change goes through one function (`begin_task()`), which releases
+  everything the colonist holds: reservations never outlive the task that made
+  them, including when a colonist leaves to eat or sleep or is removed. Work
+  done stays on the tile, so the next worker resumes it.
+- At each tile center, a colonist heading to a job or to food checks that the
+  target is still valid (order not cancelled, fruit still there); a worker
+  also checks every tick that it still owns its job.
+- When every order is reserved (`designations.count` minus work reservations
+  is zero) idle colonists skip the search entirely. Failed searches back off
+  like food and water searches, but a stamp (designation revision + number of
+  reservation releases) lets them look again as soon as work may have become
+  available.
+
+The table is a small array scanned linearly: there are at most a few
+reservations per colonist. A per-tile index can replace it if hauling makes
+reservations much more numerous.
 
 ## Pathfinding
 

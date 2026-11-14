@@ -42,6 +42,9 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y)
     for (int need = 0; need < NEED_COUNT; need++) {
         colonist->needs[need] = 1.0f;
     }
+    for (int work = 0; work < WORK_TYPE_COUNT; work++) {
+        colonist->work_priorities[work] = WORK_PRIORITY_DEFAULT;
+    }
 }
 
 void colonist_free(Colonist *colonist)
@@ -129,15 +132,12 @@ static TilePos current_tile(const Colonist *colonist)
     return (TilePos){(int16_t)colonist->x, (int16_t)colonist->y};
 }
 
-/* Every task change goes through here, so that a reserved designation is
- * always released when the colonist stops working on it. The path is kept:
- * callers set it before or clear it after. */
+/* Every task change goes through here: whatever the colonist had reserved
+ * (job, food) is released, so reservations never outlive the task that made
+ * them. The path is kept: callers set it before or clear it after. */
 static void begin_task(Colonist *colonist, const ColonistContext *context, ColonistTask task)
 {
-    if (colonist->task == TASK_WORK) {
-        designation_release(context->designations, colonist->target.x, colonist->target.y,
-                            context->worker_id);
-    }
+    reservations_release_all(context->reservations, context->worker_id);
     colonist->task = task;
     colonist->timer = 0;
     colonist->path_index = 0;
@@ -174,10 +174,18 @@ static int random_idle_ticks(Rng *rng)
     return rng_range_i32(rng, COLONIST_IDLE_MIN_TICKS, COLONIST_IDLE_MAX_TICKS);
 }
 
-static bool is_edible(const Map *map, int x, int y, void *userdata)
+/* Search filter: food that nobody else is about to eat. */
+typedef struct FoodSearch {
+    const Reservations *reservations;
+    uint8_t self;
+} FoodSearch;
+
+static bool is_free_food(const Map *map, int x, int y, void *userdata)
 {
-    (void)userdata;
-    return map_has_edible_plant(map, x, y);
+    const FoodSearch *search = userdata;
+    return map_has_edible_plant(map, x, y) &&
+           !reservations_taken_by_other(search->reservations, RESERVATION_FOOD,
+                                        (TilePos){(int16_t)x, (int16_t)y}, search->self);
 }
 
 static bool is_drinking_spot(const Map *map, int x, int y, void *userdata)
@@ -195,8 +203,9 @@ static bool try_satisfy(Colonist *colonist, const ColonistContext *context, Need
         return false;
     }
     TilePos found;
+    FoodSearch food = {context->reservations, context->worker_id};
     if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                 drink ? is_drinking_spot : is_edible, NULL,
+                                 drink ? is_drinking_spot : is_free_food, &food,
                                  drink ? COLONIST_WATER_SEARCH_MAX_COST
                                        : COLONIST_FOOD_SEARCH_MAX_COST,
                                  &colonist->path, &found)) {
@@ -206,6 +215,9 @@ static bool try_satisfy(Colonist *colonist, const ColonistContext *context, Need
     colonist->search_failures[kind] = 0;
     begin_task(colonist, context, drink ? TASK_DRINK : TASK_EAT);
     colonist->target = found;
+    if (!drink) {
+        reservations_add(context->reservations, RESERVATION_FOOD, found, context->worker_id);
+    }
     return true;
 }
 
@@ -239,13 +251,32 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
 static const int16_t NEIGHBOR_DX[4] = {0, 1, 0, -1};
 static const int16_t NEIGHBOR_DY[4] = {-1, 0, 1, 0};
 
-/* First available designation next to (x, y), in a fixed order (deterministic). */
-static bool find_adjacent_work(const Designations *designations, int x, int y, TilePos *out)
+/* Search filter for jobs: work types allowed at the priority being searched. */
+typedef struct WorkSearch {
+    const Designations *designations;
+    const Reservations *reservations;
+    WorkTypeMask mask;
+    uint8_t self;
+} WorkSearch;
+
+static bool is_open_job(const WorkSearch *search, int x, int y)
+{
+    DesignationType type = designation_get(search->designations, x, y);
+    if (type == DESIGNATION_NONE ||
+        !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type))) {
+        return false;
+    }
+    return !reservations_taken_by_other(search->reservations, RESERVATION_WORK,
+                                        (TilePos){(int16_t)x, (int16_t)y}, search->self);
+}
+
+/* First open job next to (x, y), in a fixed order (deterministic). */
+static bool find_adjacent_job(const WorkSearch *search, int x, int y, TilePos *out)
 {
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i];
         int ny = y + NEIGHBOR_DY[i];
-        if (designation_is_available(designations, nx, ny)) {
+        if (is_open_job(search, nx, ny)) {
             *out = (TilePos){(int16_t)nx, (int16_t)ny};
             return true;
         }
@@ -253,42 +284,65 @@ static bool find_adjacent_work(const Designations *designations, int x, int y, T
     return false;
 }
 
-/* A tile to stand on while working: passable, next to available work. */
+/* A tile to stand on while working: passable, next to an open job. */
 static bool is_work_spot(const Map *map, int x, int y, void *userdata)
 {
     TilePos unused;
-    return map_is_passable(map, x, y) && find_adjacent_work(userdata, x, y, &unused);
+    return map_is_passable(map, x, y) && find_adjacent_job(userdata, x, y, &unused);
 }
 
+static uint32_t work_stamp(const ColonistContext *context)
+{
+    return context->designations->revision + context->reservations->releases;
+}
+
+/* Takes the nearest job of the highest priority level that has one. */
 static bool try_start_work(Colonist *colonist, const ColonistContext *context)
 {
-    Designations *designations = context->designations;
-    if (designations == NULL || designations->available <= 0) {
+    const Designations *designations = context->designations;
+    int open_jobs = designations->count - context->reservations->count_by_kind[RESERVATION_WORK];
+    if (open_jobs <= 0) {
         return false;
     }
-    /* After a failure, new or freed work (a new revision) allows an early retry. */
+    /* After a failure, new or freed work (a new stamp) allows an early retry. */
     if (!search_allowed(colonist, SEARCH_WORK) &&
-        colonist->work_search_revision == designations->revision) {
+        colonist->work_search_stamp == work_stamp(context)) {
         return false;
     }
-    TilePos spot, target;
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                 is_work_spot, designations, COLONIST_WORK_SEARCH_MAX_COST,
-                                 &colonist->path, &spot)) {
-        /* The path is untouched on failure: a wandering colonist keeps walking. */
-        search_failed(colonist, SEARCH_WORK);
-        colonist->work_search_revision = designations->revision;
-        return false;
+    WorkSearch search = {designations, context->reservations, 0, context->worker_id};
+    for (int priority = WORK_PRIORITY_HIGHEST; priority <= WORK_PRIORITY_LOWEST; priority++) {
+        search.mask = work_types_at_priority(colonist->work_priorities, priority);
+        if (search.mask == 0 || designations_count_for_work(designations, search.mask) == 0) {
+            continue;
+        }
+        TilePos spot, target;
+        if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                     is_work_spot, &search, COLONIST_WORK_SEARCH_MAX_COST,
+                                     &colonist->path, &spot)) {
+            continue; /* The path is untouched on failure: a wanderer keeps walking. */
+        }
+        /* The search only stops on a spot next to an open job. */
+        find_adjacent_job(&search, spot.x, spot.y, &target);
+        colonist->search_failures[SEARCH_WORK] = 0;
+        colonist->search_cooldown[SEARCH_WORK] = 0;
+        begin_task(colonist, context, TASK_WORK);
+        colonist->target = target;
+        colonist->work_type = (uint8_t)designation_get(designations, target.x, target.y);
+        reservations_add(context->reservations, RESERVATION_WORK, target, context->worker_id);
+        return true;
     }
-    /* The search only stops on a spot next to available work. */
-    find_adjacent_work(designations, spot.x, spot.y, &target);
-    designation_reserve(designations, target.x, target.y, context->worker_id);
-    colonist->search_failures[SEARCH_WORK] = 0;
-    colonist->search_cooldown[SEARCH_WORK] = 0;
-    begin_task(colonist, context, TASK_WORK);
-    colonist->target = target;
-    colonist->work_type = (uint8_t)designation_get(designations, target.x, target.y);
-    return true;
+    search_failed(colonist, SEARCH_WORK);
+    colonist->work_search_stamp = work_stamp(context);
+    return false;
+}
+
+/* Whether the job the colonist is heading to or working on still exists and is still its own. */
+static bool job_still_valid(const Colonist *colonist, const ColonistContext *context)
+{
+    TilePos target = colonist->target;
+    return designation_get(context->designations, target.x, target.y) == colonist->work_type &&
+           reservations_owner(context->reservations, RESERVATION_WORK, target) ==
+               context->worker_id;
 }
 
 static void work(Colonist *colonist, const ColonistContext *context)
@@ -296,12 +350,11 @@ static void work(Colonist *colonist, const ColonistContext *context)
     Designations *designations = context->designations;
     TilePos target = colonist->target;
     int distance = abs(colonist->x - target.x) + abs(colonist->y - target.y);
-    if (distance != 1 ||
-        designation_owner(designations, target.x, target.y) != context->worker_id) {
+    DesignationType type = designation_get(designations, target.x, target.y);
+    if (distance != 1 || !job_still_valid(colonist, context)) {
         set_idle(colonist, context, 0); /* Not there, or the order was cancelled. */
         return;
     }
-    DesignationType type = designation_get(designations, target.x, target.y);
     if (!designation_can_apply(context->map, target.x, target.y, type)) {
         designation_set(designations, context->map, target.x, target.y, DESIGNATION_NONE);
         set_idle(colonist, context, 0);
@@ -373,8 +426,18 @@ static void decide(Colonist *colonist, const ColonistContext *context)
         }
         return;
     case TASK_EAT:
-    case TASK_DRINK:
+        if (!map_has_edible_plant(context->map, colonist->target.x, colonist->target.y)) {
+            set_idle(colonist, context, 0); /* The fruit is gone: decide again below. */
+            break;
+        }
         return; /* Carried on until done. */
+    case TASK_DRINK:
+        return;
+    case TASK_WORK:
+        if (!job_still_valid(colonist, context)) {
+            set_idle(colonist, context, 0); /* Cancelled on the way: decide again below. */
+        }
+        break;
     default:
         break;
     }
@@ -423,7 +486,7 @@ static void eat(Colonist *colonist, const ColonistContext *context)
     Map *map = context->map;
     if (colonist->x != colonist->target.x || colonist->y != colonist->target.y ||
         !map_has_edible_plant(map, colonist->x, colonist->y)) {
-        /* Not there, or someone else ate it first: look again soon. */
+        /* Not there, or the fruit is gone: look again soon. */
         set_idle(colonist, context, 0);
         return;
     }

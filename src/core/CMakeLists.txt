@@ -11,8 +11,10 @@ add_library(colony_core STATIC
     noise.c
     pathfinding.c
     pool.c
+    reservation.c
     rng.c
     util.c
+    work.c
     worldgen.c)
 
 target_include_directories(colony_core PUBLIC ${PROJECT_SOURCE_DIR}/src)

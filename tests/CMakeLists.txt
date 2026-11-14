@@ -13,7 +13,9 @@ set(COLONY_UNIT_TESTS
     test_noise
     test_pathfinding
     test_pool
+    test_reservation
     test_rng
+    test_work
     test_worldgen)
 
 foreach(test_name IN LISTS COLONY_UNIT_TESTS)

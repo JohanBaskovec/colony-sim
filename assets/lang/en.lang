@@ -34,6 +34,10 @@ designation.chop = Chop trees
 designation.mine = Mine rock
 tool.cancel = Cancel orders
 
+# Work types
+work.mining = Mining
+work.woodcutting = Woodcutting
+
 # Seasons
 season.spring = Spring
 season.summer = Summer
