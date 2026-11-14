@@ -35,6 +35,8 @@ TextRenderer *text_renderer_create(SDL_Renderer *renderer, const char *font_path
         text_renderer_destroy(text);
         return NULL;
     }
+    /* Without HarfBuzz, SDL_ttf mispositions glyphs after kerned pairs ("Te rrain"). */
+    TTF_SetFontKerning(text->font, false);
     text->engine = TTF_CreateRendererTextEngine(renderer);
     if (text->engine == NULL) {
         LOG_ERROR("Cannot create the text engine: %s", SDL_GetError());

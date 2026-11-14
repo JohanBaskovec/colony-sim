@@ -24,6 +24,15 @@ static const SDL_Color GRASS_COLOR = {92, 138, 60, 255};
 static const SDL_Color BUSH_COLOR = {64, 112, 48, 255};
 static const SDL_Color TREE_COLOR = {34, 88, 40, 255};
 
+/* Body colors, picked per colonist slot. */
+static const SDL_Color COLONIST_COLORS[] = {
+    {230, 120, 70, 255}, {90, 160, 230, 255}, {240, 200, 80, 255}, {200, 110, 210, 255},
+    {110, 210, 170, 255}, {235, 95, 120, 255}, {170, 190, 90, 255}, {150, 140, 240, 255},
+};
+static const SDL_Color COLONIST_OUTLINE = {20, 20, 24, 255};
+static const SDL_Color SELECTION_COLOR = {255, 255, 255, 255};
+static const SDL_Color PATH_COLOR = {255, 255, 255, 140};
+
 /* Small deterministic per-tile brightness variation, so flat areas look less uniform. */
 static int tile_variation(int x, int y)
 {
@@ -131,5 +140,108 @@ void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, in
     SDL_FRect rect = {floorf(left), floorf(top), floorf(right) - floorf(left),
                       floorf(bottom) - floorf(top)};
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderRect(renderer, &rect);
+}
+
+/* ---- Colonists ----------------------------------------------------------- */
+
+static SDL_FColor to_fcolor(SDL_Color color)
+{
+    return (SDL_FColor){color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f};
+}
+
+static void fill_circle(SDL_Renderer *renderer, float cx, float cy, float radius, SDL_Color color)
+{
+    enum { SEGMENTS = 24 };
+    SDL_Vertex vertices[SEGMENTS + 1];
+    int indices[SEGMENTS * 3];
+    SDL_FColor fcolor = to_fcolor(color);
+
+    vertices[0] = (SDL_Vertex){{cx, cy}, fcolor, {0.0f, 0.0f}};
+    for (int i = 0; i < SEGMENTS; i++) {
+        float angle = (float)i * (2.0f * SDL_PI_F / SEGMENTS);
+        vertices[i + 1] = (SDL_Vertex){{cx + radius * SDL_cosf(angle), cy + radius * SDL_sinf(angle)},
+                                       fcolor,
+                                       {0.0f, 0.0f}};
+        indices[i * 3] = 0;
+        indices[i * 3 + 1] = i + 1;
+        indices[i * 3 + 2] = (i + 1) % SEGMENTS + 1;
+    }
+    SDL_RenderGeometry(renderer, NULL, vertices, SEGMENTS + 1, indices, SEGMENTS * 3);
+}
+
+static bool is_selected(EntityId id, const EntityId *selected, int selected_count)
+{
+    for (int i = 0; i < selected_count; i++) {
+        if (entity_id_equal(id, selected[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void render_path(SDL_Renderer *renderer, const Camera *camera, const Colonist *colonist)
+{
+    enum { MAX_POINTS = 256 };
+    SDL_FPoint points[MAX_POINTS];
+    int count = 0;
+
+    float x, y;
+    colonist_position(colonist, &x, &y);
+    camera_world_to_screen(camera, x, y, &points[count].x, &points[count].y);
+    count++;
+    for (int i = colonist->path_index; i < colonist->path.count && count < MAX_POINTS; i++) {
+        TilePos step = colonist->path.steps[i];
+        camera_world_to_screen(camera, step.x + 0.5f, step.y + 0.5f, &points[count].x,
+                               &points[count].y);
+        count++;
+    }
+    if (count > 1) {
+        SDL_SetRenderDrawColor(renderer, PATH_COLOR.r, PATH_COLOR.g, PATH_COLOR.b, PATH_COLOR.a);
+        SDL_RenderLines(renderer, points, count);
+    }
+}
+
+void render_colonists(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                      const EntityId *selected, int selected_count)
+{
+    float radius = SDL_max(3.0f, camera->zoom * 0.38f);
+
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        EntityId id = game_colonist_id_at(game, slot);
+        if (entity_id_is_none(id) || !is_selected(id, selected, selected_count)) {
+            continue;
+        }
+        render_path(renderer, camera, &game->colonists[slot]);
+    }
+
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        EntityId id = game_colonist_id_at(game, slot);
+        if (entity_id_is_none(id)) {
+            continue;
+        }
+        const Colonist *colonist = &game->colonists[slot];
+        float wx, wy, sx, sy;
+        colonist_position(colonist, &wx, &wy);
+        camera_world_to_screen(camera, wx, wy, &sx, &sy);
+
+        if (is_selected(id, selected, selected_count)) {
+            fill_circle(renderer, sx, sy, radius + 3.0f, SELECTION_COLOR);
+        }
+        fill_circle(renderer, sx, sy, radius + 1.0f, COLONIST_OUTLINE);
+        SDL_Color body = COLONIST_COLORS[slot % SDL_arraysize(COLONIST_COLORS)];
+        if (colonist->task == TASK_SLEEP) {
+            body = shade(body, -70); /* Sleeping colonists look dimmer. */
+        }
+        fill_circle(renderer, sx, sy, radius, body);
+    }
+}
+
+void render_selection_box(SDL_Renderer *renderer, float x0, float y0, float x1, float y1)
+{
+    SDL_FRect rect = {SDL_min(x0, x1), SDL_min(y0, y1), SDL_fabsf(x1 - x0), SDL_fabsf(y1 - y0)};
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 40);
+    SDL_RenderFillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
     SDL_RenderRect(renderer, &rect);
 }

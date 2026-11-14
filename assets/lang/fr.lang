@@ -25,7 +25,7 @@ rock.sandstone = Grès
 
 # Plantes
 plant.grass = Herbe
-plant.bush = Buisson sauvage
+plant.bush = Buisson à baies
 plant.tree = Arbre
 
 # Saisons
@@ -39,7 +39,8 @@ hud.date = {1}, jour {0}, an {2} · {3}h{4}
 hud.speed = Vitesse : {0}×
 hud.paused = En pause
 hud.language = Langue : {0}
-hud.help = {0}/Flèches : déplacer · Molette : zoom · Glisser clic milieu/droit : défiler · Espace : pause · 1-3 : vitesse · L : langue · F3 : débogage · Échap : quitter
+hud.help.camera = {0}/Flèches : déplacer · Molette : zoom · Glisser clic milieu/droit : défiler
+hud.help.game = Clic/glisser gauche : sélectionner · Espace : pause · 1-3 : vitesse · L : langue · F3 : débogage · Échap : quitter
 
 hud.tile.position = Case {0}, {1}
 hud.tile.terrain = Terrain : {0}
@@ -54,3 +55,23 @@ hud.debug.seed = Graine : {0}
 hud.debug.zoom = Zoom : {0} px/case
 hud.debug.trees.one = {0} arbre sur la carte
 hud.debug.trees.other = {0} arbres sur la carte
+
+# Colons
+colonist.task.idle = Inactif
+colonist.task.wander = Se promène
+colonist.task.eat = Mange
+colonist.task.sleep = Dort
+
+need.food = Nourriture
+need.food.low = A faim
+need.food.critical = Meurt de faim
+need.rest = Repos
+need.rest.low = A sommeil
+need.rest.critical = À bout de forces
+
+hud.colonist.age = Âge : {0}
+hud.colonist.activity = Activité : {0}
+hud.colonist.need = {0} : {1} %
+hud.colonist.need_state = {0} : {1} % ({2})
+hud.selection.count.one = {0} colon sélectionné
+hud.selection.count.other = {0} colons sélectionnés

@@ -23,10 +23,10 @@ static const RockDef ROCK_DEFS[ROCK_COUNT] = {
 };
 
 static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
-    [PLANT_NONE] = {"none", NULL, 0.0f, 0.0f, 1.0f},
-    [PLANT_GRASS] = {"grass", N_("plant.grass"), 0.35f, 0.3f, 1.0f},
-    [PLANT_BUSH] = {"bush", N_("plant.bush"), 0.12f, 0.5f, 1.3f},
-    [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f},
+    [PLANT_NONE] = {"none", NULL, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
+    [PLANT_GRASS] = {"grass", N_("plant.grass"), 0.35f, 0.3f, 1.0f, 0.0f, 0.0f},
+    [PLANT_BUSH] = {"berry_bush", N_("plant.bush"), 0.12f, 0.5f, 1.3f, 0.45f, 0.5f},
+    [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f, 0.0f, 0.0f},
 };
 
 const TerrainDef *terrain_def(Terrain terrain)
@@ -120,4 +120,14 @@ size_t map_count_plants(const Map *map, PlantType type)
         }
     }
     return total;
+}
+
+bool map_has_edible_plant(const Map *map, int x, int y)
+{
+    if (!map_in_bounds(map, x, y)) {
+        return false;
+    }
+    const Plant *plant = &map->plants[map_index(map, x, y)];
+    const PlantDef *def = &PLANT_DEFS[plant->type];
+    return def->nutrition > 0.0f && plant->growth >= def->min_edible_growth;
 }

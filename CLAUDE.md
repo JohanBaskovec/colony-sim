@@ -38,6 +38,7 @@ cmake --preset debug && cmake --build --preset debug && ctest --preset debug    
 ./build/debug/bin/colony_sim --lang fr --seed 42                                        # run the game
 ctest --preset debug -R i18n          # only one test (regex on the test name)
 ctest --preset debug -L i18n          # translation checks only (label)
+./build/headless/bench/bench_pathfinding 200 2000   # benchmark (use an optimized build for real numbers)
 ```
 
 The first `debug`/`release`/`asan` configure downloads and builds SDL3 (minutes).
@@ -56,6 +57,9 @@ Prefer the `headless` preset while working on the simulation core.
   depend on the tick count, never on frame time.
 - Static data tables (`TerrainDef`, `PlantDef`...) have a stable `id` (saves,
   never translated) and a `name_key` (translation key).
+- Entities (colonists...) live in fixed arrays managed by a `Pool` and are
+  referenced by generational `EntityId` handles, never by pointers kept across
+  ticks. UI state (selection, camera) stays in the frontend (`App`).
 
 ## Conventions
 

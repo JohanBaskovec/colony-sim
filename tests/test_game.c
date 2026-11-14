@@ -4,11 +4,11 @@
 
 static bool init_small_game(Game *game, uint64_t seed)
 {
-    WorldGenParams params;
-    worldgen_default_params(&params);
-    params.seed = seed;
-    params.width = 64;
-    params.height = 64;
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = seed;
+    params.world.width = 64;
+    params.world.height = 64;
     return game_init(game, &params);
 }
 
@@ -19,6 +19,7 @@ static void test_init_and_shutdown(void)
     CHECK_EQ_UINT(game.seed, 9);
     CHECK_EQ_INT(game.map.width, 64);
     CHECK_EQ_INT(game.clock.speed, GAME_SPEED_NORMAL);
+    CHECK_EQ_UINT(game.colonist_pool.count, GAME_DEFAULT_COLONIST_COUNT);
     game_shutdown(&game);
     CHECK(game.map.terrain == NULL);
 }
@@ -26,9 +27,9 @@ static void test_init_and_shutdown(void)
 static void test_init_failure_leaves_game_safe_to_shut_down(void)
 {
     Game game;
-    WorldGenParams params;
-    worldgen_default_params(&params);
-    params.width = 1;
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.width = 1;
     CHECK(!game_init(&game, &params));
     game_shutdown(&game);
 }
@@ -94,9 +95,22 @@ static void test_simulation_is_deterministic(void)
         game_tick(&b);
     }
     CHECK_EQ_UINT(map_hash(&a.map), map_hash(&b.map));
+    CHECK_EQ_UINT(game_hash(&a), game_hash(&b));
     CHECK_EQ_UINT(a.clock.tick, b.clock.tick);
     game_shutdown(&a);
     game_shutdown(&b);
+}
+
+static void test_hash_changes_as_simulation_runs(void)
+{
+    Game game;
+    REQUIRE(init_small_game(&game, 8));
+    uint64_t before = game_hash(&game);
+    for (int i = 0; i < 600; i++) {
+        game_tick(&game);
+    }
+    CHECK(game_hash(&game) != before);
+    game_shutdown(&game);
 }
 
 int main(void)
@@ -106,5 +120,6 @@ int main(void)
     RUN_TEST(test_update_advances_ticks);
     RUN_TEST(test_plants_grow_over_time);
     RUN_TEST(test_simulation_is_deterministic);
+    RUN_TEST(test_hash_changes_as_simulation_runs);
     return test_summary();
 }

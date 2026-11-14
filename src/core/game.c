@@ -1,24 +1,199 @@
 #include "core/game.h"
 
+#include "core/log.h"
+#include "core/util.h"
+
+#include <math.h>
 #include <string.h>
 
-bool game_init(Game *game, const WorldGenParams *params)
+/* Spawn area requirements: enough reachable land around the starting point. */
+#define SPAWN_AREA_COST 30.0f
+#define SPAWN_AREA_MIN_TILES 900
+#define SPAWN_MAX_ATTEMPTS 400
+#define SPAWN_PLACEMENT_MAX_COST 40.0f
+
+void game_default_params(NewGameParams *params)
 {
-    memset(game, 0, sizeof(*game));
-    if (!worldgen_generate(&game->map, params)) {
+    worldgen_default_params(&params->world);
+    params->colonist_count = GAME_DEFAULT_COLONIST_COUNT;
+}
+
+/* ---- Colonist storage ---------------------------------------------------- */
+
+uint32_t game_colonist_slot_count(const Game *game)
+{
+    return game->colonist_pool.high_water;
+}
+
+EntityId game_colonist_id_at(const Game *game, uint32_t slot)
+{
+    return pool_id_at(&game->colonist_pool, slot);
+}
+
+Colonist *game_colonist(Game *game, EntityId id)
+{
+    return pool_is_alive(&game->colonist_pool, id) ? &game->colonists[id.index] : NULL;
+}
+
+const Colonist *game_colonist_const(const Game *game, EntityId id)
+{
+    return pool_is_alive(&game->colonist_pool, id) ? &game->colonists[id.index] : NULL;
+}
+
+bool game_tile_has_colonist(const Game *game, int x, int y)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (entity_id_is_none(game_colonist_id_at(game, slot))) {
+            continue;
+        }
+        const Colonist *colonist = &game->colonists[slot];
+        if (colonist->x == x && colonist->y == y) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool name_in_use(const Game *game, const char *name)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            strcmp(game->colonists[slot].name, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Random name, avoiding duplicates while unused names remain. */
+static const char *pick_name(Game *game)
+{
+    size_t count = colonist_name_count();
+    size_t start = rng_range_u32(&game->rng, (uint32_t)count);
+    for (size_t i = 0; i < count; i++) {
+        const char *name = colonist_name_at((start + i) % count);
+        if (!name_in_use(game, name)) {
+            return name;
+        }
+    }
+    return colonist_name_at(start);
+}
+
+EntityId game_spawn_colonist(Game *game, int x, int y)
+{
+    if (!map_is_passable(&game->map, x, y)) {
+        return ENTITY_NONE;
+    }
+    const char *name = pick_name(game);
+    EntityId id = pool_alloc(&game->colonist_pool);
+    if (entity_id_is_none(id)) {
+        return ENTITY_NONE;
+    }
+    Colonist *colonist = &game->colonists[id.index];
+    colonist_init(colonist, name, rng_range_i32(&game->rng, 18, 60), x, y);
+    colonist->needs[NEED_FOOD] = 0.55f + 0.35f * rng_next_float(&game->rng);
+    colonist->needs[NEED_REST] = 0.6f + 0.4f * rng_next_float(&game->rng);
+    colonist->timer = rng_range_i32(&game->rng, 0, COLONIST_IDLE_MAX_TICKS);
+    return id;
+}
+
+bool game_remove_colonist(Game *game, EntityId id)
+{
+    Colonist *colonist = game_colonist(game, id);
+    if (colonist == NULL) {
         return false;
     }
-    game->seed = params->seed;
+    colonist_free(colonist);
+    memset(colonist, 0, sizeof(*colonist));
+    return pool_release(&game->colonist_pool, id);
+}
+
+/* ---- Starting colonists -------------------------------------------------- */
+
+/* Passable tile near the map center with enough reachable land around it. */
+static bool find_spawn_center(Game *game, TilePos *out)
+{
+    Map *map = &game->map;
+    int center_x = map->width / 2;
+    int center_y = map->height / 2;
+    for (int attempt = 0; attempt < SPAWN_MAX_ATTEMPTS; attempt++) {
+        int radius = 2 + attempt / 2;
+        int x = clampi(center_x + rng_range_i32(&game->rng, -radius, radius), 0, map->width - 1);
+        int y = clampi(center_y + rng_range_i32(&game->rng, -radius, radius), 0, map->height - 1);
+        if (!map_is_passable(map, x, y)) {
+            continue;
+        }
+        TilePos candidate = {(int16_t)x, (int16_t)y};
+        if (pathfinder_reachable_count(&game->pathfinder, map, candidate, SPAWN_AREA_COST) >=
+            SPAWN_AREA_MIN_TILES) {
+            *out = candidate;
+            return true;
+        }
+    }
+    /* Tiny or very rugged map: settle for any passable tile. */
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            if (map_is_passable(map, x, y)) {
+                *out = (TilePos){(int16_t)x, (int16_t)y};
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static bool is_free_tile(const Map *map, int x, int y, void *userdata)
+{
+    return map_is_passable(map, x, y) && !game_tile_has_colonist(userdata, x, y);
+}
+
+static void spawn_starting_colonists(Game *game, int count)
+{
+    TilePos center;
+    if (count <= 0 || !find_spawn_center(game, &center)) {
+        return;
+    }
+    for (int i = 0; i < count; i++) {
+        TilePos tile;
+        if (!pathfinder_find_nearest(&game->pathfinder, &game->map, center, is_free_tile, game,
+                                     SPAWN_PLACEMENT_MAX_COST, NULL, &tile)) {
+            LOG_WARN("Not enough room to place every starting colonist");
+            return;
+        }
+        game_spawn_colonist(game, tile.x, tile.y);
+    }
+}
+
+/* ---- Lifecycle ----------------------------------------------------------- */
+
+bool game_init(Game *game, const NewGameParams *params)
+{
+    memset(game, 0, sizeof(*game));
+    if (!worldgen_generate(&game->map, &params->world) ||
+        !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
+        !pool_init(&game->colonist_pool, COLONIST_MAX)) {
+        game_shutdown(game);
+        return false;
+    }
+    game->seed = params->world.seed;
     game_clock_init(&game->clock);
-    rng_seed(&game->rng, params->seed, 0x73696dULL /* "sim" */);
+    rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
+    spawn_starting_colonists(game, params->colonist_count);
     return true;
 }
 
 void game_shutdown(Game *game)
 {
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        colonist_free(&game->colonists[slot]);
+    }
+    pool_free(&game->colonist_pool);
+    pathfinder_free(&game->pathfinder);
     map_free(&game->map);
     memset(game, 0, sizeof(*game));
 }
+
+/* ---- Simulation ---------------------------------------------------------- */
 
 static void update_plants(Game *game)
 {
@@ -43,12 +218,24 @@ static void update_plants(Game *game)
     }
 }
 
+static void update_colonists(Game *game)
+{
+    ColonistContext context = {&game->map, &game->pathfinder, &game->rng, game->clock.tick};
+    /* Fixed slot order keeps the simulation deterministic. */
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
+            colonist_tick(&game->colonists[slot], &context);
+        }
+    }
+}
+
 void game_tick(Game *game)
 {
     game->clock.tick++;
     if (game->clock.tick % GAME_PLANT_UPDATE_INTERVAL == 0) {
         update_plants(game);
     }
+    update_colonists(game);
 }
 
 int game_update(Game *game, double real_seconds)
@@ -58,4 +245,67 @@ int game_update(Game *game, double real_seconds)
         game_tick(game);
     }
     return due;
+}
+
+uint64_t game_hash(const Game *game)
+{
+    uint64_t hash = map_hash(&game->map);
+    hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
+    hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        EntityId id = game_colonist_id_at(game, slot);
+        if (entity_id_is_none(id)) {
+            continue;
+        }
+        const Colonist *c = &game->colonists[slot];
+        int32_t ints[6] = {(int32_t)id.index, (int32_t)id.generation, c->x, c->y, (int32_t)c->task,
+                           c->timer};
+        float floats[3] = {c->move_progress, c->needs[NEED_FOOD], c->needs[NEED_REST]};
+        hash = hash_fnv1a64(hash, ints, sizeof(ints));
+        hash = hash_fnv1a64(hash, floats, sizeof(floats));
+        hash = hash_fnv1a64(hash, c->name, strlen(c->name));
+    }
+    return hash;
+}
+
+/* ---- Picking ------------------------------------------------------------- */
+
+EntityId game_colonist_at(const Game *game, float world_x, float world_y)
+{
+    EntityId best = ENTITY_NONE;
+    float best_distance = GAME_PICK_RADIUS * GAME_PICK_RADIUS;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        EntityId id = game_colonist_id_at(game, slot);
+        if (entity_id_is_none(id)) {
+            continue;
+        }
+        float x, y;
+        colonist_position(&game->colonists[slot], &x, &y);
+        float distance = (x - world_x) * (x - world_x) + (y - world_y) * (y - world_y);
+        if (distance <= best_distance) {
+            best_distance = distance;
+            best = id;
+        }
+    }
+    return best;
+}
+
+int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float y1,
+                           EntityId *out, int max_count)
+{
+    float min_x = fminf(x0, x1), max_x = fmaxf(x0, x1);
+    float min_y = fminf(y0, y1), max_y = fmaxf(y0, y1);
+    int count = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game) && count < max_count; slot++) {
+        EntityId id = game_colonist_id_at(game, slot);
+        if (entity_id_is_none(id)) {
+            continue;
+        }
+        float x, y;
+        colonist_position(&game->colonists[slot], &x, &y);
+        if (x >= min_x && x <= max_x && y >= min_y && y <= max_y) {
+            out[count++] = id;
+        }
+    }
+    return count;
 }

@@ -30,6 +30,14 @@ typedef struct App {
     bool running;
     bool show_debug;
 
+    /* Selection is UI state: it lives here, not in the simulation. */
+    EntityId selected[COLONIST_MAX];
+    int selected_count;
+    bool left_button_down;
+    bool box_selecting; /* Left button dragged far enough to become a box. */
+    float drag_start_x; /* Screen coordinates where the left button was pressed. */
+    float drag_start_y;
+
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;
     int hover_y;

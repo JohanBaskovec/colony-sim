@@ -16,6 +16,7 @@ endif()
 
 option(COLONY_BUILD_GAME "Build the SDL3 game executable (fetches SDL3 if needed)" ON)
 option(COLONY_BUILD_TESTS "Build the unit tests" ON)
+option(COLONY_BUILD_BENCHMARKS "Build the benchmark executables" ON)
 option(COLONY_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(COLONY_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
@@ -32,4 +33,8 @@ endif()
 if(COLONY_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(COLONY_BUILD_BENCHMARKS)
+    add_subdirectory(bench)
 endif()

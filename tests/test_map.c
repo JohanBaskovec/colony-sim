@@ -1,5 +1,6 @@
 #include "core/i18n.h"
 #include "core/map.h"
+#include "core/pathfinding.h"
 
 #include "test_framework.h"
 
@@ -108,7 +109,8 @@ static void test_definitions_are_complete(void)
         REQUIRE(def != NULL);
         CHECK(def->id != NULL);
         CHECK(i18n_is_valid_key(def->name_key));
-        CHECK(def->move_cost >= 0.0f);
+        /* Passable terrain never costs less than the pathfinding heuristic assumes. */
+        CHECK(def->move_cost == 0.0f || def->move_cost >= PATH_MIN_TILE_COST);
     }
     for (int r = ROCK_NONE + 1; r < ROCK_COUNT; r++) {
         CHECK(i18n_is_valid_key(rock_def((RockType)r)->name_key));
@@ -124,6 +126,26 @@ static void test_definitions_are_complete(void)
     CHECK(plant_def(PLANT_COUNT) == NULL);
 }
 
+static void test_edible_plants(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16));
+    Plant *bush = &map.plants[map_index(&map, 3, 3)];
+    bush->type = PLANT_BUSH;
+    bush->growth = 1.0f;
+    CHECK(map_has_edible_plant(&map, 3, 3));
+    bush->growth = plant_def(PLANT_BUSH)->min_edible_growth - 0.01f;
+    CHECK(!map_has_edible_plant(&map, 3, 3));
+
+    Plant *tree = &map.plants[map_index(&map, 4, 4)];
+    tree->type = PLANT_TREE;
+    tree->growth = 1.0f;
+    CHECK(!map_has_edible_plant(&map, 4, 4));
+    CHECK(!map_has_edible_plant(&map, 5, 5));
+    CHECK(!map_has_edible_plant(&map, -1, 5));
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -133,5 +155,6 @@ int main(void)
     RUN_TEST(test_hash_detects_changes);
     RUN_TEST(test_count_plants);
     RUN_TEST(test_definitions_are_complete);
+    RUN_TEST(test_edible_plants);
     return test_summary();
 }

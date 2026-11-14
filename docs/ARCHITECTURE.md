@@ -13,7 +13,8 @@
 ┌──────────────▼───────────────────────────────────────────────┐
 │ src/core/  (static library colony_core, pure C17, no SDL)    │
 │                                                              │
-│  game ─► game_clock, map, worldgen ─► noise, rng             │
+│  game ─► colonist ─► pathfinding ─► map                      │
+│    ├──► pool, game_clock, worldgen ─► noise, rng             │
 │  i18n   camera   cli   log   util                            │
 └──────────────────────────────────────────────────────────────┘
                ▲
@@ -38,7 +39,10 @@ simulation:
 
 | Module       | Responsibility                                                               |
 |--------------|------------------------------------------------------------------------------|
-| `game`       | Simulation root (`Game`): owns map, clock, RNG; `game_update()`, `game_tick()` |
+| `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
+| `colonist`   | Colonist data, needs, decision making, movement along paths                  |
+| `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
+| `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
 | `map`        | Tile layers (terrain, rock, plants) and static definitions (`TerrainDef`...) |
 | `worldgen`   | Procedural map generation from a seed                                        |
@@ -101,12 +105,47 @@ Static definitions (`TerrainDef`, `RockDef`, `PlantDef`) carry a stable `id`
 They are C tables for now; moving them to data files (moddable) is a roadmap
 item.
 
-### Planned: entities
+### Entities
 
-Mobile or individually tracked things (colonists, animals, items, buildings
-with state) will live in typed pools addressed by **generational handles**
-(`index + generation`), so that stale references are detectable. Systems
-iterate pools; no pointers between entities are stored.
+Mobile or individually tracked things live in typed storage: a `Pool`
+(`core/pool.h`) allocates slots, and the owner keeps the data in an array of
+the same capacity (e.g. `Game.colonists[COLONIST_MAX]`). They are referenced
+by **generational handles** (`EntityId` = slot index + generation): once an
+entity is removed, every old handle to it is detectably stale
+(`game_colonist()` returns NULL). Systems iterate slots in index order (which
+keeps updates deterministic); no pointers between entities are stored, and
+the frontend keeps handles only (e.g. the selection).
+
+Colonists are the first entity type; animals, items and buildings with state
+will follow the same pattern.
+
+### Colonist behavior
+
+Each tick, `colonist_tick()`:
+
+1. updates needs (food always decreases; rest decreases, or increases while sleeping);
+2. when standing on a tile center, decides: hungry → walk to the nearest
+   edible plant (Dijkstra search); tired, or night and not fully rested →
+   sleep in place; otherwise wander nearby after a random pause;
+3. acts: walks one tick along its path (speed / tile cost), eats, or sleeps.
+
+Decisions only happen on tile centers, so a colonist never jumps back when it
+changes its mind. This simple state machine will be replaced by the job system
+in M2 (designations, reservations, work priorities).
+
+## Pathfinding
+
+- 8-directional grid, cost of entering a tile = `map_move_cost()` (× √2
+  diagonally), no diagonal move past an impassable corner.
+- A* with the octile heuristic scaled by `PATH_MIN_TILE_COST` (admissible as
+  long as no passable tile is cheaper: checked by a test).
+- `pathfinder_find_nearest()` runs Dijkstra until a predicate matches (food,
+  free tile...), with a cost limit to bound the search.
+- A `Pathfinder` owns per-tile scratch arrays reused across searches (stamps
+  instead of clearing), so searches do not allocate.
+- Benchmark: `bench/bench_pathfinding [size] [searches] [seed]`; about 0.8 ms
+  per cross-map search on a 200 × 200 map in Release. Unreachable goals
+  currently flood their whole area: connectivity regions are on the backlog.
 
 ## Randomness
 
@@ -131,6 +170,12 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   variation. Replacing them with a texture atlas is a roadmap item.
 - Text: SDL3_ttf renderer text engine, with a cache keyed by string content;
   entries unused for 120 frames are evicted.
+
+## Frontend state
+
+UI state that is not part of the simulation (camera, selection, drag
+rectangle, debug toggle) lives in `App`. It never influences the simulation,
+so the same seed gives the same game whatever the player looks at.
 
 ## Assets
 

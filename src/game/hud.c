@@ -9,6 +9,10 @@
 
 static const SDL_Color HUD_TEXT_COLOR = {236, 236, 228, 255};
 static const SDL_Color HUD_PANEL_COLOR = {12, 14, 18, 170};
+static const SDL_Color LABEL_SHADOW_COLOR = {0, 0, 0, 200};
+
+/* Colonist names are drawn under them from this zoom level (pixels per tile). */
+#define HUD_LABEL_MIN_ZOOM 10.0f
 
 typedef struct Panel {
     char lines[HUD_MAX_LINES][HUD_LINE_SIZE];
@@ -154,6 +158,68 @@ static void build_debug_panel(App *app, Panel *panel)
               value);
 }
 
+static void add_need_line(Panel *panel, const Colonist *colonist, NeedType need)
+{
+    float value = colonist->needs[need];
+    char percent[16];
+    tr_integer(percent, sizeof(percent), (long long)(value * 100.0f + 0.5f));
+    const char *state_key = need_level_key(need, need_level(value));
+    if (state_key == NULL) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.need"),
+                  tr(need_name_key(need)), percent);
+    } else {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.need_state"),
+                  tr(need_name_key(need)), percent, tr(state_key));
+    }
+}
+
+static void build_selection_panel(App *app, Panel *panel)
+{
+    if (app->selected_count != 1) {
+        char count[16];
+        tr_integer(count, sizeof(count), app->selected_count);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+                  tr_plural("hud.selection.count", app->selected_count), count);
+        return;
+    }
+    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
+    if (colonist == NULL) {
+        return;
+    }
+    char age[16];
+    tr_integer(age, sizeof(age), colonist->age);
+    panel_add_text(panel, colonist->name);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.age"), age);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
+              tr(colonist_task_name_key(colonist->task)));
+    add_need_line(panel, colonist, NEED_FOOD);
+    add_need_line(panel, colonist, NEED_REST);
+}
+
+void hud_draw_world_labels(App *app)
+{
+    if (app->camera.zoom < HUD_LABEL_MIN_ZOOM) {
+        return;
+    }
+    const Game *game = &app->game;
+    float offset = app->camera.zoom * 0.45f + 2.0f;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (entity_id_is_none(game_colonist_id_at(game, slot))) {
+            continue;
+        }
+        const Colonist *colonist = &game->colonists[slot];
+        float wx, wy, sx, sy;
+        colonist_position(colonist, &wx, &wy);
+        camera_world_to_screen(&app->camera, wx, wy, &sx, &sy);
+        int width, height;
+        text_measure(app->text, colonist->name, &width, &height);
+        float x = SDL_floorf(sx - (float)width * 0.5f);
+        float y = SDL_floorf(sy + offset);
+        text_draw(app->text, colonist->name, x + 1.0f, y + 1.0f, LABEL_SHADOW_COLOR);
+        text_draw(app->text, colonist->name, x, y, HUD_TEXT_COLOR);
+    }
+}
+
 void hud_draw(App *app)
 {
     const float screen_width = app->camera.viewport_width;
@@ -184,11 +250,21 @@ void hud_draw(App *app)
     Panel help = {0};
     char keys[32];
     movement_keys_label(keys, sizeof(keys));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help"), keys);
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
+    panel_add_text(&help, tr("hud.help.game"));
     float help_width, help_height;
     panel_size(app, &help, &help_width, &help_height);
     float help_y = screen_height - help_height - HUD_MARGIN;
     panel_draw(app, &help, HUD_MARGIN, help_y);
+
+    /* Bottom right: inspector of the selected colonist(s). */
+    if (app->selected_count > 0) {
+        Panel selection = {0};
+        build_selection_panel(app, &selection);
+        panel_size(app, &selection, &width, &height);
+        panel_draw(app, &selection, screen_width - width - HUD_MARGIN,
+                   help_y - height - HUD_MARGIN);
+    }
 
     if (app->hover_valid) {
         Panel tile = {0};

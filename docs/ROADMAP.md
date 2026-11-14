@@ -3,7 +3,7 @@
 Milestones are ordered; each one ends with a playable build and passing tests.
 Tick items as they land and add newly discovered tasks.
 
-## M0: Foundations ✅ (current)
+## M0: Foundations ✅
 
 - [x] CMake project, presets, SDL3/SDL3_ttf fetched automatically
 - [x] Core/frontend split (core has no SDL dependency)
@@ -17,21 +17,22 @@ Tick items as they land and add newly discovered tasks.
 - [x] Plant growth by fertility
 - [x] Camera (pan, zoom at cursor), tile inspector, HUD, debug overlay
 
-## M1: Colonists
+## M1: Colonists ✅
 
-- [ ] Entity pools with generational handles
-- [ ] Colonist entity: name, position, basic stats; spawn a starting group on passable land
-- [ ] A* pathfinding with movement costs (+ tests, + benchmark)
-- [ ] Movement along paths, interpolated rendering
-- [ ] Selection (click, box select), colonist inspector panel
-- [ ] Needs: hunger, rest; simple decision making (eat, sleep, wander)
-- [ ] Name generation (per-language name lists?) **(design decision needed)**
+- [x] Entity pools with generational handles
+- [x] Colonist entity: name, age, position; starting group spawned on a large reachable land area
+- [x] A* pathfinding with movement costs, no corner cutting, nearest-match search (+ tests, + benchmark)
+- [x] Movement along paths, interpolated rendering
+- [x] Selection (click, Shift+click, box select), colonist inspector panel, path display
+- [x] Needs: food and rest; simple decision making (eat berries, sleep in place / at night, wander)
+- [x] Names: built-in multicultural list, not translated (proper nouns)
 
-## M2: Work
+## M2: Work (next)
 
 - [ ] Designations: chop trees, mine rock, harvest plants
 - [ ] Job system with reservations
 - [ ] Items on the ground (wood, stone, food), stacking
+- [ ] Food reservations (two colonists no longer walk to the same bush)
 - [ ] Hauling and stockpile zones with filters
 - [ ] Work priorities grid UI
 
@@ -54,7 +55,7 @@ Tick items as they land and add newly discovered tasks.
 
 - [ ] Event director
 - [ ] Wildlife, hunting, animal attacks
-- [ ] Health: injuries, treatment, disease
+- [ ] Health: injuries, treatment, disease; consequences of starvation and exhaustion
 - [ ] Combat basics, raids
 
 ## M6: Persistence and polish
@@ -69,9 +70,11 @@ Tick items as they land and add newly discovered tasks.
 ## Technical backlog
 
 - [ ] Remember the chosen language between sessions
-- [ ] HarfBuzz + font fallback when a translation needs non-Latin scripts
+- [ ] HarfBuzz + font fallback when a translation needs non-Latin scripts (would also allow re-enabling kerning, disabled because SDL_ttf mispositions kerned glyphs without HarfBuzz)
 - [ ] More plural rules (Slavic languages, Arabic) when needed
 - [ ] Batch tile rendering (texture atlas / geometry) for large maps at low zoom
-- [ ] Headless benchmark executable for simulation performance
+- [x] Pathfinding benchmark (`bench/bench_pathfinding`)
+- [ ] Connectivity regions: reject unreachable goals instantly (today they flood the whole area)
+- [ ] Simulation benchmark (many colonists, long runs)
 - [ ] Windows and macOS CI builds
 - [ ] Choose a license

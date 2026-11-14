@@ -5,9 +5,9 @@
 and moods, gather resources, build a base and survive whatever the world throws
 at them.
 
-> **Status: pre-alpha (milestone M0, foundations).** A procedurally generated
-> map with terrain, rock and vegetation, a day/night cycle, game speed
-> controls, a camera and a fully translated HUD. No colonists yet: see the
+> **Status: pre-alpha (milestone M1, colonists).** A procedurally generated
+> map, a day/night cycle, and a small group of colonists who wander, eat
+> berries and sleep on their own. No work or construction yet: see the
 > [roadmap](docs/ROADMAP.md).
 
 ## Features so far
@@ -16,6 +16,9 @@ at them.
 - Fixed-rate simulation (60 ticks/s at normal speed), pause and ×1/×3/×6 speeds
 - In-game calendar (days, seasons, years) and day/night lighting
 - Plant growth that depends on terrain fertility
+- Colonists with needs (food, rest) who decide on their own: eat berries, sleep, wander
+- A* pathfinding with terrain movement costs
+- Selection (click, Shift+click, box) and a colonist inspector
 - Pan/zoom camera, tile inspector
 - **Multi-language**: English and French, switchable live; the language is picked from the system locale by default
 - Simulation core is plain C with no SDL dependency, covered by unit tests
@@ -74,6 +77,7 @@ colony_sim [--lang <code>] [--seed <n>] [--size <n>] [--help]
 |-----------------------|--------------------------------------------------------------|
 | Move the camera       | W A S D (physical keys, Z Q S D on AZERTY) or arrows; Shift = faster |
 | Drag the camera       | Middle or right mouse button                                 |
+| Select colonists      | Left click (Shift: add/remove) or left drag for a box        |
 | Zoom                  | Mouse wheel                                                  |
 | Pause / resume        | Space                                                        |
 | Speed ×1 / ×3 / ×6    | 1 / 2 / 3                                                    |
@@ -97,6 +101,7 @@ docs/          Design and technical documentation
 src/core/      Simulation core: pure C17, no SDL, deterministic, unit-tested
 src/game/      SDL3 frontend: window, input, rendering, HUD, localization loading
 tests/         Unit tests (one executable per module) and translation checker
+bench/         Performance benchmarks (not run by the tests)
 ```
 
 ## Documentation

@@ -49,7 +49,11 @@ Session goals: survive seasons, grow the colony, reach an end goal **(open)**
 - Fog of war / exploration **(open)**.
 
 ### Settlers
-- Needs: food, rest, recreation, comfort, safety, temperature.
+- Needs: food, rest (done), recreation, comfort, safety, temperature.
+- Names: proper nouns from a built-in multicultural list, identical in every
+  language (later: per-culture lists in data files).
+- Food, for now: settlers eat berries from berry bushes, which regrow. Items,
+  meals and farming come later.
 - Skills (construction, mining, growing, cooking, crafting, medicine, combat,
   social...) improving with practice.
 - Traits that modify behavior and mood.

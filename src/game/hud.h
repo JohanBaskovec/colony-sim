@@ -9,4 +9,7 @@
 
 void hud_draw(App *app);
 
+/* Names under the colonists, drawn in the world (before the HUD panels). */
+void hud_draw_world_labels(App *app);
+
 #endif /* COLONY_GAME_HUD_H */

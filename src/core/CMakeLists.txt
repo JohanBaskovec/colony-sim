@@ -1,12 +1,15 @@
 add_library(colony_core STATIC
     camera.c
     cli.c
+    colonist.c
     game.c
     game_clock.c
     i18n.c
     log.c
     map.c
     noise.c
+    pathfinding.c
+    pool.c
     rng.c
     util.c
     worldgen.c)

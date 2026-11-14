@@ -26,7 +26,7 @@ rock.sandstone = Sandstone
 
 # Plants
 plant.grass = Grass
-plant.bush = Wild bush
+plant.bush = Berry bush
 plant.tree = Tree
 
 # Seasons
@@ -44,7 +44,8 @@ hud.paused = Paused
 # {0} = language name
 hud.language = Language: {0}
 # {0} = movement keys (e.g. WASD, adapted to the keyboard layout)
-hud.help = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan · Space: pause · 1-3: speed · L: language · F3: debug · Esc: quit
+hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
+hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · L: language · F3: debug · Esc: quit
 
 # Tile inspector. {0}, {1} = tile coordinates
 hud.tile.position = Tile {0}, {1}
@@ -62,3 +63,28 @@ hud.debug.seed = Seed: {0}
 hud.debug.zoom = Zoom: {0} px/tile
 hud.debug.trees.one = {0} tree on the map
 hud.debug.trees.other = {0} trees on the map
+
+# Colonists
+colonist.task.idle = Idle
+colonist.task.wander = Wandering
+colonist.task.eat = Eating
+colonist.task.sleep = Sleeping
+
+need.food = Food
+need.food.low = Hungry
+need.food.critical = Starving
+need.rest = Rest
+need.rest.low = Tired
+need.rest.critical = Exhausted
+
+# Colonist inspector. {0} = age
+hud.colonist.age = Age: {0}
+# {0} = activity name
+hud.colonist.activity = Activity: {0}
+# {0} = need name, {1} = percentage
+hud.colonist.need = {0}: {1}%
+# {0} = need name, {1} = percentage, {2} = state (e.g. Hungry)
+hud.colonist.need_state = {0}: {1}% ({2})
+# {0} = number of selected colonists
+hud.selection.count.one = {0} colonist selected
+hud.selection.count.other = {0} colonists selected

@@ -4,11 +4,14 @@
 set(COLONY_UNIT_TESTS
     test_camera
     test_cli
+    test_colonist
     test_game
     test_game_clock
     test_i18n
     test_map
     test_noise
+    test_pathfinding
+    test_pool
     test_rng
     test_worldgen)
 

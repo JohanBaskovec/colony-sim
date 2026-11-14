@@ -62,6 +62,8 @@ typedef struct PlantDef {
     float growth_per_day; /* Growth gained per in-game day on fertility 1.0. */
     float min_fertility; /* Does not spawn nor grow below this fertility. */
     float move_cost; /* Movement cost multiplier while walking through. */
+    float nutrition; /* Food gained by eating it at full growth; 0 = not edible. */
+    float min_edible_growth; /* Cannot be eaten below this growth. */
 } PlantDef;
 
 typedef struct Plant {
@@ -110,5 +112,8 @@ float map_move_cost(const Map *map, int x, int y);
 uint64_t map_hash(const Map *map);
 
 size_t map_count_plants(const Map *map, PlantType type);
+
+/* Whether the plant on this tile can be eaten right now. */
+bool map_has_edible_plant(const Map *map, int x, int y);
 
 #endif /* COLONY_CORE_MAP_H */
