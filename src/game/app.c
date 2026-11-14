@@ -30,6 +30,7 @@ bool app_tool_active(const App *app, AppTool tool, int type)
     switch (tool) {
     case APP_TOOL_DESIGNATE: return (int)app->tool_type == type;
     case APP_TOOL_BUILD: return (int)app->build_type == type;
+    case APP_TOOL_STRUCTURE: return (int)app->structure_type == type;
     default: return true;
     }
 }
@@ -44,6 +45,8 @@ void app_toggle_tool(App *app, AppTool tool, int type)
             app->tool_type = (DesignationType)type;
         } else if (tool == APP_TOOL_BUILD) {
             app->build_type = (WorkstationType)type;
+        } else if (tool == APP_TOOL_STRUCTURE) {
+            app->structure_type = (StructureType)type;
         }
     }
     app->left_button_down = false;
@@ -543,6 +546,12 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         if (game_workstation_buildable(&app->game, app->build_type)) {
             game_place_workstation(&app->game, app->build_type, x, y);
         }
+    } else if (app->tool == APP_TOOL_STRUCTURE) {
+        int x0, y0, x1, y1;
+        tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
+        if (game_structure_buildable(&app->game, app->structure_type)) {
+            game_place_structure_rect(&app->game, app->structure_type, x0, y0, x1, y1);
+        }
     } else if (app->tool == APP_TOOL_STOCKPILE) {
         apply_stockpile_tool(app, button->x, button->y, additive);
     } else if (app->tool == APP_TOOL_GATHER) {
@@ -647,6 +656,7 @@ static void render_frame(App *app)
     render_map(app->renderer, &app->game.map, &app->camera);
     render_gather_zones(app->renderer, &app->game, &app->camera, app->selected_gather_zone);
     render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
+    render_structures(app->renderer, &app->game, &app->camera);
     render_workstations(app->renderer, &app->game, &app->camera, app->selected_station);
     render_items(app->renderer, &app->game, &app->camera);
     render_designations(app->renderer, &app->game, &app->camera);
@@ -663,6 +673,19 @@ static void render_frame(App *app)
     if (app->tool == APP_TOOL_BUILD) {
         if (app->hover_valid) {
             render_blueprint_preview(app->renderer, &app->game, &app->camera, app->build_type,
+                                     app->hover_x, app->hover_y);
+        }
+    } else if (app->tool == APP_TOOL_STRUCTURE) {
+        if (app->left_button_down) {
+            float mouse_x, mouse_y;
+            SDL_GetMouseState(&mouse_x, &mouse_y);
+            int x0, y0, x1, y1;
+            tool_rect(app, mouse_x, mouse_y, &x0, &y0, &x1, &y1);
+            render_structure_preview(app->renderer, &app->game, &app->camera,
+                                     app->structure_type, x0, y0, x1, y1);
+        } else if (app->hover_valid) {
+            render_structure_preview(app->renderer, &app->game, &app->camera,
+                                     app->structure_type, app->hover_x, app->hover_y,
                                      app->hover_x, app->hover_y);
         }
     } else if (app->tool != APP_TOOL_NONE && app->left_button_down) {

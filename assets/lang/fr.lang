@@ -30,6 +30,7 @@ plant.tree = Arbre
 
 # Désignations (ordres du joueur)
 designation.mine = Miner la roche
+designation.deconstruct = Démonter
 tool.cancel = Annuler les ordres
 tool.stockpile = Zone de stockage
 tool.gather_zone = Zone de récolte
@@ -37,16 +38,20 @@ tool.gather_zone.description = Les colons y récoltent les ressources choisies 
 tool.stockpile.description = Les colons y rangent les objets autorisés
 tool.mine.description = Les colons creusent la roche marquée et en rapportent la pierre
 tool.cancel.description = Retire les ordres de la zone glissée
+tool.deconstruct.description = Les colons démontent les lits, murs et portes marqués et récupèrent la moitié des matériaux
 
 # Menus (bas gauche)
 menu.build = Construire
 menu.work = Travail
 menu.stations = Postes de travail
+menu.structures = Constructions
 menu.zones = Zones
 menu.orders = Ordres
 # {0} : nom de la touche.
 menu.shortcut = Raccourci : {0}
 menu.no_cost = Aucune ressource nécessaire
+# {0} : matériaux (« Branches ×5 et Herbe sèche ×24 »), {1} : leur poids total (« 31,5 kg »).
+menu.structure_cost = Nécessite : {0} ({1})
 menu.work.description = Qui fait quel travail, et dans quel ordre
 help.title = Commandes
 
@@ -115,6 +120,8 @@ hud.tool.unavailable = Personne dans la colonie ne sait encore faire cela
 hud.tool.stockpile_help = Glisser : créer, ou agrandir la zone sélectionnée · Maj+glisser : retirer · Échap : retour
 hud.tool.build_cost = Nécessite : {0} ×{1}
 hud.tool.build_help = Clic gauche : placer un plan · {0} : poste suivant · Échap : retour
+hud.tool.outline_help = Glisser : murs le long d’un rectangle · Clic : un seul segment · Échap : retour
+hud.tool.structure_help = Clic : en placer un · Glisser : remplir un rectangle · Échap : retour
 
 hud.tile.position = Case {0}, {1}
 hud.tile.terrain = Terrain : {0}
@@ -130,6 +137,9 @@ hud.tile.designation_progress = Ordre : {0} ({1} % effectué)
 hud.tile.stockpile = Zone : {0}
 hud.tile.station = Poste de travail : {0}
 hud.tile.blueprint = Plan : {0} (construit à {1} %)
+hud.tile.structure = Construction : {0}
+# {0} : matériau, {1} : déjà apporté, {2} : nécessaire.
+hud.tile.material = {0} : {1}/{2}
 hud.tile.flint_some = Un peu de silex dans le sol
 hud.tile.flint_plenty = Beaucoup de silex dans le sol
 hud.item_condition = Qualité : {0} · Points de vie : {1}/{2} ({3})
@@ -152,6 +162,7 @@ colonist.task.sleep = Dort
 colonist.task.work = Travaille
 colonist.task.chop = Coupe un arbre
 colonist.task.mine = Creuse la roche
+colonist.task.deconstruct = Démonte
 colonist.task.harvest = Récolte
 colonist.task.gather_stones = Ramasse des pierres
 colonist.task.gather_branches = Ramasse des branches
@@ -159,6 +170,7 @@ colonist.task.gather_twigs = Ramasse des brindilles
 colonist.task.cut_grass = Coupe de l’herbe
 colonist.task.build = Construit un poste de travail
 colonist.task.craft = Fabrique
+colonist.task.construct = Construit
 colonist.task.haul = Transport
 
 need.food = Nourriture
@@ -173,6 +185,9 @@ need.rest.critical = À bout de forces
 
 hud.colonist.age = Âge : {0}
 hud.colonist.strength = Force : {0} (porte jusqu’à {1})
+# {0} : pourcentage de vitesse de travail perdu, {1} : heures restantes.
+hud.colonist.ground_sleep.one = A dormi par terre : travaille {0} % moins vite (encore {1} heure)
+hud.colonist.ground_sleep.other = A dormi par terre : travaille {0} % moins vite (encore {1} heures)
 hud.colonist.activity = Activité : {0}
 hud.colonist.carrying = Porte : {0} ×{1} ({2})
 hud.colonist.tool = Outil : {0} ({1}, {2})
@@ -223,6 +238,14 @@ workstation.crafting_spot = Coin d’artisanat
 workstation.crafting_spot.description = Un emplacement au sol pour fabriquer lances et autres outils en bois et en pierre
 workstation.knapping_spot = Poste de taille
 workstation.knapping_spot.description = Où silex et galets sont taillés en éclats, galets aménagés et bifaces
+
+# Constructions (bâties à partir d’un plan)
+structure.grass_bed = Lit d’herbe
+structure.grass_bed.description = Une litière d’herbe sèche pour dormir : on récupère plus vite que sur la terre nue
+structure.wall = Mur d’herbe et de branches
+structure.wall.description = Poteaux et traverses en branches couverts d’herbe sèche, 2 m de haut : personne ne passe
+structure.door = Claie de branches
+structure.door.description = Un cadre de branches tressées que l’on écarte pour passer : la porte des murs d’herbe
 
 # Recettes
 recipe.chopper = Galet aménagé

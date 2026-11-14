@@ -27,6 +27,8 @@ typedef enum ReservationKind {
     RESERVATION_HAUL_SOURCE, /* An item stack about to be picked up. */
     RESERVATION_STORAGE, /* A storage tile items are being brought to. */
     RESERVATION_STATION, /* A workstation being built or worked at. */
+    RESERVATION_CONSTRUCTION, /* A construction site being built. */
+    RESERVATION_BED, /* A bed slept in (or walked to). */
     RESERVATION_KIND_COUNT
 } ReservationKind;
 

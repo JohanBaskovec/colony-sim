@@ -6,6 +6,7 @@ set(COLONY_UNIT_TESTS
     test_cli
     test_crafting
     test_colonist
+    test_construction
     test_designation
     test_game
     test_game_clock
@@ -23,6 +24,7 @@ set(COLONY_UNIT_TESTS
     test_reservation
     test_rng
     test_stockpile
+    test_structures
     test_work
     test_workstation
     test_worldgen)

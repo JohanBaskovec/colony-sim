@@ -133,11 +133,14 @@ bool map_init(Map *map, int width, int height)
     map->rock = calloc(count, 1);
     map->plants = calloc(count, sizeof(Plant));
     map->flint = calloc(count, 1);
-    if (map->terrain == NULL || map->rock == NULL || map->plants == NULL || map->flint == NULL) {
+    map->structure = calloc(count, 1);
+    if (map->terrain == NULL || map->rock == NULL || map->plants == NULL || map->flint == NULL ||
+        map->structure == NULL) {
         map_free(map);
         return false;
     }
     memset(map->terrain, TERRAIN_SOIL, count);
+    map->structure_counts[STRUCTURE_NONE] = (int)count;
     map->width = width;
     map->height = height;
     return true;
@@ -149,6 +152,7 @@ void map_free(Map *map)
     free(map->rock);
     free(map->plants);
     free(map->flint);
+    free(map->structure);
     memset(map, 0, sizeof(*map));
 }
 
@@ -186,6 +190,35 @@ void map_set_rock(Map *map, int x, int y, RockType rock)
     }
 }
 
+void map_set_structure(Map *map, int x, int y, StructureType type)
+{
+    if (!map_in_bounds(map, x, y) || (unsigned)type >= STRUCTURE_TYPE_COUNT) {
+        return;
+    }
+    size_t index = map_index(map, x, y);
+    StructureType old = (StructureType)map->structure[index];
+    if (old == type) {
+        return;
+    }
+    bool was_passable = map_move_cost_at(map, index) > 0.0f;
+    map->structure_counts[old]--;
+    map->structure_counts[type]++;
+    map->structure[index] = (uint8_t)type;
+    if (type != STRUCTURE_NONE) {
+        map->plants[index] = (Plant){0}; /* Trampled, cut or dug out by the builders. */
+    }
+    bool is_passable = map_move_cost_at(map, index) > 0.0f;
+    if (was_passable != is_passable) {
+        log_topology_change(map, x, y, is_passable);
+    }
+}
+
+StructureType map_structure(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) ? (StructureType)map->structure[map_index(map, x, y)]
+                                    : STRUCTURE_NONE;
+}
+
 void map_topology_changed(Map *map)
 {
     log_topology_change(map, 0, 0, false);
@@ -197,7 +230,8 @@ float map_move_cost_at(const Map *map, size_t index)
         return 0.0f;
     }
     float cost = TERRAIN_DEFS[map->terrain[index]].move_cost;
-    return cost * PLANT_DEFS[map->plants[index].type].move_cost;
+    return cost * PLANT_DEFS[map->plants[index].type].move_cost *
+           structure_def((StructureType)map->structure[index])->move_cost;
 }
 
 float map_move_cost(const Map *map, int x, int y)
@@ -220,6 +254,7 @@ uint64_t map_hash(const Map *map)
     hash = hash_fnv1a64(hash, map->terrain, count);
     hash = hash_fnv1a64(hash, map->rock, count);
     hash = hash_fnv1a64(hash, map->flint, count);
+    hash = hash_fnv1a64(hash, map->structure, count);
     /* Hash plant fields one by one: struct padding bytes are unspecified. */
     for (size_t i = 0; i < count; i++) {
         const Plant *plant = &map->plants[i];

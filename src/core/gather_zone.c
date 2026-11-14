@@ -154,7 +154,8 @@ bool gather_zone_can_cover(const Map *map, int x, int y)
     size_t index = map_index(map, x, y);
     Terrain terrain = (Terrain)map->terrain[index];
     return map->rock[index] == ROCK_NONE && terrain != TERRAIN_DEEP_WATER &&
-           terrain != TERRAIN_SHALLOW_WATER;
+           terrain != TERRAIN_SHALLOW_WATER &&
+           !structure_blocks((StructureType)map->structure[index]);
 }
 
 bool gather_stone_ground(const Map *map, int x, int y)
@@ -164,7 +165,7 @@ bool gather_stone_ground(const Map *map, int x, int y)
     }
     size_t index = map_index(map, x, y);
     Terrain terrain = (Terrain)map->terrain[index];
-    return map->rock[index] == ROCK_NONE &&
+    return map->rock[index] == ROCK_NONE && map->structure[index] == STRUCTURE_NONE &&
            (terrain == TERRAIN_SOIL || terrain == TERRAIN_RICH_SOIL ||
             terrain == TERRAIN_GRAVEL || terrain == TERRAIN_ROUGH_STONE);
 }

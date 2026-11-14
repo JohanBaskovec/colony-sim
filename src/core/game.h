@@ -8,6 +8,7 @@
 #define COLONY_CORE_GAME_H
 
 #include "core/colonist.h"
+#include "core/construction.h"
 #include "core/designation.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
@@ -56,6 +57,7 @@ typedef struct Game {
     Items items; /* Items lying on the ground, same size as the map. */
     Stockpiles stockpiles; /* Storage zones drawn by the player. */
     Workstations workstations; /* Crafting spots, knapping spots... and their bills. */
+    Constructions constructions; /* Blueprints of beds, walls, doors... being built. */
     Reservations reservations; /* Who is busy with which job or food. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */
@@ -144,8 +146,9 @@ ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe);
  * the tools nobody carries have been taken from it (see bill_has_input()). */
 bool game_bill_has_input(const Game *game, const Bill *bill);
 
-/* Whether a workstation may be placed on a tile: not on a stockpile, and
- * where workstation_can_place() says yes. */
+/* Whether a workstation may be placed on a tile: not on a stockpile, a
+ * structure or a construction site, and where workstation_can_place() says
+ * yes. */
 bool game_can_place_workstation(const Game *game, int x, int y);
 
 /* Places a workstation blueprint where game_can_place_workstation() allows.
@@ -156,11 +159,34 @@ int game_place_workstation(Game *game, WorkstationType type, int x, int y);
  * Colonists working there give up. */
 bool game_remove_workstation(Game *game, int index);
 
-/* Removes blueprints (not built stations) in a rectangle. Returns how many. */
+/* Removes blueprints in a rectangle: workstations not built yet and
+ * construction sites (their materials are dropped). Returns how many. */
 int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1);
 
 /* Removes a bill; the input of a craft in progress that no other bill can
  * finish is dropped on the station's tile. */
 bool game_remove_bill(Game *game, int station, int bill);
+
+/* ---- Structures ---------------------------------------------------------- */
+
+/* Whether some living colonist knows enough to build this kind of structure. */
+bool game_structure_buildable(const Game *game, StructureType type);
+
+/* Whether a structure may be planned on a tile: not on a stockpile or a
+ * workstation, and where construction_can_place() says yes. */
+bool game_can_place_structure(const Game *game, int x, int y);
+
+/* Plans a structure where game_can_place_structure() allows. Returns the
+ * site's index or CONSTRUCTION_NONE. */
+int game_place_structure(Game *game, StructureType type, int x, int y);
+
+/* Plans structures on a rectangle (corners in any order): along its edges for
+ * types drawn as an outline (walls), on every tile otherwise. Returns how
+ * many sites were placed. */
+int game_place_structure_rect(Game *game, StructureType type, int x0, int y0, int x1, int y1);
+
+/* Removes a construction site; its delivered materials are dropped on its
+ * tile. */
+bool game_remove_construction(Game *game, int index);
 
 #endif /* COLONY_CORE_GAME_H */

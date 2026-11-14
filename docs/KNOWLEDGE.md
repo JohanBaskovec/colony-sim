@@ -383,7 +383,7 @@ knowledge. The first wood of a colony is branches and twigs.
 A typical first day: pick berries; gather stones (cobbles and flint),
 branches, twigs and grass; knap flakes and a
 hand axe from flint; make spears and digging
-sticks; light the first fire by friction; build grass beds and a windbreak
+sticks; light the first fire by friction; build grass beds and grass and branch walls
 near the hearth; go hunting.
 
 ---
@@ -428,8 +428,8 @@ with its own use.
   (up to 60%) *(tuning)*, a cobble otherwise; elsewhere only cobbles. Later,
   flint comes with the geology (chalk and limestone, §13).
 - **Branches**: dead or cut branches, the main material of the start: fuel,
-  windbreaks, lean-tos, spears, digging sticks, torches. Quality = straightness.
-- **Twigs**: kindling to light a fire, quick fuel, filling for windbreaks.
+  walls, lean-tos, spears, digging sticks, torches. Quality = straightness.
+- **Twigs**: kindling to light a fire, quick fuel, filling for branch screens.
 - **Fresh grass** dries into **dry grass** while it lies on a tile (on the
   ground or in a stockpile, not carried): **3 days** in mild dry weather,
   faster in sun and heat, not at all in rain or snow outdoors; under a roof it
@@ -765,14 +765,31 @@ walls, doors, roofs and beds.*
 
 | id              | Name                 | Footprint | Materials | Work | Min level | Passable | HP | Flammable |
 |-----------------|----------------------|-----------|-----------|------|-----------|----------|----|-----------|
-| `grass_bed`     | Grass bed            | 1 × 2     | 4 grass   | 125 (0.05 h) | 50 | yes (×1.2) | 20 | yes |
-| `windbreak`     | Windbreak            | 1 × 1 per segment, drawn as a line | 6 branches, 2 twigs | 750 (0.3 h) | 50 | no | 60 | yes |
-| `branch_screen` | Branch screen (door) | 1 × 1, in a windbreak line or cave mouth | 8 branches | 1,000 (0.4 h) | 55 | yes (×1.5) | 40 | yes |
+| `grass_bed`     | Grass bed            | 1 × 2 (1 × 1 for now) | 12 dry grass | 625 (0.25 h) | 50 | yes (×1.2) | 20 | yes |
+| `grass_wall`    | Grass and branch wall | 1 × 1 per segment, drawn as the edges of a rectangle | 5 branches, 24 dry grass | 5,000 (2 h) | 50 | no | 60 | yes |
+| `branch_screen` | Branch screen (door) | 1 × 1, in a wall or cave mouth | 5 branches, 5 twigs | 3,750 (1.5 h) | 55 | yes (×1.5) | 40 | yes |
 | `lean_to`       | Lean-to shelter      | 3 × 2, rotated (open side) | 30 branches, 10 grass | 7,500 (3 h) | 60 | yes (back row ×2) | 120 | yes |
 | (order) `clear_floor` | Clear cave floor | per tile, rough stone | none | 1,250 (0.5 h) | 50 | — | — | — |
 
 Quality: builder's level capped by materials (§2.2); grass and twigs have no
 quality and do not cap.
+
+Material counts are worked out from real structures, for a tile of about
+1 m × 1 m (a branch weighs 1.5 kg, an armful of dry grass 1 kg, a handful of
+twigs 0.2 kg):
+- grass bed: a litter of 2 m × 0.8 m, about 10 cm thick once slept on, dry
+  grass at about 80 kg/m³: 0.16 m³, **12 kg**;
+- grass and branch wall, a segment 1 m long and 2 m high: 3 posts of 2.4 m
+  (40 cm in the ground), 4 cm thick, about 2 kg each, and 8 rails of 1 m,
+  2 cm thick, every 25 cm, 0.2 kg each: 7.6 kg, **5 branches**; then 2 m² of
+  thatch 15 cm thick tied to the rails: 0.3 m³ at 80 kg/m³, **24 kg of dry
+  grass**. About 2 hours: digging the post holes with a stick, tying the
+  rails, thatching;
+- branch screen, 1 m × 2 m: a frame of 2 uprights and 3 cross bars (3 kg)
+  woven with thinner branches (4.5 kg): **5 branches**, the gaps stuffed with
+  **5 handfuls of twigs**; about 1.5 hours.
+Taking a structure apart takes a quarter of the building work and gives back
+half of the materials.
 
 ### 10.2 Details
 
@@ -783,15 +800,16 @@ by one settler.
 - Loses 1 hit point a day; below 50%, "slept on old bedding"; at 0, gone.
   Refreshing replaces the grass (4 grass, 125 ticks).
 
-**Windbreak**: a low woven fence of branches, the first wall.
-- Blocks movement and wind (M4); waist high, so sight passes over it; half
-  cover (M6).
-- Too porous to close a room on its own (insulation 0.2, a real wall 1.0).
-- Closes a cave mouth together with a branch screen.
+**Grass and branch wall**: posts and rails of branches thatched with dry
+grass, 2 m high: the first wall (it replaces the waist-high windbreak first
+planned).
+- Blocks movement, sight and wind (M4).
+- Insulation 0.5 (a wall of logs or stone 1.0): closes a room together with
+  a branch screen, a cave mouth too.
 
 **Branch screen**: a frame of branches pushed aside to pass, the first door.
 - Passable at ×1.5, blocks wind, insulation 0.3. Counts as a door for room
-  detection: a cave closed by windbreaks and a screen is a room.
+  detection: a cave closed by grass walls and a screen is a room.
 
 **Lean-to shelter**: long branches leaning on a ridge, covered with branches
 and grass, open on one long side.
@@ -809,7 +827,7 @@ and grass, open on one long side.
 - **Clear cave floor**: removes loose rock and levels the ground; the tile
   becomes "cleared floor" (move cost 1.0 instead of 1.2, nicer room). No pick
   needed.
-- A cave is closed with windbreaks and a branch screen, warmed by a hearth
+- A cave is closed with grass walls and a branch screen, warmed by a hearth
   (smoky without a vent, M4), and furnished with grass beds.
 
 ---
@@ -825,7 +843,7 @@ and grass, open on one long side.
 | Orders: chop, mine, harvest. | + gather stones, gather branches, gather twigs, cut grass, dig up. | New materials. |
 | Items never change by themselves. | Fresh grass dries into dry grass. | Grass drying (§4.1). |
 | Item categories: food, resources. | + tools, weapons, animal products, corpses. | Stockpile filters. |
-| Sleeping on the ground at full rest gain. | ×0.8 without a bed. | Gives beds a purpose. |
+| Sleeping on the ground at full rest gain. | ×0.8 without a bed, and 10% slower work for 12 hours after (a mood later). *(done)* | Gives beds a purpose. |
 | Settlers spawn near water. | Also near ripe berry bushes and a flint patch; they bring nothing. | The group arrives hungry and empty handed. |
 
 ---
@@ -859,8 +877,10 @@ Suggested order, each step with its tests:
    before haulers catch up).
 4. Tools: speed factors on orders and recipes, grade factor, wear and
    breaking, swapping for a better tool, the detour in job search.
-5. Blueprints and construction: grass bed, windbreak, branch screen, lean-to,
-   floor clearing, workstations; hauling to construction sites.
+5. Blueprints and construction: *(done)* construction sites with several
+   materials, grass bed, grass and branch wall, branch screen, taking apart,
+   sleeping in beds; *(left)* lean-to, floor clearing, workstations as
+   construction sites, hauling to construction sites, quality and wear.
 6. Roofs (lean-to, natural roof) and room detection.
 7. Conversation, apprenticeship, fading and loss; discovered knowledges only
    in the interface; knowledge in the settler inspector.

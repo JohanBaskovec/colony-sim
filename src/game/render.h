@@ -40,6 +40,14 @@ void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera 
 void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                               WorkstationType type, int x, int y);
 
+/* Built structures (beds, walls, doors) and construction sites. */
+void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+
+/* Ghosts of the structures a rectangle would plan (its edges for walls), red
+ * where they cannot be placed. */
+void render_structure_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                              StructureType type, int x0, int y0, int x1, int y1);
+
 /* Rectangle of tiles being added to (or removed from) stockpile zones. */
 void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                            int y1, bool remove);
@@ -69,11 +77,13 @@ typedef enum RenderIcon {
     RENDER_ICON_GATHER_ZONE,
     RENDER_ICON_STOCKPILE,
     RENDER_ICON_MINE,
+    RENDER_ICON_DECONSTRUCT,
     RENDER_ICON_CANCEL,
 } RenderIcon;
 
 void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, WorkstationType type);
 void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon);
+void render_structure_icon(SDL_Renderer *renderer, SDL_FRect rect, StructureType type);
 
 void render_shutdown(void);
 

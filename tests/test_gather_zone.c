@@ -107,6 +107,12 @@ static void test_where_zones_and_stones_lie(void)
     CHECK(gather_stone_ground(&map, 9, 8));
     CHECK(!gather_stone_ground(&map, 10, 8));
     CHECK(!gather_stone_ground(&map, 5, 5));
+    /* A built wall is like rock; no stones are searched for under a bed. */
+    map_set_structure(&map, 7, 9, STRUCTURE_WALL);
+    map_set_structure(&map, 8, 9, STRUCTURE_GRASS_BED);
+    CHECK(!gather_zone_can_cover(&map, 7, 9));
+    CHECK(gather_zone_can_cover(&map, 8, 9));
+    CHECK(!gather_stone_ground(&map, 8, 9));
     int index = gather_zone_create(&zones, &map, 4, 8, 11, 8);
     REQUIRE(index != GATHER_ZONE_NONE);
     CHECK_EQ_INT(gather_zone_get(&zones, index)->cell_count, 7);

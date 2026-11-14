@@ -3,9 +3,13 @@
  *
  * Each tick a colonist updates its needs, decides what to do when it stands
  * on a tile center (drink when thirsty, eat when hungry, sleep when tired or
- * at night, otherwise work: designations, building and crafting at
- * workstations, hauling; or wander), then acts (walk one tick along its path,
- * eat, work, sleep...).
+ * at night, otherwise work: designations, construction sites, building and
+ * crafting at workstations, hauling; or wander), then acts (walk one tick
+ * along its path, eat, work, sleep...).
+ *
+ * Settlers sleep in the nearest free bed (core/structure.h), or on the
+ * ground: rest comes back more slowly there, and after such a night they
+ * work more slowly for a while.
  *
  * Tools are simply carried, at most one of each type, and used without
  * equipping anything; they count in the carried weight. A colonist fetches a
@@ -16,6 +20,7 @@
 #ifndef COLONY_CORE_COLONIST_H
 #define COLONY_CORE_COLONIST_H
 
+#include "core/construction.h"
 #include "core/designation.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
@@ -75,7 +80,15 @@
 #define NEED_FOOD_DECAY_PER_TICK (1.0f / (36.0f * TICKS_PER_HOUR))
 #define NEED_WATER_DECAY_PER_TICK (1.0f / (24.0f * TICKS_PER_HOUR))
 #define NEED_REST_DECAY_PER_TICK (1.0f / (20.0f * TICKS_PER_HOUR))
+/* Rest gained asleep in a bed of rest factor 1 (see StructureDef). */
 #define NEED_REST_GAIN_PER_TICK (1.0f / (8.0f * TICKS_PER_HOUR))
+/* Rest gain multiplier when sleeping on the bare ground. */
+#define COLONIST_GROUND_REST_FACTOR 0.8f
+/* After waking up from a night on the ground, work is slower for this long. */
+#define COLONIST_GROUND_SLEEP_PENALTY_TICKS (12 * TICKS_PER_HOUR)
+#define COLONIST_GROUND_SLEEP_WORK_FACTOR 0.9f
+/* Settlers walk at most this far to a free bed. */
+#define COLONIST_BED_SEARCH_MAX_COST 150.0f
 #define NEED_LOW_THRESHOLD 0.3f
 #define NEED_CRITICAL_THRESHOLD 0.1f
 
@@ -119,6 +132,9 @@ typedef enum ColonistTask {
     TASK_HAUL, /* Walking to an item stack, picking it up, carrying it to storage. */
     TASK_BUILD, /* Bringing materials to a workstation blueprint, then building it. */
     TASK_CRAFT, /* Fetching tools and input, then working through a bill at a station. */
+    /* Bringing materials to a construction site, then building it from a
+     * neighboring tile. */
+    TASK_CONSTRUCT,
     TASK_COUNT
 } ColonistTask;
 
@@ -137,13 +153,15 @@ typedef enum SearchKind {
     SEARCH_HAUL,
     SEARCH_STATION, /* Building and crafting jobs at workstations. */
     SEARCH_GATHER,  /* Gathering zones. */
+    SEARCH_CONSTRUCTION, /* Construction sites. */
     SEARCH_COUNT
 } SearchKind;
 
-/* Steps of a job at a workstation (TASK_BUILD, TASK_CRAFT). */
+/* Steps of a job at a workstation (TASK_BUILD, TASK_CRAFT) or a construction
+ * site (TASK_CONSTRUCT). */
 typedef enum StationJobPhase {
     STATION_JOB_FETCH, /* Walking to `fetch` to pick up a tool, an input or materials. */
-    STATION_JOB_GO,    /* Walking to the station. */
+    STATION_JOB_GO,    /* Walking to the station (next to the site). */
     STATION_JOB_WORK,  /* Working on it. */
 } StationJobPhase;
 
@@ -181,6 +199,9 @@ typedef struct Colonist {
     /* Gathering zones revision + reservation releases at the last failed
      * gathering search. */
     uint32_t gather_search_stamp;
+    /* Construction sites revision + item additions + releases at the last
+     * failed construction search. */
+    uint32_t construction_search_stamp;
     ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
     TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
@@ -197,6 +218,13 @@ typedef struct Colonist {
     uint8_t station_phase; /* StationJobPhase */
     TilePos fetch;
     bool fetch_tool;
+    /* TASK_CONSTRUCT: the site (index, and number to notice a replacement);
+     * `target` is its tile, the phase and fetch fields are shared with
+     * station jobs. */
+    int site;
+    int site_number;
+    /* Ticks left of slower work after a night on the ground. */
+    int ground_sleep_ticks;
     /* Tools carried (one per type, count 1; empty slots have type ITEM_NONE). */
     ItemStack tools[COLONIST_TOOL_MAX];
     int strength; /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
@@ -217,6 +245,7 @@ typedef struct ColonistContext {
     Items *items;
     Stockpiles *stockpiles;
     Workstations *workstations;
+    Constructions *constructions;
     Reservations *reservations;
     Pathfinder *pathfinder;
     /* Connectivity regions (may be out of date, never wrong: see core/region.h). */
@@ -260,11 +289,15 @@ bool colonist_can_do(const Colonist *colonist, DesignationType type);
 bool colonist_can_gather(const Colonist *colonist, GatherJob job);
 
 /* Work done per tick on something of `knowledge`: COLONIST_WORK_SPEED scaled
- * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE). */
+ * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE), and by
+ * COLONIST_GROUND_SLEEP_WORK_FACTOR after a night on the ground. */
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge);
 
 /* Whether the colonist knows enough to build this kind of workstation. */
 bool colonist_can_build(const Colonist *colonist, WorkstationType type);
+
+/* Whether the colonist knows enough to build this kind of structure. */
+bool colonist_can_construct(const Colonist *colonist, StructureType type);
 
 /* Whether the colonist knows enough to make this recipe. */
 bool colonist_can_craft(const Colonist *colonist, RecipeType recipe);

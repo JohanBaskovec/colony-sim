@@ -6,6 +6,7 @@
 #define COLONY_CORE_MAP_H
 
 #include "core/item.h"
+#include "core/structure.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -122,6 +123,9 @@ typedef struct Map {
     /* Flint patches: chance in percent (0..MAP_FLINT_MAX_CHANCE) that a stone
      * gathered on the tile is a flint nodule rather than a cobble. */
     uint8_t *flint;
+    /* Built structures (StructureType per tile): beds, walls, doors. */
+    uint8_t *structure;
+    int structure_counts[STRUCTURE_TYPE_COUNT]; /* Tiles holding each type. */
     /* Incremented whenever where one can walk, or where water is, changes
      * (plants never block). Data derived from it (core/region.h) compares it
      * to know when it is out of date. Not part of map_hash(). */
@@ -182,7 +186,15 @@ void map_set_terrain(Map *map, int x, int y, Terrain terrain);
 void map_set_rock(Map *map, int x, int y, RockType rock);
 void map_topology_changed(Map *map);
 
-/* False when out of bounds, on impassable terrain or on a rock wall. */
+/* Same rule for structures (a wall blocks movement, a door slows it). The
+ * plant of the tile is cleared when a structure is built on it. */
+void map_set_structure(Map *map, int x, int y, StructureType type);
+
+/* STRUCTURE_NONE out of bounds. */
+StructureType map_structure(const Map *map, int x, int y);
+
+/* False when out of bounds, on impassable terrain, on a rock wall or on a
+ * structure that blocks movement. */
 bool map_is_passable(const Map *map, int x, int y);
 
 /* Movement cost multiplier of a tile, or 0 when impassable. */

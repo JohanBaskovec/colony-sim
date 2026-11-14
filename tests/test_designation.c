@@ -187,6 +187,31 @@ static void test_hash_detects_changes(void)
     free_world(&map, &d);
 }
 
+static void test_taking_structures_apart(void)
+{
+    Map map;
+    Designations designations;
+    Items items;
+    REQUIRE(init_world(&map, &designations));
+    REQUIRE(items_init(&items, 16, 16));
+    CHECK(!designation_set(&designations, &map, 8, 8, DESIGNATION_DECONSTRUCT)); /* Nothing. */
+    map_set_structure(&map, 8, 8, STRUCTURE_DOOR);
+    CHECK(designation_can_apply(&map, 8, 8, DESIGNATION_DECONSTRUCT));
+    CHECK(designation_set(&designations, &map, 8, 8, DESIGNATION_DECONSTRUCT));
+    CHECK_EQ_INT(designations_count_for_work(&designations, WORK_TYPE_BIT(WORK_CONSTRUCTION)), 1);
+    float needed = designation_work_needed(&designations, &map, 8, 8);
+    CHECK_NEAR(needed, structure_deconstruct_work(STRUCTURE_DOOR), 0.001f);
+    CHECK(!designation_add_work(&designations, &map, &items, 8, 8, needed * 0.5f, 75.0, NULL));
+    CHECK(designation_add_work(&designations, &map, &items, 8, 8, needed * 0.5f, 75.0, NULL));
+    /* Gone, with half of its materials (5 branches and 5 twigs) given back. */
+    CHECK_EQ_INT(map_structure(&map, 8, 8), STRUCTURE_NONE);
+    CHECK_EQ_INT(designation_get(&designations, 8, 8), DESIGNATION_NONE);
+    CHECK_EQ_INT(items.totals[ITEM_BRANCHES], 2);
+    CHECK_EQ_INT(items.totals[ITEM_TWIGS], 2);
+    items_free(&items);
+    free_world(&map, &designations);
+}
+
 static void test_definitions(void)
 {
     for (int type = DESIGNATION_NONE + 1; type < DESIGNATION_COUNT; type++) {
@@ -200,6 +225,9 @@ static void test_definitions(void)
     }
     /* Mining belongs to nobody yet. */
     CHECK(designation_def(DESIGNATION_MINE)->knowledge == KNOWLEDGE_NONE);
+    /* Taking a structure apart is construction work anyone who builds knows. */
+    CHECK(designation_def(DESIGNATION_DECONSTRUCT)->work_type == WORK_CONSTRUCTION);
+    CHECK(designation_def(DESIGNATION_DECONSTRUCT)->knowledge == KNOWLEDGE_BASIC_SHELTERS);
     CHECK(designation_def(DESIGNATION_COUNT) == NULL);
 }
 
@@ -214,6 +242,7 @@ int main(void)
     RUN_TEST(test_stone_blocks_are_perfect);
     RUN_TEST(test_progress_is_kept_until_cancelled);
     RUN_TEST(test_hash_detects_changes);
+    RUN_TEST(test_taking_structures_apart);
     RUN_TEST(test_definitions);
     return test_summary();
 }

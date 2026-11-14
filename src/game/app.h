@@ -22,6 +22,7 @@ typedef enum AppTool {
     APP_TOOL_STOCKPILE, /* Create/extend stockpile zones; with Shift, remove zone tiles. */
     APP_TOOL_BUILD,     /* Place a blueprint of `build_type` on the clicked tile. */
     APP_TOOL_GATHER,    /* Create/extend gathering zones; with Shift, remove zone tiles. */
+    APP_TOOL_STRUCTURE, /* Plan structures of `structure_type` (click, or drag a rectangle). */
 } AppTool;
 
 /* Windows (game/ui.h ids). */
@@ -40,6 +41,7 @@ typedef enum AppWindow {
 typedef enum BuildCategory {
     BUILD_CATEGORY_NONE,
     BUILD_CATEGORY_STATIONS,
+    BUILD_CATEGORY_STRUCTURES,
     BUILD_CATEGORY_ZONES,
     BUILD_CATEGORY_ORDERS,
     BUILD_CATEGORY_COUNT
@@ -94,6 +96,7 @@ typedef struct App {
     AppTool tool;
     DesignationType tool_type; /* For APP_TOOL_DESIGNATE. */
     WorkstationType build_type; /* For APP_TOOL_BUILD. */
+    StructureType structure_type; /* For APP_TOOL_STRUCTURE. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;
@@ -111,8 +114,8 @@ void app_run(App *app);
 void app_shutdown(App *app);
 
 /* Selects a tool (`type`: DesignationType for APP_TOOL_DESIGNATE,
- * WorkstationType for APP_TOOL_BUILD), or goes back to selection if it is
- * already active. */
+ * WorkstationType for APP_TOOL_BUILD, StructureType for APP_TOOL_STRUCTURE),
+ * or goes back to selection if it is already active. */
 void app_toggle_tool(App *app, AppTool tool, int type);
 
 /* Whether this tool (same `type` rules) is the one in use. */

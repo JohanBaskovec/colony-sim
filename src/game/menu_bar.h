@@ -13,6 +13,10 @@
 /* Draws the bar and the open menus (after the windows: they stay on top). */
 void menu_bar_draw(App *app);
 
+/* What a structure needs, with the total weight: "Needs: Branches ×5 and Dry
+ * grass ×24 (31.5 kg)". */
+void menu_bar_structure_cost(char *out, size_t size, StructureType type);
+
 /* Top of the bar and the open menus. */
 float menu_bar_top(const App *app);
 

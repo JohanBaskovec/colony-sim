@@ -33,6 +33,7 @@ static const SDL_Color COLONIST_COLORS[] = {
 static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_NONE] = {230, 70, 60, 255},
     [DESIGNATION_MINE] = {250, 140, 60, 255},
+    [DESIGNATION_DECONSTRUCT] = {240, 200, 70, 255},
 };
 static const SDL_Color STOCKPILE_COLOR = {90, 170, 230, 255};
 static const SDL_Color STOCKPILE_REMOVE_COLOR = {230, 70, 60, 255};
@@ -662,6 +663,133 @@ void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, Workstation
     render_station_shape(renderer, &rect, type, 255);
 }
 
+/* ---- Structures ------------------------------------------------------------- */
+
+/* A structure seen from above, at `alpha` (ghosts of blueprints):
+ * - grass bed: a litter of dry grass with a rolled-up end as a pillow;
+ * - wall: thatch filling the tile, posts as dark dots along the middle;
+ * - branch screen: a frame of branches woven across. */
+static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile,
+                                   StructureType type, Uint8 alpha)
+{
+    float w = tile->w, h = tile->h;
+    SDL_Color straw = DRY_GRASS_COLOR, dark = shade(DRY_GRASS_COLOR, -40);
+    SDL_Color wood = BRANCH_COLOR, edge = ITEM_OUTLINE;
+    straw.a = dark.a = wood.a = edge.a = alpha;
+    switch (type) {
+    case STRUCTURE_GRASS_BED: {
+        SDL_FRect bed = {tile->x + floorf(w * 0.12f), tile->y + floorf(h * 0.06f),
+                         floorf(w * 0.76f), floorf(h * 0.88f)};
+        fill(renderer, edge, &bed);
+        SDL_FRect litter = {bed.x + 1.0f, bed.y + 1.0f, bed.w - 2.0f, bed.h - 2.0f};
+        fill(renderer, straw, &litter);
+        SDL_FRect pillow = {litter.x, litter.y, litter.w, floorf(litter.h * 0.25f)};
+        fill(renderer, dark, &pillow);
+        break;
+    }
+    case STRUCTURE_WALL: {
+        fill(renderer, dark, tile);
+        float step = SDL_max(2.0f, floorf(w / 6.0f));
+        for (float x = tile->x + 1.0f; x < tile->x + w - 1.0f; x += step) {
+            SDL_FRect stalk = {x, tile->y, SDL_max(1.0f, floorf(step * 0.5f)), h};
+            fill(renderer, straw, &stalk);
+        }
+        float post = SDL_max(2.0f, floorf(w * 0.14f));
+        for (int i = 0; i < 3; i++) {
+            SDL_FRect dot = {tile->x + floorf(w * (0.17f + 0.33f * (float)i)) - post * 0.5f,
+                             tile->y + floorf((h - post) * 0.5f), post, post};
+            fill(renderer, wood, &dot);
+        }
+        break;
+    }
+    case STRUCTURE_DOOR: {
+        SDL_FRect frame = inset(tile, 0.9f);
+        outline(renderer, frame, SDL_max(2.0f, floorf(w * 0.1f)), wood);
+        SDL_SetRenderDrawColor(renderer, wood.r, wood.g, wood.b, wood.a);
+        float step = SDL_max(3.0f, floorf(frame.w / 4.0f));
+        for (float d = step; d < frame.w; d += step) {
+            SDL_RenderLine(renderer, frame.x + d, frame.y, frame.x, frame.y + d);
+            SDL_RenderLine(renderer, frame.x + frame.w - d, frame.y + frame.h, frame.x + frame.w,
+                           frame.y + frame.h - d);
+        }
+        break;
+    }
+    default: break;
+    }
+}
+
+void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    const Map *map = &game->map;
+    if (map->structure_counts[STRUCTURE_NONE] < (int)map_tile_count(map)) {
+        TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+        for (int y = visible.y0; y < visible.y1; y++) {
+            for (int x = visible.x0; x < visible.x1; x++) {
+                StructureType type = (StructureType)map->structure[map_index(map, x, y)];
+                if (type != STRUCTURE_NONE) {
+                    SDL_FRect tile = tile_rect(camera, x, y);
+                    render_structure_shape(renderer, &tile, type, 255);
+                }
+            }
+        }
+    }
+    /* Blueprints: a ghost that fills in as the materials arrive, outlined. */
+    const Constructions *constructions = &game->constructions;
+    if (constructions->used_count == 0) {
+        return;
+    }
+    TileRect visible = camera_visible_tiles(camera, constructions->width, constructions->height);
+    for (int i = 0; i < CONSTRUCTION_MAX; i++) {
+        const ConstructionSite *site = construction_get(constructions, i);
+        if (site == NULL || site->x < visible.x0 || site->x >= visible.x1 ||
+            site->y < visible.y0 || site->y >= visible.y1) {
+            continue;
+        }
+        const StructureDef *def = structure_def((StructureType)site->type);
+        int needed = 0, delivered = 0;
+        for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+            needed += def->materials[slot].count;
+            delivered += site->delivered[slot].count;
+        }
+        float materials = needed > 0 ? (float)delivered / (float)needed : 1.0f;
+        SDL_FRect tile = tile_rect(camera, site->x, site->y);
+        render_structure_shape(renderer, &tile, (StructureType)site->type,
+                               (Uint8)(70.0f + 110.0f * materials));
+        outline(renderer, inset(&tile, 0.9f), 1.0f, BLUEPRINT_COLOR);
+        progress_bar(renderer, &tile, construction_work_fraction(site));
+    }
+}
+
+void render_structure_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                              StructureType type, int x0, int y0, int x1, int y1)
+{
+    const StructureDef *def = structure_def(type);
+    if (def == NULL) {
+        return;
+    }
+    int min_x = SDL_min(x0, x1), max_x = SDL_max(x0, x1);
+    int min_y = SDL_min(y0, y1), max_y = SDL_max(y0, y1);
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
+            bool edge = x == min_x || x == max_x || y == min_y || y == max_y;
+            if (!edge && def->drawn_as_outline) {
+                continue;
+            }
+            SDL_FRect tile = tile_rect(camera, x, y);
+            bool allowed = game_can_place_structure(game, x, y);
+            if (allowed) {
+                render_structure_shape(renderer, &tile, type, 110);
+            }
+            outline(renderer, tile, 1.0f, allowed ? BLUEPRINT_COLOR : BLUEPRINT_REFUSED_COLOR);
+        }
+    }
+}
+
+void render_structure_icon(SDL_Renderer *renderer, SDL_FRect rect, StructureType type)
+{
+    render_structure_shape(renderer, &rect, type, 255);
+}
+
 /* A zone tile seen from above: its color, its border, and what it holds. */
 static void zone_icon(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color color)
 {
@@ -714,6 +842,12 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         SDL_RenderLine(renderer, area.x + area.w * 0.55f, area.y + area.h * 0.55f,
                        area.x + area.w * 0.5f, area.y + area.h * 0.85f);
         outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_MINE]);
+        break;
+    }
+    case RENDER_ICON_DECONSTRUCT: {
+        SDL_FRect area = inset(&rect, 0.7f);
+        render_structure_shape(renderer, &area, STRUCTURE_WALL, 255);
+        outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_DECONSTRUCT]);
         break;
     }
     case RENDER_ICON_CANCEL: {

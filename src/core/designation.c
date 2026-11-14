@@ -11,6 +11,9 @@ static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
     /* Mining needs a pick and the Mining knowledge: neither exists yet. */
     [DESIGNATION_MINE] = {"mine", N_("designation.mine"), N_("colonist.task.mine"), WORK_MINING,
                           KNOWLEDGE_NONE, KNOWLEDGE_MASTERY_LEVEL},
+    [DESIGNATION_DECONSTRUCT] = {"deconstruct", N_("designation.deconstruct"),
+                                 N_("colonist.task.deconstruct"), WORK_CONSTRUCTION,
+                                 KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -67,6 +70,7 @@ bool designation_can_apply(const Map *map, int x, int y, DesignationType type)
     }
     switch (type) {
     case DESIGNATION_MINE: return map->rock[map_index(map, x, y)] != ROCK_NONE;
+    case DESIGNATION_DECONSTRUCT: return map_structure(map, x, y) != STRUCTURE_NONE;
     default: return false;
     }
 }
@@ -153,6 +157,8 @@ float designation_work_needed(const Designations *designations, const Map *map, 
         const RockDef *rock = rock_def((RockType)map->rock[index]);
         return rock != NULL ? rock->mine_work : 0.0f;
     }
+    case DESIGNATION_DECONSTRUCT:
+        return structure_deconstruct_work((StructureType)map->structure[index]);
     default: return 0.0f;
     }
 }
@@ -186,13 +192,25 @@ ItemType designation_yield(const Designations *designations, const Map *map, int
 }
 
 /* Carries out a completed order on the map. */
-static void complete(Map *map, int x, int y, DesignationType type)
+static void complete(Map *map, Items *items, int x, int y, DesignationType type)
 {
     switch (type) {
     case DESIGNATION_MINE:
         /* The rough stone floor under the rock stays. */
         map_set_rock(map, x, y, ROCK_NONE);
         break;
+    case DESIGNATION_DECONSTRUCT: {
+        StructureType structure = map_structure(map, x, y);
+        const StructureDef *def = structure_def(structure);
+        map_set_structure(map, x, y, STRUCTURE_NONE);
+        for (int slot = 0; items != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+            int count = structure_salvage_count(structure, slot);
+            if (count > 0) {
+                items_drop(items, map, x, y, item_stack_pristine(def->materials[slot].type, count));
+            }
+        }
+        break;
+    }
     default: break;
     }
 }
@@ -211,7 +229,7 @@ bool designation_add_work(Designations *designations, Map *map, Items *items, in
     }
     int count;
     ItemType product = designation_yield(designations, map, x, y, &count);
-    complete(map, x, y, type);
+    complete(map, items, x, y, type);
     if (items != NULL && product != ITEM_NONE) {
         /* After mining: the tile is open. */
         items_drop(items, map, x, y, knowledge_product(product, count, level, rng));

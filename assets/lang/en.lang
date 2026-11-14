@@ -31,6 +31,7 @@ plant.tree = Tree
 
 # Designations (player orders)
 designation.mine = Mine rock
+designation.deconstruct = Take apart
 tool.cancel = Cancel orders
 tool.stockpile = Stockpile zone
 tool.gather_zone = Gathering zone
@@ -38,16 +39,20 @@ tool.gather_zone.description = Settlers gather the resources you pick in it: woo
 tool.stockpile.description = Settlers store the items you allow in it
 tool.mine.description = Settlers dig out the marked rock and bring back stone
 tool.cancel.description = Removes the orders in the area you drag
+tool.deconstruct.description = Settlers take the marked beds, walls and doors apart and get half of the materials back
 
 # Menus (bottom left)
 menu.build = Build
 menu.work = Work
 menu.stations = Workstations
+menu.structures = Constructions
 menu.zones = Zones
 menu.orders = Orders
 # {0}: key name.
 menu.shortcut = Shortcut: {0}
 menu.no_cost = Needs no resources
+# {0}: materials ("Branches ×5 and Dry grass ×24"), {1}: their total weight ("31.5 kg").
+menu.structure_cost = Needs: {0} ({1})
 menu.work.description = Who does which work, and in what order
 help.title = Controls
 
@@ -126,6 +131,8 @@ hud.tool.stockpile_help = Drag: create, or extend the selected zone · Shift+dra
 hud.tool.build_cost = Needs: {0} ×{1}
 # {0} = key of the build tool
 hud.tool.build_help = Left click: place a blueprint · {0}: next workstation · Esc: back
+hud.tool.outline_help = Drag: walls along the edges of a rectangle · Click: one segment · Esc: back
+hud.tool.structure_help = Click: place one · Drag: fill a rectangle · Esc: back
 
 # Tile inspector. {0}, {1} = tile coordinates
 hud.tile.position = Tile {0}, {1}
@@ -151,6 +158,9 @@ hud.tile.stockpile = Zone: {0}
 hud.tile.station = Workstation: {0}
 # {0} = workstation name, {1} = percentage of the construction done
 hud.tile.blueprint = Blueprint: {0} ({1}% built)
+hud.tile.structure = Construction: {0}
+# {0}: material, {1}: brought so far, {2}: needed.
+hud.tile.material = {0}: {1}/{2}
 hud.tile.flint_some = Some flint in the ground
 hud.tile.flint_plenty = Plenty of flint in the ground
 # Items on a tile or carried. {0} = quality grade, {1} = hit points,
@@ -176,6 +186,7 @@ colonist.task.sleep = Sleeping
 colonist.task.work = Working
 colonist.task.chop = Chopping a tree
 colonist.task.mine = Mining
+colonist.task.deconstruct = Taking apart
 colonist.task.harvest = Harvesting
 colonist.task.gather_stones = Gathering stones
 colonist.task.gather_branches = Gathering branches
@@ -183,6 +194,7 @@ colonist.task.gather_twigs = Gathering twigs
 colonist.task.cut_grass = Cutting grass
 colonist.task.build = Building a workstation
 colonist.task.craft = Crafting
+colonist.task.construct = Building
 colonist.task.haul = Hauling
 
 need.food = Food
@@ -199,6 +211,9 @@ need.rest.critical = Exhausted
 hud.colonist.age = Age: {0}
 # {0} = strength (1 to 20), {1} = weight carried without slowing down (e.g. 44 kg)
 hud.colonist.strength = Strength: {0} (carries up to {1})
+# {0}: percent of work speed lost, {1}: hours left.
+hud.colonist.ground_sleep.one = Slept on the ground: works {0}% slower ({1} hour left)
+hud.colonist.ground_sleep.other = Slept on the ground: works {0}% slower ({1} hours left)
 # {0} = activity name
 hud.colonist.activity = Activity: {0}
 # {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
@@ -266,6 +281,14 @@ workstation.crafting_spot = Crafting spot
 workstation.crafting_spot.description = A place on the ground to make spears and other tools from wood and stone
 workstation.knapping_spot = Knapping spot
 workstation.knapping_spot.description = Where flint and cobbles are knapped into flakes, choppers and hand axes
+
+# Structures (built from blueprints)
+structure.grass_bed = Grass bed
+structure.grass_bed.description = A litter of dry grass to sleep on: rest comes back faster than on the bare ground
+structure.wall = Grass and branch wall
+structure.wall.description = Posts and rails of branches thatched with dry grass, 2 m high: nobody gets through
+structure.door = Branch screen
+structure.door.description = A woven frame of branches pushed aside to pass: the door of grass walls
 
 # Recipes (named after what they make)
 recipe.chopper = Chopper

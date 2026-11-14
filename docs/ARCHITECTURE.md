@@ -44,7 +44,7 @@ simulation:
 |--------------|------------------------------------------------------------------------------|
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work            |
-| `designation`| Player work orders per tile (mine rock), the knowledge and level each needs, work progress |
+| `designation`| Player work orders per tile (mine rock, take a structure apart), the knowledge and level each needs, work progress |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
@@ -52,6 +52,8 @@ simulation:
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot): blueprints, materials, construction, bills, the craft in progress |
+| `structure`  | Structure definitions (grass bed, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor |
+| `construction`| Construction sites: blueprints of structures, materials delivered per slot, work; built structures go to the map's structure layer |
 | `work`       | Work types (mining, woodcutting, gathering, construction, crafting, hauling), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning, quality and condition of what a worker produces |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
@@ -376,6 +378,37 @@ colonist checks every tick that it still owns its job, so lookups must not
 scan the table. The index is rebuilt when reservations are released, which is
 rare next to lookups.
 
+### Structures and construction sites
+
+Built **structures** (`core/structure.h`) are a layer of the map
+(`Map.structure`, one `StructureType` per tile, with counts per type), like
+rock: `map_set_structure()` keeps `topology_revision` right (a wall blocks
+movement, a door multiplies the movement cost, a bed too) and clears the
+tile's plant. Blueprints are **construction sites** (`core/construction.h`,
+owned by `Game`, at most `CONSTRUCTION_MAX`, a dense index layer): the
+player places them (`game_place_structure_rect()`: along the edges of the
+rectangle for walls, filling it otherwise; refused on stockpiles,
+workstations, trees and bushes). A colonist with the construction work type
+and the knowledge (`TASK_CONSTRUCT`, `RESERVATION_CONSTRUCTION`) fetches each
+material in turn, as much as it can carry, delivers it from a neighboring
+tile, then works from there: a wall cannot be stood on once built. When it
+is done the site is gone, the structure appears; a blocking one pushes the
+items of its tile next door and takes the tile out of stockpiles and
+gathering zones, and a colonist left standing on it steps aside at its next
+tick. The cancel tool removes sites (their materials are dropped); the
+*take apart* order (`DESIGNATION_DECONSTRUCT`, construction work) removes a
+built structure and gives back half of its materials.
+
+Material counts come from real structures, for a tile of about 1 m²: see
+`structure.c` and `docs/KNOWLEDGE.md` §10.
+
+**Beds**: a colonist going to sleep walks to the nearest free bed
+(`RESERVATION_BED`, within `COLONIST_BED_SEARCH_MAX_COST`) and sleeps on the
+ground otherwise. Rest comes back at `rest_factor` in a bed (1 for a grass
+bed) and `COLONIST_GROUND_REST_FACTOR` (0.8) on the ground; waking up from a
+night on the ground leaves `ground_sleep_ticks` of slower work
+(`COLONIST_GROUND_SLEEP_WORK_FACTOR`), to become a mood once moods exist.
+
 ### Workstations, bills and carried tools
 
 Workstations (`core/workstation.h`, owned by `Game`, at most
@@ -511,6 +544,9 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 
 UI state that is not part of the simulation (camera, selection, selected
 stockpile or workstation, active tool, drag rectangle, debug toggle) lives in `App`.
+The structure tool (`APP_TOOL_STRUCTURE`) previews the sites a drag would
+place (`render_structure_preview()`); structures and sites are drawn by
+`render_structures()`.
 
 The UI is immediate-mode (`game/ui.h`): panels and widgets are laid out and
 drawn every frame. Everything drawn belongs to an owner: a window (an

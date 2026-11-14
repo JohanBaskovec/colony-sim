@@ -134,6 +134,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .items = &game->items,
         .stockpiles = &game->stockpiles,
         .workstations = &game->workstations,
+        .constructions = &game->constructions,
         .reservations = &game->reservations,
         .pathfinder = &game->pathfinder,
         .regions = &game->regions,
@@ -401,6 +402,7 @@ bool game_init(Game *game, const NewGameParams *params)
         !items_init(&game->items, game->map.width, game->map.height) ||
         !stockpiles_init(&game->stockpiles, game->map.width, game->map.height) ||
         !workstations_init(&game->workstations, game->map.width, game->map.height) ||
+        !constructions_init(&game->constructions, game->map.width, game->map.height) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
         !regions_init(&game->regions, game->map.width, game->map.height) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
@@ -429,6 +431,7 @@ void game_shutdown(Game *game)
     items_free(&game->items);
     stockpiles_free(&game->stockpiles);
     workstations_free(&game->workstations);
+    constructions_free(&game->constructions);
     map_free(&game->map);
     memset(game, 0, sizeof(*game));
 }
@@ -525,6 +528,7 @@ uint64_t game_hash(const Game *game)
     hash = items_hash(&game->items, hash);
     hash = stockpiles_hash(&game->stockpiles, hash);
     hash = workstations_hash(&game->workstations, hash);
+    hash = constructions_hash(&game->constructions, hash);
     hash = reservations_hash(&game->reservations, hash);
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
@@ -717,6 +721,8 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
 bool game_can_place_workstation(const Game *game, int x, int y)
 {
     return stockpile_at(&game->stockpiles, x, y) == STOCKPILE_NONE &&
+           map_structure(&game->map, x, y) == STRUCTURE_NONE &&
+           construction_at(&game->constructions, x, y) == CONSTRUCTION_NONE &&
            workstation_can_place(&game->workstations, &game->map, x, y);
 }
 
@@ -753,6 +759,9 @@ int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1)
             if (station != NULL && !station->built && game_remove_workstation(game, index)) {
                 removed++;
             }
+            if (game_remove_construction(game, construction_at(&game->constructions, x, y))) {
+                removed++;
+            }
         }
     }
     return removed;
@@ -768,6 +777,70 @@ bool game_remove_bill(Game *game, int station_index, int bill)
     ItemStack returned;
     if (workstation_remove_bill(&game->workstations, station_index, bill, &returned)) {
         items_drop(&game->items, &game->map, x, y, returned);
+    }
+    return true;
+}
+
+/* ---- Structures ---------------------------------------------------------- */
+
+bool game_structure_buildable(const Game *game, StructureType type)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            colonist_can_construct(&game->colonists[slot], type)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool game_can_place_structure(const Game *game, int x, int y)
+{
+    return stockpile_at(&game->stockpiles, x, y) == STOCKPILE_NONE &&
+           workstation_at(&game->workstations, x, y) == WORKSTATION_NONE &&
+           construction_can_place(&game->constructions, &game->map, x, y);
+}
+
+int game_place_structure(Game *game, StructureType type, int x, int y)
+{
+    if (!game_can_place_structure(game, x, y)) {
+        return CONSTRUCTION_NONE;
+    }
+    return constructions_place(&game->constructions, &game->map, type, x, y);
+}
+
+int game_place_structure_rect(Game *game, StructureType type, int x0, int y0, int x1, int y1)
+{
+    const StructureDef *def = structure_def(type);
+    if (def == NULL || type == STRUCTURE_NONE) {
+        return 0;
+    }
+    int min_x = x0 < x1 ? x0 : x1, max_x = x0 < x1 ? x1 : x0;
+    int min_y = y0 < y1 ? y0 : y1, max_y = y0 < y1 ? y1 : y0;
+    int placed = 0;
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
+            bool edge = x == min_x || x == max_x || y == min_y || y == max_y;
+            if ((edge || !def->drawn_as_outline) &&
+                game_place_structure(game, type, x, y) != CONSTRUCTION_NONE) {
+                placed++;
+            }
+        }
+    }
+    return placed;
+}
+
+bool game_remove_construction(Game *game, int index)
+{
+    const ConstructionSite *site = construction_get(&game->constructions, index);
+    if (site == NULL) {
+        return false;
+    }
+    int x = site->x, y = site->y;
+    ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
+    int count = constructions_remove(&game->constructions, index, returned);
+    for (int i = 0; i < count; i++) {
+        items_drop(&game->items, &game->map, x, y, returned[i]);
     }
     return true;
 }

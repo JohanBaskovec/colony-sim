@@ -29,6 +29,8 @@ static const MenuTool TOOLS[] = {
      N_("tool.stockpile.description"), SDLK_P},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_MINE, RENDER_ICON_MINE,
      N_("designation.mine"), N_("tool.mine.description"), SDLK_M},
+    {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DECONSTRUCT, RENDER_ICON_DECONSTRUCT,
+     N_("designation.deconstruct"), N_("tool.deconstruct.description"), SDLK_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_NONE, RENDER_ICON_CANCEL,
      N_("tool.cancel"), N_("tool.cancel.description"), SDLK_X},
 };
@@ -36,6 +38,7 @@ static const MenuTool TOOLS[] = {
 static const char *const CATEGORY_KEYS[BUILD_CATEGORY_COUNT] = {
     [BUILD_CATEGORY_NONE] = NULL,
     [BUILD_CATEGORY_STATIONS] = N_("menu.stations"),
+    [BUILD_CATEGORY_STRUCTURES] = N_("menu.structures"),
     [BUILD_CATEGORY_ZONES] = N_("menu.zones"),
     [BUILD_CATEGORY_ORDERS] = N_("menu.orders"),
 };
@@ -96,15 +99,59 @@ static void station_tooltip(App *app, WorkstationType type)
     ui_tooltip(&app->ui, lines, game_workstation_buildable(&app->game, type) ? 3 : 4);
 }
 
+void menu_bar_structure_cost(char *out, size_t size, StructureType type)
+{
+    const StructureDef *def = structure_def(type);
+    char parts[STRUCTURE_MATERIAL_SLOTS][TEXT_SIZE];
+    int count = 0;
+    float weight = 0.0f;
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        StructureMaterial material = def->materials[slot];
+        if (material.type == ITEM_NONE) {
+            continue;
+        }
+        char number[16];
+        tr_integer(number, sizeof(number), material.count);
+        TR_FORMAT(parts[count++], TEXT_SIZE, tr("recipe.ingredient"),
+                  tr(item_def(material.type)->name_key), number);
+        weight += item_stack_weight(material.type, material.count);
+    }
+    char list[TEXT_SIZE], number[16], kilograms[32];
+    if (count == 2) {
+        TR_FORMAT(list, sizeof(list), tr("recipe.both"), parts[0], parts[1]);
+    } else {
+        SDL_strlcpy(list, count == 1 ? parts[0] : "", sizeof(list));
+    }
+    int decimals = SDL_fabsf(weight - SDL_roundf(weight)) > 0.05f ? 1 : 0;
+    tr_decimal(number, sizeof(number), decimals ? weight : SDL_roundf(weight), decimals);
+    TR_FORMAT(kilograms, sizeof(kilograms), tr("unit.kg"), number);
+    TR_FORMAT(out, size, tr("menu.structure_cost"), list, kilograms);
+}
+
+static void structure_tooltip(App *app, StructureType type)
+{
+    const StructureDef *def = structure_def(type);
+    char cost[TEXT_SIZE];
+    menu_bar_structure_cost(cost, sizeof(cost), type);
+    const char *lines[4] = {tr(def->name_key), tr(def->description_key), cost,
+                            tr("hud.tool.unavailable")};
+    ui_tooltip(&app->ui, lines, game_structure_buildable(&app->game, type) ? 3 : 4);
+}
+
 static void tool_tooltip(App *app, const MenuTool *tool)
 {
+    const char *lines[4] = {tr(tool->name_key), tr(tool->description_key)};
+    int count = 2;
     char shortcut[TEXT_SIZE];
-    shortcut_line(shortcut, sizeof(shortcut), tool->key);
-    bool unavailable = tool->tool == APP_TOOL_DESIGNATE && tool->type != DESIGNATION_NONE &&
-                       !game_designation_available(&app->game, (DesignationType)tool->type);
-    const char *lines[4] = {tr(tool->name_key), tr(tool->description_key), shortcut,
-                            tr("hud.tool.unavailable")};
-    ui_tooltip(&app->ui, lines, unavailable ? 4 : 3);
+    if (tool->key != SDLK_UNKNOWN) {
+        shortcut_line(shortcut, sizeof(shortcut), tool->key);
+        lines[count++] = shortcut;
+    }
+    if (tool->tool == APP_TOOL_DESIGNATE && tool->type != DESIGNATION_NONE &&
+        !game_designation_available(&app->game, (DesignationType)tool->type)) {
+        lines[count++] = tr("hud.tool.unavailable");
+    }
+    ui_tooltip(&app->ui, lines, count);
 }
 
 /* One icon button per thing to place in the chosen category. */
@@ -115,6 +162,8 @@ static void icon_row(App *app, float x, float y)
     const MenuTool *tools[MAX_ROW_BUTTONS];
     if (app->build_category == BUILD_CATEGORY_STATIONS) {
         count = WORKSTATION_TYPE_COUNT;
+    } else if (app->build_category == BUILD_CATEGORY_STRUCTURES) {
+        count = STRUCTURE_TYPE_COUNT - 1; /* STRUCTURE_NONE is not built. */
     } else {
         for (size_t i = 0; i < SDL_arraysize(TOOLS) && count < MAX_ROW_BUTTONS; i++) {
             if (TOOLS[i].category == app->build_category) {
@@ -140,6 +189,15 @@ static void icon_row(App *app, float x, float y)
             render_workstation_icon(app->renderer, inner, type);
             if (ui_hovered(ui, rect)) {
                 station_tooltip(app, type);
+            }
+        } else if (app->build_category == BUILD_CATEGORY_STRUCTURES) {
+            StructureType type = (StructureType)(i + 1);
+            if (ui_icon_button(ui, rect, app_tool_active(app, APP_TOOL_STRUCTURE, (int)type))) {
+                app_toggle_tool(app, APP_TOOL_STRUCTURE, (int)type);
+            }
+            render_structure_icon(app->renderer, inner, type);
+            if (ui_hovered(ui, rect)) {
+                structure_tooltip(app, type);
             }
         } else {
             const MenuTool *tool = tools[i];

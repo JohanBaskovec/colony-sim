@@ -62,8 +62,13 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Gathering zones: forbid tiles under stockpiles and workstations, or decide how they mix; a zone priority; show the job under way when hovering a tile
 - [ ] Tools (next): speed factors on orders and recipes, grade factor, wear and breaking (a cobble used as a hammer does not wear yet: cobbles are not damageable); swapping for a better tool; the detour in job search
 - [ ] Starting settlers get 1 to 30 points in a few related knowledges (once non-starting knowledges exist)
-- [ ] Blueprints, construction jobs, materials; the quality of built things comes from the builder's knowledge level and the quality of the materials used
-- [ ] Stone age constructions: grass bed, windbreak (wall), branch screen (door), lean-to (roof), cave floor clearing, workstations; hauling to construction sites
+- [x] Construction sites: blueprints of structures with several materials, builders fetching each material and working from a neighboring tile, cancelling gives the materials back, a *take apart* order (half the materials back)
+- [x] First structures, with realistic material counts (dry grass only): grass bed (12 dry grass), grass and branch wall 2 m high (5 branches, 24 dry grass, drawn as the edges of a rectangle), branch screen as a door (5 branches, 5 twigs, ×1.5 movement cost)
+- [x] Beds: settlers sleep in the nearest free bed; on the ground rest comes back at ×0.8 and they work 10% slower for 12 hours after
+- [ ] Quality of built things from the builder's level and the materials; hit points, wear, refreshing bedding (`docs/KNOWLEDGE.md` §10.2)
+- [ ] Beds owned by one settler; beds of 1 × 2 tiles with a rotation
+- [ ] Haulers bring materials to construction sites (today the builder fetches them); a construction scenario in `bench_simulation`
+- [ ] Lean-to (roof), cave floor clearing; workstations built through construction sites
 - [ ] Room detection, roofs (lean-to, natural rock roof over caves)
 - [ ] Knowledge spreading: conversation, apprenticeship, fading and loss; only discovered knowledges shown in the colonist inspector
 - [x] UI framework: buttons, panels, tooltips, windows sized to their content (title bar to drag, × to close, stacking order, scroll bar and wheel when too tall), measured layouts that adapt to text length

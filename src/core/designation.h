@@ -1,13 +1,13 @@
 /*
  * Designations: work orders placed by the player on single tiles (mine this
- * wall). They are kept apart from the Map, which only describes the physical
+ * rock, take this wall apart). They are kept apart from the Map, which only describes the physical
  * world. What the land offers (wood, berries, grass, stones...) is gathered
  * in zones instead (core/gather_zone.h).
  *
  * Each order belongs to a knowledge (core/knowledge.h): only settlers with at
  * least its minimum level carry it out. Mining needs a pick and a knowledge
  * that are not in the game yet: nobody can do it for now, but the order
- * exists.
+ * exists. Taking a structure apart gives back half of its materials.
  *
  * Each designated tile also stores how much work has been done, so that
  * interrupted work resumes where it stopped. Who works on which tile is
@@ -27,6 +27,7 @@
 typedef enum DesignationType {
     DESIGNATION_NONE = 0,
     DESIGNATION_MINE, /* Dig out a rock wall. */
+    DESIGNATION_DECONSTRUCT, /* Take a built structure apart (core/structure.h). */
     DESIGNATION_COUNT
 } DesignationType;
 

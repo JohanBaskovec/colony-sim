@@ -144,11 +144,12 @@ typedef struct GatherZones {
 bool gather_zones_init(GatherZones *zones, int width, int height);
 void gather_zones_free(GatherZones *zones);
 
-/* Whether a zone may cover a tile: open ground (no rock wall), not water. */
+/* Whether a zone may cover a tile: open ground (no rock wall, no built
+ * wall), not water. */
 bool gather_zone_can_cover(const Map *map, int x, int y);
 
 /* Whether stones lie about on a tile: open ground of soil, rich soil, gravel
- * or rough stone. */
+ * or rough stone, with no structure. */
 bool gather_stone_ground(const Map *map, int x, int y);
 
 /*

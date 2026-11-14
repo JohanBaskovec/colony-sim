@@ -237,6 +237,28 @@ static void build_tile_panel(App *app, Panel *panel)
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.blueprint"), name, a);
         }
     }
+    StructureType structure = map_structure(map, x, y);
+    if (structure != STRUCTURE_NONE) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.structure"),
+                  tr(structure_def(structure)->name_key));
+    }
+    const ConstructionSite *site = construction_get(
+        &app->game.constructions, construction_at(&app->game.constructions, x, y));
+    if (site != NULL) {
+        const StructureDef *def = structure_def((StructureType)site->type);
+        tr_integer(a, sizeof(a), (long long)(construction_work_fraction(site) * 100.0f));
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.blueprint"), tr(def->name_key),
+                  a);
+        for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+            if (def->materials[slot].type == ITEM_NONE) {
+                continue;
+            }
+            tr_integer(a, sizeof(a), site->delivered[slot].count);
+            tr_integer(b, sizeof(b), def->materials[slot].count);
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.material"),
+                      tr(item_def(def->materials[slot].type)->name_key), a, b);
+        }
+    }
 
     /* Flint in the ground: what gathering stones may turn up. */
     int flint = map_flint_chance(map, x, y);
@@ -370,6 +392,15 @@ static void build_selection_panel(App *app, Panel *panel)
     }
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);
+    }
+    if (colonist->ground_sleep_ticks > 0) {
+        char percent[16], hours[16];
+        tr_integer(percent, sizeof(percent),
+                   (long long)SDL_lroundf((1.0f - COLONIST_GROUND_SLEEP_WORK_FACTOR) * 100.0f));
+        int left = (colonist->ground_sleep_ticks + TICKS_PER_HOUR - 1) / TICKS_PER_HOUR;
+        tr_integer(hours, sizeof(hours), left);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.colonist.ground_sleep", left),
+                  percent, hours);
     }
     /* Knowledges the settler has started to learn: level with one decimal,
      * and the work speed once it is high enough to use. */
@@ -578,6 +609,15 @@ void hud_draw(App *app)
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.build_help"),
                       key_name(SDLK_E));
             if (!game_workstation_buildable(&app->game, app->build_type)) {
+                panel_add_text(&tool, tr("hud.tool.unavailable"));
+            }
+        } else if (app->tool == APP_TOOL_STRUCTURE) {
+            const StructureDef *def = structure_def(app->structure_type);
+            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(def->name_key));
+            menu_bar_structure_cost(panel_add(&tool), HUD_LINE_SIZE, app->structure_type);
+            panel_add_text(&tool, tr(def->drawn_as_outline ? "hud.tool.outline_help"
+                                                           : "hud.tool.structure_help"));
+            if (!game_structure_buildable(&app->game, app->structure_type)) {
                 panel_add_text(&tool, tr("hud.tool.unavailable"));
             }
         } else {
