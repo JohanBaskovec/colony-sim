@@ -192,8 +192,9 @@ static void build_selection_panel(App *app, Panel *panel)
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.age"), age);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
               tr(colonist_task_name_key(colonist->task)));
-    add_need_line(panel, colonist, NEED_FOOD);
-    add_need_line(panel, colonist, NEED_REST);
+    for (int need = 0; need < NEED_COUNT; need++) {
+        add_need_line(panel, colonist, (NeedType)need);
+    }
 }
 
 void hud_draw_world_labels(App *app)

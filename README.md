@@ -7,7 +7,7 @@ survive whatever the world throws at them.
 
 > **Status: pre-alpha (milestone M1, colonists).** A procedurally generated
 > map, a day/night cycle, and a small group of colonists who wander, eat
-> berries and sleep on their own. No work or construction yet: see the
+> berries, drink at the shore and sleep on their own. No work or construction yet: see the
 > [roadmap](docs/ROADMAP.md).
 
 ## Features so far
@@ -16,7 +16,7 @@ survive whatever the world throws at them.
 - Fixed-rate simulation (60 ticks/s at normal speed), pause and ×1/×3/×6 speeds
 - In-game calendar (days, seasons, years) and day/night lighting
 - Plant growth that depends on terrain fertility
-- Colonists with needs (food, rest) who decide on their own: eat berries, sleep, wander
+- Colonists with needs (food, water, rest) who decide on their own: eat berries, drink, sleep, wander
 - A* pathfinding with terrain movement costs
 - Selection (click, Shift+click, box) and a colonist inspector
 - Pan/zoom camera, tile inspector

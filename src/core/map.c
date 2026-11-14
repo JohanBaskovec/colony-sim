@@ -131,3 +131,22 @@ bool map_has_edible_plant(const Map *map, int x, int y)
     const PlantDef *def = &PLANT_DEFS[plant->type];
     return def->nutrition > 0.0f && plant->growth >= def->min_edible_growth;
 }
+
+bool map_is_water(const Map *map, int x, int y)
+{
+    if (!map_in_bounds(map, x, y)) {
+        return false;
+    }
+    uint8_t terrain = map->terrain[map_index(map, x, y)];
+    return terrain == TERRAIN_SHALLOW_WATER || terrain == TERRAIN_DEEP_WATER;
+}
+
+bool map_is_drinking_spot(const Map *map, int x, int y)
+{
+    if (!map_is_passable(map, x, y)) {
+        return false;
+    }
+    return map_is_water(map, x, y) || map_is_water(map, x - 1, y) ||
+           map_is_water(map, x + 1, y) || map_is_water(map, x, y - 1) ||
+           map_is_water(map, x, y + 1);
+}

@@ -11,6 +11,8 @@
 #define SPAWN_AREA_MIN_TILES 900
 #define SPAWN_MAX_ATTEMPTS 400
 #define SPAWN_PLACEMENT_MAX_COST 40.0f
+/* Preferred: drinkable water within this travel cost of the spawn point. */
+#define SPAWN_WATER_MAX_COST 60.0f
 
 void game_default_params(NewGameParams *params)
 {
@@ -92,6 +94,7 @@ EntityId game_spawn_colonist(Game *game, int x, int y)
     Colonist *colonist = &game->colonists[id.index];
     colonist_init(colonist, name, rng_range_i32(&game->rng, 18, 60), x, y);
     colonist->needs[NEED_FOOD] = 0.55f + 0.35f * rng_next_float(&game->rng);
+    colonist->needs[NEED_WATER] = 0.6f + 0.4f * rng_next_float(&game->rng);
     colonist->needs[NEED_REST] = 0.6f + 0.4f * rng_next_float(&game->rng);
     colonist->timer = rng_range_i32(&game->rng, 0, COLONIST_IDLE_MAX_TICKS);
     return id;
@@ -110,12 +113,34 @@ bool game_remove_colonist(Game *game, EntityId id)
 
 /* ---- Starting colonists -------------------------------------------------- */
 
-/* Passable tile near the map center with enough reachable land around it. */
+static bool is_drinking_spot(const Map *map, int x, int y, void *userdata)
+{
+    (void)userdata;
+    return map_is_drinking_spot(map, x, y);
+}
+
+static bool map_has_water(const Map *map)
+{
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            if (map_is_water(map, x, y)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Passable tile near the map center with enough reachable land around it,
+ * preferably close to drinkable water. */
 static bool find_spawn_center(Game *game, TilePos *out)
 {
     Map *map = &game->map;
     int center_x = map->width / 2;
     int center_y = map->height / 2;
+    bool want_water = map_has_water(map);
+    bool have_dry_candidate = false;
+    TilePos dry_candidate = {0, 0};
     for (int attempt = 0; attempt < SPAWN_MAX_ATTEMPTS; attempt++) {
         int radius = 2 + attempt / 2;
         int x = clampi(center_x + rng_range_i32(&game->rng, -radius, radius), 0, map->width - 1);
@@ -124,11 +149,25 @@ static bool find_spawn_center(Game *game, TilePos *out)
             continue;
         }
         TilePos candidate = {(int16_t)x, (int16_t)y};
-        if (pathfinder_reachable_count(&game->pathfinder, map, candidate, SPAWN_AREA_COST) >=
+        if (pathfinder_reachable_count(&game->pathfinder, map, candidate, SPAWN_AREA_COST) <
             SPAWN_AREA_MIN_TILES) {
+            continue;
+        }
+        if (!want_water || pathfinder_find_nearest(&game->pathfinder, map, candidate,
+                                                   is_drinking_spot, NULL, SPAWN_WATER_MAX_COST,
+                                                   NULL, NULL)) {
             *out = candidate;
             return true;
         }
+        if (!have_dry_candidate) {
+            have_dry_candidate = true;
+            dry_candidate = candidate;
+        }
+    }
+    if (have_dry_candidate) {
+        LOG_WARN("No spawn area close to water found");
+        *out = dry_candidate;
+        return true;
     }
     /* Tiny or very rugged map: settle for any passable tile. */
     for (int y = 0; y < map->height; y++) {
@@ -260,9 +299,9 @@ uint64_t game_hash(const Game *game)
         const Colonist *c = &game->colonists[slot];
         int32_t ints[6] = {(int32_t)id.index, (int32_t)id.generation, c->x, c->y, (int32_t)c->task,
                            c->timer};
-        float floats[3] = {c->move_progress, c->needs[NEED_FOOD], c->needs[NEED_REST]};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
-        hash = hash_fnv1a64(hash, floats, sizeof(floats));
+        hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
+        hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));
     }
     return hash;

@@ -2,8 +2,8 @@
  * Colonists: needs, simple decision making and movement along paths.
  *
  * Each tick a colonist updates its needs, decides what to do when it stands
- * on a tile center (eat when hungry, sleep when tired or at night, otherwise
- * wander), then acts (walk one tick along its path, eat, sleep...).
+ * on a tile center (drink when thirsty, eat when hungry, sleep when tired or
+ * at night, otherwise wander), then acts (walk one tick along its path, eat, sleep...).
  * Colonists are stored in the Game (see core/game.h); this module only works
  * on one colonist at a time with explicit dependencies.
  */
@@ -27,6 +27,7 @@
 
 /* Needs go from 1 (fully satisfied) to 0. */
 #define NEED_FOOD_DECAY_PER_TICK (1.0f / (36.0f * TICKS_PER_HOUR))
+#define NEED_WATER_DECAY_PER_TICK (1.0f / (24.0f * TICKS_PER_HOUR))
 #define NEED_REST_DECAY_PER_TICK (1.0f / (20.0f * TICKS_PER_HOUR))
 #define NEED_REST_GAIN_PER_TICK (1.0f / (8.0f * TICKS_PER_HOUR))
 #define NEED_LOW_THRESHOLD 0.3f
@@ -36,9 +37,20 @@
 #define COLONIST_SATED_FOOD 0.8f
 /* At night, colonists go to sleep below this rest level. */
 #define COLONIST_NIGHT_SLEEP_REST 0.9f
+/* Before going to sleep, colonists eat and drink when below this level, so
+ * that they do not wake up starving or parched. */
+#define COLONIST_BEDTIME_NEED 0.5f
 #define COLONIST_EAT_TICKS 500
 #define COLONIST_FOOD_SEARCH_MAX_COST 120.0f
-#define COLONIST_FOOD_SEARCH_RETRY_TICKS 250
+/* Drinking fills the water need completely. */
+#define COLONIST_DRINK_TICKS 300
+/* Water is scarcer than berries: colonists accept longer trips to drink. */
+#define COLONIST_WATER_SEARCH_MAX_COST 200.0f
+/* Delay before searching again after a failed food or water search, doubled
+ * after each consecutive failure up to 2^COLONIST_SEARCH_MAX_BACKOFF times. A
+ * failed search floods everything within its cost limit, so it must stay rare. */
+#define COLONIST_SEARCH_RETRY_TICKS (TICKS_PER_HOUR / 2)
+#define COLONIST_SEARCH_MAX_BACKOFF 3
 #define COLONIST_WANDER_RADIUS 6
 #define COLONIST_IDLE_MIN_TICKS 120
 #define COLONIST_IDLE_MAX_TICKS 360
@@ -49,12 +61,14 @@ typedef enum ColonistTask {
     TASK_IDLE,
     TASK_WANDER,
     TASK_EAT, /* Walking to food, then eating. */
+    TASK_DRINK, /* Walking to a drinking spot, then drinking. */
     TASK_SLEEP,
     TASK_COUNT
 } ColonistTask;
 
 typedef enum NeedType {
     NEED_FOOD,
+    NEED_WATER,
     NEED_REST,
     NEED_COUNT
 } NeedType;
@@ -74,9 +88,10 @@ typedef struct Colonist {
     int path_index; /* Next step of `path` to walk to. */
     float move_progress; /* 0..1 from the current tile to the next step. */
     ColonistTask task;
-    TilePos target; /* Tile of the food being eaten (TASK_EAT). */
-    int timer; /* Idle countdown (TASK_IDLE) or eating progress (TASK_EAT). */
-    int food_search_cooldown; /* Ticks before searching for food again. */
+    TilePos target; /* Food tile (TASK_EAT) or drinking spot (TASK_DRINK). */
+    int timer; /* Idle countdown (TASK_IDLE), eating or drinking progress. */
+    int search_cooldown[NEED_COUNT]; /* Ticks before searching again for food/water. */
+    int search_failures[NEED_COUNT]; /* Consecutive failed searches. */
     float needs[NEED_COUNT];
 } Colonist;
 

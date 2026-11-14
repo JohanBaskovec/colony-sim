@@ -90,8 +90,8 @@ diplomatic, religious...
 
 ### Settlers
 - **Needs**:
-  - food and rest (done);
-  - water: drink from lakes and rivers, wells, buckets of water;
+  - food, rest and water (done: settlers drink at lake shores);
+  - water, later: rivers, wells, buckets of water;
   - bladder and bowels: relieve oneself anywhere at first, latrines later;
     poor hygiene (e.g. near a water source) spreads disease;
   - sexual needs: masturbation or sex between settlers, represented

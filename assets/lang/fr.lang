@@ -60,11 +60,15 @@ hud.debug.trees.other = {0} arbres sur la carte
 colonist.task.idle = Inactif
 colonist.task.wander = Se promène
 colonist.task.eat = Mange
+colonist.task.drink = Boit
 colonist.task.sleep = Dort
 
 need.food = Nourriture
 need.food.low = A faim
 need.food.critical = Meurt de faim
+need.water = Eau
+need.water.low = A soif
+need.water.critical = Meurt de soif
 need.rest = Repos
 need.rest.low = A sommeil
 need.rest.critical = À bout de forces

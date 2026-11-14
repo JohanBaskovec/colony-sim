@@ -116,4 +116,11 @@ size_t map_count_plants(const Map *map, PlantType type);
 /* Whether the plant on this tile can be eaten right now. */
 bool map_has_edible_plant(const Map *map, int x, int y);
 
+/* Shallow or deep water (false out of bounds). */
+bool map_is_water(const Map *map, int x, int y);
+
+/* Whether a settler standing on this tile can drink: the tile is passable and
+ * is shallow water or touches water (4-neighborhood). */
+bool map_is_drinking_spot(const Map *map, int x, int y);
+
 #endif /* COLONY_CORE_MAP_H */

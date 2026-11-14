@@ -27,6 +27,28 @@ static bool init_flat_game(Game *game)
     return true;
 }
 
+/* Spawns a colonist with every need satisfied. */
+static Colonist *spawn_rested(Game *game, int x, int y)
+{
+    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
+    if (colonist != NULL) {
+        for (int need = 0; need < NEED_COUNT; need++) {
+            colonist->needs[need] = 1.0f;
+        }
+    }
+    return colonist;
+}
+
+/* Turns every column from `x0` to the right edge into shallow water. */
+static void add_water_band(Map *map, int x0)
+{
+    for (int y = 0; y < map->height; y++) {
+        for (int x = x0; x < map->width; x++) {
+            map->terrain[map_index(map, x, y)] = TERRAIN_SHALLOW_WATER;
+        }
+    }
+}
+
 static void run_ticks(Game *game, int ticks)
 {
     for (int i = 0; i < ticks; i++) {
@@ -81,6 +103,12 @@ static void test_remove_invalidates_handle(void)
     game_shutdown(&game);
 }
 
+static bool is_drinking_spot(const Map *map, int x, int y, void *userdata)
+{
+    (void)userdata;
+    return map_is_drinking_spot(map, x, y);
+}
+
 static void test_starting_colonists_on_distinct_passable_tiles(void)
 {
     for (uint64_t seed = 1; seed <= 6; seed++) {
@@ -96,6 +124,10 @@ static void test_starting_colonists_on_distinct_passable_tiles(void)
         for (uint32_t a = 0; a < game_colonist_slot_count(&game); a++) {
             const Colonist *ca = &game.colonists[a];
             CHECK(map_is_passable(&game.map, ca->x, ca->y));
+            CHECK(pathfinder_find_nearest(&game.pathfinder, &game.map,
+                                          (TilePos){(int16_t)ca->x, (int16_t)ca->y},
+                                          is_drinking_spot, NULL, COLONIST_WATER_SEARCH_MAX_COST,
+                                          NULL, NULL));
             for (uint32_t b = a + 1; b < game_colonist_slot_count(&game); b++) {
                 const Colonist *cb = &game.colonists[b];
                 CHECK(ca->x != cb->x || ca->y != cb->y);
@@ -109,13 +141,13 @@ static void test_needs_decay_over_time(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 10, 10));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
     REQUIRE(colonist != NULL);
-    colonist->needs[NEED_FOOD] = 1.0f;
-    colonist->needs[NEED_REST] = 1.0f;
 
     run_ticks(&game, TICKS_PER_HOUR);
     CHECK_NEAR(colonist->needs[NEED_FOOD], 1.0 - NEED_FOOD_DECAY_PER_TICK * TICKS_PER_HOUR, 1e-4);
+    CHECK_NEAR(colonist->needs[NEED_WATER], 1.0 - NEED_WATER_DECAY_PER_TICK * TICKS_PER_HOUR,
+               1e-4);
     CHECK_NEAR(colonist->needs[NEED_REST], 1.0 - NEED_REST_DECAY_PER_TICK * TICKS_PER_HOUR, 1e-4);
     game_shutdown(&game);
 }
@@ -124,10 +156,8 @@ static void test_idle_colonist_wanders(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    EntityId id = game_spawn_colonist(&game, 20, 20);
-    Colonist *colonist = game_colonist(&game, id);
-    colonist->needs[NEED_FOOD] = 1.0f;
-    colonist->needs[NEED_REST] = 1.0f;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
 
     bool moved = false;
     for (int i = 0; i < 2000 && !moved; i++) {
@@ -149,9 +179,9 @@ static void test_hungry_colonist_walks_to_food_and_eats(void)
     map->plants[bush].type = PLANT_BUSH;
     map->plants[bush].growth = 1.0f;
 
-    Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 20, 20));
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
     colonist->needs[NEED_FOOD] = 0.2f;
-    colonist->needs[NEED_REST] = 1.0f;
 
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_EAT);
@@ -171,11 +201,136 @@ static void test_hungry_colonist_without_food_retries_later(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 20, 20));
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
     colonist->needs[NEED_FOOD] = 0.2f;
     game_tick(&game);
     CHECK(colonist->task != TASK_EAT);
-    CHECK(colonist->food_search_cooldown > 0);
+    CHECK(colonist->search_cooldown[NEED_FOOD] > 0);
+    game_shutdown(&game);
+}
+
+static void test_thirsty_colonist_walks_to_shore_and_drinks(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_water_band(&game.map, 30);
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_WATER] = 0.2f;
+
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_DRINK);
+    /* Stops on the shore instead of wading into the water. */
+    CHECK_EQ_INT(colonist->target.x, 29);
+    CHECK_EQ_INT(colonist->target.y, 20);
+
+    run_ticks(&game, 9 * TICKS_PER_SECOND / 3 + COLONIST_DRINK_TICKS + 60);
+    CHECK_EQ_INT(colonist->x, 29);
+    CHECK_NEAR(colonist->needs[NEED_WATER], 1.0, 0.01);
+    CHECK(colonist->task != TASK_DRINK);
+    game_shutdown(&game);
+}
+
+/* Surrounds a tile with rock walls (or removes them), so that a colonist
+ * standing on it cannot move and decides on every tick. */
+static void set_rock_ring(Map *map, int cx, int cy, RockType rock)
+{
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (dx != 0 || dy != 0) {
+                map->rock[map_index(map, cx + dx, cy + dy)] = (uint8_t)rock;
+            }
+        }
+    }
+}
+
+static void test_thirsty_colonist_without_water_retries_later(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    set_rock_ring(&game.map, 20, 20, ROCK_GRANITE);
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_WATER] = 0.2f;
+    game_tick(&game);
+    CHECK(colonist->task != TASK_DRINK);
+    CHECK_EQ_INT(colonist->search_cooldown[NEED_WATER], COLONIST_SEARCH_RETRY_TICKS);
+    CHECK_EQ_INT(colonist->search_cooldown[NEED_FOOD], 0);
+
+    /* Each further failure waits twice as long, up to a cap. */
+    int expected = COLONIST_SEARCH_RETRY_TICKS;
+    for (int failure = 1; failure <= COLONIST_SEARCH_MAX_BACKOFF + 1; failure++) {
+        run_ticks(&game, colonist->search_cooldown[NEED_WATER]);
+        CHECK(colonist->task != TASK_DRINK);
+        if (failure <= COLONIST_SEARCH_MAX_BACKOFF) {
+            expected *= 2;
+        }
+        CHECK_EQ_INT(colonist->search_cooldown[NEED_WATER], expected);
+    }
+
+    /* Water becomes reachable: the next search succeeds and resets the backoff. */
+    set_rock_ring(&game.map, 20, 20, ROCK_NONE);
+    add_water_band(&game.map, 40);
+    colonist->needs[NEED_WATER] = 0.2f;
+    run_ticks(&game, colonist->search_cooldown[NEED_WATER]);
+    CHECK_EQ_INT(colonist->task, TASK_DRINK);
+    CHECK_EQ_INT(colonist->search_failures[NEED_WATER], 0);
+    game_shutdown(&game);
+}
+
+static void test_most_urgent_need_first(void)
+{
+    for (int thirstier = 0; thirstier <= 1; thirstier++) {
+        Game game;
+        REQUIRE(init_flat_game(&game));
+        add_water_band(&game.map, 30);
+        Plant *bush = &game.map.plants[map_index(&game.map, 10, 20)];
+        bush->type = PLANT_BUSH;
+        bush->growth = 1.0f;
+        Colonist *colonist = spawn_rested(&game, 20, 20);
+        REQUIRE(colonist != NULL);
+        colonist->needs[NEED_FOOD] = thirstier ? 0.2f : 0.1f;
+        colonist->needs[NEED_WATER] = thirstier ? 0.1f : 0.2f;
+
+        game_tick(&game);
+        CHECK_EQ_INT(colonist->task, thirstier ? TASK_DRINK : TASK_EAT);
+        game_shutdown(&game);
+    }
+}
+
+static void test_thirst_falls_back_to_food_when_no_water(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Plant *bush = &game.map.plants[map_index(&game.map, 25, 20)];
+    bush->type = PLANT_BUSH;
+    bush->growth = 1.0f;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_WATER] = 0.1f;
+    colonist->needs[NEED_FOOD] = 0.2f;
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_EAT);
+    game_shutdown(&game);
+}
+
+static void test_severe_thirst_wakes_sleeping_colonist(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_water_band(&game.map, 30);
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_REST] = 0.2f;
+    colonist->needs[NEED_WATER] = 0.6f;
+
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_SLEEP);
+
+    colonist->needs[NEED_WATER] = NEED_CRITICAL_THRESHOLD - 0.01f;
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_DRINK);
     game_shutdown(&game);
 }
 
@@ -183,8 +338,8 @@ static void test_tired_colonist_sleeps_and_recovers(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 20, 20));
-    colonist->needs[NEED_FOOD] = 1.0f;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
     colonist->needs[NEED_REST] = 0.2f;
 
     game_tick(&game);
@@ -204,10 +359,29 @@ static void test_colonists_sleep_at_night(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     game.clock.tick = 23 * TICKS_PER_HOUR;
-    Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 20, 20));
-    colonist->needs[NEED_FOOD] = 1.0f;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
     colonist->needs[NEED_REST] = 0.7f;
     game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_SLEEP);
+    game_shutdown(&game);
+}
+
+static void test_colonists_drink_before_sleeping(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_water_band(&game.map, 30);
+    game.clock.tick = 23 * TICKS_PER_HOUR;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_REST] = 0.7f;
+    colonist->needs[NEED_WATER] = COLONIST_BEDTIME_NEED - 0.05f;
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_DRINK);
+
+    /* Once refreshed, goes to bed. */
+    run_ticks(&game, 10 * TICKS_PER_SECOND / 3 + COLONIST_DRINK_TICKS + COLONIST_IDLE_MAX_TICKS);
     CHECK_EQ_INT(colonist->task, TASK_SLEEP);
     game_shutdown(&game);
 }
@@ -280,8 +454,14 @@ int main(void)
     RUN_TEST(test_idle_colonist_wanders);
     RUN_TEST(test_hungry_colonist_walks_to_food_and_eats);
     RUN_TEST(test_hungry_colonist_without_food_retries_later);
+    RUN_TEST(test_thirsty_colonist_walks_to_shore_and_drinks);
+    RUN_TEST(test_thirsty_colonist_without_water_retries_later);
+    RUN_TEST(test_most_urgent_need_first);
+    RUN_TEST(test_thirst_falls_back_to_food_when_no_water);
+    RUN_TEST(test_severe_thirst_wakes_sleeping_colonist);
     RUN_TEST(test_tired_colonist_sleeps_and_recovers);
     RUN_TEST(test_colonists_sleep_at_night);
+    RUN_TEST(test_colonists_drink_before_sleeping);
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);
     RUN_TEST(test_translation_keys);

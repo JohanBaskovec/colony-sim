@@ -68,11 +68,15 @@ hud.debug.trees.other = {0} trees on the map
 colonist.task.idle = Idle
 colonist.task.wander = Wandering
 colonist.task.eat = Eating
+colonist.task.drink = Drinking
 colonist.task.sleep = Sleeping
 
 need.food = Food
 need.food.low = Hungry
 need.food.critical = Starving
+need.water = Water
+need.water.low = Thirsty
+need.water.critical = Dehydrated
 need.rest = Rest
 need.rest.low = Tired
 need.rest.critical = Exhausted

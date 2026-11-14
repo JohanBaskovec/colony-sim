@@ -146,6 +146,33 @@ static void test_edible_plants(void)
     map_free(&map);
 }
 
+static void test_water_and_drinking_spots(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16));
+    map.terrain[map_index(&map, 5, 5)] = TERRAIN_SHALLOW_WATER;
+    map.terrain[map_index(&map, 10, 10)] = TERRAIN_DEEP_WATER;
+    map.terrain[map_index(&map, 0, 0)] = TERRAIN_DEEP_WATER;
+
+    CHECK(map_is_water(&map, 5, 5));
+    CHECK(map_is_water(&map, 10, 10));
+    CHECK(!map_is_water(&map, 6, 5));
+    CHECK(!map_is_water(&map, -1, 5));
+
+    CHECK(map_is_drinking_spot(&map, 5, 5)); /* Standing in shallow water. */
+    CHECK(map_is_drinking_spot(&map, 6, 5)); /* Shore tiles, 4-neighborhood. */
+    CHECK(map_is_drinking_spot(&map, 5, 4));
+    CHECK(!map_is_drinking_spot(&map, 6, 6)); /* Diagonal only. */
+    CHECK(!map_is_drinking_spot(&map, 10, 10)); /* Deep water is not walkable. */
+    CHECK(map_is_drinking_spot(&map, 10, 11));
+    CHECK(map_is_drinking_spot(&map, 1, 0)); /* Map edge does not break the lookup. */
+    CHECK(!map_is_drinking_spot(&map, 3, 3));
+
+    map.rock[map_index(&map, 11, 10)] = ROCK_GRANITE;
+    CHECK(!map_is_drinking_spot(&map, 11, 10)); /* Rock walls are not standable. */
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -156,5 +183,6 @@ int main(void)
     RUN_TEST(test_count_plants);
     RUN_TEST(test_definitions_are_complete);
     RUN_TEST(test_edible_plants);
+    RUN_TEST(test_water_and_drinking_spots);
     return test_summary();
 }

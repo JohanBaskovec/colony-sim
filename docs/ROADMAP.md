@@ -29,7 +29,7 @@ Tick items as they land and add newly discovered tasks.
 
 ## M2: Work (next)
 
-- [ ] Thirst: drink from shallow water or a lake shore
+- [x] Thirst: drink from shallow water or a lake shore; eat and drink before going to sleep
 - [ ] Designations: chop trees, mine rock, harvest plants
 - [ ] Job system with reservations (including food: two colonists no longer walk to the same bush)
 - [ ] Items on the ground (wood, stone, food), stacking
@@ -89,7 +89,8 @@ Tick items as they land and add newly discovered tasks.
 - [ ] More plural rules (Slavic languages, Arabic) when needed
 - [ ] Batch tile rendering (texture atlas / geometry) for large maps at low zoom
 - [x] Pathfinding benchmark (`bench/bench_pathfinding`)
-- [ ] Connectivity regions: reject unreachable goals instantly (today they flood the whole area)
+- [ ] Connectivity regions: reject unreachable goals instantly (today they flood the whole area; failed food/water searches are only made rare by an exponential retry backoff)
+- [ ] World generation: guarantee drinkable water near the start (small maps can have none; the spawn point only prefers water)
 - [ ] Simulation benchmark (many colonists, long runs)
 - [ ] Windows and macOS CI builds
 - [ ] Choose a license

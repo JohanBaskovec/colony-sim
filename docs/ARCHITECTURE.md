@@ -123,11 +123,21 @@ will follow the same pattern.
 
 Each tick, `colonist_tick()`:
 
-1. updates needs (food always decreases; rest decreases, or increases while sleeping);
-2. when standing on a tile center, decides: hungry → walk to the nearest
-   edible plant (Dijkstra search); tired, or night and not fully rested →
-   sleep in place; otherwise wander nearby after a random pause;
-3. acts: walks one tick along its path (speed / tile cost), eats, or sleeps.
+1. updates needs (food and water always decrease; rest decreases, or
+   increases while sleeping);
+2. when standing on a tile center, decides: hungry or thirsty → walk to the
+   nearest edible plant or drinking spot (Dijkstra search), most urgent need
+   first; tired, or night and not fully rested → eat/drink first if below
+   50 %, then sleep in place; otherwise wander nearby after a random pause.
+   Severe hunger or thirst wakes a sleeping colonist up;
+3. acts: walks one tick along its path (speed / tile cost), eats, drinks, or sleeps.
+
+A drinking spot is a passable tile that is shallow water or touches water
+(`map_is_drinking_spot()`), so colonists stop on the shore rather than wade
+in. A failed food or water search floods everything within its cost limit, so
+retries back off exponentially (½ h, 1 h, 2 h, then every 4 in-game hours)
+and reset on success. The starting position prefers land with water within
+reach.
 
 Decisions only happen on tile centers, so a colonist never jumps back when it
 changes its mind. This simple state machine will be replaced by the job system

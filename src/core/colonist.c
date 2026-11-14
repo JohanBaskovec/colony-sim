@@ -38,8 +38,9 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y)
     colonist->x = x;
     colonist->y = y;
     colonist->task = TASK_IDLE;
-    colonist->needs[NEED_FOOD] = 1.0f;
-    colonist->needs[NEED_REST] = 1.0f;
+    for (int need = 0; need < NEED_COUNT; need++) {
+        colonist->needs[need] = 1.0f;
+    }
 }
 
 void colonist_free(Colonist *colonist)
@@ -79,6 +80,7 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_IDLE] = N_("colonist.task.idle"),
         [TASK_WANDER] = N_("colonist.task.wander"),
         [TASK_EAT] = N_("colonist.task.eat"),
+        [TASK_DRINK] = N_("colonist.task.drink"),
         [TASK_SLEEP] = N_("colonist.task.sleep"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
@@ -86,13 +88,19 @@ const char *colonist_task_name_key(ColonistTask task)
 
 const char *need_name_key(NeedType need)
 {
-    return need == NEED_FOOD ? N_("need.food") : N_("need.rest");
+    static const char *const KEYS[NEED_COUNT] = {
+        [NEED_FOOD] = N_("need.food"),
+        [NEED_WATER] = N_("need.water"),
+        [NEED_REST] = N_("need.rest"),
+    };
+    return (unsigned)need < NEED_COUNT ? KEYS[need] : KEYS[NEED_FOOD];
 }
 
 const char *need_level_key(NeedType need, NeedLevel level)
 {
     static const char *const KEYS[NEED_COUNT][3] = {
         [NEED_FOOD] = {NULL, N_("need.food.low"), N_("need.food.critical")},
+        [NEED_WATER] = {NULL, N_("need.water.low"), N_("need.water.critical")},
         [NEED_REST] = {NULL, N_("need.rest.low"), N_("need.rest.critical")},
     };
     if ((unsigned)need >= NEED_COUNT || (unsigned)level > NEED_LEVEL_CRITICAL) {
@@ -127,23 +135,57 @@ static bool is_edible(const Map *map, int x, int y, void *userdata)
     return map_has_edible_plant(map, x, y);
 }
 
-static bool try_start_eating(Colonist *colonist, const ColonistContext *context)
+static bool is_drinking_spot(const Map *map, int x, int y, void *userdata)
 {
-    if (colonist->food_search_cooldown > 0) {
+    (void)userdata;
+    return map_is_drinking_spot(map, x, y);
+}
+
+/* Walks to the nearest food (NEED_FOOD) or drinking spot (NEED_WATER). */
+static bool try_satisfy(Colonist *colonist, const ColonistContext *context, NeedType need)
+{
+    if (colonist->search_cooldown[need] > 0) {
         return false;
     }
+    bool drink = need == NEED_WATER;
     TilePos found;
     if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                 is_edible, NULL, COLONIST_FOOD_SEARCH_MAX_COST,
+                                 drink ? is_drinking_spot : is_edible, NULL,
+                                 drink ? COLONIST_WATER_SEARCH_MAX_COST
+                                       : COLONIST_FOOD_SEARCH_MAX_COST,
                                  &colonist->path, &found)) {
-        colonist->food_search_cooldown = COLONIST_FOOD_SEARCH_RETRY_TICKS;
+        int backoff = colonist->search_failures[need];
+        colonist->search_cooldown[need] = COLONIST_SEARCH_RETRY_TICKS << backoff;
+        if (backoff < COLONIST_SEARCH_MAX_BACKOFF) {
+            colonist->search_failures[need]++;
+        }
         return false;
     }
-    colonist->task = TASK_EAT;
+    colonist->search_failures[need] = 0;
+    colonist->task = drink ? TASK_DRINK : TASK_EAT;
     colonist->target = found;
     colonist->timer = 0;
     colonist->path_index = 0;
     return true;
+}
+
+/* Tries to satisfy food and water when below `threshold`, most urgent first. */
+static bool try_satisfy_urgent(Colonist *colonist, const ColonistContext *context,
+                               float threshold)
+{
+    float food = colonist->needs[NEED_FOOD];
+    float water = colonist->needs[NEED_WATER];
+    NeedType order[2] = {NEED_WATER, NEED_FOOD};
+    if (food < water) {
+        order[0] = NEED_FOOD;
+        order[1] = NEED_WATER;
+    }
+    for (int i = 0; i < 2; i++) {
+        if (colonist->needs[order[i]] < threshold && try_satisfy(colonist, context, order[i])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static void start_sleeping(Colonist *colonist)
@@ -182,43 +224,50 @@ static bool is_night(uint64_t tick)
 static void update_needs(Colonist *colonist)
 {
     float *food = &colonist->needs[NEED_FOOD];
+    float *water = &colonist->needs[NEED_WATER];
     float *rest = &colonist->needs[NEED_REST];
     *food = clampf(*food - NEED_FOOD_DECAY_PER_TICK, 0.0f, 1.0f);
+    *water = clampf(*water - NEED_WATER_DECAY_PER_TICK, 0.0f, 1.0f);
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist)) {
         *rest = clampf(*rest + NEED_REST_GAIN_PER_TICK, 0.0f, 1.0f);
     } else {
         *rest = clampf(*rest - NEED_REST_DECAY_PER_TICK, 0.0f, 1.0f);
     }
-    if (colonist->food_search_cooldown > 0) {
-        colonist->food_search_cooldown--;
+    for (int need = 0; need < NEED_COUNT; need++) {
+        if (colonist->search_cooldown[need] > 0) {
+            colonist->search_cooldown[need]--;
+        }
     }
 }
 
 /* Chooses a new task when needs require it. Only called on tile centers. */
 static void decide(Colonist *colonist, const ColonistContext *context)
 {
-    float food = colonist->needs[NEED_FOOD];
     float rest = colonist->needs[NEED_REST];
 
     switch (colonist->task) {
     case TASK_SLEEP:
         if (rest >= 1.0f) {
             set_idle(colonist, random_idle_ticks(context->rng));
-        } else if (food < NEED_CRITICAL_THRESHOLD) {
-            try_start_eating(colonist, context); /* Hunger wakes colonists up. */
+        } else {
+            /* Severe hunger or thirst wakes colonists up. */
+            try_satisfy_urgent(colonist, context, NEED_CRITICAL_THRESHOLD);
         }
         return;
     case TASK_EAT:
-        return; /* Carried on by act(). */
+    case TASK_DRINK:
+        return; /* Carried on until done. */
     default:
         break;
     }
 
-    if (food < NEED_LOW_THRESHOLD && try_start_eating(colonist, context)) {
+    if (try_satisfy_urgent(colonist, context, NEED_LOW_THRESHOLD)) {
         return;
     }
     if (rest < NEED_LOW_THRESHOLD || (is_night(context->tick) && rest < COLONIST_NIGHT_SLEEP_REST)) {
-        start_sleeping(colonist);
+        if (!try_satisfy_urgent(colonist, context, COLONIST_BEDTIME_NEED)) {
+            start_sleeping(colonist);
+        }
     }
 }
 
@@ -266,9 +315,24 @@ static void eat(Colonist *colonist, const ColonistContext *context)
         clampf(colonist->needs[NEED_FOOD] + def->nutrition * plant->growth, 0.0f, 1.0f);
     plant->growth = PLANT_GROWTH_AFTER_EATEN;
 
-    if (colonist->needs[NEED_FOOD] < COLONIST_SATED_FOOD && try_start_eating(colonist, context)) {
+    if (colonist->needs[NEED_FOOD] < COLONIST_SATED_FOOD &&
+        try_satisfy(colonist, context, NEED_FOOD)) {
         return;
     }
+    set_idle(colonist, random_idle_ticks(context->rng));
+}
+
+static void drink(Colonist *colonist, const ColonistContext *context)
+{
+    if (colonist->x != colonist->target.x || colonist->y != colonist->target.y ||
+        !map_is_drinking_spot(context->map, colonist->x, colonist->y)) {
+        set_idle(colonist, 0); /* The water is gone: look again soon. */
+        return;
+    }
+    if (++colonist->timer < COLONIST_DRINK_TICKS) {
+        return;
+    }
+    colonist->needs[NEED_WATER] = 1.0f;
     set_idle(colonist, random_idle_ticks(context->rng));
 }
 
@@ -294,6 +358,7 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
         break;
     case TASK_WANDER: set_idle(colonist, random_idle_ticks(context->rng)); break;
     case TASK_EAT: eat(colonist, context); break;
+    case TASK_DRINK: drink(colonist, context); break;
     case TASK_SLEEP:
     case TASK_COUNT: break;
     }
