@@ -32,6 +32,21 @@ static void test_definitions(void)
     CHECK(work_type_def(WORK_WOODCUTTING)->skill == SKILL_WOODCUTTING);
 }
 
+static void test_xp_to_next_level(void)
+{
+    CHECK_NEAR(skill_xp_to_next_level(0), SKILL_XP_PER_LEVEL, 1e-3);
+    CHECK_NEAR(skill_xp_to_next_level(9), 10.0 * SKILL_XP_PER_LEVEL, 1e-3);
+    CHECK_NEAR(skill_xp_to_next_level(SKILL_LEVEL_MAX - 1), SKILL_LEVEL_MAX * SKILL_XP_PER_LEVEL,
+               1e-3);
+    CHECK_NEAR(skill_xp_to_next_level(SKILL_LEVEL_MAX), 0.0, 1e-6);
+    CHECK_NEAR(skill_xp_to_next_level(99), 0.0, 1e-6);
+    CHECK_NEAR(skill_xp_to_next_level(-4), SKILL_XP_PER_LEVEL, 1e-3);
+    /* Each level takes longer than the previous one. */
+    for (int level = SKILL_LEVEL_MIN; level < SKILL_LEVEL_MAX - 1; level++) {
+        CHECK(skill_xp_to_next_level(level + 1) > skill_xp_to_next_level(level));
+    }
+}
+
 static void test_random_levels(void)
 {
     Rng rng;
@@ -139,6 +154,7 @@ static void test_product_stacks(void)
 int main(void)
 {
     RUN_TEST(test_definitions);
+    RUN_TEST(test_xp_to_next_level);
     RUN_TEST(test_random_levels);
     RUN_TEST(test_products_improve_with_skill);
     RUN_TEST(test_grades_of_scores);

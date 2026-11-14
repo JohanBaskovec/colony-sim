@@ -1,7 +1,9 @@
 /*
  * Skills: how good a settler is at a kind of work, and what that changes.
  *
- * Each settler has a level per skill, from SKILL_LEVEL_MIN to SKILL_LEVEL_MAX.
+ * Each settler has a level per skill, from SKILL_LEVEL_MIN to SKILL_LEVEL_MAX,
+ * and gains experience by working: one point per unit of work done on an
+ * order of that skill. Each level takes longer to reach than the previous one.
  * A work type (core/work.h) may rely on a skill. The skill of the worker sets
  * the condition of what the work produces: a skilled woodcutter brings back
  * better and less damaged logs than a clumsy one (core/item.h).
@@ -27,6 +29,11 @@ typedef enum SkillType {
  * average settlers, a few novices and a few experts. */
 #define SKILL_START_DIE 6
 
+/* Experience needed to go from level L to L + 1: SKILL_XP_PER_LEVEL × (L + 1).
+ * With one point per tick of work, level 1 takes one in-game hour of work,
+ * level 20 twenty hours: about 210 hours from novice to master. */
+#define SKILL_XP_PER_LEVEL 2500.0f
+
 /*
  * Products of skilled work. A quality score (0..100) around
  * SKILL_QUALITY_BASE + SKILL_QUALITY_PER_LEVEL × level gives the grade, one
@@ -50,6 +57,10 @@ typedef struct SkillDef {
 
 /* NULL when out of range (SKILL_NONE included). */
 const SkillDef *skill_def(SkillType skill);
+
+/* Experience needed to reach the next level from `level`; 0 at the maximum
+ * level (or above). */
+float skill_xp_to_next_level(int level);
 
 /* Random starting level for a new settler. */
 int skill_random_level(Rng *rng);

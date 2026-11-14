@@ -41,7 +41,7 @@ Tick items as they land and add newly discovered tasks.
 - [x] Item quality and hit points: five quality grades (crude to superb) and hit points per item; only items of the same grade stack, a stack keeps the average hit points; raw stone is always superb and cannot be damaged
 - [x] Skills (mining, woodcutting, gathering, levels 0 to 20, rolled at creation): the worker's skill sets the grade and condition of what it produces (novices bring back rough, damaged logs)
 - [x] Stockpile filters on item condition: quality and hit point range sliders; items a narrowed filter no longer accepts are moved out
-- [ ] Skill learning: experience from work raises levels, slowly; show skill levels in the work priorities grid
+- [x] Skill learning: work on an order gives experience in its skill, each level takes longer (one in-game hour of work for level 1, twenty for level 20); progress shown in the colonist inspector, levels in the work priorities grid
 - [ ] Skills also change work speed
 - [ ] Haul more than one stack per trip; haul towards construction sites (M3)
 - [ ] Carrying capacity from strength/health; containers (baskets, sledges) and worn equipment adding bulk and weight

@@ -53,6 +53,9 @@ void ui_end_frame(Ui *ui); /* Unconsumed clicks are dropped. */
 void ui_panel(Ui *ui, SDL_FRect rect);
 
 void ui_label(Ui *ui, const char *text, float x, float y);
+
+/* Label in a dimmer color, for secondary information. */
+void ui_label_dim(Ui *ui, const char *text, float x, float y);
 float ui_text_width(Ui *ui, const char *text);
 
 /* Plain rectangle (row backgrounds, scroll bars...). */

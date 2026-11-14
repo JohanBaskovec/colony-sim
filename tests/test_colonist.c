@@ -1098,6 +1098,78 @@ static void test_skill_levels_validate(void)
     colonist_free(&colonist);
 }
 
+static void test_experience_raises_levels(void)
+{
+    Colonist colonist;
+    colonist_init(&colonist, "Ada", 30, 0, 0);
+    REQUIRE(colonist_set_skill_level(&colonist, SKILL_MINING, 2));
+    float to_three = skill_xp_to_next_level(2);
+    CHECK_EQ_INT(colonist_gain_skill_xp(&colonist, SKILL_MINING, to_three * 0.25f), 0);
+    CHECK_NEAR(colonist_skill_progress(&colonist, SKILL_MINING), 0.25, 1e-4);
+    CHECK_EQ_INT(colonist_gain_skill_xp(&colonist, SKILL_MINING, to_three * 0.75f), 1);
+    CHECK_EQ_INT(colonist_skill_level(&colonist, SKILL_MINING), 3);
+    CHECK_NEAR(colonist_skill_progress(&colonist, SKILL_MINING), 0.0, 1e-4);
+
+    /* A big gain can raise several levels; the leftover is kept. */
+    float lots = skill_xp_to_next_level(3) + skill_xp_to_next_level(4) + 100.0f;
+    CHECK_EQ_INT(colonist_gain_skill_xp(&colonist, SKILL_MINING, lots), 2);
+    CHECK_EQ_INT(colonist_skill_level(&colonist, SKILL_MINING), 5);
+    CHECK_NEAR(colonist.skill_xp[SKILL_MINING], 100.0, 1e-2);
+
+    /* Other skills are untouched; invalid gains are ignored. */
+    CHECK_EQ_INT(colonist_skill_level(&colonist, SKILL_WOODCUTTING), SKILL_LEVEL_MIN);
+    CHECK_EQ_INT(colonist_gain_skill_xp(&colonist, SKILL_NONE, 1e9f), 0);
+    CHECK_EQ_INT(colonist_gain_skill_xp(&colonist, SKILL_MINING, -5.0f), 0);
+    CHECK_EQ_INT(colonist_gain_skill_xp(&colonist, SKILL_MINING, 0.0f), 0);
+    CHECK_NEAR(colonist.skill_xp[SKILL_MINING], 100.0, 1e-2);
+    CHECK_NEAR(colonist_skill_progress(&colonist, SKILL_NONE), 0.0, 1e-6);
+
+    /* Setting a level starts the experience over. */
+    REQUIRE(colonist_set_skill_level(&colonist, SKILL_MINING, 7));
+    CHECK_NEAR(colonist.skill_xp[SKILL_MINING], 0.0, 1e-6);
+
+    /* Masters stop gathering experience. */
+    REQUIRE(colonist_set_skill_level(&colonist, SKILL_MINING, SKILL_LEVEL_MAX - 1));
+    CHECK_EQ_INT(colonist_gain_skill_xp(&colonist, SKILL_MINING, 1e9f), 1);
+    CHECK_EQ_INT(colonist_skill_level(&colonist, SKILL_MINING), SKILL_LEVEL_MAX);
+    CHECK_NEAR(colonist.skill_xp[SKILL_MINING], 0.0, 1e-6);
+    CHECK_NEAR(colonist_skill_progress(&colonist, SKILL_MINING), 0.0, 1e-6);
+    CHECK_EQ_INT(colonist_gain_skill_xp(&colonist, SKILL_MINING, 50.0f), 0);
+    CHECK_EQ_INT(colonist_skill_level(&colonist, SKILL_MINING), SKILL_LEVEL_MAX);
+    colonist_free(&colonist);
+}
+
+static void test_working_teaches_the_order_skill(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_tree(&game.map, 26, 20);
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    for (int skill = 0; skill < SKILL_COUNT; skill++) {
+        REQUIRE(colonist_set_skill_level(colonist, (SkillType)skill, 0));
+    }
+    game_designate_rect(&game, 26, 20, 26, 20, DESIGNATION_CHOP);
+    float work = designation_work_needed(&game.designations, &game.map, 26, 20);
+    run_ticks(&game, walk_ticks(6) + (int)work + 10);
+    REQUIRE(designation_get(&game.designations, 26, 20) == DESIGNATION_NONE);
+
+    /* All the work done went into woodcutting experience. */
+    float total = colonist->skill_xp[SKILL_WOODCUTTING];
+    for (int level = 0; level < colonist_skill_level(colonist, SKILL_WOODCUTTING); level++) {
+        total += skill_xp_to_next_level(level);
+    }
+    CHECK_NEAR(total, work, 2.0);
+    /* One tree (2,000 work) is most of the way to level 1 (2,500). */
+    CHECK_EQ_INT(colonist_skill_level(colonist, SKILL_WOODCUTTING), 0);
+    CHECK_NEAR(colonist_skill_progress(colonist, SKILL_WOODCUTTING), work / SKILL_XP_PER_LEVEL,
+               1e-3);
+    CHECK_EQ_INT(colonist_skill_level(colonist, SKILL_MINING), 0);
+    CHECK_NEAR(colonist->skill_xp[SKILL_MINING], 0.0, 1e-6);
+    CHECK_NEAR(colonist->skill_xp[SKILL_GATHERING], 0.0, 1e-6);
+    game_shutdown(&game);
+}
+
 static void test_woodcutter_skill_sets_wood_condition(void)
 {
     /* The same tree, cut by a novice and by an expert. */
@@ -1179,6 +1251,8 @@ int main(void)
     RUN_TEST(test_starting_skills_are_random_and_valid);
     RUN_TEST(test_skill_levels_validate);
     RUN_TEST(test_woodcutter_skill_sets_wood_condition);
+    RUN_TEST(test_experience_raises_levels);
+    RUN_TEST(test_working_teaches_the_order_skill);
     RUN_TEST(test_reservations_stay_consistent_over_a_long_run);
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);

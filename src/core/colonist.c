@@ -78,7 +78,41 @@ bool colonist_set_skill_level(Colonist *colonist, SkillType skill, int level)
         return false;
     }
     colonist->skills[skill] = (uint8_t)level;
+    colonist->skill_xp[skill] = 0.0f;
     return true;
+}
+
+int colonist_gain_skill_xp(Colonist *colonist, SkillType skill, float xp)
+{
+    if ((unsigned)skill >= SKILL_COUNT || !(xp > 0.0f)) {
+        return 0;
+    }
+    int gained = 0;
+    float *stored = &colonist->skill_xp[skill];
+    *stored += xp;
+    for (;;) {
+        float needed = skill_xp_to_next_level(colonist->skills[skill]);
+        if (needed <= 0.0f) {
+            *stored = 0.0f; /* Mastered: nothing more to learn. */
+            break;
+        }
+        if (*stored < needed) {
+            break;
+        }
+        *stored -= needed;
+        colonist->skills[skill]++;
+        gained++;
+    }
+    return gained;
+}
+
+float colonist_skill_progress(const Colonist *colonist, SkillType skill)
+{
+    if ((unsigned)skill >= SKILL_COUNT) {
+        return 0.0f;
+    }
+    float needed = skill_xp_to_next_level(colonist->skills[skill]);
+    return needed > 0.0f ? clampf(colonist->skill_xp[skill] / needed, 0.0f, 1.0f) : 0.0f;
 }
 
 float colonist_carried_weight(const Colonist *colonist)
@@ -656,9 +690,13 @@ static void work(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0);
         return;
     }
-    if (designation_add_work(designations, context->map, context->items, target.x, target.y,
-                             COLONIST_WORK_SPEED, colonist_skill_level(colonist, skill_of(type)),
-                             context->rng)) {
+    SkillType skill = skill_of(type);
+    /* Products depend on the level before this tick's experience. */
+    bool done = designation_add_work(designations, context->map, context->items, target.x,
+                                     target.y, COLONIST_WORK_SPEED,
+                                     colonist_skill_level(colonist, skill), context->rng);
+    colonist_gain_skill_xp(colonist, skill, COLONIST_WORK_SPEED); /* Learning by doing. */
+    if (done) {
         set_idle(colonist, context, 0); /* Done: look for the next job right away. */
     }
 }

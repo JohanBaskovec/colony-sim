@@ -6,6 +6,7 @@
 
 static const SDL_Color PANEL_COLOR = {12, 14, 18, 200};
 static const SDL_Color TEXT_COLOR = {236, 236, 228, 255};
+static const SDL_Color DIM_TEXT_COLOR = {176, 180, 188, 255};
 static const SDL_Color BUTTON_COLOR = {54, 60, 72, 255};
 static const SDL_Color BUTTON_HOVER_COLOR = {80, 88, 104, 255};
 static const SDL_Color BORDER_COLOR = {130, 136, 150, 255};
@@ -136,6 +137,11 @@ void ui_panel(Ui *ui, SDL_FRect rect)
 void ui_label(Ui *ui, const char *text, float x, float y)
 {
     text_draw(ui->text, text, x, y, TEXT_COLOR);
+}
+
+void ui_label_dim(Ui *ui, const char *text, float x, float y)
+{
+    text_draw(ui->text, text, x, y, DIM_TEXT_COLOR);
 }
 
 float ui_text_width(Ui *ui, const char *text)

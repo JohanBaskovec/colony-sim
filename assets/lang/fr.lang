@@ -126,6 +126,7 @@ hud.colonist.need = {0} : {1} %
 hud.colonist.need_state = {0} : {1} % ({2})
 hud.colonist.skills = Compétences (sur {0})
 hud.colonist.skill = {0} : {1}
+hud.colonist.skill_progress = {0} : {1} (niveau suivant : {2})
 hud.selection.count.one = {0} colon sélectionné
 hud.selection.count.other = {0} colons sélectionnés
 
@@ -155,3 +156,4 @@ work_panel.colonist = Colon
 work_panel.empty = Aucun colon
 work_panel.hint = Clic gauche : priorité plus haute · Clic droit : priorité plus basse · Clic sur un nom : aller au colon
 work_panel.legend = {0} = fait en premier · {1} = fait en dernier · vide = jamais
+work_panel.skill_legend = Nombre en gris : niveau de compétence (de {0} à {1}), il monte avec la pratique

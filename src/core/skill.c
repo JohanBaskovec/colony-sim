@@ -14,6 +14,15 @@ const SkillDef *skill_def(SkillType skill)
     return (unsigned)skill < SKILL_COUNT ? &SKILL_DEFS[skill] : NULL;
 }
 
+float skill_xp_to_next_level(int level)
+{
+    if (level >= SKILL_LEVEL_MAX) {
+        return 0.0f;
+    }
+    level = clampi(level, SKILL_LEVEL_MIN, SKILL_LEVEL_MAX - 1);
+    return SKILL_XP_PER_LEVEL * (float)(level + 1);
+}
+
 int skill_random_level(Rng *rng)
 {
     int level = rng_range_i32(rng, 0, SKILL_START_DIE) + rng_range_i32(rng, 0, SKILL_START_DIE);

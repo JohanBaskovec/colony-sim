@@ -134,6 +134,7 @@ typedef struct Colonist {
     float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
     uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */
     uint8_t skills[SKILL_COUNT]; /* Levels, SKILL_LEVEL_MIN..SKILL_LEVEL_MAX. */
+    float skill_xp[SKILL_COUNT]; /* Experience toward the next level (0 at the maximum). */
     float needs[NEED_COUNT];
 } Colonist;
 
@@ -172,8 +173,18 @@ bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority)
 /* Level in a skill; SKILL_LEVEL_MIN for SKILL_NONE or an invalid skill. */
 int colonist_skill_level(const Colonist *colonist, SkillType skill);
 
-/* Fails on an invalid skill or a level out of range. */
+/* Fails on an invalid skill or a level out of range. Experience toward the
+ * next level starts over. */
 bool colonist_set_skill_level(Colonist *colonist, SkillType skill, int level);
+
+/* Adds experience to a skill, raising the level (possibly several times) each
+ * time enough is gathered; nothing more is gathered at the maximum level.
+ * Ignored for SKILL_NONE, invalid skills and xp <= 0. Returns the number of
+ * levels gained. */
+int colonist_gain_skill_xp(Colonist *colonist, SkillType skill, float xp);
+
+/* Progress toward the next level, 0..1 (0 at the maximum level). */
+float colonist_skill_progress(const Colonist *colonist, SkillType skill);
 
 /* Gives up the current task, releasing any reservation (e.g. before removal). */
 void colonist_abandon_task(Colonist *colonist, const ColonistContext *context);

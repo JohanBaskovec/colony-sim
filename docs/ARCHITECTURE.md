@@ -50,7 +50,7 @@ simulation:
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `work`       | Work types (mining, woodcutting, gathering, hauling), their skill, priority helpers |
-| `skill`      | Skills and levels; quality and condition of what a worker produces           |
+| `skill`      | Skills, levels and experience thresholds; quality and condition of what a worker produces |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
@@ -159,7 +159,13 @@ with a random spread drawn from the game RNG. Novices bring back crude or
 rough, damaged logs; experts superb, intact ones. Randomness is only drawn for
 item types that have a quality or can be damaged. Skill levels go from 0 to 20
 and are rolled when a colonist is created (sum of two dice: mostly average,
-a few novices and experts); they do not change yet.
+a few novices and experts). Colonists learn by doing: each tick of work on an
+order adds the work done to `Colonist.skill_xp` for the order's skill
+(`colonist_gain_skill_xp()`), and level L needs `SKILL_XP_PER_LEVEL × (L + 1)`
+to reach L + 1 (one in-game hour of work for level 1, twenty hours for level
+20). The products of a tick use the level before that tick's experience.
+Hauling needs no skill and teaches nothing. The work grid shows each
+colonist's level next to the priority.
 
 Food items have a
 `nutrition` per unit; a hungry colonist goes to the nearest food, on the

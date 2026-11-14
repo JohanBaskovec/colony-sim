@@ -187,6 +187,8 @@ static void test_hash_covers_skills_and_carried_condition(void)
     colonist_set_skill_level(colonist, SKILL_GATHERING, level == 0 ? 1 : level - 1);
     uint64_t skilled = game_hash(&game);
     CHECK(skilled != before);
+    colonist_gain_skill_xp(colonist, SKILL_GATHERING, 10.0f);
+    CHECK(game_hash(&game) != skilled);
 
     colonist->carried = item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60);
     uint64_t carrying = game_hash(&game);

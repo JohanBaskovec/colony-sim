@@ -282,9 +282,19 @@ static void build_selection_panel(App *app, Panel *panel)
     tr_integer(max_level, sizeof(max_level), SKILL_LEVEL_MAX);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.skills"), max_level);
     for (int skill = 0; skill < SKILL_COUNT; skill++) {
-        tr_integer(level, sizeof(level), colonist_skill_level(colonist, (SkillType)skill));
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.skill"),
-                  tr(skill_def((SkillType)skill)->name_key), level);
+        int value = colonist_skill_level(colonist, (SkillType)skill);
+        const char *name = tr(skill_def((SkillType)skill)->name_key);
+        tr_integer(level, sizeof(level), value);
+        if (value >= SKILL_LEVEL_MAX) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.skill"), name, level);
+            continue;
+        }
+        char number[16], progress[32];
+        int percent = (int)(colonist_skill_progress(colonist, (SkillType)skill) * 100.0f);
+        tr_integer(number, sizeof(number), percent);
+        TR_FORMAT(progress, sizeof(progress), tr("unit.percent"), number);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.skill_progress"), name,
+                  level, progress);
     }
 }
 
