@@ -304,6 +304,11 @@ size_t map_count_plants(const Map *map, PlantType type)
     return total;
 }
 
+bool map_plant_blocks_building(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) && map->plants[map_index(map, x, y)].type == PLANT_TREE;
+}
+
 bool map_has_edible_plant(const Map *map, int x, int y)
 {
     if (!map_in_bounds(map, x, y)) {

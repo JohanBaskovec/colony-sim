@@ -33,6 +33,7 @@ typedef struct ConstructionSite {
      * slot keeps the lowest grade delivered). */
     ItemStack delivered[STRUCTURE_MATERIAL_SLOTS];
     float progress; /* Work done, once every material is in. */
+    float clear_progress; /* Work done clearing the plant on the tile, before building. */
 } ConstructionSite;
 
 typedef struct Constructions {
@@ -55,9 +56,11 @@ int construction_at(const Constructions *constructions, int x, int y);
 
 /* NULL for an unused or invalid index. */
 const ConstructionSite *construction_get(const Constructions *constructions, int index);
+ConstructionSite *construction_get_mutable(Constructions *constructions, int index);
 
 /* Whether a structure may be planned on a tile: passable buildable ground,
- * no structure or site yet, no tree or bush (grass is fine: it is cleared). */
+ * no structure or site yet, no tree (grass and bushes are cleared by the
+ * builder first). */
 bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y);
 
 /* Places a site. Returns its index, or CONSTRUCTION_NONE when the type is

@@ -116,6 +116,8 @@ static void test_placing_and_removing(void)
     CHECK(!construction_can_place(&constructions, &map, 7, 7)); /* Tree. */
     CHECK(!construction_can_place(&constructions, &map, 16, 0));
     CHECK(construction_can_place(&constructions, &map, 8, 8)); /* Grass is cleared. */
+    map.plants[map_index(&map, 10, 10)] = (Plant){.type = PLANT_BUSH, .growth = 1.0f};
+    CHECK(construction_can_place(&constructions, &map, 10, 10)); /* So is a bush. */
     map_set_structure(&map, 9, 9, STRUCTURE_GRASS_BED);
     CHECK(!construction_can_place(&constructions, &map, 9, 9)); /* Already built. */
     CHECK_EQ_INT(constructions_place(&constructions, &map, STRUCTURE_NONE, 2, 2),

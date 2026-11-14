@@ -321,8 +321,13 @@ recipe.both = {0} and {1}
 # Workstation inspector
 station.delete = Delete
 station.blueprint = Blueprint: a builder will bring the materials and build it
+# A station made of nothing, placed on grass or a bush.
+station.blueprint_clear = Blueprint: a builder will clear the tile, then it is ready
 # {0} = material, {1} = delivered, {2} = needed
 station.materials = Materials: {0} {1}/{2}
+# Grass or a bush on a blueprint's tile, removed by the builder before building.
+# {0} = plant
+blueprint.clear_first = To clear first: {0}
 # {0} = percentage (e.g. 40%)
 station.construction = Construction: {0} done
 station.warning.nobody_can_build = Nobody in the colony knows enough to build it yet

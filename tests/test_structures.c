@@ -140,6 +140,24 @@ static void test_builder_brings_materials_and_builds_a_wall(void)
     game_shutdown(&game);
 }
 
+static void test_a_bush_is_cleared_before_building(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    items_add(&game.items, 12, 10, item_stack_pristine(ITEM_BRANCHES, 5));
+    items_add(&game.items, 14, 10, item_stack_pristine(ITEM_GRASS, 24));
+    Plant *bush = &game.map.plants[map_index(&game.map, 10, 14)];
+    *bush = (Plant){.type = PLANT_BUSH, .growth = 0.3f}; /* Young: no berries. */
+    REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 10, 14) != CONSTRUCTION_NONE);
+    CHECK(run_until_built(&game, 10, 14, 8 * TICKS_PER_HOUR));
+    CHECK_EQ_INT(map_structure(&game.map, 10, 14), STRUCTURE_WALL);
+    CHECK_EQ_INT(bush->type, PLANT_NONE);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BERRIES], 0);
+    game_shutdown(&game);
+}
+
 static void test_no_building_without_materials_or_knowledge(void)
 {
     Game game;
@@ -274,6 +292,7 @@ int main(void)
     RUN_TEST(test_placing);
     RUN_TEST(test_cancelling_gives_materials_back);
     RUN_TEST(test_builder_brings_materials_and_builds_a_wall);
+    RUN_TEST(test_a_bush_is_cleared_before_building);
     RUN_TEST(test_no_building_without_materials_or_knowledge);
     RUN_TEST(test_colonist_steps_out_of_a_new_wall);
     RUN_TEST(test_doors_let_settlers_through_slowly);

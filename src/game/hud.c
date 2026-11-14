@@ -252,6 +252,12 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
+    bool blueprint = (station != NULL && !station->built) || site != NULL;
+    if (blueprint && gather_clear_work(map, x, y) > 0.0f) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("blueprint.clear_first"),
+                  tr(plant_def((PlantType)map->plants[index].type)->name_key));
+    }
+
     /* Flint in the ground: what gathering stones may turn up. */
     int flint = map_flint_chance(map, x, y);
     if (flint > 0) {

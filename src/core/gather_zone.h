@@ -247,6 +247,15 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
 /* Work done on the tile's current job, 0..1. */
 float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, int x, int y);
 
+/* Work to clear the plant of a tile by hand before building there (0 when
+ * there is none; a tree cannot be cleared: see map_plant_blocks_building()). */
+float gather_clear_work(const Map *map, int x, int y);
+
+/* Removes the plant of a tile (cut grass, a pulled up bush) and drops what it
+ * gives (cut grass, its twigs and branches, ripe fruit) with quality from the
+ * worker's `level`; `rng` may be NULL. */
+void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng *rng);
+
 uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash);
 
 #endif /* COLONY_CORE_GATHER_ZONE_H */

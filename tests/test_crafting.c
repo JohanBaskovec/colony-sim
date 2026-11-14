@@ -603,6 +603,47 @@ static void test_crafts_make_the_station_dirty(void)
     game_shutdown(&game);
 }
 
+static void test_plants_are_cleared_before_building(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    Plant *tree = &game.map.plants[map_index(&game.map, 20, 20)];
+    *tree = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    CHECK(!game_can_place_workstation(&game, 20, 20));
+    Plant *bush = &game.map.plants[map_index(&game.map, 14, 10)];
+    *bush = (Plant){.type = PLANT_BUSH, .growth = 1.0f};
+    plant_fill_stocks(bush);
+    int twigs = plant_stock_available(bush, PLANT_STOCK_TWIGS);
+    int index = game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    REQUIRE(index != WORKSTATION_NONE);
+    const Workstation *station = workstation_get_const(&game.workstations, index);
+    CHECK(!station->built); /* The bush is in the way. */
+
+    /* Interrupted while clearing: the work done is kept. */
+    run_ticks(&game, 300);
+    CHECK_EQ_INT(colonist->task, TASK_BUILD);
+    float cleared = station->clear_progress;
+    CHECK(cleared > 0.0f);
+    game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_CONSTRUCTION,
+                           WORK_PRIORITY_DISABLED);
+    run_ticks(&game, 30);
+    CHECK(colonist->task != TASK_BUILD);
+    CHECK_NEAR(station->clear_progress, cleared, 1e-4);
+    CHECK_EQ_INT(bush->type, PLANT_BUSH);
+
+    game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_CONSTRUCTION, 1);
+    run_ticks(&game, 30); /* Picked up again at once. */
+    CHECK_EQ_INT(colonist->task, TASK_BUILD);
+    run_ticks(&game, 1000);
+    CHECK(station->built);
+    CHECK_EQ_INT(bush->type, PLANT_NONE);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], twigs);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BERRIES], plant_def(PLANT_BUSH)->harvest_yield);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_carried_tools);
@@ -626,5 +667,6 @@ int main(void)
     RUN_TEST(test_stock_counts_stored_and_waiting_items);
     RUN_TEST(test_until_stock_ignores_items_out_of_storage);
     RUN_TEST(test_crafts_make_the_station_dirty);
+    RUN_TEST(test_plants_are_cleared_before_building);
     return test_summary();
 }

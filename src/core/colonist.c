@@ -61,11 +61,14 @@ bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority)
     }
     if (colonist->work_priorities[type] != priority) {
         colonist->work_priorities[type] = (uint8_t)priority;
-        /* Jobs skipped so far may now be acceptable: forget failed searches. */
-        colonist->search_cooldown[SEARCH_WORK] = 0;
-        colonist->search_failures[SEARCH_WORK] = 0;
-        colonist->search_cooldown[SEARCH_HAUL] = 0;
-        colonist->search_failures[SEARCH_HAUL] = 0;
+        /* Jobs skipped so far may now be acceptable: forget failed searches
+         * (every kind of work, not food and water). */
+        for (int kind = 0; kind < SEARCH_COUNT; kind++) {
+            if (kind != SEARCH_FOOD && kind != SEARCH_WATER) {
+                colonist->search_cooldown[kind] = 0;
+                colonist->search_failures[kind] = 0;
+            }
+        }
     }
     return true;
 }
@@ -1600,6 +1603,27 @@ static bool arrive_at_station(Colonist *colonist, const ColonistContext *context
     return true;
 }
 
+/*
+ * Clearing the plant on a blueprint's tile before building there, one tick of
+ * work into `progress`. Returns true while there is something to clear (the
+ * tick was spent on it).
+ */
+static bool clear_plant_first(Colonist *colonist, const ColonistContext *context, TilePos tile,
+                              float *progress)
+{
+    float needed = gather_clear_work(context->map, tile.x, tile.y);
+    if (needed <= 0.0f) {
+        return false;
+    }
+    *progress += colonist_work_speed(colonist, KNOWLEDGE_NONE);
+    if (*progress >= needed) {
+        gather_clear_plant(context->map, context->items, tile.x, tile.y,
+                           colonist_knowledge_level(colonist, KNOWLEDGE_GATHERING), context->rng);
+        *progress = 0.0f;
+    }
+    return true;
+}
+
 static void station_job(Colonist *colonist, const ColonistContext *context)
 {
     Workstation *station = job_station(colonist, context);
@@ -1625,6 +1649,9 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
     case STATION_JOB_WORK: break;
     }
     if (colonist->task == TASK_BUILD) {
+        if (clear_plant_first(colonist, context, tile, &station->clear_progress)) {
+            return;
+        }
         const WorkstationDef *def = workstation_def((WorkstationType)station->type);
         bool built = workstation_add_build_work(context->workstations, colonist->station,
                                                 colonist_work_speed(colonist, def->knowledge));
@@ -1905,6 +1932,10 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
     }
     if (!next_to(colonist->x, colonist->y, colonist->target)) {
         set_idle(colonist, context, 0);
+        return;
+    }
+    ConstructionSite *clearing = construction_get_mutable(context->constructions, colonist->site);
+    if (clear_plant_first(colonist, context, colonist->target, &clearing->clear_progress)) {
         return;
     }
     StructureType type = (StructureType)site->type;

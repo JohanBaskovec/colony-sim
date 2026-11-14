@@ -58,16 +58,20 @@ const ConstructionSite *construction_get(const Constructions *constructions, int
     return site_get((Constructions *)constructions, index);
 }
 
+ConstructionSite *construction_get_mutable(Constructions *constructions, int index)
+{
+    return site_get(constructions, index);
+}
+
 bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y)
 {
     if (!in_bounds(constructions, x, y) || !map_is_passable(map, x, y)) {
         return false;
     }
     size_t index = map_index(map, x, y);
-    PlantType plant = (PlantType)map->plants[index].type;
     return terrain_def((Terrain)map->terrain[index])->buildable &&
-           map->structure[index] == STRUCTURE_NONE && plant != PLANT_TREE &&
-           plant != PLANT_BUSH && construction_at(constructions, x, y) == CONSTRUCTION_NONE;
+           map->structure[index] == STRUCTURE_NONE && !map_plant_blocks_building(map, x, y) &&
+           construction_at(constructions, x, y) == CONSTRUCTION_NONE;
 }
 
 int constructions_place(Constructions *constructions, const Map *map, StructureType type, int x,
@@ -233,6 +237,7 @@ uint64_t constructions_hash(const Constructions *constructions, uint64_t hash)
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
         }
         hash = hash_fnv1a64(hash, &site->progress, sizeof(site->progress));
+        hash = hash_fnv1a64(hash, &site->clear_progress, sizeof(site->clear_progress));
     }
     return hash;
 }

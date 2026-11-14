@@ -113,6 +113,12 @@ static void blueprint_rows(UiLayout *layout, const Game *game, const Workstation
                   tr(item_def(def->material)->name_key), a, b);
         ui_layout_label(layout, text, 0.0f, false);
     }
+    const Plant *plant = &game->map.plants[map_index(&game->map, station->x, station->y)];
+    if (gather_clear_work(&game->map, station->x, station->y) > 0.0f) {
+        TR_FORMAT(text, sizeof(text), tr("blueprint.clear_first"),
+                  tr(plant_def((PlantType)plant->type)->name_key));
+        ui_layout_label(layout, text, 0.0f, false);
+    }
     percent_text(percent, sizeof(percent), workstation_build_fraction(station));
     TR_FORMAT(text, sizeof(text), tr("station.construction"), percent);
     ui_layout_label(layout, text, 0.0f, false);
@@ -384,7 +390,10 @@ static void station_rows(UiLayout *layout, void *userdata)
     const Game *game = rows->game;
     const Workstation *station = rows->station;
     Action *action = &rows->action;
-    const char *state = station->built ? "" : tr("station.blueprint");
+    bool no_material = workstation_def((WorkstationType)station->type)->material == ITEM_NONE;
+    const char *state = station->built  ? ""
+                        : no_material   ? tr("station.blueprint_clear")
+                                        : tr("station.blueprint");
     if (ui_layout_label_with_button(layout, state, tr("station.delete"))) {
         *action = (Action){ACTION_DELETE_STATION, 0, 0};
     }

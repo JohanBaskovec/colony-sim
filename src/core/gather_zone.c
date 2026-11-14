@@ -16,6 +16,7 @@
 #define STONE_WORK 200.0f /* Per stone. */
 /* Armfuls of grass cut from a fully grown tile, proportionally fewer when shorter. */
 #define CUT_GRASS_YIELD 3.0f
+#define CLEAR_BUSH_WORK 500.0f /* Pulling up a bush by hand. */
 #define CUT_GRASS_MIN_GROWTH 0.5f
 
 #define ONE(type) ITEM_TYPE_BIT(type)
@@ -666,6 +667,45 @@ float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, in
         return 0.0f;
     }
     return clampf(zones->progress[index] / needed, 0.0f, 1.0f);
+}
+
+float gather_clear_work(const Map *map, int x, int y)
+{
+    if (!map_in_bounds(map, x, y)) {
+        return 0.0f;
+    }
+    switch ((PlantType)map->plants[map_index(map, x, y)].type) {
+    case PLANT_GRASS: return CUT_GRASS_WORK;
+    case PLANT_BUSH: return CLEAR_BUSH_WORK;
+    default: return 0.0f;
+    }
+}
+
+void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng *rng)
+{
+    if (!map_in_bounds(map, x, y)) {
+        return;
+    }
+    Plant *plant = &map->plants[map_index(map, x, y)];
+    GatherJob jobs[4];
+    int job_count = 0;
+    if (plant->type == PLANT_GRASS && plant->growth > 0.0f) {
+        jobs[job_count++] = GATHER_JOB_CUT_GRASS;
+    } else if (plant->type != PLANT_GRASS) {
+        jobs[job_count++] = GATHER_JOB_BRANCHES;
+        jobs[job_count++] = GATHER_JOB_TWIGS;
+        if (plant_has_fruit(plant)) {
+            jobs[job_count++] = GATHER_JOB_HARVEST;
+        }
+    }
+    for (int i = 0; i < job_count; i++) {
+        int count;
+        ItemType item = complete(map, x, y, jobs[i], rng, &count);
+        if (item != ITEM_NONE && count > 0 && items != NULL) {
+            items_drop(items, map, x, y, knowledge_product(item, count, level, rng));
+        }
+    }
+    memset(plant, 0, sizeof(*plant));
 }
 
 uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)

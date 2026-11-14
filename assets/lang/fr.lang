@@ -271,6 +271,8 @@ recipe.both = {0} et {1}
 # Inspecteur de poste de travail
 station.delete = Supprimer
 station.blueprint = Plan : un constructeur apportera les matériaux et le construira
+station.blueprint_clear = Plan : un constructeur défrichera la case, puis il sera prêt
+blueprint.clear_first = À défricher d’abord : {0}
 station.materials = Matériaux : {0} {1}/{2}
 station.construction = Avancement de la construction : {0}
 station.warning.nobody_can_build = Personne dans la colonie n’en sait encore assez pour le construire

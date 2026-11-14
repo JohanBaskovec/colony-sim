@@ -52,6 +52,23 @@ static void test_placing_and_removing(void)
     CHECK(!workstation_can_place(&stations, &map, 5, 5)); /* Rock. */
     CHECK(!workstation_can_place(&stations, &map, 6, 6)); /* Water. */
     CHECK(!workstation_can_place(&stations, &map, -1, 0));
+    /* Not on a tree; on grass or a bush, even a crafting spot is a blueprint
+     * until the builder clears the plant. */
+    map.plants[map_index(&map, 8, 8)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    map.plants[map_index(&map, 9, 8)] = (Plant){.type = PLANT_BUSH, .growth = 1.0f};
+    map.plants[map_index(&map, 10, 8)] = (Plant){.type = PLANT_GRASS, .growth = 0.5f};
+    CHECK(!workstation_can_place(&stations, &map, 8, 8));
+    for (int x = 9; x <= 10; x++) {
+        int spot = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, x, 8);
+        REQUIRE(spot != WORKSTATION_NONE);
+        CHECK(!workstation_get_const(&stations, spot)->built);
+        ItemStack unused[2];
+        workstations_remove(&stations, spot, unused);
+    }
+    int ready = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 11, 8);
+    CHECK(workstation_get_const(&stations, ready)->built);
+    ItemStack unused[2];
+    workstations_remove(&stations, ready, unused);
     int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4);
     REQUIRE(index != WORKSTATION_NONE);
     CHECK_EQ_INT(workstation_at(&stations, 3, 4), index);

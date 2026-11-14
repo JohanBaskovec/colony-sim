@@ -79,6 +79,7 @@ bool workstation_can_place(const Workstations *workstations, const Map *map, int
 {
     return in_bounds(workstations, x, y) && map_is_passable(map, x, y) &&
            terrain_def((Terrain)map->terrain[map_index(map, x, y)])->buildable &&
+           !map_plant_blocks_building(map, x, y) &&
            workstation_at(workstations, x, y) == WORKSTATION_NONE;
 }
 
@@ -101,8 +102,10 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
         station->y = (int16_t)y;
         station->number = workstations->next_number++;
         station->work_recipe = RECIPE_COUNT;
-        /* Nothing to bring: nothing to build either. */
-        station->built = workstation_def(type)->material == ITEM_NONE;
+        /* Nothing to bring: nothing to build either, once the plant there (if
+         * any) is cleared. */
+        station->built = workstation_def(type)->material == ITEM_NONE &&
+                         map->plants[map_index(map, x, y)].type == PLANT_NONE;
         workstations->at[index_of(workstations, x, y)] = (uint8_t)(index + 1);
         workstations->used_count++;
         workstations->revision++;
@@ -443,6 +446,7 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
                            station->built, station->materials};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         hash = hash_fnv1a64(hash, &station->build_progress, sizeof(station->build_progress));
+        hash = hash_fnv1a64(hash, &station->clear_progress, sizeof(station->clear_progress));
         hash = hash_fnv1a64(hash, &station->work_progress, sizeof(station->work_progress));
         ItemStack input = station->work_input;
         int32_t craft[6] = {station->work_recipe, input.type,       input.quality,

@@ -97,6 +97,7 @@ typedef struct Workstation {
     bool built;
     int materials; /* Delivered so far (blueprint). */
     float build_progress; /* Work done on the blueprint. */
+    float clear_progress; /* Work done clearing the plant on the tile, before building. */
     Bill bills[WORKSTATION_BILL_MAX];
     int bill_count;
     /* Craft in progress: its recipe (RECIPE_COUNT: none), the input put down
@@ -131,13 +132,13 @@ int workstation_at(const Workstations *workstations, int x, int y);
 Workstation *workstation_get(Workstations *workstations, int index);
 const Workstation *workstation_get_const(const Workstations *workstations, int index);
 
-/* Whether a station may be placed here: passable, buildable ground, no
- * station yet. */
+/* Whether a station may be placed here: passable, buildable ground, no tree
+ * (grass and bushes are cleared by the builder first), no station yet. */
 bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y);
 
 /* Places a blueprint, or the station itself, already built, when it needs
- * no material. Returns its index, or WORKSTATION_NONE when the tile does not
- * qualify or the list is full. */
+ * no material and no plant is in the way. Returns its index, or
+ * WORKSTATION_NONE when the tile does not qualify or the list is full. */
 int workstations_place(Workstations *workstations, const Map *map, WorkstationType type, int x,
                        int y);
 

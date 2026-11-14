@@ -631,6 +631,41 @@ static void test_blocked_tiles_are_left_out(void)
     free_world(&map, &zones, &items);
 }
 
+static void test_clearing_plants(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    CHECK_NEAR(gather_clear_work(&map, 1, 1), 0.0, 1e-6); /* Nothing there. */
+    CHECK_NEAR(gather_clear_work(&map, -1, 1), 0.0, 1e-6);
+    map.plants[map_index(&map, 1, 1)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    CHECK_NEAR(gather_clear_work(&map, 1, 1), 0.0, 1e-6); /* Not by hand. */
+    CHECK(map_plant_blocks_building(&map, 1, 1));
+
+    /* Grass is cut: fresh grass. */
+    map.plants[map_index(&map, 3, 3)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    CHECK(!map_plant_blocks_building(&map, 3, 3));
+    CHECK(gather_clear_work(&map, 3, 3) > 0.0f);
+    gather_clear_plant(&map, &items, 3, 3, 60.0, NULL);
+    CHECK_EQ_INT(map.plants[map_index(&map, 3, 3)].type, PLANT_NONE);
+    CHECK_EQ_INT((int)items.totals[ITEM_FRESH_GRASS], 3);
+    CHECK_NEAR(gather_clear_work(&map, 3, 3), 0.0, 1e-6);
+
+    /* A ripe bush is pulled up: its twigs and berries. */
+    Plant *bush = &map.plants[map_index(&map, 8, 3)];
+    *bush = (Plant){.type = PLANT_BUSH, .growth = 1.0f};
+    plant_fill_stocks(bush);
+    int twigs = plant_stock_available(bush, PLANT_STOCK_TWIGS);
+    REQUIRE(twigs > 0 && plant_has_fruit(bush));
+    CHECK(gather_clear_work(&map, 8, 3) > gather_clear_work(&map, 3, 3));
+    gather_clear_plant(&map, &items, 8, 3, 60.0, NULL);
+    CHECK_EQ_INT(bush->type, PLANT_NONE);
+    CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], twigs);
+    CHECK_EQ_INT((int)items.totals[ITEM_BERRIES], plant_def(PLANT_BUSH)->harvest_yield);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -652,5 +687,6 @@ int main(void)
     RUN_TEST(test_hash);
     RUN_TEST(test_overlapping_rectangle_merges_zones);
     RUN_TEST(test_blocked_tiles_are_left_out);
+    RUN_TEST(test_clearing_plants);
     return test_summary();
 }

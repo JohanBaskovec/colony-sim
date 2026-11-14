@@ -427,10 +427,11 @@ tile's plant. Blueprints are **construction sites** (`core/construction.h`,
 owned by `Game`, at most `CONSTRUCTION_MAX`, a dense index layer): the
 player places them (`game_place_structure_rect()`: along the edges of the
 rectangle for walls, filling it otherwise; refused on stockpiles,
-workstations, trees and bushes). A colonist with the construction work type
+workstations and trees). A colonist with the construction work type
 and the knowledge (`TASK_CONSTRUCT`, `RESERVATION_CONSTRUCTION`) fetches each
 material in turn, as much as it can carry, delivers it from a neighboring
-tile, then works from there: a wall cannot be stood on once built. When it
+tile, then works from there: a wall cannot be stood on once built. Grass
+or a bush on the tile is cleared first (see *Clearing plants* below). When it
 is done the site is gone, the structure appears; a blocking one pushes the
 items of its tile next door and takes the tile out of stockpiles and
 gathering zones, and a colonist left standing on it steps aside at its next
@@ -440,6 +441,16 @@ built structure and gives back half of its materials.
 
 Material counts come from real structures, for a tile of about 1 m²: see
 `structure.c` and `docs/KNOWLEDGE.md` §10.
+
+**Clearing plants**: blueprints (construction sites and workstations) may
+be placed on grass and bushes, not on trees (`map_plant_blocks_building()`:
+felling needs an axe nobody has yet). Once the materials are in, the builder
+first spends `gather_clear_work()` on the plant (cutting grass, pulling up a
+bush, no knowledge needed), kept in the blueprint's `clear_progress` if it
+is interrupted; `gather_clear_plant()` then removes the plant and drops what
+it gives (cut grass, its twigs and branches, ripe berries, with quality from
+the builder's gathering level). Only then does the construction work start.
+`map_set_structure()` still clears any plant left, as a safety net.
 
 **Beds**: a colonist going to sleep walks to the nearest free bed
 (`RESERVATION_BED`, within `COLONIST_BED_SEARCH_MAX_COST`) and sleeps on the
@@ -456,7 +467,8 @@ Workstations (`core/workstation.h`, owned by `Game`, at most
 the construction work type, and the knowledge the station needs, fetches the
 materials (a knapping spot needs a cobble as its anvil) and does the
 construction work. A station made of nothing (crafting spot) is placed
-ready. The cancel tool also removes blueprints; removing a
+ready, unless grass or a bush is in the way: it is then a blueprint until a
+builder has cleared the tile. The cancel tool also removes blueprints; removing a
 station drops what it held.
 
 A built station carries up to `WORKSTATION_BILL_MAX` **bills**: a recipe

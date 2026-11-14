@@ -218,6 +218,11 @@ uint64_t map_hash(const Map *map);
 
 size_t map_count_plants(const Map *map, PlantType type);
 
+/* Whether the plant on a tile keeps anything from being built there: a tree
+ * (felling needs an axe). Grass and bushes are cleared by hand first (see
+ * gather_clear_plant()). */
+bool map_plant_blocks_building(const Map *map, int x, int y);
+
 /* Whether the plant on this tile can be eaten right now. */
 bool map_has_edible_plant(const Map *map, int x, int y);
 
