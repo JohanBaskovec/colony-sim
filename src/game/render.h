@@ -74,11 +74,16 @@ void render_selection_box(SDL_Renderer *renderer, float x0, float y0, float x1, 
 void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, int y,
                          SDL_Color color);
 
+/* Thick outline of a selected tile (a structure). */
+void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, int y);
+
 /* Releases the buffers the renderer allocated on first use. */
 /* Icons of the build menu, drawn inside `rect`. */
 typedef enum RenderIcon {
     RENDER_ICON_GATHER_ZONE,
+    RENDER_ICON_GATHER_ZONE_REMOVE, /* The zone icon with a "minus" sign. */
     RENDER_ICON_STOCKPILE,
+    RENDER_ICON_STOCKPILE_REMOVE,
     RENDER_ICON_MINE,
     RENDER_ICON_DECONSTRUCT,
     RENDER_ICON_CANCEL,

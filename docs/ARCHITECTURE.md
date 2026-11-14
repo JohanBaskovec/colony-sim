@@ -216,6 +216,14 @@ points in percent of the maximum). `stockpile_accepts()` checks all three;
 items that are always perfect count as superb and 100 %. Zones only cover
 passable, buildable tiles. Every change bumps a `revision` counter.
 
+The zone tools (stockpiles and gathering zones alike) add a dragged rectangle
+with `stockpiles_add_rect()` / `gather_zones_add_rect()`: the selected zone and
+every zone of the same kind the rectangle overlaps are merged into one, which
+keeps the settings of the selected zone, else of the oldest; work under way on
+gathering tiles is kept. With no zone involved, a new one is created. Tiles
+are taken out of zones with Shift+drag or the removal tools of the build menu;
+a zone that keeps some tiles stays, even in several pieces.
+
 A stack **needs hauling** when no zone on its tile accepts it (narrowing a
 filter makes stored items move out), or when a zone of strictly better
 priority accepts it and has a free tile with room. A storage tile has room for
@@ -585,7 +593,15 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 ## Frontend state
 
 UI state that is not part of the simulation (camera, selection, selected
-stockpile or workstation, active tool, drag rectangle, debug toggle) lives in `App`.
+stockpile, gathering zone, workstation or structure, active tool, drag
+rectangle, debug toggle) lives in `App`. Escape and a right click on the map
+(released where it was pressed: otherwise it pans) step back one level
+(`step_back()`). Every keyboard control is a physical position (`APP_KEY_*`
+scancodes in `game/app.h`): the controls are laid out the same on any
+keyboard (WASD on QWERTY is ZQSD on AZERTY), and the help and tooltips show
+the labels of the active layout (`app_key_name()`). The key at the physical position of A on AZERTY (Q on QWERTY,
+`APP_KEY_BUILD_LIKE`) turns on the tool that builds another of what is
+selected (`build_like_selection()`).
 The structure tool (`APP_TOOL_STRUCTURE`) previews the sites a drag would
 place (`render_structure_preview()`); structures and sites are drawn by
 `render_structures()`.

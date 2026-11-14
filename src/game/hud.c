@@ -95,19 +95,11 @@ static void panel_rows(UiLayout *layout, void *userdata)
 /* Names of the keys at the physical W/A/S/D positions ("ZQSD" on AZERTY keyboards). */
 static void movement_keys_label(char *out, size_t size)
 {
-    static const SDL_Scancode SCANCODES[] = {SDL_SCANCODE_W, SDL_SCANCODE_A, SDL_SCANCODE_S,
-                                             SDL_SCANCODE_D};
+    static const SDL_Scancode SCANCODES[] = {APP_KEY_UP, APP_KEY_LEFT, APP_KEY_DOWN, APP_KEY_RIGHT};
     out[0] = '\0';
     for (size_t i = 0; i < SDL_arraysize(SCANCODES); i++) {
-        SDL_Keycode key = SDL_GetKeyFromScancode(SCANCODES[i], SDL_KMOD_NONE, false);
-        SDL_strlcat(out, SDL_GetKeyName(key), size);
+        SDL_strlcat(out, app_key_name(SCANCODES[i]), size);
     }
-}
-
-/* Name of the key with this label on the current layout (mnemonic keys). */
-static const char *key_name(SDL_Keycode key)
-{
-    return SDL_GetKeyName(key);
 }
 
 /* "21 kg", "0.3 kg": one decimal only for small, non-whole weights. */
@@ -504,12 +496,17 @@ static void help_window(App *app)
     char keys[32];
     movement_keys_label(keys, sizeof(keys));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
-    panel_add_text(&help, tr("hud.help.game"));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.gathering"), key_name(SDLK_R));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_M),
-              key_name(SDLK_X));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"), key_name(SDLK_P),
-              key_name(SDLK_E), key_name(SDLK_T));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.game"),
+              app_key_name(APP_KEY_LANGUAGE));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.gathering"),
+              app_key_name(APP_KEY_GATHER));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), app_key_name(APP_KEY_MINE),
+              app_key_name(APP_KEY_CANCEL));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"),
+              app_key_name(APP_KEY_STOCKPILE), app_key_name(APP_KEY_BUILD),
+              app_key_name(APP_KEY_WORK));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.copy"),
+              app_key_name(APP_KEY_BUILD_LIKE));
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_HELP, tr("help.title"), UI_PLACE_CENTER, panel_rows,
                      &help, &open);
@@ -578,6 +575,8 @@ void hud_draw(App *app)
     Panel status = {0};
     build_status_panel(app, &status);
     panel_draw(app, &status, HUD_MARGIN, HUD_MARGIN);
+    float status_width, status_height;
+    panel_size(app, &status, &status_width, &status_height);
 
     if (app->show_debug) {
         Panel debug = {0};
@@ -589,14 +588,14 @@ void hud_draw(App *app)
     /* Top center: active tool. */
     if (app->tool != APP_TOOL_NONE) {
         Panel tool = {0};
-        if (app->tool == APP_TOOL_STOCKPILE) {
-            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"),
-                      tr("tool.stockpile"));
-            panel_add_text(&tool, tr("hud.tool.stockpile_help"));
-        } else if (app->tool == APP_TOOL_GATHER) {
-            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"),
-                      tr("tool.gather_zone"));
-            panel_add_text(&tool, tr("hud.tool.stockpile_help"));
+        if (app->tool == APP_TOOL_STOCKPILE || app->tool == APP_TOOL_GATHER) {
+            bool stockpile = app->tool == APP_TOOL_STOCKPILE;
+            const char *name = app->zone_remove
+                                   ? (stockpile ? "tool.stockpile_remove" : "tool.gather_remove")
+                                   : (stockpile ? "tool.stockpile" : "tool.gather_zone");
+            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(name));
+            panel_add_text(&tool, tr(app->zone_remove ? "hud.tool.zone_remove_help"
+                                                      : "hud.tool.stockpile_help"));
         } else if (app->tool == APP_TOOL_BUILD) {
             const WorkstationDef *def = workstation_def(app->build_type);
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(def->name_key));
@@ -607,7 +606,7 @@ void hud_draw(App *app)
                           tr(item_def(def->material)->name_key), count);
             }
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.build_help"),
-                      key_name(SDLK_E));
+                      app_key_name(APP_KEY_BUILD));
             if (!game_workstation_buildable(&app->game, app->build_type)) {
                 panel_add_text(&tool, tr("hud.tool.unavailable"));
             }
@@ -629,7 +628,10 @@ void hud_draw(App *app)
             }
         }
         panel_size(app, &tool, &width, &height);
-        panel_draw(app, &tool, SDL_floorf((screen_width - width) * 0.5f), HUD_MARGIN);
+        /* Centered, but never over the date. */
+        float x = SDL_max(SDL_floorf((screen_width - width) * 0.5f),
+                          HUD_MARGIN * 2.0f + status_width);
+        panel_draw(app, &tool, x, HUD_MARGIN);
     }
 
     /* Top right: current language. */

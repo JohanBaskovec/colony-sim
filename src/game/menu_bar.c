@@ -19,20 +19,24 @@ typedef struct MenuTool {
     RenderIcon icon;
     const char *name_key;
     const char *description_key;
-    SDL_Keycode key; /* Its shortcut. */
+    SDL_Scancode key; /* Its shortcut (SDL_SCANCODE_UNKNOWN: none). */
 } MenuTool;
 
 static const MenuTool TOOLS[] = {
-    {BUILD_CATEGORY_ZONES, APP_TOOL_GATHER, 0, RENDER_ICON_GATHER_ZONE, N_("tool.gather_zone"),
-     N_("tool.gather_zone.description"), SDLK_R},
-    {BUILD_CATEGORY_ZONES, APP_TOOL_STOCKPILE, 0, RENDER_ICON_STOCKPILE, N_("tool.stockpile"),
-     N_("tool.stockpile.description"), SDLK_P},
+    {BUILD_CATEGORY_ZONES, APP_TOOL_GATHER, APP_ZONE_ADD, RENDER_ICON_GATHER_ZONE,
+     N_("tool.gather_zone"), N_("tool.gather_zone.description"), APP_KEY_GATHER},
+    {BUILD_CATEGORY_ZONES, APP_TOOL_GATHER, APP_ZONE_REMOVE, RENDER_ICON_GATHER_ZONE_REMOVE,
+     N_("tool.gather_remove"), N_("tool.zone_remove.description"), SDL_SCANCODE_UNKNOWN},
+    {BUILD_CATEGORY_ZONES, APP_TOOL_STOCKPILE, APP_ZONE_ADD, RENDER_ICON_STOCKPILE,
+     N_("tool.stockpile"), N_("tool.stockpile.description"), APP_KEY_STOCKPILE},
+    {BUILD_CATEGORY_ZONES, APP_TOOL_STOCKPILE, APP_ZONE_REMOVE, RENDER_ICON_STOCKPILE_REMOVE,
+     N_("tool.stockpile_remove"), N_("tool.zone_remove.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_MINE, RENDER_ICON_MINE,
-     N_("designation.mine"), N_("tool.mine.description"), SDLK_M},
+     N_("designation.mine"), N_("tool.mine.description"), APP_KEY_MINE},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DECONSTRUCT, RENDER_ICON_DECONSTRUCT,
-     N_("designation.deconstruct"), N_("tool.deconstruct.description"), SDLK_UNKNOWN},
+     N_("designation.deconstruct"), N_("tool.deconstruct.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_NONE, RENDER_ICON_CANCEL,
-     N_("tool.cancel"), N_("tool.cancel.description"), SDLK_X},
+     N_("tool.cancel"), N_("tool.cancel.description"), APP_KEY_CANCEL},
 };
 
 static const char *const CATEGORY_KEYS[BUILD_CATEGORY_COUNT] = {
@@ -77,9 +81,9 @@ static int text_row(Ui *ui, float x, float y, const char *const *labels, const b
 }
 
 /* "Shortcut: R". */
-static void shortcut_line(char *out, size_t size, SDL_Keycode key)
+static void shortcut_line(char *out, size_t size, SDL_Scancode key)
 {
-    TR_FORMAT(out, size, tr("menu.shortcut"), SDL_GetKeyName(key));
+    TR_FORMAT(out, size, tr("menu.shortcut"), app_key_name(key));
 }
 
 static void station_tooltip(App *app, WorkstationType type)
@@ -143,7 +147,7 @@ static void tool_tooltip(App *app, const MenuTool *tool)
     const char *lines[4] = {tr(tool->name_key), tr(tool->description_key)};
     int count = 2;
     char shortcut[TEXT_SIZE];
-    if (tool->key != SDLK_UNKNOWN) {
+    if (tool->key != SDL_SCANCODE_UNKNOWN) {
         shortcut_line(shortcut, sizeof(shortcut), tool->key);
         lines[count++] = shortcut;
     }
@@ -245,11 +249,11 @@ void menu_bar_draw(App *app)
     }
     char shortcut[TEXT_SIZE];
     if (hovered == 1) {
-        shortcut_line(shortcut, sizeof(shortcut), SDLK_T);
+        shortcut_line(shortcut, sizeof(shortcut), APP_KEY_WORK);
         const char *lines[3] = {tr("work_panel.title"), tr("menu.work.description"), shortcut};
         ui_tooltip(ui, lines, 3);
     } else if (hovered == 2) {
-        shortcut_line(shortcut, sizeof(shortcut), SDLK_F1);
+        shortcut_line(shortcut, sizeof(shortcut), APP_KEY_HELP);
         const char *lines[2] = {tr("help.title"), shortcut};
         ui_tooltip(ui, lines, 2);
     }

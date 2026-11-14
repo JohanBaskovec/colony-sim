@@ -24,6 +24,11 @@
 
 static const SDL_Color HOVER_COLOR = {255, 255, 255, 200};
 
+const char *app_key_name(SDL_Scancode key)
+{
+    return SDL_GetKeyName(SDL_GetKeyFromScancode(key, SDL_KMOD_NONE, false));
+}
+
 bool app_tool_active(const App *app, AppTool tool, int type)
 {
     if (app->tool != tool) {
@@ -33,6 +38,8 @@ bool app_tool_active(const App *app, AppTool tool, int type)
     case APP_TOOL_DESIGNATE: return (int)app->tool_type == type;
     case APP_TOOL_BUILD: return (int)app->build_type == type;
     case APP_TOOL_STRUCTURE: return (int)app->structure_type == type;
+    case APP_TOOL_STOCKPILE:
+    case APP_TOOL_GATHER: return app->zone_remove == (type == APP_ZONE_REMOVE);
     default: return true;
     }
 }
@@ -49,6 +56,8 @@ void app_toggle_tool(App *app, AppTool tool, int type)
             app->build_type = (WorkstationType)type;
         } else if (tool == APP_TOOL_STRUCTURE) {
             app->structure_type = (StructureType)type;
+        } else if (tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER) {
+            app->zone_remove = type == APP_ZONE_REMOVE;
         }
     }
     app->left_button_down = false;
@@ -82,6 +91,37 @@ static void clear_selection(App *app)
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
     app->selected_gather_zone = GATHER_ZONE_NONE;
+    app->structure_selected = false;
+}
+
+/* Type of the structure, or of the construction site, on a tile. */
+static StructureType structure_type_at(const App *app, int x, int y)
+{
+    StructureType built = map_structure(&app->game.map, x, y);
+    if (built != STRUCTURE_NONE) {
+        return built;
+    }
+    const Constructions *sites = &app->game.constructions;
+    const ConstructionSite *site = construction_get(sites, construction_at(sites, x, y));
+    return site != NULL ? (StructureType)site->type : STRUCTURE_NONE;
+}
+
+static void select_structure(App *app, int x, int y)
+{
+    clear_selection(app);
+    app->structure_selected = structure_type_at(app, x, y) != STRUCTURE_NONE;
+    app->selected_structure_x = x;
+    app->selected_structure_y = y;
+}
+
+/* Forgets the selected structure once it is gone (built over, taken apart). */
+static void prune_structure_selection(App *app)
+{
+    if (app->structure_selected &&
+        structure_type_at(app, app->selected_structure_x, app->selected_structure_y) ==
+            STRUCTURE_NONE) {
+        app->structure_selected = false;
+    }
 }
 
 static void select_stockpile(App *app, int index)
@@ -316,20 +356,60 @@ static void close_window(App *app, AppWindow window)
     }
 }
 
-/* Escape steps back: leaves the tool, closes the build menu, then the window
- * in front (closing an inspector clears the selection), then quits. */
+/* Escape (or a right click) steps back: cancels the drag under way, leaves
+ * the tool, closes the build menu, then the window in front (closing an
+ * inspector clears the selection), then forgets a selection without window.
+ * It never quits: the window's close button does. */
 static void step_back(App *app)
 {
     AppWindow open[APP_WINDOW_COUNT];
     int open_count = hud_open_windows(app, open);
-    if (app->tool != APP_TOOL_NONE) {
+    if (app->left_button_down) {
+        app->left_button_down = false;
+        app->box_selecting = false;
+    } else if (app->tool != APP_TOOL_NONE) {
         app->tool = APP_TOOL_NONE;
     } else if (app->build_menu_open) {
         app->build_menu_open = false;
     } else if (open_count > 0) {
         close_window(app, open[open_count - 1]);
     } else {
-        app->running = false;
+        app->structure_selected = false;
+    }
+}
+
+/* Turns a tool on (app_toggle_tool() would turn it off when it already is). */
+static void set_tool(App *app, AppTool tool, int type)
+{
+    if (!app_tool_active(app, tool, type)) {
+        app_toggle_tool(app, tool, type);
+    }
+}
+
+/* Starts building another of what is selected: a zone of the same kind (a
+ * new one: the selection is dropped, or drags would extend it), a
+ * workstation or a structure of the same type. */
+static void build_like_selection(App *app)
+{
+    const Workstation *station =
+        workstation_get_const(&app->game.workstations, app->selected_station);
+    StructureType structure =
+        app->structure_selected
+            ? structure_type_at(app, app->selected_structure_x, app->selected_structure_y)
+            : STRUCTURE_NONE;
+    if (app->selected_stockpile != STOCKPILE_NONE) {
+        clear_selection(app);
+        set_tool(app, APP_TOOL_STOCKPILE, APP_ZONE_ADD);
+    } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
+        clear_selection(app);
+        set_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD);
+    } else if (station != NULL) {
+        WorkstationType type = (WorkstationType)station->type;
+        clear_selection(app);
+        set_tool(app, APP_TOOL_BUILD, (int)type);
+    } else if (structure != STRUCTURE_NONE) {
+        clear_selection(app);
+        set_tool(app, APP_TOOL_STRUCTURE, (int)structure);
     }
 }
 
@@ -338,37 +418,33 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     if (key->repeat) {
         return;
     }
-    /* Speed keys use physical positions (scancodes): they work on any layout. */
+    /* Physical positions (scancodes): the same controls on any layout (app.h). */
     switch (key->scancode) {
-    case SDL_SCANCODE_SPACE: game_clock_toggle_pause(&app->game.clock); return;
+    case APP_KEY_PAUSE: game_clock_toggle_pause(&app->game.clock); return;
+    case APP_KEY_BUILD_LIKE: build_like_selection(app); return;
     case SDL_SCANCODE_1:
     case SDL_SCANCODE_KP_1: game_clock_set_speed(&app->game.clock, GAME_SPEED_NORMAL); return;
     case SDL_SCANCODE_2:
     case SDL_SCANCODE_KP_2: game_clock_set_speed(&app->game.clock, GAME_SPEED_FAST); return;
     case SDL_SCANCODE_3:
     case SDL_SCANCODE_KP_3: game_clock_set_speed(&app->game.clock, GAME_SPEED_FASTEST); return;
-    default: break;
-    }
-    /* Mnemonic keys use the key labels (keycodes). */
-    switch (key->key) {
-    case SDLK_ESCAPE: step_back(app); break;
-    case SDLK_F1: app->show_help = !app->show_help; break;
-    case SDLK_M: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); break;
-    case SDLK_R: toggle_tool(app, APP_TOOL_GATHER, DESIGNATION_NONE); break;
-    case SDLK_X: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); break;
-    /* Not A, D, Q, S, W or Z: movement keys on QWERTY or AZERTY keyboards. */
-    case SDLK_P: toggle_tool(app, APP_TOOL_STOCKPILE, DESIGNATION_NONE); break;
-    case SDLK_T: app->show_work_panel = !app->show_work_panel; break;
-    case SDLK_E: cycle_build_tool(app); break;
-    case SDLK_F3:
+    case APP_KEY_BACK: step_back(app); return;
+    case APP_KEY_HELP: app->show_help = !app->show_help; return;
+    case APP_KEY_MINE: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); return;
+    case APP_KEY_GATHER: app_toggle_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD); return;
+    case APP_KEY_CANCEL: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); return;
+    case APP_KEY_STOCKPILE: app_toggle_tool(app, APP_TOOL_STOCKPILE, APP_ZONE_ADD); return;
+    case APP_KEY_WORK: app->show_work_panel = !app->show_work_panel; return;
+    case APP_KEY_BUILD: cycle_build_tool(app); return;
+    case APP_KEY_DEBUG:
         app->show_debug = !app->show_debug;
         app->debug_tree_count = map_count_plants(&app->game.map, PLANT_TREE);
-        break;
-    case SDLK_L:
+        return;
+    case APP_KEY_LANGUAGE:
         localization_cycle(&app->localization);
         update_window_title(app);
-        break;
-    default: break;
+        return;
+    default: return;
     }
 }
 
@@ -425,6 +501,7 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
     app->selected_gather_zone = GATHER_ZONE_NONE;
+    app->structure_selected = false;
     if (entity_id_is_none(id)) {
         if (!additive) {
             int x = (int)floorf(world_x), y = (int)floorf(world_y);
@@ -432,6 +509,8 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
             int stockpile = stockpile_at(&app->game.stockpiles, x, y);
             if (station != WORKSTATION_NONE) {
                 select_station(app, station);
+            } else if (structure_type_at(app, x, y) != STRUCTURE_NONE) {
+                select_structure(app, x, y);
             } else if (stockpile != STOCKPILE_NONE) {
                 select_stockpile(app, stockpile);
             } else {
@@ -482,36 +561,41 @@ static void tool_rect(const App *app, float screen_x, float screen_y, int *x0, i
     screen_to_tile(app, screen_x, screen_y, x1, y1);
 }
 
-/* Stockpile tool release: extends the selected zone or creates a new one
- * (which becomes selected); with Shift, removes zone tiles instead. */
-static void apply_stockpile_tool(App *app, float screen_x, float screen_y, bool remove)
+/* Whether a zone tool drag removes tiles: in the removal mode, or with Shift. */
+static bool zone_tool_removes(const App *app)
+{
+    return app->zone_remove || (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+}
+
+/* Stockpile tool release: adds the rectangle to the selected stockpile and
+ * those it overlaps (merged into one), or creates a new one, which becomes
+ * selected; or removes zone tiles. */
+static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
 {
     Stockpiles *stockpiles = &app->game.stockpiles;
     int x0, y0, x1, y1;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
-    if (remove) {
+    if (zone_tool_removes(app)) {
         stockpiles_remove_rect(stockpiles, x0, y0, x1, y1);
         prune_stockpile_selection(app);
-    } else if (app->selected_stockpile != STOCKPILE_NONE) {
-        stockpile_extend(stockpiles, &app->game.map, app->selected_stockpile, x0, y0, x1, y1);
     } else {
-        select_stockpile(app, stockpile_create(stockpiles, &app->game.map, x0, y0, x1, y1));
+        select_stockpile(app, stockpiles_add_rect(stockpiles, &app->game.map, x0, y0, x1, y1,
+                                                  app->selected_stockpile));
     }
 }
 
 /* Gathering zone tool release: like the stockpile tool. */
-static void apply_gather_tool(App *app, float screen_x, float screen_y, bool remove)
+static void apply_gather_tool(App *app, float screen_x, float screen_y)
 {
     GatherZones *zones = &app->game.gather_zones;
     int x0, y0, x1, y1;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
-    if (remove) {
+    if (zone_tool_removes(app)) {
         gather_zones_remove_rect(zones, x0, y0, x1, y1);
         prune_gather_zone_selection(app);
-    } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
-        gather_zone_extend(zones, &app->game.map, app->selected_gather_zone, x0, y0, x1, y1);
     } else {
-        select_gather_zone(app, gather_zone_create(zones, &app->game.map, x0, y0, x1, y1));
+        select_gather_zone(app, gather_zones_add_rect(zones, &app->game.map, x0, y0, x1, y1,
+                                                      app->selected_gather_zone));
     }
 }
 
@@ -520,9 +604,23 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
     if (button->button != SDL_BUTTON_LEFT) {
         /* Right clicks on a panel go to its widgets; dragging from a panel
          * with the middle or right button does not pan the view. */
-        app->pan_blocked = button->down && ui_is_over_panel(&app->ui, button->x, button->y);
-        if (button->down && button->button == SDL_BUTTON_RIGHT) {
-            ui_capture_click(&app->ui, button->x, button->y, SDL_BUTTON_RIGHT);
+        bool over_panel = ui_is_over_panel(&app->ui, button->x, button->y);
+        app->pan_blocked = button->down && over_panel;
+        if (button->button != SDL_BUTTON_RIGHT) {
+            return;
+        }
+        if (button->down) {
+            bool captured = ui_capture_click(&app->ui, button->x, button->y, SDL_BUTTON_RIGHT);
+            /* On the map, a right click steps back, unless it was a drag to pan. */
+            app->right_click_pending = !captured && !over_panel;
+            app->right_down_x = button->x;
+            app->right_down_y = button->y;
+        } else if (app->right_click_pending) {
+            app->right_click_pending = false;
+            float dx = button->x - app->right_down_x, dy = button->y - app->right_down_y;
+            if (dx * dx + dy * dy <= APP_DRAG_THRESHOLD * APP_DRAG_THRESHOLD) {
+                step_back(app);
+            }
         }
         return;
     }
@@ -566,9 +664,9 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
             game_place_structure_rect(&app->game, app->structure_type, x0, y0, x1, y1);
         }
     } else if (app->tool == APP_TOOL_STOCKPILE) {
-        apply_stockpile_tool(app, button->x, button->y, additive);
+        apply_stockpile_tool(app, button->x, button->y);
     } else if (app->tool == APP_TOOL_GATHER) {
-        apply_gather_tool(app, button->x, button->y, additive);
+        apply_gather_tool(app, button->x, button->y);
     } else if (app->box_selecting) {
         select_in_box(app, app->drag_start_x, app->drag_start_y, button->x, button->y, additive);
     } else {
@@ -623,10 +721,10 @@ static void update_camera(App *app, float dt)
 
     const bool *keys = SDL_GetKeyboardState(NULL);
     /* Physical W/A/S/D positions (scancodes): ZQSD on AZERTY keyboards. */
-    float dx = (float)(keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT]) -
-               (float)(keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT]);
-    float dy = (float)(keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN]) -
-               (float)(keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP]);
+    float dx = (float)(keys[APP_KEY_RIGHT] || keys[SDL_SCANCODE_RIGHT]) -
+               (float)(keys[APP_KEY_LEFT] || keys[SDL_SCANCODE_LEFT]);
+    float dy = (float)(keys[APP_KEY_DOWN] || keys[SDL_SCANCODE_DOWN]) -
+               (float)(keys[APP_KEY_UP] || keys[SDL_SCANCODE_UP]);
     if (dx != 0.0f || dy != 0.0f) {
         float speed = APP_PAN_SPEED * dt;
         if (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) {
@@ -682,6 +780,10 @@ static void render_frame(App *app)
         render_tile_outline(app->renderer, &app->camera, app->hover_x, app->hover_y,
                             HOVER_COLOR);
     }
+    if (app->structure_selected) {
+        render_tile_selection(app->renderer, &app->camera, app->selected_structure_x,
+                              app->selected_structure_y);
+    }
     hud_draw_world_labels(app);
     if (app->tool == APP_TOOL_BUILD) {
         if (app->hover_valid) {
@@ -706,7 +808,7 @@ static void render_frame(App *app)
         SDL_GetMouseState(&mouse_x, &mouse_y);
         int x0, y0, x1, y1;
         tool_rect(app, mouse_x, mouse_y, &x0, &y0, &x1, &y1);
-        bool remove = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+        bool remove = zone_tool_removes(app);
         if (app->tool == APP_TOOL_STOCKPILE) {
             render_stockpile_area(app->renderer, &app->camera, x0, y0, x1, y1, remove);
         } else if (app->tool == APP_TOOL_GATHER) {
@@ -753,6 +855,7 @@ void app_run(App *app)
         prune_stockpile_selection(app);
         prune_station_selection(app);
         prune_gather_zone_selection(app);
+        prune_structure_selection(app);
         update_fps(app, dt);
         render_frame(app);
     }

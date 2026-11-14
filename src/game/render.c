@@ -793,10 +793,23 @@ static void zone_icon(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color color)
     outline(renderer, area, 2.0f, color);
 }
 
+/* Zone icon with a "minus" badge: tiles taken out of zones. */
+static void zone_remove_icon(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color color)
+{
+    zone_icon(renderer, rect, color);
+    float w = rect.w, h = rect.h;
+    SDL_FRect badge = {rect.x + floorf(w * 0.22f), rect.y + floorf(h * 0.42f), floorf(w * 0.56f),
+                       SDL_max(3.0f, floorf(h * 0.16f))};
+    fill_outlined(renderer, badge, STOCKPILE_REMOVE_COLOR);
+    batch_flush(renderer);
+}
+
 void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
 {
     float w = rect.w, h = rect.h;
     switch (icon) {
+    case RENDER_ICON_GATHER_ZONE_REMOVE: zone_remove_icon(renderer, rect, GATHER_ZONE_COLOR); break;
+    case RENDER_ICON_STOCKPILE_REMOVE: zone_remove_icon(renderer, rect, STOCKPILE_COLOR); break;
     case RENDER_ICON_GATHER_ZONE: {
         zone_icon(renderer, rect, GATHER_ZONE_COLOR);
         /* A sapling and a stone. */
@@ -877,6 +890,11 @@ void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, in
                       floorf(bottom) - floorf(top)};
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
     SDL_RenderRect(renderer, &rect);
+}
+
+void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, int y)
+{
+    outline(renderer, tile_rect(camera, x, y), 2.0f, SELECTION_COLOR);
 }
 
 /* ---- Plants and colonists ------------------------------------------------ */

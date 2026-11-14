@@ -59,6 +59,7 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Dirt and knapping debris: needs a dirt layer, and injuries (M6) for the sharp debris
 - [ ] Bills: worker level filter (minimum/maximum knowledge level), ingredient search radius, pausing a bill; "until N in stock" counting only stored items, once hauling keeps up
 - [ ] Workstations and blueprints on plants: clear the plant first (today a station may be placed on a bush or grass)
+- [x] Zone editing: a rectangle over zones of the same kind merges them (the selected one, else the oldest, keeps its settings); removal tools in the build menu take tiles out of zones (Shift+drag still works)
 - [ ] Gathering zones: forbid tiles under stockpiles and workstations, or decide how they mix; a zone priority; show the job under way when hovering a tile
 - [ ] Tools (next): speed factors on orders and recipes, grade factor, wear and breaking (a cobble used as a hammer does not wear yet: cobbles are not damageable); swapping for a better tool; the detour in job search
 - [ ] Starting settlers get 1 to 30 points in a few related knowledges (once non-starting knowledges exist)
@@ -72,7 +73,7 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Room detection, roofs (lean-to, natural rock roof over caves)
 - [ ] Knowledge spreading: conversation, apprenticeship, fading and loss; only discovered knowledges shown in the colonist inspector
 - [x] UI framework: buttons, panels, tooltips, windows sized to their content (title bar to drag, × to close, stacking order, scroll bar and wheel when too tall), measured layouts that adapt to text length
-- [x] Bottom left menus: Build (workstations, zones, orders as icon buttons with tooltips: name, description, cost, shortcut), Work, ? (controls help, F1); the tile inspector above them; Escape steps back (tool, menu, front window, quit)
+- [x] Bottom left menus: Build (workstations, zones, orders as icon buttons with tooltips: name, description, cost, shortcut), Work, ? (controls help, F1); the tile inspector above them; Escape or a right click (not a pan) steps back (drag under way, tool, menu, front window) and never quits; A (AZERTY) / Q (QWERTY) builds another of what is selected (zone, workstation, structure; structures and sites can be selected)
 - [ ] UI: horizontal scrolling (the work grid is wider than small screens), windows remembering their position between sessions, a shortcut shown for the workstation buttons (E cycles them)
 
 ## M4: Survival
@@ -123,6 +124,7 @@ Tick items as they land and add newly discovered tasks.
 ## Technical backlog
 
 - [ ] Remember the chosen language between sessions
+- [x] Every keyboard control by physical position (scancodes): the same layout on QWERTY, AZERTY and others, labels shown from the active layout
 - [ ] HarfBuzz + font fallback when a translation needs non-Latin scripts (would also allow re-enabling kerning, disabled because SDL_ttf mispositions kerned glyphs without HarfBuzz)
 - [ ] More plural rules (Slavic languages, Arabic) when needed
 - [x] Batch tile rendering (geometry) for large maps at low zoom; sprites come from a texture atlas

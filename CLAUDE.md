@@ -27,8 +27,10 @@ current milestone.
     concatenating fragments (word order differs between languages).
   - Numbers shown to the player use `tr_integer()` / `tr_decimal()`.
   - Developer-facing text (logs, CLI usage, fatal startup errors) stays in English and untranslated.
-  - Keyboard: physical-position keys use scancodes (WASD = ZQSD on AZERTY);
-    mnemonic keys use keycodes. Display key names via SDL, not hardcoded.
+  - Keyboard: every control is a physical position (scancode, `APP_KEY_*` in
+    `src/game/app.h`), so controls are laid out the same on any keyboard
+    (WASD on QWERTY = ZQSD on AZERTY). Display key names with
+    `app_key_name()` (the label on the active layout), never hardcoded.
 
 ## Commands
 
