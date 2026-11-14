@@ -34,14 +34,32 @@
 
 /*
  * Carrying, by hand (no container yet): a colonist picks up at most
- * COLONIST_CARRY_BULK of bulk and COLONIST_CARRY_WEIGHT kilograms. A single
- * item over either limit is still taken (dragged). Above the weight limit,
- * walking slows down in proportion (limit / load), never below
+ * COLONIST_CARRY_BULK of bulk and a weight set by its strength
+ * (COLONIST_CARRY_WEIGHT kilograms at COLONIST_STRENGTH_STANDARD,
+ * COLONIST_CARRY_WEIGHT_PER_STRENGTH more or less per point). A single item
+ * over either limit is still taken (dragged). Above the weight limit, walking
+ * slows down in proportion (limit / load), never below
  * COLONIST_MIN_LOAD_SPEED.
  */
 #define COLONIST_CARRY_WEIGHT 40.0f
+#define COLONIST_CARRY_WEIGHT_PER_STRENGTH 2.0f
 #define COLONIST_CARRY_BULK 60.0f
 #define COLONIST_MIN_LOAD_SPEED 0.1f
+
+/*
+ * Strength, from COLONIST_STRENGTH_MIN to COLONIST_STRENGTH_MAX. Rolled at
+ * creation: COLONIST_STRENGTH_BASE plus two dice of 0..COLONIST_STRENGTH_DIE
+ * (10 on average), minus one point per COLONIST_STRENGTH_AGE_STEP years past
+ * COLONIST_STRENGTH_PEAK_AGE. Later, health (injuries, hunger) will lower
+ * what a colonist can carry without changing its strength.
+ */
+#define COLONIST_STRENGTH_MIN 1
+#define COLONIST_STRENGTH_MAX 20
+#define COLONIST_STRENGTH_STANDARD 10
+#define COLONIST_STRENGTH_BASE 4
+#define COLONIST_STRENGTH_DIE 6
+#define COLONIST_STRENGTH_PEAK_AGE 40
+#define COLONIST_STRENGTH_AGE_STEP 6
 
 /* Needs go from 1 (fully satisfied) to 0. */
 #define NEED_FOOD_DECAY_PER_TICK (1.0f / (36.0f * TICKS_PER_HOUR))
@@ -139,7 +157,8 @@ typedef struct Colonist {
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
      * for `haul_destination`. */
     bool haul_delivering;
-    float max_carry_weight; /* Kilograms carried without slowing down. */
+    int strength; /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
+    float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
     float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
     uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */
     uint8_t skills[SKILL_COUNT]; /* Levels, SKILL_LEVEL_MIN..SKILL_LEVEL_MAX. */
@@ -206,6 +225,16 @@ bool colonist_is_moving(const Colonist *colonist);
 
 /* Interpolated position of the colonist's center, in world (tile) coordinates. */
 void colonist_position(const Colonist *colonist, float *x, float *y);
+
+/* Kilograms carried without slowing down at a strength (clamped to the valid range). */
+float colonist_carry_weight_for_strength(int strength);
+
+/* Random strength for a new colonist of this age. */
+int colonist_random_strength(Rng *rng, int age);
+
+/* Sets the strength and the weight limit that follows from it. Fails on a
+ * value out of range. */
+bool colonist_set_strength(Colonist *colonist, int strength);
 
 /* Kilograms the colonist is carrying. */
 float colonist_carried_weight(const Colonist *colonist);

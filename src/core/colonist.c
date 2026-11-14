@@ -47,7 +47,7 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y)
     for (int work = 0; work < WORK_TYPE_COUNT; work++) {
         colonist->work_priorities[work] = WORK_PRIORITY_DEFAULT;
     }
-    colonist->max_carry_weight = COLONIST_CARRY_WEIGHT;
+    colonist_set_strength(colonist, COLONIST_STRENGTH_STANDARD);
     colonist->max_carry_bulk = COLONIST_CARRY_BULK;
 }
 
@@ -121,6 +121,33 @@ float colonist_skill_progress(const Colonist *colonist, SkillType skill)
     }
     float needed = skill_xp_to_next_level(colonist->skills[skill]);
     return needed > 0.0f ? clampf(colonist->skill_xp[skill] / needed, 0.0f, 1.0f) : 0.0f;
+}
+
+float colonist_carry_weight_for_strength(int strength)
+{
+    strength = clampi(strength, COLONIST_STRENGTH_MIN, COLONIST_STRENGTH_MAX);
+    return COLONIST_CARRY_WEIGHT +
+           COLONIST_CARRY_WEIGHT_PER_STRENGTH * (float)(strength - COLONIST_STRENGTH_STANDARD);
+}
+
+int colonist_random_strength(Rng *rng, int age)
+{
+    int strength = COLONIST_STRENGTH_BASE + rng_range_i32(rng, 0, COLONIST_STRENGTH_DIE) +
+                   rng_range_i32(rng, 0, COLONIST_STRENGTH_DIE);
+    if (age > COLONIST_STRENGTH_PEAK_AGE) {
+        strength -= (age - COLONIST_STRENGTH_PEAK_AGE) / COLONIST_STRENGTH_AGE_STEP;
+    }
+    return clampi(strength, COLONIST_STRENGTH_MIN, COLONIST_STRENGTH_MAX);
+}
+
+bool colonist_set_strength(Colonist *colonist, int strength)
+{
+    if (strength < COLONIST_STRENGTH_MIN || strength > COLONIST_STRENGTH_MAX) {
+        return false;
+    }
+    colonist->strength = strength;
+    colonist->max_carry_weight = colonist_carry_weight_for_strength(strength);
+    return true;
 }
 
 float colonist_carried_weight(const Colonist *colonist)

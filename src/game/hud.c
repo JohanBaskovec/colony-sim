@@ -265,6 +265,10 @@ static void build_selection_panel(App *app, Panel *panel)
     tr_integer(age, sizeof(age), colonist->age);
     panel_add_text(panel, colonist->name);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.age"), age);
+    char strength[16], carry[32];
+    tr_integer(strength, sizeof(strength), colonist->strength);
+    format_weight(carry, sizeof(carry), colonist->max_carry_weight);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.strength"), strength, carry);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
               tr(colonist_activity_key(colonist)));
     if (colonist->carried.count > 0) {

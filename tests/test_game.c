@@ -188,7 +188,10 @@ static void test_hash_covers_skills_and_carried_condition(void)
     uint64_t skilled = game_hash(&game);
     CHECK(skilled != before);
     colonist_gain_skill_xp(colonist, SKILL_GATHERING, 10.0f);
-    CHECK(game_hash(&game) != skilled);
+    uint64_t learned = game_hash(&game);
+    CHECK(learned != skilled);
+    colonist_set_strength(colonist, colonist->strength == 5 ? 6 : 5);
+    CHECK(game_hash(&game) != learned);
 
     colonist->carried = item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60);
     uint64_t carrying = game_hash(&game);

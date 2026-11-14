@@ -27,7 +27,8 @@ static bool init_flat_game(Game *game)
     return true;
 }
 
-/* Spawns a colonist with every need satisfied that only hauls. */
+/* Spawns a colonist with every need satisfied and standard strength that
+ * only hauls. */
 static Colonist *spawn_hauler(Game *game, int x, int y)
 {
     Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
@@ -39,6 +40,7 @@ static Colonist *spawn_hauler(Game *game, int x, int y)
             colonist->work_priorities[work] = WORK_PRIORITY_DISABLED;
         }
         colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DEFAULT;
+        colonist_set_strength(colonist, COLONIST_STRENGTH_STANDARD);
     }
     return colonist;
 }

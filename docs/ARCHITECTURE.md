@@ -210,9 +210,12 @@ wants (otherwise good wood heading for an ordinary zone would drag along wood
 that belongs in a better one). Only one stack is reserved at a time; if it
 vanishes, the hauler delivers what it holds (`Colonist.haul_delivering`
 switches from collecting to delivering). Each
-colonist has a `max_carry_bulk` and a `max_carry_weight` (60 and 40 kg by
-default, by hand): `colonist_carry_capacity()` is the number of units within
-both limits, at least one (an item too big is dragged). Above the weight
+colonist has a `max_carry_bulk` (60, by hand) and a `max_carry_weight` that
+follows from its **strength** (1 to 20, rolled at creation: 10 on average,
+a point less per 6 years past 40; 40 kg at strength 10, 2 kg per point, so
+22 to 60 kg; `colonist_set_strength()` keeps both in sync). Health will later
+lower what can be carried without changing the strength.
+`colonist_carry_capacity()` is the number of units within both limits, at least one (an item too big is dragged). Above the weight
 limit, walking speed is multiplied by limit / load (at least
 `COLONIST_MIN_LOAD_SPEED`); it does not happen with today's items, but will
 with huge ones and equipment. If the destination stops

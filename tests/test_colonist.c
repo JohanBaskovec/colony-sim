@@ -30,8 +30,8 @@ static bool init_flat_game(Game *game)
     return true;
 }
 
-/* Spawns a colonist with every need satisfied and standard skills (work at
- * the normal speed, so that timings are predictable). */
+/* Spawns a colonist with every need satisfied, standard skills (work at the
+ * normal speed, so that timings are predictable) and standard strength. */
 static Colonist *spawn_rested(Game *game, int x, int y)
 {
     Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
@@ -42,6 +42,7 @@ static Colonist *spawn_rested(Game *game, int x, int y)
         for (int skill = 0; skill < SKILL_COUNT; skill++) {
             colonist_set_skill_level(colonist, (SkillType)skill, SKILL_LEVEL_STANDARD);
         }
+        colonist_set_strength(colonist, COLONIST_STRENGTH_STANDARD);
     }
     return colonist;
 }
@@ -999,6 +1000,71 @@ static void test_carry_capacity(void)
     colonist_free(&colonist);
 }
 
+static void test_strength_sets_carry_weight(void)
+{
+    CHECK_NEAR(colonist_carry_weight_for_strength(COLONIST_STRENGTH_STANDARD),
+               COLONIST_CARRY_WEIGHT, 1e-6);
+    CHECK_NEAR(colonist_carry_weight_for_strength(COLONIST_STRENGTH_MIN), 22.0, 1e-4);
+    CHECK_NEAR(colonist_carry_weight_for_strength(COLONIST_STRENGTH_MAX), 60.0, 1e-4);
+    CHECK_NEAR(colonist_carry_weight_for_strength(-5), 22.0, 1e-4);
+    CHECK_NEAR(colonist_carry_weight_for_strength(99), 60.0, 1e-4);
+
+    Colonist colonist;
+    colonist_init(&colonist, "Ada", 30, 0, 0);
+    CHECK_EQ_INT(colonist.strength, COLONIST_STRENGTH_STANDARD);
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE), 2); /* 40 kg: two 20 kg stones. */
+    REQUIRE(colonist_set_strength(&colonist, COLONIST_STRENGTH_MAX));
+    CHECK_NEAR(colonist.max_carry_weight, 60.0, 1e-4);
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE), 3);
+    REQUIRE(colonist_set_strength(&colonist, COLONIST_STRENGTH_MIN));
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE), 1);
+    /* Bulk does not depend on strength: still 60 portions of berries. */
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BERRIES), 60);
+    CHECK(!colonist_set_strength(&colonist, 0));
+    CHECK(!colonist_set_strength(&colonist, COLONIST_STRENGTH_MAX + 1));
+    CHECK_EQ_INT(colonist.strength, COLONIST_STRENGTH_MIN);
+    colonist_free(&colonist);
+}
+
+static void test_random_strength(void)
+{
+    Rng rng;
+    rng_seed(&rng, 21, 4);
+    long young_total = 0, old_total = 0;
+    int lowest = COLONIST_STRENGTH_MAX, highest = COLONIST_STRENGTH_MIN;
+    for (int i = 0; i < 2000; i++) {
+        int young = colonist_random_strength(&rng, 25);
+        int old = colonist_random_strength(&rng, 60);
+        REQUIRE(young >= COLONIST_STRENGTH_MIN && young <= COLONIST_STRENGTH_MAX);
+        REQUIRE(old >= COLONIST_STRENGTH_MIN && old <= COLONIST_STRENGTH_MAX);
+        young_total += young;
+        old_total += old;
+        lowest = young < lowest ? young : lowest;
+        highest = young > highest ? young : highest;
+    }
+    /* Average 10 before 40; three points less at 60. */
+    CHECK_NEAR((double)young_total / 2000.0, 10.0, 0.3);
+    CHECK_NEAR((double)old_total / 2000.0, 7.0, 0.3);
+    CHECK_EQ_INT(lowest, COLONIST_STRENGTH_BASE);
+    CHECK_EQ_INT(highest, COLONIST_STRENGTH_BASE + 2 * COLONIST_STRENGTH_DIE);
+
+    /* Spawned colonists get a strength and the matching weight limit. */
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    bool varied = false;
+    int first = -1;
+    for (int i = 0; i < 12; i++) {
+        Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 10 + i, 12));
+        REQUIRE(colonist != NULL);
+        CHECK_NEAR(colonist->max_carry_weight,
+                   colonist_carry_weight_for_strength(colonist->strength), 1e-6);
+        first = first < 0 ? colonist->strength : first;
+        varied = varied || colonist->strength != first;
+    }
+    CHECK(varied);
+    game_shutdown(&game);
+}
+
 static void test_night_hours(void)
 {
     CHECK(colonist_is_night(0));
@@ -1298,6 +1364,8 @@ int main(void)
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);
     RUN_TEST(test_carry_capacity);
+    RUN_TEST(test_strength_sets_carry_weight);
+    RUN_TEST(test_random_strength);
     RUN_TEST(test_night_hours);
     RUN_TEST(test_no_search_when_region_has_no_water);
     RUN_TEST(test_no_search_when_orders_are_out_of_reach);

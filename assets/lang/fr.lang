@@ -120,6 +120,7 @@ need.rest.low = A sommeil
 need.rest.critical = À bout de forces
 
 hud.colonist.age = Âge : {0}
+hud.colonist.strength = Force : {0} (porte jusqu’à {1})
 hud.colonist.activity = Activité : {0}
 hud.colonist.carrying = Porte : {0} ×{1} ({2})
 hud.colonist.need = {0} : {1} %

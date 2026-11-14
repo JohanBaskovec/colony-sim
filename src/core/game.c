@@ -100,6 +100,7 @@ EntityId game_spawn_colonist(Game *game, int x, int y)
     for (int skill = 0; skill < SKILL_COUNT; skill++) {
         colonist_set_skill_level(colonist, (SkillType)skill, skill_random_level(&game->rng));
     }
+    colonist_set_strength(colonist, colonist_random_strength(&game->rng, colonist->age));
     return id;
 }
 
@@ -357,6 +358,7 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, c->skills, sizeof(c->skills));
         hash = hash_fnv1a64(hash, c->skill_xp, sizeof(c->skill_xp));
         hash = hash_fnv1a64(hash, &c->haul_delivering, sizeof(c->haul_delivering));
+        hash = hash_fnv1a64(hash, &c->strength, sizeof(c->strength));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));

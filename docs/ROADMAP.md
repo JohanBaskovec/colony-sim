@@ -45,7 +45,8 @@ Tick items as they land and add newly discovered tasks.
 - [x] Skills also change work speed: ×0.5 at level 0, ×1 at level 10, ×1.5 at level 20 (shown in the colonist inspector)
 - [x] Haul more than one stack per trip: after a pickup, a hauler with room left collects nearby matching stacks bound for the same storage tile (one type and grade per load)
 - [ ] Haul towards construction sites (M3); loads of mixed items once containers exist
-- [ ] Carrying capacity from strength/health; containers (baskets, sledges) and worn equipment adding bulk and weight
+- [x] Strength (1 to 20, rolled at creation, lower past 40): sets the weight a colonist carries without slowing down (22 to 60 kg, 40 kg at 10); shown in the colonist inspector
+- [ ] Carrying capacity also from health (M6); containers (baskets, sledges) and worn equipment adding bulk and weight, once they can be made
 
 ## M3: Building
 

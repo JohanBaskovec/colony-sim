@@ -139,6 +139,8 @@ need.rest.critical = Exhausted
 
 # Colonist inspector. {0} = age
 hud.colonist.age = Age: {0}
+# {0} = strength (1 to 20), {1} = weight carried without slowing down (e.g. 44 kg)
+hud.colonist.strength = Strength: {0} (carries up to {1})
 # {0} = activity name
 hud.colonist.activity = Activity: {0}
 # {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
