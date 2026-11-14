@@ -68,6 +68,43 @@ static void test_tiles_are_valid_and_consistent(void)
     map_free(&map);
 }
 
+/* Stones: none on sand or water, 0 to MAP_STONES_MAX on stony ground, with
+ * every count from 0 to the most turning up, and flint on some tiles only. */
+static void test_stones(void)
+{
+    long tiles = 0, flint_tiles = 0;
+    long seen[MAP_STONES_MAX + 1] = {0};
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                int cobbles = map_stones(&map, x, y, ITEM_COBBLE);
+                int flint = map_stones(&map, x, y, ITEM_FLINT);
+                Terrain type = (Terrain)map.terrain[map_index(&map, x, y)];
+                const TerrainDef *terrain = terrain_def(type);
+                if (!terrain->stony) {
+                    CHECK_EQ_INT(cobbles + flint, 0);
+                    continue;
+                }
+                CHECK(cobbles + flint <= MAP_STONES_MAX);
+                seen[cobbles + flint]++;
+                tiles++;
+                flint_tiles += flint > 0;
+            }
+        }
+        map_free(&map);
+    }
+    for (int count = 0; count <= MAP_STONES_MAX; count++) {
+        CHECK(seen[count] > 0);
+    }
+    CHECK(flint_tiles > 0);
+    CHECK(flint_tiles < tiles / 4);
+    CHECK(!terrain_def(TERRAIN_SAND)->stony);
+    CHECK(terrain_def(TERRAIN_GRAVEL)->stony);
+}
+
 /* Sanity check of the overall composition over several seeds. */
 static void test_maps_are_mostly_usable_land(void)
 {
@@ -100,5 +137,6 @@ int main(void)
     RUN_TEST(test_invalid_size_fails);
     RUN_TEST(test_tiles_are_valid_and_consistent);
     RUN_TEST(test_maps_are_mostly_usable_land);
+    RUN_TEST(test_stones);
     return test_summary();
 }

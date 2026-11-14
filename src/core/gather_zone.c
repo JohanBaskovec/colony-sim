@@ -165,10 +165,8 @@ bool gather_stone_ground(const Map *map, int x, int y)
         return false;
     }
     size_t index = map_index(map, x, y);
-    Terrain terrain = (Terrain)map->terrain[index];
     return map->rock[index] == ROCK_NONE && map->structure[index] == STRUCTURE_NONE &&
-           (terrain == TERRAIN_SOIL || terrain == TERRAIN_RICH_SOIL ||
-            terrain == TERRAIN_GRAVEL || terrain == TERRAIN_ROUGH_STONE);
+           terrain_def((Terrain)map->terrain[index])->stony;
 }
 
 /* Clips a rectangle given by two corners in any order to the zone layer. */
@@ -506,10 +504,19 @@ static bool ripe_enough(const GatherZone *zone, GatherResource resource, const P
     return !zone->orders[resource].ripe_only || plant->growth >= 1.0f;
 }
 
-/* Whether the tile holds something for the job, given what the zone wants. */
-static bool job_open(const GatherZone *zone, const Map *map, int x, int y, GatherJob job)
+/* Stones of a resource's type on a tile (0 for the other resources). */
+static int stones_of(const Map *map, int x, int y, GatherResource resource)
 {
-    if ((zone->wanted & JOB_DEFS[job].resources) == 0 || !gather_zone_can_cover(map, x, y)) {
+    const GatherResourceDef *def = &RESOURCE_DEFS[resource];
+    return def->job == GATHER_JOB_STONES ? map_stones(map, x, y, def->item) : 0;
+}
+
+/* Whether the tile holds something for the job, among `resources` (only
+ * stones care which: a tile may hold cobbles and no flint). */
+static bool tile_holds(const GatherZone *zone, const Map *map, int x, int y, GatherJob job,
+                       GatherResourceMask resources)
+{
+    if (resources == 0 || !gather_zone_can_cover(map, x, y)) {
         return false;
     }
     const Plant *plant = &map->plants[map_index(map, x, y)];
@@ -527,9 +534,35 @@ static bool job_open(const GatherZone *zone, const Map *map, int x, int y, Gathe
         return plant->type == PLANT_TREE && ripe_enough(zone, GATHER_WOOD, plant);
     case GATHER_JOB_STONES:
         return gather_stone_ground(map, x, y) &&
-               ((zone->wanted & GATHER_RESOURCE_BIT(GATHER_COBBLES)) ||
-                map_flint_chance(map, x, y) > 0);
+               (((resources & GATHER_RESOURCE_BIT(GATHER_COBBLES)) &&
+                 stones_of(map, x, y, GATHER_COBBLES) > 0) ||
+                ((resources & GATHER_RESOURCE_BIT(GATHER_FLINT)) &&
+                 stones_of(map, x, y, GATHER_FLINT) > 0));
     default: return false;
+    }
+}
+
+/* Whether the tile holds something for the job that the zone wants. */
+static bool job_open(const GatherZone *zone, const Map *map, int x, int y, GatherJob job)
+{
+    return tile_holds(zone, map, x, y, job, zone->wanted & JOB_DEFS[job].resources);
+}
+
+/* Items a plant job would give on a tile now (0 for stones and others). */
+static int plant_yield(const Map *map, int x, int y, GatherJob job)
+{
+    const Plant *plant = &map->plants[map_index(map, x, y)];
+    const PlantDef *def = plant_def((PlantType)plant->type);
+    switch (job) {
+    case GATHER_JOB_HARVEST: return (int)((float)def->harvest_yield * plant->growth + 0.5f);
+    case GATHER_JOB_BRANCHES: return plant_stock_available(plant, PLANT_STOCK_BRANCHES);
+    case GATHER_JOB_TWIGS: return plant_stock_available(plant, PLANT_STOCK_TWIGS);
+    case GATHER_JOB_CUT_GRASS: {
+        int armfuls = (int)(CUT_GRASS_YIELD * plant->growth + 0.5f);
+        return armfuls > 1 ? armfuls : 1;
+    }
+    case GATHER_JOB_CHOP: return (int)((float)def->cut_yield * plant->growth + 0.5f);
+    default: return 0;
     }
 }
 
@@ -554,21 +587,29 @@ GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y
     return GATHER_JOB_NONE;
 }
 
-int gather_zone_flint_cells(const GatherZones *zones, const Map *map, int index)
+void gather_zone_available(const GatherZones *zones, const Map *map, int index,
+                           long available[GATHER_RESOURCE_COUNT])
 {
+    memset(available, 0, sizeof(long) * GATHER_RESOURCE_COUNT);
     if (!is_valid(zones, index)) {
-        return 0;
+        return;
     }
-    int count = 0;
+    const GatherZone *zone = &zones->list[index];
     for (int y = 0; y < zones->height; y++) {
         for (int x = 0; x < zones->width; x++) {
-            if (zones->zone[index_of(zones, x, y)] == index + 1 &&
-                gather_stone_ground(map, x, y) && map_flint_chance(map, x, y) > 0) {
-                count++;
+            if (zones->zone[index_of(zones, x, y)] != index + 1) {
+                continue;
+            }
+            for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+                GatherJob job = RESOURCE_DEFS[r].job;
+                if (!tile_holds(zone, map, x, y, job, GATHER_RESOURCE_BIT(r))) {
+                    continue;
+                }
+                available[r] += job == GATHER_JOB_STONES ? stones_of(map, x, y, (GatherResource)r)
+                                                         : plant_yield(map, x, y, job);
             }
         }
     }
-    return count;
 }
 
 float gather_job_work_needed(const Map *map, int x, int y, GatherJob job)
@@ -594,17 +635,38 @@ float gather_job_work_needed(const Map *map, int x, int y, GatherJob job)
     }
 }
 
-/* Carries out a completed job on the map; returns what it gives (count 0: nothing). */
-static ItemType complete(Map *map, int x, int y, GatherJob job, Rng *rng, int *count)
+/* The stone a gatherer finds on a tile among the `wanted` types it holds:
+ * picked at random in proportion to their numbers (the first one without
+ * `rng`). ITEM_NONE when there is none. */
+static ItemType find_stone(const Map *map, int x, int y, GatherResourceMask wanted, Rng *rng)
+{
+    int cobbles = wanted & GATHER_RESOURCE_BIT(GATHER_COBBLES)
+                      ? stones_of(map, x, y, GATHER_COBBLES)
+                      : 0;
+    int flint = wanted & GATHER_RESOURCE_BIT(GATHER_FLINT) ? stones_of(map, x, y, GATHER_FLINT)
+                                                            : 0;
+    if (cobbles + flint == 0) {
+        return ITEM_NONE;
+    }
+    if (cobbles == 0 || (flint > 0 && rng != NULL && rng_range_i32(rng, 1, cobbles + flint) <=
+                                                         flint)) {
+        return ITEM_FLINT;
+    }
+    return ITEM_COBBLE;
+}
+
+/* Carries out a completed job on the map; returns what it gives (count 0:
+ * nothing). Stones are taken among the `wanted` types. */
+static ItemType complete(Map *map, int x, int y, GatherJob job, GatherResourceMask wanted,
+                         Rng *rng, int *count)
 {
     Plant *plant = &map->plants[map_index(map, x, y)];
     const PlantDef *def = plant_def((PlantType)plant->type);
     ItemType item = ITEM_NONE;
-    *count = 0;
+    *count = plant_yield(map, x, y, job);
     switch (job) {
     case GATHER_JOB_HARVEST:
         item = def->harvest_item;
-        *count = (int)((float)def->harvest_yield * plant->growth + 0.5f);
         plant->growth = PLANT_GROWTH_AFTER_PICKING;
         break;
     case GATHER_JOB_BRANCHES:
@@ -614,26 +676,18 @@ static ItemType complete(Map *map, int x, int y, GatherJob job, Rng *rng, int *c
         *count = plant_take_stock(plant, stock, INT16_MAX);
         break;
     }
-    case GATHER_JOB_CUT_GRASS: {
-        int armfuls = (int)(CUT_GRASS_YIELD * plant->growth + 0.5f);
+    case GATHER_JOB_CUT_GRASS:
         item = ITEM_FRESH_GRASS;
-        *count = armfuls > 1 ? armfuls : 1;
         plant->growth = 0.0f;
         break;
-    }
     case GATHER_JOB_CHOP:
         item = def->cut_item;
-        *count = (int)((float)def->cut_yield * plant->growth + 0.5f);
         memset(plant, 0, sizeof(*plant));
         break;
-    case GATHER_JOB_STONES: {
-        /* On a flint patch, some of the stones are flint (randomness only drawn there). */
-        int flint = map_flint_chance(map, x, y);
-        item = flint > 0 && rng != NULL && rng_range_i32(rng, 0, 99) < flint ? ITEM_FLINT
-                                                                             : ITEM_COBBLE;
-        *count = 1;
+    case GATHER_JOB_STONES:
+        item = find_stone(map, x, y, wanted, rng);
+        *count = map_take_stone(map, x, y, item) ? 1 : 0;
         break;
-    }
     default: break;
     }
     return item;
@@ -669,11 +723,11 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
     }
     clear_progress(zones, index);
     int count;
-    ItemType item = complete(map, x, y, job, rng, &count);
+    ItemType item = complete(map, x, y, job, zone->wanted, rng, &count);
     GatherResource resource = resource_of(job, item);
     if (resource == GATHER_RESOURCE_COUNT || count <= 0 ||
         !(zone->wanted & GATHER_RESOURCE_BIT(resource))) {
-        return true; /* Nothing, or a stone nobody wants: left where it lay. */
+        return true; /* Nothing. */
     }
     if (items != NULL) {
         ItemStack stack = knowledge_product(item, count, level, rng);
@@ -732,7 +786,7 @@ void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng 
     }
     for (int i = 0; i < job_count; i++) {
         int count;
-        ItemType item = complete(map, x, y, jobs[i], rng, &count);
+        ItemType item = complete(map, x, y, jobs[i], 0, rng, &count);
         if (item != ITEM_NONE && count > 0 && items != NULL) {
             items_drop(items, map, x, y, knowledge_product(item, count, level, rng));
         }

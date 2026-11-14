@@ -18,6 +18,8 @@ static bool init_flat_game(Game *game)
     Map *map = &game->map;
     for (size_t i = 0; i < map_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_SOIL;
+        map->cobbles[i] = MAP_STONES_MAX; /* Cobbles everywhere, no flint. */
+        map->flint[i] = 0;
         map->rock[i] = ROCK_NONE;
         map->plants[i].type = PLANT_NONE;
         map->plants[i].growth = 0.0f;

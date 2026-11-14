@@ -258,11 +258,22 @@ static void build_tile_panel(App *app, Panel *panel)
                   tr(plant_def((PlantType)map->plants[index].type)->name_key));
     }
 
-    /* Flint in the ground: what gathering stones may turn up. */
-    int flint = map_flint_chance(map, x, y);
-    if (flint > 0) {
-        panel_add_text(panel, tr(flint >= MAP_FLINT_RICH_CHANCE ? "hud.tile.flint_plenty"
-                                                                 : "hud.tile.flint_some"));
+    /* Stones in the ground: what gathering stones may still find. */
+    if (gather_stone_ground(map, x, y)) {
+        static const ItemType STONES[] = {ITEM_COBBLE, ITEM_FLINT};
+        bool any = false;
+        for (size_t i = 0; i < SDL_arraysize(STONES); i++) {
+            int count = map_stones(map, x, y, STONES[i]);
+            if (count > 0) {
+                tr_integer(a, sizeof(a), count);
+                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.ground_stones"),
+                          tr(item_def(STONES[i])->name_key), a);
+                any = true;
+            }
+        }
+        if (!any) {
+            panel_add_text(panel, tr("hud.tile.no_stones"));
+        }
     }
 
     const Stockpile *stockpile =

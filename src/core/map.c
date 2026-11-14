@@ -7,13 +7,14 @@
 #include <string.h>
 
 static const TerrainDef TERRAIN_DEFS[TERRAIN_COUNT] = {
-    [TERRAIN_DEEP_WATER] = {"deep_water", N_("terrain.deep_water"), 0.0f, 0.0f, false},
-    [TERRAIN_SHALLOW_WATER] = {"shallow_water", N_("terrain.shallow_water"), 3.0f, 0.0f, false},
-    [TERRAIN_SAND] = {"sand", N_("terrain.sand"), 1.4f, 0.1f, true},
-    [TERRAIN_SOIL] = {"soil", N_("terrain.soil"), 1.0f, 1.0f, true},
-    [TERRAIN_RICH_SOIL] = {"rich_soil", N_("terrain.rich_soil"), 1.0f, 1.4f, true},
-    [TERRAIN_GRAVEL] = {"gravel", N_("terrain.gravel"), 1.1f, 0.5f, true},
-    [TERRAIN_ROUGH_STONE] = {"rough_stone", N_("terrain.rough_stone"), 1.2f, 0.0f, true},
+    [TERRAIN_DEEP_WATER] = {"deep_water", N_("terrain.deep_water"), 0.0f, 0.0f, false, false},
+    [TERRAIN_SHALLOW_WATER] = {"shallow_water", N_("terrain.shallow_water"), 3.0f, 0.0f, false,
+                               false},
+    [TERRAIN_SAND] = {"sand", N_("terrain.sand"), 1.4f, 0.1f, true, false},
+    [TERRAIN_SOIL] = {"soil", N_("terrain.soil"), 1.0f, 1.0f, true, true},
+    [TERRAIN_RICH_SOIL] = {"rich_soil", N_("terrain.rich_soil"), 1.0f, 1.4f, true, true},
+    [TERRAIN_GRAVEL] = {"gravel", N_("terrain.gravel"), 1.1f, 0.5f, true, true},
+    [TERRAIN_ROUGH_STONE] = {"rough_stone", N_("terrain.rough_stone"), 1.2f, 0.0f, true, true},
 };
 
 static const RockDef ROCK_DEFS[ROCK_COUNT] = {
@@ -147,10 +148,11 @@ bool map_init(Map *map, int width, int height)
     map->terrain = malloc(count);
     map->rock = calloc(count, 1);
     map->plants = calloc(count, sizeof(Plant));
+    map->cobbles = calloc(count, 1);
     map->flint = calloc(count, 1);
     map->structure = calloc(count, 1);
-    if (map->terrain == NULL || map->rock == NULL || map->plants == NULL || map->flint == NULL ||
-        map->structure == NULL) {
+    if (map->terrain == NULL || map->rock == NULL || map->plants == NULL ||
+        map->cobbles == NULL || map->flint == NULL || map->structure == NULL) {
         map_free(map);
         return false;
     }
@@ -166,6 +168,7 @@ void map_free(Map *map)
     free(map->terrain);
     free(map->rock);
     free(map->plants);
+    free(map->cobbles);
     free(map->flint);
     free(map->structure);
     memset(map, 0, sizeof(*map));
@@ -268,6 +271,7 @@ uint64_t map_hash(const Map *map)
     size_t count = map_tile_count(map);
     hash = hash_fnv1a64(hash, map->terrain, count);
     hash = hash_fnv1a64(hash, map->rock, count);
+    hash = hash_fnv1a64(hash, map->cobbles, count);
     hash = hash_fnv1a64(hash, map->flint, count);
     hash = hash_fnv1a64(hash, map->structure, count);
     /* Hash plant fields one by one: struct padding bytes are unspecified. */
@@ -280,16 +284,41 @@ uint64_t map_hash(const Map *map)
     return hash;
 }
 
-int map_flint_chance(const Map *map, int x, int y)
+/* The layer holding stones of a type, or NULL. */
+static uint8_t *stone_layer(const Map *map, ItemType type)
 {
-    return map_in_bounds(map, x, y) ? map->flint[map_index(map, x, y)] : 0;
+    switch (type) {
+    case ITEM_COBBLE: return map->cobbles;
+    case ITEM_FLINT: return map->flint;
+    default: return NULL;
+    }
 }
 
-void map_set_flint_chance(Map *map, int x, int y, int chance)
+int map_stones(const Map *map, int x, int y, ItemType type)
 {
-    if (map_in_bounds(map, x, y)) {
-        map->flint[map_index(map, x, y)] = (uint8_t)clampi(chance, 0, MAP_FLINT_MAX_CHANCE);
+    const uint8_t *layer = stone_layer(map, type);
+    return layer != NULL && map_in_bounds(map, x, y) ? layer[map_index(map, x, y)] : 0;
+}
+
+void map_set_stones(Map *map, int x, int y, int cobbles, int flint)
+{
+    if (!map_in_bounds(map, x, y)) {
+        return;
     }
+    size_t index = map_index(map, x, y);
+    flint = clampi(flint, 0, MAP_STONES_MAX);
+    map->flint[index] = (uint8_t)flint;
+    map->cobbles[index] = (uint8_t)clampi(cobbles, 0, MAP_STONES_MAX - flint);
+}
+
+bool map_take_stone(Map *map, int x, int y, ItemType type)
+{
+    uint8_t *layer = stone_layer(map, type);
+    if (layer == NULL || !map_in_bounds(map, x, y) || layer[map_index(map, x, y)] == 0) {
+        return false;
+    }
+    layer[map_index(map, x, y)]--;
+    return true;
 }
 
 size_t map_count_plants(const Map *map, PlantType type)

@@ -149,8 +149,8 @@ hud.tile.blueprint = Plan : {0} (construit à {1} %)
 hud.tile.structure = Construction : {0}
 # {0} : matériau, {1} : déjà apporté, {2} : nécessaire.
 hud.tile.material = {0} : {1}/{2}
-hud.tile.flint_some = Un peu de silex dans le sol
-hud.tile.flint_plenty = Beaucoup de silex dans le sol
+hud.tile.ground_stones = Dans le sol : {0} ×{1}
+hud.tile.no_stones = Plus de pierres dans le sol
 hud.item_condition = Qualité : {0} · Points de vie : {1}/{2} ({3})
 hud.item_quality = Qualité : {0}
 hud.item_hit_points = Points de vie : {0}/{1} ({2})
@@ -242,7 +242,9 @@ gather_zone.mode.until = Jusqu’à {0} dans la colonie
 gather_zone.mode.forever = Sans fin
 gather_zone.progress.done = Récolté : {0}
 gather_zone.ripe_only = Seulement les plantes à pleine maturité (100 %)
-gather_zone.warning.no_flint = Cette zone ne contient pas de silex
+gather_zone.warning.none_left = Rien de cela à récolter dans cette zone pour l’instant
+gather_zone.available.one = {0} disponible
+gather_zone.available.other = {0} disponibles
 gather_zone.delete = Supprimer
 
 # Postes de travail

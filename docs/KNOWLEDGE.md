@@ -422,12 +422,16 @@ with its own use.
   flint source matters.
 - The gatherer's Gathering level sets the grade of both: a good eye picks
   good stones.
+- **Stones are limited**: each tile of stony ground (not sand) holds 0 to 20
+  stones *(tuning)*, cobbles and flint nodules, that gathering takes one by
+  one and that never come back: a gathering zone runs out of stones. The
+  tile inspector shows what is left in the ground, the zone inspector what
+  the zone holds.
 - **Flint patches**: flint is only found on some tiles. World generation
   marks them (a noise field, more on gravel and rough stone, rare on rich
-  soil) and the tile inspector shows them ("Flint: plenty / some / none").
-  On a flint patch, each stone gathered is flint with the tile's chance
-  (up to 60%) *(tuning)*, a cobble otherwise; elsewhere only cobbles. Later,
-  flint comes with the geology (chalk and limestone, §13).
+  soil): on a flint patch, each stone of a tile is flint with the patch's
+  share (up to 60%) *(tuning)*, a cobble otherwise; elsewhere only cobbles.
+  Later, flint comes with the geology (chalk and limestone, §13).
 - **Branches**: dead or cut branches, the main material of the start: fuel,
   walls, lean-tos, spears, digging sticks, torches. Quality = straightness.
 - **Twigs**: kindling to light a fire, quick fuel, filling for branch screens.

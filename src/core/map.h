@@ -52,6 +52,7 @@ typedef struct TerrainDef {
     float move_cost; /* Movement cost multiplier; 0 means impassable. */
     float fertility; /* Plant growth multiplier (1.0 = normal soil). */
     bool buildable; /* Whether structures can be built on it. */
+    bool stony; /* Whether stones lie about on it (see Map.cobbles). */
 } TerrainDef;
 
 typedef struct RockDef {
@@ -100,10 +101,8 @@ typedef struct Plant {
 /* Plants are drawn in this many sizes as they grow (see plant_growth_stage()). */
 #define PLANT_GROWTH_STAGES 5
 
-/* Highest flint chance of a tile, in percent: even a rich patch gives cobbles too. */
-#define MAP_FLINT_MAX_CHANCE 60
-/* From this chance on, a patch is called rich (display only). */
-#define MAP_FLINT_RICH_CHANCE 25
+/* Most stones (cobbles and flint nodules together) lying about one tile. */
+#define MAP_STONES_MAX 20
 
 /* How many recent topology changes the map remembers (see Map.topology_log). */
 #define MAP_TOPOLOGY_LOG_SIZE 16
@@ -123,8 +122,10 @@ typedef struct Map {
     uint8_t *terrain; /* Terrain per tile. */
     uint8_t *rock; /* RockType per tile; non-zero means a solid rock wall. */
     Plant *plants;
-    /* Flint patches: chance in percent (0..MAP_FLINT_MAX_CHANCE) that a stone
-     * gathered on the tile is a flint nodule rather than a cobble. */
+    /* Stones lying about each tile, that gathering takes one by one: cobbles
+     * and flint nodules (on flint patches), MAP_STONES_MAX at most together.
+     * World generation puts none on sand (see gather_stone_ground()). */
+    uint8_t *cobbles;
     uint8_t *flint;
     /* Built structures (StructureType per tile): beds, walls, doors. */
     uint8_t *structure;
@@ -166,7 +167,7 @@ bool plant_has_fruit(const Plant *plant);
 /* Fills every stock to the capacity (new plants of a generated world). */
 void plant_fill_stocks(Plant *plant);
 
-/* Allocates a map filled with soil, without rock, plants nor flint. */
+/* Allocates a map filled with soil, without rock, plants nor stones. */
 bool map_init(Map *map, int width, int height);
 void map_free(Map *map);
 
@@ -226,11 +227,17 @@ bool map_plant_blocks_building(const Map *map, int x, int y);
 /* Whether the plant on this tile can be eaten right now. */
 bool map_has_edible_plant(const Map *map, int x, int y);
 
-/* Flint chance of a tile in percent (0 out of bounds). */
-int map_flint_chance(const Map *map, int x, int y);
+/* Stones of a type (ITEM_COBBLE or ITEM_FLINT) lying about a tile; 0 for other
+ * types and out of bounds. */
+int map_stones(const Map *map, int x, int y, ItemType type);
 
-/* Sets it, clamped to 0..MAP_FLINT_MAX_CHANCE (out-of-bounds tiles are ignored). */
-void map_set_flint_chance(Map *map, int x, int y, int chance);
+/* Sets the stones of a tile: each count is clamped to 0..MAP_STONES_MAX, then
+ * cobbles to what flint leaves of MAP_STONES_MAX. Out-of-bounds tiles are
+ * ignored. */
+void map_set_stones(Map *map, int x, int y, int cobbles, int flint);
+
+/* Takes one stone of a type from a tile; false when there is none. */
+bool map_take_stone(Map *map, int x, int y, ItemType type);
 
 /* Shallow or deep water (false out of bounds). */
 bool map_is_water(const Map *map, int x, int y);

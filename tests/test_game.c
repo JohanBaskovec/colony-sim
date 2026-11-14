@@ -62,7 +62,7 @@ static void test_settlers_arrive_near_ripe_berries(void)
 static bool is_flint_spot(const Map *map, int x, int y, void *userdata)
 {
     (void)userdata;
-    return map_flint_chance(map, x, y) >= GAME_SPAWN_FLINT_CHANCE &&
+    return map_stones(map, x, y, ITEM_FLINT) >= GAME_SPAWN_FLINT_STONES &&
            gather_stone_ground(map, x, y);
 }
 

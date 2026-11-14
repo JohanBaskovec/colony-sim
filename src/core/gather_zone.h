@@ -15,8 +15,9 @@
  * a ripe bush, a stock of twigs, stony ground...). When a tile offers several,
  * the plant's stocks come first (picking its fruit or felling it would take
  * them away), then its fruit, felling it, and stones last.
- * Stones are searched for, not seen: a tile may give a cobble, or flint on a
- * flint patch, and a stone of a type no order wants is left on the ground.
+ * Stones are limited: each tile holds a number of cobbles and flint nodules
+ * (Map.cobbles, Map.flint), and gathering takes them one by one, only of the
+ * types wanted.
  *
  * Every tile keeps the work done on its current job, so that interrupted work
  * resumes. Gathering is a background job: at the same work priority, settlers
@@ -158,8 +159,9 @@ void gather_zones_free(GatherZones *zones);
  * wall), not water. */
 bool gather_zone_can_cover(const Map *map, int x, int y);
 
-/* Whether stones lie about on a tile: open ground of soil, rich soil, gravel
- * or rough stone, with no structure. */
+/* Whether stones can be gathered on a tile: stony ground (soil, rich soil,
+ * gravel, rough stone: TerrainDef.stony), no rock wall, no structure. How
+ * many lie there: map_stones(). */
 bool gather_stone_ground(const Map *map, int x, int y);
 
 /*
@@ -245,8 +247,12 @@ bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y
 GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y,
                           GatherJobMask allowed);
 
-/* Tiles of a zone that may give flint. */
-int gather_zone_flint_cells(const GatherZones *zones, const Map *map, int index);
+/* How many items of each resource a zone's tiles hold now: wood of the trees,
+ * ripe fruit, branches, twigs, grass to cut, cobbles and flint in the ground.
+ * Plants the zone's orders leave alone (not fully grown, with that option)
+ * do not count. All zeros for an invalid zone. */
+void gather_zone_available(const GatherZones *zones, const Map *map, int index,
+                           long available[GATHER_RESOURCE_COUNT]);
 
 /* Total work a job needs on a tile right now (0 when the tile has nothing for it). */
 float gather_job_work_needed(const Map *map, int x, int y, GatherJob job);
@@ -254,11 +260,12 @@ float gather_job_work_needed(const Map *map, int x, int y, GatherJob job);
 /*
  * Adds work to a job on a tile (the work done on another job there is lost).
  * When enough is done, the job is carried out on the map (the tree falls,
- * the grass is cut...), its products are dropped on the tile with quality
- * and condition from the worker's `level` (core/knowledge.h; `rng` may be NULL
- * for average products, and no flint is found then), the orders count them,
- * and true is returned. A stone of a type no order wants is not dropped (but
- * true is returned all the same). False also when the job is not available.
+ * the grass is cut, a stone is taken from the ground...), its products are
+ * dropped on the tile with quality and condition from the worker's `level`
+ * (core/knowledge.h; `rng` may be NULL for average products, and a cobble is
+ * then found before flint), the orders count them, and true is returned.
+ * Stones are found among the wanted types the tile holds, at random in
+ * proportion to their numbers. False when the job is not available.
  */
 bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, GatherJob job,
                           float work, double level, Rng *rng);

@@ -173,8 +173,9 @@ hud.tile.blueprint = Blueprint: {0} ({1}% built)
 hud.tile.structure = Construction: {0}
 # {0}: material, {1}: brought so far, {2}: needed.
 hud.tile.material = {0}: {1}/{2}
-hud.tile.flint_some = Some flint in the ground
-hud.tile.flint_plenty = Plenty of flint in the ground
+# Stones lying about a tile, that gathering may still find: {0} = item name, {1} = count
+hud.tile.ground_stones = In the ground: {0} ×{1}
+hud.tile.no_stones = No stones left in the ground
 # Items on a tile or carried. {0} = quality grade, {1} = hit points,
 # {2} = maximum hit points, {3} = hit points in percent (e.g. 75%)
 hud.item_condition = Quality: {0} · Hit points: {1}/{2} ({3})
@@ -289,7 +290,11 @@ gather_zone.mode.forever = Forever
 gather_zone.progress.done = Gathered: {0}
 # Option of wood and berries: leave young trees and bushes not fully grown
 gather_zone.ripe_only = Fully grown plants only (100%)
-gather_zone.warning.no_flint = This zone has no flint
+# Enabled resource of which the zone holds nothing now (stones run out, berries grow back)
+gather_zone.warning.none_left = Nothing of it to gather in this zone now
+# {0} = how many items of a resource the zone holds now (wood of the trees, stones in the ground...)
+gather_zone.available.one = {0} available
+gather_zone.available.other = {0} available
 gather_zone.delete = Delete
 
 # Workstations

@@ -38,9 +38,9 @@
  * from where they arrive, planting more when it has to. */
 #define GAME_SPAWN_RIPE_BUSHES 6
 #define GAME_SPAWN_FOOD_MAX_COST 25.0f
-/* Likewise, a tile of a flint patch with at least this chance (percent) where
- * stones can be gathered, within the same distance: knapping needs flint. */
-#define GAME_SPAWN_FLINT_CHANCE 30
+/* Likewise, a tile with at least this many flint nodules where stones can be
+ * gathered, within the same distance: knapping needs flint. */
+#define GAME_SPAWN_FLINT_STONES 5
 
 /* Radius (in tiles) around a world point within which a colonist can be picked. */
 #define GAME_PICK_RADIUS 0.6f

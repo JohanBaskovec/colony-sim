@@ -11,7 +11,8 @@
 #define ALL_JOBS ((GatherJobMask)((1u << GATHER_JOB_COUNT) - 1u))
 
 /* 16 x 16 soil map with a granite wall at (5, 5), sand at (10, 8), water at
- * (11, 8) and gravel at (9, 8). */
+ * (11, 8) and gravel at (9, 8); MAP_STONES_MAX cobbles on every tile (only
+ * found where gather_stone_ground() allows). */
 static bool init_world(Map *map, GatherZones *zones, Items *items)
 {
     if (!map_init(map, 16, 16) || !gather_zones_init(zones, 16, 16) ||
@@ -22,6 +23,11 @@ static bool init_world(Map *map, GatherZones *zones, Items *items)
     map->terrain[map_index(map, 9, 8)] = TERRAIN_GRAVEL;
     map->terrain[map_index(map, 10, 8)] = TERRAIN_SAND;
     map->terrain[map_index(map, 11, 8)] = TERRAIN_SHALLOW_WATER;
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            map_set_stones(map, x, y, MAP_STONES_MAX, 0);
+        }
+    }
     return true;
 }
 
@@ -506,20 +512,27 @@ static void test_progress_belongs_to_one_job(void)
     free_world(&map, &zones, &items);
 }
 
-static void test_stones_again_and_again(void)
+static void test_stones_run_out(void)
 {
     Map map;
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
+    map_set_stones(&map, 8, 8, 3, 0);
     int index = gather_zone_create(&zones, &map, 8, 8, 10, 8);
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
     float needed = gather_job_work_needed(&map, 8, 8, GATHER_JOB_STONES);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 3; i++) {
+        CHECK(gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
         CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, needed, 60.0,
                                    NULL));
     }
-    CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 10);
+    CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 3);
+    /* None left: the tile offers nothing more. */
+    CHECK_EQ_INT(map_stones(&map, 8, 8, ITEM_COBBLE), 0);
+    CHECK(!gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, needed, 60.0,
+                                NULL));
     /* No stones on sand, nor outside a zone. */
     CHECK(!gather_job_available(&zones, &map, 10, 8, GATHER_JOB_STONES));
     CHECK(gather_job_available(&zones, &map, 9, 8, GATHER_JOB_STONES));
@@ -530,10 +543,40 @@ static void test_stones_again_and_again(void)
                          KNOWLEDGE_LEVEL_MAX, NULL);
     CHECK_EQ_INT(items_get(&items, 9, 8).quality, ITEM_QUALITY_SUPERB);
     CHECK(items_get(&items, 8, 8).quality <= ITEM_QUALITY_STANDARD);
+    CHECK_EQ_INT(map_stones(&map, 9, 8, ITEM_COBBLE), MAP_STONES_MAX - 1);
     free_world(&map, &zones, &items);
 }
 
-static void test_flint_patch_and_sorting(void)
+static void test_map_stones(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16));
+    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_COBBLE), 0); /* None on a new map. */
+    map_set_stones(&map, 3, 3, 7, 2);
+    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_COBBLE), 7);
+    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_FLINT), 2);
+    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_BRANCHES), 0);
+    CHECK_EQ_INT(map_stones(&map, -1, 3, ITEM_COBBLE), 0);
+    /* MAP_STONES_MAX together at most: flint first. */
+    map_set_stones(&map, 4, 4, 30, 15);
+    CHECK_EQ_INT(map_stones(&map, 4, 4, ITEM_FLINT), 15);
+    CHECK_EQ_INT(map_stones(&map, 4, 4, ITEM_COBBLE), MAP_STONES_MAX - 15);
+    map_set_stones(&map, 4, 4, -3, 99);
+    CHECK_EQ_INT(map_stones(&map, 4, 4, ITEM_FLINT), MAP_STONES_MAX);
+    CHECK_EQ_INT(map_stones(&map, 4, 4, ITEM_COBBLE), 0);
+    map_set_stones(&map, 16, 4, 3, 3); /* Ignored. */
+    uint64_t hash = map_hash(&map);
+    CHECK(map_take_stone(&map, 3, 3, ITEM_FLINT));
+    CHECK(map_hash(&map) != hash);
+    CHECK(map_take_stone(&map, 3, 3, ITEM_FLINT));
+    CHECK(!map_take_stone(&map, 3, 3, ITEM_FLINT));
+    CHECK(!map_take_stone(&map, 3, 3, ITEM_TWIGS));
+    CHECK(!map_take_stone(&map, 30, 3, ITEM_COBBLE));
+    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_COBBLE), 7);
+    map_free(&map);
+}
+
+static void test_flint_and_cobbles(void)
 {
     Map map;
     GatherZones zones;
@@ -541,40 +584,89 @@ static void test_flint_patch_and_sorting(void)
     Rng rng;
     REQUIRE(init_world(&map, &zones, &items));
     rng_seed(&rng, 7, 1);
-    map_set_flint_chance(&map, 8, 8, MAP_FLINT_MAX_CHANCE);
-    map_set_flint_chance(&map, 9, 9, 200); /* Clamped. */
-    CHECK_EQ_INT(map_flint_chance(&map, 9, 9), MAP_FLINT_MAX_CHANCE);
+    map_set_stones(&map, 8, 8, 10, 10);
     int index = gather_zone_create(&zones, &map, 4, 4, 8, 8);
-    CHECK_EQ_INT(gather_zone_flint_cells(&zones, &map, index), 1);
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_FLINT, GATHER_FOREVER);
     float stone = gather_job_work_needed(&map, 8, 8, GATHER_JOB_STONES);
-    for (int i = 0; i < 200; i++) {
+    /* Both wanted: drawn among what the tile holds, until it is empty. */
+    for (int i = 0; i < 20; i++) {
         CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, stone, 60.0,
                                    &rng));
-        CHECK(gather_zone_add_work(&zones, &map, &items, 4, 4, GATHER_JOB_STONES, stone, 60.0,
-                                   &rng));
     }
-    /* About 60% flint on the patch, none elsewhere: 400 stones in all. */
-    long flint = items.totals[ITEM_FLINT];
-    CHECK(flint > 90 && flint < 150);
-    CHECK_EQ_INT((int)(items.totals[ITEM_COBBLE] + flint), 400);
+    CHECK_EQ_INT((int)items.totals[ITEM_FLINT], 10);
+    CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 10);
+    CHECK(!gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
 
     /* Only flint wanted: tiles without flint offer nothing, and the cobbles
-     * found are left in the ground. */
-    long cobbles = items.totals[ITEM_COBBLE];
+     * stay in the ground. */
+    map_set_stones(&map, 8, 8, 5, 3);
     gather_zone_set_enabled(&zones, index, GATHER_COBBLES, false);
     gather_zones_update(&zones, items.totals);
     CHECK(!gather_job_available(&zones, &map, 4, 4, GATHER_JOB_STONES));
     CHECK(gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 3; i++) {
         CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, stone, 60.0,
                                    &rng));
     }
-    CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], (int)cobbles);
-    CHECK(items.totals[ITEM_FLINT] > flint + 40);
-    CHECK_EQ_INT(gather_zone_get(&zones, index)->orders[GATHER_FLINT].done,
-                 (int)items.totals[ITEM_FLINT]);
+    CHECK_EQ_INT((int)items.totals[ITEM_FLINT], 13);
+    CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 10);
+    CHECK_EQ_INT(map_stones(&map, 8, 8, ITEM_COBBLE), 5);
+    CHECK(!gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
+    CHECK_EQ_INT(gather_zone_get(&zones, index)->orders[GATHER_FLINT].done, 13);
+    /* Without randomness, a cobble is found before flint. */
+    map_set_stones(&map, 8, 8, 1, 1);
+    gather_zone_set_enabled(&zones, index, GATHER_COBBLES, true);
+    gather_zones_update(&zones, items.totals);
+    CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, stone, 60.0, NULL));
+    CHECK_EQ_INT(map_stones(&map, 8, 8, ITEM_COBBLE), 0);
+    CHECK_EQ_INT(map_stones(&map, 8, 8, ITEM_FLINT), 1);
+    free_world(&map, &zones, &items);
+}
+
+static void test_available_resources(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    long available[GATHER_RESOURCE_COUNT];
+    gather_zone_available(&zones, &map, 3, available); /* Invalid: all zeros. */
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        CHECK_EQ_INT((int)available[r], 0);
+    }
+    /* A 3 x 1 zone on soil, gravel and sand. */
+    int index = gather_zone_create(&zones, &map, 8, 8, 10, 8);
+    map_set_stones(&map, 8, 8, 4, 2);
+    map_set_stones(&map, 9, 8, 6, 0);
+    map_set_stones(&map, 10, 8, 9, 9); /* Sand: never found. */
+    Plant *tree = put_plant(&map, 8, 8, PLANT_TREE, 1.0f);
+    Plant *young = put_plant(&map, 9, 8, PLANT_TREE, 0.5f);
+    gather_zone_available(&zones, &map, index, available);
+    CHECK_EQ_INT((int)available[GATHER_COBBLES], 10);
+    CHECK_EQ_INT((int)available[GATHER_FLINT], 2);
+    CHECK_EQ_INT((int)available[GATHER_BRANCHES],
+                 plant_stock_available(tree, PLANT_STOCK_BRANCHES) +
+                     plant_stock_available(young, PLANT_STOCK_BRANCHES));
+    CHECK_EQ_INT((int)available[GATHER_TWIGS],
+                 plant_stock_available(tree, PLANT_STOCK_TWIGS) +
+                     plant_stock_available(young, PLANT_STOCK_TWIGS));
+    /* Wood: fully grown trees only by default, all of them without the option. */
+    int full_wood = plant_def(PLANT_TREE)->cut_yield;
+    int young_wood = (int)((float)full_wood * 0.5f + 0.5f);
+    CHECK_EQ_INT((int)available[GATHER_WOOD], full_wood);
+    gather_zone_set_ripe_only(&zones, index, GATHER_WOOD, false);
+    gather_zone_available(&zones, &map, index, available);
+    CHECK_EQ_INT((int)available[GATHER_WOOD], full_wood + young_wood);
+    CHECK_EQ_INT((int)available[GATHER_BERRIES], 0);
+    CHECK_EQ_INT((int)available[GATHER_GRASS], 0);
+    /* What is gathered no longer counts. */
+    order(&zones, &items, index, GATHER_FLINT, GATHER_FOREVER);
+    float stone = gather_job_work_needed(&map, 8, 8, GATHER_JOB_STONES);
+    CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, stone, 60.0, NULL));
+    gather_zone_available(&zones, &map, index, available);
+    CHECK_EQ_INT((int)available[GATHER_FLINT], 1);
+    CHECK_EQ_INT((int)available[GATHER_COBBLES], 10);
     free_world(&map, &zones, &items);
 }
 
@@ -732,8 +824,10 @@ int main(void)
     RUN_TEST(test_branches_twigs_grass_and_berries);
     RUN_TEST(test_fixed_count_stops);
     RUN_TEST(test_progress_belongs_to_one_job);
-    RUN_TEST(test_stones_again_and_again);
-    RUN_TEST(test_flint_patch_and_sorting);
+    RUN_TEST(test_stones_run_out);
+    RUN_TEST(test_map_stones);
+    RUN_TEST(test_flint_and_cobbles);
+    RUN_TEST(test_available_resources);
     RUN_TEST(test_plants_growing_wake_settlers);
     RUN_TEST(test_hash);
     RUN_TEST(test_overlapping_rectangle_merges_zones);

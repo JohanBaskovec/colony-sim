@@ -25,11 +25,11 @@
 #define SPAWN_BUSH_MIN_DISTANCE 3
 #define SPAWN_BUSH_SPOT_CHANCE 0.08f
 /* Flint patch laid for the first settlers when there is none near them:
- * SPAWN_FLINT_PATCH_CHANCE percent in the middle, SPAWN_FLINT_PATCH_FALLOFF
- * less per step, over SPAWN_FLINT_PATCH_RADIUS steps (Manhattan). */
+ * SPAWN_FLINT_PATCH_STONES flint nodules in the middle, SPAWN_FLINT_PATCH_FALLOFF
+ * fewer per step, over SPAWN_FLINT_PATCH_RADIUS steps (Manhattan). */
 #define SPAWN_FLINT_PATCH_RADIUS 2
-#define SPAWN_FLINT_PATCH_CHANCE 45
-#define SPAWN_FLINT_PATCH_FALLOFF 10
+#define SPAWN_FLINT_PATCH_STONES 8
+#define SPAWN_FLINT_PATCH_FALLOFF 2
 
 void game_default_params(NewGameParams *params)
 {
@@ -318,7 +318,7 @@ static void ensure_food_near(Game *game, TilePos center)
 static bool is_flint_spot(const Map *map, int x, int y, void *userdata)
 {
     (void)userdata;
-    return map_flint_chance(map, x, y) >= GAME_SPAWN_FLINT_CHANCE &&
+    return map_stones(map, x, y, ITEM_FLINT) >= GAME_SPAWN_FLINT_STONES &&
            gather_stone_ground(map, x, y);
 }
 
@@ -369,9 +369,10 @@ static void ensure_flint_near(Game *game, TilePos center)
                 !gather_stone_ground(map, x, y)) {
                 continue;
             }
-            int chance = SPAWN_FLINT_PATCH_CHANCE - SPAWN_FLINT_PATCH_FALLOFF * distance;
-            if (chance > map_flint_chance(map, x, y)) {
-                map_set_flint_chance(map, x, y, chance);
+            int flint = SPAWN_FLINT_PATCH_STONES - SPAWN_FLINT_PATCH_FALLOFF * distance;
+            if (flint > map_stones(map, x, y, ITEM_FLINT)) {
+                /* Some cobbles make room for the flint. */
+                map_set_stones(map, x, y, map_stones(map, x, y, ITEM_COBBLE), flint);
             }
         }
     }

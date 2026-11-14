@@ -54,11 +54,21 @@ static const char *progress_text(char *out, size_t size, const Game *game,
     return out;
 }
 
-/* Check box with the resource's name; when enabled, the mode button, -/+ for
- * the target and the progress on the same row, then the options and
- * warnings below. */
+/* How many items of a resource the zone holds now. */
+static const char *available_text(char *out, size_t size, long available)
+{
+    char number[16];
+    tr_integer(number, sizeof(number), available);
+    TR_FORMAT(out, size, tr_plural("gather_zone.available", available), number);
+    return out;
+}
+
+/* Check box with the resource's name and how many are available; when
+ * enabled, the mode button, -/+ for the target and the progress on the same
+ * row, then the options and warnings below. */
 static void resource_rows(UiLayout *layout, const App *app, int index, GatherResource resource,
-                          float name_column, Action *action)
+                          const long available[GATHER_RESOURCE_COUNT], float name_column,
+                          float available_column, Action *action)
 {
     Ui *ui = layout->ui;
     const GatherResourceDef *def = gather_resource_def(resource);
@@ -69,8 +79,13 @@ static void resource_rows(UiLayout *layout, const App *app, int index, GatherRes
                                     order->enabled ? UI_CHECKED : UI_UNCHECKED, name)) {
         *action = (Action){ACTION_TOGGLE, resource, 0};
     }
+    char count[TEXT_SIZE];
+    available_text(count, sizeof(count), available[resource]);
+    if (layout->draw) {
+        ui_label_dim(ui, count, x + name_column, layout->y + layout->text_offset);
+    }
     if (!order->enabled) {
-        ui_layout_measure(layout, ui_checkbox_width(ui, name));
+        ui_layout_measure(layout, name_column + ui_text_width(ui, count));
         layout->y += layout->row;
         return;
     }
@@ -81,10 +96,10 @@ static void resource_rows(UiLayout *layout, const App *app, int index, GatherRes
     const char *minus = "−", *plus = "+";
     float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
     bool has_target = order->mode != GATHER_FOREVER;
-    x += name_column;
+    x += name_column + available_column;
     float mode_width = ui_button_width(ui, mode);
     float targets_width = has_target ? 2.0f * small + 2.0f + GAP : 0.0f;
-    ui_layout_measure(layout, name_column + mode_width + GAP + targets_width +
+    ui_layout_measure(layout, name_column + available_column + mode_width + GAP + targets_width +
                                   ui_text_width(ui, progress));
     if (ui_layout_button_sized(layout, x, mode_width, mode)) {
         *action = (Action){ACTION_CYCLE_MODE, resource, 0};
@@ -118,9 +133,8 @@ static void resource_rows(UiLayout *layout, const App *app, int index, GatherRes
     if (!game_gather_job_known(&app->game, def->job)) {
         ui_layout_label(layout, tr("hud.tool.unavailable"), INDENT, true);
     }
-    if (resource == GATHER_FLINT &&
-        gather_zone_flint_cells(&app->game.gather_zones, &app->game.map, index) == 0) {
-        ui_layout_label(layout, tr("gather_zone.warning.no_flint"), INDENT, true);
+    if (available[resource] == 0) {
+        ui_layout_label(layout, tr("gather_zone.warning.none_left"), INDENT, true);
     }
 }
 
@@ -155,6 +169,7 @@ static void priority_row(UiLayout *layout, const GatherZone *zone, Action *actio
 typedef struct ZoneRows {
     const App *app;
     int index;
+    long available[GATHER_RESOURCE_COUNT]; /* Counted once per frame. */
     Action action;
 } ZoneRows;
 
@@ -181,8 +196,16 @@ static void zone_rows(UiLayout *layout, void *userdata)
         name_column = SDL_max(name_column, ui_checkbox_width(ui, name));
     }
     name_column = SDL_ceilf(name_column) + GAP;
+    float available_column = 0.0f;
     for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
-        resource_rows(layout, app, index, (GatherResource)r, name_column, action);
+        char count[TEXT_SIZE];
+        available_text(count, sizeof(count), rows->available[r]);
+        available_column = SDL_max(available_column, ui_text_width(ui, count));
+    }
+    available_column = SDL_ceilf(available_column) + GAP;
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        resource_rows(layout, app, index, (GatherResource)r, rows->available, name_column,
+                      available_column, action);
     }
 }
 
@@ -240,7 +263,8 @@ void gather_zone_panel_draw(App *app)
     char number[16], title[TEXT_SIZE];
     tr_integer(number, sizeof(number), zone->number);
     TR_FORMAT(title, sizeof(title), tr("gather_zone.name"), number);
-    ZoneRows rows = {app, index, {ACTION_NONE, GATHER_RESOURCE_COUNT, 0}};
+    ZoneRows rows = {.app = app, .index = index, .action = {ACTION_NONE, GATHER_RESOURCE_COUNT, 0}};
+    gather_zone_available(&app->game.gather_zones, &app->game.map, index, rows.available);
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_GATHER_ZONE, title, UI_PLACE_BOTTOM_RIGHT, zone_rows,
                      &rows, &open);

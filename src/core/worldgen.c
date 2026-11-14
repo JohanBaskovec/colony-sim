@@ -32,14 +32,17 @@ static float stretch(float value)
 }
 
 /*
- * Flint patches: where the flint noise is above FLINT_NOISE_THRESHOLD, the
- * chance rises to MAP_FLINT_MAX_CHANCE at the top of the noise, scaled by the
- * ground (flint weathers out of rock: plenty on gravel and under rock walls,
- * less on soil, little under the deep rich soil). Chances below
- * FLINT_MIN_CHANCE are dropped, so that patches have clear edges.
+ * Stones: every stony tile (see TerrainDef.stony) gets 0 to MAP_STONES_MAX
+ * stones. On flint patches, some of them are flint: where the flint noise is
+ * above FLINT_NOISE_THRESHOLD, the share of flint rises to FLINT_MAX_CHANCE
+ * percent at the top of the noise, scaled by the ground (flint weathers out
+ * of rock: plenty on gravel and under rock walls, less on soil, little under
+ * the deep rich soil). Shares below FLINT_MIN_CHANCE are dropped, so that
+ * patches have clear edges; even a rich patch gives cobbles too.
  */
 #define FLINT_NOISE_THRESHOLD 0.85f
 #define FLINT_MIN_CHANCE 5
+#define FLINT_MAX_CHANCE 60
 
 static float flint_ground_factor(Terrain terrain)
 {
@@ -58,9 +61,20 @@ static int flint_chance(Terrain terrain, float noise)
     if (strength <= 0.0f) {
         return 0;
     }
-    int chance = (int)((float)MAP_FLINT_MAX_CHANCE * clampf(strength * 1.5f, 0.0f, 1.0f) *
+    int chance = (int)((float)FLINT_MAX_CHANCE * clampf(strength * 1.5f, 0.0f, 1.0f) *
                        flint_ground_factor(terrain));
     return chance >= FLINT_MIN_CHANCE ? chance : 0;
+}
+
+/* Stones of a stony tile, each one flint with `chance` percent. */
+static void place_stones(Map *map, int x, int y, Rng *rng, int chance)
+{
+    int stones = rng_range_i32(rng, 0, MAP_STONES_MAX);
+    int flint = 0;
+    for (int i = 0; i < stones && chance > 0; i++) {
+        flint += rng_range_i32(rng, 0, 99) < chance;
+    }
+    map_set_stones(map, x, y, stones - flint, flint);
 }
 
 static Terrain pick_terrain(const WorldGenParams *params, float elevation, float moisture)
@@ -133,6 +147,8 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
 
     Rng rng;
     rng_seed(&rng, params->seed, 0x776f726c64ULL /* "world" */);
+    Rng stone_rng; /* A stream of its own: the plants do not depend on the stones. */
+    rng_seed(&stone_rng, params->seed, 0x73746f6e6573ULL /* "stones" */);
 
     for (int y = 0; y < map->height; y++) {
         for (int x = 0; x < map->width; x++) {
@@ -145,8 +161,11 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
             size_t index = map_index(map, x, y);
             Terrain terrain = pick_terrain(params, elevation, moisture);
             map->terrain[index] = (uint8_t)terrain;
-            float flint = stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
-            map->flint[index] = (uint8_t)flint_chance(terrain, flint);
+            if (terrain_def(terrain)->stony) {
+                float flint =
+                    stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
+                place_stones(map, x, y, &stone_rng, flint_chance(terrain, flint));
+            }
 
             if (terrain == TERRAIN_ROUGH_STONE) {
                 float rock_noise = noise_value2d(rock_seed, nx * 2.0f, ny * 2.0f);

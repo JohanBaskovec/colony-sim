@@ -20,8 +20,9 @@ static bool init_flat_game(Game *game)
     Map *map = &game->map;
     for (size_t i = 0; i < map_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_SOIL;
-        map->rock[i] = ROCK_NONE;
+        map->cobbles[i] = MAP_STONES_MAX; /* Cobbles everywhere, no flint. */
         map->flint[i] = 0;
+        map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
     map_topology_changed(map);

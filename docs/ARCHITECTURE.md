@@ -62,7 +62,7 @@ simulation:
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
-| `map`        | Tile layers (terrain, rock, plants with their branch and twig stocks, flint chance) and static definitions (`TerrainDef`...) |
+| `map`        | Tile layers (terrain, rock, plants with their branch and twig stocks, cobbles and flint in the ground) and static definitions (`TerrainDef`...) |
 | `worldgen`   | Procedural map generation from a seed                                        |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
@@ -85,7 +85,7 @@ simulation:
 | `ui_layout`    | Rows of a window laid out twice: measured, then drawn (window sized to its content) |
 | `menu_bar`     | Bottom left menus: Build (categories, icon buttons), Work, ? (help)     |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
-| `gather_zone_panel` | Inspector of the selected gathering zone (priority, a check box per resource, mode, target, progress, fully grown option, warnings) |
+| `gather_zone_panel` | Inspector of the selected gathering zone (priority, a check box per resource with how many are available, mode, target, progress, fully grown option, warnings) |
 | `station_panel` | Inspector of the selected workstation (blueprint progress, bills, warnings) |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
@@ -390,10 +390,15 @@ first, since picking its fruit or felling it would take them away, stones
 last) when it holds something a wanted resource comes from. Each job has its
 work type (felling is woodcutting, the rest gathering) and knowledge; the
 settler takes the first job of the tile among those it may do
-(`Colonist.work_type` holds the job while `gathering`). Stones are searched
-for: a tile gives a cobble, or flint on a flint patch, and a stone of a type
-no order wants is left in the ground (only flint wanted: tiles without flint
-offer nothing). The job search reuses the designation search
+(`Colonist.work_type` holds the job while `gathering`). Stones are limited:
+each tile holds a number of cobbles and flint nodules (`Map.cobbles`,
+`Map.flint`), and a stone search takes one of the wanted types the tile
+holds, at random in proportion to their numbers (only flint wanted: tiles
+without flint offer nothing, and their cobbles stay). A zone runs out of
+stones once its tiles are emptied. The zone inspector shows how many items of
+each resource the zone holds now (`gather_zone_available()`: wood of the
+trees the orders allow, ripe fruit, stocks, grass, stones), and warns about an
+enabled resource with none. The job search reuses the designation search
 (`WorkSearch.zones`), the work progress of the tile's current job lives in
 the zone layer (work on another job there starts over), and a gatherer
 chooses again after each job done, so that a more important job is noticed
@@ -542,10 +547,15 @@ hauling. Failed station searches back off with a stamp made of the
 workstations revision, item additions and reservation releases; gathering
 searches with the zones revision and reservation releases.
 
-Flint is a map layer (`Map.flint`): the chance in percent, up to
-`MAP_FLINT_MAX_CHANCE`, that gathering stones on a tile turns up flint rather
-than a cobble. World generation lays noise patches, denser on gravel and
-rough stone, and the spawn makes sure one lies near the settlers.
+Stones are two map layers (`Map.cobbles`, `Map.flint`): how many of each lie
+about a tile, `MAP_STONES_MAX` (20) at most together, taken one by one by
+gathering and never growing back. World generation gives every stony tile
+(`TerrainDef.stony`: soil, rich soil, gravel, rough stone; not sand) 0 to 20
+stones, from a random stream of their own so that the plants do not depend on
+them; on flint patches (noise, denser on gravel and rough stone) each stone is
+flint with the patch's share, up to 60 %. The spawn makes sure a tile with at
+least `GAME_SPAWN_FLINT_STONES` flint lies near the settlers, laying a small
+patch otherwise. The tile inspector shows the stones left in the ground.
 
 ## Pathfinding
 
