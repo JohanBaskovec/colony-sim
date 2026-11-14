@@ -59,7 +59,10 @@ ctest --preset debug           # run the tests
 | `asan`     | Debug + AddressSanitizer/UBSan                                       |
 | `headless` | Simulation core + tests only: no SDL download, sanitizers, `-Werror` |
 
-CLion and VS Code (CMake Tools) pick up the presets automatically.
+CLion and VS Code (CMake Tools) pick up the presets automatically. Editors
+using clangd (Zed, VS Code with the clangd extension, Neovim...) read the
+compilation database of the `debug` preset (see `.clangd`): run
+`cmake --preset debug` once, then restart the language server.
 
 ### Command line
 

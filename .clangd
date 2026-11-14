@@ -1,0 +1,6 @@
+# clangd configuration (used by Zed, VS Code + clangd, Neovim...).
+# CMake writes compile_commands.json into build/<preset>/, where clangd does
+# not look by default. Point it at the debug preset, which covers the core,
+# the SDL frontend and the tests. Run `cmake --preset debug` once first.
+CompileFlags:
+  CompilationDatabase: build/debug
