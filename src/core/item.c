@@ -7,12 +7,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * Units are human-sized pieces with realistic weights:
+ * - wood: a log about 1 m long and 11 cm thick, 7 kg of fresh wood (~10 l);
+ *   a mature tree gives 60 of them (420 kg: trunk and big branches);
+ * - stone: a rough block of about 20 kg (7.5 l of rock, irregular so it
+ *   stacks with gaps);
+ * - berries: a portion of about 300 g (half a liter, ~150 kcal).
+ */
 static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
-    /* id, name, category, stack limit, nutrition */
-    [ITEM_NONE] = {"none", NULL, ITEM_CATEGORY_COUNT, 0, 0.0f},
-    [ITEM_WOOD] = {"wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 50, 0.0f},
-    [ITEM_STONE] = {"stone", N_("item.stone"), ITEM_CATEGORY_RESOURCES, 30, 0.0f},
-    [ITEM_BERRIES] = {"berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 50, 0.05f},
+    /* id, name, category, weight (kg), bulk, nutrition */
+    [ITEM_NONE] = {"none", NULL, ITEM_CATEGORY_COUNT, 0.0f, 0.0f, 0.0f},
+    [ITEM_WOOD] = {"wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 7.0f, 20.0f, 0.0f},
+    [ITEM_STONE] = {"stone", N_("item.stone"), ITEM_CATEGORY_RESOURCES, 20.0f, 20.0f, 0.0f},
+    [ITEM_BERRIES] = {"berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 0.3f, 1.0f, 0.05f},
 };
 
 static const char *const CATEGORY_KEYS[ITEM_CATEGORY_COUNT] = {
@@ -53,6 +61,21 @@ const ItemDef *item_def(ItemType type)
 bool item_is_food(ItemType type)
 {
     return (unsigned)type < ITEM_TYPE_COUNT && ITEM_DEFS[type].nutrition > 0.0f;
+}
+
+int item_stack_limit(ItemType type)
+{
+    if (type == ITEM_NONE || (unsigned)type >= ITEM_TYPE_COUNT) {
+        return 0;
+    }
+    float limit = ITEM_TILE_BULK / ITEM_DEFS[type].bulk;
+    return limit < 1.0f ? 1 : (limit > (float)UINT16_MAX ? UINT16_MAX : (int)limit);
+}
+
+float item_stack_weight(ItemType type, int count)
+{
+    const ItemDef *def = item_def(type);
+    return def != NULL ? def->weight * (float)count : 0.0f;
 }
 
 bool items_init(Items *items, int width, int height)
@@ -104,7 +127,7 @@ int items_add(Items *items, int x, int y, ItemType type, int count)
     if (stack->type != ITEM_NONE && stack->type != type) {
         return 0;
     }
-    int room = ITEM_DEFS[type].stack_limit - (int)stack->count;
+    int room = item_stack_limit(type) - (int)stack->count;
     int added = count < room ? count : room;
     if (added <= 0) {
         return 0;

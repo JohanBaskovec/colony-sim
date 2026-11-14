@@ -47,6 +47,38 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y)
     for (int work = 0; work < WORK_TYPE_COUNT; work++) {
         colonist->work_priorities[work] = WORK_PRIORITY_DEFAULT;
     }
+    colonist->max_carry_weight = COLONIST_CARRY_WEIGHT;
+    colonist->max_carry_bulk = COLONIST_CARRY_BULK;
+}
+
+float colonist_carried_weight(const Colonist *colonist)
+{
+    return item_stack_weight((ItemType)colonist->carried.type, colonist->carried.count);
+}
+
+int colonist_carry_capacity(const Colonist *colonist, ItemType type)
+{
+    const ItemDef *def = item_def(type);
+    if (def == NULL || type == ITEM_NONE) {
+        return 0;
+    }
+    float by_weight = floorf(colonist->max_carry_weight / def->weight);
+    float by_bulk = floorf(colonist->max_carry_bulk / def->bulk);
+    float capacity = by_weight < by_bulk ? by_weight : by_bulk;
+    if (capacity < 1.0f) {
+        return 1; /* Dragged. */
+    }
+    return capacity > (float)UINT16_MAX ? UINT16_MAX : (int)capacity;
+}
+
+float colonist_load_speed_factor(const Colonist *colonist)
+{
+    float load = colonist_carried_weight(colonist);
+    if (load <= colonist->max_carry_weight) {
+        return 1.0f;
+    }
+    float factor = colonist->max_carry_weight / load;
+    return factor < COLONIST_MIN_LOAD_SPEED ? COLONIST_MIN_LOAD_SPEED : factor;
 }
 
 void colonist_free(Colonist *colonist)
@@ -471,15 +503,18 @@ static void haul(Colonist *colonist, const ColonistContext *context)
     }
     TilePos dest = colonist->haul_destination;
     if (colonist->carried.count == 0) {
-        /* Pick up as much as the destination can take, then head there. */
+        /* Pick up what the destination can take and the colonist can carry. */
         if (colonist->x != colonist->target.x || colonist->y != colonist->target.y) {
             set_idle(colonist, context, 0);
             return;
         }
         ItemStack stack = items_get(context->items, colonist->x, colonist->y);
-        int room = haul_storage_room(context->items, dest.x, dest.y, (ItemType)stack.type);
+        ItemType type = (ItemType)stack.type;
+        int wanted = haul_storage_room(context->items, dest.x, dest.y, type);
+        int capacity = colonist_carry_capacity(colonist, type);
+        wanted = wanted < capacity ? wanted : capacity;
         int taken = items_remove(context->items, colonist->x, colonist->y,
-                                 stack.count < room ? stack.count : room);
+                                 stack.count < wanted ? stack.count : wanted);
         colonist->carried = (ItemStack){stack.type, (uint16_t)taken};
         if (!pathfinder_find(context->pathfinder, context->map, current_tile(colonist), dest,
                              PATH_NO_COST_LIMIT, &colonist->path)) {
@@ -639,7 +674,8 @@ static void walk(Colonist *colonist, const ColonistContext *context)
     if (next.x != colonist->x && next.y != colonist->y) {
         cost *= SQRT2;
     }
-    colonist->move_progress += COLONIST_WALK_SPEED / (float)TICKS_PER_SECOND / cost;
+    colonist->move_progress += COLONIST_WALK_SPEED * colonist_load_speed_factor(colonist) /
+                               (float)TICKS_PER_SECOND / cost;
     if (colonist->move_progress >= 1.0f) {
         colonist->x = next.x;
         colonist->y = next.y;

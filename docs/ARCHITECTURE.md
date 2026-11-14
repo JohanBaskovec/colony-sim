@@ -117,7 +117,12 @@ dense layers of the same size: order type and work progress per tile.
 
 Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
 `Game`): at most one stack per tile (one item type, up to its stack limit),
-plus map-wide totals per type. `items_drop()` fills the target tile, then
+plus map-wide totals per type. Each `ItemDef` has a realistic `weight` (kg per
+unit: a 7 kg log, a 20 kg stone, a 300 g portion of berries) and a `bulk`
+(room taken, about half a liter per unit, gaps included). A tile holds
+`ITEM_TILE_BULK` (1000) of bulk, so the stack limit is derived:
+`item_stack_limit() = ITEM_TILE_BULK / bulk` (1,000 berries, 50 logs, 50
+stones). `items_drop()` fills the target tile, then
 spreads the rest breadth-first over nearby passable tiles (never behind a
 wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
 `RockDef.mined_item/mined_yield`, `PlantDef.harvest_item/harvest_yield`
@@ -145,7 +150,13 @@ lets idle colonists skip the search entirely when nothing can be stored.
 
 The hauler reserves the source stack (`RESERVATION_HAUL_SOURCE`) and the
 destination tile (`RESERVATION_STORAGE`), walks to the stack, picks up what
-the destination can take, and carries it there. If the destination stops
+the destination can take and it can carry, and carries it there. Each
+colonist has a `max_carry_bulk` and a `max_carry_weight` (60 and 40 kg by
+default, by hand): `colonist_carry_capacity()` is the number of units within
+both limits, at least one (an item too big is dragged). Above the weight
+limit, walking speed is multiplied by limit / load (at least
+`COLONIST_MIN_LOAD_SPEED`); it does not happen with today's items, but will
+with huge ones and equipment. If the destination stops
 accepting the items on the way (filter changed, zone removed), it looks for
 another storage tile, else drops its load. Any interruption (eating,
 sleeping...) goes through `begin_task()`, which drops carried items where the

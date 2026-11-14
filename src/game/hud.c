@@ -87,6 +87,16 @@ static const char *key_name(SDL_Keycode key)
     return SDL_GetKeyName(key);
 }
 
+/* "21 kg", "0.3 kg": one decimal only for small, non-whole weights. */
+static void format_weight(char *out, size_t size, float kilograms)
+{
+    char number[32];
+    float rounded = SDL_roundf(kilograms);
+    int decimals = (kilograms < 10.0f && SDL_fabsf(kilograms - rounded) > 0.05f) ? 1 : 0;
+    tr_decimal(number, sizeof(number), decimals ? kilograms : rounded, decimals);
+    TR_FORMAT(out, size, tr("unit.kg"), number);
+}
+
 static const char *tool_name_key(DesignationType type)
 {
     const DesignationDef *def = designation_def(type);
@@ -143,9 +153,11 @@ static void build_tile_panel(App *app, Panel *panel)
 
     ItemStack stack = items_get(&app->game.items, x, y);
     if (stack.type != ITEM_NONE) {
+        char weight[32];
         tr_integer(a, sizeof(a), stack.count);
+        format_weight(weight, sizeof(weight), item_stack_weight((ItemType)stack.type, stack.count));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
-                  tr(item_def((ItemType)stack.type)->name_key), a);
+                  tr(item_def((ItemType)stack.type)->name_key), a, weight);
     }
 
     const Stockpile *stockpile =
@@ -237,10 +249,11 @@ static void build_selection_panel(App *app, Panel *panel)
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
               tr(colonist_activity_key(colonist)));
     if (colonist->carried.count > 0) {
-        char count[16];
+        char count[16], weight[32];
         tr_integer(count, sizeof(count), colonist->carried.count);
+        format_weight(weight, sizeof(weight), colonist_carried_weight(colonist));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.carrying"),
-                  tr(item_def((ItemType)colonist->carried.type)->name_key), count);
+                  tr(item_def((ItemType)colonist->carried.type)->name_key), count, weight);
     }
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);

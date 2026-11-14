@@ -74,7 +74,7 @@ hud.tile.rock = Paroi rocheuse : {0}
 hud.tile.plant = Plante : {0} ({1} % de croissance)
 hud.tile.move_cost = Coût de déplacement : ×{0}
 hud.tile.impassable = Infranchissable
-hud.tile.items = Objets : {0} ×{1}
+hud.tile.items = Objets : {0} ×{1} ({2})
 hud.tile.designation = Ordre : {0}
 hud.tile.designation_progress = Ordre : {0} ({1} % effectué)
 hud.tile.stockpile = Zone : {0}
@@ -110,7 +110,7 @@ need.rest.critical = À bout de forces
 
 hud.colonist.age = Âge : {0}
 hud.colonist.activity = Activité : {0}
-hud.colonist.carrying = Porte : {0} ×{1}
+hud.colonist.carrying = Porte : {0} ×{1} ({2})
 hud.colonist.need = {0} : {1} %
 hud.colonist.need_state = {0} : {1} % ({2})
 hud.selection.count.one = {0} colon sélectionné
@@ -126,3 +126,6 @@ stockpile.allowed = Objets autorisés
 stockpile.allow_all = Tout
 stockpile.allow_none = Rien
 stockpile.delete = Supprimer
+
+# Unités
+unit.kg = {0} kg

@@ -33,11 +33,19 @@ typedef uint32_t ItemTypeMask;
 
 #define ITEM_TYPE_BIT(type) ((ItemTypeMask)1u << (unsigned)(type))
 
+/*
+ * Bulk is how much room an item takes, packing gaps included, in units of
+ * about half a liter. A tile holds ITEM_TILE_BULK of it (a heap of about
+ * 1 m² × 50 cm), so the stack limit of a type is ITEM_TILE_BULK / bulk.
+ */
+#define ITEM_TILE_BULK 1000.0f
+
 typedef struct ItemDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
     ItemCategory category;
-    int stack_limit; /* Maximum number of items in one stack (one tile). */
+    float weight;    /* Kilograms per item. */
+    float bulk;      /* Room taken per item (see ITEM_TILE_BULK). */
     float nutrition; /* Food need restored by eating one item; 0 = not food. */
 } ItemDef;
 
@@ -69,6 +77,12 @@ ItemTypeMask item_types_all(void);
 ItemTypeMask item_types_in_category(ItemCategory category);
 
 bool item_is_food(ItemType type);
+
+/* Maximum number of items of a type in one stack (one tile); 0 for ITEM_NONE. */
+int item_stack_limit(ItemType type);
+
+/* Kilograms of `count` items of a type. */
+float item_stack_weight(ItemType type, int count);
 
 bool items_init(Items *items, int width, int height);
 void items_free(Items *items);

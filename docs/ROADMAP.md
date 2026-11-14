@@ -36,9 +36,11 @@ Tick items as they land and add newly discovered tasks.
 - [x] Harvest designation (gathering work): berries as a food item, the bush grows back; colonists eat food items from the ground as well as ripe bushes
 - [x] Hauling and stockpile zones: zone tool (rectangle drag, extend, Shift to remove), per-zone priority from 1 (highest) to 10, allowed items by category (food, resources); colonists carry items to the best zone with room, and move stored items to better zones
 - [x] Minimal immediate-mode UI (panels, buttons, check boxes) for the stockpile inspector
+- [x] Item weight (kg, realistic) and bulk: stack limit per tile from bulk (1,000 berries, 50 logs, 50 stones); colonists carry a limited bulk and weight per trip, and walk slower when dragging more than their weight limit
 - [ ] Work priorities grid UI (priorities exist in the simulation, default 3 for everything)
 - [ ] Stockpile filters on item condition: minimum/maximum hit points and quality sliders (once items have hit points and quality)
 - [ ] Haul more than one stack per trip; haul towards construction sites (M3)
+- [ ] Carrying capacity from strength/health; containers (baskets, sledges) and worn equipment adding bulk and weight
 
 ## M3: Building
 

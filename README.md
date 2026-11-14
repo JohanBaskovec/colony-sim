@@ -22,6 +22,7 @@ survive whatever the world throws at them.
 - Items on the ground (wood, stone, berries) in stacks; colonists eat berries from bushes or from the ground
 - Work orders (designations): chop trees, mine rock, harvest berries; idle colonists pick jobs by work priority then distance, and reserve their job or food so that nobody else takes it
 - Stockpile zones with a priority (1 to 10) and item filters by category; colonists haul items into the best zone that accepts them
+- Items have a realistic weight and a bulk: bulk sets how many fit on a tile (1,000 berries, 50 logs), and colonists carry a limited weight and bulk per trip
 - A* pathfinding with terrain movement costs
 - Selection (click, Shift+click, box) and a colonist inspector
 - Pan/zoom camera, tile inspector

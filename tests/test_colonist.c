@@ -841,6 +841,36 @@ static void test_picking(void)
     game_shutdown(&game);
 }
 
+static void test_carry_capacity(void)
+{
+    Colonist colonist;
+    colonist_init(&colonist, "Test", 30, 5, 5);
+    CHECK_NEAR(colonist.max_carry_weight, COLONIST_CARRY_WEIGHT, 1e-6);
+    CHECK_NEAR(colonist.max_carry_bulk, COLONIST_CARRY_BULK, 1e-6);
+    /* Logs: 3 by bulk (60 / 20) before 5 by weight (40 kg / 7 kg). */
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_WOOD), 3);
+    /* Stone: 2 by weight (40 kg / 20 kg). */
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE), 2);
+    /* Berries: 60 portions by bulk (18 kg). */
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BERRIES), 60);
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_NONE), 0);
+
+    CHECK_NEAR(colonist_carried_weight(&colonist), 0.0, 1e-6);
+    CHECK_NEAR(colonist_load_speed_factor(&colonist), 1.0, 1e-6);
+    colonist.carried = (ItemStack){ITEM_STONE, 2};
+    CHECK_NEAR(colonist_carried_weight(&colonist), 40.0, 1e-4);
+    CHECK_NEAR(colonist_load_speed_factor(&colonist), 1.0, 1e-6); /* At the limit: fine. */
+
+    /* A weak colonist still drags one item, slowly. */
+    colonist.max_carry_weight = 5.0f;
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE), 1);
+    colonist.carried = (ItemStack){ITEM_STONE, 1};
+    CHECK_NEAR(colonist_load_speed_factor(&colonist), 0.25, 1e-6);
+    colonist.max_carry_weight = 0.1f;
+    CHECK_NEAR(colonist_load_speed_factor(&colonist), COLONIST_MIN_LOAD_SPEED, 1e-6);
+    colonist_free(&colonist);
+}
+
 static void test_translation_keys(void)
 {
     for (int task = 0; task < TASK_COUNT; task++) {
@@ -891,6 +921,7 @@ int main(void)
     RUN_TEST(test_reservations_stay_consistent_over_a_long_run);
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);
+    RUN_TEST(test_carry_capacity);
     RUN_TEST(test_translation_keys);
     return test_summary();
 }

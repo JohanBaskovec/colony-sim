@@ -8,15 +8,14 @@ typedef struct StorageLevels {
 
 int haul_storage_room(const Items *items, int x, int y, ItemType type)
 {
-    const ItemDef *def = item_def(type);
-    if (def == NULL || type == ITEM_NONE) {
+    if (item_stack_limit(type) == 0) {
         return 0;
     }
     ItemStack stack = items_get(items, x, y);
     if (stack.type != ITEM_NONE && stack.type != type) {
         return 0;
     }
-    return def->stack_limit - (int)stack.count;
+    return item_stack_limit(type) - (int)stack.count;
 }
 
 static void storage_levels(const HaulWorld *world, StorageLevels *out)

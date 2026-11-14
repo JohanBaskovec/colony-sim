@@ -31,7 +31,8 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* 9 berries of 0.05 nutrition: the same food as eating the ripe bush directly. */
     [PLANT_BUSH] = {"berry_bush", N_("plant.bush"), 0.12f, 0.5f, 1.3f, 0.45f, 0.5f, ITEM_NONE, 0,
                     ITEM_BERRIES, 9},
-    [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f, 0.0f, 0.0f, ITEM_WOOD, 25,
+    /* 60 logs of 7 kg: the usable wood of a mature tree (see item.c). */
+    [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f, 0.0f, 0.0f, ITEM_WOOD, 60,
                     ITEM_NONE, 0},
 };
 

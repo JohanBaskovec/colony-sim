@@ -12,13 +12,35 @@ static void test_definitions(void)
         REQUIRE(def != NULL);
         CHECK(def->id != NULL);
         CHECK(i18n_is_valid_key(def->name_key));
-        CHECK(def->stack_limit > 0 && def->stack_limit <= UINT16_MAX);
+        CHECK(def->weight > 0.0f && def->bulk > 0.0f);
+        CHECK(item_stack_limit((ItemType)type) > 0);
     }
     CHECK(item_def(ITEM_TYPE_COUNT) == NULL);
     CHECK(item_is_food(ITEM_BERRIES));
     CHECK(!item_is_food(ITEM_WOOD));
     CHECK(!item_is_food(ITEM_NONE));
     CHECK(!item_is_food(ITEM_TYPE_COUNT));
+}
+
+static void test_stack_limits_follow_bulk(void)
+{
+    CHECK_EQ_INT(item_stack_limit(ITEM_BERRIES), 1000);
+    CHECK_EQ_INT(item_stack_limit(ITEM_WOOD), 50);
+    CHECK_EQ_INT(item_stack_limit(ITEM_STONE), 50);
+    CHECK_EQ_INT(item_stack_limit(ITEM_NONE), 0);
+    CHECK_EQ_INT(item_stack_limit(ITEM_TYPE_COUNT), 0);
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        const ItemDef *def = item_def((ItemType)type);
+        CHECK((float)item_stack_limit((ItemType)type) * def->bulk <= ITEM_TILE_BULK);
+    }
+    CHECK_NEAR(item_stack_weight(ITEM_WOOD, 50), 50.0 * item_def(ITEM_WOOD)->weight, 1e-3);
+    CHECK_NEAR(item_stack_weight(ITEM_NONE, 5), 0.0, 1e-6);
+
+    /* A tile really takes 1000 berries. */
+    Items items;
+    REQUIRE(items_init(&items, 2, 2));
+    CHECK_EQ_INT(items_add(&items, 0, 0, ITEM_BERRIES, 1200), 1000);
+    items_free(&items);
 }
 
 static void test_categories(void)
@@ -58,7 +80,7 @@ static void test_add_and_remove(void)
     Items items;
     CHECK(!items_init(&items, 0, 4));
     REQUIRE(items_init(&items, 8, 8));
-    int limit = item_def(ITEM_WOOD)->stack_limit;
+    int limit = item_stack_limit(ITEM_WOOD);
 
     CHECK_EQ_INT(items_add(&items, 2, 3, ITEM_WOOD, 10), 10);
     CHECK_EQ_INT(items_add(&items, 2, 3, ITEM_WOOD, limit), limit - 10); /* Up to the limit. */
@@ -88,7 +110,7 @@ static void test_drop_spreads_to_reachable_tiles(void)
     Items items;
     REQUIRE(map_init(&map, 16, 16));
     REQUIRE(items_init(&items, 16, 16));
-    int limit = item_def(ITEM_STONE)->stack_limit;
+    int limit = item_stack_limit(ITEM_STONE);
 
     /* A wall right of x = 8: nothing may land behind it. */
     for (int y = 0; y < 16; y++) {
@@ -123,7 +145,7 @@ static void test_drop_without_room_loses_the_rest(void)
         map.rock[i] = ROCK_GRANITE;
     }
     map.rock[map_index(&map, 5, 5)] = ROCK_NONE;
-    int limit = item_def(ITEM_WOOD)->stack_limit;
+    int limit = item_stack_limit(ITEM_WOOD);
     CHECK_EQ_INT(items_drop(&items, &map, 5, 5, ITEM_WOOD, limit + 7), limit);
     items_free(&items);
     map_free(&map);
@@ -146,6 +168,7 @@ static void test_hash(void)
 int main(void)
 {
     RUN_TEST(test_definitions);
+    RUN_TEST(test_stack_limits_follow_bulk);
     RUN_TEST(test_categories);
     RUN_TEST(test_additions_counter);
     RUN_TEST(test_add_and_remove);

@@ -30,6 +30,17 @@
 /* Walking speed on terrain of cost 1, in tiles per second at normal game speed. */
 #define COLONIST_WALK_SPEED 3.5f
 
+/*
+ * Carrying, by hand (no container yet): a colonist picks up at most
+ * COLONIST_CARRY_BULK of bulk and COLONIST_CARRY_WEIGHT kilograms. A single
+ * item over either limit is still taken (dragged). Above the weight limit,
+ * walking slows down in proportion (limit / load), never below
+ * COLONIST_MIN_LOAD_SPEED.
+ */
+#define COLONIST_CARRY_WEIGHT 40.0f
+#define COLONIST_CARRY_BULK 60.0f
+#define COLONIST_MIN_LOAD_SPEED 0.1f
+
 /* Needs go from 1 (fully satisfied) to 0. */
 #define NEED_FOOD_DECAY_PER_TICK (1.0f / (36.0f * TICKS_PER_HOUR))
 #define NEED_WATER_DECAY_PER_TICK (1.0f / (24.0f * TICKS_PER_HOUR))
@@ -117,6 +128,8 @@ typedef struct Colonist {
     uint32_t haul_search_stamp;
     ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
     TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
+    float max_carry_weight; /* Kilograms carried without slowing down. */
+    float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
     uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */
     float needs[NEED_COUNT];
 } Colonist;
@@ -146,6 +159,16 @@ bool colonist_is_moving(const Colonist *colonist);
 
 /* Interpolated position of the colonist's center, in world (tile) coordinates. */
 void colonist_position(const Colonist *colonist, float *x, float *y);
+
+/* Kilograms the colonist is carrying. */
+float colonist_carried_weight(const Colonist *colonist);
+
+/* How many items of a type the colonist can pick up at once (at least 1:
+ * an item too heavy or too bulky is dragged). */
+int colonist_carry_capacity(const Colonist *colonist, ItemType type);
+
+/* Walking speed multiplier from the load: 1 up to the weight limit, lower above. */
+float colonist_load_speed_factor(const Colonist *colonist);
 
 NeedLevel need_level(float value);
 

@@ -125,6 +125,12 @@ a mini-game in itself:
   dwellings, so that others drink nearby instead of walking to the lake;
 - place storage, water, food and latrines smartly to shorten trips;
 - containers (buckets, baskets) and hauling jobs.
+- **Weight and bulk**: every item has a realistic weight (kg) and a bulk (room
+  taken). A tile holds a fixed amount of bulk, so small things stack high
+  (1,000 portions of berries) and big ones do not (50 logs). Settlers carry a
+  limited bulk and weight by hand; heavier loads are dragged, slowly (later:
+  huge items such as an elephant carcass, equipment worn by hand). Containers
+  (baskets, sledges, carts) and strength will raise these limits.
 
 ### Base building
 - Blueprints → construction jobs consuming materials.

@@ -164,7 +164,9 @@ static void test_completed_orders_drop_items(void)
     designation_add_work(&d, &map, &items, 3, 3, 1e6f);
     ItemStack wood = items_get(&items, 3, 3);
     CHECK_EQ_INT(wood.type, ITEM_WOOD);
-    CHECK_EQ_INT(wood.count, plant_def(PLANT_TREE)->cut_yield);
+    /* A full tile, the rest spread around. */
+    CHECK_EQ_INT(wood.count, item_stack_limit(ITEM_WOOD));
+    CHECK_EQ_INT((int)items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
 
     designation_add_work(&d, &map, &items, 5, 5, 1e6f);
     ItemStack stone = items_get(&items, 5, 5); /* Dropped where the rock was. */

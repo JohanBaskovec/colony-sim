@@ -84,8 +84,8 @@ hud.tile.rock = Rock wall: {0}
 hud.tile.plant = Plant: {0} ({1}% grown)
 hud.tile.move_cost = Movement cost: ×{0}
 hud.tile.impassable = Impassable
-# {0} = item name, {1} = number of items
-hud.tile.items = Items: {0} ×{1}
+# {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
+hud.tile.items = Items: {0} ×{1} ({2})
 # {0} = order name (e.g. Chop trees)
 hud.tile.designation = Order: {0}
 # {0} = order name, {1} = percentage of the work done
@@ -127,8 +127,8 @@ need.rest.critical = Exhausted
 hud.colonist.age = Age: {0}
 # {0} = activity name
 hud.colonist.activity = Activity: {0}
-# {0} = item name, {1} = number of items
-hud.colonist.carrying = Carrying: {0} ×{1}
+# {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
+hud.colonist.carrying = Carrying: {0} ×{1} ({2})
 # {0} = need name, {1} = percentage
 hud.colonist.need = {0}: {1}%
 # {0} = need name, {1} = percentage, {2} = state (e.g. Hungry)
@@ -149,3 +149,6 @@ stockpile.allowed = Allowed items
 stockpile.allow_all = All
 stockpile.allow_none = None
 stockpile.delete = Delete
+
+# Units. {0} = number
+unit.kg = {0} kg
