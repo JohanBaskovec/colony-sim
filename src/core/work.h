@@ -3,8 +3,9 @@
  *
  * Every job belongs to a work type. Each settler has a priority per work type:
  * 0 means the settler never does that work, otherwise 1 (highest) to
- * WORK_PRIORITY_LOWEST. Settlers pick jobs by priority first, then distance,
- * among the jobs their knowledge allows (core/knowledge.h).
+ * WORK_PRIORITY_LOWEST. Settlers pick jobs by priority first, then by work
+ * type in the order below, then distance, among the jobs their knowledge
+ * allows (core/knowledge.h).
  */
 #ifndef COLONY_CORE_WORK_H
 #define COLONY_CORE_WORK_H
@@ -14,14 +15,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* In the order of the columns of the priorities grid: at the same priority,
+ * a settler does the work of the leftmost column first. Gathering comes after
+ * construction and crafting: a zone gathering forever would keep settlers
+ * from them otherwise. */
 typedef enum WorkType {
     WORK_MINING,
+    WORK_CONSTRUCTION, /* Construction sites, workstations, taking structures apart. */
+    WORK_CRAFTING,     /* Working through the bills of workstations. */
     WORK_WOODCUTTING,
     WORK_GATHERING,
-    WORK_CONSTRUCTION, /* Building workstations (and later, everything else). */
-    WORK_CRAFTING,     /* Working through the bills of workstations. */
     WORK_HAULING,
-    WORK_CLEANING, /* The last column: at equal priority, done after everything else. */
+    WORK_CLEANING,
     WORK_TYPE_COUNT
 } WorkType;
 

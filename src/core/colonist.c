@@ -900,9 +900,11 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
 static uint32_t construction_stamp(const ColonistContext *context);
 
 /*
- * Takes the nearest job of the highest priority level that has one. At each
- * level: designations (harvesting, cutting grass...), then construction,
- * crafting, gathering zones (a background job), hauling and cleaning. Each search kind
+ * Takes the nearest job of the highest priority level that has one. Within a
+ * level, work types are tried in the order of the priorities grid's columns
+ * (WorkType order): for each, its orders, then its other jobs (construction
+ * sites and workstation blueprints, bills, gathering zones, hauling,
+ * cleaning). Each search kind
  * backs off on failure until its stamp shows that something changed.
  */
 static bool try_start_work(Colonist *colonist, const ColonistContext *context)
@@ -933,66 +935,82 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
         open_cleaning > 0 && (search_allowed(colonist, SEARCH_CLEAN) ||
                               colonist->clean_search_stamp != clean_stamp(context));
     bool searched_cleaning = false;
-    /* Taking structures apart is a designation of construction work. */
-    const WorkTypeMask not_designations = WORK_TYPE_BIT(WORK_HAULING) |
-                                          WORK_TYPE_BIT(WORK_CRAFTING) |
-                                          WORK_TYPE_BIT(WORK_CLEANING);
+    /* Every searcher below returns true once the colonist has a job; it
+     * resets the backoff of its kind. */
+#define FOUND(kind)                                                                            \
+    do {                                                                                       \
+        colonist->search_failures[kind] = 0;                                                   \
+        colonist->search_cooldown[kind] = 0;                                                   \
+        return true;                                                                           \
+    } while (0)
 
     for (int priority = WORK_PRIORITY_HIGHEST; priority <= WORK_PRIORITY_LOWEST; priority++) {
         WorkTypeMask mask = work_types_at_priority(colonist->work_priorities, priority);
-        WorkTypeMask designation_mask = mask & ~not_designations;
-        if (designations_allowed && designation_mask != 0) {
-            searched_designations = true;
-            if (try_designation_job(colonist, context, designation_mask, false)) {
-                colonist->search_failures[SEARCH_WORK] = 0;
-                colonist->search_cooldown[SEARCH_WORK] = 0;
-                return true;
-            }
-        }
-        if (constructions_allowed && (mask & WORK_TYPE_BIT(WORK_CONSTRUCTION))) {
-            searched_constructions = true;
-            if (try_construction_job(colonist, context)) {
-                colonist->search_failures[SEARCH_CONSTRUCTION] = 0;
-                colonist->search_cooldown[SEARCH_CONSTRUCTION] = 0;
-                return true;
-            }
-        }
-        for (int build = 1; build >= 0 && stations_allowed; build--) {
-            if (!(mask & WORK_TYPE_BIT(build ? WORK_CONSTRUCTION : WORK_CRAFTING))) {
+        /* At the same priority, work types are tried in the order of the
+         * columns of the priorities grid, from left to right. */
+        for (int type = 0; type < WORK_TYPE_COUNT; type++) {
+            if (!(mask & WORK_TYPE_BIT(type))) {
                 continue;
             }
-            searched_stations = true;
-            if (try_station_job(colonist, context, build)) {
-                colonist->search_failures[SEARCH_STATION] = 0;
-                colonist->search_cooldown[SEARCH_STATION] = 0;
-                return true;
+            WorkTypeMask bit = WORK_TYPE_BIT(type);
+            /* Orders (mining, taking structures apart...) of this work type. */
+            if (designations_allowed && designations_count_for_work(context->designations, bit)) {
+                searched_designations = true;
+                if (try_designation_job(colonist, context, bit, false)) {
+                    FOUND(SEARCH_WORK);
+                }
             }
-        }
-        if (gathering_allowed && gather_jobs_for(colonist, mask) != 0) {
-            searched_gathering = true;
-            if (try_designation_job(colonist, context, mask, true)) {
-                colonist->search_failures[SEARCH_GATHER] = 0;
-                colonist->search_cooldown[SEARCH_GATHER] = 0;
-                return true;
-            }
-        }
-        if (hauling_allowed && (mask & WORK_TYPE_BIT(WORK_HAULING))) {
-            searched_hauling = true;
-            if (try_haul_job(colonist, context)) {
-                colonist->search_failures[SEARCH_HAUL] = 0;
-                colonist->search_cooldown[SEARCH_HAUL] = 0;
-                return true;
-            }
-        }
-        if (cleaning_allowed && (mask & WORK_TYPE_BIT(WORK_CLEANING))) {
-            searched_cleaning = true;
-            if (try_clean_job(colonist, context)) {
-                colonist->search_failures[SEARCH_CLEAN] = 0;
-                colonist->search_cooldown[SEARCH_CLEAN] = 0;
-                return true;
+            switch ((WorkType)type) {
+            case WORK_CONSTRUCTION:
+                if (constructions_allowed) {
+                    searched_constructions = true;
+                    if (try_construction_job(colonist, context)) {
+                        FOUND(SEARCH_CONSTRUCTION);
+                    }
+                }
+                if (stations_allowed) {
+                    searched_stations = true;
+                    if (try_station_job(colonist, context, true)) {
+                        FOUND(SEARCH_STATION);
+                    }
+                }
+                break;
+            case WORK_CRAFTING:
+                if (stations_allowed) {
+                    searched_stations = true;
+                    if (try_station_job(colonist, context, false)) {
+                        FOUND(SEARCH_STATION);
+                    }
+                }
+                break;
+            case WORK_HAULING:
+                if (hauling_allowed) {
+                    searched_hauling = true;
+                    if (try_haul_job(colonist, context)) {
+                        FOUND(SEARCH_HAUL);
+                    }
+                }
+                break;
+            case WORK_CLEANING:
+                if (cleaning_allowed) {
+                    searched_cleaning = true;
+                    if (try_clean_job(colonist, context)) {
+                        FOUND(SEARCH_CLEAN);
+                    }
+                }
+                break;
+            default: /* Mining, woodcutting, gathering: jobs in gathering zones. */
+                if (gathering_allowed && gather_jobs_for(colonist, bit) != 0) {
+                    searched_gathering = true;
+                    if (try_designation_job(colonist, context, bit, true)) {
+                        FOUND(SEARCH_GATHER);
+                    }
+                }
+                break;
             }
         }
     }
+#undef FOUND
     if (searched_designations) {
         search_failed(colonist, SEARCH_WORK);
         colonist->work_search_stamp = work_stamp(context);

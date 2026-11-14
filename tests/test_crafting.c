@@ -644,6 +644,44 @@ static void test_plants_are_cleared_before_building(void)
     game_shutdown(&game);
 }
 
+/* First task of a knapper with a bill to work through and branches to
+ * gather in a zone, at the given priorities. */
+static ColonistTask first_task(int crafting, int gathering)
+{
+    Game game;
+    if (!init_flat_game(&game)) {
+        return TASK_COUNT;
+    }
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
+    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
+    workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
+    Plant *tree = &game.map.plants[map_index(&game.map, 11, 11)];
+    *tree = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    plant_fill_stocks(tree);
+    int zone = gather_zone_create(&game.gather_zones, &game.map, 11, 11, 12, 12);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BRANCHES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BRANCHES, GATHER_FOREVER);
+    EntityId id = game_colonist_id_at(&game, 0);
+    game_set_work_priority(&game, id, WORK_CRAFTING, crafting);
+    game_set_work_priority(&game, id, WORK_GATHERING, gathering);
+    run_ticks(&game, 5);
+    ColonistTask task = colonist->task;
+    game_shutdown(&game);
+    return task;
+}
+
+static void test_same_priority_follows_the_columns(void)
+{
+    /* Crafting is left of gathering in the grid: done first at equal priority. */
+    CHECK((int)WORK_CRAFTING < (int)WORK_GATHERING);
+    CHECK_EQ_INT(first_task(3, 3), TASK_CRAFT);
+    /* A higher priority wins over the column order. */
+    CHECK_EQ_INT(first_task(3, 2), TASK_WORK);
+    CHECK_EQ_INT(first_task(1, 2), TASK_CRAFT);
+}
+
 int main(void)
 {
     RUN_TEST(test_carried_tools);
@@ -668,5 +706,6 @@ int main(void)
     RUN_TEST(test_until_stock_ignores_items_out_of_storage);
     RUN_TEST(test_crafts_make_the_station_dirty);
     RUN_TEST(test_plants_are_cleared_before_building);
+    RUN_TEST(test_same_priority_follows_the_columns);
     return test_summary();
 }

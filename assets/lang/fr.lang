@@ -308,5 +308,5 @@ work_panel.title = Priorités de travail
 work_panel.colonist = Colon
 work_panel.empty = Aucun colon
 work_panel.hint = Clic gauche : priorité plus haute · Clic droit : priorité plus basse · Clic sur un nom : aller au colon
-work_panel.legend = {0} = fait en premier · {1} = fait en dernier · vide = jamais
+work_panel.legend = {0} = fait en premier · {1} = fait en dernier · vide = jamais · même chiffre : colonne de gauche d’abord
 work_panel.knowledge_legend = Petit nombre : niveau de savoir (utilisable dès {0}, jusqu’à {1} ; grisé en dessous), pour un travail plus rapide et meilleur ; il progresse avec la pratique

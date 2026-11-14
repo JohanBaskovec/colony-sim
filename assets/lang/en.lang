@@ -376,6 +376,6 @@ work_panel.colonist = Colonist
 work_panel.empty = No colonists
 work_panel.hint = Left click: higher priority · Right click: lower priority · Click a name: go to the colonist
 # {0} = highest priority number (1), {1} = lowest priority number (4)
-work_panel.legend = {0} = done first · {1} = done last · empty = never
+work_panel.legend = {0} = done first · {1} = done last · empty = never · same number: left column first
 # {0} = level from which a knowledge can be used, {1} = highest level
 work_panel.knowledge_legend = Small number: knowledge level (usable from {0}, up to {1}; greyed below), for faster and better work; it rises with practice

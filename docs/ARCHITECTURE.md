@@ -337,12 +337,16 @@ Every designation belongs to a **work type** (`core/work.h`: mining,
 woodcutting, gathering...). Each colonist has a **priority** per work type: 0 = never,
 otherwise 1 (highest) to 4 (default 3; cleaning defaults to 4).
 
-Within one priority level, `try_start_work()` tries the kinds of jobs in a
-fixed order: designations (the nearest of the work types at that level),
-construction sites, workstation blueprints, bills, gathering zones, hauling,
-cleaning. This follows the columns of the grid from left to right, except
-that gathering zones come after construction and crafting (a background job:
-a zone gathering "forever" would otherwise starve them at the same level).
+Within one priority level, `try_start_work()` goes through the work types in
+the order of the grid's columns, left to right (the order of `WorkType`):
+mining, construction, crafting, woodcutting, gathering, hauling, cleaning. A
+settler does the leftmost work it can find before looking at the next column;
+a higher priority always wins over the column order. For each work type it
+tries the nearest designation of that type, then the type's own jobs
+(construction: sites, then workstation blueprints; crafting: bills; gathering:
+gathering zones; hauling; cleaning). Gathering sits right of construction and
+crafting: a zone gathering "forever" would otherwise starve them at the same
+level.
 
 The player edits priorities in the work grid (`game/work_panel.c`), which
 only calls `game_set_work_priority()`; the stepping rules of the grid
