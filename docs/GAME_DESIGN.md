@@ -9,7 +9,7 @@ A top-down colony simulation where a handful of settlers try to build a home in
 a hostile, procedurally generated land, and lead their colony from the stone age
 towards the future. The player never controls settlers directly: they set
 priorities, designate work and plan the base, and the settlers act on their
-own, driven by their needs, skills and moods. Stories emerge from the
+own, driven by their needs, knowledge and moods. Stories emerge from the
 interaction of systems rather than from a script.
 
 ## Pillars
@@ -48,13 +48,25 @@ observe the colony → designate work / plan buildings / set priorities and role
 react to events  ←  settlers work, eat, drink, sleep, socialize  ←─┘
 ```
 
-## Eras and progression
+## Knowledge and progression
 
-- One colony advances through eras over a game; each era unlocks new
-  technologies, buildings, items and threats.
-- How progress is made (research, discovery by practice, events...) **(open)**.
-- First era: **stone age**. Typical content: gathering and hunting, flint
-  knapping, fire, hides and clothing, shelters and caves, simple tools.
+- There is no colony-wide research and no tech tree. **Each settler has a
+  level from 0 to 100 in each knowledge** (fire, stone knapping, gathering,
+  bow making, archery...). Below 50 a knowledge unlocks nothing; from 50 that
+  settler, and only them, can make the items and constructions it unlocks.
+  The level sets work speed and quality: knowledge replaces skills.
+- No knowledge requires another, so they can be learned in any order; but
+  everything must be learned, even building a computer. Progress follows
+  what the colony does (related practice leads to new knowledges) and what
+  its recipes need (materials, tools, workstations from other knowledges).
+- Settlers learn by doing, as apprentices at a master's side, from fireside
+  stories and later classes, by chatting, and by related practice (which is
+  how something nobody knows gets invented). Unused knowledge slowly fades;
+  a knowledge is lost when nobody alive masters it any more.
+- No eras as a game mechanic: historical periods only group content (from the
+  Upper Paleolithic up to the Iron Age, then later) and feed the event director.
+- Details, items and constructions: [KNOWLEDGE.md](KNOWLEDGE.md), starting with
+  the seven starting knowledges.
 
 ## Endings **(long term)**
 
@@ -101,8 +113,9 @@ diplomatic, religious...
   language (later: per-culture lists in data files).
 - Food, for now: settlers eat berries, from berry bushes (which regrow) or
   harvested onto the ground. Meals, spoilage and farming come later.
-- Skills (construction, mining, gathering, cooking, crafting, medicine, combat,
-  social...) improving with practice.
+- Knowledge levels (fire, stone knapping, gathering, building, medicine,
+  combat...) improving with practice and teaching: see *Knowledge and
+  progression*.
 - Traits that modify behavior and mood.
 - Mood: sum of situational modifiers (ate a good meal, slept outside, saw a
   death...). Low mood → reduced work, then mental breaks.
