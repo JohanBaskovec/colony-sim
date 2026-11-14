@@ -289,6 +289,54 @@ static void test_taking_a_wall_apart(void)
     game_shutdown(&game);
 }
 
+static void test_worn_bed_is_refreshed(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    map_build_structure(&game.map, 12, 12, STRUCTURE_GRASS_BED, ITEM_QUALITY_STANDARD);
+    map_set_structure_hit_points(&game.map, 12, 12, 10);
+    items_add(&game.items, 14, 10, item_stack_pristine(ITEM_GRASS, 6));
+    /* The day ends: the bed wears below half, a refresh site appears. */
+    game.clock.tick = TICKS_PER_DAY - 1;
+    game_tick(&game);
+    CHECK_EQ_INT(map_structure_hit_points(&game.map, 12, 12), 9);
+    int site = construction_at(&game.constructions, 12, 12);
+    REQUIRE(site != CONSTRUCTION_NONE);
+    CHECK(construction_get(&game.constructions, site)->refresh);
+    /* A builder brings 4 armfuls of dry grass and refreshes it. */
+    for (int i = 0; i < TICKS_PER_HOUR &&
+                    construction_at(&game.constructions, 12, 12) != CONSTRUCTION_NONE;
+         i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(construction_at(&game.constructions, 12, 12), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(map_structure_hit_points(&game.map, 12, 12), 20);
+    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 2);
+    CHECK_EQ_INT(map_structure(&game.map, 12, 12), STRUCTURE_GRASS_BED);
+    game_shutdown(&game);
+}
+
+static void test_taking_apart_a_bed_being_refreshed(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    map_set_structure(&game.map, 12, 10, STRUCTURE_GRASS_BED);
+    int site = constructions_place_refresh(&game.constructions, &game.map, 12, 10);
+    REQUIRE(site != CONSTRUCTION_NONE);
+    construction_deliver(&game.constructions, site, item_stack_pristine(ITEM_GRASS, 3));
+    CHECK_EQ_INT(game_designate_rect(&game, 12, 10, 12, 10, DESIGNATION_DECONSTRUCT), 1);
+    run_ticks(&game, TICKS_PER_HOUR);
+    CHECK_EQ_INT(map_structure(&game.map, 12, 10), STRUCTURE_NONE);
+    /* The refresh site goes too: its grass comes back with half the bed's. */
+    CHECK_EQ_INT(construction_at(&game.constructions, 12, 10), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 3 + 6);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_placing);
@@ -301,5 +349,7 @@ int main(void)
     RUN_TEST(test_settlers_sleep_in_beds);
     RUN_TEST(test_ground_sleep_takes_longer);
     RUN_TEST(test_taking_a_wall_apart);
+    RUN_TEST(test_worn_bed_is_refreshed);
+    RUN_TEST(test_taking_apart_a_bed_being_refreshed);
     return test_summary();
 }

@@ -561,6 +561,10 @@ void game_tick(Game *game)
         gather_zones_plants_changed(&game->gather_zones);
     }
     update_items(game);
+    if (game->clock.tick % TICKS_PER_DAY == 0) {
+        /* Bedding packs down: worn beds get a refresh site, or fall apart. */
+        constructions_wear_day(&game->constructions, &game->map, &game->items);
+    }
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game->items.totals);
     update_colonists(game);

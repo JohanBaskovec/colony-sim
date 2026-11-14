@@ -1307,6 +1307,17 @@ static void work(Colonist *colonist, const ColonistContext *context)
                                      target.y, colonist_work_speed(colonist, knowledge),
                                      colonist_knowledge_level(colonist, knowledge), context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1);
+    if (done && type == DESIGNATION_DECONSTRUCT) {
+        /* A refresh site on the structure taken apart: its materials back. */
+        ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
+        int count = constructions_remove(context->constructions,
+                                         construction_at(context->constructions, target.x,
+                                                         target.y),
+                                         returned);
+        for (int i = 0; i < count; i++) {
+            items_drop(context->items, context->map, target.x, target.y, returned[i]);
+        }
+    }
     if (done) {
         set_idle(colonist, context, 0); /* Look for the next job right away. */
     }
@@ -1885,10 +1896,9 @@ static bool site_has_job(const ColonistContext *context, const Colonist *worker,
     if (construction_materials_complete(site)) {
         return true;
     }
-    const StructureDef *def = structure_def((StructureType)site->type);
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         if (construction_missing(site, slot) > 0 &&
-            items_exist(context->items, ITEM_TYPE_BIT(def->materials[slot].type), 1)) {
+            items_exist(context->items, ITEM_TYPE_BIT(construction_material(site, slot)), 1)) {
             return true;
         }
     }
@@ -1944,9 +1954,8 @@ static bool go_to_site(Colonist *colonist, const ColonistContext *context)
 /* Material slot of the site for an item type, -1 if none. */
 static int site_slot(const ConstructionSite *site, ItemType type)
 {
-    const StructureDef *def = structure_def((StructureType)site->type);
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-        if (type != ITEM_NONE && def->materials[slot].type == type) {
+        if (type != ITEM_NONE && construction_material(site, slot) == type) {
             return slot;
         }
     }
@@ -1962,7 +1971,6 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
     if (site == NULL) {
         return false;
     }
-    const StructureDef *def = structure_def((StructureType)site->type);
     if (colonist->carried.count > 0) {
         int slot = site_slot(site, (ItemType)colonist->carried.type);
         int missing = slot >= 0 ? construction_missing(site, slot) - colonist->carried.count : 0;
@@ -1984,7 +1992,8 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
             continue;
         }
         missing_any = true;
-        FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(def->materials[slot].type));
+        ItemTypeMask wanted = ITEM_TYPE_BIT(construction_material(site, slot));
+        FetchSearch search = fetch_search(context, wanted);
         if (start_fetch(colonist, context, &search, current_tile(colonist),
                         COLONIST_WORK_SEARCH_MAX_COST, false)) {
             return true;
@@ -1998,6 +2007,8 @@ static bool construction_job_still_valid(const Colonist *colonist,
 {
     const ConstructionSite *site = job_site(colonist, context);
     return site != NULL &&
+           (!site->refresh || map_structure(context->map, site->x, site->y) ==
+                                  (StructureType)site->type) &&
            reservations_owner(context->reservations, RESERVATION_CONSTRUCTION,
                               colonist->target) == context->worker_id &&
            colonist->work_priorities[WORK_CONSTRUCTION] != WORK_PRIORITY_DISABLED &&
@@ -2119,8 +2130,11 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
     KnowledgeType knowledge = structure_def(type)->knowledge;
     float speed = colonist_work_speed(colonist, knowledge) *
                   work_with_tool(colonist, TOOL_USE_BUILDING);
+    /* The grade depends on the level before this tick's learning. */
     bool built = construction_add_work(context->constructions, context->map, context->items,
-                                       colonist->site, speed);
+                                       colonist->site, speed,
+                                       colonist_knowledge_level(colonist, knowledge),
+                                       context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1);
     if (built) {
         structure_built(context, type, colonist->target);

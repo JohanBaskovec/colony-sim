@@ -171,6 +171,7 @@ hud.tile.station = Workstation: {0}
 # {0} = workstation name, {1} = percentage of the construction done
 hud.tile.blueprint = Blueprint: {0} ({1}% built)
 hud.tile.structure = Construction: {0}
+hud.tile.refresh = Refreshing: {0} ({1}% done)
 # {0}: material, {1}: brought so far, {2}: needed.
 hud.tile.material = {0}: {1}/{2}
 # Stones lying about a tile, that gathering may still find: {0} = item name, {1} = count

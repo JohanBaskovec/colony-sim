@@ -147,6 +147,7 @@ hud.tile.gather_left_off = Interrompu : {0} ({1} % effectué)
 hud.tile.station = Poste de travail : {0}
 hud.tile.blueprint = Plan : {0} (construit à {1} %)
 hud.tile.structure = Construction : {0}
+hud.tile.refresh = Réfection : {0} (faite à {1} %)
 # {0} : matériau, {1} : déjà apporté, {2} : nécessaire.
 hud.tile.material = {0} : {1}/{2}
 hud.tile.ground_stones = Dans le sol : {0} ×{1}

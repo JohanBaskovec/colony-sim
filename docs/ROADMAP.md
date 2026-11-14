@@ -72,7 +72,8 @@ Tick items as they land and add newly discovered tasks.
 - [x] Construction sites: blueprints of structures with several materials, builders fetching each material and working from a neighboring tile, cancelling gives the materials back, a *take apart* order (half the materials back)
 - [x] First structures, with realistic material counts (dry grass only): grass bed (12 dry grass), grass and branch wall 2 m high (5 branches, 24 dry grass, drawn as the edges of a rectangle), branch screen as a door (5 branches, 5 twigs, ×1.5 movement cost)
 - [x] Beds: settlers sleep in the nearest free bed; on the ground rest comes back at ×0.8 and they work 10% slower for 12 hours after
-- [ ] Quality of built things from the builder's level and the materials; hit points, wear, refreshing bedding (`docs/KNOWLEDGE.md` §10.2)
+- [x] Quality of built things from the builder's level and the materials (capped at the materials' average grade + 1, grass and twigs do not cap); hit points by grade (bed 20, wall 60, screen 40 at standard, ×0.6 to ×1.5); a grass bed loses 1 hit point a day, gets a refresh site below half (4 dry grass, 125 ticks) and falls apart at 0; grade and hit points in the tile inspector
+- [ ] Built things, later: comfort by bed grade and the "slept on old bedding" mood (with moods); damage from fire, weather and animals; repairing walls and screens
 - [ ] Beds owned by one settler; beds of 1 × 2 tiles with a rotation
 - [ ] Haulers bring materials to construction sites (today the builder fetches them); a construction scenario in `bench_simulation`
 - [ ] Lean-to (roof), cave floor clearing; workstations built through construction sites

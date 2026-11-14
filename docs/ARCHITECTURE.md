@@ -55,8 +55,8 @@ simulation:
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot): blueprints, materials, construction, bills, the craft in progress |
-| `structure`  | Structure definitions (grass bed, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor |
-| `construction`| Construction sites: blueprints of structures, materials delivered per slot, work; built structures go to the map's structure layer |
+| `structure`  | Structure definitions (grass bed, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, hit points, wear and refresh; hit points by grade, grade cap from the materials |
+| `construction`| Construction sites: blueprints of structures and refresh sites on worn ones, materials delivered per slot, work, built grade; daily wear; built structures go to the map's structure layers |
 | `work`       | Work types (mining, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning, quality and condition of what a worker produces |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
@@ -464,6 +464,26 @@ built structure and gives back half of its materials.
 
 Material counts come from real structures, for a tile of about 1 m²: see
 `structure.c` and `docs/KNOWLEDGE.md` §10.
+
+**Grade, hit points, wear**: two more map layers hold each built
+structure's grade (`Map.structure_quality`) and hit points
+(`Map.structure_hit_points`). `map_set_structure()` gives a standard grade
+and full hit points (worldgen, tests); a finished site uses
+`map_build_structure()` with the builder's grade
+(`knowledge_quality_of_score()` of a roll at their level, through the
+game's `Rng`), capped by `structure_quality_cap()`: the average grade of the
+graded materials delivered (branches; grass and twigs do not cap) + 1, as
+for crafts. `structure_max_hit_points()` scales the definition's hit points
+by the grade (×0.6 crude to ×1.5 superb). Once a day (`game_tick()` on the
+day boundary) `constructions_wear_day()` takes `wear_per_day` hit points from
+structures that wear by themselves (a grass bed: 1); one at 0 falls apart
+(with a refresh site on it, whose materials are dropped), one below
+`STRUCTURE_REFRESH_BELOW` (half) gets a **refresh site**: a construction site
+with `refresh` set, on the built structure, wanting `refresh_material` and
+`refresh_work` instead of the building ones (`construction_material()`,
+`construction_material_count()`, `construction_work_needed()`). Builders
+handle it like any site; finishing it brings the hit points back to full and
+keeps the grade. Taking the structure apart removes its refresh site.
 
 **Clearing plants**: blueprints (construction sites and workstations) may
 be placed on grass and bushes, not on trees (`map_plant_blocks_building()`:

@@ -784,16 +784,17 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
             site->y < visible.y0 || site->y >= visible.y1) {
             continue;
         }
-        const StructureDef *def = structure_def((StructureType)site->type);
         int needed = 0, delivered = 0;
         for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-            needed += def->materials[slot].count;
+            needed += construction_material_count(site, slot);
             delivered += site->delivered[slot].count;
         }
         float materials = needed > 0 ? (float)delivered / (float)needed : 1.0f;
         SDL_FRect tile = tile_rect(camera, site->x, site->y);
-        render_structure_shape(renderer, &tile, (StructureType)site->type,
-                               (Uint8)(70.0f + 110.0f * materials));
+        if (!site->refresh) { /* A refresh site sits on the structure itself. */
+            render_structure_shape(renderer, &tile, (StructureType)site->type,
+                                   (Uint8)(70.0f + 110.0f * materials));
+        }
         outline(renderer, inset(&tile, 0.9f), 1.0f, BLUEPRINT_COLOR);
         progress_bar(renderer, &tile, construction_work_fraction(site));
     }

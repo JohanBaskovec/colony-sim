@@ -145,6 +145,25 @@ static void add_item_condition_line(Panel *panel, ItemStack stack)
               max_hit_points, percent);
 }
 
+/* Grade and hit points of the structure built on a tile. */
+static void add_structure_condition_line(Panel *panel, const Map *map, int x, int y)
+{
+    StructureType type = map_structure(map, x, y);
+    ItemQuality grade = map_structure_quality(map, x, y);
+    int max = structure_max_hit_points(type, grade);
+    if (max <= 0) {
+        return;
+    }
+    int current = map_structure_hit_points(map, x, y);
+    char hit_points[16], max_hit_points[16], number[16], percent[32];
+    tr_integer(hit_points, sizeof(hit_points), current);
+    tr_integer(max_hit_points, sizeof(max_hit_points), max);
+    tr_integer(number, sizeof(number), (long long)current * 100 / max);
+    TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_condition"),
+              tr(item_quality_name_key(grade)), hit_points, max_hit_points, percent);
+}
+
 static void build_status_panel(App *app, Panel *panel)
 {
     const GameClock *clock = &app->game.clock;
@@ -233,22 +252,25 @@ static void build_tile_panel(App *app, Panel *panel)
     if (structure != STRUCTURE_NONE) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.structure"),
                   tr(structure_def(structure)->name_key));
+        add_structure_condition_line(panel, map, x, y);
     }
     const ConstructionSite *site = construction_get(
         &app->game.constructions, construction_at(&app->game.constructions, x, y));
     if (site != NULL) {
         const StructureDef *def = structure_def((StructureType)site->type);
         tr_integer(a, sizeof(a), (long long)(construction_work_fraction(site) * 100.0f));
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.blueprint"), tr(def->name_key),
-                  a);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+                  tr(site->refresh ? "hud.tile.refresh" : "hud.tile.blueprint"),
+                  tr(def->name_key), a);
         for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-            if (def->materials[slot].type == ITEM_NONE) {
+            ItemType material = construction_material(site, slot);
+            if (material == ITEM_NONE) {
                 continue;
             }
             tr_integer(a, sizeof(a), site->delivered[slot].count);
-            tr_integer(b, sizeof(b), def->materials[slot].count);
+            tr_integer(b, sizeof(b), construction_material_count(site, slot));
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.material"),
-                      tr(item_def(def->materials[slot].type)->name_key), a, b);
+                      tr(item_def(material)->name_key), a, b);
         }
     }
 

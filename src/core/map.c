@@ -151,8 +151,11 @@ bool map_init(Map *map, int width, int height)
     map->cobbles = calloc(count, 1);
     map->flint = calloc(count, 1);
     map->structure = calloc(count, 1);
+    map->structure_quality = calloc(count, 1);
+    map->structure_hit_points = calloc(count, sizeof(*map->structure_hit_points));
     if (map->terrain == NULL || map->rock == NULL || map->plants == NULL ||
-        map->cobbles == NULL || map->flint == NULL || map->structure == NULL) {
+        map->cobbles == NULL || map->flint == NULL || map->structure == NULL ||
+        map->structure_quality == NULL || map->structure_hit_points == NULL) {
         map_free(map);
         return false;
     }
@@ -171,6 +174,8 @@ void map_free(Map *map)
     free(map->cobbles);
     free(map->flint);
     free(map->structure);
+    free(map->structure_quality);
+    free(map->structure_hit_points);
     memset(map, 0, sizeof(*map));
 }
 
@@ -215,6 +220,9 @@ void map_set_structure(Map *map, int x, int y, StructureType type)
     }
     size_t index = map_index(map, x, y);
     StructureType old = (StructureType)map->structure[index];
+    ItemQuality quality = type == STRUCTURE_NONE ? ITEM_QUALITY_CRUDE : ITEM_QUALITY_STANDARD;
+    map->structure_quality[index] = (uint8_t)quality;
+    map->structure_hit_points[index] = (uint16_t)structure_max_hit_points(type, quality);
     if (old == type) {
         return;
     }
@@ -229,6 +237,43 @@ void map_set_structure(Map *map, int x, int y, StructureType type)
     if (was_passable != is_passable) {
         log_topology_change(map, x, y, is_passable);
     }
+}
+
+void map_build_structure(Map *map, int x, int y, StructureType type, ItemQuality quality)
+{
+    map_set_structure(map, x, y, type);
+    if (map_in_bounds(map, x, y) && type != STRUCTURE_NONE &&
+        (unsigned)type < STRUCTURE_TYPE_COUNT) {
+        size_t index = map_index(map, x, y);
+        quality = (ItemQuality)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
+        map->structure_quality[index] = (uint8_t)quality;
+        map->structure_hit_points[index] = (uint16_t)structure_max_hit_points(type, quality);
+    }
+}
+
+ItemQuality map_structure_quality(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) ? (ItemQuality)map->structure_quality[map_index(map, x, y)]
+                                    : ITEM_QUALITY_CRUDE;
+}
+
+int map_structure_hit_points(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) ? map->structure_hit_points[map_index(map, x, y)] : 0;
+}
+
+void map_set_structure_hit_points(Map *map, int x, int y, int hit_points)
+{
+    if (!map_in_bounds(map, x, y)) {
+        return;
+    }
+    size_t index = map_index(map, x, y);
+    StructureType type = (StructureType)map->structure[index];
+    if (type == STRUCTURE_NONE) {
+        return;
+    }
+    int max = structure_max_hit_points(type, (ItemQuality)map->structure_quality[index]);
+    map->structure_hit_points[index] = (uint16_t)clampi(hit_points, 1, max);
 }
 
 StructureType map_structure(const Map *map, int x, int y)
@@ -274,6 +319,9 @@ uint64_t map_hash(const Map *map)
     hash = hash_fnv1a64(hash, map->cobbles, count);
     hash = hash_fnv1a64(hash, map->flint, count);
     hash = hash_fnv1a64(hash, map->structure, count);
+    hash = hash_fnv1a64(hash, map->structure_quality, count);
+    hash = hash_fnv1a64(hash, map->structure_hit_points,
+                        count * sizeof(*map->structure_hit_points));
     /* Hash plant fields one by one: struct padding bytes are unspecified. */
     for (size_t i = 0; i < count; i++) {
         const Plant *plant = &map->plants[i];

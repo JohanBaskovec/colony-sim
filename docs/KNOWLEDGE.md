@@ -808,6 +808,11 @@ by one settler.
   penalty; comfort by grade.
 - Loses 1 hit point a day; below 50%, "slept on old bedding"; at 0, gone.
   Refreshing replaces the grass (4 grass, 125 ticks).
+- Hit points: bed 20, wall 60, screen 40 at standard grade, ×0.6 (crude) to
+  ×1.5 (superb), like items. The grade comes from the builder's level, at
+  most one above the average grade of the graded materials (branches; dry
+  grass and twigs have no grade). *(Implemented; comfort and the old bedding
+  mood wait for moods.)*
 
 **Grass and branch wall**: posts and rails of branches thatched with dry
 grass, 2 m high: the first wall (it replaces the waist-high windbreak first

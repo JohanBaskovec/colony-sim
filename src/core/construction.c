@@ -1,5 +1,6 @@
 #include "core/construction.h"
 
+#include "core/knowledge.h"
 #include "core/util.h"
 
 #include <stdlib.h>
@@ -102,6 +103,36 @@ int constructions_place(Constructions *constructions, const Map *map, StructureT
     return CONSTRUCTION_NONE;
 }
 
+int constructions_place_refresh(Constructions *constructions, const Map *map, int x, int y)
+{
+    StructureType type = map_structure(map, x, y);
+    const StructureDef *def = structure_def(type);
+    if (!in_bounds(constructions, x, y) || type == STRUCTURE_NONE || def == NULL ||
+        def->refresh_work <= 0.0f || construction_at(constructions, x, y) != CONSTRUCTION_NONE) {
+        return CONSTRUCTION_NONE;
+    }
+    for (int index = 0; index < CONSTRUCTION_MAX; index++) {
+        ConstructionSite *site = &constructions->list[index];
+        if (site->used) {
+            continue;
+        }
+        *site = (ConstructionSite){.used = true,
+                                   .type = (uint8_t)type,
+                                   .x = (int16_t)x,
+                                   .y = (int16_t)y,
+                                   .number = constructions->next_number++,
+                                   .refresh = true};
+        for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+            site->delivered[slot] = (ItemStack){.type = ITEM_NONE};
+        }
+        constructions->at[index_of(constructions, x, y)] = (uint16_t)(index + 1);
+        constructions->used_count++;
+        constructions->revision++;
+        return index;
+    }
+    return CONSTRUCTION_NONE;
+}
+
 int constructions_remove(Constructions *constructions, int index,
                          ItemStack returned[STRUCTURE_MATERIAL_SLOTS])
 {
@@ -122,14 +153,43 @@ int constructions_remove(Constructions *constructions, int index,
     return count;
 }
 
-int construction_missing(const ConstructionSite *site, int slot)
+/* The material of a slot: the structure's, or its refresh material. */
+static StructureMaterial site_material(const ConstructionSite *site, int slot)
 {
     const StructureDef *def = structure_def((StructureType)site->type);
-    if (def == NULL || slot < 0 || slot >= STRUCTURE_MATERIAL_SLOTS ||
-        def->materials[slot].type == ITEM_NONE) {
-        return 0;
+    StructureMaterial none = {ITEM_NONE, 0};
+    if (def == NULL || slot < 0 || slot >= STRUCTURE_MATERIAL_SLOTS) {
+        return none;
     }
-    int missing = def->materials[slot].count - (int)site->delivered[slot].count;
+    if (site->refresh) {
+        return slot == 0 ? def->refresh_material : none;
+    }
+    return def->materials[slot];
+}
+
+ItemType construction_material(const ConstructionSite *site, int slot)
+{
+    return site_material(site, slot).type;
+}
+
+int construction_material_count(const ConstructionSite *site, int slot)
+{
+    StructureMaterial material = site_material(site, slot);
+    return material.type != ITEM_NONE ? material.count : 0;
+}
+
+float construction_work_needed(const ConstructionSite *site)
+{
+    const StructureDef *def = structure_def((StructureType)site->type);
+    if (def == NULL) {
+        return 0.0f;
+    }
+    return site->refresh ? def->refresh_work : def->build_work;
+}
+
+int construction_missing(const ConstructionSite *site, int slot)
+{
+    int missing = construction_material_count(site, slot) - (int)site->delivered[slot].count;
     return missing > 0 ? missing : 0;
 }
 
@@ -149,10 +209,9 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
     if (site == NULL || stack.count == 0) {
         return 0;
     }
-    const StructureDef *def = structure_def((StructureType)site->type);
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         int missing = construction_missing(site, slot);
-        if (def->materials[slot].type != stack.type || missing <= 0) {
+        if (construction_material(site, slot) != stack.type || missing <= 0) {
             continue;
         }
         ItemStack taken = stack;
@@ -194,30 +253,78 @@ static void clear_items(Map *map, Items *items, int x, int y)
 }
 
 bool construction_add_work(Constructions *constructions, Map *map, Items *items, int index,
-                           float work)
+                           float work, double level, Rng *rng)
 {
     ConstructionSite *site = site_get(constructions, index);
     if (site == NULL || !construction_materials_complete(site)) {
         return false;
     }
+    if (site->refresh && map_structure(map, site->x, site->y) != (StructureType)site->type) {
+        return false; /* The structure is gone. */
+    }
     StructureType type = (StructureType)site->type;
     site->progress += work;
-    if (site->progress < structure_def(type)->build_work) {
+    if (site->progress < construction_work_needed(site)) {
         return false;
     }
     int x = site->x, y = site->y;
+    bool refresh = site->refresh;
+    ItemQuality cap = structure_quality_cap(type, site->delivered);
     ItemStack unused[STRUCTURE_MATERIAL_SLOTS];
     constructions_remove(constructions, index, unused); /* Used up. */
-    map_set_structure(map, x, y, type);
+    if (refresh) {
+        map_set_structure_hit_points(map, x, y, INT16_MAX);
+        return true;
+    }
+    ItemQuality quality = knowledge_quality_of_score(knowledge_product_score(level, rng));
+    map_build_structure(map, x, y, type, quality < cap ? quality : cap);
     if (structure_blocks(type) && items != NULL) {
         clear_items(map, items, x, y);
     }
     return true;
 }
 
+int constructions_wear_day(Constructions *constructions, Map *map, Items *items)
+{
+    bool any = false;
+    for (int type = STRUCTURE_NONE + 1; type < STRUCTURE_TYPE_COUNT; type++) {
+        any = any || (structure_def((StructureType)type)->wear_per_day > 0 &&
+                      map->structure_counts[type] > 0);
+    }
+    int gone = 0;
+    for (int y = 0; any && y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            StructureType type = map_structure(map, x, y);
+            int wear = structure_def(type)->wear_per_day;
+            if (type == STRUCTURE_NONE || wear <= 0) {
+                continue;
+            }
+            int hit_points = map_structure_hit_points(map, x, y) - wear;
+            int site = construction_at(constructions, x, y);
+            if (hit_points <= 0) {
+                ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
+                int count = constructions_remove(constructions, site, returned);
+                for (int i = 0; items != NULL && i < count; i++) {
+                    items_drop(items, map, x, y, returned[i]);
+                }
+                map_set_structure(map, x, y, STRUCTURE_NONE);
+                gone++;
+                continue;
+            }
+            map_set_structure_hit_points(map, x, y, hit_points);
+            int max = structure_max_hit_points(type, map_structure_quality(map, x, y));
+            if ((float)hit_points < (float)max * STRUCTURE_REFRESH_BELOW &&
+                site == CONSTRUCTION_NONE) {
+                constructions_place_refresh(constructions, map, x, y);
+            }
+        }
+    }
+    return gone;
+}
+
 float construction_work_fraction(const ConstructionSite *site)
 {
-    float needed = structure_def((StructureType)site->type)->build_work;
+    float needed = construction_work_needed(site);
     return needed > 0.0f ? clampf(site->progress / needed, 0.0f, 1.0f) : 1.0f;
 }
 
@@ -229,7 +336,7 @@ uint64_t constructions_hash(const Constructions *constructions, uint64_t hash)
         if (!site->used) {
             continue;
         }
-        int32_t ints[5] = {index, site->type, site->x, site->y, site->number};
+        int32_t ints[6] = {index, site->type, site->x, site->y, site->number, site->refresh};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
             ItemStack stack = site->delivered[slot];

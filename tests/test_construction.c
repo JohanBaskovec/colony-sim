@@ -169,7 +169,7 @@ static void test_delivering(void)
     CHECK(constructions.revision != revision);
     CHECK_EQ_INT(construction_deliver(&constructions, index, crude), 0); /* Full. */
     /* No work before every material is in. */
-    CHECK(!construction_add_work(&constructions, &map, &items, index, 1.0e6f));
+    CHECK(!construction_add_work(&constructions, &map, &items, index, 1.0e6f, 60.0, NULL));
     CHECK_NEAR(site->progress, 0.0f, 0.0001f);
     CHECK_EQ_INT(construction_deliver(&constructions, index, item_stack_pristine(ITEM_GRASS, 30)),
                  24);
@@ -188,10 +188,10 @@ static void test_building(void)
     construction_deliver(&constructions, index, item_stack_pristine(ITEM_GRASS, 24));
     items_add(&items, 8, 8, item_stack_pristine(ITEM_COBBLE, 3)); /* In the way. */
     float work = structure_def(STRUCTURE_WALL)->build_work;
-    CHECK(!construction_add_work(&constructions, &map, &items, index, work * 0.5f));
+    CHECK(!construction_add_work(&constructions, &map, &items, index, work * 0.5f, 60.0, NULL));
     CHECK_NEAR(construction_work_fraction(construction_get(&constructions, index)), 0.5f, 0.001f);
     CHECK(map_is_passable(&map, 8, 8)); /* Not built yet. */
-    CHECK(construction_add_work(&constructions, &map, &items, index, work * 0.5f));
+    CHECK(construction_add_work(&constructions, &map, &items, index, work * 0.5f, 60.0, NULL));
     /* Built: the wall blocks, the grass is gone, the site is gone, the
      * stones were pushed next door, the materials are used up. */
     CHECK_EQ_INT(map_structure(&map, 8, 8), STRUCTURE_WALL);
@@ -223,6 +223,148 @@ static void test_hash(void)
     free_world(&map, &a, &items);
 }
 
+static void test_grades_and_hit_points(void)
+{
+    /* Hit points by grade: ×0.6 to ×1.5 of the standard ones. */
+    CHECK_EQ_INT(structure_max_hit_points(STRUCTURE_WALL, ITEM_QUALITY_STANDARD), 60);
+    CHECK_EQ_INT(structure_max_hit_points(STRUCTURE_WALL, ITEM_QUALITY_CRUDE), 36);
+    CHECK_EQ_INT(structure_max_hit_points(STRUCTURE_WALL, ITEM_QUALITY_SUPERB), 90);
+    CHECK_EQ_INT(structure_max_hit_points(STRUCTURE_GRASS_BED, ITEM_QUALITY_STANDARD), 20);
+    CHECK_EQ_INT(structure_max_hit_points(STRUCTURE_NONE, ITEM_QUALITY_STANDARD), 0);
+    /* Materials cap the grade: their average + 1; grass and twigs do not. */
+    ItemStack delivered[STRUCTURE_MATERIAL_SLOTS] = {
+        item_stack_make(ITEM_BRANCHES, 5, ITEM_QUALITY_CRUDE, 0),
+        item_stack_pristine(ITEM_GRASS, 24)};
+    CHECK_EQ_INT(structure_quality_cap(STRUCTURE_WALL, delivered), ITEM_QUALITY_ROUGH);
+    delivered[0].quality = ITEM_QUALITY_FINE;
+    CHECK_EQ_INT(structure_quality_cap(STRUCTURE_WALL, delivered), ITEM_QUALITY_SUPERB);
+    ItemStack grass[STRUCTURE_MATERIAL_SLOTS] = {item_stack_pristine(ITEM_GRASS, 12),
+                                                 {.type = ITEM_NONE}};
+    CHECK_EQ_INT(structure_quality_cap(STRUCTURE_GRASS_BED, grass), ITEM_QUALITY_SUPERB);
+
+    /* The map layer: grade and hit points. */
+    Map map;
+    REQUIRE(map_init(&map, 16, 16));
+    map_set_structure(&map, 2, 2, STRUCTURE_WALL);
+    CHECK_EQ_INT(map_structure_quality(&map, 2, 2), ITEM_QUALITY_STANDARD);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 60);
+    uint64_t hash = map_hash(&map);
+    map_build_structure(&map, 2, 2, STRUCTURE_WALL, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(map_structure_quality(&map, 2, 2), ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 72);
+    CHECK(map_hash(&map) != hash);
+    map_set_structure_hit_points(&map, 2, 2, 500);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 72);
+    map_set_structure_hit_points(&map, 2, 2, -4);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 1);
+    map_set_structure_hit_points(&map, 3, 3, 10); /* No structure: nothing. */
+    CHECK_EQ_INT(map_structure_hit_points(&map, 3, 3), 0);
+    map_set_structure(&map, 2, 2, STRUCTURE_NONE);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 0);
+    CHECK_EQ_INT(map_structure_hit_points(&map, -1, 2), 0);
+    map_free(&map);
+}
+
+static void test_built_grade(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    /* A master builder, crude branches: rough at best. */
+    int wall = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2);
+    construction_deliver(&constructions, wall,
+                         item_stack_make(ITEM_BRANCHES, 5, ITEM_QUALITY_CRUDE, 0));
+    construction_deliver(&constructions, wall, item_stack_pristine(ITEM_GRASS, 24));
+    CHECK(construction_add_work(&constructions, &map, &items, wall, 1.0e6f,
+                                KNOWLEDGE_LEVEL_MAX, NULL));
+    CHECK_EQ_INT(map_structure_quality(&map, 2, 2), ITEM_QUALITY_ROUGH);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2),
+                 structure_max_hit_points(STRUCTURE_WALL, ITEM_QUALITY_ROUGH));
+    /* Grass does not cap: the builder's level does. */
+    int bed = constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 3, 3);
+    construction_deliver(&constructions, bed, item_stack_pristine(ITEM_GRASS, 12));
+    CHECK(construction_add_work(&constructions, &map, &items, bed, 1.0e6f, KNOWLEDGE_LEVEL_MAX,
+                                NULL));
+    CHECK_EQ_INT(map_structure_quality(&map, 3, 3), ITEM_QUALITY_SUPERB);
+    int poor = constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 4, 4);
+    construction_deliver(&constructions, poor, item_stack_pristine(ITEM_GRASS, 12));
+    CHECK(construction_add_work(&constructions, &map, &items, poor, 1.0e6f, 50.0, NULL));
+    CHECK_EQ_INT(map_structure_quality(&map, 4, 4), ITEM_QUALITY_ROUGH);
+    free_world(&map, &constructions, &items);
+}
+
+static void test_refreshing_a_bed(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    map_build_structure(&map, 2, 2, STRUCTURE_GRASS_BED, ITEM_QUALITY_FINE);
+    map_set_structure(&map, 3, 3, STRUCTURE_WALL);
+    /* Only on a structure that can be refreshed, once. */
+    CHECK_EQ_INT(constructions_place_refresh(&constructions, &map, 3, 3), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(constructions_place_refresh(&constructions, &map, 4, 4), CONSTRUCTION_NONE);
+    int index = constructions_place_refresh(&constructions, &map, 2, 2);
+    REQUIRE(index != CONSTRUCTION_NONE);
+    CHECK_EQ_INT(constructions_place_refresh(&constructions, &map, 2, 2), CONSTRUCTION_NONE);
+    const ConstructionSite *site = construction_get(&constructions, index);
+    CHECK(site->refresh);
+    CHECK_EQ_INT(construction_material(site, 0), ITEM_GRASS);
+    CHECK_EQ_INT(construction_material_count(site, 0), 4);
+    CHECK_EQ_INT(construction_material(site, 1), ITEM_NONE);
+    CHECK_NEAR(construction_work_needed(site), 125.0, 1e-4);
+    map_set_structure_hit_points(&map, 2, 2, 5);
+    CHECK(!construction_add_work(&constructions, &map, &items, index, 1.0e6f, 60.0, NULL));
+    CHECK_EQ_INT(construction_deliver(&constructions, index, item_stack_pristine(ITEM_GRASS, 9)),
+                 4);
+    CHECK(!construction_add_work(&constructions, &map, &items, index, 100.0f, 60.0, NULL));
+    CHECK(construction_add_work(&constructions, &map, &items, index, 25.0f, 60.0, NULL));
+    /* Back to full hit points, the grade kept. */
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 24);
+    CHECK_EQ_INT(map_structure_quality(&map, 2, 2), ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(construction_at(&constructions, 2, 2), CONSTRUCTION_NONE);
+    /* A refresh of a structure that is gone does nothing. */
+    index = constructions_place_refresh(&constructions, &map, 2, 2);
+    construction_deliver(&constructions, index, item_stack_pristine(ITEM_GRASS, 4));
+    map_set_structure(&map, 2, 2, STRUCTURE_NONE);
+    CHECK(!construction_add_work(&constructions, &map, &items, index, 1.0e6f, 60.0, NULL));
+    free_world(&map, &constructions, &items);
+}
+
+static void test_beds_wear_by_the_day(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    CHECK_EQ_INT(constructions_wear_day(&constructions, &map, &items), 0); /* Nothing to wear. */
+    map_set_structure(&map, 2, 2, STRUCTURE_GRASS_BED);
+    map_set_structure(&map, 3, 3, STRUCTURE_WALL);
+    /* 20 hit points, one a day: a refresh site once below 10. */
+    for (int day = 1; day <= 10; day++) {
+        CHECK_EQ_INT(constructions_wear_day(&constructions, &map, &items), 0);
+        CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 20 - day);
+        CHECK_EQ_INT(construction_at(&constructions, 2, 2) != CONSTRUCTION_NONE, day >= 11);
+    }
+    CHECK_EQ_INT(constructions_wear_day(&constructions, &map, &items), 0);
+    int site = construction_at(&constructions, 2, 2);
+    REQUIRE(site != CONSTRUCTION_NONE);
+    CHECK(construction_get(&constructions, site)->refresh);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 3, 3), 60); /* Walls do not wear. */
+    /* Nobody refreshes it: it falls apart, the grass brought is dropped. */
+    construction_deliver(&constructions, site, item_stack_pristine(ITEM_GRASS, 2));
+    for (int day = 0; day < 8; day++) {
+        CHECK_EQ_INT(constructions_wear_day(&constructions, &map, &items), 0);
+    }
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 1);
+    CHECK_EQ_INT(constructions_wear_day(&constructions, &map, &items), 1);
+    CHECK_EQ_INT(map_structure(&map, 2, 2), STRUCTURE_NONE);
+    CHECK_EQ_INT(construction_at(&constructions, 2, 2), CONSTRUCTION_NONE);
+    CHECK_EQ_INT((int)items.totals[ITEM_GRASS], 2);
+    free_world(&map, &constructions, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -231,5 +373,9 @@ int main(void)
     RUN_TEST(test_delivering);
     RUN_TEST(test_building);
     RUN_TEST(test_hash);
+    RUN_TEST(test_grades_and_hit_points);
+    RUN_TEST(test_built_grade);
+    RUN_TEST(test_refreshing_a_bed);
+    RUN_TEST(test_beds_wear_by_the_day);
     return test_summary();
 }

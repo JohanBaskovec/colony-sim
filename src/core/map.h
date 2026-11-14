@@ -127,8 +127,11 @@ typedef struct Map {
      * World generation puts none on sand (see gather_stone_ground()). */
     uint8_t *cobbles;
     uint8_t *flint;
-    /* Built structures (StructureType per tile): beds, walls, doors. */
+    /* Built structures (StructureType per tile): beds, walls, doors, with
+     * their grade (ItemQuality) and hit points (see core/structure.h). */
     uint8_t *structure;
+    uint8_t *structure_quality;
+    uint16_t *structure_hit_points;
     int structure_counts[STRUCTURE_TYPE_COUNT]; /* Tiles holding each type. */
     /* Incremented whenever where one can walk, or where water is, changes
      * (plants never block). Data derived from it (core/region.h) compares it
@@ -198,8 +201,21 @@ void map_set_rock(Map *map, int x, int y, RockType rock);
 void map_topology_changed(Map *map);
 
 /* Same rule for structures (a wall blocks movement, a door slows it). The
- * plant of the tile is cleared when a structure is built on it. */
+ * plant of the tile is cleared when a structure is built on it. The
+ * structure is of standard grade, in perfect condition. */
 void map_set_structure(Map *map, int x, int y, StructureType type);
+
+/* Builds a structure of a grade, in perfect condition. */
+void map_build_structure(Map *map, int x, int y, StructureType type, ItemQuality quality);
+
+/* Grade and hit points of the structure on a tile (0 hit points without
+ * one or out of bounds). */
+ItemQuality map_structure_quality(const Map *map, int x, int y);
+int map_structure_hit_points(const Map *map, int x, int y);
+
+/* Sets the hit points of the structure on a tile, clamped to 1..its maximum
+ * (nothing without a structure). */
+void map_set_structure_hit_points(Map *map, int x, int y, int hit_points);
 
 /* STRUCTURE_NONE out of bounds. */
 StructureType map_structure(const Map *map, int x, int y);

@@ -1,6 +1,7 @@
 #include "core/structure.h"
 
 #include "core/i18n.h"
+#include "core/util.h"
 
 /*
  * Materials, for a tile of about 1 m × 1 m (branches: 1.5 kg, dry grass: an
@@ -16,21 +17,58 @@
  * Work: about 15 minutes to spread a bed; 2 hours for a wall segment (dig
  * the post holes with a stick, tie the rails, thatch); 1.5 hours to weave a
  * screen (TICKS_PER_HOUR = 2,500).
+ * Hit points: a bed 20 (it packs down, a hit point a day, and is refreshed
+ * with 4 armfuls of dry grass in 125 ticks), a wall 60, a screen 40.
  */
 static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
     [STRUCTURE_NONE] = {"none", NULL, NULL, {{ITEM_NONE, 0}, {ITEM_NONE, 0}}, 0.0f,
-                        KNOWLEDGE_NONE, 0.0f, 1.0f, 0.0f, false},
+                        KNOWLEDGE_NONE, 0.0f, 1.0f, 0.0f, false, 0, 0, {ITEM_NONE, 0}, 0.0f},
     [STRUCTURE_GRASS_BED] = {"grass_bed", N_("structure.grass_bed"),
                              N_("structure.grass_bed.description"),
                              {{ITEM_GRASS, 12}, {ITEM_NONE, 0}}, 625.0f, KNOWLEDGE_BASIC_SHELTERS,
-                             50.0f, 1.2f, 1.0f, false},
+                             50.0f, 1.2f, 1.0f, false, 20, 1, {ITEM_GRASS, 4}, 125.0f},
     [STRUCTURE_WALL] = {"grass_wall", N_("structure.wall"), N_("structure.wall.description"),
                         {{ITEM_BRANCHES, 5}, {ITEM_GRASS, 24}}, 5000.0f, KNOWLEDGE_BASIC_SHELTERS,
-                        50.0f, 0.0f, 0.0f, true},
+                        50.0f, 0.0f, 0.0f, true, 60, 0, {ITEM_NONE, 0}, 0.0f},
     [STRUCTURE_DOOR] = {"branch_screen", N_("structure.door"), N_("structure.door.description"),
                         {{ITEM_BRANCHES, 5}, {ITEM_TWIGS, 5}}, 3750.0f, KNOWLEDGE_BASIC_SHELTERS,
-                        55.0f, 1.5f, 0.0f, false},
+                        55.0f, 1.5f, 0.0f, false, 40, 0, {ITEM_NONE, 0}, 0.0f},
 };
+
+/* Hit points by grade, crude to superb. */
+static const float GRADE_HIT_POINTS[ITEM_QUALITY_COUNT] = {0.6f, 0.8f, 1.0f, 1.2f, 1.5f};
+
+int structure_max_hit_points(StructureType type, ItemQuality quality)
+{
+    const StructureDef *def = structure_def(type);
+    if (def == NULL || type == STRUCTURE_NONE) {
+        return 0;
+    }
+    int grade = clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
+    int hit_points = (int)((float)def->max_hit_points * GRADE_HIT_POINTS[grade] + 0.5f);
+    return hit_points > 1 ? hit_points : 1;
+}
+
+ItemQuality structure_quality_cap(StructureType type,
+                                  const ItemStack delivered[STRUCTURE_MATERIAL_SLOTS])
+{
+    const StructureDef *def = structure_def(type);
+    int sum = 0, graded = 0;
+    for (int slot = 0; def != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        const ItemDef *material = item_def(def->materials[slot].type);
+        if (def->materials[slot].type == ITEM_NONE || material == NULL ||
+            !material->has_quality || delivered[slot].count == 0) {
+            continue;
+        }
+        sum += delivered[slot].quality;
+        graded++;
+    }
+    if (graded == 0) {
+        return ITEM_QUALITY_BEST;
+    }
+    /* The average rounded down, + 1. */
+    return (ItemQuality)clampi(sum / graded + 1, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
+}
 
 /* Taking apart is quicker than building. */
 #define DECONSTRUCT_WORK_SHARE 0.25f
