@@ -80,8 +80,8 @@ Tick items as they land and add newly discovered tasks.
 - [x] Haulers bring materials to construction sites (builders still fetch what nobody brings); items promised to a site so that several settlers never bring the same ones; a construction scenario in `bench_simulation` (scenario 3)
 - [x] Profile `bench_simulation` scenario 3 (64 colonists, 5 days: 2.8 ms → 40 µs per tick, worst tick 1.4 s → 15 ms): exact haul pre-check, region scans before fetching and bed searches, stamps narrowed per reservation kind, a minimum delay between failed work searches, regions refreshed before each colonist
 - [ ] Remaining scenario 3 spikes (about 15 ms with 64 colonists): look at the worst ticks again; the pre-check scans cost grows with the map size (keep a per-region count of haulable stacks if it shows up on large maps)
-- [ ] Haulers bring materials to workstation blueprints too (or workstations built through construction sites, below)
-- [ ] Lean-to (roof), cave floor clearing; workstations built through construction sites
+- [x] Workstations built through construction sites: their blueprints are sites (haulers bring the materials, builders work from a neighboring tile, same inspector, cancelled like other sites, "build another" works on them); the station appears once the site is finished
+- [ ] Lean-to (roof), cave floor clearing
 - [ ] Room detection, roofs (lean-to, natural rock roof over caves)
 - [ ] Knowledge spreading: conversation, apprenticeship, fading and loss; only discovered knowledges shown in the colonist inspector
 - [x] UI framework: buttons, panels, tooltips, windows sized to their content (title bar to drag, × to close, stacking order, scroll bar and wheel when too tall), measured layouts that adapt to text length

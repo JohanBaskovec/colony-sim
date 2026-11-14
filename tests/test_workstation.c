@@ -32,15 +32,22 @@ static void test_definitions(void)
         REQUIRE(def != NULL);
         CHECK(def->id != NULL && i18n_is_valid_key(def->name_key));
         CHECK(i18n_is_valid_key(def->description_key));
-        CHECK((def->material == ITEM_NONE) == (def->material_count == 0));
+        bool made_of_something = false;
+        for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+            StructureMaterial material = def->materials[slot];
+            CHECK((material.type == ITEM_NONE) == (material.count == 0));
+            made_of_something = made_of_something || material.type != ITEM_NONE;
+        }
         /* Only stations made of something need building. */
-        CHECK((def->material == ITEM_NONE) == (def->build_work <= 0.0f));
+        CHECK(made_of_something == (def->build_work > 0.0f));
+        CHECK(workstation_needs_construction((WorkstationType)type) == made_of_something);
     }
     CHECK(workstation_def(WORKSTATION_TYPE_COUNT) == NULL);
+    CHECK(!workstation_needs_construction(WORKSTATION_TYPE_COUNT));
     /* Anyone can set up a crafting spot, with nothing: the chain can start. */
-    CHECK_EQ_INT(workstation_def(WORKSTATION_CRAFTING_SPOT)->material, ITEM_NONE);
+    CHECK(!workstation_needs_construction(WORKSTATION_CRAFTING_SPOT));
     CHECK_EQ_INT(workstation_def(WORKSTATION_CRAFTING_SPOT)->knowledge, KNOWLEDGE_NONE);
-    CHECK_EQ_INT(workstation_def(WORKSTATION_KNAPPING_SPOT)->material, ITEM_COBBLE);
+    CHECK_EQ_INT(workstation_def(WORKSTATION_KNAPPING_SPOT)->materials[0].type, ITEM_COBBLE);
 }
 
 static void test_placing_and_removing(void)
@@ -52,23 +59,11 @@ static void test_placing_and_removing(void)
     CHECK(!workstation_can_place(&stations, &map, 5, 5)); /* Rock. */
     CHECK(!workstation_can_place(&stations, &map, 6, 6)); /* Water. */
     CHECK(!workstation_can_place(&stations, &map, -1, 0));
-    /* Not on a tree; on grass or a bush, even a crafting spot is a blueprint
-     * until the builder clears the plant. */
+    /* Not on a tree (grass and bushes are cleared on the construction site). */
     map.plants[map_index(&map, 8, 8)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
     map.plants[map_index(&map, 9, 8)] = (Plant){.type = PLANT_BUSH, .growth = 1.0f};
-    map.plants[map_index(&map, 10, 8)] = (Plant){.type = PLANT_GRASS, .growth = 0.5f};
     CHECK(!workstation_can_place(&stations, &map, 8, 8));
-    for (int x = 9; x <= 10; x++) {
-        int spot = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, x, 8);
-        REQUIRE(spot != WORKSTATION_NONE);
-        CHECK(!workstation_get_const(&stations, spot)->built);
-        ItemStack unused[2];
-        workstations_remove(&stations, spot, unused);
-    }
-    int ready = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 11, 8);
-    CHECK(workstation_get_const(&stations, ready)->built);
-    ItemStack unused[2];
-    workstations_remove(&stations, ready, unused);
+    CHECK(workstation_can_place(&stations, &map, 9, 8));
     int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4);
     REQUIRE(index != WORKSTATION_NONE);
     CHECK_EQ_INT(workstation_at(&stations, 3, 4), index);
@@ -78,21 +73,12 @@ static void test_placing_and_removing(void)
                  WORKSTATION_NONE);
     const Workstation *station = workstation_get_const(&stations, index);
     REQUIRE(station != NULL);
-    CHECK(!station->built);
-    CHECK_EQ_INT(workstation_materials_missing(station), 1);
     CHECK_EQ_INT(stations.used_count, 1);
 
-    /* Materials delivered to a blueprint come back when it is removed. */
-    uint32_t revision = stations.revision;
-    CHECK_EQ_INT(workstation_deliver(&stations, index, item_stack_pristine(ITEM_WOOD, 3)), 0);
-    CHECK_EQ_INT(workstation_deliver(&stations, index, item_stack_pristine(ITEM_COBBLE, 3)), 1);
-    CHECK(stations.revision != revision);
-    CHECK_EQ_INT(workstation_materials_missing(station), 0);
-    ItemStack returned[2];
+    /* The anvil stone is part of the station: nothing comes back. */
+    ItemStack returned[1];
     int number = station->number;
-    REQUIRE(workstations_remove(&stations, index, returned) == 1);
-    CHECK_EQ_INT(returned[0].type, ITEM_COBBLE);
-    CHECK_EQ_INT(returned[0].count, 1);
+    CHECK_EQ_INT(workstations_remove(&stations, index, returned), 0);
     CHECK(workstation_get(&stations, index) == NULL);
     CHECK_EQ_INT(workstation_at(&stations, 3, 4), WORKSTATION_NONE);
     CHECK_EQ_INT(stations.used_count, 0);
@@ -102,39 +88,6 @@ static void test_placing_and_removing(void)
     index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4);
     REQUIRE(index != WORKSTATION_NONE);
     CHECK(workstation_get_const(&stations, index)->number > number);
-    free_world(&map, &stations, &items);
-}
-
-static void test_building(void)
-{
-    Map map;
-    Workstations stations;
-    Items items;
-    REQUIRE(init_world(&map, &stations, &items));
-    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4);
-    float needed = workstation_def(WORKSTATION_KNAPPING_SPOT)->build_work;
-    /* No work before the materials are in. */
-    CHECK(!workstation_add_build_work(&stations, index, needed));
-    CHECK_NEAR(workstation_build_fraction(workstation_get_const(&stations, index)), 0.0, 1e-6);
-    workstation_deliver(&stations, index, item_stack_pristine(ITEM_COBBLE, 1));
-    CHECK(!workstation_add_build_work(&stations, index, needed * 0.5f));
-    CHECK_NEAR(workstation_build_fraction(workstation_get_const(&stations, index)), 0.5, 1e-6);
-    CHECK(workstation_add_build_work(&stations, index, needed * 0.5f));
-    const Workstation *station = workstation_get_const(&stations, index);
-    CHECK(station->built);
-    CHECK_NEAR(workstation_build_fraction(station), 1.0, 1e-6);
-    CHECK(!workstation_add_build_work(&stations, index, needed));
-    /* The anvil stone is part of the station now. */
-    ItemStack returned[2];
-    CHECK_EQ_INT(workstations_remove(&stations, index, returned), 0);
-
-    /* A crafting spot needs no materials: it is ready at once. */
-    index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 8, 8);
-    station = workstation_get_const(&stations, index);
-    CHECK(station->built);
-    CHECK_EQ_INT(workstation_materials_missing(station), 0);
-    CHECK_NEAR(workstation_build_fraction(station), 1.0, 1e-6);
-    CHECK(!workstation_add_build_work(&stations, index, needed));
     free_world(&map, &stations, &items);
 }
 
@@ -243,10 +196,6 @@ static void test_crafting(void)
     int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4);
     int bill = workstation_add_bill(&stations, index, RECIPE_FLAKES);
     ItemStack flint = item_stack_make(ITEM_FLINT, 1, ITEM_QUALITY_FINE, 0);
-    /* Not before the station is built. */
-    CHECK(!workstation_start_craft(&stations, index, RECIPE_FLAKES, flint));
-    workstation_deliver(&stations, index, item_stack_pristine(ITEM_COBBLE, 1));
-    workstation_add_build_work(&stations, index, 1000.0f);
 
     CHECK(!workstation_start_craft(&stations, index, RECIPE_FLAKES,
                                    item_stack_pristine(ITEM_WOOD, 1)));
@@ -315,7 +264,6 @@ int main(void)
 {
     RUN_TEST(test_definitions);
     RUN_TEST(test_placing_and_removing);
-    RUN_TEST(test_building);
     RUN_TEST(test_bills);
     RUN_TEST(test_crafting);
     RUN_TEST(test_bill_inputs_after_tools);

@@ -88,7 +88,7 @@ static void test_placing(void)
      * site or a structure. */
     CHECK(stockpile_create(&game.stockpiles, &game.map, 20, 20, 21, 21) != STOCKPILE_NONE);
     CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 20, 20, DIRECTION_SOUTH));
-    CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 25, 25) != WORKSTATION_NONE);
+    CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 25, 25));
     CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 25, 25, DIRECTION_SOUTH));
     CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 3, 3, DIRECTION_SOUTH));
     CHECK(!game_can_place_workstation(&game, 3, 3));

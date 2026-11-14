@@ -54,10 +54,10 @@ simulation:
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, berries, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown plants only), a zone priority, the jobs tiles offer, what they give |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
-| `workstation`| Workstations (crafting spot, knapping spot): blueprints, materials, construction, bills, the craft in progress |
+| `workstation`| Workstations (crafting spot, knapping spot): definitions (materials, construction work), bills, the craft in progress |
 | `structure`  | Structure definitions (grass bed, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, length in tiles and `Direction`, hit points, wear and refresh; hit points by grade, grade cap from the materials |
 | `bed`        | Bed ownership: one bed per settler, one settler per bed, kept on the bed's head; beds gone from the map are forgotten |
-| `construction`| Construction sites: blueprints of structures and refresh sites on worn ones, materials delivered per slot, work, built grade; daily wear; built structures go to the map's structure layers |
+| `construction`| Construction sites: blueprints of structures and of workstations, refresh sites on worn structures, materials delivered per slot, work, built grade; daily wear; built structures go to the map's structure layers, finished workstations to `Workstations` |
 | `work`       | Work types (mining, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning, quality and condition of what a worker produces |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
@@ -88,7 +88,7 @@ simulation:
 | `menu_bar`     | Bottom left menus: Build (categories, icon buttons), Work, ? (help)     |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
 | `gather_zone_panel` | Inspector of the selected gathering zone (priority, a check box per resource with how many are available, mode, target, progress, fully grown option, warnings) |
-| `station_panel` | Inspector of the selected workstation (blueprint progress, bills, warnings) |
+| `station_panel` | Inspector of the selected workstation (bills, warnings) |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
 | `localization` | Discovers `.lang` files, selects the language, loads catalogs           |
@@ -226,8 +226,9 @@ keeps the settings of the selected zone, else of the oldest; work under way on
 gathering tiles is kept. With no zone involved, a new one is created. Zones of
 different kinds never overlap, and no zone lies under a workstation: the tools
 go through `game_add_stockpile_rect()` / `game_add_gather_zone_rect()`, which
-pass the other kind's tile layer and the workstation layer as `blocked`
-layers (a NULL-terminated list), so their tiles are left out (the low-level
+pass the other kind's tile layer, the workstation layer and the tiles of
+workstation sites (`Constructions.workstation_tiles`) as `blocked` layers (a
+NULL-terminated list), so their tiles are left out (the low-level
 `*_create()` / `*_extend()` do not check, for tests and benchmark scenarios).
 The other way round, `game_place_workstation()` takes the station's tile out
 of the zone it was in (blueprints included). Tiles
@@ -352,7 +353,7 @@ mining, construction, crafting, woodcutting, gathering, hauling, cleaning. A
 settler does the leftmost work it can find before looking at the next column;
 a higher priority always wins over the column order. For each work type it
 tries the nearest designation of that type, then the type's own jobs
-(construction: sites, then workstation blueprints; crafting: bills; gathering:
+(construction: sites, workstation blueprints included; crafting: bills; gathering:
 gathering zones; hauling; cleaning). Gathering sits right of construction and
 crafting: a zone gathering "forever" would otherwise starve them at the same
 level.
@@ -522,7 +523,7 @@ with `refresh` set, on the built structure, wanting `refresh_material` and
 handle it like any site; finishing it brings the hit points back to full and
 keeps the grade. Taking the structure apart removes its refresh site.
 
-**Clearing plants**: blueprints (construction sites and workstations) may
+**Clearing plants**: blueprints (construction sites, of structures and workstations) may
 be placed on grass and bushes, not on trees (`map_plant_blocks_building()`:
 felling needs an axe nobody has yet). Once the materials are in, the builder
 first spends `gather_clear_work()` on the plant (cutting grass, pulling up a
@@ -548,13 +549,21 @@ night on the ground leaves `ground_sleep_ticks` of slower work
 
 Workstations (`core/workstation.h`, owned by `Game`, at most
 `WORKSTATION_MAX`) sit on one tile each. The player places a **blueprint**
-(`game_place_workstation()`, which takes the tile out of any zone); a colonist with
-the construction work type, and the knowledge the station needs, fetches the
-materials (a knapping spot needs a cobble as its anvil) and does the
-construction work. A station made of nothing (crafting spot) is placed
-ready, unless grass or a bush is in the way: it is then a blueprint until a
-builder has cleared the tile. The cancel tool also removes blueprints; removing a
-station drops what it held.
+(`game_place_workstation()`, which takes the tile out of any zone): a
+construction site of one tile (`ConstructionSite.workstation`, its type +
+1; `constructions_place_workstation()`), built like a structure's. Haulers
+bring its materials (a knapping spot needs a cobble as its anvil), a
+colonist with the construction work type and the knowledge the station
+needs (`colonist_can_build_site()`) fetches what is still missing and does
+the work from a neighboring tile; `construction_add_work()` then places the
+station in `Workstations`, ready for bills. A station made of nothing
+(crafting spot, `workstation_needs_construction()` false) is placed ready,
+unless grass or a bush is in the way: its site then only has the plant to
+clear. `game_can_place_workstation()` keeps room in the station list for
+every site (`Constructions.workstation_count`); should a station still not
+fit when its work is done (a tree grown on the tile), the site waits. The
+cancel tool removes blueprints; removing a station drops the input of a
+craft in progress.
 
 A built station carries up to `WORKSTATION_BILL_MAX` **bills**: a recipe
 (`core/recipe.h`), a mode (do N times, until N in stock, forever), the input
@@ -625,8 +634,8 @@ where it stands (`FetchSearch.min_factor`), fetches it and leaves the old one
 of the same type on that tile (`colonist_swap_tool()`); a tool of another
 type is simply added. A worse tool is never taken in exchange.
 
-Station jobs (`TASK_BUILD`, `TASK_CRAFT`) go through three phases (fetch,
-go to the station, work) and reserve the station (`RESERVATION_STATION`).
+Crafts (`TASK_CRAFT`) go through three phases (fetch, go to the station,
+work) and reserve the station (`RESERVATION_STATION`).
 At one priority level, designations are tried first, then construction,
 crafting, gathering zones (a background job that never ends by itself) and
 hauling. Failed station searches back off with a stamp made of the

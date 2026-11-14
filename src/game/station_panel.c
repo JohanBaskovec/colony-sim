@@ -102,31 +102,6 @@ static void percent_text(char *out, size_t size, float fraction)
     TR_FORMAT(out, size, tr("unit.percent"), number);
 }
 
-static void blueprint_rows(UiLayout *layout, const Game *game, const Workstation *station)
-{
-    const WorkstationDef *def = workstation_def((WorkstationType)station->type);
-    char text[TEXT_SIZE], a[16], b[16], percent[32];
-    if (def->material != ITEM_NONE) {
-        tr_integer(a, sizeof(a), station->materials);
-        tr_integer(b, sizeof(b), def->material_count);
-        TR_FORMAT(text, sizeof(text), tr("station.materials"),
-                  tr(item_def(def->material)->name_key), a, b);
-        ui_layout_label(layout, text, 0.0f, false);
-    }
-    const Plant *plant = &game->map.plants[map_index(&game->map, station->x, station->y)];
-    if (gather_clear_work(&game->map, station->x, station->y) > 0.0f) {
-        TR_FORMAT(text, sizeof(text), tr("blueprint.clear_first"),
-                  tr(plant_def((PlantType)plant->type)->name_key));
-        ui_layout_label(layout, text, 0.0f, false);
-    }
-    percent_text(percent, sizeof(percent), workstation_build_fraction(station));
-    TR_FORMAT(text, sizeof(text), tr("station.construction"), percent);
-    ui_layout_label(layout, text, 0.0f, false);
-    if (!game_workstation_buildable(game, (WorkstationType)station->type)) {
-        ui_layout_label(layout, tr("station.warning.nobody_can_build"), 0.0f, true);
-    }
-}
-
 static const char *mode_label(char *out, size_t size, const Bill *bill)
 {
     char target[16];
@@ -390,18 +365,10 @@ static void station_rows(UiLayout *layout, void *userdata)
     const Game *game = rows->game;
     const Workstation *station = rows->station;
     Action *action = &rows->action;
-    bool no_material = workstation_def((WorkstationType)station->type)->material == ITEM_NONE;
-    const char *state = station->built  ? ""
-                        : no_material   ? tr("station.blueprint_clear")
-                                        : tr("station.blueprint");
-    if (ui_layout_label_with_button(layout, state, tr("station.delete"))) {
+    if (ui_layout_label_with_button(layout, "", tr("station.delete"))) {
         *action = (Action){ACTION_DELETE_STATION, 0, 0};
     }
-    if (station->built) {
-        built_rows(layout, game, station, action);
-    } else {
-        blueprint_rows(layout, game, station);
-    }
+    built_rows(layout, game, station, action);
 }
 
 static void apply(App *app, int index, const Action *action)

@@ -162,8 +162,8 @@ int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationT
  * any order) to the stockpiles or to the gathering zones as the zone tools do
  * (see stockpiles_add_rect() and gather_zones_add_rect(): zones of the same
  * kind it overlaps, and `preferred`, merge), leaving out the tiles of the
- * other kind of zone and of workstations. Return the zone's index, or STOCKPILE_NONE /
- * GATHER_ZONE_NONE when nothing could be added. */
+ * other kind of zone and of workstations (built or not). Return the zone's
+ * index, or STOCKPILE_NONE / GATHER_ZONE_NONE when nothing could be added. */
 int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int preferred);
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int preferred);
 
@@ -189,21 +189,24 @@ ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe);
  * the tools nobody carries have been taken from it (see bill_has_input()). */
 bool game_bill_has_input(const Game *game, const Bill *bill);
 
-/* Whether a workstation may be placed on a tile: not on a structure or a
- * construction site, and where workstation_can_place() says yes. */
+/* Whether a workstation may be placed on a tile: not on a structure, where
+ * construction_can_place() and workstation_can_place() say yes, with room
+ * left in the station list once every station site is finished. */
 bool game_can_place_workstation(const Game *game, int x, int y);
 
-/* Places a workstation blueprint where game_can_place_workstation() allows.
- * A zone (stockpile, gathering zone) on the tile loses it: no zone lies under
- * a station. Returns its index or WORKSTATION_NONE. */
-int game_place_workstation(Game *game, WorkstationType type, int x, int y);
+/* Places a workstation where game_can_place_workstation() allows: ready at
+ * once when it needs no construction (workstation_needs_construction()) and
+ * no plant is in the way, else its construction site. A zone (stockpile,
+ * gathering zone) on the tile loses it: no zone lies under a station.
+ * Returns whether something was placed. */
+bool game_place_workstation(Game *game, WorkstationType type, int x, int y);
 
-/* Removes a station or blueprint; what it held is dropped on its tile.
- * Colonists working there give up. */
+/* Removes a station; the input of a craft in progress is dropped on its
+ * tile. Colonists working there give up. */
 bool game_remove_workstation(Game *game, int index);
 
-/* Removes blueprints in a rectangle: workstations not built yet and
- * construction sites (their materials are dropped). Returns how many. */
+/* Removes the construction sites (structures and workstations) in a
+ * rectangle; their materials are dropped. Returns how many. */
 int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1);
 
 /* Removes a bill; the input of a craft in progress that no other bill can

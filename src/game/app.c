@@ -94,16 +94,29 @@ static void clear_selection(App *app)
     app->structure_selected = false;
 }
 
-/* Type of the structure, or of the construction site, on a tile. */
+static const ConstructionSite *site_at(const App *app, int x, int y)
+{
+    const Constructions *sites = &app->game.constructions;
+    return construction_get(sites, construction_at(sites, x, y));
+}
+
+/* Type of the structure, or of the construction site, on a tile
+ * (STRUCTURE_NONE for a workstation's site). */
 static StructureType structure_type_at(const App *app, int x, int y)
 {
     StructureType built = map_structure(&app->game.map, x, y);
     if (built != STRUCTURE_NONE) {
         return built;
     }
-    const Constructions *sites = &app->game.constructions;
-    const ConstructionSite *site = construction_get(sites, construction_at(sites, x, y));
+    const ConstructionSite *site = site_at(app, x, y);
     return site != NULL ? (StructureType)site->type : STRUCTURE_NONE;
+}
+
+/* Whether a structure or a construction site (a workstation's too) lies on a
+ * tile: what a click selects as a structure. */
+static bool structure_or_site_at(const App *app, int x, int y)
+{
+    return structure_type_at(app, x, y) != STRUCTURE_NONE || site_at(app, x, y) != NULL;
 }
 
 /* Direction of the structure, or of the construction site, on a tile. */
@@ -120,7 +133,7 @@ static Direction structure_direction_at(const App *app, int x, int y)
 static void select_structure(App *app, int x, int y)
 {
     clear_selection(app);
-    app->structure_selected = structure_type_at(app, x, y) != STRUCTURE_NONE;
+    app->structure_selected = structure_or_site_at(app, x, y);
     app->selected_structure_x = x;
     app->selected_structure_y = y;
 }
@@ -129,8 +142,7 @@ static void select_structure(App *app, int x, int y)
 static void prune_structure_selection(App *app)
 {
     if (app->structure_selected &&
-        structure_type_at(app, app->selected_structure_x, app->selected_structure_y) ==
-            STRUCTURE_NONE) {
+        !structure_or_site_at(app, app->selected_structure_x, app->selected_structure_y)) {
         app->structure_selected = false;
     }
 }
@@ -409,14 +421,22 @@ static void build_like_selection(App *app)
         app->structure_selected
             ? structure_type_at(app, app->selected_structure_x, app->selected_structure_y)
             : STRUCTURE_NONE;
+    /* A workstation's site: another of that workstation. */
+    const ConstructionSite *site =
+        app->structure_selected
+            ? site_at(app, app->selected_structure_x, app->selected_structure_y)
+            : NULL;
+    WorkstationType site_station =
+        site != NULL ? construction_workstation(site) : WORKSTATION_TYPE_COUNT;
     if (app->selected_stockpile != STOCKPILE_NONE) {
         clear_selection(app);
         set_tool(app, APP_TOOL_STOCKPILE, APP_ZONE_ADD);
     } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
         clear_selection(app);
         set_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD);
-    } else if (station != NULL) {
-        WorkstationType type = (WorkstationType)station->type;
+    } else if (station != NULL || site_station != WORKSTATION_TYPE_COUNT) {
+        WorkstationType type =
+            station != NULL ? (WorkstationType)station->type : site_station;
         clear_selection(app);
         set_tool(app, APP_TOOL_BUILD, (int)type);
     } else if (structure != STRUCTURE_NONE) {
@@ -526,7 +546,7 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
             int stockpile = stockpile_at(&app->game.stockpiles, x, y);
             if (station != WORKSTATION_NONE) {
                 select_station(app, station);
-            } else if (structure_type_at(app, x, y) != STRUCTURE_NONE) {
+            } else if (structure_or_site_at(app, x, y)) {
                 select_structure(app, x, y);
             } else if (stockpile != STOCKPILE_NONE) {
                 select_stockpile(app, stockpile);

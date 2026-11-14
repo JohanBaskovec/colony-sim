@@ -265,12 +265,7 @@ static void build_tile_panel(App *app, Panel *panel)
         &app->game.workstations, workstation_at(&app->game.workstations, x, y));
     if (station != NULL) {
         const char *name = tr(workstation_def((WorkstationType)station->type)->name_key);
-        if (station->built) {
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.station"), name);
-        } else {
-            tr_integer(a, sizeof(a), (long long)(workstation_build_fraction(station) * 100.0f));
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.blueprint"), name, a);
-        }
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.station"), name);
     }
     StructureType structure = map_structure(map, x, y);
     if (structure != STRUCTURE_NONE) {
@@ -284,11 +279,10 @@ static void build_tile_panel(App *app, Panel *panel)
     const ConstructionSite *site = construction_get(
         &app->game.constructions, construction_at(&app->game.constructions, x, y));
     if (site != NULL) {
-        const StructureDef *def = structure_def((StructureType)site->type);
         tr_integer(a, sizeof(a), (long long)(construction_work_fraction(site) * 100.0f));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
                   tr(site->refresh ? "hud.tile.refresh" : "hud.tile.blueprint"),
-                  tr(def->name_key), a);
+                  tr(construction_name_key(site)), a);
         for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
             ItemType material = construction_material(site, slot);
             if (material == ITEM_NONE) {
@@ -301,8 +295,7 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
-    bool blueprint = (station != NULL && !station->built) || site != NULL;
-    if (blueprint && gather_clear_work(map, x, y) > 0.0f) {
+    if (site != NULL && gather_clear_work(map, x, y) > 0.0f) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("blueprint.clear_first"),
                   tr(plant_def((PlantType)map->plants[index].type)->name_key));
     }
@@ -701,12 +694,7 @@ void hud_draw(App *app)
         } else if (app->tool == APP_TOOL_BUILD) {
             const WorkstationDef *def = workstation_def(app->build_type);
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(def->name_key));
-            if (def->material != ITEM_NONE) {
-                char count[16];
-                tr_integer(count, sizeof(count), def->material_count);
-                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.build_cost"),
-                          tr(item_def(def->material)->name_key), count);
-            }
+            menu_bar_materials_cost(panel_add(&tool), HUD_LINE_SIZE, def->materials);
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.build_help"),
                       app_key_name(APP_KEY_BUILD));
             if (!game_workstation_buildable(&app->game, app->build_type)) {

@@ -1,12 +1,14 @@
 /*
- * Construction sites: blueprints of structures (core/structure.h) placed by
- * the player and waiting to be built.
+ * Construction sites: blueprints of structures (core/structure.h) and of
+ * workstations (core/workstation.h) placed by the player and waiting to be
+ * built.
  *
  * Builders and haulers bring the materials, one kind at a time; a builder
  * then does the work, always from a neighboring tile (as for walls, which cannot be stood on once
  * built). When the work is done the structure appears on the map
- * (map_set_structure()) and the site is gone. A blocking structure (wall)
- * pushes the items lying on its tile to a neighboring open tile.
+ * (map_set_structure()), or the workstation is placed, and the site is gone.
+ * A blocking structure (wall) pushes the items lying on its tile to a
+ * neighboring open tile.
  *
  * The structure built has a grade from the builder's level, capped by the
  * grade of the materials (structure_quality_cap()).
@@ -34,6 +36,7 @@
 #include "core/map.h"
 #include "core/rng.h"
 #include "core/structure.h"
+#include "core/workstation.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -43,7 +46,9 @@
 
 typedef struct ConstructionSite {
     bool used;
-    uint8_t type; /* StructureType */
+    uint8_t type; /* StructureType; STRUCTURE_NONE for a workstation. */
+    /* WorkstationType + 1 when the site is a workstation's blueprint, else 0. */
+    uint8_t workstation;
     int16_t x, y; /* The structure's head. */
     uint8_t direction; /* Direction: where its other tiles lie (core/structure.h). */
     int number; /* Unique, never reused: tells a site from a later one in the same slot. */
@@ -61,8 +66,12 @@ typedef struct Constructions {
     int width;
     int height;
     uint16_t *at; /* Site index + 1 on every tile of a site, 0 when none. */
+    /* 1 on the tile of a workstation's site: zones leave it out, as they do
+     * the tiles of stations (see game_add_stockpile_rect()). */
+    uint8_t *workstation_tiles;
     ConstructionSite list[CONSTRUCTION_MAX];
     int used_count;
+    int workstation_count; /* Sites of workstations, among them. */
     int next_number;
     /* Incremented whenever sites change or get materials: settlers who found
      * nothing to build look again. */
@@ -94,8 +103,26 @@ bool construction_can_place_structure(const Constructions *constructions, const 
 int constructions_place(Constructions *constructions, const Map *map, StructureType type, int x,
                         int y, Direction direction);
 
-/* Tile `part` of a site (0: the head, up to structure_length() - 1). */
+/* Places the site of a workstation on a tile that passes
+ * construction_can_place(). Returns its index, or CONSTRUCTION_NONE. */
+int constructions_place_workstation(Constructions *constructions, const Map *map,
+                                    WorkstationType type, int x, int y);
+
+/* Tile `part` of a site (0: the head, up to construction_length() - 1). */
 void construction_tile(const ConstructionSite *site, int part, int *x, int *y);
+
+/* Tiles the site takes (1 for a workstation). */
+int construction_length(const ConstructionSite *site);
+
+/* What the site builds: its workstation type, or WORKSTATION_TYPE_COUNT for
+ * a structure. */
+WorkstationType construction_workstation(const ConstructionSite *site);
+
+/* Knowledge the work uses (and teaches); KNOWLEDGE_NONE when none. */
+KnowledgeType construction_knowledge(const ConstructionSite *site);
+
+/* Translation key of what the site builds. */
+const char *construction_name_key(const ConstructionSite *site);
 
 /* Places a refresh site on a built structure that can be refreshed (see
  * StructureDef.refresh_work) and has no site yet, given any of its tiles. Returns its index, or
@@ -142,11 +169,14 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
  * structure is built on the map with a grade from the builder's `level`
  * (core/knowledge.h; `rng` may be NULL for the average grade), capped by the
  * materials (items lying on a blocking structure's tile are dropped next to
- * it), or refreshed to full hit points; the site is removed and true is
- * returned.
+ * it), or refreshed to full hit points, or the workstation is placed in
+ * `workstations`; the site is removed and true is returned. A workstation
+ * that cannot be placed yet (a plant grew there, the list is full) keeps
+ * its site.
  */
-bool construction_add_work(Constructions *constructions, Map *map, Items *items, int index,
-                           float work, double level, Rng *rng);
+bool construction_add_work(Constructions *constructions, Map *map, Items *items,
+                           Workstations *workstations, int index, float work, double level,
+                           Rng *rng);
 
 /*
  * A day goes by: structures that wear by themselves lose their hit points

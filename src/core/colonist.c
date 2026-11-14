@@ -134,6 +134,14 @@ bool colonist_can_construct(const Colonist *colonist, StructureType type)
            knows_enough(colonist, def->knowledge, def->min_level);
 }
 
+bool colonist_can_build_site(const Colonist *colonist, const ConstructionSite *site)
+{
+    WorkstationType station = construction_workstation(site);
+    return station != WORKSTATION_TYPE_COUNT
+               ? colonist_can_build(colonist, station)
+               : colonist_can_construct(colonist, (StructureType)site->type);
+}
+
 bool colonist_can_craft(const Colonist *colonist, RecipeType recipe)
 {
     const RecipeDef *def = recipe_def(recipe);
@@ -410,7 +418,6 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
         }
         return colonist->gathering ? gather_action((GatherJob)colonist->work_type)
                                    : COLONIST_ACTION_STRIKE;
-    case TASK_BUILD:
     case TASK_CONSTRUCT: return at_station ? COLONIST_ACTION_STRIKE : COLONIST_ACTION_NONE;
     case TASK_CRAFT: return at_station ? craft_action(colonist, tool) : COLONIST_ACTION_NONE;
     case TASK_CLEAN: /* Picking up chips and shavings. */
@@ -459,7 +466,6 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_SLEEP] = N_("colonist.task.sleep"),
         [TASK_WORK] = N_("colonist.task.work"),
         [TASK_HAUL] = N_("colonist.task.haul"),
-        [TASK_BUILD] = N_("colonist.task.build"),
         [TASK_CRAFT] = N_("colonist.task.craft"),
         [TASK_CONSTRUCT] = N_("colonist.task.construct"),
         [TASK_SUPPLY] = N_("colonist.task.supply"),
@@ -1060,7 +1066,7 @@ static bool try_haul_job(Colonist *colonist, const ColonistContext *context)
     return true;
 }
 
-static bool try_station_job(Colonist *colonist, const ColonistContext *context, bool build);
+static bool try_station_job(Colonist *colonist, const ColonistContext *context);
 static bool try_construction_job(Colonist *colonist, const ColonistContext *context);
 static bool try_supply_job(Colonist *colonist, const ColonistContext *context);
 static uint32_t construction_stamp(const ColonistContext *context);
@@ -1069,8 +1075,7 @@ static uint32_t construction_stamp(const ColonistContext *context);
  * Takes the nearest job of the highest priority level that has one. Within a
  * level, work types are tried in the order of the priorities grid's columns
  * (WorkType order): for each, its orders, then its other jobs (construction
- * sites and workstation blueprints, bills, gathering zones, hauling,
- * cleaning). Each search kind
+ * sites, bills, gathering zones, hauling, cleaning). Each search kind
  * backs off on failure until its stamp shows that something changed.
  */
 static bool try_start_work(Colonist *colonist, const ColonistContext *context)
@@ -1140,17 +1145,11 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
                         FOUND(SEARCH_CONSTRUCTION);
                     }
                 }
-                if (stations_allowed) {
-                    searched_stations = true;
-                    if (try_station_job(colonist, context, true)) {
-                        FOUND(SEARCH_STATION);
-                    }
-                }
                 break;
             case WORK_CRAFTING:
                 if (stations_allowed) {
                     searched_stations = true;
-                    if (try_station_job(colonist, context, false)) {
+                    if (try_station_job(colonist, context)) {
                         FOUND(SEARCH_STATION);
                     }
                 }
@@ -1516,12 +1515,10 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
     return -1;
 }
 
-/* Search filter for stations with a job: blueprints to build, or built
- * stations with a bill the worker can take. */
+/* Search filter for stations with a bill the worker can take. */
 typedef struct StationSearch {
     const ColonistContext *context;
     const Colonist *worker;
-    bool build;
 } StationSearch;
 
 static bool is_station_job(const Map *map, int x, int y, void *userdata)
@@ -1531,26 +1528,20 @@ static bool is_station_job(const Map *map, int x, int y, void *userdata)
     const ColonistContext *context = search->context;
     const Workstation *station = workstation_get_const(
         context->workstations, workstation_at(context->workstations, x, y));
-    if (station == NULL || station->built == search->build ||
+    if (station == NULL ||
         reservations_taken_by_other(context->reservations, RESERVATION_STATION,
                                     station_tile(station), context->worker_id)) {
         return false;
     }
-    if (search->build) {
-        const WorkstationDef *def = workstation_def((WorkstationType)station->type);
-        return colonist_can_build(search->worker, (WorkstationType)station->type) &&
-               (workstation_materials_missing(station) == 0 ||
-                items_exist(context->items, ITEM_TYPE_BIT(def->material), 1));
-    }
     return choose_bill(search->worker, context, station) >= 0;
 }
 
-/* Cheap check before a search: is there any station of the right kind? */
-static bool station_jobs_exist(const ColonistContext *context, bool build)
+/* Cheap check before a search: is there any station with bills? */
+static bool station_jobs_exist(const ColonistContext *context)
 {
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = &context->workstations->list[index];
-        if (station->used && station->built != build && (build || station->bill_count > 0)) {
+        if (station->used && station->bill_count > 0) {
             return true;
         }
     }
@@ -1686,25 +1677,14 @@ static bool fetch_better_tool(Colonist *colonist, const ColonistContext *context
     return false;
 }
 
-/* Chooses the next step of a station job: fetch what is still missing
- * (tools first, then the input or the materials), else go to the station.
- * Returns false when something is missing and cannot be found. */
+/* Chooses the next step of a craft: fetch what is still missing (tools
+ * first, then the input), else go to the station. Returns false when
+ * something is missing and cannot be found. */
 static bool plan_station_job(Colonist *colonist, const ColonistContext *context)
 {
     const Workstation *station = job_station(colonist, context);
     if (station == NULL) {
         return false;
-    }
-    if (colonist->task == TASK_BUILD) {
-        const WorkstationDef *def = workstation_def((WorkstationType)station->type);
-        int missing = workstation_materials_missing(station) - (int)colonist->carried.count;
-        if (missing > 0) {
-            FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(def->material));
-            search.match = colonist->carried;
-            return start_fetch(colonist, context, &search, current_tile(colonist),
-                               COLONIST_WORK_SEARCH_MAX_COST, false);
-        }
-        return go_to_station(colonist, context, station);
     }
     const Bill *bill = &station->bills[colonist->bill];
     const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
@@ -1725,7 +1705,7 @@ static bool plan_station_job(Colonist *colonist, const ColonistContext *context)
     return go_to_station(colonist, context, station);
 }
 
-/* Whether the station job is still worth doing: the station is there and
+/* Whether the craft is still worth doing: the station is there and
  * reserved by the colonist, the work type is still allowed, the colonist
  * still knows enough and, before the work starts, the bill still wants
  * doing. */
@@ -1737,12 +1717,7 @@ static bool station_job_still_valid(const Colonist *colonist, const ColonistCont
             context->worker_id) {
         return false;
     }
-    if (colonist->task == TASK_BUILD) {
-        return !station->built &&
-               colonist->work_priorities[WORK_CONSTRUCTION] != WORK_PRIORITY_DISABLED &&
-               colonist_can_build(colonist, (WorkstationType)station->type);
-    }
-    if (!station->built || colonist->work_priorities[WORK_CRAFTING] == WORK_PRIORITY_DISABLED ||
+    if (colonist->work_priorities[WORK_CRAFTING] == WORK_PRIORITY_DISABLED ||
         colonist->bill >= station->bill_count ||
         station->bills[colonist->bill].recipe != colonist->recipe ||
         !colonist_can_craft(colonist, (RecipeType)colonist->recipe)) {
@@ -1756,12 +1731,12 @@ static bool station_job_still_valid(const Colonist *colonist, const ColonistCont
             (!bill->paused || station->work_input.count > 0));
 }
 
-static bool try_station_job(Colonist *colonist, const ColonistContext *context, bool build)
+static bool try_station_job(Colonist *colonist, const ColonistContext *context)
 {
-    if (!station_jobs_exist(context, build)) {
+    if (!station_jobs_exist(context)) {
         return false;
     }
-    StationSearch search = {context, colonist, build};
+    StationSearch search = {context, colonist};
     TilePos tile;
     if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
                                  is_station_job, &search, COLONIST_WORK_SEARCH_MAX_COST, NULL,
@@ -1770,13 +1745,13 @@ static bool try_station_job(Colonist *colonist, const ColonistContext *context, 
     }
     int index = workstation_at(context->workstations, tile.x, tile.y);
     const Workstation *station = workstation_get_const(context->workstations, index);
-    int bill = build ? 0 : choose_bill(colonist, context, station);
-    begin_task(colonist, context, build ? TASK_BUILD : TASK_CRAFT);
+    int bill = choose_bill(colonist, context, station);
+    begin_task(colonist, context, TASK_CRAFT);
     colonist->station = index;
     colonist->station_number = station->number;
     colonist->target = tile;
     colonist->bill = (uint8_t)bill;
-    colonist->recipe = build ? (uint8_t)RECIPE_COUNT : station->bills[bill].recipe;
+    colonist->recipe = station->bills[bill].recipe;
     reservations_add(context->reservations, RESERVATION_STATION, tile, context->worker_id);
     if (!plan_station_job(colonist, context)) {
         set_idle(colonist, context, 0);
@@ -1786,9 +1761,8 @@ static bool try_station_job(Colonist *colonist, const ColonistContext *context, 
     return true;
 }
 
-/* At the stack being fetched: takes a tool, or what the job still needs. */
-static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context,
-                            const Workstation *station)
+/* At the stack being fetched: takes a tool, or the input of the craft. */
+static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
 {
     ItemStack stack = items_get(context->items, colonist->x, colonist->y);
     if (stack.type == ITEM_NONE) {
@@ -1815,13 +1789,8 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context,
         }
         return true;
     }
-    int wanted;
-    if (colonist->task == TASK_BUILD) {
-        wanted = workstation_materials_missing(station) - (int)colonist->carried.count;
-    } else {
-        wanted = recipe_def((RecipeType)colonist->recipe)->input_count -
-                 (int)colonist->carried.count;
-    }
+    int wanted =
+        recipe_def((RecipeType)colonist->recipe)->input_count - (int)colonist->carried.count;
     int capacity = colonist_carry_capacity(colonist, (ItemType)stack.type) -
                    (int)colonist->carried.count;
     wanted = wanted < capacity ? wanted : capacity;
@@ -1837,23 +1806,12 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context,
     return taken > 0;
 }
 
-/* Arrived at the station: hands over what was brought, then starts working. */
+/* Arrived at the station: puts the input down, then starts working. */
 static bool arrive_at_station(Colonist *colonist, const ColonistContext *context)
 {
     Workstations *workstations = context->workstations;
     Workstation *station = job_station(colonist, context);
-    if (colonist->task == TASK_BUILD) {
-        if (colonist->carried.count > 0) {
-            int taken = workstation_deliver(workstations, colonist->station, colonist->carried);
-            colonist->carried.count = (uint16_t)(colonist->carried.count - taken);
-            if (colonist->carried.count == 0) {
-                colonist->carried = (ItemStack){.type = ITEM_NONE};
-            }
-        }
-        if (workstation_materials_missing(station) > 0) {
-            return plan_station_job(colonist, context); /* More to bring. */
-        }
-    } else if (station->work_input.count == 0) {
+    if (station->work_input.count == 0) {
         if (!workstation_start_craft(workstations, colonist->station,
                                      (RecipeType)colonist->recipe, colonist->carried)) {
             return false;
@@ -1926,7 +1884,7 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
     switch ((StationJobPhase)colonist->station_phase) {
     case STATION_JOB_FETCH:
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
-            !pick_up_fetched(colonist, context, station) ||
+            !pick_up_fetched(colonist, context) ||
             !plan_station_job(colonist, context)) {
             set_idle(colonist, context, 0); /* Drops what it holds. */
         }
@@ -1938,20 +1896,6 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
         }
         return;
     case STATION_JOB_WORK: break;
-    }
-    if (colonist->task == TASK_BUILD) {
-        if (clear_plant_first(colonist, context, tile, &station->clear_progress)) {
-            return;
-        }
-        const WorkstationDef *def = workstation_def((WorkstationType)station->type);
-        float speed = colonist_work_speed(colonist, def->knowledge) *
-                      work_with_tool(colonist, TOOL_USE_BUILDING);
-        bool built = workstation_add_build_work(context->workstations, colonist->station, speed);
-        colonist_learn_by_doing(colonist, def->knowledge, 1);
-        if (built) {
-            set_idle(colonist, context, 0);
-        }
-        return;
     }
     if (station->work_input.count == 0) {
         set_idle(colonist, context, 0); /* The input went away (bill removed). */
@@ -2025,7 +1969,7 @@ static bool site_has_job(const ColonistContext *context, const Colonist *worker,
 {
     const ConstructionSite *site =
         construction_get(context->constructions, construction_at(context->constructions, x, y));
-    if (site == NULL || !colonist_can_construct(worker, (StructureType)site->type) ||
+    if (site == NULL || !colonist_can_build_site(worker, site) ||
         reservations_taken_by_other(context->reservations, RESERVATION_CONSTRUCTION,
                                     site_origin(site), context->worker_id)) {
         return false;
@@ -2161,7 +2105,7 @@ static bool construction_job_still_valid(const Colonist *colonist,
            reservations_owner(context->reservations, RESERVATION_CONSTRUCTION,
                               site_origin(site)) == context->worker_id &&
            colonist->work_priorities[WORK_CONSTRUCTION] != WORK_PRIORITY_DISABLED &&
-           colonist_can_construct(colonist, (StructureType)site->type);
+           colonist_can_build_site(colonist, site);
 }
 
 static uint32_t construction_stamp(const ColonistContext *context)
@@ -2272,11 +2216,13 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
     return taken > 0;
 }
 
-/* A blocking structure was built: zones lose its tiles. */
+/* A blocking structure or a workstation was built: zones lose its tiles
+ * (one may have been laid on the site meanwhile). */
 static void structure_built(const ColonistContext *context, const ConstructionSite *site)
 {
-    StructureType type = (StructureType)site->type;
-    for (int part = 0; structure_blocks(type) && part < structure_length(type); part++) {
+    bool takes_tiles = construction_workstation(site) != WORKSTATION_TYPE_COUNT ||
+                       structure_blocks((StructureType)site->type);
+    for (int part = 0; takes_tiles && part < construction_length(site); part++) {
         int x, y;
         construction_tile(site, part, &x, &y);
         stockpiles_remove_rect(context->stockpiles, x, y, x, y);
@@ -2289,7 +2235,7 @@ static void structure_built(const ColonistContext *context, const ConstructionSi
 static bool clear_site_first(Colonist *colonist, const ColonistContext *context,
                              ConstructionSite *site)
 {
-    for (int part = 0; part < structure_length((StructureType)site->type); part++) {
+    for (int part = 0; part < construction_length(site); part++) {
         int x, y;
         construction_tile(site, part, &x, &y);
         if (clear_plant_first(colonist, context, (TilePos){(int16_t)x, (int16_t)y},
@@ -2353,13 +2299,12 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
         return;
     }
     ConstructionSite done = *site; /* Gone from the list once built. */
-    StructureType type = (StructureType)site->type;
-    KnowledgeType knowledge = structure_def(type)->knowledge;
+    KnowledgeType knowledge = construction_knowledge(site);
     float speed = colonist_work_speed(colonist, knowledge) *
                   work_with_tool(colonist, TOOL_USE_BUILDING);
     /* The grade depends on the level before this tick's learning. */
     bool built = construction_add_work(context->constructions, context->map, context->items,
-                                       colonist->site, speed,
+                                       context->workstations, colonist->site, speed,
                                        colonist_knowledge_level(colonist, knowledge),
                                        context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1);
@@ -2459,7 +2404,6 @@ static void decide(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
         }
         break;
-    case TASK_BUILD:
     case TASK_CRAFT:
         if (!station_job_still_valid(colonist, context)) {
             set_idle(colonist, context, 0); /* Cancelled on the way: decide again below. */
@@ -2621,7 +2565,6 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     case TASK_DRINK: drink(colonist, context); break;
     case TASK_WORK: work(colonist, context); break;
     case TASK_HAUL: haul(colonist, context); break;
-    case TASK_BUILD:
     case TASK_CRAFT: station_job(colonist, context); break;
     case TASK_CONSTRUCT:
     case TASK_SUPPLY: construction_job(colonist, context); break;

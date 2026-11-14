@@ -12,8 +12,11 @@ bool constructions_init(Constructions *constructions, int width, int height)
     if (width <= 0 || height <= 0) {
         return false;
     }
-    constructions->at = calloc((size_t)width * (size_t)height, sizeof(*constructions->at));
-    if (constructions->at == NULL) {
+    size_t tiles = (size_t)width * (size_t)height;
+    constructions->at = calloc(tiles, sizeof(*constructions->at));
+    constructions->workstation_tiles = calloc(tiles, 1);
+    if (constructions->at == NULL || constructions->workstation_tiles == NULL) {
+        constructions_free(constructions);
         return false;
     }
     constructions->width = width;
@@ -25,6 +28,7 @@ bool constructions_init(Constructions *constructions, int width, int height)
 void constructions_free(Constructions *constructions)
 {
     free(constructions->at);
+    free(constructions->workstation_tiles);
     memset(constructions, 0, sizeof(*constructions));
 }
 
@@ -91,6 +95,37 @@ bool construction_can_place_structure(const Constructions *constructions, const 
     return true;
 }
 
+int construction_length(const ConstructionSite *site)
+{
+    return site->workstation != 0 ? 1 : structure_length((StructureType)site->type);
+}
+
+WorkstationType construction_workstation(const ConstructionSite *site)
+{
+    return site->workstation != 0 ? (WorkstationType)(site->workstation - 1)
+                                  : WORKSTATION_TYPE_COUNT;
+}
+
+KnowledgeType construction_knowledge(const ConstructionSite *site)
+{
+    if (site->workstation != 0) {
+        const WorkstationDef *def = workstation_def(construction_workstation(site));
+        return def != NULL ? def->knowledge : KNOWLEDGE_NONE;
+    }
+    const StructureDef *def = structure_def((StructureType)site->type);
+    return def != NULL ? def->knowledge : KNOWLEDGE_NONE;
+}
+
+const char *construction_name_key(const ConstructionSite *site)
+{
+    if (site->workstation != 0) {
+        const WorkstationDef *def = workstation_def(construction_workstation(site));
+        return def != NULL ? def->name_key : "";
+    }
+    const StructureDef *def = structure_def((StructureType)site->type);
+    return def != NULL ? def->name_key : "";
+}
+
 void construction_tile(const ConstructionSite *site, int part, int *x, int *y)
 {
     *x = site->x + part * direction_dx((Direction)site->direction);
@@ -101,18 +136,20 @@ void construction_tile(const ConstructionSite *site, int part, int *x, int *y)
 static void mark_tiles(Constructions *constructions, const ConstructionSite *site,
                        uint16_t value)
 {
-    for (int part = 0; part < structure_length((StructureType)site->type); part++) {
+    for (int part = 0; part < construction_length(site); part++) {
         int x, y;
         construction_tile(site, part, &x, &y);
         if (in_bounds(constructions, x, y)) {
             constructions->at[index_of(constructions, x, y)] = value;
+            constructions->workstation_tiles[index_of(constructions, x, y)] =
+                value != 0 && site->workstation != 0;
         }
     }
 }
 
 /* Takes a free slot for a site; CONSTRUCTION_NONE when the list is full. */
-static int add_site(Constructions *constructions, StructureType type, int x, int y,
-                    Direction direction, bool refresh)
+static int add_site(Constructions *constructions, StructureType type, int workstation, int x,
+                    int y, Direction direction, bool refresh)
 {
     for (int index = 0; index < CONSTRUCTION_MAX; index++) {
         ConstructionSite *site = &constructions->list[index];
@@ -121,6 +158,7 @@ static int add_site(Constructions *constructions, StructureType type, int x, int
         }
         *site = (ConstructionSite){.used = true,
                                    .type = (uint8_t)type,
+                                   .workstation = (uint8_t)workstation,
                                    .x = (int16_t)x,
                                    .y = (int16_t)y,
                                    .direction = (uint8_t)direction,
@@ -131,6 +169,7 @@ static int add_site(Constructions *constructions, StructureType type, int x, int
         }
         mark_tiles(constructions, site, (uint16_t)(index + 1));
         constructions->used_count++;
+        constructions->workstation_count += workstation != 0;
         constructions->revision++;
         return index;
     }
@@ -144,7 +183,17 @@ int constructions_place(Constructions *constructions, const Map *map, StructureT
         !construction_can_place_structure(constructions, map, type, x, y, direction)) {
         return CONSTRUCTION_NONE;
     }
-    return add_site(constructions, type, x, y, direction, false);
+    return add_site(constructions, type, 0, x, y, direction, false);
+}
+
+int constructions_place_workstation(Constructions *constructions, const Map *map,
+                                    WorkstationType type, int x, int y)
+{
+    if ((unsigned)type >= WORKSTATION_TYPE_COUNT ||
+        !construction_can_place(constructions, map, x, y)) {
+        return CONSTRUCTION_NONE;
+    }
+    return add_site(constructions, STRUCTURE_NONE, (int)type + 1, x, y, DIRECTION_SOUTH, false);
 }
 
 int constructions_place_refresh(Constructions *constructions, const Map *map, int x, int y)
@@ -165,7 +214,7 @@ int constructions_place_refresh(Constructions *constructions, const Map *map, in
             return CONSTRUCTION_NONE;
         }
     }
-    return add_site(constructions, type, origin_x, origin_y, direction, true);
+    return add_site(constructions, type, 0, origin_x, origin_y, direction, true);
 }
 
 int constructions_remove(Constructions *constructions, int index,
@@ -182,6 +231,7 @@ int constructions_remove(Constructions *constructions, int index,
         }
     }
     mark_tiles(constructions, site, 0);
+    constructions->workstation_count -= site->workstation != 0;
     memset(site, 0, sizeof(*site));
     constructions->used_count--;
     constructions->revision++;
@@ -191,9 +241,16 @@ int constructions_remove(Constructions *constructions, int index,
 /* The material of a slot: the structure's, or its refresh material. */
 static StructureMaterial site_material(const ConstructionSite *site, int slot)
 {
-    const StructureDef *def = structure_def((StructureType)site->type);
     StructureMaterial none = {ITEM_NONE, 0};
-    if (def == NULL || slot < 0 || slot >= STRUCTURE_MATERIAL_SLOTS) {
+    if (slot < 0 || slot >= STRUCTURE_MATERIAL_SLOTS) {
+        return none;
+    }
+    if (site->workstation != 0) {
+        const WorkstationDef *station = workstation_def(construction_workstation(site));
+        return station != NULL ? station->materials[slot] : none;
+    }
+    const StructureDef *def = structure_def((StructureType)site->type);
+    if (def == NULL) {
         return none;
     }
     if (site->refresh) {
@@ -215,6 +272,10 @@ int construction_material_count(const ConstructionSite *site, int slot)
 
 float construction_work_needed(const ConstructionSite *site)
 {
+    if (site->workstation != 0) {
+        const WorkstationDef *station = workstation_def(construction_workstation(site));
+        return station != NULL ? station->build_work : 0.0f;
+    }
     const StructureDef *def = structure_def((StructureType)site->type);
     if (def == NULL) {
         return 0.0f;
@@ -321,8 +382,28 @@ static void clear_items(Map *map, Items *items, int x, int y)
     }
 }
 
-bool construction_add_work(Constructions *constructions, Map *map, Items *items, int index,
-                           float work, double level, Rng *rng)
+/* A workstation site whose work is done becomes the station. */
+static bool finish_workstation(Constructions *constructions, const Map *map,
+                               Workstations *workstations, int index)
+{
+    ConstructionSite *site = site_get(constructions, index);
+    WorkstationType type = construction_workstation(site);
+    int x = site->x, y = site->y;
+    /* The site's tile is taken in the station layer by nothing yet: only a
+     * plant grown meanwhile or a full list can stand in the way. */
+    if (workstations == NULL || workstations->used_count >= WORKSTATION_MAX ||
+        !workstation_can_place(workstations, map, x, y)) {
+        return false;
+    }
+    ItemStack unused[STRUCTURE_MATERIAL_SLOTS];
+    constructions_remove(constructions, index, unused); /* Used up. */
+    workstations_place(workstations, map, type, x, y);
+    return true;
+}
+
+bool construction_add_work(Constructions *constructions, Map *map, Items *items,
+                           Workstations *workstations, int index, float work, double level,
+                           Rng *rng)
 {
     ConstructionSite *site = site_get(constructions, index);
     if (site == NULL || !construction_materials_complete(site)) {
@@ -333,9 +414,13 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
         return false; /* The structure is gone. */
     }
     StructureType type = (StructureType)site->type;
-    site->progress += work;
-    if (site->progress < construction_work_needed(site)) {
+    float needed = construction_work_needed(site);
+    site->progress = site->progress + work < needed ? site->progress + work : needed;
+    if (site->progress < needed) {
         return false;
+    }
+    if (site->workstation != 0) {
+        return finish_workstation(constructions, map, workstations, index);
     }
     int x = site->x, y = site->y;
     Direction direction = (Direction)site->direction;
@@ -409,8 +494,8 @@ uint64_t constructions_hash(const Constructions *constructions, uint64_t hash)
         if (!site->used) {
             continue;
         }
-        int32_t ints[7] = {index, site->type, site->x, site->y, site->number, site->refresh,
-                           site->direction};
+        int32_t ints[8] = {index,        site->type,    site->x,         site->y,
+                           site->number, site->refresh, site->direction, site->workstation};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
             ItemStack stack = site->delivered[slot];

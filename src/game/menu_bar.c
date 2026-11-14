@@ -90,27 +90,20 @@ static void station_tooltip(App *app, WorkstationType type)
 {
     const WorkstationDef *def = workstation_def(type);
     char cost[TEXT_SIZE];
-    if (def->material != ITEM_NONE) {
-        char count[16];
-        tr_integer(count, sizeof(count), def->material_count);
-        TR_FORMAT(cost, sizeof(cost), tr("hud.tool.build_cost"),
-                  tr(item_def(def->material)->name_key), count);
-    } else {
-        SDL_strlcpy(cost, tr("menu.no_cost"), sizeof(cost));
-    }
+    menu_bar_materials_cost(cost, sizeof(cost), def->materials);
     const char *lines[4] = {tr(def->name_key), tr(def->description_key), cost,
                             tr("hud.tool.unavailable")};
     ui_tooltip(&app->ui, lines, game_workstation_buildable(&app->game, type) ? 3 : 4);
 }
 
-void menu_bar_structure_cost(char *out, size_t size, StructureType type)
+void menu_bar_materials_cost(char *out, size_t size,
+                             const StructureMaterial materials[STRUCTURE_MATERIAL_SLOTS])
 {
-    const StructureDef *def = structure_def(type);
     char parts[STRUCTURE_MATERIAL_SLOTS][TEXT_SIZE];
     int count = 0;
     float weight = 0.0f;
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-        StructureMaterial material = def->materials[slot];
+        StructureMaterial material = materials[slot];
         if (material.type == ITEM_NONE) {
             continue;
         }
@@ -119,6 +112,10 @@ void menu_bar_structure_cost(char *out, size_t size, StructureType type)
         TR_FORMAT(parts[count++], TEXT_SIZE, tr("recipe.ingredient"),
                   tr(item_def(material.type)->name_key), number);
         weight += item_stack_weight(material.type, material.count);
+    }
+    if (count == 0) {
+        SDL_strlcpy(out, tr("menu.no_cost"), size);
+        return;
     }
     char list[TEXT_SIZE], number[16], kilograms[32];
     if (count == 2) {
@@ -130,6 +127,11 @@ void menu_bar_structure_cost(char *out, size_t size, StructureType type)
     tr_decimal(number, sizeof(number), decimals ? weight : SDL_roundf(weight), decimals);
     TR_FORMAT(kilograms, sizeof(kilograms), tr("unit.kg"), number);
     TR_FORMAT(out, size, tr("menu.structure_cost"), list, kilograms);
+}
+
+void menu_bar_structure_cost(char *out, size_t size, StructureType type)
+{
+    menu_bar_materials_cost(out, size, structure_def(type)->materials);
 }
 
 static void structure_tooltip(App *app, StructureType type)

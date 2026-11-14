@@ -134,8 +134,6 @@ hud.tool.name = Tool: {0}
 hud.tool.unavailable = Nobody in the colony knows how to do this yet
 hud.tool.stockpile_help = Drag: create or extend, merging the zones it overlaps · Shift+drag: remove · Esc: back
 hud.tool.zone_remove_help = Drag: take the area out of the zones · Esc: back
-# {0} = material, {1} = how many
-hud.tool.build_cost = Needs: {0} ×{1}
 # {0} = key of the build tool
 hud.tool.build_help = Left click: place a blueprint · {0}: next workstation · Esc: back
 hud.tool.outline_help = Drag: walls along the edges of a rectangle · Click: one segment · Esc: back
@@ -210,7 +208,6 @@ colonist.task.gather_stones = Gathering stones
 colonist.task.gather_branches = Gathering branches
 colonist.task.gather_twigs = Gathering twigs
 colonist.task.cut_grass = Cutting grass
-colonist.task.build = Building a workstation
 colonist.task.craft = Crafting
 colonist.task.construct = Building
 colonist.task.supply = Bringing materials
@@ -343,17 +340,9 @@ recipe.both = {0} and {1}
 
 # Workstation inspector
 station.delete = Delete
-station.blueprint = Blueprint: a builder will bring the materials and build it
-# A station made of nothing, placed on grass or a bush.
-station.blueprint_clear = Blueprint: a builder will clear the tile, then it is ready
-# {0} = material, {1} = delivered, {2} = needed
-station.materials = Materials: {0} {1}/{2}
 # Grass or a bush on a blueprint's tile, removed by the builder before building.
 # {0} = plant
 blueprint.clear_first = To clear first: {0}
-# {0} = percentage (e.g. 40%)
-station.construction = Construction: {0} done
-station.warning.nobody_can_build = Nobody in the colony knows enough to build it yet
 # {0} = recipe, {1} = percentage (e.g. 40%)
 station.in_progress = In progress: {0} ({1} done)
 station.bills = Bills (worked through from the top)

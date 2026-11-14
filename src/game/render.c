@@ -667,19 +667,12 @@ void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera 
             continue;
         }
         SDL_FRect tile = tile_rect(camera, station->x, station->y);
-        if (station->built) {
-            render_station_shape(renderer, &tile, (WorkstationType)station->type, 255);
-            if (station->work_input.type != ITEM_NONE) {
-                render_item_stack(renderer, &tile, (ItemType)station->work_input.type);
-                batch_flush(renderer);
-            }
-            progress_bar(renderer, &tile, craft_fraction(station));
-        } else {
-            /* Blueprint: a ghost of the station, outlined. */
-            render_station_shape(renderer, &tile, (WorkstationType)station->type, 90);
-            outline(renderer, inset(&tile, 0.9f), 1.0f, BLUEPRINT_COLOR);
-            progress_bar(renderer, &tile, workstation_build_fraction(station));
+        render_station_shape(renderer, &tile, (WorkstationType)station->type, 255);
+        if (station->work_input.type != ITEM_NONE) {
+            render_item_stack(renderer, &tile, (ItemType)station->work_input.type);
+            batch_flush(renderer);
         }
+        progress_bar(renderer, &tile, craft_fraction(station));
         if (i == selected) {
             outline(renderer, tile, 2.0f, SELECTION_COLOR);
         }
@@ -834,9 +827,12 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
         StructureType type = (StructureType)site->type;
         Direction direction = (Direction)site->direction;
         SDL_FRect rect = footprint_rect(camera, site->x, site->y, type, direction);
-        if (!site->refresh) { /* A refresh site sits on the structure itself. */
-            render_structure_shape(renderer, &rect, type, direction,
-                                   (Uint8)(70.0f + 110.0f * materials));
+        Uint8 alpha = (Uint8)(70.0f + 110.0f * materials);
+        WorkstationType station = construction_workstation(site);
+        if (station != WORKSTATION_TYPE_COUNT) {
+            render_station_shape(renderer, &rect, station, alpha);
+        } else if (!site->refresh) { /* A refresh site sits on the structure itself. */
+            render_structure_shape(renderer, &rect, type, direction, alpha);
         }
         float margin = floorf(SDL_min(rect.w, rect.h) * 0.05f); /* As inset(), not square. */
         SDL_FRect frame = {rect.x + margin, rect.y + margin, rect.w - 2.0f * margin,

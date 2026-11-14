@@ -2,13 +2,15 @@
  * Workstations: places where settlers make things (crafting spot, knapping
  * spot), and the bills the player gives them.
  *
- * A workstation is built, not placed: the player places a blueprint, a
- * builder brings its materials and does the construction work. A station
- * made of nothing (crafting spot) is ready as soon as it is placed. Once built,
- * it carries a list of bills: a recipe (core/recipe.h), a repeat mode (do N
- * times, until N in stock, forever), the input types allowed, how far from
- * the station inputs are searched for, the range of worker levels in the
- * recipe's knowledge, and whether it is paused. Settlers take the first bill
+ * A workstation is built, not placed: its blueprint is a construction site
+ * (core/construction.h), where builders and haulers bring its materials and
+ * a builder does the work; the station appears once the site is finished. A
+ * station made of nothing (crafting spot) is ready as soon as it is placed,
+ * unless a plant must be cleared first. A station carries a list of bills:
+ * a recipe (core/recipe.h), a repeat mode (do N times, until N in stock,
+ * forever), the input types allowed, how far from the station inputs are
+ * searched for, the range of worker levels in the recipe's knowledge, and
+ * whether it is paused. Settlers take the first bill
  * that wants doing. A craft in progress keeps its input
  * and its work on the station, so that interrupted work resumes.
  * Design: docs/KNOWLEDGE.md §2.5, §6.3, §8.2.
@@ -21,6 +23,7 @@
 #include "core/map.h"
 #include "core/recipe.h"
 #include "core/rng.h"
+#include "core/structure.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -37,10 +40,10 @@ typedef struct WorkstationDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
     const char *description_key; /* One short sentence for the build menu. */
-    ItemType material; /* Brought by the builder; ITEM_NONE: none. */
-    int material_count;
-    /* Work ticks at speed ×1. A station with no material is placed ready,
-     * with no construction work. */
+    /* Brought to its construction site; unused slots: ITEM_NONE. */
+    StructureMaterial materials[STRUCTURE_MATERIAL_SLOTS];
+    /* Work ticks at speed ×1. A station with no material and no work is
+     * placed ready. */
     float build_work;
     /* Knowledge needed to build it; KNOWLEDGE_NONE: anyone can. */
     KnowledgeType knowledge;
@@ -94,10 +97,6 @@ typedef struct Workstation {
     uint8_t type; /* WorkstationType */
     int16_t x, y;
     int number; /* Unique, never reused: tells a station from a later one in the same slot. */
-    bool built;
-    int materials; /* Delivered so far (blueprint). */
-    float build_progress; /* Work done on the blueprint. */
-    float clear_progress; /* Work done clearing the plant on the tile, before building. */
     Bill bills[WORKSTATION_BILL_MAX];
     int bill_count;
     /* Craft in progress: its recipe (RECIPE_COUNT: none), the input put down
@@ -114,8 +113,8 @@ typedef struct Workstations {
     Workstation list[WORKSTATION_MAX];
     int used_count;
     int next_number;
-    /* Incremented whenever stations or bills change, or a station gets
-     * materials or is built: settlers who found nothing to do look again. */
+    /* Incremented whenever stations or bills change: settlers who found
+     * nothing to do look again. */
     uint32_t revision;
 } Workstations;
 
@@ -136,31 +135,21 @@ const Workstation *workstation_get_const(const Workstations *workstations, int i
  * (grass and bushes are cleared by the builder first), no station yet. */
 bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y);
 
-/* Places a blueprint, or the station itself, already built, when it needs
- * no material and no plant is in the way. Returns its index, or
- * WORKSTATION_NONE when the tile does not qualify or the list is full. */
+/* Whether a station of this type is built on a construction site (it needs
+ * materials or work), rather than placed ready. */
+bool workstation_needs_construction(WorkstationType type);
+
+/* Places a station, ready for bills (its construction, if any, is done).
+ * Returns its index, or WORKSTATION_NONE when the tile does not qualify or
+ * the list is full. */
 int workstations_place(Workstations *workstations, const Map *map, WorkstationType type, int x,
                        int y);
 
 /*
- * Removes a station (blueprint or built). What it held is given back in
- * `returned` (up to 2 stacks: materials delivered to a blueprint, input of a
- * craft in progress); returns the number of stacks. The caller drops them.
+ * Removes a station. The input of a craft in progress is given back in
+ * `returned`; returns the number of stacks (0 or 1). The caller drops them.
  */
-int workstations_remove(Workstations *workstations, int index, ItemStack returned[2]);
-
-/* Materials still missing on a blueprint (0 once built). */
-int workstation_materials_missing(const Workstation *station);
-
-/* Adds delivered materials to a blueprint; returns how many were taken. */
-int workstation_deliver(Workstations *workstations, int index, ItemStack stack);
-
-/* Adds construction work (only once all materials are in). Returns true when
- * the station becomes built. */
-bool workstation_add_build_work(Workstations *workstations, int index, float work);
-
-/* Fraction of the construction work done, 0..1 (1 once built). */
-float workstation_build_fraction(const Workstation *station);
+int workstations_remove(Workstations *workstations, int index, ItemStack returned[1]);
 
 /* Adds a bill for a recipe made at this kind of station (do once, every
  * input allowed). Returns its index, or -1. */

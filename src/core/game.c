@@ -705,13 +705,15 @@ int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationT
 
 int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int preferred)
 {
-    const uint8_t *blocked[] = {game->gather_zones.zone, game->workstations.at, NULL};
+    const uint8_t *blocked[] = {game->gather_zones.zone, game->workstations.at,
+                                game->constructions.workstation_tiles, NULL};
     return stockpiles_add_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, preferred, blocked);
 }
 
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int preferred)
 {
-    const uint8_t *blocked[] = {game->stockpiles.zone, game->workstations.at, NULL};
+    const uint8_t *blocked[] = {game->stockpiles.zone, game->workstations.at,
+                                game->constructions.workstation_tiles, NULL};
     return gather_zones_add_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, preferred,
                                  blocked);
 }
@@ -848,23 +850,32 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
 
 bool game_can_place_workstation(const Game *game, int x, int y)
 {
-    return map_structure(&game->map, x, y) == STRUCTURE_NONE &&
-           construction_at(&game->constructions, x, y) == CONSTRUCTION_NONE &&
+    /* Room in the list for every station whose site is finished. */
+    return game->workstations.used_count + game->constructions.workstation_count <
+               WORKSTATION_MAX &&
+           map_structure(&game->map, x, y) == STRUCTURE_NONE &&
+           construction_can_place(&game->constructions, &game->map, x, y) &&
            workstation_can_place(&game->workstations, &game->map, x, y);
 }
 
-int game_place_workstation(Game *game, WorkstationType type, int x, int y)
+bool game_place_workstation(Game *game, WorkstationType type, int x, int y)
 {
-    if (!game_can_place_workstation(game, x, y)) {
-        return WORKSTATION_NONE;
+    if ((unsigned)type >= WORKSTATION_TYPE_COUNT || !game_can_place_workstation(game, x, y)) {
+        return false;
     }
-    int index = workstations_place(&game->workstations, &game->map, type, x, y);
-    if (index != WORKSTATION_NONE) {
+    /* Ready at once when there is nothing to bring, to build or to clear. */
+    bool ready = !workstation_needs_construction(type) &&
+                 game->map.plants[map_index(&game->map, x, y)].type == PLANT_NONE;
+    bool placed = ready ? workstations_place(&game->workstations, &game->map, type, x, y) !=
+                              WORKSTATION_NONE
+                        : constructions_place_workstation(&game->constructions, &game->map,
+                                                          type, x, y) != CONSTRUCTION_NONE;
+    if (placed) {
         /* No zone on a station: the tile leaves the zone it was in. */
         stockpiles_remove_rect(&game->stockpiles, x, y, x, y);
         gather_zones_remove_rect(&game->gather_zones, x, y, x, y);
     }
-    return index;
+    return placed;
 }
 
 bool game_remove_workstation(Game *game, int index)
@@ -874,7 +885,7 @@ bool game_remove_workstation(Game *game, int index)
         return false;
     }
     int x = station->x, y = station->y;
-    ItemStack returned[2];
+    ItemStack returned[1];
     int count = workstations_remove(&game->workstations, index, returned);
     for (int i = 0; i < count; i++) {
         items_drop(&game->items, &game->map, x, y, returned[i]);
@@ -887,11 +898,6 @@ int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1)
     int removed = 0;
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            int index = workstation_at(&game->workstations, x, y);
-            const Workstation *station = workstation_get_const(&game->workstations, index);
-            if (station != NULL && !station->built && game_remove_workstation(game, index)) {
-                removed++;
-            }
             if (game_remove_construction(game, construction_at(&game->constructions, x, y))) {
                 removed++;
             }

@@ -9,12 +9,13 @@
 static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
     /* A place to sit and work: nothing to bring, so it is ready at once. */
     [WORKSTATION_CRAFTING_SPOT] = {"crafting_spot", N_("workstation.crafting_spot"),
-                                   N_("workstation.crafting_spot.description"), ITEM_NONE, 0,
-                                   0.0f, KNOWLEDGE_NONE, 0.0f},
+                                   N_("workstation.crafting_spot.description"),
+                                   {{ITEM_NONE, 0}, {ITEM_NONE, 0}}, 0.0f, KNOWLEDGE_NONE, 0.0f},
     /* An anvil stone to knap on. */
     [WORKSTATION_KNAPPING_SPOT] = {"knapping_spot", N_("workstation.knapping_spot"),
-                                   N_("workstation.knapping_spot.description"), ITEM_COBBLE, 1,
-                                   250.0f, KNOWLEDGE_STONE_KNAPPING, 50.0f},
+                                   N_("workstation.knapping_spot.description"),
+                                   {{ITEM_COBBLE, 1}, {ITEM_NONE, 0}}, 250.0f,
+                                   KNOWLEDGE_STONE_KNAPPING, 50.0f},
 };
 
 const WorkstationDef *workstation_def(WorkstationType type)
@@ -83,6 +84,20 @@ bool workstation_can_place(const Workstations *workstations, const Map *map, int
            workstation_at(workstations, x, y) == WORKSTATION_NONE;
 }
 
+bool workstation_needs_construction(WorkstationType type)
+{
+    const WorkstationDef *def = workstation_def(type);
+    if (def == NULL) {
+        return false;
+    }
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        if (def->materials[slot].type != ITEM_NONE) {
+            return true;
+        }
+    }
+    return def->build_work > 0.0f;
+}
+
 int workstations_place(Workstations *workstations, const Map *map, WorkstationType type, int x,
                        int y)
 {
@@ -102,10 +117,6 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
         station->y = (int16_t)y;
         station->number = workstations->next_number++;
         station->work_recipe = RECIPE_COUNT;
-        /* Nothing to bring: nothing to build either, once the plant there (if
-         * any) is cleared. */
-        station->built = workstation_def(type)->material == ITEM_NONE &&
-                         map->plants[map_index(map, x, y)].type == PLANT_NONE;
         workstations->at[index_of(workstations, x, y)] = (uint8_t)(index + 1);
         workstations->used_count++;
         workstations->revision++;
@@ -114,17 +125,13 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
     return WORKSTATION_NONE;
 }
 
-int workstations_remove(Workstations *workstations, int index, ItemStack returned[2])
+int workstations_remove(Workstations *workstations, int index, ItemStack returned[1])
 {
     Workstation *station = workstation_get(workstations, index);
     if (station == NULL) {
         return 0;
     }
     int count = 0;
-    const WorkstationDef *def = workstation_def((WorkstationType)station->type);
-    if (!station->built && station->materials > 0) {
-        returned[count++] = item_stack_pristine(def->material, station->materials);
-    }
     if (station->work_input.count > 0) {
         returned[count++] = station->work_input;
     }
@@ -133,57 +140,6 @@ int workstations_remove(Workstations *workstations, int index, ItemStack returne
     workstations->used_count--;
     workstations->revision++;
     return count;
-}
-
-int workstation_materials_missing(const Workstation *station)
-{
-    if (station->built) {
-        return 0;
-    }
-    int missing = workstation_def((WorkstationType)station->type)->material_count -
-                  station->materials;
-    return missing > 0 ? missing : 0;
-}
-
-int workstation_deliver(Workstations *workstations, int index, ItemStack stack)
-{
-    Workstation *station = workstation_get(workstations, index);
-    if (station == NULL || stack.count == 0 ||
-        stack.type != workstation_def((WorkstationType)station->type)->material) {
-        return 0;
-    }
-    int taken = clampi(stack.count, 0, workstation_materials_missing(station));
-    if (taken > 0) {
-        station->materials += taken;
-        workstations->revision++;
-    }
-    return taken;
-}
-
-bool workstation_add_build_work(Workstations *workstations, int index, float work)
-{
-    Workstation *station = workstation_get(workstations, index);
-    if (station == NULL || station->built || workstation_materials_missing(station) > 0) {
-        return false;
-    }
-    station->build_progress += work;
-    if (station->build_progress < workstation_def((WorkstationType)station->type)->build_work) {
-        return false;
-    }
-    station->built = true;
-    station->materials = 0; /* Used up in the construction. */
-    station->build_progress = 0.0f;
-    workstations->revision++;
-    return true;
-}
-
-float workstation_build_fraction(const Workstation *station)
-{
-    if (station->built) {
-        return 1.0f;
-    }
-    float needed = workstation_def((WorkstationType)station->type)->build_work;
-    return needed > 0.0f ? clampf(station->build_progress / needed, 0.0f, 1.0f) : 0.0f;
 }
 
 static Bill *get_bill(Workstations *workstations, int index, int bill)
@@ -391,7 +347,7 @@ bool workstation_start_craft(Workstations *workstations, int index, RecipeType r
                              ItemStack input)
 {
     Workstation *station = workstation_get(workstations, index);
-    if (station == NULL || !station->built || station->work_input.count > 0 ||
+    if (station == NULL || station->work_input.count > 0 ||
         !recipe_accepts_input(recipe, input)) {
         return false;
     }
@@ -442,11 +398,8 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         if (!station->used) {
             continue;
         }
-        int32_t ints[7] = {index, station->type, station->x, station->y, station->number,
-                           station->built, station->materials};
+        int32_t ints[5] = {index, station->type, station->x, station->y, station->number};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
-        hash = hash_fnv1a64(hash, &station->build_progress, sizeof(station->build_progress));
-        hash = hash_fnv1a64(hash, &station->clear_progress, sizeof(station->clear_progress));
         hash = hash_fnv1a64(hash, &station->work_progress, sizeof(station->work_progress));
         ItemStack input = station->work_input;
         int32_t craft[6] = {station->work_recipe, input.type,       input.quality,

@@ -149,10 +149,9 @@ typedef enum ColonistTask {
     TASK_SLEEP,
     TASK_WORK, /* Walking next to a designated tile, then working on it. */
     TASK_HAUL, /* Walking to an item stack, picking it up, carrying it to storage. */
-    TASK_BUILD, /* Bringing materials to a workstation blueprint, then building it. */
     TASK_CRAFT, /* Fetching tools and input, then working through a bill at a station. */
-    /* Bringing materials to a construction site, then building it from a
-     * neighboring tile. */
+    /* Bringing materials to a construction site (a structure's or a
+     * workstation's), then building it from a neighboring tile. */
     TASK_CONSTRUCT,
     TASK_SUPPLY, /* Bringing materials to a construction site (hauling work). */
     TASK_CLEAN, /* Walking to a dirty tile, then cleaning it. */
@@ -172,7 +171,7 @@ typedef enum SearchKind {
     SEARCH_WATER,
     SEARCH_WORK,
     SEARCH_HAUL,
-    SEARCH_STATION, /* Building and crafting jobs at workstations. */
+    SEARCH_STATION, /* Crafting jobs at workstations. */
     SEARCH_GATHER,  /* Gathering zones. */
     SEARCH_CONSTRUCTION, /* Construction sites. */
     SEARCH_CLEAN,        /* Dirty tiles. */
@@ -180,8 +179,8 @@ typedef enum SearchKind {
     SEARCH_COUNT
 } SearchKind;
 
-/* Steps of a job at a workstation (TASK_BUILD, TASK_CRAFT) or a construction
- * site (TASK_CONSTRUCT). */
+/* Steps of a job at a workstation (TASK_CRAFT) or a construction site
+ * (TASK_CONSTRUCT, TASK_SUPPLY). */
 typedef enum StationJobPhase {
     STATION_JOB_FETCH, /* Walking to `fetch` to pick up a tool, an input or materials. */
     STATION_JOB_GO,    /* Walking to the station (next to the site). */
@@ -240,7 +239,7 @@ typedef struct Colonist {
      * tiles at the last failed haul search. */
     uint32_t haul_search_stamp;
     /* Workstations revision + item additions + releases at the last failed
-     * building or crafting search. */
+     * crafting search. */
     uint32_t station_search_stamp;
     /* Gathering zones revision + work reservation releases at the last failed
      * gathering search. */
@@ -258,7 +257,7 @@ typedef struct Colonist {
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
      * for `haul_destination`. */
     bool haul_delivering;
-    /* TASK_BUILD, TASK_CRAFT: the station (index, and number to notice a
+    /* TASK_CRAFT: the station (index, and number to notice a
      * replacement in the same slot), the bill being worked through and its
      * recipe, the current step, and the stack being fetched (a tool when
      * `fetch_tool`). `target` is the station's tile. */
@@ -357,6 +356,10 @@ float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge);
 
 /* Whether the colonist knows enough to build this kind of workstation. */
 bool colonist_can_build(const Colonist *colonist, WorkstationType type);
+
+/* Whether the colonist knows enough to build what a construction site
+ * builds (a structure or a workstation). */
+bool colonist_can_build_site(const Colonist *colonist, const ConstructionSite *site);
 
 /* Whether the colonist knows enough to build this kind of structure. */
 bool colonist_can_construct(const Colonist *colonist, StructureType type);
