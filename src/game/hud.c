@@ -2,6 +2,7 @@
 
 #include "core/i18n.h"
 #include "game/stockpile_panel.h"
+#include "game/work_panel.h"
 
 #define HUD_MARGIN 8.0f
 #define HUD_PADDING 6.0f
@@ -360,7 +361,8 @@ void hud_draw(App *app)
     panel_add_text(&help, tr("hud.help.game"));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_C),
               key_name(SDLK_M), key_name(SDLK_H), key_name(SDLK_X));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.zones"), key_name(SDLK_P));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"), key_name(SDLK_P),
+              key_name(SDLK_T));
     float help_width, help_height;
     panel_size(app, &help, &help_width, &help_height);
     float help_y = screen_height - help_height - HUD_MARGIN;
@@ -383,4 +385,7 @@ void hud_draw(App *app)
         panel_size(app, &tile, &width, &height);
         panel_draw(app, &tile, HUD_MARGIN, help_y - height - HUD_MARGIN);
     }
+
+    /* Last, so that it is drawn over the other panels. */
+    work_panel_draw(app);
 }

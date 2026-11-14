@@ -52,6 +52,12 @@ typedef struct App {
     int selected_stockpile;
     int selected_stockpile_number;
 
+    /* Work priorities grid (game/work_panel.h). */
+    bool show_work_panel;
+    int work_panel_scroll; /* First row shown. */
+    /* A middle/right button press that started on a panel does not pan the view. */
+    bool pan_blocked;
+
     AppTool tool;
     DesignationType tool_type; /* For APP_TOOL_DESIGNATE. */
 

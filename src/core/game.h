@@ -92,6 +92,10 @@ bool game_tile_has_colonist(const Game *game, int x, int y);
 
 /* ---- Designations -------------------------------------------------------- */
 
+/* Sets a colonist's priority for a work type (see colonist_set_work_priority()).
+ * Fails on a stale handle or invalid values. */
+bool game_set_work_priority(Game *game, EntityId id, WorkType type, int priority);
+
 /* Places (or with DESIGNATION_NONE, removes) an order on every valid tile of a
  * rectangle (corners in any order). Returns the number of tiles changed. */
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type);

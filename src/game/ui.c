@@ -22,20 +22,55 @@ static void fill(Ui *ui, SDL_FRect rect, SDL_Color color)
     SDL_RenderFillRect(ui->renderer, &rect);
 }
 
+static SDL_Color brighter(SDL_Color color, int amount)
+{
+    color.r = (Uint8)SDL_min(255, color.r + amount);
+    color.g = (Uint8)SDL_min(255, color.g + amount);
+    color.b = (Uint8)SDL_min(255, color.b + amount);
+    return color;
+}
+
+static void centered_label(Ui *ui, SDL_FRect rect, const char *label)
+{
+    float text_width = ui_text_width(ui, label);
+    float line = (float)text_line_height(ui->text);
+    ui_label(ui, label, SDL_floorf(rect.x + (rect.w - text_width) * 0.5f),
+             SDL_floorf(rect.y + (rect.h - line) * 0.5f));
+}
+
 static void border(Ui *ui, SDL_FRect rect, SDL_Color color)
 {
     SDL_SetRenderDrawColor(ui->renderer, color.r, color.g, color.b, color.a);
     SDL_RenderRect(ui->renderer, &rect);
 }
 
-/* Consumes the pending click if it lies inside `rect`. */
-static bool take_click(Ui *ui, SDL_FRect rect)
+int ui_take_click(Ui *ui, SDL_FRect rect)
 {
     if (ui->click_pending && contains(rect, ui->click_x, ui->click_y)) {
         ui->click_pending = false;
-        return true;
+        return ui->click_button;
     }
-    return false;
+    return 0;
+}
+
+void ui_fill(Ui *ui, SDL_FRect rect, SDL_Color color)
+{
+    fill(ui, rect, color);
+}
+
+bool ui_hovered(const Ui *ui, SDL_FRect rect)
+{
+    return contains(rect, ui->mouse_x, ui->mouse_y);
+}
+
+int ui_cell(Ui *ui, SDL_FRect rect, const char *label, SDL_Color color)
+{
+    fill(ui, rect, ui_hovered(ui, rect) ? brighter(color, 40) : color);
+    border(ui, rect, BORDER_COLOR);
+    if (label[0] != '\0') {
+        centered_label(ui, rect, label);
+    }
+    return ui_take_click(ui, rect);
 }
 
 void ui_init(Ui *ui, SDL_Renderer *renderer, TextRenderer *text)
@@ -55,12 +90,13 @@ bool ui_is_over_panel(const Ui *ui, float x, float y)
     return false;
 }
 
-bool ui_capture_click(Ui *ui, float x, float y)
+bool ui_capture_click(Ui *ui, float x, float y, int button)
 {
     if (!ui_is_over_panel(ui, x, y)) {
         return false;
     }
     ui->click_pending = true;
+    ui->click_button = button;
     ui->click_x = x;
     ui->click_y = y;
     return true;
@@ -115,11 +151,8 @@ bool ui_button(Ui *ui, SDL_FRect rect, const char *label)
     bool hover = contains(rect, ui->mouse_x, ui->mouse_y);
     fill(ui, rect, hover ? BUTTON_HOVER_COLOR : BUTTON_COLOR);
     border(ui, rect, BORDER_COLOR);
-    float text_width = ui_text_width(ui, label);
-    float line = (float)text_line_height(ui->text);
-    ui_label(ui, label, SDL_floorf(rect.x + (rect.w - text_width) * 0.5f),
-             SDL_floorf(rect.y + (rect.h - line) * 0.5f));
-    return take_click(ui, rect);
+    centered_label(ui, rect, label);
+    return ui_take_click(ui, rect) == SDL_BUTTON_LEFT;
 }
 
 float ui_checkbox_width(Ui *ui, const char *label)
@@ -144,5 +177,5 @@ bool ui_checkbox(Ui *ui, float x, float y, float width, UiCheck state, const cha
     }
     float line = (float)text_line_height(ui->text);
     ui_label(ui, label, x + size + UI_CHECKBOX_GAP, SDL_floorf(y + (row - line) * 0.5f));
-    return take_click(ui, area);
+    return ui_take_click(ui, area) == SDL_BUTTON_LEFT;
 }

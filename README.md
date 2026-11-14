@@ -21,6 +21,7 @@ survive whatever the world throws at them.
 - Colonists with needs (food, water, rest) who decide on their own: eat berries, drink, sleep, wander
 - Items on the ground (wood, stone, berries) in stacks; colonists eat berries from bushes or from the ground
 - Work orders (designations): chop trees, mine rock, harvest berries; idle colonists pick jobs by work priority then distance, and reserve their job or food so that nobody else takes it
+- Work priorities grid: who does what, and in which order (1 to 4 per work type, or never)
 - Stockpile zones with a priority (1 to 10) and item filters by category; colonists haul items into the best zone that accepts them
 - Items have a realistic weight and a bulk: bulk sets how many fit on a tile (1,000 berries, 50 logs), and colonists carry a limited weight and bulk per trip
 - A* pathfinding with terrain movement costs
@@ -90,6 +91,7 @@ colony_sim [--lang <code>] [--seed <n>] [--size <n>] [--help]
 | Chop / mine / harvest / cancel orders | C / M / H / X, then left click or drag over the tiles; Esc to go back |
 | Stockpile zones       | P, then drag to create a zone (or extend the selected one); Shift+drag removes tiles |
 | Zone settings         | Click a zone: priority, allowed items, delete; Esc to deselect |
+| Work priorities       | T: grid of colonists × work types; left click raises a priority, right click lowers it |
 | Zoom                  | Mouse wheel                                                  |
 | Pause / resume        | Space                                                        |
 | Speed ×1 / ×3 / ×6    | 1 / 2 / 3                                                    |

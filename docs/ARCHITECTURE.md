@@ -73,6 +73,7 @@ simulation:
 | `hud`          | Builds and draws the HUD panels; all text goes through `tr()`           |
 | `ui`           | Immediate-mode widgets (panel, button, check box) and click capture     |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
+| `work_panel`   | Work priorities grid (colonists × work types)                           |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
 | `localization` | Discovers `.lang` files, selects the language, loads catalogs           |
 
@@ -211,6 +212,14 @@ Every designation belongs to a **work type** (`core/work.h`: mining,
 woodcutting, gathering...). Each colonist has a **priority** per work type: 0 = never,
 otherwise 1 (highest) to 4 (default 3).
 
+The player edits priorities in the work grid (`game/work_panel.c`), which
+only calls `game_set_work_priority()`; the stepping rules of the grid
+(`work_priority_raised()` / `work_priority_lowered()`) live in the core and
+are unit-tested. Changing a priority clears the colonist's failed-search
+backoff, so newly allowed work is picked up at once, and a job whose work
+type got disabled is given up at the next decision (a hauler first delivers
+what it already holds).
+
 When nothing more urgent is needed, an idle or wandering colonist looks for a
 job, one priority level at a time (1 first): a Dijkstra search for the nearest
 passable tile next to an open job (designated, work type at that level, not
@@ -288,9 +297,10 @@ UI state that is not part of the simulation (camera, selection, selected
 stockpile, active tool, drag rectangle, debug toggle) lives in `App`.
 
 The UI is immediate-mode (`game/ui.h`): panels and widgets are laid out and
-drawn every frame. A left click on a panel drawn during the previous frame is
-captured before it reaches the map and consumed by the first widget that
-contains it. Widgets act on the game directly through core functions
+drawn every frame. A left or right click on a panel drawn during the previous
+frame is captured before it reaches the map and consumed by the first widget
+that contains it; the mouse wheel over a panel scrolls it instead of zooming
+the map. Widgets act on the game directly through core functions
 (`stockpile_set_priority()`...). It never influences the simulation,
 so the same seed gives the same game whatever the player looks at.
 

@@ -1,10 +1,10 @@
 /*
  * Minimal immediate-mode UI: panels, buttons and checkboxes drawn every frame.
  *
- * A left click that lands on a panel drawn during the previous frame is
- * captured (the world does not see it) and handed to the widgets drawn this
- * frame: the first widget containing the click consumes it. Labels are
- * passed already translated.
+ * A mouse click (left or right) that lands on a panel drawn during the
+ * previous frame is captured (the world does not see it) and handed to the
+ * widgets drawn this frame: the first widget containing the click consumes
+ * it. Labels are passed already translated.
  */
 #ifndef COLONY_GAME_UI_H
 #define COLONY_GAME_UI_H
@@ -24,6 +24,7 @@ typedef struct Ui {
     float mouse_x;
     float mouse_y;
     bool click_pending;
+    int click_button; /* SDL_BUTTON_LEFT or SDL_BUTTON_RIGHT. */
     float click_x;
     float click_y;
     SDL_FRect areas[UI_MAX_AREAS]; /* Panels drawn this frame. */
@@ -37,9 +38,9 @@ void ui_init(Ui *ui, SDL_Renderer *renderer, TextRenderer *text);
 /* Whether a point is over a panel drawn last frame. */
 bool ui_is_over_panel(const Ui *ui, float x, float y);
 
-/* Offers a left click to the UI: returns true (and keeps it for the widgets)
+/* Offers a mouse click to the UI: returns true (and keeps it for the widgets)
  * when it lands on a panel, false when it belongs to the world. */
-bool ui_capture_click(Ui *ui, float x, float y);
+bool ui_capture_click(Ui *ui, float x, float y, int button);
 
 void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y);
 void ui_end_frame(Ui *ui); /* Unconsumed clicks are dropped. */
@@ -50,10 +51,24 @@ void ui_panel(Ui *ui, SDL_FRect rect);
 void ui_label(Ui *ui, const char *text, float x, float y);
 float ui_text_width(Ui *ui, const char *text);
 
+/* Plain rectangle (row backgrounds, scroll bars...). */
+void ui_fill(Ui *ui, SDL_FRect rect, SDL_Color color);
+
+/* Whether the mouse is over a rectangle. */
+bool ui_hovered(const Ui *ui, SDL_FRect rect);
+
+/* Consumes a pending click inside `rect`: returns its button (SDL_BUTTON_LEFT
+ * or SDL_BUTTON_RIGHT), or 0 when there is none. */
+int ui_take_click(Ui *ui, SDL_FRect rect);
+
+/* Colored box with a centered label (may be empty), brighter under the mouse.
+ * Returns the button it was clicked with this frame, or 0. */
+int ui_cell(Ui *ui, SDL_FRect rect, const char *label, SDL_Color color);
+
 /* Width of a button showing `label`. */
 float ui_button_width(Ui *ui, const char *label);
 
-/* Draws a button; true when it was clicked this frame. */
+/* Draws a button; true when it was left-clicked this frame. */
 bool ui_button(Ui *ui, SDL_FRect rect, const char *label);
 
 /* Draws a check box followed by its label (the whole row is clickable); true

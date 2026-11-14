@@ -388,6 +388,41 @@ static void test_disabled_hauling_is_never_done(void)
     game_shutdown(&game);
 }
 
+static void test_disabling_hauling_stops_before_pickup_only(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 14, 10, ITEM_BERRIES, 10);
+    stockpile_create(&game.stockpiles, &game.map, 24, 10, 24, 10);
+    EntityId id = game_spawn_colonist(&game, 10, 10);
+    Colonist *colonist = game_colonist(&game, id);
+    REQUIRE(colonist != NULL);
+    for (int need = 0; need < NEED_COUNT; need++) {
+        colonist->needs[need] = 1.0f;
+    }
+    game_tick(&game);
+    REQUIRE(colonist->task == TASK_HAUL);
+
+    /* On the way to the stack: gives up. */
+    REQUIRE(game_set_work_priority(&game, id, WORK_HAULING, WORK_PRIORITY_DISABLED));
+    run_ticks(&game, 60);
+    CHECK(colonist->task != TASK_HAUL);
+    CHECK_EQ_INT(game.reservations.count, 0);
+    CHECK_EQ_INT(count_at(&game, 14, 10, ITEM_BERRIES), 10);
+
+    /* Enabled again, then disabled once the load is in hand: it is delivered. */
+    REQUIRE(game_set_work_priority(&game, id, WORK_HAULING, WORK_PRIORITY_DEFAULT));
+    for (int i = 0; i < 2000 && colonist->carried.count == 0; i++) {
+        game_tick(&game);
+    }
+    REQUIRE(colonist->carried.count == 10);
+    REQUIRE(game_set_work_priority(&game, id, WORK_HAULING, WORK_PRIORITY_DISABLED));
+    run_ticks(&game, 800);
+    CHECK_EQ_INT(count_at(&game, 24, 10, ITEM_BERRIES), 10);
+    CHECK(colonist->task != TASK_HAUL);
+    game_shutdown(&game);
+}
+
 static void test_designations_come_before_hauling_at_same_priority(void)
 {
     Game game;
@@ -470,6 +505,7 @@ int main(void)
     RUN_TEST(test_destination_gone_without_alternative_drops_items);
     RUN_TEST(test_two_haulers_take_different_stacks);
     RUN_TEST(test_disabled_hauling_is_never_done);
+    RUN_TEST(test_disabling_hauling_stops_before_pickup_only);
     RUN_TEST(test_designations_come_before_hauling_at_same_priority);
     RUN_TEST(test_new_stockpile_is_noticed_despite_backoff);
     RUN_TEST(test_hauling_is_deterministic);

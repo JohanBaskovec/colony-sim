@@ -5,6 +5,7 @@
 #include "game/hud.h"
 #include "game/render.h"
 #include "game/stockpile_panel.h"
+#include "game/work_panel.h"
 
 #include <SDL3_ttf/SDL_ttf.h>
 #include <math.h>
@@ -224,8 +225,10 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     /* Mnemonic keys use the key labels (keycodes). */
     switch (key->key) {
     case SDLK_ESCAPE:
-        /* Steps back: zone selection, then tool, then quit. */
-        if (app->selected_stockpile != STOCKPILE_NONE) {
+        /* Steps back: work grid, zone selection, then tool, then quit. */
+        if (app->show_work_panel) {
+            app->show_work_panel = false;
+        } else if (app->selected_stockpile != STOCKPILE_NONE) {
             app->selected_stockpile = STOCKPILE_NONE;
         } else if (app->tool != APP_TOOL_NONE) {
             app->tool = APP_TOOL_NONE;
@@ -239,6 +242,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case SDLK_X: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); break;
     /* Not Z: the Z key is a movement key on AZERTY keyboards. */
     case SDLK_P: toggle_tool(app, APP_TOOL_STOCKPILE, DESIGNATION_NONE); break;
+    case SDLK_T: app->show_work_panel = !app->show_work_panel; break;
     case SDLK_F3: app->show_debug = !app->show_debug; break;
     case SDLK_L:
         localization_cycle(&app->localization);
@@ -360,10 +364,16 @@ static void apply_stockpile_tool(App *app, float screen_x, float screen_y, bool 
 static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
 {
     if (button->button != SDL_BUTTON_LEFT) {
+        /* Right clicks on a panel go to its widgets; dragging from a panel
+         * with the middle or right button does not pan the view. */
+        app->pan_blocked = button->down && ui_is_over_panel(&app->ui, button->x, button->y);
+        if (button->down && button->button == SDL_BUTTON_RIGHT) {
+            ui_capture_click(&app->ui, button->x, button->y, SDL_BUTTON_RIGHT);
+        }
         return;
     }
     if (button->down) {
-        if (ui_capture_click(&app->ui, button->x, button->y)) {
+        if (ui_capture_click(&app->ui, button->x, button->y, SDL_BUTTON_LEFT)) {
             return; /* Clicked on a panel: the widgets get it. */
         }
         app->left_button_down = true;
@@ -403,6 +413,12 @@ static void handle_event(App *app, const SDL_Event *event)
         if (event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             steps = -steps;
         }
+        if (ui_is_over_panel(&app->ui, event->wheel.mouse_x, event->wheel.mouse_y)) {
+            if (app->show_work_panel) {
+                work_panel_scroll(app, steps);
+            }
+            break; /* The wheel does not zoom the map through a panel. */
+        }
         if (steps != 0.0f) {
             camera_zoom_at(&app->camera, powf(APP_ZOOM_STEP, steps), event->wheel.mouse_x,
                            event->wheel.mouse_y);
@@ -412,7 +428,7 @@ static void handle_event(App *app, const SDL_Event *event)
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP: handle_mouse_button(app, &event->button); break;
     case SDL_EVENT_MOUSE_MOTION:
-        if (event->motion.state & (SDL_BUTTON_MMASK | SDL_BUTTON_RMASK)) {
+        if ((event->motion.state & (SDL_BUTTON_MMASK | SDL_BUTTON_RMASK)) && !app->pan_blocked) {
             camera_pan_pixels(&app->camera, -event->motion.xrel, -event->motion.yrel);
         }
         if (app->left_button_down && !app->box_selecting) {

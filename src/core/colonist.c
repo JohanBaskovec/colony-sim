@@ -51,6 +51,22 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y)
     colonist->max_carry_bulk = COLONIST_CARRY_BULK;
 }
 
+bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority)
+{
+    if ((unsigned)type >= WORK_TYPE_COUNT || !work_priority_is_valid(priority)) {
+        return false;
+    }
+    if (colonist->work_priorities[type] != priority) {
+        colonist->work_priorities[type] = (uint8_t)priority;
+        /* Jobs skipped so far may now be acceptable: forget failed searches. */
+        colonist->search_cooldown[SEARCH_WORK] = 0;
+        colonist->search_failures[SEARCH_WORK] = 0;
+        colonist->search_cooldown[SEARCH_HAUL] = 0;
+        colonist->search_failures[SEARCH_HAUL] = 0;
+    }
+    return true;
+}
+
 float colonist_carried_weight(const Colonist *colonist)
 {
     return item_stack_weight((ItemType)colonist->carried.type, colonist->carried.count);
@@ -471,7 +487,8 @@ static bool haul_still_valid(Colonist *colonist, const ColonistContext *context)
 {
     if (colonist->carried.count == 0) {
         ItemStack stack = items_get(context->items, colonist->target.x, colonist->target.y);
-        return stack.type != ITEM_NONE &&
+        return colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED &&
+               stack.type != ITEM_NONE &&
                haul_destination_valid(colonist, context, (ItemType)stack.type);
     }
     ItemType type = (ItemType)colonist->carried.type;
@@ -535,11 +552,15 @@ static void haul(Colonist *colonist, const ColonistContext *context)
     set_idle(colonist, context, 0); /* Drops any leftover nearby, then looks for more work. */
 }
 
-/* Whether the job the colonist is heading to or working on still exists and is still its own. */
+/* Whether the job the colonist is heading to or working on still exists, is
+ * still its own, and is of a work type the colonist still does. */
 static bool job_still_valid(const Colonist *colonist, const ColonistContext *context)
 {
     TilePos target = colonist->target;
-    return designation_get(context->designations, target.x, target.y) == colonist->work_type &&
+    const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
+    return def != NULL &&
+           colonist->work_priorities[def->work_type] != WORK_PRIORITY_DISABLED &&
+           designation_get(context->designations, target.x, target.y) == colonist->work_type &&
            reservations_owner(context->reservations, RESERVATION_WORK, target) ==
                context->worker_id;
 }

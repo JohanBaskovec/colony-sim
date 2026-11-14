@@ -336,6 +336,7 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
+        hash = hash_fnv1a64(hash, c->work_priorities, sizeof(c->work_priorities));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));
@@ -344,6 +345,12 @@ uint64_t game_hash(const Game *game)
 }
 
 /* ---- Designations -------------------------------------------------------- */
+
+bool game_set_work_priority(Game *game, EntityId id, WorkType type, int priority)
+{
+    Colonist *colonist = game_colonist(game, id);
+    return colonist != NULL && colonist_set_work_priority(colonist, type, priority);
+}
 
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type)
 {

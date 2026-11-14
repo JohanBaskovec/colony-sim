@@ -8,6 +8,7 @@
 #ifndef COLONY_CORE_WORK_H
 #define COLONY_CORE_WORK_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef enum WorkType {
@@ -29,6 +30,17 @@ typedef struct WorkTypeDef {
 } WorkTypeDef;
 
 const WorkTypeDef *work_type_def(WorkType type);
+
+/* Whether a value is WORK_PRIORITY_DISABLED or a priority level. */
+bool work_priority_is_valid(int priority);
+
+/*
+ * Stepping through priorities, as the player does in the priorities grid.
+ * Raising goes disabled → lowest → ... → highest, then wraps to disabled;
+ * lowering goes the other way. Invalid values give the default priority.
+ */
+int work_priority_raised(int priority);
+int work_priority_lowered(int priority);
 
 /* Bit mask with one bit per WorkType. */
 typedef uint32_t WorkTypeMask;

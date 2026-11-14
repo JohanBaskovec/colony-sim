@@ -152,6 +152,14 @@ void colonist_free(Colonist *colonist);
 
 void colonist_tick(Colonist *colonist, const ColonistContext *context);
 
+/*
+ * Changes how much a colonist favors a work type (WORK_PRIORITY_DISABLED:
+ * never does it). Fails on an invalid type or priority. The colonist looks
+ * for work again right away, and gives up a job whose work type got disabled
+ * the next time it decides (a hauler finishes carrying what it holds).
+ */
+bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority);
+
 /* Gives up the current task, releasing any reservation (e.g. before removal). */
 void colonist_abandon_task(Colonist *colonist, const ColonistContext *context);
 

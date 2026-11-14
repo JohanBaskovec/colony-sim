@@ -62,8 +62,7 @@ hud.language = Langue : {0}
 hud.help.camera = {0}/Flèches : déplacer · Molette : zoom · Glisser clic milieu/droit : défiler
 hud.help.game = Clic/glisser gauche : sélectionner · Espace : pause · 1-3 : vitesse · L : langue · F3 : débogage · Échap : quitter
 hud.help.orders = {0} : couper des arbres · {1} : miner la roche · {2} : récolter · {3} : annuler des ordres
-# {0} = touche de l'outil de zone de stockage
-hud.help.zones = {0} : zones de stockage · Clic sur une zone : ses réglages
+hud.help.manage = {0} : zones de stockage (clic sur une zone : ses réglages) · {1} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 hud.tool.name = Outil : {0}
 hud.tool.stockpile_help = Glisser : créer, ou agrandir la zone sélectionnée · Maj+glisser : retirer · Échap : retour
@@ -129,3 +128,13 @@ stockpile.delete = Supprimer
 
 # Unités
 unit.kg = {0} kg
+
+# Interface générique
+ui.close = Fermer
+
+# Grille des priorités de travail
+work_panel.title = Priorités de travail
+work_panel.colonist = Colon
+work_panel.empty = Aucun colon
+work_panel.hint = Clic gauche : priorité plus haute · Clic droit : priorité plus basse · Clic sur un nom : aller au colon
+work_panel.legend = {0} = fait en premier · {1} = fait en dernier · vide = jamais

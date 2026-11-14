@@ -631,6 +631,86 @@ static void test_disabled_work_type_is_never_done(void)
     game_shutdown(&game);
 }
 
+static void test_set_work_priority_validates(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId id = game_spawn_colonist(&game, 20, 20);
+    Colonist *colonist = game_colonist(&game, id);
+    REQUIRE(colonist != NULL);
+    uint64_t before = game_hash(&game);
+
+    CHECK(game_set_work_priority(&game, id, WORK_MINING, WORK_PRIORITY_HIGHEST));
+    CHECK_EQ_INT(colonist->work_priorities[WORK_MINING], WORK_PRIORITY_HIGHEST);
+    CHECK(game_hash(&game) != before); /* Priorities are part of the simulation state. */
+    CHECK(game_set_work_priority(&game, id, WORK_HAULING, WORK_PRIORITY_DISABLED));
+    CHECK_EQ_INT(colonist->work_priorities[WORK_HAULING], WORK_PRIORITY_DISABLED);
+
+    CHECK(!game_set_work_priority(&game, id, WORK_TYPE_COUNT, 1));
+    CHECK(!game_set_work_priority(&game, id, WORK_MINING, WORK_PRIORITY_LOWEST + 1));
+    CHECK(!game_set_work_priority(&game, id, WORK_MINING, -1));
+    CHECK_EQ_INT(colonist->work_priorities[WORK_MINING], WORK_PRIORITY_HIGHEST);
+
+    game_remove_colonist(&game, id);
+    CHECK(!game_set_work_priority(&game, id, WORK_MINING, 2)); /* Stale handle. */
+    game_shutdown(&game);
+}
+
+static void test_enabling_work_type_is_noticed_right_away(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    game.map.rock[map_index(&game.map, 23, 20)] = ROCK_SANDSTONE;
+    EntityId id = game_spawn_colonist(&game, 20, 20);
+    Colonist *colonist = game_colonist(&game, id);
+    REQUIRE(colonist != NULL);
+    for (int need = 0; need < NEED_COUNT; need++) {
+        colonist->needs[need] = 1.0f;
+    }
+    set_rock_ring(&game.map, 20, 20, ROCK_GRANITE); /* Stays put: decides every tick. */
+    game.map.rock[map_index(&game.map, 21, 20)] = ROCK_NONE;
+    game.map.rock[map_index(&game.map, 22, 20)] = ROCK_NONE;
+    REQUIRE(game_set_work_priority(&game, id, WORK_MINING, WORK_PRIORITY_DISABLED));
+    game_designate_rect(&game, 23, 20, 23, 20, DESIGNATION_MINE);
+    run_ticks(&game, 200);
+    REQUIRE(colonist->task != TASK_WORK);
+
+    /* No need to wait for the search backoff. */
+    REQUIRE(game_set_work_priority(&game, id, WORK_MINING, WORK_PRIORITY_LOWEST));
+    for (int i = 0; i < 200 && colonist->task != TASK_WORK; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    game_shutdown(&game);
+}
+
+static void test_disabling_work_type_stops_the_current_job(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_tree(&game.map, 22, 20);
+    EntityId id = game_spawn_colonist(&game, 20, 20);
+    Colonist *colonist = game_colonist(&game, id);
+    REQUIRE(colonist != NULL);
+    for (int need = 0; need < NEED_COUNT; need++) {
+        colonist->needs[need] = 1.0f;
+    }
+    game_designate_rect(&game, 22, 20, 22, 20, DESIGNATION_CHOP);
+    run_ticks(&game, walk_ticks(1) + 100);
+    REQUIRE(colonist->task == TASK_WORK);
+    float progress = designation_progress_fraction(&game.designations, &game.map, 22, 20);
+    REQUIRE(progress > 0.0f);
+
+    REQUIRE(game_set_work_priority(&game, id, WORK_WOODCUTTING, WORK_PRIORITY_DISABLED));
+    run_ticks(&game, 5);
+    CHECK(colonist->task != TASK_WORK);
+    CHECK_EQ_INT(work_owner(&game, 22, 20), RESERVATION_NO_OWNER);
+    /* The order and the work done stay for someone else. */
+    CHECK_EQ_INT(designation_get(&game.designations, 22, 20), DESIGNATION_CHOP);
+    CHECK(designation_progress_fraction(&game.designations, &game.map, 22, 20) >= progress);
+    game_shutdown(&game);
+}
+
 static void test_priority_beats_distance(void)
 {
     Game game;
@@ -915,6 +995,9 @@ int main(void)
     RUN_TEST(test_new_order_is_noticed_despite_backoff);
     RUN_TEST(test_hungry_colonists_go_to_different_bushes);
     RUN_TEST(test_disabled_work_type_is_never_done);
+    RUN_TEST(test_set_work_priority_validates);
+    RUN_TEST(test_enabling_work_type_is_noticed_right_away);
+    RUN_TEST(test_disabling_work_type_stops_the_current_job);
     RUN_TEST(test_priority_beats_distance);
     RUN_TEST(test_hungry_colonist_eats_berries_from_the_ground);
     RUN_TEST(test_colonist_harvests_berries);
