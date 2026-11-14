@@ -111,6 +111,7 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Social life: relationships, sexual needs (abstract representation)
 - [ ] Traits; related practice and the knowledges after the starting ones; classes with classrooms and schedules
 - [ ] Content of the later historical periods (Mesolithic to Iron Age, then beyond)
+- [ ] Earth building with settling down: clay deposits, wattle and daub on the branch frame of grass walls, then cob, mud bricks, rammed earth, fired bricks (`docs/KNOWLEDGE.md` §13)
 - [ ] Pregnancy, children, aging
 - [ ] Religion, spirituality levels, "inner peace" ending; other endings
 

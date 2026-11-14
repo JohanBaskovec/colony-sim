@@ -937,6 +937,38 @@ if it changes a decision):
 lies on the gravel near it and in river beds, and mining chalk gives flint
 nodules. Replaces the noise-only flint patches of step 3.
 
+**Earth building** (knowledge, after Basic shelters). Walls of earth come
+with settling down (first villages, pottery, farming, about 10,000 years
+ago), later than grass and branches but not much. In historical order:
+
+| Technique | How | First known | Needs |
+|-----------|-----|-------------|-------|
+| Wattle and daub | The branch frame of the grass wall, woven into a wattle and plastered on both sides with clay, water and fibers (dry grass, dung) | Neolithic (Linear Pottery longhouses, about 5500 BC) | Clay, water, dry grass; digging stick |
+| Cob | Lumps of earth and straw stacked by hand into thick walls (40 to 60 cm), no frame | Neolithic | The same, much more earth |
+| Mud bricks (adobe) | Bricks shaped in wooden moulds, dried in the sun for weeks | Near East, about 9000 BC (Jericho) | Moulds, a drying area, dry weather |
+| Rammed earth | Earth packed into a formwork of planks | About 2000 BC | Planks, so tools to split or saw them |
+| Fired bricks | Mud bricks fired in a kiln | About 3000 BC (Indus, Mesopotamia) | A kiln and a lot of fuel |
+
+What the game needs first:
+- **Clay** in world generation: deposits along rivers and in wet hollows,
+  shown in the tile inspector (like flint patches); dug with a digging stick,
+  then a spade.
+- **Water** to mix: a container to carry it (skin, watertight basket,
+  pottery), or the mixing done at the water's edge.
+- **Drying**: a daub wall takes several days to set; drying too fast
+  (sun, wind) cracks it *(tuning)*.
+
+Rough material counts, for a segment 1 m long and 2 m high (same tile as
+the grass wall): the frame (5 branches) woven with thinner branches (about
+5 more), and about 10 cm of daub in all: 0.2 m³ of earth at 1,500 to
+1,800 kg/m³, **300 to 350 kg**, plus a few kilograms of dry grass. That is
+about 8 trips at the standard carry weight of 40 kg: containers (baskets,
+then barrows) become precious.
+
+What it is worth: far better insulation than grass (about 0.8 against 0.5),
+hardly burns, lasts decades if a roof keeps the rain off; the price is the
+weight to carry and the drying time.
+
 ---
 
 ## 14. Open questions
