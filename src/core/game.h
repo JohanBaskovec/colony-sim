@@ -137,6 +137,19 @@ bool game_designation_available(const Game *game, DesignationType type);
 /* Whether some living colonist knows enough to do this gathering job. */
 bool game_gather_job_known(const Game *game, GatherJob job);
 
+/* The gathering job under way on a tile of a zone. */
+typedef struct GatherWorkInfo {
+    GatherJob job;   /* GATHER_JOB_NONE: nothing under way. */
+    float fraction;  /* Work done on it, 0..1. */
+    EntityId worker; /* The settler who took it (walking there or working), or ENTITY_NONE
+                        when the work was left off. */
+} GatherWorkInfo;
+
+/* What is under way on a tile: the job a settler took there, else the job
+ * some work was done on and left off. False when nothing is (the info then
+ * says GATHER_JOB_NONE). */
+bool game_gather_work_at(const Game *game, int x, int y, GatherWorkInfo *info);
+
 /* Places (or with DESIGNATION_NONE, removes) an order on every valid tile of a
  * rectangle (corners in any order). Returns the number of tiles changed. */
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type);
@@ -147,7 +160,7 @@ int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationT
  * any order) to the stockpiles or to the gathering zones as the zone tools do
  * (see stockpiles_add_rect() and gather_zones_add_rect(): zones of the same
  * kind it overlaps, and `preferred`, merge), leaving out the tiles of the
- * other kind of zone. Return the zone's index, or STOCKPILE_NONE /
+ * other kind of zone and of workstations. Return the zone's index, or STOCKPILE_NONE /
  * GATHER_ZONE_NONE when nothing could be added. */
 int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int preferred);
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int preferred);
@@ -174,13 +187,13 @@ ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe);
  * the tools nobody carries have been taken from it (see bill_has_input()). */
 bool game_bill_has_input(const Game *game, const Bill *bill);
 
-/* Whether a workstation may be placed on a tile: not on a stockpile, a
- * structure or a construction site, and where workstation_can_place() says
- * yes. */
+/* Whether a workstation may be placed on a tile: not on a structure or a
+ * construction site, and where workstation_can_place() says yes. */
 bool game_can_place_workstation(const Game *game, int x, int y);
 
 /* Places a workstation blueprint where game_can_place_workstation() allows.
- * Returns its index or WORKSTATION_NONE. */
+ * A zone (stockpile, gathering zone) on the tile loses it: no zone lies under
+ * a station. Returns its index or WORKSTATION_NONE. */
 int game_place_workstation(Game *game, WorkstationType type, int x, int y);
 
 /* Removes a station or blueprint; what it held is dropped on its tile.

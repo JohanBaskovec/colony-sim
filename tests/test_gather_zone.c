@@ -196,6 +196,46 @@ static void test_order_settings(void)
     free_world(&map, &zones, &items);
 }
 
+static void test_zone_priority(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    int a = gather_zone_create(&zones, &map, 0, 0, 2, 2);
+    int b = gather_zone_create(&zones, &map, 0, 10, 2, 12);
+    const GatherZone *zone = gather_zone_get(&zones, a);
+    CHECK_EQ_INT(zone->priority, GATHER_ZONE_PRIORITY_DEFAULT);
+    CHECK_EQ_INT(gather_zone_priority_at(&zones, 1, 1), GATHER_ZONE_PRIORITY_DEFAULT);
+    CHECK_EQ_INT(gather_zone_priority_at(&zones, 8, 8), 0);
+    CHECK_EQ_INT(gather_zone_priority_at(&zones, -1, 8), 0);
+    uint32_t revision = zones.revision;
+    gather_zone_set_priority(&zones, a, 2);
+    CHECK_EQ_INT(zone->priority, 2);
+    CHECK(zones.revision != revision); /* Settlers look again. */
+    revision = zones.revision;
+    gather_zone_set_priority(&zones, a, 2);
+    CHECK_EQ_INT(zones.revision, revision);
+    gather_zone_set_priority(&zones, a, 0);
+    CHECK_EQ_INT(zone->priority, GATHER_ZONE_PRIORITY_HIGHEST);
+    gather_zone_set_priority(&zones, a, 99);
+    CHECK_EQ_INT(zone->priority, GATHER_ZONE_PRIORITY_LOWEST);
+    gather_zone_set_priority(&zones, 9, 3); /* Ignored. */
+
+    /* Only zones that want something count. */
+    CHECK_EQ_INT(gather_zones_wanting_priorities(&zones), 0);
+    order(&zones, &items, a, GATHER_TWIGS, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_zones_wanting_priorities(&zones), 1u << GATHER_ZONE_PRIORITY_LOWEST);
+    order(&zones, &items, b, GATHER_TWIGS, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_zones_wanting_priorities(&zones),
+                 (1u << GATHER_ZONE_PRIORITY_LOWEST) | (1u << GATHER_ZONE_PRIORITY_DEFAULT));
+
+    /* A merged zone keeps the priority of the one it keeps the orders of. */
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 2, 1, 10, a, NULL), a);
+    CHECK_EQ_INT(gather_zone_priority_at(&zones, 1, 11), GATHER_ZONE_PRIORITY_LOWEST);
+    free_world(&map, &zones, &items);
+}
+
 static void test_wanted_resources(void)
 {
     Map map;
@@ -569,7 +609,10 @@ static void test_hash(void)
     uint64_t target = gather_zones_hash(&zones, HASH_FNV1A64_INIT);
     CHECK(target != created);
     gather_zone_set_ripe_only(&zones, index, GATHER_BERRIES, false);
-    CHECK(gather_zones_hash(&zones, HASH_FNV1A64_INIT) != target);
+    uint64_t ripe = gather_zones_hash(&zones, HASH_FNV1A64_INIT);
+    CHECK(ripe != target);
+    gather_zone_set_priority(&zones, index, 1);
+    CHECK(gather_zones_hash(&zones, HASH_FNV1A64_INIT) != ripe);
     free_world(&map, &zones, &items);
 }
 
@@ -620,13 +663,20 @@ static void test_blocked_tiles_are_left_out(void)
     uint8_t *blocked = calloc(map_tile_count(&map), 1);
     REQUIRE(blocked != NULL);
     blocked[map_index(&map, 1, 1)] = 3;
-    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, GATHER_ZONE_NONE, blocked);
+    /* Several layers: any of them blocks. */
+    uint8_t *other = calloc(map_tile_count(&map), 1);
+    REQUIRE(other != NULL);
+    other[map_index(&map, 2, 2)] = 1;
+    const uint8_t *layers[] = {blocked, other, NULL};
+    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, GATHER_ZONE_NONE, layers);
     REQUIRE(a != GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zone_get(&zones, a)->cell_count, 8);
+    CHECK_EQ_INT(gather_zone_get(&zones, a)->cell_count, 7);
     CHECK_EQ_INT(gather_zone_at(&zones, 1, 1), GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 1, 1, 1, GATHER_ZONE_NONE, blocked),
+    CHECK_EQ_INT(gather_zone_at(&zones, 2, 2), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 1, 1, 1, GATHER_ZONE_NONE, layers),
                  GATHER_ZONE_NONE);
     CHECK_EQ_INT(zones.used_count, 1);
+    free(other);
     free(blocked);
     free_world(&map, &zones, &items);
 }
@@ -673,6 +723,7 @@ int main(void)
     RUN_TEST(test_where_zones_and_stones_lie);
     RUN_TEST(test_zone_tiles);
     RUN_TEST(test_order_settings);
+    RUN_TEST(test_zone_priority);
     RUN_TEST(test_wanted_resources);
     RUN_TEST(test_tile_jobs_in_order);
     RUN_TEST(test_fully_grown_plants_only);

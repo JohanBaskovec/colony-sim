@@ -352,12 +352,13 @@ static void test_blocked_tiles_are_left_out(void)
     for (int x = 1; x <= 4; x++) {
         blocked[map_index(&map, x, 2)] = 1;
     }
-    int a = stockpiles_add_rect(&s, &map, 1, 1, 4, 3, STOCKPILE_NONE, blocked);
+    const uint8_t *layers[] = {blocked, NULL};
+    int a = stockpiles_add_rect(&s, &map, 1, 1, 4, 3, STOCKPILE_NONE, layers);
     REQUIRE(a != STOCKPILE_NONE);
     CHECK_EQ_INT(stockpile_get(&s, a)->cell_count, 8);
     CHECK_EQ_INT(stockpile_at(&s, 2, 2), STOCKPILE_NONE);
     /* Only blocked tiles: nothing is created. */
-    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 2, 2, 3, 2, STOCKPILE_NONE, blocked),
+    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 2, 2, 3, 2, STOCKPILE_NONE, layers),
                  STOCKPILE_NONE);
     CHECK_EQ_INT(s.used_count, 1);
     /* Without the layer, they can be covered (here by the selected stockpile). */

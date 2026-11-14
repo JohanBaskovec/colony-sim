@@ -20,7 +20,9 @@
  *
  * Every tile keeps the work done on its current job, so that interrupted work
  * resumes. Gathering is a background job: at the same work priority, settlers
- * first carry out orders, build and craft.
+ * first carry out orders, build and craft. Among zones, settlers gather in
+ * those of the highest zone priority first, then in the nearest. No zone lies
+ * under a workstation (see game_place_workstation()).
  */
 #ifndef COLONY_CORE_GATHER_ZONE_H
 #define COLONY_CORE_GATHER_ZONE_H
@@ -36,6 +38,11 @@
 
 #define GATHER_ZONE_MAX 32
 #define GATHER_ZONE_NONE (-1)
+
+/* 1 is the highest priority, like stockpiles. */
+#define GATHER_ZONE_PRIORITY_HIGHEST 1
+#define GATHER_ZONE_PRIORITY_LOWEST 10
+#define GATHER_ZONE_PRIORITY_DEFAULT 5
 
 /* What a zone may gather, in display order. */
 typedef enum GatherResource {
@@ -118,6 +125,9 @@ typedef struct GatherZone {
     bool used;
     int number; /* Shown to the player ("Gathering 2"); unique, never reused. */
     int cell_count;
+    /* Zones of a higher priority (smaller number) are gathered in first, at
+     * any distance; then the nearest job among zones of the same priority. */
+    int priority;
     GatherOrder orders[GATHER_RESOURCE_COUNT];
     /* Resources wanted now (orders enabled and not satisfied, see
      * gather_zones_update()). */
@@ -171,13 +181,13 @@ int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, in
  * overlaps become one zone, which gets the free tiles of the rectangle it may
  * cover. The merged zone keeps the orders of `preferred`, else of the oldest
  * one; work under way on its tiles is kept. With no zone involved, a new one
- * is created. Tiles where `blocked` (a layer the size of the map, or NULL) is
- * not 0 are left out: the game passes the other kinds of zones, which may not
- * overlap. Returns the zone's index, or GATHER_ZONE_NONE when nothing could be
- * added.
+ * is created. Tiles where a layer of `blocked` (layers the size of the map,
+ * the list ended by NULL; or NULL) is not 0 are left out: the game passes the
+ * other kinds of zones, which may not overlap, and the workstations. Returns
+ * the zone's index, or GATHER_ZONE_NONE when nothing could be added.
  */
 int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
-                          int preferred, const uint8_t *blocked);
+                          int preferred, const uint8_t *const *blocked);
 
 /* Removes every tile of a rectangle from its zone; zones left without tiles
  * are deleted. Returns the number of tiles removed. */
@@ -204,6 +214,15 @@ void gather_zone_set_target(GatherZones *zones, int index, GatherResource resour
                             int target);
 void gather_zone_set_ripe_only(GatherZones *zones, int index, GatherResource resource,
                                bool ripe_only);
+
+/* GATHER_ZONE_PRIORITY_HIGHEST..GATHER_ZONE_PRIORITY_LOWEST (clamped). */
+void gather_zone_set_priority(GatherZones *zones, int index, int priority);
+
+/* Priority of the zone covering a tile, 0 outside any zone. */
+int gather_zone_priority_at(const GatherZones *zones, int x, int y);
+
+/* Priorities of the zones that want something: bit p set for priority p. */
+uint32_t gather_zones_wanting_priorities(const GatherZones *zones);
 
 /* Items counted as a resource among `totals` (items lying per type). */
 long gather_resource_count(GatherResource resource, const long totals[ITEM_TYPE_COUNT]);

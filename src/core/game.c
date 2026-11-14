@@ -651,6 +651,35 @@ bool game_gather_job_known(const Game *game, GatherJob job)
     return false;
 }
 
+bool game_gather_work_at(const Game *game, int x, int y, GatherWorkInfo *info)
+{
+    *info = (GatherWorkInfo){GATHER_JOB_NONE, 0.0f, ENTITY_NONE};
+    if (!map_in_bounds(&game->map, x, y)) {
+        return false;
+    }
+    const GatherZones *zones = &game->gather_zones;
+    size_t index = map_index(&game->map, x, y);
+    float fraction = gather_zone_progress_fraction(zones, &game->map, x, y);
+    uint8_t owner = reservations_owner(&game->reservations, RESERVATION_WORK,
+                                       (TilePos){(int16_t)x, (int16_t)y});
+    EntityId id = owner > 0 ? game_colonist_id_at(game, owner - 1u) : ENTITY_NONE;
+    const Colonist *colonist = game_colonist_const(game, id);
+    if (colonist != NULL && colonist->task == TASK_WORK && colonist->gathering &&
+        colonist->target.x == x && colonist->target.y == y) {
+        info->job = (GatherJob)colonist->work_type;
+        info->worker = id;
+        /* Work done on another job of the tile is lost once this one starts. */
+        info->fraction = info->job == (GatherJob)zones->job[index] ? fraction : 0.0f;
+        return true;
+    }
+    if (fraction > 0.0f) {
+        info->job = (GatherJob)zones->job[index];
+        info->fraction = fraction;
+        return true;
+    }
+    return false;
+}
+
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type)
 {
     return designations_set_rect(&game->designations, &game->map, x0, y0, x1, y1, type);
@@ -660,14 +689,15 @@ int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationT
 
 int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int preferred)
 {
-    return stockpiles_add_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, preferred,
-                               game->gather_zones.zone);
+    const uint8_t *blocked[] = {game->gather_zones.zone, game->workstations.at, NULL};
+    return stockpiles_add_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, preferred, blocked);
 }
 
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int preferred)
 {
+    const uint8_t *blocked[] = {game->stockpiles.zone, game->workstations.at, NULL};
     return gather_zones_add_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, preferred,
-                                 game->stockpiles.zone);
+                                 blocked);
 }
 
 /* ---- Picking ------------------------------------------------------------- */
@@ -802,8 +832,7 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
 
 bool game_can_place_workstation(const Game *game, int x, int y)
 {
-    return stockpile_at(&game->stockpiles, x, y) == STOCKPILE_NONE &&
-           map_structure(&game->map, x, y) == STRUCTURE_NONE &&
+    return map_structure(&game->map, x, y) == STRUCTURE_NONE &&
            construction_at(&game->constructions, x, y) == CONSTRUCTION_NONE &&
            workstation_can_place(&game->workstations, &game->map, x, y);
 }
@@ -813,7 +842,13 @@ int game_place_workstation(Game *game, WorkstationType type, int x, int y)
     if (!game_can_place_workstation(game, x, y)) {
         return WORKSTATION_NONE;
     }
-    return workstations_place(&game->workstations, &game->map, type, x, y);
+    int index = workstations_place(&game->workstations, &game->map, type, x, y);
+    if (index != WORKSTATION_NONE) {
+        /* No zone on a station: the tile leaves the zone it was in. */
+        stockpiles_remove_rect(&game->stockpiles, x, y, x, y);
+        gather_zones_remove_rect(&game->gather_zones, x, y, x, y);
+    }
+    return index;
 }
 
 bool game_remove_workstation(Game *game, int index)

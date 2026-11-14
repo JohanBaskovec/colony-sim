@@ -190,11 +190,6 @@ static void test_placement_rules(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    int stockpile = stockpile_create(&game.stockpiles, &game.map, 20, 20, 22, 22);
-    REQUIRE(stockpile != STOCKPILE_NONE);
-    CHECK(!game_can_place_workstation(&game, 21, 21));
-    CHECK_EQ_INT(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 21, 21),
-                 WORKSTATION_NONE);
     CHECK(game_can_place_workstation(&game, 5, 5));
     int blueprint = game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 5, 5);
     CHECK(!game_can_place_workstation(&game, 5, 5)); /* One station per tile. */
@@ -206,6 +201,44 @@ static void test_placement_rules(void)
     CHECK(workstation_get(&game.workstations, built) != NULL);
     CHECK(game_remove_workstation(&game, built));
     CHECK(!game_remove_workstation(&game, built));
+    game_shutdown(&game);
+}
+
+static void test_no_zone_under_a_station(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int stockpile = game_add_stockpile_rect(&game, 20, 20, 22, 22, STOCKPILE_NONE);
+    int gather = game_add_gather_zone_rect(&game, 30, 20, 32, 22, GATHER_ZONE_NONE);
+    REQUIRE(stockpile != STOCKPILE_NONE && gather != GATHER_ZONE_NONE);
+    uint32_t stockpiles_revision = game.stockpiles.revision;
+    uint32_t gather_revision = game.gather_zones.revision;
+    /* A station placed on a zone takes the tile out of it. */
+    CHECK(game_can_place_workstation(&game, 21, 21));
+    CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 21, 21) != WORKSTATION_NONE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21), STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_get(&game.stockpiles, stockpile)->cell_count, 8);
+    CHECK(game.stockpiles.revision != stockpiles_revision);
+    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 31, 21) != WORKSTATION_NONE);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 31, 21), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_get(&game.gather_zones, gather)->cell_count, 8);
+    CHECK(game.gather_zones.revision != gather_revision);
+    /* A zone drawn over stations leaves their tiles out, blueprints included. */
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 20, 20, 22, 22, stockpile), stockpile);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21), STOCKPILE_NONE);
+    CHECK_EQ_INT(game_add_gather_zone_rect(&game, 30, 20, 32, 22, gather), gather);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 31, 21), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(game_add_gather_zone_rect(&game, 31, 21, 31, 21, GATHER_ZONE_NONE),
+                 GATHER_ZONE_NONE);
+    /* A zone made of a single tile is deleted along with it. */
+    int single = game_add_stockpile_rect(&game, 40, 40, 40, 40, STOCKPILE_NONE);
+    REQUIRE(single != STOCKPILE_NONE);
+    CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 40, 40) != WORKSTATION_NONE);
+    CHECK(stockpile_get(&game.stockpiles, single) == NULL);
+    /* Once the station is gone, the tile can be zoned again. */
+    CHECK(game_remove_workstation(&game, workstation_at(&game.workstations, 21, 21)));
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 21, 21, 21, 21, stockpile), stockpile);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21), stockpile);
     game_shutdown(&game);
 }
 
@@ -690,6 +723,7 @@ int main(void)
     RUN_TEST(test_building_comes_before_gathering_forever);
     RUN_TEST(test_knapping_spot_needs_the_knowledge);
     RUN_TEST(test_placement_rules);
+    RUN_TEST(test_no_zone_under_a_station);
     RUN_TEST(test_knapper_takes_a_cobble_as_hammer_then_strikes_flakes);
     RUN_TEST(test_knapping_cobbles_takes_two);
     RUN_TEST(test_bill_inputs_and_quality_cap);

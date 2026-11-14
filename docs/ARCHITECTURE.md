@@ -50,7 +50,7 @@ simulation:
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
-| `gather_zone`| Gathering zones: tiles, one order per resource (wood, berries, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown plants only), the jobs tiles offer, what they give |
+| `gather_zone`| Gathering zones: tiles, one order per resource (wood, berries, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown plants only), a zone priority, the jobs tiles offer, what they give |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot): blueprints, materials, construction, bills, the craft in progress |
@@ -85,7 +85,7 @@ simulation:
 | `ui_layout`    | Rows of a window laid out twice: measured, then drawn (window sized to its content) |
 | `menu_bar`     | Bottom left menus: Build (categories, icon buttons), Work, ? (help)     |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
-| `gather_zone_panel` | Inspector of the selected gathering zone (a check box per resource, mode, target, progress, fully grown option, warnings) |
+| `gather_zone_panel` | Inspector of the selected gathering zone (priority, a check box per resource, mode, target, progress, fully grown option, warnings) |
 | `station_panel` | Inspector of the selected workstation (blueprint progress, bills, warnings) |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
@@ -222,10 +222,13 @@ with `stockpiles_add_rect()` / `gather_zones_add_rect()`: the selected zone and
 every zone of the same kind the rectangle overlaps are merged into one, which
 keeps the settings of the selected zone, else of the oldest; work under way on
 gathering tiles is kept. With no zone involved, a new one is created. Zones of
-different kinds never overlap: the tools go through `game_add_stockpile_rect()`
-/ `game_add_gather_zone_rect()`, which pass the other kind's tile layer as a
-`blocked` layer, so its tiles are left out (the low-level `*_create()` /
-`*_extend()` do not check, for tests and benchmark scenarios). Tiles
+different kinds never overlap, and no zone lies under a workstation: the tools
+go through `game_add_stockpile_rect()` / `game_add_gather_zone_rect()`, which
+pass the other kind's tile layer and the workstation layer as `blocked`
+layers (a NULL-terminated list), so their tiles are left out (the low-level
+`*_create()` / `*_extend()` do not check, for tests and benchmark scenarios).
+The other way round, `game_place_workstation()` takes the station's tile out
+of the zone it was in (blueprints included). Tiles
 are taken out of zones with Shift+drag or the removal tools of the build menu;
 a zone that keeps some tiles stays, even in several pieces.
 
@@ -396,6 +399,16 @@ the zone layer (work on another job there starts over), and a gatherer
 chooses again after each job done, so that a more important job is noticed
 (usually it takes the same tile again).
 
+Each zone has a **priority** (1 to 10, default 5, like stockpiles): for one
+work type, the search goes through the priorities of the zones that want
+something (`gather_zones_wanting_priorities()`), highest first, and only
+takes the nearest job among the zones of that priority
+(`WorkSearch.zone_priority`); a level with nothing open or reachable is
+skipped by the cheap `open_job_reachable()` scan before any path search.
+Work priority and the grid's column still come first. The tile inspector
+shows the job under way on a zone tile (`game_gather_work_at()`): the settler
+who took it and the work done, or the work left off.
+
 **Reservations** (`core/reservation.h`, owned by `Game`) record who is busy with
 what: (kind, tile, owner), at most one owner per tile and kind. Kinds today:
 work (a designated tile), food (a bush about to be eaten), haul source and
@@ -467,7 +480,7 @@ night on the ground leaves `ground_sleep_ticks` of slower work
 
 Workstations (`core/workstation.h`, owned by `Game`, at most
 `WORKSTATION_MAX`) sit on one tile each. The player places a **blueprint**
-(`game_place_workstation()`, refused on stockpile tiles); a colonist with
+(`game_place_workstation()`, which takes the tile out of any zone); a colonist with
 the construction work type, and the knowledge the station needs, fetches the
 materials (a knapping spot needs a cobble as its anvil) and does the
 construction work. A station made of nothing (crafting spot) is placed

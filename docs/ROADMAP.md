@@ -64,7 +64,7 @@ Tick items as they land and add newly discovered tasks.
 - [x] Changing a work priority forgets the failed searches of every kind of work (stations, gathering zones, construction sites, cleaning were waiting for their backoff)
 - [x] Zone editing: a rectangle over zones of the same kind merges them (the selected one, else the oldest, keeps its settings); removal tools in the build menu take tiles out of zones (Shift+drag still works)
 - [x] Zones of different kinds never overlap: a gathering zone drawn over a stockpile (or the other way round) leaves its tiles out
-- [ ] Gathering zones: forbid tiles under workstations, or decide how they mix; a zone priority; show the job under way when hovering a tile
+- [x] Gathering zones: no zone (gathering or stockpile) under a workstation: zones drawn over stations leave their tiles out, a station placed on a zone takes its tile out of it; a zone priority (1 to 10, before distance, after work priority and column); the tile inspector shows the job under way on a zone tile (who, what, how far) or the work left off
 - [ ] Tools (next): speed factors on orders and recipes, grade factor, wear and breaking (a cobble used as a hammer does not wear yet: cobbles are not damageable); swapping for a better tool; the detour in job search
 - [ ] Starting settlers get 1 to 30 points in a few related knowledges (once non-starting knowledges exist)
 - [x] Construction sites: blueprints of structures with several materials, builders fetching each material and working from a neighboring tile, cancelling gives the materials back, a *take apart* order (half the materials back)

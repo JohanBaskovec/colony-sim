@@ -93,10 +93,10 @@ static void shrink_bounds(Stockpiles *stockpiles, int index)
     }
 }
 
-/* Adds the free, coverable tiles of a rectangle that `blocked` (a layer the
- * size of the map, may be NULL) leaves open. */
+/* Adds the free, coverable tiles of a rectangle that no layer of `blocked`
+ * (see stockpiles_add_rect()) covers. */
 static int extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
-                  int y1, const uint8_t *blocked)
+                  int y1, const uint8_t *const *blocked)
 {
     if (!is_valid(stockpiles, index)) {
         return 0;
@@ -108,7 +108,7 @@ static int extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int
         for (int x = min_x; x <= max_x; x++) {
             size_t i = index_of(stockpiles, x, y);
             uint8_t *zone = &stockpiles->zone[i];
-            if (*zone == 0 && (blocked == NULL || blocked[i] == 0) &&
+            if (*zone == 0 && !layers_any_set(blocked, i) &&
                 stockpile_can_cover(map, x, y)) {
                 *zone = (uint8_t)(index + 1);
                 added++;
@@ -130,7 +130,7 @@ int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, 
 }
 
 static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
-                  const uint8_t *blocked)
+                  const uint8_t *const *blocked)
 {
     int index = STOCKPILE_NONE;
     for (int i = 0; i < STOCKPILE_MAX; i++) {
@@ -187,7 +187,7 @@ static void merge(Stockpiles *stockpiles, int into, int from)
 }
 
 int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
-                        int preferred, const uint8_t *blocked)
+                        int preferred, const uint8_t *const *blocked)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(stockpiles, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);

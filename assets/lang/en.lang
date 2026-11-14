@@ -162,6 +162,10 @@ hud.tile.designation = Order: {0}
 hud.tile.designation_progress = Order: {0} ({1}% done)
 # {0} = stockpile name (e.g. Stockpile 2)
 hud.tile.stockpile = Zone: {0}
+# {0} = settler name, {1} = what they do (e.g. Gathering twigs), {2} = percentage done
+hud.tile.gather_worker = {0}: {1} ({2}% done)
+# Gathering work some settler started and left: {0} = activity, {1} = percentage done
+hud.tile.gather_left_off = Left off: {0} ({1}% done)
 # {0} = workstation name
 hud.tile.station = Workstation: {0}
 # {0} = workstation name, {1} = percentage of the construction done
@@ -265,6 +269,9 @@ gather_zone.name = Gathering zone {0}
 gather_zone.tiles.one = {0} tile
 gather_zone.tiles.other = {0} tiles
 gather_zone.hint = Tick what to gather here; items lying in the colony count
+# {0} = priority number, 1 (highest) to 10
+gather_zone.priority = Priority: {0}
+gather_zone.priority_hint = (1 = gathered first, before nearer zones)
 # Resources a zone may gather (check boxes)
 gather_zone.resource.wood = Wood
 gather_zone.resource.berries = Berries

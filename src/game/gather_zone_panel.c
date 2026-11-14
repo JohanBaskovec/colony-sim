@@ -16,12 +16,13 @@ typedef enum ActionType {
     ACTION_CYCLE_MODE,
     ACTION_ADD_TARGET,
     ACTION_TOGGLE_RIPE,
+    ACTION_ADD_PRIORITY,
 } ActionType;
 
 typedef struct Action {
     ActionType type;
     GatherResource resource;
-    int value; /* Target change. */
+    int value; /* Target or priority change. */
 } Action;
 
 static const char *mode_label(char *out, size_t size, const GatherOrder *order)
@@ -123,6 +124,34 @@ static void resource_rows(UiLayout *layout, const App *app, int index, GatherRes
     }
 }
 
+/* Priority: 1 is the highest; -/+ and a hint. */
+static void priority_row(UiLayout *layout, const GatherZone *zone, Action *action)
+{
+    Ui *ui = layout->ui;
+    char number[16], priority[TEXT_SIZE];
+    tr_integer(number, sizeof(number), zone->priority);
+    TR_FORMAT(priority, sizeof(priority), tr("gather_zone.priority"), number);
+    const char *hint = tr("gather_zone.priority_hint");
+    /* Symbols, not words: the same in every language. */
+    const char *minus = "−", *plus = "+";
+    float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
+    float label_width = ui_text_width(ui, priority);
+    ui_layout_measure(layout, label_width + GAP + 2.0f * small + 2.0f + GAP +
+                                  ui_text_width(ui, hint));
+    float x = layout->x + label_width + GAP;
+    if (ui_layout_button_sized(layout, x, small, minus)) {
+        *action = (Action){ACTION_ADD_PRIORITY, GATHER_RESOURCE_COUNT, -1};
+    }
+    if (ui_layout_button_sized(layout, x + small + 2.0f, small, plus)) {
+        *action = (Action){ACTION_ADD_PRIORITY, GATHER_RESOURCE_COUNT, 1};
+    }
+    if (layout->draw) {
+        ui_label(ui, priority, layout->x, layout->y + layout->text_offset);
+        ui_label_dim(ui, hint, x + 2.0f * small + 2.0f + GAP, layout->y + layout->text_offset);
+    }
+    layout->y += layout->row;
+}
+
 typedef struct ZoneRows {
     const App *app;
     int index;
@@ -143,6 +172,7 @@ static void zone_rows(UiLayout *layout, void *userdata)
     if (ui_layout_label_with_button(layout, tiles, tr("gather_zone.delete"))) {
         *action = (Action){ACTION_DELETE, GATHER_RESOURCE_COUNT, 0};
     }
+    priority_row(layout, zone, action);
     ui_layout_label(layout, tr("gather_zone.hint"), 0.0f, true);
 
     float name_column = 0.0f;
@@ -192,6 +222,9 @@ static void apply(App *app, int index, const Action *action)
         if (order != NULL) {
             gather_zone_set_ripe_only(zones, index, resource, !order->ripe_only);
         }
+        break;
+    case ACTION_ADD_PRIORITY:
+        gather_zone_set_priority(zones, index, zone->priority + action->value);
         break;
     case ACTION_NONE: break;
     }

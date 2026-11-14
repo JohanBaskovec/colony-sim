@@ -501,6 +501,89 @@ static void test_idle_colonist_gathers_branches(void)
     game_shutdown(&game);
 }
 
+static void test_gather_work_under_way(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_tree(&game.map, 26, 20);
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    GatherWorkInfo info;
+    CHECK(!game_gather_work_at(&game, 26, 20, &info));
+    CHECK_EQ_INT(info.job, GATHER_JOB_NONE);
+    CHECK(!game_gather_work_at(&game, -1, 20, &info));
+    CHECK_EQ_INT(order_zone(&game, 26, 20, 26, 20, GATHER_BRANCHES), 1);
+    CHECK(!game_gather_work_at(&game, 26, 20, &info)); /* Nobody on it yet. */
+
+    /* Taken: walking there. */
+    game_tick(&game);
+    REQUIRE(game_gather_work_at(&game, 26, 20, &info));
+    CHECK_EQ_INT(info.job, GATHER_JOB_BRANCHES);
+    CHECK(entity_id_equal(info.worker, id));
+    CHECK_NEAR(info.fraction, 0.0, 1e-6);
+
+    /* Half done. */
+    float work = gather_job_work_needed(&game.map, 26, 20, GATHER_JOB_BRANCHES);
+    run_ticks(&game, walk_ticks(6) + (int)(work * 0.5f));
+    REQUIRE(game_gather_work_at(&game, 26, 20, &info));
+    CHECK(info.fraction > 0.3f && info.fraction < 0.7f);
+    CHECK(entity_id_equal(info.worker, id));
+
+    /* Left off: the work done stays, nobody on it. */
+    game_set_work_priority(&game, id, WORK_GATHERING, WORK_PRIORITY_DISABLED);
+    game_tick(&game);
+    REQUIRE(game_gather_work_at(&game, 26, 20, &info));
+    CHECK_EQ_INT(info.job, GATHER_JOB_BRANCHES);
+    CHECK(entity_id_is_none(info.worker));
+    CHECK(info.fraction > 0.3f);
+    CHECK(!game_gather_work_at(&game, 25, 20, &info)); /* Another tile. */
+    game_shutdown(&game);
+}
+
+/* Where a settler at (20, 20) first goes to take branches, with a tree in a
+ * zone of its own at x = 23, 32 and 40 (zone priorities in that order); the
+ * tree at x = 40 is bare when `far_bare`. */
+static int first_branches_target(int near, int middle, int far, bool far_bare)
+{
+    Game game;
+    if (!init_flat_game(&game)) {
+        return -1;
+    }
+    const int xs[3] = {23, 32, 40};
+    const int priorities[3] = {near, middle, far};
+    for (int i = 0; i < 3; i++) {
+        add_tree(&game.map, xs[i], 20);
+        order_zone(&game, xs[i], 20, xs[i], 20, GATHER_BRANCHES);
+        gather_zone_set_priority(&game.gather_zones, gather_zone_at(&game.gather_zones, xs[i], 20),
+                                 priorities[i]);
+    }
+    if (far_bare) {
+        Plant *tree = &game.map.plants[map_index(&game.map, 40, 20)];
+        plant_take_stock(tree, PLANT_STOCK_BRANCHES, 1000);
+    }
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    int target = -1;
+    if (colonist != NULL) {
+        game_tick(&game);
+        target = colonist->task == TASK_WORK ? colonist->target.x : -1;
+    }
+    game_shutdown(&game);
+    return target;
+}
+
+static void test_zone_priority_before_distance(void)
+{
+    int normal = GATHER_ZONE_PRIORITY_DEFAULT;
+    /* Same priority: the nearest. */
+    CHECK_EQ_INT(first_branches_target(normal, normal, normal, false), 23);
+    /* The zone of the highest priority, however far. */
+    CHECK_EQ_INT(first_branches_target(normal, 3, 2, false), 40);
+    CHECK_EQ_INT(first_branches_target(4, 3, normal, false), 32);
+    /* A zone of a higher priority with nothing to take is passed over. */
+    CHECK_EQ_INT(first_branches_target(normal, 3, 2, true), 32);
+}
+
 static void test_nobody_fells_or_mines_yet(void)
 {
     Game game;
@@ -1640,6 +1723,8 @@ int main(void)
     RUN_TEST(test_colonist_cleans_dirty_tiles);
     RUN_TEST(test_cleaning_can_be_disabled);
     RUN_TEST(test_cleaning_comes_after_hauling);
+    RUN_TEST(test_zone_priority_before_distance);
+    RUN_TEST(test_gather_work_under_way);
     RUN_TEST(test_translation_keys);
     return test_summary();
 }

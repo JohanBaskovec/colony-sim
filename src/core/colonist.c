@@ -624,6 +624,7 @@ typedef struct WorkSearch {
     /* Gathering zone tiles instead of designations, for these jobs. */
     bool zones;
     GatherJobMask jobs;
+    int zone_priority; /* Only tiles of zones of this priority. */
     const GatherZones *gather_zones;
     const Map *map;
     const Reservations *reservations;
@@ -660,8 +661,9 @@ static WorkTypeMask enabled_work_types(const Colonist *colonist)
 static bool is_open_job(const WorkSearch *search, int x, int y)
 {
     if (search->zones) {
-        if (gather_tile_job(search->gather_zones, search->map, x, y, search->jobs) ==
-            GATHER_JOB_NONE) {
+        if (gather_zone_priority_at(search->gather_zones, x, y) != search->zone_priority ||
+            gather_tile_job(search->gather_zones, search->map, x, y, search->jobs) ==
+                GATHER_JOB_NONE) {
             return false;
         }
     } else {
@@ -848,17 +850,27 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
                          .worker = colonist,
                          .mask = mask,
                          .self = context->worker_id};
-    /* First make sure some open job can be reached at all: with orders deep
-     * inside rock, across water, or all taken by others, the search would
-     * explore the whole area for nothing. */
-    if (!open_job_reachable(&search, context, current_region(colonist, context))) {
-        return false;
-    }
+    /* Zones of the highest priority first, whatever the distance. */
+    uint32_t priorities = zones ? gather_zones_wanting_priorities(context->gather_zones) : 1u;
+    uint32_t region = current_region(colonist, context);
     TilePos spot, target;
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                 is_work_spot, &search, COLONIST_WORK_SEARCH_MAX_COST,
-                                 &colonist->path, &spot)) {
-        return false; /* The path is untouched on failure: a wanderer keeps walking. */
+    bool found = false;
+    for (int priority = 0; priority < 32 && !found; priority++) {
+        if (!(priorities & (1u << (unsigned)priority))) {
+            continue;
+        }
+        search.zone_priority = priority;
+        /* First make sure some open job can be reached at all: with orders deep
+         * inside rock, across water, or all taken by others, the search would
+         * explore the whole area for nothing. The path is untouched on failure:
+         * a wanderer keeps walking. */
+        found = open_job_reachable(&search, context, region) &&
+                pathfinder_find_nearest(context->pathfinder, context->map,
+                                        current_tile(colonist), is_work_spot, &search,
+                                        COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot);
+    }
+    if (!found) {
+        return false;
     }
     /* The search only stops on a spot next to an open job. */
     find_adjacent_job(&search, spot.x, spot.y, &target);

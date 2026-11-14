@@ -142,6 +142,8 @@ hud.tile.item_transform = Se transforme en {0} dans {1} h
 hud.tile.designation = Ordre : {0}
 hud.tile.designation_progress = Ordre : {0} ({1} % effectué)
 hud.tile.stockpile = Zone : {0}
+hud.tile.gather_worker = {0} : {1} ({2} % effectué)
+hud.tile.gather_left_off = Interrompu : {0} ({1} % effectué)
 hud.tile.station = Poste de travail : {0}
 hud.tile.blueprint = Plan : {0} (construit à {1} %)
 hud.tile.structure = Construction : {0}
@@ -225,6 +227,8 @@ gather_zone.name = Zone de récolte {0}
 gather_zone.tiles.one = {0} case
 gather_zone.tiles.other = {0} cases
 gather_zone.hint = Coche ce qu’il faut récolter ici ; les objets posés dans la colonie comptent
+gather_zone.priority = Priorité : {0}
+gather_zone.priority_hint = (1 = récoltée en premier, avant les zones plus proches)
 gather_zone.resource.wood = Bois
 gather_zone.resource.berries = Baies
 gather_zone.resource.branches = Branches

@@ -181,10 +181,10 @@ static void clip_rect(const GatherZones *zones, int x0, int y0, int x1, int y1, 
     *max_y = clampi(y0 < y1 ? y1 : y0, 0, zones->height - 1);
 }
 
-/* Adds the free tiles of a rectangle a zone may cover and that `blocked` (a
- * layer the size of the map, may be NULL) leaves open. */
+/* Adds the free tiles of a rectangle a zone may cover and that no layer of
+ * `blocked` (see gather_zones_add_rect()) covers. */
 static int extend(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1, int y1,
-                  const uint8_t *blocked)
+                  const uint8_t *const *blocked)
 {
     if (!is_valid(zones, index)) {
         return 0;
@@ -195,7 +195,7 @@ static int extend(GatherZones *zones, const Map *map, int index, int x0, int y0,
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
             size_t i = index_of(zones, x, y);
-            if (zones->zone[i] == 0 && (blocked == NULL || blocked[i] == 0) &&
+            if (zones->zone[i] == 0 && !layers_any_set(blocked, i) &&
                 gather_zone_can_cover(map, x, y)) {
                 zones->zone[i] = (uint8_t)(index + 1);
                 clear_progress(zones, i);
@@ -217,7 +217,7 @@ int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, in
 }
 
 static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
-                  const uint8_t *blocked)
+                  const uint8_t *const *blocked)
 {
     int index = GATHER_ZONE_NONE;
     for (int i = 0; i < GATHER_ZONE_MAX; i++) {
@@ -230,7 +230,9 @@ static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, in
         return GATHER_ZONE_NONE;
     }
     GatherZone *zone = &zones->list[index];
-    *zone = (GatherZone){.used = true, .number = zones->next_number};
+    *zone = (GatherZone){.used = true,
+                         .number = zones->next_number,
+                         .priority = GATHER_ZONE_PRIORITY_DEFAULT};
     for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
         zone->orders[r] = (GatherOrder){.ripe_only = RESOURCE_DEFS[r].ripe_option,
                                         .mode = GATHER_UNTIL,
@@ -251,7 +253,7 @@ int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x
 }
 
 int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
-                          int preferred, const uint8_t *blocked)
+                          int preferred, const uint8_t *const *blocked)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(zones, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
@@ -405,6 +407,36 @@ void gather_zone_set_ripe_only(GatherZones *zones, int index, GatherResource res
         order->ripe_only = ripe_only;
         changed(zones);
     }
+}
+
+void gather_zone_set_priority(GatherZones *zones, int index, int priority)
+{
+    if (!is_valid(zones, index)) {
+        return;
+    }
+    priority = clampi(priority, GATHER_ZONE_PRIORITY_HIGHEST, GATHER_ZONE_PRIORITY_LOWEST);
+    if (zones->list[index].priority != priority) {
+        zones->list[index].priority = priority;
+        changed(zones);
+    }
+}
+
+int gather_zone_priority_at(const GatherZones *zones, int x, int y)
+{
+    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y));
+    return zone != NULL ? zone->priority : 0;
+}
+
+uint32_t gather_zones_wanting_priorities(const GatherZones *zones)
+{
+    uint32_t priorities = 0;
+    for (int i = 0; i < GATHER_ZONE_MAX; i++) {
+        const GatherZone *zone = &zones->list[i];
+        if (zone->used && zone->wanted != 0) {
+            priorities |= 1u << (unsigned)zone->priority;
+        }
+    }
+    return priorities;
 }
 
 long gather_resource_count(GatherResource resource, const long totals[ITEM_TYPE_COUNT])
@@ -719,7 +751,7 @@ uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)
         if (!zone->used) {
             continue;
         }
-        int32_t fields[3] = {i, zone->number, (int32_t)zone->wanted};
+        int32_t fields[4] = {i, zone->number, (int32_t)zone->wanted, zone->priority};
         hash = hash_fnv1a64(hash, fields, sizeof(fields));
         for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
             const GatherOrder *order = &zone->orders[r];

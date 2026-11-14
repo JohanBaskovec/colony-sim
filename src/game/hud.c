@@ -281,6 +281,19 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(name, sizeof(name), tr("gather_zone.name"), a);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.stockpile"), name);
     }
+    GatherWorkInfo work;
+    if (game_gather_work_at(&app->game, x, y, &work)) {
+        const char *activity = tr(gather_job_def(work.job)->activity_key);
+        tr_integer(a, sizeof(a), (long long)(work.fraction * 100.0f));
+        const Colonist *worker = game_colonist_const(&app->game, work.worker);
+        if (worker != NULL) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.gather_worker"), worker->name,
+                      activity, a);
+        } else {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.gather_left_off"), activity,
+                      a);
+        }
+    }
 
     DesignationType designation = designation_get(&app->game.designations, x, y);
     if (designation != DESIGNATION_NONE) {

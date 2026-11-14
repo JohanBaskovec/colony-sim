@@ -80,12 +80,13 @@ int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, 
  * overlaps become one stockpile, which gets the free coverable tiles of the
  * rectangle. The merged stockpile keeps the settings of `preferred`, else of
  * the oldest one. With no stockpile involved, a new one is created. Tiles
- * where `blocked` (a layer the size of the map, or NULL) is not 0 are left
- * out: the game passes the other kinds of zones, which may not overlap. Returns
- * the stockpile's index, or STOCKPILE_NONE when nothing could be added.
+ * where a layer of `blocked` (layers the size of the map, the list ended by
+ * NULL; or NULL) is not 0 are left out: the game passes the other kinds of
+ * zones, which may not overlap, and the workstations. Returns the stockpile's
+ * index, or STOCKPILE_NONE when nothing could be added.
  */
 int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
-                        int preferred, const uint8_t *blocked);
+                        int preferred, const uint8_t *const *blocked);
 
 /* Removes every tile of a rectangle from whatever stockpile it belongs to;
  * stockpiles left without tiles are deleted. Returns the number of tiles removed. */
