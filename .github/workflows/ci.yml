@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Fast job: simulation core and tests only (no SDL), with sanitizers and -Werror.
+  headless-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset headless
+      - name: Build
+        run: cmake --build --preset headless --parallel
+      - name: Test
+        run: ctest --preset headless
+
+  # Full build of the game (SDL3 and SDL3_ttf are fetched and built from source).
+  game-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfreetype-dev libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxi-dev libxss-dev libxtst-dev libwayland-dev \
+            libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev \
+            libdecor-0-dev
+      - name: Configure
+        run: cmake --preset release -DCOLONY_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset release --parallel
+      - name: Test
+        run: ctest --preset release

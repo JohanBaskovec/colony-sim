@@ -1,0 +1,199 @@
+#include "game/hud.h"
+
+#include "core/i18n.h"
+
+#define HUD_MARGIN 8.0f
+#define HUD_PADDING 6.0f
+#define HUD_MAX_LINES 8
+#define HUD_LINE_SIZE 256
+
+static const SDL_Color HUD_TEXT_COLOR = {236, 236, 228, 255};
+static const SDL_Color HUD_PANEL_COLOR = {12, 14, 18, 170};
+
+typedef struct Panel {
+    char lines[HUD_MAX_LINES][HUD_LINE_SIZE];
+    int count;
+} Panel;
+
+/* Returns the buffer of a new line (the last one is reused if the panel is full). */
+static char *panel_add(Panel *panel)
+{
+    if (panel->count < HUD_MAX_LINES) {
+        panel->count++;
+    }
+    char *line = panel->lines[panel->count - 1];
+    line[0] = '\0';
+    return line;
+}
+
+static void panel_add_text(Panel *panel, const char *text)
+{
+    SDL_strlcpy(panel_add(panel), text, HUD_LINE_SIZE);
+}
+
+static void panel_size(App *app, const Panel *panel, float *width, float *height)
+{
+    int max_width = 0;
+    for (int i = 0; i < panel->count; i++) {
+        int w, h;
+        text_measure(app->text, panel->lines[i], &w, &h);
+        max_width = SDL_max(max_width, w);
+    }
+    *width = (float)max_width + 2.0f * HUD_PADDING;
+    *height = (float)(panel->count * text_line_height(app->text)) + 2.0f * HUD_PADDING;
+}
+
+static void panel_draw(App *app, const Panel *panel, float x, float y)
+{
+    if (panel->count == 0) {
+        return;
+    }
+    float width, height;
+    panel_size(app, panel, &width, &height);
+    SDL_FRect background = {x, y, width, height};
+    SDL_SetRenderDrawColor(app->renderer, HUD_PANEL_COLOR.r, HUD_PANEL_COLOR.g,
+                           HUD_PANEL_COLOR.b, HUD_PANEL_COLOR.a);
+    SDL_RenderFillRect(app->renderer, &background);
+
+    float line_height = (float)text_line_height(app->text);
+    for (int i = 0; i < panel->count; i++) {
+        text_draw(app->text, panel->lines[i], x + HUD_PADDING,
+                  y + HUD_PADDING + (float)i * line_height, HUD_TEXT_COLOR);
+    }
+}
+
+/* Names of the keys at the physical W/A/S/D positions ("ZQSD" on AZERTY keyboards). */
+static void movement_keys_label(char *out, size_t size)
+{
+    static const SDL_Scancode SCANCODES[] = {SDL_SCANCODE_W, SDL_SCANCODE_A, SDL_SCANCODE_S,
+                                             SDL_SCANCODE_D};
+    out[0] = '\0';
+    for (size_t i = 0; i < SDL_arraysize(SCANCODES); i++) {
+        SDL_Keycode key = SDL_GetKeyFromScancode(SCANCODES[i], SDL_KMOD_NONE, false);
+        SDL_strlcat(out, SDL_GetKeyName(key), size);
+    }
+}
+
+static void build_status_panel(App *app, Panel *panel)
+{
+    const GameClock *clock = &app->game.clock;
+    GameDate date = game_date_from_tick(clock->tick);
+
+    char day[16], year[16], hours[8], minutes[8];
+    tr_integer(day, sizeof(day), date.day);
+    tr_integer(year, sizeof(year), date.year);
+    SDL_snprintf(hours, sizeof(hours), "%02d", date.hour);
+    SDL_snprintf(minutes, sizeof(minutes), "%02d", date.minute);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.date"), day, tr(season_name_key(date.season)),
+              year, hours, minutes);
+
+    if (clock->speed == GAME_SPEED_PAUSED) {
+        panel_add_text(panel, tr("hud.paused"));
+    } else {
+        char multiplier[8];
+        tr_integer(multiplier, sizeof(multiplier), game_speed_multiplier(clock->speed));
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.speed"), multiplier);
+    }
+}
+
+static void build_tile_panel(App *app, Panel *panel)
+{
+    const Map *map = &app->game.map;
+    int x = app->hover_x, y = app->hover_y;
+    size_t index = map_index(map, x, y);
+    char a[32], b[32];
+
+    tr_integer(a, sizeof(a), x);
+    tr_integer(b, sizeof(b), y);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.position"), a, b);
+
+    const TerrainDef *terrain = terrain_def((Terrain)map->terrain[index]);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.terrain"), tr(terrain->name_key));
+
+    if (map->rock[index] != ROCK_NONE) {
+        const RockDef *rock = rock_def((RockType)map->rock[index]);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.rock"), tr(rock->name_key));
+    }
+
+    const Plant *plant = &map->plants[index];
+    if (plant->type != PLANT_NONE) {
+        tr_integer(a, sizeof(a), (long long)(plant->growth * 100.0f + 0.5f));
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant"),
+                  tr(plant_def((PlantType)plant->type)->name_key), a);
+    }
+
+    float cost = map_move_cost(map, x, y);
+    if (cost <= 0.0f) {
+        panel_add_text(panel, tr("hud.tile.impassable"));
+    } else {
+        tr_decimal(a, sizeof(a), cost, 2);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.move_cost"), a);
+    }
+}
+
+static void build_debug_panel(App *app, Panel *panel)
+{
+    char value[32];
+
+    tr_integer(value, sizeof(value), (long long)(app->fps + 0.5f));
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.debug.fps"), value);
+
+    tr_integer(value, sizeof(value), (long long)app->game.clock.tick);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.debug.tick"), value);
+
+    /* Seeds are identifiers: shown raw, without thousands separators. */
+    SDL_snprintf(value, sizeof(value), "%" SDL_PRIu64, app->game.seed);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.debug.seed"), value);
+
+    tr_decimal(value, sizeof(value), app->camera.zoom, 1);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.debug.zoom"), value);
+
+    size_t trees = map_count_plants(&app->game.map, PLANT_TREE);
+    tr_integer(value, sizeof(value), (long long)trees);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.debug.trees", (long long)trees),
+              value);
+}
+
+void hud_draw(App *app)
+{
+    const float screen_width = app->camera.viewport_width;
+    const float screen_height = app->camera.viewport_height;
+    float width, height;
+
+    /* Top left: date and speed, then the debug overlay below. */
+    Panel status = {0};
+    build_status_panel(app, &status);
+    panel_draw(app, &status, HUD_MARGIN, HUD_MARGIN);
+
+    if (app->show_debug) {
+        Panel debug = {0};
+        build_debug_panel(app, &debug);
+        panel_size(app, &status, &width, &height);
+        panel_draw(app, &debug, HUD_MARGIN, HUD_MARGIN * 2.0f + height);
+    }
+
+    /* Top right: current language. */
+    Panel language = {0};
+    const LanguageInfo *info = localization_active_language(&app->localization);
+    TR_FORMAT(panel_add(&language), HUD_LINE_SIZE, tr("hud.language"),
+              info != NULL ? info->name : "?");
+    panel_size(app, &language, &width, &height);
+    panel_draw(app, &language, screen_width - width - HUD_MARGIN, HUD_MARGIN);
+
+    /* Bottom: controls help, with the tile inspector above it. */
+    Panel help = {0};
+    char keys[32];
+    movement_keys_label(keys, sizeof(keys));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help"), keys);
+    float help_width, help_height;
+    panel_size(app, &help, &help_width, &help_height);
+    float help_y = screen_height - help_height - HUD_MARGIN;
+    panel_draw(app, &help, HUD_MARGIN, help_y);
+
+    if (app->hover_valid) {
+        Panel tile = {0};
+        build_tile_panel(app, &tile);
+        panel_size(app, &tile, &width, &height);
+        panel_draw(app, &tile, HUD_MARGIN, help_y - height - HUD_MARGIN);
+    }
+}

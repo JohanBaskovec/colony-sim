@@ -1,0 +1,64 @@
+# English: reference language.
+# Every key used by the game must exist in this file. Other languages are
+# checked against it by the test suite (see docs/I18N.md).
+
+language.code = en
+language.name = English
+language.plural_rule = one_other
+
+format.thousands_separator = ,
+format.decimal_separator = .
+
+game.title = Colony Sim
+
+# Terrain
+terrain.deep_water = Deep water
+terrain.shallow_water = Shallow water
+terrain.sand = Sand
+terrain.soil = Soil
+terrain.rich_soil = Rich soil
+terrain.gravel = Gravel
+terrain.rough_stone = Rough stone
+
+# Natural rock
+rock.granite = Granite
+rock.sandstone = Sandstone
+
+# Plants
+plant.grass = Grass
+plant.bush = Wild bush
+plant.tree = Tree
+
+# Seasons
+season.spring = Spring
+season.summer = Summer
+season.autumn = Autumn
+season.winter = Winter
+
+# HUD
+# {0} = day of the season, {1} = season name, {2} = year, {3} = hours (00-23), {4} = minutes
+hud.date = {1} {0}, year {2} · {3}:{4}
+# {0} = speed multiplier
+hud.speed = Speed: {0}×
+hud.paused = Paused
+# {0} = language name
+hud.language = Language: {0}
+# {0} = movement keys (e.g. WASD, adapted to the keyboard layout)
+hud.help = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan · Space: pause · 1-3: speed · L: language · F3: debug · Esc: quit
+
+# Tile inspector. {0}, {1} = tile coordinates
+hud.tile.position = Tile {0}, {1}
+hud.tile.terrain = Terrain: {0}
+hud.tile.rock = Rock wall: {0}
+# {0} = plant name, {1} = growth percentage
+hud.tile.plant = Plant: {0} ({1}% grown)
+hud.tile.move_cost = Movement cost: ×{0}
+hud.tile.impassable = Impassable
+
+# Debug overlay (F3)
+hud.debug.fps = FPS: {0}
+hud.debug.tick = Tick: {0}
+hud.debug.seed = Seed: {0}
+hud.debug.zoom = Zoom: {0} px/tile
+hud.debug.trees.one = {0} tree on the map
+hud.debug.trees.other = {0} trees on the map
