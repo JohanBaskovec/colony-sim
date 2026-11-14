@@ -615,7 +615,8 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, job, sizeof(job));
         for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
             ItemStack tool = c->tools[i];
-            int32_t fields[4] = {tool.type, tool.count, tool.quality, tool.hit_points};
+            int32_t fields[5] = {tool.type, tool.count, tool.quality, tool.hit_points,
+                                 c->tool_wear[i]};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
         }
     }

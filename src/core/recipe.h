@@ -18,6 +18,7 @@
 #include "core/item.h"
 #include "core/knowledge.h"
 #include "core/rng.h"
+#include "core/tool.h"
 
 #include <stdbool.h>
 
@@ -53,6 +54,9 @@ typedef struct RecipeDef {
     /* Dirt left by each craft (chips, shavings) on the station's tile, half
      * as much around it (see dirt_spread()). */
     int dirt;
+    /* Kind of work: the speed factor of the tool of the first set (see
+     * core/tool.h). */
+    ToolUse tool_use;
 } RecipeDef;
 
 /* NULL when out of range. */

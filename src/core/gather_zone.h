@@ -32,6 +32,7 @@
 #include "core/knowledge.h"
 #include "core/map.h"
 #include "core/rng.h"
+#include "core/tool.h"
 #include "core/work.h"
 
 #include <stdbool.h>
@@ -93,6 +94,7 @@ typedef struct GatherJobDef {
     KnowledgeType knowledge;
     float min_level;
     GatherResourceMask resources; /* The resources it gives. */
+    ToolUse tool_use; /* What a carried tool speeds up (TOOL_USE_NONE: nothing). */
 } GatherJobDef;
 
 /* NULL when out of range. */
@@ -276,6 +278,10 @@ float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, in
 /* Work to clear the plant of a tile by hand before building there (0 when
  * there is none; a tree cannot be cleared: see map_plant_blocks_building()). */
 float gather_clear_work(const Map *map, int x, int y);
+
+/* What a tool speeds up while clearing a tile: cutting grass, nothing for a
+ * bush pulled up by hand. */
+ToolUse gather_clear_tool_use(const Map *map, int x, int y);
 
 /* Removes the plant of a tile (cut grass, a pulled up bush) and drops what it
  * gives (cut grass, its twigs and branches, ripe fruit) with quality from the

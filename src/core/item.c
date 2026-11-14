@@ -43,8 +43,9 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                               20.0f, 20.0f, 0.0f, 150, false, false)},
     [ITEM_BERRIES] = {DEF("berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 0.3f, 1.0f, 0.05f, 10,
                           true, true)},
+    /* Damageable: a cobble used as a hammer wears out. */
     [ITEM_COBBLE] = {DEF("cobble", N_("item.cobble"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f,
-                         200, true, false)},
+                         200, true, true)},
     [ITEM_BRANCHES] = {DEF("branches", N_("item.branches"), ITEM_CATEGORY_RESOURCES, 1.5f, 10.0f,
                            0.0f, 20, true, true)},
     [ITEM_TWIGS] = {DEF("twigs", N_("item.twigs"), ITEM_CATEGORY_RESOURCES, 0.2f, 2.0f, 0.0f, 10,

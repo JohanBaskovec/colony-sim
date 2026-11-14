@@ -45,17 +45,17 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
 
 static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
     [GATHER_JOB_HARVEST] = {"harvest", N_("colonist.task.harvest"), GATHERING,
-                            RESOURCE(GATHER_BERRIES)},
+                            RESOURCE(GATHER_BERRIES), TOOL_USE_NONE},
     [GATHER_JOB_BRANCHES] = {"branches", N_("colonist.task.gather_branches"), GATHERING,
-                             RESOURCE(GATHER_BRANCHES)},
+                             RESOURCE(GATHER_BRANCHES), TOOL_USE_NONE},
     [GATHER_JOB_TWIGS] = {"twigs", N_("colonist.task.gather_twigs"), GATHERING,
-                          RESOURCE(GATHER_TWIGS)},
+                          RESOURCE(GATHER_TWIGS), TOOL_USE_NONE},
     [GATHER_JOB_CUT_GRASS] = {"cut_grass", N_("colonist.task.cut_grass"), GATHERING,
-                              RESOURCE(GATHER_GRASS)},
+                              RESOURCE(GATHER_GRASS), TOOL_USE_CUT_GRASS},
     [GATHER_JOB_CHOP] = {"chop", N_("colonist.task.chop"), WORK_WOODCUTTING, KNOWLEDGE_NONE,
-                         KNOWLEDGE_MASTERY_LEVEL, RESOURCE(GATHER_WOOD)},
+                         KNOWLEDGE_MASTERY_LEVEL, RESOURCE(GATHER_WOOD), TOOL_USE_NONE},
     [GATHER_JOB_STONES] = {"stones", N_("colonist.task.gather_stones"), GATHERING,
-                           RESOURCE(GATHER_FLINT) | RESOURCE(GATHER_COBBLES)},
+                           RESOURCE(GATHER_FLINT) | RESOURCE(GATHER_COBBLES), TOOL_USE_NONE},
 };
 
 #undef GATHERING
@@ -765,6 +765,13 @@ float gather_clear_work(const Map *map, int x, int y)
     case PLANT_BUSH: return CLEAR_BUSH_WORK;
     default: return 0.0f;
     }
+}
+
+ToolUse gather_clear_tool_use(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) && map->plants[map_index(map, x, y)].type == PLANT_GRASS
+               ? TOOL_USE_CUT_GRASS
+               : TOOL_USE_NONE;
 }
 
 void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng *rng)

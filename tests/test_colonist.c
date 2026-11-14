@@ -586,6 +586,71 @@ static void test_zone_priority_before_distance(void)
     CHECK_EQ_INT(first_branches_target(normal, 3, 2, true), 32);
 }
 
+/* Work done cutting a tile of grass 3 tiles away in `ticks` from the first
+ * tick of work, by a settler carrying `tool` (count 0: bare hands). */
+static float grass_progress(ItemStack tool, int ticks)
+{
+    Game game;
+    if (!init_flat_game(&game)) {
+        return -1.0f;
+    }
+    Plant *grass = &game.map.plants[map_index(&game.map, 23, 20)];
+    *grass = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    if (tool.count > 0) {
+        colonist_add_tool(colonist, tool);
+    }
+    order_zone(&game, 23, 20, 23, 20, GATHER_GRASS);
+    const float *progress_at = &game.gather_zones.progress[map_index(&game.map, 23, 20)];
+    for (int i = 0; i < 500 && *progress_at <= 0.0f; i++) {
+        game_tick(&game);
+    }
+    float first = *progress_at;
+    for (int i = 0; i < ticks; i++) {
+        game_tick(&game);
+    }
+    float progress = *progress_at - first;
+    game_shutdown(&game);
+    return progress;
+}
+
+static void test_tools_speed_up_work(void)
+{
+    ItemStack flake = item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 0);
+    ItemStack cobble = item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD, 0);
+    float bare = grass_progress((ItemStack){.type = ITEM_NONE}, 40);
+    float with_flake = grass_progress(flake, 40);
+    float with_cobble = grass_progress(cobble, 40);
+    REQUIRE(bare > 0.0f);
+    /* Bare hands cut grass at ×0.6, a flake at ×1; a cobble does not cut. */
+    CHECK_NEAR(with_flake / bare, 1.0 / 0.6, 1e-3);
+    CHECK_NEAR(with_cobble, bare, 1e-3);
+
+    /* Factors of what a settler carries. */
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    const ItemTypeMask any = ~(ItemTypeMask)0;
+    CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, any), 0.8, 1e-6);
+    CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_NONE, any), 1.0, 1e-6);
+    colonist_add_tool(colonist, cobble);
+    CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, any), 0.9, 1e-6);
+    colonist_add_tool(colonist, item_stack_make(ITEM_HAND_AXE, 1, ITEM_QUALITY_FINE, 0));
+    CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, any), 1.1, 1e-5);
+    CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, ITEM_TYPE_BIT(ITEM_COBBLE)), 0.9,
+               1e-6);
+    /* Swapping for another of the same type gives the old one back. */
+    ItemStack replaced;
+    CHECK(colonist_swap_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_SUPERB, 0),
+                             &replaced));
+    CHECK_EQ_INT(replaced.type, ITEM_COBBLE);
+    CHECK_EQ_INT(replaced.quality, ITEM_QUALITY_STANDARD);
+    CHECK(colonist_swap_tool(colonist, flake, &replaced)); /* None carried: added. */
+    CHECK_EQ_INT(replaced.type, ITEM_NONE);
+    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE)) >= 0);
+    game_shutdown(&game);
+}
+
 static void test_nobody_fells_or_mines_yet(void)
 {
     Game game;
@@ -1727,6 +1792,7 @@ int main(void)
     RUN_TEST(test_cleaning_comes_after_hauling);
     RUN_TEST(test_zone_priority_before_distance);
     RUN_TEST(test_gather_work_under_way);
+    RUN_TEST(test_tools_speed_up_work);
     RUN_TEST(test_translation_keys);
     return test_summary();
 }

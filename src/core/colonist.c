@@ -174,10 +174,25 @@ bool colonist_add_tool(Colonist *colonist, ItemStack tool)
         if (colonist->tools[i].count == 0) {
             tool.count = 1;
             colonist->tools[i] = tool;
+            colonist->tool_wear[i] = 0;
             return true;
         }
     }
     return false;
+}
+
+bool colonist_swap_tool(Colonist *colonist, ItemStack tool, ItemStack *replaced)
+{
+    *replaced = (ItemStack){.type = ITEM_NONE};
+    int index = tool.count > 0 ? colonist_tool_index(colonist, ITEM_TYPE_BIT(tool.type)) : -1;
+    if (index < 0) {
+        return colonist_add_tool(colonist, tool);
+    }
+    *replaced = colonist->tools[index];
+    tool.count = 1;
+    colonist->tools[index] = tool;
+    colonist->tool_wear[index] = 0;
+    return true;
 }
 
 void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map)
@@ -186,8 +201,55 @@ void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map)
         if (colonist->tools[i].count > 0) {
             items_drop(items, map, colonist->x, colonist->y, colonist->tools[i]);
             colonist->tools[i] = (ItemStack){.type = ITEM_NONE};
+            colonist->tool_wear[i] = 0;
         }
     }
+}
+
+/* Index of the tool the colonist works with for a use among `allowed`, or -1
+ * for bare hands. A required tool (recipes) is used even when no faster than
+ * bare hands. */
+static int working_tool(const Colonist *colonist, ToolUse use, ItemTypeMask allowed,
+                        bool required)
+{
+    if (use == TOOL_USE_NONE) {
+        return -1;
+    }
+    return tool_best(colonist->tools, COLONIST_TOOL_MAX, use, allowed, !required);
+}
+
+float colonist_tool_factor(const Colonist *colonist, ToolUse use, ItemTypeMask allowed)
+{
+    int index = working_tool(colonist, use, allowed, false);
+    return index >= 0 ? tool_speed_factor(use, colonist->tools[index])
+                      : tool_type_factor(use, ITEM_NONE);
+}
+
+/* One tick of work with a carried tool: it loses a hit point every
+ * TOOL_WEAR_TICKS, and breaks at 0. */
+static void wear_tool(Colonist *colonist, int index)
+{
+    if (index < 0 || colonist->tools[index].count == 0) {
+        return;
+    }
+    if (++colonist->tool_wear[index] < TOOL_WEAR_TICKS) {
+        return;
+    }
+    colonist->tool_wear[index] = 0;
+    if (tool_wear(&colonist->tools[index])) {
+        colonist->tools_broken++;
+    }
+}
+
+/* Speed factor of one tick of a kind of work with the best carried tool for
+ * it (bare hands when none helps), which wears. */
+static float work_with_tool(Colonist *colonist, ToolUse use)
+{
+    int index = working_tool(colonist, use, ~(ItemTypeMask)0, false);
+    float factor = index >= 0 ? tool_speed_factor(use, colonist->tools[index])
+                              : tool_type_factor(use, ITEM_NONE);
+    wear_tool(colonist, index);
+    return factor;
 }
 
 /* Weight and bulk of the carried tools. */
@@ -1219,10 +1281,11 @@ static void work(Colonist *colonist, const ColonistContext *context)
     if (colonist->gathering) {
         GatherJob job = (GatherJob)colonist->work_type;
         KnowledgeType knowledge = gather_job_def(job)->knowledge;
+        float speed = colonist_work_speed(colonist, knowledge) *
+                      work_with_tool(colonist, gather_job_def(job)->tool_use);
         /* Products depend on the level before this tick's learning. */
         bool done = gather_zone_add_work(context->gather_zones, context->map, context->items,
-                                         target.x, target.y, job,
-                                         colonist_work_speed(colonist, knowledge),
+                                         target.x, target.y, job, speed,
                                          colonist_knowledge_level(colonist, knowledge),
                                          context->rng);
         colonist_learn_by_doing(colonist, knowledge, 1);
@@ -1384,6 +1447,9 @@ typedef struct FetchSearch {
     int min_quality;
     int min_count;
     ItemStack match; /* Count 0: anything. */
+    /* Tools only better than this speed factor for `use` (0: any). */
+    ToolUse use;
+    float min_factor;
 } FetchSearch;
 
 static bool is_fetchable(const Map *map, int x, int y, void *userdata)
@@ -1394,6 +1460,8 @@ static bool is_fetchable(const Map *map, int x, int y, void *userdata)
     return stack.type != ITEM_NONE && (search->types & ITEM_TYPE_BIT(stack.type)) &&
            stack.quality >= search->min_quality && stack.count >= search->min_count &&
            (search->match.count == 0 || item_stacks_match(stack, search->match)) &&
+           (search->min_factor <= 0.0f ||
+            tool_speed_factor(search->use, stack) > search->min_factor) &&
            !reservations_taken_by_other(search->reservations, RESERVATION_HAUL_SOURCE,
                                         (TilePos){(int16_t)x, (int16_t)y}, search->self);
 }
@@ -1422,8 +1490,9 @@ static bool start_fetch(Colonist *colonist, const ColonistContext *context, Fetc
 
 static FetchSearch fetch_search(const ColonistContext *context, ItemTypeMask types)
 {
-    FetchSearch search = {context->items, context->reservations, context->worker_id, types,
-                          ITEM_QUALITY_CRUDE, 1, {.type = ITEM_NONE}};
+    FetchSearch search = {context->items,      context->reservations, context->worker_id,
+                          types,               ITEM_QUALITY_CRUDE,    1,
+                          {.type = ITEM_NONE}, TOOL_USE_NONE,         0.0f};
     return search;
 }
 
@@ -1467,6 +1536,35 @@ static bool go_to_station(Colonist *colonist, const ColonistContext *context,
                            COLONIST_WORK_SEARCH_MAX_COST, &colonist->path);
 }
 
+/* Before a craft, a tool better than the carried one lying close by: worth a
+ * short detour (the carried one is left where the better one lay). */
+static bool fetch_better_tool(Colonist *colonist, const ColonistContext *context,
+                              const RecipeDef *def)
+{
+    float best_possible = tool_best_possible_factor(def->tool_use);
+    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+        if (def->tools[slot] == 0) {
+            continue;
+        }
+        int index = working_tool(colonist, def->tool_use, def->tools[slot], true);
+        if (index < 0) {
+            continue;
+        }
+        float factor = tool_speed_factor(def->tool_use, colonist->tools[index]);
+        if (factor >= best_possible) {
+            continue;
+        }
+        FetchSearch search = fetch_search(context, def->tools[slot]);
+        search.use = def->tool_use;
+        search.min_factor = factor;
+        if (start_fetch(colonist, context, &search, current_tile(colonist),
+                        COLONIST_TOOL_SWAP_MAX_COST, true)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* Chooses the next step of a station job: fetch what is still missing
  * (tools first, then the input or the materials), else go to the station.
  * Returns false when something is missing and cannot be found. */
@@ -1495,6 +1593,9 @@ static bool plan_station_job(Colonist *colonist, const ColonistContext *context)
             return start_fetch(colonist, context, &search, current_tile(colonist),
                                COLONIST_WORK_SEARCH_MAX_COST, true);
         }
+    }
+    if (station->work_input.count == 0 && fetch_better_tool(colonist, context, def)) {
+        return true;
     }
     bool in_progress = station->work_input.count > 0;
     if (!in_progress && colonist->carried.count < def->input_count) {
@@ -1578,10 +1679,19 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context,
         for (int slot = 0; def != NULL && slot < RECIPE_TOOL_MAX; slot++) {
             tools |= def->tools[slot];
         }
-        if (!(tools & ITEM_TYPE_BIT(stack.type)) || !colonist_add_tool(colonist, stack)) {
+        int carried = colonist_tool_index(colonist, ITEM_TYPE_BIT(stack.type));
+        ToolUse use = def != NULL ? def->tool_use : TOOL_USE_NONE;
+        ItemStack replaced;
+        if (!(tools & ITEM_TYPE_BIT(stack.type)) ||
+            (carried >= 0 &&
+             tool_speed_factor(use, stack) <= tool_speed_factor(use, colonist->tools[carried])) ||
+            !colonist_swap_tool(colonist, stack, &replaced)) {
             return false;
         }
         items_remove(context->items, colonist->x, colonist->y, 1);
+        if (replaced.count > 0) {
+            items_drop(context->items, context->map, colonist->x, colonist->y, replaced);
+        }
         return true;
     }
     int wanted;
@@ -1645,13 +1755,43 @@ static bool clear_plant_first(Colonist *colonist, const ColonistContext *context
     if (needed <= 0.0f) {
         return false;
     }
-    *progress += colonist_work_speed(colonist, KNOWLEDGE_NONE);
+    *progress += colonist_work_speed(colonist, KNOWLEDGE_NONE) *
+                 work_with_tool(colonist, gather_clear_tool_use(context->map, tile.x, tile.y));
     if (*progress >= needed) {
         gather_clear_plant(context->map, context->items, tile.x, tile.y,
                            colonist_knowledge_level(colonist, KNOWLEDGE_GATHERING), context->rng);
         *progress = 0.0f;
     }
     return true;
+}
+
+/*
+ * Speed factor of one tick of a craft: the recipe's tool of the first set
+ * (core/tool.h). Every tool of the recipe wears. 0 when one of them is not
+ * carried (it broke).
+ */
+static float craft_tool_factor(Colonist *colonist, const RecipeDef *recipe)
+{
+    int used[RECIPE_TOOL_MAX];
+    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+        used[slot] = -1;
+        if (recipe->tools[slot] != 0) {
+            used[slot] = slot == 0 ? working_tool(colonist, recipe->tool_use,
+                                                  recipe->tools[slot], true)
+                                   : colonist_tool_index(colonist, recipe->tools[slot]);
+            if (used[slot] < 0) {
+                return 0.0f;
+            }
+        }
+    }
+    float factor = used[0] >= 0 ? tool_speed_factor(recipe->tool_use, colonist->tools[used[0]])
+                                : tool_type_factor(recipe->tool_use, ITEM_NONE);
+    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+        if (slot == 0 || used[slot] != used[0]) {
+            wear_tool(colonist, used[slot]);
+        }
+    }
+    return factor;
 }
 
 static void station_job(Colonist *colonist, const ColonistContext *context)
@@ -1683,8 +1823,9 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
             return;
         }
         const WorkstationDef *def = workstation_def((WorkstationType)station->type);
-        bool built = workstation_add_build_work(context->workstations, colonist->station,
-                                                colonist_work_speed(colonist, def->knowledge));
+        float speed = colonist_work_speed(colonist, def->knowledge) *
+                      work_with_tool(colonist, TOOL_USE_BUILDING);
+        bool built = workstation_add_build_work(context->workstations, colonist->station, speed);
         colonist_learn_by_doing(colonist, def->knowledge, 1);
         if (built) {
             set_idle(colonist, context, 0);
@@ -1695,11 +1836,17 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0); /* The input went away (bill removed). */
         return;
     }
-    KnowledgeType knowledge = recipe_def((RecipeType)colonist->recipe)->knowledge;
+    const RecipeDef *recipe = recipe_def((RecipeType)colonist->recipe);
+    float tool_factor = craft_tool_factor(colonist, recipe);
+    if (tool_factor <= 0.0f) {
+        set_idle(colonist, context, 0); /* A tool broke: fetch another one first. */
+        return;
+    }
+    KnowledgeType knowledge = recipe->knowledge;
     /* Products depend on the level before this tick's learning. */
     bool done = workstation_add_craft_work(context->workstations, colonist->station,
                                            colonist->bill, context->items, context->map,
-                                           colonist_work_speed(colonist, knowledge),
+                                           colonist_work_speed(colonist, knowledge) * tool_factor,
                                            colonist_knowledge_level(colonist, knowledge),
                                            context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1);
@@ -1970,8 +2117,10 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
     }
     StructureType type = (StructureType)site->type;
     KnowledgeType knowledge = structure_def(type)->knowledge;
+    float speed = colonist_work_speed(colonist, knowledge) *
+                  work_with_tool(colonist, TOOL_USE_BUILDING);
     bool built = construction_add_work(context->constructions, context->map, context->items,
-                                       colonist->site, colonist_work_speed(colonist, knowledge));
+                                       colonist->site, speed);
     colonist_learn_by_doing(colonist, knowledge, 1);
     if (built) {
         structure_built(context, type, colonist->target);

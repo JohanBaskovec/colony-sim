@@ -13,7 +13,10 @@
  *
  * Tools are simply carried, at most one of each type, and used without
  * equipping anything; they count in the carried weight. A colonist fetches a
- * tool when a task needs one it does not carry, and keeps it.
+ * tool when a recipe needs one it does not carry, and keeps it; one that
+ * carries a tool fetches a better one lying close by, leaving the old one
+ * there. Work goes as fast as the best carried tool for it allows (see
+ * core/tool.h), and wears that tool: it breaks in the end.
  * Colonists are stored in the Game (see core/game.h); this module only works
  * on one colonist at a time with explicit dependencies.
  */
@@ -33,6 +36,7 @@
 #include "core/reservation.h"
 #include "core/rng.h"
 #include "core/stockpile.h"
+#include "core/tool.h"
 #include "core/work.h"
 #include "core/workstation.h"
 
@@ -112,6 +116,9 @@
 /* Work done per tick on a designation at speed ×1 (see colonist_work_speed()). */
 #define COLONIST_WORK_SPEED 1.0f
 #define COLONIST_WORK_SEARCH_MAX_COST 250.0f
+/* How far (travel cost) a settler who carries a tool looks for a better one
+ * before a craft: a short detour, no long trip. */
+#define COLONIST_TOOL_SWAP_MAX_COST 30.0f
 /* Cleaning removes 1 % of dirt every this many ticks (a filthy tile takes
  * 10 seconds at speed ×1). */
 #define COLONIST_CLEAN_TICKS_PER_PERCENT 6
@@ -256,6 +263,9 @@ typedef struct Colonist {
     int ground_sleep_ticks;
     /* Tools carried (one per type, count 1; empty slots have type ITEM_NONE). */
     ItemStack tools[COLONIST_TOOL_MAX];
+    /* Ticks of work done with each tool since it last lost a hit point. */
+    uint16_t tool_wear[COLONIST_TOOL_MAX];
+    int tools_broken; /* Tools worn out so far (for the player's information). */
     int strength; /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
     float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
     float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
@@ -346,6 +356,15 @@ int colonist_tool_index(const Colonist *colonist, ItemTypeMask types);
  * a hammer). Fails when one of the same type is already carried, or every
  * slot is used. */
 bool colonist_add_tool(Colonist *colonist, ItemStack tool);
+
+/* Takes one item as a tool in place of the carried one of the same type,
+ * which is written to `replaced` (an empty stack when there was none: the
+ * tool is then simply added). Fails like colonist_add_tool() otherwise. */
+bool colonist_swap_tool(Colonist *colonist, ItemStack tool, ItemStack *replaced);
+
+/* Speed factor the colonist works at for a kind of work: its best carried
+ * tool among `allowed` (bare hands when none does better), see core/tool.h. */
+float colonist_tool_factor(const Colonist *colonist, ToolUse use, ItemTypeMask allowed);
 
 /* Drops every carried tool where the colonist stands (e.g. before removal). */
 void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map);

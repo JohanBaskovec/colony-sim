@@ -278,6 +278,104 @@ static void test_knapper_takes_a_cobble_as_hammer_then_strikes_flakes(void)
     game_shutdown(&game);
 }
 
+/* Work done on a craft of flakes after `ticks` at the station, with a hammer
+ * of the given grade already carried (the worker starts on the station). */
+static float knapping_progress(ItemQuality hammer, int ticks)
+{
+    Game game;
+    if (!init_flat_game(&game)) {
+        return -1.0f;
+    }
+    Colonist *colonist = spawn_worker(&game, 14, 10);
+    colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, hammer, 0));
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
+    items_add(&game.items, 15, 10, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
+    workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
+    run_ticks(&game, ticks);
+    float progress = workstation_get_const(&game.workstations, index)->work_progress;
+    game_shutdown(&game);
+    return progress;
+}
+
+static void test_tool_grade_sets_the_pace(void)
+{
+    float crude = knapping_progress(ITEM_QUALITY_CRUDE, 200);
+    float standard = knapping_progress(ITEM_QUALITY_STANDARD, 200);
+    float superb = knapping_progress(ITEM_QUALITY_SUPERB, 200);
+    REQUIRE(standard > 0.0f);
+    /* Same walk, same ticks of work: ×0.8, ×1, ×1.2. */
+    float worked = standard / (float)COLONIST_WORK_SPEED;
+    CHECK_NEAR(crude, standard - worked * 0.2f * (float)COLONIST_WORK_SPEED, 1.0);
+    CHECK_NEAR(superb, standard + worked * 0.2f * (float)COLONIST_WORK_SPEED, 1.0);
+}
+
+static void test_tools_wear_and_break(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 14, 10);
+    colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD, 2));
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
+    items_add(&game.items, 15, 10, stones(ITEM_FLINT, 5, ITEM_QUALITY_FINE));
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
+    REQUIRE(bill >= 0);
+    workstation_set_bill_mode(&game.workstations, index, bill, BILL_FOREVER);
+    /* An hour of work takes a hit point: here the hour is nearly over. */
+    int tool = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
+    colonist->tool_wear[tool] = TOOL_WEAR_TICKS - 50;
+    run_ticks(&game, 20); /* Walking to the flint: no wear. */
+    CHECK_EQ_INT(colonist->tools[tool].hit_points, 2);
+    run_ticks(&game, 100);
+    CHECK_EQ_INT(colonist->tools[tool].hit_points, 1);
+    CHECK(colonist->tool_wear[tool] < 100);
+    CHECK(workstation_get_const(&game.workstations, index)->work_progress > 0.0f);
+    /* At the end of the next hour, the hammer breaks: the craft waits. */
+    colonist->tool_wear[tool] = TOOL_WEAR_TICKS - 1;
+    run_ticks(&game, 1);
+    CHECK_EQ_INT(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE)), -1);
+    CHECK_EQ_INT(colonist->tools_broken, 1);
+    run_ticks(&game, 1);
+    float progress = workstation_get_const(&game.workstations, index)->work_progress;
+    CHECK(progress > 0.0f);
+    CHECK(colonist->task != TASK_CRAFT);
+    run_ticks(&game, 100);
+    CHECK_NEAR(workstation_get_const(&game.workstations, index)->work_progress, progress, 1e-3);
+    /* A new cobble: fetched, and the craft resumes where it was. */
+    items_add(&game.items, 17, 10, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
+    run_ticks(&game, 400);
+    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE)) >= 0);
+    CHECK(workstation_get_const(&game.workstations, index)->work_progress > progress);
+    game_shutdown(&game);
+}
+
+static void test_better_tool_close_by_is_swapped(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 14, 10);
+    colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_CRUDE, 0));
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
+    items_add(&game.items, 15, 10, stones(ITEM_FLINT, 3, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 10, stones(ITEM_COBBLE, 1, ITEM_QUALITY_FINE));
+    /* A better one far away is not worth the trip. */
+    items_add(&game.items, 14, 45, stones(ITEM_COBBLE, 1, ITEM_QUALITY_SUPERB));
+    workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
+    run_ticks(&game, 300);
+    int tool = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
+    REQUIRE(tool >= 0);
+    CHECK_EQ_INT(colonist->tools[tool].quality, ITEM_QUALITY_FINE);
+    /* The crude one is left where the fine one lay. */
+    ItemStack left = items_get(&game.items, 18, 10);
+    CHECK_EQ_INT(left.type, ITEM_COBBLE);
+    CHECK_EQ_INT(left.quality, ITEM_QUALITY_CRUDE);
+    CHECK_EQ_INT(items_get(&game.items, 14, 45).quality, ITEM_QUALITY_SUPERB);
+    /* Not picked up again: it is worse. */
+    run_ticks(&game, 1500);
+    CHECK_EQ_INT(colonist->tools[tool].quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(items_get(&game.items, 18, 10).quality, ITEM_QUALITY_CRUDE);
+    game_shutdown(&game);
+}
+
 static void test_knapping_cobbles_takes_two(void)
 {
     Game game;
@@ -725,6 +823,9 @@ int main(void)
     RUN_TEST(test_knapping_spot_needs_the_knowledge);
     RUN_TEST(test_placement_rules);
     RUN_TEST(test_no_zone_under_a_station);
+    RUN_TEST(test_tool_grade_sets_the_pace);
+    RUN_TEST(test_tools_wear_and_break);
+    RUN_TEST(test_better_tool_close_by_is_swapped);
     RUN_TEST(test_knapper_takes_a_cobble_as_hammer_then_strikes_flakes);
     RUN_TEST(test_knapping_cobbles_takes_two);
     RUN_TEST(test_bill_inputs_and_quality_cap);

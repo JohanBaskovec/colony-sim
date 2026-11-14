@@ -234,6 +234,9 @@ hud.colonist.activity = Activity: {0}
 hud.colonist.carrying = Carrying: {0} ×{1} ({2})
 # {0} = tool name, {1} = quality grade, {2} = hit points (e.g. 80%)
 hud.colonist.tool = Tool: {0} ({1}, {2})
+# {0} = number of tools the settler wore out (they break at 0% hit points)
+hud.colonist.tools_broken.one = {0} tool worn out
+hud.colonist.tools_broken.other = {0} tools worn out
 # {0} = need name, {1} = percentage
 hud.colonist.need = {0}: {1}%
 # {0} = need name, {1} = percentage, {2} = state (e.g. Hungry)

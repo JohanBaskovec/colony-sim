@@ -31,22 +31,24 @@
 static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
     [RECIPE_CHOPPER] = {"chopper", N_("recipe.chopper"), KNAPPING_SPOT, {ITEM_COBBLE, ITEM_FLINT},
                         1, ITEM_QUALITY_CRUDE, {HAMMER, 0}, 250.0f, KNOWLEDGE_STONE_KNAPPING,
-                        50.0f, ITEM_CHOPPER, 6},
+                        50.0f, ITEM_CHOPPER, 6, TOOL_USE_KNAPPING},
     [RECIPE_FLAKES] = {"flakes", N_("recipe.flakes"), KNAPPING_SPOT, {ITEM_FLINT, ITEM_COBBLE}, 1,
                        ITEM_QUALITY_CRUDE, {HAMMER, 0}, 375.0f, KNOWLEDGE_STONE_KNAPPING,
-                       55.0f, ITEM_FLAKE, 8},
+                       55.0f, ITEM_FLAKE, 8, TOOL_USE_KNAPPING},
     [RECIPE_HAND_AXE] = {"hand_axe", N_("recipe.hand_axe"), KNAPPING_SPOT,
                          {ITEM_FLINT, ITEM_COBBLE}, 1, ITEM_QUALITY_CRUDE, {HAMMER, 0},
-                         2500.0f, KNOWLEDGE_STONE_KNAPPING, 70.0f, ITEM_HAND_AXE, 12},
+                         2500.0f, KNOWLEDGE_STONE_KNAPPING, 70.0f, ITEM_HAND_AXE, 12,
+                         TOOL_USE_KNAPPING},
     /* Spears want straight branches: standard grade or better. */
     [RECIPE_THROWING_SPEAR] = {"throwing_spear", N_("recipe.throwing_spear"), CRAFTING_SPOT,
                                {ITEM_BRANCHES, ITEM_NONE}, 1, ITEM_QUALITY_STANDARD,
                                {CUTTING_TOOL, 0}, 3750.0f, KNOWLEDGE_SPEAR_MAKING, 50.0f,
-                               ITEM_THROWING_SPEAR, 4},
+                               ITEM_THROWING_SPEAR, 4, TOOL_USE_WOODWORKING},
     [RECIPE_THRUSTING_SPEAR] = {"thrusting_spear", N_("recipe.thrusting_spear"), CRAFTING_SPOT,
                                 {ITEM_BRANCHES, ITEM_NONE}, 2, ITEM_QUALITY_STANDARD,
                                 {ITEM_TYPE_BIT(ITEM_HAND_AXE), ITEM_TYPE_BIT(ITEM_FLAKE)},
-                                6250.0f, KNOWLEDGE_SPEAR_MAKING, 60.0f, ITEM_THRUSTING_SPEAR, 6},
+                                6250.0f, KNOWLEDGE_SPEAR_MAKING, 60.0f, ITEM_THRUSTING_SPEAR, 6,
+                                TOOL_USE_WOODWORKING},
 };
 
 #undef KNAPPING_SPOT

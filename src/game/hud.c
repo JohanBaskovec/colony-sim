@@ -418,6 +418,12 @@ static void build_selection_panel(App *app, Panel *panel)
                   tr(item_def((ItemType)tool.type)->name_key),
                   tr(item_quality_name_key((ItemQuality)tool.quality)), percent);
     }
+    if (colonist->tools_broken > 0) {
+        char count[16];
+        tr_integer(count, sizeof(count), colonist->tools_broken);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+                  tr_plural("hud.colonist.tools_broken", colonist->tools_broken), count);
+    }
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);
     }

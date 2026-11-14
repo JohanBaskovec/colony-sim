@@ -23,6 +23,7 @@ add_library(colony_core STATIC
     reservation.c
     rng.c
     stockpile.c
+    tool.c
     structure.c
     util.c
     work.c

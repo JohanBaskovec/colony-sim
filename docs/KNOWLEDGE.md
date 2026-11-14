@@ -294,7 +294,11 @@ hit points. Factors from crude to superb: ×0.6, ×0.8, ×1, ×1.2, ×1.5
   walking to are reserved.
 - Tools carried by a settler are theirs: others never take them.
 - Tools wear: **1 hit point per hour of work** *(tuning)*; at 0 the tool breaks
-  (notification).
+  (notification). A cobble used as a hammer wears too (200 hit points).
+- Swapping: before a craft, a settler who carries a tool for it fetches a
+  faster one lying within a short detour (about 30 tiles), leaving the old
+  one there. Optional tools (cutting grass, building) are used when carried,
+  not fetched.
 - Tool grade factor on speed: ×0.8, ×0.9, ×1.0, ×1.1, ×1.2, crude to superb.
 - Using a tool needs no knowledge of how to make it: anyone can cut with a
   flake. The knowledge that counts is the one of the job.

@@ -50,6 +50,7 @@ simulation:
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
+| `tool`       | Tool speed factors by kind of work (bare hands included) and grade, best carried tool, wear and breaking |
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, berries, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown plants only), a zone priority, the jobs tiles offer, what they give |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
@@ -536,8 +537,31 @@ lists it: knapping uses a plain cobble as its hammer. When a tool to fetch
 is of the input's type, `bill_has_input()` makes sure enough is left to
 work on (two cobbles to knap a cobble). A recipe's tools are fetched like its
 input (same `RESERVATION_HAUL_SOURCE` reservation) and then kept; a removed
-colonist drops them. Swapping, wear and speed factors come with the tools
-step of M3.
+colonist drops them.
+
+**Tool speed and wear** (`core/tool.h`): each kind of work is a `ToolUse`
+(cutting grass, knapping, woodworking, building; `TOOL_USE_NONE` for work no
+tool helps) with a speed factor per item type and one for bare hands (0:
+impossible), from the table of `docs/KNOWLEDGE.md` §2.3, times the tool's
+grade factor (×0.8 crude to ×1.2 superb). Every tick of work multiplies the
+colonist's knowledge speed by the factor of its best carried tool for the
+work (`colonist_tool_factor()`; bare hands when no tool does better):
+gathering jobs (`GatherJobDef.tool_use`), clearing a blueprint's tile
+(`gather_clear_tool_use()`), building sites and stations, and crafts
+(`RecipeDef.tool_use`, the tool of the recipe's first set; a recipe's tools
+are required). The tool used wears: `Colonist.tool_wear` counts its ticks of
+work, and every `TOOL_WEAR_TICKS` (an hour) it loses a hit point; at 0 it
+breaks (`Colonist.tools_broken`, shown in the inspector until notifications
+exist). A craft whose tool broke is left (its progress stays on the
+station) until a new tool is fetched. Cobbles are damageable for this (200
+hit points: a hammer stone lasts 200 hours of knapping). Optional tools
+(grass, building) are used when carried but not fetched yet.
+
+**Swapping**: before a craft starts, a crafter that carries a tool for the
+recipe looks for a faster one within `COLONIST_TOOL_SWAP_MAX_COST` (30) of
+where it stands (`FetchSearch.min_factor`), fetches it and leaves the old one
+of the same type on that tile (`colonist_swap_tool()`); a tool of another
+type is simply added. A worse tool is never taken in exchange.
 
 Station jobs (`TASK_BUILD`, `TASK_CRAFT`) go through three phases (fetch,
 go to the station, work) and reserve the station (`RESERVATION_STATION`).
