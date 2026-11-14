@@ -100,12 +100,24 @@ EntityId game_spawn_colonist(Game *game, int x, int y)
     return id;
 }
 
+/* Reservation owners are colonist slots + 1 and must fit in a byte. */
+_Static_assert(COLONIST_MAX < 255, "colonist slots must fit in designation owners");
+
+static ColonistContext colonist_context(Game *game, uint32_t slot)
+{
+    ColonistContext context = {&game->map,          &game->designations, &game->pathfinder,
+                               &game->rng,          game->clock.tick,    (uint8_t)(slot + 1)};
+    return context;
+}
+
 bool game_remove_colonist(Game *game, EntityId id)
 {
     Colonist *colonist = game_colonist(game, id);
     if (colonist == NULL) {
         return false;
     }
+    ColonistContext context = colonist_context(game, id.index);
+    colonist_abandon_task(colonist, &context); /* Frees its reservations. */
     colonist_free(colonist);
     memset(colonist, 0, sizeof(*colonist));
     return pool_release(&game->colonist_pool, id);
@@ -209,6 +221,7 @@ bool game_init(Game *game, const NewGameParams *params)
 {
     memset(game, 0, sizeof(*game));
     if (!worldgen_generate(&game->map, &params->world) ||
+        !designations_init(&game->designations, game->map.width, game->map.height) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
         game_shutdown(game);
@@ -228,6 +241,7 @@ void game_shutdown(Game *game)
     }
     pool_free(&game->colonist_pool);
     pathfinder_free(&game->pathfinder);
+    designations_free(&game->designations);
     map_free(&game->map);
     memset(game, 0, sizeof(*game));
 }
@@ -259,10 +273,10 @@ static void update_plants(Game *game)
 
 static void update_colonists(Game *game)
 {
-    ColonistContext context = {&game->map, &game->pathfinder, &game->rng, game->clock.tick};
     /* Fixed slot order keeps the simulation deterministic. */
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
+            ColonistContext context = colonist_context(game, slot);
             colonist_tick(&game->colonists[slot], &context);
         }
     }
@@ -289,6 +303,7 @@ int game_update(Game *game, double real_seconds)
 uint64_t game_hash(const Game *game)
 {
     uint64_t hash = map_hash(&game->map);
+    hash = designations_hash(&game->designations, hash);
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
@@ -297,14 +312,21 @@ uint64_t game_hash(const Game *game)
             continue;
         }
         const Colonist *c = &game->colonists[slot];
-        int32_t ints[6] = {(int32_t)id.index, (int32_t)id.generation, c->x, c->y, (int32_t)c->task,
-                           c->timer};
+        int32_t ints[8] = {(int32_t)id.index, (int32_t)id.generation, c->x, c->y,
+                           (int32_t)c->task, c->timer, c->target.x, c->target.y};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));
     }
     return hash;
+}
+
+/* ---- Designations -------------------------------------------------------- */
+
+int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type)
+{
+    return designations_set_rect(&game->designations, &game->map, x0, y0, x1, y1, type);
 }
 
 /* ---- Picking ------------------------------------------------------------- */

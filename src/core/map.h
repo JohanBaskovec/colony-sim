@@ -54,6 +54,7 @@ typedef struct TerrainDef {
 typedef struct RockDef {
     const char *id;
     const char *name_key;
+    float mine_work; /* Work (in ticks of a settler working) needed to mine one tile. */
 } RockDef;
 
 typedef struct PlantDef {

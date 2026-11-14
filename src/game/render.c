@@ -29,6 +29,14 @@ static const SDL_Color COLONIST_COLORS[] = {
     {230, 120, 70, 255}, {90, 160, 230, 255}, {240, 200, 80, 255}, {200, 110, 210, 255},
     {110, 210, 170, 255}, {235, 95, 120, 255}, {170, 190, 90, 255}, {150, 140, 240, 255},
 };
+/* Designation marks; index DESIGNATION_NONE is the color of the cancel tool. */
+static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
+    [DESIGNATION_NONE] = {230, 70, 60, 255},
+    [DESIGNATION_CHOP] = {250, 210, 80, 255},
+    [DESIGNATION_MINE] = {250, 140, 60, 255},
+};
+static const SDL_Color PROGRESS_BACKGROUND = {20, 20, 24, 220};
+static const SDL_Color PROGRESS_COLOR = {120, 220, 110, 255};
 static const SDL_Color COLONIST_OUTLINE = {20, 20, 24, 255};
 static const SDL_Color SELECTION_COLOR = {255, 255, 255, 255};
 static const SDL_Color PATH_COLOR = {255, 255, 255, 140};
@@ -118,6 +126,76 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
             }
         }
     }
+}
+
+/* Screen rectangle of a tile, snapped to whole pixels like render_map(). */
+static SDL_FRect tile_rect(const Camera *camera, int x, int y)
+{
+    float left, top, right, bottom;
+    camera_world_to_screen(camera, (float)x, (float)y, &left, &top);
+    camera_world_to_screen(camera, (float)(x + 1), (float)(y + 1), &right, &bottom);
+    SDL_FRect rect = {floorf(left), floorf(top), floorf(right) - floorf(left),
+                      floorf(bottom) - floorf(top)};
+    return rect;
+}
+
+/* Rectangle outline `thickness` pixels wide, drawn inwards. */
+static void outline(SDL_Renderer *renderer, SDL_FRect rect, float thickness, SDL_Color color)
+{
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    for (int i = 0; i < (int)thickness && rect.w > 2.0f && rect.h > 2.0f; i++) {
+        SDL_RenderRect(renderer, &rect);
+        rect.x += 1.0f;
+        rect.y += 1.0f;
+        rect.w -= 2.0f;
+        rect.h -= 2.0f;
+    }
+}
+
+void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    const Designations *designations = &game->designations;
+    if (designations->count == 0) {
+        return;
+    }
+    const Map *map = &game->map;
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    float thickness = camera->zoom >= 24.0f ? 2.0f : 1.0f;
+
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            DesignationType type = designation_get(designations, x, y);
+            if (type == DESIGNATION_NONE) {
+                continue;
+            }
+            SDL_FRect tile = tile_rect(camera, x, y);
+            SDL_FRect mark = inset(&tile, 0.8f);
+            outline(renderer, mark, thickness, DESIGNATION_COLORS[type]);
+
+            float progress = designation_progress_fraction(designations, map, x, y);
+            if (progress > 0.0f && tile.w >= 6.0f) {
+                float height = SDL_max(2.0f, floorf(tile.h * 0.12f));
+                SDL_FRect bar = {tile.x + 1.0f, tile.y + tile.h - height - 1.0f, tile.w - 2.0f,
+                                 height};
+                fill(renderer, PROGRESS_BACKGROUND, &bar);
+                bar.w = floorf(bar.w * progress);
+                fill(renderer, PROGRESS_COLOR, &bar);
+            }
+        }
+    }
+}
+
+void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0,
+                             int x1, int y1, DesignationType type)
+{
+    SDL_FRect a = tile_rect(camera, SDL_min(x0, x1), SDL_min(y0, y1));
+    SDL_FRect b = tile_rect(camera, SDL_max(x0, x1), SDL_max(y0, y1));
+    SDL_FRect area = {a.x, a.y, b.x + b.w - a.x, b.y + b.h - a.y};
+    SDL_Color color = DESIGNATION_COLORS[(unsigned)type < DESIGNATION_COUNT ? type : 0];
+    SDL_Color translucent = color;
+    translucent.a = 50;
+    fill(renderer, translucent, &area);
+    outline(renderer, area, 2.0f, color);
 }
 
 void render_daylight(SDL_Renderer *renderer, float daylight, float width, float height)

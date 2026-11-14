@@ -78,6 +78,18 @@ static void movement_keys_label(char *out, size_t size)
     }
 }
 
+/* Name of the key with this label on the current layout (mnemonic keys). */
+static const char *key_name(SDL_Keycode key)
+{
+    return SDL_GetKeyName(key);
+}
+
+static const char *tool_name_key(DesignationType type)
+{
+    const DesignationDef *def = designation_def(type);
+    return type == DESIGNATION_NONE || def == NULL ? N_("tool.cancel") : def->name_key;
+}
+
 static void build_status_panel(App *app, Panel *panel)
 {
     const GameClock *clock = &app->game.clock;
@@ -124,6 +136,19 @@ static void build_tile_panel(App *app, Panel *panel)
         tr_integer(a, sizeof(a), (long long)(plant->growth * 100.0f + 0.5f));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant"),
                   tr(plant_def((PlantType)plant->type)->name_key), a);
+    }
+
+    DesignationType designation = designation_get(&app->game.designations, x, y);
+    if (designation != DESIGNATION_NONE) {
+        const char *name = tr(designation_def(designation)->name_key);
+        float progress = designation_progress_fraction(&app->game.designations, map, x, y);
+        if (progress > 0.0f) {
+            tr_integer(a, sizeof(a), (long long)(progress * 100.0f));
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.designation_progress"),
+                      name, a);
+        } else {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.designation"), name);
+        }
     }
 
     float cost = map_move_cost(map, x, y);
@@ -191,7 +216,7 @@ static void build_selection_panel(App *app, Panel *panel)
     panel_add_text(panel, colonist->name);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.age"), age);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
-              tr(colonist_task_name_key(colonist->task)));
+              tr(colonist_activity_key(colonist)));
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);
     }
@@ -239,6 +264,15 @@ void hud_draw(App *app)
         panel_draw(app, &debug, HUD_MARGIN, HUD_MARGIN * 2.0f + height);
     }
 
+    /* Top center: active designation tool. */
+    if (app->tool_active) {
+        Panel tool = {0};
+        TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool"),
+                  tr(tool_name_key(app->tool_type)));
+        panel_size(app, &tool, &width, &height);
+        panel_draw(app, &tool, SDL_floorf((screen_width - width) * 0.5f), HUD_MARGIN);
+    }
+
     /* Top right: current language. */
     Panel language = {0};
     const LanguageInfo *info = localization_active_language(&app->localization);
@@ -253,6 +287,8 @@ void hud_draw(App *app)
     movement_keys_label(keys, sizeof(keys));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
     panel_add_text(&help, tr("hud.help.game"));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_C),
+              key_name(SDLK_M), key_name(SDLK_X));
     float help_width, help_height;
     panel_size(app, &help, &help_width, &help_height);
     float help_y = screen_height - help_height - HUD_MARGIN;

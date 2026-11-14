@@ -5,6 +5,7 @@ set(COLONY_UNIT_TESTS
     test_camera
     test_cli
     test_colonist
+    test_designation
     test_game
     test_game_clock
     test_i18n

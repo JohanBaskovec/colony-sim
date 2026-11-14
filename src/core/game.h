@@ -8,6 +8,7 @@
 #define COLONY_CORE_GAME_H
 
 #include "core/colonist.h"
+#include "core/designation.h"
 #include "core/game_clock.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
@@ -34,6 +35,7 @@ typedef struct NewGameParams {
 typedef struct Game {
     uint64_t seed;
     Map map;
+    Designations designations; /* Player orders (chop, mine...), same size as the map. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */
     Pathfinder pathfinder;
@@ -82,5 +84,11 @@ int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float
 
 /* Whether a colonist currently stands on the tile. */
 bool game_tile_has_colonist(const Game *game, int x, int y);
+
+/* ---- Designations -------------------------------------------------------- */
+
+/* Places (or with DESIGNATION_NONE, removes) an order on every valid tile of a
+ * rectangle (corners in any order). Returns the number of tiles changed. */
+int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type);
 
 #endif /* COLONY_CORE_GAME_H */

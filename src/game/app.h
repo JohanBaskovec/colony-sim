@@ -38,6 +38,11 @@ typedef struct App {
     float drag_start_x; /* Screen coordinates where the left button was pressed. */
     float drag_start_y;
 
+    /* Designation tool: while active, left click/drag places orders of
+     * `tool_type` (DESIGNATION_NONE: removes orders) instead of selecting. */
+    bool tool_active;
+    DesignationType tool_type;
+
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;
     int hover_y;

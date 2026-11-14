@@ -30,9 +30,10 @@ Tick items as they land and add newly discovered tasks.
 ## M2: Work (next)
 
 - [x] Thirst: drink from shallow water or a lake shore; eat and drink before going to sleep
-- [ ] Designations: chop trees, mine rock, harvest plants
-- [ ] Job system with reservations (including food: two colonists no longer walk to the same bush)
-- [ ] Items on the ground (wood, stone, food), stacking
+- [x] Designations: chop trees, mine rock (tools, rectangle drag, cancel); idle colonists do the work, one worker per tile (reservations), interrupted work resumes
+- [ ] Job system: generalize designation work into jobs, reservations for food (two colonists no longer walk to the same bush)
+- [ ] Items on the ground (wood, stone, food), stacking; chopping and mining drop them
+- [ ] Harvest designation (needs items: harvesting without a yield would only destroy berries)
 - [ ] Hauling and stockpile zones with filters
 - [ ] Work priorities grid UI
 

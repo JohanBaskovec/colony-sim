@@ -17,9 +17,9 @@ static const TerrainDef TERRAIN_DEFS[TERRAIN_COUNT] = {
 };
 
 static const RockDef ROCK_DEFS[ROCK_COUNT] = {
-    [ROCK_NONE] = {"none", NULL},
-    [ROCK_GRANITE] = {"granite", N_("rock.granite")},
-    [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone")},
+    [ROCK_NONE] = {"none", NULL, 0.0f},
+    [ROCK_GRANITE] = {"granite", N_("rock.granite"), 3500.0f},
+    [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f},
 };
 
 static const PlantDef PLANT_DEFS[PLANT_COUNT] = {

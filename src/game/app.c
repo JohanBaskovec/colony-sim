@@ -20,6 +20,19 @@
 
 static const SDL_Color HOVER_COLOR = {255, 255, 255, 200};
 
+/* Selects a designation tool, or goes back to selection if it is already active. */
+static void toggle_tool(App *app, DesignationType type)
+{
+    if (app->tool_active && app->tool_type == type) {
+        app->tool_active = false;
+    } else {
+        app->tool_active = true;
+        app->tool_type = type;
+    }
+    app->left_button_down = false;
+    app->box_selecting = false;
+}
+
 /* Routes core log messages to SDL's logging (console, Android logcat...). */
 static void sdl_log_sink(LogLevel level, const char *message, void *userdata)
 {
@@ -188,7 +201,16 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     }
     /* Mnemonic keys use the key labels (keycodes). */
     switch (key->key) {
-    case SDLK_ESCAPE: app->running = false; break;
+    case SDLK_ESCAPE:
+        if (app->tool_active) {
+            app->tool_active = false; /* Back to selection first. */
+        } else {
+            app->running = false;
+        }
+        break;
+    case SDLK_C: toggle_tool(app, DESIGNATION_CHOP); break;
+    case SDLK_M: toggle_tool(app, DESIGNATION_MINE); break;
+    case SDLK_X: toggle_tool(app, DESIGNATION_NONE); break;
     case SDLK_F3: app->show_debug = !app->show_debug; break;
     case SDLK_L:
         localization_cycle(&app->localization);
@@ -267,6 +289,22 @@ static void select_in_box(App *app, float x0, float y0, float x1, float y1, bool
     }
 }
 
+static void screen_to_tile(const App *app, float screen_x, float screen_y, int *x, int *y)
+{
+    float world_x, world_y;
+    camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
+    *x = (int)floorf(world_x);
+    *y = (int)floorf(world_y);
+}
+
+/* Tool drag rectangle in tiles, from where the button was pressed to the cursor. */
+static void tool_rect(const App *app, float screen_x, float screen_y, int *x0, int *y0, int *x1,
+                      int *y1)
+{
+    screen_to_tile(app, app->drag_start_x, app->drag_start_y, x0, y0);
+    screen_to_tile(app, screen_x, screen_y, x1, y1);
+}
+
 static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
 {
     if (button->button != SDL_BUTTON_LEFT) {
@@ -283,7 +321,11 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         return;
     }
     bool additive = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
-    if (app->box_selecting) {
+    if (app->tool_active) {
+        int x0, y0, x1, y1;
+        tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
+        game_designate_rect(&app->game, x0, y0, x1, y1, app->tool_type);
+    } else if (app->box_selecting) {
         select_in_box(app, app->drag_start_x, app->drag_start_y, button->x, button->y, additive);
     } else {
         select_at_point(app, button->x, button->y, additive);
@@ -373,6 +415,7 @@ static void render_frame(App *app)
     SDL_RenderClear(app->renderer);
 
     render_map(app->renderer, &app->game.map, &app->camera);
+    render_designations(app->renderer, &app->game, &app->camera);
     render_colonists(app->renderer, &app->game, &app->camera, app->selected,
                      app->selected_count);
     render_daylight(app->renderer, game_daylight(app->game.clock.tick),
@@ -382,7 +425,13 @@ static void render_frame(App *app)
                             HOVER_COLOR);
     }
     hud_draw_world_labels(app);
-    if (app->box_selecting) {
+    if (app->tool_active && app->left_button_down) {
+        float mouse_x, mouse_y;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+        int x0, y0, x1, y1;
+        tool_rect(app, mouse_x, mouse_y, &x0, &y0, &x1, &y1);
+        render_designation_area(app->renderer, &app->camera, x0, y0, x1, y1, app->tool_type);
+    } else if (app->box_selecting) {
         float mouse_x, mouse_y;
         SDL_GetMouseState(&mouse_x, &mouse_y);
         render_selection_box(app->renderer, app->drag_start_x, app->drag_start_y, mouse_x,

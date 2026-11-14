@@ -29,6 +29,11 @@ plant.grass = Grass
 plant.bush = Berry bush
 plant.tree = Tree
 
+# Designations (player orders)
+designation.chop = Chop trees
+designation.mine = Mine rock
+tool.cancel = Cancel orders
+
 # Seasons
 season.spring = Spring
 season.summer = Summer
@@ -46,6 +51,10 @@ hud.language = Language: {0}
 # {0} = movement keys (e.g. WASD, adapted to the keyboard layout)
 hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
 hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · L: language · F3: debug · Esc: quit
+# {0}, {1}, {2} = keys of the chop, mine and cancel tools
+hud.help.orders = {0}: chop trees · {1}: mine rock · {2}: cancel orders
+# {0} = tool name
+hud.tool = Tool: {0} · Left click/drag: apply · Esc: back
 
 # Tile inspector. {0}, {1} = tile coordinates
 hud.tile.position = Tile {0}, {1}
@@ -55,6 +64,10 @@ hud.tile.rock = Rock wall: {0}
 hud.tile.plant = Plant: {0} ({1}% grown)
 hud.tile.move_cost = Movement cost: ×{0}
 hud.tile.impassable = Impassable
+# {0} = order name (e.g. Chop trees)
+hud.tile.designation = Order: {0}
+# {0} = order name, {1} = percentage of the work done
+hud.tile.designation_progress = Order: {0} ({1}% done)
 
 # Debug overlay (F3)
 hud.debug.fps = FPS: {0}
@@ -70,6 +83,9 @@ colonist.task.wander = Wandering
 colonist.task.eat = Eating
 colonist.task.drink = Drinking
 colonist.task.sleep = Sleeping
+colonist.task.work = Working
+colonist.task.chop = Chopping a tree
+colonist.task.mine = Mining
 
 need.food = Food
 need.food.low = Hungry

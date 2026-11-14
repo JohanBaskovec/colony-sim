@@ -14,6 +14,7 @@
 │ src/core/  (static library colony_core, pure C17, no SDL)    │
 │                                                              │
 │  game ─► colonist ─► pathfinding ─► map                      │
+│    │        └─────► designation ─────► map                   │
 │    ├──► pool, game_clock, worldgen ─► noise, rng             │
 │  i18n   camera   cli   log   util                            │
 └──────────────────────────────────────────────────────────────┘
@@ -40,7 +41,8 @@ simulation:
 | Module       | Responsibility                                                               |
 |--------------|------------------------------------------------------------------------------|
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
-| `colonist`   | Colonist data, needs, decision making, movement along paths                  |
+| `colonist`   | Colonist data, needs, decision making, movement along paths, work            |
+| `designation`| Player work orders per tile (chop, mine), reservations, work progress        |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
@@ -97,8 +99,13 @@ The map stores **dense layers**, one array per layer indexed by
 - `plants[]`: at most one plant per tile (`Plant`: type + growth).
 
 Dense layers are cache-friendly, trivially serializable and hashable
-(`map_hash()`). Upcoming layers: floors, buildings/walls, zones, designations,
-room IDs, temperature, fog of war.
+(`map_hash()`). Upcoming layers: floors, buildings/walls, zones, room IDs,
+temperature, fog of war.
+
+Player orders are not part of the map (which only describes the physical
+world): `Designations` (`core/designation.h`, owned by `Game`) has its own
+dense layers of the same size: order type, reservation owner and work
+progress per tile.
 
 Static definitions (`TerrainDef`, `RockDef`, `PlantDef`) carry a stable `id`
 (used by save files, never translated) and a `name_key` (translation key).
@@ -140,8 +147,32 @@ and reset on success. The starting position prefers land with water within
 reach.
 
 Decisions only happen on tile centers, so a colonist never jumps back when it
-changes its mind. This simple state machine will be replaced by the job system
-in M2 (designations, reservations, work priorities).
+changes its mind.
+
+### Work on designations
+
+When nothing more urgent is needed, an idle or wandering colonist looks for
+work: a Dijkstra search for the nearest passable tile next to an available
+(designated, unreserved) tile, 4-neighborhood, with a fixed neighbor order.
+It reserves that tile (owner = colonist slot + 1), walks there and adds
+`COLONIST_WORK_SPEED` work per tick. When the work needed is reached the order
+is carried out on the map (tree removed, rock dug out, leaving the rough stone
+floor) and the designation disappears.
+
+- Every task change goes through one function (`begin_task()`), which releases
+  the reservation: a colonist that leaves to eat or sleep frees its job, and
+  the work done stays on the tile, so the next worker resumes it.
+- A worker checks every tick that it still owns its tile; cancelling or
+  replacing an order therefore stops it cleanly. Removing a colonist releases
+  its reservation.
+- `Designations.available` counts unreserved orders: when it is zero, idle
+  colonists skip the search entirely. Failed searches back off like food and
+  water searches, but `Designations.revision` (bumped when work may have become
+  available: new order, released reservation, completed work) lets them look
+  again at once.
+
+This is the first step towards the job system (next M2 item): other job
+sources (hauling, construction) and work priorities will build on it.
 
 ## Pathfinding
 

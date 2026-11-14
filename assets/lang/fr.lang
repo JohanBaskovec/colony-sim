@@ -28,6 +28,11 @@ plant.grass = Herbe
 plant.bush = Buisson à baies
 plant.tree = Arbre
 
+# Désignations (ordres du joueur)
+designation.chop = Couper les arbres
+designation.mine = Miner la roche
+tool.cancel = Annuler les ordres
+
 # Saisons
 season.spring = Printemps
 season.summer = Été
@@ -41,6 +46,8 @@ hud.paused = En pause
 hud.language = Langue : {0}
 hud.help.camera = {0}/Flèches : déplacer · Molette : zoom · Glisser clic milieu/droit : défiler
 hud.help.game = Clic/glisser gauche : sélectionner · Espace : pause · 1-3 : vitesse · L : langue · F3 : débogage · Échap : quitter
+hud.help.orders = {0} : couper des arbres · {1} : miner la roche · {2} : annuler des ordres
+hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 
 hud.tile.position = Case {0}, {1}
 hud.tile.terrain = Terrain : {0}
@@ -48,6 +55,8 @@ hud.tile.rock = Paroi rocheuse : {0}
 hud.tile.plant = Plante : {0} ({1} % de croissance)
 hud.tile.move_cost = Coût de déplacement : ×{0}
 hud.tile.impassable = Infranchissable
+hud.tile.designation = Ordre : {0}
+hud.tile.designation_progress = Ordre : {0} ({1} % effectué)
 
 hud.debug.fps = IPS : {0}
 hud.debug.tick = Tick : {0}
@@ -62,6 +71,9 @@ colonist.task.wander = Se promène
 colonist.task.eat = Mange
 colonist.task.drink = Boit
 colonist.task.sleep = Dort
+colonist.task.work = Travaille
+colonist.task.chop = Coupe un arbre
+colonist.task.mine = Creuse la roche
 
 need.food = Nourriture
 need.food.low = A faim

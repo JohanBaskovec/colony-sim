@@ -206,7 +206,7 @@ static void test_hungry_colonist_without_food_retries_later(void)
     colonist->needs[NEED_FOOD] = 0.2f;
     game_tick(&game);
     CHECK(colonist->task != TASK_EAT);
-    CHECK(colonist->search_cooldown[NEED_FOOD] > 0);
+    CHECK(colonist->search_cooldown[SEARCH_FOOD] > 0);
     game_shutdown(&game);
 }
 
@@ -255,27 +255,27 @@ static void test_thirsty_colonist_without_water_retries_later(void)
     colonist->needs[NEED_WATER] = 0.2f;
     game_tick(&game);
     CHECK(colonist->task != TASK_DRINK);
-    CHECK_EQ_INT(colonist->search_cooldown[NEED_WATER], COLONIST_SEARCH_RETRY_TICKS);
-    CHECK_EQ_INT(colonist->search_cooldown[NEED_FOOD], 0);
+    CHECK_EQ_INT(colonist->search_cooldown[SEARCH_WATER], COLONIST_SEARCH_RETRY_TICKS);
+    CHECK_EQ_INT(colonist->search_cooldown[SEARCH_FOOD], 0);
 
     /* Each further failure waits twice as long, up to a cap. */
     int expected = COLONIST_SEARCH_RETRY_TICKS;
     for (int failure = 1; failure <= COLONIST_SEARCH_MAX_BACKOFF + 1; failure++) {
-        run_ticks(&game, colonist->search_cooldown[NEED_WATER]);
+        run_ticks(&game, colonist->search_cooldown[SEARCH_WATER]);
         CHECK(colonist->task != TASK_DRINK);
         if (failure <= COLONIST_SEARCH_MAX_BACKOFF) {
             expected *= 2;
         }
-        CHECK_EQ_INT(colonist->search_cooldown[NEED_WATER], expected);
+        CHECK_EQ_INT(colonist->search_cooldown[SEARCH_WATER], expected);
     }
 
     /* Water becomes reachable: the next search succeeds and resets the backoff. */
     set_rock_ring(&game.map, 20, 20, ROCK_NONE);
     add_water_band(&game.map, 40);
     colonist->needs[NEED_WATER] = 0.2f;
-    run_ticks(&game, colonist->search_cooldown[NEED_WATER]);
+    run_ticks(&game, colonist->search_cooldown[SEARCH_WATER]);
     CHECK_EQ_INT(colonist->task, TASK_DRINK);
-    CHECK_EQ_INT(colonist->search_failures[NEED_WATER], 0);
+    CHECK_EQ_INT(colonist->search_failures[SEARCH_WATER], 0);
     game_shutdown(&game);
 }
 
@@ -386,6 +386,253 @@ static void test_colonists_drink_before_sleeping(void)
     game_shutdown(&game);
 }
 
+/* ---- Work on designations ---------------------------------------------- */
+
+static void add_tree(Map *map, int x, int y)
+{
+    Plant *tree = &map->plants[map_index(map, x, y)];
+    tree->type = PLANT_TREE;
+    tree->growth = 1.0f;
+}
+
+/* Ticks needed to walk `tiles` tiles on cheap terrain, plus some margin. */
+static int walk_ticks(int tiles)
+{
+    return tiles * TICKS_PER_SECOND * 2 / 3 + 60;
+}
+
+static void test_idle_colonist_chops_designated_tree(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_tree(&game.map, 26, 20);
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    CHECK_EQ_INT(game_designate_rect(&game, 26, 20, 26, 20, DESIGNATION_CHOP), 1);
+
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_EQ_INT(colonist->target.x, 26);
+    CHECK_EQ_INT(designation_owner(&game.designations, 26, 20), 1);
+    CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.chop");
+
+    float work = designation_work_needed(&game.designations, &game.map, 26, 20);
+    run_ticks(&game, walk_ticks(6) + (int)(work * 0.5f));
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_EQ_INT(colonist->x, 25); /* Works from the neighboring tile. */
+    CHECK_EQ_INT(colonist->y, 20);
+    CHECK(designation_progress_fraction(&game.designations, &game.map, 26, 20) > 0.0f);
+
+    run_ticks(&game, (int)(work * 0.5f));
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 26, 20)].type, PLANT_NONE);
+    CHECK_EQ_INT(designation_get(&game.designations, 26, 20), DESIGNATION_NONE);
+    CHECK(colonist->task != TASK_WORK);
+    game_shutdown(&game);
+}
+
+static void test_mining_opens_a_passage(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    for (int y = 0; y < game.map.height; y++) {
+        game.map.rock[map_index(&game.map, 25, y)] = ROCK_SANDSTONE;
+    }
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    CHECK(!pathfinder_find(&game.pathfinder, &game.map, (TilePos){20, 20}, (TilePos){30, 20},
+                           PATH_NO_COST_LIMIT, NULL));
+    game_designate_rect(&game, 25, 20, 25, 20, DESIGNATION_MINE);
+
+    run_ticks(&game, walk_ticks(5) + (int)rock_def(ROCK_SANDSTONE)->mine_work);
+    CHECK(map_is_passable(&game.map, 25, 20));
+    CHECK(pathfinder_find(&game.pathfinder, &game.map, (TilePos){20, 20}, (TilePos){30, 20},
+                          PATH_NO_COST_LIMIT, NULL));
+    game_shutdown(&game);
+}
+
+static void test_one_worker_per_designation(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_tree(&game.map, 26, 20);
+    add_tree(&game.map, 26, 30);
+    Colonist *a = spawn_rested(&game, 20, 20);
+    Colonist *b = spawn_rested(&game, 20, 22);
+    REQUIRE(a != NULL && b != NULL);
+    game_designate_rect(&game, 26, 20, 26, 20, DESIGNATION_CHOP);
+
+    game_tick(&game);
+    CHECK_EQ_INT(a->task, TASK_WORK);
+    CHECK(b->task != TASK_WORK); /* The only job is taken. */
+
+    /* A second job goes to the free colonist, even though it is farther. */
+    game_designate_rect(&game, 26, 30, 26, 30, DESIGNATION_CHOP);
+    for (int i = 0; i < walk_ticks(2) && b->task != TASK_WORK; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(b->task, TASK_WORK);
+    CHECK_EQ_INT(b->target.y, 30);
+    CHECK_EQ_INT(a->target.y, 20);
+    game_shutdown(&game);
+}
+
+static void test_hungry_worker_leaves_work_and_resumes_later(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_tree(&game.map, 22, 20);
+    Plant *bush = &game.map.plants[map_index(&game.map, 15, 20)];
+    bush->type = PLANT_BUSH;
+    bush->growth = 1.0f;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    game_designate_rect(&game, 22, 20, 22, 20, DESIGNATION_CHOP);
+    run_ticks(&game, walk_ticks(1) + 300);
+    REQUIRE(colonist->task == TASK_WORK);
+    float progress = designation_progress_fraction(&game.designations, &game.map, 22, 20);
+    CHECK(progress > 0.0f);
+
+    colonist->needs[NEED_FOOD] = 0.2f;
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_EAT);
+    CHECK(designation_is_available(&game.designations, 22, 20)); /* Reservation released. */
+    CHECK(designation_progress_fraction(&game.designations, &game.map, 22, 20) >= progress);
+
+    /* Back to work after eating, from where it stopped. */
+    for (int i = 0; i < walk_ticks(8) + COLONIST_EAT_TICKS && colonist->task != TASK_WORK; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    game_shutdown(&game);
+}
+
+static void test_cancelled_order_stops_the_worker(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_tree(&game.map, 22, 20);
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    game_designate_rect(&game, 22, 20, 22, 20, DESIGNATION_CHOP);
+    run_ticks(&game, walk_ticks(1) + 100);
+    REQUIRE(colonist->task == TASK_WORK);
+
+    CHECK_EQ_INT(game_designate_rect(&game, 22, 20, 22, 20, DESIGNATION_NONE), 1);
+    game_tick(&game);
+    CHECK(colonist->task != TASK_WORK);
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 22, 20)].type, PLANT_TREE);
+    game_shutdown(&game);
+}
+
+static void test_removed_worker_releases_its_job(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_tree(&game.map, 22, 20);
+    EntityId id = game_spawn_colonist(&game, 20, 20);
+    REQUIRE(game_colonist(&game, id) != NULL);
+    game_designate_rect(&game, 22, 20, 22, 20, DESIGNATION_CHOP);
+    game_tick(&game);
+    REQUIRE(game_colonist(&game, id)->task == TASK_WORK);
+    CHECK(!designation_is_available(&game.designations, 22, 20));
+
+    game_remove_colonist(&game, id);
+    CHECK(designation_is_available(&game.designations, 22, 20));
+    CHECK_EQ_INT(game.designations.available, 1);
+    game_shutdown(&game);
+}
+
+static void test_new_order_is_noticed_despite_backoff(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    /* A tree enclosed in rock: designated but unreachable. */
+    add_tree(&game.map, 10, 10);
+    set_rock_ring(&game.map, 10, 10, ROCK_GRANITE);
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    game_designate_rect(&game, 10, 10, 10, 10, DESIGNATION_CHOP);
+    game_tick(&game);
+    CHECK(colonist->task != TASK_WORK);
+    CHECK(colonist->search_cooldown[SEARCH_WORK] > 0);
+
+    /* A reachable order is picked up right away, without waiting for the cooldown. */
+    add_tree(&game.map, 24, 20);
+    game_designate_rect(&game, 24, 20, 24, 20, DESIGNATION_CHOP);
+    for (int i = 0; i < walk_ticks(1) && colonist->task != TASK_WORK; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_EQ_INT(colonist->target.x, 24);
+    game_shutdown(&game);
+}
+
+/* Every reservation belongs to a colonist working on that tile, and the
+ * designation counters match the layer contents. */
+static bool reservations_consistent(const Game *game)
+{
+    const Designations *d = &game->designations;
+    int count = 0, available = 0;
+    for (int y = 0; y < d->height; y++) {
+        for (int x = 0; x < d->width; x++) {
+            if (designation_get(d, x, y) == DESIGNATION_NONE) {
+                if (designation_owner(d, x, y) != DESIGNATION_NO_OWNER) {
+                    return false;
+                }
+                continue;
+            }
+            count++;
+            uint8_t owner = designation_owner(d, x, y);
+            if (owner == DESIGNATION_NO_OWNER) {
+                available++;
+                continue;
+            }
+            const Colonist *c = &game->colonists[owner - 1];
+            if (entity_id_is_none(game_colonist_id_at(game, owner - 1u)) ||
+                c->task != TASK_WORK || c->target.x != x || c->target.y != y) {
+                return false;
+            }
+        }
+    }
+    return count == d->count && available == d->available;
+}
+
+static void test_reservations_stay_consistent_over_a_long_run(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_water_band(&game.map, 44);
+    for (int y = 4; y < 44; y += 3) {
+        add_tree(&game.map, 10, y);
+        add_tree(&game.map, 30, y);
+        game.map.rock[map_index(&game.map, 38, y)] = ROCK_SANDSTONE;
+        Plant *bush = &game.map.plants[map_index(&game.map, 20, y)];
+        bush->type = PLANT_BUSH;
+        bush->growth = 1.0f;
+    }
+    for (int i = 0; i < 4; i++) {
+        REQUIRE(spawn_rested(&game, 18 + i, 20) != NULL);
+    }
+    game_designate_rect(&game, 0, 0, 47, 47, DESIGNATION_CHOP);
+    game_designate_rect(&game, 0, 0, 47, 47, DESIGNATION_MINE);
+    int initial = game.designations.count;
+    REQUIRE(initial > 30);
+
+    bool consistent = true;
+    for (int i = 0; i < TICKS_PER_DAY && consistent; i++) {
+        game_tick(&game);
+        if (i == TICKS_PER_DAY / 4) {
+            game_designate_rect(&game, 30, 0, 30, 47, DESIGNATION_NONE); /* Cancel some. */
+        }
+        if (i % 50 == 0) {
+            consistent = reservations_consistent(&game);
+        }
+    }
+    CHECK(consistent);
+    CHECK(game.designations.count < initial); /* Work got done. */
+    game_shutdown(&game);
+}
+
 static void test_position_is_interpolated_while_walking(void)
 {
     Colonist colonist;
@@ -462,6 +709,14 @@ int main(void)
     RUN_TEST(test_tired_colonist_sleeps_and_recovers);
     RUN_TEST(test_colonists_sleep_at_night);
     RUN_TEST(test_colonists_drink_before_sleeping);
+    RUN_TEST(test_idle_colonist_chops_designated_tree);
+    RUN_TEST(test_mining_opens_a_passage);
+    RUN_TEST(test_one_worker_per_designation);
+    RUN_TEST(test_hungry_worker_leaves_work_and_resumes_later);
+    RUN_TEST(test_cancelled_order_stops_the_worker);
+    RUN_TEST(test_removed_worker_releases_its_job);
+    RUN_TEST(test_new_order_is_noticed_despite_backoff);
+    RUN_TEST(test_reservations_stay_consistent_over_a_long_run);
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);
     RUN_TEST(test_translation_keys);

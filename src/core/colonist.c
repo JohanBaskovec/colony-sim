@@ -4,6 +4,7 @@
 #include "core/util.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define SQRT2 1.41421356f
@@ -82,8 +83,20 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_EAT] = N_("colonist.task.eat"),
         [TASK_DRINK] = N_("colonist.task.drink"),
         [TASK_SLEEP] = N_("colonist.task.sleep"),
+        [TASK_WORK] = N_("colonist.task.work"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
+}
+
+const char *colonist_activity_key(const Colonist *colonist)
+{
+    if (colonist->task == TASK_WORK) {
+        const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
+        if (def != NULL && def->activity_key != NULL) {
+            return def->activity_key;
+        }
+    }
+    return colonist_task_name_key(colonist->task);
 }
 
 const char *need_name_key(NeedType need)
@@ -116,12 +129,44 @@ static TilePos current_tile(const Colonist *colonist)
     return (TilePos){(int16_t)colonist->x, (int16_t)colonist->y};
 }
 
-static void set_idle(Colonist *colonist, int ticks)
+/* Every task change goes through here, so that a reserved designation is
+ * always released when the colonist stops working on it. The path is kept:
+ * callers set it before or clear it after. */
+static void begin_task(Colonist *colonist, const ColonistContext *context, ColonistTask task)
 {
-    colonist->task = TASK_IDLE;
-    colonist->timer = ticks;
+    if (colonist->task == TASK_WORK) {
+        designation_release(context->designations, colonist->target.x, colonist->target.y,
+                            context->worker_id);
+    }
+    colonist->task = task;
+    colonist->timer = 0;
     colonist->path_index = 0;
+}
+
+static void set_idle(Colonist *colonist, const ColonistContext *context, int ticks)
+{
+    begin_task(colonist, context, TASK_IDLE);
+    colonist->timer = ticks;
     path_clear(&colonist->path);
+}
+
+void colonist_abandon_task(Colonist *colonist, const ColonistContext *context)
+{
+    set_idle(colonist, context, 0);
+}
+
+static bool search_allowed(const Colonist *colonist, SearchKind kind)
+{
+    return colonist->search_cooldown[kind] <= 0;
+}
+
+static void search_failed(Colonist *colonist, SearchKind kind)
+{
+    int backoff = colonist->search_failures[kind];
+    colonist->search_cooldown[kind] = COLONIST_SEARCH_RETRY_TICKS << backoff;
+    if (backoff < COLONIST_SEARCH_MAX_BACKOFF) {
+        colonist->search_failures[kind]++;
+    }
 }
 
 static int random_idle_ticks(Rng *rng)
@@ -144,28 +189,23 @@ static bool is_drinking_spot(const Map *map, int x, int y, void *userdata)
 /* Walks to the nearest food (NEED_FOOD) or drinking spot (NEED_WATER). */
 static bool try_satisfy(Colonist *colonist, const ColonistContext *context, NeedType need)
 {
-    if (colonist->search_cooldown[need] > 0) {
+    bool drink = need == NEED_WATER;
+    SearchKind kind = drink ? SEARCH_WATER : SEARCH_FOOD;
+    if (!search_allowed(colonist, kind)) {
         return false;
     }
-    bool drink = need == NEED_WATER;
     TilePos found;
     if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
                                  drink ? is_drinking_spot : is_edible, NULL,
                                  drink ? COLONIST_WATER_SEARCH_MAX_COST
                                        : COLONIST_FOOD_SEARCH_MAX_COST,
                                  &colonist->path, &found)) {
-        int backoff = colonist->search_failures[need];
-        colonist->search_cooldown[need] = COLONIST_SEARCH_RETRY_TICKS << backoff;
-        if (backoff < COLONIST_SEARCH_MAX_BACKOFF) {
-            colonist->search_failures[need]++;
-        }
+        search_failed(colonist, kind);
         return false;
     }
-    colonist->search_failures[need] = 0;
-    colonist->task = drink ? TASK_DRINK : TASK_EAT;
+    colonist->search_failures[kind] = 0;
+    begin_task(colonist, context, drink ? TASK_DRINK : TASK_EAT);
     colonist->target = found;
-    colonist->timer = 0;
-    colonist->path_index = 0;
     return true;
 }
 
@@ -188,11 +228,89 @@ static bool try_satisfy_urgent(Colonist *colonist, const ColonistContext *contex
     return false;
 }
 
-static void start_sleeping(Colonist *colonist)
+static void start_sleeping(Colonist *colonist, const ColonistContext *context)
 {
-    colonist->task = TASK_SLEEP;
-    colonist->path_index = 0;
+    begin_task(colonist, context, TASK_SLEEP);
     path_clear(&colonist->path);
+}
+
+/* ---- Work ------------------------------------------------------------------ */
+
+static const int16_t NEIGHBOR_DX[4] = {0, 1, 0, -1};
+static const int16_t NEIGHBOR_DY[4] = {-1, 0, 1, 0};
+
+/* First available designation next to (x, y), in a fixed order (deterministic). */
+static bool find_adjacent_work(const Designations *designations, int x, int y, TilePos *out)
+{
+    for (int i = 0; i < 4; i++) {
+        int nx = x + NEIGHBOR_DX[i];
+        int ny = y + NEIGHBOR_DY[i];
+        if (designation_is_available(designations, nx, ny)) {
+            *out = (TilePos){(int16_t)nx, (int16_t)ny};
+            return true;
+        }
+    }
+    return false;
+}
+
+/* A tile to stand on while working: passable, next to available work. */
+static bool is_work_spot(const Map *map, int x, int y, void *userdata)
+{
+    TilePos unused;
+    return map_is_passable(map, x, y) && find_adjacent_work(userdata, x, y, &unused);
+}
+
+static bool try_start_work(Colonist *colonist, const ColonistContext *context)
+{
+    Designations *designations = context->designations;
+    if (designations == NULL || designations->available <= 0) {
+        return false;
+    }
+    /* After a failure, new or freed work (a new revision) allows an early retry. */
+    if (!search_allowed(colonist, SEARCH_WORK) &&
+        colonist->work_search_revision == designations->revision) {
+        return false;
+    }
+    TilePos spot, target;
+    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                 is_work_spot, designations, COLONIST_WORK_SEARCH_MAX_COST,
+                                 &colonist->path, &spot)) {
+        /* The path is untouched on failure: a wandering colonist keeps walking. */
+        search_failed(colonist, SEARCH_WORK);
+        colonist->work_search_revision = designations->revision;
+        return false;
+    }
+    /* The search only stops on a spot next to available work. */
+    find_adjacent_work(designations, spot.x, spot.y, &target);
+    designation_reserve(designations, target.x, target.y, context->worker_id);
+    colonist->search_failures[SEARCH_WORK] = 0;
+    colonist->search_cooldown[SEARCH_WORK] = 0;
+    begin_task(colonist, context, TASK_WORK);
+    colonist->target = target;
+    colonist->work_type = (uint8_t)designation_get(designations, target.x, target.y);
+    return true;
+}
+
+static void work(Colonist *colonist, const ColonistContext *context)
+{
+    Designations *designations = context->designations;
+    TilePos target = colonist->target;
+    int distance = abs(colonist->x - target.x) + abs(colonist->y - target.y);
+    if (distance != 1 ||
+        designation_owner(designations, target.x, target.y) != context->worker_id) {
+        set_idle(colonist, context, 0); /* Not there, or the order was cancelled. */
+        return;
+    }
+    DesignationType type = designation_get(designations, target.x, target.y);
+    if (!designation_can_apply(context->map, target.x, target.y, type)) {
+        designation_set(designations, context->map, target.x, target.y, DESIGNATION_NONE);
+        set_idle(colonist, context, 0);
+        return;
+    }
+    if (designation_add_work(designations, context->map, target.x, target.y,
+                             COLONIST_WORK_SPEED)) {
+        set_idle(colonist, context, 0); /* Done: look for the next job right away. */
+    }
 }
 
 static void start_wandering(Colonist *colonist, const ColonistContext *context)
@@ -207,12 +325,11 @@ static void start_wandering(Colonist *colonist, const ColonistContext *context)
         }
         if (pathfinder_find(context->pathfinder, context->map, current_tile(colonist), goal,
                             (float)radius * 3.0f, &colonist->path)) {
-            colonist->task = TASK_WANDER;
-            colonist->path_index = 0;
+            begin_task(colonist, context, TASK_WANDER);
             return;
         }
     }
-    set_idle(colonist, random_idle_ticks(context->rng));
+    set_idle(colonist, context, random_idle_ticks(context->rng));
 }
 
 static bool is_night(uint64_t tick)
@@ -233,14 +350,15 @@ static void update_needs(Colonist *colonist)
     } else {
         *rest = clampf(*rest - NEED_REST_DECAY_PER_TICK, 0.0f, 1.0f);
     }
-    for (int need = 0; need < NEED_COUNT; need++) {
-        if (colonist->search_cooldown[need] > 0) {
-            colonist->search_cooldown[need]--;
+    for (int kind = 0; kind < SEARCH_COUNT; kind++) {
+        if (colonist->search_cooldown[kind] > 0) {
+            colonist->search_cooldown[kind]--;
         }
     }
 }
 
-/* Chooses a new task when needs require it. Only called on tile centers. */
+/* Chooses a new task when needs require it, or picks up work when idle.
+ * Only called on tile centers. */
 static void decide(Colonist *colonist, const ColonistContext *context)
 {
     float rest = colonist->needs[NEED_REST];
@@ -248,7 +366,7 @@ static void decide(Colonist *colonist, const ColonistContext *context)
     switch (colonist->task) {
     case TASK_SLEEP:
         if (rest >= 1.0f) {
-            set_idle(colonist, random_idle_ticks(context->rng));
+            set_idle(colonist, context, random_idle_ticks(context->rng));
         } else {
             /* Severe hunger or thirst wakes colonists up. */
             try_satisfy_urgent(colonist, context, NEED_CRITICAL_THRESHOLD);
@@ -266,8 +384,12 @@ static void decide(Colonist *colonist, const ColonistContext *context)
     }
     if (rest < NEED_LOW_THRESHOLD || (is_night(context->tick) && rest < COLONIST_NIGHT_SLEEP_REST)) {
         if (!try_satisfy_urgent(colonist, context, COLONIST_BEDTIME_NEED)) {
-            start_sleeping(colonist);
+            start_sleeping(colonist, context);
         }
+        return;
+    }
+    if (colonist->task == TASK_IDLE || colonist->task == TASK_WANDER) {
+        try_start_work(colonist, context);
     }
 }
 
@@ -277,7 +399,7 @@ static void walk(Colonist *colonist, const ColonistContext *context)
     TilePos next = colonist->path.steps[colonist->path_index];
     float cost = map_move_cost(context->map, next.x, next.y);
     if (cost <= 0.0f) {
-        set_idle(colonist, random_idle_ticks(context->rng)); /* Path became blocked. */
+        set_idle(colonist, context, random_idle_ticks(context->rng)); /* Path became blocked. */
         return;
     }
     if (next.x != colonist->x && next.y != colonist->y) {
@@ -302,7 +424,7 @@ static void eat(Colonist *colonist, const ColonistContext *context)
     if (colonist->x != colonist->target.x || colonist->y != colonist->target.y ||
         !map_has_edible_plant(map, colonist->x, colonist->y)) {
         /* Not there, or someone else ate it first: look again soon. */
-        set_idle(colonist, 0);
+        set_idle(colonist, context, 0);
         return;
     }
     if (++colonist->timer < COLONIST_EAT_TICKS) {
@@ -319,21 +441,21 @@ static void eat(Colonist *colonist, const ColonistContext *context)
         try_satisfy(colonist, context, NEED_FOOD)) {
         return;
     }
-    set_idle(colonist, random_idle_ticks(context->rng));
+    set_idle(colonist, context, random_idle_ticks(context->rng));
 }
 
 static void drink(Colonist *colonist, const ColonistContext *context)
 {
     if (colonist->x != colonist->target.x || colonist->y != colonist->target.y ||
         !map_is_drinking_spot(context->map, colonist->x, colonist->y)) {
-        set_idle(colonist, 0); /* The water is gone: look again soon. */
+        set_idle(colonist, context, 0); /* The water is gone: look again soon. */
         return;
     }
     if (++colonist->timer < COLONIST_DRINK_TICKS) {
         return;
     }
     colonist->needs[NEED_WATER] = 1.0f;
-    set_idle(colonist, random_idle_ticks(context->rng));
+    set_idle(colonist, context, random_idle_ticks(context->rng));
 }
 
 void colonist_tick(Colonist *colonist, const ColonistContext *context)
@@ -356,9 +478,10 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
             start_wandering(colonist, context);
         }
         break;
-    case TASK_WANDER: set_idle(colonist, random_idle_ticks(context->rng)); break;
+    case TASK_WANDER: set_idle(colonist, context, random_idle_ticks(context->rng)); break;
     case TASK_EAT: eat(colonist, context); break;
     case TASK_DRINK: drink(colonist, context); break;
+    case TASK_WORK: work(colonist, context); break;
     case TASK_SLEEP:
     case TASK_COUNT: break;
     }

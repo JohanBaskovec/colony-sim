@@ -2,6 +2,7 @@ add_library(colony_core STATIC
     camera.c
     cli.c
     colonist.c
+    designation.c
     game.c
     game_clock.c
     i18n.c
