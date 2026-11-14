@@ -7,6 +7,8 @@
 #define INDENT UI_LAYOUT_INDENT
 #define TEXT_SIZE 160
 #define TARGET_BIG_STEP 10 /* Shift+click on -/+. */
+#define LEVEL_STEP 5
+#define LEVEL_BIG_STEP 25
 
 /* What the player clicked, applied after the rows (deleting shifts bills). */
 typedef enum ActionType {
@@ -16,13 +18,15 @@ typedef enum ActionType {
     ACTION_CYCLE_MODE,
     ACTION_ADD_TARGET,
     ACTION_TOGGLE_INPUT,
+    ACTION_ADD_MIN_LEVEL,
+    ACTION_ADD_MAX_LEVEL,
     ACTION_ADD_BILL,
 } ActionType;
 
 typedef struct Action {
     ActionType type;
     int bill;
-    int value; /* Target change, input type or recipe. */
+    int value; /* Target or level change, input type or recipe. */
 } Action;
 
 /* "Flint or cobble", "Hand axe and sharp flake": one or two names joined. */
@@ -206,6 +210,44 @@ static void bill_inputs_row(UiLayout *layout, const Bill *bill, int index, Actio
     layout->y += layout->row;
 }
 
+/* Worker level range, for recipes that need a knowledge: -/+ for the lowest
+ * level, the range, -/+ for the highest. */
+static void bill_levels_row(UiLayout *layout, const Bill *bill, int index, Action *action)
+{
+    if (recipe_def((RecipeType)bill->recipe)->knowledge == KNOWLEDGE_NONE) {
+        return;
+    }
+    Ui *ui = layout->ui;
+    char text[TEXT_SIZE], low[16], high[16];
+    tr_integer(low, sizeof(low), bill->min_level);
+    tr_integer(high, sizeof(high), bill->max_level);
+    TR_FORMAT(text, sizeof(text), tr("bill.levels"), low, high);
+    const char *minus = "−", *plus = "+";
+    float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
+    float pair = 2.0f * small + 2.0f;
+    float text_width = ui_text_width(ui, text);
+    ui_layout_measure(layout, INDENT + 2.0f * (pair + GAP) + text_width);
+    int step = (SDL_GetModState() & SDL_KMOD_SHIFT) ? LEVEL_BIG_STEP : LEVEL_STEP;
+    float x = layout->x + INDENT;
+    for (int bound = 0; bound < 2; bound++) {
+        ActionType type = bound == 0 ? ACTION_ADD_MIN_LEVEL : ACTION_ADD_MAX_LEVEL;
+        if (ui_layout_button_sized(layout, x, small, minus)) {
+            *action = (Action){type, index, -step};
+        }
+        if (ui_layout_button_sized(layout, x + small + 2.0f, small, plus)) {
+            *action = (Action){type, index, step};
+        }
+        x += pair + GAP;
+        if (bound == 0) {
+            if (layout->draw) {
+                ui_label(ui, text, x, layout->y + layout->text_offset);
+            }
+            x += text_width + GAP;
+        }
+    }
+    layout->y += layout->row;
+}
+
 /* Why nobody works on a bill, if it can be told cheaply. */
 static void bill_warning_rows(UiLayout *layout, const Game *game, const Bill *bill)
 {
@@ -213,6 +255,9 @@ static void bill_warning_rows(UiLayout *layout, const Game *game, const Bill *bi
     if (!game_recipe_known(game, recipe)) {
         ui_layout_label(layout, tr("station.warning.unknown_recipe"), INDENT, true);
         return;
+    }
+    if (!game_bill_has_worker(game, bill)) {
+        ui_layout_label(layout, tr("station.warning.no_worker_level"), INDENT, true);
     }
     const RecipeDef *def = recipe_def(recipe);
     ItemTypeMask missing = game_recipe_missing_tools(game, recipe);
@@ -257,6 +302,7 @@ static void built_rows(UiLayout *layout, const Game *game, const Workstation *st
         ui_layout_label(layout, text, INDENT, true);
         bill_mode_row(layout, game, bill, i, action);
         bill_inputs_row(layout, bill, i, action);
+        bill_levels_row(layout, bill, i, action);
         bill_warning_rows(layout, game, bill);
     }
     if (station->bill_count >= WORKSTATION_BILL_MAX) {
@@ -343,6 +389,18 @@ static void apply(App *app, int index, const Action *action)
             workstation_set_bill_input(workstations, index, action->bill,
                                        (ItemType)action->value,
                                        !(bill->inputs & ITEM_TYPE_BIT(action->value)));
+        }
+        break;
+    case ACTION_ADD_MIN_LEVEL:
+        if (bill != NULL) {
+            workstation_set_bill_min_level(workstations, index, action->bill,
+                                           bill->min_level + action->value);
+        }
+        break;
+    case ACTION_ADD_MAX_LEVEL:
+        if (bill != NULL) {
+            workstation_set_bill_max_level(workstations, index, action->bill,
+                                           bill->max_level + action->value);
         }
         break;
     case ACTION_ADD_BILL:

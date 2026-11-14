@@ -154,6 +154,28 @@ static void test_bills(void)
     CHECK(workstation_set_bill_mode(&stations, knapping, bill, BILL_UNTIL_STOCK));
     CHECK(!workstation_set_bill_mode(&stations, knapping, bill, BILL_MODE_COUNT));
 
+    /* Worker levels: everyone by default; each bound stays within the other. */
+    CHECK_EQ_INT(flakes->min_level, BILL_LEVEL_MIN);
+    CHECK_EQ_INT(flakes->max_level, BILL_LEVEL_MAX);
+    CHECK(bill_accepts_level(flakes, 50.0) && bill_accepts_level(flakes, 100.0));
+    uint64_t before = workstations_hash(&stations, HASH_FNV1A64_INIT);
+    CHECK(workstation_set_bill_min_level(&stations, knapping, bill, 60));
+    CHECK(workstations_hash(&stations, HASH_FNV1A64_INIT) != before);
+    CHECK(workstation_set_bill_max_level(&stations, knapping, bill, 80));
+    CHECK(!bill_accepts_level(flakes, 59.9));
+    CHECK(bill_accepts_level(flakes, 60.0) && bill_accepts_level(flakes, 80.0));
+    CHECK(!bill_accepts_level(flakes, 80.5));
+    CHECK(workstation_set_bill_min_level(&stations, knapping, bill, 90));
+    CHECK_EQ_INT(flakes->min_level, 80);
+    CHECK(workstation_set_bill_max_level(&stations, knapping, bill, 10));
+    CHECK_EQ_INT(flakes->max_level, 80);
+    CHECK(workstation_set_bill_max_level(&stations, knapping, bill, 500));
+    CHECK_EQ_INT(flakes->max_level, BILL_LEVEL_MAX);
+    CHECK(workstation_set_bill_min_level(&stations, knapping, bill, -5));
+    CHECK_EQ_INT(flakes->min_level, BILL_LEVEL_MIN);
+    CHECK(!workstation_set_bill_min_level(&stations, knapping, 7, 10));
+    CHECK(!workstation_set_bill_max_level(&stations, WORKSTATION_MAX, bill, 10));
+
     /* Modes. */
     Bill test = {.mode = BILL_DO_TIMES, .target = 2, .done = 1};
     CHECK(bill_wants_more(&test, 100));

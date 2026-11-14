@@ -689,6 +689,19 @@ bool game_recipe_known(const Game *game, RecipeType recipe)
     return false;
 }
 
+bool game_bill_has_worker(const Game *game, const Bill *bill)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = &game->colonists[slot];
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            colonist_can_craft(colonist, (RecipeType)bill->recipe) &&
+            colonist_level_fits_bill(colonist, bill)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool colonist_carries_tool(const Game *game, ItemTypeMask types)
 {
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {

@@ -136,6 +136,13 @@ bool colonist_can_craft(const Colonist *colonist, RecipeType recipe)
            recipe_doable_at(recipe, colonist_knowledge_level(colonist, def->knowledge));
 }
 
+bool colonist_level_fits_bill(const Colonist *colonist, const Bill *bill)
+{
+    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    return def != NULL &&
+           bill_accepts_level(bill, colonist_knowledge_level(colonist, def->knowledge));
+}
+
 int colonist_tool_index(const Colonist *colonist, ItemTypeMask types)
 {
     int best = -1;
@@ -1174,9 +1181,10 @@ static bool tools_obtainable(const Colonist *colonist, const ColonistContext *co
 
 /*
  * First bill of a built station the colonist could work through now: it
- * wants doing, the colonist knows the recipe, the tools and an input can be
- * found (cheap checks). While a craft is in progress on the station, only
- * bills of its recipe qualify: it is finished first. Returns -1 if none.
+ * wants doing, the colonist knows the recipe and has a level the bill accepts,
+ * the tools and an input can be found (cheap checks). While a craft is in
+ * progress on the station, only bills of its recipe qualify: it is finished
+ * first. Returns -1 if none.
  */
 static int choose_bill(const Colonist *colonist, const ColonistContext *context,
                        const Workstation *station)
@@ -1187,7 +1195,7 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
         RecipeType recipe = (RecipeType)bill->recipe;
         const RecipeDef *def = recipe_def(recipe);
         if ((in_progress && station->work_recipe != recipe) ||
-            !colonist_can_craft(colonist, recipe) ||
+            !colonist_can_craft(colonist, recipe) || !colonist_level_fits_bill(colonist, bill) ||
             !bill_wants_more(bill, stored_count(context, bill)) ||
             !tools_obtainable(colonist, context, def)) {
             continue;
@@ -1402,8 +1410,10 @@ static bool station_job_still_valid(const Colonist *colonist, const ColonistCont
         return false;
     }
     const Bill *bill = &station->bills[colonist->bill];
+    /* A craft under way is finished, even if the bill changed meanwhile. */
     return colonist->station_phase == STATION_JOB_WORK ||
-           bill_wants_more(bill, stored_count(context, bill));
+           (bill_wants_more(bill, stored_count(context, bill)) &&
+            colonist_level_fits_bill(colonist, bill));
 }
 
 static bool try_station_job(Colonist *colonist, const ColonistContext *context, bool build)

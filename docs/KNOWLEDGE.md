@@ -872,9 +872,9 @@ Suggested order, each step with its tests:
    - knapping and spear making recipes; failures; quality capped by
      materials (a cobble counts as crude).
    Left for later: dirt and knapping debris (a dirt layer, and injuries from
-   M6); the bill filters (search radius, worker levels); *until N* counts
-   every item lying in the colony, stored or not (otherwise crafters overshoot
-   before haulers catch up).
+   M6); the bill search radius filter (the worker level filter is done);
+   *until N* counts every item lying in the colony, stored or not (otherwise
+   crafters overshoot before haulers catch up).
 4. Tools: speed factors on orders and recipes, grade factor, wear and
    breaking, swapping for a better tool, the detour in job search.
 5. Blueprints and construction: *(done)* construction sites with several

@@ -148,6 +148,10 @@ bool game_workstation_buildable(const Game *game, WorkstationType type);
 /* Whether some living colonist knows enough to make this recipe. */
 bool game_recipe_known(const Game *game, RecipeType recipe);
 
+/* Whether some living colonist knows the bill's recipe at a level the bill
+ * accepts. */
+bool game_bill_has_worker(const Game *game, const Bill *bill);
+
 /* Tool kinds a recipe needs that no living colonist carries and that lie
  * nowhere in the colony (0 when every tool can be had): one mask per
  * missing slot, joined. */

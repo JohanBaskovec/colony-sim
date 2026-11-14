@@ -325,6 +325,10 @@ bool colonist_can_construct(const Colonist *colonist, StructureType type);
 /* Whether the colonist knows enough to make this recipe. */
 bool colonist_can_craft(const Colonist *colonist, RecipeType recipe);
 
+/* Whether the colonist's level in the recipe's knowledge lies in the bill's
+ * worker level range (see bill_accepts_level()). */
+bool colonist_level_fits_bill(const Colonist *colonist, const Bill *bill);
+
 /* Index in `tools` of the best carried tool among `types` (grade, then hit
  * points), or -1 when it carries none of them. */
 int colonist_tool_index(const Colonist *colonist, ItemTypeMask types);

@@ -206,6 +206,8 @@ int workstation_add_bill(Workstations *workstations, int index, RecipeType recip
     bill->mode = BILL_DO_TIMES;
     bill->target = BILL_TARGET_DEFAULT;
     bill->inputs = recipe_inputs(recipe);
+    bill->min_level = (uint8_t)BILL_LEVEL_MIN;
+    bill->max_level = (uint8_t)BILL_LEVEL_MAX;
     workstations->revision++;
     return station->bill_count++;
 }
@@ -277,6 +279,37 @@ bool workstation_set_bill_input(Workstations *workstations, int index, int bill,
     }
     workstations->revision++;
     return true;
+}
+
+bool workstation_set_bill_min_level(Workstations *workstations, int index, int bill, int level)
+{
+    Bill *entry = get_bill(workstations, index, bill);
+    if (entry == NULL) {
+        return false;
+    }
+    entry->min_level = (uint8_t)clampi(level, BILL_LEVEL_MIN, entry->max_level);
+    workstations->revision++;
+    return true;
+}
+
+bool workstation_set_bill_max_level(Workstations *workstations, int index, int bill, int level)
+{
+    Bill *entry = get_bill(workstations, index, bill);
+    if (entry == NULL) {
+        return false;
+    }
+    entry->max_level = (uint8_t)clampi(level, entry->min_level, BILL_LEVEL_MAX);
+    workstations->revision++;
+    return true;
+}
+
+bool bill_accepts_level(const Bill *bill, double level)
+{
+    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    if (def == NULL || def->knowledge == KNOWLEDGE_NONE) {
+        return true;
+    }
+    return level >= bill->min_level && level <= bill->max_level;
 }
 
 bool bill_wants_more(const Bill *bill, int stored)
@@ -392,8 +425,9 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         hash = hash_fnv1a64(hash, craft, sizeof(craft));
         for (int b = 0; b < station->bill_count; b++) {
             const Bill *bill = &station->bills[b];
-            uint32_t fields[5] = {bill->recipe, bill->mode, bill->target, bill->done,
-                                  bill->inputs};
+            uint32_t fields[7] = {bill->recipe,    bill->mode,     bill->target,
+                                  bill->done,      bill->inputs,   bill->min_level,
+                                  bill->max_level};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
         }
     }

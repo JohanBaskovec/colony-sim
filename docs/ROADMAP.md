@@ -57,7 +57,8 @@ Tick items as they land and add newly discovered tasks.
 - [x] Stone gathering zones instead of a repeating order: gather until the colony has a target of cobbles and of flint (or forever); stones no longer wanted are left; a background job, after construction and crafting at the same priority
 - [x] One configurable gathering zone replaces the chop, harvest, branches, twigs, grass and stones orders: a check box per resource (wood, berries, branches, twigs, grass, flint, cobbles), each gathered N times, until N lie in the colony, or forever; wood and berries from fully grown plants only (option, on by default); plant stocks taken before fruit and felling on the same tile
 - [ ] Dirt and knapping debris: needs a dirt layer, and injuries (M6) for the sharp debris
-- [ ] Bills: worker level filter (minimum/maximum knowledge level), ingredient search radius, pausing a bill; "until N in stock" counting only stored items, once hauling keeps up
+- [x] Bills: worker level filter (minimum/maximum level in the recipe's knowledge, −/+ by 5, Shift by 25; the inspector warns when nobody fits)
+- [ ] Bills: ingredient search radius, pausing a bill; "until N in stock" counting only stored items, once hauling keeps up
 - [ ] Workstations and blueprints on plants: clear the plant first (today a station may be placed on a bush or grass)
 - [x] Zone editing: a rectangle over zones of the same kind merges them (the selected one, else the oldest, keeps its settings); removal tools in the build menu take tiles out of zones (Shift+drag still works)
 - [x] Zones of different kinds never overlap: a gathering zone drawn over a stockpile (or the other way round) leaves its tiles out

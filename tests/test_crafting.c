@@ -435,6 +435,51 @@ static void test_missing_tools_and_inputs_are_reported(void)
     game_shutdown(&game);
 }
 
+static void test_bill_worker_levels(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *novice = spawn_worker(&game, 10, 10);
+    Colonist *master = spawn_worker(&game, 10, 14);
+    REQUIRE(novice != NULL && master != NULL);
+    colonist_set_knowledge_level(novice, KNOWLEDGE_STONE_KNAPPING, 60.0);
+    colonist_set_knowledge_level(master, KNOWLEDGE_STONE_KNAPPING, 90.0);
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 12);
+    items_add(&game.items, 18, 12, stones(ITEM_FLINT, 4, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 13, stones(ITEM_COBBLE, 2, ITEM_QUALITY_FINE));
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
+    REQUIRE(bill >= 0);
+    workstation_set_bill_mode(&game.workstations, index, bill, BILL_FOREVER);
+    const Bill *flakes = &workstation_get(&game.workstations, index)->bills[bill];
+
+    /* Nobody in the range: the bill waits. */
+    workstation_set_bill_min_level(&game.workstations, index, bill, 95);
+    CHECK(game_recipe_known(&game, RECIPE_FLAKES));
+    CHECK(!game_bill_has_worker(&game, flakes));
+    run_ticks(&game, 1500);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 0);
+
+    /* Masters only: the novice leaves it to the master. */
+    workstation_set_bill_min_level(&game.workstations, index, bill, 80);
+    CHECK(game_bill_has_worker(&game, flakes));
+    run_ticks(&game, 3000);
+    CHECK(game.items.totals[ITEM_FLAKE] > 0);
+    CHECK(colonist_knowledge_level(master, KNOWLEDGE_STONE_KNAPPING) > 90.0);
+    CHECK(colonist_knowledge_level(novice, KNOWLEDGE_STONE_KNAPPING) == 60.0);
+
+    /* Beginners only: the master stops (once the craft under way is done). */
+    workstation_set_bill_min_level(&game.workstations, index, bill, BILL_LEVEL_MIN);
+    workstation_set_bill_max_level(&game.workstations, index, bill, 70);
+    items_add(&game.items, 18, 14, stones(ITEM_FLINT, 4, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 15, stones(ITEM_COBBLE, 1, ITEM_QUALITY_FINE));
+    run_ticks(&game, 600);
+    double master_level = colonist_knowledge_level(master, KNOWLEDGE_STONE_KNAPPING);
+    run_ticks(&game, 3000);
+    CHECK(colonist_knowledge_level(master, KNOWLEDGE_STONE_KNAPPING) == master_level);
+    CHECK(colonist_knowledge_level(novice, KNOWLEDGE_STONE_KNAPPING) > 60.0);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_carried_tools);
@@ -452,5 +497,6 @@ int main(void)
     RUN_TEST(test_removing_a_station_drops_its_input);
     RUN_TEST(test_removing_a_colonist_drops_its_tools);
     RUN_TEST(test_missing_tools_and_inputs_are_reported);
+    RUN_TEST(test_bill_worker_levels);
     return test_summary();
 }

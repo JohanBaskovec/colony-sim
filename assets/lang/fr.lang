@@ -280,12 +280,14 @@ station.add_bill = Ajouter une commande :
 station.warning.unknown_recipe = Personne ne connaît assez bien cette recette
 station.warning.tool = Outil manquant : {0}
 station.warning.no_input = Aucun matériau adapté dans la colonie
+station.warning.no_worker_level = Personne ne connaît cette recette à un niveau compris dans cet intervalle
 bill.mode.do_times.one = Faire {0} fois
 bill.mode.do_times.other = Faire {0} fois
 bill.mode.until_stock = Jusqu’à {0} dans la colonie
 bill.mode.forever = Sans fin
 bill.progress.done = Réalisations : {0}
 bill.progress.in_colony = {0} dans la colonie
+bill.levels = Artisans de niveau {0} à {1}
 
 # Unités
 unit.kg = {0} kg

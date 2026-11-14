@@ -334,6 +334,7 @@ station.warning.unknown_recipe = Nobody knows this recipe well enough
 # {0} = tool (or "tool or tool", see recipe.either)
 station.warning.tool = Missing tool: {0}
 station.warning.no_input = No suitable material lying in the colony
+station.warning.no_worker_level = Nobody who knows this recipe has a level in this range
 # Bill repeat modes (click to change). {0} = target
 bill.mode.do_times.one = Do {0} time
 bill.mode.do_times.other = Do {0} times
@@ -343,6 +344,10 @@ bill.mode.forever = Forever
 bill.progress.done = Completed: {0}
 # {0} = products lying in the colony
 bill.progress.in_colony = {0} in the colony
+# Range of worker levels in the recipe's knowledge, between -/+ buttons that
+# change the lowest level (before) and the highest one (after).
+# {0} = lowest level, {1} = highest level
+bill.levels = Worker level {0} to {1}
 
 # Units. {0} = number
 unit.kg = {0} kg

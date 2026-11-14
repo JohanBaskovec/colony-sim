@@ -6,8 +6,9 @@
  * builder brings its materials and does the construction work. A station
  * made of nothing (crafting spot) is ready as soon as it is placed. Once built,
  * it carries a list of bills: a recipe (core/recipe.h), a repeat mode (do N
- * times, until N in stock, forever) and the input types allowed. Settlers
- * take the first bill that wants doing. A craft in progress keeps its input
+ * times, until N in stock, forever), the input types allowed and the range of
+ * worker levels in the recipe's knowledge. Settlers take the first bill that
+ * wants doing. A craft in progress keeps its input
  * and its work on the station, so that interrupted work resumes.
  * Design: docs/KNOWLEDGE.md §2.5, §6.3, §8.2.
  */
@@ -56,12 +57,21 @@ typedef enum BillMode {
 #define BILL_TARGET_MAX 999
 #define BILL_TARGET_DEFAULT 1
 
+/* Worker levels a bill accepts by default: everyone who knows the recipe. */
+#define BILL_LEVEL_MIN ((int)KNOWLEDGE_LEVEL_MIN)
+#define BILL_LEVEL_MAX ((int)KNOWLEDGE_LEVEL_MAX)
+
 typedef struct Bill {
     uint8_t recipe; /* RecipeType */
     uint8_t mode;   /* BillMode */
     uint16_t target;
     uint16_t done; /* Crafts completed (counted by BILL_DO_TIMES). */
     ItemTypeMask inputs; /* Input types allowed, among the recipe's. */
+    /* Settlers whose level in the recipe's knowledge lies in this inclusive
+     * range may take the bill (beginners for cheap things, masters for the
+     * best ones). Has no effect on recipes that need no knowledge. */
+    uint8_t min_level;
+    uint8_t max_level;
 } Bill;
 
 #define WORKSTATION_MAX 64
@@ -157,6 +167,14 @@ bool workstation_set_bill_target(Workstations *workstations, int index, int bill
 /* Allows or forbids one of the recipe's input types. */
 bool workstation_set_bill_input(Workstations *workstations, int index, int bill, ItemType type,
                                 bool allowed);
+/* Worker level range: each bound is clamped between BILL_LEVEL_MIN, the
+ * other bound and BILL_LEVEL_MAX. */
+bool workstation_set_bill_min_level(Workstations *workstations, int index, int bill, int level);
+bool workstation_set_bill_max_level(Workstations *workstations, int index, int bill, int level);
+
+/* Whether a settler at `level` in the recipe's knowledge may take the bill
+ * (always true for recipes that need no knowledge). */
+bool bill_accepts_level(const Bill *bill, double level);
 
 /* Whether a bill still wants doing, given how many of its product lie in the
  * colony, stored or not (only used by BILL_UNTIL_STOCK). */
