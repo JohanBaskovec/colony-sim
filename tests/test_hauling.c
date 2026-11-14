@@ -22,6 +22,7 @@ static bool init_flat_game(Game *game)
         map->plants[i].type = PLANT_NONE;
         map->plants[i].growth = 0.0f;
     }
+    map_topology_changed(map); /* The layers were written directly. */
     game->clock.tick = 12 * TICKS_PER_HOUR; /* Noon. */
     return true;
 }

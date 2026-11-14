@@ -83,6 +83,53 @@ static void test_table_full(void)
     CHECK_EQ_INT(r.count, 0);
 }
 
+/* Many reservations made and released in a mixed order: every lookup still
+ * agrees with a plain scan of the entries. */
+static void test_lookups_survive_churn(void)
+{
+    Reservations r;
+    reservations_init(&r);
+    uint32_t state = 12345;
+    for (int round = 0; round < 2000; round++) {
+        state = state * 1664525u + 1013904223u;
+        ReservationKind kind = (ReservationKind)((state >> 8) % RESERVATION_KIND_COUNT);
+        TilePos tile = {(int16_t)((state >> 12) % 24), (int16_t)((state >> 20) % 24)};
+        uint8_t owner = (uint8_t)(1 + (state >> 28) % 12);
+        if (round % 7 == 3) {
+            reservations_release_all(&r, owner);
+        } else if (round % 11 == 5) {
+            reservations_release_kind(&r, kind, owner);
+        } else {
+            reservations_add(&r, kind, tile, owner);
+        }
+
+        uint8_t expected = RESERVATION_NO_OWNER;
+        int by_kind[RESERVATION_KIND_COUNT] = {0};
+        for (int i = 0; i < r.count; i++) {
+            by_kind[r.entries[i].kind]++;
+            if (r.entries[i].kind == kind && r.entries[i].tile.x == tile.x &&
+                r.entries[i].tile.y == tile.y) {
+                expected = r.entries[i].owner;
+            }
+        }
+        if (reservations_owner(&r, kind, tile) != expected ||
+            by_kind[kind] != r.count_by_kind[kind]) {
+            CHECK(false);
+            return;
+        }
+        /* Every entry can be found again. */
+        for (int i = 0; i < r.count; i++) {
+            if (reservations_owner(&r, (ReservationKind)r.entries[i].kind, r.entries[i].tile) !=
+                r.entries[i].owner) {
+                CHECK(false);
+                return;
+            }
+        }
+    }
+    CHECK(r.count > 0);
+    CHECK(r.releases > 0);
+}
+
 static void test_hash_depends_on_content(void)
 {
     Reservations a, b;
@@ -102,6 +149,7 @@ int main(void)
     RUN_TEST(test_release_all);
     RUN_TEST(test_release_kind);
     RUN_TEST(test_table_full);
+    RUN_TEST(test_lookups_survive_churn);
     RUN_TEST(test_hash_depends_on_content);
     return test_summary();
 }

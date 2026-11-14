@@ -76,6 +76,9 @@ int game_clock_consume(GameClock *clock, double real_seconds);
 
 GameDate game_date_from_tick(uint64_t tick);
 
+/* Hour of the day (0-23) only: cheaper than the whole date. */
+int game_hour_from_tick(uint64_t tick);
+
 /* Light level for the given tick: GAME_DAYLIGHT_MIN at night, 1.0 at day. */
 float game_daylight(uint64_t tick);
 

@@ -81,17 +81,57 @@ void map_free(Map *map)
     memset(map, 0, sizeof(*map));
 }
 
-float map_move_cost(const Map *map, int x, int y)
+static void log_topology_change(Map *map, int x, int y, bool opened)
 {
-    if (!map_in_bounds(map, x, y)) {
-        return 0.0f;
+    map->topology_revision++;
+    map->topology_log[map->topology_revision % MAP_TOPOLOGY_LOG_SIZE] =
+        (MapTopologyChange){(int16_t)x, (int16_t)y, opened};
+}
+
+void map_set_terrain(Map *map, int x, int y, Terrain terrain)
+{
+    if (!map_in_bounds(map, x, y) || (unsigned)terrain >= TERRAIN_COUNT) {
+        return;
     }
     size_t index = map_index(map, x, y);
+    if (map->terrain[index] != terrain) {
+        map->terrain[index] = (uint8_t)terrain;
+        /* May also turn neighbors into (or out of) drinking spots. */
+        log_topology_change(map, x, y, false);
+    }
+}
+
+void map_set_rock(Map *map, int x, int y, RockType rock)
+{
+    if (!map_in_bounds(map, x, y) || (unsigned)rock >= ROCK_COUNT) {
+        return;
+    }
+    size_t index = map_index(map, x, y);
+    bool was_passable = map_move_cost_at(map, index) > 0.0f;
+    map->rock[index] = (uint8_t)rock;
+    bool is_passable = map_move_cost_at(map, index) > 0.0f;
+    if (was_passable != is_passable) {
+        log_topology_change(map, x, y, is_passable);
+    }
+}
+
+void map_topology_changed(Map *map)
+{
+    log_topology_change(map, 0, 0, false);
+}
+
+float map_move_cost_at(const Map *map, size_t index)
+{
     if (map->rock[index] != ROCK_NONE) {
         return 0.0f;
     }
     float cost = TERRAIN_DEFS[map->terrain[index]].move_cost;
     return cost * PLANT_DEFS[map->plants[index].type].move_cost;
+}
+
+float map_move_cost(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) ? map_move_cost_at(map, map_index(map, x, y)) : 0.0f;
 }
 
 bool map_is_passable(const Map *map, int x, int y)

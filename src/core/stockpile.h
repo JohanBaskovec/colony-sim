@@ -29,6 +29,9 @@ typedef struct Stockpile {
     ItemTypeMask allowed;
     int priority;
     int cell_count;
+    /* Bounding box of the zone's tiles (inclusive), kept tight: lets searches
+     * visit the zone without scanning the whole map. */
+    int min_x, min_y, max_x, max_y;
 } Stockpile;
 
 typedef struct Stockpiles {
@@ -36,6 +39,7 @@ typedef struct Stockpiles {
     int height;
     uint8_t *zone; /* Stockpile index + 1 per tile, 0 when outside any stockpile. */
     Stockpile list[STOCKPILE_MAX];
+    int used_count; /* Stockpiles in use. */
     int next_number;
     /* Incremented whenever zones or their rules change (tiles added or
      * removed, filter, priority): haulers look again. */

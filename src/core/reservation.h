@@ -17,6 +17,9 @@
 
 #define RESERVATION_MAX 256
 #define RESERVATION_NO_OWNER 0
+/* Slots of the lookup table: a power of two, at least 4 x RESERVATION_MAX so
+ * that probes stay short. */
+#define RESERVATION_INDEX_SIZE 1024
 
 typedef enum ReservationKind {
     RESERVATION_WORK, /* A designated tile being worked on. */
@@ -33,11 +36,15 @@ typedef struct Reservation {
 } Reservation;
 
 typedef struct Reservations {
-    Reservation entries[RESERVATION_MAX];
+    Reservation entries[RESERVATION_MAX]; /* In the order they were made. */
     int count;
     int count_by_kind[RESERVATION_KIND_COUNT];
     /* Incremented on every release: something may have become available. */
     uint32_t releases;
+    /* Hash table from (kind, tile) to entry index + 1 (0 = empty slot, linear
+     * probing): lookups are done every tick by every working settler. Derived
+     * from `entries`, not part of the hash. */
+    uint16_t index[RESERVATION_INDEX_SIZE];
 } Reservations;
 
 void reservations_init(Reservations *reservations);

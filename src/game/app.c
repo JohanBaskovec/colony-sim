@@ -187,6 +187,7 @@ void app_shutdown(App *app)
         game_shutdown(&app->game);
     }
     text_renderer_destroy(app->text);
+    render_shutdown();
     if (app->renderer != NULL) {
         SDL_DestroyRenderer(app->renderer);
     }
@@ -243,7 +244,10 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     /* Not Z: the Z key is a movement key on AZERTY keyboards. */
     case SDLK_P: toggle_tool(app, APP_TOOL_STOCKPILE, DESIGNATION_NONE); break;
     case SDLK_T: app->show_work_panel = !app->show_work_panel; break;
-    case SDLK_F3: app->show_debug = !app->show_debug; break;
+    case SDLK_F3:
+        app->show_debug = !app->show_debug;
+        app->debug_tree_count = map_count_plants(&app->game.map, PLANT_TREE);
+        break;
     case SDLK_L:
         localization_cycle(&app->localization);
         update_window_title(app);
@@ -477,6 +481,10 @@ static void update_fps(App *app, double dt)
     app->fps_elapsed += dt;
     app->fps_frames++;
     if (app->fps_elapsed >= 0.5) {
+        if (app->show_debug) {
+            /* Counted here rather than every frame: it scans the whole map. */
+            app->debug_tree_count = map_count_plants(&app->game.map, PLANT_TREE);
+        }
         app->fps = (float)(app->fps_frames / app->fps_elapsed);
         app->fps_elapsed = 0.0;
         app->fps_frames = 0;

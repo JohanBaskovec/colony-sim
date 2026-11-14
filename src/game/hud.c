@@ -209,7 +209,7 @@ static void build_debug_panel(App *app, Panel *panel)
     tr_decimal(value, sizeof(value), app->camera.zoom, 1);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.debug.zoom"), value);
 
-    size_t trees = map_count_plants(&app->game.map, PLANT_TREE);
+    size_t trees = app->debug_tree_count;
     tr_integer(value, sizeof(value), (long long)trees);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.debug.trees", (long long)trees),
               value);

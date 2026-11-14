@@ -14,6 +14,7 @@
 #include "core/pathfinding.h"
 #include "core/pool.h"
 #include "core/reservation.h"
+#include "core/region.h"
 #include "core/rng.h"
 #include "core/stockpile.h"
 #include "core/worldgen.h"
@@ -21,7 +22,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Plants are updated once per in-game hour. */
+/* Each plant grows once per interval; the map is covered slice by slice, a
+ * little every tick. */
 #define GAME_PLANT_UPDATE_INTERVAL TICKS_PER_HOUR
 
 #define GAME_DEFAULT_COLONIST_COUNT 3
@@ -44,6 +46,9 @@ typedef struct Game {
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */
     Pathfinder pathfinder;
+    /* Connectivity regions of the map: a cache, refreshed at the start of
+     * each tick, not part of game_hash(). */
+    Regions regions;
     Pool colonist_pool;
     Colonist colonists[COLONIST_MAX]; /* Indexed by EntityId.index. */
 } Game;

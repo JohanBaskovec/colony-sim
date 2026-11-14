@@ -62,6 +62,7 @@ static void test_passability_and_move_cost(void)
 
     map.terrain[map_index(&map, 5, 5)] = TERRAIN_SHALLOW_WATER;
     CHECK(map_move_cost(&map, 5, 5) > 1.0f);
+    CHECK_NEAR(map_move_cost_at(&map, map_index(&map, 4, 4)), map_move_cost(&map, 4, 4), 1e-6);
     map_free(&map);
 }
 

@@ -82,6 +82,78 @@ static void test_extend_and_remove(void)
     free_world(&map, &s);
 }
 
+/* The bounding box contains exactly the rows and columns that hold tiles. */
+static bool bounds_are_tight(const Stockpiles *s, int index)
+{
+    const Stockpile *stockpile = stockpile_get(s, index);
+    if (stockpile == NULL) {
+        return false;
+    }
+    int min_x = s->width, min_y = s->height, max_x = -1, max_y = -1, cells = 0;
+    for (int y = 0; y < s->height; y++) {
+        for (int x = 0; x < s->width; x++) {
+            if (stockpile_at(s, x, y) == index) {
+                min_x = x < min_x ? x : min_x;
+                max_x = x > max_x ? x : max_x;
+                min_y = y < min_y ? y : min_y;
+                max_y = y > max_y ? y : max_y;
+                cells++;
+            }
+        }
+    }
+    return cells == stockpile->cell_count && stockpile->min_x == min_x &&
+           stockpile->max_x == max_x && stockpile->min_y == min_y && stockpile->max_y == max_y;
+}
+
+static void test_bounds_follow_the_tiles(void)
+{
+    Map map;
+    Stockpiles s;
+    REQUIRE(init_world(&map, &s));
+    CHECK_EQ_INT(s.used_count, 0);
+
+    /* The water column (x = 0) is not covered: the box starts at x = 1. */
+    int a = stockpile_create(&s, &map, 0, 2, 4, 3);
+    REQUIRE(a != STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_get(&s, a)->min_x, 1);
+    CHECK_EQ_INT(stockpile_get(&s, a)->max_x, 4);
+    CHECK(bounds_are_tight(&s, a));
+    CHECK_EQ_INT(s.used_count, 1);
+
+    /* A disjoint extension grows the box; another zone in between is unaffected. */
+    int b = stockpile_create(&s, &map, 7, 2, 8, 3);
+    REQUIRE(b != STOCKPILE_NONE);
+    stockpile_extend(&s, &map, a, 10, 8, 12, 9);
+    CHECK(bounds_are_tight(&s, a));
+    CHECK(bounds_are_tight(&s, b));
+    CHECK_EQ_INT(stockpile_get(&s, a)->max_x, 12);
+    CHECK_EQ_INT(stockpile_get(&s, a)->max_y, 9);
+    CHECK_EQ_INT(s.used_count, 2);
+
+    /* Removing tiles shrinks it again. */
+    stockpiles_remove_rect(&s, 9, 7, 15, 15);
+    CHECK(bounds_are_tight(&s, a));
+    CHECK_EQ_INT(stockpile_get(&s, a)->max_x, 4);
+    stockpiles_remove_rect(&s, 1, 2, 2, 2);
+    CHECK(bounds_are_tight(&s, a));
+
+    /* Zones emptied by a removal or deleted no longer count. */
+    stockpiles_remove_rect(&s, 0, 0, 5, 5);
+    CHECK(stockpile_get(&s, a) == NULL);
+    CHECK_EQ_INT(s.used_count, 1);
+    stockpile_delete(&s, b);
+    CHECK_EQ_INT(s.used_count, 0);
+    CHECK_EQ_INT(stockpile_at(&s, 7, 2), STOCKPILE_NONE);
+    stockpile_delete(&s, b); /* Twice: no effect. */
+    CHECK_EQ_INT(s.used_count, 0);
+
+    /* A reused slot starts from a fresh box. */
+    int c = stockpile_create(&s, &map, 13, 13, 14, 14);
+    REQUIRE(c != STOCKPILE_NONE);
+    CHECK(bounds_are_tight(&s, c));
+    free_world(&map, &s);
+}
+
 static void test_delete(void)
 {
     Map map;
@@ -154,6 +226,7 @@ int main(void)
 {
     RUN_TEST(test_create_covers_valid_tiles_only);
     RUN_TEST(test_extend_and_remove);
+    RUN_TEST(test_bounds_follow_the_tiles);
     RUN_TEST(test_delete);
     RUN_TEST(test_filter_and_priority);
     RUN_TEST(test_list_full);

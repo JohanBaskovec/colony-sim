@@ -258,6 +258,12 @@ static bool is_drinking_spot(const Map *map, int x, int y, void *userdata)
     return map_is_drinking_spot(map, x, y);
 }
 
+/* Region the colonist stands in (REGION_NONE when unknown). */
+static uint32_t current_region(const Colonist *colonist, const ColonistContext *context)
+{
+    return regions_at(context->regions, context->map, colonist->x, colonist->y);
+}
+
 /* Walks to the nearest food (NEED_FOOD) or drinking spot (NEED_WATER). */
 static bool try_satisfy(Colonist *colonist, const ColonistContext *context, NeedType need)
 {
@@ -268,7 +274,12 @@ static bool try_satisfy(Colonist *colonist, const ColonistContext *context, Need
     }
     TilePos found;
     FoodSearch food = {context->items, context->reservations, context->worker_id};
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    /* No water anywhere the colonist can walk to: the search would explore
+     * everything within its cost limit for nothing. */
+    bool hopeless = drink && !regions_has_drinking_spot(context->regions, context->map,
+                                                        current_region(colonist, context));
+    if (hopeless ||
+        !pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
                                  drink ? is_drinking_spot : is_free_food, &food,
                                  drink ? COLONIST_WATER_SEARCH_MAX_COST
                                        : COLONIST_FOOD_SEARCH_MAX_COST,
@@ -355,6 +366,43 @@ static bool is_work_spot(const Map *map, int x, int y, void *userdata)
     return map_is_passable(map, x, y) && find_adjacent_job(userdata, x, y, &unused);
 }
 
+/*
+ * Whether some open job has a tile to stand on in `region`. False only when
+ * it is certain that none has (an unknown region gives true). Scans the
+ * designation layer: far cheaper than a path search that fails, but not
+ * meant for every tick.
+ */
+static bool open_job_reachable(const WorkSearch *search, const ColonistContext *context,
+                               uint32_t region)
+{
+    const Designations *designations = search->designations;
+    const Regions *regions = context->regions;
+    const int width = designations->width, height = designations->height;
+    if (region == REGION_NONE || !regions_current(regions, context->map) ||
+        regions->width != width || regions->height != height) {
+        return true;
+    }
+    int remaining = designations->count;
+    for (int y = 0; y < height && remaining > 0; y++) {
+        const uint8_t *types = &designations->type[(size_t)y * (size_t)width];
+        const uint32_t *ids = &regions->id[(size_t)y * (size_t)width];
+        for (int x = 0; x < width; x++) {
+            if (types[x] == DESIGNATION_NONE) {
+                continue;
+            }
+            remaining--; /* The scan stops once every order has been seen. */
+            bool next_to_region =
+                (x > 0 && ids[x - 1] == region) || (x + 1 < width && ids[x + 1] == region) ||
+                (y > 0 && ids[x - width] == region) ||
+                (y + 1 < height && ids[x + width] == region);
+            if (next_to_region && is_open_job(search, x, y)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static uint32_t work_stamp(const ColonistContext *context)
 {
     return context->designations->revision + context->reservations->releases;
@@ -382,6 +430,12 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
         return false;
     }
     WorkSearch search = {designations, context->reservations, mask, context->worker_id};
+    /* First make sure some open job can be reached at all: with orders deep
+     * inside rock, across water, or all taken by others, the search would
+     * explore the whole area for nothing. */
+    if (!open_job_reachable(&search, context, current_region(colonist, context))) {
+        return false;
+    }
     TilePos spot, target;
     if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
                                  is_work_spot, &search, COLONIST_WORK_SEARCH_MAX_COST,
@@ -593,8 +647,9 @@ static void start_wandering(Colonist *colonist, const ColonistContext *context)
         int dx = rng_range_i32(context->rng, -radius, radius);
         int dy = rng_range_i32(context->rng, -radius, radius);
         TilePos goal = {(int16_t)(colonist->x + dx), (int16_t)(colonist->y + dy)};
-        if ((dx == 0 && dy == 0) || !map_is_passable(context->map, goal.x, goal.y)) {
-            continue;
+        if ((dx == 0 && dy == 0) || !map_is_passable(context->map, goal.x, goal.y) ||
+            !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
+            continue; /* Blocked, or on the other side of a wall or of water. */
         }
         if (pathfinder_find(context->pathfinder, context->map, current_tile(colonist), goal,
                             (float)radius * 3.0f, &colonist->path)) {
@@ -605,9 +660,9 @@ static void start_wandering(Colonist *colonist, const ColonistContext *context)
     set_idle(colonist, context, random_idle_ticks(context->rng));
 }
 
-static bool is_night(uint64_t tick)
+bool colonist_is_night(uint64_t tick)
 {
-    int hour = game_date_from_tick(tick).hour;
+    int hour = game_hour_from_tick(tick);
     return hour >= 22 || hour < 6;
 }
 
@@ -671,7 +726,7 @@ static void decide(Colonist *colonist, const ColonistContext *context)
     if (try_satisfy_urgent(colonist, context, NEED_LOW_THRESHOLD)) {
         return;
     }
-    bool night_sleep = is_night(context->tick) && rest < COLONIST_NIGHT_SLEEP_REST;
+    bool night_sleep = context->night && rest < COLONIST_NIGHT_SLEEP_REST;
     if (rest < NEED_LOW_THRESHOLD || night_sleep) {
         if (!try_satisfy_urgent(colonist, context, COLONIST_BEDTIME_NEED)) {
             start_sleeping(colonist, context);

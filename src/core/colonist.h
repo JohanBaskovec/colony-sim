@@ -15,6 +15,7 @@
 #include "core/game_clock.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
+#include "core/region.h"
 #include "core/reservation.h"
 #include "core/rng.h"
 #include "core/stockpile.h"
@@ -142,13 +143,19 @@ typedef struct ColonistContext {
     Stockpiles *stockpiles;
     Reservations *reservations;
     Pathfinder *pathfinder;
+    /* Connectivity regions (may be out of date, never wrong: see core/region.h). */
+    const Regions *regions;
     Rng *rng;
     uint64_t tick;
+    bool night; /* colonist_is_night(tick), computed once per tick for everyone. */
     uint8_t worker_id; /* Reservation owner for this colonist (slot + 1), never 0. */
 } ColonistContext;
 
 void colonist_init(Colonist *colonist, const char *name, int age, int x, int y);
 void colonist_free(Colonist *colonist);
+
+/* Whether it is time to be in bed (22:00 to 06:00). */
+bool colonist_is_night(uint64_t tick);
 
 void colonist_tick(Colonist *colonist, const ColonistContext *context);
 

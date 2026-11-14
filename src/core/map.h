@@ -83,12 +83,30 @@ typedef struct Plant {
     float growth; /* 0 (seedling) .. 1 (mature) */
 } Plant;
 
+/* How many recent topology changes the map remembers (see Map.topology_log). */
+#define MAP_TOPOLOGY_LOG_SIZE 16
+
+/* One change of where one can walk. */
+typedef struct MapTopologyChange {
+    int16_t x, y;
+    /* True when all that happened is that this tile became passable (a rock
+     * wall was dug out): the common change, which caches can apply without
+     * starting over. False: anything else, anywhere. */
+    bool opened;
+} MapTopologyChange;
+
 typedef struct Map {
     int width;
     int height;
     uint8_t *terrain; /* Terrain per tile. */
     uint8_t *rock; /* RockType per tile; non-zero means a solid rock wall. */
     Plant *plants;
+    /* Incremented whenever where one can walk, or where water is, changes
+     * (plants never block). Data derived from it (core/region.h) compares it
+     * to know when it is out of date. Not part of map_hash(). */
+    uint32_t topology_revision;
+    /* The change that led to revision r is at index r % MAP_TOPOLOGY_LOG_SIZE. */
+    MapTopologyChange topology_log[MAP_TOPOLOGY_LOG_SIZE];
 } Map;
 
 const TerrainDef *terrain_def(Terrain terrain);
@@ -114,11 +132,25 @@ static inline size_t map_tile_count(const Map *map)
     return (size_t)map->width * (size_t)map->height;
 }
 
+/*
+ * Terrain and rock must be changed through these once the map is in use (or
+ * map_topology_changed() must be called after writing the layers directly),
+ * so that topology_revision follows. Out-of-bounds tiles are ignored. A rock
+ * change that leaves the tile as passable as before (granite to sandstone)
+ * is not a topology change.
+ */
+void map_set_terrain(Map *map, int x, int y, Terrain terrain);
+void map_set_rock(Map *map, int x, int y, RockType rock);
+void map_topology_changed(Map *map);
+
 /* False when out of bounds, on impassable terrain or on a rock wall. */
 bool map_is_passable(const Map *map, int x, int y);
 
 /* Movement cost multiplier of a tile, or 0 when impassable. */
 float map_move_cost(const Map *map, int x, int y);
+
+/* Same for a tile index known to be in bounds (hot loops: pathfinding). */
+float map_move_cost_at(const Map *map, size_t index);
 
 /* Content hash of all layers; equal maps give equal hashes. */
 uint64_t map_hash(const Map *map);

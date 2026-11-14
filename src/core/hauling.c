@@ -24,19 +24,34 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
     for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
         out->levels[type] = 0;
     }
-    for (int y = 0; y < stockpiles->height; y++) {
-        for (int x = 0; x < stockpiles->width; x++) {
-            const Stockpile *stockpile = stockpile_get(stockpiles, stockpile_at(stockpiles, x, y));
-            if (stockpile == NULL ||
-                (world->reservations->count_by_kind[RESERVATION_STORAGE] > 0 &&
-                 reservations_taken_by_other(world->reservations, RESERVATION_STORAGE,
-                                             (TilePos){(int16_t)x, (int16_t)y}, world->self))) {
-                continue; /* Someone is already bringing items there. */
-            }
-            for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-                if ((stockpile->allowed & ITEM_TYPE_BIT(type)) &&
-                    haul_storage_room(world->items, x, y, (ItemType)type) > 0) {
-                    out->levels[type] |= 1u << stockpile->priority;
+    bool any_reserved = world->reservations->count_by_kind[RESERVATION_STORAGE] > 0;
+    /* Only the tiles of each zone are visited (through its bounding box),
+     * never the whole map. */
+    for (int index = 0; index < STOCKPILE_MAX; index++) {
+        const Stockpile *stockpile = stockpile_get(stockpiles, index);
+        if (stockpile == NULL || stockpile->allowed == 0) {
+            continue;
+        }
+        for (int y = stockpile->min_y; y <= stockpile->max_y; y++) {
+            for (int x = stockpile->min_x; x <= stockpile->max_x; x++) {
+                if (stockpile_at(stockpiles, x, y) != index ||
+                    (any_reserved &&
+                     reservations_taken_by_other(world->reservations, RESERVATION_STORAGE,
+                                                 (TilePos){(int16_t)x, (int16_t)y},
+                                                 world->self))) {
+                    continue; /* Other zone, or someone is already bringing items there. */
+                }
+                ItemStack stack = items_get(world->items, x, y);
+                if (stack.type == ITEM_NONE) {
+                    /* An empty tile takes any allowed type. */
+                    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+                        if (stockpile->allowed & ITEM_TYPE_BIT(type)) {
+                            out->levels[type] |= 1u << stockpile->priority;
+                        }
+                    }
+                } else if ((stockpile->allowed & ITEM_TYPE_BIT(stack.type)) &&
+                           (int)stack.count < item_stack_limit((ItemType)stack.type)) {
+                    out->levels[stack.type] |= 1u << stockpile->priority;
                 }
             }
         }
@@ -54,6 +69,9 @@ static bool has_better_level(uint32_t levels, int current)
 
 bool haul_any_job_possible(const HaulWorld *world)
 {
+    if (world->stockpiles->used_count == 0) {
+        return false;
+    }
     StorageLevels storage;
     storage_levels(world, &storage);
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {

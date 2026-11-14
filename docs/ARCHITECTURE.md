@@ -13,7 +13,7 @@
 ┌──────────────▼───────────────────────────────────────────────┐
 │ src/core/  (static library colony_core, pure C17, no SDL)    │
 │                                                              │
-│  game ─► colonist ─► pathfinding ─► map                      │
+│  game ─► colonist ─► pathfinding, region ─► map              │
 │    │        ├─────► designation ─────► map, work             │
 │    │        ├─────► hauling ─► stockpile, item, reservation  │
 │    │        └─────► reservation, item                        │
@@ -51,6 +51,7 @@ simulation:
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `work`       | Work types (mining, woodcutting, gathering, hauling) and priority helpers    |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
+| `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
 | `map`        | Tile layers (terrain, rock, plants) and static definitions (`TerrainDef`...) |
@@ -94,9 +95,11 @@ every frame:
   cannot keep up, the game slows down instead of freezing.
 - Calendar: 2,500 ticks per hour, 24 hours per day, 15 days per season, 4
   seasons per year. The game starts on day 1 of spring, year 1, at 06:00.
-- Expensive systems run at intervals rather than every tick (plants grow once
-  per in-game hour). Future systems should do the same (e.g. needs every 60
-  ticks, temperature every 250 ticks) and spread work across ticks.
+- Expensive systems run at intervals rather than every tick, and spread their
+  work across ticks: each plant grows once per in-game hour, but a tick only
+  handles a slice of the map (`update_plants()`), so even a 1024 × 1024 map
+  never stalls. Future systems should do the same (e.g. needs every 60 ticks,
+  temperature every 250 ticks).
 
 ## World representation
 
@@ -107,6 +110,12 @@ The map stores **dense layers**, one array per layer indexed by
   (movement cost, fertility, buildable);
 - `rock[]`: natural rock walls (`RockType`, 0 = none), impassable;
 - `plants[]`: at most one plant per tile (`Plant`: type + growth).
+
+Terrain and rock decide where one can walk. Once the map is in use they are
+changed through `map_set_terrain()` / `map_set_rock()`, which bump
+`Map.topology_revision` and log the change, so that caches derived from
+passability (connectivity regions) know when they are out of date. Plants
+never block movement.
 
 Dense layers are cache-friendly, trivially serializable and hashable
 (`map_hash()`). Upcoming layers: floors, buildings/walls, zones, room IDs,
@@ -146,8 +155,10 @@ is the `WORK_HAULING` work type: at each priority level, designations come
 first, then hauling. `haul_find_job()` runs a Dijkstra search for the nearest
 such stack, then one search per priority level (best first) for the nearest
 storage tile from the stack. A per-type bit set of "priority levels with a
-free tile with room", computed once per search, makes both checks cheap and
-lets idle colonists skip the search entirely when nothing can be stored.
+free tile with room", computed once per search from the tiles of the zones
+(each zone keeps its bounding box: the map is never scanned), makes both
+checks cheap and lets idle colonists skip the search entirely when nothing
+can be stored.
 
 The hauler reserves the source stack (`RESERVATION_HAUL_SOURCE`) and the
 destination tile (`RESERVATION_STORAGE`), walks to the stack, picks up what
@@ -249,9 +260,11 @@ storage tile. Owners are colonist slot + 1.
   reservation releases) lets them look again as soon as work may have become
   available.
 
-The table is a small array scanned linearly: there are at most a few
-reservations per colonist. A per-tile index can replace it if hauling makes
-reservations much more numerous.
+The table is a small array kept in creation order (which is what gets
+hashed), with a hash index from (kind, tile) to the entry: every working
+colonist checks every tick that it still owns its job, so lookups must not
+scan the table. The index is rebuilt when reservations are released, which is
+rare next to lookups.
 
 ## Pathfinding
 
@@ -263,9 +276,44 @@ reservations much more numerous.
   free tile...), with a cost limit to bound the search.
 - A `Pathfinder` owns per-tile scratch arrays reused across searches (stamps
   instead of clearing), so searches do not allocate.
-- Benchmark: `bench/bench_pathfinding [size] [searches] [seed]`; about 0.8 ms
-  per cross-map search on a 200 × 200 map in Release. Unreachable goals
-  currently flood their whole area: connectivity regions are on the backlog.
+- Benchmark: `bench/bench_pathfinding [size] [searches] [seed]`; about 0.7 ms
+  per cross-map search on a 200 × 200 map in Release.
+
+### Connectivity regions
+
+A search for something that cannot be reached explores everything within its
+cost limit before giving up. `Regions` (`core/region.h`, owned by `Game`)
+avoids that: every passable tile gets the id of its region, two tiles being in
+the same region exactly when one can walk between them (flood fill over
+orthogonal neighbors; diagonal moves never connect more because corners
+cannot be cut). Each region also knows whether it contains a drinking spot.
+
+- Regions are a **cache**, not simulation state: they are not hashed, and
+  every use is an exact shortcut for a search that would fail anyway, so they
+  never change what the simulation does (the state hashes of the benchmark
+  scenarios are identical with and without them).
+- They are refreshed at the start of each tick when `Map.topology_revision`
+  changed. A dug-out tile (the common case) is added in place from the map's
+  change log; a change that joins or splits regions rebuilds everything.
+- Queries check the revision: if the map changed since the last refresh
+  (mining earlier in the same tick), they answer "maybe connected", never a
+  stale "no".
+- Uses today: wandering does not path to the other side of a wall; a thirsty
+  colonist does not search when its region has no water; before a work search,
+  a scan of the designation layer checks that some open job has a tile to
+  stand on in the colonist's region (orders deep inside rock, on another
+  island, or all reserved would otherwise cost a full exploration per idle
+  colonist).
+
+### Measuring
+
+`bench/bench_simulation [colonists] [days] [scenario] [size] [seed]` runs a
+colony without a window and prints the average and worst tick time and the
+final state hash. An optimization that is not supposed to change behavior
+must leave that hash unchanged. Reference (Release, 200 × 200, 64 colonists,
+10 in-game days): about 8 µs per tick left alone, 10 µs with every tree, rock
+and bush designated; long food searches when berries run out are the
+remaining spikes (1 to 4 ms).
 
 ## Randomness
 
@@ -286,6 +334,9 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 - SDL3 2D renderer (`SDL_Renderer`), VSync on, alpha blending enabled.
 - Only visible tiles are drawn (`camera_visible_tiles()`); tile edges are
   snapped to whole pixels to avoid seams.
+- Tiles, plants and item shapes are batched: they are accumulated as quads
+  and sent with a few `SDL_RenderGeometry()` calls instead of one fill per
+  rectangle (zoomed out, a 1280 × 720 window shows about 57,000 tiles).
 - Placeholder art: tiles are colored rectangles with a per-tile brightness
   variation. Replacing them with a texture atlas is a roadmap item.
 - Text: SDL3_ttf renderer text engine, with a cache keyed by string content;

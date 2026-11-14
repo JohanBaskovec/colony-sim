@@ -13,6 +13,7 @@ add_library(colony_core STATIC
     noise.c
     pathfinding.c
     pool.c
+    region.c
     reservation.c
     rng.c
     stockpile.c

@@ -112,8 +112,10 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .stockpiles = &game->stockpiles,
         .reservations = &game->reservations,
         .pathfinder = &game->pathfinder,
+        .regions = &game->regions,
         .rng = &game->rng,
         .tick = game->clock.tick,
+        .night = colonist_is_night(game->clock.tick),
         .worker_id = (uint8_t)(slot + 1),
     };
     return context;
@@ -234,6 +236,7 @@ bool game_init(Game *game, const NewGameParams *params)
         !items_init(&game->items, game->map.width, game->map.height) ||
         !stockpiles_init(&game->stockpiles, game->map.width, game->map.height) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
+        !regions_init(&game->regions, game->map.width, game->map.height) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
         game_shutdown(game);
         return false;
@@ -243,6 +246,7 @@ bool game_init(Game *game, const NewGameParams *params)
     game_clock_init(&game->clock);
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
     spawn_starting_colonists(game, params->colonist_count);
+    regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
     return true;
 }
 
@@ -253,6 +257,7 @@ void game_shutdown(Game *game)
     }
     pool_free(&game->colonist_pool);
     pathfinder_free(&game->pathfinder);
+    regions_free(&game->regions);
     designations_free(&game->designations);
     items_free(&game->items);
     stockpiles_free(&game->stockpiles);
@@ -262,13 +267,21 @@ void game_shutdown(Game *game)
 
 /* ---- Simulation ---------------------------------------------------------- */
 
+/*
+ * Every plant grows once per GAME_PLANT_UPDATE_INTERVAL ticks, but not all in
+ * the same tick: each tick handles the next slice of the map, so that a large
+ * map does not stall the simulation once per in-game hour.
+ */
 static void update_plants(Game *game)
 {
     const float growth_scale = (float)GAME_PLANT_UPDATE_INTERVAL / (float)TICKS_PER_DAY;
     Map *map = &game->map;
-    size_t count = map_tile_count(map);
+    uint64_t count = map_tile_count(map);
+    uint64_t phase = game->clock.tick % GAME_PLANT_UPDATE_INTERVAL;
+    size_t begin = (size_t)(phase * count / GAME_PLANT_UPDATE_INTERVAL);
+    size_t end = (size_t)((phase + 1) * count / GAME_PLANT_UPDATE_INTERVAL);
 
-    for (size_t i = 0; i < count; i++) {
+    for (size_t i = begin; i < end; i++) {
         Plant *plant = &map->plants[i];
         if (plant->type == PLANT_NONE || plant->growth >= 1.0f) {
             continue;
@@ -288,9 +301,10 @@ static void update_plants(Game *game)
 static void update_colonists(Game *game)
 {
     /* Fixed slot order keeps the simulation deterministic. */
+    ColonistContext context = colonist_context(game, 0); /* The same for everyone... */
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
-            ColonistContext context = colonist_context(game, slot);
+            context.worker_id = (uint8_t)(slot + 1); /* ...but for who is acting. */
             colonist_tick(&game->colonists[slot], &context);
         }
     }
@@ -299,9 +313,8 @@ static void update_colonists(Game *game)
 void game_tick(Game *game)
 {
     game->clock.tick++;
-    if (game->clock.tick % GAME_PLANT_UPDATE_INTERVAL == 0) {
-        update_plants(game);
-    }
+    regions_update(&game->regions, &game->map); /* Nothing to do unless the map changed. */
+    update_plants(game);
     update_colonists(game);
 }
 

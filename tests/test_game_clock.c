@@ -109,6 +109,12 @@ static void test_date_rollover(void)
     date = game_date_from_tick(TICKS_PER_YEAR * 2);
     CHECK_EQ_INT(date.year, 3);
     CHECK_EQ_INT(date.season, SEASON_SPRING);
+
+    /* The hour alone agrees with the full date. */
+    for (uint64_t tick = 0; tick < (uint64_t)TICKS_PER_DAY * 3; tick += 617) {
+        CHECK_EQ_INT(game_hour_from_tick(tick), game_date_from_tick(tick).hour);
+    }
+    CHECK_EQ_INT(game_hour_from_tick(TICKS_PER_YEAR * 5 + 13 * TICKS_PER_HOUR), 13);
 }
 
 static void test_daylight_cycle(void)

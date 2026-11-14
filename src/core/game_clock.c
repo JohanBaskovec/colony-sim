@@ -79,6 +79,11 @@ GameDate game_date_from_tick(uint64_t tick)
     return date;
 }
 
+int game_hour_from_tick(uint64_t tick)
+{
+    return (int)(tick % TICKS_PER_DAY / TICKS_PER_HOUR);
+}
+
 float game_daylight(uint64_t tick)
 {
     float hour = (float)(tick % TICKS_PER_DAY) / (float)TICKS_PER_HOUR;

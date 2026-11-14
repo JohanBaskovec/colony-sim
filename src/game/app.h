@@ -65,6 +65,7 @@ typedef struct App {
     int hover_x;
     int hover_y;
 
+    size_t debug_tree_count; /* Shown in the debug overlay, refreshed twice a second. */
     float fps;
     double fps_elapsed;
     int fps_frames;

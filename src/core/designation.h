@@ -70,6 +70,7 @@ int designations_set_rect(Designations *designations, const Map *map, int x0, in
 /* Designated tiles whose work type is in `mask`. */
 int designations_count_for_work(const Designations *designations, WorkTypeMask mask);
 
+
 /* Total work needed to complete the order on this tile (0 if none). */
 float designation_work_needed(const Designations *designations, const Map *map, int x, int y);
 

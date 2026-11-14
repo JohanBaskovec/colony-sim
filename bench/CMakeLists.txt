@@ -4,3 +4,7 @@
 add_executable(bench_pathfinding bench_pathfinding.c)
 target_link_libraries(bench_pathfinding PRIVATE colony_core)
 colony_configure_target(bench_pathfinding)
+
+add_executable(bench_simulation bench_simulation.c)
+target_link_libraries(bench_simulation PRIVATE colony_core)
+colony_configure_target(bench_simulation)

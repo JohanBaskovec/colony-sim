@@ -45,4 +45,7 @@ void render_selection_box(SDL_Renderer *renderer, float x0, float y0, float x1, 
 void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, int y,
                          SDL_Color color);
 
+/* Releases the buffers the renderer allocated on first use. */
+void render_shutdown(void);
+
 #endif /* COLONY_GAME_RENDER_H */

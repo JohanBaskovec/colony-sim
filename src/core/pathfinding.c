@@ -220,26 +220,44 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
             return current;
         }
 
+        /* Costs of the four orthogonal neighbors (0 when out of bounds or
+         * blocked), in DIRECTIONS order. They are computed once: they also
+         * decide which diagonal moves are allowed. */
+        float side[4];
+        for (int d = 0; d < 4; d++) {
+            int nx = x + DIRECTIONS[d][0];
+            int ny = y + DIRECTIONS[d][1];
+            side[d] = map_in_bounds(map, nx, ny)
+                          ? map_move_cost_at(map, (size_t)ny * width + (size_t)nx)
+                          : 0.0f;
+        }
+        const float base_cost = finder->cost_so_far[current];
+
         for (int d = 0; d < 8; d++) {
             int dx = DIRECTIONS[d][0];
             int dy = DIRECTIONS[d][1];
             int nx = x + dx;
             int ny = y + dy;
-            float step = map_move_cost(map, nx, ny); /* 0 when out of bounds or blocked. */
+            uint32_t next = (uint32_t)ny * width + (uint32_t)nx; /* Checked below if d >= 4. */
+            float step;
+            if (d < 4) {
+                step = side[d];
+            } else {
+                /* No corner cutting: both orthogonal neighbors must be passable
+                 * (which also means the diagonal one is in bounds). */
+                if (side[dx > 0 ? 0 : 1] <= 0.0f || side[dy > 0 ? 2 : 3] <= 0.0f ||
+                    finder->closed_stamp[next] == finder->stamp) {
+                    continue;
+                }
+                step = map_move_cost_at(map, next) * SQRT2;
+            }
             if (step <= 0.0f) {
                 continue;
             }
-            if (dx != 0 && dy != 0) {
-                if (!map_is_passable(map, x + dx, y) || !map_is_passable(map, x, y + dy)) {
-                    continue; /* No corner cutting. */
-                }
-                step *= SQRT2;
-            }
-            float cost = finder->cost_so_far[current] + step;
+            float cost = base_cost + step;
             if (cost > max_cost) {
                 continue;
             }
-            uint32_t next = (uint32_t)ny * width + (uint32_t)nx;
             if (finder->closed_stamp[next] == finder->stamp) {
                 continue;
             }

@@ -24,6 +24,7 @@ static bool init_flat_game(Game *game)
         map->plants[i].type = PLANT_NONE;
         map->plants[i].growth = 0.0f;
     }
+    map_topology_changed(map); /* The layers were written directly. */
     /* Noon: nobody wants to sleep because of the night. */
     game->clock.tick = 12 * TICKS_PER_HOUR;
     return true;
@@ -46,7 +47,7 @@ static void add_water_band(Map *map, int x0)
 {
     for (int y = 0; y < map->height; y++) {
         for (int x = x0; x < map->width; x++) {
-            map->terrain[map_index(map, x, y)] = TERRAIN_SHALLOW_WATER;
+            map_set_terrain(map, x, y, TERRAIN_SHALLOW_WATER);
         }
     }
 }
@@ -69,7 +70,7 @@ static void test_spawn_requires_passable_tile(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    game.map.terrain[map_index(&game.map, 3, 3)] = TERRAIN_DEEP_WATER;
+    map_set_terrain(&game.map, 3, 3, TERRAIN_DEEP_WATER);
     CHECK(entity_id_is_none(game_spawn_colonist(&game, 3, 3)));
     CHECK(entity_id_is_none(game_spawn_colonist(&game, -1, 3)));
 
@@ -250,7 +251,7 @@ static void set_rock_ring(Map *map, int cx, int cy, RockType rock)
     for (int dy = -1; dy <= 1; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
             if (dx != 0 || dy != 0) {
-                map->rock[map_index(map, cx + dx, cy + dy)] = (uint8_t)rock;
+                map_set_rock(map, cx + dx, cy + dy, rock);
             }
         }
     }
@@ -448,7 +449,7 @@ static void test_mining_opens_a_passage(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     for (int y = 0; y < game.map.height; y++) {
-        game.map.rock[map_index(&game.map, 25, y)] = ROCK_SANDSTONE;
+        map_set_rock(&game.map, 25, y, ROCK_SANDSTONE);
     }
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
@@ -613,7 +614,7 @@ static void test_disabled_work_type_is_never_done(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    game.map.rock[map_index(&game.map, 23, 20)] = ROCK_SANDSTONE;
+    map_set_rock(&game.map, 23, 20, ROCK_SANDSTONE);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_MINING] = WORK_PRIORITY_DISABLED;
@@ -660,7 +661,7 @@ static void test_enabling_work_type_is_noticed_right_away(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    game.map.rock[map_index(&game.map, 23, 20)] = ROCK_SANDSTONE;
+    map_set_rock(&game.map, 23, 20, ROCK_SANDSTONE);
     EntityId id = game_spawn_colonist(&game, 20, 20);
     Colonist *colonist = game_colonist(&game, id);
     REQUIRE(colonist != NULL);
@@ -668,8 +669,8 @@ static void test_enabling_work_type_is_noticed_right_away(void)
         colonist->needs[need] = 1.0f;
     }
     set_rock_ring(&game.map, 20, 20, ROCK_GRANITE); /* Stays put: decides every tick. */
-    game.map.rock[map_index(&game.map, 21, 20)] = ROCK_NONE;
-    game.map.rock[map_index(&game.map, 22, 20)] = ROCK_NONE;
+    map_set_rock(&game.map, 21, 20, ROCK_NONE);
+    map_set_rock(&game.map, 22, 20, ROCK_NONE);
     REQUIRE(game_set_work_priority(&game, id, WORK_MINING, WORK_PRIORITY_DISABLED));
     game_designate_rect(&game, 23, 20, 23, 20, DESIGNATION_MINE);
     run_ticks(&game, 200);
@@ -716,7 +717,7 @@ static void test_priority_beats_distance(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     add_tree(&game.map, 22, 20);
-    game.map.rock[map_index(&game.map, 32, 20)] = ROCK_SANDSTONE;
+    map_set_rock(&game.map, 32, 20, ROCK_SANDSTONE);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_MINING] = WORK_PRIORITY_HIGHEST;
@@ -836,7 +837,7 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
     for (int y = 4; y < 44; y += 3) {
         add_tree(&game.map, 10, y);
         add_tree(&game.map, 30, y);
-        game.map.rock[map_index(&game.map, 38, y)] = ROCK_SANDSTONE;
+        map_set_rock(&game.map, 38, y, ROCK_SANDSTONE);
         Plant *bush = &game.map.plants[map_index(&game.map, 20, y)];
         bush->type = PLANT_BUSH;
         bush->growth = 1.0f;
@@ -877,6 +878,32 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
         }
     }
     CHECK(stored_wood > 0); /* And hauled. */
+
+    /* The regions, updated in place as rock was dug out, still group tiles
+     * like regions built from scratch do. */
+    Regions fresh;
+    REQUIRE(regions_init(&fresh, game.map.width, game.map.height));
+    regions_update(&fresh, &game.map);
+    regions_update(&game.regions, &game.map);
+    bool same = true;
+    for (int y = 0; y < game.map.height && same; y++) {
+        for (int x = 0; x < game.map.width && same; x++) {
+            uint32_t a = regions_at(&game.regions, &game.map, x, y);
+            uint32_t b = regions_at(&fresh, &game.map, x, y);
+            same = (a == REGION_NONE) == (b == REGION_NONE);
+            if (x + 1 < game.map.width) {
+                same = same && (a == regions_at(&game.regions, &game.map, x + 1, y)) ==
+                                   (b == regions_at(&fresh, &game.map, x + 1, y));
+            }
+            if (y + 1 < game.map.height) {
+                same = same && (a == regions_at(&game.regions, &game.map, x, y + 1)) ==
+                                   (b == regions_at(&fresh, &game.map, x, y + 1));
+            }
+        }
+    }
+    CHECK(same);
+    CHECK(game.items.totals[ITEM_STONE] > 0 || stored_wood > 0);
+    regions_free(&fresh);
     game_shutdown(&game);
 }
 
@@ -951,6 +978,88 @@ static void test_carry_capacity(void)
     colonist_free(&colonist);
 }
 
+static void test_night_hours(void)
+{
+    CHECK(colonist_is_night(0));
+    CHECK(colonist_is_night(6 * TICKS_PER_HOUR - 1));
+    CHECK(!colonist_is_night(6 * TICKS_PER_HOUR));
+    CHECK(!colonist_is_night(22 * TICKS_PER_HOUR - 1));
+    CHECK(colonist_is_night(22 * TICKS_PER_HOUR));
+    CHECK(colonist_is_night((uint64_t)TICKS_PER_DAY * 7 + 23 * TICKS_PER_HOUR));
+}
+
+/* A colonist walled in on a map without water: the regions tell that neither
+ * water nor any wandering goal can be reached, so no path search runs at all. */
+static void test_no_search_when_region_has_no_water(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    set_rock_ring(&game.map, 20, 20, ROCK_GRANITE);
+    colonist->needs[NEED_WATER] = 0.2f;
+
+    uint32_t searches = game.pathfinder.stamp;
+    run_ticks(&game, 300);
+    CHECK_EQ_UINT(game.pathfinder.stamp, searches);
+    CHECK(colonist->task != TASK_DRINK);
+    CHECK(colonist->search_cooldown[SEARCH_WATER] > 0); /* Backs off as after a failed search. */
+    CHECK_EQ_INT(colonist->x, 20);
+
+    /* Water appears within reach: found at the next attempt. */
+    map_set_rock(&game.map, 21, 20, ROCK_NONE);
+    map_set_terrain(&game.map, 21, 20, TERRAIN_SHALLOW_WATER);
+    colonist->search_cooldown[SEARCH_WATER] = 0;
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_DRINK);
+    CHECK(game.pathfinder.stamp != searches);
+    game_shutdown(&game);
+}
+
+/* Orders that cannot be reached do not make idle colonists search. */
+static void test_no_search_when_orders_are_out_of_reach(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    set_rock_ring(&game.map, 20, 20, ROCK_GRANITE);
+    /* A block of rock elsewhere, its center designated: nothing to stand on next to it. */
+    for (int y = 30; y <= 34; y++) {
+        for (int x = 30; x <= 34; x++) {
+            map_set_rock(&game.map, x, y, ROCK_SANDSTONE);
+        }
+    }
+    CHECK_EQ_INT(game_designate_rect(&game, 32, 32, 32, 32, DESIGNATION_MINE), 1);
+    add_tree(&game.map, 40, 40); /* Reachable only from outside the ring. */
+    CHECK_EQ_INT(game_designate_rect(&game, 40, 40, 40, 40, DESIGNATION_CHOP), 1);
+
+    uint32_t searches = game.pathfinder.stamp;
+    run_ticks(&game, 300);
+    CHECK_EQ_UINT(game.pathfinder.stamp, searches);
+    CHECK(colonist->task != TASK_WORK);
+    CHECK_EQ_INT(game.reservations.count, 0);
+
+    /* An order on the ring itself can be worked on from inside. */
+    CHECK_EQ_INT(game_designate_rect(&game, 21, 20, 21, 20, DESIGNATION_MINE), 1);
+    for (int i = 0; i < 10 && colonist->task != TASK_WORK; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_EQ_INT(colonist->target.x, 21);
+
+    /* Once dug out, the way is open: the tree outside gets chopped too. */
+    run_ticks(&game, (int)rock_def(ROCK_GRANITE)->mine_work + 50);
+    CHECK(map_is_passable(&game.map, 21, 20));
+    CHECK(regions_connected(&game.regions, &game.map, (TilePos){20, 20}, (TilePos){40, 40}));
+    for (int i = 0; i < 200 && colonist->work_type != DESIGNATION_CHOP; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_EQ_INT(colonist->work_type, DESIGNATION_CHOP);
+    game_shutdown(&game);
+}
+
 static void test_translation_keys(void)
 {
     for (int task = 0; task < TASK_COUNT; task++) {
@@ -1005,6 +1114,9 @@ int main(void)
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);
     RUN_TEST(test_carry_capacity);
+    RUN_TEST(test_night_hours);
+    RUN_TEST(test_no_search_when_region_has_no_water);
+    RUN_TEST(test_no_search_when_orders_are_out_of_reach);
     RUN_TEST(test_translation_keys);
     return test_summary();
 }

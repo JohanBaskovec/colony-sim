@@ -93,10 +93,11 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Remember the chosen language between sessions
 - [ ] HarfBuzz + font fallback when a translation needs non-Latin scripts (would also allow re-enabling kerning, disabled because SDL_ttf mispositions kerned glyphs without HarfBuzz)
 - [ ] More plural rules (Slavic languages, Arabic) when needed
-- [ ] Batch tile rendering (texture atlas / geometry) for large maps at low zoom
+- [x] Batch tile rendering (geometry) for large maps at low zoom; a texture atlas comes with real art
 - [x] Pathfinding benchmark (`bench/bench_pathfinding`)
-- [ ] Connectivity regions: reject unreachable goals instantly (today they flood the whole area; failed food/water searches are only made rare by an exponential retry backoff)
+- [x] Connectivity regions: no search for unreachable goals, water or orders (`core/region.h`)
+- [ ] Failed food searches still explore everything within their cost limit (1 to 4 ms with 64 hungry colonists and no food nearby): spatial index of food sources, or a faster priority queue
 - [ ] World generation: guarantee drinkable water near the start (small maps can have none; the spawn point only prefers water)
-- [ ] Simulation benchmark (many colonists, long runs)
+- [x] Simulation benchmark (`bench/bench_simulation`: many colonists, long runs, state hash)
 - [ ] Windows and macOS CI builds
 - [ ] Choose a license

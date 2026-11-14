@@ -15,6 +15,7 @@ set(COLONY_UNIT_TESTS
     test_noise
     test_pathfinding
     test_pool
+    test_region
     test_reservation
     test_rng
     test_stockpile

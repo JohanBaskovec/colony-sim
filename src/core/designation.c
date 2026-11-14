@@ -219,7 +219,7 @@ static void complete(Map *map, int x, int y, DesignationType type)
         break;
     case DESIGNATION_MINE:
         /* The rough stone floor under the rock stays. */
-        map->rock[index] = ROCK_NONE;
+        map_set_rock(map, x, y, ROCK_NONE);
         break;
     case DESIGNATION_HARVEST: map->plants[index].growth = PLANT_GROWTH_AFTER_PICKING; break;
     default: break;

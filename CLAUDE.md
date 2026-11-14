@@ -39,6 +39,7 @@ cmake --preset debug && cmake --build --preset debug && ctest --preset debug    
 ctest --preset debug -R i18n          # only one test (regex on the test name)
 ctest --preset debug -L i18n          # translation checks only (label)
 ./build/headless/bench/bench_pathfinding 200 2000   # benchmark (use an optimized build for real numbers)
+./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times + state hash
 ```
 
 The first `debug`/`release`/`asan` configure downloads and builds SDL3 (minutes).
@@ -57,6 +58,11 @@ Prefer the `headless` preset while working on the simulation core.
   depend on the tick count, never on frame time.
 - Static data tables (`TerrainDef`, `PlantDef`...) have a stable `id` (saves,
   never translated) and a `name_key` (translation key).
+- Terrain and rock are changed through `map_set_terrain()` / `map_set_rock()`
+  (never by writing the layers directly once a `Game` runs): caches such as
+  connectivity regions rely on `Map.topology_revision`.
+- Performance work is measured with `bench_simulation`; a change that should
+  not alter behavior must leave its state hash unchanged.
 - Entities (colonists...) live in fixed arrays managed by a `Pool` and are
   referenced by generational `EntityId` handles, never by pointers kept across
   ticks. UI state (selection, camera) stays in the frontend (`App`).

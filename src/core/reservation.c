@@ -9,15 +9,38 @@ void reservations_init(Reservations *reservations)
     memset(reservations, 0, sizeof(*reservations));
 }
 
+static uint32_t slot_of(ReservationKind kind, TilePos tile)
+{
+    uint32_t hash = (uint32_t)(uint16_t)tile.x * 73856093u ^
+                    (uint32_t)(uint16_t)tile.y * 19349663u ^ ((uint32_t)kind + 1u) * 83492791u;
+    hash ^= hash >> 15;
+    return hash & (RESERVATION_INDEX_SIZE - 1);
+}
+
 static int find(const Reservations *reservations, ReservationKind kind, TilePos tile)
 {
-    for (int i = 0; i < reservations->count; i++) {
+    if ((unsigned)kind >= RESERVATION_KIND_COUNT || reservations->count_by_kind[kind] == 0) {
+        return -1;
+    }
+    for (uint32_t slot = slot_of(kind, tile); reservations->index[slot] != 0;
+         slot = (slot + 1) & (RESERVATION_INDEX_SIZE - 1)) {
+        int i = reservations->index[slot] - 1;
         const Reservation *entry = &reservations->entries[i];
         if (entry->kind == kind && entry->tile.x == tile.x && entry->tile.y == tile.y) {
             return i;
         }
     }
     return -1;
+}
+
+static void index_insert(Reservations *reservations, int i)
+{
+    const Reservation *entry = &reservations->entries[i];
+    uint32_t slot = slot_of((ReservationKind)entry->kind, entry->tile);
+    while (reservations->index[slot] != 0) {
+        slot = (slot + 1) & (RESERVATION_INDEX_SIZE - 1);
+    }
+    reservations->index[slot] = (uint16_t)(i + 1);
 }
 
 bool reservations_add(Reservations *reservations, ReservationKind kind, TilePos tile,
@@ -27,7 +50,9 @@ bool reservations_add(Reservations *reservations, ReservationKind kind, TilePos 
         reservations->count >= RESERVATION_MAX || find(reservations, kind, tile) >= 0) {
         return false;
     }
-    reservations->entries[reservations->count++] = (Reservation){(uint8_t)kind, owner, tile};
+    reservations->entries[reservations->count] = (Reservation){(uint8_t)kind, owner, tile};
+    index_insert(reservations, reservations->count);
+    reservations->count++;
     reservations->count_by_kind[kind]++;
     return true;
 }
@@ -64,6 +89,11 @@ static void release(Reservations *reservations, uint8_t owner, int kind)
     reservations->count = kept;
     if (released) {
         reservations->releases++;
+        /* Entries moved: rebuild the lookup table (releases are rare next to lookups). */
+        memset(reservations->index, 0, sizeof(reservations->index));
+        for (int i = 0; i < kept; i++) {
+            index_insert(reservations, i);
+        }
     }
 }
 

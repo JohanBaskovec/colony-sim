@@ -84,6 +84,86 @@ static void fill(SDL_Renderer *renderer, SDL_Color color, const SDL_FRect *rect)
 }
 
 /* Square centered in `tile`, covering `fraction` of its width. */
+static SDL_FColor to_fcolor(SDL_Color color)
+{
+    const float scale = 1.0f / 255.0f;
+    return (SDL_FColor){(float)color.r * scale, (float)color.g * scale, (float)color.b * scale,
+                        (float)color.a * scale};
+}
+
+/* ---- Quad batch ---------------------------------------------------------- */
+
+/*
+ * The map is tens of thousands of small rectangles when zoomed out, each with
+ * its own shade. Drawn one by one they cost a draw command each; instead they
+ * are accumulated as triangles and sent with a few SDL_RenderGeometry() calls.
+ * Quads are drawn in the order they were added, like separate fills would be.
+ */
+#define BATCH_MAX_QUADS 8192
+
+static SDL_Vertex *batch_vertices;
+static int *batch_indices;
+static int batch_count; /* Quads waiting to be drawn. */
+
+static bool batch_ready(void)
+{
+    if (batch_vertices != NULL) {
+        return true;
+    }
+    batch_vertices = SDL_malloc(sizeof(*batch_vertices) * 4 * BATCH_MAX_QUADS);
+    batch_indices = SDL_malloc(sizeof(*batch_indices) * 6 * BATCH_MAX_QUADS);
+    if (batch_vertices == NULL || batch_indices == NULL) {
+        render_shutdown();
+        return false;
+    }
+    /* Two triangles per quad; the pattern never changes. */
+    for (int quad = 0; quad < BATCH_MAX_QUADS; quad++) {
+        static const int CORNERS[6] = {0, 1, 2, 2, 3, 0};
+        for (int i = 0; i < 6; i++) {
+            batch_indices[quad * 6 + i] = quad * 4 + CORNERS[i];
+        }
+    }
+    return true;
+}
+
+static void batch_flush(SDL_Renderer *renderer)
+{
+    if (batch_count > 0) {
+        SDL_RenderGeometry(renderer, NULL, batch_vertices, batch_count * 4, batch_indices,
+                           batch_count * 6);
+        batch_count = 0;
+    }
+}
+
+/* Like fill(), but drawn at the next batch_flush() (or when the batch is full). */
+static void batch_quad(SDL_Renderer *renderer, SDL_Color color, const SDL_FRect *rect)
+{
+    if (!batch_ready()) {
+        fill(renderer, color, rect); /* Out of memory: slower, but still drawn. */
+        return;
+    }
+    if (batch_count == BATCH_MAX_QUADS) {
+        batch_flush(renderer);
+    }
+    SDL_Vertex *vertex = &batch_vertices[batch_count * 4];
+    SDL_FColor fcolor = to_fcolor(color);
+    float left = rect->x, top = rect->y, right = rect->x + rect->w, bottom = rect->y + rect->h;
+    vertex[0] = (SDL_Vertex){{left, top}, fcolor, {0.0f, 0.0f}};
+    vertex[1] = (SDL_Vertex){{right, top}, fcolor, {0.0f, 0.0f}};
+    vertex[2] = (SDL_Vertex){{right, bottom}, fcolor, {0.0f, 0.0f}};
+    vertex[3] = (SDL_Vertex){{left, bottom}, fcolor, {0.0f, 0.0f}};
+    batch_count++;
+}
+
+void render_shutdown(void)
+{
+    SDL_free(batch_vertices);
+    SDL_free(batch_indices);
+    batch_vertices = NULL;
+    batch_indices = NULL;
+    batch_count = 0;
+}
+
 static SDL_FRect inset(const SDL_FRect *tile, float fraction)
 {
     float size = SDL_max(1.0f, floorf(tile->w * fraction));
@@ -97,13 +177,13 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
 
     for (int y = visible.y0; y < visible.y1; y++) {
-        float top, bottom, unused;
+        float top, bottom, left, right, unused;
         camera_world_to_screen(camera, 0.0f, (float)y, &unused, &top);
         camera_world_to_screen(camera, 0.0f, (float)(y + 1), &unused, &bottom);
+        camera_world_to_screen(camera, (float)visible.x0, 0.0f, &right, &unused);
 
         for (int x = visible.x0; x < visible.x1; x++) {
-            float left, right;
-            camera_world_to_screen(camera, (float)x, 0.0f, &left, &unused);
+            left = right; /* The right edge of the previous tile. */
             camera_world_to_screen(camera, (float)(x + 1), 0.0f, &right, &unused);
             /* Snap edges to whole pixels so neighboring tiles never leave gaps. */
             SDL_FRect tile = {floorf(left), floorf(top), floorf(right) - floorf(left),
@@ -113,7 +193,7 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
             int variation = tile_variation(x, y);
 
             if (map->rock[index] != ROCK_NONE) {
-                fill(renderer, shade(ROCK_COLORS[map->rock[index]], variation), &tile);
+                batch_quad(renderer, shade(ROCK_COLORS[map->rock[index]], variation), &tile);
                 continue;
             }
 
@@ -122,17 +202,18 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
             if (plant->type == PLANT_GRASS) {
                 ground = mix(ground, GRASS_COLOR, 0.35f + 0.5f * plant->growth);
             }
-            fill(renderer, shade(ground, variation), &tile);
+            batch_quad(renderer, shade(ground, variation), &tile);
 
             if (plant->type == PLANT_BUSH) {
                 SDL_FRect rect = inset(&tile, 0.25f + 0.3f * plant->growth);
-                fill(renderer, shade(BUSH_COLOR, variation), &rect);
+                batch_quad(renderer, shade(BUSH_COLOR, variation), &rect);
             } else if (plant->type == PLANT_TREE) {
                 SDL_FRect rect = inset(&tile, 0.35f + 0.5f * plant->growth);
-                fill(renderer, shade(TREE_COLOR, variation), &rect);
+                batch_quad(renderer, shade(TREE_COLOR, variation), &rect);
             }
         }
     }
+    batch_flush(renderer);
 }
 
 /* Screen rectangle of a tile, snapped to whole pixels like render_map(). */
@@ -159,16 +240,17 @@ static void outline(SDL_Renderer *renderer, SDL_FRect rect, float thickness, SDL
     }
 }
 
-/* Filled rectangle with a dark one-pixel border. */
+/* Filled rectangle with a dark one-pixel border (batched: see batch_flush()). */
 static void fill_outlined(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color color)
 {
-    fill(renderer, ITEM_OUTLINE, &rect);
+    batch_quad(renderer, ITEM_OUTLINE, &rect);
     if (rect.w > 2.0f && rect.h > 2.0f) {
         SDL_FRect inner = {rect.x + 1.0f, rect.y + 1.0f, rect.w - 2.0f, rect.h - 2.0f};
-        fill(renderer, color, &inner);
+        batch_quad(renderer, color, &inner);
     }
 }
 
+/* Adds the shapes of a stack to the batch: the caller flushes it. */
 static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, ItemType type)
 {
     float w = tile->w, h = tile->h;
@@ -227,6 +309,7 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
             }
         }
     }
+    batch_flush(renderer);
 }
 
 void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera)
@@ -350,11 +433,6 @@ void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, in
 
 /* ---- Colonists ----------------------------------------------------------- */
 
-static SDL_FColor to_fcolor(SDL_Color color)
-{
-    return (SDL_FColor){color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f};
-}
-
 static void fill_circle(SDL_Renderer *renderer, float cx, float cy, float radius, SDL_Color color)
 {
     enum { SEGMENTS = 24 };
@@ -443,6 +521,7 @@ void render_colonists(SDL_Renderer *renderer, const Game *game, const Camera *ca
             float size = floorf(radius * 1.4f);
             SDL_FRect held = {floorf(sx + radius * 0.2f), floorf(sy + radius * 0.1f), size, size};
             render_item_stack(renderer, &held, (ItemType)colonist->carried.type);
+            batch_flush(renderer); /* Before the next colonist is drawn over it. */
         }
     }
 }
