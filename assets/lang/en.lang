@@ -34,6 +34,10 @@ designation.chop = Chop trees
 designation.mine = Mine rock
 tool.cancel = Cancel orders
 
+# Items
+item.wood = Wood
+item.stone = Stone
+
 # Work types
 work.mining = Mining
 work.woodcutting = Woodcutting
@@ -68,6 +72,8 @@ hud.tile.rock = Rock wall: {0}
 hud.tile.plant = Plant: {0} ({1}% grown)
 hud.tile.move_cost = Movement cost: ×{0}
 hud.tile.impassable = Impassable
+# {0} = item name, {1} = number of items
+hud.tile.items = Items: {0} ×{1}
 # {0} = order name (e.g. Chop trees)
 hud.tile.designation = Order: {0}
 # {0} = order name, {1} = percentage of the work done

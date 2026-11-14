@@ -6,6 +6,7 @@ add_library(colony_core STATIC
     game.c
     game_clock.c
     i18n.c
+    item.c
     log.c
     map.c
     noise.c

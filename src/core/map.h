@@ -5,6 +5,8 @@
 #ifndef COLONY_CORE_MAP_H
 #define COLONY_CORE_MAP_H
 
+#include "core/item.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -55,6 +57,8 @@ typedef struct RockDef {
     const char *id;
     const char *name_key;
     float mine_work; /* Work (in ticks of a settler working) needed to mine one tile. */
+    ItemType mined_item; /* Dropped when a tile is mined. */
+    int mined_yield;
 } RockDef;
 
 typedef struct PlantDef {
@@ -65,6 +69,8 @@ typedef struct PlantDef {
     float move_cost; /* Movement cost multiplier while walking through. */
     float nutrition; /* Food gained by eating it at full growth; 0 = not edible. */
     float min_edible_growth; /* Cannot be eaten below this growth. */
+    ItemType cut_item; /* Dropped when the plant is cut down (ITEM_NONE: nothing). */
+    int cut_yield; /* Items dropped at full growth, proportionally less when younger. */
 } PlantDef;
 
 typedef struct Plant {

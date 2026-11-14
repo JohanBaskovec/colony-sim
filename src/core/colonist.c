@@ -360,7 +360,7 @@ static void work(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0);
         return;
     }
-    if (designation_add_work(designations, context->map, target.x, target.y,
+    if (designation_add_work(designations, context->map, context->items, target.x, target.y,
                              COLONIST_WORK_SPEED)) {
         set_idle(colonist, context, 0); /* Done: look for the next job right away. */
     }
@@ -445,7 +445,8 @@ static void decide(Colonist *colonist, const ColonistContext *context)
     if (try_satisfy_urgent(colonist, context, NEED_LOW_THRESHOLD)) {
         return;
     }
-    if (rest < NEED_LOW_THRESHOLD || (is_night(context->tick) && rest < COLONIST_NIGHT_SLEEP_REST)) {
+    bool night_sleep = is_night(context->tick) && rest < COLONIST_NIGHT_SLEEP_REST;
+    if (rest < NEED_LOW_THRESHOLD || night_sleep) {
         if (!try_satisfy_urgent(colonist, context, COLONIST_BEDTIME_NEED)) {
             start_sleeping(colonist, context);
         }

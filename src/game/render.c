@@ -35,6 +35,9 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_CHOP] = {250, 210, 80, 255},
     [DESIGNATION_MINE] = {250, 140, 60, 255},
 };
+static const SDL_Color WOOD_COLOR = {150, 98, 52, 255};
+static const SDL_Color STONE_COLOR = {176, 174, 168, 255};
+static const SDL_Color ITEM_OUTLINE = {28, 24, 20, 255};
 static const SDL_Color PROGRESS_BACKGROUND = {20, 20, 24, 220};
 static const SDL_Color PROGRESS_COLOR = {120, 220, 110, 255};
 static const SDL_Color COLONIST_OUTLINE = {20, 20, 24, 255};
@@ -152,6 +155,64 @@ static void outline(SDL_Renderer *renderer, SDL_FRect rect, float thickness, SDL
     }
 }
 
+/* Filled rectangle with a dark one-pixel border. */
+static void fill_outlined(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color color)
+{
+    fill(renderer, ITEM_OUTLINE, &rect);
+    if (rect.w > 2.0f && rect.h > 2.0f) {
+        SDL_FRect inner = {rect.x + 1.0f, rect.y + 1.0f, rect.w - 2.0f, rect.h - 2.0f};
+        fill(renderer, color, &inner);
+    }
+}
+
+static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, ItemType type)
+{
+    float w = tile->w, h = tile->h;
+    switch (type) {
+    case ITEM_WOOD: {
+        /* Three logs. */
+        float log_h = SDL_max(1.0f, floorf(h * 0.16f));
+        for (int i = 0; i < 3; i++) {
+            float inset_x = (i == 1) ? 0.18f : 0.24f;
+            SDL_FRect log = {tile->x + floorf(w * inset_x),
+                             tile->y + floorf(h * (0.3f + 0.17f * (float)i)),
+                             floorf(w * (1.0f - 2.0f * inset_x)), log_h};
+            fill_outlined(renderer, log, shade(WOOD_COLOR, i * 12));
+        }
+        break;
+    }
+    case ITEM_STONE: {
+        /* A small heap of stones. */
+        /* x, y, size, relative to the tile. */
+        static const float STONES[3][3] = {
+            {0.22f, 0.5f, 0.3f}, {0.5f, 0.48f, 0.3f}, {0.36f, 0.26f, 0.3f}};
+        for (int i = 0; i < 3; i++) {
+            float size = SDL_max(1.0f, floorf(w * STONES[i][2]));
+            SDL_FRect stone = {tile->x + floorf(w * STONES[i][0]),
+                               tile->y + floorf(h * STONES[i][1]), size, size};
+            fill_outlined(renderer, stone, shade(STONE_COLOR, -i * 10));
+        }
+        break;
+    }
+    default: break;
+    }
+}
+
+void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    const Items *items = &game->items;
+    TileRect visible = camera_visible_tiles(camera, items->width, items->height);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            ItemStack stack = items_get(items, x, y);
+            if (stack.type != ITEM_NONE) {
+                SDL_FRect tile = tile_rect(camera, x, y);
+                render_item_stack(renderer, &tile, (ItemType)stack.type);
+            }
+        }
+    }
+}
+
 void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const Designations *designations = &game->designations;
@@ -238,9 +299,8 @@ static void fill_circle(SDL_Renderer *renderer, float cx, float cy, float radius
     vertices[0] = (SDL_Vertex){{cx, cy}, fcolor, {0.0f, 0.0f}};
     for (int i = 0; i < SEGMENTS; i++) {
         float angle = (float)i * (2.0f * SDL_PI_F / SEGMENTS);
-        vertices[i + 1] = (SDL_Vertex){{cx + radius * SDL_cosf(angle), cy + radius * SDL_sinf(angle)},
-                                       fcolor,
-                                       {0.0f, 0.0f}};
+        SDL_FPoint point = {cx + radius * SDL_cosf(angle), cy + radius * SDL_sinf(angle)};
+        vertices[i + 1] = (SDL_Vertex){point, fcolor, {0.0f, 0.0f}};
         indices[i * 3] = 0;
         indices[i * 3 + 1] = i + 1;
         indices[i * 3 + 2] = (i + 1) % SEGMENTS + 1;

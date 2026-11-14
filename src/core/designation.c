@@ -168,6 +168,30 @@ float designation_progress_fraction(const Designations *designations, const Map 
     return clampf(designations->progress[index_of(designations, x, y)] / needed, 0.0f, 1.0f);
 }
 
+ItemType designation_yield(const Designations *designations, const Map *map, int x, int y,
+                           int *count)
+{
+    *count = 0;
+    if (!map_in_bounds(map, x, y)) {
+        return ITEM_NONE;
+    }
+    size_t index = map_index(map, x, y);
+    switch (designation_get(designations, x, y)) {
+    case DESIGNATION_CHOP: {
+        const Plant *plant = &map->plants[index];
+        const PlantDef *def = plant_def((PlantType)plant->type);
+        *count = (int)((float)def->cut_yield * plant->growth + 0.5f);
+        return *count > 0 ? def->cut_item : ITEM_NONE;
+    }
+    case DESIGNATION_MINE: {
+        const RockDef *def = rock_def((RockType)map->rock[index]);
+        *count = def->mined_yield;
+        return *count > 0 ? def->mined_item : ITEM_NONE;
+    }
+    default: return ITEM_NONE;
+    }
+}
+
 /* Carries out a completed order on the map. */
 static void complete(Map *map, int x, int y, DesignationType type)
 {
@@ -185,7 +209,8 @@ static void complete(Map *map, int x, int y, DesignationType type)
     }
 }
 
-bool designation_add_work(Designations *designations, Map *map, int x, int y, float work)
+bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y,
+                          float work)
 {
     DesignationType type = designation_get(designations, x, y);
     if (type == DESIGNATION_NONE) {
@@ -196,7 +221,12 @@ bool designation_add_work(Designations *designations, Map *map, int x, int y, fl
     if (designations->progress[index] < designation_work_needed(designations, map, x, y)) {
         return false;
     }
+    int count;
+    ItemType product = designation_yield(designations, map, x, y, &count);
     complete(map, x, y, type);
+    if (items != NULL && product != ITEM_NONE) {
+        items_drop(items, map, x, y, product, count); /* After mining: the tile is open. */
+    }
     clear_tile(designations, index);
     designations->revision++; /* The map changed: new tiles may be reachable. */
     return true;

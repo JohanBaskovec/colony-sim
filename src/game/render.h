@@ -16,6 +16,9 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera);
 /* Darkens the whole screen according to the light level (1 = full daylight). */
 void render_daylight(SDL_Renderer *renderer, float daylight, float width, float height);
 
+/* Items lying on the ground (placeholder shapes per item type). */
+void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+
 /* Marks designated tiles (chop, mine...) and shows work progress. */
 void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 

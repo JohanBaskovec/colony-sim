@@ -8,8 +8,8 @@ survive whatever the world throws at them.
 > **Status: pre-alpha (milestone M2, work, in progress).** A procedurally
 > generated map, a day/night cycle, and a small group of colonists who eat
 > berries, drink at the shore, sleep, and chop trees or mine rock where the
-> player orders it. No items or construction yet: see the
-> [roadmap](docs/ROADMAP.md).
+> player orders it, leaving wood and stone on the ground. No hauling or
+> construction yet: see the [roadmap](docs/ROADMAP.md).
 
 ## Features so far
 
@@ -18,6 +18,7 @@ survive whatever the world throws at them.
 - In-game calendar (days, seasons, years) and day/night lighting
 - Plant growth that depends on terrain fertility
 - Colonists with needs (food, water, rest) who decide on their own: eat berries, drink, sleep, wander
+- Items on the ground (wood, stone) in stacks
 - Work orders (designations): chop trees and mine rock; idle colonists pick jobs by work priority then distance, and reserve their job or food so that nobody else takes it
 - A* pathfinding with terrain movement costs
 - Selection (click, Shift+click, box) and a colonist inspector

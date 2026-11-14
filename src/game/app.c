@@ -415,7 +415,9 @@ static void render_frame(App *app)
     SDL_RenderClear(app->renderer);
 
     render_map(app->renderer, &app->game.map, &app->camera);
+    render_items(app->renderer, &app->game, &app->camera);
     render_designations(app->renderer, &app->game, &app->camera);
+    hud_draw_item_counts(app);
     render_colonists(app->renderer, &app->game, &app->camera, app->selected,
                      app->selected_count);
     render_daylight(app->renderer, game_daylight(app->game.clock.tick),

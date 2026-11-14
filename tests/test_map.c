@@ -115,12 +115,15 @@ static void test_definitions_are_complete(void)
     for (int r = ROCK_NONE + 1; r < ROCK_COUNT; r++) {
         CHECK(i18n_is_valid_key(rock_def((RockType)r)->name_key));
         CHECK(rock_def((RockType)r)->mine_work > 0.0f);
+        CHECK(item_def(rock_def((RockType)r)->mined_item) != NULL);
     }
     for (int p = PLANT_NONE + 1; p < PLANT_COUNT; p++) {
         const PlantDef *def = plant_def((PlantType)p);
         CHECK(i18n_is_valid_key(def->name_key));
         CHECK(def->growth_per_day > 0.0f);
         CHECK(def->move_cost >= 1.0f);
+        /* Either drops something when cut, or nothing at all. */
+        CHECK((def->cut_item == ITEM_NONE) == (def->cut_yield == 0));
     }
     CHECK(terrain_def(TERRAIN_COUNT) == NULL);
     CHECK(rock_def(ROCK_COUNT) == NULL);

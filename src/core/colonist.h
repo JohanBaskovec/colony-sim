@@ -120,6 +120,7 @@ typedef struct Colonist {
 typedef struct ColonistContext {
     Map *map;
     Designations *designations;
+    Items *items;
     Reservations *reservations;
     Pathfinder *pathfinder;
     Rng *rng;

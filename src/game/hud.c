@@ -13,6 +13,8 @@ static const SDL_Color LABEL_SHADOW_COLOR = {0, 0, 0, 200};
 
 /* Colonist names are drawn under them from this zoom level (pixels per tile). */
 #define HUD_LABEL_MIN_ZOOM 10.0f
+/* Item stack sizes are drawn from this zoom level. */
+#define HUD_ITEM_COUNT_MIN_ZOOM 28.0f
 
 typedef struct Panel {
     char lines[HUD_MAX_LINES][HUD_LINE_SIZE];
@@ -100,8 +102,8 @@ static void build_status_panel(App *app, Panel *panel)
     tr_integer(year, sizeof(year), date.year);
     SDL_snprintf(hours, sizeof(hours), "%02d", date.hour);
     SDL_snprintf(minutes, sizeof(minutes), "%02d", date.minute);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.date"), day, tr(season_name_key(date.season)),
-              year, hours, minutes);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.date"), day,
+              tr(season_name_key(date.season)), year, hours, minutes);
 
     if (clock->speed == GAME_SPEED_PAUSED) {
         panel_add_text(panel, tr("hud.paused"));
@@ -136,6 +138,13 @@ static void build_tile_panel(App *app, Panel *panel)
         tr_integer(a, sizeof(a), (long long)(plant->growth * 100.0f + 0.5f));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant"),
                   tr(plant_def((PlantType)plant->type)->name_key), a);
+    }
+
+    ItemStack stack = items_get(&app->game.items, x, y);
+    if (stack.type != ITEM_NONE) {
+        tr_integer(a, sizeof(a), stack.count);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
+                  tr(item_def((ItemType)stack.type)->name_key), a);
     }
 
     DesignationType designation = designation_get(&app->game.designations, x, y);
@@ -219,6 +228,33 @@ static void build_selection_panel(App *app, Panel *panel)
               tr(colonist_activity_key(colonist)));
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);
+    }
+}
+
+void hud_draw_item_counts(App *app)
+{
+    if (app->camera.zoom < HUD_ITEM_COUNT_MIN_ZOOM) {
+        return;
+    }
+    const Items *items = &app->game.items;
+    TileRect visible = camera_visible_tiles(&app->camera, items->width, items->height);
+    char count[16];
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            ItemStack stack = items_get(items, x, y);
+            if (stack.type == ITEM_NONE) {
+                continue;
+            }
+            float sx, sy;
+            camera_world_to_screen(&app->camera, (float)(x + 1), (float)(y + 1), &sx, &sy);
+            tr_integer(count, sizeof(count), stack.count);
+            int width, height;
+            text_measure(app->text, count, &width, &height);
+            float tx = SDL_floorf(sx - (float)width - 2.0f);
+            float ty = SDL_floorf(sy - (float)height);
+            text_draw(app->text, count, tx + 1.0f, ty + 1.0f, LABEL_SHADOW_COLOR);
+            text_draw(app->text, count, tx, ty, HUD_TEXT_COLOR);
+        }
     }
 }
 

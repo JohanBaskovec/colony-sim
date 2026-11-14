@@ -15,7 +15,7 @@
 │                                                              │
 │  game ─► colonist ─► pathfinding ─► map                      │
 │    │        ├─────► designation ─────► map, work             │
-│    │        └─────► reservation                              │
+│    │        └─────► reservation, item                        │
 │    ├──► pool, game_clock, worldgen ─► noise, rng             │
 │  i18n   camera   cli   log   util                            │
 └──────────────────────────────────────────────────────────────┘
@@ -45,6 +45,7 @@ simulation:
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work            |
 | `designation`| Player work orders per tile (chop, mine) and their work progress             |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
+| `item`       | Items on the ground: item definitions, one stack per tile, dropping         |
 | `work`       | Work types (mining, woodcutting) and work priority helpers                   |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
@@ -109,6 +110,14 @@ Player orders are not part of the map (which only describes the physical
 world): `Designations` (`core/designation.h`, owned by `Game`) has its own
 dense layers of the same size: order type and work progress per tile.
 
+Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
+`Game`): at most one stack per tile (one item type, up to its stack limit),
+plus map-wide totals per type. `items_drop()` fills the target tile, then
+spreads the rest breadth-first over nearby passable tiles (never behind a
+wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
+`RockDef.mined_item/mined_yield`. Items carried by settlers will be stored on
+the settler when hauling arrives.
+
 Static definitions (`TerrainDef`, `RockDef`, `PlantDef`) carry a stable `id`
 (used by save files, never translated) and a `name_key` (translation key).
 They are C tables for now; moving them to data files (moddable) is a roadmap
@@ -164,7 +173,8 @@ reserved), 4-neighborhood, fixed neighbor order. Priority therefore beats
 distance. The colonist reserves the job, walks there and adds
 `COLONIST_WORK_SPEED` work per tick. When the work needed is reached the order
 is carried out on the map (tree removed, rock dug out, leaving the rough stone
-floor) and the designation disappears.
+floor), its products are dropped (wood, stone) and the designation
+disappears.
 
 **Reservations** (`core/reservation.h`, owned by `Game`) record who is busy with
 what: (kind, tile, owner), at most one owner per tile and kind. Kinds today:

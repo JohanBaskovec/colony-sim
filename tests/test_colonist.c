@@ -92,7 +92,9 @@ static void test_names_are_unique(void)
     }
     for (int i = 0; i < 20; i++) {
         for (int j = i + 1; j < 20; j++) {
-            CHECK(strcmp(game.colonists[ids[i].index].name, game.colonists[ids[j].index].name) != 0);
+            const char *a = game.colonists[ids[i].index].name;
+            const char *b = game.colonists[ids[j].index].name;
+            CHECK(strcmp(a, b) != 0);
         }
     }
     game_shutdown(&game);
@@ -432,6 +434,8 @@ static void test_idle_colonist_chops_designated_tree(void)
 
     run_ticks(&game, (int)(work * 0.5f));
     CHECK_EQ_INT(game.map.plants[map_index(&game.map, 26, 20)].type, PLANT_NONE);
+    CHECK_EQ_INT(items_get(&game.items, 26, 20).type, ITEM_WOOD); /* The wood stays there. */
+    CHECK_EQ_INT((int)game.items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
     CHECK_EQ_INT(designation_get(&game.designations, 26, 20), DESIGNATION_NONE);
     CHECK(colonist->task != TASK_WORK);
     game_shutdown(&game);

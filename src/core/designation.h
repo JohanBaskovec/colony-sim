@@ -78,10 +78,16 @@ float designation_progress_fraction(const Designations *designations, const Map 
 
 /*
  * Adds work to a designated tile. When enough work is done, the order is
- * carried out on the map (the tree disappears, the rock is dug out), the
+ * carried out on the map (the tree disappears, the rock is dug out), its
+ * products are dropped on the ground (wood, stone; `items` may be NULL), the
  * designation is removed and true is returned.
  */
-bool designation_add_work(Designations *designations, Map *map, int x, int y, float work);
+bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y,
+                          float work);
+
+/* Items the order on this tile would produce if completed now (ITEM_NONE: nothing). */
+ItemType designation_yield(const Designations *designations, const Map *map, int x, int y,
+                           int *count);
 
 uint64_t designations_hash(const Designations *designations, uint64_t hash);
 

@@ -32,8 +32,8 @@ Tick items as they land and add newly discovered tasks.
 - [x] Thirst: drink from shallow water or a lake shore; eat and drink before going to sleep
 - [x] Designations: chop trees, mine rock (tools, rectangle drag, cancel); idle colonists do the work, one worker per tile (reservations), interrupted work resumes
 - [x] Job system: generic reservation table (jobs, food: two colonists no longer walk to the same bush), work types (mining, woodcutting) and per-colonist work priorities, jobs picked by priority then distance
-- [ ] Items on the ground (wood, stone, food), stacking; chopping and mining drop them
-- [ ] Harvest designation (needs items: harvesting without a yield would only destroy berries)
+- [x] Items on the ground (wood, stone), one stack per tile with stack limits; chopping and mining drop them, spreading to nearby reachable tiles
+- [ ] Harvest designation: berries as a food item, colonists eat from the ground too
 - [ ] Hauling and stockpile zones with filters
 - [ ] Work priorities grid UI (priorities exist in the simulation, default 3 for everything)
 

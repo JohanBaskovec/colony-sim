@@ -67,7 +67,8 @@ static void test_hash_depends_on_content(void)
     Reservations a, b;
     reservations_init(&a);
     reservations_init(&b);
-    CHECK_EQ_UINT(reservations_hash(&a, HASH_FNV1A64_INIT), reservations_hash(&b, HASH_FNV1A64_INIT));
+    CHECK_EQ_UINT(reservations_hash(&a, HASH_FNV1A64_INIT),
+                  reservations_hash(&b, HASH_FNV1A64_INIT));
     reservations_add(&a, RESERVATION_WORK, A, 1);
     CHECK(reservations_hash(&a, HASH_FNV1A64_INIT) != reservations_hash(&b, HASH_FNV1A64_INIT));
     reservations_add(&b, RESERVATION_WORK, A, 2);

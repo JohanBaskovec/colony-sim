@@ -141,7 +141,8 @@ static void test_prefers_cheaper_terrain(void)
     double straight_cost = 10.0 + 3.0 * 3.0; /* Through the water. */
     CHECK(finder.last_cost < straight_cost);
     for (int i = 0; i < path.count; i++) {
-        CHECK(map.terrain[map_index(&map, path.steps[i].x, path.steps[i].y)] != TERRAIN_SHALLOW_WATER);
+        TilePos step = path.steps[i];
+        CHECK(map.terrain[map_index(&map, step.x, step.y)] != TERRAIN_SHALLOW_WATER);
     }
     cleanup(&map, &finder, &path);
 }

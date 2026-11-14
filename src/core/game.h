@@ -37,6 +37,7 @@ typedef struct Game {
     uint64_t seed;
     Map map;
     Designations designations; /* Player orders (chop, mine...), same size as the map. */
+    Items items; /* Items lying on the ground, same size as the map. */
     Reservations reservations; /* Who is busy with which job or food. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */

@@ -40,7 +40,8 @@ typedef struct Reservations {
 
 void reservations_init(Reservations *reservations);
 
-/* Fails if the tile is already reserved for this kind, the owner is invalid or the table is full. */
+/* Fails if the tile is already reserved for this kind, the owner is invalid or
+ * the table is full. */
 bool reservations_add(Reservations *reservations, ReservationKind kind, TilePos tile,
                       uint8_t owner);
 

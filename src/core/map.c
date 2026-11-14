@@ -17,16 +17,17 @@ static const TerrainDef TERRAIN_DEFS[TERRAIN_COUNT] = {
 };
 
 static const RockDef ROCK_DEFS[ROCK_COUNT] = {
-    [ROCK_NONE] = {"none", NULL, 0.0f},
-    [ROCK_GRANITE] = {"granite", N_("rock.granite"), 3500.0f},
-    [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f},
+    [ROCK_NONE] = {"none", NULL, 0.0f, ITEM_NONE, 0},
+    [ROCK_GRANITE] = {"granite", N_("rock.granite"), 3500.0f, ITEM_STONE, 10},
+    [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f, ITEM_STONE, 12},
 };
 
 static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
-    [PLANT_NONE] = {"none", NULL, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
-    [PLANT_GRASS] = {"grass", N_("plant.grass"), 0.35f, 0.3f, 1.0f, 0.0f, 0.0f},
-    [PLANT_BUSH] = {"berry_bush", N_("plant.bush"), 0.12f, 0.5f, 1.3f, 0.45f, 0.5f},
-    [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f, 0.0f, 0.0f},
+    [PLANT_NONE] = {"none", NULL, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0},
+    [PLANT_GRASS] = {"grass", N_("plant.grass"), 0.35f, 0.3f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0},
+    [PLANT_BUSH] = {"berry_bush", N_("plant.bush"), 0.12f, 0.5f, 1.3f, 0.45f, 0.5f, ITEM_NONE,
+                    0},
+    [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f, 0.0f, 0.0f, ITEM_WOOD, 25},
 };
 
 const TerrainDef *terrain_def(Terrain terrain)

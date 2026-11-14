@@ -108,6 +108,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
     ColonistContext context = {
         .map = &game->map,
         .designations = &game->designations,
+        .items = &game->items,
         .reservations = &game->reservations,
         .pathfinder = &game->pathfinder,
         .rng = &game->rng,
@@ -229,6 +230,7 @@ bool game_init(Game *game, const NewGameParams *params)
     memset(game, 0, sizeof(*game));
     if (!worldgen_generate(&game->map, &params->world) ||
         !designations_init(&game->designations, game->map.width, game->map.height) ||
+        !items_init(&game->items, game->map.width, game->map.height) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
         game_shutdown(game);
@@ -250,6 +252,7 @@ void game_shutdown(Game *game)
     pool_free(&game->colonist_pool);
     pathfinder_free(&game->pathfinder);
     designations_free(&game->designations);
+    items_free(&game->items);
     map_free(&game->map);
     memset(game, 0, sizeof(*game));
 }
@@ -312,6 +315,7 @@ uint64_t game_hash(const Game *game)
 {
     uint64_t hash = map_hash(&game->map);
     hash = designations_hash(&game->designations, hash);
+    hash = items_hash(&game->items, hash);
     hash = reservations_hash(&game->reservations, hash);
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));

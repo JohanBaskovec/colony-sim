@@ -33,6 +33,10 @@ designation.chop = Couper les arbres
 designation.mine = Miner la roche
 tool.cancel = Annuler les ordres
 
+# Objets
+item.wood = Bois
+item.stone = Pierre
+
 # Types de travail
 work.mining = Minage
 work.woodcutting = Bûcheronnage
@@ -59,6 +63,7 @@ hud.tile.rock = Paroi rocheuse : {0}
 hud.tile.plant = Plante : {0} ({1} % de croissance)
 hud.tile.move_cost = Coût de déplacement : ×{0}
 hud.tile.impassable = Infranchissable
+hud.tile.items = Objets : {0} ×{1}
 hud.tile.designation = Ordre : {0}
 hud.tile.designation_progress = Ordre : {0} ({1} % effectué)
 
