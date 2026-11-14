@@ -9,6 +9,7 @@ set(COLONY_UNIT_TESTS
     test_colonist
     test_construction
     test_designation
+    test_dirt
     test_game
     test_game_clock
     test_gather_zone

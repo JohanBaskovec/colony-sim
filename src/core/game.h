@@ -10,6 +10,7 @@
 #include "core/colonist.h"
 #include "core/construction.h"
 #include "core/designation.h"
+#include "core/dirt.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
 #include "core/map.h"
@@ -53,6 +54,7 @@ typedef struct Game {
     uint64_t seed;
     Map map;
     Designations designations; /* Player orders (chop, mine...), same size as the map. */
+    Dirt dirt; /* How dirty each tile is. */
     GatherZones gather_zones; /* Where wood, berries, grass, stones... are gathered. */
     Items items; /* Items lying on the ground, same size as the map. */
     Stockpiles stockpiles; /* Storage zones drawn by the player. */

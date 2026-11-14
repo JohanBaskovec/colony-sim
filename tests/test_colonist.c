@@ -1485,6 +1485,85 @@ static void test_work_speed_follows_knowledge(void)
     colonist_free(&colonist);
 }
 
+static void test_colonist_cleans_dirty_tiles(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    CHECK_EQ_INT(colonist->work_priorities[WORK_CLEANING], WORK_PRIORITY_DEFAULT_CLEANING);
+    dirt_add(&game.dirt, &game.map, 14, 10, 50);
+    dirt_add(&game.dirt, &game.map, 15, 10, 20);
+    dirt_add(&game.dirt, &game.map, 15, 11, 30);
+    bool seen_cleaning = false;
+    for (int i = 0; i < 1200 && game.dirt.dirty_count > 0; i++) {
+        game_tick(&game);
+        if (colonist->task == TASK_CLEAN && colonist_action(colonist, NULL) ==
+                                                COLONIST_ACTION_GATHER) {
+            seen_cleaning = true;
+            CHECK(colonist->x == colonist->target.x && colonist->y == colonist->target.y);
+        }
+    }
+    CHECK(seen_cleaning);
+    CHECK_EQ_INT(game.dirt.dirty_count, 0);
+    /* 100 % of dirt at COLONIST_CLEAN_TICKS_PER_PERCENT ticks each, and the walk. */
+    CHECK(game.clock.tick - 12 * TICKS_PER_HOUR >= 100 * COLONIST_CLEAN_TICKS_PER_PERCENT);
+    CHECK_EQ_INT(game.reservations.count_by_kind[RESERVATION_CLEAN], 0);
+    game_shutdown(&game);
+}
+
+static void test_cleaning_can_be_disabled(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    dirt_add(&game.dirt, &game.map, 12, 10, 100);
+    run_ticks(&game, 120);
+    CHECK_EQ_INT(colonist->task, TASK_CLEAN);
+    /* Disabled on the way or while cleaning: the colonist stops. */
+    CHECK(game_set_work_priority(&game, id, WORK_CLEANING, WORK_PRIORITY_DISABLED));
+    run_ticks(&game, 60);
+    CHECK(colonist->task != TASK_CLEAN);
+    int left = dirt_at(&game.dirt, 12, 10);
+    CHECK(left > 0);
+    run_ticks(&game, 2000);
+    CHECK_EQ_INT(dirt_at(&game.dirt, 12, 10), left);
+    game_shutdown(&game);
+}
+
+/* First task of a colonist with a dirty tile next to it and an item to haul
+ * farther away, at the given priorities. */
+static ColonistTask first_job(int hauling, int cleaning)
+{
+    Game game;
+    if (!init_flat_game(&game)) {
+        return TASK_COUNT;
+    }
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    EntityId id = game_colonist_id_at(&game, 0);
+    stockpile_create(&game.stockpiles, &game.map, 20, 20, 21, 21);
+    dirt_add(&game.dirt, &game.map, 11, 10, 100);
+    items_add(&game.items, 16, 10, item_stack_pristine(ITEM_COBBLE, 1));
+    game_set_work_priority(&game, id, WORK_HAULING, hauling);
+    game_set_work_priority(&game, id, WORK_CLEANING, cleaning);
+    run_ticks(&game, 30);
+    ColonistTask task = colonist != NULL ? colonist->task : TASK_COUNT;
+    game_shutdown(&game);
+    return task;
+}
+
+static void test_cleaning_comes_after_hauling(void)
+{
+    /* Default priorities: cleaning is the lowest. */
+    CHECK_EQ_INT(first_job(WORK_PRIORITY_DEFAULT, WORK_PRIORITY_DEFAULT_CLEANING), TASK_HAUL);
+    /* Same priority: hauling, the column on the left, comes first. */
+    CHECK_EQ_INT(first_job(3, 3), TASK_HAUL);
+    /* A higher priority wins over the column order. */
+    CHECK_EQ_INT(first_job(3, WORK_PRIORITY_HIGHEST), TASK_CLEAN);
+}
+
 static void test_translation_keys(void)
 {
     for (int task = 0; task < TASK_COUNT; task++) {
@@ -1558,6 +1637,9 @@ int main(void)
     RUN_TEST(test_night_hours);
     RUN_TEST(test_no_search_when_region_has_no_water);
     RUN_TEST(test_no_search_when_orders_are_out_of_reach);
+    RUN_TEST(test_colonist_cleans_dirty_tiles);
+    RUN_TEST(test_cleaning_can_be_disabled);
+    RUN_TEST(test_cleaning_comes_after_hauling);
     RUN_TEST(test_translation_keys);
     return test_summary();
 }

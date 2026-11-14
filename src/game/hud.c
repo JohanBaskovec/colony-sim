@@ -289,6 +289,12 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
+    int dirt = dirt_at(&app->game.dirt, x, y);
+    if (dirt > 0) {
+        tr_integer(a, sizeof(a), dirt);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.dirt"), a);
+    }
+
     float cost = map_move_cost(map, x, y);
     if (cost <= 0.0f) {
         panel_add_text(panel, tr("hud.tile.impassable"));

@@ -765,6 +765,7 @@ static void render_frame(App *app)
     SDL_RenderClear(app->renderer);
 
     render_map(app->renderer, &app->game.map, &app->camera);
+    render_dirt(app->renderer, &app->game.dirt, &app->camera);
     render_gather_zones(app->renderer, &app->game, &app->camera, app->selected_gather_zone);
     render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
     render_structures(app->renderer, &app->game, &app->camera);

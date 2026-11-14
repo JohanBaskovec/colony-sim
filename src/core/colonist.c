@@ -47,6 +47,7 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y)
     for (int work = 0; work < WORK_TYPE_COUNT; work++) {
         colonist->work_priorities[work] = WORK_PRIORITY_DEFAULT;
     }
+    colonist->work_priorities[WORK_CLEANING] = WORK_PRIORITY_DEFAULT_CLEANING;
     colonist_set_strength(colonist, COLONIST_STRENGTH_STANDARD);
     colonist->max_carry_bulk = COLONIST_CARRY_BULK;
     colonist->station = WORKSTATION_NONE;
@@ -346,6 +347,10 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
     case TASK_BUILD:
     case TASK_CONSTRUCT: return at_station ? COLONIST_ACTION_STRIKE : COLONIST_ACTION_NONE;
     case TASK_CRAFT: return at_station ? craft_action(colonist, tool) : COLONIST_ACTION_NONE;
+    case TASK_CLEAN: /* Picking up chips and shavings. */
+        return colonist->x == colonist->target.x && colonist->y == colonist->target.y
+                   ? COLONIST_ACTION_GATHER
+                   : COLONIST_ACTION_NONE;
     case TASK_IDLE:
     case TASK_WANDER:
     case TASK_HAUL:
@@ -390,6 +395,7 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_BUILD] = N_("colonist.task.build"),
         [TASK_CRAFT] = N_("colonist.task.craft"),
         [TASK_CONSTRUCT] = N_("colonist.task.construct"),
+        [TASK_CLEAN] = N_("colonist.task.clean"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
 }
@@ -739,6 +745,67 @@ static uint32_t gather_stamp(const ColonistContext *context)
     return context->gather_zones->revision + context->reservations->releases;
 }
 
+static uint32_t clean_stamp(const ColonistContext *context)
+{
+    return context->dirt->revision + context->reservations->releases;
+}
+
+/* Search filter: a dirty tile nobody else is cleaning. */
+typedef struct CleanSearch {
+    const Dirt *dirt;
+    const Reservations *reservations;
+    uint8_t self;
+} CleanSearch;
+
+static bool is_dirty_tile(const Map *map, int x, int y, void *userdata)
+{
+    (void)map;
+    const CleanSearch *search = userdata;
+    return dirt_at(search->dirt, x, y) > 0 &&
+           !reservations_taken_by_other(search->reservations, RESERVATION_CLEAN,
+                                        (TilePos){(int16_t)x, (int16_t)y}, search->self);
+}
+
+/* Walks to the nearest dirty tile to clean it. */
+static bool try_clean_job(Colonist *colonist, const ColonistContext *context)
+{
+    CleanSearch search = {context->dirt, context->reservations, context->worker_id};
+    TilePos found;
+    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                 is_dirty_tile, &search, COLONIST_WORK_SEARCH_MAX_COST,
+                                 &colonist->path, &found)) {
+        return false;
+    }
+    begin_task(colonist, context, TASK_CLEAN);
+    colonist->target = found;
+    reservations_add(context->reservations, RESERVATION_CLEAN, found, context->worker_id);
+    return true;
+}
+
+static bool clean_job_still_valid(const Colonist *colonist, const ColonistContext *context)
+{
+    return colonist->work_priorities[WORK_CLEANING] != WORK_PRIORITY_DISABLED &&
+           dirt_at(context->dirt, colonist->target.x, colonist->target.y) > 0;
+}
+
+/* Cleans the tile it stands on, 1 % at a time. */
+static void clean(Colonist *colonist, const ColonistContext *context)
+{
+    TilePos target = colonist->target;
+    if (colonist->x != target.x || colonist->y != target.y ||
+        !clean_job_still_valid(colonist, context)) {
+        set_idle(colonist, context, 0);
+        return;
+    }
+    if (++colonist->timer < COLONIST_CLEAN_TICKS_PER_PERCENT) {
+        return;
+    }
+    colonist->timer = 0;
+    if (dirt_clean(context->dirt, target.x, target.y, 1) == 0) {
+        set_idle(colonist, context, 0); /* The next dirty tile is probably next to it. */
+    }
+}
+
 static HaulWorld haul_world(const ColonistContext *context)
 {
     HaulWorld world = {context->map,         context->items,      context->stockpiles,
@@ -832,7 +899,7 @@ static uint32_t construction_stamp(const ColonistContext *context);
 /*
  * Takes the nearest job of the highest priority level that has one. At each
  * level: designations (harvesting, cutting grass...), then construction,
- * crafting, gathering zones (a background job) and hauling. Each search kind
+ * crafting, gathering zones (a background job), hauling and cleaning. Each search kind
  * backs off on failure until its stamp shows that something changed.
  */
 static bool try_start_work(Colonist *colonist, const ColonistContext *context)
@@ -857,9 +924,16 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
          colonist->gather_search_stamp != gather_stamp(context));
     bool searched_designations = false, searched_hauling = false, searched_stations = false;
     bool searched_gathering = false;
+    int open_cleaning = context->dirt->dirty_count -
+                        context->reservations->count_by_kind[RESERVATION_CLEAN];
+    bool cleaning_allowed =
+        open_cleaning > 0 && (search_allowed(colonist, SEARCH_CLEAN) ||
+                              colonist->clean_search_stamp != clean_stamp(context));
+    bool searched_cleaning = false;
     /* Taking structures apart is a designation of construction work. */
     const WorkTypeMask not_designations = WORK_TYPE_BIT(WORK_HAULING) |
-                                          WORK_TYPE_BIT(WORK_CRAFTING);
+                                          WORK_TYPE_BIT(WORK_CRAFTING) |
+                                          WORK_TYPE_BIT(WORK_CLEANING);
 
     for (int priority = WORK_PRIORITY_HIGHEST; priority <= WORK_PRIORITY_LOWEST; priority++) {
         WorkTypeMask mask = work_types_at_priority(colonist->work_priorities, priority);
@@ -907,6 +981,14 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
                 return true;
             }
         }
+        if (cleaning_allowed && (mask & WORK_TYPE_BIT(WORK_CLEANING))) {
+            searched_cleaning = true;
+            if (try_clean_job(colonist, context)) {
+                colonist->search_failures[SEARCH_CLEAN] = 0;
+                colonist->search_cooldown[SEARCH_CLEAN] = 0;
+                return true;
+            }
+        }
     }
     if (searched_designations) {
         search_failed(colonist, SEARCH_WORK);
@@ -927,6 +1009,10 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
     if (searched_gathering) {
         search_failed(colonist, SEARCH_GATHER);
         colonist->gather_search_stamp = gather_stamp(context);
+    }
+    if (searched_cleaning) {
+        search_failed(colonist, SEARCH_CLEAN);
+        colonist->clean_search_stamp = clean_stamp(context);
     }
     return false;
 }
@@ -1561,6 +1647,8 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
                                            context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1);
     if (done) {
+        dirt_spread(context->dirt, context->map, tile.x, tile.y,
+                    recipe_def((RecipeType)colonist->recipe)->dirt);
         set_idle(colonist, context, 0);
     }
 }
@@ -1928,6 +2016,11 @@ static void decide(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
         }
         break;
+    case TASK_CLEAN:
+        if (!clean_job_still_valid(colonist, context)) {
+            set_idle(colonist, context, 0);
+        }
+        break;
     default:
         break;
     }
@@ -2072,6 +2165,7 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     case TASK_BUILD:
     case TASK_CRAFT: station_job(colonist, context); break;
     case TASK_CONSTRUCT: construction_job(colonist, context); break;
+    case TASK_CLEAN: clean(colonist, context); break;
     case TASK_SLEEP:
     case TASK_COUNT: break;
     }

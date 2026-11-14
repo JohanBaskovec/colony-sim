@@ -14,6 +14,9 @@
 
 void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera);
 
+/* Dark spots on dirty tiles. */
+void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera);
+
 /* Darkens the whole screen according to the light level (1 = full daylight). */
 void render_daylight(SDL_Renderer *renderer, float daylight, float width, float height);
 

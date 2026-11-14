@@ -575,6 +575,34 @@ static void test_until_stock_ignores_items_out_of_storage(void)
     game_shutdown(&game);
 }
 
+static void test_crafts_make_the_station_dirty(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 95.0); /* Never fails. */
+    colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
+    game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_CLEANING,
+                           WORK_PRIORITY_DISABLED);
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
+    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
+    workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
+    run_ticks(&game, 4000);
+    REQUIRE((int)game.items.totals[ITEM_HAND_AXE] == 1);
+    int dirt = recipe_def(RECIPE_HAND_AXE)->dirt;
+    CHECK(dirt > 0);
+    CHECK_EQ_INT(dirt_at(&game.dirt, 14, 10), dirt);
+    CHECK_EQ_INT(dirt_at(&game.dirt, 15, 11), dirt / 2);
+    CHECK_EQ_INT(dirt_at(&game.dirt, 16, 10), 0);
+    CHECK_EQ_INT(game.dirt.dirty_count, 9);
+
+    /* Once cleaning is allowed, the colonist cleans it all. */
+    game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_CLEANING, 1);
+    run_ticks(&game, 2000);
+    CHECK_EQ_INT(game.dirt.dirty_count, 0);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_carried_tools);
@@ -597,5 +625,6 @@ int main(void)
     RUN_TEST(test_bill_input_radius);
     RUN_TEST(test_stock_counts_stored_and_waiting_items);
     RUN_TEST(test_until_stock_ignores_items_out_of_storage);
+    RUN_TEST(test_crafts_make_the_station_dirty);
     return test_summary();
 }

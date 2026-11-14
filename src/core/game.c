@@ -138,6 +138,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
     ColonistContext context = {
         .map = &game->map,
         .designations = &game->designations,
+        .dirt = &game->dirt,
         .gather_zones = &game->gather_zones,
         .items = &game->items,
         .stockpiles = &game->stockpiles,
@@ -407,6 +408,7 @@ bool game_init(Game *game, const NewGameParams *params)
     memset(game, 0, sizeof(*game));
     if (!worldgen_generate(&game->map, &params->world) ||
         !designations_init(&game->designations, game->map.width, game->map.height) ||
+        !dirt_init(&game->dirt, game->map.width, game->map.height) ||
         !gather_zones_init(&game->gather_zones, game->map.width, game->map.height) ||
         !items_init(&game->items, game->map.width, game->map.height) ||
         !stockpiles_init(&game->stockpiles, game->map.width, game->map.height) ||
@@ -475,6 +477,7 @@ void game_shutdown(Game *game)
     pathfinder_free(&game->pathfinder);
     regions_free(&game->regions);
     designations_free(&game->designations);
+    dirt_free(&game->dirt);
     gather_zones_free(&game->gather_zones);
     items_free(&game->items);
     stockpiles_free(&game->stockpiles);
@@ -575,6 +578,7 @@ uint64_t game_hash(const Game *game)
 {
     uint64_t hash = map_hash(&game->map);
     hash = designations_hash(&game->designations, hash);
+    hash = dirt_hash(&game->dirt, hash);
     hash = gather_zones_hash(&game->gather_zones, hash);
     hash = items_hash(&game->items, hash);
     hash = stockpiles_hash(&game->stockpiles, hash);

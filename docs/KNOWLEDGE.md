@@ -339,10 +339,11 @@ knowledge. The first wood of a colony is branches and twigs.
 | High | Felling trees, mining | Hit by a falling tree or rock, broken bones |
 | Very high | Hunting dangerous game | Goring, trampling |
 
-- **Dirt**: some jobs and places make tiles dirty (knapping debris, butchering,
-  cooking). Dirt lowers room quality and, once health exists, helps infections
-  spread; it is cleaned by the cleaning job. **Sharp knapping debris** can also
-  cut settlers who walk barefoot over it (until footwear exists).
+- **Dirt**: some jobs and places make tiles dirty (knapping chips, wood
+  shavings, later butchering and cooking). Dirt lowers room quality and, once
+  health exists, helps infections spread; it is cleaned by the cleaning job.
+  *Dropped:* sharp knapping debris that cuts barefoot walkers (too much
+  simulation for what it adds).
 
 ### 2.5 Workstations and bills
 
@@ -586,7 +587,7 @@ no spear, no butchering.*
 | Work        | 250 (0.1 h), Stone knapping 50 |
 | Hit points  | 150, not flammable |
 | Workstation | Knapping recipes |
-| Side effect | Sharp debris on the tile and its neighbours: dirt, and cuts for barefoot walkers (§2.4) |
+| Side effect | Chips: dirt on the tile and its neighbours (§2.4) |
 
 ---
 
@@ -871,8 +872,8 @@ Suggested order, each step with its tests:
      when a recipe needs one and kept afterwards;
    - knapping and spear making recipes; failures; quality capped by
      materials (a cobble counts as crude).
-   Left for later: dirt and knapping debris (a dirt layer, and injuries from
-   M6). Since then bills got a worker level filter, an input search radius
+   Since then: a dirt layer (crafts dirty the station and around it,
+   cleaning is a work type; sharp debris was dropped), and bills got a worker level filter, an input search radius
    and a pause, and *until N* counts the stock: stored items and those on
    their way to storage (lying on a workstation, carried by a hauler).
 4. Tools: speed factors on orders and recipes, grade factor, wear and
@@ -977,7 +978,7 @@ None at the moment.
 
 Settled so far: stones are gathered in zones with a target per stone type
 (or forever); grass drying is
-simulated; dirt, knapping debris and work accidents exist; the interface
+simulated; dirt and work accidents exist (no sharp knapping debris); the interface
 shows only discovered knowledges; no innate aptitudes; felling and mining are
 the knowledges **Felling** and **Mining**; the hafted axe comes from Hafting
 (§13), the knowledge that makes the antler pick is decided when it is

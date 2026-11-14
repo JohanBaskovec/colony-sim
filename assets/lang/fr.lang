@@ -91,6 +91,7 @@ work.gathering = Cueillette
 work.construction = Construction
 work.crafting = Artisanat
 work.hauling = Transport
+work.cleaning = Nettoyage
 
 # Savoirs
 knowledge.fire = Feu
@@ -134,6 +135,7 @@ hud.tile.rock = Paroi rocheuse : {0}
 hud.tile.plant = Plante : {0} ({1} % de croissance)
 hud.tile.plant_stock = {0} à ramasser : {1}/{2}
 hud.tile.move_cost = Coût de déplacement : ×{0}
+hud.tile.dirt = Saleté : {0} %
 hud.tile.impassable = Infranchissable
 hud.tile.items = Objets : {0} ×{1} ({2})
 hud.tile.item_transform = Se transforme en {0} dans {1} h
@@ -176,6 +178,7 @@ colonist.task.cut_grass = Coupe de l’herbe
 colonist.task.build = Construit un poste de travail
 colonist.task.craft = Fabrique
 colonist.task.construct = Construit
+colonist.task.clean = Nettoie
 colonist.task.haul = Transport
 
 need.food = Nourriture

@@ -50,6 +50,9 @@ typedef struct RecipeDef {
     KnowledgeType knowledge;
     float min_level;
     ItemType product; /* Main product (what a bill counts in storage). */
+    /* Dirt left by each craft (chips, shavings) on the station's tile, half
+     * as much around it (see dirt_spread()). */
+    int dirt;
 } RecipeDef;
 
 /* NULL when out of range. */

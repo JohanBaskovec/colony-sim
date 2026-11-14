@@ -23,6 +23,7 @@
 #include "core/appearance.h"
 #include "core/construction.h"
 #include "core/designation.h"
+#include "core/dirt.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
 #include "core/knowledge.h"
@@ -111,6 +112,9 @@
 /* Work done per tick on a designation at speed ×1 (see colonist_work_speed()). */
 #define COLONIST_WORK_SPEED 1.0f
 #define COLONIST_WORK_SEARCH_MAX_COST 250.0f
+/* Cleaning removes 1 % of dirt every this many ticks (a filthy tile takes
+ * 10 seconds at speed ×1). */
+#define COLONIST_CLEAN_TICKS_PER_PERCENT 6
 /* After picking up a stack, a hauler with room left also collects matching
  * stacks within this travel cost before delivering. */
 #define COLONIST_HAUL_COLLECT_MAX_COST 12.0f
@@ -136,6 +140,7 @@ typedef enum ColonistTask {
     /* Bringing materials to a construction site, then building it from a
      * neighboring tile. */
     TASK_CONSTRUCT,
+    TASK_CLEAN, /* Walking to a dirty tile, then cleaning it. */
     TASK_COUNT
 } ColonistTask;
 
@@ -155,6 +160,7 @@ typedef enum SearchKind {
     SEARCH_STATION, /* Building and crafting jobs at workstations. */
     SEARCH_GATHER,  /* Gathering zones. */
     SEARCH_CONSTRUCTION, /* Construction sites. */
+    SEARCH_CLEAN,        /* Dirty tiles. */
     SEARCH_COUNT
 } SearchKind;
 
@@ -200,7 +206,8 @@ typedef struct Colonist {
     int path_index; /* Next step of `path` to walk to. */
     float move_progress; /* 0..1 from the current tile to the next step. */
     ColonistTask task;
-    /* Food tile (TASK_EAT), drinking spot (TASK_DRINK) or designated tile (TASK_WORK). */
+    /* Food tile (TASK_EAT), drinking spot (TASK_DRINK), designated tile
+     * (TASK_WORK) or dirty tile (TASK_CLEAN). */
     TilePos target;
     int timer; /* Idle countdown (TASK_IDLE), eating or drinking progress. */
     /* TASK_WORK: the DesignationType being worked on, or the GatherJob when
@@ -222,6 +229,8 @@ typedef struct Colonist {
     /* Construction sites revision + item additions + releases at the last
      * failed construction search. */
     uint32_t construction_search_stamp;
+    /* Dirt revision + reservation releases at the last failed cleaning search. */
+    uint32_t clean_search_stamp;
     ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
     TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
@@ -262,6 +271,7 @@ typedef struct Colonist {
 typedef struct ColonistContext {
     Map *map;
     Designations *designations;
+    Dirt *dirt;
     GatherZones *gather_zones;
     Items *items;
     Stockpiles *stockpiles;

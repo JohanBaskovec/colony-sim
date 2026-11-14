@@ -220,6 +220,52 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
     batch_flush(renderer);
 }
 
+/* Bits of a deterministic hash of a tile and a number (spot positions). */
+static uint32_t tile_hash(int x, int y, int n)
+{
+    uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u ^ (uint32_t)n * 83492791u;
+    h ^= h >> 13;
+    h *= 0x5bd1e995u;
+    h ^= h >> 15;
+    return h;
+}
+
+/* Dirt: dark spots scattered on the tile, more and darker as it gets dirtier;
+ * each spot is two crossed rectangles, which reads as a blob. */
+#define DIRT_SPOTS_MAX 8
+
+void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera)
+{
+    if (dirt->dirty_count == 0) {
+        return;
+    }
+    TileRect visible = camera_visible_tiles(camera, dirt->width, dirt->height);
+    float pixels = camera->zoom;
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            int level = dirt_at(dirt, x, y);
+            if (level == 0) {
+                continue;
+            }
+            float left, top;
+            camera_world_to_screen(camera, (float)x, (float)y, &left, &top);
+            int spots = 1 + level * (DIRT_SPOTS_MAX - 1) / DIRT_MAX;
+            SDL_Color color = {58, 42, 26, (Uint8)(70 + level)};
+            for (int i = 0; i < spots; i++) {
+                uint32_t h = tile_hash(x, y, i);
+                float size = pixels * (0.12f + 0.12f * (float)(h & 0xffu) / 255.0f);
+                float cx = left + pixels * (0.15f + 0.7f * (float)((h >> 8) & 0xffu) / 255.0f);
+                float cy = top + pixels * (0.15f + 0.7f * (float)((h >> 16) & 0xffu) / 255.0f);
+                SDL_FRect wide = {cx - size * 0.5f, cy - size * 0.3f, size, size * 0.6f};
+                SDL_FRect tall = {cx - size * 0.3f, cy - size * 0.5f, size * 0.6f, size};
+                batch_quad(renderer, color, &wide);
+                batch_quad(renderer, color, &tall);
+            }
+        }
+    }
+    batch_flush(renderer);
+}
+
 /* Screen rectangle of a tile, snapped to whole pixels like render_map(). */
 static SDL_FRect tile_rect(const Camera *camera, int x, int y)
 {

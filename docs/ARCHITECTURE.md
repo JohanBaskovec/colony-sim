@@ -46,6 +46,7 @@ simulation:
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work, facial expression from the needs, the action its hands are doing |
 | `appearance` | Looks of a colonist (skin, body shape, hair style and color, beard), rolled at creation |
 | `designation`| Player work orders per tile (mine rock, take a structure apart), the knowledge and level each needs, work progress |
+| `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
@@ -55,7 +56,7 @@ simulation:
 | `workstation`| Workstations (crafting spot, knapping spot): blueprints, materials, construction, bills, the craft in progress |
 | `structure`  | Structure definitions (grass bed, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor |
 | `construction`| Construction sites: blueprints of structures, materials delivered per slot, work; built structures go to the map's structure layer |
-| `work`       | Work types (mining, woodcutting, gathering, construction, crafting, hauling), the knowledge shown for each, priority helpers |
+| `work`       | Work types (mining, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning, quality and condition of what a worker produces |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
@@ -313,11 +314,35 @@ within `GAME_SPAWN_FOOD_MAX_COST` of travel.
 Decisions only happen on tile centers, so a colonist never jumps back when it
 changes its mind.
 
+### Dirt and cleaning
+
+`core/dirt.h` keeps a dirt level per tile (0..100 %, owned by `Game`, part
+of `game_hash()`), with a count of dirty tiles and a revision. Completing a
+craft dirties the station's tile by the recipe's `dirt` (chips, shavings) and
+each neighbour by half (`dirt_spread()`); dirt never lies on water, rock or
+built walls. Later it will lower beauty and help diseases spread.
+
+Cleaning is the `WORK_CLEANING` work type, the last column, at the lowest
+priority by default: an idle colonist walks to the nearest dirty tile nobody
+else is cleaning (`RESERVATION_CLEAN`), stands on it and removes 1 % every
+`COLONIST_CLEAN_TICKS_PER_PERCENT` ticks (no knowledge, no tool), then looks
+again (the next dirty tile is usually next to it). The search is skipped
+when every dirty tile is reserved, and backs off on failure until the dirt
+revision or a reservation release changes its stamp. The frontend draws dark
+spots on dirty tiles and shows the level in the tile inspector.
+
 ### Work and reservations
 
 Every designation belongs to a **work type** (`core/work.h`: mining,
 woodcutting, gathering...). Each colonist has a **priority** per work type: 0 = never,
-otherwise 1 (highest) to 4 (default 3).
+otherwise 1 (highest) to 4 (default 3; cleaning defaults to 4).
+
+Within one priority level, `try_start_work()` tries the kinds of jobs in a
+fixed order: designations (the nearest of the work types at that level),
+construction sites, workstation blueprints, bills, gathering zones, hauling,
+cleaning. This follows the columns of the grid from left to right, except
+that gathering zones come after construction and crafting (a background job:
+a zone gathering "forever" would otherwise starve them at the same level).
 
 The player edits priorities in the work grid (`game/work_panel.c`), which
 only calls `game_set_work_priority()`; the stepping rules of the grid

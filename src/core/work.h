@@ -21,6 +21,7 @@ typedef enum WorkType {
     WORK_CONSTRUCTION, /* Building workstations (and later, everything else). */
     WORK_CRAFTING,     /* Working through the bills of workstations. */
     WORK_HAULING,
+    WORK_CLEANING, /* The last column: at equal priority, done after everything else. */
     WORK_TYPE_COUNT
 } WorkType;
 
@@ -28,6 +29,8 @@ typedef enum WorkType {
 #define WORK_PRIORITY_HIGHEST 1
 #define WORK_PRIORITY_LOWEST 4
 #define WORK_PRIORITY_DEFAULT 3
+/* New settlers clean at the lowest priority. */
+#define WORK_PRIORITY_DEFAULT_CLEANING WORK_PRIORITY_LOWEST
 
 typedef struct WorkTypeDef {
     const char *id; /* Stable identifier (saves), never shown. */
