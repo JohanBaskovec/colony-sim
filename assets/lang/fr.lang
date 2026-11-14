@@ -41,15 +41,24 @@ tool.stockpile = Zone de stockage
 
 # Objets
 item.wood = Bois
-item.stone = Pierre
 item.stone_block = Bloc de pierre
 item.branches = Branches
 item.twigs = Brindilles
 item.fresh_grass = Herbe fraîche
 item.grass = Herbe sèche
 item.berries = Baies
+item.cobble = Galet
+item.flint = Silex
+item.hammerstone = Percuteur
+item.chopper = Galet aménagé
+item.flake = Éclat tranchant
+item.hand_axe = Biface
+item.throwing_spear = Lance de jet
+item.thrusting_spear = Épieu
 item.category.food = Nourriture
 item.category.resources = Ressources
+item.category.tools = Outils
+item.category.weapons = Armes
 # Paliers de qualité, du pire au meilleur, après « Qualité : » (accord au féminin)
 item.quality.crude = grossière
 item.quality.rough = médiocre
@@ -61,6 +70,8 @@ item.quality.superb = superbe
 work.mining = Minage
 work.woodcutting = Bûcheronnage
 work.gathering = Cueillette
+work.construction = Construction
+work.crafting = Artisanat
 work.hauling = Transport
 
 # Savoirs
@@ -87,11 +98,13 @@ hud.help.camera = {0}/Flèches : déplacer · Molette : zoom · Glisser clic m
 hud.help.game = Clic/glisser gauche : sélectionner · Espace : pause · 1-3 : vitesse · L : langue · F3 : débogage · Échap : quitter
 hud.help.gathering = {0} : récolter · {1} : ramasser des pierres · {2} : des branches · {3} : des brindilles · {4} : couper de l’herbe
 hud.help.orders = {0} : couper des arbres · {1} : miner la roche · {2} : annuler des ordres
-hud.help.manage = {0} : zones de stockage (clic sur une zone : ses réglages) · {1} : priorités de travail
+hud.help.manage = {0} : zones de stockage · {1} : postes de travail · clic sur une zone ou un poste : ses réglages · {2} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 hud.tool.name = Outil : {0}
 hud.tool.unavailable = Personne dans la colonie ne sait encore faire cela
 hud.tool.stockpile_help = Glisser : créer, ou agrandir la zone sélectionnée · Maj+glisser : retirer · Échap : retour
+hud.tool.build_cost = Nécessite : {0} ×{1}
+hud.tool.build_help = Clic gauche : placer un plan · {0} : poste suivant · Échap : retour
 
 hud.tile.position = Case {0}, {1}
 hud.tile.terrain = Terrain : {0}
@@ -105,6 +118,10 @@ hud.tile.item_transform = Se transforme en {0} dans {1} h
 hud.tile.designation = Ordre : {0}
 hud.tile.designation_progress = Ordre : {0} ({1} % effectué)
 hud.tile.stockpile = Zone : {0}
+hud.tile.station = Poste de travail : {0}
+hud.tile.blueprint = Plan : {0} (construit à {1} %)
+hud.tile.flint_some = Un peu de silex dans le sol
+hud.tile.flint_plenty = Beaucoup de silex dans le sol
 hud.item_condition = Qualité : {0} · Points de vie : {1}/{2} ({3})
 hud.item_quality = Qualité : {0}
 hud.item_hit_points = Points de vie : {0}/{1} ({2})
@@ -130,6 +147,8 @@ colonist.task.gather_stones = Ramasse des pierres
 colonist.task.gather_branches = Ramasse des branches
 colonist.task.gather_twigs = Ramasse des brindilles
 colonist.task.cut_grass = Coupe de l’herbe
+colonist.task.build = Construit un poste de travail
+colonist.task.craft = Fabrique
 colonist.task.haul = Transport
 
 need.food = Nourriture
@@ -146,6 +165,7 @@ hud.colonist.age = Âge : {0}
 hud.colonist.strength = Force : {0} (porte jusqu’à {1})
 hud.colonist.activity = Activité : {0}
 hud.colonist.carrying = Porte : {0} ×{1} ({2})
+hud.colonist.tool = Outil : {0} ({1}, {2})
 hud.colonist.need = {0} : {1} %
 hud.colonist.need_state = {0} : {1} % ({2})
 hud.colonist.knowledge = Savoirs (niveaux sur 100)
@@ -166,6 +186,41 @@ stockpile.allow_none = Rien
 stockpile.quality = Qualité : de {0} à {1}
 stockpile.hit_points = Points de vie : de {0} à {1}
 stockpile.delete = Supprimer
+
+# Postes de travail
+workstation.crafting_spot = Coin d’artisanat
+workstation.knapping_spot = Poste de taille
+
+# Recettes
+recipe.pick_hammerstone = Choisir un percuteur
+recipe.knap_chopper = Tailler un galet aménagé
+recipe.strike_flakes = Débiter des éclats
+recipe.shape_hand_axe = Façonner un biface
+recipe.make_throwing_spear = Fabriquer une lance de jet
+recipe.make_thrusting_spear = Fabriquer un épieu
+
+# Inspecteur de poste de travail
+station.delete = Supprimer
+station.blueprint = Plan : un constructeur apportera les matériaux et le construira
+station.materials = Matériaux : {0} {1}/{2}
+station.construction = Avancement de la construction : {0}
+station.warning.nobody_can_build = Personne dans la colonie n’en sait encore assez pour le construire
+station.in_progress = En cours : {0} ({1})
+station.bills = Commandes (traitées de haut en bas)
+station.no_bills = Aucune commande : ajoutez-en une ci-dessous
+station.bill = {0}. {1}
+station.bill.remove = Retirer
+station.add_bill = Ajouter une commande :
+station.warning.unknown_recipe = Personne ne connaît assez bien cette recette
+station.warning.tool = Outil manquant : {0}
+station.warning.tool_either = Outil manquant : {0} ou {1}
+station.warning.no_input = Aucun matériau adapté dans la colonie
+bill.mode.do_times.one = Faire {0} fois
+bill.mode.do_times.other = Faire {0} fois
+bill.mode.until_stock = Jusqu’à {0} dans la colonie
+bill.mode.forever = Sans fin
+bill.progress.done = Réalisations : {0}
+bill.progress.in_colony = {0} dans la colonie
 
 # Unités
 unit.kg = {0} kg

@@ -49,6 +49,13 @@ static const SDL_Color BRANCH_COLOR = {122, 86, 50, 255};
 static const SDL_Color TWIG_COLOR = {168, 128, 82, 255};
 static const SDL_Color FRESH_GRASS_COLOR = {92, 168, 64, 255};
 static const SDL_Color DRY_GRASS_COLOR = {206, 184, 104, 255};
+static const SDL_Color FLINT_COLOR = {72, 78, 96, 255};
+static const SDL_Color FLAKE_COLOR = {128, 136, 156, 255};
+static const SDL_Color SPEAR_COLOR = {176, 134, 84, 255};
+static const SDL_Color MAT_COLOR = {164, 132, 82, 255};
+static const SDL_Color ANVIL_COLOR = {124, 122, 118, 255};
+static const SDL_Color BLUEPRINT_COLOR = {120, 190, 250, 255};
+static const SDL_Color BLUEPRINT_REFUSED_COLOR = {230, 70, 60, 255};
 static const SDL_Color ITEM_OUTLINE = {28, 24, 20, 255};
 static const SDL_Color PROGRESS_BACKGROUND = {20, 20, 24, 220};
 static const SDL_Color PROGRESS_COLOR = {120, 220, 110, 255};
@@ -285,8 +292,10 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         }
         break;
     }
-    case ITEM_STONE: {
-        /* A small heap of pebbles. */
+    case ITEM_COBBLE:
+    case ITEM_FLINT: {
+        /* A small heap of pebbles, or dark flint nodules. */
+        SDL_Color color = type == ITEM_FLINT ? FLINT_COLOR : STONE_COLOR;
         /* x, y, size, relative to the tile. */
         static const float STONES[4][3] = {{0.24f, 0.56f, 0.2f},
                                            {0.48f, 0.54f, 0.22f},
@@ -296,8 +305,58 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
             float size = SDL_max(1.0f, floorf(w * STONES[i][2]));
             SDL_FRect stone = {tile->x + floorf(w * STONES[i][0]),
                                tile->y + floorf(h * STONES[i][1]), size, size};
-            fill_outlined(renderer, stone, shade(STONE_COLOR, -i * 10));
+            fill_outlined(renderer, stone, shade(color, -i * 10));
         }
+        break;
+    }
+    case ITEM_HAMMERSTONE:
+    case ITEM_CHOPPER: {
+        /* One fist-sized stone; a chopper has a knapped, darker edge. */
+        float size = SDL_max(2.0f, floorf(w * 0.42f));
+        SDL_FRect stone = {tile->x + floorf((w - size) * 0.5f), tile->y + floorf(h * 0.4f), size,
+                           floorf(size * 0.85f)};
+        fill_outlined(renderer, stone, shade(STONE_COLOR, type == ITEM_HAMMERSTONE ? -6 : 6));
+        if (type == ITEM_CHOPPER && size >= 6.0f) {
+            SDL_FRect edge = {stone.x + 1.0f, stone.y + 1.0f, floorf(size * 0.3f),
+                              stone.h - 2.0f};
+            batch_quad(renderer, shade(STONE_COLOR, -40), &edge);
+        }
+        break;
+    }
+    case ITEM_FLAKE: {
+        /* A few thin slivers. */
+        float thickness = SDL_max(1.0f, floorf(h * 0.08f));
+        for (int i = 0; i < 3; i++) {
+            SDL_FRect sliver = {tile->x + floorf(w * (0.24f + 0.12f * (float)(i % 2))),
+                                tile->y + floorf(h * (0.38f + 0.14f * (float)i)),
+                                floorf(w * 0.34f), thickness};
+            fill_outlined(renderer, sliver, shade(FLAKE_COLOR, i * 10));
+        }
+        break;
+    }
+    case ITEM_HAND_AXE: {
+        /* A teardrop: rows narrowing towards the tip. */
+        static const float ROWS[4][2] = {
+            {0.42f, 0.16f}, {0.34f, 0.3f}, {0.3f, 0.4f}, {0.36f, 0.28f}};
+        float row_h = SDL_max(1.0f, floorf(h * 0.12f));
+        for (int i = 0; i < 4; i++) {
+            SDL_FRect row = {tile->x + floorf(w * ROWS[i][0]),
+                             tile->y + floorf(h * 0.3f) + row_h * (float)i,
+                             SDL_max(1.0f, floorf(w * ROWS[i][1])), row_h};
+            batch_quad(renderer, shade(FLINT_COLOR, i * 8), &row);
+        }
+        break;
+    }
+    case ITEM_THROWING_SPEAR:
+    case ITEM_THRUSTING_SPEAR: {
+        /* A long shaft with a sharpened tip; the thrusting spear is thicker. */
+        bool thrusting = type == ITEM_THRUSTING_SPEAR;
+        float thickness = SDL_max(1.0f, floorf(h * (thrusting ? 0.12f : 0.08f)));
+        SDL_FRect shaft = {tile->x + floorf(w * 0.08f), tile->y + floorf(h * 0.5f),
+                           floorf(w * 0.72f), thickness};
+        fill_outlined(renderer, shaft, SPEAR_COLOR);
+        SDL_FRect tip = {shaft.x + shaft.w, shaft.y, floorf(w * 0.12f), thickness};
+        fill_outlined(renderer, tip, shade(SPEAR_COLOR, -50));
         break;
     }
     case ITEM_BRANCHES:
@@ -456,6 +515,96 @@ void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0,
     translucent.a = 50;
     fill(renderer, translucent, &area);
     outline(renderer, area, 2.0f, color);
+}
+
+/* Fraction of a recipe's work done on a station's craft in progress. */
+static float craft_fraction(const Workstation *station)
+{
+    const RecipeDef *recipe = recipe_def((RecipeType)station->work_recipe);
+    if (recipe == NULL || station->work_input.type == ITEM_NONE) {
+        return 0.0f;
+    }
+    return clampf(station->work_progress / recipe->work, 0.0f, 1.0f);
+}
+
+static void progress_bar(SDL_Renderer *renderer, const SDL_FRect *tile, float fraction)
+{
+    if (fraction <= 0.0f || tile->w < 6.0f) {
+        return;
+    }
+    float height = SDL_max(2.0f, floorf(tile->h * 0.12f));
+    SDL_FRect bar = {tile->x + 1.0f, tile->y + tile->h - height - 1.0f, tile->w - 2.0f, height};
+    fill(renderer, PROGRESS_BACKGROUND, &bar);
+    bar.w = floorf(bar.w * fraction);
+    fill(renderer, PROGRESS_COLOR, &bar);
+}
+
+/* The station itself: a mat to sit on; a knapping spot adds a flat anvil stone. */
+static void render_station_shape(SDL_Renderer *renderer, const SDL_FRect *tile,
+                                 WorkstationType type, Uint8 alpha)
+{
+    SDL_Color mat = MAT_COLOR, anvil = ANVIL_COLOR, weave = shade(MAT_COLOR, -30);
+    SDL_Color edge = ITEM_OUTLINE;
+    mat.a = anvil.a = weave.a = edge.a = alpha;
+    SDL_FRect area = inset(tile, 0.84f);
+    fill(renderer, mat, &area);
+    float step = SDL_max(3.0f, floorf(area.h / 4.0f));
+    for (float y = area.y + step; y < area.y + area.h - 1.0f; y += step) {
+        SDL_FRect line = {area.x, y, area.w, 1.0f};
+        fill(renderer, weave, &line);
+    }
+    if (type == WORKSTATION_KNAPPING_SPOT) {
+        SDL_FRect stone = {tile->x + floorf(tile->w * 0.3f), tile->y + floorf(tile->h * 0.34f),
+                           floorf(tile->w * 0.4f), floorf(tile->h * 0.28f)};
+        fill(renderer, edge, &stone);
+        SDL_FRect top = {stone.x + 1.0f, stone.y + 1.0f, stone.w - 2.0f, stone.h - 2.0f};
+        fill(renderer, anvil, &top);
+    }
+}
+
+void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                         int selected)
+{
+    const Workstations *workstations = &game->workstations;
+    if (workstations->used_count == 0) {
+        return;
+    }
+    TileRect visible = camera_visible_tiles(camera, workstations->width, workstations->height);
+    for (int i = 0; i < WORKSTATION_MAX; i++) {
+        const Workstation *station = workstation_get_const(workstations, i);
+        if (station == NULL || station->x < visible.x0 || station->x >= visible.x1 ||
+            station->y < visible.y0 || station->y >= visible.y1) {
+            continue;
+        }
+        SDL_FRect tile = tile_rect(camera, station->x, station->y);
+        if (station->built) {
+            render_station_shape(renderer, &tile, (WorkstationType)station->type, 255);
+            if (station->work_input.type != ITEM_NONE) {
+                render_item_stack(renderer, &tile, (ItemType)station->work_input.type);
+                batch_flush(renderer);
+            }
+            progress_bar(renderer, &tile, craft_fraction(station));
+        } else {
+            /* Blueprint: a ghost of the station, outlined. */
+            render_station_shape(renderer, &tile, (WorkstationType)station->type, 90);
+            outline(renderer, inset(&tile, 0.9f), 1.0f, BLUEPRINT_COLOR);
+            progress_bar(renderer, &tile, workstation_build_fraction(station));
+        }
+        if (i == selected) {
+            outline(renderer, tile, 2.0f, SELECTION_COLOR);
+        }
+    }
+}
+
+void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                              WorkstationType type, int x, int y)
+{
+    SDL_FRect tile = tile_rect(camera, x, y);
+    bool allowed = game_can_place_workstation(game, x, y);
+    if (allowed) {
+        render_station_shape(renderer, &tile, type, 110);
+    }
+    outline(renderer, tile, 2.0f, allowed ? BLUEPRINT_COLOR : BLUEPRINT_REFUSED_COLOR);
 }
 
 void render_daylight(SDL_Renderer *renderer, float daylight, float width, float height)

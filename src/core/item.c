@@ -14,14 +14,20 @@
  * - stone block: a rough block of about 20 kg dug out of a rock wall (7.5 l
  *   of rock, irregular so it stacks with gaps);
  * - berries: a portion of about 300 g (half a liter, ~190 kcal);
- * - stone: a stone that fits the hand, about 1 kg, picked up from the ground;
- *   its grade is how well it knaps (fine grained or coarse);
+ * - cobble: a rounded stone that fits the hand, about 1 kg, picked up from
+ *   the ground; tough, the knapper's hammer (its grade is its toughness);
+ * - flint: a nodule of about 1 kg, the stone that is knapped (its grade is how
+ *   fine and even its grain is);
  * - branches: a dead or cut branch of about 1.5 kg, poorly packed;
  * - twigs: a handful (about 200 g) of kindling;
  * - grass: an armful, 2.5 kg cut fresh, 1 kg once dry (about 12 l either way).
  * Stone blocks never wear out; logs vary with the woodcutter (knots, cracks)
  * and berries with the gatherer (ripeness, bruises). Fresh grass left on the
  * ground dries in three days.
+ * Tools and weapons (docs/KNOWLEDGE.md §6, §8): a hammerstone (0.8 kg), a
+ * chopper (1 kg), a sharp flake (30 g, razor sharp but soon worn out), a hand
+ * axe (600 g); a throwing spear (0.8 kg, a long straight branch) and a
+ * thrusting spear (1.5 kg, thicker).
  */
 #define DEF(id_, key, category_, weight_, bulk_, nutrition_, hp, quality, damage)                 \
     .id = (id_), .name_key = (key), .category = (category_), .weight = (weight_),              \
@@ -37,8 +43,8 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                               20.0f, 20.0f, 0.0f, 150, false, false)},
     [ITEM_BERRIES] = {DEF("berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 0.3f, 1.0f, 0.05f, 10,
                           true, true)},
-    [ITEM_STONE] = {DEF("stone", N_("item.stone"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f, 200,
-                        true, false)},
+    [ITEM_COBBLE] = {DEF("cobble", N_("item.cobble"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f,
+                         200, true, false)},
     [ITEM_BRANCHES] = {DEF("branches", N_("item.branches"), ITEM_CATEGORY_RESOURCES, 1.5f, 10.0f,
                            0.0f, 20, true, true)},
     [ITEM_TWIGS] = {DEF("twigs", N_("item.twigs"), ITEM_CATEGORY_RESOURCES, 0.2f, 2.0f, 0.0f, 10,
@@ -48,6 +54,20 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                           .transforms_into = ITEM_GRASS, .transform_hours = 72},
     [ITEM_GRASS] = {DEF("grass", N_("item.grass"), ITEM_CATEGORY_RESOURCES, 1.0f, 25.0f, 0.0f, 15,
                         false, true)},
+    [ITEM_FLINT] = {DEF("flint", N_("item.flint"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f, 150,
+                        true, false)},
+    [ITEM_HAMMERSTONE] = {DEF("hammerstone", N_("item.hammerstone"), ITEM_CATEGORY_TOOLS, 0.8f,
+                              1.5f, 0.0f, 300, true, true)},
+    [ITEM_CHOPPER] = {DEF("chopper", N_("item.chopper"), ITEM_CATEGORY_TOOLS, 1.0f, 2.0f, 0.0f, 80,
+                          true, true)},
+    [ITEM_FLAKE] = {DEF("flake", N_("item.flake"), ITEM_CATEGORY_TOOLS, 0.03f, 0.2f, 0.0f, 15,
+                        true, true)},
+    [ITEM_HAND_AXE] = {DEF("hand_axe", N_("item.hand_axe"), ITEM_CATEGORY_TOOLS, 0.6f, 1.5f, 0.0f,
+                           120, true, true)},
+    [ITEM_THROWING_SPEAR] = {DEF("throwing_spear", N_("item.throwing_spear"),
+                                 ITEM_CATEGORY_WEAPONS, 0.8f, 10.0f, 0.0f, 50, true, true)},
+    [ITEM_THRUSTING_SPEAR] = {DEF("thrusting_spear", N_("item.thrusting_spear"),
+                                  ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 70, true, true)},
 };
 
 #undef DEF
@@ -68,6 +88,8 @@ const char *item_quality_name_key(ItemQuality quality)
 static const char *const CATEGORY_KEYS[ITEM_CATEGORY_COUNT] = {
     [ITEM_CATEGORY_FOOD] = N_("item.category.food"),
     [ITEM_CATEGORY_RESOURCES] = N_("item.category.resources"),
+    [ITEM_CATEGORY_TOOLS] = N_("item.category.tools"),
+    [ITEM_CATEGORY_WEAPONS] = N_("item.category.weapons"),
 };
 
 const char *item_category_name_key(ItemCategory category)
@@ -103,6 +125,15 @@ const ItemDef *item_def(ItemType type)
 bool item_is_food(ItemType type)
 {
     return (unsigned)type < ITEM_TYPE_COUNT && ITEM_DEFS[type].nutrition > 0.0f;
+}
+
+bool item_is_tool(ItemType type)
+{
+    if ((unsigned)type >= ITEM_TYPE_COUNT || type == ITEM_NONE) {
+        return false;
+    }
+    ItemCategory category = ITEM_DEFS[type].category;
+    return category == ITEM_CATEGORY_TOOLS || category == ITEM_CATEGORY_WEAPONS;
 }
 
 int item_stack_limit(ItemType type)

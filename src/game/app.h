@@ -17,9 +17,10 @@
 
 /* What a left click/drag on the map does. */
 typedef enum AppTool {
-    APP_TOOL_NONE,      /* Select colonists or a stockpile. */
+    APP_TOOL_NONE,      /* Select colonists, a workstation or a stockpile. */
     APP_TOOL_DESIGNATE, /* Place orders of `tool_type` (DESIGNATION_NONE: remove orders). */
     APP_TOOL_STOCKPILE, /* Create/extend stockpile zones; with Shift, remove zone tiles. */
+    APP_TOOL_BUILD,     /* Place a blueprint of `build_type` on the clicked tile. */
 } AppTool;
 
 typedef struct App {
@@ -51,6 +52,10 @@ typedef struct App {
      * colonist selection. The number guards against a reused index. */
     int selected_stockpile;
     int selected_stockpile_number;
+    /* Selected workstation (WORKSTATION_NONE if none), exclusive with the
+     * other selections; same guard. */
+    int selected_station;
+    int selected_station_number;
 
     /* Work priorities grid (game/work_panel.h). */
     bool show_work_panel;
@@ -60,6 +65,7 @@ typedef struct App {
 
     AppTool tool;
     DesignationType tool_type; /* For APP_TOOL_DESIGNATE. */
+    WorkstationType build_type; /* For APP_TOOL_BUILD. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;

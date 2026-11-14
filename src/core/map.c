@@ -132,7 +132,8 @@ bool map_init(Map *map, int width, int height)
     map->terrain = malloc(count);
     map->rock = calloc(count, 1);
     map->plants = calloc(count, sizeof(Plant));
-    if (map->terrain == NULL || map->rock == NULL || map->plants == NULL) {
+    map->flint = calloc(count, 1);
+    if (map->terrain == NULL || map->rock == NULL || map->plants == NULL || map->flint == NULL) {
         map_free(map);
         return false;
     }
@@ -147,6 +148,7 @@ void map_free(Map *map)
     free(map->terrain);
     free(map->rock);
     free(map->plants);
+    free(map->flint);
     memset(map, 0, sizeof(*map));
 }
 
@@ -217,6 +219,7 @@ uint64_t map_hash(const Map *map)
     size_t count = map_tile_count(map);
     hash = hash_fnv1a64(hash, map->terrain, count);
     hash = hash_fnv1a64(hash, map->rock, count);
+    hash = hash_fnv1a64(hash, map->flint, count);
     /* Hash plant fields one by one: struct padding bytes are unspecified. */
     for (size_t i = 0; i < count; i++) {
         const Plant *plant = &map->plants[i];
@@ -225,6 +228,18 @@ uint64_t map_hash(const Map *map)
         hash = hash_fnv1a64(hash, &plant->growth, sizeof(plant->growth));
     }
     return hash;
+}
+
+int map_flint_chance(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) ? map->flint[map_index(map, x, y)] : 0;
+}
+
+void map_set_flint_chance(Map *map, int x, int y, int chance)
+{
+    if (map_in_bounds(map, x, y)) {
+        map->flint[map_index(map, x, y)] = (uint8_t)clampi(chance, 0, MAP_FLINT_MAX_CHANCE);
+    }
 }
 
 size_t map_count_plants(const Map *map, PlantType type)

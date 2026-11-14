@@ -270,7 +270,7 @@ ItemType designation_yield(const Designations *designations, const Map *map, int
         *count = (int)((float)def->harvest_yield * plant->growth + 0.5f);
         return *count > 0 ? def->harvest_item : ITEM_NONE;
     }
-    case DESIGNATION_GATHER_STONES: *count = 1; return ITEM_STONE;
+    case DESIGNATION_GATHER_STONES: *count = 1; return ITEM_COBBLE;
     case DESIGNATION_GATHER_BRANCHES:
     case DESIGNATION_GATHER_TWIGS: {
         PlantStock stock = stock_of(designation_get(designations, x, y));
@@ -320,6 +320,12 @@ bool designation_add_work(Designations *designations, Map *map, Items *items, in
     }
     int count;
     ItemType product = designation_yield(designations, map, x, y, &count);
+    /* On a flint patch, some of the stones are flint (randomness only drawn there). */
+    int flint = map_flint_chance(map, x, y);
+    if (type == DESIGNATION_GATHER_STONES && flint > 0 && rng != NULL &&
+        rng_range_i32(rng, 0, 99) < flint) {
+        product = ITEM_FLINT;
+    }
     complete(map, x, y, type);
     if (items != NULL && product != ITEM_NONE) {
         /* After mining: the tile is open. */

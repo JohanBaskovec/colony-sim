@@ -3,8 +3,13 @@
  *
  * Each tick a colonist updates its needs, decides what to do when it stands
  * on a tile center (drink when thirsty, eat when hungry, sleep when tired or
- * at night, otherwise work on designations, or wander), then acts (walk one
- * tick along its path, eat, work, sleep...).
+ * at night, otherwise work: designations, building and crafting at
+ * workstations, hauling; or wander), then acts (walk one tick along its path,
+ * eat, work, sleep...).
+ *
+ * Tools are simply carried, at most one of each type, and used without
+ * equipping anything; they count in the carried weight. A colonist fetches a
+ * tool when a task needs one it does not carry, and keeps it.
  * Colonists are stored in the Game (see core/game.h); this module only works
  * on one colonist at a time with explicit dependencies.
  */
@@ -21,6 +26,7 @@
 #include "core/rng.h"
 #include "core/stockpile.h"
 #include "core/work.h"
+#include "core/workstation.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -61,6 +67,9 @@
 #define COLONIST_STRENGTH_PEAK_AGE 40
 #define COLONIST_STRENGTH_AGE_STEP 6
 
+/* Tools carried at once: one per tool type at most. */
+#define COLONIST_TOOL_MAX 8
+
 /* Needs go from 1 (fully satisfied) to 0. */
 #define NEED_FOOD_DECAY_PER_TICK (1.0f / (36.0f * TICKS_PER_HOUR))
 #define NEED_WATER_DECAY_PER_TICK (1.0f / (24.0f * TICKS_PER_HOUR))
@@ -85,6 +94,8 @@
 /* Work done per tick on a designation at speed ×1 (see colonist_work_speed()). */
 #define COLONIST_WORK_SPEED 1.0f
 #define COLONIST_WORK_SEARCH_MAX_COST 250.0f
+/* Crafters look for the input of a recipe within this travel cost of the station. */
+#define COLONIST_CRAFT_INPUT_MAX_COST 80.0f
 /* After picking up a stack, a hauler with room left also collects matching
  * stacks within this travel cost before delivering. */
 #define COLONIST_HAUL_COLLECT_MAX_COST 12.0f
@@ -105,6 +116,8 @@ typedef enum ColonistTask {
     TASK_SLEEP,
     TASK_WORK, /* Walking next to a designated tile, then working on it. */
     TASK_HAUL, /* Walking to an item stack, picking it up, carrying it to storage. */
+    TASK_BUILD, /* Bringing materials to a workstation blueprint, then building it. */
+    TASK_CRAFT, /* Fetching tools and input, then working through a bill at a station. */
     TASK_COUNT
 } ColonistTask;
 
@@ -121,8 +134,16 @@ typedef enum SearchKind {
     SEARCH_WATER,
     SEARCH_WORK,
     SEARCH_HAUL,
+    SEARCH_STATION, /* Building and crafting jobs at workstations. */
     SEARCH_COUNT
 } SearchKind;
+
+/* Steps of a job at a workstation (TASK_BUILD, TASK_CRAFT). */
+typedef enum StationJobPhase {
+    STATION_JOB_FETCH, /* Walking to `fetch` to pick up a tool, an input or materials. */
+    STATION_JOB_GO,    /* Walking to the station. */
+    STATION_JOB_WORK,  /* Working on it. */
+} StationJobPhase;
 
 typedef enum NeedLevel {
     NEED_LEVEL_OK,
@@ -149,11 +170,27 @@ typedef struct Colonist {
     uint32_t work_search_stamp;
     /* Stockpile revision + item additions + releases at the last failed haul search. */
     uint32_t haul_search_stamp;
+    /* Workstations revision + item additions + releases at the last failed
+     * building or crafting search. */
+    uint32_t station_search_stamp;
     ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
     TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
      * for `haul_destination`. */
     bool haul_delivering;
+    /* TASK_BUILD, TASK_CRAFT: the station (index, and number to notice a
+     * replacement in the same slot), the bill being worked through and its
+     * recipe, the current step, and the stack being fetched (a tool when
+     * `fetch_tool`). `target` is the station's tile. */
+    int station;
+    int station_number;
+    uint8_t bill;
+    uint8_t recipe;
+    uint8_t station_phase; /* StationJobPhase */
+    TilePos fetch;
+    bool fetch_tool;
+    /* Tools carried (one per type, count 1; empty slots have type ITEM_NONE). */
+    ItemStack tools[COLONIST_TOOL_MAX];
     int strength; /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
     float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
     float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
@@ -170,6 +207,7 @@ typedef struct ColonistContext {
     Designations *designations;
     Items *items;
     Stockpiles *stockpiles;
+    Workstations *workstations;
     Reservations *reservations;
     Pathfinder *pathfinder;
     /* Connectivity regions (may be out of date, never wrong: see core/region.h). */
@@ -213,6 +251,23 @@ bool colonist_can_do(const Colonist *colonist, DesignationType type);
  * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE). */
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge);
 
+/* Whether the colonist knows enough to build this kind of workstation. */
+bool colonist_can_build(const Colonist *colonist, WorkstationType type);
+
+/* Whether the colonist knows enough to make this recipe. */
+bool colonist_can_craft(const Colonist *colonist, RecipeType recipe);
+
+/* Index in `tools` of the best carried tool among `types` (grade, then hit
+ * points), or -1 when it carries none of them. */
+int colonist_tool_index(const Colonist *colonist, ItemTypeMask types);
+
+/* Takes one tool. Fails when it is not a tool, a tool of the same type is
+ * already carried, or every slot is used. */
+bool colonist_add_tool(Colonist *colonist, ItemStack tool);
+
+/* Drops every carried tool where the colonist stands (e.g. before removal). */
+void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map);
+
 /* Gives up the current task, releasing any reservation (e.g. before removal). */
 void colonist_abandon_task(Colonist *colonist, const ColonistContext *context);
 
@@ -231,11 +286,12 @@ int colonist_random_strength(Rng *rng, int age);
  * value out of range. */
 bool colonist_set_strength(Colonist *colonist, int strength);
 
-/* Kilograms the colonist is carrying. */
+/* Kilograms the colonist is carrying: the load in hand and the tools. */
 float colonist_carried_weight(const Colonist *colonist);
 
-/* How many items of a type the colonist can pick up at once (at least 1:
- * an item too heavy or too bulky is dragged). */
+/* How many items of a type the colonist can pick up at once, in what the
+ * weight and bulk limits leave once its tools are counted (at least 1: an
+ * item too heavy or too bulky is dragged). */
 int colonist_carry_capacity(const Colonist *colonist, ItemType type);
 
 /* Walking speed multiplier from the load: 1 up to the weight limit, lower above. */

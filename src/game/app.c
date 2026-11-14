@@ -35,6 +35,21 @@ static void toggle_tool(App *app, AppTool tool, DesignationType type)
     app->box_selecting = false;
 }
 
+/* Build tool: crafting spot, then the next kinds of station, then off. */
+static void cycle_build_tool(App *app)
+{
+    if (app->tool != APP_TOOL_BUILD) {
+        app->tool = APP_TOOL_BUILD;
+        app->build_type = (WorkstationType)0;
+    } else if (app->build_type + 1 < WORKSTATION_TYPE_COUNT) {
+        app->build_type = (WorkstationType)(app->build_type + 1);
+    } else {
+        app->tool = APP_TOOL_NONE;
+    }
+    app->left_button_down = false;
+    app->box_selecting = false;
+}
+
 static void select_stockpile(App *app, int index)
 {
     const Stockpile *stockpile = stockpile_get(&app->game.stockpiles, index);
@@ -42,6 +57,28 @@ static void select_stockpile(App *app, int index)
     app->selected_stockpile_number = stockpile != NULL ? stockpile->number : 0;
     if (stockpile != NULL) {
         app->selected_count = 0; /* Colonists and zones are not selected together. */
+        app->selected_station = WORKSTATION_NONE;
+    }
+}
+
+static void select_station(App *app, int index)
+{
+    const Workstation *station = workstation_get_const(&app->game.workstations, index);
+    app->selected_station = station != NULL ? index : WORKSTATION_NONE;
+    app->selected_station_number = station != NULL ? station->number : 0;
+    if (station != NULL) {
+        app->selected_count = 0;
+        app->selected_stockpile = STOCKPILE_NONE;
+    }
+}
+
+/* Forgets the selected workstation once it no longer exists. */
+static void prune_station_selection(App *app)
+{
+    const Workstation *station =
+        workstation_get_const(&app->game.workstations, app->selected_station);
+    if (station == NULL || station->number != app->selected_station_number) {
+        app->selected_station = WORKSTATION_NONE;
     }
 }
 
@@ -177,6 +214,7 @@ bool app_init(App *app, const CliOptions *options)
     camera_init(&app->camera, start_x, start_y, APP_INITIAL_ZOOM);
     ui_init(&app->ui, app->renderer, app->text);
     app->selected_stockpile = STOCKPILE_NONE;
+    app->selected_station = WORKSTATION_NONE;
     app->running = true;
     return true;
 }
@@ -226,11 +264,13 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     /* Mnemonic keys use the key labels (keycodes). */
     switch (key->key) {
     case SDLK_ESCAPE:
-        /* Steps back: work grid, zone selection, then tool, then quit. */
+        /* Steps back: work grid, zone or station selection, then tool, then quit. */
         if (app->show_work_panel) {
             app->show_work_panel = false;
         } else if (app->selected_stockpile != STOCKPILE_NONE) {
             app->selected_stockpile = STOCKPILE_NONE;
+        } else if (app->selected_station != WORKSTATION_NONE) {
+            app->selected_station = WORKSTATION_NONE;
         } else if (app->tool != APP_TOOL_NONE) {
             app->tool = APP_TOOL_NONE;
         } else {
@@ -248,6 +288,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     /* Not A, D, Q, S, W or Z: movement keys on QWERTY or AZERTY keyboards. */
     case SDLK_P: toggle_tool(app, APP_TOOL_STOCKPILE, DESIGNATION_NONE); break;
     case SDLK_T: app->show_work_panel = !app->show_work_panel; break;
+    case SDLK_E: cycle_build_tool(app); break;
     case SDLK_F3:
         app->show_debug = !app->show_debug;
         app->debug_tree_count = map_count_plants(&app->game.map, PLANT_TREE);
@@ -294,8 +335,9 @@ static void prune_selection(App *app)
     }
 }
 
-/* Click: select the colonist under the cursor, or else the stockpile zone
- * there. Shift adds colonists to / removes them from the selection. */
+/* Click: select the colonist under the cursor, or else the workstation or the
+ * stockpile zone there. Shift adds colonists to / removes them from the
+ * selection. */
 static void select_at_point(App *app, float screen_x, float screen_y, bool additive)
 {
     float world_x, world_y;
@@ -305,10 +347,16 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
         app->selected_count = 0;
     }
     app->selected_stockpile = STOCKPILE_NONE;
+    app->selected_station = WORKSTATION_NONE;
     if (entity_id_is_none(id)) {
         if (!additive) {
-            select_stockpile(app, stockpile_at(&app->game.stockpiles, (int)floorf(world_x),
-                                               (int)floorf(world_y)));
+            int x = (int)floorf(world_x), y = (int)floorf(world_y);
+            int station = workstation_at(&app->game.workstations, x, y);
+            if (station != WORKSTATION_NONE) {
+                select_station(app, station);
+            } else {
+                select_stockpile(app, stockpile_at(&app->game.stockpiles, x, y));
+            }
         }
         return;
     }
@@ -331,6 +379,7 @@ static void select_in_box(App *app, float x0, float y0, float x1, float y1, bool
         app->selected_count = 0;
     }
     app->selected_stockpile = STOCKPILE_NONE;
+    app->selected_station = WORKSTATION_NONE;
     for (int i = 0; i < count; i++) {
         select_add(app, found[i]);
     }
@@ -401,6 +450,17 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         if (app->tool_type == DESIGNATION_NONE ||
             game_designation_available(&app->game, app->tool_type)) {
             game_designate_rect(&app->game, x0, y0, x1, y1, app->tool_type);
+        }
+        if (app->tool_type == DESIGNATION_NONE) {
+            game_remove_blueprints_rect(&app->game, x0, y0, x1, y1);
+            prune_station_selection(app);
+        }
+    } else if (app->tool == APP_TOOL_BUILD) {
+        /* Blueprints nobody can build are refused (the tool panel says why). */
+        int x, y;
+        screen_to_tile(app, button->x, button->y, &x, &y);
+        if (game_workstation_buildable(&app->game, app->build_type)) {
+            game_place_workstation(&app->game, app->build_type, x, y);
         }
     } else if (app->tool == APP_TOOL_STOCKPILE) {
         apply_stockpile_tool(app, button->x, button->y, additive);
@@ -506,6 +566,7 @@ static void render_frame(App *app)
 
     render_map(app->renderer, &app->game.map, &app->camera);
     render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
+    render_workstations(app->renderer, &app->game, &app->camera, app->selected_station);
     render_items(app->renderer, &app->game, &app->camera);
     render_designations(app->renderer, &app->game, &app->camera);
     hud_draw_item_counts(app);
@@ -518,7 +579,12 @@ static void render_frame(App *app)
                             HOVER_COLOR);
     }
     hud_draw_world_labels(app);
-    if (app->tool != APP_TOOL_NONE && app->left_button_down) {
+    if (app->tool == APP_TOOL_BUILD) {
+        if (app->hover_valid) {
+            render_blueprint_preview(app->renderer, &app->game, &app->camera, app->build_type,
+                                     app->hover_x, app->hover_y);
+        }
+    } else if (app->tool != APP_TOOL_NONE && app->left_button_down) {
         float mouse_x, mouse_y;
         SDL_GetMouseState(&mouse_x, &mouse_y);
         int x0, y0, x1, y1;
@@ -565,6 +631,7 @@ void app_run(App *app)
         game_update(&app->game, dt);
         prune_selection(app);
         prune_stockpile_selection(app);
+        prune_station_selection(app);
         update_fps(app, dt);
         render_frame(app);
     }

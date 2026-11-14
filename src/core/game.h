@@ -17,6 +17,7 @@
 #include "core/region.h"
 #include "core/rng.h"
 #include "core/stockpile.h"
+#include "core/workstation.h"
 #include "core/worldgen.h"
 
 #include <stdbool.h>
@@ -34,6 +35,9 @@
  * from where they arrive, planting more when it has to. */
 #define GAME_SPAWN_RIPE_BUSHES 6
 #define GAME_SPAWN_FOOD_MAX_COST 25.0f
+/* Likewise, a tile of a flint patch with at least this chance (percent) where
+ * stones can be gathered, within the same distance: knapping needs flint. */
+#define GAME_SPAWN_FLINT_CHANCE 30
 
 /* Radius (in tiles) around a world point within which a colonist can be picked. */
 #define GAME_PICK_RADIUS 0.6f
@@ -49,6 +53,7 @@ typedef struct Game {
     Designations designations; /* Player orders (chop, mine...), same size as the map. */
     Items items; /* Items lying on the ground, same size as the map. */
     Stockpiles stockpiles; /* Storage zones drawn by the player. */
+    Workstations workstations; /* Crafting spots, knapping spots... and their bills. */
     Reservations reservations; /* Who is busy with which job or food. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */
@@ -115,5 +120,41 @@ bool game_designation_available(const Game *game, DesignationType type);
 /* Places (or with DESIGNATION_NONE, removes) an order on every valid tile of a
  * rectangle (corners in any order). Returns the number of tiles changed. */
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type);
+
+/* ---- Workstations -------------------------------------------------------- */
+
+/* Whether some living colonist knows enough to build this kind of station
+ * (the player may only place blueprints someone can build). */
+bool game_workstation_buildable(const Game *game, WorkstationType type);
+
+/* Whether some living colonist knows enough to make this recipe. */
+bool game_recipe_known(const Game *game, RecipeType recipe);
+
+/* Tool kinds a recipe needs that no living colonist carries and that lie
+ * nowhere in the colony (0 when every tool can be had): one mask per
+ * missing slot, joined. */
+ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe);
+
+/* Whether enough of some input type a bill allows lies in the colony. */
+bool game_bill_has_input(const Game *game, const Bill *bill);
+
+/* Whether a workstation may be placed on a tile: not on a stockpile, and
+ * where workstation_can_place() says yes. */
+bool game_can_place_workstation(const Game *game, int x, int y);
+
+/* Places a workstation blueprint where game_can_place_workstation() allows.
+ * Returns its index or WORKSTATION_NONE. */
+int game_place_workstation(Game *game, WorkstationType type, int x, int y);
+
+/* Removes a station or blueprint; what it held is dropped on its tile.
+ * Colonists working there give up. */
+bool game_remove_workstation(Game *game, int index);
+
+/* Removes blueprints (not built stations) in a rectangle. Returns how many. */
+int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1);
+
+/* Removes a bill; the input of a craft in progress that no other bill can
+ * finish is dropped on the station's tile. */
+bool game_remove_bill(Game *game, int station, int bill);
 
 #endif /* COLONY_CORE_GAME_H */

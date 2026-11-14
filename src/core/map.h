@@ -96,6 +96,11 @@ typedef struct Plant {
     float growth; /* 0 (seedling) .. 1 (mature) */
 } Plant;
 
+/* Highest flint chance of a tile, in percent: even a rich patch gives cobbles too. */
+#define MAP_FLINT_MAX_CHANCE 60
+/* From this chance on, a patch is called rich (display only). */
+#define MAP_FLINT_RICH_CHANCE 25
+
 /* How many recent topology changes the map remembers (see Map.topology_log). */
 #define MAP_TOPOLOGY_LOG_SIZE 16
 
@@ -114,6 +119,9 @@ typedef struct Map {
     uint8_t *terrain; /* Terrain per tile. */
     uint8_t *rock; /* RockType per tile; non-zero means a solid rock wall. */
     Plant *plants;
+    /* Flint patches: chance in percent (0..MAP_FLINT_MAX_CHANCE) that a stone
+     * gathered on the tile is a flint nodule rather than a cobble. */
+    uint8_t *flint;
     /* Incremented whenever where one can walk, or where water is, changes
      * (plants never block). Data derived from it (core/region.h) compares it
      * to know when it is out of date. Not part of map_hash(). */
@@ -144,7 +152,7 @@ void plant_regrow_stocks(Plant *plant, int hours);
 /* Fills every stock to the capacity (new plants of a generated world). */
 void plant_fill_stocks(Plant *plant);
 
-/* Allocates a map filled with soil, without rock nor plants. */
+/* Allocates a map filled with soil, without rock, plants nor flint. */
 bool map_init(Map *map, int width, int height);
 void map_free(Map *map);
 
@@ -190,6 +198,12 @@ size_t map_count_plants(const Map *map, PlantType type);
 
 /* Whether the plant on this tile can be eaten right now. */
 bool map_has_edible_plant(const Map *map, int x, int y);
+
+/* Flint chance of a tile in percent (0 out of bounds). */
+int map_flint_chance(const Map *map, int x, int y);
+
+/* Sets it, clamped to 0..MAP_FLINT_MAX_CHANCE (out-of-bounds tiles are ignored). */
+void map_set_flint_chance(Map *map, int x, int y, int chance);
 
 /* Shallow or deep water (false out of bounds). */
 bool map_is_water(const Map *map, int x, int y);

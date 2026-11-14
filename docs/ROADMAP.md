@@ -53,10 +53,12 @@ Tick items as they land and add newly discovered tasks.
 - [x] Design of the knowledge system and of the seven starting knowledges, their items and constructions (`docs/KNOWLEDGE.md`)
 - [x] Knowledge definitions and per-settler levels (seven starting knowledges, 50 to 80 at the start), replacing skills: speed, quality and minimum levels from knowledge; learning by doing; start with no tools nor food, ripe berry bushes guaranteed near the arrival point; knowledge levels in the colonist inspector and the work grid
 - [x] New materials and orders: gather stones (repeats until cancelled), gather branches, gather twigs (plant stocks that grow back), cut grass; fresh grass dries on the ground; mined stone renamed stone block; felling and mining locked until axes, picks and their knowledges exist
-- [ ] Dirt and knapping debris (with the knapping spot)
+- [x] Workstations and bills: stone split into cobble and flint, flint patches (one near the start); workstations built from a blueprint by a builder who brings the materials (crafting spot, knapping spot); bills (do N times, until N lie in the colony, forever; allowed stone types) and crafting; carried tools (one per type, no equipment slot), fetched when a recipe needs one and kept; knapping and spear making recipes, hand axe failures, quality capped by materials; build tool, workstation inspector, flint and carried tools in the inspectors
+- [ ] Dirt and knapping debris: needs a dirt layer, and injuries (M6) for the sharp debris
+- [ ] Bills: worker level filter (minimum/maximum knowledge level), ingredient search radius, pausing a bill; "until N in stock" counting only stored items, once hauling keeps up
+- [ ] Workstations and blueprints on plants: clear the plant first (today a station may be placed on a bush or grass)
+- [ ] Tools (next): speed factors on orders and recipes, grade factor, wear and breaking; swapping for a better tool; the detour in job search
 - [ ] Starting settlers get 1 to 30 points in a few related knowledges (once non-starting knowledges exist)
-- [ ] Tools: tool slot, fetching the best tool, speed factors and wear; felling and mining need a tool
-- [ ] Workstations and bills: crafting spot, knapping spot; knapping and spear making recipes, failures, quality capped by materials
 - [ ] Blueprints, construction jobs, materials; the quality of built things comes from the builder's knowledge level and the quality of the materials used
 - [ ] Stone age constructions: grass bed, windbreak (wall), branch screen (door), lean-to (roof), cave floor clearing, workstations; hauling to construction sites
 - [ ] Room detection, roofs (lean-to, natural rock roof over caves)

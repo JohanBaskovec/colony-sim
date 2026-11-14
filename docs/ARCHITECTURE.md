@@ -49,13 +49,15 @@ simulation:
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
-| `work`       | Work types (mining, woodcutting, gathering, hauling), the knowledge shown for each, priority helpers |
+| `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
+| `workstation`| Workstations (crafting spot, knapping spot): blueprints, materials, construction, bills, the craft in progress |
+| `work`       | Work types (mining, woodcutting, gathering, construction, crafting, hauling), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning, quality and condition of what a worker produces |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
-| `map`        | Tile layers (terrain, rock, plants with their branch and twig stocks) and static definitions (`TerrainDef`...) |
+| `map`        | Tile layers (terrain, rock, plants with their branch and twig stocks, flint chance) and static definitions (`TerrainDef`...) |
 | `worldgen`   | Procedural map generation from a seed                                        |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
@@ -75,6 +77,7 @@ simulation:
 | `hud`          | Builds and draws the HUD panels; all text goes through `tr()`           |
 | `ui`           | Immediate-mode widgets (panel, button, check box) and click capture     |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
+| `station_panel` | Inspector of the selected workstation (blueprint progress, bills, warnings) |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
 | `localization` | Discovers `.lang` files, selects the language, loads catalogs           |
@@ -134,11 +137,11 @@ dense layers of the same size: order type and work progress per tile.
 Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
 `Game`): at most one stack per tile (one item type, up to its stack limit),
 plus map-wide totals per type. Each `ItemDef` has a realistic `weight` (kg per
-unit: a 7 kg log, a 20 kg stone block, a 1 kg stone, a 300 g portion of berries) and a `bulk`
+unit: a 7 kg log, a 20 kg stone block, a 1 kg cobble, a 300 g portion of berries) and a `bulk`
 (room taken, about half a liter per unit, gaps included). A tile holds
 `ITEM_TILE_BULK` (1000) of bulk, so the stack limit is derived:
 `item_stack_limit() = ITEM_TILE_BULK / bulk` (1,000 berries, 50 logs, 50
-stone blocks, 666 stones). `items_drop()` fills the target tile, then
+stone blocks, 666 cobbles). `items_drop()` fills the target tile, then
 spreads the rest breadth-first over nearby passable tiles (never behind a
 wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
 `RockDef.mined_item/mined_yield`, `PlantDef.harvest_item/harvest_yield`
@@ -340,6 +343,55 @@ colonist checks every tick that it still owns its job, so lookups must not
 scan the table. The index is rebuilt when reservations are released, which is
 rare next to lookups.
 
+### Workstations, bills and carried tools
+
+Workstations (`core/workstation.h`, owned by `Game`, at most
+`WORKSTATION_MAX`) sit on one tile each. The player places a **blueprint**
+(`game_place_workstation()`, refused on stockpile tiles); a colonist with
+the construction work type, and the knowledge the station needs, fetches the
+materials (a knapping spot needs a cobble as its anvil) and does the
+construction work. The cancel tool also removes blueprints; removing a
+station drops what it held.
+
+A built station carries up to `WORKSTATION_BILL_MAX` **bills**: a recipe
+(`core/recipe.h`), a mode (do N times, until N lie in the colony, forever)
+and the input types allowed. "Until N" counts `Items.totals`, i.e. every
+item lying on the map, stored or not, but not carried ones: counting only
+stored items would let a crafter make far too many before anyone hauls.
+Bills are worked through from the top: a crafter takes the first one that
+wants more, whose recipe it knows, whose tools can be had (carried, or lying
+somewhere) and with an allowed input lying in the colony. Inputs are searched
+around the station (`COLONIST_CRAFT_INPUT_MAX_COST`), in the recipe's
+preference order (flint first for flakes, a cobble first for a chopper).
+In recipes and stations `KNOWLEDGE_NONE` means anyone can (in designations
+it means nobody can yet).
+
+A craft in progress lives on the station (`work_recipe`, `work_input`,
+`work_progress`), not on the colonist: if the crafter leaves to eat, the next
+one resumes it, and while it is unfinished only bills of the same recipe are
+taken. Products are dropped on the station's tile. Quality comes from the
+worker's level, capped by the material (`recipe_quality_cap()`: grade + 1,
+a cobble knaps like crude flint); shaping a hand axe can fail
+(`recipe_failure_chance()`), leaving a few flakes.
+
+**Carried tools**: a colonist has no equipment slots but keeps up to
+`COLONIST_TOOL_MAX` tools (`Colonist.tools`, at most one per type), which
+count in the carried weight and bulk. A recipe's tools are fetched like its
+input (same `RESERVATION_HAUL_SOURCE` reservation) and then kept; a removed
+colonist drops them. Swapping, wear and speed factors come with the tools
+step of M3.
+
+Station jobs (`TASK_BUILD`, `TASK_CRAFT`) go through three phases (fetch,
+go to the station, work) and reserve the station (`RESERVATION_STATION`).
+At one priority level, designations are tried first, then construction, then
+crafting, then hauling. Failed searches back off with a stamp made of the
+workstations revision, item additions and reservation releases.
+
+Flint is a map layer (`Map.flint`): the chance in percent, up to
+`MAP_FLINT_MAX_CHANCE`, that gathering stones on a tile turns up flint rather
+than a cobble. World generation lays noise patches, denser on gravel and
+rough stone, and the spawn makes sure one lies near the settlers.
+
 ## Pathfinding
 
 - 8-directional grid, cost of entering a tile = `map_move_cost()` (× √2
@@ -419,7 +471,7 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 ## Frontend state
 
 UI state that is not part of the simulation (camera, selection, selected
-stockpile, active tool, drag rectangle, debug toggle) lives in `App`.
+stockpile or workstation, active tool, drag rectangle, debug toggle) lives in `App`.
 
 The UI is immediate-mode (`game/ui.h`): panels and widgets are laid out and
 drawn every frame. A left or right click on a panel drawn during the previous

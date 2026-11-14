@@ -31,6 +31,15 @@ void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x
 void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                        int selected);
 
+/* Workstations and blueprints (with their progress); the selected one (index,
+ * or WORKSTATION_NONE) is outlined. */
+void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                         int selected);
+
+/* Ghost of a blueprint under the cursor, red where it cannot be placed. */
+void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                              WorkstationType type, int x, int y);
+
 /* Rectangle of tiles being added to (or removed from) stockpile zones. */
 void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                            int y1, bool remove);

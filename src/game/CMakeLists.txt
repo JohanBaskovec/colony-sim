@@ -4,6 +4,7 @@ add_executable(colony_sim
     localization.c
     main.c
     render.c
+    station_panel.c
     stockpile_panel.c
     text.c
     ui.c

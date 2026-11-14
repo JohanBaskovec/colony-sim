@@ -192,10 +192,10 @@ static void test_product_stacks(void)
     CHECK_EQ_INT(master.hit_points, item_def(ITEM_BRANCHES)->max_hit_points);
 
     /* Stones: a grade (how well they knap), never damaged. */
-    ItemStack stones = knowledge_product(ITEM_STONE, 1, 100.0, NULL);
+    ItemStack stones = knowledge_product(ITEM_COBBLE, 1, 100.0, NULL);
     CHECK_EQ_INT(stones.quality, ITEM_QUALITY_SUPERB);
-    CHECK_EQ_INT(stones.hit_points, item_def(ITEM_STONE)->max_hit_points);
-    CHECK_EQ_INT(knowledge_product(ITEM_STONE, 1, 50.0, NULL).quality, ITEM_QUALITY_ROUGH);
+    CHECK_EQ_INT(stones.hit_points, item_def(ITEM_COBBLE)->max_hit_points);
+    CHECK_EQ_INT(knowledge_product(ITEM_COBBLE, 1, 50.0, NULL).quality, ITEM_QUALITY_ROUGH);
 
     /* Stone blocks are always perfect and draw no randomness. */
     Rng rng, untouched;

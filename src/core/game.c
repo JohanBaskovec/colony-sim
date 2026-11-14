@@ -22,6 +22,12 @@
 #define SPAWN_BUSH_MAX_COST (GAME_SPAWN_FOOD_MAX_COST - 10.0f)
 #define SPAWN_BUSH_MIN_DISTANCE 3
 #define SPAWN_BUSH_SPOT_CHANCE 0.08f
+/* Flint patch laid for the first settlers when there is none near them:
+ * SPAWN_FLINT_PATCH_CHANCE percent in the middle, SPAWN_FLINT_PATCH_FALLOFF
+ * less per step, over SPAWN_FLINT_PATCH_RADIUS steps (Manhattan). */
+#define SPAWN_FLINT_PATCH_RADIUS 2
+#define SPAWN_FLINT_PATCH_CHANCE 45
+#define SPAWN_FLINT_PATCH_FALLOFF 10
 
 void game_default_params(NewGameParams *params)
 {
@@ -126,6 +132,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .designations = &game->designations,
         .items = &game->items,
         .stockpiles = &game->stockpiles,
+        .workstations = &game->workstations,
         .reservations = &game->reservations,
         .pathfinder = &game->pathfinder,
         .regions = &game->regions,
@@ -145,6 +152,7 @@ bool game_remove_colonist(Game *game, EntityId id)
     }
     ColonistContext context = colonist_context(game, id.index);
     colonist_abandon_task(colonist, &context); /* Frees its reservations. */
+    colonist_drop_tools(colonist, &game->items, &game->map);
     colonist_free(colonist);
     memset(colonist, 0, sizeof(*colonist));
     return pool_release(&game->colonist_pool, id);
@@ -294,6 +302,69 @@ static void ensure_food_near(Game *game, TilePos center)
     }
 }
 
+/* A tile of a rich enough flint patch where stones can be gathered. */
+static bool is_flint_spot(const Map *map, int x, int y, void *userdata)
+{
+    (void)userdata;
+    return map_flint_chance(map, x, y) >= GAME_SPAWN_FLINT_CHANCE &&
+           designation_can_apply(map, x, y, DESIGNATION_GATHER_STONES);
+}
+
+typedef struct PatchSpotSearch {
+    TilePos center;
+    Rng *rng;
+    float chance; /* Of taking a suitable spot. */
+} PatchSpotSearch;
+
+/* Where a flint patch can be laid: ground where stones can be gathered, not
+ * next to the arrival point; scattered like the bushes (see is_bush_spot()). */
+static bool is_patch_spot(const Map *map, int x, int y, void *userdata)
+{
+    PatchSpotSearch *search = userdata;
+    if (!designation_can_apply(map, x, y, DESIGNATION_GATHER_STONES) ||
+        abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_BUSH_MIN_DISTANCE) {
+        return false;
+    }
+    return search->chance >= 1.0f || rng_next_float(search->rng) < search->chance;
+}
+
+/* The first settlers need flint to knap: lays a small flint patch near their
+ * arrival point when there is none within reach. */
+static void ensure_flint_near(Game *game, TilePos center)
+{
+    Map *map = &game->map;
+    if (pathfinder_find_nearest(&game->pathfinder, map, center, is_flint_spot, NULL,
+                                SPAWN_BUSH_MAX_COST, NULL, NULL)) {
+        return;
+    }
+    PatchSpotSearch search = {center, &game->rng, SPAWN_BUSH_SPOT_CHANCE};
+    TilePos spot;
+    if (!pathfinder_find_nearest(&game->pathfinder, map, center, is_patch_spot, &search,
+                                 SPAWN_BUSH_MAX_COST, NULL, &spot)) {
+        search.chance = 1.0f;
+        if (!pathfinder_find_nearest(&game->pathfinder, map, center, is_patch_spot, &search,
+                                     SPAWN_BUSH_MAX_COST, NULL, &spot)) {
+            LOG_WARN("No room for flint near the starting colonists");
+            return;
+        }
+    }
+    /* Richest in the middle, fading over SPAWN_FLINT_PATCH_RADIUS tiles. */
+    for (int dy = -SPAWN_FLINT_PATCH_RADIUS; dy <= SPAWN_FLINT_PATCH_RADIUS; dy++) {
+        for (int dx = -SPAWN_FLINT_PATCH_RADIUS; dx <= SPAWN_FLINT_PATCH_RADIUS; dx++) {
+            int x = spot.x + dx, y = spot.y + dy;
+            int distance = abs(dx) + abs(dy);
+            if (distance > SPAWN_FLINT_PATCH_RADIUS ||
+                !designation_can_apply(map, x, y, DESIGNATION_GATHER_STONES)) {
+                continue;
+            }
+            int chance = SPAWN_FLINT_PATCH_CHANCE - SPAWN_FLINT_PATCH_FALLOFF * distance;
+            if (chance > map_flint_chance(map, x, y)) {
+                map_set_flint_chance(map, x, y, chance);
+            }
+        }
+    }
+}
+
 static bool is_free_tile(const Map *map, int x, int y, void *userdata)
 {
     return map_is_passable(map, x, y) && !game_tile_has_colonist(userdata, x, y);
@@ -306,6 +377,7 @@ static void spawn_starting_colonists(Game *game, int count)
         return;
     }
     ensure_food_near(game, center);
+    ensure_flint_near(game, center);
     for (int i = 0; i < count; i++) {
         TilePos tile;
         if (!pathfinder_find_nearest(&game->pathfinder, &game->map, center, is_free_tile, game,
@@ -326,6 +398,7 @@ bool game_init(Game *game, const NewGameParams *params)
         !designations_init(&game->designations, game->map.width, game->map.height) ||
         !items_init(&game->items, game->map.width, game->map.height) ||
         !stockpiles_init(&game->stockpiles, game->map.width, game->map.height) ||
+        !workstations_init(&game->workstations, game->map.width, game->map.height) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
         !regions_init(&game->regions, game->map.width, game->map.height) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
@@ -352,6 +425,7 @@ void game_shutdown(Game *game)
     designations_free(&game->designations);
     items_free(&game->items);
     stockpiles_free(&game->stockpiles);
+    workstations_free(&game->workstations);
     map_free(&game->map);
     memset(game, 0, sizeof(*game));
 }
@@ -440,6 +514,7 @@ uint64_t game_hash(const Game *game)
     hash = designations_hash(&game->designations, hash);
     hash = items_hash(&game->items, hash);
     hash = stockpiles_hash(&game->stockpiles, hash);
+    hash = workstations_hash(&game->workstations, hash);
     hash = reservations_hash(&game->reservations, hash);
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
@@ -464,6 +539,14 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));
+        int32_t job[8] = {c->station,       c->station_number, c->bill,    c->recipe,
+                          c->station_phase, c->fetch.x,        c->fetch.y, c->fetch_tool};
+        hash = hash_fnv1a64(hash, job, sizeof(job));
+        for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+            ItemStack tool = c->tools[i];
+            int32_t fields[4] = {tool.type, tool.count, tool.quality, tool.hit_points};
+            hash = hash_fnv1a64(hash, fields, sizeof(fields));
+        }
     }
     return hash;
 }
@@ -532,4 +615,129 @@ int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float
         }
     }
     return count;
+}
+
+/* ---- Workstations -------------------------------------------------------- */
+
+bool game_workstation_buildable(const Game *game, WorkstationType type)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            colonist_can_build(&game->colonists[slot], type)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool game_recipe_known(const Game *game, RecipeType recipe)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            colonist_can_craft(&game->colonists[slot], recipe)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool colonist_carries_tool(const Game *game, ItemTypeMask types)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            colonist_tool_index(&game->colonists[slot], types) >= 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool items_lying(const Items *items, ItemTypeMask types, int count)
+{
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        if ((types & ITEM_TYPE_BIT(type)) && items->totals[type] >= count) {
+            return true;
+        }
+    }
+    return false;
+}
+
+ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe)
+{
+    const RecipeDef *def = recipe_def(recipe);
+    ItemTypeMask missing = 0;
+    for (int slot = 0; def != NULL && slot < RECIPE_TOOL_MAX; slot++) {
+        ItemTypeMask types = def->tools[slot];
+        if (types != 0 && !items_lying(&game->items, types, 1) &&
+            !colonist_carries_tool(game, types)) {
+            missing |= types;
+        }
+    }
+    return missing;
+}
+
+bool game_bill_has_input(const Game *game, const Bill *bill)
+{
+    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    return def != NULL &&
+           items_lying(&game->items, bill->inputs & recipe_inputs((RecipeType)bill->recipe),
+                       def->input_count);
+}
+
+bool game_can_place_workstation(const Game *game, int x, int y)
+{
+    return stockpile_at(&game->stockpiles, x, y) == STOCKPILE_NONE &&
+           workstation_can_place(&game->workstations, &game->map, x, y);
+}
+
+int game_place_workstation(Game *game, WorkstationType type, int x, int y)
+{
+    if (!game_can_place_workstation(game, x, y)) {
+        return WORKSTATION_NONE;
+    }
+    return workstations_place(&game->workstations, &game->map, type, x, y);
+}
+
+bool game_remove_workstation(Game *game, int index)
+{
+    const Workstation *station = workstation_get_const(&game->workstations, index);
+    if (station == NULL) {
+        return false;
+    }
+    int x = station->x, y = station->y;
+    ItemStack returned[2];
+    int count = workstations_remove(&game->workstations, index, returned);
+    for (int i = 0; i < count; i++) {
+        items_drop(&game->items, &game->map, x, y, returned[i]);
+    }
+    return true;
+}
+
+int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1)
+{
+    int removed = 0;
+    for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
+        for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
+            int index = workstation_at(&game->workstations, x, y);
+            const Workstation *station = workstation_get_const(&game->workstations, index);
+            if (station != NULL && !station->built && game_remove_workstation(game, index)) {
+                removed++;
+            }
+        }
+    }
+    return removed;
+}
+
+bool game_remove_bill(Game *game, int station_index, int bill)
+{
+    const Workstation *station = workstation_get_const(&game->workstations, station_index);
+    if (station == NULL || bill < 0 || bill >= station->bill_count) {
+        return false;
+    }
+    int x = station->x, y = station->y;
+    ItemStack returned;
+    if (workstation_remove_bill(&game->workstations, station_index, bill, &returned)) {
+        items_drop(&game->items, &game->map, x, y, returned);
+    }
+    return true;
 }

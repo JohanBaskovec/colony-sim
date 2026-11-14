@@ -1,0 +1,362 @@
+#include "game/station_panel.h"
+
+#include "core/i18n.h"
+
+#define PANEL_PADDING 8.0f
+#define GAP 8.0f
+#define INDENT 20.0f
+#define TEXT_SIZE 160
+#define TARGET_BIG_STEP 10 /* Shift+click on -/+. */
+
+/* The rows are laid out twice: once to measure the panel, then to draw it.
+ * Widgets only exist (and react) in the second pass. */
+typedef struct Layout {
+    Ui *ui;
+    bool draw;
+    float x, y;
+    float width; /* Measuring: widest row so far. Drawing: content width. */
+    float row, text_offset, button_height;
+} Layout;
+
+/* What the player clicked, applied after the rows (deleting shifts bills). */
+typedef enum ActionType {
+    ACTION_NONE,
+    ACTION_DELETE_STATION,
+    ACTION_DELETE_BILL,
+    ACTION_CYCLE_MODE,
+    ACTION_ADD_TARGET,
+    ACTION_TOGGLE_INPUT,
+    ACTION_ADD_BILL,
+} ActionType;
+
+typedef struct Action {
+    ActionType type;
+    int bill;
+    int value; /* Target change, input type or recipe. */
+} Action;
+
+static void measure(Layout *layout, float width)
+{
+    if (!layout->draw) {
+        layout->width = SDL_max(layout->width, width);
+    }
+}
+
+static void label_row(Layout *layout, const char *text, float indent, bool dim)
+{
+    measure(layout, indent + ui_text_width(layout->ui, text));
+    if (layout->draw) {
+        float y = layout->y + layout->text_offset;
+        if (dim) {
+            ui_label_dim(layout->ui, text, layout->x + indent, y);
+        } else {
+            ui_label(layout->ui, text, layout->x + indent, y);
+        }
+    }
+    layout->y += layout->row;
+}
+
+static bool button(Layout *layout, float x, const char *label)
+{
+    return layout->draw &&
+           ui_button(layout->ui,
+                     (SDL_FRect){x, layout->y, ui_button_width(layout->ui, label),
+                                 layout->button_height},
+                     label);
+}
+
+/* Label on the left, button on the right of the same row. */
+static bool label_with_button(Layout *layout, const char *text, const char *label)
+{
+    float button_width = ui_button_width(layout->ui, label);
+    measure(layout, ui_text_width(layout->ui, text) + GAP + button_width);
+    bool clicked = button(layout, layout->x + layout->width - button_width, label);
+    if (layout->draw) {
+        ui_label(layout->ui, text, layout->x, layout->y + layout->text_offset);
+    }
+    layout->y += layout->row;
+    return clicked;
+}
+
+static void percent_text(char *out, size_t size, float fraction)
+{
+    char number[16];
+    tr_integer(number, sizeof(number), (long long)(SDL_clamp(fraction, 0.0f, 1.0f) * 100.0f));
+    TR_FORMAT(out, size, tr("unit.percent"), number);
+}
+
+static void blueprint_rows(Layout *layout, const Game *game, const Workstation *station)
+{
+    const WorkstationDef *def = workstation_def((WorkstationType)station->type);
+    char text[TEXT_SIZE], a[16], b[16], percent[32];
+    label_row(layout, tr("station.blueprint"), 0.0f, true);
+    if (def->material != ITEM_NONE) {
+        tr_integer(a, sizeof(a), station->materials);
+        tr_integer(b, sizeof(b), def->material_count);
+        TR_FORMAT(text, sizeof(text), tr("station.materials"),
+                  tr(item_def(def->material)->name_key), a, b);
+        label_row(layout, text, 0.0f, false);
+    }
+    percent_text(percent, sizeof(percent), workstation_build_fraction(station));
+    TR_FORMAT(text, sizeof(text), tr("station.construction"), percent);
+    label_row(layout, text, 0.0f, false);
+    if (!game_workstation_buildable(game, (WorkstationType)station->type)) {
+        label_row(layout, tr("station.warning.nobody_can_build"), 0.0f, true);
+    }
+}
+
+static const char *mode_label(char *out, size_t size, const Bill *bill)
+{
+    char target[16];
+    tr_integer(target, sizeof(target), bill->target);
+    switch ((BillMode)bill->mode) {
+    case BILL_DO_TIMES:
+        TR_FORMAT(out, size, tr_plural("bill.mode.do_times", bill->target), target);
+        break;
+    case BILL_UNTIL_STOCK: TR_FORMAT(out, size, tr("bill.mode.until_stock"), target); break;
+    default: SDL_strlcpy(out, tr("bill.mode.forever"), size); break;
+    }
+    return out;
+}
+
+/* Mode button, -/+ for the target, and how far the bill has got. */
+static void bill_mode_row(Layout *layout, const Game *game, const Bill *bill, int index,
+                          Action *action)
+{
+    Ui *ui = layout->ui;
+    char mode[TEXT_SIZE], progress[TEXT_SIZE] = "", number[16];
+    mode_label(mode, sizeof(mode), bill);
+    /* Symbols, not words: the same in every language. */
+    const char *minus = "−", *plus = "+";
+    float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
+    bool has_target = bill->mode != BILL_FOREVER;
+    if (bill->mode == BILL_DO_TIMES) {
+        tr_integer(number, sizeof(number), bill->done);
+        TR_FORMAT(progress, sizeof(progress), tr("bill.progress.done"), number);
+    } else if (bill->mode == BILL_UNTIL_STOCK) {
+        const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+        tr_integer(number, sizeof(number), game->items.totals[def->product]);
+        TR_FORMAT(progress, sizeof(progress), tr("bill.progress.in_colony"), number);
+    }
+    float x = layout->x + INDENT;
+    float width = INDENT + ui_button_width(ui, mode) + GAP;
+    if (has_target) {
+        width += 2.0f * small + 2.0f + GAP;
+    }
+    measure(layout, width + ui_text_width(ui, progress));
+    if (button(layout, x, mode)) {
+        *action = (Action){ACTION_CYCLE_MODE, index, 0};
+    }
+    x += ui_button_width(ui, mode) + GAP;
+    if (has_target) {
+        int step = (SDL_GetModState() & SDL_KMOD_SHIFT) ? TARGET_BIG_STEP : 1;
+        if (layout->draw && ui_button(ui, (SDL_FRect){x, layout->y, small, layout->button_height},
+                                      minus)) {
+            *action = (Action){ACTION_ADD_TARGET, index, -step};
+        }
+        if (layout->draw &&
+            ui_button(ui, (SDL_FRect){x + small + 2.0f, layout->y, small, layout->button_height},
+                      plus)) {
+            *action = (Action){ACTION_ADD_TARGET, index, step};
+        }
+        x += 2.0f * small + 2.0f + GAP;
+    }
+    if (layout->draw && progress[0] != '\0') {
+        ui_label_dim(ui, progress, x, layout->y + layout->text_offset);
+    }
+    layout->y += layout->row;
+}
+
+/* One check box per input type, when the recipe has a choice. */
+static void bill_inputs_row(Layout *layout, const Bill *bill, int index, Action *action)
+{
+    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    int alternatives = 0;
+    float width = INDENT;
+    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
+        if (def->inputs[i] != ITEM_NONE) {
+            alternatives++;
+            width += ui_checkbox_width(layout->ui, tr(item_def(def->inputs[i])->name_key)) + GAP;
+        }
+    }
+    if (alternatives < 2) {
+        return;
+    }
+    measure(layout, width - GAP);
+    float x = layout->x + INDENT;
+    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
+        ItemType type = def->inputs[i];
+        if (type == ITEM_NONE) {
+            continue;
+        }
+        const char *name = tr(item_def(type)->name_key);
+        float box_width = ui_checkbox_width(layout->ui, name);
+        bool allowed = (bill->inputs & ITEM_TYPE_BIT(type)) != 0;
+        if (layout->draw && ui_checkbox(layout->ui, x, layout->y, box_width,
+                                        allowed ? UI_CHECKED : UI_UNCHECKED, name)) {
+            *action = (Action){ACTION_TOGGLE_INPUT, index, (int)type};
+        }
+        x += box_width + GAP;
+    }
+    layout->y += layout->row;
+}
+
+/* Why nobody works on a bill, if it can be told cheaply. */
+static void bill_warning_rows(Layout *layout, const Game *game, const Bill *bill)
+{
+    RecipeType recipe = (RecipeType)bill->recipe;
+    if (!game_recipe_known(game, recipe)) {
+        label_row(layout, tr("station.warning.unknown_recipe"), INDENT, true);
+        return;
+    }
+    const RecipeDef *def = recipe_def(recipe);
+    ItemTypeMask missing = game_recipe_missing_tools(game, recipe);
+    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+        ItemTypeMask types = def->tools[slot];
+        if (types == 0 || (missing & types) != types) {
+            continue;
+        }
+        const char *names[2] = {NULL, NULL};
+        int count = 0;
+        for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && count < 2; type++) {
+            if (types & ITEM_TYPE_BIT(type)) {
+                names[count++] = tr(item_def((ItemType)type)->name_key);
+            }
+        }
+        char text[TEXT_SIZE];
+        if (count == 2) {
+            TR_FORMAT(text, sizeof(text), tr("station.warning.tool_either"), names[0], names[1]);
+        } else {
+            TR_FORMAT(text, sizeof(text), tr("station.warning.tool"), names[0]);
+        }
+        label_row(layout, text, INDENT, true);
+    }
+    if (bill_wants_more(bill, (int)game->items.totals[def->product]) &&
+        !game_bill_has_input(game, bill)) {
+        label_row(layout, tr("station.warning.no_input"), INDENT, true);
+    }
+}
+
+static void built_rows(Layout *layout, const Game *game, const Workstation *station,
+                       Action *action)
+{
+    char text[TEXT_SIZE], number[16], percent[32];
+    const RecipeDef *current = recipe_def((RecipeType)station->work_recipe);
+    if (current != NULL && station->work_input.count > 0) {
+        percent_text(percent, sizeof(percent), station->work_progress / current->work);
+        TR_FORMAT(text, sizeof(text), tr("station.in_progress"), tr(current->name_key), percent);
+        label_row(layout, text, 0.0f, false);
+    }
+    label_row(layout, tr(station->bill_count > 0 ? "station.bills" : "station.no_bills"), 0.0f,
+              station->bill_count == 0);
+    for (int i = 0; i < station->bill_count; i++) {
+        const Bill *bill = &station->bills[i];
+        tr_integer(number, sizeof(number), i + 1);
+        TR_FORMAT(text, sizeof(text), tr("station.bill"), number,
+                  tr(recipe_def((RecipeType)bill->recipe)->name_key));
+        if (label_with_button(layout, text, tr("station.bill.remove"))) {
+            *action = (Action){ACTION_DELETE_BILL, i, 0};
+        }
+        bill_mode_row(layout, game, bill, i, action);
+        bill_inputs_row(layout, bill, i, action);
+        bill_warning_rows(layout, game, bill);
+    }
+    if (station->bill_count >= WORKSTATION_BILL_MAX) {
+        return;
+    }
+    label_row(layout, tr("station.add_bill"), 0.0f, false);
+    for (int recipe = 0; recipe < RECIPE_COUNT; recipe++) {
+        const RecipeDef *def = recipe_def((RecipeType)recipe);
+        if (!(def->stations & WORKSTATION_BIT(station->type))) {
+            continue;
+        }
+        const char *name = tr(def->name_key);
+        measure(layout, INDENT + ui_button_width(layout->ui, name));
+        if (button(layout, layout->x + INDENT, name)) {
+            *action = (Action){ACTION_ADD_BILL, 0, recipe};
+        }
+        layout->y += layout->row;
+    }
+}
+
+static void station_rows(Layout *layout, const Game *game, const Workstation *station,
+                         Action *action)
+{
+    const char *name = tr(workstation_def((WorkstationType)station->type)->name_key);
+    if (label_with_button(layout, name, tr("station.delete"))) {
+        *action = (Action){ACTION_DELETE_STATION, 0, 0};
+    }
+    if (station->built) {
+        built_rows(layout, game, station, action);
+    } else {
+        blueprint_rows(layout, game, station);
+    }
+}
+
+static void apply(App *app, int index, const Action *action)
+{
+    Workstations *workstations = &app->game.workstations;
+    const Workstation *station = workstation_get_const(workstations, index);
+    const Bill *bill = action->bill >= 0 && action->bill < station->bill_count
+                           ? &station->bills[action->bill]
+                           : NULL;
+    switch (action->type) {
+    case ACTION_DELETE_STATION:
+        game_remove_workstation(&app->game, index);
+        app->selected_station = WORKSTATION_NONE;
+        break;
+    case ACTION_DELETE_BILL: game_remove_bill(&app->game, index, action->bill); break;
+    case ACTION_CYCLE_MODE:
+        if (bill != NULL) {
+            workstation_set_bill_mode(workstations, index, action->bill,
+                                      (BillMode)((bill->mode + 1) % BILL_MODE_COUNT));
+        }
+        break;
+    case ACTION_ADD_TARGET:
+        if (bill != NULL) {
+            workstation_set_bill_target(workstations, index, action->bill,
+                                        bill->target + action->value);
+        }
+        break;
+    case ACTION_TOGGLE_INPUT:
+        if (bill != NULL) {
+            workstation_set_bill_input(workstations, index, action->bill,
+                                       (ItemType)action->value,
+                                       !(bill->inputs & ITEM_TYPE_BIT(action->value)));
+        }
+        break;
+    case ACTION_ADD_BILL:
+        workstation_add_bill(workstations, index, (RecipeType)action->value);
+        break;
+    case ACTION_NONE: break;
+    }
+}
+
+void station_panel_draw(App *app, float right, float bottom)
+{
+    int index = app->selected_station;
+    const Workstation *station = workstation_get_const(&app->game.workstations, index);
+    if (station == NULL) {
+        return;
+    }
+    Ui *ui = &app->ui;
+    float row = ui_row_height(ui);
+    float line = (float)text_line_height(app->text);
+    Layout layout = {ui, false, 0.0f, 0.0f, 0.0f, row, SDL_floorf((row - line) * 0.5f), row - 2.0f};
+    Action action = {ACTION_NONE, -1, 0};
+    station_rows(&layout, &app->game, station, &action);
+
+    float width = SDL_ceilf(layout.width);
+    float height = layout.y + 2.0f * PANEL_PADDING;
+    SDL_FRect panel = {right - width - 2.0f * PANEL_PADDING, SDL_max(0.0f, bottom - height),
+                       width + 2.0f * PANEL_PADDING, height};
+    ui_panel(ui, panel);
+    layout.draw = true;
+    layout.x = panel.x + PANEL_PADDING;
+    layout.y = panel.y + PANEL_PADDING;
+    layout.width = width;
+    station_rows(&layout, &app->game, station, &action);
+    if (action.type != ACTION_NONE) {
+        apply(app, index, &action);
+    }
+}

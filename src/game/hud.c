@@ -1,12 +1,13 @@
 #include "game/hud.h"
 
 #include "core/i18n.h"
+#include "game/station_panel.h"
 #include "game/stockpile_panel.h"
 #include "game/work_panel.h"
 
 #define HUD_MARGIN 8.0f
 #define HUD_PADDING 6.0f
-#define HUD_MAX_LINES 16
+#define HUD_MAX_LINES 24
 #define HUD_LINE_SIZE 256
 
 static const SDL_Color HUD_TEXT_COLOR = {236, 236, 228, 255};
@@ -204,6 +205,25 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
+    const Workstation *station = workstation_get_const(
+        &app->game.workstations, workstation_at(&app->game.workstations, x, y));
+    if (station != NULL) {
+        const char *name = tr(workstation_def((WorkstationType)station->type)->name_key);
+        if (station->built) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.station"), name);
+        } else {
+            tr_integer(a, sizeof(a), (long long)(workstation_build_fraction(station) * 100.0f));
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.blueprint"), name, a);
+        }
+    }
+
+    /* Flint in the ground: what gathering stones may turn up. */
+    int flint = map_flint_chance(map, x, y);
+    if (flint > 0) {
+        panel_add_text(panel, tr(flint >= MAP_FLINT_RICH_CHANCE ? "hud.tile.flint_plenty"
+                                                                 : "hud.tile.flint_some"));
+    }
+
     const Stockpile *stockpile =
         stockpile_get(&app->game.stockpiles, stockpile_at(&app->game.stockpiles, x, y));
     if (stockpile != NULL) {
@@ -303,6 +323,18 @@ static void build_selection_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.carrying"),
                   tr(item_def((ItemType)colonist->carried.type)->name_key), count, weight);
         add_item_condition_line(panel, colonist->carried);
+    }
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        ItemStack tool = colonist->tools[i];
+        if (tool.type == ITEM_NONE) {
+            continue;
+        }
+        char hit_points[16], percent[32];
+        tr_integer(hit_points, sizeof(hit_points), item_stack_hit_points_percent(tool));
+        TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), hit_points);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.tool"),
+                  tr(item_def((ItemType)tool.type)->name_key),
+                  tr(item_quality_name_key((ItemQuality)tool.quality)), percent);
     }
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);
@@ -406,6 +438,20 @@ void hud_draw(App *app)
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"),
                       tr("tool.stockpile"));
             panel_add_text(&tool, tr("hud.tool.stockpile_help"));
+        } else if (app->tool == APP_TOOL_BUILD) {
+            const WorkstationDef *def = workstation_def(app->build_type);
+            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(def->name_key));
+            if (def->material != ITEM_NONE) {
+                char count[16];
+                tr_integer(count, sizeof(count), def->material_count);
+                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.build_cost"),
+                          tr(item_def(def->material)->name_key), count);
+            }
+            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.build_help"),
+                      key_name(SDLK_E));
+            if (!game_workstation_buildable(&app->game, app->build_type)) {
+                panel_add_text(&tool, tr("hud.tool.unavailable"));
+            }
         } else {
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool"),
                       tr(tool_name_key(app->tool_type)));
@@ -437,14 +483,16 @@ void hud_draw(App *app)
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_C),
               key_name(SDLK_M), key_name(SDLK_X));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"), key_name(SDLK_P),
-              key_name(SDLK_T));
+              key_name(SDLK_E), key_name(SDLK_T));
     float help_width, help_height;
     panel_size(app, &help, &help_width, &help_height);
     float help_y = screen_height - help_height - HUD_MARGIN;
     panel_draw(app, &help, HUD_MARGIN, help_y);
 
-    /* Bottom right: inspector of the selected colonist(s) or stockpile. */
-    if (app->selected_stockpile != STOCKPILE_NONE) {
+    /* Bottom right: inspector of the selected colonist(s), station or stockpile. */
+    if (app->selected_station != WORKSTATION_NONE) {
+        station_panel_draw(app, screen_width - HUD_MARGIN, help_y - HUD_MARGIN);
+    } else if (app->selected_stockpile != STOCKPILE_NONE) {
         stockpile_panel_draw(app, screen_width - HUD_MARGIN, help_y - HUD_MARGIN);
     } else if (app->selected_count > 0) {
         Panel selection = {0};

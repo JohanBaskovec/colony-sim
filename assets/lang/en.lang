@@ -42,15 +42,24 @@ tool.stockpile = Stockpile zone
 
 # Items
 item.wood = Wood
-item.stone = Stone
 item.stone_block = Stone block
 item.branches = Branches
 item.twigs = Twigs
 item.fresh_grass = Fresh grass
 item.grass = Dry grass
 item.berries = Berries
+item.cobble = Cobble
+item.flint = Flint
+item.hammerstone = Hammerstone
+item.chopper = Chopper
+item.flake = Sharp flake
+item.hand_axe = Hand axe
+item.throwing_spear = Throwing spear
+item.thrusting_spear = Thrusting spear
 item.category.food = Food
 item.category.resources = Resources
+item.category.tools = Tools
+item.category.weapons = Weapons
 # Quality grades, worst to best, shown after "Quality:" (e.g. "Quality: fine")
 item.quality.crude = crude
 item.quality.rough = rough
@@ -62,6 +71,8 @@ item.quality.superb = superb
 work.mining = Mining
 work.woodcutting = Woodcutting
 work.gathering = Gathering
+work.construction = Construction
+work.crafting = Crafting
 work.hauling = Hauling
 
 # Skills
@@ -93,14 +104,18 @@ hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · L: lang
 # {0}, {1}, {2}, {3} = keys of the chop, mine, harvest and cancel tools
 hud.help.gathering = {0}: harvest · {1}: gather stones · {2}: gather branches · {3}: gather twigs · {4}: cut grass
 hud.help.orders = {0}: chop trees · {1}: mine rock · {2}: cancel orders
-# {0} = key of the stockpile zone tool, {1} = key of the work priorities grid
-hud.help.manage = {0}: stockpile zones (click a zone: its settings) · {1}: work priorities
+# {0} = key of the stockpile zone tool, {1} = key of the build tool, {2} = key of the work priorities grid
+hud.help.manage = {0}: stockpile zones · {1}: workstations · click a zone or station: its settings · {2}: work priorities
 # {0} = tool name
 hud.tool = Tool: {0} · Left click/drag: apply · Esc: back
 # {0} = tool name (stockpile zone tool: first line, help on the second line)
 hud.tool.name = Tool: {0}
 hud.tool.unavailable = Nobody in the colony knows how to do this yet
 hud.tool.stockpile_help = Drag: create, or extend the selected zone · Shift+drag: remove · Esc: back
+# {0} = material, {1} = how many
+hud.tool.build_cost = Needs: {0} ×{1}
+# {0} = key of the build tool
+hud.tool.build_help = Left click: place a blueprint · {0}: next workstation · Esc: back
 
 # Tile inspector. {0}, {1} = tile coordinates
 hud.tile.position = Tile {0}, {1}
@@ -122,6 +137,12 @@ hud.tile.designation = Order: {0}
 hud.tile.designation_progress = Order: {0} ({1}% done)
 # {0} = stockpile name (e.g. Stockpile 2)
 hud.tile.stockpile = Zone: {0}
+# {0} = workstation name
+hud.tile.station = Workstation: {0}
+# {0} = workstation name, {1} = percentage of the construction done
+hud.tile.blueprint = Blueprint: {0} ({1}% built)
+hud.tile.flint_some = Some flint in the ground
+hud.tile.flint_plenty = Plenty of flint in the ground
 # Items on a tile or carried. {0} = quality grade, {1} = hit points,
 # {2} = maximum hit points, {3} = hit points in percent (e.g. 75%)
 hud.item_condition = Quality: {0} · Hit points: {1}/{2} ({3})
@@ -150,6 +171,8 @@ colonist.task.gather_stones = Gathering stones
 colonist.task.gather_branches = Gathering branches
 colonist.task.gather_twigs = Gathering twigs
 colonist.task.cut_grass = Cutting grass
+colonist.task.build = Building a workstation
+colonist.task.craft = Crafting
 colonist.task.haul = Hauling
 
 need.food = Food
@@ -170,6 +193,8 @@ hud.colonist.strength = Strength: {0} (carries up to {1})
 hud.colonist.activity = Activity: {0}
 # {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
 hud.colonist.carrying = Carrying: {0} ×{1} ({2})
+# {0} = tool name, {1} = quality grade, {2} = hit points (e.g. 80%)
+hud.colonist.tool = Tool: {0} ({1}, {2})
 # {0} = need name, {1} = percentage
 hud.colonist.need = {0}: {1}%
 # {0} = need name, {1} = percentage, {2} = state (e.g. Hungry)
@@ -199,6 +224,50 @@ stockpile.quality = Quality: {0} to {1}
 # {0} = lowest accepted hit points (e.g. 50%), {1} = highest
 stockpile.hit_points = Hit points: {0} to {1}
 stockpile.delete = Delete
+
+# Workstations
+workstation.crafting_spot = Crafting spot
+workstation.knapping_spot = Knapping spot
+
+# Recipes
+recipe.pick_hammerstone = Pick a hammerstone
+recipe.knap_chopper = Knap a chopper
+recipe.strike_flakes = Strike flakes
+recipe.shape_hand_axe = Shape a hand axe
+recipe.make_throwing_spear = Make a throwing spear
+recipe.make_thrusting_spear = Make a thrusting spear
+
+# Workstation inspector
+station.delete = Delete
+station.blueprint = Blueprint: a builder will bring the materials and build it
+# {0} = material, {1} = delivered, {2} = needed
+station.materials = Materials: {0} {1}/{2}
+# {0} = percentage (e.g. 40%)
+station.construction = Construction: {0} done
+station.warning.nobody_can_build = Nobody in the colony knows enough to build it yet
+# {0} = recipe, {1} = percentage (e.g. 40%)
+station.in_progress = In progress: {0} ({1} done)
+station.bills = Bills (worked through from the top)
+station.no_bills = No bills yet: add one below
+# {0} = position in the list, {1} = recipe
+station.bill = {0}. {1}
+station.bill.remove = Remove
+station.add_bill = Add a bill:
+station.warning.unknown_recipe = Nobody knows this recipe well enough
+# {0} = tool
+station.warning.tool = Missing tool: {0}
+# {0}, {1} = tools, either will do
+station.warning.tool_either = Missing tool: {0} or {1}
+station.warning.no_input = No suitable material lying in the colony
+# Bill repeat modes (click to change). {0} = target
+bill.mode.do_times.one = Do {0} time
+bill.mode.do_times.other = Do {0} times
+bill.mode.until_stock = Until {0} in the colony
+bill.mode.forever = Forever
+# {0} = crafts completed
+bill.progress.done = Completed: {0}
+# {0} = products lying in the colony
+bill.progress.in_colony = {0} in the colony
 
 # Units. {0} = number
 unit.kg = {0} kg

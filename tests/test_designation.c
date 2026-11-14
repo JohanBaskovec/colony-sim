@@ -4,6 +4,8 @@
 
 #include "test_framework.h"
 
+#include <stdlib.h>
+
 /* 16 x 16 soil map with a tree at (3, 3), a granite wall at (5, 5) and a
  * sandstone wall at (6, 5). */
 static bool init_world(Map *map, Designations *designations)
@@ -281,7 +283,7 @@ static void test_gathering_stones_repeats(void)
 
     CHECK(!designation_add_work(&d, &map, &items, 8, 8, needed * 0.5f, 60.0, NULL));
     CHECK(designation_add_work(&d, &map, &items, 8, 8, needed * 0.5f, 60.0, NULL));
-    CHECK_EQ_INT(items_get(&items, 8, 8).type, ITEM_STONE);
+    CHECK_EQ_INT(items_get(&items, 8, 8).type, ITEM_COBBLE);
     CHECK_EQ_INT(items_get(&items, 8, 8).count, 1);
     /* The order stays, from scratch: stones are never exhausted. */
     CHECK_EQ_INT(designation_get(&d, 8, 8), DESIGNATION_GATHER_STONES);
@@ -290,8 +292,43 @@ static void test_gathering_stones_repeats(void)
     for (int i = 0; i < 9; i++) {
         CHECK(designation_add_work(&d, &map, &items, 8, 8, needed, 60.0, NULL));
     }
-    CHECK_EQ_INT((int)items.totals[ITEM_STONE], 10);
+    CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 10);
     CHECK_EQ_INT(designation_get(&d, 8, 8), DESIGNATION_GATHER_STONES);
+    items_free(&items);
+    free_world(&map, &d);
+}
+
+static void test_gathering_stones_on_a_flint_patch(void)
+{
+    Map map;
+    Designations d;
+    Items items;
+    Rng rng;
+    REQUIRE(init_world(&map, &d));
+    REQUIRE(items_init(&items, 16, 16));
+    rng_seed(&rng, 7, 1);
+    map_set_flint_chance(&map, 8, 8, MAP_FLINT_MAX_CHANCE);
+    CHECK_EQ_INT(map_flint_chance(&map, 8, 8), MAP_FLINT_MAX_CHANCE);
+    map_set_flint_chance(&map, 9, 9, 200); /* Clamped. */
+    CHECK_EQ_INT(map_flint_chance(&map, 9, 9), MAP_FLINT_MAX_CHANCE);
+    CHECK_EQ_INT(map_flint_chance(&map, -1, 0), 0);
+    REQUIRE(designation_set(&d, &map, 8, 8, DESIGNATION_GATHER_STONES));
+    REQUIRE(designation_set(&d, &map, 4, 4, DESIGNATION_GATHER_STONES));
+    float needed = designation_work_needed(&d, &map, 8, 8);
+    for (int i = 0; i < 200; i++) {
+        CHECK(designation_add_work(&d, &map, &items, 8, 8, needed, 60.0, &rng));
+        CHECK(designation_add_work(&d, &map, &items, 4, 4, needed, 60.0, &rng));
+    }
+    /* About 60% flint on the patch, none elsewhere: 400 stones in all. */
+    long flint = items.totals[ITEM_FLINT];
+    CHECK(flint > 90 && flint < 150);
+    CHECK_EQ_INT((int)(items.totals[ITEM_COBBLE] + flint), 400);
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            ItemStack stack = items_get(&items, x, y);
+            CHECK(stack.type != ITEM_FLINT || abs(x - 8) + abs(y - 8) <= 2 * ITEM_DROP_RADIUS);
+        }
+    }
     items_free(&items);
     free_world(&map, &d);
 }
@@ -459,6 +496,7 @@ int main(void)
     RUN_TEST(test_products_depend_on_level);
     RUN_TEST(test_gathering_orders_need_a_target);
     RUN_TEST(test_gathering_stones_repeats);
+    RUN_TEST(test_gathering_stones_on_a_flint_patch);
     RUN_TEST(test_gathering_branches_leaves_the_tree);
     RUN_TEST(test_cutting_grass);
     RUN_TEST(test_harvest_picks_ripe_fruit);

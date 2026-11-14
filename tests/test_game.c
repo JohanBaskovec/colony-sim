@@ -58,6 +58,28 @@ static void test_settlers_arrive_near_ripe_berries(void)
     }
 }
 
+/* Accepts a tile of a rich enough flint patch where stones can be gathered. */
+static bool is_flint_spot(const Map *map, int x, int y, void *userdata)
+{
+    (void)userdata;
+    return map_flint_chance(map, x, y) >= GAME_SPAWN_FLINT_CHANCE &&
+           designation_can_apply(map, x, y, DESIGNATION_GATHER_STONES);
+}
+
+static void test_settlers_arrive_near_flint(void)
+{
+    for (uint64_t seed = 1; seed <= 40; seed++) {
+        Game game;
+        REQUIRE(init_small_game(&game, seed));
+        const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
+        REQUIRE(first != NULL);
+        TilePos start = {(int16_t)first->x, (int16_t)first->y};
+        CHECK(pathfinder_find_nearest(&game.pathfinder, &game.map, start, is_flint_spot, NULL,
+                                      GAME_SPAWN_FOOD_MAX_COST, NULL, NULL));
+        game_shutdown(&game);
+    }
+}
+
 static void test_init_failure_leaves_game_safe_to_shut_down(void)
 {
     Game game;
@@ -318,6 +340,7 @@ int main(void)
     RUN_TEST(test_init_and_shutdown);
     RUN_TEST(test_init_failure_leaves_game_safe_to_shut_down);
     RUN_TEST(test_settlers_arrive_near_ripe_berries);
+    RUN_TEST(test_settlers_arrive_near_flint);
     RUN_TEST(test_update_advances_ticks);
     RUN_TEST(test_plants_grow_over_time);
     RUN_TEST(test_plant_growth_is_spread_over_ticks);

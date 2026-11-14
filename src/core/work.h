@@ -18,6 +18,8 @@ typedef enum WorkType {
     WORK_MINING,
     WORK_WOODCUTTING,
     WORK_GATHERING,
+    WORK_CONSTRUCTION, /* Building workstations (and later, everything else). */
+    WORK_CRAFTING,     /* Working through the bills of workstations. */
     WORK_HAULING,
     WORK_TYPE_COUNT
 } WorkType;

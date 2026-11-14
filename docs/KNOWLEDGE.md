@@ -1,7 +1,8 @@
 # Knowledge, items and constructions
 
 *Living document: the reference for what settlers can know, make and build.
-Design only, nothing here is implemented yet; the ROADMAP says what is done.
+Mostly design: steps 1 and 2 of the implementation plan (§12) are done; the
+ROADMAP says what is implemented.
 Values marked *(tuning)* are first guesses, to adjust in play.*
 
 The project owner keeps a historical outline of the content, from the Upper
@@ -27,7 +28,8 @@ detailed when they are developed.
 10. [Basic shelters](#10-basic-shelters)
 11. [Changes to what already exists](#11-changes-to-what-already-exists)
 12. [Implementation plan](#12-implementation-plan)
-13. [Open questions](#13-open-questions)
+13. [Future content](#13-future-content): noted for later, not detailed
+14. [Open questions](#14-open-questions)
 
 ---
 
@@ -263,7 +265,7 @@ their family by conversation, stories and apprenticeship.
 
 1. The level of the job's knowledge gives a quality score (§1.4).
 2. The grade is capped at **the average grade of the materials + 1**: a master
-   knapper with a coarse stone makes at best a rough hand axe. Materials
+   knapper with a coarse flint makes at best a rough hand axe. Materials
    without quality never cap.
 3. Made things come out at 100% hit points, except for failures.
 
@@ -274,10 +276,23 @@ hit points. Factors from crude to superb: ×0.6, ×0.8, ×1, ×1.2, ×1.5
 
 ### 2.3 Tools
 
-- A settler has **one tool slot** and **one weapon slot** (a spear fits
-  either). Before a job that wants a tool, a settler without one fetches the
-  best available tool from storage. The tool stays in hand until another job
-  needs a different one.
+- **No equipment slots.** Tools (and spears) are simply carried: a settler
+  uses whatever they carry, the best one for each task, without equipping
+  anything. Two guards:
+  - **at most one tool of each type** per settler (one flake, one
+    hammerstone...), so that nobody hoards the colony's tools;
+  - carried tools **count in the carried weight** (§2.1, strength), so a
+    settler loaded with heavy tools hauls less. Small tools weigh next to
+    nothing (a flake: 30 g); big ones (axes, picks, spears) are felt.
+- **Fetched when needed, never put back after the work.** When a task wants
+  a tool type the settler does not carry, they pick the best reachable one up
+  on the way (from storage or the ground) and keep it.
+- **Put down only** when swapping for a better one of the same type (at the
+  place where the better one lies, no extra trip) or when it breaks.
+- Job search counts the detour: a settler who already carries the tool is
+  preferred over one who would have to fetch it. Tools that someone is
+  walking to are reserved.
+- Tools carried by a settler are theirs: others never take them.
 - Tools wear: **1 hit point per hour of work** *(tuning)*; at 0 the tool breaks
   (notification).
 - Tool grade factor on speed: ×0.8, ×0.9, ×1.0, ×1.1, ×1.2, crude to superb.
@@ -329,7 +344,7 @@ knowledge. The first wood of a colony is branches and twigs.
 
 ### 2.5 Workstations and bills
 
-- A **bill** = a recipe + a repeat mode (*do N times*, *until N in storage*,
+- A **bill** = a recipe + a repeat mode (*do N times*, *until N in the colony*,
   *forever*) + filters: ingredient search radius (default 30 tiles), minimum
   ingredient grade, allowed workers (level range in the recipe's knowledge).
 - A crafter fetches all the ingredients, works at the station for the recipe's
@@ -339,6 +354,15 @@ knowledge. The first wood of a colony is branches and twigs.
   work (ticks), knowledge and minimum level, products and by-products,
   failure chance if any.
 - Unfinished work is kept on the station and resumes, like orders today.
+- **Tools of a recipe** are fetched like ingredients, but not consumed: the
+  crafter picks the tool up (the best available one), works with it, and
+  keeps it afterwards (§2.3). A recipe whose tool does not
+  exist in the colony cannot be started (the bill says why).
+- **Workstations are built**, not placed: the player places a workstation
+  blueprint; a builder brings its materials (fetched like ingredients, by the
+  builder until hauling to construction sites exists) and does the
+  construction work, with the station's knowledge and level. The general
+  blueprint system (§10, step 5 of §12) reuses this.
 
 ---
 
@@ -351,10 +375,12 @@ knowledge. The first wood of a colony is branches and twigs.
   starting knowledges influence (§1.5): they have "heard of" bows, cord or
   tanning. Nobody starts above 50 outside the starting knowledges.
 - World generation guarantees ripe berry bushes and drinkable water near the
-  start, since the group arrives hungry.
+  start, since the group arrives hungry, and a **flint patch** within reach
+  (§4.1): without flint the colony could only knap rough tools.
 
-A typical first day: pick berries; gather stones, branches, twigs and grass;
-pick a hammerstone and knap flakes and a hand axe; make spears and digging
+A typical first day: pick berries; gather stones (cobbles and flint),
+branches, twigs and grass; pick a cobble as hammerstone and knap flakes and a
+hand axe from flint; make spears and digging
 sticks; light the first fire by friction; build grass beds and a windbreak
 near the hearth; go hunting.
 
@@ -366,18 +392,39 @@ near the hearth; go hunting.
 
 | id            | Name          | Category  | kg   | Bulk | Stack | HP  | Quality | Damageable | Source |
 |---------------|---------------|-----------|------|------|-------|-----|---------|------------|--------|
-| `stone`       | Stone         | Resources | 1.0  | 1.5  | 666   | 200 | yes     | no         | Gather stones (§4.2). |
+| `cobble`      | Cobble        | Resources | 1.0  | 1.5  | 666   | 200 | yes     | no         | Gather stones (§4.2). Today's `stone` item, renamed. |
+| `flint`       | Flint nodule  | Resources | 1.0  | 1.5  | 666   | 150 | yes     | no         | Gather stones on a flint patch (§4.2). |
 | `branches`    | Branches      | Resources | 1.5  | 10   | 100   | 20  | yes     | yes        | Gather branches. |
 | `twigs`       | Twigs (handful) | Resources | 0.2 | 2   | 500   | 10  | no      | yes        | Gather twigs. |
 | `fresh_grass` | Fresh grass (armful) | Resources | 2.5 | 25 | 40  | 10  | no      | yes        | Cut grass. Dries into dry grass. |
 | `grass`       | Dry grass (armful) | Resources | 1.0 | 25 | 40   | 15  | no      | yes        | Fresh grass left to dry. |
 | `wood`        | Wood (log)    | Resources | 7.0  | 20   | 50    | 60  | yes     | yes        | Felling trees (needs an axe: not at the start). |
-| `stone_block` | Stone block   | Resources | 20.0 | 20   | 50    | 150 | no      | no         | Mining (needs a pick: not at the start). Today's `stone` item, renamed. |
+| `stone_block` | Stone block   | Resources | 20.0 | 20   | 50    | 150 | no      | no         | Mining (needs a pick: not at the start). Was `stone` before step 2. |
 
-- **Stone**: a stone that fits the hand, the raw material of knapping. Its
-  grade is how well it knaps (fine grained like flint, or coarse), and caps
-  the grade of what is knapped from it (§2.2). The gatherer's Gathering level
-  sets the grade: a good eye picks good stones.
+Stone types follow what knappers actually need: the stone that is knapped
+must be fine grained, even and brittle (it breaks into smooth, sharp flakes:
+conchoidal fracture), while the hammer must be **tough** rather than hard, a
+rounded stone that takes blows without shattering (a flint hammer would break
+quickly). Two types are enough for the start; others are noted in §13, each
+with its own use.
+
+- **Cobble**: a rounded stone that fits the hand (quartzite, sandstone,
+  granite). The hammerstone of the knapper, the anvil of the knapping spot,
+  a building material. It can be knapped, as the first tools in history
+  were, but coarsely: as a knapping material **a cobble counts as crude**
+  whatever its grade, so what is knapped from it is at best rough (§2.2). Its
+  grade is its toughness: the grade of a hammerstone picked from it.
+- **Flint nodule**: the knapping stone. Its grade is how fine and even its
+  grain is, and caps the grade of what is knapped from it (§2.2): a good
+  flint source matters.
+- The gatherer's Gathering level sets the grade of both: a good eye picks
+  good stones.
+- **Flint patches**: flint is only found on some tiles. World generation
+  marks them (a noise field, more on gravel and rough stone, rare on rich
+  soil) and the tile inspector shows them ("Flint: plenty / some / none").
+  On a flint patch, each stone gathered is flint with the tile's chance
+  (up to 60%) *(tuning)*, a cobble otherwise; elsewhere only cobbles. Later,
+  flint comes with the geology (chalk and limestone, §13).
 - **Branches**: dead or cut branches, the main material of the start: fuel,
   windbreaks, lean-tos, spears, digging sticks, torches. Quality = straightness.
 - **Twigs**: kindling to light a fire, quick fuel, filling for windbreaks.
@@ -394,13 +441,14 @@ near the hearth; go hunting.
 ### 4.2 Gathering orders
 
 New designation tools next to Harvest and Chop: **Gather stones**, **Gather
-branches**, **Gather twigs**, **Cut grass**, **Dig up**. All belong to
+branches**, **Gather twigs**, **Cut grass**, **Dig up** (gather stones,
+branches and twigs and cut grass are implemented). All belong to
 Gathering (minimum 50) and produce items whose grade and condition come from
 the gatherer's level, like harvesting today.
 
 | Order            | Target | Work per item | Tool | Yield |
 |------------------|--------|---------------|------|-------|
-| Gather stones    | Soil, rich soil (with or without grass), gravel, rough stone tiles | 200 | none | 1 stone per work cycle; **unlimited**: the order repeats until the player cancels it |
+| Gather stones    | Soil, rich soil (with or without grass), gravel, rough stone tiles | 200 | none | 1 cobble or flint nodule (flint patches, §4.1) per work cycle; **unlimited**: the order repeats until the player cancels it |
 | Gather branches  | Tree with branches in stock | 300 | none | The tree's stock: up to 6 branches on a mature tree (scaled by growth); the tree stays, 1 branch grows back every 2 days |
 | Gather twigs     | Tree or bush with twigs in stock | 150 | none | Up to 10 handfuls on a mature tree, 4 on a bush; 1 grows back per day |
 | Cut grass        | Grass at growth ≥ 0.5 | 150 | flake best | `growth × 3` armfuls of fresh grass (1 to 3); the grass regrows from 0 |
@@ -425,7 +473,7 @@ food. Fire must be lit, fed and watched.*
 | `grilled_meat` | Grilled meat  | Food     | 0.4 | 1    | 1,000 | 12 | yes     | yes        |
 | `roasted_tubers` | Roasted tubers | Food  | 0.25 | 1   | 1,000 | 15 | yes     | yes        |
 
-- **Torch**: stored unlit; lit at a burning fire and carried in the tool slot,
+- **Torch**: stored unlit; lit at a burning fire and carried,
   it **burns 1 hour** with a light radius of 3 tiles (×0.8 to ×1.2 as long by
   grade). Lights a hearth at once. Later: night work, keeping animals away.
 - **Ember bundle**: embers wrapped in dry grass, to carry fire. Never stored:
@@ -446,7 +494,7 @@ food. Fire must be lit, fed and watched.*
 | Open hearth       | (construction, §5.3) | | | 250 | 50 | |
 
 - **Fire hardening** dries and chars a wooden point. Hardenable: digging stick,
-  wooden spear, thrusting spear. The hardened item is a separate type
+  throwing spear, thrusting spear. The hardened item is a separate type
   (`<id>_hardened`): max hit points ×1.5, damage ×1.2 for spears; grade and
   condition carry over; only once.
 - **Lighting** is a job created when a hearth with fuel is set to burn and is
@@ -492,10 +540,11 @@ no spear, no butchering.*
 | `flake`       | Sharp flake      | Tools    | 0.03 | 0.2  | 5,000 | 15  | yes     | yes        |
 | `hand_axe`    | Hand axe         | Tools    | 0.6  | 1.5  | 666   | 120 | yes     | yes        |
 
-- **Hammerstone**: the knapper's hammer, needed by all knapping recipes; also
-  cracks bones.
+- **Hammerstone**: a well chosen cobble, the knapper's hard hammer, needed by
+  all knapping recipes; also cracks bones. Finer work with a soft hammer
+  (antler, bone) comes later (§13).
 - **Chopper**: a stone with a few flakes struck off one edge; the crudest
-  cutting tool.
+  cutting tool, easy to make even from a cobble.
 - **Sharp flake**: razor sharp, the best cutting tool of the start, worn out
   after 15 hours of work.
 - **Hand axe**: shaped on both faces; good at everything except felling trees
@@ -505,13 +554,18 @@ no spear, no butchering.*
 
 | Recipe           | Ingredients | Tools       | Station       | Work         | Min level | Products |
 |------------------|-------------|-------------|---------------|--------------|-----------|----------|
-| Pick hammerstone | 1 stone     | —           | anywhere      | 125 (0.05 h) | 50 | 1 hammerstone |
-| Knap chopper     | 1 stone     | hammerstone | Knapping spot | 250 (0.1 h)  | 50 | 1 chopper |
-| Strike flakes    | 1 stone     | hammerstone | Knapping spot | 375 (0.15 h) | 55 | `3 + (L − 50) / 10` flakes (3 to 8) |
-| Shape hand axe   | 1 stone     | hammerstone | Knapping spot | 2,500 (1 h)  | 70 | 1 hand axe + 2 flakes |
+| Pick hammerstone | 1 cobble    | —           | anywhere      | 125 (0.05 h) | 50 | 1 hammerstone (grade of the cobble) |
+| Knap chopper     | 1 cobble or flint | hammerstone | Knapping spot | 250 (0.1 h)  | 50 | 1 chopper |
+| Strike flakes    | 1 flint or cobble | hammerstone | Knapping spot | 375 (0.15 h) | 55 | `3 + (L − 50) / 10` flakes (3 to 8) |
+| Shape hand axe   | 1 flint or cobble | hammerstone | Knapping spot | 2,500 (1 h)  | 70 | 1 hand axe + 2 flakes |
 
 - **Pick hammerstone** needs no station and no tool, so the chain can always
-  start, even with nothing.
+  start, even with nothing. Its grade is the cobble's (picking is choosing,
+  not shaping), not the knapper's.
+- Knapping a cobble instead of flint is allowed but caps the product at
+  rough (a cobble counts as crude, §4.1). Bills can restrict the stone type;
+  by default they prefer flint for flakes and hand axes, and cobbles for
+  choppers.
 - **Shape hand axe** fails with probability `40% − 2% × (L − 70)` (40% at 70,
   none from 90) *(tuning)*. A failure still gives `1 + (L − 50) / 10` flakes;
   the stone is lost.
@@ -522,7 +576,7 @@ no spear, no butchering.*
 |-------------|-------|
 | id          | `knapping_spot` |
 | Footprint   | 1 × 1, passable (an anvil stone to sit by) |
-| Materials   | 1 stone |
+| Materials   | 1 cobble (the anvil) |
 | Work        | 250 (0.1 h), Stone knapping 50 |
 | Hit points  | 150, not flammable |
 | Workstation | Knapping recipes |
@@ -588,8 +642,12 @@ designed with them.*
 
 | id                | Name            | Category | kg  | Bulk | Stack | HP | Quality | Damageable | Use |
 |-------------------|-----------------|----------|-----|------|-------|----|---------|------------|-----|
-| `wooden_spear`    | Wooden spear    | Weapons  | 0.8 | 10   | 100   | 50 | yes     | yes        | Thrown (range 6 tiles) or thrust; damage 12. Hardenable. |
+| `wooden_spear`    | Throwing spear  | Weapons  | 0.8 | 10   | 100   | 50 | yes     | yes        | Thrown (range 6 tiles) or thrust; damage 12. Hardenable. |
 | `thrusting_spear` | Thrusting spear | Weapons  | 1.5 | 12   | 83    | 70 | yes     | yes        | Melee only, reach 2 tiles; damage 18; braced against charges. Hardenable. |
+
+In French: *lance de jet* (throwing spear) and *épieu* (thrusting spear).
+Both are all wood, hardened in the fire; stone-tipped spears need the
+Hafting knowledge (§13).
 
 Damage values are relative, for the M6 health system; grade multiplies damage
 (§2.2), hardening adds ×1.2.
@@ -598,7 +656,7 @@ Damage values are relative, for the M6 health system; grade multiplies damage
 
 | Recipe               | Ingredients | Tools | Station | Work | Min level | Products |
 |----------------------|-------------|-------|---------|------|-----------|----------|
-| Make wooden spear    | 1 branches (grade standard or better: straight) | flake or hand axe | Crafting spot | 3,750 (1.5 h) | 50 | 1 wooden spear |
+| Make throwing spear  | 1 branches (grade standard or better: straight) | flake or hand axe | Crafting spot | 3,750 (1.5 h) | 50 | 1 throwing spear |
 | Make thrusting spear | 2 branches (standard or better) | hand axe, flake | Crafting spot | 6,250 (2.5 h) | 60 | 1 thrusting spear |
 
 Construction **crafting spot**: 1 × 1, passable, no materials, 125 ticks; needs
@@ -609,7 +667,7 @@ sticks and spears.
 
 | Job | Min level | Notes |
 |-----|-----------|-------|
-| Hunt small and fleeing game (hare, deer, horse) | 50 | Needs a spear in the weapon slot. |
+| Hunt small and fleeing game (hare, deer, horse) | 50 | Needs a carried spear. |
 | Hunt dangerous game (boar, aurochs) | 65 | Settlers below it do not take these targets. |
 
 - The player designates animals; hunters approach (stealth from their level),
@@ -756,12 +814,12 @@ and grass, open on one long side.
 | Skills (mining, woodcutting, gathering), levels 0 to 20. | Replaced by knowledge levels (§1). Gathering becomes a knowledge; **Felling** and **Mining** become knowledges of their own, not starting ones. | One system for what settlers know and how well. |
 | Trees are felled bare handed. | Felling needs an axe (first: hafted axe); not possible at the start. | Realism; branches and twigs are the first wood. |
 | Rock is mined bare handed. | Mining needs a pick (first: antler pick); not possible at the start. | Realism. |
-| `stone`: a 20 kg block from mining. | Renamed `stone_block`; `stone` becomes the 1 kg gathered stone. | Stone is gathered and knapped from the first day. |
+| `stone`: a 20 kg block from mining. | Renamed `stone_block`; `stone` became the 1 kg gathered stone (step 2), now split into `cobble` and `flint` (step 3). | Stone is gathered and knapped from the first day; hammers and knapped stone are different stones. |
 | Orders: chop, mine, harvest. | + gather stones, gather branches, gather twigs, cut grass, dig up. | New materials. |
 | Items never change by themselves. | Fresh grass dries into dry grass. | Grass drying (§4.1). |
 | Item categories: food, resources. | + tools, weapons, animal products, corpses. | Stockpile filters. |
 | Sleeping on the ground at full rest gain. | ×0.8 without a bed. | Gives beds a purpose. |
-| Settlers spawn near water. | Also near ripe berry bushes; they bring nothing. | The group arrives hungry and empty handed. |
+| Settlers spawn near water. | Also near ripe berry bushes and a flint patch; they bring nothing. | The group arrives hungry and empty handed. |
 
 ---
 
@@ -770,15 +828,30 @@ and grass, open on one long side.
 Suggested order, each step with its tests:
 
 **M3: Building**
-1. Knowledge definitions and per-settler levels for the seven starting
-   knowledges; skills replaced; work speed, quality and minimum levels from
-   knowledge. Learning by doing. Start of a game (§3).
-2. New materials and orders: stone, branches, twigs, fresh and dry grass
-   (drying); gather and cut orders; branch and twig stocks; `stone_block`
-   rename; felling and mining locked (no axe or pick yet); dirt from knapping.
-3. Tools: tool slot, fetching, speed factors, wear.
-4. Workstations and bills: crafting spot, knapping spot; knapping and spear
-   making recipes; failures; quality capped by materials.
+1. *(done)* Knowledge definitions and per-settler levels for the seven
+   starting knowledges; skills replaced; work speed, quality and minimum
+   levels from knowledge. Learning by doing. Start of a game (§3).
+2. *(done)* New materials and orders: stone, branches, twigs, fresh and dry
+   grass (drying); gather and cut orders; branch and twig stocks;
+   `stone_block` rename; felling and mining locked (no axe or pick yet).
+3. *(done)* Workstations and bills, with what they need from tools and construction:
+   - stone types: `stone` split into `cobble` and `flint`, flint patches in
+     world generation (one guaranteed near the start), shown in the tile
+     inspector;
+   - workstations built from a blueprint: a builder brings the materials and
+     does the work (crafting spot, knapping spot);
+   - bills (recipe, repeat mode, filters) and crafting: fetching
+     ingredients, working at the station, products on the output tile;
+   - carried tools (one per type, counted in the carried weight), fetched
+     when a recipe needs one and kept afterwards;
+   - knapping and spear making recipes; failures; quality capped by
+     materials (a cobble counts as crude).
+   Left for later: dirt and knapping debris (a dirt layer, and injuries from
+   M6); the bill filters (search radius, worker levels); *until N* counts
+   every item lying in the colony, stored or not (otherwise crafters overshoot
+   before haulers catch up).
+4. Tools: speed factors on orders and recipes, grade factor, wear and
+   breaking, swapping for a better tool, the detour in job search.
 5. Blueprints and construction: grass bed, windbreak, branch screen, lean-to,
    floor clearing, workstations; hauling to construction sites.
 6. Roofs (lean-to, natural roof) and room detection.
@@ -799,10 +872,55 @@ classes with schedules and classrooms; children.
 
 ---
 
-## 13. Open questions
+## 13. Future content
 
-None at the moment. Settled so far: gathering stones repeats until cancelled;
-grass drying is simulated; dirt, knapping debris and work accidents exist;
-the interface shows only discovered knowledges; no innate aptitudes; felling
-and mining are the knowledges **Felling** and **Mining**, and which knowledges
-make the hafted axe and the antler pick is decided when they are detailed.
+Noted so as not to be forgotten; each is detailed when development reaches
+it.
+
+**Hafting** (knowledge). Fixing a stone onto a handle, with cord (knowledge
+Cordage and fibers, which gathering leads to) and glue (resin, later birch
+tar). Spear making and stone knapping lead to it (§1.5). It makes at once:
+
+- the **stone-tipped spear**: a flint point on a throwing or thrusting spear,
+  more damage than fire-hardened wood;
+- the **hafted axe**, the first axe, which unlocks felling trees (with the
+  Felling knowledge).
+
+**Blade technology** (knowledge). Long regular blades struck from a prepared
+core: better spear points, and real knife blades that can be hafted. Stone
+knapping leads to it (§1.5).
+
+**Soft hammer**. An antler or bone hammer (from hunting, M5), an optional tool
+for shaping hand axes: thinner flakes and more regular edges, so fewer
+failures and a better grade.
+
+**Other stone types**, each with a use of its own (a stone type only exists
+if it changes a decision):
+
+| Stone | Use | When |
+|-------|-----|------|
+| Pyrite | Struck against flint, it sparks: lighting a fire without friction, faster and more reliably | M4 (fire) |
+| Ochre (red, yellow) | Pigment: painting, protection from sun and insects; helps tanning hides | With tanning or art |
+| Obsidian | The finest edge there is, but brittle: better flakes, faster wear; only in volcanic regions | With biomes |
+| Sandstone (abrasive) | Grinding stones; polishing stones for polished axes | Neolithic |
+| Tough rock (dolerite, jadeite) | Polished axes, which do not chip like flint | Neolithic |
+| Heating stones (granite, basalt) | Boiling water with hot stones; flint and wet river stones burst in the fire (an accident) | M4 (cooking) |
+
+**Geology**. A chalk and limestone rock type in world generation: flint
+lies on the gravel near it and in river beds, and mining chalk gives flint
+nodules. Replaces the noise-only flint patches of step 3.
+
+---
+
+## 14. Open questions
+
+None at the moment.
+
+Settled so far: gathering stones repeats until cancelled; grass drying is
+simulated; dirt, knapping debris and work accidents exist; the interface
+shows only discovered knowledges; no innate aptitudes; felling and mining are
+the knowledges **Felling** and **Mining**; the hafted axe comes from Hafting
+(§13), the knowledge that makes the antler pick is decided when it is
+detailed; two stone types at the start (cobble and flint); workstations are
+built by a builder from the start of step 3, not placed instantly; no
+equipment slots: tools are carried, one per type, counted in the weight.

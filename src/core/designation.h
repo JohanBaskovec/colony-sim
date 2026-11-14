@@ -105,12 +105,14 @@ float designation_progress_fraction(const Designations *designations, const Map 
  * returned; the designation is removed, unless the order repeats (its
  * progress then starts over). The products' quality and condition come from
  * the worker's `level` in the order's knowledge (core/knowledge.h); `rng`
- * may be NULL for average products.
+ * may be NULL for average products. Stones gathered on a flint patch are
+ * flint nodules with the tile's chance (cobbles when `rng` is NULL).
  */
 bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y,
                           float work, double level, Rng *rng);
 
-/* Items the order on this tile would produce if completed now (ITEM_NONE: nothing). */
+/* Items the order on this tile would produce if completed now (ITEM_NONE:
+ * nothing); gathering stones gives cobbles here, flint being drawn on completion. */
 ItemType designation_yield(const Designations *designations, const Map *map, int x, int y,
                            int *count);
 

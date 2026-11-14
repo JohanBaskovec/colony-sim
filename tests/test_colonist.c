@@ -759,7 +759,7 @@ static void test_priority_beats_distance(void)
     REQUIRE(init_flat_game(&game));
     add_tree(&game.map, 32, 20);
     /* Something to haul right next to the colonist. */
-    items_add(&game.items, 22, 20, item_stack_pristine(ITEM_STONE, 5));
+    items_add(&game.items, 22, 20, item_stack_pristine(ITEM_COBBLE, 5));
     REQUIRE(stockpile_create(&game.stockpiles, &game.map, 18, 24, 20, 26) != STOCKPILE_NONE);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
@@ -1301,8 +1301,8 @@ static void test_repeating_order_keeps_the_worker_busy(void)
 
     run_ticks(&game, walk_ticks(2) + (int)(work * 3.5f));
     /* Stone after stone, without stopping, and the order stays. */
-    CHECK((int)game.items.totals[ITEM_STONE] >= 3);
-    CHECK_EQ_INT(items_get(&game.items, 23, 20).type, ITEM_STONE);
+    CHECK((int)game.items.totals[ITEM_COBBLE] >= 3);
+    CHECK_EQ_INT(items_get(&game.items, 23, 20).type, ITEM_COBBLE);
     CHECK_EQ_INT(designation_get(&game.designations, 23, 20), DESIGNATION_GATHER_STONES);
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK_EQ_INT(colonist->target.x, 23);

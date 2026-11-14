@@ -14,12 +14,14 @@ add_library(colony_core STATIC
     noise.c
     pathfinding.c
     pool.c
+    recipe.c
     region.c
     reservation.c
     rng.c
     stockpile.c
     util.c
     work.c
+    workstation.c
     worldgen.c)
 
 target_include_directories(colony_core PUBLIC ${PROJECT_SOURCE_DIR}/src)

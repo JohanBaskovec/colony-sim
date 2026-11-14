@@ -5,11 +5,21 @@
 #define PANEL_PADDING 8.0f
 #define GAP 8.0f
 #define ITEM_INDENT 20.0f
+#define ITEM_COLUMNS 2
 #define TEXT_SIZE 128
 #define SLIDER_MIN_WIDTH 200.0f
 #define HIT_POINTS_STEP 5 /* Percent per slider step. */
 #define QUALITY_SLIDER_ID 1
 #define HIT_POINTS_SLIDER_ID 2
+
+static int category_type_count(ItemCategory category)
+{
+    int count = 0;
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        count += item_def((ItemType)type)->category == category;
+    }
+    return count;
+}
 
 static UiCheck check_state(ItemTypeMask allowed, ItemTypeMask mask)
 {
@@ -61,18 +71,20 @@ void stockpile_panel_draw(App *app, float right, float bottom)
                                GAP + ui_button_width(ui, none));
     width = SDL_max(width, SDL_max(SLIDER_MIN_WIDTH, ui_text_width(ui, quality)));
     width = SDL_max(width, ui_text_width(ui, hit_points));
+    /* Item types of a category in ITEM_COLUMNS columns, under the category. */
     int rows = 8;
+    float column = 0.0f;
     for (int category = 0; category < ITEM_CATEGORY_COUNT; category++) {
         width = SDL_max(width,
                         ui_checkbox_width(ui, tr(item_category_name_key((ItemCategory)category))));
-        rows++;
+        rows += 1 + (category_type_count((ItemCategory)category) + ITEM_COLUMNS - 1) /
+                        ITEM_COLUMNS;
     }
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-        width = SDL_max(width, ITEM_INDENT + ui_checkbox_width(
-                                                 ui, tr(item_def((ItemType)type)->name_key)));
-        rows++;
+        column = SDL_max(column, ui_checkbox_width(ui, tr(item_def((ItemType)type)->name_key)));
     }
-    width = SDL_ceilf(width);
+    column = SDL_ceilf(column) + GAP;
+    width = SDL_ceilf(SDL_max(width, ITEM_INDENT + (float)ITEM_COLUMNS * column));
     float height = (float)rows * row + 2.0f * PANEL_PADDING;
     SDL_FRect panel = {right - width - 2.0f * PANEL_PADDING, bottom - height,
                        width + 2.0f * PANEL_PADDING, height};
@@ -149,16 +161,23 @@ void stockpile_panel_draw(App *app, float right, float bottom)
             new_allowed = state == UI_CHECKED ? new_allowed & ~mask : new_allowed | mask;
         }
         y += row;
+        int shown = 0;
         for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
             const ItemDef *def = item_def((ItemType)type);
             if ((int)def->category != category) {
                 continue;
             }
             ItemTypeMask bit = ITEM_TYPE_BIT(type);
-            if (ui_checkbox(ui, x + ITEM_INDENT, y, width - ITEM_INDENT,
-                            (allowed & bit) ? UI_CHECKED : UI_UNCHECKED, tr(def->name_key))) {
+            float cx = x + ITEM_INDENT + (float)(shown % ITEM_COLUMNS) * column;
+            if (ui_checkbox(ui, cx, y, column - GAP, (allowed & bit) ? UI_CHECKED : UI_UNCHECKED,
+                            tr(def->name_key))) {
                 new_allowed ^= bit;
             }
+            if (++shown % ITEM_COLUMNS == 0) {
+                y += row;
+            }
+        }
+        if (shown % ITEM_COLUMNS != 0) {
             y += row;
         }
     }

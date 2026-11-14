@@ -31,6 +31,38 @@ static float stretch(float value)
     return clampf((value - 0.5f) * 1.9f + 0.5f, 0.0f, 1.0f);
 }
 
+/*
+ * Flint patches: where the flint noise is above FLINT_NOISE_THRESHOLD, the
+ * chance rises to MAP_FLINT_MAX_CHANCE at the top of the noise, scaled by the
+ * ground (flint weathers out of rock: plenty on gravel and under rock walls,
+ * less on soil, little under the deep rich soil). Chances below
+ * FLINT_MIN_CHANCE are dropped, so that patches have clear edges.
+ */
+#define FLINT_NOISE_THRESHOLD 0.85f
+#define FLINT_MIN_CHANCE 5
+
+static float flint_ground_factor(Terrain terrain)
+{
+    switch (terrain) {
+    case TERRAIN_GRAVEL:
+    case TERRAIN_ROUGH_STONE: return 1.0f;
+    case TERRAIN_SOIL: return 0.7f;
+    case TERRAIN_RICH_SOIL: return 0.3f;
+    default: return 0.0f;
+    }
+}
+
+static int flint_chance(Terrain terrain, float noise)
+{
+    float strength = (noise - FLINT_NOISE_THRESHOLD) / (1.0f - FLINT_NOISE_THRESHOLD);
+    if (strength <= 0.0f) {
+        return 0;
+    }
+    int chance = (int)((float)MAP_FLINT_MAX_CHANCE * clampf(strength * 1.5f, 0.0f, 1.0f) *
+                       flint_ground_factor(terrain));
+    return chance >= FLINT_MIN_CHANCE ? chance : 0;
+}
+
 static Terrain pick_terrain(const WorldGenParams *params, float elevation, float moisture)
 {
     if (elevation < params->water_level - 0.08f) {
@@ -96,6 +128,7 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
     const uint32_t moisture_seed = derive_seed(params->seed, 2);
     const uint32_t rock_seed = derive_seed(params->seed, 3);
     const uint32_t forest_seed = derive_seed(params->seed, 4);
+    const uint32_t flint_seed = derive_seed(params->seed, 5);
     const float frequency = 1.0f / (params->feature_scale > 1.0f ? params->feature_scale : 1.0f);
 
     Rng rng;
@@ -112,6 +145,8 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
             size_t index = map_index(map, x, y);
             Terrain terrain = pick_terrain(params, elevation, moisture);
             map->terrain[index] = (uint8_t)terrain;
+            float flint = stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
+            map->flint[index] = (uint8_t)flint_chance(terrain, flint);
 
             if (terrain == TERRAIN_ROUGH_STONE) {
                 float rock_noise = noise_value2d(rock_seed, nx * 2.0f, ny * 2.0f);

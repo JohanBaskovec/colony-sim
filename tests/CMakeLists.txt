@@ -4,6 +4,7 @@
 set(COLONY_UNIT_TESTS
     test_camera
     test_cli
+    test_crafting
     test_colonist
     test_designation
     test_game
@@ -16,11 +17,13 @@ set(COLONY_UNIT_TESTS
     test_noise
     test_pathfinding
     test_pool
+    test_recipe
     test_region
     test_reservation
     test_rng
     test_stockpile
     test_work
+    test_workstation
     test_worldgen)
 
 foreach(test_name IN LISTS COLONY_UNIT_TESTS)

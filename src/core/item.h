@@ -7,7 +7,7 @@
  *
  * Every item has a quality grade (how good the material is, which carries
  * over to what is made from it) and hit points (its condition). Some types
- * are always perfect: raw stone is always of the best grade and cannot be
+ * are always perfect: stone blocks are always of the best grade and cannot be
  * damaged. Only items of the same type and grade stack together; a stack
  * keeps the count-weighted average hit points of its items.
  */
@@ -25,11 +25,18 @@ typedef enum ItemType {
     ITEM_WOOD,
     ITEM_STONE_BLOCK,
     ITEM_BERRIES,
-    ITEM_STONE,
+    ITEM_COBBLE,
     ITEM_BRANCHES,
     ITEM_TWIGS,
     ITEM_FRESH_GRASS,
     ITEM_GRASS,
+    ITEM_FLINT,
+    ITEM_HAMMERSTONE,
+    ITEM_CHOPPER,
+    ITEM_FLAKE,
+    ITEM_HAND_AXE,
+    ITEM_THROWING_SPEAR,
+    ITEM_THRUSTING_SPEAR,
     ITEM_TYPE_COUNT
 } ItemType;
 
@@ -37,11 +44,14 @@ typedef enum ItemType {
 typedef enum ItemCategory {
     ITEM_CATEGORY_FOOD,
     ITEM_CATEGORY_RESOURCES,
+    ITEM_CATEGORY_TOOLS,
+    ITEM_CATEGORY_WEAPONS,
     ITEM_CATEGORY_COUNT
 } ItemCategory;
 
 /* Bit mask with one bit per ItemType. */
 typedef uint32_t ItemTypeMask;
+_Static_assert(ITEM_TYPE_COUNT <= 32, "item types must fit in an ItemTypeMask");
 
 #define ITEM_TYPE_BIT(type) ((ItemTypeMask)1u << (unsigned)(type))
 
@@ -118,6 +128,10 @@ ItemTypeMask item_types_all(void);
 ItemTypeMask item_types_in_category(ItemCategory category);
 
 bool item_is_food(ItemType type);
+
+/* Tools and weapons: settlers carry them (one of each type) and use them,
+ * instead of hauling them as a load. */
+bool item_is_tool(ItemType type);
 
 /* Maximum number of items of a type in one stack (one tile); 0 for ITEM_NONE. */
 int item_stack_limit(ItemType type);
