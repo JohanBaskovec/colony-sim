@@ -23,11 +23,16 @@ static const RockDef ROCK_DEFS[ROCK_COUNT] = {
 };
 
 static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
-    [PLANT_NONE] = {"none", NULL, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0},
-    [PLANT_GRASS] = {"grass", N_("plant.grass"), 0.35f, 0.3f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0},
-    [PLANT_BUSH] = {"berry_bush", N_("plant.bush"), 0.12f, 0.5f, 1.3f, 0.45f, 0.5f, ITEM_NONE,
-                    0},
-    [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f, 0.0f, 0.0f, ITEM_WOOD, 25},
+    /* id, name, growth/day, min fertility, move cost, nutrition, min edible growth,
+     * cut item, cut yield, harvest item, harvest yield */
+    [PLANT_NONE] = {"none", NULL, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0, ITEM_NONE, 0},
+    [PLANT_GRASS] = {"grass", N_("plant.grass"), 0.35f, 0.3f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0,
+                     ITEM_NONE, 0},
+    /* 9 berries of 0.05 nutrition: the same food as eating the ripe bush directly. */
+    [PLANT_BUSH] = {"berry_bush", N_("plant.bush"), 0.12f, 0.5f, 1.3f, 0.45f, 0.5f, ITEM_NONE, 0,
+                    ITEM_BERRIES, 9},
+    [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f, 0.0f, 0.0f, ITEM_WOOD, 25,
+                    ITEM_NONE, 0},
 };
 
 const TerrainDef *terrain_def(Terrain terrain)

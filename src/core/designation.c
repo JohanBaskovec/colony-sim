@@ -9,12 +9,15 @@
 /* Chopping a tree: a fixed part plus a part proportional to its size. */
 #define CHOP_BASE_WORK 400.0f
 #define CHOP_GROWTH_WORK 1600.0f
+#define HARVEST_WORK 300.0f
 
 static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
     [DESIGNATION_NONE] = {"none", NULL, NULL, WORK_TYPE_COUNT},
     [DESIGNATION_CHOP] = {"chop", N_("designation.chop"), N_("colonist.task.chop"),
                           WORK_WOODCUTTING},
     [DESIGNATION_MINE] = {"mine", N_("designation.mine"), N_("colonist.task.mine"), WORK_MINING},
+    [DESIGNATION_HARVEST] = {"harvest", N_("designation.harvest"), N_("colonist.task.harvest"),
+                             WORK_GATHERING},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -67,6 +70,12 @@ bool designation_can_apply(const Map *map, int x, int y, DesignationType type)
     case DESIGNATION_CHOP:
         return map->plants[index].type == PLANT_TREE && map->rock[index] == ROCK_NONE;
     case DESIGNATION_MINE: return map->rock[index] != ROCK_NONE;
+    case DESIGNATION_HARVEST: {
+        const Plant *plant = &map->plants[index];
+        const PlantDef *def = plant_def((PlantType)plant->type);
+        return def->harvest_item != ITEM_NONE && plant->growth >= def->min_edible_growth &&
+               map->rock[index] == ROCK_NONE;
+    }
     default: return false;
     }
 }
@@ -150,6 +159,7 @@ float designation_work_needed(const Designations *designations, const Map *map, 
     size_t index = map_index(map, x, y);
     switch (designation_get(designations, x, y)) {
     case DESIGNATION_CHOP: return CHOP_BASE_WORK + CHOP_GROWTH_WORK * map->plants[index].growth;
+    case DESIGNATION_HARVEST: return HARVEST_WORK;
     case DESIGNATION_MINE: {
         const RockDef *rock = rock_def((RockType)map->rock[index]);
         return rock != NULL ? rock->mine_work : 0.0f;
@@ -188,6 +198,12 @@ ItemType designation_yield(const Designations *designations, const Map *map, int
         *count = def->mined_yield;
         return *count > 0 ? def->mined_item : ITEM_NONE;
     }
+    case DESIGNATION_HARVEST: {
+        const Plant *plant = &map->plants[index];
+        const PlantDef *def = plant_def((PlantType)plant->type);
+        *count = (int)((float)def->harvest_yield * plant->growth + 0.5f);
+        return *count > 0 ? def->harvest_item : ITEM_NONE;
+    }
     default: return ITEM_NONE;
     }
 }
@@ -205,6 +221,7 @@ static void complete(Map *map, int x, int y, DesignationType type)
         /* The rough stone floor under the rock stays. */
         map->rock[index] = ROCK_NONE;
         break;
+    case DESIGNATION_HARVEST: map->plants[index].growth = PLANT_GROWTH_AFTER_PICKING; break;
     default: break;
     }
 }

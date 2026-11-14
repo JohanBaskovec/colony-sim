@@ -99,8 +99,8 @@ diplomatic, religious...
   - recreation, comfort, safety, temperature.
 - Names: proper nouns from a built-in multicultural list, identical in every
   language (later: per-culture lists in data files).
-- Food, for now: settlers eat berries from berry bushes, which regrow. Items,
-  meals and farming come later.
+- Food, for now: settlers eat berries, from berry bushes (which regrow) or
+  harvested onto the ground. Meals, spoilage and farming come later.
 - Skills (construction, mining, gathering, cooking, crafting, medicine, combat,
   social...) improving with practice.
 - Traits that modify behavior and mood.

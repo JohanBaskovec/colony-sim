@@ -3,6 +3,7 @@
 #include "core/i18n.h"
 #include "core/util.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -174,8 +175,15 @@ static int random_idle_ticks(Rng *rng)
     return rng_range_i32(rng, COLONIST_IDLE_MIN_TICKS, COLONIST_IDLE_MAX_TICKS);
 }
 
+/* Food on a tile: edible items on the ground, or a ripe plant. */
+static bool tile_has_food(const Map *map, const Items *items, int x, int y)
+{
+    return item_is_food((ItemType)items_get(items, x, y).type) || map_has_edible_plant(map, x, y);
+}
+
 /* Search filter: food that nobody else is about to eat. */
 typedef struct FoodSearch {
+    const Items *items;
     const Reservations *reservations;
     uint8_t self;
 } FoodSearch;
@@ -183,7 +191,7 @@ typedef struct FoodSearch {
 static bool is_free_food(const Map *map, int x, int y, void *userdata)
 {
     const FoodSearch *search = userdata;
-    return map_has_edible_plant(map, x, y) &&
+    return tile_has_food(map, search->items, x, y) &&
            !reservations_taken_by_other(search->reservations, RESERVATION_FOOD,
                                         (TilePos){(int16_t)x, (int16_t)y}, search->self);
 }
@@ -203,7 +211,7 @@ static bool try_satisfy(Colonist *colonist, const ColonistContext *context, Need
         return false;
     }
     TilePos found;
-    FoodSearch food = {context->reservations, context->worker_id};
+    FoodSearch food = {context->items, context->reservations, context->worker_id};
     if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
                                  drink ? is_drinking_spot : is_free_food, &food,
                                  drink ? COLONIST_WATER_SEARCH_MAX_COST
@@ -426,7 +434,8 @@ static void decide(Colonist *colonist, const ColonistContext *context)
         }
         return;
     case TASK_EAT:
-        if (!map_has_edible_plant(context->map, colonist->target.x, colonist->target.y)) {
+        if (!tile_has_food(context->map, context->items, colonist->target.x,
+                           colonist->target.y)) {
             set_idle(colonist, context, 0); /* The fruit is gone: decide again below. */
             break;
         }
@@ -486,8 +495,8 @@ static void eat(Colonist *colonist, const ColonistContext *context)
 {
     Map *map = context->map;
     if (colonist->x != colonist->target.x || colonist->y != colonist->target.y ||
-        !map_has_edible_plant(map, colonist->x, colonist->y)) {
-        /* Not there, or the fruit is gone: look again soon. */
+        !tile_has_food(map, context->items, colonist->x, colonist->y)) {
+        /* Not there, or the food is gone: look again soon. */
         set_idle(colonist, context, 0);
         return;
     }
@@ -495,11 +504,20 @@ static void eat(Colonist *colonist, const ColonistContext *context)
         return;
     }
 
-    Plant *plant = &map->plants[map_index(map, colonist->x, colonist->y)];
-    const PlantDef *def = plant_def((PlantType)plant->type);
-    colonist->needs[NEED_FOOD] =
-        clampf(colonist->needs[NEED_FOOD] + def->nutrition * plant->growth, 0.0f, 1.0f);
-    plant->growth = PLANT_GROWTH_AFTER_EATEN;
+    float *food = &colonist->needs[NEED_FOOD];
+    ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+    if (item_is_food((ItemType)stack.type)) {
+        /* Items on the ground first: eat what it takes to be sated. */
+        float nutrition = item_def((ItemType)stack.type)->nutrition;
+        int wanted = (int)ceilf((COLONIST_SATED_FOOD - *food) / nutrition);
+        int eaten = items_remove(context->items, colonist->x, colonist->y, wanted > 1 ? wanted : 1);
+        *food = clampf(*food + nutrition * (float)eaten, 0.0f, 1.0f);
+    } else {
+        Plant *plant = &map->plants[map_index(map, colonist->x, colonist->y)];
+        const PlantDef *def = plant_def((PlantType)plant->type);
+        *food = clampf(*food + def->nutrition * plant->growth, 0.0f, 1.0f);
+        plant->growth = PLANT_GROWTH_AFTER_PICKING;
+    }
 
     if (colonist->needs[NEED_FOOD] < COLONIST_SATED_FOOD &&
         try_satisfy(colonist, context, NEED_FOOD)) {

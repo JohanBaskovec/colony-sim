@@ -124,6 +124,7 @@ static void test_definitions_are_complete(void)
         CHECK(def->move_cost >= 1.0f);
         /* Either drops something when cut, or nothing at all. */
         CHECK((def->cut_item == ITEM_NONE) == (def->cut_yield == 0));
+        CHECK((def->harvest_item == ITEM_NONE) == (def->harvest_yield == 0));
     }
     CHECK(terrain_def(TERRAIN_COUNT) == NULL);
     CHECK(rock_def(ROCK_COUNT) == NULL);

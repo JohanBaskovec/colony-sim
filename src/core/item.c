@@ -8,14 +8,20 @@
 #include <string.h>
 
 static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
-    [ITEM_NONE] = {"none", NULL, 0},
-    [ITEM_WOOD] = {"wood", N_("item.wood"), 50},
-    [ITEM_STONE] = {"stone", N_("item.stone"), 30},
+    [ITEM_NONE] = {"none", NULL, 0, 0.0f},
+    [ITEM_WOOD] = {"wood", N_("item.wood"), 50, 0.0f},
+    [ITEM_STONE] = {"stone", N_("item.stone"), 30, 0.0f},
+    [ITEM_BERRIES] = {"berries", N_("item.berries"), 50, 0.05f},
 };
 
 const ItemDef *item_def(ItemType type)
 {
     return (unsigned)type < ITEM_TYPE_COUNT ? &ITEM_DEFS[type] : NULL;
+}
+
+bool item_is_food(ItemType type)
+{
+    return (unsigned)type < ITEM_TYPE_COUNT && ITEM_DEFS[type].nutrition > 0.0f;
 }
 
 bool items_init(Items *items, int width, int height)

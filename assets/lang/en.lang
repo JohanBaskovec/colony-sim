@@ -32,15 +32,18 @@ plant.tree = Tree
 # Designations (player orders)
 designation.chop = Chop trees
 designation.mine = Mine rock
+designation.harvest = Harvest
 tool.cancel = Cancel orders
 
 # Items
 item.wood = Wood
 item.stone = Stone
+item.berries = Berries
 
 # Work types
 work.mining = Mining
 work.woodcutting = Woodcutting
+work.gathering = Gathering
 
 # Seasons
 season.spring = Spring
@@ -59,8 +62,8 @@ hud.language = Language: {0}
 # {0} = movement keys (e.g. WASD, adapted to the keyboard layout)
 hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
 hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · L: language · F3: debug · Esc: quit
-# {0}, {1}, {2} = keys of the chop, mine and cancel tools
-hud.help.orders = {0}: chop trees · {1}: mine rock · {2}: cancel orders
+# {0}, {1}, {2}, {3} = keys of the chop, mine, harvest and cancel tools
+hud.help.orders = {0}: chop trees · {1}: mine rock · {2}: harvest · {3}: cancel orders
 # {0} = tool name
 hud.tool = Tool: {0} · Left click/drag: apply · Esc: back
 
@@ -96,6 +99,7 @@ colonist.task.sleep = Sleeping
 colonist.task.work = Working
 colonist.task.chop = Chopping a tree
 colonist.task.mine = Mining
+colonist.task.harvest = Harvesting
 
 need.food = Food
 need.food.low = Hungry

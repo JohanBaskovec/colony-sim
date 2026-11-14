@@ -13,6 +13,7 @@
 typedef enum WorkType {
     WORK_MINING,
     WORK_WOODCUTTING,
+    WORK_GATHERING,
     WORK_TYPE_COUNT
 } WorkType;
 

@@ -174,6 +174,32 @@ static void test_completed_orders_drop_items(void)
     free_world(&map, &d);
 }
 
+static void test_harvest_picks_ripe_fruit(void)
+{
+    Map map;
+    Designations d;
+    Items items;
+    REQUIRE(init_world(&map, &d));
+    REQUIRE(items_init(&items, 16, 16));
+    Plant *bush = &map.plants[map_index(&map, 8, 8)];
+    bush->type = PLANT_BUSH;
+    bush->growth = plant_def(PLANT_BUSH)->min_edible_growth - 0.1f;
+    CHECK(!designation_set(&d, &map, 8, 8, DESIGNATION_HARVEST)); /* Not ripe yet. */
+    CHECK(!designation_set(&d, &map, 3, 3, DESIGNATION_HARVEST)); /* Trees bear nothing. */
+    bush->growth = 1.0f;
+    REQUIRE(designation_set(&d, &map, 8, 8, DESIGNATION_HARVEST));
+    CHECK_EQ_INT(d.count_by_work[WORK_GATHERING], 1);
+
+    CHECK(designation_add_work(&d, &map, &items, 8, 8, designation_work_needed(&d, &map, 8, 8)));
+    ItemStack berries = items_get(&items, 8, 8);
+    CHECK_EQ_INT(berries.type, ITEM_BERRIES);
+    CHECK_EQ_INT(berries.count, plant_def(PLANT_BUSH)->harvest_yield);
+    CHECK_EQ_INT(bush->type, PLANT_BUSH); /* The bush stays and grows back. */
+    CHECK_NEAR(bush->growth, PLANT_GROWTH_AFTER_PICKING, 1e-6);
+    items_free(&items);
+    free_world(&map, &d);
+}
+
 static void test_progress_is_kept_until_cancelled(void)
 {
     Map map;
@@ -227,6 +253,7 @@ int main(void)
     RUN_TEST(test_chopping_removes_the_tree);
     RUN_TEST(test_mining_opens_the_wall);
     RUN_TEST(test_completed_orders_drop_items);
+    RUN_TEST(test_harvest_picks_ripe_fruit);
     RUN_TEST(test_progress_is_kept_until_cancelled);
     RUN_TEST(test_hash_detects_changes);
     RUN_TEST(test_definitions);

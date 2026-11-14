@@ -15,6 +15,10 @@ static void test_definitions(void)
         CHECK(def->stack_limit > 0 && def->stack_limit <= UINT16_MAX);
     }
     CHECK(item_def(ITEM_TYPE_COUNT) == NULL);
+    CHECK(item_is_food(ITEM_BERRIES));
+    CHECK(!item_is_food(ITEM_WOOD));
+    CHECK(!item_is_food(ITEM_NONE));
+    CHECK(!item_is_food(ITEM_TYPE_COUNT));
 }
 
 static void test_add_and_remove(void)

@@ -34,9 +34,11 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_NONE] = {230, 70, 60, 255},
     [DESIGNATION_CHOP] = {250, 210, 80, 255},
     [DESIGNATION_MINE] = {250, 140, 60, 255},
+    [DESIGNATION_HARVEST] = {225, 120, 235, 255},
 };
 static const SDL_Color WOOD_COLOR = {150, 98, 52, 255};
 static const SDL_Color STONE_COLOR = {176, 174, 168, 255};
+static const SDL_Color BERRY_COLOR = {150, 40, 90, 255};
 static const SDL_Color ITEM_OUTLINE = {28, 24, 20, 255};
 static const SDL_Color PROGRESS_BACKGROUND = {20, 20, 24, 220};
 static const SDL_Color PROGRESS_COLOR = {120, 220, 110, 255};
@@ -191,6 +193,18 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
             SDL_FRect stone = {tile->x + floorf(w * STONES[i][0]),
                                tile->y + floorf(h * STONES[i][1]), size, size};
             fill_outlined(renderer, stone, shade(STONE_COLOR, -i * 10));
+        }
+        break;
+    }
+    case ITEM_BERRIES: {
+        /* A handful of berries. */
+        static const float BERRIES[5][2] = {
+            {0.3f, 0.5f}, {0.5f, 0.45f}, {0.42f, 0.62f}, {0.58f, 0.6f}, {0.38f, 0.36f}};
+        float size = SDL_max(1.0f, floorf(w * 0.16f));
+        for (int i = 0; i < 5; i++) {
+            SDL_FRect berry = {tile->x + floorf(w * BERRIES[i][0]),
+                               tile->y + floorf(h * BERRIES[i][1]), size, size};
+            fill_outlined(renderer, berry, shade(BERRY_COLOR, i * 8));
         }
         break;
     }

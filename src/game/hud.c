@@ -324,7 +324,7 @@ void hud_draw(App *app)
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
     panel_add_text(&help, tr("hud.help.game"));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_C),
-              key_name(SDLK_M), key_name(SDLK_X));
+              key_name(SDLK_M), key_name(SDLK_H), key_name(SDLK_X));
     float help_width, help_height;
     panel_size(app, &help, &help_width, &help_height);
     float help_y = screen_height - help_height - HUD_MARGIN;

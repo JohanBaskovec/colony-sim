@@ -17,6 +17,7 @@ typedef enum ItemType {
     ITEM_NONE = 0,
     ITEM_WOOD,
     ITEM_STONE,
+    ITEM_BERRIES,
     ITEM_TYPE_COUNT
 } ItemType;
 
@@ -24,6 +25,7 @@ typedef struct ItemDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
     int stack_limit; /* Maximum number of items in one stack (one tile). */
+    float nutrition; /* Food need restored by eating one item; 0 = not food. */
 } ItemDef;
 
 typedef struct ItemStack {
@@ -42,6 +44,8 @@ typedef struct Items {
 #define ITEM_DROP_RADIUS 4
 
 const ItemDef *item_def(ItemType type);
+
+bool item_is_food(ItemType type);
 
 bool items_init(Items *items, int width, int height);
 void items_free(Items *items);

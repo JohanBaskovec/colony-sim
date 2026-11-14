@@ -20,6 +20,7 @@ typedef enum DesignationType {
     DESIGNATION_NONE = 0,
     DESIGNATION_CHOP, /* Cut down a tree. */
     DESIGNATION_MINE, /* Dig out a rock wall. */
+    DESIGNATION_HARVEST, /* Pick the fruit of a ripe plant; the plant stays. */
     DESIGNATION_COUNT
 } DesignationType;
 

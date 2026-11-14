@@ -71,7 +71,12 @@ typedef struct PlantDef {
     float min_edible_growth; /* Cannot be eaten below this growth. */
     ItemType cut_item; /* Dropped when the plant is cut down (ITEM_NONE: nothing). */
     int cut_yield; /* Items dropped at full growth, proportionally less when younger. */
+    ItemType harvest_item; /* Picked when harvested, the plant stays (ITEM_NONE: nothing). */
+    int harvest_yield; /* Items picked at full growth; harvesting needs min_edible_growth. */
 } PlantDef;
+
+/* Growth left on a plant after its fruit has been eaten or harvested. */
+#define PLANT_GROWTH_AFTER_PICKING 0.05f
 
 typedef struct Plant {
     uint8_t type; /* PlantType */

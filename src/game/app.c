@@ -210,6 +210,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
         break;
     case SDLK_C: toggle_tool(app, DESIGNATION_CHOP); break;
     case SDLK_M: toggle_tool(app, DESIGNATION_MINE); break;
+    case SDLK_H: toggle_tool(app, DESIGNATION_HARVEST); break;
     case SDLK_X: toggle_tool(app, DESIGNATION_NONE); break;
     case SDLK_F3: app->show_debug = !app->show_debug; break;
     case SDLK_L:

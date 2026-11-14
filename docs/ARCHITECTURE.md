@@ -115,7 +115,10 @@ Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
 plus map-wide totals per type. `items_drop()` fills the target tile, then
 spreads the rest breadth-first over nearby passable tiles (never behind a
 wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
-`RockDef.mined_item/mined_yield`. Items carried by settlers will be stored on
+`RockDef.mined_item/mined_yield`, `PlantDef.harvest_item/harvest_yield`
+(harvesting keeps the plant, which grows back). Food items have a
+`nutrition` per unit; a hungry colonist goes to the nearest food, on the
+ground or on a ripe bush, and eats just what it takes to be sated. Items carried by settlers will be stored on
 the settler when hauling arrives.
 
 Static definitions (`TerrainDef`, `RockDef`, `PlantDef`) carry a stable `id`
@@ -163,7 +166,7 @@ changes its mind.
 ### Work and reservations
 
 Every designation belongs to a **work type** (`core/work.h`: mining,
-woodcutting...). Each colonist has a **priority** per work type: 0 = never,
+woodcutting, gathering...). Each colonist has a **priority** per work type: 0 = never,
 otherwise 1 (highest) to 4 (default 3).
 
 When nothing more urgent is needed, an idle or wandering colonist looks for a

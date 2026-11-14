@@ -61,8 +61,6 @@
 #define COLONIST_WANDER_RADIUS 6
 #define COLONIST_IDLE_MIN_TICKS 120
 #define COLONIST_IDLE_MAX_TICKS 360
-/* Growth left on a plant after its fruit has been eaten. */
-#define PLANT_GROWTH_AFTER_EATEN 0.05f
 
 typedef enum ColonistTask {
     TASK_IDLE,

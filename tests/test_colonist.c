@@ -3,6 +3,8 @@
 
 #include "test_framework.h"
 
+#include <math.h>
+
 /* A small game on a flat, empty soil map with no starting colonists. */
 static bool init_flat_game(Game *game)
 {
@@ -201,7 +203,7 @@ static void test_hungry_colonist_walks_to_food_and_eats(void)
     CHECK_EQ_INT(colonist->x, 30);
     CHECK_EQ_INT(colonist->y, 20);
     CHECK(colonist->needs[NEED_FOOD] > 0.55f);
-    CHECK_NEAR(map->plants[bush].growth, PLANT_GROWTH_AFTER_EATEN, 1e-6);
+    CHECK_NEAR(map->plants[bush].growth, PLANT_GROWTH_AFTER_PICKING, 1e-6);
     CHECK(colonist->task != TASK_EAT); /* No other food around: gives up and idles. */
     game_shutdown(&game);
 }
@@ -657,6 +659,56 @@ static void test_priority_beats_distance(void)
     game_shutdown(&game);
 }
 
+static void test_hungry_colonist_eats_berries_from_the_ground(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 24, 20, ITEM_BERRIES, 20);
+    Plant *bush = &game.map.plants[map_index(&game.map, 30, 20)]; /* Farther away. */
+    bush->type = PLANT_BUSH;
+    bush->growth = 1.0f;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_FOOD] = 0.2f;
+
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_EAT);
+    CHECK_EQ_INT(colonist->target.x, 24); /* The nearest food. */
+    run_ticks(&game, walk_ticks(4) + COLONIST_EAT_TICKS);
+
+    /* Ate just what it takes to be sated (hunger grew a little on the way), and
+     * left the rest. */
+    float nutrition = item_def(ITEM_BERRIES)->nutrition;
+    int eaten = 20 - items_get(&game.items, 24, 20).count;
+    int expected = (int)ceilf((COLONIST_SATED_FOOD - 0.2f) / nutrition);
+    CHECK(colonist->needs[NEED_FOOD] >= COLONIST_SATED_FOOD - 0.01f);
+    CHECK(eaten >= expected && eaten <= expected + 1);
+    CHECK_NEAR(bush->growth, 1.0, 1e-6); /* The bush was not touched. */
+    game_shutdown(&game);
+}
+
+static void test_colonist_harvests_berries(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Plant *bush = &game.map.plants[map_index(&game.map, 24, 20)];
+    bush->type = PLANT_BUSH;
+    bush->growth = 1.0f;
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    CHECK_EQ_INT(game_designate_rect(&game, 24, 20, 24, 20, DESIGNATION_HARVEST), 1);
+
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.harvest");
+    run_ticks(&game, walk_ticks(4) + (int)designation_work_needed(&game.designations,
+                                                                   &game.map, 24, 20));
+    CHECK_EQ_INT(items_get(&game.items, 24, 20).type, ITEM_BERRIES);
+    CHECK_EQ_INT(items_get(&game.items, 24, 20).count, plant_def(PLANT_BUSH)->harvest_yield);
+    CHECK_NEAR(bush->growth, PLANT_GROWTH_AFTER_PICKING, 0.01);
+    game_shutdown(&game);
+}
+
 /* Every reservation belongs to a live colonist whose current task targets
  * that tile (work: TASK_WORK, food: TASK_EAT), each colonist holds at most
  * one, and the per-kind counters match. */
@@ -809,6 +861,8 @@ int main(void)
     RUN_TEST(test_hungry_colonists_go_to_different_bushes);
     RUN_TEST(test_disabled_work_type_is_never_done);
     RUN_TEST(test_priority_beats_distance);
+    RUN_TEST(test_hungry_colonist_eats_berries_from_the_ground);
+    RUN_TEST(test_colonist_harvests_berries);
     RUN_TEST(test_reservations_stay_consistent_over_a_long_run);
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);
