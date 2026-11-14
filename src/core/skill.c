@@ -23,6 +23,13 @@ float skill_xp_to_next_level(int level)
     return SKILL_XP_PER_LEVEL * (float)(level + 1);
 }
 
+float skill_work_speed(int level)
+{
+    level = clampi(level, SKILL_LEVEL_MIN, SKILL_LEVEL_MAX);
+    float t = (float)(level - SKILL_LEVEL_MIN) / (float)(SKILL_LEVEL_MAX - SKILL_LEVEL_MIN);
+    return lerpf(SKILL_SPEED_AT_MIN, SKILL_SPEED_AT_MAX, t);
+}
+
 int skill_random_level(Rng *rng)
 {
     int level = rng_range_i32(rng, 0, SKILL_START_DIE) + rng_range_i32(rng, 0, SKILL_START_DIE);

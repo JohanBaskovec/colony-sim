@@ -64,8 +64,11 @@
 #define COLONIST_DRINK_TICKS 300
 /* Water is scarcer than berries: colonists accept longer trips to drink. */
 #define COLONIST_WATER_SEARCH_MAX_COST 200.0f
-/* Work done per tick on a designation. */
+/* Work done per tick on a designation at the standard skill level
+ * (see colonist_work_speed()). */
 #define COLONIST_WORK_SPEED 1.0f
+/* Experience gained per tick spent working on a designation. */
+#define COLONIST_WORK_XP_PER_TICK 1.0f
 #define COLONIST_WORK_SEARCH_MAX_COST 250.0f
 /* Delay before searching again after a failed food, water or work search, doubled
  * after each consecutive failure up to 2^COLONIST_SEARCH_MAX_BACKOFF times. A
@@ -182,6 +185,10 @@ bool colonist_set_skill_level(Colonist *colonist, SkillType skill, int level);
  * Ignored for SKILL_NONE, invalid skills and xp <= 0. Returns the number of
  * levels gained. */
 int colonist_gain_skill_xp(Colonist *colonist, SkillType skill, float xp);
+
+/* Work done per tick on an order relying on `skill`: COLONIST_WORK_SPEED
+ * scaled by skill_work_speed() (unscaled for SKILL_NONE). */
+float colonist_work_speed(const Colonist *colonist, SkillType skill);
 
 /* Progress toward the next level, 0..1 (0 at the maximum level). */
 float colonist_skill_progress(const Colonist *colonist, SkillType skill);

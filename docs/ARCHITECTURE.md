@@ -159,9 +159,11 @@ with a random spread drawn from the game RNG. Novices bring back crude or
 rough, damaged logs; experts superb, intact ones. Randomness is only drawn for
 item types that have a quality or can be damaged. Skill levels go from 0 to 20
 and are rolled when a colonist is created (sum of two dice: mostly average,
-a few novices and experts). Colonists learn by doing: each tick of work on an
-order adds the work done to `Colonist.skill_xp` for the order's skill
-(`colonist_gain_skill_xp()`), and level L needs `SKILL_XP_PER_LEVEL × (L + 1)`
+a few novices and experts). The level also sets the work speed
+(`colonist_work_speed()`): ×0.5 at level 0, ×1 at level 10, ×1.5 at level 20.
+Colonists learn by doing: each tick spent working on an order adds
+`COLONIST_WORK_XP_PER_TICK` to `Colonist.skill_xp` for the order's skill
+(`colonist_gain_skill_xp()`), whatever their speed, and level L needs `SKILL_XP_PER_LEVEL × (L + 1)`
 to reach L + 1 (one in-game hour of work for level 1, twenty hours for level
 20). The products of a tick use the level before that tick's experience.
 Hauling needs no skill and teaches nothing. The work grid shows each
@@ -274,7 +276,8 @@ job, one priority level at a time (1 first): a Dijkstra search for the nearest
 passable tile next to an open job (designated, work type at that level, not
 reserved), 4-neighborhood, fixed neighbor order. Priority therefore beats
 distance. The colonist reserves the job, walks there and adds
-`COLONIST_WORK_SPEED` work per tick. When the work needed is reached the order
+`colonist_work_speed()` work per tick (`COLONIST_WORK_SPEED` scaled by its
+skill level). When the work needed is reached the order
 is carried out on the map (tree removed, rock dug out, leaving the rough stone
 floor), its products are dropped (wood, stone) and the designation
 disappears.

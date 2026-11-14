@@ -149,10 +149,10 @@ hud.colonist.need = {0}: {1}%
 hud.colonist.need_state = {0}: {1}% ({2})
 # {0} = highest skill level
 hud.colonist.skills = Skills (out of {0})
-# {0} = skill name, {1} = level
-hud.colonist.skill = {0}: {1}
-# {0} = skill name, {1} = level, {2} = progress toward the next level (e.g. 45%)
-hud.colonist.skill_progress = {0}: {1} (next level: {2})
+# {0} = skill name, {1} = level, {2} = work speed multiplier (e.g. 1.25)
+hud.colonist.skill = {0}: {1} (speed ×{2})
+# {0} = skill name, {1} = level, {2} = work speed multiplier, {3} = progress toward the next level (e.g. 45%)
+hud.colonist.skill_progress = {0}: {1} (speed ×{2}, next level: {3})
 # {0} = number of selected colonists
 hud.selection.count.one = {0} colonist selected
 hud.selection.count.other = {0} colonists selected
@@ -189,4 +189,4 @@ work_panel.hint = Left click: higher priority · Right click: lower priority · 
 # {0} = highest priority number (1), {1} = lowest priority number (4)
 work_panel.legend = {0} = done first · {1} = done last · empty = never
 # {0} = lowest skill level, {1} = highest
-work_panel.skill_legend = Grey number: skill level ({0} to {1}), it rises with practice
+work_panel.skill_legend = Grey number: skill level ({0} to {1}), for faster and better work; it rises with practice

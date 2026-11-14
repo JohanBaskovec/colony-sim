@@ -30,7 +30,8 @@ static bool init_flat_game(Game *game)
     return true;
 }
 
-/* Spawns a colonist with every need satisfied. */
+/* Spawns a colonist with every need satisfied and standard skills (work at
+ * the normal speed, so that timings are predictable). */
 static Colonist *spawn_rested(Game *game, int x, int y)
 {
     Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
@@ -38,8 +39,28 @@ static Colonist *spawn_rested(Game *game, int x, int y)
         for (int need = 0; need < NEED_COUNT; need++) {
             colonist->needs[need] = 1.0f;
         }
+        for (int skill = 0; skill < SKILL_COUNT; skill++) {
+            colonist_set_skill_level(colonist, (SkillType)skill, SKILL_LEVEL_STANDARD);
+        }
     }
     return colonist;
+}
+
+/* Ticks until the order on (x, y) is gone (at most `max_ticks`); returns the
+ * number of ticks during which work was done on it. */
+static int run_until_done(Game *game, int x, int y, int max_ticks)
+{
+    int working = 0;
+    for (int i = 0; i < max_ticks && designation_get(&game->designations, x, y) != DESIGNATION_NONE;
+         i++) {
+        float before = game->designations.progress[map_index(&game->map, x, y)];
+        game_tick(game);
+        if (designation_get(&game->designations, x, y) == DESIGNATION_NONE ||
+            game->designations.progress[map_index(&game->map, x, y)] > before) {
+            working++;
+        }
+    }
+    return working;
 }
 
 /* Turns every column from `x0` to the right edge into shallow water. */
@@ -1067,7 +1088,7 @@ static void test_starting_skills_are_random_and_valid(void)
     bool varied = false;
     int first = -1;
     for (int i = 0; i < 12; i++) {
-        Colonist *colonist = spawn_rested(&game, 10 + i, 10);
+        Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 10 + i, 10));
         REQUIRE(colonist != NULL);
         for (int skill = 0; skill < SKILL_COUNT; skill++) {
             int level = colonist_skill_level(colonist, (SkillType)skill);
@@ -1150,20 +1171,19 @@ static void test_working_teaches_the_order_skill(void)
         REQUIRE(colonist_set_skill_level(colonist, (SkillType)skill, 0));
     }
     game_designate_rect(&game, 26, 20, 26, 20, DESIGNATION_CHOP);
-    float work = designation_work_needed(&game.designations, &game.map, 26, 20);
-    run_ticks(&game, walk_ticks(6) + (int)work + 10);
+    int working = run_until_done(&game, 26, 20, 20000);
     REQUIRE(designation_get(&game.designations, 26, 20) == DESIGNATION_NONE);
 
-    /* All the work done went into woodcutting experience. */
+    /* Every tick spent working gave one point of woodcutting experience. */
     float total = colonist->skill_xp[SKILL_WOODCUTTING];
     for (int level = 0; level < colonist_skill_level(colonist, SKILL_WOODCUTTING); level++) {
         total += skill_xp_to_next_level(level);
     }
-    CHECK_NEAR(total, work, 2.0);
-    /* One tree (2,000 work) is most of the way to level 1 (2,500). */
-    CHECK_EQ_INT(colonist_skill_level(colonist, SKILL_WOODCUTTING), 0);
-    CHECK_NEAR(colonist_skill_progress(colonist, SKILL_WOODCUTTING), work / SKILL_XP_PER_LEVEL,
-               1e-3);
+    CHECK_NEAR(total, (float)working * COLONIST_WORK_XP_PER_TICK, 1.0);
+    /* A novice works at half speed: a tree (2,000 work) takes about 4,000
+     * ticks, enough for level 1 (2,500). */
+    CHECK(working > 3500);
+    CHECK_EQ_INT(colonist_skill_level(colonist, SKILL_WOODCUTTING), 1);
     CHECK_EQ_INT(colonist_skill_level(colonist, SKILL_MINING), 0);
     CHECK_NEAR(colonist->skill_xp[SKILL_MINING], 0.0, 1e-6);
     CHECK_NEAR(colonist->skill_xp[SKILL_GATHERING], 0.0, 1e-6);
@@ -1174,6 +1194,7 @@ static void test_woodcutter_skill_sets_wood_condition(void)
 {
     /* The same tree, cut by a novice and by an expert. */
     ItemStack results[2];
+    int working[2];
     int levels[2] = {SKILL_LEVEL_MIN, SKILL_LEVEL_MAX};
     for (int run = 0; run < 2; run++) {
         Game game;
@@ -1183,8 +1204,7 @@ static void test_woodcutter_skill_sets_wood_condition(void)
         REQUIRE(colonist != NULL);
         REQUIRE(colonist_set_skill_level(colonist, SKILL_WOODCUTTING, levels[run]));
         game_designate_rect(&game, 26, 20, 26, 20, DESIGNATION_CHOP);
-        float work = designation_work_needed(&game.designations, &game.map, 26, 20);
-        run_ticks(&game, walk_ticks(6) + (int)work + 10);
+        working[run] = run_until_done(&game, 26, 20, 20000);
         results[run] = items_get(&game.items, 26, 20);
         REQUIRE(results[run].type == ITEM_WOOD);
         game_shutdown(&game);
@@ -1193,6 +1213,26 @@ static void test_woodcutter_skill_sets_wood_condition(void)
     CHECK(results[1].quality >= ITEM_QUALITY_FINE);
     CHECK(results[0].hit_points < results[1].hit_points);
     CHECK_EQ_INT(results[1].hit_points, item_def(ITEM_WOOD)->max_hit_points);
+    /* The expert is also much faster (×1.5 against ×0.5, the novice a bit
+     * faster once it reaches level 1). */
+    CHECK(working[1] * 2 < working[0]);
+}
+
+static void test_work_speed_follows_skill(void)
+{
+    CHECK_NEAR(skill_work_speed(SKILL_LEVEL_MIN), SKILL_SPEED_AT_MIN, 1e-6);
+    CHECK_NEAR(skill_work_speed(SKILL_LEVEL_STANDARD), 1.0, 1e-6);
+    CHECK_NEAR(skill_work_speed(SKILL_LEVEL_MAX), SKILL_SPEED_AT_MAX, 1e-6);
+    CHECK_NEAR(skill_work_speed(-3), SKILL_SPEED_AT_MIN, 1e-6);
+    CHECK_NEAR(skill_work_speed(99), SKILL_SPEED_AT_MAX, 1e-6);
+
+    Colonist colonist;
+    colonist_init(&colonist, "Ada", 30, 0, 0);
+    REQUIRE(colonist_set_skill_level(&colonist, SKILL_MINING, SKILL_LEVEL_MAX));
+    CHECK_NEAR(colonist_work_speed(&colonist, SKILL_MINING), COLONIST_WORK_SPEED * 1.5, 1e-6);
+    CHECK_NEAR(colonist_work_speed(&colonist, SKILL_GATHERING), COLONIST_WORK_SPEED * 0.5, 1e-6);
+    CHECK_NEAR(colonist_work_speed(&colonist, SKILL_NONE), COLONIST_WORK_SPEED, 1e-6);
+    colonist_free(&colonist);
 }
 
 static void test_translation_keys(void)
@@ -1253,6 +1293,7 @@ int main(void)
     RUN_TEST(test_woodcutter_skill_sets_wood_condition);
     RUN_TEST(test_experience_raises_levels);
     RUN_TEST(test_working_teaches_the_order_skill);
+    RUN_TEST(test_work_speed_follows_skill);
     RUN_TEST(test_reservations_stay_consistent_over_a_long_run);
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);

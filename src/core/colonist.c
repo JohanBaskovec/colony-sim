@@ -106,6 +106,14 @@ int colonist_gain_skill_xp(Colonist *colonist, SkillType skill, float xp)
     return gained;
 }
 
+float colonist_work_speed(const Colonist *colonist, SkillType skill)
+{
+    if ((unsigned)skill >= SKILL_COUNT) {
+        return COLONIST_WORK_SPEED;
+    }
+    return COLONIST_WORK_SPEED * skill_work_speed(colonist->skills[skill]);
+}
+
 float colonist_skill_progress(const Colonist *colonist, SkillType skill)
 {
     if ((unsigned)skill >= SKILL_COUNT) {
@@ -693,9 +701,9 @@ static void work(Colonist *colonist, const ColonistContext *context)
     SkillType skill = skill_of(type);
     /* Products depend on the level before this tick's experience. */
     bool done = designation_add_work(designations, context->map, context->items, target.x,
-                                     target.y, COLONIST_WORK_SPEED,
+                                     target.y, colonist_work_speed(colonist, skill),
                                      colonist_skill_level(colonist, skill), context->rng);
-    colonist_gain_skill_xp(colonist, skill, COLONIST_WORK_SPEED); /* Learning by doing. */
+    colonist_gain_skill_xp(colonist, skill, COLONIST_WORK_XP_PER_TICK); /* Learning by doing. */
     if (done) {
         set_idle(colonist, context, 0); /* Done: look for the next job right away. */
     }
