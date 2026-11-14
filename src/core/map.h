@@ -137,6 +137,14 @@ typedef struct Map {
     uint8_t *structure_quality;
     uint16_t *structure_hit_points;
     int structure_counts[STRUCTURE_TYPE_COUNT]; /* Tiles holding each type. */
+    /* Built roofs: the roof's StructureType over each tile (0: none) and its
+     * grade. A layer of its own: a roof covers a bed, a wall or open ground. */
+    uint8_t *roof;
+    uint8_t *roof_quality;
+    int roof_count; /* Roofed tiles. */
+    /* Incremented whenever a structure or a roof changes. Data derived from
+     * it (core/room.h) compares it. Not part of map_hash(). */
+    uint32_t build_revision;
     /* Incremented whenever where one can walk, or where water is, changes
      * (plants never block). Data derived from it (core/region.h) compares it
      * to know when it is out of date. Not part of map_hash(). */
@@ -242,6 +250,30 @@ void map_set_structure_hit_points(Map *map, int x, int y, int hit_points);
 
 /* STRUCTURE_NONE out of bounds. */
 StructureType map_structure(const Map *map, int x, int y);
+
+/* The roof built over a tile (STRUCTURE_NONE without one or out of bounds)
+ * and its grade. */
+StructureType map_roof(const Map *map, int x, int y);
+ItemQuality map_roof_quality(const Map *map, int x, int y);
+
+/* Builds a roof (a type for which structure_is_roof()) of a grade over a
+ * tile, or removes it (STRUCTURE_NONE). Other types and out-of-bounds tiles
+ * are ignored. */
+void map_set_roof(Map *map, int x, int y, StructureType roof, ItemQuality quality);
+
+/* Whether a roof over the tile would rest on something: a wall (a structure
+ * that blocks movement) or rock within ROOF_SUPPORT_RANGE tiles. */
+bool map_roof_supported(const Map *map, int x, int y);
+
+/*
+ * Whether rock covers the tile: an open tile with rock at most 3 tiles away
+ * in at least 6 of the 8 directions (inside a cave, under an overhang).
+ * docs/KNOWLEDGE.md §10.
+ */
+bool map_natural_roof(const Map *map, int x, int y);
+
+/* A built roof or a natural one. */
+bool map_is_roofed(const Map *map, int x, int y);
 
 /* False when out of bounds, on impassable terrain, on a rock wall or on a
  * structure that blocks movement. */

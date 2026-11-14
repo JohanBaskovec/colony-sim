@@ -1,5 +1,6 @@
 #include "core/construction.h"
 #include "core/i18n.h"
+#include "core/knowledge.h"
 #include "core/structure.h"
 
 #include "test_framework.h"
@@ -579,6 +580,125 @@ static void test_workstation_site(void)
     free_world(&map, &constructions, &items);
 }
 
+static void test_roof_layer(void)
+{
+    const StructureDef *def = structure_def(STRUCTURE_ROOF);
+    CHECK(structure_is_roof(STRUCTURE_ROOF));
+    CHECK(!structure_is_roof(STRUCTURE_WALL));
+    CHECK(!structure_is_roof(STRUCTURE_TYPE_COUNT));
+    CHECK(!structure_blocks(STRUCTURE_ROOF));
+    CHECK(structure_is_door(STRUCTURE_DOOR));
+    CHECK(!structure_is_door(STRUCTURE_WALL));
+    CHECK_EQ_INT(def->materials[0].type, ITEM_BRANCHES);
+    CHECK_EQ_INT(def->materials[1].type, ITEM_GRASS);
+
+    Map map;
+    REQUIRE(map_init(&map, 16, 16));
+    uint64_t bare = map_hash(&map);
+    /* Not a structure of the structure layer. */
+    CHECK(!map_place_structure(&map, 3, 3, STRUCTURE_ROOF, DIRECTION_SOUTH,
+                               ITEM_QUALITY_STANDARD));
+    CHECK_EQ_INT(map_structure(&map, 3, 3), STRUCTURE_NONE);
+    /* Over a bed, which stays. */
+    map_set_structure(&map, 3, 3, STRUCTURE_GRASS_BED);
+    uint32_t revision = map.build_revision;
+    map_set_roof(&map, 3, 3, STRUCTURE_ROOF, ITEM_QUALITY_FINE);
+    CHECK(map.build_revision != revision);
+    CHECK_EQ_INT(map_roof(&map, 3, 3), STRUCTURE_ROOF);
+    CHECK_EQ_INT(map_roof_quality(&map, 3, 3), ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(map_structure(&map, 3, 3), STRUCTURE_GRASS_BED);
+    CHECK_EQ_INT(map.roof_count, 1);
+    map_set_roof(&map, 3, 3, STRUCTURE_ROOF, ITEM_QUALITY_CRUDE); /* Rebuilt: no new tile. */
+    CHECK_EQ_INT(map.roof_count, 1);
+    map_set_roof(&map, 4, 3, STRUCTURE_WALL, ITEM_QUALITY_STANDARD); /* Not a roof. */
+    map_set_roof(&map, -1, 3, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK_EQ_INT(map_roof(&map, 4, 3), STRUCTURE_NONE);
+    CHECK_EQ_INT(map_roof(&map, -1, 3), STRUCTURE_NONE);
+    CHECK_EQ_INT(map.roof_count, 1);
+    uint64_t roofed = map_hash(&map);
+    map_set_roof(&map, 3, 3, STRUCTURE_NONE, ITEM_QUALITY_STANDARD);
+    CHECK_EQ_INT(map.roof_count, 0);
+    map_set_structure(&map, 3, 3, STRUCTURE_NONE);
+    /* The hash sees roofs, and stays as it was without any. */
+    CHECK(roofed != bare);
+    CHECK_EQ_UINT(map_hash(&map), bare);
+
+    /* Support: a wall or rock within ROOF_SUPPORT_RANGE tiles. */
+    CHECK(!map_roof_supported(&map, 8, 8));
+    map_set_structure(&map, 8 + ROOF_SUPPORT_RANGE + 1, 8, STRUCTURE_WALL);
+    CHECK(!map_roof_supported(&map, 8, 8));
+    map_set_structure(&map, 8 + ROOF_SUPPORT_RANGE, 8 + ROOF_SUPPORT_RANGE, STRUCTURE_WALL);
+    CHECK(map_roof_supported(&map, 8, 8));
+    map_set_structure(&map, 8 + ROOF_SUPPORT_RANGE, 8 + ROOF_SUPPORT_RANGE, STRUCTURE_DOOR);
+    CHECK(!map_roof_supported(&map, 8, 8)); /* A door holds nothing up. */
+    map_set_rock(&map, 8 - ROOF_SUPPORT_RANGE, 8, ROCK_GRANITE);
+    CHECK(map_roof_supported(&map, 8, 8));
+    map_free(&map);
+}
+
+static void test_roof_sites(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    /* Granite at (5, 5), water at (6, 6), a tree at (7, 7), grass at (8, 8). */
+    CHECK(!construction_can_place_roof(&constructions, &map, 5, 5)); /* Rock. */
+    CHECK(!construction_can_place_roof(&constructions, &map, 6, 6)); /* Water. */
+    CHECK(!construction_can_place_roof(&constructions, &map, 7, 7)); /* A tree. */
+    CHECK(construction_can_place_roof(&constructions, &map, 4, 4));  /* Next to the rock. */
+    CHECK(!construction_can_place_roof(&constructions, &map, 8, 8)); /* 3 tiles from the rock. */
+    map_set_structure(&map, 9, 10, STRUCTURE_WALL);
+    CHECK(construction_can_place_roof(&constructions, &map, 8, 8)); /* Over grass. */
+    CHECK(!construction_can_place_roof(&constructions, &map, 12, 13)); /* Nothing to rest on. */
+    CHECK(!construction_can_place_roof(&constructions, &map, -1, 0));
+    map_set_structure(&map, 12, 10, STRUCTURE_WALL);
+    CHECK(construction_can_place_roof(&constructions, &map, 12, 12));
+    CHECK(construction_can_place_roof(&constructions, &map, 12, 10)); /* Over the wall. */
+    CHECK(construction_can_place_structure(&constructions, &map, STRUCTURE_ROOF, 12, 12,
+                                           DIRECTION_SOUTH));
+
+    /* Over a bed: the roof is built in its own layer, the bed stays. */
+    map_set_structure(&map, 11, 11, STRUCTURE_GRASS_BED);
+    int index =
+        constructions_place(&constructions, &map, STRUCTURE_ROOF, 11, 11, DIRECTION_SOUTH);
+    REQUIRE(index != CONSTRUCTION_NONE);
+    CHECK(!construction_can_place_roof(&constructions, &map, 11, 11)); /* A site there. */
+    construction_deliver(&constructions, index, item_stack_pristine(ITEM_BRANCHES, 3));
+    construction_deliver(&constructions, index, item_stack_pristine(ITEM_GRASS, 20));
+    CHECK(construction_add_work(&constructions, &map, &items, NULL, index, 1.0e6f, 60.0, NULL));
+    CHECK_EQ_INT(map_roof(&map, 11, 11), STRUCTURE_ROOF);
+    /* The grade of the builder's level, as for any structure. */
+    CHECK_EQ_INT(map_roof_quality(&map, 11, 11),
+                 knowledge_quality_of_score(knowledge_product_score(60.0, NULL)));
+    CHECK_EQ_INT(map_structure(&map, 11, 11), STRUCTURE_GRASS_BED);
+    CHECK(!construction_can_place_roof(&constructions, &map, 11, 11)); /* Roofed already. */
+    /* Planned next to a planned wall: built once the wall stands. */
+    CHECK(!construction_can_place_roof(&constructions, &map, 3, 12));
+    int wall = constructions_place(&constructions, &map, STRUCTURE_WALL, 3, 14, DIRECTION_SOUTH);
+    REQUIRE(wall != CONSTRUCTION_NONE);
+    CHECK(construction_can_place_roof(&constructions, &map, 3, 12));
+    int roof = constructions_place(&constructions, &map, STRUCTURE_ROOF, 3, 12, DIRECTION_SOUTH);
+    REQUIRE(roof != CONSTRUCTION_NONE);
+    construction_deliver(&constructions, roof, item_stack_pristine(ITEM_BRANCHES, 3));
+    construction_deliver(&constructions, roof, item_stack_pristine(ITEM_GRASS, 20));
+    const ConstructionSite *roof_site = construction_get(&constructions, roof);
+    CHECK(construction_materials_complete(roof_site));
+    CHECK(!construction_can_work(roof_site, &map));
+    CHECK(!construction_add_work(&constructions, &map, &items, NULL, roof, 1.0e6f, 60.0, NULL));
+    CHECK_NEAR(roof_site->progress, 0.0, 1e-6);
+    ItemStack unused[STRUCTURE_MATERIAL_SLOTS];
+    constructions_remove(&constructions, wall, unused);
+    map_set_structure(&map, 3, 14, STRUCTURE_WALL); /* Built. */
+    CHECK(construction_can_work(roof_site, &map));
+    CHECK(construction_add_work(&constructions, &map, &items, NULL, roof, 1.0e6f, 60.0, NULL));
+    CHECK_EQ_INT(map_roof(&map, 3, 12), STRUCTURE_ROOF);
+    /* A bed can still be planned under a roof. */
+    CHECK(construction_can_place_structure(&constructions, &map, STRUCTURE_GRASS_BED, 13, 11,
+                                           DIRECTION_SOUTH));
+    free_world(&map, &constructions, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -595,5 +715,7 @@ int main(void)
     RUN_TEST(test_bed_sites);
     RUN_TEST(test_promises);
     RUN_TEST(test_workstation_site);
+    RUN_TEST(test_roof_layer);
+    RUN_TEST(test_roof_sites);
     return test_summary();
 }

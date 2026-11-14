@@ -420,6 +420,7 @@ bool game_init(Game *game, const NewGameParams *params)
         !beds_init(&game->beds, game->map.width, game->map.height) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
         !regions_init(&game->regions, game->map.width, game->map.height) ||
+        !rooms_init(&game->rooms, game->map.width, game->map.height) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
         game_shutdown(game);
         return false;
@@ -480,6 +481,7 @@ void game_shutdown(Game *game)
     pool_free(&game->colonist_pool);
     pathfinder_free(&game->pathfinder);
     regions_free(&game->regions);
+    rooms_free(&game->rooms);
     designations_free(&game->designations);
     dirt_free(&game->dirt);
     gather_zones_free(&game->gather_zones);
@@ -576,6 +578,12 @@ void game_tick(Game *game)
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game->items.totals);
     update_colonists(game);
+}
+
+const Rooms *game_rooms(Game *game)
+{
+    rooms_update(&game->rooms, &game->map);
+    return &game->rooms;
 }
 
 int game_update(Game *game, double real_seconds)
@@ -940,7 +948,9 @@ bool game_can_place_structure(const Game *game, StructureType type, int x, int y
     if (length <= 0 || (unsigned)direction >= DIRECTION_COUNT) {
         return false;
     }
-    for (int part = 0; part < length; part++) {
+    /* A roof goes over anything: a stockpile or a workstation under a roof is
+     * the point. */
+    for (int part = 0; !structure_is_roof(type) && part < length; part++) {
         int px = x + part * direction_dx(direction), py = y + part * direction_dy(direction);
         if (stockpile_at(&game->stockpiles, px, py) != STOCKPILE_NONE ||
             workstation_at(&game->workstations, px, py) != WORKSTATION_NONE) {

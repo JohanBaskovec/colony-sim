@@ -24,6 +24,7 @@ set(COLONY_UNIT_TESTS
     test_pool
     test_recipe
     test_region
+    test_room
     test_reservation
     test_rng
     test_stockpile

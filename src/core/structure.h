@@ -1,6 +1,6 @@
 /*
  * Structures: what settlers build on a tile from gathered materials (grass
- * bed, grass and branch wall, branch screen). This module only holds their
+ * bed, grass and branch wall, branch screen, grass roof). This module only holds their
  * definitions; built structures are a layer of the map (core/map.h) and
  * blueprints waiting to be built are construction sites
  * (core/construction.h).
@@ -13,6 +13,10 @@
  * head and its foot, turned in one of four directions. The head is the
  * structure's origin: where its grade and hit points are kept, where a
  * settler lies down.
+ *
+ * A roof is built over a tile and whatever stands on it (a bed, a wall, a
+ * stockpile): it lives in a map layer of its own (see map_roof()), and must
+ * rest on a wall or rock nearby (ROOF_SUPPORT_RANGE).
  *
  * A built structure has a grade (the builder's level, capped by the grade of
  * its materials) and hit points (more for a better grade). Some wear by
@@ -32,6 +36,7 @@ typedef enum StructureType {
     STRUCTURE_GRASS_BED,
     STRUCTURE_WALL, /* Grass and branch wall. */
     STRUCTURE_DOOR, /* Branch screen: pushed aside to pass. */
+    STRUCTURE_ROOF, /* Grass roof on branch rafters, over a tile. */
     STRUCTURE_TYPE_COUNT
 } StructureType;
 
@@ -83,7 +88,13 @@ typedef struct StructureDef {
      * when the work is 0. Asked for below STRUCTURE_REFRESH_BELOW. */
     StructureMaterial refresh_material;
     float refresh_work;
+    bool roof; /* Built in the roof layer, over the tile (see map_roof()). */
 } StructureDef;
+
+/* A roof tile needs a wall (a structure that blocks movement) or rock at
+ * most this many tiles away, in any direction (branch rafters span about
+ * 2.5 m): a hut of up to 4 × 4 tiles inside its walls can be roofed. */
+#define ROOF_SUPPORT_RANGE 2
 
 /* Fraction of its hit points under which a structure that can be refreshed
  * gets a refresh site. */
@@ -97,6 +108,12 @@ bool structure_blocks(StructureType type);
 
 /* Whether settlers sleep on it. */
 bool structure_is_bed(StructureType type);
+
+/* Whether it is a door: passable, but it closes a room (core/room.h). */
+bool structure_is_door(StructureType type);
+
+/* Whether it is a roof (built in the roof layer). */
+bool structure_is_roof(StructureType type);
 
 /* Tiles it takes: 1 for most, 2 for a bed (0 for STRUCTURE_NONE). Part `i`
  * of a structure whose head is at (x, y) lies at (x + i × direction_dx(),

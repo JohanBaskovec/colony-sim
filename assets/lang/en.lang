@@ -138,6 +138,8 @@ hud.tool.zone_remove_help = Drag: take the area out of the zones · Esc: back
 hud.tool.build_help = Left click: place a blueprint · {0}: next workstation · Esc: back
 hud.tool.outline_help = Drag: walls along the edges of a rectangle · Click: one segment · Esc: back
 hud.tool.structure_help = Click: place one · Drag: fill a rectangle · Esc: back
+# {0} = number of tiles
+hud.tool.roof_support = Each roof tile needs a wall or rock at most {0} tiles away
 hud.tool.rotate_help = {0}: turn it
 
 # Tile inspector. {0}, {1} = tile coordinates
@@ -171,6 +173,16 @@ hud.tile.station = Workstation: {0}
 # {0} = workstation name, {1} = percentage of the construction done
 hud.tile.blueprint = Blueprint: {0} ({1}% built)
 hud.tile.structure = Construction: {0}
+# {0} = roof, {1} = grade
+hud.tile.roof = Roof: {0} ({1})
+hud.tile.natural_roof = Roof: rock overhead
+# {0} = number of tiles of the room
+hud.tile.room_roofed.one = Room: {0} tile, roofed
+hud.tile.room_roofed.other = Room: {0} tiles, roofed
+# {0} = number of tiles of the room, {1} = how many of them have a roof
+hud.tile.room_open.one = Room: {0} tile, {1} under a roof
+hud.tile.room_open.other = Room: {0} tiles, {1} under a roof
+hud.tile.outdoors = Outdoors
 hud.tile.refresh = Refreshing: {0} ({1}% done)
 hud.tile.bed_owner = Owner: {0}
 hud.tile.bed_free = Free bed: the next settler to sleep here takes it
@@ -318,6 +330,8 @@ structure.wall = Grass and branch wall
 structure.wall.description = Posts and rails of branches thatched with dry grass, 2 m high: nobody gets through
 structure.door = Branch screen
 structure.door.description = A woven frame of branches pushed aside to pass: the door of grass walls
+structure.roof = Grass roof
+structure.roof.description = Branch rafters thatched with dry grass, over whatever stands on the tile: it rests on a wall or rock close by
 
 # Recipes (named after what they make)
 recipe.chopper = Chopper

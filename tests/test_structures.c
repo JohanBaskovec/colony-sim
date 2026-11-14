@@ -555,6 +555,81 @@ static void test_taking_apart_a_bed_being_refreshed(void)
     game_shutdown(&game);
 }
 
+/* A settler roofs a hut: walls around, a roof over the inside, without
+ * clearing the grass under it. The hut becomes a roofed room. */
+static void test_roofing_a_hut(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    REQUIRE(spawn_rested(&game, 10, 10) != NULL);
+    REQUIRE(spawn_rested(&game, 11, 10) != NULL);
+    /* Walls around two tiles, (15, 15) and (16, 15), a door on the east. */
+    for (int x = 14; x <= 17; x++) {
+        map_set_structure(&game.map, x, 14, STRUCTURE_WALL);
+        map_set_structure(&game.map, x, 16, STRUCTURE_WALL);
+    }
+    map_set_structure(&game.map, 14, 15, STRUCTURE_WALL);
+    map_set_structure(&game.map, 17, 15, STRUCTURE_DOOR);
+    game.map.plants[map_index(&game.map, 15, 15)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    /* A stockpile inside: a roof goes over it. */
+    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 16, 15, 16, 15) != STOCKPILE_NONE);
+    CHECK(game_can_place_structure(&game, STRUCTURE_ROOF, 16, 15, DIRECTION_SOUTH));
+    CHECK(!game_can_place_structure(&game, STRUCTURE_ROOF, 30, 30, DIRECTION_SOUTH));
+    CHECK_EQ_INT(game_place_structure_rect(&game, STRUCTURE_ROOF, DIRECTION_SOUTH, 15, 15, 16,
+                                           15),
+                 2);
+    game_tick(&game);
+    const Room *room = rooms_at(game_rooms(&game), &game.map, 15, 15);
+    REQUIRE(room != NULL);
+    CHECK(room->closed);
+    CHECK_EQ_INT(room->tiles, 2);
+    CHECK(!room_is_roofed(room));
+
+    items_add(&game.items, 10, 12, item_stack_pristine(ITEM_BRANCHES, 6));
+    for (int x = 8; x < 10; x++) { /* 20 armfuls a tile. */
+        CHECK_EQ_INT(items_add(&game.items, x, 7, item_stack_pristine(ITEM_GRASS, 20)), 20);
+    }
+    for (int i = 0; i < 6 * TICKS_PER_HOUR && game.constructions.used_count > 0; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(game.constructions.used_count, 0);
+    CHECK_EQ_INT(game.map.roof_count, 2);
+    CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 0);
+    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 0);
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 15, 15)].type, PLANT_GRASS);
+    CHECK(stockpile_at(&game.stockpiles, 16, 15) != STOCKPILE_NONE);
+    game_tick(&game);
+    CHECK(room_is_roofed(rooms_at(game_rooms(&game), &game.map, 15, 15)));
+    game_shutdown(&game);
+}
+
+/* Taking apart a tile with a bed under a roof: the bed first, then the roof. */
+static void test_taking_a_roof_apart(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    map_set_structure(&game.map, 12, 10, STRUCTURE_DOOR);
+    map_set_roof(&game.map, 12, 10, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(&game.map, 14, 10, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK_EQ_INT(game_designate_rect(&game, 12, 10, 14, 10, DESIGNATION_DECONSTRUCT), 2);
+    for (int i = 0; i < 2 * TICKS_PER_HOUR && game.designations.count > 0; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(map_roof(&game.map, 14, 10), STRUCTURE_NONE);
+    CHECK_EQ_INT(map_structure(&game.map, 12, 10), STRUCTURE_NONE); /* The door went first. */
+    CHECK_EQ_INT(map_roof(&game.map, 12, 10), STRUCTURE_ROOF);       /* One order, one thing. */
+    /* Half of the roof's materials (3 branches, 20 armfuls of grass) come back. */
+    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 10);
+    CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 1 + 2);
+    CHECK_EQ_INT(game_designate_rect(&game, 12, 10, 12, 10, DESIGNATION_DECONSTRUCT), 1);
+    run_ticks(&game, TICKS_PER_HOUR);
+    CHECK_EQ_INT(map_roof(&game.map, 12, 10), STRUCTURE_NONE);
+    CHECK_EQ_INT(game.map.roof_count, 0);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_placing);
@@ -574,5 +649,7 @@ int main(void)
     RUN_TEST(test_taking_a_wall_apart);
     RUN_TEST(test_worn_bed_is_refreshed);
     RUN_TEST(test_taking_apart_a_bed_being_refreshed);
+    RUN_TEST(test_roofing_a_hut);
+    RUN_TEST(test_taking_a_roof_apart);
     return test_summary();
 }

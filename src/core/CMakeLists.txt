@@ -21,6 +21,7 @@ add_library(colony_core STATIC
     pool.c
     recipe.c
     region.c
+    room.c
     reservation.c
     rng.c
     stockpile.c

@@ -100,8 +100,8 @@ static const ConstructionSite *site_at(const App *app, int x, int y)
     return construction_get(sites, construction_at(sites, x, y));
 }
 
-/* Type of the structure, or of the construction site, on a tile
- * (STRUCTURE_NONE for a workstation's site). */
+/* Type of the structure, of the construction site, or of the roof, on a
+ * tile, in that order (STRUCTURE_NONE for a workstation's site). */
 static StructureType structure_type_at(const App *app, int x, int y)
 {
     StructureType built = map_structure(&app->game.map, x, y);
@@ -109,7 +109,7 @@ static StructureType structure_type_at(const App *app, int x, int y)
         return built;
     }
     const ConstructionSite *site = site_at(app, x, y);
-    return site != NULL ? (StructureType)site->type : STRUCTURE_NONE;
+    return site != NULL ? (StructureType)site->type : map_roof(&app->game.map, x, y);
 }
 
 /* Whether a structure or a construction site (a workstation's too) lies on a

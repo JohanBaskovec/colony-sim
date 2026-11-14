@@ -128,6 +128,7 @@ hud.tool.zone_remove_help = Glisser : retirer la surface des zones · Échap :
 hud.tool.build_help = Clic gauche : placer un plan · {0} : poste suivant · Échap : retour
 hud.tool.outline_help = Glisser : murs le long d’un rectangle · Clic : un seul segment · Échap : retour
 hud.tool.structure_help = Clic : en placer un · Glisser : remplir un rectangle · Échap : retour
+hud.tool.roof_support = Chaque case de toit doit avoir un mur ou de la roche à {0} cases au plus
 hud.tool.rotate_help = {0} : le tourner
 
 hud.tile.position = Case {0}, {1}
@@ -148,6 +149,13 @@ hud.tile.gather_left_off = Interrompu : {0} ({1} % effectué)
 hud.tile.station = Poste de travail : {0}
 hud.tile.blueprint = Plan : {0} (construit à {1} %)
 hud.tile.structure = Construction : {0}
+hud.tile.roof = Toit : {0} ({1})
+hud.tile.natural_roof = Toit : la roche au-dessus
+hud.tile.room_roofed.one = Pièce : {0} case, couverte
+hud.tile.room_roofed.other = Pièce : {0} cases, couverte
+hud.tile.room_open.one = Pièce : {0} case, dont {1} sous un toit
+hud.tile.room_open.other = Pièce : {0} cases, dont {1} sous un toit
+hud.tile.outdoors = Dehors
 hud.tile.refresh = Réfection : {0} (faite à {1} %)
 hud.tile.bed_owner = Propriétaire : {0}
 hud.tile.bed_free = Lit libre : le prochain colon qui y dort le prend
@@ -268,6 +276,8 @@ structure.wall = Mur d’herbe et de branches
 structure.wall.description = Poteaux et traverses en branches couverts d’herbe sèche, 2 m de haut : personne ne passe
 structure.door = Claie de branches
 structure.door.description = Un cadre de branches tressées que l’on écarte pour passer : la porte des murs d’herbe
+structure.roof = Toit de chaume
+structure.roof.description = Des chevrons de branches couverts d’herbe sèche, au-dessus de ce qui occupe la case : il repose sur un mur ou de la roche tout proche
 
 # Recettes
 recipe.chopper = Galet aménagé

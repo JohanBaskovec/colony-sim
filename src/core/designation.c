@@ -70,7 +70,9 @@ bool designation_can_apply(const Map *map, int x, int y, DesignationType type)
     }
     switch (type) {
     case DESIGNATION_MINE: return map->rock[map_index(map, x, y)] != ROCK_NONE;
-    case DESIGNATION_DECONSTRUCT: return map_structure(map, x, y) != STRUCTURE_NONE;
+    case DESIGNATION_DECONSTRUCT:
+        return map_structure(map, x, y) != STRUCTURE_NONE ||
+               map_roof(map, x, y) != STRUCTURE_NONE;
     default: return false;
     }
 }
@@ -158,7 +160,9 @@ float designation_work_needed(const Designations *designations, const Map *map, 
         return rock != NULL ? rock->mine_work : 0.0f;
     }
     case DESIGNATION_DECONSTRUCT:
-        return structure_deconstruct_work((StructureType)map->structure[index]);
+        return structure_deconstruct_work(map->structure[index] != STRUCTURE_NONE
+                                              ? (StructureType)map->structure[index]
+                                              : (StructureType)map->roof[index]);
     default: return 0.0f;
     }
 }
@@ -200,9 +204,15 @@ static void complete(Map *map, Items *items, int x, int y, DesignationType type)
         map_set_rock(map, x, y, ROCK_NONE);
         break;
     case DESIGNATION_DECONSTRUCT: {
+        /* The structure first; the roof once nothing stands under it. */
         StructureType structure = map_structure(map, x, y);
+        if (structure != STRUCTURE_NONE) {
+            map_set_structure(map, x, y, STRUCTURE_NONE);
+        } else {
+            structure = map_roof(map, x, y);
+            map_set_roof(map, x, y, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
+        }
         const StructureDef *def = structure_def(structure);
-        map_set_structure(map, x, y, STRUCTURE_NONE);
         for (int slot = 0; items != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
             int count = structure_salvage_count(structure, slot);
             if (count > 0) {

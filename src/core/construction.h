@@ -93,8 +93,15 @@ ConstructionSite *construction_get_mutable(Constructions *constructions, int ind
  * builder first). */
 bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y);
 
+/* Whether a roof may be planned over a tile: buildable ground, no rock, no
+ * tree, no roof nor site yet, a support in reach: built (map_roof_supported())
+ * or planned (the site of a wall), so that a whole hut can be planned at
+ * once. Whatever stands there (a bed, a wall) stays under it. */
+bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
+                                 int y);
+
 /* construction_can_place() on every tile a structure with its head at
- * (x, y) would take. */
+ * (x, y) would take (construction_can_place_roof() for a roof). */
 bool construction_can_place_structure(const Constructions *constructions, const Map *map,
                                       StructureType type, int x, int y, Direction direction);
 
@@ -158,8 +165,13 @@ int construction_promise(Constructions *constructions, int index, int slot, int 
 void construction_release_promise(Constructions *constructions, int index, int number, int slot,
                                   int count);
 
-/* Whether every material is in: the work can start. */
+/* Whether every material is in. */
 bool construction_materials_complete(const ConstructionSite *site);
+
+/* Whether the work can start: every material is in and, for a roof, a wall
+ * or rock holds it up now (map_roof_supported(); its walls may still be
+ * sites). */
+bool construction_can_work(const ConstructionSite *site, const Map *map);
 
 /* Delivers items to the slot of their type; returns how many were taken. */
 int construction_deliver(Constructions *constructions, int index, ItemStack stack);

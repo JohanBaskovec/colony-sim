@@ -437,7 +437,7 @@ with its own use.
   share (up to 60%) *(tuning)*, a cobble otherwise; elsewhere only cobbles.
   Later, flint comes with the geology (chalk and limestone, §13).
 - **Branches**: dead or cut branches, the main material of the start: fuel,
-  walls, lean-tos, spears, digging sticks, torches. Quality = straightness.
+  walls, roofs, spears, digging sticks, torches. Quality = straightness.
 - **Twigs**: kindling to light a fire, quick fuel, filling for branch screens.
 - **Fresh grass** dries into **dry grass** while it lies on a tile (on the
   ground or in a stockpile, not carried): **3 days** in mild dry weather,
@@ -777,8 +777,7 @@ walls, doors, roofs and beds.*
 | `grass_bed`     | Grass bed            | 1 × 2 (1 × 1 for now) | 12 dry grass | 625 (0.25 h) | 50 | yes (×1.2) | 20 | yes |
 | `grass_wall`    | Grass and branch wall | 1 × 1 per segment, drawn as the edges of a rectangle | 5 branches, 24 dry grass | 5,000 (2 h) | 50 | no | 60 | yes |
 | `branch_screen` | Branch screen (door) | 1 × 1, in a wall or cave mouth | 5 branches, 5 twigs | 3,750 (1.5 h) | 55 | yes (×1.5) | 40 | yes |
-| `lean_to`       | Lean-to shelter      | 3 × 2, rotated (open side) | 30 branches, 10 grass | 7,500 (3 h) | 60 | yes (back row ×2) | 120 | yes |
-| (order) `clear_floor` | Clear cave floor | per tile, rough stone | none | 1,250 (0.5 h) | 50 | — | — | — |
+| (order) `clear_floor` | Clear cave floor *(later, once mining exists)* | per tile, rough stone | none | 1,250 (0.5 h) | 50 | — | — | — |
 
 Quality: builder's level capped by materials (§2.2); grass and twigs have no
 quality and do not cap.
@@ -827,22 +826,26 @@ planned).
 - Passable at ×1.5, blocks wind, insulation 0.3. Counts as a door for room
   detection: a cave closed by grass walls and a screen is a room.
 
-**Lean-to shelter**: long branches leaning on a ridge, covered with branches
-and grass, open on one long side.
-- A **roof** on its 6 tiles: rain protection, "under a roof" for rot and fire
-  (M4), no "slept outside" penalty.
-- Back row low (×2 movement cost, a bed fits), front row high enough to stand.
-- Does not close a room (insulation 0.4). Facing its open side to a hearth 1
-  or 2 tiles away gives warm sleep (M4): the classic camp.
-- The player chooses the open side (four rotations).
+**Roof**: branches covered with dry grass over walled tiles, for a small hut
+(a lean-to was planned, dropped: a hut with a roof does the same).
+- Per tile: 3 branches (rafters and battens) and 20 dry grass (thatch 20 cm
+  thick), 1.5 h of work, level 50, 50 hit points. Over whatever stands on
+  the tile (a bed, a wall, a stockpile).
+- Rests on a wall or rock at most 2 tiles away (branch rafters span about
+  2.5 m): a hut of up to 4 × 4 tiles inside its walls can be roofed.
+- Rain protection, "under a roof" for rot and fire (M4), no "slept outside"
+  penalty.
+- **Rooms**: walls, branch screens and rock close a room (at most 400 tiles,
+  not reaching the map's edge); a room is roofed when all its tiles are.
 
 **Caves**: settling in natural caves and under overhangs.
-- A **natural roof** covers floor tiles surrounded by rock: rock within 2 tiles
-  in at least 6 of the 8 directions *(tuning, roof detection in M3)*. Like a
+- A **natural roof** covers floor tiles surrounded by rock: rock within 3 tiles
+  in at least 6 of the 8 directions *(tuning: within 2, the corners of a
+  3 × 3 cave would be open)*. Like a
   roof, plus a stable temperature (M4).
-- **Clear cave floor**: removes loose rock and levels the ground; the tile
-  becomes "cleared floor" (move cost 1.0 instead of 1.2, nicer room). No pick
-  needed.
+- **Clear cave floor** *(later: caves cannot be dug out before mining
+  exists)*: removes loose rock and levels the ground; the tile becomes
+  "cleared floor" (move cost 1.0 instead of 1.2, nicer room). No pick needed.
 - A cave is closed with grass walls and a branch screen, warmed by a hearth
   (smoky without a vent, M4), and furnished with grass beds.
 
@@ -895,9 +898,10 @@ Suggested order, each step with its tests:
    breaking, swapping for a better tool, the detour in job search.
 5. Blueprints and construction: *(done)* construction sites with several
    materials, grass bed, grass and branch wall, branch screen, taking apart,
-   sleeping in beds; *(left)* lean-to, floor clearing, workstations as
-   construction sites, hauling to construction sites, quality and wear.
-6. Roofs (lean-to, natural roof) and room detection.
+   sleeping in beds, workstations as construction sites, hauling to
+   construction sites, quality and wear; the lean-to was dropped (a hut with
+   a roof does the same) and floor clearing waits for mining.
+6. Roofs (built over walled tiles, natural roof) and room detection.
 7. Conversation, apprenticeship, fading and loss; discovered knowledges only
    in the interface; knowledge in the settler inspector.
 

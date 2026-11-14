@@ -761,9 +761,22 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
         }
         break;
     }
+    case STRUCTURE_ROOF: {
+        /* Rows of thatch, overlapping: they line up from one tile to the next. */
+        fill(renderer, straw, tile);
+        float step = SDL_max(3.0f, floorf(h / 4.0f));
+        for (float y = tile->y + step - 1.0f; y < tile->y + h; y += step) {
+            SDL_FRect row = {tile->x, y, w, SDL_max(1.0f, floorf(step * 0.25f))};
+            fill(renderer, dark, &row);
+        }
+        break;
+    }
     default: break;
     }
 }
+
+/* Opacity of built roofs: what is under them stays visible. */
+#define ROOF_ALPHA 110
 
 /* Screen rectangle of all the tiles of a structure whose head is at (x, y). */
 static SDL_FRect footprint_rect(const Camera *camera, int x, int y, StructureType type,
@@ -802,6 +815,18 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
                     Direction direction = map_structure_direction(map, x, y);
                     SDL_FRect rect = footprint_rect(camera, x, y, type, direction);
                     render_structure_shape(renderer, &rect, type, direction, 255);
+                }
+            }
+        }
+    }
+    if (map->roof_count > 0) {
+        TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+        for (int y = visible.y0; y < visible.y1; y++) {
+            for (int x = visible.x0; x < visible.x1; x++) {
+                StructureType roof = map_roof(map, x, y);
+                if (roof != STRUCTURE_NONE) {
+                    SDL_FRect rect = tile_rect(camera, x, y);
+                    render_structure_shape(renderer, &rect, roof, DIRECTION_SOUTH, ROOF_ALPHA);
                 }
             }
         }

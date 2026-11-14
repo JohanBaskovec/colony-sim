@@ -276,6 +276,25 @@ static void build_tile_panel(App *app, Panel *panel)
             add_bed_owner_line(app, panel, x, y);
         }
     }
+    StructureType roof = map_roof(map, x, y);
+    if (roof != STRUCTURE_NONE) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.roof"),
+                  tr(structure_def(roof)->name_key),
+                  tr(item_quality_name_key(map_roof_quality(map, x, y))));
+    } else if (map_natural_roof(map, x, y)) {
+        panel_add_text(panel, tr("hud.tile.natural_roof"));
+    }
+    const Room *room = rooms_at(game_rooms(&app->game), map, x, y);
+    if (room != NULL && !room->closed) {
+        panel_add_text(panel, tr("hud.tile.outdoors"));
+    } else if (room != NULL) {
+        tr_integer(a, sizeof(a), room->tiles);
+        tr_integer(b, sizeof(b), room->roofed);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+                  tr_plural(room_is_roofed(room) ? "hud.tile.room_roofed" : "hud.tile.room_open",
+                            room->tiles),
+                  a, b);
+    }
     const ConstructionSite *site = construction_get(
         &app->game.constructions, construction_at(&app->game.constructions, x, y));
     if (site != NULL) {
@@ -704,6 +723,11 @@ void hud_draw(App *app)
             const StructureDef *def = structure_def(app->structure_type);
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(def->name_key));
             menu_bar_structure_cost(panel_add(&tool), HUD_LINE_SIZE, app->structure_type);
+            if (structure_is_roof(app->structure_type)) {
+                char range[16];
+                tr_integer(range, sizeof(range), ROOF_SUPPORT_RANGE);
+                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.roof_support"), range);
+            }
             panel_add_text(&tool, tr(def->drawn_as_outline ? "hud.tool.outline_help"
                                                            : "hud.tool.structure_help"));
             if (def->length > 1) {

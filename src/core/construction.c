@@ -79,12 +79,44 @@ bool construction_can_place(const Constructions *constructions, const Map *map, 
            construction_at(constructions, x, y) == CONSTRUCTION_NONE;
 }
 
+bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
+                                 int y)
+{
+    if (!in_bounds(constructions, x, y) || !map_in_bounds(map, x, y)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y);
+    if (!terrain_def((Terrain)map->terrain[index])->buildable ||
+        map->rock[index] != ROCK_NONE || map->roof[index] != STRUCTURE_NONE ||
+        map_plant_blocks_building(map, x, y) ||
+        construction_at(constructions, x, y) != CONSTRUCTION_NONE) {
+        return false;
+    }
+    if (map_roof_supported(map, x, y)) {
+        return true;
+    }
+    /* A wall planned in reach will hold it up. */
+    for (int dy = -ROOF_SUPPORT_RANGE; dy <= ROOF_SUPPORT_RANGE; dy++) {
+        for (int dx = -ROOF_SUPPORT_RANGE; dx <= ROOF_SUPPORT_RANGE; dx++) {
+            const ConstructionSite *site =
+                construction_get(constructions, construction_at(constructions, x + dx, y + dy));
+            if (site != NULL && !site->refresh && structure_blocks((StructureType)site->type)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool construction_can_place_structure(const Constructions *constructions, const Map *map,
                                       StructureType type, int x, int y, Direction direction)
 {
     int length = structure_length(type);
     if (length <= 0 || (unsigned)direction >= DIRECTION_COUNT) {
         return false;
+    }
+    if (structure_is_roof(type)) {
+        return construction_can_place_roof(constructions, map, x, y);
     }
     for (int part = 0; part < length; part++) {
         if (!construction_can_place(constructions, map, x + part * direction_dx(direction),
@@ -333,6 +365,13 @@ bool construction_materials_complete(const ConstructionSite *site)
     return true;
 }
 
+bool construction_can_work(const ConstructionSite *site, const Map *map)
+{
+    return construction_materials_complete(site) &&
+           (!structure_is_roof((StructureType)site->type) ||
+            map_roof_supported(map, site->x, site->y));
+}
+
 int construction_deliver(Constructions *constructions, int index, ItemStack stack)
 {
     ConstructionSite *site = site_get(constructions, index);
@@ -406,7 +445,7 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
                            Rng *rng)
 {
     ConstructionSite *site = site_get(constructions, index);
-    if (site == NULL || !construction_materials_complete(site)) {
+    if (site == NULL || !construction_can_work(site, map)) {
         return false;
     }
     if (site->refresh && (!map_structure_is_origin(map, site->x, site->y) ||
@@ -433,6 +472,10 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
         return true;
     }
     ItemQuality quality = knowledge_quality_of_score(knowledge_product_score(level, rng));
+    if (structure_is_roof(type)) {
+        map_set_roof(map, x, y, type, quality < cap ? quality : cap);
+        return true;
+    }
     map_place_structure(map, x, y, type, direction, quality < cap ? quality : cap);
     for (int part = 0; structure_blocks(type) && items != NULL && part < structure_length(type);
          part++) {

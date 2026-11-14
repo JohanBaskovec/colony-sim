@@ -1067,6 +1067,7 @@ static bool try_haul_job(Colonist *colonist, const ColonistContext *context)
 }
 
 static bool try_station_job(Colonist *colonist, const ColonistContext *context);
+static bool site_still_wanted(const ColonistContext *context, const ConstructionSite *site);
 static bool try_construction_job(Colonist *colonist, const ColonistContext *context);
 static bool try_supply_job(Colonist *colonist, const ColonistContext *context);
 static uint32_t construction_stamp(const ColonistContext *context);
@@ -1415,13 +1416,13 @@ static void work(Colonist *colonist, const ColonistContext *context)
                                      target.y, colonist_work_speed(colonist, knowledge),
                                      colonist_knowledge_level(colonist, knowledge), context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1);
-    if (done && type == DESIGNATION_DECONSTRUCT) {
+    int site = construction_at(context->constructions, target.x, target.y);
+    const ConstructionSite *refresh = construction_get(context->constructions, site);
+    if (done && type == DESIGNATION_DECONSTRUCT && refresh != NULL && refresh->refresh &&
+        !site_still_wanted(context, refresh)) {
         /* A refresh site on the structure taken apart: its materials back. */
         ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
-        int count = constructions_remove(context->constructions,
-                                         construction_at(context->constructions, target.x,
-                                                         target.y),
-                                         returned);
+        int count = constructions_remove(context->constructions, site, returned);
         for (int i = 0; i < count; i++) {
             items_drop(context->items, context->map, target.x, target.y, returned[i]);
         }
@@ -1974,7 +1975,7 @@ static bool site_has_job(const ColonistContext *context, const Colonist *worker,
                                     site_origin(site), context->worker_id)) {
         return false;
     }
-    return construction_materials_complete(site) || site_wants_material(context, site);
+    return construction_can_work(site, context->map) || site_wants_material(context, site);
 }
 
 /* Cheap check before searching the map: whether some site offers a job,
@@ -2085,7 +2086,7 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
             return true;
         }
     }
-    return colonist->task == TASK_CONSTRUCT && construction_materials_complete(site) &&
+    return colonist->task == TASK_CONSTRUCT && construction_can_work(site, context->map) &&
            go_to_site(colonist, context);
 }
 
@@ -2280,7 +2281,7 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
             }
             colonist->carried = (ItemStack){.type = ITEM_NONE};
         }
-        if (supplying || !construction_materials_complete(site)) {
+        if (supplying || !construction_can_work(site, context->map)) {
             if (!plan_construction(colonist, context)) { /* More to bring. */
                 set_idle(colonist, context, 0);
             }
@@ -2295,7 +2296,9 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
         return;
     }
     ConstructionSite *clearing = construction_get_mutable(context->constructions, colonist->site);
-    if (clear_site_first(colonist, context, clearing)) {
+    /* A roof goes over the plants, as over anything else. */
+    if (!structure_is_roof((StructureType)site->type) &&
+        clear_site_first(colonist, context, clearing)) {
         return;
     }
     ConstructionSite done = *site; /* Gone from the list once built. */

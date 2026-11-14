@@ -62,6 +62,7 @@ simulation:
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning, quality and condition of what a worker produces |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
+| `room`       | Rooms: areas closed by walls, doors and rock, and whether roofs cover them (a cache) |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
 | `map`        | Tile layers (terrain, rock, plants with their branch and twig stocks, cobbles and flint in the ground) and static definitions (`TerrainDef`...) |
@@ -532,6 +533,29 @@ is interrupted; `gather_clear_plant()` then removes the plant and drops what
 it gives (cut grass, its twigs and branches, ripe berries, with quality from
 the builder's gathering level). Only then does the construction work start.
 `map_set_structure()` still clears any plant left, as a safety net.
+
+**Roofs**: `STRUCTURE_ROOF` is planned and built like any structure (a
+rectangle filled with sites), but lives in a map layer of its own
+(`Map.roof`, `Map.roof_quality`, `map_set_roof()`): a roof covers a bed, a
+wall, a stockpile or a workstation, and is not cleared of plants. A roof
+tile needs a wall or rock within `ROOF_SUPPORT_RANGE` (2) tiles; a planned
+wall counts when planning (`construction_can_place_roof()`), so a whole hut
+is planned at once, but the work waits until a wall stands
+(`construction_can_work()`). Taking a tile apart removes its structure
+first, its roof with a second order. `map_natural_roof()` covers open tiles
+with rock within 3 tiles in at least 6 of the 8 directions (caves,
+overhangs). `map_hash()` only hashes the roof layers once a roof exists, so
+older hashes stay valid.
+
+**Rooms** (`core/room.h`, owned by `Game`): every tile without rock, a wall
+or a door belongs to an area (flood fill over orthogonal neighbors, water
+included); an area is a room when it does not reach the map's edge and has
+at most `ROOM_MAX_TILES` tiles, roofed when all its tiles are
+(`map_is_roofed()`). A cache like the regions, compared with
+`Map.topology_revision` and `Map.build_revision` (bumped by every structure
+or roof change); nothing in the simulation uses rooms yet, so they are only
+rebuilt when asked for (`game_rooms()`, the tile inspector), never during a
+tick.
 
 **Beds**: a colonist going to sleep walks to its own bed (`core/bed.h`),
 else to the nearest free bed, which becomes its own (`RESERVATION_BED`,

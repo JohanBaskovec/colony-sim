@@ -154,10 +154,12 @@ bool map_init(Map *map, int width, int height)
     map->structure_part = calloc(count, 1);
     map->structure_quality = calloc(count, 1);
     map->structure_hit_points = calloc(count, sizeof(*map->structure_hit_points));
+    map->roof = calloc(count, 1);
+    map->roof_quality = calloc(count, 1);
     if (map->terrain == NULL || map->rock == NULL || map->plants == NULL ||
         map->cobbles == NULL || map->flint == NULL || map->structure == NULL ||
         map->structure_part == NULL || map->structure_quality == NULL ||
-        map->structure_hit_points == NULL) {
+        map->structure_hit_points == NULL || map->roof == NULL || map->roof_quality == NULL) {
         map_free(map);
         return false;
     }
@@ -179,6 +181,8 @@ void map_free(Map *map)
     free(map->structure_part);
     free(map->structure_quality);
     free(map->structure_hit_points);
+    free(map->roof);
+    free(map->roof_quality);
     memset(map, 0, sizeof(*map));
 }
 
@@ -232,6 +236,7 @@ static void set_tile_structure(Map *map, int x, int y, StructureType type, uint8
     map->structure_part[index] = part;
     map->structure_quality[index] = (uint8_t)quality;
     map->structure_hit_points[index] = (uint16_t)hit_points;
+    map->build_revision++;
     if (type != STRUCTURE_NONE) {
         map->plants[index] = (Plant){0}; /* Trampled, cut or dug out by the builders. */
     }
@@ -293,6 +298,7 @@ bool map_place_structure(Map *map, int x, int y, StructureType type, Direction d
                          ItemQuality quality)
 {
     if (type == STRUCTURE_NONE || (unsigned)type >= STRUCTURE_TYPE_COUNT ||
+        structure_is_roof(type) || /* See map_set_roof(). */
         (unsigned)direction >= DIRECTION_COUNT) {
         return false;
     }
@@ -400,6 +406,88 @@ bool map_is_passable(const Map *map, int x, int y)
     return map_move_cost(map, x, y) > 0.0f;
 }
 
+StructureType map_roof(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) ? (StructureType)map->roof[map_index(map, x, y)]
+                                    : STRUCTURE_NONE;
+}
+
+ItemQuality map_roof_quality(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) ? (ItemQuality)map->roof_quality[map_index(map, x, y)]
+                                    : ITEM_QUALITY_CRUDE;
+}
+
+void map_set_roof(Map *map, int x, int y, StructureType roof, ItemQuality quality)
+{
+    if (!map_in_bounds(map, x, y) || (roof != STRUCTURE_NONE && !structure_is_roof(roof))) {
+        return;
+    }
+    size_t index = map_index(map, x, y);
+    map->roof_count += (roof != STRUCTURE_NONE) - (map->roof[index] != STRUCTURE_NONE);
+    map->roof[index] = (uint8_t)roof;
+    map->roof_quality[index] =
+        roof != STRUCTURE_NONE
+            ? (uint8_t)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST)
+            : 0;
+    map->build_revision++;
+}
+
+/* Rock, or a structure that blocks movement: what a roof rests on. */
+static bool holds_up_roof(const Map *map, int x, int y)
+{
+    if (!map_in_bounds(map, x, y)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y);
+    return map->rock[index] != ROCK_NONE || structure_blocks((StructureType)map->structure[index]);
+}
+
+bool map_roof_supported(const Map *map, int x, int y)
+{
+    for (int dy = -ROOF_SUPPORT_RANGE; dy <= ROOF_SUPPORT_RANGE; dy++) {
+        for (int dx = -ROOF_SUPPORT_RANGE; dx <= ROOF_SUPPORT_RANGE; dx++) {
+            if (holds_up_roof(map, x + dx, y + dy)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Rock within this many tiles, in at least NATURAL_ROOF_DIRECTIONS of the 8
+ * directions, covers a tile (tuning). */
+#define NATURAL_ROOF_REACH 3
+#define NATURAL_ROOF_DIRECTIONS 6
+
+bool map_natural_roof(const Map *map, int x, int y)
+{
+    if (!map_in_bounds(map, x, y) || map->rock[map_index(map, x, y)] != ROCK_NONE) {
+        return false;
+    }
+    static const int DX[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+    static const int DY[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+    int covered = 0;
+    for (int i = 0; i < 8; i++) {
+        for (int step = 1; step <= NATURAL_ROOF_REACH; step++) {
+            int nx = x + DX[i] * step, ny = y + DY[i] * step;
+            if (map_in_bounds(map, nx, ny) && map->rock[map_index(map, nx, ny)] != ROCK_NONE) {
+                covered++;
+                break;
+            }
+        }
+        if (covered + (7 - i) < NATURAL_ROOF_DIRECTIONS) {
+            return false; /* Not enough directions left. */
+        }
+    }
+    return covered >= NATURAL_ROOF_DIRECTIONS;
+}
+
+bool map_is_roofed(const Map *map, int x, int y)
+{
+    return map_roof(map, x, y) != STRUCTURE_NONE || map_natural_roof(map, x, y);
+}
+
 uint64_t map_hash(const Map *map)
 {
     uint64_t hash = HASH_FNV1A64_INIT;
@@ -416,6 +504,10 @@ uint64_t map_hash(const Map *map)
     hash = hash_fnv1a64(hash, map->structure_quality, count);
     hash = hash_fnv1a64(hash, map->structure_hit_points,
                         count * sizeof(*map->structure_hit_points));
+    if (map->roof_count > 0) { /* Hashes of maps without roofs stay as they were. */
+        hash = hash_fnv1a64(hash, map->roof, count);
+        hash = hash_fnv1a64(hash, map->roof_quality, count);
+    }
     /* Hash plant fields one by one: struct padding bytes are unspecified. */
     for (size_t i = 0; i < count; i++) {
         const Plant *plant = &map->plants[i];

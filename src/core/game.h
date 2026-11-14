@@ -19,6 +19,7 @@
 #include "core/pool.h"
 #include "core/reservation.h"
 #include "core/region.h"
+#include "core/room.h"
 #include "core/rng.h"
 #include "core/stockpile.h"
 #include "core/workstation.h"
@@ -69,6 +70,9 @@ typedef struct Game {
     /* Connectivity regions of the map: a cache, refreshed at the start of
      * each tick, not part of game_hash(). */
     Regions regions;
+    /* Rooms and whether they are roofed: a cache, brought up to date when
+     * asked for (game_rooms()), not part of game_hash(). */
+    Rooms rooms;
     Pool colonist_pool;
     Colonist colonists[COLONIST_MAX]; /* Indexed by EntityId.index. */
     /* Items in stock per type, what "until N in stock" bills count: lying in a
@@ -91,6 +95,11 @@ void game_update_stock(Game *game);
 void game_shutdown(Game *game);
 
 /* Advances the simulation by `real_seconds` of real time. Returns ticks run. */
+/* The rooms of the map as it is now (rebuilt if it changed). Nothing in the
+ * simulation depends on them yet, so they are only computed when asked for
+ * (the tile inspector). */
+const Rooms *game_rooms(Game *game);
+
 int game_update(Game *game, double real_seconds);
 
 /* Runs exactly one simulation tick. */
@@ -220,7 +229,8 @@ bool game_structure_buildable(const Game *game, StructureType type);
 
 /* Whether a structure may be planned with its head at (x, y), facing
  * `direction`: every tile it would take is off stockpiles and workstations,
- * and passes construction_can_place(). */
+ * and passes construction_can_place(); a roof goes over stockpiles and
+ * workstations, where construction_can_place_roof() allows. */
 bool game_can_place_structure(const Game *game, StructureType type, int x, int y,
                               Direction direction);
 
