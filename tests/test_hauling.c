@@ -57,7 +57,8 @@ static void run_ticks(Game *game, int ticks)
 static HaulWorld world_of(Game *game)
 {
     HaulWorld world = {&game->map,          &game->items,      &game->stockpiles,
-                       &game->reservations, &game->pathfinder, 1};
+                       &game->reservations, &game->pathfinder, 1,
+                       NULL,                REGION_NONE,       0};
     return world;
 }
 
@@ -765,6 +766,46 @@ static void test_far_or_vanished_stacks_are_not_waited_for(void)
     game_shutdown(&game);
 }
 
+/* The check before a search is exact about the stacks: none left that a
+ * stockpile with room accepts, nobody else took, in the hauler's region. */
+static void test_any_job_possible_is_exact(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    stockpile_create(&game.stockpiles, &game.map, 20, 5, 20, 5);
+    /* A stored stack of fine wood with room left: rough wood lies about. */
+    items_add(&game.items, 20, 5, item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_FINE, 100));
+    items_add(&game.items, 5, 5, item_stack_make(ITEM_WOOD, 10, ITEM_QUALITY_ROUGH, 100));
+    HaulWorld world = world_of(&game);
+    CHECK(!haul_any_job_possible(&world)); /* Wood is allowed, but not that grade. */
+
+    /* Fine wood, taken by another hauler. */
+    items_add(&game.items, 30, 30, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 100));
+    CHECK(haul_any_job_possible(&world));
+    reservations_add(&game.reservations, RESERVATION_HAUL_SOURCE, (TilePos){30, 30}, 2);
+    CHECK(!haul_any_job_possible(&world));
+    reservations_release_all(&game.reservations, 2);
+    CHECK(haul_any_job_possible(&world));
+
+    /* Walled off from the hauler: another region. */
+    for (int y = 28; y <= 32; y++) {
+        for (int x = 28; x <= 32; x++) {
+            bool edge = x == 28 || x == 32 || y == 28 || y == 32;
+            if (edge) {
+                map_set_rock(&game.map, x, y, ROCK_GRANITE);
+            }
+        }
+    }
+    regions_update(&game.regions, &game.map);
+    world.regions = &game.regions;
+    world.region = regions_at(&game.regions, &game.map, 4, 5);
+    world.from_y = 5;
+    CHECK(!haul_any_job_possible(&world));
+    world.region = regions_at(&game.regions, &game.map, 30, 30); /* A hauler in there. */
+    CHECK(haul_any_job_possible(&world));
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_storage_room);
@@ -791,6 +832,7 @@ int main(void)
     RUN_TEST(test_haulers_sort_items_by_condition);
     RUN_TEST(test_carried_items_keep_their_condition);
     RUN_TEST(test_find_extra_source);
+    RUN_TEST(test_any_job_possible_is_exact);
     RUN_TEST(test_hauler_collects_several_stacks_per_trip);
     RUN_TEST(test_collecting_stops_at_carrying_capacity);
     RUN_TEST(test_far_or_vanished_stacks_are_not_waited_for);

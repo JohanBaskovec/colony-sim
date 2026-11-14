@@ -785,9 +785,14 @@ static void test_new_order_is_noticed_despite_backoff(void)
     CHECK(colonist->task != TASK_WORK);
     CHECK(colonist->search_cooldown[SEARCH_GATHER] > 0);
 
-    /* A reachable order is picked up right away, without waiting for the cooldown. */
+    CHECK(colonist->search_cooldown[SEARCH_GATHER] > COLONIST_SEARCH_MIN_RETRY_TICKS);
+
+    /* A reachable order is picked up without waiting for the whole cooldown, but not
+     * before the minimum delay: a busy colony changes orders all the time. */
     add_tree(&game.map, 24, 20);
     order_zone(&game, 24, 20, 24, 20, GATHER_BRANCHES);
+    run_ticks(&game, COLONIST_SEARCH_MIN_RETRY_TICKS - 2);
+    CHECK(colonist->task != TASK_WORK);
     for (int i = 0; i < walk_ticks(1) && colonist->task != TASK_WORK; i++) {
         game_tick(&game);
     }

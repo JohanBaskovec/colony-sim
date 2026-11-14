@@ -47,6 +47,10 @@ static void test_release_all(void)
     CHECK_EQ_INT(reservations_owner(&r, RESERVATION_FOOD, B), 2);
     CHECK_EQ_INT(reservations_owner(&r, RESERVATION_WORK, A), RESERVATION_NO_OWNER);
     CHECK_EQ_UINT(r.releases, 1);
+    /* Counted per kind too: one release that freed both kinds owner 1 held. */
+    CHECK_EQ_UINT(r.releases_by_kind[RESERVATION_WORK], 1);
+    CHECK_EQ_UINT(r.releases_by_kind[RESERVATION_FOOD], 1);
+    CHECK_EQ_UINT(r.releases_by_kind[RESERVATION_STORAGE], 0);
     CHECK(reservations_add(&r, RESERVATION_WORK, A, 2)); /* Free again. */
 }
 
@@ -69,6 +73,9 @@ static void test_release_kind(void)
     CHECK_EQ_INT(reservations_owner(&r, RESERVATION_STORAGE, A), 2);     /* Other owner. */
     CHECK_EQ_INT(reservations_owner(&r, RESERVATION_STORAGE, B), RESERVATION_NO_OWNER);
     CHECK_EQ_UINT(r.releases, 1);
+    CHECK_EQ_UINT(r.releases_by_kind[RESERVATION_STORAGE], 1);
+    CHECK_EQ_UINT(r.releases_by_kind[RESERVATION_HAUL_SOURCE], 0); /* Nothing freed. */
+    CHECK_EQ_UINT(r.releases_by_kind[RESERVATION_WORK], 0);
 }
 
 static void test_table_full(void)

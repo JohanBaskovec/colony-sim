@@ -78,7 +78,8 @@ Tick items as they land and add newly discovered tasks.
 - [x] Beds owned by one settler (taken the first night, kept, freed when the bed or the settler goes; the owner in the tile inspector, the bed in the colonist inspector); beds of 1 × 2 tiles, head and foot, turned with a key (F on QWERTY and AZERTY), laid side by side when a rectangle is dragged
 - [ ] Beds, later: the player assigns a bed to a settler (or frees it); double beds for couples (with relationships)
 - [x] Haulers bring materials to construction sites (builders still fetch what nobody brings); items promised to a site so that several settlers never bring the same ones; a construction scenario in `bench_simulation` (scenario 3)
-- [ ] Profile `bench_simulation` scenario 3 without sites (about 20 µs per tick, worst ticks around 30 ms with 16 colonists: the gathering zone and a full stockpile)
+- [x] Profile `bench_simulation` scenario 3 (64 colonists, 5 days: 2.8 ms → 40 µs per tick, worst tick 1.4 s → 15 ms): exact haul pre-check, region scans before fetching and bed searches, stamps narrowed per reservation kind, a minimum delay between failed work searches, regions refreshed before each colonist
+- [ ] Remaining scenario 3 spikes (about 15 ms with 64 colonists): look at the worst ticks again; the pre-check scans cost grows with the map size (keep a per-region count of haulable stacks if it shows up on large maps)
 - [ ] Haulers bring materials to workstation blueprints too (or workstations built through construction sites, below)
 - [ ] Lean-to (roof), cave floor clearing; workstations built through construction sites
 - [ ] Room detection, roofs (lean-to, natural rock roof over caves)

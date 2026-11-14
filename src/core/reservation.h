@@ -45,6 +45,9 @@ typedef struct Reservations {
     int count_by_kind[RESERVATION_KIND_COUNT];
     /* Incremented on every release: something may have become available. */
     uint32_t releases;
+    /* The same per kind: a search that failed only looks again when what it
+     * looks for may have become available. */
+    uint32_t releases_by_kind[RESERVATION_KIND_COUNT];
     /* Hash table from (kind, tile) to entry index + 1 (0 = empty slot, linear
      * probing): lookups are done every tick by every working settler. Derived
      * from `entries`, not part of the hash. */

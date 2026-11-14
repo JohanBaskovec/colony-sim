@@ -77,10 +77,12 @@ static void release(Reservations *reservations, uint8_t owner, int kind)
 {
     int kept = 0;
     bool released = false;
+    bool kinds[RESERVATION_KIND_COUNT] = {false};
     for (int i = 0; i < reservations->count; i++) {
         Reservation entry = reservations->entries[i];
         if (entry.owner == owner && (kind < 0 || entry.kind == kind)) {
             reservations->count_by_kind[entry.kind]--;
+            kinds[entry.kind] = true;
             released = true;
         } else {
             reservations->entries[kept++] = entry;
@@ -89,6 +91,9 @@ static void release(Reservations *reservations, uint8_t owner, int kind)
     reservations->count = kept;
     if (released) {
         reservations->releases++;
+        for (int k = 0; k < RESERVATION_KIND_COUNT; k++) {
+            reservations->releases_by_kind[k] += kinds[k];
+        }
         /* Entries moved: rebuild the lookup table (releases are rare next to lookups). */
         memset(reservations->index, 0, sizeof(reservations->index));
         for (int i = 0; i < kept; i++) {

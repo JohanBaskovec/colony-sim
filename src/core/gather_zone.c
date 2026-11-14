@@ -511,12 +511,11 @@ static int stones_of(const Map *map, int x, int y, GatherResource resource)
     return def->job == GATHER_JOB_STONES ? map_stones(map, x, y, def->item) : 0;
 }
 
-/* Whether the tile holds something for the job, among `resources` (only
- * stones care which: a tile may hold cobbles and no flint). */
-static bool tile_holds(const GatherZone *zone, const Map *map, int x, int y, GatherJob job,
-                       GatherResourceMask resources)
+/* tile_holds() on a tile a zone can cover (checked by the caller). */
+static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, int y,
+                               GatherJob job, GatherResourceMask resources)
 {
-    if (resources == 0 || !gather_zone_can_cover(map, x, y)) {
+    if (resources == 0) {
         return false;
     }
     const Plant *plant = &map->plants[map_index(map, x, y)];
@@ -540,6 +539,15 @@ static bool tile_holds(const GatherZone *zone, const Map *map, int x, int y, Gat
                  stones_of(map, x, y, GATHER_FLINT) > 0));
     default: return false;
     }
+}
+
+/* Whether the tile holds something for the job, among `resources` (only
+ * stones care which: a tile may hold cobbles and no flint). */
+static bool tile_holds(const GatherZone *zone, const Map *map, int x, int y, GatherJob job,
+                       GatherResourceMask resources)
+{
+    return resources != 0 && gather_zone_can_cover(map, x, y) &&
+           covered_tile_holds(zone, map, x, y, job, resources);
 }
 
 /* Whether the tile holds something for the job that the zone wants. */
@@ -579,8 +587,14 @@ GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y
     if (zone == NULL || zone->wanted == 0) {
         return GATHER_JOB_NONE;
     }
+    /* Called for every tile a job search looks at: the cover is checked once. */
+    if (!gather_zone_can_cover(map, x, y)) {
+        return GATHER_JOB_NONE;
+    }
     for (int job = 0; job < GATHER_JOB_COUNT; job++) {
-        if ((allowed & GATHER_JOB_BIT(job)) && job_open(zone, map, x, y, (GatherJob)job)) {
+        GatherResourceMask wanted = zone->wanted & JOB_DEFS[job].resources;
+        if ((allowed & GATHER_JOB_BIT(job)) && wanted != 0 &&
+            covered_tile_holds(zone, map, x, y, (GatherJob)job, wanted)) {
             return (GatherJob)job;
         }
     }

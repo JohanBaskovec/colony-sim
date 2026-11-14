@@ -28,6 +28,7 @@ set(COLONY_UNIT_TESTS
     test_rng
     test_stockpile
     test_tool
+    test_util
     test_structures
     test_work
     test_workstation

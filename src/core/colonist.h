@@ -132,6 +132,11 @@
  * failed search floods everything within its cost limit, so it must stay rare. */
 #define COLONIST_SEARCH_RETRY_TICKS (TICKS_PER_HOUR / 2)
 #define COLONIST_SEARCH_MAX_BACKOFF 3
+/* A change in what a failed work search looks for (items added, a job let go)
+ * cuts that delay short, but not sooner than this after the failure: with
+ * many settlers something changes every tick, and idle ones would search
+ * again and again for the few jobs left. */
+#define COLONIST_SEARCH_MIN_RETRY_TICKS 60
 #define COLONIST_WANDER_RADIUS 6
 #define COLONIST_IDLE_MIN_TICKS 120
 #define COLONIST_IDLE_MAX_TICKS 360
@@ -227,20 +232,24 @@ typedef struct Colonist {
     bool gathering;
     int search_cooldown[SEARCH_COUNT]; /* Ticks before searching again. */
     int search_failures[SEARCH_COUNT]; /* Consecutive failed searches. */
-    /* Designations revision + reservation releases at the last failed work search. */
+    int search_quiet[SEARCH_COUNT]; /* Ticks before a change may cut the delay short. */
+    /* Designations revision + work reservation releases at the last failed
+     * work search. */
     uint32_t work_search_stamp;
-    /* Stockpile revision + item additions + releases at the last failed haul search. */
+    /* Stockpile revision + item additions + releases of stacks and storage
+     * tiles at the last failed haul search. */
     uint32_t haul_search_stamp;
     /* Workstations revision + item additions + releases at the last failed
      * building or crafting search. */
     uint32_t station_search_stamp;
-    /* Gathering zones revision + reservation releases at the last failed
+    /* Gathering zones revision + work reservation releases at the last failed
      * gathering search. */
     uint32_t gather_search_stamp;
     /* Construction sites revision + item additions + releases at the last
      * failed construction search. */
     uint32_t construction_search_stamp;
-    /* Dirt revision + reservation releases at the last failed cleaning search. */
+    /* Dirt revision + cleaning reservation releases at the last failed
+     * cleaning search. */
     uint32_t clean_search_stamp;
     /* Same as construction_search_stamp, for the last failed supply search. */
     uint32_t supply_search_stamp;

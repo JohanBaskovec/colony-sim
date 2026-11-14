@@ -13,6 +13,7 @@
 #include "core/item.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
+#include "core/region.h"
 #include "core/reservation.h"
 #include "core/stockpile.h"
 
@@ -26,6 +27,11 @@ typedef struct HaulWorld {
     const Reservations *reservations;
     Pathfinder *pathfinder;
     uint8_t self; /* Reservation owner of the hauler. */
+    /* Connectivity regions and the hauler's region, to skip stacks it cannot
+     * walk to in haul_any_job_possible(); NULL (or REGION_NONE): no check. */
+    const Regions *regions;
+    uint32_t region;
+    int from_y; /* The hauler's row: haul_any_job_possible() looks around it first. */
 } HaulWorld;
 
 typedef struct HaulJob {
@@ -48,8 +54,12 @@ int haul_storage_room(const Items *items, int x, int y, ItemStack stack);
 int haul_destination_room(const Stockpiles *stockpiles, const Items *items, int x, int y,
                           ItemStack stack);
 
-/* Cheap check: is there any item whose type some stockpile with room allows?
- * (Conditions are not looked at: a true answer may still find nothing.) */
+/* Check before haul_find_job(): whether some stack needs hauling, nobody
+ * reserved it, and it lies in the hauler's region (when known). A scan of the
+ * map, much cheaper than a search that finds nothing: with haulers busy on
+ * the few stacks a stockpile has room for, the others would search the
+ * whole area each time an item is added somewhere. A true answer may still
+ * find nothing (a stack too far away). */
 bool haul_any_job_possible(const HaulWorld *world);
 
 /*

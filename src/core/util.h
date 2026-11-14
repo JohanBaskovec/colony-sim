@@ -39,6 +39,15 @@ static inline int layers_any_set(const uint8_t *const *layers, size_t index)
     return 0;
 }
 
+/* Row `step` of a scan of rows 0..height-1 that starts at row `center` and
+ * moves outwards (center, center + 1, center - 1, center + 2...), or -1 for
+ * a step out of range (skip it). Steps go from 0 to 2 × height - 1. */
+static inline int row_outwards(int center, int step, int height)
+{
+    int row = (step & 1) ? center + (step + 1) / 2 : center - step / 2;
+    return row >= 0 && row < height ? row : -1;
+}
+
 /* Incremental 64-bit FNV-1a: feed the previous result (or HASH_FNV1A64_INIT) as `hash`. */
 uint64_t hash_fnv1a64(uint64_t hash, const void *data, size_t size);
 

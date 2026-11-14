@@ -1,5 +1,7 @@
 #include "core/hauling.h"
 
+#include "core/util.h"
+
 /* Where items can go right now. Built at the start of each search by visiting
  * the tiles of every stockpile (never the whole map). */
 typedef struct StorageLevels {
@@ -131,6 +133,13 @@ static bool has_better_level(uint32_t levels, int current)
     return (levels & ((1u << current) - 1u)) != 0; /* Bits 1..current-1. */
 }
 
+typedef struct SourceSearch {
+    const HaulWorld *world;
+    const StorageLevels *storage;
+} SourceSearch;
+
+static bool is_haul_source(const Map *map, int x, int y, void *userdata);
+
 bool haul_any_job_possible(const HaulWorld *world)
 {
     if (world->stockpiles->used_count == 0) {
@@ -138,18 +147,39 @@ bool haul_any_job_possible(const HaulWorld *world)
     }
     StorageLevels storage;
     storage_levels(world, &storage);
-    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-        if (storage.levels[type] != 0 && world->items->totals[type] > 0) {
-            return true;
+    bool any_type = false;
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && !any_type; type++) {
+        any_type = storage.levels[type] != 0 && world->items->totals[type] > 0;
+    }
+    if (!any_type) {
+        return false;
+    }
+    const Map *map = world->map;
+    const uint32_t *regions = NULL;
+    if (world->regions != NULL && world->region != REGION_NONE &&
+        regions_current(world->regions, map)) {
+        regions = world->regions->id;
+    }
+    SourceSearch search = {world, &storage};
+    /* From the hauler's row outwards: a stack nearby is found at once. */
+    for (int step = 0; step < 2 * map->height; step++) {
+        int y = row_outwards(world->from_y, step, map->height);
+        if (y < 0) {
+            continue;
+        }
+        const ItemStack *row = &world->items->stacks[(size_t)y * (size_t)map->width];
+        for (int x = 0; x < map->width; x++) {
+            if (row[x].type == ITEM_NONE || storage.levels[row[x].type] == 0 ||
+                (regions != NULL && regions[map_index(map, x, y)] != world->region)) {
+                continue;
+            }
+            if (is_haul_source(map, x, y, &search)) {
+                return true;
+            }
         }
     }
     return false;
 }
-
-typedef struct SourceSearch {
-    const HaulWorld *world;
-    const StorageLevels *storage;
-} SourceSearch;
 
 static bool is_haul_source(const Map *map, int x, int y, void *userdata)
 {

@@ -547,6 +547,9 @@ static void update_colonists(Game *game)
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
             context.worker_id = (uint8_t)(slot + 1); /* ...but for who is acting. */
+            /* Someone before may have changed the map (a felled tree, a new wall): stale
+             * regions would make every search pre-check answer "maybe". */
+            regions_update(&game->regions, &game->map);
             colonist_tick(&game->colonists[slot], &context);
         }
     }

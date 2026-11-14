@@ -272,8 +272,12 @@ with huge ones and equipment. If the destination stops
 accepting the items on the way (filter changed, zone removed), it looks for
 another storage tile, else drops its load. Any interruption (eating,
 sleeping...) goes through `begin_task()`, which drops carried items where the
-colonist stands, so items are never lost. A failed haul search backs off; its
-stamp is the stockpile revision + item additions + reservation releases.
+colonist stands, so items are never lost. Before searching, a scan of the
+item layer (rows outward from the hauler, tiles of its region only) checks
+that some stack could be hauled now (`haul_any_job_possible()`: same rules as
+the search, so a "no" is exact). A failed haul search backs off; its stamp is
+the stockpile revision + item additions + releases of haul source and storage
+reservations.
 
 Static definitions (`TerrainDef`, `RockDef`, `PlantDef`) carry a stable `id`
 (used by save files, never translated) and a `name_key` (translation key).
@@ -333,7 +337,7 @@ else is cleaning (`RESERVATION_CLEAN`), stands on it and removes 1 % every
 `COLONIST_CLEAN_TICKS_PER_PERCENT` ticks (no knowledge, no tool), then looks
 again (the next dirty tile is usually next to it). The search is skipped
 when every dirty tile is reserved, and backs off on failure until the dirt
-revision or a reservation release changes its stamp. The frontend draws dark
+revision or the release of a cleaning reservation changes its stamp. The frontend draws dark
 spots on dirty tiles and shows the level in the tile inspector.
 
 ### Work and reservations
@@ -432,8 +436,12 @@ storage tile. Owners are colonist slot + 1.
 - When every order is reserved (`designations.count` minus work reservations
   is zero) idle colonists skip the search entirely. Failed searches back off
   like food and water searches, but a stamp (designation revision + number of
-  reservation releases) lets them look again as soon as work may have become
-  available.
+  work reservation releases) lets them look again once work may have become
+  available, no sooner than `COLONIST_SEARCH_MIN_RETRY_TICKS` (one second at
+  ×1) after the failure: in a busy colony something changes almost every
+  tick, and 64 idle colonists searching again each time cost milliseconds
+  per tick. Each stamp only counts the reservation kinds its search cares
+  about (`Reservations.releases_by_kind`).
 
 The table is a small array kept in creation order (which is what gets
 hashed), with a hash index from (kind, tile) to the entry: every working
@@ -623,7 +631,7 @@ At one priority level, designations are tried first, then construction,
 crafting, gathering zones (a background job that never ends by itself) and
 hauling. Failed station searches back off with a stamp made of the
 workstations revision, item additions and reservation releases; gathering
-searches with the zones revision and reservation releases.
+searches with the zones revision and work reservation releases.
 
 Stones are two map layers (`Map.cobbles`, `Map.flint`): how many of each lie
 about a tile, `MAP_STONES_MAX` (20) at most together, taken one by one by
@@ -661,8 +669,10 @@ cannot be cut). Each region also knows whether it contains a drinking spot.
   every use is an exact shortcut for a search that would fail anyway, so they
   never change what the simulation does (the state hashes of the benchmark
   scenarios are identical with and without them).
-- They are refreshed at the start of each tick when `Map.topology_revision`
-  changed. A dug-out tile (the common case) is added in place from the map's
+- They are refreshed at the start of each tick and before each colonist acts
+  when `Map.topology_revision` changed (a tree felled by the first colonist
+  would otherwise leave every later one with "maybe" answers, hence full
+  failing searches, for the rest of the tick). A dug-out tile (the common case) is added in place from the map's
   change log; a change that joins or splits regions rebuilds everything.
 - Queries check the revision: if the map changed since the last refresh
   (mining earlier in the same tick), they answer "maybe connected", never a
@@ -672,7 +682,9 @@ cannot be cut). Each region also knows whether it contains a drinking spot.
   a scan of the designation layer checks that some open job has a tile to
   stand on in the colonist's region (orders deep inside rock, on another
   island, or all reserved would otherwise cost a full exploration per idle
-  colonist).
+  colonist). The same kind of scan, limited to the colonist's region, runs
+  before hauling, fetching materials and looking for a free bed
+  (`any_tile_reachable()` in `colonist.c`).
 
 ### Measuring
 
@@ -682,9 +694,13 @@ final state hash. An optimization that is not supposed to change behavior
 must leave that hash unchanged. Reference (Release, 200 × 200, 64 colonists,
 10 in-game days): about 8 µs per tick left alone, 10 µs with every tree, rock
 and bush designated; long food searches when berries run out are the
-remaining spikes (1 to 4 ms). Scenario 3 (construction, 16 colonists, 10
-days): about 23 µs per tick, 20 µs of it without the sites (the gathering
-zone and the small stockpile alone, still to profile).
+remaining spikes (1 to 4 ms). Scenario 3 (construction, a gathering zone
+and a small stockpile that fills up): about 8 µs per tick with 16 colonists
+over 10 days (worst tick 4 ms), 40 µs with 64 colonists over 5 days (worst
+tick 15 ms; it was 2.8 ms per tick and 1.4 s before the exact pre-checks,
+narrowed stamps and minimum retry delay). Failing searches dominated: a
+search for something out of reach explores everything within its limit, so
+the cheap answer is a scan that proves nothing is there.
 
 ## Randomness
 
