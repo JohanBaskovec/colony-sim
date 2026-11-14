@@ -68,4 +68,14 @@ bool haul_find_job(const HaulWorld *world, TilePos from, float max_cost, HaulJob
 bool haul_find_destination(const HaulWorld *world, TilePos from, ItemStack stack,
                            int current_priority, float max_cost, TilePos *out, Path *path);
 
+/*
+ * Nearest stack (within `max_cost` of `from`) that can join a load already in
+ * hand on its way to `destination`: it matches the load (same type and
+ * grade), the destination's stockpile accepts it and is better than where it
+ * lies, no stockpile with room is better still, and nobody else reserved it.
+ * Writes the path to it into `path` (may be NULL).
+ */
+bool haul_find_extra_source(const HaulWorld *world, TilePos from, ItemStack load,
+                            TilePos destination, float max_cost, TilePos *out, Path *path);
+
 #endif /* COLONY_CORE_HAULING_H */

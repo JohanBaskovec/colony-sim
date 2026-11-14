@@ -269,6 +269,29 @@ static void test_only_same_grade_stacks(void)
     items_free(&items);
 }
 
+static void test_stack_merge(void)
+{
+    ItemStack hand = {.type = ITEM_NONE};
+    CHECK(item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 60)));
+    CHECK_EQ_INT(hand.count, 3);
+    CHECK_EQ_INT(hand.hit_points, 60);
+    CHECK(item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_FINE, 20)));
+    CHECK_EQ_INT(hand.count, 4);
+    CHECK_EQ_INT(hand.hit_points, 50); /* (3 × 60 + 20) / 4 */
+    CHECK_EQ_INT(hand.quality, ITEM_QUALITY_FINE);
+    /* Another grade or type: refused, nothing changes. */
+    CHECK(!item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_ROUGH, 60)));
+    CHECK(!item_stack_merge(&hand, item_stack_pristine(ITEM_STONE, 2)));
+    CHECK_EQ_INT(hand.count, 4);
+    /* Merging nothing is fine. */
+    CHECK(item_stack_merge(&hand, (ItemStack){.type = ITEM_NONE}));
+    CHECK_EQ_INT(hand.count, 4);
+    /* Counts are capped. */
+    ItemStack big = item_stack_make(ITEM_BERRIES, UINT16_MAX - 1, ITEM_QUALITY_FINE, 10);
+    CHECK(item_stack_merge(&big, item_stack_make(ITEM_BERRIES, 5, ITEM_QUALITY_FINE, 10)));
+    CHECK_EQ_INT(big.count, UINT16_MAX);
+}
+
 static void test_merged_hit_points_stay_between(void)
 {
     Items items;
@@ -361,6 +384,7 @@ int main(void)
     RUN_TEST(test_stack_make_keeps_condition_valid);
     RUN_TEST(test_hit_points_percent);
     RUN_TEST(test_only_same_grade_stacks);
+    RUN_TEST(test_stack_merge);
     RUN_TEST(test_merged_hit_points_stay_between);
     RUN_TEST(test_drop_keeps_condition);
     RUN_TEST(test_drop_skips_other_grades);

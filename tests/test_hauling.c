@@ -609,7 +609,8 @@ static void test_haulers_sort_items_by_condition(void)
     ItemStack merged = a.count == 16 ? a : b;
     CHECK_EQ_INT(merged.count, 16);
     CHECK_EQ_INT(merged.quality, ITEM_QUALITY_FINE);
-    CHECK_EQ_INT(merged.hit_points, 50);
+    /* Loads merged in hand, then on the tile: rounding may differ by one. */
+    CHECK(merged.hit_points >= 49 && merged.hit_points <= 51);
     game_shutdown(&game);
 }
 
@@ -632,6 +633,128 @@ static void test_carried_items_keep_their_condition(void)
     CHECK_EQ_INT(stored.count, 30);
     CHECK_EQ_INT(stored.quality, ITEM_QUALITY_ROUGH);
     CHECK_EQ_INT(stored.hit_points, 7);
+    game_shutdown(&game);
+}
+
+static void test_find_extra_source(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int pile = stockpile_create(&game.stockpiles, &game.map, 20, 10, 20, 10);
+    stockpile_set_hit_points_range(&game.stockpiles, pile, (IntRange){50, 100});
+    TilePos dest = {20, 10};
+    ItemStack load = item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60);
+    items_add(&game.items, 11, 10, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_ROUGH, 60));
+    items_add(&game.items, 10, 12, item_stack_pristine(ITEM_STONE, 3));
+    items_add(&game.items, 9, 10, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 10));
+    HaulWorld world = world_of(&game);
+    TilePos out;
+    /* Other grade, other type, too damaged for the destination: none fits. */
+    CHECK(!haul_find_extra_source(&world, (TilePos){10, 10}, load, dest, 12.0f, &out, NULL));
+
+    items_add(&game.items, 10, 14, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 40));
+    REQUIRE(haul_find_extra_source(&world, (TilePos){10, 10}, load, dest, 12.0f, &out, NULL));
+    CHECK_EQ_INT(out.x, 10);
+    CHECK_EQ_INT(out.y, 14);
+    /* Out of reach of a short detour. */
+    CHECK(!haul_find_extra_source(&world, (TilePos){10, 10}, load, dest, 3.0f, &out, NULL));
+    /* Reserved by another hauler. */
+    reservations_add(&game.reservations, RESERVATION_HAUL_SOURCE, (TilePos){10, 14}, 7);
+    CHECK(!haul_find_extra_source(&world, (TilePos){10, 10}, load, dest, 12.0f, &out, NULL));
+    reservations_release_all(&game.reservations, 7);
+
+    /* Already in a stockpile as good as the destination: stays there. */
+    int other = stockpile_create(&game.stockpiles, &game.map, 10, 14, 10, 14);
+    CHECK(!haul_find_extra_source(&world, (TilePos){10, 10}, load, dest, 12.0f, &out, NULL));
+    stockpile_set_priority(&game.stockpiles, other, STOCKPILE_PRIORITY_LOWEST);
+    CHECK(haul_find_extra_source(&world, (TilePos){10, 10}, load, dest, 12.0f, &out, NULL));
+
+    /* A better stockpile with room wants it: not taken along. */
+    int better = stockpile_create(&game.stockpiles, &game.map, 30, 30, 30, 30);
+    stockpile_set_priority(&game.stockpiles, better, 1);
+    CHECK(!haul_find_extra_source(&world, (TilePos){10, 10}, load, dest, 12.0f, &out, NULL));
+    /* No destination stockpile: nothing. */
+    CHECK(!haul_find_extra_source(&world, (TilePos){10, 10}, load, (TilePos){2, 2}, 12.0f, &out,
+                                  NULL));
+    game_shutdown(&game);
+}
+
+/* Runs until the first items reach (x, y); returns how many arrived at once. */
+static int first_delivery(Game *game, int x, int y, int max_ticks)
+{
+    for (int i = 0; i < max_ticks; i++) {
+        game_tick(game);
+        int count = items_get(&game->items, x, y).count;
+        if (count > 0) {
+            return count;
+        }
+    }
+    return 0;
+}
+
+static void test_hauler_collects_several_stacks_per_trip(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 10, 10, item_stack_make(ITEM_BERRIES, 10, ITEM_QUALITY_FINE, 10));
+    items_add(&game.items, 12, 11, item_stack_make(ITEM_BERRIES, 10, ITEM_QUALITY_FINE, 6));
+    items_add(&game.items, 11, 13, item_stack_make(ITEM_BERRIES, 10, ITEM_QUALITY_FINE, 8));
+    stockpile_create(&game.stockpiles, &game.map, 25, 10, 25, 10);
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    CHECK_EQ_INT(first_delivery(&game, 25, 10, 4000), 30); /* All three in one trip. */
+    ItemStack stored = items_get(&game.items, 25, 10);
+    CHECK_EQ_INT(stored.quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(stored.hit_points, 8); /* (10 × 10 + 10 × 6 + 10 × 8) / 30 */
+    CHECK_EQ_INT(count_in(&game, 0, 0, 20, 20, ITEM_BERRIES), 0);
+    CHECK_EQ_INT(game.reservations.count, 0);
+    game_shutdown(&game);
+}
+
+static void test_collecting_stops_at_carrying_capacity(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    stockpile_create(&game.stockpiles, &game.map, 25, 10, 25, 10);
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    /* Two stacks that together are more than one load. */
+    int capacity = colonist_carry_capacity(colonist, ITEM_WOOD);
+    REQUIRE(capacity >= 2);
+    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_WOOD, capacity - 1));
+    items_add(&game.items, 11, 11, item_stack_pristine(ITEM_WOOD, capacity - 1));
+    int most = 0;
+    for (int i = 0; i < 4000; i++) {
+        game_tick(&game);
+        most = colonist->carried.count > most ? colonist->carried.count : most;
+    }
+    CHECK_EQ_INT(most, capacity);
+    /* The rest came on a second trip. */
+    CHECK_EQ_INT(count_at(&game, 25, 10, ITEM_WOOD), 2 * (capacity - 1));
+    game_shutdown(&game);
+}
+
+static void test_far_or_vanished_stacks_are_not_waited_for(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BERRIES, 10));
+    items_add(&game.items, 12, 10, item_stack_pristine(ITEM_BERRIES, 10));
+    items_add(&game.items, 10, 40, item_stack_pristine(ITEM_BERRIES, 10)); /* Far away. */
+    stockpile_create(&game.stockpiles, &game.map, 25, 10, 25, 10);
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    /* Picks up the first stack and heads for the second... */
+    for (int i = 0; i < 2000 && colonist->carried.count == 0; i++) {
+        game_tick(&game);
+    }
+    REQUIRE(colonist->carried.count == 10);
+    CHECK(!colonist->haul_delivering);
+    CHECK_EQ_INT(colonist->target.x, 12);
+    /* ...which someone else takes meanwhile: it delivers what it holds. */
+    items_remove(&game.items, 12, 10, 10);
+    CHECK_EQ_INT(first_delivery(&game, 25, 10, 2000), 10);
+    CHECK_EQ_INT(count_at(&game, 10, 40, ITEM_BERRIES), 10); /* Not collected on the way. */
     game_shutdown(&game);
 }
 
@@ -660,6 +783,10 @@ int main(void)
     RUN_TEST(test_items_rejected_by_a_new_filter_move_out);
     RUN_TEST(test_haulers_sort_items_by_condition);
     RUN_TEST(test_carried_items_keep_their_condition);
+    RUN_TEST(test_find_extra_source);
+    RUN_TEST(test_hauler_collects_several_stacks_per_trip);
+    RUN_TEST(test_collecting_stops_at_carrying_capacity);
+    RUN_TEST(test_far_or_vanished_stacks_are_not_waited_for);
     RUN_TEST(test_hauling_is_deterministic);
     return test_summary();
 }

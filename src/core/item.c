@@ -158,6 +158,28 @@ static int weighted_average(int a, int count_a, int b, int count_b)
     return (int)(((long)a * count_a + (long)b * count_b + total / 2) / total);
 }
 
+bool item_stack_merge(ItemStack *into, ItemStack from)
+{
+    if (from.type == ITEM_NONE || from.count == 0) {
+        return true;
+    }
+    if (into->type == ITEM_NONE || into->count == 0) {
+        *into = from;
+        return true;
+    }
+    if (!item_stacks_match(*into, from)) {
+        return false;
+    }
+    int count = (int)into->count + (int)from.count;
+    if (count > UINT16_MAX) {
+        count = UINT16_MAX;
+    }
+    into->hit_points =
+        (uint16_t)weighted_average(into->hit_points, into->count, from.hit_points, from.count);
+    into->count = (uint16_t)count;
+    return true;
+}
+
 bool items_init(Items *items, int width, int height)
 {
     memset(items, 0, sizeof(*items));

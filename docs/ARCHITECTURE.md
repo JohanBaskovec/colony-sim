@@ -201,8 +201,15 @@ the search entirely when nothing can be stored; the per-zone data, checked
 against the zone filters, decides for a given stack.
 
 The hauler reserves the source stack (`RESERVATION_HAUL_SOURCE`) and the
-destination tile (`RESERVATION_STORAGE`), walks to the stack, picks up what
-the destination can take and it can carry, and carries it there. Each
+destination tile (`RESERVATION_STORAGE`), walks to the stack and picks up what
+the destination can take and it can carry. With room left in hand, it then
+collects more on the way (`haul_find_extra_source()`): the nearest stack
+within `COLONIST_HAUL_COLLECT_MAX_COST` that matches the load (same type and
+grade), that the destination's zone accepts and that no better zone with room
+wants (otherwise good wood heading for an ordinary zone would drag along wood
+that belongs in a better one). Only one stack is reserved at a time; if it
+vanishes, the hauler delivers what it holds (`Colonist.haul_delivering`
+switches from collecting to delivering). Each
 colonist has a `max_carry_bulk` and a `max_carry_weight` (60 and 40 kg by
 default, by hand): `colonist_carry_capacity()` is the number of units within
 both limits, at least one (an item too big is dragged). Above the weight

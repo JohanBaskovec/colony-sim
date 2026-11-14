@@ -43,7 +43,8 @@ Tick items as they land and add newly discovered tasks.
 - [x] Stockpile filters on item condition: quality and hit point range sliders; items a narrowed filter no longer accepts are moved out
 - [x] Skill learning: work on an order gives experience in its skill, each level takes longer (one in-game hour of work for level 1, twenty for level 20); progress shown in the colonist inspector, levels in the work priorities grid
 - [x] Skills also change work speed: ×0.5 at level 0, ×1 at level 10, ×1.5 at level 20 (shown in the colonist inspector)
-- [ ] Haul more than one stack per trip; haul towards construction sites (M3)
+- [x] Haul more than one stack per trip: after a pickup, a hauler with room left collects nearby matching stacks bound for the same storage tile (one type and grade per load)
+- [ ] Haul towards construction sites (M3); loads of mixed items once containers exist
 - [ ] Carrying capacity from strength/health; containers (baskets, sledges) and worn equipment adding bulk and weight
 
 ## M3: Building

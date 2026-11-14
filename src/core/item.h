@@ -123,6 +123,11 @@ ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points)
 /* Whether two stacks may share a tile: same type and same grade. */
 bool item_stacks_match(ItemStack a, ItemStack b);
 
+/* Adds `from` to `into` (empty, or matching): counts add up (capped at
+ * UINT16_MAX), hit points are averaged by count. Fails, changing nothing,
+ * when the stacks do not match. */
+bool item_stack_merge(ItemStack *into, ItemStack from);
+
 /* `count` items in perfect condition. */
 ItemStack item_stack_pristine(ItemType type, int count);
 

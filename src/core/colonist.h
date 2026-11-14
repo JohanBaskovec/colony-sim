@@ -70,6 +70,9 @@
 /* Experience gained per tick spent working on a designation. */
 #define COLONIST_WORK_XP_PER_TICK 1.0f
 #define COLONIST_WORK_SEARCH_MAX_COST 250.0f
+/* After picking up a stack, a hauler with room left also collects matching
+ * stacks within this travel cost before delivering. */
+#define COLONIST_HAUL_COLLECT_MAX_COST 12.0f
 /* Delay before searching again after a failed food, water or work search, doubled
  * after each consecutive failure up to 2^COLONIST_SEARCH_MAX_BACKOFF times. A
  * failed search floods everything within its cost limit, so it must stay rare. */
@@ -133,6 +136,9 @@ typedef struct Colonist {
     uint32_t haul_search_stamp;
     ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
     TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
+    /* TASK_HAUL: false while collecting stacks (`target`), true once heading
+     * for `haul_destination`. */
+    bool haul_delivering;
     float max_carry_weight; /* Kilograms carried without slowing down. */
     float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
     uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */

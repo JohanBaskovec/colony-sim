@@ -232,3 +232,47 @@ bool haul_find_job(const HaulWorld *world, TilePos from, float max_cost, HaulJob
     job->count = stack.count < room ? stack.count : room;
     return true;
 }
+
+typedef struct ExtraSearch {
+    const HaulWorld *world;
+    ItemStack load;
+    const Stockpile *zone; /* Of the destination. */
+    const StorageLevels *storage;
+} ExtraSearch;
+
+static bool is_extra_source(const Map *map, int x, int y, void *userdata)
+{
+    (void)map;
+    const ExtraSearch *search = userdata;
+    const HaulWorld *world = search->world;
+    ItemStack stack = items_get(world->items, x, y);
+    if (stack.type == ITEM_NONE || !item_stacks_match(stack, search->load) ||
+        !stockpile_accepts(search->zone, stack)) {
+        return false;
+    }
+    int current = stockpile_storage_priority(world->stockpiles, x, y, stack);
+    if (current != 0 && current <= search->zone->priority) {
+        return false; /* Already stored as well (the destination itself included). */
+    }
+    if (has_better_level(levels_for(world, search->storage, stack), search->zone->priority)) {
+        return false; /* A better stockpile wants it: it goes there, on its own trip. */
+    }
+    return !reservations_taken_by_other(world->reservations, RESERVATION_HAUL_SOURCE,
+                                        (TilePos){(int16_t)x, (int16_t)y}, world->self);
+}
+
+bool haul_find_extra_source(const HaulWorld *world, TilePos from, ItemStack load,
+                            TilePos destination, float max_cost, TilePos *out, Path *path)
+{
+    const Stockpile *zone =
+        stockpile_get(world->stockpiles, stockpile_at(world->stockpiles, destination.x,
+                                                      destination.y));
+    if (zone == NULL || load.type == ITEM_NONE) {
+        return false;
+    }
+    StorageLevels storage;
+    storage_levels(world, &storage);
+    ExtraSearch search = {world, load, zone, &storage};
+    return pathfinder_find_nearest(world->pathfinder, world->map, from, is_extra_source, &search,
+                                   max_cost, path, out);
+}

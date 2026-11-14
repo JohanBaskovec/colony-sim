@@ -250,6 +250,7 @@ static void begin_task(Colonist *colonist, const ColonistContext *context, Colon
         colonist->carried = (ItemStack){.type = ITEM_NONE};
     }
     reservations_release_all(context->reservations, context->worker_id);
+    colonist->haul_delivering = false;
     colonist->task = task;
     colonist->timer = 0;
     colonist->path_index = 0;
@@ -584,20 +585,73 @@ static bool haul_destination_valid(const Colonist *colonist, const ColonistConte
     return haul_destination_room(context->stockpiles, context->items, dest.x, dest.y, stack) > 0;
 }
 
+/* Items of the load in hand (or of `stack` when empty) that can still be
+ * added: limited by what the colonist can carry and the room left on the
+ * destination tile. */
+static int haul_room_left(const Colonist *colonist, const ColonistContext *context,
+                          ItemStack stack)
+{
+    TilePos dest = colonist->haul_destination;
+    ItemStack load = colonist->carried.count > 0 ? colonist->carried : stack;
+    int room = haul_destination_room(context->stockpiles, context->items, dest.x, dest.y, load);
+    int capacity = colonist_carry_capacity(colonist, (ItemType)load.type);
+    int left = (room < capacity ? room : capacity) - (int)colonist->carried.count;
+    return left > 0 ? left : 0;
+}
+
+/* Stops collecting and heads for the destination with the load in hand. */
+static bool start_delivery(Colonist *colonist, const ColonistContext *context)
+{
+    reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
+                              context->worker_id);
+    colonist->haul_delivering = true;
+    colonist->path_index = 0;
+    return pathfinder_find(context->pathfinder, context->map, current_tile(colonist),
+                           colonist->haul_destination, PATH_NO_COST_LIMIT, &colonist->path);
+}
+
+/* With room left in hand, heads for another matching stack nearby that the
+ * destination accepts. Returns false when there is none. */
+static bool collect_more(Colonist *colonist, const ColonistContext *context)
+{
+    if (haul_room_left(colonist, context, colonist->carried) <= 0) {
+        return false;
+    }
+    HaulWorld world = haul_world(context);
+    TilePos extra;
+    if (!haul_find_extra_source(&world, current_tile(colonist), colonist->carried,
+                                colonist->haul_destination, COLONIST_HAUL_COLLECT_MAX_COST,
+                                &extra, &colonist->path)) {
+        return false;
+    }
+    reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
+                              context->worker_id);
+    reservations_add(context->reservations, RESERVATION_HAUL_SOURCE, extra, context->worker_id);
+    colonist->target = extra;
+    colonist->path_index = 0;
+    return true;
+}
+
 /*
- * Whether a haul is still worth doing. Before pickup: the stack is still there
- * and the destination accepts it. After pickup: when the destination stopped
- * accepting the items (filter changed, zone removed, tile filled), the hauler
- * looks for another storage tile and only gives up (dropping its load) if
- * there is none.
+ * Whether a haul is still worth doing. While collecting: the stack is still
+ * there, matches what is in hand and the destination accepts it; when it is
+ * gone, a hauler that already holds items delivers them. While delivering:
+ * when the destination stopped accepting the items (filter changed, zone
+ * removed, tile filled), the hauler looks for another storage tile and only
+ * gives up (dropping its load) if there is none.
  */
 static bool haul_still_valid(Colonist *colonist, const ColonistContext *context)
 {
-    if (colonist->carried.count == 0) {
+    if (!colonist->haul_delivering) {
         ItemStack stack = items_get(context->items, colonist->target.x, colonist->target.y);
-        return colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED &&
-               stack.type != ITEM_NONE &&
-               haul_destination_valid(colonist, context, stack);
+        bool holding = colonist->carried.count > 0;
+        if (colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED &&
+            stack.type != ITEM_NONE && (!holding || item_stacks_match(stack, colonist->carried)) &&
+            haul_destination_valid(colonist, context, stack) &&
+            (!holding || haul_destination_valid(colonist, context, colonist->carried))) {
+            return true;
+        }
+        return holding && start_delivery(colonist, context);
     }
     if (haul_destination_valid(colonist, context, colonist->carried)) {
         return true;
@@ -623,33 +677,28 @@ static void haul(Colonist *colonist, const ColonistContext *context)
         return;
     }
     if (colonist_is_moving(colonist)) {
-        return; /* Rerouted to another storage tile. */
+        return; /* On the way (possibly rerouted). */
     }
-    TilePos dest = colonist->haul_destination;
-    if (colonist->carried.count == 0) {
-        /* Pick up what the destination can take and the colonist can carry. */
+    if (!colonist->haul_delivering) {
+        /* At a stack: pick up what fits, then collect more nearby or deliver. */
         if (colonist->x != colonist->target.x || colonist->y != colonist->target.y) {
             set_idle(colonist, context, 0);
             return;
         }
         ItemStack stack = items_get(context->items, colonist->x, colonist->y);
-        int wanted = haul_destination_room(context->stockpiles, context->items, dest.x, dest.y,
-                                           stack);
-        int capacity = colonist_carry_capacity(colonist, (ItemType)stack.type);
-        wanted = wanted < capacity ? wanted : capacity;
+        int wanted = haul_room_left(colonist, context, stack);
         int taken = items_remove(context->items, colonist->x, colonist->y,
                                  stack.count < wanted ? stack.count : wanted);
-        colonist->carried = stack; /* Same condition as the stack it comes from. */
-        colonist->carried.count = (uint16_t)taken;
-        if (taken == 0) {
-            colonist->carried.type = ITEM_NONE;
-        }
-        if (!pathfinder_find(context->pathfinder, context->map, current_tile(colonist), dest,
-                             PATH_NO_COST_LIMIT, &colonist->path)) {
+        ItemStack picked = stack; /* Same condition as the stack it comes from. */
+        picked.count = (uint16_t)taken;
+        item_stack_merge(&colonist->carried, picked);
+        if (colonist->carried.count == 0 ||
+            (!collect_more(colonist, context) && !start_delivery(colonist, context))) {
             set_idle(colonist, context, 0);
         }
         return;
     }
+    TilePos dest = colonist->haul_destination;
     if (colonist->x != dest.x || colonist->y != dest.y) {
         set_idle(colonist, context, 0);
         return;
