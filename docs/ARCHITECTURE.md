@@ -55,7 +55,8 @@ simulation:
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot): blueprints, materials, construction, bills, the craft in progress |
-| `structure`  | Structure definitions (grass bed, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, hit points, wear and refresh; hit points by grade, grade cap from the materials |
+| `structure`  | Structure definitions (grass bed, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, length in tiles and `Direction`, hit points, wear and refresh; hit points by grade, grade cap from the materials |
+| `bed`        | Bed ownership: one bed per settler, one settler per bed, kept on the bed's head; beds gone from the map are forgotten |
 | `construction`| Construction sites: blueprints of structures and refresh sites on worn ones, materials delivered per slot, work, built grade; daily wear; built structures go to the map's structure layers |
 | `work`       | Work types (mining, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning, quality and condition of what a worker produces |
@@ -465,6 +466,22 @@ built structure and gives back half of its materials.
 Material counts come from real structures, for a tile of about 1 m²: see
 `structure.c` and `docs/KNOWLEDGE.md` §10.
 
+**Long structures**: a grass bed takes two tiles (`StructureDef.length`),
+its head and its foot in one of four `Direction`s. Every tile holds the
+type (movement cost, blocking and the inspector work per tile as before);
+`Map.structure_part` holds the direction and the tile's place in the
+structure, so `map_structure_origin()` finds the head from any tile. Grade
+and hit points live on the head. `map_place_structure()` writes every tile
+(removing whole any structure in the way), `map_remove_structure()` (and
+`map_set_structure(..., STRUCTURE_NONE)`) removes every tile, from any of
+them. A construction site has a direction too and takes every tile in the
+index layer; builders reserve it on its head (`RESERVATION_CONSTRUCTION`),
+work it from next to any of its tiles and clear the plants of each tile in
+turn. `game_plan_structure_rect()` lays out what a drag plans (beds side by
+side in rows of their length, the rectangle stretched to hold one, the
+clicked tile always a head); placing and the preview both use it. The
+player turns beds with `APP_KEY_ROTATE` (`App.structure_direction`).
+
 **Grade, hit points, wear**: two more map layers hold each built
 structure's grade (`Map.structure_quality`) and hit points
 (`Map.structure_hit_points`). `map_set_structure()` gives a standard grade
@@ -495,9 +512,14 @@ it gives (cut grass, its twigs and branches, ripe berries, with quality from
 the builder's gathering level). Only then does the construction work start.
 `map_set_structure()` still clears any plant left, as a safety net.
 
-**Beds**: a colonist going to sleep walks to the nearest free bed
-(`RESERVATION_BED`, within `COLONIST_BED_SEARCH_MAX_COST`) and sleeps on the
-ground otherwise. Rest comes back at `rest_factor` in a bed (1 for a grass
+**Beds**: a colonist going to sleep walks to its own bed (`core/bed.h`),
+else to the nearest free bed, which becomes its own (`RESERVATION_BED`,
+within `COLONIST_BED_SEARCH_MAX_COST`), and sleeps on the ground otherwise.
+`Beds` (owned by `Game`) keeps the owner id (colonist slot + 1) on the bed's
+head tile and the bed of each owner; a bed owned by someone else is never
+taken, even when its owner is awake. `game_tick()` calls
+`beds_forget_missing()` (beds taken apart or fallen apart lose their owner)
+and `game_remove_colonist()` frees the settler's bed. Rest comes back at `rest_factor` in a bed (1 for a grass
 bed) and `COLONIST_GROUND_REST_FACTOR` (0.8) on the ground; waking up from a
 night on the ground leaves `ground_sleep_ticks` of slower work
 (`COLONIST_GROUND_SLEEP_WORK_FACTOR`), to become a mood once moods exist.

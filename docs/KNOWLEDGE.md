@@ -803,7 +803,9 @@ half of the materials.
 ### 10.2 Details
 
 **Grass bed** (the "litter of grass and leaves"): a bed on the ground, owned
-by one settler.
+by one settler, 1 × 2 tiles (head and foot, turned four ways). *(Ownership
+and size implemented: a settler takes the nearest free bed the first night
+and keeps it.)*
 - Bare ground: rest gain ×0.8, mood "slept on the ground". Grass bed: ×1.0, no
   penalty; comfort by grade.
 - Loses 1 hit point a day; below 50%, "slept on old bedding"; at 0, gone.

@@ -7,6 +7,7 @@
 #ifndef COLONY_CORE_GAME_H
 #define COLONY_CORE_GAME_H
 
+#include "core/bed.h"
 #include "core/colonist.h"
 #include "core/construction.h"
 #include "core/designation.h"
@@ -60,6 +61,7 @@ typedef struct Game {
     Stockpiles stockpiles; /* Storage zones drawn by the player. */
     Workstations workstations; /* Crafting spots, knapping spots... and their bills. */
     Constructions constructions; /* Blueprints of beds, walls, doors... being built. */
+    Beds beds; /* Who owns which bed. */
     Reservations reservations; /* Who is busy with which job or food. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */
@@ -213,18 +215,31 @@ bool game_remove_bill(Game *game, int station, int bill);
 /* Whether some living colonist knows enough to build this kind of structure. */
 bool game_structure_buildable(const Game *game, StructureType type);
 
-/* Whether a structure may be planned on a tile: not on a stockpile or a
- * workstation, and where construction_can_place() says yes. */
-bool game_can_place_structure(const Game *game, int x, int y);
+/* Whether a structure may be planned with its head at (x, y), facing
+ * `direction`: every tile it would take is off stockpiles and workstations,
+ * and passes construction_can_place(). */
+bool game_can_place_structure(const Game *game, StructureType type, int x, int y,
+                              Direction direction);
 
 /* Plans a structure where game_can_place_structure() allows. Returns the
  * site's index or CONSTRUCTION_NONE. */
-int game_place_structure(Game *game, StructureType type, int x, int y);
+int game_place_structure(Game *game, StructureType type, int x, int y, Direction direction);
 
-/* Plans structures on a rectangle (corners in any order): along its edges for
- * types drawn as an outline (walls), on every tile otherwise. Returns how
+/* One structure of a plan: its head, and whether it can be placed. */
+typedef void (*StructurePlanVisit)(int x, int y, bool allowed, void *userdata);
+
+/* Where structures go on a rectangle (corners in any order), in a fixed
+ * order: along its edges for types drawn as an outline (walls), on every
+ * tile otherwise; long ones (beds) side by side, in rows of their length
+ * along `direction`, the rectangle stretched that way to hold at least one. */
+void game_plan_structure_rect(const Game *game, StructureType type, Direction direction,
+                              int x0, int y0, int x1, int y1, StructurePlanVisit visit,
+                              void *userdata);
+
+/* Places what game_plan_structure_rect() plans where allowed. Returns how
  * many sites were placed. */
-int game_place_structure_rect(Game *game, StructureType type, int x0, int y0, int x1, int y1);
+int game_place_structure_rect(Game *game, StructureType type, Direction direction, int x0,
+                              int y0, int x1, int y1);
 
 /* Removes a construction site; its delivered materials are dropped on its
  * tile. */

@@ -42,6 +42,7 @@ typedef enum AppTool {
 #define APP_KEY_BUILD SDL_SCANCODE_E      /* Workstation blueprints, one kind after the other. */
 #define APP_KEY_GATHER SDL_SCANCODE_R
 #define APP_KEY_WORK SDL_SCANCODE_T
+#define APP_KEY_ROTATE SDL_SCANCODE_F /* Turns the structure being planned (beds). */
 #define APP_KEY_STOCKPILE SDL_SCANCODE_P
 #define APP_KEY_LANGUAGE SDL_SCANCODE_L
 #define APP_KEY_MINE SDL_SCANCODE_M
@@ -135,6 +136,7 @@ typedef struct App {
     bool zone_remove;          /* For the zone tools: drags remove tiles from zones. */
     WorkstationType build_type; /* For APP_TOOL_BUILD. */
     StructureType structure_type; /* For APP_TOOL_STRUCTURE. */
+    Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;

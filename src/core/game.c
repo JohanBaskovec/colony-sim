@@ -144,6 +144,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .stockpiles = &game->stockpiles,
         .workstations = &game->workstations,
         .constructions = &game->constructions,
+        .beds = &game->beds,
         .reservations = &game->reservations,
         .pathfinder = &game->pathfinder,
         .regions = &game->regions,
@@ -164,6 +165,7 @@ bool game_remove_colonist(Game *game, EntityId id)
     }
     ColonistContext context = colonist_context(game, id.index);
     colonist_abandon_task(colonist, &context); /* Frees its reservations. */
+    beds_release_owner(&game->beds, (uint8_t)(id.index + 1));
     colonist_drop_tools(colonist, &game->items, &game->map);
     colonist_free(colonist);
     memset(colonist, 0, sizeof(*colonist));
@@ -415,6 +417,7 @@ bool game_init(Game *game, const NewGameParams *params)
         !stockpiles_init(&game->stockpiles, game->map.width, game->map.height) ||
         !workstations_init(&game->workstations, game->map.width, game->map.height) ||
         !constructions_init(&game->constructions, game->map.width, game->map.height) ||
+        !beds_init(&game->beds, game->map.width, game->map.height) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
         !regions_init(&game->regions, game->map.width, game->map.height) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
@@ -484,6 +487,7 @@ void game_shutdown(Game *game)
     stockpiles_free(&game->stockpiles);
     workstations_free(&game->workstations);
     constructions_free(&game->constructions);
+    beds_free(&game->beds);
     map_free(&game->map);
     memset(game, 0, sizeof(*game));
 }
@@ -565,6 +569,7 @@ void game_tick(Game *game)
         /* Bedding packs down: worn beds get a refresh site, or fall apart. */
         constructions_wear_day(&game->constructions, &game->map, &game->items);
     }
+    beds_forget_missing(&game->beds, &game->map); /* Beds taken apart or fallen apart. */
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game->items.totals);
     update_colonists(game);
@@ -589,6 +594,7 @@ uint64_t game_hash(const Game *game)
     hash = stockpiles_hash(&game->stockpiles, hash);
     hash = workstations_hash(&game->workstations, hash);
     hash = constructions_hash(&game->constructions, hash);
+    hash = beds_hash(&game->beds, hash);
     hash = reservations_hash(&game->reservations, hash);
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
@@ -917,40 +923,98 @@ bool game_structure_buildable(const Game *game, StructureType type)
     return false;
 }
 
-bool game_can_place_structure(const Game *game, int x, int y)
+bool game_can_place_structure(const Game *game, StructureType type, int x, int y,
+                              Direction direction)
 {
-    return stockpile_at(&game->stockpiles, x, y) == STOCKPILE_NONE &&
-           workstation_at(&game->workstations, x, y) == WORKSTATION_NONE &&
-           construction_can_place(&game->constructions, &game->map, x, y);
+    int length = structure_length(type);
+    if (length <= 0 || (unsigned)direction >= DIRECTION_COUNT) {
+        return false;
+    }
+    for (int part = 0; part < length; part++) {
+        int px = x + part * direction_dx(direction), py = y + part * direction_dy(direction);
+        if (stockpile_at(&game->stockpiles, px, py) != STOCKPILE_NONE ||
+            workstation_at(&game->workstations, px, py) != WORKSTATION_NONE) {
+            return false;
+        }
+    }
+    return construction_can_place_structure(&game->constructions, &game->map, type, x, y,
+                                            direction);
 }
 
-int game_place_structure(Game *game, StructureType type, int x, int y)
+int game_place_structure(Game *game, StructureType type, int x, int y, Direction direction)
 {
-    if (!game_can_place_structure(game, x, y)) {
+    if (!game_can_place_structure(game, type, x, y, direction)) {
         return CONSTRUCTION_NONE;
     }
-    return constructions_place(&game->constructions, &game->map, type, x, y);
+    return constructions_place(&game->constructions, &game->map, type, x, y, direction);
 }
 
-int game_place_structure_rect(Game *game, StructureType type, int x0, int y0, int x1, int y1)
+void game_plan_structure_rect(const Game *game, StructureType type, Direction direction,
+                              int x0, int y0, int x1, int y1, StructurePlanVisit visit,
+                              void *userdata)
 {
     const StructureDef *def = structure_def(type);
-    if (def == NULL || type == STRUCTURE_NONE) {
-        return 0;
+    if (def == NULL || type == STRUCTURE_NONE || (unsigned)direction >= DIRECTION_COUNT) {
+        return;
     }
     int min_x = x0 < x1 ? x0 : x1, max_x = x0 < x1 ? x1 : x0;
     int min_y = y0 < y1 ? y0 : y1, max_y = y0 < y1 ? y1 : y0;
-    int placed = 0;
-    for (int y = min_y; y <= max_y; y++) {
-        for (int x = min_x; x <= max_x; x++) {
-            bool edge = x == min_x || x == max_x || y == min_y || y == max_y;
-            if ((edge || !def->drawn_as_outline) &&
-                game_place_structure(game, type, x, y) != CONSTRUCTION_NONE) {
-                placed++;
-            }
+    int length = def->length;
+    int dx = direction_dx(direction), dy = direction_dy(direction);
+    /* Stretched the way the structure goes, to hold at least one. */
+    if (dx != 0 && max_x - min_x + 1 < length) {
+        if (dx > 0) {
+            max_x = min_x + length - 1;
+        } else {
+            min_x = max_x - length + 1;
         }
     }
-    return placed;
+    if (dy != 0 && max_y - min_y + 1 < length) {
+        if (dy > 0) {
+            max_y = min_y + length - 1;
+        } else {
+            min_y = max_y - length + 1;
+        }
+    }
+    /* Cells of `length` tiles along the structure; the head at the end the
+     * structure goes from. */
+    int step_x = dx != 0 ? length : 1, step_y = dy != 0 ? length : 1;
+    for (int y = min_y; y + step_y - 1 <= max_y; y += step_y) {
+        for (int x = min_x; x + step_x - 1 <= max_x; x += step_x) {
+            bool edge = x == min_x || x == max_x || y == min_y || y == max_y;
+            if (!edge && def->drawn_as_outline) {
+                continue;
+            }
+            int head_x = dx < 0 ? x + length - 1 : x;
+            int head_y = dy < 0 ? y + length - 1 : y;
+            visit(head_x, head_y, game_can_place_structure(game, type, head_x, head_y, direction),
+                  userdata);
+        }
+    }
+}
+
+typedef struct StructurePlacing {
+    Game *game;
+    StructureType type;
+    Direction direction;
+    int placed;
+} StructurePlacing;
+
+static void place_planned(int x, int y, bool allowed, void *userdata)
+{
+    StructurePlacing *placing = userdata;
+    if (allowed && game_place_structure(placing->game, placing->type, x, y,
+                                        placing->direction) != CONSTRUCTION_NONE) {
+        placing->placed++;
+    }
+}
+
+int game_place_structure_rect(Game *game, StructureType type, Direction direction, int x0,
+                              int y0, int x1, int y1)
+{
+    StructurePlacing placing = {game, type, direction, 0};
+    game_plan_structure_rect(game, type, direction, x0, y0, x1, y1, place_planned, &placing);
+    return placing.placed;
 }
 
 bool game_remove_construction(Game *game, int index)

@@ -7,9 +7,10 @@
  * crafting at workstations, hauling; or wander), then acts (walk one tick
  * along its path, eat, work, sleep...).
  *
- * Settlers sleep in the nearest free bed (core/structure.h), or on the
- * ground: rest comes back more slowly there, and after such a night they
- * work more slowly for a while.
+ * Settlers sleep in their own bed (core/bed.h); one without a bed takes the
+ * nearest free one, and one whose bed cannot be reached takes another. With
+ * no bed at all they sleep on the ground: rest comes back more slowly there,
+ * and after such a night they work more slowly for a while.
  *
  * Tools are simply carried, at most one of each type, and used without
  * equipping anything; they count in the carried weight. A colonist fetches a
@@ -24,6 +25,7 @@
 #define COLONY_CORE_COLONIST_H
 
 #include "core/appearance.h"
+#include "core/bed.h"
 #include "core/construction.h"
 #include "core/designation.h"
 #include "core/dirt.h"
@@ -93,7 +95,7 @@
 /* After waking up from a night on the ground, work is slower for this long. */
 #define COLONIST_GROUND_SLEEP_PENALTY_TICKS (12 * TICKS_PER_HOUR)
 #define COLONIST_GROUND_SLEEP_WORK_FACTOR 0.9f
-/* Settlers walk at most this far to a free bed. */
+/* Settlers walk at most this far to their bed or a free one. */
 #define COLONIST_BED_SEARCH_MAX_COST 150.0f
 #define NEED_LOW_THRESHOLD 0.3f
 #define NEED_CRITICAL_THRESHOLD 0.1f
@@ -287,6 +289,7 @@ typedef struct ColonistContext {
     Stockpiles *stockpiles;
     Workstations *workstations;
     Constructions *constructions;
+    Beds *beds;
     Reservations *reservations;
     Pathfinder *pathfinder;
     /* Connectivity regions (may be out of date, never wrong: see core/region.h). */

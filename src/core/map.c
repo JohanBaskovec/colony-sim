@@ -151,11 +151,13 @@ bool map_init(Map *map, int width, int height)
     map->cobbles = calloc(count, 1);
     map->flint = calloc(count, 1);
     map->structure = calloc(count, 1);
+    map->structure_part = calloc(count, 1);
     map->structure_quality = calloc(count, 1);
     map->structure_hit_points = calloc(count, sizeof(*map->structure_hit_points));
     if (map->terrain == NULL || map->rock == NULL || map->plants == NULL ||
         map->cobbles == NULL || map->flint == NULL || map->structure == NULL ||
-        map->structure_quality == NULL || map->structure_hit_points == NULL) {
+        map->structure_part == NULL || map->structure_quality == NULL ||
+        map->structure_hit_points == NULL) {
         map_free(map);
         return false;
     }
@@ -174,6 +176,7 @@ void map_free(Map *map)
     free(map->cobbles);
     free(map->flint);
     free(map->structure);
+    free(map->structure_part);
     free(map->structure_quality);
     free(map->structure_hit_points);
     memset(map, 0, sizeof(*map));
@@ -213,23 +216,22 @@ void map_set_rock(Map *map, int x, int y, RockType rock)
     }
 }
 
-void map_set_structure(Map *map, int x, int y, StructureType type)
+#define PART_DIRECTION_MASK 0x3u
+#define PART_INDEX_SHIFT 2
+
+/* Puts a structure tile (or none) on a tile: counts, plant, topology. */
+static void set_tile_structure(Map *map, int x, int y, StructureType type, uint8_t part,
+                               ItemQuality quality, int hit_points)
 {
-    if (!map_in_bounds(map, x, y) || (unsigned)type >= STRUCTURE_TYPE_COUNT) {
-        return;
-    }
     size_t index = map_index(map, x, y);
     StructureType old = (StructureType)map->structure[index];
-    ItemQuality quality = type == STRUCTURE_NONE ? ITEM_QUALITY_CRUDE : ITEM_QUALITY_STANDARD;
-    map->structure_quality[index] = (uint8_t)quality;
-    map->structure_hit_points[index] = (uint16_t)structure_max_hit_points(type, quality);
-    if (old == type) {
-        return;
-    }
     bool was_passable = map_move_cost_at(map, index) > 0.0f;
     map->structure_counts[old]--;
     map->structure_counts[type]++;
     map->structure[index] = (uint8_t)type;
+    map->structure_part[index] = part;
+    map->structure_quality[index] = (uint8_t)quality;
+    map->structure_hit_points[index] = (uint16_t)hit_points;
     if (type != STRUCTURE_NONE) {
         map->plants[index] = (Plant){0}; /* Trampled, cut or dug out by the builders. */
     }
@@ -239,39 +241,130 @@ void map_set_structure(Map *map, int x, int y, StructureType type)
     }
 }
 
-void map_build_structure(Map *map, int x, int y, StructureType type, ItemQuality quality)
+bool map_structure_origin(const Map *map, int x, int y, int *origin_x, int *origin_y)
 {
-    map_set_structure(map, x, y, type);
-    if (map_in_bounds(map, x, y) && type != STRUCTURE_NONE &&
-        (unsigned)type < STRUCTURE_TYPE_COUNT) {
-        size_t index = map_index(map, x, y);
-        quality = (ItemQuality)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
-        map->structure_quality[index] = (uint8_t)quality;
-        map->structure_hit_points[index] = (uint16_t)structure_max_hit_points(type, quality);
+    if (!map_in_bounds(map, x, y)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y);
+    if (map->structure[index] == STRUCTURE_NONE) {
+        return false;
+    }
+    uint8_t part = map->structure_part[index];
+    Direction direction = (Direction)(part & PART_DIRECTION_MASK);
+    int offset = part >> PART_INDEX_SHIFT;
+    *origin_x = x - offset * direction_dx(direction);
+    *origin_y = y - offset * direction_dy(direction);
+    return true;
+}
+
+bool map_structure_is_origin(const Map *map, int x, int y)
+{
+    return map_in_bounds(map, x, y) && map->structure[map_index(map, x, y)] != STRUCTURE_NONE &&
+           (map->structure_part[map_index(map, x, y)] >> PART_INDEX_SHIFT) == 0;
+}
+
+Direction map_structure_direction(const Map *map, int x, int y)
+{
+    if (!map_in_bounds(map, x, y) || map->structure[map_index(map, x, y)] == STRUCTURE_NONE) {
+        return DIRECTION_SOUTH;
+    }
+    return (Direction)(map->structure_part[map_index(map, x, y)] & PART_DIRECTION_MASK);
+}
+
+void map_remove_structure(Map *map, int x, int y)
+{
+    int origin_x, origin_y;
+    if (!map_structure_origin(map, x, y, &origin_x, &origin_y)) {
+        return;
+    }
+    StructureType type = map_structure(map, x, y);
+    Direction direction = map_structure_direction(map, x, y);
+    for (int part = 0; part < structure_length(type); part++) {
+        int px = origin_x + part * direction_dx(direction);
+        int py = origin_y + part * direction_dy(direction);
+        if (map_structure(map, px, py) == type) {
+            set_tile_structure(map, px, py, STRUCTURE_NONE, 0, ITEM_QUALITY_CRUDE, 0);
+        }
+    }
+}
+
+bool map_place_structure(Map *map, int x, int y, StructureType type, Direction direction,
+                         ItemQuality quality)
+{
+    if (type == STRUCTURE_NONE || (unsigned)type >= STRUCTURE_TYPE_COUNT ||
+        (unsigned)direction >= DIRECTION_COUNT) {
+        return false;
+    }
+    int length = structure_length(type);
+    int dx = direction_dx(direction), dy = direction_dy(direction);
+    for (int part = 0; part < length; part++) {
+        if (!map_in_bounds(map, x + part * dx, y + part * dy)) {
+            return false;
+        }
+    }
+    quality = (ItemQuality)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
+    bool same = true; /* The same structure already there: only its condition changes. */
+    for (int part = 0; part < length; part++) {
+        size_t index = map_index(map, x + part * dx, y + part * dy);
+        same = same && map->structure[index] == (uint8_t)type &&
+               map->structure_part[index] ==
+                   (uint8_t)((unsigned)direction | ((unsigned)part << PART_INDEX_SHIFT));
+    }
+    if (same) {
+        size_t head = map_index(map, x, y);
+        map->structure_quality[head] = (uint8_t)quality;
+        map->structure_hit_points[head] = (uint16_t)structure_max_hit_points(type, quality);
+        return true;
+    }
+    for (int part = 0; part < length; part++) {
+        map_remove_structure(map, x + part * dx, y + part * dy);
+    }
+    for (int part = 0; part < length; part++) {
+        bool head = part == 0;
+        set_tile_structure(map, x + part * dx, y + part * dy, type,
+                           (uint8_t)((unsigned)direction | ((unsigned)part << PART_INDEX_SHIFT)),
+                           head ? quality : ITEM_QUALITY_CRUDE,
+                           head ? structure_max_hit_points(type, quality) : 0);
+    }
+    return true;
+}
+
+void map_set_structure(Map *map, int x, int y, StructureType type)
+{
+    if (type == STRUCTURE_NONE) {
+        map_remove_structure(map, x, y);
+    } else {
+        map_place_structure(map, x, y, type, DIRECTION_SOUTH, ITEM_QUALITY_STANDARD);
     }
 }
 
 ItemQuality map_structure_quality(const Map *map, int x, int y)
 {
-    return map_in_bounds(map, x, y) ? (ItemQuality)map->structure_quality[map_index(map, x, y)]
-                                    : ITEM_QUALITY_CRUDE;
+    int origin_x, origin_y;
+    if (!map_structure_origin(map, x, y, &origin_x, &origin_y)) {
+        return ITEM_QUALITY_CRUDE;
+    }
+    return (ItemQuality)map->structure_quality[map_index(map, origin_x, origin_y)];
 }
 
 int map_structure_hit_points(const Map *map, int x, int y)
 {
-    return map_in_bounds(map, x, y) ? map->structure_hit_points[map_index(map, x, y)] : 0;
+    int origin_x, origin_y;
+    if (!map_structure_origin(map, x, y, &origin_x, &origin_y)) {
+        return 0;
+    }
+    return map->structure_hit_points[map_index(map, origin_x, origin_y)];
 }
 
 void map_set_structure_hit_points(Map *map, int x, int y, int hit_points)
 {
-    if (!map_in_bounds(map, x, y)) {
+    int origin_x, origin_y;
+    if (!map_structure_origin(map, x, y, &origin_x, &origin_y)) {
         return;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, origin_x, origin_y);
     StructureType type = (StructureType)map->structure[index];
-    if (type == STRUCTURE_NONE) {
-        return;
-    }
     int max = structure_max_hit_points(type, (ItemQuality)map->structure_quality[index]);
     map->structure_hit_points[index] = (uint16_t)clampi(hit_points, 1, max);
 }
@@ -319,6 +412,7 @@ uint64_t map_hash(const Map *map)
     hash = hash_fnv1a64(hash, map->cobbles, count);
     hash = hash_fnv1a64(hash, map->flint, count);
     hash = hash_fnv1a64(hash, map->structure, count);
+    hash = hash_fnv1a64(hash, map->structure_part, count);
     hash = hash_fnv1a64(hash, map->structure_quality, count);
     hash = hash_fnv1a64(hash, map->structure_hit_points,
                         count * sizeof(*map->structure_hit_points));

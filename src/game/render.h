@@ -47,10 +47,12 @@ void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Ca
 /* Built structures (beds, walls, doors) and construction sites. */
 void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
-/* Ghosts of the structures a rectangle would plan (its edges for walls), red
- * where they cannot be placed. */
+/* Ghosts of the structures a rectangle would plan (game_plan_structure_rect():
+ * its edges for walls, beds side by side facing `direction`), red where they
+ * cannot be placed. */
 void render_structure_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                              StructureType type, int x0, int y0, int x1, int y1);
+                              StructureType type, Direction direction, int x0, int y0, int x1,
+                              int y1);
 
 /* Rectangle of tiles being added to (or removed from) stockpile zones. */
 void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,

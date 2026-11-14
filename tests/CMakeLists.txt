@@ -3,6 +3,7 @@
 
 set(COLONY_UNIT_TESTS
     test_appearance
+    test_bed
     test_camera
     test_cli
     test_crafting

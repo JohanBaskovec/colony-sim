@@ -106,6 +106,17 @@ static StructureType structure_type_at(const App *app, int x, int y)
     return site != NULL ? (StructureType)site->type : STRUCTURE_NONE;
 }
 
+/* Direction of the structure, or of the construction site, on a tile. */
+static Direction structure_direction_at(const App *app, int x, int y)
+{
+    if (map_structure(&app->game.map, x, y) != STRUCTURE_NONE) {
+        return map_structure_direction(&app->game.map, x, y);
+    }
+    const Constructions *sites = &app->game.constructions;
+    const ConstructionSite *site = construction_get(sites, construction_at(sites, x, y));
+    return site != NULL ? (Direction)site->direction : DIRECTION_SOUTH;
+}
+
 static void select_structure(App *app, int x, int y)
 {
     clear_selection(app);
@@ -239,6 +250,7 @@ static void update_window_title(App *app)
 bool app_init(App *app, const CliOptions *options)
 {
     SDL_zerop(app);
+    app->structure_direction = DIRECTION_SOUTH; /* Beds' heads at the top. */
     log_set_sink(sdl_log_sink, NULL);
     SDL_SetAppMetadata("Colony Sim", COLONY_VERSION, "io.github.colony-sim");
 
@@ -408,6 +420,8 @@ static void build_like_selection(App *app)
         clear_selection(app);
         set_tool(app, APP_TOOL_BUILD, (int)type);
     } else if (structure != STRUCTURE_NONE) {
+        app->structure_direction =
+            structure_direction_at(app, app->selected_structure_x, app->selected_structure_y);
         clear_selection(app);
         set_tool(app, APP_TOOL_STRUCTURE, (int)structure);
     }
@@ -436,6 +450,9 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_STOCKPILE: app_toggle_tool(app, APP_TOOL_STOCKPILE, APP_ZONE_ADD); return;
     case APP_KEY_WORK: app->show_work_panel = !app->show_work_panel; return;
     case APP_KEY_BUILD: cycle_build_tool(app); return;
+    case APP_KEY_ROTATE:
+        app->structure_direction = direction_turn(app->structure_direction);
+        return;
     case APP_KEY_DEBUG:
         app->show_debug = !app->show_debug;
         app->debug_tree_count = map_count_plants(&app->game.map, PLANT_TREE);
@@ -661,7 +678,8 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         int x0, y0, x1, y1;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
         if (game_structure_buildable(&app->game, app->structure_type)) {
-            game_place_structure_rect(&app->game, app->structure_type, x0, y0, x1, y1);
+            game_place_structure_rect(&app->game, app->structure_type, app->structure_direction,
+                                      x0, y0, x1, y1);
         }
     } else if (app->tool == APP_TOOL_STOCKPILE) {
         apply_stockpile_tool(app, button->x, button->y);
@@ -798,11 +816,12 @@ static void render_frame(App *app)
             int x0, y0, x1, y1;
             tool_rect(app, mouse_x, mouse_y, &x0, &y0, &x1, &y1);
             render_structure_preview(app->renderer, &app->game, &app->camera,
-                                     app->structure_type, x0, y0, x1, y1);
+                                     app->structure_type, app->structure_direction, x0, y0, x1,
+                                     y1);
         } else if (app->hover_valid) {
             render_structure_preview(app->renderer, &app->game, &app->camera,
-                                     app->structure_type, app->hover_x, app->hover_y,
-                                     app->hover_x, app->hover_y);
+                                     app->structure_type, app->structure_direction, app->hover_x,
+                                     app->hover_y, app->hover_x, app->hover_y);
         }
     } else if (app->tool != APP_TOOL_NONE && app->left_button_down) {
         float mouse_x, mouse_y;

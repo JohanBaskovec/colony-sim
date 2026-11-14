@@ -125,6 +125,7 @@ hud.help.gathering = {0}: gathering zones (wood, berries, branches, twigs, grass
 hud.help.orders = {0}: mine rock · {1}: cancel orders
 # {0} = key of the stockpile zone tool, {1} = key of the build tool, {2} = key of the work priorities grid
 hud.help.copy = {0}: build another of what is selected (zone, workstation, bed, wall, door)
+hud.help.rotate = {0}: turn the bed being placed (head and foot)
 hud.help.manage = {0}: stockpile zones · {1}: workstations · click a zone or station: its settings · {2}: work priorities
 # {0} = tool name
 hud.tool = Tool: {0} · Left click/drag: apply · Esc: back
@@ -139,6 +140,7 @@ hud.tool.build_cost = Needs: {0} ×{1}
 hud.tool.build_help = Left click: place a blueprint · {0}: next workstation · Esc: back
 hud.tool.outline_help = Drag: walls along the edges of a rectangle · Click: one segment · Esc: back
 hud.tool.structure_help = Click: place one · Drag: fill a rectangle · Esc: back
+hud.tool.rotate_help = {0}: turn it
 
 # Tile inspector. {0}, {1} = tile coordinates
 hud.tile.position = Tile {0}, {1}
@@ -172,6 +174,8 @@ hud.tile.station = Workstation: {0}
 hud.tile.blueprint = Blueprint: {0} ({1}% built)
 hud.tile.structure = Construction: {0}
 hud.tile.refresh = Refreshing: {0} ({1}% done)
+hud.tile.bed_owner = Owner: {0}
+hud.tile.bed_free = Free bed: the next settler to sleep here takes it
 # {0}: material, {1}: brought so far, {2}: needed.
 hud.tile.material = {0}: {1}/{2}
 # Stones lying about a tile, that gathering may still find: {0} = item name, {1} = count
@@ -238,6 +242,8 @@ hud.colonist.tool = Tool: {0} ({1}, {2})
 # {0} = number of tools the settler wore out (they break at 0% hit points)
 hud.colonist.tools_broken.one = {0} tool worn out
 hud.colonist.tools_broken.other = {0} tools worn out
+hud.colonist.bed = Own bed: {0} ({1})
+hud.colonist.no_bed = No bed of their own
 # {0} = need name, {1} = percentage
 hud.colonist.need = {0}: {1}%
 # {0} = need name, {1} = percentage, {2} = state (e.g. Hungry)

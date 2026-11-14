@@ -1,5 +1,6 @@
 add_library(colony_core STATIC
     appearance.c
+    bed.c
     camera.c
     cli.c
     colonist.c

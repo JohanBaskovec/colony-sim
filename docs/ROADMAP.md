@@ -74,7 +74,8 @@ Tick items as they land and add newly discovered tasks.
 - [x] Beds: settlers sleep in the nearest free bed; on the ground rest comes back at ×0.8 and they work 10% slower for 12 hours after
 - [x] Quality of built things from the builder's level and the materials (capped at the materials' average grade + 1, grass and twigs do not cap); hit points by grade (bed 20, wall 60, screen 40 at standard, ×0.6 to ×1.5); a grass bed loses 1 hit point a day, gets a refresh site below half (4 dry grass, 125 ticks) and falls apart at 0; grade and hit points in the tile inspector
 - [ ] Built things, later: comfort by bed grade and the "slept on old bedding" mood (with moods); damage from fire, weather and animals; repairing walls and screens
-- [ ] Beds owned by one settler; beds of 1 × 2 tiles with a rotation
+- [x] Beds owned by one settler (taken the first night, kept, freed when the bed or the settler goes; the owner in the tile inspector, the bed in the colonist inspector); beds of 1 × 2 tiles, head and foot, turned with a key (F on QWERTY and AZERTY), laid side by side when a rectangle is dragged
+- [ ] Beds, later: the player assigns a bed to a settler (or frees it); double beds for couples (with relationships)
 - [ ] Haulers bring materials to construction sites (today the builder fetches them); a construction scenario in `bench_simulation`
 - [ ] Lean-to (roof), cave floor clearing; workstations built through construction sites
 - [ ] Room detection, roofs (lean-to, natural rock roof over caves)

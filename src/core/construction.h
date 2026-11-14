@@ -17,8 +17,9 @@
  * StructureDef.refresh_*, and finishing it brings the structure back to full
  * hit points. Structures worn down to 0 fall apart.
  *
- * Sites are kept in a fixed list with a dense layer of indices the size of
- * the map. Removing a site gives its delivered materials back.
+ * A site takes every tile of its structure (a bed: its head and its foot);
+ * its position is the structure's head. Sites are kept in a fixed list with
+ * a dense layer of indices the size of the map. Removing a site gives its delivered materials back.
  */
 #ifndef COLONY_CORE_CONSTRUCTION_H
 #define COLONY_CORE_CONSTRUCTION_H
@@ -37,20 +38,21 @@
 typedef struct ConstructionSite {
     bool used;
     uint8_t type; /* StructureType */
-    int16_t x, y;
+    int16_t x, y; /* The structure's head. */
+    uint8_t direction; /* Direction: where its other tiles lie (core/structure.h). */
     int number; /* Unique, never reused: tells a site from a later one in the same slot. */
     /* Materials brought so far, per slot of the structure's definition (a
      * slot keeps the lowest grade delivered). */
     ItemStack delivered[STRUCTURE_MATERIAL_SLOTS];
     float progress; /* Work done, once every material is in. */
-    float clear_progress; /* Work done clearing the plant on the tile, before building. */
+    float clear_progress; /* Work done clearing the plant of a tile, before building. */
     bool refresh; /* Refreshing the built structure of the tile, not building one. */
 } ConstructionSite;
 
 typedef struct Constructions {
     int width;
     int height;
-    uint16_t *at; /* Site index + 1 per tile, 0 when none. */
+    uint16_t *at; /* Site index + 1 on every tile of a site, 0 when none. */
     ConstructionSite list[CONSTRUCTION_MAX];
     int used_count;
     int next_number;
@@ -74,13 +76,21 @@ ConstructionSite *construction_get_mutable(Constructions *constructions, int ind
  * builder first). */
 bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y);
 
-/* Places a site. Returns its index, or CONSTRUCTION_NONE when the type is
- * invalid, the tile does not qualify or the list is full. */
+/* construction_can_place() on every tile a structure with its head at
+ * (x, y) would take. */
+bool construction_can_place_structure(const Constructions *constructions, const Map *map,
+                                      StructureType type, int x, int y, Direction direction);
+
+/* Places a site, its head at (x, y). Returns its index, or CONSTRUCTION_NONE
+ * when the type is invalid, a tile does not qualify or the list is full. */
 int constructions_place(Constructions *constructions, const Map *map, StructureType type, int x,
-                        int y);
+                        int y, Direction direction);
+
+/* Tile `part` of a site (0: the head, up to structure_length() - 1). */
+void construction_tile(const ConstructionSite *site, int part, int *x, int *y);
 
 /* Places a refresh site on a built structure that can be refreshed (see
- * StructureDef.refresh_work) and has no site yet. Returns its index, or
+ * StructureDef.refresh_work) and has no site yet, given any of its tiles. Returns its index, or
  * CONSTRUCTION_NONE. */
 int constructions_place_refresh(Constructions *constructions, const Map *map, int x, int y);
 

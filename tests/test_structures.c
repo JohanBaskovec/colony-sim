@@ -73,24 +73,28 @@ static void test_placing(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     /* Walls go along the edges of the rectangle, beds fill it. */
-    CHECK_EQ_INT(game_place_structure_rect(&game, STRUCTURE_WALL, 6, 5, 3, 3), 10);
+    CHECK_EQ_INT(game_place_structure_rect(&game, STRUCTURE_WALL, DIRECTION_SOUTH, 6, 5, 3, 3),
+                 10);
     CHECK_EQ_INT(game.constructions.used_count, 10);
     CHECK(construction_at(&game.constructions, 4, 4) == CONSTRUCTION_NONE); /* Inside. */
     CHECK(construction_at(&game.constructions, 3, 4) != CONSTRUCTION_NONE);
-    CHECK_EQ_INT(game_place_structure_rect(&game, STRUCTURE_GRASS_BED, 10, 10, 11, 11), 4);
-    CHECK_EQ_INT(game_place_structure_rect(&game, STRUCTURE_NONE, 20, 20, 21, 21), 0);
+    /* Beds of two tiles: two side by side on a 2 × 2 rectangle. */
+    CHECK_EQ_INT(
+        game_place_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_SOUTH, 10, 10, 11, 11), 2);
+    CHECK_EQ_INT(
+        game_place_structure_rect(&game, STRUCTURE_NONE, DIRECTION_SOUTH, 20, 20, 21, 21), 0);
 
     /* Not on a stockpile, a workstation or another site; no workstation on a
      * site or a structure. */
     CHECK(stockpile_create(&game.stockpiles, &game.map, 20, 20, 21, 21) != STOCKPILE_NONE);
-    CHECK(!game_can_place_structure(&game, 20, 20));
+    CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 20, 20, DIRECTION_SOUTH));
     CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 25, 25) != WORKSTATION_NONE);
-    CHECK(!game_can_place_structure(&game, 25, 25));
-    CHECK(!game_can_place_structure(&game, 3, 3));
+    CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 25, 25, DIRECTION_SOUTH));
+    CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 3, 3, DIRECTION_SOUTH));
     CHECK(!game_can_place_workstation(&game, 3, 3));
     map_set_structure(&game.map, 30, 30, STRUCTURE_GRASS_BED);
     CHECK(!game_can_place_workstation(&game, 30, 30));
-    CHECK(!game_can_place_structure(&game, 30, 30));
+    CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 30, 30, DIRECTION_SOUTH));
     game_shutdown(&game);
 }
 
@@ -98,7 +102,7 @@ static void test_cancelling_gives_materials_back(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    int index = game_place_structure(&game, STRUCTURE_WALL, 5, 5);
+    int index = game_place_structure(&game, STRUCTURE_WALL, 5, 5, DIRECTION_SOUTH);
     REQUIRE(index != CONSTRUCTION_NONE);
     construction_deliver(&game.constructions, index, item_stack_pristine(ITEM_BRANCHES, 4));
     construction_deliver(&game.constructions, index, item_stack_pristine(ITEM_GRASS, 6));
@@ -119,7 +123,8 @@ static void test_builder_brings_materials_and_builds_a_wall(void)
     items_add(&game.items, 12, 10, item_stack_pristine(ITEM_BRANCHES, 6));
     items_add(&game.items, 14, 10, item_stack_pristine(ITEM_GRASS, 30));
     items_add(&game.items, 16, 10, item_stack_pristine(ITEM_FRESH_GRASS, 30)); /* Not used. */
-    REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 10, 14) != CONSTRUCTION_NONE);
+    REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 10, 14, DIRECTION_SOUTH) !=
+            CONSTRUCTION_NONE);
     /* The wall tile is in a gathering zone and a stockpile: built, it leaves them. */
     int zone = gather_zone_create(&game.gather_zones, &game.map, 10, 14, 11, 14);
     REQUIRE(zone != GATHER_ZONE_NONE);
@@ -152,7 +157,8 @@ static void test_a_bush_is_cleared_before_building(void)
     items_add(&game.items, 14, 10, item_stack_pristine(ITEM_GRASS, 24));
     Plant *bush = &game.map.plants[map_index(&game.map, 10, 14)];
     *bush = (Plant){.type = PLANT_BUSH, .growth = 0.3f}; /* Young: no berries. */
-    REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 10, 14) != CONSTRUCTION_NONE);
+    REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 10, 14, DIRECTION_SOUTH) !=
+            CONSTRUCTION_NONE);
     CHECK(run_until_built(&game, 10, 14, 8 * TICKS_PER_HOUR));
     CHECK_EQ_INT(map_structure(&game.map, 10, 14), STRUCTURE_WALL);
     CHECK_EQ_INT(bush->type, PLANT_NONE);
@@ -166,7 +172,8 @@ static void test_no_building_without_materials_or_knowledge(void)
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_rested(&game, 10, 10);
     REQUIRE(colonist != NULL);
-    REQUIRE(game_place_structure(&game, STRUCTURE_GRASS_BED, 12, 12) != CONSTRUCTION_NONE);
+    REQUIRE(game_place_structure(&game, STRUCTURE_GRASS_BED, 12, 12, DIRECTION_SOUTH) !=
+            CONSTRUCTION_NONE);
     /* Fresh grass would mould: only dry grass makes a bed. */
     items_add(&game.items, 14, 10, item_stack_pristine(ITEM_FRESH_GRASS, 20));
     run_ticks(&game, 10);
@@ -228,6 +235,7 @@ static void test_settlers_sleep_in_beds(void)
     CHECK_EQ_INT(sleeper->task, TASK_SLEEP);
     CHECK_EQ_INT(other->task, TASK_SLEEP);
     CHECK_EQ_INT(reservations_owner(&game.reservations, RESERVATION_BED, (TilePos){13, 10}), 1);
+    CHECK_EQ_INT(beds_owner(&game.beds, 13, 10), 1); /* It takes the bed. */
     run_ticks(&game, 3 * TICKS_PER_HOUR);
     /* The first one walked to the bed, the other one sleeps where it is. */
     CHECK(sleeper->x == 13 && sleeper->y == 10);
@@ -247,6 +255,119 @@ static void test_settlers_sleep_in_beds(void)
     int left = other->ground_sleep_ticks;
     run_ticks(&game, 100);
     CHECK_EQ_INT(other->ground_sleep_ticks, left - 100);
+    game_shutdown(&game);
+}
+
+/* Settlers keep the bed they took; a bed taken apart or a settler gone frees
+ * it. */
+static void test_settlers_own_their_beds(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *owner = spawn_rested(&game, 10, 10);
+    Colonist *newcomer = spawn_rested(&game, 20, 10);
+    REQUIRE(owner != NULL && newcomer != NULL);
+    map_set_structure(&game.map, 11, 10, STRUCTURE_GRASS_BED);
+    map_set_structure(&game.map, 13, 10, STRUCTURE_GRASS_BED);
+    map_set_structure(&game.map, 16, 10, STRUCTURE_GRASS_BED);
+    REQUIRE(beds_assign(&game.beds, 1, 16, 10)); /* The first settler's bed. */
+    REQUIRE(beds_assign(&game.beds, 3, 13, 10)); /* A settler away from home. */
+    owner->needs[NEED_REST] = 0.2f;
+    newcomer->needs[NEED_REST] = 0.2f;
+
+    game_tick(&game);
+    run_ticks(&game, TICKS_PER_HOUR);
+    /* The owner walks past two free beds to its own; the newcomer takes the
+     * free one, past the beds of the others. */
+    CHECK(owner->x == 16 && owner->y == 10);
+    CHECK(newcomer->x == 11 && newcomer->y == 10);
+    TilePos bed;
+    CHECK(beds_owned(&game.beds, 2, &bed) && bed.x == 11 && bed.y == 10);
+    CHECK_EQ_INT(beds_owner(&game.beds, 13, 10), 3);
+    CHECK_EQ_INT(beds_owner(&game.beds, 16, 10), 1);
+
+    /* Its bed gone, the owner has none; the newcomer gone, its bed is free. */
+    map_set_structure(&game.map, 16, 11, STRUCTURE_NONE); /* By the foot. */
+    game_tick(&game);
+    CHECK(!beds_owned(&game.beds, 1, &bed));
+    CHECK(game_remove_colonist(&game, game_colonist_id_at(&game, 1)));
+    CHECK_EQ_INT(beds_owner(&game.beds, 11, 10), BED_NO_OWNER);
+    game_shutdown(&game);
+}
+
+typedef struct PlannedBeds {
+    int count;
+    int heads[8][2];
+    int allowed;
+} PlannedBeds;
+
+static void collect_planned(int x, int y, bool allowed, void *userdata)
+{
+    PlannedBeds *planned = userdata;
+    if (planned->count < 8) {
+        planned->heads[planned->count][0] = x;
+        planned->heads[planned->count][1] = y;
+    }
+    planned->count++;
+    planned->allowed += allowed;
+}
+
+static void test_planning_beds(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    /* A click: one bed, its head on the tile clicked, whichever way it goes. */
+    PlannedBeds planned = {0};
+    game_plan_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_WEST, 10, 10, 10, 10,
+                             collect_planned, &planned);
+    CHECK_EQ_INT(planned.count, 1);
+    CHECK(planned.heads[0][0] == 10 && planned.heads[0][1] == 10);
+    planned = (PlannedBeds){0};
+    game_plan_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_NORTH, 10, 10, 10, 10,
+                             collect_planned, &planned);
+    CHECK(planned.count == 1 && planned.heads[0][0] == 10 && planned.heads[0][1] == 10);
+
+    /* 3 × 3 facing south: a row of three beds, the last row too short. */
+    planned = (PlannedBeds){0};
+    game_plan_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_SOUTH, 12, 12, 10, 10,
+                             collect_planned, &planned);
+    CHECK_EQ_INT(planned.count, 3);
+    CHECK_EQ_INT(planned.allowed, 3);
+    CHECK(planned.heads[2][0] == 12 && planned.heads[2][1] == 10);
+    /* 4 × 1 facing east: two beds, heads on the west. */
+    planned = (PlannedBeds){0};
+    game_plan_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_EAST, 10, 20, 13, 20,
+                             collect_planned, &planned);
+    CHECK_EQ_INT(planned.count, 2);
+    CHECK(planned.heads[1][0] == 12 && planned.heads[1][1] == 20);
+
+    /* A bed whose foot would lie on a stockpile is refused. */
+    CHECK(stockpile_create(&game.stockpiles, &game.map, 30, 31, 30, 31) != STOCKPILE_NONE);
+    CHECK(!game_can_place_structure(&game, STRUCTURE_GRASS_BED, 30, 30, DIRECTION_SOUTH));
+    CHECK(game_can_place_structure(&game, STRUCTURE_GRASS_BED, 30, 30, DIRECTION_NORTH));
+    CHECK_EQ_INT(game_place_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_EAST, 10, 20,
+                                           13, 20),
+                 2);
+    CHECK_EQ_INT(construction_at(&game.constructions, 13, 20),
+                 construction_at(&game.constructions, 12, 20));
+    game_shutdown(&game);
+}
+
+/* A bed facing east is built whole by a settler working next to it. */
+static void test_building_a_bed_facing_east(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *builder = spawn_rested(&game, 8, 8);
+    REQUIRE(builder != NULL);
+    items_add(&game.items, 6, 8, item_stack_pristine(ITEM_GRASS, 12));
+    REQUIRE(game_place_structure(&game, STRUCTURE_GRASS_BED, 12, 8, DIRECTION_EAST) !=
+            CONSTRUCTION_NONE);
+    CHECK(run_until_built(&game, 13, 8, 4 * TICKS_PER_HOUR));
+    CHECK(map_structure_is_origin(&game.map, 12, 8));
+    CHECK_EQ_INT(map_structure(&game.map, 13, 8), STRUCTURE_GRASS_BED);
+    CHECK_EQ_INT(map_structure_direction(&game.map, 13, 8), DIRECTION_EAST);
+    CHECK_EQ_INT(game.constructions.used_count, 0);
     game_shutdown(&game);
 }
 
@@ -295,7 +416,8 @@ static void test_worn_bed_is_refreshed(void)
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_rested(&game, 10, 10);
     REQUIRE(colonist != NULL);
-    map_build_structure(&game.map, 12, 12, STRUCTURE_GRASS_BED, ITEM_QUALITY_STANDARD);
+    map_place_structure(&game.map, 12, 12, STRUCTURE_GRASS_BED, DIRECTION_SOUTH,
+                        ITEM_QUALITY_STANDARD);
     map_set_structure_hit_points(&game.map, 12, 12, 10);
     items_add(&game.items, 14, 10, item_stack_pristine(ITEM_GRASS, 6));
     /* The day ends: the bed wears below half, a refresh site appears. */
@@ -347,6 +469,9 @@ int main(void)
     RUN_TEST(test_colonist_steps_out_of_a_new_wall);
     RUN_TEST(test_doors_let_settlers_through_slowly);
     RUN_TEST(test_settlers_sleep_in_beds);
+    RUN_TEST(test_settlers_own_their_beds);
+    RUN_TEST(test_planning_beds);
+    RUN_TEST(test_building_a_bed_facing_east);
     RUN_TEST(test_ground_sleep_takes_longer);
     RUN_TEST(test_taking_a_wall_apart);
     RUN_TEST(test_worn_bed_is_refreshed);

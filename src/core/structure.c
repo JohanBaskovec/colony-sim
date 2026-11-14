@@ -22,17 +22,17 @@
  */
 static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
     [STRUCTURE_NONE] = {"none", NULL, NULL, {{ITEM_NONE, 0}, {ITEM_NONE, 0}}, 0.0f,
-                        KNOWLEDGE_NONE, 0.0f, 1.0f, 0.0f, false, 0, 0, {ITEM_NONE, 0}, 0.0f},
+                        KNOWLEDGE_NONE, 0.0f, 1.0f, 0.0f, false, 0, 0, 0, {ITEM_NONE, 0}, 0.0f},
     [STRUCTURE_GRASS_BED] = {"grass_bed", N_("structure.grass_bed"),
                              N_("structure.grass_bed.description"),
                              {{ITEM_GRASS, 12}, {ITEM_NONE, 0}}, 625.0f, KNOWLEDGE_BASIC_SHELTERS,
-                             50.0f, 1.2f, 1.0f, false, 20, 1, {ITEM_GRASS, 4}, 125.0f},
+                             50.0f, 1.2f, 1.0f, false, 2, 20, 1, {ITEM_GRASS, 4}, 125.0f},
     [STRUCTURE_WALL] = {"grass_wall", N_("structure.wall"), N_("structure.wall.description"),
                         {{ITEM_BRANCHES, 5}, {ITEM_GRASS, 24}}, 5000.0f, KNOWLEDGE_BASIC_SHELTERS,
-                        50.0f, 0.0f, 0.0f, true, 60, 0, {ITEM_NONE, 0}, 0.0f},
+                        50.0f, 0.0f, 0.0f, true, 1, 60, 0, {ITEM_NONE, 0}, 0.0f},
     [STRUCTURE_DOOR] = {"branch_screen", N_("structure.door"), N_("structure.door.description"),
                         {{ITEM_BRANCHES, 5}, {ITEM_TWIGS, 5}}, 3750.0f, KNOWLEDGE_BASIC_SHELTERS,
-                        55.0f, 1.5f, 0.0f, false, 40, 0, {ITEM_NONE, 0}, 0.0f},
+                        55.0f, 1.5f, 0.0f, false, 1, 40, 0, {ITEM_NONE, 0}, 0.0f},
 };
 
 /* Hit points by grade, crude to superb. */
@@ -68,6 +68,26 @@ ItemQuality structure_quality_cap(StructureType type,
     }
     /* The average rounded down, + 1. */
     return (ItemQuality)clampi(sum / graded + 1, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
+}
+
+int direction_dx(Direction direction)
+{
+    return direction == DIRECTION_EAST ? 1 : direction == DIRECTION_WEST ? -1 : 0;
+}
+
+int direction_dy(Direction direction)
+{
+    return direction == DIRECTION_SOUTH ? 1 : direction == DIRECTION_NORTH ? -1 : 0;
+}
+
+Direction direction_turn(Direction direction)
+{
+    return (Direction)(((unsigned)direction + 1) % DIRECTION_COUNT);
+}
+
+int structure_length(StructureType type)
+{
+    return (unsigned)type < STRUCTURE_TYPE_COUNT ? STRUCTURE_DEFS[type].length : 0;
 }
 
 /* Taking apart is quicker than building. */

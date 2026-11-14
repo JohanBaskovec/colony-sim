@@ -164,6 +164,30 @@ static void add_structure_condition_line(Panel *panel, const Map *map, int x, in
               tr(item_quality_name_key(grade)), hit_points, max_hit_points, percent);
 }
 
+/* Owner of a bed (the settler's id is its slot + 1, core/bed.h). */
+static const Colonist *bed_owner(const Game *game, int x, int y)
+{
+    int origin_x, origin_y;
+    if (!map_structure_origin(&game->map, x, y, &origin_x, &origin_y)) {
+        return NULL;
+    }
+    uint8_t owner = beds_owner(&game->beds, origin_x, origin_y);
+    if (owner == BED_NO_OWNER) {
+        return NULL;
+    }
+    return game_colonist_const(game, game_colonist_id_at(game, (uint32_t)owner - 1));
+}
+
+static void add_bed_owner_line(const App *app, Panel *panel, int x, int y)
+{
+    const Colonist *owner = bed_owner(&app->game, x, y);
+    if (owner != NULL) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.bed_owner"), owner->name);
+    } else {
+        panel_add_text(panel, tr("hud.tile.bed_free"));
+    }
+}
+
 static void build_status_panel(App *app, Panel *panel)
 {
     const GameClock *clock = &app->game.clock;
@@ -253,6 +277,9 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.structure"),
                   tr(structure_def(structure)->name_key));
         add_structure_condition_line(panel, map, x, y);
+        if (structure_is_bed(structure)) {
+            add_bed_owner_line(app, panel, x, y);
+        }
     }
     const ConstructionSite *site = construction_get(
         &app->game.constructions, construction_at(&app->game.constructions, x, y));
@@ -458,6 +485,15 @@ static void build_selection_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.colonist.ground_sleep", left),
                   percent, hours);
     }
+    TilePos bed;
+    if (beds_owned(&app->game.beds, (uint8_t)(app->selected[0].index + 1), &bed)) {
+        StructureType type = map_structure(&app->game.map, bed.x, bed.y);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.bed"),
+                  tr(structure_def(type)->name_key),
+                  tr(item_quality_name_key(map_structure_quality(&app->game.map, bed.x, bed.y))));
+    } else {
+        panel_add_text(panel, tr("hud.colonist.no_bed"));
+    }
     /* Knowledges the settler has started to learn: level with one decimal,
      * and the work speed once it is high enough to use. */
     panel_add_text(panel, tr("hud.colonist.knowledge"));
@@ -571,6 +607,8 @@ static void help_window(App *app)
               app_key_name(APP_KEY_WORK));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.copy"),
               app_key_name(APP_KEY_BUILD_LIKE));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.rotate"),
+              app_key_name(APP_KEY_ROTATE));
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_HELP, tr("help.title"), UI_PLACE_CENTER, panel_rows,
                      &help, &open);
@@ -680,6 +718,10 @@ void hud_draw(App *app)
             menu_bar_structure_cost(panel_add(&tool), HUD_LINE_SIZE, app->structure_type);
             panel_add_text(&tool, tr(def->drawn_as_outline ? "hud.tool.outline_help"
                                                            : "hud.tool.structure_help"));
+            if (def->length > 1) {
+                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.rotate_help"),
+                          app_key_name(APP_KEY_ROTATE));
+            }
             if (!game_structure_buildable(&app->game, app->structure_type)) {
                 panel_add_text(&tool, tr("hud.tool.unavailable"));
             }

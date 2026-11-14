@@ -9,6 +9,11 @@
  * structures (docs/KNOWLEDGE.md §10): a wall segment is 1 m long and 2 m
  * high, a frame of posts and rails thatched with dry grass.
  *
+ * Most structures take one tile; a grass bed takes two (2 m × 0.8 m), its
+ * head and its foot, turned in one of four directions. The head is the
+ * structure's origin: where its grade and hit points are kept, where a
+ * settler lies down.
+ *
  * A built structure has a grade (the builder's level, capped by the grade of
  * its materials) and hit points (more for a better grade). Some wear by
  * themselves (a grass bed loses a hit point a day) and are refreshed with a
@@ -32,6 +37,26 @@ typedef enum StructureType {
 
 #define STRUCTURE_MATERIAL_SLOTS 2
 
+/* Tiles of the longest structure. */
+#define STRUCTURE_LENGTH_MAX 2
+
+/* Where a long structure goes from its head: the foot of a bed facing south
+ * lies under its head. */
+typedef enum Direction {
+    DIRECTION_NORTH = 0,
+    DIRECTION_EAST,
+    DIRECTION_SOUTH,
+    DIRECTION_WEST,
+    DIRECTION_COUNT
+} Direction;
+
+/* One step in a direction (y grows southwards). */
+int direction_dx(Direction direction);
+int direction_dy(Direction direction);
+
+/* The next direction clockwise. */
+Direction direction_turn(Direction direction);
+
 typedef struct StructureMaterial {
     ItemType type; /* ITEM_NONE: unused slot. */
     int count;
@@ -51,6 +76,7 @@ typedef struct StructureDef {
     float rest_factor;
     /* Placed along the edges of a dragged rectangle (walls), not one by one. */
     bool drawn_as_outline;
+    int length; /* Tiles, from the head along its direction (a bed: 2). */
     int max_hit_points; /* At standard grade (see structure_max_hit_points()). */
     int wear_per_day;   /* Hit points lost each day by itself (bedding packs down). */
     /* Refreshing (a new layer of bedding): material and work; no refresh
@@ -71,6 +97,11 @@ bool structure_blocks(StructureType type);
 
 /* Whether settlers sleep on it. */
 bool structure_is_bed(StructureType type);
+
+/* Tiles it takes: 1 for most, 2 for a bed (0 for STRUCTURE_NONE). Part `i`
+ * of a structure whose head is at (x, y) lies at (x + i × direction_dx(),
+ * y + i × direction_dy()). */
+int structure_length(StructureType type);
 
 /* Hit points of a structure of a grade: the standard ones × the grade
  * factor (×0.6 crude to ×1.5 superb, docs/KNOWLEDGE.md §2.2); at least 1.

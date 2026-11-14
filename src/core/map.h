@@ -127,9 +127,13 @@ typedef struct Map {
      * World generation puts none on sand (see gather_stone_ground()). */
     uint8_t *cobbles;
     uint8_t *flint;
-    /* Built structures (StructureType per tile): beds, walls, doors, with
-     * their grade (ItemQuality) and hit points (see core/structure.h). */
+    /* Built structures (StructureType on every tile they take): beds,
+     * walls, doors. `structure_part` holds the structure's Direction (bits
+     * 0-1) and which of its tiles this is (bits 2-3, 0 for the head); the
+     * grade (ItemQuality) and hit points are kept on the head (see
+     * core/structure.h). */
     uint8_t *structure;
+    uint8_t *structure_part;
     uint8_t *structure_quality;
     uint16_t *structure_hit_points;
     int structure_counts[STRUCTURE_TYPE_COUNT]; /* Tiles holding each type. */
@@ -201,20 +205,39 @@ void map_set_rock(Map *map, int x, int y, RockType rock);
 void map_topology_changed(Map *map);
 
 /* Same rule for structures (a wall blocks movement, a door slows it). The
- * plant of the tile is cleared when a structure is built on it. The
- * structure is of standard grade, in perfect condition. */
+ * plants of its tiles are cleared when a structure is built.
+ *
+ * Builds a structure of a grade, in perfect condition, with its head at
+ * (x, y) and its other tiles in `direction` (see structure_length()). Any
+ * structure already on those tiles is removed whole. Fails (nothing changes)
+ * when a tile is out of bounds. */
+bool map_place_structure(Map *map, int x, int y, StructureType type, Direction direction,
+                         ItemQuality quality);
+
+/* map_place_structure() of standard grade, facing south; STRUCTURE_NONE
+ * removes the structure covering the tile (map_remove_structure()). */
 void map_set_structure(Map *map, int x, int y, StructureType type);
 
-/* Builds a structure of a grade, in perfect condition. */
-void map_build_structure(Map *map, int x, int y, StructureType type, ItemQuality quality);
+/* Removes the whole structure covering a tile, all its tiles. */
+void map_remove_structure(Map *map, int x, int y);
 
-/* Grade and hit points of the structure on a tile (0 hit points without
- * one or out of bounds). */
+/* Head of the structure covering a tile (the tile itself for a one-tile
+ * structure); false without a structure. */
+bool map_structure_origin(const Map *map, int x, int y, int *origin_x, int *origin_y);
+
+/* Whether the tile holds the head of a structure. */
+bool map_structure_is_origin(const Map *map, int x, int y);
+
+/* Direction of the structure covering a tile (DIRECTION_SOUTH without one). */
+Direction map_structure_direction(const Map *map, int x, int y);
+
+/* Grade and hit points of the structure covering a tile (0 hit points
+ * without one or out of bounds). */
 ItemQuality map_structure_quality(const Map *map, int x, int y);
 int map_structure_hit_points(const Map *map, int x, int y);
 
-/* Sets the hit points of the structure on a tile, clamped to 1..its maximum
- * (nothing without a structure). */
+/* Sets the hit points of the structure covering a tile, clamped to 1..its
+ * maximum (nothing without a structure). */
 void map_set_structure_hit_points(Map *map, int x, int y, int hit_points);
 
 /* STRUCTURE_NONE out of bounds. */

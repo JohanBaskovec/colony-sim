@@ -644,25 +644,53 @@ static bool try_satisfy_urgent(Colonist *colonist, const ColonistContext *contex
     return false;
 }
 
-/* Search filter: a bed nobody else sleeps in or walks to. */
+/* Search filter: the head of a bed nobody else owns, sleeps in or walks to. */
 static bool is_free_bed(const Map *map, int x, int y, void *userdata)
 {
     const ColonistContext *context = userdata;
-    return structure_is_bed(map_structure(map, x, y)) &&
+    uint8_t owner = beds_owner(context->beds, x, y);
+    return map_structure_is_origin(map, x, y) && structure_is_bed(map_structure(map, x, y)) &&
+           (owner == BED_NO_OWNER || owner == context->worker_id) &&
            !reservations_taken_by_other(context->reservations, RESERVATION_BED,
                                         (TilePos){(int16_t)x, (int16_t)y}, context->worker_id);
 }
 
-/* Goes to sleep in the nearest free bed, or where the colonist stands. */
+typedef struct OwnBedSearch {
+    const ColonistContext *context;
+    TilePos bed;
+} OwnBedSearch;
+
+static bool is_own_bed(const Map *map, int x, int y, void *userdata)
+{
+    const OwnBedSearch *search = userdata;
+    return x == search->bed.x && y == search->bed.y &&
+           is_free_bed(map, x, y, (void *)search->context);
+}
+
+/* Goes to sleep in its own bed, else in the nearest free one (which becomes
+ * its own), else where the colonist stands. */
 static void start_sleeping(Colonist *colonist, const ColonistContext *context)
 {
     begin_task(colonist, context, TASK_SLEEP);
     path_clear(&colonist->path);
+    if (context->map->structure_counts[STRUCTURE_GRASS_BED] == 0) {
+        return;
+    }
     TilePos bed;
-    if (context->map->structure_counts[STRUCTURE_GRASS_BED] > 0 &&
-        pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                is_free_bed, (void *)context, COLONIST_BED_SEARCH_MAX_COST,
-                                &colonist->path, &bed)) {
+    OwnBedSearch own = {context, {-1, -1}};
+    bool found = false;
+    if (beds_owned(context->beds, context->worker_id, &own.bed)) {
+        found = pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                        is_own_bed, &own, COLONIST_BED_SEARCH_MAX_COST,
+                                        &colonist->path, &bed);
+    }
+    if (!found && pathfinder_find_nearest(context->pathfinder, context->map,
+                                          current_tile(colonist), is_free_bed, (void *)context,
+                                          COLONIST_BED_SEARCH_MAX_COST, &colonist->path, &bed)) {
+        found = true;
+        beds_assign(context->beds, context->worker_id, bed.x, bed.y);
+    }
+    if (found) {
         colonist->target = bed;
         reservations_add(context->reservations, RESERVATION_BED, bed, context->worker_id);
     }
@@ -1884,13 +1912,19 @@ static bool next_to(int x, int y, TilePos tile)
 
 /* Whether a site offers work to this colonist: free, buildable by it, and
  * either ready for work or missing a material that lies somewhere. */
+/* A site is reserved on its head, whichever of its tiles a builder works by. */
+static TilePos site_origin(const ConstructionSite *site)
+{
+    return (TilePos){site->x, site->y};
+}
+
 static bool site_has_job(const ColonistContext *context, const Colonist *worker, int x, int y)
 {
     const ConstructionSite *site =
         construction_get(context->constructions, construction_at(context->constructions, x, y));
     if (site == NULL || !colonist_can_construct(worker, (StructureType)site->type) ||
         reservations_taken_by_other(context->reservations, RESERVATION_CONSTRUCTION,
-                                    (TilePos){(int16_t)x, (int16_t)y}, context->worker_id)) {
+                                    site_origin(site), context->worker_id)) {
         return false;
     }
     if (construction_materials_complete(site)) {
@@ -2007,10 +2041,11 @@ static bool construction_job_still_valid(const Colonist *colonist,
 {
     const ConstructionSite *site = job_site(colonist, context);
     return site != NULL &&
-           (!site->refresh || map_structure(context->map, site->x, site->y) ==
-                                  (StructureType)site->type) &&
+           (!site->refresh || (map_structure_is_origin(context->map, site->x, site->y) &&
+                               map_structure(context->map, site->x, site->y) ==
+                                   (StructureType)site->type)) &&
            reservations_owner(context->reservations, RESERVATION_CONSTRUCTION,
-                              colonist->target) == context->worker_id &&
+                              site_origin(site)) == context->worker_id &&
            colonist->work_priorities[WORK_CONSTRUCTION] != WORK_PRIORITY_DISABLED &&
            colonist_can_construct(colonist, (StructureType)site->type);
 }
@@ -2035,11 +2070,13 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
     }
     find_adjacent_site(&search, spot.x, spot.y, &target);
     int index = construction_at(context->constructions, target.x, target.y);
+    const ConstructionSite *site = construction_get(context->constructions, index);
     begin_task(colonist, context, TASK_CONSTRUCT);
     colonist->site = index;
-    colonist->site_number = construction_get(context->constructions, index)->number;
-    colonist->target = target;
-    reservations_add(context->reservations, RESERVATION_CONSTRUCTION, target, context->worker_id);
+    colonist->site_number = site->number;
+    colonist->target = target; /* The tile of the site worked by, its head or another. */
+    reservations_add(context->reservations, RESERVATION_CONSTRUCTION, site_origin(site),
+                     context->worker_id);
     if (!plan_construction(colonist, context)) {
         set_idle(colonist, context, 0);
         path_clear(&colonist->path);
@@ -2072,13 +2109,32 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
     return taken > 0;
 }
 
-/* A blocking structure was built: zones lose the tile. */
-static void structure_built(const ColonistContext *context, StructureType type, TilePos tile)
+/* A blocking structure was built: zones lose its tiles. */
+static void structure_built(const ColonistContext *context, const ConstructionSite *site)
 {
-    if (structure_blocks(type)) {
-        stockpiles_remove_rect(context->stockpiles, tile.x, tile.y, tile.x, tile.y);
-        gather_zones_remove_rect(context->gather_zones, tile.x, tile.y, tile.x, tile.y);
+    StructureType type = (StructureType)site->type;
+    for (int part = 0; structure_blocks(type) && part < structure_length(type); part++) {
+        int x, y;
+        construction_tile(site, part, &x, &y);
+        stockpiles_remove_rect(context->stockpiles, x, y, x, y);
+        gather_zones_remove_rect(context->gather_zones, x, y, x, y);
     }
+}
+
+/* Clears the plants of a site's tiles, one after the other (see
+ * clear_plant_first()). */
+static bool clear_site_first(Colonist *colonist, const ColonistContext *context,
+                             ConstructionSite *site)
+{
+    for (int part = 0; part < structure_length((StructureType)site->type); part++) {
+        int x, y;
+        construction_tile(site, part, &x, &y);
+        if (clear_plant_first(colonist, context, (TilePos){(int16_t)x, (int16_t)y},
+                              &site->clear_progress)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static void construction_job(Colonist *colonist, const ColonistContext *context)
@@ -2123,9 +2179,10 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
         return;
     }
     ConstructionSite *clearing = construction_get_mutable(context->constructions, colonist->site);
-    if (clear_plant_first(colonist, context, colonist->target, &clearing->clear_progress)) {
+    if (clear_site_first(colonist, context, clearing)) {
         return;
     }
+    ConstructionSite done = *site; /* Gone from the list once built. */
     StructureType type = (StructureType)site->type;
     KnowledgeType knowledge = structure_def(type)->knowledge;
     float speed = colonist_work_speed(colonist, knowledge) *
@@ -2137,7 +2194,7 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
                                        context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1);
     if (built) {
-        structure_built(context, type, colonist->target);
+        structure_built(context, &done);
         set_idle(colonist, context, 0);
     }
 }

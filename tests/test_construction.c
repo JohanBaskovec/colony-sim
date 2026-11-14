@@ -75,14 +75,16 @@ static void test_map_layer(void)
     uint32_t revision = map.topology_revision;
     uint64_t hash = map_hash(&map);
 
-    /* A bed: no topology change, slower to cross, the grass is gone. */
+    /* A bed (two tiles, facing south): no topology change, slower to cross,
+     * the grass is gone. */
     map_set_structure(&map, 2, 2, STRUCTURE_GRASS_BED);
     CHECK_EQ_INT(map_structure(&map, 2, 2), STRUCTURE_GRASS_BED);
+    CHECK_EQ_INT(map_structure(&map, 2, 3), STRUCTURE_GRASS_BED);
     CHECK_EQ_INT(map.plants[map_index(&map, 2, 2)].type, PLANT_NONE);
     CHECK_EQ_UINT(map.topology_revision, revision);
     CHECK(map_is_passable(&map, 2, 2));
     CHECK_NEAR(map_move_cost(&map, 2, 2), 1.2f, 0.001f);
-    CHECK_EQ_INT(map.structure_counts[STRUCTURE_GRASS_BED], 1);
+    CHECK_EQ_INT(map.structure_counts[STRUCTURE_GRASS_BED], 2);
     CHECK(map_hash(&map) != hash);
 
     /* A wall blocks: a topology change. */
@@ -95,7 +97,7 @@ static void test_map_layer(void)
     CHECK(map_is_passable(&map, 3, 2));
     CHECK_EQ_UINT(map.topology_revision, revision + 2);
     CHECK_EQ_INT(map.structure_counts[STRUCTURE_WALL], 0);
-    CHECK_EQ_INT(map.structure_counts[STRUCTURE_NONE], 255);
+    CHECK_EQ_INT(map.structure_counts[STRUCTURE_NONE], 254);
 
     /* Out of bounds and invalid types are ignored. */
     map_set_structure(&map, -1, 0, STRUCTURE_WALL);
@@ -120,10 +122,10 @@ static void test_placing_and_removing(void)
     CHECK(construction_can_place(&constructions, &map, 10, 10)); /* So is a bush. */
     map_set_structure(&map, 9, 9, STRUCTURE_GRASS_BED);
     CHECK(!construction_can_place(&constructions, &map, 9, 9)); /* Already built. */
-    CHECK_EQ_INT(constructions_place(&constructions, &map, STRUCTURE_NONE, 2, 2),
+    CHECK_EQ_INT(constructions_place(&constructions, &map, STRUCTURE_NONE, 2, 2, DIRECTION_SOUTH),
                  CONSTRUCTION_NONE);
 
-    int index = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2);
+    int index = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2, DIRECTION_SOUTH);
     REQUIRE(index != CONSTRUCTION_NONE);
     CHECK_EQ_INT(construction_at(&constructions, 2, 2), index);
     CHECK_EQ_INT(constructions.used_count, 1);
@@ -155,7 +157,7 @@ static void test_delivering(void)
     Constructions constructions;
     Items items;
     REQUIRE(init_world(&map, &constructions, &items));
-    int index = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2);
+    int index = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2, DIRECTION_SOUTH);
     const ConstructionSite *site = construction_get(&constructions, index);
     uint32_t revision = constructions.revision;
     /* Only what is missing is taken; grades mix, the lowest one stays. */
@@ -183,7 +185,7 @@ static void test_building(void)
     Constructions constructions;
     Items items;
     REQUIRE(init_world(&map, &constructions, &items));
-    int index = constructions_place(&constructions, &map, STRUCTURE_WALL, 8, 8);
+    int index = constructions_place(&constructions, &map, STRUCTURE_WALL, 8, 8, DIRECTION_SOUTH);
     construction_deliver(&constructions, index, item_stack_pristine(ITEM_BRANCHES, 5));
     construction_deliver(&constructions, index, item_stack_pristine(ITEM_GRASS, 24));
     items_add(&items, 8, 8, item_stack_pristine(ITEM_COBBLE, 3)); /* In the way. */
@@ -213,9 +215,9 @@ static void test_hash(void)
     REQUIRE(init_world(&map, &a, &items));
     REQUIRE(constructions_init(&b, 16, 16));
     CHECK(constructions_hash(&a, 1) == constructions_hash(&b, 1));
-    int index = constructions_place(&a, &map, STRUCTURE_DOOR, 1, 1);
+    int index = constructions_place(&a, &map, STRUCTURE_DOOR, 1, 1, DIRECTION_SOUTH);
     CHECK(constructions_hash(&a, 1) != constructions_hash(&b, 1));
-    constructions_place(&b, &map, STRUCTURE_DOOR, 1, 1);
+    constructions_place(&b, &map, STRUCTURE_DOOR, 1, 1, DIRECTION_SOUTH);
     CHECK(constructions_hash(&a, 1) == constructions_hash(&b, 1));
     construction_deliver(&a, index, item_stack_pristine(ITEM_TWIGS, 2));
     CHECK(constructions_hash(&a, 1) != constructions_hash(&b, 1));
@@ -249,7 +251,7 @@ static void test_grades_and_hit_points(void)
     CHECK_EQ_INT(map_structure_quality(&map, 2, 2), ITEM_QUALITY_STANDARD);
     CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 60);
     uint64_t hash = map_hash(&map);
-    map_build_structure(&map, 2, 2, STRUCTURE_WALL, ITEM_QUALITY_FINE);
+    map_place_structure(&map, 2, 2, STRUCTURE_WALL, DIRECTION_SOUTH, ITEM_QUALITY_FINE);
     CHECK_EQ_INT(map_structure_quality(&map, 2, 2), ITEM_QUALITY_FINE);
     CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 72);
     CHECK(map_hash(&map) != hash);
@@ -272,7 +274,7 @@ static void test_built_grade(void)
     Items items;
     REQUIRE(init_world(&map, &constructions, &items));
     /* A master builder, crude branches: rough at best. */
-    int wall = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2);
+    int wall = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2, DIRECTION_SOUTH);
     construction_deliver(&constructions, wall,
                          item_stack_make(ITEM_BRANCHES, 5, ITEM_QUALITY_CRUDE, 0));
     construction_deliver(&constructions, wall, item_stack_pristine(ITEM_GRASS, 24));
@@ -282,12 +284,13 @@ static void test_built_grade(void)
     CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2),
                  structure_max_hit_points(STRUCTURE_WALL, ITEM_QUALITY_ROUGH));
     /* Grass does not cap: the builder's level does. */
-    int bed = constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 3, 3);
+    int bed = constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 3, 3, DIRECTION_SOUTH);
     construction_deliver(&constructions, bed, item_stack_pristine(ITEM_GRASS, 12));
     CHECK(construction_add_work(&constructions, &map, &items, bed, 1.0e6f, KNOWLEDGE_LEVEL_MAX,
                                 NULL));
     CHECK_EQ_INT(map_structure_quality(&map, 3, 3), ITEM_QUALITY_SUPERB);
-    int poor = constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 4, 4);
+    int poor =
+        constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 4, 4, DIRECTION_SOUTH);
     construction_deliver(&constructions, poor, item_stack_pristine(ITEM_GRASS, 12));
     CHECK(construction_add_work(&constructions, &map, &items, poor, 1.0e6f, 50.0, NULL));
     CHECK_EQ_INT(map_structure_quality(&map, 4, 4), ITEM_QUALITY_ROUGH);
@@ -300,7 +303,7 @@ static void test_refreshing_a_bed(void)
     Constructions constructions;
     Items items;
     REQUIRE(init_world(&map, &constructions, &items));
-    map_build_structure(&map, 2, 2, STRUCTURE_GRASS_BED, ITEM_QUALITY_FINE);
+    map_place_structure(&map, 2, 2, STRUCTURE_GRASS_BED, DIRECTION_SOUTH, ITEM_QUALITY_FINE);
     map_set_structure(&map, 3, 3, STRUCTURE_WALL);
     /* Only on a structure that can be refreshed, once. */
     CHECK_EQ_INT(constructions_place_refresh(&constructions, &map, 3, 3), CONSTRUCTION_NONE);
@@ -351,6 +354,7 @@ static void test_beds_wear_by_the_day(void)
     int site = construction_at(&constructions, 2, 2);
     REQUIRE(site != CONSTRUCTION_NONE);
     CHECK(construction_get(&constructions, site)->refresh);
+    CHECK_EQ_INT(construction_at(&constructions, 2, 3), site); /* On the foot too. */
     CHECK_EQ_INT(map_structure_hit_points(&map, 3, 3), 60); /* Walls do not wear. */
     /* Nobody refreshes it: it falls apart, the grass brought is dropped. */
     construction_deliver(&constructions, site, item_stack_pristine(ITEM_GRASS, 2));
@@ -360,8 +364,100 @@ static void test_beds_wear_by_the_day(void)
     CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2), 1);
     CHECK_EQ_INT(constructions_wear_day(&constructions, &map, &items), 1);
     CHECK_EQ_INT(map_structure(&map, 2, 2), STRUCTURE_NONE);
+    CHECK_EQ_INT(map_structure(&map, 2, 3), STRUCTURE_NONE);
     CHECK_EQ_INT(construction_at(&constructions, 2, 2), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(construction_at(&constructions, 2, 3), CONSTRUCTION_NONE);
     CHECK_EQ_INT((int)items.totals[ITEM_GRASS], 2);
+    free_world(&map, &constructions, &items);
+}
+
+static void test_long_structures(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16));
+    CHECK_EQ_INT(structure_length(STRUCTURE_GRASS_BED), 2);
+    CHECK_EQ_INT(structure_length(STRUCTURE_WALL), 1);
+    CHECK_EQ_INT(structure_length(STRUCTURE_NONE), 0);
+    CHECK_EQ_INT(direction_turn(DIRECTION_WEST), DIRECTION_NORTH);
+    CHECK_EQ_INT(direction_dx(DIRECTION_EAST) + direction_dy(DIRECTION_NORTH), 0);
+
+    /* A bed facing east: its foot east of its head. */
+    REQUIRE(map_place_structure(&map, 5, 5, STRUCTURE_GRASS_BED, DIRECTION_EAST,
+                                ITEM_QUALITY_FINE));
+    CHECK_EQ_INT(map_structure(&map, 6, 5), STRUCTURE_GRASS_BED);
+    CHECK_EQ_INT(map_structure(&map, 4, 5), STRUCTURE_NONE);
+    int x = -1, y = -1;
+    CHECK(map_structure_origin(&map, 6, 5, &x, &y) && x == 5 && y == 5);
+    CHECK(map_structure_is_origin(&map, 5, 5));
+    CHECK(!map_structure_is_origin(&map, 6, 5));
+    CHECK_EQ_INT(map_structure_direction(&map, 6, 5), DIRECTION_EAST);
+    /* Grade and hit points are the head's, read or written by any tile. */
+    CHECK_EQ_INT(map_structure_quality(&map, 6, 5), ITEM_QUALITY_FINE);
+    map_set_structure_hit_points(&map, 6, 5, 7);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 5, 5), 7);
+    CHECK_EQ_INT(map.structure_counts[STRUCTURE_GRASS_BED], 2);
+
+    /* Removed whole by any of its tiles. */
+    map_remove_structure(&map, 6, 5);
+    CHECK_EQ_INT(map_structure(&map, 5, 5), STRUCTURE_NONE);
+    CHECK_EQ_INT(map.structure_counts[STRUCTURE_GRASS_BED], 0);
+    CHECK(!map_structure_origin(&map, 5, 5, &x, &y));
+
+    /* A wall built on the foot of a bed replaces the whole bed. */
+    map_place_structure(&map, 5, 5, STRUCTURE_GRASS_BED, DIRECTION_WEST, ITEM_QUALITY_STANDARD);
+    CHECK_EQ_INT(map_structure(&map, 4, 5), STRUCTURE_GRASS_BED);
+    map_set_structure(&map, 4, 5, STRUCTURE_WALL);
+    CHECK_EQ_INT(map_structure(&map, 5, 5), STRUCTURE_NONE);
+    CHECK_EQ_INT(map.structure_counts[STRUCTURE_GRASS_BED], 0);
+
+    /* It does not fit across the edge. */
+    CHECK(!map_place_structure(&map, 0, 0, STRUCTURE_GRASS_BED, DIRECTION_NORTH,
+                               ITEM_QUALITY_STANDARD));
+    CHECK_EQ_INT(map_structure(&map, 0, 0), STRUCTURE_NONE);
+    CHECK(map_place_structure(&map, 0, 0, STRUCTURE_GRASS_BED, DIRECTION_SOUTH,
+                              ITEM_QUALITY_STANDARD));
+    map_free(&map);
+}
+
+static void test_bed_sites(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    /* Both tiles must qualify: not with its foot on rock or across the edge. */
+    CHECK_EQ_INT(constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 5, 6,
+                                     DIRECTION_NORTH),
+                 CONSTRUCTION_NONE);
+    CHECK_EQ_INT(constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 15, 2,
+                                     DIRECTION_EAST),
+                 CONSTRUCTION_NONE);
+    int index =
+        constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 2, 3, DIRECTION_NORTH);
+    REQUIRE(index != CONSTRUCTION_NONE);
+    CHECK_EQ_INT(construction_at(&constructions, 2, 2), index);
+    int x, y;
+    construction_tile(construction_get(&constructions, index), 1, &x, &y);
+    CHECK(x == 2 && y == 2);
+    CHECK(!construction_can_place(&constructions, &map, 2, 2)); /* Its foot is taken. */
+    construction_deliver(&constructions, index, item_stack_pristine(ITEM_GRASS, 12));
+    CHECK(construction_add_work(&constructions, &map, &items, index, 1.0e6f, 60.0, NULL));
+    CHECK(map_structure_is_origin(&map, 2, 3));
+    CHECK_EQ_INT(map_structure(&map, 2, 2), STRUCTURE_GRASS_BED);
+    CHECK_EQ_INT(map_structure_direction(&map, 2, 2), DIRECTION_NORTH);
+    CHECK_EQ_INT(construction_at(&constructions, 2, 2), CONSTRUCTION_NONE);
+
+    /* A refresh site placed by the foot sits on the head, over both tiles;
+     * removing it frees both. */
+    index = constructions_place_refresh(&constructions, &map, 2, 2);
+    REQUIRE(index != CONSTRUCTION_NONE);
+    const ConstructionSite *site = construction_get(&constructions, index);
+    CHECK(site->x == 2 && site->y == 3 && site->direction == DIRECTION_NORTH);
+    CHECK_EQ_INT(construction_at(&constructions, 2, 3), index);
+    ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
+    constructions_remove(&constructions, index, returned);
+    CHECK_EQ_INT(construction_at(&constructions, 2, 2), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(construction_at(&constructions, 2, 3), CONSTRUCTION_NONE);
     free_world(&map, &constructions, &items);
 }
 
@@ -377,5 +473,7 @@ int main(void)
     RUN_TEST(test_built_grade);
     RUN_TEST(test_refreshing_a_bed);
     RUN_TEST(test_beds_wear_by_the_day);
+    RUN_TEST(test_long_structures);
+    RUN_TEST(test_bed_sites);
     return test_summary();
 }

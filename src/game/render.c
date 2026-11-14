@@ -507,7 +507,7 @@ static void progress_bar(SDL_Renderer *renderer, const SDL_FRect *tile, float fr
     if (fraction <= 0.0f || tile->w < 6.0f) {
         return;
     }
-    float height = SDL_max(2.0f, floorf(tile->h * 0.12f));
+    float height = SDL_max(2.0f, floorf(SDL_min(tile->w, tile->h) * 0.12f));
     SDL_FRect bar = {tile->x + 1.0f, tile->y + tile->h - height - 1.0f, tile->w - 2.0f, height};
     fill(renderer, PROGRESS_BACKGROUND, &bar);
     bar.w = floorf(bar.w * fraction);
@@ -704,12 +704,14 @@ void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, Workstation
 
 /* ---- Structures ------------------------------------------------------------- */
 
-/* A structure seen from above, at `alpha` (ghosts of blueprints):
- * - grass bed: a litter of dry grass with a rolled-up end as a pillow;
+/* A structure seen from above, at `alpha` (ghosts of blueprints), filling
+ * `rect` (all its tiles) and facing `direction`:
+ * - grass bed: a litter of dry grass with a rolled-up end as a pillow, at
+ *   its head;
  * - wall: thatch filling the tile, posts as dark dots along the middle;
  * - branch screen: a frame of branches woven across. */
 static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile,
-                                   StructureType type, Uint8 alpha)
+                                   StructureType type, Direction direction, Uint8 alpha)
 {
     float w = tile->w, h = tile->h;
     SDL_Color straw = DRY_GRASS_COLOR, dark = shade(DRY_GRASS_COLOR, -40);
@@ -717,12 +719,25 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
     straw.a = dark.a = wood.a = edge.a = alpha;
     switch (type) {
     case STRUCTURE_GRASS_BED: {
-        SDL_FRect bed = {tile->x + floorf(w * 0.12f), tile->y + floorf(h * 0.06f),
-                         floorf(w * 0.76f), floorf(h * 0.88f)};
+        bool vertical = direction == DIRECTION_NORTH || direction == DIRECTION_SOUTH;
+        float across = vertical ? w : h; /* One tile. */
+        float side = floorf(across * 0.12f), end = floorf(across * 0.06f);
+        SDL_FRect bed = vertical ? (SDL_FRect){tile->x + side, tile->y + end, w - 2.0f * side,
+                                               h - 2.0f * end}
+                                 : (SDL_FRect){tile->x + end, tile->y + side, w - 2.0f * end,
+                                               h - 2.0f * side};
         fill(renderer, edge, &bed);
         SDL_FRect litter = {bed.x + 1.0f, bed.y + 1.0f, bed.w - 2.0f, bed.h - 2.0f};
         fill(renderer, straw, &litter);
-        SDL_FRect pillow = {litter.x, litter.y, litter.w, floorf(litter.h * 0.25f)};
+        float roll = floorf(across * 0.25f);
+        SDL_FRect pillow = litter;
+        if (vertical) {
+            pillow.y += direction == DIRECTION_NORTH ? litter.h - roll : 0.0f;
+            pillow.h = roll;
+        } else {
+            pillow.x += direction == DIRECTION_WEST ? litter.w - roll : 0.0f;
+            pillow.w = roll;
+        }
         fill(renderer, dark, &pillow);
         break;
     }
@@ -757,17 +772,43 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
     }
 }
 
+/* Screen rectangle of all the tiles of a structure whose head is at (x, y). */
+static SDL_FRect footprint_rect(const Camera *camera, int x, int y, StructureType type,
+                                Direction direction)
+{
+    int length = SDL_max(1, structure_length(type));
+    int end_x = x + (length - 1) * direction_dx(direction);
+    int end_y = y + (length - 1) * direction_dy(direction);
+    SDL_FRect first = tile_rect(camera, SDL_min(x, end_x), SDL_min(y, end_y));
+    SDL_FRect last = tile_rect(camera, SDL_max(x, end_x), SDL_max(y, end_y));
+    return (SDL_FRect){first.x, first.y, last.x + last.w - first.x, last.y + last.h - first.y};
+}
+
+/* Visible tiles, widened so that a long structure with its head just out of
+ * sight is still drawn. */
+static TileRect visible_heads(const Camera *camera, int width, int height)
+{
+    TileRect visible = camera_visible_tiles(camera, width, height);
+    int margin = STRUCTURE_LENGTH_MAX - 1;
+    visible.x0 = SDL_max(0, visible.x0 - margin);
+    visible.y0 = SDL_max(0, visible.y0 - margin);
+    visible.x1 = SDL_min(width, visible.x1 + margin);
+    visible.y1 = SDL_min(height, visible.y1 + margin);
+    return visible;
+}
+
 void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const Map *map = &game->map;
     if (map->structure_counts[STRUCTURE_NONE] < (int)map_tile_count(map)) {
-        TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+        TileRect visible = visible_heads(camera, map->width, map->height);
         for (int y = visible.y0; y < visible.y1; y++) {
             for (int x = visible.x0; x < visible.x1; x++) {
-                StructureType type = (StructureType)map->structure[map_index(map, x, y)];
-                if (type != STRUCTURE_NONE) {
-                    SDL_FRect tile = tile_rect(camera, x, y);
-                    render_structure_shape(renderer, &tile, type, 255);
+                if (map_structure_is_origin(map, x, y)) {
+                    StructureType type = map_structure(map, x, y);
+                    Direction direction = map_structure_direction(map, x, y);
+                    SDL_FRect rect = footprint_rect(camera, x, y, type, direction);
+                    render_structure_shape(renderer, &rect, type, direction, 255);
                 }
             }
         }
@@ -777,7 +818,7 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
     if (constructions->used_count == 0) {
         return;
     }
-    TileRect visible = camera_visible_tiles(camera, constructions->width, constructions->height);
+    TileRect visible = visible_heads(camera, constructions->width, constructions->height);
     for (int i = 0; i < CONSTRUCTION_MAX; i++) {
         const ConstructionSite *site = construction_get(constructions, i);
         if (site == NULL || site->x < visible.x0 || site->x >= visible.x1 ||
@@ -790,44 +831,49 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
             delivered += site->delivered[slot].count;
         }
         float materials = needed > 0 ? (float)delivered / (float)needed : 1.0f;
-        SDL_FRect tile = tile_rect(camera, site->x, site->y);
+        StructureType type = (StructureType)site->type;
+        Direction direction = (Direction)site->direction;
+        SDL_FRect rect = footprint_rect(camera, site->x, site->y, type, direction);
         if (!site->refresh) { /* A refresh site sits on the structure itself. */
-            render_structure_shape(renderer, &tile, (StructureType)site->type,
+            render_structure_shape(renderer, &rect, type, direction,
                                    (Uint8)(70.0f + 110.0f * materials));
         }
-        outline(renderer, inset(&tile, 0.9f), 1.0f, BLUEPRINT_COLOR);
-        progress_bar(renderer, &tile, construction_work_fraction(site));
+        float margin = floorf(SDL_min(rect.w, rect.h) * 0.05f); /* As inset(), not square. */
+        SDL_FRect frame = {rect.x + margin, rect.y + margin, rect.w - 2.0f * margin,
+                           rect.h - 2.0f * margin};
+        outline(renderer, frame, 1.0f, BLUEPRINT_COLOR);
+        progress_bar(renderer, &rect, construction_work_fraction(site));
     }
 }
 
-void render_structure_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                              StructureType type, int x0, int y0, int x1, int y1)
+typedef struct StructurePreview {
+    SDL_Renderer *renderer;
+    const Camera *camera;
+    StructureType type;
+    Direction direction;
+} StructurePreview;
+
+static void preview_planned(int x, int y, bool allowed, void *userdata)
 {
-    const StructureDef *def = structure_def(type);
-    if (def == NULL) {
-        return;
+    const StructurePreview *preview = userdata;
+    SDL_FRect rect = footprint_rect(preview->camera, x, y, preview->type, preview->direction);
+    if (allowed) {
+        render_structure_shape(preview->renderer, &rect, preview->type, preview->direction, 110);
     }
-    int min_x = SDL_min(x0, x1), max_x = SDL_max(x0, x1);
-    int min_y = SDL_min(y0, y1), max_y = SDL_max(y0, y1);
-    for (int y = min_y; y <= max_y; y++) {
-        for (int x = min_x; x <= max_x; x++) {
-            bool edge = x == min_x || x == max_x || y == min_y || y == max_y;
-            if (!edge && def->drawn_as_outline) {
-                continue;
-            }
-            SDL_FRect tile = tile_rect(camera, x, y);
-            bool allowed = game_can_place_structure(game, x, y);
-            if (allowed) {
-                render_structure_shape(renderer, &tile, type, 110);
-            }
-            outline(renderer, tile, 1.0f, allowed ? BLUEPRINT_COLOR : BLUEPRINT_REFUSED_COLOR);
-        }
-    }
+    outline(preview->renderer, rect, 1.0f, allowed ? BLUEPRINT_COLOR : BLUEPRINT_REFUSED_COLOR);
+}
+
+void render_structure_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                              StructureType type, Direction direction, int x0, int y0, int x1,
+                              int y1)
+{
+    StructurePreview preview = {renderer, camera, type, direction};
+    game_plan_structure_rect(game, type, direction, x0, y0, x1, y1, preview_planned, &preview);
 }
 
 void render_structure_icon(SDL_Renderer *renderer, SDL_FRect rect, StructureType type)
 {
-    render_structure_shape(renderer, &rect, type, 255);
+    render_structure_shape(renderer, &rect, type, DIRECTION_SOUTH, 255);
 }
 
 /* A zone tile seen from above: its color, its border, and what it holds. */
@@ -899,7 +945,7 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
     }
     case RENDER_ICON_DECONSTRUCT: {
         SDL_FRect area = inset(&rect, 0.7f);
-        render_structure_shape(renderer, &area, STRUCTURE_WALL, 255);
+        render_structure_shape(renderer, &area, STRUCTURE_WALL, DIRECTION_SOUTH, 255);
         outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_DECONSTRUCT]);
         break;
     }
