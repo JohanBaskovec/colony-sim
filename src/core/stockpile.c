@@ -135,6 +135,8 @@ int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int
     *stockpile = (Stockpile){.used = true,
                              .number = stockpiles->next_number,
                              .allowed = item_types_all(),
+                             .quality = {0, ITEM_QUALITY_BEST},
+                             .hit_points = {0, 100},
                              .priority = STOCKPILE_PRIORITY_DEFAULT};
     clear_bounds(stockpile);
     if (stockpile_extend(stockpiles, map, index, x0, y0, x1, y1) == 0) {
@@ -220,6 +222,53 @@ void stockpile_set_allowed(Stockpiles *stockpiles, int index, ItemTypeMask allow
     }
 }
 
+static IntRange valid_range(IntRange range, int max)
+{
+    int a = clampi(range.min, 0, max);
+    int b = clampi(range.max, 0, max);
+    return a <= b ? (IntRange){a, b} : (IntRange){b, a};
+}
+
+static bool same_range(IntRange a, IntRange b)
+{
+    return a.min == b.min && a.max == b.max;
+}
+
+void stockpile_set_quality_range(Stockpiles *stockpiles, int index, IntRange range)
+{
+    if (is_valid(stockpiles, index)) {
+        range = valid_range(range, ITEM_QUALITY_BEST);
+        if (!same_range(range, stockpiles->list[index].quality)) {
+            stockpiles->list[index].quality = range;
+            stockpiles->revision++;
+        }
+    }
+}
+
+void stockpile_set_hit_points_range(Stockpiles *stockpiles, int index, IntRange range)
+{
+    if (is_valid(stockpiles, index)) {
+        range = valid_range(range, 100);
+        if (!same_range(range, stockpiles->list[index].hit_points)) {
+            stockpiles->list[index].hit_points = range;
+            stockpiles->revision++;
+        }
+    }
+}
+
+static bool in_range(IntRange range, int value)
+{
+    return value >= range.min && value <= range.max;
+}
+
+bool stockpile_accepts(const Stockpile *stockpile, ItemStack stack)
+{
+    return stockpile != NULL && stack.type != ITEM_NONE && stack.count > 0 &&
+           (stockpile->allowed & ITEM_TYPE_BIT(stack.type)) &&
+           in_range(stockpile->quality, stack.quality) &&
+           in_range(stockpile->hit_points, item_stack_hit_points_percent(stack));
+}
+
 void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority)
 {
     if (is_valid(stockpiles, index)) {
@@ -229,13 +278,10 @@ void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority)
     }
 }
 
-int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, ItemType type)
+int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, ItemStack stack)
 {
     const Stockpile *stockpile = stockpile_get(stockpiles, stockpile_at(stockpiles, x, y));
-    if (stockpile == NULL || type == ITEM_NONE || !(stockpile->allowed & ITEM_TYPE_BIT(type))) {
-        return 0;
-    }
-    return stockpile->priority;
+    return stockpile_accepts(stockpile, stack) ? stockpile->priority : 0;
 }
 
 uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
@@ -245,7 +291,15 @@ uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
     for (int i = 0; i < STOCKPILE_MAX; i++) {
         const Stockpile *s = &stockpiles->list[i];
         if (s->used) {
-            int32_t fields[5] = {i, s->number, (int32_t)s->allowed, s->priority, s->cell_count};
+            int32_t fields[9] = {i,
+                                 s->number,
+                                 (int32_t)s->allowed,
+                                 s->priority,
+                                 s->cell_count,
+                                 s->quality.min,
+                                 s->quality.max,
+                                 s->hit_points.min,
+                                 s->hit_points.max};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
         }
     }

@@ -18,6 +18,7 @@ set(COLONY_UNIT_TESTS
     test_region
     test_reservation
     test_rng
+    test_skill
     test_stockpile
     test_work
     test_worldgen)

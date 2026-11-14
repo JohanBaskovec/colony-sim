@@ -67,6 +67,20 @@ bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority)
     return true;
 }
 
+int colonist_skill_level(const Colonist *colonist, SkillType skill)
+{
+    return (unsigned)skill < SKILL_COUNT ? colonist->skills[skill] : SKILL_LEVEL_MIN;
+}
+
+bool colonist_set_skill_level(Colonist *colonist, SkillType skill, int level)
+{
+    if ((unsigned)skill >= SKILL_COUNT || level < SKILL_LEVEL_MIN || level > SKILL_LEVEL_MAX) {
+        return false;
+    }
+    colonist->skills[skill] = (uint8_t)level;
+    return true;
+}
+
 float colonist_carried_weight(const Colonist *colonist)
 {
     return item_stack_weight((ItemType)colonist->carried.type, colonist->carried.count);
@@ -190,9 +204,8 @@ static void begin_task(Colonist *colonist, const ColonistContext *context, Colon
 {
     if (colonist->carried.count > 0) {
         /* Whatever is in hand is put down where the colonist stands. */
-        items_drop(context->items, context->map, colonist->x, colonist->y,
-                   (ItemType)colonist->carried.type, colonist->carried.count);
-        colonist->carried = (ItemStack){ITEM_NONE, 0};
+        items_drop(context->items, context->map, colonist->x, colonist->y, colonist->carried);
+        colonist->carried = (ItemStack){.type = ITEM_NONE};
     }
     reservations_release_all(context->reservations, context->worker_id);
     colonist->task = task;
@@ -521,13 +534,12 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
     return false;
 }
 
-/* Whether the haul destination still accepts items of `type` and has room. */
+/* Whether the haul destination still accepts these items and has room. */
 static bool haul_destination_valid(const Colonist *colonist, const ColonistContext *context,
-                                   ItemType type)
+                                   ItemStack stack)
 {
     TilePos dest = colonist->haul_destination;
-    return stockpile_storage_priority(context->stockpiles, dest.x, dest.y, type) > 0 &&
-           haul_storage_room(context->items, dest.x, dest.y, type) > 0;
+    return haul_destination_room(context->stockpiles, context->items, dest.x, dest.y, stack) > 0;
 }
 
 /*
@@ -543,16 +555,15 @@ static bool haul_still_valid(Colonist *colonist, const ColonistContext *context)
         ItemStack stack = items_get(context->items, colonist->target.x, colonist->target.y);
         return colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED &&
                stack.type != ITEM_NONE &&
-               haul_destination_valid(colonist, context, (ItemType)stack.type);
+               haul_destination_valid(colonist, context, stack);
     }
-    ItemType type = (ItemType)colonist->carried.type;
-    if (haul_destination_valid(colonist, context, type)) {
+    if (haul_destination_valid(colonist, context, colonist->carried)) {
         return true;
     }
     HaulWorld world = haul_world(context);
     TilePos dest;
     /* Carried items count as not stored: any accepting stockpile will do. */
-    if (!haul_find_destination(&world, current_tile(colonist), type, 0,
+    if (!haul_find_destination(&world, current_tile(colonist), colonist->carried, 0,
                                COLONIST_WORK_SEARCH_MAX_COST, &dest, &colonist->path)) {
         return false;
     }
@@ -580,13 +591,17 @@ static void haul(Colonist *colonist, const ColonistContext *context)
             return;
         }
         ItemStack stack = items_get(context->items, colonist->x, colonist->y);
-        ItemType type = (ItemType)stack.type;
-        int wanted = haul_storage_room(context->items, dest.x, dest.y, type);
-        int capacity = colonist_carry_capacity(colonist, type);
+        int wanted = haul_destination_room(context->stockpiles, context->items, dest.x, dest.y,
+                                           stack);
+        int capacity = colonist_carry_capacity(colonist, (ItemType)stack.type);
         wanted = wanted < capacity ? wanted : capacity;
         int taken = items_remove(context->items, colonist->x, colonist->y,
                                  stack.count < wanted ? stack.count : wanted);
-        colonist->carried = (ItemStack){stack.type, (uint16_t)taken};
+        colonist->carried = stack; /* Same condition as the stack it comes from. */
+        colonist->carried.count = (uint16_t)taken;
+        if (taken == 0) {
+            colonist->carried.type = ITEM_NONE;
+        }
         if (!pathfinder_find(context->pathfinder, context->map, current_tile(colonist), dest,
                              PATH_NO_COST_LIMIT, &colonist->path)) {
             set_idle(colonist, context, 0);
@@ -597,11 +612,10 @@ static void haul(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0);
         return;
     }
-    ItemType type = (ItemType)colonist->carried.type;
-    int added = items_add(context->items, dest.x, dest.y, type, colonist->carried.count);
+    int added = items_add(context->items, dest.x, dest.y, colonist->carried);
     colonist->carried.count = (uint16_t)(colonist->carried.count - added);
     if (colonist->carried.count == 0) {
-        colonist->carried.type = ITEM_NONE;
+        colonist->carried = (ItemStack){.type = ITEM_NONE};
     }
     set_idle(colonist, context, 0); /* Drops any leftover nearby, then looks for more work. */
 }
@@ -617,6 +631,14 @@ static bool job_still_valid(const Colonist *colonist, const ColonistContext *con
            designation_get(context->designations, target.x, target.y) == colonist->work_type &&
            reservations_owner(context->reservations, RESERVATION_WORK, target) ==
                context->worker_id;
+}
+
+/* Skill used to carry out an order. */
+static SkillType skill_of(DesignationType type)
+{
+    const DesignationDef *def = designation_def(type);
+    const WorkTypeDef *work = def != NULL ? work_type_def(def->work_type) : NULL;
+    return work != NULL ? work->skill : SKILL_NONE;
 }
 
 static void work(Colonist *colonist, const ColonistContext *context)
@@ -635,7 +657,8 @@ static void work(Colonist *colonist, const ColonistContext *context)
         return;
     }
     if (designation_add_work(designations, context->map, context->items, target.x, target.y,
-                             COLONIST_WORK_SPEED)) {
+                             COLONIST_WORK_SPEED, colonist_skill_level(colonist, skill_of(type)),
+                             context->rng)) {
         set_idle(colonist, context, 0); /* Done: look for the next job right away. */
     }
 }

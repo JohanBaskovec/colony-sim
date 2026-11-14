@@ -529,8 +529,8 @@ static void render_frame(App *app)
                              mouse_y);
     }
     float mouse_x, mouse_y;
-    SDL_GetMouseState(&mouse_x, &mouse_y);
-    ui_begin_frame(&app->ui, mouse_x, mouse_y);
+    SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
+    ui_begin_frame(&app->ui, mouse_x, mouse_y, (buttons & SDL_BUTTON_LMASK) != 0);
     hud_draw(app);
     ui_end_frame(&app->ui);
 

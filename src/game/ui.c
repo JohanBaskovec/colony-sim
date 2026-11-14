@@ -10,6 +10,11 @@ static const SDL_Color BUTTON_COLOR = {54, 60, 72, 255};
 static const SDL_Color BUTTON_HOVER_COLOR = {80, 88, 104, 255};
 static const SDL_Color BORDER_COLOR = {130, 136, 150, 255};
 static const SDL_Color CHECK_COLOR = {120, 210, 110, 255};
+static const SDL_Color TRACK_COLOR = {54, 60, 72, 255};
+static const SDL_Color HANDLE_COLOR = {200, 204, 214, 255};
+
+#define UI_SLIDER_HANDLE_WIDTH 8.0f
+#define UI_SLIDER_TRACK_HEIGHT 4.0f
 
 static bool contains(SDL_FRect rect, float x, float y)
 {
@@ -102,10 +107,14 @@ bool ui_capture_click(Ui *ui, float x, float y, int button)
     return true;
 }
 
-void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y)
+void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y, bool left_button_down)
 {
     ui->mouse_x = mouse_x;
     ui->mouse_y = mouse_y;
+    ui->mouse_down = left_button_down;
+    if (!left_button_down) {
+        ui->active_slider = 0; /* Released: dragging is over. */
+    }
     ui->area_count = 0;
 }
 
@@ -178,4 +187,72 @@ bool ui_checkbox(Ui *ui, float x, float y, float width, UiCheck state, const cha
     float line = (float)text_line_height(ui->text);
     ui_label(ui, label, x + size + UI_CHECKBOX_GAP, SDL_floorf(y + (row - line) * 0.5f));
     return ui_take_click(ui, area) == SDL_BUTTON_LEFT;
+}
+
+/* Step under a horizontal position, steps spread evenly between the two ends
+ * of the track (inset by half a handle). */
+static int slider_step_at(SDL_FRect rect, int steps, float x)
+{
+    float left = rect.x + UI_SLIDER_HANDLE_WIDTH * 0.5f;
+    float span = rect.w - UI_SLIDER_HANDLE_WIDTH;
+    if (steps <= 1 || span <= 0.0f) {
+        return 0;
+    }
+    int step = (int)SDL_roundf((x - left) / span * (float)(steps - 1));
+    return SDL_clamp(step, 0, steps - 1);
+}
+
+static float slider_x_of(SDL_FRect rect, int steps, int step)
+{
+    float span = rect.w - UI_SLIDER_HANDLE_WIDTH;
+    float t = steps > 1 ? (float)step / (float)(steps - 1) : 0.0f;
+    return SDL_floorf(rect.x + UI_SLIDER_HANDLE_WIDTH * 0.5f + span * t);
+}
+
+bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *high)
+{
+    int old_low = *low, old_high = *high;
+    float target_x = 0.0f;
+    bool moving = false;
+    if (ui_take_click(ui, rect) == SDL_BUTTON_LEFT) {
+        int step = slider_step_at(rect, steps, ui->click_x);
+        /* The nearest handle; between equal handles, the side clicked on. */
+        int to_low = SDL_abs(step - *low), to_high = SDL_abs(step - *high);
+        ui->active_slider = id;
+        ui->active_handle = to_low < to_high || (to_low == to_high && step < *low) ? 0 : 1;
+        target_x = ui->click_x;
+        moving = true; /* Even if the button was already released. */
+    }
+    if (ui->active_slider == id && ui->mouse_down) {
+        target_x = ui->mouse_x;
+        moving = true;
+    }
+    if (moving) {
+        int step = slider_step_at(rect, steps, target_x);
+        if (ui->active_handle == 0) {
+            *low = SDL_min(step, *high);
+        } else {
+            *high = SDL_max(step, *low);
+        }
+    }
+
+    float center = SDL_floorf(rect.y + rect.h * 0.5f);
+    fill(ui, (SDL_FRect){rect.x, center - UI_SLIDER_TRACK_HEIGHT * 0.5f, rect.w,
+                         UI_SLIDER_TRACK_HEIGHT},
+         TRACK_COLOR);
+    float low_x = slider_x_of(rect, steps, *low), high_x = slider_x_of(rect, steps, *high);
+    fill(ui, (SDL_FRect){low_x, center - UI_SLIDER_TRACK_HEIGHT * 0.5f, high_x - low_x,
+                         UI_SLIDER_TRACK_HEIGHT},
+         CHECK_COLOR);
+    bool hover = ui_hovered(ui, rect) || ui->active_slider == id;
+    SDL_Color handle = hover ? brighter(HANDLE_COLOR, 40) : HANDLE_COLOR;
+    float handle_height = SDL_floorf(rect.h * 0.8f);
+    for (int i = 0; i < 2; i++) {
+        float hx = i == 0 ? low_x : high_x;
+        SDL_FRect knob = {hx - UI_SLIDER_HANDLE_WIDTH * 0.5f, center - handle_height * 0.5f,
+                          UI_SLIDER_HANDLE_WIDTH, handle_height};
+        fill(ui, knob, handle);
+        border(ui, knob, BORDER_COLOR);
+    }
+    return *low != old_low || *high != old_high;
 }

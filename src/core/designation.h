@@ -11,6 +11,7 @@
 #define COLONY_CORE_DESIGNATION_H
 
 #include "core/map.h"
+#include "core/rng.h"
 #include "core/work.h"
 
 #include <stdbool.h>
@@ -82,10 +83,12 @@ float designation_progress_fraction(const Designations *designations, const Map 
  * Adds work to a designated tile. When enough work is done, the order is
  * carried out on the map (the tree disappears, the rock is dug out), its
  * products are dropped on the ground (wood, stone; `items` may be NULL), the
- * designation is removed and true is returned.
+ * designation is removed and true is returned. The products' quality and
+ * condition come from the worker's `skill_level` in the order's skill
+ * (core/skill.h); `rng` may be NULL for average products.
  */
 bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y,
-                          float work);
+                          float work, int skill_level, Rng *rng);
 
 /* Items the order on this tile would produce if completed now (ITEM_NONE: nothing). */
 ItemType designation_yield(const Designations *designations, const Map *map, int x, int y,

@@ -86,7 +86,7 @@ static void test_counts_per_work_type(void)
                  3);
     CHECK_EQ_INT(designations_count_for_work(&d, 0), 0);
 
-    designation_add_work(&d, &map, NULL, 5, 5, rock_def(ROCK_GRANITE)->mine_work);
+    designation_add_work(&d, &map, NULL, 5, 5, rock_def(ROCK_GRANITE)->mine_work, 0, NULL);
     designation_set(&d, &map, 3, 3, DESIGNATION_NONE);
     CHECK_EQ_INT(d.count_by_work[WORK_WOODCUTTING], 0);
     CHECK_EQ_INT(d.count_by_work[WORK_MINING], 1);
@@ -103,18 +103,18 @@ static void test_chopping_removes_the_tree(void)
     float needed = designation_work_needed(&d, &map, 3, 3);
     CHECK(needed > 0.0f);
 
-    CHECK(!designation_add_work(&d, &map, NULL, 3, 3, needed * 0.5f));
+    CHECK(!designation_add_work(&d, &map, NULL, 3, 3, needed * 0.5f, 0, NULL));
     CHECK_NEAR(designation_progress_fraction(&d, &map, 3, 3), 0.5, 1e-4);
     CHECK_EQ_INT(map.plants[map_index(&map, 3, 3)].type, PLANT_TREE);
 
     uint32_t revision = d.revision;
-    CHECK(designation_add_work(&d, &map, NULL, 3, 3, needed * 0.5f));
+    CHECK(designation_add_work(&d, &map, NULL, 3, 3, needed * 0.5f, 0, NULL));
     CHECK_EQ_INT(map.plants[map_index(&map, 3, 3)].type, PLANT_NONE);
     CHECK_EQ_INT(designation_get(&d, 3, 3), DESIGNATION_NONE);
     CHECK_NEAR(designation_progress_fraction(&d, &map, 3, 3), 0.0, 1e-6);
     CHECK_EQ_INT(d.count, 0);
     CHECK(d.revision != revision);
-    CHECK(!designation_add_work(&d, &map, NULL, 3, 3, 1.0f)); /* Nothing left to do. */
+    CHECK(!designation_add_work(&d, &map, NULL, 3, 3, 1.0f, 0, NULL)); /* Nothing left to do. */
     free_world(&map, &d);
 }
 
@@ -131,7 +131,7 @@ static void test_mining_opens_the_wall(void)
 
     Terrain floor = (Terrain)map.terrain[map_index(&map, 5, 5)];
     CHECK(!map_is_passable(&map, 5, 5));
-    CHECK(designation_add_work(&d, &map, NULL, 5, 5, rock_def(ROCK_GRANITE)->mine_work));
+    CHECK(designation_add_work(&d, &map, NULL, 5, 5, rock_def(ROCK_GRANITE)->mine_work, 0, NULL));
     CHECK(map_is_passable(&map, 5, 5));
     CHECK_EQ_INT(map.terrain[map_index(&map, 5, 5)], floor);
     CHECK_EQ_INT(d.count, 1);
@@ -161,17 +161,57 @@ static void test_completed_orders_drop_items(void)
     CHECK_EQ_INT(designation_yield(&d, &map, 0, 0, &count), ITEM_NONE);
     CHECK_EQ_INT(count, 0);
 
-    designation_add_work(&d, &map, &items, 3, 3, 1e6f);
+    designation_add_work(&d, &map, &items, 3, 3, 1e6f, 0, NULL);
     ItemStack wood = items_get(&items, 3, 3);
     CHECK_EQ_INT(wood.type, ITEM_WOOD);
     /* A full tile, the rest spread around. */
     CHECK_EQ_INT(wood.count, item_stack_limit(ITEM_WOOD));
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
 
-    designation_add_work(&d, &map, &items, 5, 5, 1e6f);
+    designation_add_work(&d, &map, &items, 5, 5, 1e6f, 0, NULL);
     ItemStack stone = items_get(&items, 5, 5); /* Dropped where the rock was. */
     CHECK_EQ_INT(stone.type, ITEM_STONE);
     CHECK_EQ_INT(stone.count, rock_def(ROCK_GRANITE)->mined_yield);
+    items_free(&items);
+    free_world(&map, &d);
+}
+
+static void test_products_depend_on_skill(void)
+{
+    Map map;
+    Designations d;
+    Items items;
+    REQUIRE(init_world(&map, &d));
+    REQUIRE(items_init(&items, 16, 16));
+    int wood_hp = item_def(ITEM_WOOD)->max_hit_points;
+
+    /* A novice woodcutter brings back rough, damaged logs... */
+    REQUIRE(designation_set(&d, &map, 3, 3, DESIGNATION_CHOP));
+    designation_add_work(&d, &map, &items, 3, 3, 1e6f, SKILL_LEVEL_MIN, NULL);
+    ItemStack novice = items_get(&items, 3, 3);
+    CHECK_EQ_INT(novice.type, ITEM_WOOD);
+    CHECK_EQ_INT(novice.quality, skill_quality_of_score(skill_product_score(0, NULL)));
+    CHECK_EQ_INT(novice.hit_points,
+                 item_hit_points_at_percent(ITEM_WOOD, skill_product_condition(0, NULL)));
+    CHECK(novice.hit_points < wood_hp);
+
+    /* ...an expert superb, intact ones. */
+    Plant *tree = &map.plants[map_index(&map, 12, 12)];
+    tree->type = PLANT_TREE;
+    tree->growth = 1.0f;
+    REQUIRE(designation_set(&d, &map, 12, 12, DESIGNATION_CHOP));
+    designation_add_work(&d, &map, &items, 12, 12, 1e6f, SKILL_LEVEL_MAX, NULL);
+    ItemStack expert = items_get(&items, 12, 12);
+    CHECK_EQ_INT(expert.quality, ITEM_QUALITY_SUPERB);
+    CHECK_EQ_INT(expert.hit_points, wood_hp);
+
+    /* Stone comes out perfect whoever mines it. */
+    REQUIRE(designation_set(&d, &map, 5, 5, DESIGNATION_MINE));
+    designation_add_work(&d, &map, &items, 5, 5, 1e6f, SKILL_LEVEL_MIN, NULL);
+    ItemStack stone = items_get(&items, 5, 5);
+    CHECK_EQ_INT(stone.type, ITEM_STONE);
+    CHECK_EQ_INT(stone.quality, ITEM_QUALITY_BEST);
+    CHECK_EQ_INT(stone.hit_points, item_def(ITEM_STONE)->max_hit_points);
     items_free(&items);
     free_world(&map, &d);
 }
@@ -192,7 +232,8 @@ static void test_harvest_picks_ripe_fruit(void)
     REQUIRE(designation_set(&d, &map, 8, 8, DESIGNATION_HARVEST));
     CHECK_EQ_INT(d.count_by_work[WORK_GATHERING], 1);
 
-    CHECK(designation_add_work(&d, &map, &items, 8, 8, designation_work_needed(&d, &map, 8, 8)));
+    float needed = designation_work_needed(&d, &map, 8, 8);
+    CHECK(designation_add_work(&d, &map, &items, 8, 8, needed, 0, NULL));
     ItemStack berries = items_get(&items, 8, 8);
     CHECK_EQ_INT(berries.type, ITEM_BERRIES);
     CHECK_EQ_INT(berries.count, plant_def(PLANT_BUSH)->harvest_yield);
@@ -208,7 +249,7 @@ static void test_progress_is_kept_until_cancelled(void)
     Designations d;
     REQUIRE(init_world(&map, &d));
     REQUIRE(designation_set(&d, &map, 5, 5, DESIGNATION_MINE));
-    designation_add_work(&d, &map, NULL, 5, 5, 1000.0f);
+    designation_add_work(&d, &map, NULL, 5, 5, 1000.0f, 0, NULL);
     CHECK_NEAR(designation_progress_fraction(&d, &map, 5, 5),
                1000.0 / rock_def(ROCK_GRANITE)->mine_work, 1e-4);
 
@@ -228,7 +269,7 @@ static void test_hash_detects_changes(void)
     designation_set(&d, &map, 3, 3, DESIGNATION_CHOP);
     uint64_t designated = designations_hash(&d, HASH_FNV1A64_INIT);
     CHECK(designated != empty);
-    designation_add_work(&d, &map, NULL, 3, 3, 10.0f);
+    designation_add_work(&d, &map, NULL, 3, 3, 10.0f, 0, NULL);
     CHECK(designations_hash(&d, HASH_FNV1A64_INIT) != designated);
     free_world(&map, &d);
 }
@@ -255,6 +296,7 @@ int main(void)
     RUN_TEST(test_chopping_removes_the_tree);
     RUN_TEST(test_mining_opens_the_wall);
     RUN_TEST(test_completed_orders_drop_items);
+    RUN_TEST(test_products_depend_on_skill);
     RUN_TEST(test_harvest_picks_ripe_fruit);
     RUN_TEST(test_progress_is_kept_until_cancelled);
     RUN_TEST(test_hash_detects_changes);

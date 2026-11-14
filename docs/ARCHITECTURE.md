@@ -14,7 +14,7 @@
 │ src/core/  (static library colony_core, pure C17, no SDL)    │
 │                                                              │
 │  game ─► colonist ─► pathfinding, region ─► map              │
-│    │        ├─────► designation ─────► map, work             │
+│    │        ├─────► designation ─► map, work ─► skill ─► item │
 │    │        ├─────► hauling ─► stockpile, item, reservation  │
 │    │        └─────► reservation, item                        │
 │    ├──► pool, game_clock, worldgen ─► noise, rng             │
@@ -46,10 +46,11 @@ simulation:
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work            |
 | `designation`| Player work orders per tile (chop, mine) and their work progress             |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
-| `item`       | Items on the ground: item definitions and categories, one stack per tile, dropping |
-| `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types |
+| `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping |
+| `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
-| `work`       | Work types (mining, woodcutting, gathering, hauling) and priority helpers    |
+| `work`       | Work types (mining, woodcutting, gathering, hauling), their skill, priority helpers |
+| `skill`      | Skills and levels; quality and condition of what a worker produces           |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
@@ -136,7 +137,31 @@ stones). `items_drop()` fills the target tile, then
 spreads the rest breadth-first over nearby passable tiles (never behind a
 wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
 `RockDef.mined_item/mined_yield`, `PlantDef.harvest_item/harvest_yield`
-(harvesting keeps the plant, which grows back). Food items have a
+(harvesting keeps the plant, which grows back).
+
+Every item has a **quality grade** (`ItemQuality`: crude, rough, standard,
+fine, superb) and **hit points** (`hit_points`, up to `ItemDef.max_hit_points`).
+Some types are always perfect (`has_quality` / `damageable` false: raw stone
+is always superb and at full hit points); `item_stack_make()` enforces it, so
+no code path can create a damaged stone. Only items of the same type **and
+grade** share a tile (`item_stacks_match()`); a stack keeps the count-weighted
+average hit points of its items. Grades are few on purpose: they keep stacks
+large. Averaging grades instead would have broken storage filters, because
+two stacks a zone rejects for different reasons (a crude one and a broken one)
+could merge into one it accepts. Hit points averaging can only do that with a
+two-sided hit point range, which is rare and harmless. Quality is meant to
+carry over to what is made from the items (M3).
+
+Completed orders produce items through `skill_product()` (`core/skill.h`):
+the worker's level in the order's skill (`WorkTypeDef.skill`) sets a quality
+score (grade = score / 20) and a condition in percent of the hit points, both
+with a random spread drawn from the game RNG. Novices bring back crude or
+rough, damaged logs; experts superb, intact ones. Randomness is only drawn for
+item types that have a quality or can be damaged. Skill levels go from 0 to 20
+and are rolled when a colonist is created (sum of two dice: mostly average,
+a few novices and experts); they do not change yet.
+
+Food items have a
 `nutrition` per unit; a hungry colonist goes to the nearest food, on the
 ground or on a ripe bush, and eats just what it takes to be sated. Items in
 hand are stored on the colonist (`Colonist.carried`), not in the layer.
@@ -146,19 +171,26 @@ hand are stored on the colonist (`Colonist.carried`), not in the layer.
 `Stockpiles` (`core/stockpile.h`, owned by `Game`) is another dense layer: the
 zone index of each tile (0 = none) plus a fixed table of zones (number shown to
 the player, priority from 1 = highest to 10 = lowest, default 5, and a bit mask
-of allowed item types). Zones only cover passable, buildable tiles. Every
-change bumps a `revision` counter.
+of allowed item types, a range of accepted grades and a range of accepted hit
+points in percent of the maximum). `stockpile_accepts()` checks all three;
+items that are always perfect count as superb and 100 %. Zones only cover
+passable, buildable tiles. Every change bumps a `revision` counter.
 
-A stack **needs hauling** when no zone on its tile accepts it, or when a zone
-of strictly better priority accepts it and has a free tile with room. Hauling
+A stack **needs hauling** when no zone on its tile accepts it (narrowing a
+filter makes stored items move out), or when a zone of strictly better
+priority accepts it and has a free tile with room. A storage tile has room for
+a stack when it is empty or holds a matching stack that the zone still
+accepts (`haul_destination_room()`). Hauling
 is the `WORK_HAULING` work type: at each priority level, designations come
 first, then hauling. `haul_find_job()` runs a Dijkstra search for the nearest
 such stack, then one search per priority level (best first) for the nearest
-storage tile from the stack. A per-type bit set of "priority levels with a
-free tile with room", computed once per search from the tiles of the zones
-(each zone keeps its bounding box: the map is never scanned), makes both
-checks cheap and lets idle colonists skip the search entirely when nothing
-can be stored.
+storage tile from the stack. Once per search, the tiles of the zones are
+visited (each zone keeps its bounding box: the map is never scanned, and a
+zone with an empty tile is not scanned further) to record which zones have
+room for which type and grade, plus a per-type bit set of "priority levels
+with room". The latter is a quick upper bound that lets idle colonists skip
+the search entirely when nothing can be stored; the per-zone data, checked
+against the zone filters, decides for a given stack.
 
 The hauler reserves the source stack (`RESERVATION_HAUL_SOURCE`) and the
 destination tile (`RESERVATION_STORAGE`), walks to the stack, picks up what

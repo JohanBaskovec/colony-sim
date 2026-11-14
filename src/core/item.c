@@ -14,14 +14,33 @@
  * - stone: a rough block of about 20 kg (7.5 l of rock, irregular so it
  *   stacks with gaps);
  * - berries: a portion of about 300 g (half a liter, ~150 kcal).
+ * Raw stone is always flawless and nearly indestructible; logs vary with the
+ * woodcutter (knots, cracks, a split trunk) and berries with the gatherer
+ * (ripeness, bruises).
  */
 static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
-    /* id, name, category, weight (kg), bulk, nutrition */
-    [ITEM_NONE] = {"none", NULL, ITEM_CATEGORY_COUNT, 0.0f, 0.0f, 0.0f},
-    [ITEM_WOOD] = {"wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 7.0f, 20.0f, 0.0f},
-    [ITEM_STONE] = {"stone", N_("item.stone"), ITEM_CATEGORY_RESOURCES, 20.0f, 20.0f, 0.0f},
-    [ITEM_BERRIES] = {"berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 0.3f, 1.0f, 0.05f},
+    /* id, name, category, weight (kg), bulk, nutrition, hit points, quality?, damageable? */
+    [ITEM_NONE] = {"none", NULL, ITEM_CATEGORY_COUNT, 0.0f, 0.0f, 0.0f, 0, false, false},
+    [ITEM_WOOD] = {"wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 7.0f, 20.0f, 0.0f, 60,
+                   true, true},
+    [ITEM_STONE] = {"stone", N_("item.stone"), ITEM_CATEGORY_RESOURCES, 20.0f, 20.0f, 0.0f, 150,
+                    false, false},
+    [ITEM_BERRIES] = {"berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 0.3f, 1.0f, 0.05f, 10,
+                      true, true},
 };
+
+static const char *const QUALITY_KEYS[ITEM_QUALITY_COUNT] = {
+    [ITEM_QUALITY_CRUDE] = N_("item.quality.crude"),
+    [ITEM_QUALITY_ROUGH] = N_("item.quality.rough"),
+    [ITEM_QUALITY_STANDARD] = N_("item.quality.standard"),
+    [ITEM_QUALITY_FINE] = N_("item.quality.fine"),
+    [ITEM_QUALITY_SUPERB] = N_("item.quality.superb"),
+};
+
+const char *item_quality_name_key(ItemQuality quality)
+{
+    return (unsigned)quality < ITEM_QUALITY_COUNT ? QUALITY_KEYS[quality] : NULL;
+}
 
 static const char *const CATEGORY_KEYS[ITEM_CATEGORY_COUNT] = {
     [ITEM_CATEGORY_FOOD] = N_("item.category.food"),
@@ -78,6 +97,67 @@ float item_stack_weight(ItemType type, int count)
     return def != NULL ? def->weight * (float)count : 0.0f;
 }
 
+static bool is_item_type(ItemType type)
+{
+    return type != ITEM_NONE && (unsigned)type < ITEM_TYPE_COUNT;
+}
+
+ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points)
+{
+    if (!is_item_type(type) || count <= 0) {
+        return (ItemStack){.type = ITEM_NONE};
+    }
+    const ItemDef *def = &ITEM_DEFS[type];
+    if (count > UINT16_MAX) {
+        count = UINT16_MAX;
+    }
+    return (ItemStack){
+        .type = (uint8_t)type,
+        .quality = (uint8_t)(def->has_quality ? clampi(quality, 0, ITEM_QUALITY_BEST)
+                                              : ITEM_QUALITY_BEST),
+        .count = (uint16_t)count,
+        .hit_points = (uint16_t)(def->damageable ? clampi(hit_points, 1, def->max_hit_points)
+                                                 : def->max_hit_points),
+    };
+}
+
+ItemStack item_stack_pristine(ItemType type, int count)
+{
+    const ItemDef *def = item_def(type);
+    return item_stack_make(type, count, ITEM_QUALITY_BEST, def != NULL ? def->max_hit_points : 0);
+}
+
+bool item_stacks_match(ItemStack a, ItemStack b)
+{
+    return a.type == b.type && a.quality == b.quality;
+}
+
+int item_hit_points_at_percent(ItemType type, int percent)
+{
+    if (!is_item_type(type)) {
+        return 0;
+    }
+    int max = ITEM_DEFS[type].max_hit_points;
+    int hit_points = (max * clampi(percent, 0, 100) + 50) / 100;
+    return clampi(hit_points, 1, max);
+}
+
+int item_stack_hit_points_percent(ItemStack stack)
+{
+    if (!is_item_type((ItemType)stack.type) || stack.count == 0) {
+        return 0;
+    }
+    return (int)stack.hit_points * 100 / ITEM_DEFS[stack.type].max_hit_points;
+}
+
+/* Average of two values weighted by item counts, rounded to the nearest:
+ * always between the two values. */
+static int weighted_average(int a, int count_a, int b, int count_b)
+{
+    long total = (long)count_a + count_b;
+    return (int)(((long)a * count_a + (long)b * count_b + total / 2) / total);
+}
+
 bool items_init(Items *items, int width, int height)
 {
     memset(items, 0, sizeof(*items));
@@ -112,27 +192,35 @@ static ItemStack *stack_at(Items *items, int x, int y)
 ItemStack items_get(const Items *items, int x, int y)
 {
     if (!in_bounds(items, x, y)) {
-        return (ItemStack){ITEM_NONE, 0};
+        return (ItemStack){.type = ITEM_NONE};
     }
     return items->stacks[(size_t)y * (size_t)items->width + (size_t)x];
 }
 
-int items_add(Items *items, int x, int y, ItemType type, int count)
+int items_add(Items *items, int x, int y, ItemStack batch)
 {
-    if (!in_bounds(items, x, y) || type == ITEM_NONE || (unsigned)type >= ITEM_TYPE_COUNT ||
-        count <= 0) {
+    ItemType type = (ItemType)batch.type;
+    if (!in_bounds(items, x, y) || !is_item_type(type) || batch.count == 0) {
         return 0;
     }
+    /* Callers may build stacks by hand: keep the condition valid for the type. */
+    batch = item_stack_make(type, batch.count, batch.quality, batch.hit_points);
     ItemStack *stack = stack_at(items, x, y);
-    if (stack->type != ITEM_NONE && stack->type != type) {
+    if (stack->type != ITEM_NONE && !item_stacks_match(*stack, batch)) {
         return 0;
     }
     int room = item_stack_limit(type) - (int)stack->count;
-    int added = count < room ? count : room;
+    int added = (int)batch.count < room ? (int)batch.count : room;
     if (added <= 0) {
         return 0;
     }
-    stack->type = (uint8_t)type;
+    if (stack->type == ITEM_NONE) {
+        *stack = batch;
+        stack->count = 0;
+    } else {
+        stack->hit_points =
+            (uint16_t)weighted_average(stack->hit_points, stack->count, batch.hit_points, added);
+    }
     stack->count = (uint16_t)(stack->count + added);
     items->totals[type] += added;
     items->additions++;
@@ -152,13 +240,14 @@ int items_remove(Items *items, int x, int y, int count)
     items->totals[stack->type] -= removed;
     stack->count = (uint16_t)(stack->count - removed);
     if (stack->count == 0) {
-        stack->type = ITEM_NONE;
+        *stack = (ItemStack){.type = ITEM_NONE};
     }
     return removed;
 }
 
-int items_drop(Items *items, const Map *map, int x, int y, ItemType type, int count)
+int items_drop(Items *items, const Map *map, int x, int y, ItemStack batch)
 {
+    int count = batch.count;
     enum { SIDE = 2 * ITEM_DROP_RADIUS + 1 };
     static const int DX[4] = {0, 1, 0, -1};
     static const int DY[4] = {-1, 0, 1, 0};
@@ -178,7 +267,9 @@ int items_drop(Items *items, const Map *map, int x, int y, ItemType type, int co
         int cell = queue[head++];
         int cx = x + cell % SIDE - ITEM_DROP_RADIUS;
         int cy = y + cell / SIDE - ITEM_DROP_RADIUS;
-        placed += items_add(items, cx, cy, type, count - placed);
+        ItemStack rest = batch;
+        rest.count = (uint16_t)(count - placed);
+        placed += items_add(items, cx, cy, rest);
         for (int i = 0; i < 4; i++) {
             int rx = cell % SIDE + DX[i];
             int ry = cell / SIDE + DY[i];
@@ -202,6 +293,8 @@ uint64_t items_hash(const Items *items, uint64_t hash)
         const ItemStack *stack = &items->stacks[i];
         hash = hash_fnv1a64(hash, &stack->type, sizeof(stack->type));
         hash = hash_fnv1a64(hash, &stack->count, sizeof(stack->count));
+        hash = hash_fnv1a64(hash, &stack->quality, sizeof(stack->quality));
+        hash = hash_fnv1a64(hash, &stack->hit_points, sizeof(stack->hit_points));
     }
     return hash;
 }

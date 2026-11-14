@@ -97,6 +97,9 @@ EntityId game_spawn_colonist(Game *game, int x, int y)
     colonist->needs[NEED_WATER] = 0.6f + 0.4f * rng_next_float(&game->rng);
     colonist->needs[NEED_REST] = 0.6f + 0.4f * rng_next_float(&game->rng);
     colonist->timer = rng_range_i32(&game->rng, 0, COLONIST_IDLE_MAX_TICKS);
+    for (int skill = 0; skill < SKILL_COUNT; skill++) {
+        colonist_set_skill_level(colonist, (SkillType)skill, skill_random_level(&game->rng));
+    }
     return id;
 }
 
@@ -342,14 +345,16 @@ uint64_t game_hash(const Game *game)
             continue;
         }
         const Colonist *c = &game->colonists[slot];
-        int32_t ints[12] = {(int32_t)id.index,  (int32_t)id.generation, c->x,
-                            c->y,               (int32_t)c->task,       c->timer,
-                            c->target.x,        c->target.y,            c->carried.type,
-                            c->carried.count,   c->haul_destination.x,  c->haul_destination.y};
+        int32_t ints[14] = {(int32_t)id.index,   (int32_t)id.generation, c->x,
+                            c->y,                (int32_t)c->task,       c->timer,
+                            c->target.x,         c->target.y,            c->carried.type,
+                            c->carried.count,    c->carried.quality,     c->carried.hit_points,
+                            c->haul_destination.x, c->haul_destination.y};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
         hash = hash_fnv1a64(hash, c->work_priorities, sizeof(c->work_priorities));
+        hash = hash_fnv1a64(hash, c->skills, sizeof(c->skills));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));

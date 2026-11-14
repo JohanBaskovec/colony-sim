@@ -38,13 +38,17 @@ Tick items as they land and add newly discovered tasks.
 - [x] Minimal immediate-mode UI (panels, buttons, check boxes) for the stockpile inspector
 - [x] Item weight (kg, realistic) and bulk: stack limit per tile from bulk (1,000 berries, 50 logs, 50 stones); colonists carry a limited bulk and weight per trip, and walk slower when dragging more than their weight limit
 - [x] Work priorities grid UI: colonists × work types, left click raises a priority, right click lowers it (1 to 4, empty = never); changes apply at once (a disabled work type is dropped, a newly enabled one is picked up without waiting)
-- [ ] Stockpile filters on item condition: minimum/maximum hit points and quality sliders (once items have hit points and quality)
+- [x] Item quality and hit points: five quality grades (crude to superb) and hit points per item; only items of the same grade stack, a stack keeps the average hit points; raw stone is always superb and cannot be damaged
+- [x] Skills (mining, woodcutting, gathering, levels 0 to 20, rolled at creation): the worker's skill sets the grade and condition of what it produces (novices bring back rough, damaged logs)
+- [x] Stockpile filters on item condition: quality and hit point range sliders; items a narrowed filter no longer accepts are moved out
+- [ ] Skill learning: experience from work raises levels, slowly; show skill levels in the work priorities grid
+- [ ] Skills also change work speed
 - [ ] Haul more than one stack per trip; haul towards construction sites (M3)
 - [ ] Carrying capacity from strength/health; containers (baskets, sledges) and worn equipment adding bulk and weight
 
 ## M3: Building
 
-- [ ] Blueprints, construction jobs, materials
+- [ ] Blueprints, construction jobs, materials; the quality of built things comes from the builder's skill and the quality of the materials used
 - [ ] Walls, doors, floors; furniture (bed, storage) in stone age materials
 - [ ] Room detection, roofs
 - [ ] UI framework: buttons, panels, tooltips (all translatable, layout adapts to text length)
@@ -56,7 +60,7 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Seasons affect temperature and plant growth; weather
 - [ ] Bladder and bowel needs, hygiene, latrines
 - [ ] Containers (buckets) and roles: water carrier filling buckets near dwellings
-- [ ] Gathering, cooking on fire, spoilage
+- [ ] Gathering, cooking on fire, spoilage (items lose hit points over time; outdoors faster than under a roof); food quality affects mood
 - [ ] Mood system with modifiers, mental breaks
 
 ## M5: Vision and exploration
@@ -83,7 +87,7 @@ Tick items as they land and add newly discovered tasks.
 ## Later
 
 - [ ] Social life: relationships, sexual needs (abstract representation)
-- [ ] Skills and traits
+- [ ] Traits; more skills as new kinds of work appear (basic skills are in M2)
 - [ ] Era progression system; bronze age, then the following eras
 - [ ] Pregnancy, children, aging
 - [ ] Religion, spirituality levels, "inner peace" ending; other endings

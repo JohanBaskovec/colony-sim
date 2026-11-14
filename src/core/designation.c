@@ -227,7 +227,7 @@ static void complete(Map *map, int x, int y, DesignationType type)
 }
 
 bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y,
-                          float work)
+                          float work, int skill_level, Rng *rng)
 {
     DesignationType type = designation_get(designations, x, y);
     if (type == DESIGNATION_NONE) {
@@ -242,7 +242,8 @@ bool designation_add_work(Designations *designations, Map *map, Items *items, in
     ItemType product = designation_yield(designations, map, x, y, &count);
     complete(map, x, y, type);
     if (items != NULL && product != ITEM_NONE) {
-        items_drop(items, map, x, y, product, count); /* After mining: the tile is open. */
+        /* After mining: the tile is open. */
+        items_drop(items, map, x, y, skill_product(product, count, skill_level, rng));
     }
     clear_tile(designations, index);
     designations->revision++; /* The map changed: new tiles may be reachable. */

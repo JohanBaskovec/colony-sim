@@ -1,6 +1,7 @@
 /*
- * Inspector of the selected stockpile zone: priority (1-10), allowed items
- * by category, deletion. Changes are applied to the game immediately.
+ * Inspector of the selected stockpile zone: priority (1-10), accepted quality
+ * grades and hit points (range sliders), allowed items by category, deletion.
+ * Changes are applied to the game immediately.
  */
 #ifndef COLONY_GAME_STOCKPILE_PANEL_H
 #define COLONY_GAME_STOCKPILE_PANEL_H

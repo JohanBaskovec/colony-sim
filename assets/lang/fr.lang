@@ -41,12 +41,23 @@ item.stone = Pierre
 item.berries = Baies
 item.category.food = Nourriture
 item.category.resources = Ressources
+# Paliers de qualité, du pire au meilleur, après « Qualité : » (accord au féminin)
+item.quality.crude = grossière
+item.quality.rough = médiocre
+item.quality.standard = correcte
+item.quality.fine = bonne
+item.quality.superb = superbe
 
 # Types de travail
 work.mining = Minage
 work.woodcutting = Bûcheronnage
 work.gathering = Cueillette
 work.hauling = Transport
+
+# Compétences
+skill.mining = Minage
+skill.woodcutting = Bûcheronnage
+skill.gathering = Cueillette
 
 # Saisons
 season.spring = Printemps
@@ -77,6 +88,7 @@ hud.tile.items = Objets : {0} ×{1} ({2})
 hud.tile.designation = Ordre : {0}
 hud.tile.designation_progress = Ordre : {0} ({1} % effectué)
 hud.tile.stockpile = Zone : {0}
+hud.item_condition = Qualité : {0} · Points de vie : {1}/{2} ({3})
 
 hud.debug.fps = IPS : {0}
 hud.debug.tick = Tick : {0}
@@ -112,6 +124,8 @@ hud.colonist.activity = Activité : {0}
 hud.colonist.carrying = Porte : {0} ×{1} ({2})
 hud.colonist.need = {0} : {1} %
 hud.colonist.need_state = {0} : {1} % ({2})
+hud.colonist.skills = Compétences (sur {0})
+hud.colonist.skill = {0} : {1}
 hud.selection.count.one = {0} colon sélectionné
 hud.selection.count.other = {0} colons sélectionnés
 
@@ -124,10 +138,13 @@ stockpile.priority_hint = (1 = la plus haute)
 stockpile.allowed = Objets autorisés
 stockpile.allow_all = Tout
 stockpile.allow_none = Rien
+stockpile.quality = Qualité : de {0} à {1}
+stockpile.hit_points = Points de vie : de {0} à {1}
 stockpile.delete = Supprimer
 
 # Unités
 unit.kg = {0} kg
+unit.percent = {0} %
 
 # Interface générique
 ui.close = Fermer

@@ -4,9 +4,12 @@
  * Every job belongs to a work type. Each settler has a priority per work type:
  * 0 means the settler never does that work, otherwise 1 (highest) to
  * WORK_PRIORITY_LOWEST. Settlers pick jobs by priority first, then distance.
+ * A work type may rely on a skill (core/skill.h).
  */
 #ifndef COLONY_CORE_WORK_H
 #define COLONY_CORE_WORK_H
+
+#include "core/skill.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -27,6 +30,7 @@ typedef enum WorkType {
 typedef struct WorkTypeDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
+    SkillType skill; /* Skill the work relies on, SKILL_NONE if any settler does as well. */
 } WorkTypeDef;
 
 const WorkTypeDef *work_type_def(WorkType type);

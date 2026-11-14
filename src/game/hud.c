@@ -6,7 +6,7 @@
 
 #define HUD_MARGIN 8.0f
 #define HUD_PADDING 6.0f
-#define HUD_MAX_LINES 8
+#define HUD_MAX_LINES 16
 #define HUD_LINE_SIZE 256
 
 static const SDL_Color HUD_TEXT_COLOR = {236, 236, 228, 255};
@@ -104,6 +104,23 @@ static const char *tool_name_key(DesignationType type)
     return type == DESIGNATION_NONE || def == NULL ? N_("tool.cancel") : def->name_key;
 }
 
+/* "Quality: fine · Hit points: 45/60 (75%)" line of an item stack. */
+static void add_item_condition_line(Panel *panel, ItemStack stack)
+{
+    const ItemDef *def = item_def((ItemType)stack.type);
+    if (def == NULL || stack.type == ITEM_NONE) {
+        return;
+    }
+    char hit_points[16], max_hit_points[16], number[16], percent[32];
+    tr_integer(hit_points, sizeof(hit_points), stack.hit_points);
+    tr_integer(max_hit_points, sizeof(max_hit_points), def->max_hit_points);
+    tr_integer(number, sizeof(number), item_stack_hit_points_percent(stack));
+    TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_condition"),
+              tr(item_quality_name_key((ItemQuality)stack.quality)), hit_points, max_hit_points,
+              percent);
+}
+
 static void build_status_panel(App *app, Panel *panel)
 {
     const GameClock *clock = &app->game.clock;
@@ -159,6 +176,7 @@ static void build_tile_panel(App *app, Panel *panel)
         format_weight(weight, sizeof(weight), item_stack_weight((ItemType)stack.type, stack.count));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
                   tr(item_def((ItemType)stack.type)->name_key), a, weight);
+        add_item_condition_line(panel, stack);
     }
 
     const Stockpile *stockpile =
@@ -255,9 +273,18 @@ static void build_selection_panel(App *app, Panel *panel)
         format_weight(weight, sizeof(weight), colonist_carried_weight(colonist));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.carrying"),
                   tr(item_def((ItemType)colonist->carried.type)->name_key), count, weight);
+        add_item_condition_line(panel, colonist->carried);
     }
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);
+    }
+    char max_level[8], level[8];
+    tr_integer(max_level, sizeof(max_level), SKILL_LEVEL_MAX);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.skills"), max_level);
+    for (int skill = 0; skill < SKILL_COUNT; skill++) {
+        tr_integer(level, sizeof(level), colonist_skill_level(colonist, (SkillType)skill));
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.skill"),
+                  tr(skill_def((SkillType)skill)->name_key), level);
     }
 }
 

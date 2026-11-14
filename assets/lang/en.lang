@@ -42,12 +42,23 @@ item.stone = Stone
 item.berries = Berries
 item.category.food = Food
 item.category.resources = Resources
+# Quality grades, worst to best, shown after "Quality:" (e.g. "Quality: fine")
+item.quality.crude = crude
+item.quality.rough = rough
+item.quality.standard = standard
+item.quality.fine = fine
+item.quality.superb = superb
 
 # Work types
 work.mining = Mining
 work.woodcutting = Woodcutting
 work.gathering = Gathering
 work.hauling = Hauling
+
+# Skills
+skill.mining = Mining
+skill.woodcutting = Woodcutting
+skill.gathering = Gathering
 
 # Seasons
 season.spring = Spring
@@ -92,6 +103,9 @@ hud.tile.designation = Order: {0}
 hud.tile.designation_progress = Order: {0} ({1}% done)
 # {0} = stockpile name (e.g. Stockpile 2)
 hud.tile.stockpile = Zone: {0}
+# Items on a tile or carried. {0} = quality grade, {1} = hit points,
+# {2} = maximum hit points, {3} = hit points in percent (e.g. 75%)
+hud.item_condition = Quality: {0} · Hit points: {1}/{2} ({3})
 
 # Debug overlay (F3)
 hud.debug.fps = FPS: {0}
@@ -133,6 +147,10 @@ hud.colonist.carrying = Carrying: {0} ×{1} ({2})
 hud.colonist.need = {0}: {1}%
 # {0} = need name, {1} = percentage, {2} = state (e.g. Hungry)
 hud.colonist.need_state = {0}: {1}% ({2})
+# {0} = highest skill level
+hud.colonist.skills = Skills (out of {0})
+# {0} = skill name, {1} = level
+hud.colonist.skill = {0}: {1}
 # {0} = number of selected colonists
 hud.selection.count.one = {0} colonist selected
 hud.selection.count.other = {0} colonists selected
@@ -148,10 +166,15 @@ stockpile.priority_hint = (1 = highest)
 stockpile.allowed = Allowed items
 stockpile.allow_all = All
 stockpile.allow_none = None
+# {0} = lowest accepted quality grade, {1} = highest
+stockpile.quality = Quality: {0} to {1}
+# {0} = lowest accepted hit points (e.g. 50%), {1} = highest
+stockpile.hit_points = Hit points: {0} to {1}
 stockpile.delete = Delete
 
 # Units. {0} = number
 unit.kg = {0} kg
+unit.percent = {0}%
 
 # Generic UI
 ui.close = Close

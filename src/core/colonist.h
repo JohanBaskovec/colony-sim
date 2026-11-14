@@ -18,6 +18,7 @@
 #include "core/region.h"
 #include "core/reservation.h"
 #include "core/rng.h"
+#include "core/skill.h"
 #include "core/stockpile.h"
 #include "core/work.h"
 
@@ -132,6 +133,7 @@ typedef struct Colonist {
     float max_carry_weight; /* Kilograms carried without slowing down. */
     float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
     uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */
+    uint8_t skills[SKILL_COUNT]; /* Levels, SKILL_LEVEL_MIN..SKILL_LEVEL_MAX. */
     float needs[NEED_COUNT];
 } Colonist;
 
@@ -166,6 +168,12 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context);
  * the next time it decides (a hauler finishes carrying what it holds).
  */
 bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority);
+
+/* Level in a skill; SKILL_LEVEL_MIN for SKILL_NONE or an invalid skill. */
+int colonist_skill_level(const Colonist *colonist, SkillType skill);
+
+/* Fails on an invalid skill or a level out of range. */
+bool colonist_set_skill_level(Colonist *colonist, SkillType skill, int level);
 
 /* Gives up the current task, releasing any reservation (e.g. before removal). */
 void colonist_abandon_task(Colonist *colonist, const ColonistContext *context);

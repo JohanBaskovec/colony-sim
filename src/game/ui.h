@@ -4,7 +4,8 @@
  * A mouse click (left or right) that lands on a panel drawn during the
  * previous frame is captured (the world does not see it) and handed to the
  * widgets drawn this frame: the first widget containing the click consumes
- * it. Labels are passed already translated.
+ * it. Labels are passed already translated. Sliders keep following the mouse
+ * while the left button stays down after a click on them (dragging).
  */
 #ifndef COLONY_GAME_UI_H
 #define COLONY_GAME_UI_H
@@ -23,6 +24,9 @@ typedef struct Ui {
     TextRenderer *text;
     float mouse_x;
     float mouse_y;
+    bool mouse_down; /* Left button held. */
+    int active_slider; /* Id of the slider being dragged, 0 if none. */
+    int active_handle; /* 0: low handle, 1: high handle. */
     bool click_pending;
     int click_button; /* SDL_BUTTON_LEFT or SDL_BUTTON_RIGHT. */
     float click_x;
@@ -42,7 +46,7 @@ bool ui_is_over_panel(const Ui *ui, float x, float y);
  * when it lands on a panel, false when it belongs to the world. */
 bool ui_capture_click(Ui *ui, float x, float y, int button);
 
-void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y);
+void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y, bool left_button_down);
 void ui_end_frame(Ui *ui); /* Unconsumed clicks are dropped. */
 
 /* Panel background; also blocks clicks to the world from the next frame on. */
@@ -77,6 +81,15 @@ bool ui_checkbox(Ui *ui, float x, float y, float width, UiCheck state, const cha
 
 /* Width of a check box row showing `label`. */
 float ui_checkbox_width(Ui *ui, const char *label);
+
+/*
+ * Slider selecting a range of steps 0..steps-1 with two handles. A click
+ * moves the nearest handle there, and it follows the mouse while the left
+ * button is held; the low handle never passes the high one. `id` (non-zero)
+ * identifies the slider from one frame to the next. Returns true when *low or
+ * *high changed.
+ */
+bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *high);
 
 /* Height of one widget row. */
 float ui_row_height(const Ui *ui);

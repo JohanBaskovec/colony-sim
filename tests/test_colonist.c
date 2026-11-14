@@ -744,7 +744,7 @@ static void test_hungry_colonist_eats_berries_from_the_ground(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 24, 20, ITEM_BERRIES, 20);
+    items_add(&game.items, 24, 20, item_stack_pristine(ITEM_BERRIES, 20));
     Plant *bush = &game.map.plants[map_index(&game.map, 30, 20)]; /* Farther away. */
     bush->type = PLANT_BUSH;
     bush->growth = 1.0f;
@@ -964,14 +964,14 @@ static void test_carry_capacity(void)
 
     CHECK_NEAR(colonist_carried_weight(&colonist), 0.0, 1e-6);
     CHECK_NEAR(colonist_load_speed_factor(&colonist), 1.0, 1e-6);
-    colonist.carried = (ItemStack){ITEM_STONE, 2};
+    colonist.carried = item_stack_pristine(ITEM_STONE, 2);
     CHECK_NEAR(colonist_carried_weight(&colonist), 40.0, 1e-4);
     CHECK_NEAR(colonist_load_speed_factor(&colonist), 1.0, 1e-6); /* At the limit: fine. */
 
     /* A weak colonist still drags one item, slowly. */
     colonist.max_carry_weight = 5.0f;
     CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE), 1);
-    colonist.carried = (ItemStack){ITEM_STONE, 1};
+    colonist.carried = item_stack_pristine(ITEM_STONE, 1);
     CHECK_NEAR(colonist_load_speed_factor(&colonist), 0.25, 1e-6);
     colonist.max_carry_weight = 0.1f;
     CHECK_NEAR(colonist_load_speed_factor(&colonist), COLONIST_MIN_LOAD_SPEED, 1e-6);
@@ -1060,10 +1060,76 @@ static void test_no_search_when_orders_are_out_of_reach(void)
     game_shutdown(&game);
 }
 
+static void test_starting_skills_are_random_and_valid(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    bool varied = false;
+    int first = -1;
+    for (int i = 0; i < 12; i++) {
+        Colonist *colonist = spawn_rested(&game, 10 + i, 10);
+        REQUIRE(colonist != NULL);
+        for (int skill = 0; skill < SKILL_COUNT; skill++) {
+            int level = colonist_skill_level(colonist, (SkillType)skill);
+            CHECK(level >= SKILL_LEVEL_MIN && level <= SKILL_LEVEL_MAX);
+            if (first < 0) {
+                first = level;
+            } else if (level != first) {
+                varied = true;
+            }
+        }
+    }
+    CHECK(varied);
+    game_shutdown(&game);
+}
+
+static void test_skill_levels_validate(void)
+{
+    Colonist colonist;
+    colonist_init(&colonist, "Ada", 30, 0, 0);
+    CHECK_EQ_INT(colonist_skill_level(&colonist, SKILL_MINING), SKILL_LEVEL_MIN);
+    CHECK(colonist_set_skill_level(&colonist, SKILL_MINING, 12));
+    CHECK_EQ_INT(colonist_skill_level(&colonist, SKILL_MINING), 12);
+    CHECK(!colonist_set_skill_level(&colonist, SKILL_MINING, SKILL_LEVEL_MAX + 1));
+    CHECK(!colonist_set_skill_level(&colonist, SKILL_MINING, -1));
+    CHECK(!colonist_set_skill_level(&colonist, SKILL_NONE, 3));
+    CHECK_EQ_INT(colonist_skill_level(&colonist, SKILL_MINING), 12);
+    CHECK_EQ_INT(colonist_skill_level(&colonist, SKILL_NONE), SKILL_LEVEL_MIN);
+    colonist_free(&colonist);
+}
+
+static void test_woodcutter_skill_sets_wood_condition(void)
+{
+    /* The same tree, cut by a novice and by an expert. */
+    ItemStack results[2];
+    int levels[2] = {SKILL_LEVEL_MIN, SKILL_LEVEL_MAX};
+    for (int run = 0; run < 2; run++) {
+        Game game;
+        REQUIRE(init_flat_game(&game));
+        add_tree(&game.map, 26, 20);
+        Colonist *colonist = spawn_rested(&game, 20, 20);
+        REQUIRE(colonist != NULL);
+        REQUIRE(colonist_set_skill_level(colonist, SKILL_WOODCUTTING, levels[run]));
+        game_designate_rect(&game, 26, 20, 26, 20, DESIGNATION_CHOP);
+        float work = designation_work_needed(&game.designations, &game.map, 26, 20);
+        run_ticks(&game, walk_ticks(6) + (int)work + 10);
+        results[run] = items_get(&game.items, 26, 20);
+        REQUIRE(results[run].type == ITEM_WOOD);
+        game_shutdown(&game);
+    }
+    CHECK(results[0].quality <= ITEM_QUALITY_ROUGH);
+    CHECK(results[1].quality >= ITEM_QUALITY_FINE);
+    CHECK(results[0].hit_points < results[1].hit_points);
+    CHECK_EQ_INT(results[1].hit_points, item_def(ITEM_WOOD)->max_hit_points);
+}
+
 static void test_translation_keys(void)
 {
     for (int task = 0; task < TASK_COUNT; task++) {
         CHECK(i18n_is_valid_key(colonist_task_name_key((ColonistTask)task)));
+    }
+    for (int skill = 0; skill < SKILL_COUNT; skill++) {
+        CHECK(i18n_is_valid_key(skill_def((SkillType)skill)->name_key));
     }
     for (int need = 0; need < NEED_COUNT; need++) {
         CHECK(i18n_is_valid_key(need_name_key((NeedType)need)));
@@ -1110,6 +1176,9 @@ int main(void)
     RUN_TEST(test_priority_beats_distance);
     RUN_TEST(test_hungry_colonist_eats_berries_from_the_ground);
     RUN_TEST(test_colonist_harvests_berries);
+    RUN_TEST(test_starting_skills_are_random_and_valid);
+    RUN_TEST(test_skill_levels_validate);
+    RUN_TEST(test_woodcutter_skill_sets_wood_condition);
     RUN_TEST(test_reservations_stay_consistent_over_a_long_run);
     RUN_TEST(test_position_is_interpolated_while_walking);
     RUN_TEST(test_picking);

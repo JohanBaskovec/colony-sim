@@ -176,6 +176,29 @@ static void test_hash_changes_as_simulation_runs(void)
     game_shutdown(&game);
 }
 
+static void test_hash_covers_skills_and_carried_condition(void)
+{
+    Game game;
+    REQUIRE(init_small_game(&game, 8));
+    Colonist *colonist = game_colonist(&game, game_colonist_id_at(&game, 0));
+    REQUIRE(colonist != NULL);
+    uint64_t before = game_hash(&game);
+    int level = colonist_skill_level(colonist, SKILL_GATHERING);
+    colonist_set_skill_level(colonist, SKILL_GATHERING, level == 0 ? 1 : level - 1);
+    uint64_t skilled = game_hash(&game);
+    CHECK(skilled != before);
+
+    colonist->carried = item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60);
+    uint64_t carrying = game_hash(&game);
+    colonist->carried.quality = ITEM_QUALITY_ROUGH;
+    CHECK(game_hash(&game) != carrying);
+    colonist->carried.quality = ITEM_QUALITY_FINE;
+    colonist->carried.hit_points = 30;
+    CHECK(game_hash(&game) != carrying);
+    colonist->carried = (ItemStack){.type = ITEM_NONE};
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_and_shutdown);
@@ -185,5 +208,6 @@ int main(void)
     RUN_TEST(test_plant_growth_is_spread_over_ticks);
     RUN_TEST(test_simulation_is_deterministic);
     RUN_TEST(test_hash_changes_as_simulation_runs);
+    RUN_TEST(test_hash_covers_skills_and_carried_condition);
     return test_summary();
 }

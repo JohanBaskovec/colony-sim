@@ -6,6 +6,10 @@
 #define GAP 8.0f
 #define ITEM_INDENT 20.0f
 #define TEXT_SIZE 128
+#define SLIDER_MIN_WIDTH 200.0f
+#define HIT_POINTS_STEP 5 /* Percent per slider step. */
+#define QUALITY_SLIDER_ID 1
+#define HIT_POINTS_SLIDER_ID 2
 
 static UiCheck check_state(ItemTypeMask allowed, ItemTypeMask mask)
 {
@@ -34,6 +38,15 @@ void stockpile_panel_draw(App *app, float right, float bottom)
     const char *all = tr("stockpile.allow_all");
     const char *none = tr("stockpile.allow_none");
     const char *delete_label = tr("stockpile.delete");
+    char low[32], high[32], quality[TEXT_SIZE], hit_points[TEXT_SIZE];
+    TR_FORMAT(quality, sizeof(quality), tr("stockpile.quality"),
+              tr(item_quality_name_key((ItemQuality)stockpile->quality.min)),
+              tr(item_quality_name_key((ItemQuality)stockpile->quality.max)));
+    tr_integer(number, sizeof(number), stockpile->hit_points.min);
+    TR_FORMAT(low, sizeof(low), tr("unit.percent"), number);
+    tr_integer(number, sizeof(number), stockpile->hit_points.max);
+    TR_FORMAT(high, sizeof(high), tr("unit.percent"), number);
+    TR_FORMAT(hit_points, sizeof(hit_points), tr("stockpile.hit_points"), low, high);
     /* Symbols, not words: the same in every language. */
     const char *minus = "−", *plus = "+";
 
@@ -46,7 +59,9 @@ void stockpile_panel_draw(App *app, float right, float bottom)
                                ui_text_width(ui, hint));
     width = SDL_max(width, ui_text_width(ui, allowed_label) + GAP + ui_button_width(ui, all) +
                                GAP + ui_button_width(ui, none));
-    int rows = 4;
+    width = SDL_max(width, SDL_max(SLIDER_MIN_WIDTH, ui_text_width(ui, quality)));
+    width = SDL_max(width, ui_text_width(ui, hit_points));
+    int rows = 8;
     for (int category = 0; category < ITEM_CATEGORY_COUNT; category++) {
         width = SDL_max(width,
                         ui_checkbox_width(ui, tr(item_category_name_key((ItemCategory)category))));
@@ -88,6 +103,26 @@ void stockpile_panel_draw(App *app, float right, float bottom)
         stockpile_set_priority(stockpiles, index, stockpile->priority + 1);
     }
     ui_label(ui, hint, bx + 2.0f * small + GAP, y + text_offset);
+    y += row;
+
+    /* Condition filters: quality grades, hit points in steps of HIT_POINTS_STEP %. */
+    ui_label(ui, quality, x, y + text_offset);
+    y += row;
+    int quality_low = stockpile->quality.min, quality_high = stockpile->quality.max;
+    if (ui_range_slider(ui, QUALITY_SLIDER_ID, (SDL_FRect){x, y, width, row}, ITEM_QUALITY_COUNT,
+                        &quality_low, &quality_high)) {
+        stockpile_set_quality_range(stockpiles, index, (IntRange){quality_low, quality_high});
+    }
+    y += row;
+    ui_label(ui, hit_points, x, y + text_offset);
+    y += row;
+    int hp_low = stockpile->hit_points.min / HIT_POINTS_STEP;
+    int hp_high = (stockpile->hit_points.max + HIT_POINTS_STEP - 1) / HIT_POINTS_STEP;
+    if (ui_range_slider(ui, HIT_POINTS_SLIDER_ID, (SDL_FRect){x, y, width, row},
+                        100 / HIT_POINTS_STEP + 1, &hp_low, &hp_high)) {
+        stockpile_set_hit_points_range(
+            stockpiles, index, (IntRange){hp_low * HIT_POINTS_STEP, hp_high * HIT_POINTS_STEP});
+    }
     y += row;
 
     /* Filters. */
