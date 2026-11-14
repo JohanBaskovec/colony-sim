@@ -44,10 +44,11 @@ simulation:
 |--------------|------------------------------------------------------------------------------|
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work            |
-| `designation`| Player work orders per tile (gather, cut, harvest, chop, mine), the knowledge and level each needs, work progress |
+| `designation`| Player work orders per tile (mine rock), the knowledge and level each needs, work progress |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
+| `gather_zone`| Gathering zones: tiles, one order per resource (wood, berries, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown plants only), the jobs tiles offer, what they give |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot): blueprints, materials, construction, bills, the craft in progress |
@@ -77,6 +78,7 @@ simulation:
 | `hud`          | Builds and draws the HUD panels; all text goes through `tr()`           |
 | `ui`           | Immediate-mode widgets (panel, button, check box) and click capture     |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
+| `gather_zone_panel` | Inspector of the selected gathering zone (a check box per resource, mode, target, progress, fully grown option, warnings) |
 | `station_panel` | Inspector of the selected workstation (blueprint progress, bills, warnings) |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
@@ -171,10 +173,12 @@ Settlers have a **level in each knowledge** (`Colonist.knowledge`, a `double`
 from 0 to 100, `core/knowledge.h`, design in `docs/KNOWLEDGE.md`). There is no
 tree: below `KNOWLEDGE_MASTERY_LEVEL` (50) a knowledge unlocks nothing; from
 there each order needs its own minimum level (`DesignationDef.knowledge` and
-`min_level`, checked by `colonist_can_do()`). An order whose knowledge is
-`KNOWLEDGE_NONE` cannot be done by anyone yet: felling and mining wait for
-tools and their own knowledges, and the frontend refuses to place orders
-nobody can carry out (`game_designation_available()`). The first settlers get
+`min_level`, checked by `colonist_can_do()`; gathering jobs: `GatherJobDef`,
+`colonist_can_gather()`). An order or job whose knowledge is `KNOWLEDGE_NONE`
+cannot be done by anyone yet: felling and mining wait for tools and their own
+knowledges. The frontend refuses to place orders nobody can carry out
+(`game_designation_available()`), and the zone inspector warns under a
+resource nobody can gather (`game_gather_job_known()`). The first settlers get
 50 to 80 in each starting knowledge.
 
 Completed orders produce items through `knowledge_product()`: the worker's
@@ -189,8 +193,7 @@ times a difficulty that falls as the level rises ((110 − level) / 60) and an
 age factor (children ×2, elders ×0.5). The products of a tick use the level
 before that tick's learning. Hauling needs no knowledge and teaches nothing.
 The work grid shows each colonist's level in the work type's knowledge,
-greyed below mastery. Repeating orders (gather stones) stay on their tile
-after each completion and keep the same worker busy until cancelled.
+greyed below mastery.
 
 Food items have a
 `nutrition` per unit; a hungry colonist goes to the nearest food, on the
@@ -315,8 +318,36 @@ distance. The colonist reserves the job, walks there and adds
 knowledge level). When the work needed is reached the order
 is carried out on the map (tree removed, rock dug out leaving the rough stone
 floor, grass cut, branches or twigs taken from the plant's stock), its
-products are dropped (wood, stone blocks, stones, branches...) and the
-designation disappears, unless it repeats.
+products are dropped (wood, stone blocks, branches...) and the
+designation disappears.
+
+**Gathering zones** (`core/gather_zone.h`, owned by `Game`) are how the player
+asks for what the land offers: felling trees, picking berries, taking branches
+and twigs, cutting grass and picking up stones. Designations are left for
+single-tile orders (mining). A zone holds one order per resource
+(`GatherOrder`): off by default, and when enabled it gathers N items and stops
+(counted by the order itself), or gathers until the items lying in the colony
+(`Items.totals`, as for bills; grass counts fresh and dry) reach a target, or
+gathers forever. Wood and berries may wait for fully grown plants (on by
+default) so that settlers do not walk to young plants that give little.
+`gather_zones_update()` recomputes each tick which resources every zone wants
+and bumps the zones revision when it changes; it is also bumped once per
+in-game hour, after every plant has grown, so that idle settlers look again.
+
+A zone tile offers a **job** (`GatherJob`: branches, twigs, harvest, cut grass,
+chop, stones, in that order of preference on one tile: the plant's stocks
+first, since picking its fruit or felling it would take them away, stones
+last) when it holds something a wanted resource comes from. Each job has its
+work type (felling is woodcutting, the rest gathering) and knowledge; the
+settler takes the first job of the tile among those it may do
+(`Colonist.work_type` holds the job while `gathering`). Stones are searched
+for: a tile gives a cobble, or flint on a flint patch, and a stone of a type
+no order wants is left in the ground (only flint wanted: tiles without flint
+offer nothing). The job search reuses the designation search
+(`WorkSearch.zones`), the work progress of the tile's current job lives in
+the zone layer (work on another job there starts over), and a gatherer
+chooses again after each job done, so that a more important job is noticed
+(usually it takes the same tile again).
 
 **Reservations** (`core/reservation.h`, owned by `Game`) record who is busy with
 what: (kind, tile, owner), at most one owner per tile and kind. Kinds today:
@@ -350,7 +381,8 @@ Workstations (`core/workstation.h`, owned by `Game`, at most
 (`game_place_workstation()`, refused on stockpile tiles); a colonist with
 the construction work type, and the knowledge the station needs, fetches the
 materials (a knapping spot needs a cobble as its anvil) and does the
-construction work. The cancel tool also removes blueprints; removing a
+construction work. A station made of nothing (crafting spot) is placed
+ready. The cancel tool also removes blueprints; removing a
 station drops what it held.
 
 A built station carries up to `WORKSTATION_BILL_MAX` **bills**: a recipe
@@ -376,16 +408,21 @@ a cobble knaps like crude flint); shaping a hand axe can fail
 
 **Carried tools**: a colonist has no equipment slots but keeps up to
 `COLONIST_TOOL_MAX` tools (`Colonist.tools`, at most one per type), which
-count in the carried weight and bulk. A recipe's tools are fetched like its
+count in the carried weight and bulk. Any item can be a tool when a recipe
+lists it: knapping uses a plain cobble as its hammer. When a tool to fetch
+is of the input's type, `bill_has_input()` makes sure enough is left to
+work on (two cobbles to knap a cobble). A recipe's tools are fetched like its
 input (same `RESERVATION_HAUL_SOURCE` reservation) and then kept; a removed
 colonist drops them. Swapping, wear and speed factors come with the tools
 step of M3.
 
 Station jobs (`TASK_BUILD`, `TASK_CRAFT`) go through three phases (fetch,
 go to the station, work) and reserve the station (`RESERVATION_STATION`).
-At one priority level, designations are tried first, then construction, then
-crafting, then hauling. Failed searches back off with a stamp made of the
-workstations revision, item additions and reservation releases.
+At one priority level, designations are tried first, then construction,
+crafting, gathering zones (a background job that never ends by itself) and
+hauling. Failed station searches back off with a stamp made of the
+workstations revision, item additions and reservation releases; gathering
+searches with the zones revision and reservation releases.
 
 Flint is a map layer (`Map.flint`): the chance in percent, up to
 `MAP_FLINT_MAX_CHANCE`, that gathering stones on a tile turns up flint rather

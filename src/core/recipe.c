@@ -24,42 +24,34 @@
 
 #define KNAPPING_SPOT WORKSTATION_BIT(WORKSTATION_KNAPPING_SPOT)
 #define CRAFTING_SPOT WORKSTATION_BIT(WORKSTATION_CRAFTING_SPOT)
-#define HAMMERSTONE ITEM_TYPE_BIT(ITEM_HAMMERSTONE)
+/* Knapping is done with a plain cobble as a hammer. */
+#define HAMMER ITEM_TYPE_BIT(ITEM_COBBLE)
 #define CUTTING_TOOL (ITEM_TYPE_BIT(ITEM_FLAKE) | ITEM_TYPE_BIT(ITEM_HAND_AXE))
 
 static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
-    /* Picking is choosing a good cobble, not shaping it: anywhere a knapper
-     * sits, with no tool, so that the chain can always start. */
-    [RECIPE_PICK_HAMMERSTONE] = {"pick_hammerstone", N_("recipe.pick_hammerstone"),
-                                 KNAPPING_SPOT | CRAFTING_SPOT, {ITEM_COBBLE, ITEM_NONE}, 1,
-                                 ITEM_QUALITY_CRUDE, {0, 0}, 125.0f, KNOWLEDGE_STONE_KNAPPING,
-                                 50.0f, ITEM_HAMMERSTONE},
-    [RECIPE_KNAP_CHOPPER] = {"knap_chopper", N_("recipe.knap_chopper"), KNAPPING_SPOT,
-                             {ITEM_COBBLE, ITEM_FLINT}, 1, ITEM_QUALITY_CRUDE, {HAMMERSTONE, 0},
-                             250.0f, KNOWLEDGE_STONE_KNAPPING, 50.0f, ITEM_CHOPPER},
-    [RECIPE_STRIKE_FLAKES] = {"strike_flakes", N_("recipe.strike_flakes"), KNAPPING_SPOT,
-                              {ITEM_FLINT, ITEM_COBBLE}, 1, ITEM_QUALITY_CRUDE, {HAMMERSTONE, 0},
-                              375.0f, KNOWLEDGE_STONE_KNAPPING, 55.0f, ITEM_FLAKE},
-    [RECIPE_SHAPE_HAND_AXE] = {"shape_hand_axe", N_("recipe.shape_hand_axe"), KNAPPING_SPOT,
-                               {ITEM_FLINT, ITEM_COBBLE}, 1, ITEM_QUALITY_CRUDE,
-                               {HAMMERSTONE, 0}, 2500.0f, KNOWLEDGE_STONE_KNAPPING, 70.0f,
-                               ITEM_HAND_AXE},
+    [RECIPE_CHOPPER] = {"chopper", N_("recipe.chopper"), KNAPPING_SPOT, {ITEM_COBBLE, ITEM_FLINT},
+                        1, ITEM_QUALITY_CRUDE, {HAMMER, 0}, 250.0f, KNOWLEDGE_STONE_KNAPPING,
+                        50.0f, ITEM_CHOPPER},
+    [RECIPE_FLAKES] = {"flakes", N_("recipe.flakes"), KNAPPING_SPOT, {ITEM_FLINT, ITEM_COBBLE}, 1,
+                       ITEM_QUALITY_CRUDE, {HAMMER, 0}, 375.0f, KNOWLEDGE_STONE_KNAPPING,
+                       55.0f, ITEM_FLAKE},
+    [RECIPE_HAND_AXE] = {"hand_axe", N_("recipe.hand_axe"), KNAPPING_SPOT,
+                         {ITEM_FLINT, ITEM_COBBLE}, 1, ITEM_QUALITY_CRUDE, {HAMMER, 0},
+                         2500.0f, KNOWLEDGE_STONE_KNAPPING, 70.0f, ITEM_HAND_AXE},
     /* Spears want straight branches: standard grade or better. */
-    [RECIPE_MAKE_THROWING_SPEAR] = {"make_throwing_spear", N_("recipe.make_throwing_spear"),
-                                    CRAFTING_SPOT, {ITEM_BRANCHES, ITEM_NONE}, 1,
-                                    ITEM_QUALITY_STANDARD, {CUTTING_TOOL, 0}, 3750.0f,
-                                    KNOWLEDGE_SPEAR_MAKING, 50.0f, ITEM_THROWING_SPEAR},
-    [RECIPE_MAKE_THRUSTING_SPEAR] = {"make_thrusting_spear", N_("recipe.make_thrusting_spear"),
-                                     CRAFTING_SPOT, {ITEM_BRANCHES, ITEM_NONE}, 2,
-                                     ITEM_QUALITY_STANDARD,
-                                     {ITEM_TYPE_BIT(ITEM_HAND_AXE), ITEM_TYPE_BIT(ITEM_FLAKE)},
-                                     6250.0f, KNOWLEDGE_SPEAR_MAKING, 60.0f,
-                                     ITEM_THRUSTING_SPEAR},
+    [RECIPE_THROWING_SPEAR] = {"throwing_spear", N_("recipe.throwing_spear"), CRAFTING_SPOT,
+                               {ITEM_BRANCHES, ITEM_NONE}, 1, ITEM_QUALITY_STANDARD,
+                               {CUTTING_TOOL, 0}, 3750.0f, KNOWLEDGE_SPEAR_MAKING, 50.0f,
+                               ITEM_THROWING_SPEAR},
+    [RECIPE_THRUSTING_SPEAR] = {"thrusting_spear", N_("recipe.thrusting_spear"), CRAFTING_SPOT,
+                                {ITEM_BRANCHES, ITEM_NONE}, 2, ITEM_QUALITY_STANDARD,
+                                {ITEM_TYPE_BIT(ITEM_HAND_AXE), ITEM_TYPE_BIT(ITEM_FLAKE)},
+                                6250.0f, KNOWLEDGE_SPEAR_MAKING, 60.0f, ITEM_THRUSTING_SPEAR},
 };
 
 #undef KNAPPING_SPOT
 #undef CRAFTING_SPOT
-#undef HAMMERSTONE
+#undef HAMMER
 #undef CUTTING_TOOL
 
 const RecipeDef *recipe_def(RecipeType recipe)
@@ -112,7 +104,7 @@ ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input)
 
 float recipe_failure_chance(RecipeType recipe, double level)
 {
-    if (recipe != RECIPE_SHAPE_HAND_AXE) {
+    if (recipe != RECIPE_HAND_AXE) {
         return 0.0f;
     }
     float above = (float)level - RECIPE_DEFS[recipe].min_level;
@@ -145,15 +137,10 @@ int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
     }
     ItemQuality cap = recipe_quality_cap(recipe, input);
     switch (recipe) {
-    case RECIPE_PICK_HAMMERSTONE:
-        /* The hammerstone is as good as the cobble picked. */
-        out[0] = item_stack_make(ITEM_HAMMERSTONE, 1, input.quality,
-                                 item_def(ITEM_HAMMERSTONE)->max_hit_points);
-        return 1;
-    case RECIPE_STRIKE_FLAKES:
+    case RECIPE_FLAKES:
         out[0] = product(ITEM_FLAKE, FLAKES_BASE + steps_above_mastery(level), level, rng, cap);
         return 1;
-    case RECIPE_SHAPE_HAND_AXE: {
+    case RECIPE_HAND_AXE: {
         float failure = recipe_failure_chance(recipe, level);
         if (rng != NULL && failure > 0.0f && rng_next_float(rng) < failure) {
             /* The stone is lost; some flakes are left. */

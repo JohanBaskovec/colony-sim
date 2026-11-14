@@ -130,6 +130,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
     ColonistContext context = {
         .map = &game->map,
         .designations = &game->designations,
+        .gather_zones = &game->gather_zones,
         .items = &game->items,
         .stockpiles = &game->stockpiles,
         .workstations = &game->workstations,
@@ -307,7 +308,7 @@ static bool is_flint_spot(const Map *map, int x, int y, void *userdata)
 {
     (void)userdata;
     return map_flint_chance(map, x, y) >= GAME_SPAWN_FLINT_CHANCE &&
-           designation_can_apply(map, x, y, DESIGNATION_GATHER_STONES);
+           gather_stone_ground(map, x, y);
 }
 
 typedef struct PatchSpotSearch {
@@ -321,7 +322,7 @@ typedef struct PatchSpotSearch {
 static bool is_patch_spot(const Map *map, int x, int y, void *userdata)
 {
     PatchSpotSearch *search = userdata;
-    if (!designation_can_apply(map, x, y, DESIGNATION_GATHER_STONES) ||
+    if (!gather_stone_ground(map, x, y) ||
         abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_BUSH_MIN_DISTANCE) {
         return false;
     }
@@ -354,7 +355,7 @@ static void ensure_flint_near(Game *game, TilePos center)
             int x = spot.x + dx, y = spot.y + dy;
             int distance = abs(dx) + abs(dy);
             if (distance > SPAWN_FLINT_PATCH_RADIUS ||
-                !designation_can_apply(map, x, y, DESIGNATION_GATHER_STONES)) {
+                !gather_stone_ground(map, x, y)) {
                 continue;
             }
             int chance = SPAWN_FLINT_PATCH_CHANCE - SPAWN_FLINT_PATCH_FALLOFF * distance;
@@ -396,6 +397,7 @@ bool game_init(Game *game, const NewGameParams *params)
     memset(game, 0, sizeof(*game));
     if (!worldgen_generate(&game->map, &params->world) ||
         !designations_init(&game->designations, game->map.width, game->map.height) ||
+        !gather_zones_init(&game->gather_zones, game->map.width, game->map.height) ||
         !items_init(&game->items, game->map.width, game->map.height) ||
         !stockpiles_init(&game->stockpiles, game->map.width, game->map.height) ||
         !workstations_init(&game->workstations, game->map.width, game->map.height) ||
@@ -423,6 +425,7 @@ void game_shutdown(Game *game)
     pathfinder_free(&game->pathfinder);
     regions_free(&game->regions);
     designations_free(&game->designations);
+    gather_zones_free(&game->gather_zones);
     items_free(&game->items);
     stockpiles_free(&game->stockpiles);
     workstations_free(&game->workstations);
@@ -495,7 +498,13 @@ void game_tick(Game *game)
     game->clock.tick++;
     regions_update(&game->regions, &game->map); /* Nothing to do unless the map changed. */
     update_plants(game);
+    if (game->clock.tick % GAME_PLANT_UPDATE_INTERVAL == 0) {
+        /* Every plant grew since the last time: zones may offer new jobs. */
+        gather_zones_plants_changed(&game->gather_zones);
+    }
     update_items(game);
+    /* What gathering zones want, from what lies in the colony now. */
+    gather_zones_update(&game->gather_zones, game->items.totals);
     update_colonists(game);
 }
 
@@ -512,6 +521,7 @@ uint64_t game_hash(const Game *game)
 {
     uint64_t hash = map_hash(&game->map);
     hash = designations_hash(&game->designations, hash);
+    hash = gather_zones_hash(&game->gather_zones, hash);
     hash = items_hash(&game->items, hash);
     hash = stockpiles_hash(&game->stockpiles, hash);
     hash = workstations_hash(&game->workstations, hash);
@@ -539,8 +549,9 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));
-        int32_t job[8] = {c->station,       c->station_number, c->bill,    c->recipe,
-                          c->station_phase, c->fetch.x,        c->fetch.y, c->fetch_tool};
+        int32_t job[10] = {c->station,  c->station_number, c->bill,       c->recipe,
+                           c->station_phase, c->fetch.x,   c->fetch.y,     c->fetch_tool,
+                           c->work_type, c->gathering};
         hash = hash_fnv1a64(hash, job, sizeof(job));
         for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
             ItemStack tool = c->tools[i];
@@ -564,6 +575,17 @@ bool game_designation_available(const Game *game, DesignationType type)
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
             colonist_can_do(&game->colonists[slot], type)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool game_gather_job_known(const Game *game, GatherJob job)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            colonist_can_gather(&game->colonists[slot], job)) {
             return true;
         }
     }
@@ -679,9 +701,17 @@ ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe)
 bool game_bill_has_input(const Game *game, const Bill *bill)
 {
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
-    return def != NULL &&
-           items_lying(&game->items, bill->inputs & recipe_inputs((RecipeType)bill->recipe),
-                       def->input_count);
+    if (def == NULL) {
+        return false;
+    }
+    /* Tools nobody carries yet will be taken from what lies around. */
+    ItemTypeMask tools[RECIPE_TOOL_MAX] = {0};
+    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+        if (def->tools[slot] != 0 && !colonist_carries_tool(game, def->tools[slot])) {
+            tools[slot] = def->tools[slot];
+        }
+    }
+    return bill_has_input(bill, game->items.totals, tools);
 }
 
 bool game_can_place_workstation(const Game *game, int x, int y)

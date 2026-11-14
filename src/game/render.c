@@ -32,16 +32,11 @@ static const SDL_Color COLONIST_COLORS[] = {
 /* Designation marks; index DESIGNATION_NONE is the color of the cancel tool. */
 static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_NONE] = {230, 70, 60, 255},
-    [DESIGNATION_CHOP] = {250, 210, 80, 255},
     [DESIGNATION_MINE] = {250, 140, 60, 255},
-    [DESIGNATION_HARVEST] = {225, 120, 235, 255},
-    [DESIGNATION_GATHER_STONES] = {200, 200, 210, 255},
-    [DESIGNATION_GATHER_BRANCHES] = {200, 150, 90, 255},
-    [DESIGNATION_GATHER_TWIGS] = {235, 190, 130, 255},
-    [DESIGNATION_CUT_GRASS] = {140, 230, 110, 255},
 };
 static const SDL_Color STOCKPILE_COLOR = {90, 170, 230, 255};
 static const SDL_Color STOCKPILE_REMOVE_COLOR = {230, 70, 60, 255};
+static const SDL_Color GATHER_ZONE_COLOR = {225, 170, 90, 255};
 static const SDL_Color WOOD_COLOR = {150, 98, 52, 255};
 static const SDL_Color STONE_COLOR = {176, 174, 168, 255};
 static const SDL_Color BERRY_COLOR = {150, 40, 90, 255};
@@ -309,14 +304,13 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         }
         break;
     }
-    case ITEM_HAMMERSTONE:
     case ITEM_CHOPPER: {
-        /* One fist-sized stone; a chopper has a knapped, darker edge. */
+        /* One fist-sized stone with a knapped, darker edge. */
         float size = SDL_max(2.0f, floorf(w * 0.42f));
         SDL_FRect stone = {tile->x + floorf((w - size) * 0.5f), tile->y + floorf(h * 0.4f), size,
                            floorf(size * 0.85f)};
-        fill_outlined(renderer, stone, shade(STONE_COLOR, type == ITEM_HAMMERSTONE ? -6 : 6));
-        if (type == ITEM_CHOPPER && size >= 6.0f) {
+        fill_outlined(renderer, stone, shade(STONE_COLOR, 6));
+        if (size >= 6.0f) {
             SDL_FRect edge = {stone.x + 1.0f, stone.y + 1.0f, floorf(size * 0.3f),
                               stone.h - 2.0f};
             batch_quad(renderer, shade(STONE_COLOR, -40), &edge);
@@ -467,54 +461,121 @@ void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x
     outline(renderer, area, 2.0f, color);
 }
 
-void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                       int selected)
+/* Bar at the bottom of a tile, filled to `fraction` (nothing at 0). */
+static void progress_bar(SDL_Renderer *renderer, const SDL_FRect *tile, float fraction)
 {
-    const Stockpiles *stockpiles = &game->stockpiles;
-    TileRect visible = camera_visible_tiles(camera, stockpiles->width, stockpiles->height);
-    SDL_Color normal = STOCKPILE_COLOR, highlight = STOCKPILE_COLOR;
+    if (fraction <= 0.0f || tile->w < 6.0f) {
+        return;
+    }
+    float height = SDL_max(2.0f, floorf(tile->h * 0.12f));
+    SDL_FRect bar = {tile->x + 1.0f, tile->y + tile->h - height - 1.0f, tile->w - 2.0f, height};
+    fill(renderer, PROGRESS_BACKGROUND, &bar);
+    bar.w = floorf(bar.w * fraction);
+    fill(renderer, PROGRESS_COLOR, &bar);
+}
+
+/* Zone id of a tile in a layer of zone index + 1 (0 outside), or -1. */
+static int zone_id(const uint8_t *layer, int width, int height, int x, int y)
+{
+    if (x < 0 || y < 0 || x >= width || y >= height) {
+        return -1;
+    }
+    return (int)layer[(size_t)y * (size_t)width + (size_t)x] - 1;
+}
+
+/* Zones as a translucent overlay with their borders; the selected one
+ * (index, or -1) is brighter. */
+static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, const uint8_t *layer,
+                              int width, int height, int selected, SDL_Color color)
+{
+    TileRect visible = camera_visible_tiles(camera, width, height);
+    SDL_Color normal = color, highlight = color;
     normal.a = 45;
     highlight.a = 90;
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            int index = stockpile_at(stockpiles, x, y);
-            if (index == STOCKPILE_NONE) {
+            int index = zone_id(layer, width, height, x, y);
+            if (index < 0) {
                 continue;
             }
             SDL_FRect tile = tile_rect(camera, x, y);
             fill(renderer, index == selected ? highlight : normal, &tile);
             /* Zone border: edges of the tile that face another zone or none. */
-            SDL_Color edge = STOCKPILE_COLOR;
+            SDL_Color edge = color;
             edge.a = index == selected ? 255 : 140;
             SDL_SetRenderDrawColor(renderer, edge.r, edge.g, edge.b, edge.a);
             float l = tile.x, t = tile.y, r = tile.x + tile.w - 1.0f, b = tile.y + tile.h - 1.0f;
-            if (stockpile_at(stockpiles, x - 1, y) != index) {
+            if (zone_id(layer, width, height, x - 1, y) != index) {
                 SDL_RenderLine(renderer, l, t, l, b);
             }
-            if (stockpile_at(stockpiles, x + 1, y) != index) {
+            if (zone_id(layer, width, height, x + 1, y) != index) {
                 SDL_RenderLine(renderer, r, t, r, b);
             }
-            if (stockpile_at(stockpiles, x, y - 1) != index) {
+            if (zone_id(layer, width, height, x, y - 1) != index) {
                 SDL_RenderLine(renderer, l, t, r, t);
             }
-            if (stockpile_at(stockpiles, x, y + 1) != index) {
+            if (zone_id(layer, width, height, x, y + 1) != index) {
                 SDL_RenderLine(renderer, l, b, r, b);
             }
         }
     }
 }
 
-void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
-                           int y1, bool remove)
+/* Rectangle of tiles being drawn with a zone tool. */
+static void render_zone_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                             int y1, SDL_Color color)
 {
     SDL_FRect a = tile_rect(camera, SDL_min(x0, x1), SDL_min(y0, y1));
     SDL_FRect b = tile_rect(camera, SDL_max(x0, x1), SDL_max(y0, y1));
     SDL_FRect area = {a.x, a.y, b.x + b.w - a.x, b.y + b.h - a.y};
-    SDL_Color color = remove ? STOCKPILE_REMOVE_COLOR : STOCKPILE_COLOR;
     SDL_Color translucent = color;
     translucent.a = 50;
     fill(renderer, translucent, &area);
     outline(renderer, area, 2.0f, color);
+}
+
+void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                       int selected)
+{
+    const Stockpiles *stockpiles = &game->stockpiles;
+    render_zone_layer(renderer, camera, stockpiles->zone, stockpiles->width, stockpiles->height,
+                      selected, STOCKPILE_COLOR);
+}
+
+void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                           int y1, bool remove)
+{
+    render_zone_area(renderer, camera, x0, y0, x1, y1,
+                     remove ? STOCKPILE_REMOVE_COLOR : STOCKPILE_COLOR);
+}
+
+void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                         int selected)
+{
+    const GatherZones *zones = &game->gather_zones;
+    if (zones->used_count == 0) {
+        return;
+    }
+    render_zone_layer(renderer, camera, zones->zone, zones->width, zones->height, selected,
+                      GATHER_ZONE_COLOR);
+    /* Progress of the job under way on each tile. */
+    TileRect visible = camera_visible_tiles(camera, zones->width, zones->height);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            float progress = gather_zone_progress_fraction(zones, &game->map, x, y);
+            if (progress > 0.0f) {
+                SDL_FRect tile = tile_rect(camera, x, y);
+                progress_bar(renderer, &tile, progress);
+            }
+        }
+    }
+}
+
+void render_gather_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                        int y1, bool remove)
+{
+    render_zone_area(renderer, camera, x0, y0, x1, y1,
+                     remove ? STOCKPILE_REMOVE_COLOR : GATHER_ZONE_COLOR);
 }
 
 /* Fraction of a recipe's work done on a station's craft in progress. */
@@ -527,17 +588,6 @@ static float craft_fraction(const Workstation *station)
     return clampf(station->work_progress / recipe->work, 0.0f, 1.0f);
 }
 
-static void progress_bar(SDL_Renderer *renderer, const SDL_FRect *tile, float fraction)
-{
-    if (fraction <= 0.0f || tile->w < 6.0f) {
-        return;
-    }
-    float height = SDL_max(2.0f, floorf(tile->h * 0.12f));
-    SDL_FRect bar = {tile->x + 1.0f, tile->y + tile->h - height - 1.0f, tile->w - 2.0f, height};
-    fill(renderer, PROGRESS_BACKGROUND, &bar);
-    bar.w = floorf(bar.w * fraction);
-    fill(renderer, PROGRESS_COLOR, &bar);
-}
 
 /* The station itself: a mat to sit on; a knapping spot adds a flat anvil stone. */
 static void render_station_shape(SDL_Renderer *renderer, const SDL_FRect *tile,

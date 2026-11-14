@@ -101,6 +101,13 @@ bool colonist_can_do(const Colonist *colonist, DesignationType type)
            designation_doable_at(type, colonist_knowledge_level(colonist, def->knowledge));
 }
 
+bool colonist_can_gather(const Colonist *colonist, GatherJob job)
+{
+    const GatherJobDef *def = gather_job_def(job);
+    return def != NULL &&
+           gather_job_doable_at(job, colonist_knowledge_level(colonist, def->knowledge));
+}
+
 /* KNOWLEDGE_NONE: anyone (workstations and recipes that need no knowledge). */
 static bool knows_enough(const Colonist *colonist, KnowledgeType knowledge, float min_level)
 {
@@ -140,7 +147,7 @@ int colonist_tool_index(const Colonist *colonist, ItemTypeMask types)
 
 bool colonist_add_tool(Colonist *colonist, ItemStack tool)
 {
-    if (tool.count == 0 || !item_is_tool((ItemType)tool.type) ||
+    if (tool.count == 0 || tool.type == ITEM_NONE ||
         colonist_tool_index(colonist, ITEM_TYPE_BIT(tool.type)) >= 0) {
         return false;
     }
@@ -297,6 +304,12 @@ const char *colonist_task_name_key(ColonistTask task)
 
 const char *colonist_activity_key(const Colonist *colonist)
 {
+    if (colonist->task == TASK_WORK && colonist->gathering) {
+        const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
+        if (def != NULL) {
+            return def->activity_key;
+        }
+    }
     if (colonist->task == TASK_WORK) {
         const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
         if (def != NULL && def->activity_key != NULL) {
@@ -482,19 +495,56 @@ static const int16_t NEIGHBOR_DY[4] = {-1, 0, 1, 0};
 /* Search filter for jobs: work types allowed at the priority being searched. */
 typedef struct WorkSearch {
     const Designations *designations;
+    /* Gathering zone tiles instead of designations, for these jobs. */
+    bool zones;
+    GatherJobMask jobs;
+    const GatherZones *gather_zones;
+    const Map *map;
     const Reservations *reservations;
     const Colonist *worker; /* Only jobs its knowledge allows. */
     WorkTypeMask mask;
     uint8_t self;
 } WorkSearch;
 
+/* Gathering jobs a colonist may do: work type among `mask`, and knowledge. */
+static GatherJobMask gather_jobs_for(const Colonist *colonist, WorkTypeMask mask)
+{
+    GatherJobMask jobs = 0;
+    for (int job = 0; job < GATHER_JOB_COUNT; job++) {
+        if ((mask & WORK_TYPE_BIT(gather_job_def((GatherJob)job)->work_type)) &&
+            colonist_can_gather(colonist, (GatherJob)job)) {
+            jobs |= GATHER_JOB_BIT(job);
+        }
+    }
+    return jobs;
+}
+
+/* Work types the colonist does at all. */
+static WorkTypeMask enabled_work_types(const Colonist *colonist)
+{
+    WorkTypeMask mask = 0;
+    for (int type = 0; type < WORK_TYPE_COUNT; type++) {
+        if (colonist->work_priorities[type] != WORK_PRIORITY_DISABLED) {
+            mask |= WORK_TYPE_BIT(type);
+        }
+    }
+    return mask;
+}
+
 static bool is_open_job(const WorkSearch *search, int x, int y)
 {
-    DesignationType type = designation_get(search->designations, x, y);
-    if (type == DESIGNATION_NONE ||
-        !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type)) ||
-        !colonist_can_do(search->worker, type)) {
-        return false;
+    if (search->zones) {
+        if (gather_tile_job(search->gather_zones, search->map, x, y, search->jobs) ==
+            GATHER_JOB_NONE) {
+            return false;
+        }
+    } else {
+        DesignationType type = designation_get(search->designations, x, y);
+        if (type == DESIGNATION_NONE ||
+            !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type)) ||
+            !colonist_can_do(search->worker, type)) {
+            return false;
+        }
     }
     return !reservations_taken_by_other(search->reservations, RESERVATION_WORK,
                                         (TilePos){(int16_t)x, (int16_t)y}, search->self);
@@ -537,12 +587,16 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
         regions->width != width || regions->height != height) {
         return true;
     }
-    int remaining = designations->count;
+    /* Designated tiles, or tiles of the zones that want something. */
+    int remaining = search->zones ? search->gather_zones->wanting_cells : designations->count;
     for (int y = 0; y < height && remaining > 0; y++) {
-        const uint8_t *types = &designations->type[(size_t)y * (size_t)width];
+        const uint8_t *types = search->zones
+                                   ? &search->gather_zones->zone[(size_t)y * (size_t)width]
+                                   : &designations->type[(size_t)y * (size_t)width];
         const uint32_t *ids = &regions->id[(size_t)y * (size_t)width];
         for (int x = 0; x < width; x++) {
-            if (types[x] == DESIGNATION_NONE) {
+            if (types[x] == 0 || (search->zones && search->gather_zones->list[types[x] - 1]
+                                                           .wanted == 0)) {
                 continue;
             }
             remaining--; /* The scan stops once every order has been seen. */
@@ -561,6 +615,11 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
 static uint32_t work_stamp(const ColonistContext *context)
 {
     return context->designations->revision + context->reservations->releases;
+}
+
+static uint32_t gather_stamp(const ColonistContext *context)
+{
+    return context->gather_zones->revision + context->reservations->releases;
 }
 
 static HaulWorld haul_world(const ColonistContext *context)
@@ -582,15 +641,26 @@ static uint32_t station_stamp(const ColonistContext *context)
            context->reservations->releases;
 }
 
-/* Designation jobs of the given work types: nearest one. */
+/* Designation jobs of the given work types, or gathering zone tiles
+ * (`zones`): nearest one. */
 static bool try_designation_job(Colonist *colonist, const ColonistContext *context,
-                                WorkTypeMask mask)
+                                WorkTypeMask mask, bool zones)
 {
     const Designations *designations = context->designations;
-    if (designations_count_for_work(designations, mask) == 0) {
+    GatherJobMask jobs = zones ? gather_jobs_for(colonist, mask) : 0;
+    if (zones ? jobs == 0 || context->gather_zones->wanting_cells == 0
+              : designations_count_for_work(designations, mask) == 0) {
         return false;
     }
-    WorkSearch search = {designations, context->reservations, colonist, mask, context->worker_id};
+    WorkSearch search = {.designations = designations,
+                         .zones = zones,
+                         .jobs = jobs,
+                         .gather_zones = context->gather_zones,
+                         .map = context->map,
+                         .reservations = context->reservations,
+                         .worker = colonist,
+                         .mask = mask,
+                         .self = context->worker_id};
     /* First make sure some open job can be reached at all: with orders deep
      * inside rock, across water, or all taken by others, the search would
      * explore the whole area for nothing. */
@@ -607,7 +677,11 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
     find_adjacent_job(&search, spot.x, spot.y, &target);
     begin_task(colonist, context, TASK_WORK);
     colonist->target = target;
-    colonist->work_type = (uint8_t)designation_get(designations, target.x, target.y);
+    colonist->work_type =
+        (uint8_t)(zones ? gather_tile_job(context->gather_zones, context->map, target.x,
+                                          target.y, jobs)
+                        : designation_get(designations, target.x, target.y));
+    colonist->gathering = zones;
     reservations_add(context->reservations, RESERVATION_WORK, target, context->worker_id);
     return true;
 }
@@ -638,9 +712,9 @@ static bool try_station_job(Colonist *colonist, const ColonistContext *context, 
 
 /*
  * Takes the nearest job of the highest priority level that has one. At each
- * level, designations (mining, woodcutting...) come before hauling. Each
- * search kind backs off on failure until its stamp shows that something
- * changed.
+ * level: designations (harvesting, cutting grass...), then construction,
+ * crafting, gathering zones (a background job) and hauling. Each search kind
+ * backs off on failure until its stamp shows that something changed.
  */
 static bool try_start_work(Colonist *colonist, const ColonistContext *context)
 {
@@ -653,7 +727,12 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
                            colonist->haul_search_stamp != haul_stamp(context);
     bool stations_allowed = search_allowed(colonist, SEARCH_STATION) ||
                             colonist->station_search_stamp != station_stamp(context);
+    bool gathering_allowed =
+        context->gather_zones->wanting_cells > 0 &&
+        (search_allowed(colonist, SEARCH_GATHER) ||
+         colonist->gather_search_stamp != gather_stamp(context));
     bool searched_designations = false, searched_hauling = false, searched_stations = false;
+    bool searched_gathering = false;
     const WorkTypeMask not_designations = WORK_TYPE_BIT(WORK_HAULING) |
                                           WORK_TYPE_BIT(WORK_CONSTRUCTION) |
                                           WORK_TYPE_BIT(WORK_CRAFTING);
@@ -663,7 +742,7 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
         WorkTypeMask designation_mask = mask & ~not_designations;
         if (designations_allowed && designation_mask != 0) {
             searched_designations = true;
-            if (try_designation_job(colonist, context, designation_mask)) {
+            if (try_designation_job(colonist, context, designation_mask, false)) {
                 colonist->search_failures[SEARCH_WORK] = 0;
                 colonist->search_cooldown[SEARCH_WORK] = 0;
                 return true;
@@ -677,6 +756,14 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
             if (try_station_job(colonist, context, build)) {
                 colonist->search_failures[SEARCH_STATION] = 0;
                 colonist->search_cooldown[SEARCH_STATION] = 0;
+                return true;
+            }
+        }
+        if (gathering_allowed && gather_jobs_for(colonist, mask) != 0) {
+            searched_gathering = true;
+            if (try_designation_job(colonist, context, mask, true)) {
+                colonist->search_failures[SEARCH_GATHER] = 0;
+                colonist->search_cooldown[SEARCH_GATHER] = 0;
                 return true;
             }
         }
@@ -700,6 +787,10 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
     if (searched_stations) {
         search_failed(colonist, SEARCH_STATION);
         colonist->station_search_stamp = station_stamp(context);
+    }
+    if (searched_gathering) {
+        search_failed(colonist, SEARCH_GATHER);
+        colonist->gather_search_stamp = gather_stamp(context);
     }
     return false;
 }
@@ -843,6 +934,14 @@ static void haul(Colonist *colonist, const ColonistContext *context)
 static bool job_still_valid(const Colonist *colonist, const ColonistContext *context)
 {
     TilePos target = colonist->target;
+    bool own = reservations_owner(context->reservations, RESERVATION_WORK, target) ==
+               context->worker_id;
+    if (colonist->gathering) {
+        GatherJob job = (GatherJob)colonist->work_type;
+        return own && (unsigned)job < GATHER_JOB_COUNT &&
+               (gather_jobs_for(colonist, enabled_work_types(colonist)) & GATHER_JOB_BIT(job)) &&
+               gather_job_available(context->gather_zones, context->map, target.x, target.y, job);
+    }
     const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
     return def != NULL &&
            colonist->work_priorities[def->work_type] != WORK_PRIORITY_DISABLED &&
@@ -862,6 +961,23 @@ static void work(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0); /* Not there, or the order was cancelled. */
         return;
     }
+    if (colonist->gathering) {
+        GatherJob job = (GatherJob)colonist->work_type;
+        KnowledgeType knowledge = gather_job_def(job)->knowledge;
+        /* Products depend on the level before this tick's learning. */
+        bool done = gather_zone_add_work(context->gather_zones, context->map, context->items,
+                                         target.x, target.y, job,
+                                         colonist_work_speed(colonist, knowledge),
+                                         colonist_knowledge_level(colonist, knowledge),
+                                         context->rng);
+        colonist_learn_by_doing(colonist, knowledge, 1);
+        /* After each job, choose again: a zone may keep a settler busy
+         * forever, and a more important job may be waiting. */
+        if (done) {
+            set_idle(colonist, context, 0);
+        }
+        return;
+    }
     if (!designation_can_apply(context->map, target.x, target.y, type)) {
         designation_set(designations, context->map, target.x, target.y, DESIGNATION_NONE);
         set_idle(colonist, context, 0);
@@ -873,10 +989,8 @@ static void work(Colonist *colonist, const ColonistContext *context)
                                      target.y, colonist_work_speed(colonist, knowledge),
                                      colonist_knowledge_level(colonist, knowledge), context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1);
-    /* A repeating order stays: carry on with it. Otherwise look for the next
-     * job right away. */
-    if (done && designation_get(designations, target.x, target.y) != type) {
-        set_idle(colonist, context, 0);
+    if (done) {
+        set_idle(colonist, context, 0); /* Look for the next job right away. */
     }
 }
 
@@ -946,8 +1060,18 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
         if ((in_progress && station->work_recipe != recipe) ||
             !colonist_can_craft(colonist, recipe) ||
             !bill_wants_more(bill, stored_count(context, bill)) ||
-            !tools_obtainable(colonist, context, def) ||
-            (!in_progress && !items_exist(context->items, bill->inputs, def->input_count))) {
+            !tools_obtainable(colonist, context, def)) {
+            continue;
+        }
+        /* The tools still to fetch may be of the input's type (a cobble to
+         * knap with): they must leave enough to work on. */
+        ItemTypeMask to_fetch[RECIPE_TOOL_MAX] = {0};
+        for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+            if (def->tools[slot] != 0 && colonist_tool_index(colonist, def->tools[slot]) < 0) {
+                to_fetch[slot] = def->tools[slot];
+            }
+        }
+        if (!in_progress && !bill_has_input(bill, context->items->totals, to_fetch)) {
             continue;
         }
         return index;
@@ -1192,7 +1316,12 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context,
         return false;
     }
     if (colonist->fetch_tool) {
-        if (!item_is_tool((ItemType)stack.type) || !colonist_add_tool(colonist, stack)) {
+        const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
+        ItemTypeMask tools = 0;
+        for (int slot = 0; def != NULL && slot < RECIPE_TOOL_MAX; slot++) {
+            tools |= def->tools[slot];
+        }
+        if (!(tools & ITEM_TYPE_BIT(stack.type)) || !colonist_add_tool(colonist, stack)) {
             return false;
         }
         items_remove(context->items, colonist->x, colonist->y, 1);

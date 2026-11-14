@@ -18,6 +18,7 @@
 
 #include "core/designation.h"
 #include "core/game_clock.h"
+#include "core/gather_zone.h"
 #include "core/knowledge.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
@@ -135,6 +136,7 @@ typedef enum SearchKind {
     SEARCH_WORK,
     SEARCH_HAUL,
     SEARCH_STATION, /* Building and crafting jobs at workstations. */
+    SEARCH_GATHER,  /* Gathering zones. */
     SEARCH_COUNT
 } SearchKind;
 
@@ -163,7 +165,10 @@ typedef struct Colonist {
     /* Food tile (TASK_EAT), drinking spot (TASK_DRINK) or designated tile (TASK_WORK). */
     TilePos target;
     int timer; /* Idle countdown (TASK_IDLE), eating or drinking progress. */
-    uint8_t work_type; /* DesignationType being worked on (TASK_WORK). */
+    /* TASK_WORK: the DesignationType being worked on, or the GatherJob when
+     * `gathering` (in a gathering zone rather than on a designation). */
+    uint8_t work_type;
+    bool gathering;
     int search_cooldown[SEARCH_COUNT]; /* Ticks before searching again. */
     int search_failures[SEARCH_COUNT]; /* Consecutive failed searches. */
     /* Designations revision + reservation releases at the last failed work search. */
@@ -173,6 +178,9 @@ typedef struct Colonist {
     /* Workstations revision + item additions + releases at the last failed
      * building or crafting search. */
     uint32_t station_search_stamp;
+    /* Gathering zones revision + reservation releases at the last failed
+     * gathering search. */
+    uint32_t gather_search_stamp;
     ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
     TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
@@ -205,6 +213,7 @@ typedef struct Colonist {
 typedef struct ColonistContext {
     Map *map;
     Designations *designations;
+    GatherZones *gather_zones;
     Items *items;
     Stockpiles *stockpiles;
     Workstations *workstations;
@@ -247,6 +256,9 @@ void colonist_learn_by_doing(Colonist *colonist, KnowledgeType knowledge, int ti
 /* Whether the colonist knows enough to carry out this kind of order. */
 bool colonist_can_do(const Colonist *colonist, DesignationType type);
 
+/* Whether the colonist knows enough to do this gathering job. */
+bool colonist_can_gather(const Colonist *colonist, GatherJob job);
+
 /* Work done per tick on something of `knowledge`: COLONIST_WORK_SPEED scaled
  * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE). */
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge);
@@ -261,8 +273,9 @@ bool colonist_can_craft(const Colonist *colonist, RecipeType recipe);
  * points), or -1 when it carries none of them. */
 int colonist_tool_index(const Colonist *colonist, ItemTypeMask types);
 
-/* Takes one tool. Fails when it is not a tool, a tool of the same type is
- * already carried, or every slot is used. */
+/* Takes one item as a tool (any item a recipe uses as one, e.g. a cobble as
+ * a hammer). Fails when one of the same type is already carried, or every
+ * slot is used. */
 bool colonist_add_tool(Colonist *colonist, ItemStack tool);
 
 /* Drops every carried tool where the colonist stands (e.g. before removal). */

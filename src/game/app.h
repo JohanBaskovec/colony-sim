@@ -21,6 +21,7 @@ typedef enum AppTool {
     APP_TOOL_DESIGNATE, /* Place orders of `tool_type` (DESIGNATION_NONE: remove orders). */
     APP_TOOL_STOCKPILE, /* Create/extend stockpile zones; with Shift, remove zone tiles. */
     APP_TOOL_BUILD,     /* Place a blueprint of `build_type` on the clicked tile. */
+    APP_TOOL_GATHER,    /* Create/extend gathering zones; with Shift, remove zone tiles. */
 } AppTool;
 
 typedef struct App {
@@ -56,6 +57,9 @@ typedef struct App {
      * other selections; same guard. */
     int selected_station;
     int selected_station_number;
+    /* Selected gathering zone (GATHER_ZONE_NONE if none), same rules. */
+    int selected_gather_zone;
+    int selected_gather_zone_number;
 
     /* Work priorities grid (game/work_panel.h). */
     bool show_work_panel;

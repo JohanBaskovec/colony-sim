@@ -5,6 +5,7 @@ add_library(colony_core STATIC
     designation.c
     game.c
     game_clock.c
+    gather_zone.c
     hauling.c
     i18n.c
     item.c

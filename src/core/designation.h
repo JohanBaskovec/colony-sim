@@ -1,12 +1,13 @@
 /*
- * Designations: work orders placed by the player on tiles (gather stones
- * here, cut this grass). They are kept apart from the Map, which only
- * describes the physical world.
+ * Designations: work orders placed by the player on single tiles (mine this
+ * wall). They are kept apart from the Map, which only describes the physical
+ * world. What the land offers (wood, berries, grass, stones...) is gathered
+ * in zones instead (core/gather_zone.h).
  *
  * Each order belongs to a knowledge (core/knowledge.h): only settlers with at
- * least its minimum level carry it out. Felling trees and mining rock need
- * tools and knowledges that are not in the game yet: nobody can do them for
- * now, but the orders exist.
+ * least its minimum level carry it out. Mining needs a pick and a knowledge
+ * that are not in the game yet: nobody can do it for now, but the order
+ * exists.
  *
  * Each designated tile also stores how much work has been done, so that
  * interrupted work resumes where it stopped. Who works on which tile is
@@ -25,27 +26,18 @@
 
 typedef enum DesignationType {
     DESIGNATION_NONE = 0,
-    DESIGNATION_CHOP, /* Cut down a tree. */
     DESIGNATION_MINE, /* Dig out a rock wall. */
-    DESIGNATION_HARVEST, /* Pick the fruit of a ripe plant; the plant stays. */
-    DESIGNATION_GATHER_STONES, /* Pick up stones from the ground, again and again. */
-    DESIGNATION_GATHER_BRANCHES, /* Take the dead branches of a tree; the tree stays. */
-    DESIGNATION_GATHER_TWIGS, /* Take the twigs of a tree or bush; the plant stays. */
-    DESIGNATION_CUT_GRASS, /* Cut grass, which grows back. */
     DESIGNATION_COUNT
 } DesignationType;
 
 typedef struct DesignationDef {
     const char *id; /* Stable identifier (saves), never shown. */
-    const char *name_key; /* Order name, e.g. "Chop trees". */
-    const char *activity_key; /* What a settler doing it is busy with, e.g. "Chopping a tree". */
+    const char *name_key; /* Order name, e.g. "Mine rock". */
+    const char *activity_key; /* What a settler doing it is busy with, e.g. "Mining". */
     WorkType work_type;
     /* Knowledge needed, KNOWLEDGE_NONE when nobody can carry it out yet. */
     KnowledgeType knowledge;
     float min_level; /* At least KNOWLEDGE_MASTERY_LEVEL. */
-    /* The order stays once carried out, and is carried out again and again
-     * until the player cancels it. */
-    bool repeats;
 } DesignationDef;
 
 typedef struct Designations {
@@ -69,14 +61,14 @@ void designations_free(Designations *designations);
 /* Whether a settler at `level` in the order's knowledge can carry it out. */
 bool designation_doable_at(DesignationType type, double level);
 
-/* Whether the order makes sense on this tile (a tree to chop, stones to gather...). */
+/* Whether the order makes sense on this tile (a wall to mine...). */
 bool designation_can_apply(const Map *map, int x, int y, DesignationType type);
 
 DesignationType designation_get(const Designations *designations, int x, int y);
 
 /*
  * Places an order on a tile. DESIGNATION_NONE removes the order. Invalid
- * orders (nothing to chop...) are ignored. Re-placing the same order keeps
+ * orders (nothing to mine...) are ignored. Re-placing the same order keeps
  * its progress. Returns whether the tile changed.
  */
 bool designation_set(Designations *designations, const Map *map, int x, int y,
@@ -90,7 +82,6 @@ int designations_set_rect(Designations *designations, const Map *map, int x0, in
 /* Designated tiles whose work type is in `mask`. */
 int designations_count_for_work(const Designations *designations, WorkTypeMask mask);
 
-
 /* Total work needed to complete the order on this tile (0 if none). */
 float designation_work_needed(const Designations *designations, const Map *map, int x, int y);
 
@@ -100,19 +91,17 @@ float designation_progress_fraction(const Designations *designations, const Map 
 
 /*
  * Adds work to a designated tile. When enough work is done, the order is
- * carried out on the map (the tree disappears, the grass is cut...), its
+ * carried out on the map (the wall disappears...), its
  * products are dropped on the ground (`items` may be NULL) and true is
- * returned; the designation is removed, unless the order repeats (its
- * progress then starts over). The products' quality and condition come from
- * the worker's `level` in the order's knowledge (core/knowledge.h); `rng`
- * may be NULL for average products. Stones gathered on a flint patch are
- * flint nodules with the tile's chance (cobbles when `rng` is NULL).
+ * returned; the designation is removed. The products' quality and condition
+ * come from the worker's `level` in the order's knowledge
+ * (core/knowledge.h); `rng` may be NULL for average products.
  */
 bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y,
                           float work, double level, Rng *rng);
 
 /* Items the order on this tile would produce if completed now (ITEM_NONE:
- * nothing); gathering stones gives cobbles here, flint being drawn on completion. */
+ * nothing). */
 ItemType designation_yield(const Designations *designations, const Map *map, int x, int y,
                            int *count);
 

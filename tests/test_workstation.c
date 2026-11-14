@@ -30,8 +30,9 @@ static void test_definitions(void)
         const WorkstationDef *def = workstation_def((WorkstationType)type);
         REQUIRE(def != NULL);
         CHECK(def->id != NULL && def->name_key != NULL);
-        CHECK(def->build_work > 0.0f);
         CHECK((def->material == ITEM_NONE) == (def->material_count == 0));
+        /* Only stations made of something need building. */
+        CHECK((def->material == ITEM_NONE) == (def->build_work <= 0.0f));
     }
     CHECK(workstation_def(WORKSTATION_TYPE_COUNT) == NULL);
     /* Anyone can set up a crafting spot, with nothing: the chain can start. */
@@ -108,10 +109,13 @@ static void test_building(void)
     ItemStack returned[2];
     CHECK_EQ_INT(workstations_remove(&stations, index, returned), 0);
 
-    /* A crafting spot needs no materials. */
+    /* A crafting spot needs no materials: it is ready at once. */
     index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 8, 8);
-    CHECK(workstation_add_build_work(&stations, index,
-                                     workstation_def(WORKSTATION_CRAFTING_SPOT)->build_work));
+    station = workstation_get_const(&stations, index);
+    CHECK(station->built);
+    CHECK_EQ_INT(workstation_materials_missing(station), 0);
+    CHECK_NEAR(workstation_build_fraction(station), 1.0, 1e-6);
+    CHECK(!workstation_add_build_work(&stations, index, needed));
     free_world(&map, &stations, &items);
 }
 
@@ -124,12 +128,12 @@ static void test_bills(void)
     int knapping = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4);
     int crafting = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 8, 8);
     /* Recipes go to their own stations. */
-    CHECK_EQ_INT(workstation_add_bill(&stations, crafting, RECIPE_STRIKE_FLAKES), -1);
-    CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_MAKE_THROWING_SPEAR), -1);
-    CHECK_EQ_INT(workstation_add_bill(&stations, crafting, RECIPE_PICK_HAMMERSTONE), 0);
+    CHECK_EQ_INT(workstation_add_bill(&stations, crafting, RECIPE_FLAKES), -1);
+    CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_THROWING_SPEAR), -1);
+    CHECK_EQ_INT(workstation_add_bill(&stations, crafting, RECIPE_THROWING_SPEAR), 0);
     CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_COUNT), -1);
 
-    int bill = workstation_add_bill(&stations, knapping, RECIPE_STRIKE_FLAKES);
+    int bill = workstation_add_bill(&stations, knapping, RECIPE_FLAKES);
     REQUIRE(bill == 0);
     Workstation *station = workstation_get(&stations, knapping);
     Bill *flakes = &station->bills[bill];
@@ -160,13 +164,13 @@ static void test_bills(void)
     CHECK(bill_wants_more(&test, 1000));
 
     for (int i = 1; i < WORKSTATION_BILL_MAX; i++) {
-        CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_KNAP_CHOPPER), i);
+        CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_CHOPPER), i);
     }
-    CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_KNAP_CHOPPER), -1);
+    CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_CHOPPER), -1);
     ItemStack returned;
     CHECK(!workstation_remove_bill(&stations, knapping, 0, &returned));
     CHECK_EQ_INT(station->bill_count, WORKSTATION_BILL_MAX - 1);
-    CHECK_EQ_INT(station->bills[0].recipe, RECIPE_KNAP_CHOPPER);
+    CHECK_EQ_INT(station->bills[0].recipe, RECIPE_CHOPPER);
     CHECK(!workstation_remove_bill(&stations, knapping, WORKSTATION_BILL_MAX, &returned));
     free_world(&map, &stations, &items);
 }
@@ -178,19 +182,19 @@ static void test_crafting(void)
     Items items;
     REQUIRE(init_world(&map, &stations, &items));
     int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4);
-    int bill = workstation_add_bill(&stations, index, RECIPE_STRIKE_FLAKES);
+    int bill = workstation_add_bill(&stations, index, RECIPE_FLAKES);
     ItemStack flint = item_stack_make(ITEM_FLINT, 1, ITEM_QUALITY_FINE, 0);
     /* Not before the station is built. */
-    CHECK(!workstation_start_craft(&stations, index, RECIPE_STRIKE_FLAKES, flint));
+    CHECK(!workstation_start_craft(&stations, index, RECIPE_FLAKES, flint));
     workstation_deliver(&stations, index, item_stack_pristine(ITEM_COBBLE, 1));
     workstation_add_build_work(&stations, index, 1000.0f);
 
-    CHECK(!workstation_start_craft(&stations, index, RECIPE_STRIKE_FLAKES,
+    CHECK(!workstation_start_craft(&stations, index, RECIPE_FLAKES,
                                    item_stack_pristine(ITEM_WOOD, 1)));
-    REQUIRE(workstation_start_craft(&stations, index, RECIPE_STRIKE_FLAKES, flint));
-    CHECK(!workstation_start_craft(&stations, index, RECIPE_STRIKE_FLAKES, flint)); /* Busy. */
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES, flint));
+    CHECK(!workstation_start_craft(&stations, index, RECIPE_FLAKES, flint)); /* Busy. */
 
-    float needed = recipe_def(RECIPE_STRIKE_FLAKES)->work;
+    float needed = recipe_def(RECIPE_FLAKES)->work;
     CHECK(!workstation_add_craft_work(&stations, index, bill, &items, &map, needed * 0.5f, 55.0,
                                       NULL));
     CHECK(workstation_add_craft_work(&stations, index, bill, &items, &map, needed * 0.5f, 55.0,
@@ -205,7 +209,7 @@ static void test_crafting(void)
     CHECK(!workstation_add_craft_work(&stations, index, bill, &items, &map, needed, 55.0, NULL));
 
     /* The input of an unfinished craft comes back with its bill. */
-    REQUIRE(workstation_start_craft(&stations, index, RECIPE_STRIKE_FLAKES, flint));
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES, flint));
     ItemStack returned = {0};
     CHECK(workstation_remove_bill(&stations, index, bill, &returned));
     CHECK_EQ_INT(returned.type, ITEM_FLINT);
@@ -223,9 +227,29 @@ static void test_hash(void)
     int index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4);
     uint64_t placed = workstations_hash(&stations, HASH_FNV1A64_INIT);
     CHECK(placed != empty);
-    workstation_add_bill(&stations, index, RECIPE_PICK_HAMMERSTONE);
+    workstation_add_bill(&stations, index, RECIPE_THROWING_SPEAR);
     CHECK(workstations_hash(&stations, HASH_FNV1A64_INIT) != placed);
     free_world(&map, &stations, &items);
+}
+
+static void test_bill_inputs_after_tools(void)
+{
+    Bill bill = {.recipe = RECIPE_CHOPPER, .mode = BILL_DO_TIMES, .target = 1,
+                 .inputs = recipe_inputs(RECIPE_CHOPPER)};
+    long totals[ITEM_TYPE_COUNT] = {0};
+    ItemTypeMask hammer[RECIPE_TOOL_MAX] = {ITEM_TYPE_BIT(ITEM_COBBLE), 0};
+    ItemTypeMask none[RECIPE_TOOL_MAX] = {0, 0};
+    totals[ITEM_COBBLE] = 1;
+    CHECK(bill_has_input(&bill, totals, none));    /* The hammer is already carried. */
+    CHECK(!bill_has_input(&bill, totals, hammer)); /* The only cobble is the hammer. */
+    totals[ITEM_FLINT] = 1;
+    CHECK(bill_has_input(&bill, totals, hammer)); /* Strike the flint with the cobble. */
+    bill.inputs = ITEM_TYPE_BIT(ITEM_COBBLE);
+    CHECK(!bill_has_input(&bill, totals, hammer)); /* Flint not allowed. */
+    totals[ITEM_COBBLE] = 2;
+    CHECK(bill_has_input(&bill, totals, hammer));
+    bill.inputs = 0;
+    CHECK(!bill_has_input(&bill, totals, none));
 }
 
 int main(void)
@@ -235,6 +259,7 @@ int main(void)
     RUN_TEST(test_building);
     RUN_TEST(test_bills);
     RUN_TEST(test_crafting);
+    RUN_TEST(test_bill_inputs_after_tools);
     RUN_TEST(test_hash);
     return test_summary();
 }

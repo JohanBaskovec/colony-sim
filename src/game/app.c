@@ -50,25 +50,51 @@ static void cycle_build_tool(App *app)
     app->box_selecting = false;
 }
 
+/* Colonists, a station or a zone: one kind of selection at a time. */
+static void clear_selection(App *app)
+{
+    app->selected_count = 0;
+    app->selected_stockpile = STOCKPILE_NONE;
+    app->selected_station = WORKSTATION_NONE;
+    app->selected_gather_zone = GATHER_ZONE_NONE;
+}
+
 static void select_stockpile(App *app, int index)
 {
     const Stockpile *stockpile = stockpile_get(&app->game.stockpiles, index);
+    if (stockpile != NULL) {
+        clear_selection(app);
+    }
     app->selected_stockpile = stockpile != NULL ? index : STOCKPILE_NONE;
     app->selected_stockpile_number = stockpile != NULL ? stockpile->number : 0;
-    if (stockpile != NULL) {
-        app->selected_count = 0; /* Colonists and zones are not selected together. */
-        app->selected_station = WORKSTATION_NONE;
-    }
 }
 
 static void select_station(App *app, int index)
 {
     const Workstation *station = workstation_get_const(&app->game.workstations, index);
+    if (station != NULL) {
+        clear_selection(app);
+    }
     app->selected_station = station != NULL ? index : WORKSTATION_NONE;
     app->selected_station_number = station != NULL ? station->number : 0;
-    if (station != NULL) {
-        app->selected_count = 0;
-        app->selected_stockpile = STOCKPILE_NONE;
+}
+
+static void select_gather_zone(App *app, int index)
+{
+    const GatherZone *zone = gather_zone_get(&app->game.gather_zones, index);
+    if (zone != NULL) {
+        clear_selection(app);
+    }
+    app->selected_gather_zone = zone != NULL ? index : GATHER_ZONE_NONE;
+    app->selected_gather_zone_number = zone != NULL ? zone->number : 0;
+}
+
+/* Forgets the selected gathering zone once it no longer exists. */
+static void prune_gather_zone_selection(App *app)
+{
+    const GatherZone *zone = gather_zone_get(&app->game.gather_zones, app->selected_gather_zone);
+    if (zone == NULL || zone->number != app->selected_gather_zone_number) {
+        app->selected_gather_zone = GATHER_ZONE_NONE;
     }
 }
 
@@ -215,6 +241,7 @@ bool app_init(App *app, const CliOptions *options)
     ui_init(&app->ui, app->renderer, app->text);
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
+    app->selected_gather_zone = GATHER_ZONE_NONE;
     app->running = true;
     return true;
 }
@@ -271,19 +298,16 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
             app->selected_stockpile = STOCKPILE_NONE;
         } else if (app->selected_station != WORKSTATION_NONE) {
             app->selected_station = WORKSTATION_NONE;
+        } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
+            app->selected_gather_zone = GATHER_ZONE_NONE;
         } else if (app->tool != APP_TOOL_NONE) {
             app->tool = APP_TOOL_NONE;
         } else {
             app->running = false;
         }
         break;
-    case SDLK_C: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_CHOP); break;
     case SDLK_M: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); break;
-    case SDLK_H: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_HARVEST); break;
-    case SDLK_R: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_GATHER_STONES); break;
-    case SDLK_B: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_GATHER_BRANCHES); break;
-    case SDLK_K: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_GATHER_TWIGS); break;
-    case SDLK_G: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_CUT_GRASS); break;
+    case SDLK_R: toggle_tool(app, APP_TOOL_GATHER, DESIGNATION_NONE); break;
     case SDLK_X: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); break;
     /* Not A, D, Q, S, W or Z: movement keys on QWERTY or AZERTY keyboards. */
     case SDLK_P: toggle_tool(app, APP_TOOL_STOCKPILE, DESIGNATION_NONE); break;
@@ -335,8 +359,8 @@ static void prune_selection(App *app)
     }
 }
 
-/* Click: select the colonist under the cursor, or else the workstation or the
- * stockpile zone there. Shift adds colonists to / removes them from the
+/* Click: select the colonist under the cursor, or else the workstation, the
+ * stockpile zone or the gathering zone there. Shift adds colonists to / removes them from the
  * selection. */
 static void select_at_point(App *app, float screen_x, float screen_y, bool additive)
 {
@@ -348,14 +372,18 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     }
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
+    app->selected_gather_zone = GATHER_ZONE_NONE;
     if (entity_id_is_none(id)) {
         if (!additive) {
             int x = (int)floorf(world_x), y = (int)floorf(world_y);
             int station = workstation_at(&app->game.workstations, x, y);
+            int stockpile = stockpile_at(&app->game.stockpiles, x, y);
             if (station != WORKSTATION_NONE) {
                 select_station(app, station);
+            } else if (stockpile != STOCKPILE_NONE) {
+                select_stockpile(app, stockpile);
             } else {
-                select_stockpile(app, stockpile_at(&app->game.stockpiles, x, y));
+                select_gather_zone(app, gather_zone_at(&app->game.gather_zones, x, y));
             }
         }
         return;
@@ -380,6 +408,7 @@ static void select_in_box(App *app, float x0, float y0, float x1, float y1, bool
     }
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
+    app->selected_gather_zone = GATHER_ZONE_NONE;
     for (int i = 0; i < count; i++) {
         select_add(app, found[i]);
     }
@@ -415,6 +444,22 @@ static void apply_stockpile_tool(App *app, float screen_x, float screen_y, bool 
         stockpile_extend(stockpiles, &app->game.map, app->selected_stockpile, x0, y0, x1, y1);
     } else {
         select_stockpile(app, stockpile_create(stockpiles, &app->game.map, x0, y0, x1, y1));
+    }
+}
+
+/* Gathering zone tool release: like the stockpile tool. */
+static void apply_gather_tool(App *app, float screen_x, float screen_y, bool remove)
+{
+    GatherZones *zones = &app->game.gather_zones;
+    int x0, y0, x1, y1;
+    tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
+    if (remove) {
+        gather_zones_remove_rect(zones, x0, y0, x1, y1);
+        prune_gather_zone_selection(app);
+    } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
+        gather_zone_extend(zones, &app->game.map, app->selected_gather_zone, x0, y0, x1, y1);
+    } else {
+        select_gather_zone(app, gather_zone_create(zones, &app->game.map, x0, y0, x1, y1));
     }
 }
 
@@ -464,6 +509,8 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         }
     } else if (app->tool == APP_TOOL_STOCKPILE) {
         apply_stockpile_tool(app, button->x, button->y, additive);
+    } else if (app->tool == APP_TOOL_GATHER) {
+        apply_gather_tool(app, button->x, button->y, additive);
     } else if (app->box_selecting) {
         select_in_box(app, app->drag_start_x, app->drag_start_y, button->x, button->y, additive);
     } else {
@@ -565,6 +612,7 @@ static void render_frame(App *app)
     SDL_RenderClear(app->renderer);
 
     render_map(app->renderer, &app->game.map, &app->camera);
+    render_gather_zones(app->renderer, &app->game, &app->camera, app->selected_gather_zone);
     render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
     render_workstations(app->renderer, &app->game, &app->camera, app->selected_station);
     render_items(app->renderer, &app->game, &app->camera);
@@ -589,9 +637,11 @@ static void render_frame(App *app)
         SDL_GetMouseState(&mouse_x, &mouse_y);
         int x0, y0, x1, y1;
         tool_rect(app, mouse_x, mouse_y, &x0, &y0, &x1, &y1);
+        bool remove = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
         if (app->tool == APP_TOOL_STOCKPILE) {
-            bool remove = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
             render_stockpile_area(app->renderer, &app->camera, x0, y0, x1, y1, remove);
+        } else if (app->tool == APP_TOOL_GATHER) {
+            render_gather_area(app->renderer, &app->camera, x0, y0, x1, y1, remove);
         } else {
             render_designation_area(app->renderer, &app->camera, x0, y0, x1, y1,
                                     app->tool_type);
@@ -632,6 +682,7 @@ void app_run(App *app)
         prune_selection(app);
         prune_stockpile_selection(app);
         prune_station_selection(app);
+        prune_gather_zone_selection(app);
         update_fps(app, dt);
         render_frame(app);
     }

@@ -5,17 +5,34 @@
  *     bench_simulation [colonists] [days] [scenario] [map_size] [seed]
  *
  * Scenarios: 0 = colonists left alone (needs and wandering only);
- * 1 = every plant of the map designated (grass cut, twigs, branches and
- * berries gathered), stones gathered next to the colony, two stockpiles (work,
- * hauling, and many orders that cannot be reached);
- * 2 = only orders that nobody can reach: branches of the trees growing where
- * the colonists cannot walk to (other islands).
+ * 1 = a gathering zone over the whole map (grass cut, twigs, branches and
+ * berries gathered, forever), a zone gathering stones forever next to the
+ * colony, two stockpiles (work, hauling, and many jobs that cannot be reached);
+ * 2 = only jobs that nobody can reach: a zone gathering the branches of the
+ * trees growing where the colonists cannot walk to (other islands).
  */
 #include "core/game.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+
+static void gather_forever(Game *game, int zone, GatherResource resource)
+{
+    gather_zone_set_enabled(&game->gather_zones, zone, resource, true);
+    gather_zone_set_mode(&game->gather_zones, zone, resource, GATHER_FOREVER);
+}
+
+/* Tiles of all the gathering zones. */
+static int zone_tiles(const Game *game)
+{
+    int tiles = 0;
+    for (int i = 0; i < GATHER_ZONE_MAX; i++) {
+        const GatherZone *zone = gather_zone_get(&game->gather_zones, i);
+        tiles += zone != NULL ? zone->cell_count : 0;
+    }
+    return tiles;
+}
 
 static double now_seconds(void)
 {
@@ -45,39 +62,45 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
     if (scenario == 1) {
-        /* A tile holds one order: the later ones win where several apply. */
-        game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_CUT_GRASS);
-        game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_GATHER_TWIGS);
-        game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_GATHER_BRANCHES);
-        game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_HARVEST);
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         if (first != NULL) {
             int x = first->x, y = first->y;
-            /* Repeating orders: they keep some colonists busy to the end. */
-            game_designate_rect(&game, x - 14, y + 8, x - 10, y + 12,
-                                DESIGNATION_GATHER_STONES);
+            /* Stones forever: keeps some colonists busy to the end. */
+            int stones = gather_zone_create(&game.gather_zones, &game.map, x - 14, y + 8, x - 10,
+                                            y + 12);
+            gather_forever(&game, stones, GATHER_COBBLES);
+            gather_forever(&game, stones, GATHER_FLINT);
             stockpile_create(&game.stockpiles, &game.map, x - 6, y - 6, x + 6, y + 6);
             int better =
                 stockpile_create(&game.stockpiles, &game.map, x + 10, y - 4, x + 16, y + 4);
             stockpile_set_priority(&game.stockpiles, better, 2);
         }
+        /* Everything else the land offers, on the whole map. */
+        int land = gather_zone_create(&game.gather_zones, &game.map, 0, 0, size - 1, size - 1);
+        gather_forever(&game, land, GATHER_GRASS);
+        gather_forever(&game, land, GATHER_TWIGS);
+        gather_forever(&game, land, GATHER_BRANCHES);
+        gather_forever(&game, land, GATHER_BERRIES);
+        gather_zone_set_ripe_only(&game.gather_zones, land, GATHER_BERRIES, false);
     }
     if (scenario == 2) {
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         regions_update(&game.regions, &game.map);
+        int land = gather_zone_create(&game.gather_zones, &game.map, 0, 0, size - 1, size - 1);
+        gather_forever(&game, land, GATHER_BRANCHES);
         uint32_t home = first != NULL
                             ? regions_at(&game.regions, &game.map, first->x, first->y)
                             : REGION_NONE;
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
                 uint32_t region = regions_at(&game.regions, &game.map, x, y);
-                if (region != REGION_NONE && region != home) {
-                    game_designate_rect(&game, x, y, x, y, DESIGNATION_GATHER_BRANCHES);
+                if (region == home) {
+                    gather_zones_remove_rect(&game.gather_zones, x, y, x, y);
                 }
             }
         }
     }
-    int orders = game.designations.count;
+    int orders = zone_tiles(&game);
 
     long ticks = (long)days * TICKS_PER_DAY;
     long slow_ticks = 0; /* Ticks over one millisecond. */
@@ -100,7 +123,7 @@ int main(int argc, char **argv)
            (unsigned long long)seed, scenario, game.colonist_pool.count, days, ticks);
     printf("  total %.2f s, %.2f us/tick, worst tick %.2f ms, %ld ticks over 1 ms\n", seconds,
            seconds * 1e6 / (double)ticks, worst * 1e3, slow_ticks);
-    printf("  orders %d -> %d, items:", orders, game.designations.count);
+    printf("  zone tiles %d, items:", orders);
     for (int type = 1; type < ITEM_TYPE_COUNT; type++) {
         if (game.items.totals[type] > 0) {
             printf(" %ld %s", game.items.totals[type], item_def((ItemType)type)->id);

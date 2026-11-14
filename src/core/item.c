@@ -24,10 +24,10 @@
  * Stone blocks never wear out; logs vary with the woodcutter (knots, cracks)
  * and berries with the gatherer (ripeness, bruises). Fresh grass left on the
  * ground dries in three days.
- * Tools and weapons (docs/KNOWLEDGE.md §6, §8): a hammerstone (0.8 kg), a
- * chopper (1 kg), a sharp flake (30 g, razor sharp but soon worn out), a hand
- * axe (600 g); a throwing spear (0.8 kg, a long straight branch) and a
- * thrusting spear (1.5 kg, thicker).
+ * Tools and weapons (docs/KNOWLEDGE.md §6, §8; a plain cobble serves as
+ * the knapper's hammer): a chopper (1 kg), a sharp flake (30 g, razor sharp
+ * but soon worn out), a hand axe (600 g); a throwing spear (0.8 kg, a long
+ * straight branch) and a thrusting spear (1.5 kg, thicker).
  */
 #define DEF(id_, key, category_, weight_, bulk_, nutrition_, hp, quality, damage)                 \
     .id = (id_), .name_key = (key), .category = (category_), .weight = (weight_),              \
@@ -56,8 +56,6 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                         false, true)},
     [ITEM_FLINT] = {DEF("flint", N_("item.flint"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f, 150,
                         true, false)},
-    [ITEM_HAMMERSTONE] = {DEF("hammerstone", N_("item.hammerstone"), ITEM_CATEGORY_TOOLS, 0.8f,
-                              1.5f, 0.0f, 300, true, true)},
     [ITEM_CHOPPER] = {DEF("chopper", N_("item.chopper"), ITEM_CATEGORY_TOOLS, 1.0f, 2.0f, 0.0f, 80,
                           true, true)},
     [ITEM_FLAKE] = {DEF("flake", N_("item.flake"), ITEM_CATEGORY_TOOLS, 0.03f, 0.2f, 0.0f, 15,
@@ -127,14 +125,6 @@ bool item_is_food(ItemType type)
     return (unsigned)type < ITEM_TYPE_COUNT && ITEM_DEFS[type].nutrition > 0.0f;
 }
 
-bool item_is_tool(ItemType type)
-{
-    if ((unsigned)type >= ITEM_TYPE_COUNT || type == ITEM_NONE) {
-        return false;
-    }
-    ItemCategory category = ITEM_DEFS[type].category;
-    return category == ITEM_CATEGORY_TOOLS || category == ITEM_CATEGORY_WEAPONS;
-}
 
 int item_stack_limit(ItemType type)
 {

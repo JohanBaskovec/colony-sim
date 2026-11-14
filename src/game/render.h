@@ -44,6 +44,15 @@ void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Ca
 void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                            int y1, bool remove);
 
+/* Gathering zones (and the progress of the stone being looked for); the
+ * selected one (index, or GATHER_ZONE_NONE) is brighter. */
+void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                         int selected);
+
+/* Rectangle of tiles being added to (or removed from) gathering zones. */
+void render_gather_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                        int y1, bool remove);
+
 /* Draws every colonist (and what they carry); selected ones get a ring and their current path. */
 void render_colonists(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                       const EntityId *selected, int selected_count);

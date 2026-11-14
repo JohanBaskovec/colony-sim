@@ -10,6 +10,7 @@
 #include "core/colonist.h"
 #include "core/designation.h"
 #include "core/game_clock.h"
+#include "core/gather_zone.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
 #include "core/pool.h"
@@ -51,6 +52,7 @@ typedef struct Game {
     uint64_t seed;
     Map map;
     Designations designations; /* Player orders (chop, mine...), same size as the map. */
+    GatherZones gather_zones; /* Where wood, berries, grass, stones... are gathered. */
     Items items; /* Items lying on the ground, same size as the map. */
     Stockpiles stockpiles; /* Storage zones drawn by the player. */
     Workstations workstations; /* Crafting spots, knapping spots... and their bills. */
@@ -117,6 +119,9 @@ bool game_set_work_priority(Game *game, EntityId id, WorkType type, int priority
  * (the player may only place orders someone can do). */
 bool game_designation_available(const Game *game, DesignationType type);
 
+/* Whether some living colonist knows enough to do this gathering job. */
+bool game_gather_job_known(const Game *game, GatherJob job);
+
 /* Places (or with DESIGNATION_NONE, removes) an order on every valid tile of a
  * rectangle (corners in any order). Returns the number of tiles changed. */
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type);
@@ -135,7 +140,8 @@ bool game_recipe_known(const Game *game, RecipeType recipe);
  * missing slot, joined. */
 ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe);
 
-/* Whether enough of some input type a bill allows lies in the colony. */
+/* Whether enough of some input type a bill allows lies in the colony, once
+ * the tools nobody carries have been taken from it (see bill_has_input()). */
 bool game_bill_has_input(const Game *game, const Bill *bill);
 
 /* Whether a workstation may be placed on a tile: not on a stockpile, and

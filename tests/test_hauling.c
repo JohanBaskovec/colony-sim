@@ -428,7 +428,7 @@ static void test_disabling_hauling_stops_before_pickup_only(void)
     game_shutdown(&game);
 }
 
-static void test_designations_come_before_hauling_at_same_priority(void)
+static void test_gathering_comes_before_hauling_at_same_priority(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
@@ -438,7 +438,9 @@ static void test_designations_come_before_hauling_at_same_priority(void)
     tree->type = PLANT_TREE;
     tree->growth = 1.0f;
     plant_fill_stocks(tree);
-    game_designate_rect(&game, 30, 30, 30, 30, DESIGNATION_GATHER_BRANCHES);
+    int zone = gather_zone_create(&game.gather_zones, &game.map, 30, 30, 30, 30);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BRANCHES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BRANCHES, GATHER_FOREVER);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DEFAULT;
@@ -779,7 +781,7 @@ int main(void)
     RUN_TEST(test_two_haulers_take_different_stacks);
     RUN_TEST(test_disabled_hauling_is_never_done);
     RUN_TEST(test_disabling_hauling_stops_before_pickup_only);
-    RUN_TEST(test_designations_come_before_hauling_at_same_priority);
+    RUN_TEST(test_gathering_comes_before_hauling_at_same_priority);
     RUN_TEST(test_new_stockpile_is_noticed_despite_backoff);
     RUN_TEST(test_destination_room_follows_the_filter);
     RUN_TEST(test_find_job_respects_condition_filters);

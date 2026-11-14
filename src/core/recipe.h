@@ -4,11 +4,12 @@
  *
  * A recipe takes one kind of input (with alternatives, in order of
  * preference: flint or a cobble), needs tools that are used but not consumed
- * (one of each listed set), a workstation, an amount of work, and a minimum
- * level in a knowledge. What comes out, and how good it is, depends on the
- * worker's level and on the input: the grade of a product is capped at the
- * grade of its material + 1, and a cobble knapped instead of flint counts as
- * crude. Some recipes can fail (shaping a hand axe).
+ * (one of each listed set; any item can serve, e.g. a cobble as a hammer), a
+ * workstation, an amount of work, and a minimum level in a knowledge. What
+ * comes out, and how good it is, depends on the worker's level and on the
+ * input: the grade of a product is capped at the grade of its material + 1,
+ * and a cobble knapped instead of flint counts as crude. Some recipes can
+ * fail (shaping a hand axe).
  * Design: docs/KNOWLEDGE.md §2.2, §2.5, §6.2, §8.2.
  */
 #ifndef COLONY_CORE_RECIPE_H
@@ -21,12 +22,11 @@
 #include <stdbool.h>
 
 typedef enum RecipeType {
-    RECIPE_PICK_HAMMERSTONE,
-    RECIPE_KNAP_CHOPPER,
-    RECIPE_STRIKE_FLAKES,
-    RECIPE_SHAPE_HAND_AXE,
-    RECIPE_MAKE_THROWING_SPEAR,
-    RECIPE_MAKE_THRUSTING_SPEAR,
+    RECIPE_CHOPPER,
+    RECIPE_FLAKES,
+    RECIPE_HAND_AXE,
+    RECIPE_THROWING_SPEAR,
+    RECIPE_THRUSTING_SPEAR,
     RECIPE_COUNT
 } RecipeType;
 

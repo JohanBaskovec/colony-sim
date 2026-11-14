@@ -7,9 +7,9 @@
 #include <string.h>
 
 static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
-    /* A place to sit and work: nothing to bring, anyone can set it up. */
+    /* A place to sit and work: nothing to bring, so it is ready at once. */
     [WORKSTATION_CRAFTING_SPOT] = {"crafting_spot", N_("workstation.crafting_spot"), ITEM_NONE, 0,
-                                   125.0f, KNOWLEDGE_NONE, 0.0f},
+                                   0.0f, KNOWLEDGE_NONE, 0.0f},
     /* An anvil stone to knap on. */
     [WORKSTATION_KNAPPING_SPOT] = {"knapping_spot", N_("workstation.knapping_spot"), ITEM_COBBLE,
                                    1, 250.0f, KNOWLEDGE_STONE_KNAPPING, 50.0f},
@@ -99,6 +99,8 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
         station->y = (int16_t)y;
         station->number = workstations->next_number++;
         station->work_recipe = RECIPE_COUNT;
+        /* Nothing to bring: nothing to build either. */
+        station->built = workstation_def(type)->material == ITEM_NONE;
         workstations->at[index_of(workstations, x, y)] = (uint8_t)(index + 1);
         workstations->used_count++;
         workstations->revision++;
@@ -283,6 +285,43 @@ bool bill_wants_more(const Bill *bill, int stored)
     case BILL_FOREVER: return true;
     default: return false;
     }
+}
+
+bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
+                    const ItemTypeMask tools[RECIPE_TOOL_MAX])
+{
+    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    if (def == NULL) {
+        return false;
+    }
+    ItemTypeMask inputs = bill->inputs & recipe_inputs((RecipeType)bill->recipe);
+    long left[ITEM_TYPE_COUNT];
+    memcpy(left, totals, sizeof(left));
+    /* Each tool still to fetch takes one item: of a type the bill does not
+     * use if possible, else the most plentiful one. */
+    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+        int best = ITEM_NONE;
+        for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+            if (!(tools[slot] & ITEM_TYPE_BIT(type)) || left[type] <= 0) {
+                continue;
+            }
+            bool used = (inputs & ITEM_TYPE_BIT(type)) != 0;
+            bool best_used = best != ITEM_NONE && (inputs & ITEM_TYPE_BIT(best)) != 0;
+            if (best == ITEM_NONE || (best_used && !used) ||
+                (best_used == used && left[type] > left[best])) {
+                best = type;
+            }
+        }
+        if (best != ITEM_NONE) {
+            left[best]--;
+        }
+    }
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        if ((inputs & ITEM_TYPE_BIT(type)) && left[type] >= def->input_count) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool workstation_start_craft(Workstations *workstations, int index, RecipeType recipe,

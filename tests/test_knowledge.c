@@ -1,5 +1,6 @@
 #include "core/designation.h"
 #include "core/game_clock.h"
+#include "core/gather_zone.h"
 #include "core/i18n.h"
 #include "core/knowledge.h"
 #include "core/work.h"
@@ -42,10 +43,12 @@ static void test_mastery_and_orders(void)
     CHECK(knowledge_is_mastered(100.0));
 
     /* Gathering orders from 50 on; nobody can fell trees or mine yet. */
-    CHECK(!designation_doable_at(DESIGNATION_GATHER_STONES, 49.9));
-    CHECK(designation_doable_at(DESIGNATION_GATHER_STONES, 50.0));
-    CHECK(designation_doable_at(DESIGNATION_HARVEST, 80.0));
-    CHECK(!designation_doable_at(DESIGNATION_CHOP, 100.0));
+    CHECK(!gather_job_doable_at(GATHER_JOB_TWIGS, 49.9));
+    CHECK(gather_job_doable_at(GATHER_JOB_TWIGS, 50.0));
+    CHECK(gather_job_doable_at(GATHER_JOB_HARVEST, 80.0));
+    CHECK(gather_job_doable_at(GATHER_JOB_STONES, 50.0));
+    CHECK(!gather_job_doable_at(GATHER_JOB_CHOP, 100.0));
+    CHECK(!gather_job_doable_at(GATHER_JOB_COUNT, 100.0));
     CHECK(!designation_doable_at(DESIGNATION_MINE, 100.0));
     CHECK(!designation_doable_at(DESIGNATION_NONE, 100.0));
     CHECK(!designation_doable_at(DESIGNATION_COUNT, 100.0));

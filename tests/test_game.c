@@ -63,7 +63,7 @@ static bool is_flint_spot(const Map *map, int x, int y, void *userdata)
 {
     (void)userdata;
     return map_flint_chance(map, x, y) >= GAME_SPAWN_FLINT_CHANCE &&
-           designation_can_apply(map, x, y, DESIGNATION_GATHER_STONES);
+           gather_stone_ground(map, x, y);
 }
 
 static void test_settlers_arrive_near_flint(void)

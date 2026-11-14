@@ -3,7 +3,8 @@
  * spot), and the bills the player gives them.
  *
  * A workstation is built, not placed: the player places a blueprint, a
- * builder brings its materials and does the construction work. Once built,
+ * builder brings its materials and does the construction work. A station
+ * made of nothing (crafting spot) is ready as soon as it is placed. Once built,
  * it carries a list of bills: a recipe (core/recipe.h), a repeat mode (do N
  * times, until N in stock, forever) and the input types allowed. Settlers
  * take the first bill that wants doing. A craft in progress keeps its input
@@ -35,7 +36,9 @@ typedef struct WorkstationDef {
     const char *name_key;
     ItemType material; /* Brought by the builder; ITEM_NONE: none. */
     int material_count;
-    float build_work; /* Work ticks at speed ×1. */
+    /* Work ticks at speed ×1. A station with no material is placed ready,
+     * with no construction work. */
+    float build_work;
     /* Knowledge needed to build it; KNOWLEDGE_NONE: anyone can. */
     KnowledgeType knowledge;
     float min_level;
@@ -110,8 +113,9 @@ const Workstation *workstation_get_const(const Workstations *workstations, int i
  * station yet. */
 bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y);
 
-/* Places a blueprint. Returns its index, or WORKSTATION_NONE when the tile
- * does not qualify or the list is full. */
+/* Places a blueprint, or the station itself, already built, when it needs
+ * no material. Returns its index, or WORKSTATION_NONE when the tile does not
+ * qualify or the list is full. */
 int workstations_place(Workstations *workstations, const Map *map, WorkstationType type, int x,
                        int y);
 
@@ -156,6 +160,15 @@ bool workstation_set_bill_input(Workstations *workstations, int index, int bill,
 /* Whether a bill still wants doing, given how many of its product lie in the
  * colony, stored or not (only used by BILL_UNTIL_STOCK). */
 bool bill_wants_more(const Bill *bill, int stored);
+
+/*
+ * Whether enough of an input type the bill allows lies in the colony
+ * (`totals`: items lying per type), once the tools still to fetch (`tools`:
+ * one item of each non-empty set, 0 for none) have taken theirs: knapping
+ * with a cobble as a hammer needs a second stone to knap.
+ */
+bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
+                    const ItemTypeMask tools[RECIPE_TOOL_MAX]);
 
 /*
  * Starts a craft of `recipe` with `input` (the station must hold no other

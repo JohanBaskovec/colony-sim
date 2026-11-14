@@ -31,7 +31,6 @@ typedef enum ItemType {
     ITEM_FRESH_GRASS,
     ITEM_GRASS,
     ITEM_FLINT,
-    ITEM_HAMMERSTONE,
     ITEM_CHOPPER,
     ITEM_FLAKE,
     ITEM_HAND_AXE,
@@ -129,9 +128,6 @@ ItemTypeMask item_types_in_category(ItemCategory category);
 
 bool item_is_food(ItemType type);
 
-/* Tools and weapons: settlers carry them (one of each type) and use them,
- * instead of hauling them as a load. */
-bool item_is_tool(ItemType type);
 
 /* Maximum number of items of a type in one stack (one tile); 0 for ITEM_NONE. */
 int item_stack_limit(ItemType type);

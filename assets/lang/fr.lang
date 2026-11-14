@@ -29,15 +29,10 @@ plant.bush = Buisson à baies
 plant.tree = Arbre
 
 # Désignations (ordres du joueur)
-designation.chop = Couper les arbres
 designation.mine = Miner la roche
-designation.harvest = Récolter
-designation.gather_stones = Ramasser des pierres
-designation.gather_branches = Ramasser des branches
-designation.gather_twigs = Ramasser des brindilles
-designation.cut_grass = Couper de l’herbe
 tool.cancel = Annuler les ordres
 tool.stockpile = Zone de stockage
+tool.gather_zone = Zone de récolte
 
 # Objets
 item.wood = Bois
@@ -49,7 +44,6 @@ item.grass = Herbe sèche
 item.berries = Baies
 item.cobble = Galet
 item.flint = Silex
-item.hammerstone = Percuteur
 item.chopper = Galet aménagé
 item.flake = Éclat tranchant
 item.hand_axe = Biface
@@ -96,8 +90,8 @@ hud.paused = En pause
 hud.language = Langue : {0}
 hud.help.camera = {0}/Flèches : déplacer · Molette : zoom · Glisser clic milieu/droit : défiler
 hud.help.game = Clic/glisser gauche : sélectionner · Espace : pause · 1-3 : vitesse · L : langue · F3 : débogage · Échap : quitter
-hud.help.gathering = {0} : récolter · {1} : ramasser des pierres · {2} : des branches · {3} : des brindilles · {4} : couper de l’herbe
-hud.help.orders = {0} : couper des arbres · {1} : miner la roche · {2} : annuler des ordres
+hud.help.gathering = {0} : zones de récolte (bois, baies, branches, brindilles, herbe, pierres)
+hud.help.orders = {0} : miner la roche · {1} : annuler des ordres
 hud.help.manage = {0} : zones de stockage · {1} : postes de travail · clic sur une zone ou un poste : ses réglages · {2} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 hud.tool.name = Outil : {0}
@@ -187,17 +181,43 @@ stockpile.quality = Qualité : de {0} à {1}
 stockpile.hit_points = Points de vie : de {0} à {1}
 stockpile.delete = Supprimer
 
+# Inspecteur de zone de récolte
+gather_zone.name = Zone de récolte {0}
+gather_zone.tiles.one = {0} case
+gather_zone.tiles.other = {0} cases
+gather_zone.hint = Coche ce qu’il faut récolter ici ; les objets posés dans la colonie comptent
+gather_zone.resource.wood = Bois
+gather_zone.resource.berries = Baies
+gather_zone.resource.branches = Branches
+gather_zone.resource.twigs = Brindilles
+gather_zone.resource.grass = Herbe
+gather_zone.resource.flint = Silex
+gather_zone.resource.cobbles = Galets
+gather_zone.mode.do_count.one = Récolter {0}
+gather_zone.mode.do_count.other = Récolter {0}
+gather_zone.mode.until = Jusqu’à {0} dans la colonie
+gather_zone.mode.forever = Sans fin
+gather_zone.progress.done = Récolté : {0}
+gather_zone.ripe_only = Seulement les plantes à pleine maturité (100 %)
+gather_zone.warning.no_flint = Cette zone ne contient pas de silex
+gather_zone.delete = Supprimer
+
 # Postes de travail
 workstation.crafting_spot = Coin d’artisanat
 workstation.knapping_spot = Poste de taille
 
 # Recettes
-recipe.pick_hammerstone = Choisir un percuteur
-recipe.knap_chopper = Tailler un galet aménagé
-recipe.strike_flakes = Débiter des éclats
-recipe.shape_hand_axe = Façonner un biface
-recipe.make_throwing_spear = Fabriquer une lance de jet
-recipe.make_thrusting_spear = Fabriquer un épieu
+recipe.chopper = Galet aménagé
+recipe.flakes = Éclats tranchants
+recipe.hand_axe = Biface
+recipe.throwing_spear = Lance de jet
+recipe.thrusting_spear = Épieu
+recipe.needs = Nécessite {0} · Outils : {1}
+recipe.needs_no_tool = Nécessite {0} · Sans outil
+recipe.ingredient = {0} ×{1}
+recipe.ingredient_quality = {0} (qualité {1} ou mieux)
+recipe.either = {0} ou {1}
+recipe.both = {0} et {1}
 
 # Inspecteur de poste de travail
 station.delete = Supprimer
@@ -213,7 +233,6 @@ station.bill.remove = Retirer
 station.add_bill = Ajouter une commande :
 station.warning.unknown_recipe = Personne ne connaît assez bien cette recette
 station.warning.tool = Outil manquant : {0}
-station.warning.tool_either = Outil manquant : {0} ou {1}
 station.warning.no_input = Aucun matériau adapté dans la colonie
 bill.mode.do_times.one = Faire {0} fois
 bill.mode.do_times.other = Faire {0} fois

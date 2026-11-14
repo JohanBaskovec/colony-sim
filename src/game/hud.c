@@ -1,6 +1,7 @@
 #include "game/hud.h"
 
 #include "core/i18n.h"
+#include "game/gather_zone_panel.h"
 #include "game/station_panel.h"
 #include "game/stockpile_panel.h"
 #include "game/work_panel.h"
@@ -232,6 +233,14 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(name, sizeof(name), tr("stockpile.name"), a);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.stockpile"), name);
     }
+    const GatherZone *gather =
+        gather_zone_get(&app->game.gather_zones, gather_zone_at(&app->game.gather_zones, x, y));
+    if (gather != NULL) {
+        char name[HUD_LINE_SIZE];
+        tr_integer(a, sizeof(a), gather->number);
+        TR_FORMAT(name, sizeof(name), tr("gather_zone.name"), a);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.stockpile"), name);
+    }
 
     DesignationType designation = designation_get(&app->game.designations, x, y);
     if (designation != DESIGNATION_NONE) {
@@ -438,6 +447,10 @@ void hud_draw(App *app)
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"),
                       tr("tool.stockpile"));
             panel_add_text(&tool, tr("hud.tool.stockpile_help"));
+        } else if (app->tool == APP_TOOL_GATHER) {
+            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"),
+                      tr("tool.gather_zone"));
+            panel_add_text(&tool, tr("hud.tool.stockpile_help"));
         } else if (app->tool == APP_TOOL_BUILD) {
             const WorkstationDef *def = workstation_def(app->build_type);
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(def->name_key));
@@ -478,10 +491,9 @@ void hud_draw(App *app)
     movement_keys_label(keys, sizeof(keys));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
     panel_add_text(&help, tr("hud.help.game"));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.gathering"), key_name(SDLK_H),
-              key_name(SDLK_R), key_name(SDLK_B), key_name(SDLK_K), key_name(SDLK_G));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_C),
-              key_name(SDLK_M), key_name(SDLK_X));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.gathering"), key_name(SDLK_R));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_M),
+              key_name(SDLK_X));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"), key_name(SDLK_P),
               key_name(SDLK_E), key_name(SDLK_T));
     float help_width, help_height;
@@ -492,6 +504,8 @@ void hud_draw(App *app)
     /* Bottom right: inspector of the selected colonist(s), station or stockpile. */
     if (app->selected_station != WORKSTATION_NONE) {
         station_panel_draw(app, screen_width - HUD_MARGIN, help_y - HUD_MARGIN);
+    } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
+        gather_zone_panel_draw(app, screen_width - HUD_MARGIN, help_y - HUD_MARGIN);
     } else if (app->selected_stockpile != STOCKPILE_NONE) {
         stockpile_panel_draw(app, screen_width - HUD_MARGIN, help_y - HUD_MARGIN);
     } else if (app->selected_count > 0) {

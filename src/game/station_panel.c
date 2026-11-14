@@ -78,6 +78,68 @@ static bool label_with_button(Layout *layout, const char *text, const char *labe
     return clicked;
 }
 
+/* "Flint or cobble", "Hand axe and sharp flake": one or two names joined. */
+static void join_names(char *out, size_t size, const char *key, const char *names[2], int count)
+{
+    if (count >= 2) {
+        TR_FORMAT(out, size, tr(key), names[0], names[1]);
+    } else {
+        SDL_strlcpy(out, count == 1 ? names[0] : "", size);
+    }
+}
+
+/* Names of the item types of a mask, joined with "or". */
+static void either_names(char *out, size_t size, ItemTypeMask types)
+{
+    const char *names[2] = {NULL, NULL};
+    int count = 0;
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && count < 2; type++) {
+        if (types & ITEM_TYPE_BIT(type)) {
+            names[count++] = tr(item_def((ItemType)type)->name_key);
+        }
+    }
+    join_names(out, size, "recipe.either", names, count);
+}
+
+/* "Needs Flint or cobble ×1 · Tools: Cobble". */
+static void recipe_needs(char *out, size_t size, RecipeType recipe)
+{
+    const RecipeDef *def = recipe_def(recipe);
+    char names[TEXT_SIZE], count[16], ingredient[TEXT_SIZE], text[TEXT_SIZE];
+    /* Inputs in the recipe's order of preference. */
+    const char *inputs[2] = {NULL, NULL};
+    int input_count = 0;
+    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
+        if (def->inputs[i] != ITEM_NONE) {
+            inputs[input_count++] = tr(item_def(def->inputs[i])->name_key);
+        }
+    }
+    join_names(names, sizeof(names), "recipe.either", inputs, input_count);
+    tr_integer(count, sizeof(count), def->input_count);
+    TR_FORMAT(ingredient, sizeof(ingredient), tr("recipe.ingredient"), names, count);
+    if (def->input_min_quality > ITEM_QUALITY_CRUDE) {
+        SDL_strlcpy(text, ingredient, sizeof(text));
+        TR_FORMAT(ingredient, sizeof(ingredient), tr("recipe.ingredient_quality"), text,
+                  tr(item_quality_name_key(def->input_min_quality)));
+    }
+    char tools[RECIPE_TOOL_MAX][TEXT_SIZE];
+    const char *slots[RECIPE_TOOL_MAX] = {NULL, NULL};
+    int tool_count = 0;
+    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+        if (def->tools[slot] != 0) {
+            either_names(tools[tool_count], sizeof(tools[tool_count]), def->tools[slot]);
+            slots[tool_count] = tools[tool_count];
+            tool_count++;
+        }
+    }
+    if (tool_count == 0) {
+        TR_FORMAT(out, size, tr("recipe.needs_no_tool"), ingredient);
+        return;
+    }
+    join_names(text, sizeof(text), "recipe.both", slots, tool_count);
+    TR_FORMAT(out, size, tr("recipe.needs"), ingredient, text);
+}
+
 static void percent_text(char *out, size_t size, float fraction)
 {
     char number[16];
@@ -216,19 +278,9 @@ static void bill_warning_rows(Layout *layout, const Game *game, const Bill *bill
         if (types == 0 || (missing & types) != types) {
             continue;
         }
-        const char *names[2] = {NULL, NULL};
-        int count = 0;
-        for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && count < 2; type++) {
-            if (types & ITEM_TYPE_BIT(type)) {
-                names[count++] = tr(item_def((ItemType)type)->name_key);
-            }
-        }
-        char text[TEXT_SIZE];
-        if (count == 2) {
-            TR_FORMAT(text, sizeof(text), tr("station.warning.tool_either"), names[0], names[1]);
-        } else {
-            TR_FORMAT(text, sizeof(text), tr("station.warning.tool"), names[0]);
-        }
+        char names[TEXT_SIZE], text[TEXT_SIZE];
+        either_names(names, sizeof(names), types);
+        TR_FORMAT(text, sizeof(text), tr("station.warning.tool"), names);
         label_row(layout, text, INDENT, true);
     }
     if (bill_wants_more(bill, (int)game->items.totals[def->product]) &&
@@ -257,6 +309,8 @@ static void built_rows(Layout *layout, const Game *game, const Workstation *stat
         if (label_with_button(layout, text, tr("station.bill.remove"))) {
             *action = (Action){ACTION_DELETE_BILL, i, 0};
         }
+        recipe_needs(text, sizeof(text), (RecipeType)bill->recipe);
+        label_row(layout, text, INDENT, true);
         bill_mode_row(layout, game, bill, i, action);
         bill_inputs_row(layout, bill, i, action);
         bill_warning_rows(layout, game, bill);
@@ -265,15 +319,28 @@ static void built_rows(Layout *layout, const Game *game, const Workstation *stat
         return;
     }
     label_row(layout, tr("station.add_bill"), 0.0f, false);
+    /* Buttons in a column, what each recipe needs aligned after them. */
+    float column = 0.0f;
+    for (int recipe = 0; recipe < RECIPE_COUNT; recipe++) {
+        const RecipeDef *def = recipe_def((RecipeType)recipe);
+        if (def->stations & WORKSTATION_BIT(station->type)) {
+            column = SDL_max(column, ui_button_width(layout->ui, tr(def->name_key)));
+        }
+    }
     for (int recipe = 0; recipe < RECIPE_COUNT; recipe++) {
         const RecipeDef *def = recipe_def((RecipeType)recipe);
         if (!(def->stations & WORKSTATION_BIT(station->type))) {
             continue;
         }
         const char *name = tr(def->name_key);
-        measure(layout, INDENT + ui_button_width(layout->ui, name));
+        recipe_needs(text, sizeof(text), (RecipeType)recipe);
+        measure(layout, INDENT + column + GAP + ui_text_width(layout->ui, text));
         if (button(layout, layout->x + INDENT, name)) {
             *action = (Action){ACTION_ADD_BILL, 0, recipe};
+        }
+        if (layout->draw) {
+            ui_label_dim(layout->ui, text, layout->x + INDENT + column + GAP,
+                         layout->y + layout->text_offset);
         }
         layout->y += layout->row;
     }

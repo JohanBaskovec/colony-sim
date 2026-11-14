@@ -280,7 +280,7 @@ hit points. Factors from crude to superb: ×0.6, ×0.8, ×1, ×1.2, ×1.5
   uses whatever they carry, the best one for each task, without equipping
   anything. Two guards:
   - **at most one tool of each type** per settler (one flake, one
-    hammerstone...), so that nobody hoards the colony's tools;
+    cobble to knap with...), so that nobody hoards the colony's tools;
   - carried tools **count in the carried weight** (§2.1, strength), so a
     settler loaded with heavy tools hauls less. Small tools weigh next to
     nothing (a flake: 30 g); big ones (axes, picks, spears) are felt.
@@ -298,10 +298,12 @@ hit points. Factors from crude to superb: ×0.6, ×0.8, ×1, ×1.2, ×1.5
 - Tool grade factor on speed: ×0.8, ×0.9, ×1.0, ×1.1, ×1.2, crude to superb.
 - Using a tool needs no knowledge of how to make it: anyone can cut with a
   flake. The knowledge that counts is the one of the job.
+- **Any item can be a tool** when a recipe or job asks for it: a plain
+  cobble is the knapper's hammer (there is no separate hammerstone item).
 
 Speed factor by job and tool (— = impossible with it; "none" = bare hands):
 
-| Job                              | None | Hammerstone | Chopper | Flake | Hand axe | Digging stick |
+| Job                              | None | Cobble      | Chopper | Flake | Hand axe | Digging stick |
 |----------------------------------|------|-------------|---------|-------|----------|---------------|
 | Felling a tree                   | —    | —           | —       | —     | —        | —             |
 | Mining rock                      | —    | —           | —       | —     | —        | —             |
@@ -379,7 +381,7 @@ knowledge. The first wood of a colony is branches and twigs.
   (§4.1): without flint the colony could only knap rough tools.
 
 A typical first day: pick berries; gather stones (cobbles and flint),
-branches, twigs and grass; pick a cobble as hammerstone and knap flakes and a
+branches, twigs and grass; knap flakes and a
 hand axe from flint; make spears and digging
 sticks; light the first fire by friction; build grass beds and a windbreak
 near the hearth; go hunting.
@@ -409,11 +411,11 @@ quickly). Two types are enough for the start; others are noted in §13, each
 with its own use.
 
 - **Cobble**: a rounded stone that fits the hand (quartzite, sandstone,
-  granite). The hammerstone of the knapper, the anvil of the knapping spot,
+  granite). The hammer of the knapper, the anvil of the knapping spot,
   a building material. It can be knapped, as the first tools in history
   were, but coarsely: as a knapping material **a cobble counts as crude**
   whatever its grade, so what is knapped from it is at best rough (§2.2). Its
-  grade is its toughness: the grade of a hammerstone picked from it.
+  grade is its toughness, which matters when it is used as a hammer.
 - **Flint nodule**: the knapping stone. Its grade is how fine and even its
   grain is, and caps the grade of what is knapped from it (§2.2): a good
   flint source matters.
@@ -440,20 +442,25 @@ with its own use.
 
 ### 4.2 Gathering orders
 
-New designation tools next to Harvest and Chop: **Gather stones**, **Gather
-branches**, **Gather twigs**, **Cut grass**, **Dig up** (gather stones,
-branches and twigs and cut grass are implemented). All belong to
-Gathering (minimum 50) and produce items whose grade and condition come from
-the gatherer's level, like harvesting today.
+Everything the land offers is gathered in **gathering zones**: the player
+draws a zone, then ticks the resources to take there (wood, berries,
+branches, twigs, grass, flint, cobbles). Each ticked resource is gathered N
+times, until N lie in the colony (items lying anywhere count, as for bills),
+or forever; wood and berries may be taken from fully grown plants only (on
+by default), so that settlers do not walk to young plants that give little.
+On a tile that offers several jobs, the plant's stocks come first, then its
+fruit, felling it, and stones last. All jobs but felling belong to Gathering
+(minimum 50) and produce items whose grade and condition come from the
+gatherer's level. **Dig up** is not implemented yet.
 
 | Order            | Target | Work per item | Tool | Yield |
 |------------------|--------|---------------|------|-------|
-| Gather stones    | Soil, rich soil (with or without grass), gravel, rough stone tiles | 200 | none | 1 cobble or flint nodule (flint patches, §4.1) per work cycle; **unlimited**: the order repeats until the player cancels it |
-| Gather branches  | Tree with branches in stock | 300 | none | The tree's stock: up to 6 branches on a mature tree (scaled by growth); the tree stays, 1 branch grows back every 2 days |
-| Gather twigs     | Tree or bush with twigs in stock | 150 | none | Up to 10 handfuls on a mature tree, 4 on a bush; 1 grows back per day |
-| Cut grass        | Grass at growth ≥ 0.5 | 150 | flake best | `growth × 3` armfuls of fresh grass (1 to 3); the grass regrows from 0 |
+| Stones (zone)    | Soil, rich soil (with or without grass), gravel, rough stone tiles | 200 | none | 1 cobble or flint nodule (flint patches, §4.1) per work cycle; stones never run out, so the zone says how many (a type no longer wanted is not kept: a cobble found while only flint is wanted is left) |
+| Branches (zone)  | Tree with branches in stock | 300 | none | The tree's stock: up to 6 branches on a mature tree (scaled by growth); the tree stays, 1 branch grows back every 2 days |
+| Twigs (zone)     | Tree or bush with twigs in stock | 150 | none | Up to 10 handfuls on a mature tree, 4 on a bush; 1 grows back per day |
+| Grass (zone)     | Grass at growth ≥ 0.5 | 150 | flake best | `growth × 3` armfuls of fresh grass (1 to 3); the grass regrows from 0 |
 | Dig up           | Wild tuber plant | 500 | digging stick | 4 tubers (§7) |
-| Harvest (existing) | Ripe bush, hazel, mushrooms | see §7 | none | see §7 |
+| Berries (zone)   | Ripe bush (fully grown with the option), later hazel, mushrooms | see §7 | none | see §7 |
 
 Branch and twig stocks are shown in the tile inspector.
 
@@ -535,14 +542,13 @@ no spear, no butchering.*
 
 | id            | Name             | Category | kg   | Bulk | Stack | HP  | Quality | Damageable |
 |---------------|------------------|----------|------|------|-------|-----|---------|------------|
-| `hammerstone` | Hammerstone      | Tools    | 0.8  | 1.5  | 666   | 300 | yes     | yes        |
 | `chopper`     | Chopper          | Tools    | 1.0  | 2    | 500   | 80  | yes     | yes        |
 | `flake`       | Sharp flake      | Tools    | 0.03 | 0.2  | 5,000 | 15  | yes     | yes        |
 | `hand_axe`    | Hand axe         | Tools    | 0.6  | 1.5  | 666   | 120 | yes     | yes        |
 
-- **Hammerstone**: a well chosen cobble, the knapper's hard hammer, needed by
-  all knapping recipes; also cracks bones. Finer work with a soft hammer
-  (antler, bone) comes later (§13).
+- **Hammer**: no item of its own: a plain **cobble**, carried as a tool, is
+  the knapper's hard hammer, needed by all knapping recipes; it also cracks
+  bones. Finer work with a soft hammer (antler, bone) comes later (§13).
 - **Chopper**: a stone with a few flakes struck off one edge; the crudest
   cutting tool, easy to make even from a cobble.
 - **Sharp flake**: razor sharp, the best cutting tool of the start, worn out
@@ -554,14 +560,14 @@ no spear, no butchering.*
 
 | Recipe           | Ingredients | Tools       | Station       | Work         | Min level | Products |
 |------------------|-------------|-------------|---------------|--------------|-----------|----------|
-| Pick hammerstone | 1 cobble    | —           | anywhere      | 125 (0.05 h) | 50 | 1 hammerstone (grade of the cobble) |
-| Knap chopper     | 1 cobble or flint | hammerstone | Knapping spot | 250 (0.1 h)  | 50 | 1 chopper |
-| Strike flakes    | 1 flint or cobble | hammerstone | Knapping spot | 375 (0.15 h) | 55 | `3 + (L − 50) / 10` flakes (3 to 8) |
-| Shape hand axe   | 1 flint or cobble | hammerstone | Knapping spot | 2,500 (1 h)  | 70 | 1 hand axe + 2 flakes |
+| Knap chopper     | 1 cobble or flint | cobble      | Knapping spot | 250 (0.1 h)  | 50 | 1 chopper |
+| Strike flakes    | 1 flint or cobble | cobble      | Knapping spot | 375 (0.15 h) | 55 | `3 + (L − 50) / 10` flakes (3 to 8) |
+| Shape hand axe   | 1 flint or cobble | cobble      | Knapping spot | 2,500 (1 h)  | 70 | 1 hand axe + 2 flakes |
 
-- **Pick hammerstone** needs no station and no tool, so the chain can always
-  start, even with nothing. Its grade is the cobble's (picking is choosing,
-  not shaping), not the knapper's.
+- The tool of every knapping recipe is a plain cobble, so the chain can
+  always start with two stones: one to strike with, one to knap. A cobble
+  carried as a hammer is kept like any tool. In the game, recipes are named
+  after their product (Chopper, Sharp flakes, Hand axe...).
 - Knapping a cobble instead of flint is allowed but caps the product at
   rough (a cobble counts as crude, §4.1). Bills can restrict the stone type;
   by default they prefer flint for flakes and hand axes, and cobbles for
@@ -659,8 +665,9 @@ Damage values are relative, for the M6 health system; grade multiplies damage
 | Make throwing spear  | 1 branches (grade standard or better: straight) | flake or hand axe | Crafting spot | 3,750 (1.5 h) | 50 | 1 throwing spear |
 | Make thrusting spear | 2 branches (standard or better) | hand axe, flake | Crafting spot | 6,250 (2.5 h) | 60 | 1 thrusting spear |
 
-Construction **crafting spot**: 1 × 1, passable, no materials, 125 ticks; needs
-no knowledge (a place to sit and work). Workstation for torches, digging
+Construction **crafting spot**: 1 × 1, passable, no materials, so no
+construction work either: it is ready as soon as it is placed; needs no
+knowledge (a place to sit and work). Workstation for torches, digging
 sticks and spears.
 
 ### 8.3 Spear hunting
@@ -707,7 +714,7 @@ working, sewing).*
 | Recipe         | Ingredients | Tools | Station | Work | Min level | Products |
 |----------------|-------------|-------|---------|------|-----------|----------|
 | Butcher carcass | 1 carcass  | flake, hand axe or chopper | Butchering spot (or in the field) | 40 per kg of carcass (red deer: 4,400 ≈ 1.8 h) | 50 | §9.3 |
-| Crack bones    | 2 bones     | hammerstone | Butchering spot | 250 (0.1 h) | 50 | 1 marrow |
+| Crack bones    | 2 bones     | cobble      | Butchering spot | 250 (0.1 h) | 50 | 1 marrow |
 
 ### 9.3 Yields
 
@@ -916,7 +923,8 @@ nodules. Replaces the noise-only flint patches of step 3.
 
 None at the moment.
 
-Settled so far: gathering stones repeats until cancelled; grass drying is
+Settled so far: stones are gathered in zones with a target per stone type
+(or forever); grass drying is
 simulated; dirt, knapping debris and work accidents exist; the interface
 shows only discovered knowledges; no innate aptitudes; felling and mining are
 the knowledges **Felling** and **Mining**; the hafted axe comes from Hafting
