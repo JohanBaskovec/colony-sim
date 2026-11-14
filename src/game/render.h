@@ -44,7 +44,7 @@ void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Ca
 void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                            int y1, bool remove);
 
-/* Gathering zones (and the progress of the stone being looked for); the
+/* Gathering zones (and the progress of the job under way on each tile); the
  * selected one (index, or GATHER_ZONE_NONE) is brighter. */
 void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                          int selected);
@@ -64,6 +64,17 @@ void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, in
                          SDL_Color color);
 
 /* Releases the buffers the renderer allocated on first use. */
+/* Icons of the build menu, drawn inside `rect`. */
+typedef enum RenderIcon {
+    RENDER_ICON_GATHER_ZONE,
+    RENDER_ICON_STOCKPILE,
+    RENDER_ICON_MINE,
+    RENDER_ICON_CANCEL,
+} RenderIcon;
+
+void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, WorkstationType type);
+void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon);
+
 void render_shutdown(void);
 
 #endif /* COLONY_GAME_RENDER_H */

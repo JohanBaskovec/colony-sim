@@ -22,17 +22,37 @@
 
 static const SDL_Color HOVER_COLOR = {255, 255, 255, 200};
 
-/* Selects a tool, or goes back to selection if it is already active. */
-static void toggle_tool(App *app, AppTool tool, DesignationType type)
+bool app_tool_active(const App *app, AppTool tool, int type)
 {
-    if (app->tool == tool && (tool != APP_TOOL_DESIGNATE || app->tool_type == type)) {
+    if (app->tool != tool) {
+        return false;
+    }
+    switch (tool) {
+    case APP_TOOL_DESIGNATE: return (int)app->tool_type == type;
+    case APP_TOOL_BUILD: return (int)app->build_type == type;
+    default: return true;
+    }
+}
+
+void app_toggle_tool(App *app, AppTool tool, int type)
+{
+    if (app_tool_active(app, tool, type)) {
         app->tool = APP_TOOL_NONE;
     } else {
         app->tool = tool;
-        app->tool_type = type;
+        if (tool == APP_TOOL_DESIGNATE) {
+            app->tool_type = (DesignationType)type;
+        } else if (tool == APP_TOOL_BUILD) {
+            app->build_type = (WorkstationType)type;
+        }
     }
     app->left_button_down = false;
     app->box_selecting = false;
+}
+
+static void toggle_tool(App *app, AppTool tool, DesignationType type)
+{
+    app_toggle_tool(app, tool, (int)type);
 }
 
 /* Build tool: crafting spot, then the next kinds of station, then off. */
@@ -272,6 +292,36 @@ void app_shutdown(App *app)
     SDL_zerop(app);
 }
 
+static void close_window(App *app, AppWindow window)
+{
+    switch (window) {
+    case APP_WINDOW_COLONIST: app->selected_count = 0; break;
+    case APP_WINDOW_STATION: app->selected_station = WORKSTATION_NONE; break;
+    case APP_WINDOW_STOCKPILE: app->selected_stockpile = STOCKPILE_NONE; break;
+    case APP_WINDOW_GATHER_ZONE: app->selected_gather_zone = GATHER_ZONE_NONE; break;
+    case APP_WINDOW_WORK: app->show_work_panel = false; break;
+    case APP_WINDOW_HELP: app->show_help = false; break;
+    default: break;
+    }
+}
+
+/* Escape steps back: leaves the tool, closes the build menu, then the window
+ * in front (closing an inspector clears the selection), then quits. */
+static void step_back(App *app)
+{
+    AppWindow open[APP_WINDOW_COUNT];
+    int open_count = hud_open_windows(app, open);
+    if (app->tool != APP_TOOL_NONE) {
+        app->tool = APP_TOOL_NONE;
+    } else if (app->build_menu_open) {
+        app->build_menu_open = false;
+    } else if (open_count > 0) {
+        close_window(app, open[open_count - 1]);
+    } else {
+        app->running = false;
+    }
+}
+
 static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
 {
     if (key->repeat) {
@@ -290,22 +340,8 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     }
     /* Mnemonic keys use the key labels (keycodes). */
     switch (key->key) {
-    case SDLK_ESCAPE:
-        /* Steps back: work grid, zone or station selection, then tool, then quit. */
-        if (app->show_work_panel) {
-            app->show_work_panel = false;
-        } else if (app->selected_stockpile != STOCKPILE_NONE) {
-            app->selected_stockpile = STOCKPILE_NONE;
-        } else if (app->selected_station != WORKSTATION_NONE) {
-            app->selected_station = WORKSTATION_NONE;
-        } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
-            app->selected_gather_zone = GATHER_ZONE_NONE;
-        } else if (app->tool != APP_TOOL_NONE) {
-            app->tool = APP_TOOL_NONE;
-        } else {
-            app->running = false;
-        }
-        break;
+    case SDLK_ESCAPE: step_back(app); break;
+    case SDLK_F1: app->show_help = !app->show_help; break;
     case SDLK_M: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); break;
     case SDLK_R: toggle_tool(app, APP_TOOL_GATHER, DESIGNATION_NONE); break;
     case SDLK_X: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); break;
@@ -532,10 +568,7 @@ static void handle_event(App *app, const SDL_Event *event)
         if (event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             steps = -steps;
         }
-        if (ui_is_over_panel(&app->ui, event->wheel.mouse_x, event->wheel.mouse_y)) {
-            if (app->show_work_panel) {
-                work_panel_scroll(app, steps);
-            }
+        if (ui_scroll(&app->ui, event->wheel.mouse_x, event->wheel.mouse_y, steps)) {
             break; /* The wheel does not zoom the map through a panel. */
         }
         if (steps != 0.0f) {
@@ -654,7 +687,8 @@ static void render_frame(App *app)
     }
     float mouse_x, mouse_y;
     SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
-    ui_begin_frame(&app->ui, mouse_x, mouse_y, (buttons & SDL_BUTTON_LMASK) != 0);
+    ui_begin_frame(&app->ui, mouse_x, mouse_y, (buttons & SDL_BUTTON_LMASK) != 0,
+                   app->camera.viewport_width, app->camera.viewport_height);
     hud_draw(app);
     ui_end_frame(&app->ui);
 

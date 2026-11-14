@@ -8,8 +8,8 @@
 
 #include "game/app.h"
 
-/* Draws the panel with its bottom right corner at (right, bottom), if a
- * stockpile is selected. */
-void stockpile_panel_draw(App *app, float right, float bottom);
+/* Draws the window (APP_WINDOW_STOCKPILE) if a stockpile is selected;
+ * closing it deselects the stockpile. */
+void stockpile_panel_draw(App *app);
 
 #endif /* COLONY_GAME_STOCKPILE_PANEL_H */

@@ -1,6 +1,8 @@
 /*
- * Heads-up display: date and speed, language, tile inspector, controls help
- * and the debug overlay. Every visible string goes through tr().
+ * Heads-up display: date and speed, language, active tool, the menus
+ * (game/menu_bar.h) with the tile inspector above them, the windows
+ * (inspectors, work priorities, controls help) in their stacking order,
+ * tooltips and the debug overlay. Every visible string goes through tr().
  */
 #ifndef COLONY_GAME_HUD_H
 #define COLONY_GAME_HUD_H
@@ -8,6 +10,9 @@
 #include "game/app.h"
 
 void hud_draw(App *app);
+
+/* Windows open now, back to front (the last one is in front). Returns how many. */
+int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT]);
 
 /* Stack sizes in the bottom right corner of item tiles, when zoomed in enough
  * (drawn in the world, under the colonists). */

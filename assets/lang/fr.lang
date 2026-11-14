@@ -33,6 +33,22 @@ designation.mine = Miner la roche
 tool.cancel = Annuler les ordres
 tool.stockpile = Zone de stockage
 tool.gather_zone = Zone de récolte
+tool.gather_zone.description = Les colons y récoltent les ressources choisies : bois, baies, branches, brindilles, herbe, pierres
+tool.stockpile.description = Les colons y rangent les objets autorisés
+tool.mine.description = Les colons creusent la roche marquée et en rapportent la pierre
+tool.cancel.description = Retire les ordres de la zone glissée
+
+# Menus (bas gauche)
+menu.build = Construire
+menu.work = Travail
+menu.stations = Postes de travail
+menu.zones = Zones
+menu.orders = Ordres
+# {0} : nom de la touche.
+menu.shortcut = Raccourci : {0}
+menu.no_cost = Aucune ressource nécessaire
+menu.work.description = Qui fait quel travail, et dans quel ordre
+help.title = Commandes
 
 # Objets
 item.wood = Bois
@@ -89,7 +105,7 @@ hud.speed = Vitesse : {0}×
 hud.paused = En pause
 hud.language = Langue : {0}
 hud.help.camera = {0}/Flèches : déplacer · Molette : zoom · Glisser clic milieu/droit : défiler
-hud.help.game = Clic/glisser gauche : sélectionner · Espace : pause · 1-3 : vitesse · L : langue · F3 : débogage · Échap : quitter
+hud.help.game = Clic/glisser gauche : sélectionner · Espace : pause · 1-3 : vitesse · L : langue · F3 : débogage · Échap : revenir, puis quitter
 hud.help.gathering = {0} : zones de récolte (bois, baies, branches, brindilles, herbe, pierres)
 hud.help.orders = {0} : miner la roche · {1} : annuler des ordres
 hud.help.manage = {0} : zones de stockage · {1} : postes de travail · clic sur une zone ou un poste : ses réglages · {2} : priorités de travail
@@ -204,7 +220,9 @@ gather_zone.delete = Supprimer
 
 # Postes de travail
 workstation.crafting_spot = Coin d’artisanat
+workstation.crafting_spot.description = Un emplacement au sol pour fabriquer lances et autres outils en bois et en pierre
 workstation.knapping_spot = Poste de taille
+workstation.knapping_spot.description = Où silex et galets sont taillés en éclats, galets aménagés et bifaces
 
 # Recettes
 recipe.chopper = Galet aménagé
@@ -246,7 +264,6 @@ unit.kg = {0} kg
 unit.percent = {0} %
 
 # Interface générique
-ui.close = Fermer
 
 # Grille des priorités de travail
 work_panel.title = Priorités de travail

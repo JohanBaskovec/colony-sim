@@ -34,6 +34,22 @@ designation.mine = Mine rock
 tool.cancel = Cancel orders
 tool.stockpile = Stockpile zone
 tool.gather_zone = Gathering zone
+tool.gather_zone.description = Settlers gather the resources you pick in it: wood, berries, branches, twigs, grass, stones
+tool.stockpile.description = Settlers store the items you allow in it
+tool.mine.description = Settlers dig out the marked rock and bring back stone
+tool.cancel.description = Removes the orders in the area you drag
+
+# Menus (bottom left)
+menu.build = Build
+menu.work = Work
+menu.stations = Workstations
+menu.zones = Zones
+menu.orders = Orders
+# {0}: key name.
+menu.shortcut = Shortcut: {0}
+menu.no_cost = Needs no resources
+menu.work.description = Who does which work, and in what order
+help.title = Controls
 
 # Items
 item.wood = Wood
@@ -94,7 +110,7 @@ hud.paused = Paused
 hud.language = Language: {0}
 # {0} = movement keys (e.g. WASD, adapted to the keyboard layout)
 hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
-hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · L: language · F3: debug · Esc: quit
+hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · L: language · F3: debug · Esc: back, then quit
 # {0}, {1}, {2}, {3} = keys of the chop, mine, harvest and cancel tools
 hud.help.gathering = {0}: gathering zones (wood, berries, branches, twigs, grass, stones)
 hud.help.orders = {0}: mine rock · {1}: cancel orders
@@ -247,7 +263,9 @@ gather_zone.delete = Delete
 
 # Workstations
 workstation.crafting_spot = Crafting spot
+workstation.crafting_spot.description = A place on the ground to make spears and other tools from wood and stone
 workstation.knapping_spot = Knapping spot
+workstation.knapping_spot.description = Where flint and cobbles are knapped into flakes, choppers and hand axes
 
 # Recipes (named after what they make)
 recipe.chopper = Chopper
@@ -303,7 +321,6 @@ unit.kg = {0} kg
 unit.percent = {0}%
 
 # Generic UI
-ui.close = Close
 
 # Work priorities grid
 work_panel.title = Work priorities

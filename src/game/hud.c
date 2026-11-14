@@ -2,9 +2,13 @@
 
 #include "core/i18n.h"
 #include "game/gather_zone_panel.h"
+#include "game/menu_bar.h"
 #include "game/station_panel.h"
+#include "game/ui_layout.h"
 #include "game/stockpile_panel.h"
 #include "game/work_panel.h"
+
+#include <limits.h>
 
 #define HUD_MARGIN 8.0f
 #define HUD_PADDING 6.0f
@@ -13,6 +17,8 @@
 
 static const SDL_Color HUD_TEXT_COLOR = {236, 236, 228, 255};
 static const SDL_Color HUD_PANEL_COLOR = {12, 14, 18, 170};
+/* The tile inspector lets the world show through. */
+static const SDL_Color HUD_TILE_PANEL_COLOR = {12, 14, 18, 120};
 static const SDL_Color LABEL_SHADOW_COLOR = {0, 0, 0, 200};
 
 /* Colonist names are drawn under them from this zoom level (pixels per tile). */
@@ -53,7 +59,8 @@ static void panel_size(App *app, const Panel *panel, float *width, float *height
     *height = (float)(panel->count * text_line_height(app->text)) + 2.0f * HUD_PADDING;
 }
 
-static void panel_draw(App *app, const Panel *panel, float x, float y)
+/* Text panel that does not catch clicks. */
+static void panel_draw_colored(App *app, const Panel *panel, float x, float y, SDL_Color color)
 {
     if (panel->count == 0) {
         return;
@@ -61,14 +68,27 @@ static void panel_draw(App *app, const Panel *panel, float x, float y)
     float width, height;
     panel_size(app, panel, &width, &height);
     SDL_FRect background = {x, y, width, height};
-    SDL_SetRenderDrawColor(app->renderer, HUD_PANEL_COLOR.r, HUD_PANEL_COLOR.g,
-                           HUD_PANEL_COLOR.b, HUD_PANEL_COLOR.a);
+    SDL_SetRenderDrawColor(app->renderer, color.r, color.g, color.b, color.a);
     SDL_RenderFillRect(app->renderer, &background);
 
     float line_height = (float)text_line_height(app->text);
     for (int i = 0; i < panel->count; i++) {
         text_draw(app->text, panel->lines[i], x + HUD_PADDING,
                   y + HUD_PADDING + (float)i * line_height, HUD_TEXT_COLOR);
+    }
+}
+
+static void panel_draw(App *app, const Panel *panel, float x, float y)
+{
+    panel_draw_colored(app, panel, x, y, HUD_PANEL_COLOR);
+}
+
+/* The lines of a panel as the rows of a window (game/ui_layout.h). */
+static void panel_rows(UiLayout *layout, void *userdata)
+{
+    const Panel *panel = userdata;
+    for (int i = 0; i < panel->count; i++) {
+        ui_layout_label(layout, panel->lines[i], 0.0f, false);
     }
 }
 
@@ -302,13 +322,17 @@ static void add_need_line(Panel *panel, const Colonist *colonist, NeedType need)
     }
 }
 
+/* Lines of the colonist inspector (its title is the colonist's name), or the
+ * names of the colonists selected. */
 static void build_selection_panel(App *app, Panel *panel)
 {
     if (app->selected_count != 1) {
-        char count[16];
-        tr_integer(count, sizeof(count), app->selected_count);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
-                  tr_plural("hud.selection.count", app->selected_count), count);
+        for (int i = 0; i < app->selected_count && panel->count < HUD_MAX_LINES; i++) {
+            const Colonist *colonist = game_colonist_const(&app->game, app->selected[i]);
+            if (colonist != NULL) {
+                panel_add_text(panel, colonist->name);
+            }
+        }
         return;
     }
     const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
@@ -317,7 +341,6 @@ static void build_selection_panel(App *app, Panel *panel)
     }
     char age[16];
     tr_integer(age, sizeof(age), colonist->age);
-    panel_add_text(panel, colonist->name);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.age"), age);
     char strength[16], carry[32];
     tr_integer(strength, sizeof(strength), colonist->strength);
@@ -422,10 +445,102 @@ void hud_draw_world_labels(App *app)
     }
 }
 
+static void colonist_window(App *app)
+{
+    Panel lines = {0};
+    build_selection_panel(app, &lines);
+    char title[HUD_LINE_SIZE];
+    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
+    if (app->selected_count == 1 && colonist != NULL) {
+        SDL_strlcpy(title, colonist->name, sizeof(title));
+    } else {
+        char count[16];
+        tr_integer(count, sizeof(count), app->selected_count);
+        TR_FORMAT(title, sizeof(title), tr_plural("hud.selection.count", app->selected_count),
+                  count);
+    }
+    bool open = true;
+    ui_layout_window(&app->ui, APP_WINDOW_COLONIST, title, UI_PLACE_BOTTOM_RIGHT, panel_rows,
+                     &lines, &open);
+    if (!open) {
+        app->selected_count = 0;
+    }
+}
+
+static void help_window(App *app)
+{
+    Panel help = {0};
+    char keys[32];
+    movement_keys_label(keys, sizeof(keys));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
+    panel_add_text(&help, tr("hud.help.game"));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.gathering"), key_name(SDLK_R));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_M),
+              key_name(SDLK_X));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"), key_name(SDLK_P),
+              key_name(SDLK_E), key_name(SDLK_T));
+    bool open = true;
+    ui_layout_window(&app->ui, APP_WINDOW_HELP, tr("help.title"), UI_PLACE_CENTER, panel_rows,
+                     &help, &open);
+    if (!open) {
+        app->show_help = false;
+    }
+}
+
+static void draw_window(App *app, AppWindow window)
+{
+    switch (window) {
+    case APP_WINDOW_COLONIST: colonist_window(app); break;
+    case APP_WINDOW_STATION: station_panel_draw(app); break;
+    case APP_WINDOW_STOCKPILE: stockpile_panel_draw(app); break;
+    case APP_WINDOW_GATHER_ZONE: gather_zone_panel_draw(app); break;
+    case APP_WINDOW_WORK: work_panel_draw(app); break;
+    case APP_WINDOW_HELP: help_window(app); break;
+    default: break;
+    }
+}
+
+/* Stacking order; a window just opened comes in front. */
+static unsigned window_order(const App *app, AppWindow window)
+{
+    unsigned z = ui_window_z(&app->ui, (int)window);
+    return z == 0 ? UINT_MAX : z;
+}
+
+int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
+{
+    int count = 0;
+    if (app->selected_station != WORKSTATION_NONE) {
+        out[count++] = APP_WINDOW_STATION;
+    } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
+        out[count++] = APP_WINDOW_GATHER_ZONE;
+    } else if (app->selected_stockpile != STOCKPILE_NONE) {
+        out[count++] = APP_WINDOW_STOCKPILE;
+    } else if (app->selected_count > 0) {
+        out[count++] = APP_WINDOW_COLONIST;
+    }
+    if (app->show_work_panel) {
+        out[count++] = APP_WINDOW_WORK;
+    }
+    if (app->show_help) {
+        out[count++] = APP_WINDOW_HELP;
+    }
+    /* Insertion sort, back to front. */
+    for (int i = 1; i < count; i++) {
+        AppWindow window = out[i];
+        int j = i;
+        while (j > 0 && window_order(app, out[j - 1]) > window_order(app, window)) {
+            out[j] = out[j - 1];
+            j--;
+        }
+        out[j] = window;
+    }
+    return count;
+}
+
 void hud_draw(App *app)
 {
     const float screen_width = app->camera.viewport_width;
-    const float screen_height = app->camera.viewport_height;
     float width, height;
 
     /* Top left: date and speed, then the debug overlay below. */
@@ -485,44 +600,22 @@ void hud_draw(App *app)
     panel_size(app, &language, &width, &height);
     panel_draw(app, &language, screen_width - width - HUD_MARGIN, HUD_MARGIN);
 
-    /* Bottom: controls help, with the tile inspector above it. */
-    Panel help = {0};
-    char keys[32];
-    movement_keys_label(keys, sizeof(keys));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
-    panel_add_text(&help, tr("hud.help.game"));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.gathering"), key_name(SDLK_R));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_M),
-              key_name(SDLK_X));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"), key_name(SDLK_P),
-              key_name(SDLK_E), key_name(SDLK_T));
-    float help_width, help_height;
-    panel_size(app, &help, &help_width, &help_height);
-    float help_y = screen_height - help_height - HUD_MARGIN;
-    panel_draw(app, &help, HUD_MARGIN, help_y);
-
-    /* Bottom right: inspector of the selected colonist(s), station or stockpile. */
-    if (app->selected_station != WORKSTATION_NONE) {
-        station_panel_draw(app, screen_width - HUD_MARGIN, help_y - HUD_MARGIN);
-    } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
-        gather_zone_panel_draw(app, screen_width - HUD_MARGIN, help_y - HUD_MARGIN);
-    } else if (app->selected_stockpile != STOCKPILE_NONE) {
-        stockpile_panel_draw(app, screen_width - HUD_MARGIN, help_y - HUD_MARGIN);
-    } else if (app->selected_count > 0) {
-        Panel selection = {0};
-        build_selection_panel(app, &selection);
-        panel_size(app, &selection, &width, &height);
-        panel_draw(app, &selection, screen_width - width - HUD_MARGIN,
-                   help_y - height - HUD_MARGIN);
-    }
-
+    /* Bottom left: the tile inspector above the menus. */
+    float menu_top = menu_bar_top(app);
     if (app->hover_valid) {
         Panel tile = {0};
         build_tile_panel(app, &tile);
         panel_size(app, &tile, &width, &height);
-        panel_draw(app, &tile, HUD_MARGIN, help_y - height - HUD_MARGIN);
+        panel_draw_colored(app, &tile, HUD_MARGIN, menu_top - height - HUD_MARGIN,
+                           HUD_TILE_PANEL_COLOR);
     }
 
-    /* Last, so that it is drawn over the other panels. */
-    work_panel_draw(app);
+    /* Windows, back to front. */
+    AppWindow open[APP_WINDOW_COUNT];
+    int open_count = hud_open_windows(app, open);
+    for (int i = 0; i < open_count; i++) {
+        draw_window(app, open[i]);
+    }
+    menu_bar_draw(app);
+    ui_draw_tooltip(&app->ui);
 }

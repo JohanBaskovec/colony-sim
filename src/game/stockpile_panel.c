@@ -2,7 +2,6 @@
 
 #include "core/i18n.h"
 
-#define PANEL_PADDING 8.0f
 #define GAP 8.0f
 #define ITEM_INDENT 20.0f
 #define ITEM_COLUMNS 2
@@ -27,7 +26,7 @@ static UiCheck check_state(ItemTypeMask allowed, ItemTypeMask mask)
     return on == mask ? UI_CHECKED : (on != 0 ? UI_PARTIAL : UI_UNCHECKED);
 }
 
-void stockpile_panel_draw(App *app, float right, float bottom)
+void stockpile_panel_draw(App *app)
 {
     Stockpiles *stockpiles = &app->game.stockpiles;
     int index = app->selected_stockpile;
@@ -63,8 +62,7 @@ void stockpile_panel_draw(App *app, float right, float bottom)
     /* Measure. */
     float row = ui_row_height(ui);
     float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
-    float width = ui_text_width(ui, title) + GAP + ui_button_width(ui, delete_label);
-    width = SDL_max(width, ui_text_width(ui, tiles));
+    float width = ui_text_width(ui, tiles) + GAP + ui_button_width(ui, delete_label);
     width = SDL_max(width, ui_text_width(ui, priority) + GAP + 2.0f * small + GAP +
                                ui_text_width(ui, hint));
     width = SDL_max(width, ui_text_width(ui, allowed_label) + GAP + ui_button_width(ui, all) +
@@ -72,7 +70,7 @@ void stockpile_panel_draw(App *app, float right, float bottom)
     width = SDL_max(width, SDL_max(SLIDER_MIN_WIDTH, ui_text_width(ui, quality)));
     width = SDL_max(width, ui_text_width(ui, hit_points));
     /* Item types of a category in ITEM_COLUMNS columns, under the category. */
-    int rows = 8;
+    int rows = 7;
     float column = 0.0f;
     for (int category = 0; category < ITEM_CATEGORY_COUNT; category++) {
         width = SDL_max(width,
@@ -85,24 +83,21 @@ void stockpile_panel_draw(App *app, float right, float bottom)
     }
     column = SDL_ceilf(column) + GAP;
     width = SDL_ceilf(SDL_max(width, ITEM_INDENT + (float)ITEM_COLUMNS * column));
-    float height = (float)rows * row + 2.0f * PANEL_PADDING;
-    SDL_FRect panel = {right - width - 2.0f * PANEL_PADDING, bottom - height,
-                       width + 2.0f * PANEL_PADDING, height};
-    ui_panel(ui, panel);
-
-    float x = panel.x + PANEL_PADDING, y = panel.y + PANEL_PADDING;
+    bool open = true;
+    SDL_FPoint origin = ui_window_begin(ui, APP_WINDOW_STOCKPILE, title, width,
+                                        (float)rows * row, UI_PLACE_BOTTOM_RIGHT, &open);
+    width = SDL_max(width, ui_window_content_width(ui));
+    float x = origin.x, y = origin.y;
     float line = (float)text_line_height(app->text);
     float text_offset = SDL_floorf((row - line) * 0.5f);
     float button_height = row - 2.0f;
 
-    /* Title and delete button. */
-    ui_label(ui, title, x, y + text_offset);
+    /* Tiles and delete button. */
+    ui_label(ui, tiles, x, y + text_offset);
     float delete_width = ui_button_width(ui, delete_label);
     bool deleted = ui_button(ui, (SDL_FRect){x + width - delete_width, y, delete_width,
                                              button_height},
                              delete_label);
-    y += row;
-    ui_label(ui, tiles, x, y + text_offset);
     y += row;
 
     /* Priority: 1 is the highest. */
@@ -181,8 +176,12 @@ void stockpile_panel_draw(App *app, float right, float bottom)
             y += row;
         }
     }
+    ui_window_end(ui);
     if (new_allowed != allowed) {
         stockpile_set_allowed(stockpiles, index, new_allowed);
+    }
+    if (deleted || !open) {
+        app->selected_stockpile = STOCKPILE_NONE;
     }
     if (deleted) {
         stockpile_delete(stockpiles, index);

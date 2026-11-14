@@ -9,8 +9,8 @@
 
 #include "game/app.h"
 
-/* Draws the panel with its bottom right corner at (right, bottom), if a
- * workstation is selected. */
-void station_panel_draw(App *app, float right, float bottom);
+/* Draws the window (APP_WINDOW_STATION) if a workstation is selected;
+ * closing it deselects the station. */
+void station_panel_draw(App *app);
 
 #endif /* COLONY_GAME_STATION_PANEL_H */

@@ -9,10 +9,7 @@
 
 #include "game/app.h"
 
-/* Draws the grid if it is open (App.show_work_panel). */
+/* Draws the grid in a window (APP_WINDOW_WORK) if it is open (App.show_work_panel). */
 void work_panel_draw(App *app);
-
-/* Scrolls the rows by a number of mouse wheel steps (positive: towards the top). */
-void work_panel_scroll(App *app, float steps);
 
 #endif /* COLONY_GAME_WORK_PANEL_H */

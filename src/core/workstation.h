@@ -34,6 +34,7 @@ typedef enum WorkstationType {
 typedef struct WorkstationDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
+    const char *description_key; /* One short sentence for the build menu. */
     ItemType material; /* Brought by the builder; ITEM_NONE: none. */
     int material_count;
     /* Work ticks at speed ×1. A station with no material is placed ready,

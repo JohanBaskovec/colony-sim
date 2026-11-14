@@ -1,4 +1,5 @@
 #include "core/workstation.h"
+#include "core/i18n.h"
 #include "core/util.h"
 
 #include "test_framework.h"
@@ -29,7 +30,8 @@ static void test_definitions(void)
     for (int type = 0; type < WORKSTATION_TYPE_COUNT; type++) {
         const WorkstationDef *def = workstation_def((WorkstationType)type);
         REQUIRE(def != NULL);
-        CHECK(def->id != NULL && def->name_key != NULL);
+        CHECK(def->id != NULL && i18n_is_valid_key(def->name_key));
+        CHECK(i18n_is_valid_key(def->description_key));
         CHECK((def->material == ITEM_NONE) == (def->material_count == 0));
         /* Only stations made of something need building. */
         CHECK((def->material == ITEM_NONE) == (def->build_work <= 0.0f));

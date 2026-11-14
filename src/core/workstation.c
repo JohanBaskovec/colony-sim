@@ -8,11 +8,13 @@
 
 static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
     /* A place to sit and work: nothing to bring, so it is ready at once. */
-    [WORKSTATION_CRAFTING_SPOT] = {"crafting_spot", N_("workstation.crafting_spot"), ITEM_NONE, 0,
+    [WORKSTATION_CRAFTING_SPOT] = {"crafting_spot", N_("workstation.crafting_spot"),
+                                   N_("workstation.crafting_spot.description"), ITEM_NONE, 0,
                                    0.0f, KNOWLEDGE_NONE, 0.0f},
     /* An anvil stone to knap on. */
-    [WORKSTATION_KNAPPING_SPOT] = {"knapping_spot", N_("workstation.knapping_spot"), ITEM_COBBLE,
-                                   1, 250.0f, KNOWLEDGE_STONE_KNAPPING, 50.0f},
+    [WORKSTATION_KNAPPING_SPOT] = {"knapping_spot", N_("workstation.knapping_spot"),
+                                   N_("workstation.knapping_spot.description"), ITEM_COBBLE, 1,
+                                   250.0f, KNOWLEDGE_STONE_KNAPPING, 50.0f},
 };
 
 const WorkstationDef *workstation_def(WorkstationType type)

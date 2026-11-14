@@ -4,11 +4,13 @@ add_executable(colony_sim
     hud.c
     localization.c
     main.c
+    menu_bar.c
     render.c
     station_panel.c
     stockpile_panel.c
     text.c
     ui.c
+    ui_layout.c
     work_panel.c)
 
 target_link_libraries(colony_sim PRIVATE colony_core SDL3_ttf::SDL3_ttf SDL3::SDL3)

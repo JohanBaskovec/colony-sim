@@ -66,7 +66,9 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Stone age constructions: grass bed, windbreak (wall), branch screen (door), lean-to (roof), cave floor clearing, workstations; hauling to construction sites
 - [ ] Room detection, roofs (lean-to, natural rock roof over caves)
 - [ ] Knowledge spreading: conversation, apprenticeship, fading and loss; only discovered knowledges shown in the colonist inspector
-- [ ] UI framework: buttons, panels, tooltips (all translatable, layout adapts to text length)
+- [x] UI framework: buttons, panels, tooltips, windows sized to their content (title bar to drag, × to close, stacking order, scroll bar and wheel when too tall), measured layouts that adapt to text length
+- [x] Bottom left menus: Build (workstations, zones, orders as icon buttons with tooltips: name, description, cost, shortcut), Work, ? (controls help, F1); the tile inspector above them; Escape steps back (tool, menu, front window, quit)
+- [ ] UI: horizontal scrolling (the work grid is wider than small screens), windows remembering their position between sessions, a shortcut shown for the workstation buttons (E cycles them)
 
 ## M4: Survival
 

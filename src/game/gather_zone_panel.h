@@ -9,8 +9,8 @@
 
 #include "game/app.h"
 
-/* Draws the panel with its bottom right corner at (right, bottom), if a
- * gathering zone is selected. */
-void gather_zone_panel_draw(App *app, float right, float bottom);
+/* Draws the window (APP_WINDOW_GATHER_ZONE) if a gathering zone is selected;
+ * closing it deselects the zone. */
+void gather_zone_panel_draw(App *app);
 
 #endif /* COLONY_GAME_GATHER_ZONE_PANEL_H */

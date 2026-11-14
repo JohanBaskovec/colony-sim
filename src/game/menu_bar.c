@@ -1,0 +1,223 @@
+#include "game/menu_bar.h"
+
+#include "core/i18n.h"
+#include "game/render.h"
+
+#define BAR_MARGIN 8.0f
+#define BAR_PADDING 4.0f
+#define BAR_GAP 4.0f /* Between buttons, and between rows. */
+#define ICON_SIZE 48.0f
+#define ICON_INSET 6.0f
+#define TEXT_SIZE 256
+#define MAX_ROW_BUTTONS 8
+
+/* Zones and orders of the build menu (workstations come from their table). */
+typedef struct MenuTool {
+    BuildCategory category;
+    AppTool tool;
+    int type; /* See app_toggle_tool(). */
+    RenderIcon icon;
+    const char *name_key;
+    const char *description_key;
+    SDL_Keycode key; /* Its shortcut. */
+} MenuTool;
+
+static const MenuTool TOOLS[] = {
+    {BUILD_CATEGORY_ZONES, APP_TOOL_GATHER, 0, RENDER_ICON_GATHER_ZONE, N_("tool.gather_zone"),
+     N_("tool.gather_zone.description"), SDLK_R},
+    {BUILD_CATEGORY_ZONES, APP_TOOL_STOCKPILE, 0, RENDER_ICON_STOCKPILE, N_("tool.stockpile"),
+     N_("tool.stockpile.description"), SDLK_P},
+    {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_MINE, RENDER_ICON_MINE,
+     N_("designation.mine"), N_("tool.mine.description"), SDLK_M},
+    {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_NONE, RENDER_ICON_CANCEL,
+     N_("tool.cancel"), N_("tool.cancel.description"), SDLK_X},
+};
+
+static const char *const CATEGORY_KEYS[BUILD_CATEGORY_COUNT] = {
+    [BUILD_CATEGORY_NONE] = NULL,
+    [BUILD_CATEGORY_STATIONS] = N_("menu.stations"),
+    [BUILD_CATEGORY_ZONES] = N_("menu.zones"),
+    [BUILD_CATEGORY_ORDERS] = N_("menu.orders"),
+};
+
+static float button_height(const Ui *ui)
+{
+    return ui_row_height(ui) + 6.0f;
+}
+
+/* A panel holding a row of text buttons at (x, y); returns the index of the
+ * button clicked (-1: none) and sets *hovered to the one under the mouse. */
+static int text_row(Ui *ui, float x, float y, const char *const *labels, const bool *active,
+                    int count, int *hovered)
+{
+    float height = button_height(ui);
+    float width = 2.0f * BAR_PADDING + BAR_GAP * (float)(count - 1);
+    for (int i = 0; i < count; i++) {
+        width += SDL_ceilf(ui_button_width(ui, labels[i])) + 8.0f;
+    }
+    ui_panel(ui, (SDL_FRect){x, y, width, height + 2.0f * BAR_PADDING});
+    int clicked = -1;
+    *hovered = -1;
+    float bx = x + BAR_PADDING;
+    for (int i = 0; i < count; i++) {
+        SDL_FRect rect = {bx, y + BAR_PADDING, SDL_ceilf(ui_button_width(ui, labels[i])) + 8.0f,
+                          height};
+        if (ui_toggle_button(ui, rect, labels[i], active[i])) {
+            clicked = i;
+        }
+        if (ui_hovered(ui, rect)) {
+            *hovered = i;
+        }
+        bx += rect.w + BAR_GAP;
+    }
+    return clicked;
+}
+
+/* "Shortcut: R". */
+static void shortcut_line(char *out, size_t size, SDL_Keycode key)
+{
+    TR_FORMAT(out, size, tr("menu.shortcut"), SDL_GetKeyName(key));
+}
+
+static void station_tooltip(App *app, WorkstationType type)
+{
+    const WorkstationDef *def = workstation_def(type);
+    char cost[TEXT_SIZE];
+    if (def->material != ITEM_NONE) {
+        char count[16];
+        tr_integer(count, sizeof(count), def->material_count);
+        TR_FORMAT(cost, sizeof(cost), tr("hud.tool.build_cost"),
+                  tr(item_def(def->material)->name_key), count);
+    } else {
+        SDL_strlcpy(cost, tr("menu.no_cost"), sizeof(cost));
+    }
+    const char *lines[4] = {tr(def->name_key), tr(def->description_key), cost,
+                            tr("hud.tool.unavailable")};
+    ui_tooltip(&app->ui, lines, game_workstation_buildable(&app->game, type) ? 3 : 4);
+}
+
+static void tool_tooltip(App *app, const MenuTool *tool)
+{
+    char shortcut[TEXT_SIZE];
+    shortcut_line(shortcut, sizeof(shortcut), tool->key);
+    bool unavailable = tool->tool == APP_TOOL_DESIGNATE && tool->type != DESIGNATION_NONE &&
+                       !game_designation_available(&app->game, (DesignationType)tool->type);
+    const char *lines[4] = {tr(tool->name_key), tr(tool->description_key), shortcut,
+                            tr("hud.tool.unavailable")};
+    ui_tooltip(&app->ui, lines, unavailable ? 4 : 3);
+}
+
+/* One icon button per thing to place in the chosen category. */
+static void icon_row(App *app, float x, float y)
+{
+    Ui *ui = &app->ui;
+    int count = 0;
+    const MenuTool *tools[MAX_ROW_BUTTONS];
+    if (app->build_category == BUILD_CATEGORY_STATIONS) {
+        count = WORKSTATION_TYPE_COUNT;
+    } else {
+        for (size_t i = 0; i < SDL_arraysize(TOOLS) && count < MAX_ROW_BUTTONS; i++) {
+            if (TOOLS[i].category == app->build_category) {
+                tools[count++] = &TOOLS[i];
+            }
+        }
+    }
+    if (count == 0) {
+        return;
+    }
+    float width = 2.0f * BAR_PADDING + (float)count * ICON_SIZE + (float)(count - 1) * BAR_GAP;
+    ui_panel(ui, (SDL_FRect){x, y, width, ICON_SIZE + 2.0f * BAR_PADDING});
+    for (int i = 0; i < count; i++) {
+        SDL_FRect rect = {x + BAR_PADDING + (float)i * (ICON_SIZE + BAR_GAP), y + BAR_PADDING,
+                          ICON_SIZE, ICON_SIZE};
+        SDL_FRect inner = {rect.x + ICON_INSET, rect.y + ICON_INSET, rect.w - 2.0f * ICON_INSET,
+                           rect.h - 2.0f * ICON_INSET};
+        if (app->build_category == BUILD_CATEGORY_STATIONS) {
+            WorkstationType type = (WorkstationType)i;
+            if (ui_icon_button(ui, rect, app_tool_active(app, APP_TOOL_BUILD, i))) {
+                app_toggle_tool(app, APP_TOOL_BUILD, i);
+            }
+            render_workstation_icon(app->renderer, inner, type);
+            if (ui_hovered(ui, rect)) {
+                station_tooltip(app, type);
+            }
+        } else {
+            const MenuTool *tool = tools[i];
+            if (ui_icon_button(ui, rect, app_tool_active(app, tool->tool, tool->type))) {
+                app_toggle_tool(app, tool->tool, tool->type);
+            }
+            render_tool_icon(app->renderer, inner, tool->icon);
+            if (ui_hovered(ui, rect)) {
+                tool_tooltip(app, tool);
+            }
+        }
+    }
+}
+
+float menu_bar_top(const App *app)
+{
+    float row_height = button_height(&app->ui) + 2.0f * BAR_PADDING;
+    float y = app->camera.viewport_height - BAR_MARGIN - row_height;
+    if (app->build_menu_open) {
+        y -= row_height + BAR_GAP;
+        if (app->build_category != BUILD_CATEGORY_NONE) {
+            y -= ICON_SIZE + 2.0f * BAR_PADDING + BAR_GAP;
+        }
+    }
+    return y;
+}
+
+void menu_bar_draw(App *app)
+{
+    Ui *ui = &app->ui;
+    float row_height = button_height(ui) + 2.0f * BAR_PADDING;
+    float y = app->camera.viewport_height - BAR_MARGIN - row_height;
+
+    /* The bar. */
+    const char *labels[3] = {tr("menu.build"), tr("menu.work"), "?"};
+    bool active[3] = {app->build_menu_open, app->show_work_panel, app->show_help};
+    int hovered;
+    switch (text_row(ui, BAR_MARGIN, y, labels, active, 3, &hovered)) {
+    case 0:
+        app->build_menu_open = !app->build_menu_open;
+        break;
+    case 1: app->show_work_panel = !app->show_work_panel; break;
+    case 2: app->show_help = !app->show_help; break;
+    default: break;
+    }
+    char shortcut[TEXT_SIZE];
+    if (hovered == 1) {
+        shortcut_line(shortcut, sizeof(shortcut), SDLK_T);
+        const char *lines[3] = {tr("work_panel.title"), tr("menu.work.description"), shortcut};
+        ui_tooltip(ui, lines, 3);
+    } else if (hovered == 2) {
+        shortcut_line(shortcut, sizeof(shortcut), SDLK_F1);
+        const char *lines[2] = {tr("help.title"), shortcut};
+        ui_tooltip(ui, lines, 2);
+    }
+    if (!app->build_menu_open) {
+        return;
+    }
+
+    /* Categories. */
+    y -= row_height + BAR_GAP;
+    const char *categories[BUILD_CATEGORY_COUNT - 1];
+    bool open[BUILD_CATEGORY_COUNT - 1];
+    for (int i = 0; i < BUILD_CATEGORY_COUNT - 1; i++) {
+        categories[i] = tr(CATEGORY_KEYS[i + 1]);
+        open[i] = (int)app->build_category == i + 1;
+    }
+    int clicked = text_row(ui, BAR_MARGIN, y, categories, open, BUILD_CATEGORY_COUNT - 1,
+                           &hovered);
+    if (clicked >= 0) {
+        BuildCategory category = (BuildCategory)(clicked + 1);
+        app->build_category = app->build_category == category ? BUILD_CATEGORY_NONE : category;
+    }
+    if (app->build_category == BUILD_CATEGORY_NONE) {
+        return;
+    }
+
+    /* What the category places. */
+    y -= ICON_SIZE + 2.0f * BAR_PADDING + BAR_GAP;
+    icon_row(app, BAR_MARGIN, y);
+}

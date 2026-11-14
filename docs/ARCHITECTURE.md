@@ -75,8 +75,10 @@ simulation:
 | `main`         | Parses the command line, runs the app                                   |
 | `app`          | SDL init/shutdown, main loop, input → camera/clock, frame orchestration |
 | `render`       | Draws the map (placeholder colored tiles), daylight overlay, highlights |
-| `hud`          | Builds and draws the HUD panels; all text goes through `tr()`           |
-| `ui`           | Immediate-mode widgets (panel, button, check box) and click capture     |
+| `hud`          | Builds and draws the HUD panels and the windows in stacking order; all text goes through `tr()` |
+| `ui`           | Immediate-mode widgets (panel, window, button, check box, slider, tooltip) and click capture |
+| `ui_layout`    | Rows of a window laid out twice: measured, then drawn (window sized to its content) |
+| `menu_bar`     | Bottom left menus: Build (categories, icon buttons), Work, ? (help)     |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
 | `gather_zone_panel` | Inspector of the selected gathering zone (a check box per resource, mode, target, progress, fully grown option, warnings) |
 | `station_panel` | Inspector of the selected workstation (blueprint progress, bills, warnings) |
@@ -511,10 +513,20 @@ UI state that is not part of the simulation (camera, selection, selected
 stockpile or workstation, active tool, drag rectangle, debug toggle) lives in `App`.
 
 The UI is immediate-mode (`game/ui.h`): panels and widgets are laid out and
-drawn every frame. A left or right click on a panel drawn during the previous
-frame is captured before it reaches the map and consumed by the first widget
-that contains it; the mouse wheel over a panel scrolls it instead of zooming
-the map. Widgets act on the game directly through core functions
+drawn every frame. Everything drawn belongs to an owner: a window (an
+`AppWindow` id) or a plain panel. A left or right click on a panel or window
+drawn during the previous frame is captured before it reaches the map and
+handed to the topmost owner under it, whose first widget containing it
+consumes it; only that owner's widgets light up under the mouse. The mouse
+wheel over a window scrolls it (over any panel, it never zooms the map).
+
+Windows (inspectors, work grid, controls help) keep their position, stacking
+order and scroll in `Ui` from one frame to the next. They are sized to their
+content: `ui_layout_window()` runs the rows once to measure them, then again
+to draw them. A window taller than the screen allows scrolls, with its
+content clipped. A click brings a window to the front, and a window opened
+again comes to the front; the HUD draws the open windows back to front
+(`hud_open_windows()`), then the menus on top, then the tooltip. Widgets act on the game directly through core functions
 (`stockpile_set_priority()`...). It never influences the simulation,
 so the same seed gives the same game whatever the player looks at.
 

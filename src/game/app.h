@@ -24,6 +24,27 @@ typedef enum AppTool {
     APP_TOOL_GATHER,    /* Create/extend gathering zones; with Shift, remove zone tiles. */
 } AppTool;
 
+/* Windows (game/ui.h ids). */
+typedef enum AppWindow {
+    APP_WINDOW_NONE,
+    APP_WINDOW_COLONIST, /* Inspector of the selected colonist(s). */
+    APP_WINDOW_STATION,
+    APP_WINDOW_STOCKPILE,
+    APP_WINDOW_GATHER_ZONE,
+    APP_WINDOW_WORK, /* Work priorities grid. */
+    APP_WINDOW_HELP, /* Controls. */
+    APP_WINDOW_COUNT
+} AppWindow;
+
+/* Second level of the build menu (game/menu_bar.h). */
+typedef enum BuildCategory {
+    BUILD_CATEGORY_NONE,
+    BUILD_CATEGORY_STATIONS,
+    BUILD_CATEGORY_ZONES,
+    BUILD_CATEGORY_ORDERS,
+    BUILD_CATEGORY_COUNT
+} BuildCategory;
+
 typedef struct App {
     SDL_Window *window;
     SDL_Renderer *renderer;
@@ -61,9 +82,12 @@ typedef struct App {
     int selected_gather_zone;
     int selected_gather_zone_number;
 
-    /* Work priorities grid (game/work_panel.h). */
+    /* Work priorities grid (game/work_panel.h) and controls help. */
     bool show_work_panel;
-    int work_panel_scroll; /* First row shown. */
+    bool show_help;
+    /* Build menu (game/menu_bar.h): open, and which category is shown. */
+    bool build_menu_open;
+    BuildCategory build_category;
     /* A middle/right button press that started on a panel does not pan the view. */
     bool pan_blocked;
 
@@ -85,5 +109,13 @@ typedef struct App {
 bool app_init(App *app, const CliOptions *options);
 void app_run(App *app);
 void app_shutdown(App *app);
+
+/* Selects a tool (`type`: DesignationType for APP_TOOL_DESIGNATE,
+ * WorkstationType for APP_TOOL_BUILD), or goes back to selection if it is
+ * already active. */
+void app_toggle_tool(App *app, AppTool tool, int type);
+
+/* Whether this tool (same `type` rules) is the one in use. */
+bool app_tool_active(const App *app, AppTool tool, int type);
 
 #endif /* COLONY_GAME_APP_H */

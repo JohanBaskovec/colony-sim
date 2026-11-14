@@ -1,22 +1,12 @@
 #include "game/station_panel.h"
 
 #include "core/i18n.h"
+#include "game/ui_layout.h"
 
-#define PANEL_PADDING 8.0f
-#define GAP 8.0f
-#define INDENT 20.0f
+#define GAP UI_LAYOUT_GAP
+#define INDENT UI_LAYOUT_INDENT
 #define TEXT_SIZE 160
 #define TARGET_BIG_STEP 10 /* Shift+click on -/+. */
-
-/* The rows are laid out twice: once to measure the panel, then to draw it.
- * Widgets only exist (and react) in the second pass. */
-typedef struct Layout {
-    Ui *ui;
-    bool draw;
-    float x, y;
-    float width; /* Measuring: widest row so far. Drawing: content width. */
-    float row, text_offset, button_height;
-} Layout;
 
 /* What the player clicked, applied after the rows (deleting shifts bills). */
 typedef enum ActionType {
@@ -34,49 +24,6 @@ typedef struct Action {
     int bill;
     int value; /* Target change, input type or recipe. */
 } Action;
-
-static void measure(Layout *layout, float width)
-{
-    if (!layout->draw) {
-        layout->width = SDL_max(layout->width, width);
-    }
-}
-
-static void label_row(Layout *layout, const char *text, float indent, bool dim)
-{
-    measure(layout, indent + ui_text_width(layout->ui, text));
-    if (layout->draw) {
-        float y = layout->y + layout->text_offset;
-        if (dim) {
-            ui_label_dim(layout->ui, text, layout->x + indent, y);
-        } else {
-            ui_label(layout->ui, text, layout->x + indent, y);
-        }
-    }
-    layout->y += layout->row;
-}
-
-static bool button(Layout *layout, float x, const char *label)
-{
-    return layout->draw &&
-           ui_button(layout->ui,
-                     (SDL_FRect){x, layout->y, ui_button_width(layout->ui, label),
-                                 layout->button_height},
-                     label);
-}
-
-/* Label on the left, button on the right of the same row. */
-static bool label_with_button(Layout *layout, const char *text, const char *label)
-{
-    float button_width = ui_button_width(layout->ui, label);
-    measure(layout, ui_text_width(layout->ui, text) + GAP + button_width);
-    bool clicked = button(layout, layout->x + layout->width - button_width, label);
-    if (layout->draw) {
-        ui_label(layout->ui, text, layout->x, layout->y + layout->text_offset);
-    }
-    layout->y += layout->row;
-    return clicked;
-}
 
 /* "Flint or cobble", "Hand axe and sharp flake": one or two names joined. */
 static void join_names(char *out, size_t size, const char *key, const char *names[2], int count)
@@ -147,23 +94,22 @@ static void percent_text(char *out, size_t size, float fraction)
     TR_FORMAT(out, size, tr("unit.percent"), number);
 }
 
-static void blueprint_rows(Layout *layout, const Game *game, const Workstation *station)
+static void blueprint_rows(UiLayout *layout, const Game *game, const Workstation *station)
 {
     const WorkstationDef *def = workstation_def((WorkstationType)station->type);
     char text[TEXT_SIZE], a[16], b[16], percent[32];
-    label_row(layout, tr("station.blueprint"), 0.0f, true);
     if (def->material != ITEM_NONE) {
         tr_integer(a, sizeof(a), station->materials);
         tr_integer(b, sizeof(b), def->material_count);
         TR_FORMAT(text, sizeof(text), tr("station.materials"),
                   tr(item_def(def->material)->name_key), a, b);
-        label_row(layout, text, 0.0f, false);
+        ui_layout_label(layout, text, 0.0f, false);
     }
     percent_text(percent, sizeof(percent), workstation_build_fraction(station));
     TR_FORMAT(text, sizeof(text), tr("station.construction"), percent);
-    label_row(layout, text, 0.0f, false);
+    ui_layout_label(layout, text, 0.0f, false);
     if (!game_workstation_buildable(game, (WorkstationType)station->type)) {
-        label_row(layout, tr("station.warning.nobody_can_build"), 0.0f, true);
+        ui_layout_label(layout, tr("station.warning.nobody_can_build"), 0.0f, true);
     }
 }
 
@@ -182,7 +128,7 @@ static const char *mode_label(char *out, size_t size, const Bill *bill)
 }
 
 /* Mode button, -/+ for the target, and how far the bill has got. */
-static void bill_mode_row(Layout *layout, const Game *game, const Bill *bill, int index,
+static void bill_mode_row(UiLayout *layout, const Game *game, const Bill *bill, int index,
                           Action *action)
 {
     Ui *ui = layout->ui;
@@ -205,20 +151,17 @@ static void bill_mode_row(Layout *layout, const Game *game, const Bill *bill, in
     if (has_target) {
         width += 2.0f * small + 2.0f + GAP;
     }
-    measure(layout, width + ui_text_width(ui, progress));
-    if (button(layout, x, mode)) {
+    ui_layout_measure(layout, width + ui_text_width(ui, progress));
+    if (ui_layout_button(layout, x, mode)) {
         *action = (Action){ACTION_CYCLE_MODE, index, 0};
     }
     x += ui_button_width(ui, mode) + GAP;
     if (has_target) {
         int step = (SDL_GetModState() & SDL_KMOD_SHIFT) ? TARGET_BIG_STEP : 1;
-        if (layout->draw && ui_button(ui, (SDL_FRect){x, layout->y, small, layout->button_height},
-                                      minus)) {
+        if (ui_layout_button_sized(layout, x, small, minus)) {
             *action = (Action){ACTION_ADD_TARGET, index, -step};
         }
-        if (layout->draw &&
-            ui_button(ui, (SDL_FRect){x + small + 2.0f, layout->y, small, layout->button_height},
-                      plus)) {
+        if (ui_layout_button_sized(layout, x + small + 2.0f, small, plus)) {
             *action = (Action){ACTION_ADD_TARGET, index, step};
         }
         x += 2.0f * small + 2.0f + GAP;
@@ -230,7 +173,7 @@ static void bill_mode_row(Layout *layout, const Game *game, const Bill *bill, in
 }
 
 /* One check box per input type, when the recipe has a choice. */
-static void bill_inputs_row(Layout *layout, const Bill *bill, int index, Action *action)
+static void bill_inputs_row(UiLayout *layout, const Bill *bill, int index, Action *action)
 {
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
     int alternatives = 0;
@@ -244,7 +187,7 @@ static void bill_inputs_row(Layout *layout, const Bill *bill, int index, Action 
     if (alternatives < 2) {
         return;
     }
-    measure(layout, width - GAP);
+    ui_layout_measure(layout, width - GAP);
     float x = layout->x + INDENT;
     for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
         ItemType type = def->inputs[i];
@@ -264,11 +207,11 @@ static void bill_inputs_row(Layout *layout, const Bill *bill, int index, Action 
 }
 
 /* Why nobody works on a bill, if it can be told cheaply. */
-static void bill_warning_rows(Layout *layout, const Game *game, const Bill *bill)
+static void bill_warning_rows(UiLayout *layout, const Game *game, const Bill *bill)
 {
     RecipeType recipe = (RecipeType)bill->recipe;
     if (!game_recipe_known(game, recipe)) {
-        label_row(layout, tr("station.warning.unknown_recipe"), INDENT, true);
+        ui_layout_label(layout, tr("station.warning.unknown_recipe"), INDENT, true);
         return;
     }
     const RecipeDef *def = recipe_def(recipe);
@@ -281,15 +224,15 @@ static void bill_warning_rows(Layout *layout, const Game *game, const Bill *bill
         char names[TEXT_SIZE], text[TEXT_SIZE];
         either_names(names, sizeof(names), types);
         TR_FORMAT(text, sizeof(text), tr("station.warning.tool"), names);
-        label_row(layout, text, INDENT, true);
+        ui_layout_label(layout, text, INDENT, true);
     }
     if (bill_wants_more(bill, (int)game->items.totals[def->product]) &&
         !game_bill_has_input(game, bill)) {
-        label_row(layout, tr("station.warning.no_input"), INDENT, true);
+        ui_layout_label(layout, tr("station.warning.no_input"), INDENT, true);
     }
 }
 
-static void built_rows(Layout *layout, const Game *game, const Workstation *station,
+static void built_rows(UiLayout *layout, const Game *game, const Workstation *station,
                        Action *action)
 {
     char text[TEXT_SIZE], number[16], percent[32];
@@ -297,20 +240,21 @@ static void built_rows(Layout *layout, const Game *game, const Workstation *stat
     if (current != NULL && station->work_input.count > 0) {
         percent_text(percent, sizeof(percent), station->work_progress / current->work);
         TR_FORMAT(text, sizeof(text), tr("station.in_progress"), tr(current->name_key), percent);
-        label_row(layout, text, 0.0f, false);
+        ui_layout_label(layout, text, 0.0f, false);
     }
-    label_row(layout, tr(station->bill_count > 0 ? "station.bills" : "station.no_bills"), 0.0f,
-              station->bill_count == 0);
+    ui_layout_label(layout,
+                    tr(station->bill_count > 0 ? "station.bills" : "station.no_bills"), 0.0f,
+                    station->bill_count == 0);
     for (int i = 0; i < station->bill_count; i++) {
         const Bill *bill = &station->bills[i];
         tr_integer(number, sizeof(number), i + 1);
         TR_FORMAT(text, sizeof(text), tr("station.bill"), number,
                   tr(recipe_def((RecipeType)bill->recipe)->name_key));
-        if (label_with_button(layout, text, tr("station.bill.remove"))) {
+        if (ui_layout_label_with_button(layout, text, tr("station.bill.remove"))) {
             *action = (Action){ACTION_DELETE_BILL, i, 0};
         }
         recipe_needs(text, sizeof(text), (RecipeType)bill->recipe);
-        label_row(layout, text, INDENT, true);
+        ui_layout_label(layout, text, INDENT, true);
         bill_mode_row(layout, game, bill, i, action);
         bill_inputs_row(layout, bill, i, action);
         bill_warning_rows(layout, game, bill);
@@ -318,7 +262,7 @@ static void built_rows(Layout *layout, const Game *game, const Workstation *stat
     if (station->bill_count >= WORKSTATION_BILL_MAX) {
         return;
     }
-    label_row(layout, tr("station.add_bill"), 0.0f, false);
+    ui_layout_label(layout, tr("station.add_bill"), 0.0f, false);
     /* Buttons in a column, what each recipe needs aligned after them. */
     float column = 0.0f;
     for (int recipe = 0; recipe < RECIPE_COUNT; recipe++) {
@@ -334,8 +278,8 @@ static void built_rows(Layout *layout, const Game *game, const Workstation *stat
         }
         const char *name = tr(def->name_key);
         recipe_needs(text, sizeof(text), (RecipeType)recipe);
-        measure(layout, INDENT + column + GAP + ui_text_width(layout->ui, text));
-        if (button(layout, layout->x + INDENT, name)) {
+        ui_layout_measure(layout, INDENT + column + GAP + ui_text_width(layout->ui, text));
+        if (ui_layout_button(layout, layout->x + INDENT, name)) {
             *action = (Action){ACTION_ADD_BILL, 0, recipe};
         }
         if (layout->draw) {
@@ -346,11 +290,20 @@ static void built_rows(Layout *layout, const Game *game, const Workstation *stat
     }
 }
 
-static void station_rows(Layout *layout, const Game *game, const Workstation *station,
-                         Action *action)
+typedef struct StationRows {
+    const Game *game;
+    const Workstation *station;
+    Action action;
+} StationRows;
+
+static void station_rows(UiLayout *layout, void *userdata)
 {
-    const char *name = tr(workstation_def((WorkstationType)station->type)->name_key);
-    if (label_with_button(layout, name, tr("station.delete"))) {
+    StationRows *rows = userdata;
+    const Game *game = rows->game;
+    const Workstation *station = rows->station;
+    Action *action = &rows->action;
+    const char *state = station->built ? "" : tr("station.blueprint");
+    if (ui_layout_label_with_button(layout, state, tr("station.delete"))) {
         *action = (Action){ACTION_DELETE_STATION, 0, 0};
     }
     if (station->built) {
@@ -399,31 +352,22 @@ static void apply(App *app, int index, const Action *action)
     }
 }
 
-void station_panel_draw(App *app, float right, float bottom)
+void station_panel_draw(App *app)
 {
     int index = app->selected_station;
     const Workstation *station = workstation_get_const(&app->game.workstations, index);
     if (station == NULL) {
         return;
     }
-    Ui *ui = &app->ui;
-    float row = ui_row_height(ui);
-    float line = (float)text_line_height(app->text);
-    Layout layout = {ui, false, 0.0f, 0.0f, 0.0f, row, SDL_floorf((row - line) * 0.5f), row - 2.0f};
-    Action action = {ACTION_NONE, -1, 0};
-    station_rows(&layout, &app->game, station, &action);
-
-    float width = SDL_ceilf(layout.width);
-    float height = layout.y + 2.0f * PANEL_PADDING;
-    SDL_FRect panel = {right - width - 2.0f * PANEL_PADDING, SDL_max(0.0f, bottom - height),
-                       width + 2.0f * PANEL_PADDING, height};
-    ui_panel(ui, panel);
-    layout.draw = true;
-    layout.x = panel.x + PANEL_PADDING;
-    layout.y = panel.y + PANEL_PADDING;
-    layout.width = width;
-    station_rows(&layout, &app->game, station, &action);
-    if (action.type != ACTION_NONE) {
-        apply(app, index, &action);
+    const char *title = tr(workstation_def((WorkstationType)station->type)->name_key);
+    StationRows rows = {&app->game, station, {ACTION_NONE, -1, 0}};
+    bool open = true;
+    ui_layout_window(&app->ui, APP_WINDOW_STATION, title, UI_PLACE_BOTTOM_RIGHT, station_rows,
+                     &rows, &open);
+    if (rows.action.type != ACTION_NONE) {
+        apply(app, index, &rows.action);
+    }
+    if (!open) {
+        app->selected_station = WORKSTATION_NONE;
     }
 }

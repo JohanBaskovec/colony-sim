@@ -657,6 +657,78 @@ void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Ca
     outline(renderer, tile, 2.0f, allowed ? BLUEPRINT_COLOR : BLUEPRINT_REFUSED_COLOR);
 }
 
+void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, WorkstationType type)
+{
+    render_station_shape(renderer, &rect, type, 255);
+}
+
+/* A zone tile seen from above: its color, its border, and what it holds. */
+static void zone_icon(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color color)
+{
+    SDL_Color translucent = color;
+    translucent.a = 90;
+    SDL_FRect area = inset(&rect, 0.86f);
+    fill(renderer, translucent, &area);
+    outline(renderer, area, 2.0f, color);
+}
+
+void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
+{
+    float w = rect.w, h = rect.h;
+    switch (icon) {
+    case RENDER_ICON_GATHER_ZONE: {
+        zone_icon(renderer, rect, GATHER_ZONE_COLOR);
+        /* A sapling and a stone. */
+        SDL_FRect trunk = {rect.x + floorf(w * 0.3f), rect.y + floorf(h * 0.45f),
+                           SDL_max(2.0f, floorf(w * 0.08f)), floorf(h * 0.25f)};
+        SDL_FRect crown = {rect.x + floorf(w * 0.2f), rect.y + floorf(h * 0.25f),
+                           floorf(w * 0.28f), floorf(h * 0.24f)};
+        SDL_FRect stone = {rect.x + floorf(w * 0.58f), rect.y + floorf(h * 0.56f),
+                           floorf(w * 0.18f), floorf(h * 0.14f)};
+        fill(renderer, WOOD_COLOR, &trunk);
+        fill(renderer, TREE_COLOR, &crown);
+        fill_outlined(renderer, stone, STONE_COLOR);
+        batch_flush(renderer);
+        break;
+    }
+    case RENDER_ICON_STOCKPILE: {
+        zone_icon(renderer, rect, STOCKPILE_COLOR);
+        /* Two stacked logs. */
+        for (int i = 0; i < 2; i++) {
+            SDL_FRect log = {rect.x + floorf(w * 0.28f), rect.y + floorf(h * (0.38f + 0.16f * i)),
+                             floorf(w * 0.44f), floorf(h * 0.12f)};
+            fill_outlined(renderer, log, WOOD_COLOR);
+        }
+        batch_flush(renderer);
+        break;
+    }
+    case RENDER_ICON_MINE: {
+        SDL_FRect area = inset(&rect, 0.8f);
+        fill(renderer, ROCK_COLORS[ROCK_GRANITE], &area);
+        /* Cracks. */
+        SDL_SetRenderDrawColor(renderer, 40, 40, 46, 255);
+        SDL_RenderLine(renderer, area.x + area.w * 0.2f, area.y + area.h * 0.3f,
+                       area.x + area.w * 0.55f, area.y + area.h * 0.55f);
+        SDL_RenderLine(renderer, area.x + area.w * 0.55f, area.y + area.h * 0.55f,
+                       area.x + area.w * 0.8f, area.y + area.h * 0.45f);
+        SDL_RenderLine(renderer, area.x + area.w * 0.55f, area.y + area.h * 0.55f,
+                       area.x + area.w * 0.5f, area.y + area.h * 0.85f);
+        outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_MINE]);
+        break;
+    }
+    case RENDER_ICON_CANCEL: {
+        SDL_FRect area = inset(&rect, 0.5f);
+        SDL_Color red = DESIGNATION_COLORS[DESIGNATION_NONE];
+        SDL_SetRenderDrawColor(renderer, red.r, red.g, red.b, red.a);
+        for (float d = -1.5f; d <= 1.5f; d += 0.5f) {
+            SDL_RenderLine(renderer, area.x + d, area.y, area.x + area.w + d, area.y + area.h);
+            SDL_RenderLine(renderer, area.x + area.w + d, area.y, area.x + d, area.y + area.h);
+        }
+        break;
+    }
+    }
+}
+
 void render_daylight(SDL_Renderer *renderer, float daylight, float width, float height)
 {
     float darkness = 1.0f - clampf(daylight, 0.0f, 1.0f);
