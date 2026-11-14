@@ -74,6 +74,17 @@ int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int
 int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
                      int y1);
 
+/*
+ * Adds a rectangle to the stockpiles, as the zone tool does: `preferred` (the
+ * selected stockpile, or STOCKPILE_NONE) and every stockpile the rectangle
+ * overlaps become one stockpile, which gets the free coverable tiles of the
+ * rectangle. The merged stockpile keeps the settings of `preferred`, else of
+ * the oldest one. With no stockpile involved, a new one is created. Returns
+ * the stockpile's index, or STOCKPILE_NONE when nothing could be added.
+ */
+int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
+                        int preferred);
+
 /* Removes every tile of a rectangle from whatever stockpile it belongs to;
  * stockpiles left without tiles are deleted. Returns the number of tiles removed. */
 int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1);

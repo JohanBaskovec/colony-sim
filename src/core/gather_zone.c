@@ -234,6 +234,52 @@ int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x
     return index;
 }
 
+int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
+                          int preferred)
+{
+    int min_x, min_y, max_x, max_y;
+    clip_rect(zones, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
+    bool overlapped[GATHER_ZONE_MAX] = {false};
+    int into = is_valid(zones, preferred) ? preferred : GATHER_ZONE_NONE;
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
+            int zone = zones->zone[index_of(zones, x, y)] - 1;
+            if (zone == GATHER_ZONE_NONE || overlapped[zone]) {
+                continue;
+            }
+            overlapped[zone] = true;
+            if (into == GATHER_ZONE_NONE ||
+                (into != preferred && zones->list[zone].number < zones->list[into].number)) {
+                into = zone; /* The oldest, unless one is preferred. */
+            }
+        }
+    }
+    if (into == GATHER_ZONE_NONE) {
+        return gather_zone_create(zones, map, x0, y0, x1, y1);
+    }
+    bool merged = false;
+    size_t count = (size_t)zones->width * (size_t)zones->height;
+    for (size_t i = 0; i < count; i++) {
+        int zone = zones->zone[i] - 1;
+        if (zone != GATHER_ZONE_NONE && zone != into && overlapped[zone]) {
+            zones->zone[i] = (uint8_t)(into + 1); /* Its progress stays. */
+            zones->list[into].cell_count++;
+            merged = true;
+        }
+    }
+    for (int zone = 0; zone < GATHER_ZONE_MAX; zone++) {
+        if (overlapped[zone] && zone != into) {
+            zones->list[zone] = (GatherZone){.used = false};
+            zones->used_count--;
+        }
+    }
+    if (merged) {
+        changed(zones);
+    }
+    gather_zone_extend(zones, map, into, x0, y0, x1, y1);
+    return into;
+}
+
 int gather_zones_remove_rect(GatherZones *zones, int x0, int y0, int x1, int y1)
 {
     int min_x, min_y, max_x, max_y;

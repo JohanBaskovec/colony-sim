@@ -148,6 +148,61 @@ int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int
     return index;
 }
 
+/* Moves every tile of `from` to `into` and deletes `from`. */
+static void merge(Stockpiles *stockpiles, int into, int from)
+{
+    Stockpile *source = &stockpiles->list[from];
+    Stockpile *target = &stockpiles->list[into];
+    for (int y = source->min_y; y <= source->max_y; y++) {
+        for (int x = source->min_x; x <= source->max_x; x++) {
+            uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y)];
+            if (*zone == from + 1) {
+                *zone = (uint8_t)(into + 1);
+                grow_bounds(target, x, y);
+            }
+        }
+    }
+    target->cell_count += source->cell_count;
+    source->used = false;
+    source->cell_count = 0;
+    clear_bounds(source);
+    stockpiles->used_count--;
+    stockpiles->revision++;
+}
+
+int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
+                        int preferred)
+{
+    int min_x, min_y, max_x, max_y;
+    clip_rect(stockpiles, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
+    bool overlapped[STOCKPILE_MAX] = {false};
+    int into = is_valid(stockpiles, preferred) ? preferred : STOCKPILE_NONE;
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
+            int zone = stockpiles->zone[index_of(stockpiles, x, y)] - 1;
+            if (zone == STOCKPILE_NONE || overlapped[zone]) {
+                continue;
+            }
+            overlapped[zone] = true;
+            if (into == STOCKPILE_NONE ||
+                (into != preferred &&
+                 stockpiles->list[zone].number < stockpiles->list[into].number)) {
+                into = zone; /* The oldest, unless one is preferred. */
+            }
+        }
+    }
+    if (into == STOCKPILE_NONE) {
+        return stockpile_create(stockpiles, map, x0, y0, x1, y1);
+    }
+    for (int zone = 0; zone < STOCKPILE_MAX; zone++) {
+        if (overlapped[zone] && zone != into) {
+            merge(stockpiles, into, zone);
+        }
+    }
+    stockpile_extend(stockpiles, map, into, x0, y0, x1, y1);
+    return into;
+}
+
 int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1)
 {
     int min_x, min_y, max_x, max_y;

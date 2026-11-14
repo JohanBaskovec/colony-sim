@@ -165,6 +165,18 @@ int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x
 int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
                        int y1);
 
+/*
+ * Adds a rectangle to the gathering zones, as the zone tool does: `preferred`
+ * (the selected zone, or GATHER_ZONE_NONE) and every zone the rectangle
+ * overlaps become one zone, which gets the free tiles of the rectangle it may
+ * cover. The merged zone keeps the orders of `preferred`, else of the oldest
+ * one; work under way on its tiles is kept. With no zone involved, a new one
+ * is created. Returns the zone's index, or GATHER_ZONE_NONE when nothing could
+ * be added.
+ */
+int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
+                          int preferred);
+
 /* Removes every tile of a rectangle from its zone; zones left without tiles
  * are deleted. Returns the number of tiles removed. */
 int gather_zones_remove_rect(GatherZones *zones, int x0, int y0, int x1, int y1);

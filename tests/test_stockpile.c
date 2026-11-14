@@ -299,6 +299,47 @@ static void test_hash(void)
     free_world(&map, &s);
 }
 
+static void test_overlapping_rectangle_merges_stockpiles(void)
+{
+    Map map;
+    Stockpiles s;
+    REQUIRE(init_world(&map, &s));
+    /* Nothing there: a new stockpile. */
+    int a = stockpiles_add_rect(&s, &map, 1, 1, 3, 3, STOCKPILE_NONE);
+    REQUIRE(a != STOCKPILE_NONE);
+    int b = stockpiles_add_rect(&s, &map, 8, 1, 10, 3, STOCKPILE_NONE);
+    REQUIRE(b != STOCKPILE_NONE && b != a);
+    stockpile_set_priority(&s, b, 2);
+    CHECK_EQ_INT(s.used_count, 2);
+
+    /* Over both: one stockpile, the oldest, with every tile. */
+    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 3, 2, 8, 2, STOCKPILE_NONE), a);
+    CHECK_EQ_INT(s.used_count, 1);
+    CHECK(stockpile_get(&s, b) == NULL);
+    const Stockpile *merged = stockpile_get(&s, a);
+    REQUIRE(merged != NULL);
+    CHECK_EQ_INT(merged->cell_count, 9 + 9 + 4); /* (4..7, 2) were new. */
+    CHECK_EQ_INT(merged->priority, STOCKPILE_PRIORITY_DEFAULT);
+    CHECK_EQ_INT(stockpile_at(&s, 10, 3), a);
+    CHECK_EQ_INT(merged->max_x, 10);
+
+    /* The selected stockpile wins over an older one and keeps its settings. */
+    int c = stockpiles_add_rect(&s, &map, 1, 10, 2, 11, STOCKPILE_NONE);
+    REQUIRE(c != STOCKPILE_NONE);
+    stockpile_set_priority(&s, c, 9);
+    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 2, 3, 2, 10, c), c);
+    CHECK(stockpile_get(&s, a) == NULL);
+    CHECK_EQ_INT(stockpile_get(&s, c)->priority, 9);
+    CHECK_EQ_INT(stockpile_get(&s, c)->cell_count, 22 + 4 + 6);
+    CHECK_EQ_INT(stockpile_at(&s, 9, 2), c);
+
+    /* Away from any stockpile, the selected one grows (it is not touched otherwise). */
+    CHECK_EQ_INT(stockpiles_add_rect(&s, &map, 13, 13, 13, 13, c), c);
+    CHECK_EQ_INT(stockpile_at(&s, 13, 13), c);
+    CHECK_EQ_INT(s.used_count, 1);
+    free_world(&map, &s);
+}
+
 int main(void)
 {
     RUN_TEST(test_create_covers_valid_tiles_only);
@@ -309,5 +350,6 @@ int main(void)
     RUN_TEST(test_condition_ranges);
     RUN_TEST(test_list_full);
     RUN_TEST(test_hash);
+    RUN_TEST(test_overlapping_rectangle_merges_stockpiles);
     return test_summary();
 }

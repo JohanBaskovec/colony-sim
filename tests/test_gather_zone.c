@@ -573,6 +573,44 @@ static void test_hash(void)
     free_world(&map, &zones, &items);
 }
 
+static void test_overlapping_rectangle_merges_zones(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, GATHER_ZONE_NONE);
+    int b = gather_zones_add_rect(&zones, &map, 6, 0, 8, 2, GATHER_ZONE_NONE);
+    REQUIRE(a != GATHER_ZONE_NONE && b != GATHER_ZONE_NONE && a != b);
+    order(&zones, &items, a, GATHER_TWIGS, GATHER_FOREVER);
+    order(&zones, &items, b, GATHER_COBBLES, GATHER_FOREVER);
+    /* Work under way in the younger zone. */
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 7, 1, GATHER_JOB_STONES, 100.0f, 60.0,
+                                NULL));
+
+    /* Over both: the oldest takes everything, with its orders. */
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 2, 1, 6, 1, GATHER_ZONE_NONE), a);
+    CHECK_EQ_INT(zones.used_count, 1);
+    CHECK(gather_zone_get(&zones, b) == NULL);
+    const GatherZone *merged = gather_zone_get(&zones, a);
+    REQUIRE(merged != NULL);
+    CHECK_EQ_INT(merged->cell_count, 9 + 9 + 3);
+    CHECK(merged->orders[GATHER_TWIGS].enabled);
+    CHECK(!merged->orders[GATHER_COBBLES].enabled);
+    CHECK_EQ_INT(gather_zone_at(&zones, 8, 2), a);
+    CHECK_NEAR(zones.progress[map_index(&map, 7, 1)], 100.0, 1e-4); /* Kept. */
+
+    /* The selected zone wins and keeps its orders. */
+    int c = gather_zones_add_rect(&zones, &map, 0, 12, 1, 13, GATHER_ZONE_NONE);
+    REQUIRE(c != GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 2, 1, 12, c), c);
+    CHECK(gather_zone_get(&zones, a) == NULL);
+    CHECK(!gather_zone_get(&zones, c)->orders[GATHER_TWIGS].enabled);
+    CHECK_EQ_INT(gather_zone_get(&zones, c)->cell_count, 21 + 4 + 9);
+    CHECK_EQ_INT(zones.used_count, 1);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -592,5 +630,6 @@ int main(void)
     RUN_TEST(test_flint_patch_and_sorting);
     RUN_TEST(test_plants_growing_wake_settlers);
     RUN_TEST(test_hash);
+    RUN_TEST(test_overlapping_rectangle_merges_zones);
     return test_summary();
 }
