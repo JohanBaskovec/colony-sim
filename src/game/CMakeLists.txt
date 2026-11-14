@@ -4,7 +4,9 @@ add_executable(colony_sim
     localization.c
     main.c
     render.c
-    text.c)
+    stockpile_panel.c
+    text.c
+    ui.c)
 
 target_link_libraries(colony_sim PRIVATE colony_core SDL3_ttf::SDL3_ttf SDL3::SDL3)
 

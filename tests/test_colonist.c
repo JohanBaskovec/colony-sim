@@ -710,24 +710,33 @@ static void test_colonist_harvests_berries(void)
 }
 
 /* Every reservation belongs to a live colonist whose current task targets
- * that tile (work: TASK_WORK, food: TASK_EAT), each colonist holds at most
- * one, and the per-kind counters match. */
+ * that tile (work: TASK_WORK, food: TASK_EAT, haul source and storage:
+ * TASK_HAUL), each colonist holds at most one per kind, and the per-kind
+ * counters match. */
 static bool reservations_consistent(const Game *game)
 {
     const Reservations *r = &game->reservations;
     int by_kind[RESERVATION_KIND_COUNT] = {0};
-    int held[COLONIST_MAX + 1] = {0};
+    int held[COLONIST_MAX + 1][RESERVATION_KIND_COUNT] = {{0}};
     for (int i = 0; i < r->count; i++) {
         const Reservation *entry = &r->entries[i];
         by_kind[entry->kind]++;
         uint32_t slot = entry->owner - 1u;
         if (entry->owner == RESERVATION_NO_OWNER || slot >= COLONIST_MAX ||
-            entity_id_is_none(game_colonist_id_at(game, slot)) || ++held[entry->owner] > 1) {
+            entity_id_is_none(game_colonist_id_at(game, slot)) ||
+            ++held[entry->owner][entry->kind] > 1) {
             return false;
         }
         const Colonist *c = &game->colonists[slot];
-        ColonistTask expected = entry->kind == RESERVATION_WORK ? TASK_WORK : TASK_EAT;
-        if (c->task != expected || c->target.x != entry->tile.x || c->target.y != entry->tile.y) {
+        ColonistTask expected = TASK_HAUL;
+        TilePos tile = c->target;
+        switch (entry->kind) {
+        case RESERVATION_WORK: expected = TASK_WORK; break;
+        case RESERVATION_FOOD: expected = TASK_EAT; break;
+        case RESERVATION_STORAGE: tile = c->haul_destination; break;
+        default: break;
+        }
+        if (c->task != expected || tile.x != entry->tile.x || tile.y != entry->tile.y) {
             return false;
         }
     }
@@ -757,6 +766,8 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
     }
     game_designate_rect(&game, 0, 0, 47, 47, DESIGNATION_CHOP);
     game_designate_rect(&game, 0, 0, 47, 47, DESIGNATION_MINE);
+    int pile = stockpile_create(&game.stockpiles, &game.map, 14, 10, 16, 30);
+    REQUIRE(pile != STOCKPILE_NONE);
     int initial = game.designations.count;
     REQUIRE(initial > 30);
 
@@ -766,12 +777,26 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
         if (i == TICKS_PER_DAY / 4) {
             game_designate_rect(&game, 30, 0, 30, 47, DESIGNATION_NONE); /* Cancel some. */
         }
+        if (i == TICKS_PER_DAY / 3) {
+            stockpiles_remove_rect(&game.stockpiles, 14, 10, 16, 15); /* Shrink the storage. */
+        }
+        if (i == TICKS_PER_DAY / 2) {
+            stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_WOOD));
+        }
         if (i % 50 == 0) {
             consistent = reservations_consistent(&game);
         }
     }
     CHECK(consistent);
     CHECK(game.designations.count < initial); /* Work got done. */
+    int stored_wood = 0;
+    for (int y = 16; y <= 30; y++) {
+        for (int x = 14; x <= 16; x++) {
+            ItemStack stack = items_get(&game.items, x, y);
+            stored_wood += stack.type == ITEM_WOOD ? stack.count : 0;
+        }
+    }
+    CHECK(stored_wood > 0); /* And hauled. */
     game_shutdown(&game);
 }
 

@@ -8,6 +8,7 @@ set(COLONY_UNIT_TESTS
     test_designation
     test_game
     test_game_clock
+    test_hauling
     test_i18n
     test_item
     test_map
@@ -16,6 +17,7 @@ set(COLONY_UNIT_TESTS
     test_pool
     test_reservation
     test_rng
+    test_stockpile
     test_work
     test_worldgen)
 

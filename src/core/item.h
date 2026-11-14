@@ -21,9 +21,22 @@ typedef enum ItemType {
     ITEM_TYPE_COUNT
 } ItemType;
 
+/* Groups of item types, e.g. for storage filters. */
+typedef enum ItemCategory {
+    ITEM_CATEGORY_FOOD,
+    ITEM_CATEGORY_RESOURCES,
+    ITEM_CATEGORY_COUNT
+} ItemCategory;
+
+/* Bit mask with one bit per ItemType. */
+typedef uint32_t ItemTypeMask;
+
+#define ITEM_TYPE_BIT(type) ((ItemTypeMask)1u << (unsigned)(type))
+
 typedef struct ItemDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
+    ItemCategory category;
     int stack_limit; /* Maximum number of items in one stack (one tile). */
     float nutrition; /* Food need restored by eating one item; 0 = not food. */
 } ItemDef;
@@ -38,12 +51,22 @@ typedef struct Items {
     int height;
     ItemStack *stacks;
     long totals[ITEM_TYPE_COUNT]; /* Items of each type on the whole map. */
+    uint32_t additions; /* Incremented whenever items are added (haulers look again). */
 } Items;
 
 /* Items dropped by a single action spread at most this far (in steps). */
 #define ITEM_DROP_RADIUS 4
 
 const ItemDef *item_def(ItemType type);
+
+/* Translation key of a category name, NULL if out of range. */
+const char *item_category_name_key(ItemCategory category);
+
+/* Every real item type (ITEM_NONE excluded). */
+ItemTypeMask item_types_all(void);
+
+/* Item types belonging to a category. */
+ItemTypeMask item_types_in_category(ItemCategory category);
 
 bool item_is_food(ItemType type);
 

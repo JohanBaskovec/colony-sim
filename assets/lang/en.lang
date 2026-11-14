@@ -34,16 +34,20 @@ designation.chop = Chop trees
 designation.mine = Mine rock
 designation.harvest = Harvest
 tool.cancel = Cancel orders
+tool.stockpile = Stockpile zone
 
 # Items
 item.wood = Wood
 item.stone = Stone
 item.berries = Berries
+item.category.food = Food
+item.category.resources = Resources
 
 # Work types
 work.mining = Mining
 work.woodcutting = Woodcutting
 work.gathering = Gathering
+work.hauling = Hauling
 
 # Seasons
 season.spring = Spring
@@ -64,8 +68,13 @@ hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
 hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · L: language · F3: debug · Esc: quit
 # {0}, {1}, {2}, {3} = keys of the chop, mine, harvest and cancel tools
 hud.help.orders = {0}: chop trees · {1}: mine rock · {2}: harvest · {3}: cancel orders
+# {0} = key of the stockpile zone tool
+hud.help.zones = {0}: stockpile zones · Click a zone: its settings
 # {0} = tool name
 hud.tool = Tool: {0} · Left click/drag: apply · Esc: back
+# {0} = tool name (stockpile zone tool: first line, help on the second line)
+hud.tool.name = Tool: {0}
+hud.tool.stockpile_help = Drag: create, or extend the selected zone · Shift+drag: remove · Esc: back
 
 # Tile inspector. {0}, {1} = tile coordinates
 hud.tile.position = Tile {0}, {1}
@@ -81,6 +90,8 @@ hud.tile.items = Items: {0} ×{1}
 hud.tile.designation = Order: {0}
 # {0} = order name, {1} = percentage of the work done
 hud.tile.designation_progress = Order: {0} ({1}% done)
+# {0} = stockpile name (e.g. Stockpile 2)
+hud.tile.stockpile = Zone: {0}
 
 # Debug overlay (F3)
 hud.debug.fps = FPS: {0}
@@ -100,6 +111,7 @@ colonist.task.work = Working
 colonist.task.chop = Chopping a tree
 colonist.task.mine = Mining
 colonist.task.harvest = Harvesting
+colonist.task.haul = Hauling
 
 need.food = Food
 need.food.low = Hungry
@@ -115,6 +127,8 @@ need.rest.critical = Exhausted
 hud.colonist.age = Age: {0}
 # {0} = activity name
 hud.colonist.activity = Activity: {0}
+# {0} = item name, {1} = number of items
+hud.colonist.carrying = Carrying: {0} ×{1}
 # {0} = need name, {1} = percentage
 hud.colonist.need = {0}: {1}%
 # {0} = need name, {1} = percentage, {2} = state (e.g. Hungry)
@@ -122,3 +136,16 @@ hud.colonist.need_state = {0}: {1}% ({2})
 # {0} = number of selected colonists
 hud.selection.count.one = {0} colonist selected
 hud.selection.count.other = {0} colonists selected
+
+# Stockpile zone inspector. {0} = zone number
+stockpile.name = Stockpile {0}
+# {0} = number of tiles
+stockpile.tiles.one = {0} tile
+stockpile.tiles.other = {0} tiles
+# {0} = priority, from 1 (highest) to 10 (lowest)
+stockpile.priority = Priority: {0}
+stockpile.priority_hint = (1 = highest)
+stockpile.allowed = Allowed items
+stockpile.allow_all = All
+stockpile.allow_none = None
+stockpile.delete = Delete

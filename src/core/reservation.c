@@ -45,15 +45,16 @@ bool reservations_taken_by_other(const Reservations *reservations, ReservationKi
     return owner != RESERVATION_NO_OWNER && owner != self;
 }
 
-void reservations_release_all(Reservations *reservations, uint8_t owner)
+/* Releases what `owner` holds, of one kind or (kind < 0) of every kind.
+ * Order-preserving removal keeps the table (and its hash) independent of how
+ * entries are released. */
+static void release(Reservations *reservations, uint8_t owner, int kind)
 {
-    /* Order-preserving removal keeps the table (and its hash) independent of
-     * how entries are released. */
     int kept = 0;
     bool released = false;
     for (int i = 0; i < reservations->count; i++) {
         Reservation entry = reservations->entries[i];
-        if (entry.owner == owner) {
+        if (entry.owner == owner && (kind < 0 || entry.kind == kind)) {
             reservations->count_by_kind[entry.kind]--;
             released = true;
         } else {
@@ -64,6 +65,16 @@ void reservations_release_all(Reservations *reservations, uint8_t owner)
     if (released) {
         reservations->releases++;
     }
+}
+
+void reservations_release_all(Reservations *reservations, uint8_t owner)
+{
+    release(reservations, owner, -1);
+}
+
+void reservations_release_kind(Reservations *reservations, ReservationKind kind, uint8_t owner)
+{
+    release(reservations, owner, (int)kind);
 }
 
 uint64_t reservations_hash(const Reservations *reservations, uint64_t hash)

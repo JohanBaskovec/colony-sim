@@ -15,6 +15,7 @@
 #include "core/pool.h"
 #include "core/reservation.h"
 #include "core/rng.h"
+#include "core/stockpile.h"
 #include "core/worldgen.h"
 
 #include <stdbool.h>
@@ -38,6 +39,7 @@ typedef struct Game {
     Map map;
     Designations designations; /* Player orders (chop, mine...), same size as the map. */
     Items items; /* Items lying on the ground, same size as the map. */
+    Stockpiles stockpiles; /* Storage zones drawn by the player. */
     Reservations reservations; /* Who is busy with which job or food. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */

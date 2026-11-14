@@ -1,0 +1,137 @@
+#include "game/stockpile_panel.h"
+
+#include "core/i18n.h"
+
+#define PANEL_PADDING 8.0f
+#define GAP 8.0f
+#define ITEM_INDENT 20.0f
+#define TEXT_SIZE 128
+
+static UiCheck check_state(ItemTypeMask allowed, ItemTypeMask mask)
+{
+    ItemTypeMask on = allowed & mask;
+    return on == mask ? UI_CHECKED : (on != 0 ? UI_PARTIAL : UI_UNCHECKED);
+}
+
+void stockpile_panel_draw(App *app, float right, float bottom)
+{
+    Stockpiles *stockpiles = &app->game.stockpiles;
+    int index = app->selected_stockpile;
+    const Stockpile *stockpile = stockpile_get(stockpiles, index);
+    if (stockpile == NULL) {
+        return;
+    }
+    Ui *ui = &app->ui;
+    char number[16], title[TEXT_SIZE], tiles[TEXT_SIZE], priority[TEXT_SIZE];
+    tr_integer(number, sizeof(number), stockpile->number);
+    TR_FORMAT(title, sizeof(title), tr("stockpile.name"), number);
+    tr_integer(number, sizeof(number), stockpile->cell_count);
+    TR_FORMAT(tiles, sizeof(tiles), tr_plural("stockpile.tiles", stockpile->cell_count), number);
+    tr_integer(number, sizeof(number), stockpile->priority);
+    TR_FORMAT(priority, sizeof(priority), tr("stockpile.priority"), number);
+    const char *hint = tr("stockpile.priority_hint");
+    const char *allowed_label = tr("stockpile.allowed");
+    const char *all = tr("stockpile.allow_all");
+    const char *none = tr("stockpile.allow_none");
+    const char *delete_label = tr("stockpile.delete");
+    /* Symbols, not words: the same in every language. */
+    const char *minus = "−", *plus = "+";
+
+    /* Measure. */
+    float row = ui_row_height(ui);
+    float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
+    float width = ui_text_width(ui, title) + GAP + ui_button_width(ui, delete_label);
+    width = SDL_max(width, ui_text_width(ui, tiles));
+    width = SDL_max(width, ui_text_width(ui, priority) + GAP + 2.0f * small + GAP +
+                               ui_text_width(ui, hint));
+    width = SDL_max(width, ui_text_width(ui, allowed_label) + GAP + ui_button_width(ui, all) +
+                               GAP + ui_button_width(ui, none));
+    int rows = 4;
+    for (int category = 0; category < ITEM_CATEGORY_COUNT; category++) {
+        width = SDL_max(width,
+                        ui_checkbox_width(ui, tr(item_category_name_key((ItemCategory)category))));
+        rows++;
+    }
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        width = SDL_max(width, ITEM_INDENT + ui_checkbox_width(
+                                                 ui, tr(item_def((ItemType)type)->name_key)));
+        rows++;
+    }
+    width = SDL_ceilf(width);
+    float height = (float)rows * row + 2.0f * PANEL_PADDING;
+    SDL_FRect panel = {right - width - 2.0f * PANEL_PADDING, bottom - height,
+                       width + 2.0f * PANEL_PADDING, height};
+    ui_panel(ui, panel);
+
+    float x = panel.x + PANEL_PADDING, y = panel.y + PANEL_PADDING;
+    float line = (float)text_line_height(app->text);
+    float text_offset = SDL_floorf((row - line) * 0.5f);
+    float button_height = row - 2.0f;
+
+    /* Title and delete button. */
+    ui_label(ui, title, x, y + text_offset);
+    float delete_width = ui_button_width(ui, delete_label);
+    bool deleted = ui_button(ui, (SDL_FRect){x + width - delete_width, y, delete_width,
+                                             button_height},
+                             delete_label);
+    y += row;
+    ui_label(ui, tiles, x, y + text_offset);
+    y += row;
+
+    /* Priority: 1 is the highest. */
+    ui_label(ui, priority, x, y + text_offset);
+    float bx = x + ui_text_width(ui, priority) + GAP;
+    if (ui_button(ui, (SDL_FRect){bx, y, small, button_height}, minus)) {
+        stockpile_set_priority(stockpiles, index, stockpile->priority - 1);
+    }
+    if (ui_button(ui, (SDL_FRect){bx + small + 2.0f, y, small, button_height}, plus)) {
+        stockpile_set_priority(stockpiles, index, stockpile->priority + 1);
+    }
+    ui_label(ui, hint, bx + 2.0f * small + GAP, y + text_offset);
+    y += row;
+
+    /* Filters. */
+    ItemTypeMask allowed = stockpile->allowed;
+    ItemTypeMask new_allowed = allowed;
+    ui_label(ui, allowed_label, x, y + text_offset);
+    float none_width = ui_button_width(ui, none);
+    float all_width = ui_button_width(ui, all);
+    if (ui_button(ui, (SDL_FRect){x + width - none_width, y, none_width, button_height}, none)) {
+        new_allowed = 0;
+    }
+    if (ui_button(ui,
+                  (SDL_FRect){x + width - none_width - GAP - all_width, y, all_width,
+                              button_height},
+                  all)) {
+        new_allowed = item_types_all();
+    }
+    y += row;
+    for (int category = 0; category < ITEM_CATEGORY_COUNT; category++) {
+        ItemTypeMask mask = item_types_in_category((ItemCategory)category);
+        UiCheck state = check_state(allowed, mask);
+        if (ui_checkbox(ui, x, y, width, state,
+                        tr(item_category_name_key((ItemCategory)category)))) {
+            new_allowed = state == UI_CHECKED ? new_allowed & ~mask : new_allowed | mask;
+        }
+        y += row;
+        for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+            const ItemDef *def = item_def((ItemType)type);
+            if ((int)def->category != category) {
+                continue;
+            }
+            ItemTypeMask bit = ITEM_TYPE_BIT(type);
+            if (ui_checkbox(ui, x + ITEM_INDENT, y, width - ITEM_INDENT,
+                            (allowed & bit) ? UI_CHECKED : UI_UNCHECKED, tr(def->name_key))) {
+                new_allowed ^= bit;
+            }
+            y += row;
+        }
+    }
+    if (new_allowed != allowed) {
+        stockpile_set_allowed(stockpiles, index, new_allowed);
+    }
+    if (deleted) {
+        stockpile_delete(stockpiles, index);
+        app->selected_stockpile = STOCKPILE_NONE;
+    }
+}

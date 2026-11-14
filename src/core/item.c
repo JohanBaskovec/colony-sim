@@ -8,11 +8,42 @@
 #include <string.h>
 
 static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
-    [ITEM_NONE] = {"none", NULL, 0, 0.0f},
-    [ITEM_WOOD] = {"wood", N_("item.wood"), 50, 0.0f},
-    [ITEM_STONE] = {"stone", N_("item.stone"), 30, 0.0f},
-    [ITEM_BERRIES] = {"berries", N_("item.berries"), 50, 0.05f},
+    /* id, name, category, stack limit, nutrition */
+    [ITEM_NONE] = {"none", NULL, ITEM_CATEGORY_COUNT, 0, 0.0f},
+    [ITEM_WOOD] = {"wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 50, 0.0f},
+    [ITEM_STONE] = {"stone", N_("item.stone"), ITEM_CATEGORY_RESOURCES, 30, 0.0f},
+    [ITEM_BERRIES] = {"berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 50, 0.05f},
 };
+
+static const char *const CATEGORY_KEYS[ITEM_CATEGORY_COUNT] = {
+    [ITEM_CATEGORY_FOOD] = N_("item.category.food"),
+    [ITEM_CATEGORY_RESOURCES] = N_("item.category.resources"),
+};
+
+const char *item_category_name_key(ItemCategory category)
+{
+    return (unsigned)category < ITEM_CATEGORY_COUNT ? CATEGORY_KEYS[category] : NULL;
+}
+
+ItemTypeMask item_types_all(void)
+{
+    ItemTypeMask mask = 0;
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        mask |= ITEM_TYPE_BIT(type);
+    }
+    return mask;
+}
+
+ItemTypeMask item_types_in_category(ItemCategory category)
+{
+    ItemTypeMask mask = 0;
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        if (ITEM_DEFS[type].category == category) {
+            mask |= ITEM_TYPE_BIT(type);
+        }
+    }
+    return mask;
+}
 
 const ItemDef *item_def(ItemType type)
 {
@@ -81,6 +112,7 @@ int items_add(Items *items, int x, int y, ItemType type, int count)
     stack->type = (uint8_t)type;
     stack->count = (uint16_t)(stack->count + added);
     items->totals[type] += added;
+    items->additions++;
     return added;
 }
 

@@ -1,6 +1,7 @@
 #include "game/hud.h"
 
 #include "core/i18n.h"
+#include "game/stockpile_panel.h"
 
 #define HUD_MARGIN 8.0f
 #define HUD_PADDING 6.0f
@@ -147,6 +148,15 @@ static void build_tile_panel(App *app, Panel *panel)
                   tr(item_def((ItemType)stack.type)->name_key), a);
     }
 
+    const Stockpile *stockpile =
+        stockpile_get(&app->game.stockpiles, stockpile_at(&app->game.stockpiles, x, y));
+    if (stockpile != NULL) {
+        char name[HUD_LINE_SIZE];
+        tr_integer(a, sizeof(a), stockpile->number);
+        TR_FORMAT(name, sizeof(name), tr("stockpile.name"), a);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.stockpile"), name);
+    }
+
     DesignationType designation = designation_get(&app->game.designations, x, y);
     if (designation != DESIGNATION_NONE) {
         const char *name = tr(designation_def(designation)->name_key);
@@ -226,6 +236,12 @@ static void build_selection_panel(App *app, Panel *panel)
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.age"), age);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
               tr(colonist_activity_key(colonist)));
+    if (colonist->carried.count > 0) {
+        char count[16];
+        tr_integer(count, sizeof(count), colonist->carried.count);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.carrying"),
+                  tr(item_def((ItemType)colonist->carried.type)->name_key), count);
+    }
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);
     }
@@ -300,11 +316,17 @@ void hud_draw(App *app)
         panel_draw(app, &debug, HUD_MARGIN, HUD_MARGIN * 2.0f + height);
     }
 
-    /* Top center: active designation tool. */
-    if (app->tool_active) {
+    /* Top center: active tool. */
+    if (app->tool != APP_TOOL_NONE) {
         Panel tool = {0};
-        TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool"),
-                  tr(tool_name_key(app->tool_type)));
+        if (app->tool == APP_TOOL_STOCKPILE) {
+            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"),
+                      tr("tool.stockpile"));
+            panel_add_text(&tool, tr("hud.tool.stockpile_help"));
+        } else {
+            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool"),
+                      tr(tool_name_key(app->tool_type)));
+        }
         panel_size(app, &tool, &width, &height);
         panel_draw(app, &tool, SDL_floorf((screen_width - width) * 0.5f), HUD_MARGIN);
     }
@@ -325,13 +347,16 @@ void hud_draw(App *app)
     panel_add_text(&help, tr("hud.help.game"));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_C),
               key_name(SDLK_M), key_name(SDLK_H), key_name(SDLK_X));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.zones"), key_name(SDLK_P));
     float help_width, help_height;
     panel_size(app, &help, &help_width, &help_height);
     float help_y = screen_height - help_height - HUD_MARGIN;
     panel_draw(app, &help, HUD_MARGIN, help_y);
 
-    /* Bottom right: inspector of the selected colonist(s). */
-    if (app->selected_count > 0) {
+    /* Bottom right: inspector of the selected colonist(s) or stockpile. */
+    if (app->selected_stockpile != STOCKPILE_NONE) {
+        stockpile_panel_draw(app, screen_width - HUD_MARGIN, help_y - HUD_MARGIN);
+    } else if (app->selected_count > 0) {
         Panel selection = {0};
         build_selection_panel(app, &selection);
         panel_size(app, &selection, &width, &height);

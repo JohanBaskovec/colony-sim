@@ -15,6 +15,7 @@
 │                                                              │
 │  game ─► colonist ─► pathfinding ─► map                      │
 │    │        ├─────► designation ─────► map, work             │
+│    │        ├─────► hauling ─► stockpile, item, reservation  │
 │    │        └─────► reservation, item                        │
 │    ├──► pool, game_clock, worldgen ─► noise, rng             │
 │  i18n   camera   cli   log   util                            │
@@ -45,8 +46,10 @@ simulation:
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work            |
 | `designation`| Player work orders per tile (chop, mine) and their work progress             |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
-| `item`       | Items on the ground: item definitions, one stack per tile, dropping         |
-| `work`       | Work types (mining, woodcutting) and work priority helpers                   |
+| `item`       | Items on the ground: item definitions and categories, one stack per tile, dropping |
+| `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types |
+| `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
+| `work`       | Work types (mining, woodcutting, gathering, hauling) and priority helpers    |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
@@ -68,6 +71,8 @@ simulation:
 | `app`          | SDL init/shutdown, main loop, input → camera/clock, frame orchestration |
 | `render`       | Draws the map (placeholder colored tiles), daylight overlay, highlights |
 | `hud`          | Builds and draws the HUD panels; all text goes through `tr()`           |
+| `ui`           | Immediate-mode widgets (panel, button, check box) and click capture     |
+| `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
 | `localization` | Discovers `.lang` files, selects the language, loads catalogs           |
 
@@ -118,8 +123,34 @@ wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
 `RockDef.mined_item/mined_yield`, `PlantDef.harvest_item/harvest_yield`
 (harvesting keeps the plant, which grows back). Food items have a
 `nutrition` per unit; a hungry colonist goes to the nearest food, on the
-ground or on a ripe bush, and eats just what it takes to be sated. Items carried by settlers will be stored on
-the settler when hauling arrives.
+ground or on a ripe bush, and eats just what it takes to be sated. Items in
+hand are stored on the colonist (`Colonist.carried`), not in the layer.
+
+### Stockpiles and hauling
+
+`Stockpiles` (`core/stockpile.h`, owned by `Game`) is another dense layer: the
+zone index of each tile (0 = none) plus a fixed table of zones (number shown to
+the player, priority from 1 = highest to 10 = lowest, default 5, and a bit mask
+of allowed item types). Zones only cover passable, buildable tiles. Every
+change bumps a `revision` counter.
+
+A stack **needs hauling** when no zone on its tile accepts it, or when a zone
+of strictly better priority accepts it and has a free tile with room. Hauling
+is the `WORK_HAULING` work type: at each priority level, designations come
+first, then hauling. `haul_find_job()` runs a Dijkstra search for the nearest
+such stack, then one search per priority level (best first) for the nearest
+storage tile from the stack. A per-type bit set of "priority levels with a
+free tile with room", computed once per search, makes both checks cheap and
+lets idle colonists skip the search entirely when nothing can be stored.
+
+The hauler reserves the source stack (`RESERVATION_HAUL_SOURCE`) and the
+destination tile (`RESERVATION_STORAGE`), walks to the stack, picks up what
+the destination can take, and carries it there. If the destination stops
+accepting the items on the way (filter changed, zone removed), it looks for
+another storage tile, else drops its load. Any interruption (eating,
+sleeping...) goes through `begin_task()`, which drops carried items where the
+colonist stands, so items are never lost. A failed haul search backs off; its
+stamp is the stockpile revision + item additions + reservation releases.
 
 Static definitions (`TerrainDef`, `RockDef`, `PlantDef`) carry a stable `id`
 (used by save files, never translated) and a `name_key` (translation key).
@@ -181,8 +212,9 @@ disappears.
 
 **Reservations** (`core/reservation.h`, owned by `Game`) record who is busy with
 what: (kind, tile, owner), at most one owner per tile and kind. Kinds today:
-work (a designated tile) and food (a bush about to be eaten), so two colonists
-never walk to the same job or the same bush. Owners are colonist slot + 1.
+work (a designated tile), food (a bush about to be eaten), haul source and
+storage tile, so two colonists never walk to the same job, bush, stack or
+storage tile. Owners are colonist slot + 1.
 
 - Every task change goes through one function (`begin_task()`), which releases
   everything the colonist holds: reservations never outlive the task that made
@@ -241,8 +273,14 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 
 ## Frontend state
 
-UI state that is not part of the simulation (camera, selection, drag
-rectangle, debug toggle) lives in `App`. It never influences the simulation,
+UI state that is not part of the simulation (camera, selection, selected
+stockpile, active tool, drag rectangle, debug toggle) lives in `App`.
+
+The UI is immediate-mode (`game/ui.h`): panels and widgets are laid out and
+drawn every frame. A left click on a panel drawn during the previous frame is
+captured before it reaches the map and consumed by the first widget that
+contains it. Widgets act on the game directly through core functions
+(`stockpile_set_priority()`...). It never influences the simulation,
 so the same seed gives the same game whatever the player looks at.
 
 ## Assets

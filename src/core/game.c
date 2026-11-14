@@ -109,6 +109,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .map = &game->map,
         .designations = &game->designations,
         .items = &game->items,
+        .stockpiles = &game->stockpiles,
         .reservations = &game->reservations,
         .pathfinder = &game->pathfinder,
         .rng = &game->rng,
@@ -231,6 +232,7 @@ bool game_init(Game *game, const NewGameParams *params)
     if (!worldgen_generate(&game->map, &params->world) ||
         !designations_init(&game->designations, game->map.width, game->map.height) ||
         !items_init(&game->items, game->map.width, game->map.height) ||
+        !stockpiles_init(&game->stockpiles, game->map.width, game->map.height) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
         game_shutdown(game);
@@ -253,6 +255,7 @@ void game_shutdown(Game *game)
     pathfinder_free(&game->pathfinder);
     designations_free(&game->designations);
     items_free(&game->items);
+    stockpiles_free(&game->stockpiles);
     map_free(&game->map);
     memset(game, 0, sizeof(*game));
 }
@@ -316,6 +319,7 @@ uint64_t game_hash(const Game *game)
     uint64_t hash = map_hash(&game->map);
     hash = designations_hash(&game->designations, hash);
     hash = items_hash(&game->items, hash);
+    hash = stockpiles_hash(&game->stockpiles, hash);
     hash = reservations_hash(&game->reservations, hash);
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
@@ -325,8 +329,10 @@ uint64_t game_hash(const Game *game)
             continue;
         }
         const Colonist *c = &game->colonists[slot];
-        int32_t ints[8] = {(int32_t)id.index, (int32_t)id.generation, c->x, c->y,
-                           (int32_t)c->task, c->timer, c->target.x, c->target.y};
+        int32_t ints[12] = {(int32_t)id.index,  (int32_t)id.generation, c->x,
+                            c->y,               (int32_t)c->task,       c->timer,
+                            c->target.x,        c->target.y,            c->carried.type,
+                            c->carried.count,   c->haul_destination.x,  c->haul_destination.y};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));

@@ -26,7 +26,16 @@ void render_designations(SDL_Renderer *renderer, const Game *game, const Camera 
 void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0,
                              int x1, int y1, DesignationType type);
 
-/* Draws every colonist; selected ones get a ring and their current path. */
+/* Stockpile zones as a translucent overlay; the selected one (index, or
+ * STOCKPILE_NONE) is brighter and outlined. */
+void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                       int selected);
+
+/* Rectangle of tiles being added to (or removed from) stockpile zones. */
+void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                           int y1, bool remove);
+
+/* Draws every colonist (and what they carry); selected ones get a ring and their current path. */
 void render_colonists(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                       const EntityId *selected, int selected_count);
 

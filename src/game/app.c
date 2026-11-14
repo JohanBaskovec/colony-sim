@@ -4,6 +4,7 @@
 #include "core/log.h"
 #include "game/hud.h"
 #include "game/render.h"
+#include "game/stockpile_panel.h"
 
 #include <SDL3_ttf/SDL_ttf.h>
 #include <math.h>
@@ -20,17 +21,36 @@
 
 static const SDL_Color HOVER_COLOR = {255, 255, 255, 200};
 
-/* Selects a designation tool, or goes back to selection if it is already active. */
-static void toggle_tool(App *app, DesignationType type)
+/* Selects a tool, or goes back to selection if it is already active. */
+static void toggle_tool(App *app, AppTool tool, DesignationType type)
 {
-    if (app->tool_active && app->tool_type == type) {
-        app->tool_active = false;
+    if (app->tool == tool && (tool != APP_TOOL_DESIGNATE || app->tool_type == type)) {
+        app->tool = APP_TOOL_NONE;
     } else {
-        app->tool_active = true;
+        app->tool = tool;
         app->tool_type = type;
     }
     app->left_button_down = false;
     app->box_selecting = false;
+}
+
+static void select_stockpile(App *app, int index)
+{
+    const Stockpile *stockpile = stockpile_get(&app->game.stockpiles, index);
+    app->selected_stockpile = stockpile != NULL ? index : STOCKPILE_NONE;
+    app->selected_stockpile_number = stockpile != NULL ? stockpile->number : 0;
+    if (stockpile != NULL) {
+        app->selected_count = 0; /* Colonists and zones are not selected together. */
+    }
+}
+
+/* Forgets the selected stockpile once it no longer exists. */
+static void prune_stockpile_selection(App *app)
+{
+    const Stockpile *stockpile = stockpile_get(&app->game.stockpiles, app->selected_stockpile);
+    if (stockpile == NULL || stockpile->number != app->selected_stockpile_number) {
+        app->selected_stockpile = STOCKPILE_NONE;
+    }
 }
 
 /* Routes core log messages to SDL's logging (console, Android logcat...). */
@@ -154,6 +174,8 @@ bool app_init(App *app, const CliOptions *options)
         colonist_position(first, &start_x, &start_y);
     }
     camera_init(&app->camera, start_x, start_y, APP_INITIAL_ZOOM);
+    ui_init(&app->ui, app->renderer, app->text);
+    app->selected_stockpile = STOCKPILE_NONE;
     app->running = true;
     return true;
 }
@@ -202,16 +224,21 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     /* Mnemonic keys use the key labels (keycodes). */
     switch (key->key) {
     case SDLK_ESCAPE:
-        if (app->tool_active) {
-            app->tool_active = false; /* Back to selection first. */
+        /* Steps back: zone selection, then tool, then quit. */
+        if (app->selected_stockpile != STOCKPILE_NONE) {
+            app->selected_stockpile = STOCKPILE_NONE;
+        } else if (app->tool != APP_TOOL_NONE) {
+            app->tool = APP_TOOL_NONE;
         } else {
             app->running = false;
         }
         break;
-    case SDLK_C: toggle_tool(app, DESIGNATION_CHOP); break;
-    case SDLK_M: toggle_tool(app, DESIGNATION_MINE); break;
-    case SDLK_H: toggle_tool(app, DESIGNATION_HARVEST); break;
-    case SDLK_X: toggle_tool(app, DESIGNATION_NONE); break;
+    case SDLK_C: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_CHOP); break;
+    case SDLK_M: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); break;
+    case SDLK_H: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_HARVEST); break;
+    case SDLK_X: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); break;
+    /* Not Z: the Z key is a movement key on AZERTY keyboards. */
+    case SDLK_P: toggle_tool(app, APP_TOOL_STOCKPILE, DESIGNATION_NONE); break;
     case SDLK_F3: app->show_debug = !app->show_debug; break;
     case SDLK_L:
         localization_cycle(&app->localization);
@@ -255,7 +282,8 @@ static void prune_selection(App *app)
     }
 }
 
-/* Click: select the colonist under the cursor. Shift adds to / removes from the selection. */
+/* Click: select the colonist under the cursor, or else the stockpile zone
+ * there. Shift adds colonists to / removes them from the selection. */
 static void select_at_point(App *app, float screen_x, float screen_y, bool additive)
 {
     float world_x, world_y;
@@ -264,7 +292,12 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     if (!additive) {
         app->selected_count = 0;
     }
+    app->selected_stockpile = STOCKPILE_NONE;
     if (entity_id_is_none(id)) {
+        if (!additive) {
+            select_stockpile(app, stockpile_at(&app->game.stockpiles, (int)floorf(world_x),
+                                               (int)floorf(world_y)));
+        }
         return;
     }
     int index = find_selected(app, id);
@@ -285,6 +318,7 @@ static void select_in_box(App *app, float x0, float y0, float x1, float y1, bool
     if (!additive) {
         app->selected_count = 0;
     }
+    app->selected_stockpile = STOCKPILE_NONE;
     for (int i = 0; i < count; i++) {
         select_add(app, found[i]);
     }
@@ -306,12 +340,32 @@ static void tool_rect(const App *app, float screen_x, float screen_y, int *x0, i
     screen_to_tile(app, screen_x, screen_y, x1, y1);
 }
 
+/* Stockpile tool release: extends the selected zone or creates a new one
+ * (which becomes selected); with Shift, removes zone tiles instead. */
+static void apply_stockpile_tool(App *app, float screen_x, float screen_y, bool remove)
+{
+    Stockpiles *stockpiles = &app->game.stockpiles;
+    int x0, y0, x1, y1;
+    tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
+    if (remove) {
+        stockpiles_remove_rect(stockpiles, x0, y0, x1, y1);
+        prune_stockpile_selection(app);
+    } else if (app->selected_stockpile != STOCKPILE_NONE) {
+        stockpile_extend(stockpiles, &app->game.map, app->selected_stockpile, x0, y0, x1, y1);
+    } else {
+        select_stockpile(app, stockpile_create(stockpiles, &app->game.map, x0, y0, x1, y1));
+    }
+}
+
 static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
 {
     if (button->button != SDL_BUTTON_LEFT) {
         return;
     }
     if (button->down) {
+        if (ui_capture_click(&app->ui, button->x, button->y)) {
+            return; /* Clicked on a panel: the widgets get it. */
+        }
         app->left_button_down = true;
         app->box_selecting = false;
         app->drag_start_x = button->x;
@@ -322,10 +376,12 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         return;
     }
     bool additive = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
-    if (app->tool_active) {
+    if (app->tool == APP_TOOL_DESIGNATE) {
         int x0, y0, x1, y1;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
         game_designate_rect(&app->game, x0, y0, x1, y1, app->tool_type);
+    } else if (app->tool == APP_TOOL_STOCKPILE) {
+        apply_stockpile_tool(app, button->x, button->y, additive);
     } else if (app->box_selecting) {
         select_in_box(app, app->drag_start_x, app->drag_start_y, button->x, button->y, additive);
     } else {
@@ -396,7 +452,8 @@ static void update_camera(App *app, float dt)
     app->hover_x = (int)floorf(world_x);
     app->hover_y = (int)floorf(world_y);
     app->hover_valid = (SDL_GetMouseFocus() == app->window) &&
-                       map_in_bounds(&app->game.map, app->hover_x, app->hover_y);
+                       map_in_bounds(&app->game.map, app->hover_x, app->hover_y) &&
+                       !ui_is_over_panel(&app->ui, mouse_x, mouse_y);
 }
 
 static void update_fps(App *app, double dt)
@@ -416,6 +473,7 @@ static void render_frame(App *app)
     SDL_RenderClear(app->renderer);
 
     render_map(app->renderer, &app->game.map, &app->camera);
+    render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
     render_items(app->renderer, &app->game, &app->camera);
     render_designations(app->renderer, &app->game, &app->camera);
     hud_draw_item_counts(app);
@@ -428,19 +486,29 @@ static void render_frame(App *app)
                             HOVER_COLOR);
     }
     hud_draw_world_labels(app);
-    if (app->tool_active && app->left_button_down) {
+    if (app->tool != APP_TOOL_NONE && app->left_button_down) {
         float mouse_x, mouse_y;
         SDL_GetMouseState(&mouse_x, &mouse_y);
         int x0, y0, x1, y1;
         tool_rect(app, mouse_x, mouse_y, &x0, &y0, &x1, &y1);
-        render_designation_area(app->renderer, &app->camera, x0, y0, x1, y1, app->tool_type);
+        if (app->tool == APP_TOOL_STOCKPILE) {
+            bool remove = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+            render_stockpile_area(app->renderer, &app->camera, x0, y0, x1, y1, remove);
+        } else {
+            render_designation_area(app->renderer, &app->camera, x0, y0, x1, y1,
+                                    app->tool_type);
+        }
     } else if (app->box_selecting) {
         float mouse_x, mouse_y;
         SDL_GetMouseState(&mouse_x, &mouse_y);
         render_selection_box(app->renderer, app->drag_start_x, app->drag_start_y, mouse_x,
                              mouse_y);
     }
+    float mouse_x, mouse_y;
+    SDL_GetMouseState(&mouse_x, &mouse_y);
+    ui_begin_frame(&app->ui, mouse_x, mouse_y);
     hud_draw(app);
+    ui_end_frame(&app->ui);
 
     text_renderer_end_frame(app->text);
     SDL_RenderPresent(app->renderer);
@@ -464,6 +532,7 @@ void app_run(App *app)
         update_camera(app, (float)dt);
         game_update(&app->game, dt);
         prune_selection(app);
+        prune_stockpile_selection(app);
         update_fps(app, dt);
         render_frame(app);
     }

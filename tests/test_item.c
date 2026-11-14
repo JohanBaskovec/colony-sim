@@ -21,6 +21,38 @@ static void test_definitions(void)
     CHECK(!item_is_food(ITEM_TYPE_COUNT));
 }
 
+static void test_categories(void)
+{
+    ItemTypeMask all = item_types_all();
+    ItemTypeMask covered = 0;
+    for (int category = 0; category < ITEM_CATEGORY_COUNT; category++) {
+        CHECK(i18n_is_valid_key(item_category_name_key((ItemCategory)category)));
+        ItemTypeMask mask = item_types_in_category((ItemCategory)category);
+        CHECK(mask != 0);
+        CHECK((covered & mask) == 0); /* Each type belongs to one category. */
+        covered |= mask;
+    }
+    CHECK_EQ_UINT(covered, all);
+    CHECK(!(all & ITEM_TYPE_BIT(ITEM_NONE)));
+    CHECK(item_types_in_category(ITEM_CATEGORY_FOOD) & ITEM_TYPE_BIT(ITEM_BERRIES));
+    CHECK(item_types_in_category(ITEM_CATEGORY_RESOURCES) & ITEM_TYPE_BIT(ITEM_WOOD));
+    CHECK(item_types_in_category(ITEM_CATEGORY_RESOURCES) & ITEM_TYPE_BIT(ITEM_STONE));
+    CHECK(item_category_name_key(ITEM_CATEGORY_COUNT) == NULL);
+    CHECK_EQ_UINT(item_types_in_category(ITEM_CATEGORY_COUNT), 0);
+}
+
+static void test_additions_counter(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4));
+    CHECK_EQ_UINT(items.additions, 0);
+    items_add(&items, 1, 1, ITEM_WOOD, 5);
+    CHECK_EQ_UINT(items.additions, 1);
+    items_remove(&items, 1, 1, 5);
+    CHECK_EQ_UINT(items.additions, 1); /* Removals do not count. */
+    items_free(&items);
+}
+
 static void test_add_and_remove(void)
 {
     Items items;
@@ -114,6 +146,8 @@ static void test_hash(void)
 int main(void)
 {
     RUN_TEST(test_definitions);
+    RUN_TEST(test_categories);
+    RUN_TEST(test_additions_counter);
     RUN_TEST(test_add_and_remove);
     RUN_TEST(test_drop_spreads_to_reachable_tiles);
     RUN_TEST(test_drop_without_room_loses_the_rest);

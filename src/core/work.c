@@ -6,6 +6,7 @@ static const WorkTypeDef WORK_TYPE_DEFS[WORK_TYPE_COUNT] = {
     [WORK_MINING] = {"mining", N_("work.mining")},
     [WORK_WOODCUTTING] = {"woodcutting", N_("work.woodcutting")},
     [WORK_GATHERING] = {"gathering", N_("work.gathering")},
+    [WORK_HAULING] = {"hauling", N_("work.hauling")},
 };
 
 const WorkTypeDef *work_type_def(WorkType type)

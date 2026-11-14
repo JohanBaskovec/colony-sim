@@ -17,6 +17,7 @@
 #include "core/pathfinding.h"
 #include "core/reservation.h"
 #include "core/rng.h"
+#include "core/stockpile.h"
 #include "core/work.h"
 
 #include <stdbool.h>
@@ -69,6 +70,7 @@ typedef enum ColonistTask {
     TASK_DRINK, /* Walking to a drinking spot, then drinking. */
     TASK_SLEEP,
     TASK_WORK, /* Walking next to a designated tile, then working on it. */
+    TASK_HAUL, /* Walking to an item stack, picking it up, carrying it to storage. */
     TASK_COUNT
 } ColonistTask;
 
@@ -84,6 +86,7 @@ typedef enum SearchKind {
     SEARCH_FOOD,
     SEARCH_WATER,
     SEARCH_WORK,
+    SEARCH_HAUL,
     SEARCH_COUNT
 } SearchKind;
 
@@ -110,6 +113,10 @@ typedef struct Colonist {
     int search_failures[SEARCH_COUNT]; /* Consecutive failed searches. */
     /* Designations revision + reservation releases at the last failed work search. */
     uint32_t work_search_stamp;
+    /* Stockpile revision + item additions + releases at the last failed haul search. */
+    uint32_t haul_search_stamp;
+    ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
+    TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
     uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */
     float needs[NEED_COUNT];
 } Colonist;
@@ -119,6 +126,7 @@ typedef struct ColonistContext {
     Map *map;
     Designations *designations;
     Items *items;
+    Stockpiles *stockpiles;
     Reservations *reservations;
     Pathfinder *pathfinder;
     Rng *rng;

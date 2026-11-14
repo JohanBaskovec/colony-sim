@@ -50,6 +50,27 @@ static void test_release_all(void)
     CHECK(reservations_add(&r, RESERVATION_WORK, A, 2)); /* Free again. */
 }
 
+static void test_release_kind(void)
+{
+    Reservations r;
+    reservations_init(&r);
+    reservations_add(&r, RESERVATION_HAUL_SOURCE, A, 1);
+    reservations_add(&r, RESERVATION_STORAGE, B, 1);
+    reservations_add(&r, RESERVATION_STORAGE, A, 2);
+
+    reservations_release_kind(&r, RESERVATION_WORK, 1); /* Holds none of that kind. */
+    CHECK_EQ_INT(r.count, 3);
+    CHECK_EQ_UINT(r.releases, 0);
+
+    reservations_release_kind(&r, RESERVATION_STORAGE, 1);
+    CHECK_EQ_INT(r.count, 2);
+    CHECK_EQ_INT(r.count_by_kind[RESERVATION_STORAGE], 1);
+    CHECK_EQ_INT(reservations_owner(&r, RESERVATION_HAUL_SOURCE, A), 1); /* Kept. */
+    CHECK_EQ_INT(reservations_owner(&r, RESERVATION_STORAGE, A), 2);     /* Other owner. */
+    CHECK_EQ_INT(reservations_owner(&r, RESERVATION_STORAGE, B), RESERVATION_NO_OWNER);
+    CHECK_EQ_UINT(r.releases, 1);
+}
+
 static void test_table_full(void)
 {
     Reservations r;
@@ -79,6 +100,7 @@ int main(void)
 {
     RUN_TEST(test_add_and_query);
     RUN_TEST(test_release_all);
+    RUN_TEST(test_release_kind);
     RUN_TEST(test_table_full);
     RUN_TEST(test_hash_depends_on_content);
     return test_summary();

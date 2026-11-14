@@ -1,5 +1,6 @@
 #include "core/colonist.h"
 
+#include "core/hauling.h"
 #include "core/i18n.h"
 #include "core/util.h"
 
@@ -88,6 +89,7 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_DRINK] = N_("colonist.task.drink"),
         [TASK_SLEEP] = N_("colonist.task.sleep"),
         [TASK_WORK] = N_("colonist.task.work"),
+        [TASK_HAUL] = N_("colonist.task.haul"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
 }
@@ -138,6 +140,12 @@ static TilePos current_tile(const Colonist *colonist)
  * them. The path is kept: callers set it before or clear it after. */
 static void begin_task(Colonist *colonist, const ColonistContext *context, ColonistTask task)
 {
+    if (colonist->carried.count > 0) {
+        /* Whatever is in hand is put down where the colonist stands. */
+        items_drop(context->items, context->map, colonist->x, colonist->y,
+                   (ItemType)colonist->carried.type, colonist->carried.count);
+        colonist->carried = (ItemStack){ITEM_NONE, 0};
+    }
     reservations_release_all(context->reservations, context->worker_id);
     colonist->task = task;
     colonist->timer = 0;
@@ -304,44 +312,192 @@ static uint32_t work_stamp(const ColonistContext *context)
     return context->designations->revision + context->reservations->releases;
 }
 
-/* Takes the nearest job of the highest priority level that has one. */
-static bool try_start_work(Colonist *colonist, const ColonistContext *context)
+static HaulWorld haul_world(const ColonistContext *context)
+{
+    HaulWorld world = {context->map,         context->items,      context->stockpiles,
+                       context->reservations, context->pathfinder, context->worker_id};
+    return world;
+}
+
+static uint32_t haul_stamp(const ColonistContext *context)
+{
+    return context->stockpiles->revision + context->items->additions +
+           context->reservations->releases;
+}
+
+/* Designation jobs of the given work types: nearest one. */
+static bool try_designation_job(Colonist *colonist, const ColonistContext *context,
+                                WorkTypeMask mask)
 {
     const Designations *designations = context->designations;
-    int open_jobs = designations->count - context->reservations->count_by_kind[RESERVATION_WORK];
-    if (open_jobs <= 0) {
+    if (designations_count_for_work(designations, mask) == 0) {
         return false;
     }
-    /* After a failure, new or freed work (a new stamp) allows an early retry. */
-    if (!search_allowed(colonist, SEARCH_WORK) &&
-        colonist->work_search_stamp == work_stamp(context)) {
+    WorkSearch search = {designations, context->reservations, mask, context->worker_id};
+    TilePos spot, target;
+    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                 is_work_spot, &search, COLONIST_WORK_SEARCH_MAX_COST,
+                                 &colonist->path, &spot)) {
+        return false; /* The path is untouched on failure: a wanderer keeps walking. */
+    }
+    /* The search only stops on a spot next to an open job. */
+    find_adjacent_job(&search, spot.x, spot.y, &target);
+    begin_task(colonist, context, TASK_WORK);
+    colonist->target = target;
+    colonist->work_type = (uint8_t)designation_get(designations, target.x, target.y);
+    reservations_add(context->reservations, RESERVATION_WORK, target, context->worker_id);
+    return true;
+}
+
+static bool try_haul_job(Colonist *colonist, const ColonistContext *context)
+{
+    HaulWorld world = haul_world(context);
+    if (!haul_any_job_possible(&world)) {
         return false;
     }
-    WorkSearch search = {designations, context->reservations, 0, context->worker_id};
+    HaulJob job;
+    if (!haul_find_job(&world, current_tile(colonist), COLONIST_WORK_SEARCH_MAX_COST, &job) ||
+        !pathfinder_find(context->pathfinder, context->map, current_tile(colonist), job.source,
+                         COLONIST_WORK_SEARCH_MAX_COST, &colonist->path)) {
+        return false;
+    }
+    begin_task(colonist, context, TASK_HAUL);
+    colonist->target = job.source;
+    colonist->haul_destination = job.destination;
+    reservations_add(context->reservations, RESERVATION_HAUL_SOURCE, job.source,
+                     context->worker_id);
+    reservations_add(context->reservations, RESERVATION_STORAGE, job.destination,
+                     context->worker_id);
+    return true;
+}
+
+/*
+ * Takes the nearest job of the highest priority level that has one. At each
+ * level, designations (mining, woodcutting...) come before hauling. Each
+ * search kind backs off on failure until its stamp shows that something
+ * changed.
+ */
+static bool try_start_work(Colonist *colonist, const ColonistContext *context)
+{
+    int open_jobs = context->designations->count -
+                    context->reservations->count_by_kind[RESERVATION_WORK];
+    bool designations_allowed =
+        open_jobs > 0 && (search_allowed(colonist, SEARCH_WORK) ||
+                          colonist->work_search_stamp != work_stamp(context));
+    bool hauling_allowed = search_allowed(colonist, SEARCH_HAUL) ||
+                           colonist->haul_search_stamp != haul_stamp(context);
+    bool searched_designations = false, searched_hauling = false;
+
     for (int priority = WORK_PRIORITY_HIGHEST; priority <= WORK_PRIORITY_LOWEST; priority++) {
-        search.mask = work_types_at_priority(colonist->work_priorities, priority);
-        if (search.mask == 0 || designations_count_for_work(designations, search.mask) == 0) {
-            continue;
+        WorkTypeMask mask = work_types_at_priority(colonist->work_priorities, priority);
+        WorkTypeMask designation_mask = mask & ~WORK_TYPE_BIT(WORK_HAULING);
+        if (designations_allowed && designation_mask != 0) {
+            searched_designations = true;
+            if (try_designation_job(colonist, context, designation_mask)) {
+                colonist->search_failures[SEARCH_WORK] = 0;
+                colonist->search_cooldown[SEARCH_WORK] = 0;
+                return true;
+            }
         }
-        TilePos spot, target;
-        if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                     is_work_spot, &search, COLONIST_WORK_SEARCH_MAX_COST,
-                                     &colonist->path, &spot)) {
-            continue; /* The path is untouched on failure: a wanderer keeps walking. */
+        if (hauling_allowed && (mask & WORK_TYPE_BIT(WORK_HAULING))) {
+            searched_hauling = true;
+            if (try_haul_job(colonist, context)) {
+                colonist->search_failures[SEARCH_HAUL] = 0;
+                colonist->search_cooldown[SEARCH_HAUL] = 0;
+                return true;
+            }
         }
-        /* The search only stops on a spot next to an open job. */
-        find_adjacent_job(&search, spot.x, spot.y, &target);
-        colonist->search_failures[SEARCH_WORK] = 0;
-        colonist->search_cooldown[SEARCH_WORK] = 0;
-        begin_task(colonist, context, TASK_WORK);
-        colonist->target = target;
-        colonist->work_type = (uint8_t)designation_get(designations, target.x, target.y);
-        reservations_add(context->reservations, RESERVATION_WORK, target, context->worker_id);
+    }
+    if (searched_designations) {
+        search_failed(colonist, SEARCH_WORK);
+        colonist->work_search_stamp = work_stamp(context);
+    }
+    if (searched_hauling) {
+        search_failed(colonist, SEARCH_HAUL);
+        colonist->haul_search_stamp = haul_stamp(context);
+    }
+    return false;
+}
+
+/* Whether the haul destination still accepts items of `type` and has room. */
+static bool haul_destination_valid(const Colonist *colonist, const ColonistContext *context,
+                                   ItemType type)
+{
+    TilePos dest = colonist->haul_destination;
+    return stockpile_storage_priority(context->stockpiles, dest.x, dest.y, type) > 0 &&
+           haul_storage_room(context->items, dest.x, dest.y, type) > 0;
+}
+
+/*
+ * Whether a haul is still worth doing. Before pickup: the stack is still there
+ * and the destination accepts it. After pickup: when the destination stopped
+ * accepting the items (filter changed, zone removed, tile filled), the hauler
+ * looks for another storage tile and only gives up (dropping its load) if
+ * there is none.
+ */
+static bool haul_still_valid(Colonist *colonist, const ColonistContext *context)
+{
+    if (colonist->carried.count == 0) {
+        ItemStack stack = items_get(context->items, colonist->target.x, colonist->target.y);
+        return stack.type != ITEM_NONE &&
+               haul_destination_valid(colonist, context, (ItemType)stack.type);
+    }
+    ItemType type = (ItemType)colonist->carried.type;
+    if (haul_destination_valid(colonist, context, type)) {
         return true;
     }
-    search_failed(colonist, SEARCH_WORK);
-    colonist->work_search_stamp = work_stamp(context);
-    return false;
+    HaulWorld world = haul_world(context);
+    TilePos dest;
+    /* Carried items count as not stored: any accepting stockpile will do. */
+    if (!haul_find_destination(&world, current_tile(colonist), type, 0,
+                               COLONIST_WORK_SEARCH_MAX_COST, &dest, &colonist->path)) {
+        return false;
+    }
+    reservations_release_kind(context->reservations, RESERVATION_STORAGE, context->worker_id);
+    reservations_add(context->reservations, RESERVATION_STORAGE, dest, context->worker_id);
+    colonist->haul_destination = dest;
+    colonist->path_index = 0;
+    return true;
+}
+
+static void haul(Colonist *colonist, const ColonistContext *context)
+{
+    if (!haul_still_valid(colonist, context)) {
+        set_idle(colonist, context, 0); /* Drops what it carries. */
+        return;
+    }
+    if (colonist_is_moving(colonist)) {
+        return; /* Rerouted to another storage tile. */
+    }
+    TilePos dest = colonist->haul_destination;
+    if (colonist->carried.count == 0) {
+        /* Pick up as much as the destination can take, then head there. */
+        if (colonist->x != colonist->target.x || colonist->y != colonist->target.y) {
+            set_idle(colonist, context, 0);
+            return;
+        }
+        ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+        int room = haul_storage_room(context->items, dest.x, dest.y, (ItemType)stack.type);
+        int taken = items_remove(context->items, colonist->x, colonist->y,
+                                 stack.count < room ? stack.count : room);
+        colonist->carried = (ItemStack){stack.type, (uint16_t)taken};
+        if (!pathfinder_find(context->pathfinder, context->map, current_tile(colonist), dest,
+                             PATH_NO_COST_LIMIT, &colonist->path)) {
+            set_idle(colonist, context, 0);
+        }
+        return;
+    }
+    if (colonist->x != dest.x || colonist->y != dest.y) {
+        set_idle(colonist, context, 0);
+        return;
+    }
+    ItemType type = (ItemType)colonist->carried.type;
+    int added = items_add(context->items, dest.x, dest.y, type, colonist->carried.count);
+    colonist->carried.count = (uint16_t)(colonist->carried.count - added);
+    if (colonist->carried.count == 0) {
+        colonist->carried.type = ITEM_NONE;
+    }
+    set_idle(colonist, context, 0); /* Drops any leftover nearby, then looks for more work. */
 }
 
 /* Whether the job the colonist is heading to or working on still exists and is still its own. */
@@ -445,6 +601,11 @@ static void decide(Colonist *colonist, const ColonistContext *context)
     case TASK_WORK:
         if (!job_still_valid(colonist, context)) {
             set_idle(colonist, context, 0); /* Cancelled on the way: decide again below. */
+        }
+        break;
+    case TASK_HAUL:
+        if (!haul_still_valid(colonist, context)) {
+            set_idle(colonist, context, 0);
         }
         break;
     default:
@@ -564,6 +725,7 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     case TASK_EAT: eat(colonist, context); break;
     case TASK_DRINK: drink(colonist, context); break;
     case TASK_WORK: work(colonist, context); break;
+    case TASK_HAUL: haul(colonist, context); break;
     case TASK_SLEEP:
     case TASK_COUNT: break;
     }

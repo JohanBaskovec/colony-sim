@@ -36,6 +36,8 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_MINE] = {250, 140, 60, 255},
     [DESIGNATION_HARVEST] = {225, 120, 235, 255},
 };
+static const SDL_Color STOCKPILE_COLOR = {90, 170, 230, 255};
+static const SDL_Color STOCKPILE_REMOVE_COLOR = {230, 70, 60, 255};
 static const SDL_Color WOOD_COLOR = {150, 98, 52, 255};
 static const SDL_Color STONE_COLOR = {176, 174, 168, 255};
 static const SDL_Color BERRY_COLOR = {150, 40, 90, 255};
@@ -273,6 +275,56 @@ void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x
     outline(renderer, area, 2.0f, color);
 }
 
+void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                       int selected)
+{
+    const Stockpiles *stockpiles = &game->stockpiles;
+    TileRect visible = camera_visible_tiles(camera, stockpiles->width, stockpiles->height);
+    SDL_Color normal = STOCKPILE_COLOR, highlight = STOCKPILE_COLOR;
+    normal.a = 45;
+    highlight.a = 90;
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            int index = stockpile_at(stockpiles, x, y);
+            if (index == STOCKPILE_NONE) {
+                continue;
+            }
+            SDL_FRect tile = tile_rect(camera, x, y);
+            fill(renderer, index == selected ? highlight : normal, &tile);
+            /* Zone border: edges of the tile that face another zone or none. */
+            SDL_Color edge = STOCKPILE_COLOR;
+            edge.a = index == selected ? 255 : 140;
+            SDL_SetRenderDrawColor(renderer, edge.r, edge.g, edge.b, edge.a);
+            float l = tile.x, t = tile.y, r = tile.x + tile.w - 1.0f, b = tile.y + tile.h - 1.0f;
+            if (stockpile_at(stockpiles, x - 1, y) != index) {
+                SDL_RenderLine(renderer, l, t, l, b);
+            }
+            if (stockpile_at(stockpiles, x + 1, y) != index) {
+                SDL_RenderLine(renderer, r, t, r, b);
+            }
+            if (stockpile_at(stockpiles, x, y - 1) != index) {
+                SDL_RenderLine(renderer, l, t, r, t);
+            }
+            if (stockpile_at(stockpiles, x, y + 1) != index) {
+                SDL_RenderLine(renderer, l, b, r, b);
+            }
+        }
+    }
+}
+
+void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                           int y1, bool remove)
+{
+    SDL_FRect a = tile_rect(camera, SDL_min(x0, x1), SDL_min(y0, y1));
+    SDL_FRect b = tile_rect(camera, SDL_max(x0, x1), SDL_max(y0, y1));
+    SDL_FRect area = {a.x, a.y, b.x + b.w - a.x, b.y + b.h - a.y};
+    SDL_Color color = remove ? STOCKPILE_REMOVE_COLOR : STOCKPILE_COLOR;
+    SDL_Color translucent = color;
+    translucent.a = 50;
+    fill(renderer, translucent, &area);
+    outline(renderer, area, 2.0f, color);
+}
+
 void render_daylight(SDL_Renderer *renderer, float daylight, float width, float height)
 {
     float darkness = 1.0f - clampf(daylight, 0.0f, 1.0f);
@@ -386,6 +438,12 @@ void render_colonists(SDL_Renderer *renderer, const Game *game, const Camera *ca
             body = shade(body, -70); /* Sleeping colonists look dimmer. */
         }
         fill_circle(renderer, sx, sy, radius, body);
+        if (colonist->carried.count > 0) {
+            /* What it carries, held in front (lower right) of it. */
+            float size = floorf(radius * 1.4f);
+            SDL_FRect held = {floorf(sx + radius * 0.2f), floorf(sy + radius * 0.1f), size, size};
+            render_item_stack(renderer, &held, (ItemType)colonist->carried.type);
+        }
     }
 }
 

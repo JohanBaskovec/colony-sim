@@ -20,7 +20,9 @@
 
 typedef enum ReservationKind {
     RESERVATION_WORK, /* A designated tile being worked on. */
-    RESERVATION_FOOD, /* A plant about to be eaten. */
+    RESERVATION_FOOD, /* Food (plant or items) about to be eaten. */
+    RESERVATION_HAUL_SOURCE, /* An item stack about to be picked up. */
+    RESERVATION_STORAGE, /* A storage tile items are being brought to. */
     RESERVATION_KIND_COUNT
 } ReservationKind;
 
@@ -54,6 +56,9 @@ bool reservations_taken_by_other(const Reservations *reservations, ReservationKi
 
 /* Releases everything held by `owner`. */
 void reservations_release_all(Reservations *reservations, uint8_t owner);
+
+/* Releases what `owner` holds for one kind only. */
+void reservations_release_kind(Reservations *reservations, ReservationKind kind, uint8_t owner);
 
 uint64_t reservations_hash(const Reservations *reservations, uint64_t hash);
 

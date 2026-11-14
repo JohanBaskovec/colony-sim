@@ -5,6 +5,7 @@ add_library(colony_core STATIC
     designation.c
     game.c
     game_clock.c
+    hauling.c
     i18n.c
     item.c
     log.c
@@ -14,6 +15,7 @@ add_library(colony_core STATIC
     pool.c
     reservation.c
     rng.c
+    stockpile.c
     util.c
     work.c
     worldgen.c)

@@ -10,14 +10,23 @@
 #include "core/game.h"
 #include "game/localization.h"
 #include "game/text.h"
+#include "game/ui.h"
 
 #include <SDL3/SDL.h>
 #include <stdbool.h>
+
+/* What a left click/drag on the map does. */
+typedef enum AppTool {
+    APP_TOOL_NONE,      /* Select colonists or a stockpile. */
+    APP_TOOL_DESIGNATE, /* Place orders of `tool_type` (DESIGNATION_NONE: remove orders). */
+    APP_TOOL_STOCKPILE, /* Create/extend stockpile zones; with Shift, remove zone tiles. */
+} AppTool;
 
 typedef struct App {
     SDL_Window *window;
     SDL_Renderer *renderer;
     TextRenderer *text;
+    Ui ui;
     Localization localization;
     Game game;
     Camera camera;
@@ -38,10 +47,13 @@ typedef struct App {
     float drag_start_x; /* Screen coordinates where the left button was pressed. */
     float drag_start_y;
 
-    /* Designation tool: while active, left click/drag places orders of
-     * `tool_type` (DESIGNATION_NONE: removes orders) instead of selecting. */
-    bool tool_active;
-    DesignationType tool_type;
+    /* Selected stockpile zone (STOCKPILE_NONE if none), exclusive with the
+     * colonist selection. The number guards against a reused index. */
+    int selected_stockpile;
+    int selected_stockpile_number;
+
+    AppTool tool;
+    DesignationType tool_type; /* For APP_TOOL_DESIGNATE. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;
