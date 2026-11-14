@@ -13,12 +13,12 @@
 
 #include "core/designation.h"
 #include "core/game_clock.h"
+#include "core/knowledge.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
 #include "core/region.h"
 #include "core/reservation.h"
 #include "core/rng.h"
-#include "core/skill.h"
 #include "core/stockpile.h"
 #include "core/work.h"
 
@@ -82,11 +82,8 @@
 #define COLONIST_DRINK_TICKS 300
 /* Water is scarcer than berries: colonists accept longer trips to drink. */
 #define COLONIST_WATER_SEARCH_MAX_COST 200.0f
-/* Work done per tick on a designation at the standard skill level
- * (see colonist_work_speed()). */
+/* Work done per tick on a designation at speed ×1 (see colonist_work_speed()). */
 #define COLONIST_WORK_SPEED 1.0f
-/* Experience gained per tick spent working on a designation. */
-#define COLONIST_WORK_XP_PER_TICK 1.0f
 #define COLONIST_WORK_SEARCH_MAX_COST 250.0f
 /* After picking up a stack, a hauler with room left also collects matching
  * stacks within this travel cost before delivering. */
@@ -161,8 +158,9 @@ typedef struct Colonist {
     float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
     float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
     uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */
-    uint8_t skills[SKILL_COUNT]; /* Levels, SKILL_LEVEL_MIN..SKILL_LEVEL_MAX. */
-    float skill_xp[SKILL_COUNT]; /* Experience toward the next level (0 at the maximum). */
+    /* Level in each knowledge, KNOWLEDGE_LEVEL_MIN..KNOWLEDGE_LEVEL_MAX. Double
+     * precision: a tick of practice adds a tiny fraction of a point. */
+    double knowledge[KNOWLEDGE_COUNT];
     float needs[NEED_COUNT];
 } Colonist;
 
@@ -198,25 +196,22 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context);
  */
 bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority);
 
-/* Level in a skill; SKILL_LEVEL_MIN for SKILL_NONE or an invalid skill. */
-int colonist_skill_level(const Colonist *colonist, SkillType skill);
+/* Level in a knowledge; KNOWLEDGE_LEVEL_MIN for KNOWLEDGE_NONE or an invalid one. */
+double colonist_knowledge_level(const Colonist *colonist, KnowledgeType knowledge);
 
-/* Fails on an invalid skill or a level out of range. Experience toward the
- * next level starts over. */
-bool colonist_set_skill_level(Colonist *colonist, SkillType skill, int level);
+/* Fails on an invalid knowledge or a level out of range. */
+bool colonist_set_knowledge_level(Colonist *colonist, KnowledgeType knowledge, double level);
 
-/* Adds experience to a skill, raising the level (possibly several times) each
- * time enough is gathered; nothing more is gathered at the maximum level.
- * Ignored for SKILL_NONE, invalid skills and xp <= 0. Returns the number of
- * levels gained. */
-int colonist_gain_skill_xp(Colonist *colonist, SkillType skill, float xp);
+/* Learning by doing: `ticks` of work on something of this knowledge (see
+ * knowledge_learn()). Ignored for KNOWLEDGE_NONE and invalid values. */
+void colonist_learn_by_doing(Colonist *colonist, KnowledgeType knowledge, int ticks);
 
-/* Work done per tick on an order relying on `skill`: COLONIST_WORK_SPEED
- * scaled by skill_work_speed() (unscaled for SKILL_NONE). */
-float colonist_work_speed(const Colonist *colonist, SkillType skill);
+/* Whether the colonist knows enough to carry out this kind of order. */
+bool colonist_can_do(const Colonist *colonist, DesignationType type);
 
-/* Progress toward the next level, 0..1 (0 at the maximum level). */
-float colonist_skill_progress(const Colonist *colonist, SkillType skill);
+/* Work done per tick on something of `knowledge`: COLONIST_WORK_SPEED scaled
+ * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE). */
+float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge);
 
 /* Gives up the current task, releasing any reservation (e.g. before removal). */
 void colonist_abandon_task(Colonist *colonist, const ColonistContext *context);

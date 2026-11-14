@@ -25,8 +25,15 @@
 /* Each plant grows once per interval; the map is covered slice by slice, a
  * little every tick. */
 #define GAME_PLANT_UPDATE_INTERVAL TICKS_PER_HOUR
+/* Same for items lying on the ground (transformations such as drying). */
+#define GAME_ITEM_UPDATE_INTERVAL TICKS_PER_HOUR
 
 #define GAME_DEFAULT_COLONIST_COUNT 3
+/* The first settlers bring nothing: world generation makes sure there are at
+ * least this many ripe berry bushes within GAME_SPAWN_FOOD_MAX_COST of travel
+ * from where they arrive, planting more when it has to. */
+#define GAME_SPAWN_RIPE_BUSHES 6
+#define GAME_SPAWN_FOOD_MAX_COST 25.0f
 
 /* Radius (in tiles) around a world point within which a colonist can be picked. */
 #define GAME_PICK_RADIUS 0.6f
@@ -100,6 +107,10 @@ bool game_tile_has_colonist(const Game *game, int x, int y);
 /* Sets a colonist's priority for a work type (see colonist_set_work_priority()).
  * Fails on a stale handle or invalid values. */
 bool game_set_work_priority(Game *game, EntityId id, WorkType type, int priority);
+
+/* Whether some living colonist knows enough to carry out this kind of order
+ * (the player may only place orders someone can do). */
+bool game_designation_available(const Game *game, DesignationType type);
 
 /* Places (or with DESIGNATION_NONE, removes) an order on every valid tile of a
  * rectangle (corners in any order). Returns the number of tiles changed. */

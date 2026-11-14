@@ -5,10 +5,11 @@
  *     bench_simulation [colonists] [days] [scenario] [map_size] [seed]
  *
  * Scenarios: 0 = colonists left alone (needs and wandering only);
- * 1 = every tree, rock and bush of the map designated, two stockpiles (work,
+ * 1 = every plant of the map designated (grass cut, twigs, branches and
+ * berries gathered), stones gathered next to the colony, two stockpiles (work,
  * hauling, and many orders that cannot be reached);
- * 2 = only orders that nobody can reach: the trees growing where the
- * colonists cannot walk to (other islands).
+ * 2 = only orders that nobody can reach: branches of the trees growing where
+ * the colonists cannot walk to (other islands).
  */
 #include "core/game.h"
 
@@ -44,12 +45,17 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
     if (scenario == 1) {
-        game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_CHOP);
-        game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_MINE);
+        /* A tile holds one order: the later ones win where several apply. */
+        game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_CUT_GRASS);
+        game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_GATHER_TWIGS);
+        game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_GATHER_BRANCHES);
         game_designate_rect(&game, 0, 0, size - 1, size - 1, DESIGNATION_HARVEST);
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         if (first != NULL) {
             int x = first->x, y = first->y;
+            /* Repeating orders: they keep some colonists busy to the end. */
+            game_designate_rect(&game, x - 14, y + 8, x - 10, y + 12,
+                                DESIGNATION_GATHER_STONES);
             stockpile_create(&game.stockpiles, &game.map, x - 6, y - 6, x + 6, y + 6);
             int better =
                 stockpile_create(&game.stockpiles, &game.map, x + 10, y - 4, x + 16, y + 4);
@@ -66,7 +72,7 @@ int main(int argc, char **argv)
             for (int x = 0; x < size; x++) {
                 uint32_t region = regions_at(&game.regions, &game.map, x, y);
                 if (region != REGION_NONE && region != home) {
-                    game_designate_rect(&game, x, y, x, y, DESIGNATION_CHOP);
+                    game_designate_rect(&game, x, y, x, y, DESIGNATION_GATHER_BRANCHES);
                 }
             }
         }
@@ -94,9 +100,13 @@ int main(int argc, char **argv)
            (unsigned long long)seed, scenario, game.colonist_pool.count, days, ticks);
     printf("  total %.2f s, %.2f us/tick, worst tick %.2f ms, %ld ticks over 1 ms\n", seconds,
            seconds * 1e6 / (double)ticks, worst * 1e3, slow_ticks);
-    printf("  orders %d -> %d, items on the ground: %ld wood, %ld stone, %ld berries\n", orders,
-           game.designations.count, game.items.totals[ITEM_WOOD], game.items.totals[ITEM_STONE],
-           game.items.totals[ITEM_BERRIES]);
+    printf("  orders %d -> %d, items:", orders, game.designations.count);
+    for (int type = 1; type < ITEM_TYPE_COUNT; type++) {
+        if (game.items.totals[type] > 0) {
+            printf(" %ld %s", game.items.totals[type], item_def((ItemType)type)->id);
+        }
+    }
+    printf("\n");
     printf("  state hash %016llx\n", (unsigned long long)game_hash(&game));
 
     game_shutdown(&game);

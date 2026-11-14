@@ -3,10 +3,11 @@
 #include "core/i18n.h"
 
 static const WorkTypeDef WORK_TYPE_DEFS[WORK_TYPE_COUNT] = {
-    [WORK_MINING] = {"mining", N_("work.mining"), SKILL_MINING},
-    [WORK_WOODCUTTING] = {"woodcutting", N_("work.woodcutting"), SKILL_WOODCUTTING},
-    [WORK_GATHERING] = {"gathering", N_("work.gathering"), SKILL_GATHERING},
-    [WORK_HAULING] = {"hauling", N_("work.hauling"), SKILL_NONE},
+    /* Mining and woodcutting need knowledges that do not exist yet. */
+    [WORK_MINING] = {"mining", N_("work.mining"), KNOWLEDGE_NONE},
+    [WORK_WOODCUTTING] = {"woodcutting", N_("work.woodcutting"), KNOWLEDGE_NONE},
+    [WORK_GATHERING] = {"gathering", N_("work.gathering"), KNOWLEDGE_GATHERING},
+    [WORK_HAULING] = {"hauling", N_("work.hauling"), KNOWLEDGE_NONE},
 };
 
 const WorkTypeDef *work_type_def(WorkType type)

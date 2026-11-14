@@ -83,6 +83,7 @@ static void place_plant(Map *map, size_t index, Rng *rng, const WorldGenParams *
         plant->type = PLANT_GRASS;
         plant->growth = 0.2f + 0.8f * growth_roll;
     }
+    plant_fill_stocks(plant);
 }
 
 bool worldgen_generate(Map *map, const WorldGenParams *params)

@@ -11,23 +11,46 @@
  * Units are human-sized pieces with realistic weights:
  * - wood: a log about 1 m long and 11 cm thick, 7 kg of fresh wood (~10 l);
  *   a mature tree gives 60 of them (420 kg: trunk and big branches);
- * - stone: a rough block of about 20 kg (7.5 l of rock, irregular so it
- *   stacks with gaps);
- * - berries: a portion of about 300 g (half a liter, ~150 kcal).
- * Raw stone is always flawless and nearly indestructible; logs vary with the
- * woodcutter (knots, cracks, a split trunk) and berries with the gatherer
- * (ripeness, bruises).
+ * - stone block: a rough block of about 20 kg dug out of a rock wall (7.5 l
+ *   of rock, irregular so it stacks with gaps);
+ * - berries: a portion of about 300 g (half a liter, ~190 kcal);
+ * - stone: a stone that fits the hand, about 1 kg, picked up from the ground;
+ *   its grade is how well it knaps (fine grained or coarse);
+ * - branches: a dead or cut branch of about 1.5 kg, poorly packed;
+ * - twigs: a handful (about 200 g) of kindling;
+ * - grass: an armful, 2.5 kg cut fresh, 1 kg once dry (about 12 l either way).
+ * Stone blocks never wear out; logs vary with the woodcutter (knots, cracks)
+ * and berries with the gatherer (ripeness, bruises). Fresh grass left on the
+ * ground dries in three days.
  */
+#define DEF(id_, key, category_, weight_, bulk_, nutrition_, hp, quality, damage)                 \
+    .id = (id_), .name_key = (key), .category = (category_), .weight = (weight_),              \
+    .bulk = (bulk_), .nutrition = (nutrition_), .max_hit_points = (hp), .has_quality = (quality), \
+    .damageable = (damage)
+
 static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     /* id, name, category, weight (kg), bulk, nutrition, hit points, quality?, damageable? */
-    [ITEM_NONE] = {"none", NULL, ITEM_CATEGORY_COUNT, 0.0f, 0.0f, 0.0f, 0, false, false},
-    [ITEM_WOOD] = {"wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 7.0f, 20.0f, 0.0f, 60,
-                   true, true},
-    [ITEM_STONE] = {"stone", N_("item.stone"), ITEM_CATEGORY_RESOURCES, 20.0f, 20.0f, 0.0f, 150,
-                    false, false},
-    [ITEM_BERRIES] = {"berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 0.3f, 1.0f, 0.05f, 10,
-                      true, true},
+    [ITEM_NONE] = {DEF("none", NULL, ITEM_CATEGORY_COUNT, 0.0f, 0.0f, 0.0f, 0, false, false)},
+    [ITEM_WOOD] = {DEF("wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 7.0f, 20.0f, 0.0f, 60,
+                       true, true)},
+    [ITEM_STONE_BLOCK] = {DEF("stone_block", N_("item.stone_block"), ITEM_CATEGORY_RESOURCES,
+                              20.0f, 20.0f, 0.0f, 150, false, false)},
+    [ITEM_BERRIES] = {DEF("berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 0.3f, 1.0f, 0.05f, 10,
+                          true, true)},
+    [ITEM_STONE] = {DEF("stone", N_("item.stone"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f, 200,
+                        true, false)},
+    [ITEM_BRANCHES] = {DEF("branches", N_("item.branches"), ITEM_CATEGORY_RESOURCES, 1.5f, 10.0f,
+                           0.0f, 20, true, true)},
+    [ITEM_TWIGS] = {DEF("twigs", N_("item.twigs"), ITEM_CATEGORY_RESOURCES, 0.2f, 2.0f, 0.0f, 10,
+                        false, true)},
+    [ITEM_FRESH_GRASS] = {DEF("fresh_grass", N_("item.fresh_grass"), ITEM_CATEGORY_RESOURCES, 2.5f,
+                              25.0f, 0.0f, 10, false, true),
+                          .transforms_into = ITEM_GRASS, .transform_hours = 72},
+    [ITEM_GRASS] = {DEF("grass", N_("item.grass"), ITEM_CATEGORY_RESOURCES, 1.0f, 25.0f, 0.0f, 15,
+                        false, true)},
 };
+
+#undef DEF
 
 static const char *const QUALITY_KEYS[ITEM_QUALITY_COUNT] = {
     [ITEM_QUALITY_CRUDE] = N_("item.quality.crude"),
@@ -121,6 +144,16 @@ ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points)
     };
 }
 
+/* Transformation progress made valid for a type: 0 when it never transforms. */
+static uint16_t valid_progress(ItemType type, int progress)
+{
+    const ItemDef *def = &ITEM_DEFS[type];
+    if (def->transforms_into == ITEM_NONE) {
+        return 0;
+    }
+    return (uint16_t)clampi(progress, 0, def->transform_hours);
+}
+
 ItemStack item_stack_pristine(ItemType type, int count)
 {
     const ItemDef *def = item_def(type);
@@ -176,6 +209,8 @@ bool item_stack_merge(ItemStack *into, ItemStack from)
     }
     into->hit_points =
         (uint16_t)weighted_average(into->hit_points, into->count, from.hit_points, from.count);
+    into->progress =
+        (uint16_t)weighted_average(into->progress, into->count, from.progress, from.count);
     into->count = (uint16_t)count;
     return true;
 }
@@ -226,7 +261,9 @@ int items_add(Items *items, int x, int y, ItemStack batch)
         return 0;
     }
     /* Callers may build stacks by hand: keep the condition valid for the type. */
+    uint16_t progress = valid_progress(type, batch.progress);
     batch = item_stack_make(type, batch.count, batch.quality, batch.hit_points);
+    batch.progress = progress;
     ItemStack *stack = stack_at(items, x, y);
     if (stack->type != ITEM_NONE && !item_stacks_match(*stack, batch)) {
         return 0;
@@ -242,6 +279,8 @@ int items_add(Items *items, int x, int y, ItemStack batch)
     } else {
         stack->hit_points =
             (uint16_t)weighted_average(stack->hit_points, stack->count, batch.hit_points, added);
+        stack->progress =
+            (uint16_t)weighted_average(stack->progress, stack->count, batch.progress, added);
     }
     stack->count = (uint16_t)(stack->count + added);
     items->totals[type] += added;
@@ -307,6 +346,46 @@ int items_drop(Items *items, const Map *map, int x, int y, ItemStack batch)
     return placed;
 }
 
+/* Turns a stack that has reached its transformation into the new type. */
+static void transform(Items *items, ItemStack *stack)
+{
+    ItemType from = (ItemType)stack->type;
+    ItemType to = ITEM_DEFS[from].transforms_into;
+    int percent = item_stack_hit_points_percent(*stack);
+    int quality = ITEM_DEFS[from].has_quality ? stack->quality : ITEM_QUALITY_BEST;
+    int count = stack->count;
+    *stack = item_stack_make(to, count, quality, item_hit_points_at_percent(to, percent));
+    items->totals[from] -= count;
+    items->totals[to] += count;
+    items->additions++; /* Something new to store: haulers look again. */
+}
+
+int items_advance(Items *items, size_t begin, size_t end, int hours)
+{
+    size_t count = (size_t)items->width * (size_t)items->height;
+    if (end > count) {
+        end = count;
+    }
+    if (hours <= 0) {
+        return 0;
+    }
+    int transformed = 0;
+    for (size_t i = begin; i < end; i++) {
+        ItemStack *stack = &items->stacks[i];
+        if (stack->type == ITEM_NONE || ITEM_DEFS[stack->type].transforms_into == ITEM_NONE) {
+            continue;
+        }
+        int progress = (int)stack->progress + hours;
+        if (progress >= ITEM_DEFS[stack->type].transform_hours) {
+            transform(items, stack);
+            transformed++;
+        } else {
+            stack->progress = (uint16_t)progress;
+        }
+    }
+    return transformed;
+}
+
 uint64_t items_hash(const Items *items, uint64_t hash)
 {
     size_t count = (size_t)items->width * (size_t)items->height;
@@ -317,6 +396,7 @@ uint64_t items_hash(const Items *items, uint64_t hash)
         hash = hash_fnv1a64(hash, &stack->count, sizeof(stack->count));
         hash = hash_fnv1a64(hash, &stack->quality, sizeof(stack->quality));
         hash = hash_fnv1a64(hash, &stack->hit_points, sizeof(stack->hit_points));
+        hash = hash_fnv1a64(hash, &stack->progress, sizeof(stack->progress));
     }
     return hash;
 }

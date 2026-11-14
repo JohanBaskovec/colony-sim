@@ -32,12 +32,21 @@ plant.tree = Arbre
 designation.chop = Couper les arbres
 designation.mine = Miner la roche
 designation.harvest = Récolter
+designation.gather_stones = Ramasser des pierres
+designation.gather_branches = Ramasser des branches
+designation.gather_twigs = Ramasser des brindilles
+designation.cut_grass = Couper de l’herbe
 tool.cancel = Annuler les ordres
 tool.stockpile = Zone de stockage
 
 # Objets
 item.wood = Bois
 item.stone = Pierre
+item.stone_block = Bloc de pierre
+item.branches = Branches
+item.twigs = Brindilles
+item.fresh_grass = Herbe fraîche
+item.grass = Herbe sèche
 item.berries = Baies
 item.category.food = Nourriture
 item.category.resources = Ressources
@@ -54,10 +63,14 @@ work.woodcutting = Bûcheronnage
 work.gathering = Cueillette
 work.hauling = Transport
 
-# Compétences
-skill.mining = Minage
-skill.woodcutting = Bûcheronnage
-skill.gathering = Cueillette
+# Savoirs
+knowledge.fire = Feu
+knowledge.stone_knapping = Taille de la pierre
+knowledge.gathering = Cueillette
+knowledge.spear_making = Fabrication d’épieux
+knowledge.spear_hunting = Chasse à l’épieu
+knowledge.butchering = Boucherie
+knowledge.basic_shelters = Abris sommaires
 
 # Saisons
 season.spring = Printemps
@@ -72,23 +85,29 @@ hud.paused = En pause
 hud.language = Langue : {0}
 hud.help.camera = {0}/Flèches : déplacer · Molette : zoom · Glisser clic milieu/droit : défiler
 hud.help.game = Clic/glisser gauche : sélectionner · Espace : pause · 1-3 : vitesse · L : langue · F3 : débogage · Échap : quitter
-hud.help.orders = {0} : couper des arbres · {1} : miner la roche · {2} : récolter · {3} : annuler des ordres
+hud.help.gathering = {0} : récolter · {1} : ramasser des pierres · {2} : des branches · {3} : des brindilles · {4} : couper de l’herbe
+hud.help.orders = {0} : couper des arbres · {1} : miner la roche · {2} : annuler des ordres
 hud.help.manage = {0} : zones de stockage (clic sur une zone : ses réglages) · {1} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 hud.tool.name = Outil : {0}
+hud.tool.unavailable = Personne dans la colonie ne sait encore faire cela
 hud.tool.stockpile_help = Glisser : créer, ou agrandir la zone sélectionnée · Maj+glisser : retirer · Échap : retour
 
 hud.tile.position = Case {0}, {1}
 hud.tile.terrain = Terrain : {0}
 hud.tile.rock = Paroi rocheuse : {0}
 hud.tile.plant = Plante : {0} ({1} % de croissance)
+hud.tile.plant_stock = {0} à ramasser : {1}/{2}
 hud.tile.move_cost = Coût de déplacement : ×{0}
 hud.tile.impassable = Infranchissable
 hud.tile.items = Objets : {0} ×{1} ({2})
+hud.tile.item_transform = Se transforme en {0} dans {1} h
 hud.tile.designation = Ordre : {0}
 hud.tile.designation_progress = Ordre : {0} ({1} % effectué)
 hud.tile.stockpile = Zone : {0}
 hud.item_condition = Qualité : {0} · Points de vie : {1}/{2} ({3})
+hud.item_quality = Qualité : {0}
+hud.item_hit_points = Points de vie : {0}/{1} ({2})
 
 hud.debug.fps = IPS : {0}
 hud.debug.tick = Tick : {0}
@@ -107,6 +126,10 @@ colonist.task.work = Travaille
 colonist.task.chop = Coupe un arbre
 colonist.task.mine = Creuse la roche
 colonist.task.harvest = Récolte
+colonist.task.gather_stones = Ramasse des pierres
+colonist.task.gather_branches = Ramasse des branches
+colonist.task.gather_twigs = Ramasse des brindilles
+colonist.task.cut_grass = Coupe de l’herbe
 colonist.task.haul = Transport
 
 need.food = Nourriture
@@ -125,9 +148,9 @@ hud.colonist.activity = Activité : {0}
 hud.colonist.carrying = Porte : {0} ×{1} ({2})
 hud.colonist.need = {0} : {1} %
 hud.colonist.need_state = {0} : {1} % ({2})
-hud.colonist.skills = Compétences (sur {0})
-hud.colonist.skill = {0} : {1} (vitesse ×{2})
-hud.colonist.skill_progress = {0} : {1} (vitesse ×{2}, niveau suivant : {3})
+hud.colonist.knowledge = Savoirs (niveaux sur 100)
+hud.colonist.knowledge_level = {0} : {1} (vitesse ×{2})
+hud.colonist.knowledge_learning = {0} : {1} (en apprentissage)
 hud.selection.count.one = {0} colon sélectionné
 hud.selection.count.other = {0} colons sélectionnés
 
@@ -157,4 +180,4 @@ work_panel.colonist = Colon
 work_panel.empty = Aucun colon
 work_panel.hint = Clic gauche : priorité plus haute · Clic droit : priorité plus basse · Clic sur un nom : aller au colon
 work_panel.legend = {0} = fait en premier · {1} = fait en dernier · vide = jamais
-work_panel.skill_legend = Nombre en gris : compétence (de {0} à {1}), pour un travail plus rapide et meilleur ; elle progresse avec la pratique
+work_panel.knowledge_legend = Petit nombre : niveau de savoir (utilisable dès {0}, jusqu’à {1} ; grisé en dessous), pour un travail plus rapide et meilleur ; il progresse avec la pratique

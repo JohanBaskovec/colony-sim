@@ -2,6 +2,8 @@
 
 #include "test_framework.h"
 
+#include <stdint.h>
+
 #include <stdlib.h>
 
 static bool init_small_game(Game *game, uint64_t seed)
@@ -24,6 +26,36 @@ static void test_init_and_shutdown(void)
     CHECK_EQ_UINT(game.colonist_pool.count, GAME_DEFAULT_COLONIST_COUNT);
     game_shutdown(&game);
     CHECK(game.map.terrain == NULL);
+}
+
+typedef struct BushCount {
+    int ripe;
+} BushCount;
+
+/* Counts ripe berry bushes and never accepts a tile, to visit the whole area. */
+static bool count_ripe_bush(const Map *map, int x, int y, void *userdata)
+{
+    const Plant *plant = &map->plants[map_index(map, x, y)];
+    if (plant->type == PLANT_BUSH && plant->growth >= plant_def(PLANT_BUSH)->min_edible_growth) {
+        ((BushCount *)userdata)->ripe++;
+    }
+    return false;
+}
+
+static void test_settlers_arrive_near_ripe_berries(void)
+{
+    for (uint64_t seed = 1; seed <= 40; seed++) {
+        Game game;
+        REQUIRE(init_small_game(&game, seed));
+        const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
+        REQUIRE(first != NULL);
+        TilePos start = {(int16_t)first->x, (int16_t)first->y};
+        BushCount count = {0};
+        pathfinder_find_nearest(&game.pathfinder, &game.map, start, count_ripe_bush, &count,
+                                GAME_SPAWN_FOOD_MAX_COST, NULL, NULL);
+        CHECK(count.ripe >= GAME_SPAWN_RIPE_BUSHES);
+        game_shutdown(&game);
+    }
 }
 
 static void test_init_failure_leaves_game_safe_to_shut_down(void)
@@ -176,20 +208,19 @@ static void test_hash_changes_as_simulation_runs(void)
     game_shutdown(&game);
 }
 
-static void test_hash_covers_skills_and_carried_condition(void)
+static void test_hash_covers_knowledge_and_carried_condition(void)
 {
     Game game;
     REQUIRE(init_small_game(&game, 8));
     Colonist *colonist = game_colonist(&game, game_colonist_id_at(&game, 0));
     REQUIRE(colonist != NULL);
     uint64_t before = game_hash(&game);
-    int level = colonist_skill_level(colonist, SKILL_GATHERING);
-    colonist_set_skill_level(colonist, SKILL_GATHERING, level == 0 ? 1 : level - 1);
-    uint64_t skilled = game_hash(&game);
-    CHECK(skilled != before);
-    colonist_gain_skill_xp(colonist, SKILL_GATHERING, 10.0f);
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, 51.0);
+    uint64_t known = game_hash(&game);
+    CHECK(known != before);
+    colonist_learn_by_doing(colonist, KNOWLEDGE_GATHERING, 1); /* A tiny gain. */
     uint64_t learned = game_hash(&game);
-    CHECK(learned != skilled);
+    CHECK(learned != known);
     colonist_set_strength(colonist, colonist->strength == 5 ? 6 : 5);
     CHECK(game_hash(&game) != learned);
 
@@ -200,7 +231,85 @@ static void test_hash_covers_skills_and_carried_condition(void)
     colonist->carried.quality = ITEM_QUALITY_FINE;
     colonist->carried.hit_points = 30;
     CHECK(game_hash(&game) != carrying);
+    colonist->carried = item_stack_make(ITEM_FRESH_GRASS, 2, 0, 10);
+    carrying = game_hash(&game);
+    colonist->carried.progress = 5;
+    CHECK(game_hash(&game) != carrying);
     colonist->carried = (ItemStack){.type = ITEM_NONE};
+    game_shutdown(&game);
+}
+
+static void test_fresh_grass_dries_on_the_ground(void)
+{
+    Game game;
+    REQUIRE(init_small_game(&game, 8));
+    /* Somewhere passable, away from anyone's hands. */
+    int x = -1, y = -1;
+    for (int ty = 0; ty < game.map.height && x < 0; ty++) {
+        for (int tx = 0; tx < game.map.width && x < 0; tx++) {
+            if (map_is_passable(&game.map, tx, ty)) {
+                x = tx;
+                y = ty;
+            }
+        }
+    }
+    REQUIRE(x >= 0);
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(&game); slot++) {
+        game_remove_colonist(&game, game_colonist_id_at(&game, slot));
+    }
+    int hours = item_def(ITEM_FRESH_GRASS)->transform_hours;
+    REQUIRE(items_add(&game.items, x, y, item_stack_make(ITEM_FRESH_GRASS, 3, 0, 5)) == 3);
+
+    for (int i = 0; i < (hours - 1) * TICKS_PER_HOUR; i++) {
+        game_tick(&game);
+    }
+    ItemStack stack = items_get(&game.items, x, y);
+    CHECK_EQ_INT(stack.type, ITEM_FRESH_GRASS);
+    CHECK(stack.progress >= hours - 2);
+
+    for (int i = 0; i < 2 * TICKS_PER_HOUR; i++) {
+        game_tick(&game);
+    }
+    stack = items_get(&game.items, x, y);
+    CHECK_EQ_INT(stack.type, ITEM_GRASS);
+    CHECK_EQ_INT(stack.count, 3);
+    /* The condition carries over (in percent, rounded to whole hit points). */
+    CHECK_EQ_INT(stack.hit_points, item_hit_points_at_percent(ITEM_GRASS, 50));
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FRESH_GRASS], 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_GRASS], 3);
+    game_shutdown(&game);
+}
+
+static void test_plant_stocks_grow_back(void)
+{
+    Game game;
+    REQUIRE(init_small_game(&game, 8));
+    size_t tree = SIZE_MAX;
+    for (size_t i = 0; i < map_tile_count(&game.map) && tree == SIZE_MAX; i++) {
+        if (game.map.plants[i].type == PLANT_TREE && game.map.plants[i].growth >= 1.0f) {
+            tree = i;
+        }
+    }
+    if (tree == SIZE_MAX) {
+        tree = 0;
+        game.map.rock[0] = ROCK_NONE;
+        game.map.plants[0].type = PLANT_TREE;
+        game.map.plants[0].growth = 1.0f;
+    }
+    Plant *plant = &game.map.plants[tree];
+    /* Generated plants start with full stocks. */
+    plant_fill_stocks(plant);
+    int capacity = plant_stock_capacity(plant, PLANT_STOCK_BRANCHES);
+    REQUIRE(capacity > 0);
+    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_BRANCHES), capacity);
+    plant_take_stock(plant, PLANT_STOCK_BRANCHES, capacity);
+    plant_take_stock(plant, PLANT_STOCK_TWIGS, 1000);
+    int regrow = plant_def(PLANT_TREE)->stock_regrow_hours[PLANT_STOCK_BRANCHES];
+    for (int i = 0; i < (regrow + 1) * TICKS_PER_HOUR; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_BRANCHES), 1);
+    CHECK(plant_stock_available(plant, PLANT_STOCK_TWIGS) >= 2); /* Twigs grow back faster. */
     game_shutdown(&game);
 }
 
@@ -208,11 +317,14 @@ int main(void)
 {
     RUN_TEST(test_init_and_shutdown);
     RUN_TEST(test_init_failure_leaves_game_safe_to_shut_down);
+    RUN_TEST(test_settlers_arrive_near_ripe_berries);
     RUN_TEST(test_update_advances_ticks);
     RUN_TEST(test_plants_grow_over_time);
     RUN_TEST(test_plant_growth_is_spread_over_ticks);
     RUN_TEST(test_simulation_is_deterministic);
     RUN_TEST(test_hash_changes_as_simulation_runs);
-    RUN_TEST(test_hash_covers_skills_and_carried_condition);
+    RUN_TEST(test_hash_covers_knowledge_and_carried_condition);
+    RUN_TEST(test_fresh_grass_dries_on_the_ground);
+    RUN_TEST(test_plant_stocks_grow_back);
     return test_summary();
 }

@@ -1,0 +1,133 @@
+/*
+ * Knowledge: what a settler knows how to do, and how well.
+ *
+ * Each settler has a level from KNOWLEDGE_LEVEL_MIN to KNOWLEDGE_LEVEL_MAX in
+ * every knowledge (fire, stone knapping, gathering...). There is no tree: no
+ * knowledge requires another. Below KNOWLEDGE_MASTERY_LEVEL a knowledge
+ * unlocks nothing; from there, the settler can carry out the orders and
+ * recipes that belong to it, each from its own minimum level. The level sets
+ * how fast the work goes and how good its products are. Levels rise with
+ * practice (learning by doing; other ways to learn come later).
+ * Design: docs/KNOWLEDGE.md.
+ */
+#ifndef COLONY_CORE_KNOWLEDGE_H
+#define COLONY_CORE_KNOWLEDGE_H
+
+#include "core/item.h"
+#include "core/rng.h"
+
+#include <stdbool.h>
+
+typedef enum KnowledgeType {
+    KNOWLEDGE_FIRE,
+    KNOWLEDGE_STONE_KNAPPING,
+    KNOWLEDGE_GATHERING,
+    KNOWLEDGE_SPEAR_MAKING,
+    KNOWLEDGE_SPEAR_HUNTING,
+    KNOWLEDGE_BUTCHERING,
+    KNOWLEDGE_BASIC_SHELTERS,
+    KNOWLEDGE_COUNT
+} KnowledgeType;
+
+/* Work that needs no knowledge (hauling), or that no known knowledge allows. */
+#define KNOWLEDGE_NONE KNOWLEDGE_COUNT
+
+#define KNOWLEDGE_LEVEL_MIN 0.0f
+#define KNOWLEDGE_LEVEL_MAX 100.0f
+/* Lowest level at which a knowledge unlocks anything. */
+#define KNOWLEDGE_MASTERY_LEVEL 50.0f
+
+/* Work speed multiplier at KNOWLEDGE_MASTERY_LEVEL and KNOWLEDGE_LEVEL_MAX,
+ * linear in between (×1 at 75). */
+#define KNOWLEDGE_SPEED_AT_MASTERY 0.5f
+#define KNOWLEDGE_SPEED_AT_MAX 1.5f
+
+/*
+ * Products of work. A quality score (0..100) around KNOWLEDGE_QUALITY_BASE +
+ * KNOWLEDGE_QUALITY_PER_LEVEL × (level − mastery) gives the grade, one grade
+ * per KNOWLEDGE_QUALITY_GRADE_WIDTH points. The condition (percent of the
+ * item's hit points) is around KNOWLEDGE_CONDITION_BASE +
+ * KNOWLEDGE_CONDITION_PER_LEVEL × (level − mastery), capped at 100. Both vary
+ * by up to ±KNOWLEDGE_PRODUCT_SPREAD.
+ */
+#define KNOWLEDGE_QUALITY_BASE 25.0f
+#define KNOWLEDGE_QUALITY_PER_LEVEL 1.4f
+#define KNOWLEDGE_QUALITY_GRADE_WIDTH 20
+#define KNOWLEDGE_CONDITION_BASE 50.0f
+#define KNOWLEDGE_CONDITION_PER_LEVEL 1.6f
+#define KNOWLEDGE_PRODUCT_SPREAD 10
+
+/*
+ * Learning. A gain in points is rate × hours × age factor × difficulty, where
+ * difficulty = (KNOWLEDGE_DIFFICULTY_CEILING − level) /
+ * KNOWLEDGE_DIFFICULTY_SCALE: the basics come quickly, mastery slowly (×1.83
+ * at 0, ×1 at 50, ×0.17 at 100). Doing the work of a knowledge gives
+ * KNOWLEDGE_DOING_RATE points per hour at difficulty 1: about 110 hours of
+ * work from 50 to 100.
+ */
+#define KNOWLEDGE_DIFFICULTY_CEILING 110.0
+#define KNOWLEDGE_DIFFICULTY_SCALE 60.0
+#define KNOWLEDGE_DOING_RATE 1.0
+
+/* Learning speed by age: children learn twice as fast, elders half as fast. */
+#define KNOWLEDGE_CHILD_AGE_LIMIT 14 /* Children are younger than this. */
+#define KNOWLEDGE_ELDER_AGE 60
+#define KNOWLEDGE_CHILD_FACTOR 2.0
+#define KNOWLEDGE_ELDER_FACTOR 0.5
+
+/* Starting levels in the starting knowledges: KNOWLEDGE_START_MIN plus
+ * KNOWLEDGE_START_SPAN × (two dice of 0..KNOWLEDGE_START_DIE) /
+ * (2 × KNOWLEDGE_START_DIE), i.e. 50 to 80, mostly around 65. */
+#define KNOWLEDGE_START_MIN 50.0f
+#define KNOWLEDGE_START_SPAN 30.0f
+#define KNOWLEDGE_START_DIE 5
+
+typedef struct KnowledgeDef {
+    const char *id; /* Stable identifier (saves), never shown. */
+    const char *name_key;
+    bool starting; /* Every first settler starts with it. */
+} KnowledgeDef;
+
+/* NULL when out of range (KNOWLEDGE_NONE included). */
+const KnowledgeDef *knowledge_def(KnowledgeType knowledge);
+
+/* Whether a level is enough to use a knowledge at all. */
+bool knowledge_is_mastered(double level);
+
+/* Work speed multiplier at a level: KNOWLEDGE_SPEED_AT_MASTERY at the mastery
+ * level (and below: callers check the level first), up to
+ * KNOWLEDGE_SPEED_AT_MAX. */
+float knowledge_work_speed(double level);
+
+/* Learning multiplier at a level (see KNOWLEDGE_DIFFICULTY_CEILING). */
+double knowledge_difficulty(double level);
+
+/* Learning multiplier at an age. */
+double knowledge_age_factor(int age);
+
+/* Level after learning for `hours` at `rate` points per hour (at difficulty 1)
+ * by a settler of this age, capped at KNOWLEDGE_LEVEL_MAX. */
+double knowledge_learn(double level, double rate, double hours, int age);
+
+/* Random starting level in a starting knowledge. */
+float knowledge_random_starting_level(Rng *rng);
+
+/* Quality score (0..100) of something produced at this level; `rng` may be
+ * NULL for the average result. */
+int knowledge_product_score(double level, Rng *rng);
+
+/* Grade of a quality score. */
+ItemQuality knowledge_quality_of_score(int score);
+
+/* Condition (1..100, percent of the hit points) of something produced at
+ * this level; `rng` may be NULL for the average result. */
+int knowledge_product_condition(double level, Rng *rng);
+
+/*
+ * `count` items of `type` produced by a worker at this level: quality and
+ * condition are rolled for the item types that have them (randomness is only
+ * drawn for those), others come out perfect.
+ */
+ItemStack knowledge_product(ItemType type, int count, double level, Rng *rng);
+
+#endif /* COLONY_CORE_KNOWLEDGE_H */

@@ -8,6 +8,7 @@ add_library(colony_core STATIC
     hauling.c
     i18n.c
     item.c
+    knowledge.c
     log.c
     map.c
     noise.c
@@ -16,7 +17,6 @@ add_library(colony_core STATIC
     region.c
     reservation.c
     rng.c
-    skill.c
     stockpile.c
     util.c
     work.c

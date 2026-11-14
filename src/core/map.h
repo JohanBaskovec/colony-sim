@@ -61,6 +61,13 @@ typedef struct RockDef {
     int mined_yield;
 } RockDef;
 
+/* Things a plant offers without being cut down, and that grow back. */
+typedef enum PlantStock {
+    PLANT_STOCK_BRANCHES,
+    PLANT_STOCK_TWIGS,
+    PLANT_STOCK_COUNT
+} PlantStock;
+
 typedef struct PlantDef {
     const char *id;
     const char *name_key;
@@ -73,6 +80,10 @@ typedef struct PlantDef {
     int cut_yield; /* Items dropped at full growth, proportionally less when younger. */
     ItemType harvest_item; /* Picked when harvested, the plant stays (ITEM_NONE: nothing). */
     int harvest_yield; /* Items picked at full growth; harvesting needs min_edible_growth. */
+    /* Stocks: at most `stock_capacity` items at full growth (proportionally
+     * fewer when younger), one growing back every `stock_regrow_hours`. */
+    int stock_capacity[PLANT_STOCK_COUNT];
+    int stock_regrow_hours[PLANT_STOCK_COUNT];
 } PlantDef;
 
 /* Growth left on a plant after its fruit has been eaten or harvested. */
@@ -80,6 +91,8 @@ typedef struct PlantDef {
 
 typedef struct Plant {
     uint8_t type; /* PlantType */
+    /* Stocks, in hours of regrowth: one item per stock_regrow_hours. */
+    uint16_t stock[PLANT_STOCK_COUNT];
     float growth; /* 0 (seedling) .. 1 (mature) */
 } Plant;
 
@@ -112,6 +125,24 @@ typedef struct Map {
 const TerrainDef *terrain_def(Terrain terrain);
 const RockDef *rock_def(RockType rock);
 const PlantDef *plant_def(PlantType plant);
+
+/* Item a stock gives (branches, twigs). */
+ItemType plant_stock_item(PlantStock stock);
+
+/* Most items of a stock the plant can hold at its current growth. */
+int plant_stock_capacity(const Plant *plant, PlantStock stock);
+
+/* Items of a stock that can be taken now. */
+int plant_stock_available(const Plant *plant, PlantStock stock);
+
+/* Takes up to `count` items of a stock; returns how many were taken. */
+int plant_take_stock(Plant *plant, PlantStock stock, int count);
+
+/* Lets the stocks grow back for `hours`, up to the capacity. */
+void plant_regrow_stocks(Plant *plant, int hours);
+
+/* Fills every stock to the capacity (new plants of a generated world). */
+void plant_fill_stocks(Plant *plant);
 
 /* Allocates a map filled with soil, without rock nor plants. */
 bool map_init(Map *map, int width, int height);

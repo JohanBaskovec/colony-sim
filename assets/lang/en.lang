@@ -33,12 +33,21 @@ plant.tree = Tree
 designation.chop = Chop trees
 designation.mine = Mine rock
 designation.harvest = Harvest
+designation.gather_stones = Gather stones
+designation.gather_branches = Gather branches
+designation.gather_twigs = Gather twigs
+designation.cut_grass = Cut grass
 tool.cancel = Cancel orders
 tool.stockpile = Stockpile zone
 
 # Items
 item.wood = Wood
 item.stone = Stone
+item.stone_block = Stone block
+item.branches = Branches
+item.twigs = Twigs
+item.fresh_grass = Fresh grass
+item.grass = Dry grass
 item.berries = Berries
 item.category.food = Food
 item.category.resources = Resources
@@ -56,9 +65,13 @@ work.gathering = Gathering
 work.hauling = Hauling
 
 # Skills
-skill.mining = Mining
-skill.woodcutting = Woodcutting
-skill.gathering = Gathering
+knowledge.fire = Fire
+knowledge.stone_knapping = Stone knapping
+knowledge.gathering = Gathering
+knowledge.spear_making = Spear making
+knowledge.spear_hunting = Spear hunting
+knowledge.butchering = Butchering
+knowledge.basic_shelters = Basic shelters
 
 # Seasons
 season.spring = Spring
@@ -78,13 +91,15 @@ hud.language = Language: {0}
 hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
 hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · L: language · F3: debug · Esc: quit
 # {0}, {1}, {2}, {3} = keys of the chop, mine, harvest and cancel tools
-hud.help.orders = {0}: chop trees · {1}: mine rock · {2}: harvest · {3}: cancel orders
+hud.help.gathering = {0}: harvest · {1}: gather stones · {2}: gather branches · {3}: gather twigs · {4}: cut grass
+hud.help.orders = {0}: chop trees · {1}: mine rock · {2}: cancel orders
 # {0} = key of the stockpile zone tool, {1} = key of the work priorities grid
 hud.help.manage = {0}: stockpile zones (click a zone: its settings) · {1}: work priorities
 # {0} = tool name
 hud.tool = Tool: {0} · Left click/drag: apply · Esc: back
 # {0} = tool name (stockpile zone tool: first line, help on the second line)
 hud.tool.name = Tool: {0}
+hud.tool.unavailable = Nobody in the colony knows how to do this yet
 hud.tool.stockpile_help = Drag: create, or extend the selected zone · Shift+drag: remove · Esc: back
 
 # Tile inspector. {0}, {1} = tile coordinates
@@ -93,10 +108,14 @@ hud.tile.terrain = Terrain: {0}
 hud.tile.rock = Rock wall: {0}
 # {0} = plant name, {1} = growth percentage
 hud.tile.plant = Plant: {0} ({1}% grown)
+# {0} = item name (branches, twigs), {1} = how many can be gathered now, {2} = most the plant can hold
+hud.tile.plant_stock = {0} to gather: {1}/{2}
 hud.tile.move_cost = Movement cost: ×{0}
 hud.tile.impassable = Impassable
 # {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
 hud.tile.items = Items: {0} ×{1} ({2})
+# {0} = item the stack turns into (e.g. dry grass), {1} = hours left
+hud.tile.item_transform = Turns into {0} in {1} h
 # {0} = order name (e.g. Chop trees)
 hud.tile.designation = Order: {0}
 # {0} = order name, {1} = percentage of the work done
@@ -106,6 +125,8 @@ hud.tile.stockpile = Zone: {0}
 # Items on a tile or carried. {0} = quality grade, {1} = hit points,
 # {2} = maximum hit points, {3} = hit points in percent (e.g. 75%)
 hud.item_condition = Quality: {0} · Hit points: {1}/{2} ({3})
+hud.item_quality = Quality: {0}
+hud.item_hit_points = Hit points: {0}/{1} ({2})
 
 # Debug overlay (F3)
 hud.debug.fps = FPS: {0}
@@ -125,6 +146,10 @@ colonist.task.work = Working
 colonist.task.chop = Chopping a tree
 colonist.task.mine = Mining
 colonist.task.harvest = Harvesting
+colonist.task.gather_stones = Gathering stones
+colonist.task.gather_branches = Gathering branches
+colonist.task.gather_twigs = Gathering twigs
+colonist.task.cut_grass = Cutting grass
 colonist.task.haul = Hauling
 
 need.food = Food
@@ -149,12 +174,11 @@ hud.colonist.carrying = Carrying: {0} ×{1} ({2})
 hud.colonist.need = {0}: {1}%
 # {0} = need name, {1} = percentage, {2} = state (e.g. Hungry)
 hud.colonist.need_state = {0}: {1}% ({2})
-# {0} = highest skill level
-hud.colonist.skills = Skills (out of {0})
-# {0} = skill name, {1} = level, {2} = work speed multiplier (e.g. 1.25)
-hud.colonist.skill = {0}: {1} (speed ×{2})
-# {0} = skill name, {1} = level, {2} = work speed multiplier, {3} = progress toward the next level (e.g. 45%)
-hud.colonist.skill_progress = {0}: {1} (speed ×{2}, next level: {3})
+hud.colonist.knowledge = Knowledge (levels out of 100)
+# {0} = knowledge name, {1} = level (e.g. 63.4), {2} = work speed multiplier (e.g. 1.25)
+hud.colonist.knowledge_level = {0}: {1} (speed ×{2})
+# {0} = knowledge name, {1} = level, too low to use the knowledge yet
+hud.colonist.knowledge_learning = {0}: {1} (still learning)
 # {0} = number of selected colonists
 hud.selection.count.one = {0} colonist selected
 hud.selection.count.other = {0} colonists selected
@@ -190,5 +214,5 @@ work_panel.empty = No colonists
 work_panel.hint = Left click: higher priority · Right click: lower priority · Click a name: go to the colonist
 # {0} = highest priority number (1), {1} = lowest priority number (4)
 work_panel.legend = {0} = done first · {1} = done last · empty = never
-# {0} = lowest skill level, {1} = highest
-work_panel.skill_legend = Grey number: skill level ({0} to {1}), for faster and better work; it rises with practice
+# {0} = level from which a knowledge can be used, {1} = highest level
+work_panel.knowledge_legend = Small number: knowledge level (usable from {0}, up to {1}; greyed below), for faster and better work; it rises with practice

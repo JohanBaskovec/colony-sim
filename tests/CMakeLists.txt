@@ -11,6 +11,7 @@ set(COLONY_UNIT_TESTS
     test_hauling
     test_i18n
     test_item
+    test_knowledge
     test_map
     test_noise
     test_pathfinding
@@ -18,7 +19,6 @@ set(COLONY_UNIT_TESTS
     test_region
     test_reservation
     test_rng
-    test_skill
     test_stockpile
     test_work
     test_worldgen)

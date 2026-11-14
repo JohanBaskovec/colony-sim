@@ -15,6 +15,7 @@
 #define COLONY_CORE_ITEM_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 struct Map; /* core/map.h includes this header. */
@@ -22,8 +23,13 @@ struct Map; /* core/map.h includes this header. */
 typedef enum ItemType {
     ITEM_NONE = 0,
     ITEM_WOOD,
-    ITEM_STONE,
+    ITEM_STONE_BLOCK,
     ITEM_BERRIES,
+    ITEM_STONE,
+    ITEM_BRANCHES,
+    ITEM_TWIGS,
+    ITEM_FRESH_GRASS,
+    ITEM_GRASS,
     ITEM_TYPE_COUNT
 } ItemType;
 
@@ -69,6 +75,10 @@ typedef struct ItemDef {
     int max_hit_points; /* Hit points of one item in perfect condition. */
     bool has_quality; /* false: always ITEM_QUALITY_BEST. */
     bool damageable;  /* false: always at max_hit_points. */
+    /* Items lying on a tile turn into `transforms_into` after
+     * `transform_hours` (fresh grass dries); ITEM_NONE: never. */
+    ItemType transforms_into;
+    int transform_hours;
 } ItemDef;
 
 /* Items of one type: on a tile, in a settler's hands, or about to be added. */
@@ -77,6 +87,9 @@ typedef struct ItemStack {
     uint8_t quality; /* ItemQuality, the same for every item of the stack. */
     uint16_t count;
     uint16_t hit_points; /* Per item, 1..max_hit_points, average of the items. */
+    /* Hours spent lying on a tile toward the type's transformation (average
+     * of the items); 0 for types that do not transform. */
+    uint16_t progress;
 } ItemStack;
 
 typedef struct Items {
@@ -124,8 +137,8 @@ ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points)
 bool item_stacks_match(ItemStack a, ItemStack b);
 
 /* Adds `from` to `into` (empty, or matching): counts add up (capped at
- * UINT16_MAX), hit points are averaged by count. Fails, changing nothing,
- * when the stacks do not match. */
+ * UINT16_MAX), hit points and transformation progress are averaged by count.
+ * Fails, changing nothing, when the stacks do not match. */
 bool item_stack_merge(ItemStack *into, ItemStack from);
 
 /* `count` items in perfect condition. */
@@ -161,6 +174,15 @@ int items_remove(Items *items, int x, int y, int count);
  * room are lost.
  */
 int items_drop(Items *items, const struct Map *map, int x, int y, ItemStack batch);
+
+/*
+ * Lets `hours` pass for the stacks of tiles begin..end-1 (tile indices): stacks
+ * of types that transform progress, and those that reach their type's
+ * transform_hours turn into the new type (same count, same hit points in
+ * percent, quality kept when both types have one). Returns the number of
+ * stacks that transformed.
+ */
+int items_advance(Items *items, size_t begin, size_t end, int hours);
 
 uint64_t items_hash(const Items *items, uint64_t hash);
 

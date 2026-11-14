@@ -9,7 +9,7 @@
 #define MIN_CELL_WIDTH 44.0f
 #define SCROLLBAR_WIDTH 6.0f
 #define TEXT_SIZE 256
-#define SKILL_LABEL_INSET 4.0f
+#define LEVEL_LABEL_INSET 4.0f
 
 /* From WORK_PRIORITY_DISABLED (dark) to the highest priority (bright green). */
 static const SDL_Color PRIORITY_COLORS[WORK_PRIORITY_LOWEST + 1] = {
@@ -66,10 +66,10 @@ void work_panel_draw(App *app)
     tr_integer(highest, sizeof(highest), WORK_PRIORITY_HIGHEST);
     tr_integer(lowest, sizeof(lowest), WORK_PRIORITY_LOWEST);
     TR_FORMAT(legend, sizeof(legend), tr("work_panel.legend"), highest, lowest);
-    char skill_legend[TEXT_SIZE], min_level[8], max_level[8];
-    tr_integer(min_level, sizeof(min_level), SKILL_LEVEL_MIN);
-    tr_integer(max_level, sizeof(max_level), SKILL_LEVEL_MAX);
-    TR_FORMAT(skill_legend, sizeof(skill_legend), tr("work_panel.skill_legend"), min_level,
+    char level_legend[TEXT_SIZE], mastery[8], max_level[8];
+    tr_integer(mastery, sizeof(mastery), (long long)KNOWLEDGE_MASTERY_LEVEL);
+    tr_integer(max_level, sizeof(max_level), (long long)KNOWLEDGE_LEVEL_MAX);
+    TR_FORMAT(level_legend, sizeof(level_legend), tr("work_panel.knowledge_legend"), mastery,
               max_level);
 
     /* Rows: living colonists, in slot order. */
@@ -100,7 +100,7 @@ void work_panel_draw(App *app)
     float width = SDL_max(grid_width, ui_text_width(ui, title) + COLUMN_GAP * 2.0f +
                                           ui_button_width(ui, close));
     width = SDL_max(width, SDL_max(ui_text_width(ui, hint), ui_text_width(ui, legend)));
-    width = SDL_ceilf(SDL_max(width, ui_text_width(ui, skill_legend)));
+    width = SDL_ceilf(SDL_max(width, ui_text_width(ui, level_legend)));
     /* The work columns share whatever width the text lines add. */
     float extra = SDL_floorf((width - grid_width) / (float)WORK_TYPE_COUNT);
     for (int type = 0; type < WORK_TYPE_COUNT; type++) {
@@ -173,14 +173,19 @@ void work_panel_draw(App *app)
             SDL_FRect cell = {column_x, y + 1.0f, column_width[type] - COLUMN_GAP, row - 2.0f};
             SDL_Color color = PRIORITY_COLORS[work_priority_is_valid(priority) ? priority : 0];
             int button = ui_cell(ui, cell, label, color);
-            /* Skill level in the corner, dimmed: who is best at what. */
-            SkillType skill = work_type_def((WorkType)type)->skill;
-            if (skill != SKILL_NONE) {
+            /* Knowledge level in the corner (who is best at what), greyed
+             * when it is too low to do the work at all. */
+            KnowledgeType knowledge = work_type_def((WorkType)type)->knowledge;
+            if (knowledge != KNOWLEDGE_NONE) {
+                double value = colonist_knowledge_level(colonist, knowledge);
                 char level[8];
-                tr_integer(level, sizeof(level), colonist_skill_level(colonist, skill));
-                ui_label_dim(ui, level,
-                             cell.x + cell.w - SKILL_LABEL_INSET - ui_text_width(ui, level),
-                             y + text_offset);
+                tr_integer(level, sizeof(level), (long long)value);
+                float label_x = cell.x + cell.w - LEVEL_LABEL_INSET - ui_text_width(ui, level);
+                if (knowledge_is_mastered(value)) {
+                    ui_label(ui, level, label_x, y + text_offset);
+                } else {
+                    ui_label_dim(ui, level, label_x, y + text_offset);
+                }
             }
             if (button == SDL_BUTTON_LEFT) {
                 game_set_work_priority(game, id, (WorkType)type, work_priority_raised(priority));
@@ -209,5 +214,5 @@ void work_panel_draw(App *app)
     y += row;
     ui_label(ui, legend, x, y + text_offset);
     y += row;
-    ui_label(ui, skill_legend, x, y + text_offset);
+    ui_label(ui, level_legend, x, y + text_offset);
 }

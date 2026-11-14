@@ -189,7 +189,7 @@ static void test_filter_and_priority(void)
     CHECK_EQ_UINT(stockpile_get(&s, a)->allowed, item_types_all());
 
     stockpile_set_priority(&s, a, 2);
-    CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, item_stack_pristine(ITEM_STONE, 1)), 2);
+    CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, item_stack_pristine(ITEM_STONE_BLOCK, 1)), 2);
     stockpile_set_priority(&s, a, 99);
     CHECK_EQ_INT(stockpile_get(&s, a)->priority, STOCKPILE_PRIORITY_LOWEST);
     stockpile_set_priority(&s, a, -3);
@@ -224,7 +224,7 @@ static void test_condition_ranges(void)
     CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_ROUGH, wood_hp)));
     CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_SUPERB, wood_hp)));
     /* Stone is flawless: above this range. */
-    CHECK(!stockpile_accepts(pile, item_stack_pristine(ITEM_STONE, 1)));
+    CHECK(!stockpile_accepts(pile, item_stack_pristine(ITEM_STONE_BLOCK, 1)));
     CHECK_EQ_INT(
         stockpile_storage_priority(&s, 2, 2, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_FINE, 9)),
         STOCKPILE_PRIORITY_DEFAULT);
@@ -237,7 +237,7 @@ static void test_condition_ranges(void)
     stockpile_set_hit_points_range(&s, a, (IntRange){50, 100});
     CHECK(stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, 0, wood_hp / 2)));
     CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, 0, wood_hp / 2 - 1)));
-    CHECK(stockpile_accepts(pile, item_stack_pristine(ITEM_STONE, 1)));
+    CHECK(stockpile_accepts(pile, item_stack_pristine(ITEM_STONE_BLOCK, 1)));
     stockpile_set_hit_points_range(&s, a, (IntRange){0, 99}); /* Damaged items only. */
     CHECK(!stockpile_accepts(pile, item_stack_pristine(ITEM_WOOD, 1)));
     CHECK(stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, 0, wood_hp - 1)));

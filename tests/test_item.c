@@ -27,7 +27,7 @@ static void test_stack_limits_follow_bulk(void)
 {
     CHECK_EQ_INT(item_stack_limit(ITEM_BERRIES), 1000);
     CHECK_EQ_INT(item_stack_limit(ITEM_WOOD), 50);
-    CHECK_EQ_INT(item_stack_limit(ITEM_STONE), 50);
+    CHECK_EQ_INT(item_stack_limit(ITEM_STONE_BLOCK), 50);
     CHECK_EQ_INT(item_stack_limit(ITEM_NONE), 0);
     CHECK_EQ_INT(item_stack_limit(ITEM_TYPE_COUNT), 0);
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
@@ -59,7 +59,7 @@ static void test_categories(void)
     CHECK(!(all & ITEM_TYPE_BIT(ITEM_NONE)));
     CHECK(item_types_in_category(ITEM_CATEGORY_FOOD) & ITEM_TYPE_BIT(ITEM_BERRIES));
     CHECK(item_types_in_category(ITEM_CATEGORY_RESOURCES) & ITEM_TYPE_BIT(ITEM_WOOD));
-    CHECK(item_types_in_category(ITEM_CATEGORY_RESOURCES) & ITEM_TYPE_BIT(ITEM_STONE));
+    CHECK(item_types_in_category(ITEM_CATEGORY_RESOURCES) & ITEM_TYPE_BIT(ITEM_STONE_BLOCK));
     CHECK(item_category_name_key(ITEM_CATEGORY_COUNT) == NULL);
     CHECK_EQ_UINT(item_types_in_category(ITEM_CATEGORY_COUNT), 0);
 }
@@ -88,10 +88,10 @@ static void test_add_and_remove(void)
     CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_WOOD, limit)), limit - 10);
     CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_WOOD, 1)), 0);
     /* One type per tile. */
-    CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_STONE, 1)), 0);
+    CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_STONE_BLOCK, 1)), 0);
     CHECK_EQ_INT(items_add(&items, -1, 3, item_stack_pristine(ITEM_WOOD, 1)), 0);
     CHECK_EQ_INT(items_add(&items, 4, 4, item_stack_pristine(ITEM_NONE, 1)), 0);
-    CHECK_EQ_INT(items_add(&items, 4, 4, item_stack_pristine(ITEM_STONE, 0)), 0);
+    CHECK_EQ_INT(items_add(&items, 4, 4, item_stack_pristine(ITEM_STONE_BLOCK, 0)), 0);
     ItemStack stack = items_get(&items, 2, 3);
     CHECK_EQ_INT(stack.type, ITEM_WOOD);
     CHECK_EQ_INT(stack.count, limit);
@@ -103,7 +103,7 @@ static void test_add_and_remove(void)
     CHECK_EQ_INT(items_get(&items, 2, 3).type, ITEM_NONE); /* Empty tiles forget their type. */
     CHECK_EQ_INT(items_remove(&items, 2, 3, 1), 0);
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD], 0);
-    CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_STONE, 3)), 3);
+    CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_STONE_BLOCK, 3)), 3);
     items_free(&items);
 }
 
@@ -113,14 +113,14 @@ static void test_drop_spreads_to_reachable_tiles(void)
     Items items;
     REQUIRE(map_init(&map, 16, 16));
     REQUIRE(items_init(&items, 16, 16));
-    int limit = item_stack_limit(ITEM_STONE);
+    int limit = item_stack_limit(ITEM_STONE_BLOCK);
 
     /* A wall right of x = 8: nothing may land behind it. */
     for (int y = 0; y < 16; y++) {
         map.rock[map_index(&map, 9, y)] = ROCK_GRANITE;
     }
     items_add(&items, 8, 8, item_stack_pristine(ITEM_WOOD, 1)); /* Occupied by another type. */
-    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, item_stack_pristine(ITEM_STONE, limit * 3)),
+    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, item_stack_pristine(ITEM_STONE_BLOCK, limit * 3)),
                  limit * 3);
     CHECK_EQ_INT(items_get(&items, 8, 8).type, ITEM_WOOD);
     for (int y = 0; y < 16; y++) {
@@ -131,10 +131,10 @@ static void test_drop_spreads_to_reachable_tiles(void)
     /* The nearest tiles are filled first. */
     CHECK_EQ_INT(items_get(&items, 8, 7).count, limit);
     CHECK_EQ_INT(items_get(&items, 7, 8).count, limit);
-    CHECK_EQ_INT((int)items.totals[ITEM_STONE], limit * 3);
+    CHECK_EQ_INT((int)items.totals[ITEM_STONE_BLOCK], limit * 3);
 
     /* Inside the wall. */
-    CHECK_EQ_INT(items_drop(&items, &map, 9, 8, item_stack_pristine(ITEM_STONE, 5)), 0);
+    CHECK_EQ_INT(items_drop(&items, &map, 9, 8, item_stack_pristine(ITEM_STONE_BLOCK, 5)), 0);
     items_free(&items);
     map_free(&map);
 }
@@ -162,8 +162,8 @@ static void test_condition_definitions(void)
         CHECK(item_def((ItemType)type)->max_hit_points > 0);
     }
     /* Stone is always perfect; wood and berries vary and can be damaged. */
-    CHECK(!item_def(ITEM_STONE)->has_quality);
-    CHECK(!item_def(ITEM_STONE)->damageable);
+    CHECK(!item_def(ITEM_STONE_BLOCK)->has_quality);
+    CHECK(!item_def(ITEM_STONE_BLOCK)->damageable);
     CHECK(item_def(ITEM_WOOD)->has_quality);
     CHECK(item_def(ITEM_WOOD)->damageable);
     CHECK(item_def(ITEM_BERRIES)->has_quality);
@@ -192,9 +192,9 @@ static void test_stack_make_keeps_condition_valid(void)
     CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, 2, 0).hit_points, 1); /* Never destroyed here. */
 
     /* Stone ignores what it is given. */
-    ItemStack stone = item_stack_make(ITEM_STONE, 2, ITEM_QUALITY_CRUDE, 3);
+    ItemStack stone = item_stack_make(ITEM_STONE_BLOCK, 2, ITEM_QUALITY_CRUDE, 3);
     CHECK_EQ_INT(stone.quality, ITEM_QUALITY_BEST);
-    CHECK_EQ_INT(stone.hit_points, item_def(ITEM_STONE)->max_hit_points);
+    CHECK_EQ_INT(stone.hit_points, item_def(ITEM_STONE_BLOCK)->max_hit_points);
 
     CHECK_EQ_INT(item_stack_make(ITEM_NONE, 2, 2, 5).type, ITEM_NONE);
     CHECK_EQ_INT(item_stack_make(ITEM_TYPE_COUNT, 2, 2, 5).type, ITEM_NONE);
@@ -262,10 +262,10 @@ static void test_only_same_grade_stacks(void)
     CHECK_EQ_INT(items_get(&items, 1, 1).hit_points, 9);
 
     /* A hand-built stack is made valid when added. */
-    ItemStack bogus = {.type = ITEM_STONE, .quality = 0, .count = 2, .hit_points = 1};
+    ItemStack bogus = {.type = ITEM_STONE_BLOCK, .quality = 0, .count = 2, .hit_points = 1};
     CHECK_EQ_INT(items_add(&items, 2, 2, bogus), 2);
     CHECK_EQ_INT(items_get(&items, 2, 2).quality, ITEM_QUALITY_BEST);
-    CHECK_EQ_INT(items_get(&items, 2, 2).hit_points, item_def(ITEM_STONE)->max_hit_points);
+    CHECK_EQ_INT(items_get(&items, 2, 2).hit_points, item_def(ITEM_STONE_BLOCK)->max_hit_points);
     items_free(&items);
 }
 
@@ -281,7 +281,7 @@ static void test_stack_merge(void)
     CHECK_EQ_INT(hand.quality, ITEM_QUALITY_FINE);
     /* Another grade or type: refused, nothing changes. */
     CHECK(!item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_ROUGH, 60)));
-    CHECK(!item_stack_merge(&hand, item_stack_pristine(ITEM_STONE, 2)));
+    CHECK(!item_stack_merge(&hand, item_stack_pristine(ITEM_STONE_BLOCK, 2)));
     CHECK_EQ_INT(hand.count, 4);
     /* Merging nothing is fine. */
     CHECK(item_stack_merge(&hand, (ItemStack){.type = ITEM_NONE}));

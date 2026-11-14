@@ -14,7 +14,7 @@
 │ src/core/  (static library colony_core, pure C17, no SDL)    │
 │                                                              │
 │  game ─► colonist ─► pathfinding, region ─► map              │
-│    │        ├─────► designation ─► map, work ─► skill ─► item │
+│    │        ├─────► designation ─► map, work ─► knowledge ─► item │
 │    │        ├─────► hauling ─► stockpile, item, reservation  │
 │    │        └─────► reservation, item                        │
 │    ├──► pool, game_clock, worldgen ─► noise, rng             │
@@ -44,18 +44,18 @@ simulation:
 |--------------|------------------------------------------------------------------------------|
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work            |
-| `designation`| Player work orders per tile (chop, mine) and their work progress             |
+| `designation`| Player work orders per tile (gather, cut, harvest, chop, mine), the knowledge and level each needs, work progress |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
-| `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping |
+| `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
-| `work`       | Work types (mining, woodcutting, gathering, hauling), their skill, priority helpers |
-| `skill`      | Skills, levels and experience thresholds; quality and condition of what a worker produces |
+| `work`       | Work types (mining, woodcutting, gathering, hauling), the knowledge shown for each, priority helpers |
+| `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning, quality and condition of what a worker produces |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
-| `map`        | Tile layers (terrain, rock, plants) and static definitions (`TerrainDef`...) |
+| `map`        | Tile layers (terrain, rock, plants with their branch and twig stocks) and static definitions (`TerrainDef`...) |
 | `worldgen`   | Procedural map generation from a seed                                        |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
@@ -99,7 +99,8 @@ every frame:
 - Expensive systems run at intervals rather than every tick, and spread their
   work across ticks: each plant grows once per in-game hour, but a tick only
   handles a slice of the map (`update_plants()`), so even a 1024 × 1024 map
-  never stalls. Future systems should do the same (e.g. needs every 60 ticks,
+  never stalls. Items on the ground are advanced the same way, once per hour
+  per tile (`update_items()`, `items_advance()`). Future systems should do the same (e.g. needs every 60 ticks,
   temperature every 250 ticks).
 
 ## World representation
@@ -110,7 +111,11 @@ The map stores **dense layers**, one array per layer indexed by
 - `terrain[]`: `Terrain` (water, sand, soil...), each with a `TerrainDef`
   (movement cost, fertility, buildable);
 - `rock[]`: natural rock walls (`RockType`, 0 = none), impassable;
-- `plants[]`: at most one plant per tile (`Plant`: type + growth).
+- `plants[]`: at most one plant per tile (`Plant`: type, growth, and stocks
+  of what can be gathered from it without felling it: branches and twigs).
+  Stocks are counted in hours of regrowth (`PlantDef.stock_regrow_hours` per
+  item), capped by `stock_capacity` scaled by growth, and grow back with the
+  plant's hourly update, even on mature plants.
 
 Terrain and rock decide where one can walk. Once the map is in use they are
 changed through `map_set_terrain()` / `map_set_rock()`, which bump
@@ -129,21 +134,28 @@ dense layers of the same size: order type and work progress per tile.
 Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
 `Game`): at most one stack per tile (one item type, up to its stack limit),
 plus map-wide totals per type. Each `ItemDef` has a realistic `weight` (kg per
-unit: a 7 kg log, a 20 kg stone, a 300 g portion of berries) and a `bulk`
+unit: a 7 kg log, a 20 kg stone block, a 1 kg stone, a 300 g portion of berries) and a `bulk`
 (room taken, about half a liter per unit, gaps included). A tile holds
 `ITEM_TILE_BULK` (1000) of bulk, so the stack limit is derived:
 `item_stack_limit() = ITEM_TILE_BULK / bulk` (1,000 berries, 50 logs, 50
-stones). `items_drop()` fills the target tile, then
+stone blocks, 666 stones). `items_drop()` fills the target tile, then
 spreads the rest breadth-first over nearby passable tiles (never behind a
 wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
 `RockDef.mined_item/mined_yield`, `PlantDef.harvest_item/harvest_yield`
-(harvesting keeps the plant, which grows back).
+(harvesting keeps the plant, which grows back); gathering takes items from
+the plant's stocks (`plant_take_stock()`).
+
+Some items change while they lie on the ground: `ItemDef.transforms_into`
+after `transform_hours` (fresh grass dries into dry grass in 72 hours).
+`ItemStack.progress` counts the hours spent so far; merging stacks averages
+it by count, like hit points. A stack that transforms keeps its hit points
+percentage, and its quality when the new type has one.
 
 Every item has a **quality grade** (`ItemQuality`: crude, rough, standard,
 fine, superb) and **hit points** (`hit_points`, up to `ItemDef.max_hit_points`).
-Some types are always perfect (`has_quality` / `damageable` false: raw stone
-is always superb and at full hit points); `item_stack_make()` enforces it, so
-no code path can create a damaged stone. Only items of the same type **and
+Some types are always perfect (`has_quality` / `damageable` false: stone
+blocks are always superb and at full hit points); `item_stack_make()`
+enforces it, so no code path can create a damaged stone block. Only items of the same type **and
 grade** share a tile (`item_stacks_match()`); a stack keeps the count-weighted
 average hit points of its items. Grades are few on purpose: they keep stacks
 large. Averaging grades instead would have broken storage filters, because
@@ -152,22 +164,30 @@ could merge into one it accepts. Hit points averaging can only do that with a
 two-sided hit point range, which is rare and harmless. Quality is meant to
 carry over to what is made from the items (M3).
 
-Completed orders produce items through `skill_product()` (`core/skill.h`):
-the worker's level in the order's skill (`WorkTypeDef.skill`) sets a quality
-score (grade = score / 20) and a condition in percent of the hit points, both
-with a random spread drawn from the game RNG. Novices bring back crude or
-rough, damaged logs; experts superb, intact ones. Randomness is only drawn for
-item types that have a quality or can be damaged. Skill levels go from 0 to 20
-and are rolled when a colonist is created (sum of two dice: mostly average,
-a few novices and experts). The level also sets the work speed
-(`colonist_work_speed()`): ×0.5 at level 0, ×1 at level 10, ×1.5 at level 20.
-Colonists learn by doing: each tick spent working on an order adds
-`COLONIST_WORK_XP_PER_TICK` to `Colonist.skill_xp` for the order's skill
-(`colonist_gain_skill_xp()`), whatever their speed, and level L needs `SKILL_XP_PER_LEVEL × (L + 1)`
-to reach L + 1 (one in-game hour of work for level 1, twenty hours for level
-20). The products of a tick use the level before that tick's experience.
-Hauling needs no skill and teaches nothing. The work grid shows each
-colonist's level next to the priority.
+Settlers have a **level in each knowledge** (`Colonist.knowledge`, a `double`
+from 0 to 100, `core/knowledge.h`, design in `docs/KNOWLEDGE.md`). There is no
+tree: below `KNOWLEDGE_MASTERY_LEVEL` (50) a knowledge unlocks nothing; from
+there each order needs its own minimum level (`DesignationDef.knowledge` and
+`min_level`, checked by `colonist_can_do()`). An order whose knowledge is
+`KNOWLEDGE_NONE` cannot be done by anyone yet: felling and mining wait for
+tools and their own knowledges, and the frontend refuses to place orders
+nobody can carry out (`game_designation_available()`). The first settlers get
+50 to 80 in each starting knowledge.
+
+Completed orders produce items through `knowledge_product()`: the worker's
+level sets a quality score (25 + 1.4 × (level − 50), grade = score / 20) and a
+condition in percent of the hit points (50 + 1.6 × (level − 50)), both with a
+random spread of ±10 drawn from the game RNG. Randomness is only drawn for
+item types that have a quality or can be damaged. The level also sets the work
+speed (`colonist_work_speed()`): ×0.5 at 50, ×1 at 75, ×1.5 at 100.
+Colonists learn by doing: each tick spent working adds to the order's
+knowledge (`colonist_learn_by_doing()`) `KNOWLEDGE_DOING_RATE` points per hour
+times a difficulty that falls as the level rises ((110 − level) / 60) and an
+age factor (children ×2, elders ×0.5). The products of a tick use the level
+before that tick's learning. Hauling needs no knowledge and teaches nothing.
+The work grid shows each colonist's level in the work type's knowledge,
+greyed below mastery. Repeating orders (gather stones) stay on their tile
+after each completion and keep the same worker busy until cancelled.
 
 Food items have a
 `nutrition` per unit; a hungry colonist goes to the nearest food, on the
@@ -261,8 +281,10 @@ A drinking spot is a passable tile that is shallow water or touches water
 (`map_is_drinking_spot()`), so colonists stop on the shore rather than wade
 in. A failed food or water search floods everything within its cost limit, so
 retries back off exponentially (½ h, 1 h, 2 h, then every 4 in-game hours)
-and reset on success. The starting position prefers land with water within
-reach.
+and reset on success. The starting position prefers fertile land with water
+within reach. The first settlers bring nothing, so world generation then
+plants ripe berry bushes nearby until there are `GAME_SPAWN_RIPE_BUSHES`
+within `GAME_SPAWN_FOOD_MAX_COST` of travel.
 
 Decisions only happen on tile centers, so a colonist never jumps back when it
 changes its mind.
@@ -287,10 +309,11 @@ passable tile next to an open job (designated, work type at that level, not
 reserved), 4-neighborhood, fixed neighbor order. Priority therefore beats
 distance. The colonist reserves the job, walks there and adds
 `colonist_work_speed()` work per tick (`COLONIST_WORK_SPEED` scaled by its
-skill level). When the work needed is reached the order
-is carried out on the map (tree removed, rock dug out, leaving the rough stone
-floor), its products are dropped (wood, stone) and the designation
-disappears.
+knowledge level). When the work needed is reached the order
+is carried out on the map (tree removed, rock dug out leaving the rough stone
+floor, grass cut, branches or twigs taken from the plant's stock), its
+products are dropped (wood, stone blocks, stones, branches...) and the
+designation disappears, unless it repeats.
 
 **Reservations** (`core/reservation.h`, owned by `Game`) record who is busy with
 what: (kind, tile, owner), at most one owner per tile and kind. Kinds today:

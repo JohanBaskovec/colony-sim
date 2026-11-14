@@ -1,7 +1,12 @@
 /*
- * Designations: work orders placed by the player on tiles (chop this tree,
- * mine this rock). They are kept apart from the Map, which only describes
- * the physical world.
+ * Designations: work orders placed by the player on tiles (gather stones
+ * here, cut this grass). They are kept apart from the Map, which only
+ * describes the physical world.
+ *
+ * Each order belongs to a knowledge (core/knowledge.h): only settlers with at
+ * least its minimum level carry it out. Felling trees and mining rock need
+ * tools and knowledges that are not in the game yet: nobody can do them for
+ * now, but the orders exist.
  *
  * Each designated tile also stores how much work has been done, so that
  * interrupted work resumes where it stopped. Who works on which tile is
@@ -10,6 +15,7 @@
 #ifndef COLONY_CORE_DESIGNATION_H
 #define COLONY_CORE_DESIGNATION_H
 
+#include "core/knowledge.h"
 #include "core/map.h"
 #include "core/rng.h"
 #include "core/work.h"
@@ -22,6 +28,10 @@ typedef enum DesignationType {
     DESIGNATION_CHOP, /* Cut down a tree. */
     DESIGNATION_MINE, /* Dig out a rock wall. */
     DESIGNATION_HARVEST, /* Pick the fruit of a ripe plant; the plant stays. */
+    DESIGNATION_GATHER_STONES, /* Pick up stones from the ground, again and again. */
+    DESIGNATION_GATHER_BRANCHES, /* Take the dead branches of a tree; the tree stays. */
+    DESIGNATION_GATHER_TWIGS, /* Take the twigs of a tree or bush; the plant stays. */
+    DESIGNATION_CUT_GRASS, /* Cut grass, which grows back. */
     DESIGNATION_COUNT
 } DesignationType;
 
@@ -30,6 +40,12 @@ typedef struct DesignationDef {
     const char *name_key; /* Order name, e.g. "Chop trees". */
     const char *activity_key; /* What a settler doing it is busy with, e.g. "Chopping a tree". */
     WorkType work_type;
+    /* Knowledge needed, KNOWLEDGE_NONE when nobody can carry it out yet. */
+    KnowledgeType knowledge;
+    float min_level; /* At least KNOWLEDGE_MASTERY_LEVEL. */
+    /* The order stays once carried out, and is carried out again and again
+     * until the player cancels it. */
+    bool repeats;
 } DesignationDef;
 
 typedef struct Designations {
@@ -50,7 +66,10 @@ const DesignationDef *designation_def(DesignationType type);
 bool designations_init(Designations *designations, int width, int height);
 void designations_free(Designations *designations);
 
-/* Whether the order makes sense on this tile (a tree to chop, a rock to mine). */
+/* Whether a settler at `level` in the order's knowledge can carry it out. */
+bool designation_doable_at(DesignationType type, double level);
+
+/* Whether the order makes sense on this tile (a tree to chop, stones to gather...). */
 bool designation_can_apply(const Map *map, int x, int y, DesignationType type);
 
 DesignationType designation_get(const Designations *designations, int x, int y);
@@ -81,14 +100,15 @@ float designation_progress_fraction(const Designations *designations, const Map 
 
 /*
  * Adds work to a designated tile. When enough work is done, the order is
- * carried out on the map (the tree disappears, the rock is dug out), its
- * products are dropped on the ground (wood, stone; `items` may be NULL), the
- * designation is removed and true is returned. The products' quality and
- * condition come from the worker's `skill_level` in the order's skill
- * (core/skill.h); `rng` may be NULL for average products.
+ * carried out on the map (the tree disappears, the grass is cut...), its
+ * products are dropped on the ground (`items` may be NULL) and true is
+ * returned; the designation is removed, unless the order repeats (its
+ * progress then starts over). The products' quality and condition come from
+ * the worker's `level` in the order's knowledge (core/knowledge.h); `rng`
+ * may be NULL for average products.
  */
 bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y,
-                          float work, int skill_level, Rng *rng);
+                          float work, double level, Rng *rng);
 
 /* Items the order on this tile would produce if completed now (ITEM_NONE: nothing). */
 ItemType designation_yield(const Designations *designations, const Map *map, int x, int y,

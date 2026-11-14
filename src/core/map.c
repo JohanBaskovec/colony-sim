@@ -18,22 +18,25 @@ static const TerrainDef TERRAIN_DEFS[TERRAIN_COUNT] = {
 
 static const RockDef ROCK_DEFS[ROCK_COUNT] = {
     [ROCK_NONE] = {"none", NULL, 0.0f, ITEM_NONE, 0},
-    [ROCK_GRANITE] = {"granite", N_("rock.granite"), 3500.0f, ITEM_STONE, 10},
-    [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f, ITEM_STONE, 12},
+    [ROCK_GRANITE] = {"granite", N_("rock.granite"), 3500.0f, ITEM_STONE_BLOCK, 10},
+    [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f, ITEM_STONE_BLOCK, 12},
 };
 
 static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* id, name, growth/day, min fertility, move cost, nutrition, min edible growth,
-     * cut item, cut yield, harvest item, harvest yield */
-    [PLANT_NONE] = {"none", NULL, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0, ITEM_NONE, 0},
+     * cut item, cut yield, harvest item, harvest yield, stock capacity (branches, twigs),
+     * stock regrowth hours (branches, twigs) */
+    [PLANT_NONE] = {"none", NULL, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0, ITEM_NONE, 0,
+                    {0, 0}, {0, 0}},
     [PLANT_GRASS] = {"grass", N_("plant.grass"), 0.35f, 0.3f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0,
-                     ITEM_NONE, 0},
+                     ITEM_NONE, 0, {0, 0}, {0, 0}},
     /* 9 berries of 0.05 nutrition: the same food as eating the ripe bush directly. */
     [PLANT_BUSH] = {"berry_bush", N_("plant.bush"), 0.12f, 0.5f, 1.3f, 0.45f, 0.5f, ITEM_NONE, 0,
-                    ITEM_BERRIES, 9},
-    /* 60 logs of 7 kg: the usable wood of a mature tree (see item.c). */
+                    ITEM_BERRIES, 9, {0, 4}, {0, 24}},
+    /* 60 logs of 7 kg: the usable wood of a mature tree (see item.c). Dead
+     * branches can be gathered without felling it. */
     [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f, 0.0f, 0.0f, ITEM_WOOD, 60,
-                    ITEM_NONE, 0},
+                    ITEM_NONE, 0, {6, 10}, {48, 24}},
 };
 
 const TerrainDef *terrain_def(Terrain terrain)
@@ -49,6 +52,72 @@ const RockDef *rock_def(RockType rock)
 const PlantDef *plant_def(PlantType plant)
 {
     return ((unsigned)plant < PLANT_COUNT) ? &PLANT_DEFS[plant] : NULL;
+}
+
+ItemType plant_stock_item(PlantStock stock)
+{
+    switch (stock) {
+    case PLANT_STOCK_BRANCHES: return ITEM_BRANCHES;
+    case PLANT_STOCK_TWIGS: return ITEM_TWIGS;
+    default: return ITEM_NONE;
+    }
+}
+
+int plant_stock_capacity(const Plant *plant, PlantStock stock)
+{
+    if ((unsigned)stock >= PLANT_STOCK_COUNT || (unsigned)plant->type >= PLANT_COUNT) {
+        return 0;
+    }
+    float growth = clampf(plant->growth, 0.0f, 1.0f);
+    return (int)((float)PLANT_DEFS[plant->type].stock_capacity[stock] * growth + 0.5f);
+}
+
+/* Regrowth hours a full stock holds. */
+static int stock_limit(const Plant *plant, PlantStock stock)
+{
+    return plant_stock_capacity(plant, stock) * PLANT_DEFS[plant->type].stock_regrow_hours[stock];
+}
+
+int plant_stock_available(const Plant *plant, PlantStock stock)
+{
+    int capacity = plant_stock_capacity(plant, stock);
+    if (capacity <= 0) {
+        return 0;
+    }
+    int available = plant->stock[stock] / PLANT_DEFS[plant->type].stock_regrow_hours[stock];
+    return available < capacity ? available : capacity;
+}
+
+int plant_take_stock(Plant *plant, PlantStock stock, int count)
+{
+    int available = plant_stock_available(plant, stock);
+    int taken = count < available ? count : available;
+    if (taken <= 0) {
+        return 0;
+    }
+    int hours = taken * PLANT_DEFS[plant->type].stock_regrow_hours[stock];
+    plant->stock[stock] = (uint16_t)(plant->stock[stock] - hours);
+    return taken;
+}
+
+void plant_regrow_stocks(Plant *plant, int hours)
+{
+    if (hours <= 0 || (unsigned)plant->type >= PLANT_COUNT) {
+        return;
+    }
+    for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {
+        /* A stock above the limit (the plant was eaten down) drops to it. */
+        int value = (int)plant->stock[stock] + hours;
+        plant->stock[stock] = (uint16_t)clampi(value, 0, stock_limit(plant, (PlantStock)stock));
+    }
+}
+
+void plant_fill_stocks(Plant *plant)
+{
+    for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {
+        int limit = (unsigned)plant->type < PLANT_COUNT ? stock_limit(plant, (PlantStock)stock) : 0;
+        plant->stock[stock] = (uint16_t)clampi(limit, 0, UINT16_MAX);
+    }
 }
 
 bool map_init(Map *map, int width, int height)
@@ -152,6 +221,7 @@ uint64_t map_hash(const Map *map)
     for (size_t i = 0; i < count; i++) {
         const Plant *plant = &map->plants[i];
         hash = hash_fnv1a64(hash, &plant->type, sizeof(plant->type));
+        hash = hash_fnv1a64(hash, plant->stock, sizeof(plant->stock));
         hash = hash_fnv1a64(hash, &plant->growth, sizeof(plant->growth));
     }
     return hash;

@@ -4,6 +4,7 @@
 #include "core/util.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Spawn area requirements: enough reachable land around the starting point. */
@@ -13,6 +14,14 @@
 #define SPAWN_PLACEMENT_MAX_COST 40.0f
 /* Preferred: drinkable water within this travel cost of the spawn point. */
 #define SPAWN_WATER_MAX_COST 60.0f
+/* Bushes for the first settlers are counted and planted within this travel
+ * cost of the arrival point: closer than GAME_SPAWN_FOOD_MAX_COST, since the
+ * settlers stand a few tiles away from it. Planted ones are at least
+ * SPAWN_BUSH_MIN_DISTANCE tiles (Manhattan) from it, each candidate spot
+ * being taken with SPAWN_BUSH_SPOT_CHANCE. */
+#define SPAWN_BUSH_MAX_COST (GAME_SPAWN_FOOD_MAX_COST - 10.0f)
+#define SPAWN_BUSH_MIN_DISTANCE 3
+#define SPAWN_BUSH_SPOT_CHANCE 0.08f
 
 void game_default_params(NewGameParams *params)
 {
@@ -97,8 +106,11 @@ EntityId game_spawn_colonist(Game *game, int x, int y)
     colonist->needs[NEED_WATER] = 0.6f + 0.4f * rng_next_float(&game->rng);
     colonist->needs[NEED_REST] = 0.6f + 0.4f * rng_next_float(&game->rng);
     colonist->timer = rng_range_i32(&game->rng, 0, COLONIST_IDLE_MAX_TICKS);
-    for (int skill = 0; skill < SKILL_COUNT; skill++) {
-        colonist_set_skill_level(colonist, (SkillType)skill, skill_random_level(&game->rng));
+    for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
+        if (knowledge_def((KnowledgeType)knowledge)->starting) {
+            colonist_set_knowledge_level(colonist, (KnowledgeType)knowledge,
+                                         knowledge_random_starting_level(&game->rng));
+        }
     }
     colonist_set_strength(colonist, colonist_random_strength(&game->rng, colonist->age));
     return id;
@@ -159,15 +171,15 @@ static bool map_has_water(const Map *map)
 }
 
 /* Passable tile near the map center with enough reachable land around it,
- * preferably close to drinkable water. */
+ * preferably on ground where berry bushes grow and close to drinkable water. */
 static bool find_spawn_center(Game *game, TilePos *out)
 {
     Map *map = &game->map;
     int center_x = map->width / 2;
     int center_y = map->height / 2;
     bool want_water = map_has_water(map);
-    bool have_dry_candidate = false;
-    TilePos dry_candidate = {0, 0};
+    bool have_fallback = false;
+    TilePos fallback = {0, 0};
     for (int attempt = 0; attempt < SPAWN_MAX_ATTEMPTS; attempt++) {
         int radius = 2 + attempt / 2;
         int x = clampi(center_x + rng_range_i32(&game->rng, -radius, radius), 0, map->width - 1);
@@ -180,20 +192,23 @@ static bool find_spawn_center(Game *game, TilePos *out)
             SPAWN_AREA_MIN_TILES) {
             continue;
         }
-        if (!want_water || pathfinder_find_nearest(&game->pathfinder, map, candidate,
-                                                   is_drinking_spot, NULL, SPAWN_WATER_MAX_COST,
-                                                   NULL, NULL)) {
+        bool fertile = terrain_def((Terrain)map->terrain[map_index(map, x, y)])->fertility >=
+                       plant_def(PLANT_BUSH)->min_fertility;
+        if (fertile && (!want_water || pathfinder_find_nearest(&game->pathfinder, map, candidate,
+                                                               is_drinking_spot, NULL,
+                                                               SPAWN_WATER_MAX_COST, NULL,
+                                                               NULL))) {
             *out = candidate;
             return true;
         }
-        if (!have_dry_candidate) {
-            have_dry_candidate = true;
-            dry_candidate = candidate;
+        if (!have_fallback) {
+            have_fallback = true;
+            fallback = candidate;
         }
     }
-    if (have_dry_candidate) {
-        LOG_WARN("No spawn area close to water found");
-        *out = dry_candidate;
+    if (have_fallback) {
+        LOG_WARN("No fertile spawn area close to water found");
+        *out = fallback;
         return true;
     }
     /* Tiny or very rugged map: settle for any passable tile. */
@@ -208,6 +223,77 @@ static bool find_spawn_center(Game *game, TilePos *out)
     return false;
 }
 
+static bool is_ripe_bush(const Plant *plant)
+{
+    return plant->type == PLANT_BUSH && plant->growth >= plant_def(PLANT_BUSH)->min_edible_growth;
+}
+
+/* Counts the ripe bushes it visits and never accepts a tile, so that the
+ * search covers the whole area. */
+static bool count_ripe_bush(const Map *map, int x, int y, void *userdata)
+{
+    if (is_ripe_bush(&map->plants[map_index(map, x, y)])) {
+        (*(int *)userdata)++;
+    }
+    return false;
+}
+
+typedef struct BushSpotSearch {
+    TilePos center;
+    Rng *rng;
+    float chance; /* Of taking a suitable spot. */
+} BushSpotSearch;
+
+/* Where a bush can be planted: fertile open ground with at most grass on it,
+ * not next to the arrival point. Each suitable spot is only taken with some
+ * chance (drawn in the search order, which is deterministic) so that bushes
+ * end up scattered. */
+static bool is_bush_spot(const Map *map, int x, int y, void *userdata)
+{
+    BushSpotSearch *search = userdata;
+    size_t index = map_index(map, x, y);
+    const Plant *plant = &map->plants[index];
+    if (map->rock[index] != ROCK_NONE || map_is_water(map, x, y) ||
+        (plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
+        terrain_def((Terrain)map->terrain[index])->fertility <
+            plant_def(PLANT_BUSH)->min_fertility ||
+        abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_BUSH_MIN_DISTANCE) {
+        return false;
+    }
+    return search->chance >= 1.0f || rng_next_float(search->rng) < search->chance;
+}
+
+/* The first settlers bring no food: plants ripe berry bushes near their
+ * arrival point until there are GAME_SPAWN_RIPE_BUSHES within reach. */
+static void ensure_food_near(Game *game, TilePos center)
+{
+    int ripe = 0;
+    pathfinder_find_nearest(&game->pathfinder, &game->map, center, count_ripe_bush, &ripe,
+                            SPAWN_BUSH_MAX_COST, NULL, NULL);
+    BushSpotSearch search = {center, &game->rng, SPAWN_BUSH_SPOT_CHANCE};
+    for (; ripe < GAME_SPAWN_RIPE_BUSHES; ripe++) {
+        TilePos spot;
+        bool found = pathfinder_find_nearest(&game->pathfinder, &game->map, center,
+                                             is_bush_spot, &search, SPAWN_BUSH_MAX_COST, NULL,
+                                             &spot);
+        if (!found) {
+            /* Few suitable spots: take the nearest one. */
+            search.chance = 1.0f;
+            found = pathfinder_find_nearest(&game->pathfinder, &game->map, center, is_bush_spot,
+                                            &search, SPAWN_BUSH_MAX_COST, NULL, &spot);
+        }
+        if (!found) {
+            LOG_WARN("No room for berry bushes near the starting colonists");
+            return;
+        }
+        Plant *plant = &game->map.plants[map_index(&game->map, spot.x, spot.y)];
+        memset(plant, 0, sizeof(*plant));
+        plant->type = PLANT_BUSH;
+        plant->growth = 1.0f;
+        plant_fill_stocks(plant);
+    }
+}
+
 static bool is_free_tile(const Map *map, int x, int y, void *userdata)
 {
     return map_is_passable(map, x, y) && !game_tile_has_colonist(userdata, x, y);
@@ -219,6 +305,7 @@ static void spawn_starting_colonists(Game *game, int count)
     if (count <= 0 || !find_spawn_center(game, &center)) {
         return;
     }
+    ensure_food_near(game, center);
     for (int i = 0; i < count; i++) {
         TilePos tile;
         if (!pathfinder_find_nearest(&game->pathfinder, &game->map, center, is_free_tile, game,
@@ -287,7 +374,11 @@ static void update_plants(Game *game)
 
     for (size_t i = begin; i < end; i++) {
         Plant *plant = &map->plants[i];
-        if (plant->type == PLANT_NONE || plant->growth >= 1.0f) {
+        if (plant->type == PLANT_NONE) {
+            continue;
+        }
+        plant_regrow_stocks(plant, GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR);
+        if (plant->growth >= 1.0f) {
             continue;
         }
         const PlantDef *def = plant_def((PlantType)plant->type);
@@ -300,6 +391,17 @@ static void update_plants(Game *game)
             plant->growth = 1.0f;
         }
     }
+}
+
+/* Items lying on the ground change over time (fresh grass dries), slice by
+ * slice like plants. */
+static void update_items(Game *game)
+{
+    uint64_t count = map_tile_count(&game->map);
+    uint64_t phase = game->clock.tick % GAME_ITEM_UPDATE_INTERVAL;
+    size_t begin = (size_t)(phase * count / GAME_ITEM_UPDATE_INTERVAL);
+    size_t end = (size_t)((phase + 1) * count / GAME_ITEM_UPDATE_INTERVAL);
+    items_advance(&game->items, begin, end, GAME_ITEM_UPDATE_INTERVAL / TICKS_PER_HOUR);
 }
 
 static void update_colonists(Game *game)
@@ -319,6 +421,7 @@ void game_tick(Game *game)
     game->clock.tick++;
     regions_update(&game->regions, &game->map); /* Nothing to do unless the map changed. */
     update_plants(game);
+    update_items(game);
     update_colonists(game);
 }
 
@@ -346,17 +449,16 @@ uint64_t game_hash(const Game *game)
             continue;
         }
         const Colonist *c = &game->colonists[slot];
-        int32_t ints[14] = {(int32_t)id.index,   (int32_t)id.generation, c->x,
+        int32_t ints[15] = {(int32_t)id.index,   (int32_t)id.generation, c->x,
                             c->y,                (int32_t)c->task,       c->timer,
                             c->target.x,         c->target.y,            c->carried.type,
                             c->carried.count,    c->carried.quality,     c->carried.hit_points,
-                            c->haul_destination.x, c->haul_destination.y};
+                            c->carried.progress, c->haul_destination.x, c->haul_destination.y};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
         hash = hash_fnv1a64(hash, c->work_priorities, sizeof(c->work_priorities));
-        hash = hash_fnv1a64(hash, c->skills, sizeof(c->skills));
-        hash = hash_fnv1a64(hash, c->skill_xp, sizeof(c->skill_xp));
+        hash = hash_fnv1a64(hash, c->knowledge, sizeof(c->knowledge));
         hash = hash_fnv1a64(hash, &c->haul_delivering, sizeof(c->haul_delivering));
         hash = hash_fnv1a64(hash, &c->strength, sizeof(c->strength));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
@@ -372,6 +474,17 @@ bool game_set_work_priority(Game *game, EntityId id, WorkType type, int priority
 {
     Colonist *colonist = game_colonist(game, id);
     return colonist != NULL && colonist_set_work_priority(colonist, type, priority);
+}
+
+bool game_designation_available(const Game *game, DesignationType type)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            colonist_can_do(&game->colonists[slot], type)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type)

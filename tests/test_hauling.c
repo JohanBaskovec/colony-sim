@@ -86,7 +86,7 @@ static void test_storage_room(void)
     items_add(&game.items, 3, 3, item_stack_pristine(ITEM_WOOD, 20));
     CHECK_EQ_INT(haul_storage_room(&game.items, 3, 3, item_stack_pristine(ITEM_WOOD, 1)),
                  item_stack_limit(ITEM_WOOD) - 20);
-    ItemStack stone = item_stack_pristine(ITEM_STONE, 1);
+    ItemStack stone = item_stack_pristine(ITEM_STONE_BLOCK, 1);
     CHECK_EQ_INT(haul_storage_room(&game.items, 3, 3, stone), 0); /* Other type. */
     CHECK_EQ_INT(haul_storage_room(&game.items, 4, 4, item_stack_pristine(ITEM_NONE, 1)), 0);
     game_shutdown(&game);
@@ -104,7 +104,7 @@ static void test_no_job_without_stockpile(void)
 
     /* A stockpile that refuses wood does not help either. */
     int pile = stockpile_create(&game.stockpiles, &game.map, 10, 10, 12, 12);
-    stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_STONE));
+    stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_STONE_BLOCK));
     CHECK(!haul_any_job_possible(&world));
     CHECK(!haul_find_job(&world, (TilePos){5, 6}, PATH_NO_COST_LIMIT, &job));
     game_shutdown(&game);
@@ -115,7 +115,7 @@ static void test_find_job_picks_nearest_stack_and_storage(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     items_add(&game.items, 5, 5, item_stack_pristine(ITEM_WOOD, 10));
-    items_add(&game.items, 20, 5, item_stack_pristine(ITEM_STONE, 7));
+    items_add(&game.items, 20, 5, item_stack_pristine(ITEM_STONE_BLOCK, 7));
     stockpile_create(&game.stockpiles, &game.map, 8, 4, 9, 6);
     HaulWorld world = world_of(&game);
     HaulJob job;
@@ -170,7 +170,7 @@ static void test_stored_items_move_only_to_better_storage(void)
 
     /* A stockpile that stops accepting its items makes them haulable to any storage. */
     stockpile_set_priority(&game.stockpiles, other, STOCKPILE_PRIORITY_LOWEST);
-    stockpile_set_allowed(&game.stockpiles, low, ITEM_TYPE_BIT(ITEM_STONE));
+    stockpile_set_allowed(&game.stockpiles, low, ITEM_TYPE_BIT(ITEM_STONE_BLOCK));
     REQUIRE(haul_find_job(&world, (TilePos){5, 5}, PATH_NO_COST_LIMIT, &job));
     CHECK_EQ_INT(job.destination.x, 15);
     game_shutdown(&game);
@@ -300,21 +300,21 @@ static void test_interrupted_hauler_drops_its_load(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_STONE, 20));
+    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_STONE_BLOCK, 20));
     stockpile_create(&game.stockpiles, &game.map, 30, 10, 30, 10);
     Colonist *colonist = spawn_hauler(&game, 10, 10);
     REQUIRE(colonist != NULL);
     run_ticks(&game, 120);
-    REQUIRE(colonist->carried.count == colonist_carry_capacity(colonist, ITEM_STONE));
+    REQUIRE(colonist->carried.count == colonist_carry_capacity(colonist, ITEM_STONE_BLOCK));
     REQUIRE(colonist->x > 10 && colonist->x < 30);
 
     /* Exhausted: the hauler falls asleep and puts its load down. */
     colonist->needs[NEED_REST] = 0.1f;
     run_ticks(&game, 60);
     CHECK_EQ_INT(colonist->carried.count, 0);
-    CHECK_EQ_INT(game.items.totals[ITEM_STONE], 20); /* Nothing lost. */
-    CHECK_EQ_INT(count_at(&game, 10, 10, ITEM_STONE), 20 - colonist_carry_capacity(colonist,
-                                                                                  ITEM_STONE));
+    CHECK_EQ_INT(game.items.totals[ITEM_STONE_BLOCK], 20); /* Nothing lost. */
+    int carried = colonist_carry_capacity(colonist, ITEM_STONE_BLOCK);
+    CHECK_EQ_INT(count_at(&game, 10, 10, ITEM_STONE_BLOCK), 20 - carried);
     game_shutdown(&game);
 }
 
@@ -437,17 +437,18 @@ static void test_designations_come_before_hauling_at_same_priority(void)
     Plant *tree = &game.map.plants[map_index(&game.map, 30, 30)];
     tree->type = PLANT_TREE;
     tree->growth = 1.0f;
-    game_designate_rect(&game, 30, 30, 30, 30, DESIGNATION_CHOP);
+    plant_fill_stocks(tree);
+    game_designate_rect(&game, 30, 30, 30, 30, DESIGNATION_GATHER_BRANCHES);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
-    colonist->work_priorities[WORK_WOODCUTTING] = WORK_PRIORITY_DEFAULT;
+    colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DEFAULT;
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_WORK);
 
-    /* Hauling at a higher priority wins over woodcutting. */
+    /* Hauling at a higher priority wins over gathering. */
     Colonist *other = spawn_hauler(&game, 9, 10);
     REQUIRE(other != NULL);
-    other->work_priorities[WORK_WOODCUTTING] = WORK_PRIORITY_DEFAULT;
+    other->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DEFAULT;
     other->work_priorities[WORK_HAULING] = WORK_PRIORITY_HIGHEST;
     game_tick(&game);
     CHECK_EQ_INT(other->task, TASK_HAUL);
@@ -475,7 +476,7 @@ static void test_hauling_is_deterministic(void)
         Game game;
         REQUIRE(init_flat_game(&game));
         for (int i = 0; i < 6; i++) {
-            ItemType type = i % 2 ? ITEM_WOOD : ITEM_STONE;
+            ItemType type = i % 2 ? ITEM_WOOD : ITEM_STONE_BLOCK;
             items_add(&game.items, 5 + i * 3, 8 + i, item_stack_pristine(type, 25));
         }
         int pile = stockpile_create(&game.stockpiles, &game.map, 30, 5, 33, 8);
@@ -487,7 +488,7 @@ static void test_hauling_is_deterministic(void)
         run_ticks(&game, 6000);
         hashes[run] = game_hash(&game);
         CHECK(count_in(&game, 30, 5, 33, 8, ITEM_WOOD) +
-                  count_in(&game, 30, 5, 33, 8, ITEM_STONE) >
+                  count_in(&game, 30, 5, 33, 8, ITEM_STONE_BLOCK) >
               20);
         game_shutdown(&game);
     }
@@ -647,7 +648,7 @@ static void test_find_extra_source(void)
     TilePos dest = {20, 10};
     ItemStack load = item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60);
     items_add(&game.items, 11, 10, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_ROUGH, 60));
-    items_add(&game.items, 10, 12, item_stack_pristine(ITEM_STONE, 3));
+    items_add(&game.items, 10, 12, item_stack_pristine(ITEM_STONE_BLOCK, 3));
     items_add(&game.items, 9, 10, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 10));
     HaulWorld world = world_of(&game);
     TilePos out;

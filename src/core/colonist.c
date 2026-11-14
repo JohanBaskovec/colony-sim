@@ -67,60 +67,45 @@ bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority)
     return true;
 }
 
-int colonist_skill_level(const Colonist *colonist, SkillType skill)
+double colonist_knowledge_level(const Colonist *colonist, KnowledgeType knowledge)
 {
-    return (unsigned)skill < SKILL_COUNT ? colonist->skills[skill] : SKILL_LEVEL_MIN;
+    return (unsigned)knowledge < KNOWLEDGE_COUNT ? colonist->knowledge[knowledge]
+                                                 : KNOWLEDGE_LEVEL_MIN;
 }
 
-bool colonist_set_skill_level(Colonist *colonist, SkillType skill, int level)
+bool colonist_set_knowledge_level(Colonist *colonist, KnowledgeType knowledge, double level)
 {
-    if ((unsigned)skill >= SKILL_COUNT || level < SKILL_LEVEL_MIN || level > SKILL_LEVEL_MAX) {
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT || !(level >= KNOWLEDGE_LEVEL_MIN) ||
+        level > KNOWLEDGE_LEVEL_MAX) {
         return false;
     }
-    colonist->skills[skill] = (uint8_t)level;
-    colonist->skill_xp[skill] = 0.0f;
+    colonist->knowledge[knowledge] = level;
     return true;
 }
 
-int colonist_gain_skill_xp(Colonist *colonist, SkillType skill, float xp)
+void colonist_learn_by_doing(Colonist *colonist, KnowledgeType knowledge, int ticks)
 {
-    if ((unsigned)skill >= SKILL_COUNT || !(xp > 0.0f)) {
-        return 0;
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT || ticks <= 0) {
+        return;
     }
-    int gained = 0;
-    float *stored = &colonist->skill_xp[skill];
-    *stored += xp;
-    for (;;) {
-        float needed = skill_xp_to_next_level(colonist->skills[skill]);
-        if (needed <= 0.0f) {
-            *stored = 0.0f; /* Mastered: nothing more to learn. */
-            break;
-        }
-        if (*stored < needed) {
-            break;
-        }
-        *stored -= needed;
-        colonist->skills[skill]++;
-        gained++;
-    }
-    return gained;
+    double *level = &colonist->knowledge[knowledge];
+    *level = knowledge_learn(*level, KNOWLEDGE_DOING_RATE, (double)ticks / TICKS_PER_HOUR,
+                             colonist->age);
 }
 
-float colonist_work_speed(const Colonist *colonist, SkillType skill)
+bool colonist_can_do(const Colonist *colonist, DesignationType type)
 {
-    if ((unsigned)skill >= SKILL_COUNT) {
+    const DesignationDef *def = designation_def(type);
+    return def != NULL &&
+           designation_doable_at(type, colonist_knowledge_level(colonist, def->knowledge));
+}
+
+float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge)
+{
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT) {
         return COLONIST_WORK_SPEED;
     }
-    return COLONIST_WORK_SPEED * skill_work_speed(colonist->skills[skill]);
-}
-
-float colonist_skill_progress(const Colonist *colonist, SkillType skill)
-{
-    if ((unsigned)skill >= SKILL_COUNT) {
-        return 0.0f;
-    }
-    float needed = skill_xp_to_next_level(colonist->skills[skill]);
-    return needed > 0.0f ? clampf(colonist->skill_xp[skill] / needed, 0.0f, 1.0f) : 0.0f;
+    return COLONIST_WORK_SPEED * knowledge_work_speed(colonist->knowledge[knowledge]);
 }
 
 float colonist_carry_weight_for_strength(int strength)
@@ -413,6 +398,7 @@ static const int16_t NEIGHBOR_DY[4] = {-1, 0, 1, 0};
 typedef struct WorkSearch {
     const Designations *designations;
     const Reservations *reservations;
+    const Colonist *worker; /* Only jobs its knowledge allows. */
     WorkTypeMask mask;
     uint8_t self;
 } WorkSearch;
@@ -421,7 +407,8 @@ static bool is_open_job(const WorkSearch *search, int x, int y)
 {
     DesignationType type = designation_get(search->designations, x, y);
     if (type == DESIGNATION_NONE ||
-        !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type))) {
+        !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type)) ||
+        !colonist_can_do(search->worker, type)) {
         return false;
     }
     return !reservations_taken_by_other(search->reservations, RESERVATION_WORK,
@@ -512,7 +499,7 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
     if (designations_count_for_work(designations, mask) == 0) {
         return false;
     }
-    WorkSearch search = {designations, context->reservations, mask, context->worker_id};
+    WorkSearch search = {designations, context->reservations, colonist, mask, context->worker_id};
     /* First make sure some open job can be reached at all: with orders deep
      * inside rock, across water, or all taken by others, the search would
      * explore the whole area for nothing. */
@@ -739,24 +726,17 @@ static void haul(Colonist *colonist, const ColonistContext *context)
 }
 
 /* Whether the job the colonist is heading to or working on still exists, is
- * still its own, and is of a work type the colonist still does. */
+ * still its own, and is of a work type the colonist still does and knows. */
 static bool job_still_valid(const Colonist *colonist, const ColonistContext *context)
 {
     TilePos target = colonist->target;
     const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
     return def != NULL &&
            colonist->work_priorities[def->work_type] != WORK_PRIORITY_DISABLED &&
+           colonist_can_do(colonist, (DesignationType)colonist->work_type) &&
            designation_get(context->designations, target.x, target.y) == colonist->work_type &&
            reservations_owner(context->reservations, RESERVATION_WORK, target) ==
                context->worker_id;
-}
-
-/* Skill used to carry out an order. */
-static SkillType skill_of(DesignationType type)
-{
-    const DesignationDef *def = designation_def(type);
-    const WorkTypeDef *work = def != NULL ? work_type_def(def->work_type) : NULL;
-    return work != NULL ? work->skill : SKILL_NONE;
 }
 
 static void work(Colonist *colonist, const ColonistContext *context)
@@ -774,14 +754,16 @@ static void work(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0);
         return;
     }
-    SkillType skill = skill_of(type);
-    /* Products depend on the level before this tick's experience. */
+    KnowledgeType knowledge = designation_def(type)->knowledge;
+    /* Products depend on the level before this tick's learning. */
     bool done = designation_add_work(designations, context->map, context->items, target.x,
-                                     target.y, colonist_work_speed(colonist, skill),
-                                     colonist_skill_level(colonist, skill), context->rng);
-    colonist_gain_skill_xp(colonist, skill, COLONIST_WORK_XP_PER_TICK); /* Learning by doing. */
-    if (done) {
-        set_idle(colonist, context, 0); /* Done: look for the next job right away. */
+                                     target.y, colonist_work_speed(colonist, knowledge),
+                                     colonist_knowledge_level(colonist, knowledge), context->rng);
+    colonist_learn_by_doing(colonist, knowledge, 1);
+    /* A repeating order stays: carry on with it. Otherwise look for the next
+     * job right away. */
+    if (done && designation_get(designations, target.x, target.y) != type) {
+        set_idle(colonist, context, 0);
     }
 }
 

@@ -240,8 +240,12 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case SDLK_C: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_CHOP); break;
     case SDLK_M: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); break;
     case SDLK_H: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_HARVEST); break;
+    case SDLK_R: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_GATHER_STONES); break;
+    case SDLK_B: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_GATHER_BRANCHES); break;
+    case SDLK_K: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_GATHER_TWIGS); break;
+    case SDLK_G: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_CUT_GRASS); break;
     case SDLK_X: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); break;
-    /* Not Z: the Z key is a movement key on AZERTY keyboards. */
+    /* Not A, D, Q, S, W or Z: movement keys on QWERTY or AZERTY keyboards. */
     case SDLK_P: toggle_tool(app, APP_TOOL_STOCKPILE, DESIGNATION_NONE); break;
     case SDLK_T: app->show_work_panel = !app->show_work_panel; break;
     case SDLK_F3:
@@ -393,7 +397,11 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
     if (app->tool == APP_TOOL_DESIGNATE) {
         int x0, y0, x1, y1;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
-        game_designate_rect(&app->game, x0, y0, x1, y1, app->tool_type);
+        /* Orders nobody can carry out are refused (the tool panel says why). */
+        if (app->tool_type == DESIGNATION_NONE ||
+            game_designation_available(&app->game, app->tool_type)) {
+            game_designate_rect(&app->game, x0, y0, x1, y1, app->tool_type);
+        }
     } else if (app->tool == APP_TOOL_STOCKPILE) {
         apply_stockpile_tool(app, button->x, button->y, additive);
     } else if (app->box_selecting) {

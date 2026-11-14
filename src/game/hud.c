@@ -104,11 +104,17 @@ static const char *tool_name_key(DesignationType type)
     return type == DESIGNATION_NONE || def == NULL ? N_("tool.cancel") : def->name_key;
 }
 
-/* "Quality: fine · Hit points: 45/60 (75%)" line of an item stack. */
+/* "Quality: fine · Hit points: 45/60 (75%)" line of an item stack, with only
+ * the parts its type has (none for stone blocks, no quality for grass). */
 static void add_item_condition_line(Panel *panel, ItemStack stack)
 {
     const ItemDef *def = item_def((ItemType)stack.type);
-    if (def == NULL || stack.type == ITEM_NONE) {
+    if (def == NULL || stack.type == ITEM_NONE || (!def->has_quality && !def->damageable)) {
+        return;
+    }
+    const char *quality = tr(item_quality_name_key((ItemQuality)stack.quality));
+    if (!def->damageable) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_quality"), quality);
         return;
     }
     char hit_points[16], max_hit_points[16], number[16], percent[32];
@@ -116,9 +122,13 @@ static void add_item_condition_line(Panel *panel, ItemStack stack)
     tr_integer(max_hit_points, sizeof(max_hit_points), def->max_hit_points);
     tr_integer(number, sizeof(number), item_stack_hit_points_percent(stack));
     TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_condition"),
-              tr(item_quality_name_key((ItemQuality)stack.quality)), hit_points, max_hit_points,
-              percent);
+    if (!def->has_quality) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_hit_points"), hit_points,
+                  max_hit_points, percent);
+        return;
+    }
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_condition"), quality, hit_points,
+              max_hit_points, percent);
 }
 
 static void build_status_panel(App *app, Panel *panel)
@@ -167,6 +177,15 @@ static void build_tile_panel(App *app, Panel *panel)
         tr_integer(a, sizeof(a), (long long)(plant->growth * 100.0f + 0.5f));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant"),
                   tr(plant_def((PlantType)plant->type)->name_key), a);
+        for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {
+            if (plant_stock_capacity(plant, (PlantStock)stock) <= 0) {
+                continue;
+            }
+            tr_integer(a, sizeof(a), plant_stock_available(plant, (PlantStock)stock));
+            tr_integer(b, sizeof(b), plant_stock_capacity(plant, (PlantStock)stock));
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant_stock"),
+                      tr(item_def(plant_stock_item((PlantStock)stock))->name_key), a, b);
+        }
     }
 
     ItemStack stack = items_get(&app->game.items, x, y);
@@ -177,6 +196,12 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
                   tr(item_def((ItemType)stack.type)->name_key), a, weight);
         add_item_condition_line(panel, stack);
+        const ItemDef *def = item_def((ItemType)stack.type);
+        if (def->transforms_into != ITEM_NONE && def->transform_hours > stack.progress) {
+            tr_integer(a, sizeof(a), def->transform_hours - stack.progress);
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.item_transform"),
+                      tr(item_def(def->transforms_into)->name_key), a);
+        }
     }
 
     const Stockpile *stockpile =
@@ -282,26 +307,26 @@ static void build_selection_panel(App *app, Panel *panel)
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);
     }
-    char max_level[8], level[8];
-    tr_integer(max_level, sizeof(max_level), SKILL_LEVEL_MAX);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.skills"), max_level);
-    for (int skill = 0; skill < SKILL_COUNT; skill++) {
-        int value = colonist_skill_level(colonist, (SkillType)skill);
-        const char *name = tr(skill_def((SkillType)skill)->name_key);
-        char speed[16];
-        tr_integer(level, sizeof(level), value);
-        tr_decimal(speed, sizeof(speed), skill_work_speed(value), 2);
-        if (value >= SKILL_LEVEL_MAX) {
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.skill"), name, level,
-                      speed);
+    /* Knowledges the settler has started to learn: level with one decimal,
+     * and the work speed once it is high enough to use. */
+    panel_add_text(panel, tr("hud.colonist.knowledge"));
+    for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
+        double value = colonist_knowledge_level(colonist, (KnowledgeType)knowledge);
+        if (!(value > 0.0)) {
             continue;
         }
-        char number[16], progress[32];
-        int percent = (int)(colonist_skill_progress(colonist, (SkillType)skill) * 100.0f);
-        tr_integer(number, sizeof(number), percent);
-        TR_FORMAT(progress, sizeof(progress), tr("unit.percent"), number);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.skill_progress"), name,
-                  level, speed, progress);
+        const char *name = tr(knowledge_def((KnowledgeType)knowledge)->name_key);
+        char level[16];
+        tr_decimal(level, sizeof(level), (float)(SDL_floor(value * 10.0) / 10.0), 1);
+        if (!knowledge_is_mastered(value)) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.knowledge_learning"),
+                      name, level);
+            continue;
+        }
+        char speed[16];
+        tr_decimal(speed, sizeof(speed), knowledge_work_speed(value), 2);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.knowledge_level"), name,
+                  level, speed);
     }
 }
 
@@ -384,6 +409,10 @@ void hud_draw(App *app)
         } else {
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool"),
                       tr(tool_name_key(app->tool_type)));
+            if (app->tool_type != DESIGNATION_NONE &&
+                !game_designation_available(&app->game, app->tool_type)) {
+                panel_add_text(&tool, tr("hud.tool.unavailable"));
+            }
         }
         panel_size(app, &tool, &width, &height);
         panel_draw(app, &tool, SDL_floorf((screen_width - width) * 0.5f), HUD_MARGIN);
@@ -403,8 +432,10 @@ void hud_draw(App *app)
     movement_keys_label(keys, sizeof(keys));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
     panel_add_text(&help, tr("hud.help.game"));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.gathering"), key_name(SDLK_H),
+              key_name(SDLK_R), key_name(SDLK_B), key_name(SDLK_K), key_name(SDLK_G));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), key_name(SDLK_C),
-              key_name(SDLK_M), key_name(SDLK_H), key_name(SDLK_X));
+              key_name(SDLK_M), key_name(SDLK_X));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"), key_name(SDLK_P),
               key_name(SDLK_T));
     float help_width, help_height;

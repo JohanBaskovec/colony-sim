@@ -35,12 +35,20 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_CHOP] = {250, 210, 80, 255},
     [DESIGNATION_MINE] = {250, 140, 60, 255},
     [DESIGNATION_HARVEST] = {225, 120, 235, 255},
+    [DESIGNATION_GATHER_STONES] = {200, 200, 210, 255},
+    [DESIGNATION_GATHER_BRANCHES] = {200, 150, 90, 255},
+    [DESIGNATION_GATHER_TWIGS] = {235, 190, 130, 255},
+    [DESIGNATION_CUT_GRASS] = {140, 230, 110, 255},
 };
 static const SDL_Color STOCKPILE_COLOR = {90, 170, 230, 255};
 static const SDL_Color STOCKPILE_REMOVE_COLOR = {230, 70, 60, 255};
 static const SDL_Color WOOD_COLOR = {150, 98, 52, 255};
 static const SDL_Color STONE_COLOR = {176, 174, 168, 255};
 static const SDL_Color BERRY_COLOR = {150, 40, 90, 255};
+static const SDL_Color BRANCH_COLOR = {122, 86, 50, 255};
+static const SDL_Color TWIG_COLOR = {168, 128, 82, 255};
+static const SDL_Color FRESH_GRASS_COLOR = {92, 168, 64, 255};
+static const SDL_Color DRY_GRASS_COLOR = {206, 184, 104, 255};
 static const SDL_Color ITEM_OUTLINE = {28, 24, 20, 255};
 static const SDL_Color PROGRESS_BACKGROUND = {20, 20, 24, 220};
 static const SDL_Color PROGRESS_COLOR = {120, 220, 110, 255};
@@ -267,16 +275,58 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         }
         break;
     }
+    case ITEM_STONE_BLOCK: {
+        /* Two squared blocks. */
+        float size = SDL_max(1.0f, floorf(w * 0.34f));
+        for (int i = 0; i < 2; i++) {
+            SDL_FRect block = {tile->x + floorf(w * (0.14f + 0.38f * (float)i)),
+                               tile->y + floorf(h * 0.44f), size, size};
+            fill_outlined(renderer, block, shade(STONE_COLOR, -i * 14));
+        }
+        break;
+    }
     case ITEM_STONE: {
-        /* A small heap of stones. */
+        /* A small heap of pebbles. */
         /* x, y, size, relative to the tile. */
-        static const float STONES[3][3] = {
-            {0.22f, 0.5f, 0.3f}, {0.5f, 0.48f, 0.3f}, {0.36f, 0.26f, 0.3f}};
-        for (int i = 0; i < 3; i++) {
+        static const float STONES[4][3] = {{0.24f, 0.56f, 0.2f},
+                                           {0.48f, 0.54f, 0.22f},
+                                           {0.36f, 0.36f, 0.2f},
+                                           {0.62f, 0.38f, 0.16f}};
+        for (int i = 0; i < 4; i++) {
             float size = SDL_max(1.0f, floorf(w * STONES[i][2]));
             SDL_FRect stone = {tile->x + floorf(w * STONES[i][0]),
                                tile->y + floorf(h * STONES[i][1]), size, size};
             fill_outlined(renderer, stone, shade(STONE_COLOR, -i * 10));
+        }
+        break;
+    }
+    case ITEM_BRANCHES:
+    case ITEM_TWIGS: {
+        /* Long thin branches, or a pile of short twigs. */
+        bool twigs = type == ITEM_TWIGS;
+        int count = twigs ? 4 : 3;
+        float length = twigs ? 0.36f : 0.68f;
+        float thickness = SDL_max(1.0f, floorf(h * (twigs ? 0.08f : 0.11f)));
+        for (int i = 0; i < count; i++) {
+            float x = twigs ? 0.2f + 0.24f * (float)(i % 2) : 0.16f + 0.04f * (float)(i % 2);
+            SDL_FRect stick = {tile->x + floorf(w * x),
+                               tile->y + floorf(h * (0.3f + 0.15f * (float)i)),
+                               floorf(w * length), thickness};
+            fill_outlined(renderer, stick, shade(twigs ? TWIG_COLOR : BRANCH_COLOR, i * 10));
+        }
+        break;
+    }
+    case ITEM_FRESH_GRASS:
+    case ITEM_GRASS: {
+        /* A sheaf of upright blades. */
+        SDL_Color color = type == ITEM_GRASS ? DRY_GRASS_COLOR : FRESH_GRASS_COLOR;
+        float blade_w = SDL_max(1.0f, floorf(w * 0.1f));
+        for (int i = 0; i < 5; i++) {
+            float top = (i % 2 == 0) ? 0.26f : 0.34f;
+            SDL_FRect blade = {tile->x + floorf(w * (0.24f + 0.1f * (float)i)),
+                               tile->y + floorf(h * top), blade_w,
+                               floorf(h * (0.76f - top))};
+            fill_outlined(renderer, blade, shade(color, (i % 3) * 10));
         }
         break;
     }
