@@ -43,7 +43,8 @@ simulation:
 | Module       | Responsibility                                                               |
 |--------------|------------------------------------------------------------------------------|
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
-| `colonist`   | Colonist data, needs, decision making, movement along paths, work            |
+| `colonist`   | Colonist data, needs, decision making, movement along paths, work, facial expression from the needs, the action its hands are doing |
+| `appearance` | Looks of a colonist (skin, body shape, hair style and color, beard), rolled at creation |
 | `designation`| Player work orders per tile (mine rock, take a structure apart), the knowledge and level each needs, work progress |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
@@ -76,7 +77,8 @@ simulation:
 |----------------|-------------------------------------------------------------------------|
 | `main`         | Parses the command line, runs the app                                   |
 | `app`          | SDL init/shutdown, main loop, input → camera/clock, frame orchestration |
-| `render`       | Draws the map (placeholder colored tiles), daylight overlay, highlights |
+| `render`       | Draws the map (colored ground tiles), zones, items, plants and colonists (sprites, depth sorted), daylight overlay, highlights |
+| `sprites`      | Loads `assets/sprites/*.png` into a texture atlas with halved copies, batches sprite quads |
 | `hud`          | Builds and draws the HUD panels and the windows in stacking order; all text goes through `tr()` |
 | `ui`           | Immediate-mode widgets (panel, window, button, check box, slider, tooltip) and click capture |
 | `ui_layout`    | Rows of a window laid out twice: measured, then drawn (window sized to its content) |
@@ -518,6 +520,10 @@ remaining spikes (1 to 4 ms).
 - `Rng` (PCG32) instances are seeded explicitly. World generation uses its own
   stream; the simulation uses `game->rng`. New systems that need randomness
   either use `game->rng` (in a fixed order) or their own derived stream.
+- Colonist looks (`appearance_roll()`) come from a stream derived from the
+  game seed and the colonist's handle, never from `game->rng`: adding a hair
+  style or changing the odds must not change what the simulation does (the
+  `bench_simulation` state hash stays the same).
 - `rand()`, `time()` and friends are forbidden in `src/core/`.
 
 ## Internationalization
@@ -532,11 +538,47 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 - SDL3 2D renderer (`SDL_Renderer`), VSync on, alpha blending enabled.
 - Only visible tiles are drawn (`camera_visible_tiles()`); tile edges are
   snapped to whole pixels to avoid seams.
-- Tiles, plants and item shapes are batched: they are accumulated as quads
+- Tiles and item shapes are batched: they are accumulated as quads
   and sent with a few `SDL_RenderGeometry()` calls instead of one fill per
   rectangle (zoomed out, a 1280 × 720 window shows about 57,000 tiles).
-- Placeholder art: tiles are colored rectangles with a per-tile brightness
-  variation. Replacing them with a texture atlas is a roadmap item.
+- The ground is still colored rectangles with a per-tile brightness
+  variation; grass tints the soil.
+- Sprites (`game/sprites.h`): 128 sprite pixels per tile (the largest zoom
+  shows them 1:1). `tools/generate_sprites.py` draws them procedurally
+  (Pillow, 4× supersampling) into `assets/sprites/`; run it again after
+  changing it and commit the PNG files. At startup they are packed into one
+  atlas (shelf packing, sizes and places multiples of 32 with 32-pixel gutters),
+  and five halved copies are computed (opacity-weighted averages; SDL has no
+  mipmaps). A batch uses the smallest copy at least as detailed as the
+  screen, so trees do not shimmer zoomed out. Sprites are queued as textured
+  quads and drawn with `SDL_RenderGeometry()`; the vertex color tints them
+  (hair color, darker when asleep) or fades them.
+- A sprite is anchored by the middle of its bottom edge on a point of the
+  world (the bottom middle of a plant's tile, a colonist's feet) and may
+  overflow its tile: trees reach up to 3 tiles high and 2 wide. Plants and
+  colonists are drawn together from the back (top of the screen) to the
+  front (`render_world_sprites()`): rows of plants merged with colonists
+  sorted by the depth of their feet. A tree that would hide a colonist
+  standing behind it is drawn see-through.
+- Plants: one sprite per growth stage (`plant_growth_stage()`, 5 stages);
+  bushes have a second set with berries (`plant_has_fruit()`). Sprites are
+  mirrored on some tiles for variety.
+- Colonists: four layers drawn in order on the same 128 × 192 canvas: body
+  (naked, without arms nor legs; thin, average or heavy, per skin tone), head
+  (per skin tone and expression), beard, hair. Clothes will be extra layers
+  between the body and the head.
+  Hair and beard sprites are light gray, tinted with the hair color. The
+  expression comes from the needs (`colonist_expression()`). Front view
+  only.
+- Hands: while a colonist works (`colonist_action()`: blows, cutting,
+  picking, eating), a fist moves beside it on the side of its job, holding
+  the tool of the job when there is one (only crafting uses tools so far:
+  hammerstone for knapping, flake or hand axe for spears). The tool turns
+  around the grip (`sprites_draw_rotated()`). The movement depends on the
+  game tick, so it follows the game speed and stops when paused; colonists
+  are out of step (offset by slot).
+- Tree see-through test: the head and chest of a colonist behind the middle
+  of a tree sprite (its canvas has empty corners).
 - Text: SDL3_ttf renderer text engine, with a cache keyed by string content;
   entries unused for 120 frames are evicted.
 

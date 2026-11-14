@@ -12,6 +12,8 @@
 #define SPAWN_AREA_MIN_TILES 900
 #define SPAWN_MAX_ATTEMPTS 400
 #define SPAWN_PLACEMENT_MAX_COST 40.0f
+/* Mixed into the game seed for the stream colonist looks are rolled from. */
+#define GAME_APPEARANCE_SEED 0x5eed1ce5a77ea12aULL
 /* Preferred: drinkable water within this travel cost of the spawn point. */
 #define SPAWN_WATER_MAX_COST 60.0f
 /* Bushes for the first settlers are counted and planted within this travel
@@ -119,6 +121,12 @@ EntityId game_spawn_colonist(Game *game, int x, int y)
         }
     }
     colonist_set_strength(colonist, colonist_random_strength(&game->rng, colonist->age));
+    /* Looks come from their own stream: adding a sprite variant must not
+     * change what the simulation does. */
+    Rng looks;
+    rng_seed(&looks, game->seed ^ GAME_APPEARANCE_SEED,
+             ((uint64_t)id.generation << 32) | id.index);
+    colonist->appearance = appearance_roll(&looks, colonist->age);
     return id;
 }
 

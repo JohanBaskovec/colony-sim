@@ -6,7 +6,7 @@
 #define COLONY_CORE_CAMERA_H
 
 #define CAMERA_MIN_ZOOM 4.0f /* Pixels per tile. */
-#define CAMERA_MAX_ZOOM 96.0f
+#define CAMERA_MAX_ZOOM 128.0f /* One sprite pixel per screen pixel. */
 
 typedef struct Camera {
     float x; /* World position at the center of the viewport, in tiles. */

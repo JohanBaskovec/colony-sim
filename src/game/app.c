@@ -14,10 +14,12 @@
 #define APP_WINDOW_HEIGHT 720
 #define APP_FONT_FILE "fonts/DejaVuSans.ttf"
 #define APP_FONT_SIZE 15.0f
-#define APP_INITIAL_ZOOM 16.0f
+#define APP_INITIAL_ZOOM 48.0f
 #define APP_PAN_SPEED 900.0f /* Pixels per second. */
 #define APP_PAN_FAST_FACTOR 2.5f
 #define APP_ZOOM_STEP 1.15f
+/* Height of a colonist's body above its position, in tiles (for clicks). */
+#define APP_PICK_BODY_OFFSET 0.7f
 #define APP_DRAG_THRESHOLD 5.0f /* Pixels before a click becomes a box selection. */
 
 static const SDL_Color HOVER_COLOR = {255, 255, 255, 200};
@@ -228,12 +230,17 @@ bool app_init(App *app, const CliOptions *options)
         return false;
     }
     SDL_SetRenderVSync(app->renderer, 1);
+    LOG_INFO("Renderer: %s", SDL_GetRendererName(app->renderer));
     SDL_SetRenderDrawBlendMode(app->renderer, SDL_BLENDMODE_BLEND);
 
     char font_path[1200];
     SDL_snprintf(font_path, sizeof(font_path), "%s%s", app->assets_dir, APP_FONT_FILE);
     app->text = text_renderer_create(app->renderer, font_path, APP_FONT_SIZE);
     if (app->text == NULL) {
+        return false;
+    }
+    app->sprites = sprites_create(app->renderer, app->assets_dir);
+    if (app->sprites == NULL) {
         return false;
     }
 
@@ -275,6 +282,7 @@ void app_shutdown(App *app)
         game_shutdown(&app->game);
     }
     text_renderer_destroy(app->text);
+    sprites_destroy(app->sprites);
     render_shutdown();
     if (app->renderer != NULL) {
         SDL_DestroyRenderer(app->renderer);
@@ -406,6 +414,11 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     float world_x, world_y;
     camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
     EntityId id = game_colonist_at(&app->game, world_x, world_y);
+    if (entity_id_is_none(id)) {
+        /* Colonist sprites stand above their position: a click on the head
+         * or the body counts too. */
+        id = game_colonist_at(&app->game, world_x, world_y + APP_PICK_BODY_OFFSET);
+    }
     if (!additive) {
         app->selected_count = 0;
     }
@@ -659,10 +672,10 @@ static void render_frame(App *app)
     render_structures(app->renderer, &app->game, &app->camera);
     render_workstations(app->renderer, &app->game, &app->camera, app->selected_station);
     render_items(app->renderer, &app->game, &app->camera);
+    render_world_sprites(app->renderer, app->sprites, &app->game, &app->camera, app->selected,
+                         app->selected_count);
     render_designations(app->renderer, &app->game, &app->camera);
     hud_draw_item_counts(app);
-    render_colonists(app->renderer, &app->game, &app->camera, app->selected,
-                     app->selected_count);
     render_daylight(app->renderer, game_daylight(app->game.clock.tick),
                     app->camera.viewport_width, app->camera.viewport_height);
     if (app->hover_valid) {

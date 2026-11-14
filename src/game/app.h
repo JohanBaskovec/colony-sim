@@ -9,6 +9,7 @@
 #include "core/cli.h"
 #include "core/game.h"
 #include "game/localization.h"
+#include "game/sprites.h"
 #include "game/text.h"
 #include "game/ui.h"
 
@@ -51,6 +52,7 @@ typedef struct App {
     SDL_Window *window;
     SDL_Renderer *renderer;
     TextRenderer *text;
+    Sprites *sprites;
     Ui ui;
     Localization localization;
     Game game;

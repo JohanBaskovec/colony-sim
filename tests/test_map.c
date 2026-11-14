@@ -179,6 +179,31 @@ static void test_water_and_drinking_spots(void)
     map_free(&map);
 }
 
+static void test_plant_growth_stages_and_fruit(void)
+{
+    Plant plant = {.type = PLANT_TREE, .growth = 0.0f};
+    CHECK_EQ_INT(plant_growth_stage(&plant), 0);
+    plant.growth = 0.19f;
+    CHECK_EQ_INT(plant_growth_stage(&plant), 0);
+    plant.growth = 0.21f;
+    CHECK_EQ_INT(plant_growth_stage(&plant), 1);
+    plant.growth = 0.79f;
+    CHECK_EQ_INT(plant_growth_stage(&plant), 3);
+    plant.growth = 1.0f;
+    CHECK_EQ_INT(plant_growth_stage(&plant), PLANT_GROWTH_STAGES - 1);
+    plant.growth = 1.5f; /* Out of range: clamped. */
+    CHECK_EQ_INT(plant_growth_stage(&plant), PLANT_GROWTH_STAGES - 1);
+    CHECK(!plant_has_fruit(&plant)); /* Trees bear no fruit. */
+
+    const PlantDef *bush = plant_def(PLANT_BUSH);
+    plant = (Plant){.type = PLANT_BUSH, .growth = bush->min_edible_growth};
+    CHECK(plant_has_fruit(&plant));
+    plant.growth = PLANT_GROWTH_AFTER_PICKING; /* Just picked. */
+    CHECK(!plant_has_fruit(&plant));
+    plant = (Plant){.type = PLANT_COUNT, .growth = 1.0f};
+    CHECK(!plant_has_fruit(&plant));
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -190,5 +215,6 @@ int main(void)
     RUN_TEST(test_definitions_are_complete);
     RUN_TEST(test_edible_plants);
     RUN_TEST(test_water_and_drinking_spots);
+    RUN_TEST(test_plant_growth_stages_and_fruit);
     return test_summary();
 }

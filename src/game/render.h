@@ -1,6 +1,6 @@
 /*
- * World rendering. Placeholder graphics: tiles are drawn as colored
- * rectangles until sprites are introduced.
+ * World rendering. The ground, zones and items are still drawn as colored
+ * shapes; plants and colonists are sprites (see game/sprites.h).
  */
 #ifndef COLONY_GAME_RENDER_H
 #define COLONY_GAME_RENDER_H
@@ -8,6 +8,7 @@
 #include "core/camera.h"
 #include "core/game.h"
 #include "core/map.h"
+#include "game/sprites.h"
 
 #include <SDL3/SDL.h>
 
@@ -61,9 +62,11 @@ void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera 
 void render_gather_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                         int y1, bool remove);
 
-/* Draws every colonist (and what they carry); selected ones get a ring and their current path. */
-void render_colonists(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                      const EntityId *selected, int selected_count);
+/* Trees, bushes and colonists (with what they carry), from the back to the
+ * front so that tall sprites overlap correctly; selected colonists get a ring
+ * and their current path. */
+void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
+                          const Camera *camera, const EntityId *selected, int selected_count);
 
 /* Rectangle shown while box-selecting, in screen coordinates. */
 void render_selection_box(SDL_Renderer *renderer, float x0, float y0, float x1, float y1);

@@ -109,13 +109,14 @@ missing. See the [translator guide](docs/I18N.md).
 ## Project layout
 
 ```
-assets/        Game data shipped next to the executable (fonts, translations)
+assets/        Game data shipped next to the executable (fonts, translations, sprites)
 cmake/         CMake helpers (dependencies, warnings, translation key check)
 docs/          Design and technical documentation
 src/core/      Simulation core: pure C17, no SDL, deterministic, unit-tested
 src/game/      SDL3 frontend: window, input, rendering, HUD, localization loading
 tests/         Unit tests (one executable per module) and translation checker
 bench/         Performance benchmarks (not run by the tests)
+tools/         Development scripts (procedural sprite generator)
 ```
 
 ## Documentation

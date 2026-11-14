@@ -298,6 +298,78 @@ NeedLevel need_level(float value)
     return value < NEED_LOW_THRESHOLD ? NEED_LEVEL_LOW : NEED_LEVEL_OK;
 }
 
+static ColonistAction gather_action(GatherJob job)
+{
+    return job == GATHER_JOB_CHOP ? COLONIST_ACTION_STRIKE : COLONIST_ACTION_GATHER;
+}
+
+static ColonistAction craft_action(const Colonist *colonist, ItemType *tool)
+{
+    const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
+    if (def == NULL) {
+        return COLONIST_ACTION_NONE;
+    }
+    int index = colonist_tool_index(colonist, def->tools[0]);
+    *tool = index >= 0 ? (ItemType)colonist->tools[index].type : ITEM_NONE;
+    /* Stones are knapped with blows of a hammerstone; anything else is cut. */
+    return (def->tools[0] & ITEM_TYPE_BIT(ITEM_COBBLE)) ? COLONIST_ACTION_STRIKE
+                                                        : COLONIST_ACTION_CUT;
+}
+
+ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
+{
+    ItemType unused;
+    if (tool == NULL) {
+        tool = &unused;
+    }
+    *tool = ITEM_NONE;
+    if (colonist_is_moving(colonist)) {
+        return COLONIST_ACTION_NONE;
+    }
+    bool at_station = colonist->station_phase == STATION_JOB_WORK;
+    switch (colonist->task) {
+    case TASK_EAT:
+    case TASK_DRINK: return COLONIST_ACTION_EAT;
+    case TASK_WORK:
+        if (abs(colonist->x - colonist->target.x) + abs(colonist->y - colonist->target.y) != 1) {
+            return COLONIST_ACTION_NONE; /* Not at the job yet. */
+        }
+        return colonist->gathering ? gather_action((GatherJob)colonist->work_type)
+                                   : COLONIST_ACTION_STRIKE;
+    case TASK_BUILD:
+    case TASK_CONSTRUCT: return at_station ? COLONIST_ACTION_STRIKE : COLONIST_ACTION_NONE;
+    case TASK_CRAFT: return at_station ? craft_action(colonist, tool) : COLONIST_ACTION_NONE;
+    case TASK_IDLE:
+    case TASK_WANDER:
+    case TASK_HAUL:
+    case TASK_SLEEP:
+    case TASK_COUNT: break;
+    }
+    return COLONIST_ACTION_NONE;
+}
+
+ColonistExpression colonist_expression(const Colonist *colonist)
+{
+    NeedLevel worst = NEED_LEVEL_OK;
+    bool content = true;
+    for (int need = 0; need < NEED_COUNT; need++) {
+        NeedLevel level = need_level(colonist->needs[need]);
+        if (level > worst) {
+            worst = level;
+        }
+        if (colonist->needs[need] < NEED_CONTENT_THRESHOLD) {
+            content = false;
+        }
+    }
+    if (worst == NEED_LEVEL_CRITICAL) {
+        return EXPRESSION_ANGRY;
+    }
+    if (worst == NEED_LEVEL_LOW) {
+        return EXPRESSION_SAD;
+    }
+    return content ? EXPRESSION_SMILING : EXPRESSION_NEUTRAL;
+}
+
 const char *colonist_task_name_key(ColonistTask task)
 {
     static const char *const KEYS[TASK_COUNT] = {

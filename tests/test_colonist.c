@@ -991,6 +991,66 @@ static void test_position_is_interpolated_while_walking(void)
     colonist_free(&colonist);
 }
 
+static void test_action_follows_the_job(void)
+{
+    Colonist colonist;
+    colonist_init(&colonist, "Test", 30, 5, 5);
+    ItemType tool = ITEM_FLINT;
+    CHECK_EQ_INT(colonist_action(&colonist, &tool), COLONIST_ACTION_NONE); /* Idle. */
+    CHECK_EQ_INT(tool, ITEM_NONE);
+
+    colonist.task = TASK_EAT;
+    CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_EAT);
+    colonist.task = TASK_DRINK;
+    CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_EAT);
+
+    /* Work only next to the target. */
+    colonist.task = TASK_WORK;
+    colonist.work_type = DESIGNATION_MINE;
+    colonist.target = (TilePos){9, 5};
+    CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_NONE);
+    colonist.target = (TilePos){6, 5};
+    CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_STRIKE);
+    colonist.gathering = true;
+    colonist.work_type = GATHER_JOB_HARVEST;
+    CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_GATHER);
+    colonist.work_type = GATHER_JOB_CHOP;
+    CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_STRIKE);
+
+    /* Crafting: only once at work, with the tool of the recipe. */
+    colonist.gathering = false;
+    colonist.task = TASK_CRAFT;
+    colonist.recipe = RECIPE_HAND_AXE;
+    colonist.station_phase = STATION_JOB_FETCH;
+    CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_NONE);
+    colonist.station_phase = STATION_JOB_WORK;
+    REQUIRE(colonist_add_tool(&colonist, (ItemStack){.type = ITEM_COBBLE,
+                                                    .quality = ITEM_QUALITY_STANDARD,
+                                                    .count = 1,
+                                                    .hit_points = 100}));
+    REQUIRE(colonist_add_tool(&colonist, (ItemStack){.type = ITEM_FLAKE,
+                                                    .quality = ITEM_QUALITY_STANDARD,
+                                                    .count = 1,
+                                                    .hit_points = 100}));
+    CHECK_EQ_INT(colonist_action(&colonist, &tool), COLONIST_ACTION_STRIKE);
+    CHECK_EQ_INT(tool, ITEM_COBBLE);
+    colonist.recipe = RECIPE_THROWING_SPEAR;
+    CHECK_EQ_INT(colonist_action(&colonist, &tool), COLONIST_ACTION_CUT);
+    CHECK_EQ_INT(tool, ITEM_FLAKE);
+    colonist.task = TASK_CONSTRUCT;
+    CHECK_EQ_INT(colonist_action(&colonist, &tool), COLONIST_ACTION_STRIKE);
+    CHECK_EQ_INT(tool, ITEM_NONE); /* Built by hand. */
+
+    /* Nobody acts while walking. */
+    colonist.path.steps = malloc(sizeof(TilePos));
+    REQUIRE(colonist.path.steps != NULL);
+    colonist.path.capacity = 1;
+    colonist.path.count = 1;
+    colonist.path.steps[0] = (TilePos){6, 6};
+    CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_NONE);
+    colonist_free(&colonist);
+}
+
 static void test_picking(void)
 {
     Game game;
@@ -1490,6 +1550,7 @@ int main(void)
     RUN_TEST(test_work_speed_follows_knowledge);
     RUN_TEST(test_reservations_stay_consistent_over_a_long_run);
     RUN_TEST(test_position_is_interpolated_while_walking);
+    RUN_TEST(test_action_follows_the_job);
     RUN_TEST(test_picking);
     RUN_TEST(test_carry_capacity);
     RUN_TEST(test_strength_sets_carry_weight);

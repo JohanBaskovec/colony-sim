@@ -103,7 +103,12 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Settings menu (language, resolution, volume, key bindings) persisted in the user preferences folder
 - [ ] Main menu, new game options (seed, map size, difficulty)
 - [ ] Sound and music
-- [ ] Pixel art sprites (64 × 64 tiles) and texture atlas instead of colored tiles, with mipmaps for zoomed-out views
+- [x] Sprites (128 × 128 pixels per tile) in a texture atlas with halved copies for zoomed-out views: trees and bushes (5 growth stages, bushes with and without berries), colonists in 4 layers (naked limbless body in 3 shapes, head with 4 expressions, beard, hair) in front view, a moving fist (with the tool of the job) while working
+- [ ] Ground textures (soil, sand, gravel, stone, water, rock walls) with transitions between terrains
+- [ ] Colonist sprites seen from the back and the sides, walking and sleeping poses
+- [ ] Sprites for items, workstations and structures
+- [ ] Clothes as sprite layers over the body (hide tunic, fur wrap...), once clothing exists
+- [ ] Gender (or body types) for colonists, to tie beards and names together
 - [ ] Data-driven definitions (terrain, plants, items) + mod loading
 
 ## Later
@@ -120,7 +125,7 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Remember the chosen language between sessions
 - [ ] HarfBuzz + font fallback when a translation needs non-Latin scripts (would also allow re-enabling kerning, disabled because SDL_ttf mispositions kerned glyphs without HarfBuzz)
 - [ ] More plural rules (Slavic languages, Arabic) when needed
-- [x] Batch tile rendering (geometry) for large maps at low zoom; a texture atlas comes with real art
+- [x] Batch tile rendering (geometry) for large maps at low zoom; sprites come from a texture atlas
 - [x] Pathfinding benchmark (`bench/bench_pathfinding`)
 - [x] Connectivity regions: no search for unreachable goals, water or orders (`core/region.h`)
 - [ ] Failed food searches still explore everything within their cost limit (1 to 4 ms with 64 hungry colonists and no food nearby): spatial index of food sources, or a faster priority queue

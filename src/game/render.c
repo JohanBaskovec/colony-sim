@@ -3,6 +3,7 @@
 #include "core/util.h"
 
 #include <math.h>
+#include <stdlib.h>
 
 static const SDL_Color TERRAIN_COLORS[TERRAIN_COUNT] = {
     [TERRAIN_DEEP_WATER] = {28, 58, 110, 255},
@@ -21,13 +22,13 @@ static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
 };
 
 static const SDL_Color GRASS_COLOR = {92, 138, 60, 255};
-static const SDL_Color BUSH_COLOR = {64, 112, 48, 255};
 static const SDL_Color TREE_COLOR = {34, 88, 40, 255};
 
-/* Body colors, picked per colonist slot. */
-static const SDL_Color COLONIST_COLORS[] = {
-    {230, 120, 70, 255}, {90, 160, 230, 255}, {240, 200, 80, 255}, {200, 110, 210, 255},
-    {110, 210, 170, 255}, {235, 95, 120, 255}, {170, 190, 90, 255}, {150, 140, 240, 255},
+/* Tints of the (light gray) hair and beard sprites. */
+static const SDL_Color HAIR_COLORS[HAIR_COLOR_COUNT] = {
+    [HAIR_COLOR_BLACK] = {58, 46, 40, 255},     [HAIR_COLOR_DARK_BROWN] = {100, 66, 44, 255},
+    [HAIR_COLOR_BROWN] = {146, 102, 64, 255},   [HAIR_COLOR_AUBURN] = {172, 86, 48, 255},
+    [HAIR_COLOR_BLOND] = {226, 190, 118, 255},  [HAIR_COLOR_GRAY] = {188, 184, 178, 255},
 };
 /* Designation marks; index DESIGNATION_NONE is the color of the cancel tool. */
 static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
@@ -55,7 +56,6 @@ static const SDL_Color BLUEPRINT_REFUSED_COLOR = {230, 70, 60, 255};
 static const SDL_Color ITEM_OUTLINE = {28, 24, 20, 255};
 static const SDL_Color PROGRESS_BACKGROUND = {20, 20, 24, 220};
 static const SDL_Color PROGRESS_COLOR = {120, 220, 110, 255};
-static const SDL_Color COLONIST_OUTLINE = {20, 20, 24, 255};
 static const SDL_Color SELECTION_COLOR = {255, 255, 255, 255};
 static const SDL_Color PATH_COLOR = {255, 255, 255, 140};
 
@@ -215,13 +215,6 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
             }
             batch_quad(renderer, shade(ground, variation), &tile);
 
-            if (plant->type == PLANT_BUSH) {
-                SDL_FRect rect = inset(&tile, 0.25f + 0.3f * plant->growth);
-                batch_quad(renderer, shade(BUSH_COLOR, variation), &rect);
-            } else if (plant->type == PLANT_TREE) {
-                SDL_FRect rect = inset(&tile, 0.35f + 0.5f * plant->growth);
-                batch_quad(renderer, shade(TREE_COLOR, variation), &rect);
-            }
         }
     }
     batch_flush(renderer);
@@ -886,25 +879,89 @@ void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, in
     SDL_RenderRect(renderer, &rect);
 }
 
-/* ---- Colonists ----------------------------------------------------------- */
+/* ---- Plants and colonists ------------------------------------------------ */
 
-static void fill_circle(SDL_Renderer *renderer, float cx, float cy, float radius, SDL_Color color)
+/* Trees reach this many rows above their tile, and one column on each side. */
+#define SPRITE_OVERFLOW_ROWS 3
+#define SPRITE_OVERFLOW_COLUMNS 1
+/* Depth of a plant in its tile (where its trunk or stems meet the ground):
+ * things are drawn from the back (top of the screen) to the front. */
+#define PLANT_DEPTH 0.91f
+/* Feet of a colonist below its position (the middle of its tile), in tiles,
+ * and the margin under the feet in the character sprites. */
+#define COLONIST_FEET 0.38f
+#define COLONIST_SPRITE_MARGIN (8.0f / SPRITE_PIXELS_PER_TILE)
+/* Brightness of a sleeping colonist. */
+#define COLONIST_SLEEP_SHADE 0.55f
+/* Screen area of a colonist sprite (the figure, not the empty margins) in
+ * tiles around its feet, and the opacity of a tree standing in front of it:
+ * nobody gets lost in a forest. */
+#define COLONIST_HALF_WIDTH 0.3f
+#define COLONIST_HEIGHT 1.05f
+#define TREE_SEE_THROUGH_ALPHA 0.4f
+
+static const SDL_FColor WHITE = {1.0f, 1.0f, 1.0f, 1.0f};
+
+/* ---- Hand animation ------------------------------------------------------ */
+
+/* Where the hand of a working colonist is: offsets from its feet in tiles
+ * (x toward the side of the job, y upward) and the angle of the tool in
+ * degrees (0: pointing up, positive: leaning toward the job). */
+typedef struct HandPose {
+    float x, y, angle;
+} HandPose;
+
+/* Length of one movement, in ticks: it follows the game speed and stops when
+ * the game is paused. */
+static const int ACTION_PERIODS[COLONIST_ACTION_COUNT] = {
+    [COLONIST_ACTION_STRIKE] = 36,
+    [COLONIST_ACTION_CUT] = 30,
+    [COLONIST_ACTION_GATHER] = 48,
+    [COLONIST_ACTION_EAT] = 60,
+};
+
+/* `phase` goes from 0 to 1 over one movement. */
+static HandPose hand_pose(ColonistAction action, float phase)
 {
-    enum { SEGMENTS = 24 };
-    SDL_Vertex vertices[SEGMENTS + 1];
-    int indices[SEGMENTS * 3];
-    SDL_FColor fcolor = to_fcolor(color);
+    float wave = 0.5f - 0.5f * SDL_cosf(2.0f * SDL_PI_F * phase); /* 0 → 1 → 0, smooth. */
+    switch (action) {
+    case COLONIST_ACTION_STRIKE: {
+        /* Raised slowly, brought down fast. */
+        float lift = phase < 0.75f ? SDL_sinf(phase / 0.75f * SDL_PI_F * 0.5f)
+                                   : SDL_cosf((phase - 0.75f) / 0.25f * SDL_PI_F * 0.5f);
+        return (HandPose){0.31f - 0.05f * lift, 0.3f + 0.3f * lift, 75.0f - 85.0f * lift};
+    }
+    case COLONIST_ACTION_CUT: {
+        float stroke = SDL_sinf(2.0f * SDL_PI_F * phase);
+        return (HandPose){0.27f + 0.08f * stroke, 0.36f + 0.02f * wave, 55.0f + 12.0f * stroke};
+    }
+    case COLONIST_ACTION_GATHER: return (HandPose){0.3f + 0.13f * wave, 0.3f - 0.07f * wave, 0.0f};
+    case COLONIST_ACTION_EAT: return (HandPose){0.3f - 0.22f * wave, 0.32f + 0.32f * wave, 0.0f};
+    case COLONIST_ACTION_NONE:
+    case COLONIST_ACTION_COUNT: break;
+    }
+    return (HandPose){0.3f, 0.3f, 0.0f};
+}
 
-    vertices[0] = (SDL_Vertex){{cx, cy}, fcolor, {0.0f, 0.0f}};
+/* Filled ring (an ellipse with a hole), e.g. a selection mark on the ground. */
+static void fill_ring(SDL_Renderer *renderer, float cx, float cy, float rx, float ry,
+                      float thickness, SDL_Color color)
+{
+    enum { SEGMENTS = 32 };
+    SDL_Vertex vertices[SEGMENTS * 2];
+    int indices[SEGMENTS * 6];
+    SDL_FColor fcolor = to_fcolor(color);
     for (int i = 0; i < SEGMENTS; i++) {
         float angle = (float)i * (2.0f * SDL_PI_F / SEGMENTS);
-        SDL_FPoint point = {cx + radius * SDL_cosf(angle), cy + radius * SDL_sinf(angle)};
-        vertices[i + 1] = (SDL_Vertex){point, fcolor, {0.0f, 0.0f}};
-        indices[i * 3] = 0;
-        indices[i * 3 + 1] = i + 1;
-        indices[i * 3 + 2] = (i + 1) % SEGMENTS + 1;
+        float c = SDL_cosf(angle), s = SDL_sinf(angle);
+        vertices[i * 2] = (SDL_Vertex){{cx + rx * c, cy + ry * s}, fcolor, {0.0f, 0.0f}};
+        vertices[i * 2 + 1] = (SDL_Vertex){
+            {cx + (rx - thickness) * c, cy + (ry - thickness) * s}, fcolor, {0.0f, 0.0f}};
+        int next = (i + 1) % SEGMENTS;
+        int quad[6] = {i * 2, next * 2, next * 2 + 1, next * 2 + 1, i * 2 + 1, i * 2};
+        SDL_memcpy(&indices[i * 6], quad, sizeof(quad));
     }
-    SDL_RenderGeometry(renderer, NULL, vertices, SEGMENTS + 1, indices, SEGMENTS * 3);
+    SDL_RenderGeometry(renderer, NULL, vertices, SEGMENTS * 2, indices, SEGMENTS * 6);
 }
 
 static bool is_selected(EntityId id, const EntityId *selected, int selected_count)
@@ -925,12 +982,12 @@ static void render_path(SDL_Renderer *renderer, const Camera *camera, const Colo
 
     float x, y;
     colonist_position(colonist, &x, &y);
-    camera_world_to_screen(camera, x, y, &points[count].x, &points[count].y);
+    camera_world_to_screen(camera, x, y + COLONIST_FEET, &points[count].x, &points[count].y);
     count++;
     for (int i = colonist->path_index; i < colonist->path.count && count < MAX_POINTS; i++) {
         TilePos step = colonist->path.steps[i];
-        camera_world_to_screen(camera, step.x + 0.5f, step.y + 0.5f, &points[count].x,
-                               &points[count].y);
+        camera_world_to_screen(camera, step.x + 0.5f, step.y + 0.5f + COLONIST_FEET,
+                               &points[count].x, &points[count].y);
         count++;
     }
     if (count > 1) {
@@ -939,46 +996,201 @@ static void render_path(SDL_Renderer *renderer, const Camera *camera, const Colo
     }
 }
 
-void render_colonists(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                      const EntityId *selected, int selected_count)
+static SDL_FColor tint(SDL_Color color, float brightness)
 {
-    float radius = SDL_max(3.0f, camera->zoom * 0.38f);
+    SDL_FColor result = to_fcolor(color);
+    result.r *= brightness;
+    result.g *= brightness;
+    result.b *= brightness;
+    return result;
+}
 
+/* A colonist from its layers: body, head (with the face), beard, hair. */
+/* A fist (holding the tool of the job, if any) moving beside a working colonist. */
+static void render_hand(Sprites *sprites, const Camera *camera, const Colonist *colonist,
+                        uint32_t slot, uint64_t tick, float feet_x, float feet_y,
+                        SDL_FColor color)
+{
+    ItemType tool;
+    ColonistAction action = colonist_action(colonist, &tool);
+    if (action == COLONIST_ACTION_NONE) {
+        return;
+    }
+    int period = ACTION_PERIODS[action];
+    /* Colonists side by side do not move in step. */
+    uint64_t step = (tick + (uint64_t)slot * 7u) % (uint64_t)period;
+    HandPose pose = hand_pose(action, (float)step / (float)period);
+    /* The hand on the side of the job (the right one when it is straight up or down). */
+    float side = colonist->target.x < colonist->x ? -1.0f : 1.0f;
+    float hand_x = feet_x + side * pose.x * camera->zoom;
+    float hand_y = feet_y - pose.y * camera->zoom;
+    SpriteId tool_sprite = sprite_tool(tool);
+    if (tool_sprite >= 0) {
+        sprites_draw_rotated(sprites, tool_sprite, hand_x, hand_y, side * pose.angle, color,
+                             side < 0.0f);
+    }
+    sprites_draw_rotated(sprites, sprite_fist(colonist->appearance.skin), hand_x, hand_y, 0.0f,
+                         color, side < 0.0f);
+}
+
+static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera,
+                            const Colonist *colonist, uint32_t slot, uint64_t tick,
+                            bool selected)
+{
+    float wx, wy, feet_x, feet_y, anchor_x, anchor_y;
+    colonist_position(colonist, &wx, &wy);
+    camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &feet_x, &feet_y);
+    camera_world_to_screen(camera, wx, wy + COLONIST_FEET + COLONIST_SPRITE_MARGIN, &anchor_x,
+                           &anchor_y);
+    if (selected) {
+        sprites_flush(sprites);
+        float rx = SDL_max(4.0f, camera->zoom * 0.3f);
+        fill_ring(renderer, feet_x, feet_y, rx, rx * 0.4f, SDL_max(1.5f, camera->zoom * 0.04f),
+                  SELECTION_COLOR);
+    }
+    ColonistAppearance looks = colonist->appearance;
+    float brightness = colonist->task == TASK_SLEEP ? COLONIST_SLEEP_SHADE : 1.0f;
+    SDL_FColor skin = tint((SDL_Color){255, 255, 255, 255}, brightness);
+    SDL_FColor hair = tint(HAIR_COLORS[looks.hair_color % HAIR_COLOR_COUNT], brightness);
+    sprites_draw(sprites, sprite_body(looks.body, looks.skin), anchor_x, anchor_y, skin, false);
+    sprites_draw(sprites, sprite_head(looks.skin, colonist_expression(colonist)), anchor_x,
+                 anchor_y, skin, false);
+    if (looks.beard > 0) {
+        sprites_draw(sprites, sprite_beard(looks.beard), anchor_x, anchor_y, hair, false);
+    }
+    if (looks.hair_style > 0) {
+        sprites_draw(sprites, sprite_hair(looks.hair_style), anchor_x, anchor_y, hair, false);
+    }
+    render_hand(sprites, camera, colonist, slot, tick, feet_x, feet_y, skin);
+    if (colonist->carried.count > 0) {
+        /* What it carries, held in front of it at waist height. */
+        sprites_flush(sprites);
+        float size = floorf(SDL_max(4.0f, camera->zoom * 0.42f));
+        SDL_FRect held = {floorf(feet_x - size * 0.5f), floorf(feet_y - camera->zoom * 0.62f),
+                          size, size};
+        render_item_stack(renderer, &held, (ItemType)colonist->carried.type);
+        batch_flush(renderer);
+    }
+}
+
+typedef struct DepthEntry {
+    float depth;
+    uint32_t slot;
+    SDL_FRect area; /* On screen. */
+} DepthEntry;
+
+static int compare_depth(const void *a, const void *b)
+{
+    const DepthEntry *x = a, *y = b;
+    if (x->depth != y->depth) {
+        return x->depth < y->depth ? -1 : 1;
+    }
+    return x->slot < y->slot ? -1 : (x->slot > y->slot);
+}
+
+/* Whether a sprite drawn at `depth` over `rect` would hide the head or chest of
+ * a colonist behind it. Only the middle of the sprite counts (its canvas has
+ * empty corners): in a forest, only the trees right in front of someone fade. */
+static bool hides_colonist(const SDL_FRect *rect, float depth, const DepthEntry *colonists,
+                           int count)
+{
+    SDL_FRect core = {rect->x + rect->w * 0.15f, rect->y, rect->w * 0.7f, rect->h * 0.9f};
+    for (int i = 0; i < count && colonists[i].depth < depth; i++) {
+        const SDL_FRect *area = &colonists[i].area;
+        SDL_FPoint chest = {area->x + area->w * 0.5f, area->y + area->h * 0.4f};
+        if (SDL_PointInRectFloat(&chest, &core)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void render_plant(Sprites *sprites, const Camera *camera, const Plant *plant, int x, int y,
+                         const DepthEntry *colonists, int colonist_count)
+{
+    SpriteId id;
+    if (plant->type == PLANT_TREE) {
+        id = sprite_tree(plant_growth_stage(plant));
+    } else if (plant->type == PLANT_BUSH) {
+        id = sprite_bush(plant_growth_stage(plant), plant_has_fruit(plant));
+    } else {
+        return; /* Grass is part of the ground. */
+    }
+    float sx, sy;
+    camera_world_to_screen(camera, (float)x + 0.5f, (float)(y + 1), &sx, &sy);
+    SDL_FColor color = WHITE;
+    if (plant->type == PLANT_TREE && colonist_count > 0) {
+        float width, height;
+        sprites_size(sprites, id, &width, &height);
+        SDL_FRect rect = {sx - width * 0.5f, sy - height, width, height};
+        if (hides_colonist(&rect, (float)y + PLANT_DEPTH, colonists, colonist_count)) {
+            color.a = TREE_SEE_THROUGH_ALPHA;
+        }
+    }
+    /* Mirrored on some tiles so that a forest does not look like a stamp. */
+    sprites_draw(sprites, id, sx, sy, color, (tile_variation(x, y) & 4) != 0);
+}
+
+void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
+                          const Camera *camera, const EntityId *selected, int selected_count)
+{
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
-        if (entity_id_is_none(id) || !is_selected(id, selected, selected_count)) {
-            continue;
-        }
-        render_path(renderer, camera, &game->colonists[slot]);
-    }
-
-    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
-        EntityId id = game_colonist_id_at(game, slot);
-        if (entity_id_is_none(id)) {
-            continue;
-        }
-        const Colonist *colonist = &game->colonists[slot];
-        float wx, wy, sx, sy;
-        colonist_position(colonist, &wx, &wy);
-        camera_world_to_screen(camera, wx, wy, &sx, &sy);
-
-        if (is_selected(id, selected, selected_count)) {
-            fill_circle(renderer, sx, sy, radius + 3.0f, SELECTION_COLOR);
-        }
-        fill_circle(renderer, sx, sy, radius + 1.0f, COLONIST_OUTLINE);
-        SDL_Color body = COLONIST_COLORS[slot % SDL_arraysize(COLONIST_COLORS)];
-        if (colonist->task == TASK_SLEEP) {
-            body = shade(body, -70); /* Sleeping colonists look dimmer. */
-        }
-        fill_circle(renderer, sx, sy, radius, body);
-        if (colonist->carried.count > 0) {
-            /* What it carries, held in front (lower right) of it. */
-            float size = floorf(radius * 1.4f);
-            SDL_FRect held = {floorf(sx + radius * 0.2f), floorf(sy + radius * 0.1f), size, size};
-            render_item_stack(renderer, &held, (ItemType)colonist->carried.type);
-            batch_flush(renderer); /* Before the next colonist is drawn over it. */
+        if (!entity_id_is_none(id) && is_selected(id, selected, selected_count)) {
+            render_path(renderer, camera, &game->colonists[slot]);
         }
     }
+
+    const Map *map = &game->map;
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    int x0 = SDL_max(0, visible.x0 - SPRITE_OVERFLOW_COLUMNS);
+    int x1 = SDL_min(map->width, visible.x1 + SPRITE_OVERFLOW_COLUMNS);
+    int y1 = SDL_min(map->height, visible.y1 + SPRITE_OVERFLOW_ROWS);
+
+    /* Colonists in depth order, merged with the rows of plants below. */
+    DepthEntry order[COLONIST_MAX];
+    int count = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game) && count < COLONIST_MAX;
+         slot++) {
+        if (entity_id_is_none(game_colonist_id_at(game, slot))) {
+            continue;
+        }
+        float wx, wy;
+        colonist_position(&game->colonists[slot], &wx, &wy);
+        if (wx < (float)x0 - 1.0f || wx > (float)x1 + 1.0f || wy < (float)visible.y0 - 1.0f ||
+            wy > (float)y1 + 1.0f) {
+            continue;
+        }
+        float sx, sy;
+        camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &sx, &sy);
+        float half_width = COLONIST_HALF_WIDTH * camera->zoom;
+        float height = COLONIST_HEIGHT * camera->zoom;
+        SDL_FRect area = {sx - half_width, sy - height, 2.0f * half_width, height};
+        order[count++] = (DepthEntry){wy + COLONIST_FEET, slot, area};
+    }
+    qsort(order, (size_t)count, sizeof(order[0]), compare_depth);
+
+    sprites_begin(sprites, camera->zoom);
+    uint64_t tick = game->clock.tick;
+    int next = 0;
+    for (int y = visible.y0; y < y1; y++) {
+        while (next < count && order[next].depth < (float)y + PLANT_DEPTH) {
+            uint32_t slot = order[next++].slot;
+            render_colonist(renderer, sprites, camera, &game->colonists[slot], slot, tick,
+                            is_selected(game_colonist_id_at(game, slot), selected,
+                                        selected_count));
+        }
+        for (int x = x0; x < x1; x++) {
+            render_plant(sprites, camera, &map->plants[map_index(map, x, y)], x, y, order,
+                         count);
+        }
+    }
+    while (next < count) {
+        uint32_t slot = order[next++].slot;
+        render_colonist(renderer, sprites, camera, &game->colonists[slot], slot, tick,
+                        is_selected(game_colonist_id_at(game, slot), selected, selected_count));
+    }
+    sprites_flush(sprites);
 }
 
 void render_selection_box(SDL_Renderer *renderer, float x0, float y0, float x1, float y1)

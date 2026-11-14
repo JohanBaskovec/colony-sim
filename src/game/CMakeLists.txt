@@ -6,6 +6,7 @@ add_executable(colony_sim
     main.c
     menu_bar.c
     render.c
+    sprites.c
     station_panel.c
     stockpile_panel.c
     text.c

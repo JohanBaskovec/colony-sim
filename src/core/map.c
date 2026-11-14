@@ -112,6 +112,21 @@ void plant_regrow_stocks(Plant *plant, int hours)
     }
 }
 
+int plant_growth_stage(const Plant *plant)
+{
+    int stage = (int)(clampf(plant->growth, 0.0f, 1.0f) * (float)PLANT_GROWTH_STAGES);
+    return clampi(stage, 0, PLANT_GROWTH_STAGES - 1);
+}
+
+bool plant_has_fruit(const Plant *plant)
+{
+    if ((unsigned)plant->type >= PLANT_COUNT) {
+        return false;
+    }
+    const PlantDef *def = &PLANT_DEFS[plant->type];
+    return def->harvest_item != ITEM_NONE && plant->growth >= def->min_edible_growth;
+}
+
 void plant_fill_stocks(Plant *plant)
 {
     for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {

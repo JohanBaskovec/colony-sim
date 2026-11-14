@@ -20,6 +20,7 @@
 #ifndef COLONY_CORE_COLONIST_H
 #define COLONY_CORE_COLONIST_H
 
+#include "core/appearance.h"
 #include "core/construction.h"
 #include "core/designation.h"
 #include "core/game_clock.h"
@@ -91,6 +92,8 @@
 #define COLONIST_BED_SEARCH_MAX_COST 150.0f
 #define NEED_LOW_THRESHOLD 0.3f
 #define NEED_CRITICAL_THRESHOLD 0.1f
+/* Colonists smile when every need is at least this well satisfied. */
+#define NEED_CONTENT_THRESHOLD 0.7f
 
 /* A hungry colonist keeps eating until food reaches this level. */
 #define COLONIST_SATED_FOOD 0.8f
@@ -165,6 +168,25 @@ typedef enum StationJobPhase {
     STATION_JOB_WORK,  /* Working on it. */
 } StationJobPhase;
 
+/* Face shown by the colonist sprite, from how well its needs are met. */
+typedef enum ColonistExpression {
+    EXPRESSION_NEUTRAL,
+    EXPRESSION_SMILING,
+    EXPRESSION_SAD,
+    EXPRESSION_ANGRY,
+    EXPRESSION_COUNT
+} ColonistExpression;
+
+/* What a colonist's hands are doing, for the frontend to animate. */
+typedef enum ColonistAction {
+    COLONIST_ACTION_NONE,   /* Walking, idle, asleep, carrying. */
+    COLONIST_ACTION_STRIKE, /* Blows: mining, felling, building, knapping. */
+    COLONIST_ACTION_CUT,    /* Back and forth with a cutting tool: shaping a spear. */
+    COLONIST_ACTION_GATHER, /* Picking or pulling: berries, branches, twigs, grass, stones. */
+    COLONIST_ACTION_EAT,    /* The hand to the mouth: eating or drinking. */
+    COLONIST_ACTION_COUNT
+} ColonistAction;
+
 typedef enum NeedLevel {
     NEED_LEVEL_OK,
     NEED_LEVEL_LOW,
@@ -235,6 +257,7 @@ typedef struct Colonist {
      * precision: a tick of practice adds a tiny fraction of a point. */
     double knowledge[KNOWLEDGE_COUNT];
     float needs[NEED_COUNT];
+    ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
 
 /* What a colonist needs to see of the world to make decisions. */
@@ -344,6 +367,16 @@ int colonist_carry_capacity(const Colonist *colonist, ItemType type);
 float colonist_load_speed_factor(const Colonist *colonist);
 
 NeedLevel need_level(float value);
+
+/* The action under way and, when it needs one, the tool in hand (written to
+ * `tool` when not NULL; ITEM_NONE without a tool). Only a colonist standing at
+ * its job and actually working on it acts; the tool is the one of the first
+ * tool kind of the recipe being crafted. */
+ColonistAction colonist_action(const Colonist *colonist, ItemType *tool);
+
+/* Angry when a need is critical, sad when one is low, smiling when every need
+ * reaches NEED_CONTENT_THRESHOLD, neutral otherwise. */
+ColonistExpression colonist_expression(const Colonist *colonist);
 
 /* Translation keys. need_level_key() returns NULL for NEED_LEVEL_OK. */
 const char *colonist_task_name_key(ColonistTask task);

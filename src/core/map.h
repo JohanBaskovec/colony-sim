@@ -97,6 +97,9 @@ typedef struct Plant {
     float growth; /* 0 (seedling) .. 1 (mature) */
 } Plant;
 
+/* Plants are drawn in this many sizes as they grow (see plant_growth_stage()). */
+#define PLANT_GROWTH_STAGES 5
+
 /* Highest flint chance of a tile, in percent: even a rich patch gives cobbles too. */
 #define MAP_FLINT_MAX_CHANCE 60
 /* From this chance on, a patch is called rich (display only). */
@@ -152,6 +155,13 @@ int plant_take_stock(Plant *plant, PlantStock stock, int count);
 
 /* Lets the stocks grow back for `hours`, up to the capacity. */
 void plant_regrow_stocks(Plant *plant, int hours);
+
+/* Size class of a plant, 0 (seedling) .. PLANT_GROWTH_STAGES - 1 (mature):
+ * growth split in equal steps. */
+int plant_growth_stage(const Plant *plant);
+
+/* Whether the plant carries fruit that can be picked or eaten (ripe berries). */
+bool plant_has_fruit(const Plant *plant);
 
 /* Fills every stock to the capacity (new plants of a generated world). */
 void plant_fill_stocks(Plant *plant);
