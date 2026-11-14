@@ -208,6 +208,7 @@ int workstation_add_bill(Workstations *workstations, int index, RecipeType recip
     bill->inputs = recipe_inputs(recipe);
     bill->min_level = (uint8_t)BILL_LEVEL_MIN;
     bill->max_level = (uint8_t)BILL_LEVEL_MAX;
+    bill->input_radius = BILL_INPUT_RADIUS_DEFAULT;
     workstations->revision++;
     return station->bill_count++;
 }
@@ -299,6 +300,30 @@ bool workstation_set_bill_max_level(Workstations *workstations, int index, int b
         return false;
     }
     entry->max_level = (uint8_t)clampi(level, entry->min_level, BILL_LEVEL_MAX);
+    workstations->revision++;
+    return true;
+}
+
+bool workstation_set_bill_paused(Workstations *workstations, int index, int bill, bool paused)
+{
+    Bill *entry = get_bill(workstations, index, bill);
+    if (entry == NULL) {
+        return false;
+    }
+    entry->paused = paused;
+    workstations->revision++;
+    return true;
+}
+
+bool workstation_set_bill_input_radius(Workstations *workstations, int index, int bill,
+                                       int radius)
+{
+    Bill *entry = get_bill(workstations, index, bill);
+    if (entry == NULL) {
+        return false;
+    }
+    entry->input_radius =
+        (uint16_t)clampi(radius, BILL_INPUT_RADIUS_MIN, BILL_INPUT_RADIUS_MAX);
     workstations->revision++;
     return true;
 }
@@ -425,9 +450,9 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         hash = hash_fnv1a64(hash, craft, sizeof(craft));
         for (int b = 0; b < station->bill_count; b++) {
             const Bill *bill = &station->bills[b];
-            uint32_t fields[7] = {bill->recipe,    bill->mode,     bill->target,
-                                  bill->done,      bill->inputs,   bill->min_level,
-                                  bill->max_level};
+            uint32_t fields[9] = {bill->recipe,    bill->mode,      bill->target,
+                                  bill->done,      bill->inputs,    bill->min_level,
+                                  bill->max_level, bill->paused,    bill->input_radius};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
         }
     }

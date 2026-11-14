@@ -174,6 +174,24 @@ static void test_bills(void)
     CHECK(workstation_set_bill_min_level(&stations, knapping, bill, -5));
     CHECK_EQ_INT(flakes->min_level, BILL_LEVEL_MIN);
     CHECK(!workstation_set_bill_min_level(&stations, knapping, 7, 10));
+
+    /* Pause and input radius. */
+    CHECK(!flakes->paused);
+    CHECK_EQ_INT(flakes->input_radius, BILL_INPUT_RADIUS_DEFAULT);
+    before = workstations_hash(&stations, HASH_FNV1A64_INIT);
+    CHECK(workstation_set_bill_paused(&stations, knapping, bill, true));
+    CHECK(flakes->paused);
+    uint64_t paused = workstations_hash(&stations, HASH_FNV1A64_INIT);
+    CHECK(paused != before);
+    CHECK(workstation_set_bill_input_radius(&stations, knapping, bill, 30));
+    CHECK_EQ_INT(flakes->input_radius, 30);
+    CHECK(workstations_hash(&stations, HASH_FNV1A64_INIT) != paused);
+    CHECK(workstation_set_bill_input_radius(&stations, knapping, bill, 0));
+    CHECK_EQ_INT(flakes->input_radius, BILL_INPUT_RADIUS_MIN);
+    CHECK(workstation_set_bill_input_radius(&stations, knapping, bill, 10000));
+    CHECK_EQ_INT(flakes->input_radius, BILL_INPUT_RADIUS_MAX);
+    CHECK(!workstation_set_bill_paused(&stations, knapping, 7, false));
+    CHECK(!workstation_set_bill_input_radius(&stations, knapping, 7, 20));
     CHECK(!workstation_set_bill_max_level(&stations, WORKSTATION_MAX, bill, 10));
 
     /* Modes. */

@@ -111,8 +111,6 @@
 /* Work done per tick on a designation at speed ×1 (see colonist_work_speed()). */
 #define COLONIST_WORK_SPEED 1.0f
 #define COLONIST_WORK_SEARCH_MAX_COST 250.0f
-/* Crafters look for the input of a recipe within this travel cost of the station. */
-#define COLONIST_CRAFT_INPUT_MAX_COST 80.0f
 /* After picking up a stack, a hauler with room left also collects matching
  * stacks within this travel cost before delivering. */
 #define COLONIST_HAUL_COLLECT_MAX_COST 12.0f
@@ -273,6 +271,7 @@ typedef struct ColonistContext {
     Pathfinder *pathfinder;
     /* Connectivity regions (may be out of date, never wrong: see core/region.h). */
     const Regions *regions;
+    const long *stock; /* Game.stock: items in stock per type. */
     Rng *rng;
     uint64_t tick;
     bool night; /* colonist_is_night(tick), computed once per tick for everyone. */

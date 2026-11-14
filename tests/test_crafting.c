@@ -480,6 +480,101 @@ static void test_bill_worker_levels(void)
     game_shutdown(&game);
 }
 
+static void test_paused_bill(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 95.0); /* Never fails. */
+    colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
+    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 2, ITEM_QUALITY_FINE));
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
+    workstation_set_bill_target(&game.workstations, index, bill, 2);
+    const Workstation *station = workstation_get_const(&game.workstations, index);
+
+    /* Paused: nothing starts. */
+    workstation_set_bill_paused(&game.workstations, index, bill, true);
+    run_ticks(&game, 1500);
+    CHECK(colonist->task != TASK_CRAFT);
+    CHECK_EQ_INT(station->work_input.count, 0);
+
+    /* Resumed, then paused again during the craft: it is finished, and no
+     * other one is started. */
+    workstation_set_bill_paused(&game.workstations, index, bill, false);
+    run_ticks(&game, 600);
+    CHECK_EQ_INT(station->work_input.type, ITEM_FLINT);
+    workstation_set_bill_paused(&game.workstations, index, bill, true);
+    run_ticks(&game, 3000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_HAND_AXE], 1);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FLINT], 1);
+    CHECK_EQ_INT(station->work_input.count, 0);
+    CHECK_EQ_INT(station->bills[bill].done, 1);
+    game_shutdown(&game);
+}
+
+static void test_bill_input_radius(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 10, 12);
+    items_add(&game.items, 40, 12, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE)); /* 30 tiles. */
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
+    workstation_set_bill_input_radius(&game.workstations, index, bill, 20);
+    run_ticks(&game, 3000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 0);
+    CHECK_EQ_INT(items_get(&game.items, 40, 12).type, ITEM_FLINT);
+
+    workstation_set_bill_input_radius(&game.workstations, index, bill, 40);
+    run_ticks(&game, 4000);
+    CHECK(game.items.totals[ITEM_FLAKE] > 0);
+    game_shutdown(&game);
+}
+
+static void test_stock_counts_stored_and_waiting_items(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
+    int pile = stockpile_create(&game.stockpiles, &game.map, 20, 20, 22, 22);
+    REQUIRE(index != WORKSTATION_NONE && pile != STOCKPILE_NONE);
+    items_add(&game.items, 20, 20, item_stack_pristine(ITEM_FLAKE, 2)); /* Stored. */
+    items_add(&game.items, 14, 10, item_stack_pristine(ITEM_FLAKE, 3)); /* Just made. */
+    items_add(&game.items, 40, 40, item_stack_pristine(ITEM_FLAKE, 7)); /* Lost in the wild. */
+    Colonist *hauler = spawn_worker(&game, 30, 30);
+    REQUIRE(hauler != NULL);
+    hauler->task = TASK_HAUL;
+    hauler->carried = item_stack_pristine(ITEM_FLAKE, 1);
+    game_update_stock(&game);
+    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 2 + 3 + 1);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 2 + 3 + 7);
+    game_shutdown(&game);
+}
+
+static void test_until_stock_ignores_items_out_of_storage(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 55.0); /* 3 flakes each. */
+    colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
+    game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_HAULING,
+                           WORK_PRIORITY_DISABLED);
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
+    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 10, ITEM_QUALITY_FINE));
+    items_add(&game.items, 44, 44, item_stack_pristine(ITEM_FLAKE, 9)); /* Not in stock. */
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
+    workstation_set_bill_mode(&game.workstations, index, bill, BILL_UNTIL_STOCK);
+    workstation_set_bill_target(&game.workstations, index, bill, 5);
+    run_ticks(&game, 8000);
+    /* The flakes made wait on the station (nobody hauls) and count: 3 + 3. */
+    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 6);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 9 + 6);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_carried_tools);
@@ -498,5 +593,9 @@ int main(void)
     RUN_TEST(test_removing_a_colonist_drops_its_tools);
     RUN_TEST(test_missing_tools_and_inputs_are_reported);
     RUN_TEST(test_bill_worker_levels);
+    RUN_TEST(test_paused_bill);
+    RUN_TEST(test_bill_input_radius);
+    RUN_TEST(test_stock_counts_stored_and_waiting_items);
+    RUN_TEST(test_until_stock_ignores_items_out_of_storage);
     return test_summary();
 }

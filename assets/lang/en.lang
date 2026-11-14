@@ -338,12 +338,18 @@ station.warning.no_worker_level = Nobody who knows this recipe has a level in th
 # Bill repeat modes (click to change). {0} = target
 bill.mode.do_times.one = Do {0} time
 bill.mode.do_times.other = Do {0} times
-bill.mode.until_stock = Until {0} in the colony
+bill.mode.until_stock = Until {0} in stock
 bill.mode.forever = Forever
 # {0} = crafts completed
 bill.progress.done = Completed: {0}
 # {0} = products lying in the colony
 bill.progress.in_colony = {0} in the colony
+# {0} = products in stock (stored, or on their way to storage)
+bill.progress.in_stock = {0} in stock
+bill.paused = Paused
+# How far from the station inputs are looked for, between -/+ buttons.
+# {0} = distance in tiles
+bill.input_radius = Ingredients within {0} tiles
 # Range of worker levels in the recipe's knowledge, between -/+ buttons that
 # change the lowest level (before) and the highest one (after).
 # {0} = lowest level, {1} = highest level

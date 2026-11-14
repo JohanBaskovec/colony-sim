@@ -283,10 +283,13 @@ station.warning.no_input = Aucun matériau adapté dans la colonie
 station.warning.no_worker_level = Personne ne connaît cette recette à un niveau compris dans cet intervalle
 bill.mode.do_times.one = Faire {0} fois
 bill.mode.do_times.other = Faire {0} fois
-bill.mode.until_stock = Jusqu’à {0} dans la colonie
+bill.mode.until_stock = Jusqu’à {0} en stock
 bill.mode.forever = Sans fin
 bill.progress.done = Réalisations : {0}
 bill.progress.in_colony = {0} dans la colonie
+bill.progress.in_stock = {0} en stock
+bill.paused = En pause
+bill.input_radius = Ingrédients à {0} cases au plus
 bill.levels = Artisans de niveau {0} à {1}
 
 # Unités

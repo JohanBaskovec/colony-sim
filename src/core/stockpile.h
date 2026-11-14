@@ -118,6 +118,11 @@ void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority);
  * (not stored). */
 int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, ItemStack stack);
 
+/* Adds to `stored` (per item type) the items lying in stockpiles that accept
+ * them. */
+void stockpiles_count_stored(const Stockpiles *stockpiles, const Items *items,
+                             long stored[ITEM_TYPE_COUNT]);
+
 uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash);
 
 #endif /* COLONY_CORE_STOCKPILE_H */

@@ -6,9 +6,10 @@
  * builder brings its materials and does the construction work. A station
  * made of nothing (crafting spot) is ready as soon as it is placed. Once built,
  * it carries a list of bills: a recipe (core/recipe.h), a repeat mode (do N
- * times, until N in stock, forever), the input types allowed and the range of
- * worker levels in the recipe's knowledge. Settlers take the first bill that
- * wants doing. A craft in progress keeps its input
+ * times, until N in stock, forever), the input types allowed, how far from
+ * the station inputs are searched for, the range of worker levels in the
+ * recipe's knowledge, and whether it is paused. Settlers take the first bill
+ * that wants doing. A craft in progress keeps its input
  * and its work on the station, so that interrupted work resumes.
  * Design: docs/KNOWLEDGE.md §2.5, §6.3, §8.2.
  */
@@ -48,7 +49,7 @@ typedef struct WorkstationDef {
 
 typedef enum BillMode {
     BILL_DO_TIMES,    /* Do it `target` times. */
-    BILL_UNTIL_STOCK, /* Until `target` products lie in the colony (not carried). */
+    BILL_UNTIL_STOCK, /* Until `target` products are in stock (see Game.stock). */
     BILL_FOREVER,     /* Again and again. */
     BILL_MODE_COUNT
 } BillMode;
@@ -56,6 +57,12 @@ typedef enum BillMode {
 #define BILL_TARGET_MIN 1
 #define BILL_TARGET_MAX 999
 #define BILL_TARGET_DEFAULT 1
+
+/* How far from the station a bill's inputs are searched for, in travel cost
+ * (about one per tile on open ground). */
+#define BILL_INPUT_RADIUS_MIN 10
+#define BILL_INPUT_RADIUS_MAX 250
+#define BILL_INPUT_RADIUS_DEFAULT 80
 
 /* Worker levels a bill accepts by default: everyone who knows the recipe. */
 #define BILL_LEVEL_MIN ((int)KNOWLEDGE_LEVEL_MIN)
@@ -72,6 +79,10 @@ typedef struct Bill {
      * best ones). Has no effect on recipes that need no knowledge. */
     uint8_t min_level;
     uint8_t max_level;
+    /* A paused bill starts no craft (one under way on the station is
+     * finished, so that the station is not blocked). */
+    bool paused;
+    uint16_t input_radius; /* BILL_INPUT_RADIUS_MIN..BILL_INPUT_RADIUS_MAX. */
 } Bill;
 
 #define WORKSTATION_MAX 64
@@ -171,13 +182,17 @@ bool workstation_set_bill_input(Workstations *workstations, int index, int bill,
  * other bound and BILL_LEVEL_MAX. */
 bool workstation_set_bill_min_level(Workstations *workstations, int index, int bill, int level);
 bool workstation_set_bill_max_level(Workstations *workstations, int index, int bill, int level);
+bool workstation_set_bill_paused(Workstations *workstations, int index, int bill, bool paused);
+/* Clamped to BILL_INPUT_RADIUS_MIN..BILL_INPUT_RADIUS_MAX. */
+bool workstation_set_bill_input_radius(Workstations *workstations, int index, int bill,
+                                       int radius);
 
 /* Whether a settler at `level` in the recipe's knowledge may take the bill
  * (always true for recipes that need no knowledge). */
 bool bill_accepts_level(const Bill *bill, double level);
 
-/* Whether a bill still wants doing, given how many of its product lie in the
- * colony, stored or not (only used by BILL_UNTIL_STOCK). */
+/* Whether a bill still wants doing, given how many of its product are in
+ * stock (only used by BILL_UNTIL_STOCK). Paused or not: see Bill.paused. */
 bool bill_wants_more(const Bill *bill, int stored);
 
 /*

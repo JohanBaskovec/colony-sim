@@ -355,6 +355,28 @@ int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, ItemS
     return stockpile_accepts(stockpile, stack) ? stockpile->priority : 0;
 }
 
+void stockpiles_count_stored(const Stockpiles *stockpiles, const Items *items,
+                             long stored[ITEM_TYPE_COUNT])
+{
+    for (int index = 0; index < STOCKPILE_MAX; index++) {
+        const Stockpile *stockpile = &stockpiles->list[index];
+        if (!stockpile->used) {
+            continue;
+        }
+        for (int y = stockpile->min_y; y <= stockpile->max_y; y++) {
+            for (int x = stockpile->min_x; x <= stockpile->max_x; x++) {
+                if (stockpiles->zone[index_of(stockpiles, x, y)] != index + 1) {
+                    continue;
+                }
+                ItemStack stack = items_get(items, x, y);
+                if (stack.count > 0 && stockpile_accepts(stockpile, stack)) {
+                    stored[stack.type] += stack.count;
+                }
+            }
+        }
+    }
+}
+
 uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
 {
     hash = hash_fnv1a64(hash, stockpiles->zone,

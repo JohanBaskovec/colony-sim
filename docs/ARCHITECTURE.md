@@ -435,17 +435,26 @@ ready. The cancel tool also removes blueprints; removing a
 station drops what it held.
 
 A built station carries up to `WORKSTATION_BILL_MAX` **bills**: a recipe
-(`core/recipe.h`), a mode (do N times, until N lie in the colony, forever)
-the input types allowed and a range of worker levels in the recipe's
+(`core/recipe.h`), a mode (do N times, until N in stock, forever), the input
+types allowed, how far inputs are searched for (`input_radius`, a travel cost
+from the station, 80 by default), a range of worker levels in the recipe's
 knowledge (`min_level`..`max_level`, inclusive, 0..100 by default: beginners
-for cheap things, masters for the best ones). "Until N" counts `Items.totals`, i.e. every
-item lying on the map, stored or not, but not carried ones: counting only
-stored items would let a crafter make far too many before anyone hauls.
+for cheap things, masters for the best ones) and a pause flag.
+
+"Until N" counts `Game.stock`: items lying in a stockpile that accepts them,
+plus those on their way there, lying on a workstation tile (where products
+are dropped) or carried by a hauler. Counting only stored items would let a
+crafter make more while the last ones wait for a hauler; counting every item
+on the map (as gathering zones do) would count tools lost in the wild.
+`game_update_stock()` scans the stockpiles (their bounding boxes), the
+stations and the colonists; `game_tick()` only calls it while some bill is in
+"until N" mode (it costs as much as the rest of a small colony's tick).
+
 Bills are worked through from the top: a crafter takes the first one that
-wants more, whose recipe it knows at a level the bill accepts
+is not paused, wants more, whose recipe it knows at a level the bill accepts
 (`colonist_level_fits_bill()`), whose tools can be had (carried, or lying
 somewhere) and with an allowed input lying in the colony. Inputs are searched
-around the station (`COLONIST_CRAFT_INPUT_MAX_COST`), in the recipe's
+within the bill's radius of the station, in the recipe's
 preference order (flint first for flakes, a cobble first for a chopper).
 In recipes and stations `KNOWLEDGE_NONE` means anyone can (in designations
 it means nobody can yet).
@@ -453,8 +462,10 @@ it means nobody can yet).
 A craft in progress lives on the station (`work_recipe`, `work_input`,
 `work_progress`), not on the colonist: if the crafter leaves to eat, the next
 one resumes it, and while it is unfinished only bills of the same recipe are
-taken. A crafter already working finishes the craft even if the bill no
-longer accepts its level (it learned, or the range changed). Products are dropped on the station's tile. Quality comes from the
+taken, paused or not (a paused bill would otherwise block the station). A
+crafter already working finishes the craft even if the bill no longer accepts
+its level (it learned, or the range changed) or was paused. Products are
+dropped on the station's tile. Quality comes from the
 worker's level, capped by the material (`recipe_quality_cap()`: grade + 1,
 a cobble knaps like crude flint); shaping a hand axe can fail
 (`recipe_failure_chance()`), leaving a few flakes.

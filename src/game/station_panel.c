@@ -9,6 +9,8 @@
 #define TARGET_BIG_STEP 10 /* Shift+click on -/+. */
 #define LEVEL_STEP 5
 #define LEVEL_BIG_STEP 25
+#define RADIUS_STEP 10
+#define RADIUS_BIG_STEP 50
 
 /* What the player clicked, applied after the rows (deleting shifts bills). */
 typedef enum ActionType {
@@ -20,13 +22,15 @@ typedef enum ActionType {
     ACTION_TOGGLE_INPUT,
     ACTION_ADD_MIN_LEVEL,
     ACTION_ADD_MAX_LEVEL,
+    ACTION_TOGGLE_PAUSE,
+    ACTION_ADD_RADIUS,
     ACTION_ADD_BILL,
 } ActionType;
 
 typedef struct Action {
     ActionType type;
     int bill;
-    int value; /* Target or level change, input type or recipe. */
+    int value; /* Target, level or radius change, input type or recipe. */
 } Action;
 
 /* "Flint or cobble", "Hand axe and sharp flake": one or two names joined. */
@@ -147,8 +151,8 @@ static void bill_mode_row(UiLayout *layout, const Game *game, const Bill *bill, 
         TR_FORMAT(progress, sizeof(progress), tr("bill.progress.done"), number);
     } else if (bill->mode == BILL_UNTIL_STOCK) {
         const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
-        tr_integer(number, sizeof(number), game->items.totals[def->product]);
-        TR_FORMAT(progress, sizeof(progress), tr("bill.progress.in_colony"), number);
+        tr_integer(number, sizeof(number), game->stock[def->product]);
+        TR_FORMAT(progress, sizeof(progress), tr("bill.progress.in_stock"), number);
     }
     float x = layout->x + INDENT;
     float width = INDENT + ui_button_width(ui, mode) + GAP;
@@ -206,6 +210,37 @@ static void bill_inputs_row(UiLayout *layout, const Bill *bill, int index, Actio
             *action = (Action){ACTION_TOGGLE_INPUT, index, (int)type};
         }
         x += box_width + GAP;
+    }
+    layout->y += layout->row;
+}
+
+/* Pause check box, and -/+ for how far inputs are looked for. */
+static void bill_pause_row(UiLayout *layout, const Bill *bill, int index, Action *action)
+{
+    Ui *ui = layout->ui;
+    char text[TEXT_SIZE], radius[16];
+    tr_integer(radius, sizeof(radius), bill->input_radius);
+    TR_FORMAT(text, sizeof(text), tr("bill.input_radius"), radius);
+    const char *pause = tr("bill.paused"), *minus = "−", *plus = "+";
+    float box_width = ui_checkbox_width(ui, pause);
+    float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
+    float pair = 2.0f * small + 2.0f;
+    ui_layout_measure(layout, INDENT + box_width + GAP + pair + GAP + ui_text_width(ui, text));
+    float x = layout->x + INDENT;
+    if (layout->draw && ui_checkbox(ui, x, layout->y, box_width,
+                                    bill->paused ? UI_CHECKED : UI_UNCHECKED, pause)) {
+        *action = (Action){ACTION_TOGGLE_PAUSE, index, 0};
+    }
+    x += box_width + GAP;
+    int step = (SDL_GetModState() & SDL_KMOD_SHIFT) ? RADIUS_BIG_STEP : RADIUS_STEP;
+    if (ui_layout_button_sized(layout, x, small, minus)) {
+        *action = (Action){ACTION_ADD_RADIUS, index, -step};
+    }
+    if (ui_layout_button_sized(layout, x + small + 2.0f, small, plus)) {
+        *action = (Action){ACTION_ADD_RADIUS, index, step};
+    }
+    if (layout->draw) {
+        ui_label(ui, text, x + pair + GAP, layout->y + layout->text_offset);
     }
     layout->y += layout->row;
 }
@@ -271,7 +306,7 @@ static void bill_warning_rows(UiLayout *layout, const Game *game, const Bill *bi
         TR_FORMAT(text, sizeof(text), tr("station.warning.tool"), names);
         ui_layout_label(layout, text, INDENT, true);
     }
-    if (bill_wants_more(bill, (int)game->items.totals[def->product]) &&
+    if (bill_wants_more(bill, (int)game->stock[def->product]) &&
         !game_bill_has_input(game, bill)) {
         ui_layout_label(layout, tr("station.warning.no_input"), INDENT, true);
     }
@@ -303,6 +338,7 @@ static void built_rows(UiLayout *layout, const Game *game, const Workstation *st
         bill_mode_row(layout, game, bill, i, action);
         bill_inputs_row(layout, bill, i, action);
         bill_levels_row(layout, bill, i, action);
+        bill_pause_row(layout, bill, i, action);
         bill_warning_rows(layout, game, bill);
     }
     if (station->bill_count >= WORKSTATION_BILL_MAX) {
@@ -403,6 +439,17 @@ static void apply(App *app, int index, const Action *action)
                                            bill->max_level + action->value);
         }
         break;
+    case ACTION_TOGGLE_PAUSE:
+        if (bill != NULL) {
+            workstation_set_bill_paused(workstations, index, action->bill, !bill->paused);
+        }
+        break;
+    case ACTION_ADD_RADIUS:
+        if (bill != NULL) {
+            workstation_set_bill_input_radius(workstations, index, action->bill,
+                                              bill->input_radius + action->value);
+        }
+        break;
     case ACTION_ADD_BILL:
         workstation_add_bill(workstations, index, (RecipeType)action->value);
         break;
@@ -417,6 +464,7 @@ void station_panel_draw(App *app)
     if (station == NULL) {
         return;
     }
+    game_update_stock(&app->game); /* Up to date even while paused. */
     const char *title = tr(workstation_def((WorkstationType)station->type)->name_key);
     StationRows rows = {&app->game, station, {ACTION_NONE, -1, 0}};
     bool open = true;

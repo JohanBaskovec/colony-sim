@@ -1160,9 +1160,7 @@ static int stored_count(const ColonistContext *context, const Bill *bill)
     if (bill->mode != BILL_UNTIL_STOCK) {
         return 0;
     }
-    /* Everything lying in the colony counts, stored or waiting to be hauled
-     * (otherwise a crafter would make more before anyone stores the last ones). */
-    return (int)context->items->totals[recipe_def((RecipeType)bill->recipe)->product];
+    return (int)context->stock[recipe_def((RecipeType)bill->recipe)->product];
 }
 
 /* Whether a tool of each kind the recipe needs is carried or lies somewhere. */
@@ -1182,9 +1180,9 @@ static bool tools_obtainable(const Colonist *colonist, const ColonistContext *co
 /*
  * First bill of a built station the colonist could work through now: it
  * wants doing, the colonist knows the recipe and has a level the bill accepts,
- * the tools and an input can be found (cheap checks). While a craft is in
- * progress on the station, only bills of its recipe qualify: it is finished
- * first. Returns -1 if none.
+ * the tools and an input can be found (cheap checks), it is not paused. While
+ * a craft is in progress on the station, only bills of its recipe qualify,
+ * paused or not: it is finished first. Returns -1 if none.
  */
 static int choose_bill(const Colonist *colonist, const ColonistContext *context,
                        const Workstation *station)
@@ -1194,7 +1192,7 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
         const Bill *bill = &station->bills[index];
         RecipeType recipe = (RecipeType)bill->recipe;
         const RecipeDef *def = recipe_def(recipe);
-        if ((in_progress && station->work_recipe != recipe) ||
+        if ((in_progress && station->work_recipe != recipe) || (!in_progress && bill->paused) ||
             !colonist_can_craft(colonist, recipe) || !colonist_level_fits_bill(colonist, bill) ||
             !bill_wants_more(bill, stored_count(context, bill)) ||
             !tools_obtainable(colonist, context, def)) {
@@ -1326,7 +1324,7 @@ static bool fetch_input(Colonist *colonist, const ColonistContext *context,
         search.min_count = def->input_count - colonist->carried.count;
         search.match = colonist->carried;
         if (start_fetch(colonist, context, &search, station_tile(station),
-                        COLONIST_CRAFT_INPUT_MAX_COST, false)) {
+                        (float)bill->input_radius, false)) {
             return true;
         }
     }
@@ -1413,7 +1411,8 @@ static bool station_job_still_valid(const Colonist *colonist, const ColonistCont
     /* A craft under way is finished, even if the bill changed meanwhile. */
     return colonist->station_phase == STATION_JOB_WORK ||
            (bill_wants_more(bill, stored_count(context, bill)) &&
-            colonist_level_fits_bill(colonist, bill));
+            colonist_level_fits_bill(colonist, bill) &&
+            (!bill->paused || station->work_input.count > 0));
 }
 
 static bool try_station_job(Colonist *colonist, const ColonistContext *context, bool build)

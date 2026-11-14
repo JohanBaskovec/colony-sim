@@ -67,12 +67,23 @@ typedef struct Game {
     Regions regions;
     Pool colonist_pool;
     Colonist colonists[COLONIST_MAX]; /* Indexed by EntityId.index. */
+    /* Items in stock per type, what "until N in stock" bills count: lying in a
+     * stockpile that accepts them, or on their way there (lying on a
+     * workstation, where crafts drop their products, or carried by a hauler),
+     * so that crafters do not make more while the last ones wait for a
+     * hauler. Refreshed at the start of each tick while some bill counts it
+     * (see game_update_stock()), not part of game_hash(). */
+    long stock[ITEM_TYPE_COUNT];
 } Game;
 
 void game_default_params(NewGameParams *params);
 
 /* Generates a new world. On failure the game is left empty (safe to shut down). */
 bool game_init(Game *game, const NewGameParams *params);
+
+/* Recomputes Game.stock (game_tick() does it first thing when a bill needs
+ * it; the frontend calls it before showing the stock). */
+void game_update_stock(Game *game);
 void game_shutdown(Game *game);
 
 /* Advances the simulation by `real_seconds` of real time. Returns ticks run. */

@@ -367,6 +367,32 @@ static void test_blocked_tiles_are_left_out(void)
     free_world(&map, &s);
 }
 
+static void test_count_stored(void)
+{
+    Map map;
+    Stockpiles s;
+    Items items;
+    REQUIRE(init_world(&map, &s));
+    REQUIRE(items_init(&items, 16, 16));
+    int pile = stockpile_create(&s, &map, 2, 2, 4, 4);
+    REQUIRE(pile != STOCKPILE_NONE);
+    stockpile_set_allowed(&s, pile, ITEM_TYPE_BIT(ITEM_WOOD) | ITEM_TYPE_BIT(ITEM_FLINT));
+    stockpile_create(&s, &map, 10, 10, 10, 10); /* Accepts everything. */
+    items_add(&items, 2, 2, item_stack_pristine(ITEM_WOOD, 3));
+    items_add(&items, 4, 4, item_stack_pristine(ITEM_WOOD, 2));
+    items_add(&items, 3, 3, item_stack_pristine(ITEM_COBBLE, 4)); /* Not accepted. */
+    items_add(&items, 8, 8, item_stack_pristine(ITEM_WOOD, 7));   /* Outside. */
+    items_add(&items, 10, 10, item_stack_pristine(ITEM_COBBLE, 1));
+    long stored[ITEM_TYPE_COUNT] = {0};
+    stored[ITEM_FLINT] = 1; /* Added to, not reset. */
+    stockpiles_count_stored(&s, &items, stored);
+    CHECK_EQ_INT((int)stored[ITEM_WOOD], 5);
+    CHECK_EQ_INT((int)stored[ITEM_COBBLE], 1);
+    CHECK_EQ_INT((int)stored[ITEM_FLINT], 1);
+    items_free(&items);
+    free_world(&map, &s);
+}
+
 int main(void)
 {
     RUN_TEST(test_create_covers_valid_tiles_only);
@@ -379,5 +405,6 @@ int main(void)
     RUN_TEST(test_hash);
     RUN_TEST(test_overlapping_rectangle_merges_stockpiles);
     RUN_TEST(test_blocked_tiles_are_left_out);
+    RUN_TEST(test_count_stored);
     return test_summary();
 }

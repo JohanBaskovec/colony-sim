@@ -146,6 +146,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .reservations = &game->reservations,
         .pathfinder = &game->pathfinder,
         .regions = &game->regions,
+        .stock = game->stock,
         .rng = &game->rng,
         .tick = game->clock.tick,
         .night = colonist_is_night(game->clock.tick),
@@ -423,7 +424,46 @@ bool game_init(Game *game, const NewGameParams *params)
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
     spawn_starting_colonists(game, params->colonist_count);
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
+    game_update_stock(game);
     return true;
+}
+
+/* Whether some bill counts the stock. */
+static bool stock_counted(const Game *game)
+{
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = workstation_get_const(&game->workstations, index);
+        for (int bill = 0; station != NULL && bill < station->bill_count; bill++) {
+            if (station->bills[bill].mode == BILL_UNTIL_STOCK) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void game_update_stock(Game *game)
+{
+    memset(game->stock, 0, sizeof(game->stock));
+    stockpiles_count_stored(&game->stockpiles, &game->items, game->stock);
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = workstation_get_const(&game->workstations, index);
+        if (station == NULL) {
+            continue;
+        }
+        ItemStack stack = items_get(&game->items, station->x, station->y);
+        if (stack.count > 0 &&
+            stockpile_storage_priority(&game->stockpiles, station->x, station->y, stack) == 0) {
+            game->stock[stack.type] += stack.count; /* Not counted as stored already. */
+        }
+    }
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = &game->colonists[slot];
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            colonist->task == TASK_HAUL && colonist->carried.count > 0) {
+            game->stock[colonist->carried.type] += colonist->carried.count;
+        }
+    }
 }
 
 void game_shutdown(Game *game)
@@ -508,6 +548,9 @@ void game_tick(Game *game)
 {
     game->clock.tick++;
     regions_update(&game->regions, &game->map); /* Nothing to do unless the map changed. */
+    if (stock_counted(game)) {
+        game_update_stock(game);
+    }
     update_plants(game);
     if (game->clock.tick % GAME_PLANT_UPDATE_INTERVAL == 0) {
         /* Every plant grew since the last time: zones may offer new jobs. */
