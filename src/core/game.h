@@ -168,6 +168,10 @@ void game_set_instant_deconstruct(Game *game, bool on);
 void game_debug_next_weather(Game *game);
 void game_debug_cold_snap(Game *game);
 
+/* Debug: every colonist gets a gloomy memory (THOUGHT_DEBUG_GLOOM, enough to
+ * break down soon, fading within hours), and nothing holds a break back. */
+void game_debug_sadden(Game *game);
+
 /* ---- Colonists ----------------------------------------------------------- */
 
 /*

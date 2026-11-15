@@ -13,6 +13,7 @@ typedef struct DebugRows {
     const char *weather; /* Name of the sky now. */
     bool next_weather;
     bool cold_snap;
+    bool sadden;
 } DebugRows;
 
 /* A button on its own row. Returns whether it was clicked. */
@@ -49,6 +50,7 @@ static void debug_rows(UiLayout *layout, void *userdata)
     TR_FORMAT(label, sizeof(label), tr("debug.next_weather"), rows->weather);
     rows->next_weather |= button_row(layout, label);
     rows->cold_snap |= button_row(layout, tr("debug.cold_snap"));
+    rows->sadden |= button_row(layout, tr("debug.sadden"));
 }
 
 void debug_panel_draw(App *app)
@@ -76,6 +78,9 @@ void debug_panel_draw(App *app)
     }
     if (rows.next_weather) {
         game_debug_next_weather(game);
+    }
+    if (rows.sadden) {
+        game_debug_sadden(game);
     }
     if (rows.cold_snap) {
         game_debug_cold_snap(game);

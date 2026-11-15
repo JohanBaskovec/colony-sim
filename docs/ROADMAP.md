@@ -108,7 +108,9 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Weather, later: settlers taking shelter when at risk of hypothermia (with health); snow slowing walking and covering plants; rain filling puddles and making work outdoors slower; wind (direction, spreading fire, wind chill); droughts and floods; sun and heat speeding drying; moods (soaked, enjoying the sun)
 - [ ] Bladder and bowel needs, hygiene, latrines
 - [ ] Containers (buckets) and roles: water carrier filling buckets near dwellings
-- [ ] Mood system with modifiers, mental breaks
+- [x] Moods, step A: a mood from 0 to 100 drifting towards the sum of thoughts; states (hungry, thirsty, tired, cold, too hot, soaked, out in the rain) and memories (how the last night went: in a bed, on the ground, under the open sky, cold or hot; varied, monotonous, cooked or spoiled meals; warmed by a fire; a fireside story; chats); mood speeds work up or slows it down (±20 %), changes quality and condition (±10 levels) and learning (±25 %), replacing the slower work after a night on the ground; breaks below 25 (sulking without working) and 10 (going off alone, binging on the colony's food), a notice, relief afterwards; mood, its effects, thoughts and breaks in the colonist inspector, faces from the mood; a debug button to sadden everyone
+- [x] Moods, fading thoughts: no all-or-nothing thought and no drift, the mood is 50 plus what every thought weighs now; states set in over an hour, hunger, thirst and exhaustion grow worse the longer they last, and a state over fades; memories weigh in full for a while, then halve at their own pace until forgotten; renewed or adding up (chats) when they come back; the inspector shows what each thought weighs and the most it weighed while it fades
+- [ ] Moods, later: personality traits changing thoughts; expectations rising with the colony's wealth; inspiration in a very good mood; destructive breaks; mood thoughts from rooms (with room quality), clothes, deaths and injuries, meal quality; the mood in the work grid
 
 ## M5: Vision and exploration
 

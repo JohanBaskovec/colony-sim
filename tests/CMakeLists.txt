@@ -22,6 +22,7 @@ set(COLONY_UNIT_TESTS
     test_learning
     test_hearth
     test_map
+    test_mood
     test_noise
     test_pathfinding
     test_pool

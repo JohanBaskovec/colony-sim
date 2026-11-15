@@ -54,6 +54,7 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y)
     colonist->station = WORKSTATION_NONE;
     colonist->site = CONSTRUCTION_NONE;
     colonist->chat_topic = KNOWLEDGE_NONE;
+    mood_init(&colonist->mood);
 }
 
 bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority)
@@ -108,6 +109,7 @@ double colonist_learn(Colonist *colonist, KnowledgeType knowledge, KnowledgeSour
     }
     double *level = &colonist->knowledge[knowledge];
     double before = *level;
+    rate *= mood_learn_factor(colonist->mood.value);
     *level = knowledge_learn_capped(before, rate, hours, colonist->age, cap);
     double gain = *level - before;
     if (!(gain > 0.0)) {
@@ -367,10 +369,21 @@ float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge)
     if ((unsigned)knowledge < KNOWLEDGE_COUNT) {
         speed *= knowledge_work_speed(colonist->knowledge[knowledge]);
     }
-    if (colonist->ground_sleep_ticks > 0) {
-        speed *= COLONIST_GROUND_SLEEP_WORK_FACTOR;
-    }
-    return speed;
+    return speed * mood_work_factor(colonist->mood.value);
+}
+
+double colonist_work_level(const Colonist *colonist, KnowledgeType knowledge)
+{
+    double level = colonist_knowledge_level(colonist, knowledge) +
+                   mood_level_offset(colonist->mood.value);
+    return level < KNOWLEDGE_LEVEL_MIN   ? KNOWLEDGE_LEVEL_MIN
+           : level > KNOWLEDGE_LEVEL_MAX ? KNOWLEDGE_LEVEL_MAX
+                                         : level;
+}
+
+bool colonist_in_break(const Colonist *colonist)
+{
+    return colonist->mood.break_type != MOOD_BREAK_NONE;
 }
 
 float colonist_carry_weight_for_strength(int strength)
@@ -532,24 +545,14 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
 
 ColonistExpression colonist_expression(const Colonist *colonist)
 {
-    NeedLevel worst = NEED_LEVEL_OK;
-    bool content = true;
-    for (int need = 0; need < NEED_COUNT; need++) {
-        NeedLevel level = need_level(colonist->needs[need]);
-        if (level > worst) {
-            worst = level;
-        }
-        if (colonist->needs[need] < NEED_CONTENT_THRESHOLD) {
-            content = false;
-        }
-    }
-    if (worst == NEED_LEVEL_CRITICAL) {
+    float mood = colonist->mood.value;
+    if (colonist_in_break(colonist) || mood < COLONIST_ANGRY_BELOW) {
         return EXPRESSION_ANGRY;
     }
-    if (worst == NEED_LEVEL_LOW) {
+    if (mood < COLONIST_SAD_BELOW) {
         return EXPRESSION_SAD;
     }
-    return content ? EXPRESSION_SMILING : EXPRESSION_NEUTRAL;
+    return mood >= COLONIST_SMILING_FROM ? EXPRESSION_SMILING : EXPRESSION_NEUTRAL;
 }
 
 const char *colonist_task_name_key(ColonistTask task)
@@ -577,6 +580,11 @@ const char *colonist_task_name_key(ColonistTask task)
 
 const char *colonist_activity_key(const Colonist *colonist)
 {
+    const char *break_key = mood_break_key((MoodBreak)colonist->mood.break_type);
+    if (break_key != NULL && colonist->task != TASK_SLEEP && colonist->task != TASK_EAT &&
+        colonist->task != TASK_DRINK) {
+        return break_key;
+    }
     if (colonist->task == TASK_WORK && colonist->gathering) {
         const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
         if (def != NULL) {
@@ -646,8 +654,17 @@ static void release_fuel(Colonist *colonist, const ColonistContext *context)
 /* Every task change goes through here: whatever the colonist had reserved
  * (job, food) is released, so reservations never outlive the task that made
  * them. The path is kept: callers set it before or clear it after. */
+static void remember_sleep(Colonist *colonist, const ColonistContext *context);
+
 static void begin_task(Colonist *colonist, const ColonistContext *context, ColonistTask task)
 {
+    if (colonist->task == TASK_SLEEP && task != TASK_SLEEP) {
+        remember_sleep(colonist, context); /* Woke up. */
+    } else if (colonist->task != TASK_SLEEP && task == TASK_SLEEP) {
+        colonist->sleep_ticks = 0;
+        colonist->sleep_cold_ticks = 0;
+        colonist->sleep_hot_ticks = 0;
+    }
     if (colonist->carried.count > 0) {
         /* Whatever is in hand is put down where the colonist stands. */
         items_drop(context->items, context->map, colonist->x, colonist->y, colonist->carried);
@@ -1044,15 +1061,46 @@ static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context)
 
 /* Rest gain multiplier where the colonist lies: its bed (or the ground),
  * and the temperature it feels there. */
-static float rest_factor(const Colonist *colonist, const ColonistContext *context)
+/* Rest gain multiplier asleep where the colonist lies, feeling `felt`. */
+static float rest_factor(const Colonist *colonist, const ColonistContext *context, float felt)
 {
     StructureType bed = map_structure(context->map, colonist->x, colonist->y);
     float factor =
         structure_is_bed(bed) ? structure_def(bed)->rest_factor : COLONIST_GROUND_REST_FACTOR;
-    if (context->temperatures != NULL) {
-        factor *= colonist_sleep_temperature_factor(felt_here(colonist, context));
+    return factor * colonist_sleep_temperature_factor(felt);
+}
+
+/* A sleep ends: after a real one, the colonist remembers how it slept. */
+static void remember_sleep(Colonist *colonist, const ColonistContext *context)
+{
+    int ticks = colonist->sleep_ticks;
+    if (ticks >= MOOD_SLEEP_MIN_TICKS) {
+        Mood *mood = &colonist->mood;
+        bool bed = structure_is_bed(map_structure(context->map, colonist->x, colonist->y));
+        bool outside = temperature_cover(context->map, colonist->x, colonist->y) ==
+                       TEMPERATURE_COVER_OPEN;
+        float bad = MOOD_SLEEP_BAD_SHARE * (float)ticks;
+        bool cold = (float)colonist->sleep_cold_ticks > bad;
+        bool hot = (float)colonist->sleep_hot_ticks > bad;
+        if (!bed) {
+            mood_remember(mood, THOUGHT_SLEPT_ON_GROUND);
+        }
+        if (outside) {
+            mood_remember(mood, THOUGHT_SLEPT_OUTSIDE);
+        }
+        if (cold) {
+            mood_remember(mood, THOUGHT_SLEPT_COLD);
+        }
+        if (hot) {
+            mood_remember(mood, THOUGHT_SLEPT_HOT);
+        }
+        if (bed && !outside && !cold && !hot) {
+            mood_remember(mood, THOUGHT_SLEPT_WELL);
+        }
     }
-    return factor;
+    colonist->sleep_ticks = 0;
+    colonist->sleep_cold_ticks = 0;
+    colonist->sleep_hot_ticks = 0;
 }
 
 /* ---- Work ------------------------------------------------------------------ */
@@ -1756,7 +1804,7 @@ static void work(Colonist *colonist, const ColonistContext *context)
         /* Products depend on the level before this tick's learning. */
         bool done = gather_zone_add_work(context->gather_zones, context->map, context->items,
                                          target.x, target.y, job, speed,
-                                         colonist_knowledge_level(colonist, knowledge),
+                                         colonist_work_level(colonist, knowledge),
                                          context->rng);
         colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
         /* After each job, choose again: a zone may keep a settler busy
@@ -1777,7 +1825,7 @@ static void work(Colonist *colonist, const ColonistContext *context)
                                      target.y,
                                      colonist_work_speed(colonist, knowledge) *
                                          assistance(colonist, context),
-                                     colonist_knowledge_level(colonist, knowledge), context->rng);
+                                     colonist_work_level(colonist, knowledge), context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     int site = construction_at(context->constructions, target.x, target.y);
     const ConstructionSite *refresh = construction_get(context->constructions, site);
@@ -2282,7 +2330,7 @@ static bool clear_plant_first(Colonist *colonist, const ColonistContext *context
                                 gather_clear_tool_use(context->map, tile.x, tile.y));
     if (*progress >= needed) {
         gather_clear_plant(context->map, context->items, tile.x, tile.y,
-                           colonist_knowledge_level(colonist, KNOWLEDGE_GATHERING), context->rng);
+                           colonist_work_level(colonist, KNOWLEDGE_GATHERING), context->rng);
         *progress = 0.0f;
     }
     return true;
@@ -2362,7 +2410,7 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
                                            colonist->bill, context->items, context->map,
                                            colonist_work_speed(colonist, knowledge) * tool_factor *
                                                assistance(colonist, context),
-                                           colonist_knowledge_level(colonist, knowledge),
+                                           colonist_work_level(colonist, knowledge),
                                            context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     if (done) {
@@ -2775,7 +2823,7 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
     /* The grade depends on the level before this tick's learning. */
     bool built = construction_add_work(context->constructions, context->map, context->items,
                                        context->workstations, colonist->site, speed,
-                                       colonist_knowledge_level(colonist, knowledge),
+                                       colonist_work_level(colonist, knowledge),
                                        context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     if (built) {
@@ -2788,6 +2836,9 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
 
 bool colonist_can_chat(const Colonist *colonist)
 {
+    if (colonist_in_break(colonist)) {
+        return false; /* Wants to be left alone. */
+    }
     switch (colonist->task) {
     case TASK_IDLE:
     case TASK_WANDER: return true;
@@ -3354,7 +3405,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
             break;
         }
         /* The chance depends on the level before this attempt's learning. */
-        double level = colonist_knowledge_level(colonist, KNOWLEDGE_FIRE);
+        double level = colonist_work_level(colonist, KNOWLEDGE_FIRE);
         colonist->light_progress += speed;
         colonist_learn_by_doing(colonist, KNOWLEDGE_FIRE, 1, context->tick);
         if (colonist->light_progress < HEARTH_FRICTION_WORK) {
@@ -3565,6 +3616,7 @@ static void story(Colonist *colonist, const ColonistContext *context)
         return;
     }
     colonist->knowledge_practice[colonist->story_topic] = context->tick; /* Teaching. */
+    mood_remember(&colonist->mood, THOUGHT_FIRESIDE_STORY);
 }
 
 /* Sitting near the hearth, learning while the storyteller tells. */
@@ -3585,6 +3637,7 @@ static void listen_to_story(Colonist *colonist, const ColonistContext *context)
     if (!colonist_telling(teller, context->workstations)) {
         return; /* Waits for the story to start. */
     }
+    mood_remember(&colonist->mood, THOUGHT_FIRESIDE_STORY);
     KnowledgeType topic = (KnowledgeType)teller->story_topic;
     double level = teller->knowledge[topic];
     colonist_learn(colonist, topic, KNOWLEDGE_SOURCE_STORIES,
@@ -3618,6 +3671,69 @@ bool colonist_is_night(uint64_t tick)
     return hour >= 22 || hour < 6;
 }
 
+/* States thought now (hungry, cold, out in the rain...). */
+static ThoughtMask mood_states(Colonist *colonist, const ColonistContext *context, bool asleep)
+{
+    static const ThoughtType LOW[NEED_COUNT] = {THOUGHT_HUNGRY, THOUGHT_THIRSTY, THOUGHT_TIRED};
+    static const ThoughtType CRITICAL[NEED_COUNT] = {THOUGHT_STARVING, THOUGHT_PARCHED,
+                                                     THOUGHT_EXHAUSTED};
+    ThoughtMask states = 0;
+    for (int need = 0; need < NEED_COUNT; need++) {
+        if (need == NEED_REST && asleep) {
+            continue; /* Resting already. */
+        }
+        NeedLevel level = need_level(colonist->needs[need]);
+        if (level == NEED_LEVEL_CRITICAL) {
+            states |= THOUGHT_BIT(CRITICAL[need]);
+        } else if (level == NEED_LEVEL_LOW) {
+            states |= THOUGHT_BIT(LOW[need]);
+        }
+    }
+    if (context->temperatures != NULL) {
+        float felt = felt_here(colonist, context);
+        if (!asleep && felt < MOOD_COLD_CELSIUS) {
+            states |= THOUGHT_BIT(THOUGHT_COLD);
+        } else if (!asleep && felt > MOOD_HOT_CELSIUS) {
+            states |= THOUGHT_BIT(THOUGHT_HOT);
+        }
+        if (temperature_at(context->temperatures, colonist->x, colonist->y) <
+                MOOD_FIRE_COLD_AIR &&
+            hearths_radiant_warmth(context->workstations, context->map, colonist->x,
+                                   colonist->y) >= MOOD_FIRE_WARMTH) {
+            mood_remember(&colonist->mood, THOUGHT_WARMED_BY_FIRE);
+        }
+    }
+    if (colonist->wetness >= MOOD_SOAKED_WETNESS) {
+        states |= THOUGHT_BIT(THOUGHT_SOAKED);
+    }
+    if (context->wetting > 0.0f &&
+        temperature_cover(context->map, colonist->x, colonist->y) == TEMPERATURE_COVER_OPEN) {
+        states |= THOUGHT_BIT(THOUGHT_IN_THE_RAIN);
+    }
+    return states;
+}
+
+/* The colonist takes stock of how it is, its mood drifts, and in a very bad
+ * mood it may break down (the next decision acts it out). */
+static void update_mood(Colonist *colonist, const ColonistContext *context)
+{
+    Mood *mood = &colonist->mood;
+    bool asleep = colonist->task == TASK_SLEEP && !colonist_is_moving(colonist);
+    mood_set_states(mood, mood_states(colonist, context, asleep));
+    mood_advance(mood, MOOD_UPDATE_TICKS);
+    if (asleep || !mood_can_break(mood)) {
+        return;
+    }
+    float chance = mood_break_chance(mood->value) * (float)MOOD_UPDATE_TICKS / TICKS_PER_HOUR;
+    if (chance <= 0.0f || !rng_chance(context->rng, chance)) {
+        return;
+    }
+    MoodBreak kind = mood_break_kind(mood->value, rng_next_float(context->rng));
+    int hours = kind == MOOD_BREAK_SULK ? rng_range_i32(context->rng, 2, 4)
+                                        : rng_range_i32(context->rng, 4, 8);
+    mood_start_break(mood, kind, hours * TICKS_PER_HOUR);
+}
+
 static void update_needs(Colonist *colonist, const ColonistContext *context)
 {
     float *food = &colonist->needs[NEED_FOOD];
@@ -3625,9 +3741,6 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
     float *rest = &colonist->needs[NEED_REST];
     *food = clampf(*food - NEED_FOOD_DECAY_PER_TICK, 0.0f, 1.0f);
     *water = clampf(*water - NEED_WATER_DECAY_PER_TICK, 0.0f, 1.0f);
-    if (colonist->ground_sleep_ticks > 0) {
-        colonist->ground_sleep_ticks--;
-    }
     if (colonist->ember_ticks > 0) {
         colonist->ember_ticks--;
     }
@@ -3637,8 +3750,16 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
         colonist->chat_ticks = colonist_can_chat(colonist) ? colonist->chat_ticks - 1 : 0;
     }
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist)) {
-        float gain = NEED_REST_GAIN_PER_TICK * rest_factor(colonist, context);
+        float felt = context->temperatures != NULL ? felt_here(colonist, context)
+                                                   : felt_temperature(context, 0, 0);
+        float gain = NEED_REST_GAIN_PER_TICK * rest_factor(colonist, context, felt);
         *rest = clampf(*rest + gain, 0.0f, 1.0f);
+        colonist->sleep_ticks++;
+        if (felt < COLONIST_COLD_SLEEP_BELOW) {
+            colonist->sleep_cold_ticks++;
+        } else if (felt > COLONIST_HOT_SLEEP_ABOVE) {
+            colonist->sleep_hot_ticks++;
+        }
     } else {
         *rest = clampf(*rest - NEED_REST_DECAY_PER_TICK, 0.0f, 1.0f);
     }
@@ -3649,6 +3770,74 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
         if (colonist->search_quiet[kind] > 0) {
             colonist->search_quiet[kind]--;
         }
+    }
+    mood_break_tick(&colonist->mood, 1);
+    /* Spread over the ticks: not every colonist at once. */
+    if ((context->tick + context->worker_id) % MOOD_UPDATE_TICKS == 0) {
+        update_mood(colonist, context);
+    }
+}
+
+/* Walks off alone to a spot far away (MOOD_WANDER_OFF_*). */
+static bool go_off_alone(Colonist *colonist, const ColonistContext *context)
+{
+    int far = (int)(MOOD_WANDER_OFF_MAX_COST / 3.0f), near = (int)(MOOD_WANDER_OFF_MIN_COST / 2.0f);
+    for (int attempt = 0; attempt < 8; attempt++) {
+        int dx = rng_range_i32(context->rng, -far, far);
+        int dy = rng_range_i32(context->rng, -far, far);
+        if (abs(dx) < near && abs(dy) < near) {
+            continue; /* Not far enough. */
+        }
+        TilePos goal = {(int16_t)(colonist->x + dx), (int16_t)(colonist->y + dy)};
+        if (!map_is_passable(context->map, goal.x, goal.y) ||
+            !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
+            continue;
+        }
+        if (pathfinder_find(context->pathfinder, context->map, current_tile(colonist), goal,
+                            MOOD_WANDER_OFF_MAX_COST, &colonist->path)) {
+            begin_task(colonist, context, TASK_WANDER);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* A break: no work; the colonist still eats, drinks and sleeps when it must,
+ * sulks about, goes off alone, or eats far more than it needs. */
+static void act_out_break(Colonist *colonist, const ColonistContext *context)
+{
+    Mood *mood = &colonist->mood;
+    float rest = colonist->needs[NEED_REST];
+    if (try_satisfy_urgent(colonist, context, NEED_CRITICAL_THRESHOLD)) {
+        return;
+    }
+    if (rest < NEED_CRITICAL_THRESHOLD || (context->night && rest < COLONIST_NIGHT_SLEEP_REST)) {
+        start_sleeping(colonist, context);
+        return;
+    }
+    switch ((MoodBreak)mood->break_type) {
+    case MOOD_BREAK_BINGE:
+        if (mood->binge_left <= 0.0f) {
+            mood_end_break(mood); /* Ate it all. */
+            set_idle(colonist, context, random_idle_ticks(context->rng));
+            return;
+        }
+        if (try_satisfy(colonist, context, NEED_FOOD)) {
+            return;
+        }
+        break; /* No food: sulks. */
+    case MOOD_BREAK_WANDER_OFF:
+        if (!mood->went_off) {
+            mood->went_off = true;
+            if (go_off_alone(colonist, context)) {
+                return;
+            }
+        }
+        break;
+    default: break;
+    }
+    if (colonist->task != TASK_IDLE && colonist->task != TASK_WANDER) {
+        set_idle(colonist, context, random_idle_ticks(context->rng));
     }
 }
 
@@ -3661,10 +3850,6 @@ static void decide(Colonist *colonist, const ColonistContext *context)
     switch (colonist->task) {
     case TASK_SLEEP:
         if (rest >= 1.0f) {
-            /* Rested, but stiff after a night on the bare ground. */
-            if (!structure_is_bed(map_structure(context->map, colonist->x, colonist->y))) {
-                colonist->ground_sleep_ticks = COLONIST_GROUND_SLEEP_PENALTY_TICKS;
-            }
             set_idle(colonist, context, random_idle_ticks(context->rng));
         } else if (!try_satisfy_urgent(colonist, context, NEED_CRITICAL_THRESHOLD)) {
             /* Severe hunger or thirst wakes colonists up; the cold or the heat
@@ -3736,6 +3921,10 @@ static void decide(Colonist *colonist, const ColonistContext *context)
         break;
     }
 
+    if (colonist_in_break(colonist)) {
+        act_out_break(colonist, context);
+        return;
+    }
     if (try_satisfy_urgent(colonist, context, NEED_LOW_THRESHOLD)) {
         return;
     }
@@ -3801,22 +3990,35 @@ static void eat(Colonist *colonist, const ColonistContext *context)
     }
 
     float *food = &colonist->needs[NEED_FOOD];
-    ItemStack stack = items_get(context->items, colonist->x, colonist->y);
-    if (item_is_food((ItemType)stack.type)) {
-        /* Items on the ground first: eat what it takes to be sated. */
-        float nutrition = item_def((ItemType)stack.type)->nutrition;
-        int wanted = (int)ceilf((COLONIST_SATED_FOOD - *food) / nutrition);
-        int eaten = items_remove(context->items, colonist->x, colonist->y, wanted > 1 ? wanted : 1);
-        *food = clampf(*food + nutrition * (float)eaten, 0.0f, 1.0f);
-    } else {
-        /* Then the plant's fruit or leaves, as many as it takes. */
-        Plant *plant = &map->plants[map_index(map, colonist->x, colonist->y)];
-        ItemType type = plant_stock_item((PlantType)plant->type, PLANT_STOCK_FOOD);
-        float nutrition = item_def(type)->nutrition;
-        int wanted = (int)ceilf((COLONIST_SATED_FOOD - *food) / nutrition);
-        int eaten = plant_take_stock(plant, PLANT_STOCK_FOOD, wanted > 1 ? wanted : 1);
-        *food = clampf(*food + nutrition * (float)eaten, 0.0f, 1.0f);
+    Mood *mood = &colonist->mood;
+    /* What it takes to be sated, and on a binge far more. */
+    float appetite = fmaxf(COLONIST_SATED_FOOD - *food, 0.0f);
+    if (mood->break_type == MOOD_BREAK_BINGE) {
+        appetite += fmaxf(mood->binge_left, 0.0f);
     }
+    ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+    ItemType type;
+    int eaten;
+    if (item_is_food((ItemType)stack.type)) {
+        /* Items on the ground first. */
+        type = (ItemType)stack.type;
+        int wanted = (int)ceilf(appetite / item_def(type)->nutrition);
+        eaten = items_remove(context->items, colonist->x, colonist->y, wanted > 1 ? wanted : 1);
+        mood_meal(mood, type, item_stack_hit_points_percent(stack));
+    } else {
+        /* Then the plant's fruit or leaves, fresh. */
+        Plant *plant = &map->plants[map_index(map, colonist->x, colonist->y)];
+        type = plant_stock_item((PlantType)plant->type, PLANT_STOCK_FOOD);
+        int wanted = (int)ceilf(appetite / item_def(type)->nutrition);
+        eaten = plant_take_stock(plant, PLANT_STOCK_FOOD, wanted > 1 ? wanted : 1);
+        mood_meal(mood, type, 100);
+    }
+    float nutrition = item_def(type)->nutrition * (float)eaten;
+    if (mood->break_type == MOOD_BREAK_BINGE) {
+        /* Beyond what it took to be sated. */
+        mood->binge_left -= fmaxf(nutrition - fmaxf(COLONIST_SATED_FOOD - *food, 0.0f), 0.0f);
+    }
+    *food = clampf(*food + nutrition, 0.0f, 1.0f);
 
     if (colonist->needs[NEED_FOOD] < COLONIST_SATED_FOOD &&
         try_satisfy(colonist, context, NEED_FOOD)) {

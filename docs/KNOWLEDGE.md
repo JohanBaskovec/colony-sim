@@ -108,6 +108,11 @@ level (0 to 20), with the same curves:
 
 Quality is also capped by the materials (§2.2).
 
+The settler's mood (0 to 100, neutral at 50) changes all of it: work goes up
+to 20 % faster or slower, and products and constructions come out as if the
+level were up to 10 points higher or lower; learning goes up to 25 % faster or
+slower.
+
 ### 1.5 Learning
 
 Every gain is in points of level, computed as:
@@ -942,7 +947,7 @@ planned).
 | Orders: chop, mine, harvest. | + gather stones, gather branches, gather twigs, cut grass, dig up. | New materials. |
 | Items never change by themselves. | Fresh grass dries into dry grass. | Grass drying (§4.1). |
 | Item categories: food, resources. | + tools, weapons, animal products, corpses. | Stockpile filters. |
-| Sleeping on the ground at full rest gain. | ×0.8 without a bed, and 10% slower work for 12 hours after (a mood later). *(done)* | Gives beds a purpose. |
+| Sleeping on the ground at full rest gain. | ×0.8 without a bed, and a bad memory of the night (mood). *(done)* | Gives beds a purpose. |
 | Settlers spawn near water. | Also near brambles bearing fruit, hazels and a flint patch; they bring nothing. | The group arrives hungry and empty handed. |
 | The game starts in spring; one berry bush, ripe all year. | Starts at the end of summer; eight wild food plants with their seasons (§7). | Food through the seasons. |
 | Food never spoils. | Food lying on a tile rots, faster when warm, not when frozen (§7.4). *(done)* | Seasons matter: nuts and roots for the winter. |

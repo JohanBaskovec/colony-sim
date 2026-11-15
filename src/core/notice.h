@@ -20,6 +20,10 @@ typedef enum NoticeType {
     NOTICE_KNOWLEDGE_LOST,        /* Nobody masters it any more. */
     NOTICE_KNOWLEDGE_FORGOTTEN,   /* Nobody knows anything of it any more. */
     NOTICE_ROOF_COLLAPSED,        /* A roof fell in (no knowledge). */
+    /* A settler broke down (core/mood.h): sulks, goes off alone, binges. */
+    NOTICE_BREAK_SULK,
+    NOTICE_BREAK_WANDER_OFF,
+    NOTICE_BREAK_BINGE,
     NOTICE_TYPE_COUNT
 } NoticeType;
 

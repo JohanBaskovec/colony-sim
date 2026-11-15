@@ -75,6 +75,8 @@ bool conversation_hold(Colonist *a, EntityId a_id, Colonist *b, EntityId b_id, u
         listen(b, a, a_topic, tick);
         listen(a, b, b_topic, tick);
     }
+    mood_remember(&a->mood, THOUGHT_CHAT);
+    mood_remember(&b->mood, THOUGHT_CHAT);
     a->chat_ticks = CONVERSATION_TICKS;
     a->chat_partner = b_id;
     a->chat_topic = (uint8_t)a_topic;

@@ -339,18 +339,14 @@ static void test_settlers_sleep_in_beds(void)
     /* Rest comes back faster in a bed. */
     CHECK(sleeper->needs[NEED_REST] > other->needs[NEED_REST] + 0.03f);
 
-    /* Fully rested (before the night): stiff after the ground, fine after the bed. */
+    /* Fully rested (before the night): each remembers how it slept. */
     run_ticks(&game, 6 * TICKS_PER_HOUR);
     CHECK(sleeper->task != TASK_SLEEP && other->task != TASK_SLEEP);
-    CHECK_EQ_INT(sleeper->ground_sleep_ticks, 0);
-    CHECK(other->ground_sleep_ticks > 0);
-    float rested_speed = colonist_work_speed(sleeper, KNOWLEDGE_GATHERING);
-    CHECK_NEAR(colonist_work_speed(other, KNOWLEDGE_GATHERING),
-               COLONIST_GROUND_SLEEP_WORK_FACTOR * rested_speed, 0.0001f);
-    /* The stiffness wears off. */
-    int left = other->ground_sleep_ticks;
-    run_ticks(&game, 100);
-    CHECK_EQ_INT(other->ground_sleep_ticks, left - 100);
+    CHECK(!mood_has(&sleeper->mood, THOUGHT_SLEPT_ON_GROUND));
+    CHECK(mood_has(&other->mood, THOUGHT_SLEPT_ON_GROUND));
+    /* No roof over either of them. */
+    CHECK(mood_has(&sleeper->mood, THOUGHT_SLEPT_OUTSIDE));
+    CHECK(!mood_has(&sleeper->mood, THOUGHT_SLEPT_WELL));
     game_shutdown(&game);
 }
 

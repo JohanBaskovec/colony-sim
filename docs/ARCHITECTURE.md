@@ -43,7 +43,7 @@ simulation:
 | Module       | Responsibility                                                               |
 |--------------|------------------------------------------------------------------------------|
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
-| `colonist`   | Colonist data, needs, decision making, movement along paths, work, facial expression from the needs, the action its hands are doing |
+| `colonist`   | Colonist data, needs, decision making, movement along paths, work, what its mood thinks of (states, sleep, meals) and its breaks, facial expression from the mood, the action its hands are doing |
 | `appearance` | Looks of a colonist (skin, body shape, hair style and color, beard), rolled at creation |
 | `designation`| Player work orders per tile (mine rock, take a structure apart), the knowledge and level each needs, work progress |
 | `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
@@ -62,7 +62,8 @@ simulation:
 | `work`       | Work types (mining, fire, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning (rates, caps, fading), quality and condition of what a worker produces |
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
-| `notice`     | Messages the simulation raises for the player (a knowledge about to be lost...), kept in a ring |
+| `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), kept in a ring |
+| `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
 | `roof`       | Roofs falling in when their last support goes (half the materials drop), checked around what the map logged as changed |
@@ -289,6 +290,38 @@ nearest food, on the ground or on a plant bearing food it may eat in place
 (fruit, nuts, leaves; not roots, nor what could be mistaken for a poisonous
 plant), and eats just what it takes to be sated. Items in
 hand are stored on the colonist (`Colonist.carried`), not in the layer.
+
+**Moods** (`core/mood.h`, `Colonist.mood`, part of `game_hash()`): the mood
+(0 to 100) is 50 plus what each of the settler's thoughts weighs now
+(`Mood.weight`), with no drift and no all-or-nothing thought: every thought
+weighs more or less over time. States (hungry, thirsty, tired and worse; cold
+or too hot while awake; soaked; out in the rain) are set by `update_mood()`
+every `MOOD_UPDATE_TICKS`, the colonists spread over those ticks by their
+slot, then `mood_advance()` moves every thought on. A state sets in over an
+hour (`MOOD_STATE_RISE_HOURS`); hunger, thirst and exhaustion grow worse the
+longer they last (`ThoughtDef.grow_hours`, `grow_max`: up to twice as bad);
+once over, a state fades. A memory weighs its full value for
+`ThoughtDef.plateau_hours`, then fades. Fading halves a thought every
+`half_life_hours` until it weighs less than `MOOD_FORGET_BELOW`; `Mood.peak`
+keeps the most it weighed, shown in the inspector ("fading, was −8"). A
+memory that comes back is renewed to its full value, or adds up to
+`max_stack` times it (chats). Memories: how the last sleep went
+(`remember_sleep()` when a sleep of two hours or more ends: in a bed or on the
+ground, under the open sky, too cold or hot for a quarter of it, or well),
+meals (`mood_meal()`: cooked, spoiled, varied or monotonous among the last
+five), a fire's warmth on a cold day, a fireside story (teller and
+listeners), chats (adding up). The mood scales work speed
+(`colonist_work_speed()`, ±20 %), the level products and constructions come
+from (`colonist_work_level()`, ±10 levels: quality and condition) and
+learning (`colonist_learn()`, ±25 %); it replaced the old slower work after a
+night on the ground. Below 25 a break may start (`mood_break_chance()`, rolled
+on the game's random stream, so only for unhappy settlers): a sulk (no work,
+2 to 4 hours), and below 10 going off alone far away or a binge on the
+colony's food (4 to 8 hours, a binge ends once eaten). During a break
+`act_out_break()` replaces the decision: urgent needs and sleep still come
+first, no work, no chat, no fireside. A break ends with relief (+10, fading
+after 6 hours) and 12 hours without another one. The game raises a notice when one
+starts (`Mood.break_started`). The face shown follows the mood.
 
 ### Stockpiles and hauling
 
@@ -753,9 +786,8 @@ head tile and the bed of each owner; a bed owned by someone else is never
 taken, even when its owner is awake. `game_tick()` calls
 `beds_forget_missing()` (beds taken apart or fallen apart lose their owner)
 and `game_remove_colonist()` frees the settler's bed. Rest comes back at `rest_factor` in a bed (1 for a grass
-bed) and `COLONIST_GROUND_REST_FACTOR` (0.8) on the ground; waking up from a
-night on the ground leaves `ground_sleep_ticks` of slower work
-(`COLONIST_GROUND_SLEEP_WORK_FACTOR`), to become a mood once moods exist.
+bed) and `COLONIST_GROUND_REST_FACTOR` (0.8) on the ground; a night on the
+ground is a bad memory (moods, below).
 
 ### Workstations, bills and carried tools
 

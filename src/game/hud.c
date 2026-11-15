@@ -13,7 +13,7 @@
 
 #define HUD_MARGIN 8.0f
 #define HUD_PADDING 6.0f
-#define HUD_MAX_LINES 40
+#define HUD_MAX_LINES 64
 #define HUD_LINE_SIZE 256
 
 static const SDL_Color HUD_TEXT_COLOR = {236, 236, 228, 255};
@@ -517,6 +517,63 @@ static void add_need_line(Panel *panel, const Colonist *colonist, NeedType need)
     }
 }
 
+/* A whole number with its sign ("+6", "-8"). */
+static void format_signed(char *out, size_t size, long long value)
+{
+    char number[16];
+    tr_integer(number, sizeof(number), value);
+    SDL_snprintf(out, size, "%s%s", value > 0 ? "+" : "", number);
+}
+
+/* Whole hours left of `ticks`, rounded up. */
+static int hours_left(int ticks)
+{
+    return (ticks + TICKS_PER_HOUR - 1) / TICKS_PER_HOUR;
+}
+
+/* The mood and what it does, a break under way, then every thought with what
+ * it weighs now (and, fading, the most it weighed). */
+static void add_mood_lines(Panel *panel, const Colonist *colonist)
+{
+    const Mood *mood = &colonist->mood;
+    char value[16];
+    tr_integer(value, sizeof(value), SDL_lroundf(mood->value));
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.mood"), value,
+              tr(mood_level_key(mood->value)));
+    char work[16], learn[16], level[16];
+    tr_decimal(work, sizeof(work), mood_work_factor(mood->value), 2);
+    tr_decimal(learn, sizeof(learn), (float)mood_learn_factor(mood->value), 2);
+    format_signed(level, sizeof(level), SDL_lround(mood_level_offset(mood->value)));
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.mood_effects"), work, learn,
+              level);
+    const char *break_key = mood_break_key((MoodBreak)mood->break_type);
+    if (break_key != NULL) {
+        int left = hours_left(mood->break_ticks);
+        char hours[16];
+        tr_integer(hours, sizeof(hours), left);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.colonist.break", left),
+                  tr(break_key), hours);
+    }
+    for (int type = 0; type < THOUGHT_COUNT; type++) {
+        ThoughtType thought = (ThoughtType)type;
+        if (!mood_has(mood, thought)) {
+            continue;
+        }
+        const ThoughtDef *def = thought_def(thought);
+        char amount[16];
+        format_signed(amount, sizeof(amount), SDL_lroundf(mood_thought_value(mood, thought)));
+        if (mood_fading(mood, thought)) {
+            char peak[16];
+            format_signed(peak, sizeof(peak), SDL_lroundf(mood->peak[type]));
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.thought_fading"), amount,
+                      tr(def->name_key), peak);
+        } else {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.thought"), amount,
+                      tr(def->name_key));
+        }
+    }
+}
+
 /* A knowledge level as shown: one decimal, rounded down. */
 static void format_level(char *out, size_t size, double level)
 {
@@ -682,15 +739,7 @@ static void build_selection_panel(App *app, Panel *panel)
     for (int need = 0; need < NEED_COUNT; need++) {
         add_need_line(panel, colonist, (NeedType)need);
     }
-    if (colonist->ground_sleep_ticks > 0) {
-        char percent[16], hours[16];
-        tr_integer(percent, sizeof(percent),
-                   (long long)SDL_lroundf((1.0f - COLONIST_GROUND_SLEEP_WORK_FACTOR) * 100.0f));
-        int left = (colonist->ground_sleep_ticks + TICKS_PER_HOUR - 1) / TICKS_PER_HOUR;
-        tr_integer(hours, sizeof(hours), left);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.colonist.ground_sleep", left),
-                  percent, hours);
-    }
+    add_mood_lines(panel, colonist);
     float chill = COLONIST_WET_CHILL * colonist->wetness;
     long long wet = (long long)SDL_lroundf(colonist->wetness * 100.0f);
     if (wet > 0) {

@@ -85,19 +85,21 @@ static void test_validation_rejects_out_of_range(void)
     CHECK(!appearance_is_valid(looks));
 }
 
-static void test_expression_follows_needs(void)
+static void test_expression_follows_mood(void)
 {
     Colonist colonist;
     colonist_init(&colonist, "Test", 30, 0, 0);
-    for (int need = 0; need < NEED_COUNT; need++) {
-        colonist.needs[need] = 1.0f;
-    }
+    colonist.mood.value = COLONIST_SMILING_FROM;
     CHECK_EQ_INT(colonist_expression(&colonist), EXPRESSION_SMILING);
-    colonist.needs[NEED_REST] = NEED_CONTENT_THRESHOLD - 0.01f;
+    colonist.mood.value = MOOD_NEUTRAL;
     CHECK_EQ_INT(colonist_expression(&colonist), EXPRESSION_NEUTRAL);
-    colonist.needs[NEED_FOOD] = NEED_LOW_THRESHOLD - 0.01f;
+    colonist.mood.value = COLONIST_SAD_BELOW - 1.0f;
     CHECK_EQ_INT(colonist_expression(&colonist), EXPRESSION_SAD);
-    colonist.needs[NEED_WATER] = NEED_CRITICAL_THRESHOLD - 0.01f;
+    colonist.mood.value = COLONIST_ANGRY_BELOW - 1.0f;
+    CHECK_EQ_INT(colonist_expression(&colonist), EXPRESSION_ANGRY);
+    /* Angry during a break, whatever the mood. */
+    colonist.mood.value = MOOD_NEUTRAL;
+    mood_start_break(&colonist.mood, MOOD_BREAK_SULK, TICKS_PER_HOUR);
     CHECK_EQ_INT(colonist_expression(&colonist), EXPRESSION_ANGRY);
     colonist_free(&colonist);
 }
@@ -142,7 +144,7 @@ int main(void)
     RUN_TEST(test_gray_hair_comes_with_age);
     RUN_TEST(test_same_seed_same_looks);
     RUN_TEST(test_validation_rejects_out_of_range);
-    RUN_TEST(test_expression_follows_needs);
+    RUN_TEST(test_expression_follows_mood);
     RUN_TEST(test_colonists_get_deterministic_looks);
     return test_summary();
 }

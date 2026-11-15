@@ -361,6 +361,9 @@ static void test_apprentice_assists_a_master(void)
 
     /* The second settler takes the free place; a master gone, it stops. */
     run_until_at_work(&game, master, 3000);
+    for (int i = 0; i < 60 && second->task != TASK_ASSIST; i++) {
+        run_ticks(&game, 1); /* At its next step at the latest. */
+    }
     CHECK_EQ_INT(second->task, TASK_ASSIST);
     game_remove_colonist(&game, master_id);
     run_ticks(&game, 60); /* At its next step at the latest. */

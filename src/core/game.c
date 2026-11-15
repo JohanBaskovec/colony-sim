@@ -659,7 +659,18 @@ static void update_colonists(Game *game)
             /* Someone before may have changed the map (a felled tree, a new wall): stale
              * regions would make every search pre-check answer "maybe". */
             regions_update(&game->regions, &game->map);
-            colonist_tick(&game->colonists[slot], &context);
+            Colonist *colonist = &game->colonists[slot];
+            colonist_tick(colonist, &context);
+            if (colonist->mood.break_started) {
+                static const NoticeType NOTICES[MOOD_BREAK_COUNT] = {
+                    [MOOD_BREAK_SULK] = NOTICE_BREAK_SULK,
+                    [MOOD_BREAK_WANDER_OFF] = NOTICE_BREAK_WANDER_OFF,
+                    [MOOD_BREAK_BINGE] = NOTICE_BREAK_BINGE,
+                };
+                colonist->mood.break_started = false;
+                notices_push(&game->notices, NOTICES[colonist->mood.break_type], KNOWLEDGE_NONE,
+                             colonist->name, game->clock.tick);
+            }
         }
     }
 }
@@ -749,6 +760,17 @@ void game_debug_next_weather(Game *game)
 void game_debug_cold_snap(Game *game)
 {
     game->weather.spell = -WEATHER_SPELL_MAX;
+}
+
+void game_debug_sadden(Game *game)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
+            Mood *mood = &game->colonists[slot].mood;
+            mood_remember(mood, THOUGHT_DEBUG_GLOOM);
+            mood->break_cooldown = 0;
+        }
+    }
 }
 
 /* GameDebug.instant_deconstruct: every order to take a structure apart or a
@@ -887,6 +909,9 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
         hash = hash_fnv1a64(hash, &c->wetness, sizeof(c->wetness));
+        hash = mood_hash(&c->mood, hash);
+        int32_t sleep[3] = {c->sleep_ticks, c->sleep_cold_ticks, c->sleep_hot_ticks};
+        hash = hash_fnv1a64(hash, sleep, sizeof(sleep));
         hash = hash_fnv1a64(hash, c->work_priorities, sizeof(c->work_priorities));
         hash = hash_fnv1a64(hash, c->knowledge, sizeof(c->knowledge));
         hash = hash_fnv1a64(hash, c->knowledge_peak, sizeof(c->knowledge_peak));

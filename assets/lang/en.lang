@@ -75,6 +75,7 @@ debug.instant_deconstruct = Instant taking apart (marked structures and roofs co
 # {0} = the sky now (e.g. Rain)
 debug.next_weather = Weather: {0} (next)
 debug.cold_snap = Cold snap (until tomorrow)
+debug.sadden = Sadden everyone (gloom, fading)
 
 # Items
 item.wood = Wood
@@ -312,9 +313,16 @@ need.rest.critical = Exhausted
 hud.colonist.age = Age: {0}
 # {0} = strength (1 to 20), {1} = weight carried without slowing down (e.g. 44 kg)
 hud.colonist.strength = Strength: {0} (carries up to {1})
-# {0}: percent of work speed lost, {1}: hours left.
-hud.colonist.ground_sleep.one = Slept on the ground: works {0}% slower ({1} hour left)
-hud.colonist.ground_sleep.other = Slept on the ground: works {0}% slower ({1} hours left)
+# Mood: {0} = mood (0 to 100), {1} = how it feels (mood.level.*), {2} = the mood it is heading for
+hud.colonist.mood = Mood: {0} ({1})
+# {0} = work speed factor, {1} = learning speed factor, {2} = levels added to the quality of what is made (e.g. +3, -5)
+hud.colonist.mood_effects = Works ×{0}, learns ×{1}, quality {2} levels
+# {0} = the break (mood.break.*), {1} = hours left
+hud.colonist.break.one = Breaking down: {0} ({1} hour left)
+hud.colonist.break.other = Breaking down: {0} ({1} hours left)
+# A thought: {0} = what it adds to the mood (e.g. +6, -8), {1} = the thought (thought.*); {2} = hours left of a memory
+hud.colonist.thought = • {1}: {0}
+hud.colonist.thought_fading = • {1}: {0} (fading, was {2})
 # {0} = how wet, in percent; {1} = degrees felt colder (e.g. 6 °C)
 hud.colonist.wet = Wet ({0}%): feels {1} colder
 # {0} = activity name
@@ -564,3 +572,44 @@ notice.knowledge_last_master = {0}: {1} is the last one who masters it
 notice.knowledge_lost = {0}: nobody masters it any more
 notice.knowledge_forgotten = {0}: forgotten, nobody knows anything of it any more
 notice.roof_collapsed = A roof fell in: no wall or rock held it up any more
+# A settler breaks down (bad mood). {1} = name
+notice.break_sulk = {1} is sulking and refuses to work
+notice.break_wander_off = {1} has had enough and goes off alone
+notice.break_binge = {1} is gorging on the colony's food
+
+# Moods: thoughts (what a settler thinks, with what it adds to its mood)
+thought.hungry = Hungry
+thought.starving = Starving
+thought.thirsty = Thirsty
+thought.parched = Parched
+thought.tired = Tired
+thought.exhausted = Exhausted
+thought.cold = Cold
+thought.hot = Too hot
+thought.soaked = Soaked to the bone
+thought.in_the_rain = Out in the rain
+thought.slept_well = Slept well in a bed
+thought.slept_on_ground = Slept on the bare ground
+thought.slept_outside = Slept under the open sky
+thought.slept_cold = A cold night
+thought.slept_hot = A night too hot
+thought.varied_meals = Varied meals
+thought.same_food = The same food again and again
+thought.cooked_meal = A cooked meal
+thought.spoiled_food = Ate spoiled food
+thought.warmed_by_fire = Warmed by a fire
+thought.fireside_story = A story by the fire
+thought.chat = A good chat
+thought.relief = Relief after letting it out
+thought.debug_gloom = Gloom out of nowhere (debug)
+# Breaks: what a settler in a very bad mood does
+mood.break.sulk = Sulking
+mood.break.wander_off = Gone off alone
+mood.break.binge = Eating far too much
+# How a mood feels
+mood.level.breaking = about to break down
+mood.level.miserable = miserable
+mood.level.upset = upset
+mood.level.neutral = neutral
+mood.level.content = content
+mood.level.happy = happy

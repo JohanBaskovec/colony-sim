@@ -10,7 +10,16 @@
  * Settlers sleep in their own bed (core/bed.h); one without a bed takes the
  * nearest free one, and one whose bed cannot be reached takes another. With
  * no bed at all they sleep on the ground: rest comes back more slowly there,
- * and after such a night they work more slowly for a while.
+ * and they remember the night (core/mood.h).
+ *
+ * Moods (core/mood.h): every MOOD_UPDATE_TICKS a colonist takes stock of
+ * how it is (hungry, cold, soaked, out in the rain...) and its mood drifts;
+ * it remembers how it slept, what it ate, a fire that warmed it, stories and
+ * chats. Its mood speeds up or slows down its work and learning, and makes
+ * what it makes better or worse (colonist_work_level()). A colonist in a
+ * very bad mood may break down: it then sulks and does no work, goes off
+ * alone far away, or eats far more than it needs; it still eats, drinks and
+ * sleeps when it must.
  *
  * Tools are simply carried, at most one of each type, and used without
  * equipping anything; they count in the carried weight. A colonist fetches a
@@ -49,6 +58,7 @@
 #include "core/hearth.h"
 #include "core/knowledge.h"
 #include "core/map.h"
+#include "core/mood.h"
 #include "core/pathfinding.h"
 #include "core/pool.h"
 #include "core/region.h"
@@ -110,9 +120,6 @@
 #define NEED_REST_GAIN_PER_TICK (1.0f / (8.0f * TICKS_PER_HOUR))
 /* Rest gain multiplier when sleeping on the bare ground. */
 #define COLONIST_GROUND_REST_FACTOR 0.8f
-/* After waking up from a night on the ground, work is slower for this long. */
-#define COLONIST_GROUND_SLEEP_PENALTY_TICKS (12 * TICKS_PER_HOUR)
-#define COLONIST_GROUND_SLEEP_WORK_FACTOR 0.9f
 /* Sleeping where it feels colder or hotter than this rests less: the rest
  * gain loses COLONIST_SLEEP_LOSS_PER_DEGREE of itself per degree beyond,
  * down to COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN (tuning). The felt
@@ -142,8 +149,10 @@
 #define COLONIST_BED_SEARCH_MAX_COST 150.0f
 #define NEED_LOW_THRESHOLD 0.3f
 #define NEED_CRITICAL_THRESHOLD 0.1f
-/* Colonists smile when every need is at least this well satisfied. */
-#define NEED_CONTENT_THRESHOLD 0.7f
+/* Faces by mood (see colonist_expression()). */
+#define COLONIST_ANGRY_BELOW 20.0f
+#define COLONIST_SAD_BELOW 35.0f
+#define COLONIST_SMILING_FROM 65.0f
 
 /* A hungry colonist keeps eating until food reaches this level. */
 #define COLONIST_SATED_FOOD 0.8f
@@ -356,8 +365,11 @@ typedef struct Colonist {
     int site_number;
     int supply_slot;
     int supply_promised;
-    /* Ticks left of slower work after a night on the ground. */
-    int ground_sleep_ticks;
+    /* The sleep under way (TASK_SLEEP): ticks asleep, and of them, ticks it
+     * felt too cold or hot to sleep well. */
+    int sleep_ticks;
+    int sleep_cold_ticks;
+    int sleep_hot_ticks;
     /* Tools carried (one per type, count 1; empty slots have type ITEM_NONE). */
     ItemStack tools[COLONIST_TOOL_MAX];
     /* Ticks of work done with each tool since it last lost a hit point. */
@@ -409,6 +421,7 @@ typedef struct Colonist {
     uint8_t story_topic;
     float needs[NEED_COUNT];
     float wetness; /* 0 (dry) .. 1 (wet through). */
+    Mood mood;
     ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
 
@@ -538,9 +551,17 @@ float colonist_sleep_temperature_factor(float celsius);
 bool colonist_can_gather(const Colonist *colonist, GatherJob job);
 
 /* Work done per tick on something of `knowledge`: COLONIST_WORK_SPEED scaled
- * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE), and by
- * COLONIST_GROUND_SLEEP_WORK_FACTOR after a night on the ground. */
+ * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE), and by the mood
+ * (mood_work_factor()). */
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge);
+
+/* The level what the colonist makes comes from (quality and condition of
+ * products, grade of constructions): its level in the knowledge, more or
+ * less with its mood (mood_level_offset()), within the valid levels. */
+double colonist_work_level(const Colonist *colonist, KnowledgeType knowledge);
+
+/* Whether the colonist is having a break (core/mood.h). */
+bool colonist_in_break(const Colonist *colonist);
 
 /* Whether the colonist knows enough to build this kind of workstation. */
 bool colonist_can_build(const Colonist *colonist, WorkstationType type);
@@ -629,8 +650,9 @@ NeedLevel need_level(float value);
  * tool kind of the recipe being crafted. */
 ColonistAction colonist_action(const Colonist *colonist, ItemType *tool);
 
-/* Angry when a need is critical, sad when one is low, smiling when every need
- * reaches NEED_CONTENT_THRESHOLD, neutral otherwise. */
+/* From the mood: angry during a break or below COLONIST_ANGRY_BELOW, sad
+ * below COLONIST_SAD_BELOW, smiling from COLONIST_SMILING_FROM, neutral
+ * otherwise. */
 ColonistExpression colonist_expression(const Colonist *colonist);
 
 /* Translation keys. need_level_key() returns NULL for NEED_LEVEL_OK. */

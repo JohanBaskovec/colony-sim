@@ -18,6 +18,7 @@ add_library(colony_core STATIC
     knowledge.c
     log.c
     map.c
+    mood.c
     noise.c
     notice.c
     pathfinding.c

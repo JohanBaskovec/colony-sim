@@ -32,6 +32,9 @@ const char *notice_text_key(NoticeType type)
         [NOTICE_KNOWLEDGE_LOST] = N_("notice.knowledge_lost"),
         [NOTICE_KNOWLEDGE_FORGOTTEN] = N_("notice.knowledge_forgotten"),
         [NOTICE_ROOF_COLLAPSED] = N_("notice.roof_collapsed"),
+        [NOTICE_BREAK_SULK] = N_("notice.break_sulk"),
+        [NOTICE_BREAK_WANDER_OFF] = N_("notice.break_wander_off"),
+        [NOTICE_BREAK_BINGE] = N_("notice.break_binge"),
     };
     return (unsigned)type < NOTICE_TYPE_COUNT ? KEYS[type] : KEYS[NOTICE_KNOWLEDGE_LOST];
 }
