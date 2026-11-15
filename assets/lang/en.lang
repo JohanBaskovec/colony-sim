@@ -74,6 +74,8 @@ item.flake = Sharp flake
 item.hand_axe = Hand axe
 item.throwing_spear = Throwing spear
 item.thrusting_spear = Thrusting spear
+item.throwing_spear_hardened = Fire-hardened throwing spear
+item.thrusting_spear_hardened = Fire-hardened thrusting spear
 item.category.food = Food
 item.category.resources = Resources
 item.category.tools = Tools
@@ -87,6 +89,7 @@ item.quality.superb = superb
 
 # Work types
 work.mining = Mining
+work.fire = Fire
 work.woodcutting = Woodcutting
 work.gathering = Gathering
 work.construction = Construction
@@ -226,6 +229,10 @@ colonist.task.supply = Bringing materials
 colonist.task.clean = Cleaning
 colonist.task.assist = Apprenticing
 colonist.task.haul = Hauling
+colonist.task.refuel = Feeding a fire
+colonist.task.light = Lighting a fire
+colonist.task.story = Telling a story
+colonist.task.listen = Listening to a story
 
 need.food = Food
 need.food.low = Hungry
@@ -268,6 +275,9 @@ hud.colonist.knowledge_learning = {0}: {1} (not mastered yet)
 hud.colonist.knowledge_learning_fading = {0}: {1} (not mastered yet, fading)
 # {0} = the master's name, {1} = knowledge name
 hud.colonist.apprentice = Learning from {0}: {1}
+hud.colonist.telling = Telling about: {0}
+hud.colonist.listening = Listening to {0} about: {1}
+hud.colonist.embers = Carrying embers wrapped in grass
 # {0} = the apprentice's name
 hud.colonist.teaching = Teaching {0} the trade
 # {0} = the other settler's name
@@ -280,6 +290,7 @@ hud.knowledge.peak = Best level reached: {0}
 hud.knowledge.gain.doing = +{0} today by doing the work
 hud.knowledge.gain.apprenticeship = +{0} today as an apprentice
 hud.knowledge.gain.conversation = +{0} today by chatting
+hud.knowledge.gain.stories = +{0} today from fireside stories
 hud.knowledge.no_gain = Nothing learned today
 hud.knowledge.practised = Practised lately
 # {0} = days without practice, {1} = days after which a knowledge fades
@@ -351,6 +362,8 @@ workstation.crafting_spot = Crafting spot
 workstation.crafting_spot.description = A place on the ground to make spears and other tools from wood and stone
 workstation.knapping_spot = Knapping spot
 workstation.knapping_spot.description = Where flint and cobbles are knapped into flakes, choppers and hand axes
+workstation.open_hearth = Open hearth
+workstation.open_hearth.description = A ring of stones around a pit: a fire for light at night, fireside stories and hardening wood
 
 # Structures (built from blueprints)
 structure.grass_bed = Grass bed
@@ -368,6 +381,8 @@ recipe.flakes = Sharp flakes
 recipe.hand_axe = Hand axe
 recipe.throwing_spear = Throwing spear
 recipe.thrusting_spear = Thrusting spear
+recipe.harden_throwing_spear = Harden a throwing spear in the fire
+recipe.harden_thrusting_spear = Harden a thrusting spear in the fire
 # What a recipe needs. {0} = ingredient, {1} = tools
 recipe.needs = Needs {0} · Tools: {1}
 # {0} = ingredient
@@ -399,6 +414,15 @@ station.warning.unknown_recipe = Nobody knows this recipe well enough
 station.warning.tool = Missing tool: {0}
 station.warning.no_input = No suitable material lying in the colony
 station.warning.no_worker_level = Nobody who knows this recipe has a level in this range
+station.warning.fire_out = The fire is out: these bills wait for it to burn
+station.hearth.fuel = Fuel: {0} of {1}
+station.hearth.burning = Burning, fuel for {0} h
+station.hearth.out = Out
+station.hearth.keep_burning = Keep it burning
+station.hearth.fuel_types = Burn:
+station.hearth.teach = Fireside stories in the evening, about:
+station.hearth.teach_hint = A settler who knows it well tells about it to those sitting around
+station.hearth.nothing_to_teach = Nothing discovered to tell about yet
 # Bill repeat modes (click to change). {0} = target
 bill.mode.do_times.one = Do {0} time
 bill.mode.do_times.other = Do {0} times

@@ -36,6 +36,8 @@ typedef enum ItemType {
     ITEM_HAND_AXE,
     ITEM_THROWING_SPEAR,
     ITEM_THRUSTING_SPEAR,
+    ITEM_THROWING_SPEAR_HARDENED, /* Its point dried and charred in a fire. */
+    ITEM_THRUSTING_SPEAR_HARDENED,
     ITEM_TYPE_COUNT
 } ItemType;
 

@@ -27,7 +27,8 @@
  * Tools and weapons (docs/KNOWLEDGE.md §6, §8; a plain cobble serves as
  * the knapper's hammer): a chopper (1 kg), a sharp flake (30 g, razor sharp
  * but soon worn out), a hand axe (600 g); a throwing spear (0.8 kg, a long
- * straight branch) and a thrusting spear (1.5 kg, thicker).
+ * straight branch) and a thrusting spear (1.5 kg, thicker). Fire hardening
+ * (docs/KNOWLEDGE.md §5.2) makes spears that last half as long again.
  */
 #define DEF(id_, key, category_, weight_, bulk_, nutrition_, hp, quality, damage)                 \
     .id = (id_), .name_key = (key), .category = (category_), .weight = (weight_),              \
@@ -67,6 +68,14 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                                  ITEM_CATEGORY_WEAPONS, 0.8f, 10.0f, 0.0f, 50, true, true)},
     [ITEM_THRUSTING_SPEAR] = {DEF("thrusting_spear", N_("item.thrusting_spear"),
                                   ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 70, true, true)},
+    [ITEM_THROWING_SPEAR_HARDENED] = {DEF("throwing_spear_hardened",
+                                          N_("item.throwing_spear_hardened"),
+                                          ITEM_CATEGORY_WEAPONS, 0.8f, 10.0f, 0.0f, 75, true,
+                                          true)},
+    [ITEM_THRUSTING_SPEAR_HARDENED] = {DEF("thrusting_spear_hardened",
+                                           N_("item.thrusting_spear_hardened"),
+                                           ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 105, true,
+                                           true)},
 };
 
 #undef DEF

@@ -7,6 +7,7 @@ static const WorkTypeDef WORK_TYPE_DEFS[WORK_TYPE_COUNT] = {
     [WORK_MINING] = {"mining", N_("work.mining"), KNOWLEDGE_NONE},
     [WORK_WOODCUTTING] = {"woodcutting", N_("work.woodcutting"), KNOWLEDGE_NONE},
     [WORK_GATHERING] = {"gathering", N_("work.gathering"), KNOWLEDGE_GATHERING},
+    [WORK_FIRE] = {"fire", N_("work.fire"), KNOWLEDGE_FIRE},
     /* Each construction and recipe has its own knowledge. */
     [WORK_CONSTRUCTION] = {"construction", N_("work.construction"), KNOWLEDGE_NONE},
     [WORK_CRAFTING] = {"crafting", N_("work.crafting"), KNOWLEDGE_NONE},

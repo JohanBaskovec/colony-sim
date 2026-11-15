@@ -7,8 +7,9 @@
  * unlocks nothing; from there, the settler can carry out the orders and
  * recipes that belong to it, each from its own minimum level. The level sets
  * how fast the work goes and how good its products are. Levels rise by
- * doing the work, by assisting a master (apprenticeship) and, a little, by
- * chatting (core/conversation.h); each way of learning stops at its own cap.
+ * doing the work, by assisting a master (apprenticeship), by listening to
+ * fireside stories and, a little, by chatting (core/conversation.h); each way
+ * of learning stops at its own cap.
  * Unpractised knowledges fade, down to a share of the best level reached.
  * Design: docs/KNOWLEDGE.md.
  */
@@ -80,6 +81,10 @@ typedef enum KnowledgeType {
 #define KNOWLEDGE_APPRENTICE_RATE 1.5
 #define KNOWLEDGE_CONVERSATION_RATE 0.3
 #define KNOWLEDGE_CONVERSATION_CAP 30.0
+/* Fireside stories: KNOWLEDGE_STORY_RATE × the storyteller's level / 100,
+ * up to KNOWLEDGE_STORY_CAP and the storyteller's level. */
+#define KNOWLEDGE_STORY_RATE 1.0
+#define KNOWLEDGE_STORY_CAP 60.0
 
 /*
  * Fading: a knowledge not practised for KNOWLEDGE_FADE_AFTER_DAYS loses one
@@ -99,6 +104,7 @@ typedef enum KnowledgeSource {
     KNOWLEDGE_SOURCE_DOING,
     KNOWLEDGE_SOURCE_APPRENTICESHIP,
     KNOWLEDGE_SOURCE_CONVERSATION,
+    KNOWLEDGE_SOURCE_STORIES,
     KNOWLEDGE_SOURCE_COUNT
 } KnowledgeSource;
 

@@ -1,7 +1,7 @@
 # Knowledge, items and constructions
 
 *Living document: the reference for what settlers can know, make and build.
-Mostly design: steps 1 and 2 of the implementation plan (§12) are done; the
+Mostly design: the implementation plan (§12) says which steps are done; the
 ROADMAP says what is implemented.
 Values marked *(tuning)* are first guesses, to adjust in play.*
 
@@ -912,9 +912,30 @@ Suggested order, each step with its tests:
    starts; fading takes 1/15 of a point a day. Fireside stories wait for the
    hearth (M4), related practice for knowledges that are not starting ones.
 
-**M4: Survival**: open hearth, fuel, lighting, torches, ember bundles,
-hardening, grilling, roasting, fireside stories; heat, wind, rain, rot;
-tubers, hazel, mushrooms with seasons.
+**M4: Survival**
+8. *(done)* Fire: open hearth, fuel and refuelling, lighting with embers or
+   by friction, light at night, fire hardening of spears, fireside stories
+   and the "teach" mark. Implementation choices, departing from §5:
+   - the hearth is walked over like the other stations for now (blocking it
+     needs a passable side to work from, and room for listeners);
+   - embers are a flag on the settler (`ember_ticks`), not an
+     `ember_bundle` item, and are dropped with the lighting job; friction
+     takes a handful of dry grass as tinder (no twigs), burnt whether the
+     fire takes or not;
+   - no torch yet: it has no use before night work, and embers already
+     carry fire; no "burn now" setting (unticking "keep it burning" lets
+     the fire burn out);
+   - hardened spears get their ×1.5 hit points; the ×1.2 damage waits for
+     hunting, the hardened digging stick for the digging stick;
+   - fireside stories: from 19:00 to 22:00, a settler who masters a
+     knowledge marked to teach (a colony setting, shown in the hearth's
+     panel) tells about its best one beside a burning hearth nobody tells
+     at, up to 8 idle settlers sit around and learn at
+     `KNOWLEDGE_STORY_RATE` (1.0, times the teller's level factor) up to
+     the teller's level and 60. The first master to come tells, even if a
+     better one listens.
+   Then: grilling and roasting (with meat and tubers), heat, wind, rain,
+   rot; tubers, hazel, mushrooms with seasons.
 
 **M5: Vision and exploration**: wildlife, spear hunting, carcasses,
 butchering, cracking bones.

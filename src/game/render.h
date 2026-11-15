@@ -17,8 +17,9 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera);
 /* Dark spots on dirty tiles. */
 void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera);
 
-/* Darkens the whole screen according to the light level (1 = full daylight). */
-void render_daylight(SDL_Renderer *renderer, float daylight, float width, float height);
+/* Darkens the screen according to the light level of the hour, less around
+ * burning hearths, which also glow warm. */
+void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
 /* Items lying on the ground (placeholder shapes per item type). */
 void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera);

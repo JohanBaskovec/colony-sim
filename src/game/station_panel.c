@@ -1,5 +1,6 @@
 #include "game/station_panel.h"
 
+#include "core/hearth.h"
 #include "core/i18n.h"
 #include "game/ui_layout.h"
 
@@ -25,12 +26,15 @@ typedef enum ActionType {
     ACTION_TOGGLE_PAUSE,
     ACTION_ADD_RADIUS,
     ACTION_ADD_BILL,
+    ACTION_TOGGLE_KEEP_BURNING,
+    ACTION_TOGGLE_FUEL,
+    ACTION_TOGGLE_TEACH,
 } ActionType;
 
 typedef struct Action {
     ActionType type;
     int bill;
-    int value; /* Target, level or radius change, input type or recipe. */
+    int value; /* Target, level or radius change, item type, recipe or knowledge. */
 } Action;
 
 /* "Flint or cobble", "Hand axe and sharp flake": one or two names joined. */
@@ -265,12 +269,16 @@ static void bill_levels_row(UiLayout *layout, const Bill *bill, int index, Actio
 }
 
 /* Why nobody works on a bill, if it can be told cheaply. */
-static void bill_warning_rows(UiLayout *layout, const Game *game, const Bill *bill)
+static void bill_warning_rows(UiLayout *layout, const Game *game, const Workstation *station,
+                              const Bill *bill)
 {
     RecipeType recipe = (RecipeType)bill->recipe;
     if (!game_recipe_known(game, recipe)) {
         ui_layout_label(layout, tr("station.warning.unknown_recipe"), INDENT, true);
         return;
+    }
+    if (recipe_needs_fire(recipe) && !station->burning) {
+        ui_layout_label(layout, tr("station.warning.fire_out"), INDENT, true);
     }
     if (!game_bill_has_worker(game, bill)) {
         ui_layout_label(layout, tr("station.warning.no_worker_level"), INDENT, true);
@@ -290,6 +298,96 @@ static void bill_warning_rows(UiLayout *layout, const Game *game, const Bill *bi
     if (bill_wants_more(bill, (int)game->stock[def->product]) &&
         !game_bill_has_input(game, bill)) {
         ui_layout_label(layout, tr("station.warning.no_input"), INDENT, true);
+    }
+}
+
+/* A check box on its own row. Returns whether it was clicked. */
+static bool checkbox_row(UiLayout *layout, float indent, const char *label, bool checked)
+{
+    float width = ui_checkbox_width(layout->ui, label);
+    ui_layout_measure(layout, indent + width);
+    bool clicked = layout->draw && ui_checkbox(layout->ui, layout->x + indent, layout->y, width,
+                                               checked ? UI_CHECKED : UI_UNCHECKED, label);
+    layout->y += layout->row;
+    return clicked;
+}
+
+static void kilograms_text(char *out, size_t size, float kilograms)
+{
+    char number[16];
+    tr_decimal(number, sizeof(number), kilograms, 1);
+    TR_FORMAT(out, size, tr("unit.kg"), number);
+}
+
+/* "Burn:" and one check box per fuel type. */
+static void hearth_fuel_row(UiLayout *layout, const Workstation *station, Action *action)
+{
+    Ui *ui = layout->ui;
+    const char *label = tr("station.hearth.fuel_types");
+    float width = ui_text_width(ui, label);
+    for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
+        if (HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(type)) {
+            width += GAP + ui_checkbox_width(ui, tr(item_def((ItemType)type)->name_key));
+        }
+    }
+    ui_layout_measure(layout, width);
+    float x = layout->x;
+    if (layout->draw) {
+        ui_label(ui, label, x, layout->y + layout->text_offset);
+    }
+    x += ui_text_width(ui, label) + GAP;
+    for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
+        if (!(HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(type))) {
+            continue;
+        }
+        const char *name = tr(item_def((ItemType)type)->name_key);
+        float box_width = ui_checkbox_width(ui, name);
+        bool allowed = (station->fuel_types & ITEM_TYPE_BIT(type)) != 0;
+        if (layout->draw && ui_checkbox(ui, x, layout->y, box_width,
+                                        allowed ? UI_CHECKED : UI_UNCHECKED, name)) {
+            *action = (Action){ACTION_TOGGLE_FUEL, 0, type};
+        }
+        x += box_width + GAP;
+    }
+    layout->y += layout->row;
+}
+
+/* The fire: fuel, burning or out, what the player wants of it, and which
+ * knowledge is told at fireside stories (a colony setting, shown here). */
+static void hearth_rows(UiLayout *layout, const Game *game, const Workstation *station,
+                        Action *action)
+{
+    char text[TEXT_SIZE], fuel[32], capacity[32], number[16];
+    kilograms_text(fuel, sizeof(fuel), station->fuel);
+    kilograms_text(capacity, sizeof(capacity), HEARTH_FUEL_CAPACITY);
+    TR_FORMAT(text, sizeof(text), tr("station.hearth.fuel"), fuel, capacity);
+    ui_layout_label(layout, text, 0.0f, false);
+    if (station->burning) {
+        tr_decimal(number, sizeof(number), station->fuel / HEARTH_BURN_PER_HOUR, 1);
+        TR_FORMAT(text, sizeof(text), tr("station.hearth.burning"), number);
+        ui_layout_label(layout, text, 0.0f, false);
+    } else {
+        ui_layout_label(layout, tr("station.hearth.out"), 0.0f, true);
+    }
+    if (checkbox_row(layout, 0.0f, tr("station.hearth.keep_burning"), station->keep_burning)) {
+        *action = (Action){ACTION_TOGGLE_KEEP_BURNING, 0, 0};
+    }
+    hearth_fuel_row(layout, station, action);
+    ui_layout_label(layout, tr("station.hearth.teach"), 0.0f, false);
+    ui_layout_label(layout, tr("station.hearth.teach_hint"), INDENT, true);
+    bool any = false;
+    for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
+        if (!game_knowledge_discovered(game, (KnowledgeType)knowledge)) {
+            continue;
+        }
+        any = true;
+        const char *name = tr(knowledge_def((KnowledgeType)knowledge)->name_key);
+        if (checkbox_row(layout, INDENT, name, game->teach[knowledge])) {
+            *action = (Action){ACTION_TOGGLE_TEACH, 0, knowledge};
+        }
+    }
+    if (!any) {
+        ui_layout_label(layout, tr("station.hearth.nothing_to_teach"), INDENT, true);
     }
 }
 
@@ -320,7 +418,7 @@ static void built_rows(UiLayout *layout, const Game *game, const Workstation *st
         bill_inputs_row(layout, bill, i, action);
         bill_levels_row(layout, bill, i, action);
         bill_pause_row(layout, bill, i, action);
-        bill_warning_rows(layout, game, bill);
+        bill_warning_rows(layout, game, station, bill);
     }
     if (station->bill_count >= WORKSTATION_BILL_MAX) {
         return;
@@ -367,6 +465,9 @@ static void station_rows(UiLayout *layout, void *userdata)
     Action *action = &rows->action;
     if (ui_layout_label_with_button(layout, "", tr("station.delete"))) {
         *action = (Action){ACTION_DELETE_STATION, 0, 0};
+    }
+    if (hearth_is(station)) {
+        hearth_rows(layout, game, station, action);
     }
     built_rows(layout, game, station, action);
 }
@@ -428,6 +529,17 @@ static void apply(App *app, int index, const Action *action)
         break;
     case ACTION_ADD_BILL:
         workstation_add_bill(workstations, index, (RecipeType)action->value);
+        break;
+    case ACTION_TOGGLE_KEEP_BURNING:
+        hearth_set_keep_burning(workstations, index, !station->keep_burning);
+        break;
+    case ACTION_TOGGLE_FUEL:
+        hearth_set_fuel_type(workstations, index, (ItemType)action->value,
+                             !(station->fuel_types & ITEM_TYPE_BIT(action->value)));
+        break;
+    case ACTION_TOGGLE_TEACH:
+        game_set_teach(&app->game, (KnowledgeType)action->value,
+                       !app->game.teach[action->value]);
         break;
     case ACTION_NONE: break;
     }

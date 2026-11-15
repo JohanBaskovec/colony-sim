@@ -11,6 +11,7 @@ add_library(colony_core STATIC
     game.c
     game_clock.c
     gather_zone.c
+    hearth.c
     hauling.c
     i18n.c
     item.c

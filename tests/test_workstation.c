@@ -38,9 +38,10 @@ static void test_definitions(void)
             CHECK((material.type == ITEM_NONE) == (material.count == 0));
             made_of_something = made_of_something || material.type != ITEM_NONE;
         }
-        /* Only stations made of something need building. */
-        CHECK(made_of_something == (def->build_work > 0.0f));
-        CHECK(workstation_needs_construction((WorkstationType)type) == made_of_something);
+        /* Stations made of something, or dug (a hearth), need building. */
+        CHECK(!made_of_something || def->build_work > 0.0f);
+        CHECK(workstation_needs_construction((WorkstationType)type) ==
+              (made_of_something || def->build_work > 0.0f));
     }
     CHECK(workstation_def(WORKSTATION_TYPE_COUNT) == NULL);
     CHECK(!workstation_needs_construction(WORKSTATION_TYPE_COUNT));
@@ -48,6 +49,11 @@ static void test_definitions(void)
     CHECK(!workstation_needs_construction(WORKSTATION_CRAFTING_SPOT));
     CHECK_EQ_INT(workstation_def(WORKSTATION_CRAFTING_SPOT)->knowledge, KNOWLEDGE_NONE);
     CHECK_EQ_INT(workstation_def(WORKSTATION_KNAPPING_SPOT)->materials[0].type, ITEM_COBBLE);
+    /* A hearth is a pit to dig: no material, some work, and fire. */
+    CHECK(workstation_needs_construction(WORKSTATION_OPEN_HEARTH));
+    CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->materials[0].type, ITEM_NONE);
+    CHECK(workstation_def(WORKSTATION_OPEN_HEARTH)->hearth);
+    CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->knowledge, KNOWLEDGE_FIRE);
 }
 
 static void test_placing_and_removing(void)

@@ -504,9 +504,18 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
         return colonist->x == colonist->target.x && colonist->y == colonist->target.y
                    ? COLONIST_ACTION_GATHER
                    : COLONIST_ACTION_NONE;
+    case TASK_LIGHT: /* Wrapping embers, or twirling a stick on a board. */
+        if (colonist->light_step == LIGHT_EMBERS) {
+            return COLONIST_ACTION_GATHER;
+        }
+        return colonist->light_step == LIGHT_FRICTION ? COLONIST_ACTION_CUT
+                                                      : COLONIST_ACTION_NONE;
     case TASK_IDLE:
     case TASK_WANDER:
     case TASK_ASSIST:
+    case TASK_REFUEL:
+    case TASK_STORY:
+    case TASK_LISTEN:
     case TASK_HAUL:
     case TASK_SUPPLY:
     case TASK_SLEEP:
@@ -552,6 +561,10 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_SUPPLY] = N_("colonist.task.supply"),
         [TASK_CLEAN] = N_("colonist.task.clean"),
         [TASK_ASSIST] = N_("colonist.task.assist"),
+        [TASK_REFUEL] = N_("colonist.task.refuel"),
+        [TASK_LIGHT] = N_("colonist.task.light"),
+        [TASK_STORY] = N_("colonist.task.story"),
+        [TASK_LISTEN] = N_("colonist.task.listen"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
 }
@@ -614,6 +627,16 @@ static void release_promise(Colonist *colonist, const ColonistContext *context)
     }
 }
 
+/* Gives up the fuel a colonist promised to bring to a hearth. */
+static void release_fuel(Colonist *colonist, const ColonistContext *context)
+{
+    if (colonist->fuel_promised > 0.0f) {
+        hearth_release_fuel(context->workstations, colonist->station, colonist->station_number,
+                            colonist->fuel_promised);
+        colonist->fuel_promised = 0.0f;
+    }
+}
+
 /* Every task change goes through here: whatever the colonist had reserved
  * (job, food) is released, so reservations never outlive the task that made
  * them. The path is kept: callers set it before or clear it after. */
@@ -626,6 +649,9 @@ static void begin_task(Colonist *colonist, const ColonistContext *context, Colon
     }
     reservations_release_all(context->reservations, context->worker_id);
     release_promise(colonist, context);
+    release_fuel(colonist, context);
+    colonist->ember_ticks = 0; /* Embers carried go out. */
+    colonist->light_progress = 0.0f;
     colonist->haul_delivering = false;
     colonist->task = task;
     colonist->timer = 0;
@@ -1154,6 +1180,10 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
 static bool try_supply_job(Colonist *colonist, const ColonistContext *context);
 static uint32_t construction_stamp(const ColonistContext *context);
 static bool try_assist(Colonist *colonist, const ColonistContext *context, WorkType type);
+static bool try_refuel_job(Colonist *colonist, const ColonistContext *context);
+static bool try_light_job(Colonist *colonist, const ColonistContext *context);
+static bool next_to(int x, int y, TilePos tile);
+static bool is_next_to_target(const Map *map, int x, int y, void *userdata);
 
 /*
  * Takes the nearest job of the highest priority level that has one. Within a
@@ -1197,6 +1227,12 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context,
         open_cleaning > 0 && retry_allowed(colonist, SEARCH_CLEAN, colonist->clean_search_stamp,
                                            clean_stamp(context));
     bool searched_cleaning = false;
+    uint32_t hearth_stamp = station_stamp(context);
+    bool refuel_allowed =
+        retry_allowed(colonist, SEARCH_REFUEL, colonist->refuel_search_stamp, hearth_stamp);
+    bool light_allowed =
+        retry_allowed(colonist, SEARCH_LIGHT, colonist->light_search_stamp, hearth_stamp);
+    bool searched_refuel = false, searched_light = false;
     /* Apprenticeship: a master doing a job of the work type that the colonist
      * lacks the level for, once its own jobs of that type are all out of
      * reach. */
@@ -1245,8 +1281,23 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context,
                     }
                 }
                 break;
+            case WORK_FIRE:
+                if (light_allowed) {
+                    searched_light = true;
+                    if (try_light_job(colonist, context)) {
+                        FOUND(SEARCH_LIGHT);
+                    }
+                }
+                break;
             case WORK_HAULING:
-                /* Construction sites waiting for materials first. */
+                /* Hearths running low first, then construction sites
+                 * waiting for materials. */
+                if (refuel_allowed) {
+                    searched_refuel = true;
+                    if (try_refuel_job(colonist, context)) {
+                        FOUND(SEARCH_REFUEL);
+                    }
+                }
                 if (supply_allowed) {
                     searched_supply = true;
                     if (try_supply_job(colonist, context)) {
@@ -1288,6 +1339,14 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context,
 #undef FOUND
     if (searched_assist) {
         colonist->search_cooldown[SEARCH_ASSIST] = COLONIST_ASSIST_SEARCH_TICKS;
+    }
+    if (searched_refuel) {
+        search_failed(colonist, SEARCH_REFUEL);
+        colonist->refuel_search_stamp = hearth_stamp;
+    }
+    if (searched_light) {
+        search_failed(colonist, SEARCH_LIGHT);
+        colonist->light_search_stamp = hearth_stamp;
     }
     if (searched_designations) {
         search_failed(colonist, SEARCH_WORK);
@@ -1603,6 +1662,7 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
         RecipeType recipe = (RecipeType)bill->recipe;
         const RecipeDef *def = recipe_def(recipe);
         if ((in_progress && station->work_recipe != recipe) || (!in_progress && bill->paused) ||
+            (recipe_needs_fire(recipe) && !station->burning) ||
             !colonist_can_craft(colonist, recipe) || !colonist_level_fits_bill(colonist, bill) ||
             !bill_wants_more(bill, stored_count(context, bill)) ||
             !tools_obtainable(colonist, context, def)) {
@@ -1749,6 +1809,16 @@ static bool go_to_station(Colonist *colonist, const ColonistContext *context,
     colonist->station_phase = STATION_JOB_GO;
     colonist->path_index = 0;
     TilePos tile = station_tile(station);
+    if (hearth_is(station)) { /* Worked from beside, not from inside the fire. */
+        if (next_to(colonist->x, colonist->y, tile)) {
+            path_clear(&colonist->path);
+            return true;
+        }
+        TilePos spot;
+        return pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                       is_next_to_target, &tile, COLONIST_WORK_SEARCH_MAX_COST,
+                                       &colonist->path, &spot);
+    }
     if (colonist->x == tile.x && colonist->y == tile.y) {
         path_clear(&colonist->path);
         return true;
@@ -1829,8 +1899,9 @@ static bool station_job_still_valid(const Colonist *colonist, const ColonistCont
     if (colonist->work_priorities[WORK_CRAFTING] == WORK_PRIORITY_DISABLED ||
         colonist->bill >= station->bill_count ||
         station->bills[colonist->bill].recipe != colonist->recipe ||
-        !colonist_can_craft(colonist, (RecipeType)colonist->recipe)) {
-        return false;
+        !colonist_can_craft(colonist, (RecipeType)colonist->recipe) ||
+        (recipe_needs_fire((RecipeType)colonist->recipe) && !station->burning)) {
+        return false; /* (A craft whose fire went out waits on the station.) */
     }
     const Bill *bill = &station->bills[colonist->bill];
     /* A craft under way is finished, even if the bill changed meanwhile. */
@@ -1999,7 +2070,8 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
         }
         return;
     case STATION_JOB_GO:
-        if (colonist->x != tile.x || colonist->y != tile.y ||
+        if (!(hearth_is(station) ? next_to(colonist->x, colonist->y, tile)
+                                 : colonist->x == tile.x && colonist->y == tile.y) ||
             !arrive_at_station(colonist, context)) {
             set_idle(colonist, context, 0);
         }
@@ -2439,7 +2511,11 @@ bool colonist_can_chat(const Colonist *colonist)
     case TASK_CRAFT:
     case TASK_CONSTRUCT:
     case TASK_CLEAN:
+    case TASK_LIGHT:
     case TASK_ASSIST: return !colonist_is_moving(colonist);
+    case TASK_REFUEL:
+    case TASK_STORY:
+    case TASK_LISTEN:
     case TASK_SLEEP:
     case TASK_HAUL:
     case TASK_SUPPLY:
@@ -2557,19 +2633,25 @@ static bool is_beside_target(const Map *map, int x, int y, void *userdata)
     return map_is_passable(map, x, y) && beside(x, y, target->x, target->y);
 }
 
-/* Heads for a tile beside the master. */
-static bool go_beside(Colonist *colonist, const ColonistContext *context, const Colonist *master)
+/* Heads for one of the 8 tiles around `at`. */
+static bool go_beside_tile(Colonist *colonist, const ColonistContext *context, TilePos at)
 {
     colonist->path_index = 0;
-    if (beside(colonist->x, colonist->y, master->x, master->y)) {
+    if (beside(colonist->x, colonist->y, at.x, at.y)) {
         path_clear(&colonist->path);
         return true;
     }
-    TilePos at = {(int16_t)master->x, (int16_t)master->y};
     TilePos spot;
     return pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
                                    is_beside_target, &at, COLONIST_WORK_SEARCH_MAX_COST,
                                    &colonist->path, &spot);
+}
+
+/* Heads for a tile beside the master. */
+static bool go_beside(Colonist *colonist, const ColonistContext *context, const Colonist *master)
+{
+    return go_beside_tile(colonist, context,
+                          (TilePos){(int16_t)master->x, (int16_t)master->y});
 }
 
 /* Looks for the nearest master doing a job of this work type the colonist
@@ -2652,6 +2734,576 @@ static void assist(Colonist *colonist, const ColonistContext *context)
                    1.0 / TICKS_PER_HOUR, teacher, context->tick);
 }
 
+/* ---- Hearths: fuel, lighting, fireside stories ------------------------------ */
+
+/* Heads for a tile next to `tile` (4 neighbors). */
+static bool go_next_to(Colonist *colonist, const ColonistContext *context, TilePos tile)
+{
+    colonist->path_index = 0;
+    if (next_to(colonist->x, colonist->y, tile)) {
+        path_clear(&colonist->path);
+        return true;
+    }
+    TilePos spot;
+    return pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                   is_next_to_target, &tile, COLONIST_WORK_SEARCH_MAX_COST,
+                                   &colonist->path, &spot);
+}
+
+/* Whether some station passes `wants` (a cheap check before a search). */
+static bool any_station(const ColonistContext *context, bool (*wants)(const Workstation *))
+{
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = &context->workstations->list[index];
+        if (station->used && wants(station)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static const Workstation *station_on(const ColonistContext *context, int x, int y)
+{
+    return workstation_get_const(context->workstations,
+                                 workstation_at(context->workstations, x, y));
+}
+
+static bool wants_fuel(const Workstation *station)
+{
+    return hearth_fuel_wanted(station) > 0.0f;
+}
+
+/* Fuel types the hearth takes now. */
+static ItemTypeMask fuel_wanted_types(const Workstation *station)
+{
+    ItemTypeMask types = 0;
+    for (int type = 1; type < ITEM_TYPE_COUNT; type++) {
+        if (hearth_fuel_items_wanted(station, (ItemType)type) > 0) {
+            types |= ITEM_TYPE_BIT(type);
+        }
+    }
+    return types;
+}
+
+/* Search filter: a hearth wanting fuel of a type that lies somewhere. */
+static bool is_hearth_wanting_fuel(const Map *map, int x, int y, void *userdata)
+{
+    (void)map;
+    const ColonistContext *context = userdata;
+    const Workstation *station = station_on(context, x, y);
+    return station != NULL && wants_fuel(station) &&
+           items_exist(context->items, fuel_wanted_types(station), 1);
+}
+
+static bool try_refuel_job(Colonist *colonist, const ColonistContext *context)
+{
+    if (!any_station(context, wants_fuel)) {
+        return false;
+    }
+    TilePos tile;
+    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                 is_hearth_wanting_fuel, (void *)context,
+                                 COLONIST_WORK_SEARCH_MAX_COST, NULL, &tile)) {
+        return false;
+    }
+    int index = workstation_at(context->workstations, tile.x, tile.y);
+    const Workstation *station = workstation_get_const(context->workstations, index);
+    begin_task(colonist, context, TASK_REFUEL);
+    colonist->station = index;
+    colonist->station_number = station->number;
+    colonist->target = tile;
+    FetchSearch search = fetch_search(context, fuel_wanted_types(station));
+    if (!start_fetch(colonist, context, &search, tile, COLONIST_WORK_SEARCH_MAX_COST, false)) {
+        set_idle(colonist, context, 0);
+        path_clear(&colonist->path);
+        return false;
+    }
+    /* All it wants, until the load in hand is known. */
+    colonist->fuel_promised = hearth_fuel_wanted(station);
+    hearth_promise_fuel(context->workstations, index, colonist->fuel_promised);
+    return true;
+}
+
+static bool refuel_still_valid(const Colonist *colonist, const ColonistContext *context)
+{
+    const Workstation *station = job_station(colonist, context);
+    return hearth_is(station) && station->keep_burning &&
+           colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED;
+}
+
+/* Picks up fuel, then puts it in the hearth from a neighboring tile. */
+static void refuel(Colonist *colonist, const ColonistContext *context)
+{
+    Workstation *station = job_station(colonist, context);
+    if (!refuel_still_valid(colonist, context)) {
+        set_idle(colonist, context, 0);
+        return;
+    }
+    TilePos hearth = station_tile(station);
+    if (colonist->station_phase == STATION_JOB_FETCH) {
+        ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+        float value = hearth_fuel_value((ItemType)stack.type);
+        if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
+            value <= 0.0f || !(station->fuel_types & ITEM_TYPE_BIT(stack.type))) {
+            set_idle(colonist, context, 0);
+            return;
+        }
+        float others = station->fuel_promised - colonist->fuel_promised;
+        int count = (int)floorf((HEARTH_FUEL_CAPACITY - station->fuel - others) / value);
+        int capacity = colonist_carry_capacity(colonist, (ItemType)stack.type);
+        count = count < capacity ? count : capacity;
+        count = count < stack.count ? count : stack.count;
+        if (count <= 0) {
+            set_idle(colonist, context, 0);
+            return;
+        }
+        items_remove(context->items, colonist->x, colonist->y, count);
+        colonist->carried = stack;
+        colonist->carried.count = (uint16_t)count;
+        /* What is promised now is what is in hand. */
+        release_fuel(colonist, context);
+        colonist->fuel_promised = value * (float)count;
+        hearth_promise_fuel(context->workstations, colonist->station, colonist->fuel_promised);
+        reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
+                                  context->worker_id);
+        colonist->station_phase = STATION_JOB_GO;
+        if (!go_next_to(colonist, context, hearth)) {
+            set_idle(colonist, context, 0);
+        }
+        return;
+    }
+    if (!next_to(colonist->x, colonist->y, hearth)) {
+        set_idle(colonist, context, 0);
+        return;
+    }
+    int taken = hearth_add_fuel(context->workstations, colonist->station, colonist->carried);
+    colonist->carried.count = (uint16_t)(colonist->carried.count - taken);
+    if (colonist->carried.count == 0) {
+        colonist->carried = (ItemStack){.type = ITEM_NONE};
+    }
+    set_idle(colonist, context, 0); /* Puts down what did not fit. */
+}
+
+bool colonist_can_light(const Colonist *colonist)
+{
+    return colonist->knowledge[KNOWLEDGE_FIRE] >= HEARTH_LIGHT_MIN_LEVEL;
+}
+
+static bool hearth_to_light(const ColonistContext *context, const Workstation *station)
+{
+    return station != NULL && hearth_needs_lighting(station) &&
+           !reservations_taken_by_other(context->reservations, RESERVATION_FIRE,
+                                        station_tile(station), context->worker_id);
+}
+
+static bool needs_lighting(const Workstation *station)
+{
+    return hearth_needs_lighting(station);
+}
+
+static bool is_hearth_to_light(const Map *map, int x, int y, void *userdata)
+{
+    (void)map;
+    const ColonistContext *context = userdata;
+    return hearth_to_light(context, station_on(context, x, y));
+}
+
+typedef struct FireSourceSearch {
+    const ColonistContext *context;
+    TilePos hearth; /* The one to light: not a source. */
+} FireSourceSearch;
+
+static bool is_fire_source(const Map *map, int x, int y, void *userdata)
+{
+    (void)map;
+    const FireSourceSearch *search = userdata;
+    const Workstation *station = station_on(search->context, x, y);
+    return station != NULL && station->burning &&
+           (station->x != search->hearth.x || station->y != search->hearth.y);
+}
+
+static bool carries_tinder(const Colonist *colonist)
+{
+    return colonist->carried.type == ITEM_GRASS && colonist->carried.count > 0;
+}
+
+/* Next step of lighting: to the hearth with embers or tinder in hand, else
+ * embers from a burning fire close to it, else dry grass for friction.
+ * False when none can be had. */
+static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
+{
+    const Workstation *station = job_station(colonist, context);
+    if (station == NULL) {
+        return false;
+    }
+    TilePos hearth = station_tile(station);
+    colonist->light_progress = 0.0f;
+    if (colonist->ember_ticks > 0 || carries_tinder(colonist)) {
+        colonist->light_step = LIGHT_GO;
+        return go_next_to(colonist, context, hearth);
+    }
+    FireSourceSearch sources = {context, hearth};
+    TilePos source;
+    if (pathfinder_find_nearest(context->pathfinder, context->map, hearth, is_fire_source,
+                                &sources, HEARTH_FIRE_CARRY_MAX_COST, NULL, &source)) {
+        const Workstation *fire = station_on(context, source.x, source.y);
+        colonist->fire_source = workstation_at(context->workstations, source.x, source.y);
+        colonist->fire_source_number = fire->number;
+        colonist->light_step = LIGHT_TO_SOURCE;
+        return go_next_to(colonist, context, source);
+    }
+    FetchSearch tinder = fetch_search(context, ITEM_TYPE_BIT(ITEM_GRASS));
+    colonist->light_step = LIGHT_FETCH_TINDER;
+    return start_fetch(colonist, context, &tinder, hearth, COLONIST_WORK_SEARCH_MAX_COST, false);
+}
+
+static bool try_light_job(Colonist *colonist, const ColonistContext *context)
+{
+    if (!colonist_can_light(colonist) || !any_station(context, needs_lighting)) {
+        return false;
+    }
+    TilePos tile;
+    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                 is_hearth_to_light, (void *)context,
+                                 COLONIST_WORK_SEARCH_MAX_COST, NULL, &tile)) {
+        return false;
+    }
+    int index = workstation_at(context->workstations, tile.x, tile.y);
+    begin_task(colonist, context, TASK_LIGHT);
+    colonist->station = index;
+    colonist->station_number = workstation_get_const(context->workstations, index)->number;
+    colonist->target = tile;
+    reservations_add(context->reservations, RESERVATION_FIRE, tile, context->worker_id);
+    if (!plan_lighting(colonist, context)) {
+        set_idle(colonist, context, 0);
+        path_clear(&colonist->path);
+        return false;
+    }
+    return true;
+}
+
+static bool light_still_valid(const Colonist *colonist, const ColonistContext *context)
+{
+    const Workstation *station = job_station(colonist, context);
+    return station != NULL && hearth_needs_lighting(station) &&
+           reservations_owner(context->reservations, RESERVATION_FIRE, station_tile(station)) ==
+               context->worker_id &&
+           colonist->work_priorities[WORK_FIRE] != WORK_PRIORITY_DISABLED &&
+           colonist_can_light(colonist);
+}
+
+/* The burning hearth embers are taken from, NULL when gone or out. */
+static const Workstation *fire_source(const Colonist *colonist, const ColonistContext *context)
+{
+    const Workstation *source =
+        workstation_get_const(context->workstations, colonist->fire_source);
+    return source != NULL && source->number == colonist->fire_source_number && source->burning
+               ? source
+               : NULL;
+}
+
+static void light_job(Colonist *colonist, const ColonistContext *context)
+{
+    if (!light_still_valid(colonist, context)) {
+        set_idle(colonist, context, 0);
+        return;
+    }
+    TilePos hearth = colonist->target;
+    float speed = colonist_work_speed(colonist, KNOWLEDGE_FIRE);
+    switch ((LightStep)colonist->light_step) {
+    case LIGHT_FETCH_TINDER: {
+        ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+        if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
+            stack.type != ITEM_GRASS) {
+            set_idle(colonist, context, 0);
+            return;
+        }
+        items_remove(context->items, colonist->x, colonist->y, 1);
+        colonist->carried = stack;
+        colonist->carried.count = 1;
+        reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
+                                  context->worker_id);
+        break; /* Then to the hearth. */
+    }
+    case LIGHT_TO_SOURCE: {
+        const Workstation *source = fire_source(colonist, context);
+        if (source != NULL && next_to(colonist->x, colonist->y, station_tile(source))) {
+            colonist->light_step = LIGHT_EMBERS;
+            colonist->light_progress = 0.0f;
+            return;
+        }
+        break; /* Gone out, or not there: plan again. */
+    }
+    case LIGHT_EMBERS:
+        if (fire_source(colonist, context) == NULL) {
+            break;
+        }
+        colonist->light_progress += speed;
+        colonist_learn_by_doing(colonist, KNOWLEDGE_FIRE, 1, context->tick);
+        if (colonist->light_progress < HEARTH_EMBER_WORK) {
+            return;
+        }
+        colonist->ember_ticks = HEARTH_EMBER_TICKS;
+        break;
+    case LIGHT_GO:
+        if (!next_to(colonist->x, colonist->y, hearth)) {
+            break;
+        }
+        if (colonist->ember_ticks > 0) {
+            hearth_light(context->workstations, colonist->station);
+            colonist_learn_by_doing(colonist, KNOWLEDGE_FIRE, 1, context->tick);
+            set_idle(colonist, context, 0);
+            return;
+        }
+        if (carries_tinder(colonist)) {
+            colonist->light_step = LIGHT_FRICTION;
+            colonist->light_progress = 0.0f;
+            return;
+        }
+        break;
+    case LIGHT_FRICTION: {
+        if (!carries_tinder(colonist) || !next_to(colonist->x, colonist->y, hearth)) {
+            break;
+        }
+        /* The chance depends on the level before this attempt's learning. */
+        double level = colonist_knowledge_level(colonist, KNOWLEDGE_FIRE);
+        colonist->light_progress += speed;
+        colonist_learn_by_doing(colonist, KNOWLEDGE_FIRE, 1, context->tick);
+        if (colonist->light_progress < HEARTH_FRICTION_WORK) {
+            return;
+        }
+        /* The tinder burns, whether the fire takes or not. */
+        colonist->carried.count--;
+        if (colonist->carried.count == 0) {
+            colonist->carried = (ItemStack){.type = ITEM_NONE};
+        }
+        if (rng_next_float(context->rng) < hearth_friction_chance(level)) {
+            hearth_light(context->workstations, colonist->station);
+            set_idle(colonist, context, 0);
+            return;
+        }
+        break; /* Failed: more tinder. */
+    }
+    }
+    if (!plan_lighting(colonist, context)) {
+        set_idle(colonist, context, 0);
+    }
+}
+
+bool colonist_telling(const Colonist *colonist, const Workstations *workstations)
+{
+    if (colonist->task != TASK_STORY || colonist_is_moving(colonist)) {
+        return false;
+    }
+    const Workstation *station = workstation_get_const(workstations, colonist->station);
+    return station != NULL && station->number == colonist->station_number && station->burning &&
+           beside(colonist->x, colonist->y, station->x, station->y);
+}
+
+KnowledgeType colonist_story_topic(const Colonist *colonist, const bool *teach)
+{
+    KnowledgeType best = KNOWLEDGE_NONE;
+    for (int knowledge = 0; teach != NULL && knowledge < KNOWLEDGE_COUNT; knowledge++) {
+        double level = colonist->knowledge[knowledge];
+        if (teach[knowledge] && knowledge_is_mastered(level) &&
+            (best == KNOWLEDGE_NONE || level > colonist->knowledge[best])) {
+            best = (KnowledgeType)knowledge;
+        }
+    }
+    return best;
+}
+
+typedef struct FiresideSearch {
+    const ColonistContext *context;
+    EntityId self;
+    TilePos hearth;
+} FiresideSearch;
+
+/* Whether someone other than `self` tells stories at this hearth. */
+static bool hearth_has_storyteller(const ColonistContext *context, const Workstation *station,
+                                   EntityId self)
+{
+    for (uint32_t slot = 0; slot < context->colonist_pool->high_water; slot++) {
+        EntityId id = pool_id_at(context->colonist_pool, slot);
+        const Colonist *other = &context->colonists[slot];
+        if (!entity_id_is_none(id) && !entity_id_equal(id, self) && other->task == TASK_STORY &&
+            other->station_number == station->number) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool is_story_hearth(const Map *map, int x, int y, void *userdata)
+{
+    (void)map;
+    const FiresideSearch *search = userdata;
+    const Workstation *station = station_on(search->context, x, y);
+    return station != NULL && station->burning &&
+           !hearth_has_storyteller(search->context, station, search->self);
+}
+
+/* Goes to tell about its best taught knowledge at a burning hearth nobody
+ * tells stories at. */
+static bool try_tell(Colonist *colonist, const ColonistContext *context, EntityId self)
+{
+    KnowledgeType topic = colonist_story_topic(colonist, context->teach);
+    FiresideSearch search = {context, self, {0, 0}};
+    TilePos tile;
+    if (topic == KNOWLEDGE_NONE ||
+        !pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                 is_story_hearth, &search, COLONIST_WORK_SEARCH_MAX_COST, NULL,
+                                 &tile) ||
+        !go_beside_tile(colonist, context, tile)) {
+        return false;
+    }
+    const Workstation *station = station_on(context, tile.x, tile.y);
+    begin_task(colonist, context, TASK_STORY);
+    colonist->station = workstation_at(context->workstations, tile.x, tile.y);
+    colonist->station_number = station->number;
+    colonist->target = tile;
+    colonist->story_topic = (uint8_t)topic;
+    return true;
+}
+
+static int listener_count(const ColonistContext *context, EntityId teller)
+{
+    int count = 0;
+    for (uint32_t slot = 0; slot < context->colonist_pool->high_water; slot++) {
+        const Colonist *other = &context->colonists[slot];
+        if (!entity_id_is_none(pool_id_at(context->colonist_pool, slot)) &&
+            other->task == TASK_LISTEN && entity_id_equal(other->mentor, teller)) {
+            count++;
+        }
+    }
+    return count;
+}
+
+/* A free place to sit around the hearth: not the hearth, nobody else's. */
+static bool is_listen_spot(const Map *map, int x, int y, void *userdata)
+{
+    const FiresideSearch *search = userdata;
+    int dx = abs(x - search->hearth.x), dy = abs(y - search->hearth.y);
+    int distance = dx > dy ? dx : dy;
+    if (distance < 1 || distance > HEARTH_LISTEN_SPOT_RANGE || !map_is_passable(map, x, y)) {
+        return false;
+    }
+    const ColonistContext *context = search->context;
+    for (uint32_t slot = 0; slot < context->colonist_pool->high_water; slot++) {
+        EntityId id = pool_id_at(context->colonist_pool, slot);
+        const Colonist *other = &context->colonists[slot];
+        if (entity_id_is_none(id) || entity_id_equal(id, search->self)) {
+            continue;
+        }
+        if ((other->task == TASK_LISTEN && other->target.x == x && other->target.y == y) ||
+            (other->task == TASK_STORY && other->x == x && other->y == y)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Goes to sit near the closest storyteller with room for one more. */
+static bool try_listen(Colonist *colonist, const ColonistContext *context, EntityId self)
+{
+    TilePos here = current_tile(colonist);
+    EntityId best = ENTITY_NONE;
+    int best_distance = INT_MAX;
+    for (uint32_t slot = 0; slot < context->colonist_pool->high_water; slot++) {
+        EntityId id = pool_id_at(context->colonist_pool, slot);
+        const Colonist *teller = &context->colonists[slot];
+        if (entity_id_is_none(id) || entity_id_equal(id, self) || teller->task != TASK_STORY) {
+            continue;
+        }
+        int distance = abs(teller->target.x - colonist->x) + abs(teller->target.y - colonist->y);
+        if (distance >= best_distance ||
+            !regions_connected(context->regions, context->map, here, teller->target) ||
+            listener_count(context, id) >= HEARTH_STORY_LISTENERS) {
+            continue;
+        }
+        best = id;
+        best_distance = distance;
+    }
+    Colonist *teller = colonist_by_id(context, best);
+    if (teller == NULL) {
+        return false;
+    }
+    FiresideSearch search = {context, self, teller->target};
+    TilePos spot;
+    if (!pathfinder_find_nearest(context->pathfinder, context->map, here, is_listen_spot,
+                                 &search, COLONIST_WORK_SEARCH_MAX_COST, &colonist->path,
+                                 &spot)) {
+        return false;
+    }
+    begin_task(colonist, context, TASK_LISTEN);
+    colonist->mentor = best;
+    colonist->station = teller->station;
+    colonist->station_number = teller->station_number;
+    colonist->target = spot;
+    return true;
+}
+
+/* In the evening, with knowledges marked to teach: tell, or listen. */
+static bool try_fireside(Colonist *colonist, const ColonistContext *context)
+{
+    if (context->colonists == NULL || context->teach == NULL ||
+        !hearth_story_time(context->tick) || !search_allowed(colonist, SEARCH_STORY)) {
+        return false;
+    }
+    bool taught = false;
+    for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
+        taught = taught || context->teach[knowledge];
+    }
+    EntityId self = pool_id_at(context->colonist_pool, (uint32_t)(context->worker_id - 1));
+    if (taught && (try_tell(colonist, context, self) || try_listen(colonist, context, self))) {
+        return true;
+    }
+    colonist->search_cooldown[SEARCH_STORY] = COLONIST_ASSIST_SEARCH_TICKS;
+    return false;
+}
+
+/* Beside the hearth, telling (listeners learn on their side). */
+static void story(Colonist *colonist, const ColonistContext *context)
+{
+    const Workstation *station = job_station(colonist, context);
+    if (station == NULL || !station->burning || !hearth_story_time(context->tick)) {
+        set_idle(colonist, context, 0);
+        return;
+    }
+    if (!beside(colonist->x, colonist->y, station->x, station->y)) {
+        if (!go_beside_tile(colonist, context, station_tile(station))) {
+            set_idle(colonist, context, 0);
+        }
+        return;
+    }
+    colonist->knowledge_practice[colonist->story_topic] = context->tick; /* Teaching. */
+}
+
+/* Sitting near the hearth, learning while the storyteller tells. */
+static void listen_to_story(Colonist *colonist, const ColonistContext *context)
+{
+    const Colonist *teller = colonist_by_id(context, colonist->mentor);
+    const Workstation *station = job_station(colonist, context);
+    if (teller == NULL || station == NULL || teller->task != TASK_STORY ||
+        teller->station_number != colonist->station_number) {
+        set_idle(colonist, context, 0);
+        return;
+    }
+    int dx = abs(colonist->x - station->x), dy = abs(colonist->y - station->y);
+    if ((dx > dy ? dx : dy) > HEARTH_STORY_RANGE) {
+        set_idle(colonist, context, 0); /* Did not get there. */
+        return;
+    }
+    if (!colonist_telling(teller, context->workstations)) {
+        return; /* Waits for the story to start. */
+    }
+    KnowledgeType topic = (KnowledgeType)teller->story_topic;
+    double level = teller->knowledge[topic];
+    colonist_learn(colonist, topic, KNOWLEDGE_SOURCE_STORIES,
+                   knowledge_taught_rate(KNOWLEDGE_STORY_RATE, level), 1.0 / TICKS_PER_HOUR,
+                   level < KNOWLEDGE_STORY_CAP ? level : KNOWLEDGE_STORY_CAP, context->tick);
+}
+
 static void start_wandering(Colonist *colonist, const ColonistContext *context)
 {
     const int radius = COLONIST_WANDER_RADIUS;
@@ -2687,6 +3339,9 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
     *water = clampf(*water - NEED_WATER_DECAY_PER_TICK, 0.0f, 1.0f);
     if (colonist->ground_sleep_ticks > 0) {
         colonist->ground_sleep_ticks--;
+    }
+    if (colonist->ember_ticks > 0) {
+        colonist->ember_ticks--;
     }
     if (colonist->chat_ticks > 0) {
         /* A chat ends early when the colonist gets busy. */
@@ -2771,6 +3426,22 @@ static void decide(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
         }
         break;
+    case TASK_REFUEL:
+        if (!refuel_still_valid(colonist, context)) {
+            set_idle(colonist, context, 0);
+        }
+        break;
+    case TASK_LIGHT:
+        if (!light_still_valid(colonist, context)) {
+            set_idle(colonist, context, 0);
+        }
+        break;
+    case TASK_STORY:
+    case TASK_LISTEN:
+        if (!hearth_story_time(context->tick)) {
+            set_idle(colonist, context, 0); /* Bedtime. */
+        }
+        break;
     default:
         break;
     }
@@ -2786,7 +3457,10 @@ static void decide(Colonist *colonist, const ColonistContext *context)
         return;
     }
     if (colonist->task == TASK_IDLE || colonist->task == TASK_WANDER) {
-        try_start_work(colonist, context, WORK_PRIORITY_LOWEST);
+        /* In the evening, the fireside before new work. */
+        if (!try_fireside(colonist, context)) {
+            try_start_work(colonist, context, WORK_PRIORITY_LOWEST);
+        }
     } else if (colonist->task == TASK_ASSIST && search_allowed(colonist, SEARCH_ASSIST)) {
         /* Work of a higher priority than the apprenticeship comes first. */
         colonist->search_cooldown[SEARCH_ASSIST] = COLONIST_ASSIST_SEARCH_TICKS;
@@ -2924,6 +3598,10 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     case TASK_SUPPLY: construction_job(colonist, context); break;
     case TASK_CLEAN: clean(colonist, context); break;
     case TASK_ASSIST: assist(colonist, context); break;
+    case TASK_REFUEL: refuel(colonist, context); break;
+    case TASK_LIGHT: light_job(colonist, context); break;
+    case TASK_STORY: story(colonist, context); break;
+    case TASK_LISTEN: listen_to_story(colonist, context); break;
     case TASK_SLEEP:
     case TASK_COUNT: break;
     }

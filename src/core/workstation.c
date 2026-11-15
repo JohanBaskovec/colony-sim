@@ -16,6 +16,11 @@ static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
                                    N_("workstation.knapping_spot.description"),
                                    {{ITEM_COBBLE, 1}, {ITEM_NONE, 0}}, 250.0f,
                                    KNOWLEDGE_STONE_KNAPPING, 50.0f},
+    /* A shallow pit ringed with stones: nothing to bring, a little digging. */
+    [WORKSTATION_OPEN_HEARTH] = {"open_hearth", N_("workstation.open_hearth"),
+                                 N_("workstation.open_hearth.description"),
+                                 {{ITEM_NONE, 0}, {ITEM_NONE, 0}}, 250.0f, KNOWLEDGE_FIRE, 50.0f,
+                                 .hearth = true},
 };
 
 const WorkstationDef *workstation_def(WorkstationType type)
@@ -117,6 +122,10 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
         station->y = (int16_t)y;
         station->number = workstations->next_number++;
         station->work_recipe = RECIPE_COUNT;
+        if (WORKSTATION_DEFS[type].hearth) {
+            station->keep_burning = true;
+            station->fuel_types = HEARTH_FUEL_TYPES;
+        }
         workstations->at[index_of(workstations, x, y)] = (uint8_t)(index + 1);
         workstations->used_count++;
         workstations->revision++;
@@ -405,6 +414,10 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         int32_t craft[6] = {station->work_recipe, input.type,       input.quality,
                             input.count,          input.hit_points, input.progress};
         hash = hash_fnv1a64(hash, craft, sizeof(craft));
+        float fire[2] = {station->fuel, station->fuel_promised};
+        hash = hash_fnv1a64(hash, fire, sizeof(fire));
+        uint32_t fire_state[3] = {station->burning, station->keep_burning, station->fuel_types};
+        hash = hash_fnv1a64(hash, fire_state, sizeof(fire_state));
         for (int b = 0; b < station->bill_count; b++) {
             const Bill *bill = &station->bills[b];
             uint32_t fields[9] = {bill->recipe,    bill->mode,      bill->target,

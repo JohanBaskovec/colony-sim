@@ -24,6 +24,7 @@
 
 #define KNAPPING_SPOT WORKSTATION_BIT(WORKSTATION_KNAPPING_SPOT)
 #define CRAFTING_SPOT WORKSTATION_BIT(WORKSTATION_CRAFTING_SPOT)
+#define OPEN_HEARTH WORKSTATION_BIT(WORKSTATION_OPEN_HEARTH)
 /* Knapping is done with a plain cobble as a hammer. */
 #define HAMMER ITEM_TYPE_BIT(ITEM_COBBLE)
 #define CUTTING_TOOL (ITEM_TYPE_BIT(ITEM_FLAKE) | ITEM_TYPE_BIT(ITEM_HAND_AXE))
@@ -49,10 +50,22 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                 {ITEM_TYPE_BIT(ITEM_HAND_AXE), ITEM_TYPE_BIT(ITEM_FLAKE)},
                                 6250.0f, KNOWLEDGE_SPEAR_MAKING, 60.0f, ITEM_THRUSTING_SPEAR, 6,
                                 TOOL_USE_WOODWORKING},
+    /* Drying and charring a wooden point over the fire. */
+    [RECIPE_HARDEN_THROWING_SPEAR] = {"harden_throwing_spear",
+                                      N_("recipe.harden_throwing_spear"), OPEN_HEARTH,
+                                      {ITEM_THROWING_SPEAR, ITEM_NONE}, 1, ITEM_QUALITY_CRUDE,
+                                      {0, 0}, 750.0f, KNOWLEDGE_FIRE, 55.0f,
+                                      ITEM_THROWING_SPEAR_HARDENED, 0, TOOL_USE_NONE},
+    [RECIPE_HARDEN_THRUSTING_SPEAR] = {"harden_thrusting_spear",
+                                       N_("recipe.harden_thrusting_spear"), OPEN_HEARTH,
+                                       {ITEM_THRUSTING_SPEAR, ITEM_NONE}, 1, ITEM_QUALITY_CRUDE,
+                                       {0, 0}, 750.0f, KNOWLEDGE_FIRE, 55.0f,
+                                       ITEM_THRUSTING_SPEAR_HARDENED, 0, TOOL_USE_NONE},
 };
 
 #undef KNAPPING_SPOT
 #undef CRAFTING_SPOT
+#undef OPEN_HEARTH
 #undef HAMMER
 #undef CUTTING_TOOL
 
@@ -102,6 +115,12 @@ ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input)
     }
     int grade = knaps_a_cobble(def, input) ? ITEM_QUALITY_CRUDE : input.quality;
     return (ItemQuality)clampi(grade + 1, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
+}
+
+bool recipe_needs_fire(RecipeType recipe)
+{
+    const RecipeDef *def = recipe_def(recipe);
+    return def != NULL && (def->stations & WORKSTATION_BIT(WORKSTATION_OPEN_HEARTH));
 }
 
 float recipe_failure_chance(RecipeType recipe, double level)
@@ -154,6 +173,13 @@ int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
         out[1] = product(ITEM_FLAKE, HAND_AXE_FLAKES, level, rng, cap);
         return 2;
     }
+    case RECIPE_HARDEN_THROWING_SPEAR:
+    case RECIPE_HARDEN_THRUSTING_SPEAR:
+        /* The same spear, its grade and wear kept, lasting longer. */
+        out[0] = item_stack_make(def->product, 1, input.quality,
+                                 item_hit_points_at_percent(
+                                     def->product, item_stack_hit_points_percent(input)));
+        return 1;
     default: out[0] = product(def->product, 1, level, rng, cap); return 1;
     }
 }

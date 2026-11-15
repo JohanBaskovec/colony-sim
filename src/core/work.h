@@ -18,9 +18,10 @@
 /* In the order of the columns of the priorities grid: at the same priority,
  * a settler does the work of the leftmost column first. Gathering comes after
  * construction and crafting: a zone gathering forever would keep settlers
- * from them otherwise. */
+ * from them otherwise. Lighting a hearth is short and comes first. */
 typedef enum WorkType {
     WORK_MINING,
+    WORK_FIRE,         /* Lighting hearths (refuelling them is hauling). */
     WORK_CONSTRUCTION, /* Construction sites, workstations, taking structures apart. */
     WORK_CRAFTING,     /* Working through the bills of workstations. */
     WORK_WOODCUTTING,

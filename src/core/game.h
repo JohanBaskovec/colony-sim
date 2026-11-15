@@ -94,6 +94,8 @@ typedef struct Game {
     uint8_t knowledge_masters[KNOWLEDGE_COUNT];
     bool knowledge_known[KNOWLEDGE_COUNT];
     bool knowledge_counted;
+    /* Knowledges the player wants told about at fireside stories. */
+    bool teach[KNOWLEDGE_COUNT];
 } Game;
 
 void game_default_params(NewGameParams *params);
@@ -158,6 +160,10 @@ int game_knowledge_masters(const Game *game, KnowledgeType knowledge);
 
 /* The colonist assisting a master as an apprentice, or ENTITY_NONE. */
 EntityId game_apprentice_of(const Game *game, EntityId master);
+
+/* Marks a knowledge to be taught (or not) at fireside stories. Fails on an
+ * invalid knowledge. */
+bool game_set_teach(Game *game, KnowledgeType knowledge, bool teach);
 
 /* Counts who knows what and raises notices for what changed since the last
  * count: a knowledge discovered, mastered again, mastered by a single

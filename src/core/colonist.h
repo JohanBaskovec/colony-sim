@@ -26,6 +26,13 @@
  * learns, up to the master's level. Masters take one apprentice each.
  * Settlers chat now and then (core/conversation.h). Knowledges not practised
  * for a while fade (colonist_fade_knowledge(), once a day).
+ *
+ * Hearths (core/hearth.h): haulers bring them fuel (TASK_REFUEL), settlers
+ * who know fire light them (TASK_LIGHT, work type WORK_FIRE). In the evening
+ * (hearth_story_time()), a settler with nothing to do who masters a
+ * knowledge the player marked to teach tells about it beside a burning
+ * hearth (TASK_STORY), and others with nothing to do sit around and listen
+ * (TASK_LISTEN), learning up to KNOWLEDGE_STORY_CAP.
  * Colonists are stored in the Game (see core/game.h); this module only works
  * on one colonist at a time with explicit dependencies.
  */
@@ -39,6 +46,7 @@
 #include "core/dirt.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
+#include "core/hearth.h"
 #include "core/knowledge.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
@@ -173,6 +181,10 @@ typedef enum ColonistTask {
     TASK_CLEAN, /* Walking to a dirty tile, then cleaning it. */
     /* Following a master (Colonist.mentor) and helping with their job. */
     TASK_ASSIST,
+    TASK_REFUEL, /* Bringing fuel to a hearth (hauling work). */
+    TASK_LIGHT,  /* Lighting a hearth: embers from a burning fire, or friction. */
+    TASK_STORY,  /* Telling about a knowledge beside a burning hearth. */
+    TASK_LISTEN, /* Sitting near a storyteller (Colonist.mentor) and listening. */
     TASK_COUNT
 } ColonistTask;
 
@@ -195,6 +207,9 @@ typedef enum SearchKind {
     SEARCH_CLEAN,        /* Dirty tiles. */
     SEARCH_SUPPLY,       /* Construction sites missing materials, for haulers. */
     SEARCH_ASSIST,       /* Masters to assist, or better work while assisting. */
+    SEARCH_REFUEL,       /* Hearths wanting fuel. */
+    SEARCH_LIGHT,        /* Hearths to light. */
+    SEARCH_STORY,        /* A hearth to tell stories at, or a story to listen to. */
     SEARCH_COUNT
 } SearchKind;
 
@@ -205,6 +220,15 @@ typedef enum StationJobPhase {
     STATION_JOB_GO,    /* Walking to the station (next to the site). */
     STATION_JOB_WORK,  /* Working on it. */
 } StationJobPhase;
+
+/* Steps of lighting a hearth (TASK_LIGHT). */
+typedef enum LightStep {
+    LIGHT_FETCH_TINDER, /* Walking to dry grass (`fetch`) for lighting by friction. */
+    LIGHT_TO_SOURCE,    /* Walking to a burning hearth (`fire_source`) for embers. */
+    LIGHT_EMBERS,       /* Wrapping embers in grass beside it. */
+    LIGHT_GO,           /* Walking to the hearth to light (`station`). */
+    LIGHT_FRICTION,     /* Beside it, twirling a stick on a board. */
+} LightStep;
 
 /* Face shown by the colonist sprite, from how well its needs are met. */
 typedef enum ColonistExpression {
@@ -271,6 +295,10 @@ typedef struct Colonist {
     uint32_t clean_search_stamp;
     /* Same as construction_search_stamp, for the last failed supply search. */
     uint32_t supply_search_stamp;
+    /* Workstations revision + item additions + releases at the last failed
+     * refuel and lighting searches. */
+    uint32_t refuel_search_stamp;
+    uint32_t light_search_stamp;
     ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
     TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
@@ -334,6 +362,19 @@ typedef struct Colonist {
     int chat_ticks;
     EntityId chat_partner;
     uint8_t chat_topic;
+    /* TASK_REFUEL: kilograms of fuel promised to the hearth (`station`),
+     * released when the task changes. */
+    float fuel_promised;
+    /* TASK_LIGHT: the step (LightStep), the burning hearth embers come from
+     * (index and number), and the work done on the step. The hearth to light
+     * is `station`, reserved as RESERVATION_FIRE on `target`. */
+    uint8_t light_step;
+    int fire_source;
+    int fire_source_number;
+    float light_progress;
+    int ember_ticks; /* Embers carried: ticks before they go out. */
+    /* TASK_STORY: the knowledge told at the hearth `station` (`target`). */
+    uint8_t story_topic;
     float needs[NEED_COUNT];
     ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
@@ -362,6 +403,9 @@ typedef struct ColonistContext {
      * assist; NULL: nobody assists anyone. */
     Colonist *colonists;
     const Pool *colonist_pool;
+    /* Knowledges the player wants taught at fireside stories (Game.teach);
+     * NULL: none. */
+    const bool *teach;
 } ColonistContext;
 
 void colonist_init(Colonist *colonist, const char *name, int age, int x, int y);
@@ -462,6 +506,18 @@ bool colonist_can_build_site(const Colonist *colonist, const ConstructionSite *s
 
 /* Whether the colonist knows enough to build this kind of structure. */
 bool colonist_can_construct(const Colonist *colonist, StructureType type);
+
+/* Whether the colonist knows fire well enough to light a hearth. */
+bool colonist_can_light(const Colonist *colonist);
+
+/* Whether the colonist tells a story now: beside the burning hearth of its
+ * TASK_STORY, not walking. */
+bool colonist_telling(const Colonist *colonist, const Workstations *workstations);
+
+/* The knowledge the colonist would tell about at the fireside: among those
+ * marked in `teach`, the one it knows best, at least at mastery;
+ * KNOWLEDGE_NONE when there is none. */
+KnowledgeType colonist_story_topic(const Colonist *colonist, const bool *teach);
 
 /* Whether the colonist knows enough to make this recipe. */
 bool colonist_can_craft(const Colonist *colonist, RecipeType recipe);

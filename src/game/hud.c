@@ -451,6 +451,21 @@ static void add_social_lines(App *app, Panel *panel, const Colonist *colonist, E
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.apprentice"), mentor->name,
                   tr(def->name_key));
     }
+    const KnowledgeDef *story = knowledge_def((KnowledgeType)colonist->story_topic);
+    if (colonist->task == TASK_STORY && story != NULL) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.telling"),
+                  tr(story->name_key));
+    }
+    if (colonist->task == TASK_LISTEN && mentor != NULL) {
+        const KnowledgeDef *told = knowledge_def((KnowledgeType)mentor->story_topic);
+        if (mentor->task == TASK_STORY && told != NULL) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.listening"), mentor->name,
+                      tr(told->name_key));
+        }
+    }
+    if (colonist->ember_ticks > 0) {
+        SDL_strlcpy(panel_add(panel), tr("hud.colonist.embers"), HUD_LINE_SIZE);
+    }
     const Colonist *apprentice =
         game_colonist_const(&app->game, game_apprentice_of(&app->game, id));
     if (apprentice != NULL) {
@@ -478,6 +493,7 @@ static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType 
         [KNOWLEDGE_SOURCE_DOING] = N_("hud.knowledge.gain.doing"),
         [KNOWLEDGE_SOURCE_APPRENTICESHIP] = N_("hud.knowledge.gain.apprenticeship"),
         [KNOWLEDGE_SOURCE_CONVERSATION] = N_("hud.knowledge.gain.conversation"),
+        [KNOWLEDGE_SOURCE_STORIES] = N_("hud.knowledge.gain.stories"),
     };
     char lines[UI_TOOLTIP_LINES][HUD_LINE_SIZE];
     const char *pointers[UI_TOOLTIP_LINES];

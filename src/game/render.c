@@ -1,7 +1,9 @@
 #include "game/render.h"
 
+#include "core/hearth.h"
 #include "core/util.h"
 
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -58,6 +60,13 @@ static const SDL_Color PROGRESS_BACKGROUND = {20, 20, 24, 220};
 static const SDL_Color PROGRESS_COLOR = {120, 220, 110, 255};
 static const SDL_Color SELECTION_COLOR = {255, 255, 255, 255};
 static const SDL_Color PATH_COLOR = {255, 255, 255, 140};
+static const SDL_Color HARDENED_SPEAR_COLOR = {128, 88, 52, 255};
+static const SDL_Color PIT_COLOR = {46, 38, 34, 255};
+static const SDL_Color ASH_COLOR = {98, 94, 90, 255};
+static const SDL_Color FLAME_COLOR = {240, 118, 34, 255};
+static const SDL_Color FLAME_CORE_COLOR = {255, 222, 96, 255};
+static const SDL_Color NIGHT_COLOR = {8, 12, 40, 255};
+static const SDL_Color GLOW_COLOR = {255, 136, 48, 255};
 
 /* Small deterministic per-tile brightness variation, so flat areas look less uniform. */
 static int tile_variation(int x, int y)
@@ -116,6 +125,10 @@ static SDL_Vertex *batch_vertices;
 static int *batch_indices;
 static int batch_count; /* Quads waiting to be drawn. */
 
+/* Night: light at the tile corners of the area lit by fires (render_daylight()). */
+static float *light_corners;
+static size_t light_corner_capacity;
+
 static bool batch_ready(void)
 {
     if (batch_vertices != NULL) {
@@ -166,8 +179,31 @@ static void batch_quad(SDL_Renderer *renderer, SDL_Color color, const SDL_FRect 
     batch_count++;
 }
 
+/* Like batch_quad(), each corner (clockwise from the top left) its own color. */
+static void batch_gradient_quad(SDL_Renderer *renderer, const SDL_Color colors[4],
+                                SDL_FRect rect)
+{
+    if (!batch_ready()) {
+        fill(renderer, colors[0], &rect);
+        return;
+    }
+    if (batch_count == BATCH_MAX_QUADS) {
+        batch_flush(renderer);
+    }
+    SDL_Vertex *vertex = &batch_vertices[batch_count * 4];
+    float left = rect.x, top = rect.y, right = rect.x + rect.w, bottom = rect.y + rect.h;
+    vertex[0] = (SDL_Vertex){{left, top}, to_fcolor(colors[0]), {0.0f, 0.0f}};
+    vertex[1] = (SDL_Vertex){{right, top}, to_fcolor(colors[1]), {0.0f, 0.0f}};
+    vertex[2] = (SDL_Vertex){{right, bottom}, to_fcolor(colors[2]), {0.0f, 0.0f}};
+    vertex[3] = (SDL_Vertex){{left, bottom}, to_fcolor(colors[3]), {0.0f, 0.0f}};
+    batch_count++;
+}
+
 void render_shutdown(void)
 {
+    SDL_free(light_corners);
+    light_corners = NULL;
+    light_corner_capacity = 0;
     SDL_free(batch_vertices);
     SDL_free(batch_indices);
     batch_vertices = NULL;
@@ -382,15 +418,21 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         break;
     }
     case ITEM_THROWING_SPEAR:
-    case ITEM_THRUSTING_SPEAR: {
-        /* A long shaft with a sharpened tip; the thrusting spear is thicker. */
-        bool thrusting = type == ITEM_THRUSTING_SPEAR;
+    case ITEM_THRUSTING_SPEAR:
+    case ITEM_THROWING_SPEAR_HARDENED:
+    case ITEM_THRUSTING_SPEAR_HARDENED: {
+        /* A long shaft with a sharpened tip; the thrusting spear is thicker,
+         * a fire-hardened one darker with a charred tip. */
+        bool thrusting = type == ITEM_THRUSTING_SPEAR || type == ITEM_THRUSTING_SPEAR_HARDENED;
+        bool hardened =
+            type == ITEM_THROWING_SPEAR_HARDENED || type == ITEM_THRUSTING_SPEAR_HARDENED;
+        SDL_Color wood = hardened ? HARDENED_SPEAR_COLOR : SPEAR_COLOR;
         float thickness = SDL_max(1.0f, floorf(h * (thrusting ? 0.12f : 0.08f)));
         SDL_FRect shaft = {tile->x + floorf(w * 0.08f), tile->y + floorf(h * 0.5f),
                            floorf(w * 0.72f), thickness};
-        fill_outlined(renderer, shaft, SPEAR_COLOR);
+        fill_outlined(renderer, shaft, wood);
         SDL_FRect tip = {shaft.x + shaft.w, shaft.y, floorf(w * 0.12f), thickness};
-        fill_outlined(renderer, tip, shade(SPEAR_COLOR, -50));
+        fill_outlined(renderer, tip, shade(wood, hardened ? -90 : -50));
         break;
     }
     case ITEM_BRANCHES:
@@ -629,10 +671,79 @@ static float craft_fraction(const Workstation *station)
 }
 
 
-/* The station itself: a mat to sit on; a knapping spot adds a flat anvil stone. */
+/* An open hearth: a ring of stones around a pit with ashes. */
+static void render_hearth_shape(SDL_Renderer *renderer, const SDL_FRect *tile, Uint8 alpha)
+{
+    SDL_Color pit = PIT_COLOR, ash = ASH_COLOR, edge = ITEM_OUTLINE;
+    pit.a = ash.a = edge.a = alpha;
+    SDL_FRect hole = inset(tile, 0.6f);
+    fill(renderer, pit, &hole);
+    SDL_FRect ashes = inset(tile, 0.3f);
+    fill(renderer, ash, &ashes);
+    float size = SDL_max(2.0f, floorf(tile->w * 0.18f));
+    float cx = tile->x + tile->w * 0.5f, cy = tile->y + tile->h * 0.5f;
+    for (int i = 0; i < 8; i++) {
+        float angle = (float)i * (SDL_PI_F / 4.0f);
+        SDL_FRect stone = {floorf(cx + cosf(angle) * tile->w * 0.33f - size * 0.5f),
+                           floorf(cy + sinf(angle) * tile->h * 0.33f - size * 0.5f), size, size};
+        fill(renderer, edge, &stone);
+        SDL_Color color = shade(ANVIL_COLOR, (i % 3) * 12 - 12);
+        color.a = alpha;
+        SDL_FRect top = {stone.x + 1.0f, stone.y + 1.0f, stone.w - 2.0f, stone.h - 2.0f};
+        fill(renderer, color, &top);
+    }
+}
+
+/* Flames over the middle of a tile, flickering with `time` (seconds), as
+ * tall as `strength` (0..1) allows. */
+static void render_flames(SDL_Renderer *renderer, const SDL_FRect *tile, float time,
+                          float strength)
+{
+    float width = SDL_max(2.0f, floorf(tile->w * 0.12f));
+    float cx = tile->x + tile->w * 0.5f, base = tile->y + floorf(tile->h * 0.58f);
+    for (int k = 0; k < 3; k++) {
+        float phase = time * 9.0f + (float)k * 2.1f;
+        float tall = (k == 1 ? 0.3f : 0.2f) + 0.06f * sinf(phase) + 0.03f * sinf(phase * 2.7f);
+        float height = SDL_max(2.0f, floorf(tile->h * tall * (0.5f + 0.5f * strength)));
+        SDL_FRect flame = {floorf(cx + ((float)k - 1.0f) * width * 0.9f - width * 0.5f),
+                           base - height, width, height};
+        fill(renderer, FLAME_COLOR, &flame);
+        SDL_FRect core = {flame.x + floorf(width * 0.25f), flame.y + floorf(height * 0.35f),
+                          SDL_max(1.0f, floorf(width * 0.5f)), floorf(height * 0.65f)};
+        fill(renderer, FLAME_CORE_COLOR, &core);
+    }
+}
+
+/* The fuel in a hearth (up to three sticks across the pit) and its fire. */
+static void render_hearth_fire(SDL_Renderer *renderer, const SDL_FRect *tile,
+                               const Workstation *station)
+{
+    float fill_fraction = clampf(station->fuel / HEARTH_FUEL_CAPACITY, 0.0f, 1.0f);
+    int sticks = station->fuel > 0.0f ? 1 + (int)(fill_fraction * 2.99f) : 0;
+    float thickness = SDL_max(1.0f, floorf(tile->h * 0.07f));
+    for (int i = 0; i < sticks; i++) {
+        float offset = ((float)i - (float)(sticks - 1) * 0.5f) * thickness * 1.6f;
+        SDL_FRect stick = {tile->x + floorf(tile->w * 0.3f),
+                           floorf(tile->y + tile->h * 0.54f + offset), floorf(tile->w * 0.4f),
+                           thickness};
+        fill_outlined(renderer, stick, shade(BRANCH_COLOR, -i * 14));
+    }
+    if (station->burning) {
+        /* Real time: flames keep moving while the game is paused. */
+        float time = (float)(SDL_GetTicks() % 100000u) / 1000.0f;
+        render_flames(renderer, tile, time, clampf(station->fuel / 5.0f, 0.0f, 1.0f));
+    }
+}
+
+/* The station itself: a mat to sit on; a knapping spot adds a flat anvil stone;
+ * an open hearth is a ring of stones. */
 static void render_station_shape(SDL_Renderer *renderer, const SDL_FRect *tile,
                                  WorkstationType type, Uint8 alpha)
 {
+    if (workstation_def(type)->hearth) {
+        render_hearth_shape(renderer, tile, alpha);
+        return;
+    }
     SDL_Color mat = MAT_COLOR, anvil = ANVIL_COLOR, weave = shade(MAT_COLOR, -30);
     SDL_Color edge = ITEM_OUTLINE;
     mat.a = anvil.a = weave.a = edge.a = alpha;
@@ -668,6 +779,9 @@ void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera 
         }
         SDL_FRect tile = tile_rect(camera, station->x, station->y);
         render_station_shape(renderer, &tile, (WorkstationType)station->type, 255);
+        if (hearth_is(station)) {
+            render_hearth_fire(renderer, &tile, station);
+        }
         if (station->work_input.type != ITEM_NONE) {
             render_item_stack(renderer, &tile, (ItemType)station->work_input.type);
             batch_flush(renderer);
@@ -693,6 +807,9 @@ void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Ca
 void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, WorkstationType type)
 {
     render_station_shape(renderer, &rect, type, 255);
+    if (workstation_def(type)->hearth) {
+        render_flames(renderer, &rect, 0.0f, 1.0f);
+    }
 }
 
 /* ---- Structures ------------------------------------------------------------- */
@@ -983,15 +1100,115 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
     }
 }
 
-void render_daylight(SDL_Renderer *renderer, float daylight, float width, float height)
+/* ---- Night ---------------------------------------------------------------- */
+
+/* How much of the darkness the full light of a fire takes away, and how
+ * strong its warm glow is. */
+#define FIRE_LIGHT_STRENGTH 0.85f
+#define FIRE_GLOW_STRENGTH 0.3f
+
+/* Tiles that burning hearths light, within `visible` (empty: x0 >= x1). */
+static TileRect lit_tiles(const Workstations *workstations, TileRect visible)
 {
-    float darkness = 1.0f - clampf(daylight, 0.0f, 1.0f);
+    TileRect box = {INT_MAX, INT_MAX, INT_MIN, INT_MIN};
+    int reach = (int)ceilf(HEARTH_LIGHT_RADIUS);
+    for (int i = 0; i < WORKSTATION_MAX; i++) {
+        const Workstation *station = workstation_get_const(workstations, i);
+        if (station == NULL || !station->burning) {
+            continue;
+        }
+        box.x0 = SDL_min(box.x0, station->x - reach);
+        box.y0 = SDL_min(box.y0, station->y - reach);
+        box.x1 = SDL_max(box.x1, station->x + reach + 1);
+        box.y1 = SDL_max(box.y1, station->y + reach + 1);
+    }
+    box.x0 = SDL_max(box.x0, visible.x0);
+    box.y0 = SDL_max(box.y0, visible.y0);
+    box.x1 = SDL_min(box.x1, visible.x1);
+    box.y1 = SDL_min(box.y1, visible.y1);
+    return box;
+}
+
+/* One quad per tile of `box`, each corner colored `color` with an alpha from
+ * the light there. */
+static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box,
+                      SDL_Color color, float darkness, bool glow)
+{
+    int columns = box.x1 - box.x0 + 1;
+    float flicker = 0.95f + 0.05f * sinf((float)(SDL_GetTicks() % 100000u) * 0.011f);
+    for (int y = box.y0; y < box.y1; y++) {
+        for (int x = box.x0; x < box.x1; x++) {
+            int corner = (y - box.y0) * columns + (x - box.x0);
+            float light[4] = {light_corners[corner], light_corners[corner + 1],
+                              light_corners[corner + columns + 1],
+                              light_corners[corner + columns]};
+            if (glow && light[0] + light[1] + light[2] + light[3] <= 0.0f) {
+                continue;
+            }
+            SDL_Color colors[4];
+            for (int i = 0; i < 4; i++) {
+                float alpha = glow ? darkness * FIRE_GLOW_STRENGTH * light[i] * flicker
+                                   : darkness * (1.0f - FIRE_LIGHT_STRENGTH * light[i] * flicker);
+                colors[i] = color;
+                colors[i].a = (Uint8)(clampf(alpha, 0.0f, 1.0f) * 255.0f);
+            }
+            batch_gradient_quad(renderer, colors, tile_rect(camera, x, y));
+        }
+    }
+    batch_flush(renderer);
+}
+
+void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    float darkness = 1.0f - clampf(game_daylight(game->clock.tick), 0.0f, 1.0f);
     if (darkness <= 0.0f) {
         return;
     }
-    SDL_FRect screen = {0.0f, 0.0f, width, height};
-    SDL_SetRenderDrawColor(renderer, 8, 12, 40, (Uint8)(darkness * 255.0f));
-    SDL_RenderFillRect(renderer, &screen);
+    Uint8 alpha = (Uint8)(darkness * 255.0f);
+    SDL_SetRenderDrawColor(renderer, NIGHT_COLOR.r, NIGHT_COLOR.g, NIGHT_COLOR.b, alpha);
+    float width = camera->viewport_width, height = camera->viewport_height;
+    const Workstations *workstations = &game->workstations;
+    TileRect visible = camera_visible_tiles(camera, workstations->width, workstations->height);
+    TileRect box = lit_tiles(workstations, visible);
+    size_t corners = box.x0 < box.x1 && box.y0 < box.y1
+                         ? (size_t)(box.x1 - box.x0 + 1) * (size_t)(box.y1 - box.y0 + 1)
+                         : 0;
+    if (corners > light_corner_capacity) {
+        float *grown = SDL_realloc(light_corners, corners * sizeof(*light_corners));
+        if (grown != NULL) {
+            light_corners = grown;
+            light_corner_capacity = corners;
+        }
+    }
+    if (corners == 0 || corners > light_corner_capacity) {
+        SDL_FRect screen = {0.0f, 0.0f, width, height};
+        SDL_RenderFillRect(renderer, &screen);
+        return;
+    }
+    /* Plain darkness around the lit area, a gradient inside it. */
+    SDL_FRect first = tile_rect(camera, box.x0, box.y0);
+    SDL_FRect last = tile_rect(camera, box.x1 - 1, box.y1 - 1);
+    float left = first.x, top = first.y, right = last.x + last.w, bottom = last.y + last.h;
+    SDL_FRect around[4] = {{0.0f, 0.0f, width, top},
+                           {0.0f, bottom, width, height - bottom},
+                           {0.0f, top, left, bottom - top},
+                           {right, top, width - right, bottom - top}};
+    for (int i = 0; i < 4; i++) {
+        if (around[i].w > 0.0f && around[i].h > 0.0f) {
+            SDL_RenderFillRect(renderer, &around[i]);
+        }
+    }
+    int columns = box.x1 - box.x0 + 1;
+    for (int y = box.y0; y <= box.y1; y++) {
+        for (int x = box.x0; x <= box.x1; x++) {
+            light_corners[(y - box.y0) * columns + (x - box.x0)] =
+                hearths_light_at(workstations, (float)x, (float)y);
+        }
+    }
+    lit_quads(renderer, camera, box, NIGHT_COLOR, darkness, false);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+    lit_quads(renderer, camera, box, GLOW_COLOR, darkness, true);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 }
 
 void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, int y,
@@ -1273,7 +1490,8 @@ static void render_chat_bubbles(SDL_Renderer *renderer, const Game *game, const 
     }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         const Colonist *colonist = &game->colonists[slot];
-        if (entity_id_is_none(game_colonist_id_at(game, slot)) || colonist->chat_ticks <= 0) {
+        if (entity_id_is_none(game_colonist_id_at(game, slot)) ||
+            (colonist->chat_ticks <= 0 && !colonist_telling(colonist, &game->workstations))) {
             continue;
         }
         float wx, wy, sx, sy;

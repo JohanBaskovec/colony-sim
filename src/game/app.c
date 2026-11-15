@@ -813,8 +813,7 @@ static void render_frame(App *app)
                          app->selected_count);
     render_designations(app->renderer, &app->game, &app->camera);
     hud_draw_item_counts(app);
-    render_daylight(app->renderer, game_daylight(app->game.clock.tick),
-                    app->camera.viewport_width, app->camera.viewport_height);
+    render_daylight(app->renderer, &app->game, &app->camera);
     if (app->hover_valid) {
         render_tile_outline(app->renderer, &app->camera, app->hover_x, app->hover_y,
                             HOVER_COLOR);

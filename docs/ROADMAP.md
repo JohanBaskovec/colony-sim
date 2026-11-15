@@ -85,14 +85,16 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Roofs and rooms, later: a roof falls when its last support goes; a key to hide roofs; effects of roofs and rooms (rain, rot, warmth, "slept outside", room quality) with M4 and moods; rooms kept up to date incrementally once the simulation uses them
 - [ ] Clearing cave floors, once mining exists (rock cannot be mined yet: it needs a pick)
 - [x] Knowledge spreading: conversation (nearby settlers chat now and then, a speech bubble, a little learned from what the other talks about, never past 30), apprenticeship (a settler lacking the level for a job assists a master doing it: learns up to the master's level, the work goes 25% faster, one apprentice per master), fading after 15 days without practice (down to 80% of the best level); only discovered knowledges in the colonist inspector, a tooltip per knowledge (gains of the day by source, practice, fading, masters); notices in the top right corner (a knowledge left to a single master, lost, forgotten, mastered again)
-- [ ] Knowledge spreading, later: fireside stories and the "teach" mark (with the hearth, M4); related practice and inventing knowledges (with the first knowledges that are not starting ones); a colony log keeping the notices; chats feeding relationships (social system)
+- [x] Fireside stories and the "teach" mark (with the open hearth, M4)
+- [ ] Knowledge spreading, later: related practice and inventing knowledges (with the first knowledges that are not starting ones); a colony log keeping the notices; chats feeding relationships (social system)
 - [x] UI framework: buttons, panels, tooltips, windows sized to their content (title bar to drag, × to close, stacking order, scroll bar and wheel when too tall), measured layouts that adapt to text length
 - [x] Bottom left menus: Build (workstations, zones, orders as icon buttons with tooltips: name, description, cost, shortcut), Work, ? (controls help, F1); the tile inspector above them; Escape or a right click (not a pan) steps back (drag under way, tool, menu, front window) and never quits; A (AZERTY) / Q (QWERTY) builds another of what is selected (zone, workstation, structure; structures and sites can be selected)
 - [ ] UI: horizontal scrolling (the work grid is wider than small screens), windows remembering their position between sessions, a shortcut shown for the workstation buttons (E cycles them)
 
 ## M4: Survival
 
-- [ ] Fire: campfires, light and heat, fuel
+- [x] Fire: the open hearth (dug, no material), fuel (branches, twigs, logs by weight, up to 20 kg, 2.5 kg an hour; haulers refuel it below half; "keep it burning" and a fuel filter), lighting (embers carried from a burning fire within 60, else friction with a handful of grass as tinder, 30% to 100% by level), light around it at night (6 tiles), fire hardening of spears (×1.5 hit points, grade and condition kept), fireside stories in the evening (a master tells about a knowledge marked to teach, up to 8 listeners learn up to 60)
+- [ ] Fire, later: heat (with the temperature simulation); a torch (light to work at night); roasting and cooking (with meat and tubers); fire spreading and rain putting fires out; hearths that block the way (they are walked over for now); hardened spears dealing ×1.2 damage (with hunting); the better storyteller taking over at a hearth
 - [ ] Temperature simulation per tile: diffusion, wall insulation, doors, caves
 - [ ] Seasons affect temperature and plant growth; weather
 - [ ] Bladder and bowel needs, hygiene, latrines

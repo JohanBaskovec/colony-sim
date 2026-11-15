@@ -54,11 +54,12 @@ simulation:
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, berries, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown plants only), a zone priority, the jobs tiles offer, what they give |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
-| `workstation`| Workstations (crafting spot, knapping spot): definitions (materials, construction work), bills, the craft in progress |
+| `workstation`| Workstations (crafting spot, knapping spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
+| `hearth`     | The fire of an open hearth: fuel values, fuel wanted, burning, lighting rules, light around burning hearths, the hours of fireside stories |
 | `structure`  | Structure definitions (grass bed, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, length in tiles and `Direction`, hit points, wear and refresh; hit points by grade, grade cap from the materials |
 | `bed`        | Bed ownership: one bed per settler, one settler per bed, kept on the bed's head; beds gone from the map are forgotten |
 | `construction`| Construction sites: blueprints of structures and of workstations, refresh sites on worn structures, materials delivered per slot, work, built grade; daily wear; built structures go to the map's structure layers, finished workstations to `Workstations` |
-| `work`       | Work types (mining, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
+| `work`       | Work types (mining, fire, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning (rates, caps, fading), quality and condition of what a worker produces |
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost...), kept in a ring |
@@ -704,6 +705,52 @@ crafting, gathering zones (a background job that never ends by itself) and
 hauling. Failed station searches back off with a stamp made of the
 workstations revision, item additions and reservation releases; gathering
 searches with the zones revision and work reservation releases.
+
+### Hearths and fire
+
+An open hearth (`WORKSTATION_OPEN_HEARTH`, `WorkstationDef.hearth`) is a
+workstation dug like a site (no material, 250 work, Fire 50) and walked over
+like the other stations for now; crafters and refuellers work from a
+4-neighbor tile. Its fire lives on the `Workstation` (`fuel` in kilograms,
+`burning`, the player's `keep_burning` and `fuel_types`, and `fuel_promised`,
+what haulers are bringing); `core/hearth.h` holds the rules and
+`hearths_burn()` runs every tick in `game_tick()`, bumping the workstations
+revision when a fire goes out or falls below the refuel mark so that
+searches backed off on that revision look again.
+
+- **Refuelling** (`TASK_REFUEL`) is hauling work, tried before bringing
+  materials to sites: the hearth wants fuel once its fuel plus what is
+  promised is below half, then enough to fill it; the hauler promises all
+  of it, then only what it picked up, and releases the promise when the job
+  ends in any way (`release_fuel()` in `begin_task()`; ignored if the
+  station was replaced, its `number` changed).
+- **Lighting** (`TASK_LIGHT`, the `WORK_FIRE` work type, Fire 50 or more)
+  reserves the hearth (`RESERVATION_FIRE`) and goes through `LightStep`s:
+  embers from another burning hearth within `HEARTH_FIRE_CARRY_MAX_COST`
+  of it (`Colonist.ember_ticks`, a flag rather than an item: they last
+  4 hours and are dropped with the task), else a handful of grass fetched as
+  tinder and an attempt by friction, which burns the tinder and succeeds by
+  `hearth_friction_chance()` of the level before the attempt (an RNG draw).
+- **Recipes that need fire** (`recipe_needs_fire()`: made at a hearth) are
+  skipped by `choose_bill()` while the hearth is out, and a craft stops when
+  it goes out (the input and progress stay on the station). Hardening keeps
+  the spear's grade and hit point percentage (`recipe_craft()`).
+- **Fireside stories**: in the evening (`hearth_story_time()`, 19:00 to
+  22:00), an idle or wandering settler tries `try_fireside()` before looking
+  for work: one who masters a knowledge the player marked to teach
+  (`Game.teach`, a colony setting shown in the hearth's panel) goes beside a
+  burning hearth nobody tells stories at (`TASK_STORY`, its best such
+  knowledge in `story_topic`; telling is practice), others sit within 3
+  tiles of a storyteller with room (`TASK_LISTEN`, at most 8, `mentor` is
+  the teller) and learn while it tells, up to the teller's level and
+  `KNOWLEDGE_STORY_CAP` (60), as `KNOWLEDGE_SOURCE_STORIES`. Both end at
+  22:00 or when the fire goes out. The evening search backs off like the
+  apprenticeship one.
+- **Rendering**: a ring of stones, sticks for the fuel, flames moving with
+  real time; at night `render_daylight()` darkens plain rectangles around
+  the area lit by burning hearths and a grid of per-corner alpha quads
+  inside it (`hearths_light_at()`, linear over 6 tiles), plus an additive
+  warm glow.
 
 Stones are two map layers (`Map.cobbles`, `Map.flint`): how many of each lie
 about a tile, `MAP_STONES_MAX` (20) at most together, taken one by one by

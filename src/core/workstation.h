@@ -1,6 +1,8 @@
 /*
  * Workstations: places where settlers make things (crafting spot, knapping
- * spot), and the bills the player gives them.
+ * spot, open hearth), and the bills the player gives them. A hearth also
+ * holds a fire: its fuel, whether it burns, what the player wants of it (see
+ * core/hearth.h); it is worked from a neighboring tile.
  *
  * A workstation is built, not placed: its blueprint is a construction site
  * (core/construction.h), where builders and haulers bring its materials and
@@ -31,10 +33,15 @@
 typedef enum WorkstationType {
     WORKSTATION_CRAFTING_SPOT,
     WORKSTATION_KNAPPING_SPOT,
+    WORKSTATION_OPEN_HEARTH,
     WORKSTATION_TYPE_COUNT
 } WorkstationType;
 
 #define WORKSTATION_BIT(type) (1u << (unsigned)(type))
+
+/* What a hearth burns (core/hearth.h): branches, twigs and logs. */
+#define HEARTH_FUEL_TYPES                                                                    \
+    (ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS) | ITEM_TYPE_BIT(ITEM_WOOD))
 
 typedef struct WorkstationDef {
     const char *id; /* Stable identifier (saves), never shown. */
@@ -48,6 +55,9 @@ typedef struct WorkstationDef {
     /* Knowledge needed to build it; KNOWLEDGE_NONE: anyone can. */
     KnowledgeType knowledge;
     float min_level;
+    /* Holds a fire (core/hearth.h), worked from a neighboring tile rather
+     * than standing on it. */
+    bool hearth;
 } WorkstationDef;
 
 typedef enum BillMode {
@@ -104,6 +114,14 @@ typedef struct Workstation {
     uint8_t work_recipe;
     ItemStack work_input;
     float work_progress;
+    /* Hearths only (core/hearth.h): kilograms of fuel in it, whether it
+     * burns, whether settlers keep it burning (refuel and light it), the fuel
+     * types allowed, and the kilograms haulers are bringing. */
+    float fuel;
+    bool burning;
+    bool keep_burning;
+    ItemTypeMask fuel_types;
+    float fuel_promised;
 } Workstation;
 
 typedef struct Workstations {

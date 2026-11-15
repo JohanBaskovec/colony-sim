@@ -30,6 +30,7 @@ typedef enum ReservationKind {
     RESERVATION_CONSTRUCTION, /* A construction site being built. */
     RESERVATION_BED, /* A bed slept in (or walked to). */
     RESERVATION_CLEAN, /* A dirty tile being cleaned. */
+    RESERVATION_FIRE, /* A hearth being lit. */
     RESERVATION_KIND_COUNT
 } ReservationKind;
 

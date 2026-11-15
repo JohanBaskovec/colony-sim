@@ -157,6 +157,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .worker_id = (uint8_t)(slot + 1),
         .colonists = game->colonists,
         .colonist_pool = &game->colonist_pool,
+        .teach = game->teach,
     };
     return context;
 }
@@ -585,6 +586,7 @@ void game_tick(Game *game)
         gather_zones_plants_changed(&game->gather_zones);
     }
     update_items(game);
+    hearths_burn(&game->workstations);
     if (game->clock.tick % TICKS_PER_DAY == 0) {
         /* Bedding packs down: worn beds get a refresh site, or fall apart. */
         constructions_wear_day(&game->constructions, &game->map, &game->items);
@@ -632,6 +634,7 @@ uint64_t game_hash(const Game *game)
     hash = reservations_hash(&game->reservations, hash);
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
+    hash = hash_fnv1a64(hash, game->teach, sizeof(game->teach));
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
         if (entity_id_is_none(id)) {
@@ -656,6 +659,11 @@ uint64_t game_hash(const Game *game)
                              (int32_t)c->chat_partner.generation, c->chat_topic};
         hash = hash_fnv1a64(hash, social, sizeof(social));
         hash = hash_fnv1a64(hash, &c->assisted_until, sizeof(c->assisted_until));
+        int32_t fire[6] = {c->light_step,       c->fire_source, c->fire_source_number,
+                           c->ember_ticks,      c->story_topic, (int32_t)c->fuel_promised};
+        hash = hash_fnv1a64(hash, fire, sizeof(fire));
+        hash = hash_fnv1a64(hash, &c->light_progress, sizeof(c->light_progress));
+        hash = hash_fnv1a64(hash, &c->fuel_promised, sizeof(c->fuel_promised));
         hash = hash_fnv1a64(hash, &c->haul_delivering, sizeof(c->haul_delivering));
         hash = hash_fnv1a64(hash, &c->strength, sizeof(c->strength));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
@@ -705,6 +713,15 @@ int game_knowledge_masters(const Game *game, KnowledgeType knowledge)
         }
     }
     return masters;
+}
+
+bool game_set_teach(Game *game, KnowledgeType knowledge, bool teach)
+{
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT) {
+        return false;
+    }
+    game->teach[knowledge] = teach;
+    return true;
 }
 
 EntityId game_apprentice_of(const Game *game, EntityId master)
