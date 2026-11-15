@@ -5,6 +5,7 @@
 
 #include "test_framework.h"
 
+#include <math.h>
 #include <string.h>
 
 /* A small game on a flat, empty soil map with no starting colonists, at noon. */
@@ -241,6 +242,52 @@ static void test_chance_light_and_time(void)
     CHECK(hearth_story_time(TICKS_PER_DAY + 22 * TICKS_PER_HOUR - 1));
     CHECK(!hearth_story_time(22 * TICKS_PER_HOUR));
     CHECK(!hearth_story_time(12 * TICKS_PER_HOUR));
+}
+
+static void test_radiant_warmth(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    const Workstations *workstations = &game.workstations;
+    int index = built_hearth(&game, 20, 20, HEARTH_FUEL_CAPACITY);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20), 0.0, 1e-9); /* Out. */
+    REQUIRE(hearth_light(&game.workstations, index));
+    /* Falling off with the distance, nothing beyond the radius. */
+    float one = hearths_radiant_warmth(workstations, &game.map, 21, 20);
+    CHECK_NEAR(one, HEARTH_RADIANT_WARMTH, 1e-4);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 20, 20), HEARTH_RADIANT_WARMTH,
+               1e-4);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 20, 22),
+               HEARTH_RADIANT_WARMTH * expf(-HEARTH_RADIANT_FALLOFF), 1e-4);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 17, 20),
+               HEARTH_RADIANT_WARMTH * expf(-2.0f * HEARTH_RADIANT_FALLOFF), 1e-4);
+    CHECK(hearths_radiant_warmth(workstations, &game.map, 20 + HEARTH_RADIANT_RADIUS, 20) > 0.0f);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21 + HEARTH_RADIANT_RADIUS, 20),
+               0.0, 1e-9);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 24, 24), 0.0, 1e-9); /* 5.7. */
+    /* A wall in between stops it, not one beside the way. */
+    map_set_structure(&game.map, 22, 20, STRUCTURE_WALL);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 23, 20), 0.0, 1e-9);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20), one, 1e-6);
+    CHECK(hearths_radiant_warmth(workstations, &game.map, 22, 22) > 0.0f);
+    /* Felt: the air's plus the fire's. */
+    CHECK_NEAR(hearths_felt_temperature(workstations, &game.map, &game.temperatures, 21, 20),
+               temperature_at(&game.temperatures, 21, 20) + one, 1e-4);
+    CHECK_NEAR(hearths_felt_temperature(workstations, &game.map, &game.temperatures, 40, 40),
+               temperature_at(&game.temperatures, 40, 40), 1e-6);
+    /* A fire low on fuel radiates less. */
+    workstation_get(&game.workstations, index)->fuel = HEARTH_RADIANT_FULL_FUEL * 0.5f;
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20),
+               HEARTH_RADIANT_WARMTH * (HEARTH_RADIANT_LOW_FIRE +
+                                        (1.0f - HEARTH_RADIANT_LOW_FIRE) * 0.5f),
+               1e-4);
+    /* Two fires add up. */
+    workstation_get(&game.workstations, index)->fuel = HEARTH_FUEL_CAPACITY;
+    int other = built_hearth(&game, 20, 24, HEARTH_FUEL_CAPACITY);
+    REQUIRE(hearth_light(&game.workstations, other));
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 20, 22),
+               2.0f * HEARTH_RADIANT_WARMTH * expf(-HEARTH_RADIANT_FALLOFF), 1e-4);
+    game_shutdown(&game);
 }
 
 static void test_hearth_is_dug_by_builders(void)
@@ -542,6 +589,7 @@ int main(void)
     RUN_TEST(test_fuel);
     RUN_TEST(test_burning);
     RUN_TEST(test_chance_light_and_time);
+    RUN_TEST(test_radiant_warmth);
     RUN_TEST(test_hearth_is_dug_by_builders);
     RUN_TEST(test_haulers_refuel);
     RUN_TEST(test_lighting_by_friction);

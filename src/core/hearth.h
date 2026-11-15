@@ -19,6 +19,8 @@
 #define COLONY_CORE_HEARTH_H
 
 #include "core/game_clock.h"
+#include "core/map.h"
+#include "core/temperature.h"
 #include "core/workstation.h"
 
 #include <stdbool.h>
@@ -38,6 +40,18 @@
 /* Degrees an hour a burning hearth adds to its tile, which spread around it
  * (core/temperature.h) (tuning). */
 #define HEARTH_HEAT_PER_HOUR 200.0f
+/* Warmth a burning fire radiates (what makes one sweat beside a campfire,
+ * though the air around it barely warms): HEARTH_RADIANT_WARMTH degrees felt
+ * one tile from it, losing HEARTH_RADIANT_FALLOFF of itself (as an
+ * exponent) per tile further, nothing beyond HEARTH_RADIANT_RADIUS; walls,
+ * doors and rock in between stop it. A fire low on fuel radiates less: from
+ * HEARTH_RADIANT_LOW_FIRE of it to all of it at HEARTH_RADIANT_FULL_FUEL
+ * kilograms (tuning). */
+#define HEARTH_RADIANT_WARMTH 20.0f
+#define HEARTH_RADIANT_FALLOFF 0.8f
+#define HEARTH_RADIANT_RADIUS 5
+#define HEARTH_RADIANT_LOW_FIRE 0.4f
+#define HEARTH_RADIANT_FULL_FUEL 5.0f
 /* Tiles lit around a burning hearth at night (fading to nothing there). */
 #define HEARTH_LIGHT_RADIUS 6.0f
 
@@ -94,6 +108,15 @@ float hearth_friction_chance(double level);
 
 /* Light (0..1) burning hearths give at a world point (tile centers at +0.5). */
 float hearths_light_at(const Workstations *workstations, float x, float y);
+
+/* Degrees felt on a tile from the warmth burning hearths radiate (added
+ * up, 0 when none reaches it). */
+float hearths_radiant_warmth(const Workstations *workstations, const Map *map, int x, int y);
+
+/* Temperature felt on a tile: the air's (core/temperature.h) plus the
+ * warmth hearths radiate. What settlers feel; the air's is what spreads. */
+float hearths_felt_temperature(const Workstations *workstations, const Map *map,
+                               const Temperatures *temperatures, int x, int y);
 
 /* Whether it is the time of fireside stories. */
 bool hearth_story_time(uint64_t tick);

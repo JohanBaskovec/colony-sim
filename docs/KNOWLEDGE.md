@@ -535,7 +535,7 @@ food. Fire must be lit, fed and watched.*
 | Burn rate   | 2.5 kg/h: a branch lasts 36 min, a handful of twigs 5 min, a log 2.8 h *(tuning)* |
 | Refuelling  | "Keep burning" or "burn now"; haulers refuel below half; fuel filter. |
 | Light       | Radius 6 tiles while burning. |
-| Heat        | About 15 kW, through the temperature simulation (M4). |
+| Heat        | About 15 kW, through the temperature simulation: heats the air of its tile (200 degrees an hour, spreading) and radiates warmth felt up to 5 tiles away. |
 | Fire risk   | Sparks can set fire to grass, beds and branch constructions within 1 tile (M4). |
 | Rain        | Heavy rain can put it out, unless under a roof (M4). |
 | Workstation | Fire hardening, grilling, roasting, fireside stories (§1.5). |
@@ -938,8 +938,10 @@ Suggested order, each step with its tests:
    heat) and sleeping in the cold. A hearth's heat is a number of degrees an
    hour on its tile (`HEARTH_HEAT_PER_HOUR`, 200), not the 15 kW of §5.3,
    tuned so that a closed and roofed hut with a fire stays about 15 °C above
-   the air; an open fire barely warms the air around it, and the warmth felt
-   beside it waits.
+   the air. An open fire barely warms the air around it, but radiates
+   warmth felt on the tiles around it (+20 °C one tile away, +9 at two, +4
+   at three, stopped by walls); sleeping is best between 10 and 30 °C felt,
+   and settlers without a bed sleep beside a fire on cold nights.
    Then: grilling and roasting (with meat and tubers), wind, rain, rot;
    tubers, hazel, mushrooms with seasons.
 

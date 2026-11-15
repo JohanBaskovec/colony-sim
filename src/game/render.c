@@ -1175,13 +1175,36 @@ static SDL_Color temperature_color(float celsius)
     return mix(TEMPERATURE_COLORS[from], TEMPERATURE_COLORS[from + 1], position - (float)from);
 }
 
+/* Whether a tile is within reach of the warmth of a burning hearth. */
+static bool near_fire(const Workstations *workstations, int x, int y)
+{
+    for (int i = 0; i < WORKSTATION_MAX; i++) {
+        const Workstation *station = &workstations->list[i];
+        if (station->used && station->burning && abs(station->x - x) <= HEARTH_RADIANT_RADIUS &&
+            abs(station->y - y) <= HEARTH_RADIANT_RADIUS) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const Temperatures *temperatures = &game->temperatures;
+    const Workstations *workstations = &game->workstations;
     TileRect visible = camera_visible_tiles(camera, temperatures->width, temperatures->height);
+    /* Burning hearths are few: tiles away from all of them only have the air's. */
+    bool burning = false;
+    for (int i = 0; i < WORKSTATION_MAX && !burning; i++) {
+        burning = workstations->list[i].used && workstations->list[i].burning;
+    }
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            SDL_Color color = temperature_color(temperature_at(temperatures, x, y));
+            float celsius = temperature_at(temperatures, x, y);
+            if (burning && near_fire(workstations, x, y)) {
+                celsius += hearths_radiant_warmth(workstations, &game->map, x, y);
+            }
+            SDL_Color color = temperature_color(celsius);
             color.a = 120;
             SDL_FRect tile = tile_rect(camera, x, y);
             batch_quad(renderer, color, &tile);

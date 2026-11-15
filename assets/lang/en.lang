@@ -131,7 +131,7 @@ hud.help.orders = {0}: mine rock · {1}: cancel orders
 # {0} = key of the stockpile zone tool, {1} = key of the build tool, {2} = key of the work priorities grid
 hud.help.copy = {0}: build another of what is selected (zone, workstation, bed, wall, door)
 hud.help.rotate = {0}: turn the bed being placed (head and foot)
-hud.help.temperature = {0}: temperature view (each tile, from blue for cold to red for hot)
+hud.help.temperature = {0}: temperature view (felt on each tile, the warmth of fires included: blue for cold, red for hot)
 hud.help.manage = {0}: stockpile zones · {1}: workstations · click a zone or station: its settings · {2}: work priorities
 # {0} = tool name
 hud.tool = Tool: {0} · Left click/drag: apply · Esc: back
@@ -190,6 +190,7 @@ hud.tile.room_open.one = Room: {0} tile, {1} under a roof
 hud.tile.room_open.other = Room: {0} tiles, {1} under a roof
 hud.tile.outdoors = Outdoors
 hud.tile.temperature = Temperature: {0}
+hud.tile.temperature_felt = Temperature: {0} (felt: {1}, by the fire)
 hud.tile.refresh = Refreshing: {0} ({1}% done)
 hud.tile.bed_owner = Owner: {0}
 hud.tile.bed_free = Free bed: the next settler to sleep here takes it
@@ -267,6 +268,7 @@ hud.colonist.tools_broken.other = {0} tools worn out
 hud.colonist.bed = Own bed: {0} ({1})
 hud.colonist.no_bed = No bed of their own
 hud.colonist.cold_sleep = Sleeping in the cold ({0}): rests ×{1} as fast
+hud.colonist.hot_sleep = Sleeping too hot ({0}): rests ×{1} as fast
 # {0} = need name, {1} = percentage
 hud.colonist.need = {0}: {1}%
 # {0} = need name, {1} = percentage, {2} = state (e.g. Hungry)

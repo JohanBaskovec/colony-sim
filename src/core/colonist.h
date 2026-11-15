@@ -113,12 +113,21 @@
 /* After waking up from a night on the ground, work is slower for this long. */
 #define COLONIST_GROUND_SLEEP_PENALTY_TICKS (12 * TICKS_PER_HOUR)
 #define COLONIST_GROUND_SLEEP_WORK_FACTOR 0.9f
-/* Sleeping where it is colder than this rests less: the rest gain loses
- * COLONIST_COLD_SLEEP_LOSS_PER_DEGREE of itself per degree below, down to
- * COLONIST_COLD_SLEEP_FACTOR_MIN (tuning). */
+/* Sleeping where it feels colder or hotter than this rests less: the rest
+ * gain loses COLONIST_SLEEP_LOSS_PER_DEGREE of itself per degree beyond,
+ * down to COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN (tuning). The felt
+ * temperature counts the warmth of fires (hearths_felt_temperature()). */
 #define COLONIST_COLD_SLEEP_BELOW 10.0f
-#define COLONIST_COLD_SLEEP_LOSS_PER_DEGREE 0.025f
-#define COLONIST_COLD_SLEEP_FACTOR_MIN 0.5f
+#define COLONIST_HOT_SLEEP_ABOVE 30.0f
+#define COLONIST_SLEEP_LOSS_PER_DEGREE 0.025f
+#define COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN 0.5f
+/* A settler with no bed to go to, who would sleep too cold or too hot where
+ * it stands, walks at most this far to a spot that feels right beside a
+ * fire. */
+#define COLONIST_WARM_SPOT_MAX_COST 80.0f
+/* Asleep out of a bed, a settler checks this often whether it feels too
+ * cold or hot (the night gets colder, a fire burns low) and moves. */
+#define COLONIST_WARM_SPOT_CHECK_TICKS (TICKS_PER_HOUR / 2)
 /* Settlers walk at most this far to their bed or a free one. */
 #define COLONIST_BED_SEARCH_MAX_COST 150.0f
 #define NEED_LOW_THRESHOLD 0.3f
@@ -217,6 +226,7 @@ typedef enum SearchKind {
     SEARCH_REFUEL,       /* Hearths wanting fuel. */
     SEARCH_LIGHT,        /* Hearths to light. */
     SEARCH_STORY,        /* A hearth to tell stories at, or a story to listen to. */
+    SEARCH_WARM_SPOT,    /* Asleep too cold or hot: a better spot beside a fire. */
     SEARCH_COUNT
 } SearchKind;
 
@@ -498,8 +508,8 @@ bool colonist_at_work(const Colonist *colonist);
 /* Whether the colonist knows enough to carry out this kind of order. */
 bool colonist_can_do(const Colonist *colonist, DesignationType type);
 
-/* Rest gain multiplier of sleeping at a temperature: 1 when mild enough,
- * less in the cold (COLONIST_COLD_SLEEP_BELOW). */
+/* Rest gain multiplier of sleeping at a felt temperature: 1 between
+ * COLONIST_COLD_SLEEP_BELOW and COLONIST_HOT_SLEEP_ABOVE, less beyond. */
 float colonist_sleep_temperature_factor(float celsius);
 
 /* Whether the colonist knows enough to do this gathering job. */

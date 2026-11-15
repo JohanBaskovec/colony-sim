@@ -21,7 +21,8 @@ void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera)
  * burning hearths, which also glow warm. */
 void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
-/* The temperature of each visible tile, from blue (cold) to red (hot). */
+/* The temperature felt on each visible tile (the warmth of fires
+ * included), from blue (cold) to red (hot). */
 void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
 /* Items lying on the ground (placeholder shapes per item type). */

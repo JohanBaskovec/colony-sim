@@ -3,6 +3,7 @@
 #include "core/util.h"
 
 #include <math.h>
+#include <stdlib.h>
 
 #define BURN_PER_TICK (HEARTH_BURN_PER_HOUR / (float)TICKS_PER_HOUR)
 
@@ -164,6 +165,64 @@ float hearths_light_at(const Workstations *workstations, float x, float y)
         light = fmaxf(light, here);
     }
     return clampf(light, 0.0f, 1.0f);
+}
+
+/* Whether nothing stops warmth between two tiles: no wall, door or rock on
+ * the tiles of the line between them (their own tiles excluded). */
+static bool warmth_reaches(const Map *map, int x0, int y0, int x1, int y1)
+{
+    int dx = abs(x1 - x0), dy = -abs(y1 - y0);
+    int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    int error = dx + dy, x = x0, y = y0;
+    for (;;) {
+        int twice = 2 * error;
+        if (twice >= dy) {
+            error += dy;
+            x += sx;
+        }
+        if (twice <= dx) {
+            error += dx;
+            y += sy;
+        }
+        if (x == x1 && y == y1) {
+            return true;
+        }
+        if (temperature_material(map, x, y) != TEMPERATURE_MATERIAL_AIR) {
+            return false;
+        }
+    }
+}
+
+float hearths_radiant_warmth(const Workstations *workstations, const Map *map, int x, int y)
+{
+    float warmth = 0.0f;
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = &workstations->list[index];
+        if (!station->used || !station->burning) {
+            continue;
+        }
+        int dx = x - station->x, dy = y - station->y;
+        if (abs(dx) > HEARTH_RADIANT_RADIUS || abs(dy) > HEARTH_RADIANT_RADIUS) {
+            continue;
+        }
+        float distance = sqrtf((float)(dx * dx + dy * dy));
+        if (distance > (float)HEARTH_RADIANT_RADIUS ||
+            ((dx != 0 || dy != 0) && !warmth_reaches(map, station->x, station->y, x, y))) {
+            continue;
+        }
+        float fire = HEARTH_RADIANT_LOW_FIRE + (1.0f - HEARTH_RADIANT_LOW_FIRE) *
+                                                   clampf(station->fuel / HEARTH_RADIANT_FULL_FUEL,
+                                                          0.0f, 1.0f);
+        float beyond = fmaxf(distance, 1.0f) - 1.0f;
+        warmth += HEARTH_RADIANT_WARMTH * fire * expf(-HEARTH_RADIANT_FALLOFF * beyond);
+    }
+    return warmth;
+}
+
+float hearths_felt_temperature(const Workstations *workstations, const Map *map,
+                               const Temperatures *temperatures, int x, int y)
+{
+    return temperature_at(temperatures, x, y) + hearths_radiant_warmth(workstations, map, x, y);
 }
 
 bool hearth_story_time(uint64_t tick)

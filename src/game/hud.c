@@ -305,9 +305,17 @@ static void build_tile_panel(App *app, Panel *panel)
     } else if (map_natural_roof(map, x, y)) {
         panel_add_text(panel, tr("hud.tile.natural_roof"));
     }
-    char celsius[32];
-    temperature_text(celsius, sizeof(celsius), temperature_at(&app->game.temperatures, x, y), 1);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature"), celsius);
+    char celsius[32], felt[32];
+    float air = temperature_at(&app->game.temperatures, x, y);
+    float radiant = hearths_radiant_warmth(&app->game.workstations, map, x, y);
+    temperature_text(celsius, sizeof(celsius), air, 1);
+    if (radiant >= 0.05f) {
+        temperature_text(felt, sizeof(felt), air + radiant, 1);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature_felt"), celsius,
+                  felt);
+    } else {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature"), celsius);
+    }
     const Room *room = rooms_at(game_rooms(&app->game), map, x, y);
     if (room != NULL && !room->closed) {
         panel_add_text(panel, tr("hud.tile.outdoors"));
@@ -631,14 +639,18 @@ static void build_selection_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.colonist.ground_sleep", left),
                   percent, hours);
     }
-    float sleep_celsius = temperature_at(&app->game.temperatures, colonist->x, colonist->y);
+    float sleep_celsius = hearths_felt_temperature(&app->game.workstations, &app->game.map,
+                                                   &app->game.temperatures, colonist->x,
+                                                   colonist->y);
     float sleep_factor = colonist_sleep_temperature_factor(sleep_celsius);
-    if (colonist->task == TASK_SLEEP && sleep_factor < 1.0f) {
+    if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist) && sleep_factor < 1.0f) {
         char celsius[32], factor[16];
         temperature_text(celsius, sizeof(celsius), sleep_celsius, 0);
         tr_decimal(factor, sizeof(factor), sleep_factor, 2);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.cold_sleep"), celsius,
-                  factor);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+                  tr(sleep_celsius < COLONIST_COLD_SLEEP_BELOW ? "hud.colonist.cold_sleep"
+                                                               : "hud.colonist.hot_sleep"),
+                  celsius, factor);
     }
     TilePos bed;
     if (beds_owned(&app->game.beds, (uint8_t)(app->selected[0].index + 1), &bed)) {

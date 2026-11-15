@@ -836,13 +836,18 @@ static bool is_own_bed(const Map *map, int x, int y, void *userdata)
            is_free_bed(map, x, y, (void *)search->context);
 }
 
+static bool go_to_warm_spot(Colonist *colonist, const ColonistContext *context);
+static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context);
+
 /* Goes to sleep in its own bed, else in the nearest free one (which becomes
- * its own), else where the colonist stands. */
+ * its own), else at a spot beside a fire when too cold or hot where the
+ * colonist stands, else there. */
 static void start_sleeping(Colonist *colonist, const ColonistContext *context)
 {
     begin_task(colonist, context, TASK_SLEEP);
     path_clear(&colonist->path);
     if (context->map->structure_counts[STRUCTURE_GRASS_BED] == 0) {
+        go_to_warm_spot(colonist, context);
         return;
     }
     TilePos bed;
@@ -864,21 +869,102 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
     if (found) {
         colonist->target = bed;
         reservations_add(context->reservations, RESERVATION_BED, bed, context->worker_id);
+    } else {
+        go_to_warm_spot(colonist, context);
     }
 }
 
 float colonist_sleep_temperature_factor(float celsius)
 {
-    float below = COLONIST_COLD_SLEEP_BELOW - celsius;
-    if (below <= 0.0f) {
+    float beyond = fmaxf(COLONIST_COLD_SLEEP_BELOW - celsius, celsius - COLONIST_HOT_SLEEP_ABOVE);
+    if (beyond <= 0.0f) {
         return 1.0f;
     }
-    return fmaxf(COLONIST_COLD_SLEEP_FACTOR_MIN,
-                 1.0f - COLONIST_COLD_SLEEP_LOSS_PER_DEGREE * below);
+    return fmaxf(COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN,
+                 1.0f - COLONIST_SLEEP_LOSS_PER_DEGREE * beyond);
+}
+
+/* Temperature the colonist feels on a tile (mild without temperatures). */
+static float felt_temperature(const ColonistContext *context, int x, int y)
+{
+    if (context->temperatures == NULL) {
+        return (COLONIST_COLD_SLEEP_BELOW + COLONIST_HOT_SLEEP_ABOVE) * 0.5f;
+    }
+    return hearths_felt_temperature(context->workstations, context->map, context->temperatures, x,
+                                    y);
+}
+
+static bool comfortable_to_sleep(float celsius)
+{
+    return celsius >= COLONIST_COLD_SLEEP_BELOW && celsius <= COLONIST_HOT_SLEEP_ABOVE;
+}
+
+/* Search filter: a free tile beside a fire where it feels right to sleep. */
+static bool is_warm_spot(const Map *map, int x, int y, void *userdata)
+{
+    const ColonistContext *context = userdata;
+    TilePos tile = {(int16_t)x, (int16_t)y};
+    return workstation_at(context->workstations, x, y) == WORKSTATION_NONE &&
+           map_structure(map, x, y) == STRUCTURE_NONE &&
+           !reservations_taken_by_other(context->reservations, RESERVATION_BED, tile,
+                                        context->worker_id) &&
+           hearths_radiant_warmth(context->workstations, map, x, y) > 0.0f &&
+           comfortable_to_sleep(felt_temperature(context, x, y));
+}
+
+static bool any_fire_burning(const ColonistContext *context)
+{
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = &context->workstations->list[index];
+        if (station->used && station->burning) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* With no bed to go to and too cold or hot here: walks to a spot beside a
+ * burning fire that feels right, if there is one. Returns whether it goes. */
+static bool go_to_warm_spot(Colonist *colonist, const ColonistContext *context)
+{
+    if (context->temperatures == NULL ||
+        comfortable_to_sleep(felt_temperature(context, colonist->x, colonist->y)) ||
+        !any_fire_burning(context)) {
+        return false;
+    }
+    TilePos spot;
+    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                 is_warm_spot, (void *)context, COLONIST_WARM_SPOT_MAX_COST,
+                                 &colonist->path, &spot)) {
+        return false;
+    }
+    colonist->target = spot;
+    reservations_add(context->reservations, RESERVATION_BED, spot, context->worker_id);
+    return true;
+}
+
+/* Asleep on the ground, now and then: moves to a spot beside a fire when it
+ * feels too cold or hot where it lies. */
+static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context)
+{
+    if (colonist_is_moving(colonist) || context->temperatures == NULL ||
+        !search_allowed(colonist, SEARCH_WARM_SPOT) ||
+        structure_is_bed(map_structure(context->map, colonist->x, colonist->y)) ||
+        comfortable_to_sleep(felt_temperature(context, colonist->x, colonist->y)) ||
+        !any_fire_burning(context)) {
+        return;
+    }
+    colonist->search_cooldown[SEARCH_WARM_SPOT] = COLONIST_WARM_SPOT_CHECK_TICKS;
+    TilePos here = current_tile(colonist);
+    /* Its own spot, if it had one, is free again: it may stay there. */
+    reservations_release_kind(context->reservations, RESERVATION_BED, context->worker_id);
+    if (!go_to_warm_spot(colonist, context)) {
+        reservations_add(context->reservations, RESERVATION_BED, here, context->worker_id);
+    }
 }
 
 /* Rest gain multiplier where the colonist lies: its bed (or the ground),
- * and how cold it is there. */
+ * and the temperature it feels there. */
 static float rest_factor(const Colonist *colonist, const ColonistContext *context)
 {
     StructureType bed = map_structure(context->map, colonist->x, colonist->y);
@@ -886,7 +972,7 @@ static float rest_factor(const Colonist *colonist, const ColonistContext *contex
         structure_is_bed(bed) ? structure_def(bed)->rest_factor : COLONIST_GROUND_REST_FACTOR;
     if (context->temperatures != NULL) {
         factor *= colonist_sleep_temperature_factor(
-            temperature_at(context->temperatures, colonist->x, colonist->y));
+            felt_temperature(context, colonist->x, colonist->y));
     }
     return factor;
 }
@@ -3394,9 +3480,10 @@ static void decide(Colonist *colonist, const ColonistContext *context)
                 colonist->ground_sleep_ticks = COLONIST_GROUND_SLEEP_PENALTY_TICKS;
             }
             set_idle(colonist, context, random_idle_ticks(context->rng));
-        } else {
-            /* Severe hunger or thirst wakes colonists up. */
-            try_satisfy_urgent(colonist, context, NEED_CRITICAL_THRESHOLD);
+        } else if (!try_satisfy_urgent(colonist, context, NEED_CRITICAL_THRESHOLD)) {
+            /* Severe hunger or thirst wakes colonists up; the cold or the heat
+             * of the night moves them. */
+            stay_warm_asleep(colonist, context);
         }
         return;
     case TASK_EAT:

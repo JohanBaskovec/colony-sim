@@ -7,6 +7,7 @@
 #include "test_framework.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Start of the middle day of a season. */
@@ -302,8 +303,15 @@ static void test_sleep_temperature_factor(void)
     CHECK_NEAR(colonist_sleep_temperature_factor(20.0f), 1.0, 1e-6);
     CHECK_NEAR(colonist_sleep_temperature_factor(COLONIST_COLD_SLEEP_BELOW), 1.0, 1e-6);
     CHECK_NEAR(colonist_sleep_temperature_factor(COLONIST_COLD_SLEEP_BELOW - 4.0f),
-               1.0f - 4.0f * COLONIST_COLD_SLEEP_LOSS_PER_DEGREE, 1e-6);
-    CHECK_NEAR(colonist_sleep_temperature_factor(-40.0f), COLONIST_COLD_SLEEP_FACTOR_MIN, 1e-6);
+               1.0f - 4.0f * COLONIST_SLEEP_LOSS_PER_DEGREE, 1e-6);
+    CHECK_NEAR(colonist_sleep_temperature_factor(-40.0f), COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN,
+               1e-6);
+    /* Too hot too. */
+    CHECK_NEAR(colonist_sleep_temperature_factor(COLONIST_HOT_SLEEP_ABOVE), 1.0, 1e-6);
+    CHECK_NEAR(colonist_sleep_temperature_factor(COLONIST_HOT_SLEEP_ABOVE + 6.0f),
+               1.0f - 6.0f * COLONIST_SLEEP_LOSS_PER_DEGREE, 1e-6);
+    CHECK_NEAR(colonist_sleep_temperature_factor(90.0f), COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN,
+               1e-6);
 }
 
 /* Ticks a settler sleeping at (x, y) takes to rest from 0.2. */
@@ -355,6 +363,104 @@ static void test_cold_sleep_is_longer(void)
     CHECK(cold > warm + 2 * TICKS_PER_HOUR);
 }
 
+/* A rested settler doing nothing, then tired. */
+static Colonist *spawn_sleeper(Game *game, int x, int y)
+{
+    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
+    if (colonist != NULL) {
+        for (int type = 0; type < WORK_TYPE_COUNT; type++) {
+            colonist_set_work_priority(colonist, (WorkType)type, WORK_PRIORITY_DISABLED);
+        }
+        colonist->needs[NEED_REST] = 0.2f;
+    }
+    return colonist;
+}
+
+static float felt(const Game *game, int x, int y)
+{
+    return hearths_felt_temperature(&game->workstations, &game->map, &game->temperatures, x, y);
+}
+
+static void test_sleeping_beside_a_fire(void)
+{
+    uint64_t night = mid_season(SEASON_WINTER) + 22 * TICKS_PER_HOUR;
+    Game game;
+    REQUIRE(init_flat_game(&game, night));
+    int hearth = burning_hearth(&game, 20, 20);
+    Colonist *first = spawn_sleeper(&game, 10, 20);
+    Colonist *second = spawn_sleeper(&game, 30, 22);
+    REQUIRE(first != NULL && second != NULL);
+    CHECK(felt(&game, 10, 20) < COLONIST_COLD_SLEEP_BELOW);
+    run_hours(&game, 0.3f);
+    refill(&game, hearth);
+    /* Both asleep near the fire, each on a spot of its own, neither on the
+     * hearth, both feeling right. */
+    CHECK_EQ_INT(first->task, TASK_SLEEP);
+    CHECK_EQ_INT(second->task, TASK_SLEEP);
+    CHECK(!colonist_is_moving(first) && !colonist_is_moving(second));
+    CHECK(first->x != second->x || first->y != second->y);
+    CHECK(first->x != 20 || first->y != 20);
+    CHECK(abs(first->x - 20) <= HEARTH_RADIANT_RADIUS && abs(first->y - 20) <= 5);
+    float first_felt = felt(&game, first->x, first->y);
+    CHECK(first_felt >= COLONIST_COLD_SLEEP_BELOW && first_felt <= COLONIST_HOT_SLEEP_ABOVE);
+    float second_felt = felt(&game, second->x, second->y);
+    CHECK(second_felt >= COLONIST_COLD_SLEEP_BELOW && second_felt <= COLONIST_HOT_SLEEP_ABOVE);
+    /* Resting as fast as on mild ground: 8 hours from 0.2. */
+    int ticks = 0;
+    while (first->task == TASK_SLEEP && ticks < TICKS_PER_DAY) {
+        run_hours(&game, 0.1f);
+        refill(&game, hearth);
+        ticks += TICKS_PER_HOUR / 10;
+    }
+    CHECK(ticks <= 8 * TICKS_PER_HOUR + TICKS_PER_HOUR / 2);
+    game_shutdown(&game);
+
+    /* Asleep where it was mild enough in the evening: the night gets colder,
+     * and it moves to the fire. */
+    uint64_t autumn = mid_season(SEASON_AUTUMN) + 20 * TICKS_PER_HOUR;
+    REQUIRE(init_flat_game(&game, autumn));
+    hearth = burning_hearth(&game, 20, 20);
+    Colonist *late = spawn_sleeper(&game, 10, 20);
+    REQUIRE(late != NULL);
+    CHECK(felt(&game, 10, 20) >= COLONIST_COLD_SLEEP_BELOW);
+    late->needs[NEED_REST] = 0.0f; /* A long night ahead. */
+    run_hours(&game, 0.2f);
+    CHECK_EQ_INT(late->task, TASK_SLEEP);
+    CHECK_EQ_INT(late->x, 10);
+    for (int i = 0; i < 16; i++) {
+        run_hours(&game, 0.5f);
+        refill(&game, hearth);
+        late->needs[NEED_REST] = fminf(late->needs[NEED_REST], 0.5f);
+    }
+    CHECK(felt(&game, 10, 20) < COLONIST_COLD_SLEEP_BELOW);
+    CHECK_EQ_INT(late->task, TASK_SLEEP);
+    CHECK(abs(late->x - 20) <= HEARTH_RADIANT_RADIUS && abs(late->y - 20) <= 5);
+    float late_felt = felt(&game, late->x, late->y);
+    CHECK(late_felt >= COLONIST_COLD_SLEEP_BELOW && late_felt <= COLONIST_HOT_SLEEP_ABOVE);
+    game_shutdown(&game);
+
+    /* No fire: asleep where it stands. */
+    REQUIRE(init_flat_game(&game, night));
+    Colonist *alone = spawn_sleeper(&game, 10, 20);
+    REQUIRE(alone != NULL);
+    run_hours(&game, 0.3f);
+    CHECK_EQ_INT(alone->task, TASK_SLEEP);
+    CHECK_EQ_INT(alone->x, 10);
+    CHECK_EQ_INT(alone->y, 20);
+    game_shutdown(&game);
+
+    /* Mild enough where it stands: no need to move. */
+    uint64_t summer = mid_season(SEASON_SUMMER) + 22 * TICKS_PER_HOUR;
+    REQUIRE(init_flat_game(&game, summer));
+    burning_hearth(&game, 20, 20);
+    Colonist *mild = spawn_sleeper(&game, 10, 20);
+    REQUIRE(mild != NULL);
+    run_hours(&game, 0.3f);
+    CHECK_EQ_INT(mild->x, 10);
+    CHECK_EQ_INT(mild->y, 20);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_outdoor);
@@ -366,5 +472,6 @@ int main(void)
     RUN_TEST(test_cave_stays_mild);
     RUN_TEST(test_sleep_temperature_factor);
     RUN_TEST(test_cold_sleep_is_longer);
+    RUN_TEST(test_sleeping_beside_a_fire);
     return test_summary();
 }

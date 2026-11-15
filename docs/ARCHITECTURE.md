@@ -616,11 +616,25 @@ where one could not walk anyway; within `MAP_NATURAL_ROOF_REACH`, since
 rock makes natural roofs around it), rebuilt whole when the logs overflowed
 or the layers were written directly (`MapTopologyChange.anywhere`). Edge
 rates of 0 and a padded layer let tiles on the edges of the map go through
-the same loop. A settler asleep where it is colder than
-`COLONIST_COLD_SLEEP_BELOW` rests less (`colonist_sleep_temperature_factor()`,
-times the bed's or the ground's rest factor); the frontend shows the
-temperature in the inspectors and a temperature view (`render_temperature()`,
-key H).
+the same loop.
+
+What settlers feel is not only the air: a burning fire radiates warmth
+(`hearths_radiant_warmth()`: `HEARTH_RADIANT_WARMTH` one tile away, falling
+off exponentially, nothing beyond `HEARTH_RADIANT_RADIUS`, less when low on
+fuel, stopped by a wall, door or rock on the line between, several fires
+adding up), which barely warms the air outdoors but makes one sweat beside
+it. `hearths_felt_temperature()` adds it to the air's; it is computed when
+asked for, never stored. A settler asleep where it feels colder than
+`COLONIST_COLD_SLEEP_BELOW` or hotter than `COLONIST_HOT_SLEEP_ABOVE` rests
+less (`colonist_sleep_temperature_factor()`, times the bed's or the ground's
+rest factor). With no bed to go to, a settler who would sleep too cold or hot
+walks to the nearest free tile beside a burning fire that feels right
+(`is_warm_spot()`, within `COLONIST_WARM_SPOT_MAX_COST`, reserved like a bed
+with `RESERVATION_BED`), and asleep on the ground it checks again every
+`COLONIST_WARM_SPOT_CHECK_TICKS` (`SEARCH_WARM_SPOT`): the night gets colder,
+fires burn low. Nothing of this runs while no fire burns. The frontend shows
+the air and felt temperatures in the inspectors and a felt temperature view
+(`render_temperature()`, key H).
 
 **Beds**: a colonist going to sleep walks to its own bed (`core/bed.h`),
 else to the nearest free bed, which becomes its own (`RESERVATION_BED`,
