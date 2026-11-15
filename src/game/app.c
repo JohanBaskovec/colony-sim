@@ -891,6 +891,7 @@ void app_run(App *app)
         }
         update_camera(app, (float)dt);
         game_update(&app->game, dt);
+        hud_update_notices(app, dt);
         prune_selection(app);
         prune_stockpile_selection(app);
         prune_station_selection(app);

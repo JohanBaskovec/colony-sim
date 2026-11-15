@@ -224,6 +224,7 @@ colonist.task.craft = Crafting
 colonist.task.construct = Building
 colonist.task.supply = Bringing materials
 colonist.task.clean = Cleaning
+colonist.task.assist = Apprenticing
 colonist.task.haul = Hauling
 
 need.food = Food
@@ -261,8 +262,36 @@ hud.colonist.need_state = {0}: {1}% ({2})
 hud.colonist.knowledge = Knowledge (levels out of 100)
 # {0} = knowledge name, {1} = level (e.g. 63.4), {2} = work speed multiplier (e.g. 1.25)
 hud.colonist.knowledge_level = {0}: {1} (speed ×{2})
+hud.colonist.knowledge_level_fading = {0}: {1} (speed ×{2}, fading)
 # {0} = knowledge name, {1} = level, too low to use the knowledge yet
-hud.colonist.knowledge_learning = {0}: {1} (still learning)
+hud.colonist.knowledge_learning = {0}: {1} (not mastered yet)
+hud.colonist.knowledge_learning_fading = {0}: {1} (not mastered yet, fading)
+# {0} = the master's name, {1} = knowledge name
+hud.colonist.apprentice = Learning from {0}: {1}
+# {0} = the apprentice's name
+hud.colonist.teaching = Teaching {0} the trade
+# {0} = the other settler's name
+hud.colonist.chatting = Chatting with {0}
+# {0} = the other settler's name, {1} = knowledge the settler talks about
+hud.colonist.chatting_about = Chatting with {0} about {1}
+# Tooltip of a knowledge in the colonist inspector. {0} = level
+hud.knowledge.peak = Best level reached: {0}
+# {0} = points gained today (e.g. 0.42)
+hud.knowledge.gain.doing = +{0} today by doing the work
+hud.knowledge.gain.apprenticeship = +{0} today as an apprentice
+hud.knowledge.gain.conversation = +{0} today by chatting
+hud.knowledge.no_gain = Nothing learned today
+hud.knowledge.practised = Practised lately
+# {0} = days without practice, {1} = days after which a knowledge fades
+hud.knowledge.unpractised.one = Not practised for {0} day (fades after {1} days)
+hud.knowledge.unpractised.other = Not practised for {0} days (fades after {1} days)
+# {0} = days without practice, {1} = lowest level it can fade to
+hud.knowledge.fading.one = Fading: not practised for {0} day, down to {1} at worst
+hud.knowledge.fading.other = Fading: not practised for {0} days, down to {1} at worst
+# {0} = number of settlers with level 50 or more
+hud.knowledge.masters.one = {0} settler masters it in the colony
+hud.knowledge.masters.other = {0} settlers master it in the colony
+hud.knowledge.no_master = Nobody in the colony masters it
 # {0} = number of selected colonists
 hud.selection.count.one = {0} colonist selected
 hud.selection.count.other = {0} colonists selected
@@ -405,3 +434,10 @@ work_panel.hint = Left click: higher priority · Right click: lower priority · 
 work_panel.legend = {0} = done first · {1} = done last · empty = never · same number: left column first
 # {0} = level from which a knowledge can be used, {1} = highest level
 work_panel.knowledge_legend = Small number: knowledge level (usable from {0}, up to {1}; greyed below), for faster and better work; it rises with practice
+
+# Notices in the top right corner. {0} = knowledge name, {1} = settler name
+notice.knowledge_discovered = {1} is getting an idea: {0}
+notice.knowledge_mastered = {0}: {1} masters it again
+notice.knowledge_last_master = {0}: {1} is the last one who masters it
+notice.knowledge_lost = {0}: nobody masters it any more
+notice.knowledge_forgotten = {0}: forgotten, nobody knows anything of it any more

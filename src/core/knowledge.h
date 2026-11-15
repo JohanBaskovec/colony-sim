@@ -6,8 +6,10 @@
  * knowledge requires another. Below KNOWLEDGE_MASTERY_LEVEL a knowledge
  * unlocks nothing; from there, the settler can carry out the orders and
  * recipes that belong to it, each from its own minimum level. The level sets
- * how fast the work goes and how good its products are. Levels rise with
- * practice (learning by doing; other ways to learn come later).
+ * how fast the work goes and how good its products are. Levels rise by
+ * doing the work, by assisting a master (apprenticeship) and, a little, by
+ * chatting (core/conversation.h); each way of learning stops at its own cap.
+ * Unpractised knowledges fade, down to a share of the best level reached.
  * Design: docs/KNOWLEDGE.md.
  */
 #ifndef COLONY_CORE_KNOWLEDGE_H
@@ -69,6 +71,37 @@ typedef enum KnowledgeType {
 #define KNOWLEDGE_DIFFICULTY_SCALE 60.0
 #define KNOWLEDGE_DOING_RATE 1.0
 
+/*
+ * Learning from someone else: apprentices get KNOWLEDGE_APPRENTICE_RATE and
+ * listeners KNOWLEDGE_CONVERSATION_RATE points per hour, scaled by the
+ * teacher's level / 100. Nobody learns past the teacher's level, nor past
+ * KNOWLEDGE_CONVERSATION_CAP by chatting.
+ */
+#define KNOWLEDGE_APPRENTICE_RATE 1.5
+#define KNOWLEDGE_CONVERSATION_RATE 0.3
+#define KNOWLEDGE_CONVERSATION_CAP 30.0
+
+/*
+ * Fading: a knowledge not practised for KNOWLEDGE_FADE_AFTER_DAYS loses one
+ * point every KNOWLEDGE_FADE_DAYS_PER_POINT days, never below
+ * KNOWLEDGE_FADE_FLOOR of the highest level ever reached.
+ */
+#define KNOWLEDGE_FADE_AFTER_DAYS 15
+#define KNOWLEDGE_FADE_DAYS_PER_POINT 15
+#define KNOWLEDGE_FADE_FLOOR 0.8
+
+/* A knowledge is discovered (shown at all) while some living settler has at
+ * least this level in it. */
+#define KNOWLEDGE_DISCOVERED_LEVEL 1.0
+
+/* Ways of learning, for the gains shown to the player. */
+typedef enum KnowledgeSource {
+    KNOWLEDGE_SOURCE_DOING,
+    KNOWLEDGE_SOURCE_APPRENTICESHIP,
+    KNOWLEDGE_SOURCE_CONVERSATION,
+    KNOWLEDGE_SOURCE_COUNT
+} KnowledgeSource;
+
 /* Learning speed by age: children learn twice as fast, elders half as fast. */
 #define KNOWLEDGE_CHILD_AGE_LIMIT 14 /* Children are younger than this. */
 #define KNOWLEDGE_ELDER_AGE 60
@@ -108,6 +141,20 @@ double knowledge_age_factor(int age);
 /* Level after learning for `hours` at `rate` points per hour (at difficulty 1)
  * by a settler of this age, capped at KNOWLEDGE_LEVEL_MAX. */
 double knowledge_learn(double level, double rate, double hours, int age);
+
+/* Like knowledge_learn(), never past `cap`: a level already at or above it
+ * stays as it is. */
+double knowledge_learn_capped(double level, double rate, double hours, int age, double cap);
+
+/* Rate of learning from a teacher at `teacher_level`: `base_rate` × level / 100. */
+double knowledge_taught_rate(double base_rate, double teacher_level);
+
+/* Lowest level fading can bring a knowledge down to, from its peak. */
+double knowledge_fade_floor(double peak);
+
+/* Level after one more day of fading, `idle_days` days after the last
+ * practice (unchanged before KNOWLEDGE_FADE_AFTER_DAYS). */
+double knowledge_fade_day(double level, double peak, int idle_days);
 
 /* Random starting level in a starting knowledge. */
 float knowledge_random_starting_level(Rng *rng);

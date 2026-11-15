@@ -148,6 +148,16 @@ KnowledgeType construction_knowledge(const ConstructionSite *site)
     return def != NULL ? def->knowledge : KNOWLEDGE_NONE;
 }
 
+float construction_min_level(const ConstructionSite *site)
+{
+    if (site->workstation != 0) {
+        const WorkstationDef *def = workstation_def(construction_workstation(site));
+        return def != NULL ? def->min_level : 0.0f;
+    }
+    const StructureDef *def = structure_def((StructureType)site->type);
+    return def != NULL ? def->min_level : 0.0f;
+}
+
 const char *construction_name_key(const ConstructionSite *site)
 {
     if (site->workstation != 0) {

@@ -1,5 +1,6 @@
 #include "core/game.h"
 
+#include "core/conversation.h"
 #include "core/log.h"
 #include "core/util.h"
 
@@ -121,6 +122,7 @@ EntityId game_spawn_colonist(Game *game, int x, int y)
         }
     }
     colonist_set_strength(colonist, colonist_random_strength(&game->rng, colonist->age));
+    colonist_reset_practice(colonist, game->clock.tick);
     /* Looks come from their own stream: adding a sprite variant must not
      * change what the simulation does. */
     Rng looks;
@@ -153,6 +155,8 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .tick = game->clock.tick,
         .night = colonist_is_night(game->clock.tick),
         .worker_id = (uint8_t)(slot + 1),
+        .colonists = game->colonists,
+        .colonist_pool = &game->colonist_pool,
     };
     return context;
 }
@@ -432,6 +436,7 @@ bool game_init(Game *game, const NewGameParams *params)
     spawn_starting_colonists(game, params->colonist_count);
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
     game_update_stock(game);
+    game_count_knowledge(game); /* Who knows what at the start: no notice for it. */
     return true;
 }
 
@@ -557,6 +562,16 @@ static void update_colonists(Game *game)
     }
 }
 
+/* Unpractised knowledges fade a little, once a day. */
+static void fade_knowledge(Game *game)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
+            colonist_fade_knowledge(&game->colonists[slot], game->clock.tick);
+        }
+    }
+}
+
 void game_tick(Game *game)
 {
     game->clock.tick++;
@@ -573,11 +588,19 @@ void game_tick(Game *game)
     if (game->clock.tick % TICKS_PER_DAY == 0) {
         /* Bedding packs down: worn beds get a refresh site, or fall apart. */
         constructions_wear_day(&game->constructions, &game->map, &game->items);
+        fade_knowledge(game);
     }
     beds_forget_missing(&game->beds, &game->map); /* Beds taken apart or fallen apart. */
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game->items.totals);
     update_colonists(game);
+    if (game->clock.tick % CONVERSATION_CHECK_TICKS == 0) {
+        conversations_update(game->colonists, &game->colonist_pool, game->clock.tick,
+                             &game->rng);
+    }
+    if (game->clock.tick % GAME_KNOWLEDGE_CHECK_TICKS == 0) {
+        game_count_knowledge(game);
+    }
 }
 
 const Rooms *game_rooms(Game *game)
@@ -625,6 +648,14 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
         hash = hash_fnv1a64(hash, c->work_priorities, sizeof(c->work_priorities));
         hash = hash_fnv1a64(hash, c->knowledge, sizeof(c->knowledge));
+        hash = hash_fnv1a64(hash, c->knowledge_peak, sizeof(c->knowledge_peak));
+        hash = hash_fnv1a64(hash, c->knowledge_practice, sizeof(c->knowledge_practice));
+        int32_t social[8] = {(int32_t)c->mentor.index,       (int32_t)c->mentor.generation,
+                             c->assist_work,                 c->assist_wait,
+                             c->chat_ticks,                  (int32_t)c->chat_partner.index,
+                             (int32_t)c->chat_partner.generation, c->chat_topic};
+        hash = hash_fnv1a64(hash, social, sizeof(social));
+        hash = hash_fnv1a64(hash, &c->assisted_until, sizeof(c->assisted_until));
         hash = hash_fnv1a64(hash, &c->haul_delivering, sizeof(c->haul_delivering));
         hash = hash_fnv1a64(hash, &c->strength, sizeof(c->strength));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
@@ -643,6 +674,106 @@ uint64_t game_hash(const Game *game)
         }
     }
     return hash;
+}
+
+/* ---- Knowledge ----------------------------------------------------------- */
+
+bool game_knowledge_discovered(const Game *game, KnowledgeType knowledge)
+{
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT) {
+        return false;
+    }
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            game->colonists[slot].knowledge[knowledge] >= KNOWLEDGE_DISCOVERED_LEVEL) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int game_knowledge_masters(const Game *game, KnowledgeType knowledge)
+{
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT) {
+        return 0;
+    }
+    int masters = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            knowledge_is_mastered(game->colonists[slot].knowledge[knowledge])) {
+            masters++;
+        }
+    }
+    return masters;
+}
+
+EntityId game_apprentice_of(const Game *game, EntityId master)
+{
+    if (game_colonist_const(game, master) == NULL) {
+        return ENTITY_NONE;
+    }
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        EntityId id = game_colonist_id_at(game, slot);
+        const Colonist *colonist = &game->colonists[slot];
+        if (!entity_id_is_none(id) && colonist->task == TASK_ASSIST &&
+            entity_id_equal(colonist->mentor, master)) {
+            return id;
+        }
+    }
+    return ENTITY_NONE;
+}
+
+/* Notices for one knowledge, from the last count to this one. */
+static void knowledge_notices(Game *game, KnowledgeType knowledge, int masters, bool known,
+                              const Colonist *master, const Colonist *knower)
+{
+    Notices *notices = &game->notices;
+    uint64_t tick = game->clock.tick;
+    int before = game->knowledge_masters[knowledge];
+    if (known && !game->knowledge_known[knowledge]) {
+        notices_push(notices, NOTICE_KNOWLEDGE_DISCOVERED, knowledge, knower->name, tick);
+    }
+    if (masters == 1 && before >= 2) {
+        notices_push(notices, NOTICE_KNOWLEDGE_LAST_MASTER, knowledge, master->name, tick);
+    } else if (masters >= 1 && before == 0) {
+        notices_push(notices, NOTICE_KNOWLEDGE_MASTERED, knowledge, master->name, tick);
+    } else if (masters == 0 && before >= 1) {
+        notices_push(notices, NOTICE_KNOWLEDGE_LOST, knowledge, NULL, tick);
+    }
+    if (!known && game->knowledge_known[knowledge]) {
+        notices_push(notices, NOTICE_KNOWLEDGE_FORGOTTEN, knowledge, NULL, tick);
+    }
+}
+
+void game_count_knowledge(Game *game)
+{
+    for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
+        int masters = 0;
+        const Colonist *master = NULL, *knower = NULL;
+        for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+            if (entity_id_is_none(game_colonist_id_at(game, slot))) {
+                continue;
+            }
+            const Colonist *colonist = &game->colonists[slot];
+            double level = colonist->knowledge[knowledge];
+            if (level >= KNOWLEDGE_DISCOVERED_LEVEL && knower == NULL) {
+                knower = colonist;
+            }
+            if (knowledge_is_mastered(level)) {
+                masters++;
+                if (master == NULL) {
+                    master = colonist;
+                }
+            }
+        }
+        bool known = knower != NULL;
+        if (game->knowledge_counted) {
+            knowledge_notices(game, (KnowledgeType)knowledge, masters, known, master, knower);
+        }
+        game->knowledge_masters[knowledge] = (uint8_t)(masters < 255 ? masters : 255);
+        game->knowledge_known[knowledge] = known;
+    }
+    game->knowledge_counted = true;
 }
 
 /* ---- Designations -------------------------------------------------------- */

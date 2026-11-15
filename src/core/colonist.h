@@ -18,6 +18,14 @@
  * carries a tool fetches a better one lying close by, leaving the old one
  * there. Work goes as fast as the best carried tool for it allows (see
  * core/tool.h), and wears that tool: it breaks in the end.
+ *
+ * Knowledge spreads (docs/KNOWLEDGE.md §1.5, §1.6): a settler who finds no
+ * job of a work type, and lacks the level for the job of that type someone
+ * else is doing, assists them as an apprentice (TASK_ASSIST): it stands at
+ * the master's side, adds COLONIST_APPRENTICE_HELP of a worker to the work and
+ * learns, up to the master's level. Masters take one apprentice each.
+ * Settlers chat now and then (core/conversation.h). Knowledges not practised
+ * for a while fade (colonist_fade_knowledge(), once a day).
  * Colonists are stored in the Game (see core/game.h); this module only works
  * on one colonist at a time with explicit dependencies.
  */
@@ -34,6 +42,7 @@
 #include "core/knowledge.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
+#include "core/pool.h"
 #include "core/region.h"
 #include "core/reservation.h"
 #include "core/rng.h"
@@ -140,6 +149,13 @@
 #define COLONIST_WANDER_RADIUS 6
 #define COLONIST_IDLE_MIN_TICKS 120
 #define COLONIST_IDLE_MAX_TICKS 360
+/* Apprentices add this share of a worker to their master's work. */
+#define COLONIST_APPRENTICE_HELP 0.25f
+/* Delay between two searches for a master to assist, and, while assisting,
+ * for work of a higher priority. */
+#define COLONIST_ASSIST_SEARCH_TICKS 250
+/* An apprentice waits this long for a master between two jobs. */
+#define COLONIST_ASSIST_WAIT_TICKS 250
 
 typedef enum ColonistTask {
     TASK_IDLE,
@@ -155,6 +171,8 @@ typedef enum ColonistTask {
     TASK_CONSTRUCT,
     TASK_SUPPLY, /* Bringing materials to a construction site (hauling work). */
     TASK_CLEAN, /* Walking to a dirty tile, then cleaning it. */
+    /* Following a master (Colonist.mentor) and helping with their job. */
+    TASK_ASSIST,
     TASK_COUNT
 } ColonistTask;
 
@@ -176,6 +194,7 @@ typedef enum SearchKind {
     SEARCH_CONSTRUCTION, /* Construction sites. */
     SEARCH_CLEAN,        /* Dirty tiles. */
     SEARCH_SUPPLY,       /* Construction sites missing materials, for haulers. */
+    SEARCH_ASSIST,       /* Masters to assist, or better work while assisting. */
     SEARCH_COUNT
 } SearchKind;
 
@@ -291,6 +310,30 @@ typedef struct Colonist {
     /* Level in each knowledge, KNOWLEDGE_LEVEL_MIN..KNOWLEDGE_LEVEL_MAX. Double
      * precision: a tick of practice adds a tiny fraction of a point. */
     double knowledge[KNOWLEDGE_COUNT];
+    /* Highest level ever reached in each knowledge: fading stops at
+     * KNOWLEDGE_FADE_FLOOR of it. */
+    double knowledge_peak[KNOWLEDGE_COUNT];
+    /* Tick of the last practice of each knowledge: doing its work, or
+     * having an apprentice in it. */
+    uint64_t knowledge_practice[KNOWLEDGE_COUNT];
+    /* Points gained per knowledge and way of learning on the day
+     * `knowledge_gains_day` (for the player's information only). */
+    float knowledge_gains[KNOWLEDGE_COUNT][KNOWLEDGE_SOURCE_COUNT];
+    uint32_t knowledge_gains_day;
+    /* TASK_ASSIST: the master, the work type and knowledge of their job when
+     * last seen, and how long the apprentice has waited for them to get back
+     * to work. */
+    EntityId mentor;
+    uint8_t assist_work;
+    uint8_t assist_knowledge;
+    int assist_wait;
+    /* A master works faster up to this tick: an apprentice is helping. */
+    uint64_t assisted_until;
+    /* Conversation under way (see core/conversation.h): ticks left, with
+     * whom, and the knowledge brought up (KNOWLEDGE_NONE: small talk). */
+    int chat_ticks;
+    EntityId chat_partner;
+    uint8_t chat_topic;
     float needs[NEED_COUNT];
     ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
@@ -315,6 +358,10 @@ typedef struct ColonistContext {
     uint64_t tick;
     bool night; /* colonist_is_night(tick), computed once per tick for everyone. */
     uint8_t worker_id; /* Reservation owner for this colonist (slot + 1), never 0. */
+    /* Every colonist (Game.colonists) and who is alive, to find a master to
+     * assist; NULL: nobody assists anyone. */
+    Colonist *colonists;
+    const Pool *colonist_pool;
 } ColonistContext;
 
 void colonist_init(Colonist *colonist, const char *name, int age, int x, int y);
@@ -339,9 +386,61 @@ double colonist_knowledge_level(const Colonist *colonist, KnowledgeType knowledg
 /* Fails on an invalid knowledge or a level out of range. */
 bool colonist_set_knowledge_level(Colonist *colonist, KnowledgeType knowledge, double level);
 
-/* Learning by doing: `ticks` of work on something of this knowledge (see
- * knowledge_learn()). Ignored for KNOWLEDGE_NONE and invalid values. */
-void colonist_learn_by_doing(Colonist *colonist, KnowledgeType knowledge, int ticks);
+/*
+ * Learning: `hours` at `rate` points per hour (see knowledge_learn()), never
+ * past `cap`. The gain is counted in the gains of the day of `tick`, under
+ * `source`, and raises the peak. Returns the points gained.
+ */
+double colonist_learn(Colonist *colonist, KnowledgeType knowledge, KnowledgeSource source,
+                      double rate, double hours, double cap, uint64_t tick);
+
+/* Learning by doing: `ticks` of work on something of this knowledge at
+ * `tick`, which also counts as practice. Ignored for KNOWLEDGE_NONE and
+ * invalid values. */
+void colonist_learn_by_doing(Colonist *colonist, KnowledgeType knowledge, int ticks,
+                             uint64_t tick);
+
+/* Points gained today (the day of `tick`) in a knowledge by one way of
+ * learning. */
+double colonist_knowledge_gain_today(const Colonist *colonist, KnowledgeType knowledge,
+                                     KnowledgeSource source, uint64_t tick);
+
+/* Whole days since the knowledge was last practised. */
+int colonist_days_unpractised(const Colonist *colonist, KnowledgeType knowledge, uint64_t tick);
+
+/* Whether the knowledge is fading (unpractised for long enough, above its
+ * floor). */
+bool colonist_knowledge_fading(const Colonist *colonist, KnowledgeType knowledge, uint64_t tick);
+
+/* A day goes by: knowledges unpractised for long enough fade a little (see
+ * knowledge_fade_day()). */
+void colonist_fade_knowledge(Colonist *colonist, uint64_t tick);
+
+/* Marks every knowledge as practised at `tick` (a newcomer: what they knew
+ * before is fresh). */
+void colonist_reset_practice(Colonist *colonist, uint64_t tick);
+
+/* Whether what the colonist is doing leaves it free to chat: idle or
+ * wandering, or standing at a meal, a drink or a job. Asleep, walking to
+ * something or carrying a load: no. */
+bool colonist_can_chat(const Colonist *colonist);
+
+/* What a job the colonist is busy with needs (the master's side of
+ * apprenticeship). */
+typedef struct ColonistJobNeed {
+    KnowledgeType knowledge; /* Never KNOWLEDGE_NONE when the job counts. */
+    float min_level;
+    WorkType work_type;
+} ColonistJobNeed;
+
+/* What the colonist's job needs: false when it is not a job of a knowledge
+ * (hauling, eating...). */
+bool colonist_job_need(const Colonist *colonist, const ColonistContext *context,
+                       ColonistJobNeed *need);
+
+/* Whether the colonist is at the work itself (not walking to it nor
+ * fetching what it needs). */
+bool colonist_at_work(const Colonist *colonist);
 
 /* Whether the colonist knows enough to carry out this kind of order. */
 bool colonist_can_do(const Colonist *colonist, DesignationType type);

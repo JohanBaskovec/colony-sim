@@ -240,7 +240,7 @@ static void test_hash_covers_knowledge_and_carried_condition(void)
     colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, 51.0);
     uint64_t known = game_hash(&game);
     CHECK(known != before);
-    colonist_learn_by_doing(colonist, KNOWLEDGE_GATHERING, 1); /* A tiny gain. */
+    colonist_learn_by_doing(colonist, KNOWLEDGE_GATHERING, 1, 0); /* A tiny gain. */
     uint64_t learned = game_hash(&game);
     CHECK(learned != known);
     colonist_set_strength(colonist, colonist->strength == 5 ? 6 : 5);

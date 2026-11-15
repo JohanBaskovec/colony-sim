@@ -60,6 +60,38 @@ double knowledge_learn(double level, double rate, double hours, int age)
     return level > KNOWLEDGE_LEVEL_MAX ? KNOWLEDGE_LEVEL_MAX : level;
 }
 
+double knowledge_learn_capped(double level, double rate, double hours, int age, double cap)
+{
+    if (!(level < cap)) {
+        return level;
+    }
+    double learned = knowledge_learn(level, rate, hours, age);
+    return learned < cap ? learned : cap;
+}
+
+double knowledge_taught_rate(double base_rate, double teacher_level)
+{
+    return teacher_level > 0.0 ? base_rate * teacher_level / KNOWLEDGE_LEVEL_MAX : 0.0;
+}
+
+double knowledge_fade_floor(double peak)
+{
+    return peak * KNOWLEDGE_FADE_FLOOR;
+}
+
+double knowledge_fade_day(double level, double peak, int idle_days)
+{
+    if (idle_days < KNOWLEDGE_FADE_AFTER_DAYS) {
+        return level;
+    }
+    double floor = knowledge_fade_floor(peak);
+    if (!(level > floor)) {
+        return level;
+    }
+    double faded = level - 1.0 / KNOWLEDGE_FADE_DAYS_PER_POINT;
+    return faded > floor ? faded : floor;
+}
+
 float knowledge_random_starting_level(Rng *rng)
 {
     int dice =

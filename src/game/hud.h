@@ -11,6 +11,10 @@
 
 void hud_draw(App *app);
 
+/* Takes the notices the game raised since the last frame and ages those on
+ * screen by `dt` real seconds. */
+void hud_update_notices(App *app, double dt);
+
 /* Windows open now, back to front (the last one is in front). Returns how many. */
 int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT]);
 

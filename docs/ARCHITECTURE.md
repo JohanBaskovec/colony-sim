@@ -59,7 +59,9 @@ simulation:
 | `bed`        | Bed ownership: one bed per settler, one settler per bed, kept on the bed's head; beds gone from the map are forgotten |
 | `construction`| Construction sites: blueprints of structures and of workstations, refresh sites on worn structures, materials delivered per slot, work, built grade; daily wear; built structures go to the map's structure layers, finished workstations to `Workstations` |
 | `work`       | Work types (mining, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
-| `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning, quality and condition of what a worker produces |
+| `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning (rates, caps, fading), quality and condition of what a worker produces |
+| `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
+| `notice`     | Messages the simulation raises for the player (a knowledge about to be lost...), kept in a ring |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
 | `room`       | Rooms: areas closed by walls, doors and rock, and whether roofs cover them (a cache) |
@@ -204,6 +206,43 @@ age factor (children ×2, elders ×0.5). The products of a tick use the level
 before that tick's learning. Hauling needs no knowledge and teaches nothing.
 The work grid shows each colonist's level in the work type's knowledge,
 greyed below mastery.
+
+**Knowledge spreads** (`docs/KNOWLEDGE.md` §1.5 to §1.7). Every gain goes
+through `colonist_learn()`: a rate, a duration, a cap, and a source counted
+in the gains of the day (`Colonist.knowledge_gains`, for the inspector's
+tooltip); it raises `knowledge_peak`.
+- *Apprenticeship* (`TASK_ASSIST`). In `try_start_work()`, once a work type's
+  own jobs are all out of reach, a colonist looks for a master busy with a job
+  of that type (`colonist_job_need()`: a recipe, a construction site, an order
+  or a gathering job) that it lacks the level for, with no apprentice yet, and
+  follows them (`ColonistContext.colonists` and `colonist_pool` give it the
+  others; tests that leave them NULL have no apprentices). Standing beside a
+  master who is at the work (`colonist_at_work()`), it learns
+  `KNOWLEDGE_APPRENTICE_RATE` × master level / 100 per hour, up to the
+  master's level, and sets `assisted_until` on the master, whose work goes
+  ×1.25 while it is current. It waits up to `COLONIST_ASSIST_WAIT_TICKS` for
+  a master between two jobs, and checks every `COLONIST_ASSIST_SEARCH_TICKS`
+  for its own work of a higher priority. Apprenticeship counts as practice
+  for the master.
+- *Conversation* (`core/conversation.h`): every `CONVERSATION_CHECK_TICKS`
+  after the colonists act, `game_tick()` gives each pair within 3 tiles that
+  is free to chat (`colonist_can_chat()`) a chance of one chat per hour
+  together, drawn from `Game.rng` in slot order. A chat lasts 6 minutes
+  (`chat_ticks`, a bubble over their heads); 40% are about a knowledge, each
+  speaker picking one weighted by level (×2 if practised in the last day), and
+  the listener gets the whole chat's gain at once (cap 30 and the speaker's
+  level).
+- *Fading*: once a day, `colonist_fade_knowledge()` takes a fifteenth of a
+  point off each knowledge not practised (`knowledge_practice`, a tick: doing
+  the work, having an apprentice) for 15 days, down to 80% of the peak.
+- *Discovered knowledges and notices*: the inspector only lists knowledges
+  some living colonist has at 1 or more (`game_knowledge_discovered()`).
+  Every `GAME_KNOWLEDGE_CHECK_TICKS`, `game_count_knowledge()` counts the
+  masters of each knowledge and raises a `Notice` (`core/notice.h`) when a
+  knowledge is discovered, mastered again, mastered by a single settler, lost
+  (nobody at 50) or forgotten (nobody at 1). The count made by `game_init()`
+  raises none. Notices are not part of the simulation state (`game_hash()`);
+  the frontend shows the new ones in the top right corner for 15 seconds.
 
 Food items have a
 `nutrition` per unit; a hungry colonist goes to the nearest food, on the

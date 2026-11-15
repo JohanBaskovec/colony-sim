@@ -5,6 +5,7 @@ add_library(colony_core STATIC
     cli.c
     colonist.c
     construction.c
+    conversation.c
     designation.c
     dirt.c
     game.c
@@ -17,6 +18,7 @@ add_library(colony_core STATIC
     log.c
     map.c
     noise.c
+    notice.c
     pathfinding.c
     pool.c
     recipe.c

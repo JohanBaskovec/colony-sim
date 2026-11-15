@@ -193,6 +193,7 @@ colonist.task.craft = Fabrique
 colonist.task.construct = Construit
 colonist.task.supply = Apporte des matériaux
 colonist.task.clean = Nettoie
+colonist.task.assist = En apprentissage
 colonist.task.haul = Transport
 
 need.food = Nourriture
@@ -221,7 +222,26 @@ hud.colonist.need = {0} : {1} %
 hud.colonist.need_state = {0} : {1} % ({2})
 hud.colonist.knowledge = Savoirs (niveaux sur 100)
 hud.colonist.knowledge_level = {0} : {1} (vitesse ×{2})
-hud.colonist.knowledge_learning = {0} : {1} (en apprentissage)
+hud.colonist.knowledge_level_fading = {0} : {1} (vitesse ×{2}, s’oublie)
+hud.colonist.knowledge_learning = {0} : {1} (pas encore maîtrisé)
+hud.colonist.knowledge_learning_fading = {0} : {1} (pas encore maîtrisé, s’oublie)
+hud.colonist.apprentice = Apprend auprès de {0} : {1}
+hud.colonist.teaching = Transmet son savoir à {0}
+hud.colonist.chatting = Bavarde avec {0}
+hud.colonist.chatting_about = Bavarde avec {0} : {1}
+hud.knowledge.peak = Meilleur niveau atteint : {0}
+hud.knowledge.gain.doing = +{0} aujourd’hui en pratiquant
+hud.knowledge.gain.apprenticeship = +{0} aujourd’hui en apprentissage
+hud.knowledge.gain.conversation = +{0} aujourd’hui en bavardant
+hud.knowledge.no_gain = Rien appris aujourd’hui
+hud.knowledge.practised = Pratiqué récemment
+hud.knowledge.unpractised.one = Pas pratiqué depuis {0} jour (s’oublie après {1} jours)
+hud.knowledge.unpractised.other = Pas pratiqué depuis {0} jours (s’oublie après {1} jours)
+hud.knowledge.fading.one = S’oublie : pas pratiqué depuis {0} jour, jusqu’à {1} au pire
+hud.knowledge.fading.other = S’oublie : pas pratiqué depuis {0} jours, jusqu’à {1} au pire
+hud.knowledge.masters.one = {0} personne le maîtrise dans la colonie
+hud.knowledge.masters.other = {0} personnes le maîtrisent dans la colonie
+hud.knowledge.no_master = Personne dans la colonie ne le maîtrise
 hud.selection.count.one = {0} colon sélectionné
 hud.selection.count.other = {0} colons sélectionnés
 
@@ -329,3 +349,10 @@ work_panel.empty = Aucun colon
 work_panel.hint = Clic gauche : priorité plus haute · Clic droit : priorité plus basse · Clic sur un nom : aller au colon
 work_panel.legend = {0} = fait en premier · {1} = fait en dernier · vide = jamais · même chiffre : colonne de gauche d’abord
 work_panel.knowledge_legend = Petit nombre : niveau de savoir (utilisable dès {0}, jusqu’à {1} ; grisé en dessous), pour un travail plus rapide et meilleur ; il progresse avec la pratique
+
+# Notifications en haut à droite. {0} = savoir, {1} = nom du colon
+notice.knowledge_discovered = {1} a une idée : {0}
+notice.knowledge_mastered = {0} : {1} maîtrise de nouveau ce savoir
+notice.knowledge_last_master = {0} : {1} est la dernière personne à maîtriser ce savoir
+notice.knowledge_lost = {0} : plus personne ne maîtrise ce savoir
+notice.knowledge_forgotten = {0} : savoir oublié, plus personne n’en sait rien

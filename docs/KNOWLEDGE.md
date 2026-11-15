@@ -901,9 +901,16 @@ Suggested order, each step with its tests:
    sleeping in beds, workstations as construction sites, hauling to
    construction sites, quality and wear; the lean-to was dropped (a hut with
    a roof does the same) and floor clearing waits for mining.
-6. Roofs (built over walled tiles, natural roof) and room detection.
-7. Conversation, apprenticeship, fading and loss; discovered knowledges only
-   in the interface; knowledge in the settler inspector.
+6. *(done)* Roofs (built over walled tiles, natural roof) and room detection.
+7. *(done)* Conversation, apprenticeship, fading and loss; discovered
+   knowledges only in the interface; knowledge in the settler inspector, with
+   a tooltip (best level, gains of the day by source, practice and fading,
+   masters in the colony); notices for a knowledge discovered, mastered
+   again, left to a single master, lost or forgotten. Implementation choices:
+   a settler looks for a master to assist within its work search, after its
+   own jobs of the same work type; a chat's whole gain is given when it
+   starts; fading takes 1/15 of a point a day. Fireside stories wait for the
+   hearth (M4), related practice for knowledges that are not starting ones.
 
 **M4: Survival**: open hearth, fuel, lighting, torches, ember bundles,
 hardening, grilling, roasting, fireside stories; heat, wind, rain, rot;

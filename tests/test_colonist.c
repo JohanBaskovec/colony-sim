@@ -1449,24 +1449,24 @@ static void test_learning_by_doing(void)
     colonist_init(&colonist, "Ada", 30, 0, 0);
     REQUIRE(colonist_set_knowledge_level(&colonist, KNOWLEDGE_GATHERING, 50.0));
     /* An hour of work at 50: one point. */
-    colonist_learn_by_doing(&colonist, KNOWLEDGE_GATHERING, TICKS_PER_HOUR);
+    colonist_learn_by_doing(&colonist, KNOWLEDGE_GATHERING, TICKS_PER_HOUR, 0);
     CHECK_NEAR(colonist_knowledge_level(&colonist, KNOWLEDGE_GATHERING), 51.0, 1e-6);
 
     /* Other knowledges are untouched; invalid practice is ignored. */
     CHECK_NEAR(colonist_knowledge_level(&colonist, KNOWLEDGE_FIRE), 0.0, 1e-9);
-    colonist_learn_by_doing(&colonist, KNOWLEDGE_NONE, TICKS_PER_HOUR);
-    colonist_learn_by_doing(&colonist, KNOWLEDGE_GATHERING, 0);
-    colonist_learn_by_doing(&colonist, KNOWLEDGE_GATHERING, -50);
+    colonist_learn_by_doing(&colonist, KNOWLEDGE_NONE, TICKS_PER_HOUR, 0);
+    colonist_learn_by_doing(&colonist, KNOWLEDGE_GATHERING, 0, 0);
+    colonist_learn_by_doing(&colonist, KNOWLEDGE_GATHERING, -50, 0);
     CHECK_NEAR(colonist_knowledge_level(&colonist, KNOWLEDGE_GATHERING), 51.0, 1e-6);
 
     /* Elders learn half as fast; nobody goes past the maximum. */
     Colonist elder;
     colonist_init(&elder, "Oren", 70, 0, 0);
     REQUIRE(colonist_set_knowledge_level(&elder, KNOWLEDGE_FIRE, 50.0));
-    colonist_learn_by_doing(&elder, KNOWLEDGE_FIRE, TICKS_PER_HOUR);
+    colonist_learn_by_doing(&elder, KNOWLEDGE_FIRE, TICKS_PER_HOUR, 0);
     CHECK_NEAR(colonist_knowledge_level(&elder, KNOWLEDGE_FIRE), 50.5, 1e-6);
     REQUIRE(colonist_set_knowledge_level(&elder, KNOWLEDGE_FIRE, 99.99));
-    colonist_learn_by_doing(&elder, KNOWLEDGE_FIRE, 100 * TICKS_PER_HOUR);
+    colonist_learn_by_doing(&elder, KNOWLEDGE_FIRE, 100 * TICKS_PER_HOUR, 0);
     CHECK_NEAR(colonist_knowledge_level(&elder, KNOWLEDGE_FIRE), KNOWLEDGE_LEVEL_MAX, 1e-9);
     colonist_free(&elder);
     colonist_free(&colonist);

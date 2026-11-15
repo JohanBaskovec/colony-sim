@@ -78,6 +78,10 @@ typedef enum BuildCategory {
     BUILD_CATEGORY_COUNT
 } BuildCategory;
 
+/* Notices on screen at once, and how long each one stays (real seconds). */
+#define APP_NOTICES_SHOWN 5
+#define APP_NOTICE_SECONDS 15.0
+
 typedef struct App {
     SDL_Window *window;
     SDL_Renderer *renderer;
@@ -141,6 +145,14 @@ typedef struct App {
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;
     int hover_y;
+
+    /* Notices (core/notice.h) in the top right corner: the number of the
+     * next one to take from the game, and those on screen with how long (real
+     * seconds) they have been there, oldest first. */
+    uint32_t next_notice;
+    uint32_t notices_shown[APP_NOTICES_SHOWN];
+    double notices_age[APP_NOTICES_SHOWN];
+    int notices_shown_count;
 
     size_t debug_tree_count; /* Shown in the debug overlay, refreshed twice a second. */
     float fps;

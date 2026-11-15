@@ -128,6 +128,9 @@ WorkstationType construction_workstation(const ConstructionSite *site);
 /* Knowledge the work uses (and teaches); KNOWLEDGE_NONE when none. */
 KnowledgeType construction_knowledge(const ConstructionSite *site);
 
+/* Lowest level in that knowledge the work needs. */
+float construction_min_level(const ConstructionSite *site);
+
 /* Translation key of what the site builds. */
 const char *construction_name_key(const ConstructionSite *site);
 

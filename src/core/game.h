@@ -15,6 +15,7 @@
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
 #include "core/map.h"
+#include "core/notice.h"
 #include "core/pathfinding.h"
 #include "core/pool.h"
 #include "core/reservation.h"
@@ -43,6 +44,10 @@
 /* Likewise, a tile with at least this many flint nodules where stones can be
  * gathered, within the same distance: knapping needs flint. */
 #define GAME_SPAWN_FLINT_STONES 5
+
+/* How often the game counts who knows what, to raise notices (a knowledge
+ * only one settler still masters...). */
+#define GAME_KNOWLEDGE_CHECK_TICKS 250
 
 /* Radius (in tiles) around a world point within which a colonist can be picked. */
 #define GAME_PICK_RADIUS 0.6f
@@ -82,6 +87,13 @@ typedef struct Game {
      * hauler. Refreshed at the start of each tick while some bill counts it
      * (see game_update_stock()), not part of game_hash(). */
     long stock[ITEM_TYPE_COUNT];
+    Notices notices; /* Messages for the player, not part of game_hash(). */
+    /* Who knew what at the last count (see GAME_KNOWLEDGE_CHECK_TICKS):
+     * settlers mastering each knowledge, and whether anyone had it at
+     * KNOWLEDGE_DISCOVERED_LEVEL. Only used for notices. */
+    uint8_t knowledge_masters[KNOWLEDGE_COUNT];
+    bool knowledge_known[KNOWLEDGE_COUNT];
+    bool knowledge_counted;
 } Game;
 
 void game_default_params(NewGameParams *params);
@@ -94,12 +106,12 @@ bool game_init(Game *game, const NewGameParams *params);
 void game_update_stock(Game *game);
 void game_shutdown(Game *game);
 
-/* Advances the simulation by `real_seconds` of real time. Returns ticks run. */
 /* The rooms of the map as it is now (rebuilt if it changed). Nothing in the
  * simulation depends on them yet, so they are only computed when asked for
  * (the tile inspector). */
 const Rooms *game_rooms(Game *game);
 
+/* Advances the simulation by `real_seconds` of real time. Returns ticks run. */
 int game_update(Game *game, double real_seconds);
 
 /* Runs exactly one simulation tick. */
@@ -134,6 +146,24 @@ int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float
 
 /* Whether a colonist currently stands on the tile. */
 bool game_tile_has_colonist(const Game *game, int x, int y);
+
+/* ---- Knowledge ----------------------------------------------------------- */
+
+/* Whether some living colonist has at least KNOWLEDGE_DISCOVERED_LEVEL in a
+ * knowledge: only those are shown. */
+bool game_knowledge_discovered(const Game *game, KnowledgeType knowledge);
+
+/* Living colonists who master a knowledge (knowledge_is_mastered()). */
+int game_knowledge_masters(const Game *game, KnowledgeType knowledge);
+
+/* The colonist assisting a master as an apprentice, or ENTITY_NONE. */
+EntityId game_apprentice_of(const Game *game, EntityId master);
+
+/* Counts who knows what and raises notices for what changed since the last
+ * count: a knowledge discovered, mastered again, mastered by a single
+ * settler, no longer mastered, forgotten. The first count after game_init()
+ * raises none. game_tick() runs it every GAME_KNOWLEDGE_CHECK_TICKS. */
+void game_count_knowledge(Game *game);
 
 /* ---- Designations -------------------------------------------------------- */
 

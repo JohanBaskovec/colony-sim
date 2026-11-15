@@ -4,6 +4,7 @@
 #include "core/i18n.h"
 #include "core/util.h"
 
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,6 +53,7 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y)
     colonist->max_carry_bulk = COLONIST_CARRY_BULK;
     colonist->station = WORKSTATION_NONE;
     colonist->site = CONSTRUCTION_NONE;
+    colonist->chat_topic = KNOWLEDGE_NONE;
 }
 
 bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority)
@@ -87,17 +89,95 @@ bool colonist_set_knowledge_level(Colonist *colonist, KnowledgeType knowledge, d
         return false;
     }
     colonist->knowledge[knowledge] = level;
+    if (level > colonist->knowledge_peak[knowledge]) {
+        colonist->knowledge_peak[knowledge] = level;
+    }
     return true;
 }
 
-void colonist_learn_by_doing(Colonist *colonist, KnowledgeType knowledge, int ticks)
+static uint32_t day_of_tick(uint64_t tick)
+{
+    return (uint32_t)(tick / TICKS_PER_DAY);
+}
+
+double colonist_learn(Colonist *colonist, KnowledgeType knowledge, KnowledgeSource source,
+                      double rate, double hours, double cap, uint64_t tick)
+{
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT || (unsigned)source >= KNOWLEDGE_SOURCE_COUNT) {
+        return 0.0;
+    }
+    double *level = &colonist->knowledge[knowledge];
+    double before = *level;
+    *level = knowledge_learn_capped(before, rate, hours, colonist->age, cap);
+    double gain = *level - before;
+    if (!(gain > 0.0)) {
+        return 0.0;
+    }
+    if (*level > colonist->knowledge_peak[knowledge]) {
+        colonist->knowledge_peak[knowledge] = *level;
+    }
+    uint32_t day = day_of_tick(tick);
+    if (colonist->knowledge_gains_day != day) {
+        memset(colonist->knowledge_gains, 0, sizeof(colonist->knowledge_gains));
+        colonist->knowledge_gains_day = day;
+    }
+    colonist->knowledge_gains[knowledge][source] += (float)gain;
+    return gain;
+}
+
+void colonist_learn_by_doing(Colonist *colonist, KnowledgeType knowledge, int ticks,
+                             uint64_t tick)
 {
     if ((unsigned)knowledge >= KNOWLEDGE_COUNT || ticks <= 0) {
         return;
     }
-    double *level = &colonist->knowledge[knowledge];
-    *level = knowledge_learn(*level, KNOWLEDGE_DOING_RATE, (double)ticks / TICKS_PER_HOUR,
-                             colonist->age);
+    colonist->knowledge_practice[knowledge] = tick;
+    colonist_learn(colonist, knowledge, KNOWLEDGE_SOURCE_DOING, KNOWLEDGE_DOING_RATE,
+                   (double)ticks / TICKS_PER_HOUR, KNOWLEDGE_LEVEL_MAX, tick);
+}
+
+double colonist_knowledge_gain_today(const Colonist *colonist, KnowledgeType knowledge,
+                                     KnowledgeSource source, uint64_t tick)
+{
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT || (unsigned)source >= KNOWLEDGE_SOURCE_COUNT ||
+        colonist->knowledge_gains_day != day_of_tick(tick)) {
+        return 0.0;
+    }
+    return colonist->knowledge_gains[knowledge][source];
+}
+
+int colonist_days_unpractised(const Colonist *colonist, KnowledgeType knowledge, uint64_t tick)
+{
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT || tick < colonist->knowledge_practice[knowledge]) {
+        return 0;
+    }
+    return (int)((tick - colonist->knowledge_practice[knowledge]) / TICKS_PER_DAY);
+}
+
+bool colonist_knowledge_fading(const Colonist *colonist, KnowledgeType knowledge, uint64_t tick)
+{
+    if ((unsigned)knowledge >= KNOWLEDGE_COUNT) {
+        return false;
+    }
+    return colonist_days_unpractised(colonist, knowledge, tick) >= KNOWLEDGE_FADE_AFTER_DAYS &&
+           colonist->knowledge[knowledge] >
+               knowledge_fade_floor(colonist->knowledge_peak[knowledge]);
+}
+
+void colonist_fade_knowledge(Colonist *colonist, uint64_t tick)
+{
+    for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
+        int idle = colonist_days_unpractised(colonist, (KnowledgeType)knowledge, tick);
+        colonist->knowledge[knowledge] = knowledge_fade_day(
+            colonist->knowledge[knowledge], colonist->knowledge_peak[knowledge], idle);
+    }
+}
+
+void colonist_reset_practice(Colonist *colonist, uint64_t tick)
+{
+    for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
+        colonist->knowledge_practice[knowledge] = tick;
+    }
 }
 
 bool colonist_can_do(const Colonist *colonist, DesignationType type)
@@ -426,6 +506,7 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
                    : COLONIST_ACTION_NONE;
     case TASK_IDLE:
     case TASK_WANDER:
+    case TASK_ASSIST:
     case TASK_HAUL:
     case TASK_SUPPLY:
     case TASK_SLEEP:
@@ -470,6 +551,7 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_CONSTRUCT] = N_("colonist.task.construct"),
         [TASK_SUPPLY] = N_("colonist.task.supply"),
         [TASK_CLEAN] = N_("colonist.task.clean"),
+        [TASK_ASSIST] = N_("colonist.task.assist"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
 }
@@ -1071,6 +1153,7 @@ static bool site_still_wanted(const ColonistContext *context, const Construction
 static bool try_construction_job(Colonist *colonist, const ColonistContext *context);
 static bool try_supply_job(Colonist *colonist, const ColonistContext *context);
 static uint32_t construction_stamp(const ColonistContext *context);
+static bool try_assist(Colonist *colonist, const ColonistContext *context, WorkType type);
 
 /*
  * Takes the nearest job of the highest priority level that has one. Within a
@@ -1079,7 +1162,9 @@ static uint32_t construction_stamp(const ColonistContext *context);
  * sites, bills, gathering zones, hauling, cleaning). Each search kind
  * backs off on failure until its stamp shows that something changed.
  */
-static bool try_start_work(Colonist *colonist, const ColonistContext *context)
+/* Looks for work at priorities from the highest down to `lowest_priority`. */
+static bool try_start_work(Colonist *colonist, const ColonistContext *context,
+                           int lowest_priority)
 {
     int open_jobs = context->designations->count -
                     context->reservations->count_by_kind[RESERVATION_WORK];
@@ -1112,6 +1197,11 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
         open_cleaning > 0 && retry_allowed(colonist, SEARCH_CLEAN, colonist->clean_search_stamp,
                                            clean_stamp(context));
     bool searched_cleaning = false;
+    /* Apprenticeship: a master doing a job of the work type that the colonist
+     * lacks the level for, once its own jobs of that type are all out of
+     * reach. */
+    bool assist_allowed = context->colonists != NULL && search_allowed(colonist, SEARCH_ASSIST);
+    bool searched_assist = false;
     /* Every searcher below returns true once the colonist has a job; it
      * resets the backoff of its kind. */
 #define FOUND(kind)                                                                            \
@@ -1122,7 +1212,7 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
         return true;                                                                           \
     } while (0)
 
-    for (int priority = WORK_PRIORITY_HIGHEST; priority <= WORK_PRIORITY_LOWEST; priority++) {
+    for (int priority = WORK_PRIORITY_HIGHEST; priority <= lowest_priority; priority++) {
         WorkTypeMask mask = work_types_at_priority(colonist->work_priorities, priority);
         /* At the same priority, work types are tried in the order of the
          * columns of the priorities grid, from left to right. */
@@ -1187,9 +1277,18 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context)
                 }
                 break;
             }
+            if (assist_allowed) {
+                searched_assist = true;
+                if (try_assist(colonist, context, (WorkType)type)) {
+                    FOUND(SEARCH_ASSIST);
+                }
+            }
         }
     }
 #undef FOUND
+    if (searched_assist) {
+        colonist->search_cooldown[SEARCH_ASSIST] = COLONIST_ASSIST_SEARCH_TICKS;
+    }
     if (searched_designations) {
         search_failed(colonist, SEARCH_WORK);
         colonist->work_search_stamp = work_stamp(context);
@@ -1377,6 +1476,12 @@ static bool job_still_valid(const Colonist *colonist, const ColonistContext *con
                context->worker_id;
 }
 
+/* Work speed factor from an apprentice helping (see COLONIST_APPRENTICE_HELP). */
+static float assistance(const Colonist *colonist, const ColonistContext *context)
+{
+    return colonist->assisted_until >= context->tick ? 1.0f + COLONIST_APPRENTICE_HELP : 1.0f;
+}
+
 static void work(Colonist *colonist, const ColonistContext *context)
 {
     Designations *designations = context->designations;
@@ -1391,13 +1496,14 @@ static void work(Colonist *colonist, const ColonistContext *context)
         GatherJob job = (GatherJob)colonist->work_type;
         KnowledgeType knowledge = gather_job_def(job)->knowledge;
         float speed = colonist_work_speed(colonist, knowledge) *
-                      work_with_tool(colonist, gather_job_def(job)->tool_use);
+                      work_with_tool(colonist, gather_job_def(job)->tool_use) *
+                      assistance(colonist, context);
         /* Products depend on the level before this tick's learning. */
         bool done = gather_zone_add_work(context->gather_zones, context->map, context->items,
                                          target.x, target.y, job, speed,
                                          colonist_knowledge_level(colonist, knowledge),
                                          context->rng);
-        colonist_learn_by_doing(colonist, knowledge, 1);
+        colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
         /* After each job, choose again: a zone may keep a settler busy
          * forever, and a more important job may be waiting. */
         if (done) {
@@ -1413,9 +1519,11 @@ static void work(Colonist *colonist, const ColonistContext *context)
     KnowledgeType knowledge = designation_def(type)->knowledge;
     /* Products depend on the level before this tick's learning. */
     bool done = designation_add_work(designations, context->map, context->items, target.x,
-                                     target.y, colonist_work_speed(colonist, knowledge),
+                                     target.y,
+                                     colonist_work_speed(colonist, knowledge) *
+                                         assistance(colonist, context),
                                      colonist_knowledge_level(colonist, knowledge), context->rng);
-    colonist_learn_by_doing(colonist, knowledge, 1);
+    colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     int site = construction_at(context->constructions, target.x, target.y);
     const ConstructionSite *refresh = construction_get(context->constructions, site);
     if (done && type == DESIGNATION_DECONSTRUCT && refresh != NULL && refresh->refresh &&
@@ -1912,10 +2020,11 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
     /* Products depend on the level before this tick's learning. */
     bool done = workstation_add_craft_work(context->workstations, colonist->station,
                                            colonist->bill, context->items, context->map,
-                                           colonist_work_speed(colonist, knowledge) * tool_factor,
+                                           colonist_work_speed(colonist, knowledge) * tool_factor *
+                                               assistance(colonist, context),
                                            colonist_knowledge_level(colonist, knowledge),
                                            context->rng);
-    colonist_learn_by_doing(colonist, knowledge, 1);
+    colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     if (done) {
         dirt_spread(context->dirt, context->map, tile.x, tile.y,
                     recipe_def((RecipeType)colonist->recipe)->dirt);
@@ -2304,17 +2413,243 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
     ConstructionSite done = *site; /* Gone from the list once built. */
     KnowledgeType knowledge = construction_knowledge(site);
     float speed = colonist_work_speed(colonist, knowledge) *
-                  work_with_tool(colonist, TOOL_USE_BUILDING);
+                  work_with_tool(colonist, TOOL_USE_BUILDING) * assistance(colonist, context);
     /* The grade depends on the level before this tick's learning. */
     bool built = construction_add_work(context->constructions, context->map, context->items,
                                        context->workstations, colonist->site, speed,
                                        colonist_knowledge_level(colonist, knowledge),
                                        context->rng);
-    colonist_learn_by_doing(colonist, knowledge, 1);
+    colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     if (built) {
         structure_built(context, &done);
         set_idle(colonist, context, 0);
     }
+}
+
+/* ---- Apprenticeship and conversation ------------------------------------- */
+
+bool colonist_can_chat(const Colonist *colonist)
+{
+    switch (colonist->task) {
+    case TASK_IDLE:
+    case TASK_WANDER: return true;
+    case TASK_EAT:
+    case TASK_DRINK:
+    case TASK_WORK:
+    case TASK_CRAFT:
+    case TASK_CONSTRUCT:
+    case TASK_CLEAN:
+    case TASK_ASSIST: return !colonist_is_moving(colonist);
+    case TASK_SLEEP:
+    case TASK_HAUL:
+    case TASK_SUPPLY:
+    case TASK_COUNT: break;
+    }
+    return false;
+}
+
+static void set_need(ColonistJobNeed *need, KnowledgeType knowledge, float min_level,
+                     WorkType work_type)
+{
+    need->knowledge = knowledge;
+    need->min_level = min_level;
+    need->work_type = work_type;
+}
+
+bool colonist_job_need(const Colonist *colonist, const ColonistContext *context,
+                       ColonistJobNeed *need)
+{
+    set_need(need, KNOWLEDGE_NONE, 0.0f, WORK_TYPE_COUNT);
+    switch (colonist->task) {
+    case TASK_CRAFT: {
+        const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
+        if (def != NULL) {
+            set_need(need, def->knowledge, def->min_level, WORK_CRAFTING);
+        }
+        break;
+    }
+    case TASK_CONSTRUCT: {
+        const ConstructionSite *site = job_site(colonist, context);
+        if (site != NULL) {
+            set_need(need, construction_knowledge(site), construction_min_level(site),
+                     WORK_CONSTRUCTION);
+        }
+        break;
+    }
+    case TASK_WORK:
+        if (colonist->gathering) {
+            const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
+            if (def != NULL) {
+                set_need(need, def->knowledge, def->min_level, def->work_type);
+            }
+        } else {
+            const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
+            if (def != NULL) {
+                set_need(need, def->knowledge, def->min_level, def->work_type);
+            }
+        }
+        break;
+    default: break;
+    }
+    return (unsigned)need->knowledge < KNOWLEDGE_COUNT &&
+           (unsigned)need->work_type < WORK_TYPE_COUNT;
+}
+
+bool colonist_at_work(const Colonist *colonist)
+{
+    if (colonist_is_moving(colonist)) {
+        return false;
+    }
+    switch (colonist->task) {
+    case TASK_CRAFT:
+    case TASK_CONSTRUCT: return colonist->station_phase == STATION_JOB_WORK;
+    case TASK_WORK: return next_to(colonist->x, colonist->y, colonist->target);
+    default: return false;
+    }
+}
+
+/* A living colonist, NULL when the handle is stale or nobody assists anyone
+ * in this context. */
+static Colonist *colonist_by_id(const ColonistContext *context, EntityId id)
+{
+    if (context->colonists == NULL || !pool_is_alive(context->colonist_pool, id)) {
+        return NULL;
+    }
+    return &context->colonists[id.index];
+}
+
+/* Whether `apprentice` can learn the job `need` from `master`: it does that
+ * kind of work, lacks the level for the job, and the master knows more. */
+static bool can_learn_from(const Colonist *apprentice, const Colonist *master,
+                           const ColonistJobNeed *need)
+{
+    double own = apprentice->knowledge[need->knowledge];
+    return apprentice->work_priorities[need->work_type] != WORK_PRIORITY_DISABLED &&
+           own < need->min_level && master->knowledge[need->knowledge] > own;
+}
+
+/* Whether someone other than `self` assists this master. */
+static bool has_apprentice(const ColonistContext *context, EntityId master, EntityId self)
+{
+    for (uint32_t slot = 0; slot < context->colonist_pool->high_water; slot++) {
+        EntityId id = pool_id_at(context->colonist_pool, slot);
+        if (entity_id_is_none(id) || entity_id_equal(id, self)) {
+            continue;
+        }
+        const Colonist *other = &context->colonists[slot];
+        if (other->task == TASK_ASSIST && entity_id_equal(other->mentor, master)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* One of the 8 tiles around (x, y), not (x, y) itself. */
+static bool beside(int x, int y, int to_x, int to_y)
+{
+    int dx = abs(x - to_x), dy = abs(y - to_y);
+    return dx <= 1 && dy <= 1 && (dx | dy) != 0;
+}
+
+static bool is_beside_target(const Map *map, int x, int y, void *userdata)
+{
+    const TilePos *target = userdata;
+    return map_is_passable(map, x, y) && beside(x, y, target->x, target->y);
+}
+
+/* Heads for a tile beside the master. */
+static bool go_beside(Colonist *colonist, const ColonistContext *context, const Colonist *master)
+{
+    colonist->path_index = 0;
+    if (beside(colonist->x, colonist->y, master->x, master->y)) {
+        path_clear(&colonist->path);
+        return true;
+    }
+    TilePos at = {(int16_t)master->x, (int16_t)master->y};
+    TilePos spot;
+    return pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                   is_beside_target, &at, COLONIST_WORK_SEARCH_MAX_COST,
+                                   &colonist->path, &spot);
+}
+
+/* Looks for the nearest master doing a job of this work type the colonist
+ * can learn, with no apprentice yet, and goes to assist them. */
+static bool try_assist(Colonist *colonist, const ColonistContext *context, WorkType type)
+{
+    EntityId self = pool_id_at(context->colonist_pool, (uint32_t)(context->worker_id - 1));
+    TilePos here = current_tile(colonist);
+    EntityId best = ENTITY_NONE;
+    int best_distance = INT_MAX;
+    for (uint32_t slot = 0; slot < context->colonist_pool->high_water; slot++) {
+        EntityId id = pool_id_at(context->colonist_pool, slot);
+        if (entity_id_is_none(id) || entity_id_equal(id, self)) {
+            continue;
+        }
+        const Colonist *master = &context->colonists[slot];
+        ColonistJobNeed need;
+        if (!colonist_job_need(master, context, &need) || need.work_type != type ||
+            !can_learn_from(colonist, master, &need)) {
+            continue;
+        }
+        int distance = abs(master->x - colonist->x) + abs(master->y - colonist->y);
+        TilePos at = {(int16_t)master->x, (int16_t)master->y};
+        if (distance >= best_distance ||
+            !regions_connected(context->regions, context->map, here, at) ||
+            has_apprentice(context, id, self)) {
+            continue;
+        }
+        best = id;
+        best_distance = distance;
+    }
+    Colonist *master = colonist_by_id(context, best);
+    if (master == NULL || !go_beside(colonist, context, master)) {
+        return false;
+    }
+    ColonistJobNeed need;
+    colonist_job_need(master, context, &need);
+    begin_task(colonist, context, TASK_ASSIST);
+    colonist->mentor = best;
+    colonist->assist_work = (uint8_t)type;
+    colonist->assist_knowledge = (uint8_t)need.knowledge;
+    colonist->assist_wait = 0;
+    return true;
+}
+
+/* Follows the master and helps while they work, learning their job. */
+static void assist(Colonist *colonist, const ColonistContext *context)
+{
+    Colonist *master = colonist_by_id(context, colonist->mentor);
+    if (master == NULL) {
+        set_idle(colonist, context, 0);
+        return;
+    }
+    ColonistJobNeed need;
+    if (!colonist_job_need(master, context, &need) || !can_learn_from(colonist, master, &need)) {
+        /* Between two jobs, busy with something else, or learned enough. */
+        if (++colonist->assist_wait >= COLONIST_ASSIST_WAIT_TICKS) {
+            set_idle(colonist, context, 0);
+        }
+        return;
+    }
+    colonist->assist_wait = 0;
+    colonist->assist_work = (uint8_t)need.work_type;
+    colonist->assist_knowledge = (uint8_t)need.knowledge;
+    if (!beside(colonist->x, colonist->y, master->x, master->y)) {
+        /* Catches up once the master stands still. */
+        if (!colonist_is_moving(master) && !go_beside(colonist, context, master)) {
+            set_idle(colonist, context, 0);
+        }
+        return;
+    }
+    if (!colonist_at_work(master)) {
+        return; /* Waits while the master fetches what the job needs. */
+    }
+    master->assisted_until = context->tick + 1;
+    master->knowledge_practice[need.knowledge] = context->tick;
+    double teacher = master->knowledge[need.knowledge];
+    colonist_learn(colonist, need.knowledge, KNOWLEDGE_SOURCE_APPRENTICESHIP,
+                   knowledge_taught_rate(KNOWLEDGE_APPRENTICE_RATE, teacher),
+                   1.0 / TICKS_PER_HOUR, teacher, context->tick);
 }
 
 static void start_wandering(Colonist *colonist, const ColonistContext *context)
@@ -2352,6 +2687,10 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
     *water = clampf(*water - NEED_WATER_DECAY_PER_TICK, 0.0f, 1.0f);
     if (colonist->ground_sleep_ticks > 0) {
         colonist->ground_sleep_ticks--;
+    }
+    if (colonist->chat_ticks > 0) {
+        /* A chat ends early when the colonist gets busy. */
+        colonist->chat_ticks = colonist_can_chat(colonist) ? colonist->chat_ticks - 1 : 0;
     }
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist)) {
         float gain = NEED_REST_GAIN_PER_TICK * rest_factor(colonist, context->map);
@@ -2427,6 +2766,11 @@ static void decide(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
         }
         break;
+    case TASK_ASSIST:
+        if (colonist_by_id(context, colonist->mentor) == NULL) {
+            set_idle(colonist, context, 0);
+        }
+        break;
     default:
         break;
     }
@@ -2442,7 +2786,14 @@ static void decide(Colonist *colonist, const ColonistContext *context)
         return;
     }
     if (colonist->task == TASK_IDLE || colonist->task == TASK_WANDER) {
-        try_start_work(colonist, context);
+        try_start_work(colonist, context, WORK_PRIORITY_LOWEST);
+    } else if (colonist->task == TASK_ASSIST && search_allowed(colonist, SEARCH_ASSIST)) {
+        /* Work of a higher priority than the apprenticeship comes first. */
+        colonist->search_cooldown[SEARCH_ASSIST] = COLONIST_ASSIST_SEARCH_TICKS;
+        int priority = colonist->work_priorities[colonist->assist_work];
+        if (priority > WORK_PRIORITY_HIGHEST) {
+            try_start_work(colonist, context, priority - 1);
+        }
     }
 }
 
@@ -2572,6 +2923,7 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     case TASK_CONSTRUCT:
     case TASK_SUPPLY: construction_job(colonist, context); break;
     case TASK_CLEAN: clean(colonist, context); break;
+    case TASK_ASSIST: assist(colonist, context); break;
     case TASK_SLEEP:
     case TASK_COUNT: break;
     }

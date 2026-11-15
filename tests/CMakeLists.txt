@@ -18,6 +18,7 @@ set(COLONY_UNIT_TESTS
     test_i18n
     test_item
     test_knowledge
+    test_learning
     test_map
     test_noise
     test_pathfinding

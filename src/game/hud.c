@@ -12,7 +12,7 @@
 
 #define HUD_MARGIN 8.0f
 #define HUD_PADDING 6.0f
-#define HUD_MAX_LINES 24
+#define HUD_MAX_LINES 40
 #define HUD_LINE_SIZE 256
 
 static const SDL_Color HUD_TEXT_COLOR = {236, 236, 228, 255};
@@ -28,6 +28,8 @@ static const SDL_Color LABEL_SHADOW_COLOR = {0, 0, 0, 200};
 
 typedef struct Panel {
     char lines[HUD_MAX_LINES][HUD_LINE_SIZE];
+    /* KnowledgeType + 1 of a line that has a knowledge's tooltip, else 0. */
+    uint8_t tip[HUD_MAX_LINES];
     int count;
 } Panel;
 
@@ -39,6 +41,7 @@ static char *panel_add(Panel *panel)
     }
     char *line = panel->lines[panel->count - 1];
     line[0] = '\0';
+    panel->tip[panel->count - 1] = 0;
     return line;
 }
 
@@ -433,6 +436,99 @@ static void add_need_line(Panel *panel, const Colonist *colonist, NeedType need)
     }
 }
 
+/* A knowledge level as shown: one decimal, rounded down. */
+static void format_level(char *out, size_t size, double level)
+{
+    tr_decimal(out, size, (float)(SDL_floor(level * 10.0) / 10.0), 1);
+}
+
+/* Who the colonist learns from, teaches, or chats with. */
+static void add_social_lines(App *app, Panel *panel, const Colonist *colonist, EntityId id)
+{
+    const Colonist *mentor = game_colonist_const(&app->game, colonist->mentor);
+    const KnowledgeDef *def = knowledge_def((KnowledgeType)colonist->assist_knowledge);
+    if (colonist->task == TASK_ASSIST && mentor != NULL && def != NULL) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.apprentice"), mentor->name,
+                  tr(def->name_key));
+    }
+    const Colonist *apprentice =
+        game_colonist_const(&app->game, game_apprentice_of(&app->game, id));
+    if (apprentice != NULL) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.teaching"),
+                  apprentice->name);
+    }
+    const Colonist *partner = game_colonist_const(&app->game, colonist->chat_partner);
+    if (colonist->chat_ticks > 0 && partner != NULL) {
+        const KnowledgeDef *topic = knowledge_def((KnowledgeType)colonist->chat_topic);
+        if (topic != NULL) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.chatting_about"),
+                      partner->name, tr(topic->name_key));
+        } else {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.chatting"),
+                      partner->name);
+        }
+    }
+}
+
+/* Tooltip of a knowledge line of the colonist inspector: best level, what
+ * was learned today and how, practice and fading, masters in the colony. */
+static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType knowledge)
+{
+    static const char *const GAIN_KEYS[KNOWLEDGE_SOURCE_COUNT] = {
+        [KNOWLEDGE_SOURCE_DOING] = N_("hud.knowledge.gain.doing"),
+        [KNOWLEDGE_SOURCE_APPRENTICESHIP] = N_("hud.knowledge.gain.apprenticeship"),
+        [KNOWLEDGE_SOURCE_CONVERSATION] = N_("hud.knowledge.gain.conversation"),
+    };
+    char lines[UI_TOOLTIP_LINES][HUD_LINE_SIZE];
+    const char *pointers[UI_TOOLTIP_LINES];
+    int count = 0;
+    uint64_t tick = app->game.clock.tick;
+    char a[32], b[32];
+    double peak = colonist->knowledge_peak[knowledge];
+    SDL_strlcpy(lines[count++], tr(knowledge_def(knowledge)->name_key), HUD_LINE_SIZE);
+    if (peak - colonist->knowledge[knowledge] >= 0.05) {
+        format_level(a, sizeof(a), peak);
+        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr("hud.knowledge.peak"), a);
+    }
+    bool gained = false;
+    for (int source = 0; source < KNOWLEDGE_SOURCE_COUNT; source++) {
+        double gain = colonist_knowledge_gain_today(colonist, knowledge,
+                                                    (KnowledgeSource)source, tick);
+        if (gain >= 0.005) {
+            tr_decimal(a, sizeof(a), (float)gain, 2);
+            TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr(GAIN_KEYS[source]), a);
+            gained = true;
+        }
+    }
+    if (!gained) {
+        SDL_strlcpy(lines[count++], tr("hud.knowledge.no_gain"), HUD_LINE_SIZE);
+    }
+    int days = colonist_days_unpractised(colonist, knowledge, tick);
+    tr_integer(a, sizeof(a), days);
+    if (colonist_knowledge_fading(colonist, knowledge, tick)) {
+        format_level(b, sizeof(b), knowledge_fade_floor(peak));
+        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr_plural("hud.knowledge.fading", days), a, b);
+    } else if (days >= 1) {
+        tr_integer(b, sizeof(b), KNOWLEDGE_FADE_AFTER_DAYS);
+        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr_plural("hud.knowledge.unpractised", days),
+                  a, b);
+    } else {
+        SDL_strlcpy(lines[count++], tr("hud.knowledge.practised"), HUD_LINE_SIZE);
+    }
+    int masters = game_knowledge_masters(&app->game, knowledge);
+    if (masters == 0) {
+        SDL_strlcpy(lines[count++], tr("hud.knowledge.no_master"), HUD_LINE_SIZE);
+    } else {
+        tr_integer(a, sizeof(a), masters);
+        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr_plural("hud.knowledge.masters", masters),
+                  a);
+    }
+    for (int i = 0; i < count; i++) {
+        pointers[i] = lines[i];
+    }
+    ui_tooltip(&app->ui, pointers, count);
+}
+
 /* Lines of the colonist inspector (its title is the colonist's name), or the
  * names of the colonists selected. */
 static void build_selection_panel(App *app, Panel *panel)
@@ -459,6 +555,7 @@ static void build_selection_panel(App *app, Panel *panel)
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.strength"), strength, carry);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
               tr(colonist_activity_key(colonist)));
+    add_social_lines(app, panel, colonist, app->selected[0]);
     if (colonist->carried.count > 0) {
         char count[16], weight[32];
         tr_integer(count, sizeof(count), colonist->carried.count);
@@ -506,26 +603,34 @@ static void build_selection_panel(App *app, Panel *panel)
     } else {
         panel_add_text(panel, tr("hud.colonist.no_bed"));
     }
-    /* Knowledges the settler has started to learn: level with one decimal,
-     * and the work speed once it is high enough to use. */
+    /* Discovered knowledges the settler has started to learn: level with one
+     * decimal, the work speed once it is high enough to use, and a tooltip. */
     panel_add_text(panel, tr("hud.colonist.knowledge"));
     for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
         double value = colonist_knowledge_level(colonist, (KnowledgeType)knowledge);
-        if (!(value > 0.0)) {
+        if (!(value > 0.0) || !game_knowledge_discovered(&app->game, (KnowledgeType)knowledge)) {
             continue;
         }
         const char *name = tr(knowledge_def((KnowledgeType)knowledge)->name_key);
         char level[16];
-        tr_decimal(level, sizeof(level), (float)(SDL_floor(value * 10.0) / 10.0), 1);
+        format_level(level, sizeof(level), value);
+        bool fading =
+            colonist_knowledge_fading(colonist, (KnowledgeType)knowledge, app->game.clock.tick);
+        char *line = panel_add(panel);
+        panel->tip[panel->count - 1] = (uint8_t)(knowledge + 1);
         if (!knowledge_is_mastered(value)) {
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.knowledge_learning"),
+            TR_FORMAT(line, HUD_LINE_SIZE,
+                      tr(fading ? "hud.colonist.knowledge_learning_fading"
+                                : "hud.colonist.knowledge_learning"),
                       name, level);
             continue;
         }
         char speed[16];
         tr_decimal(speed, sizeof(speed), knowledge_work_speed(value), 2);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.knowledge_level"), name,
-                  level, speed);
+        TR_FORMAT(line, HUD_LINE_SIZE,
+                  tr(fading ? "hud.colonist.knowledge_level_fading"
+                            : "hud.colonist.knowledge_level"),
+                  name, level, speed);
     }
 }
 
@@ -580,10 +685,31 @@ void hud_draw_world_labels(App *app)
     }
 }
 
+typedef struct ColonistRows {
+    App *app;
+    const Panel *panel;
+} ColonistRows;
+
+/* The inspector's lines; a knowledge line shows its tooltip under the mouse. */
+static void colonist_rows(UiLayout *layout, void *userdata)
+{
+    const ColonistRows *rows = userdata;
+    const Colonist *colonist = game_colonist_const(&rows->app->game, rows->app->selected[0]);
+    for (int i = 0; i < rows->panel->count; i++) {
+        SDL_FRect rect = {layout->x, layout->y, layout->width, layout->row};
+        ui_layout_label(layout, rows->panel->lines[i], 0.0f, false);
+        int tip = rows->panel->tip[i];
+        if (layout->draw && tip > 0 && colonist != NULL && ui_hovered(layout->ui, rect)) {
+            knowledge_tooltip(rows->app, colonist, (KnowledgeType)(tip - 1));
+        }
+    }
+}
+
 static void colonist_window(App *app)
 {
     Panel lines = {0};
     build_selection_panel(app, &lines);
+    ColonistRows rows = {app, &lines};
     char title[HUD_LINE_SIZE];
     const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
     if (app->selected_count == 1 && colonist != NULL) {
@@ -595,8 +721,8 @@ static void colonist_window(App *app)
                   count);
     }
     bool open = true;
-    ui_layout_window(&app->ui, APP_WINDOW_COLONIST, title, UI_PLACE_BOTTOM_RIGHT, panel_rows,
-                     &lines, &open);
+    ui_layout_window(&app->ui, APP_WINDOW_COLONIST, title, UI_PLACE_BOTTOM_RIGHT, colonist_rows,
+                     &rows, &open);
     if (!open) {
         app->selected_count = 0;
     }
@@ -680,6 +806,60 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     return count;
 }
 
+void hud_update_notices(App *app, double dt)
+{
+    /* Those on screen age; the oldest go. */
+    int kept = 0;
+    for (int i = 0; i < app->notices_shown_count; i++) {
+        app->notices_age[i] += dt;
+        if (app->notices_age[i] < APP_NOTICE_SECONDS) {
+            app->notices_shown[kept] = app->notices_shown[i];
+            app->notices_age[kept] = app->notices_age[i];
+            kept++;
+        }
+    }
+    app->notices_shown_count = kept;
+    const Notices *notices = &app->game.notices;
+    if (app->next_notice > notices->count) {
+        app->next_notice = 0; /* A new game. */
+        app->notices_shown_count = 0;
+    }
+    for (; app->next_notice < notices->count; app->next_notice++) {
+        if (notices_get(notices, app->next_notice) == NULL) {
+            continue; /* Forgotten already. */
+        }
+        if (app->notices_shown_count == APP_NOTICES_SHOWN) {
+            SDL_memmove(app->notices_shown, app->notices_shown + 1,
+                        sizeof(app->notices_shown[0]) * (APP_NOTICES_SHOWN - 1));
+            SDL_memmove(app->notices_age, app->notices_age + 1,
+                        sizeof(app->notices_age[0]) * (APP_NOTICES_SHOWN - 1));
+            app->notices_shown_count--;
+        }
+        app->notices_shown[app->notices_shown_count] = app->next_notice;
+        app->notices_age[app->notices_shown_count] = 0.0;
+        app->notices_shown_count++;
+    }
+}
+
+/* The notices on screen, in the top right corner from `top` down, newest
+ * last. */
+static void draw_notices(App *app, float top)
+{
+    Panel panel = {0};
+    for (int i = 0; i < app->notices_shown_count; i++) {
+        const Notice *notice = notices_get(&app->game.notices, app->notices_shown[i]);
+        const KnowledgeDef *def = notice != NULL ? knowledge_def(notice->knowledge) : NULL;
+        if (def != NULL) {
+            TR_FORMAT(panel_add(&panel), HUD_LINE_SIZE,
+                      tr(notice_text_key((NoticeType)notice->type)), tr(def->name_key),
+                      notice->name);
+        }
+    }
+    float width, height;
+    panel_size(app, &panel, &width, &height);
+    panel_draw(app, &panel, app->camera.viewport_width - width - HUD_MARGIN, top);
+}
+
 void hud_draw(App *app)
 {
     const float screen_width = app->camera.viewport_width;
@@ -759,6 +939,7 @@ void hud_draw(App *app)
               info != NULL ? info->name : "?");
     panel_size(app, &language, &width, &height);
     panel_draw(app, &language, screen_width - width - HUD_MARGIN, HUD_MARGIN);
+    draw_notices(app, HUD_MARGIN * 2.0f + height);
 
     /* Bottom left: the tile inspector above the menus. */
     float menu_top = menu_bar_top(app);

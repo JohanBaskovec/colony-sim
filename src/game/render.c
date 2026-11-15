@@ -1030,6 +1030,8 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
  * nobody gets lost in a forest. */
 #define COLONIST_HALF_WIDTH 0.3f
 #define COLONIST_HEIGHT 1.05f
+/* Speech bubbles over chatting colonists from this zoom level (pixels per tile). */
+#define CHAT_BUBBLE_MIN_ZOOM 14.0f
 #define TREE_SEE_THROUGH_ALPHA 0.4f
 
 static const SDL_FColor WHITE = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -1263,6 +1265,39 @@ static void render_plant(Sprites *sprites, const Camera *camera, const Plant *pl
     sprites_draw(sprites, id, sx, sy, color, (tile_variation(x, y) & 4) != 0);
 }
 
+/* A small speech bubble over the head of colonists who are chatting. */
+static void render_chat_bubbles(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    if (camera->zoom < CHAT_BUBBLE_MIN_ZOOM) {
+        return;
+    }
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = &game->colonists[slot];
+        if (entity_id_is_none(game_colonist_id_at(game, slot)) || colonist->chat_ticks <= 0) {
+            continue;
+        }
+        float wx, wy, sx, sy;
+        colonist_position(colonist, &wx, &wy);
+        camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &sx, &sy);
+        float width = floorf(camera->zoom * 0.42f), height = floorf(camera->zoom * 0.24f);
+        SDL_FRect bubble = {floorf(sx + camera->zoom * 0.08f),
+                            floorf(sy - COLONIST_HEIGHT * camera->zoom - height * 0.6f), width,
+                            height};
+        SDL_SetRenderDrawColor(renderer, 245, 245, 238, 230);
+        SDL_RenderFillRect(renderer, &bubble);
+        SDL_FRect tail = {bubble.x + 1.0f, bubble.y + height, SDL_max(2.0f, width * 0.18f),
+                          SDL_max(2.0f, height * 0.3f)};
+        SDL_RenderFillRect(renderer, &tail);
+        float dot = SDL_max(1.0f, floorf(height * 0.22f));
+        SDL_SetRenderDrawColor(renderer, 60, 60, 66, 255);
+        for (int i = 0; i < 3; i++) {
+            SDL_FRect rect = {floorf(bubble.x + width * (0.25f + 0.25f * (float)i) - dot * 0.5f),
+                              floorf(bubble.y + (height - dot) * 0.5f), dot, dot};
+            SDL_RenderFillRect(renderer, &rect);
+        }
+    }
+}
+
 void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
                           const Camera *camera, const EntityId *selected, int selected_count)
 {
@@ -1323,6 +1358,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
                         is_selected(game_colonist_id_at(game, slot), selected, selected_count));
     }
     sprites_flush(sprites);
+    render_chat_bubbles(renderer, game, camera);
 }
 
 void render_selection_box(SDL_Renderer *renderer, float x0, float y0, float x1, float y1)
