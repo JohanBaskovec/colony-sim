@@ -597,11 +597,7 @@ static void update_plants(Game *game)
 
 float game_item_rot_rate(const Game *game, int x, int y)
 {
-    if (!map_in_bounds(&game->map, x, y)) {
-        return 0.0f;
-    }
-    bool sheltered = temperature_cover(&game->map, x, y) != TEMPERATURE_COVER_OPEN;
-    return item_rot_rate(temperature_at(&game->temperatures, x, y), sheltered);
+    return temperature_rot_rate(&game->temperatures, &game->map, x, y);
 }
 
 /* ItemRotRateFn for items_advance(). */

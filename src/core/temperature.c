@@ -181,6 +181,16 @@ TemperatureCover temperature_cover(const Map *map, int x, int y)
     return map_natural_roof(map, x, y) ? TEMPERATURE_COVER_NATURAL : TEMPERATURE_COVER_OPEN;
 }
 
+float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y)
+{
+    if (!map_in_bounds(map, x, y)) {
+        return 0.0f;
+    }
+    float celsius =
+        temperatures != NULL ? temperature_at(temperatures, x, y) : ITEM_ROT_REFERENCE_CELSIUS;
+    return item_rot_rate(celsius, temperature_cover(map, x, y) != TEMPERATURE_COVER_OPEN);
+}
+
 /* Brings the caches up to date with the changes the map logged since. */
 static void update_caches(Temperatures *temperatures, const Map *map)
 {

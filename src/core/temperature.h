@@ -105,6 +105,11 @@ void temperatures_add_heat(Temperatures *temperatures, int x, int y, float degre
 TemperatureMaterial temperature_material(const Map *map, int x, int y);
 TemperatureCover temperature_cover(const Map *map, int x, int y);
 
+/* Speed of rot of food lying on a tile: item_rot_rate() at the tile's
+ * temperature (ITEM_ROT_REFERENCE_CELSIUS when `temperatures` is NULL),
+ * under its roof if any; 0 out of bounds. */
+float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y);
+
 /* One tick: the band of rows due at `tick` exchanges heat. */
 void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick);
 

@@ -705,8 +705,9 @@ gatherer (damaged) spoils sooner. So berries picked at the end of summer
 last about two days, roots dug in autumn a few weeks, and anything left out
 in winter keeps while it freezes. Food in a settler's hands does not rot.
 The tile inspector shows how long a stack has left at the tile's
-temperature now. Later: smoking and drying meat, storage pits, rain
-speeding rot, settlers eating the food closest to rotting first.
+temperature now. A hungry settler first eats food lying within a short
+walk that rots away within a day, before nearer food that keeps. Later:
+smoking and drying meat, storage pits, rain speeding rot.
 
 ### 7.5 Construction: ground stockpile
 

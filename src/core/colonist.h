@@ -144,6 +144,11 @@
 #define COLONIST_BEDTIME_NEED 0.5f
 #define COLONIST_EAT_TICKS 500
 #define COLONIST_FOOD_SEARCH_MAX_COST 120.0f
+/* Food lying within this cost that rots away in less than
+ * COLONIST_SPOILING_FOOD_HOURS (at its tile now) is eaten first, before
+ * nearer food that keeps. */
+#define COLONIST_SPOILING_FOOD_HOURS 24.0f
+#define COLONIST_SPOILING_FOOD_MAX_COST 60.0f
 /* Drinking fills the water need completely. */
 #define COLONIST_DRINK_TICKS 300
 /* Water is scarcer than berries: colonists accept longer trips to drink. */

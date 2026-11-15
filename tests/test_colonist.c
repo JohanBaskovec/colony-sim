@@ -995,6 +995,33 @@ static void test_hungry_colonist_eats_fruit_from_the_ground(void)
     game_shutdown(&game);
 }
 
+static void test_hungry_colonist_eats_spoiling_food_first(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 23, 20, item_stack_pristine(ITEM_HAZELNUTS, 20)); /* Keeps. */
+    /* Bruised mushrooms, a few hours from rotting away, farther. */
+    items_add(&game.items, 32, 20, item_stack_make(ITEM_MUSHROOMS, 30, ITEM_QUALITY_STANDARD, 1));
+    /* Carrots keep for weeks: not worth a longer walk. */
+    items_add(&game.items, 26, 20, item_stack_pristine(ITEM_WILD_CARROTS, 20));
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_FOOD] = 0.2f;
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_EAT);
+    CHECK_EQ_INT(colonist->target.x, 32);
+
+    /* Nothing about to rot: the nearest food. */
+    Colonist *other = spawn_rested(&game, 20, 24);
+    REQUIRE(other != NULL);
+    items_remove(&game.items, 32, 20, 30);
+    other->needs[NEED_FOOD] = 0.2f;
+    game_tick(&game);
+    CHECK_EQ_INT(other->task, TASK_EAT);
+    CHECK_EQ_INT(other->target.x, 23);
+    game_shutdown(&game);
+}
+
 static void test_colonist_harvests_blackberries(void)
 {
     Game game;
@@ -1840,6 +1867,7 @@ int main(void)
     RUN_TEST(test_disabling_work_type_stops_the_current_job);
     RUN_TEST(test_priority_beats_distance);
     RUN_TEST(test_hungry_colonist_eats_fruit_from_the_ground);
+    RUN_TEST(test_hungry_colonist_eats_spoiling_food_first);
     RUN_TEST(test_colonist_harvests_blackberries);
     RUN_TEST(test_starting_knowledge_is_random_and_valid);
     RUN_TEST(test_knowledge_levels_validate);

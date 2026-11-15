@@ -167,6 +167,23 @@ static void test_materials_and_covers(void)
     game_shutdown(&game);
 }
 
+static void test_rot_rate_on_a_tile(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game, mid_season(SEASON_SPRING)));
+    Map *map = &game.map;
+    map_set_roof(map, 6, 6, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 8, 8),
+               item_rot_rate(temperature_at(&game.temperatures, 8, 8), false), 1e-6);
+    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 6, 6),
+               item_rot_rate(temperature_at(&game.temperatures, 6, 6), true), 1e-6);
+    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, -1, 6), 0.0f, 1e-6);
+    /* Without temperatures: mild. */
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 8, 8), 1.0f, 1e-6);
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 6, 6), ITEM_ROT_SHELTERED, 1e-6);
+    game_shutdown(&game);
+}
+
 /* The cached kind of a tile. */
 static int cached_kind(const Game *game, int x, int y)
 {
@@ -466,6 +483,7 @@ int main(void)
     RUN_TEST(test_outdoor);
     RUN_TEST(test_open_ground_follows_the_air);
     RUN_TEST(test_materials_and_covers);
+    RUN_TEST(test_rot_rate_on_a_tile);
     RUN_TEST(test_cache_follows_the_map);
     RUN_TEST(test_hearth_warms_around_it);
     RUN_TEST(test_hut_keeps_the_warmth);

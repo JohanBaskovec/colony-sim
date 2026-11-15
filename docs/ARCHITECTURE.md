@@ -278,10 +278,12 @@ tooltip); it raises `knowledge_peak`.
   the frontend shows the new ones in the top right corner for 15 seconds.
 
 Food items have a
-`nutrition` per unit; a hungry colonist goes to the nearest food, on the
-ground or on a plant bearing food it may eat in place (fruit, nuts, leaves;
-not roots, nor what could be mistaken for a poisonous plant), and eats just
-what it takes to be sated. Items in
+`nutrition` per unit; a hungry colonist first looks for food lying on the
+ground that rots away within a day at its tile (`temperature_rot_rate()`),
+within a short walk (`COLONIST_SPOILING_FOOD_MAX_COST`), then goes to the
+nearest food, on the ground or on a plant bearing food it may eat in place
+(fruit, nuts, leaves; not roots, nor what could be mistaken for a poisonous
+plant), and eats just what it takes to be sated. Items in
 hand are stored on the colonist (`Colonist.carried`), not in the layer.
 
 ### Stockpiles and hauling
@@ -935,9 +937,11 @@ cannot be cut). Each region also knows whether it contains a drinking spot.
   a scan of the designation layer checks that some open job has a tile to
   stand on in the colonist's region (orders deep inside rock, on another
   island, or all reserved would otherwise cost a full exploration per idle
-  colonist). The same kind of scan, limited to the colonist's region, runs
-  before hauling, fetching materials and looking for a free bed
-  (`any_tile_reachable()` in `colonist.c`).
+  colonist). The same kind of scan, limited to the colonist's region and to
+  the square the search could reach at most (a step costs at least
+  `PATH_MIN_TILE_COST`), runs before looking for food, hauling, fetching
+  materials and looking for a free bed (`any_tile_reachable()` in
+  `colonist.c`).
 
 ### Measuring
 
@@ -946,12 +950,14 @@ colony without a window and prints the average and worst tick time and the
 final state hash. An optimization that is not supposed to change behavior
 must leave that hash unchanged. Reference (Release, 200 × 200, 64 colonists,
 10 in-game days): about 8 µs per tick left alone, 10 µs with every tree, rock
-and bush designated; long food searches when food runs out are the
-remaining spikes (1 to 4 ms). Scenario 3 (construction, a gathering zone
+and bush designated; food searches when no food is within reach are
+answered by the scan. Scenario 3 (construction, a gathering zone
 and a small stockpile that fills up): about 8 µs per tick with 16 colonists
 over 10 days (worst tick 4 ms), 40 µs with 64 colonists over 5 days (worst
 tick 15 ms; it was 2.8 ms per tick and 1.4 s before the exact pre-checks,
-narrowed stamps and minimum retry delay). Failing searches dominated: a
+narrowed stamps and minimum retry delay). Its spikes now come from every
+colonist waking up at the same tick and searching the gathering zone for a
+job (1 to 3 ms each, a search that succeeds far away). Failing searches dominated: a
 search for something out of reach explores everything within its limit, so
 the cheap answer is a scan that proves nothing is there.
 

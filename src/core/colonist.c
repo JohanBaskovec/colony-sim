@@ -715,6 +715,7 @@ static bool tile_has_food(const Map *map, const Items *items, int x, int y)
 typedef struct FoodSearch {
     const Items *items;
     const Reservations *reservations;
+    const Temperatures *temperatures;
     uint8_t self;
 } FoodSearch;
 
@@ -722,6 +723,21 @@ static bool is_free_food(const Map *map, int x, int y, void *userdata)
 {
     const FoodSearch *search = userdata;
     return tile_has_food(map, search->items, x, y) &&
+           !reservations_taken_by_other(search->reservations, RESERVATION_FOOD,
+                                        (TilePos){(int16_t)x, (int16_t)y}, search->self);
+}
+
+/* Search filter: free food lying on the ground that rots away soon. */
+static bool is_free_spoiling_food(const Map *map, int x, int y, void *userdata)
+{
+    const FoodSearch *search = userdata;
+    ItemStack stack = items_get(search->items, x, y);
+    if (!item_is_food((ItemType)stack.type) || !item_rots((ItemType)stack.type)) {
+        return false;
+    }
+    float hours =
+        item_stack_rot_hours(stack, temperature_rot_rate(search->temperatures, map, x, y));
+    return hours >= 0.0f && hours < COLONIST_SPOILING_FOOD_HOURS &&
            !reservations_taken_by_other(search->reservations, RESERVATION_FOOD,
                                         (TilePos){(int16_t)x, (int16_t)y}, search->self);
 }
@@ -739,27 +755,37 @@ static uint32_t current_region(const Colonist *colonist, const ColonistContext *
 }
 
 /*
- * Whether some tile of the region of `from` passes `predicate`: a scan of the
- * map before a search for the nearest such tile, much cheaper than a search
- * that explores the whole area and finds nothing (every stack of a material
- * taken, no free bed left). True without up-to-date regions: search anyway.
+ * Whether some tile of the region of `from` within reach of a search of
+ * `max_cost` passes `predicate`: a scan of the map before a search for the
+ * nearest such tile, much cheaper than a search that explores the whole area
+ * and finds nothing (every stack of a material taken, no free bed left, no
+ * food nearby). Within reach: a step costs at least PATH_MIN_TILE_COST, so
+ * nothing farther than max_cost / PATH_MIN_TILE_COST tiles in a straight or
+ * diagonal line can be reached. True without up-to-date regions: search
+ * anyway.
  */
 static bool any_tile_reachable(const ColonistContext *context, TilePos from,
-                               TilePredicate predicate, void *userdata)
+                               TilePredicate predicate, void *userdata, float max_cost)
 {
     const Map *map = context->map;
     uint32_t region = regions_at(context->regions, map, from.x, from.y);
     if (region == REGION_NONE) {
         return true;
     }
+    float tiles = floorf(max_cost / PATH_MIN_TILE_COST);
+    int reach = tiles < (float)(map->width + map->height) ? (int)tiles
+                                                          : map->width + map->height;
+    int x0 = from.x - reach > 0 ? from.x - reach : 0;
+    int x1 = from.x + reach < map->width - 1 ? from.x + reach : map->width - 1;
+    int rows = 2 * (reach < map->height ? reach : map->height) + 1;
     /* From the row of `from` outwards: what is near is found at once. */
-    for (int step = 0; step < 2 * map->height; step++) {
+    for (int step = 0; step < rows; step++) {
         int y = row_outwards(from.y, step, map->height);
         if (y < 0) {
             continue;
         }
         const uint32_t *ids = &context->regions->id[(size_t)y * (size_t)map->width];
-        for (int x = 0; x < map->width; x++) {
+        for (int x = x0; x <= x1; x++) {
             if (ids[x] == region && predicate(map, x, y, userdata)) {
                 return true;
             }
@@ -768,7 +794,20 @@ static bool any_tile_reachable(const ColonistContext *context, TilePos from,
     return false;
 }
 
-/* Walks to the nearest food (NEED_FOOD) or drinking spot (NEED_WATER). */
+/* Nearest free food lying on the ground that rots away soon, within a short
+ * walk; the colonist's path leads there. */
+static bool find_spoiling_food(Colonist *colonist, const ColonistContext *context,
+                               FoodSearch *food, TilePos *found)
+{
+    return any_tile_reachable(context, current_tile(colonist), is_free_spoiling_food, food,
+                              COLONIST_SPOILING_FOOD_MAX_COST) &&
+           pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                   is_free_spoiling_food, food, COLONIST_SPOILING_FOOD_MAX_COST,
+                                   &colonist->path, found);
+}
+
+/* Walks to the nearest food (NEED_FOOD: food about to rot first) or
+ * drinking spot (NEED_WATER). */
 static bool try_satisfy(Colonist *colonist, const ColonistContext *context, NeedType need)
 {
     bool drink = need == NEED_WATER;
@@ -777,17 +816,22 @@ static bool try_satisfy(Colonist *colonist, const ColonistContext *context, Need
         return false;
     }
     TilePos found;
-    FoodSearch food = {context->items, context->reservations, context->worker_id};
-    /* No water anywhere the colonist can walk to: the search would explore
-     * everything within its cost limit for nothing. */
-    bool hopeless = drink && !regions_has_drinking_spot(context->regions, context->map,
-                                                        current_region(colonist, context));
+    FoodSearch food = {context->items, context->reservations, context->temperatures,
+                       context->worker_id};
+    /* No water anywhere the colonist can walk to, no food within reach: the
+     * search would explore everything within its cost limit for nothing. */
+    bool hopeless = drink ? !regions_has_drinking_spot(context->regions, context->map,
+                                                       current_region(colonist, context))
+                          : !any_tile_reachable(context, current_tile(colonist), is_free_food,
+                                                &food, COLONIST_FOOD_SEARCH_MAX_COST);
+    bool spoiling = !drink && !hopeless && find_spoiling_food(colonist, context, &food, &found);
     if (hopeless ||
-        !pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                 drink ? is_drinking_spot : is_free_food, &food,
-                                 drink ? COLONIST_WATER_SEARCH_MAX_COST
-                                       : COLONIST_FOOD_SEARCH_MAX_COST,
-                                 &colonist->path, &found)) {
+        (!spoiling &&
+         !pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+                                  drink ? is_drinking_spot : is_free_food, &food,
+                                  drink ? COLONIST_WATER_SEARCH_MAX_COST
+                                        : COLONIST_FOOD_SEARCH_MAX_COST,
+                                  &colonist->path, &found))) {
         search_failed(colonist, kind);
         return false;
     }
@@ -865,7 +909,8 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
                                         &colonist->path, &bed);
     }
     if (!found &&
-        any_tile_reachable(context, current_tile(colonist), is_free_bed, (void *)context) &&
+        any_tile_reachable(context, current_tile(colonist), is_free_bed, (void *)context,
+                           COLONIST_BED_SEARCH_MAX_COST) &&
         pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
                                 is_free_bed, (void *)context, COLONIST_BED_SEARCH_MAX_COST,
                                 &colonist->path, &bed)) {
@@ -1878,7 +1923,7 @@ static bool start_fetch(Colonist *colonist, const ColonistContext *context, Fetc
                         TilePos from, float max_cost, bool tool)
 {
     TilePos found;
-    if (!any_tile_reachable(context, from, is_fetchable, search) ||
+    if (!any_tile_reachable(context, from, is_fetchable, search, max_cost) ||
         !pathfinder_find_nearest(context->pathfinder, context->map, from, is_fetchable, search,
                                  max_cost, NULL, &found) ||
         !pathfinder_find(context->pathfinder, context->map, current_tile(colonist), found,
