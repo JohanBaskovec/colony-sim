@@ -194,6 +194,17 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
                            Rng *rng);
 
 /*
+ * Finishes a site at once (the debug cheat GameDebug.instant_build): the
+ * missing materials appear, of standard grade, and all the work is done at
+ * `level` (see construction_add_work()). Returns false, changing nothing,
+ * when it cannot be finished now: a roof without support, a workstation that
+ * cannot be placed (a plant on its tile: clear it first), a refresh site
+ * whose structure is gone.
+ */
+bool construction_finish_now(Constructions *constructions, Map *map, Items *items,
+                             Workstations *workstations, int index, double level, Rng *rng);
+
+/*
  * A day goes by: structures that wear by themselves lose their hit points
  * of the day. Those worn down to 0 fall apart (with their refresh site,
  * whose materials are dropped on the tile); those below

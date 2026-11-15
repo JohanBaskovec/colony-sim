@@ -495,6 +495,39 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
     return true;
 }
 
+bool construction_finish_now(Constructions *constructions, Map *map, Items *items,
+                             Workstations *workstations, int index, double level, Rng *rng)
+{
+    ConstructionSite *site = site_get(constructions, index);
+    if (site == NULL) {
+        return false;
+    }
+    StructureType type = (StructureType)site->type;
+    bool ready = true;
+    if (site->workstation != 0) {
+        ready = workstations != NULL && workstations->used_count < WORKSTATION_MAX &&
+                workstation_can_place(workstations, map, site->x, site->y);
+    } else if (site->refresh) {
+        ready = map_structure_is_origin(map, site->x, site->y) &&
+                map_structure(map, site->x, site->y) == type;
+    } else if (structure_is_roof(type)) {
+        ready = map_roof_supported(map, site->x, site->y);
+    }
+    if (!ready) {
+        return false;
+    }
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        int missing = construction_missing(site, slot);
+        if (missing > 0) {
+            construction_deliver(constructions, index,
+                                 item_stack_make(construction_material(site, slot), missing,
+                                                 ITEM_QUALITY_STANDARD, UINT16_MAX));
+        }
+    }
+    return construction_add_work(constructions, map, items, workstations, index,
+                                 construction_work_needed(site), level, rng);
+}
+
 int constructions_wear_day(Constructions *constructions, Map *map, Items *items)
 {
     bool any = false;

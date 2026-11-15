@@ -1,6 +1,7 @@
 #include "game/hud.h"
 
 #include "core/i18n.h"
+#include "game/debug_panel.h"
 #include "game/gather_zone_panel.h"
 #include "game/menu_bar.h"
 #include "game/station_panel.h"
@@ -807,6 +808,8 @@ static void help_window(App *app)
               app_key_name(APP_KEY_ROTATE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.temperature"),
               app_key_name(APP_KEY_TEMPERATURE));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.debug"),
+              app_key_name(APP_KEY_DEBUG_MENU));
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_HELP, tr("help.title"), UI_PLACE_CENTER, panel_rows,
                      &help, &open);
@@ -824,6 +827,7 @@ static void draw_window(App *app, AppWindow window)
     case APP_WINDOW_GATHER_ZONE: gather_zone_panel_draw(app); break;
     case APP_WINDOW_WORK: work_panel_draw(app); break;
     case APP_WINDOW_HELP: help_window(app); break;
+    case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
     default: break;
     }
 }
@@ -852,6 +856,9 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     }
     if (app->show_help) {
         out[count++] = APP_WINDOW_HELP;
+    }
+    if (app->show_debug_menu) {
+        out[count++] = APP_WINDOW_DEBUG;
     }
     /* Insertion sort, back to front. */
     for (int i = 1; i < count; i++) {

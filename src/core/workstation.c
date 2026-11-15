@@ -141,7 +141,7 @@ int workstations_remove(Workstations *workstations, int index, ItemStack returne
         return 0;
     }
     int count = 0;
-    if (station->work_input.count > 0) {
+    if (station->work_input.count > 0 && !station->free_input) {
         returned[count++] = station->work_input;
     }
     workstations->at[index_of(workstations, station->x, station->y)] = 0;
@@ -201,11 +201,13 @@ bool workstation_remove_bill(Workstations *workstations, int index, int bill,
     if (station->work_recipe != recipe || station->work_input.count == 0) {
         return false;
     }
+    bool given_back = !station->free_input;
     *returned = station->work_input;
     station->work_input = (ItemStack){.type = ITEM_NONE};
     station->work_recipe = RECIPE_COUNT;
     station->work_progress = 0.0f;
-    return true;
+    station->free_input = false;
+    return given_back;
 }
 
 bool workstation_set_bill_mode(Workstations *workstations, int index, int bill, BillMode mode)
@@ -363,6 +365,34 @@ bool workstation_start_craft(Workstations *workstations, int index, RecipeType r
     station->work_recipe = (uint8_t)recipe;
     station->work_input = input;
     station->work_progress = 0.0f;
+    station->free_input = false;
+    return true;
+}
+
+ItemStack bill_free_input(const Bill *bill)
+{
+    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    for (int i = 0; def != NULL && i < RECIPE_INPUT_ALTERNATIVES; i++) {
+        ItemType type = def->inputs[i];
+        if (type != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(type))) {
+            int quality = def->input_min_quality > ITEM_QUALITY_STANDARD
+                              ? (int)def->input_min_quality
+                              : (int)ITEM_QUALITY_STANDARD;
+            return item_stack_make(type, def->input_count, quality, UINT16_MAX);
+        }
+    }
+    return item_stack_make(ITEM_NONE, 0, 0, 0);
+}
+
+bool workstation_start_free_craft(Workstations *workstations, int index, int bill)
+{
+    Bill *entry = get_bill(workstations, index, bill);
+    if (entry == NULL ||
+        !workstation_start_craft(workstations, index, (RecipeType)entry->recipe,
+                                 bill_free_input(entry))) {
+        return false;
+    }
+    workstations->list[index].free_input = true;
     return true;
 }
 
@@ -386,6 +416,7 @@ bool workstation_add_craft_work(Workstations *workstations, int index, int bill,
     station->work_input = (ItemStack){.type = ITEM_NONE};
     station->work_recipe = RECIPE_COUNT;
     station->work_progress = 0.0f;
+    station->free_input = false;
     if (bill < 0 || bill >= station->bill_count || station->bills[bill].recipe != recipe) {
         bill = -1;
         for (int i = 0; i < station->bill_count && bill < 0; i++) {
@@ -414,6 +445,9 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         int32_t craft[6] = {station->work_recipe, input.type,       input.quality,
                             input.count,          input.hit_points, input.progress};
         hash = hash_fnv1a64(hash, craft, sizeof(craft));
+        if (station->free_input) { /* (Only then: hashes stay as they were without it.) */
+            hash = hash_fnv1a64(hash, &station->free_input, sizeof(station->free_input));
+        }
         float fire[2] = {station->fuel, station->fuel_promised};
         hash = hash_fnv1a64(hash, fire, sizeof(fire));
         uint32_t fire_state[3] = {station->burning, station->keep_burning, station->fuel_types};

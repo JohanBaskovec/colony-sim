@@ -376,6 +376,7 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_GATHER_ZONE: app->selected_gather_zone = GATHER_ZONE_NONE; break;
     case APP_WINDOW_WORK: app->show_work_panel = false; break;
     case APP_WINDOW_HELP: app->show_help = false; break;
+    case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
     default: break;
     }
 }
@@ -464,6 +465,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case SDL_SCANCODE_KP_3: game_clock_set_speed(&app->game.clock, GAME_SPEED_FASTEST); return;
     case APP_KEY_BACK: step_back(app); return;
     case APP_KEY_HELP: app->show_help = !app->show_help; return;
+    case APP_KEY_DEBUG_MENU: app->show_debug_menu = !app->show_debug_menu; return;
     case APP_KEY_TEMPERATURE: app->show_temperature = !app->show_temperature; return;
     case APP_KEY_MINE: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); return;
     case APP_KEY_GATHER: app_toggle_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD); return;

@@ -7,6 +7,7 @@ set(COLONY_UNIT_TESTS
     test_camera
     test_cli
     test_crafting
+    test_debug
     test_colonist
     test_construction
     test_designation

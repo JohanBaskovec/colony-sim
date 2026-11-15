@@ -1779,7 +1779,9 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
                 to_fetch[slot] = def->tools[slot];
             }
         }
-        if (!in_progress && !bill_has_input(bill, context->items->totals, to_fetch)) {
+        if (!in_progress && (context->free_crafts
+                                 ? bill_free_input(bill).count == 0
+                                 : !bill_has_input(bill, context->items->totals, to_fetch))) {
             continue;
         }
         return index;
@@ -1981,7 +1983,7 @@ static bool plan_station_job(Colonist *colonist, const ColonistContext *context)
         return true;
     }
     bool in_progress = station->work_input.count > 0;
-    if (!in_progress && colonist->carried.count < def->input_count) {
+    if (!in_progress && !context->free_crafts && colonist->carried.count < def->input_count) {
         return fetch_input(colonist, context, station, bill);
     }
     return go_to_station(colonist, context, station);
@@ -2095,11 +2097,18 @@ static bool arrive_at_station(Colonist *colonist, const ColonistContext *context
     Workstations *workstations = context->workstations;
     Workstation *station = job_station(colonist, context);
     if (station->work_input.count == 0) {
-        if (!workstation_start_craft(workstations, colonist->station,
-                                     (RecipeType)colonist->recipe, colonist->carried)) {
+        if (context->free_crafts &&
+            colonist->carried.count < recipe_def((RecipeType)colonist->recipe)->input_count) {
+            /* Out of nothing (what it holds, if anything, stays in hand). */
+            if (!workstation_start_free_craft(workstations, colonist->station, colonist->bill)) {
+                return false;
+            }
+        } else if (!workstation_start_craft(workstations, colonist->station,
+                                            (RecipeType)colonist->recipe, colonist->carried)) {
             return false;
+        } else {
+            colonist->carried = (ItemStack){.type = ITEM_NONE};
         }
-        colonist->carried = (ItemStack){.type = ITEM_NONE};
     }
     colonist->station_phase = STATION_JOB_WORK;
     return true;

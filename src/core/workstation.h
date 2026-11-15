@@ -114,6 +114,9 @@ typedef struct Workstation {
     uint8_t work_recipe;
     ItemStack work_input;
     float work_progress;
+    /* The input came out of nothing (workstation_start_free_craft()): it is
+     * not given back when the craft is called off. */
+    bool free_input;
     /* Hearths only (core/hearth.h): kilograms of fuel in it, whether it
      * burns, whether settlers keep it burning (refuel and light it), the fuel
      * types allowed, and the kilograms haulers are bringing. */
@@ -164,7 +167,7 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
                        int y);
 
 /*
- * Removes a station. The input of a craft in progress is given back in
+ * Removes a station. The input of a craft in progress (unless free) is given back in
  * `returned`; returns the number of stacks (0 or 1). The caller drops them.
  */
 int workstations_remove(Workstations *workstations, int index, ItemStack returned[1]);
@@ -175,7 +178,8 @@ int workstation_add_bill(Workstations *workstations, int index, RecipeType recip
 
 /* Removes a bill; later bills move up. The input of a craft in progress for
  * this recipe is given back in `returned` when no other bill makes it
- * (returns whether it was). */
+ * (returns whether it was; a free input is not given back: the craft is
+ * just called off). */
 bool workstation_remove_bill(Workstations *workstations, int index, int bill,
                              ItemStack *returned);
 
@@ -218,6 +222,17 @@ bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
  */
 bool workstation_start_craft(Workstations *workstations, int index, RecipeType recipe,
                              ItemStack input);
+
+/* The input a free craft of a bill gets (the debug cheat
+ * GameDebug.free_crafts): the recipe's count of the first input type the
+ * bill allows, of standard grade (or the least the recipe takes), in perfect
+ * condition. Empty when the bill allows none. */
+ItemStack bill_free_input(const Bill *bill);
+
+/* Starts a craft of a bill's recipe with its free input (bill_free_input()),
+ * which is not given back if the craft is called off. Fails like
+ * workstation_start_craft(), or when the bill allows no input. */
+bool workstation_start_free_craft(Workstations *workstations, int index, int bill);
 
 /*
  * Adds work to the craft in progress. When it is complete, the products are

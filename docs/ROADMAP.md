@@ -152,3 +152,4 @@ Tick items as they land and add newly discovered tasks.
 - [x] Simulation benchmark (`bench/bench_simulation`: many colonists, long runs, state hash)
 - [ ] Windows and macOS CI builds
 - [ ] Choose a license
+- [x] Debug menu (F4): instant free construction, free crafts (`GameDebug`)

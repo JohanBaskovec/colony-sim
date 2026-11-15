@@ -425,6 +425,8 @@ typedef struct ColonistContext {
     const bool *teach;
     /* Temperature per tile (Game.temperatures); NULL: always mild. */
     const Temperatures *temperatures;
+    /* Debug cheat (GameDebug.free_crafts): crafts need no input. */
+    bool free_crafts;
 } ColonistContext;
 
 void colonist_init(Colonist *colonist, const char *name, int age, int x, int y);

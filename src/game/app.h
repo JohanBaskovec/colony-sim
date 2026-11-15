@@ -50,7 +50,8 @@ typedef enum AppTool {
 #define APP_KEY_PAUSE SDL_SCANCODE_SPACE
 #define APP_KEY_BACK SDL_SCANCODE_ESCAPE
 #define APP_KEY_HELP SDL_SCANCODE_F1
-#define APP_KEY_DEBUG SDL_SCANCODE_F3
+#define APP_KEY_DEBUG SDL_SCANCODE_F3      /* Debug information. */
+#define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4 /* Cheats (game/debug_panel.h). */
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H /* Temperature view on or off. */
 
 /* Types of the zone tools (see app_toggle_tool()). */
@@ -66,6 +67,7 @@ typedef enum AppWindow {
     APP_WINDOW_GATHER_ZONE,
     APP_WINDOW_WORK, /* Work priorities grid. */
     APP_WINDOW_HELP, /* Controls. */
+    APP_WINDOW_DEBUG, /* Debug menu (cheats). */
     APP_WINDOW_COUNT
 } AppWindow;
 
@@ -130,6 +132,7 @@ typedef struct App {
     /* Work priorities grid (game/work_panel.h) and controls help. */
     bool show_work_panel;
     bool show_help;
+    bool show_debug_menu; /* Debug menu (game/debug_panel.h). */
     bool show_temperature; /* The temperature of each tile over the map. */
     /* Build menu (game/menu_bar.h): open, and which category is shown. */
     bool build_menu_open;

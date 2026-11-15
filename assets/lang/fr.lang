@@ -57,6 +57,9 @@ menu.no_cost = Aucune ressource nécessaire
 menu.structure_cost = Nécessite : {0} ({1})
 menu.work.description = Qui fait quel travail, et dans quel ordre
 help.title = Commandes
+debug.title = Débogage
+debug.instant_build = Construction instantanée et gratuite (chaque plan est construit aussitôt, sans matériaux)
+debug.free_crafts = Fabrication gratuite (plus besoin d’ingrédients)
 
 # Objets
 item.wood = Bois
@@ -125,6 +128,7 @@ hud.help.orders = {0} : miner la roche · {1} : annuler des ordres
 hud.help.copy = {0} : construire un autre exemplaire de la sélection (zone, poste, lit, mur, porte)
 hud.help.rotate = {0} : tourner le lit à placer (tête et pied)
 hud.help.temperature = {0} : vue thermique (température ressentie sur chaque case, chaleur des feux comprise : bleu pour le froid, rouge pour le chaud)
+hud.help.debug = {0} : menu de débogage (triches pour tester)
 hud.help.manage = {0} : zones de stockage · {1} : postes de travail · clic sur une zone ou un poste : ses réglages · {2} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 hud.tool.name = Outil : {0}

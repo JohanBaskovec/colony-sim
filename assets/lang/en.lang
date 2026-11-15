@@ -58,6 +58,9 @@ menu.no_cost = Needs no resources
 menu.structure_cost = Needs: {0} ({1})
 menu.work.description = Who does which work, and in what order
 help.title = Controls
+debug.title = Debug
+debug.instant_build = Instant free construction (every blueprint is built at once, without materials)
+debug.free_crafts = Free crafts (no ingredients needed)
 
 # Items
 item.wood = Wood
@@ -132,6 +135,7 @@ hud.help.orders = {0}: mine rock · {1}: cancel orders
 hud.help.copy = {0}: build another of what is selected (zone, workstation, bed, wall, door)
 hud.help.rotate = {0}: turn the bed being placed (head and foot)
 hud.help.temperature = {0}: temperature view (felt on each tile, the warmth of fires included: blue for cold, red for hot)
+hud.help.debug = {0}: debug menu (cheats for testing)
 hud.help.manage = {0}: stockpile zones · {1}: workstations · click a zone or station: its settings · {2}: work priorities
 # {0} = tool name
 hud.tool = Tool: {0} · Left click/drag: apply · Esc: back

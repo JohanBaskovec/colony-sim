@@ -95,6 +95,7 @@ simulation:
 | `gather_zone_panel` | Inspector of the selected gathering zone (priority, a check box per resource with how many are available, mode, target, progress, fully grown option, warnings) |
 | `station_panel` | Inspector of the selected workstation (bills, warnings) |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
+| `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`)                    |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
 | `localization` | Discovers `.lang` files, selects the language, loads catalogs           |
 
@@ -803,6 +804,30 @@ flint with the patch's share, up to 60 %. The spawn makes sure a tile with at
 least `GAME_SPAWN_FLINT_STONES` flint lies near the settlers, laying a small
 patch otherwise. The tile inspector shows the stones left in the ground.
 
+### Debug cheats
+
+`Game.debug` (`GameDebug`) holds cheats for testing, switched from the debug
+menu (F4, `game/debug_panel.c`) through `game_set_instant_build()` and
+`game_set_free_crafts()`. They are simulation state: `game_hash()` includes
+them, but only while one is on, so that hashes stay those of a game without
+them (`bench_simulation` hashes are unchanged).
+
+- **Instant build**: at the start of each tick, `game_tick()` finishes every
+  site it can: plants on its tiles are cleared (`gather_clear_plant()`), then
+  `construction_finish_now()` delivers the missing materials (standard
+  grade) and does all the work at `GAME_DEBUG_BUILD_LEVEL` without drawing
+  from the RNG (average grade). Zones leave the tiles it built on, as after a
+  builder's work. A roof without support and a station that cannot be placed
+  wait; sites are finished in list order, so walls placed with their roof
+  hold it up in the same tick when they come first.
+- **Free crafts**: `ColonistContext.free_crafts` lets `choose_bill()` skip
+  the input check (`bill_free_input()`: the bill must allow some input type)
+  and `plan_station_job()` skip fetching it; at the station,
+  `workstation_start_free_craft()` starts the craft with the recipe's count of
+  the first allowed input type, standard grade at least. `Workstation.free_input`
+  marks it so that removing the station or the bill drops nothing. Tools, the
+  recipe's knowledge and a burning fire are still needed.
+
 ## Pathfinding
 
 - 8-directional grid, cost of entering a tile = `map_move_cost()` (× √2
@@ -933,7 +958,7 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 
 UI state that is not part of the simulation (camera, selection, selected
 stockpile, gathering zone, workstation or structure, active tool, drag
-rectangle, debug toggle) lives in `App`. Escape and a right click on the map
+rectangle, debug overlay and menu toggles) lives in `App`. Escape and a right click on the map
 (released where it was pressed: otherwise it pans) step back one level
 (`step_back()`). Every keyboard control is a physical position (`APP_KEY_*`
 scancodes in `game/app.h`): the controls are laid out the same on any

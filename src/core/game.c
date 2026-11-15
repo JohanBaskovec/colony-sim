@@ -159,6 +159,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .colonist_pool = &game->colonist_pool,
         .teach = game->teach,
         .temperatures = &game->temperatures,
+        .free_crafts = game->debug.free_crafts,
     };
     return context;
 }
@@ -591,9 +592,57 @@ static void heat_from_hearths(Game *game)
     }
 }
 
+/* GameDebug.instant_build: every site that can be finished is, plants in
+ * the way cleared first. What it built leaves zones, as a builder's work
+ * does. */
+static void finish_constructions_now(Game *game)
+{
+    for (int index = 0; index < CONSTRUCTION_MAX; index++) {
+        const ConstructionSite *site = construction_get(&game->constructions, index);
+        if (site == NULL) {
+            continue;
+        }
+        ConstructionSite done = *site; /* Gone from the list once built. */
+        int length = construction_length(&done);
+        for (int part = 0; !structure_is_roof((StructureType)done.type) && part < length;
+             part++) {
+            int x, y;
+            construction_tile(&done, part, &x, &y);
+            if (gather_clear_work(&game->map, x, y) > 0.0f) {
+                gather_clear_plant(&game->map, &game->items, x, y, GAME_DEBUG_BUILD_LEVEL, NULL);
+            }
+        }
+        if (!construction_finish_now(&game->constructions, &game->map, &game->items,
+                                     &game->workstations, index, GAME_DEBUG_BUILD_LEVEL, NULL)) {
+            continue;
+        }
+        bool takes_tiles = construction_workstation(&done) != WORKSTATION_TYPE_COUNT ||
+                           structure_blocks((StructureType)done.type);
+        for (int part = 0; takes_tiles && part < length; part++) {
+            int x, y;
+            construction_tile(&done, part, &x, &y);
+            stockpiles_remove_rect(&game->stockpiles, x, y, x, y);
+            gather_zones_remove_rect(&game->gather_zones, x, y, x, y);
+        }
+    }
+}
+
+void game_set_instant_build(Game *game, bool on)
+{
+    game->debug.instant_build = on;
+}
+
+void game_set_free_crafts(Game *game, bool on)
+{
+    game->debug.free_crafts = on;
+}
+
 void game_tick(Game *game)
 {
     game->clock.tick++;
+    if (game->debug.instant_build) {
+        finish_constructions_now(game);
+    }
     regions_update(&game->regions, &game->map); /* Nothing to do unless the map changed. */
     if (stock_counted(game)) {
         game_update_stock(game);
@@ -656,6 +705,10 @@ uint64_t game_hash(const Game *game)
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
     hash = hash_fnv1a64(hash, game->teach, sizeof(game->teach));
     hash = temperatures_hash(&game->temperatures, hash);
+    if (game->debug.instant_build || game->debug.free_crafts) {
+        uint8_t debug[2] = {game->debug.instant_build, game->debug.free_crafts};
+        hash = hash_fnv1a64(hash, debug, sizeof(debug));
+    }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
         if (entity_id_is_none(id)) {
@@ -1014,6 +1067,9 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
     if (def == NULL) {
         return false;
+    }
+    if (game->debug.free_crafts) {
+        return bill_free_input(bill).count > 0;
     }
     /* Tools nobody carries yet will be taken from what lies around. */
     ItemTypeMask tools[RECIPE_TOOL_MAX] = {0};

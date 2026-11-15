@@ -53,6 +53,23 @@
 /* Radius (in tiles) around a world point within which a colonist can be picked. */
 #define GAME_PICK_RADIUS 0.6f
 
+/* Level of the builder behind debug instant construction (a standard grade,
+ * on average). */
+#define GAME_DEBUG_BUILD_LEVEL 65.0
+
+/* Cheats for testing, set from the debug menu. They change the simulation,
+ * so game_hash() includes them (only when one is on, so that hashes stay as
+ * they were without them). */
+typedef struct GameDebug {
+    /* Every construction site is finished at the start of each tick, for
+     * free: no materials, no work, no builder. Plants in the way are cleared;
+     * a roof without support and a workstation that cannot be placed wait. */
+    bool instant_build;
+    /* Crafts need no input: crafters make it out of nothing (tools, the
+     * recipe's knowledge and a burning fire are still needed). */
+    bool free_crafts;
+} GameDebug;
+
 typedef struct NewGameParams {
     WorldGenParams world;
     int colonist_count; /* Starting colonists, placed near the map center. */
@@ -98,6 +115,7 @@ typedef struct Game {
     bool knowledge_counted;
     /* Knowledges the player wants told about at fireside stories. */
     bool teach[KNOWLEDGE_COUNT];
+    GameDebug debug;
 } Game;
 
 void game_default_params(NewGameParams *params);
@@ -123,6 +141,10 @@ void game_tick(Game *game);
 
 /* Content hash of the whole simulation state (determinism checks). */
 uint64_t game_hash(const Game *game);
+
+/* Turns a cheat of GameDebug on or off. */
+void game_set_instant_build(Game *game, bool on);
+void game_set_free_crafts(Game *game, bool on);
 
 /* ---- Colonists ----------------------------------------------------------- */
 
@@ -233,7 +255,8 @@ bool game_bill_has_worker(const Game *game, const Bill *bill);
 ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe);
 
 /* Whether enough of some input type a bill allows lies in the colony, once
- * the tools nobody carries have been taken from it (see bill_has_input()). */
+ * the tools nobody carries have been taken from it (see bill_has_input()).
+ * With GameDebug.free_crafts: whether the bill allows some input. */
 bool game_bill_has_input(const Game *game, const Bill *bill);
 
 /* Whether a workstation may be placed on a tile: not on a structure, where

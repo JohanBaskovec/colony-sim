@@ -1,0 +1,52 @@
+#include "game/debug_panel.h"
+
+#include "core/i18n.h"
+#include "game/ui_layout.h"
+
+/* What the player clicked in the drawing pass, applied after it. */
+typedef struct DebugRows {
+    const GameDebug *debug;
+    bool toggle_instant_build;
+    bool toggle_free_crafts;
+} DebugRows;
+
+/* A check box on its own row. Returns whether it was clicked. */
+static bool checkbox_row(UiLayout *layout, const char *label, bool checked)
+{
+    float width = ui_checkbox_width(layout->ui, label);
+    ui_layout_measure(layout, width);
+    bool clicked = layout->draw && ui_checkbox(layout->ui, layout->x, layout->y, width,
+                                               checked ? UI_CHECKED : UI_UNCHECKED, label);
+    layout->y += layout->row;
+    return clicked;
+}
+
+static void debug_rows(UiLayout *layout, void *userdata)
+{
+    DebugRows *rows = userdata;
+    rows->toggle_instant_build |=
+        checkbox_row(layout, tr("debug.instant_build"), rows->debug->instant_build);
+    rows->toggle_free_crafts |=
+        checkbox_row(layout, tr("debug.free_crafts"), rows->debug->free_crafts);
+}
+
+void debug_panel_draw(App *app)
+{
+    if (!app->show_debug_menu) {
+        return;
+    }
+    Game *game = &app->game;
+    DebugRows rows = {.debug = &game->debug};
+    bool open = true;
+    ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER,
+                     debug_rows, &rows, &open);
+    if (rows.toggle_instant_build) {
+        game_set_instant_build(game, !game->debug.instant_build);
+    }
+    if (rows.toggle_free_crafts) {
+        game_set_free_crafts(game, !game->debug.free_crafts);
+    }
+    if (!open) {
+        app->show_debug_menu = false;
+    }
+}
