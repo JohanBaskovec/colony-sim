@@ -313,6 +313,24 @@ static void test_instant_deconstruct(void)
     game_shutdown(&game);
 }
 
+static void test_weather_cheats(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    CHECK_EQ_INT(game.weather.type, WEATHER_CLEAR);
+    WeatherType order[] = {WEATHER_CLOUDY, WEATHER_FOG, WEATHER_RAIN, WEATHER_STORM,
+                           WEATHER_CLEAR};
+    for (int i = 0; i < 5; i++) {
+        game_debug_next_weather(&game);
+        CHECK_EQ_INT(game.weather.type, order[i]);
+    }
+    float before = game_outdoor_temperature(&game);
+    game_debug_cold_snap(&game);
+    CHECK_NEAR(game.weather.spell, -WEATHER_SPELL_MAX, 1e-6f);
+    CHECK(game_outdoor_temperature(&game) < before);
+    game_shutdown(&game);
+}
+
 /* The cheats count in the hash only while on: a game where they were never
  * touched hashes as before. */
 static void test_hash(void)
@@ -348,6 +366,7 @@ int main(void)
     RUN_TEST(test_free_input_is_not_given_back);
     RUN_TEST(test_no_tools);
     RUN_TEST(test_instant_deconstruct);
+    RUN_TEST(test_weather_cheats);
     RUN_TEST(test_hash);
     return test_summary();
 }

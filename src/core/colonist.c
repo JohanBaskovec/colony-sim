@@ -716,6 +716,7 @@ typedef struct FoodSearch {
     const Items *items;
     const Reservations *reservations;
     const Temperatures *temperatures;
+    bool rains; /* Rain or snow falls (food out in it rots faster). */
     uint8_t self;
 } FoodSearch;
 
@@ -735,8 +736,8 @@ static bool is_free_spoiling_food(const Map *map, int x, int y, void *userdata)
     if (!item_is_food((ItemType)stack.type) || !item_rots((ItemType)stack.type)) {
         return false;
     }
-    float hours =
-        item_stack_rot_hours(stack, temperature_rot_rate(search->temperatures, map, x, y));
+    float hours = item_stack_rot_hours(
+        stack, temperature_rot_rate(search->temperatures, map, x, y, search->rains));
     return hours >= 0.0f && hours < COLONIST_SPOILING_FOOD_HOURS &&
            !reservations_taken_by_other(search->reservations, RESERVATION_FOOD,
                                         (TilePos){(int16_t)x, (int16_t)y}, search->self);
@@ -817,7 +818,7 @@ static bool try_satisfy(Colonist *colonist, const ColonistContext *context, Need
     }
     TilePos found;
     FoodSearch food = {context->items, context->reservations, context->temperatures,
-                       context->worker_id};
+                       context->wetting > 0.0f, context->worker_id};
     /* No water anywhere the colonist can walk to, no food within reach: the
      * search would explore everything within its cost limit for nothing. */
     bool hopeless = drink ? !regions_has_drinking_spot(context->regions, context->map,
@@ -945,6 +946,35 @@ static float felt_temperature(const ColonistContext *context, int x, int y)
                                     y);
 }
 
+/* Degrees colder a settler feels for being wet. */
+static float wet_chill(const Colonist *colonist)
+{
+    return COLONIST_WET_CHILL * colonist->wetness;
+}
+
+/* Temperature the colonist feels where it is, wet or not. */
+static float felt_here(const Colonist *colonist, const ColonistContext *context)
+{
+    return felt_temperature(context, colonist->x, colonist->y) - wet_chill(colonist);
+}
+
+/* Out in the rain or snow, the colonist gets wet; elsewhere it dries, fast
+ * beside a fire. */
+static void update_wetness(Colonist *colonist, const ColonistContext *context)
+{
+    bool exposed = context->wetting > 0.0f &&
+                   temperature_cover(context->map, colonist->x, colonist->y) ==
+                       TEMPERATURE_COVER_OPEN;
+    if (exposed) {
+        colonist->wetness = fminf(1.0f, colonist->wetness + context->wetting / TICKS_PER_HOUR);
+    } else if (colonist->wetness > 0.0f) {
+        bool warm =
+            felt_temperature(context, colonist->x, colonist->y) >= COLONIST_DRY_WARM_CELSIUS;
+        float rate = warm ? COLONIST_DRY_WARM_PER_HOUR : COLONIST_DRY_PER_HOUR;
+        colonist->wetness = fmaxf(0.0f, colonist->wetness - rate / TICKS_PER_HOUR);
+    }
+}
+
 static bool comfortable_to_sleep(float celsius)
 {
     return celsius >= COLONIST_COLD_SLEEP_BELOW && celsius <= COLONIST_HOT_SLEEP_ABOVE;
@@ -978,8 +1008,7 @@ static bool any_fire_burning(const ColonistContext *context)
  * burning fire that feels right, if there is one. Returns whether it goes. */
 static bool go_to_warm_spot(Colonist *colonist, const ColonistContext *context)
 {
-    if (context->temperatures == NULL ||
-        comfortable_to_sleep(felt_temperature(context, colonist->x, colonist->y)) ||
+    if (context->temperatures == NULL || comfortable_to_sleep(felt_here(colonist, context)) ||
         !any_fire_burning(context)) {
         return false;
     }
@@ -1001,8 +1030,7 @@ static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context)
     if (colonist_is_moving(colonist) || context->temperatures == NULL ||
         !search_allowed(colonist, SEARCH_WARM_SPOT) ||
         structure_is_bed(map_structure(context->map, colonist->x, colonist->y)) ||
-        comfortable_to_sleep(felt_temperature(context, colonist->x, colonist->y)) ||
-        !any_fire_burning(context)) {
+        comfortable_to_sleep(felt_here(colonist, context)) || !any_fire_burning(context)) {
         return;
     }
     colonist->search_cooldown[SEARCH_WARM_SPOT] = COLONIST_WARM_SPOT_CHECK_TICKS;
@@ -1022,8 +1050,7 @@ static float rest_factor(const Colonist *colonist, const ColonistContext *contex
     float factor =
         structure_is_bed(bed) ? structure_def(bed)->rest_factor : COLONIST_GROUND_REST_FACTOR;
     if (context->temperatures != NULL) {
-        factor *= colonist_sleep_temperature_factor(
-            felt_temperature(context, colonist->x, colonist->y));
+        factor *= colonist_sleep_temperature_factor(felt_here(colonist, context));
     }
     return factor;
 }
@@ -3151,6 +3178,7 @@ bool colonist_can_light(const Colonist *colonist)
 static bool hearth_to_light(const ColonistContext *context, const Workstation *station)
 {
     return station != NULL && hearth_needs_lighting(station) &&
+           !hearth_rained_on(station, context->map, context->wetting) &&
            !reservations_taken_by_other(context->reservations, RESERVATION_FIRE,
                                         station_tile(station), context->worker_id);
 }
@@ -3245,6 +3273,7 @@ static bool light_still_valid(const Colonist *colonist, const ColonistContext *c
 {
     const Workstation *station = job_station(colonist, context);
     return station != NULL && hearth_needs_lighting(station) &&
+           !hearth_rained_on(station, context->map, context->wetting) &&
            reservations_owner(context->reservations, RESERVATION_FIRE, station_tile(station)) ==
                context->worker_id &&
            colonist->work_priorities[WORK_FIRE] != WORK_PRIORITY_DISABLED &&
@@ -3602,6 +3631,7 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
     if (colonist->ember_ticks > 0) {
         colonist->ember_ticks--;
     }
+    update_wetness(colonist, context);
     if (colonist->chat_ticks > 0) {
         /* A chat ends early when the colonist gets busy. */
         colonist->chat_ticks = colonist_can_chat(colonist) ? colonist->chat_ticks - 1 : 0;

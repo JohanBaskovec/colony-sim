@@ -27,9 +27,12 @@
 #define SPAWN_PLANT_SPOT_CHANCE 0.08f
 /* Mushrooms (docs/KNOWLEDGE.md §7.3): each day of their season, a patch
  * appears with MUSHROOM_CHANCE on open soil within MUSHROOM_TREE_RANGE tiles
- * of a mature tree, and an existing one goes with MUSHROOM_VANISH_CHANCE
- * (five days on average). */
-#define MUSHROOM_CHANCE 0.004f
+ * of a mature tree, ×(1 + recent rain / MUSHROOM_RAIN_HOURS), at most
+ * ×MUSHROOM_RAIN_MAX after much rain (Weather.recent_rain), and an existing
+ * one goes with MUSHROOM_VANISH_CHANCE (five days on average). */
+#define MUSHROOM_CHANCE 0.0015f
+#define MUSHROOM_RAIN_HOURS 4.0f
+#define MUSHROOM_RAIN_MAX 4.0f
 #define MUSHROOM_VANISH_CHANCE 0.2f
 #define MUSHROOM_TREE_RANGE 2
 /* Flint patch laid for the first settlers when there is none near them:
@@ -166,6 +169,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .colonist_pool = &game->colonist_pool,
         .teach = game->teach,
         .temperatures = &game->temperatures,
+        .wetting = weather_wetting(&game->weather, game->clock.tick),
         .free_crafts = game->debug.free_crafts,
         .no_tools = game->debug.no_tools,
     };
@@ -452,7 +456,9 @@ bool game_init(Game *game, const NewGameParams *params)
     game_clock_init(&game->clock);
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
     roof_watch_init(&game->roof_watch, &game->map);
-    if (!temperatures_init(&game->temperatures, &game->map, game->clock.tick)) {
+    weather_init(&game->weather, game->seed, game->clock.tick);
+    if (!temperatures_init(&game->temperatures, &game->map,
+                           weather_outdoor(&game->weather, game->clock.tick))) {
         game_shutdown(game);
         return false;
     }
@@ -538,6 +544,13 @@ static float world_roll(uint64_t seed, size_t tile, int day, uint32_t salt)
     return (float)(hash >> 40) / (float)(1u << 24);
 }
 
+/* Chance that a mushroom patch appears on a tile today: more after rain. */
+static float mushroom_chance(const Weather *weather)
+{
+    return MUSHROOM_CHANCE *
+           fminf(1.0f + weather->recent_rain / MUSHROOM_RAIN_HOURS, MUSHROOM_RAIN_MAX);
+}
+
 /* Once a day per tile: mushroom patches come and go under the trees. */
 static void mushrooms_day(Game *game, size_t index, int day)
 {
@@ -551,7 +564,7 @@ static void mushrooms_day(Game *game, size_t index, int day)
     }
     if ((plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
         !plant_days_contain(plant_def(PLANT_MUSHROOMS)->food_days, day) ||
-        world_roll(game->seed, index, day, 0) >= MUSHROOM_CHANCE) {
+        world_roll(game->seed, index, day, 0) >= mushroom_chance(&game->weather)) {
         return;
     }
     int x = (int)(index % (size_t)map->width), y = (int)(index / (size_t)map->width);
@@ -597,15 +610,26 @@ static void update_plants(Game *game)
 
 float game_item_rot_rate(const Game *game, int x, int y)
 {
-    return temperature_rot_rate(&game->temperatures, &game->map, x, y);
+    bool rains = weather_wetting(&game->weather, game->clock.tick) > 0.0f;
+    return temperature_rot_rate(&game->temperatures, &game->map, x, y, rains);
 }
 
-/* ItemRotRateFn for items_advance(). */
-static float tile_rot_rate(const void *context, size_t tile)
+float game_outdoor_temperature(const Game *game)
+{
+    return weather_outdoor(&game->weather, game->clock.tick);
+}
+
+/* ItemConditionsFn for items_advance(): out in the rain, food rots faster
+ * and nothing dries. */
+static ItemConditions tile_conditions(const void *context, size_t tile)
 {
     const Game *game = context;
     int width = game->map.width;
-    return game_item_rot_rate(game, (int)(tile % (size_t)width), (int)(tile / (size_t)width));
+    int x = (int)(tile % (size_t)width), y = (int)(tile / (size_t)width);
+    bool rains = weather_wetting(&game->weather, game->clock.tick) > 0.0f;
+    bool open = temperature_cover(&game->map, x, y) == TEMPERATURE_COVER_OPEN;
+    return (ItemConditions){temperature_rot_rate(&game->temperatures, &game->map, x, y, rains),
+                            !(rains && open)};
 }
 
 /* Items lying on the ground change over time (fresh grass dries, food
@@ -617,7 +641,7 @@ static void update_items(Game *game)
     size_t begin = (size_t)(phase * count / GAME_ITEM_UPDATE_INTERVAL);
     size_t end = (size_t)((phase + 1) * count / GAME_ITEM_UPDATE_INTERVAL);
     items_advance(&game->items, begin, end, GAME_ITEM_UPDATE_INTERVAL / TICKS_PER_HOUR,
-                  tile_rot_rate, game);
+                  tile_conditions, game);
 }
 
 static void update_colonists(Game *game)
@@ -712,6 +736,16 @@ void game_set_instant_deconstruct(Game *game, bool on)
     game->debug.instant_deconstruct = on;
 }
 
+void game_debug_next_weather(Game *game)
+{
+    game->weather.type = (uint8_t)((game->weather.type + 1u) % WEATHER_TYPE_COUNT);
+}
+
+void game_debug_cold_snap(Game *game)
+{
+    game->weather.spell = -WEATHER_SPELL_MAX;
+}
+
 /* GameDebug.instant_deconstruct: every order to take a structure apart or a
  * roof down is carried out, as a settler's work would (a refresh site on a
  * structure taken apart goes too, its materials dropped). */
@@ -749,6 +783,7 @@ static void deconstruct_now(Game *game)
 void game_tick(Game *game)
 {
     game->clock.tick++;
+    weather_tick(&game->weather, game->clock.tick);
     if (game->debug.instant_deconstruct) {
         deconstruct_now(game);
     }
@@ -765,9 +800,11 @@ void game_tick(Game *game)
         gather_zones_plants_changed(&game->gather_zones);
     }
     update_items(game);
-    hearths_burn(&game->workstations);
+    hearths_burn(&game->workstations, &game->map,
+                 weather_wetting(&game->weather, game->clock.tick));
     heat_from_hearths(game);
-    temperatures_tick(&game->temperatures, &game->map, game->clock.tick);
+    temperatures_tick(&game->temperatures, &game->map, game->clock.tick,
+                      weather_outdoor(&game->weather, game->clock.tick));
     if (game->clock.tick % TICKS_PER_DAY == 0) {
         /* Bedding packs down: worn beds get a refresh site, or fall apart. */
         constructions_wear_day(&game->constructions, &game->map, &game->items);
@@ -823,6 +860,7 @@ uint64_t game_hash(const Game *game)
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
     hash = hash_fnv1a64(hash, game->teach, sizeof(game->teach));
     hash = temperatures_hash(&game->temperatures, hash);
+    hash = weather_hash(&game->weather, hash);
     if (game->debug.instant_build || game->debug.free_crafts || game->debug.no_tools ||
         game->debug.instant_deconstruct) {
         uint8_t debug[4] = {game->debug.instant_build, game->debug.free_crafts,
@@ -843,6 +881,7 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
         hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
+        hash = hash_fnv1a64(hash, &c->wetness, sizeof(c->wetness));
         hash = hash_fnv1a64(hash, c->work_priorities, sizeof(c->work_priorities));
         hash = hash_fnv1a64(hash, c->knowledge, sizeof(c->knowledge));
         hash = hash_fnv1a64(hash, c->knowledge_peak, sizeof(c->knowledge_peak));

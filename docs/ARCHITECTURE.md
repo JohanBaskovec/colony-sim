@@ -68,6 +68,7 @@ simulation:
 | `roof`       | Roofs falling in when their last support goes (half the materials drop), checked around what the map logged as changed |
 | `room`       | Rooms: areas closed by walls, doors and rock, and whether roofs cover them (a cache) |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
+| `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
 | `map`        | Tile layers (terrain, rock, plants with their branch, twig and food stocks, cobbles and flint in the ground), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
@@ -196,10 +197,13 @@ the drying hours); the stack is gone when its hit points run out, so a
 poorly gathered (damaged) stack spoils sooner. The speed comes from the
 tile: `item_rot_rate()` doubles every 10 °C above 15 °C (at most ×4),
 halves every 10 °C below, stops at or below 0 °C (frozen), ×0.75 under a
-built or natural roof. `items_advance()` asks it through a callback
-(`ItemRotRateFn`), so that `item` does not depend on the temperature layer;
-the game passes `game_item_rot_rate()`, which the tile inspector also uses
-for its estimate. Items in hands or in a workstation's input do not rot.
+built or natural roof, ×1.5 under the open sky while rain or snow falls.
+`items_advance()` asks for the conditions of each tile through a callback
+(`ItemConditionsFn`: the rot rate, and whether what dries can dry: not out
+in the rain), so that `item` depends neither on the temperature layer nor
+on the weather; the game passes `tile_conditions()`, and the tile
+inspector uses `game_item_rot_rate()` for its estimate. Items in hands or
+in a workstation's input do not rot.
 
 Every item has a **quality grade** (`ItemQuality`: crude, rough, standard,
 fine, superb) and **hit points** (`hit_points`, up to `ItemDef.max_hit_points`).
@@ -659,8 +663,10 @@ tick.
 
 **Temperature** (`core/temperature.h`, `Game.temperatures`, part of
 `game_hash()`): `temperature_outdoor()` is a function of the tick (seasons
-blended with a cosine between their middles, a daily swing coldest at 5:00
-and warmest at 15:00); weather will add to it. Each tile holds a
+blended with a cosine between their middles, `temperature_season_mean()`,
+plus a daily swing coldest at 5:00 and warmest at 15:00,
+`temperature_daily_swing()`); the weather changes it (`weather_outdoor()`,
+below), and `temperatures_tick()` takes the result. Each tile holds a
 temperature; every tick `temperatures_tick()` updates one band of rows in
 place, a whole pass every `TEMPERATURE_SWEEP_TICKS` (100), explicitly: a
 tile moves toward its four neighbors at the lower conductance of the two
@@ -694,6 +700,40 @@ with `RESERVATION_BED`), and asleep on the ground it checks again every
 fires burn low. Nothing of this runs while no fire burns. The frontend shows
 the air and felt temperatures in the inspectors and a felt temperature view
 (`render_temperature()`, key H).
+
+**Weather** (`core/weather.h`, `Game.weather`, part of `game_hash()`): the
+sky changes every `WEATHER_PERIOD_HOURS` (6): it stays with
+`WEATHER_PERSISTENCE` (0.4), else a sky is drawn from the season's odds
+(`WEATHER_SEASON_ODDS`: summer the sunniest and stormiest, autumn the
+foggiest), moving one step at most along clear → cloudy (or fog) → rain →
+storm (`weather_next()`, a pure function); fog only forms in periods
+starting before noon. Rain and storms fall as snow at or below 1 °C
+(`weather_precipitation()`). Each day a warm or cold spell drifts
+(`Weather.spell`: keeps 0.75 of itself plus a change of about ±2 °C,
+within ±8). The outdoor air is the season's mean plus the spell plus the
+sky's offset (rain −2 °C, storm −4) plus the daily swing times the sky's
+factor (clear ×1.3, cloudy ×0.6, rain ×0.4...). Every hour the snow cover
+of open ground grows while it snows and melts above 0 °C (faster in the
+rain), and `recent_rain` keeps 0.96 of itself plus one per hour of rain.
+Draws come from `weather_roll()`, a hash of the seed, the period or day and
+a salt, never from `game->rng`: the weather does not depend on what the
+settlers do. The game starts on a clear sky.
+
+What it changes: what falls wets settlers under the open sky
+(`weather_wetting()`, 1 an hour in the rain, 2 in a storm, 0.25 in the snow,
+into `ColonistContext.wetting`; `Colonist.wetness` dries by 0.25 an hour, 1
+where it feels 20 °C or more), and a wet settler feels up to
+`COLONIST_WET_CHILL` (8 °C) colder, which counts for sleep; settlers do not
+run for shelter (that comes with hypothermia). A burning hearth under the
+open sky soaks up the same rate (`Workstation.soaked`) and goes out at
+`HEARTH_SOAKED_OUT` (2: two hours of rain), its fuel kept; nobody lights a
+hearth rain or snow falls on (`hearth_rained_on()`). Food out in the rain
+rots ×1.5 and fresh grass does not dry (`ItemConditions`). Mushrooms come
+×(1 + recent rain / 4), at most ×4. The frontend shows the sky and snow
+cover in the HUD, how wet a settler is, a hearth soaking, the snow cover on
+open ground (`render_snow_cover()`), falling rain and snow, fog and
+lightning over the view (`render_weather()`, animated by real time), and
+clouds dim the daylight (`weather_light()`).
 
 **Beds**: a colonist going to sleep walks to its own bed (`core/bed.h`),
 else to the nearest free bed, which becomes its own (`RESERVATION_BED`,
@@ -897,6 +937,9 @@ them (`bench_simulation` hashes are unchanged).
   (`designation_add_work()` with all the work needed: half the materials
   back), removing the refresh site of a structure taken apart; roofs left
   without support fall in later in the same tick.
+- **Weather**: `game_debug_next_weather()` switches to the next sky at once,
+  `game_debug_cold_snap()` sets the coldest spell (until the next day's
+  draw). They change `Game.weather` directly (always in the hash).
 
 ## Pathfinding
 
@@ -966,6 +1009,8 @@ the cheap answer is a scan that proves nothing is there.
 - `Rng` (PCG32) instances are seeded explicitly. World generation uses its own
   stream; the simulation uses `game->rng`. New systems that need randomness
   either use `game->rng` (in a fixed order) or their own derived stream.
+- The weather (`weather_roll()`) and mushrooms (`world_roll()`) come from
+  hashes of the seed and the period, day or tile, never from `game->rng`.
 - Colonist looks (`appearance_roll()`) come from a stream derived from the
   game seed and the colonist's handle, never from `game->rng`: adding a hair
   style or changing the odds must not change what the simulation does (the

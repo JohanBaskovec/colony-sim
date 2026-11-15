@@ -325,6 +325,104 @@ static SDL_FRect tile_rect(const Camera *camera, int x, int y)
     return rect;
 }
 
+/* Snow lying on open ground: a white veil over each tile under the open
+ * sky (not on water, rock or under a roof), thicker as the cover grows. */
+void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    float snow = game->weather.snow;
+    if (snow <= 0.0f) {
+        return;
+    }
+    const Map *map = &game->map;
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    SDL_SetRenderDrawColor(renderer, 240, 244, 250, (Uint8)(clampf(snow, 0.0f, 1.0f) * 200.0f));
+    for (int y = visible.y0; y < visible.y1; y++) {
+        int run = -1; /* First tile of the current run of snowy tiles. */
+        for (int x = visible.x0; x <= visible.x1; x++) {
+            bool snowy = x < visible.x1 && !map_is_water(map, x, y) &&
+                         map->rock[map_index(map, x, y)] == ROCK_NONE &&
+                         temperature_cover(map, x, y) == TEMPERATURE_COVER_OPEN;
+            if (snowy && run < 0) {
+                run = x;
+            } else if (!snowy && run >= 0) {
+                SDL_FRect first = tile_rect(camera, run, y);
+                SDL_FRect last = tile_rect(camera, x - 1, y);
+                SDL_FRect rect = {first.x, first.y, last.x + last.w - first.x, first.h};
+                SDL_RenderFillRect(renderer, &rect);
+                run = -1;
+            }
+        }
+    }
+}
+
+/* A number in [0, 1) from an index and a salt, for falling drops. */
+static float particle_roll(uint32_t index, uint32_t salt)
+{
+    uint32_t h = index * 0x9e3779b1u ^ salt * 0x85ebca77u;
+    h ^= h >> 15;
+    h *= 0x2c1b3c6du;
+    h ^= h >> 12;
+    return (float)(h >> 8) / (float)(1u << 24);
+}
+
+void render_weather(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                    Uint64 now_ms)
+{
+    WeatherType type = (WeatherType)game->weather.type;
+    float width = camera->viewport_width, height = camera->viewport_height;
+    float seconds = (float)(now_ms % 600000u) / 1000.0f;
+    if (type == WEATHER_FOG) {
+        SDL_SetRenderDrawColor(renderer, 205, 210, 215, 90);
+        SDL_FRect screen = {0.0f, 0.0f, width, height};
+        SDL_RenderFillRect(renderer, &screen);
+        return;
+    }
+    Precipitation falling = weather_precipitation(&game->weather, game->clock.tick);
+    if (falling == PRECIPITATION_NONE) {
+        return;
+    }
+    bool storm = type == WEATHER_STORM;
+    bool snow = falling == PRECIPITATION_SNOW;
+    /* As many drops on any screen: so many per million pixels. */
+    float density = snow ? 300.0f : storm ? 600.0f : 300.0f;
+    int count = (int)(density * width * height / 1.0e6f);
+    float speed = snow ? 60.0f : storm ? 1100.0f : 800.0f; /* Pixels a second. */
+    float wind = snow ? 15.0f : storm ? 0.35f * speed : 0.08f * speed;
+    float length = snow ? 0.0f : storm ? 22.0f : 16.0f;
+    if (snow) {
+        SDL_SetRenderDrawColor(renderer, 245, 248, 255, 220);
+    } else {
+        SDL_SetRenderDrawColor(renderer, 170, 190, 220, 150);
+    }
+    for (int i = 0; i < count; i++) {
+        float fall = (height + length) * (0.6f + 0.4f * particle_roll((uint32_t)i, 3));
+        float y = fmodf(particle_roll((uint32_t)i, 1) * (height + length) +
+                            seconds * speed * (fall / (height + length)),
+                        height + length) -
+                  length;
+        float drift = wind * (y + length) / speed;
+        float x = fmodf(particle_roll((uint32_t)i, 2) * width + drift, width);
+        if (snow) {
+            x += 6.0f * sinf(seconds * 1.5f + (float)i); /* Flakes sway. */
+            SDL_FRect flake = {x, y, 3.0f, 3.0f};
+            SDL_RenderFillRect(renderer, &flake);
+        } else {
+            float slant = length * wind / speed;
+            SDL_RenderLine(renderer, x, y, x + slant, y + length);
+        }
+    }
+    /* Now and then, lightning: one flash somewhere in each 7 second window. */
+    if (storm && !snow) {
+        uint32_t window = (uint32_t)(now_ms / 7000u);
+        Uint64 flash = (Uint64)window * 7000u + (Uint64)(particle_roll(window, 4) * 6800.0f);
+        if (now_ms >= flash && now_ms < flash + 120u) {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 110);
+            SDL_FRect screen = {0.0f, 0.0f, width, height};
+            SDL_RenderFillRect(renderer, &screen);
+        }
+    }
+}
+
 /* Rectangle outline `thickness` pixels wide, drawn inwards. */
 static void outline(SDL_Renderer *renderer, SDL_FRect rect, float thickness, SDL_Color color)
 {
@@ -1325,7 +1423,9 @@ void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *
 
 void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
-    float darkness = 1.0f - clampf(game_daylight(game->clock.tick), 0.0f, 1.0f);
+    /* Clouds and rain dim the day (and the night a little more). */
+    float light = game_daylight(game->clock.tick) * weather_light(&game->weather);
+    float darkness = 1.0f - clampf(light, 0.0f, 1.0f);
     if (darkness <= 0.0f) {
         return;
     }

@@ -35,6 +35,7 @@ set(COLONY_UNIT_TESTS
     test_temperature
     test_tool
     test_util
+    test_weather
     test_structures
     test_work
     test_workstation

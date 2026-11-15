@@ -17,8 +17,16 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera);
 /* Dark spots on dirty tiles. */
 void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera);
 
-/* Darkens the screen according to the light level of the hour, less around
- * burning hearths, which also glow warm. */
+/* Snow lying on open ground (Weather.snow), under everything on it. */
+void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+
+/* What falls from the sky (rain, snow, lightning in a storm) or fog, over
+ * the whole view; `now_ms`: real time, which animates it. */
+void render_weather(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                    Uint64 now_ms);
+
+/* Darkens the screen according to the light level of the hour and the
+ * clouds, less around burning hearths, which also glow warm. */
 void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
 /* The temperature felt on each visible tile (the warmth of fires

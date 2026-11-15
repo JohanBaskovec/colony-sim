@@ -25,6 +25,7 @@
 #include "core/roof.h"
 #include "core/stockpile.h"
 #include "core/temperature.h"
+#include "core/weather.h"
 #include "core/workstation.h"
 #include "core/worldgen.h"
 
@@ -108,6 +109,7 @@ typedef struct Game {
      * asked for (game_rooms()), not part of game_hash(). */
     Rooms rooms;
     Temperatures temperatures; /* Per tile, warmed by burning hearths. */
+    Weather weather; /* The sky, warm and cold spells, snow on the ground. */
     /* Where roofs were last checked for support (core/roof.h): derived from
      * the map, not part of game_hash(). */
     RoofWatch roof_watch;
@@ -161,6 +163,10 @@ void game_set_instant_build(Game *game, bool on);
 void game_set_free_crafts(Game *game, bool on);
 void game_set_no_tools(Game *game, bool on);
 void game_set_instant_deconstruct(Game *game, bool on);
+/* Debug: the next sky at once (clear → cloudy → fog → rain → storm), and a
+ * cold snap (the coldest spell, until the next day's draw). */
+void game_debug_next_weather(Game *game);
+void game_debug_cold_snap(Game *game);
 
 /* ---- Colonists ----------------------------------------------------------- */
 
@@ -190,8 +196,12 @@ int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float
 bool game_tile_has_colonist(const Game *game, int x, int y);
 
 /* Speed of rot of food lying on a tile (item_rot_rate() at the tile's
- * temperature, under its roof if any); 0 out of bounds. */
+ * temperature, under its roof if any, faster out in the rain); 0 out of
+ * bounds. */
 float game_item_rot_rate(const Game *game, int x, int y);
+
+/* Outdoor air temperature now, with the weather. */
+float game_outdoor_temperature(const Game *game);
 
 /* ---- Knowledge ----------------------------------------------------------- */
 

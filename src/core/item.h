@@ -12,8 +12,9 @@
  * keeps the count-weighted average hit points of its items.
  *
  * Food rots while it lies on a tile: it loses hit points, faster when warm,
- * not at all when frozen, a little slower under a roof, and is gone when
- * they run out (see item_rot_rate()). Items in hands do not rot.
+ * not at all when frozen, a little slower under a roof, faster in the rain,
+ * and is gone when they run out (see item_rot_rate()). Fresh grass does not
+ * dry in the rain. Items in hands do not rot.
  */
 #ifndef COLONY_CORE_ITEM_H
 #define COLONY_CORE_ITEM_H
@@ -121,6 +122,8 @@ typedef struct ItemDef {
 #define ITEM_ROT_FROZEN_CELSIUS 0.0f
 #define ITEM_ROT_RATE_MAX 4.0f
 #define ITEM_ROT_SHELTERED 0.75f
+/* Rot of food out in the rain (×), wet through. */
+#define ITEM_ROT_RAINED_ON 1.5f
 /* Rot units per hit point (see ItemStack.progress). */
 #define ITEM_ROT_STEP 1000
 
@@ -231,21 +234,27 @@ int items_remove(Items *items, int x, int y, int count);
  */
 int items_drop(Items *items, const struct Map *map, int x, int y, ItemStack batch);
 
-/* Speed of rot on a tile (item_rot_rate()), asked of the caller of
- * items_advance(). */
-typedef float (*ItemRotRateFn)(const void *context, size_t tile);
+/* What items lying on a tile go through: the speed of rot (item_rot_rate()),
+ * and whether what dries can dry (not out in the rain). */
+typedef struct ItemConditions {
+    float rot_rate;
+    bool dries;
+} ItemConditions;
+
+/* Conditions on a tile, asked of the caller of items_advance(). */
+typedef ItemConditions (*ItemConditionsFn)(const void *context, size_t tile);
 
 /*
- * Lets `hours` pass for the stacks of tiles begin..end-1 (tile indices): stacks
- * of types that transform progress, and those that reach their type's
- * transform_hours turn into the new type (same count, same hit points in
- * percent, quality kept when both types have one); stacks of types that rot
- * lose hit points at the rate `rot_rate` gives for their tile (×1 when NULL)
- * and are gone when none are left. Returns the number of stacks that
- * transformed or rotted away.
+ * Lets `hours` pass for the stacks of tiles begin..end-1 (tile indices), in
+ * the conditions `conditions` gives for each tile (NULL: rot at ×1, drying):
+ * stacks of types that transform progress where they dry, and those that
+ * reach their type's transform_hours turn into the new type (same count,
+ * same hit points in percent, quality kept when both types have one); stacks
+ * of types that rot lose hit points and are gone when none are left. Returns
+ * the number of stacks that transformed or rotted away.
  */
-int items_advance(Items *items, size_t begin, size_t end, int hours, ItemRotRateFn rot_rate,
-                  const void *context);
+int items_advance(Items *items, size_t begin, size_t end, int hours,
+                  ItemConditionsFn conditions, const void *context);
 
 uint64_t items_hash(const Items *items, uint64_t hash);
 

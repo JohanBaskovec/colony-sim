@@ -448,7 +448,7 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         if (station->free_input) { /* (Only then: hashes stay as they were without it.) */
             hash = hash_fnv1a64(hash, &station->free_input, sizeof(station->free_input));
         }
-        float fire[2] = {station->fuel, station->fuel_promised};
+        float fire[3] = {station->fuel, station->fuel_promised, station->soaked};
         hash = hash_fnv1a64(hash, fire, sizeof(fire));
         uint32_t fire_state[3] = {station->burning, station->keep_burning, station->fuel_types};
         hash = hash_fnv1a64(hash, fire_state, sizeof(fire_state));

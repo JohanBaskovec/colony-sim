@@ -446,9 +446,9 @@ with its own use.
   ground or in a stockpile, not carried): **3 days** in mild dry weather,
   faster in sun and heat, not at all in rain or snow outdoors; under a roof it
   dries at the normal rate whatever the weather (M4) *(tuning)*. A stack keeps
-  the drying progress of its items (average, like hit points). Fresh grass
-  left wet for too long rots (loses hit points). Until weather exists, drying
-  runs at the mild-weather rate.
+  the drying progress of its items (average, like hit points). *(done: no
+  drying under the open sky while rain or snow falls; sun and heat do not
+  speed it up yet.)* Later: fresh grass left wet for too long rots.
 - **Dry grass**: bedding, roof covering, tinder. Fresh grass cannot replace it
   (a bed of fresh grass would mould, wet tinder does not catch).
 
@@ -525,8 +525,9 @@ food. Fire must be lit, fed and watched.*
 - **Lighting** is a job created when a hearth with fuel is set to burn and is
   unlit. The fire lighter carries fire (ember bundle or lit torch) from a
   burning fire within 60 path cost if there is one, and otherwise makes fire
-  by friction. A failed attempt burns its twigs and grass. Impossible in rain
-  on an open hearth (weather, M4). A hearth with no fire in reach and no
+  by friction. A failed attempt burns its twigs and grass. Impossible while
+  rain or snow falls on a hearth under the open sky, which two hours of rain
+  put out (one in a storm), its fuel kept *(done)*. A hearth with no fire in reach and no
   tinder cannot be lit: the job says why.
 - Grilled food: grade from the cook's level, capped by the ingredients + 1.
 
@@ -680,8 +681,8 @@ nothing shows above ground, they grow again the next season.
 | `mushrooms`   | Open soil within 2 tiles of a mature tree | — | 1.0 | 3 mushrooms | autumn | each autumn day a patch appears with 0.4% on each such tile and an existing one goes with 20% (5 days on average); gone when picked, and at the first frost |
 
 Mushrooms appear from a hash of the seed, the tile and the day, so that they
-draw nothing from the game's random stream (more after rain once weather
-exists).
+draw nothing from the game's random stream; more after rain: ×(1 + hours
+of recent rain / 4), at most ×4 *(done)*.
 
 ### 7.4 Rot *(done)*
 

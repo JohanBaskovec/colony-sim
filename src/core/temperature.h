@@ -88,12 +88,18 @@ typedef struct Temperatures {
     uint32_t build_revision;
 } Temperatures;
 
-/* Every tile at the outdoor temperature of `tick` (rock at the ground's). */
-bool temperatures_init(Temperatures *temperatures, const Map *map, uint64_t tick);
+/* Every tile at the `outdoor` temperature (rock at the ground's). */
+bool temperatures_init(Temperatures *temperatures, const Map *map, float outdoor);
 void temperatures_free(Temperatures *temperatures);
 
-/* Outdoor air temperature at a tick. */
+/* Outdoor air temperature at a tick, before the weather
+ * (core/weather.h): the season's mean plus the daily swing. */
 float temperature_outdoor(uint64_t tick);
+
+/* The season's mean temperature at a tick, and where the day stands
+ * between its coldest (-1) and warmest (1) hour. */
+float temperature_season_mean(uint64_t tick);
+float temperature_daily_swing(uint64_t tick);
 
 /* Temperature of a tile; TEMPERATURE_GROUND out of bounds. */
 float temperature_at(const Temperatures *temperatures, int x, int y);
@@ -107,11 +113,14 @@ TemperatureCover temperature_cover(const Map *map, int x, int y);
 
 /* Speed of rot of food lying on a tile: item_rot_rate() at the tile's
  * temperature (ITEM_ROT_REFERENCE_CELSIUS when `temperatures` is NULL),
- * under its roof if any; 0 out of bounds. */
-float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y);
+ * under its roof if any, ×ITEM_ROT_RAINED_ON under the open sky while it
+ * `rains`; 0 out of bounds. */
+float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y,
+                           bool rains);
 
-/* One tick: the band of rows due at `tick` exchanges heat. */
-void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick);
+/* One tick: the band of rows due at `tick` exchanges heat, with the
+ * outdoor air at `outdoor` (core/weather.h). */
+void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick, float outdoor);
 
 uint64_t temperatures_hash(const Temperatures *temperatures, uint64_t hash);
 

@@ -128,6 +128,16 @@
 /* Asleep out of a bed, a settler checks this often whether it feels too
  * cold or hot (the night gets colder, a fire burns low) and moves. */
 #define COLONIST_WARM_SPOT_CHECK_TICKS (TICKS_PER_HOUR / 2)
+/* Out under the open sky while rain or snow falls, settlers get wet at the
+ * weather's rate (weather_wetting(): soaked in an hour of rain), and dry by
+ * COLONIST_DRY_PER_HOUR, COLONIST_DRY_WARM_PER_HOUR where it feels at least
+ * COLONIST_DRY_WARM_CELSIUS (beside a fire). Wet through, a settler feels
+ * COLONIST_WET_CHILL degrees colder (tuning). They do not run for shelter:
+ * that comes with the risk of hypothermia (health). */
+#define COLONIST_DRY_PER_HOUR 0.25f
+#define COLONIST_DRY_WARM_PER_HOUR 1.0f
+#define COLONIST_DRY_WARM_CELSIUS 20.0f
+#define COLONIST_WET_CHILL 8.0f
 /* Settlers walk at most this far to their bed or a free one. */
 #define COLONIST_BED_SEARCH_MAX_COST 150.0f
 #define NEED_LOW_THRESHOLD 0.3f
@@ -398,6 +408,7 @@ typedef struct Colonist {
     /* TASK_STORY: the knowledge told at the hearth `station` (`target`). */
     uint8_t story_topic;
     float needs[NEED_COUNT];
+    float wetness; /* 0 (dry) .. 1 (wet through). */
     ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
 
@@ -430,6 +441,9 @@ typedef struct ColonistContext {
     const bool *teach;
     /* Temperature per tile (Game.temperatures); NULL: always mild. */
     const Temperatures *temperatures;
+    /* How fast settlers out under the open sky get wet now, per hour
+     * (weather_wetting(), 0 when nothing falls). */
+    float wetting;
     /* Debug cheats (GameDebug): crafts need no input, no tool is needed. */
     bool free_crafts;
     bool no_tools;

@@ -33,6 +33,7 @@ add_library(colony_core STATIC
     tool.c
     structure.c
     util.c
+    weather.c
     work.c
     workstation.c
     worldgen.c)

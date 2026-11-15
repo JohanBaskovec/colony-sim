@@ -221,8 +221,16 @@ static void build_status_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.speed"), multiplier);
     }
     char outdoor[32];
-    temperature_text(outdoor, sizeof(outdoor), temperature_outdoor(clock->tick), 0);
+    temperature_text(outdoor, sizeof(outdoor), game_outdoor_temperature(&app->game), 0);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.outdoor_temperature"), outdoor);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.weather"),
+              tr(weather_name_key(&app->game.weather, clock->tick)));
+    long long snow = (long long)SDL_lroundf(app->game.weather.snow * 100.0f);
+    if (snow > 0) {
+        char percent[16];
+        tr_integer(percent, sizeof(percent), snow);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.snow_cover"), percent);
+    }
     if (app->show_temperature) {
         char cold[32], hot[32];
         temperature_text(cold, sizeof(cold), -10.0f, 0);
@@ -683,9 +691,18 @@ static void build_selection_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.colonist.ground_sleep", left),
                   percent, hours);
     }
+    float chill = COLONIST_WET_CHILL * colonist->wetness;
+    long long wet = (long long)SDL_lroundf(colonist->wetness * 100.0f);
+    if (wet > 0) {
+        char percent[16], degrees[32];
+        tr_integer(percent, sizeof(percent), wet);
+        temperature_text(degrees, sizeof(degrees), chill, 0);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.wet"), percent, degrees);
+    }
     float sleep_celsius = hearths_felt_temperature(&app->game.workstations, &app->game.map,
                                                    &app->game.temperatures, colonist->x,
-                                                   colonist->y);
+                                                   colonist->y) -
+                          chill;
     float sleep_factor = colonist_sleep_temperature_factor(sleep_celsius);
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist) && sleep_factor < 1.0f) {
         char celsius[32], factor[16];

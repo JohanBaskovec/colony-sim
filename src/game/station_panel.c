@@ -362,12 +362,23 @@ static void hearth_rows(UiLayout *layout, const Game *game, const Workstation *s
     kilograms_text(capacity, sizeof(capacity), HEARTH_FUEL_CAPACITY);
     TR_FORMAT(text, sizeof(text), tr("station.hearth.fuel"), fuel, capacity);
     ui_layout_label(layout, text, 0.0f, false);
+    bool rained_on = hearth_rained_on(station, &game->map,
+                                      weather_wetting(&game->weather, game->clock.tick));
     if (station->burning) {
         tr_decimal(number, sizeof(number), station->fuel / HEARTH_BURN_PER_HOUR, 1);
         TR_FORMAT(text, sizeof(text), tr("station.hearth.burning"), number);
         ui_layout_label(layout, text, 0.0f, false);
+        if (station->soaked > 0.0f && rained_on) {
+            tr_integer(number, sizeof(number),
+                       (long long)(station->soaked / HEARTH_SOAKED_OUT * 100.0f));
+            TR_FORMAT(text, sizeof(text), tr("station.hearth.soaking"), number);
+            ui_layout_label(layout, text, 0.0f, true);
+        }
     } else {
         ui_layout_label(layout, tr("station.hearth.out"), 0.0f, true);
+        if (rained_on) {
+            ui_layout_label(layout, tr("station.hearth.rained_on"), 0.0f, true);
+        }
     }
     if (checkbox_row(layout, 0.0f, tr("station.hearth.keep_burning"), station->keep_burning)) {
         *action = (Action){ACTION_TOGGLE_KEEP_BURNING, 0, 0};

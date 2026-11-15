@@ -76,7 +76,7 @@ static void refresh_area(Temperatures *temperatures, const Map *map, int x0, int
     }
 }
 
-bool temperatures_init(Temperatures *temperatures, const Map *map, uint64_t tick)
+bool temperatures_init(Temperatures *temperatures, const Map *map, float outdoor)
 {
     memset(temperatures, 0, sizeof(*temperatures));
     size_t count = map_tile_count(map);
@@ -99,7 +99,6 @@ bool temperatures_init(Temperatures *temperatures, const Map *map, uint64_t tick
     temperatures->edge_south = temperatures->buffers[2] + width;
     temperatures->width = map->width;
     temperatures->height = map->height;
-    float outdoor = temperature_outdoor(tick);
     for (size_t i = 0; i < count; i++) {
         temperatures->celsius[i] = outdoor;
     }
@@ -118,7 +117,7 @@ void temperatures_free(Temperatures *temperatures)
     memset(temperatures, 0, sizeof(*temperatures));
 }
 
-float temperature_outdoor(uint64_t tick)
+float temperature_season_mean(uint64_t tick)
 {
     static const float MEANS[SEASON_COUNT] = TEMPERATURE_SEASON_MEANS;
     /* Seasons: from the middle of one to the middle of the next. */
@@ -128,9 +127,13 @@ float temperature_outdoor(uint64_t tick)
     int from = ((int)first % SEASON_COUNT + SEASON_COUNT) % SEASON_COUNT;
     int to = (from + 1) % SEASON_COUNT;
     float blend = (1.0f - cosf(PI_F * (position - first))) * 0.5f;
-    float mean = lerpf(MEANS[from], MEANS[to], blend);
-    /* The day: warming up from the coldest hour to the warmest, cooling
-     * down for the rest of the day. */
+    return lerpf(MEANS[from], MEANS[to], blend);
+}
+
+float temperature_daily_swing(uint64_t tick)
+{
+    /* Warming up from the coldest hour to the warmest, cooling down for the
+     * rest of the day. */
     float hour = (float)(tick % TICKS_PER_DAY) / (float)TICKS_PER_HOUR;
     const float coldest = (float)TEMPERATURE_COLDEST_HOUR;
     const float warmest = (float)TEMPERATURE_WARMEST_HOUR;
@@ -141,7 +144,12 @@ float temperature_outdoor(uint64_t tick)
         float since = fmodf(hour - warmest + (float)HOURS_PER_DAY, (float)HOURS_PER_DAY);
         swing = cosf(PI_F * since / ((float)HOURS_PER_DAY - (warmest - coldest)));
     }
-    return mean + TEMPERATURE_DAILY_SWING * swing;
+    return swing;
+}
+
+float temperature_outdoor(uint64_t tick)
+{
+    return temperature_season_mean(tick) + TEMPERATURE_DAILY_SWING * temperature_daily_swing(tick);
 }
 
 float temperature_at(const Temperatures *temperatures, int x, int y)
@@ -181,14 +189,17 @@ TemperatureCover temperature_cover(const Map *map, int x, int y)
     return map_natural_roof(map, x, y) ? TEMPERATURE_COVER_NATURAL : TEMPERATURE_COVER_OPEN;
 }
 
-float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y)
+float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y,
+                           bool rains)
 {
     if (!map_in_bounds(map, x, y)) {
         return 0.0f;
     }
     float celsius =
         temperatures != NULL ? temperature_at(temperatures, x, y) : ITEM_ROT_REFERENCE_CELSIUS;
-    return item_rot_rate(celsius, temperature_cover(map, x, y) != TEMPERATURE_COVER_OPEN);
+    bool sheltered = temperature_cover(map, x, y) != TEMPERATURE_COVER_OPEN;
+    float rate = item_rot_rate(celsius, sheltered);
+    return rains && !sheltered ? rate * ITEM_ROT_RAINED_ON : rate;
 }
 
 /* Brings the caches up to date with the changes the map logged since. */
@@ -226,7 +237,7 @@ static void update_caches(Temperatures *temperatures, const Map *map)
     temperatures->build_revision = map->build_revision;
 }
 
-void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick)
+void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick, float outdoor)
 {
     if (temperatures->celsius == NULL || temperatures->width != map->width ||
         temperatures->height != map->height) {
@@ -238,7 +249,6 @@ void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick
     int y0 = height * band / TEMPERATURE_SWEEP_TICKS;
     int y1 = height * (band + 1) / TEMPERATURE_SWEEP_TICKS;
     const float hours = (float)TEMPERATURE_SWEEP_TICKS / (float)TICKS_PER_HOUR;
-    float outdoor = temperature_outdoor(tick);
     float *celsius = temperatures->celsius;
     const float *east = temperatures->edge_east, *south = temperatures->edge_south;
     const uint8_t *kind = temperatures->kind;

@@ -123,12 +123,34 @@ bool hearth_set_fuel_type(Workstations *workstations, int index, ItemType type, 
     return true;
 }
 
-int hearths_burn(Workstations *workstations)
+bool hearth_rained_on(const Workstation *station, const Map *map, float wetting)
+{
+    return wetting > 0.0f && station != NULL &&
+           temperature_cover(map, station->x, station->y) == TEMPERATURE_COVER_OPEN;
+}
+
+int hearths_burn(Workstations *workstations, const Map *map, float wetting)
 {
     int out = 0;
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         Workstation *station = &workstations->list[index];
-        if (!station->used || !station->burning) {
+        if (!station->used || !hearth_is(station)) {
+            continue;
+        }
+        if (station->burning && hearth_rained_on(station, map, wetting)) {
+            station->soaked += wetting / (float)TICKS_PER_HOUR;
+        } else if (station->soaked > 0.0f) {
+            station->soaked =
+                fmaxf(0.0f, station->soaked - HEARTH_DRY_PER_HOUR / (float)TICKS_PER_HOUR);
+        }
+        if (!station->burning) {
+            continue;
+        }
+        if (station->soaked >= HEARTH_SOAKED_OUT) {
+            station->burning = false;
+            station->soaked = 0.0f;
+            out++;
+            workstations->revision++;
             continue;
         }
         bool wanted_before = hearth_fuel_wanted(station) > 0.0f;

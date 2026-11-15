@@ -11,8 +11,10 @@
  * of it (they go out after HEARTH_EMBER_TICKS), else by friction, an attempt
  * taking HEARTH_FRICTION_WORK and a handful of dry grass as tinder, which
  * succeeds more often the better the settler knows fire. A burning hearth
- * lights the tiles around it at night, and is where spears are hardened and
- * fireside stories told (core/colonist.h).
+ * lights the tiles around it at night, and is where spears are hardened,
+ * roots roasted and fireside stories told (core/colonist.h). Rain and snow
+ * soak a fire under the open sky until it goes out (its fuel kept), and
+ * nobody can light it while they fall (core/weather.h).
  * Design: docs/KNOWLEDGE.md §5.
  */
 #ifndef COLONY_CORE_HEARTH_H
@@ -52,6 +54,12 @@
 #define HEARTH_RADIANT_RADIUS 5
 #define HEARTH_RADIANT_LOW_FIRE 0.4f
 #define HEARTH_RADIANT_FULL_FUEL 5.0f
+/* A fire under the open sky soaks up what falls (weather_wetting(): 1 an
+ * hour in the rain, 2 in a storm, 0.25 in the snow) and goes out at
+ * HEARTH_SOAKED_OUT (two hours of rain); it dries by HEARTH_DRY_PER_HOUR
+ * (tuning). */
+#define HEARTH_SOAKED_OUT 2.0f
+#define HEARTH_DRY_PER_HOUR 1.0f
 /* Tiles lit around a burning hearth at night (fading to nothing there). */
 #define HEARTH_LIGHT_RADIUS 6.0f
 
@@ -99,9 +107,14 @@ bool hearth_light(Workstations *workstations, int index);
 bool hearth_set_keep_burning(Workstations *workstations, int index, bool keep);
 bool hearth_set_fuel_type(Workstations *workstations, int index, ItemType type, bool allowed);
 
-/* One tick: burning hearths burn their fuel and go out when it is gone.
- * Returns how many went out. */
-int hearths_burn(Workstations *workstations);
+/* Whether rain or snow falls on the hearth (`wetting`: weather_wetting()),
+ * which is under the open sky. */
+bool hearth_rained_on(const Workstation *station, const Map *map, float wetting);
+
+/* One tick: burning hearths burn their fuel and go out when it is gone, or
+ * soaked by what falls on them (`wetting`: weather_wetting(), 0 when
+ * nothing falls). Returns how many went out. */
+int hearths_burn(Workstations *workstations, const Map *map, float wetting);
 
 /* Chance (0..1) that an attempt at lighting by friction succeeds at a level. */
 float hearth_friction_chance(double level);

@@ -69,11 +69,9 @@ static void test_settlers_arrive_near_food(void)
 
 /* Mushrooms come up under mature trees on the first autumn nights, and only
  * there; they go again within days. */
-static void test_mushrooms_come_and_go(void)
+/* Soil everywhere: a grove on the west half, a meadow on the east. */
+static void make_grove(Map *map)
 {
-    Game game;
-    REQUIRE(init_small_game(&game, 3));
-    Map *map = &game.map;
     for (size_t i = 0; i < map_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_SOIL;
         map->rock[i] = ROCK_NONE;
@@ -84,6 +82,41 @@ static void test_mushrooms_come_and_go(void)
                                               : (Plant){.type = PLANT_GRASS, .growth = 1.0f};
     }
     map_topology_changed(map);
+}
+
+/* Mushroom patches that came up during the first hour of an autumn day,
+ * with `rain` hours of recent rain. */
+static unsigned mushrooms_after(double rain)
+{
+    Game game;
+    if (!init_small_game(&game, 3)) {
+        return 0;
+    }
+    make_grove(&game.map);
+    game.clock.tick = (uint64_t)SEASON_DAY(SEASON_AUTUMN, 4) * TICKS_PER_DAY;
+    for (int i = 0; i < TICKS_PER_HOUR; i++) {
+        game.weather.recent_rain = (float)rain;
+        game_tick(&game);
+    }
+    unsigned patches = (unsigned)map_count_plants(&game.map, PLANT_MUSHROOMS);
+    game_shutdown(&game);
+    return patches;
+}
+
+static void test_mushrooms_come_after_rain(void)
+{
+    unsigned dry = mushrooms_after(0.0);
+    unsigned wet = mushrooms_after(20.0);
+    CHECK(wet > 2 * dry);
+    CHECK(wet > 0);
+}
+
+static void test_mushrooms_come_and_go(void)
+{
+    Game game;
+    REQUIRE(init_small_game(&game, 3));
+    Map *map = &game.map;
+    make_grove(map);
     /* Summer: none. */
     game.clock.tick = (uint64_t)SEASON_DAY(SEASON_SUMMER, 5) * TICKS_PER_DAY;
     for (int i = 0; i < TICKS_PER_HOUR; i++) {
@@ -407,6 +440,40 @@ static void test_food_rots_on_the_ground(void)
     game_shutdown(&game);
 }
 
+static void test_grass_does_not_dry_in_a_storm(void)
+{
+    Game game;
+    REQUIRE(init_small_game(&game, 8));
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(&game); slot++) {
+        game_remove_colonist(&game, game_colonist_id_at(&game, slot));
+    }
+    int x = -1, y = -1;
+    for (int ty = 1; ty < game.map.height && x < 0; ty++) {
+        for (int tx = 0; tx < game.map.width && x < 0; tx++) {
+            if (map_is_passable(&game.map, tx, ty) &&
+                temperature_cover(&game.map, tx, ty) == TEMPERATURE_COVER_OPEN) {
+                x = tx;
+                y = ty;
+            }
+        }
+    }
+    REQUIRE(x >= 0);
+    REQUIRE(items_add(&game.items, x, y, item_stack_pristine(ITEM_FRESH_GRASS, 2)) == 2);
+    for (int i = 0; i < 6 * TICKS_PER_HOUR; i++) {
+        game.weather.type = WEATHER_STORM;
+        game.weather.spell = 5.0f; /* Rain, not snow. */
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(items_get(&game.items, x, y).progress, 0);
+    CHECK(weather_wetting(&game.weather, game.clock.tick) > 0.0f);
+    game.weather.type = WEATHER_CLEAR;
+    for (int i = 0; i < 3 * TICKS_PER_HOUR; i++) {
+        game_tick(&game);
+    }
+    CHECK(items_get(&game.items, x, y).progress >= 2);
+    game_shutdown(&game);
+}
+
 static void test_plant_stocks_grow_back(void)
 {
     Game game;
@@ -496,6 +563,8 @@ int main(void)
     RUN_TEST(test_hash_covers_knowledge_and_carried_condition);
     RUN_TEST(test_fresh_grass_dries_on_the_ground);
     RUN_TEST(test_food_rots_on_the_ground);
+    RUN_TEST(test_mushrooms_come_after_rain);
+    RUN_TEST(test_grass_does_not_dry_in_a_storm);
     RUN_TEST(test_plant_stocks_grow_back);
     RUN_TEST(test_zones_of_different_kinds_never_overlap);
     return test_summary();

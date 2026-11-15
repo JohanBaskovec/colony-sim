@@ -492,8 +492,8 @@ static bool rot(Items *items, ItemStack *stack, int hours, float rate)
     return false;
 }
 
-int items_advance(Items *items, size_t begin, size_t end, int hours, ItemRotRateFn rot_rate,
-                  const void *context)
+int items_advance(Items *items, size_t begin, size_t end, int hours,
+                  ItemConditionsFn conditions, const void *context)
 {
     size_t count = (size_t)items->width * (size_t)items->height;
     if (end > count) {
@@ -508,11 +508,17 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemRotRate
         if (stack->type == ITEM_NONE) {
             continue;
         }
-        if (ITEM_DEFS[stack->type].rot_days > 0.0f) {
-            transformed += rot(items, stack, hours, rot_rate != NULL ? rot_rate(context, i) : 1.0f);
+        const ItemDef *def = &ITEM_DEFS[stack->type];
+        if (def->rot_days <= 0.0f && def->transforms_into == ITEM_NONE) {
             continue;
         }
-        if (ITEM_DEFS[stack->type].transforms_into == ITEM_NONE) {
+        ItemConditions here =
+            conditions != NULL ? conditions(context, i) : (ItemConditions){1.0f, true};
+        if (def->rot_days > 0.0f) {
+            transformed += rot(items, stack, hours, here.rot_rate);
+            continue;
+        }
+        if (!here.dries) {
             continue;
         }
         int progress = (int)stack->progress + hours;

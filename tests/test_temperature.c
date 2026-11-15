@@ -133,13 +133,13 @@ static void test_open_ground_follows_the_air(void)
         game.temperatures.celsius[i] = 30.0f;
     }
     run_hours(&game, 1.5f);
-    float outdoor = temperature_outdoor(game.clock.tick);
+    float outdoor = game_outdoor_temperature(&game);
     CHECK_NEAR(temperature_at(&game.temperatures, 20, 20), outdoor, 1.0);
     CHECK_NEAR(temperature_at(&game.temperatures, 0, 0), outdoor, 1.0);
     CHECK_NEAR(temperature_at(&game.temperatures, -1, 5), TEMPERATURE_GROUND, 1e-6);
     /* Following the day. */
     run_hours(&game, 10.0f);
-    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20), temperature_outdoor(game.clock.tick),
+    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20), game_outdoor_temperature(&game),
                1.0);
     game_shutdown(&game);
 }
@@ -173,14 +173,17 @@ static void test_rot_rate_on_a_tile(void)
     REQUIRE(init_flat_game(&game, mid_season(SEASON_SPRING)));
     Map *map = &game.map;
     map_set_roof(map, 6, 6, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
-    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 8, 8),
+    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 8, 8, false),
                item_rot_rate(temperature_at(&game.temperatures, 8, 8), false), 1e-6);
-    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 6, 6),
+    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 6, 6, false),
                item_rot_rate(temperature_at(&game.temperatures, 6, 6), true), 1e-6);
-    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, -1, 6), 0.0f, 1e-6);
+    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, -1, 6, false), 0.0f, 1e-6);
     /* Without temperatures: mild. */
-    CHECK_NEAR(temperature_rot_rate(NULL, map, 8, 8), 1.0f, 1e-6);
-    CHECK_NEAR(temperature_rot_rate(NULL, map, 6, 6), ITEM_ROT_SHELTERED, 1e-6);
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 8, 8, false), 1.0f, 1e-6);
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 6, 6, false), ITEM_ROT_SHELTERED, 1e-6);
+    /* Rain: faster in the open, not under the roof. */
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 8, 8, true), ITEM_ROT_RAINED_ON, 1e-6);
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 6, 6, true), ITEM_ROT_SHELTERED, 1e-6);
     game_shutdown(&game);
 }
 
@@ -255,7 +258,7 @@ static void test_hearth_warms_around_it(void)
         run_hours(&game, 0.5f);
         refill(&game, hearth);
     }
-    float outdoor = temperature_outdoor(game.clock.tick);
+    float outdoor = game_outdoor_temperature(&game);
     float at = temperature_at(&game.temperatures, 20, 20) - outdoor;
     float next = temperature_at(&game.temperatures, 21, 20) - outdoor;
     float near = temperature_at(&game.temperatures, 22, 20) - outdoor;
@@ -279,7 +282,7 @@ static void test_hut_keeps_the_warmth(void)
             run_hours(&game, 0.5f);
             refill(&game, hearth);
         }
-        float outdoor = temperature_outdoor(game.clock.tick);
+        float outdoor = game_outdoor_temperature(&game);
         inside[variant] = temperature_at(&game.temperatures, 19, 21) - outdoor;
         /* The walls keep it in. */
         CHECK(fabsf(temperature_at(&game.temperatures, 17, 20) - outdoor) < 1.0f);
@@ -307,7 +310,7 @@ static void test_cave_stays_mild(void)
     }
     CHECK_EQ_INT(temperature_cover(&game.map, 17, 17), TEMPERATURE_COVER_NATURAL);
     run_hours(&game, 24.0f);
-    float outdoor = temperature_outdoor(game.clock.tick);
+    float outdoor = game_outdoor_temperature(&game);
     CHECK(outdoor < 2.0f);
     float cave = temperature_at(&game.temperatures, 17, 16);
     CHECK(cave > outdoor + 5.0f);
@@ -378,6 +381,48 @@ static void test_cold_sleep_is_longer(void)
     /* On the ground both times: 8 hours from 0.2 when mild. */
     CHECK_NEAR((double)warm, 8.0 * TICKS_PER_HOUR, 0.05 * TICKS_PER_HOUR);
     CHECK(cold > warm + 2 * TICKS_PER_HOUR);
+}
+
+/* Runs `hours` with the sky forced to `type` and no spell. */
+static void run_sky(Game *game, float hours, WeatherType type)
+{
+    int ticks = (int)(hours * (float)TICKS_PER_HOUR);
+    for (int i = 0; i < ticks; i++) {
+        game->weather.type = (uint8_t)type;
+        game->weather.spell = 0.0f;
+        run_hours(game, 1.0f / (float)TICKS_PER_HOUR);
+    }
+}
+
+static void test_rain_wets_settlers(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game, mid_season(SEASON_SPRING) + 11 * TICKS_PER_HOUR));
+    build_hut(&game, 18, 18, 22, 22, true);
+    Colonist *out = game_colonist(&game, game_spawn_colonist(&game, 8, 8));
+    Colonist *in = game_colonist(&game, game_spawn_colonist(&game, 20, 20));
+    REQUIRE(out != NULL && in != NULL);
+    for (int type = 0; type < WORK_TYPE_COUNT; type++) {
+        colonist_set_work_priority(out, (WorkType)type, WORK_PRIORITY_DISABLED);
+        colonist_set_work_priority(in, (WorkType)type, WORK_PRIORITY_DISABLED);
+    }
+    out->needs[NEED_REST] = in->needs[NEED_REST] = 0.05f; /* Asleep where they are. */
+    run_sky(&game, 0.5f, WEATHER_RAIN);
+    CHECK_EQ_INT(out->task, TASK_SLEEP);
+    CHECK_NEAR(out->wetness, 0.5f, 0.02f);
+    CHECK_NEAR(in->wetness, 0.0f, 1e-6f);
+    run_sky(&game, 1.0f, WEATHER_RAIN);
+    CHECK_NEAR(out->wetness, 1.0f, 1e-6f);
+    CHECK_NEAR(in->wetness, 0.0f, 1e-6f);
+    /* The rain stops: dries slowly in the mild air... */
+    run_sky(&game, 1.0f, WEATHER_CLEAR);
+    CHECK_NEAR(out->wetness, 1.0f - COLONIST_DRY_PER_HOUR, 0.02f);
+    /* ...fast beside a fire. */
+    int hearth = burning_hearth(&game, out->x + 1, out->y);
+    REQUIRE(hearth != WORKSTATION_NONE);
+    run_sky(&game, 0.5f, WEATHER_CLEAR);
+    CHECK(out->wetness < 1.0f - COLONIST_DRY_PER_HOUR - 0.3f);
+    game_shutdown(&game);
 }
 
 /* A rested settler doing nothing, then tired. */
@@ -490,6 +535,7 @@ int main(void)
     RUN_TEST(test_cave_stays_mild);
     RUN_TEST(test_sleep_temperature_factor);
     RUN_TEST(test_cold_sleep_is_longer);
+    RUN_TEST(test_rain_wets_settlers);
     RUN_TEST(test_sleeping_beside_a_fire);
     return test_summary();
 }

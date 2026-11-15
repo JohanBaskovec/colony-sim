@@ -72,6 +72,9 @@ debug.instant_build = Instant free construction (every blueprint is built at onc
 debug.free_crafts = Free crafts (no ingredients needed)
 debug.no_tools = Work without tools (crafts need none, work goes at least at a standard tool's speed)
 debug.instant_deconstruct = Instant taking apart (marked structures and roofs come down at once)
+# {0} = the sky now (e.g. Rain)
+debug.next_weather = Weather: {0} (next)
+debug.cold_snap = Cold snap (until tomorrow)
 
 # Items
 item.wood = Wood
@@ -136,6 +139,13 @@ season.spring = Spring
 season.summer = Summer
 season.autumn = Autumn
 season.winter = Winter
+weather.clear = Clear
+weather.cloudy = Cloudy
+weather.fog = Fog
+weather.rain = Rain
+weather.storm = Storm
+weather.snow = Snow
+weather.snowstorm = Snowstorm
 
 # HUD
 # {0} = day of the season, {1} = season name, {2} = year, {3} = hours (00-23), {4} = minutes
@@ -143,6 +153,10 @@ hud.date = {1} {0}, year {2} · {3}:{4}
 # {0} = speed multiplier
 hud.speed = Speed: {0}×
 hud.outdoor_temperature = Outdoors: {0}
+# {0} = the sky (e.g. Rain)
+hud.weather = Weather: {0}
+# {0} = how much of the open ground snow covers, in percent
+hud.snow_cover = Snow on the ground: {0}%
 hud.temperature_view = Temperature view: blue {0}, red {1} · {2}: hide
 hud.roof_view = Roof view: roofs, roof blueprints and orders · {0}: show or hide
 hud.paused = Paused
@@ -301,6 +315,8 @@ hud.colonist.strength = Strength: {0} (carries up to {1})
 # {0}: percent of work speed lost, {1}: hours left.
 hud.colonist.ground_sleep.one = Slept on the ground: works {0}% slower ({1} hour left)
 hud.colonist.ground_sleep.other = Slept on the ground: works {0}% slower ({1} hours left)
+# {0} = how wet, in percent; {1} = degrees felt colder (e.g. 6 °C)
+hud.colonist.wet = Wet ({0}%): feels {1} colder
 # {0} = activity name
 hud.colonist.activity = Activity: {0}
 # {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
@@ -481,6 +497,9 @@ station.warning.fire_out = The fire is out: these bills wait for it to burn
 station.hearth.fuel = Fuel: {0} of {1}
 station.hearth.burning = Burning, fuel for {0} h
 station.hearth.out = Out
+# {0} = how close the rain is to putting the fire out, in percent
+station.hearth.soaking = The rain is putting it out ({0}%)
+station.hearth.rained_on = Cannot be lit while rain or snow falls on it
 station.hearth.keep_burning = Keep it burning
 station.hearth.fuel_types = Burn:
 station.hearth.teach = Fireside stories in the evening, about:

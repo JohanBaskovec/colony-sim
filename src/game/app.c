@@ -820,6 +820,7 @@ static void render_frame(App *app)
 
     render_map(app->renderer, &app->game.map, &app->camera);
     render_dirt(app->renderer, &app->game.dirt, &app->camera);
+    render_snow_cover(app->renderer, &app->game, &app->camera);
     render_gather_zones(app->renderer, &app->game, &app->camera, app->selected_gather_zone);
     render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
     bool roofs = app_roof_view(app);
@@ -831,6 +832,7 @@ static void render_frame(App *app)
     render_designations(app->renderer, &app->game, &app->camera, roofs);
     hud_draw_item_counts(app);
     render_daylight(app->renderer, &app->game, &app->camera);
+    render_weather(app->renderer, &app->game, &app->camera, SDL_GetTicks());
     if (app->show_temperature) {
         render_temperature(app->renderer, &app->game, &app->camera);
     }

@@ -476,7 +476,7 @@ static void test_ground_sleep_takes_longer(void)
     /* In summer, where it is never cold enough to rest less. */
     game.clock.tick = (uint64_t)(DAYS_PER_SEASON + 7) * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
     for (size_t i = 0; i < map_tile_count(&game.map); i++) {
-        game.temperatures.celsius[i] = temperature_outdoor(game.clock.tick);
+        game.temperatures.celsius[i] = game_outdoor_temperature(&game);
     }
     colonist->needs[NEED_REST] = 0.2f;
     game_tick(&game);

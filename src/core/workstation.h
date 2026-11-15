@@ -119,12 +119,14 @@ typedef struct Workstation {
     bool free_input;
     /* Hearths only (core/hearth.h): kilograms of fuel in it, whether it
      * burns, whether settlers keep it burning (refuel and light it), the fuel
-     * types allowed, and the kilograms haulers are bringing. */
+     * types allowed, the kilograms haulers are bringing, and how soaked
+     * the fire is by rain (it goes out at HEARTH_SOAKED_OUT). */
     float fuel;
     bool burning;
     bool keep_burning;
     ItemTypeMask fuel_types;
     float fuel_promised;
+    float soaked;
 } Workstation;
 
 typedef struct Workstations {

@@ -184,7 +184,7 @@ static void test_burning(void)
     const Workstation *station = hearth(&game, index);
     CHECK(station->burning);
     for (int i = 0; i < TICKS_PER_HOUR; i++) {
-        CHECK_EQ_INT(hearths_burn(workstations), 0);
+        CHECK_EQ_INT(hearths_burn(workstations, &game.map, 0.0f), 0);
     }
     CHECK_NEAR(station->fuel, HEARTH_FUEL_CAPACITY - HEARTH_BURN_PER_HOUR, 0.05);
 
@@ -192,19 +192,19 @@ static void test_burning(void)
     workstation_get(workstations, index)->fuel =
         HEARTH_FUEL_CAPACITY * HEARTH_REFUEL_BELOW + 0.0001f;
     uint32_t revision = workstations->revision;
-    hearths_burn(workstations);
+    hearths_burn(workstations, &game.map, 0.0f);
     CHECK(workstations->revision != revision);
     CHECK(hearth_fuel_wanted(station) > 0.0f);
     revision = workstations->revision;
-    hearths_burn(workstations);
+    hearths_burn(workstations, &game.map, 0.0f);
     CHECK_EQ_UINT(workstations->revision, revision); /* Only once. */
 
     /* Out once the fuel is gone. */
     workstation_get(workstations, index)->fuel = 0.0001f;
-    CHECK_EQ_INT(hearths_burn(workstations), 1);
+    CHECK_EQ_INT(hearths_burn(workstations, &game.map, 0.0f), 1);
     CHECK(!station->burning);
     CHECK_NEAR(station->fuel, 0.0, 1e-9);
-    CHECK_EQ_INT(hearths_burn(workstations), 0);
+    CHECK_EQ_INT(hearths_burn(workstations, &game.map, 0.0f), 0);
 
     /* In a game, every tick. */
     workstation_get(workstations, index)->fuel = 5.0f;
@@ -496,6 +496,55 @@ static void test_fire_hardening(void)
     game_shutdown(&game);
 }
 
+/* Rain falling all the time, as hard as `type` (rain or storm), and mild. */
+static void run_rainy_ticks(Game *game, int ticks, WeatherType type)
+{
+    for (int i = 0; i < ticks; i++) {
+        game->weather.type = (uint8_t)type;
+        game->weather.spell = 5.0f;
+        run_ticks(game, 1, true);
+    }
+}
+
+static void test_rain_puts_out_fires_in_the_open(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int open = built_hearth(&game, 10, 10, HEARTH_FUEL_CAPACITY);
+    int roofed = built_hearth(&game, 20, 10, HEARTH_FUEL_CAPACITY);
+    map_set_structure(&game.map, 21, 10, STRUCTURE_WALL); /* Holds the roof up. */
+    map_set_roof(&game.map, 20, 10, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    REQUIRE(hearth_light(&game.workstations, open));
+    REQUIRE(hearth_light(&game.workstations, roofed));
+    float wetting = WEATHER_WETTING_RAIN;
+    CHECK(hearth_rained_on(hearth(&game, open), &game.map, wetting));
+    CHECK(!hearth_rained_on(hearth(&game, roofed), &game.map, wetting));
+    CHECK(!hearth_rained_on(hearth(&game, open), &game.map, 0.0f));
+
+    /* Two hours of rain. */
+    run_rainy_ticks(&game, 2 * TICKS_PER_HOUR - 10, WEATHER_RAIN);
+    CHECK(hearth(&game, open)->burning);
+    CHECK(hearth(&game, open)->soaked > 0.9f * HEARTH_SOAKED_OUT);
+    run_rainy_ticks(&game, 20, WEATHER_RAIN);
+    CHECK(!hearth(&game, open)->burning);
+    CHECK(hearth(&game, open)->fuel > 0.0f); /* The fuel is still there. */
+    CHECK(hearth(&game, roofed)->burning);
+    CHECK_NEAR(hearth(&game, roofed)->soaked, 0.0f, 1e-6);
+
+    /* Nobody lights it in the rain; it is lit once the rain stops. */
+    Colonist *lighter = spawn_settler(&game, 12, 12, 75.0, WORK_FIRE);
+    REQUIRE(lighter != NULL);
+    run_rainy_ticks(&game, 600, WEATHER_STORM);
+    CHECK(!hearth(&game, open)->burning);
+    CHECK(lighter->task != TASK_LIGHT);
+    for (int i = 0; i < 3000 && !hearth(&game, open)->burning; i++) {
+        game.weather.type = WEATHER_CLEAR;
+        run_ticks(&game, 1, true);
+    }
+    CHECK(hearth(&game, open)->burning);
+    game_shutdown(&game);
+}
+
 static void test_roasting(void)
 {
     /* One roasted root per raw one, no fresher than they were. */
@@ -629,6 +678,7 @@ int main(void)
     RUN_TEST(test_embers_do_not_go_far);
     RUN_TEST(test_fire_hardening);
     RUN_TEST(test_roasting);
+    RUN_TEST(test_rain_puts_out_fires_in_the_open);
     RUN_TEST(test_fireside_stories);
     RUN_TEST(test_at_most_eight_listeners);
     return test_summary();

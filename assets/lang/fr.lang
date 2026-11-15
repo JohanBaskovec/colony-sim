@@ -71,6 +71,8 @@ debug.instant_build = Construction instantanée et gratuite (chaque plan est con
 debug.free_crafts = Fabrication gratuite (plus besoin d’ingrédients)
 debug.no_tools = Travail sans outil (plus besoin d’outils pour fabriquer, le travail va au moins à la vitesse d’un outil ordinaire)
 debug.instant_deconstruct = Déconstruction instantanée (les constructions et toits marqués sont démontés aussitôt)
+debug.next_weather = Temps : {0} (suivant)
+debug.cold_snap = Vague de froid (jusqu’à demain)
 
 # Objets
 item.wood = Bois
@@ -135,11 +137,20 @@ season.spring = Printemps
 season.summer = Été
 season.autumn = Automne
 season.winter = Hiver
+weather.clear = Dégagé
+weather.cloudy = Nuageux
+weather.fog = Brouillard
+weather.rain = Pluie
+weather.storm = Orage
+weather.snow = Neige
+weather.snowstorm = Tempête de neige
 
 # Interface
 hud.date = {1}, jour {0}, an {2} · {3}h{4}
 hud.speed = Vitesse : {0}×
 hud.outdoor_temperature = Dehors : {0}
+hud.weather = Temps : {0}
+hud.snow_cover = Neige au sol : {0} %
 hud.temperature_view = Vue thermique : bleu {0}, rouge {1} · {2} : masquer
 hud.roof_view = Vue des toits : toits, plans et ordres de toit · {0} : afficher ou masquer
 hud.paused = En pause
@@ -263,6 +274,7 @@ hud.colonist.strength = Force : {0} (porte jusqu’à {1})
 # {0} : pourcentage de vitesse de travail perdu, {1} : heures restantes.
 hud.colonist.ground_sleep.one = A dormi par terre : travaille {0} % moins vite (encore {1} heure)
 hud.colonist.ground_sleep.other = A dormi par terre : travaille {0} % moins vite (encore {1} heures)
+hud.colonist.wet = Mouillé ({0} %) : ressent {1} de froid en plus
 hud.colonist.activity = Activité : {0}
 hud.colonist.carrying = Porte : {0} ×{1} ({2})
 hud.colonist.tool = Outil : {0} ({1}, {2})
@@ -402,6 +414,8 @@ station.warning.fire_out = Le feu est éteint : ces commandes attendent qu’il
 station.hearth.fuel = Combustible : {0} sur {1}
 station.hearth.burning = Allumé, combustible pour {0} h
 station.hearth.out = Éteint
+station.hearth.soaking = La pluie est en train de l’éteindre ({0} %)
+station.hearth.rained_on = Impossible à allumer sous la pluie ou la neige
 station.hearth.keep_burning = Entretenir le feu
 station.hearth.fuel_types = Brûler :
 station.hearth.teach = Veillées, le soir, au sujet de :

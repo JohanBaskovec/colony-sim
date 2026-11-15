@@ -400,11 +400,34 @@ static void test_rot_hours(void)
     CHECK(item_stack_rot_hours((ItemStack){0}, 1.0f) < 0.0f);
 }
 
-/* Rate for every tile of a test: a float behind the context pointer. */
-static float fixed_rate(const void *context, size_t tile)
+/* Rot rate for every tile of a test: a float behind the context pointer
+ * (things dry). */
+static ItemConditions fixed_rate(const void *context, size_t tile)
 {
     (void)tile;
-    return *(const float *)context;
+    return (ItemConditions){*(const float *)context, true};
+}
+
+/* Every tile out in the rain: nothing dries. */
+static ItemConditions rained_on(const void *context, size_t tile)
+{
+    (void)context;
+    (void)tile;
+    return (ItemConditions){ITEM_ROT_RAINED_ON, false};
+}
+
+static void test_grass_does_not_dry_in_the_rain(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4));
+    REQUIRE(items_add(&items, 1, 1, item_stack_pristine(ITEM_FRESH_GRASS, 3)) == 3);
+    int hours = item_def(ITEM_FRESH_GRASS)->transform_hours;
+    CHECK_EQ_INT(items_advance(&items, 0, 16, hours, rained_on, NULL), 0);
+    CHECK_EQ_INT(items_get(&items, 1, 1).type, ITEM_FRESH_GRASS);
+    CHECK_EQ_INT(items_get(&items, 1, 1).progress, 0);
+    CHECK_EQ_INT(items_advance(&items, 0, 16, hours, NULL, NULL), 1);
+    CHECK_EQ_INT(items_get(&items, 1, 1).type, ITEM_GRASS);
+    items_free(&items);
 }
 
 static void test_food_rots_away(void)
@@ -525,6 +548,7 @@ int main(void)
     RUN_TEST(test_rot_hours);
     RUN_TEST(test_food_rots_away);
     RUN_TEST(test_rot_progress_merges);
+    RUN_TEST(test_grass_does_not_dry_in_the_rain);
     RUN_TEST(test_hash);
     return test_summary();
 }
