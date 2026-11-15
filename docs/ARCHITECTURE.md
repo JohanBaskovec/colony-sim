@@ -51,7 +51,7 @@ simulation:
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `tool`       | Tool speed factors by kind of work (bare hands included) and grade, best carried tool, wear and breaking |
-| `gather_zone`| Gathering zones: tiles, one order per resource (wood, berries, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown plants only), a zone priority, the jobs tiles offer, what they give |
+| `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown trees only), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
@@ -70,7 +70,7 @@ simulation:
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
-| `map`        | Tile layers (terrain, rock, plants with their branch and twig stocks, cobbles and flint in the ground) and static definitions (`TerrainDef`...) |
+| `map`        | Tile layers (terrain, rock, plants with their branch, twig and food stocks, cobbles and flint in the ground), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `worldgen`   | Procedural map generation from a seed                                        |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
@@ -116,7 +116,9 @@ every frame:
 - At most `GAME_CLOCK_MAX_TICKS_PER_UPDATE` ticks run per frame: if the machine
   cannot keep up, the game slows down instead of freezing.
 - Calendar: 2,500 ticks per hour, 24 hours per day, 15 days per season, 4
-  seasons per year. The game starts on day 1 of spring, year 1, at 06:00.
+  seasons per year. The game starts at the end of summer (day 11 of summer,
+  `GAME_START_DAY`), year 1, at 06:00: wild food is plentiful, and there is
+  time to build before winter.
 - Expensive systems run at intervals rather than every tick, and spread their
   work across ticks: each plant grows once per in-game hour, but a tick only
   handles a slice of the map (`update_plants()`), so even a 1024 × 1024 map
@@ -133,10 +135,25 @@ The map stores **dense layers**, one array per layer indexed by
   (movement cost, fertility, buildable);
 - `rock[]`: natural rock walls (`RockType`, 0 = none), impassable;
 - `plants[]`: at most one plant per tile (`Plant`: type, growth, and stocks
-  of what can be gathered from it without felling it: branches and twigs).
-  Stocks are counted in hours of regrowth (`PlantDef.stock_regrow_hours` per
-  item), capped by `stock_capacity` scaled by growth, and grow back with the
-  plant's hourly update, even on mature plants.
+  of what can be gathered from it without felling it: branches, twigs and
+  food). Stocks are counted in hours of regrowth (`PlantDef.stock_regrow_hours`
+  per item), capped by `stock_capacity` scaled by growth, and grow back with
+  the plant's hourly update, even on mature plants.
+
+**Seasons** are days of the year: a `PlantDays` bit set (60 days fit in 64
+bits) says when a plant grows (`growth_days`: spring to autumn for all of
+them) and when its food ripens (`food_days`: blackberries at the end of
+summer, hazelnuts in autumn, rhizomes all year...). Out of its food days the
+food stock is gone; plants that die back (wild garlic after spring, nettles
+in winter) wither to growth 0 and show nothing until their growing days come
+back. `plant_advance()` does one step of all this; `plant_settle()` puts a
+new plant in the state of a day (world generation, planted food). Eating or
+picking takes from the food stock, so the plant itself is untouched (a wild
+carrot dug up goes back to growth 0, a mushroom patch picked is gone).
+Mushrooms appear on their own in autumn near mature trees: each tile gets a
+daily roll from a hash of the seed, the tile and the day (`world_roll()` in
+`game.c`), during the first in-game hour of the day, so that they draw
+nothing from the game's random stream.
 
 Terrain and rock decide where one can walk. Once the map is in use they are
 changed through `map_set_terrain()` / `map_set_rock()`, which bump
@@ -155,16 +172,15 @@ dense layers of the same size: order type and work progress per tile.
 Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
 `Game`): at most one stack per tile (one item type, up to its stack limit),
 plus map-wide totals per type. Each `ItemDef` has a realistic `weight` (kg per
-unit: a 7 kg log, a 20 kg stone block, a 1 kg cobble, a 300 g portion of berries) and a `bulk`
+unit: a 7 kg log, a 20 kg stone block, a 1 kg cobble, a 300 g handful of blackberries) and a `bulk`
 (room taken, about half a liter per unit, gaps included). A tile holds
 `ITEM_TILE_BULK` (1000) of bulk, so the stack limit is derived:
-`item_stack_limit() = ITEM_TILE_BULK / bulk` (1,000 berries, 50 logs, 50
+`item_stack_limit() = ITEM_TILE_BULK / bulk` (1,000 handfuls of blackberries, 50 logs, 50
 stone blocks, 666 cobbles). `items_drop()` fills the target tile, then
 spreads the rest breadth-first over nearby passable tiles (never behind a
 wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
-`RockDef.mined_item/mined_yield`, `PlantDef.harvest_item/harvest_yield`
-(harvesting keeps the plant, which grows back); gathering takes items from
-the plant's stocks (`plant_take_stock()`).
+`RockDef.mined_item/mined_yield`, `PlantDef.food_item` (the food stock);
+gathering takes items from the plant's stocks (`plant_take_stock()`).
 
 Some items change while they lie on the ground: `ItemDef.transforms_into`
 after `transform_hours` (fresh grass dries into dry grass in 72 hours).
@@ -250,7 +266,9 @@ tooltip); it raises `knowledge_peak`.
 
 Food items have a
 `nutrition` per unit; a hungry colonist goes to the nearest food, on the
-ground or on a ripe bush, and eats just what it takes to be sated. Items in
+ground or on a plant bearing food it may eat in place (fruit, nuts, leaves;
+not roots, nor what could be mistaken for a poisonous plant), and eats just
+what it takes to be sated. Items in
 hand are stored on the colonist (`Colonist.carried`), not in the layer.
 
 ### Stockpiles and hauling
@@ -362,7 +380,8 @@ in. A failed food or water search floods everything within its cost limit, so
 retries back off exponentially (½ h, 1 h, 2 h, then every 4 in-game hours)
 and reset on success. The starting position prefers fertile land with water
 within reach. The first settlers bring nothing, so world generation then
-plants ripe berry bushes nearby until there are `GAME_SPAWN_RIPE_BUSHES`
+plants grown brambles (bearing fruit at the start) and hazels (nuts in
+autumn) nearby until there are `GAME_SPAWN_BRAMBLES` and `GAME_SPAWN_HAZELS`
 within `GAME_SPAWN_FOOD_MAX_COST` of travel.
 
 Decisions only happen on tile centers, so a colonist never jumps back when it
@@ -423,22 +442,28 @@ products are dropped (wood, stone blocks, branches...) and the
 designation disappears.
 
 **Gathering zones** (`core/gather_zone.h`, owned by `Game`) are how the player
-asks for what the land offers: felling trees, picking berries, taking branches
-and twigs, cutting grass and picking up stones. Designations are left for
+asks for what the land offers: felling trees, picking and digging up wild
+food, taking branches and twigs, cutting grass and picking up stones. Designations are left for
 single-tile orders (mining). A zone holds one order per resource
 (`GatherOrder`): off by default, and when enabled it gathers N items and stops
 (counted by the order itself), or gathers until the items lying in the colony
 (`Items.totals`, as for bills; grass counts fresh and dry) reach a target, or
-gathers forever. Wood and berries may wait for fully grown plants (on by
-default) so that settlers do not walk to young plants that give little.
+gathers forever. Wood may wait for fully grown trees (on by default) so that
+settlers do not walk to young trees that give little.
 `gather_zones_update()` recomputes each tick which resources every zone wants
 and bumps the zones revision when it changes; it is also bumped once per
 in-game hour, after every plant has grown, so that idle settlers look again.
 
-A zone tile offers a **job** (`GatherJob`: branches, twigs, harvest, cut grass,
-chop, stones, in that order of preference on one tile: the plant's stocks
-first, since picking its fruit or felling it would take them away, stones
-last) when it holds something a wanted resource comes from. Each job has its
+A zone tile offers a **job** (`GatherJob`: branches, twigs, harvest, harvest
+carefully, dig, dig carefully, cut grass, chop, stones, in that order of
+preference on one tile: branches and twigs first, since felling would take
+them away, stones last) when it holds something a wanted resource comes
+from. Each wild food is a resource of the job that suits its plant: picked or
+dug up, and "carefully" (Gathering 60, `GATHER_CAREFUL_MIN_LEVEL`) when easily
+mistaken for a poisonous plant, so that the existing job masks decide who may
+take it. Digging jobs (`GatherJobDef.fetches_tool`) send the gatherer to a
+better digging tool lying within `COLONIST_TOOL_SWAP_MAX_COST` first
+(`fetch_gather_tool()`, the craft's fetch phase reused); it keeps it. Each job has its
 work type (felling is woodcutting, the rest gathering) and knowledge; the
 settler takes the first job of the tile among those it may do
 (`Colonist.work_type` holds the job while `gathering`). Stones are limited:
@@ -467,8 +492,8 @@ who took it and the work done, or the work left off.
 
 **Reservations** (`core/reservation.h`, owned by `Game`) record who is busy with
 what: (kind, tile, owner), at most one owner per tile and kind. Kinds today:
-work (a designated tile), food (a bush about to be eaten), haul source and
-storage tile, so two colonists never walk to the same job, bush, stack or
+work (a designated tile), food (a plant about to be eaten), haul source and
+storage tile, so two colonists never walk to the same job, plant, stack or
 storage tile. Owners are colonist slot + 1.
 
 - Every task change goes through one function (`begin_task()`), which releases
@@ -520,7 +545,7 @@ searching the map, both check the list of sites (`any_site_job()`): the
 search stamp moves with every item added anywhere, and a site waiting for a
 material that does not exist yet (grass still drying) must not cost a
 search each time. Grass
-or a bush on the tile is cleared first (see *Clearing plants* below). When it
+or another plant but a tree on the tile is cleared first (see *Clearing plants* below). When it
 is done the site is gone, the structure appears; a blocking one pushes the
 items of its tile next door and takes the tile out of stockpiles and
 gathering zones, and a colonist left standing on it steps aside at its next
@@ -568,12 +593,13 @@ handle it like any site; finishing it brings the hit points back to full and
 keeps the grade. Taking the structure apart removes its refresh site.
 
 **Clearing plants**: blueprints (construction sites, of structures and workstations) may
-be placed on grass and bushes, not on trees (`map_plant_blocks_building()`:
-felling needs an axe nobody has yet). Once the materials are in, the builder
-first spends `gather_clear_work()` on the plant (cutting grass, pulling up a
-bush, no knowledge needed), kept in the blueprint's `clear_progress` if it
+be placed on grass, shrubs and low plants, not on trees
+(`map_plant_blocks_building()`: felling needs an axe nobody has yet). Once the
+materials are in, the builder first spends `gather_clear_work()` on the plant
+(cutting grass or a low plant, pulling up a shrub, nothing for a withered
+plant, no knowledge needed), kept in the blueprint's `clear_progress` if it
 is interrupted; `gather_clear_plant()` then removes the plant and drops what
-it gives (cut grass, its twigs and branches, ripe berries, with quality from
+it gives (cut grass, its twigs and branches, its food, with quality from
 the builder's gathering level). Only then does the construction work start.
 `map_set_structure()` still clears any plant left, as a safety net.
 
@@ -679,7 +705,7 @@ needs (`colonist_can_build_site()`) fetches what is still missing and does
 the work from a neighboring tile; `construction_add_work()` then places the
 station in `Workstations`, ready for bills. A station made of nothing
 (crafting spot, `workstation_needs_construction()` false) is placed ready,
-unless grass or a bush is in the way: its site then only has the plant to
+unless a plant is in the way: its site then only has the plant to
 clear. `game_can_place_workstation()` keeps room in the station list for
 every site (`Constructions.workstation_count`); should a station still not
 fit when its work is done (a tree grown on the tile), the site waits. The
@@ -907,7 +933,7 @@ colony without a window and prints the average and worst tick time and the
 final state hash. An optimization that is not supposed to change behavior
 must leave that hash unchanged. Reference (Release, 200 × 200, 64 colonists,
 10 in-game days): about 8 µs per tick left alone, 10 µs with every tree, rock
-and bush designated; long food searches when berries run out are the
+and bush designated; long food searches when food runs out are the
 remaining spikes (1 to 4 ms). Scenario 3 (construction, a gathering zone
 and a small stockpile that fills up): about 8 µs per tick with 16 colonists
 over 10 days (worst tick 4 ms), 40 µs with 64 colonists over 5 days (worst
@@ -960,10 +986,13 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   colonists are drawn together from the back (top of the screen) to the
   front (`render_world_sprites()`): rows of plants merged with colonists
   sorted by the depth of their feet. A tree that would hide a colonist
-  standing behind it is drawn see-through.
-- Plants: one sprite per growth stage (`plant_growth_stage()`, 5 stages);
-  bushes have a second set with berries (`plant_has_fruit()`). Sprites are
-  mirrored on some tiles for variety.
+  standing behind it is drawn see-through (a hazel too).
+- Plants: a table in `sprites.c` gives each plant type its sprites: trees,
+  hazels and brambles one per growth stage (`plant_growth_stage()`, 5
+  stages), low plants three sizes the stages are shared out among, mushrooms
+  one; hazels and brambles have a second set showing their food
+  (`plant_has_food()`). Withered plants are not drawn. Sprites are mirrored
+  on some tiles for variety.
 - Colonists: four layers drawn in order on the same 128 × 192 canvas: body
   (naked, without arms nor legs; thin, average or heavy, per skin tone), head
   (per skin tone and expression), beard, hair. Clothes will be extra layers

@@ -3,6 +3,7 @@
 
 #include "test_framework.h"
 
+/* At the end of summer: the brambles bear fruit, autumn's food follows. */
 static void test_init_starts_in_the_morning_at_normal_speed(void)
 {
     GameClock clock;
@@ -10,10 +11,23 @@ static void test_init_starts_in_the_morning_at_normal_speed(void)
     CHECK_EQ_INT(clock.speed, GAME_SPEED_NORMAL);
     GameDate date = game_date_from_tick(clock.tick);
     CHECK_EQ_INT(date.year, 1);
-    CHECK_EQ_INT(date.season, SEASON_SPRING);
-    CHECK_EQ_INT(date.day, 1);
+    CHECK_EQ_INT(date.season, SEASON_SUMMER);
+    CHECK_EQ_INT(date.day, 11);
+    CHECK_EQ_INT(game_day_of_year(clock.tick), GAME_START_DAY);
     CHECK_EQ_INT(date.hour, GAME_START_HOUR);
     CHECK_EQ_INT(date.minute, 0);
+}
+
+static void test_day_of_year(void)
+{
+    CHECK_EQ_INT(game_day_of_year(0), 0);
+    CHECK_EQ_INT(game_day_of_year(TICKS_PER_DAY - 1), 0);
+    CHECK_EQ_INT(game_day_of_year(TICKS_PER_DAY), 1);
+    CHECK_EQ_INT(game_day_of_year(TICKS_PER_YEAR - 1), DAYS_PER_YEAR - 1);
+    CHECK_EQ_INT(game_day_of_year(TICKS_PER_YEAR + 3 * TICKS_PER_DAY), 3);
+    CHECK_EQ_INT(SEASON_DAY(SEASON_SPRING, 1), 0);
+    CHECK_EQ_INT(SEASON_DAY(SEASON_AUTUMN, 1), 2 * DAYS_PER_SEASON);
+    CHECK_EQ_INT(SEASON_DAY(SEASON_WINTER, DAYS_PER_SEASON), DAYS_PER_YEAR - 1);
 }
 
 static void test_speed_multipliers(void)
@@ -151,6 +165,7 @@ static void test_season_keys(void)
 int main(void)
 {
     RUN_TEST(test_init_starts_in_the_morning_at_normal_speed);
+    RUN_TEST(test_day_of_year);
     RUN_TEST(test_speed_multipliers);
     RUN_TEST(test_consume_produces_ticks_at_fixed_rate);
     RUN_TEST(test_consume_scales_with_speed);

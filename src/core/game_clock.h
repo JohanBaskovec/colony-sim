@@ -19,8 +19,16 @@
 #define DAYS_PER_YEAR (DAYS_PER_SEASON * SEASONS_PER_YEAR)
 #define TICKS_PER_YEAR ((uint64_t)TICKS_PER_DAY * DAYS_PER_YEAR)
 
-/* A new game starts on day 1 of spring, year 1, at this hour. */
+/* Day of the year (0-based) of a season's day (1-based). */
+#define SEASON_DAY(season, day) ((int)(season) * DAYS_PER_SEASON + (day) - 1)
+
+/* A new game starts at the end of summer of year 1 (brambles bear fruit,
+ * hazelnuts and roots follow in autumn), on this day of the year, at this
+ * hour. */
+#define GAME_START_DAY SEASON_DAY(SEASON_SUMMER, 11)
 #define GAME_START_HOUR 6
+#define GAME_START_TICK (((uint64_t)GAME_START_DAY * HOURS_PER_DAY + GAME_START_HOUR) * \
+                         TICKS_PER_HOUR)
 
 /* Upper bound of ticks run per update, so a slow frame cannot snowball. */
 #define GAME_CLOCK_MAX_TICKS_PER_UPDATE 30
@@ -78,6 +86,9 @@ GameDate game_date_from_tick(uint64_t tick);
 
 /* Hour of the day (0-23) only: cheaper than the whole date. */
 int game_hour_from_tick(uint64_t tick);
+
+/* Day of the year, 0 (spring, day 1) .. DAYS_PER_YEAR - 1. */
+int game_day_of_year(uint64_t tick);
 
 /* Light level for the given tick: GAME_DAYLIGHT_MIN at night, 1.0 at day. */
 float game_daylight(uint64_t tick);

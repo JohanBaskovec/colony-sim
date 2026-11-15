@@ -13,7 +13,15 @@
  *   a mature tree gives 60 of them (420 kg: trunk and big branches);
  * - stone block: a rough block of about 20 kg dug out of a rock wall (7.5 l
  *   of rock, irregular so it stacks with gaps);
- * - berries: a portion of about 300 g (half a liter, ~190 kcal);
+ * - blackberries: a handful of about 300 g (half a liter, ~190 kcal: ripe
+ *   wild fruit, generously counted);
+ * - hazelnuts: 100 g in their shells (~285 kcal), which keep for months;
+ * - mushrooms: 100 g of caps (~30 kcal), more taste than food;
+ * - wild garlic, nettles, plantain: a bunch of about 200 g of leaves or young
+ *   shoots (~60 kcal for garlic and nettles, ~50 for plantain);
+ * - wild carrots: a bunch of thin roots, about 250 g (~100 kcal);
+ * - cattail rhizomes: about 250 g of starchy rootstock (~250 kcal, half of it
+ *   digested raw);
  * - cobble: a rounded stone that fits the hand, about 1 kg, picked up from
  *   the ground; tough, the knapper's hammer (its grade is its toughness);
  * - flint: a nodule of about 1 kg, the stone that is knapped (its grade is how
@@ -22,13 +30,15 @@
  * - twigs: a handful (about 200 g) of kindling;
  * - grass: an armful, 2.5 kg cut fresh, 1 kg once dry (about 12 l either way).
  * Stone blocks never wear out; logs vary with the woodcutter (knots, cracks)
- * and berries with the gatherer (ripeness, bruises). Fresh grass left on the
+ * and wild food with the gatherer (ripeness, bruises). Fresh grass left on the
  * ground dries in three days.
  * Tools and weapons (docs/KNOWLEDGE.md §6, §8; a plain cobble serves as
  * the knapper's hammer): a chopper (1 kg), a sharp flake (30 g, razor sharp
  * but soon worn out), a hand axe (600 g); a throwing spear (0.8 kg, a long
  * straight branch) and a thrusting spear (1.5 kg, thicker). Fire hardening
- * (docs/KNOWLEDGE.md §5.2) makes spears that last half as long again.
+ * (docs/KNOWLEDGE.md §5.2) makes spears that last half as long again. The
+ * digging stick (1 kg, a stout pointed branch) digs roots up (§7); hardened
+ * in the fire, it lasts half as long again too.
  */
 #define DEF(id_, key, category_, weight_, bulk_, nutrition_, hp, quality, damage)                 \
     .id = (id_), .name_key = (key), .category = (category_), .weight = (weight_),              \
@@ -42,8 +52,8 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                        true, true)},
     [ITEM_STONE_BLOCK] = {DEF("stone_block", N_("item.stone_block"), ITEM_CATEGORY_RESOURCES,
                               20.0f, 20.0f, 0.0f, 150, false, false)},
-    [ITEM_BERRIES] = {DEF("berries", N_("item.berries"), ITEM_CATEGORY_FOOD, 0.3f, 1.0f, 0.05f, 10,
-                          true, true)},
+    [ITEM_BLACKBERRIES] = {DEF("blackberries", N_("item.blackberries"), ITEM_CATEGORY_FOOD, 0.3f,
+                               1.0f, 0.05f, 10, true, true)},
     /* Damageable: a cobble used as a hammer wears out. */
     [ITEM_COBBLE] = {DEF("cobble", N_("item.cobble"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f,
                          200, true, true)},
@@ -76,6 +86,25 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                                            N_("item.thrusting_spear_hardened"),
                                            ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 105, true,
                                            true)},
+    [ITEM_HAZELNUTS] = {DEF("hazelnuts", N_("item.hazelnuts"), ITEM_CATEGORY_FOOD, 0.1f, 0.4f,
+                            0.075f, 100, true, true)},
+    [ITEM_MUSHROOMS] = {DEF("mushrooms", N_("item.mushrooms"), ITEM_CATEGORY_FOOD, 0.1f, 0.5f,
+                            0.01f, 5, true, true)},
+    [ITEM_WILD_GARLIC] = {DEF("wild_garlic", N_("item.wild_garlic"), ITEM_CATEGORY_FOOD, 0.2f,
+                              1.5f, 0.016f, 5, true, true)},
+    [ITEM_NETTLES] = {DEF("nettles", N_("item.nettles"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f, 0.016f, 5,
+                          true, true)},
+    [ITEM_PLANTAIN] = {DEF("plantain", N_("item.plantain"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f,
+                           0.013f, 5, true, true)},
+    [ITEM_WILD_CARROTS] = {DEF("wild_carrots", N_("item.wild_carrots"), ITEM_CATEGORY_FOOD, 0.25f,
+                               1.0f, 0.027f, 30, true, true)},
+    [ITEM_CATTAIL_RHIZOMES] = {DEF("cattail_rhizomes", N_("item.cattail_rhizomes"),
+                                   ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.05f, 30, true, true)},
+    [ITEM_DIGGING_STICK] = {DEF("digging_stick", N_("item.digging_stick"), ITEM_CATEGORY_TOOLS,
+                                1.0f, 6.0f, 0.0f, 40, true, true)},
+    [ITEM_DIGGING_STICK_HARDENED] = {DEF("digging_stick_hardened",
+                                         N_("item.digging_stick_hardened"), ITEM_CATEGORY_TOOLS,
+                                         1.0f, 6.0f, 0.0f, 60, true, true)},
 };
 
 #undef DEF

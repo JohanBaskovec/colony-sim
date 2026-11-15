@@ -59,7 +59,9 @@ static void test_tiles_are_valid_and_consistent(void)
             float fertility = terrain_def((Terrain)map.terrain[i])->fertility;
             CHECK(map.rock[i] == ROCK_NONE);
             CHECK(fertility >= plant_def((PlantType)plant->type)->min_fertility);
-            CHECK(plant->growth > 0.0f && plant->growth <= 1.0f);
+            /* Withered plants (wild garlic at the end of summer) wait at 0. */
+            CHECK(plant->growth > 0.0f || plant_is_dormant(plant));
+            CHECK(plant->growth <= 1.0f);
         }
         if (map.rock[i] != ROCK_NONE) {
             CHECK_EQ_INT(map.terrain[i], TERRAIN_ROUGH_STONE);

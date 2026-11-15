@@ -20,8 +20,9 @@
 
 typedef int SpriteId;
 
-SpriteId sprite_tree(int stage);
-SpriteId sprite_bush(int stage, bool fruit);
+/* A plant at a growth stage (0 .. PLANT_GROWTH_STAGES - 1), bearing food or
+ * not; -1 for plants without a sprite (grass is part of the ground). */
+SpriteId sprite_plant(PlantType type, int stage, bool fruit);
 /* Character layers, drawn in this order. The body is naked, without arms nor
  * legs: clothes will be layers drawn over it. */
 SpriteId sprite_body(int body, int skin);

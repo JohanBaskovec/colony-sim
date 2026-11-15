@@ -28,21 +28,27 @@ static void test_init_and_shutdown(void)
     CHECK(game.map.terrain == NULL);
 }
 
-typedef struct BushCount {
-    int ripe;
-} BushCount;
+typedef struct FoodPlantCount {
+    PlantType type;
+    int count;
+} FoodPlantCount;
 
-/* Counts ripe berry bushes and never accepts a tile, to visit the whole area. */
-static bool count_ripe_bush(const Map *map, int x, int y, void *userdata)
+/* Counts the grown food plants of a kind and never accepts a tile, to visit
+ * the whole area. */
+static bool count_food_plant(const Map *map, int x, int y, void *userdata)
 {
+    FoodPlantCount *count = userdata;
     const Plant *plant = &map->plants[map_index(map, x, y)];
-    if (plant->type == PLANT_BUSH && plant->growth >= plant_def(PLANT_BUSH)->min_edible_growth) {
-        ((BushCount *)userdata)->ripe++;
+    if (plant->type == count->type &&
+        plant->growth >= plant_def(count->type)->min_food_growth) {
+        count->count++;
     }
     return false;
 }
 
-static void test_settlers_arrive_near_ripe_berries(void)
+/* At the end of summer: brambles bearing fruit near the arrival point, and
+ * hazels for the autumn. */
+static void test_settlers_arrive_near_food(void)
 {
     for (uint64_t seed = 1; seed <= 40; seed++) {
         Game game;
@@ -50,12 +56,66 @@ static void test_settlers_arrive_near_ripe_berries(void)
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         REQUIRE(first != NULL);
         TilePos start = {(int16_t)first->x, (int16_t)first->y};
-        BushCount count = {0};
-        pathfinder_find_nearest(&game.pathfinder, &game.map, start, count_ripe_bush, &count,
+        FoodPlantCount brambles = {PLANT_BRAMBLE, 0}, hazels = {PLANT_HAZEL, 0};
+        pathfinder_find_nearest(&game.pathfinder, &game.map, start, count_food_plant, &brambles,
                                 GAME_SPAWN_FOOD_MAX_COST, NULL, NULL);
-        CHECK(count.ripe >= GAME_SPAWN_RIPE_BUSHES);
+        pathfinder_find_nearest(&game.pathfinder, &game.map, start, count_food_plant, &hazels,
+                                GAME_SPAWN_FOOD_MAX_COST, NULL, NULL);
+        CHECK(brambles.count >= GAME_SPAWN_BRAMBLES);
+        CHECK(hazels.count >= GAME_SPAWN_HAZELS);
         game_shutdown(&game);
     }
+}
+
+/* Mushrooms come up under mature trees on the first autumn nights, and only
+ * there; they go again within days. */
+static void test_mushrooms_come_and_go(void)
+{
+    Game game;
+    REQUIRE(init_small_game(&game, 3));
+    Map *map = &game.map;
+    for (size_t i = 0; i < map_tile_count(map); i++) {
+        map->terrain[i] = TERRAIN_SOIL;
+        map->rock[i] = ROCK_NONE;
+        map->structure[i] = STRUCTURE_NONE;
+        /* A grove on the west half, meadow on the east. */
+        bool grove = (int)(i % (size_t)map->width) < map->width / 2;
+        map->plants[i] = grove && i % 7 == 0 ? (Plant){.type = PLANT_TREE, .growth = 1.0f}
+                                              : (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    }
+    map_topology_changed(map);
+    /* Summer: none. */
+    game.clock.tick = (uint64_t)SEASON_DAY(SEASON_SUMMER, 5) * TICKS_PER_DAY;
+    for (int i = 0; i < TICKS_PER_HOUR; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_UINT(map_count_plants(map, PLANT_MUSHROOMS), 0);
+    /* The first nights of autumn. */
+    int patches = 0;
+    for (int day = 1; day <= 3; day++) {
+        game.clock.tick = (uint64_t)SEASON_DAY(SEASON_AUTUMN, day) * TICKS_PER_DAY;
+        for (int i = 0; i < TICKS_PER_HOUR; i++) {
+            game_tick(&game);
+        }
+    }
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            const Plant *plant = &map->plants[map_index(map, x, y)];
+            if (plant->type == PLANT_MUSHROOMS) {
+                patches++;
+                CHECK(map_tree_near(map, x, y, 2));
+                CHECK(plant_has_food(plant));
+            }
+        }
+    }
+    CHECK(patches > 0);
+    /* Two weeks on, in winter: all gone. */
+    game.clock.tick = (uint64_t)SEASON_DAY(SEASON_WINTER, 2) * TICKS_PER_DAY;
+    for (int i = 0; i < TICKS_PER_HOUR; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_UINT(map_count_plants(map, PLANT_MUSHROOMS), 0);
+    game_shutdown(&game);
 }
 
 /* Accepts a tile of a rich enough flint patch where stones can be gathered. */
@@ -161,9 +221,10 @@ static void test_plant_growth_is_spread_over_ticks(void)
     for (size_t i = 0; i < count; i++) {
         const Plant *plant = &map->plants[i];
         before[i] = plant->growth;
+        const PlantDef *def = plant_def((PlantType)plant->type);
         if (plant->type != PLANT_NONE && plant->growth < 1.0f &&
-            terrain_def((Terrain)map->terrain[i])->fertility >=
-                plant_def((PlantType)plant->type)->min_fertility) {
+            plant_days_contain(def->growth_days, game_day_of_year(game.clock.tick)) &&
+            terrain_def((Terrain)map->terrain[i])->fertility >= def->min_fertility) {
             growing++;
         }
     }
@@ -320,7 +381,7 @@ static void test_plant_stocks_grow_back(void)
     }
     Plant *plant = &game.map.plants[tree];
     /* Generated plants start with full stocks. */
-    plant_fill_stocks(plant);
+    plant_settle(plant, GAME_START_DAY);
     int capacity = plant_stock_capacity(plant, PLANT_STOCK_BRANCHES);
     REQUIRE(capacity > 0);
     CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_BRANCHES), capacity);
@@ -380,7 +441,8 @@ int main(void)
 {
     RUN_TEST(test_init_and_shutdown);
     RUN_TEST(test_init_failure_leaves_game_safe_to_shut_down);
-    RUN_TEST(test_settlers_arrive_near_ripe_berries);
+    RUN_TEST(test_settlers_arrive_near_food);
+    RUN_TEST(test_mushrooms_come_and_go);
     RUN_TEST(test_settlers_arrive_near_flint);
     RUN_TEST(test_update_advances_ticks);
     RUN_TEST(test_plants_grow_over_time);

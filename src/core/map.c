@@ -23,22 +23,97 @@ static const RockDef ROCK_DEFS[ROCK_COUNT] = {
     [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f, ITEM_STONE_BLOCK, 12},
 };
 
+/* Seasons' days, for the plant tables. */
+#define SPRING(day) SEASON_DAY(SEASON_SPRING, day)
+#define SUMMER(day) SEASON_DAY(SEASON_SUMMER, day)
+#define AUTUMN(day) SEASON_DAY(SEASON_AUTUMN, day)
+#define WINTER(day) SEASON_DAY(SEASON_WINTER, day)
+/* Plants grow from spring to autumn and rest in winter. */
+#define GROWING_SEASON PLANT_DAYS(SPRING(1), AUTUMN(DAYS_PER_SEASON))
+#define STOCKS(branches, twigs, food) {branches, twigs, food}
+
+/*
+ * Wild plants and their seasons in a temperate climate (docs/KNOWLEDGE.md §7).
+ * Food values: see the items (core/item.c). A stock grows back one item per
+ * `stock_regrow_hours`: a bramble ripens two handfuls a day at the end of
+ * summer, a hazel a little over one nut a day in autumn.
+ */
 static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
-    /* id, name, growth/day, min fertility, move cost, nutrition, min edible growth,
-     * cut item, cut yield, harvest item, harvest yield, stock capacity (branches, twigs),
-     * stock regrowth hours (branches, twigs) */
-    [PLANT_NONE] = {"none", NULL, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0, ITEM_NONE, 0,
-                    {0, 0}, {0, 0}},
-    [PLANT_GRASS] = {"grass", N_("plant.grass"), 0.35f, 0.3f, 1.0f, 0.0f, 0.0f, ITEM_NONE, 0,
-                     ITEM_NONE, 0, {0, 0}, {0, 0}},
-    /* 9 berries of 0.05 nutrition: the same food as eating the ripe bush directly. */
-    [PLANT_BUSH] = {"berry_bush", N_("plant.bush"), 0.12f, 0.5f, 1.3f, 0.45f, 0.5f, ITEM_NONE, 0,
-                    ITEM_BERRIES, 9, {0, 4}, {0, 24}},
+    [PLANT_NONE] = {.id = "none", .move_cost = 1.0f},
+    [PLANT_GRASS] = {.id = "grass", .name_key = N_("plant.grass"), .growth_per_day = 0.35f,
+                     .min_fertility = 0.3f, .move_cost = 1.0f, .growth_days = GROWING_SEASON},
     /* 60 logs of 7 kg: the usable wood of a mature tree (see item.c). Dead
      * branches can be gathered without felling it. */
-    [PLANT_TREE] = {"tree", N_("plant.tree"), 0.03f, 0.6f, 1.6f, 0.0f, 0.0f, ITEM_WOOD, 60,
-                    ITEM_NONE, 0, {6, 10}, {48, 24}},
+    [PLANT_TREE] = {.id = "tree", .name_key = N_("plant.tree"), .growth_per_day = 0.03f,
+                    .min_fertility = 0.6f, .move_cost = 1.6f, .growth_days = GROWING_SEASON,
+                    .cut_item = ITEM_WOOD, .cut_yield = 60, .stock_capacity = STOCKS(6, 10, 0),
+                    .stock_regrow_hours = STOCKS(48, 24, 0)},
+    [PLANT_HAZEL] = {.id = "hazel", .name_key = N_("plant.hazel"), .growth_per_day = 0.04f,
+                     .min_fertility = 0.6f, .move_cost = 1.4f, .growth_days = GROWING_SEASON,
+                     .stock_capacity = STOCKS(3, 6, 12), .stock_regrow_hours = STOCKS(72, 24, 20),
+                     .food_item = ITEM_HAZELNUTS,
+                     .food_days = PLANT_DAYS(AUTUMN(1), AUTUMN(DAYS_PER_SEASON)),
+                     .min_food_growth = 0.6f},
+    /* Thorny canes: slow to walk through. */
+    [PLANT_BRAMBLE] = {.id = "bramble", .name_key = N_("plant.bramble"), .growth_per_day = 0.12f,
+                       .min_fertility = 0.5f, .move_cost = 2.0f, .growth_days = GROWING_SEASON,
+                       .stock_capacity = STOCKS(0, 0, 9), .stock_regrow_hours = STOCKS(0, 0, 12),
+                       .food_item = ITEM_BLACKBERRIES,
+                       .food_days = PLANT_DAYS(SUMMER(8), AUTUMN(7)), .min_food_growth = 0.5f},
+    /* Easily mistaken for lily of the valley or autumn crocus. */
+    [PLANT_WILD_GARLIC] = {.id = "wild_garlic", .name_key = N_("plant.wild_garlic"),
+                           .growth_per_day = 0.25f, .min_fertility = 1.2f, .move_cost = 1.0f,
+                           .growth_days = PLANT_DAYS(SPRING(1), SUMMER(3)), .dies_back = true,
+                           .stock_capacity = STOCKS(0, 0, 3),
+                           .stock_regrow_hours = STOCKS(0, 0, 24), .food_item = ITEM_WILD_GARLIC,
+                           .food_days = PLANT_DAYS(SPRING(1), SPRING(DAYS_PER_SEASON)),
+                           .min_food_growth = 0.3f, .food_confusable = true},
+    /* Young shoots in spring, and again when it grows back in autumn. */
+    [PLANT_NETTLE] = {.id = "nettle", .name_key = N_("plant.nettle"), .growth_per_day = 0.2f,
+                      .min_fertility = 1.2f, .move_cost = 1.2f, .growth_days = GROWING_SEASON,
+                      .dies_back = true, .stock_capacity = STOCKS(0, 0, 3),
+                      .stock_regrow_hours = STOCKS(0, 0, 24), .food_item = ITEM_NETTLES,
+                      .food_days = PLANT_DAYS(SPRING(1), SPRING(DAYS_PER_SEASON)) |
+                                   PLANT_DAYS(AUTUMN(3), AUTUMN(DAYS_PER_SEASON)),
+                      .min_food_growth = 0.2f},
+    [PLANT_PLANTAIN] = {.id = "plantain", .name_key = N_("plant.plantain"),
+                        .growth_per_day = 0.15f, .min_fertility = 0.6f, .move_cost = 1.0f,
+                        .growth_days = GROWING_SEASON, .stock_capacity = STOCKS(0, 0, 2),
+                        .stock_regrow_hours = STOCKS(0, 0, 24), .food_item = ITEM_PLANTAIN,
+                        .food_days = GROWING_SEASON, .min_food_growth = 0.3f},
+    /* Its root is tender from autumn until early spring, woody once it
+     * flowers; easily mistaken for hemlock. */
+    [PLANT_WILD_CARROT] = {.id = "wild_carrot", .name_key = N_("plant.wild_carrot"),
+                           .growth_per_day = 0.08f, .min_fertility = 0.6f, .move_cost = 1.0f,
+                           .growth_days = GROWING_SEASON, .stock_capacity = STOCKS(0, 0, 3),
+                           .stock_regrow_hours = STOCKS(0, 0, 24),
+                           .food_item = ITEM_WILD_CARROTS,
+                           .food_days = PLANT_DAYS(AUTUMN(1), WINTER(DAYS_PER_SEASON)) |
+                                        PLANT_DAYS(SPRING(1), SPRING(6)),
+                           .min_food_growth = 0.6f, .food_dug = true, .food_confusable = true,
+                           .dug_whole = true},
+    /* In the shallows and on the shore. A spreading rootstock: digging part
+     * of it up leaves the rest growing. */
+    [PLANT_CATTAIL] = {.id = "cattail", .name_key = N_("plant.cattail"), .growth_per_day = 0.1f,
+                       .wetland = true, .move_cost = 1.3f, .growth_days = GROWING_SEASON,
+                       .stock_capacity = STOCKS(0, 0, 4), .stock_regrow_hours = STOCKS(0, 0, 48),
+                       .food_item = ITEM_CATTAIL_RHIZOMES, .food_days = PLANT_ALL_YEAR,
+                       .min_food_growth = 0.5f, .food_dug = true},
+    /* Appear fully grown, picked or gone within days (see core/game.c). Some
+     * are deadly: a matter for skilled gatherers. */
+    [PLANT_MUSHROOMS] = {.id = "mushrooms", .name_key = N_("plant.mushrooms"),
+                         .move_cost = 1.0f, .stock_capacity = STOCKS(0, 0, 3),
+                         .stock_regrow_hours = STOCKS(0, 0, 24), .food_item = ITEM_MUSHROOMS,
+                         .food_days = PLANT_DAYS(AUTUMN(1), AUTUMN(DAYS_PER_SEASON)),
+                         .food_confusable = true, .vanishes = true},
 };
+
+#undef SPRING
+#undef SUMMER
+#undef AUTUMN
+#undef WINTER
+#undef GROWING_SEASON
+#undef STOCKS
 
 const TerrainDef *terrain_def(Terrain terrain)
 {
@@ -55,11 +130,13 @@ const PlantDef *plant_def(PlantType plant)
     return ((unsigned)plant < PLANT_COUNT) ? &PLANT_DEFS[plant] : NULL;
 }
 
-ItemType plant_stock_item(PlantStock stock)
+ItemType plant_stock_item(PlantType type, PlantStock stock)
 {
     switch (stock) {
     case PLANT_STOCK_BRANCHES: return ITEM_BRANCHES;
     case PLANT_STOCK_TWIGS: return ITEM_TWIGS;
+    case PLANT_STOCK_FOOD:
+        return (unsigned)type < PLANT_COUNT ? PLANT_DEFS[type].food_item : ITEM_NONE;
     default: return ITEM_NONE;
     }
 }
@@ -69,8 +146,13 @@ int plant_stock_capacity(const Plant *plant, PlantStock stock)
     if ((unsigned)stock >= PLANT_STOCK_COUNT || (unsigned)plant->type >= PLANT_COUNT) {
         return 0;
     }
+    const PlantDef *def = &PLANT_DEFS[plant->type];
     float growth = clampf(plant->growth, 0.0f, 1.0f);
-    return (int)((float)PLANT_DEFS[plant->type].stock_capacity[stock] * growth + 0.5f);
+    if (stock == PLANT_STOCK_FOOD &&
+        (def->food_item == ITEM_NONE || growth < def->min_food_growth)) {
+        return 0;
+    }
+    return (int)((float)def->stock_capacity[stock] * growth + 0.5f);
 }
 
 /* Regrowth hours a full stock holds. */
@@ -101,15 +183,59 @@ int plant_take_stock(Plant *plant, PlantStock stock, int count)
     return taken;
 }
 
-void plant_regrow_stocks(Plant *plant, int hours)
+bool plant_days_contain(PlantDays days, int day_of_year)
+{
+    return day_of_year >= 0 && day_of_year < DAYS_PER_YEAR && ((days >> day_of_year) & 1u);
+}
+
+/* Whether a stock of a plant grows on a day of the year. */
+static bool stock_in_season(const PlantDef *def, PlantStock stock, int day_of_year)
+{
+    return plant_days_contain(stock == PLANT_STOCK_FOOD ? def->food_days : def->growth_days,
+                              day_of_year);
+}
+
+void plant_regrow_stocks(Plant *plant, int hours, int day_of_year)
 {
     if (hours <= 0 || (unsigned)plant->type >= PLANT_COUNT) {
         return;
     }
+    const PlantDef *def = &PLANT_DEFS[plant->type];
     for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {
+        bool in_season = stock_in_season(def, (PlantStock)stock, day_of_year);
+        if (!in_season && stock == PLANT_STOCK_FOOD) {
+            plant->stock[stock] = 0; /* Fallen, rotten or woody. */
+            continue;
+        }
         /* A stock above the limit (the plant was eaten down) drops to it. */
-        int value = (int)plant->stock[stock] + hours;
+        int value = (int)plant->stock[stock] + (in_season ? hours : 0);
         plant->stock[stock] = (uint16_t)clampi(value, 0, stock_limit(plant, (PlantStock)stock));
+    }
+}
+
+void plant_advance(Plant *plant, float fertility, int hours, int day_of_year)
+{
+    if (plant->type == PLANT_NONE || (unsigned)plant->type >= PLANT_COUNT || hours <= 0) {
+        return;
+    }
+    const PlantDef *def = &PLANT_DEFS[plant->type];
+    if (def->wetland) {
+        fertility = 1.0f;
+    }
+    bool growing = plant_days_contain(def->growth_days, day_of_year);
+    if (!growing && def->dies_back) {
+        plant->growth = 0.0f;
+        memset(plant->stock, 0, sizeof(plant->stock));
+    } else {
+        plant_regrow_stocks(plant, hours, day_of_year);
+        if (growing && plant->growth < 1.0f && fertility >= def->min_fertility) {
+            float growth = plant->growth + def->growth_per_day * fertility * (float)hours /
+                                               (float)HOURS_PER_DAY;
+            plant->growth = growth < 1.0f ? growth : 1.0f;
+        }
+    }
+    if (def->vanishes && plant_stock_available(plant, PLANT_STOCK_FOOD) == 0) {
+        memset(plant, 0, sizeof(*plant));
     }
 }
 
@@ -119,19 +245,30 @@ int plant_growth_stage(const Plant *plant)
     return clampi(stage, 0, PLANT_GROWTH_STAGES - 1);
 }
 
-bool plant_has_fruit(const Plant *plant)
+bool plant_has_food(const Plant *plant)
 {
-    if ((unsigned)plant->type >= PLANT_COUNT) {
-        return false;
-    }
-    const PlantDef *def = &PLANT_DEFS[plant->type];
-    return def->harvest_item != ITEM_NONE && plant->growth >= def->min_edible_growth;
+    return plant_stock_available(plant, PLANT_STOCK_FOOD) > 0;
 }
 
-void plant_fill_stocks(Plant *plant)
+bool plant_is_dormant(const Plant *plant)
 {
+    return (unsigned)plant->type < PLANT_COUNT && PLANT_DEFS[plant->type].dies_back &&
+           plant->growth <= 0.0f;
+}
+
+void plant_settle(Plant *plant, int day_of_year)
+{
+    if ((unsigned)plant->type >= PLANT_COUNT) {
+        return;
+    }
+    const PlantDef *def = &PLANT_DEFS[plant->type];
+    if (def->dies_back && !plant_days_contain(def->growth_days, day_of_year)) {
+        plant->growth = 0.0f;
+    }
     for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {
-        int limit = (unsigned)plant->type < PLANT_COUNT ? stock_limit(plant, (PlantStock)stock) : 0;
+        bool full =
+            stock != PLANT_STOCK_FOOD || stock_in_season(def, PLANT_STOCK_FOOD, day_of_year);
+        int limit = full ? stock_limit(plant, (PlantStock)stock) : 0;
         plant->stock[stock] = (uint16_t)clampi(limit, 0, UINT16_MAX);
     }
 }
@@ -589,7 +726,22 @@ bool map_has_edible_plant(const Map *map, int x, int y)
     }
     const Plant *plant = &map->plants[map_index(map, x, y)];
     const PlantDef *def = &PLANT_DEFS[plant->type];
-    return def->nutrition > 0.0f && plant->growth >= def->min_edible_growth;
+    return !def->food_dug && !def->food_confusable && plant_has_food(plant);
+}
+
+bool map_tree_near(const Map *map, int x, int y, int range)
+{
+    for (int ty = y - range; ty <= y + range; ty++) {
+        for (int tx = x - range; tx <= x + range; tx++) {
+            if (map_in_bounds(map, tx, ty)) {
+                const Plant *plant = &map->plants[map_index(map, tx, ty)];
+                if (plant->type == PLANT_TREE && plant->growth >= 1.0f) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 bool map_is_water(const Map *map, int x, int y)

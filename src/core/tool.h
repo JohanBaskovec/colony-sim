@@ -23,10 +23,11 @@ typedef enum ToolUse {
     TOOL_USE_KNAPPING,    /* Striking stone. */
     TOOL_USE_WOODWORKING, /* Shaping wood: spears. */
     TOOL_USE_BUILDING,    /* Construction sites and workstations. */
+    TOOL_USE_DIGGING,     /* Digging roots up. */
     TOOL_USE_COUNT
 } ToolUse;
 
-/* Work no tool helps with (gathering branches, picking berries...). */
+/* Work no tool helps with (gathering branches, picking fruit...). */
 #define TOOL_USE_NONE TOOL_USE_COUNT
 
 /* Work done with a tool before it loses one hit point: an hour. */

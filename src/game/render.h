@@ -81,9 +81,9 @@ void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera 
 void render_gather_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                         int y1, bool remove);
 
-/* Trees, bushes and colonists (with what they carry), from the back to the
- * front so that tall sprites overlap correctly; selected colonists get a ring
- * and their current path. */
+/* Plants (trees, shrubs, low plants) and colonists (with what they carry),
+ * from the back to the front so that tall sprites overlap correctly; selected
+ * colonists get a ring and their current path. */
 void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
                           const Camera *camera, const EntityId *selected, int selected_count);
 

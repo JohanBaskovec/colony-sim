@@ -61,6 +61,15 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                        {ITEM_THRUSTING_SPEAR, ITEM_NONE}, 1, ITEM_QUALITY_CRUDE,
                                        {0, 0}, 750.0f, KNOWLEDGE_FIRE, 55.0f,
                                        ITEM_THRUSTING_SPEAR_HARDENED, 0, TOOL_USE_NONE},
+    /* A stout branch, its end cut to a point: part of gathering. */
+    [RECIPE_DIGGING_STICK] = {"digging_stick", N_("recipe.digging_stick"), CRAFTING_SPOT,
+                              {ITEM_BRANCHES, ITEM_NONE}, 1, ITEM_QUALITY_CRUDE,
+                              {CUTTING_TOOL, 0}, 375.0f, KNOWLEDGE_GATHERING, 50.0f,
+                              ITEM_DIGGING_STICK, 2, TOOL_USE_WOODWORKING},
+    [RECIPE_HARDEN_DIGGING_STICK] = {"harden_digging_stick", N_("recipe.harden_digging_stick"),
+                                     OPEN_HEARTH, {ITEM_DIGGING_STICK, ITEM_NONE}, 1,
+                                     ITEM_QUALITY_CRUDE, {0, 0}, 750.0f, KNOWLEDGE_FIRE, 55.0f,
+                                     ITEM_DIGGING_STICK_HARDENED, 0, TOOL_USE_NONE},
 };
 
 #undef KNAPPING_SPOT
@@ -175,7 +184,8 @@ int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
     }
     case RECIPE_HARDEN_THROWING_SPEAR:
     case RECIPE_HARDEN_THRUSTING_SPEAR:
-        /* The same spear, its grade and wear kept, lasting longer. */
+    case RECIPE_HARDEN_DIGGING_STICK:
+        /* The same spear or stick, its grade and wear kept, lasting longer. */
         out[0] = item_stack_make(def->product, 1, input.quality,
                                  item_hit_points_at_percent(
                                      def->product, item_stack_hit_points_percent(input)));

@@ -6,7 +6,7 @@
  *
  * Scenarios: 0 = colonists left alone (needs and wandering only);
  * 1 = a gathering zone over the whole map (grass cut, twigs, branches and
- * berries gathered, forever), a zone gathering stones forever next to the
+ * wild food gathered, forever), a zone gathering stones forever next to the
  * colony, two stockpiles (work, hauling, and many jobs that cannot be reached);
  * 2 = only jobs that nobody can reach: a zone gathering the branches of the
  * trees growing where the colonists cannot walk to (other islands);
@@ -84,8 +84,9 @@ int main(int argc, char **argv)
         gather_forever(&game, land, GATHER_GRASS);
         gather_forever(&game, land, GATHER_TWIGS);
         gather_forever(&game, land, GATHER_BRANCHES);
-        gather_forever(&game, land, GATHER_BERRIES);
-        gather_zone_set_ripe_only(&game.gather_zones, land, GATHER_BERRIES, false);
+        for (int r = GATHER_BLACKBERRIES; r <= GATHER_CATTAIL_RHIZOMES; r++) { /* Wild food. */
+            gather_forever(&game, land, (GatherResource)r);
+        }
     }
     if (scenario == 2) {
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));

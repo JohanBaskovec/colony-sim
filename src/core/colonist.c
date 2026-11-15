@@ -1204,6 +1204,9 @@ static uint32_t station_stamp(const ColonistContext *context)
            context->reservations->releases;
 }
 
+static bool fetch_gather_tool(Colonist *colonist, const ColonistContext *context);
+static void take_gather_tool(Colonist *colonist, const ColonistContext *context);
+
 /* Designation jobs of the given work types, or gathering zone tiles
  * (`zones`): nearest one. */
 static bool try_designation_job(Colonist *colonist, const ColonistContext *context,
@@ -1255,7 +1258,11 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
                                           target.y, jobs)
                         : designation_get(designations, target.x, target.y));
     colonist->gathering = zones;
+    colonist->station_phase = STATION_JOB_GO;
     reservations_add(context->reservations, RESERVATION_WORK, target, context->worker_id);
+    if (zones) {
+        fetch_gather_tool(colonist, context); /* A detour for a digging stick, maybe. */
+    }
     return true;
 }
 
@@ -1656,8 +1663,16 @@ static void work(Colonist *colonist, const ColonistContext *context)
     TilePos target = colonist->target;
     int distance = abs(colonist->x - target.x) + abs(colonist->y - target.y);
     DesignationType type = designation_get(designations, target.x, target.y);
-    if (distance != 1 || !job_still_valid(colonist, context)) {
-        set_idle(colonist, context, 0); /* Not there, or the order was cancelled. */
+    if (!job_still_valid(colonist, context)) {
+        set_idle(colonist, context, 0); /* The order was cancelled. */
+        return;
+    }
+    if (colonist->gathering && colonist->station_phase == STATION_JOB_FETCH) {
+        take_gather_tool(colonist, context);
+        return;
+    }
+    if (distance != 1) {
+        set_idle(colonist, context, 0); /* Not there. */
         return;
     }
     if (colonist->gathering) {
@@ -1965,6 +1980,63 @@ static bool fetch_better_tool(Colonist *colonist, const ColonistContext *context
         }
     }
     return false;
+}
+
+/* On the way to a gathering job that a tool speeds up and that is worth a
+ * detour (digging), a better tool than the carried one lying close by: the
+ * colonist heads for it first (see take_gather_tool()). */
+static bool fetch_gather_tool(Colonist *colonist, const ColonistContext *context)
+{
+    const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
+    if (def == NULL || !def->fetches_tool || context->no_tools) {
+        return false;
+    }
+    float factor = colonist_tool_factor(colonist, def->tool_use, ~(ItemTypeMask)0);
+    if (factor >= tool_best_possible_factor(def->tool_use)) {
+        return false;
+    }
+    ItemTypeMask types = 0;
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        if (tool_type_factor(def->tool_use, (ItemType)type) > factor) {
+            types |= ITEM_TYPE_BIT(type);
+        }
+    }
+    FetchSearch search = fetch_search(context, types);
+    search.use = def->tool_use;
+    search.min_factor = factor;
+    return start_fetch(colonist, context, &search, current_tile(colonist),
+                       COLONIST_TOOL_SWAP_MAX_COST, true);
+}
+
+/* At the tool fetched on the way to a gathering job: takes it (a carried
+ * tool of the same type is left in its place), then heads for the job. */
+static void take_gather_tool(Colonist *colonist, const ColonistContext *context)
+{
+    ToolUse use = gather_job_def((GatherJob)colonist->work_type)->tool_use;
+    ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+    ItemStack replaced;
+    if (colonist->x == colonist->fetch.x && colonist->y == colonist->fetch.y &&
+        stack.type != ITEM_NONE &&
+        tool_speed_factor(use, stack) > colonist_tool_factor(colonist, use, ~(ItemTypeMask)0) &&
+        colonist_swap_tool(colonist, stack, &replaced)) {
+        items_remove(context->items, colonist->x, colonist->y, 1);
+        if (replaced.count > 0) {
+            items_drop(context->items, context->map, colonist->x, colonist->y, replaced);
+        }
+    }
+    reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
+                              context->worker_id);
+    colonist->station_phase = STATION_JOB_GO;
+    colonist->path_index = 0;
+    TilePos spot;
+    if (next_to(colonist->x, colonist->y, colonist->target)) {
+        path_clear(&colonist->path);
+    } else if (!pathfinder_find_nearest(context->pathfinder, context->map,
+                                        current_tile(colonist), is_next_to_target,
+                                        &colonist->target, COLONIST_WORK_SEARCH_MAX_COST,
+                                        &colonist->path, &spot)) {
+        set_idle(colonist, context, 0);
+    }
 }
 
 /* Chooses the next step of a craft: fetch what is still missing (tools
@@ -3662,10 +3734,13 @@ static void eat(Colonist *colonist, const ColonistContext *context)
         int eaten = items_remove(context->items, colonist->x, colonist->y, wanted > 1 ? wanted : 1);
         *food = clampf(*food + nutrition * (float)eaten, 0.0f, 1.0f);
     } else {
+        /* Then the plant's fruit or leaves, as many as it takes. */
         Plant *plant = &map->plants[map_index(map, colonist->x, colonist->y)];
-        const PlantDef *def = plant_def((PlantType)plant->type);
-        *food = clampf(*food + def->nutrition * plant->growth, 0.0f, 1.0f);
-        plant->growth = PLANT_GROWTH_AFTER_PICKING;
+        ItemType type = plant_stock_item((PlantType)plant->type, PLANT_STOCK_FOOD);
+        float nutrition = item_def(type)->nutrition;
+        int wanted = (int)ceilf((COLONIST_SATED_FOOD - *food) / nutrition);
+        int eaten = plant_take_stock(plant, PLANT_STOCK_FOOD, wanted > 1 ? wanted : 1);
+        *food = clampf(*food + nutrition * (float)eaten, 0.0f, 1.0f);
     }
 
     if (colonist->needs[NEED_FOOD] < COLONIST_SATED_FOOD &&

@@ -17,14 +17,21 @@
 #define GAME_APPEARANCE_SEED 0x5eed1ce5a77ea12aULL
 /* Preferred: drinkable water within this travel cost of the spawn point. */
 #define SPAWN_WATER_MAX_COST 60.0f
-/* Bushes for the first settlers are counted and planted within this travel
- * cost of the arrival point: closer than GAME_SPAWN_FOOD_MAX_COST, since the
- * settlers stand a few tiles away from it. Planted ones are at least
- * SPAWN_BUSH_MIN_DISTANCE tiles (Manhattan) from it, each candidate spot
- * being taken with SPAWN_BUSH_SPOT_CHANCE. */
-#define SPAWN_BUSH_MAX_COST (GAME_SPAWN_FOOD_MAX_COST - 10.0f)
-#define SPAWN_BUSH_MIN_DISTANCE 3
-#define SPAWN_BUSH_SPOT_CHANCE 0.08f
+/* Food plants for the first settlers are counted and planted within this
+ * travel cost of the arrival point: closer than GAME_SPAWN_FOOD_MAX_COST,
+ * since the settlers stand a few tiles away from it. Planted ones are at
+ * least SPAWN_PLANT_MIN_DISTANCE tiles (Manhattan) from it, each candidate
+ * spot being taken with SPAWN_PLANT_SPOT_CHANCE. */
+#define SPAWN_PLANT_MAX_COST (GAME_SPAWN_FOOD_MAX_COST - 10.0f)
+#define SPAWN_PLANT_MIN_DISTANCE 3
+#define SPAWN_PLANT_SPOT_CHANCE 0.08f
+/* Mushrooms (docs/KNOWLEDGE.md §7.3): each day of their season, a patch
+ * appears with MUSHROOM_CHANCE on open soil within MUSHROOM_TREE_RANGE tiles
+ * of a mature tree, and an existing one goes with MUSHROOM_VANISH_CHANCE
+ * (five days on average). */
+#define MUSHROOM_CHANCE 0.004f
+#define MUSHROOM_VANISH_CHANCE 0.2f
+#define MUSHROOM_TREE_RANGE 2
 /* Flint patch laid for the first settlers when there is none near them:
  * SPAWN_FLINT_PATCH_STONES flint nodules in the middle, SPAWN_FLINT_PATCH_FALLOFF
  * fewer per step, over SPAWN_FLINT_PATCH_RADIUS steps (Manhattan). */
@@ -223,7 +230,7 @@ static bool find_spawn_center(Game *game, TilePos *out)
             continue;
         }
         bool fertile = terrain_def((Terrain)map->terrain[map_index(map, x, y)])->fertility >=
-                       plant_def(PLANT_BUSH)->min_fertility;
+                       plant_def(PLANT_BRAMBLE)->min_fertility;
         if (fertile && (!want_water || pathfinder_find_nearest(&game->pathfinder, map, candidate,
                                                                is_drinking_spot, NULL,
                                                                SPAWN_WATER_MAX_COST, NULL,
@@ -253,74 +260,80 @@ static bool find_spawn_center(Game *game, TilePos *out)
     return false;
 }
 
-static bool is_ripe_bush(const Plant *plant)
-{
-    return plant->type == PLANT_BUSH && plant->growth >= plant_def(PLANT_BUSH)->min_edible_growth;
-}
+/* A food plant of a kind, grown enough to bear food in its season. */
+typedef struct FoodPlantCount {
+    PlantType type;
+    int count;
+} FoodPlantCount;
 
-/* Counts the ripe bushes it visits and never accepts a tile, so that the
+/* Counts the food plants it visits and never accepts a tile, so that the
  * search covers the whole area. */
-static bool count_ripe_bush(const Map *map, int x, int y, void *userdata)
+static bool count_food_plant(const Map *map, int x, int y, void *userdata)
 {
-    if (is_ripe_bush(&map->plants[map_index(map, x, y)])) {
-        (*(int *)userdata)++;
+    FoodPlantCount *count = userdata;
+    const Plant *plant = &map->plants[map_index(map, x, y)];
+    if (plant->type == count->type &&
+        plant->growth >= plant_def(count->type)->min_food_growth) {
+        count->count++;
     }
     return false;
 }
 
-typedef struct BushSpotSearch {
+typedef struct PlantSpotSearch {
     TilePos center;
     Rng *rng;
-    float chance; /* Of taking a suitable spot. */
-} BushSpotSearch;
+    float chance;  /* Of taking a suitable spot. */
+    PlantType type; /* What is planted. */
+} PlantSpotSearch;
 
-/* Where a bush can be planted: fertile open ground with at most grass on it,
- * not next to the arrival point. Each suitable spot is only taken with some
- * chance (drawn in the search order, which is deterministic) so that bushes
- * end up scattered. */
-static bool is_bush_spot(const Map *map, int x, int y, void *userdata)
+/* Where a food plant can be planted: fertile enough open ground with at most
+ * grass on it, not next to the arrival point. Each suitable spot is only
+ * taken with some chance (drawn in the search order, which is deterministic)
+ * so that the plants end up scattered. */
+static bool is_plant_spot(const Map *map, int x, int y, void *userdata)
 {
-    BushSpotSearch *search = userdata;
+    PlantSpotSearch *search = userdata;
     size_t index = map_index(map, x, y);
     const Plant *plant = &map->plants[index];
     if (map->rock[index] != ROCK_NONE || map_is_water(map, x, y) ||
         (plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
         terrain_def((Terrain)map->terrain[index])->fertility <
-            plant_def(PLANT_BUSH)->min_fertility ||
-        abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_BUSH_MIN_DISTANCE) {
+            plant_def(search->type)->min_fertility ||
+        abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_PLANT_MIN_DISTANCE) {
         return false;
     }
     return search->chance >= 1.0f || rng_next_float(search->rng) < search->chance;
 }
 
-/* The first settlers bring no food: plants ripe berry bushes near their
- * arrival point until there are GAME_SPAWN_RIPE_BUSHES within reach. */
-static void ensure_food_near(Game *game, TilePos center)
+/* The first settlers bring no food: plants fully grown food plants of a kind
+ * near their arrival point until there are `wanted` within reach. */
+static void ensure_food_plants_near(Game *game, TilePos center, PlantType type, int wanted)
 {
-    int ripe = 0;
-    pathfinder_find_nearest(&game->pathfinder, &game->map, center, count_ripe_bush, &ripe,
-                            SPAWN_BUSH_MAX_COST, NULL, NULL);
-    BushSpotSearch search = {center, &game->rng, SPAWN_BUSH_SPOT_CHANCE};
-    for (; ripe < GAME_SPAWN_RIPE_BUSHES; ripe++) {
+    FoodPlantCount count = {type, 0};
+    pathfinder_find_nearest(&game->pathfinder, &game->map, center, count_food_plant, &count,
+                            SPAWN_PLANT_MAX_COST, NULL, NULL);
+    PlantSpotSearch search = {center, &game->rng, SPAWN_PLANT_SPOT_CHANCE, type};
+    int day = game_day_of_year(game->clock.tick);
+    for (int planted = count.count; planted < wanted; planted++) {
         TilePos spot;
         bool found = pathfinder_find_nearest(&game->pathfinder, &game->map, center,
-                                             is_bush_spot, &search, SPAWN_BUSH_MAX_COST, NULL,
+                                             is_plant_spot, &search, SPAWN_PLANT_MAX_COST, NULL,
                                              &spot);
         if (!found) {
             /* Few suitable spots: take the nearest one. */
             search.chance = 1.0f;
-            found = pathfinder_find_nearest(&game->pathfinder, &game->map, center, is_bush_spot,
-                                            &search, SPAWN_BUSH_MAX_COST, NULL, &spot);
+            found = pathfinder_find_nearest(&game->pathfinder, &game->map, center, is_plant_spot,
+                                            &search, SPAWN_PLANT_MAX_COST, NULL, &spot);
         }
         if (!found) {
-            LOG_WARN("No room for berry bushes near the starting colonists");
+            LOG_WARN("No room for food plants near the starting colonists");
             return;
         }
         Plant *plant = &game->map.plants[map_index(&game->map, spot.x, spot.y)];
         memset(plant, 0, sizeof(*plant));
-        plant->type = PLANT_BUSH;
+        plant->type = (uint8_t)type;
         plant->growth = 1.0f;
-        plant_fill_stocks(plant);
+        plant_settle(plant, day);
     }
 }
 
@@ -339,12 +352,12 @@ typedef struct PatchSpotSearch {
 } PatchSpotSearch;
 
 /* Where a flint patch can be laid: ground where stones can be gathered, not
- * next to the arrival point; scattered like the bushes (see is_bush_spot()). */
+ * next to the arrival point; scattered like food plants (see is_plant_spot()). */
 static bool is_patch_spot(const Map *map, int x, int y, void *userdata)
 {
     PatchSpotSearch *search = userdata;
     if (!gather_stone_ground(map, x, y) ||
-        abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_BUSH_MIN_DISTANCE) {
+        abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_PLANT_MIN_DISTANCE) {
         return false;
     }
     return search->chance >= 1.0f || rng_next_float(search->rng) < search->chance;
@@ -356,16 +369,16 @@ static void ensure_flint_near(Game *game, TilePos center)
 {
     Map *map = &game->map;
     if (pathfinder_find_nearest(&game->pathfinder, map, center, is_flint_spot, NULL,
-                                SPAWN_BUSH_MAX_COST, NULL, NULL)) {
+                                SPAWN_PLANT_MAX_COST, NULL, NULL)) {
         return;
     }
-    PatchSpotSearch search = {center, &game->rng, SPAWN_BUSH_SPOT_CHANCE};
+    PatchSpotSearch search = {center, &game->rng, SPAWN_PLANT_SPOT_CHANCE};
     TilePos spot;
     if (!pathfinder_find_nearest(&game->pathfinder, map, center, is_patch_spot, &search,
-                                 SPAWN_BUSH_MAX_COST, NULL, &spot)) {
+                                 SPAWN_PLANT_MAX_COST, NULL, &spot)) {
         search.chance = 1.0f;
         if (!pathfinder_find_nearest(&game->pathfinder, map, center, is_patch_spot, &search,
-                                     SPAWN_BUSH_MAX_COST, NULL, &spot)) {
+                                     SPAWN_PLANT_MAX_COST, NULL, &spot)) {
             LOG_WARN("No room for flint near the starting colonists");
             return;
         }
@@ -399,7 +412,8 @@ static void spawn_starting_colonists(Game *game, int count)
     if (count <= 0 || !find_spawn_center(game, &center)) {
         return;
     }
-    ensure_food_near(game, center);
+    ensure_food_plants_near(game, center, PLANT_BRAMBLE, GAME_SPAWN_BRAMBLES);
+    ensure_food_plants_near(game, center, PLANT_HAZEL, GAME_SPAWN_HAZELS);
     ensure_flint_near(game, center);
     for (int i = 0; i < count; i++) {
         TilePos tile;
@@ -511,37 +525,72 @@ void game_shutdown(Game *game)
 
 /* ---- Simulation ---------------------------------------------------------- */
 
+/* A number in [0, 1) drawn from the seed, a tile, a day and `salt`: chance
+ * events of the world that do not draw from (and so do not shift) the game's
+ * random stream. */
+static float world_roll(uint64_t seed, size_t tile, int day, uint32_t salt)
+{
+    uint64_t key[3] = {seed, (uint64_t)tile, ((uint64_t)(uint32_t)day << 32) | salt};
+    uint64_t hash = hash_fnv1a64(HASH_FNV1A64_INIT, key, sizeof(key));
+    hash ^= hash >> 33; /* Mixes the last bytes into the high bits. */
+    hash *= 0xff51afd7ed558ccdULL;
+    hash ^= hash >> 33;
+    return (float)(hash >> 40) / (float)(1u << 24);
+}
+
+/* Once a day per tile: mushroom patches come and go under the trees. */
+static void mushrooms_day(Game *game, size_t index, int day)
+{
+    Map *map = &game->map;
+    Plant *plant = &map->plants[index];
+    if (plant->type == PLANT_MUSHROOMS) {
+        if (world_roll(game->seed, index, day, 1) < MUSHROOM_VANISH_CHANCE) {
+            memset(plant, 0, sizeof(*plant));
+        }
+        return;
+    }
+    if ((plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
+        !plant_days_contain(plant_def(PLANT_MUSHROOMS)->food_days, day) ||
+        world_roll(game->seed, index, day, 0) >= MUSHROOM_CHANCE) {
+        return;
+    }
+    int x = (int)(index % (size_t)map->width), y = (int)(index / (size_t)map->width);
+    Terrain terrain = (Terrain)map->terrain[index];
+    if ((terrain != TERRAIN_SOIL && terrain != TERRAIN_RICH_SOIL) ||
+        map->rock[index] != ROCK_NONE || map->structure[index] != STRUCTURE_NONE ||
+        construction_at(&game->constructions, x, y) != CONSTRUCTION_NONE ||
+        workstation_at(&game->workstations, x, y) >= 0 ||
+        !map_tree_near(map, x, y, MUSHROOM_TREE_RANGE)) {
+        return;
+    }
+    *plant = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
+    plant_settle(plant, day);
+}
+
 /*
  * Every plant grows once per GAME_PLANT_UPDATE_INTERVAL ticks, but not all in
  * the same tick: each tick handles the next slice of the map, so that a large
- * map does not stall the simulation once per in-game hour.
+ * map does not stall the simulation once per in-game hour. In the first hour
+ * of the day, each tile also has its daily events (mushrooms).
  */
 static void update_plants(Game *game)
 {
-    const float growth_scale = (float)GAME_PLANT_UPDATE_INTERVAL / (float)TICKS_PER_DAY;
     Map *map = &game->map;
     uint64_t count = map_tile_count(map);
     uint64_t phase = game->clock.tick % GAME_PLANT_UPDATE_INTERVAL;
     size_t begin = (size_t)(phase * count / GAME_PLANT_UPDATE_INTERVAL);
     size_t end = (size_t)((phase + 1) * count / GAME_PLANT_UPDATE_INTERVAL);
+    int day = game_day_of_year(game->clock.tick);
+    bool first_hour = game_hour_from_tick(game->clock.tick) == 0;
 
     for (size_t i = begin; i < end; i++) {
+        if (first_hour) {
+            mushrooms_day(game, i, day);
+        }
         Plant *plant = &map->plants[i];
-        if (plant->type == PLANT_NONE) {
-            continue;
-        }
-        plant_regrow_stocks(plant, GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR);
-        if (plant->growth >= 1.0f) {
-            continue;
-        }
-        const PlantDef *def = plant_def((PlantType)plant->type);
-        float fertility = terrain_def((Terrain)map->terrain[i])->fertility;
-        if (fertility < def->min_fertility) {
-            continue;
-        }
-        plant->growth += def->growth_per_day * fertility * growth_scale;
-        if (plant->growth > 1.0f) {
-            plant->growth = 1.0f;
+        if (plant->type != PLANT_NONE) {
+            plant_advance(plant, terrain_def((Terrain)map->terrain[i])->fertility,
+                          GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR, day);
         }
     }
 }

@@ -258,7 +258,7 @@ their family by conversation, stories and apprenticeship.
 | Work speed  | Knowledge level (§1.4) × tool (§2.3) × tool grade (§2.3). |
 | Weight      | Kilograms per item, realistic. |
 | Bulk        | Room per item, about half liters with packing gaps; a tile holds 1,000. Stack limit = 1,000 / bulk. |
-| Nutrition   | Food need restored per item. 1.0 lasts 36 h, so 1.0 ≈ 3,750 kcal (2,500 kcal a day). Berries: 0.3 kg ≈ 190 kcal = 0.05. |
+| Nutrition   | Food need restored per item. 1.0 lasts 36 h, so 1.0 ≈ 3,750 kcal (2,500 kcal a day). Blackberries: 0.3 kg ≈ 190 kcal = 0.05. |
 | Hit points  | Per item in perfect condition; lost through wear, damage and, later, rot. |
 
 ### 2.2 Quality of made things
@@ -312,9 +312,9 @@ Speed factor by job and tool (— = impossible with it; "none" = bare hands):
 | Felling a tree                   | —    | —           | —       | —     | —        | —             |
 | Mining rock                      | —    | —           | —       | —     | —        | —             |
 | Gathering stones, branches, twigs| ×1.0 |             |         |       |          |               |
-| Picking berries, nuts, mushrooms | ×1.0 |             |         |       |          |               |
+| Picking fruit, nuts, leaves, mushrooms | ×1.0 |       |         |       |          |               |
 | Cutting grass                    | ×0.6 | —           | ×0.8    | ×1.0  | ×0.9     | —             |
-| Digging up tubers                | ×0.3 | —           | —       | —     | ×0.5     | ×1.0          |
+| Digging up roots (rhizomes, wild carrots) | ×0.3 | — | —       | —     | ×0.5     | ×1.0          |
 | Knapping                         | —    | ×1.0        | —       | —     | —        | —             |
 | Woodworking (spears, sticks, torches) | ×0.5 (torches only) | — | ×0.6 | ×1.0 | ×1.0 | — |
 | Butchering                       | —    | —           | ×0.6    | ×1.0  | ×0.9     | —             |
@@ -337,7 +337,7 @@ knowledge. The first wood of a colony is branches and twigs.
 
 | Danger | Examples | Typical injuries |
 |--------|----------|------------------|
-| Very low | Picking berries, cutting grass, hauling | Scratch, twisted ankle |
+| Very low | Picking fruit, cutting grass, hauling | Scratch, twisted ankle |
 | Low | Gathering branches and twigs, making spears, grilling | Cut, splinter, burn |
 | Medium | Knapping, butchering, building | Deep cut, flake in the eye, crushed finger |
 | High | Felling trees, mining | Hit by a falling tree or rock, broken bones |
@@ -381,11 +381,14 @@ knowledge. The first wood of a colony is branches and twigs.
   **1 to 30** points in three to six other knowledges, picked among those the
   starting knowledges influence (§1.5): they have "heard of" bows, cord or
   tanning. Nobody starts above 50 outside the starting knowledges.
-- World generation guarantees ripe berry bushes and drinkable water near the
-  start, since the group arrives hungry, and a **flint patch** within reach
-  (§4.1): without flint the colony could only knap rough tools.
+- The game starts at the **end of summer** (day 11 of summer): brambles bear
+  blackberries, hazelnuts and roots follow in autumn, and there is time to
+  build before winter (§7).
+- World generation guarantees brambles bearing fruit, hazels and drinkable
+  water near the start, since the group arrives hungry, and a **flint patch**
+  within reach (§4.1): without flint the colony could only knap rough tools.
 
-A typical first day: pick berries; gather stones (cobbles and flint),
+A typical first day: pick blackberries; gather stones (cobbles and flint),
 branches, twigs and grass; knap flakes and a
 hand axe from flint; make spears and digging
 sticks; light the first fire by friction; build grass beds and grass and branch walls
@@ -452,26 +455,28 @@ with its own use.
 ### 4.2 Gathering orders
 
 Everything the land offers is gathered in **gathering zones**: the player
-draws a zone, then ticks the resources to take there (wood, berries,
-branches, twigs, grass, flint, cobbles). Each ticked resource is gathered N
-times, until N lie in the colony (items lying anywhere count, as for bills),
-or forever; wood and berries may be taken from fully grown plants only (on
-by default), so that settlers do not walk to young plants that give little.
-On a tile that offers several jobs, the plant's stocks come first, then its
-fruit, felling it, and stones last. All jobs but felling belong to Gathering
-(minimum 50) and produce items whose grade and condition come from the
-gatherer's level. **Dig up** is not implemented yet.
+draws a zone, then ticks the resources to take there (wood, each wild food
+of §7, branches, twigs, grass, flint, cobbles). Each ticked resource is
+gathered N times, until N lie in the colony (items lying anywhere count, as
+for bills), or forever; wood may be taken from fully grown trees only (on by
+default), so that settlers do not walk to young trees that give little.
+Wild food is there in its season only. On a tile that offers several jobs,
+the plant's branches and twigs come first, then its food, felling it, and
+stones last. All jobs but felling belong to Gathering (minimum 50; 60 for
+food easily mistaken for a poisonous plant, §7) and produce items whose
+grade and condition come from the gatherer's level. Zones cover shallow
+water too (cattails grow there).
 
 | Order            | Target | Work per item | Tool | Yield |
 |------------------|--------|---------------|------|-------|
 | Stones (zone)    | Soil, rich soil (with or without grass), gravel, rough stone tiles | 200 | none | 1 cobble or flint nodule (flint patches, §4.1) per work cycle; stones never run out, so the zone says how many (a type no longer wanted is not kept: a cobble found while only flint is wanted is left) |
 | Branches (zone)  | Tree with branches in stock | 300 | none | The tree's stock: up to 6 branches on a mature tree (scaled by growth); the tree stays, 1 branch grows back every 2 days |
-| Twigs (zone)     | Tree or bush with twigs in stock | 150 | none | Up to 10 handfuls on a mature tree, 4 on a bush; 1 grows back per day |
+| Twigs (zone)     | Tree or hazel with twigs in stock | 150 | none | Up to 10 handfuls on a mature tree, 6 on a hazel; 1 grows back per day |
 | Grass (zone)     | Grass at growth ≥ 0.5 | 150 | flake best | `growth × 3` armfuls of fresh grass (1 to 3); the grass regrows from 0 |
-| Dig up           | Wild tuber plant | 500 | digging stick | 4 tubers (§7) |
-| Berries (zone)   | Ripe bush (fully grown with the option), later hazel, mushrooms | see §7 | none | see §7 |
+| Wild food (zone) | A plant bearing food in its season | 40 to pick, 125 to dig up | digging stick to dig (fetched on the way) | The plant's food stock (§7) |
 
-Branch and twig stocks are shown in the tile inspector.
+Branch, twig and food stocks are shown in the tile inspector (food out of
+season says so).
 
 ---
 
@@ -487,7 +492,7 @@ food. Fire must be lit, fed and watched.*
 | `torch`        | Torch         | Tools    | 0.5 | 3    | 333   | 10 | yes     | yes        |
 | `ember_bundle` | Ember bundle  | Tools    | 0.2 | 1    | —     | 100 (burns down) | no | yes |
 | `grilled_meat` | Grilled meat  | Food     | 0.4 | 1    | 1,000 | 12 | yes     | yes        |
-| `roasted_tubers` | Roasted tubers | Food  | 0.25 | 1   | 1,000 | 15 | yes     | yes        |
+| `roasted_rhizomes` | Roasted rhizomes | Food | 0.25 | 1   | 1,000 | 15 | yes     | yes        |
 
 - **Torch**: stored unlit; lit at a burning fire and carried,
   it **burns 1 hour** with a light radius of 3 tiles (×0.8 to ×1.2 as long by
@@ -495,7 +500,7 @@ food. Fire must be lit, fed and watched.*
 - **Ember bundle**: embers wrapped in dry grass, to carry fire. Never stored:
   made at a burning fire by a fire lighter and carried straight to the hearth
   to light. Goes out after **4 hours**.
-- **Grilled meat**: nutrition 0.19. **Roasted tubers**: nutrition 0.07.
+- **Grilled meat**: nutrition 0.19. **Roasted rhizomes**: nutrition 0.07 (step B of §7).
 
 ### 5.2 Recipes and jobs
 
@@ -504,13 +509,13 @@ food. Fire must be lit, fed and watched.*
 | Make torch        | 1 branches  | —     | Crafting spot | 125 (0.05 h) | 50 | 1 torch |
 | Fire-harden       | 1 hardenable item | — | Burning hearth | 750 (0.3 h) | 55 | 1 hardened item |
 | Grill meat        | 4 raw meat  | —     | Burning hearth | 375 (0.15 h) | 50 | 4 grilled meat |
-| Roast tubers      | 4 tubers    | —     | Burning hearth | 250 (0.1 h)  | 50 | 4 roasted tubers |
+| Roast rhizomes    | 4 cattail rhizomes | — | Burning hearth | 250 (0.1 h)  | 50 | 4 roasted rhizomes |
 | Light by friction | 1 twigs, 1 grass | — | Unlit hearth | 750 (0.3 h) per attempt | 50 | a fire, with probability `30% + 1.4% × (L − 50)` (30% to 100%) |
 | Carry fire        | —           | —     | Burning fire → unlit hearth | 50 | 50 | a fire, always |
 | Open hearth       | (construction, §5.3) | | | 250 | 50 | |
 
-- **Fire hardening** dries and chars a wooden point. Hardenable: digging stick,
-  throwing spear, thrusting spear. The hardened item is a separate type
+- **Fire hardening** dries and chars a wooden point. Hardenable: digging stick
+  (done), throwing spear, thrusting spear. The hardened item is a separate type
   (`<id>_hardened`): max hit points ×1.5, damage ×1.2 for spears; grade and
   condition carry over; only once.
 - **Lighting** is a job created when a hearth with fuel is set to burn and is
@@ -604,39 +609,79 @@ no spear, no butchering.*
 *Starting knowledge. Wild food, and the plant and mineral
 materials of every other knowledge (gathering orders: §4.2).*
 
+Wild food follows the seasons of a temperate climate (15 days each): most
+of it comes at the end of summer and in autumn, little in winter, and spring
+brings greens. Greens are low in calories (about 30 kcal per 100 g) but count
+for the variety of meals (moods, later); the staples are hazelnuts, cattail
+rhizomes, blackberries and wild carrots. Nuts and roots keep, the winter
+food once rot exists (step B below).
+
 ### 7.1 Items
 
 | id              | Name          | Category | kg   | Bulk | Stack | HP  | Quality | Damageable | Nutrition |
 |-----------------|---------------|----------|------|------|-------|-----|---------|------------|-----------|
 | `digging_stick` | Digging stick | Tools    | 1.0  | 6    | 166   | 40  | yes     | yes        | — |
-| `berries`       | Berries (existing) | Food | 0.3 | 1   | 1,000 | 10  | yes     | yes        | 0.05 (≈ 190 kcal) |
-| `tubers`        | Wild tubers   | Food     | 0.25 | 1    | 1,000 | 30  | yes     | yes        | 0.05 raw (≈ 250 kcal, half digested); roasted: §5 |
-| `nuts`          | Hazelnuts     | Food     | 0.1  | 0.4  | 2,500 | 100 | yes     | yes        | 0.075 (≈ 285 kcal) |
+| `digging_stick_hardened` | Fire-hardened digging stick | Tools | 1.0 | 6 | 166 | 60 | yes | yes | — |
+| `blackberries`  | Blackberries (a handful) | Food | 0.3 | 1 | 1,000 | 10 | yes   | yes        | 0.05 (≈ 190 kcal, generously counted) |
+| `hazelnuts`     | Hazelnuts (in shells) | Food | 0.1 | 0.4 | 2,500 | 100 | yes  | yes        | 0.075 (≈ 285 kcal) |
 | `mushrooms`     | Mushrooms     | Food     | 0.1  | 0.5  | 2,000 | 5   | yes     | yes        | 0.01 (≈ 30 kcal) |
+| `wild_garlic`   | Wild garlic (a bunch of leaves) | Food | 0.2 | 1.5 | 666 | 5 | yes | yes      | 0.016 (≈ 60 kcal) |
+| `nettles`       | Nettles (young shoots) | Food | 0.2 | 1.5 | 666 | 5  | yes     | yes        | 0.016 (≈ 60 kcal) |
+| `plantain`      | Plantain leaves | Food   | 0.2  | 1.5  | 666   | 5   | yes     | yes        | 0.013 (≈ 50 kcal) |
+| `wild_carrots`  | Wild carrots (a bunch of roots) | Food | 0.25 | 1 | 1,000 | 30 | yes | yes   | 0.027 (≈ 100 kcal) |
+| `cattail_rhizomes` | Cattail rhizomes | Food | 0.25 | 1    | 1,000 | 30  | yes     | yes        | 0.05 raw (≈ 250 kcal, half digested); roasted: §5 |
 
-- Hit points stand for shelf life once rot exists (M4): mushrooms and berries
-  spoil in days, tubers in weeks, nuts keep for months: the winter food.
-- **Mushrooms**: little food but tasty (mood, M4). Below Gathering 65, a picker
-  may take a toxic one by mistake: `(65 − L) × 2%` per mushroom *(tuning)*;
-  food poisoning once health exists (M6).
+- Hit points stand for shelf life once rot exists: mushrooms, greens and
+  blackberries spoil in days, roots in weeks, nuts keep for months.
+- **Easily mistaken for a poisonous plant**: mushrooms (deadly ones), wild
+  garlic (lily of the valley, autumn crocus), wild carrot (hemlock). Only a
+  gatherer at **Gathering 60** or more takes them (`GATHER_CAREFUL_MIN_LEVEL`),
+  and nobody eats them where they grow. Once health exists (M6), a mistake
+  below 65 poisons: `(65 − L) × 2%` per item *(tuning)*.
+- Settlers eat blackberries, hazelnuts, nettles and plantain where they grow
+  when hungry (as many as it takes); roots are dug up first.
 
 ### 7.2 Recipes and orders
 
 | Recipe / order     | Ingredients | Tools | Station | Work | Min level | Products |
 |--------------------|-------------|-------|---------|------|-----------|----------|
-| Make digging stick | 1 branches  | flake or hand axe | Crafting spot | 375 (0.15 h) | 50 | 1 digging stick (hardenable) |
-| Harvest berries (existing) | ripe berry bush | — | — | 300 | 50 | 9 berries; the bush regrows |
-| Harvest nuts       | ripe hazel  | —     | — | 400 | 50 | 12 nuts; regrows next year |
-| Harvest mushrooms  | mushroom patch | —  | — | 100 | 50 | 3 mushrooms; the patch disappears |
-| Dig up tubers      | wild tuber plant | digging stick | — | 500 | 50 | 4 tubers; 30% chance the plant regrows *(tuning)* |
+| Make digging stick | 1 branches  | flake or hand axe | Crafting spot | 375 (0.15 h) | 50 | 1 digging stick (hardenable at a hearth, Fire 55) |
+| Pick (zone)        | blackberries, hazelnuts, nettles, plantain in season | — | — | 40 per item | 50 | the plant's food stock; the plant stays |
+| Pick with care (zone) | mushrooms, wild garlic in season | — | — | 40 per item | 60 | the stock; a mushroom patch is gone once picked |
+| Dig up (zone)      | cattail rhizomes | digging stick (×1.0; hand axe ×0.5, bare hands ×0.3) | — | 125 per item | 50 | the stock (4); the cattail grows on |
+| Dig up with care (zone) | wild carrots in season | same | — | 125 per item | 60 | the stock (3); the plant grows again from 0 |
 
-### 7.3 New plants
+A gatherer going to dig fetches a better digging tool lying within a short
+detour (`COLONIST_TOOL_SWAP_MAX_COST`) and keeps it; the other gathering
+jobs use whatever tool the settler carries.
 
-| id            | Grows on | Growth / day | Notes |
-|---------------|----------|--------------|-------|
-| `hazel`       | Soil and rich soil (fertility ≥ 0.6), forest edges | 0.03 | Shrub (move cost 1.4). Ripe in autumn once seasons exist; until then, when fully grown. Has twigs. |
-| `wild_tubers` | Rich soil, preferably within 6 tiles of water | 0.08 | Low plant. Edible from growth 0.8. |
-| `mushrooms`   | Soil within 2 tiles of a mature tree | — | Appear at random under trees (more after rain, M4); vanish after 5 days. |
+### 7.3 Plants and seasons
+
+Every plant grows from spring to autumn and rests in winter. Its food is a
+stock (like branches and twigs) that ripens only on its days of the year,
+one item per regrowth period, up to a capacity scaled by growth (none below
+a minimum growth); out of its days the stock is gone (fallen, rotten,
+woody). Plants that die back wither to growth 0 out of their growing days:
+nothing shows above ground, they grow again the next season.
+
+| id            | Where | Growth / day | Move cost | Food (capacity, regrowth) | Food season | Notes |
+|---------------|-------|--------------|-----------|---------------------------|-------------|-------|
+| `bramble`     | Fertility ≥ 0.5, more at forest edges | 0.12 | 2.0 (thorns) | 9 blackberries, 12 h | summer 8 – autumn 7 | from growth 0.5 |
+| `hazel`       | Fertility ≥ 0.6, forest edges | 0.04 | 1.4 | 12 hazelnuts, 20 h | autumn | from growth 0.6; branches (3, 72 h) and twigs (6, 24 h) |
+| `wild_garlic` | Rich soil under the trees | 0.25 | 1.0 | 3 bunches, 24 h | spring | grows spring – summer 3, then withers |
+| `nettle`      | Rich soil, damp | 0.2 | 1.2 | 3 bunches, 24 h | spring, autumn 3 – 15 | withers in winter |
+| `plantain`    | Fertility ≥ 0.6, open meadows | 0.15 | 1.0 | 2 bunches, 24 h | spring – autumn | |
+| `wild_carrot` | Soil, open meadows | 0.08 | 1.0 | 3 bunches of roots, 24 h | autumn – spring 6 | from growth 0.6; dug up whole |
+| `cattail`     | Shallow water by the shore, and the shore | 0.1 (any ground) | 1.3 | 4 rhizomes, 48 h | all year | from growth 0.5 |
+| `mushrooms`   | Open soil within 2 tiles of a mature tree | — | 1.0 | 3 mushrooms | autumn | each autumn day a patch appears with 0.4% on each such tile and an existing one goes with 20% (5 days on average); gone when picked, and at the first frost |
+
+Mushrooms appear from a hash of the seed, the tile and the day, so that they
+draw nothing from the game's random stream (more after rain once weather
+exists).
+
+**Step B** *(next)*: rot (items lose hit points, slower when cool or under a
+roof; nuts and roots keep, greens and mushrooms do not) and roasting at the
+hearth (rhizomes and carrots roasted give more).
 
 ### 7.4 Construction: ground stockpile
 
@@ -863,7 +908,8 @@ planned).
 | Items never change by themselves. | Fresh grass dries into dry grass. | Grass drying (§4.1). |
 | Item categories: food, resources. | + tools, weapons, animal products, corpses. | Stockpile filters. |
 | Sleeping on the ground at full rest gain. | ×0.8 without a bed, and 10% slower work for 12 hours after (a mood later). *(done)* | Gives beds a purpose. |
-| Settlers spawn near water. | Also near ripe berry bushes and a flint patch; they bring nothing. | The group arrives hungry and empty handed. |
+| Settlers spawn near water. | Also near brambles bearing fruit, hazels and a flint patch; they bring nothing. | The group arrives hungry and empty handed. |
+| The game starts in spring; one berry bush, ripe all year. | Starts at the end of summer; eight wild food plants with their seasons (§7). | Food through the seasons. |
 
 ---
 
@@ -926,7 +972,7 @@ Suggested order, each step with its tests:
      carry fire; no "burn now" setting (unticking "keep it burning" lets
      the fire burn out);
    - hardened spears get their ×1.5 hit points; the ×1.2 damage waits for
-     hunting, the hardened digging stick for the digging stick;
+     hunting;
    - fireside stories: from 19:00 to 22:00, a settler who masters a
      knowledge marked to teach (a colony setting, shown in the hearth's
      panel) tells about its best one beside a burning hearth nobody tells
@@ -942,8 +988,14 @@ Suggested order, each step with its tests:
    warmth felt on the tiles around it (+20 °C one tile away, +9 at two, +4
    at three, stopped by walls); sleeping is best between 10 and 30 °C felt,
    and settlers without a bed sleep beside a fire on cold nights.
-   Then: grilling and roasting (with meat and tubers), wind, rain, rot;
-   tubers, hazel, mushrooms with seasons.
+10. *(done)* Food through the seasons, step A (§7): plants follow the
+    seasons (food ripening on its days, plants withering, no growth in
+    winter); bramble, hazel, wild garlic, nettle, plantain, wild carrot,
+    cattail and mushrooms replace the berry bush; picking and digging jobs,
+    careful ones from Gathering 60; the digging stick (and its hardening),
+    fetched on the way to dig; the game starts at the end of summer, with
+    brambles and hazels near the arrival point.
+    Then: step B (rot, roasting), grilling (with meat), wind, rain.
 
 **M5: Vision and exploration**: wildlife, spear hunting, carcasses,
 butchering, cracking bones.

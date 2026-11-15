@@ -77,7 +77,7 @@ static void test_instant_build(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     Plant *bush = &game.map.plants[map_index(&game.map, 14, 10)];
-    *bush = (Plant){.type = PLANT_BUSH, .growth = 1.0f};
+    *bush = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
     REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 10, 10, DIRECTION_EAST) !=
             CONSTRUCTION_NONE);
     REQUIRE(game_place_structure(&game, STRUCTURE_GRASS_BED, 10, 14, DIRECTION_EAST) !=

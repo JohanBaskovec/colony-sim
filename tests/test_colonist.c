@@ -7,6 +7,9 @@
 #include <string.h>
 
 /* A small game on a flat, empty soil map with no starting colonists. */
+/* The start of the first day of a game (the end of summer: brambles bear fruit). */
+#define TODAY ((uint64_t)GAME_START_DAY * TICKS_PER_DAY)
+
 static bool init_flat_game(Game *game)
 {
     NewGameParams params;
@@ -28,7 +31,7 @@ static bool init_flat_game(Game *game)
     }
     map_topology_changed(map); /* The layers were written directly. */
     /* Noon: nobody wants to sleep because of the night. */
-    game->clock.tick = 12 * TICKS_PER_HOUR;
+    game->clock.tick = TODAY + 12 * TICKS_PER_HOUR;
     return true;
 }
 
@@ -96,6 +99,21 @@ static void run_ticks(Game *game, int ticks)
     for (int i = 0; i < ticks; i++) {
         game_tick(game);
     }
+}
+
+/* A grown bramble bearing all its blackberries. */
+static Plant *add_bramble(Map *map, int x, int y)
+{
+    Plant *bramble = &map->plants[map_index(map, x, y)];
+    *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
+    plant_settle(bramble, GAME_START_DAY);
+    return bramble;
+}
+
+/* Handfuls of blackberries a grown bramble bears at most. */
+static int bramble_fruit(void)
+{
+    return plant_def(PLANT_BRAMBLE)->stock_capacity[PLANT_STOCK_FOOD];
 }
 
 static void test_spawn_requires_passable_tile(void)
@@ -219,9 +237,7 @@ static void test_hungry_colonist_walks_to_food_and_eats(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     Map *map = &game.map;
-    size_t bush = map_index(map, 30, 20);
-    map->plants[bush].type = PLANT_BUSH;
-    map->plants[bush].growth = 1.0f;
+    Plant *bramble = add_bramble(map, 30, 20);
 
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
@@ -236,7 +252,9 @@ static void test_hungry_colonist_walks_to_food_and_eats(void)
     CHECK_EQ_INT(colonist->x, 30);
     CHECK_EQ_INT(colonist->y, 20);
     CHECK(colonist->needs[NEED_FOOD] > 0.55f);
-    CHECK_NEAR(map->plants[bush].growth, PLANT_GROWTH_AFTER_PICKING, 1e-6);
+    /* Ate some of the fruit; the bramble stays. */
+    CHECK(plant_stock_available(bramble, PLANT_STOCK_FOOD) < bramble_fruit());
+    CHECK_NEAR(bramble->growth, 1.0f, 1e-6);
     CHECK(colonist->task != TASK_EAT); /* No other food around: gives up and idles. */
     game_shutdown(&game);
 }
@@ -329,9 +347,7 @@ static void test_most_urgent_need_first(void)
         Game game;
         REQUIRE(init_flat_game(&game));
         add_water_band(&game.map, 30);
-        Plant *bush = &game.map.plants[map_index(&game.map, 10, 20)];
-        bush->type = PLANT_BUSH;
-        bush->growth = 1.0f;
+        add_bramble(&game.map, 10, 20);
         Colonist *colonist = spawn_rested(&game, 20, 20);
         REQUIRE(colonist != NULL);
         colonist->needs[NEED_FOOD] = thirstier ? 0.2f : 0.1f;
@@ -347,9 +363,7 @@ static void test_thirst_falls_back_to_food_when_no_water(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    Plant *bush = &game.map.plants[map_index(&game.map, 25, 20)];
-    bush->type = PLANT_BUSH;
-    bush->growth = 1.0f;
+    add_bramble(&game.map, 25, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->needs[NEED_WATER] = 0.1f;
@@ -402,7 +416,7 @@ static void test_colonists_sleep_at_night(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    game.clock.tick = 23 * TICKS_PER_HOUR;
+    game.clock.tick = TODAY + 23 * TICKS_PER_HOUR;
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->needs[NEED_REST] = 0.7f;
@@ -416,7 +430,7 @@ static void test_colonists_drink_before_sleeping(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     add_water_band(&game.map, 30);
-    game.clock.tick = 23 * TICKS_PER_HOUR;
+    game.clock.tick = TODAY + 23 * TICKS_PER_HOUR;
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->needs[NEED_REST] = 0.7f;
@@ -437,7 +451,7 @@ static void add_tree(Map *map, int x, int y)
     Plant *tree = &map->plants[map_index(map, x, y)];
     tree->type = PLANT_TREE;
     tree->growth = 1.0f;
-    plant_fill_stocks(tree);
+    plant_settle(tree, GAME_START_DAY);
 }
 
 /* Branches a mature tree holds. */
@@ -709,9 +723,7 @@ static void test_hungry_worker_leaves_work_and_resumes_later(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     add_tree(&game.map, 22, 20);
-    Plant *bush = &game.map.plants[map_index(&game.map, 15, 20)];
-    bush->type = PLANT_BUSH;
-    bush->growth = 1.0f;
+    add_bramble(&game.map, 15, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     order_zone(&game, 22, 20, 22, 20, GATHER_BRANCHES);
@@ -801,14 +813,12 @@ static void test_new_order_is_noticed_despite_backoff(void)
     game_shutdown(&game);
 }
 
-static void test_hungry_colonists_go_to_different_bushes(void)
+static void test_hungry_colonists_go_to_different_brambles(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
     for (int i = 0; i < 2; i++) {
-        Plant *bush = &game.map.plants[map_index(&game.map, 25, 20 + 10 * i)];
-        bush->type = PLANT_BUSH;
-        bush->growth = 1.0f;
+        add_bramble(&game.map, 25, 20 + 10 * i);
     }
     Colonist *a = spawn_rested(&game, 20, 20);
     Colonist *b = spawn_rested(&game, 20, 21);
@@ -820,7 +830,7 @@ static void test_hungry_colonists_go_to_different_bushes(void)
     CHECK_EQ_INT(a->task, TASK_EAT);
     CHECK_EQ_INT(b->task, TASK_EAT);
     CHECK_EQ_INT(a->target.y, 20);
-    CHECK_EQ_INT(b->target.y, 30); /* The closer bush is already taken. */
+    CHECK_EQ_INT(b->target.y, 30); /* The closer bramble is already taken. */
     CHECK_EQ_INT(game.reservations.count_by_kind[RESERVATION_FOOD], 2);
 
     /* Once both have eaten, nothing stays reserved. */
@@ -958,14 +968,12 @@ static void test_priority_beats_distance(void)
     game_shutdown(&game);
 }
 
-static void test_hungry_colonist_eats_berries_from_the_ground(void)
+static void test_hungry_colonist_eats_fruit_from_the_ground(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 24, 20, item_stack_pristine(ITEM_BERRIES, 20));
-    Plant *bush = &game.map.plants[map_index(&game.map, 30, 20)]; /* Farther away. */
-    bush->type = PLANT_BUSH;
-    bush->growth = 1.0f;
+    items_add(&game.items, 24, 20, item_stack_pristine(ITEM_BLACKBERRIES, 20));
+    Plant *bramble = add_bramble(&game.map, 30, 20); /* Farther away. */
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->needs[NEED_FOOD] = 0.2f;
@@ -977,34 +985,34 @@ static void test_hungry_colonist_eats_berries_from_the_ground(void)
 
     /* Ate just what it takes to be sated (hunger grew a little on the way), and
      * left the rest. */
-    float nutrition = item_def(ITEM_BERRIES)->nutrition;
+    float nutrition = item_def(ITEM_BLACKBERRIES)->nutrition;
     int eaten = 20 - items_get(&game.items, 24, 20).count;
     int expected = (int)ceilf((COLONIST_SATED_FOOD - 0.2f) / nutrition);
     CHECK(colonist->needs[NEED_FOOD] >= COLONIST_SATED_FOOD - 0.01f);
     CHECK(eaten >= expected && eaten <= expected + 1);
-    CHECK_NEAR(bush->growth, 1.0, 1e-6); /* The bush was not touched. */
+    /* The bramble was not touched. */
+    CHECK_EQ_INT(plant_stock_available(bramble, PLANT_STOCK_FOOD), bramble_fruit());
     game_shutdown(&game);
 }
 
-static void test_colonist_harvests_berries(void)
+static void test_colonist_harvests_blackberries(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    Plant *bush = &game.map.plants[map_index(&game.map, 24, 20)];
-    bush->type = PLANT_BUSH;
-    bush->growth = 1.0f;
+    Plant *bramble = add_bramble(&game.map, 24, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
-    CHECK_EQ_INT(order_zone(&game, 24, 20, 24, 20, GATHER_BERRIES), 1);
+    CHECK_EQ_INT(order_zone(&game, 24, 20, 24, 20, GATHER_BLACKBERRIES), 1);
 
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.harvest");
     run_ticks(&game,
               walk_ticks(4) + (int)gather_job_work_needed(&game.map, 24, 20, GATHER_JOB_HARVEST));
-    CHECK_EQ_INT(items_get(&game.items, 24, 20).type, ITEM_BERRIES);
-    CHECK_EQ_INT(items_get(&game.items, 24, 20).count, plant_def(PLANT_BUSH)->harvest_yield);
-    CHECK_NEAR(bush->growth, PLANT_GROWTH_AFTER_PICKING, 0.01);
+    CHECK_EQ_INT(items_get(&game.items, 24, 20).type, ITEM_BLACKBERRIES);
+    CHECK_EQ_INT(items_get(&game.items, 24, 20).count, bramble_fruit());
+    CHECK_EQ_INT(plant_stock_available(bramble, PLANT_STOCK_FOOD), 0);
+    CHECK_NEAR(bramble->growth, 1.0f, 1e-6);
     game_shutdown(&game);
 }
 
@@ -1056,9 +1064,7 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
         add_tree(&game.map, 10, y);
         add_tree(&game.map, 30, y);
         map_set_rock(&game.map, 38, y, ROCK_SANDSTONE);
-        Plant *bush = &game.map.plants[map_index(&game.map, 20, y)];
-        bush->type = PLANT_BUSH;
-        bush->growth = 1.0f;
+        add_bramble(&game.map, 20, y);
     }
     for (int i = 0; i < 4; i++) {
         REQUIRE(spawn_rested(&game, 18 + i, 20) != NULL);
@@ -1236,7 +1242,7 @@ static void test_carry_capacity(void)
     /* Stone: 2 by weight (40 kg / 20 kg). */
     CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE_BLOCK), 2);
     /* Berries: 60 portions by bulk (18 kg). */
-    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BERRIES), 60);
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BLACKBERRIES), 60);
     CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_NONE), 0);
 
     CHECK_NEAR(colonist_carried_weight(&colonist), 0.0, 1e-6);
@@ -1275,7 +1281,7 @@ static void test_strength_sets_carry_weight(void)
     REQUIRE(colonist_set_strength(&colonist, COLONIST_STRENGTH_MIN));
     CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE_BLOCK), 1);
     /* Bulk does not depend on strength: still 60 portions of berries. */
-    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BERRIES), 60);
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BLACKBERRIES), 60);
     CHECK(!colonist_set_strength(&colonist, 0));
     CHECK(!colonist_set_strength(&colonist, COLONIST_STRENGTH_MAX + 1));
     CHECK_EQ_INT(colonist.strength, COLONIST_STRENGTH_MIN);
@@ -1579,27 +1585,89 @@ static void test_gathering_zone_stops_at_its_targets(void)
     game_shutdown(&game);
 }
 
-static void test_gatherer_waits_for_fully_grown_bushes(void)
+static void test_gatherer_waits_for_the_fruit_to_ripen(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    Plant *bush = &game.map.plants[map_index(&game.map, 24, 20)];
-    bush->type = PLANT_BUSH;
-    bush->growth = 0.998f; /* Ripe fruit, but not fully grown yet. */
+    Plant *bramble = add_bramble(&game.map, 24, 20);
+    plant_take_stock(bramble, PLANT_STOCK_FOOD, 1000); /* Picked clean. */
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
-    REQUIRE(order_zone(&game, 22, 18, 26, 22, GATHER_BERRIES) == 25);
-    REQUIRE(game.gather_zones.list[0].orders[GATHER_BERRIES].ripe_only);
+    REQUIRE(order_zone(&game, 22, 18, 26, 22, GATHER_BLACKBERRIES) == 25);
     run_ticks(&game, 300);
     CHECK(colonist->task != TASK_WORK);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_BERRIES], 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], 0);
 
-    /* Once the bush has grown, the idle colonist notices and picks it. */
+    /* Once a handful has ripened, the idle colonist notices and picks it. */
+    int regrow = plant_def(PLANT_BRAMBLE)->stock_regrow_hours[PLANT_STOCK_FOOD];
+    plant_regrow_stocks(bramble, regrow, GAME_START_DAY);
+    REQUIRE(plant_stock_available(bramble, PLANT_STOCK_FOOD) == 1);
     run_ticks(&game, TICKS_PER_HOUR * 2);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_BERRIES], plant_def(PLANT_BUSH)->harvest_yield);
-    CHECK_NEAR(bush->growth, PLANT_GROWTH_AFTER_PICKING, 0.01);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], 1);
+    CHECK_EQ_INT(plant_stock_available(bramble, PLANT_STOCK_FOOD), 0);
     game_shutdown(&game);
+}
+
+/* Digging roots up: with a digging stick lying close by, the gatherer
+ * fetches it on the way and digs faster; it keeps it. */
+static void test_gatherer_fetches_a_digging_stick(void)
+{
+    double ticks[2];
+    for (int stick = 0; stick <= 1; stick++) {
+        Game game;
+        REQUIRE(init_flat_game(&game));
+        Plant *cattail = &game.map.plants[map_index(&game.map, 26, 20)];
+        *cattail = (Plant){.type = PLANT_CATTAIL, .growth = 1.0f};
+        plant_settle(cattail, GAME_START_DAY);
+        int rhizomes = plant_stock_available(cattail, PLANT_STOCK_FOOD);
+        REQUIRE(rhizomes > 0);
+        if (stick) {
+            items_add(&game.items, 20, 23, item_stack_pristine(ITEM_DIGGING_STICK, 1));
+        }
+        Colonist *colonist = spawn_rested(&game, 20, 20);
+        REQUIRE(colonist != NULL);
+        colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+        REQUIRE(order_zone(&game, 26, 20, 26, 20, GATHER_CATTAIL_RHIZOMES) == 1);
+        game_tick(&game);
+        CHECK_EQ_INT(colonist->task, TASK_WORK);
+        CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.dig");
+        int i = 0;
+        for (; i < 6 * TICKS_PER_HOUR && game.items.totals[ITEM_CATTAIL_RHIZOMES] == 0; i++) {
+            game_tick(&game);
+        }
+        CHECK_EQ_INT((int)game.items.totals[ITEM_CATTAIL_RHIZOMES], rhizomes);
+        CHECK_EQ_INT(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_DIGGING_STICK)) >= 0,
+                     stick);
+        CHECK_EQ_INT((int)game.items.totals[ITEM_DIGGING_STICK], 0);
+        ticks[stick] = i;
+        game_shutdown(&game);
+    }
+    /* Three times faster with the stick, a detour included. */
+    CHECK(ticks[1] * 2.0 < ticks[0]);
+}
+
+/* Food that looks like a poisonous plant: only a skilled gatherer takes it. */
+static void test_only_skilled_gatherers_pick_mushrooms(void)
+{
+    for (int skilled = 0; skilled <= 1; skilled++) {
+        Game game;
+        REQUIRE(init_flat_game(&game));
+        game.clock.tick = (uint64_t)SEASON_DAY(SEASON_AUTUMN, 2) * TICKS_PER_DAY +
+                          12 * TICKS_PER_HOUR;
+        Plant *patch = &game.map.plants[map_index(&game.map, 24, 20)];
+        *patch = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
+        plant_settle(patch, game_day_of_year(game.clock.tick));
+        Colonist *colonist = spawn_rested(&game, 20, 20);
+        REQUIRE(colonist != NULL);
+        colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING,
+                                     skilled ? GATHER_CAREFUL_MIN_LEVEL
+                                             : GATHER_CAREFUL_MIN_LEVEL - 1.0f);
+        REQUIRE(order_zone(&game, 24, 20, 24, 20, GATHER_MUSHROOMS) == 1);
+        game_tick(&game);
+        CHECK_EQ_INT(colonist->task == TASK_WORK, skilled);
+        game_shutdown(&game);
+    }
 }
 
 static void test_orders_need_the_knowledge(void)
@@ -1662,7 +1730,8 @@ static void test_colonist_cleans_dirty_tiles(void)
     CHECK(seen_cleaning);
     CHECK_EQ_INT(game.dirt.dirty_count, 0);
     /* 100 % of dirt at COLONIST_CLEAN_TICKS_PER_PERCENT ticks each, and the walk. */
-    CHECK(game.clock.tick - 12 * TICKS_PER_HOUR >= 100 * COLONIST_CLEAN_TICKS_PER_PERCENT);
+    CHECK(game.clock.tick - TODAY - 12 * TICKS_PER_HOUR >=
+          100 * COLONIST_CLEAN_TICKS_PER_PERCENT);
     CHECK_EQ_INT(game.reservations.count_by_kind[RESERVATION_CLEAN], 0);
     game_shutdown(&game);
 }
@@ -1764,20 +1833,22 @@ int main(void)
     RUN_TEST(test_cancelled_order_stops_the_worker);
     RUN_TEST(test_removed_worker_releases_its_job);
     RUN_TEST(test_new_order_is_noticed_despite_backoff);
-    RUN_TEST(test_hungry_colonists_go_to_different_bushes);
+    RUN_TEST(test_hungry_colonists_go_to_different_brambles);
     RUN_TEST(test_disabled_work_type_is_never_done);
     RUN_TEST(test_set_work_priority_validates);
     RUN_TEST(test_enabling_work_type_is_noticed_right_away);
     RUN_TEST(test_disabling_work_type_stops_the_current_job);
     RUN_TEST(test_priority_beats_distance);
-    RUN_TEST(test_hungry_colonist_eats_berries_from_the_ground);
-    RUN_TEST(test_colonist_harvests_berries);
+    RUN_TEST(test_hungry_colonist_eats_fruit_from_the_ground);
+    RUN_TEST(test_colonist_harvests_blackberries);
     RUN_TEST(test_starting_knowledge_is_random_and_valid);
     RUN_TEST(test_knowledge_levels_validate);
     RUN_TEST(test_gatherer_level_sets_branch_condition);
     RUN_TEST(test_gathering_zone_keeps_the_worker_busy);
     RUN_TEST(test_gathering_zone_stops_at_its_targets);
-    RUN_TEST(test_gatherer_waits_for_fully_grown_bushes);
+    RUN_TEST(test_gatherer_waits_for_the_fruit_to_ripen);
+    RUN_TEST(test_gatherer_fetches_a_digging_stick);
+    RUN_TEST(test_only_skilled_gatherers_pick_mushrooms);
     RUN_TEST(test_orders_need_the_knowledge);
     RUN_TEST(test_learning_by_doing);
     RUN_TEST(test_working_teaches_the_order_knowledge);

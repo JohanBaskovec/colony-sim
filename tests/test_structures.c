@@ -252,13 +252,13 @@ static void test_a_bush_is_cleared_before_building(void)
     items_add(&game.items, 12, 10, item_stack_pristine(ITEM_BRANCHES, 5));
     items_add(&game.items, 14, 10, item_stack_pristine(ITEM_GRASS, 24));
     Plant *bush = &game.map.plants[map_index(&game.map, 10, 14)];
-    *bush = (Plant){.type = PLANT_BUSH, .growth = 0.3f}; /* Young: no berries. */
+    *bush = (Plant){.type = PLANT_BRAMBLE, .growth = 0.3f}; /* Young: no fruit. */
     REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 10, 14, DIRECTION_SOUTH) !=
             CONSTRUCTION_NONE);
     CHECK(run_until_built(&game, 10, 14, 8 * TICKS_PER_HOUR));
     CHECK_EQ_INT(map_structure(&game.map, 10, 14), STRUCTURE_WALL);
     CHECK_EQ_INT(bush->type, PLANT_NONE);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_BERRIES], 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], 0);
     game_shutdown(&game);
 }
 

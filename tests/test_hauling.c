@@ -220,7 +220,7 @@ static void test_colonist_hauls_items_into_stockpile(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BERRIES, 30));
+    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BLACKBERRIES, 30));
     int pile = stockpile_create(&game.stockpiles, &game.map, 20, 10, 21, 11);
     REQUIRE(pile != STOCKPILE_NONE);
     Colonist *colonist = spawn_hauler(&game, 8, 10);
@@ -233,13 +233,14 @@ static void test_colonist_hauls_items_into_stockpile(void)
                                     (TilePos){10, 10}),
                  1);
     run_ticks(&game, 200);
-    CHECK_EQ_INT(colonist->carried.type, ITEM_BERRIES); /* Picked up on the way. */
+    CHECK_EQ_INT(colonist->carried.type, ITEM_BLACKBERRIES); /* Picked up on the way. */
     CHECK_EQ_INT(colonist->carried.count, 30);
-    CHECK_EQ_INT(count_at(&game, 10, 10, ITEM_BERRIES), 0);
-    CHECK_EQ_INT(game.items.totals[ITEM_BERRIES], 0); /* Carried items are not on the ground. */
+    CHECK_EQ_INT(count_at(&game, 10, 10, ITEM_BLACKBERRIES), 0);
+    /* Carried items are not on the ground. */
+    CHECK_EQ_INT(game.items.totals[ITEM_BLACKBERRIES], 0);
 
     run_ticks(&game, 600);
-    CHECK_EQ_INT(count_in(&game, 20, 10, 21, 11, ITEM_BERRIES), 30);
+    CHECK_EQ_INT(count_in(&game, 20, 10, 21, 11, ITEM_BLACKBERRIES), 30);
     CHECK_EQ_INT(colonist->carried.count, 0);
     CHECK_EQ_INT(game.reservations.count, 0);
     game_shutdown(&game);
@@ -325,7 +326,7 @@ static void test_removed_destination_reroutes_the_hauler(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BERRIES, 15));
+    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BLACKBERRIES, 15));
     int near = stockpile_create(&game.stockpiles, &game.map, 20, 10, 20, 10);
     stockpile_create(&game.stockpiles, &game.map, 20, 20, 20, 20);
     Colonist *colonist = spawn_hauler(&game, 10, 10);
@@ -336,8 +337,8 @@ static void test_removed_destination_reroutes_the_hauler(void)
 
     stockpile_delete(&game.stockpiles, near);
     run_ticks(&game, 1500);
-    CHECK_EQ_INT(count_at(&game, 20, 20, ITEM_BERRIES), 15);
-    CHECK_EQ_INT(game.items.totals[ITEM_BERRIES], 15);
+    CHECK_EQ_INT(count_at(&game, 20, 20, ITEM_BLACKBERRIES), 15);
+    CHECK_EQ_INT(game.items.totals[ITEM_BLACKBERRIES], 15);
     CHECK_EQ_INT(game.reservations.count, 0);
     game_shutdown(&game);
 }
@@ -346,7 +347,7 @@ static void test_destination_gone_without_alternative_drops_items(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BERRIES, 15));
+    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BLACKBERRIES, 15));
     int pile = stockpile_create(&game.stockpiles, &game.map, 25, 10, 25, 10);
     Colonist *colonist = spawn_hauler(&game, 10, 10);
     REQUIRE(colonist != NULL);
@@ -357,8 +358,8 @@ static void test_destination_gone_without_alternative_drops_items(void)
     run_ticks(&game, 120);
     CHECK_EQ_INT(colonist->carried.count, 0);
     CHECK(colonist->task != TASK_HAUL);
-    CHECK_EQ_INT(game.items.totals[ITEM_BERRIES], 15);
-    CHECK_EQ_INT(count_at(&game, 25, 10, ITEM_BERRIES), 0);
+    CHECK_EQ_INT(game.items.totals[ITEM_BLACKBERRIES], 15);
+    CHECK_EQ_INT(count_at(&game, 25, 10, ITEM_BLACKBERRIES), 0);
     game_shutdown(&game);
 }
 
@@ -366,8 +367,8 @@ static void test_two_haulers_take_different_stacks(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BERRIES, 10));
-    items_add(&game.items, 10, 12, item_stack_pristine(ITEM_BERRIES, 10));
+    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BLACKBERRIES, 10));
+    items_add(&game.items, 10, 12, item_stack_pristine(ITEM_BLACKBERRIES, 10));
     stockpile_create(&game.stockpiles, &game.map, 20, 10, 20, 13);
     Colonist *a = spawn_hauler(&game, 9, 11);
     Colonist *b = spawn_hauler(&game, 8, 11);
@@ -377,7 +378,7 @@ static void test_two_haulers_take_different_stacks(void)
     CHECK(a->target.y != b->target.y);
     CHECK(a->haul_destination.y != b->haul_destination.y);
     run_ticks(&game, 1200);
-    CHECK_EQ_INT(count_in(&game, 20, 10, 20, 13, ITEM_BERRIES), 20);
+    CHECK_EQ_INT(count_in(&game, 20, 10, 20, 13, ITEM_BLACKBERRIES), 20);
     game_shutdown(&game);
 }
 
@@ -400,7 +401,7 @@ static void test_disabling_hauling_stops_before_pickup_only(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 14, 10, item_stack_pristine(ITEM_BERRIES, 10));
+    items_add(&game.items, 14, 10, item_stack_pristine(ITEM_BLACKBERRIES, 10));
     stockpile_create(&game.stockpiles, &game.map, 24, 10, 24, 10);
     EntityId id = game_spawn_colonist(&game, 10, 10);
     Colonist *colonist = game_colonist(&game, id);
@@ -416,7 +417,7 @@ static void test_disabling_hauling_stops_before_pickup_only(void)
     run_ticks(&game, 60);
     CHECK(colonist->task != TASK_HAUL);
     CHECK_EQ_INT(game.reservations.count, 0);
-    CHECK_EQ_INT(count_at(&game, 14, 10, ITEM_BERRIES), 10);
+    CHECK_EQ_INT(count_at(&game, 14, 10, ITEM_BLACKBERRIES), 10);
 
     /* Enabled again, then disabled once the load is in hand: it is delivered. */
     REQUIRE(game_set_work_priority(&game, id, WORK_HAULING, WORK_PRIORITY_DEFAULT));
@@ -426,7 +427,7 @@ static void test_disabling_hauling_stops_before_pickup_only(void)
     REQUIRE(colonist->carried.count == 10);
     REQUIRE(game_set_work_priority(&game, id, WORK_HAULING, WORK_PRIORITY_DISABLED));
     run_ticks(&game, 800);
-    CHECK_EQ_INT(count_at(&game, 24, 10, ITEM_BERRIES), 10);
+    CHECK_EQ_INT(count_at(&game, 24, 10, ITEM_BLACKBERRIES), 10);
     CHECK(colonist->task != TASK_HAUL);
     game_shutdown(&game);
 }
@@ -440,7 +441,7 @@ static void test_gathering_comes_before_hauling_at_same_priority(void)
     Plant *tree = &game.map.plants[map_index(&game.map, 30, 30)];
     tree->type = PLANT_TREE;
     tree->growth = 1.0f;
-    plant_fill_stocks(tree);
+    plant_settle(tree, GAME_START_DAY);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 30, 30, 30, 30);
     gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BRANCHES, true);
     gather_zone_set_mode(&game.gather_zones, zone, GATHER_BRANCHES, GATHER_FOREVER);
@@ -626,7 +627,7 @@ static void test_carried_items_keep_their_condition(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 10, 10, item_stack_make(ITEM_BERRIES, 30, ITEM_QUALITY_ROUGH, 7));
+    items_add(&game.items, 10, 10, item_stack_make(ITEM_BLACKBERRIES, 30, ITEM_QUALITY_ROUGH, 7));
     stockpile_create(&game.stockpiles, &game.map, 20, 10, 20, 10);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
@@ -704,9 +705,9 @@ static void test_hauler_collects_several_stacks_per_trip(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 10, 10, item_stack_make(ITEM_BERRIES, 10, ITEM_QUALITY_FINE, 10));
-    items_add(&game.items, 12, 11, item_stack_make(ITEM_BERRIES, 10, ITEM_QUALITY_FINE, 6));
-    items_add(&game.items, 11, 13, item_stack_make(ITEM_BERRIES, 10, ITEM_QUALITY_FINE, 8));
+    items_add(&game.items, 10, 10, item_stack_make(ITEM_BLACKBERRIES, 10, ITEM_QUALITY_FINE, 10));
+    items_add(&game.items, 12, 11, item_stack_make(ITEM_BLACKBERRIES, 10, ITEM_QUALITY_FINE, 6));
+    items_add(&game.items, 11, 13, item_stack_make(ITEM_BLACKBERRIES, 10, ITEM_QUALITY_FINE, 8));
     stockpile_create(&game.stockpiles, &game.map, 25, 10, 25, 10);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
@@ -714,7 +715,7 @@ static void test_hauler_collects_several_stacks_per_trip(void)
     ItemStack stored = items_get(&game.items, 25, 10);
     CHECK_EQ_INT(stored.quality, ITEM_QUALITY_FINE);
     CHECK_EQ_INT(stored.hit_points, 8); /* (10 × 10 + 10 × 6 + 10 × 8) / 30 */
-    CHECK_EQ_INT(count_in(&game, 0, 0, 20, 20, ITEM_BERRIES), 0);
+    CHECK_EQ_INT(count_in(&game, 0, 0, 20, 20, ITEM_BLACKBERRIES), 0);
     CHECK_EQ_INT(game.reservations.count, 0);
     game_shutdown(&game);
 }
@@ -746,9 +747,9 @@ static void test_far_or_vanished_stacks_are_not_waited_for(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BERRIES, 10));
-    items_add(&game.items, 12, 10, item_stack_pristine(ITEM_BERRIES, 10));
-    items_add(&game.items, 10, 40, item_stack_pristine(ITEM_BERRIES, 10)); /* Far away. */
+    items_add(&game.items, 10, 10, item_stack_pristine(ITEM_BLACKBERRIES, 10));
+    items_add(&game.items, 12, 10, item_stack_pristine(ITEM_BLACKBERRIES, 10));
+    items_add(&game.items, 10, 40, item_stack_pristine(ITEM_BLACKBERRIES, 10)); /* Far away. */
     stockpile_create(&game.stockpiles, &game.map, 25, 10, 25, 10);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
@@ -762,7 +763,7 @@ static void test_far_or_vanished_stacks_are_not_waited_for(void)
     /* ...which someone else takes meanwhile: it delivers what it holds. */
     items_remove(&game.items, 12, 10, 10);
     CHECK_EQ_INT(first_delivery(&game, 25, 10, 2000), 10);
-    CHECK_EQ_INT(count_at(&game, 10, 40, ITEM_BERRIES), 10); /* Not collected on the way. */
+    CHECK_EQ_INT(count_at(&game, 10, 40, ITEM_BLACKBERRIES), 10); /* Not collected on the way. */
     game_shutdown(&game);
 }
 

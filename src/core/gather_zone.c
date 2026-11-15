@@ -9,14 +9,17 @@
 /* Felling a tree: a fixed part plus a part proportional to its size. */
 #define CHOP_BASE_WORK 400.0f
 #define CHOP_GROWTH_WORK 1600.0f
-#define HARVEST_WORK 300.0f
+/* Wild food, per item taken: 360 for a bramble's nine handfuls, 480 for a
+ * hazel's twelve nuts; 500 to dig four cattail rhizomes up. */
+#define HARVEST_WORK 40.0f
+#define DIG_WORK 125.0f
 #define BRANCH_WORK 300.0f /* Per branch. */
 #define TWIGS_WORK 150.0f  /* Per handful. */
 #define CUT_GRASS_WORK 150.0f
 #define STONE_WORK 200.0f /* Per stone. */
 /* Armfuls of grass cut from a fully grown tile, proportionally fewer when shorter. */
 #define CUT_GRASS_YIELD 3.0f
-#define CLEAR_BUSH_WORK 500.0f /* Pulling up a bush by hand. */
+#define CLEAR_SHRUB_WORK 500.0f /* Pulling up a shrub by hand. */
 #define CUT_GRASS_MIN_GROWTH 0.5f
 
 #define ONE(type) ITEM_TYPE_BIT(type)
@@ -24,8 +27,25 @@
 static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
     [GATHER_WOOD] = {"wood", N_("gather_zone.resource.wood"), ITEM_WOOD, ONE(ITEM_WOOD),
                      GATHER_JOB_CHOP, true},
-    [GATHER_BERRIES] = {"berries", N_("gather_zone.resource.berries"), ITEM_BERRIES,
-                        ONE(ITEM_BERRIES), GATHER_JOB_HARVEST, true},
+    [GATHER_BLACKBERRIES] = {"blackberries", N_("gather_zone.resource.blackberries"),
+                             ITEM_BLACKBERRIES, ONE(ITEM_BLACKBERRIES), GATHER_JOB_HARVEST, false},
+    [GATHER_HAZELNUTS] = {"hazelnuts", N_("gather_zone.resource.hazelnuts"), ITEM_HAZELNUTS,
+                          ONE(ITEM_HAZELNUTS), GATHER_JOB_HARVEST, false},
+    [GATHER_MUSHROOMS] = {"mushrooms", N_("gather_zone.resource.mushrooms"), ITEM_MUSHROOMS,
+                          ONE(ITEM_MUSHROOMS), GATHER_JOB_HARVEST_CAREFULLY, false},
+    [GATHER_WILD_GARLIC] = {"wild_garlic", N_("gather_zone.resource.wild_garlic"),
+                            ITEM_WILD_GARLIC, ONE(ITEM_WILD_GARLIC), GATHER_JOB_HARVEST_CAREFULLY,
+                            false},
+    [GATHER_NETTLES] = {"nettles", N_("gather_zone.resource.nettles"), ITEM_NETTLES,
+                        ONE(ITEM_NETTLES), GATHER_JOB_HARVEST, false},
+    [GATHER_PLANTAIN] = {"plantain", N_("gather_zone.resource.plantain"), ITEM_PLANTAIN,
+                         ONE(ITEM_PLANTAIN), GATHER_JOB_HARVEST, false},
+    [GATHER_WILD_CARROTS] = {"wild_carrots", N_("gather_zone.resource.wild_carrots"),
+                             ITEM_WILD_CARROTS, ONE(ITEM_WILD_CARROTS), GATHER_JOB_DIG_CAREFULLY,
+                             false},
+    [GATHER_CATTAIL_RHIZOMES] = {"cattail_rhizomes", N_("gather_zone.resource.cattail_rhizomes"),
+                                 ITEM_CATTAIL_RHIZOMES, ONE(ITEM_CATTAIL_RHIZOMES), GATHER_JOB_DIG,
+                                 false},
     [GATHER_BRANCHES] = {"branches", N_("gather_zone.resource.branches"), ITEM_BRANCHES,
                          ONE(ITEM_BRANCHES), GATHER_JOB_BRANCHES, false},
     [GATHER_TWIGS] = {"twigs", N_("gather_zone.resource.twigs"), ITEM_TWIGS, ONE(ITEM_TWIGS),
@@ -41,24 +61,37 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
 #undef ONE
 
 #define GATHERING WORK_GATHERING, KNOWLEDGE_GATHERING, KNOWLEDGE_MASTERY_LEVEL
+#define CAREFUL WORK_GATHERING, KNOWLEDGE_GATHERING, GATHER_CAREFUL_MIN_LEVEL
 #define RESOURCE(r) GATHER_RESOURCE_BIT(r)
 
 static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
     [GATHER_JOB_HARVEST] = {"harvest", N_("colonist.task.harvest"), GATHERING,
-                            RESOURCE(GATHER_BERRIES), TOOL_USE_NONE},
+                            RESOURCE(GATHER_BLACKBERRIES) | RESOURCE(GATHER_HAZELNUTS) |
+                                RESOURCE(GATHER_NETTLES) | RESOURCE(GATHER_PLANTAIN),
+                            TOOL_USE_NONE, false},
+    [GATHER_JOB_HARVEST_CAREFULLY] = {"harvest_carefully", N_("colonist.task.harvest_carefully"),
+                                      CAREFUL,
+                                      RESOURCE(GATHER_MUSHROOMS) | RESOURCE(GATHER_WILD_GARLIC),
+                                      TOOL_USE_NONE, false},
+    [GATHER_JOB_DIG] = {"dig", N_("colonist.task.dig"), GATHERING,
+                        RESOURCE(GATHER_CATTAIL_RHIZOMES), TOOL_USE_DIGGING, true},
+    [GATHER_JOB_DIG_CAREFULLY] = {"dig_carefully", N_("colonist.task.dig_carefully"), CAREFUL,
+                                  RESOURCE(GATHER_WILD_CARROTS), TOOL_USE_DIGGING, true},
     [GATHER_JOB_BRANCHES] = {"branches", N_("colonist.task.gather_branches"), GATHERING,
-                             RESOURCE(GATHER_BRANCHES), TOOL_USE_NONE},
+                             RESOURCE(GATHER_BRANCHES), TOOL_USE_NONE, false},
     [GATHER_JOB_TWIGS] = {"twigs", N_("colonist.task.gather_twigs"), GATHERING,
-                          RESOURCE(GATHER_TWIGS), TOOL_USE_NONE},
+                          RESOURCE(GATHER_TWIGS), TOOL_USE_NONE, false},
     [GATHER_JOB_CUT_GRASS] = {"cut_grass", N_("colonist.task.cut_grass"), GATHERING,
-                              RESOURCE(GATHER_GRASS), TOOL_USE_CUT_GRASS},
+                              RESOURCE(GATHER_GRASS), TOOL_USE_CUT_GRASS, false},
     [GATHER_JOB_CHOP] = {"chop", N_("colonist.task.chop"), WORK_WOODCUTTING, KNOWLEDGE_NONE,
-                         KNOWLEDGE_MASTERY_LEVEL, RESOURCE(GATHER_WOOD), TOOL_USE_NONE},
+                         KNOWLEDGE_MASTERY_LEVEL, RESOURCE(GATHER_WOOD), TOOL_USE_NONE, false},
     [GATHER_JOB_STONES] = {"stones", N_("colonist.task.gather_stones"), GATHERING,
-                           RESOURCE(GATHER_FLINT) | RESOURCE(GATHER_COBBLES), TOOL_USE_NONE},
+                           RESOURCE(GATHER_FLINT) | RESOURCE(GATHER_COBBLES), TOOL_USE_NONE,
+                           false},
 };
 
 #undef GATHERING
+#undef CAREFUL
 #undef RESOURCE
 
 _Static_assert(GATHER_RESOURCE_COUNT <= 32 && GATHER_JOB_COUNT < 255, "masks and job layer");
@@ -155,7 +188,6 @@ bool gather_zone_can_cover(const Map *map, int x, int y)
     size_t index = map_index(map, x, y);
     Terrain terrain = (Terrain)map->terrain[index];
     return map->rock[index] == ROCK_NONE && terrain != TERRAIN_DEEP_WATER &&
-           terrain != TERRAIN_SHALLOW_WATER &&
            !structure_blocks((StructureType)map->structure[index]);
 }
 
@@ -504,6 +536,26 @@ static bool ripe_enough(const GatherZone *zone, GatherResource resource, const P
     return !zone->orders[resource].ripe_only || plant->growth >= 1.0f;
 }
 
+/* The resource an item is gathered as (GATHER_RESOURCE_COUNT: none). */
+static GatherResource resource_of_item(ItemType item)
+{
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        if (RESOURCE_DEFS[r].item == item) {
+            return (GatherResource)r;
+        }
+    }
+    return GATHER_RESOURCE_COUNT;
+}
+
+/* Whether a plant bears food now, of one of `resources`. */
+static bool food_among(const Plant *plant, GatherResourceMask resources)
+{
+    GatherResource resource = resource_of_item(plant_stock_item((PlantType)plant->type,
+                                                                PLANT_STOCK_FOOD));
+    return resource != GATHER_RESOURCE_COUNT && (resources & GATHER_RESOURCE_BIT(resource)) &&
+           plant_has_food(plant);
+}
+
 /* Stones of a resource's type on a tile (0 for the other resources). */
 static int stones_of(const Map *map, int x, int y, GatherResource resource)
 {
@@ -520,11 +572,10 @@ static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, in
     }
     const Plant *plant = &map->plants[map_index(map, x, y)];
     switch (job) {
-    case GATHER_JOB_HARVEST: {
-        const PlantDef *def = plant_def((PlantType)plant->type);
-        return def->harvest_item != ITEM_NONE && plant->growth >= def->min_edible_growth &&
-               ripe_enough(zone, GATHER_BERRIES, plant);
-    }
+    case GATHER_JOB_HARVEST:
+    case GATHER_JOB_HARVEST_CAREFULLY:
+    case GATHER_JOB_DIG:
+    case GATHER_JOB_DIG_CAREFULLY: return food_among(plant, resources);
     case GATHER_JOB_BRANCHES: return plant_stock_available(plant, PLANT_STOCK_BRANCHES) > 0;
     case GATHER_JOB_TWIGS: return plant_stock_available(plant, PLANT_STOCK_TWIGS) > 0;
     case GATHER_JOB_CUT_GRASS:
@@ -562,7 +613,10 @@ static int plant_yield(const Map *map, int x, int y, GatherJob job)
     const Plant *plant = &map->plants[map_index(map, x, y)];
     const PlantDef *def = plant_def((PlantType)plant->type);
     switch (job) {
-    case GATHER_JOB_HARVEST: return (int)((float)def->harvest_yield * plant->growth + 0.5f);
+    case GATHER_JOB_HARVEST:
+    case GATHER_JOB_HARVEST_CAREFULLY:
+    case GATHER_JOB_DIG:
+    case GATHER_JOB_DIG_CAREFULLY: return plant_stock_available(plant, PLANT_STOCK_FOOD);
     case GATHER_JOB_BRANCHES: return plant_stock_available(plant, PLANT_STOCK_BRANCHES);
     case GATHER_JOB_TWIGS: return plant_stock_available(plant, PLANT_STOCK_TWIGS);
     case GATHER_JOB_CUT_GRASS: {
@@ -632,8 +686,12 @@ float gather_job_work_needed(const Map *map, int x, int y, GatherJob job)
         return 0.0f;
     }
     const Plant *plant = &map->plants[map_index(map, x, y)];
+    int food = plant_stock_available(plant, PLANT_STOCK_FOOD);
     switch (job) {
-    case GATHER_JOB_HARVEST: return HARVEST_WORK;
+    case GATHER_JOB_HARVEST:
+    case GATHER_JOB_HARVEST_CAREFULLY: return HARVEST_WORK * (float)(food > 1 ? food : 1);
+    case GATHER_JOB_DIG:
+    case GATHER_JOB_DIG_CAREFULLY: return DIG_WORK * (float)(food > 1 ? food : 1);
     case GATHER_JOB_BRANCHES: {
         int available = plant_stock_available(plant, PLANT_STOCK_BRANCHES);
         return BRANCH_WORK * (float)(available > 1 ? available : 1);
@@ -680,13 +738,22 @@ static ItemType complete(Map *map, int x, int y, GatherJob job, GatherResourceMa
     *count = plant_yield(map, x, y, job);
     switch (job) {
     case GATHER_JOB_HARVEST:
-        item = def->harvest_item;
-        plant->growth = PLANT_GROWTH_AFTER_PICKING;
+    case GATHER_JOB_HARVEST_CAREFULLY:
+    case GATHER_JOB_DIG:
+    case GATHER_JOB_DIG_CAREFULLY:
+        item = def->food_item;
+        *count = plant_take_stock(plant, PLANT_STOCK_FOOD, INT16_MAX);
+        if (def->vanishes) {
+            memset(plant, 0, sizeof(*plant)); /* The patch is gone. */
+        } else if (def->dug_whole) {
+            plant->growth = 0.0f; /* Grows again from what is left in the ground. */
+            memset(plant->stock, 0, sizeof(plant->stock));
+        }
         break;
     case GATHER_JOB_BRANCHES:
     case GATHER_JOB_TWIGS: {
         PlantStock stock = job == GATHER_JOB_BRANCHES ? PLANT_STOCK_BRANCHES : PLANT_STOCK_TWIGS;
-        item = plant_stock_item(stock);
+        item = plant_stock_item((PlantType)plant->type, stock);
         *count = plant_take_stock(plant, stock, INT16_MAX);
         break;
     }
@@ -774,11 +841,25 @@ float gather_clear_work(const Map *map, int x, int y)
     if (!map_in_bounds(map, x, y)) {
         return 0.0f;
     }
-    switch ((PlantType)map->plants[map_index(map, x, y)].type) {
-    case PLANT_GRASS: return CUT_GRASS_WORK;
-    case PLANT_BUSH: return CLEAR_BUSH_WORK;
-    default: return 0.0f;
+    const Plant *plant = &map->plants[map_index(map, x, y)];
+    if (plant_is_dormant(plant)) {
+        return 0.0f; /* Nothing in the way: what is left in the ground goes with the work. */
     }
+    switch ((PlantType)plant->type) {
+    case PLANT_NONE:
+    case PLANT_TREE:
+    case PLANT_COUNT: return 0.0f;
+    case PLANT_HAZEL:
+    case PLANT_BRAMBLE: return CLEAR_SHRUB_WORK;
+    case PLANT_GRASS:
+    case PLANT_WILD_GARLIC:
+    case PLANT_NETTLE:
+    case PLANT_PLANTAIN:
+    case PLANT_WILD_CARROT:
+    case PLANT_CATTAIL:
+    case PLANT_MUSHROOMS: return CUT_GRASS_WORK;
+    }
+    return 0.0f;
 }
 
 ToolUse gather_clear_tool_use(const Map *map, int x, int y)
@@ -801,8 +882,8 @@ void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng 
     } else if (plant->type != PLANT_GRASS) {
         jobs[job_count++] = GATHER_JOB_BRANCHES;
         jobs[job_count++] = GATHER_JOB_TWIGS;
-        if (plant_has_fruit(plant)) {
-            jobs[job_count++] = GATHER_JOB_HARVEST;
+        if (plant_has_food(plant)) {
+            jobs[job_count++] = GATHER_JOB_HARVEST; /* Food of any kind, dug or picked. */
         }
     }
     for (int i = 0; i < job_count; i++) {

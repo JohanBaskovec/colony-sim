@@ -38,10 +38,12 @@
 #define GAME_ITEM_UPDATE_INTERVAL TICKS_PER_HOUR
 
 #define GAME_DEFAULT_COLONIST_COUNT 3
-/* The first settlers bring nothing: world generation makes sure there are at
- * least this many ripe berry bushes within GAME_SPAWN_FOOD_MAX_COST of travel
+/* The first settlers bring nothing and arrive at the end of summer: world
+ * generation makes sure there are at least this many grown brambles (bearing
+ * fruit) and hazels (nuts in autumn) within GAME_SPAWN_FOOD_MAX_COST of travel
  * from where they arrive, planting more when it has to. */
-#define GAME_SPAWN_RIPE_BUSHES 6
+#define GAME_SPAWN_BRAMBLES 6
+#define GAME_SPAWN_HAZELS 3
 #define GAME_SPAWN_FOOD_MAX_COST 25.0f
 /* Likewise, a tile with at least this many flint nodules where stones can be
  * gathered, within the same distance: knapping needs flint. */
@@ -89,7 +91,7 @@ typedef struct Game {
     Map map;
     Designations designations; /* Player orders (chop, mine...), same size as the map. */
     Dirt dirt; /* How dirty each tile is. */
-    GatherZones gather_zones; /* Where wood, berries, grass, stones... are gathered. */
+    GatherZones gather_zones; /* Where wood, wild food, grass, stones... are gathered. */
     Items items; /* Items lying on the ground, same size as the map. */
     Stockpiles stockpiles; /* Storage zones drawn by the player. */
     Workstations workstations; /* Crafting spots, knapping spots... and their bills. */

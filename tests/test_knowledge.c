@@ -210,9 +210,10 @@ static void test_product_stacks(void)
     CHECK_EQ_UINT(rng.state, untouched.state);
 
     /* Berries vary, and draw randomness. */
-    ItemStack berries = knowledge_product(ITEM_BERRIES, 30, 60.0, &rng);
+    ItemStack berries = knowledge_product(ITEM_BLACKBERRIES, 30, 60.0, &rng);
     CHECK(rng.state != untouched.state);
-    CHECK(berries.hit_points >= 1 && berries.hit_points <= item_def(ITEM_BERRIES)->max_hit_points);
+    CHECK(berries.hit_points >= 1 &&
+          berries.hit_points <= item_def(ITEM_BLACKBERRIES)->max_hit_points);
 
     CHECK_EQ_INT(knowledge_product(ITEM_NONE, 3, 60.0, NULL).type, ITEM_NONE);
     CHECK_EQ_INT(knowledge_product(ITEM_WOOD, 0, 60.0, NULL).count, 0);

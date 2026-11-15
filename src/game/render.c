@@ -47,7 +47,15 @@ static const SDL_Color STOCKPILE_REMOVE_COLOR = {230, 70, 60, 255};
 static const SDL_Color GATHER_ZONE_COLOR = {225, 170, 90, 255};
 static const SDL_Color WOOD_COLOR = {150, 98, 52, 255};
 static const SDL_Color STONE_COLOR = {176, 174, 168, 255};
-static const SDL_Color BERRY_COLOR = {150, 40, 90, 255};
+static const SDL_Color BERRY_COLOR = {70, 28, 64, 255};
+static const SDL_Color HAZELNUT_COLOR = {150, 104, 56, 255};
+static const SDL_Color MUSHROOM_CAP_COLOR = {178, 132, 84, 255};
+static const SDL_Color MUSHROOM_STEM_COLOR = {226, 214, 190, 255};
+static const SDL_Color WILD_GARLIC_COLOR = {84, 170, 70, 255};
+static const SDL_Color NETTLE_COLOR = {56, 112, 52, 255};
+static const SDL_Color PLANTAIN_COLOR = {106, 146, 68, 255};
+static const SDL_Color WILD_CARROT_COLOR = {222, 206, 168, 255};
+static const SDL_Color RHIZOME_COLOR = {176, 140, 100, 255};
 static const SDL_Color BRANCH_COLOR = {122, 86, 50, 255};
 static const SDL_Color TWIG_COLOR = {168, 128, 82, 255};
 static const SDL_Color FRESH_GRASS_COLOR = {92, 168, 64, 255};
@@ -469,16 +477,76 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         }
         break;
     }
-    case ITEM_BERRIES: {
-        /* A handful of berries. */
-        static const float BERRIES[5][2] = {
+    case ITEM_BLACKBERRIES:
+    case ITEM_HAZELNUTS: {
+        /* A handful of berries, or a few nuts. */
+        static const float SPOTS[5][2] = {
             {0.3f, 0.5f}, {0.5f, 0.45f}, {0.42f, 0.62f}, {0.58f, 0.6f}, {0.38f, 0.36f}};
-        float size = SDL_max(1.0f, floorf(w * 0.16f));
+        bool nuts = type == ITEM_HAZELNUTS;
+        float size = SDL_max(1.0f, floorf(w * (nuts ? 0.18f : 0.16f)));
         for (int i = 0; i < 5; i++) {
-            SDL_FRect berry = {tile->x + floorf(w * BERRIES[i][0]),
-                               tile->y + floorf(h * BERRIES[i][1]), size, size};
-            fill_outlined(renderer, berry, shade(BERRY_COLOR, i * 8));
+            SDL_FRect spot = {tile->x + floorf(w * SPOTS[i][0]),
+                              tile->y + floorf(h * SPOTS[i][1]), size, size};
+            fill_outlined(renderer, spot, shade(nuts ? HAZELNUT_COLOR : BERRY_COLOR, i * 8));
         }
+        break;
+    }
+    case ITEM_MUSHROOMS: {
+        /* Three caps on pale stems. */
+        static const float CAPS[3][2] = {{0.24f, 0.42f}, {0.5f, 0.34f}, {0.42f, 0.56f}};
+        float cap_w = SDL_max(2.0f, floorf(w * 0.24f));
+        float cap_h = SDL_max(1.0f, floorf(h * 0.1f));
+        for (int i = 0; i < 3; i++) {
+            float x = tile->x + floorf(w * CAPS[i][0]), y = tile->y + floorf(h * CAPS[i][1]);
+            SDL_FRect stem = {x + floorf(cap_w * 0.35f), y + cap_h,
+                              SDL_max(1.0f, floorf(cap_w * 0.3f)), cap_h};
+            fill_outlined(renderer, stem, MUSHROOM_STEM_COLOR);
+            SDL_FRect cap = {x, y, cap_w, cap_h};
+            fill_outlined(renderer, cap, shade(MUSHROOM_CAP_COLOR, i * 10));
+        }
+        break;
+    }
+    case ITEM_WILD_GARLIC:
+    case ITEM_NETTLES:
+    case ITEM_PLANTAIN: {
+        /* A bunch of leaves: broad for wild garlic, narrow for plantain. */
+        SDL_Color color = type == ITEM_WILD_GARLIC ? WILD_GARLIC_COLOR
+                          : type == ITEM_NETTLES   ? NETTLE_COLOR
+                                                   : PLANTAIN_COLOR;
+        float leaf_w = SDL_max(1.0f, floorf(w * (type == ITEM_PLANTAIN ? 0.09f : 0.14f)));
+        for (int i = 0; i < 4; i++) {
+            float top = (i % 2 == 0) ? 0.3f : 0.38f;
+            SDL_FRect leaf = {tile->x + floorf(w * (0.24f + 0.13f * (float)i)),
+                              tile->y + floorf(h * top), leaf_w, floorf(h * (0.72f - top))};
+            fill_outlined(renderer, leaf, shade(color, (i % 3) * 12));
+        }
+        break;
+    }
+    case ITEM_WILD_CARROTS:
+    case ITEM_CATTAIL_RHIZOMES: {
+        /* Thin pale roots lying side by side, or thick knobbly rhizomes. */
+        bool rhizomes = type == ITEM_CATTAIL_RHIZOMES;
+        float thickness = SDL_max(1.0f, floorf(h * (rhizomes ? 0.13f : 0.08f)));
+        for (int i = 0; i < 3; i++) {
+            SDL_FRect root = {tile->x + floorf(w * (0.18f + 0.06f * (float)(i % 2))),
+                              tile->y + floorf(h * (0.34f + 0.14f * (float)i)),
+                              floorf(w * (rhizomes ? 0.58f : 0.5f)), thickness};
+            fill_outlined(renderer, root,
+                          shade(rhizomes ? RHIZOME_COLOR : WILD_CARROT_COLOR, -i * 10));
+        }
+        break;
+    }
+    case ITEM_DIGGING_STICK:
+    case ITEM_DIGGING_STICK_HARDENED: {
+        /* A short stout stick with a point; darker once hardened in the fire. */
+        bool hardened = type == ITEM_DIGGING_STICK_HARDENED;
+        SDL_Color wood = hardened ? HARDENED_SPEAR_COLOR : SPEAR_COLOR;
+        float thickness = SDL_max(1.0f, floorf(h * 0.13f));
+        SDL_FRect shaft = {tile->x + floorf(w * 0.18f), tile->y + floorf(h * 0.48f),
+                           floorf(w * 0.5f), thickness};
+        fill_outlined(renderer, shaft, wood);
+        SDL_FRect tip = {shaft.x + shaft.w, shaft.y, floorf(w * 0.12f), thickness};
+        fill_outlined(renderer, tip, shade(wood, hardened ? -90 : -50));
         break;
     }
     default: break;
@@ -1546,18 +1614,19 @@ static bool hides_colonist(const SDL_FRect *rect, float depth, const DepthEntry 
 static void render_plant(Sprites *sprites, const Camera *camera, const Plant *plant, int x, int y,
                          const DepthEntry *colonists, int colonist_count)
 {
-    SpriteId id;
-    if (plant->type == PLANT_TREE) {
-        id = sprite_tree(plant_growth_stage(plant));
-    } else if (plant->type == PLANT_BUSH) {
-        id = sprite_bush(plant_growth_stage(plant), plant_has_fruit(plant));
-    } else {
+    if (plant->type == PLANT_NONE || plant_is_dormant(plant)) {
+        return; /* Nothing above ground. */
+    }
+    SpriteId id = sprite_plant((PlantType)plant->type, plant_growth_stage(plant),
+                               plant_has_food(plant));
+    if (id < 0) {
         return; /* Grass is part of the ground. */
     }
     float sx, sy;
     camera_world_to_screen(camera, (float)x + 0.5f, (float)(y + 1), &sx, &sy);
     SDL_FColor color = WHITE;
-    if (plant->type == PLANT_TREE && colonist_count > 0) {
+    bool tall = plant->type == PLANT_TREE || plant->type == PLANT_HAZEL;
+    if (tall && colonist_count > 0) {
         float width, height;
         sprites_size(sprites, id, &width, &height);
         SDL_FRect rect = {sx - width * 0.5f, sy - height, width, height};

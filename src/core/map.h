@@ -5,6 +5,7 @@
 #ifndef COLONY_CORE_MAP_H
 #define COLONY_CORE_MAP_H
 
+#include "core/game_clock.h"
 #include "core/item.h"
 #include "core/structure.h"
 
@@ -36,8 +37,15 @@ typedef enum RockType {
 typedef enum PlantType {
     PLANT_NONE = 0,
     PLANT_GRASS,
-    PLANT_BUSH,
     PLANT_TREE,
+    PLANT_HAZEL,       /* Shrub: hazelnuts in autumn, branches and twigs. */
+    PLANT_BRAMBLE,     /* Thorny: blackberries at the end of summer. */
+    PLANT_WILD_GARLIC, /* Leaves in spring, then withers under the trees. */
+    PLANT_NETTLE,      /* Young shoots in spring and autumn. */
+    PLANT_PLANTAIN,    /* Ribwort plantain: leaves from spring to autumn. */
+    PLANT_WILD_CARROT, /* Its root is dug up from autumn to early spring. */
+    PLANT_CATTAIL,     /* By the water: starchy rhizomes dug up all year. */
+    PLANT_MUSHROOMS,   /* A patch under trees in autumn, gone in days. */
     PLANT_COUNT
 } PlantType;
 
@@ -67,29 +75,53 @@ typedef struct RockDef {
 typedef enum PlantStock {
     PLANT_STOCK_BRANCHES,
     PLANT_STOCK_TWIGS,
+    PLANT_STOCK_FOOD, /* Fruit, nuts, leaves or roots: PlantDef.food_item, in season. */
     PLANT_STOCK_COUNT
 } PlantStock;
+
+/* A set of days of the year (bit d: day d, 0-based, see game_day_of_year()). */
+typedef uint64_t PlantDays;
+_Static_assert(DAYS_PER_YEAR <= 64, "a year must fit in PlantDays");
+
+/* Days `first` to `last` of the year (0-based, first <= last), both included. */
+#define PLANT_DAYS(first, last)                                                                    \
+    ((PlantDays)((((uint64_t)2 << (last)) - 1) & ~(((uint64_t)1 << (first)) - 1)))
+#define PLANT_ALL_YEAR PLANT_DAYS(0, DAYS_PER_YEAR - 1)
 
 typedef struct PlantDef {
     const char *id;
     const char *name_key;
     float growth_per_day; /* Growth gained per in-game day on fertility 1.0. */
     float min_fertility; /* Does not spawn nor grow below this fertility. */
+    /* Grows in shallow water and along the shore whatever the ground: the
+     * fertility counts as 1.0 (see plant_advance()). */
+    bool wetland;
     float move_cost; /* Movement cost multiplier while walking through. */
-    float nutrition; /* Food gained by eating it at full growth; 0 = not edible. */
-    float min_edible_growth; /* Cannot be eaten below this growth. */
+    PlantDays growth_days; /* When it grows (and when its stocks grow back). */
+    /* Withers on the other days: back to growth 0, nothing above ground, its
+     * stocks gone, until it grows again. */
+    bool dies_back;
     ItemType cut_item; /* Dropped when the plant is cut down (ITEM_NONE: nothing). */
     int cut_yield; /* Items dropped at full growth, proportionally less when younger. */
-    ItemType harvest_item; /* Picked when harvested, the plant stays (ITEM_NONE: nothing). */
-    int harvest_yield; /* Items picked at full growth; harvesting needs min_edible_growth. */
     /* Stocks: at most `stock_capacity` items at full growth (proportionally
      * fewer when younger), one growing back every `stock_regrow_hours`. */
     int stock_capacity[PLANT_STOCK_COUNT];
     int stock_regrow_hours[PLANT_STOCK_COUNT];
+    /* Food (PLANT_STOCK_FOOD): what it is, the days it ripens on (it falls,
+     * rots or turns woody on the other days: the stock is gone) and the
+     * growth the plant needs to bear any. */
+    ItemType food_item; /* ITEM_NONE: none. */
+    PlantDays food_days;
+    float min_food_growth;
+    bool food_dug; /* Roots: dug up (with a digging stick, best), never eaten in place. */
+    /* Easily mistaken for a poisonous plant: only a skilled gatherer takes it
+     * (see core/gather_zone.h), and nobody eats it in place. */
+    bool food_confusable;
+    bool dug_whole; /* Digging its food up takes the plant: back to growth 0. */
+    /* Gone once its food is (taken, or out of season); appears on its own
+     * (see core/game.c). */
+    bool vanishes;
 } PlantDef;
-
-/* Growth left on a plant after its fruit has been eaten or harvested. */
-#define PLANT_GROWTH_AFTER_PICKING 0.05f
 
 typedef struct Plant {
     uint8_t type; /* PlantType */
@@ -174,10 +206,11 @@ const TerrainDef *terrain_def(Terrain terrain);
 const RockDef *rock_def(RockType rock);
 const PlantDef *plant_def(PlantType plant);
 
-/* Item a stock gives (branches, twigs). */
-ItemType plant_stock_item(PlantStock stock);
+/* Item a stock of a plant type gives (branches, twigs, its food). */
+ItemType plant_stock_item(PlantType type, PlantStock stock);
 
-/* Most items of a stock the plant can hold at its current growth. */
+/* Most items of a stock the plant can hold at its current growth (food:
+ * none below PlantDef.min_food_growth, whatever the season). */
 int plant_stock_capacity(const Plant *plant, PlantStock stock);
 
 /* Items of a stock that can be taken now. */
@@ -186,18 +219,37 @@ int plant_stock_available(const Plant *plant, PlantStock stock);
 /* Takes up to `count` items of a stock; returns how many were taken. */
 int plant_take_stock(Plant *plant, PlantStock stock, int count);
 
-/* Lets the stocks grow back for `hours`, up to the capacity. */
-void plant_regrow_stocks(Plant *plant, int hours);
+/* Whether a day of the year (0-based) is in a set. */
+bool plant_days_contain(PlantDays days, int day_of_year);
+
+/* Lets the stocks grow back for `hours` on a day of the year, up to the
+ * capacity: food only on its days (the stock is gone on the others), the
+ * other stocks on the plant's growth days. */
+void plant_regrow_stocks(Plant *plant, int hours, int day_of_year);
+
+/*
+ * One step of a plant's life on a tile of `fertility`, `hours` long on a day
+ * of the year: its stocks grow back, it grows on its growth days (not below
+ * its minimum fertility), withers on the others when it dies back, and goes
+ * (type PLANT_NONE) when it vanishes and its food is gone.
+ */
+void plant_advance(Plant *plant, float fertility, int hours, int day_of_year);
 
 /* Size class of a plant, 0 (seedling) .. PLANT_GROWTH_STAGES - 1 (mature):
  * growth split in equal steps. */
 int plant_growth_stage(const Plant *plant);
 
-/* Whether the plant carries fruit that can be picked or eaten (ripe berries). */
-bool plant_has_fruit(const Plant *plant);
+/* Whether the plant bears food that can be taken now (ripe fruit, nuts...). */
+bool plant_has_food(const Plant *plant);
 
-/* Fills every stock to the capacity (new plants of a generated world). */
-void plant_fill_stocks(Plant *plant);
+/* Whether nothing of the plant shows above ground (withered until its growth
+ * days come back). */
+bool plant_is_dormant(const Plant *plant);
+
+/* Puts a new plant in the state of a day of the year (new plants of a
+ * generated world): withered when it dies back out of its growth days, every
+ * stock full otherwise (food in season only). */
+void plant_settle(Plant *plant, int day_of_year);
 
 /* Allocates a map filled with soil, without rock, plants nor stones. */
 bool map_init(Map *map, int width, int height);
@@ -312,8 +364,12 @@ size_t map_count_plants(const Map *map, PlantType type);
  * gather_clear_plant()). */
 bool map_plant_blocks_building(const Map *map, int x, int y);
 
-/* Whether the plant on this tile can be eaten right now. */
+/* Whether the plant on this tile bears food a settler may eat in place right
+ * now (not roots, nor anything easily mistaken for a poisonous plant). */
 bool map_has_edible_plant(const Map *map, int x, int y);
+
+/* Whether a mature tree (fully grown) stands within `range` tiles (square). */
+bool map_tree_near(const Map *map, int x, int y, int range);
 
 /* Stones of a type (ITEM_COBBLE or ITEM_FLINT) lying about a tile; 0 for other
  * types and out of bounds. */

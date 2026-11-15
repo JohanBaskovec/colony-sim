@@ -1,20 +1,23 @@
 /*
  * Gathering zones: areas drawn by the player where settlers take what the
- * land offers: they fell trees, pick berries, take branches and twigs, cut
- * grass and pick up stones (cobbles and flint nodules).
+ * land offers: they fell trees, pick wild food (fruit, nuts, leaves,
+ * mushrooms), dig roots up, take branches and twigs, cut grass and pick up
+ * stones (cobbles and flint nodules).
  *
  * Each tile belongs to at most one zone (dense layer of zone ids, the size of
  * the map). A zone holds one order per resource, off by default. An enabled
  * order either gathers a number of items and stops, or gathers until the
  * colony has a target number of the resource (items lying anywhere on the map
  * count, stored or not, like bills: see core/workstation.h), or gathers
- * forever. Wood and berries may be taken from fully grown plants only, so
- * that settlers do not walk to young plants that give little.
+ * forever. Wood may be taken from fully grown trees only, so that settlers do
+ * not walk to young trees that give little. Wild food is there in its season
+ * only (see PlantDef.food_days); what is easily mistaken for a poisonous
+ * plant is only taken by skilled gatherers (GATHER_CAREFUL_MIN_LEVEL).
  *
  * A tile offers a job when it holds something an order wants (a tree to fell,
- * a ripe bush, a stock of twigs, stony ground...). When a tile offers several,
- * the plant's stocks come first (picking its fruit or felling it would take
- * them away), then its fruit, felling it, and stones last.
+ * ripe fruit, a stock of twigs, stony ground...). When a tile offers several,
+ * the plant's branches and twigs come first (felling it would take them
+ * away), then its food, felling it, and stones last.
  * Stones are limited: each tile holds a number of cobbles and flint nodules
  * (Map.cobbles, Map.flint), and gathering takes them one by one, only of the
  * types wanted.
@@ -49,7 +52,14 @@
 /* What a zone may gather, in display order. */
 typedef enum GatherResource {
     GATHER_WOOD,
-    GATHER_BERRIES,
+    GATHER_BLACKBERRIES,
+    GATHER_HAZELNUTS,
+    GATHER_MUSHROOMS,
+    GATHER_WILD_GARLIC,
+    GATHER_NETTLES,
+    GATHER_PLANTAIN,
+    GATHER_WILD_CARROTS,
+    GATHER_CATTAIL_RHIZOMES,
     GATHER_BRANCHES,
     GATHER_TWIGS,
     GATHER_GRASS,
@@ -64,15 +74,25 @@ typedef uint32_t GatherResourceMask;
 /* What a settler does on a tile, in order of preference on the same tile. */
 typedef enum GatherJob {
     GATHER_JOB_BRANCHES,  /* Take the dead branches of a tree. */
-    GATHER_JOB_TWIGS,     /* Take the twigs of a tree or bush. */
-    GATHER_JOB_HARVEST,   /* Pick the fruit of a plant; the plant stays. */
-    GATHER_JOB_CUT_GRASS, /* Cut grass, which grows back. */
+    GATHER_JOB_TWIGS,     /* Take the twigs of a tree or shrub. */
+    GATHER_JOB_HARVEST,   /* Pick fruit, nuts or leaves; the plant stays. */
+    /* Pick what is easily mistaken for a poisonous plant (mushrooms, wild
+     * garlic): skilled gatherers only. */
+    GATHER_JOB_HARVEST_CAREFULLY,
+    GATHER_JOB_DIG,           /* Dig roots up (a digging stick helps). */
+    GATHER_JOB_DIG_CAREFULLY, /* The same, easily mistaken for a poisonous plant. */
+    GATHER_JOB_CUT_GRASS,     /* Cut grass, which grows back. */
     GATHER_JOB_CHOP,      /* Fell a tree. */
     GATHER_JOB_STONES,    /* Search the ground for a stone. */
     GATHER_JOB_COUNT
 } GatherJob;
 
 #define GATHER_JOB_NONE GATHER_JOB_COUNT
+
+/* Gathering level needed to take wild food easily mistaken for a poisonous
+ * plant (docs/KNOWLEDGE.md §7: the risk of a mistake below it comes with
+ * health). */
+#define GATHER_CAREFUL_MIN_LEVEL 60.0f
 typedef uint32_t GatherJobMask;
 #define GATHER_JOB_BIT(job) ((GatherJobMask)1u << (unsigned)(job))
 
@@ -95,6 +115,9 @@ typedef struct GatherJobDef {
     float min_level;
     GatherResourceMask resources; /* The resources it gives. */
     ToolUse tool_use; /* What a carried tool speeds up (TOOL_USE_NONE: nothing). */
+    /* A better tool for it lying close by is worth fetching on the way (the
+     * other jobs use whatever tool the settler carries). */
+    bool fetches_tool;
 } GatherJobDef;
 
 /* NULL when out of range. */
@@ -158,7 +181,7 @@ bool gather_zones_init(GatherZones *zones, int width, int height);
 void gather_zones_free(GatherZones *zones);
 
 /* Whether a zone may cover a tile: open ground (no rock wall, no built
- * wall), not water. */
+ * wall) or shallow water (cattails grow there), not deep water. */
 bool gather_zone_can_cover(const Map *map, int x, int y);
 
 /* Whether stones can be gathered on a tile: stony ground (soil, rich soil,
@@ -276,15 +299,16 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
 float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, int x, int y);
 
 /* Work to clear the plant of a tile by hand before building there (0 when
- * there is none; a tree cannot be cleared: see map_plant_blocks_building()). */
+ * there is none, or nothing of it shows above ground; a tree cannot be
+ * cleared: see map_plant_blocks_building()). */
 float gather_clear_work(const Map *map, int x, int y);
 
 /* What a tool speeds up while clearing a tile: cutting grass, nothing for a
- * bush pulled up by hand. */
+ * shrub or a low plant pulled up by hand. */
 ToolUse gather_clear_tool_use(const Map *map, int x, int y);
 
-/* Removes the plant of a tile (cut grass, a pulled up bush) and drops what it
- * gives (cut grass, its twigs and branches, ripe fruit) with quality from the
+/* Removes the plant of a tile (cut grass, a pulled up shrub) and drops what it
+ * gives (cut grass, its twigs and branches, its food) with quality from the
  * worker's `level`; `rng` may be NULL. */
 void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng *rng);
 

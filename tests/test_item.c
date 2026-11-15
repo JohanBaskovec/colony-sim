@@ -17,7 +17,7 @@ static void test_definitions(void)
         CHECK(item_stack_limit((ItemType)type) > 0);
     }
     CHECK(item_def(ITEM_TYPE_COUNT) == NULL);
-    CHECK(item_is_food(ITEM_BERRIES));
+    CHECK(item_is_food(ITEM_BLACKBERRIES));
     CHECK(!item_is_food(ITEM_WOOD));
     CHECK(!item_is_food(ITEM_NONE));
     CHECK(!item_is_food(ITEM_TYPE_COUNT));
@@ -25,7 +25,7 @@ static void test_definitions(void)
 
 static void test_stack_limits_follow_bulk(void)
 {
-    CHECK_EQ_INT(item_stack_limit(ITEM_BERRIES), 1000);
+    CHECK_EQ_INT(item_stack_limit(ITEM_BLACKBERRIES), 1000);
     CHECK_EQ_INT(item_stack_limit(ITEM_WOOD), 50);
     CHECK_EQ_INT(item_stack_limit(ITEM_STONE_BLOCK), 50);
     CHECK_EQ_INT(item_stack_limit(ITEM_NONE), 0);
@@ -40,7 +40,7 @@ static void test_stack_limits_follow_bulk(void)
     /* A tile really takes 1000 berries. */
     Items items;
     REQUIRE(items_init(&items, 2, 2));
-    CHECK_EQ_INT(items_add(&items, 0, 0, item_stack_pristine(ITEM_BERRIES, 1200)), 1000);
+    CHECK_EQ_INT(items_add(&items, 0, 0, item_stack_pristine(ITEM_BLACKBERRIES, 1200)), 1000);
     items_free(&items);
 }
 
@@ -57,7 +57,7 @@ static void test_categories(void)
     }
     CHECK_EQ_UINT(covered, all);
     CHECK(!(all & ITEM_TYPE_BIT(ITEM_NONE)));
-    CHECK(item_types_in_category(ITEM_CATEGORY_FOOD) & ITEM_TYPE_BIT(ITEM_BERRIES));
+    CHECK(item_types_in_category(ITEM_CATEGORY_FOOD) & ITEM_TYPE_BIT(ITEM_BLACKBERRIES));
     CHECK(item_types_in_category(ITEM_CATEGORY_RESOURCES) & ITEM_TYPE_BIT(ITEM_WOOD));
     CHECK(item_types_in_category(ITEM_CATEGORY_RESOURCES) & ITEM_TYPE_BIT(ITEM_STONE_BLOCK));
     CHECK(item_category_name_key(ITEM_CATEGORY_COUNT) == NULL);
@@ -166,8 +166,8 @@ static void test_condition_definitions(void)
     CHECK(!item_def(ITEM_STONE_BLOCK)->damageable);
     CHECK(item_def(ITEM_WOOD)->has_quality);
     CHECK(item_def(ITEM_WOOD)->damageable);
-    CHECK(item_def(ITEM_BERRIES)->has_quality);
-    CHECK(item_def(ITEM_BERRIES)->damageable);
+    CHECK(item_def(ITEM_BLACKBERRIES)->has_quality);
+    CHECK(item_def(ITEM_BLACKBERRIES)->damageable);
 }
 
 static void test_quality_grades(void)
@@ -201,14 +201,14 @@ static void test_stack_make_keeps_condition_valid(void)
     CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 0, 2, 5).type, ITEM_NONE);
     CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 0, 2, 5).count, 0);
 
-    ItemStack pristine = item_stack_pristine(ITEM_BERRIES, 7);
+    ItemStack pristine = item_stack_pristine(ITEM_BLACKBERRIES, 7);
     CHECK_EQ_INT(pristine.quality, ITEM_QUALITY_BEST);
-    CHECK_EQ_INT(pristine.hit_points, item_def(ITEM_BERRIES)->max_hit_points);
+    CHECK_EQ_INT(pristine.hit_points, item_def(ITEM_BLACKBERRIES)->max_hit_points);
     CHECK_EQ_INT(item_stack_hit_points_percent(pristine), 100);
 
     CHECK(item_stacks_match(wood, item_stack_make(ITEM_WOOD, 9, ITEM_QUALITY_ROUGH, 60)));
     CHECK(!item_stacks_match(wood, item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_FINE, 20)));
-    CHECK(!item_stacks_match(wood, item_stack_make(ITEM_BERRIES, 5, ITEM_QUALITY_ROUGH, 5)));
+    CHECK(!item_stacks_match(wood, item_stack_make(ITEM_BLACKBERRIES, 5, ITEM_QUALITY_ROUGH, 5)));
 }
 
 static void test_hit_points_percent(void)
@@ -287,8 +287,8 @@ static void test_stack_merge(void)
     CHECK(item_stack_merge(&hand, (ItemStack){.type = ITEM_NONE}));
     CHECK_EQ_INT(hand.count, 4);
     /* Counts are capped. */
-    ItemStack big = item_stack_make(ITEM_BERRIES, UINT16_MAX - 1, ITEM_QUALITY_FINE, 10);
-    CHECK(item_stack_merge(&big, item_stack_make(ITEM_BERRIES, 5, ITEM_QUALITY_FINE, 10)));
+    ItemStack big = item_stack_make(ITEM_BLACKBERRIES, UINT16_MAX - 1, ITEM_QUALITY_FINE, 10);
+    CHECK(item_stack_merge(&big, item_stack_make(ITEM_BLACKBERRIES, 5, ITEM_QUALITY_FINE, 10)));
     CHECK_EQ_INT(big.count, UINT16_MAX);
 }
 
@@ -299,9 +299,9 @@ static void test_merged_hit_points_stay_between(void)
     Rng rng;
     rng_seed(&rng, 99, 0);
     for (int i = 0; i < 500; i++) {
-        ItemStack a = item_stack_make(ITEM_BERRIES, rng_range_i32(&rng, 1, 400), 2,
+        ItemStack a = item_stack_make(ITEM_BLACKBERRIES, rng_range_i32(&rng, 1, 400), 2,
                                       rng_range_i32(&rng, 1, 10));
-        ItemStack b = item_stack_make(ITEM_BERRIES, rng_range_i32(&rng, 1, 400), 2,
+        ItemStack b = item_stack_make(ITEM_BLACKBERRIES, rng_range_i32(&rng, 1, 400), 2,
                                       rng_range_i32(&rng, 1, 10));
         items_remove(&items, 0, 0, 1000);
         items_add(&items, 0, 0, a);

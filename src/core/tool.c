@@ -16,6 +16,10 @@ static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
                            0.8f,
                            {[ITEM_COBBLE] = 0.9f, [ITEM_CHOPPER] = 1.0f, [ITEM_FLAKE] = 0.9f,
                             [ITEM_HAND_AXE] = 1.0f}},
+    [TOOL_USE_DIGGING] = {"digging",
+                          0.3f,
+                          {[ITEM_HAND_AXE] = 0.5f, [ITEM_DIGGING_STICK] = 1.0f,
+                           [ITEM_DIGGING_STICK_HARDENED] = 1.0f}},
 };
 
 /* Crude to superb. */

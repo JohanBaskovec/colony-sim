@@ -15,7 +15,7 @@ static bool init_world(Map *map, Designations *designations)
     Plant *tree = &map->plants[map_index(map, 3, 3)];
     tree->type = PLANT_TREE;
     tree->growth = 1.0f;
-    plant_fill_stocks(tree);
+    plant_settle(tree, GAME_START_DAY);
     map->rock[map_index(map, 5, 5)] = ROCK_GRANITE;
     map->rock[map_index(map, 6, 5)] = ROCK_SANDSTONE;
     return true;

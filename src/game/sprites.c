@@ -28,16 +28,37 @@ static const char *const HAIR_NAMES[APPEARANCE_HAIR_STYLE_COUNT] = {
     NULL, "short", "long", "curly", "bun", "braids"};
 static const char *const BEARD_NAMES[APPEARANCE_BEARD_COUNT] = {NULL, "stubble", "short", "full",
                                                                "mustache"};
+/* Plants with sprites: file name, sizes drawn (growth stages are shared out
+ * among them), and whether a variant shows its food (fruit, nuts). */
+typedef struct PlantSprites {
+    PlantType type;
+    const char *name;
+    int sizes;
+    bool fruit;
+} PlantSprites;
+static const PlantSprites PLANT_SPRITES[] = {
+    {PLANT_TREE, "tree", PLANT_GROWTH_STAGES, false},
+    {PLANT_HAZEL, "hazel", PLANT_GROWTH_STAGES, true},
+    {PLANT_BRAMBLE, "bramble", PLANT_GROWTH_STAGES, true},
+    {PLANT_WILD_GARLIC, "wild_garlic", 3, false},
+    {PLANT_NETTLE, "nettle", 3, false},
+    {PLANT_PLANTAIN, "plantain", 3, false},
+    {PLANT_WILD_CARROT, "wild_carrot", 3, false},
+    {PLANT_CATTAIL, "cattail", 3, false},
+    {PLANT_MUSHROOMS, "mushrooms", 1, false},
+};
+/* Sum of the sizes (twice for plants with a food variant), checked when the
+ * sprites are loaded. */
+#define PLANT_SPRITE_COUNT 41
+
 /* Tools with a sprite, and their file names. */
 static const ItemType TOOL_TYPES[] = {ITEM_COBBLE, ITEM_CHOPPER, ITEM_FLAKE, ITEM_HAND_AXE};
 static const char *const TOOL_NAMES[] = {"cobble", "chopper", "flake", "hand_axe"};
 #define TOOL_SPRITE_COUNT ((int)SDL_arraysize(TOOL_TYPES))
 
 enum {
-    TREE_FIRST = 0,
-    BUSH_FIRST = TREE_FIRST + PLANT_GROWTH_STAGES,
-    BUSH_FRUIT_FIRST = BUSH_FIRST + PLANT_GROWTH_STAGES,
-    BODY_FIRST = BUSH_FRUIT_FIRST + PLANT_GROWTH_STAGES,
+    PLANT_FIRST = 0,
+    BODY_FIRST = PLANT_FIRST + PLANT_SPRITE_COUNT,
     HEAD_FIRST = BODY_FIRST + APPEARANCE_BODY_COUNT * APPEARANCE_SKIN_COUNT,
     BEARD_FIRST = HEAD_FIRST + APPEARANCE_SKIN_COUNT * EXPRESSION_COUNT,
     HAIR_FIRST = BEARD_FIRST + APPEARANCE_BEARD_COUNT - 1,
@@ -48,14 +69,28 @@ enum {
 SDL_COMPILE_TIME_ASSERT(tool_sprites, SDL_arraysize(TOOL_TYPES) == SPRITE_COUNT - TOOL_FIRST &&
                                           SDL_arraysize(TOOL_NAMES) == SDL_arraysize(TOOL_TYPES));
 
-SpriteId sprite_tree(int stage)
+/* Sprites of the plants before entry `index` of PLANT_SPRITES. */
+static int plant_sprites_before(int index)
 {
-    return TREE_FIRST + clampi(stage, 0, PLANT_GROWTH_STAGES - 1);
+    int count = 0;
+    for (int i = 0; i < index; i++) {
+        count += PLANT_SPRITES[i].sizes * (PLANT_SPRITES[i].fruit ? 2 : 1);
+    }
+    return count;
 }
 
-SpriteId sprite_bush(int stage, bool fruit)
+SpriteId sprite_plant(PlantType type, int stage, bool fruit)
 {
-    return (fruit ? BUSH_FRUIT_FIRST : BUSH_FIRST) + clampi(stage, 0, PLANT_GROWTH_STAGES - 1);
+    for (int i = 0; i < (int)SDL_arraysize(PLANT_SPRITES); i++) {
+        const PlantSprites *plant = &PLANT_SPRITES[i];
+        if (plant->type == type) {
+            int size = clampi(stage, 0, PLANT_GROWTH_STAGES - 1) * plant->sizes /
+                       PLANT_GROWTH_STAGES;
+            return PLANT_FIRST + plant_sprites_before(i) +
+                   (fruit && plant->fruit ? plant->sizes : 0) + size;
+        }
+    }
+    return -1;
 }
 
 SpriteId sprite_body(int body, int skin)
@@ -98,12 +133,18 @@ SpriteId sprite_tool(ItemType type)
 /* File name (without directory nor extension) of a sprite. */
 static void sprite_file_name(SpriteId id, char *out, size_t size)
 {
-    if (id < BUSH_FIRST) {
-        SDL_snprintf(out, size, "tree_%d", id - TREE_FIRST);
-    } else if (id < BUSH_FRUIT_FIRST) {
-        SDL_snprintf(out, size, "bush_%d", id - BUSH_FIRST);
-    } else if (id < BODY_FIRST) {
-        SDL_snprintf(out, size, "bush_berries_%d", id - BUSH_FRUIT_FIRST);
+    if (id < BODY_FIRST) {
+        int index = 0, first = PLANT_FIRST;
+        while (index + 1 < (int)SDL_arraysize(PLANT_SPRITES) &&
+               id >= PLANT_FIRST + plant_sprites_before(index + 1)) {
+            index++;
+        }
+        first += plant_sprites_before(index);
+        const PlantSprites *plant = &PLANT_SPRITES[index];
+        int offset = id - first;
+        bool fruit = offset >= plant->sizes;
+        SDL_snprintf(out, size, fruit ? "%s_fruit_%d" : "%s_%d", plant->name,
+                     offset % plant->sizes);
     } else if (id < HEAD_FIRST) {
         int index = id - BODY_FIRST;
         SDL_snprintf(out, size, "body_%s_%d", BODY_NAMES[index / APPEARANCE_SKIN_COUNT],
@@ -293,6 +334,11 @@ Sprites *sprites_create(SDL_Renderer *renderer, const char *assets_dir)
     Sprites *sprites = SDL_calloc(1, sizeof(*sprites));
     if (sprites == NULL) {
         LOG_ERROR("Out of memory for the sprites");
+        return NULL;
+    }
+    if (plant_sprites_before((int)SDL_arraysize(PLANT_SPRITES)) != PLANT_SPRITE_COUNT) {
+        LOG_ERROR("PLANT_SPRITE_COUNT does not match the plant sprite table");
+        SDL_free(sprites);
         return NULL;
     }
     sprites->renderer = renderer;

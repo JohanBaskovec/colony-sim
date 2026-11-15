@@ -179,7 +179,7 @@ static void test_filter_and_priority(void)
     REQUIRE(init_world(&map, &s));
     int a = stockpile_create(&s, &map, 1, 1, 4, 4);
     ItemStack wood = item_stack_pristine(ITEM_WOOD, 1);
-    ItemStack berries = item_stack_pristine(ITEM_BERRIES, 1);
+    ItemStack berries = item_stack_pristine(ITEM_BLACKBERRIES, 1);
     CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, wood), STOCKPILE_PRIORITY_DEFAULT);
     CHECK_EQ_INT(stockpile_storage_priority(&s, 8, 8, wood), 0); /* Not in a stockpile. */
     CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, item_stack_pristine(ITEM_NONE, 1)), 0);
@@ -256,11 +256,11 @@ static void test_condition_ranges(void)
     CHECK_EQ_INT(pile->quality.max, ITEM_QUALITY_FINE);
 
     /* The type filter still applies; empty stacks are never accepted. */
-    stockpile_set_allowed(&s, a, ITEM_TYPE_BIT(ITEM_BERRIES));
+    stockpile_set_allowed(&s, a, ITEM_TYPE_BIT(ITEM_BLACKBERRIES));
     CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_FINE, wood_hp)));
-    CHECK(stockpile_accepts(pile, item_stack_make(ITEM_BERRIES, 1, ITEM_QUALITY_FINE, 10)));
+    CHECK(stockpile_accepts(pile, item_stack_make(ITEM_BLACKBERRIES, 1, ITEM_QUALITY_FINE, 10)));
     CHECK(!stockpile_accepts(pile, (ItemStack){.type = ITEM_NONE}));
-    CHECK(!stockpile_accepts(NULL, item_stack_make(ITEM_BERRIES, 1, ITEM_QUALITY_FINE, 10)));
+    CHECK(!stockpile_accepts(NULL, item_stack_make(ITEM_BLACKBERRIES, 1, ITEM_QUALITY_FINE, 10)));
 
     /* Invalid stockpiles are ignored. */
     stockpile_set_quality_range(&s, 40, (IntRange){1, 2});

@@ -5,7 +5,7 @@
 
 void game_clock_init(GameClock *clock)
 {
-    clock->tick = (uint64_t)GAME_START_HOUR * TICKS_PER_HOUR;
+    clock->tick = GAME_START_TICK;
     clock->speed = GAME_SPEED_NORMAL;
     clock->resume_speed = GAME_SPEED_NORMAL;
     clock->pending_ticks = 0.0;
@@ -82,6 +82,11 @@ GameDate game_date_from_tick(uint64_t tick)
 int game_hour_from_tick(uint64_t tick)
 {
     return (int)(tick % TICKS_PER_DAY / TICKS_PER_HOUR);
+}
+
+int game_day_of_year(uint64_t tick)
+{
+    return (int)(tick / TICKS_PER_DAY % DAYS_PER_YEAR);
 }
 
 float game_daylight(uint64_t tick)

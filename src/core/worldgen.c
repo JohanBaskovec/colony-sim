@@ -4,6 +4,8 @@
 #include "core/rng.h"
 #include "core/util.h"
 
+#include <math.h>
+
 void worldgen_default_params(WorldGenParams *params)
 {
     params->seed = 1;
@@ -100,36 +102,103 @@ static Terrain pick_terrain(const WorldGenParams *params, float elevation, float
     return moisture > 0.6f ? TERRAIN_RICH_SOIL : TERRAIN_SOIL;
 }
 
+/* A plant of a type, if the tile is fertile enough for it, with a chance. */
+typedef struct PlantChance {
+    PlantType type;
+    float chance;
+} PlantChance;
+
 static void place_plant(Map *map, size_t index, Rng *rng, const WorldGenParams *params,
                         float moisture, float forest)
 {
-    float fertility = terrain_def((Terrain)map->terrain[index])->fertility;
+    Terrain terrain = (Terrain)map->terrain[index];
+    float fertility = terrain_def(terrain)->fertility;
     float roll = rng_next_float(rng);
     float growth_roll = rng_next_float(rng);
 
-    float tree_chance = 0.0f;
-    if (fertility >= plant_def(PLANT_TREE)->min_fertility) {
-        /* Mostly scattered trees, with dense forests where the forest noise is high. */
-        float forest_factor = clampf((forest - 0.5f) * 3.0f, 0.0f, 1.0f);
-        tree_chance =
-            params->tree_density * (0.04f + 0.9f * forest_factor) * (0.5f + 0.5f * moisture);
-    }
-    float bush_chance = fertility >= plant_def(PLANT_BUSH)->min_fertility ? 0.03f : 0.0f;
-    float grass_chance =
-        fertility >= plant_def(PLANT_GRASS)->min_fertility ? 0.35f + 0.6f * moisture : 0.0f;
-
+    /* Mostly scattered trees, with dense forests where the forest noise is
+     * high; shrubs like their edges, low plants the open meadows or the damp
+     * woods. */
+    float forest_factor = clampf((forest - 0.5f) * 3.0f, 0.0f, 1.0f);
+    float edge = forest_factor > 0.0f ? 1.0f - fabsf(2.0f * forest_factor - 1.0f) : 0.0f;
+    float open = 1.0f - forest_factor;
+    const PlantChance chances[] = {
+        {PLANT_TREE,
+         params->tree_density * (0.04f + 0.9f * forest_factor) * (0.5f + 0.5f * moisture)},
+        {PLANT_HAZEL, 0.006f + 0.05f * edge},
+        {PLANT_BRAMBLE, 0.015f + 0.025f * edge},
+        {PLANT_WILD_GARLIC, 0.12f * forest_factor},
+        {PLANT_NETTLE, 0.04f * moisture},
+        {PLANT_PLANTAIN, 0.04f * open},
+        {PLANT_WILD_CARROT, terrain == TERRAIN_SOIL ? 0.015f * open : 0.0f},
+        {PLANT_GRASS, 0.35f + 0.6f * moisture},
+    };
     Plant *plant = &map->plants[index];
-    if (roll < tree_chance) {
-        plant->type = PLANT_TREE;
-        plant->growth = 0.4f + 0.6f * growth_roll;
-    } else if (roll < tree_chance + bush_chance) {
-        plant->type = PLANT_BUSH;
-        plant->growth = 0.2f + 0.8f * growth_roll;
-    } else if (roll < tree_chance + bush_chance + grass_chance) {
-        plant->type = PLANT_GRASS;
-        plant->growth = 0.2f + 0.8f * growth_roll;
+    float sum = 0.0f;
+    for (size_t i = 0; i < sizeof(chances) / sizeof(chances[0]); i++) {
+        const PlantDef *def = plant_def(chances[i].type);
+        if (fertility < def->min_fertility) {
+            continue;
+        }
+        sum += chances[i].chance;
+        if (roll < sum) {
+            plant->type = (uint8_t)chances[i].type;
+            /* Trees are older; grass and low plants anything. */
+            plant->growth = chances[i].type == PLANT_TREE ? 0.4f + 0.6f * growth_roll
+                                                          : 0.2f + 0.8f * growth_roll;
+            break;
+        }
     }
-    plant_fill_stocks(plant);
+    plant_settle(plant, GAME_START_DAY);
+}
+
+/* Whether a tile is water, or next to it (8 neighbors). */
+static bool by_water(const Map *map, int x, int y)
+{
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (map_is_water(map, x + dx, y + dy)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Cattails along the shores: in the shallows next to the land, and on the
+ * land next to the water, in place of grass. */
+static void place_cattails(Map *map, Rng *rng)
+{
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            size_t index = map_index(map, x, y);
+            Terrain terrain = (Terrain)map->terrain[index];
+            Plant *plant = &map->plants[index];
+            if (terrain == TERRAIN_DEEP_WATER || map->rock[index] != ROCK_NONE ||
+                (plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
+                !by_water(map, x, y)) {
+                continue;
+            }
+            bool shallows = terrain == TERRAIN_SHALLOW_WATER;
+            if (shallows) { /* Only at the edge: next to the land. */
+                bool shore = false;
+                for (int d = 0; d < 4 && !shore; d++) {
+                    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+                    int nx = x + DX[d], ny = y + DY[d];
+                    shore = map_in_bounds(map, nx, ny) && !map_is_water(map, nx, ny);
+                }
+                if (!shore) {
+                    continue;
+                }
+            }
+            float roll = rng_next_float(rng);
+            float growth_roll = rng_next_float(rng);
+            if (roll < (shallows ? 0.3f : 0.15f)) {
+                *plant = (Plant){.type = PLANT_CATTAIL, .growth = 0.4f + 0.6f * growth_roll};
+                plant_settle(plant, GAME_START_DAY);
+            }
+        }
+    }
 }
 
 bool worldgen_generate(Map *map, const WorldGenParams *params)
@@ -177,5 +246,8 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
             place_plant(map, index, &rng, params, moisture, forest);
         }
     }
+    Rng shore_rng; /* A stream of its own: the inland plants do not depend on the shores. */
+    rng_seed(&shore_rng, params->seed, 0x73686f7265ULL /* "shore" */);
+    place_cattails(map, &shore_rng);
     return true;
 }

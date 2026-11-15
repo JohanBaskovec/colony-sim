@@ -26,7 +26,14 @@ rock.sandstone = Sandstone
 
 # Plants
 plant.grass = Grass
-plant.bush = Berry bush
+plant.hazel = Hazel
+plant.bramble = Bramble
+plant.wild_garlic = Wild garlic
+plant.nettle = Nettle
+plant.plantain = Ribwort plantain
+plant.wild_carrot = Wild carrot
+plant.cattail = Cattail
+plant.mushrooms = Mushrooms
 plant.tree = Tree
 
 # Designations (player orders)
@@ -39,7 +46,7 @@ tool.gather_zone = Gathering zone
 tool.gather_remove = Remove from gathering zones
 tool.stockpile_remove = Remove from stockpiles
 tool.zone_remove.description = Takes the area you drag out of the zones; the rest of each zone stays
-tool.gather_zone.description = Settlers gather the resources you pick in it: wood, berries, branches, twigs, grass, stones
+tool.gather_zone.description = Settlers gather the resources you pick in it: wood, wild food, branches, twigs, grass, stones
 tool.stockpile.description = Settlers store the items you allow in it
 tool.mine.description = Settlers dig out the marked rock and bring back stone
 tool.cancel.description = Removes the orders in the area you drag
@@ -73,7 +80,14 @@ item.branches = Branches
 item.twigs = Twigs
 item.fresh_grass = Fresh grass
 item.grass = Dry grass
-item.berries = Berries
+item.blackberries = Blackberries
+item.hazelnuts = Hazelnuts
+item.mushrooms = Mushrooms
+item.wild_garlic = Wild garlic
+item.nettles = Nettles
+item.plantain = Plantain leaves
+item.wild_carrots = Wild carrots
+item.cattail_rhizomes = Cattail rhizomes
 item.cobble = Cobble
 item.flint = Flint
 item.chopper = Chopper
@@ -83,6 +97,8 @@ item.throwing_spear = Throwing spear
 item.thrusting_spear = Thrusting spear
 item.throwing_spear_hardened = Fire-hardened throwing spear
 item.thrusting_spear_hardened = Fire-hardened thrusting spear
+item.digging_stick = Digging stick
+item.digging_stick_hardened = Fire-hardened digging stick
 item.category.food = Food
 item.category.resources = Resources
 item.category.tools = Tools
@@ -134,7 +150,7 @@ hud.language = Language: {0}
 hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
 hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · {0}: language · F3: debug · Esc or right click: back
 # {0}, {1}, {2}, {3} = keys of the chop, mine, harvest and cancel tools
-hud.help.gathering = {0}: gathering zones (wood, berries, branches, twigs, grass, stones)
+hud.help.gathering = {0}: gathering zones (wood, wild food, branches, twigs, grass, stones)
 hud.help.orders = {0}: mine rock · {1}: cancel orders
 # {0} = key of the stockpile zone tool, {1} = key of the build tool, {2} = key of the work priorities grid
 hud.help.copy = {0}: build another of what is selected (zone, workstation, bed, wall, door)
@@ -166,6 +182,10 @@ hud.tile.terrain = Terrain: {0}
 hud.tile.rock = Rock wall: {0}
 # {0} = plant name, {1} = growth percentage
 hud.tile.plant = Plant: {0} ({1}% grown)
+# A plant withered out of its season (wild garlic in summer, nettles in winter)
+hud.tile.plant_dormant = Plant: {0} (withered, grows back in spring)
+# {0} = the food a plant bears in another season (hazelnuts in summer...)
+hud.tile.plant_food_out_of_season = {0}: out of season
 # {0} = item name (branches, twigs), {1} = how many can be gathered now, {2} = most the plant can hold
 hud.tile.plant_stock = {0} to gather: {1}/{2}
 hud.tile.move_cost = Movement cost: ×{0}
@@ -237,6 +257,11 @@ colonist.task.mine = Mining
 colonist.task.deconstruct = Taking apart
 colonist.task.remove_roof = Taking a roof down
 colonist.task.harvest = Harvesting
+# Picking food easily mistaken for a poisonous plant (mushrooms, wild garlic)
+colonist.task.harvest_carefully = Picking with care
+colonist.task.dig = Digging up roots
+# Digging up roots easily mistaken for a poisonous plant (wild carrots)
+colonist.task.dig_carefully = Digging up roots with care
 colonist.task.gather_stones = Gathering stones
 colonist.task.gather_branches = Gathering branches
 colonist.task.gather_twigs = Gathering twigs
@@ -355,7 +380,14 @@ gather_zone.priority = Priority: {0}
 gather_zone.priority_hint = (1 = gathered first, before nearer zones)
 # Resources a zone may gather (check boxes)
 gather_zone.resource.wood = Wood
-gather_zone.resource.berries = Berries
+gather_zone.resource.blackberries = Blackberries
+gather_zone.resource.hazelnuts = Hazelnuts
+gather_zone.resource.mushrooms = Mushrooms
+gather_zone.resource.wild_garlic = Wild garlic
+gather_zone.resource.nettles = Nettles
+gather_zone.resource.plantain = Plantain leaves
+gather_zone.resource.wild_carrots = Wild carrots
+gather_zone.resource.cattail_rhizomes = Cattail rhizomes
 gather_zone.resource.branches = Branches
 gather_zone.resource.twigs = Twigs
 gather_zone.resource.grass = Grass
@@ -368,9 +400,9 @@ gather_zone.mode.until = Until {0} in the colony
 gather_zone.mode.forever = Forever
 # {0} = items gathered by this order so far
 gather_zone.progress.done = Gathered: {0}
-# Option of wood and berries: leave young trees and bushes not fully grown
+# Option of wood: leave young trees not fully grown
 gather_zone.ripe_only = Fully grown plants only (100%)
-# Enabled resource of which the zone holds nothing now (stones run out, berries grow back)
+# Enabled resource of which the zone holds nothing now (stones run out, food out of season)
 gather_zone.warning.none_left = Nothing of it to gather in this zone now
 # {0} = how many items of a resource the zone holds now (wood of the trees, stones in the ground...)
 gather_zone.available.one = {0} available
@@ -403,6 +435,8 @@ recipe.throwing_spear = Throwing spear
 recipe.thrusting_spear = Thrusting spear
 recipe.harden_throwing_spear = Harden a throwing spear in the fire
 recipe.harden_thrusting_spear = Harden a thrusting spear in the fire
+recipe.digging_stick = Digging stick
+recipe.harden_digging_stick = Harden a digging stick in the fire
 # What a recipe needs. {0} = ingredient, {1} = tools
 recipe.needs = Needs {0} · Tools: {1}
 # {0} = ingredient

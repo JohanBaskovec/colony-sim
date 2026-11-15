@@ -215,8 +215,6 @@ GROUND_SHADOW = (0, 0, 0)
 # Canvas (width, height) and scale of each growth stage.
 TREE_STAGES = [((128, 128), 0.24), ((128, 192), 0.42), ((192, 256), 0.6),
                ((256, 320), 0.8), ((256, 384), 1.0)]
-BUSH_STAGES = [((128, 128), 0.34), ((128, 128), 0.52), ((128, 128), 0.7),
-               ((160, 160), 0.86), ((192, 160), 1.0)]
 
 
 def foliage(canvas, blobs, scale, rng, base, dark, light, clip_extra=None):
@@ -300,59 +298,335 @@ def draw_tree(stage):
     return compose(shadow, canvas, shadow_opacity=0.28)
 
 
-BUSH_LEAVES = (78, 128, 56)
-BUSH_LEAVES_DARK = (44, 88, 42)
-BUSH_LEAVES_LIGHT = (134, 176, 82)
-BUSH_OUTLINE = (24, 40, 22)
-BERRY = (168, 36, 70)
-BERRY_DARK = (96, 18, 48)
+# Canvas (width, height) and scale of each growth stage of the shrubs.
+HAZEL_STAGES = [((128, 128), 0.34), ((128, 160), 0.52), ((128, 192), 0.7),
+                ((160, 224), 0.86), ((192, 256), 1.0)]
+BRAMBLE_STAGES = [((128, 128), 0.34), ((128, 128), 0.52), ((128, 128), 0.7),
+                  ((160, 128), 0.86), ((192, 160), 1.0)]
+# Low plants are drawn in three sizes: young, growing, grown.
+HERB_SCALES = [0.5, 0.75, 1.0]
+
+HAZEL_LEAVES = (96, 146, 62)
+HAZEL_LEAVES_DARK = (54, 98, 44)
+HAZEL_LEAVES_LIGHT = (150, 190, 92)
+HAZEL_BARK = (128, 104, 82)
+HAZELNUT = (176, 132, 70)
+HAZELNUT_HUSK = (150, 172, 88)
+BRAMBLE_LEAVES = (58, 104, 50)
+BRAMBLE_LEAVES_DARK = (32, 66, 36)
+BRAMBLE_LEAVES_LIGHT = (104, 146, 72)
+BRAMBLE_CANE = (118, 54, 62)
+BLACKBERRY = (52, 24, 52)
+BLACKBERRY_UNRIPE = (176, 40, 52)
+PLANT_OUTLINE = (24, 40, 22)
 
 
-def draw_bush(stage, berries):
-    (width, height), scale = BUSH_STAGES[stage]
+def scatter_on(canvas, rng, box, count, draw_fn, attempts=4000):
+    """Calls draw_fn(x, y) at up to `count` random spots of `box` well inside
+    what is drawn so far (fruit on the foliage)."""
+    clip = canvas.coverage()
+    x0, y0, x1, y1 = box
+    placed = 0
+    for _ in range(attempts):
+        if placed >= count:
+            break
+        x, y = rng.uniform(x0, x1), rng.uniform(y0, y1)
+        ix, iy = int(x * SUPERSAMPLING), int(y * SUPERSAMPLING)
+        if not (0 <= ix < canvas.big_w and 0 <= iy < canvas.big_h):
+            continue
+        if clip[iy, ix] < 0.99 or clip[max(0, iy - 6 * SUPERSAMPLING), ix] < 0.99:
+            continue
+        draw_fn(x, y)
+        placed += 1
+
+
+def draw_hazel(stage, nuts):
+    """A multi-stemmed shrub: thin grey-brown stems fanning out from the
+    ground, round soft leaves; clusters of nuts in their husks in autumn."""
+    (width, height), scale = HAZEL_STAGES[stage]
+    canvas = Canvas(width, height)
+    rng = random.Random(2100 + stage)
+    cx = width / 2.0
+    base_y = height - 12.0
+    shadow = Canvas(width, height)
+    shadow.ellipse(cx, base_y + 2, 64 * scale + 6, 15 * scale + 3, (0, 0, 0))
+    top = base_y - 210 * scale
+    for i, dx in enumerate((-30, -16, -4, 8, 20, 32)):
+        lean = dx * 1.6 * scale
+        canvas.line([(cx + dx * 0.25 * scale, base_y + 2),
+                     (cx + dx * 0.6 * scale + lean * 0.3, base_y - 100 * scale),
+                     (cx + lean, top + 40 * scale + (i % 2) * 18 * scale)],
+                    max(1.5, 5.5 * scale), shade(HAZEL_BARK, 0.9 + 0.08 * (i % 3)))
+    layout = [(0, -190, 44), (-40, -160, 42), (40, -164, 40), (-62, -112, 36), (62, -116, 36),
+              (-20, -128, 46), (24, -124, 44), (0, -84, 38), (-46, -70, 28), (46, -72, 28)]
+    if stage <= 1:
+        layout = [(0, -120, 42), (-38, -84, 36), (38, -86, 36), (0, -60, 34)]
+    blobs = [(cx + dx * scale, base_y + dy * scale, r * scale) for dx, dy, r in layout]
+    foliage(canvas, blobs, scale, rng, rgb(HAZEL_LEAVES), rgb(HAZEL_LEAVES_DARK),
+            rgb(HAZEL_LEAVES_LIGHT))
+    if nuts:
+        nut_rng = random.Random(3100 + stage)
+        radius = max(2.4, 5.0 * scale)
+
+        def nut_cluster(x, y):
+            for k in range(nut_rng.choice((2, 3))):
+                nx = x + (k - 1) * radius * 1.5
+                ny = y + (k % 2) * radius * 0.6
+                canvas.ellipse(nx, ny - radius * 0.5, radius * 1.2, radius * 0.9,
+                               rgb(HAZELNUT_HUSK), light=0.4)
+                canvas.ellipse(nx, ny + radius * 0.3, radius, radius * 1.05, rgb(HAZELNUT),
+                               light=0.6)
+                canvas.ellipse(nx - radius * 0.3, ny, radius * 0.28, radius * 0.25,
+                               (1.0, 0.95, 0.85), opacity=0.7)
+
+        scatter_on(canvas, nut_rng, (cx - 70 * scale, base_y - 210 * scale, cx + 70 * scale,
+                                     base_y - 60 * scale), int(4 + 8 * scale), nut_cluster)
+    canvas.outline(max(1.2, 2.0 * min(1.0, scale + 0.3)), PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.25)
+
+
+def draw_bramble(stage, berries):
+    """A low sprawling thicket: arching reddish canes, dark leaves; clusters
+    of blackberries, a few still red, at the end of summer."""
+    (width, height), scale = BRAMBLE_STAGES[stage]
     canvas = Canvas(width, height)
     rng = random.Random(2000 + stage)
     cx = width / 2.0
     base_y = height - 14.0
     shadow = Canvas(width, height)
-    shadow.ellipse(cx, base_y + 2, 72 * scale + 4, 14 * scale + 3, (0, 0, 0))
-    # A few woody stems peek out at the bottom.
-    for dx in (-14, 0, 13):
-        canvas.line([(cx + dx * scale, base_y + 2), (cx + dx * 1.6 * scale, base_y - 40 * scale)],
-                    max(1.5, 5 * scale), (96, 70, 46))
-    layout = [(0, -62, 42), (-44, -40, 38), (44, -42, 38), (-70, -14, 26), (70, -16, 26),
-              (-24, -20, 40), (26, -18, 40), (0, -96, 26)]
+    shadow.ellipse(cx, base_y + 2, 80 * scale + 4, 14 * scale + 3, (0, 0, 0))
+    layout = [(0, -56, 38), (-44, -38, 36), (44, -40, 36), (-76, -14, 26), (76, -16, 26),
+              (-22, -20, 40), (24, -18, 40), (0, -84, 24)]
     blobs = [(cx + dx * scale, base_y + dy * scale, r * scale) for dx, dy, r in layout]
-    foliage(canvas, blobs, scale, rng, rgb(BUSH_LEAVES), rgb(BUSH_LEAVES_DARK),
-            rgb(BUSH_LEAVES_LIGHT))
+    foliage(canvas, blobs, scale, rng, rgb(BRAMBLE_LEAVES), rgb(BRAMBLE_LEAVES_DARK),
+            rgb(BRAMBLE_LEAVES_LIGHT))
+    # Canes arching out of the thicket and down to the ground, with thorns.
+    for side, start, reach, rise in ((-1, 0.2, 92, 46), (1, 0.1, 96, 40), (-1, 0.5, 70, 30),
+                                     (1, 0.45, 76, 34)):
+        points = []
+        for i in range(9):
+            t = i / 8.0
+            x = cx + side * (reach * (start + (1.0 - start) * t)) * scale
+            y = base_y - 8 * scale - rise * scale * math.sin(math.pi * (0.35 + 0.65 * t))
+            y += rng.uniform(-1.5, 1.5) * scale
+            points.append((x, y))
+        canvas.line(points, max(1.4, 3.6 * scale), BRAMBLE_CANE)
+        for x, y in points[1:-1:2]:
+            canvas.line([(x, y), (x + side * 3 * scale, y - 5 * scale)], max(1.0, 1.6 * scale),
+                        shade(BRAMBLE_CANE, 0.7))
     if berries:
-        clip = canvas.coverage()
         berry_rng = random.Random(3000 + stage)
-        count = int(6 + 20 * scale)
-        radius = max(2.2, 5.2 * scale)
-        placed = 0
-        attempts = 0
-        while placed < count and attempts < 4000:
-            attempts += 1
-            x = berry_rng.uniform(cx - 80 * scale, cx + 80 * scale)
-            y = berry_rng.uniform(base_y - 110 * scale, base_y - 4 * scale)
-            ix, iy = int(x * SUPERSAMPLING), int(y * SUPERSAMPLING)
-            if not (0 <= ix < canvas.big_w and 0 <= iy < canvas.big_h):
-                continue
-            if clip[iy, ix] < 0.99 or clip[max(0, iy - 12 * SUPERSAMPLING // 2), ix] < 0.99:
-                continue
-            # Small clusters of two or three berries.
-            for k in range(berry_rng.choice((1, 2, 3))):
-                bx = x + (k - 1) * radius * 1.3
+        radius = max(2.2, 4.8 * scale)
+
+        def berry_cluster(x, y):
+            for k in range(berry_rng.choice((2, 3, 3))):
+                bx = x + (k - 1) * radius * 1.4
                 by = y + (k % 2) * radius * 0.9
-                canvas.ellipse(bx, by + radius * 0.15, radius * 1.12, radius * 1.12,
-                               rgb(BERRY_DARK))
-                canvas.ellipse(bx, by, radius, radius, rgb(BERRY), light=0.6)
-                canvas.ellipse(bx - radius * 0.35, by - radius * 0.4, radius * 0.32,
-                               radius * 0.28, (1.0, 0.92, 0.95), opacity=0.85)
-            placed += 1
-    canvas.outline(max(1.2, 2.0 * min(1.0, scale + 0.3)), BUSH_OUTLINE)
+                ripe = berry_rng.random() < 0.8
+                color = BLACKBERRY if ripe else BLACKBERRY_UNRIPE
+                canvas.ellipse(bx, by, radius, radius * 1.1, rgb(color), light=0.5)
+                # The drupelets: small highlights.
+                for _ in range(3):
+                    canvas.ellipse(bx + berry_rng.uniform(-0.5, 0.3) * radius,
+                                   by + berry_rng.uniform(-0.6, 0.3) * radius, radius * 0.22,
+                                   radius * 0.22, (0.85, 0.8, 0.95) if ripe else (1.0, 0.7, 0.7),
+                                   opacity=0.6)
+
+        scatter_on(canvas, berry_rng, (cx - 84 * scale, base_y - 100 * scale, cx + 84 * scale,
+                                       base_y - 6 * scale), int(6 + 18 * scale), berry_cluster)
+    canvas.outline(max(1.2, 2.0 * min(1.0, scale + 0.3)), PLANT_OUTLINE)
     return compose(shadow, canvas, shadow_opacity=0.25)
+
+
+def leaf(canvas, base, tip, width, color, vein=None):
+    """A pointed leaf from `base` to `tip`, `width` across at its widest."""
+    (bx, by), (tx, ty) = base, tip
+    dx, dy = tx - bx, ty - by
+    length = max(math.hypot(dx, dy), 1e-3)
+    nx, ny = -dy / length, dx / length
+    points = []
+    for i in range(11):
+        t = i / 10.0
+        half = width * 0.5 * math.sin(math.pi * t) ** 0.8
+        points.append((bx + dx * t + nx * half, by + dy * t + ny * half))
+    for i in range(10, -1, -1):
+        t = i / 10.0
+        half = width * 0.5 * math.sin(math.pi * t) ** 0.8
+        points.append((bx + dx * t - nx * half, by + dy * t - ny * half))
+    canvas.polygon(points, color)
+    if vein is not None:
+        canvas.line([(bx, by), (bx + dx * 0.85, by + dy * 0.85)], max(0.8, width * 0.08), vein,
+                    opacity=0.6)
+
+
+HERB_W, HERB_H = 128, 128
+
+
+def herb_canvas():
+    canvas = Canvas(HERB_W, HERB_H)
+    shadow = Canvas(HERB_W, HERB_H)
+    return canvas, shadow, HERB_W / 2.0, HERB_H - 14.0
+
+
+def draw_wild_garlic(size):
+    """Broad bright leaves rising from the ground; white star flowers in
+    round heads once grown."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(4000 + size)
+    shadow.ellipse(cx, base_y + 2, 44 * scale + 4, 10 * scale + 2, (0, 0, 0))
+    green, dark = (86, 168, 72), (52, 120, 48)
+    for i in range(9):
+        angle = math.radians(-150 + i * 15 + rng.uniform(-6, 6))
+        length = rng.uniform(46, 62) * scale
+        tip = (cx + math.cos(angle) * length, base_y + math.sin(angle) * length * 0.95)
+        base = (cx + (i - 4) * 2.0 * scale, base_y)
+        leaf(canvas, base, tip, 15 * scale, dark if i % 3 == 0 else green, (170, 210, 140))
+    if size == 2:
+        for k in range(3):
+            fx = cx + (k - 1) * 22 * scale + rng.uniform(-4, 4)
+            fy = base_y - rng.uniform(62, 74) * scale
+            canvas.line([(fx, base_y - 6), (fx, fy)], 2.0, (110, 160, 80))
+            for _ in range(7):
+                canvas.ellipse(fx + rng.uniform(-6, 6), fy + rng.uniform(-6, 5), 2.6, 2.6,
+                               (0.97, 0.97, 0.94))
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
+def draw_nettle(size):
+    """Upright stems with pairs of toothed dark leaves, smaller towards the top."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(4100 + size)
+    shadow.ellipse(cx, base_y + 2, 38 * scale + 4, 9 * scale + 2, (0, 0, 0))
+    green, dark = (64, 122, 56), (40, 86, 42)
+    for stem in range(3):
+        sx = cx + (stem - 1) * 24 * scale
+        height = rng.uniform(80, 100) * scale
+        canvas.line([(sx, base_y), (sx + rng.uniform(-3, 3), base_y - height)],
+                    max(1.2, 2.6 * scale), (76, 104, 52))
+        for pair in range(5):
+            t = 0.2 + pair * 0.18
+            y = base_y - height * t
+            length = (30 - pair * 4) * scale
+            for side in (-1, 1):
+                leaf(canvas, (sx, y), (sx + side * length, y - length * 0.45),
+                     length * 0.62, dark if (pair + side) % 2 else green, (110, 150, 90))
+        leaf(canvas, (sx, base_y - height), (sx, base_y - height - 12 * scale), 8 * scale, green)
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
+def draw_plantain(size):
+    """A flat rosette of narrow ribbed leaves; flower spikes on bare stalks
+    once grown."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(4200 + size)
+    shadow.ellipse(cx, base_y - 4, 48 * scale + 4, 14 * scale + 2, (0, 0, 0))
+    green, dark = (110, 150, 70), (72, 112, 52)
+    center_y = base_y - 10 * scale
+    for i in range(12):
+        angle = math.radians(i * 30 + rng.uniform(-8, 8))
+        length = rng.uniform(40, 52) * scale
+        tip = (cx + math.cos(angle) * length, center_y + math.sin(angle) * length * 0.4)
+        leaf(canvas, (cx, center_y), tip, 9 * scale, dark if i % 2 else green, (170, 200, 130))
+    if size == 2:
+        for k in range(2):
+            fx = cx + (k * 2 - 1) * 10
+            top = center_y - rng.uniform(64, 76)
+            canvas.line([(cx, center_y), (fx, top)], 1.6, (130, 140, 80))
+            canvas.ellipse(fx, top - 5, 3.6, 7.5, (96, 72, 46), light=0.4)
+            for _ in range(6):  # Stamens: a pale ring.
+                canvas.ellipse(fx + rng.uniform(-4, 4), top - 5 + rng.uniform(-3, 3), 0.9, 0.9,
+                               (0.95, 0.92, 0.75))
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
+def draw_wild_carrot(size):
+    """Feathery, finely cut leaves; a flat white flower head on a stalk once
+    grown (the second year)."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(4300 + size)
+    shadow.ellipse(cx, base_y + 2, 40 * scale + 4, 9 * scale + 2, (0, 0, 0))
+    green = (96, 150, 70)
+    for i in range(7):
+        angle = math.radians(-160 + i * 23 + rng.uniform(-5, 5))
+        length = rng.uniform(36, 48) * scale
+        x1 = cx + math.cos(angle) * length
+        y1 = base_y + math.sin(angle) * length
+        canvas.line([(cx, base_y), (x1, y1)], max(1.0, 1.8 * scale), (90, 130, 64))
+        for j in range(8):  # Tiny leaflets along the stalk.
+            t = 0.3 + j * 0.09
+            px, py = cx + (x1 - cx) * t, base_y + (y1 - base_y) * t
+            for side in (-1, 1):
+                canvas.ellipse(px + side * 3.2 * scale, py - 1.5 * scale, 3.0 * scale,
+                               1.6 * scale, shade(green, 0.85 + 0.1 * (j % 3)))
+    if size == 2:
+        top = base_y - 92
+        canvas.line([(cx, base_y), (cx + 3, top)], 2.0, (110, 140, 80))
+        for _ in range(60):
+            angle = rng.uniform(0, 2 * math.pi)
+            r = rng.uniform(0, 16) ** 0.9
+            canvas.ellipse(cx + 3 + math.cos(angle) * r, top + math.sin(angle) * r * 0.4,
+                           1.8, 1.4, (0.98, 0.98, 0.95))
+        canvas.ellipse(cx + 3, top, 1.6, 1.4, (0.4, 0.15, 0.25))  # The dark central flower.
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
+CATTAIL_W, CATTAIL_H = 128, 192
+
+
+def draw_cattail(size):
+    """Tall upright blades; brown cylindrical heads on stiff stalks once grown."""
+    scale = HERB_SCALES[size]
+    canvas = Canvas(CATTAIL_W, CATTAIL_H)
+    shadow = Canvas(CATTAIL_W, CATTAIL_H)
+    rng = random.Random(4400 + size)
+    cx, base_y = CATTAIL_W / 2.0, CATTAIL_H - 12.0
+    shadow.ellipse(cx, base_y + 2, 40 * scale + 4, 9 * scale + 2, (0, 0, 0))
+    green, dark = (110, 146, 70), (70, 108, 54)
+    for i in range(11):
+        x0 = cx + (i - 5) * 4.5 * scale
+        height = rng.uniform(110, 160) * scale
+        lean = (i - 5) * rng.uniform(2, 5) * scale
+        leaf(canvas, (x0, base_y), (x0 + lean, base_y - height), 7 * scale,
+             dark if i % 3 == 0 else green)
+    if size == 2:
+        for k in range(3):
+            x = cx + (k - 1) * 16 + rng.uniform(-3, 3)
+            top = base_y - rng.uniform(150, 168)
+            canvas.line([(x, base_y), (x, top - 18)], 2.0, (120, 140, 80))
+            canvas.ellipse(x, top + 14, 5.0, 16.0, (104, 64, 40), light=0.5)
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
+def draw_mushrooms():
+    """A few brown caps on pale stems, in the leaf litter."""
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(4500)
+    shadow.ellipse(cx, base_y + 2, 34, 8, (0, 0, 0))
+    for x, y, r in ((-18, -2, 12), (14, -6, 15), (-2, 6, 9), (30, 6, 8)):
+        x, y = cx + x, base_y + y
+        canvas.polygon([(x - r * 0.3, y), (x - r * 0.25, y - r * 1.4), (x + r * 0.25, y - r * 1.4),
+                        (x + r * 0.3, y)], (232, 222, 200))
+        canvas.ellipse(x, y - r * 1.45, r, r * 0.6, (168, 116, 70), light=0.6)
+        for _ in range(3):
+            canvas.ellipse(x + rng.uniform(-0.5, 0.5) * r, y - r * 1.6, r * 0.12, r * 0.08,
+                           (0.92, 0.86, 0.74), opacity=0.7)
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
+# Low plants: file name and drawing function (three sizes, except mushrooms).
+HERBS = [("wild_garlic", draw_wild_garlic), ("nettle", draw_nettle),
+         ("plantain", draw_plantain), ("wild_carrot", draw_wild_carrot),
+         ("cattail", draw_cattail)]
 
 
 def compose(shadow, canvas, shadow_opacity):
@@ -730,9 +1004,16 @@ def generate(output):
     sprites = {}
     for stage in range(len(TREE_STAGES)):
         sprites[f"tree_{stage}.png"] = draw_tree(stage)
-    for stage in range(len(BUSH_STAGES)):
-        sprites[f"bush_{stage}.png"] = draw_bush(stage, False)
-        sprites[f"bush_berries_{stage}.png"] = draw_bush(stage, True)
+    for stage in range(len(HAZEL_STAGES)):
+        sprites[f"hazel_{stage}.png"] = draw_hazel(stage, False)
+        sprites[f"hazel_fruit_{stage}.png"] = draw_hazel(stage, True)
+    for stage in range(len(BRAMBLE_STAGES)):
+        sprites[f"bramble_{stage}.png"] = draw_bramble(stage, False)
+        sprites[f"bramble_fruit_{stage}.png"] = draw_bramble(stage, True)
+    for name, draw in HERBS:
+        for size in range(len(HERB_SCALES)):
+            sprites[f"{name}_{size}.png"] = draw(size)
+    sprites["mushrooms_0.png"] = draw_mushrooms()
     for shape, (name, _, _, _) in enumerate(BODY_SHAPES):
         for skin in range(len(SKIN_TONES)):
             sprites[f"body_{name}_{skin}.png"] = draw_body(shape, skin)
@@ -771,12 +1052,18 @@ def preview(images, path):
         sheet.alpha_composite(image, (x, 400 - image.height))
         x += image.width + 4
     x = 10
-    for berries in (False, True):
-        for stage in range(5):
-            name = f"bush_berries_{stage}.png" if berries else f"bush_{stage}.png"
-            image = images[name]
-            sheet.alpha_composite(image, (x, 580 - image.height))
-            x += image.width
+    for name in ("hazel", "bramble"):
+        for fruit in (False, True):
+            for stage in (2, 4):
+                image = images[f"{name}_fruit_{stage}.png" if fruit else f"{name}_{stage}.png"]
+                sheet.alpha_composite(image, (x, 600 - image.height))
+                x += image.width
+    x = 10 + 128 * 5 + 300
+    for name, _ in HERBS:
+        image = images[f"{name}_2.png"]
+        sheet.alpha_composite(image, (x, 400 - image.height))
+        x += 100
+    sheet.alpha_composite(images["mushrooms_0.png"], (x, 400 - 128))
     hair_colors = [(44, 34, 30), (92, 60, 38), (140, 96, 58), (164, 78, 44), (220, 184, 112),
                    (176, 172, 166)]
     x = 10
