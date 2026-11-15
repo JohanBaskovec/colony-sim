@@ -321,6 +321,21 @@ static void build_tile_panel(App *app, Panel *panel)
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.item_transform"),
                       tr(item_def(def->transforms_into)->name_key), a);
         }
+        if (item_rots((ItemType)stack.type)) {
+            /* At the tile's temperature now: an estimate. */
+            float hours = item_stack_rot_hours(stack, game_item_rot_rate(&app->game, x, y));
+            if (hours < 0.0f) {
+                panel_add_text(panel, tr("hud.tile.item_frozen"));
+            } else if (hours < 48.0f) {
+                tr_integer(a, sizeof(a), (long long)hours + 1);
+                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.item_rot_hours"), a);
+            } else {
+                long long days = (long long)(hours / 24.0f + 0.5f);
+                tr_integer(a, sizeof(a), days);
+                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+                          tr_plural("hud.tile.item_rot_days", days), a);
+            }
+        }
     }
 
     const Workstation *station = workstation_get_const(

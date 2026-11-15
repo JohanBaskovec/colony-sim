@@ -595,15 +595,33 @@ static void update_plants(Game *game)
     }
 }
 
-/* Items lying on the ground change over time (fresh grass dries), slice by
- * slice like plants. */
+float game_item_rot_rate(const Game *game, int x, int y)
+{
+    if (!map_in_bounds(&game->map, x, y)) {
+        return 0.0f;
+    }
+    bool sheltered = temperature_cover(&game->map, x, y) != TEMPERATURE_COVER_OPEN;
+    return item_rot_rate(temperature_at(&game->temperatures, x, y), sheltered);
+}
+
+/* ItemRotRateFn for items_advance(). */
+static float tile_rot_rate(const void *context, size_t tile)
+{
+    const Game *game = context;
+    int width = game->map.width;
+    return game_item_rot_rate(game, (int)(tile % (size_t)width), (int)(tile / (size_t)width));
+}
+
+/* Items lying on the ground change over time (fresh grass dries, food
+ * rots), slice by slice like plants. */
 static void update_items(Game *game)
 {
     uint64_t count = map_tile_count(&game->map);
     uint64_t phase = game->clock.tick % GAME_ITEM_UPDATE_INTERVAL;
     size_t begin = (size_t)(phase * count / GAME_ITEM_UPDATE_INTERVAL);
     size_t end = (size_t)((phase + 1) * count / GAME_ITEM_UPDATE_INTERVAL);
-    items_advance(&game->items, begin, end, GAME_ITEM_UPDATE_INTERVAL / TICKS_PER_HOUR);
+    items_advance(&game->items, begin, end, GAME_ITEM_UPDATE_INTERVAL / TICKS_PER_HOUR,
+                  tile_rot_rate, game);
 }
 
 static void update_colonists(Game *game)

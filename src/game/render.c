@@ -523,16 +523,26 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         break;
     }
     case ITEM_WILD_CARROTS:
-    case ITEM_CATTAIL_RHIZOMES: {
-        /* Thin pale roots lying side by side, or thick knobbly rhizomes. */
-        bool rhizomes = type == ITEM_CATTAIL_RHIZOMES;
+    case ITEM_CATTAIL_RHIZOMES:
+    case ITEM_ROASTED_CARROTS:
+    case ITEM_ROASTED_RHIZOMES: {
+        /* Thin pale roots lying side by side, or thick knobbly rhizomes;
+         * browned with charred spots once roasted. */
+        bool rhizomes = type == ITEM_CATTAIL_RHIZOMES || type == ITEM_ROASTED_RHIZOMES;
+        bool roasted = type == ITEM_ROASTED_CARROTS || type == ITEM_ROASTED_RHIZOMES;
+        SDL_Color color = shade(rhizomes ? RHIZOME_COLOR : WILD_CARROT_COLOR, roasted ? -70 : 0);
         float thickness = SDL_max(1.0f, floorf(h * (rhizomes ? 0.13f : 0.08f)));
         for (int i = 0; i < 3; i++) {
             SDL_FRect root = {tile->x + floorf(w * (0.18f + 0.06f * (float)(i % 2))),
                               tile->y + floorf(h * (0.34f + 0.14f * (float)i)),
                               floorf(w * (rhizomes ? 0.58f : 0.5f)), thickness};
-            fill_outlined(renderer, root,
-                          shade(rhizomes ? RHIZOME_COLOR : WILD_CARROT_COLOR, -i * 10));
+            fill_outlined(renderer, root, shade(color, -i * 10));
+            if (roasted) {
+                SDL_FRect spot = {root.x + floorf(root.w * (0.3f + 0.2f * (float)i)), root.y,
+                                  SDL_max(1.0f, floorf(root.w * 0.15f)), thickness};
+                SDL_SetRenderDrawColor(renderer, 40, 28, 20, 255);
+                SDL_RenderFillRect(renderer, &spot);
+            }
         }
         break;
     }

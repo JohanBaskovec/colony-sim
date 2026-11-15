@@ -99,6 +99,8 @@ item.throwing_spear_hardened = Fire-hardened throwing spear
 item.thrusting_spear_hardened = Fire-hardened thrusting spear
 item.digging_stick = Digging stick
 item.digging_stick_hardened = Fire-hardened digging stick
+item.roasted_rhizomes = Roasted rhizomes
+item.roasted_carrots = Roasted wild carrots
 item.category.food = Food
 item.category.resources = Resources
 item.category.tools = Tools
@@ -196,6 +198,11 @@ hud.tile.impassable = Impassable
 hud.tile.items = Items: {0} ×{1} ({2})
 # {0} = item the stack turns into (e.g. dry grass), {1} = hours left
 hud.tile.item_transform = Turns into {0} in {1} h
+# Food rotting at the tile's temperature now; {0} = hours or days left
+hud.tile.item_rot_hours = Rots away in about {0} h
+hud.tile.item_rot_days.one = Rots away in about {0} day
+hud.tile.item_rot_days.other = Rots away in about {0} days
+hud.tile.item_frozen = Frozen: does not rot
 # {0} = order name (e.g. Chop trees)
 hud.tile.designation = Order: {0}
 # {0} = order name, {1} = percentage of the work done
@@ -437,6 +444,8 @@ recipe.harden_throwing_spear = Harden a throwing spear in the fire
 recipe.harden_thrusting_spear = Harden a thrusting spear in the fire
 recipe.digging_stick = Digging stick
 recipe.harden_digging_stick = Harden a digging stick in the fire
+recipe.roast_rhizomes = Roast cattail rhizomes
+recipe.roast_carrots = Roast wild carrots
 # What a recipe needs. {0} = ingredient, {1} = tools
 recipe.needs = Needs {0} · Tools: {1}
 # {0} = ingredient

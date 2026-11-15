@@ -48,7 +48,7 @@ simulation:
 | `designation`| Player work orders per tile (mine rock, take a structure apart), the knowledge and level each needs, work progress |
 | `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
-| `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying) |
+| `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying), rot |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `tool`       | Tool speed factors by kind of work (bare hands included) and grade, best carried tool, wear and breaking |
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown trees only), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
@@ -187,6 +187,19 @@ after `transform_hours` (fresh grass dries into dry grass in 72 hours).
 `ItemStack.progress` counts the hours spent so far; merging stacks averages
 it by count, like hit points. A stack that transforms keeps its hit points
 percentage, and its quality when the new type has one.
+
+Food **rots** while it lies on a tile (`ItemDef.rot_days`: how long a
+pristine item lasts in the open at 15 °C; a type never both rots and
+transforms). For those types `ItemStack.progress` holds the rot toward the
+next hit point lost, in 1/`ITEM_ROT_STEP` of one (averaged on merges like
+the drying hours); the stack is gone when its hit points run out, so a
+poorly gathered (damaged) stack spoils sooner. The speed comes from the
+tile: `item_rot_rate()` doubles every 10 °C above 15 °C (at most ×4),
+halves every 10 °C below, stops at or below 0 °C (frozen), ×0.75 under a
+built or natural roof. `items_advance()` asks it through a callback
+(`ItemRotRateFn`), so that `item` does not depend on the temperature layer;
+the game passes `game_item_rot_rate()`, which the tile inspector also uses
+for its estimate. Items in hands or in a workstation's input do not rot.
 
 Every item has a **quality grade** (`ItemQuality`: crude, rough, standard,
 fine, superb) and **hit points** (`hit_points`, up to `ItemDef.max_hit_points`).

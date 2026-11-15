@@ -4,6 +4,7 @@
 #include "core/map.h"
 #include "core/util.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -21,7 +22,8 @@
  *   shoots (~60 kcal for garlic and nettles, ~50 for plantain);
  * - wild carrots: a bunch of thin roots, about 250 g (~100 kcal);
  * - cattail rhizomes: about 250 g of starchy rootstock (~250 kcal, half of it
- *   digested raw);
+ *   digested raw); roasted in the embers, most of it (~350 kcal);
+ * - roasted carrots: a bunch of wild carrots roasted, softer (~130 kcal);
  * - cobble: a rounded stone that fits the hand, about 1 kg, picked up from
  *   the ground; tough, the knapper's hammer (its grade is its toughness);
  * - flint: a nodule of about 1 kg, the stone that is knapped (its grade is how
@@ -31,7 +33,9 @@
  * - grass: an armful, 2.5 kg cut fresh, 1 kg once dry (about 12 l either way).
  * Stone blocks never wear out; logs vary with the woodcutter (knots, cracks)
  * and wild food with the gatherer (ripeness, bruises). Fresh grass left on the
- * ground dries in three days.
+ * ground dries in three days. Food lying in the open at 15 °C keeps (rot_days):
+ * greens and mushrooms 2 days, blackberries 3, roasted roots 4 (moist and
+ * soft), cattail rhizomes 15, wild carrots 20, hazelnuts in their shells 90.
  * Tools and weapons (docs/KNOWLEDGE.md §6, §8; a plain cobble serves as
  * the knapper's hammer): a chopper (1 kg), a sharp flake (30 g, razor sharp
  * but soon worn out), a hand axe (600 g); a throwing spear (0.8 kg, a long
@@ -53,7 +57,8 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_STONE_BLOCK] = {DEF("stone_block", N_("item.stone_block"), ITEM_CATEGORY_RESOURCES,
                               20.0f, 20.0f, 0.0f, 150, false, false)},
     [ITEM_BLACKBERRIES] = {DEF("blackberries", N_("item.blackberries"), ITEM_CATEGORY_FOOD, 0.3f,
-                               1.0f, 0.05f, 10, true, true)},
+                               1.0f, 0.05f, 10, true, true),
+                           .rot_days = 3.0f},
     /* Damageable: a cobble used as a hammer wears out. */
     [ITEM_COBBLE] = {DEF("cobble", N_("item.cobble"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f,
                          200, true, true)},
@@ -87,24 +92,37 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                                            ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 105, true,
                                            true)},
     [ITEM_HAZELNUTS] = {DEF("hazelnuts", N_("item.hazelnuts"), ITEM_CATEGORY_FOOD, 0.1f, 0.4f,
-                            0.075f, 100, true, true)},
+                            0.075f, 100, true, true),
+                        .rot_days = 90.0f},
     [ITEM_MUSHROOMS] = {DEF("mushrooms", N_("item.mushrooms"), ITEM_CATEGORY_FOOD, 0.1f, 0.5f,
-                            0.01f, 5, true, true)},
+                            0.01f, 5, true, true),
+                        .rot_days = 2.0f},
     [ITEM_WILD_GARLIC] = {DEF("wild_garlic", N_("item.wild_garlic"), ITEM_CATEGORY_FOOD, 0.2f,
-                              1.5f, 0.016f, 5, true, true)},
+                              1.5f, 0.016f, 5, true, true),
+                          .rot_days = 2.0f},
     [ITEM_NETTLES] = {DEF("nettles", N_("item.nettles"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f, 0.016f, 5,
-                          true, true)},
+                          true, true),
+                      .rot_days = 2.0f},
     [ITEM_PLANTAIN] = {DEF("plantain", N_("item.plantain"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f,
-                           0.013f, 5, true, true)},
+                           0.013f, 5, true, true),
+                       .rot_days = 2.0f},
     [ITEM_WILD_CARROTS] = {DEF("wild_carrots", N_("item.wild_carrots"), ITEM_CATEGORY_FOOD, 0.25f,
-                               1.0f, 0.027f, 30, true, true)},
+                               1.0f, 0.027f, 30, true, true),
+                           .rot_days = 20.0f},
     [ITEM_CATTAIL_RHIZOMES] = {DEF("cattail_rhizomes", N_("item.cattail_rhizomes"),
-                                   ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.05f, 30, true, true)},
+                                   ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.05f, 30, true, true),
+                               .rot_days = 15.0f},
     [ITEM_DIGGING_STICK] = {DEF("digging_stick", N_("item.digging_stick"), ITEM_CATEGORY_TOOLS,
                                 1.0f, 6.0f, 0.0f, 40, true, true)},
     [ITEM_DIGGING_STICK_HARDENED] = {DEF("digging_stick_hardened",
                                          N_("item.digging_stick_hardened"), ITEM_CATEGORY_TOOLS,
                                          1.0f, 6.0f, 0.0f, 60, true, true)},
+    [ITEM_ROASTED_RHIZOMES] = {DEF("roasted_rhizomes", N_("item.roasted_rhizomes"),
+                                   ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.07f, 15, true, true),
+                               .rot_days = 4.0f},
+    [ITEM_ROASTED_CARROTS] = {DEF("roasted_carrots", N_("item.roasted_carrots"),
+                                  ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.035f, 15, true, true),
+                              .rot_days = 4.0f},
 };
 
 #undef DEF
@@ -164,6 +182,37 @@ bool item_is_food(ItemType type)
     return (unsigned)type < ITEM_TYPE_COUNT && ITEM_DEFS[type].nutrition > 0.0f;
 }
 
+bool item_rots(ItemType type)
+{
+    return (unsigned)type < ITEM_TYPE_COUNT && ITEM_DEFS[type].rot_days > 0.0f;
+}
+
+float item_rot_rate(float celsius, bool sheltered)
+{
+    if (celsius <= ITEM_ROT_FROZEN_CELSIUS) {
+        return 0.0f;
+    }
+    float rate = exp2f((celsius - ITEM_ROT_REFERENCE_CELSIUS) / ITEM_ROT_DOUBLING_CELSIUS);
+    if (rate > ITEM_ROT_RATE_MAX) {
+        rate = ITEM_ROT_RATE_MAX;
+    }
+    return sheltered ? rate * ITEM_ROT_SHELTERED : rate;
+}
+
+/* Rot units an item of a rotting type loses per hour at `rate`. */
+static float rot_units_per_hour(const ItemDef *def, float rate)
+{
+    return rate * (float)ITEM_ROT_STEP * (float)def->max_hit_points / (def->rot_days * 24.0f);
+}
+
+float item_stack_rot_hours(ItemStack stack, float rate)
+{
+    if (stack.type == ITEM_NONE || !item_rots((ItemType)stack.type) || rate <= 0.0f) {
+        return -1.0f;
+    }
+    float left = (float)stack.hit_points * (float)ITEM_ROT_STEP - (float)stack.progress;
+    return left / rot_units_per_hour(&ITEM_DEFS[stack.type], rate);
+}
 
 int item_stack_limit(ItemType type)
 {
@@ -204,10 +253,14 @@ ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points)
     };
 }
 
-/* Transformation progress made valid for a type: 0 when it never transforms. */
+/* Transformation or rot progress made valid for a type: 0 when it neither
+ * transforms nor rots. */
 static uint16_t valid_progress(ItemType type, int progress)
 {
     const ItemDef *def = &ITEM_DEFS[type];
+    if (def->rot_days > 0.0f) {
+        return (uint16_t)clampi(progress, 0, ITEM_ROT_STEP - 1);
+    }
     if (def->transforms_into == ITEM_NONE) {
         return 0;
     }
@@ -420,7 +473,27 @@ static void transform(Items *items, ItemStack *stack)
     items->additions++; /* Something new to store: haulers look again. */
 }
 
-int items_advance(Items *items, size_t begin, size_t end, int hours)
+/* Rots a stack for `hours` at `rate`; returns true when it rotted away. */
+static bool rot(Items *items, ItemStack *stack, int hours, float rate)
+{
+    if (rate <= 0.0f) {
+        return false;
+    }
+    float units = rot_units_per_hour(&ITEM_DEFS[stack->type], rate) * (float)hours;
+    long total = (long)stack->progress + lroundf(units);
+    long lost = total / ITEM_ROT_STEP;
+    if (lost >= stack->hit_points) {
+        items->totals[stack->type] -= stack->count;
+        *stack = (ItemStack){0};
+        return true;
+    }
+    stack->hit_points = (uint16_t)(stack->hit_points - lost);
+    stack->progress = (uint16_t)(total % ITEM_ROT_STEP);
+    return false;
+}
+
+int items_advance(Items *items, size_t begin, size_t end, int hours, ItemRotRateFn rot_rate,
+                  const void *context)
 {
     size_t count = (size_t)items->width * (size_t)items->height;
     if (end > count) {
@@ -432,7 +505,14 @@ int items_advance(Items *items, size_t begin, size_t end, int hours)
     int transformed = 0;
     for (size_t i = begin; i < end; i++) {
         ItemStack *stack = &items->stacks[i];
-        if (stack->type == ITEM_NONE || ITEM_DEFS[stack->type].transforms_into == ITEM_NONE) {
+        if (stack->type == ITEM_NONE) {
+            continue;
+        }
+        if (ITEM_DEFS[stack->type].rot_days > 0.0f) {
+            transformed += rot(items, stack, hours, rot_rate != NULL ? rot_rate(context, i) : 1.0f);
+            continue;
+        }
+        if (ITEM_DEFS[stack->type].transforms_into == ITEM_NONE) {
             continue;
         }
         int progress = (int)stack->progress + hours;

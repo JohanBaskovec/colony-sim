@@ -70,6 +70,15 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                      OPEN_HEARTH, {ITEM_DIGGING_STICK, ITEM_NONE}, 1,
                                      ITEM_QUALITY_CRUDE, {0, 0}, 750.0f, KNOWLEDGE_FIRE, 55.0f,
                                      ITEM_DIGGING_STICK_HARDENED, 0, TOOL_USE_NONE},
+    /* Roots roasted in the embers: more of their starch is digested. */
+    [RECIPE_ROAST_RHIZOMES] = {"roast_rhizomes", N_("recipe.roast_rhizomes"), OPEN_HEARTH,
+                               {ITEM_CATTAIL_RHIZOMES, ITEM_NONE}, 4, ITEM_QUALITY_CRUDE,
+                               {0, 0}, 250.0f, KNOWLEDGE_FIRE, 50.0f, ITEM_ROASTED_RHIZOMES, 0,
+                               TOOL_USE_NONE},
+    [RECIPE_ROAST_CARROTS] = {"roast_carrots", N_("recipe.roast_carrots"), OPEN_HEARTH,
+                              {ITEM_WILD_CARROTS, ITEM_NONE}, 4, ITEM_QUALITY_CRUDE, {0, 0},
+                              250.0f, KNOWLEDGE_FIRE, 50.0f, ITEM_ROASTED_CARROTS, 0,
+                              TOOL_USE_NONE},
 };
 
 #undef KNAPPING_SPOT
@@ -190,6 +199,16 @@ int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
                                  item_hit_points_at_percent(
                                      def->product, item_stack_hit_points_percent(input)));
         return 1;
+    case RECIPE_ROAST_RHIZOMES:
+    case RECIPE_ROAST_CARROTS: {
+        /* One roasted root per raw one, no fresher than they were. */
+        out[0] = product(def->product, def->input_count, level, rng, cap);
+        int percent = item_stack_hit_points_percent(input);
+        if (out[0].count > 0 && item_stack_hit_points_percent(out[0]) > percent) {
+            out[0].hit_points = (uint16_t)item_hit_points_at_percent(def->product, percent);
+        }
+        return 1;
+    }
     default: out[0] = product(def->product, 1, level, rng, cap); return 1;
     }
 }

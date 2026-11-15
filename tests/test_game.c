@@ -363,6 +363,50 @@ static void test_fresh_grass_dries_on_the_ground(void)
     game_shutdown(&game);
 }
 
+static void test_food_rots_on_the_ground(void)
+{
+    Game game;
+    REQUIRE(init_small_game(&game, 8));
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(&game); slot++) {
+        game_remove_colonist(&game, game_colonist_id_at(&game, slot));
+    }
+    /* Two passable tiles side by side, in the open. */
+    int x = -1, y = -1;
+    for (int ty = 1; ty < game.map.height && x < 0; ty++) {
+        for (int tx = 0; tx + 1 < game.map.width && x < 0; tx++) {
+            if (map_is_passable(&game.map, tx, ty) && map_is_passable(&game.map, tx + 1, ty) &&
+                !map_natural_roof(&game.map, tx, ty) && !map_natural_roof(&game.map, tx + 1, ty)) {
+                x = tx;
+                y = ty;
+            }
+        }
+    }
+    REQUIRE(x >= 0);
+    CHECK_NEAR(game_item_rot_rate(&game, -1, y), 0.0f, 1e-6f);
+    float rate = game_item_rot_rate(&game, x, y);
+    CHECK_NEAR(rate, item_rot_rate(temperature_at(&game.temperatures, x, y), false), 1e-6f);
+    CHECK(rate > 0.0f); /* The end of summer. */
+
+    REQUIRE(items_add(&game.items, x, y, item_stack_pristine(ITEM_MUSHROOMS, 3)) == 3);
+    REQUIRE(items_add(&game.items, x + 1, y, item_stack_pristine(ITEM_HAZELNUTS, 3)) == 3);
+    float hours = item_stack_rot_hours(items_get(&game.items, x, y), rate);
+    for (int i = 0; i < (int)(hours * 0.5f) * TICKS_PER_HOUR; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(items_get(&game.items, x, y).type, ITEM_MUSHROOMS);
+    CHECK(items_get(&game.items, x, y).hit_points < item_def(ITEM_MUSHROOMS)->max_hit_points);
+    for (int i = 0; i < 3 * 24 * TICKS_PER_HOUR; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(items_get(&game.items, x, y).type, ITEM_NONE);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_MUSHROOMS], 0);
+    /* Nuts keep. */
+    ItemStack nuts = items_get(&game.items, x + 1, y);
+    CHECK_EQ_INT(nuts.type, ITEM_HAZELNUTS);
+    CHECK(item_stack_hit_points_percent(nuts) >= 90);
+    game_shutdown(&game);
+}
+
 static void test_plant_stocks_grow_back(void)
 {
     Game game;
@@ -451,6 +495,7 @@ int main(void)
     RUN_TEST(test_hash_changes_as_simulation_runs);
     RUN_TEST(test_hash_covers_knowledge_and_carried_condition);
     RUN_TEST(test_fresh_grass_dries_on_the_ground);
+    RUN_TEST(test_food_rots_on_the_ground);
     RUN_TEST(test_plant_stocks_grow_back);
     RUN_TEST(test_zones_of_different_kinds_never_overlap);
     return test_summary();

@@ -10,6 +10,10 @@
  * are always perfect: stone blocks are always of the best grade and cannot be
  * damaged. Only items of the same type and grade stack together; a stack
  * keeps the count-weighted average hit points of its items.
+ *
+ * Food rots while it lies on a tile: it loses hit points, faster when warm,
+ * not at all when frozen, a little slower under a roof, and is gone when
+ * they run out (see item_rot_rate()). Items in hands do not rot.
  */
 #ifndef COLONY_CORE_ITEM_H
 #define COLONY_CORE_ITEM_H
@@ -47,6 +51,8 @@ typedef enum ItemType {
     ITEM_CATTAIL_RHIZOMES,
     ITEM_DIGGING_STICK,
     ITEM_DIGGING_STICK_HARDENED,
+    ITEM_ROASTED_RHIZOMES,
+    ITEM_ROASTED_CARROTS,
     ITEM_TYPE_COUNT
 } ItemType;
 
@@ -99,7 +105,24 @@ typedef struct ItemDef {
      * `transform_hours` (fresh grass dries); ITEM_NONE: never. */
     ItemType transforms_into;
     int transform_hours;
+    /* Days a pristine item lasts lying in the open at
+     * ITEM_ROT_REFERENCE_CELSIUS before it has rotted away; 0: never rots.
+     * A type never both rots and transforms. */
+    float rot_days;
 } ItemDef;
+
+/* Rot runs at ×1 at this temperature in the open, twice as fast every
+ * ITEM_ROT_DOUBLING_CELSIUS warmer (at most ×ITEM_ROT_RATE_MAX), half as
+ * fast every as many degrees cooler, and stops at or below
+ * ITEM_ROT_FROZEN_CELSIUS; under a roof (built or natural) it runs at
+ * ×ITEM_ROT_SHELTERED, out of sun and rain (tuning). */
+#define ITEM_ROT_REFERENCE_CELSIUS 15.0f
+#define ITEM_ROT_DOUBLING_CELSIUS 10.0f
+#define ITEM_ROT_FROZEN_CELSIUS 0.0f
+#define ITEM_ROT_RATE_MAX 4.0f
+#define ITEM_ROT_SHELTERED 0.75f
+/* Rot units per hit point (see ItemStack.progress). */
+#define ITEM_ROT_STEP 1000
 
 /* Items of one type: on a tile, in a settler's hands, or about to be added. */
 typedef struct ItemStack {
@@ -107,8 +130,9 @@ typedef struct ItemStack {
     uint8_t quality; /* ItemQuality, the same for every item of the stack. */
     uint16_t count;
     uint16_t hit_points; /* Per item, 1..max_hit_points, average of the items. */
-    /* Hours spent lying on a tile toward the type's transformation (average
-     * of the items); 0 for types that do not transform. */
+    /* Types that transform: hours spent lying on a tile toward the
+     * transformation. Types that rot: rot toward the next hit point lost, in
+     * 1/ITEM_ROT_STEP of one. Average of the items; 0 for other types. */
     uint16_t progress;
 } ItemStack;
 
@@ -138,6 +162,17 @@ ItemTypeMask item_types_all(void);
 ItemTypeMask item_types_in_category(ItemCategory category);
 
 bool item_is_food(ItemType type);
+
+/* Whether items of a type rot (ItemDef.rot_days > 0). */
+bool item_rots(ItemType type);
+
+/* Speed of rot (×1 at ITEM_ROT_REFERENCE_CELSIUS in the open) at a
+ * temperature, under a roof or not; 0 when frozen. */
+float item_rot_rate(float celsius, bool sheltered);
+
+/* Hours until a stack rots away at `rate` (item_rot_rate()); a negative
+ * value when it never does (a type that does not rot, a rate of 0). */
+float item_stack_rot_hours(ItemStack stack, float rate);
 
 
 /* Maximum number of items of a type in one stack (one tile); 0 for ITEM_NONE. */
@@ -196,14 +231,21 @@ int items_remove(Items *items, int x, int y, int count);
  */
 int items_drop(Items *items, const struct Map *map, int x, int y, ItemStack batch);
 
+/* Speed of rot on a tile (item_rot_rate()), asked of the caller of
+ * items_advance(). */
+typedef float (*ItemRotRateFn)(const void *context, size_t tile);
+
 /*
  * Lets `hours` pass for the stacks of tiles begin..end-1 (tile indices): stacks
  * of types that transform progress, and those that reach their type's
  * transform_hours turn into the new type (same count, same hit points in
- * percent, quality kept when both types have one). Returns the number of
- * stacks that transformed.
+ * percent, quality kept when both types have one); stacks of types that rot
+ * lose hit points at the rate `rot_rate` gives for their tile (×1 when NULL)
+ * and are gone when none are left. Returns the number of stacks that
+ * transformed or rotted away.
  */
-int items_advance(Items *items, size_t begin, size_t end, int hours);
+int items_advance(Items *items, size_t begin, size_t end, int hours, ItemRotRateFn rot_rate,
+                  const void *context);
 
 uint64_t items_hash(const Items *items, uint64_t hash);
 

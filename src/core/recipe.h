@@ -11,8 +11,9 @@
  * and a cobble knapped instead of flint counts as crude. Some recipes can
  * fail (shaping a hand axe). Recipes made at a hearth need it burning
  * (recipe_needs_fire()); fire hardening keeps the grade and condition of the
- * spear or digging stick hardened.
- * Design: docs/KNOWLEDGE.md §2.2, §2.5, §6.2, §7.2, §8.2.
+ * spear or digging stick hardened; roasting gives as many roasted roots as
+ * it takes raw ones, no fresher than they were.
+ * Design: docs/KNOWLEDGE.md §2.2, §2.5, §5.2, §6.2, §7.2, §8.2.
  */
 #ifndef COLONY_CORE_RECIPE_H
 #define COLONY_CORE_RECIPE_H
@@ -34,6 +35,8 @@ typedef enum RecipeType {
     RECIPE_HARDEN_THRUSTING_SPEAR,
     RECIPE_DIGGING_STICK,
     RECIPE_HARDEN_DIGGING_STICK,
+    RECIPE_ROAST_RHIZOMES,
+    RECIPE_ROAST_CARROTS,
     RECIPE_COUNT
 } RecipeType;
 

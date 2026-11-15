@@ -189,6 +189,10 @@ int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float
 /* Whether a colonist currently stands on the tile. */
 bool game_tile_has_colonist(const Game *game, int x, int y);
 
+/* Speed of rot of food lying on a tile (item_rot_rate() at the tile's
+ * temperature, under its roof if any); 0 out of bounds. */
+float game_item_rot_rate(const Game *game, int x, int y);
+
 /* ---- Knowledge ----------------------------------------------------------- */
 
 /* Whether some living colonist has at least KNOWLEDGE_DISCOVERED_LEVEL in a

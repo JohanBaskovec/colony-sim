@@ -348,6 +348,136 @@ static void test_drop_keeps_condition(void)
     map_free(&map);
 }
 
+static void test_rot_definitions(void)
+{
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        const ItemDef *def = item_def((ItemType)type);
+        if (item_rots((ItemType)type)) {
+            CHECK(item_is_food((ItemType)type));
+            CHECK(def->damageable);
+            CHECK_EQ_INT(def->transforms_into, ITEM_NONE);
+        }
+    }
+    /* Every food rots; nuts and roots keep longer than fruit, greens and
+     * mushrooms. */
+    CHECK(item_rots(ITEM_MUSHROOMS) && item_rots(ITEM_ROASTED_RHIZOMES));
+    CHECK(!item_rots(ITEM_WOOD) && !item_rots(ITEM_NONE) && !item_rots(ITEM_TYPE_COUNT));
+    CHECK(item_def(ITEM_HAZELNUTS)->rot_days > item_def(ITEM_CATTAIL_RHIZOMES)->rot_days);
+    CHECK(item_def(ITEM_CATTAIL_RHIZOMES)->rot_days > item_def(ITEM_BLACKBERRIES)->rot_days);
+    CHECK(item_def(ITEM_BLACKBERRIES)->rot_days > item_def(ITEM_NETTLES)->rot_days);
+    /* Roasting gives more food. */
+    CHECK(item_def(ITEM_ROASTED_RHIZOMES)->nutrition >
+          item_def(ITEM_CATTAIL_RHIZOMES)->nutrition);
+    CHECK(item_def(ITEM_ROASTED_CARROTS)->nutrition > item_def(ITEM_WILD_CARROTS)->nutrition);
+}
+
+static void test_rot_rate(void)
+{
+    CHECK_NEAR(item_rot_rate(ITEM_ROT_REFERENCE_CELSIUS, false), 1.0f, 1e-5f);
+    CHECK_NEAR(item_rot_rate(ITEM_ROT_REFERENCE_CELSIUS + ITEM_ROT_DOUBLING_CELSIUS, false), 2.0f,
+               1e-5f);
+    CHECK_NEAR(item_rot_rate(ITEM_ROT_REFERENCE_CELSIUS - ITEM_ROT_DOUBLING_CELSIUS, false), 0.5f,
+               1e-5f);
+    CHECK_NEAR(item_rot_rate(ITEM_ROT_REFERENCE_CELSIUS, true), ITEM_ROT_SHELTERED, 1e-5f);
+    CHECK_NEAR(item_rot_rate(80.0f, false), ITEM_ROT_RATE_MAX, 1e-5f);
+    /* Frozen. */
+    CHECK_NEAR(item_rot_rate(ITEM_ROT_FROZEN_CELSIUS, false), 0.0f, 1e-6f);
+    CHECK_NEAR(item_rot_rate(-10.0f, true), 0.0f, 1e-6f);
+    CHECK(item_rot_rate(0.5f, false) > 0.0f);
+}
+
+static void test_rot_hours(void)
+{
+    float days = item_def(ITEM_MUSHROOMS)->rot_days;
+    ItemStack fresh = item_stack_pristine(ITEM_MUSHROOMS, 4);
+    CHECK_NEAR(item_stack_rot_hours(fresh, 1.0f), days * 24.0f, 0.01f);
+    CHECK_NEAR(item_stack_rot_hours(fresh, 2.0f), days * 12.0f, 0.01f);
+    ItemStack bruised = item_stack_make(ITEM_MUSHROOMS, 4, ITEM_QUALITY_BEST,
+                                        item_def(ITEM_MUSHROOMS)->max_hit_points / 2);
+    CHECK(item_stack_rot_hours(bruised, 1.0f) < item_stack_rot_hours(fresh, 1.0f));
+    CHECK(item_stack_rot_hours(fresh, 0.0f) < 0.0f);
+    CHECK(item_stack_rot_hours(item_stack_pristine(ITEM_WOOD, 1), 1.0f) < 0.0f);
+    CHECK(item_stack_rot_hours((ItemStack){0}, 1.0f) < 0.0f);
+}
+
+/* Rate for every tile of a test: a float behind the context pointer. */
+static float fixed_rate(const void *context, size_t tile)
+{
+    (void)tile;
+    return *(const float *)context;
+}
+
+static void test_food_rots_away(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4));
+    REQUIRE(items_add(&items, 1, 1, item_stack_pristine(ITEM_MUSHROOMS, 5)) == 5);
+    REQUIRE(items_add(&items, 2, 1, item_stack_pristine(ITEM_HAZELNUTS, 5)) == 5);
+    REQUIRE(items_add(&items, 3, 1, item_stack_pristine(ITEM_WOOD, 5)) == 5);
+    int hours = (int)(item_def(ITEM_MUSHROOMS)->rot_days * 24.0f);
+    int max = item_def(ITEM_MUSHROOMS)->max_hit_points;
+    size_t tiles = 16;
+
+    /* Half way: half the hit points are gone, the rest kept as progress. */
+    for (int hour = 0; hour < hours / 2; hour++) {
+        CHECK_EQ_INT(items_advance(&items, 0, tiles, 1, NULL, NULL), 0);
+    }
+    ItemStack half = items_get(&items, 1, 1);
+    CHECK_EQ_INT(half.count, 5);
+    int left = half.hit_points * ITEM_ROT_STEP - half.progress;
+    CHECK(abs(left - max * ITEM_ROT_STEP / 2) <= hours); /* Rounding, at most 1 an hour. */
+    CHECK(items_get(&items, 2, 1).hit_points < item_def(ITEM_HAZELNUTS)->max_hit_points);
+
+    /* Frozen: nothing changes. */
+    float frozen = 0.0f;
+    CHECK_EQ_INT(items_advance(&items, 0, tiles, 24, fixed_rate, &frozen), 0);
+    CHECK_EQ_INT(items_get(&items, 1, 1).hit_points, half.hit_points);
+    CHECK_EQ_INT(items_get(&items, 1, 1).progress, half.progress);
+
+    /* The rest of the way: gone, the totals with them. */
+    int rotted = 0;
+    for (int hour = 0; hour < hours / 2 + 1; hour++) {
+        rotted += items_advance(&items, 0, tiles, 1, NULL, NULL);
+    }
+    CHECK_EQ_INT(rotted, 1);
+    CHECK_EQ_INT(items_get(&items, 1, 1).type, ITEM_NONE);
+    CHECK_EQ_INT((int)items.totals[ITEM_MUSHROOMS], 0);
+    /* Nuts keep, wood does not rot. */
+    CHECK_EQ_INT(items_get(&items, 2, 1).count, 5);
+    CHECK_EQ_INT(items_get(&items, 3, 1).hit_points, item_def(ITEM_WOOD)->max_hit_points);
+
+    /* Twice as fast when warmer. */
+    REQUIRE(items_add(&items, 0, 0, item_stack_pristine(ITEM_NETTLES, 2)) == 2);
+    float warm = 2.0f;
+    int nettle_hours = (int)(item_def(ITEM_NETTLES)->rot_days * 24.0f);
+    for (int hour = 0; hour < nettle_hours / 2 - 1; hour++) {
+        items_advance(&items, 0, 1, 1, fixed_rate, &warm);
+    }
+    CHECK_EQ_INT(items_get(&items, 0, 0).type, ITEM_NETTLES);
+    items_advance(&items, 0, 1, 2, fixed_rate, &warm);
+    CHECK_EQ_INT(items_get(&items, 0, 0).type, ITEM_NONE);
+    items_free(&items);
+}
+
+static void test_rot_progress_merges(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4));
+    ItemStack old = item_stack_make(ITEM_BLACKBERRIES, 2, ITEM_QUALITY_STANDARD, 4);
+    old.progress = 600;
+    REQUIRE(items_add(&items, 1, 1, old) == 2);
+    CHECK_EQ_INT(items_get(&items, 1, 1).progress, 600);
+    ItemStack fresh = item_stack_make(ITEM_BLACKBERRIES, 2, ITEM_QUALITY_STANDARD, 4);
+    REQUIRE(items_add(&items, 1, 1, fresh) == 2);
+    CHECK_EQ_INT(items_get(&items, 1, 1).progress, 300);
+    /* Out of range: clamped below one hit point. */
+    ItemStack odd = item_stack_make(ITEM_HAZELNUTS, 1, ITEM_QUALITY_STANDARD, 50);
+    odd.progress = 5000;
+    REQUIRE(items_add(&items, 2, 2, odd) == 1);
+    CHECK(items_get(&items, 2, 2).progress < ITEM_ROT_STEP);
+    items_free(&items);
+}
+
 static void test_hash(void)
 {
     Items a, b;
@@ -390,6 +520,11 @@ int main(void)
     RUN_TEST(test_drop_skips_other_grades);
     RUN_TEST(test_drop_spreads_to_reachable_tiles);
     RUN_TEST(test_drop_without_room_loses_the_rest);
+    RUN_TEST(test_rot_definitions);
+    RUN_TEST(test_rot_rate);
+    RUN_TEST(test_rot_hours);
+    RUN_TEST(test_food_rots_away);
+    RUN_TEST(test_rot_progress_merges);
     RUN_TEST(test_hash);
     return test_summary();
 }

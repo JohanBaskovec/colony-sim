@@ -1,5 +1,5 @@
 /* Open hearths: fuel, burning, refuelling, lighting by friction or with
- * embers, fire hardening and fireside stories. */
+ * embers, fire hardening, roasting and fireside stories. */
 #include "core/game.h"
 #include "core/hearth.h"
 
@@ -496,6 +496,37 @@ static void test_fire_hardening(void)
     game_shutdown(&game);
 }
 
+static void test_roasting(void)
+{
+    /* One roasted root per raw one, no fresher than they were. */
+    ItemStack raw = item_stack_make(ITEM_CATTAIL_RHIZOMES, 4, ITEM_QUALITY_STANDARD,
+                                    item_hit_points_at_percent(ITEM_CATTAIL_RHIZOMES, 40));
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft(RECIPE_ROAST_RHIZOMES, raw, 90.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_ROASTED_RHIZOMES);
+    CHECK_EQ_INT(out[0].count, 4);
+    CHECK(item_stack_hit_points_percent(out[0]) <= 40);
+    CHECK(recipe_needs_fire(RECIPE_ROAST_RHIZOMES) && recipe_needs_fire(RECIPE_ROAST_CARROTS));
+    CHECK_EQ_INT(recipe_def(RECIPE_ROAST_CARROTS)->product, ITEM_ROASTED_CARROTS);
+
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *cook = spawn_settler(&game, 12, 12, 75.0, WORK_CRAFTING);
+    REQUIRE(cook != NULL);
+    int index = built_hearth(&game, 14, 10, HEARTH_FUEL_CAPACITY);
+    REQUIRE(hearth_light(&game.workstations, index));
+    items_add(&game.items, 16, 12, item_stack_pristine(ITEM_WILD_CARROTS, 8));
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_ROAST_CARROTS);
+    REQUIRE(bill >= 0);
+    workstation_get(&game.workstations, index)->bills[bill].target = 2;
+    run_ticks(&game, 2500, true);
+    int roasted = (int)game.items.totals[ITEM_ROASTED_CARROTS] +
+                  (cook->carried.type == ITEM_ROASTED_CARROTS ? cook->carried.count : 0);
+    CHECK_EQ_INT(roasted, 8);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_WILD_CARROTS], 0);
+    game_shutdown(&game);
+}
+
 /* Counts colonists doing `task`. */
 static int count_task(const Game *game, ColonistTask task)
 {
@@ -597,6 +628,7 @@ int main(void)
     RUN_TEST(test_lighting_with_embers);
     RUN_TEST(test_embers_do_not_go_far);
     RUN_TEST(test_fire_hardening);
+    RUN_TEST(test_roasting);
     RUN_TEST(test_fireside_stories);
     RUN_TEST(test_at_most_eight_listeners);
     return test_summary();

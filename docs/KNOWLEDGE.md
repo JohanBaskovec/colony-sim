@@ -493,6 +493,7 @@ food. Fire must be lit, fed and watched.*
 | `ember_bundle` | Ember bundle  | Tools    | 0.2 | 1    | —     | 100 (burns down) | no | yes |
 | `grilled_meat` | Grilled meat  | Food     | 0.4 | 1    | 1,000 | 12 | yes     | yes        |
 | `roasted_rhizomes` | Roasted rhizomes | Food | 0.25 | 1   | 1,000 | 15 | yes     | yes        |
+| `roasted_carrots` | Roasted wild carrots | Food | 0.25 | 1 | 1,000 | 15 | yes     | yes        |
 
 - **Torch**: stored unlit; lit at a burning fire and carried,
   it **burns 1 hour** with a light radius of 3 tiles (×0.8 to ×1.2 as long by
@@ -500,7 +501,9 @@ food. Fire must be lit, fed and watched.*
 - **Ember bundle**: embers wrapped in dry grass, to carry fire. Never stored:
   made at a burning fire by a fire lighter and carried straight to the hearth
   to light. Goes out after **4 hours**.
-- **Grilled meat**: nutrition 0.19. **Roasted rhizomes**: nutrition 0.07 (step B of §7).
+- **Grilled meat**: nutrition 0.19. **Roasted rhizomes**: nutrition 0.07
+  (0.05 raw); **roasted wild carrots**: 0.035 (0.027 raw). Roasted roots
+  are moist and soft and rot in 4 days (§7.1). *(done: roasting)*
 
 ### 5.2 Recipes and jobs
 
@@ -509,7 +512,8 @@ food. Fire must be lit, fed and watched.*
 | Make torch        | 1 branches  | —     | Crafting spot | 125 (0.05 h) | 50 | 1 torch |
 | Fire-harden       | 1 hardenable item | — | Burning hearth | 750 (0.3 h) | 55 | 1 hardened item |
 | Grill meat        | 4 raw meat  | —     | Burning hearth | 375 (0.15 h) | 50 | 4 grilled meat |
-| Roast rhizomes    | 4 cattail rhizomes | — | Burning hearth | 250 (0.1 h)  | 50 | 4 roasted rhizomes |
+| Roast rhizomes    | 4 cattail rhizomes | — | Burning hearth | 250 (0.1 h)  | Fire 50 | 4 roasted rhizomes, no fresher than the raw ones |
+| Roast wild carrots | 4 wild carrots | — | Burning hearth | 250 (0.1 h)  | Fire 50 | 4 roasted carrots, same |
 | Light by friction | 1 twigs, 1 grass | — | Unlit hearth | 750 (0.3 h) per attempt | 50 | a fire, with probability `30% + 1.4% × (L − 50)` (30% to 100%) |
 | Carry fire        | —           | —     | Burning fire → unlit hearth | 50 | 50 | a fire, always |
 | Open hearth       | (construction, §5.3) | | | 250 | 50 | |
@@ -613,8 +617,8 @@ Wild food follows the seasons of a temperate climate (15 days each): most
 of it comes at the end of summer and in autumn, little in winter, and spring
 brings greens. Greens are low in calories (about 30 kcal per 100 g) but count
 for the variety of meals (moods, later); the staples are hazelnuts, cattail
-rhizomes, blackberries and wild carrots. Nuts and roots keep, the winter
-food once rot exists (step B below).
+rhizomes, blackberries and wild carrots. Nuts and roots keep: they are the
+winter food, as food rots (§7.4).
 
 ### 7.1 Items
 
@@ -631,7 +635,7 @@ food once rot exists (step B below).
 | `wild_carrots`  | Wild carrots (a bunch of roots) | Food | 0.25 | 1 | 1,000 | 30 | yes | yes   | 0.027 (≈ 100 kcal) |
 | `cattail_rhizomes` | Cattail rhizomes | Food | 0.25 | 1    | 1,000 | 30  | yes     | yes        | 0.05 raw (≈ 250 kcal, half digested); roasted: §5 |
 
-- Hit points stand for shelf life once rot exists: mushrooms, greens and
+- Hit points stand for shelf life (rot, §7.4): mushrooms, greens and
   blackberries spoil in days, roots in weeks, nuts keep for months.
 - **Easily mistaken for a poisonous plant**: mushrooms (deadly ones), wild
   garlic (lily of the valley, autumn crocus), wild carrot (hemlock). Only a
@@ -679,11 +683,32 @@ Mushrooms appear from a hash of the seed, the tile and the day, so that they
 draw nothing from the game's random stream (more after rain once weather
 exists).
 
-**Step B** *(next)*: rot (items lose hit points, slower when cool or under a
-roof; nuts and roots keep, greens and mushrooms do not) and roasting at the
-hearth (rhizomes and carrots roasted give more).
+### 7.4 Rot *(done)*
 
-### 7.4 Construction: ground stockpile
+Food lying on a tile rots: it loses hit points and is gone when none are
+left (a stack keeps the average of its items, so fresh food added to an old
+stack spoils with it). A pristine item lasts, in the open at 15 °C:
+
+| Food | Keeps |
+|------|-------|
+| Mushrooms, wild garlic, nettles, plantain | 2 days |
+| Blackberries | 3 days |
+| Roasted rhizomes, roasted carrots | 4 days |
+| Cattail rhizomes | 15 days |
+| Wild carrots | 20 days |
+| Hazelnuts (in their shells) | 90 days |
+
+Rot runs twice as fast every 10 °C warmer (at most ×4) and half as fast
+every 10 °C cooler, stops when frozen (0 °C and below), and runs at ×0.75
+under a roof, out of sun and rain *(tuning)*. Food gathered by a poor
+gatherer (damaged) spoils sooner. So berries picked at the end of summer
+last about two days, roots dug in autumn a few weeks, and anything left out
+in winter keeps while it freezes. Food in a settler's hands does not rot.
+The tile inspector shows how long a stack has left at the tile's
+temperature now. Later: smoking and drying meat, storage pits, rain
+speeding rot, settlers eating the food closest to rotting first.
+
+### 7.5 Construction: ground stockpile
 
 The "storage heap on the bare ground" is the existing stockpile zone. It needs
 no knowledge. Its filter gains the new categories (tools, weapons, animal
@@ -910,6 +935,7 @@ planned).
 | Sleeping on the ground at full rest gain. | ×0.8 without a bed, and 10% slower work for 12 hours after (a mood later). *(done)* | Gives beds a purpose. |
 | Settlers spawn near water. | Also near brambles bearing fruit, hazels and a flint patch; they bring nothing. | The group arrives hungry and empty handed. |
 | The game starts in spring; one berry bush, ripe all year. | Starts at the end of summer; eight wild food plants with their seasons (§7). | Food through the seasons. |
+| Food never spoils. | Food lying on a tile rots, faster when warm, not when frozen (§7.4). *(done)* | Seasons matter: nuts and roots for the winter. |
 
 ---
 
@@ -995,7 +1021,9 @@ Suggested order, each step with its tests:
     careful ones from Gathering 60; the digging stick (and its hardening),
     fetched on the way to dig; the game starts at the end of summer, with
     brambles and hazels near the arrival point.
-    Then: step B (rot, roasting), grilling (with meat), wind, rain.
+11. *(done)* Food through the seasons, step B: rot (§7.4) and roasting
+    rhizomes and wild carrots at the hearth (§5.2).
+    Then: grilling (with meat), wind, rain.
 
 **M5: Vision and exploration**: wildlife, spear hunting, carcasses,
 butchering, cracking bones.
