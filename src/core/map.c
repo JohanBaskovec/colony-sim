@@ -190,7 +190,14 @@ static void log_topology_change(Map *map, int x, int y, bool opened)
 {
     map->topology_revision++;
     map->topology_log[map->topology_revision % MAP_TOPOLOGY_LOG_SIZE] =
-        (MapTopologyChange){(int16_t)x, (int16_t)y, opened};
+        (MapTopologyChange){(int16_t)x, (int16_t)y, opened, false};
+}
+
+static void log_build_change(Map *map, int x, int y)
+{
+    map->build_revision++;
+    map->build_log[map->build_revision % MAP_BUILD_LOG_SIZE] =
+        (MapBuildChange){(int16_t)x, (int16_t)y};
 }
 
 void map_set_terrain(Map *map, int x, int y, Terrain terrain)
@@ -213,10 +220,13 @@ void map_set_rock(Map *map, int x, int y, RockType rock)
     }
     size_t index = map_index(map, x, y);
     bool was_passable = map_move_cost_at(map, index) > 0.0f;
+    bool was_rock = map->rock[index] != ROCK_NONE;
     map->rock[index] = (uint8_t)rock;
     bool is_passable = map_move_cost_at(map, index) > 0.0f;
     if (was_passable != is_passable) {
         log_topology_change(map, x, y, is_passable);
+    } else if (was_rock != (rock != ROCK_NONE)) {
+        log_build_change(map, x, y); /* Rock where a wall stood: rooms, warmth. */
     }
 }
 
@@ -236,7 +246,7 @@ static void set_tile_structure(Map *map, int x, int y, StructureType type, uint8
     map->structure_part[index] = part;
     map->structure_quality[index] = (uint8_t)quality;
     map->structure_hit_points[index] = (uint16_t)hit_points;
-    map->build_revision++;
+    log_build_change(map, x, y);
     if (type != STRUCTURE_NONE) {
         map->plants[index] = (Plant){0}; /* Trampled, cut or dug out by the builders. */
     }
@@ -384,6 +394,7 @@ StructureType map_structure(const Map *map, int x, int y)
 void map_topology_changed(Map *map)
 {
     log_topology_change(map, 0, 0, false);
+    map->topology_log[map->topology_revision % MAP_TOPOLOGY_LOG_SIZE].anywhere = true;
 }
 
 float map_move_cost_at(const Map *map, size_t index)
@@ -430,7 +441,7 @@ void map_set_roof(Map *map, int x, int y, StructureType roof, ItemQuality qualit
         roof != STRUCTURE_NONE
             ? (uint8_t)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST)
             : 0;
-    map->build_revision++;
+    log_build_change(map, x, y);
 }
 
 /* Rock, or a structure that blocks movement: what a roof rests on. */
@@ -457,7 +468,6 @@ bool map_roof_supported(const Map *map, int x, int y)
 
 /* Rock within this many tiles, in at least NATURAL_ROOF_DIRECTIONS of the 8
  * directions, covers a tile (tuning). */
-#define NATURAL_ROOF_REACH 3
 #define NATURAL_ROOF_DIRECTIONS 6
 
 bool map_natural_roof(const Map *map, int x, int y)
@@ -469,7 +479,7 @@ bool map_natural_roof(const Map *map, int x, int y)
     static const int DY[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
     int covered = 0;
     for (int i = 0; i < 8; i++) {
-        for (int step = 1; step <= NATURAL_ROOF_REACH; step++) {
+        for (int step = 1; step <= MAP_NATURAL_ROOF_REACH; step++) {
             int nx = x + DX[i] * step, ny = y + DY[i] * step;
             if (map_in_bounds(map, nx, ny) && map->rock[map_index(map, nx, ny)] != ROCK_NONE) {
                 covered++;

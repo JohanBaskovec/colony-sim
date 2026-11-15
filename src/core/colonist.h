@@ -55,6 +55,7 @@
 #include "core/reservation.h"
 #include "core/rng.h"
 #include "core/stockpile.h"
+#include "core/temperature.h"
 #include "core/tool.h"
 #include "core/work.h"
 #include "core/workstation.h"
@@ -112,6 +113,12 @@
 /* After waking up from a night on the ground, work is slower for this long. */
 #define COLONIST_GROUND_SLEEP_PENALTY_TICKS (12 * TICKS_PER_HOUR)
 #define COLONIST_GROUND_SLEEP_WORK_FACTOR 0.9f
+/* Sleeping where it is colder than this rests less: the rest gain loses
+ * COLONIST_COLD_SLEEP_LOSS_PER_DEGREE of itself per degree below, down to
+ * COLONIST_COLD_SLEEP_FACTOR_MIN (tuning). */
+#define COLONIST_COLD_SLEEP_BELOW 10.0f
+#define COLONIST_COLD_SLEEP_LOSS_PER_DEGREE 0.025f
+#define COLONIST_COLD_SLEEP_FACTOR_MIN 0.5f
 /* Settlers walk at most this far to their bed or a free one. */
 #define COLONIST_BED_SEARCH_MAX_COST 150.0f
 #define NEED_LOW_THRESHOLD 0.3f
@@ -406,6 +413,8 @@ typedef struct ColonistContext {
     /* Knowledges the player wants taught at fireside stories (Game.teach);
      * NULL: none. */
     const bool *teach;
+    /* Temperature per tile (Game.temperatures); NULL: always mild. */
+    const Temperatures *temperatures;
 } ColonistContext;
 
 void colonist_init(Colonist *colonist, const char *name, int age, int x, int y);
@@ -488,6 +497,10 @@ bool colonist_at_work(const Colonist *colonist);
 
 /* Whether the colonist knows enough to carry out this kind of order. */
 bool colonist_can_do(const Colonist *colonist, DesignationType type);
+
+/* Rest gain multiplier of sleeping at a temperature: 1 when mild enough,
+ * less in the cold (COLONIST_COLD_SLEEP_BELOW). */
+float colonist_sleep_temperature_factor(float celsius);
 
 /* Whether the colonist knows enough to do this gathering job. */
 bool colonist_can_gather(const Colonist *colonist, GatherJob job);

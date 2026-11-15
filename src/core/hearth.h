@@ -35,6 +35,9 @@
 #define HEARTH_FRICTION_CHANCE_PER_LEVEL 0.014f
 /* Level in fire needed to light a hearth. */
 #define HEARTH_LIGHT_MIN_LEVEL 50.0f
+/* Degrees an hour a burning hearth adds to its tile, which spread around it
+ * (core/temperature.h) (tuning). */
+#define HEARTH_HEAT_PER_HOUR 200.0f
 /* Tiles lit around a burning hearth at night (fading to nothing there). */
 #define HEARTH_LIGHT_RADIUS 6.0f
 

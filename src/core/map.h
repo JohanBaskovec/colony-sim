@@ -107,14 +107,29 @@ typedef struct Plant {
 /* How many recent topology changes the map remembers (see Map.topology_log). */
 #define MAP_TOPOLOGY_LOG_SIZE 16
 
+/* How many recent structure and roof changes the map remembers (see
+ * Map.build_log). */
+#define MAP_BUILD_LOG_SIZE 16
+
+/* A natural roof needs rock within this many tiles (see map_natural_roof()). */
+#define MAP_NATURAL_ROOF_REACH 3
+
 /* One change of where one can walk. */
 typedef struct MapTopologyChange {
     int16_t x, y;
     /* True when all that happened is that this tile became passable (a rock
      * wall was dug out): the common change, which caches can apply without
-     * starting over. False: anything else, anywhere. */
+     * starting over. False: anything else, on this tile or (`anywhere`)
+     * anywhere. */
     bool opened;
+    bool anywhere; /* The layers were written directly (map_topology_changed()). */
 } MapTopologyChange;
+
+/* One change of a structure or a roof, or of rock where one could not walk
+ * anyway (a tile; see Map.build_log). */
+typedef struct MapBuildChange {
+    int16_t x, y;
+} MapBuildChange;
 
 typedef struct Map {
     int width;
@@ -145,6 +160,8 @@ typedef struct Map {
     /* Incremented whenever a structure or a roof changes. Data derived from
      * it (core/room.h) compares it. Not part of map_hash(). */
     uint32_t build_revision;
+    /* The change that led to build revision r is at index r % MAP_BUILD_LOG_SIZE. */
+    MapBuildChange build_log[MAP_BUILD_LOG_SIZE];
     /* Incremented whenever where one can walk, or where water is, changes
      * (plants never block). Data derived from it (core/region.h) compares it
      * to know when it is out of date. Not part of map_hash(). */

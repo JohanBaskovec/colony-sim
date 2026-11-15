@@ -867,11 +867,28 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
     }
 }
 
-/* Rest gain multiplier where the colonist lies. */
-static float rest_factor(const Colonist *colonist, const Map *map)
+float colonist_sleep_temperature_factor(float celsius)
 {
-    StructureType bed = map_structure(map, colonist->x, colonist->y);
-    return structure_is_bed(bed) ? structure_def(bed)->rest_factor : COLONIST_GROUND_REST_FACTOR;
+    float below = COLONIST_COLD_SLEEP_BELOW - celsius;
+    if (below <= 0.0f) {
+        return 1.0f;
+    }
+    return fmaxf(COLONIST_COLD_SLEEP_FACTOR_MIN,
+                 1.0f - COLONIST_COLD_SLEEP_LOSS_PER_DEGREE * below);
+}
+
+/* Rest gain multiplier where the colonist lies: its bed (or the ground),
+ * and how cold it is there. */
+static float rest_factor(const Colonist *colonist, const ColonistContext *context)
+{
+    StructureType bed = map_structure(context->map, colonist->x, colonist->y);
+    float factor =
+        structure_is_bed(bed) ? structure_def(bed)->rest_factor : COLONIST_GROUND_REST_FACTOR;
+    if (context->temperatures != NULL) {
+        factor *= colonist_sleep_temperature_factor(
+            temperature_at(context->temperatures, colonist->x, colonist->y));
+    }
+    return factor;
 }
 
 /* ---- Work ------------------------------------------------------------------ */
@@ -3348,7 +3365,7 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
         colonist->chat_ticks = colonist_can_chat(colonist) ? colonist->chat_ticks - 1 : 0;
     }
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist)) {
-        float gain = NEED_REST_GAIN_PER_TICK * rest_factor(colonist, context->map);
+        float gain = NEED_REST_GAIN_PER_TICK * rest_factor(colonist, context);
         *rest = clampf(*rest + gain, 0.0f, 1.0f);
     } else {
         *rest = clampf(*rest - NEED_REST_DECAY_PER_TICK, 0.0f, 1.0f);

@@ -191,6 +191,14 @@ static void add_bed_owner_line(const App *app, Panel *panel, int x, int y)
     }
 }
 
+/* "12.5 °C", with `decimals` decimals. */
+static void temperature_text(char *out, size_t size, float celsius, int decimals)
+{
+    char number[16];
+    tr_decimal(number, sizeof(number), celsius, decimals);
+    TR_FORMAT(out, size, tr("unit.celsius"), number);
+}
+
 static void build_status_panel(App *app, Panel *panel)
 {
     const GameClock *clock = &app->game.clock;
@@ -210,6 +218,16 @@ static void build_status_panel(App *app, Panel *panel)
         char multiplier[8];
         tr_integer(multiplier, sizeof(multiplier), game_speed_multiplier(clock->speed));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.speed"), multiplier);
+    }
+    char outdoor[32];
+    temperature_text(outdoor, sizeof(outdoor), temperature_outdoor(clock->tick), 0);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.outdoor_temperature"), outdoor);
+    if (app->show_temperature) {
+        char cold[32], hot[32];
+        temperature_text(cold, sizeof(cold), -10.0f, 0);
+        temperature_text(hot, sizeof(hot), 30.0f, 0);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.temperature_view"), cold, hot,
+                  app_key_name(APP_KEY_TEMPERATURE));
     }
 }
 
@@ -287,6 +305,9 @@ static void build_tile_panel(App *app, Panel *panel)
     } else if (map_natural_roof(map, x, y)) {
         panel_add_text(panel, tr("hud.tile.natural_roof"));
     }
+    char celsius[32];
+    temperature_text(celsius, sizeof(celsius), temperature_at(&app->game.temperatures, x, y), 1);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature"), celsius);
     const Room *room = rooms_at(game_rooms(&app->game), map, x, y);
     if (room != NULL && !room->closed) {
         panel_add_text(panel, tr("hud.tile.outdoors"));
@@ -610,6 +631,15 @@ static void build_selection_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.colonist.ground_sleep", left),
                   percent, hours);
     }
+    float sleep_celsius = temperature_at(&app->game.temperatures, colonist->x, colonist->y);
+    float sleep_factor = colonist_sleep_temperature_factor(sleep_celsius);
+    if (colonist->task == TASK_SLEEP && sleep_factor < 1.0f) {
+        char celsius[32], factor[16];
+        temperature_text(celsius, sizeof(celsius), sleep_celsius, 0);
+        tr_decimal(factor, sizeof(factor), sleep_factor, 2);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.cold_sleep"), celsius,
+                  factor);
+    }
     TilePos bed;
     if (beds_owned(&app->game.beds, (uint8_t)(app->selected[0].index + 1), &bed)) {
         StructureType type = map_structure(&app->game.map, bed.x, bed.y);
@@ -763,6 +793,8 @@ static void help_window(App *app)
               app_key_name(APP_KEY_BUILD_LIKE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.rotate"),
               app_key_name(APP_KEY_ROTATE));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.temperature"),
+              app_key_name(APP_KEY_TEMPERATURE));
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_HELP, tr("help.title"), UI_PLACE_CENTER, panel_rows,
                      &help, &open);

@@ -114,6 +114,8 @@ season.winter = Hiver
 # Interface
 hud.date = {1}, jour {0}, an {2} · {3}h{4}
 hud.speed = Vitesse : {0}×
+hud.outdoor_temperature = Dehors : {0}
+hud.temperature_view = Vue thermique : bleu {0}, rouge {1} · {2} : masquer
 hud.paused = En pause
 hud.language = Langue : {0}
 hud.help.camera = {0}/Flèches : déplacer · Molette : zoom · Glisser clic milieu/droit : défiler
@@ -122,6 +124,7 @@ hud.help.gathering = {0} : zones de récolte (bois, baies, branches, brindilles
 hud.help.orders = {0} : miner la roche · {1} : annuler des ordres
 hud.help.copy = {0} : construire un autre exemplaire de la sélection (zone, poste, lit, mur, porte)
 hud.help.rotate = {0} : tourner le lit à placer (tête et pied)
+hud.help.temperature = {0} : vue thermique (chaque case, du bleu pour le froid au rouge pour le chaud)
 hud.help.manage = {0} : zones de stockage · {1} : postes de travail · clic sur une zone ou un poste : ses réglages · {2} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 hud.tool.name = Outil : {0}
@@ -159,6 +162,7 @@ hud.tile.room_roofed.other = Pièce : {0} cases, couverte
 hud.tile.room_open.one = Pièce : {0} case, dont {1} sous un toit
 hud.tile.room_open.other = Pièce : {0} cases, dont {1} sous un toit
 hud.tile.outdoors = Dehors
+hud.tile.temperature = Température : {0}
 hud.tile.refresh = Réfection : {0} (faite à {1} %)
 hud.tile.bed_owner = Propriétaire : {0}
 hud.tile.bed_free = Lit libre : le prochain colon qui y dort le prend
@@ -225,6 +229,7 @@ hud.colonist.tools_broken.one = {0} outil usé jusqu’à la casse
 hud.colonist.tools_broken.other = {0} outils usés jusqu’à la casse
 hud.colonist.bed = Lit attitré : {0} ({1})
 hud.colonist.no_bed = Pas de lit attitré
+hud.colonist.cold_sleep = Dort au froid ({0}) : repos ×{1}
 hud.colonist.need = {0} : {1} %
 hud.colonist.need_state = {0} : {1} % ({2})
 hud.colonist.knowledge = Savoirs (niveaux sur 100)
@@ -363,6 +368,7 @@ bill.levels = Artisans de niveau {0} à {1}
 # Unités
 unit.kg = {0} kg
 unit.percent = {0} %
+unit.celsius = {0} °C
 
 # Interface générique
 

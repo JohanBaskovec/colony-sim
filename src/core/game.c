@@ -158,6 +158,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .colonists = game->colonists,
         .colonist_pool = &game->colonist_pool,
         .teach = game->teach,
+        .temperatures = &game->temperatures,
     };
     return context;
 }
@@ -434,6 +435,10 @@ bool game_init(Game *game, const NewGameParams *params)
     reservations_init(&game->reservations);
     game_clock_init(&game->clock);
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
+    if (!temperatures_init(&game->temperatures, &game->map, game->clock.tick)) {
+        game_shutdown(game);
+        return false;
+    }
     spawn_starting_colonists(game, params->colonist_count);
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
     game_update_stock(game);
@@ -488,6 +493,7 @@ void game_shutdown(Game *game)
     pathfinder_free(&game->pathfinder);
     regions_free(&game->regions);
     rooms_free(&game->rooms);
+    temperatures_free(&game->temperatures);
     designations_free(&game->designations);
     dirt_free(&game->dirt);
     gather_zones_free(&game->gather_zones);
@@ -573,6 +579,18 @@ static void fade_knowledge(Game *game)
     }
 }
 
+/* Burning hearths warm their tile, every tick. */
+static void heat_from_hearths(Game *game)
+{
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = &game->workstations.list[index];
+        if (station->used && station->burning) {
+            temperatures_add_heat(&game->temperatures, station->x, station->y,
+                                  HEARTH_HEAT_PER_HOUR / (float)TICKS_PER_HOUR);
+        }
+    }
+}
+
 void game_tick(Game *game)
 {
     game->clock.tick++;
@@ -587,6 +605,8 @@ void game_tick(Game *game)
     }
     update_items(game);
     hearths_burn(&game->workstations);
+    heat_from_hearths(game);
+    temperatures_tick(&game->temperatures, &game->map, game->clock.tick);
     if (game->clock.tick % TICKS_PER_DAY == 0) {
         /* Bedding packs down: worn beds get a refresh site, or fall apart. */
         constructions_wear_day(&game->constructions, &game->map, &game->items);
@@ -635,6 +655,7 @@ uint64_t game_hash(const Game *game)
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
     hash = hash_fnv1a64(hash, game->teach, sizeof(game->teach));
+    hash = temperatures_hash(&game->temperatures, hash);
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
         if (entity_id_is_none(id)) {

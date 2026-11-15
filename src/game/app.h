@@ -51,6 +51,7 @@ typedef enum AppTool {
 #define APP_KEY_BACK SDL_SCANCODE_ESCAPE
 #define APP_KEY_HELP SDL_SCANCODE_F1
 #define APP_KEY_DEBUG SDL_SCANCODE_F3
+#define APP_KEY_TEMPERATURE SDL_SCANCODE_H /* Temperature view on or off. */
 
 /* Types of the zone tools (see app_toggle_tool()). */
 #define APP_ZONE_ADD 0
@@ -129,6 +130,7 @@ typedef struct App {
     /* Work priorities grid (game/work_panel.h) and controls help. */
     bool show_work_panel;
     bool show_help;
+    bool show_temperature; /* The temperature of each tile over the map. */
     /* Build menu (game/menu_bar.h): open, and which category is shown. */
     bool build_menu_open;
     BuildCategory build_category;

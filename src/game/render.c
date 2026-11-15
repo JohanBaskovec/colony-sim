@@ -1158,6 +1158,38 @@ static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box
     batch_flush(renderer);
 }
 
+/* Colors of the temperature view, every 10 degrees from -10 to 30 °C. */
+#define TEMPERATURE_VIEW_COLDEST (-10.0f)
+#define TEMPERATURE_VIEW_STEP 10.0f
+static const SDL_Color TEMPERATURE_COLORS[] = {
+    {40, 60, 200, 255}, {60, 150, 235, 255}, {90, 200, 150, 255}, {240, 210, 70, 255},
+    {225, 60, 40, 255},
+};
+
+static SDL_Color temperature_color(float celsius)
+{
+    const int last = (int)SDL_arraysize(TEMPERATURE_COLORS) - 1;
+    float position = clampf((celsius - TEMPERATURE_VIEW_COLDEST) / TEMPERATURE_VIEW_STEP, 0.0f,
+                            (float)last);
+    int from = SDL_min((int)position, last - 1);
+    return mix(TEMPERATURE_COLORS[from], TEMPERATURE_COLORS[from + 1], position - (float)from);
+}
+
+void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    const Temperatures *temperatures = &game->temperatures;
+    TileRect visible = camera_visible_tiles(camera, temperatures->width, temperatures->height);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            SDL_Color color = temperature_color(temperature_at(temperatures, x, y));
+            color.a = 120;
+            SDL_FRect tile = tile_rect(camera, x, y);
+            batch_quad(renderer, color, &tile);
+        }
+    }
+    batch_flush(renderer);
+}
+
 void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     float darkness = 1.0f - clampf(game_daylight(game->clock.tick), 0.0f, 1.0f);

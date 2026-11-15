@@ -464,6 +464,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case SDL_SCANCODE_KP_3: game_clock_set_speed(&app->game.clock, GAME_SPEED_FASTEST); return;
     case APP_KEY_BACK: step_back(app); return;
     case APP_KEY_HELP: app->show_help = !app->show_help; return;
+    case APP_KEY_TEMPERATURE: app->show_temperature = !app->show_temperature; return;
     case APP_KEY_MINE: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); return;
     case APP_KEY_GATHER: app_toggle_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD); return;
     case APP_KEY_CANCEL: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); return;
@@ -814,6 +815,9 @@ static void render_frame(App *app)
     render_designations(app->renderer, &app->game, &app->camera);
     hud_draw_item_counts(app);
     render_daylight(app->renderer, &app->game, &app->camera);
+    if (app->show_temperature) {
+        render_temperature(app->renderer, &app->game, &app->camera);
+    }
     if (app->hover_valid) {
         render_tile_outline(app->renderer, &app->camera, app->hover_x, app->hover_y,
                             HOVER_COLOR);

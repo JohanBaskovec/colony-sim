@@ -94,8 +94,9 @@ Tick items as they land and add newly discovered tasks.
 ## M4: Survival
 
 - [x] Fire: the open hearth (dug, no material), fuel (branches, twigs, logs by weight, up to 20 kg, 2.5 kg an hour; haulers refuel it below half; "keep it burning" and a fuel filter), lighting (embers carried from a burning fire within 60, else friction with a handful of grass as tinder, 30% to 100% by level), light around it at night (6 tiles), fire hardening of spears (×1.5 hit points, grade and condition kept), fireside stories in the evening (a master tells about a knowledge marked to teach, up to 8 listeners learn up to 60)
-- [ ] Fire, later: heat (with the temperature simulation); a torch (light to work at night); roasting and cooking (with meat and tubers); fire spreading and rain putting fires out; hearths that block the way (they are walked over for now); hardened spears dealing ×1.2 damage (with hunting); the better storyteller taking over at a hearth
-- [ ] Temperature simulation per tile: diffusion, wall insulation, doors, caves
+- [ ] Fire, later: a torch (light to work at night); roasting and cooking (with meat and tubers); fire spreading and rain putting fires out; hearths that block the way (they are walked over for now); hardened spears dealing ×1.2 damage (with hunting); the better storyteller taking over at a hearth
+- [x] Temperature per tile: outdoor air through the seasons and the day (12, 22, 10 and −2 °C in the middle of each season, ±5 °C over the day), heat spreading between tiles (walls and doors slow it down), open sky, roofs and natural roofs (caves stay near 10 °C), burning hearths heating (a closed and roofed hut with a fire stays about 15 °C above the air); sleeping below 10 °C rests less (2.5% per degree, down to half); the temperature in the tile inspector, outdoors under the clock, a temperature view (H)
+- [ ] Temperature, later: warmth felt beside an open fire (it barely warms the air around it); hot weather; clothes and shelter choices when going to sleep (settlers do not look for a warm spot yet); moods, hypothermia and heatstroke (with moods and health); rot by temperature (with spoilage); a roof's insulation by its material
 - [ ] Seasons affect temperature and plant growth; weather
 - [ ] Bladder and bowel needs, hygiene, latrines
 - [ ] Containers (buckets) and roles: water carrier filling buckets near dwellings

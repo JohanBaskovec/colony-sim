@@ -842,7 +842,7 @@ planned).
 - A **natural roof** covers floor tiles surrounded by rock: rock within 3 tiles
   in at least 6 of the 8 directions *(tuning: within 2, the corners of a
   3 × 3 cave would be open)*. Like a
-  roof, plus a stable temperature (M4).
+  roof, plus a stable temperature (done: near 10 °C, `core/temperature.h`).
 - **Clear cave floor** *(later: caves cannot be dug out before mining
   exists)*: removes loose rock and levels the ground; the tile becomes
   "cleared floor" (move cost 1.0 instead of 1.2, nicer room). No pick needed.
@@ -934,8 +934,14 @@ Suggested order, each step with its tests:
      `KNOWLEDGE_STORY_RATE` (1.0, times the teller's level factor) up to
      the teller's level and 60. The first master to come tells, even if a
      better one listens.
-   Then: grilling and roasting (with meat and tubers), heat, wind, rain,
-   rot; tubers, hazel, mushrooms with seasons.
+9. *(done)* Temperature per tile (seasons, day, walls, roofs, caves, hearth
+   heat) and sleeping in the cold. A hearth's heat is a number of degrees an
+   hour on its tile (`HEARTH_HEAT_PER_HOUR`, 200), not the 15 kW of §5.3,
+   tuned so that a closed and roofed hut with a fire stays about 15 °C above
+   the air; an open fire barely warms the air around it, and the warmth felt
+   beside it waits.
+   Then: grilling and roasting (with meat and tubers), wind, rain, rot;
+   tubers, hazel, mushrooms with seasons.
 
 **M5: Vision and exploration**: wildlife, spear hunting, carcasses,
 butchering, cracking bones.

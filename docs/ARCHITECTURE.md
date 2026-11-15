@@ -66,6 +66,7 @@ simulation:
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
 | `room`       | Rooms: areas closed by walls, doors and rock, and whether roofs cover them (a cache) |
+| `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
 | `map`        | Tile layers (terrain, rock, plants with their branch and twig stocks, cobbles and flint in the ground) and static definitions (`TerrainDef`...) |
@@ -597,6 +598,30 @@ or roof change); nothing in the simulation uses rooms yet, so they are only
 rebuilt when asked for (`game_rooms()`, the tile inspector), never during a
 tick.
 
+**Temperature** (`core/temperature.h`, `Game.temperatures`, part of
+`game_hash()`): `temperature_outdoor()` is a function of the tick (seasons
+blended with a cosine between their middles, a daily swing coldest at 5:00
+and warmest at 15:00); weather will add to it. Each tile holds a
+temperature; every tick `temperatures_tick()` updates one band of rows in
+place, a whole pass every `TEMPERATURE_SWEEP_TICKS` (100), explicitly: a
+tile moves toward its four neighbors at the lower conductance of the two
+(air 4/h, door 1.5, wall and rock 0.5), toward the outdoor air at a rate
+set by its cover (open sky 6/h, built roof 0.3, natural roof none) and,
+under a natural roof, toward the ground (10 °C, 0.3/h). Rock stays at the
+ground's temperature. The step is stable while a tile's rates add up to
+less than 25/h. What each tile is made of and covered by, and the rate on
+each edge, are caches: updated around the tiles of the map's change logs
+(`Map.topology_log`, and `Map.build_log` for structures, roofs and rock
+where one could not walk anyway; within `MAP_NATURAL_ROOF_REACH`, since
+rock makes natural roofs around it), rebuilt whole when the logs overflowed
+or the layers were written directly (`MapTopologyChange.anywhere`). Edge
+rates of 0 and a padded layer let tiles on the edges of the map go through
+the same loop. A settler asleep where it is colder than
+`COLONIST_COLD_SLEEP_BELOW` rests less (`colonist_sleep_temperature_factor()`,
+times the bed's or the ground's rest factor); the frontend shows the
+temperature in the inspectors and a temperature view (`render_temperature()`,
+key H).
+
 **Beds**: a colonist going to sleep walks to its own bed (`core/bed.h`),
 else to the nearest free bed, which becomes its own (`RESERVATION_BED`,
 within `COLONIST_BED_SEARCH_MAX_COST`), and sleeps on the ground otherwise.
@@ -746,6 +771,8 @@ searches backed off on that revision look again.
   `KNOWLEDGE_STORY_CAP` (60), as `KNOWLEDGE_SOURCE_STORIES`. Both end at
   22:00 or when the fire goes out. The evening search backs off like the
   apprenticeship one.
+- **Heat**: a burning hearth adds `HEARTH_HEAT_PER_HOUR` degrees to its
+  tile every tick (`temperatures_add_heat()`, see below).
 - **Rendering**: a ring of stones, sticks for the fuel, flames moving with
   real time; at night `render_daylight()` darkens plain rectangles around
   the area lit by burning hearths and a grid of per-corner alpha quads

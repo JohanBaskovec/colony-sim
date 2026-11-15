@@ -23,6 +23,7 @@
 #include "core/room.h"
 #include "core/rng.h"
 #include "core/stockpile.h"
+#include "core/temperature.h"
 #include "core/workstation.h"
 #include "core/worldgen.h"
 
@@ -78,6 +79,7 @@ typedef struct Game {
     /* Rooms and whether they are roofed: a cache, brought up to date when
      * asked for (game_rooms()), not part of game_hash(). */
     Rooms rooms;
+    Temperatures temperatures; /* Per tile, warmed by burning hearths. */
     Pool colonist_pool;
     Colonist colonists[COLONIST_MAX]; /* Indexed by EntityId.index. */
     /* Items in stock per type, what "until N in stock" bills count: lying in a

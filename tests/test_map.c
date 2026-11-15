@@ -204,6 +204,41 @@ static void test_plant_growth_stages_and_fruit(void)
     CHECK(!plant_has_fruit(&plant));
 }
 
+static void test_change_logs(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 20, 16));
+    /* Structures and roofs: the build log. */
+    uint32_t build = map.build_revision;
+    map_set_structure(&map, 3, 4, STRUCTURE_WALL);
+    CHECK_EQ_UINT(map.build_revision, build + 1);
+    const MapBuildChange *change = &map.build_log[map.build_revision % MAP_BUILD_LOG_SIZE];
+    CHECK_EQ_INT(change->x, 3);
+    CHECK_EQ_INT(change->y, 4);
+    map_set_roof(&map, 7, 8, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    change = &map.build_log[map.build_revision % MAP_BUILD_LOG_SIZE];
+    CHECK_EQ_INT(change->x, 7);
+    CHECK_EQ_INT(change->y, 8);
+    /* Rock on a wall: nobody could walk there anyway, but it is a change. */
+    uint32_t topology = map.topology_revision;
+    build = map.build_revision;
+    map_set_rock(&map, 3, 4, ROCK_GRANITE);
+    CHECK_EQ_UINT(map.topology_revision, topology);
+    CHECK_EQ_UINT(map.build_revision, build + 1);
+    /* Rock on open ground: the topology log, on its tile. */
+    map_set_rock(&map, 10, 10, ROCK_GRANITE);
+    const MapTopologyChange *moved = &map.topology_log[map.topology_revision %
+                                                       MAP_TOPOLOGY_LOG_SIZE];
+    CHECK_EQ_INT(moved->x, 10);
+    CHECK_EQ_INT(moved->y, 10);
+    CHECK(!moved->opened && !moved->anywhere);
+    /* Layers written directly: anywhere. */
+    map_topology_changed(&map);
+    moved = &map.topology_log[map.topology_revision % MAP_TOPOLOGY_LOG_SIZE];
+    CHECK(moved->anywhere);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -216,5 +251,6 @@ int main(void)
     RUN_TEST(test_edible_plants);
     RUN_TEST(test_water_and_drinking_spots);
     RUN_TEST(test_plant_growth_stages_and_fruit);
+    RUN_TEST(test_change_logs);
     return test_summary();
 }
