@@ -160,6 +160,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .teach = game->teach,
         .temperatures = &game->temperatures,
         .free_crafts = game->debug.free_crafts,
+        .no_tools = game->debug.no_tools,
     };
     return context;
 }
@@ -436,6 +437,7 @@ bool game_init(Game *game, const NewGameParams *params)
     reservations_init(&game->reservations);
     game_clock_init(&game->clock);
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
+    roof_watch_init(&game->roof_watch, &game->map);
     if (!temperatures_init(&game->temperatures, &game->map, game->clock.tick)) {
         game_shutdown(game);
         return false;
@@ -637,9 +639,56 @@ void game_set_free_crafts(Game *game, bool on)
     game->debug.free_crafts = on;
 }
 
+void game_set_no_tools(Game *game, bool on)
+{
+    game->debug.no_tools = on;
+}
+
+void game_set_instant_deconstruct(Game *game, bool on)
+{
+    game->debug.instant_deconstruct = on;
+}
+
+/* GameDebug.instant_deconstruct: every order to take a structure apart or a
+ * roof down is carried out, as a settler's work would (a refresh site on a
+ * structure taken apart goes too, its materials dropped). */
+static void deconstruct_now(Game *game)
+{
+    Designations *designations = &game->designations;
+    Map *map = &game->map;
+    if (designations->count_by_work[WORK_CONSTRUCTION] == 0) {
+        return;
+    }
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            DesignationType type = designation_get(designations, x, y);
+            if (type != DESIGNATION_DECONSTRUCT && type != DESIGNATION_REMOVE_ROOF) {
+                continue;
+            }
+            if (!designation_can_apply(map, x, y, type)) {
+                designation_set(designations, map, x, y, DESIGNATION_NONE);
+                continue;
+            }
+            int site = type == DESIGNATION_DECONSTRUCT ? construction_at(&game->constructions, x, y)
+                                                       : CONSTRUCTION_NONE;
+            designation_add_work(designations, map, &game->items, x, y,
+                                 designation_work_needed(designations, map, x, y),
+                                 GAME_DEBUG_BUILD_LEVEL, NULL);
+            const ConstructionSite *refresh = construction_get(&game->constructions, site);
+            if (refresh != NULL && refresh->refresh &&
+                map_structure(map, refresh->x, refresh->y) != (StructureType)refresh->type) {
+                game_remove_construction(game, site);
+            }
+        }
+    }
+}
+
 void game_tick(Game *game)
 {
     game->clock.tick++;
+    if (game->debug.instant_deconstruct) {
+        deconstruct_now(game);
+    }
     if (game->debug.instant_build) {
         finish_constructions_now(game);
     }
@@ -665,6 +714,12 @@ void game_tick(Game *game)
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game->items.totals);
     update_colonists(game);
+    /* Walls taken apart or fallen apart, rock dug out: roofs left without
+     * support fall in. */
+    if (roofs_collapse(&game->roof_watch, &game->map, &game->items, &game->designations) > 0) {
+        notices_push(&game->notices, NOTICE_ROOF_COLLAPSED, KNOWLEDGE_NONE, NULL,
+                     game->clock.tick);
+    }
     if (game->clock.tick % CONVERSATION_CHECK_TICKS == 0) {
         conversations_update(game->colonists, &game->colonist_pool, game->clock.tick,
                              &game->rng);
@@ -705,8 +760,10 @@ uint64_t game_hash(const Game *game)
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
     hash = hash_fnv1a64(hash, game->teach, sizeof(game->teach));
     hash = temperatures_hash(&game->temperatures, hash);
-    if (game->debug.instant_build || game->debug.free_crafts) {
-        uint8_t debug[2] = {game->debug.instant_build, game->debug.free_crafts};
+    if (game->debug.instant_build || game->debug.free_crafts || game->debug.no_tools ||
+        game->debug.instant_deconstruct) {
+        uint8_t debug[4] = {game->debug.instant_build, game->debug.free_crafts,
+                            game->debug.no_tools, game->debug.instant_deconstruct};
         hash = hash_fnv1a64(hash, debug, sizeof(debug));
     }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
@@ -928,7 +985,34 @@ bool game_gather_work_at(const Game *game, int x, int y, GatherWorkInfo *info)
 
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type)
 {
-    return designations_set_rect(&game->designations, &game->map, x0, y0, x1, y1, type);
+    if (type == DESIGNATION_NONE) {
+        return designations_set_rect(&game->designations, &game->map, x0, y0, x1, y1, type);
+    }
+    int changed = 0;
+    for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
+        for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
+            DesignationType old = designation_get(&game->designations, x, y);
+            if (old == DESIGNATION_NONE || designation_is_roof(old) == designation_is_roof(type)) {
+                changed += designation_set(&game->designations, &game->map, x, y, type);
+            }
+        }
+    }
+    return changed;
+}
+
+int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, bool roofs)
+{
+    int removed = 0;
+    for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
+        for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
+            DesignationType old = designation_get(&game->designations, x, y);
+            if (old != DESIGNATION_NONE && designation_is_roof(old) == roofs) {
+                removed +=
+                    designation_set(&game->designations, &game->map, x, y, DESIGNATION_NONE);
+            }
+        }
+    }
+    return removed + game_remove_blueprints_rect(game, x0, y0, x1, y1, roofs);
 }
 
 /* ---- Zones --------------------------------------------------------------- */
@@ -1052,7 +1136,7 @@ ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe)
 {
     const RecipeDef *def = recipe_def(recipe);
     ItemTypeMask missing = 0;
-    for (int slot = 0; def != NULL && slot < RECIPE_TOOL_MAX; slot++) {
+    for (int slot = 0; def != NULL && !game->debug.no_tools && slot < RECIPE_TOOL_MAX; slot++) {
         ItemTypeMask types = def->tools[slot];
         if (types != 0 && !items_lying(&game->items, types, 1) &&
             !colonist_carries_tool(game, types)) {
@@ -1073,7 +1157,7 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
     }
     /* Tools nobody carries yet will be taken from what lies around. */
     ItemTypeMask tools[RECIPE_TOOL_MAX] = {0};
-    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+    for (int slot = 0; !game->debug.no_tools && slot < RECIPE_TOOL_MAX; slot++) {
         if (def->tools[slot] != 0 && !colonist_carries_tool(game, def->tools[slot])) {
             tools[slot] = def->tools[slot];
         }
@@ -1126,12 +1210,13 @@ bool game_remove_workstation(Game *game, int index)
     return true;
 }
 
-int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1)
+int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, bool roofs)
 {
     int removed = 0;
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            if (game_remove_construction(game, construction_at(&game->constructions, x, y))) {
+            int site = construction_in_layer(&game->constructions, x, y, roofs);
+            if (game_remove_construction(game, site)) {
                 removed++;
             }
         }

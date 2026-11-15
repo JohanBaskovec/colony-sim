@@ -37,7 +37,11 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_NONE] = {230, 70, 60, 255},
     [DESIGNATION_MINE] = {250, 140, 60, 255},
     [DESIGNATION_DECONSTRUCT] = {240, 200, 70, 255},
+    [DESIGNATION_REMOVE_ROOF] = {240, 200, 70, 255},
 };
+/* Roof view: rock overhead (caves), and where a roof could rest. */
+static const SDL_Color NATURAL_ROOF_COLOR = {150, 120, 200, 90};
+static const SDL_Color ROOF_SUPPORT_COLOR = {120, 220, 140, 60};
 static const SDL_Color STOCKPILE_COLOR = {90, 170, 230, 255};
 static const SDL_Color STOCKPILE_REMOVE_COLOR = {230, 70, 60, 255};
 static const SDL_Color GATHER_ZONE_COLOR = {225, 170, 90, 255};
@@ -497,7 +501,8 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
     batch_flush(renderer);
 }
 
-void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                         bool roofs)
 {
     const Designations *designations = &game->designations;
     if (designations->count == 0) {
@@ -510,11 +515,12 @@ void render_designations(SDL_Renderer *renderer, const Game *game, const Camera 
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
             DesignationType type = designation_get(designations, x, y);
-            if (type == DESIGNATION_NONE) {
+            if (type == DESIGNATION_NONE || (designation_is_roof(type) && !roofs)) {
                 continue;
             }
             SDL_FRect tile = tile_rect(camera, x, y);
-            SDL_FRect mark = inset(&tile, 0.8f);
+            /* A roof's order around the tile, as a roof covers it all. */
+            SDL_FRect mark = inset(&tile, designation_is_roof(type) ? 0.96f : 0.8f);
             outline(renderer, mark, thickness, DESIGNATION_COLORS[type]);
 
             float progress = designation_progress_fraction(designations, map, x, y);
@@ -892,8 +898,9 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
     }
 }
 
-/* Opacity of built roofs: what is under them stays visible. */
-#define ROOF_ALPHA 110
+/* Opacity of built roofs in the roof view: clearly seen, what is under them
+ * still shows through. */
+#define ROOF_ALPHA 190
 
 /* Screen rectangle of all the tiles of a structure whose head is at (x, y). */
 static SDL_FRect footprint_rect(const Camera *camera, int x, int y, StructureType type,
@@ -920,7 +927,8 @@ static TileRect visible_heads(const Camera *camera, int width, int height)
     return visible;
 }
 
-void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                       bool roofs)
 {
     const Map *map = &game->map;
     if (map->structure_counts[STRUCTURE_NONE] < (int)map_tile_count(map)) {
@@ -936,14 +944,16 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
             }
         }
     }
-    if (map->roof_count > 0) {
+    if (roofs) {
         TileRect visible = camera_visible_tiles(camera, map->width, map->height);
         for (int y = visible.y0; y < visible.y1; y++) {
             for (int x = visible.x0; x < visible.x1; x++) {
                 StructureType roof = map_roof(map, x, y);
+                SDL_FRect rect = tile_rect(camera, x, y);
                 if (roof != STRUCTURE_NONE) {
-                    SDL_FRect rect = tile_rect(camera, x, y);
                     render_structure_shape(renderer, &rect, roof, DIRECTION_SOUTH, ROOF_ALPHA);
+                } else if (map_natural_roof(map, x, y)) {
+                    fill(renderer, NATURAL_ROOF_COLOR, &rect);
                 }
             }
         }
@@ -957,7 +967,8 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
     for (int i = 0; i < CONSTRUCTION_MAX; i++) {
         const ConstructionSite *site = construction_get(constructions, i);
         if (site == NULL || site->x < visible.x0 || site->x >= visible.x1 ||
-            site->y < visible.y0 || site->y >= visible.y1) {
+            site->y < visible.y0 || site->y >= visible.y1 ||
+            (construction_is_roof(site) && !roofs)) {
             continue;
         }
         int needed = 0, delivered = 0;
@@ -981,6 +992,21 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
                            rect.h - 2.0f * margin};
         outline(renderer, frame, 1.0f, BLUEPRINT_COLOR);
         progress_bar(renderer, &rect, construction_work_fraction(site));
+    }
+}
+
+void render_roof_support(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    const Map *map = &game->map;
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            if (map->rock[map_index(map, x, y)] == ROCK_NONE &&
+                construction_roof_held(&game->constructions, map, x, y)) {
+                SDL_FRect rect = tile_rect(camera, x, y);
+                fill(renderer, ROOF_SUPPORT_COLOR, &rect);
+            }
+        }
     }
 }
 
@@ -1085,6 +1111,12 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         SDL_FRect area = inset(&rect, 0.7f);
         render_structure_shape(renderer, &area, STRUCTURE_WALL, DIRECTION_SOUTH, 255);
         outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_DECONSTRUCT]);
+        break;
+    }
+    case RENDER_ICON_REMOVE_ROOF: {
+        SDL_FRect area = inset(&rect, 0.7f);
+        render_structure_shape(renderer, &area, STRUCTURE_ROOF, DIRECTION_SOUTH, 255);
+        outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_REMOVE_ROOF]);
         break;
     }
     case RENDER_ICON_CANCEL: {

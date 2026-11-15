@@ -1,4 +1,5 @@
-/* Debug cheats (GameDebug): instant free construction and free crafts. */
+/* Debug cheats (GameDebug): instant free construction, free crafts, work without
+ * tools, instant taking apart. */
 #include "core/game.h"
 
 #include "test_framework.h"
@@ -245,6 +246,73 @@ static void test_free_input_is_not_given_back(void)
     workstations_free(&stations);
 }
 
+/* Without a hammer, nobody knaps; with the cheat, the knapper does, bare-handed. */
+static void test_no_tools(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *knapper = spawn_worker(&game, 10, 10);
+    REQUIRE(knapper != NULL);
+    colonist_set_knowledge_level(knapper, KNOWLEDGE_STONE_KNAPPING, 95.0);
+    int index = workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT,
+                                   14, 10);
+    workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
+    items_add(&game.items, 16, 10, item_stack_pristine(ITEM_FLINT, 3));
+    CHECK(game_recipe_missing_tools(&game, RECIPE_HAND_AXE) != 0);
+    run_ticks(&game, 300);
+    CHECK(knapper->task != TASK_CRAFT);
+
+    game_set_no_tools(&game, true);
+    CHECK_EQ_INT((int)game_recipe_missing_tools(&game, RECIPE_HAND_AXE), 0);
+    for (int i = 0; i < 20 && game.items.totals[ITEM_HAND_AXE] == 0; i++) {
+        run_ticks(&game, 300);
+    }
+    CHECK(game.items.totals[ITEM_HAND_AXE] > 0);
+    CHECK(game.items.totals[ITEM_FLINT] < 3); /* Made of the flint lying there. */
+    CHECK_EQ_INT(colonist_tool_index(knapper, ITEM_TYPE_BIT(ITEM_COBBLE)), -1);
+    game_shutdown(&game);
+}
+
+/* Orders to take apart and to take roofs down are carried out at once; a
+ * roof left without support falls in the same tick, and the refresh site of
+ * a bed taken apart goes with it. */
+static void test_instant_deconstruct(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    map_set_structure(&game.map, 10, 10, STRUCTURE_WALL);
+    map_set_structure(&game.map, 14, 10, STRUCTURE_WALL);
+    map_place_structure(&game.map, 10, 14, STRUCTURE_GRASS_BED, DIRECTION_EAST,
+                        ITEM_QUALITY_STANDARD);
+    map_set_roof(&game.map, 11, 10, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD); /* (10, 10)'s. */
+    map_set_roof(&game.map, 13, 10, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD); /* (14, 10)'s. */
+    int refresh = constructions_place_refresh(&game.constructions, &game.map, 10, 14);
+    REQUIRE(refresh != CONSTRUCTION_NONE);
+    const ConstructionSite *site = construction_get(&game.constructions, refresh);
+    construction_deliver(&game.constructions, refresh,
+                         item_stack_pristine(construction_material(site, 0), 1));
+    CHECK_EQ_INT(game_designate_rect(&game, 10, 10, 10, 10, DESIGNATION_DECONSTRUCT), 1);
+    CHECK_EQ_INT(game_designate_rect(&game, 11, 14, 11, 14, DESIGNATION_DECONSTRUCT), 1);
+    CHECK_EQ_INT(game_designate_rect(&game, 13, 10, 13, 10, DESIGNATION_REMOVE_ROOF), 1);
+    run_ticks(&game, 10);
+    CHECK_EQ_INT(map_structure(&game.map, 10, 10), STRUCTURE_WALL); /* Nobody to do it. */
+
+    uint32_t notices = game.notices.count;
+    game_set_instant_deconstruct(&game, true);
+    run_ticks(&game, 1);
+    CHECK_EQ_INT(game.designations.count, 0);
+    CHECK_EQ_INT(map_structure(&game.map, 10, 10), STRUCTURE_NONE);
+    CHECK_EQ_INT(map_structure(&game.map, 10, 14), STRUCTURE_NONE);
+    CHECK_EQ_INT(map_structure(&game.map, 11, 14), STRUCTURE_NONE);
+    CHECK_EQ_INT(map_structure(&game.map, 14, 10), STRUCTURE_WALL);
+    CHECK_EQ_INT(map_roof(&game.map, 13, 10), STRUCTURE_NONE); /* Taken down. */
+    CHECK_EQ_INT(map_roof(&game.map, 11, 10), STRUCTURE_NONE); /* Fell in. */
+    CHECK_EQ_INT(game.notices.count, notices + 1);
+    CHECK_EQ_INT(game.constructions.used_count, 0);
+    CHECK(game.items.totals[ITEM_GRASS] > 0);
+    game_shutdown(&game);
+}
+
 /* The cheats count in the hash only while on: a game where they were never
  * touched hashes as before. */
 static void test_hash(void)
@@ -260,6 +328,13 @@ static void test_hash(void)
     CHECK(game_hash(&a) != game_hash(&b));
     game_set_instant_build(&b, false);
     CHECK(game_hash(&a) == game_hash(&b));
+    game_set_no_tools(&b, true);
+    CHECK(game_hash(&a) != game_hash(&b));
+    game_set_no_tools(&b, false);
+    game_set_instant_deconstruct(&b, true);
+    CHECK(game_hash(&a) != game_hash(&b));
+    game_set_instant_deconstruct(&b, false);
+    CHECK(game_hash(&a) == game_hash(&b));
     game_shutdown(&a);
     game_shutdown(&b);
 }
@@ -271,6 +346,8 @@ int main(void)
     RUN_TEST(test_bill_free_input);
     RUN_TEST(test_free_crafts);
     RUN_TEST(test_free_input_is_not_given_back);
+    RUN_TEST(test_no_tools);
+    RUN_TEST(test_instant_deconstruct);
     RUN_TEST(test_hash);
     return test_summary();
 }

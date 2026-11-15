@@ -330,15 +330,21 @@ static void wear_tool(Colonist *colonist, int index)
     }
 }
 
+/* Speed of work without a tool under the debug cheat GameDebug.no_tools: a
+ * standard tool's. */
+#define NO_TOOLS_FACTOR 1.0f
+
 /* Speed factor of one tick of a kind of work with the best carried tool for
  * it (bare hands when none helps), which wears. */
-static float work_with_tool(Colonist *colonist, ToolUse use)
+static float work_with_tool(Colonist *colonist, const ColonistContext *context, ToolUse use)
 {
     int index = working_tool(colonist, use, ~(ItemTypeMask)0, false);
     float factor = index >= 0 ? tool_speed_factor(use, colonist->tools[index])
                               : tool_type_factor(use, ITEM_NONE);
     wear_tool(colonist, index);
-    return factor;
+    return context->no_tools && use != TOOL_USE_NONE && factor < NO_TOOLS_FACTOR
+               ? NO_TOOLS_FACTOR
+               : factor;
 }
 
 /* Weight and bulk of the carried tools. */
@@ -1658,7 +1664,7 @@ static void work(Colonist *colonist, const ColonistContext *context)
         GatherJob job = (GatherJob)colonist->work_type;
         KnowledgeType knowledge = gather_job_def(job)->knowledge;
         float speed = colonist_work_speed(colonist, knowledge) *
-                      work_with_tool(colonist, gather_job_def(job)->tool_use) *
+                      work_with_tool(colonist, context, gather_job_def(job)->tool_use) *
                       assistance(colonist, context);
         /* Products depend on the level before this tick's learning. */
         bool done = gather_zone_add_work(context->gather_zones, context->map, context->items,
@@ -1768,13 +1774,13 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
             (recipe_needs_fire(recipe) && !station->burning) ||
             !colonist_can_craft(colonist, recipe) || !colonist_level_fits_bill(colonist, bill) ||
             !bill_wants_more(bill, stored_count(context, bill)) ||
-            !tools_obtainable(colonist, context, def)) {
+            (!context->no_tools && !tools_obtainable(colonist, context, def))) {
             continue;
         }
         /* The tools still to fetch may be of the input's type (a cobble to
          * knap with): they must leave enough to work on. */
         ItemTypeMask to_fetch[RECIPE_TOOL_MAX] = {0};
-        for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+        for (int slot = 0; !context->no_tools && slot < RECIPE_TOOL_MAX; slot++) {
             if (def->tools[slot] != 0 && colonist_tool_index(colonist, def->tools[slot]) < 0) {
                 to_fetch[slot] = def->tools[slot];
             }
@@ -1972,14 +1978,15 @@ static bool plan_station_job(Colonist *colonist, const ColonistContext *context)
     }
     const Bill *bill = &station->bills[colonist->bill];
     const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
-    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+    for (int slot = 0; !context->no_tools && slot < RECIPE_TOOL_MAX; slot++) {
         if (def->tools[slot] != 0 && colonist_tool_index(colonist, def->tools[slot]) < 0) {
             FetchSearch search = fetch_search(context, def->tools[slot]);
             return start_fetch(colonist, context, &search, current_tile(colonist),
                                COLONIST_WORK_SEARCH_MAX_COST, true);
         }
     }
-    if (station->work_input.count == 0 && fetch_better_tool(colonist, context, def)) {
+    if (station->work_input.count == 0 && !context->no_tools &&
+        fetch_better_tool(colonist, context, def)) {
         return true;
     }
     bool in_progress = station->work_input.count > 0;
@@ -2127,7 +2134,8 @@ static bool clear_plant_first(Colonist *colonist, const ColonistContext *context
         return false;
     }
     *progress += colonist_work_speed(colonist, KNOWLEDGE_NONE) *
-                 work_with_tool(colonist, gather_clear_tool_use(context->map, tile.x, tile.y));
+                 work_with_tool(colonist, context,
+                                gather_clear_tool_use(context->map, tile.x, tile.y));
     if (*progress >= needed) {
         gather_clear_plant(context->map, context->items, tile.x, tile.y,
                            colonist_knowledge_level(colonist, KNOWLEDGE_GATHERING), context->rng);
@@ -2139,9 +2147,11 @@ static bool clear_plant_first(Colonist *colonist, const ColonistContext *context
 /*
  * Speed factor of one tick of a craft: the recipe's tool of the first set
  * (core/tool.h). Every tool of the recipe wears. 0 when one of them is not
- * carried (it broke).
+ * carried (it broke); with the cheat GameDebug.no_tools, a missing tool is
+ * no matter and the first one's speed is a standard tool's.
  */
-static float craft_tool_factor(Colonist *colonist, const RecipeDef *recipe)
+static float craft_tool_factor(Colonist *colonist, const ColonistContext *context,
+                               const RecipeDef *recipe)
 {
     int used[RECIPE_TOOL_MAX];
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
@@ -2150,13 +2160,15 @@ static float craft_tool_factor(Colonist *colonist, const RecipeDef *recipe)
             used[slot] = slot == 0 ? working_tool(colonist, recipe->tool_use,
                                                   recipe->tools[slot], true)
                                    : colonist_tool_index(colonist, recipe->tools[slot]);
-            if (used[slot] < 0) {
+            if (used[slot] < 0 && !context->no_tools) {
                 return 0.0f;
             }
         }
     }
+    float bare =
+        context->no_tools ? NO_TOOLS_FACTOR : tool_type_factor(recipe->tool_use, ITEM_NONE);
     float factor = used[0] >= 0 ? tool_speed_factor(recipe->tool_use, colonist->tools[used[0]])
-                                : tool_type_factor(recipe->tool_use, ITEM_NONE);
+                                : bare;
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
         if (slot == 0 || used[slot] != used[0]) {
             wear_tool(colonist, used[slot]);
@@ -2195,7 +2207,7 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
         return;
     }
     const RecipeDef *recipe = recipe_def((RecipeType)colonist->recipe);
-    float tool_factor = craft_tool_factor(colonist, recipe);
+    float tool_factor = craft_tool_factor(colonist, context, recipe);
     if (tool_factor <= 0.0f) {
         set_idle(colonist, context, 0); /* A tool broke: fetch another one first. */
         return;
@@ -2257,14 +2269,20 @@ static bool site_wants_material(const ColonistContext *context, const Constructi
     return false;
 }
 
+/* Builders reserve a site on its head: in a reservation kind of its layer,
+ * as a roof's site may lie over a wall's. */
+static ReservationKind site_reservation(const ConstructionSite *site)
+{
+    return construction_is_roof(site) ? RESERVATION_ROOF_CONSTRUCTION : RESERVATION_CONSTRUCTION;
+}
+
 /* Whether a site offers work to this colonist: free, buildable by it, and
  * either ready for work or missing a material it can go for. */
-static bool site_has_job(const ColonistContext *context, const Colonist *worker, int x, int y)
+static bool site_has_job(const ColonistContext *context, const Colonist *worker, int index)
 {
-    const ConstructionSite *site =
-        construction_get(context->constructions, construction_at(context->constructions, x, y));
+    const ConstructionSite *site = construction_get(context->constructions, index);
     if (site == NULL || !colonist_can_build_site(worker, site) ||
-        reservations_taken_by_other(context->reservations, RESERVATION_CONSTRUCTION,
+        reservations_taken_by_other(context->reservations, site_reservation(site),
                                     site_origin(site), context->worker_id)) {
         return false;
     }
@@ -2285,7 +2303,7 @@ static bool any_site_job(const ColonistContext *context, const Colonist *worker)
             if (site_wants_material(context, site)) {
                 return true;
             }
-        } else if (site_has_job(context, worker, site->x, site->y)) {
+        } else if (site_has_job(context, worker, index)) {
             return true;
         }
     }
@@ -2297,14 +2315,19 @@ typedef struct SiteSearch {
     const Colonist *worker;
 } SiteSearch;
 
-/* First site with a job next to (x, y), in a fixed order. */
-static bool find_adjacent_site(const SiteSearch *search, int x, int y, TilePos *out)
+/* First site with a job next to (x, y), in a fixed order (on each tile, the
+ * structure's site before the roof's): its tile and index. */
+static bool find_adjacent_site(const SiteSearch *search, int x, int y, TilePos *out, int *index)
 {
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i], ny = y + NEIGHBOR_DY[i];
-        if (site_has_job(search->context, search->worker, nx, ny)) {
-            *out = (TilePos){(int16_t)nx, (int16_t)ny};
-            return true;
+        for (int roof = 0; roof < 2; roof++) {
+            int site = construction_in_layer(search->context->constructions, nx, ny, roof);
+            if (site_has_job(search->context, search->worker, site)) {
+                *out = (TilePos){(int16_t)nx, (int16_t)ny};
+                *index = site;
+                return true;
+            }
         }
     }
     return false;
@@ -2313,7 +2336,8 @@ static bool find_adjacent_site(const SiteSearch *search, int x, int y, TilePos *
 static bool is_site_spot(const Map *map, int x, int y, void *userdata)
 {
     TilePos unused;
-    return map_is_passable(map, x, y) && find_adjacent_site(userdata, x, y, &unused);
+    int index;
+    return map_is_passable(map, x, y) && find_adjacent_site(userdata, x, y, &unused, &index);
 }
 
 static bool is_next_to_target(const Map *map, int x, int y, void *userdata)
@@ -2396,7 +2420,7 @@ static bool construction_job_still_valid(const Colonist *colonist,
 {
     const ConstructionSite *site = job_site(colonist, context);
     return site != NULL && site_still_wanted(context, site) &&
-           reservations_owner(context->reservations, RESERVATION_CONSTRUCTION,
+           reservations_owner(context->reservations, site_reservation(site),
                               site_origin(site)) == context->worker_id &&
            colonist->work_priorities[WORK_CONSTRUCTION] != WORK_PRIORITY_DISABLED &&
            colonist_can_build_site(colonist, site);
@@ -2420,14 +2444,14 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
                                  &spot)) {
         return false;
     }
-    find_adjacent_site(&search, spot.x, spot.y, &target);
-    int index = construction_at(context->constructions, target.x, target.y);
+    int index = CONSTRUCTION_NONE;
+    find_adjacent_site(&search, spot.x, spot.y, &target, &index);
     const ConstructionSite *site = construction_get(context->constructions, index);
     begin_task(colonist, context, TASK_CONSTRUCT);
     colonist->site = index;
     colonist->site_number = site->number;
     colonist->target = target; /* The tile of the site worked by, its head or another. */
-    reservations_add(context->reservations, RESERVATION_CONSTRUCTION, site_origin(site),
+    reservations_add(context->reservations, site_reservation(site), site_origin(site),
                      context->worker_id);
     if (!plan_construction(colonist, context)) {
         set_idle(colonist, context, 0);
@@ -2437,18 +2461,22 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
     return true;
 }
 
-/* First site next to (x, y), in a fixed order, missing a material nobody
- * brings yet that lies about. */
-static bool find_supply_site(const ColonistContext *context, int x, int y, TilePos *out)
+/* First site next to (x, y), in a fixed order (as find_adjacent_site()),
+ * missing a material nobody brings yet that lies about. */
+static bool find_supply_site(const ColonistContext *context, int x, int y, TilePos *out,
+                             int *index)
 {
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i], ny = y + NEIGHBOR_DY[i];
-        const ConstructionSite *site = construction_get(
-            context->constructions, construction_at(context->constructions, nx, ny));
-        if (site != NULL && site_still_wanted(context, site) &&
-            site_wants_material(context, site)) {
-            *out = (TilePos){(int16_t)nx, (int16_t)ny};
-            return true;
+        for (int roof = 0; roof < 2; roof++) {
+            int found = construction_in_layer(context->constructions, nx, ny, roof);
+            const ConstructionSite *site = construction_get(context->constructions, found);
+            if (site != NULL && site_still_wanted(context, site) &&
+                site_wants_material(context, site)) {
+                *out = (TilePos){(int16_t)nx, (int16_t)ny};
+                *index = found;
+                return true;
+            }
         }
     }
     return false;
@@ -2457,7 +2485,8 @@ static bool find_supply_site(const ColonistContext *context, int x, int y, TileP
 static bool is_supply_spot(const Map *map, int x, int y, void *userdata)
 {
     TilePos unused;
-    return map_is_passable(map, x, y) && find_supply_site(userdata, x, y, &unused);
+    int index;
+    return map_is_passable(map, x, y) && find_supply_site(userdata, x, y, &unused, &index);
 }
 
 /* A hauler brings materials to the nearest site that waits for some. */
@@ -2472,8 +2501,8 @@ static bool try_supply_job(Colonist *colonist, const ColonistContext *context)
                                  NULL, &spot)) {
         return false;
     }
-    find_supply_site(context, spot.x, spot.y, &target);
-    int index = construction_at(context->constructions, target.x, target.y);
+    int index = CONSTRUCTION_NONE;
+    find_supply_site(context, spot.x, spot.y, &target, &index);
     begin_task(colonist, context, TASK_SUPPLY);
     colonist->site = index;
     colonist->site_number = construction_get(context->constructions, index)->number;
@@ -2597,7 +2626,8 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
     ConstructionSite done = *site; /* Gone from the list once built. */
     KnowledgeType knowledge = construction_knowledge(site);
     float speed = colonist_work_speed(colonist, knowledge) *
-                  work_with_tool(colonist, TOOL_USE_BUILDING) * assistance(colonist, context);
+                  work_with_tool(colonist, context, TOOL_USE_BUILDING) *
+                  assistance(colonist, context);
     /* The grade depends on the level before this tick's learning. */
     bool built = construction_add_work(context->constructions, context->map, context->items,
                                        context->workstations, colonist->site, speed,

@@ -28,8 +28,10 @@ void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *
 /* Items lying on the ground (placeholder shapes per item type). */
 void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
-/* Marks designated tiles (chop, mine...) and shows work progress. */
-void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+/* Marks designated tiles (chop, mine...) and shows work progress; orders
+ * about roofs (designation_is_roof()) only in the roof view (`roofs`). */
+void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                         bool roofs);
 
 /* Rectangle of tiles being designated with a tool (corners in any order). */
 void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0,
@@ -49,8 +51,15 @@ void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera 
 void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                               WorkstationType type, int x, int y);
 
-/* Built structures (beds, walls, doors) and construction sites. */
-void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+/* Built structures (beds, walls, doors) and construction sites; in the roof
+ * view (`roofs`), built roofs, the sites of roofs and natural roofs over
+ * them (otherwise roofs are not drawn: they would hide what is under). */
+void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                       bool roofs);
+
+/* Tiles a roof could rest on (construction_roof_held()), shown while
+ * planning roofs. */
+void render_roof_support(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
 /* Ghosts of the structures a rectangle would plan (game_plan_structure_rect():
  * its edges for walls, beds side by side facing `direction`), red where they
@@ -96,6 +105,7 @@ typedef enum RenderIcon {
     RENDER_ICON_STOCKPILE_REMOVE,
     RENDER_ICON_MINE,
     RENDER_ICON_DECONSTRUCT,
+    RENDER_ICON_REMOVE_ROOF,
     RENDER_ICON_CANCEL,
 } RenderIcon;
 

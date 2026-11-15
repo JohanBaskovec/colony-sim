@@ -106,7 +106,7 @@ static void test_cancelling_gives_materials_back(void)
     REQUIRE(index != CONSTRUCTION_NONE);
     construction_deliver(&game.constructions, index, item_stack_pristine(ITEM_BRANCHES, 4));
     construction_deliver(&game.constructions, index, item_stack_pristine(ITEM_GRASS, 6));
-    CHECK_EQ_INT(game_remove_blueprints_rect(&game, 0, 0, 10, 10), 1);
+    CHECK_EQ_INT(game_remove_blueprints_rect(&game, 0, 0, 10, 10, false), 1);
     CHECK_EQ_INT(game.constructions.used_count, 0);
     CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 4);
     CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 6);
@@ -608,27 +608,37 @@ static void test_roofing_a_hut(void)
     game_shutdown(&game);
 }
 
-/* Taking apart a tile with a bed under a roof: the bed first, then the roof. */
+/* Taking apart a door under a roof, and taking roofs down: an order of its
+ * own for each layer, which the other layer's orders leave alone. */
 static void test_taking_a_roof_apart(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_rested(&game, 10, 10);
     REQUIRE(colonist != NULL);
+    map_set_structure(&game.map, 13, 12, STRUCTURE_WALL); /* Holds the roofs up. */
     map_set_structure(&game.map, 12, 10, STRUCTURE_DOOR);
     map_set_roof(&game.map, 12, 10, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     map_set_roof(&game.map, 14, 10, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
-    CHECK_EQ_INT(game_designate_rect(&game, 12, 10, 14, 10, DESIGNATION_DECONSTRUCT), 2);
+    CHECK(designation_is_roof(DESIGNATION_REMOVE_ROOF));
+    CHECK(!designation_is_roof(DESIGNATION_DECONSTRUCT));
+    /* Taking apart: the door only, not the roofs. */
+    CHECK_EQ_INT(game_designate_rect(&game, 12, 10, 14, 10, DESIGNATION_DECONSTRUCT), 1);
+    /* Taking roofs down: the door's tile keeps its order. */
+    CHECK_EQ_INT(game_designate_rect(&game, 12, 10, 14, 10, DESIGNATION_REMOVE_ROOF), 1);
+    CHECK_EQ_INT(designation_get(&game.designations, 12, 10), DESIGNATION_DECONSTRUCT);
     for (int i = 0; i < 2 * TICKS_PER_HOUR && game.designations.count > 0; i++) {
         game_tick(&game);
     }
+    CHECK_EQ_INT(game.designations.count, 0);
     CHECK_EQ_INT(map_roof(&game.map, 14, 10), STRUCTURE_NONE);
-    CHECK_EQ_INT(map_structure(&game.map, 12, 10), STRUCTURE_NONE); /* The door went first. */
-    CHECK_EQ_INT(map_roof(&game.map, 12, 10), STRUCTURE_ROOF);       /* One order, one thing. */
+    CHECK_EQ_INT(map_structure(&game.map, 12, 10), STRUCTURE_NONE);
+    CHECK_EQ_INT(map_roof(&game.map, 12, 10), STRUCTURE_ROOF); /* One order, one thing. */
     /* Half of the roof's materials (3 branches, 20 armfuls of grass) come back. */
     CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 10);
     CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 1 + 2);
-    CHECK_EQ_INT(game_designate_rect(&game, 12, 10, 12, 10, DESIGNATION_DECONSTRUCT), 1);
+    CHECK_EQ_INT(game_designate_rect(&game, 12, 10, 12, 10, DESIGNATION_DECONSTRUCT), 0);
+    CHECK_EQ_INT(game_designate_rect(&game, 12, 10, 12, 10, DESIGNATION_REMOVE_ROOF), 1);
     run_ticks(&game, TICKS_PER_HOUR);
     CHECK_EQ_INT(map_roof(&game.map, 12, 10), STRUCTURE_NONE);
     CHECK_EQ_INT(game.map.roof_count, 0);

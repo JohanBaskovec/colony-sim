@@ -19,6 +19,7 @@ typedef enum NoticeType {
     NOTICE_KNOWLEDGE_LAST_MASTER, /* Only one settler still masters it. */
     NOTICE_KNOWLEDGE_LOST,        /* Nobody masters it any more. */
     NOTICE_KNOWLEDGE_FORGOTTEN,   /* Nobody knows anything of it any more. */
+    NOTICE_ROOF_COLLAPSED,        /* A roof fell in (no knowledge). */
     NOTICE_TYPE_COUNT
 } NoticeType;
 
@@ -44,7 +45,8 @@ void notices_push(Notices *notices, NoticeType type, int knowledge, const char *
  * forgotten. */
 const Notice *notices_get(const Notices *notices, uint32_t number);
 
-/* Translation key of a notice's text: {0} is the knowledge, {1} the name. */
+/* Translation key of a notice's text: {0} is the knowledge (empty for a
+ * notice about none), {1} the name. */
 const char *notice_text_key(NoticeType type);
 
 #endif /* COLONY_CORE_NOTICE_H */

@@ -31,6 +31,7 @@ plant.tree = Arbre
 # Désignations (ordres du joueur)
 designation.mine = Miner la roche
 designation.deconstruct = Démonter
+designation.remove_roof = Retirer les toits
 tool.cancel = Annuler les ordres
 tool.stockpile = Zone de stockage
 tool.gather_zone = Zone de récolte
@@ -42,6 +43,7 @@ tool.stockpile.description = Les colons y rangent les objets autorisés
 tool.mine.description = Les colons creusent la roche marquée et en rapportent la pierre
 tool.cancel.description = Retire les ordres de la zone glissée
 tool.deconstruct.description = Les colons démontent les lits, murs et portes marqués et récupèrent la moitié des matériaux
+tool.remove_roof.description = Les colons retirent les toits marqués (dans la vue des toits) et récupèrent la moitié des matériaux
 
 # Menus (bas gauche)
 menu.build = Construire
@@ -60,6 +62,8 @@ help.title = Commandes
 debug.title = Débogage
 debug.instant_build = Construction instantanée et gratuite (chaque plan est construit aussitôt, sans matériaux)
 debug.free_crafts = Fabrication gratuite (plus besoin d’ingrédients)
+debug.no_tools = Travail sans outil (plus besoin d’outils pour fabriquer, le travail va au moins à la vitesse d’un outil ordinaire)
+debug.instant_deconstruct = Déconstruction instantanée (les constructions et toits marqués sont démontés aussitôt)
 
 # Objets
 item.wood = Bois
@@ -119,6 +123,7 @@ hud.date = {1}, jour {0}, an {2} · {3}h{4}
 hud.speed = Vitesse : {0}×
 hud.outdoor_temperature = Dehors : {0}
 hud.temperature_view = Vue thermique : bleu {0}, rouge {1} · {2} : masquer
+hud.roof_view = Vue des toits : toits, plans et ordres de toit · {0} : afficher ou masquer
 hud.paused = En pause
 hud.language = Langue : {0}
 hud.help.camera = {0}/Flèches : déplacer · Molette : zoom · Glisser clic milieu/droit : défiler
@@ -128,6 +133,7 @@ hud.help.orders = {0} : miner la roche · {1} : annuler des ordres
 hud.help.copy = {0} : construire un autre exemplaire de la sélection (zone, poste, lit, mur, porte)
 hud.help.rotate = {0} : tourner le lit à placer (tête et pied)
 hud.help.temperature = {0} : vue thermique (température ressentie sur chaque case, chaleur des feux comprise : bleu pour le froid, rouge pour le chaud)
+hud.help.roofs = {0} : vue des toits (toits construits, plans de toit, roche au-dessus ; les outils de toit l’affichent d’eux-mêmes)
 hud.help.debug = {0} : menu de débogage (triches pour tester)
 hud.help.manage = {0} : zones de stockage · {1} : postes de travail · clic sur une zone ou un poste : ses réglages · {2} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
@@ -139,6 +145,8 @@ hud.tool.build_help = Clic gauche : placer un plan · {0} : poste suivant · �
 hud.tool.outline_help = Glisser : murs le long d’un rectangle · Clic : un seul segment · Échap : retour
 hud.tool.structure_help = Clic : en placer un · Glisser : remplir un rectangle · Échap : retour
 hud.tool.roof_support = Chaque case de toit doit avoir un mur ou de la roche à {0} cases au plus
+hud.tool.cancel_roofs = Vue des toits : seuls les plans et ordres de toit sont annulés
+hud.tool.cancel_ground = Les toits ne sont pas touchés : annulez-les dans la vue des toits
 hud.tool.rotate_help = {0} : le tourner
 
 hud.tile.position = Case {0}, {1}
@@ -196,6 +204,7 @@ colonist.task.work = Travaille
 colonist.task.chop = Coupe un arbre
 colonist.task.mine = Creuse la roche
 colonist.task.deconstruct = Démonte
+colonist.task.remove_roof = Retire un toit
 colonist.task.harvest = Récolte
 colonist.task.gather_stones = Ramasse des pierres
 colonist.task.gather_branches = Ramasse des branches
@@ -392,3 +401,4 @@ notice.knowledge_mastered = {0} : {1} maîtrise de nouveau ce savoir
 notice.knowledge_last_master = {0} : {1} est la dernière personne à maîtriser ce savoir
 notice.knowledge_lost = {0} : plus personne ne maîtrise ce savoir
 notice.knowledge_forgotten = {0} : savoir oublié, plus personne n’en sait rien
+notice.roof_collapsed = Un toit s’est effondré : plus aucun mur ni roche ne le soutenait

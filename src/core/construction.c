@@ -14,8 +14,10 @@ bool constructions_init(Constructions *constructions, int width, int height)
     }
     size_t tiles = (size_t)width * (size_t)height;
     constructions->at = calloc(tiles, sizeof(*constructions->at));
+    constructions->roof_at = calloc(tiles, sizeof(*constructions->roof_at));
     constructions->workstation_tiles = calloc(tiles, 1);
-    if (constructions->at == NULL || constructions->workstation_tiles == NULL) {
+    if (constructions->at == NULL || constructions->roof_at == NULL ||
+        constructions->workstation_tiles == NULL) {
         constructions_free(constructions);
         return false;
     }
@@ -28,6 +30,7 @@ bool constructions_init(Constructions *constructions, int width, int height)
 void constructions_free(Constructions *constructions)
 {
     free(constructions->at);
+    free(constructions->roof_at);
     free(constructions->workstation_tiles);
     memset(constructions, 0, sizeof(*constructions));
 }
@@ -48,6 +51,24 @@ int construction_at(const Constructions *constructions, int x, int y)
         return CONSTRUCTION_NONE;
     }
     return (int)constructions->at[index_of(constructions, x, y)] - 1;
+}
+
+int construction_roof_at(const Constructions *constructions, int x, int y)
+{
+    if (!in_bounds(constructions, x, y)) {
+        return CONSTRUCTION_NONE;
+    }
+    return (int)constructions->roof_at[index_of(constructions, x, y)] - 1;
+}
+
+int construction_in_layer(const Constructions *constructions, int x, int y, bool roof)
+{
+    return roof ? construction_roof_at(constructions, x, y) : construction_at(constructions, x, y);
+}
+
+bool construction_is_roof(const ConstructionSite *site)
+{
+    return site->workstation == 0 && structure_is_roof((StructureType)site->type);
 }
 
 static ConstructionSite *site_get(Constructions *constructions, int index)
@@ -79,19 +100,8 @@ bool construction_can_place(const Constructions *constructions, const Map *map, 
            construction_at(constructions, x, y) == CONSTRUCTION_NONE;
 }
 
-bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
-                                 int y)
+bool construction_roof_held(const Constructions *constructions, const Map *map, int x, int y)
 {
-    if (!in_bounds(constructions, x, y) || !map_in_bounds(map, x, y)) {
-        return false;
-    }
-    size_t index = map_index(map, x, y);
-    if (!terrain_def((Terrain)map->terrain[index])->buildable ||
-        map->rock[index] != ROCK_NONE || map->roof[index] != STRUCTURE_NONE ||
-        map_plant_blocks_building(map, x, y) ||
-        construction_at(constructions, x, y) != CONSTRUCTION_NONE) {
-        return false;
-    }
     if (map_roof_supported(map, x, y)) {
         return true;
     }
@@ -106,6 +116,20 @@ bool construction_can_place_roof(const Constructions *constructions, const Map *
         }
     }
     return false;
+}
+
+bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
+                                 int y)
+{
+    if (!in_bounds(constructions, x, y) || !map_in_bounds(map, x, y)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y);
+    return terrain_def((Terrain)map->terrain[index])->buildable &&
+           map->rock[index] == ROCK_NONE && map->roof[index] == STRUCTURE_NONE &&
+           !map_plant_blocks_building(map, x, y) &&
+           construction_roof_at(constructions, x, y) == CONSTRUCTION_NONE &&
+           construction_roof_held(constructions, map, x, y);
 }
 
 bool construction_can_place_structure(const Constructions *constructions, const Map *map,
@@ -181,7 +205,12 @@ static void mark_tiles(Constructions *constructions, const ConstructionSite *sit
     for (int part = 0; part < construction_length(site); part++) {
         int x, y;
         construction_tile(site, part, &x, &y);
-        if (in_bounds(constructions, x, y)) {
+        if (!in_bounds(constructions, x, y)) {
+            continue;
+        }
+        if (construction_is_roof(site)) {
+            constructions->roof_at[index_of(constructions, x, y)] = value;
+        } else {
             constructions->at[index_of(constructions, x, y)] = value;
             constructions->workstation_tiles[index_of(constructions, x, y)] =
                 value != 0 && site->workstation != 0;

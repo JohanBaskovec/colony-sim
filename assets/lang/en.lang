@@ -32,6 +32,7 @@ plant.tree = Tree
 # Designations (player orders)
 designation.mine = Mine rock
 designation.deconstruct = Take apart
+designation.remove_roof = Take roofs down
 tool.cancel = Cancel orders
 tool.stockpile = Stockpile zone
 tool.gather_zone = Gathering zone
@@ -43,6 +44,7 @@ tool.stockpile.description = Settlers store the items you allow in it
 tool.mine.description = Settlers dig out the marked rock and bring back stone
 tool.cancel.description = Removes the orders in the area you drag
 tool.deconstruct.description = Settlers take the marked beds, walls and doors apart and get half of the materials back
+tool.remove_roof.description = Settlers take the marked roofs down (in the roof view) and get half of the materials back
 
 # Menus (bottom left)
 menu.build = Build
@@ -61,6 +63,8 @@ help.title = Controls
 debug.title = Debug
 debug.instant_build = Instant free construction (every blueprint is built at once, without materials)
 debug.free_crafts = Free crafts (no ingredients needed)
+debug.no_tools = Work without tools (crafts need none, work goes at least at a standard tool's speed)
+debug.instant_deconstruct = Instant taking apart (marked structures and roofs come down at once)
 
 # Items
 item.wood = Wood
@@ -122,6 +126,7 @@ hud.date = {1} {0}, year {2} · {3}:{4}
 hud.speed = Speed: {0}×
 hud.outdoor_temperature = Outdoors: {0}
 hud.temperature_view = Temperature view: blue {0}, red {1} · {2}: hide
+hud.roof_view = Roof view: roofs, roof blueprints and orders · {0}: show or hide
 hud.paused = Paused
 # {0} = language name
 hud.language = Language: {0}
@@ -135,6 +140,7 @@ hud.help.orders = {0}: mine rock · {1}: cancel orders
 hud.help.copy = {0}: build another of what is selected (zone, workstation, bed, wall, door)
 hud.help.rotate = {0}: turn the bed being placed (head and foot)
 hud.help.temperature = {0}: temperature view (felt on each tile, the warmth of fires included: blue for cold, red for hot)
+hud.help.roofs = {0}: roof view (built roofs, roof blueprints, rock overhead; the roof tools show it by themselves)
 hud.help.debug = {0}: debug menu (cheats for testing)
 hud.help.manage = {0}: stockpile zones · {1}: workstations · click a zone or station: its settings · {2}: work priorities
 # {0} = tool name
@@ -150,6 +156,8 @@ hud.tool.outline_help = Drag: walls along the edges of a rectangle · Click: one
 hud.tool.structure_help = Click: place one · Drag: fill a rectangle · Esc: back
 # {0} = number of tiles
 hud.tool.roof_support = Each roof tile needs a wall or rock at most {0} tiles away
+hud.tool.cancel_roofs = Roof view: only roof blueprints and roof orders are cancelled
+hud.tool.cancel_ground = Roofs are left alone: cancel them in the roof view
 hud.tool.rotate_help = {0}: turn it
 
 # Tile inspector. {0}, {1} = tile coordinates
@@ -227,6 +235,7 @@ colonist.task.work = Working
 colonist.task.chop = Chopping a tree
 colonist.task.mine = Mining
 colonist.task.deconstruct = Taking apart
+colonist.task.remove_roof = Taking a roof down
 colonist.task.harvest = Harvesting
 colonist.task.gather_stones = Gathering stones
 colonist.task.gather_branches = Gathering branches
@@ -477,3 +486,4 @@ notice.knowledge_mastered = {0}: {1} masters it again
 notice.knowledge_last_master = {0}: {1} is the last one who masters it
 notice.knowledge_lost = {0}: nobody masters it any more
 notice.knowledge_forgotten = {0}: forgotten, nobody knows anything of it any more
+notice.roof_collapsed = A roof fell in: no wall or rock held it up any more

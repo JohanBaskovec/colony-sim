@@ -22,6 +22,7 @@
 #include "core/region.h"
 #include "core/room.h"
 #include "core/rng.h"
+#include "core/roof.h"
 #include "core/stockpile.h"
 #include "core/temperature.h"
 #include "core/workstation.h"
@@ -68,6 +69,14 @@ typedef struct GameDebug {
     /* Crafts need no input: crafters make it out of nothing (tools, the
      * recipe's knowledge and a burning fire are still needed). */
     bool free_crafts;
+    /* No tool is needed: crafts go without theirs, and work done without a
+     * tool goes at least at a standard tool's speed (×1). Carried tools are
+     * still used (and wear) when they do better. */
+    bool no_tools;
+    /* Orders to take structures apart and roofs down are carried out at the
+     * start of each tick, with nobody there (half the materials back, as
+     * usual). */
+    bool instant_deconstruct;
 } GameDebug;
 
 typedef struct NewGameParams {
@@ -97,6 +106,9 @@ typedef struct Game {
      * asked for (game_rooms()), not part of game_hash(). */
     Rooms rooms;
     Temperatures temperatures; /* Per tile, warmed by burning hearths. */
+    /* Where roofs were last checked for support (core/roof.h): derived from
+     * the map, not part of game_hash(). */
+    RoofWatch roof_watch;
     Pool colonist_pool;
     Colonist colonists[COLONIST_MAX]; /* Indexed by EntityId.index. */
     /* Items in stock per type, what "until N in stock" bills count: lying in a
@@ -145,6 +157,8 @@ uint64_t game_hash(const Game *game);
 /* Turns a cheat of GameDebug on or off. */
 void game_set_instant_build(Game *game, bool on);
 void game_set_free_crafts(Game *game, bool on);
+void game_set_no_tools(Game *game, bool on);
+void game_set_instant_deconstruct(Game *game, bool on);
 
 /* ---- Colonists ----------------------------------------------------------- */
 
@@ -222,8 +236,15 @@ typedef struct GatherWorkInfo {
 bool game_gather_work_at(const Game *game, int x, int y, GatherWorkInfo *info);
 
 /* Places (or with DESIGNATION_NONE, removes) an order on every valid tile of a
- * rectangle (corners in any order). Returns the number of tiles changed. */
+ * rectangle (corners in any order). An order of the other layer
+ * (designation_is_roof()) already on a tile stays: taking a wall apart does
+ * not call off taking its roof down. Returns the number of tiles changed. */
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type);
+
+/* The cancel tool: removes the orders and the construction sites of a layer
+ * (roofs, or everything else) in a rectangle (corners in any order). Returns
+ * how many orders and sites were removed. */
+int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, bool roofs);
 
 /* ---- Zones --------------------------------------------------------------- */
 
@@ -250,13 +271,14 @@ bool game_recipe_known(const Game *game, RecipeType recipe);
 bool game_bill_has_worker(const Game *game, const Bill *bill);
 
 /* Tool kinds a recipe needs that no living colonist carries and that lie
- * nowhere in the colony (0 when every tool can be had): one mask per
- * missing slot, joined. */
+ * nowhere in the colony (0 when every tool can be had, or none is needed:
+ * GameDebug.no_tools): one mask per missing slot, joined. */
 ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe);
 
 /* Whether enough of some input type a bill allows lies in the colony, once
  * the tools nobody carries have been taken from it (see bill_has_input()).
- * With GameDebug.free_crafts: whether the bill allows some input. */
+ * With GameDebug.free_crafts: whether the bill allows some input; with
+ * GameDebug.no_tools, no tool is taken from it. */
 bool game_bill_has_input(const Game *game, const Bill *bill);
 
 /* Whether a workstation may be placed on a tile: not on a structure, where
@@ -275,9 +297,10 @@ bool game_place_workstation(Game *game, WorkstationType type, int x, int y);
  * tile. Colonists working there give up. */
 bool game_remove_workstation(Game *game, int index);
 
-/* Removes the construction sites (structures and workstations) in a
- * rectangle; their materials are dropped. Returns how many. */
-int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1);
+/* Removes the construction sites in a rectangle, of roofs (`roofs`) or of
+ * structures and workstations; their materials are dropped. Returns how
+ * many. */
+int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, bool roofs);
 
 /* Removes a bill; the input of a craft in progress that no other bill can
  * finish is dropped on the station's tile. */

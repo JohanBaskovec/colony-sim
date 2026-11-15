@@ -234,7 +234,7 @@ static void test_placement_rules(void)
     int built = built_station(&game, WORKSTATION_CRAFTING_SPOT, 6, 5);
     /* Cancelling orders removes blueprints (the station's and the wall's), not
      * built stations. */
-    CHECK_EQ_INT(game_remove_blueprints_rect(&game, 0, 0, 10, 10), 2);
+    CHECK_EQ_INT(game_remove_blueprints_rect(&game, 0, 0, 10, 10, false), 2);
     CHECK_EQ_INT(construction_at(&game.constructions, 5, 5), CONSTRUCTION_NONE);
     CHECK_EQ_INT(game.constructions.workstation_count, 0);
     CHECK(workstation_get(&game.workstations, built) != NULL);

@@ -14,6 +14,9 @@ static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
     [DESIGNATION_DECONSTRUCT] = {"deconstruct", N_("designation.deconstruct"),
                                  N_("colonist.task.deconstruct"), WORK_CONSTRUCTION,
                                  KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL},
+    [DESIGNATION_REMOVE_ROOF] = {"remove_roof", N_("designation.remove_roof"),
+                                 N_("colonist.task.remove_roof"), WORK_CONSTRUCTION,
+                                 KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -63,6 +66,11 @@ bool designation_doable_at(DesignationType type, double level)
            level >= def->min_level;
 }
 
+bool designation_is_roof(DesignationType type)
+{
+    return type == DESIGNATION_REMOVE_ROOF;
+}
+
 bool designation_can_apply(const Map *map, int x, int y, DesignationType type)
 {
     if (!map_in_bounds(map, x, y)) {
@@ -70,9 +78,8 @@ bool designation_can_apply(const Map *map, int x, int y, DesignationType type)
     }
     switch (type) {
     case DESIGNATION_MINE: return map->rock[map_index(map, x, y)] != ROCK_NONE;
-    case DESIGNATION_DECONSTRUCT:
-        return map_structure(map, x, y) != STRUCTURE_NONE ||
-               map_roof(map, x, y) != STRUCTURE_NONE;
+    case DESIGNATION_DECONSTRUCT: return map_structure(map, x, y) != STRUCTURE_NONE;
+    case DESIGNATION_REMOVE_ROOF: return map_roof(map, x, y) != STRUCTURE_NONE;
     default: return false;
     }
 }
@@ -160,9 +167,9 @@ float designation_work_needed(const Designations *designations, const Map *map, 
         return rock != NULL ? rock->mine_work : 0.0f;
     }
     case DESIGNATION_DECONSTRUCT:
-        return structure_deconstruct_work(map->structure[index] != STRUCTURE_NONE
-                                              ? (StructureType)map->structure[index]
-                                              : (StructureType)map->roof[index]);
+        return structure_deconstruct_work((StructureType)map->structure[index]);
+    case DESIGNATION_REMOVE_ROOF:
+        return structure_deconstruct_work((StructureType)map->roof[index]);
     default: return 0.0f;
     }
 }
@@ -195,6 +202,18 @@ ItemType designation_yield(const Designations *designations, const Map *map, int
     }
 }
 
+/* Half the materials of a structure taken apart, dropped on its tile. */
+static void drop_salvage(StructureType type, Map *map, Items *items, int x, int y)
+{
+    const StructureDef *def = structure_def(type);
+    for (int slot = 0; def != NULL && items != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        int count = structure_salvage_count(type, slot);
+        if (count > 0) {
+            items_drop(items, map, x, y, item_stack_pristine(def->materials[slot].type, count));
+        }
+    }
+}
+
 /* Carries out a completed order on the map. */
 static void complete(Map *map, Items *items, int x, int y, DesignationType type)
 {
@@ -204,21 +223,15 @@ static void complete(Map *map, Items *items, int x, int y, DesignationType type)
         map_set_rock(map, x, y, ROCK_NONE);
         break;
     case DESIGNATION_DECONSTRUCT: {
-        /* The structure first; the roof once nothing stands under it. */
         StructureType structure = map_structure(map, x, y);
-        if (structure != STRUCTURE_NONE) {
-            map_set_structure(map, x, y, STRUCTURE_NONE);
-        } else {
-            structure = map_roof(map, x, y);
-            map_set_roof(map, x, y, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
-        }
-        const StructureDef *def = structure_def(structure);
-        for (int slot = 0; items != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-            int count = structure_salvage_count(structure, slot);
-            if (count > 0) {
-                items_drop(items, map, x, y, item_stack_pristine(def->materials[slot].type, count));
-            }
-        }
+        map_set_structure(map, x, y, STRUCTURE_NONE);
+        drop_salvage(structure, map, items, x, y);
+        break;
+    }
+    case DESIGNATION_REMOVE_ROOF: {
+        StructureType roof = map_roof(map, x, y);
+        map_set_roof(map, x, y, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
+        drop_salvage(roof, map, items, x, y);
         break;
     }
     default: break;

@@ -230,6 +230,33 @@ static void build_status_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.temperature_view"), cold, hot,
                   app_key_name(APP_KEY_TEMPERATURE));
     }
+    if (app_roof_view(app)) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.roof_view"),
+                  app_key_name(APP_KEY_ROOF_VIEW));
+    }
+}
+
+/* A construction site's lines in the tile inspector: progress and materials. */
+static void add_site_lines(Panel *panel, const ConstructionSite *site)
+{
+    if (site == NULL) {
+        return;
+    }
+    char a[32], b[32];
+    tr_integer(a, sizeof(a), (long long)(construction_work_fraction(site) * 100.0f));
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+              tr(site->refresh ? "hud.tile.refresh" : "hud.tile.blueprint"),
+              tr(construction_name_key(site)), a);
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        ItemType material = construction_material(site, slot);
+        if (material == ITEM_NONE) {
+            continue;
+        }
+        tr_integer(a, sizeof(a), site->delivered[slot].count);
+        tr_integer(b, sizeof(b), construction_material_count(site, slot));
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.material"),
+                  tr(item_def(material)->name_key), a, b);
+    }
 }
 
 static void build_tile_panel(App *app, Panel *panel)
@@ -330,22 +357,10 @@ static void build_tile_panel(App *app, Panel *panel)
     }
     const ConstructionSite *site = construction_get(
         &app->game.constructions, construction_at(&app->game.constructions, x, y));
-    if (site != NULL) {
-        tr_integer(a, sizeof(a), (long long)(construction_work_fraction(site) * 100.0f));
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
-                  tr(site->refresh ? "hud.tile.refresh" : "hud.tile.blueprint"),
-                  tr(construction_name_key(site)), a);
-        for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-            ItemType material = construction_material(site, slot);
-            if (material == ITEM_NONE) {
-                continue;
-            }
-            tr_integer(a, sizeof(a), site->delivered[slot].count);
-            tr_integer(b, sizeof(b), construction_material_count(site, slot));
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.material"),
-                      tr(item_def(material)->name_key), a, b);
-        }
-    }
+    const ConstructionSite *roof_site = construction_get(
+        &app->game.constructions, construction_roof_at(&app->game.constructions, x, y));
+    add_site_lines(panel, site);
+    add_site_lines(panel, roof_site);
 
     if (site != NULL && gather_clear_work(map, x, y) > 0.0f) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("blueprint.clear_first"),
@@ -808,6 +823,8 @@ static void help_window(App *app)
               app_key_name(APP_KEY_ROTATE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.temperature"),
               app_key_name(APP_KEY_TEMPERATURE));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.roofs"),
+              app_key_name(APP_KEY_ROOF_VIEW));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.debug"),
               app_key_name(APP_KEY_DEBUG_MENU));
     bool open = true;
@@ -915,12 +932,13 @@ static void draw_notices(App *app, float top)
     Panel panel = {0};
     for (int i = 0; i < app->notices_shown_count; i++) {
         const Notice *notice = notices_get(&app->game.notices, app->notices_shown[i]);
-        const KnowledgeDef *def = notice != NULL ? knowledge_def(notice->knowledge) : NULL;
-        if (def != NULL) {
-            TR_FORMAT(panel_add(&panel), HUD_LINE_SIZE,
-                      tr(notice_text_key((NoticeType)notice->type)), tr(def->name_key),
-                      notice->name);
+        if (notice == NULL) {
+            continue;
         }
+        /* Not every notice is about a knowledge (a roof falling in). */
+        const KnowledgeDef *def = knowledge_def(notice->knowledge);
+        TR_FORMAT(panel_add(&panel), HUD_LINE_SIZE, tr(notice_text_key((NoticeType)notice->type)),
+                  def != NULL ? tr(def->name_key) : "", notice->name);
     }
     float width, height;
     panel_size(app, &panel, &width, &height);
@@ -987,6 +1005,10 @@ void hud_draw(App *app)
         } else {
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool"),
                       tr(tool_name_key(app->tool_type)));
+            if (app->tool_type == DESIGNATION_NONE) {
+                panel_add_text(&tool, tr(app_roof_view(app) ? "hud.tool.cancel_roofs"
+                                                            : "hud.tool.cancel_ground"));
+            }
             if (app->tool_type != DESIGNATION_NONE &&
                 !game_designation_available(&app->game, app->tool_type)) {
                 panel_add_text(&tool, tr("hud.tool.unavailable"));

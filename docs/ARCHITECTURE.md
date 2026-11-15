@@ -65,6 +65,7 @@ simulation:
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost...), kept in a ring |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
 | `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
+| `roof`       | Roofs falling in when their last support goes (half the materials drop), checked around what the map logged as changed |
 | `room`       | Rooms: areas closed by walls, doors and rock, and whether roofs cover them (a cache) |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
@@ -579,12 +580,28 @@ the builder's gathering level). Only then does the construction work start.
 **Roofs**: `STRUCTURE_ROOF` is planned and built like any structure (a
 rectangle filled with sites), but lives in a map layer of its own
 (`Map.roof`, `Map.roof_quality`, `map_set_roof()`): a roof covers a bed, a
-wall, a stockpile or a workstation, and is not cleared of plants. A roof
-tile needs a wall or rock within `ROOF_SUPPORT_RANGE` (2) tiles; a planned
-wall counts when planning (`construction_can_place_roof()`), so a whole hut
-is planned at once, but the work waits until a wall stands
-(`construction_can_work()`). Taking a tile apart removes its structure
-first, its roof with a second order. `map_natural_roof()` covers open tiles
+wall, a stockpile or a workstation, and is not cleared of plants. Its sites
+have a layer of their own too (`Constructions.roof_at`,
+`construction_roof_at()`, `construction_is_roof()`), so a roof can be
+planned over the site of a wall or a bed and the other way round; builders
+reserve a roof's site in a kind of its own (`RESERVATION_ROOF_CONSTRUCTION`)
+and look at both sites of each tile next to them, the structure's first. A
+roof tile needs a wall or rock within `ROOF_SUPPORT_RANGE` (2) tiles; a
+planned wall counts when planning (`construction_roof_held()`), so a whole
+hut is planned at once, but the work waits until a wall stands
+(`construction_can_work()`). Taking a roof down is an order of its own
+(`DESIGNATION_REMOVE_ROOF`, half the materials back); *take apart* only
+deals with structures. Orders and sites belong to a layer
+(`designation_is_roof()`): `game_designate_rect()` leaves orders of the other
+layer alone and `game_cancel_rect()` (the cancel tool) removes one layer's.
+When the last support of a roof goes (a wall taken apart or fallen apart, a
+door in its place, rock dug out), the roof falls in (`core/roof.h`): half its
+materials drop on the tile, an order to take it down goes, and the game
+raises a notice. `roofs_collapse()` runs every tick after the settlers and
+only checks the roofs within `ROOF_SUPPORT_RANGE` of what the map logged as
+changed (`Map.build_log`, `Map.topology_log`), or every roof when the logs
+overflowed; the `RoofWatch` it keeps is derived, not hashed. A light grass
+roof hurts nobody. `map_natural_roof()` covers open tiles
 with rock within 3 tiles in at least 6 of the 8 directions (caves,
 overhangs). `map_hash()` only hashes the roof layers once a roof exists, so
 older hashes stay valid.
@@ -807,8 +824,9 @@ patch otherwise. The tile inspector shows the stones left in the ground.
 ### Debug cheats
 
 `Game.debug` (`GameDebug`) holds cheats for testing, switched from the debug
-menu (F4, `game/debug_panel.c`) through `game_set_instant_build()` and
-`game_set_free_crafts()`. They are simulation state: `game_hash()` includes
+menu (F4, `game/debug_panel.c`) through `game_set_instant_build()`,
+`game_set_free_crafts()`, `game_set_no_tools()` and
+`game_set_instant_deconstruct()`. They are simulation state: `game_hash()` includes
 them, but only while one is on, so that hashes stay those of a game without
 them (`bench_simulation` hashes are unchanged).
 
@@ -827,6 +845,17 @@ them (`bench_simulation` hashes are unchanged).
   the first allowed input type, standard grade at least. `Workstation.free_input`
   marks it so that removing the station or the bill drops nothing. Tools, the
   recipe's knowledge and a burning fire are still needed.
+- **No tools**: `ColonistContext.no_tools` lets crafts go without their tools
+  (no tool search nor detour for a better one, `craft_tool_factor()` does not
+  stop) and raises the speed of work done without a tool to a standard
+  tool's (×1, `work_with_tool()`); carried tools still help and wear when
+  they do better. `game_recipe_missing_tools()` and `game_bill_has_input()`
+  follow.
+- **Instant deconstruct**: at the start of each tick, `game_tick()` carries
+  out every order to take a structure apart or a roof down
+  (`designation_add_work()` with all the work needed: half the materials
+  back), removing the refresh site of a structure taken apart; roofs left
+  without support fall in later in the same tick.
 
 ## Pathfinding
 
@@ -969,6 +998,13 @@ selected (`build_like_selection()`).
 The structure tool (`APP_TOOL_STRUCTURE`) previews the sites a drag would
 place (`render_structure_preview()`); structures and sites are drawn by
 `render_structures()`.
+Roofs would hide what is under them, so they are only drawn in the roof view
+(`app_roof_view()`: Y, `App.show_roofs`, or while the roof tool or the
+order to take roofs down is active): built roofs, the sites and orders of
+roofs, natural roofs; while planning roofs, the tiles a roof could rest on
+(`render_roof_support()`). In the roof view a click selects a roof or its
+site, and the cancel tool only deals with roofs; elsewhere it leaves them
+alone. The tile inspector always tells about the roof over a tile.
 
 The UI is immediate-mode (`game/ui.h`): panels and widgets are laid out and
 drawn every frame. Everything drawn belongs to an owner: a window (an

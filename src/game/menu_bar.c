@@ -35,6 +35,8 @@ static const MenuTool TOOLS[] = {
      N_("designation.mine"), N_("tool.mine.description"), APP_KEY_MINE},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DECONSTRUCT, RENDER_ICON_DECONSTRUCT,
      N_("designation.deconstruct"), N_("tool.deconstruct.description"), SDL_SCANCODE_UNKNOWN},
+    {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_REMOVE_ROOF, RENDER_ICON_REMOVE_ROOF,
+     N_("designation.remove_roof"), N_("tool.remove_roof.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_NONE, RENDER_ICON_CANCEL,
      N_("tool.cancel"), N_("tool.cancel.description"), APP_KEY_CANCEL},
 };

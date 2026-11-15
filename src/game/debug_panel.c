@@ -8,6 +8,8 @@ typedef struct DebugRows {
     const GameDebug *debug;
     bool toggle_instant_build;
     bool toggle_free_crafts;
+    bool toggle_no_tools;
+    bool toggle_instant_deconstruct;
 } DebugRows;
 
 /* A check box on its own row. Returns whether it was clicked. */
@@ -28,6 +30,9 @@ static void debug_rows(UiLayout *layout, void *userdata)
         checkbox_row(layout, tr("debug.instant_build"), rows->debug->instant_build);
     rows->toggle_free_crafts |=
         checkbox_row(layout, tr("debug.free_crafts"), rows->debug->free_crafts);
+    rows->toggle_no_tools |= checkbox_row(layout, tr("debug.no_tools"), rows->debug->no_tools);
+    rows->toggle_instant_deconstruct |= checkbox_row(layout, tr("debug.instant_deconstruct"),
+                                                     rows->debug->instant_deconstruct);
 }
 
 void debug_panel_draw(App *app)
@@ -45,6 +50,12 @@ void debug_panel_draw(App *app)
     }
     if (rows.toggle_free_crafts) {
         game_set_free_crafts(game, !game->debug.free_crafts);
+    }
+    if (rows.toggle_no_tools) {
+        game_set_no_tools(game, !game->debug.no_tools);
+    }
+    if (rows.toggle_instant_deconstruct) {
+        game_set_instant_deconstruct(game, !game->debug.instant_deconstruct);
     }
     if (!open) {
         app->show_debug_menu = false;

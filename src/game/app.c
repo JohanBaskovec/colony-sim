@@ -44,6 +44,13 @@ bool app_tool_active(const App *app, AppTool tool, int type)
     }
 }
 
+bool app_roof_view(const App *app)
+{
+    return app->show_roofs ||
+           (app->tool == APP_TOOL_STRUCTURE && structure_is_roof(app->structure_type)) ||
+           (app->tool == APP_TOOL_DESIGNATE && designation_is_roof(app->tool_type));
+}
+
 void app_toggle_tool(App *app, AppTool tool, int type)
 {
     if (app_tool_active(app, tool, type)) {
@@ -94,29 +101,32 @@ static void clear_selection(App *app)
     app->structure_selected = false;
 }
 
-static const ConstructionSite *site_at(const App *app, int x, int y)
+/* The construction site on a tile, in the roof layer (`roof`) or not. */
+static const ConstructionSite *site_at(const App *app, int x, int y, bool roof)
 {
     const Constructions *sites = &app->game.constructions;
-    return construction_get(sites, construction_at(sites, x, y));
+    return construction_get(sites, construction_in_layer(sites, x, y, roof));
 }
 
-/* Type of the structure, of the construction site, or of the roof, on a
- * tile, in that order (STRUCTURE_NONE for a workstation's site). */
-static StructureType structure_type_at(const App *app, int x, int y)
+/* Type of what is built, else of the construction site, on a tile, in the
+ * roof layer (`roof`) or not (STRUCTURE_NONE for a workstation's site). */
+static StructureType structure_type_at(const App *app, int x, int y, bool roof)
 {
-    StructureType built = map_structure(&app->game.map, x, y);
+    StructureType built =
+        roof ? map_roof(&app->game.map, x, y) : map_structure(&app->game.map, x, y);
     if (built != STRUCTURE_NONE) {
         return built;
     }
-    const ConstructionSite *site = site_at(app, x, y);
-    return site != NULL ? (StructureType)site->type : map_roof(&app->game.map, x, y);
+    const ConstructionSite *site = site_at(app, x, y, roof);
+    return site != NULL ? (StructureType)site->type : STRUCTURE_NONE;
 }
 
 /* Whether a structure or a construction site (a workstation's too) lies on a
- * tile: what a click selects as a structure. */
-static bool structure_or_site_at(const App *app, int x, int y)
+ * tile, in a layer: what a click selects as a structure. */
+static bool structure_or_site_at(const App *app, int x, int y, bool roof)
 {
-    return structure_type_at(app, x, y) != STRUCTURE_NONE || site_at(app, x, y) != NULL;
+    return structure_type_at(app, x, y, roof) != STRUCTURE_NONE ||
+           site_at(app, x, y, roof) != NULL;
 }
 
 /* Direction of the structure, or of the construction site, on a tile. */
@@ -133,7 +143,8 @@ static Direction structure_direction_at(const App *app, int x, int y)
 static void select_structure(App *app, int x, int y)
 {
     clear_selection(app);
-    app->structure_selected = structure_or_site_at(app, x, y);
+    app->selected_structure_roof = app_roof_view(app);
+    app->structure_selected = structure_or_site_at(app, x, y, app->selected_structure_roof);
     app->selected_structure_x = x;
     app->selected_structure_y = y;
 }
@@ -142,7 +153,8 @@ static void select_structure(App *app, int x, int y)
 static void prune_structure_selection(App *app)
 {
     if (app->structure_selected &&
-        !structure_or_site_at(app, app->selected_structure_x, app->selected_structure_y)) {
+        !structure_or_site_at(app, app->selected_structure_x, app->selected_structure_y,
+                              app->selected_structure_roof)) {
         app->structure_selected = false;
     }
 }
@@ -418,14 +430,15 @@ static void build_like_selection(App *app)
 {
     const Workstation *station =
         workstation_get_const(&app->game.workstations, app->selected_station);
+    bool roof = app->selected_structure_roof;
     StructureType structure =
         app->structure_selected
-            ? structure_type_at(app, app->selected_structure_x, app->selected_structure_y)
+            ? structure_type_at(app, app->selected_structure_x, app->selected_structure_y, roof)
             : STRUCTURE_NONE;
     /* A workstation's site: another of that workstation. */
     const ConstructionSite *site =
         app->structure_selected
-            ? site_at(app, app->selected_structure_x, app->selected_structure_y)
+            ? site_at(app, app->selected_structure_x, app->selected_structure_y, roof)
             : NULL;
     WorkstationType site_station =
         site != NULL ? construction_workstation(site) : WORKSTATION_TYPE_COUNT;
@@ -467,6 +480,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_HELP: app->show_help = !app->show_help; return;
     case APP_KEY_DEBUG_MENU: app->show_debug_menu = !app->show_debug_menu; return;
     case APP_KEY_TEMPERATURE: app->show_temperature = !app->show_temperature; return;
+    case APP_KEY_ROOF_VIEW: app->show_roofs = !app->show_roofs; return;
     case APP_KEY_MINE: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); return;
     case APP_KEY_GATHER: app_toggle_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD); return;
     case APP_KEY_CANCEL: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); return;
@@ -549,7 +563,7 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
             int stockpile = stockpile_at(&app->game.stockpiles, x, y);
             if (station != WORKSTATION_NONE) {
                 select_station(app, station);
-            } else if (structure_or_site_at(app, x, y)) {
+            } else if (structure_or_site_at(app, x, y, app_roof_view(app))) {
                 select_structure(app, x, y);
             } else if (stockpile != STOCKPILE_NONE) {
                 select_stockpile(app, stockpile);
@@ -682,13 +696,12 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         int x0, y0, x1, y1;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
         /* Orders nobody can carry out are refused (the tool panel says why). */
-        if (app->tool_type == DESIGNATION_NONE ||
-            game_designation_available(&app->game, app->tool_type)) {
-            game_designate_rect(&app->game, x0, y0, x1, y1, app->tool_type);
-        }
         if (app->tool_type == DESIGNATION_NONE) {
-            game_remove_blueprints_rect(&app->game, x0, y0, x1, y1);
+            /* In the roof view, roofs only; elsewhere, everything else. */
+            game_cancel_rect(&app->game, x0, y0, x1, y1, app_roof_view(app));
             prune_station_selection(app);
+        } else if (game_designation_available(&app->game, app->tool_type)) {
+            game_designate_rect(&app->game, x0, y0, x1, y1, app->tool_type);
         }
     } else if (app->tool == APP_TOOL_BUILD) {
         /* Blueprints nobody can build are refused (the tool panel says why). */
@@ -809,12 +822,13 @@ static void render_frame(App *app)
     render_dirt(app->renderer, &app->game.dirt, &app->camera);
     render_gather_zones(app->renderer, &app->game, &app->camera, app->selected_gather_zone);
     render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
-    render_structures(app->renderer, &app->game, &app->camera);
+    bool roofs = app_roof_view(app);
+    render_structures(app->renderer, &app->game, &app->camera, roofs);
     render_workstations(app->renderer, &app->game, &app->camera, app->selected_station);
     render_items(app->renderer, &app->game, &app->camera);
     render_world_sprites(app->renderer, app->sprites, &app->game, &app->camera, app->selected,
                          app->selected_count);
-    render_designations(app->renderer, &app->game, &app->camera);
+    render_designations(app->renderer, &app->game, &app->camera, roofs);
     hud_draw_item_counts(app);
     render_daylight(app->renderer, &app->game, &app->camera);
     if (app->show_temperature) {
@@ -835,6 +849,9 @@ static void render_frame(App *app)
                                      app->hover_x, app->hover_y);
         }
     } else if (app->tool == APP_TOOL_STRUCTURE) {
+        if (structure_is_roof(app->structure_type)) {
+            render_roof_support(app->renderer, &app->game, &app->camera);
+        }
         if (app->left_button_down) {
             float mouse_x, mouse_y;
             SDL_GetMouseState(&mouse_x, &mouse_y);

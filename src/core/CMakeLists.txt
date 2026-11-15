@@ -24,6 +24,7 @@ add_library(colony_core STATIC
     pool.c
     recipe.c
     region.c
+    roof.c
     room.c
     temperature.c
     reservation.c

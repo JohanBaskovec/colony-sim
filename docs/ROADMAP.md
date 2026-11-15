@@ -81,8 +81,9 @@ Tick items as they land and add newly discovered tasks.
 - [x] Profile `bench_simulation` scenario 3 (64 colonists, 5 days: 2.8 ms → 40 µs per tick, worst tick 1.4 s → 15 ms): exact haul pre-check, region scans before fetching and bed searches, stamps narrowed per reservation kind, a minimum delay between failed work searches, regions refreshed before each colonist
 - [ ] Remaining scenario 3 spikes (about 15 ms with 64 colonists): look at the worst ticks again; the pre-check scans cost grows with the map size (keep a per-region count of haulable stacks if it shows up on large maps)
 - [x] Workstations built through construction sites: their blueprints are sites (haulers bring the materials, builders work from a neighboring tile, same inspector, cancelled like other sites, "build another" works on them); the station appears once the site is finished
-- [x] Roofs and rooms: a grass roof built like any structure, tile by tile over anything (bed, wall, stockpile), resting on a wall or rock within 2 tiles (planned walls count, the work waits for them); natural rock roof in caves; rooms closed by walls, screens and rock, roofed or not, in the tile inspector; taking apart removes the structure, then the roof
-- [ ] Roofs and rooms, later: a roof falls when its last support goes; a key to hide roofs; effects of roofs and rooms (rain, rot, warmth, "slept outside", room quality) with M4 and moods; rooms kept up to date incrementally once the simulation uses them
+- [x] Roofs and rooms: a grass roof built like any structure, tile by tile over anything (bed, wall, stockpile), resting on a wall or rock within 2 tiles (planned walls count, the work waits for them); natural rock roof in caves; rooms closed by walls, screens and rock, roofed or not, in the tile inspector
+- [x] Roof layer: roofs and their sites only drawn in the roof view (Y, or while using a roof tool), roofs planned over the sites of walls and beds, an order of its own to take roofs down, the cancel tool working on one layer at a time; a roof falls in when its last support in reach goes (half its materials drop, a notice)
+- [ ] Roofs and rooms, later: effects of roofs and rooms (rain, rot, warmth, "slept outside", room quality) with M4 and moods; rooms kept up to date incrementally once the simulation uses them
 - [ ] Clearing cave floors, once mining exists (rock cannot be mined yet: it needs a pick)
 - [x] Knowledge spreading: conversation (nearby settlers chat now and then, a speech bubble, a little learned from what the other talks about, never past 30), apprenticeship (a settler lacking the level for a job assists a master doing it: learns up to the master's level, the work goes 25% faster, one apprentice per master), fading after 15 days without practice (down to 80% of the best level); only discovered knowledges in the colonist inspector, a tooltip per knowledge (gains of the day by source, practice, fading, masters); notices in the top right corner (a knowledge left to a single master, lost, forgotten, mastered again)
 - [x] Fireside stories and the "teach" mark (with the open hearth, M4)
@@ -152,4 +153,4 @@ Tick items as they land and add newly discovered tasks.
 - [x] Simulation benchmark (`bench/bench_simulation`: many colonists, long runs, state hash)
 - [ ] Windows and macOS CI builds
 - [ ] Choose a license
-- [x] Debug menu (F4): instant free construction, free crafts (`GameDebug`)
+- [x] Debug menu (F4): instant free construction, free crafts, work without tools, instant taking apart (`GameDebug`)
