@@ -51,7 +51,7 @@ simulation:
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying), rot |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `tool`       | Tool speed factors by kind of work (bare hands included) and grade, best carried tool, wear and breaking |
-| `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, branches, twigs, grass, flint, cobbles: gather N, until N in the colony, forever; fully grown trees only), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
+| `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, branches, twigs, grass, flint, cobbles: gather N, until N in the colony or N days of food, forever; full harvest only) and per group of resources (wood, food, stones: limits each of its resources), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
@@ -90,11 +90,11 @@ simulation:
 | `render`       | Draws the map (colored ground tiles), zones, items, plants and colonists (sprites, depth sorted), daylight overlay, highlights |
 | `sprites`      | Loads `assets/sprites/*.png` into a texture atlas with halved copies, batches sprite quads |
 | `hud`          | Builds and draws the HUD panels and the windows in stacking order; all text goes through `tr()` |
-| `ui`           | Immediate-mode widgets (panel, window, button, check box, slider, tooltip) and click capture |
+| `ui`           | Immediate-mode widgets (panel, window, button, check box, slider, dropdown, tooltip) and click capture |
 | `ui_layout`    | Rows of a window laid out twice: measured, then drawn (window sized to its content) |
 | `menu_bar`     | Bottom left menus: Build (categories, icon buttons), Work, ? (help)     |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
-| `gather_zone_panel` | Inspector of the selected gathering zone (priority, a check box per resource with how many are available, mode, target, progress, fully grown option, warnings) |
+| `gather_zone_panel` | Inspector of the selected gathering zone (priority; foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings) |
 | `station_panel` | Inspector of the selected workstation (bills, warnings) |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`)                    |
@@ -467,9 +467,19 @@ single-tile orders (mining). A zone holds one order per resource
 (`GatherOrder`): off by default, and when enabled it gathers N items and stops
 (counted by the order itself), or gathers until the items lying in the colony
 (`Items.totals`, as for bills; grass counts fresh and dry) reach a target, or
-gathers forever. Wood may wait for fully grown trees (on by default) so that
-settlers do not walk to young trees that give little.
-`gather_zones_update()` recomputes each tick which resources every zone wants
+gathers forever. Food may count days of food instead of items
+(`GatherUnit`): `gather_food_days()` divides the nutrition of the food lying
+in the colony by what the settlers eat in a day (`gather_daily_food()`, from
+`NEED_FOOD_DECAY_PER_TICK`; the game passes it to `gather_zones_update()`).
+Resources belong to groups (`GatherGroup`: wood, food, stones; grass has
+none), each with an order of its own (`GatherGroupOrder`, always on: food
+until 5 days of food by default, the others forever): a resource is wanted
+only when its own order and its group's both want it, and a group's
+`done` counts what its resources gave. An order may wait for the full harvest
+(`ripe_only`): food, branches and twigs from plants whose stock is full
+(every fruit ripe, not a grown plant), trees and grass fully grown (on by
+default for wood only), so that settlers do not walk to plants that give
+little. `gather_zones_update()` recomputes each tick which resources every zone wants
 and bumps the zones revision when it changes; it is also bumped once per
 in-game hour, after every plant has grown, so that idle settlers look again.
 
@@ -1106,6 +1116,10 @@ drawn during the previous frame is captured before it reaches the map and
 handed to the topmost owner under it, whose first widget containing it
 consumes it; only that owner's widgets light up under the mouse. The mouse
 wheel over a window scrolls it (over any panel, it never zooms the map).
+A dropdown's list is drawn at the end of the frame, over the windows, as an
+owner of its own (`UI_POPUP_OWNER`), so that it captures the clicks on it;
+the option picked is returned by the dropdown at the next frame, and a click
+anywhere else closes the list (on the map, it does nothing else).
 
 Windows (inspectors, work grid, controls help) keep their position, stacking
 order and scroll in `Ui` from one frame to the next. They are sized to their
@@ -1113,7 +1127,8 @@ content: `ui_layout_window()` runs the rows once to measure them, then again
 to draw them. A window taller than the screen allows scrolls, with its
 content clipped. A click brings a window to the front, and a window opened
 again comes to the front; the HUD draws the open windows back to front
-(`hud_open_windows()`), then the menus on top, then the tooltip. Widgets act on the game directly through core functions
+(`hud_open_windows()`), then the menus on top, then an open dropdown list,
+then the tooltip. Widgets act on the game directly through core functions
 (`stockpile_set_priority()`...). It never influences the simulation,
 so the same seed gives the same game whatever the player looks at.
 

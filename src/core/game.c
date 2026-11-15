@@ -614,6 +614,11 @@ float game_item_rot_rate(const Game *game, int x, int y)
     return temperature_rot_rate(&game->temperatures, &game->map, x, y, rains);
 }
 
+float game_daily_food(const Game *game)
+{
+    return gather_daily_food((int)game->colonist_pool.count);
+}
+
 float game_outdoor_temperature(const Game *game)
 {
     return weather_outdoor(&game->weather, game->clock.tick);
@@ -812,7 +817,7 @@ void game_tick(Game *game)
     }
     beds_forget_missing(&game->beds, &game->map); /* Beds taken apart or fallen apart. */
     /* What gathering zones want, from what lies in the colony now. */
-    gather_zones_update(&game->gather_zones, game->items.totals);
+    gather_zones_update(&game->gather_zones, game->items.totals, game_daily_food(game));
     update_colonists(game);
     /* Walls taken apart or fallen apart, rock dug out: roofs left without
      * support fall in. */

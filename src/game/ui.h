@@ -1,6 +1,6 @@
 /*
- * Minimal immediate-mode UI: panels, windows, buttons, check boxes, sliders
- * and tooltips, drawn every frame.
+ * Minimal immediate-mode UI: panels, windows, buttons, check boxes, sliders,
+ * dropdowns and tooltips, drawn every frame.
  *
  * Everything drawn belongs to an owner: a window (its id) or a plain panel.
  * A mouse click (left or right) that lands on a panel or window drawn during
@@ -16,6 +16,12 @@
  * the front, and windows must be drawn in their stacking order (see
  * ui_window_z()). Sliders and scroll bars keep following the mouse while the
  * left button stays down after a click on them (dragging).
+ *
+ * A dropdown opens a list of options over everything else, drawn at the end
+ * of the frame (ui_draw_popup()); the list belongs to an owner of its own,
+ * so that it captures the clicks on it. An option picked is returned by the
+ * dropdown at the next frame. A click anywhere else closes the list (a click
+ * on the world does nothing else then).
  */
 #ifndef COLONY_GAME_UI_H
 #define COLONY_GAME_UI_H
@@ -29,8 +35,11 @@
 #define UI_MAX_WINDOWS 16
 #define UI_TOOLTIP_LINES 8
 #define UI_TOOLTIP_LINE_SIZE 256
-/* Window ids are 1 .. UI_ANONYMOUS_OWNER - 1. */
+/* Window ids are 1 .. UI_POPUP_OWNER - 1. */
 #define UI_ANONYMOUS_OWNER 1000
+#define UI_POPUP_OWNER (UI_ANONYMOUS_OWNER - 1) /* The open dropdown list. */
+#define UI_POPUP_OPTIONS 8
+#define UI_POPUP_OPTION_SIZE 96
 
 typedef enum UiCheck { UI_UNCHECKED, UI_PARTIAL, UI_CHECKED } UiCheck;
 
@@ -93,6 +102,16 @@ typedef struct Ui {
     float scroll_drag_offset;
     char tooltip[UI_TOOLTIP_LINES][UI_TOOLTIP_LINE_SIZE];
     int tooltip_count;
+    /* The open dropdown list (popup_id 0: none), below its button. */
+    int popup_id;
+    SDL_FRect popup_anchor;
+    char popup_options[UI_POPUP_OPTIONS][UI_POPUP_OPTION_SIZE];
+    int popup_count;
+    int popup_selected;
+    bool popup_seen;     /* Its dropdown was drawn this frame (else it closes). */
+    int popup_closed_id; /* Closed by this frame's click: that click does not open it again. */
+    int picked_id;       /* Dropdown an option was picked from, returned the next frame. */
+    int picked_option;
 } Ui;
 
 void ui_init(Ui *ui, SDL_Renderer *renderer, TextRenderer *text);
@@ -170,6 +189,26 @@ bool ui_toggle_button(Ui *ui, SDL_FRect rect, const char *label, bool active);
 /* An empty button frame for an icon the caller draws inside; lit while
  * `active`. True when it was left-clicked this frame. */
 bool ui_icon_button(Ui *ui, SDL_FRect rect, bool active);
+
+/* A small triangle button, pointing down when `open` (a section shown), right
+ * otherwise; true when it was left-clicked this frame. */
+bool ui_disclosure(Ui *ui, SDL_FRect rect, bool open);
+
+/* Width of a dropdown showing the widest of its options. */
+float ui_dropdown_width(Ui *ui, const char *const *options, int count);
+
+/*
+ * Dropdown showing options[selected]: a click opens the list of the `count`
+ * options (at most UI_POPUP_OPTIONS) below it, or closes it. Returns the
+ * option picked in the list (at the frame after the click), -1 otherwise.
+ * `id` (non-zero) tells the dropdowns drawn in a frame apart.
+ */
+int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int count,
+                int selected);
+
+/* Draws the open dropdown list, if any, over everything else but the
+ * tooltip; call it at the end of the frame, before ui_draw_tooltip(). */
+void ui_draw_popup(Ui *ui);
 
 /* Draws a check box followed by its label (the whole row is clickable); true
  * when it was clicked this frame. */

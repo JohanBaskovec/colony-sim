@@ -9,10 +9,22 @@
  * order either gathers a number of items and stops, or gathers until the
  * colony has a target number of the resource (items lying anywhere on the map
  * count, stored or not, like bills: see core/workstation.h), or gathers
- * forever. Wood may be taken from fully grown trees only, so that settlers do
- * not walk to young trees that give little. Wild food is there in its season
- * only (see PlantDef.food_days); what is easily mistaken for a poisonous
- * plant is only taken by skilled gatherers (GATHER_CAREFUL_MIN_LEVEL).
+ * forever. Food may instead be gathered until the colony has a number of days
+ * of food: the nutrition of the food lying in the colony over what all the
+ * settlers eat in a day (gather_food_days()).
+ *
+ * Resources come in groups (wood, food, stones; grass is on its own), each
+ * with an order of its own that limits all of its resources: a resource is
+ * gathered only while its own order and its group's order both want it (the
+ * group's order is never turned off; food: until 5 days of food by default).
+ *
+ * An order may wait for the full harvest (GatherOrder.ripe_only): wild food,
+ * branches and twigs are taken only from plants whose stock is full (every
+ * fruit ripe, not only a grown plant), trees felled and grass cut fully grown
+ * only, so that settlers do not walk to plants that give little. Wild food is
+ * there in its season only (see PlantDef.food_days); what is easily mistaken
+ * for a poisonous plant is only taken by skilled gatherers
+ * (GATHER_CAREFUL_MIN_LEVEL).
  *
  * A tile offers a job when it holds something an order wants (a tree to fell,
  * ripe fruit, a stock of twigs, stony ground...). When a tile offers several,
@@ -96,14 +108,32 @@ typedef enum GatherJob {
 typedef uint32_t GatherJobMask;
 #define GATHER_JOB_BIT(job) ((GatherJobMask)1u << (unsigned)(job))
 
+/* Groups of resources, each with an order limiting all of them. */
+typedef enum GatherGroup {
+    GATHER_GROUP_WOOD, /* Wood, branches, twigs. */
+    GATHER_GROUP_FOOD, /* Wild food. */
+    GATHER_GROUP_STONES,
+    GATHER_GROUP_COUNT
+} GatherGroup;
+
+#define GATHER_GROUP_NONE GATHER_GROUP_COUNT
+
 typedef struct GatherResourceDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
     ItemType item;        /* What gathering gives. */
     ItemTypeMask counted; /* Items counted as this resource in the colony (grass: fresh or dry). */
     GatherJob job;
-    bool ripe_option; /* Whether the order may wait for fully grown plants. */
+    bool ripe_option; /* Whether the order may wait for the full harvest. */
+    GatherGroup group; /* GATHER_GROUP_NONE: on its own. */
 } GatherResourceDef;
+
+typedef struct GatherGroupDef {
+    const char *id; /* Stable identifier (saves), never shown. */
+    const char *name_key;
+    GatherResourceMask members; /* In display order. */
+    bool food; /* May be gathered until a number of days of food. */
+} GatherGroupDef;
 
 typedef struct GatherJobDef {
     const char *id;
@@ -123,6 +153,16 @@ typedef struct GatherJobDef {
 /* NULL when out of range. */
 const GatherResourceDef *gather_resource_def(GatherResource resource);
 const GatherJobDef *gather_job_def(GatherJob job);
+const GatherGroupDef *gather_group_def(GatherGroup group);
+
+/* Group of a resource (GATHER_GROUP_NONE: none, or out of range). */
+GatherGroup gather_resource_group(GatherResource resource);
+
+/* Resources whose orders may wait for the full harvest. */
+GatherResourceMask gather_ripe_options(void);
+
+/* Whether a resource is food (it may be gathered until days of food). */
+bool gather_resource_is_food(GatherResource resource);
 
 /* Whether a settler at `level` in the job's knowledge can do it. */
 bool gather_job_doable_at(GatherJob job, double level);
@@ -135,17 +175,34 @@ typedef enum GatherMode {
     GATHER_MODE_COUNT
 } GatherMode;
 
+/* What GATHER_UNTIL counts. */
+typedef enum GatherUnit {
+    GATHER_UNIT_ITEMS,     /* Items lying in the colony. */
+    GATHER_UNIT_FOOD_DAYS, /* Days of food (food only, see gather_food_days()). */
+    GATHER_UNIT_COUNT
+} GatherUnit;
+
 #define GATHER_TARGET_MIN 1
 #define GATHER_TARGET_MAX 9999
 #define GATHER_TARGET_DEFAULT 20
+#define GATHER_FOOD_DAYS_DEFAULT 5
 
 typedef struct GatherOrder {
     bool enabled;
-    bool ripe_only; /* Fully grown plants only (resources with ripe_option). */
+    bool ripe_only; /* Full harvest only (resources with ripe_option). */
     uint8_t mode;   /* GatherMode */
+    uint8_t unit;   /* GatherUnit of GATHER_UNTIL. */
     uint16_t target;
     uint16_t done; /* Items gathered (counted by GATHER_DO_COUNT). */
 } GatherOrder;
+
+/* The order of a group: it is always on, and limits each of its resources. */
+typedef struct GatherGroupOrder {
+    uint8_t mode; /* GatherMode */
+    uint8_t unit; /* GatherUnit of GATHER_UNTIL. */
+    uint16_t target;
+    uint16_t done; /* Items of the group's resources gathered. */
+} GatherGroupOrder;
 
 typedef struct GatherZone {
     bool used;
@@ -155,6 +212,7 @@ typedef struct GatherZone {
      * any distance; then the nearest job among zones of the same priority. */
     int priority;
     GatherOrder orders[GATHER_RESOURCE_COUNT];
+    GatherGroupOrder groups[GATHER_GROUP_COUNT];
     /* Resources wanted now (orders enabled and not satisfied, see
      * gather_zones_update()). */
     GatherResourceMask wanted;
@@ -192,7 +250,9 @@ bool gather_stone_ground(const Map *map, int x, int y);
 /*
  * Creates a zone from the tiles of a rectangle (corners in any order) that
  * gather_zone_can_cover() accepts and that are in no other zone. Every order
- * is off. Returns its index, or GATHER_ZONE_NONE when no tile qualifies or
+ * is off (until GATHER_TARGET_DEFAULT items, wood waiting for full-grown
+ * trees); the food group gathers until GATHER_FOOD_DAYS_DEFAULT days of food,
+ * the other groups forever. Returns its index, or GATHER_ZONE_NONE when no tile qualifies or
  * the list is full.
  */
 int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1);
@@ -229,18 +289,43 @@ const GatherZone *gather_zone_get(const GatherZones *zones, int index);
 int gather_zone_at(const GatherZones *zones, int x, int y);
 
 /*
- * Order settings. Invalid zones, resources and modes are ignored; targets
- * are clamped to GATHER_TARGET_MIN..GATHER_TARGET_MAX. Enabling an order or
- * changing its mode starts its count over. Call gather_zones_update()
- * afterwards (the game does it every tick).
+ * Order settings. Invalid zones, resources, groups, modes and units are
+ * ignored, and so is the days-of-food unit for what is not food; targets are
+ * clamped to GATHER_TARGET_MIN..GATHER_TARGET_MAX. Enabling an order or
+ * changing its mode starts its count over. When the target comes to count
+ * something else (another unit, or days of food that become items to gather
+ * as the mode changes), it is set to that unit's default
+ * (GATHER_TARGET_DEFAULT items, GATHER_FOOD_DAYS_DEFAULT days). Call
+ * gather_zones_update() afterwards (the game does it every tick).
  */
 void gather_zone_set_enabled(GatherZones *zones, int index, GatherResource resource, bool on);
 void gather_zone_set_mode(GatherZones *zones, int index, GatherResource resource,
                           GatherMode mode);
+void gather_zone_set_unit(GatherZones *zones, int index, GatherResource resource,
+                          GatherUnit unit);
 void gather_zone_set_target(GatherZones *zones, int index, GatherResource resource,
                             int target);
 void gather_zone_set_ripe_only(GatherZones *zones, int index, GatherResource resource,
                                bool ripe_only);
+
+/* The same for the order of a group. Turning a group on or off does it for
+ * each of its resources (turning it on starts the group's count over); its
+ * full harvest option is set for each of its resources that has it. */
+void gather_zone_set_group_enabled(GatherZones *zones, int index, GatherGroup group, bool on);
+void gather_zone_set_group_mode(GatherZones *zones, int index, GatherGroup group,
+                                GatherMode mode);
+void gather_zone_set_group_unit(GatherZones *zones, int index, GatherGroup group,
+                                GatherUnit unit);
+void gather_zone_set_group_target(GatherZones *zones, int index, GatherGroup group, int target);
+void gather_zone_set_group_ripe_only(GatherZones *zones, int index, GatherGroup group,
+                                     bool ripe_only);
+
+/* Full harvest only, or not, for every resource of a zone that has the option. */
+void gather_zone_set_all_ripe_only(GatherZones *zones, int index, bool ripe_only);
+
+/* Resources of a zone whose order is on, and that wait for the full harvest. */
+GatherResourceMask gather_zone_enabled_mask(const GatherZone *zone);
+GatherResourceMask gather_zone_ripe_mask(const GatherZone *zone);
 
 /* GATHER_ZONE_PRIORITY_HIGHEST..GATHER_ZONE_PRIORITY_LOWEST (clamped). */
 void gather_zone_set_priority(GatherZones *zones, int index, int priority);
@@ -254,11 +339,34 @@ uint32_t gather_zones_wanting_priorities(const GatherZones *zones);
 /* Items counted as a resource among `totals` (items lying per type). */
 long gather_resource_count(GatherResource resource, const long totals[ITEM_TYPE_COUNT]);
 
-/* Resources a zone wants given the items lying in the colony. */
-GatherResourceMask gather_zone_wanted(const GatherZone *zone, const long totals[ITEM_TYPE_COUNT]);
+/* Items counted as the resources of a group among `totals`. */
+long gather_group_count(GatherGroup group, const long totals[ITEM_TYPE_COUNT]);
+
+/* Food need all the settlers lose in a day (what gather_food_days() divides by). */
+float gather_daily_food(int settlers);
+
+/*
+ * Whole days of food: the nutrition of the items of the `counted` types among
+ * `totals` (items lying in the colony; their state is ignored) over
+ * `daily_food` (gather_daily_food()). 0 when nobody eats.
+ */
+long gather_food_days(ItemTypeMask counted, const long totals[ITEM_TYPE_COUNT], float daily_food);
+
+/* Days of food in a resource, and in a group (the food group: every food,
+ * cooked or not). */
+long gather_resource_food_days(GatherResource resource, const long totals[ITEM_TYPE_COUNT],
+                               float daily_food);
+long gather_group_food_days(GatherGroup group, const long totals[ITEM_TYPE_COUNT],
+                            float daily_food);
+
+/* Resources a zone wants given the items lying in the colony and the food
+ * the settlers eat in a day (gather_daily_food()). */
+GatherResourceMask gather_zone_wanted(const GatherZone *zone, const long totals[ITEM_TYPE_COUNT],
+                                      float daily_food);
 
 /* Recomputes what every zone wants. */
-void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT]);
+void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT],
+                         float daily_food);
 
 /* Plants grew: tiles may offer new jobs. */
 void gather_zones_plants_changed(GatherZones *zones);
@@ -274,8 +382,8 @@ GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y
 
 /* How many items of each resource a zone's tiles hold now: wood of the trees,
  * ripe fruit, branches, twigs, grass to cut, cobbles and flint in the ground.
- * Plants the zone's orders leave alone (not fully grown, with that option)
- * do not count. All zeros for an invalid zone. */
+ * Plants the zone's orders leave alone (not ready, when waiting for the full
+ * harvest) do not count. All zeros for an invalid zone. */
 void gather_zone_available(const GatherZones *zones, const Map *map, int index,
                            long available[GATHER_RESOURCE_COUNT]);
 

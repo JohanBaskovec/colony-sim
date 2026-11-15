@@ -1,8 +1,11 @@
 /*
- * Inspector of the selected gathering zone: mode (until the colony has
- * enough, or forever), a target per stone type with how many lie in the
- * colony, what is being gathered now, deletion. Changes are applied to the
- * game immediately.
+ * Inspector of the selected gathering zone: its priority, then a row per
+ * group of resources (foldable) and per resource: a check box, how many the
+ * zone holds, the full harvest option (a plant with rays, tri-state for a
+ * group and for the whole zone, at the top of its column), the mode (a
+ * dropdown: forever, gather a number, until a number in the colony or days
+ * of food) with its target and progress; deletion. Changes are applied to
+ * the game immediately.
  */
 #ifndef COLONY_GAME_GATHER_ZONE_PANEL_H
 #define COLONY_GAME_GATHER_ZONE_PANEL_H

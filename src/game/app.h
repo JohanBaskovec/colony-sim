@@ -123,6 +123,8 @@ typedef struct App {
     /* Selected gathering zone (GATHER_ZONE_NONE if none), same rules. */
     int selected_gather_zone;
     int selected_gather_zone_number;
+    /* Groups of resources folded in the gathering zone window (UI state). */
+    bool gather_group_folded[GATHER_GROUP_COUNT];
     /* Selected structure or construction site (its tile), same rules; in the
      * roof layer when selected in the roof view. */
     bool structure_selected;

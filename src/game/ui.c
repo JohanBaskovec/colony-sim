@@ -149,6 +149,14 @@ bool ui_is_over_panel(const Ui *ui, float x, float y)
 bool ui_capture_click(Ui *ui, float x, float y, int button)
 {
     int owner = owner_at(ui, x, y);
+    if (ui->popup_id != 0 && owner != UI_POPUP_OWNER) {
+        /* A click outside the open list closes it. */
+        ui->popup_closed_id = ui->popup_id;
+        ui->popup_id = 0;
+        if (owner == 0) {
+            return true; /* Nothing else happens on the world. */
+        }
+    }
     if (owner == 0) {
         return false;
     }
@@ -194,6 +202,7 @@ void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y, bool left_button_down,
     ui->anonymous_count = 0;
     ui->owner = 0;
     ui->tooltip_count = 0;
+    ui->popup_seen = false;
 }
 
 void ui_end_frame(Ui *ui)
@@ -201,6 +210,7 @@ void ui_end_frame(Ui *ui)
     SDL_memcpy(ui->previous_areas, ui->areas, sizeof(ui->areas));
     ui->previous_area_count = ui->area_count;
     ui->click_pending = false;
+    ui->popup_closed_id = 0;
     for (int i = 0; i < UI_MAX_WINDOWS; i++) {
         ui->windows[i].was_drawn = ui->windows[i].drawn;
         ui->windows[i].drawn = false;
@@ -435,6 +445,110 @@ bool ui_toggle_button(Ui *ui, SDL_FRect rect, const char *label, bool active)
 bool ui_icon_button(Ui *ui, SDL_FRect rect, bool active)
 {
     return button_frame(ui, rect, active);
+}
+
+bool ui_disclosure(Ui *ui, SDL_FRect rect, bool open)
+{
+    bool clicked = button_frame(ui, rect, false);
+    centered_label(ui, rect, open ? "▾" : "▸");
+    return clicked;
+}
+
+/* Room for the arrow of a dropdown, after its label. */
+static float dropdown_arrow_width(Ui *ui)
+{
+    return ui_text_width(ui, "▾") + UI_BUTTON_PADDING;
+}
+
+float ui_dropdown_width(Ui *ui, const char *const *options, int count)
+{
+    float widest = 0.0f;
+    for (int i = 0; i < count; i++) {
+        widest = SDL_max(widest, ui_text_width(ui, options[i]));
+    }
+    return SDL_ceilf(widest) + 2.0f * UI_BUTTON_PADDING + dropdown_arrow_width(ui);
+}
+
+int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int count,
+                int selected)
+{
+    int picked = -1;
+    if (ui->picked_id == id) {
+        picked = ui->picked_option;
+        ui->picked_id = 0;
+    }
+    count = SDL_clamp(count, 0, UI_POPUP_OPTIONS);
+    bool open = ui->popup_id == id;
+    bool clicked = button_frame(ui, rect, open);
+    float line = (float)text_line_height(ui->text);
+    float text_y = SDL_floorf(rect.y + (rect.h - line) * 0.5f);
+    if (selected >= 0 && selected < count) {
+        ui_label(ui, options[selected], rect.x + UI_BUTTON_PADDING, text_y);
+    }
+    ui_label_dim(ui, "▾", rect.x + rect.w - dropdown_arrow_width(ui), text_y);
+    if (clicked && open) {
+        ui->popup_id = 0;
+    } else if (clicked && ui->popup_closed_id != id) {
+        ui->popup_id = id;
+        ui->popup_count = count;
+        ui->popup_selected = selected;
+        for (int i = 0; i < count; i++) {
+            SDL_strlcpy(ui->popup_options[i], options[i], UI_POPUP_OPTION_SIZE);
+        }
+    }
+    if (ui->popup_id == id) {
+        ui->popup_seen = true;
+        ui->popup_anchor = rect; /* Follows the window when it moves or scrolls. */
+    }
+    return picked;
+}
+
+void ui_draw_popup(Ui *ui)
+{
+    if (ui->popup_id == 0) {
+        return;
+    }
+    if (!ui->popup_seen) {
+        ui->popup_id = 0; /* Its window is gone. */
+        return;
+    }
+    float row = ui_row_height(ui);
+    float width = ui->popup_anchor.w;
+    for (int i = 0; i < ui->popup_count; i++) {
+        width = SDL_max(width, ui_text_width(ui, ui->popup_options[i]) + 2.0f * UI_BUTTON_PADDING);
+    }
+    width = SDL_ceilf(width);
+    float height = row * (float)ui->popup_count;
+    float x = SDL_min(ui->popup_anchor.x, ui->screen_width - width);
+    float y = ui->popup_anchor.y + ui->popup_anchor.h;
+    if (y + height > ui->screen_height) {
+        y = ui->popup_anchor.y - height; /* Above the button. */
+    }
+    SDL_FRect box = {SDL_max(0.0f, x), SDL_max(0.0f, y), width, height};
+    ui->owner = UI_POPUP_OWNER;
+    add_area(ui, box, UI_POPUP_OWNER);
+    fill(ui, box, WINDOW_COLOR);
+    float line = (float)text_line_height(ui->text);
+    int picked = -1;
+    for (int i = 0; i < ui->popup_count; i++) {
+        SDL_FRect item = {box.x, box.y + row * (float)i, box.w, row};
+        if (ui_hovered(ui, item)) {
+            fill(ui, item, BUTTON_HOVER_COLOR);
+        } else if (i == ui->popup_selected) {
+            fill(ui, item, BUTTON_ACTIVE_COLOR);
+        }
+        ui_label(ui, ui->popup_options[i], item.x + UI_BUTTON_PADDING,
+                 SDL_floorf(item.y + (row - line) * 0.5f));
+        if (ui_take_click(ui, item) == SDL_BUTTON_LEFT) {
+            picked = i;
+        }
+    }
+    border(ui, box, BORDER_COLOR);
+    if (picked >= 0) {
+        ui->picked_id = ui->popup_id;
+        ui->picked_option = picked;
+        ui->popup_id = 0;
+    }
 }
 
 float ui_checkbox_width(Ui *ui, const char *label)

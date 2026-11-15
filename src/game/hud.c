@@ -1092,5 +1092,6 @@ void hud_draw(App *app)
         draw_window(app, open[i]);
     }
     menu_bar_draw(app);
+    ui_draw_popup(&app->ui);
     ui_draw_tooltip(&app->ui);
 }

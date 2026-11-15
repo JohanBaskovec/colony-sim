@@ -200,6 +200,9 @@ bool game_tile_has_colonist(const Game *game, int x, int y);
  * bounds. */
 float game_item_rot_rate(const Game *game, int x, int y);
 
+/* Food need all the colonists lose in a day (gather_daily_food()). */
+float game_daily_food(const Game *game);
+
 /* Outdoor air temperature now, with the weather. */
 float game_outdoor_temperature(const Game *game);
 

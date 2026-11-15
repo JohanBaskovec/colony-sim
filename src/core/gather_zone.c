@@ -1,5 +1,6 @@
 #include "core/gather_zone.h"
 
+#include "core/colonist.h"
 #include "core/i18n.h"
 #include "core/util.h"
 
@@ -24,39 +25,67 @@
 
 #define ONE(type) ITEM_TYPE_BIT(type)
 
+#define WOOD GATHER_GROUP_WOOD
+#define FOOD GATHER_GROUP_FOOD
+#define STONES GATHER_GROUP_STONES
+
 static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
     [GATHER_WOOD] = {"wood", N_("gather_zone.resource.wood"), ITEM_WOOD, ONE(ITEM_WOOD),
-                     GATHER_JOB_CHOP, true},
+                     GATHER_JOB_CHOP, true, WOOD},
     [GATHER_BLACKBERRIES] = {"blackberries", N_("gather_zone.resource.blackberries"),
-                             ITEM_BLACKBERRIES, ONE(ITEM_BLACKBERRIES), GATHER_JOB_HARVEST, false},
+                             ITEM_BLACKBERRIES, ONE(ITEM_BLACKBERRIES), GATHER_JOB_HARVEST, true,
+                             FOOD},
     [GATHER_HAZELNUTS] = {"hazelnuts", N_("gather_zone.resource.hazelnuts"), ITEM_HAZELNUTS,
-                          ONE(ITEM_HAZELNUTS), GATHER_JOB_HARVEST, false},
+                          ONE(ITEM_HAZELNUTS), GATHER_JOB_HARVEST, true, FOOD},
     [GATHER_MUSHROOMS] = {"mushrooms", N_("gather_zone.resource.mushrooms"), ITEM_MUSHROOMS,
-                          ONE(ITEM_MUSHROOMS), GATHER_JOB_HARVEST_CAREFULLY, false},
+                          ONE(ITEM_MUSHROOMS), GATHER_JOB_HARVEST_CAREFULLY, true, FOOD},
     [GATHER_WILD_GARLIC] = {"wild_garlic", N_("gather_zone.resource.wild_garlic"),
                             ITEM_WILD_GARLIC, ONE(ITEM_WILD_GARLIC), GATHER_JOB_HARVEST_CAREFULLY,
-                            false},
+                            true, FOOD},
     [GATHER_NETTLES] = {"nettles", N_("gather_zone.resource.nettles"), ITEM_NETTLES,
-                        ONE(ITEM_NETTLES), GATHER_JOB_HARVEST, false},
+                        ONE(ITEM_NETTLES), GATHER_JOB_HARVEST, true, FOOD},
     [GATHER_PLANTAIN] = {"plantain", N_("gather_zone.resource.plantain"), ITEM_PLANTAIN,
-                         ONE(ITEM_PLANTAIN), GATHER_JOB_HARVEST, false},
+                         ONE(ITEM_PLANTAIN), GATHER_JOB_HARVEST, true, FOOD},
     [GATHER_WILD_CARROTS] = {"wild_carrots", N_("gather_zone.resource.wild_carrots"),
                              ITEM_WILD_CARROTS, ONE(ITEM_WILD_CARROTS), GATHER_JOB_DIG_CAREFULLY,
-                             false},
+                             true, FOOD},
     [GATHER_CATTAIL_RHIZOMES] = {"cattail_rhizomes", N_("gather_zone.resource.cattail_rhizomes"),
                                  ITEM_CATTAIL_RHIZOMES, ONE(ITEM_CATTAIL_RHIZOMES), GATHER_JOB_DIG,
-                                 false},
+                                 true, FOOD},
     [GATHER_BRANCHES] = {"branches", N_("gather_zone.resource.branches"), ITEM_BRANCHES,
-                         ONE(ITEM_BRANCHES), GATHER_JOB_BRANCHES, false},
+                         ONE(ITEM_BRANCHES), GATHER_JOB_BRANCHES, true, WOOD},
     [GATHER_TWIGS] = {"twigs", N_("gather_zone.resource.twigs"), ITEM_TWIGS, ONE(ITEM_TWIGS),
-                      GATHER_JOB_TWIGS, false},
+                      GATHER_JOB_TWIGS, true, WOOD},
     [GATHER_GRASS] = {"grass", N_("gather_zone.resource.grass"), ITEM_FRESH_GRASS,
-                      ONE(ITEM_FRESH_GRASS) | ONE(ITEM_GRASS), GATHER_JOB_CUT_GRASS, false},
+                      ONE(ITEM_FRESH_GRASS) | ONE(ITEM_GRASS), GATHER_JOB_CUT_GRASS, true,
+                      GATHER_GROUP_NONE},
     [GATHER_FLINT] = {"flint", N_("gather_zone.resource.flint"), ITEM_FLINT, ONE(ITEM_FLINT),
-                      GATHER_JOB_STONES, false},
+                      GATHER_JOB_STONES, false, STONES},
     [GATHER_COBBLES] = {"cobbles", N_("gather_zone.resource.cobbles"), ITEM_COBBLE,
-                        ONE(ITEM_COBBLE), GATHER_JOB_STONES, false},
+                        ONE(ITEM_COBBLE), GATHER_JOB_STONES, false, STONES},
 };
+
+#undef WOOD
+#undef FOOD
+#undef STONES
+
+#define MEMBER(r) GATHER_RESOURCE_BIT(r)
+
+static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
+    [GATHER_GROUP_WOOD] = {"wood", N_("gather_zone.group.wood"),
+                           MEMBER(GATHER_WOOD) | MEMBER(GATHER_BRANCHES) | MEMBER(GATHER_TWIGS),
+                           false},
+    [GATHER_GROUP_FOOD] = {"food", N_("gather_zone.group.food"),
+                           MEMBER(GATHER_BLACKBERRIES) | MEMBER(GATHER_HAZELNUTS) |
+                               MEMBER(GATHER_MUSHROOMS) | MEMBER(GATHER_WILD_GARLIC) |
+                               MEMBER(GATHER_NETTLES) | MEMBER(GATHER_PLANTAIN) |
+                               MEMBER(GATHER_WILD_CARROTS) | MEMBER(GATHER_CATTAIL_RHIZOMES),
+                           true},
+    [GATHER_GROUP_STONES] = {"stones", N_("gather_zone.group.stones"),
+                             MEMBER(GATHER_FLINT) | MEMBER(GATHER_COBBLES), false},
+};
+
+#undef MEMBER
 
 #undef ONE
 
@@ -104,6 +133,34 @@ const GatherResourceDef *gather_resource_def(GatherResource resource)
 const GatherJobDef *gather_job_def(GatherJob job)
 {
     return (unsigned)job < GATHER_JOB_COUNT ? &JOB_DEFS[job] : NULL;
+}
+
+const GatherGroupDef *gather_group_def(GatherGroup group)
+{
+    return (unsigned)group < GATHER_GROUP_COUNT ? &GROUP_DEFS[group] : NULL;
+}
+
+GatherGroup gather_resource_group(GatherResource resource)
+{
+    return (unsigned)resource < GATHER_RESOURCE_COUNT ? RESOURCE_DEFS[resource].group
+                                                      : GATHER_GROUP_NONE;
+}
+
+GatherResourceMask gather_ripe_options(void)
+{
+    GatherResourceMask options = 0;
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        if (RESOURCE_DEFS[r].ripe_option) {
+            options |= GATHER_RESOURCE_BIT(r);
+        }
+    }
+    return options;
+}
+
+bool gather_resource_is_food(GatherResource resource)
+{
+    GatherGroup group = gather_resource_group(resource);
+    return group != GATHER_GROUP_NONE && GROUP_DEFS[group].food;
 }
 
 bool gather_job_doable_at(GatherJob job, double level)
@@ -264,10 +321,20 @@ static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, in
                          .number = zones->next_number,
                          .priority = GATHER_ZONE_PRIORITY_DEFAULT};
     for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
-        zone->orders[r] = (GatherOrder){.ripe_only = RESOURCE_DEFS[r].ripe_option,
+        /* Wood: young trees give little. */
+        zone->orders[r] = (GatherOrder){.ripe_only = r == GATHER_WOOD,
                                         .mode = GATHER_UNTIL,
+                                        .unit = GATHER_UNIT_ITEMS,
                                         .target = GATHER_TARGET_DEFAULT};
     }
+    for (int g = 0; g < GATHER_GROUP_COUNT; g++) {
+        zone->groups[g] = (GatherGroupOrder){.mode = GATHER_FOREVER,
+                                             .unit = GATHER_UNIT_ITEMS,
+                                             .target = GATHER_TARGET_DEFAULT};
+    }
+    zone->groups[GATHER_GROUP_FOOD] = (GatherGroupOrder){.mode = GATHER_UNTIL,
+                                                         .unit = GATHER_UNIT_FOOD_DAYS,
+                                                         .target = GATHER_FOOD_DAYS_DEFAULT};
     if (extend(zones, map, index, x0, y0, x1, y1, blocked) == 0) {
         zone->used = false;
         return GATHER_ZONE_NONE;
@@ -404,13 +471,58 @@ void gather_zone_set_enabled(GatherZones *zones, int index, GatherResource resou
     }
 }
 
+/* What the target of an order counts: days of food only while it gathers until. */
+static GatherUnit target_unit(uint8_t mode, uint8_t unit)
+{
+    return mode == GATHER_UNTIL ? (GatherUnit)unit : GATHER_UNIT_ITEMS;
+}
+
+static uint16_t unit_default_target(GatherUnit unit)
+{
+    return unit == GATHER_UNIT_FOOD_DAYS ? GATHER_FOOD_DAYS_DEFAULT : GATHER_TARGET_DEFAULT;
+}
+
+/* Sets the mode of an order (a resource's or a group's); when its target
+ * comes to count something else, it is set to that unit's default. */
+static bool set_mode(uint8_t *order_mode, uint8_t unit, uint16_t *target, uint16_t *done,
+                     GatherMode mode)
+{
+    if ((unsigned)mode >= GATHER_MODE_COUNT || *order_mode == mode) {
+        return false;
+    }
+    GatherUnit before = target_unit(*order_mode, unit);
+    GatherUnit after = target_unit((uint8_t)mode, unit);
+    if (before != after) {
+        *target = unit_default_target(after);
+    }
+    *order_mode = (uint8_t)mode;
+    *done = 0;
+    return true;
+}
+
 void gather_zone_set_mode(GatherZones *zones, int index, GatherResource resource,
                           GatherMode mode)
 {
     GatherOrder *order = get_order(zones, index, resource);
-    if (order != NULL && (unsigned)mode < GATHER_MODE_COUNT && order->mode != mode) {
-        order->mode = (uint8_t)mode;
-        order->done = 0;
+    if (order != NULL && set_mode(&order->mode, order->unit, &order->target, &order->done, mode)) {
+        changed(zones);
+    }
+}
+
+/* Whether `unit` may count what a resource (or group) is: days of food for food only. */
+static bool unit_allowed(GatherUnit unit, bool food)
+{
+    return unit == GATHER_UNIT_ITEMS || (unit == GATHER_UNIT_FOOD_DAYS && food);
+}
+
+void gather_zone_set_unit(GatherZones *zones, int index, GatherResource resource,
+                          GatherUnit unit)
+{
+    GatherOrder *order = get_order(zones, index, resource);
+    if (order != NULL && unit_allowed(unit, gather_resource_is_food(resource)) &&
+        order->unit != unit) {
+        order->unit = (uint8_t)unit;
+        order->target = unit_default_target(unit);
         changed(zones);
     }
 }
@@ -437,6 +549,110 @@ void gather_zone_set_ripe_only(GatherZones *zones, int index, GatherResource res
         order->ripe_only = ripe_only;
         changed(zones);
     }
+}
+
+static GatherGroupOrder *get_group_order(GatherZones *zones, int index, GatherGroup group)
+{
+    if (!is_valid(zones, index) || (unsigned)group >= GATHER_GROUP_COUNT) {
+        return NULL;
+    }
+    return &zones->list[index].groups[group];
+}
+
+void gather_zone_set_group_enabled(GatherZones *zones, int index, GatherGroup group, bool on)
+{
+    GatherGroupOrder *group_order = get_group_order(zones, index, group);
+    if (group_order == NULL) {
+        return;
+    }
+    if (on) {
+        group_order->done = 0;
+    }
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        if (GROUP_DEFS[group].members & GATHER_RESOURCE_BIT(r)) {
+            gather_zone_set_enabled(zones, index, (GatherResource)r, on);
+        }
+    }
+    changed(zones);
+}
+
+void gather_zone_set_group_mode(GatherZones *zones, int index, GatherGroup group,
+                                GatherMode mode)
+{
+    GatherGroupOrder *order = get_group_order(zones, index, group);
+    if (order != NULL && set_mode(&order->mode, order->unit, &order->target, &order->done, mode)) {
+        changed(zones);
+    }
+}
+
+void gather_zone_set_group_unit(GatherZones *zones, int index, GatherGroup group,
+                                GatherUnit unit)
+{
+    GatherGroupOrder *order = get_group_order(zones, index, group);
+    if (order != NULL && unit_allowed(unit, GROUP_DEFS[group].food) && order->unit != unit) {
+        order->unit = (uint8_t)unit;
+        order->target = unit_default_target(unit);
+        changed(zones);
+    }
+}
+
+void gather_zone_set_group_target(GatherZones *zones, int index, GatherGroup group, int target)
+{
+    GatherGroupOrder *order = get_group_order(zones, index, group);
+    if (order == NULL) {
+        return;
+    }
+    uint16_t value = (uint16_t)clampi(target, GATHER_TARGET_MIN, GATHER_TARGET_MAX);
+    if (order->target != value) {
+        order->target = value;
+        changed(zones);
+    }
+}
+
+/* Sets the full harvest option of the resources among `members`. */
+static void set_ripe_only_of(GatherZones *zones, int index, GatherResourceMask members,
+                             bool ripe_only)
+{
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        if (members & GATHER_RESOURCE_BIT(r)) {
+            gather_zone_set_ripe_only(zones, index, (GatherResource)r, ripe_only);
+        }
+    }
+}
+
+void gather_zone_set_group_ripe_only(GatherZones *zones, int index, GatherGroup group,
+                                     bool ripe_only)
+{
+    if ((unsigned)group < GATHER_GROUP_COUNT) {
+        set_ripe_only_of(zones, index, GROUP_DEFS[group].members, ripe_only);
+    }
+}
+
+void gather_zone_set_all_ripe_only(GatherZones *zones, int index, bool ripe_only)
+{
+    set_ripe_only_of(zones, index, ~(GatherResourceMask)0, ripe_only);
+}
+
+GatherResourceMask gather_zone_enabled_mask(const GatherZone *zone)
+{
+    GatherResourceMask mask = 0;
+    for (int r = 0; zone != NULL && r < GATHER_RESOURCE_COUNT; r++) {
+        if (zone->orders[r].enabled) {
+            mask |= GATHER_RESOURCE_BIT(r);
+        }
+    }
+    return mask;
+}
+
+GatherResourceMask gather_zone_ripe_mask(const GatherZone *zone)
+{
+    GatherResourceMask mask = 0;
+    for (int r = 0; zone != NULL && r < GATHER_RESOURCE_COUNT; r++) {
+        if (zone->orders[r].ripe_only && RESOURCE_DEFS[r].ripe_option) {
+            mask |= GATHER_RESOURCE_BIT(r);
+        }
+    }
+    return mask;
 }
 
 void gather_zone_set_priority(GatherZones *zones, int index, int priority)
@@ -481,29 +697,116 @@ long gather_resource_count(GatherResource resource, const long totals[ITEM_TYPE_
     return count;
 }
 
-GatherResourceMask gather_zone_wanted(const GatherZone *zone, const long totals[ITEM_TYPE_COUNT])
+long gather_group_count(GatherGroup group, const long totals[ITEM_TYPE_COUNT])
 {
-    GatherResourceMask wanted = 0;
-    for (int r = 0; zone != NULL && r < GATHER_RESOURCE_COUNT; r++) {
-        const GatherOrder *order = &zone->orders[r];
-        bool want = false;
-        if (order->enabled) {
-            switch ((GatherMode)order->mode) {
-            case GATHER_DO_COUNT: want = order->done < order->target; break;
-            case GATHER_UNTIL:
-                want = gather_resource_count((GatherResource)r, totals) < (long)order->target;
-                break;
-            default: want = true; break;
-            }
+    long count = 0;
+    for (int r = 0; (unsigned)group < GATHER_GROUP_COUNT && r < GATHER_RESOURCE_COUNT; r++) {
+        if (GROUP_DEFS[group].members & GATHER_RESOURCE_BIT(r)) {
+            count += gather_resource_count((GatherResource)r, totals);
         }
-        if (want) {
+    }
+    return count;
+}
+
+float gather_daily_food(int settlers)
+{
+    return settlers > 0 ? (float)settlers * NEED_FOOD_DECAY_PER_TICK * (float)TICKS_PER_DAY
+                        : 0.0f;
+}
+
+long gather_food_days(ItemTypeMask counted, const long totals[ITEM_TYPE_COUNT], float daily_food)
+{
+    if (daily_food <= 0.0f) {
+        return 0;
+    }
+    double nutrition = 0.0;
+    for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
+        if ((counted & ITEM_TYPE_BIT(type)) && item_is_food((ItemType)type)) {
+            nutrition += (double)totals[type] * (double)item_def((ItemType)type)->nutrition;
+        }
+    }
+    /* A little slack so that exact multiples are not lost to rounding. */
+    return (long)(nutrition / (double)daily_food + 1e-6);
+}
+
+long gather_resource_food_days(GatherResource resource, const long totals[ITEM_TYPE_COUNT],
+                               float daily_food)
+{
+    const GatherResourceDef *def = gather_resource_def(resource);
+    return def != NULL ? gather_food_days(def->counted, totals, daily_food) : 0;
+}
+
+long gather_group_food_days(GatherGroup group, const long totals[ITEM_TYPE_COUNT],
+                            float daily_food)
+{
+    if ((unsigned)group >= GATHER_GROUP_COUNT || !GROUP_DEFS[group].food) {
+        return 0;
+    }
+    ItemTypeMask all_food = 0;
+    for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
+        if (item_is_food((ItemType)type)) {
+            all_food |= ITEM_TYPE_BIT(type);
+        }
+    }
+    return gather_food_days(all_food, totals, daily_food);
+}
+
+/* Whether an order of `mode` wants more, given what it counts: items done,
+ * and what lies in the colony (`count`, in its unit). */
+static bool order_wants(uint8_t mode, uint16_t target, uint16_t done, long count)
+{
+    switch ((GatherMode)mode) {
+    case GATHER_DO_COUNT: return done < target;
+    case GATHER_UNTIL: return count < (long)target;
+    default: return true;
+    }
+}
+
+/* Whether a group's order lets its resources be gathered. */
+static bool group_wants(const GatherGroupOrder *order, GatherGroup group,
+                        const long totals[ITEM_TYPE_COUNT], float daily_food)
+{
+    long count = 0;
+    if (order->mode == GATHER_UNTIL) {
+        count = order->unit == GATHER_UNIT_FOOD_DAYS
+                    ? gather_group_food_days(group, totals, daily_food)
+                    : gather_group_count(group, totals);
+    }
+    return order_wants(order->mode, order->target, order->done, count);
+}
+
+GatherResourceMask gather_zone_wanted(const GatherZone *zone, const long totals[ITEM_TYPE_COUNT],
+                                      float daily_food)
+{
+    if (zone == NULL) {
+        return 0;
+    }
+    bool groups_want[GATHER_GROUP_COUNT + 1];
+    for (int g = 0; g < GATHER_GROUP_COUNT; g++) {
+        groups_want[g] = group_wants(&zone->groups[g], (GatherGroup)g, totals, daily_food);
+    }
+    groups_want[GATHER_GROUP_NONE] = true;
+    GatherResourceMask wanted = 0;
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        const GatherOrder *order = &zone->orders[r];
+        if (!order->enabled || !groups_want[RESOURCE_DEFS[r].group]) {
+            continue;
+        }
+        long count = 0;
+        if (order->mode == GATHER_UNTIL) {
+            count = order->unit == GATHER_UNIT_FOOD_DAYS
+                        ? gather_resource_food_days((GatherResource)r, totals, daily_food)
+                        : gather_resource_count((GatherResource)r, totals);
+        }
+        if (order_wants(order->mode, order->target, order->done, count)) {
             wanted |= GATHER_RESOURCE_BIT(r);
         }
     }
     return wanted;
 }
 
-void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT])
+void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT],
+                         float daily_food)
 {
     bool any_change = false;
     for (int i = 0; i < GATHER_ZONE_MAX; i++) {
@@ -511,7 +814,7 @@ void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT])
         if (!zone->used) {
             continue;
         }
-        GatherResourceMask wanted = gather_zone_wanted(zone, totals);
+        GatherResourceMask wanted = gather_zone_wanted(zone, totals, daily_food);
         if (wanted != zone->wanted) {
             zone->wanted = wanted;
             any_change = true;
@@ -531,9 +834,29 @@ void gather_zones_plants_changed(GatherZones *zones)
 
 /* ---- Jobs ------------------------------------------------------------------- */
 
+/* Whether a stock of a plant is full (every fruit ripe, every twig grown back). */
+static bool stock_full(const Plant *plant, PlantStock stock)
+{
+    int capacity = plant_stock_capacity(plant, stock);
+    return capacity > 0 && plant_stock_available(plant, stock) >= capacity;
+}
+
+/* Whether a plant is ready for a resource's order: always, unless it waits for
+ * the full harvest (a full stock; trees and grass fully grown). */
 static bool ripe_enough(const GatherZone *zone, GatherResource resource, const Plant *plant)
 {
-    return !zone->orders[resource].ripe_only || plant->growth >= 1.0f;
+    if (!zone->orders[resource].ripe_only || !RESOURCE_DEFS[resource].ripe_option) {
+        return true;
+    }
+    switch (RESOURCE_DEFS[resource].job) {
+    case GATHER_JOB_BRANCHES: return stock_full(plant, PLANT_STOCK_BRANCHES);
+    case GATHER_JOB_TWIGS: return stock_full(plant, PLANT_STOCK_TWIGS);
+    case GATHER_JOB_HARVEST:
+    case GATHER_JOB_HARVEST_CAREFULLY:
+    case GATHER_JOB_DIG:
+    case GATHER_JOB_DIG_CAREFULLY: return stock_full(plant, PLANT_STOCK_FOOD);
+    default: return plant->growth >= 1.0f;
+    }
 }
 
 /* The resource an item is gathered as (GATHER_RESOURCE_COUNT: none). */
@@ -547,13 +870,13 @@ static GatherResource resource_of_item(ItemType item)
     return GATHER_RESOURCE_COUNT;
 }
 
-/* Whether a plant bears food now, of one of `resources`. */
-static bool food_among(const Plant *plant, GatherResourceMask resources)
+/* Whether a plant bears food now, of one of `resources`, ready for the zone's order. */
+static bool food_among(const GatherZone *zone, const Plant *plant, GatherResourceMask resources)
 {
     GatherResource resource = resource_of_item(plant_stock_item((PlantType)plant->type,
                                                                 PLANT_STOCK_FOOD));
     return resource != GATHER_RESOURCE_COUNT && (resources & GATHER_RESOURCE_BIT(resource)) &&
-           plant_has_food(plant);
+           plant_has_food(plant) && ripe_enough(zone, resource, plant);
 }
 
 /* Stones of a resource's type on a tile (0 for the other resources). */
@@ -575,11 +898,16 @@ static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, in
     case GATHER_JOB_HARVEST:
     case GATHER_JOB_HARVEST_CAREFULLY:
     case GATHER_JOB_DIG:
-    case GATHER_JOB_DIG_CAREFULLY: return food_among(plant, resources);
-    case GATHER_JOB_BRANCHES: return plant_stock_available(plant, PLANT_STOCK_BRANCHES) > 0;
-    case GATHER_JOB_TWIGS: return plant_stock_available(plant, PLANT_STOCK_TWIGS) > 0;
+    case GATHER_JOB_DIG_CAREFULLY: return food_among(zone, plant, resources);
+    case GATHER_JOB_BRANCHES:
+        return plant_stock_available(plant, PLANT_STOCK_BRANCHES) > 0 &&
+               ripe_enough(zone, GATHER_BRANCHES, plant);
+    case GATHER_JOB_TWIGS:
+        return plant_stock_available(plant, PLANT_STOCK_TWIGS) > 0 &&
+               ripe_enough(zone, GATHER_TWIGS, plant);
     case GATHER_JOB_CUT_GRASS:
-        return plant->type == PLANT_GRASS && plant->growth >= CUT_GRASS_MIN_GROWTH;
+        return plant->type == PLANT_GRASS && plant->growth >= CUT_GRASS_MIN_GROWTH &&
+               ripe_enough(zone, GATHER_GRASS, plant);
     case GATHER_JOB_CHOP:
         return plant->type == PLANT_TREE && ripe_enough(zone, GATHER_WOOD, plant);
     case GATHER_JOB_STONES:
@@ -820,6 +1148,15 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
         zone->wanted &= ~GATHER_RESOURCE_BIT(resource);
         changed(zones);
     }
+    GatherGroup group = RESOURCE_DEFS[resource].group;
+    if (group != GATHER_GROUP_NONE) {
+        GatherGroupOrder *group_order = &zone->groups[group];
+        group_order->done = (uint16_t)clampi(group_order->done + count, 0, UINT16_MAX);
+        if (group_order->mode == GATHER_DO_COUNT && group_order->done >= group_order->target) {
+            zone->wanted &= ~GROUP_DEFS[group].members;
+            changed(zones);
+        }
+    }
     return true;
 }
 
@@ -911,8 +1248,13 @@ uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)
         hash = hash_fnv1a64(hash, fields, sizeof(fields));
         for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
             const GatherOrder *order = &zone->orders[r];
-            int32_t values[5] = {order->enabled, order->ripe_only, order->mode, order->target,
-                                 order->done};
+            int32_t values[6] = {order->enabled, order->ripe_only, order->mode, order->unit,
+                                 order->target, order->done};
+            hash = hash_fnv1a64(hash, values, sizeof(values));
+        }
+        for (int g = 0; g < GATHER_GROUP_COUNT; g++) {
+            const GatherGroupOrder *group = &zone->groups[g];
+            int32_t values[4] = {group->mode, group->unit, group->target, group->done};
             hash = hash_fnv1a64(hash, values, sizeof(values));
         }
     }

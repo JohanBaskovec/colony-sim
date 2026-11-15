@@ -398,11 +398,12 @@ gather_zone.name = Gathering zone {0}
 gather_zone.tiles.one = {0} tile
 gather_zone.tiles.other = {0} tiles
 gather_zone.hint = Tick what to gather here; items lying in the colony count
+gather_zone.hint_group = A group's setting limits each of its resources
 # {0} = priority number, 1 (highest) to 10
 gather_zone.priority = Priority: {0}
 gather_zone.priority_hint = (1 = gathered first, before nearer zones)
 # Resources a zone may gather (check boxes)
-gather_zone.resource.wood = Wood
+gather_zone.resource.wood = Trees to fell
 gather_zone.resource.blackberries = Blackberries
 gather_zone.resource.hazelnuts = Hazelnuts
 gather_zone.resource.mushrooms = Mushrooms
@@ -416,15 +417,29 @@ gather_zone.resource.twigs = Twigs
 gather_zone.resource.grass = Grass
 gather_zone.resource.flint = Flint
 gather_zone.resource.cobbles = Cobbles
-# Repeat modes of an order (click to change). {0} = target
-gather_zone.mode.do_count.one = Gather {0}
-gather_zone.mode.do_count.other = Gather {0}
-gather_zone.mode.until = Until {0} in the colony
+# Groups of resources (foldable rows; their setting limits each of their resources)
+gather_zone.group.wood = Wood
+gather_zone.group.food = Food
+gather_zone.group.stones = Stones
+# Repeat modes of an order (dropdown); the target follows
+gather_zone.mode.do_count = Gather
+gather_zone.mode.until = Until
 gather_zone.mode.forever = Forever
+# What "Until" counts (dropdown; "days of food" for food only)
+gather_zone.unit.items = in the colony
+gather_zone.unit.food_days = days of food
 # {0} = items gathered by this order so far
 gather_zone.progress.done = Gathered: {0}
-# Option of wood: leave young trees not fully grown
-gather_zone.ripe_only = Fully grown plants only (100%)
+# {0} = how many lie in the colony now, in the unit shown before it (items or days of food)
+gather_zone.progress.now = Now: {0}
+# Full harvest option (a plant with rays): its tooltip
+gather_zone.ripe.title = Wait for the full harvest
+gather_zone.ripe.on = On
+gather_zone.ripe.off = Off
+gather_zone.ripe.partial = On for some resources only
+gather_zone.ripe.fruit = Food, branches, twigs: only from plants with everything ready (every fruit ripe)
+gather_zone.ripe.grown = Trees, grass: only fully grown
+gather_zone.ripe.all = Applies to every harvest of the zone
 # Enabled resource of which the zone holds nothing now (stones run out, food out of season)
 gather_zone.warning.none_left = Nothing of it to gather in this zone now
 # {0} = how many items of a resource the zone holds now (wood of the trees, stones in the ground...)

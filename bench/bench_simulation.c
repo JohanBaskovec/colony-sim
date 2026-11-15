@@ -87,6 +87,7 @@ int main(int argc, char **argv)
         for (int r = GATHER_BLACKBERRIES; r <= GATHER_CATTAIL_RHIZOMES; r++) { /* Wild food. */
             gather_forever(&game, land, (GatherResource)r);
         }
+        gather_zone_set_group_mode(&game.gather_zones, land, GATHER_GROUP_FOOD, GATHER_FOREVER);
     }
     if (scenario == 2) {
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));

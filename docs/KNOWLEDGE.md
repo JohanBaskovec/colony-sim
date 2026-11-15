@@ -458,9 +458,17 @@ Everything the land offers is gathered in **gathering zones**: the player
 draws a zone, then ticks the resources to take there (wood, each wild food
 of §7, branches, twigs, grass, flint, cobbles). Each ticked resource is
 gathered N times, until N lie in the colony (items lying anywhere count, as
-for bills), or forever; wood may be taken from fully grown trees only (on by
-default), so that settlers do not walk to young trees that give little.
-Wild food is there in its season only. On a tile that offers several jobs,
+for bills), or forever; food may also be gathered until the colony has N days
+of food (the nutrition of the food lying in the colony over what all the
+settlers eat in a day, whole days; rot is ignored). Resources come in groups
+(wood: logs, branches, twigs; food; stones; grass alone), and a group's order
+limits each of its resources: a resource is gathered only while its own order
+and its group's both want it (food: until 5 days of food by default, every
+food counted, roasted roots too; the other groups forever). An order may wait
+for the full harvest: food, branches and twigs only from plants whose stock
+is full (every fruit ripe, not only a grown plant), trees and grass fully
+grown only (on by default for trees), so that settlers do not walk to plants
+that give little. Wild food is there in its season only. On a tile that offers several jobs,
 the plant's branches and twigs come first, then its food, felling it, and
 stones last. All jobs but felling belong to Gathering (minimum 50; 60 for
 food easily mistaken for a poisonous plant, §7) and produce items whose
