@@ -1,15 +1,20 @@
 /*
- * Designations: work orders placed by the player on single tiles (mine this
- * rock, take this wall apart). They are kept apart from the Map, which only describes the physical
- * world. What the land offers (wood, berries, grass, stones...) is gathered
- * in zones instead (core/gather_zone.h).
+ * Designations: work orders placed by the player on single tiles (dig this
+ * earth, mine this rock, take this wall apart). They are kept apart from the
+ * Map, which only describes the physical world. What the land offers (wood,
+ * berries, grass, stones...) is gathered in zones instead
+ * (core/gather_zone.h).
  *
  * Each order belongs to a knowledge (core/knowledge.h): only settlers with at
- * least its minimum level carry it out. Mining needs a pick and a knowledge
- * that are not in the game yet: nobody can do it for now, but the order
- * exists. Taking a structure apart gives back half of its materials, and so
- * does taking a roof down. Roof orders belong to the roof layer (see
- * designation_is_roof()): the player places them in the roof view.
+ * least its minimum level carry it out. Earth is dug out with the shelter
+ * builders' knowledge, faster with a digging stick: galleries into hills,
+ * and ramps cut into a one-level bank of earth (the bank's tile becomes a
+ * slope up to the ground behind it, the ground over it is taken away).
+ * Mining rock needs a pick and a knowledge that are not in the game yet:
+ * nobody can do it for now, but the order exists. Taking a structure apart
+ * gives back half of its materials, and so does taking a roof down. Roof
+ * orders belong to the roof layer (see designation_is_roof()): the player
+ * places them in the roof view.
  *
  * Each designated tile also stores how much work has been done, so that
  * interrupted work resumes where it stopped. Who works on which tile is
@@ -18,9 +23,12 @@
 #ifndef COLONY_CORE_DESIGNATION_H
 #define COLONY_CORE_DESIGNATION_H
 
+#include "core/construction.h"
 #include "core/knowledge.h"
 #include "core/map.h"
 #include "core/rng.h"
+#include "core/stockpile.h"
+#include "core/tool.h"
 #include "core/work.h"
 
 #include <stdbool.h>
@@ -31,8 +39,14 @@ typedef enum DesignationType {
     DESIGNATION_MINE, /* Dig out a rock wall. */
     DESIGNATION_DECONSTRUCT, /* Take a built structure apart (core/structure.h), not its roof. */
     DESIGNATION_REMOVE_ROOF, /* Take the roof over a tile down. */
+    DESIGNATION_DIG,      /* Dig out earth (ROCK_EARTH). */
+    DESIGNATION_DIG_RAMP, /* Cut a ramp into a bank of earth one level high. */
     DESIGNATION_COUNT
 } DesignationType;
+
+/* A ramp takes this many times the work of digging its tile out (the ground
+ * over it goes too). */
+#define DESIGNATION_RAMP_WORK_FACTOR 1.5f
 
 typedef struct DesignationDef {
     const char *id; /* Stable identifier (saves), never shown. */
@@ -42,6 +56,7 @@ typedef struct DesignationDef {
     /* Knowledge needed, KNOWLEDGE_NONE when nobody can carry it out yet. */
     KnowledgeType knowledge;
     float min_level; /* At least KNOWLEDGE_MASTERY_LEVEL. */
+    ToolUse tool_use; /* A tool that speeds the work up (fetched on the way), or none. */
 } DesignationDef;
 
 typedef struct Designations {
@@ -71,6 +86,14 @@ bool designation_is_roof(DesignationType type);
 
 /* Whether the order makes sense on this tile (a wall to mine...). */
 bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType type);
+
+/* Whether the ground over a ramp to cut at (x, y, z) is free of what lives
+ * outside the map: construction sites, workstations, stockpiles. A ramp
+ * takes that ground away: such orders are refused, or dropped when the
+ * ground gets used before the work is done. */
+bool designation_ramp_ground_free(const Constructions *constructions,
+                                  const Workstations *workstations, const Stockpiles *stockpiles,
+                                  int x, int y, int z);
 
 DesignationType designation_get(const Designations *designations, int x, int y, int z);
 

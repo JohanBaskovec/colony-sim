@@ -7,16 +7,26 @@
 #include <string.h>
 
 static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
-    [DESIGNATION_NONE] = {"none", NULL, NULL, WORK_TYPE_COUNT, KNOWLEDGE_NONE, 0.0f},
+    [DESIGNATION_NONE] = {"none", NULL, NULL, WORK_TYPE_COUNT, KNOWLEDGE_NONE, 0.0f,
+                          TOOL_USE_NONE},
     /* Mining needs a pick and the Mining knowledge: neither exists yet. */
     [DESIGNATION_MINE] = {"mine", N_("designation.mine"), N_("colonist.task.mine"), WORK_MINING,
-                          KNOWLEDGE_NONE, KNOWLEDGE_MASTERY_LEVEL},
+                          KNOWLEDGE_NONE, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_NONE},
     [DESIGNATION_DECONSTRUCT] = {"deconstruct", N_("designation.deconstruct"),
                                  N_("colonist.task.deconstruct"), WORK_CONSTRUCTION,
-                                 KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL},
+                                 KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
+                                 TOOL_USE_NONE},
     [DESIGNATION_REMOVE_ROOF] = {"remove_roof", N_("designation.remove_roof"),
                                  N_("colonist.task.remove_roof"), WORK_CONSTRUCTION,
-                                 KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL},
+                                 KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
+                                 TOOL_USE_NONE},
+    /* Pit dwellings and dugouts: the shelter builders dig. */
+    [DESIGNATION_DIG] = {"dig", N_("designation.dig"), N_("colonist.task.dig_earth"), WORK_MINING,
+                         KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_DIGGING},
+    [DESIGNATION_DIG_RAMP] = {"dig_ramp", N_("designation.dig_ramp"),
+                              N_("colonist.task.dig_ramp"), WORK_MINING,
+                              KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
+                              TOOL_USE_DIGGING},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -74,17 +84,57 @@ bool designation_is_roof(DesignationType type)
     return type == DESIGNATION_REMOVE_ROOF;
 }
 
+/* Whether a ramp can be cut into this tile: earth, with bare ground over it
+ * (nothing standing on it, open air above, so that it can be taken away) and
+ * ground to lead up to beside it. */
+static bool ramp_possible(const Map *map, int x, int y, int z)
+{
+    static const int DX[4] = {0, 1, 0, -1};
+    static const int DY[4] = {-1, 0, 1, 0};
+    if (map->rock[map_index(map, x, y, z)] != ROCK_EARTH || !map_in_bounds(map, x, y, z + 1)) {
+        return false;
+    }
+    size_t over = map_index(map, x, y, z + 1);
+    if (!map_has_floor(map, x, y, z + 1) || map->rock[over] != ROCK_NONE || map->slope[over] ||
+        map->structure[over] != STRUCTURE_NONE || map->roof[over] != STRUCTURE_NONE ||
+        map_plant_blocks_building(map, x, y, z + 1) ||
+        (map_in_bounds(map, x, y, z + 2) && !map_is_open(map, x, y, z + 2))) {
+        return false;
+    }
+    for (int i = 0; i < 4; i++) {
+        int nx = x + DX[i], ny = y + DY[i];
+        if (map_in_bounds(map, nx, ny, z + 1) && map_has_floor(map, nx, ny, z + 1) &&
+            map->rock[map_index(map, nx, ny, z + 1)] == ROCK_NONE) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType type)
 {
     if (!map_in_bounds(map, x, y, z)) {
         return false;
     }
+    RockType rock = (RockType)map->rock[map_index(map, x, y, z)];
     switch (type) {
-    case DESIGNATION_MINE: return map->rock[map_index(map, x, y, z)] != ROCK_NONE;
+    case DESIGNATION_MINE: return rock != ROCK_NONE && rock != ROCK_EARTH;
+    case DESIGNATION_DIG: return rock == ROCK_EARTH;
+    case DESIGNATION_DIG_RAMP: return ramp_possible(map, x, y, z);
     case DESIGNATION_DECONSTRUCT: return map_structure(map, x, y, z) != STRUCTURE_NONE;
     case DESIGNATION_REMOVE_ROOF: return map_roof(map, x, y, z) != STRUCTURE_NONE;
     default: return false;
     }
+}
+
+bool designation_ramp_ground_free(const Constructions *constructions,
+                                  const Workstations *workstations, const Stockpiles *stockpiles,
+                                  int x, int y, int z)
+{
+    return construction_at(constructions, x, y, z + 1) == CONSTRUCTION_NONE &&
+           construction_roof_at(constructions, x, y, z + 1) == CONSTRUCTION_NONE &&
+           workstation_at(workstations, x, y, z + 1) == WORKSTATION_NONE &&
+           stockpile_at(stockpiles, x, y, z + 1) == STOCKPILE_NONE;
 }
 
 DesignationType designation_get(const Designations *designations, int x, int y, int z)
@@ -165,9 +215,14 @@ float designation_work_needed(const Designations *designations, const Map *map, 
     }
     size_t index = map_index(map, x, y, z);
     switch (designation_get(designations, x, y, z)) {
-    case DESIGNATION_MINE: {
+    case DESIGNATION_MINE:
+    case DESIGNATION_DIG: {
         const RockDef *rock = rock_def((RockType)map->rock[index]);
         return rock != NULL ? rock->mine_work : 0.0f;
+    }
+    case DESIGNATION_DIG_RAMP: {
+        const RockDef *rock = rock_def((RockType)map->rock[index]);
+        return rock != NULL ? rock->mine_work * DESIGNATION_RAMP_WORK_FACTOR : 0.0f;
     }
     case DESIGNATION_DECONSTRUCT:
         return structure_deconstruct_work((StructureType)map->structure[index]);
@@ -196,7 +251,9 @@ ItemType designation_yield(const Designations *designations, const Map *map, int
     }
     size_t index = map_index(map, x, y, z);
     switch (designation_get(designations, x, y, z)) {
-    case DESIGNATION_MINE: {
+    case DESIGNATION_MINE:
+    case DESIGNATION_DIG:
+    case DESIGNATION_DIG_RAMP: {
         const RockDef *def = rock_def((RockType)map->rock[index]);
         *count = def->mined_yield;
         return *count > 0 ? def->mined_item : ITEM_NONE;
@@ -217,14 +274,32 @@ static void drop_salvage(StructureType type, Map *map, Items *items, int x, int 
     }
 }
 
+/* Cuts a ramp: the earth goes, its floor slopes up, and the ground over it
+ * is taken away (what lay on it slides down onto the ramp). */
+static void cut_ramp(Map *map, Items *items, int x, int y, int z)
+{
+    map_set_rock(map, x, y, z, ROCK_NONE);
+    size_t over = map_index(map, x, y, z + 1);
+    map->plants[over] = (Plant){0};
+    map_set_terrain(map, x, y, z + 1, TERRAIN_OPEN);
+    map_set_slope(map, x, y, z, true);
+    ItemStack lying = items != NULL ? items_get(items, x, y, z + 1) : (ItemStack){0};
+    if (lying.type != ITEM_NONE) {
+        items_remove(items, x, y, z + 1, lying.count);
+        items_drop(items, map, x, y, z, lying);
+    }
+}
+
 /* Carries out a completed order on the map. */
 static void complete(Map *map, Items *items, int x, int y, int z, DesignationType type)
 {
     switch (type) {
     case DESIGNATION_MINE:
-        /* The rough stone floor under the rock stays. */
+    case DESIGNATION_DIG:
+        /* The floor under the rock stays. */
         map_set_rock(map, x, y, z, ROCK_NONE);
         break;
+    case DESIGNATION_DIG_RAMP: cut_ramp(map, items, x, y, z); break;
     case DESIGNATION_DECONSTRUCT: {
         StructureType structure = map_structure(map, x, y, z);
         map_set_structure(map, x, y, z, STRUCTURE_NONE);

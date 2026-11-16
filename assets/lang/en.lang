@@ -42,6 +42,8 @@ plant.tree = Tree
 designation.mine = Mine rock
 designation.deconstruct = Take apart
 designation.remove_roof = Take roofs down
+designation.dig = Dig earth
+designation.dig_ramp = Cut a ramp
 tool.cancel = Cancel orders
 tool.stockpile = Stockpile zone
 tool.gather_zone = Gathering zone
@@ -51,6 +53,8 @@ tool.zone_remove.description = Takes the area you drag out of the zones; the res
 tool.gather_zone.description = Settlers gather the resources you pick in it: wood, wild food, branches, twigs, grass, stones
 tool.stockpile.description = Settlers store the items you allow in it
 tool.mine.description = Settlers dig out the marked rock and bring back stone
+tool.dig.description = Settlers dig out the marked earth (galleries into hills, dugouts), faster with a digging stick
+tool.dig_ramp.description = Mark a bank of earth one level high: settlers cut a ramp into it, to walk up to the ground behind
 tool.cancel.description = Removes the orders in the area you drag
 tool.deconstruct.description = Settlers take the marked beds, walls and doors apart and get half of the materials back
 tool.remove_roof.description = Settlers take the marked roofs down (in the roof view) and get half of the materials back
@@ -119,7 +123,7 @@ item.quality.fine = fine
 item.quality.superb = superb
 
 # Work types
-work.mining = Mining
+work.mining = Digging
 work.fire = Fire
 work.woodcutting = Woodcutting
 work.gathering = Gathering
@@ -282,6 +286,8 @@ colonist.task.work = Working
 colonist.task.chop = Chopping a tree
 colonist.task.mine = Mining
 colonist.task.deconstruct = Taking apart
+colonist.task.dig_earth = Digging earth
+colonist.task.dig_ramp = Cutting a ramp
 colonist.task.remove_roof = Taking a roof down
 colonist.task.harvest = Harvesting
 # Picking food easily mistaken for a poisonous plant (mushrooms, wild garlic)

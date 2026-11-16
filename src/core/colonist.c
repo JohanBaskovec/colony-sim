@@ -1348,8 +1348,8 @@ static uint32_t station_stamp(const ColonistContext *context)
            context->reservations->releases;
 }
 
-static bool fetch_gather_tool(Colonist *colonist, const ColonistContext *context);
-static void take_gather_tool(Colonist *colonist, const ColonistContext *context);
+static bool fetch_job_tool(Colonist *colonist, const ColonistContext *context);
+static void take_job_tool(Colonist *colonist, const ColonistContext *context);
 
 /* Designation jobs of the given work types, or gathering zone tiles
  * (`zones`): nearest one. */
@@ -1404,9 +1404,7 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
     colonist->gathering = zones;
     colonist->station_phase = STATION_JOB_GO;
     reservations_add(context->reservations, RESERVATION_WORK, target, context->worker_id);
-    if (zones) {
-        fetch_gather_tool(colonist, context); /* A detour for a digging stick, maybe. */
-    }
+    fetch_job_tool(colonist, context); /* A detour for a digging stick, maybe. */
     return true;
 }
 
@@ -1816,8 +1814,8 @@ static void work(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0); /* The order was cancelled. */
         return;
     }
-    if (colonist->gathering && colonist->station_phase == STATION_JOB_FETCH) {
-        take_gather_tool(colonist, context);
+    if (colonist->station_phase == STATION_JOB_FETCH) {
+        take_job_tool(colonist, context);
         return;
     }
     if (distance != 1) {
@@ -1843,17 +1841,23 @@ static void work(Colonist *colonist, const ColonistContext *context)
         }
         return;
     }
-    if (!designation_can_apply(context->map, target.x, target.y, target.z, type)) {
+    if (!designation_can_apply(context->map, target.x, target.y, target.z, type) ||
+        (type == DESIGNATION_DIG_RAMP &&
+         !designation_ramp_ground_free(context->constructions, context->workstations,
+                                       context->stockpiles, target.x, target.y, target.z))) {
         designation_set(designations, context->map, target.x, target.y, target.z, DESIGNATION_NONE);
         set_idle(colonist, context, 0);
         return;
     }
     KnowledgeType knowledge = designation_def(type)->knowledge;
+    ToolUse use = designation_def(type)->tool_use;
+    float speed = colonist_work_speed(colonist, knowledge) * assistance(colonist, context);
+    if (use != TOOL_USE_NONE) {
+        speed *= work_with_tool(colonist, context, use);
+    }
     /* Products depend on the level before this tick's learning. */
     bool done = designation_add_work(designations, context->map, context->items, target.x,
-                                     target.y, target.z,
-                                     colonist_work_speed(colonist, knowledge) *
-                                         assistance(colonist, context),
+                                     target.y, target.z, speed,
                                      colonist_work_level(colonist, knowledge), context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     int site = construction_at(context->constructions, target.x, target.y, target.z);
@@ -2132,37 +2136,54 @@ static bool fetch_better_tool(Colonist *colonist, const ColonistContext *context
     return false;
 }
 
-/* On the way to a gathering job that a tool speeds up and that is worth a
- * detour (digging), a better tool than the carried one lying close by: the
- * colonist heads for it first (see take_gather_tool()). */
-static bool fetch_gather_tool(Colonist *colonist, const ColonistContext *context)
+/* The tool use of the current work job (gathering or order), and whether it
+ * is worth a detour for a better tool (digging). */
+static ToolUse job_tool_use(const Colonist *colonist, bool *fetches)
 {
-    const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
-    if (def == NULL || !def->fetches_tool || context->no_tools) {
+    if (colonist->gathering) {
+        const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
+        *fetches = def != NULL && def->fetches_tool;
+        return def != NULL ? def->tool_use : TOOL_USE_NONE;
+    }
+    const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
+    ToolUse use = def != NULL ? def->tool_use : TOOL_USE_NONE;
+    *fetches = use != TOOL_USE_NONE;
+    return use;
+}
+
+/* On the way to a work job that a tool speeds up and that is worth a detour
+ * (digging), a better tool than the carried one lying close by: the colonist
+ * heads for it first (see take_job_tool()). */
+static bool fetch_job_tool(Colonist *colonist, const ColonistContext *context)
+{
+    bool fetches;
+    ToolUse use = job_tool_use(colonist, &fetches);
+    if (!fetches || context->no_tools) {
         return false;
     }
-    float factor = colonist_tool_factor(colonist, def->tool_use, ~(ItemTypeMask)0);
-    if (factor >= tool_best_possible_factor(def->tool_use)) {
+    float factor = colonist_tool_factor(colonist, use, ~(ItemTypeMask)0);
+    if (factor >= tool_best_possible_factor(use)) {
         return false;
     }
     ItemTypeMask types = 0;
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-        if (tool_type_factor(def->tool_use, (ItemType)type) > factor) {
+        if (tool_type_factor(use, (ItemType)type) > factor) {
             types |= ITEM_TYPE_BIT(type);
         }
     }
     FetchSearch search = fetch_search(context, types);
-    search.use = def->tool_use;
+    search.use = use;
     search.min_factor = factor;
     return start_fetch(colonist, context, &search, current_tile(colonist),
                        COLONIST_TOOL_SWAP_MAX_COST, true);
 }
 
-/* At the tool fetched on the way to a gathering job: takes it (a carried
- * tool of the same type is left in its place), then heads for the job. */
-static void take_gather_tool(Colonist *colonist, const ColonistContext *context)
+/* At the tool fetched on the way to a work job: takes it (a carried tool of
+ * the same type is left in its place), then heads for the job. */
+static void take_job_tool(Colonist *colonist, const ColonistContext *context)
 {
-    ToolUse use = gather_job_def((GatherJob)colonist->work_type)->tool_use;
+    bool fetches;
+    ToolUse use = job_tool_use(colonist, &fetches);
     ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
     ItemStack replaced;
     if (colonist->x == colonist->fetch.x && colonist->y == colonist->fetch.y &&

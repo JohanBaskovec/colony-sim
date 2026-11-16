@@ -1072,6 +1072,59 @@ static void test_colonist_climbs_to_food_on_a_hill(void)
     game_shutdown(&game);
 }
 
+/* Cutting a ramp into a bank of earth: the digger fetches a digging stick on
+ * the way, cuts the ramp, and settlers then walk up it. */
+static void test_colonist_cuts_a_ramp(void)
+{
+    Game game;
+    REQUIRE(init_hill_game(&game));
+    map_set_slope(&game.map, 25, 20, 0, false); /* The hill's only way up. */
+    items_add(&game.items, 20, 26, 0, item_stack_pristine(ITEM_DIGGING_STICK, 1));
+    Colonist *colonist = spawn_rested(&game, 20, 24);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    CHECK(game_designation_available(&game, DESIGNATION_DIG_RAMP));
+    REQUIRE(game_designate_rect(&game, 26, 28, 26, 28, 0, DESIGNATION_DIG_RAMP) == 1);
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.dig_ramp");
+    for (int i = 0; i < 2 * TICKS_PER_HOUR && !map_is_slope(&game.map, 26, 28, 0); i++) {
+        game_tick(&game);
+    }
+    CHECK(map_is_slope(&game.map, 26, 28, 0));
+    CHECK(map_is_open(&game.map, 26, 28, 1));
+    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_DIGGING_STICK)) >= 0);
+    CHECK_EQ_INT(designation_get(&game.designations, 26, 28, 0), DESIGNATION_NONE);
+
+    /* Food on the hill: up the new ramp. */
+    items_add(&game.items, 30, 28, 1, item_stack_pristine(ITEM_BLACKBERRIES, 20));
+    colonist->needs[NEED_FOOD] = 0.2f;
+    run_ticks(&game, walk_ticks(20) + COLONIST_EAT_TICKS);
+    CHECK_EQ_INT(colonist->z, 1);
+    CHECK(items_get(&game.items, 30, 28, 1).count < 20);
+    game_shutdown(&game);
+}
+
+/* No ramp under a stockpile: the order is refused, or dropped when the
+ * stockpile comes after it. */
+static void test_ramps_spare_stockpiles(void)
+{
+    Game game;
+    REQUIRE(init_hill_game(&game));
+    Colonist *colonist = spawn_rested(&game, 20, 24);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 26, 10, 27, 10, 1) != STOCKPILE_NONE);
+    CHECK_EQ_INT(game_designate_rect(&game, 26, 10, 26, 10, 0, DESIGNATION_DIG_RAMP), 0);
+    REQUIRE(game_designate_rect(&game, 26, 28, 26, 28, 0, DESIGNATION_DIG_RAMP) == 1);
+    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 26, 28, 26, 28, 1) != STOCKPILE_NONE);
+    run_ticks(&game, walk_ticks(12) + TICKS_PER_SECOND);
+    CHECK_EQ_INT(designation_get(&game.designations, 26, 28, 0), DESIGNATION_NONE);
+    CHECK(!map_is_slope(&game.map, 26, 28, 0));
+    CHECK(map_has_floor(&game.map, 26, 28, 1));
+    game_shutdown(&game);
+}
+
 static void test_hungry_colonist_eats_spoiling_food_first(void)
 {
     Game game;
@@ -1948,6 +2001,8 @@ int main(void)
     RUN_TEST(test_priority_beats_distance);
     RUN_TEST(test_hungry_colonist_eats_fruit_from_the_ground);
     RUN_TEST(test_colonist_climbs_to_food_on_a_hill);
+    RUN_TEST(test_colonist_cuts_a_ramp);
+    RUN_TEST(test_ramps_spare_stockpiles);
     RUN_TEST(test_hungry_colonist_eats_spoiling_food_first);
     RUN_TEST(test_colonist_harvests_blackberries);
     RUN_TEST(test_starting_knowledge_is_random_and_valid);

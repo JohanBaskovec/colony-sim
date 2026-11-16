@@ -52,6 +52,8 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_MINE] = {250, 140, 60, 255},
     [DESIGNATION_DECONSTRUCT] = {240, 200, 70, 255},
     [DESIGNATION_REMOVE_ROOF] = {240, 200, 70, 255},
+    [DESIGNATION_DIG] = {250, 140, 60, 255},
+    [DESIGNATION_DIG_RAMP] = {250, 170, 90, 255},
 };
 /* Roof view: rock overhead (caves), and where a roof could rest. */
 static const SDL_Color NATURAL_ROOF_COLOR = {150, 120, 200, 90};
@@ -1415,6 +1417,28 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         SDL_RenderLine(renderer, area.x + area.w * 0.55f, area.y + area.h * 0.55f,
                        area.x + area.w * 0.5f, area.y + area.h * 0.85f);
         outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_MINE]);
+        break;
+    }
+    case RENDER_ICON_DIG:
+    case RENDER_ICON_DIG_RAMP: {
+        SDL_FRect area = inset(&rect, 0.8f);
+        fill(renderer, ROCK_COLORS[ROCK_EARTH], &area);
+        if (icon == RENDER_ICON_DIG) { /* A dark hole dug into it. */
+            SDL_FRect hole = {area.x + area.w * 0.3f, area.y + area.h * 0.35f, area.w * 0.4f,
+                              area.h * 0.4f};
+            fill(renderer, (SDL_Color){40, 28, 20, 255}, &hole);
+        } else { /* A ramp rising to the right, lit. */
+            SDL_SetRenderDrawColor(renderer, 196, 160, 112, 255);
+            float rise = area.h * 0.6f;
+            for (float row = 0.0f; row < rise; row += 1.0f) {
+                float left = area.x + area.w * 0.15f + area.w * 0.7f * (1.0f - row / rise);
+                SDL_RenderLine(renderer, left, area.y + area.h * 0.8f - row,
+                               area.x + area.w * 0.85f, area.y + area.h * 0.8f - row);
+            }
+        }
+        outline(renderer, area, 2.0f,
+                DESIGNATION_COLORS[icon == RENDER_ICON_DIG ? DESIGNATION_DIG
+                                                           : DESIGNATION_DIG_RAMP]);
         break;
     }
     case RENDER_ICON_DECONSTRUCT: {

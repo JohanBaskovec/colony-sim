@@ -45,7 +45,7 @@ simulation:
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work, what its mood thinks of (states, sleep, meals) and its breaks, facial expression from the mood, the action its hands are doing |
 | `appearance` | Looks of a colonist (skin, body shape, hair style and color, beard), rolled at creation |
-| `designation`| Player work orders per tile (mine rock, take a structure apart), the knowledge and level each needs, work progress |
+| `designation`| Player work orders per tile (dig earth, cut a ramp, mine rock, take a structure apart), the knowledge, level and tool each needs, work progress |
 | `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying), rot |
@@ -221,6 +221,22 @@ temperature, fog of war.
 Player orders are not part of the map (which only describes the physical
 world): `Designations` (`core/designation.h`, owned by `Game`) has its own
 dense layers of the same size: order type and work progress per tile.
+
+**Digging** (step 3 of the levels, first part): earth (`ROCK_EARTH`) is dug
+with the shelter builders' knowledge (`DESIGNATION_DIG`, a pit dwelling or
+a gallery into a hill; its ground stays overhead as a natural roof), rock is
+mined (`DESIGNATION_MINE`, nobody can yet). Both are "Digging" work
+(`WORK_MINING`). `DESIGNATION_DIG_RAMP` cuts a ramp into a bank of earth
+one level high: the order goes on the bank's earth tile, from the level
+below; the earth goes, the tile becomes a slope (`map_set_slope()`), and
+the ground over it is taken away (open space; its plants go, the items on
+it slide down onto the ramp). It needs bare ground over the bank (no tree,
+structure, roof or slope; open air above it) and ground beside it to lead
+up to (`designation_can_apply()`); construction sites, workstations and
+stockpiles there refuse the order, or drop it when they come later
+(`designation_ramp_ground_free()`). Orders with a `tool_use` (digging) are
+sped up by the tool and send the worker to a better one lying nearby first,
+as digging jobs in gathering zones do. Digging down is not possible yet.
 
 Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
 `Game`): at most one stack per tile (one item type, up to its stack limit),
@@ -541,8 +557,8 @@ reserved), 4-neighborhood, fixed neighbor order. Priority therefore beats
 distance. The colonist reserves the job, walks there and adds
 `colonist_work_speed()` work per tick (`COLONIST_WORK_SPEED` scaled by its
 knowledge level). When the work needed is reached the order
-is carried out on the map (tree removed, rock dug out leaving the rough stone
-floor, grass cut, branches or twigs taken from the plant's stock), its
+is carried out on the map (tree removed, rock or earth dug out leaving its
+floor, a ramp cut, grass cut, branches or twigs taken from the plant's stock), its
 products are dropped (wood, stone blocks, branches...) and the
 designation disappears.
 
@@ -578,7 +594,8 @@ dug up, and "carefully" (Gathering 60, `GATHER_CAREFUL_MIN_LEVEL`) when easily
 mistaken for a poisonous plant, so that the existing job masks decide who may
 take it. Digging jobs (`GatherJobDef.fetches_tool`) send the gatherer to a
 better digging tool lying within `COLONIST_TOOL_SWAP_MAX_COST` first
-(`fetch_gather_tool()`, the craft's fetch phase reused); it keeps it. Each job has its
+(`fetch_job_tool()`, the craft's fetch phase reused; orders that dig do the
+same); it keeps it. Each job has its
 work type (felling is woodcutting, the rest gathering) and knowledge; the
 settler takes the first job of the tile among those it may do
 (`Colonist.work_type` holds the job while `gathering`). Stones are limited:

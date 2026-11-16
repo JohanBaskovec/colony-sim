@@ -1142,6 +1142,11 @@ int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, int z, Desig
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
             DesignationType old = designation_get(&game->designations, x, y, z);
+            if (type == DESIGNATION_DIG_RAMP &&
+                !designation_ramp_ground_free(&game->constructions, &game->workstations,
+                                              &game->stockpiles, x, y, z)) {
+                continue;
+            }
             if (old == DESIGNATION_NONE || designation_is_roof(old) == designation_is_roof(type)) {
                 changed += designation_set(&game->designations, &game->map, x, y, z, type);
             }
