@@ -83,6 +83,12 @@ bool hearth_needs_lighting(const Workstation *station)
     return hearth_is(station) && station->keep_burning && !station->burning && station->fuel > 0.0f;
 }
 
+bool hearth_needs_kindling(const Workstation *station)
+{
+    return hearth_is(station) && station->keep_burning && !station->burning &&
+           station->fuel <= 0.0f && station->fuel_promised <= 0.0f;
+}
+
 bool hearth_light(Workstations *workstations, int index)
 {
     Workstation *station = workstation_get(workstations, index);

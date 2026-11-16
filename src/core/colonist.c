@@ -3338,9 +3338,18 @@ bool colonist_can_light(const Colonist *colonist)
     return colonist->knowledge[KNOWLEDGE_FIRE] >= HEARTH_LIGHT_MIN_LEVEL;
 }
 
+/* A hearth the lighter has work at: with fuel to light, or with none and
+ * some lying somewhere to bring it first. */
+static bool light_wanted(const ColonistContext *context, const Workstation *station)
+{
+    return hearth_needs_lighting(station) ||
+           (hearth_needs_kindling(station) &&
+            items_exist(context->items, fuel_wanted_types(station), 1));
+}
+
 static bool hearth_to_light(const ColonistContext *context, const Workstation *station)
 {
-    return station != NULL && hearth_needs_lighting(station) &&
+    return station != NULL && light_wanted(context, station) &&
            !hearth_rained_on(station, context->map, context->wetting) &&
            !reservations_taken_by_other(context->reservations, RESERVATION_FIRE,
                                         station_tile(station), context->worker_id);
@@ -3348,7 +3357,7 @@ static bool hearth_to_light(const ColonistContext *context, const Workstation *s
 
 static bool needs_lighting(const Workstation *station)
 {
-    return hearth_needs_lighting(station);
+    return hearth_needs_lighting(station) || hearth_needs_kindling(station);
 }
 
 static bool is_hearth_to_light(const Map *map, int x, int y, int z, void *userdata)
@@ -3378,9 +3387,17 @@ static bool carries_tinder(const Colonist *colonist)
     return colonist->carried.type == ITEM_GRASS && colonist->carried.count > 0;
 }
 
-/* Next step of lighting: to the hearth with embers or tinder in hand, else
- * embers from a burning fire close to it, else dry grass for friction.
- * False when none can be had. */
+/* Whether the colonist holds fuel the hearth takes. */
+static bool carries_fuel(const Colonist *colonist, const Workstation *station)
+{
+    return colonist->carried.count > 0 &&
+           hearth_fuel_value((ItemType)colonist->carried.type) > 0.0f &&
+           (station->fuel_types & ITEM_TYPE_BIT(colonist->carried.type)) != 0;
+}
+
+/* Next step of lighting: fuel for a hearth with none, then to the hearth with embers or tinder in
+ * hand, else embers from a burning fire close to it, else dry grass for friction. False when none
+ * can be had. */
 static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
 {
     const Workstation *station = job_station(colonist, context);
@@ -3389,6 +3406,15 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
     }
     TilePos hearth = station_tile(station);
     colonist->light_progress = 0.0f;
+    if (station->fuel <= 0.0f) { /* Nothing to burn: fuel first. */
+        if (carries_fuel(colonist, station)) {
+            colonist->light_step = LIGHT_BRING_FUEL;
+            return go_next_to(colonist, context, hearth);
+        }
+        FetchSearch fuel = fetch_search(context, fuel_wanted_types(station));
+        colonist->light_step = LIGHT_FETCH_FUEL;
+        return start_fetch(colonist, context, &fuel, hearth, COLONIST_WORK_SEARCH_MAX_COST, false);
+    }
     if (colonist->ember_ticks > 0 || carries_tinder(colonist)) {
         colonist->light_step = LIGHT_GO;
         return go_next_to(colonist, context, hearth);
@@ -3436,7 +3462,7 @@ static bool try_light_job(Colonist *colonist, const ColonistContext *context)
 static bool light_still_valid(const Colonist *colonist, const ColonistContext *context)
 {
     const Workstation *station = job_station(colonist, context);
-    return station != NULL && hearth_needs_lighting(station) &&
+    return station != NULL && (hearth_needs_lighting(station) || hearth_needs_kindling(station)) &&
            !hearth_rained_on(station, context->map, context->wetting) &&
            reservations_owner(context->reservations, RESERVATION_FIRE, station_tile(station)) ==
                context->worker_id &&
@@ -3462,7 +3488,45 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
     }
     TilePos hearth = colonist->target;
     float speed = colonist_work_speed(colonist, KNOWLEDGE_FIRE);
+    Workstation *station = job_station(colonist, context);
     switch ((LightStep)colonist->light_step) {
+    case LIGHT_FETCH_FUEL: {
+        ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
+        float value = hearth_fuel_value((ItemType)stack.type);
+        if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y || value <= 0.0f ||
+            !(station->fuel_types & ITEM_TYPE_BIT(stack.type))) {
+            set_idle(colonist, context, 0);
+            return;
+        }
+        int count = (int)floorf((HEARTH_FUEL_CAPACITY - station->fuel) / value);
+        int capacity = colonist_carry_capacity(colonist, (ItemType)stack.type);
+        count = count < capacity ? count : capacity;
+        count = count < stack.count ? count : stack.count;
+        if (count <= 0) {
+            set_idle(colonist, context, 0);
+            return;
+        }
+        items_remove(context->items, colonist->x, colonist->y, colonist->z, count);
+        colonist->carried = stack;
+        colonist->carried.count = (uint16_t)count;
+        reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
+                                  context->worker_id);
+        break; /* Then to the hearth. */
+    }
+    case LIGHT_BRING_FUEL: {
+        if (!carries_fuel(colonist, station) ||
+            !next_to(colonist->x, colonist->y, colonist->z, hearth)) {
+            break; /* Plan again. */
+        }
+        int taken = hearth_add_fuel(context->workstations, colonist->station, colonist->carried);
+        colonist->carried.count = (uint16_t)(colonist->carried.count - taken);
+        if (colonist->carried.count > 0) {
+            set_idle(colonist, context, 0); /* Puts down what did not fit. */
+            return;
+        }
+        colonist->carried = (ItemStack){.type = ITEM_NONE};
+        break; /* Fuel in: on to the fire. */
+    }
     case LIGHT_FETCH_TINDER: {
         ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||

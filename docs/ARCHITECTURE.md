@@ -1120,7 +1120,10 @@ searches backed off on that revision look again.
   station was replaced, its `number` changed).
 - **Lighting** (`TASK_LIGHT`, the `WORK_FIRE` work type, Fire 50 or more)
   reserves the hearth (`RESERVATION_FIRE`) and goes through `LightStep`s:
-  embers from another burning hearth within `HEARTH_FIRE_CARRY_MAX_COST`
+  first, for a hearth with no fuel and none on its way
+  (`hearth_needs_kindling()`, and some fuel the hearth takes lying
+  somewhere), fuel fetched and put in (`LIGHT_FETCH_FUEL`,
+  `LIGHT_BRING_FUEL`: no hauler needed); then embers from another burning hearth within `HEARTH_FIRE_CARRY_MAX_COST`
   of it (`Colonist.ember_ticks`, a flag rather than an item: they last
   4 hours and are dropped with the task), else a handful of grass fetched as
   tinder and an attempt by friction, which burns the tinder and succeeds by

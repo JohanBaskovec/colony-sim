@@ -259,6 +259,8 @@ typedef enum StationJobPhase {
 
 /* Steps of lighting a hearth (TASK_LIGHT). */
 typedef enum LightStep {
+    LIGHT_FETCH_FUEL,   /* Walking to fuel (`fetch`) for a hearth with none in it. */
+    LIGHT_BRING_FUEL,   /* Walking to the hearth with the fuel to put in it. */
     LIGHT_FETCH_TINDER, /* Walking to dry grass (`fetch`) for lighting by friction. */
     LIGHT_TO_SOURCE,    /* Walking to a burning hearth (`fire_source`) for embers. */
     LIGHT_EMBERS,       /* Wrapping embers in grass beside it. */

@@ -390,6 +390,44 @@ static void test_lighting_by_friction(void)
     game_shutdown(&game);
 }
 
+static void test_lighter_brings_fuel_to_an_empty_hearth(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *lighter = spawn_settler(&game, 10, 10, 100.0, WORK_FIRE);
+    REQUIRE(lighter != NULL);
+    int index = built_hearth(&game, 14, 10, 0.0f);
+    items_add(&game.items, 18, 13, 0, item_stack_make(ITEM_GRASS, 3, 0, 0));
+    CHECK(hearth_needs_kindling(hearth(&game, index)));
+
+    /* No fuel anywhere: nothing to do. */
+    run_ticks(&game, 600, true);
+    CHECK(!hearth(&game, index)->burning);
+    CHECK(lighter->task != TASK_LIGHT);
+
+    /* Fuel lying somewhere: it is fetched, put in, and the fire lit, by the
+     * one who lights fires (no hauler here). */
+    items_add(&game.items, 6, 16, 0, item_stack_make(ITEM_BRANCHES, 4, 0, 0));
+    run_ticks(&game, 4000, true);
+    const Workstation *station = hearth(&game, index);
+    CHECK(station->burning);
+    CHECK(station->fuel > 0.0f);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_GRASS], 2);
+    CHECK_EQ_INT(lighter->carried.count, 0);
+    CHECK(lighter->task != TASK_LIGHT);
+
+    /* Fuel of a type the hearth does not take is left where it lies. */
+    int other = built_hearth(&game, 30, 30, 0.0f);
+    REQUIRE(hearth_set_fuel_type(&game.workstations, other, ITEM_TWIGS, false));
+    items_add(&game.items, 26, 30, 0, item_stack_make(ITEM_TWIGS, 5, 0, 0));
+    items_add(&game.items, 31, 33, 0, item_stack_make(ITEM_GRASS, 3, 0, 0));
+    run_ticks(&game, 2500, true);
+    CHECK(!hearth(&game, other)->burning);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 5);
+    game_shutdown(&game);
+}
+
 static void test_failed_friction_burns_the_tinder(void)
 {
     Game game;
@@ -679,6 +717,7 @@ int main(void)
     RUN_TEST(test_hearth_is_dug_by_builders);
     RUN_TEST(test_haulers_refuel);
     RUN_TEST(test_lighting_by_friction);
+    RUN_TEST(test_lighter_brings_fuel_to_an_empty_hearth);
     RUN_TEST(test_failed_friction_burns_the_tinder);
     RUN_TEST(test_lighting_with_embers);
     RUN_TEST(test_embers_do_not_go_far);

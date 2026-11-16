@@ -6,7 +6,8 @@
  * burns HEARTH_BURN_PER_HOUR and goes out once its fuel is gone. While the
  * player keeps it burning (the default), haulers bring the fuel types the
  * player allows once it falls below HEARTH_REFUEL_BELOW of the capacity, and
- * a settler who knows fire lights it when it has fuel and no fire: with
+ * a settler who knows fire lights it when it has fuel and no fire (bringing
+ * it fuel first when it has none and nobody is on the way with any): with
  * embers wrapped in grass at a burning fire within HEARTH_FIRE_CARRY_MAX_COST
  * of it (they go out after HEARTH_EMBER_TICKS), else by friction, an attempt
  * taking HEARTH_FRICTION_WORK and a handful of dry grass as tinder, which
@@ -99,6 +100,10 @@ void hearth_release_fuel(Workstations *workstations, int index, int number, floa
 
 /* Whether a settler should light it: kept burning, fuel in it, no fire. */
 bool hearth_needs_lighting(const Workstation *station);
+
+/* Whether a settler who lights fires should first bring it fuel: kept
+ * burning, no fire, no fuel in it and none on its way. */
+bool hearth_needs_kindling(const Workstation *station);
 
 /* Lights the hearth at `index` if it has fuel. Returns whether it burns. */
 bool hearth_light(Workstations *workstations, int index);
