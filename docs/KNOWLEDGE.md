@@ -352,8 +352,8 @@ on the side that does the least harm (see `core/tree.h`).
 | Very high | Hunting dangerous game | Goring, trampling |
 
 - **Dirt**: some jobs and places make tiles dirty (knapping chips, wood
-  shavings, later butchering and cooking). Dirt lowers room quality and, once
-  health exists, helps infections spread; it is cleaned by the cleaning job.
+  shavings, later butchering and cooking). Dirt, once health exists, helps infections
+  spread; it is cleaned by the cleaning job.
   *Dropped:* sharp knapping debris that cuts barefoot walkers (too much
   simulation for what it adds).
 
@@ -911,8 +911,7 @@ planned).
   a branch screen, a cave mouth too.
 
 **Branch screen**: a frame of branches pushed aside to pass, the first door.
-- Passable at ×1.5, blocks wind, insulation 0.3. Counts as a door for room
-  detection: a cave closed by grass walls and a screen is a room.
+- Passable at ×1.5, blocks wind, insulation 0.3.
 
 **Roof**: branches covered with dry grass over walled tiles, for a small hut
 (a lean-to was planned, dropped: a hut with a roof does the same).
@@ -922,10 +921,8 @@ planned).
   worked on from below; too frail to stand on.
 - Rests on a wall or rock at most 2 tiles away (branch rafters span about
   2.5 m): a hut of up to 4 × 4 tiles inside its walls can be roofed.
-- Rain protection, "under a roof" for rot and fire (M4), no "slept outside"
-  penalty.
-- **Rooms**: walls, branch screens and rock close a room (at most 400 tiles,
-  not reaching the map's edge); a room is roofed when all its tiles are.
+- Rain protection, "under a roof" for rot and fire (M4); a night in the rain
+  leaves the "wet night" memory.
 
 **Caves**: settling in natural caves and under overhangs.
 - A **natural roof** covers tiles with ground or rock somewhere above them
@@ -934,7 +931,7 @@ planned).
   (done: near 10 °C, `core/temperature.h`).
 - **Clear cave floor** *(later: caves cannot be dug out before mining
   exists)*: removes loose rock and levels the ground; the tile becomes
-  "cleared floor" (move cost 1.0 instead of 1.2, nicer room). No pick needed.
+  "cleared floor" (move cost 1.0 instead of 1.2). No pick needed.
 - A cave is closed with grass walls and a branch screen, warmed by a hearth
   (smoky without a vent, M4), and furnished with grass beds.
 
@@ -992,7 +989,7 @@ Suggested order, each step with its tests:
    sleeping in beds, workstations as construction sites, hauling to
    construction sites, quality and wear; the lean-to was dropped (a hut with
    a roof does the same) and floor clearing waits for mining.
-6. *(done)* Roofs (built over walled tiles, natural roof) and room detection.
+6. *(done)* Roofs (built over walled tiles, natural roof).
 7. *(done)* Conversation, apprenticeship, fading and loss; discovered
    knowledges only in the interface; knowledge in the settler inspector, with
    a tooltip (best level, gains of the day by source, practice and fading,

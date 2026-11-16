@@ -76,7 +76,8 @@
 #define MOOD_FIRE_WARMTH 4.0f
 #define MOOD_FIRE_COLD_AIR 15.0f
 /* A sleep counts (memories of how it was) after this long; the night was
- * cold (hot) when it felt so for more than MOOD_SLEEP_BAD_SHARE of it. */
+ * cold (hot, wet: soaked) when it felt so for more than MOOD_SLEEP_BAD_SHARE
+ * of it. */
 #define MOOD_SLEEP_MIN_TICKS (2 * TICKS_PER_HOUR)
 #define MOOD_SLEEP_BAD_SHARE 0.25f
 
@@ -95,7 +96,7 @@ typedef enum ThoughtType {
     /* Memories. */
     THOUGHT_SLEPT_WELL,
     THOUGHT_SLEPT_ON_GROUND,
-    THOUGHT_SLEPT_OUTSIDE,
+    THOUGHT_SLEPT_WET,
     THOUGHT_SLEPT_COLD,
     THOUGHT_SLEPT_HOT,
     THOUGHT_VARIED_MEALS,

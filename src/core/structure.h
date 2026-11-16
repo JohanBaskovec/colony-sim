@@ -112,9 +112,6 @@ bool structure_blocks(StructureType type);
 /* Whether settlers sleep on it. */
 bool structure_is_bed(StructureType type);
 
-/* Whether it is a door: passable, but it closes a room (core/room.h). */
-bool structure_is_door(StructureType type);
-
 /* Whether it is a roof (built as a floor over the walls). */
 bool structure_is_roof(StructureType type);
 

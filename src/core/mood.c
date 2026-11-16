@@ -34,8 +34,7 @@ static const ThoughtDef THOUGHT_DEFS[THOUGHT_COUNT] = {
     [THOUGHT_SLEPT_WELL] = MEMORY("slept_well", N_("thought.slept_well"), 6.0f, 4.0f, 6.0f, 1),
     [THOUGHT_SLEPT_ON_GROUND] =
         MEMORY("slept_on_ground", N_("thought.slept_on_ground"), -5.0f, 2.0f, 4.0f, 1),
-    [THOUGHT_SLEPT_OUTSIDE] =
-        MEMORY("slept_outside", N_("thought.slept_outside"), -4.0f, 2.0f, 4.0f, 1),
+    [THOUGHT_SLEPT_WET] = MEMORY("slept_wet", N_("thought.slept_wet"), -5.0f, 2.0f, 4.0f, 1),
     [THOUGHT_SLEPT_COLD] = MEMORY("slept_cold", N_("thought.slept_cold"), -6.0f, 2.0f, 4.0f, 1),
     [THOUGHT_SLEPT_HOT] = MEMORY("slept_hot", N_("thought.slept_hot"), -4.0f, 2.0f, 4.0f, 1),
     [THOUGHT_VARIED_MEALS] =

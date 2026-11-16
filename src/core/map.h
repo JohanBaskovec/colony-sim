@@ -254,7 +254,7 @@ typedef struct Map {
     uint8_t *forbidden;
     int forbidden_count; /* Tiles with some bit set. */
     /* Incremented whenever a structure or a roof changes. Data derived from
-     * it (core/room.h) compares it. Not part of map_hash(). */
+     * it (core/roof.h, core/temperature.h) compares it. Not part of map_hash(). */
     uint32_t build_revision;
     /* The change that led to build revision r is at index r % MAP_BUILD_LOG_SIZE. */
     MapBuildChange build_log[MAP_BUILD_LOG_SIZE];

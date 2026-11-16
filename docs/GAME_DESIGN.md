@@ -177,7 +177,7 @@ see or use is simulated as individuals.
   combat...) improving with practice and teaching: see *Knowledge and
   progression*.
 - Traits that modify behavior and mood.
-- Mood: sum of situational modifiers (ate a good meal, slept outside, saw a
+- Mood: sum of situational modifiers (ate a good meal, slept in the rain, saw a
   death...). Low mood → reduced work, then mental breaks.
 - Relationships between settlers (friendship, rivalry, romance, family).
 - Health: body parts, injuries, diseases, treatment; consequences of hunger,
@@ -208,7 +208,6 @@ a mini-game in itself:
 ### Base building
 - Blueprints → construction jobs consuming materials.
 - Walls, doors, floors, roofs; furniture (beds, tables, workbenches, storage).
-- Room detection (enclosed areas) with room quality (size, beauty, cleanliness).
 - Zones: stockpiles (with filters), growing zones, activity areas.
 
 ### Production

@@ -162,7 +162,7 @@ static void test_memories_add_up(void)
     mood_remember(&mood, THOUGHT_DEBUG_GLOOM);
     mood_remember(&mood, THOUGHT_SLEPT_ON_GROUND);
     mood_remember(&mood, THOUGHT_SPOILED_FOOD);
-    mood_remember(&mood, THOUGHT_SLEPT_OUTSIDE);
+    mood_remember(&mood, THOUGHT_SLEPT_WET);
     CHECK_NEAR(mood.value, MOOD_MIN, 1e-6);
 }
 
@@ -370,11 +370,37 @@ static void test_settlers_remember_their_nights(void)
     run_ticks(&game, 9 * TICKS_PER_HOUR);
     REQUIRE(sleeper->task != TASK_SLEEP && other->task != TASK_SLEEP);
     CHECK(mood_has(&sleeper->mood, THOUGHT_SLEPT_WELL));
-    CHECK(!mood_has(&sleeper->mood, THOUGHT_SLEPT_OUTSIDE));
+    CHECK(!mood_has(&sleeper->mood, THOUGHT_SLEPT_WET));
     CHECK(mood_has(&other->mood, THOUGHT_SLEPT_ON_GROUND));
-    CHECK(mood_has(&other->mood, THOUGHT_SLEPT_OUTSIDE));
+    CHECK(!mood_has(&other->mood, THOUGHT_SLEPT_WET)); /* A dry night: no roof needed. */
     CHECK(!mood_has(&other->mood, THOUGHT_SLEPT_WELL));
     CHECK(sleeper->mood.value > other->mood.value);
+    game_shutdown(&game);
+}
+
+/* It is the rain that spoils a night, not the open sky: under a roof one
+ * stays dry, in the open one is soaked by morning. */
+static void test_a_night_in_the_rain(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    map_set_structure(&game.map, 13, 10, 0, STRUCTURE_GRASS_BED);
+    map_set_structure(&game.map, 14, 10, 0, STRUCTURE_WALL); /* Holds the roof up. */
+    map_set_roof(&game.map, 13, 10, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    Colonist *sheltered = spawn_rested(&game, 12, 10);
+    Colonist *exposed = spawn_rested(&game, 30, 30);
+    REQUIRE(sheltered != NULL && exposed != NULL);
+    sheltered->needs[NEED_REST] = 0.2f;
+    exposed->needs[NEED_REST] = 0.2f;
+    for (int i = 0; i < 9 * TICKS_PER_HOUR; i++) {
+        game.weather.type = WEATHER_RAIN;
+        game.weather.spell = WEATHER_SPELL_MAX;
+        run_ticks(&game, 1);
+    }
+    REQUIRE(sheltered->task != TASK_SLEEP && exposed->task != TASK_SLEEP);
+    CHECK(mood_has(&exposed->mood, THOUGHT_SLEPT_WET));
+    CHECK(!mood_has(&sheltered->mood, THOUGHT_SLEPT_WET));
+    CHECK(!mood_has(&exposed->mood, THOUGHT_SLEPT_WELL));
     game_shutdown(&game);
 }
 
@@ -519,6 +545,7 @@ int main(void)
     RUN_TEST(test_hash);
     RUN_TEST(test_mood_changes_work);
     RUN_TEST(test_settlers_remember_their_nights);
+    RUN_TEST(test_a_night_in_the_rain);
     RUN_TEST(test_misery_leads_to_breaks);
     RUN_TEST(test_sulking_settler_does_no_work);
     RUN_TEST(test_binge_eats_the_colony_food);

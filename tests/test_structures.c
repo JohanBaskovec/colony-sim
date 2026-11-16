@@ -408,9 +408,6 @@ static void test_settlers_sleep_in_beds(void)
     CHECK(sleeper->task != TASK_SLEEP && other->task != TASK_SLEEP);
     CHECK(!mood_has(&sleeper->mood, THOUGHT_SLEPT_ON_GROUND));
     CHECK(mood_has(&other->mood, THOUGHT_SLEPT_ON_GROUND));
-    /* No roof over either of them. */
-    CHECK(mood_has(&sleeper->mood, THOUGHT_SLEPT_OUTSIDE));
-    CHECK(!mood_has(&sleeper->mood, THOUGHT_SLEPT_WELL));
     game_shutdown(&game);
 }
 
@@ -647,11 +644,7 @@ static void test_roofing_a_hut(void)
     CHECK_EQ_INT(
         game_place_structure_rect(&game, STRUCTURE_ROOF, DIRECTION_SOUTH, 15, 15, 16, 15, 1), 2);
     game_tick(&game);
-    const Room *room = rooms_at(game_rooms(&game), &game.map, 15, 15, 0);
-    REQUIRE(room != NULL);
-    CHECK(room->closed);
-    CHECK_EQ_INT(room->tiles, 2);
-    CHECK(!room_is_roofed(room));
+    CHECK(!map_is_roofed(&game.map, 15, 15, 0)); /* Only planned. */
 
     items_add(&game.items, 10, 12, 0, item_stack_pristine(ITEM_BRANCHES, 6));
     for (int x = 8; x < 10; x++) { /* 20 armfuls a tile. */
@@ -668,8 +661,8 @@ static void test_roofing_a_hut(void)
     CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 0);
     CHECK_EQ_INT(game.map.plants[map_index(&game.map, 15, 15, 0)].type, PLANT_GRASS);
     CHECK(stockpile_at(&game.stockpiles, 16, 15, 0) != STOCKPILE_NONE);
-    game_tick(&game);
-    CHECK(room_is_roofed(rooms_at(game_rooms(&game), &game.map, 15, 15, 0)));
+    CHECK(map_is_roofed(&game.map, 15, 15, 0));
+    CHECK(map_is_roofed(&game.map, 16, 15, 0));
     game_shutdown(&game);
 }
 

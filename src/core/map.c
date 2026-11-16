@@ -444,7 +444,7 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
     } else if (was_open != map_is_open_at(map, index)) {
         log_topology_change(map, x, y, z, false); /* Over a slope: closes or opens it. */
     } else if (was_rock != (rock != ROCK_NONE)) {
-        log_build_change(map, x, y, z); /* Rock where a wall stood: rooms, warmth. */
+        log_build_change(map, x, y, z); /* Rock where a wall stood: roofs, warmth. */
     }
 }
 
@@ -832,7 +832,7 @@ void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality
             ? (uint8_t)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST)
             : 0;
     map_set_terrain(map, x, y, z, roof != STRUCTURE_NONE ? terrain : TERRAIN_OPEN);
-    log_build_change(map, x, y, z); /* Rooms, warmth. */
+    log_build_change(map, x, y, z); /* Roofs, warmth. */
 }
 
 /* Rock, or a structure that blocks movement: what a roof rests on. */

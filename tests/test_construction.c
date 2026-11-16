@@ -591,8 +591,6 @@ static void test_roof_layer(void)
     CHECK(!structure_is_roof(STRUCTURE_WALL));
     CHECK(!structure_is_roof(STRUCTURE_TYPE_COUNT));
     CHECK(!structure_blocks(STRUCTURE_ROOF));
-    CHECK(structure_is_door(STRUCTURE_DOOR));
-    CHECK(!structure_is_door(STRUCTURE_WALL));
     CHECK_EQ_INT(def->materials[0].type, ITEM_BRANCHES);
     CHECK_EQ_INT(def->materials[1].type, ITEM_GRASS);
 

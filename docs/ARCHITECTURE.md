@@ -68,7 +68,6 @@ simulation:
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
 | `tree`       | Trees in the volume: a trunk of solid wood and floors of foliage built into the map as the tree grows, finding the tree of a tile, where a felled tree falls (aimed away from structures) and what it leaves along its length |
 | `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
-| `room`       | Rooms: areas closed by walls, doors and rock, and whether roofs cover them (a cache) |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
@@ -142,7 +141,7 @@ one-level map has the same layout as a flat one. Every function that takes a
 tile takes `x, y, z` (rectangles take `x0, y0, x1, y1, z`), every position
 (`TilePos`, colonists, stations, sites, stockpiles) carries its level, and
 every module that keeps a per-tile array (items, designations, dirt, beds,
-stockpiles, zones, regions, rooms, temperature, pathfinder) sizes it for all
+stockpiles, zones, regions, temperature, pathfinder) sizes it for all
 the levels.
 
 A tile is **solid** (rock: a wall, or the inside of a hill), **open with a
@@ -300,7 +299,7 @@ lay on the foliage falls to the ground under it (`tree_fell()`,
 uses of climbing trees wait for vision and wildlife (a lookout, a refuge).
 
 Dense layers are cache-friendly, trivially serializable and hashable
-(`map_hash()`). Upcoming layers: floors, buildings/walls, zones, room IDs,
+(`map_hash()`). Upcoming layers: floors, buildings/walls, zones,
 temperature, fog of war.
 
 Player orders are not part of the map (which only describes the physical
@@ -502,7 +501,7 @@ keeps the most it weighed, shown in the inspector ("fading, was −8"). A
 memory that comes back is renewed to its full value, or adds up to
 `max_stack` times it (chats). Memories: how the last sleep went
 (`remember_sleep()` when a sleep of two hours or more ends: in a bed or on the
-ground, under the open sky, too cold or hot for a quarter of it, or well),
+ground, too cold, hot or wet (soaked) for a quarter of it, or well),
 meals (`mood_meal()`: cooked, spoiled, varied or monotonous among the last
 five), a fire's warmth on a cold day, a fireside story (teller and
 listeners), chats (adding up). The mood scales work speed
@@ -904,16 +903,6 @@ logs overflowed; the `RoofWatch` it keeps is derived, not hashed. A light
 grass roof hurts nobody. The roof itself is out in the open air, for heat
 (`TEMPERATURE_MATERIAL_OPEN`). `map_hash()` only hashes the grade layer once
 a roof exists, so older hashes stay valid.
-
-**Rooms** (`core/room.h`, owned by `Game`): every tile without rock, a wall
-or a door belongs to an area (flood fill over orthogonal neighbors, water
-included); an area is a room when it does not reach the map's edge and has
-at most `ROOM_MAX_TILES` tiles, roofed when all its tiles are
-(`map_is_roofed()`). A cache like the regions, compared with
-`Map.topology_revision` and `Map.build_revision` (bumped by every structure
-or roof change); nothing in the simulation uses rooms yet, so they are only
-rebuilt when asked for (`game_rooms()`, the tile inspector), never during a
-tick.
 
 **Temperature** (`core/temperature.h`, `Game.temperatures`, part of
 `game_hash()`): `temperature_outdoor()` is a function of the tick (seasons

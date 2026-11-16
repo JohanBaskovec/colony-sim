@@ -20,7 +20,6 @@
 #include "core/pool.h"
 #include "core/reservation.h"
 #include "core/region.h"
-#include "core/room.h"
 #include "core/rng.h"
 #include "core/roof.h"
 #include "core/stockpile.h"
@@ -113,9 +112,6 @@ typedef struct Game {
     /* Connectivity regions of the map: a cache, refreshed at the start of
      * each tick, not part of game_hash(). */
     Regions regions;
-    /* Rooms and whether they are roofed: a cache, brought up to date when
-     * asked for (game_rooms()), not part of game_hash(). */
-    Rooms rooms;
     Temperatures temperatures; /* Per tile, warmed by burning hearths. */
     Weather weather;           /* The sky, warm and cold spells, snow on the ground. */
     /* Where roofs were last checked for support (core/roof.h): derived from
@@ -151,11 +147,6 @@ bool game_init(Game *game, const NewGameParams *params);
  * it; the frontend calls it before showing the stock). */
 void game_update_stock(Game *game);
 void game_shutdown(Game *game);
-
-/* The rooms of the map as it is now (rebuilt if it changed). Nothing in the
- * simulation depends on them yet, so they are only computed when asked for
- * (the tile inspector). */
-const Rooms *game_rooms(Game *game);
 
 /* Advances the simulation by `real_seconds` of real time. Returns ticks run. */
 int game_update(Game *game, double real_seconds);

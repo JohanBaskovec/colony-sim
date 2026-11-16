@@ -451,7 +451,6 @@ bool game_init(Game *game, const NewGameParams *params)
         !beds_init(&game->beds, game->map.width, game->map.height, game->map.depth) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height, game->map.depth) ||
         !regions_init(&game->regions, game->map.width, game->map.height, game->map.depth) ||
-        !rooms_init(&game->rooms, game->map.width, game->map.height, game->map.depth) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
         game_shutdown(game);
         return false;
@@ -520,7 +519,6 @@ void game_shutdown(Game *game)
     pool_free(&game->colonist_pool);
     pathfinder_free(&game->pathfinder);
     regions_free(&game->regions);
-    rooms_free(&game->rooms);
     temperatures_free(&game->temperatures);
     designations_free(&game->designations);
     dirt_free(&game->dirt);
@@ -1130,12 +1128,6 @@ void game_tick(Game *game)
     if (game->clock.tick % GAME_KNOWLEDGE_CHECK_TICKS == 0) {
         game_count_knowledge(game);
     }
-}
-
-const Rooms *game_rooms(Game *game)
-{
-    rooms_update(&game->rooms, &game->map);
-    return &game->rooms;
 }
 
 int game_update(Game *game, double real_seconds)

@@ -221,11 +221,6 @@ bool structure_is_bed(StructureType type)
     return (unsigned)type < STRUCTURE_TYPE_COUNT && STRUCTURE_DEFS[type].rest_factor > 0.0f;
 }
 
-bool structure_is_door(StructureType type)
-{
-    return type == STRUCTURE_DOOR;
-}
-
 bool structure_is_roof(StructureType type)
 {
     return (unsigned)type < STRUCTURE_TYPE_COUNT && STRUCTURE_DEFS[type].roof;

@@ -662,6 +662,7 @@ static void begin_task(Colonist *colonist, const ColonistContext *context, Colon
         colonist->sleep_ticks = 0;
         colonist->sleep_cold_ticks = 0;
         colonist->sleep_hot_ticks = 0;
+        colonist->sleep_wet_ticks = 0;
     }
     if (colonist->carried.count > 0) {
         /* Whatever is in hand is put down where the colonist stands. */
@@ -1088,16 +1089,15 @@ static void remember_sleep(Colonist *colonist, const ColonistContext *context)
         Mood *mood = &colonist->mood;
         bool bed =
             structure_is_bed(map_structure(context->map, colonist->x, colonist->y, colonist->z));
-        bool outside = temperature_cover(context->map, colonist->x, colonist->y, colonist->z) ==
-                       TEMPERATURE_COVER_OPEN;
         float bad = MOOD_SLEEP_BAD_SHARE * (float)ticks;
         bool cold = (float)colonist->sleep_cold_ticks > bad;
         bool hot = (float)colonist->sleep_hot_ticks > bad;
+        bool wet = (float)colonist->sleep_wet_ticks > bad;
         if (!bed) {
             mood_remember(mood, THOUGHT_SLEPT_ON_GROUND);
         }
-        if (outside) {
-            mood_remember(mood, THOUGHT_SLEPT_OUTSIDE);
+        if (wet) {
+            mood_remember(mood, THOUGHT_SLEPT_WET);
         }
         if (cold) {
             mood_remember(mood, THOUGHT_SLEPT_COLD);
@@ -1105,13 +1105,14 @@ static void remember_sleep(Colonist *colonist, const ColonistContext *context)
         if (hot) {
             mood_remember(mood, THOUGHT_SLEPT_HOT);
         }
-        if (bed && !outside && !cold && !hot) {
+        if (bed && !wet && !cold && !hot) {
             mood_remember(mood, THOUGHT_SLEPT_WELL);
         }
     }
     colonist->sleep_ticks = 0;
     colonist->sleep_cold_ticks = 0;
     colonist->sleep_hot_ticks = 0;
+    colonist->sleep_wet_ticks = 0;
 }
 
 /* ---- Work ------------------------------------------------------------------ */
@@ -3937,6 +3938,9 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
             colonist->sleep_cold_ticks++;
         } else if (felt > COLONIST_HOT_SLEEP_ABOVE) {
             colonist->sleep_hot_ticks++;
+        }
+        if (colonist->wetness >= MOOD_SOAKED_WETNESS) {
+            colonist->sleep_wet_ticks++;
         }
     } else {
         *rest = clampf(*rest - NEED_REST_DECAY_PER_TICK, 0.0f, 1.0f);

@@ -360,10 +360,11 @@ typedef struct Colonist {
     int supply_slot;
     int supply_promised;
     /* The sleep under way (TASK_SLEEP): ticks asleep, and of them, ticks it
-     * felt too cold or hot to sleep well. */
+     * felt too cold or hot to sleep well, or was soaked. */
     int sleep_ticks;
     int sleep_cold_ticks;
     int sleep_hot_ticks;
+    int sleep_wet_ticks;
     /* Tools carried (one per type, count 1; empty slots have type ITEM_NONE). */
     ItemStack tools[COLONIST_TOOL_MAX];
     /* Ticks of work done with each tool since it last lost a hit point. */

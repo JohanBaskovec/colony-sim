@@ -419,17 +419,6 @@ static void build_tile_panel(App *app, Panel *panel)
     } else {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature"), celsius);
     }
-    const Room *room = rooms_at(game_rooms(&app->game), map, x, y, z);
-    if (room != NULL && !room->closed) {
-        panel_add_text(panel, tr("hud.tile.outdoors"));
-    } else if (room != NULL) {
-        tr_integer(a, sizeof(a), room->tiles);
-        tr_integer(b, sizeof(b), room->roofed);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
-                  tr_plural(room_is_roofed(room) ? "hud.tile.room_roofed" : "hud.tile.room_open",
-                            room->tiles),
-                  a, b);
-    }
     const ConstructionSite *site = construction_get(
         &app->game.constructions, construction_at(&app->game.constructions, x, y, z));
     add_site_lines(panel, site);
