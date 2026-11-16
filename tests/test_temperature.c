@@ -64,10 +64,10 @@ static void build_hut(Game *game, int x0, int y0, int x1, int y1, bool roofed)
             bool edge = x == x0 || x == x1 || y == y0 || y == y1;
             if (edge) {
                 bool door = y == y1 && x == (x0 + x1) / 2;
-                map_set_structure(&game->map, x, y, door ? STRUCTURE_DOOR : STRUCTURE_WALL);
+                map_set_structure(&game->map, x, y, 0, door ? STRUCTURE_DOOR : STRUCTURE_WALL);
             }
             if (roofed) {
-                map_set_roof(&game->map, x, y, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+                map_set_roof(&game->map, x, y, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
             }
         }
     }
@@ -76,7 +76,7 @@ static void build_hut(Game *game, int x0, int y0, int x1, int y1, bool roofed)
 static int burning_hearth(Game *game, int x, int y)
 {
     int index =
-        workstations_place(&game->workstations, &game->map, WORKSTATION_OPEN_HEARTH, x, y);
+        workstations_place(&game->workstations, &game->map, WORKSTATION_OPEN_HEARTH, x, y, 0);
     Workstation *station = workstation_get(&game->workstations, index);
     if (station != NULL) {
         station->fuel = HEARTH_FUEL_CAPACITY;
@@ -134,12 +134,12 @@ static void test_open_ground_follows_the_air(void)
     }
     run_hours(&game, 1.5f);
     float outdoor = game_outdoor_temperature(&game);
-    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20), outdoor, 1.0);
-    CHECK_NEAR(temperature_at(&game.temperatures, 0, 0), outdoor, 1.0);
-    CHECK_NEAR(temperature_at(&game.temperatures, -1, 5), TEMPERATURE_GROUND, 1e-6);
+    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20, 0), outdoor, 1.0);
+    CHECK_NEAR(temperature_at(&game.temperatures, 0, 0, 0), outdoor, 1.0);
+    CHECK_NEAR(temperature_at(&game.temperatures, -1, 5, 0), TEMPERATURE_GROUND, 1e-6);
     /* Following the day. */
     run_hours(&game, 10.0f);
-    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20), game_outdoor_temperature(&game),
+    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20, 0), game_outdoor_temperature(&game),
                1.0);
     game_shutdown(&game);
 }
@@ -149,21 +149,21 @@ static void test_materials_and_covers(void)
     Game game;
     REQUIRE(init_flat_game(&game, mid_season(SEASON_SPRING)));
     Map *map = &game.map;
-    map_set_rock(map, 1, 1, ROCK_GRANITE);
-    map_set_structure(map, 5, 5, STRUCTURE_WALL);
-    map_set_structure(map, 6, 5, STRUCTURE_DOOR);
-    map_set_structure(map, 7, 5, STRUCTURE_GRASS_BED);
-    map_set_roof(map, 6, 6, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
-    CHECK_EQ_INT(temperature_material(map, 1, 1), TEMPERATURE_MATERIAL_ROCK);
-    CHECK_EQ_INT(temperature_material(map, -1, 1), TEMPERATURE_MATERIAL_ROCK);
-    CHECK_EQ_INT(temperature_material(map, 5, 5), TEMPERATURE_MATERIAL_WALL);
-    CHECK_EQ_INT(temperature_material(map, 6, 5), TEMPERATURE_MATERIAL_DOOR);
-    CHECK_EQ_INT(temperature_material(map, 8, 8), TEMPERATURE_MATERIAL_AIR);
-    CHECK_EQ_INT(temperature_cover(map, 6, 6), TEMPERATURE_COVER_ROOFED);
-    CHECK_EQ_INT(temperature_cover(map, 8, 8), TEMPERATURE_COVER_OPEN);
+    map_set_rock(map, 1, 1, 0, ROCK_GRANITE);
+    map_set_structure(map, 5, 5, 0, STRUCTURE_WALL);
+    map_set_structure(map, 6, 5, 0, STRUCTURE_DOOR);
+    map_set_structure(map, 7, 5, 0, STRUCTURE_GRASS_BED);
+    map_set_roof(map, 6, 6, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK_EQ_INT(temperature_material(map, 1, 1, 0), TEMPERATURE_MATERIAL_ROCK);
+    CHECK_EQ_INT(temperature_material(map, -1, 1, 0), TEMPERATURE_MATERIAL_ROCK);
+    CHECK_EQ_INT(temperature_material(map, 5, 5, 0), TEMPERATURE_MATERIAL_WALL);
+    CHECK_EQ_INT(temperature_material(map, 6, 5, 0), TEMPERATURE_MATERIAL_DOOR);
+    CHECK_EQ_INT(temperature_material(map, 8, 8, 0), TEMPERATURE_MATERIAL_AIR);
+    CHECK_EQ_INT(temperature_cover(map, 6, 6, 0), TEMPERATURE_COVER_ROOFED);
+    CHECK_EQ_INT(temperature_cover(map, 8, 8, 0), TEMPERATURE_COVER_OPEN);
     /* Rock stays at the ground's temperature. */
     run_hours(&game, 0.1f);
-    CHECK_NEAR(temperature_at(&game.temperatures, 1, 1), TEMPERATURE_GROUND, 1e-6);
+    CHECK_NEAR(temperature_at(&game.temperatures, 1, 1, 0), TEMPERATURE_GROUND, 1e-6);
     game_shutdown(&game);
 }
 
@@ -172,25 +172,66 @@ static void test_rot_rate_on_a_tile(void)
     Game game;
     REQUIRE(init_flat_game(&game, mid_season(SEASON_SPRING)));
     Map *map = &game.map;
-    map_set_roof(map, 6, 6, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
-    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 8, 8, false),
-               item_rot_rate(temperature_at(&game.temperatures, 8, 8), false), 1e-6);
-    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 6, 6, false),
-               item_rot_rate(temperature_at(&game.temperatures, 6, 6), true), 1e-6);
-    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, -1, 6, false), 0.0f, 1e-6);
+    map_set_roof(map, 6, 6, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 8, 8, 0, false),
+               item_rot_rate(temperature_at(&game.temperatures, 8, 8, 0), false), 1e-6);
+    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 6, 6, 0, false),
+               item_rot_rate(temperature_at(&game.temperatures, 6, 6, 0), true), 1e-6);
+    CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, -1, 6, 0, false), 0.0f, 1e-6);
     /* Without temperatures: mild. */
-    CHECK_NEAR(temperature_rot_rate(NULL, map, 8, 8, false), 1.0f, 1e-6);
-    CHECK_NEAR(temperature_rot_rate(NULL, map, 6, 6, false), ITEM_ROT_SHELTERED, 1e-6);
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 8, 8, 0, false), 1.0f, 1e-6);
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 6, 6, 0, false), ITEM_ROT_SHELTERED, 1e-6);
     /* Rain: faster in the open, not under the roof. */
-    CHECK_NEAR(temperature_rot_rate(NULL, map, 8, 8, true), ITEM_ROT_RAINED_ON, 1e-6);
-    CHECK_NEAR(temperature_rot_rate(NULL, map, 6, 6, true), ITEM_ROT_SHELTERED, 1e-6);
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 8, 8, 0, true), ITEM_ROT_RAINED_ON, 1e-6);
+    CHECK_NEAR(temperature_rot_rate(NULL, map, 6, 6, 0, true), ITEM_ROT_SHELTERED, 1e-6);
     game_shutdown(&game);
+}
+
+/* Each level has its own temperatures; no heat flows between levels yet. */
+static void test_levels_keep_their_heat(void)
+{
+    Map map;
+    Temperatures temperatures;
+    REQUIRE(map_init(&map, 16, 16, 2));
+    /* A closed room of rock walls on level 1, none on level 0. */
+    for (int i = 4; i <= 10; i++) {
+        map_set_rock(&map, i, 4, 1, ROCK_GRANITE);
+        map_set_rock(&map, i, 10, 1, ROCK_GRANITE);
+        map_set_rock(&map, 4, i, 1, ROCK_GRANITE);
+        map_set_rock(&map, 10, i, 1, ROCK_GRANITE);
+    }
+    const float outdoor = 10.0f;
+    REQUIRE(temperatures_init(&temperatures, &map, outdoor));
+    CHECK_EQ_INT(temperatures.depth, 2);
+    CHECK_NEAR(temperature_at(&temperatures, 4, 4, 1), TEMPERATURE_GROUND, 1e-6); /* Rock. */
+    CHECK_NEAR(temperature_at(&temperatures, 4, 4, 0), outdoor, 1e-6);
+    CHECK_NEAR(temperature_at(&temperatures, 4, 4, 2), TEMPERATURE_GROUND, 1e-6); /* Out. */
+    /* Heat on level 1, in the room: it spreads there, never down to level 0. */
+    for (uint64_t tick = 0; tick < (uint64_t)TICKS_PER_HOUR; tick++) {
+        temperatures_add_heat(&temperatures, 7, 7, 1, 0.05f);
+        temperatures_tick(&temperatures, &map, tick, outdoor);
+    }
+    CHECK(temperature_at(&temperatures, 7, 7, 1) > outdoor + 5.0f);
+    CHECK(temperature_at(&temperatures, 8, 7, 1) > outdoor + 1.0f);
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            CHECK_NEAR(temperature_at(&temperatures, x, y, 0), outdoor, 1e-3);
+        }
+    }
+    /* The last row of level 0 and the first of level 1 do not exchange heat. */
+    temperatures_add_heat(&temperatures, 3, 15, 0, 20.0f);
+    for (uint64_t tick = 0; tick < 4 * (uint64_t)TEMPERATURE_SWEEP_TICKS; tick++) {
+        temperatures_tick(&temperatures, &map, tick, outdoor);
+    }
+    CHECK_NEAR(temperature_at(&temperatures, 3, 0, 1), outdoor, 1e-3);
+    temperatures_free(&temperatures);
+    map_free(&map);
 }
 
 /* The cached kind of a tile. */
 static int cached_kind(const Game *game, int x, int y)
 {
-    return game->temperatures.kind[map_index(&game->map, x, y)];
+    return game->temperatures.kind[map_index(&game->map, x, y, 0)];
 }
 
 static int kind_of(TemperatureMaterial material, TemperatureCover cover)
@@ -207,15 +248,15 @@ static void test_cache_follows_the_map(void)
     CHECK_EQ_INT(cached_kind(&game, 5, 5),
                  kind_of(TEMPERATURE_MATERIAL_AIR, TEMPERATURE_COVER_OPEN));
     /* One change at a time: only around the tile. */
-    map_set_structure(map, 5, 5, STRUCTURE_WALL);
+    map_set_structure(map, 5, 5, 0, STRUCTURE_WALL);
     game_tick(&game);
     CHECK_EQ_INT(cached_kind(&game, 5, 5),
                  kind_of(TEMPERATURE_MATERIAL_WALL, TEMPERATURE_COVER_OPEN));
-    map_set_roof(map, 5, 5, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(map, 5, 5, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     game_tick(&game);
     CHECK_EQ_INT(cached_kind(&game, 5, 5),
                  kind_of(TEMPERATURE_MATERIAL_WALL, TEMPERATURE_COVER_ROOFED));
-    map_set_structure(map, 5, 5, STRUCTURE_NONE);
+    map_set_structure(map, 5, 5, 0, STRUCTURE_NONE);
     game_tick(&game);
     CHECK_EQ_INT(cached_kind(&game, 5, 5),
                  kind_of(TEMPERATURE_MATERIAL_AIR, TEMPERATURE_COVER_ROOFED));
@@ -223,7 +264,7 @@ static void test_cache_follows_the_map(void)
     for (int y = 28; y <= 32; y++) {
         for (int x = 28; x <= 32; x++) {
             if (x != 30 || y != 30) {
-                map_set_rock(map, x, y, ROCK_GRANITE);
+                map_set_rock(map, x, y, 0, ROCK_GRANITE);
                 game_tick(&game);
             }
         }
@@ -232,14 +273,14 @@ static void test_cache_follows_the_map(void)
                  kind_of(TEMPERATURE_MATERIAL_AIR, TEMPERATURE_COVER_NATURAL));
     CHECK_EQ_INT(cached_kind(&game, 28, 28),
                  kind_of(TEMPERATURE_MATERIAL_ROCK, TEMPERATURE_COVER_NATURAL));
-    CHECK_NEAR(temperature_at(&game.temperatures, 28, 28), TEMPERATURE_GROUND, 1e-6);
+    CHECK_NEAR(temperature_at(&game.temperatures, 28, 28, 0), TEMPERATURE_GROUND, 1e-6);
     /* Dug out again. */
-    map_set_rock(map, 28, 28, ROCK_NONE);
+    map_set_rock(map, 28, 28, 0, ROCK_NONE);
     game_tick(&game);
     CHECK_EQ_INT(cached_kind(&game, 28, 28) / TEMPERATURE_COVER_COUNT, TEMPERATURE_MATERIAL_AIR);
     /* Many changes at once: everything rebuilt. */
     for (int x = 0; x < 20; x++) {
-        map_set_structure(map, x, 10, STRUCTURE_WALL);
+        map_set_structure(map, x, 10, 0, STRUCTURE_WALL);
     }
     game_tick(&game);
     for (int x = 0; x < 20; x++) {
@@ -259,10 +300,10 @@ static void test_hearth_warms_around_it(void)
         refill(&game, hearth);
     }
     float outdoor = game_outdoor_temperature(&game);
-    float at = temperature_at(&game.temperatures, 20, 20) - outdoor;
-    float next = temperature_at(&game.temperatures, 21, 20) - outdoor;
-    float near = temperature_at(&game.temperatures, 22, 20) - outdoor;
-    float far = temperature_at(&game.temperatures, 26, 20) - outdoor;
+    float at = temperature_at(&game.temperatures, 20, 20, 0) - outdoor;
+    float next = temperature_at(&game.temperatures, 21, 20, 0) - outdoor;
+    float near = temperature_at(&game.temperatures, 22, 20, 0) - outdoor;
+    float far = temperature_at(&game.temperatures, 26, 20, 0) - outdoor;
     CHECK(at > 3.0f);
     CHECK(at > next && next > near && near > far);
     CHECK(far < 0.5f);
@@ -283,9 +324,9 @@ static void test_hut_keeps_the_warmth(void)
             refill(&game, hearth);
         }
         float outdoor = game_outdoor_temperature(&game);
-        inside[variant] = temperature_at(&game.temperatures, 19, 21) - outdoor;
+        inside[variant] = temperature_at(&game.temperatures, 19, 21, 0) - outdoor;
         /* The walls keep it in. */
-        CHECK(fabsf(temperature_at(&game.temperatures, 17, 20) - outdoor) < 1.0f);
+        CHECK(fabsf(temperature_at(&game.temperatures, 17, 20, 0) - outdoor) < 1.0f);
         game_shutdown(&game);
     }
     CHECK(inside[0] > inside[1] + 5.0f);
@@ -304,15 +345,15 @@ static void test_cave_stays_mild(void)
             bool hollow = x >= 16 && x <= 18 && y >= 16 && y <= 18;
             bool passage = x == 17 && y > 18;
             if (!hollow && !passage) {
-                map_set_rock(&game.map, x, y, ROCK_GRANITE);
+                map_set_rock(&game.map, x, y, 0, ROCK_GRANITE);
             }
         }
     }
-    CHECK_EQ_INT(temperature_cover(&game.map, 17, 17), TEMPERATURE_COVER_NATURAL);
+    CHECK_EQ_INT(temperature_cover(&game.map, 17, 17, 0), TEMPERATURE_COVER_NATURAL);
     run_hours(&game, 24.0f);
     float outdoor = game_outdoor_temperature(&game);
     CHECK(outdoor < 2.0f);
-    float cave = temperature_at(&game.temperatures, 17, 16);
+    float cave = temperature_at(&game.temperatures, 17, 16, 0);
     CHECK(cave > outdoor + 5.0f);
     CHECK(cave <= TEMPERATURE_GROUND + 0.01f);
     game_shutdown(&game);
@@ -337,7 +378,7 @@ static void test_sleep_temperature_factor(void)
 /* Ticks a settler sleeping at (x, y) takes to rest from 0.2. */
 static int ticks_to_rest(Game *game, int x, int y)
 {
-    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
+    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
     if (colonist == NULL) {
         return -1;
     }
@@ -374,7 +415,7 @@ static void test_cold_sleep_is_longer(void)
     game.clock.tick = evening;
     Workstation *station = workstation_get(&game.workstations, hearth);
     station->fuel = HEARTH_FUEL_CAPACITY;
-    CHECK(temperature_at(&game.temperatures, 19, 19) > COLONIST_COLD_SLEEP_BELOW);
+    CHECK(temperature_at(&game.temperatures, 19, 19, 0) > COLONIST_COLD_SLEEP_BELOW);
     int warm = ticks_to_rest(&game, 19, 19);
     game_shutdown(&game);
 
@@ -399,8 +440,8 @@ static void test_rain_wets_settlers(void)
     Game game;
     REQUIRE(init_flat_game(&game, mid_season(SEASON_SPRING) + 11 * TICKS_PER_HOUR));
     build_hut(&game, 18, 18, 22, 22, true);
-    Colonist *out = game_colonist(&game, game_spawn_colonist(&game, 8, 8));
-    Colonist *in = game_colonist(&game, game_spawn_colonist(&game, 20, 20));
+    Colonist *out = game_colonist(&game, game_spawn_colonist(&game, 8, 8, 0));
+    Colonist *in = game_colonist(&game, game_spawn_colonist(&game, 20, 20, 0));
     REQUIRE(out != NULL && in != NULL);
     for (int type = 0; type < WORK_TYPE_COUNT; type++) {
         colonist_set_work_priority(out, (WorkType)type, WORK_PRIORITY_DISABLED);
@@ -428,7 +469,7 @@ static void test_rain_wets_settlers(void)
 /* A rested settler doing nothing, then tired. */
 static Colonist *spawn_sleeper(Game *game, int x, int y)
 {
-    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
+    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
     if (colonist != NULL) {
         for (int type = 0; type < WORK_TYPE_COUNT; type++) {
             colonist_set_work_priority(colonist, (WorkType)type, WORK_PRIORITY_DISABLED);
@@ -440,7 +481,7 @@ static Colonist *spawn_sleeper(Game *game, int x, int y)
 
 static float felt(const Game *game, int x, int y)
 {
-    return hearths_felt_temperature(&game->workstations, &game->map, &game->temperatures, x, y);
+    return hearths_felt_temperature(&game->workstations, &game->map, &game->temperatures, x, y, 0);
 }
 
 static void test_sleeping_beside_a_fire(void)
@@ -530,6 +571,7 @@ int main(void)
     RUN_TEST(test_materials_and_covers);
     RUN_TEST(test_rot_rate_on_a_tile);
     RUN_TEST(test_cache_follows_the_map);
+    RUN_TEST(test_levels_keep_their_heat);
     RUN_TEST(test_hearth_warms_around_it);
     RUN_TEST(test_hut_keeps_the_warmth);
     RUN_TEST(test_cave_stays_mild);

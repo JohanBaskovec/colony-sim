@@ -37,7 +37,7 @@ static bool init_flat_game(Game *game)
  * (WORK_TYPE_COUNT: nothing). */
 static Colonist *spawn_settler(Game *game, int x, int y, double level, WorkType work)
 {
-    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
+    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
     if (colonist != NULL) {
         for (int need = 0; need < NEED_COUNT; need++) {
             colonist->needs[need] = 1.0f;
@@ -77,7 +77,8 @@ static void run_ticks(Game *game, int ticks, bool noon)
 /* A hearth already built, with `fuel` kilograms in it. */
 static int built_hearth(Game *game, int x, int y, float fuel)
 {
-    int index = workstations_place(&game->workstations, &game->map, WORKSTATION_OPEN_HEARTH, x, y);
+    int index =
+        workstations_place(&game->workstations, &game->map, WORKSTATION_OPEN_HEARTH, x, y, 0);
     Workstation *station = workstation_get(&game->workstations, index);
     if (station != NULL) {
         station->fuel = fuel;
@@ -95,7 +96,7 @@ static ItemStack find_item(const Game *game, ItemType type)
 {
     for (int y = 0; y < game->map.height; y++) {
         for (int x = 0; x < game->map.width; x++) {
-            ItemStack stack = items_get(&game->items, x, y);
+            ItemStack stack = items_get(&game->items, x, y, 0);
             if (stack.type == type && stack.count > 0) {
                 return stack;
             }
@@ -166,7 +167,7 @@ static void test_fuel(void)
     CHECK_NEAR(hearth_fuel_wanted(station), HEARTH_FUEL_CAPACITY, 1e-6);
 
     /* Other stations are no hearth. */
-    int spot = workstations_place(workstations, &game.map, WORKSTATION_CRAFTING_SPOT, 20, 20);
+    int spot = workstations_place(workstations, &game.map, WORKSTATION_CRAFTING_SPOT, 20, 20, 0);
     CHECK(!hearth_is(hearth(&game, spot)));
     CHECK(!hearth_is(NULL));
     CHECK_EQ_INT(hearth_add_fuel(workstations, spot, item_stack_make(ITEM_BRANCHES, 2, 0, 0)), 0);
@@ -250,34 +251,35 @@ static void test_radiant_warmth(void)
     REQUIRE(init_flat_game(&game));
     const Workstations *workstations = &game.workstations;
     int index = built_hearth(&game, 20, 20, HEARTH_FUEL_CAPACITY);
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20), 0.0, 1e-9); /* Out. */
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20, 0), 0.0, 1e-9); /* Out. */
     REQUIRE(hearth_light(&game.workstations, index));
     /* Falling off with the distance, nothing beyond the radius. */
-    float one = hearths_radiant_warmth(workstations, &game.map, 21, 20);
+    float one = hearths_radiant_warmth(workstations, &game.map, 21, 20, 0);
     CHECK_NEAR(one, HEARTH_RADIANT_WARMTH, 1e-4);
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 20, 20), HEARTH_RADIANT_WARMTH,
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 20, 20, 0), HEARTH_RADIANT_WARMTH,
                1e-4);
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 20, 22),
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 20, 22, 0),
                HEARTH_RADIANT_WARMTH * expf(-HEARTH_RADIANT_FALLOFF), 1e-4);
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 17, 20),
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 17, 20, 0),
                HEARTH_RADIANT_WARMTH * expf(-2.0f * HEARTH_RADIANT_FALLOFF), 1e-4);
-    CHECK(hearths_radiant_warmth(workstations, &game.map, 20 + HEARTH_RADIANT_RADIUS, 20) > 0.0f);
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21 + HEARTH_RADIANT_RADIUS, 20),
+    CHECK(hearths_radiant_warmth(workstations, &game.map, 20 + HEARTH_RADIANT_RADIUS, 20, 0) >
+          0.0f);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21 + HEARTH_RADIANT_RADIUS, 20, 0),
                0.0, 1e-9);
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 24, 24), 0.0, 1e-9); /* 5.7. */
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 24, 24, 0), 0.0, 1e-9); /* 5.7. */
     /* A wall in between stops it, not one beside the way. */
-    map_set_structure(&game.map, 22, 20, STRUCTURE_WALL);
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 23, 20), 0.0, 1e-9);
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20), one, 1e-6);
-    CHECK(hearths_radiant_warmth(workstations, &game.map, 22, 22) > 0.0f);
+    map_set_structure(&game.map, 22, 20, 0, STRUCTURE_WALL);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 23, 20, 0), 0.0, 1e-9);
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20, 0), one, 1e-6);
+    CHECK(hearths_radiant_warmth(workstations, &game.map, 22, 22, 0) > 0.0f);
     /* Felt: the air's plus the fire's. */
-    CHECK_NEAR(hearths_felt_temperature(workstations, &game.map, &game.temperatures, 21, 20),
-               temperature_at(&game.temperatures, 21, 20) + one, 1e-4);
-    CHECK_NEAR(hearths_felt_temperature(workstations, &game.map, &game.temperatures, 40, 40),
-               temperature_at(&game.temperatures, 40, 40), 1e-6);
+    CHECK_NEAR(hearths_felt_temperature(workstations, &game.map, &game.temperatures, 21, 20, 0),
+               temperature_at(&game.temperatures, 21, 20, 0) + one, 1e-4);
+    CHECK_NEAR(hearths_felt_temperature(workstations, &game.map, &game.temperatures, 40, 40, 0),
+               temperature_at(&game.temperatures, 40, 40, 0), 1e-6);
     /* A fire low on fuel radiates less. */
     workstation_get(&game.workstations, index)->fuel = HEARTH_RADIANT_FULL_FUEL * 0.5f;
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20),
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20, 0),
                HEARTH_RADIANT_WARMTH * (HEARTH_RADIANT_LOW_FIRE +
                                         (1.0f - HEARTH_RADIANT_LOW_FIRE) * 0.5f),
                1e-4);
@@ -285,7 +287,7 @@ static void test_radiant_warmth(void)
     workstation_get(&game.workstations, index)->fuel = HEARTH_FUEL_CAPACITY;
     int other = built_hearth(&game, 20, 24, HEARTH_FUEL_CAPACITY);
     REQUIRE(hearth_light(&game.workstations, other));
-    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 20, 22),
+    CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 20, 22, 0),
                2.0f * HEARTH_RADIANT_WARMTH * expf(-HEARTH_RADIANT_FALLOFF), 1e-4);
     game_shutdown(&game);
 }
@@ -296,14 +298,14 @@ static void test_hearth_is_dug_by_builders(void)
     REQUIRE(init_flat_game(&game));
     spawn_settler(&game, 10, 10, 75.0, WORK_CONSTRUCTION);
     CHECK(game_workstation_buildable(&game, WORKSTATION_OPEN_HEARTH));
-    REQUIRE(game_place_workstation(&game, WORKSTATION_OPEN_HEARTH, 14, 10));
-    CHECK(construction_at(&game.constructions, 14, 10) != CONSTRUCTION_NONE);
-    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10), WORKSTATION_NONE);
+    REQUIRE(game_place_workstation(&game, WORKSTATION_OPEN_HEARTH, 14, 10, 0));
+    CHECK(construction_at(&game.constructions, 14, 10, 0) != CONSTRUCTION_NONE);
+    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
     /* No material to bring: just the work. */
     run_ticks(&game, 1200, true);
-    int index = workstation_at(&game.workstations, 14, 10);
+    int index = workstation_at(&game.workstations, 14, 10, 0);
     REQUIRE(index != WORKSTATION_NONE);
-    CHECK_EQ_INT(construction_at(&game.constructions, 14, 10), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(construction_at(&game.constructions, 14, 10, 0), CONSTRUCTION_NONE);
     const Workstation *station = hearth(&game, index);
     CHECK(hearth_is(station));
     CHECK(station->keep_burning);
@@ -319,8 +321,8 @@ static void test_haulers_refuel(void)
     Colonist *hauler = spawn_settler(&game, 10, 10, 75.0, WORK_HAULING);
     REQUIRE(hauler != NULL);
     int index = built_hearth(&game, 14, 10, 0.0f);
-    items_add(&game.items, 20, 14, item_stack_make(ITEM_BRANCHES, 20, 0, 0));
-    items_add(&game.items, 6, 16, item_stack_make(ITEM_TWIGS, 30, 0, 0));
+    items_add(&game.items, 20, 14, 0, item_stack_make(ITEM_BRANCHES, 20, 0, 0));
+    items_add(&game.items, 6, 16, 0, item_stack_make(ITEM_TWIGS, 30, 0, 0));
     /* Twigs not allowed: only branches go in. */
     REQUIRE(hearth_set_fuel_type(&game.workstations, index, ITEM_TWIGS, false));
     run_ticks(&game, 3000, true);
@@ -364,7 +366,7 @@ static void test_lighting_by_friction(void)
     Colonist *novice = spawn_settler(&game, 10, 10, HEARTH_LIGHT_MIN_LEVEL - 1.0, WORK_FIRE);
     REQUIRE(novice != NULL);
     int index = built_hearth(&game, 14, 10, 5.0f);
-    items_add(&game.items, 18, 13, item_stack_make(ITEM_GRASS, 3, 0, 0));
+    items_add(&game.items, 18, 13, 0, item_stack_make(ITEM_GRASS, 3, 0, 0));
     CHECK(!colonist_can_light(novice));
     run_ticks(&game, 1500, true);
     CHECK(!hearth(&game, index)->burning);
@@ -393,7 +395,7 @@ static void test_failed_friction_burns_the_tinder(void)
     Colonist *lighter = spawn_settler(&game, 10, 10, HEARTH_LIGHT_MIN_LEVEL, WORK_FIRE);
     REQUIRE(lighter != NULL);
     int index = built_hearth(&game, 14, 10, 20.0f);
-    items_add(&game.items, 18, 13, item_stack_make(ITEM_GRASS, 6, 0, 0));
+    items_add(&game.items, 18, 13, 0, item_stack_make(ITEM_GRASS, 6, 0, 0));
     int attempts = 0;
     for (int i = 0; i < 40 && !hearth(&game, index)->burning; i++) {
         run_ticks(&game, 500, true);
@@ -446,7 +448,7 @@ static void test_fire_hardening(void)
     Colonist *crafter = spawn_settler(&game, 12, 12, 75.0, WORK_CRAFTING);
     REQUIRE(crafter != NULL);
     int index = built_hearth(&game, 14, 10, HEARTH_FUEL_CAPACITY);
-    items_add(&game.items, 16, 12,
+    items_add(&game.items, 16, 12, 0,
               item_stack_make(ITEM_THROWING_SPEAR, 1, ITEM_QUALITY_FINE,
                               item_hit_points_at_percent(ITEM_THROWING_SPEAR, 60)));
     REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_HARDEN_THROWING_SPEAR) >= 0);
@@ -512,8 +514,8 @@ static void test_rain_puts_out_fires_in_the_open(void)
     REQUIRE(init_flat_game(&game));
     int open = built_hearth(&game, 10, 10, HEARTH_FUEL_CAPACITY);
     int roofed = built_hearth(&game, 20, 10, HEARTH_FUEL_CAPACITY);
-    map_set_structure(&game.map, 21, 10, STRUCTURE_WALL); /* Holds the roof up. */
-    map_set_roof(&game.map, 20, 10, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_structure(&game.map, 21, 10, 0, STRUCTURE_WALL); /* Holds the roof up. */
+    map_set_roof(&game.map, 20, 10, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     REQUIRE(hearth_light(&game.workstations, open));
     REQUIRE(hearth_light(&game.workstations, roofed));
     float wetting = WEATHER_WETTING_RAIN;
@@ -564,7 +566,7 @@ static void test_roasting(void)
     REQUIRE(cook != NULL);
     int index = built_hearth(&game, 14, 10, HEARTH_FUEL_CAPACITY);
     REQUIRE(hearth_light(&game.workstations, index));
-    items_add(&game.items, 16, 12, item_stack_pristine(ITEM_WILD_CARROTS, 8));
+    items_add(&game.items, 16, 12, 0, item_stack_pristine(ITEM_WILD_CARROTS, 8));
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_ROAST_CARROTS);
     REQUIRE(bill >= 0);
     workstation_get(&game.workstations, index)->bills[bill].target = 2;

@@ -64,20 +64,20 @@ simulation:
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), kept in a ring |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
-| `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate             |
-| `region`     | Connectivity regions: which tiles can reach each other on foot (a cache)    |
+| `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level |
+| `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
 | `roof`       | Roofs falling in when their last support goes (half the materials drop), checked around what the map logged as changed |
 | `room`       | Rooms: areas closed by walls, doors and rock, and whether roofs cover them (a cache) |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
-| `map`        | Tile layers (terrain, rock, plants with their branch, twig and food stocks, cobbles and flint in the ground), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
+| `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with their branch, twig and food stocks, cobbles and flint in the ground), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `worldgen`   | Procedural map generation from a seed                                        |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
 | `i18n`       | Translation catalogs, `tr()`, plurals, placeholders, number formatting       |
-| `camera`     | World ↔ screen transforms, zoom, visible tile range                          |
+| `camera`     | World ↔ screen transforms, zoom, visible tile range, the level shown         |
 | `cli`        | Command-line parsing                                                         |
 | `log`        | Logging with a pluggable sink                                                |
 | `util`       | Small helpers (clamp, lerp, FNV hashes)                                      |
@@ -130,8 +130,27 @@ every frame:
 
 ## World representation
 
-The map stores **dense layers**, one array per layer indexed by
-`y * width + x`:
+The map is a **volume**: `width × height` tiles on each of `depth` levels
+(at most `MAP_MAX_SIZE` = 256 tiles a side and `MAP_MAX_LEVELS` = 32 levels,
+one level = 2 m of height). It stores **dense layers**, one array per layer,
+level after level: `map_index()` gives `(z * height + y) * width + x`, so a
+one-level map has the same layout as a flat one. Every function that takes a
+tile takes `x, y, z` (rectangles take `x0, y0, x1, y1, z`), every position
+(`TilePos`, colonists, stations, sites, stockpiles) carries its level, and
+every module that keeps a per-tile array (items, designations, dirt, beds,
+stockpiles, zones, regions, rooms, temperature, pathfinder) sizes it for all
+the levels. `map_ground_level()` says on which level the ground of a column
+is (0 for now: world generation makes one level).
+
+For now **nothing links the levels**: searches, region and room floods stay
+on the level they start from, a goal on another level is unreachable, heat
+does not cross between levels and a hearth only warms its own level. The
+links (slopes, ramps, ladders, stairs) come with the next steps of the levels
+milestone (see `ROADMAP.md`). Hashes only mix in a level when it is not 0 (or
+when the map has more than one level), so one-level games keep the hashes
+they had before levels existed.
+
+The layers:
 
 - `terrain[]`: `Terrain` (water, sand, soil...), each with a `TerrainDef`
   (movement cost, fertility, buildable);
@@ -717,7 +736,9 @@ tile moves toward its four neighbors at the lower conductance of the two
 set by its cover (open sky 6/h, built roof 0.3, natural roof none) and,
 under a natural roof, toward the ground (10 °C, 0.3/h). Rock stays at the
 ground's temperature. The step is stable while a tile's rates add up to
-less than 25/h. What each tile is made of and covered by, and the rate on
+less than 25/h. The bands of rows run through all the levels one after the
+other (`height × depth` rows); for now a tile only exchanges heat with the
+tiles of its own level (the edges between levels have a rate of 0). What each tile is made of and covered by, and the rate on
 each edge, are caches: updated around the tiles of the map's change logs
 (`Map.topology_log`, and `Map.build_log` for structures, roofs and rock
 where one could not walk anyway; within `MAP_NATURAL_ROOF_REACH`, since
@@ -993,6 +1014,9 @@ them (`bench_simulation` hashes are unchanged).
   free tile...), with a cost limit to bound the search.
 - A `Pathfinder` owns per-tile scratch arrays reused across searches (stamps
   instead of clearing), so searches do not allocate.
+- A search stays on the level of its start (nothing links the levels yet):
+  its scratch arrays are indexed relative to the first tile of that level,
+  and a goal on another level is unreachable.
 - Benchmark: `bench/bench_pathfinding [size] [searches] [seed]`; about 0.7 ms
   per cross-map search on a 200 × 200 map in Release.
 
@@ -1003,7 +1027,8 @@ cost limit before giving up. `Regions` (`core/region.h`, owned by `Game`)
 avoids that: every passable tile gets the id of its region, two tiles being in
 the same region exactly when one can walk between them (flood fill over
 orthogonal neighbors; diagonal moves never connect more because corners
-cannot be cut). Each region also knows whether it contains a drinking spot.
+cannot be cut). Floods stay on their level, so two levels never share a
+region. Each region also knows whether it contains a drinking spot.
 
 - Regions are a **cache**, not simulation state: they are not hashed, and
   every use is an exact shortcut for a search that would fail anyway, so they
@@ -1122,7 +1147,10 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 
 UI state that is not part of the simulation (camera, selection, selected
 stockpile, gathering zone, workstation or structure, active tool, drag
-rectangle, debug overlay and menu toggles) lives in `App`. Escape and a right click on the map
+rectangle, debug overlay and menu toggles) lives in `App`. The level shown is
+`Camera.level`: the map, the entities and the overlays are drawn for that
+level only, and clicks and tools act on it (a selected structure keeps its
+level in `App.selected_structure_z`). Escape and a right click on the map
 (released where it was pressed: otherwise it pans) step back one level
 (`step_back()`). Every keyboard control is a physical position (`APP_KEY_*`
 scancodes in `game/app.h`): the controls are laid out the same on any

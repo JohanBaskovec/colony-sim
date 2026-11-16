@@ -28,18 +28,19 @@ const WorkstationDef *workstation_def(WorkstationType type)
     return (unsigned)type < WORKSTATION_TYPE_COUNT ? &WORKSTATION_DEFS[type] : NULL;
 }
 
-bool workstations_init(Workstations *workstations, int width, int height)
+bool workstations_init(Workstations *workstations, int width, int height, int depth)
 {
     memset(workstations, 0, sizeof(*workstations));
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
-    workstations->at = calloc((size_t)width * (size_t)height, 1);
+    workstations->at = calloc((size_t)width * (size_t)height * (size_t)depth, 1);
     if (workstations->at == NULL) {
         return false;
     }
     workstations->width = width;
     workstations->height = height;
+    workstations->depth = depth;
     workstations->next_number = 1;
     return true;
 }
@@ -50,22 +51,24 @@ void workstations_free(Workstations *workstations)
     memset(workstations, 0, sizeof(*workstations));
 }
 
-static bool in_bounds(const Workstations *workstations, int x, int y)
+static bool in_bounds(const Workstations *workstations, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && x < workstations->width && y < workstations->height;
+    return x >= 0 && y >= 0 && z >= 0 && x < workstations->width && y < workstations->height &&
+           z < workstations->depth;
 }
 
-static size_t index_of(const Workstations *workstations, int x, int y)
+static size_t index_of(const Workstations *workstations, int x, int y, int z)
 {
-    return (size_t)y * (size_t)workstations->width + (size_t)x;
+    return ((size_t)z * (size_t)workstations->height + (size_t)y) * (size_t)workstations->width +
+           (size_t)x;
 }
 
-int workstation_at(const Workstations *workstations, int x, int y)
+int workstation_at(const Workstations *workstations, int x, int y, int z)
 {
-    if (!in_bounds(workstations, x, y)) {
+    if (!in_bounds(workstations, x, y, z)) {
         return WORKSTATION_NONE;
     }
-    return (int)workstations->at[index_of(workstations, x, y)] - 1;
+    return (int)workstations->at[index_of(workstations, x, y, z)] - 1;
 }
 
 Workstation *workstation_get(Workstations *workstations, int index)
@@ -81,12 +84,12 @@ const Workstation *workstation_get_const(const Workstations *workstations, int i
     return workstation_get((Workstations *)workstations, index);
 }
 
-bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y)
+bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y, int z)
 {
-    return in_bounds(workstations, x, y) && map_is_passable(map, x, y) &&
-           terrain_def((Terrain)map->terrain[map_index(map, x, y)])->buildable &&
-           !map_plant_blocks_building(map, x, y) &&
-           workstation_at(workstations, x, y) == WORKSTATION_NONE;
+    return in_bounds(workstations, x, y, z) && map_is_passable(map, x, y, z) &&
+           terrain_def((Terrain)map->terrain[map_index(map, x, y, z)])->buildable &&
+           !map_plant_blocks_building(map, x, y, z) &&
+           workstation_at(workstations, x, y, z) == WORKSTATION_NONE;
 }
 
 bool workstation_needs_construction(WorkstationType type)
@@ -104,10 +107,10 @@ bool workstation_needs_construction(WorkstationType type)
 }
 
 int workstations_place(Workstations *workstations, const Map *map, WorkstationType type, int x,
-                       int y)
+                       int y, int z)
 {
     if ((unsigned)type >= WORKSTATION_TYPE_COUNT ||
-        !workstation_can_place(workstations, map, x, y)) {
+        !workstation_can_place(workstations, map, x, y, z)) {
         return WORKSTATION_NONE;
     }
     for (int index = 0; index < WORKSTATION_MAX; index++) {
@@ -126,7 +129,7 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
             station->keep_burning = true;
             station->fuel_types = HEARTH_FUEL_TYPES;
         }
-        workstations->at[index_of(workstations, x, y)] = (uint8_t)(index + 1);
+        workstations->at[index_of(workstations, x, y, z)] = (uint8_t)(index + 1);
         workstations->used_count++;
         workstations->revision++;
         return index;
@@ -144,7 +147,7 @@ int workstations_remove(Workstations *workstations, int index, ItemStack returne
     if (station->work_input.count > 0 && !station->free_input) {
         returned[count++] = station->work_input;
     }
-    workstations->at[index_of(workstations, station->x, station->y)] = 0;
+    workstations->at[index_of(workstations, station->x, station->y, station->z)] = 0;
     memset(station, 0, sizeof(*station));
     workstations->used_count--;
     workstations->revision++;
@@ -411,7 +414,7 @@ bool workstation_add_craft_work(Workstations *workstations, int index, int bill,
     ItemStack products[RECIPE_PRODUCT_MAX];
     int count = recipe_craft(recipe, station->work_input, level, rng, products);
     for (int i = 0; i < count; i++) {
-        items_drop(items, map, station->x, station->y, products[i]);
+        items_drop(items, map, station->x, station->y, station->z, products[i]);
     }
     station->work_input = (ItemStack){.type = ITEM_NONE};
     station->work_recipe = RECIPE_COUNT;
@@ -440,6 +443,9 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         }
         int32_t ints[5] = {index, station->type, station->x, station->y, station->number};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
+        if (station->z != 0) { /* Hashes of one-level games stay as they were. */
+            hash = hash_fnv1a64(hash, &station->z, sizeof(station->z));
+        }
         hash = hash_fnv1a64(hash, &station->work_progress, sizeof(station->work_progress));
         ItemStack input = station->work_input;
         int32_t craft[6] = {station->work_recipe, input.type,       input.quality,

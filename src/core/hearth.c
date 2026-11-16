@@ -126,7 +126,7 @@ bool hearth_set_fuel_type(Workstations *workstations, int index, ItemType type, 
 bool hearth_rained_on(const Workstation *station, const Map *map, float wetting)
 {
     return wetting > 0.0f && station != NULL &&
-           temperature_cover(map, station->x, station->y) == TEMPERATURE_COVER_OPEN;
+           temperature_cover(map, station->x, station->y, station->z) == TEMPERATURE_COVER_OPEN;
 }
 
 int hearths_burn(Workstations *workstations, const Map *map, float wetting)
@@ -191,7 +191,7 @@ float hearths_light_at(const Workstations *workstations, float x, float y)
 
 /* Whether nothing stops warmth between two tiles: no wall, door or rock on
  * the tiles of the line between them (their own tiles excluded). */
-static bool warmth_reaches(const Map *map, int x0, int y0, int x1, int y1)
+static bool warmth_reaches(const Map *map, int x0, int y0, int x1, int y1, int z)
 {
     int dx = abs(x1 - x0), dy = -abs(y1 - y0);
     int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
@@ -209,18 +209,18 @@ static bool warmth_reaches(const Map *map, int x0, int y0, int x1, int y1)
         if (x == x1 && y == y1) {
             return true;
         }
-        if (temperature_material(map, x, y) != TEMPERATURE_MATERIAL_AIR) {
+        if (temperature_material(map, x, y, z) != TEMPERATURE_MATERIAL_AIR) {
             return false;
         }
     }
 }
 
-float hearths_radiant_warmth(const Workstations *workstations, const Map *map, int x, int y)
+float hearths_radiant_warmth(const Workstations *workstations, const Map *map, int x, int y, int z)
 {
     float warmth = 0.0f;
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = &workstations->list[index];
-        if (!station->used || !station->burning) {
+        if (!station->used || !station->burning || station->z != z) {
             continue;
         }
         int dx = x - station->x, dy = y - station->y;
@@ -229,7 +229,8 @@ float hearths_radiant_warmth(const Workstations *workstations, const Map *map, i
         }
         float distance = sqrtf((float)(dx * dx + dy * dy));
         if (distance > (float)HEARTH_RADIANT_RADIUS ||
-            ((dx != 0 || dy != 0) && !warmth_reaches(map, station->x, station->y, x, y))) {
+            ((dx != 0 || dy != 0) &&
+             !warmth_reaches(map, station->x, station->y, x, y, station->z))) {
             continue;
         }
         float fire = HEARTH_RADIANT_LOW_FIRE + (1.0f - HEARTH_RADIANT_LOW_FIRE) *
@@ -242,9 +243,10 @@ float hearths_radiant_warmth(const Workstations *workstations, const Map *map, i
 }
 
 float hearths_felt_temperature(const Workstations *workstations, const Map *map,
-                               const Temperatures *temperatures, int x, int y)
+                               const Temperatures *temperatures, int x, int y, int z)
 {
-    return temperature_at(temperatures, x, y) + hearths_radiant_warmth(workstations, map, x, y);
+    return temperature_at(temperatures, x, y, z) +
+           hearths_radiant_warmth(workstations, map, x, y, z);
 }
 
 bool hearth_story_time(uint64_t tick)

@@ -11,7 +11,7 @@ void roof_watch_init(RoofWatch *watch, const Map *map)
 
 /* Brings down the unsupported roofs in a rectangle (clipped to the map). */
 static int collapse_area(Map *map, Items *items, Designations *designations, int x0, int y0,
-                         int x1, int y1)
+                         int x1, int y1, int z)
 {
     x0 = clampi(x0, 0, map->width - 1);
     x1 = clampi(x1, 0, map->width - 1);
@@ -20,22 +20,22 @@ static int collapse_area(Map *map, Items *items, Designations *designations, int
     int fallen = 0;
     for (int y = y0; y <= y1; y++) {
         for (int x = x0; x <= x1; x++) {
-            StructureType roof = map_roof(map, x, y);
-            if (roof == STRUCTURE_NONE || map_roof_supported(map, x, y)) {
+            StructureType roof = map_roof(map, x, y, z);
+            if (roof == STRUCTURE_NONE || map_roof_supported(map, x, y, z)) {
                 continue;
             }
-            map_set_roof(map, x, y, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
+            map_set_roof(map, x, y, z, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
             const StructureDef *def = structure_def(roof);
             for (int slot = 0; items != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
                 int count = structure_salvage_count(roof, slot);
                 if (count > 0) {
-                    items_drop(items, map, x, y,
+                    items_drop(items, map, x, y, z,
                                item_stack_pristine(def->materials[slot].type, count));
                 }
             }
             if (designations != NULL &&
-                designation_get(designations, x, y) == DESIGNATION_REMOVE_ROOF) {
-                designation_set(designations, map, x, y, DESIGNATION_NONE);
+                designation_get(designations, x, y, z) == DESIGNATION_REMOVE_ROOF) {
+                designation_set(designations, map, x, y, z, DESIGNATION_NONE);
             }
             fallen++;
         }
@@ -57,19 +57,21 @@ int roofs_collapse(RoofWatch *watch, Map *map, Items *items, Designations *desig
         const int reach = ROOF_SUPPORT_RANGE;
         if (everything) {
             fallen += collapse_area(map, items, designations, 0, 0, map->width - 1,
-                                    map->height - 1);
+                                    map->height - 1, 0);
         } else {
             for (uint32_t r = 1; r <= topology; r++) {
                 const MapTopologyChange *change =
                     &map->topology_log[(watch->topology_revision + r) % MAP_TOPOLOGY_LOG_SIZE];
-                fallen += collapse_area(map, items, designations, change->x - reach,
-                                        change->y - reach, change->x + reach, change->y + reach);
+                fallen +=
+                    collapse_area(map, items, designations, change->x - reach, change->y - reach,
+                                  change->x + reach, change->y + reach, change->z);
             }
             for (uint32_t r = 1; r <= build; r++) {
                 const MapBuildChange *change =
                     &map->build_log[(watch->build_revision + r) % MAP_BUILD_LOG_SIZE];
-                fallen += collapse_area(map, items, designations, change->x - reach,
-                                        change->y - reach, change->x + reach, change->y + reach);
+                fallen +=
+                    collapse_area(map, items, designations, change->x - reach, change->y - reach,
+                                  change->x + reach, change->y + reach, change->z);
             }
         }
     }

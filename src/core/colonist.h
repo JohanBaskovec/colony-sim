@@ -301,6 +301,7 @@ typedef struct Colonist {
     int age;
     int x; /* Current tile. */
     int y;
+    int z;
     Path path;
     int path_index; /* Next step of `path` to walk to. */
     float move_progress; /* 0..1 from the current tile to the next step. */
@@ -462,7 +463,7 @@ typedef struct ColonistContext {
     bool no_tools;
 } ColonistContext;
 
-void colonist_init(Colonist *colonist, const char *name, int age, int x, int y);
+void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, int z);
 void colonist_free(Colonist *colonist);
 
 /* Whether it is time to be in bed (22:00 to 06:00). */

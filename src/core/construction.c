@@ -6,13 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-bool constructions_init(Constructions *constructions, int width, int height)
+bool constructions_init(Constructions *constructions, int width, int height, int depth)
 {
     memset(constructions, 0, sizeof(*constructions));
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
-    size_t tiles = (size_t)width * (size_t)height;
+    size_t tiles = (size_t)width * (size_t)height * (size_t)depth;
     constructions->at = calloc(tiles, sizeof(*constructions->at));
     constructions->roof_at = calloc(tiles, sizeof(*constructions->roof_at));
     constructions->workstation_tiles = calloc(tiles, 1);
@@ -23,6 +23,7 @@ bool constructions_init(Constructions *constructions, int width, int height)
     }
     constructions->width = width;
     constructions->height = height;
+    constructions->depth = depth;
     constructions->next_number = 1;
     return true;
 }
@@ -35,35 +36,38 @@ void constructions_free(Constructions *constructions)
     memset(constructions, 0, sizeof(*constructions));
 }
 
-static bool in_bounds(const Constructions *constructions, int x, int y)
+static bool in_bounds(const Constructions *constructions, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && x < constructions->width && y < constructions->height;
+    return x >= 0 && y >= 0 && z >= 0 && x < constructions->width && y < constructions->height &&
+           z < constructions->depth;
 }
 
-static size_t index_of(const Constructions *constructions, int x, int y)
+static size_t index_of(const Constructions *constructions, int x, int y, int z)
 {
-    return (size_t)y * (size_t)constructions->width + (size_t)x;
+    return ((size_t)z * (size_t)constructions->height + (size_t)y) * (size_t)constructions->width +
+           (size_t)x;
 }
 
-int construction_at(const Constructions *constructions, int x, int y)
+int construction_at(const Constructions *constructions, int x, int y, int z)
 {
-    if (!in_bounds(constructions, x, y)) {
+    if (!in_bounds(constructions, x, y, z)) {
         return CONSTRUCTION_NONE;
     }
-    return (int)constructions->at[index_of(constructions, x, y)] - 1;
+    return (int)constructions->at[index_of(constructions, x, y, z)] - 1;
 }
 
-int construction_roof_at(const Constructions *constructions, int x, int y)
+int construction_roof_at(const Constructions *constructions, int x, int y, int z)
 {
-    if (!in_bounds(constructions, x, y)) {
+    if (!in_bounds(constructions, x, y, z)) {
         return CONSTRUCTION_NONE;
     }
-    return (int)constructions->roof_at[index_of(constructions, x, y)] - 1;
+    return (int)constructions->roof_at[index_of(constructions, x, y, z)] - 1;
 }
 
-int construction_in_layer(const Constructions *constructions, int x, int y, bool roof)
+int construction_in_layer(const Constructions *constructions, int x, int y, int z, bool roof)
 {
-    return roof ? construction_roof_at(constructions, x, y) : construction_at(constructions, x, y);
+    return roof ? construction_roof_at(constructions, x, y, z)
+                : construction_at(constructions, x, y, z);
 }
 
 bool construction_is_roof(const ConstructionSite *site)
@@ -89,27 +93,27 @@ ConstructionSite *construction_get_mutable(Constructions *constructions, int ind
     return site_get(constructions, index);
 }
 
-bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y)
+bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y, int z)
 {
-    if (!in_bounds(constructions, x, y) || !map_is_passable(map, x, y)) {
+    if (!in_bounds(constructions, x, y, z) || !map_is_passable(map, x, y, z)) {
         return false;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     return terrain_def((Terrain)map->terrain[index])->buildable &&
-           map->structure[index] == STRUCTURE_NONE && !map_plant_blocks_building(map, x, y) &&
-           construction_at(constructions, x, y) == CONSTRUCTION_NONE;
+           map->structure[index] == STRUCTURE_NONE && !map_plant_blocks_building(map, x, y, z) &&
+           construction_at(constructions, x, y, z) == CONSTRUCTION_NONE;
 }
 
-bool construction_roof_held(const Constructions *constructions, const Map *map, int x, int y)
+bool construction_roof_held(const Constructions *constructions, const Map *map, int x, int y, int z)
 {
-    if (map_roof_supported(map, x, y)) {
+    if (map_roof_supported(map, x, y, z)) {
         return true;
     }
     /* A wall planned in reach will hold it up. */
     for (int dy = -ROOF_SUPPORT_RANGE; dy <= ROOF_SUPPORT_RANGE; dy++) {
         for (int dx = -ROOF_SUPPORT_RANGE; dx <= ROOF_SUPPORT_RANGE; dx++) {
             const ConstructionSite *site =
-                construction_get(constructions, construction_at(constructions, x + dx, y + dy));
+                construction_get(constructions, construction_at(constructions, x + dx, y + dy, z));
             if (site != NULL && !site->refresh && structure_blocks((StructureType)site->type)) {
                 return true;
             }
@@ -119,32 +123,32 @@ bool construction_roof_held(const Constructions *constructions, const Map *map, 
 }
 
 bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
-                                 int y)
+                                 int y, int z)
 {
-    if (!in_bounds(constructions, x, y) || !map_in_bounds(map, x, y)) {
+    if (!in_bounds(constructions, x, y, z) || !map_in_bounds(map, x, y, z)) {
         return false;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     return terrain_def((Terrain)map->terrain[index])->buildable &&
            map->rock[index] == ROCK_NONE && map->roof[index] == STRUCTURE_NONE &&
-           !map_plant_blocks_building(map, x, y) &&
-           construction_roof_at(constructions, x, y) == CONSTRUCTION_NONE &&
-           construction_roof_held(constructions, map, x, y);
+           !map_plant_blocks_building(map, x, y, z) &&
+           construction_roof_at(constructions, x, y, z) == CONSTRUCTION_NONE &&
+           construction_roof_held(constructions, map, x, y, z);
 }
 
 bool construction_can_place_structure(const Constructions *constructions, const Map *map,
-                                      StructureType type, int x, int y, Direction direction)
+                                      StructureType type, int x, int y, int z, Direction direction)
 {
     int length = structure_length(type);
     if (length <= 0 || (unsigned)direction >= DIRECTION_COUNT) {
         return false;
     }
     if (structure_is_roof(type)) {
-        return construction_can_place_roof(constructions, map, x, y);
+        return construction_can_place_roof(constructions, map, x, y, z);
     }
     for (int part = 0; part < length; part++) {
         if (!construction_can_place(constructions, map, x + part * direction_dx(direction),
-                                    y + part * direction_dy(direction))) {
+                                    y + part * direction_dy(direction), z)) {
             return false;
         }
     }
@@ -192,10 +196,11 @@ const char *construction_name_key(const ConstructionSite *site)
     return def != NULL ? def->name_key : "";
 }
 
-void construction_tile(const ConstructionSite *site, int part, int *x, int *y)
+void construction_tile(const ConstructionSite *site, int part, int *x, int *y, int *z)
 {
     *x = site->x + part * direction_dx((Direction)site->direction);
     *y = site->y + part * direction_dy((Direction)site->direction);
+    *z = site->z;
 }
 
 /* Writes `value` (site index + 1, or 0) on every tile of a site. */
@@ -203,16 +208,16 @@ static void mark_tiles(Constructions *constructions, const ConstructionSite *sit
                        uint16_t value)
 {
     for (int part = 0; part < construction_length(site); part++) {
-        int x, y;
-        construction_tile(site, part, &x, &y);
-        if (!in_bounds(constructions, x, y)) {
+        int x, y, z;
+        construction_tile(site, part, &x, &y, &z);
+        if (!in_bounds(constructions, x, y, z)) {
             continue;
         }
         if (construction_is_roof(site)) {
-            constructions->roof_at[index_of(constructions, x, y)] = value;
+            constructions->roof_at[index_of(constructions, x, y, z)] = value;
         } else {
-            constructions->at[index_of(constructions, x, y)] = value;
-            constructions->workstation_tiles[index_of(constructions, x, y)] =
+            constructions->at[index_of(constructions, x, y, z)] = value;
+            constructions->workstation_tiles[index_of(constructions, x, y, z)] =
                 value != 0 && site->workstation != 0;
         }
     }
@@ -220,7 +225,7 @@ static void mark_tiles(Constructions *constructions, const ConstructionSite *sit
 
 /* Takes a free slot for a site; CONSTRUCTION_NONE when the list is full. */
 static int add_site(Constructions *constructions, StructureType type, int workstation, int x,
-                    int y, Direction direction, bool refresh)
+                    int y, int z, Direction direction, bool refresh)
 {
     for (int index = 0; index < CONSTRUCTION_MAX; index++) {
         ConstructionSite *site = &constructions->list[index];
@@ -232,6 +237,7 @@ static int add_site(Constructions *constructions, StructureType type, int workst
                                    .workstation = (uint8_t)workstation,
                                    .x = (int16_t)x,
                                    .y = (int16_t)y,
+                                   .z = (int16_t)z,
                                    .direction = (uint8_t)direction,
                                    .number = constructions->next_number++,
                                    .refresh = refresh};
@@ -248,44 +254,44 @@ static int add_site(Constructions *constructions, StructureType type, int workst
 }
 
 int constructions_place(Constructions *constructions, const Map *map, StructureType type, int x,
-                        int y, Direction direction)
+                        int y, int z, Direction direction)
 {
     if (type == STRUCTURE_NONE || (unsigned)type >= STRUCTURE_TYPE_COUNT ||
-        !construction_can_place_structure(constructions, map, type, x, y, direction)) {
+        !construction_can_place_structure(constructions, map, type, x, y, z, direction)) {
         return CONSTRUCTION_NONE;
     }
-    return add_site(constructions, type, 0, x, y, direction, false);
+    return add_site(constructions, type, 0, x, y, z, direction, false);
 }
 
 int constructions_place_workstation(Constructions *constructions, const Map *map,
-                                    WorkstationType type, int x, int y)
+                                    WorkstationType type, int x, int y, int z)
 {
     if ((unsigned)type >= WORKSTATION_TYPE_COUNT ||
-        !construction_can_place(constructions, map, x, y)) {
+        !construction_can_place(constructions, map, x, y, z)) {
         return CONSTRUCTION_NONE;
     }
-    return add_site(constructions, STRUCTURE_NONE, (int)type + 1, x, y, DIRECTION_SOUTH, false);
+    return add_site(constructions, STRUCTURE_NONE, (int)type + 1, x, y, z, DIRECTION_SOUTH, false);
 }
 
-int constructions_place_refresh(Constructions *constructions, const Map *map, int x, int y)
+int constructions_place_refresh(Constructions *constructions, const Map *map, int x, int y, int z)
 {
     int origin_x, origin_y;
-    if (!map_structure_origin(map, x, y, &origin_x, &origin_y)) {
+    if (!map_structure_origin(map, x, y, z, &origin_x, &origin_y)) {
         return CONSTRUCTION_NONE;
     }
-    StructureType type = map_structure(map, x, y);
-    Direction direction = map_structure_direction(map, x, y);
+    StructureType type = map_structure(map, x, y, z);
+    Direction direction = map_structure_direction(map, x, y, z);
     const StructureDef *def = structure_def(type);
     if (def == NULL || def->refresh_work <= 0.0f) {
         return CONSTRUCTION_NONE;
     }
     for (int part = 0; part < def->length; part++) {
         if (construction_at(constructions, origin_x + part * direction_dx(direction),
-                            origin_y + part * direction_dy(direction)) != CONSTRUCTION_NONE) {
+                            origin_y + part * direction_dy(direction), z) != CONSTRUCTION_NONE) {
             return CONSTRUCTION_NONE;
         }
     }
-    return add_site(constructions, type, 0, origin_x, origin_y, direction, true);
+    return add_site(constructions, type, 0, origin_x, origin_y, z, direction, true);
 }
 
 int constructions_remove(Constructions *constructions, int index,
@@ -408,7 +414,7 @@ bool construction_can_work(const ConstructionSite *site, const Map *map)
 {
     return construction_materials_complete(site) &&
            (!structure_is_roof((StructureType)site->type) ||
-            map_roof_supported(map, site->x, site->y));
+            map_roof_supported(map, site->x, site->y, site->z));
 }
 
 int construction_deliver(Constructions *constructions, int index, ItemStack stack)
@@ -439,21 +445,21 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
 }
 
 /* A blocking structure leaves no room for items: they go next door. */
-static void clear_items(Map *map, Items *items, int x, int y)
+static void clear_items(Map *map, Items *items, int x, int y, int z)
 {
-    ItemStack stack = items_get(items, x, y);
+    ItemStack stack = items_get(items, x, y, z);
     if (stack.count == 0) {
         return;
     }
     static const int DX[4] = {0, 1, 0, -1};
     static const int DY[4] = {-1, 0, 1, 0};
     for (int i = 0; i < 4; i++) {
-        if (map_is_passable(map, x + DX[i], y + DY[i])) {
-            items_remove(items, x, y, stack.count);
-            int placed = items_drop(items, map, x + DX[i], y + DY[i], stack);
+        if (map_is_passable(map, x + DX[i], y + DY[i], z)) {
+            items_remove(items, x, y, z, stack.count);
+            int placed = items_drop(items, map, x + DX[i], y + DY[i], z, stack);
             if (placed < stack.count) {
                 stack.count = (uint16_t)(stack.count - placed);
-                items_add(items, x, y, stack); /* No room: what is left stays. */
+                items_add(items, x, y, z, stack); /* No room: what is left stays. */
             }
             return;
         }
@@ -466,16 +472,16 @@ static bool finish_workstation(Constructions *constructions, const Map *map,
 {
     ConstructionSite *site = site_get(constructions, index);
     WorkstationType type = construction_workstation(site);
-    int x = site->x, y = site->y;
+    int x = site->x, y = site->y, z = site->z;
     /* The site's tile is taken in the station layer by nothing yet: only a
      * plant grown meanwhile or a full list can stand in the way. */
     if (workstations == NULL || workstations->used_count >= WORKSTATION_MAX ||
-        !workstation_can_place(workstations, map, x, y)) {
+        !workstation_can_place(workstations, map, x, y, z)) {
         return false;
     }
     ItemStack unused[STRUCTURE_MATERIAL_SLOTS];
     constructions_remove(constructions, index, unused); /* Used up. */
-    workstations_place(workstations, map, type, x, y);
+    workstations_place(workstations, map, type, x, y, z);
     return true;
 }
 
@@ -487,8 +493,9 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
     if (site == NULL || !construction_can_work(site, map)) {
         return false;
     }
-    if (site->refresh && (!map_structure_is_origin(map, site->x, site->y) ||
-                          map_structure(map, site->x, site->y) != (StructureType)site->type)) {
+    if (site->refresh &&
+        (!map_structure_is_origin(map, site->x, site->y, site->z) ||
+         map_structure(map, site->x, site->y, site->z) != (StructureType)site->type)) {
         return false; /* The structure is gone. */
     }
     StructureType type = (StructureType)site->type;
@@ -500,26 +507,26 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
     if (site->workstation != 0) {
         return finish_workstation(constructions, map, workstations, index);
     }
-    int x = site->x, y = site->y;
+    int x = site->x, y = site->y, z = site->z;
     Direction direction = (Direction)site->direction;
     bool refresh = site->refresh;
     ItemQuality cap = structure_quality_cap(type, site->delivered);
     ItemStack unused[STRUCTURE_MATERIAL_SLOTS];
     constructions_remove(constructions, index, unused); /* Used up. */
     if (refresh) {
-        map_set_structure_hit_points(map, x, y, INT16_MAX);
+        map_set_structure_hit_points(map, x, y, z, INT16_MAX);
         return true;
     }
     ItemQuality quality = knowledge_quality_of_score(knowledge_product_score(level, rng));
     if (structure_is_roof(type)) {
-        map_set_roof(map, x, y, type, quality < cap ? quality : cap);
+        map_set_roof(map, x, y, z, type, quality < cap ? quality : cap);
         return true;
     }
-    map_place_structure(map, x, y, type, direction, quality < cap ? quality : cap);
+    map_place_structure(map, x, y, z, type, direction, quality < cap ? quality : cap);
     for (int part = 0; structure_blocks(type) && items != NULL && part < structure_length(type);
          part++) {
         clear_items(map, items, x + part * direction_dx(direction),
-                    y + part * direction_dy(direction));
+                    y + part * direction_dy(direction), z);
     }
     return true;
 }
@@ -535,12 +542,12 @@ bool construction_finish_now(Constructions *constructions, Map *map, Items *item
     bool ready = true;
     if (site->workstation != 0) {
         ready = workstations != NULL && workstations->used_count < WORKSTATION_MAX &&
-                workstation_can_place(workstations, map, site->x, site->y);
+                workstation_can_place(workstations, map, site->x, site->y, site->z);
     } else if (site->refresh) {
-        ready = map_structure_is_origin(map, site->x, site->y) &&
-                map_structure(map, site->x, site->y) == type;
+        ready = map_structure_is_origin(map, site->x, site->y, site->z) &&
+                map_structure(map, site->x, site->y, site->z) == type;
     } else if (structure_is_roof(type)) {
-        ready = map_roof_supported(map, site->x, site->y);
+        ready = map_roof_supported(map, site->x, site->y, site->z);
     }
     if (!ready) {
         return false;
@@ -565,30 +572,32 @@ int constructions_wear_day(Constructions *constructions, Map *map, Items *items)
                       map->structure_counts[type] > 0);
     }
     int gone = 0;
-    for (int y = 0; any && y < map->height; y++) {
-        for (int x = 0; x < map->width; x++) {
-            StructureType type = map_structure(map, x, y);
-            int wear = structure_def(type)->wear_per_day;
-            if (type == STRUCTURE_NONE || wear <= 0 || !map_structure_is_origin(map, x, y)) {
-                continue;
-            }
-            int hit_points = map_structure_hit_points(map, x, y) - wear;
-            int site = construction_at(constructions, x, y);
-            if (hit_points <= 0) {
-                ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
-                int count = constructions_remove(constructions, site, returned);
-                for (int i = 0; items != NULL && i < count; i++) {
-                    items_drop(items, map, x, y, returned[i]);
+    for (int z = 0; any && z < map->depth; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                StructureType type = map_structure(map, x, y, z);
+                int wear = structure_def(type)->wear_per_day;
+                if (type == STRUCTURE_NONE || wear <= 0 || !map_structure_is_origin(map, x, y, z)) {
+                    continue;
                 }
-                map_set_structure(map, x, y, STRUCTURE_NONE);
-                gone++;
-                continue;
-            }
-            map_set_structure_hit_points(map, x, y, hit_points);
-            int max = structure_max_hit_points(type, map_structure_quality(map, x, y));
-            if ((float)hit_points < (float)max * STRUCTURE_REFRESH_BELOW &&
-                site == CONSTRUCTION_NONE) {
-                constructions_place_refresh(constructions, map, x, y);
+                int hit_points = map_structure_hit_points(map, x, y, z) - wear;
+                int site = construction_at(constructions, x, y, z);
+                if (hit_points <= 0) {
+                    ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
+                    int count = constructions_remove(constructions, site, returned);
+                    for (int i = 0; items != NULL && i < count; i++) {
+                        items_drop(items, map, x, y, z, returned[i]);
+                    }
+                    map_set_structure(map, x, y, z, STRUCTURE_NONE);
+                    gone++;
+                    continue;
+                }
+                map_set_structure_hit_points(map, x, y, z, hit_points);
+                int max = structure_max_hit_points(type, map_structure_quality(map, x, y, z));
+                if ((float)hit_points < (float)max * STRUCTURE_REFRESH_BELOW &&
+                    site == CONSTRUCTION_NONE) {
+                    constructions_place_refresh(constructions, map, x, y, z);
+                }
             }
         }
     }
@@ -612,6 +621,9 @@ uint64_t constructions_hash(const Constructions *constructions, uint64_t hash)
         int32_t ints[8] = {index,        site->type,    site->x,         site->y,
                            site->number, site->refresh, site->direction, site->workstation};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
+        if (site->z != 0) { /* Hashes of one-level games stay as they were. */
+            hash = hash_fnv1a64(hash, &site->z, sizeof(site->z));
+        }
         for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
             ItemStack stack = site->delivered[slot];
             int32_t fields[5] = {stack.type, stack.quality, stack.count, stack.hit_points,

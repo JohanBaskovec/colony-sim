@@ -273,15 +273,15 @@ void plant_settle(Plant *plant, int day_of_year)
     }
 }
 
-bool map_init(Map *map, int width, int height)
+bool map_init(Map *map, int width, int height, int depth)
 {
     memset(map, 0, sizeof(*map));
     if (width < MAP_MIN_SIZE || height < MAP_MIN_SIZE || width > MAP_MAX_SIZE ||
-        height > MAP_MAX_SIZE) {
+        height > MAP_MAX_SIZE || depth < 1 || depth > MAP_MAX_LEVELS) {
         return false;
     }
 
-    size_t count = (size_t)width * (size_t)height;
+    size_t count = (size_t)width * (size_t)height * (size_t)depth;
     map->terrain = malloc(count);
     map->rock = calloc(count, 1);
     map->plants = calloc(count, sizeof(Plant));
@@ -304,6 +304,7 @@ bool map_init(Map *map, int width, int height)
     map->structure_counts[STRUCTURE_NONE] = (int)count;
     map->width = width;
     map->height = height;
+    map->depth = depth;
     return true;
 }
 
@@ -323,47 +324,47 @@ void map_free(Map *map)
     memset(map, 0, sizeof(*map));
 }
 
-static void log_topology_change(Map *map, int x, int y, bool opened)
+static void log_topology_change(Map *map, int x, int y, int z, bool opened)
 {
     map->topology_revision++;
     map->topology_log[map->topology_revision % MAP_TOPOLOGY_LOG_SIZE] =
-        (MapTopologyChange){(int16_t)x, (int16_t)y, opened, false};
+        (MapTopologyChange){(int16_t)x, (int16_t)y, (int16_t)z, opened, false};
 }
 
-static void log_build_change(Map *map, int x, int y)
+static void log_build_change(Map *map, int x, int y, int z)
 {
     map->build_revision++;
     map->build_log[map->build_revision % MAP_BUILD_LOG_SIZE] =
-        (MapBuildChange){(int16_t)x, (int16_t)y};
+        (MapBuildChange){(int16_t)x, (int16_t)y, (int16_t)z};
 }
 
-void map_set_terrain(Map *map, int x, int y, Terrain terrain)
+void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
 {
-    if (!map_in_bounds(map, x, y) || (unsigned)terrain >= TERRAIN_COUNT) {
+    if (!map_in_bounds(map, x, y, z) || (unsigned)terrain >= TERRAIN_COUNT) {
         return;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     if (map->terrain[index] != terrain) {
         map->terrain[index] = (uint8_t)terrain;
         /* May also turn neighbors into (or out of) drinking spots. */
-        log_topology_change(map, x, y, false);
+        log_topology_change(map, x, y, z, false);
     }
 }
 
-void map_set_rock(Map *map, int x, int y, RockType rock)
+void map_set_rock(Map *map, int x, int y, int z, RockType rock)
 {
-    if (!map_in_bounds(map, x, y) || (unsigned)rock >= ROCK_COUNT) {
+    if (!map_in_bounds(map, x, y, z) || (unsigned)rock >= ROCK_COUNT) {
         return;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     bool was_passable = map_move_cost_at(map, index) > 0.0f;
     bool was_rock = map->rock[index] != ROCK_NONE;
     map->rock[index] = (uint8_t)rock;
     bool is_passable = map_move_cost_at(map, index) > 0.0f;
     if (was_passable != is_passable) {
-        log_topology_change(map, x, y, is_passable);
+        log_topology_change(map, x, y, z, is_passable);
     } else if (was_rock != (rock != ROCK_NONE)) {
-        log_build_change(map, x, y); /* Rock where a wall stood: rooms, warmth. */
+        log_build_change(map, x, y, z); /* Rock where a wall stood: rooms, warmth. */
     }
 }
 
@@ -371,10 +372,10 @@ void map_set_rock(Map *map, int x, int y, RockType rock)
 #define PART_INDEX_SHIFT 2
 
 /* Puts a structure tile (or none) on a tile: counts, plant, topology. */
-static void set_tile_structure(Map *map, int x, int y, StructureType type, uint8_t part,
+static void set_tile_structure(Map *map, int x, int y, int z, StructureType type, uint8_t part,
                                ItemQuality quality, int hit_points)
 {
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     StructureType old = (StructureType)map->structure[index];
     bool was_passable = map_move_cost_at(map, index) > 0.0f;
     map->structure_counts[old]--;
@@ -383,22 +384,22 @@ static void set_tile_structure(Map *map, int x, int y, StructureType type, uint8
     map->structure_part[index] = part;
     map->structure_quality[index] = (uint8_t)quality;
     map->structure_hit_points[index] = (uint16_t)hit_points;
-    log_build_change(map, x, y);
+    log_build_change(map, x, y, z);
     if (type != STRUCTURE_NONE) {
         map->plants[index] = (Plant){0}; /* Trampled, cut or dug out by the builders. */
     }
     bool is_passable = map_move_cost_at(map, index) > 0.0f;
     if (was_passable != is_passable) {
-        log_topology_change(map, x, y, is_passable);
+        log_topology_change(map, x, y, z, is_passable);
     }
 }
 
-bool map_structure_origin(const Map *map, int x, int y, int *origin_x, int *origin_y)
+bool map_structure_origin(const Map *map, int x, int y, int z, int *origin_x, int *origin_y)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return false;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     if (map->structure[index] == STRUCTURE_NONE) {
         return false;
     }
@@ -410,38 +411,39 @@ bool map_structure_origin(const Map *map, int x, int y, int *origin_x, int *orig
     return true;
 }
 
-bool map_structure_is_origin(const Map *map, int x, int y)
+bool map_structure_is_origin(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y) && map->structure[map_index(map, x, y)] != STRUCTURE_NONE &&
-           (map->structure_part[map_index(map, x, y)] >> PART_INDEX_SHIFT) == 0;
+    return map_in_bounds(map, x, y, z) &&
+           map->structure[map_index(map, x, y, z)] != STRUCTURE_NONE &&
+           (map->structure_part[map_index(map, x, y, z)] >> PART_INDEX_SHIFT) == 0;
 }
 
-Direction map_structure_direction(const Map *map, int x, int y)
+Direction map_structure_direction(const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y) || map->structure[map_index(map, x, y)] == STRUCTURE_NONE) {
+    if (!map_in_bounds(map, x, y, z) || map->structure[map_index(map, x, y, z)] == STRUCTURE_NONE) {
         return DIRECTION_SOUTH;
     }
-    return (Direction)(map->structure_part[map_index(map, x, y)] & PART_DIRECTION_MASK);
+    return (Direction)(map->structure_part[map_index(map, x, y, z)] & PART_DIRECTION_MASK);
 }
 
-void map_remove_structure(Map *map, int x, int y)
+void map_remove_structure(Map *map, int x, int y, int z)
 {
     int origin_x, origin_y;
-    if (!map_structure_origin(map, x, y, &origin_x, &origin_y)) {
+    if (!map_structure_origin(map, x, y, z, &origin_x, &origin_y)) {
         return;
     }
-    StructureType type = map_structure(map, x, y);
-    Direction direction = map_structure_direction(map, x, y);
+    StructureType type = map_structure(map, x, y, z);
+    Direction direction = map_structure_direction(map, x, y, z);
     for (int part = 0; part < structure_length(type); part++) {
         int px = origin_x + part * direction_dx(direction);
         int py = origin_y + part * direction_dy(direction);
-        if (map_structure(map, px, py) == type) {
-            set_tile_structure(map, px, py, STRUCTURE_NONE, 0, ITEM_QUALITY_CRUDE, 0);
+        if (map_structure(map, px, py, z) == type) {
+            set_tile_structure(map, px, py, z, STRUCTURE_NONE, 0, ITEM_QUALITY_CRUDE, 0);
         }
     }
 }
 
-bool map_place_structure(Map *map, int x, int y, StructureType type, Direction direction,
+bool map_place_structure(Map *map, int x, int y, int z, StructureType type, Direction direction,
                          ItemQuality quality)
 {
     if (type == STRUCTURE_NONE || (unsigned)type >= STRUCTURE_TYPE_COUNT ||
@@ -452,30 +454,30 @@ bool map_place_structure(Map *map, int x, int y, StructureType type, Direction d
     int length = structure_length(type);
     int dx = direction_dx(direction), dy = direction_dy(direction);
     for (int part = 0; part < length; part++) {
-        if (!map_in_bounds(map, x + part * dx, y + part * dy)) {
+        if (!map_in_bounds(map, x + part * dx, y + part * dy, z)) {
             return false;
         }
     }
     quality = (ItemQuality)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
     bool same = true; /* The same structure already there: only its condition changes. */
     for (int part = 0; part < length; part++) {
-        size_t index = map_index(map, x + part * dx, y + part * dy);
+        size_t index = map_index(map, x + part * dx, y + part * dy, z);
         same = same && map->structure[index] == (uint8_t)type &&
                map->structure_part[index] ==
                    (uint8_t)((unsigned)direction | ((unsigned)part << PART_INDEX_SHIFT));
     }
     if (same) {
-        size_t head = map_index(map, x, y);
+        size_t head = map_index(map, x, y, z);
         map->structure_quality[head] = (uint8_t)quality;
         map->structure_hit_points[head] = (uint16_t)structure_max_hit_points(type, quality);
         return true;
     }
     for (int part = 0; part < length; part++) {
-        map_remove_structure(map, x + part * dx, y + part * dy);
+        map_remove_structure(map, x + part * dx, y + part * dy, z);
     }
     for (int part = 0; part < length; part++) {
         bool head = part == 0;
-        set_tile_structure(map, x + part * dx, y + part * dy, type,
+        set_tile_structure(map, x + part * dx, y + part * dy, z, type,
                            (uint8_t)((unsigned)direction | ((unsigned)part << PART_INDEX_SHIFT)),
                            head ? quality : ITEM_QUALITY_CRUDE,
                            head ? structure_max_hit_points(type, quality) : 0);
@@ -483,54 +485,54 @@ bool map_place_structure(Map *map, int x, int y, StructureType type, Direction d
     return true;
 }
 
-void map_set_structure(Map *map, int x, int y, StructureType type)
+void map_set_structure(Map *map, int x, int y, int z, StructureType type)
 {
     if (type == STRUCTURE_NONE) {
-        map_remove_structure(map, x, y);
+        map_remove_structure(map, x, y, z);
     } else {
-        map_place_structure(map, x, y, type, DIRECTION_SOUTH, ITEM_QUALITY_STANDARD);
+        map_place_structure(map, x, y, z, type, DIRECTION_SOUTH, ITEM_QUALITY_STANDARD);
     }
 }
 
-ItemQuality map_structure_quality(const Map *map, int x, int y)
+ItemQuality map_structure_quality(const Map *map, int x, int y, int z)
 {
     int origin_x, origin_y;
-    if (!map_structure_origin(map, x, y, &origin_x, &origin_y)) {
+    if (!map_structure_origin(map, x, y, z, &origin_x, &origin_y)) {
         return ITEM_QUALITY_CRUDE;
     }
-    return (ItemQuality)map->structure_quality[map_index(map, origin_x, origin_y)];
+    return (ItemQuality)map->structure_quality[map_index(map, origin_x, origin_y, z)];
 }
 
-int map_structure_hit_points(const Map *map, int x, int y)
+int map_structure_hit_points(const Map *map, int x, int y, int z)
 {
     int origin_x, origin_y;
-    if (!map_structure_origin(map, x, y, &origin_x, &origin_y)) {
+    if (!map_structure_origin(map, x, y, z, &origin_x, &origin_y)) {
         return 0;
     }
-    return map->structure_hit_points[map_index(map, origin_x, origin_y)];
+    return map->structure_hit_points[map_index(map, origin_x, origin_y, z)];
 }
 
-void map_set_structure_hit_points(Map *map, int x, int y, int hit_points)
+void map_set_structure_hit_points(Map *map, int x, int y, int z, int hit_points)
 {
     int origin_x, origin_y;
-    if (!map_structure_origin(map, x, y, &origin_x, &origin_y)) {
+    if (!map_structure_origin(map, x, y, z, &origin_x, &origin_y)) {
         return;
     }
-    size_t index = map_index(map, origin_x, origin_y);
+    size_t index = map_index(map, origin_x, origin_y, z);
     StructureType type = (StructureType)map->structure[index];
     int max = structure_max_hit_points(type, (ItemQuality)map->structure_quality[index]);
     map->structure_hit_points[index] = (uint16_t)clampi(hit_points, 1, max);
 }
 
-StructureType map_structure(const Map *map, int x, int y)
+StructureType map_structure(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y) ? (StructureType)map->structure[map_index(map, x, y)]
+    return map_in_bounds(map, x, y, z) ? (StructureType)map->structure[map_index(map, x, y, z)]
                                     : STRUCTURE_NONE;
 }
 
 void map_topology_changed(Map *map)
 {
-    log_topology_change(map, 0, 0, false);
+    log_topology_change(map, 0, 0, 0, false);
     map->topology_log[map->topology_revision % MAP_TOPOLOGY_LOG_SIZE].anywhere = true;
 }
 
@@ -544,58 +546,58 @@ float map_move_cost_at(const Map *map, size_t index)
            structure_def((StructureType)map->structure[index])->move_cost;
 }
 
-float map_move_cost(const Map *map, int x, int y)
+float map_move_cost(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y) ? map_move_cost_at(map, map_index(map, x, y)) : 0.0f;
+    return map_in_bounds(map, x, y, z) ? map_move_cost_at(map, map_index(map, x, y, z)) : 0.0f;
 }
 
-bool map_is_passable(const Map *map, int x, int y)
+bool map_is_passable(const Map *map, int x, int y, int z)
 {
-    return map_move_cost(map, x, y) > 0.0f;
+    return map_move_cost(map, x, y, z) > 0.0f;
 }
 
-StructureType map_roof(const Map *map, int x, int y)
+StructureType map_roof(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y) ? (StructureType)map->roof[map_index(map, x, y)]
+    return map_in_bounds(map, x, y, z) ? (StructureType)map->roof[map_index(map, x, y, z)]
                                     : STRUCTURE_NONE;
 }
 
-ItemQuality map_roof_quality(const Map *map, int x, int y)
+ItemQuality map_roof_quality(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y) ? (ItemQuality)map->roof_quality[map_index(map, x, y)]
+    return map_in_bounds(map, x, y, z) ? (ItemQuality)map->roof_quality[map_index(map, x, y, z)]
                                     : ITEM_QUALITY_CRUDE;
 }
 
-void map_set_roof(Map *map, int x, int y, StructureType roof, ItemQuality quality)
+void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality)
 {
-    if (!map_in_bounds(map, x, y) || (roof != STRUCTURE_NONE && !structure_is_roof(roof))) {
+    if (!map_in_bounds(map, x, y, z) || (roof != STRUCTURE_NONE && !structure_is_roof(roof))) {
         return;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     map->roof_count += (roof != STRUCTURE_NONE) - (map->roof[index] != STRUCTURE_NONE);
     map->roof[index] = (uint8_t)roof;
     map->roof_quality[index] =
         roof != STRUCTURE_NONE
             ? (uint8_t)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST)
             : 0;
-    log_build_change(map, x, y);
+    log_build_change(map, x, y, z);
 }
 
 /* Rock, or a structure that blocks movement: what a roof rests on. */
-static bool holds_up_roof(const Map *map, int x, int y)
+static bool holds_up_roof(const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return false;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     return map->rock[index] != ROCK_NONE || structure_blocks((StructureType)map->structure[index]);
 }
 
-bool map_roof_supported(const Map *map, int x, int y)
+bool map_roof_supported(const Map *map, int x, int y, int z)
 {
     for (int dy = -ROOF_SUPPORT_RANGE; dy <= ROOF_SUPPORT_RANGE; dy++) {
         for (int dx = -ROOF_SUPPORT_RANGE; dx <= ROOF_SUPPORT_RANGE; dx++) {
-            if (holds_up_roof(map, x + dx, y + dy)) {
+            if (holds_up_roof(map, x + dx, y + dy, z)) {
                 return true;
             }
         }
@@ -607,9 +609,9 @@ bool map_roof_supported(const Map *map, int x, int y)
  * directions, covers a tile (tuning). */
 #define NATURAL_ROOF_DIRECTIONS 6
 
-bool map_natural_roof(const Map *map, int x, int y)
+bool map_natural_roof(const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y) || map->rock[map_index(map, x, y)] != ROCK_NONE) {
+    if (!map_in_bounds(map, x, y, z) || map->rock[map_index(map, x, y, z)] != ROCK_NONE) {
         return false;
     }
     static const int DX[8] = {0, 1, 1, 1, 0, -1, -1, -1};
@@ -618,7 +620,8 @@ bool map_natural_roof(const Map *map, int x, int y)
     for (int i = 0; i < 8; i++) {
         for (int step = 1; step <= MAP_NATURAL_ROOF_REACH; step++) {
             int nx = x + DX[i] * step, ny = y + DY[i] * step;
-            if (map_in_bounds(map, nx, ny) && map->rock[map_index(map, nx, ny)] != ROCK_NONE) {
+            if (map_in_bounds(map, nx, ny, z) &&
+                map->rock[map_index(map, nx, ny, z)] != ROCK_NONE) {
                 covered++;
                 break;
             }
@@ -630,9 +633,9 @@ bool map_natural_roof(const Map *map, int x, int y)
     return covered >= NATURAL_ROOF_DIRECTIONS;
 }
 
-bool map_is_roofed(const Map *map, int x, int y)
+bool map_is_roofed(const Map *map, int x, int y, int z)
 {
-    return map_roof(map, x, y) != STRUCTURE_NONE || map_natural_roof(map, x, y);
+    return map_roof(map, x, y, z) != STRUCTURE_NONE || map_natural_roof(map, x, y, z);
 }
 
 uint64_t map_hash(const Map *map)
@@ -640,6 +643,9 @@ uint64_t map_hash(const Map *map)
     uint64_t hash = HASH_FNV1A64_INIT;
     int32_t size[2] = {map->width, map->height};
     hash = hash_fnv1a64(hash, size, sizeof(size));
+    if (map->depth != 1) { /* Hashes of one-level maps stay as they were. */
+        hash = hash_fnv1a64(hash, &map->depth, sizeof(map->depth));
+    }
 
     size_t count = map_tile_count(map);
     hash = hash_fnv1a64(hash, map->terrain, count);
@@ -675,30 +681,30 @@ static uint8_t *stone_layer(const Map *map, ItemType type)
     }
 }
 
-int map_stones(const Map *map, int x, int y, ItemType type)
+int map_stones(const Map *map, int x, int y, int z, ItemType type)
 {
     const uint8_t *layer = stone_layer(map, type);
-    return layer != NULL && map_in_bounds(map, x, y) ? layer[map_index(map, x, y)] : 0;
+    return layer != NULL && map_in_bounds(map, x, y, z) ? layer[map_index(map, x, y, z)] : 0;
 }
 
-void map_set_stones(Map *map, int x, int y, int cobbles, int flint)
+void map_set_stones(Map *map, int x, int y, int z, int cobbles, int flint)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     flint = clampi(flint, 0, MAP_STONES_MAX);
     map->flint[index] = (uint8_t)flint;
     map->cobbles[index] = (uint8_t)clampi(cobbles, 0, MAP_STONES_MAX - flint);
 }
 
-bool map_take_stone(Map *map, int x, int y, ItemType type)
+bool map_take_stone(Map *map, int x, int y, int z, ItemType type)
 {
     uint8_t *layer = stone_layer(map, type);
-    if (layer == NULL || !map_in_bounds(map, x, y) || layer[map_index(map, x, y)] == 0) {
+    if (layer == NULL || !map_in_bounds(map, x, y, z) || layer[map_index(map, x, y, z)] == 0) {
         return false;
     }
-    layer[map_index(map, x, y)]--;
+    layer[map_index(map, x, y, z)]--;
     return true;
 }
 
@@ -714,27 +720,27 @@ size_t map_count_plants(const Map *map, PlantType type)
     return total;
 }
 
-bool map_plant_blocks_building(const Map *map, int x, int y)
+bool map_plant_blocks_building(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y) && map->plants[map_index(map, x, y)].type == PLANT_TREE;
+    return map_in_bounds(map, x, y, z) && map->plants[map_index(map, x, y, z)].type == PLANT_TREE;
 }
 
-bool map_has_edible_plant(const Map *map, int x, int y)
+bool map_has_edible_plant(const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return false;
     }
-    const Plant *plant = &map->plants[map_index(map, x, y)];
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
     const PlantDef *def = &PLANT_DEFS[plant->type];
     return !def->food_dug && !def->food_confusable && plant_has_food(plant);
 }
 
-bool map_tree_near(const Map *map, int x, int y, int range)
+bool map_tree_near(const Map *map, int x, int y, int z, int range)
 {
     for (int ty = y - range; ty <= y + range; ty++) {
         for (int tx = x - range; tx <= x + range; tx++) {
-            if (map_in_bounds(map, tx, ty)) {
-                const Plant *plant = &map->plants[map_index(map, tx, ty)];
+            if (map_in_bounds(map, tx, ty, z)) {
+                const Plant *plant = &map->plants[map_index(map, tx, ty, z)];
                 if (plant->type == PLANT_TREE && plant->growth >= 1.0f) {
                     return true;
                 }
@@ -744,21 +750,29 @@ bool map_tree_near(const Map *map, int x, int y, int range)
     return false;
 }
 
-bool map_is_water(const Map *map, int x, int y)
+bool map_is_water(const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return false;
     }
-    uint8_t terrain = map->terrain[map_index(map, x, y)];
+    uint8_t terrain = map->terrain[map_index(map, x, y, z)];
     return terrain == TERRAIN_SHALLOW_WATER || terrain == TERRAIN_DEEP_WATER;
 }
 
-bool map_is_drinking_spot(const Map *map, int x, int y)
+bool map_is_drinking_spot(const Map *map, int x, int y, int z)
 {
-    if (!map_is_passable(map, x, y)) {
+    if (!map_is_passable(map, x, y, z)) {
         return false;
     }
-    return map_is_water(map, x, y) || map_is_water(map, x - 1, y) ||
-           map_is_water(map, x + 1, y) || map_is_water(map, x, y - 1) ||
-           map_is_water(map, x, y + 1);
+    return map_is_water(map, x, y, z) || map_is_water(map, x - 1, y, z) ||
+           map_is_water(map, x + 1, y, z) || map_is_water(map, x, y - 1, z) ||
+           map_is_water(map, x, y + 1, z);
+}
+
+int map_ground_level(const Map *map, int x, int y)
+{
+    (void)map;
+    (void)x;
+    (void)y;
+    return 0;
 }

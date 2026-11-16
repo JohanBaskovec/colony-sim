@@ -178,7 +178,7 @@ void game_debug_sadden(Game *game);
  * Creates a colonist on a tile with a random unused name, age and needs.
  * Returns ENTITY_NONE if the tile is not passable or the colony is full.
  */
-EntityId game_spawn_colonist(Game *game, int x, int y);
+EntityId game_spawn_colonist(Game *game, int x, int y, int z);
 bool game_remove_colonist(Game *game, EntityId id);
 
 /* NULL when the handle is stale. */
@@ -189,20 +189,22 @@ const Colonist *game_colonist_const(const Game *game, EntityId id);
 uint32_t game_colonist_slot_count(const Game *game);
 EntityId game_colonist_id_at(const Game *game, uint32_t slot);
 
-/* Colonist closest to a world point, within GAME_PICK_RADIUS, or ENTITY_NONE. */
-EntityId game_colonist_at(const Game *game, float world_x, float world_y);
+/* Colonist of level z closest to a world point, within GAME_PICK_RADIUS, or
+ * ENTITY_NONE. */
+EntityId game_colonist_at(const Game *game, float world_x, float world_y, int z);
 
-/* Colonists whose center lies in the rectangle (corners in any order). Returns the count. */
-int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float y1,
+/* Colonists of level z whose center lies in the rectangle (corners in any
+ * order). Returns the count. */
+int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
                            EntityId *out, int max_count);
 
 /* Whether a colonist currently stands on the tile. */
-bool game_tile_has_colonist(const Game *game, int x, int y);
+bool game_tile_has_colonist(const Game *game, int x, int y, int z);
 
 /* Speed of rot of food lying on a tile (item_rot_rate() at the tile's
  * temperature, under its roof if any, faster out in the rain); 0 out of
  * bounds. */
-float game_item_rot_rate(const Game *game, int x, int y);
+float game_item_rot_rate(const Game *game, int x, int y, int z);
 
 /* Food need all the colonists lose in a day (gather_daily_food()). */
 float game_daily_food(const Game *game);
@@ -256,18 +258,18 @@ typedef struct GatherWorkInfo {
 /* What is under way on a tile: the job a settler took there, else the job
  * some work was done on and left off. False when nothing is (the info then
  * says GATHER_JOB_NONE). */
-bool game_gather_work_at(const Game *game, int x, int y, GatherWorkInfo *info);
+bool game_gather_work_at(const Game *game, int x, int y, int z, GatherWorkInfo *info);
 
 /* Places (or with DESIGNATION_NONE, removes) an order on every valid tile of a
  * rectangle (corners in any order). An order of the other layer
  * (designation_is_roof()) already on a tile stays: taking a wall apart does
  * not call off taking its roof down. Returns the number of tiles changed. */
-int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type);
+int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, int z, DesignationType type);
 
 /* The cancel tool: removes the orders and the construction sites of a layer
  * (roofs, or everything else) in a rectangle (corners in any order). Returns
  * how many orders and sites were removed. */
-int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, bool roofs);
+int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool roofs);
 
 /* ---- Zones --------------------------------------------------------------- */
 
@@ -277,8 +279,8 @@ int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, bool roofs);
  * kind it overlaps, and `preferred`, merge), leaving out the tiles of the
  * other kind of zone and of workstations (built or not). Return the zone's
  * index, or STOCKPILE_NONE / GATHER_ZONE_NONE when nothing could be added. */
-int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int preferred);
-int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int preferred);
+int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred);
+int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred);
 
 /* ---- Workstations -------------------------------------------------------- */
 
@@ -307,14 +309,14 @@ bool game_bill_has_input(const Game *game, const Bill *bill);
 /* Whether a workstation may be placed on a tile: not on a structure, where
  * construction_can_place() and workstation_can_place() say yes, with room
  * left in the station list once every station site is finished. */
-bool game_can_place_workstation(const Game *game, int x, int y);
+bool game_can_place_workstation(const Game *game, int x, int y, int z);
 
 /* Places a workstation where game_can_place_workstation() allows: ready at
  * once when it needs no construction (workstation_needs_construction()) and
  * no plant is in the way, else its construction site. A zone (stockpile,
  * gathering zone) on the tile loses it: no zone lies under a station.
  * Returns whether something was placed. */
-bool game_place_workstation(Game *game, WorkstationType type, int x, int y);
+bool game_place_workstation(Game *game, WorkstationType type, int x, int y, int z);
 
 /* Removes a station; the input of a craft in progress is dropped on its
  * tile. Colonists working there give up. */
@@ -323,7 +325,7 @@ bool game_remove_workstation(Game *game, int index);
 /* Removes the construction sites in a rectangle, of roofs (`roofs`) or of
  * structures and workstations; their materials are dropped. Returns how
  * many. */
-int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, bool roofs);
+int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool roofs);
 
 /* Removes a bill; the input of a craft in progress that no other bill can
  * finish is dropped on the station's tile. */
@@ -338,28 +340,28 @@ bool game_structure_buildable(const Game *game, StructureType type);
  * `direction`: every tile it would take is off stockpiles and workstations,
  * and passes construction_can_place(); a roof goes over stockpiles and
  * workstations, where construction_can_place_roof() allows. */
-bool game_can_place_structure(const Game *game, StructureType type, int x, int y,
+bool game_can_place_structure(const Game *game, StructureType type, int x, int y, int z,
                               Direction direction);
 
 /* Plans a structure where game_can_place_structure() allows. Returns the
  * site's index or CONSTRUCTION_NONE. */
-int game_place_structure(Game *game, StructureType type, int x, int y, Direction direction);
+int game_place_structure(Game *game, StructureType type, int x, int y, int z, Direction direction);
 
 /* One structure of a plan: its head, and whether it can be placed. */
-typedef void (*StructurePlanVisit)(int x, int y, bool allowed, void *userdata);
+typedef void (*StructurePlanVisit)(int x, int y, int z, bool allowed, void *userdata);
 
 /* Where structures go on a rectangle (corners in any order), in a fixed
  * order: along its edges for types drawn as an outline (walls), on every
  * tile otherwise; long ones (beds) side by side, in rows of their length
  * along `direction`, the rectangle stretched that way to hold at least one. */
 void game_plan_structure_rect(const Game *game, StructureType type, Direction direction,
-                              int x0, int y0, int x1, int y1, StructurePlanVisit visit,
+                              int x0, int y0, int x1, int y1, int z, StructurePlanVisit visit,
                               void *userdata);
 
 /* Places what game_plan_structure_rect() plans where allowed. Returns how
  * many sites were placed. */
 int game_place_structure_rect(Game *game, StructureType type, Direction direction, int x0,
-                              int y0, int x1, int y1);
+                              int y0, int x1, int y1, int z);
 
 /* Removes a construction site; its delivered materials are dropped on its
  * tile. */

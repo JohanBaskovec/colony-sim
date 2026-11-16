@@ -17,8 +17,8 @@ static TilePos random_passable_tile(const Map *map, Rng *rng)
     for (;;) {
         int x = (int)rng_range_u32(rng, (uint32_t)map->width);
         int y = (int)rng_range_u32(rng, (uint32_t)map->height);
-        if (map_is_passable(map, x, y)) {
-            return (TilePos){(int16_t)x, (int16_t)y};
+        if (map_is_passable(map, x, y, 0)) {
+            return (TilePos){(int16_t)x, (int16_t)y, 0};
         }
     }
 }
@@ -38,7 +38,7 @@ int main(int argc, char **argv)
     Map map;
     Pathfinder finder;
     Path path = {0};
-    if (!worldgen_generate(&map, &params) || !pathfinder_init(&finder, size, size)) {
+    if (!worldgen_generate(&map, &params) || !pathfinder_init(&finder, size, size, 1)) {
         fprintf(stderr, "initialization failed\n");
         return EXIT_FAILURE;
     }

@@ -34,6 +34,7 @@ typedef struct Room {
 typedef struct Rooms {
     int width;
     int height;
+    int depth;
     uint32_t *id; /* Area of each tile, ROOM_NONE on rock, walls and doors. */
     uint32_t count; /* Areas are numbered 1..count. */
     Room *list; /* Per area id (index 0 unused). */
@@ -43,7 +44,7 @@ typedef struct Rooms {
     bool built;
 } Rooms;
 
-bool rooms_init(Rooms *rooms, int width, int height);
+bool rooms_init(Rooms *rooms, int width, int height, int depth);
 void rooms_free(Rooms *rooms);
 
 /* Rebuilds the areas if the map changed since the last call. */
@@ -54,7 +55,7 @@ bool rooms_current(const Rooms *rooms, const Map *map);
 
 /* The area of a tile: a room or outdoors. NULL on rock, walls and doors, out
  * of bounds, or when the areas are not current. */
-const Room *rooms_at(const Rooms *rooms, const Map *map, int x, int y);
+const Room *rooms_at(const Rooms *rooms, const Map *map, int x, int y, int z);
 
 /* Whether a room is closed and every one of its tiles roofed. */
 bool room_is_roofed(const Room *room);

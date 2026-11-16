@@ -47,6 +47,7 @@ typedef struct DesignationDef {
 typedef struct Designations {
     int width;
     int height;
+    int depth;
     uint8_t *type; /* DesignationType per tile. */
     float *progress; /* Work done so far, in work ticks. */
     int count; /* Designated tiles. */
@@ -59,7 +60,7 @@ typedef struct Designations {
 
 const DesignationDef *designation_def(DesignationType type);
 
-bool designations_init(Designations *designations, int width, int height);
+bool designations_init(Designations *designations, int width, int height, int depth);
 void designations_free(Designations *designations);
 
 /* Whether a settler at `level` in the order's knowledge can carry it out. */
@@ -69,32 +70,33 @@ bool designation_doable_at(DesignationType type, double level);
 bool designation_is_roof(DesignationType type);
 
 /* Whether the order makes sense on this tile (a wall to mine...). */
-bool designation_can_apply(const Map *map, int x, int y, DesignationType type);
+bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType type);
 
-DesignationType designation_get(const Designations *designations, int x, int y);
+DesignationType designation_get(const Designations *designations, int x, int y, int z);
 
 /*
  * Places an order on a tile. DESIGNATION_NONE removes the order. Invalid
  * orders (nothing to mine...) are ignored. Re-placing the same order keeps
  * its progress. Returns whether the tile changed.
  */
-bool designation_set(Designations *designations, const Map *map, int x, int y,
+bool designation_set(Designations *designations, const Map *map, int x, int y, int z,
                      DesignationType type);
 
 /* designation_set() on every tile of a rectangle (corners in any order, clipped
  * to the map). Returns the number of tiles changed. */
 int designations_set_rect(Designations *designations, const Map *map, int x0, int y0, int x1,
-                          int y1, DesignationType type);
+                          int y1, int z, DesignationType type);
 
 /* Designated tiles whose work type is in `mask`. */
 int designations_count_for_work(const Designations *designations, WorkTypeMask mask);
 
 /* Total work needed to complete the order on this tile (0 if none). */
-float designation_work_needed(const Designations *designations, const Map *map, int x, int y);
+float designation_work_needed(const Designations *designations, const Map *map, int x, int y,
+                              int z);
 
 /* Work done as a fraction 0..1 of the work needed. */
 float designation_progress_fraction(const Designations *designations, const Map *map, int x,
-                                    int y);
+                                    int y, int z);
 
 /*
  * Adds work to a designated tile. When enough work is done, the order is
@@ -104,12 +106,12 @@ float designation_progress_fraction(const Designations *designations, const Map 
  * come from the worker's `level` in the order's knowledge
  * (core/knowledge.h); `rng` may be NULL for average products.
  */
-bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y,
+bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y, int z,
                           float work, double level, Rng *rng);
 
 /* Items the order on this tile would produce if completed now (ITEM_NONE:
  * nothing). */
-ItemType designation_yield(const Designations *designations, const Map *map, int x, int y,
+ItemType designation_yield(const Designations *designations, const Map *map, int x, int y, int z,
                            int *count);
 
 uint64_t designations_hash(const Designations *designations, uint64_t hash);

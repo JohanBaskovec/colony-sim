@@ -33,7 +33,7 @@ static bool init_flat_game(Game *game)
 
 static Colonist *spawn_rested(Game *game, int x, int y)
 {
-    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
+    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
     if (colonist != NULL) {
         for (int need = 0; need < NEED_COUNT; need++) {
             colonist->needs[need] = 1.0f;
@@ -323,7 +323,7 @@ static void test_hash(void)
 static void test_mood_changes_work(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Test", 30, 0, 0);
+    colonist_init(&colonist, "Test", 30, 0, 0, 0);
     colonist_set_knowledge_level(&colonist, KNOWLEDGE_GATHERING, 50.0);
     float neutral = colonist_work_speed(&colonist, KNOWLEDGE_GATHERING);
     CHECK_NEAR(colonist_work_level(&colonist, KNOWLEDGE_GATHERING), 50.0, 1e-9);
@@ -339,7 +339,7 @@ static void test_mood_changes_work(void)
     CHECK_NEAR(colonist_work_level(&colonist, KNOWLEDGE_GATHERING), KNOWLEDGE_LEVEL_MIN, 1e-9);
     /* Learning: slower when unhappy. */
     Colonist happy;
-    colonist_init(&happy, "Happy", 30, 0, 0);
+    colonist_init(&happy, "Happy", 30, 0, 0, 0);
     colonist_set_knowledge_level(&happy, KNOWLEDGE_GATHERING, 2.0);
     happy.mood.value = MOOD_MAX;
     colonist_learn_by_doing(&happy, KNOWLEDGE_GATHERING, TICKS_PER_HOUR, 0);
@@ -355,9 +355,9 @@ static void test_settlers_remember_their_nights(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    map_set_structure(&game.map, 13, 10, STRUCTURE_GRASS_BED);
-    map_set_structure(&game.map, 14, 10, STRUCTURE_WALL); /* Holds the roof up. */
-    map_set_roof(&game.map, 13, 10, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_structure(&game.map, 13, 10, 0, STRUCTURE_GRASS_BED);
+    map_set_structure(&game.map, 14, 10, 0, STRUCTURE_WALL); /* Holds the roof up. */
+    map_set_roof(&game.map, 13, 10, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     game.weather.spell = WEATHER_SPELL_MAX; /* A mild night. */
     Colonist *sleeper = spawn_rested(&game, 12, 10);
     Colonist *other = spawn_rested(&game, 30, 30);
@@ -410,7 +410,7 @@ static void test_sulking_settler_does_no_work(void)
     for (size_t i = 0; i < map_tile_count(&game.map); i++) {
         game.map.cobbles[i] = MAP_STONES_MAX;
     }
-    int zone = gather_zone_create(&game.gather_zones, &game.map, 18, 18, 22, 22);
+    int zone = gather_zone_create(&game.gather_zones, &game.map, 18, 18, 22, 22, 0);
     gather_zone_set_enabled(&game.gather_zones, zone, GATHER_COBBLES, true);
     gather_zone_set_mode(&game.gather_zones, zone, GATHER_COBBLES, GATHER_FOREVER);
     mood_start_break(&colonist->mood, MOOD_BREAK_SULK, 2 * TICKS_PER_HOUR);
@@ -442,7 +442,7 @@ static void test_binge_eats_the_colony_food(void)
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
-    items_drop(&game.items, &game.map, 23, 20, item_stack_pristine(ITEM_HAZELNUTS, 60));
+    items_drop(&game.items, &game.map, 23, 20, 0, item_stack_pristine(ITEM_HAZELNUTS, 60));
     mood_start_break(&colonist->mood, MOOD_BREAK_BINGE, 6 * TICKS_PER_HOUR);
     run_ticks(&game, 2 * TICKS_PER_HOUR);
     long eaten = 60 - game.items.totals[ITEM_HAZELNUTS];
@@ -480,7 +480,7 @@ static void test_cooked_meal(void)
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->needs[NEED_FOOD] = 0.2f;
-    items_drop(&game.items, &game.map, 21, 20, item_stack_pristine(ITEM_ROASTED_RHIZOMES, 10));
+    items_drop(&game.items, &game.map, 21, 20, 0, item_stack_pristine(ITEM_ROASTED_RHIZOMES, 10));
     run_ticks(&game, TICKS_PER_HOUR);
     CHECK(colonist->needs[NEED_FOOD] > 0.5f);
     CHECK(mood_has(&colonist->mood, THOUGHT_COOKED_MEAL));

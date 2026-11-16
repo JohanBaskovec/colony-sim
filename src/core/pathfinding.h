@@ -23,6 +23,7 @@
 typedef struct TilePos {
     int16_t x;
     int16_t y;
+    int16_t z; /* The level. */
 } TilePos;
 
 /* Sequence of tiles to walk through: excludes the start, ends at the destination. */
@@ -43,6 +44,7 @@ typedef struct PathHeapItem {
 typedef struct Pathfinder {
     int width;
     int height;
+    int depth;
     float *cost_so_far; /* g cost per tile, valid when seen_stamp matches. */
     int32_t *came_from;
     uint32_t *seen_stamp;
@@ -56,9 +58,9 @@ typedef struct Pathfinder {
     float last_cost;
 } Pathfinder;
 
-typedef bool (*TilePredicate)(const Map *map, int x, int y, void *userdata);
+typedef bool (*TilePredicate)(const Map *map, int x, int y, int z, void *userdata);
 
-bool pathfinder_init(Pathfinder *finder, int width, int height);
+bool pathfinder_init(Pathfinder *finder, int width, int height, int depth);
 void pathfinder_free(Pathfinder *finder);
 
 /*

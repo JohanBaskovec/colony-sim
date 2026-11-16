@@ -328,18 +328,19 @@ bool item_stack_merge(ItemStack *into, ItemStack from)
     return true;
 }
 
-bool items_init(Items *items, int width, int height)
+bool items_init(Items *items, int width, int height, int depth)
 {
     memset(items, 0, sizeof(*items));
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
-    items->stacks = calloc((size_t)width * (size_t)height, sizeof(*items->stacks));
+    items->stacks = calloc((size_t)width * (size_t)height * (size_t)depth, sizeof(*items->stacks));
     if (items->stacks == NULL) {
         return false;
     }
     items->width = width;
     items->height = height;
+    items->depth = depth;
     return true;
 }
 
@@ -349,35 +350,41 @@ void items_free(Items *items)
     memset(items, 0, sizeof(*items));
 }
 
-static bool in_bounds(const Items *items, int x, int y)
+static bool in_bounds(const Items *items, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && x < items->width && y < items->height;
+    return x >= 0 && y >= 0 && z >= 0 && x < items->width && y < items->height &&
+           z < items->depth;
 }
 
-static ItemStack *stack_at(Items *items, int x, int y)
+static size_t index_of(const Items *items, int x, int y, int z)
 {
-    return &items->stacks[(size_t)y * (size_t)items->width + (size_t)x];
+    return ((size_t)z * (size_t)items->height + (size_t)y) * (size_t)items->width + (size_t)x;
 }
 
-ItemStack items_get(const Items *items, int x, int y)
+static ItemStack *stack_at(Items *items, int x, int y, int z)
 {
-    if (!in_bounds(items, x, y)) {
+    return &items->stacks[index_of(items, x, y, z)];
+}
+
+ItemStack items_get(const Items *items, int x, int y, int z)
+{
+    if (!in_bounds(items, x, y, z)) {
         return (ItemStack){.type = ITEM_NONE};
     }
-    return items->stacks[(size_t)y * (size_t)items->width + (size_t)x];
+    return items->stacks[index_of(items, x, y, z)];
 }
 
-int items_add(Items *items, int x, int y, ItemStack batch)
+int items_add(Items *items, int x, int y, int z, ItemStack batch)
 {
     ItemType type = (ItemType)batch.type;
-    if (!in_bounds(items, x, y) || !is_item_type(type) || batch.count == 0) {
+    if (!in_bounds(items, x, y, z) || !is_item_type(type) || batch.count == 0) {
         return 0;
     }
     /* Callers may build stacks by hand: keep the condition valid for the type. */
     uint16_t progress = valid_progress(type, batch.progress);
     batch = item_stack_make(type, batch.count, batch.quality, batch.hit_points);
     batch.progress = progress;
-    ItemStack *stack = stack_at(items, x, y);
+    ItemStack *stack = stack_at(items, x, y, z);
     if (stack->type != ITEM_NONE && !item_stacks_match(*stack, batch)) {
         return 0;
     }
@@ -401,12 +408,12 @@ int items_add(Items *items, int x, int y, ItemStack batch)
     return added;
 }
 
-int items_remove(Items *items, int x, int y, int count)
+int items_remove(Items *items, int x, int y, int z, int count)
 {
-    if (!in_bounds(items, x, y) || count <= 0) {
+    if (!in_bounds(items, x, y, z) || count <= 0) {
         return 0;
     }
-    ItemStack *stack = stack_at(items, x, y);
+    ItemStack *stack = stack_at(items, x, y, z);
     int removed = count < (int)stack->count ? count : (int)stack->count;
     if (removed <= 0) {
         return 0;
@@ -419,13 +426,13 @@ int items_remove(Items *items, int x, int y, int count)
     return removed;
 }
 
-int items_drop(Items *items, const Map *map, int x, int y, ItemStack batch)
+int items_drop(Items *items, const Map *map, int x, int y, int z, ItemStack batch)
 {
     int count = batch.count;
     enum { SIDE = 2 * ITEM_DROP_RADIUS + 1 };
     static const int DX[4] = {0, 1, 0, -1};
     static const int DY[4] = {-1, 0, 1, 0};
-    if (!map_is_passable(map, x, y)) {
+    if (!map_is_passable(map, x, y, z)) {
         return 0;
     }
     /* Breadth-first search over passable tiles, so that items never land
@@ -443,7 +450,7 @@ int items_drop(Items *items, const Map *map, int x, int y, ItemStack batch)
         int cy = y + cell / SIDE - ITEM_DROP_RADIUS;
         ItemStack rest = batch;
         rest.count = (uint16_t)(count - placed);
-        placed += items_add(items, cx, cy, rest);
+        placed += items_add(items, cx, cy, z, rest);
         for (int i = 0; i < 4; i++) {
             int rx = cell % SIDE + DX[i];
             int ry = cell / SIDE + DY[i];
@@ -451,7 +458,7 @@ int items_drop(Items *items, const Map *map, int x, int y, ItemStack batch)
                 continue;
             }
             visited[ry * SIDE + rx] = true;
-            if (map_is_passable(map, x + rx - ITEM_DROP_RADIUS, y + ry - ITEM_DROP_RADIUS)) {
+            if (map_is_passable(map, x + rx - ITEM_DROP_RADIUS, y + ry - ITEM_DROP_RADIUS, z)) {
                 queue[tail++] = ry * SIDE + rx;
             }
         }
@@ -495,7 +502,7 @@ static bool rot(Items *items, ItemStack *stack, int hours, float rate)
 int items_advance(Items *items, size_t begin, size_t end, int hours,
                   ItemConditionsFn conditions, const void *context)
 {
-    size_t count = (size_t)items->width * (size_t)items->height;
+    size_t count = (size_t)items->width * (size_t)items->height * (size_t)items->depth;
     if (end > count) {
         end = count;
     }
@@ -534,7 +541,7 @@ int items_advance(Items *items, size_t begin, size_t end, int hours,
 
 uint64_t items_hash(const Items *items, uint64_t hash)
 {
-    size_t count = (size_t)items->width * (size_t)items->height;
+    size_t count = (size_t)items->width * (size_t)items->height * (size_t)items->depth;
     /* Field by field: struct padding bytes are unspecified. */
     for (size_t i = 0; i < count; i++) {
         const ItemStack *stack = &items->stacks[i];

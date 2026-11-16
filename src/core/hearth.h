@@ -124,12 +124,12 @@ float hearths_light_at(const Workstations *workstations, float x, float y);
 
 /* Degrees felt on a tile from the warmth burning hearths radiate (added
  * up, 0 when none reaches it). */
-float hearths_radiant_warmth(const Workstations *workstations, const Map *map, int x, int y);
+float hearths_radiant_warmth(const Workstations *workstations, const Map *map, int x, int y, int z);
 
 /* Temperature felt on a tile: the air's (core/temperature.h) plus the
  * warmth hearths radiate. What settlers feel; the air's is what spreads. */
 float hearths_felt_temperature(const Workstations *workstations, const Map *map,
-                               const Temperatures *temperatures, int x, int y);
+                               const Temperatures *temperatures, int x, int y, int z);
 
 /* Whether it is the time of fireside stories. */
 bool hearth_story_time(uint64_t tick);

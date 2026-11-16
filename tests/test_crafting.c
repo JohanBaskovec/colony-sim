@@ -33,7 +33,7 @@ static bool init_flat_game(Game *game)
 /* Rested colonist at level 75 in every knowledge (speed ×1). */
 static Colonist *spawn_worker(Game *game, int x, int y)
 {
-    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
+    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
     if (colonist != NULL) {
         for (int need = 0; need < NEED_COUNT; need++) {
             colonist->needs[need] = 1.0f;
@@ -65,7 +65,7 @@ static void run_ticks(Game *game, int ticks)
 /* A station already built (its construction skipped). */
 static int built_station(Game *game, WorkstationType type, int x, int y)
 {
-    return workstations_place(&game->workstations, &game->map, type, x, y);
+    return workstations_place(&game->workstations, &game->map, type, x, y, 0);
 }
 
 static ItemStack stones(ItemType type, int count, ItemQuality quality)
@@ -113,9 +113,9 @@ static void test_crafting_spot_is_ready_at_once(void)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     REQUIRE(colonist != NULL);
     CHECK(game_workstation_buildable(&game, WORKSTATION_CRAFTING_SPOT));
-    REQUIRE(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 14, 10));
-    CHECK(workstation_at(&game.workstations, 14, 10) != WORKSTATION_NONE);
-    CHECK_EQ_INT(construction_at(&game.constructions, 14, 10), CONSTRUCTION_NONE);
+    REQUIRE(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 14, 10, 0));
+    CHECK(workstation_at(&game.workstations, 14, 10, 0) != WORKSTATION_NONE);
+    CHECK_EQ_INT(construction_at(&game.constructions, 14, 10, 0), CONSTRUCTION_NONE);
     /* Nobody comes to build it. */
     run_ticks(&game, 300);
     CHECK(colonist->task != TASK_CONSTRUCT);
@@ -127,22 +127,22 @@ static void test_builder_brings_the_materials(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_worker(&game, 10, 10);
-    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10));
+    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
     /* A blueprint: a construction site, no station yet. */
     const ConstructionSite *site = construction_get(
-        &game.constructions, construction_at(&game.constructions, 14, 10));
+        &game.constructions, construction_at(&game.constructions, 14, 10, 0));
     REQUIRE(site != NULL);
     CHECK_EQ_INT(construction_workstation(site), WORKSTATION_KNAPPING_SPOT);
-    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10), WORKSTATION_NONE);
+    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
     /* No cobble anywhere: nothing happens. */
     run_ticks(&game, 300);
-    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10), WORKSTATION_NONE);
+    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
     CHECK(colonist->task != TASK_CONSTRUCT);
 
-    items_add(&game.items, 6, 14, stones(ITEM_COBBLE, 3, ITEM_QUALITY_STANDARD));
+    items_add(&game.items, 6, 14, 0, stones(ITEM_COBBLE, 3, ITEM_QUALITY_STANDARD));
     run_ticks(&game, 1500);
-    CHECK(workstation_at(&game.workstations, 14, 10) != WORKSTATION_NONE);
-    CHECK_EQ_INT(construction_at(&game.constructions, 14, 10), CONSTRUCTION_NONE);
+    CHECK(workstation_at(&game.workstations, 14, 10, 0) != WORKSTATION_NONE);
+    CHECK_EQ_INT(construction_at(&game.constructions, 14, 10, 0), CONSTRUCTION_NONE);
     CHECK_EQ_INT(game.constructions.workstation_count, 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 2); /* One became the anvil. */
     CHECK_EQ_INT(colonist->carried.count, 0);
@@ -156,15 +156,15 @@ static void test_building_comes_before_gathering_forever(void)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
     /* Same priority for gathering and construction; the zone is closer. */
-    int zone = gather_zone_create(&game.gather_zones, &game.map, 9, 12, 11, 13);
+    int zone = gather_zone_create(&game.gather_zones, &game.map, 9, 12, 11, 13, 0);
     gather_zone_set_enabled(&game.gather_zones, zone, GATHER_COBBLES, true);
     gather_zone_set_mode(&game.gather_zones, zone, GATHER_COBBLES, GATHER_FOREVER);
     run_ticks(&game, 300);
     REQUIRE(colonist->task == TASK_WORK && colonist->gathering);
-    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 16, 10));
+    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 16, 10, 0));
     run_ticks(&game, 1500);
     /* The gatherer stopped at the next decision to build with a cobble just found. */
-    CHECK(workstation_at(&game.workstations, 16, 10) != WORKSTATION_NONE);
+    CHECK(workstation_at(&game.workstations, 16, 10, 0) != WORKSTATION_NONE);
     game_shutdown(&game);
 }
 
@@ -176,11 +176,11 @@ static void test_knapping_spot_needs_the_knowledge(void)
     colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 40.0);
     CHECK(!game_workstation_buildable(&game, WORKSTATION_KNAPPING_SPOT));
     CHECK(game_workstation_buildable(&game, WORKSTATION_CRAFTING_SPOT));
-    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10));
-    items_add(&game.items, 12, 10, stones(ITEM_COBBLE, 3, ITEM_QUALITY_STANDARD));
+    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
+    items_add(&game.items, 12, 10, 0, stones(ITEM_COBBLE, 3, ITEM_QUALITY_STANDARD));
     run_ticks(&game, 1500);
-    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10), WORKSTATION_NONE);
-    CHECK(construction_at(&game.constructions, 14, 10) != CONSTRUCTION_NONE);
+    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
+    CHECK(construction_at(&game.constructions, 14, 10, 0) != CONSTRUCTION_NONE);
     game_shutdown(&game);
 }
 
@@ -193,11 +193,11 @@ static void test_haulers_supply_station_sites(void)
     Colonist *hauler = spawn_worker(&game, 10, 10);
     REQUIRE(hauler != NULL);
     colonist_set_knowledge_level(hauler, KNOWLEDGE_STONE_KNAPPING, 40.0); /* Cannot build it. */
-    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10));
+    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
     const ConstructionSite *site = construction_get(
-        &game.constructions, construction_at(&game.constructions, 14, 10));
+        &game.constructions, construction_at(&game.constructions, 14, 10, 0));
     REQUIRE(site != NULL);
-    items_add(&game.items, 6, 14, stones(ITEM_COBBLE, 3, ITEM_QUALITY_STANDARD));
+    items_add(&game.items, 6, 14, 0, stones(ITEM_COBBLE, 3, ITEM_QUALITY_STANDARD));
     bool supplied = false;
     for (int i = 0; i < 1500 && !supplied; i++) {
         run_ticks(&game, 1);
@@ -206,13 +206,13 @@ static void test_haulers_supply_station_sites(void)
     CHECK(supplied);
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 2);
     run_ticks(&game, 300);
-    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10), WORKSTATION_NONE); /* Unbuilt. */
+    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE); /* Unbuilt. */
 
     Colonist *builder = spawn_worker(&game, 20, 10);
     REQUIRE(builder != NULL);
     builder->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
     run_ticks(&game, 600);
-    CHECK(workstation_at(&game.workstations, 14, 10) != WORKSTATION_NONE);
+    CHECK(workstation_at(&game.workstations, 14, 10, 0) != WORKSTATION_NONE);
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 2); /* Nothing more was brought. */
     game_shutdown(&game);
 }
@@ -221,21 +221,21 @@ static void test_placement_rules(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    CHECK(game_can_place_workstation(&game, 5, 5));
-    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 5, 5));
-    CHECK(!game_can_place_workstation(&game, 5, 5)); /* One station per tile. */
-    CHECK(!game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 5, 5));
-    CHECK(!game_place_workstation(&game, WORKSTATION_TYPE_COUNT, 7, 5));
-    CHECK(!game_can_place_workstation(&game, -1, 5));
+    CHECK(game_can_place_workstation(&game, 5, 5, 0));
+    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 5, 5, 0));
+    CHECK(!game_can_place_workstation(&game, 5, 5, 0)); /* One station per tile. */
+    CHECK(!game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 5, 5, 0));
+    CHECK(!game_place_workstation(&game, WORKSTATION_TYPE_COUNT, 7, 5, 0));
+    CHECK(!game_can_place_workstation(&game, -1, 5, 0));
     /* Nor on a structure's site. */
-    REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 8, 5, DIRECTION_SOUTH) !=
+    REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 8, 5, 0, DIRECTION_SOUTH) !=
             CONSTRUCTION_NONE);
-    CHECK(!game_can_place_workstation(&game, 8, 5));
+    CHECK(!game_can_place_workstation(&game, 8, 5, 0));
     int built = built_station(&game, WORKSTATION_CRAFTING_SPOT, 6, 5);
     /* Cancelling orders removes blueprints (the station's and the wall's), not
      * built stations. */
-    CHECK_EQ_INT(game_remove_blueprints_rect(&game, 0, 0, 10, 10, false), 2);
-    CHECK_EQ_INT(construction_at(&game.constructions, 5, 5), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(game_remove_blueprints_rect(&game, 0, 0, 10, 10, 0, false), 2);
+    CHECK_EQ_INT(construction_at(&game.constructions, 5, 5, 0), CONSTRUCTION_NONE);
     CHECK_EQ_INT(game.constructions.workstation_count, 0);
     CHECK(workstation_get(&game.workstations, built) != NULL);
     CHECK(game_remove_workstation(&game, built));
@@ -246,8 +246,8 @@ static void test_placement_rules(void)
         REQUIRE(built_station(&game, WORKSTATION_CRAFTING_SPOT, 10 + i % 30, 20 + i / 30) !=
                 WORKSTATION_NONE);
     }
-    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 5, 5)); /* The last one. */
-    CHECK(!game_can_place_workstation(&game, 6, 5));
+    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 5, 5, 0)); /* The last one. */
+    CHECK(!game_can_place_workstation(&game, 6, 5, 0));
     game_shutdown(&game);
 }
 
@@ -255,37 +255,37 @@ static void test_no_zone_under_a_station(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    int stockpile = game_add_stockpile_rect(&game, 20, 20, 22, 22, STOCKPILE_NONE);
-    int gather = game_add_gather_zone_rect(&game, 30, 20, 32, 22, GATHER_ZONE_NONE);
+    int stockpile = game_add_stockpile_rect(&game, 20, 20, 22, 22, 0, STOCKPILE_NONE);
+    int gather = game_add_gather_zone_rect(&game, 30, 20, 32, 22, 0, GATHER_ZONE_NONE);
     REQUIRE(stockpile != STOCKPILE_NONE && gather != GATHER_ZONE_NONE);
     uint32_t stockpiles_revision = game.stockpiles.revision;
     uint32_t gather_revision = game.gather_zones.revision;
     /* A station placed on a zone takes the tile out of it. */
-    CHECK(game_can_place_workstation(&game, 21, 21));
-    CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 21, 21));
-    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21), STOCKPILE_NONE);
+    CHECK(game_can_place_workstation(&game, 21, 21, 0));
+    CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 21, 21, 0));
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21, 0), STOCKPILE_NONE);
     CHECK_EQ_INT(stockpile_get(&game.stockpiles, stockpile)->cell_count, 8);
     CHECK(game.stockpiles.revision != stockpiles_revision);
-    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 31, 21)); /* A site. */
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 31, 21), GATHER_ZONE_NONE);
+    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 31, 21, 0)); /* A site. */
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 31, 21, 0), GATHER_ZONE_NONE);
     CHECK_EQ_INT(gather_zone_get(&game.gather_zones, gather)->cell_count, 8);
     CHECK(game.gather_zones.revision != gather_revision);
     /* A zone drawn over stations leaves their tiles out, blueprints included. */
-    CHECK_EQ_INT(game_add_stockpile_rect(&game, 20, 20, 22, 22, stockpile), stockpile);
-    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21), STOCKPILE_NONE);
-    CHECK_EQ_INT(game_add_gather_zone_rect(&game, 30, 20, 32, 22, gather), gather);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 31, 21), GATHER_ZONE_NONE);
-    CHECK_EQ_INT(game_add_gather_zone_rect(&game, 31, 21, 31, 21, GATHER_ZONE_NONE),
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 20, 20, 22, 22, 0, stockpile), stockpile);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21, 0), STOCKPILE_NONE);
+    CHECK_EQ_INT(game_add_gather_zone_rect(&game, 30, 20, 32, 22, 0, gather), gather);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 31, 21, 0), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(game_add_gather_zone_rect(&game, 31, 21, 31, 21, 0, GATHER_ZONE_NONE),
                  GATHER_ZONE_NONE);
     /* A zone made of a single tile is deleted along with it. */
-    int single = game_add_stockpile_rect(&game, 40, 40, 40, 40, STOCKPILE_NONE);
+    int single = game_add_stockpile_rect(&game, 40, 40, 40, 40, 0, STOCKPILE_NONE);
     REQUIRE(single != STOCKPILE_NONE);
-    CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 40, 40));
+    CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 40, 40, 0));
     CHECK(stockpile_get(&game.stockpiles, single) == NULL);
     /* Once the station is gone, the tile can be zoned again. */
-    CHECK(game_remove_workstation(&game, workstation_at(&game.workstations, 21, 21)));
-    CHECK_EQ_INT(game_add_stockpile_rect(&game, 21, 21, 21, 21, stockpile), stockpile);
-    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21), stockpile);
+    CHECK(game_remove_workstation(&game, workstation_at(&game.workstations, 21, 21, 0)));
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 21, 21, 21, 21, 0, stockpile), stockpile);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21, 0), stockpile);
     game_shutdown(&game);
 }
 
@@ -296,7 +296,7 @@ static void test_knapper_takes_a_cobble_as_hammer_then_strikes_flakes(void)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
     REQUIRE(index != WORKSTATION_NONE);
-    items_add(&game.items, 18, 12, stones(ITEM_FLINT, 4, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 12, 0, stones(ITEM_FLINT, 4, ITEM_QUALITY_FINE));
     int flakes = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     workstation_set_bill_target(&game.workstations, index, flakes, 2);
     CHECK(game_recipe_known(&game, RECIPE_FLAKES));
@@ -307,7 +307,7 @@ static void test_knapper_takes_a_cobble_as_hammer_then_strikes_flakes(void)
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLINT], 4);
 
-    items_add(&game.items, 18, 10, stones(ITEM_COBBLE, 1, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 10, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_FINE));
     run_ticks(&game, 3000);
     /* The cobble is carried as a hammer, and kept. */
     int tool = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
@@ -335,7 +335,7 @@ static float knapping_progress(ItemQuality hammer, int ticks)
     Colonist *colonist = spawn_worker(&game, 14, 10);
     colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, hammer, 0));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 15, 10, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
+    items_add(&game.items, 15, 10, 0, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
     workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     run_ticks(&game, ticks);
     float progress = workstation_get_const(&game.workstations, index)->work_progress;
@@ -362,7 +362,7 @@ static void test_tools_wear_and_break(void)
     Colonist *colonist = spawn_worker(&game, 14, 10);
     colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD, 2));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 15, 10, stones(ITEM_FLINT, 5, ITEM_QUALITY_FINE));
+    items_add(&game.items, 15, 10, 0, stones(ITEM_FLINT, 5, ITEM_QUALITY_FINE));
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
     REQUIRE(bill >= 0);
     workstation_set_bill_mode(&game.workstations, index, bill, BILL_FOREVER);
@@ -387,7 +387,7 @@ static void test_tools_wear_and_break(void)
     run_ticks(&game, 100);
     CHECK_NEAR(workstation_get_const(&game.workstations, index)->work_progress, progress, 1e-3);
     /* A new cobble: fetched, and the craft resumes where it was. */
-    items_add(&game.items, 17, 10, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
+    items_add(&game.items, 17, 10, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
     run_ticks(&game, 400);
     CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE)) >= 0);
     CHECK(workstation_get_const(&game.workstations, index)->work_progress > progress);
@@ -401,24 +401,24 @@ static void test_better_tool_close_by_is_swapped(void)
     Colonist *colonist = spawn_worker(&game, 14, 10);
     colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_CRUDE, 0));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 15, 10, stones(ITEM_FLINT, 3, ITEM_QUALITY_FINE));
-    items_add(&game.items, 18, 10, stones(ITEM_COBBLE, 1, ITEM_QUALITY_FINE));
+    items_add(&game.items, 15, 10, 0, stones(ITEM_FLINT, 3, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 10, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_FINE));
     /* A better one far away is not worth the trip. */
-    items_add(&game.items, 14, 45, stones(ITEM_COBBLE, 1, ITEM_QUALITY_SUPERB));
+    items_add(&game.items, 14, 45, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_SUPERB));
     workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     run_ticks(&game, 300);
     int tool = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
     REQUIRE(tool >= 0);
     CHECK_EQ_INT(colonist->tools[tool].quality, ITEM_QUALITY_FINE);
     /* The crude one is left where the fine one lay. */
-    ItemStack left = items_get(&game.items, 18, 10);
+    ItemStack left = items_get(&game.items, 18, 10, 0);
     CHECK_EQ_INT(left.type, ITEM_COBBLE);
     CHECK_EQ_INT(left.quality, ITEM_QUALITY_CRUDE);
-    CHECK_EQ_INT(items_get(&game.items, 14, 45).quality, ITEM_QUALITY_SUPERB);
+    CHECK_EQ_INT(items_get(&game.items, 14, 45, 0).quality, ITEM_QUALITY_SUPERB);
     /* Not picked up again: it is worse. */
     run_ticks(&game, 1500);
     CHECK_EQ_INT(colonist->tools[tool].quality, ITEM_QUALITY_FINE);
-    CHECK_EQ_INT(items_get(&game.items, 18, 10).quality, ITEM_QUALITY_CRUDE);
+    CHECK_EQ_INT(items_get(&game.items, 18, 10, 0).quality, ITEM_QUALITY_CRUDE);
     game_shutdown(&game);
 }
 
@@ -433,13 +433,13 @@ static void test_knapping_cobbles_takes_two(void)
     workstation_set_bill_input(&game.workstations, index, bill, ITEM_FLINT, false);
     const Bill *chopper = &workstation_get(&game.workstations, index)->bills[bill];
     /* One cobble: the hammer, nothing left to knap. Nobody even starts. */
-    items_add(&game.items, 18, 10, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
+    items_add(&game.items, 18, 10, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
     CHECK(!game_bill_has_input(&game, chopper));
     run_ticks(&game, 600);
     CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE)) < 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 1);
     /* A second one: one to strike with, one to knap. */
-    items_add(&game.items, 18, 12, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
+    items_add(&game.items, 18, 12, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
     CHECK(game_bill_has_input(&game, chopper));
     run_ticks(&game, 2000);
     CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE)) >= 0);
@@ -456,15 +456,15 @@ static void test_bill_inputs_and_quality_cap(void)
     colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 100.0);
     colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 18, 10, stones(ITEM_COBBLE, 2, ITEM_QUALITY_SUPERB));
-    items_add(&game.items, 18, 12, stones(ITEM_FLINT, 2, ITEM_QUALITY_SUPERB));
+    items_add(&game.items, 18, 10, 0, stones(ITEM_COBBLE, 2, ITEM_QUALITY_SUPERB));
+    items_add(&game.items, 18, 12, 0, stones(ITEM_FLINT, 2, ITEM_QUALITY_SUPERB));
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     workstation_set_bill_input(&game.workstations, index, bill, ITEM_FLINT, false);
     run_ticks(&game, 1500);
     /* Only cobbles allowed: a master knapper gets rough flakes out of one. */
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLINT], 2);
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 1);
-    ItemStack flakes = items_get(&game.items, 14, 10);
+    ItemStack flakes = items_get(&game.items, 14, 10, 0);
     CHECK_EQ_INT(flakes.type, ITEM_FLAKE);
     CHECK_EQ_INT(flakes.count, 8);
     CHECK_EQ_INT(flakes.quality, ITEM_QUALITY_ROUGH);
@@ -479,8 +479,8 @@ static void test_bill_until_in_storage(void)
     colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 55.0); /* 3 flakes each. */
     colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 10, ITEM_QUALITY_FINE));
-    int stockpile = stockpile_create(&game.stockpiles, &game.map, 10, 14, 12, 16);
+    items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 10, ITEM_QUALITY_FINE));
+    int stockpile = stockpile_create(&game.stockpiles, &game.map, 10, 14, 12, 16, 0);
     REQUIRE(stockpile != STOCKPILE_NONE);
     stockpile_set_allowed(&game.stockpiles, stockpile, ITEM_TYPE_BIT(ITEM_FLAKE));
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
@@ -490,8 +490,8 @@ static void test_bill_until_in_storage(void)
     /* 3 flakes, 3 more: 6 in stock, then it stops. They end up in storage. */
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 6);
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLINT], 8);
-    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 14, 10), STOCKPILE_NONE);
-    CHECK(items_get(&game.items, 14, 10).type != ITEM_FLAKE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 14, 10, 0), STOCKPILE_NONE);
+    CHECK(items_get(&game.items, 14, 10, 0).type != ITEM_FLAKE);
     game_shutdown(&game);
 }
 
@@ -503,7 +503,7 @@ static void test_interrupted_craft_resumes(void)
     colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 95.0); /* Never fails. */
     colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
+    items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
     workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
     run_ticks(&game, 600);
     const Workstation *station = workstation_get_const(&game.workstations, index);
@@ -535,13 +535,13 @@ static void test_spears_need_a_cutting_tool_and_straight_branches(void)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
     workstation_add_bill(&game.workstations, index, RECIPE_THROWING_SPEAR);
-    items_add(&game.items, 16, 10, item_stack_make(ITEM_BRANCHES, 3, ITEM_QUALITY_ROUGH, 20));
-    items_add(&game.items, 16, 12, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    items_add(&game.items, 16, 10, 0, item_stack_make(ITEM_BRANCHES, 3, ITEM_QUALITY_ROUGH, 20));
+    items_add(&game.items, 16, 12, 0, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
     run_ticks(&game, 1000);
     /* Crooked branches only: no spear. */
     CHECK_EQ_INT((int)game.items.totals[ITEM_THROWING_SPEAR], 0);
 
-    items_add(&game.items, 16, 14, item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_STANDARD, 20));
+    items_add(&game.items, 16, 14, 0, item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_STANDARD, 20));
     run_ticks(&game, 6000);
     CHECK_EQ_INT((int)game.items.totals[ITEM_THROWING_SPEAR], 1);
     CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], 3);
@@ -559,12 +559,12 @@ static void test_removing_a_station_drops_its_input(void)
     colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 95.0);
     colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
+    items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
     workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
     run_ticks(&game, 600);
     REQUIRE(workstation_get_const(&game.workstations, index)->work_input.count == 1);
     CHECK(game_remove_workstation(&game, index));
-    CHECK_EQ_INT(items_get(&game.items, 14, 10).type, ITEM_FLINT);
+    CHECK_EQ_INT(items_get(&game.items, 14, 10, 0).type, ITEM_FLINT);
     run_ticks(&game, 10);
     CHECK(colonist->task != TASK_CRAFT);
     game_shutdown(&game);
@@ -597,16 +597,16 @@ static void test_missing_tools_and_inputs_are_reported(void)
     ItemTypeMask axe = ITEM_TYPE_BIT(ITEM_HAND_AXE), flake = ITEM_TYPE_BIT(ITEM_FLAKE);
     CHECK_EQ_UINT(game_recipe_missing_tools(&game, RECIPE_THRUSTING_SPEAR), axe | flake);
     /* A tool counts whether it lies somewhere or is carried. */
-    items_add(&game.items, 30, 30, item_stack_pristine(ITEM_HAND_AXE, 1));
+    items_add(&game.items, 30, 30, 0, item_stack_pristine(ITEM_HAND_AXE, 1));
     CHECK_EQ_UINT(game_recipe_missing_tools(&game, RECIPE_THRUSTING_SPEAR), flake);
     colonist_add_tool(colonist, item_stack_pristine(ITEM_FLAKE, 1));
     CHECK_EQ_UINT(game_recipe_missing_tools(&game, RECIPE_THRUSTING_SPEAR), 0);
 
     /* Two branches are needed, of a type the bill allows. */
     CHECK(!game_bill_has_input(&game, spear));
-    items_add(&game.items, 31, 30, item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_STANDARD, 20));
+    items_add(&game.items, 31, 30, 0, item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_STANDARD, 20));
     CHECK(!game_bill_has_input(&game, spear));
-    items_add(&game.items, 32, 30, item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_STANDARD, 20));
+    items_add(&game.items, 32, 30, 0, item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_STANDARD, 20));
     CHECK(game_bill_has_input(&game, spear));
     workstation_set_bill_input(&game.workstations, index, bill, ITEM_BRANCHES, false);
     CHECK(!game_bill_has_input(&game, spear));
@@ -623,8 +623,8 @@ static void test_bill_worker_levels(void)
     colonist_set_knowledge_level(novice, KNOWLEDGE_STONE_KNAPPING, 60.0);
     colonist_set_knowledge_level(master, KNOWLEDGE_STONE_KNAPPING, 90.0);
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 12);
-    items_add(&game.items, 18, 12, stones(ITEM_FLINT, 4, ITEM_QUALITY_FINE));
-    items_add(&game.items, 18, 13, stones(ITEM_COBBLE, 2, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 12, 0, stones(ITEM_FLINT, 4, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 13, 0, stones(ITEM_COBBLE, 2, ITEM_QUALITY_FINE));
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     REQUIRE(bill >= 0);
     workstation_set_bill_mode(&game.workstations, index, bill, BILL_FOREVER);
@@ -648,8 +648,8 @@ static void test_bill_worker_levels(void)
     /* Beginners only: the master stops (once the craft under way is done). */
     workstation_set_bill_min_level(&game.workstations, index, bill, BILL_LEVEL_MIN);
     workstation_set_bill_max_level(&game.workstations, index, bill, 70);
-    items_add(&game.items, 18, 14, stones(ITEM_FLINT, 4, ITEM_QUALITY_FINE));
-    items_add(&game.items, 18, 15, stones(ITEM_COBBLE, 1, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 14, 0, stones(ITEM_FLINT, 4, ITEM_QUALITY_FINE));
+    items_add(&game.items, 18, 15, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_FINE));
     run_ticks(&game, 600);
     double master_level = colonist_knowledge_level(master, KNOWLEDGE_STONE_KNAPPING);
     run_ticks(&game, 3000);
@@ -666,7 +666,7 @@ static void test_paused_bill(void)
     colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 95.0); /* Never fails. */
     colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 2, ITEM_QUALITY_FINE));
+    items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 2, ITEM_QUALITY_FINE));
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
     workstation_set_bill_target(&game.workstations, index, bill, 2);
     const Workstation *station = workstation_get_const(&game.workstations, index);
@@ -698,12 +698,12 @@ static void test_bill_input_radius(void)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 10, 12);
-    items_add(&game.items, 40, 12, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE)); /* 30 tiles. */
+    items_add(&game.items, 40, 12, 0, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE)); /* 30 tiles. */
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     workstation_set_bill_input_radius(&game.workstations, index, bill, 20);
     run_ticks(&game, 3000);
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 0);
-    CHECK_EQ_INT(items_get(&game.items, 40, 12).type, ITEM_FLINT);
+    CHECK_EQ_INT(items_get(&game.items, 40, 12, 0).type, ITEM_FLINT);
 
     workstation_set_bill_input_radius(&game.workstations, index, bill, 40);
     run_ticks(&game, 4000);
@@ -716,11 +716,11 @@ static void test_stock_counts_stored_and_waiting_items(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    int pile = stockpile_create(&game.stockpiles, &game.map, 20, 20, 22, 22);
+    int pile = stockpile_create(&game.stockpiles, &game.map, 20, 20, 22, 22, 0);
     REQUIRE(index != WORKSTATION_NONE && pile != STOCKPILE_NONE);
-    items_add(&game.items, 20, 20, item_stack_pristine(ITEM_FLAKE, 2)); /* Stored. */
-    items_add(&game.items, 14, 10, item_stack_pristine(ITEM_FLAKE, 3)); /* Just made. */
-    items_add(&game.items, 40, 40, item_stack_pristine(ITEM_FLAKE, 7)); /* Lost in the wild. */
+    items_add(&game.items, 20, 20, 0, item_stack_pristine(ITEM_FLAKE, 2)); /* Stored. */
+    items_add(&game.items, 14, 10, 0, item_stack_pristine(ITEM_FLAKE, 3)); /* Just made. */
+    items_add(&game.items, 40, 40, 0, item_stack_pristine(ITEM_FLAKE, 7)); /* Lost in the wild. */
     Colonist *hauler = spawn_worker(&game, 30, 30);
     REQUIRE(hauler != NULL);
     hauler->task = TASK_HAUL;
@@ -741,8 +741,8 @@ static void test_until_stock_ignores_items_out_of_storage(void)
     game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_HAULING,
                            WORK_PRIORITY_DISABLED);
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 10, ITEM_QUALITY_FINE));
-    items_add(&game.items, 44, 44, item_stack_pristine(ITEM_FLAKE, 9)); /* Not in stock. */
+    items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 10, ITEM_QUALITY_FINE));
+    items_add(&game.items, 44, 44, 0, item_stack_pristine(ITEM_FLAKE, 9)); /* Not in stock. */
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     workstation_set_bill_mode(&game.workstations, index, bill, BILL_UNTIL_STOCK);
     workstation_set_bill_target(&game.workstations, index, bill, 5);
@@ -763,15 +763,15 @@ static void test_crafts_make_the_station_dirty(void)
     game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_CLEANING,
                            WORK_PRIORITY_DISABLED);
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
+    items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
     workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
     run_ticks(&game, 4000);
     REQUIRE((int)game.items.totals[ITEM_HAND_AXE] == 1);
     int dirt = recipe_def(RECIPE_HAND_AXE)->dirt;
     CHECK(dirt > 0);
-    CHECK_EQ_INT(dirt_at(&game.dirt, 14, 10), dirt);
-    CHECK_EQ_INT(dirt_at(&game.dirt, 15, 11), dirt / 2);
-    CHECK_EQ_INT(dirt_at(&game.dirt, 16, 10), 0);
+    CHECK_EQ_INT(dirt_at(&game.dirt, 14, 10, 0), dirt);
+    CHECK_EQ_INT(dirt_at(&game.dirt, 15, 11, 0), dirt / 2);
+    CHECK_EQ_INT(dirt_at(&game.dirt, 16, 10, 0), 0);
     CHECK_EQ_INT(game.dirt.dirty_count, 9);
 
     /* Once cleaning is allowed, the colonist cleans it all. */
@@ -787,20 +787,20 @@ static void test_plants_are_cleared_before_building(void)
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_worker(&game, 10, 10);
     REQUIRE(colonist != NULL);
-    Plant *tree = &game.map.plants[map_index(&game.map, 20, 20)];
+    Plant *tree = &game.map.plants[map_index(&game.map, 20, 20, 0)];
     *tree = (Plant){.type = PLANT_TREE, .growth = 1.0f};
-    CHECK(!game_can_place_workstation(&game, 20, 20));
-    Plant *hazel = &game.map.plants[map_index(&game.map, 14, 10)];
+    CHECK(!game_can_place_workstation(&game, 20, 20, 0));
+    Plant *hazel = &game.map.plants[map_index(&game.map, 14, 10, 0)];
     *hazel = (Plant){.type = PLANT_HAZEL, .growth = 1.0f};
     plant_settle(hazel, game_day_of_year(game.clock.tick));
     int twigs = plant_stock_available(hazel, PLANT_STOCK_TWIGS);
     int branches = plant_stock_available(hazel, PLANT_STOCK_BRANCHES);
     REQUIRE(twigs > 0 && branches > 0);
-    REQUIRE(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 14, 10));
+    REQUIRE(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 14, 10, 0));
     /* The hazel is in the way: a site, to clear it first. */
-    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10), WORKSTATION_NONE);
+    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
     const ConstructionSite *site = construction_get(
-        &game.constructions, construction_at(&game.constructions, 14, 10));
+        &game.constructions, construction_at(&game.constructions, 14, 10, 0));
     REQUIRE(site != NULL);
 
     /* Interrupted while clearing: the work done is kept. */
@@ -819,7 +819,7 @@ static void test_plants_are_cleared_before_building(void)
     run_ticks(&game, 30); /* Picked up again at once. */
     CHECK_EQ_INT(colonist->task, TASK_CONSTRUCT);
     run_ticks(&game, 1000);
-    CHECK(workstation_at(&game.workstations, 14, 10) != WORKSTATION_NONE);
+    CHECK(workstation_at(&game.workstations, 14, 10, 0) != WORKSTATION_NONE);
     CHECK_EQ_INT(hazel->type, PLANT_NONE);
     CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], twigs);
     CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], branches);
@@ -837,12 +837,12 @@ static ColonistTask first_task(int crafting, int gathering)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     colonist_add_tool(colonist, item_stack_pristine(ITEM_COBBLE, 1));
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 16, 10, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
+    items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
     workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
-    Plant *tree = &game.map.plants[map_index(&game.map, 11, 11)];
+    Plant *tree = &game.map.plants[map_index(&game.map, 11, 11, 0)];
     *tree = (Plant){.type = PLANT_TREE, .growth = 1.0f};
     plant_settle(tree, GAME_START_DAY);
-    int zone = gather_zone_create(&game.gather_zones, &game.map, 11, 11, 12, 12);
+    int zone = gather_zone_create(&game.gather_zones, &game.map, 11, 11, 12, 12, 0);
     gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BRANCHES, true);
     gather_zone_set_mode(&game.gather_zones, zone, GATHER_BRANCHES, GATHER_FOREVER);
     EntityId id = game_colonist_id_at(&game, 0);

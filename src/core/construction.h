@@ -50,7 +50,7 @@ typedef struct ConstructionSite {
     uint8_t type; /* StructureType; STRUCTURE_NONE for a workstation. */
     /* WorkstationType + 1 when the site is a workstation's blueprint, else 0. */
     uint8_t workstation;
-    int16_t x, y; /* The structure's head. */
+    int16_t x, y, z; /* The structure's head. */
     uint8_t direction; /* Direction: where its other tiles lie (core/structure.h). */
     int number; /* Unique, never reused: tells a site from a later one in the same slot. */
     /* Materials brought so far, per slot of the structure's definition (a
@@ -66,6 +66,7 @@ typedef struct ConstructionSite {
 typedef struct Constructions {
     int width;
     int height;
+    int depth;
     /* Site index + 1 on every tile of a site, 0 when none: structures and
      * workstations, and roofs. */
     uint16_t *at;
@@ -82,18 +83,18 @@ typedef struct Constructions {
     uint32_t revision;
 } Constructions;
 
-bool constructions_init(Constructions *constructions, int width, int height);
+bool constructions_init(Constructions *constructions, int width, int height, int depth);
 void constructions_free(Constructions *constructions);
 
 /* Index of the site of a structure or a workstation on a tile, or
  * CONSTRUCTION_NONE. */
-int construction_at(const Constructions *constructions, int x, int y);
+int construction_at(const Constructions *constructions, int x, int y, int z);
 
 /* Index of the site of a roof over a tile, or CONSTRUCTION_NONE. */
-int construction_roof_at(const Constructions *constructions, int x, int y);
+int construction_roof_at(const Constructions *constructions, int x, int y, int z);
 
 /* The site on a tile, of a roof (`roof`) or of the rest; CONSTRUCTION_NONE. */
-int construction_in_layer(const Constructions *constructions, int x, int y, bool roof);
+int construction_in_layer(const Constructions *constructions, int x, int y, int z, bool roof);
 
 /* Whether a site is a roof's (it lies in the roof layer). */
 bool construction_is_roof(const ConstructionSite *site);
@@ -105,36 +106,38 @@ ConstructionSite *construction_get_mutable(Constructions *constructions, int ind
 /* Whether a structure may be planned on a tile: passable buildable ground,
  * no structure or site yet (a roof or its site above does not count), no
  * tree (grass and bushes are cleared by the builder first). */
-bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y);
+bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y,
+                            int z);
 
 /* Whether a roof over a tile would be held up: by a wall or rock in reach
  * (map_roof_supported()), or by the site of a wall in reach, so that a whole
  * hut can be planned at once. */
-bool construction_roof_held(const Constructions *constructions, const Map *map, int x, int y);
+bool construction_roof_held(const Constructions *constructions, const Map *map, int x, int y,
+                            int z);
 
 /* Whether a roof may be planned over a tile: buildable ground, no rock, no
  * tree, no roof nor roof site yet, held up (construction_roof_held()).
  * Whatever stands or is planned there (a bed, a wall) stays under it. */
 bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
-                                 int y);
+                                 int y, int z);
 
 /* construction_can_place() on every tile a structure with its head at
  * (x, y) would take (construction_can_place_roof() for a roof). */
 bool construction_can_place_structure(const Constructions *constructions, const Map *map,
-                                      StructureType type, int x, int y, Direction direction);
+                                      StructureType type, int x, int y, int z, Direction direction);
 
 /* Places a site, its head at (x, y). Returns its index, or CONSTRUCTION_NONE
  * when the type is invalid, a tile does not qualify or the list is full. */
 int constructions_place(Constructions *constructions, const Map *map, StructureType type, int x,
-                        int y, Direction direction);
+                        int y, int z, Direction direction);
 
 /* Places the site of a workstation on a tile that passes
  * construction_can_place(). Returns its index, or CONSTRUCTION_NONE. */
 int constructions_place_workstation(Constructions *constructions, const Map *map,
-                                    WorkstationType type, int x, int y);
+                                    WorkstationType type, int x, int y, int z);
 
 /* Tile `part` of a site (0: the head, up to construction_length() - 1). */
-void construction_tile(const ConstructionSite *site, int part, int *x, int *y);
+void construction_tile(const ConstructionSite *site, int part, int *x, int *y, int *z);
 
 /* Tiles the site takes (1 for a workstation). */
 int construction_length(const ConstructionSite *site);
@@ -155,7 +158,7 @@ const char *construction_name_key(const ConstructionSite *site);
 /* Places a refresh site on a built structure that can be refreshed (see
  * StructureDef.refresh_work) and has no site yet, given any of its tiles. Returns its index, or
  * CONSTRUCTION_NONE. */
-int constructions_place_refresh(Constructions *constructions, const Map *map, int x, int y);
+int constructions_place_refresh(Constructions *constructions, const Map *map, int x, int y, int z);
 
 /* Removes a site; its delivered materials are given back in `returned`.
  * Returns the number of stacks (the caller drops them). */

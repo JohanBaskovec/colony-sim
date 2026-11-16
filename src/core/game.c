@@ -70,14 +70,14 @@ const Colonist *game_colonist_const(const Game *game, EntityId id)
     return pool_is_alive(&game->colonist_pool, id) ? &game->colonists[id.index] : NULL;
 }
 
-bool game_tile_has_colonist(const Game *game, int x, int y)
+bool game_tile_has_colonist(const Game *game, int x, int y, int z)
 {
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         if (entity_id_is_none(game_colonist_id_at(game, slot))) {
             continue;
         }
         const Colonist *colonist = &game->colonists[slot];
-        if (colonist->x == x && colonist->y == y) {
+        if (colonist->x == x && colonist->y == y && colonist->z == z) {
             return true;
         }
     }
@@ -109,9 +109,9 @@ static const char *pick_name(Game *game)
     return colonist_name_at(start);
 }
 
-EntityId game_spawn_colonist(Game *game, int x, int y)
+EntityId game_spawn_colonist(Game *game, int x, int y, int z)
 {
-    if (!map_is_passable(&game->map, x, y)) {
+    if (!map_is_passable(&game->map, x, y, z)) {
         return ENTITY_NONE;
     }
     const char *name = pick_name(game);
@@ -120,7 +120,7 @@ EntityId game_spawn_colonist(Game *game, int x, int y)
         return ENTITY_NONE;
     }
     Colonist *colonist = &game->colonists[id.index];
-    colonist_init(colonist, name, rng_range_i32(&game->rng, 18, 60), x, y);
+    colonist_init(colonist, name, rng_range_i32(&game->rng, 18, 60), x, y, z);
     colonist->needs[NEED_FOOD] = 0.55f + 0.35f * rng_next_float(&game->rng);
     colonist->needs[NEED_WATER] = 0.6f + 0.4f * rng_next_float(&game->rng);
     colonist->needs[NEED_REST] = 0.6f + 0.4f * rng_next_float(&game->rng);
@@ -193,18 +193,20 @@ bool game_remove_colonist(Game *game, EntityId id)
 
 /* ---- Starting colonists -------------------------------------------------- */
 
-static bool is_drinking_spot(const Map *map, int x, int y, void *userdata)
+static bool is_drinking_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)userdata;
-    return map_is_drinking_spot(map, x, y);
+    return map_is_drinking_spot(map, x, y, z);
 }
 
 static bool map_has_water(const Map *map)
 {
-    for (int y = 0; y < map->height; y++) {
-        for (int x = 0; x < map->width; x++) {
-            if (map_is_water(map, x, y)) {
-                return true;
+    for (int z = 0; z < map->depth; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                if (map_is_water(map, x, y, z)) {
+                    return true;
+                }
             }
         }
     }
@@ -220,20 +222,21 @@ static bool find_spawn_center(Game *game, TilePos *out)
     int center_y = map->height / 2;
     bool want_water = map_has_water(map);
     bool have_fallback = false;
-    TilePos fallback = {0, 0};
+    TilePos fallback = {0, 0, 0};
     for (int attempt = 0; attempt < SPAWN_MAX_ATTEMPTS; attempt++) {
         int radius = 2 + attempt / 2;
         int x = clampi(center_x + rng_range_i32(&game->rng, -radius, radius), 0, map->width - 1);
         int y = clampi(center_y + rng_range_i32(&game->rng, -radius, radius), 0, map->height - 1);
-        if (!map_is_passable(map, x, y)) {
+        int z = map_ground_level(map, x, y);
+        if (!map_is_passable(map, x, y, z)) {
             continue;
         }
-        TilePos candidate = {(int16_t)x, (int16_t)y};
+        TilePos candidate = {(int16_t)x, (int16_t)y, (int16_t)z};
         if (pathfinder_reachable_count(&game->pathfinder, map, candidate, SPAWN_AREA_COST) <
             SPAWN_AREA_MIN_TILES) {
             continue;
         }
-        bool fertile = terrain_def((Terrain)map->terrain[map_index(map, x, y)])->fertility >=
+        bool fertile = terrain_def((Terrain)map->terrain[map_index(map, x, y, z)])->fertility >=
                        plant_def(PLANT_BRAMBLE)->min_fertility;
         if (fertile && (!want_water || pathfinder_find_nearest(&game->pathfinder, map, candidate,
                                                                is_drinking_spot, NULL,
@@ -253,11 +256,13 @@ static bool find_spawn_center(Game *game, TilePos *out)
         return true;
     }
     /* Tiny or very rugged map: settle for any passable tile. */
-    for (int y = 0; y < map->height; y++) {
-        for (int x = 0; x < map->width; x++) {
-            if (map_is_passable(map, x, y)) {
-                *out = (TilePos){(int16_t)x, (int16_t)y};
-                return true;
+    for (int z = 0; z < map->depth; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                if (map_is_passable(map, x, y, z)) {
+                    *out = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
+                    return true;
+                }
             }
         }
     }
@@ -272,10 +277,10 @@ typedef struct FoodPlantCount {
 
 /* Counts the food plants it visits and never accepts a tile, so that the
  * search covers the whole area. */
-static bool count_food_plant(const Map *map, int x, int y, void *userdata)
+static bool count_food_plant(const Map *map, int x, int y, int z, void *userdata)
 {
     FoodPlantCount *count = userdata;
-    const Plant *plant = &map->plants[map_index(map, x, y)];
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
     if (plant->type == count->type &&
         plant->growth >= plant_def(count->type)->min_food_growth) {
         count->count++;
@@ -294,12 +299,12 @@ typedef struct PlantSpotSearch {
  * grass on it, not next to the arrival point. Each suitable spot is only
  * taken with some chance (drawn in the search order, which is deterministic)
  * so that the plants end up scattered. */
-static bool is_plant_spot(const Map *map, int x, int y, void *userdata)
+static bool is_plant_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     PlantSpotSearch *search = userdata;
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     const Plant *plant = &map->plants[index];
-    if (map->rock[index] != ROCK_NONE || map_is_water(map, x, y) ||
+    if (map->rock[index] != ROCK_NONE || map_is_water(map, x, y, z) ||
         (plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
         terrain_def((Terrain)map->terrain[index])->fertility <
             plant_def(search->type)->min_fertility ||
@@ -333,7 +338,7 @@ static void ensure_food_plants_near(Game *game, TilePos center, PlantType type, 
             LOG_WARN("No room for food plants near the starting colonists");
             return;
         }
-        Plant *plant = &game->map.plants[map_index(&game->map, spot.x, spot.y)];
+        Plant *plant = &game->map.plants[map_index(&game->map, spot.x, spot.y, spot.z)];
         memset(plant, 0, sizeof(*plant));
         plant->type = (uint8_t)type;
         plant->growth = 1.0f;
@@ -342,11 +347,11 @@ static void ensure_food_plants_near(Game *game, TilePos center, PlantType type, 
 }
 
 /* A tile of a rich enough flint patch where stones can be gathered. */
-static bool is_flint_spot(const Map *map, int x, int y, void *userdata)
+static bool is_flint_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)userdata;
-    return map_stones(map, x, y, ITEM_FLINT) >= GAME_SPAWN_FLINT_STONES &&
-           gather_stone_ground(map, x, y);
+    return map_stones(map, x, y, z, ITEM_FLINT) >= GAME_SPAWN_FLINT_STONES &&
+           gather_stone_ground(map, x, y, z);
 }
 
 typedef struct PatchSpotSearch {
@@ -357,10 +362,10 @@ typedef struct PatchSpotSearch {
 
 /* Where a flint patch can be laid: ground where stones can be gathered, not
  * next to the arrival point; scattered like food plants (see is_plant_spot()). */
-static bool is_patch_spot(const Map *map, int x, int y, void *userdata)
+static bool is_patch_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     PatchSpotSearch *search = userdata;
-    if (!gather_stone_ground(map, x, y) ||
+    if (!gather_stone_ground(map, x, y, z) ||
         abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_PLANT_MIN_DISTANCE) {
         return false;
     }
@@ -390,24 +395,24 @@ static void ensure_flint_near(Game *game, TilePos center)
     /* Richest in the middle, fading over SPAWN_FLINT_PATCH_RADIUS tiles. */
     for (int dy = -SPAWN_FLINT_PATCH_RADIUS; dy <= SPAWN_FLINT_PATCH_RADIUS; dy++) {
         for (int dx = -SPAWN_FLINT_PATCH_RADIUS; dx <= SPAWN_FLINT_PATCH_RADIUS; dx++) {
-            int x = spot.x + dx, y = spot.y + dy;
+            int x = spot.x + dx, y = spot.y + dy, z = spot.z;
             int distance = abs(dx) + abs(dy);
             if (distance > SPAWN_FLINT_PATCH_RADIUS ||
-                !gather_stone_ground(map, x, y)) {
+                !gather_stone_ground(map, x, y, z)) {
                 continue;
             }
             int flint = SPAWN_FLINT_PATCH_STONES - SPAWN_FLINT_PATCH_FALLOFF * distance;
-            if (flint > map_stones(map, x, y, ITEM_FLINT)) {
+            if (flint > map_stones(map, x, y, z, ITEM_FLINT)) {
                 /* Some cobbles make room for the flint. */
-                map_set_stones(map, x, y, map_stones(map, x, y, ITEM_COBBLE), flint);
+                map_set_stones(map, x, y, z, map_stones(map, x, y, z, ITEM_COBBLE), flint);
             }
         }
     }
 }
 
-static bool is_free_tile(const Map *map, int x, int y, void *userdata)
+static bool is_free_tile(const Map *map, int x, int y, int z, void *userdata)
 {
-    return map_is_passable(map, x, y) && !game_tile_has_colonist(userdata, x, y);
+    return map_is_passable(map, x, y, z) && !game_tile_has_colonist(userdata, x, y, z);
 }
 
 static void spawn_starting_colonists(Game *game, int count)
@@ -426,7 +431,7 @@ static void spawn_starting_colonists(Game *game, int count)
             LOG_WARN("Not enough room to place every starting colonist");
             return;
         }
-        game_spawn_colonist(game, tile.x, tile.y);
+        game_spawn_colonist(game, tile.x, tile.y, tile.z);
     }
 }
 
@@ -436,17 +441,21 @@ bool game_init(Game *game, const NewGameParams *params)
 {
     memset(game, 0, sizeof(*game));
     if (!worldgen_generate(&game->map, &params->world) ||
-        !designations_init(&game->designations, game->map.width, game->map.height) ||
-        !dirt_init(&game->dirt, game->map.width, game->map.height) ||
-        !gather_zones_init(&game->gather_zones, game->map.width, game->map.height) ||
-        !items_init(&game->items, game->map.width, game->map.height) ||
-        !stockpiles_init(&game->stockpiles, game->map.width, game->map.height) ||
-        !workstations_init(&game->workstations, game->map.width, game->map.height) ||
-        !constructions_init(&game->constructions, game->map.width, game->map.height) ||
-        !beds_init(&game->beds, game->map.width, game->map.height) ||
-        !pathfinder_init(&game->pathfinder, game->map.width, game->map.height) ||
-        !regions_init(&game->regions, game->map.width, game->map.height) ||
-        !rooms_init(&game->rooms, game->map.width, game->map.height) ||
+        !designations_init(&game->designations, game->map.width, game->map.height,
+                           game->map.depth) ||
+        !dirt_init(&game->dirt, game->map.width, game->map.height, game->map.depth) ||
+        !gather_zones_init(&game->gather_zones, game->map.width, game->map.height,
+                           game->map.depth) ||
+        !items_init(&game->items, game->map.width, game->map.height, game->map.depth) ||
+        !stockpiles_init(&game->stockpiles, game->map.width, game->map.height, game->map.depth) ||
+        !workstations_init(&game->workstations, game->map.width, game->map.height,
+                           game->map.depth) ||
+        !constructions_init(&game->constructions, game->map.width, game->map.height,
+                            game->map.depth) ||
+        !beds_init(&game->beds, game->map.width, game->map.height, game->map.depth) ||
+        !pathfinder_init(&game->pathfinder, game->map.width, game->map.height, game->map.depth) ||
+        !regions_init(&game->regions, game->map.width, game->map.height, game->map.depth) ||
+        !rooms_init(&game->rooms, game->map.width, game->map.height, game->map.depth) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX)) {
         game_shutdown(game);
         return false;
@@ -492,9 +501,9 @@ void game_update_stock(Game *game)
         if (station == NULL) {
             continue;
         }
-        ItemStack stack = items_get(&game->items, station->x, station->y);
-        if (stack.count > 0 &&
-            stockpile_storage_priority(&game->stockpiles, station->x, station->y, stack) == 0) {
+        ItemStack stack = items_get(&game->items, station->x, station->y, station->z);
+        if (stack.count > 0 && stockpile_storage_priority(&game->stockpiles, station->x, station->y,
+                                                          station->z, stack) == 0) {
             game->stock[stack.type] += stack.count; /* Not counted as stored already. */
         }
     }
@@ -567,13 +576,14 @@ static void mushrooms_day(Game *game, size_t index, int day)
         world_roll(game->seed, index, day, 0) >= mushroom_chance(&game->weather)) {
         return;
     }
-    int x = (int)(index % (size_t)map->width), y = (int)(index / (size_t)map->width);
+    int x, y, z;
+    map_tile_of(map, index, &x, &y, &z);
     Terrain terrain = (Terrain)map->terrain[index];
     if ((terrain != TERRAIN_SOIL && terrain != TERRAIN_RICH_SOIL) ||
         map->rock[index] != ROCK_NONE || map->structure[index] != STRUCTURE_NONE ||
-        construction_at(&game->constructions, x, y) != CONSTRUCTION_NONE ||
-        workstation_at(&game->workstations, x, y) >= 0 ||
-        !map_tree_near(map, x, y, MUSHROOM_TREE_RANGE)) {
+        construction_at(&game->constructions, x, y, z) != CONSTRUCTION_NONE ||
+        workstation_at(&game->workstations, x, y, z) >= 0 ||
+        !map_tree_near(map, x, y, z, MUSHROOM_TREE_RANGE)) {
         return;
     }
     *plant = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
@@ -608,10 +618,10 @@ static void update_plants(Game *game)
     }
 }
 
-float game_item_rot_rate(const Game *game, int x, int y)
+float game_item_rot_rate(const Game *game, int x, int y, int z)
 {
     bool rains = weather_wetting(&game->weather, game->clock.tick) > 0.0f;
-    return temperature_rot_rate(&game->temperatures, &game->map, x, y, rains);
+    return temperature_rot_rate(&game->temperatures, &game->map, x, y, z, rains);
 }
 
 float game_daily_food(const Game *game)
@@ -629,11 +639,11 @@ float game_outdoor_temperature(const Game *game)
 static ItemConditions tile_conditions(const void *context, size_t tile)
 {
     const Game *game = context;
-    int width = game->map.width;
-    int x = (int)(tile % (size_t)width), y = (int)(tile / (size_t)width);
+    int x, y, z;
+    map_tile_of(&game->map, tile, &x, &y, &z);
     bool rains = weather_wetting(&game->weather, game->clock.tick) > 0.0f;
-    bool open = temperature_cover(&game->map, x, y) == TEMPERATURE_COVER_OPEN;
-    return (ItemConditions){temperature_rot_rate(&game->temperatures, &game->map, x, y, rains),
+    bool open = temperature_cover(&game->map, x, y, z) == TEMPERATURE_COVER_OPEN;
+    return (ItemConditions){temperature_rot_rate(&game->temperatures, &game->map, x, y, z, rains),
                             !(rains && open)};
 }
 
@@ -691,7 +701,7 @@ static void heat_from_hearths(Game *game)
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = &game->workstations.list[index];
         if (station->used && station->burning) {
-            temperatures_add_heat(&game->temperatures, station->x, station->y,
+            temperatures_add_heat(&game->temperatures, station->x, station->y, station->z,
                                   HEARTH_HEAT_PER_HOUR / (float)TICKS_PER_HOUR);
         }
     }
@@ -711,10 +721,10 @@ static void finish_constructions_now(Game *game)
         int length = construction_length(&done);
         for (int part = 0; !structure_is_roof((StructureType)done.type) && part < length;
              part++) {
-            int x, y;
-            construction_tile(&done, part, &x, &y);
-            if (gather_clear_work(&game->map, x, y) > 0.0f) {
-                gather_clear_plant(&game->map, &game->items, x, y, GAME_DEBUG_BUILD_LEVEL, NULL);
+            int x, y, z;
+            construction_tile(&done, part, &x, &y, &z);
+            if (gather_clear_work(&game->map, x, y, z) > 0.0f) {
+                gather_clear_plant(&game->map, &game->items, x, y, z, GAME_DEBUG_BUILD_LEVEL, NULL);
             }
         }
         if (!construction_finish_now(&game->constructions, &game->map, &game->items,
@@ -724,10 +734,10 @@ static void finish_constructions_now(Game *game)
         bool takes_tiles = construction_workstation(&done) != WORKSTATION_TYPE_COUNT ||
                            structure_blocks((StructureType)done.type);
         for (int part = 0; takes_tiles && part < length; part++) {
-            int x, y;
-            construction_tile(&done, part, &x, &y);
-            stockpiles_remove_rect(&game->stockpiles, x, y, x, y);
-            gather_zones_remove_rect(&game->gather_zones, x, y, x, y);
+            int x, y, z;
+            construction_tile(&done, part, &x, &y, &z);
+            stockpiles_remove_rect(&game->stockpiles, x, y, x, y, z);
+            gather_zones_remove_rect(&game->gather_zones, x, y, x, y, z);
         }
     }
 }
@@ -783,25 +793,29 @@ static void deconstruct_now(Game *game)
     if (designations->count_by_work[WORK_CONSTRUCTION] == 0) {
         return;
     }
-    for (int y = 0; y < map->height; y++) {
-        for (int x = 0; x < map->width; x++) {
-            DesignationType type = designation_get(designations, x, y);
-            if (type != DESIGNATION_DECONSTRUCT && type != DESIGNATION_REMOVE_ROOF) {
-                continue;
-            }
-            if (!designation_can_apply(map, x, y, type)) {
-                designation_set(designations, map, x, y, DESIGNATION_NONE);
-                continue;
-            }
-            int site = type == DESIGNATION_DECONSTRUCT ? construction_at(&game->constructions, x, y)
-                                                       : CONSTRUCTION_NONE;
-            designation_add_work(designations, map, &game->items, x, y,
-                                 designation_work_needed(designations, map, x, y),
-                                 GAME_DEBUG_BUILD_LEVEL, NULL);
-            const ConstructionSite *refresh = construction_get(&game->constructions, site);
-            if (refresh != NULL && refresh->refresh &&
-                map_structure(map, refresh->x, refresh->y) != (StructureType)refresh->type) {
-                game_remove_construction(game, site);
+    for (int z = 0; z < map->depth; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                DesignationType type = designation_get(designations, x, y, z);
+                if (type != DESIGNATION_DECONSTRUCT && type != DESIGNATION_REMOVE_ROOF) {
+                    continue;
+                }
+                if (!designation_can_apply(map, x, y, z, type)) {
+                    designation_set(designations, map, x, y, z, DESIGNATION_NONE);
+                    continue;
+                }
+                int site = type == DESIGNATION_DECONSTRUCT
+                               ? construction_at(&game->constructions, x, y, z)
+                               : CONSTRUCTION_NONE;
+                designation_add_work(designations, map, &game->items, x, y, z,
+                                     designation_work_needed(designations, map, x, y, z),
+                                     GAME_DEBUG_BUILD_LEVEL, NULL);
+                const ConstructionSite *refresh = construction_get(&game->constructions, site);
+                if (refresh != NULL && refresh->refresh &&
+                    map_structure(map, refresh->x, refresh->y, refresh->z) !=
+                        (StructureType)refresh->type) {
+                    game_remove_construction(game, site);
+                }
             }
         }
     }
@@ -906,6 +920,10 @@ uint64_t game_hash(const Game *game)
                             c->carried.count,    c->carried.quality,     c->carried.hit_points,
                             c->carried.progress, c->haul_destination.x, c->haul_destination.y};
         hash = hash_fnv1a64(hash, ints, sizeof(ints));
+        if (game->map.depth != 1) { /* Hashes of one-level games stay as they were. */
+            int32_t levels[4] = {c->z, c->target.z, c->haul_destination.z, c->fetch.z};
+            hash = hash_fnv1a64(hash, levels, sizeof(levels));
+        }
         hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
         hash = hash_fnv1a64(hash, &c->wetness, sizeof(c->wetness));
@@ -1086,17 +1104,17 @@ bool game_gather_job_known(const Game *game, GatherJob job)
     return false;
 }
 
-bool game_gather_work_at(const Game *game, int x, int y, GatherWorkInfo *info)
+bool game_gather_work_at(const Game *game, int x, int y, int z, GatherWorkInfo *info)
 {
     *info = (GatherWorkInfo){GATHER_JOB_NONE, 0.0f, ENTITY_NONE};
-    if (!map_in_bounds(&game->map, x, y)) {
+    if (!map_in_bounds(&game->map, x, y, z)) {
         return false;
     }
     const GatherZones *zones = &game->gather_zones;
-    size_t index = map_index(&game->map, x, y);
-    float fraction = gather_zone_progress_fraction(zones, &game->map, x, y);
+    size_t index = map_index(&game->map, x, y, z);
+    float fraction = gather_zone_progress_fraction(zones, &game->map, x, y, z);
     uint8_t owner = reservations_owner(&game->reservations, RESERVATION_WORK,
-                                       (TilePos){(int16_t)x, (int16_t)y});
+                                       (TilePos){(int16_t)x, (int16_t)y, (int16_t)z});
     EntityId id = owner > 0 ? game_colonist_id_at(game, owner - 1u) : ENTITY_NONE;
     const Colonist *colonist = game_colonist_const(game, id);
     if (colonist != NULL && colonist->task == TASK_WORK && colonist->gathering &&
@@ -1115,64 +1133,65 @@ bool game_gather_work_at(const Game *game, int x, int y, GatherWorkInfo *info)
     return false;
 }
 
-int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, DesignationType type)
+int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, int z, DesignationType type)
 {
     if (type == DESIGNATION_NONE) {
-        return designations_set_rect(&game->designations, &game->map, x0, y0, x1, y1, type);
+        return designations_set_rect(&game->designations, &game->map, x0, y0, x1, y1, z, type);
     }
     int changed = 0;
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            DesignationType old = designation_get(&game->designations, x, y);
+            DesignationType old = designation_get(&game->designations, x, y, z);
             if (old == DESIGNATION_NONE || designation_is_roof(old) == designation_is_roof(type)) {
-                changed += designation_set(&game->designations, &game->map, x, y, type);
+                changed += designation_set(&game->designations, &game->map, x, y, z, type);
             }
         }
     }
     return changed;
 }
 
-int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, bool roofs)
+int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool roofs)
 {
     int removed = 0;
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            DesignationType old = designation_get(&game->designations, x, y);
+            DesignationType old = designation_get(&game->designations, x, y, z);
             if (old != DESIGNATION_NONE && designation_is_roof(old) == roofs) {
                 removed +=
-                    designation_set(&game->designations, &game->map, x, y, DESIGNATION_NONE);
+                    designation_set(&game->designations, &game->map, x, y, z, DESIGNATION_NONE);
             }
         }
     }
-    return removed + game_remove_blueprints_rect(game, x0, y0, x1, y1, roofs);
+    return removed + game_remove_blueprints_rect(game, x0, y0, x1, y1, z, roofs);
 }
 
 /* ---- Zones --------------------------------------------------------------- */
 
-int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int preferred)
+int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred)
 {
     const uint8_t *blocked[] = {game->gather_zones.zone, game->workstations.at,
                                 game->constructions.workstation_tiles, NULL};
-    return stockpiles_add_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, preferred, blocked);
+    return stockpiles_add_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, z, preferred,
+                               blocked);
 }
 
-int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int preferred)
+int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred)
 {
     const uint8_t *blocked[] = {game->stockpiles.zone, game->workstations.at,
                                 game->constructions.workstation_tiles, NULL};
-    return gather_zones_add_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, preferred,
+    return gather_zones_add_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, z, preferred,
                                  blocked);
 }
 
 /* ---- Picking ------------------------------------------------------------- */
 
-EntityId game_colonist_at(const Game *game, float world_x, float world_y)
+EntityId game_colonist_at(const Game *game, float world_x, float world_y, int z)
 {
     EntityId best = ENTITY_NONE;
     float best_distance = GAME_PICK_RADIUS * GAME_PICK_RADIUS;
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
-        if (entity_id_is_none(id)) {
+        if (entity_id_is_none(id) || game->colonists[slot].z != z) {
             continue;
         }
         float x, y;
@@ -1186,7 +1205,7 @@ EntityId game_colonist_at(const Game *game, float world_x, float world_y)
     return best;
 }
 
-int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float y1,
+int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
                            EntityId *out, int max_count)
 {
     float min_x = fminf(x0, x1), max_x = fmaxf(x0, x1);
@@ -1194,7 +1213,7 @@ int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float
     int count = 0;
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game) && count < max_count; slot++) {
         EntityId id = game_colonist_id_at(game, slot);
-        if (entity_id_is_none(id)) {
+        if (entity_id_is_none(id) || game->colonists[slot].z != z) {
             continue;
         }
         float x, y;
@@ -1297,32 +1316,32 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
     return bill_has_input(bill, game->items.totals, tools);
 }
 
-bool game_can_place_workstation(const Game *game, int x, int y)
+bool game_can_place_workstation(const Game *game, int x, int y, int z)
 {
     /* Room in the list for every station whose site is finished. */
     return game->workstations.used_count + game->constructions.workstation_count <
                WORKSTATION_MAX &&
-           map_structure(&game->map, x, y) == STRUCTURE_NONE &&
-           construction_can_place(&game->constructions, &game->map, x, y) &&
-           workstation_can_place(&game->workstations, &game->map, x, y);
+           map_structure(&game->map, x, y, z) == STRUCTURE_NONE &&
+           construction_can_place(&game->constructions, &game->map, x, y, z) &&
+           workstation_can_place(&game->workstations, &game->map, x, y, z);
 }
 
-bool game_place_workstation(Game *game, WorkstationType type, int x, int y)
+bool game_place_workstation(Game *game, WorkstationType type, int x, int y, int z)
 {
-    if ((unsigned)type >= WORKSTATION_TYPE_COUNT || !game_can_place_workstation(game, x, y)) {
+    if ((unsigned)type >= WORKSTATION_TYPE_COUNT || !game_can_place_workstation(game, x, y, z)) {
         return false;
     }
     /* Ready at once when there is nothing to bring, to build or to clear. */
     bool ready = !workstation_needs_construction(type) &&
-                 game->map.plants[map_index(&game->map, x, y)].type == PLANT_NONE;
-    bool placed = ready ? workstations_place(&game->workstations, &game->map, type, x, y) !=
+                 game->map.plants[map_index(&game->map, x, y, z)].type == PLANT_NONE;
+    bool placed = ready ? workstations_place(&game->workstations, &game->map, type, x, y, z) !=
                               WORKSTATION_NONE
                         : constructions_place_workstation(&game->constructions, &game->map,
-                                                          type, x, y) != CONSTRUCTION_NONE;
+                                                          type, x, y, z) != CONSTRUCTION_NONE;
     if (placed) {
         /* No zone on a station: the tile leaves the zone it was in. */
-        stockpiles_remove_rect(&game->stockpiles, x, y, x, y);
-        gather_zones_remove_rect(&game->gather_zones, x, y, x, y);
+        stockpiles_remove_rect(&game->stockpiles, x, y, x, y, z);
+        gather_zones_remove_rect(&game->gather_zones, x, y, x, y, z);
     }
     return placed;
 }
@@ -1333,21 +1352,21 @@ bool game_remove_workstation(Game *game, int index)
     if (station == NULL) {
         return false;
     }
-    int x = station->x, y = station->y;
+    int x = station->x, y = station->y, z = station->z;
     ItemStack returned[1];
     int count = workstations_remove(&game->workstations, index, returned);
     for (int i = 0; i < count; i++) {
-        items_drop(&game->items, &game->map, x, y, returned[i]);
+        items_drop(&game->items, &game->map, x, y, z, returned[i]);
     }
     return true;
 }
 
-int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, bool roofs)
+int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool roofs)
 {
     int removed = 0;
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            int site = construction_in_layer(&game->constructions, x, y, roofs);
+            int site = construction_in_layer(&game->constructions, x, y, z, roofs);
             if (game_remove_construction(game, site)) {
                 removed++;
             }
@@ -1362,10 +1381,10 @@ bool game_remove_bill(Game *game, int station_index, int bill)
     if (station == NULL || bill < 0 || bill >= station->bill_count) {
         return false;
     }
-    int x = station->x, y = station->y;
+    int x = station->x, y = station->y, z = station->z;
     ItemStack returned;
     if (workstation_remove_bill(&game->workstations, station_index, bill, &returned)) {
-        items_drop(&game->items, &game->map, x, y, returned);
+        items_drop(&game->items, &game->map, x, y, z, returned);
     }
     return true;
 }
@@ -1383,7 +1402,7 @@ bool game_structure_buildable(const Game *game, StructureType type)
     return false;
 }
 
-bool game_can_place_structure(const Game *game, StructureType type, int x, int y,
+bool game_can_place_structure(const Game *game, StructureType type, int x, int y, int z,
                               Direction direction)
 {
     int length = structure_length(type);
@@ -1394,25 +1413,25 @@ bool game_can_place_structure(const Game *game, StructureType type, int x, int y
      * the point. */
     for (int part = 0; !structure_is_roof(type) && part < length; part++) {
         int px = x + part * direction_dx(direction), py = y + part * direction_dy(direction);
-        if (stockpile_at(&game->stockpiles, px, py) != STOCKPILE_NONE ||
-            workstation_at(&game->workstations, px, py) != WORKSTATION_NONE) {
+        if (stockpile_at(&game->stockpiles, px, py, z) != STOCKPILE_NONE ||
+            workstation_at(&game->workstations, px, py, z) != WORKSTATION_NONE) {
             return false;
         }
     }
-    return construction_can_place_structure(&game->constructions, &game->map, type, x, y,
+    return construction_can_place_structure(&game->constructions, &game->map, type, x, y, z,
                                             direction);
 }
 
-int game_place_structure(Game *game, StructureType type, int x, int y, Direction direction)
+int game_place_structure(Game *game, StructureType type, int x, int y, int z, Direction direction)
 {
-    if (!game_can_place_structure(game, type, x, y, direction)) {
+    if (!game_can_place_structure(game, type, x, y, z, direction)) {
         return CONSTRUCTION_NONE;
     }
-    return constructions_place(&game->constructions, &game->map, type, x, y, direction);
+    return constructions_place(&game->constructions, &game->map, type, x, y, z, direction);
 }
 
 void game_plan_structure_rect(const Game *game, StructureType type, Direction direction,
-                              int x0, int y0, int x1, int y1, StructurePlanVisit visit,
+                              int x0, int y0, int x1, int y1, int z, StructurePlanVisit visit,
                               void *userdata)
 {
     const StructureDef *def = structure_def(type);
@@ -1449,8 +1468,8 @@ void game_plan_structure_rect(const Game *game, StructureType type, Direction di
             }
             int head_x = dx < 0 ? x + length - 1 : x;
             int head_y = dy < 0 ? y + length - 1 : y;
-            visit(head_x, head_y, game_can_place_structure(game, type, head_x, head_y, direction),
-                  userdata);
+            visit(head_x, head_y, z,
+                  game_can_place_structure(game, type, head_x, head_y, z, direction), userdata);
         }
     }
 }
@@ -1462,20 +1481,20 @@ typedef struct StructurePlacing {
     int placed;
 } StructurePlacing;
 
-static void place_planned(int x, int y, bool allowed, void *userdata)
+static void place_planned(int x, int y, int z, bool allowed, void *userdata)
 {
     StructurePlacing *placing = userdata;
-    if (allowed && game_place_structure(placing->game, placing->type, x, y,
+    if (allowed && game_place_structure(placing->game, placing->type, x, y, z,
                                         placing->direction) != CONSTRUCTION_NONE) {
         placing->placed++;
     }
 }
 
 int game_place_structure_rect(Game *game, StructureType type, Direction direction, int x0,
-                              int y0, int x1, int y1)
+                              int y0, int x1, int y1, int z)
 {
     StructurePlacing placing = {game, type, direction, 0};
-    game_plan_structure_rect(game, type, direction, x0, y0, x1, y1, place_planned, &placing);
+    game_plan_structure_rect(game, type, direction, x0, y0, x1, y1, z, place_planned, &placing);
     return placing.placed;
 }
 
@@ -1485,11 +1504,11 @@ bool game_remove_construction(Game *game, int index)
     if (site == NULL) {
         return false;
     }
-    int x = site->x, y = site->y;
+    int x = site->x, y = site->y, z = site->z;
     ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
     int count = constructions_remove(&game->constructions, index, returned);
     for (int i = 0; i < count; i++) {
-        items_drop(&game->items, &game->map, x, y, returned[i]);
+        items_drop(&game->items, &game->map, x, y, z, returned[i]);
     }
     return true;
 }

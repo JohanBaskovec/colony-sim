@@ -13,6 +13,7 @@ static Camera make_camera(void)
 static void test_center_of_viewport_is_camera_position(void)
 {
     Camera camera = make_camera();
+    CHECK_EQ_INT(camera.level, 0); /* The level shown. */
     float wx, wy;
     camera_screen_to_world(&camera, 400.0f, 300.0f, &wx, &wy);
     CHECK_NEAR(wx, 50.0, 1e-4);

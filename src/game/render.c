@@ -233,6 +233,7 @@ static SDL_FRect inset(const SDL_FRect *tile, float fraction)
 
 void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
 {
+    const int z = camera->level; /* The level shown. */
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
 
     for (int y = visible.y0; y < visible.y1; y++) {
@@ -248,7 +249,7 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
             SDL_FRect tile = {floorf(left), floorf(top), floorf(right) - floorf(left),
                               floorf(bottom) - floorf(top)};
 
-            size_t index = map_index(map, x, y);
+            size_t index = map_index(map, x, y, z);
             int variation = tile_variation(x, y);
 
             if (map->rock[index] != ROCK_NONE) {
@@ -284,6 +285,7 @@ static uint32_t tile_hash(int x, int y, int n)
 
 void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera)
 {
+    const int z = camera->level; /* The level shown. */
     if (dirt->dirty_count == 0) {
         return;
     }
@@ -291,7 +293,7 @@ void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera)
     float pixels = camera->zoom;
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            int level = dirt_at(dirt, x, y);
+            int level = dirt_at(dirt, x, y, z);
             if (level == 0) {
                 continue;
             }
@@ -329,6 +331,7 @@ static SDL_FRect tile_rect(const Camera *camera, int x, int y)
  * sky (not on water, rock or under a roof), thicker as the cover grows. */
 void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
+    const int z = camera->level; /* The level shown. */
     float snow = game->weather.snow;
     if (snow <= 0.0f) {
         return;
@@ -339,9 +342,9 @@ void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *c
     for (int y = visible.y0; y < visible.y1; y++) {
         int run = -1; /* First tile of the current run of snowy tiles. */
         for (int x = visible.x0; x <= visible.x1; x++) {
-            bool snowy = x < visible.x1 && !map_is_water(map, x, y) &&
-                         map->rock[map_index(map, x, y)] == ROCK_NONE &&
-                         temperature_cover(map, x, y) == TEMPERATURE_COVER_OPEN;
+            bool snowy = x < visible.x1 && !map_is_water(map, x, y, z) &&
+                         map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
+                         temperature_cover(map, x, y, z) == TEMPERATURE_COVER_OPEN;
             if (snowy && run < 0) {
                 run = x;
             } else if (!snowy && run >= 0) {
@@ -663,11 +666,12 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
 
 void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
+    const int z = camera->level; /* The level shown. */
     const Items *items = &game->items;
     TileRect visible = camera_visible_tiles(camera, items->width, items->height);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            ItemStack stack = items_get(items, x, y);
+            ItemStack stack = items_get(items, x, y, z);
             if (stack.type != ITEM_NONE) {
                 SDL_FRect tile = tile_rect(camera, x, y);
                 render_item_stack(renderer, &tile, (ItemType)stack.type);
@@ -680,6 +684,7 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
 void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                          bool roofs)
 {
+    const int z = camera->level; /* The level shown. */
     const Designations *designations = &game->designations;
     if (designations->count == 0) {
         return;
@@ -690,7 +695,7 @@ void render_designations(SDL_Renderer *renderer, const Game *game, const Camera 
 
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            DesignationType type = designation_get(designations, x, y);
+            DesignationType type = designation_get(designations, x, y, z);
             if (type == DESIGNATION_NONE || (designation_is_roof(type) && !roofs)) {
                 continue;
             }
@@ -699,7 +704,7 @@ void render_designations(SDL_Renderer *renderer, const Game *game, const Camera 
             SDL_FRect mark = inset(&tile, designation_is_roof(type) ? 0.96f : 0.8f);
             outline(renderer, mark, thickness, DESIGNATION_COLORS[type]);
 
-            float progress = designation_progress_fraction(designations, map, x, y);
+            float progress = designation_progress_fraction(designations, map, x, y, z);
             if (progress > 0.0f && tile.w >= 6.0f) {
                 float height = SDL_max(2.0f, floorf(tile.h * 0.12f));
                 SDL_FRect bar = {tile.x + 1.0f, tile.y + tile.h - height - 1.0f, tile.w - 2.0f,
@@ -816,6 +821,7 @@ void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0,
 void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                          int selected)
 {
+    const int z = camera->level; /* The level shown. */
     const GatherZones *zones = &game->gather_zones;
     if (zones->used_count == 0) {
         return;
@@ -826,7 +832,7 @@ void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera 
     TileRect visible = camera_visible_tiles(camera, zones->width, zones->height);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            float progress = gather_zone_progress_fraction(zones, &game->map, x, y);
+            float progress = gather_zone_progress_fraction(zones, &game->map, x, y, z);
             if (progress > 0.0f) {
                 SDL_FRect tile = tile_rect(camera, x, y);
                 progress_bar(renderer, &tile, progress);
@@ -955,8 +961,8 @@ void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera 
     TileRect visible = camera_visible_tiles(camera, workstations->width, workstations->height);
     for (int i = 0; i < WORKSTATION_MAX; i++) {
         const Workstation *station = workstation_get_const(workstations, i);
-        if (station == NULL || station->x < visible.x0 || station->x >= visible.x1 ||
-            station->y < visible.y0 || station->y >= visible.y1) {
+        if (station == NULL || station->z != camera->level || station->x < visible.x0 ||
+            station->x >= visible.x1 || station->y < visible.y0 || station->y >= visible.y1) {
             continue;
         }
         SDL_FRect tile = tile_rect(camera, station->x, station->y);
@@ -978,8 +984,9 @@ void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera 
 void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                               WorkstationType type, int x, int y)
 {
+    const int z = camera->level; /* The level shown. */
     SDL_FRect tile = tile_rect(camera, x, y);
-    bool allowed = game_can_place_workstation(game, x, y);
+    bool allowed = game_can_place_workstation(game, x, y, z);
     if (allowed) {
         render_station_shape(renderer, &tile, type, 110);
     }
@@ -1106,14 +1113,15 @@ static TileRect visible_heads(const Camera *camera, int width, int height)
 void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                        bool roofs)
 {
+    const int z = camera->level; /* The level shown. */
     const Map *map = &game->map;
     if (map->structure_counts[STRUCTURE_NONE] < (int)map_tile_count(map)) {
         TileRect visible = visible_heads(camera, map->width, map->height);
         for (int y = visible.y0; y < visible.y1; y++) {
             for (int x = visible.x0; x < visible.x1; x++) {
-                if (map_structure_is_origin(map, x, y)) {
-                    StructureType type = map_structure(map, x, y);
-                    Direction direction = map_structure_direction(map, x, y);
+                if (map_structure_is_origin(map, x, y, z)) {
+                    StructureType type = map_structure(map, x, y, z);
+                    Direction direction = map_structure_direction(map, x, y, z);
                     SDL_FRect rect = footprint_rect(camera, x, y, type, direction);
                     render_structure_shape(renderer, &rect, type, direction, 255);
                 }
@@ -1124,11 +1132,11 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
         TileRect visible = camera_visible_tiles(camera, map->width, map->height);
         for (int y = visible.y0; y < visible.y1; y++) {
             for (int x = visible.x0; x < visible.x1; x++) {
-                StructureType roof = map_roof(map, x, y);
+                StructureType roof = map_roof(map, x, y, z);
                 SDL_FRect rect = tile_rect(camera, x, y);
                 if (roof != STRUCTURE_NONE) {
                     render_structure_shape(renderer, &rect, roof, DIRECTION_SOUTH, ROOF_ALPHA);
-                } else if (map_natural_roof(map, x, y)) {
+                } else if (map_natural_roof(map, x, y, z)) {
                     fill(renderer, NATURAL_ROOF_COLOR, &rect);
                 }
             }
@@ -1142,8 +1150,8 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
     TileRect visible = visible_heads(camera, constructions->width, constructions->height);
     for (int i = 0; i < CONSTRUCTION_MAX; i++) {
         const ConstructionSite *site = construction_get(constructions, i);
-        if (site == NULL || site->x < visible.x0 || site->x >= visible.x1 ||
-            site->y < visible.y0 || site->y >= visible.y1 ||
+        if (site == NULL || site->z != camera->level || site->x < visible.x0 ||
+            site->x >= visible.x1 || site->y < visible.y0 || site->y >= visible.y1 ||
             (construction_is_roof(site) && !roofs)) {
             continue;
         }
@@ -1173,12 +1181,13 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
 
 void render_roof_support(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
+    const int z = camera->level; /* The level shown. */
     const Map *map = &game->map;
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            if (map->rock[map_index(map, x, y)] == ROCK_NONE &&
-                construction_roof_held(&game->constructions, map, x, y)) {
+            if (map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
+                construction_roof_held(&game->constructions, map, x, y, z)) {
                 SDL_FRect rect = tile_rect(camera, x, y);
                 fill(renderer, ROOF_SUPPORT_COLOR, &rect);
             }
@@ -1193,8 +1202,9 @@ typedef struct StructurePreview {
     Direction direction;
 } StructurePreview;
 
-static void preview_planned(int x, int y, bool allowed, void *userdata)
+static void preview_planned(int x, int y, int z, bool allowed, void *userdata)
 {
+    (void)z; /* The level shown. */
     const StructurePreview *preview = userdata;
     SDL_FRect rect = footprint_rect(preview->camera, x, y, preview->type, preview->direction);
     if (allowed) {
@@ -1207,8 +1217,9 @@ void render_structure_preview(SDL_Renderer *renderer, const Game *game, const Ca
                               StructureType type, Direction direction, int x0, int y0, int x1,
                               int y1)
 {
+    const int z = camera->level; /* The level shown. */
     StructurePreview preview = {renderer, camera, type, direction};
-    game_plan_structure_rect(game, type, direction, x0, y0, x1, y1, preview_planned, &preview);
+    game_plan_structure_rect(game, type, direction, x0, y0, x1, y1, z, preview_planned, &preview);
 }
 
 void render_structure_icon(SDL_Renderer *renderer, SDL_FRect rect, StructureType type)
@@ -1315,14 +1326,15 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
 #define FIRE_LIGHT_STRENGTH 0.85f
 #define FIRE_GLOW_STRENGTH 0.3f
 
-/* Tiles that burning hearths light, within `visible` (empty: x0 >= x1). */
-static TileRect lit_tiles(const Workstations *workstations, TileRect visible)
+/* Tiles that burning hearths of level z light, within `visible` (empty: x0 >=
+ * x1). */
+static TileRect lit_tiles(const Workstations *workstations, TileRect visible, int z)
 {
     TileRect box = {INT_MAX, INT_MAX, INT_MIN, INT_MIN};
     int reach = (int)ceilf(HEARTH_LIGHT_RADIUS);
     for (int i = 0; i < WORKSTATION_MAX; i++) {
         const Workstation *station = workstation_get_const(workstations, i);
-        if (station == NULL || !station->burning) {
+        if (station == NULL || !station->burning || station->z != z) {
             continue;
         }
         box.x0 = SDL_min(box.x0, station->x - reach);
@@ -1384,11 +1396,12 @@ static SDL_Color temperature_color(float celsius)
 }
 
 /* Whether a tile is within reach of the warmth of a burning hearth. */
-static bool near_fire(const Workstations *workstations, int x, int y)
+static bool near_fire(const Workstations *workstations, int x, int y, int z)
 {
     for (int i = 0; i < WORKSTATION_MAX; i++) {
         const Workstation *station = &workstations->list[i];
-        if (station->used && station->burning && abs(station->x - x) <= HEARTH_RADIANT_RADIUS &&
+        if (station->used && station->burning && station->z == z &&
+            abs(station->x - x) <= HEARTH_RADIANT_RADIUS &&
             abs(station->y - y) <= HEARTH_RADIANT_RADIUS) {
             return true;
         }
@@ -1398,6 +1411,7 @@ static bool near_fire(const Workstations *workstations, int x, int y)
 
 void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
+    const int z = camera->level; /* The level shown. */
     const Temperatures *temperatures = &game->temperatures;
     const Workstations *workstations = &game->workstations;
     TileRect visible = camera_visible_tiles(camera, temperatures->width, temperatures->height);
@@ -1408,9 +1422,9 @@ void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *
     }
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            float celsius = temperature_at(temperatures, x, y);
-            if (burning && near_fire(workstations, x, y)) {
-                celsius += hearths_radiant_warmth(workstations, &game->map, x, y);
+            float celsius = temperature_at(temperatures, x, y, z);
+            if (burning && near_fire(workstations, x, y, z)) {
+                celsius += hearths_radiant_warmth(workstations, &game->map, x, y, z);
             }
             SDL_Color color = temperature_color(celsius);
             color.a = 120;
@@ -1434,7 +1448,7 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
     float width = camera->viewport_width, height = camera->viewport_height;
     const Workstations *workstations = &game->workstations;
     TileRect visible = camera_visible_tiles(camera, workstations->width, workstations->height);
-    TileRect box = lit_tiles(workstations, visible);
+    TileRect box = lit_tiles(workstations, visible, camera->level);
     size_t corners = box.x0 < box.x1 && box.y0 < box.y1
                          ? (size_t)(box.x1 - box.x0 + 1) * (size_t)(box.y1 - box.y0 + 1)
                          : 0;
@@ -1756,7 +1770,7 @@ static void render_chat_bubbles(SDL_Renderer *renderer, const Game *game, const 
     }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         const Colonist *colonist = &game->colonists[slot];
-        if (entity_id_is_none(game_colonist_id_at(game, slot)) ||
+        if (entity_id_is_none(game_colonist_id_at(game, slot)) || colonist->z != camera->level ||
             (colonist->chat_ticks <= 0 && !colonist_telling(colonist, &game->workstations))) {
             continue;
         }
@@ -1785,9 +1799,11 @@ static void render_chat_bubbles(SDL_Renderer *renderer, const Game *game, const 
 void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
                           const Camera *camera, const EntityId *selected, int selected_count)
 {
+    const int z = camera->level; /* The level shown. */
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
-        if (!entity_id_is_none(id) && is_selected(id, selected, selected_count)) {
+        if (!entity_id_is_none(id) && game->colonists[slot].z == z &&
+            is_selected(id, selected, selected_count)) {
             render_path(renderer, camera, &game->colonists[slot]);
         }
     }
@@ -1803,7 +1819,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
     int count = 0;
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game) && count < COLONIST_MAX;
          slot++) {
-        if (entity_id_is_none(game_colonist_id_at(game, slot))) {
+        if (entity_id_is_none(game_colonist_id_at(game, slot)) || game->colonists[slot].z != z) {
             continue;
         }
         float wx, wy;
@@ -1832,7 +1848,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
                                         selected_count));
         }
         for (int x = x0; x < x1; x++) {
-            render_plant(sprites, camera, &map->plants[map_index(map, x, y)], x, y, order,
+            render_plant(sprites, camera, &map->plants[map_index(map, x, y, z)], x, y, order,
                          count);
         }
     }

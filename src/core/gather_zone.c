@@ -171,13 +171,13 @@ bool gather_job_doable_at(GatherJob job, double level)
 
 /* ---- Tiles ------------------------------------------------------------------ */
 
-bool gather_zones_init(GatherZones *zones, int width, int height)
+bool gather_zones_init(GatherZones *zones, int width, int height, int depth)
 {
     memset(zones, 0, sizeof(*zones));
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
-    size_t count = (size_t)width * (size_t)height;
+    size_t count = (size_t)width * (size_t)height * (size_t)depth;
     zones->zone = calloc(count, sizeof(*zones->zone));
     zones->job = calloc(count, sizeof(*zones->job));
     zones->progress = calloc(count, sizeof(*zones->progress));
@@ -187,6 +187,7 @@ bool gather_zones_init(GatherZones *zones, int width, int height)
     }
     zones->width = width;
     zones->height = height;
+    zones->depth = depth;
     zones->next_number = 1;
     return true;
 }
@@ -199,14 +200,15 @@ void gather_zones_free(GatherZones *zones)
     memset(zones, 0, sizeof(*zones));
 }
 
-static bool in_bounds(const GatherZones *zones, int x, int y)
+static bool in_bounds(const GatherZones *zones, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && x < zones->width && y < zones->height;
+    return x >= 0 && y >= 0 && z >= 0 && x < zones->width && y < zones->height &&
+           z < zones->depth;
 }
 
-static size_t index_of(const GatherZones *zones, int x, int y)
+static size_t index_of(const GatherZones *zones, int x, int y, int z)
 {
-    return (size_t)y * (size_t)zones->width + (size_t)x;
+    return ((size_t)z * (size_t)zones->height + (size_t)y) * (size_t)zones->width + (size_t)x;
 }
 
 static bool is_valid(const GatherZones *zones, int index)
@@ -237,23 +239,23 @@ static void changed(GatherZones *zones)
     zones->revision++;
 }
 
-bool gather_zone_can_cover(const Map *map, int x, int y)
+bool gather_zone_can_cover(const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return false;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     Terrain terrain = (Terrain)map->terrain[index];
     return map->rock[index] == ROCK_NONE && terrain != TERRAIN_DEEP_WATER &&
            !structure_blocks((StructureType)map->structure[index]);
 }
 
-bool gather_stone_ground(const Map *map, int x, int y)
+bool gather_stone_ground(const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return false;
     }
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     return map->rock[index] == ROCK_NONE && map->structure[index] == STRUCTURE_NONE &&
            terrain_def((Terrain)map->terrain[index])->stony;
 }
@@ -271,7 +273,7 @@ static void clip_rect(const GatherZones *zones, int x0, int y0, int x1, int y1, 
 /* Adds the free tiles of a rectangle a zone may cover and that no layer of
  * `blocked` (see gather_zones_add_rect()) covers. */
 static int extend(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1, int y1,
-                  const uint8_t *const *blocked)
+                  int z, const uint8_t *const *blocked)
 {
     if (!is_valid(zones, index)) {
         return 0;
@@ -281,9 +283,9 @@ static int extend(GatherZones *zones, const Map *map, int index, int x0, int y0,
     int added = 0;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            size_t i = index_of(zones, x, y);
+            size_t i = index_of(zones, x, y, z);
             if (zones->zone[i] == 0 && !layers_any_set(blocked, i) &&
-                gather_zone_can_cover(map, x, y)) {
+                gather_zone_can_cover(map, x, y, z)) {
                 zones->zone[i] = (uint8_t)(index + 1);
                 clear_progress(zones, i);
                 added++;
@@ -298,12 +300,12 @@ static int extend(GatherZones *zones, const Map *map, int index, int x0, int y0,
 }
 
 int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
-                       int y1)
+                       int y1, int z)
 {
-    return extend(zones, map, index, x0, y0, x1, y1, NULL);
+    return extend(zones, map, index, x0, y0, x1, y1, z, NULL);
 }
 
-static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
+static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z,
                   const uint8_t *const *blocked)
 {
     int index = GATHER_ZONE_NONE;
@@ -335,7 +337,7 @@ static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, in
     zone->groups[GATHER_GROUP_FOOD] = (GatherGroupOrder){.mode = GATHER_UNTIL,
                                                          .unit = GATHER_UNIT_FOOD_DAYS,
                                                          .target = GATHER_FOOD_DAYS_DEFAULT};
-    if (extend(zones, map, index, x0, y0, x1, y1, blocked) == 0) {
+    if (extend(zones, map, index, x0, y0, x1, y1, z, blocked) == 0) {
         zone->used = false;
         return GATHER_ZONE_NONE;
     }
@@ -344,12 +346,12 @@ static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, in
     return index;
 }
 
-int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1)
+int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z)
 {
-    return create(zones, map, x0, y0, x1, y1, NULL);
+    return create(zones, map, x0, y0, x1, y1, z, NULL);
 }
 
-int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
+int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z,
                           int preferred, const uint8_t *const *blocked)
 {
     int min_x, min_y, max_x, max_y;
@@ -358,7 +360,7 @@ int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, in
     int into = is_valid(zones, preferred) ? preferred : GATHER_ZONE_NONE;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            int zone = zones->zone[index_of(zones, x, y)] - 1;
+            int zone = zones->zone[index_of(zones, x, y, z)] - 1;
             if (zone == GATHER_ZONE_NONE || overlapped[zone]) {
                 continue;
             }
@@ -370,10 +372,10 @@ int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, in
         }
     }
     if (into == GATHER_ZONE_NONE) {
-        return create(zones, map, x0, y0, x1, y1, blocked);
+        return create(zones, map, x0, y0, x1, y1, z, blocked);
     }
     bool merged = false;
-    size_t count = (size_t)zones->width * (size_t)zones->height;
+    size_t count = (size_t)zones->width * (size_t)zones->height * (size_t)zones->depth;
     for (size_t i = 0; i < count; i++) {
         int zone = zones->zone[i] - 1;
         if (zone != GATHER_ZONE_NONE && zone != into && overlapped[zone]) {
@@ -391,18 +393,18 @@ int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, in
     if (merged) {
         changed(zones);
     }
-    extend(zones, map, into, x0, y0, x1, y1, blocked);
+    extend(zones, map, into, x0, y0, x1, y1, z, blocked);
     return into;
 }
 
-int gather_zones_remove_rect(GatherZones *zones, int x0, int y0, int x1, int y1)
+int gather_zones_remove_rect(GatherZones *zones, int x0, int y0, int x1, int y1, int z)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(zones, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
     int removed = 0;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            size_t i = index_of(zones, x, y);
+            size_t i = index_of(zones, x, y, z);
             if (zones->zone[i] != 0) {
                 GatherZone *zone = &zones->list[zones->zone[i] - 1];
                 if (--zone->cell_count == 0) {
@@ -426,7 +428,7 @@ void gather_zone_delete(GatherZones *zones, int index)
     if (!is_valid(zones, index)) {
         return;
     }
-    size_t count = (size_t)zones->width * (size_t)zones->height;
+    size_t count = (size_t)zones->width * (size_t)zones->height * (size_t)zones->depth;
     for (size_t i = 0; i < count; i++) {
         if (zones->zone[i] == index + 1) {
             zones->zone[i] = 0;
@@ -443,12 +445,12 @@ const GatherZone *gather_zone_get(const GatherZones *zones, int index)
     return is_valid(zones, index) ? &zones->list[index] : NULL;
 }
 
-int gather_zone_at(const GatherZones *zones, int x, int y)
+int gather_zone_at(const GatherZones *zones, int x, int y, int z)
 {
-    if (!in_bounds(zones, x, y)) {
+    if (!in_bounds(zones, x, y, z)) {
         return GATHER_ZONE_NONE;
     }
-    return (int)zones->zone[index_of(zones, x, y)] - 1;
+    return (int)zones->zone[index_of(zones, x, y, z)] - 1;
 }
 
 /* ---- Orders ----------------------------------------------------------------- */
@@ -667,9 +669,9 @@ void gather_zone_set_priority(GatherZones *zones, int index, int priority)
     }
 }
 
-int gather_zone_priority_at(const GatherZones *zones, int x, int y)
+int gather_zone_priority_at(const GatherZones *zones, int x, int y, int z)
 {
-    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y));
+    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y, z));
     return zone != NULL ? zone->priority : 0;
 }
 
@@ -880,20 +882,20 @@ static bool food_among(const GatherZone *zone, const Plant *plant, GatherResourc
 }
 
 /* Stones of a resource's type on a tile (0 for the other resources). */
-static int stones_of(const Map *map, int x, int y, GatherResource resource)
+static int stones_of(const Map *map, int x, int y, int z, GatherResource resource)
 {
     const GatherResourceDef *def = &RESOURCE_DEFS[resource];
-    return def->job == GATHER_JOB_STONES ? map_stones(map, x, y, def->item) : 0;
+    return def->job == GATHER_JOB_STONES ? map_stones(map, x, y, z, def->item) : 0;
 }
 
 /* tile_holds() on a tile a zone can cover (checked by the caller). */
-static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, int y,
+static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, int y, int z,
                                GatherJob job, GatherResourceMask resources)
 {
     if (resources == 0) {
         return false;
     }
-    const Plant *plant = &map->plants[map_index(map, x, y)];
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
     switch (job) {
     case GATHER_JOB_HARVEST:
     case GATHER_JOB_HARVEST_CAREFULLY:
@@ -911,34 +913,34 @@ static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, in
     case GATHER_JOB_CHOP:
         return plant->type == PLANT_TREE && ripe_enough(zone, GATHER_WOOD, plant);
     case GATHER_JOB_STONES:
-        return gather_stone_ground(map, x, y) &&
+        return gather_stone_ground(map, x, y, z) &&
                (((resources & GATHER_RESOURCE_BIT(GATHER_COBBLES)) &&
-                 stones_of(map, x, y, GATHER_COBBLES) > 0) ||
+                 stones_of(map, x, y, z, GATHER_COBBLES) > 0) ||
                 ((resources & GATHER_RESOURCE_BIT(GATHER_FLINT)) &&
-                 stones_of(map, x, y, GATHER_FLINT) > 0));
+                 stones_of(map, x, y, z, GATHER_FLINT) > 0));
     default: return false;
     }
 }
 
 /* Whether the tile holds something for the job, among `resources` (only
  * stones care which: a tile may hold cobbles and no flint). */
-static bool tile_holds(const GatherZone *zone, const Map *map, int x, int y, GatherJob job,
+static bool tile_holds(const GatherZone *zone, const Map *map, int x, int y, int z, GatherJob job,
                        GatherResourceMask resources)
 {
-    return resources != 0 && gather_zone_can_cover(map, x, y) &&
-           covered_tile_holds(zone, map, x, y, job, resources);
+    return resources != 0 && gather_zone_can_cover(map, x, y, z) &&
+           covered_tile_holds(zone, map, x, y, z, job, resources);
 }
 
 /* Whether the tile holds something for the job that the zone wants. */
-static bool job_open(const GatherZone *zone, const Map *map, int x, int y, GatherJob job)
+static bool job_open(const GatherZone *zone, const Map *map, int x, int y, int z, GatherJob job)
 {
-    return tile_holds(zone, map, x, y, job, zone->wanted & JOB_DEFS[job].resources);
+    return tile_holds(zone, map, x, y, z, job, zone->wanted & JOB_DEFS[job].resources);
 }
 
 /* Items a plant job would give on a tile now (0 for stones and others). */
-static int plant_yield(const Map *map, int x, int y, GatherJob job)
+static int plant_yield(const Map *map, int x, int y, int z, GatherJob job)
 {
-    const Plant *plant = &map->plants[map_index(map, x, y)];
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
     const PlantDef *def = plant_def((PlantType)plant->type);
     switch (job) {
     case GATHER_JOB_HARVEST:
@@ -956,27 +958,28 @@ static int plant_yield(const Map *map, int x, int y, GatherJob job)
     }
 }
 
-bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y, GatherJob job)
+bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y, int z,
+                          GatherJob job)
 {
-    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y));
-    return zone != NULL && (unsigned)job < GATHER_JOB_COUNT && job_open(zone, map, x, y, job);
+    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y, z));
+    return zone != NULL && (unsigned)job < GATHER_JOB_COUNT && job_open(zone, map, x, y, z, job);
 }
 
-GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y,
+GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y, int z,
                           GatherJobMask allowed)
 {
-    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y));
+    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y, z));
     if (zone == NULL || zone->wanted == 0) {
         return GATHER_JOB_NONE;
     }
     /* Called for every tile a job search looks at: the cover is checked once. */
-    if (!gather_zone_can_cover(map, x, y)) {
+    if (!gather_zone_can_cover(map, x, y, z)) {
         return GATHER_JOB_NONE;
     }
     for (int job = 0; job < GATHER_JOB_COUNT; job++) {
         GatherResourceMask wanted = zone->wanted & JOB_DEFS[job].resources;
         if ((allowed & GATHER_JOB_BIT(job)) && wanted != 0 &&
-            covered_tile_holds(zone, map, x, y, (GatherJob)job, wanted)) {
+            covered_tile_holds(zone, map, x, y, z, (GatherJob)job, wanted)) {
             return (GatherJob)job;
         }
     }
@@ -991,29 +994,32 @@ void gather_zone_available(const GatherZones *zones, const Map *map, int index,
         return;
     }
     const GatherZone *zone = &zones->list[index];
-    for (int y = 0; y < zones->height; y++) {
-        for (int x = 0; x < zones->width; x++) {
-            if (zones->zone[index_of(zones, x, y)] != index + 1) {
-                continue;
-            }
-            for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
-                GatherJob job = RESOURCE_DEFS[r].job;
-                if (!tile_holds(zone, map, x, y, job, GATHER_RESOURCE_BIT(r))) {
+    for (int z = 0; z < zones->depth; z++) {
+        for (int y = 0; y < zones->height; y++) {
+            for (int x = 0; x < zones->width; x++) {
+                if (zones->zone[index_of(zones, x, y, z)] != index + 1) {
                     continue;
                 }
-                available[r] += job == GATHER_JOB_STONES ? stones_of(map, x, y, (GatherResource)r)
-                                                         : plant_yield(map, x, y, job);
+                for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+                    GatherJob job = RESOURCE_DEFS[r].job;
+                    if (!tile_holds(zone, map, x, y, z, job, GATHER_RESOURCE_BIT(r))) {
+                        continue;
+                    }
+                    available[r] += job == GATHER_JOB_STONES
+                                        ? stones_of(map, x, y, z, (GatherResource)r)
+                                        : plant_yield(map, x, y, z, job);
+                }
             }
         }
     }
 }
 
-float gather_job_work_needed(const Map *map, int x, int y, GatherJob job)
+float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return 0.0f;
     }
-    const Plant *plant = &map->plants[map_index(map, x, y)];
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
     int food = plant_stock_available(plant, PLANT_STOCK_FOOD);
     switch (job) {
     case GATHER_JOB_HARVEST:
@@ -1038,12 +1044,12 @@ float gather_job_work_needed(const Map *map, int x, int y, GatherJob job)
 /* The stone a gatherer finds on a tile among the `wanted` types it holds:
  * picked at random in proportion to their numbers (the first one without
  * `rng`). ITEM_NONE when there is none. */
-static ItemType find_stone(const Map *map, int x, int y, GatherResourceMask wanted, Rng *rng)
+static ItemType find_stone(const Map *map, int x, int y, int z, GatherResourceMask wanted, Rng *rng)
 {
     int cobbles = wanted & GATHER_RESOURCE_BIT(GATHER_COBBLES)
-                      ? stones_of(map, x, y, GATHER_COBBLES)
+                      ? stones_of(map, x, y, z, GATHER_COBBLES)
                       : 0;
-    int flint = wanted & GATHER_RESOURCE_BIT(GATHER_FLINT) ? stones_of(map, x, y, GATHER_FLINT)
+    int flint = wanted & GATHER_RESOURCE_BIT(GATHER_FLINT) ? stones_of(map, x, y, z, GATHER_FLINT)
                                                             : 0;
     if (cobbles + flint == 0) {
         return ITEM_NONE;
@@ -1057,13 +1063,13 @@ static ItemType find_stone(const Map *map, int x, int y, GatherResourceMask want
 
 /* Carries out a completed job on the map; returns what it gives (count 0:
  * nothing). Stones are taken among the `wanted` types. */
-static ItemType complete(Map *map, int x, int y, GatherJob job, GatherResourceMask wanted,
+static ItemType complete(Map *map, int x, int y, int z, GatherJob job, GatherResourceMask wanted,
                          Rng *rng, int *count)
 {
-    Plant *plant = &map->plants[map_index(map, x, y)];
+    Plant *plant = &map->plants[map_index(map, x, y, z)];
     const PlantDef *def = plant_def((PlantType)plant->type);
     ItemType item = ITEM_NONE;
-    *count = plant_yield(map, x, y, job);
+    *count = plant_yield(map, x, y, z, job);
     switch (job) {
     case GATHER_JOB_HARVEST:
     case GATHER_JOB_HARVEST_CAREFULLY:
@@ -1094,8 +1100,8 @@ static ItemType complete(Map *map, int x, int y, GatherJob job, GatherResourceMa
         memset(plant, 0, sizeof(*plant));
         break;
     case GATHER_JOB_STONES:
-        item = find_stone(map, x, y, wanted, rng);
-        *count = map_take_stone(map, x, y, item) ? 1 : 0;
+        item = find_stone(map, x, y, z, wanted, rng);
+        *count = map_take_stone(map, x, y, z, item) ? 1 : 0;
         break;
     default: break;
     }
@@ -1113,26 +1119,26 @@ static GatherResource resource_of(GatherJob job, ItemType item)
     return GATHER_RESOURCE_COUNT;
 }
 
-bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, GatherJob job,
-                          float work, double level, Rng *rng)
+bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
+                          GatherJob job, float work, double level, Rng *rng)
 {
-    int zone_index = gather_zone_at(zones, x, y);
-    if (!gather_job_available(zones, map, x, y, job)) {
+    int zone_index = gather_zone_at(zones, x, y, z);
+    if (!gather_job_available(zones, map, x, y, z, job)) {
         return false;
     }
     GatherZone *zone = &zones->list[zone_index];
-    size_t index = index_of(zones, x, y);
+    size_t index = index_of(zones, x, y, z);
     if (zones->job[index] != job) {
         zones->job[index] = (uint8_t)job;
         zones->progress[index] = 0.0f;
     }
     zones->progress[index] += work;
-    if (zones->progress[index] < gather_job_work_needed(map, x, y, job)) {
+    if (zones->progress[index] < gather_job_work_needed(map, x, y, z, job)) {
         return false;
     }
     clear_progress(zones, index);
     int count;
-    ItemType item = complete(map, x, y, job, zone->wanted, rng, &count);
+    ItemType item = complete(map, x, y, z, job, zone->wanted, rng, &count);
     GatherResource resource = resource_of(job, item);
     if (resource == GATHER_RESOURCE_COUNT || count <= 0 ||
         !(zone->wanted & GATHER_RESOURCE_BIT(resource))) {
@@ -1140,7 +1146,7 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
     }
     if (items != NULL) {
         ItemStack stack = knowledge_product(item, count, level, rng);
-        items_drop(items, map, x, y, stack);
+        items_drop(items, map, x, y, z, stack);
     }
     GatherOrder *order = &zone->orders[resource];
     order->done = (uint16_t)clampi(order->done + count, 0, UINT16_MAX);
@@ -1160,25 +1166,25 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
     return true;
 }
 
-float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, int x, int y)
+float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, int x, int y, int z)
 {
-    if (!in_bounds(zones, x, y)) {
+    if (!in_bounds(zones, x, y, z)) {
         return 0.0f;
     }
-    size_t index = index_of(zones, x, y);
-    float needed = gather_job_work_needed(map, x, y, (GatherJob)zones->job[index]);
+    size_t index = index_of(zones, x, y, z);
+    float needed = gather_job_work_needed(map, x, y, z, (GatherJob)zones->job[index]);
     if (needed <= 0.0f) {
         return 0.0f;
     }
     return clampf(zones->progress[index] / needed, 0.0f, 1.0f);
 }
 
-float gather_clear_work(const Map *map, int x, int y)
+float gather_clear_work(const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return 0.0f;
     }
-    const Plant *plant = &map->plants[map_index(map, x, y)];
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
     if (plant_is_dormant(plant)) {
         return 0.0f; /* Nothing in the way: what is left in the ground goes with the work. */
     }
@@ -1199,19 +1205,19 @@ float gather_clear_work(const Map *map, int x, int y)
     return 0.0f;
 }
 
-ToolUse gather_clear_tool_use(const Map *map, int x, int y)
+ToolUse gather_clear_tool_use(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y) && map->plants[map_index(map, x, y)].type == PLANT_GRASS
+    return map_in_bounds(map, x, y, z) && map->plants[map_index(map, x, y, z)].type == PLANT_GRASS
                ? TOOL_USE_CUT_GRASS
                : TOOL_USE_NONE;
 }
 
-void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng *rng)
+void gather_clear_plant(Map *map, Items *items, int x, int y, int z, double level, Rng *rng)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return;
     }
-    Plant *plant = &map->plants[map_index(map, x, y)];
+    Plant *plant = &map->plants[map_index(map, x, y, z)];
     GatherJob jobs[4];
     int job_count = 0;
     if (plant->type == PLANT_GRASS && plant->growth > 0.0f) {
@@ -1225,9 +1231,9 @@ void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng 
     }
     for (int i = 0; i < job_count; i++) {
         int count;
-        ItemType item = complete(map, x, y, jobs[i], 0, rng, &count);
+        ItemType item = complete(map, x, y, z, jobs[i], 0, rng, &count);
         if (item != ITEM_NONE && count > 0 && items != NULL) {
-            items_drop(items, map, x, y, knowledge_product(item, count, level, rng));
+            items_drop(items, map, x, y, z, knowledge_product(item, count, level, rng));
         }
     }
     memset(plant, 0, sizeof(*plant));
@@ -1235,7 +1241,7 @@ void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng 
 
 uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)
 {
-    size_t count = (size_t)zones->width * (size_t)zones->height;
+    size_t count = (size_t)zones->width * (size_t)zones->height * (size_t)zones->depth;
     hash = hash_fnv1a64(hash, zones->zone, count * sizeof(*zones->zone));
     hash = hash_fnv1a64(hash, zones->job, count * sizeof(*zones->job));
     hash = hash_fnv1a64(hash, zones->progress, count * sizeof(*zones->progress));

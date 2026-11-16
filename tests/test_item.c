@@ -39,8 +39,8 @@ static void test_stack_limits_follow_bulk(void)
 
     /* A tile really takes 1000 berries. */
     Items items;
-    REQUIRE(items_init(&items, 2, 2));
-    CHECK_EQ_INT(items_add(&items, 0, 0, item_stack_pristine(ITEM_BLACKBERRIES, 1200)), 1000);
+    REQUIRE(items_init(&items, 2, 2, 1));
+    CHECK_EQ_INT(items_add(&items, 0, 0, 0, item_stack_pristine(ITEM_BLACKBERRIES, 1200)), 1000);
     items_free(&items);
 }
 
@@ -67,11 +67,11 @@ static void test_categories(void)
 static void test_additions_counter(void)
 {
     Items items;
-    REQUIRE(items_init(&items, 4, 4));
+    REQUIRE(items_init(&items, 4, 4, 1));
     CHECK_EQ_UINT(items.additions, 0);
-    items_add(&items, 1, 1, item_stack_pristine(ITEM_WOOD, 5));
+    items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_WOOD, 5));
     CHECK_EQ_UINT(items.additions, 1);
-    items_remove(&items, 1, 1, 5);
+    items_remove(&items, 1, 1, 0, 5);
     CHECK_EQ_UINT(items.additions, 1); /* Removals do not count. */
     items_free(&items);
 }
@@ -79,31 +79,31 @@ static void test_additions_counter(void)
 static void test_add_and_remove(void)
 {
     Items items;
-    CHECK(!items_init(&items, 0, 4));
-    REQUIRE(items_init(&items, 8, 8));
+    CHECK(!items_init(&items, 0, 4, 1));
+    REQUIRE(items_init(&items, 8, 8, 1));
     int limit = item_stack_limit(ITEM_WOOD);
 
-    CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_WOOD, 10)), 10);
+    CHECK_EQ_INT(items_add(&items, 2, 3, 0, item_stack_pristine(ITEM_WOOD, 10)), 10);
     /* Up to the limit. */
-    CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_WOOD, limit)), limit - 10);
-    CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_WOOD, 1)), 0);
+    CHECK_EQ_INT(items_add(&items, 2, 3, 0, item_stack_pristine(ITEM_WOOD, limit)), limit - 10);
+    CHECK_EQ_INT(items_add(&items, 2, 3, 0, item_stack_pristine(ITEM_WOOD, 1)), 0);
     /* One type per tile. */
-    CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_STONE_BLOCK, 1)), 0);
-    CHECK_EQ_INT(items_add(&items, -1, 3, item_stack_pristine(ITEM_WOOD, 1)), 0);
-    CHECK_EQ_INT(items_add(&items, 4, 4, item_stack_pristine(ITEM_NONE, 1)), 0);
-    CHECK_EQ_INT(items_add(&items, 4, 4, item_stack_pristine(ITEM_STONE_BLOCK, 0)), 0);
-    ItemStack stack = items_get(&items, 2, 3);
+    CHECK_EQ_INT(items_add(&items, 2, 3, 0, item_stack_pristine(ITEM_STONE_BLOCK, 1)), 0);
+    CHECK_EQ_INT(items_add(&items, -1, 3, 0, item_stack_pristine(ITEM_WOOD, 1)), 0);
+    CHECK_EQ_INT(items_add(&items, 4, 4, 0, item_stack_pristine(ITEM_NONE, 1)), 0);
+    CHECK_EQ_INT(items_add(&items, 4, 4, 0, item_stack_pristine(ITEM_STONE_BLOCK, 0)), 0);
+    ItemStack stack = items_get(&items, 2, 3, 0);
     CHECK_EQ_INT(stack.type, ITEM_WOOD);
     CHECK_EQ_INT(stack.count, limit);
-    CHECK_EQ_INT(items_get(&items, 99, 0).type, ITEM_NONE);
+    CHECK_EQ_INT(items_get(&items, 99, 0, 0).type, ITEM_NONE);
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD], limit);
 
-    CHECK_EQ_INT(items_remove(&items, 2, 3, 5), 5);
-    CHECK_EQ_INT(items_remove(&items, 2, 3, 1000), limit - 5);
-    CHECK_EQ_INT(items_get(&items, 2, 3).type, ITEM_NONE); /* Empty tiles forget their type. */
-    CHECK_EQ_INT(items_remove(&items, 2, 3, 1), 0);
+    CHECK_EQ_INT(items_remove(&items, 2, 3, 0, 5), 5);
+    CHECK_EQ_INT(items_remove(&items, 2, 3, 0, 1000), limit - 5);
+    CHECK_EQ_INT(items_get(&items, 2, 3, 0).type, ITEM_NONE); /* Empty tiles forget their type. */
+    CHECK_EQ_INT(items_remove(&items, 2, 3, 0, 1), 0);
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD], 0);
-    CHECK_EQ_INT(items_add(&items, 2, 3, item_stack_pristine(ITEM_STONE_BLOCK, 3)), 3);
+    CHECK_EQ_INT(items_add(&items, 2, 3, 0, item_stack_pristine(ITEM_STONE_BLOCK, 3)), 3);
     items_free(&items);
 }
 
@@ -111,30 +111,31 @@ static void test_drop_spreads_to_reachable_tiles(void)
 {
     Map map;
     Items items;
-    REQUIRE(map_init(&map, 16, 16));
-    REQUIRE(items_init(&items, 16, 16));
+    REQUIRE(map_init(&map, 16, 16, 1));
+    REQUIRE(items_init(&items, 16, 16, 1));
     int limit = item_stack_limit(ITEM_STONE_BLOCK);
 
     /* A wall right of x = 8: nothing may land behind it. */
     for (int y = 0; y < 16; y++) {
-        map.rock[map_index(&map, 9, y)] = ROCK_GRANITE;
+        map.rock[map_index(&map, 9, y, 0)] = ROCK_GRANITE;
     }
-    items_add(&items, 8, 8, item_stack_pristine(ITEM_WOOD, 1)); /* Occupied by another type. */
-    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, item_stack_pristine(ITEM_STONE_BLOCK, limit * 3)),
-                 limit * 3);
-    CHECK_EQ_INT(items_get(&items, 8, 8).type, ITEM_WOOD);
+    items_add(&items, 8, 8, 0, item_stack_pristine(ITEM_WOOD, 1)); /* Occupied by another type. */
+    CHECK_EQ_INT(
+        items_drop(&items, &map, 8, 8, 0, item_stack_pristine(ITEM_STONE_BLOCK, limit * 3)),
+        limit * 3);
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).type, ITEM_WOOD);
     for (int y = 0; y < 16; y++) {
         for (int x = 9; x < 16; x++) {
-            CHECK_EQ_INT(items_get(&items, x, y).count, 0);
+            CHECK_EQ_INT(items_get(&items, x, y, 0).count, 0);
         }
     }
     /* The nearest tiles are filled first. */
-    CHECK_EQ_INT(items_get(&items, 8, 7).count, limit);
-    CHECK_EQ_INT(items_get(&items, 7, 8).count, limit);
+    CHECK_EQ_INT(items_get(&items, 8, 7, 0).count, limit);
+    CHECK_EQ_INT(items_get(&items, 7, 8, 0).count, limit);
     CHECK_EQ_INT((int)items.totals[ITEM_STONE_BLOCK], limit * 3);
 
     /* Inside the wall. */
-    CHECK_EQ_INT(items_drop(&items, &map, 9, 8, item_stack_pristine(ITEM_STONE_BLOCK, 5)), 0);
+    CHECK_EQ_INT(items_drop(&items, &map, 9, 8, 0, item_stack_pristine(ITEM_STONE_BLOCK, 5)), 0);
     items_free(&items);
     map_free(&map);
 }
@@ -143,15 +144,16 @@ static void test_drop_without_room_loses_the_rest(void)
 {
     Map map;
     Items items;
-    REQUIRE(map_init(&map, 16, 16));
-    REQUIRE(items_init(&items, 16, 16));
+    REQUIRE(map_init(&map, 16, 16, 1));
+    REQUIRE(items_init(&items, 16, 16, 1));
     /* A single open tile enclosed in rock. */
     for (size_t i = 0; i < map_tile_count(&map); i++) {
         map.rock[i] = ROCK_GRANITE;
     }
-    map.rock[map_index(&map, 5, 5)] = ROCK_NONE;
+    map.rock[map_index(&map, 5, 5, 0)] = ROCK_NONE;
     int limit = item_stack_limit(ITEM_WOOD);
-    CHECK_EQ_INT(items_drop(&items, &map, 5, 5, item_stack_pristine(ITEM_WOOD, limit + 7)), limit);
+    CHECK_EQ_INT(items_drop(&items, &map, 5, 5, 0, item_stack_pristine(ITEM_WOOD, limit + 7)),
+                 limit);
     items_free(&items);
     map_free(&map);
 }
@@ -228,44 +230,45 @@ static void test_hit_points_percent(void)
 static void test_only_same_grade_stacks(void)
 {
     Items items;
-    REQUIRE(items_init(&items, 4, 4));
-    CHECK_EQ_INT(items_add(&items, 1, 1, item_stack_make(ITEM_WOOD, 30, ITEM_QUALITY_FINE, 30)),
+    REQUIRE(items_init(&items, 4, 4, 1));
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 30, ITEM_QUALITY_FINE, 30)),
                  30);
     /* Another grade does not fit on the tile. */
-    CHECK_EQ_INT(items_add(&items, 1, 1, item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_ROUGH, 30)),
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_ROUGH, 30)),
                  0);
     /* The same grade merges; hit points are averaged by count. */
-    CHECK_EQ_INT(items_add(&items, 1, 1, item_stack_make(ITEM_WOOD, 10, ITEM_QUALITY_FINE, 60)),
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 10, ITEM_QUALITY_FINE, 60)),
                  10);
-    ItemStack stack = items_get(&items, 1, 1);
+    ItemStack stack = items_get(&items, 1, 1, 0);
     CHECK_EQ_INT(stack.count, 40);
     CHECK_EQ_INT(stack.quality, ITEM_QUALITY_FINE);
     CHECK_EQ_INT(stack.hit_points, 38); /* (30 × 30 + 10 × 60) / 40 = 37.5, rounded */
 
     /* Only what fits is merged, and only that counts in the average. */
     int room = item_stack_limit(ITEM_WOOD) - 40;
-    CHECK_EQ_INT(items_add(&items, 1, 1, item_stack_make(ITEM_WOOD, 100, ITEM_QUALITY_FINE, 1)),
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 100, ITEM_QUALITY_FINE, 1)),
                  room);
-    CHECK_EQ_INT(items_get(&items, 1, 1).hit_points, (40 * 38 + room * 1 + 25) / 50);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, (40 * 38 + room * 1 + 25) / 50);
 
     /* Removed items leave the rest unchanged; an emptied tile forgets it all. */
-    ItemStack before = items_get(&items, 1, 1);
-    items_remove(&items, 1, 1, 5);
-    CHECK_EQ_INT(items_get(&items, 1, 1).quality, before.quality);
-    CHECK_EQ_INT(items_get(&items, 1, 1).hit_points, before.hit_points);
-    items_remove(&items, 1, 1, 1000);
-    ItemStack empty = items_get(&items, 1, 1);
+    ItemStack before = items_get(&items, 1, 1, 0);
+    items_remove(&items, 1, 1, 0, 5);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).quality, before.quality);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, before.hit_points);
+    items_remove(&items, 1, 1, 0, 1000);
+    ItemStack empty = items_get(&items, 1, 1, 0);
     CHECK_EQ_INT(empty.quality, 0);
     CHECK_EQ_INT(empty.hit_points, 0);
-    CHECK_EQ_INT(items_add(&items, 1, 1, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_CRUDE, 9)), 1);
-    CHECK_EQ_INT(items_get(&items, 1, 1).quality, ITEM_QUALITY_CRUDE);
-    CHECK_EQ_INT(items_get(&items, 1, 1).hit_points, 9);
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_CRUDE, 9)),
+                 1);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).quality, ITEM_QUALITY_CRUDE);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, 9);
 
     /* A hand-built stack is made valid when added. */
     ItemStack bogus = {.type = ITEM_STONE_BLOCK, .quality = 0, .count = 2, .hit_points = 1};
-    CHECK_EQ_INT(items_add(&items, 2, 2, bogus), 2);
-    CHECK_EQ_INT(items_get(&items, 2, 2).quality, ITEM_QUALITY_BEST);
-    CHECK_EQ_INT(items_get(&items, 2, 2).hit_points, item_def(ITEM_STONE_BLOCK)->max_hit_points);
+    CHECK_EQ_INT(items_add(&items, 2, 2, 0, bogus), 2);
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).quality, ITEM_QUALITY_BEST);
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).hit_points, item_def(ITEM_STONE_BLOCK)->max_hit_points);
     items_free(&items);
 }
 
@@ -295,7 +298,7 @@ static void test_stack_merge(void)
 static void test_merged_hit_points_stay_between(void)
 {
     Items items;
-    REQUIRE(items_init(&items, 4, 4));
+    REQUIRE(items_init(&items, 4, 4, 1));
     Rng rng;
     rng_seed(&rng, 99, 0);
     for (int i = 0; i < 500; i++) {
@@ -303,10 +306,10 @@ static void test_merged_hit_points_stay_between(void)
                                       rng_range_i32(&rng, 1, 10));
         ItemStack b = item_stack_make(ITEM_BLACKBERRIES, rng_range_i32(&rng, 1, 400), 2,
                                       rng_range_i32(&rng, 1, 10));
-        items_remove(&items, 0, 0, 1000);
-        items_add(&items, 0, 0, a);
-        items_add(&items, 0, 0, b);
-        ItemStack merged = items_get(&items, 0, 0);
+        items_remove(&items, 0, 0, 0, 1000);
+        items_add(&items, 0, 0, 0, a);
+        items_add(&items, 0, 0, 0, b);
+        ItemStack merged = items_get(&items, 0, 0, 0);
         int lo = a.hit_points < b.hit_points ? a.hit_points : b.hit_points;
         int hi = a.hit_points < b.hit_points ? b.hit_points : a.hit_points;
         CHECK(merged.hit_points >= lo && merged.hit_points <= hi);
@@ -318,14 +321,14 @@ static void test_drop_skips_other_grades(void)
 {
     Map map;
     Items items;
-    REQUIRE(map_init(&map, 16, 16));
-    REQUIRE(items_init(&items, 16, 16));
-    items_add(&items, 8, 8, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_SUPERB, 60));
+    REQUIRE(map_init(&map, 16, 16, 1));
+    REQUIRE(items_init(&items, 16, 16, 1));
+    items_add(&items, 8, 8, 0, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_SUPERB, 60));
     ItemStack crude = item_stack_make(ITEM_WOOD, 4, ITEM_QUALITY_CRUDE, 60);
-    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, crude), 4);
-    CHECK_EQ_INT(items_get(&items, 8, 8).count, 1);
-    CHECK_EQ_INT(items_get(&items, 8, 7).count, 4); /* Next tile. */
-    CHECK_EQ_INT(items_get(&items, 8, 7).quality, ITEM_QUALITY_CRUDE);
+    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, crude), 4);
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).count, 1);
+    CHECK_EQ_INT(items_get(&items, 8, 7, 0).count, 4); /* Next tile. */
+    CHECK_EQ_INT(items_get(&items, 8, 7, 0).quality, ITEM_QUALITY_CRUDE);
     items_free(&items);
     map_free(&map);
 }
@@ -334,16 +337,16 @@ static void test_drop_keeps_condition(void)
 {
     Map map;
     Items items;
-    REQUIRE(map_init(&map, 16, 16));
-    REQUIRE(items_init(&items, 16, 16));
+    REQUIRE(map_init(&map, 16, 16, 1));
+    REQUIRE(items_init(&items, 16, 16, 1));
     int limit = item_stack_limit(ITEM_WOOD);
     ItemStack fine = item_stack_make(ITEM_WOOD, limit + 5, ITEM_QUALITY_FINE, 21);
-    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, fine), limit + 5);
-    CHECK_EQ_INT(items_get(&items, 8, 8).quality, ITEM_QUALITY_FINE);
-    CHECK_EQ_INT(items_get(&items, 8, 8).hit_points, 21);
-    CHECK_EQ_INT(items_get(&items, 8, 7).count, 5); /* The rest, same condition. */
-    CHECK_EQ_INT(items_get(&items, 8, 7).quality, ITEM_QUALITY_FINE);
-    CHECK_EQ_INT(items_get(&items, 8, 7).hit_points, 21);
+    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, fine), limit + 5);
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).hit_points, 21);
+    CHECK_EQ_INT(items_get(&items, 8, 7, 0).count, 5); /* The rest, same condition. */
+    CHECK_EQ_INT(items_get(&items, 8, 7, 0).quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(items_get(&items, 8, 7, 0).hit_points, 21);
     items_free(&items);
     map_free(&map);
 }
@@ -419,24 +422,24 @@ static ItemConditions rained_on(const void *context, size_t tile)
 static void test_grass_does_not_dry_in_the_rain(void)
 {
     Items items;
-    REQUIRE(items_init(&items, 4, 4));
-    REQUIRE(items_add(&items, 1, 1, item_stack_pristine(ITEM_FRESH_GRASS, 3)) == 3);
+    REQUIRE(items_init(&items, 4, 4, 1));
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_FRESH_GRASS, 3)) == 3);
     int hours = item_def(ITEM_FRESH_GRASS)->transform_hours;
     CHECK_EQ_INT(items_advance(&items, 0, 16, hours, rained_on, NULL), 0);
-    CHECK_EQ_INT(items_get(&items, 1, 1).type, ITEM_FRESH_GRASS);
-    CHECK_EQ_INT(items_get(&items, 1, 1).progress, 0);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_FRESH_GRASS);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).progress, 0);
     CHECK_EQ_INT(items_advance(&items, 0, 16, hours, NULL, NULL), 1);
-    CHECK_EQ_INT(items_get(&items, 1, 1).type, ITEM_GRASS);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_GRASS);
     items_free(&items);
 }
 
 static void test_food_rots_away(void)
 {
     Items items;
-    REQUIRE(items_init(&items, 4, 4));
-    REQUIRE(items_add(&items, 1, 1, item_stack_pristine(ITEM_MUSHROOMS, 5)) == 5);
-    REQUIRE(items_add(&items, 2, 1, item_stack_pristine(ITEM_HAZELNUTS, 5)) == 5);
-    REQUIRE(items_add(&items, 3, 1, item_stack_pristine(ITEM_WOOD, 5)) == 5);
+    REQUIRE(items_init(&items, 4, 4, 1));
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_MUSHROOMS, 5)) == 5);
+    REQUIRE(items_add(&items, 2, 1, 0, item_stack_pristine(ITEM_HAZELNUTS, 5)) == 5);
+    REQUIRE(items_add(&items, 3, 1, 0, item_stack_pristine(ITEM_WOOD, 5)) == 5);
     int hours = (int)(item_def(ITEM_MUSHROOMS)->rot_days * 24.0f);
     int max = item_def(ITEM_MUSHROOMS)->max_hit_points;
     size_t tiles = 16;
@@ -445,17 +448,17 @@ static void test_food_rots_away(void)
     for (int hour = 0; hour < hours / 2; hour++) {
         CHECK_EQ_INT(items_advance(&items, 0, tiles, 1, NULL, NULL), 0);
     }
-    ItemStack half = items_get(&items, 1, 1);
+    ItemStack half = items_get(&items, 1, 1, 0);
     CHECK_EQ_INT(half.count, 5);
     int left = half.hit_points * ITEM_ROT_STEP - half.progress;
     CHECK(abs(left - max * ITEM_ROT_STEP / 2) <= hours); /* Rounding, at most 1 an hour. */
-    CHECK(items_get(&items, 2, 1).hit_points < item_def(ITEM_HAZELNUTS)->max_hit_points);
+    CHECK(items_get(&items, 2, 1, 0).hit_points < item_def(ITEM_HAZELNUTS)->max_hit_points);
 
     /* Frozen: nothing changes. */
     float frozen = 0.0f;
     CHECK_EQ_INT(items_advance(&items, 0, tiles, 24, fixed_rate, &frozen), 0);
-    CHECK_EQ_INT(items_get(&items, 1, 1).hit_points, half.hit_points);
-    CHECK_EQ_INT(items_get(&items, 1, 1).progress, half.progress);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, half.hit_points);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).progress, half.progress);
 
     /* The rest of the way: gone, the totals with them. */
     int rotted = 0;
@@ -463,63 +466,63 @@ static void test_food_rots_away(void)
         rotted += items_advance(&items, 0, tiles, 1, NULL, NULL);
     }
     CHECK_EQ_INT(rotted, 1);
-    CHECK_EQ_INT(items_get(&items, 1, 1).type, ITEM_NONE);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_NONE);
     CHECK_EQ_INT((int)items.totals[ITEM_MUSHROOMS], 0);
     /* Nuts keep, wood does not rot. */
-    CHECK_EQ_INT(items_get(&items, 2, 1).count, 5);
-    CHECK_EQ_INT(items_get(&items, 3, 1).hit_points, item_def(ITEM_WOOD)->max_hit_points);
+    CHECK_EQ_INT(items_get(&items, 2, 1, 0).count, 5);
+    CHECK_EQ_INT(items_get(&items, 3, 1, 0).hit_points, item_def(ITEM_WOOD)->max_hit_points);
 
     /* Twice as fast when warmer. */
-    REQUIRE(items_add(&items, 0, 0, item_stack_pristine(ITEM_NETTLES, 2)) == 2);
+    REQUIRE(items_add(&items, 0, 0, 0, item_stack_pristine(ITEM_NETTLES, 2)) == 2);
     float warm = 2.0f;
     int nettle_hours = (int)(item_def(ITEM_NETTLES)->rot_days * 24.0f);
     for (int hour = 0; hour < nettle_hours / 2 - 1; hour++) {
         items_advance(&items, 0, 1, 1, fixed_rate, &warm);
     }
-    CHECK_EQ_INT(items_get(&items, 0, 0).type, ITEM_NETTLES);
+    CHECK_EQ_INT(items_get(&items, 0, 0, 0).type, ITEM_NETTLES);
     items_advance(&items, 0, 1, 2, fixed_rate, &warm);
-    CHECK_EQ_INT(items_get(&items, 0, 0).type, ITEM_NONE);
+    CHECK_EQ_INT(items_get(&items, 0, 0, 0).type, ITEM_NONE);
     items_free(&items);
 }
 
 static void test_rot_progress_merges(void)
 {
     Items items;
-    REQUIRE(items_init(&items, 4, 4));
+    REQUIRE(items_init(&items, 4, 4, 1));
     ItemStack old = item_stack_make(ITEM_BLACKBERRIES, 2, ITEM_QUALITY_STANDARD, 4);
     old.progress = 600;
-    REQUIRE(items_add(&items, 1, 1, old) == 2);
-    CHECK_EQ_INT(items_get(&items, 1, 1).progress, 600);
+    REQUIRE(items_add(&items, 1, 1, 0, old) == 2);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).progress, 600);
     ItemStack fresh = item_stack_make(ITEM_BLACKBERRIES, 2, ITEM_QUALITY_STANDARD, 4);
-    REQUIRE(items_add(&items, 1, 1, fresh) == 2);
-    CHECK_EQ_INT(items_get(&items, 1, 1).progress, 300);
+    REQUIRE(items_add(&items, 1, 1, 0, fresh) == 2);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).progress, 300);
     /* Out of range: clamped below one hit point. */
     ItemStack odd = item_stack_make(ITEM_HAZELNUTS, 1, ITEM_QUALITY_STANDARD, 50);
     odd.progress = 5000;
-    REQUIRE(items_add(&items, 2, 2, odd) == 1);
-    CHECK(items_get(&items, 2, 2).progress < ITEM_ROT_STEP);
+    REQUIRE(items_add(&items, 2, 2, 0, odd) == 1);
+    CHECK(items_get(&items, 2, 2, 0).progress < ITEM_ROT_STEP);
     items_free(&items);
 }
 
 static void test_hash(void)
 {
     Items a, b;
-    REQUIRE(items_init(&a, 8, 8));
-    REQUIRE(items_init(&b, 8, 8));
+    REQUIRE(items_init(&a, 8, 8, 1));
+    REQUIRE(items_init(&b, 8, 8, 1));
     CHECK_EQ_UINT(items_hash(&a, HASH_FNV1A64_INIT), items_hash(&b, HASH_FNV1A64_INIT));
-    items_add(&a, 1, 1, item_stack_pristine(ITEM_WOOD, 2));
+    items_add(&a, 1, 1, 0, item_stack_pristine(ITEM_WOOD, 2));
     CHECK(items_hash(&a, HASH_FNV1A64_INIT) != items_hash(&b, HASH_FNV1A64_INIT));
-    items_add(&b, 1, 1, item_stack_pristine(ITEM_WOOD, 3));
+    items_add(&b, 1, 1, 0, item_stack_pristine(ITEM_WOOD, 3));
     CHECK(items_hash(&a, HASH_FNV1A64_INIT) != items_hash(&b, HASH_FNV1A64_INIT));
 
     /* Same items in another condition. */
-    items_remove(&b, 1, 1, 1);
+    items_remove(&b, 1, 1, 0, 1);
     CHECK_EQ_UINT(items_hash(&a, HASH_FNV1A64_INIT), items_hash(&b, HASH_FNV1A64_INIT));
-    items_remove(&b, 1, 1, 2);
-    items_add(&b, 1, 1, item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60));
+    items_remove(&b, 1, 1, 0, 2);
+    items_add(&b, 1, 1, 0, item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60));
     CHECK(items_hash(&a, HASH_FNV1A64_INIT) != items_hash(&b, HASH_FNV1A64_INIT));
-    items_remove(&b, 1, 1, 2);
-    items_add(&b, 1, 1, item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_BEST, 59));
+    items_remove(&b, 1, 1, 0, 2);
+    items_add(&b, 1, 1, 0, item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_BEST, 59));
     CHECK(items_hash(&a, HASH_FNV1A64_INIT) != items_hash(&b, HASH_FNV1A64_INIT));
     items_free(&a);
     items_free(&b);

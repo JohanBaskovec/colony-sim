@@ -6,13 +6,13 @@
 
 static TilePos tile(int x, int y)
 {
-    return (TilePos){(int16_t)x, (int16_t)y};
+    return (TilePos){(int16_t)x, (int16_t)y, 0};
 }
 
 /* Map of plain soil: every tile costs 1. */
 static bool make_open_map(Map *map, Pathfinder *finder, int size)
 {
-    return map_init(map, size, size) && pathfinder_init(finder, size, size);
+    return map_init(map, size, size, 1) && pathfinder_init(finder, size, size, 1);
 }
 
 static void cleanup(Map *map, Pathfinder *finder, Path *path)
@@ -25,7 +25,7 @@ static void cleanup(Map *map, Pathfinder *finder, Path *path)
 static void wall_column(Map *map, int x, int y0, int y1)
 {
     for (int y = y0; y <= y1; y++) {
-        map->rock[map_index(map, x, y)] = ROCK_GRANITE;
+        map->rock[map_index(map, x, y, 0)] = ROCK_GRANITE;
     }
 }
 
@@ -37,7 +37,7 @@ static void check_path_is_valid(const Map *map, TilePos start, TilePos goal, con
         TilePos step = path->steps[i];
         CHECK(abs(step.x - previous.x) <= 1 && abs(step.y - previous.y) <= 1);
         CHECK(!(step.x == previous.x && step.y == previous.y));
-        CHECK(map_is_passable(map, step.x, step.y));
+        CHECK(map_is_passable(map, step.x, step.y, step.z));
         previous = step;
     }
     CHECK(previous.x == goal.x && previous.y == goal.y);
@@ -118,7 +118,7 @@ static void test_no_corner_cutting(void)
     Path path = {0};
     REQUIRE(make_open_map(&map, &finder, 16));
     /* Rock at (5,4): going from (4,4) to (5,5) diagonally would cut its corner. */
-    map.rock[map_index(&map, 5, 4)] = ROCK_GRANITE;
+    map.rock[map_index(&map, 5, 4, 0)] = ROCK_GRANITE;
     REQUIRE(pathfinder_find(&finder, &map, tile(4, 4), tile(5, 5), PATH_NO_COST_LIMIT, &path));
     CHECK_EQ_INT(path.count, 2);
     CHECK_NEAR(finder.last_cost, 2.0, 1e-4);
@@ -134,7 +134,7 @@ static void test_prefers_cheaper_terrain(void)
     /* A band of shallow water (cost 3) across the straight line, with a dry detour. */
     for (int y = 0; y < 8; y++) {
         for (int x = 10; x < 13; x++) {
-            map.terrain[map_index(&map, x, y)] = TERRAIN_SHALLOW_WATER;
+            map.terrain[map_index(&map, x, y, 0)] = TERRAIN_SHALLOW_WATER;
         }
     }
     REQUIRE(pathfinder_find(&finder, &map, tile(5, 5), tile(18, 5), PATH_NO_COST_LIMIT, &path));
@@ -142,7 +142,7 @@ static void test_prefers_cheaper_terrain(void)
     CHECK(finder.last_cost < straight_cost);
     for (int i = 0; i < path.count; i++) {
         TilePos step = path.steps[i];
-        CHECK(map.terrain[map_index(&map, step.x, step.y)] != TERRAIN_SHALLOW_WATER);
+        CHECK(map.terrain[map_index(&map, step.x, step.y, step.z)] != TERRAIN_SHALLOW_WATER);
     }
     cleanup(&map, &finder, &path);
 }
@@ -158,10 +158,10 @@ static void test_cost_limit(void)
     cleanup(&map, &finder, &path);
 }
 
-static bool has_tree(const Map *map, int x, int y, void *userdata)
+static bool has_tree(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)userdata;
-    return map->plants[map_index(map, x, y)].type == PLANT_TREE;
+    return map->plants[map_index(map, x, y, z)].type == PLANT_TREE;
 }
 
 static void test_find_nearest_matching_tile(void)
@@ -171,8 +171,8 @@ static void test_find_nearest_matching_tile(void)
     Path path = {0};
     TilePos found;
     REQUIRE(make_open_map(&map, &finder, 32));
-    map.plants[map_index(&map, 20, 10)].type = PLANT_TREE;
-    map.plants[map_index(&map, 13, 10)].type = PLANT_TREE;
+    map.plants[map_index(&map, 20, 10, 0)].type = PLANT_TREE;
+    map.plants[map_index(&map, 13, 10, 0)].type = PLANT_TREE;
 
     REQUIRE(pathfinder_find_nearest(&finder, &map, tile(10, 10), has_tree, NULL,
                                     PATH_NO_COST_LIMIT, &path, &found));
@@ -205,6 +205,42 @@ static void test_reachable_count(void)
     cleanup(&map, &finder, &path);
 }
 
+/* Searches stay on the level they start from (nothing links the levels yet). */
+static void test_searches_stay_on_their_level(void)
+{
+    Map map;
+    Pathfinder finder;
+    Path path = {0};
+    TilePos found;
+    REQUIRE(map_init(&map, 16, 16, 3));
+    REQUIRE(pathfinder_init(&finder, 16, 16, 3));
+    TilePos start = {2, 2, 1}, goal = {12, 9, 1};
+    /* A wall on level 1 only: the path goes around it. */
+    for (int y = 0; y < 14; y++) {
+        map.rock[map_index(&map, 7, y, 1)] = ROCK_GRANITE;
+    }
+    REQUIRE(pathfinder_find(&finder, &map, start, goal, PATH_NO_COST_LIMIT, &path));
+    check_path_is_valid(&map, start, goal, &path);
+    for (int i = 0; i < path.count; i++) {
+        CHECK_EQ_INT(path.steps[i].z, 1);
+    }
+    CHECK(finder.last_cost > 10.0f + 7.0f * (float)(SQRT2 - 1.0)); /* The detour. */
+    /* No path to another level. */
+    CHECK(!pathfinder_find(&finder, &map, start, (TilePos){12, 9, 2}, PATH_NO_COST_LIMIT,
+                           &path));
+    /* The nearest tree on the start's level, not the one just below. */
+    map.plants[map_index(&map, 3, 2, 0)].type = PLANT_TREE;
+    map.plants[map_index(&map, 2, 6, 1)].type = PLANT_TREE;
+    REQUIRE(pathfinder_find_nearest(&finder, &map, start, has_tree, NULL, PATH_NO_COST_LIMIT,
+                                    &path, &found));
+    CHECK(found.x == 2 && found.y == 6 && found.z == 1);
+    /* One level: 256 tiles reachable, not 768. */
+    CHECK_EQ_UINT(pathfinder_reachable_count(&finder, &map, (TilePos){0, 0, 2},
+                                             PATH_NO_COST_LIMIT),
+                  256);
+    cleanup(&map, &finder, &path);
+}
+
 static void test_many_searches_reuse_memory(void)
 {
     Map map;
@@ -230,6 +266,7 @@ int main(void)
     RUN_TEST(test_cost_limit);
     RUN_TEST(test_find_nearest_matching_tile);
     RUN_TEST(test_reachable_count);
+    RUN_TEST(test_searches_stay_on_their_level);
     RUN_TEST(test_many_searches_reuse_memory);
     return test_summary();
 }

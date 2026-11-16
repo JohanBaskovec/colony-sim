@@ -105,7 +105,7 @@ typedef struct Bill {
 typedef struct Workstation {
     bool used;
     uint8_t type; /* WorkstationType */
-    int16_t x, y;
+    int16_t x, y, z;
     int number; /* Unique, never reused: tells a station from a later one in the same slot. */
     Bill bills[WORKSTATION_BILL_MAX];
     int bill_count;
@@ -132,6 +132,7 @@ typedef struct Workstation {
 typedef struct Workstations {
     int width;
     int height;
+    int depth;
     uint8_t *at; /* Workstation index + 1 per tile, 0 when none. */
     Workstation list[WORKSTATION_MAX];
     int used_count;
@@ -144,11 +145,11 @@ typedef struct Workstations {
 /* NULL when out of range. */
 const WorkstationDef *workstation_def(WorkstationType type);
 
-bool workstations_init(Workstations *workstations, int width, int height);
+bool workstations_init(Workstations *workstations, int width, int height, int depth);
 void workstations_free(Workstations *workstations);
 
 /* Index of the station on a tile, or WORKSTATION_NONE. */
-int workstation_at(const Workstations *workstations, int x, int y);
+int workstation_at(const Workstations *workstations, int x, int y, int z);
 
 /* NULL for an unused or invalid index. */
 Workstation *workstation_get(Workstations *workstations, int index);
@@ -156,7 +157,7 @@ const Workstation *workstation_get_const(const Workstations *workstations, int i
 
 /* Whether a station may be placed here: passable, buildable ground, no tree
  * (grass and bushes are cleared by the builder first), no station yet. */
-bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y);
+bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y, int z);
 
 /* Whether a station of this type is built on a construction site (it needs
  * materials or work), rather than placed ready. */
@@ -166,7 +167,7 @@ bool workstation_needs_construction(WorkstationType type);
  * Returns its index, or WORKSTATION_NONE when the tile does not qualify or
  * the list is full. */
 int workstations_place(Workstations *workstations, const Map *map, WorkstationType type, int x,
-                       int y);
+                       int y, int z);
 
 /*
  * Removes a station. The input of a craft in progress (unless free) is given back in

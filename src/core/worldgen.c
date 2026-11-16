@@ -69,14 +69,14 @@ static int flint_chance(Terrain terrain, float noise)
 }
 
 /* Stones of a stony tile, each one flint with `chance` percent. */
-static void place_stones(Map *map, int x, int y, Rng *rng, int chance)
+static void place_stones(Map *map, int x, int y, int z, Rng *rng, int chance)
 {
     int stones = rng_range_i32(rng, 0, MAP_STONES_MAX);
     int flint = 0;
     for (int i = 0; i < stones && chance > 0; i++) {
         flint += rng_range_i32(rng, 0, 99) < chance;
     }
-    map_set_stones(map, x, y, stones - flint, flint);
+    map_set_stones(map, x, y, z, stones - flint, flint);
 }
 
 static Terrain pick_terrain(const WorldGenParams *params, float elevation, float moisture)
@@ -153,11 +153,11 @@ static void place_plant(Map *map, size_t index, Rng *rng, const WorldGenParams *
 }
 
 /* Whether a tile is water, or next to it (8 neighbors). */
-static bool by_water(const Map *map, int x, int y)
+static bool by_water(const Map *map, int x, int y, int z)
 {
     for (int dy = -1; dy <= 1; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
-            if (map_is_water(map, x + dx, y + dy)) {
+            if (map_is_water(map, x + dx, y + dy, z)) {
                 return true;
             }
         }
@@ -171,12 +171,13 @@ static void place_cattails(Map *map, Rng *rng)
 {
     for (int y = 0; y < map->height; y++) {
         for (int x = 0; x < map->width; x++) {
-            size_t index = map_index(map, x, y);
+            int z = map_ground_level(map, x, y);
+            size_t index = map_index(map, x, y, z);
             Terrain terrain = (Terrain)map->terrain[index];
             Plant *plant = &map->plants[index];
             if (terrain == TERRAIN_DEEP_WATER || map->rock[index] != ROCK_NONE ||
                 (plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
-                !by_water(map, x, y)) {
+                !by_water(map, x, y, z)) {
                 continue;
             }
             bool shallows = terrain == TERRAIN_SHALLOW_WATER;
@@ -185,7 +186,7 @@ static void place_cattails(Map *map, Rng *rng)
                 for (int d = 0; d < 4 && !shore; d++) {
                     static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
                     int nx = x + DX[d], ny = y + DY[d];
-                    shore = map_in_bounds(map, nx, ny) && !map_is_water(map, nx, ny);
+                    shore = map_in_bounds(map, nx, ny, z) && !map_is_water(map, nx, ny, z);
                 }
                 if (!shore) {
                     continue;
@@ -203,7 +204,7 @@ static void place_cattails(Map *map, Rng *rng)
 
 bool worldgen_generate(Map *map, const WorldGenParams *params)
 {
-    if (!map_init(map, params->width, params->height)) {
+    if (!map_init(map, params->width, params->height, 1)) { /* One level for now. */
         return false;
     }
 
@@ -227,13 +228,14 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
             float moisture =
                 stretch(noise_fbm2d(moisture_seed, nx * 1.3f, ny * 1.3f, 4, 2.0f, 0.5f));
 
-            size_t index = map_index(map, x, y);
+            int z = map_ground_level(map, x, y);
+            size_t index = map_index(map, x, y, z);
             Terrain terrain = pick_terrain(params, elevation, moisture);
             map->terrain[index] = (uint8_t)terrain;
             if (terrain_def(terrain)->stony) {
                 float flint =
                     stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
-                place_stones(map, x, y, &stone_rng, flint_chance(terrain, flint));
+                place_stones(map, x, y, z, &stone_rng, flint_chance(terrain, flint));
             }
 
             if (terrain == TERRAIN_ROUGH_STONE) {

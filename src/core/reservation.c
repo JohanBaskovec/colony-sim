@@ -12,7 +12,8 @@ void reservations_init(Reservations *reservations)
 static uint32_t slot_of(ReservationKind kind, TilePos tile)
 {
     uint32_t hash = (uint32_t)(uint16_t)tile.x * 73856093u ^
-                    (uint32_t)(uint16_t)tile.y * 19349663u ^ ((uint32_t)kind + 1u) * 83492791u;
+                    (uint32_t)(uint16_t)tile.y * 19349663u ^
+                    (uint32_t)(uint16_t)tile.z * 25165843u ^ ((uint32_t)kind + 1u) * 83492791u;
     hash ^= hash >> 15;
     return hash & (RESERVATION_INDEX_SIZE - 1);
 }
@@ -26,7 +27,8 @@ static int find(const Reservations *reservations, ReservationKind kind, TilePos 
          slot = (slot + 1) & (RESERVATION_INDEX_SIZE - 1)) {
         int i = reservations->index[slot] - 1;
         const Reservation *entry = &reservations->entries[i];
-        if (entry->kind == kind && entry->tile.x == tile.x && entry->tile.y == tile.y) {
+        if (entry->kind == kind && entry->tile.x == tile.x && entry->tile.y == tile.y &&
+            entry->tile.z == tile.z) {
             return i;
         }
     }
@@ -118,6 +120,9 @@ uint64_t reservations_hash(const Reservations *reservations, uint64_t hash)
         const Reservation *entry = &reservations->entries[i];
         int32_t fields[4] = {entry->kind, entry->owner, entry->tile.x, entry->tile.y};
         hash = hash_fnv1a64(hash, fields, sizeof(fields));
+        if (entry->tile.z != 0) { /* Hashes of one-level games stay as they were. */
+            hash = hash_fnv1a64(hash, &entry->tile.z, sizeof(entry->tile.z));
+        }
     }
     return hash;
 }

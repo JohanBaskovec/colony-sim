@@ -9,12 +9,12 @@
 /* 16 x 16 soil map with a granite wall at (5, 5) and water at (6, 6). */
 static bool init_world(Map *map, Workstations *stations, Items *items)
 {
-    if (!map_init(map, 16, 16) || !workstations_init(stations, 16, 16) ||
-        !items_init(items, 16, 16)) {
+    if (!map_init(map, 16, 16, 1) || !workstations_init(stations, 16, 16, 1) ||
+        !items_init(items, 16, 16, 1)) {
         return false;
     }
-    map->rock[map_index(map, 5, 5)] = ROCK_GRANITE;
-    map->terrain[map_index(map, 6, 6)] = TERRAIN_DEEP_WATER;
+    map->rock[map_index(map, 5, 5, 0)] = ROCK_GRANITE;
+    map->terrain[map_index(map, 6, 6, 0)] = TERRAIN_DEEP_WATER;
     return true;
 }
 
@@ -62,20 +62,20 @@ static void test_placing_and_removing(void)
     Workstations stations;
     Items items;
     REQUIRE(init_world(&map, &stations, &items));
-    CHECK(!workstation_can_place(&stations, &map, 5, 5)); /* Rock. */
-    CHECK(!workstation_can_place(&stations, &map, 6, 6)); /* Water. */
-    CHECK(!workstation_can_place(&stations, &map, -1, 0));
+    CHECK(!workstation_can_place(&stations, &map, 5, 5, 0)); /* Rock. */
+    CHECK(!workstation_can_place(&stations, &map, 6, 6, 0)); /* Water. */
+    CHECK(!workstation_can_place(&stations, &map, -1, 0, 0));
     /* Not on a tree (grass and shrubs are cleared on the construction site). */
-    map.plants[map_index(&map, 8, 8)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
-    map.plants[map_index(&map, 9, 8)] = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
-    CHECK(!workstation_can_place(&stations, &map, 8, 8));
-    CHECK(workstation_can_place(&stations, &map, 9, 8));
-    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4);
+    map.plants[map_index(&map, 8, 8, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    map.plants[map_index(&map, 9, 8, 0)] = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
+    CHECK(!workstation_can_place(&stations, &map, 8, 8, 0));
+    CHECK(workstation_can_place(&stations, &map, 9, 8, 0));
+    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
     REQUIRE(index != WORKSTATION_NONE);
-    CHECK_EQ_INT(workstation_at(&stations, 3, 4), index);
-    CHECK_EQ_INT(workstation_at(&stations, 4, 4), WORKSTATION_NONE);
-    CHECK(!workstation_can_place(&stations, &map, 3, 4)); /* Taken. */
-    CHECK_EQ_INT(workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4),
+    CHECK_EQ_INT(workstation_at(&stations, 3, 4, 0), index);
+    CHECK_EQ_INT(workstation_at(&stations, 4, 4, 0), WORKSTATION_NONE);
+    CHECK(!workstation_can_place(&stations, &map, 3, 4, 0)); /* Taken. */
+    CHECK_EQ_INT(workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0),
                  WORKSTATION_NONE);
     const Workstation *station = workstation_get_const(&stations, index);
     REQUIRE(station != NULL);
@@ -86,12 +86,12 @@ static void test_placing_and_removing(void)
     int number = station->number;
     CHECK_EQ_INT(workstations_remove(&stations, index, returned), 0);
     CHECK(workstation_get(&stations, index) == NULL);
-    CHECK_EQ_INT(workstation_at(&stations, 3, 4), WORKSTATION_NONE);
+    CHECK_EQ_INT(workstation_at(&stations, 3, 4, 0), WORKSTATION_NONE);
     CHECK_EQ_INT(stations.used_count, 0);
     CHECK_EQ_INT(workstations_remove(&stations, index, returned), 0);
 
     /* A new station never reuses a number. */
-    index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4);
+    index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
     REQUIRE(index != WORKSTATION_NONE);
     CHECK(workstation_get_const(&stations, index)->number > number);
     free_world(&map, &stations, &items);
@@ -103,8 +103,8 @@ static void test_bills(void)
     Workstations stations;
     Items items;
     REQUIRE(init_world(&map, &stations, &items));
-    int knapping = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4);
-    int crafting = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 8, 8);
+    int knapping = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
+    int crafting = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 8, 8, 0);
     /* Recipes go to their own stations. */
     CHECK_EQ_INT(workstation_add_bill(&stations, crafting, RECIPE_FLAKES), -1);
     CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_THROWING_SPEAR), -1);
@@ -199,7 +199,7 @@ static void test_crafting(void)
     Workstations stations;
     Items items;
     REQUIRE(init_world(&map, &stations, &items));
-    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4);
+    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
     int bill = workstation_add_bill(&stations, index, RECIPE_FLAKES);
     ItemStack flint = item_stack_make(ITEM_FLINT, 1, ITEM_QUALITY_FINE, 0);
 
@@ -213,7 +213,7 @@ static void test_crafting(void)
                                       NULL));
     CHECK(workstation_add_craft_work(&stations, index, bill, &items, &map, needed * 0.5f, 55.0,
                                      NULL));
-    ItemStack flakes = items_get(&items, 3, 4);
+    ItemStack flakes = items_get(&items, 3, 4, 0);
     CHECK_EQ_INT(flakes.type, ITEM_FLAKE);
     CHECK_EQ_INT(flakes.count, 3);
     const Workstation *station = workstation_get_const(&stations, index);
@@ -238,7 +238,7 @@ static void test_hash(void)
     Items items;
     REQUIRE(init_world(&map, &stations, &items));
     uint64_t empty = workstations_hash(&stations, HASH_FNV1A64_INIT);
-    int index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4);
+    int index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
     uint64_t placed = workstations_hash(&stations, HASH_FNV1A64_INIT);
     CHECK(placed != empty);
     workstation_add_bill(&stations, index, RECIPE_THROWING_SPEAR);

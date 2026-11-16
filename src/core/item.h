@@ -142,6 +142,7 @@ typedef struct ItemStack {
 typedef struct Items {
     int width;
     int height;
+    int depth;
     ItemStack *stacks;
     long totals[ITEM_TYPE_COUNT]; /* Items of each type on the whole map. */
     uint32_t additions; /* Incremented whenever items are added (haulers look again). */
@@ -210,20 +211,20 @@ int item_hit_points_at_percent(ItemType type, int percent);
  * (100 only when undamaged); 0 for an empty stack. */
 int item_stack_hit_points_percent(ItemStack stack);
 
-bool items_init(Items *items, int width, int height);
+bool items_init(Items *items, int width, int height, int depth);
 void items_free(Items *items);
 
 /* Empty stack when out of bounds. */
-ItemStack items_get(const Items *items, int x, int y);
+ItemStack items_get(const Items *items, int x, int y, int z);
 
 /* Adds items to a tile that is empty or holds a matching stack (same type and
  * grade), up to the stack limit; the tile's stack takes the average hit
  * points. Returns the number actually added. */
-int items_add(Items *items, int x, int y, ItemStack batch);
+int items_add(Items *items, int x, int y, int z, ItemStack batch);
 
 /* Removes up to `count` items from a tile (they have the grade and hit points
  * of the stack). Returns the number removed. */
-int items_remove(Items *items, int x, int y, int count);
+int items_remove(Items *items, int x, int y, int z, int count);
 
 /*
  * Puts items on (x, y) and, when it is full or holds something else (another
@@ -232,7 +233,7 @@ int items_remove(Items *items, int x, int y, int count);
  * within ITEM_DROP_RADIUS). Returns the number placed: items that find no
  * room are lost.
  */
-int items_drop(Items *items, const struct Map *map, int x, int y, ItemStack batch);
+int items_drop(Items *items, const struct Map *map, int x, int y, int z, ItemStack batch);
 
 /* What items lying on a tile go through: the speed of rot (item_rot_rate()),
  * and whether what dries can dry (not out in the rain). */

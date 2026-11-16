@@ -3,13 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-bool regions_init(Regions *regions, int width, int height)
+bool regions_init(Regions *regions, int width, int height, int depth)
 {
     memset(regions, 0, sizeof(*regions));
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
-    size_t count = (size_t)width * (size_t)height;
+    size_t count = (size_t)width * (size_t)height * (size_t)depth;
     regions->id = calloc(count, sizeof(*regions->id));
     regions->stack = malloc(count * sizeof(*regions->stack));
     /* At most one region per tile, plus REGION_NONE. */
@@ -20,6 +20,7 @@ bool regions_init(Regions *regions, int width, int height)
     }
     regions->width = width;
     regions->height = height;
+    regions->depth = depth;
     return true;
 }
 
@@ -34,7 +35,8 @@ void regions_free(Regions *regions)
 bool regions_current(const Regions *regions, const Map *map)
 {
     return regions->built && regions->map_revision == map->topology_revision &&
-           regions->width == map->width && regions->height == map->height;
+           regions->width == map->width && regions->height == map->height &&
+           regions->depth == map->depth;
 }
 
 /*
@@ -53,8 +55,9 @@ static void fill(Regions *regions, const Map *map, uint32_t start, uint32_t regi
     while (top > 0) {
         uint32_t tile = regions->stack[--top];
         uint32_t x = tile % width;
-        uint32_t y = tile / width;
-        if (map_is_drinking_spot(map, (int)x, (int)y)) {
+        uint32_t y = tile % (width * height) / width; /* Neighbors: on the same level. */
+        uint32_t z = tile / (width * height);
+        if (map_is_drinking_spot(map, (int)x, (int)y, (int)z)) {
             regions->drinkable[region] = 1;
         }
         uint32_t neighbors[4];
@@ -86,9 +89,9 @@ static void fill(Regions *regions, const Map *map, uint32_t start, uint32_t regi
  * neighbors, or starts a new one if it has none. Returns false when it joins
  * several regions together: the caller has to rebuild.
  */
-static bool open_tile(Regions *regions, const Map *map, int x, int y)
+static bool open_tile(Regions *regions, const Map *map, int x, int y, int z)
 {
-    size_t tile = map_index(map, x, y);
+    size_t tile = map_index(map, x, y, z);
     if (map_move_cost_at(map, tile) <= 0.0f) {
         return false; /* Not what the log says: start over. */
     }
@@ -97,10 +100,10 @@ static bool open_tile(Regions *regions, const Map *map, int x, int y)
     uint32_t region = REGION_NONE;
     for (int i = 0; i < 4; i++) {
         int nx = x + DX[i], ny = y + DY[i];
-        if (!map_in_bounds(map, nx, ny)) {
+        if (!map_in_bounds(map, nx, ny, z)) {
             continue;
         }
-        uint32_t neighbor = regions->id[map_index(map, nx, ny)];
+        uint32_t neighbor = regions->id[map_index(map, nx, ny, z)];
         if (neighbor == REGION_NONE) {
             continue;
         }
@@ -114,7 +117,7 @@ static bool open_tile(Regions *regions, const Map *map, int x, int y)
         regions->drinkable[region] = 0;
     }
     regions->id[tile] = region;
-    if (map_is_drinking_spot(map, x, y)) {
+    if (map_is_drinking_spot(map, x, y, z)) {
         regions->drinkable[region] = 1;
     }
     return true;
@@ -131,8 +134,8 @@ static bool update_incrementally(Regions *regions, const Map *map)
     for (uint32_t i = 1; i <= pending; i++) {
         uint32_t revision = regions->map_revision + i;
         const MapTopologyChange *change = &map->topology_log[revision % MAP_TOPOLOGY_LOG_SIZE];
-        if (!change->opened || !map_in_bounds(map, change->x, change->y) ||
-            !open_tile(regions, map, change->x, change->y)) {
+        if (!change->opened || !map_in_bounds(map, change->x, change->y, change->z) ||
+            !open_tile(regions, map, change->x, change->y, change->z)) {
             return false;
         }
     }
@@ -143,7 +146,7 @@ static bool update_incrementally(Regions *regions, const Map *map)
 void regions_update(Regions *regions, const Map *map)
 {
     if (regions_current(regions, map) || regions->id == NULL || regions->width != map->width ||
-        regions->height != map->height) {
+        regions->height != map->height || regions->depth != map->depth) {
         return;
     }
     if (update_incrementally(regions, map)) {
@@ -163,18 +166,18 @@ void regions_update(Regions *regions, const Map *map)
     regions->built = true;
 }
 
-uint32_t regions_at(const Regions *regions, const Map *map, int x, int y)
+uint32_t regions_at(const Regions *regions, const Map *map, int x, int y, int z)
 {
-    if (!regions_current(regions, map) || !map_in_bounds(map, x, y)) {
+    if (!regions_current(regions, map) || !map_in_bounds(map, x, y, z)) {
         return REGION_NONE;
     }
-    return regions->id[map_index(map, x, y)];
+    return regions->id[map_index(map, x, y, z)];
 }
 
 bool regions_connected(const Regions *regions, const Map *map, TilePos a, TilePos b)
 {
-    uint32_t region_a = regions_at(regions, map, a.x, a.y);
-    uint32_t region_b = regions_at(regions, map, b.x, b.y);
+    uint32_t region_a = regions_at(regions, map, a.x, a.y, a.z);
+    uint32_t region_b = regions_at(regions, map, b.x, b.y, b.z);
     return region_a == REGION_NONE || region_b == REGION_NONE || region_a == region_b;
 }
 

@@ -20,31 +20,31 @@ typedef struct StorageLevels {
 #define ALL_GRADES ((uint8_t)((1u << ITEM_QUALITY_COUNT) - 1u))
 _Static_assert(ITEM_QUALITY_COUNT <= 8, "grade masks are bytes");
 
-int haul_storage_room(const Items *items, int x, int y, ItemStack stack)
+int haul_storage_room(const Items *items, int x, int y, int z, ItemStack stack)
 {
     int limit = item_stack_limit((ItemType)stack.type);
     if (limit == 0) {
         return 0;
     }
-    ItemStack there = items_get(items, x, y);
+    ItemStack there = items_get(items, x, y, z);
     if (there.type != ITEM_NONE && !item_stacks_match(there, stack)) {
         return 0;
     }
     return limit - (int)there.count;
 }
 
-int haul_destination_room(const Stockpiles *stockpiles, const Items *items, int x, int y,
+int haul_destination_room(const Stockpiles *stockpiles, const Items *items, int x, int y, int z,
                           ItemStack stack)
 {
-    const Stockpile *stockpile = stockpile_get(stockpiles, stockpile_at(stockpiles, x, y));
+    const Stockpile *stockpile = stockpile_get(stockpiles, stockpile_at(stockpiles, x, y, z));
     if (!stockpile_accepts(stockpile, stack)) {
         return 0;
     }
-    ItemStack there = items_get(items, x, y);
+    ItemStack there = items_get(items, x, y, z);
     if (there.type != ITEM_NONE && !stockpile_accepts(stockpile, there)) {
         return 0;
     }
-    return haul_storage_room(items, x, y, stack);
+    return haul_storage_room(items, x, y, z, stack);
 }
 
 static void storage_levels(const HaulWorld *world, StorageLevels *out)
@@ -65,24 +65,26 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
             grades[type] = 0;
         }
         bool any_room = false, empty_tile = false;
-        for (int y = stockpile->min_y; y <= stockpile->max_y && !empty_tile; y++) {
-            for (int x = stockpile->min_x; x <= stockpile->max_x; x++) {
-                if (stockpile_at(stockpiles, x, y) != index ||
-                    (any_reserved &&
-                     reservations_taken_by_other(world->reservations, RESERVATION_STORAGE,
-                                                 (TilePos){(int16_t)x, (int16_t)y},
-                                                 world->self))) {
-                    continue; /* Other zone, or someone is already bringing items there. */
-                }
-                ItemStack stack = items_get(world->items, x, y);
-                if (stack.type == ITEM_NONE) {
-                    empty_tile = true; /* Takes anything allowed: no need to look further. */
-                    break;
-                }
-                if (stockpile_accepts(stockpile, stack) &&
-                    (int)stack.count < item_stack_limit((ItemType)stack.type)) {
-                    grades[stack.type] |= (uint8_t)(1u << stack.quality);
-                    any_room = true;
+        for (int z = stockpile->min_z; z <= stockpile->max_z && !empty_tile; z++) {
+            for (int y = stockpile->min_y; y <= stockpile->max_y && !empty_tile; y++) {
+                for (int x = stockpile->min_x; x <= stockpile->max_x; x++) {
+                    if (stockpile_at(stockpiles, x, y, z) != index ||
+                        (any_reserved &&
+                         reservations_taken_by_other(world->reservations, RESERVATION_STORAGE,
+                                                     (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                                     world->self))) {
+                        continue; /* Other zone, or someone is already bringing items there. */
+                    }
+                    ItemStack stack = items_get(world->items, x, y, z);
+                    if (stack.type == ITEM_NONE) {
+                        empty_tile = true; /* Takes anything allowed: no need to look further. */
+                        break;
+                    }
+                    if (stockpile_accepts(stockpile, stack) &&
+                        (int)stack.count < item_stack_limit((ItemType)stack.type)) {
+                        grades[stack.type] |= (uint8_t)(1u << stack.quality);
+                        any_room = true;
+                    }
                 }
             }
         }
@@ -138,7 +140,7 @@ typedef struct SourceSearch {
     const StorageLevels *storage;
 } SourceSearch;
 
-static bool is_haul_source(const Map *map, int x, int y, void *userdata);
+static bool is_haul_source(const Map *map, int x, int y, int z, void *userdata);
 
 bool haul_any_job_possible(const HaulWorld *world)
 {
@@ -161,19 +163,23 @@ bool haul_any_job_possible(const HaulWorld *world)
         regions = world->regions->id;
     }
     SourceSearch search = {world, &storage};
+    const int z = world->from_z;
+    if (z < 0 || z >= map->depth) {
+        return false;
+    }
     /* From the hauler's row outwards: a stack nearby is found at once. */
     for (int step = 0; step < 2 * map->height; step++) {
         int y = row_outwards(world->from_y, step, map->height);
         if (y < 0) {
             continue;
         }
-        const ItemStack *row = &world->items->stacks[(size_t)y * (size_t)map->width];
+        const ItemStack *row = &world->items->stacks[map_index(map, 0, y, z)];
         for (int x = 0; x < map->width; x++) {
             if (row[x].type == ITEM_NONE || storage.levels[row[x].type] == 0 ||
-                (regions != NULL && regions[map_index(map, x, y)] != world->region)) {
+                (regions != NULL && regions[map_index(map, x, y, z)] != world->region)) {
                 continue;
             }
-            if (is_haul_source(map, x, y, &search)) {
+            if (is_haul_source(map, x, y, z, &search)) {
                 return true;
             }
         }
@@ -181,19 +187,19 @@ bool haul_any_job_possible(const HaulWorld *world)
     return false;
 }
 
-static bool is_haul_source(const Map *map, int x, int y, void *userdata)
+static bool is_haul_source(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const SourceSearch *search = userdata;
     const HaulWorld *world = search->world;
-    ItemStack stack = items_get(world->items, x, y);
+    ItemStack stack = items_get(world->items, x, y, z);
     if (stack.type == ITEM_NONE || search->storage->levels[stack.type] == 0) {
         return false;
     }
-    int current = stockpile_storage_priority(world->stockpiles, x, y, stack);
+    int current = stockpile_storage_priority(world->stockpiles, x, y, z, stack);
     return has_better_level(levels_for(world, search->storage, stack), current) &&
            !reservations_taken_by_other(world->reservations, RESERVATION_HAUL_SOURCE,
-                                        (TilePos){(int16_t)x, (int16_t)y}, world->self);
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z}, world->self);
 }
 
 typedef struct DestinationSearch {
@@ -202,16 +208,16 @@ typedef struct DestinationSearch {
     int priority;
 } DestinationSearch;
 
-static bool is_destination(const Map *map, int x, int y, void *userdata)
+static bool is_destination(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const DestinationSearch *search = userdata;
     const HaulWorld *world = search->world;
-    return stockpile_storage_priority(world->stockpiles, x, y, search->stack) ==
+    return stockpile_storage_priority(world->stockpiles, x, y, z, search->stack) ==
                search->priority &&
-           haul_destination_room(world->stockpiles, world->items, x, y, search->stack) > 0 &&
+           haul_destination_room(world->stockpiles, world->items, x, y, z, search->stack) > 0 &&
            !reservations_taken_by_other(world->reservations, RESERVATION_STORAGE,
-                                        (TilePos){(int16_t)x, (int16_t)y}, world->self);
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z}, world->self);
 }
 
 bool haul_find_destination(const HaulWorld *world, TilePos from, ItemStack stack,
@@ -248,14 +254,15 @@ bool haul_find_job(const HaulWorld *world, TilePos from, float max_cost, HaulJob
                                  max_cost, NULL, &source)) {
         return false;
     }
-    ItemStack stack = items_get(world->items, source.x, source.y);
-    int current = stockpile_storage_priority(world->stockpiles, source.x, source.y, stack);
+    ItemStack stack = items_get(world->items, source.x, source.y, source.z);
+    int current =
+        stockpile_storage_priority(world->stockpiles, source.x, source.y, source.z, stack);
     TilePos destination;
     if (!haul_find_destination(world, source, stack, current, max_cost, &destination, NULL)) {
         return false;
     }
-    int room =
-        haul_destination_room(world->stockpiles, world->items, destination.x, destination.y, stack);
+    int room = haul_destination_room(world->stockpiles, world->items, destination.x, destination.y,
+                                     destination.z, stack);
     job->source = source;
     job->destination = destination;
     job->type = (ItemType)stack.type;
@@ -270,17 +277,17 @@ typedef struct ExtraSearch {
     const StorageLevels *storage;
 } ExtraSearch;
 
-static bool is_extra_source(const Map *map, int x, int y, void *userdata)
+static bool is_extra_source(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const ExtraSearch *search = userdata;
     const HaulWorld *world = search->world;
-    ItemStack stack = items_get(world->items, x, y);
+    ItemStack stack = items_get(world->items, x, y, z);
     if (stack.type == ITEM_NONE || !item_stacks_match(stack, search->load) ||
         !stockpile_accepts(search->zone, stack)) {
         return false;
     }
-    int current = stockpile_storage_priority(world->stockpiles, x, y, stack);
+    int current = stockpile_storage_priority(world->stockpiles, x, y, z, stack);
     if (current != 0 && current <= search->zone->priority) {
         return false; /* Already stored as well (the destination itself included). */
     }
@@ -288,7 +295,7 @@ static bool is_extra_source(const Map *map, int x, int y, void *userdata)
         return false; /* A better stockpile wants it: it goes there, on its own trip. */
     }
     return !reservations_taken_by_other(world->reservations, RESERVATION_HAUL_SOURCE,
-                                        (TilePos){(int16_t)x, (int16_t)y}, world->self);
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z}, world->self);
 }
 
 bool haul_find_extra_source(const HaulWorld *world, TilePos from, ItemStack load,
@@ -296,7 +303,7 @@ bool haul_find_extra_source(const HaulWorld *world, TilePos from, ItemStack load
 {
     const Stockpile *zone =
         stockpile_get(world->stockpiles, stockpile_at(world->stockpiles, destination.x,
-                                                      destination.y));
+                                                      destination.y, destination.z));
     if (zone == NULL || load.type == ITEM_NONE) {
         return false;
     }

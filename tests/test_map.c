@@ -8,15 +8,15 @@
 static void test_init_rejects_invalid_sizes(void)
 {
     Map map;
-    CHECK(!map_init(&map, MAP_MIN_SIZE - 1, 32));
-    CHECK(!map_init(&map, 32, MAP_MAX_SIZE + 1));
+    CHECK(!map_init(&map, MAP_MIN_SIZE - 1, 32, 1));
+    CHECK(!map_init(&map, 32, MAP_MAX_SIZE + 1, 1));
     CHECK(map.terrain == NULL && map.width == 0);
 }
 
 static void test_init_fills_with_soil(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 32, 20));
+    REQUIRE(map_init(&map, 32, 20, 1));
     CHECK_EQ_INT(map.width, 32);
     CHECK_EQ_INT(map.height, 20);
     CHECK_EQ_UINT(map_tile_count(&map), 640);
@@ -32,46 +32,99 @@ static void test_init_fills_with_soil(void)
 static void test_bounds_and_index(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 20, 16));
-    CHECK(map_in_bounds(&map, 0, 0));
-    CHECK(map_in_bounds(&map, 19, 15));
-    CHECK(!map_in_bounds(&map, -1, 0));
-    CHECK(!map_in_bounds(&map, 20, 0));
-    CHECK(!map_in_bounds(&map, 0, 16));
-    CHECK_EQ_UINT(map_index(&map, 0, 0), 0);
-    CHECK_EQ_UINT(map_index(&map, 5, 2), 45);
+    REQUIRE(map_init(&map, 20, 16, 1));
+    CHECK(map_in_bounds(&map, 0, 0, 0));
+    CHECK(map_in_bounds(&map, 19, 15, 0));
+    CHECK(!map_in_bounds(&map, -1, 0, 0));
+    CHECK(!map_in_bounds(&map, 20, 0, 0));
+    CHECK(!map_in_bounds(&map, 0, 16, 0));
+    CHECK_EQ_UINT(map_index(&map, 0, 0, 0), 0);
+    CHECK_EQ_UINT(map_index(&map, 5, 2, 0), 45);
     map_free(&map);
+}
+
+/* A map of several levels: the layers hold them one after the other, and
+ * every map function looks at one level only. */
+static void test_levels(void)
+{
+    Map map;
+    CHECK(!map_init(&map, 16, 16, 0));
+    CHECK(!map_init(&map, 16, 16, MAP_MAX_LEVELS + 1));
+    REQUIRE(map_init(&map, 20, 16, 3));
+    CHECK_EQ_INT(map.depth, 3);
+    CHECK_EQ_UINT(map_level_tile_count(&map), 320);
+    CHECK_EQ_UINT(map_tile_count(&map), 960);
+    CHECK(map_in_bounds(&map, 19, 15, 2));
+    CHECK(!map_in_bounds(&map, 0, 0, 3));
+    CHECK(!map_in_bounds(&map, 0, 0, -1));
+    CHECK_EQ_UINT(map_index(&map, 5, 2, 0), 45);
+    CHECK_EQ_UINT(map_index(&map, 5, 2, 2), 2 * 320 + 45);
+    for (size_t i = 0; i < map_tile_count(&map); i += 37) {
+        int x, y, z;
+        map_tile_of(&map, i, &x, &y, &z);
+        CHECK_EQ_UINT(map_index(&map, x, y, z), i);
+    }
+    CHECK_EQ_INT(map_ground_level(&map, 4, 4), 0);
+
+    /* Levels do not touch: a wall on level 1 stays there. */
+    map_set_structure(&map, 4, 4, 1, STRUCTURE_WALL);
+    CHECK_EQ_INT(map_structure(&map, 4, 4, 1), STRUCTURE_WALL);
+    CHECK_EQ_INT(map_structure(&map, 4, 4, 0), STRUCTURE_NONE);
+    CHECK(!map_is_passable(&map, 4, 4, 1));
+    CHECK(map_is_passable(&map, 4, 4, 0));
+    CHECK(map_roof_supported(&map, 5, 4, 1));
+    CHECK(!map_roof_supported(&map, 5, 4, 0));
+    CHECK_EQ_INT(map.build_log[map.build_revision % MAP_BUILD_LOG_SIZE].z, 1);
+    map_set_rock(&map, 8, 8, 2, ROCK_GRANITE);
+    CHECK_EQ_INT(map.topology_log[map.topology_revision % MAP_TOPOLOGY_LOG_SIZE].z, 2);
+    map_set_roof(&map, 5, 4, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK(map_is_roofed(&map, 5, 4, 1));
+    CHECK(!map_is_roofed(&map, 5, 4, 0));
+    map_set_stones(&map, 2, 2, 2, 5, 1);
+    CHECK_EQ_INT(map_stones(&map, 2, 2, 2, ITEM_COBBLE), 5);
+    CHECK_EQ_INT(map_stones(&map, 2, 2, 0, ITEM_COBBLE), 0);
+    map_free(&map);
+
+    /* The number of levels is part of the hash (a one-level map hashes as
+     * before levels existed). */
+    Map a, b;
+    REQUIRE(map_init(&a, 16, 16, 1));
+    REQUIRE(map_init(&b, 16, 16, 2));
+    CHECK(map_hash(&a) != map_hash(&b));
+    map_free(&a);
+    map_free(&b);
 }
 
 static void test_passability_and_move_cost(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 16, 16));
+    REQUIRE(map_init(&map, 16, 16, 1));
 
-    CHECK(map_is_passable(&map, 1, 1));
-    CHECK_NEAR(map_move_cost(&map, 1, 1), 1.0, 1e-6);
-    CHECK(!map_is_passable(&map, -1, 0));
+    CHECK(map_is_passable(&map, 1, 1, 0));
+    CHECK_NEAR(map_move_cost(&map, 1, 1, 0), 1.0, 1e-6);
+    CHECK(!map_is_passable(&map, -1, 0, 0));
 
-    map.terrain[map_index(&map, 2, 2)] = TERRAIN_DEEP_WATER;
-    CHECK(!map_is_passable(&map, 2, 2));
+    map.terrain[map_index(&map, 2, 2, 0)] = TERRAIN_DEEP_WATER;
+    CHECK(!map_is_passable(&map, 2, 2, 0));
 
-    map.rock[map_index(&map, 3, 3)] = ROCK_GRANITE;
-    CHECK(!map_is_passable(&map, 3, 3));
+    map.rock[map_index(&map, 3, 3, 0)] = ROCK_GRANITE;
+    CHECK(!map_is_passable(&map, 3, 3, 0));
 
-    map.plants[map_index(&map, 4, 4)].type = PLANT_TREE;
-    CHECK_NEAR(map_move_cost(&map, 4, 4), plant_def(PLANT_TREE)->move_cost, 1e-6);
+    map.plants[map_index(&map, 4, 4, 0)].type = PLANT_TREE;
+    CHECK_NEAR(map_move_cost(&map, 4, 4, 0), plant_def(PLANT_TREE)->move_cost, 1e-6);
 
-    map.terrain[map_index(&map, 5, 5)] = TERRAIN_SHALLOW_WATER;
-    CHECK(map_move_cost(&map, 5, 5) > 1.0f);
-    CHECK_NEAR(map_move_cost_at(&map, map_index(&map, 4, 4)), map_move_cost(&map, 4, 4), 1e-6);
+    map.terrain[map_index(&map, 5, 5, 0)] = TERRAIN_SHALLOW_WATER;
+    CHECK(map_move_cost(&map, 5, 5, 0) > 1.0f);
+    CHECK_NEAR(map_move_cost_at(&map, map_index(&map, 4, 4, 0)), map_move_cost(&map, 4, 4, 0),
+               1e-6);
     map_free(&map);
 }
 
 static void test_hash_detects_changes(void)
 {
     Map a, b;
-    REQUIRE(map_init(&a, 24, 24));
-    REQUIRE(map_init(&b, 24, 24));
+    REQUIRE(map_init(&a, 24, 24, 1));
+    REQUIRE(map_init(&b, 24, 24, 1));
     CHECK_EQ_UINT(map_hash(&a), map_hash(&b));
 
     b.plants[10].type = PLANT_GRASS;
@@ -84,8 +137,8 @@ static void test_hash_detects_changes(void)
     map_free(&a);
     map_free(&b);
 
-    REQUIRE(map_init(&a, 16, 32));
-    REQUIRE(map_init(&b, 32, 16));
+    REQUIRE(map_init(&a, 16, 32, 1));
+    REQUIRE(map_init(&b, 32, 16, 1));
     CHECK(map_hash(&a) != map_hash(&b)); /* Same tile count, different shape. */
     map_free(&a);
     map_free(&b);
@@ -94,7 +147,7 @@ static void test_hash_detects_changes(void)
 static void test_count_plants(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 16, 16));
+    REQUIRE(map_init(&map, 16, 16, 1));
     map.plants[0].type = PLANT_TREE;
     map.plants[1].type = PLANT_TREE;
     map.plants[2].type = PLANT_BRAMBLE;
@@ -150,62 +203,62 @@ static void test_definitions_are_complete(void)
 static void test_edible_plants(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 16, 16));
-    Plant *bramble = &map.plants[map_index(&map, 3, 3)];
+    REQUIRE(map_init(&map, 16, 16, 1));
+    Plant *bramble = &map.plants[map_index(&map, 3, 3, 0)];
     *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
-    CHECK(!map_has_edible_plant(&map, 3, 3)); /* No fruit yet. */
+    CHECK(!map_has_edible_plant(&map, 3, 3, 0)); /* No fruit yet. */
     plant_settle(bramble, SEASON_DAY(SEASON_SUMMER, 10));
-    CHECK(map_has_edible_plant(&map, 3, 3));
+    CHECK(map_has_edible_plant(&map, 3, 3, 0));
     CHECK(plant_has_food(bramble));
     plant_take_stock(bramble, PLANT_STOCK_FOOD, 1000); /* Picked clean. */
-    CHECK(!map_has_edible_plant(&map, 3, 3));
+    CHECK(!map_has_edible_plant(&map, 3, 3, 0));
 
     /* Roots and what could be mistaken for a poisonous plant are not eaten
      * in place, even in season. */
-    Plant *carrot = &map.plants[map_index(&map, 6, 6)];
+    Plant *carrot = &map.plants[map_index(&map, 6, 6, 0)];
     *carrot = (Plant){.type = PLANT_WILD_CARROT, .growth = 1.0f};
     plant_settle(carrot, SEASON_DAY(SEASON_AUTUMN, 5));
     CHECK(plant_has_food(carrot));
-    CHECK(!map_has_edible_plant(&map, 6, 6));
-    Plant *mushrooms = &map.plants[map_index(&map, 7, 6)];
+    CHECK(!map_has_edible_plant(&map, 6, 6, 0));
+    Plant *mushrooms = &map.plants[map_index(&map, 7, 6, 0)];
     *mushrooms = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
     plant_settle(mushrooms, SEASON_DAY(SEASON_AUTUMN, 5));
     CHECK(plant_has_food(mushrooms));
-    CHECK(!map_has_edible_plant(&map, 7, 6));
+    CHECK(!map_has_edible_plant(&map, 7, 6, 0));
 
-    Plant *tree = &map.plants[map_index(&map, 4, 4)];
+    Plant *tree = &map.plants[map_index(&map, 4, 4, 0)];
     tree->type = PLANT_TREE;
     tree->growth = 1.0f;
-    CHECK(!map_has_edible_plant(&map, 4, 4));
-    CHECK(!map_has_edible_plant(&map, 5, 5));
-    CHECK(!map_has_edible_plant(&map, -1, 5));
+    CHECK(!map_has_edible_plant(&map, 4, 4, 0));
+    CHECK(!map_has_edible_plant(&map, 5, 5, 0));
+    CHECK(!map_has_edible_plant(&map, -1, 5, 0));
     map_free(&map);
 }
 
 static void test_water_and_drinking_spots(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 16, 16));
-    map.terrain[map_index(&map, 5, 5)] = TERRAIN_SHALLOW_WATER;
-    map.terrain[map_index(&map, 10, 10)] = TERRAIN_DEEP_WATER;
-    map.terrain[map_index(&map, 0, 0)] = TERRAIN_DEEP_WATER;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    map.terrain[map_index(&map, 5, 5, 0)] = TERRAIN_SHALLOW_WATER;
+    map.terrain[map_index(&map, 10, 10, 0)] = TERRAIN_DEEP_WATER;
+    map.terrain[map_index(&map, 0, 0, 0)] = TERRAIN_DEEP_WATER;
 
-    CHECK(map_is_water(&map, 5, 5));
-    CHECK(map_is_water(&map, 10, 10));
-    CHECK(!map_is_water(&map, 6, 5));
-    CHECK(!map_is_water(&map, -1, 5));
+    CHECK(map_is_water(&map, 5, 5, 0));
+    CHECK(map_is_water(&map, 10, 10, 0));
+    CHECK(!map_is_water(&map, 6, 5, 0));
+    CHECK(!map_is_water(&map, -1, 5, 0));
 
-    CHECK(map_is_drinking_spot(&map, 5, 5)); /* Standing in shallow water. */
-    CHECK(map_is_drinking_spot(&map, 6, 5)); /* Shore tiles, 4-neighborhood. */
-    CHECK(map_is_drinking_spot(&map, 5, 4));
-    CHECK(!map_is_drinking_spot(&map, 6, 6)); /* Diagonal only. */
-    CHECK(!map_is_drinking_spot(&map, 10, 10)); /* Deep water is not walkable. */
-    CHECK(map_is_drinking_spot(&map, 10, 11));
-    CHECK(map_is_drinking_spot(&map, 1, 0)); /* Map edge does not break the lookup. */
-    CHECK(!map_is_drinking_spot(&map, 3, 3));
+    CHECK(map_is_drinking_spot(&map, 5, 5, 0)); /* Standing in shallow water. */
+    CHECK(map_is_drinking_spot(&map, 6, 5, 0)); /* Shore tiles, 4-neighborhood. */
+    CHECK(map_is_drinking_spot(&map, 5, 4, 0));
+    CHECK(!map_is_drinking_spot(&map, 6, 6, 0)); /* Diagonal only. */
+    CHECK(!map_is_drinking_spot(&map, 10, 10, 0)); /* Deep water is not walkable. */
+    CHECK(map_is_drinking_spot(&map, 10, 11, 0));
+    CHECK(map_is_drinking_spot(&map, 1, 0, 0)); /* Map edge does not break the lookup. */
+    CHECK(!map_is_drinking_spot(&map, 3, 3, 0));
 
-    map.rock[map_index(&map, 11, 10)] = ROCK_GRANITE;
-    CHECK(!map_is_drinking_spot(&map, 11, 10)); /* Rock walls are not standable. */
+    map.rock[map_index(&map, 11, 10, 0)] = ROCK_GRANITE;
+    CHECK(!map_is_drinking_spot(&map, 11, 10, 0)); /* Rock walls are not standable. */
     map_free(&map);
 }
 
@@ -355,40 +408,40 @@ static void test_mushrooms_vanish(void)
 static void test_tree_near(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 16, 16));
-    map.plants[map_index(&map, 5, 5)] = (Plant){.type = PLANT_TREE, .growth = 0.9f};
-    CHECK(!map_tree_near(&map, 6, 6, 2)); /* Not mature yet. */
-    map.plants[map_index(&map, 5, 5)].growth = 1.0f;
-    CHECK(map_tree_near(&map, 6, 6, 2));
-    CHECK(map_tree_near(&map, 7, 3, 2));
-    CHECK(!map_tree_near(&map, 8, 5, 2));
-    CHECK(map_tree_near(&map, 5, 5, 0));
+    REQUIRE(map_init(&map, 16, 16, 1));
+    map.plants[map_index(&map, 5, 5, 0)] = (Plant){.type = PLANT_TREE, .growth = 0.9f};
+    CHECK(!map_tree_near(&map, 6, 6, 0, 2)); /* Not mature yet. */
+    map.plants[map_index(&map, 5, 5, 0)].growth = 1.0f;
+    CHECK(map_tree_near(&map, 6, 6, 0, 2));
+    CHECK(map_tree_near(&map, 7, 3, 0, 2));
+    CHECK(!map_tree_near(&map, 8, 5, 0, 2));
+    CHECK(map_tree_near(&map, 5, 5, 0, 0));
     map_free(&map);
 }
 
 static void test_change_logs(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 20, 16));
+    REQUIRE(map_init(&map, 20, 16, 1));
     /* Structures and roofs: the build log. */
     uint32_t build = map.build_revision;
-    map_set_structure(&map, 3, 4, STRUCTURE_WALL);
+    map_set_structure(&map, 3, 4, 0, STRUCTURE_WALL);
     CHECK_EQ_UINT(map.build_revision, build + 1);
     const MapBuildChange *change = &map.build_log[map.build_revision % MAP_BUILD_LOG_SIZE];
     CHECK_EQ_INT(change->x, 3);
     CHECK_EQ_INT(change->y, 4);
-    map_set_roof(&map, 7, 8, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(&map, 7, 8, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     change = &map.build_log[map.build_revision % MAP_BUILD_LOG_SIZE];
     CHECK_EQ_INT(change->x, 7);
     CHECK_EQ_INT(change->y, 8);
     /* Rock on a wall: nobody could walk there anyway, but it is a change. */
     uint32_t topology = map.topology_revision;
     build = map.build_revision;
-    map_set_rock(&map, 3, 4, ROCK_GRANITE);
+    map_set_rock(&map, 3, 4, 0, ROCK_GRANITE);
     CHECK_EQ_UINT(map.topology_revision, topology);
     CHECK_EQ_UINT(map.build_revision, build + 1);
     /* Rock on open ground: the topology log, on its tile. */
-    map_set_rock(&map, 10, 10, ROCK_GRANITE);
+    map_set_rock(&map, 10, 10, 0, ROCK_GRANITE);
     const MapTopologyChange *moved = &map.topology_log[map.topology_revision %
                                                        MAP_TOPOLOGY_LOG_SIZE];
     CHECK_EQ_INT(moved->x, 10);
@@ -406,6 +459,7 @@ int main(void)
     RUN_TEST(test_init_rejects_invalid_sizes);
     RUN_TEST(test_init_fills_with_soil);
     RUN_TEST(test_bounds_and_index);
+    RUN_TEST(test_levels);
     RUN_TEST(test_passability_and_move_cost);
     RUN_TEST(test_hash_detects_changes);
     RUN_TEST(test_count_plants);

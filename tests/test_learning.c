@@ -37,7 +37,7 @@ static bool init_flat_game(Game *game)
 /* Rested colonist at `level` in every knowledge, doing only `work`. */
 static EntityId spawn_settler(Game *game, int x, int y, double level, WorkType work)
 {
-    EntityId id = game_spawn_colonist(game, x, y);
+    EntityId id = game_spawn_colonist(game, x, y, 0);
     Colonist *colonist = game_colonist(game, id);
     if (colonist != NULL) {
         for (int need = 0; need < NEED_COUNT; need++) {
@@ -100,7 +100,7 @@ static void test_learning_helpers(void)
 static void test_gains_of_the_day_and_peak(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Test", 30, 0, 0);
+    colonist_init(&colonist, "Test", 30, 0, 0, 0);
     CHECK(colonist_set_knowledge_level(&colonist, KNOWLEDGE_FIRE, 40.0));
     CHECK_NEAR(colonist.knowledge_peak[KNOWLEDGE_FIRE], 40.0, 1e-9);
     uint64_t tick = 3 * TICKS_PER_DAY + 100;
@@ -142,7 +142,7 @@ static void test_gains_of_the_day_and_peak(void)
 static void test_unpractised_knowledge_fades(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Test", 30, 0, 0);
+    colonist_init(&colonist, "Test", 30, 0, 0, 0);
     colonist_set_knowledge_level(&colonist, KNOWLEDGE_BUTCHERING, 70.0);
     colonist_set_knowledge_level(&colonist, KNOWLEDGE_FIRE, 70.0);
     colonist_reset_practice(&colonist, 0);
@@ -175,7 +175,7 @@ static void test_conversation_topics(void)
     Rng rng;
     rng_seed(&rng, 7, 1);
     Colonist speaker;
-    colonist_init(&speaker, "Speaker", 30, 0, 0);
+    colonist_init(&speaker, "Speaker", 30, 0, 0, 0);
     CHECK_EQ_INT(conversation_pick_topic(&speaker, 0, &rng), KNOWLEDGE_NONE);
     speaker.knowledge[KNOWLEDGE_FIRE] = 0.5; /* Too little to talk about. */
     CHECK_EQ_INT(conversation_pick_topic(&speaker, 0, &rng), KNOWLEDGE_NONE);
@@ -207,8 +207,8 @@ static void test_chats_teach_a_little(void)
     Rng rng;
     rng_seed(&rng, 11, 2);
     Colonist a, b;
-    colonist_init(&a, "A", 30, 0, 0);
-    colonist_init(&b, "B", 30, 1, 0);
+    colonist_init(&a, "A", 30, 0, 0, 0);
+    colonist_init(&b, "B", 30, 1, 0, 0);
     EntityId a_id = {0, 1}, b_id = {1, 1};
     a.knowledge[KNOWLEDGE_FIRE] = 80.0;
     b.knowledge[KNOWLEDGE_GATHERING] = 12.0;
@@ -273,9 +273,9 @@ static void test_conversations_need_nearby_free_settlers(void)
 static int knapping_workshop(Game *game)
 {
     int station = workstations_place(&game->workstations, &game->map,
-                                     WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game->items, 18, 12, item_stack_make(ITEM_FLINT, 20, ITEM_QUALITY_FINE, 0));
-    items_add(&game->items, 18, 10, item_stack_make(ITEM_COBBLE, 6, ITEM_QUALITY_FINE, 0));
+                                     WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
+    items_add(&game->items, 18, 12, 0, item_stack_make(ITEM_FLINT, 20, ITEM_QUALITY_FINE, 0));
+    items_add(&game->items, 18, 10, 0, item_stack_make(ITEM_COBBLE, 6, ITEM_QUALITY_FINE, 0));
     int bill = workstation_add_bill(&game->workstations, station, RECIPE_HAND_AXE);
     workstation_set_bill_mode(&game->workstations, station, bill, BILL_FOREVER);
     return station;

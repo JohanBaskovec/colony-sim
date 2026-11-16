@@ -25,15 +25,16 @@
 typedef struct Beds {
     int width;
     int height;
+    int depth;
     uint8_t *owner; /* Per tile: owner of the bed whose head lies there, or BED_NO_OWNER. */
     TilePos owned[BED_OWNER_COUNT]; /* Per owner id: head of its bed, x = -1 when none. */
 } Beds;
 
-bool beds_init(Beds *beds, int width, int height);
+bool beds_init(Beds *beds, int width, int height, int depth);
 void beds_free(Beds *beds);
 
 /* Owner of the bed whose head is at (x, y), or BED_NO_OWNER. */
-uint8_t beds_owner(const Beds *beds, int x, int y);
+uint8_t beds_owner(const Beds *beds, int x, int y, int z);
 
 /* Head of the bed of an owner; false when it has none. */
 bool beds_owned(const Beds *beds, uint8_t owner, TilePos *bed);
@@ -41,13 +42,13 @@ bool beds_owned(const Beds *beds, uint8_t owner, TilePos *bed);
 /* Gives the bed whose head is at (x, y) to an owner: the bed it had is freed,
  * and the bed's former owner loses it. Fails for BED_NO_OWNER or out of
  * bounds. */
-bool beds_assign(Beds *beds, uint8_t owner, int x, int y);
+bool beds_assign(Beds *beds, uint8_t owner, int x, int y, int z);
 
 /* Frees the bed of an owner (the settler is gone), if any. */
 void beds_release_owner(Beds *beds, uint8_t owner);
 
 /* Frees the bed whose head is at (x, y), if owned. */
-void beds_release_bed(Beds *beds, int x, int y);
+void beds_release_bed(Beds *beds, int x, int y, int z);
 
 /* Frees the owned beds whose head no longer holds the head of a bed. Returns
  * how many. */

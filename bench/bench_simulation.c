@@ -71,16 +71,16 @@ int main(int argc, char **argv)
             int x = first->x, y = first->y;
             /* Stones forever: keeps some colonists busy to the end. */
             int stones = gather_zone_create(&game.gather_zones, &game.map, x - 14, y + 8, x - 10,
-                                            y + 12);
+                                            y + 12, 0);
             gather_forever(&game, stones, GATHER_COBBLES);
             gather_forever(&game, stones, GATHER_FLINT);
-            stockpile_create(&game.stockpiles, &game.map, x - 6, y - 6, x + 6, y + 6);
+            stockpile_create(&game.stockpiles, &game.map, x - 6, y - 6, x + 6, y + 6, 0);
             int better =
-                stockpile_create(&game.stockpiles, &game.map, x + 10, y - 4, x + 16, y + 4);
+                stockpile_create(&game.stockpiles, &game.map, x + 10, y - 4, x + 16, y + 4, 0);
             stockpile_set_priority(&game.stockpiles, better, 2);
         }
         /* Everything else the land offers, on the whole map. */
-        int land = gather_zone_create(&game.gather_zones, &game.map, 0, 0, size - 1, size - 1);
+        int land = gather_zone_create(&game.gather_zones, &game.map, 0, 0, size - 1, size - 1, 0);
         gather_forever(&game, land, GATHER_GRASS);
         gather_forever(&game, land, GATHER_TWIGS);
         gather_forever(&game, land, GATHER_BRANCHES);
@@ -92,16 +92,16 @@ int main(int argc, char **argv)
     if (scenario == 2) {
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         regions_update(&game.regions, &game.map);
-        int land = gather_zone_create(&game.gather_zones, &game.map, 0, 0, size - 1, size - 1);
+        int land = gather_zone_create(&game.gather_zones, &game.map, 0, 0, size - 1, size - 1, 0);
         gather_forever(&game, land, GATHER_BRANCHES);
         uint32_t home = first != NULL
-                            ? regions_at(&game.regions, &game.map, first->x, first->y)
+                            ? regions_at(&game.regions, &game.map, first->x, first->y, first->z)
                             : REGION_NONE;
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
-                uint32_t region = regions_at(&game.regions, &game.map, x, y);
+                uint32_t region = regions_at(&game.regions, &game.map, x, y, 0);
                 if (region == home) {
-                    gather_zones_remove_rect(&game.gather_zones, x, y, x, y);
+                    gather_zones_remove_rect(&game.gather_zones, x, y, x, y, 0);
                 }
             }
         }
@@ -110,19 +110,19 @@ int main(int argc, char **argv)
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         if (first != NULL) {
             int x = first->x, y = first->y;
-            stockpile_create(&game.stockpiles, &game.map, x - 8, y - 3, x - 3, y + 3);
+            stockpile_create(&game.stockpiles, &game.map, x - 8, y - 3, x - 3, y + 3, 0);
             int land = gather_zone_create(&game.gather_zones, &game.map, x - 30, y - 30, x + 30,
-                                          y + 30);
+                                          y + 30, 0);
             gather_forever(&game, land, GATHER_GRASS);
             gather_forever(&game, land, GATHER_BRANCHES);
             gather_forever(&game, land, GATHER_TWIGS);
             /* The screen first, then the walls around it (7 × 6 tiles), then
              * two rows of beds inside. */
-            game_place_structure(&game, STRUCTURE_DOOR, x + 7, y + 3, DIRECTION_SOUTH);
+            game_place_structure(&game, STRUCTURE_DOOR, x + 7, y + 3, 0, DIRECTION_SOUTH);
             game_place_structure_rect(&game, STRUCTURE_WALL, DIRECTION_SOUTH, x + 4, y - 2,
-                                      x + 10, y + 3);
+                                      x + 10, y + 3, 0);
             game_place_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_EAST, x + 5, y - 1,
-                                      x + 8, y + 1);
+                                      x + 8, y + 1, 0);
         }
     }
     int orders = zone_tiles(&game);

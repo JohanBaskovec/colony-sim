@@ -23,6 +23,7 @@
 typedef struct Regions {
     int width;
     int height;
+    int depth;
     uint32_t *id;       /* Region of each tile, REGION_NONE when impassable. */
     uint32_t count;     /* Regions are numbered 1..count. */
     uint8_t *drinkable; /* Per region id: whether it contains a drinking spot. */
@@ -32,7 +33,7 @@ typedef struct Regions {
     uint32_t rebuilds; /* Full rebuilds so far (statistics, tests). */
 } Regions;
 
-bool regions_init(Regions *regions, int width, int height);
+bool regions_init(Regions *regions, int width, int height, int depth);
 void regions_free(Regions *regions);
 
 /* Brings the regions up to date if the map topology changed since the last
@@ -44,7 +45,7 @@ void regions_update(Regions *regions, const Map *map);
 bool regions_current(const Regions *regions, const Map *map);
 
 /* Region of a tile; REGION_NONE if impassable or if the regions are not current. */
-uint32_t regions_at(const Regions *regions, const Map *map, int x, int y);
+uint32_t regions_at(const Regions *regions, const Map *map, int x, int y, int z);
 
 /* False only when both tiles are known to be in different regions. */
 bool regions_connected(const Regions *regions, const Map *map, TilePos a, TilePos b);

@@ -31,7 +31,10 @@ typedef struct HaulWorld {
      * walk to in haul_any_job_possible(); NULL (or REGION_NONE): no check. */
     const Regions *regions;
     uint32_t region;
-    int from_y; /* The hauler's row: haul_any_job_possible() looks around it first. */
+    /* The hauler's row, looked around first, and its level, the only one
+     * haul_any_job_possible() looks at (nothing links the levels yet). */
+    int from_y;
+    int from_z;
 } HaulWorld;
 
 typedef struct HaulJob {
@@ -43,7 +46,7 @@ typedef struct HaulJob {
 
 /* Items of `stack` a tile can still take: empty, or holding a matching stack
  * (same type and grade) below the stack limit. */
-int haul_storage_room(const Items *items, int x, int y, ItemStack stack);
+int haul_storage_room(const Items *items, int x, int y, int z, ItemStack stack);
 
 /*
  * Items of `stack` a storage tile can take: none unless the tile is in a
@@ -51,7 +54,7 @@ int haul_storage_room(const Items *items, int x, int y, ItemStack stack);
  * stockpile accepts too (one waiting to be hauled out is not added to), up to
  * the stack limit.
  */
-int haul_destination_room(const Stockpiles *stockpiles, const Items *items, int x, int y,
+int haul_destination_room(const Stockpiles *stockpiles, const Items *items, int x, int y, int z,
                           ItemStack stack);
 
 /* Check before haul_find_job(): whether some stack needs hauling, nobody

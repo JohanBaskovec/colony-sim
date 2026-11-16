@@ -14,6 +14,7 @@ typedef struct Camera {
     float zoom; /* Pixels per tile. */
     float viewport_width; /* In pixels. */
     float viewport_height;
+    int level; /* The map level shown (see core/map.h). */
 } Camera;
 
 /* Rectangle of tiles: x0 <= x < x1, y0 <= y < y1. */
@@ -21,6 +22,7 @@ typedef struct TileRect {
     int x0, y0, x1, y1;
 } TileRect;
 
+/* Shows level 0. */
 void camera_init(Camera *camera, float x, float y, float zoom);
 void camera_set_viewport(Camera *camera, float width, float height);
 

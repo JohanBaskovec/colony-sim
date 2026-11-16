@@ -5,18 +5,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-bool stockpiles_init(Stockpiles *stockpiles, int width, int height)
+bool stockpiles_init(Stockpiles *stockpiles, int width, int height, int depth)
 {
     memset(stockpiles, 0, sizeof(*stockpiles));
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
-    stockpiles->zone = calloc((size_t)width * (size_t)height, sizeof(*stockpiles->zone));
+    stockpiles->zone =
+        calloc((size_t)width * (size_t)height * (size_t)depth, sizeof(*stockpiles->zone));
     if (stockpiles->zone == NULL) {
         return false;
     }
     stockpiles->width = width;
     stockpiles->height = height;
+    stockpiles->depth = depth;
     stockpiles->next_number = 1;
     return true;
 }
@@ -27,20 +29,22 @@ void stockpiles_free(Stockpiles *stockpiles)
     memset(stockpiles, 0, sizeof(*stockpiles));
 }
 
-static bool in_bounds(const Stockpiles *stockpiles, int x, int y)
+static bool in_bounds(const Stockpiles *stockpiles, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && x < stockpiles->width && y < stockpiles->height;
+    return x >= 0 && y >= 0 && z >= 0 && x < stockpiles->width && y < stockpiles->height &&
+           z < stockpiles->depth;
 }
 
-static size_t index_of(const Stockpiles *stockpiles, int x, int y)
+static size_t index_of(const Stockpiles *stockpiles, int x, int y, int z)
 {
-    return (size_t)y * (size_t)stockpiles->width + (size_t)x;
+    return ((size_t)z * (size_t)stockpiles->height + (size_t)y) * (size_t)stockpiles->width +
+           (size_t)x;
 }
 
-bool stockpile_can_cover(const Map *map, int x, int y)
+bool stockpile_can_cover(const Map *map, int x, int y, int z)
 {
-    return map_is_passable(map, x, y) &&
-           terrain_def((Terrain)map->terrain[map_index(map, x, y)])->buildable;
+    return map_is_passable(map, x, y, z) &&
+           terrain_def((Terrain)map->terrain[map_index(map, x, y, z)])->buildable;
 }
 
 /* Clips a rectangle given by two corners in any order to the zone layer. */
@@ -59,23 +63,26 @@ static bool is_valid(const Stockpiles *stockpiles, int index)
 }
 
 /* Makes the bounding box include a tile (the first tile defines it). */
-static void grow_bounds(Stockpile *stockpile, int x, int y)
+static void grow_bounds(Stockpile *stockpile, int x, int y, int z)
 {
     if (stockpile->max_x < stockpile->min_x) {
         stockpile->min_x = stockpile->max_x = x;
         stockpile->min_y = stockpile->max_y = y;
+        stockpile->min_z = stockpile->max_z = z;
         return;
     }
     stockpile->min_x = x < stockpile->min_x ? x : stockpile->min_x;
     stockpile->max_x = x > stockpile->max_x ? x : stockpile->max_x;
     stockpile->min_y = y < stockpile->min_y ? y : stockpile->min_y;
     stockpile->max_y = y > stockpile->max_y ? y : stockpile->max_y;
+    stockpile->min_z = z < stockpile->min_z ? z : stockpile->min_z;
+    stockpile->max_z = z > stockpile->max_z ? z : stockpile->max_z;
 }
 
 static void clear_bounds(Stockpile *stockpile)
 {
-    stockpile->min_x = stockpile->min_y = 0;
-    stockpile->max_x = stockpile->max_y = -1; /* Empty. */
+    stockpile->min_x = stockpile->min_y = stockpile->min_z = 0;
+    stockpile->max_x = stockpile->max_y = stockpile->max_z = -1; /* Empty. */
 }
 
 /* Recomputes the bounding box after tiles were removed. */
@@ -84,10 +91,12 @@ static void shrink_bounds(Stockpiles *stockpiles, int index)
     Stockpile *stockpile = &stockpiles->list[index];
     Stockpile old = *stockpile;
     clear_bounds(stockpile);
-    for (int y = old.min_y; y <= old.max_y; y++) {
-        for (int x = old.min_x; x <= old.max_x; x++) {
-            if (stockpiles->zone[index_of(stockpiles, x, y)] == index + 1) {
-                grow_bounds(stockpile, x, y);
+    for (int z = old.min_z; z <= old.max_z; z++) {
+        for (int y = old.min_y; y <= old.max_y; y++) {
+            for (int x = old.min_x; x <= old.max_x; x++) {
+                if (stockpiles->zone[index_of(stockpiles, x, y, z)] == index + 1) {
+                    grow_bounds(stockpile, x, y, z);
+                }
             }
         }
     }
@@ -96,7 +105,7 @@ static void shrink_bounds(Stockpiles *stockpiles, int index)
 /* Adds the free, coverable tiles of a rectangle that no layer of `blocked`
  * (see stockpiles_add_rect()) covers. */
 static int extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
-                  int y1, const uint8_t *const *blocked)
+                  int y1, int z, const uint8_t *const *blocked)
 {
     if (!is_valid(stockpiles, index)) {
         return 0;
@@ -106,13 +115,13 @@ static int extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int
     int added = 0;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            size_t i = index_of(stockpiles, x, y);
+            size_t i = index_of(stockpiles, x, y, z);
             uint8_t *zone = &stockpiles->zone[i];
             if (*zone == 0 && !layers_any_set(blocked, i) &&
-                stockpile_can_cover(map, x, y)) {
+                stockpile_can_cover(map, x, y, z)) {
                 *zone = (uint8_t)(index + 1);
                 added++;
-                grow_bounds(&stockpiles->list[index], x, y);
+                grow_bounds(&stockpiles->list[index], x, y, z);
             }
         }
     }
@@ -124,12 +133,12 @@ static int extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int
 }
 
 int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
-                     int y1)
+                     int y1, int z)
 {
-    return extend(stockpiles, map, index, x0, y0, x1, y1, NULL);
+    return extend(stockpiles, map, index, x0, y0, x1, y1, z, NULL);
 }
 
-static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
+static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1, int z,
                   const uint8_t *const *blocked)
 {
     int index = STOCKPILE_NONE;
@@ -150,7 +159,7 @@ static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1
                              .hit_points = {0, 100},
                              .priority = STOCKPILE_PRIORITY_DEFAULT};
     clear_bounds(stockpile);
-    if (extend(stockpiles, map, index, x0, y0, x1, y1, blocked) == 0) {
+    if (extend(stockpiles, map, index, x0, y0, x1, y1, z, blocked) == 0) {
         stockpile->used = false;
         return STOCKPILE_NONE;
     }
@@ -159,9 +168,9 @@ static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1
     return index;
 }
 
-int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1)
+int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1, int z)
 {
-    return create(stockpiles, map, x0, y0, x1, y1, NULL);
+    return create(stockpiles, map, x0, y0, x1, y1, z, NULL);
 }
 
 /* Moves every tile of `from` to `into` and deletes `from`. */
@@ -169,12 +178,14 @@ static void merge(Stockpiles *stockpiles, int into, int from)
 {
     Stockpile *source = &stockpiles->list[from];
     Stockpile *target = &stockpiles->list[into];
-    for (int y = source->min_y; y <= source->max_y; y++) {
-        for (int x = source->min_x; x <= source->max_x; x++) {
-            uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y)];
-            if (*zone == from + 1) {
-                *zone = (uint8_t)(into + 1);
-                grow_bounds(target, x, y);
+    for (int z = source->min_z; z <= source->max_z; z++) {
+        for (int y = source->min_y; y <= source->max_y; y++) {
+            for (int x = source->min_x; x <= source->max_x; x++) {
+                uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y, z)];
+                if (*zone == from + 1) {
+                    *zone = (uint8_t)(into + 1);
+                    grow_bounds(target, x, y, z);
+                }
             }
         }
     }
@@ -187,7 +198,7 @@ static void merge(Stockpiles *stockpiles, int into, int from)
 }
 
 int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
-                        int preferred, const uint8_t *const *blocked)
+                        int z, int preferred, const uint8_t *const *blocked)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(stockpiles, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
@@ -195,7 +206,7 @@ int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, 
     int into = is_valid(stockpiles, preferred) ? preferred : STOCKPILE_NONE;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            int zone = stockpiles->zone[index_of(stockpiles, x, y)] - 1;
+            int zone = stockpiles->zone[index_of(stockpiles, x, y, z)] - 1;
             if (zone == STOCKPILE_NONE || overlapped[zone]) {
                 continue;
             }
@@ -208,18 +219,18 @@ int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, 
         }
     }
     if (into == STOCKPILE_NONE) {
-        return create(stockpiles, map, x0, y0, x1, y1, blocked);
+        return create(stockpiles, map, x0, y0, x1, y1, z, blocked);
     }
     for (int zone = 0; zone < STOCKPILE_MAX; zone++) {
         if (overlapped[zone] && zone != into) {
             merge(stockpiles, into, zone);
         }
     }
-    extend(stockpiles, map, into, x0, y0, x1, y1, blocked);
+    extend(stockpiles, map, into, x0, y0, x1, y1, z, blocked);
     return into;
 }
 
-int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1)
+int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1, int z)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(stockpiles, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
@@ -227,7 +238,7 @@ int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y
     bool touched[STOCKPILE_MAX] = {false};
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y)];
+            uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y, z)];
             if (*zone != 0) {
                 Stockpile *stockpile = &stockpiles->list[*zone - 1];
                 touched[*zone - 1] = true;
@@ -257,11 +268,13 @@ void stockpile_delete(Stockpiles *stockpiles, int index)
         return;
     }
     Stockpile *stockpile = &stockpiles->list[index];
-    for (int y = stockpile->min_y; y <= stockpile->max_y; y++) {
-        for (int x = stockpile->min_x; x <= stockpile->max_x; x++) {
-            uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y)];
-            if (*zone == index + 1) {
-                *zone = 0;
+    for (int z = stockpile->min_z; z <= stockpile->max_z; z++) {
+        for (int y = stockpile->min_y; y <= stockpile->max_y; y++) {
+            for (int x = stockpile->min_x; x <= stockpile->max_x; x++) {
+                uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y, z)];
+                if (*zone == index + 1) {
+                    *zone = 0;
+                }
             }
         }
     }
@@ -277,12 +290,12 @@ const Stockpile *stockpile_get(const Stockpiles *stockpiles, int index)
     return is_valid(stockpiles, index) ? &stockpiles->list[index] : NULL;
 }
 
-int stockpile_at(const Stockpiles *stockpiles, int x, int y)
+int stockpile_at(const Stockpiles *stockpiles, int x, int y, int z)
 {
-    if (!in_bounds(stockpiles, x, y)) {
+    if (!in_bounds(stockpiles, x, y, z)) {
         return STOCKPILE_NONE;
     }
-    return (int)stockpiles->zone[index_of(stockpiles, x, y)] - 1;
+    return (int)stockpiles->zone[index_of(stockpiles, x, y, z)] - 1;
 }
 
 void stockpile_set_allowed(Stockpiles *stockpiles, int index, ItemTypeMask allowed)
@@ -349,9 +362,9 @@ void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority)
     }
 }
 
-int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, ItemStack stack)
+int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, int z, ItemStack stack)
 {
-    const Stockpile *stockpile = stockpile_get(stockpiles, stockpile_at(stockpiles, x, y));
+    const Stockpile *stockpile = stockpile_get(stockpiles, stockpile_at(stockpiles, x, y, z));
     return stockpile_accepts(stockpile, stack) ? stockpile->priority : 0;
 }
 
@@ -363,14 +376,16 @@ void stockpiles_count_stored(const Stockpiles *stockpiles, const Items *items,
         if (!stockpile->used) {
             continue;
         }
-        for (int y = stockpile->min_y; y <= stockpile->max_y; y++) {
-            for (int x = stockpile->min_x; x <= stockpile->max_x; x++) {
-                if (stockpiles->zone[index_of(stockpiles, x, y)] != index + 1) {
-                    continue;
-                }
-                ItemStack stack = items_get(items, x, y);
-                if (stack.count > 0 && stockpile_accepts(stockpile, stack)) {
-                    stored[stack.type] += stack.count;
+        for (int z = stockpile->min_z; z <= stockpile->max_z; z++) {
+            for (int y = stockpile->min_y; y <= stockpile->max_y; y++) {
+                for (int x = stockpile->min_x; x <= stockpile->max_x; x++) {
+                    if (stockpiles->zone[index_of(stockpiles, x, y, z)] != index + 1) {
+                        continue;
+                    }
+                    ItemStack stack = items_get(items, x, y, z);
+                    if (stack.count > 0 && stockpile_accepts(stockpile, stack)) {
+                        stored[stack.type] += stack.count;
+                    }
                 }
             }
         }
@@ -380,7 +395,8 @@ void stockpiles_count_stored(const Stockpiles *stockpiles, const Items *items,
 uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
 {
     hash = hash_fnv1a64(hash, stockpiles->zone,
-                        (size_t)stockpiles->width * (size_t)stockpiles->height);
+                        (size_t)stockpiles->width * (size_t)stockpiles->height *
+                            (size_t)stockpiles->depth);
     for (int i = 0; i < STOCKPILE_MAX; i++) {
         const Stockpile *s = &stockpiles->list[i];
         if (s->used) {

@@ -221,6 +221,7 @@ typedef struct GatherZone {
 typedef struct GatherZones {
     int width;
     int height;
+    int depth;
     uint8_t *zone;   /* Zone index + 1 per tile, 0 when outside any zone. */
     uint8_t *job;    /* GatherJob the tile's progress belongs to. */
     float *progress; /* Work done on the tile's current job. */
@@ -235,17 +236,17 @@ typedef struct GatherZones {
     uint32_t revision;
 } GatherZones;
 
-bool gather_zones_init(GatherZones *zones, int width, int height);
+bool gather_zones_init(GatherZones *zones, int width, int height, int depth);
 void gather_zones_free(GatherZones *zones);
 
 /* Whether a zone may cover a tile: open ground (no rock wall, no built
  * wall) or shallow water (cattails grow there), not deep water. */
-bool gather_zone_can_cover(const Map *map, int x, int y);
+bool gather_zone_can_cover(const Map *map, int x, int y, int z);
 
 /* Whether stones can be gathered on a tile: stony ground (soil, rich soil,
  * gravel, rough stone: TerrainDef.stony), no rock wall, no structure. How
  * many lie there: map_stones(). */
-bool gather_stone_ground(const Map *map, int x, int y);
+bool gather_stone_ground(const Map *map, int x, int y, int z);
 
 /*
  * Creates a zone from the tiles of a rectangle (corners in any order) that
@@ -255,12 +256,12 @@ bool gather_stone_ground(const Map *map, int x, int y);
  * the other groups forever. Returns its index, or GATHER_ZONE_NONE when no tile qualifies or
  * the list is full.
  */
-int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1);
+int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z);
 
 /* Adds the free tiles of a rectangle a zone may cover. Returns the number of
  * tiles added. */
 int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
-                       int y1);
+                       int y1, int z);
 
 /*
  * Adds a rectangle to the gathering zones, as the zone tool does: `preferred`
@@ -273,12 +274,12 @@ int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, in
  * other kinds of zones, which may not overlap, and the workstations. Returns
  * the zone's index, or GATHER_ZONE_NONE when nothing could be added.
  */
-int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
+int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z,
                           int preferred, const uint8_t *const *blocked);
 
 /* Removes every tile of a rectangle from its zone; zones left without tiles
  * are deleted. Returns the number of tiles removed. */
-int gather_zones_remove_rect(GatherZones *zones, int x0, int y0, int x1, int y1);
+int gather_zones_remove_rect(GatherZones *zones, int x0, int y0, int x1, int y1, int z);
 
 void gather_zone_delete(GatherZones *zones, int index);
 
@@ -286,7 +287,7 @@ void gather_zone_delete(GatherZones *zones, int index);
 const GatherZone *gather_zone_get(const GatherZones *zones, int index);
 
 /* Index of the zone covering a tile, or GATHER_ZONE_NONE. */
-int gather_zone_at(const GatherZones *zones, int x, int y);
+int gather_zone_at(const GatherZones *zones, int x, int y, int z);
 
 /*
  * Order settings. Invalid zones, resources, groups, modes and units are
@@ -331,7 +332,7 @@ GatherResourceMask gather_zone_ripe_mask(const GatherZone *zone);
 void gather_zone_set_priority(GatherZones *zones, int index, int priority);
 
 /* Priority of the zone covering a tile, 0 outside any zone. */
-int gather_zone_priority_at(const GatherZones *zones, int x, int y);
+int gather_zone_priority_at(const GatherZones *zones, int x, int y, int z);
 
 /* Priorities of the zones that want something: bit p set for priority p. */
 uint32_t gather_zones_wanting_priorities(const GatherZones *zones);
@@ -373,11 +374,12 @@ void gather_zones_plants_changed(GatherZones *zones);
 
 /* Whether a tile offers a job to anyone: in a zone that wants something the
  * tile holds. */
-bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y, GatherJob job);
+bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y, int z,
+                          GatherJob job);
 
 /* First job a tile offers among `allowed`, in order of preference, or
  * GATHER_JOB_NONE. */
-GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y,
+GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y, int z,
                           GatherJobMask allowed);
 
 /* How many items of each resource a zone's tiles hold now: wood of the trees,
@@ -388,7 +390,7 @@ void gather_zone_available(const GatherZones *zones, const Map *map, int index,
                            long available[GATHER_RESOURCE_COUNT]);
 
 /* Total work a job needs on a tile right now (0 when the tile has nothing for it). */
-float gather_job_work_needed(const Map *map, int x, int y, GatherJob job);
+float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job);
 
 /*
  * Adds work to a job on a tile (the work done on another job there is lost).
@@ -400,25 +402,25 @@ float gather_job_work_needed(const Map *map, int x, int y, GatherJob job);
  * Stones are found among the wanted types the tile holds, at random in
  * proportion to their numbers. False when the job is not available.
  */
-bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, GatherJob job,
-                          float work, double level, Rng *rng);
+bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
+                          GatherJob job, float work, double level, Rng *rng);
 
 /* Work done on the tile's current job, 0..1. */
-float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, int x, int y);
+float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, int x, int y, int z);
 
 /* Work to clear the plant of a tile by hand before building there (0 when
  * there is none, or nothing of it shows above ground; a tree cannot be
  * cleared: see map_plant_blocks_building()). */
-float gather_clear_work(const Map *map, int x, int y);
+float gather_clear_work(const Map *map, int x, int y, int z);
 
 /* What a tool speeds up while clearing a tile: cutting grass, nothing for a
  * shrub or a low plant pulled up by hand. */
-ToolUse gather_clear_tool_use(const Map *map, int x, int y);
+ToolUse gather_clear_tool_use(const Map *map, int x, int y, int z);
 
 /* Removes the plant of a tile (cut grass, a pulled up shrub) and drops what it
  * gives (cut grass, its twigs and branches, its food) with quality from the
  * worker's `level`; `rng` may be NULL. */
-void gather_clear_plant(Map *map, Items *items, int x, int y, double level, Rng *rng);
+void gather_clear_plant(Map *map, Items *items, int x, int y, int z, double level, Rng *rng);
 
 uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash);
 

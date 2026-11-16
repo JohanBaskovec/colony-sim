@@ -75,7 +75,12 @@ typedef enum TemperatureCover {
 typedef struct Temperatures {
     int width;
     int height;
-    float *celsius; /* Per tile (padded by a row and a tile on each side). */
+    int depth;
+    /* Per tile, the levels one after the other as in the map (padded by a
+     * row and a tile on each side). No heat flows between levels yet: the
+     * edges between the last row of a level and the first of the next have a
+     * rate of 0. */
+    float *celsius;
     /* Caches of the map: per tile, material × TEMPERATURE_COVER_COUNT +
      * cover; the rate between a tile and its east and south neighbors (0 at
      * the edges of the map, and padded so that tiles on the edges need no
@@ -102,20 +107,20 @@ float temperature_season_mean(uint64_t tick);
 float temperature_daily_swing(uint64_t tick);
 
 /* Temperature of a tile; TEMPERATURE_GROUND out of bounds. */
-float temperature_at(const Temperatures *temperatures, int x, int y);
+float temperature_at(const Temperatures *temperatures, int x, int y, int z);
 
 /* Heats a tile by `degrees` (a burning hearth, every tick). */
-void temperatures_add_heat(Temperatures *temperatures, int x, int y, float degrees);
+void temperatures_add_heat(Temperatures *temperatures, int x, int y, int z, float degrees);
 
 /* What a tile is made of and covered by, as the layer sees the map now. */
-TemperatureMaterial temperature_material(const Map *map, int x, int y);
-TemperatureCover temperature_cover(const Map *map, int x, int y);
+TemperatureMaterial temperature_material(const Map *map, int x, int y, int z);
+TemperatureCover temperature_cover(const Map *map, int x, int y, int z);
 
 /* Speed of rot of food lying on a tile: item_rot_rate() at the tile's
  * temperature (ITEM_ROT_REFERENCE_CELSIUS when `temperatures` is NULL),
  * under its roof if any, ×ITEM_ROT_RAINED_ON under the open sky while it
  * `rains`; 0 out of bounds. */
-float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y,
+float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y, int z,
                            bool rains);
 
 /* One tick: the band of rows due at `tick` exchanges heat, with the

@@ -40,12 +40,13 @@ typedef struct Stockpile {
     int cell_count;
     /* Bounding box of the zone's tiles (inclusive), kept tight: lets searches
      * visit the zone without scanning the whole map. */
-    int min_x, min_y, max_x, max_y;
+    int min_x, min_y, min_z, max_x, max_y, max_z;
 } Stockpile;
 
 typedef struct Stockpiles {
     int width;
     int height;
+    int depth;
     uint8_t *zone; /* Stockpile index + 1 per tile, 0 when outside any stockpile. */
     Stockpile list[STOCKPILE_MAX];
     int used_count; /* Stockpiles in use. */
@@ -55,11 +56,11 @@ typedef struct Stockpiles {
     uint32_t revision;
 } Stockpiles;
 
-bool stockpiles_init(Stockpiles *stockpiles, int width, int height);
+bool stockpiles_init(Stockpiles *stockpiles, int width, int height, int depth);
 void stockpiles_free(Stockpiles *stockpiles);
 
 /* Whether items may be stored on this tile: passable and buildable terrain. */
-bool stockpile_can_cover(const Map *map, int x, int y);
+bool stockpile_can_cover(const Map *map, int x, int y, int z);
 
 /*
  * Creates a stockpile from the tiles of a rectangle (corners in any order)
@@ -67,12 +68,12 @@ bool stockpile_can_cover(const Map *map, int x, int y);
  * type in any condition, default priority. Returns its index, or STOCKPILE_NONE when no tile
  * qualifies or the stockpile list is full.
  */
-int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1);
+int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1, int z);
 
 /* Adds the free, coverable tiles of a rectangle to an existing stockpile.
  * Returns the number of tiles added. */
 int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
-                     int y1);
+                     int y1, int z);
 
 /*
  * Adds a rectangle to the stockpiles, as the zone tool does: `preferred` (the
@@ -86,11 +87,11 @@ int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, 
  * index, or STOCKPILE_NONE when nothing could be added.
  */
 int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
-                        int preferred, const uint8_t *const *blocked);
+                        int z, int preferred, const uint8_t *const *blocked);
 
 /* Removes every tile of a rectangle from whatever stockpile it belongs to;
  * stockpiles left without tiles are deleted. Returns the number of tiles removed. */
-int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1);
+int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1, int z);
 
 void stockpile_delete(Stockpiles *stockpiles, int index);
 
@@ -98,7 +99,7 @@ void stockpile_delete(Stockpiles *stockpiles, int index);
 const Stockpile *stockpile_get(const Stockpiles *stockpiles, int index);
 
 /* Index of the stockpile covering a tile, or STOCKPILE_NONE. */
-int stockpile_at(const Stockpiles *stockpiles, int x, int y);
+int stockpile_at(const Stockpiles *stockpiles, int x, int y, int z);
 
 void stockpile_set_allowed(Stockpiles *stockpiles, int index, ItemTypeMask allowed);
 
@@ -117,7 +118,7 @@ void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority);
 /* Priority at which these items are stored on a tile: the stockpile's
  * priority if the tile is in a stockpile accepting them, 0 otherwise
  * (not stored). */
-int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, ItemStack stack);
+int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, int z, ItemStack stack);
 
 /* Adds to `stored` (per item type) the items lying in stockpiles that accept
  * them. */

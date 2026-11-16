@@ -88,7 +88,7 @@ static void test_validation_rejects_out_of_range(void)
 static void test_expression_follows_mood(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Test", 30, 0, 0);
+    colonist_init(&colonist, "Test", 30, 0, 0, 0);
     colonist.mood.value = COLONIST_SMILING_FROM;
     CHECK_EQ_INT(colonist_expression(&colonist), EXPRESSION_SMILING);
     colonist.mood.value = MOOD_NEUTRAL;

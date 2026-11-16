@@ -129,7 +129,7 @@ typedef struct App {
      * roof layer when selected in the roof view. */
     bool structure_selected;
     bool selected_structure_roof;
-    int selected_structure_x, selected_structure_y;
+    int selected_structure_x, selected_structure_y, selected_structure_z;
     /* A right click on the map (not dragged to pan) steps back like Escape. */
     bool right_click_pending;
     float right_down_x, right_down_y;

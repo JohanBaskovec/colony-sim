@@ -102,51 +102,52 @@ static void clear_selection(App *app)
 }
 
 /* The construction site on a tile, in the roof layer (`roof`) or not. */
-static const ConstructionSite *site_at(const App *app, int x, int y, bool roof)
+static const ConstructionSite *site_at(const App *app, int x, int y, int z, bool roof)
 {
     const Constructions *sites = &app->game.constructions;
-    return construction_get(sites, construction_in_layer(sites, x, y, roof));
+    return construction_get(sites, construction_in_layer(sites, x, y, z, roof));
 }
 
 /* Type of what is built, else of the construction site, on a tile, in the
  * roof layer (`roof`) or not (STRUCTURE_NONE for a workstation's site). */
-static StructureType structure_type_at(const App *app, int x, int y, bool roof)
+static StructureType structure_type_at(const App *app, int x, int y, int z, bool roof)
 {
     StructureType built =
-        roof ? map_roof(&app->game.map, x, y) : map_structure(&app->game.map, x, y);
+        roof ? map_roof(&app->game.map, x, y, z) : map_structure(&app->game.map, x, y, z);
     if (built != STRUCTURE_NONE) {
         return built;
     }
-    const ConstructionSite *site = site_at(app, x, y, roof);
+    const ConstructionSite *site = site_at(app, x, y, z, roof);
     return site != NULL ? (StructureType)site->type : STRUCTURE_NONE;
 }
 
 /* Whether a structure or a construction site (a workstation's too) lies on a
  * tile, in a layer: what a click selects as a structure. */
-static bool structure_or_site_at(const App *app, int x, int y, bool roof)
+static bool structure_or_site_at(const App *app, int x, int y, int z, bool roof)
 {
-    return structure_type_at(app, x, y, roof) != STRUCTURE_NONE ||
-           site_at(app, x, y, roof) != NULL;
+    return structure_type_at(app, x, y, z, roof) != STRUCTURE_NONE ||
+           site_at(app, x, y, z, roof) != NULL;
 }
 
 /* Direction of the structure, or of the construction site, on a tile. */
-static Direction structure_direction_at(const App *app, int x, int y)
+static Direction structure_direction_at(const App *app, int x, int y, int z)
 {
-    if (map_structure(&app->game.map, x, y) != STRUCTURE_NONE) {
-        return map_structure_direction(&app->game.map, x, y);
+    if (map_structure(&app->game.map, x, y, z) != STRUCTURE_NONE) {
+        return map_structure_direction(&app->game.map, x, y, z);
     }
     const Constructions *sites = &app->game.constructions;
-    const ConstructionSite *site = construction_get(sites, construction_at(sites, x, y));
+    const ConstructionSite *site = construction_get(sites, construction_at(sites, x, y, z));
     return site != NULL ? (Direction)site->direction : DIRECTION_SOUTH;
 }
 
-static void select_structure(App *app, int x, int y)
+static void select_structure(App *app, int x, int y, int z)
 {
     clear_selection(app);
     app->selected_structure_roof = app_roof_view(app);
-    app->structure_selected = structure_or_site_at(app, x, y, app->selected_structure_roof);
+    app->structure_selected = structure_or_site_at(app, x, y, z, app->selected_structure_roof);
     app->selected_structure_x = x;
     app->selected_structure_y = y;
+    app->selected_structure_z = z;
 }
 
 /* Forgets the selected structure once it is gone (built over, taken apart). */
@@ -154,7 +155,7 @@ static void prune_structure_selection(App *app)
 {
     if (app->structure_selected &&
         !structure_or_site_at(app, app->selected_structure_x, app->selected_structure_y,
-                              app->selected_structure_roof)) {
+                              app->selected_structure_z, app->selected_structure_roof)) {
         app->structure_selected = false;
     }
 }
@@ -433,12 +434,14 @@ static void build_like_selection(App *app)
     bool roof = app->selected_structure_roof;
     StructureType structure =
         app->structure_selected
-            ? structure_type_at(app, app->selected_structure_x, app->selected_structure_y, roof)
+            ? structure_type_at(app, app->selected_structure_x, app->selected_structure_y,
+                              app->selected_structure_z, roof)
             : STRUCTURE_NONE;
     /* A workstation's site: another of that workstation. */
     const ConstructionSite *site =
         app->structure_selected
-            ? site_at(app, app->selected_structure_x, app->selected_structure_y, roof)
+            ? site_at(app, app->selected_structure_x, app->selected_structure_y,
+                              app->selected_structure_z, roof)
             : NULL;
     WorkstationType site_station =
         site != NULL ? construction_workstation(site) : WORKSTATION_TYPE_COUNT;
@@ -455,7 +458,8 @@ static void build_like_selection(App *app)
         set_tool(app, APP_TOOL_BUILD, (int)type);
     } else if (structure != STRUCTURE_NONE) {
         app->structure_direction =
-            structure_direction_at(app, app->selected_structure_x, app->selected_structure_y);
+            structure_direction_at(app, app->selected_structure_x, app->selected_structure_y,
+                                   app->selected_structure_z);
         clear_selection(app);
         set_tool(app, APP_TOOL_STRUCTURE, (int)structure);
     }
@@ -541,13 +545,14 @@ static void prune_selection(App *app)
  * selection. */
 static void select_at_point(App *app, float screen_x, float screen_y, bool additive)
 {
+    const int z = app->camera.level; /* The level shown. */
     float world_x, world_y;
     camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
-    EntityId id = game_colonist_at(&app->game, world_x, world_y);
+    EntityId id = game_colonist_at(&app->game, world_x, world_y, z);
     if (entity_id_is_none(id)) {
         /* Colonist sprites stand above their position: a click on the head
          * or the body counts too. */
-        id = game_colonist_at(&app->game, world_x, world_y + APP_PICK_BODY_OFFSET);
+        id = game_colonist_at(&app->game, world_x, world_y + APP_PICK_BODY_OFFSET, z);
     }
     if (!additive) {
         app->selected_count = 0;
@@ -559,16 +564,16 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     if (entity_id_is_none(id)) {
         if (!additive) {
             int x = (int)floorf(world_x), y = (int)floorf(world_y);
-            int station = workstation_at(&app->game.workstations, x, y);
-            int stockpile = stockpile_at(&app->game.stockpiles, x, y);
+            int station = workstation_at(&app->game.workstations, x, y, z);
+            int stockpile = stockpile_at(&app->game.stockpiles, x, y, z);
             if (station != WORKSTATION_NONE) {
                 select_station(app, station);
-            } else if (structure_or_site_at(app, x, y, app_roof_view(app))) {
-                select_structure(app, x, y);
+            } else if (structure_or_site_at(app, x, y, z, app_roof_view(app))) {
+                select_structure(app, x, y, z);
             } else if (stockpile != STOCKPILE_NONE) {
                 select_stockpile(app, stockpile);
             } else {
-                select_gather_zone(app, gather_zone_at(&app->game.gather_zones, x, y));
+                select_gather_zone(app, gather_zone_at(&app->game.gather_zones, x, y, z));
             }
         }
         return;
@@ -587,7 +592,8 @@ static void select_in_box(App *app, float x0, float y0, float x1, float y1, bool
     camera_screen_to_world(&app->camera, x0, y0, &wx0, &wy0);
     camera_screen_to_world(&app->camera, x1, y1, &wx1, &wy1);
     EntityId found[COLONIST_MAX];
-    int count = game_colonists_in_rect(&app->game, wx0, wy0, wx1, wy1, found, COLONIST_MAX);
+    int count = game_colonists_in_rect(&app->game, wx0, wy0, wx1, wy1, app->camera.level, found,
+                                       COLONIST_MAX);
     if (!additive) {
         app->selected_count = 0;
     }
@@ -626,14 +632,15 @@ static bool zone_tool_removes(const App *app)
  * selected; or removes zone tiles. */
 static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
 {
+    const int z = app->camera.level; /* The level shown. */
     Stockpiles *stockpiles = &app->game.stockpiles;
     int x0, y0, x1, y1;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
     if (zone_tool_removes(app)) {
-        stockpiles_remove_rect(stockpiles, x0, y0, x1, y1);
+        stockpiles_remove_rect(stockpiles, x0, y0, x1, y1, z);
         prune_stockpile_selection(app);
     } else {
-        select_stockpile(app, game_add_stockpile_rect(&app->game, x0, y0, x1, y1,
+        select_stockpile(app, game_add_stockpile_rect(&app->game, x0, y0, x1, y1, z,
                                                       app->selected_stockpile));
     }
 }
@@ -641,14 +648,15 @@ static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
 /* Gathering zone tool release: like the stockpile tool. */
 static void apply_gather_tool(App *app, float screen_x, float screen_y)
 {
+    const int z = app->camera.level; /* The level shown. */
     GatherZones *zones = &app->game.gather_zones;
     int x0, y0, x1, y1;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
     if (zone_tool_removes(app)) {
-        gather_zones_remove_rect(zones, x0, y0, x1, y1);
+        gather_zones_remove_rect(zones, x0, y0, x1, y1, z);
         prune_gather_zone_selection(app);
     } else {
-        select_gather_zone(app, game_add_gather_zone_rect(&app->game, x0, y0, x1, y1,
+        select_gather_zone(app, game_add_gather_zone_rect(&app->game, x0, y0, x1, y1, z,
                                                           app->selected_gather_zone));
     }
 }
@@ -692,30 +700,31 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         return;
     }
     bool additive = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+    const int z = app->camera.level; /* The level shown. */
     if (app->tool == APP_TOOL_DESIGNATE) {
         int x0, y0, x1, y1;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
         /* Orders nobody can carry out are refused (the tool panel says why). */
         if (app->tool_type == DESIGNATION_NONE) {
             /* In the roof view, roofs only; elsewhere, everything else. */
-            game_cancel_rect(&app->game, x0, y0, x1, y1, app_roof_view(app));
+            game_cancel_rect(&app->game, x0, y0, x1, y1, z, app_roof_view(app));
             prune_station_selection(app);
         } else if (game_designation_available(&app->game, app->tool_type)) {
-            game_designate_rect(&app->game, x0, y0, x1, y1, app->tool_type);
+            game_designate_rect(&app->game, x0, y0, x1, y1, z, app->tool_type);
         }
     } else if (app->tool == APP_TOOL_BUILD) {
         /* Blueprints nobody can build are refused (the tool panel says why). */
         int x, y;
         screen_to_tile(app, button->x, button->y, &x, &y);
         if (game_workstation_buildable(&app->game, app->build_type)) {
-            game_place_workstation(&app->game, app->build_type, x, y);
+            game_place_workstation(&app->game, app->build_type, x, y, z);
         }
     } else if (app->tool == APP_TOOL_STRUCTURE) {
         int x0, y0, x1, y1;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
         if (game_structure_buildable(&app->game, app->structure_type)) {
             game_place_structure_rect(&app->game, app->structure_type, app->structure_direction,
-                                      x0, y0, x1, y1);
+                                      x0, y0, x1, y1, z);
         }
     } else if (app->tool == APP_TOOL_STOCKPILE) {
         apply_stockpile_tool(app, button->x, button->y);
@@ -769,6 +778,7 @@ static void handle_event(App *app, const SDL_Event *event)
 
 static void update_camera(App *app, float dt)
 {
+    const int z = app->camera.level; /* The level shown. */
     int width = 0, height = 0;
     SDL_GetRenderOutputSize(app->renderer, &width, &height);
     camera_set_viewport(&app->camera, (float)width, (float)height);
@@ -794,7 +804,7 @@ static void update_camera(App *app, float dt)
     app->hover_x = (int)floorf(world_x);
     app->hover_y = (int)floorf(world_y);
     app->hover_valid = (SDL_GetMouseFocus() == app->window) &&
-                       map_in_bounds(&app->game.map, app->hover_x, app->hover_y) &&
+                       map_in_bounds(&app->game.map, app->hover_x, app->hover_y, z) &&
                        !ui_is_over_panel(&app->ui, mouse_x, mouse_y);
 }
 

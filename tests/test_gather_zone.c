@@ -16,17 +16,17 @@
  * found where gather_stone_ground() allows). */
 static bool init_world(Map *map, GatherZones *zones, Items *items)
 {
-    if (!map_init(map, 16, 16) || !gather_zones_init(zones, 16, 16) ||
-        !items_init(items, 16, 16)) {
+    if (!map_init(map, 16, 16, 1) || !gather_zones_init(zones, 16, 16, 1) ||
+        !items_init(items, 16, 16, 1)) {
         return false;
     }
-    map->rock[map_index(map, 5, 5)] = ROCK_GRANITE;
-    map->terrain[map_index(map, 9, 8)] = TERRAIN_GRAVEL;
-    map->terrain[map_index(map, 10, 8)] = TERRAIN_SAND;
-    map->terrain[map_index(map, 11, 8)] = TERRAIN_SHALLOW_WATER;
+    map->rock[map_index(map, 5, 5, 0)] = ROCK_GRANITE;
+    map->terrain[map_index(map, 9, 8, 0)] = TERRAIN_GRAVEL;
+    map->terrain[map_index(map, 10, 8, 0)] = TERRAIN_SAND;
+    map->terrain[map_index(map, 11, 8, 0)] = TERRAIN_SHALLOW_WATER;
     for (int y = 0; y < 16; y++) {
         for (int x = 0; x < 16; x++) {
-            map_set_stones(map, x, y, MAP_STONES_MAX, 0);
+            map_set_stones(map, x, y, 0, MAP_STONES_MAX, 0);
         }
     }
     return true;
@@ -41,7 +41,7 @@ static void free_world(Map *map, GatherZones *zones, Items *items)
 
 static Plant *put_plant(Map *map, int x, int y, PlantType type, float growth)
 {
-    Plant *plant = &map->plants[map_index(map, x, y)];
+    Plant *plant = &map->plants[map_index(map, x, y, 0)];
     plant->type = (uint8_t)type;
     plant->growth = growth;
     plant_settle(plant, GAME_START_DAY);
@@ -60,7 +60,7 @@ static void order(GatherZones *zones, const Items *items, int index, GatherResou
 static void test_init_rejects_invalid_sizes(void)
 {
     GatherZones zones;
-    CHECK(!gather_zones_init(&zones, 0, 10));
+    CHECK(!gather_zones_init(&zones, 0, 10, 1));
     CHECK(zones.zone == NULL && zones.width == 0);
 }
 
@@ -164,30 +164,30 @@ static void test_where_zones_and_stones_lie(void)
     REQUIRE(init_world(&map, &zones, &items));
     /* Zones cover open ground, sand and shallow water (cattails) included,
      * but not deep water nor rock. */
-    CHECK(gather_zone_can_cover(&map, 8, 8));
-    CHECK(gather_zone_can_cover(&map, 10, 8));
-    CHECK(gather_zone_can_cover(&map, 11, 8));
-    map.terrain[map_index(&map, 12, 8)] = TERRAIN_DEEP_WATER;
-    CHECK(!gather_zone_can_cover(&map, 12, 8));
-    CHECK(!gather_zone_can_cover(&map, 5, 5));
-    CHECK(!gather_zone_can_cover(&map, -1, 0));
+    CHECK(gather_zone_can_cover(&map, 8, 8, 0));
+    CHECK(gather_zone_can_cover(&map, 10, 8, 0));
+    CHECK(gather_zone_can_cover(&map, 11, 8, 0));
+    map.terrain[map_index(&map, 12, 8, 0)] = TERRAIN_DEEP_WATER;
+    CHECK(!gather_zone_can_cover(&map, 12, 8, 0));
+    CHECK(!gather_zone_can_cover(&map, 5, 5, 0));
+    CHECK(!gather_zone_can_cover(&map, -1, 0, 0));
     /* Stones lie on soil, gravel and rough stone, not on sand. */
-    CHECK(gather_stone_ground(&map, 8, 8));
-    CHECK(gather_stone_ground(&map, 9, 8));
-    CHECK(!gather_stone_ground(&map, 10, 8));
-    CHECK(!gather_stone_ground(&map, 5, 5));
+    CHECK(gather_stone_ground(&map, 8, 8, 0));
+    CHECK(gather_stone_ground(&map, 9, 8, 0));
+    CHECK(!gather_stone_ground(&map, 10, 8, 0));
+    CHECK(!gather_stone_ground(&map, 5, 5, 0));
     /* A built wall is like rock; no stones are searched for under a bed. */
-    map_set_structure(&map, 7, 9, STRUCTURE_WALL);
-    map_set_structure(&map, 8, 9, STRUCTURE_GRASS_BED);
-    CHECK(!gather_zone_can_cover(&map, 7, 9));
-    CHECK(gather_zone_can_cover(&map, 8, 9));
-    CHECK(!gather_stone_ground(&map, 8, 9));
-    int index = gather_zone_create(&zones, &map, 4, 8, 12, 8);
+    map_set_structure(&map, 7, 9, 0, STRUCTURE_WALL);
+    map_set_structure(&map, 8, 9, 0, STRUCTURE_GRASS_BED);
+    CHECK(!gather_zone_can_cover(&map, 7, 9, 0));
+    CHECK(gather_zone_can_cover(&map, 8, 9, 0));
+    CHECK(!gather_stone_ground(&map, 8, 9, 0));
+    int index = gather_zone_create(&zones, &map, 4, 8, 12, 8, 0);
     REQUIRE(index != GATHER_ZONE_NONE);
     CHECK_EQ_INT(gather_zone_get(&zones, index)->cell_count, 8);
-    CHECK_EQ_INT(gather_zone_at(&zones, 12, 8), GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zone_at(&zones, 11, 8), index);
-    CHECK_EQ_INT(gather_zone_create(&zones, &map, 12, 8, 12, 8), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&zones, 12, 8, 0), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&zones, 11, 8, 0), index);
+    CHECK_EQ_INT(gather_zone_create(&zones, &map, 12, 8, 12, 8, 0), GATHER_ZONE_NONE);
     free_world(&map, &zones, &items);
 }
 
@@ -197,7 +197,7 @@ static void test_zone_tiles(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    int a = gather_zone_create(&zones, &map, 0, 0, 2, 2);
+    int a = gather_zone_create(&zones, &map, 0, 0, 2, 2, 0);
     REQUIRE(a != GATHER_ZONE_NONE);
     const GatherZone *zone = gather_zone_get(&zones, a);
     CHECK_EQ_INT(zone->number, 1);
@@ -220,24 +220,24 @@ static void test_zone_tiles(void)
     CHECK_EQ_INT(zone->wanted, 0);
     CHECK_EQ_INT(zones.wanting_cells, 0);
     /* Tiles of another zone are not taken. */
-    int b = gather_zone_create(&zones, &map, 2, 2, 3, 3);
+    int b = gather_zone_create(&zones, &map, 2, 2, 3, 3, 0);
     REQUIRE(b != GATHER_ZONE_NONE);
     CHECK_EQ_INT(gather_zone_get(&zones, b)->cell_count, 3);
     CHECK_EQ_INT(gather_zone_get(&zones, b)->number, 2);
-    CHECK_EQ_INT(gather_zone_extend(&zones, &map, a, 0, 3, 1, 3), 2);
+    CHECK_EQ_INT(gather_zone_extend(&zones, &map, a, 0, 3, 1, 3, 0), 2);
     CHECK_EQ_INT(zone->cell_count, 11);
     CHECK_EQ_INT(zones.used_count, 2);
     /* Removing tiles; a zone left empty is deleted. */
-    CHECK_EQ_INT(gather_zones_remove_rect(&zones, 2, 2, 3, 3), 4);
+    CHECK_EQ_INT(gather_zones_remove_rect(&zones, 2, 2, 3, 3, 0), 4);
     CHECK(gather_zone_get(&zones, b) == NULL);
     CHECK_EQ_INT(zone->cell_count, 10);
     CHECK_EQ_INT(zones.used_count, 1);
     gather_zone_delete(&zones, a);
     CHECK(gather_zone_get(&zones, a) == NULL);
-    CHECK_EQ_INT(gather_zone_at(&zones, 0, 0), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&zones, 0, 0, 0), GATHER_ZONE_NONE);
     CHECK_EQ_INT(zones.used_count, 0);
     /* Numbers are never reused. */
-    int c = gather_zone_create(&zones, &map, 0, 0, 0, 0);
+    int c = gather_zone_create(&zones, &map, 0, 0, 0, 0, 0);
     CHECK_EQ_INT(gather_zone_get(&zones, c)->number, 3);
     free_world(&map, &zones, &items);
 }
@@ -248,7 +248,7 @@ static void test_order_settings(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    int index = gather_zone_create(&zones, &map, 0, 0, 2, 2);
+    int index = gather_zone_create(&zones, &map, 0, 0, 2, 2, 0);
     const GatherZone *zone = gather_zone_get(&zones, index);
     const GatherOrder *twigs = &zone->orders[GATHER_TWIGS];
     uint32_t revision = zones.revision;
@@ -302,13 +302,13 @@ static void test_zone_priority(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    int a = gather_zone_create(&zones, &map, 0, 0, 2, 2);
-    int b = gather_zone_create(&zones, &map, 0, 10, 2, 12);
+    int a = gather_zone_create(&zones, &map, 0, 0, 2, 2, 0);
+    int b = gather_zone_create(&zones, &map, 0, 10, 2, 12, 0);
     const GatherZone *zone = gather_zone_get(&zones, a);
     CHECK_EQ_INT(zone->priority, GATHER_ZONE_PRIORITY_DEFAULT);
-    CHECK_EQ_INT(gather_zone_priority_at(&zones, 1, 1), GATHER_ZONE_PRIORITY_DEFAULT);
-    CHECK_EQ_INT(gather_zone_priority_at(&zones, 8, 8), 0);
-    CHECK_EQ_INT(gather_zone_priority_at(&zones, -1, 8), 0);
+    CHECK_EQ_INT(gather_zone_priority_at(&zones, 1, 1, 0), GATHER_ZONE_PRIORITY_DEFAULT);
+    CHECK_EQ_INT(gather_zone_priority_at(&zones, 8, 8, 0), 0);
+    CHECK_EQ_INT(gather_zone_priority_at(&zones, -1, 8, 0), 0);
     uint32_t revision = zones.revision;
     gather_zone_set_priority(&zones, a, 2);
     CHECK_EQ_INT(zone->priority, 2);
@@ -331,8 +331,8 @@ static void test_zone_priority(void)
                  (1u << GATHER_ZONE_PRIORITY_LOWEST) | (1u << GATHER_ZONE_PRIORITY_DEFAULT));
 
     /* A merged zone keeps the priority of the one it keeps the orders of. */
-    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 2, 1, 10, a, NULL), a);
-    CHECK_EQ_INT(gather_zone_priority_at(&zones, 1, 11), GATHER_ZONE_PRIORITY_LOWEST);
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 2, 1, 10, 0, a, NULL), a);
+    CHECK_EQ_INT(gather_zone_priority_at(&zones, 1, 11, 0), GATHER_ZONE_PRIORITY_LOWEST);
     free_world(&map, &zones, &items);
 }
 
@@ -342,28 +342,28 @@ static void test_wanted_resources(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    int index = gather_zone_create(&zones, &map, 0, 0, 2, 2);
+    int index = gather_zone_create(&zones, &map, 0, 0, 2, 2, 0);
     const GatherZone *zone = gather_zone_get(&zones, index);
     /* Until the colony has 10 armfuls of grass: fresh and dry both count. */
     order(&zones, &items, index, GATHER_GRASS, GATHER_UNTIL);
     gather_zone_set_target(&zones, index, GATHER_GRASS, 10);
-    items_add(&items, 12, 12, item_stack_pristine(ITEM_FRESH_GRASS, 6));
+    items_add(&items, 12, 12, 0, item_stack_pristine(ITEM_FRESH_GRASS, 6));
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, GATHER_RESOURCE_BIT(GATHER_GRASS));
     CHECK_EQ_INT(zones.wanting_cells, 9);
     CHECK_EQ_INT((int)gather_resource_count(GATHER_GRASS, items.totals), 6);
-    items_add(&items, 13, 12, item_stack_pristine(ITEM_GRASS, 4));
+    items_add(&items, 13, 12, 0, item_stack_pristine(ITEM_GRASS, 4));
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, 0);
     CHECK_EQ_INT(zones.wanting_cells, 0);
     /* Forever: whatever lies in the colony. */
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
-    items_add(&items, 14, 12, item_stack_pristine(ITEM_COBBLE, 50));
+    items_add(&items, 14, 12, 0, item_stack_pristine(ITEM_COBBLE, 50));
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, GATHER_RESOURCE_BIT(GATHER_COBBLES));
     /* A fixed count: what this order gathered, not what lies about. */
     order(&zones, &items, index, GATHER_FLINT, GATHER_DO_COUNT);
-    items_add(&items, 15, 12, item_stack_pristine(ITEM_FLINT, 50));
+    items_add(&items, 15, 12, 0, item_stack_pristine(ITEM_FLINT, 50));
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK(zone->wanted & GATHER_RESOURCE_BIT(GATHER_FLINT));
     /* Turned off: never wanted. */
@@ -380,8 +380,8 @@ static void test_tile_jobs_in_order(void)
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
     put_plant(&map, 2, 2, PLANT_TREE, 1.0f);
-    int index = gather_zone_create(&zones, &map, 0, 0, 3, 3);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, ALL_JOBS), GATHER_JOB_NONE);
+    int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ALL_JOBS), GATHER_JOB_NONE);
     order(&zones, &items, index, GATHER_WOOD, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_TWIGS, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_BRANCHES, GATHER_FOREVER);
@@ -390,18 +390,18 @@ static void test_tile_jobs_in_order(void)
     GatherJobMask no_branches = ALL_JOBS & ~GATHER_JOB_BIT(GATHER_JOB_BRANCHES);
     GatherJobMask chop_or_stones = GATHER_JOB_BIT(GATHER_JOB_CHOP) |
                                    GATHER_JOB_BIT(GATHER_JOB_STONES);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, ALL_JOBS), GATHER_JOB_BRANCHES);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, no_branches), GATHER_JOB_TWIGS);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, chop_or_stones), GATHER_JOB_CHOP);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, GATHER_JOB_BIT(GATHER_JOB_STONES)),
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ALL_JOBS), GATHER_JOB_BRANCHES);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, no_branches), GATHER_JOB_TWIGS);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, chop_or_stones), GATHER_JOB_CHOP);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, GATHER_JOB_BIT(GATHER_JOB_STONES)),
                  GATHER_JOB_STONES);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, ALL_JOBS), GATHER_JOB_STONES);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, GATHER_JOB_BIT(GATHER_JOB_CHOP)),
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, 0, ALL_JOBS), GATHER_JOB_STONES);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, 0, GATHER_JOB_BIT(GATHER_JOB_CHOP)),
                  GATHER_JOB_NONE);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 8, 8, ALL_JOBS), GATHER_JOB_NONE);
-    CHECK(gather_job_available(&zones, &map, 2, 2, GATHER_JOB_CHOP));
-    CHECK(!gather_job_available(&zones, &map, 2, 2, GATHER_JOB_HARVEST));
-    CHECK(!gather_job_available(&zones, &map, 2, 2, GATHER_JOB_NONE));
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 8, 8, 0, ALL_JOBS), GATHER_JOB_NONE);
+    CHECK(gather_job_available(&zones, &map, 2, 2, 0, GATHER_JOB_CHOP));
+    CHECK(!gather_job_available(&zones, &map, 2, 2, 0, GATHER_JOB_HARVEST));
+    CHECK(!gather_job_available(&zones, &map, 2, 2, 0, GATHER_JOB_NONE));
     free_world(&map, &zones, &items);
 }
 
@@ -415,17 +415,17 @@ static void test_fully_grown_plants_only(void)
     const PlantDef *def = plant_def(PLANT_BRAMBLE);
     Plant *young = put_plant(&map, 2, 1, PLANT_BRAMBLE, def->min_food_growth - 0.01f);
     put_plant(&map, 3, 1, PLANT_BRAMBLE, def->min_food_growth);
-    int index = gather_zone_create(&zones, &map, 0, 0, 3, 3);
+    int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
     order(&zones, &items, index, GATHER_WOOD, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
     /* By default, young trees not fully grown are left alone. */
-    CHECK(!gather_job_available(&zones, &map, 1, 1, GATHER_JOB_CHOP));
+    CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_CHOP));
     gather_zone_set_ripe_only(&zones, index, GATHER_WOOD, false);
-    CHECK(gather_job_available(&zones, &map, 1, 1, GATHER_JOB_CHOP));
+    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_CHOP));
     /* A bramble too young bears no fruit; an older one does. */
-    CHECK(!gather_job_available(&zones, &map, 2, 1, GATHER_JOB_HARVEST));
+    CHECK(!gather_job_available(&zones, &map, 2, 1, 0, GATHER_JOB_HARVEST));
     CHECK(plant_stock_available(young, PLANT_STOCK_FOOD) == 0);
-    CHECK(gather_job_available(&zones, &map, 3, 1, GATHER_JOB_HARVEST));
+    CHECK(gather_job_available(&zones, &map, 3, 1, 0, GATHER_JOB_HARVEST));
     free_world(&map, &zones, &items);
 }
 
@@ -441,52 +441,53 @@ static void test_food_in_season(void)
     Plant *cattail = put_plant(&map, 2, 1, PLANT_CATTAIL, 1.0f);
     Plant *carrot = put_plant(&map, 3, 1, PLANT_WILD_CARROT, 1.0f);
     Plant *mushrooms = put_plant(&map, 1, 3, PLANT_MUSHROOMS, 1.0f);
-    map.terrain[map_index(&map, 2, 1)] = TERRAIN_SHALLOW_WATER; /* Cattails stand in water. */
-    int index = gather_zone_create(&zones, &map, 0, 0, 4, 4);
+    map.terrain[map_index(&map, 2, 1, 0)] = TERRAIN_SHALLOW_WATER; /* Cattails stand in water. */
+    int index = gather_zone_create(&zones, &map, 0, 0, 4, 4, 0);
     for (int r = GATHER_BLACKBERRIES; r <= GATHER_CATTAIL_RHIZOMES; r++) {
         order(&zones, &items, index, (GatherResource)r, GATHER_FOREVER);
     }
     /* The end of summer: rhizomes all year, but no nuts nor roots yet. */
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, GATHER_JOB_BIT(GATHER_JOB_HARVEST)),
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, 0, GATHER_JOB_BIT(GATHER_JOB_HARVEST)),
                  GATHER_JOB_NONE);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 1, ALL_JOBS), GATHER_JOB_DIG);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, ALL_JOBS), GATHER_JOB_NONE);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 1, 0, ALL_JOBS), GATHER_JOB_DIG);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_NONE);
     /* Autumn. */
     plant_settle(hazel, autumn);
     plant_settle(carrot, autumn);
     plant_settle(mushrooms, autumn);
-    CHECK(gather_job_available(&zones, &map, 1, 1, GATHER_JOB_HARVEST));
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, ALL_JOBS), GATHER_JOB_DIG_CAREFULLY);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 3, ALL_JOBS), GATHER_JOB_HARVEST_CAREFULLY);
+    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_HARVEST));
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_DIG_CAREFULLY);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 3, 0, ALL_JOBS), GATHER_JOB_HARVEST_CAREFULLY);
     /* Not for the settlers who cannot tell them from poisonous ones. */
     GatherJobMask novice = ALL_JOBS & ~GATHER_JOB_BIT(GATHER_JOB_DIG_CAREFULLY) &
                            ~GATHER_JOB_BIT(GATHER_JOB_HARVEST_CAREFULLY);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, novice), GATHER_JOB_NONE);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 3, novice), GATHER_JOB_NONE);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, novice), GATHER_JOB_NONE);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 3, 0, novice), GATHER_JOB_NONE);
 
     /* Nuts: the work grows with their number; the hazel stays. */
     int nuts = plant_stock_available(hazel, PLANT_STOCK_FOOD);
     REQUIRE(nuts == plant_def(PLANT_HAZEL)->stock_capacity[PLANT_STOCK_FOOD]);
-    CHECK(gather_job_work_needed(&map, 1, 1, GATHER_JOB_HARVEST) >
-          gather_job_work_needed(&map, 1, 3, GATHER_JOB_HARVEST_CAREFULLY));
-    CHECK(gather_zone_add_work(&zones, &map, &items, 1, 1, GATHER_JOB_HARVEST, 1e6f, 60.0, NULL));
+    CHECK(gather_job_work_needed(&map, 1, 1, 0, GATHER_JOB_HARVEST) >
+          gather_job_work_needed(&map, 1, 3, 0, GATHER_JOB_HARVEST_CAREFULLY));
+    CHECK(
+        gather_zone_add_work(&zones, &map, &items, 1, 1, 0, GATHER_JOB_HARVEST, 1e6f, 60.0, NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_HAZELNUTS], nuts);
     CHECK_EQ_INT(hazel->type, PLANT_HAZEL);
     CHECK_NEAR(hazel->growth, 1.0f, 1e-6);
     /* Rhizomes: part of the rootstock, the cattail grows on. */
     int rhizomes = plant_stock_available(cattail, PLANT_STOCK_FOOD);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 2, 1, GATHER_JOB_DIG, 1e6f, 60.0, NULL));
+    CHECK(gather_zone_add_work(&zones, &map, &items, 2, 1, 0, GATHER_JOB_DIG, 1e6f, 60.0, NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_CATTAIL_RHIZOMES], rhizomes);
     CHECK_NEAR(cattail->growth, 1.0f, 1e-6);
     /* A wild carrot dug up is gone, but grows again from what is left. */
     int roots = plant_stock_available(carrot, PLANT_STOCK_FOOD);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, GATHER_JOB_DIG_CAREFULLY, 1e6f, 60.0,
+    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_DIG_CAREFULLY, 1e6f, 60.0,
                                NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_WILD_CARROTS], roots);
     CHECK_EQ_INT(carrot->type, PLANT_WILD_CARROT);
     CHECK_NEAR(carrot->growth, 0.0f, 1e-6);
     /* Mushrooms picked: the patch is gone. */
-    CHECK(gather_zone_add_work(&zones, &map, &items, 1, 3, GATHER_JOB_HARVEST_CAREFULLY, 1e6f,
+    CHECK(gather_zone_add_work(&zones, &map, &items, 1, 3, 0, GATHER_JOB_HARVEST_CAREFULLY, 1e6f,
                                60.0, NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_MUSHROOMS],
                  plant_def(PLANT_MUSHROOMS)->stock_capacity[PLANT_STOCK_FOOD]);
@@ -508,7 +509,7 @@ static void test_full_harvest(void)
     Plant *bramble = put_plant(&map, 5, 1, PLANT_BRAMBLE, 1.0f);
     put_plant(&map, 1, 3, PLANT_GRASS, 0.8f);
     put_plant(&map, 3, 3, PLANT_GRASS, 1.0f);
-    int index = gather_zone_create(&zones, &map, 0, 0, 6, 4);
+    int index = gather_zone_create(&zones, &map, 0, 0, 6, 4, 0);
     order(&zones, &items, index, GATHER_BRANCHES, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_GRASS, GATHER_FOREVER);
@@ -517,32 +518,32 @@ static void test_full_harvest(void)
     CHECK_EQ_INT(gather_zone_ripe_mask(zone), gather_ripe_options());
     /* Full stocks: the young bramble's few berries are all ripe. */
     REQUIRE(plant_stock_available(young, PLANT_STOCK_FOOD) > 0);
-    CHECK(gather_job_available(&zones, &map, 3, 1, GATHER_JOB_HARVEST));
-    CHECK(gather_job_available(&zones, &map, 5, 1, GATHER_JOB_HARVEST));
-    CHECK(gather_job_available(&zones, &map, 1, 1, GATHER_JOB_BRANCHES));
+    CHECK(gather_job_available(&zones, &map, 3, 1, 0, GATHER_JOB_HARVEST));
+    CHECK(gather_job_available(&zones, &map, 5, 1, 0, GATHER_JOB_HARVEST));
+    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
     /* Some taken: what is left waits until the stock is full again. */
     CHECK_EQ_INT(plant_take_stock(bramble, PLANT_STOCK_FOOD, 1), 1);
     CHECK_EQ_INT(plant_take_stock(tree, PLANT_STOCK_BRANCHES, 1), 1);
-    CHECK(!gather_job_available(&zones, &map, 5, 1, GATHER_JOB_HARVEST));
-    CHECK(!gather_job_available(&zones, &map, 1, 1, GATHER_JOB_BRANCHES));
+    CHECK(!gather_job_available(&zones, &map, 5, 1, 0, GATHER_JOB_HARVEST));
+    CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
     long available[GATHER_RESOURCE_COUNT];
     gather_zone_available(&zones, &map, index, available);
     CHECK_EQ_INT((int)available[GATHER_BLACKBERRIES],
                  plant_stock_available(young, PLANT_STOCK_FOOD));
     CHECK_EQ_INT((int)available[GATHER_BRANCHES], 0);
     /* Grass fully grown only. */
-    CHECK(!gather_job_available(&zones, &map, 1, 3, GATHER_JOB_CUT_GRASS));
-    CHECK(gather_job_available(&zones, &map, 3, 3, GATHER_JOB_CUT_GRASS));
+    CHECK(!gather_job_available(&zones, &map, 1, 3, 0, GATHER_JOB_CUT_GRASS));
+    CHECK(gather_job_available(&zones, &map, 3, 3, 0, GATHER_JOB_CUT_GRASS));
     /* Without the option, whatever there is. */
     gather_zone_set_group_ripe_only(&zones, index, GATHER_GROUP_FOOD, false);
-    CHECK(gather_job_available(&zones, &map, 5, 1, GATHER_JOB_HARVEST));
-    CHECK(!gather_job_available(&zones, &map, 1, 1, GATHER_JOB_BRANCHES));
+    CHECK(gather_job_available(&zones, &map, 5, 1, 0, GATHER_JOB_HARVEST));
+    CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
     CHECK(!(gather_zone_ripe_mask(zone) & GATHER_RESOURCE_BIT(GATHER_HAZELNUTS)));
     CHECK(gather_zone_ripe_mask(zone) & GATHER_RESOURCE_BIT(GATHER_TWIGS));
     gather_zone_set_all_ripe_only(&zones, index, false);
     CHECK_EQ_INT(gather_zone_ripe_mask(zone), 0);
-    CHECK(gather_job_available(&zones, &map, 1, 1, GATHER_JOB_BRANCHES));
-    CHECK(gather_job_available(&zones, &map, 1, 3, GATHER_JOB_CUT_GRASS));
+    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
+    CHECK(gather_job_available(&zones, &map, 1, 3, 0, GATHER_JOB_CUT_GRASS));
     free_world(&map, &zones, &items);
 }
 
@@ -553,7 +554,7 @@ static void test_group_orders(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    int index = gather_zone_create(&zones, &map, 0, 0, 1, 0);
+    int index = gather_zone_create(&zones, &map, 0, 0, 1, 0, 0);
     const GatherZone *zone = gather_zone_get(&zones, index);
     GatherResourceMask stones = gather_group_def(GATHER_GROUP_STONES)->members;
     /* Turning a group on turns each of its resources on. */
@@ -566,10 +567,10 @@ static void test_group_orders(void)
     /* The group until 3 stones in the colony: cobbles and flint both count. */
     gather_zone_set_group_mode(&zones, index, GATHER_GROUP_STONES, GATHER_UNTIL);
     gather_zone_set_group_target(&zones, index, GATHER_GROUP_STONES, 3);
-    items_add(&items, 10, 10, item_stack_pristine(ITEM_COBBLE, 2));
+    items_add(&items, 10, 10, 0, item_stack_pristine(ITEM_COBBLE, 2));
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, stones);
-    items_add(&items, 11, 10, item_stack_pristine(ITEM_FLINT, 1));
+    items_add(&items, 11, 10, 0, item_stack_pristine(ITEM_FLINT, 1));
     CHECK_EQ_INT((int)gather_group_count(GATHER_GROUP_STONES, items.totals), 3);
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, 0);
@@ -578,9 +579,9 @@ static void test_group_orders(void)
     gather_zone_set_group_target(&zones, index, GATHER_GROUP_STONES, 2);
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, stones);
-    float stone = gather_job_work_needed(&map, 0, 0, GATHER_JOB_STONES);
+    float stone = gather_job_work_needed(&map, 0, 0, 0, GATHER_JOB_STONES);
     for (int i = 0; i < 2; i++) {
-        CHECK(gather_zone_add_work(&zones, &map, &items, 0, 0, GATHER_JOB_STONES, stone, 60.0,
+        CHECK(gather_zone_add_work(&zones, &map, &items, 0, 0, 0, GATHER_JOB_STONES, stone, 60.0,
                                    NULL));
     }
     CHECK_EQ_INT(zone->groups[GATHER_GROUP_STONES].done, 2);
@@ -634,7 +635,7 @@ static void test_days_of_food(void)
     CHECK_EQ_INT((int)gather_group_food_days(GATHER_GROUP_FOOD, totals, daily), 5);
     CHECK_EQ_INT((int)gather_resource_food_days(GATHER_WILD_CARROTS, totals, daily), 0);
 
-    int index = gather_zone_create(&zones, &map, 0, 0, 1, 0);
+    int index = gather_zone_create(&zones, &map, 0, 0, 1, 0, 0);
     const GatherZone *zone = gather_zone_get(&zones, index);
     gather_zone_set_group_enabled(&zones, index, GATHER_GROUP_FOOD, true);
     gather_zone_set_mode(&zones, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
@@ -668,26 +669,26 @@ static void test_felling_a_tree(void)
     REQUIRE(init_world(&map, &zones, &items));
     put_plant(&map, 3, 3, PLANT_TREE, 1.0f);
     put_plant(&map, 8, 8, PLANT_TREE, 0.5f);
-    int index = gather_zone_create(&zones, &map, 0, 0, 9, 9);
+    int index = gather_zone_create(&zones, &map, 0, 0, 9, 9, 0);
     order(&zones, &items, index, GATHER_WOOD, GATHER_FOREVER);
     gather_zone_set_ripe_only(&zones, index, GATHER_WOOD, false);
     /* Bigger trees take longer. */
-    float full = gather_job_work_needed(&map, 3, 3, GATHER_JOB_CHOP);
-    CHECK(full > gather_job_work_needed(&map, 8, 8, GATHER_JOB_CHOP));
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 3, 3, GATHER_JOB_CHOP, full * 0.5f, 60.0,
+    float full = gather_job_work_needed(&map, 3, 3, 0, GATHER_JOB_CHOP);
+    CHECK(full > gather_job_work_needed(&map, 8, 8, 0, GATHER_JOB_CHOP));
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CHOP, full * 0.5f, 60.0,
                                 NULL));
-    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, 3, 3), 0.5, 1e-4);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 3, GATHER_JOB_CHOP, full * 0.5f, 60.0,
+    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, 3, 3, 0), 0.5, 1e-4);
+    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CHOP, full * 0.5f, 60.0,
                                NULL));
-    CHECK_EQ_INT(map.plants[map_index(&map, 3, 3)].type, PLANT_NONE);
-    ItemStack wood = items_get(&items, 3, 3);
+    CHECK_EQ_INT(map.plants[map_index(&map, 3, 3, 0)].type, PLANT_NONE);
+    ItemStack wood = items_get(&items, 3, 3, 0);
     CHECK_EQ_INT(wood.type, ITEM_WOOD);
     /* A full tile, the rest spread around. */
     CHECK_EQ_INT(wood.count, item_stack_limit(ITEM_WOOD));
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
-    CHECK(!gather_job_available(&zones, &map, 3, 3, GATHER_JOB_CHOP));
+    CHECK(!gather_job_available(&zones, &map, 3, 3, 0, GATHER_JOB_CHOP));
     /* A half-grown tree gives half the wood. */
-    CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_CHOP, 1e6f, 60.0, NULL));
+    CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, 0, GATHER_JOB_CHOP, 1e6f, 60.0, NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD],
                  plant_def(PLANT_TREE)->cut_yield + (plant_def(PLANT_TREE)->cut_yield + 1) / 2);
     CHECK_EQ_INT(gather_zone_get(&zones, index)->orders[GATHER_WOOD].done,
@@ -703,21 +704,22 @@ static void test_products_depend_on_level(void)
     REQUIRE(init_world(&map, &zones, &items));
     put_plant(&map, 3, 3, PLANT_TREE, 1.0f);
     put_plant(&map, 12, 12, PLANT_TREE, 1.0f);
-    int index = gather_zone_create(&zones, &map, 0, 0, 15, 15);
+    int index = gather_zone_create(&zones, &map, 0, 0, 15, 15, 0);
     order(&zones, &items, index, GATHER_WOOD, GATHER_FOREVER);
     int wood_hp = item_def(ITEM_WOOD)->max_hit_points;
     const double beginner_level = KNOWLEDGE_MASTERY_LEVEL;
     /* A beginner brings back rough, damaged logs... */
-    gather_zone_add_work(&zones, &map, &items, 3, 3, GATHER_JOB_CHOP, 1e6f, beginner_level, NULL);
-    ItemStack beginner = items_get(&items, 3, 3);
+    gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CHOP, 1e6f, beginner_level,
+                         NULL);
+    ItemStack beginner = items_get(&items, 3, 3, 0);
     CHECK_EQ_INT(beginner.type, ITEM_WOOD);
     CHECK_EQ_INT(beginner.quality,
                  knowledge_quality_of_score(knowledge_product_score(beginner_level, NULL)));
     CHECK(beginner.hit_points < wood_hp);
     /* ...a master superb, intact ones. */
-    gather_zone_add_work(&zones, &map, &items, 12, 12, GATHER_JOB_CHOP, 1e6f, KNOWLEDGE_LEVEL_MAX,
-                         NULL);
-    ItemStack master = items_get(&items, 12, 12);
+    gather_zone_add_work(&zones, &map, &items, 12, 12, 0, GATHER_JOB_CHOP, 1e6f,
+                         KNOWLEDGE_LEVEL_MAX, NULL);
+    ItemStack master = items_get(&items, 12, 12, 0);
     CHECK_EQ_INT(master.quality, ITEM_QUALITY_SUPERB);
     CHECK_EQ_INT(master.hit_points, wood_hp);
     free_world(&map, &zones, &items);
@@ -733,7 +735,7 @@ static void test_branches_twigs_grass_and_nuts(void)
     Plant *hazel = put_plant(&map, 3, 1, PLANT_HAZEL, 1.0f);
     Plant *grass = put_plant(&map, 1, 3, PLANT_GRASS, 1.0f);
     Plant *short_grass = put_plant(&map, 3, 3, PLANT_GRASS, 0.4f);
-    int index = gather_zone_create(&zones, &map, 0, 0, 4, 4);
+    int index = gather_zone_create(&zones, &map, 0, 0, 4, 4, 0);
     order(&zones, &items, index, GATHER_BRANCHES, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_TWIGS, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_GRASS, GATHER_FOREVER);
@@ -743,39 +745,39 @@ static void test_branches_twigs_grass_and_nuts(void)
     /* Branches: all at once, the work growing with their number; the tree stays. */
     int branches = plant_stock_available(tree, PLANT_STOCK_BRANCHES);
     REQUIRE(branches > 1);
-    float one_branch = gather_job_work_needed(&map, 1, 1, GATHER_JOB_BRANCHES) / (float)branches;
+    float one_branch = gather_job_work_needed(&map, 1, 1, 0, GATHER_JOB_BRANCHES) / (float)branches;
     CHECK(one_branch > 0.0f);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 1, 1, GATHER_JOB_BRANCHES, 1e6f, 60.0,
+    CHECK(gather_zone_add_work(&zones, &map, &items, 1, 1, 0, GATHER_JOB_BRANCHES, 1e6f, 60.0,
                                NULL));
     CHECK_EQ_INT(tree->type, PLANT_TREE);
     CHECK_EQ_INT(plant_stock_available(tree, PLANT_STOCK_BRANCHES), 0);
     CHECK_EQ_INT((int)items.totals[ITEM_BRANCHES], branches);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, ALL_JOBS), GATHER_JOB_TWIGS);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, 0, ALL_JOBS), GATHER_JOB_TWIGS);
 
     /* The hazel's branches and twigs come before its nuts. */
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, ALL_JOBS), GATHER_JOB_BRANCHES);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, GATHER_JOB_BRANCHES, 1e6f, 60.0,
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_BRANCHES);
+    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_BRANCHES, 1e6f, 60.0,
                                NULL));
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, ALL_JOBS), GATHER_JOB_TWIGS);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, GATHER_JOB_TWIGS, 1e6f, 60.0, NULL));
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_TWIGS);
+    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_TWIGS, 1e6f, 60.0, NULL));
     CHECK(items.totals[ITEM_TWIGS] > 0);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, ALL_JOBS), GATHER_JOB_HARVEST);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, GATHER_JOB_HARVEST, 1e6f, 60.0,
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_HARVEST);
+    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_HARVEST, 1e6f, 60.0,
                                NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_HAZELNUTS],
                  plant_def(PLANT_HAZEL)->stock_capacity[PLANT_STOCK_FOOD]);
     CHECK_NEAR(hazel->growth, 1.0f, 1e-6);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, ALL_JOBS), GATHER_JOB_NONE);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_NONE);
 
     /* Grass: tall enough only; it grows back from nothing. */
-    CHECK(gather_job_available(&zones, &map, 1, 3, GATHER_JOB_CUT_GRASS));
-    CHECK(!gather_job_available(&zones, &map, 3, 3, GATHER_JOB_CUT_GRASS));
-    CHECK(gather_zone_add_work(&zones, &map, &items, 1, 3, GATHER_JOB_CUT_GRASS, 1e6f, 60.0,
+    CHECK(gather_job_available(&zones, &map, 1, 3, 0, GATHER_JOB_CUT_GRASS));
+    CHECK(!gather_job_available(&zones, &map, 3, 3, 0, GATHER_JOB_CUT_GRASS));
+    CHECK(gather_zone_add_work(&zones, &map, &items, 1, 3, 0, GATHER_JOB_CUT_GRASS, 1e6f, 60.0,
                                NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_FRESH_GRASS], 3);
     CHECK_EQ_INT(grass->type, PLANT_GRASS);
     CHECK_NEAR(grass->growth, 0.0, 1e-6);
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 3, 3, GATHER_JOB_CUT_GRASS, 1e6f, 60.0,
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CUT_GRASS, 1e6f, 60.0,
                                 NULL));
     CHECK_NEAR(short_grass->growth, 0.4, 1e-6);
     free_world(&map, &zones, &items);
@@ -787,20 +789,20 @@ static void test_fixed_count_stops(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    int index = gather_zone_create(&zones, &map, 0, 0, 1, 0);
+    int index = gather_zone_create(&zones, &map, 0, 0, 1, 0, 0);
     order(&zones, &items, index, GATHER_COBBLES, GATHER_DO_COUNT);
     gather_zone_set_target(&zones, index, GATHER_COBBLES, 3);
     const GatherZone *zone = gather_zone_get(&zones, index);
-    float stone = gather_job_work_needed(&map, 0, 0, GATHER_JOB_STONES);
+    float stone = gather_job_work_needed(&map, 0, 0, 0, GATHER_JOB_STONES);
     for (int i = 0; i < 3; i++) {
-        CHECK(gather_zone_add_work(&zones, &map, &items, 0, 0, GATHER_JOB_STONES, stone, 60.0,
+        CHECK(gather_zone_add_work(&zones, &map, &items, 0, 0, 0, GATHER_JOB_STONES, stone, 60.0,
                                    NULL));
     }
     /* Done at once, whatever lies in the colony. */
     CHECK_EQ_INT(zone->orders[GATHER_COBBLES].done, 3);
     CHECK_EQ_INT(zone->wanted, 0);
     CHECK_EQ_INT(zones.wanting_cells, 0);
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 0, 0, GATHER_JOB_STONES, stone, 60.0,
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 0, 0, 0, GATHER_JOB_STONES, stone, 60.0,
                                 NULL));
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, 0);
@@ -820,21 +822,21 @@ static void test_progress_belongs_to_one_job(void)
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
     put_plant(&map, 2, 2, PLANT_TREE, 1.0f);
-    int index = gather_zone_create(&zones, &map, 0, 0, 3, 3);
+    int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
     order(&zones, &items, index, GATHER_TWIGS, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, GATHER_JOB_TWIGS, 100.0f, 60.0,
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_TWIGS, 100.0f, 60.0,
                                 NULL));
-    CHECK(gather_zone_progress_fraction(&zones, &map, 2, 2) > 0.0f);
+    CHECK(gather_zone_progress_fraction(&zones, &map, 2, 2, 0) > 0.0f);
     /* Work on another job there starts from scratch. */
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, GATHER_JOB_STONES, 100.0f, 60.0,
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_STONES, 100.0f, 60.0,
                                 NULL));
-    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, 2, 2), 0.5, 1e-4);
-    CHECK_NEAR(zones.progress[map_index(&map, 2, 2)], 100.0, 1e-4);
-    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, -1, 2), 0.0, 1e-6);
+    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, 2, 2, 0), 0.5, 1e-4);
+    CHECK_NEAR(zones.progress[map_index(&map, 2, 2, 0)], 100.0, 1e-4);
+    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, -1, 2, 0), 0.0, 1e-6);
     /* Removing the tile forgets the work. */
-    gather_zones_remove_rect(&zones, 2, 2, 2, 2);
-    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, 2, 2), 0.0, 1e-6);
+    gather_zones_remove_rect(&zones, 2, 2, 2, 2, 0);
+    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, 2, 2, 0), 0.0, 1e-6);
     free_world(&map, &zones, &items);
 }
 
@@ -844,61 +846,61 @@ static void test_stones_run_out(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    map_set_stones(&map, 8, 8, 3, 0);
-    int index = gather_zone_create(&zones, &map, 8, 8, 10, 8);
+    map_set_stones(&map, 8, 8, 0, 3, 0);
+    int index = gather_zone_create(&zones, &map, 8, 8, 10, 8, 0);
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
-    float needed = gather_job_work_needed(&map, 8, 8, GATHER_JOB_STONES);
+    float needed = gather_job_work_needed(&map, 8, 8, 0, GATHER_JOB_STONES);
     for (int i = 0; i < 3; i++) {
-        CHECK(gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
-        CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, needed, 60.0,
+        CHECK(gather_job_available(&zones, &map, 8, 8, 0, GATHER_JOB_STONES));
+        CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, 0, GATHER_JOB_STONES, needed, 60.0,
                                    NULL));
     }
     CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 3);
     /* None left: the tile offers nothing more. */
-    CHECK_EQ_INT(map_stones(&map, 8, 8, ITEM_COBBLE), 0);
-    CHECK(!gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, needed, 60.0,
+    CHECK_EQ_INT(map_stones(&map, 8, 8, 0, ITEM_COBBLE), 0);
+    CHECK(!gather_job_available(&zones, &map, 8, 8, 0, GATHER_JOB_STONES));
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 8, 8, 0, GATHER_JOB_STONES, needed, 60.0,
                                 NULL));
     /* No stones on sand, nor outside a zone. */
-    CHECK(!gather_job_available(&zones, &map, 10, 8, GATHER_JOB_STONES));
-    CHECK(gather_job_available(&zones, &map, 9, 8, GATHER_JOB_STONES));
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, GATHER_JOB_STONES, needed, 60.0,
+    CHECK(!gather_job_available(&zones, &map, 10, 8, 0, GATHER_JOB_STONES));
+    CHECK(gather_job_available(&zones, &map, 9, 8, 0, GATHER_JOB_STONES));
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_STONES, needed, 60.0,
                                 NULL));
     /* A good eye picks good stones. */
-    gather_zone_add_work(&zones, &map, &items, 9, 8, GATHER_JOB_STONES, needed,
+    gather_zone_add_work(&zones, &map, &items, 9, 8, 0, GATHER_JOB_STONES, needed,
                          KNOWLEDGE_LEVEL_MAX, NULL);
-    CHECK_EQ_INT(items_get(&items, 9, 8).quality, ITEM_QUALITY_SUPERB);
-    CHECK(items_get(&items, 8, 8).quality <= ITEM_QUALITY_STANDARD);
-    CHECK_EQ_INT(map_stones(&map, 9, 8, ITEM_COBBLE), MAP_STONES_MAX - 1);
+    CHECK_EQ_INT(items_get(&items, 9, 8, 0).quality, ITEM_QUALITY_SUPERB);
+    CHECK(items_get(&items, 8, 8, 0).quality <= ITEM_QUALITY_STANDARD);
+    CHECK_EQ_INT(map_stones(&map, 9, 8, 0, ITEM_COBBLE), MAP_STONES_MAX - 1);
     free_world(&map, &zones, &items);
 }
 
 static void test_map_stones(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 16, 16));
-    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_COBBLE), 0); /* None on a new map. */
-    map_set_stones(&map, 3, 3, 7, 2);
-    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_COBBLE), 7);
-    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_FLINT), 2);
-    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_BRANCHES), 0);
-    CHECK_EQ_INT(map_stones(&map, -1, 3, ITEM_COBBLE), 0);
+    REQUIRE(map_init(&map, 16, 16, 1));
+    CHECK_EQ_INT(map_stones(&map, 3, 3, 0, ITEM_COBBLE), 0); /* None on a new map. */
+    map_set_stones(&map, 3, 3, 0, 7, 2);
+    CHECK_EQ_INT(map_stones(&map, 3, 3, 0, ITEM_COBBLE), 7);
+    CHECK_EQ_INT(map_stones(&map, 3, 3, 0, ITEM_FLINT), 2);
+    CHECK_EQ_INT(map_stones(&map, 3, 3, 0, ITEM_BRANCHES), 0);
+    CHECK_EQ_INT(map_stones(&map, -1, 3, 0, ITEM_COBBLE), 0);
     /* MAP_STONES_MAX together at most: flint first. */
-    map_set_stones(&map, 4, 4, 30, 15);
-    CHECK_EQ_INT(map_stones(&map, 4, 4, ITEM_FLINT), 15);
-    CHECK_EQ_INT(map_stones(&map, 4, 4, ITEM_COBBLE), MAP_STONES_MAX - 15);
-    map_set_stones(&map, 4, 4, -3, 99);
-    CHECK_EQ_INT(map_stones(&map, 4, 4, ITEM_FLINT), MAP_STONES_MAX);
-    CHECK_EQ_INT(map_stones(&map, 4, 4, ITEM_COBBLE), 0);
-    map_set_stones(&map, 16, 4, 3, 3); /* Ignored. */
+    map_set_stones(&map, 4, 4, 0, 30, 15);
+    CHECK_EQ_INT(map_stones(&map, 4, 4, 0, ITEM_FLINT), 15);
+    CHECK_EQ_INT(map_stones(&map, 4, 4, 0, ITEM_COBBLE), MAP_STONES_MAX - 15);
+    map_set_stones(&map, 4, 4, 0, -3, 99);
+    CHECK_EQ_INT(map_stones(&map, 4, 4, 0, ITEM_FLINT), MAP_STONES_MAX);
+    CHECK_EQ_INT(map_stones(&map, 4, 4, 0, ITEM_COBBLE), 0);
+    map_set_stones(&map, 16, 4, 0, 3, 3); /* Ignored. */
     uint64_t hash = map_hash(&map);
-    CHECK(map_take_stone(&map, 3, 3, ITEM_FLINT));
+    CHECK(map_take_stone(&map, 3, 3, 0, ITEM_FLINT));
     CHECK(map_hash(&map) != hash);
-    CHECK(map_take_stone(&map, 3, 3, ITEM_FLINT));
-    CHECK(!map_take_stone(&map, 3, 3, ITEM_FLINT));
-    CHECK(!map_take_stone(&map, 3, 3, ITEM_TWIGS));
-    CHECK(!map_take_stone(&map, 30, 3, ITEM_COBBLE));
-    CHECK_EQ_INT(map_stones(&map, 3, 3, ITEM_COBBLE), 7);
+    CHECK(map_take_stone(&map, 3, 3, 0, ITEM_FLINT));
+    CHECK(!map_take_stone(&map, 3, 3, 0, ITEM_FLINT));
+    CHECK(!map_take_stone(&map, 3, 3, 0, ITEM_TWIGS));
+    CHECK(!map_take_stone(&map, 30, 3, 0, ITEM_COBBLE));
+    CHECK_EQ_INT(map_stones(&map, 3, 3, 0, ITEM_COBBLE), 7);
     map_free(&map);
 }
 
@@ -910,43 +912,44 @@ static void test_flint_and_cobbles(void)
     Rng rng;
     REQUIRE(init_world(&map, &zones, &items));
     rng_seed(&rng, 7, 1);
-    map_set_stones(&map, 8, 8, 10, 10);
-    int index = gather_zone_create(&zones, &map, 4, 4, 8, 8);
+    map_set_stones(&map, 8, 8, 0, 10, 10);
+    int index = gather_zone_create(&zones, &map, 4, 4, 8, 8, 0);
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_FLINT, GATHER_FOREVER);
-    float stone = gather_job_work_needed(&map, 8, 8, GATHER_JOB_STONES);
+    float stone = gather_job_work_needed(&map, 8, 8, 0, GATHER_JOB_STONES);
     /* Both wanted: drawn among what the tile holds, until it is empty. */
     for (int i = 0; i < 20; i++) {
-        CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, stone, 60.0,
+        CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, 0, GATHER_JOB_STONES, stone, 60.0,
                                    &rng));
     }
     CHECK_EQ_INT((int)items.totals[ITEM_FLINT], 10);
     CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 10);
-    CHECK(!gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
+    CHECK(!gather_job_available(&zones, &map, 8, 8, 0, GATHER_JOB_STONES));
 
     /* Only flint wanted: tiles without flint offer nothing, and the cobbles
      * stay in the ground. */
-    map_set_stones(&map, 8, 8, 5, 3);
+    map_set_stones(&map, 8, 8, 0, 5, 3);
     gather_zone_set_enabled(&zones, index, GATHER_COBBLES, false);
     gather_zones_update(&zones, items.totals, 0.0f);
-    CHECK(!gather_job_available(&zones, &map, 4, 4, GATHER_JOB_STONES));
-    CHECK(gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
+    CHECK(!gather_job_available(&zones, &map, 4, 4, 0, GATHER_JOB_STONES));
+    CHECK(gather_job_available(&zones, &map, 8, 8, 0, GATHER_JOB_STONES));
     for (int i = 0; i < 3; i++) {
-        CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, stone, 60.0,
+        CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, 0, GATHER_JOB_STONES, stone, 60.0,
                                    &rng));
     }
     CHECK_EQ_INT((int)items.totals[ITEM_FLINT], 13);
     CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 10);
-    CHECK_EQ_INT(map_stones(&map, 8, 8, ITEM_COBBLE), 5);
-    CHECK(!gather_job_available(&zones, &map, 8, 8, GATHER_JOB_STONES));
+    CHECK_EQ_INT(map_stones(&map, 8, 8, 0, ITEM_COBBLE), 5);
+    CHECK(!gather_job_available(&zones, &map, 8, 8, 0, GATHER_JOB_STONES));
     CHECK_EQ_INT(gather_zone_get(&zones, index)->orders[GATHER_FLINT].done, 13);
     /* Without randomness, a cobble is found before flint. */
-    map_set_stones(&map, 8, 8, 1, 1);
+    map_set_stones(&map, 8, 8, 0, 1, 1);
     gather_zone_set_enabled(&zones, index, GATHER_COBBLES, true);
     gather_zones_update(&zones, items.totals, 0.0f);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, stone, 60.0, NULL));
-    CHECK_EQ_INT(map_stones(&map, 8, 8, ITEM_COBBLE), 0);
-    CHECK_EQ_INT(map_stones(&map, 8, 8, ITEM_FLINT), 1);
+    CHECK(
+        gather_zone_add_work(&zones, &map, &items, 8, 8, 0, GATHER_JOB_STONES, stone, 60.0, NULL));
+    CHECK_EQ_INT(map_stones(&map, 8, 8, 0, ITEM_COBBLE), 0);
+    CHECK_EQ_INT(map_stones(&map, 8, 8, 0, ITEM_FLINT), 1);
     free_world(&map, &zones, &items);
 }
 
@@ -962,10 +965,10 @@ static void test_available_resources(void)
         CHECK_EQ_INT((int)available[r], 0);
     }
     /* A 3 x 1 zone on soil, gravel and sand. */
-    int index = gather_zone_create(&zones, &map, 8, 8, 10, 8);
-    map_set_stones(&map, 8, 8, 4, 2);
-    map_set_stones(&map, 9, 8, 6, 0);
-    map_set_stones(&map, 10, 8, 9, 9); /* Sand: never found. */
+    int index = gather_zone_create(&zones, &map, 8, 8, 10, 8, 0);
+    map_set_stones(&map, 8, 8, 0, 4, 2);
+    map_set_stones(&map, 9, 8, 0, 6, 0);
+    map_set_stones(&map, 10, 8, 0, 9, 9); /* Sand: never found. */
     Plant *tree = put_plant(&map, 8, 8, PLANT_TREE, 1.0f);
     Plant *young = put_plant(&map, 9, 8, PLANT_TREE, 0.5f);
     gather_zone_available(&zones, &map, index, available);
@@ -988,8 +991,9 @@ static void test_available_resources(void)
     CHECK_EQ_INT((int)available[GATHER_GRASS], 0);
     /* What is gathered no longer counts. */
     order(&zones, &items, index, GATHER_FLINT, GATHER_FOREVER);
-    float stone = gather_job_work_needed(&map, 8, 8, GATHER_JOB_STONES);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, GATHER_JOB_STONES, stone, 60.0, NULL));
+    float stone = gather_job_work_needed(&map, 8, 8, 0, GATHER_JOB_STONES);
+    CHECK(
+        gather_zone_add_work(&zones, &map, &items, 8, 8, 0, GATHER_JOB_STONES, stone, 60.0, NULL));
     gather_zone_available(&zones, &map, index, available);
     CHECK_EQ_INT((int)available[GATHER_FLINT], 1);
     CHECK_EQ_INT((int)available[GATHER_COBBLES], 10);
@@ -1005,7 +1009,7 @@ static void test_plants_growing_wake_settlers(void)
     uint32_t revision = zones.revision;
     gather_zones_plants_changed(&zones); /* No zone: nothing to look for. */
     CHECK_EQ_UINT(zones.revision, revision);
-    int index = gather_zone_create(&zones, &map, 0, 0, 3, 3);
+    int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
     order(&zones, &items, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
     revision = zones.revision;
     gather_zones_plants_changed(&zones);
@@ -1020,7 +1024,7 @@ static void test_hash(void)
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
     uint64_t empty = gather_zones_hash(&zones, HASH_FNV1A64_INIT);
-    int index = gather_zone_create(&zones, &map, 0, 0, 2, 2);
+    int index = gather_zone_create(&zones, &map, 0, 0, 2, 2, 0);
     uint64_t created = gather_zones_hash(&zones, HASH_FNV1A64_INIT);
     CHECK(created != empty);
     gather_zone_set_target(&zones, index, GATHER_FLINT, 3);
@@ -1040,17 +1044,17 @@ static void test_overlapping_rectangle_merges_zones(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, GATHER_ZONE_NONE, NULL);
-    int b = gather_zones_add_rect(&zones, &map, 6, 0, 8, 2, GATHER_ZONE_NONE, NULL);
+    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, 0, GATHER_ZONE_NONE, NULL);
+    int b = gather_zones_add_rect(&zones, &map, 6, 0, 8, 2, 0, GATHER_ZONE_NONE, NULL);
     REQUIRE(a != GATHER_ZONE_NONE && b != GATHER_ZONE_NONE && a != b);
     order(&zones, &items, a, GATHER_TWIGS, GATHER_FOREVER);
     order(&zones, &items, b, GATHER_COBBLES, GATHER_FOREVER);
     /* Work under way in the younger zone. */
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 7, 1, GATHER_JOB_STONES, 100.0f, 60.0,
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 7, 1, 0, GATHER_JOB_STONES, 100.0f, 60.0,
                                 NULL));
 
     /* Over both: the oldest takes everything, with its orders. */
-    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 2, 1, 6, 1, GATHER_ZONE_NONE, NULL), a);
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 2, 1, 6, 1, 0, GATHER_ZONE_NONE, NULL), a);
     CHECK_EQ_INT(zones.used_count, 1);
     CHECK(gather_zone_get(&zones, b) == NULL);
     const GatherZone *merged = gather_zone_get(&zones, a);
@@ -1058,13 +1062,13 @@ static void test_overlapping_rectangle_merges_zones(void)
     CHECK_EQ_INT(merged->cell_count, 9 + 9 + 3);
     CHECK(merged->orders[GATHER_TWIGS].enabled);
     CHECK(!merged->orders[GATHER_COBBLES].enabled);
-    CHECK_EQ_INT(gather_zone_at(&zones, 8, 2), a);
-    CHECK_NEAR(zones.progress[map_index(&map, 7, 1)], 100.0, 1e-4); /* Kept. */
+    CHECK_EQ_INT(gather_zone_at(&zones, 8, 2, 0), a);
+    CHECK_NEAR(zones.progress[map_index(&map, 7, 1, 0)], 100.0, 1e-4); /* Kept. */
 
     /* The selected zone wins and keeps its orders. */
-    int c = gather_zones_add_rect(&zones, &map, 0, 12, 1, 13, GATHER_ZONE_NONE, NULL);
+    int c = gather_zones_add_rect(&zones, &map, 0, 12, 1, 13, 0, GATHER_ZONE_NONE, NULL);
     REQUIRE(c != GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 2, 1, 12, c, NULL), c);
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 2, 1, 12, 0, c, NULL), c);
     CHECK(gather_zone_get(&zones, a) == NULL);
     CHECK(!gather_zone_get(&zones, c)->orders[GATHER_TWIGS].enabled);
     CHECK_EQ_INT(gather_zone_get(&zones, c)->cell_count, 21 + 4 + 9);
@@ -1080,18 +1084,18 @@ static void test_blocked_tiles_are_left_out(void)
     REQUIRE(init_world(&map, &zones, &items));
     uint8_t *blocked = calloc(map_tile_count(&map), 1);
     REQUIRE(blocked != NULL);
-    blocked[map_index(&map, 1, 1)] = 3;
+    blocked[map_index(&map, 1, 1, 0)] = 3;
     /* Several layers: any of them blocks. */
     uint8_t *other = calloc(map_tile_count(&map), 1);
     REQUIRE(other != NULL);
-    other[map_index(&map, 2, 2)] = 1;
+    other[map_index(&map, 2, 2, 0)] = 1;
     const uint8_t *layers[] = {blocked, other, NULL};
-    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, GATHER_ZONE_NONE, layers);
+    int a = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, 0, GATHER_ZONE_NONE, layers);
     REQUIRE(a != GATHER_ZONE_NONE);
     CHECK_EQ_INT(gather_zone_get(&zones, a)->cell_count, 7);
-    CHECK_EQ_INT(gather_zone_at(&zones, 1, 1), GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zone_at(&zones, 2, 2), GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 1, 1, 1, GATHER_ZONE_NONE, layers),
+    CHECK_EQ_INT(gather_zone_at(&zones, 1, 1, 0), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&zones, 2, 2, 0), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 1, 1, 1, 1, 0, GATHER_ZONE_NONE, layers),
                  GATHER_ZONE_NONE);
     CHECK_EQ_INT(zones.used_count, 1);
     free(other);
@@ -1105,40 +1109,40 @@ static void test_clearing_plants(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    CHECK_NEAR(gather_clear_work(&map, 1, 1), 0.0, 1e-6); /* Nothing there. */
-    CHECK_NEAR(gather_clear_work(&map, -1, 1), 0.0, 1e-6);
-    map.plants[map_index(&map, 1, 1)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
-    CHECK_NEAR(gather_clear_work(&map, 1, 1), 0.0, 1e-6); /* Not by hand. */
-    CHECK(map_plant_blocks_building(&map, 1, 1));
+    CHECK_NEAR(gather_clear_work(&map, 1, 1, 0), 0.0, 1e-6); /* Nothing there. */
+    CHECK_NEAR(gather_clear_work(&map, -1, 1, 0), 0.0, 1e-6);
+    map.plants[map_index(&map, 1, 1, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    CHECK_NEAR(gather_clear_work(&map, 1, 1, 0), 0.0, 1e-6); /* Not by hand. */
+    CHECK(map_plant_blocks_building(&map, 1, 1, 0));
 
     /* Grass is cut: fresh grass. */
-    map.plants[map_index(&map, 3, 3)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
-    CHECK(!map_plant_blocks_building(&map, 3, 3));
-    CHECK(gather_clear_work(&map, 3, 3) > 0.0f);
-    gather_clear_plant(&map, &items, 3, 3, 60.0, NULL);
-    CHECK_EQ_INT(map.plants[map_index(&map, 3, 3)].type, PLANT_NONE);
+    map.plants[map_index(&map, 3, 3, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    CHECK(!map_plant_blocks_building(&map, 3, 3, 0));
+    CHECK(gather_clear_work(&map, 3, 3, 0) > 0.0f);
+    gather_clear_plant(&map, &items, 3, 3, 0, 60.0, NULL);
+    CHECK_EQ_INT(map.plants[map_index(&map, 3, 3, 0)].type, PLANT_NONE);
     CHECK_EQ_INT((int)items.totals[ITEM_FRESH_GRASS], 3);
-    CHECK_NEAR(gather_clear_work(&map, 3, 3), 0.0, 1e-6);
+    CHECK_NEAR(gather_clear_work(&map, 3, 3, 0), 0.0, 1e-6);
 
     /* A hazel is pulled up: its twigs, branches and nuts. */
-    Plant *hazel = &map.plants[map_index(&map, 8, 3)];
+    Plant *hazel = &map.plants[map_index(&map, 8, 3, 0)];
     *hazel = (Plant){.type = PLANT_HAZEL, .growth = 1.0f};
     plant_settle(hazel, SEASON_DAY(SEASON_AUTUMN, 2));
     int twigs = plant_stock_available(hazel, PLANT_STOCK_TWIGS);
     int nuts = plant_stock_available(hazel, PLANT_STOCK_FOOD);
     REQUIRE(twigs > 0 && nuts > 0);
-    CHECK(gather_clear_work(&map, 8, 3) > gather_clear_work(&map, 3, 3));
-    gather_clear_plant(&map, &items, 8, 3, 60.0, NULL);
+    CHECK(gather_clear_work(&map, 8, 3, 0) > gather_clear_work(&map, 3, 3, 0));
+    gather_clear_plant(&map, &items, 8, 3, 0, 60.0, NULL);
     CHECK_EQ_INT(hazel->type, PLANT_NONE);
     CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], twigs);
     CHECK_EQ_INT((int)items.totals[ITEM_HAZELNUTS], nuts);
 
     /* Wild garlic withered underground: nothing in the way. */
-    Plant *garlic = &map.plants[map_index(&map, 9, 3)];
+    Plant *garlic = &map.plants[map_index(&map, 9, 3, 0)];
     *garlic = (Plant){.type = PLANT_WILD_GARLIC, .growth = 1.0f};
     plant_settle(garlic, GAME_START_DAY);
     REQUIRE(plant_is_dormant(garlic));
-    CHECK_NEAR(gather_clear_work(&map, 9, 3), 0.0, 1e-6);
+    CHECK_NEAR(gather_clear_work(&map, 9, 3, 0), 0.0, 1e-6);
     free_world(&map, &zones, &items);
 }
 

@@ -82,9 +82,9 @@ static void test_stones(void)
         REQUIRE(worldgen_generate(&map, &params));
         for (int y = 0; y < map.height; y++) {
             for (int x = 0; x < map.width; x++) {
-                int cobbles = map_stones(&map, x, y, ITEM_COBBLE);
-                int flint = map_stones(&map, x, y, ITEM_FLINT);
-                Terrain type = (Terrain)map.terrain[map_index(&map, x, y)];
+                int cobbles = map_stones(&map, x, y, 0, ITEM_COBBLE);
+                int flint = map_stones(&map, x, y, 0, ITEM_FLINT);
+                Terrain type = (Terrain)map.terrain[map_index(&map, x, y, 0)];
                 const TerrainDef *terrain = terrain_def(type);
                 if (!terrain->stony) {
                     CHECK_EQ_INT(cobbles + flint, 0);
@@ -118,7 +118,7 @@ static void test_maps_are_mostly_usable_land(void)
         size_t passable = 0;
         for (int y = 0; y < map.height; y++) {
             for (int x = 0; x < map.width; x++) {
-                passable += map_is_passable(&map, x, y);
+                passable += map_is_passable(&map, x, y, 0);
             }
         }
         double ratio = (double)passable / (double)map_tile_count(&map);

@@ -150,15 +150,15 @@ static void add_item_condition_line(Panel *panel, ItemStack stack)
 }
 
 /* Grade and hit points of the structure built on a tile. */
-static void add_structure_condition_line(Panel *panel, const Map *map, int x, int y)
+static void add_structure_condition_line(Panel *panel, const Map *map, int x, int y, int z)
 {
-    StructureType type = map_structure(map, x, y);
-    ItemQuality grade = map_structure_quality(map, x, y);
+    StructureType type = map_structure(map, x, y, z);
+    ItemQuality grade = map_structure_quality(map, x, y, z);
     int max = structure_max_hit_points(type, grade);
     if (max <= 0) {
         return;
     }
-    int current = map_structure_hit_points(map, x, y);
+    int current = map_structure_hit_points(map, x, y, z);
     char hit_points[16], max_hit_points[16], number[16], percent[32];
     tr_integer(hit_points, sizeof(hit_points), current);
     tr_integer(max_hit_points, sizeof(max_hit_points), max);
@@ -169,13 +169,13 @@ static void add_structure_condition_line(Panel *panel, const Map *map, int x, in
 }
 
 /* Owner of a bed (the settler's id is its slot + 1, core/bed.h). */
-static const Colonist *bed_owner(const Game *game, int x, int y)
+static const Colonist *bed_owner(const Game *game, int x, int y, int z)
 {
     int origin_x, origin_y;
-    if (!map_structure_origin(&game->map, x, y, &origin_x, &origin_y)) {
+    if (!map_structure_origin(&game->map, x, y, z, &origin_x, &origin_y)) {
         return NULL;
     }
-    uint8_t owner = beds_owner(&game->beds, origin_x, origin_y);
+    uint8_t owner = beds_owner(&game->beds, origin_x, origin_y, z);
     if (owner == BED_NO_OWNER) {
         return NULL;
     }
@@ -184,7 +184,8 @@ static const Colonist *bed_owner(const Game *game, int x, int y)
 
 static void add_bed_owner_line(const App *app, Panel *panel, int x, int y)
 {
-    const Colonist *owner = bed_owner(&app->game, x, y);
+    const int z = app->camera.level; /* The level shown. */
+    const Colonist *owner = bed_owner(&app->game, x, y, z);
     if (owner != NULL) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.bed_owner"), owner->name);
     } else {
@@ -269,9 +270,10 @@ static void add_site_lines(Panel *panel, const ConstructionSite *site)
 
 static void build_tile_panel(App *app, Panel *panel)
 {
+    const int z = app->camera.level; /* The level shown. */
     const Map *map = &app->game.map;
     int x = app->hover_x, y = app->hover_y;
-    size_t index = map_index(map, x, y);
+    size_t index = map_index(map, x, y, z);
     char a[32], b[32];
 
     tr_integer(a, sizeof(a), x);
@@ -315,7 +317,7 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
-    ItemStack stack = items_get(&app->game.items, x, y);
+    ItemStack stack = items_get(&app->game.items, x, y, z);
     if (stack.type != ITEM_NONE) {
         char weight[32];
         tr_integer(a, sizeof(a), stack.count);
@@ -331,7 +333,7 @@ static void build_tile_panel(App *app, Panel *panel)
         }
         if (item_rots((ItemType)stack.type)) {
             /* At the tile's temperature now: an estimate. */
-            float hours = item_stack_rot_hours(stack, game_item_rot_rate(&app->game, x, y));
+            float hours = item_stack_rot_hours(stack, game_item_rot_rate(&app->game, x, y, z));
             if (hours < 0.0f) {
                 panel_add_text(panel, tr("hud.tile.item_frozen"));
             } else if (hours < 48.0f) {
@@ -347,31 +349,31 @@ static void build_tile_panel(App *app, Panel *panel)
     }
 
     const Workstation *station = workstation_get_const(
-        &app->game.workstations, workstation_at(&app->game.workstations, x, y));
+        &app->game.workstations, workstation_at(&app->game.workstations, x, y, z));
     if (station != NULL) {
         const char *name = tr(workstation_def((WorkstationType)station->type)->name_key);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.station"), name);
     }
-    StructureType structure = map_structure(map, x, y);
+    StructureType structure = map_structure(map, x, y, z);
     if (structure != STRUCTURE_NONE) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.structure"),
                   tr(structure_def(structure)->name_key));
-        add_structure_condition_line(panel, map, x, y);
+        add_structure_condition_line(panel, map, x, y, z);
         if (structure_is_bed(structure)) {
             add_bed_owner_line(app, panel, x, y);
         }
     }
-    StructureType roof = map_roof(map, x, y);
+    StructureType roof = map_roof(map, x, y, z);
     if (roof != STRUCTURE_NONE) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.roof"),
                   tr(structure_def(roof)->name_key),
-                  tr(item_quality_name_key(map_roof_quality(map, x, y))));
-    } else if (map_natural_roof(map, x, y)) {
+                  tr(item_quality_name_key(map_roof_quality(map, x, y, z))));
+    } else if (map_natural_roof(map, x, y, z)) {
         panel_add_text(panel, tr("hud.tile.natural_roof"));
     }
     char celsius[32], felt[32];
-    float air = temperature_at(&app->game.temperatures, x, y);
-    float radiant = hearths_radiant_warmth(&app->game.workstations, map, x, y);
+    float air = temperature_at(&app->game.temperatures, x, y, z);
+    float radiant = hearths_radiant_warmth(&app->game.workstations, map, x, y, z);
     temperature_text(celsius, sizeof(celsius), air, 1);
     if (radiant >= 0.05f) {
         temperature_text(felt, sizeof(felt), air + radiant, 1);
@@ -380,7 +382,7 @@ static void build_tile_panel(App *app, Panel *panel)
     } else {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature"), celsius);
     }
-    const Room *room = rooms_at(game_rooms(&app->game), map, x, y);
+    const Room *room = rooms_at(game_rooms(&app->game), map, x, y, z);
     if (room != NULL && !room->closed) {
         panel_add_text(panel, tr("hud.tile.outdoors"));
     } else if (room != NULL) {
@@ -392,23 +394,23 @@ static void build_tile_panel(App *app, Panel *panel)
                   a, b);
     }
     const ConstructionSite *site = construction_get(
-        &app->game.constructions, construction_at(&app->game.constructions, x, y));
+        &app->game.constructions, construction_at(&app->game.constructions, x, y, z));
     const ConstructionSite *roof_site = construction_get(
-        &app->game.constructions, construction_roof_at(&app->game.constructions, x, y));
+        &app->game.constructions, construction_roof_at(&app->game.constructions, x, y, z));
     add_site_lines(panel, site);
     add_site_lines(panel, roof_site);
 
-    if (site != NULL && gather_clear_work(map, x, y) > 0.0f) {
+    if (site != NULL && gather_clear_work(map, x, y, z) > 0.0f) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("blueprint.clear_first"),
                   tr(plant_def((PlantType)map->plants[index].type)->name_key));
     }
 
     /* Stones in the ground: what gathering stones may still find. */
-    if (gather_stone_ground(map, x, y)) {
+    if (gather_stone_ground(map, x, y, z)) {
         static const ItemType STONES[] = {ITEM_COBBLE, ITEM_FLINT};
         bool any = false;
         for (size_t i = 0; i < SDL_arraysize(STONES); i++) {
-            int count = map_stones(map, x, y, STONES[i]);
+            int count = map_stones(map, x, y, z, STONES[i]);
             if (count > 0) {
                 tr_integer(a, sizeof(a), count);
                 TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.ground_stones"),
@@ -422,7 +424,7 @@ static void build_tile_panel(App *app, Panel *panel)
     }
 
     const Stockpile *stockpile =
-        stockpile_get(&app->game.stockpiles, stockpile_at(&app->game.stockpiles, x, y));
+        stockpile_get(&app->game.stockpiles, stockpile_at(&app->game.stockpiles, x, y, z));
     if (stockpile != NULL) {
         char name[HUD_LINE_SIZE];
         tr_integer(a, sizeof(a), stockpile->number);
@@ -430,7 +432,7 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.stockpile"), name);
     }
     const GatherZone *gather =
-        gather_zone_get(&app->game.gather_zones, gather_zone_at(&app->game.gather_zones, x, y));
+        gather_zone_get(&app->game.gather_zones, gather_zone_at(&app->game.gather_zones, x, y, z));
     if (gather != NULL) {
         char name[HUD_LINE_SIZE];
         tr_integer(a, sizeof(a), gather->number);
@@ -438,7 +440,7 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.stockpile"), name);
     }
     GatherWorkInfo work;
-    if (game_gather_work_at(&app->game, x, y, &work)) {
+    if (game_gather_work_at(&app->game, x, y, z, &work)) {
         const char *activity = tr(gather_job_def(work.job)->activity_key);
         tr_integer(a, sizeof(a), (long long)(work.fraction * 100.0f));
         const Colonist *worker = game_colonist_const(&app->game, work.worker);
@@ -451,10 +453,10 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
-    DesignationType designation = designation_get(&app->game.designations, x, y);
+    DesignationType designation = designation_get(&app->game.designations, x, y, z);
     if (designation != DESIGNATION_NONE) {
         const char *name = tr(designation_def(designation)->name_key);
-        float progress = designation_progress_fraction(&app->game.designations, map, x, y);
+        float progress = designation_progress_fraction(&app->game.designations, map, x, y, z);
         if (progress > 0.0f) {
             tr_integer(a, sizeof(a), (long long)(progress * 100.0f));
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.designation_progress"),
@@ -464,13 +466,13 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
-    int dirt = dirt_at(&app->game.dirt, x, y);
+    int dirt = dirt_at(&app->game.dirt, x, y, z);
     if (dirt > 0) {
         tr_integer(a, sizeof(a), dirt);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.dirt"), a);
     }
 
-    float cost = map_move_cost(map, x, y);
+    float cost = map_move_cost(map, x, y, z);
     if (cost <= 0.0f) {
         panel_add_text(panel, tr("hud.tile.impassable"));
     } else {
@@ -750,7 +752,7 @@ static void build_selection_panel(App *app, Panel *panel)
     }
     float sleep_celsius = hearths_felt_temperature(&app->game.workstations, &app->game.map,
                                                    &app->game.temperatures, colonist->x,
-                                                   colonist->y) -
+                                                   colonist->y, colonist->z) -
                           chill;
     float sleep_factor = colonist_sleep_temperature_factor(sleep_celsius);
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist) && sleep_factor < 1.0f) {
@@ -764,10 +766,11 @@ static void build_selection_panel(App *app, Panel *panel)
     }
     TilePos bed;
     if (beds_owned(&app->game.beds, (uint8_t)(app->selected[0].index + 1), &bed)) {
-        StructureType type = map_structure(&app->game.map, bed.x, bed.y);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.bed"),
-                  tr(structure_def(type)->name_key),
-                  tr(item_quality_name_key(map_structure_quality(&app->game.map, bed.x, bed.y))));
+        StructureType type = map_structure(&app->game.map, bed.x, bed.y, bed.z);
+        TR_FORMAT(
+            panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.bed"),
+            tr(structure_def(type)->name_key),
+            tr(item_quality_name_key(map_structure_quality(&app->game.map, bed.x, bed.y, bed.z))));
     } else {
         panel_add_text(panel, tr("hud.colonist.no_bed"));
     }
@@ -804,6 +807,7 @@ static void build_selection_panel(App *app, Panel *panel)
 
 void hud_draw_item_counts(App *app)
 {
+    const int z = app->camera.level; /* The level shown. */
     if (app->camera.zoom < HUD_ITEM_COUNT_MIN_ZOOM) {
         return;
     }
@@ -812,7 +816,7 @@ void hud_draw_item_counts(App *app)
     char count[16];
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            ItemStack stack = items_get(items, x, y);
+            ItemStack stack = items_get(items, x, y, z);
             if (stack.type == ITEM_NONE) {
                 continue;
             }
@@ -837,7 +841,8 @@ void hud_draw_world_labels(App *app)
     const Game *game = &app->game;
     float offset = app->camera.zoom * 0.48f + 2.0f; /* Just under the feet. */
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
-        if (entity_id_is_none(game_colonist_id_at(game, slot))) {
+        if (entity_id_is_none(game_colonist_id_at(game, slot)) ||
+            game->colonists[slot].z != app->camera.level) {
             continue;
         }
         const Colonist *colonist = &game->colonists[slot];

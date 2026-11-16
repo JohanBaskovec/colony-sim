@@ -1,6 +1,10 @@
 /*
  * The tile map: terrain, natural rock walls and plants, stored as dense layers
- * (one array per layer, indexed by y * width + x).
+ * (one array per layer). The map is a volume: `depth` levels of width x height
+ * tiles, each level 2 m high (a storey); a tile is (x, y, z), z the level, and
+ * the layers hold the levels one after the other (index (z * height + y) *
+ * width + x, see map_index()). For now nothing links the levels: every map
+ * function looks at one level only.
  */
 #ifndef COLONY_CORE_MAP_H
 #define COLONY_CORE_MAP_H
@@ -14,7 +18,8 @@
 #include <stdint.h>
 
 #define MAP_MIN_SIZE 16
-#define MAP_MAX_SIZE 1024
+#define MAP_MAX_SIZE 256
+#define MAP_MAX_LEVELS 32
 
 typedef enum Terrain {
     TERRAIN_DEEP_WATER,
@@ -148,7 +153,7 @@ typedef struct Plant {
 
 /* One change of where one can walk. */
 typedef struct MapTopologyChange {
-    int16_t x, y;
+    int16_t x, y, z;
     /* True when all that happened is that this tile became passable (a rock
      * wall was dug out): the common change, which caches can apply without
      * starting over. False: anything else, on this tile or (`anywhere`)
@@ -160,12 +165,13 @@ typedef struct MapTopologyChange {
 /* One change of a structure or a roof, or of rock where one could not walk
  * anyway (a tile; see Map.build_log). */
 typedef struct MapBuildChange {
-    int16_t x, y;
+    int16_t x, y, z;
 } MapBuildChange;
 
 typedef struct Map {
     int width;
     int height;
+    int depth; /* Levels, 1..MAP_MAX_LEVELS. */
     uint8_t *terrain; /* Terrain per tile. */
     uint8_t *rock; /* RockType per tile; non-zero means a solid rock wall. */
     Plant *plants;
@@ -251,23 +257,40 @@ bool plant_is_dormant(const Plant *plant);
  * stock full otherwise (food in season only). */
 void plant_settle(Plant *plant, int day_of_year);
 
-/* Allocates a map filled with soil, without rock, plants nor stones. */
-bool map_init(Map *map, int width, int height);
+/* Allocates a map of `depth` levels filled with soil, without rock, plants
+ * nor stones. */
+bool map_init(Map *map, int width, int height, int depth);
 void map_free(Map *map);
 
-static inline bool map_in_bounds(const Map *map, int x, int y)
+static inline bool map_in_bounds(const Map *map, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && x < map->width && y < map->height;
+    return x >= 0 && y >= 0 && z >= 0 && x < map->width && y < map->height && z < map->depth;
 }
 
-static inline size_t map_index(const Map *map, int x, int y)
+static inline size_t map_index(const Map *map, int x, int y, int z)
 {
-    return (size_t)y * (size_t)map->width + (size_t)x;
+    return ((size_t)z * (size_t)map->height + (size_t)y) * (size_t)map->width + (size_t)x;
 }
 
-static inline size_t map_tile_count(const Map *map)
+/* Tiles of one level. */
+static inline size_t map_level_tile_count(const Map *map)
 {
     return (size_t)map->width * (size_t)map->height;
+}
+
+/* Tiles of every level. */
+static inline size_t map_tile_count(const Map *map)
+{
+    return map_level_tile_count(map) * (size_t)map->depth;
+}
+
+/* The tile of an index (the reverse of map_index()). */
+static inline void map_tile_of(const Map *map, size_t index, int *x, int *y, int *z)
+{
+    size_t level = map_level_tile_count(map);
+    *z = (int)(index / level);
+    *y = (int)(index % level / (size_t)map->width);
+    *x = (int)(index % (size_t)map->width);
 }
 
 /*
@@ -277,8 +300,8 @@ static inline size_t map_tile_count(const Map *map)
  * change that leaves the tile as passable as before (granite to sandstone)
  * is not a topology change.
  */
-void map_set_terrain(Map *map, int x, int y, Terrain terrain);
-void map_set_rock(Map *map, int x, int y, RockType rock);
+void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain);
+void map_set_rock(Map *map, int x, int y, int z, RockType rock);
 void map_topology_changed(Map *map);
 
 /* Same rule for structures (a wall blocks movement, a door slows it). The
@@ -288,68 +311,68 @@ void map_topology_changed(Map *map);
  * (x, y) and its other tiles in `direction` (see structure_length()). Any
  * structure already on those tiles is removed whole. Fails (nothing changes)
  * when a tile is out of bounds. */
-bool map_place_structure(Map *map, int x, int y, StructureType type, Direction direction,
+bool map_place_structure(Map *map, int x, int y, int z, StructureType type, Direction direction,
                          ItemQuality quality);
 
 /* map_place_structure() of standard grade, facing south; STRUCTURE_NONE
  * removes the structure covering the tile (map_remove_structure()). */
-void map_set_structure(Map *map, int x, int y, StructureType type);
+void map_set_structure(Map *map, int x, int y, int z, StructureType type);
 
 /* Removes the whole structure covering a tile, all its tiles. */
-void map_remove_structure(Map *map, int x, int y);
+void map_remove_structure(Map *map, int x, int y, int z);
 
 /* Head of the structure covering a tile (the tile itself for a one-tile
  * structure); false without a structure. */
-bool map_structure_origin(const Map *map, int x, int y, int *origin_x, int *origin_y);
+bool map_structure_origin(const Map *map, int x, int y, int z, int *origin_x, int *origin_y);
 
 /* Whether the tile holds the head of a structure. */
-bool map_structure_is_origin(const Map *map, int x, int y);
+bool map_structure_is_origin(const Map *map, int x, int y, int z);
 
 /* Direction of the structure covering a tile (DIRECTION_SOUTH without one). */
-Direction map_structure_direction(const Map *map, int x, int y);
+Direction map_structure_direction(const Map *map, int x, int y, int z);
 
 /* Grade and hit points of the structure covering a tile (0 hit points
  * without one or out of bounds). */
-ItemQuality map_structure_quality(const Map *map, int x, int y);
-int map_structure_hit_points(const Map *map, int x, int y);
+ItemQuality map_structure_quality(const Map *map, int x, int y, int z);
+int map_structure_hit_points(const Map *map, int x, int y, int z);
 
 /* Sets the hit points of the structure covering a tile, clamped to 1..its
  * maximum (nothing without a structure). */
-void map_set_structure_hit_points(Map *map, int x, int y, int hit_points);
+void map_set_structure_hit_points(Map *map, int x, int y, int z, int hit_points);
 
 /* STRUCTURE_NONE out of bounds. */
-StructureType map_structure(const Map *map, int x, int y);
+StructureType map_structure(const Map *map, int x, int y, int z);
 
 /* The roof built over a tile (STRUCTURE_NONE without one or out of bounds)
  * and its grade. */
-StructureType map_roof(const Map *map, int x, int y);
-ItemQuality map_roof_quality(const Map *map, int x, int y);
+StructureType map_roof(const Map *map, int x, int y, int z);
+ItemQuality map_roof_quality(const Map *map, int x, int y, int z);
 
 /* Builds a roof (a type for which structure_is_roof()) of a grade over a
  * tile, or removes it (STRUCTURE_NONE). Other types and out-of-bounds tiles
  * are ignored. */
-void map_set_roof(Map *map, int x, int y, StructureType roof, ItemQuality quality);
+void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality);
 
 /* Whether a roof over the tile would rest on something: a wall (a structure
  * that blocks movement) or rock within ROOF_SUPPORT_RANGE tiles. */
-bool map_roof_supported(const Map *map, int x, int y);
+bool map_roof_supported(const Map *map, int x, int y, int z);
 
 /*
  * Whether rock covers the tile: an open tile with rock at most 3 tiles away
  * in at least 6 of the 8 directions (inside a cave, under an overhang).
  * docs/KNOWLEDGE.md §10.
  */
-bool map_natural_roof(const Map *map, int x, int y);
+bool map_natural_roof(const Map *map, int x, int y, int z);
 
 /* A built roof or a natural one. */
-bool map_is_roofed(const Map *map, int x, int y);
+bool map_is_roofed(const Map *map, int x, int y, int z);
 
 /* False when out of bounds, on impassable terrain, on a rock wall or on a
  * structure that blocks movement. */
-bool map_is_passable(const Map *map, int x, int y);
+bool map_is_passable(const Map *map, int x, int y, int z);
 
 /* Movement cost multiplier of a tile, or 0 when impassable. */
-float map_move_cost(const Map *map, int x, int y);
+float map_move_cost(const Map *map, int x, int y, int z);
 
 /* Same for a tile index known to be in bounds (hot loops: pathfinding). */
 float map_move_cost_at(const Map *map, size_t index);
@@ -362,32 +385,36 @@ size_t map_count_plants(const Map *map, PlantType type);
 /* Whether the plant on a tile keeps anything from being built there: a tree
  * (felling needs an axe). Grass and bushes are cleared by hand first (see
  * gather_clear_plant()). */
-bool map_plant_blocks_building(const Map *map, int x, int y);
+bool map_plant_blocks_building(const Map *map, int x, int y, int z);
 
 /* Whether the plant on this tile bears food a settler may eat in place right
  * now (not roots, nor anything easily mistaken for a poisonous plant). */
-bool map_has_edible_plant(const Map *map, int x, int y);
+bool map_has_edible_plant(const Map *map, int x, int y, int z);
 
 /* Whether a mature tree (fully grown) stands within `range` tiles (square). */
-bool map_tree_near(const Map *map, int x, int y, int range);
+bool map_tree_near(const Map *map, int x, int y, int z, int range);
 
 /* Stones of a type (ITEM_COBBLE or ITEM_FLINT) lying about a tile; 0 for other
  * types and out of bounds. */
-int map_stones(const Map *map, int x, int y, ItemType type);
+int map_stones(const Map *map, int x, int y, int z, ItemType type);
 
 /* Sets the stones of a tile: each count is clamped to 0..MAP_STONES_MAX, then
  * cobbles to what flint leaves of MAP_STONES_MAX. Out-of-bounds tiles are
  * ignored. */
-void map_set_stones(Map *map, int x, int y, int cobbles, int flint);
+void map_set_stones(Map *map, int x, int y, int z, int cobbles, int flint);
 
 /* Takes one stone of a type from a tile; false when there is none. */
-bool map_take_stone(Map *map, int x, int y, ItemType type);
+bool map_take_stone(Map *map, int x, int y, int z, ItemType type);
+
+/* The level of the ground at (x, y), where settlers arrive and the world is
+ * generated: level 0 for now (no relief yet). */
+int map_ground_level(const Map *map, int x, int y);
 
 /* Shallow or deep water (false out of bounds). */
-bool map_is_water(const Map *map, int x, int y);
+bool map_is_water(const Map *map, int x, int y, int z);
 
 /* Whether a settler standing on this tile can drink: the tile is passable and
  * is shallow water or touches water (4-neighborhood). */
-bool map_is_drinking_spot(const Map *map, int x, int y);
+bool map_is_drinking_spot(const Map *map, int x, int y, int z);
 
 #endif /* COLONY_CORE_MAP_H */

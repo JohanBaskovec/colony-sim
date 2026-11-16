@@ -3,13 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-bool rooms_init(Rooms *rooms, int width, int height)
+bool rooms_init(Rooms *rooms, int width, int height, int depth)
 {
     memset(rooms, 0, sizeof(*rooms));
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
-    size_t count = (size_t)width * (size_t)height;
+    size_t count = (size_t)width * (size_t)height * (size_t)depth;
     rooms->id = calloc(count, sizeof(*rooms->id));
     rooms->stack = malloc(count * sizeof(*rooms->stack));
     /* At most one area per tile, plus ROOM_NONE. */
@@ -20,6 +20,7 @@ bool rooms_init(Rooms *rooms, int width, int height)
     }
     rooms->width = width;
     rooms->height = height;
+    rooms->depth = depth;
     return true;
 }
 
@@ -35,7 +36,8 @@ bool rooms_current(const Rooms *rooms, const Map *map)
 {
     return rooms->built && rooms->topology_revision == map->topology_revision &&
            rooms->build_revision == map->build_revision && rooms->width == map->width &&
-           rooms->height == map->height;
+           rooms->height == map->height &&
+           rooms->depth == map->depth;
 }
 
 /* Rock, a wall or a door: what closes a room. */
@@ -60,7 +62,7 @@ static void fill(Rooms *rooms, const Map *map, uint32_t start, uint32_t area)
     while (top > 0) {
         uint32_t tile = rooms->stack[--top];
         uint32_t x = tile % width;
-        uint32_t y = tile / width;
+        uint32_t y = tile % (width * height) / width; /* Neighbors: on the same level. */
         room->tiles++;
         if (x == 0 || y == 0 || x + 1 == width || y + 1 == height) {
             room->closed = false; /* Open to the rest of the world. */
@@ -95,7 +97,7 @@ static void fill(Rooms *rooms, const Map *map, uint32_t start, uint32_t area)
 void rooms_update(Rooms *rooms, const Map *map)
 {
     if (rooms_current(rooms, map) || rooms->id == NULL || rooms->width != map->width ||
-        rooms->height != map->height) {
+        rooms->height != map->height || rooms->depth != map->depth) {
         return;
     }
     size_t tiles = map_tile_count(map);
@@ -109,9 +111,9 @@ void rooms_update(Rooms *rooms, const Map *map)
     /* Roofs, for rooms only: outdoors is mostly open sky. */
     for (size_t tile = 0; tile < tiles; tile++) {
         Room *room = &rooms->list[rooms->id[tile]];
-        if (rooms->id[tile] != ROOM_NONE && room->closed &&
-            map_is_roofed(map, (int)(tile % (size_t)map->width),
-                          (int)(tile / (size_t)map->width))) {
+        int x, y, z;
+        map_tile_of(map, tile, &x, &y, &z);
+        if (rooms->id[tile] != ROOM_NONE && room->closed && map_is_roofed(map, x, y, z)) {
             room->roofed++;
         }
     }
@@ -120,12 +122,12 @@ void rooms_update(Rooms *rooms, const Map *map)
     rooms->built = true;
 }
 
-const Room *rooms_at(const Rooms *rooms, const Map *map, int x, int y)
+const Room *rooms_at(const Rooms *rooms, const Map *map, int x, int y, int z)
 {
-    if (!rooms_current(rooms, map) || !map_in_bounds(map, x, y)) {
+    if (!rooms_current(rooms, map) || !map_in_bounds(map, x, y, z)) {
         return NULL;
     }
-    uint32_t area = rooms->id[map_index(map, x, y)];
+    uint32_t area = rooms->id[map_index(map, x, y, z)];
     return area != ROOM_NONE ? &rooms->list[area] : NULL;
 }
 

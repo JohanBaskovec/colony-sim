@@ -35,10 +35,10 @@ typedef struct FoodPlantCount {
 
 /* Counts the grown food plants of a kind and never accepts a tile, to visit
  * the whole area. */
-static bool count_food_plant(const Map *map, int x, int y, void *userdata)
+static bool count_food_plant(const Map *map, int x, int y, int z, void *userdata)
 {
     FoodPlantCount *count = userdata;
-    const Plant *plant = &map->plants[map_index(map, x, y)];
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
     if (plant->type == count->type &&
         plant->growth >= plant_def(count->type)->min_food_growth) {
         count->count++;
@@ -55,7 +55,7 @@ static void test_settlers_arrive_near_food(void)
         REQUIRE(init_small_game(&game, seed));
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         REQUIRE(first != NULL);
-        TilePos start = {(int16_t)first->x, (int16_t)first->y};
+        TilePos start = {(int16_t)first->x, (int16_t)first->y, (int16_t)first->z};
         FoodPlantCount brambles = {PLANT_BRAMBLE, 0}, hazels = {PLANT_HAZEL, 0};
         pathfinder_find_nearest(&game.pathfinder, &game.map, start, count_food_plant, &brambles,
                                 GAME_SPAWN_FOOD_MAX_COST, NULL, NULL);
@@ -133,10 +133,10 @@ static void test_mushrooms_come_and_go(void)
     }
     for (int y = 0; y < map->height; y++) {
         for (int x = 0; x < map->width; x++) {
-            const Plant *plant = &map->plants[map_index(map, x, y)];
+            const Plant *plant = &map->plants[map_index(map, x, y, 0)];
             if (plant->type == PLANT_MUSHROOMS) {
                 patches++;
-                CHECK(map_tree_near(map, x, y, 2));
+                CHECK(map_tree_near(map, x, y, 0, 2));
                 CHECK(plant_has_food(plant));
             }
         }
@@ -152,11 +152,11 @@ static void test_mushrooms_come_and_go(void)
 }
 
 /* Accepts a tile of a rich enough flint patch where stones can be gathered. */
-static bool is_flint_spot(const Map *map, int x, int y, void *userdata)
+static bool is_flint_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)userdata;
-    return map_stones(map, x, y, ITEM_FLINT) >= GAME_SPAWN_FLINT_STONES &&
-           gather_stone_ground(map, x, y);
+    return map_stones(map, x, y, z, ITEM_FLINT) >= GAME_SPAWN_FLINT_STONES &&
+           gather_stone_ground(map, x, y, z);
 }
 
 static void test_settlers_arrive_near_flint(void)
@@ -166,7 +166,7 @@ static void test_settlers_arrive_near_flint(void)
         REQUIRE(init_small_game(&game, seed));
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         REQUIRE(first != NULL);
-        TilePos start = {(int16_t)first->x, (int16_t)first->y};
+        TilePos start = {(int16_t)first->x, (int16_t)first->y, (int16_t)first->z};
         CHECK(pathfinder_find_nearest(&game.pathfinder, &game.map, start, is_flint_spot, NULL,
                                       GAME_SPAWN_FOOD_MAX_COST, NULL, NULL));
         game_shutdown(&game);
@@ -205,12 +205,12 @@ static void test_plants_grow_over_time(void)
     Map *map = &game.map;
 
     /* Controlled setup on known terrain. */
-    size_t fertile = map_index(map, 1, 1);
-    size_t barren = map_index(map, 2, 1);
-    map_set_rock(map, 1, 1, ROCK_NONE);
-    map_set_rock(map, 2, 1, ROCK_NONE);
-    map_set_terrain(map, 1, 1, TERRAIN_SOIL);
-    map_set_terrain(map, 2, 1, TERRAIN_SAND);
+    size_t fertile = map_index(map, 1, 1, 0);
+    size_t barren = map_index(map, 2, 1, 0);
+    map_set_rock(map, 1, 1, 0, ROCK_NONE);
+    map_set_rock(map, 2, 1, 0, ROCK_NONE);
+    map_set_terrain(map, 1, 1, 0, TERRAIN_SOIL);
+    map_set_terrain(map, 2, 1, 0, TERRAIN_SAND);
     map->plants[fertile].type = PLANT_GRASS;
     map->plants[fertile].growth = 0.1f;
     map->plants[barren].type = PLANT_GRASS;
@@ -363,7 +363,7 @@ static void test_fresh_grass_dries_on_the_ground(void)
     int x = -1, y = -1;
     for (int ty = 0; ty < game.map.height && x < 0; ty++) {
         for (int tx = 0; tx < game.map.width && x < 0; tx++) {
-            if (map_is_passable(&game.map, tx, ty)) {
+            if (map_is_passable(&game.map, tx, ty, 0)) {
                 x = tx;
                 y = ty;
             }
@@ -374,19 +374,19 @@ static void test_fresh_grass_dries_on_the_ground(void)
         game_remove_colonist(&game, game_colonist_id_at(&game, slot));
     }
     int hours = item_def(ITEM_FRESH_GRASS)->transform_hours;
-    REQUIRE(items_add(&game.items, x, y, item_stack_make(ITEM_FRESH_GRASS, 3, 0, 5)) == 3);
+    REQUIRE(items_add(&game.items, x, y, 0, item_stack_make(ITEM_FRESH_GRASS, 3, 0, 5)) == 3);
 
     for (int i = 0; i < (hours - 1) * TICKS_PER_HOUR; i++) {
         game_tick(&game);
     }
-    ItemStack stack = items_get(&game.items, x, y);
+    ItemStack stack = items_get(&game.items, x, y, 0);
     CHECK_EQ_INT(stack.type, ITEM_FRESH_GRASS);
     CHECK(stack.progress >= hours - 2);
 
     for (int i = 0; i < 2 * TICKS_PER_HOUR; i++) {
         game_tick(&game);
     }
-    stack = items_get(&game.items, x, y);
+    stack = items_get(&game.items, x, y, 0);
     CHECK_EQ_INT(stack.type, ITEM_GRASS);
     CHECK_EQ_INT(stack.count, 3);
     /* The condition carries over (in percent, rounded to whole hit points). */
@@ -407,34 +407,36 @@ static void test_food_rots_on_the_ground(void)
     int x = -1, y = -1;
     for (int ty = 1; ty < game.map.height && x < 0; ty++) {
         for (int tx = 0; tx + 1 < game.map.width && x < 0; tx++) {
-            if (map_is_passable(&game.map, tx, ty) && map_is_passable(&game.map, tx + 1, ty) &&
-                !map_natural_roof(&game.map, tx, ty) && !map_natural_roof(&game.map, tx + 1, ty)) {
+            if (map_is_passable(&game.map, tx, ty, 0) &&
+                map_is_passable(&game.map, tx + 1, ty, 0) &&
+                !map_natural_roof(&game.map, tx, ty, 0) &&
+                !map_natural_roof(&game.map, tx + 1, ty, 0)) {
                 x = tx;
                 y = ty;
             }
         }
     }
     REQUIRE(x >= 0);
-    CHECK_NEAR(game_item_rot_rate(&game, -1, y), 0.0f, 1e-6f);
-    float rate = game_item_rot_rate(&game, x, y);
-    CHECK_NEAR(rate, item_rot_rate(temperature_at(&game.temperatures, x, y), false), 1e-6f);
+    CHECK_NEAR(game_item_rot_rate(&game, -1, y, 0), 0.0f, 1e-6f);
+    float rate = game_item_rot_rate(&game, x, y, 0);
+    CHECK_NEAR(rate, item_rot_rate(temperature_at(&game.temperatures, x, y, 0), false), 1e-6f);
     CHECK(rate > 0.0f); /* The end of summer. */
 
-    REQUIRE(items_add(&game.items, x, y, item_stack_pristine(ITEM_MUSHROOMS, 3)) == 3);
-    REQUIRE(items_add(&game.items, x + 1, y, item_stack_pristine(ITEM_HAZELNUTS, 3)) == 3);
-    float hours = item_stack_rot_hours(items_get(&game.items, x, y), rate);
+    REQUIRE(items_add(&game.items, x, y, 0, item_stack_pristine(ITEM_MUSHROOMS, 3)) == 3);
+    REQUIRE(items_add(&game.items, x + 1, y, 0, item_stack_pristine(ITEM_HAZELNUTS, 3)) == 3);
+    float hours = item_stack_rot_hours(items_get(&game.items, x, y, 0), rate);
     for (int i = 0; i < (int)(hours * 0.5f) * TICKS_PER_HOUR; i++) {
         game_tick(&game);
     }
-    CHECK_EQ_INT(items_get(&game.items, x, y).type, ITEM_MUSHROOMS);
-    CHECK(items_get(&game.items, x, y).hit_points < item_def(ITEM_MUSHROOMS)->max_hit_points);
+    CHECK_EQ_INT(items_get(&game.items, x, y, 0).type, ITEM_MUSHROOMS);
+    CHECK(items_get(&game.items, x, y, 0).hit_points < item_def(ITEM_MUSHROOMS)->max_hit_points);
     for (int i = 0; i < 3 * 24 * TICKS_PER_HOUR; i++) {
         game_tick(&game);
     }
-    CHECK_EQ_INT(items_get(&game.items, x, y).type, ITEM_NONE);
+    CHECK_EQ_INT(items_get(&game.items, x, y, 0).type, ITEM_NONE);
     CHECK_EQ_INT((int)game.items.totals[ITEM_MUSHROOMS], 0);
     /* Nuts keep. */
-    ItemStack nuts = items_get(&game.items, x + 1, y);
+    ItemStack nuts = items_get(&game.items, x + 1, y, 0);
     CHECK_EQ_INT(nuts.type, ITEM_HAZELNUTS);
     CHECK(item_stack_hit_points_percent(nuts) >= 90);
     game_shutdown(&game);
@@ -450,27 +452,27 @@ static void test_grass_does_not_dry_in_a_storm(void)
     int x = -1, y = -1;
     for (int ty = 1; ty < game.map.height && x < 0; ty++) {
         for (int tx = 0; tx < game.map.width && x < 0; tx++) {
-            if (map_is_passable(&game.map, tx, ty) &&
-                temperature_cover(&game.map, tx, ty) == TEMPERATURE_COVER_OPEN) {
+            if (map_is_passable(&game.map, tx, ty, 0) &&
+                temperature_cover(&game.map, tx, ty, 0) == TEMPERATURE_COVER_OPEN) {
                 x = tx;
                 y = ty;
             }
         }
     }
     REQUIRE(x >= 0);
-    REQUIRE(items_add(&game.items, x, y, item_stack_pristine(ITEM_FRESH_GRASS, 2)) == 2);
+    REQUIRE(items_add(&game.items, x, y, 0, item_stack_pristine(ITEM_FRESH_GRASS, 2)) == 2);
     for (int i = 0; i < 6 * TICKS_PER_HOUR; i++) {
         game.weather.type = WEATHER_STORM;
         game.weather.spell = 5.0f; /* Rain, not snow. */
         game_tick(&game);
     }
-    CHECK_EQ_INT(items_get(&game.items, x, y).progress, 0);
+    CHECK_EQ_INT(items_get(&game.items, x, y, 0).progress, 0);
     CHECK(weather_wetting(&game.weather, game.clock.tick) > 0.0f);
     game.weather.type = WEATHER_CLEAR;
     for (int i = 0; i < 3 * TICKS_PER_HOUR; i++) {
         game_tick(&game);
     }
-    CHECK(items_get(&game.items, x, y).progress >= 2);
+    CHECK(items_get(&game.items, x, y, 0).progress >= 2);
     game_shutdown(&game);
 }
 
@@ -513,34 +515,34 @@ static void test_zones_of_different_kinds_never_overlap(void)
     REQUIRE(init_small_game(&game, 4));
     for (int y = 10; y <= 20; y++) {
         for (int x = 10; x <= 20; x++) {
-            map_set_rock(&game.map, x, y, ROCK_NONE);
-            map_set_terrain(&game.map, x, y, TERRAIN_SOIL);
+            map_set_rock(&game.map, x, y, 0, ROCK_NONE);
+            map_set_terrain(&game.map, x, y, 0, TERRAIN_SOIL);
         }
     }
-    int pile = game_add_stockpile_rect(&game, 10, 10, 12, 12, STOCKPILE_NONE);
+    int pile = game_add_stockpile_rect(&game, 10, 10, 12, 12, 0, STOCKPILE_NONE);
     REQUIRE(pile != STOCKPILE_NONE);
 
     /* A gathering zone drawn over the stockpile gets the other tiles only. */
-    int zone = game_add_gather_zone_rect(&game, 11, 11, 14, 14, GATHER_ZONE_NONE);
+    int zone = game_add_gather_zone_rect(&game, 11, 11, 14, 14, 0, GATHER_ZONE_NONE);
     REQUIRE(zone != GATHER_ZONE_NONE);
     CHECK_EQ_INT(gather_zone_get(&game.gather_zones, zone)->cell_count, 16 - 4);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 12, 12), GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 12), zone);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 12, 12, 0), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 12, 0), zone);
 
     /* And the other way round: the stockpile grows around the zone. */
-    CHECK_EQ_INT(game_add_stockpile_rect(&game, 12, 10, 16, 10, pile), pile);
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 12, 10, 16, 10, 0, pile), pile);
     CHECK_EQ_INT(stockpile_get(&game.stockpiles, pile)->cell_count, 9 + 4);
-    CHECK_EQ_INT(game_add_stockpile_rect(&game, 13, 13, 14, 14, STOCKPILE_NONE), STOCKPILE_NONE);
-    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 13, 13), STOCKPILE_NONE);
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 13, 13, 14, 14, 0, STOCKPILE_NONE), STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 13, 13, 0), STOCKPILE_NONE);
 
     /* Merging zones of the same kind still works across the other kind. */
-    int other = game_add_gather_zone_rect(&game, 18, 18, 19, 19, GATHER_ZONE_NONE);
+    int other = game_add_gather_zone_rect(&game, 18, 18, 19, 19, 0, GATHER_ZONE_NONE);
     REQUIRE(other != GATHER_ZONE_NONE);
-    CHECK_EQ_INT(game_add_gather_zone_rect(&game, 13, 10, 18, 18, GATHER_ZONE_NONE), zone);
+    CHECK_EQ_INT(game_add_gather_zone_rect(&game, 13, 10, 18, 18, 0, GATHER_ZONE_NONE), zone);
     CHECK_EQ_INT(game.gather_zones.used_count, 1);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 10), GATHER_ZONE_NONE); /* Stockpile. */
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 17, 17), zone);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 19, 19), zone);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 10, 0), GATHER_ZONE_NONE); /* Stockpile. */
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 17, 17, 0), zone);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 19, 19, 0), zone);
 
     for (size_t i = 0; i < map_tile_count(&game.map); i++) {
         CHECK(game.stockpiles.zone[i] == 0 || game.gather_zones.zone[i] == 0);

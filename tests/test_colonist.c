@@ -43,7 +43,7 @@ static bool init_flat_game(Game *game)
  * standard strength. */
 static Colonist *spawn_rested(Game *game, int x, int y)
 {
-    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y));
+    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
     if (colonist != NULL) {
         for (int need = 0; need < NEED_COUNT; need++) {
             colonist->needs[need] = 1.0f;
@@ -63,9 +63,9 @@ static Colonist *spawn_rested(Game *game, int x, int y)
 static int run_until_done(Game *game, int x, int y, int max_ticks)
 {
     int working = 0;
-    const float *progress = &game->gather_zones.progress[map_index(&game->map, x, y)];
+    const float *progress = &game->gather_zones.progress[map_index(&game->map, x, y, 0)];
     for (int i = 0;
-         i < max_ticks && plant_stock_available(&game->map.plants[map_index(&game->map, x, y)],
+         i < max_ticks && plant_stock_available(&game->map.plants[map_index(&game->map, x, y, 0)],
                                                 PLANT_STOCK_BRANCHES) > 0;
          i++) {
         float before = *progress;
@@ -82,7 +82,7 @@ static void add_water_band(Map *map, int x0)
 {
     for (int y = 0; y < map->height; y++) {
         for (int x = x0; x < map->width; x++) {
-            map_set_terrain(map, x, y, TERRAIN_SHALLOW_WATER);
+            map_set_terrain(map, x, y, 0, TERRAIN_SHALLOW_WATER);
         }
     }
 }
@@ -91,7 +91,7 @@ static void add_water_band(Map *map, int x0)
 static uint8_t work_owner(const Game *game, int x, int y)
 {
     return reservations_owner(&game->reservations, RESERVATION_WORK,
-                              (TilePos){(int16_t)x, (int16_t)y});
+                              (TilePos){(int16_t)x, (int16_t)y, 0});
 }
 
 static void run_ticks(Game *game, int ticks)
@@ -104,7 +104,7 @@ static void run_ticks(Game *game, int ticks)
 /* A grown bramble bearing all its blackberries. */
 static Plant *add_bramble(Map *map, int x, int y)
 {
-    Plant *bramble = &map->plants[map_index(map, x, y)];
+    Plant *bramble = &map->plants[map_index(map, x, y, 0)];
     *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
     plant_settle(bramble, GAME_START_DAY);
     return bramble;
@@ -120,17 +120,17 @@ static void test_spawn_requires_passable_tile(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    map_set_terrain(&game.map, 3, 3, TERRAIN_DEEP_WATER);
-    CHECK(entity_id_is_none(game_spawn_colonist(&game, 3, 3)));
-    CHECK(entity_id_is_none(game_spawn_colonist(&game, -1, 3)));
+    map_set_terrain(&game.map, 3, 3, 0, TERRAIN_DEEP_WATER);
+    CHECK(entity_id_is_none(game_spawn_colonist(&game, 3, 3, 0)));
+    CHECK(entity_id_is_none(game_spawn_colonist(&game, -1, 3, 0)));
 
-    EntityId id = game_spawn_colonist(&game, 4, 4);
+    EntityId id = game_spawn_colonist(&game, 4, 4, 0);
     const Colonist *colonist = game_colonist_const(&game, id);
     REQUIRE(colonist != NULL);
     CHECK_EQ_INT(colonist->x, 4);
     CHECK(colonist->name[0] != '\0');
     CHECK(colonist->age >= 18 && colonist->age <= 60);
-    CHECK(game_tile_has_colonist(&game, 4, 4));
+    CHECK(game_tile_has_colonist(&game, 4, 4, 0));
     game_shutdown(&game);
 }
 
@@ -140,7 +140,7 @@ static void test_names_are_unique(void)
     REQUIRE(init_flat_game(&game));
     EntityId ids[20];
     for (int i = 0; i < 20; i++) {
-        ids[i] = game_spawn_colonist(&game, i, 0);
+        ids[i] = game_spawn_colonist(&game, i, 0, 0);
         REQUIRE(!entity_id_is_none(ids[i]));
     }
     for (int i = 0; i < 20; i++) {
@@ -157,18 +157,18 @@ static void test_remove_invalidates_handle(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    EntityId id = game_spawn_colonist(&game, 2, 2);
+    EntityId id = game_spawn_colonist(&game, 2, 2, 0);
     CHECK(game_remove_colonist(&game, id));
     CHECK(game_colonist(&game, id) == NULL);
     CHECK(!game_remove_colonist(&game, id));
-    CHECK(!game_tile_has_colonist(&game, 2, 2));
+    CHECK(!game_tile_has_colonist(&game, 2, 2, 0));
     game_shutdown(&game);
 }
 
-static bool is_drinking_spot(const Map *map, int x, int y, void *userdata)
+static bool is_drinking_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)userdata;
-    return map_is_drinking_spot(map, x, y);
+    return map_is_drinking_spot(map, x, y, z);
 }
 
 static void test_starting_colonists_on_distinct_passable_tiles(void)
@@ -185,9 +185,9 @@ static void test_starting_colonists_on_distinct_passable_tiles(void)
 
         for (uint32_t a = 0; a < game_colonist_slot_count(&game); a++) {
             const Colonist *ca = &game.colonists[a];
-            CHECK(map_is_passable(&game.map, ca->x, ca->y));
+            CHECK(map_is_passable(&game.map, ca->x, ca->y, ca->z));
             CHECK(pathfinder_find_nearest(&game.pathfinder, &game.map,
-                                          (TilePos){(int16_t)ca->x, (int16_t)ca->y},
+                                          (TilePos){(int16_t)ca->x, (int16_t)ca->y, (int16_t)ca->z},
                                           is_drinking_spot, NULL, COLONIST_WATER_SEARCH_MAX_COST,
                                           NULL, NULL));
             for (uint32_t b = a + 1; b < game_colonist_slot_count(&game); b++) {
@@ -301,7 +301,7 @@ static void set_rock_ring(Map *map, int cx, int cy, RockType rock)
     for (int dy = -1; dy <= 1; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
             if (dx != 0 || dy != 0) {
-                map_set_rock(map, cx + dx, cy + dy, rock);
+                map_set_rock(map, cx + dx, cy + dy, 0, rock);
             }
         }
     }
@@ -448,7 +448,7 @@ static void test_colonists_drink_before_sleeping(void)
 
 static void add_tree(Map *map, int x, int y)
 {
-    Plant *tree = &map->plants[map_index(map, x, y)];
+    Plant *tree = &map->plants[map_index(map, x, y, 0)];
     tree->type = PLANT_TREE;
     tree->growth = 1.0f;
     plant_settle(tree, GAME_START_DAY);
@@ -470,7 +470,7 @@ static int walk_ticks(int tiles)
  * the number of tiles it covers. */
 static int order_zone(Game *game, int x0, int y0, int x1, int y1, GatherResource resource)
 {
-    int zone = gather_zone_create(&game->gather_zones, &game->map, x0, y0, x1, y1);
+    int zone = gather_zone_create(&game->gather_zones, &game->map, x0, y0, x1, y1, 0);
     if (zone == GATHER_ZONE_NONE) {
         return 0;
     }
@@ -481,7 +481,7 @@ static int order_zone(Game *game, int x0, int y0, int x1, int y1, GatherResource
 
 static bool branches_open(const Game *game, int x, int y)
 {
-    return gather_job_available(&game->gather_zones, &game->map, x, y, GATHER_JOB_BRANCHES);
+    return gather_job_available(&game->gather_zones, &game->map, x, y, 0, GATHER_JOB_BRANCHES);
 }
 
 static void test_idle_colonist_gathers_branches(void)
@@ -499,18 +499,18 @@ static void test_idle_colonist_gathers_branches(void)
     CHECK_EQ_INT(work_owner(&game, 26, 20), 1);
     CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.gather_branches");
 
-    float work = gather_job_work_needed(&game.map, 26, 20, GATHER_JOB_BRANCHES);
+    float work = gather_job_work_needed(&game.map, 26, 20, 0, GATHER_JOB_BRANCHES);
     run_ticks(&game, walk_ticks(6) + (int)(work * 0.5f));
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK_EQ_INT(colonist->x, 25); /* Works from the neighboring tile. */
     CHECK_EQ_INT(colonist->y, 20);
-    CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 26, 20) > 0.0f);
+    CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 26, 20, 0) > 0.0f);
 
     run_ticks(&game, (int)(work * 0.5f));
-    const Plant *tree = &game.map.plants[map_index(&game.map, 26, 20)];
+    const Plant *tree = &game.map.plants[map_index(&game.map, 26, 20, 0)];
     CHECK_EQ_INT(tree->type, PLANT_TREE); /* The tree stays... */
     CHECK_EQ_INT(plant_stock_available(tree, PLANT_STOCK_BRANCHES), 0); /* ...bare. */
-    CHECK_EQ_INT(items_get(&game.items, 26, 20).type, ITEM_BRANCHES);
+    CHECK_EQ_INT(items_get(&game.items, 26, 20, 0).type, ITEM_BRANCHES);
     CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], tree_branches());
     CHECK(!branches_open(&game, 26, 20));
     CHECK(colonist->task != TASK_WORK);
@@ -526,34 +526,34 @@ static void test_gather_work_under_way(void)
     REQUIRE(colonist != NULL);
     EntityId id = game_colonist_id_at(&game, 0);
     GatherWorkInfo info;
-    CHECK(!game_gather_work_at(&game, 26, 20, &info));
+    CHECK(!game_gather_work_at(&game, 26, 20, 0, &info));
     CHECK_EQ_INT(info.job, GATHER_JOB_NONE);
-    CHECK(!game_gather_work_at(&game, -1, 20, &info));
+    CHECK(!game_gather_work_at(&game, -1, 20, 0, &info));
     CHECK_EQ_INT(order_zone(&game, 26, 20, 26, 20, GATHER_BRANCHES), 1);
-    CHECK(!game_gather_work_at(&game, 26, 20, &info)); /* Nobody on it yet. */
+    CHECK(!game_gather_work_at(&game, 26, 20, 0, &info)); /* Nobody on it yet. */
 
     /* Taken: walking there. */
     game_tick(&game);
-    REQUIRE(game_gather_work_at(&game, 26, 20, &info));
+    REQUIRE(game_gather_work_at(&game, 26, 20, 0, &info));
     CHECK_EQ_INT(info.job, GATHER_JOB_BRANCHES);
     CHECK(entity_id_equal(info.worker, id));
     CHECK_NEAR(info.fraction, 0.0, 1e-6);
 
     /* Half done. */
-    float work = gather_job_work_needed(&game.map, 26, 20, GATHER_JOB_BRANCHES);
+    float work = gather_job_work_needed(&game.map, 26, 20, 0, GATHER_JOB_BRANCHES);
     run_ticks(&game, walk_ticks(6) + (int)(work * 0.5f));
-    REQUIRE(game_gather_work_at(&game, 26, 20, &info));
+    REQUIRE(game_gather_work_at(&game, 26, 20, 0, &info));
     CHECK(info.fraction > 0.3f && info.fraction < 0.7f);
     CHECK(entity_id_equal(info.worker, id));
 
     /* Left off: the work done stays, nobody on it. */
     game_set_work_priority(&game, id, WORK_GATHERING, WORK_PRIORITY_DISABLED);
     game_tick(&game);
-    REQUIRE(game_gather_work_at(&game, 26, 20, &info));
+    REQUIRE(game_gather_work_at(&game, 26, 20, 0, &info));
     CHECK_EQ_INT(info.job, GATHER_JOB_BRANCHES);
     CHECK(entity_id_is_none(info.worker));
     CHECK(info.fraction > 0.3f);
-    CHECK(!game_gather_work_at(&game, 25, 20, &info)); /* Another tile. */
+    CHECK(!game_gather_work_at(&game, 25, 20, 0, &info)); /* Another tile. */
     game_shutdown(&game);
 }
 
@@ -571,11 +571,11 @@ static int first_branches_target(int near, int middle, int far, bool far_bare)
     for (int i = 0; i < 3; i++) {
         add_tree(&game.map, xs[i], 20);
         order_zone(&game, xs[i], 20, xs[i], 20, GATHER_BRANCHES);
-        gather_zone_set_priority(&game.gather_zones, gather_zone_at(&game.gather_zones, xs[i], 20),
-                                 priorities[i]);
+        gather_zone_set_priority(&game.gather_zones,
+                                 gather_zone_at(&game.gather_zones, xs[i], 20, 0), priorities[i]);
     }
     if (far_bare) {
-        Plant *tree = &game.map.plants[map_index(&game.map, 40, 20)];
+        Plant *tree = &game.map.plants[map_index(&game.map, 40, 20, 0)];
         plant_take_stock(tree, PLANT_STOCK_BRANCHES, 1000);
     }
     Colonist *colonist = spawn_rested(&game, 20, 20);
@@ -608,14 +608,14 @@ static float grass_progress(ItemStack tool, int ticks)
     if (!init_flat_game(&game)) {
         return -1.0f;
     }
-    Plant *grass = &game.map.plants[map_index(&game.map, 23, 20)];
+    Plant *grass = &game.map.plants[map_index(&game.map, 23, 20, 0)];
     *grass = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
     Colonist *colonist = spawn_rested(&game, 20, 20);
     if (tool.count > 0) {
         colonist_add_tool(colonist, tool);
     }
     order_zone(&game, 23, 20, 23, 20, GATHER_GRASS);
-    const float *progress_at = &game.gather_zones.progress[map_index(&game.map, 23, 20)];
+    const float *progress_at = &game.gather_zones.progress[map_index(&game.map, 23, 20, 0)];
     for (int i = 0; i < 500 && *progress_at <= 0.0f; i++) {
         game_tick(&game);
     }
@@ -669,7 +669,7 @@ static void test_nobody_fells_or_mines_yet(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    map_set_rock(&game.map, 25, 20, ROCK_SANDSTONE);
+    map_set_rock(&game.map, 25, 20, 0, ROCK_SANDSTONE);
     add_tree(&game.map, 20, 25);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
@@ -677,15 +677,15 @@ static void test_nobody_fells_or_mines_yet(void)
         colonist_set_knowledge_level(colonist, (KnowledgeType)k, KNOWLEDGE_LEVEL_MAX);
     }
     /* Orders can exist, but nobody can carry them out: no axe, no pick. */
-    CHECK_EQ_INT(game_designate_rect(&game, 25, 20, 25, 20, DESIGNATION_MINE), 1);
+    CHECK_EQ_INT(game_designate_rect(&game, 25, 20, 25, 20, 0, DESIGNATION_MINE), 1);
     CHECK_EQ_INT(order_zone(&game, 20, 25, 20, 25, GATHER_WOOD), 1);
     CHECK(!game_designation_available(&game, DESIGNATION_MINE));
     CHECK(!game_gather_job_known(&game, GATHER_JOB_CHOP));
     CHECK(game_gather_job_known(&game, GATHER_JOB_HARVEST));
 
     run_ticks(&game, walk_ticks(5) + 4000);
-    CHECK(!map_is_passable(&game.map, 25, 20));
-    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 20, 25)].type, PLANT_TREE);
+    CHECK(!map_is_passable(&game.map, 25, 20, 0));
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 20, 25, 0)].type, PLANT_TREE);
     CHECK_EQ_INT(game.designations.count, 1);
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.reservations.count, 0);
@@ -729,14 +729,14 @@ static void test_hungry_worker_leaves_work_and_resumes_later(void)
     order_zone(&game, 22, 20, 22, 20, GATHER_BRANCHES);
     run_ticks(&game, walk_ticks(1) + 300);
     REQUIRE(colonist->task == TASK_WORK);
-    float progress = gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20);
+    float progress = gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20, 0);
     CHECK(progress > 0.0f);
 
     colonist->needs[NEED_FOOD] = 0.2f;
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_EAT);
     CHECK_EQ_INT(work_owner(&game, 22, 20), RESERVATION_NO_OWNER); /* Released. */
-    CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20) >= progress);
+    CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20, 0) >= progress);
 
     /* Back to work after eating, from where it stopped. */
     for (int i = 0; i < walk_ticks(8) + COLONIST_EAT_TICKS && colonist->task != TASK_WORK; i++) {
@@ -757,10 +757,10 @@ static void test_cancelled_order_stops_the_worker(void)
     run_ticks(&game, walk_ticks(1) + 100);
     REQUIRE(colonist->task == TASK_WORK);
 
-    CHECK_EQ_INT(gather_zones_remove_rect(&game.gather_zones, 22, 20, 22, 20), 1);
+    CHECK_EQ_INT(gather_zones_remove_rect(&game.gather_zones, 22, 20, 22, 20, 0), 1);
     game_tick(&game);
     CHECK(colonist->task != TASK_WORK);
-    const Plant *tree = &game.map.plants[map_index(&game.map, 22, 20)];
+    const Plant *tree = &game.map.plants[map_index(&game.map, 22, 20, 0)];
     CHECK_EQ_INT(plant_stock_available(tree, PLANT_STOCK_BRANCHES), tree_branches());
     game_shutdown(&game);
 }
@@ -770,7 +770,7 @@ static void test_removed_worker_releases_its_job(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     add_tree(&game.map, 22, 20);
-    EntityId id = game_spawn_colonist(&game, 20, 20);
+    EntityId id = game_spawn_colonist(&game, 20, 20, 0);
     REQUIRE(game_colonist(&game, id) != NULL);
     order_zone(&game, 22, 20, 22, 20, GATHER_BRANCHES);
     game_tick(&game);
@@ -866,7 +866,7 @@ static void test_set_work_priority_validates(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    EntityId id = game_spawn_colonist(&game, 20, 20);
+    EntityId id = game_spawn_colonist(&game, 20, 20, 0);
     Colonist *colonist = game_colonist(&game, id);
     REQUIRE(colonist != NULL);
     uint64_t before = game_hash(&game);
@@ -891,14 +891,14 @@ static void test_enabling_work_type_is_noticed_right_away(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    EntityId id = game_spawn_colonist(&game, 20, 20);
+    EntityId id = game_spawn_colonist(&game, 20, 20, 0);
     Colonist *colonist = game_colonist(&game, id);
     REQUIRE(colonist != NULL);
     for (int need = 0; need < NEED_COUNT; need++) {
         colonist->needs[need] = 1.0f;
     }
     set_rock_ring(&game.map, 20, 20, ROCK_GRANITE); /* Stays put: decides every tick. */
-    map_set_rock(&game.map, 21, 20, ROCK_NONE);
+    map_set_rock(&game.map, 21, 20, 0, ROCK_NONE);
     REQUIRE(game_set_work_priority(&game, id, WORK_GATHERING, WORK_PRIORITY_DISABLED));
     REQUIRE(order_zone(&game, 22, 20, 22, 20, GATHER_COBBLES) == 1);
     run_ticks(&game, 200);
@@ -918,7 +918,7 @@ static void test_disabling_work_type_stops_the_current_job(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     add_tree(&game.map, 22, 20);
-    EntityId id = game_spawn_colonist(&game, 20, 20);
+    EntityId id = game_spawn_colonist(&game, 20, 20, 0);
     Colonist *colonist = game_colonist(&game, id);
     REQUIRE(colonist != NULL);
     for (int need = 0; need < NEED_COUNT; need++) {
@@ -927,7 +927,7 @@ static void test_disabling_work_type_stops_the_current_job(void)
     order_zone(&game, 22, 20, 22, 20, GATHER_BRANCHES);
     run_ticks(&game, walk_ticks(1) + 100);
     REQUIRE(colonist->task == TASK_WORK);
-    float progress = gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20);
+    float progress = gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20, 0);
     REQUIRE(progress > 0.0f);
 
     REQUIRE(game_set_work_priority(&game, id, WORK_GATHERING, WORK_PRIORITY_DISABLED));
@@ -936,7 +936,7 @@ static void test_disabling_work_type_stops_the_current_job(void)
     CHECK_EQ_INT(work_owner(&game, 22, 20), RESERVATION_NO_OWNER);
     /* The order and the work done stay for someone else. */
     CHECK(branches_open(&game, 22, 20));
-    CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20) >= progress);
+    CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20, 0) >= progress);
     game_shutdown(&game);
 }
 
@@ -946,8 +946,8 @@ static void test_priority_beats_distance(void)
     REQUIRE(init_flat_game(&game));
     add_tree(&game.map, 32, 20);
     /* Something to haul right next to the colonist. */
-    items_add(&game.items, 22, 20, item_stack_pristine(ITEM_COBBLE, 5));
-    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 18, 24, 20, 26) != STOCKPILE_NONE);
+    items_add(&game.items, 22, 20, 0, item_stack_pristine(ITEM_COBBLE, 5));
+    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 18, 24, 20, 26, 0) != STOCKPILE_NONE);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_HIGHEST;
@@ -959,7 +959,7 @@ static void test_priority_beats_distance(void)
     CHECK_EQ_INT(colonist->target.x, 32); /* Farther, but gathering comes first. */
 
     /* With gathering done (cancelled here), the lower priority work is picked up. */
-    gather_zones_remove_rect(&game.gather_zones, 32, 20, 32, 20);
+    gather_zones_remove_rect(&game.gather_zones, 32, 20, 32, 20, 0);
     for (int i = 0; i < walk_ticks(2) && colonist->task != TASK_HAUL; i++) {
         game_tick(&game);
     }
@@ -972,7 +972,7 @@ static void test_hungry_colonist_eats_fruit_from_the_ground(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 24, 20, item_stack_pristine(ITEM_BLACKBERRIES, 20));
+    items_add(&game.items, 24, 20, 0, item_stack_pristine(ITEM_BLACKBERRIES, 20));
     Plant *bramble = add_bramble(&game.map, 30, 20); /* Farther away. */
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
@@ -986,7 +986,7 @@ static void test_hungry_colonist_eats_fruit_from_the_ground(void)
     /* Ate just what it takes to be sated (hunger grew a little on the way), and
      * left the rest. */
     float nutrition = item_def(ITEM_BLACKBERRIES)->nutrition;
-    int eaten = 20 - items_get(&game.items, 24, 20).count;
+    int eaten = 20 - items_get(&game.items, 24, 20, 0).count;
     int expected = (int)ceilf((COLONIST_SATED_FOOD - 0.2f) / nutrition);
     CHECK(colonist->needs[NEED_FOOD] >= COLONIST_SATED_FOOD - 0.01f);
     CHECK(eaten >= expected && eaten <= expected + 1);
@@ -999,11 +999,12 @@ static void test_hungry_colonist_eats_spoiling_food_first(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 23, 20, item_stack_pristine(ITEM_HAZELNUTS, 20)); /* Keeps. */
+    items_add(&game.items, 23, 20, 0, item_stack_pristine(ITEM_HAZELNUTS, 20)); /* Keeps. */
     /* Bruised mushrooms, a few hours from rotting away, farther. */
-    items_add(&game.items, 32, 20, item_stack_make(ITEM_MUSHROOMS, 30, ITEM_QUALITY_STANDARD, 1));
+    items_add(&game.items, 32, 20, 0,
+              item_stack_make(ITEM_MUSHROOMS, 30, ITEM_QUALITY_STANDARD, 1));
     /* Carrots keep for weeks: not worth a longer walk. */
-    items_add(&game.items, 26, 20, item_stack_pristine(ITEM_WILD_CARROTS, 20));
+    items_add(&game.items, 26, 20, 0, item_stack_pristine(ITEM_WILD_CARROTS, 20));
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->needs[NEED_FOOD] = 0.2f;
@@ -1014,7 +1015,7 @@ static void test_hungry_colonist_eats_spoiling_food_first(void)
     /* Nothing about to rot: the nearest food. */
     Colonist *other = spawn_rested(&game, 20, 24);
     REQUIRE(other != NULL);
-    items_remove(&game.items, 32, 20, 30);
+    items_remove(&game.items, 32, 20, 0, 30);
     other->needs[NEED_FOOD] = 0.2f;
     game_tick(&game);
     CHECK_EQ_INT(other->task, TASK_EAT);
@@ -1034,10 +1035,10 @@ static void test_colonist_harvests_blackberries(void)
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.harvest");
-    run_ticks(&game,
-              walk_ticks(4) + (int)gather_job_work_needed(&game.map, 24, 20, GATHER_JOB_HARVEST));
-    CHECK_EQ_INT(items_get(&game.items, 24, 20).type, ITEM_BLACKBERRIES);
-    CHECK_EQ_INT(items_get(&game.items, 24, 20).count, bramble_fruit());
+    run_ticks(&game, walk_ticks(4) +
+                         (int)gather_job_work_needed(&game.map, 24, 20, 0, GATHER_JOB_HARVEST));
+    CHECK_EQ_INT(items_get(&game.items, 24, 20, 0).type, ITEM_BLACKBERRIES);
+    CHECK_EQ_INT(items_get(&game.items, 24, 20, 0).count, bramble_fruit());
     CHECK_EQ_INT(plant_stock_available(bramble, PLANT_STOCK_FOOD), 0);
     CHECK_NEAR(bramble->growth, 1.0f, 1e-6);
     game_shutdown(&game);
@@ -1090,15 +1091,15 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
     for (int y = 4; y < 44; y += 3) {
         add_tree(&game.map, 10, y);
         add_tree(&game.map, 30, y);
-        map_set_rock(&game.map, 38, y, ROCK_SANDSTONE);
+        map_set_rock(&game.map, 38, y, 0, ROCK_SANDSTONE);
         add_bramble(&game.map, 20, y);
     }
     for (int i = 0; i < 4; i++) {
         REQUIRE(spawn_rested(&game, 18 + i, 20) != NULL);
     }
     order_zone(&game, 0, 0, 47, 47, GATHER_BRANCHES);
-    game_designate_rect(&game, 0, 0, 47, 47, DESIGNATION_MINE); /* Nobody can, for now. */
-    int pile = stockpile_create(&game.stockpiles, &game.map, 14, 10, 16, 30);
+    game_designate_rect(&game, 0, 0, 47, 47, 0, DESIGNATION_MINE); /* Nobody can, for now. */
+    int pile = stockpile_create(&game.stockpiles, &game.map, 14, 10, 16, 30, 0);
     REQUIRE(pile != STOCKPILE_NONE);
     int mines = game.designations.count;
     REQUIRE(mines > 10);
@@ -1107,10 +1108,10 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
     for (int i = 0; i < TICKS_PER_DAY && consistent; i++) {
         game_tick(&game);
         if (i == TICKS_PER_DAY / 4) {
-            gather_zones_remove_rect(&game.gather_zones, 30, 0, 30, 47); /* Cancel some. */
+            gather_zones_remove_rect(&game.gather_zones, 30, 0, 30, 47, 0); /* Cancel some. */
         }
         if (i == TICKS_PER_DAY / 3) {
-            stockpiles_remove_rect(&game.stockpiles, 14, 10, 16, 15); /* Shrink the storage. */
+            stockpiles_remove_rect(&game.stockpiles, 14, 10, 16, 15, 0); /* Shrink the storage. */
         }
         if (i == TICKS_PER_DAY / 2) {
             stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_BRANCHES));
@@ -1124,7 +1125,7 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
     int stored_branches = 0;
     for (int y = 16; y <= 30; y++) {
         for (int x = 14; x <= 16; x++) {
-            ItemStack stack = items_get(&game.items, x, y);
+            ItemStack stack = items_get(&game.items, x, y, 0);
             stored_branches += stack.type == ITEM_BRANCHES ? stack.count : 0;
         }
     }
@@ -1133,22 +1134,22 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
     /* The regions, updated in place, still group tiles like regions built
      * from scratch do. */
     Regions fresh;
-    REQUIRE(regions_init(&fresh, game.map.width, game.map.height));
+    REQUIRE(regions_init(&fresh, game.map.width, game.map.height, game.map.depth));
     regions_update(&fresh, &game.map);
     regions_update(&game.regions, &game.map);
     bool same = true;
     for (int y = 0; y < game.map.height && same; y++) {
         for (int x = 0; x < game.map.width && same; x++) {
-            uint32_t a = regions_at(&game.regions, &game.map, x, y);
-            uint32_t b = regions_at(&fresh, &game.map, x, y);
+            uint32_t a = regions_at(&game.regions, &game.map, x, y, 0);
+            uint32_t b = regions_at(&fresh, &game.map, x, y, 0);
             same = (a == REGION_NONE) == (b == REGION_NONE);
             if (x + 1 < game.map.width) {
-                same = same && (a == regions_at(&game.regions, &game.map, x + 1, y)) ==
-                                   (b == regions_at(&fresh, &game.map, x + 1, y));
+                same = same && (a == regions_at(&game.regions, &game.map, x + 1, y, 0)) ==
+                                   (b == regions_at(&fresh, &game.map, x + 1, y, 0));
             }
             if (y + 1 < game.map.height) {
-                same = same && (a == regions_at(&game.regions, &game.map, x, y + 1)) ==
-                                   (b == regions_at(&fresh, &game.map, x, y + 1));
+                same = same && (a == regions_at(&game.regions, &game.map, x, y + 1, 0)) ==
+                                   (b == regions_at(&fresh, &game.map, x, y + 1, 0));
             }
         }
     }
@@ -1160,7 +1161,7 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
 static void test_position_is_interpolated_while_walking(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Test", 30, 5, 5);
+    colonist_init(&colonist, "Test", 30, 5, 5, 0);
     float x, y;
     colonist_position(&colonist, &x, &y);
     CHECK_NEAR(x, 5.5, 1e-6);
@@ -1170,7 +1171,7 @@ static void test_position_is_interpolated_while_walking(void)
     REQUIRE(colonist.path.steps != NULL);
     colonist.path.capacity = 1;
     colonist.path.count = 1;
-    colonist.path.steps[0] = (TilePos){6, 5};
+    colonist.path.steps[0] = (TilePos){6, 5, 0};
     colonist.move_progress = 0.25f;
     CHECK(colonist_is_moving(&colonist));
     colonist_position(&colonist, &x, &y);
@@ -1182,7 +1183,7 @@ static void test_position_is_interpolated_while_walking(void)
 static void test_action_follows_the_job(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Test", 30, 5, 5);
+    colonist_init(&colonist, "Test", 30, 5, 5, 0);
     ItemType tool = ITEM_FLINT;
     CHECK_EQ_INT(colonist_action(&colonist, &tool), COLONIST_ACTION_NONE); /* Idle. */
     CHECK_EQ_INT(tool, ITEM_NONE);
@@ -1195,9 +1196,9 @@ static void test_action_follows_the_job(void)
     /* Work only next to the target. */
     colonist.task = TASK_WORK;
     colonist.work_type = DESIGNATION_MINE;
-    colonist.target = (TilePos){9, 5};
+    colonist.target = (TilePos){9, 5, 0};
     CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_NONE);
-    colonist.target = (TilePos){6, 5};
+    colonist.target = (TilePos){6, 5, 0};
     CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_STRIKE);
     colonist.gathering = true;
     colonist.work_type = GATHER_JOB_HARVEST;
@@ -1234,7 +1235,7 @@ static void test_action_follows_the_job(void)
     REQUIRE(colonist.path.steps != NULL);
     colonist.path.capacity = 1;
     colonist.path.count = 1;
-    colonist.path.steps[0] = (TilePos){6, 6};
+    colonist.path.steps[0] = (TilePos){6, 6, 0};
     CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_NONE);
     colonist_free(&colonist);
 }
@@ -1243,25 +1244,27 @@ static void test_picking(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    EntityId a = game_spawn_colonist(&game, 10, 10);
-    EntityId b = game_spawn_colonist(&game, 12, 10);
-    game_spawn_colonist(&game, 30, 30);
+    EntityId a = game_spawn_colonist(&game, 10, 10, 0);
+    EntityId b = game_spawn_colonist(&game, 12, 10, 0);
+    game_spawn_colonist(&game, 30, 30, 0);
 
-    CHECK(entity_id_equal(game_colonist_at(&game, 10.5f, 10.5f), a));
-    CHECK(entity_id_equal(game_colonist_at(&game, 12.3f, 10.6f), b));
-    CHECK(entity_id_is_none(game_colonist_at(&game, 11.5f, 10.5f)));
+    CHECK(entity_id_equal(game_colonist_at(&game, 10.5f, 10.5f, 0), a));
+    CHECK(entity_id_equal(game_colonist_at(&game, 12.3f, 10.6f, 0), b));
+    CHECK(entity_id_is_none(game_colonist_at(&game, 11.5f, 10.5f, 0)));
+    CHECK(entity_id_is_none(game_colonist_at(&game, 10.5f, 10.5f, 1))); /* Another level. */
 
     EntityId found[8];
-    CHECK_EQ_INT(game_colonists_in_rect(&game, 13.0f, 9.0f, 9.0f, 12.0f, found, 8), 2);
-    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, found, 8), 3);
-    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, found, 1), 1);
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 13.0f, 9.0f, 9.0f, 12.0f, 0, found, 8), 2);
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, 0, found, 8), 3);
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, 0, found, 1), 1);
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, 1, found, 8), 0);
     game_shutdown(&game);
 }
 
 static void test_carry_capacity(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Test", 30, 5, 5);
+    colonist_init(&colonist, "Test", 30, 5, 5, 0);
     CHECK_NEAR(colonist.max_carry_weight, COLONIST_CARRY_WEIGHT, 1e-6);
     CHECK_NEAR(colonist.max_carry_bulk, COLONIST_CARRY_BULK, 1e-6);
     /* Logs: 3 by bulk (60 / 20) before 5 by weight (40 kg / 7 kg). */
@@ -1298,7 +1301,7 @@ static void test_strength_sets_carry_weight(void)
     CHECK_NEAR(colonist_carry_weight_for_strength(99), 60.0, 1e-4);
 
     Colonist colonist;
-    colonist_init(&colonist, "Ada", 30, 0, 0);
+    colonist_init(&colonist, "Ada", 30, 0, 0, 0);
     CHECK_EQ_INT(colonist.strength, COLONIST_STRENGTH_STANDARD);
     /* 40 kg: two 20 kg stone blocks. */
     CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE_BLOCK), 2);
@@ -1343,7 +1346,7 @@ static void test_random_strength(void)
     bool varied = false;
     int first = -1;
     for (int i = 0; i < 12; i++) {
-        Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 10 + i, 12));
+        Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 10 + i, 12, 0));
         REQUIRE(colonist != NULL);
         CHECK_NEAR(colonist->max_carry_weight,
                    colonist_carry_weight_for_strength(colonist->strength), 1e-6);
@@ -1383,8 +1386,8 @@ static void test_no_search_when_region_has_no_water(void)
     CHECK_EQ_INT(colonist->x, 20);
 
     /* Water appears within reach: found at the next attempt. */
-    map_set_rock(&game.map, 21, 20, ROCK_NONE);
-    map_set_terrain(&game.map, 21, 20, TERRAIN_SHALLOW_WATER);
+    map_set_rock(&game.map, 21, 20, 0, ROCK_NONE);
+    map_set_terrain(&game.map, 21, 20, 0, TERRAIN_SHALLOW_WATER);
     colonist->search_cooldown[SEARCH_WATER] = 0;
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_DRINK);
@@ -1415,7 +1418,7 @@ static void test_no_search_when_orders_are_out_of_reach(void)
 
     /* Once the ring opens, the tree outside is reached (after the search
      * backoff: no order changed). */
-    map_set_rock(&game.map, 21, 20, ROCK_NONE);
+    map_set_rock(&game.map, 21, 20, 0, ROCK_NONE);
     int wait = (COLONIST_SEARCH_RETRY_TICKS << COLONIST_SEARCH_MAX_BACKOFF) + walk_ticks(1);
     for (int i = 0; i < wait && colonist->task != TASK_WORK; i++) {
         game_tick(&game);
@@ -1432,7 +1435,7 @@ static void test_starting_knowledge_is_random_and_valid(void)
     bool varied = false;
     double first = -1.0;
     for (int i = 0; i < 12; i++) {
-        Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 10 + i, 10));
+        Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 10 + i, 10, 0));
         REQUIRE(colonist != NULL);
         for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
             double level = colonist_knowledge_level(colonist, (KnowledgeType)k);
@@ -1454,7 +1457,7 @@ static void test_starting_knowledge_is_random_and_valid(void)
 static void test_knowledge_levels_validate(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Ada", 30, 0, 0);
+    colonist_init(&colonist, "Ada", 30, 0, 0, 0);
     CHECK_NEAR(colonist_knowledge_level(&colonist, KNOWLEDGE_FIRE), KNOWLEDGE_LEVEL_MIN, 1e-9);
     CHECK(colonist_set_knowledge_level(&colonist, KNOWLEDGE_FIRE, 62.5));
     CHECK_NEAR(colonist_knowledge_level(&colonist, KNOWLEDGE_FIRE), 62.5, 1e-9);
@@ -1479,7 +1482,7 @@ static void test_knowledge_levels_validate(void)
 static void test_learning_by_doing(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Ada", 30, 0, 0);
+    colonist_init(&colonist, "Ada", 30, 0, 0, 0);
     REQUIRE(colonist_set_knowledge_level(&colonist, KNOWLEDGE_GATHERING, 50.0));
     /* An hour of work at 50: one point. */
     colonist_learn_by_doing(&colonist, KNOWLEDGE_GATHERING, TICKS_PER_HOUR, 0);
@@ -1494,7 +1497,7 @@ static void test_learning_by_doing(void)
 
     /* Elders learn half as fast; nobody goes past the maximum. */
     Colonist elder;
-    colonist_init(&elder, "Oren", 70, 0, 0);
+    colonist_init(&elder, "Oren", 70, 0, 0, 0);
     REQUIRE(colonist_set_knowledge_level(&elder, KNOWLEDGE_FIRE, 50.0));
     colonist_learn_by_doing(&elder, KNOWLEDGE_FIRE, TICKS_PER_HOUR, 0);
     CHECK_NEAR(colonist_knowledge_level(&elder, KNOWLEDGE_FIRE), 50.5, 1e-6);
@@ -1548,7 +1551,7 @@ static void test_gatherer_level_sets_branch_condition(void)
         REQUIRE(colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, levels[run]));
         order_zone(&game, 26, 20, 26, 20, GATHER_BRANCHES);
         working[run] = run_until_done(&game, 26, 20, 20000);
-        results[run] = items_get(&game.items, 26, 20);
+        results[run] = items_get(&game.items, 26, 20, 0);
         REQUIRE(results[run].type == ITEM_BRANCHES);
         game_shutdown(&game);
     }
@@ -1568,13 +1571,13 @@ static void test_gathering_zone_keeps_the_worker_busy(void)
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
     REQUIRE(order_zone(&game, 23, 20, 23, 20, GATHER_COBBLES) == 1);
-    int zone = gather_zone_at(&game.gather_zones, 23, 20);
-    float stone_work = gather_job_work_needed(&game.map, 23, 20, GATHER_JOB_STONES);
+    int zone = gather_zone_at(&game.gather_zones, 23, 20, 0);
+    float stone_work = gather_job_work_needed(&game.map, 23, 20, 0, GATHER_JOB_STONES);
 
     run_ticks(&game, walk_ticks(2) + (int)(stone_work * 3.5f));
     /* Stone after stone, without stopping. */
     CHECK((int)game.items.totals[ITEM_COBBLE] >= 3);
-    CHECK_EQ_INT(items_get(&game.items, 23, 20).type, ITEM_COBBLE);
+    CHECK_EQ_INT(items_get(&game.items, 23, 20, 0).type, ITEM_COBBLE);
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK(colonist->gathering);
     CHECK_EQ_INT(colonist->target.x, 23);
@@ -1595,18 +1598,18 @@ static void test_gathering_zone_stops_at_its_targets(void)
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
-    int zone = gather_zone_create(&game.gather_zones, &game.map, 23, 20, 24, 20);
+    int zone = gather_zone_create(&game.gather_zones, &game.map, 23, 20, 24, 20, 0);
     REQUIRE(zone != GATHER_ZONE_NONE);
     gather_zone_set_enabled(&game.gather_zones, zone, GATHER_COBBLES, true);
     gather_zone_set_target(&game.gather_zones, zone, GATHER_COBBLES, 3);
-    float stone_work = gather_job_work_needed(&game.map, 23, 20, GATHER_JOB_STONES);
+    float stone_work = gather_job_work_needed(&game.map, 23, 20, 0, GATHER_JOB_STONES);
     run_ticks(&game, walk_ticks(4) + (int)(stone_work * 8.0f));
     /* Three cobbles in the colony: done. */
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 3);
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.gather_zones.wanting_cells, 0);
     /* One taken away (used up): the zone wants one more. */
-    items_remove(&game.items, 23, 20, 1);
+    items_remove(&game.items, 23, 20, 0, 1);
     run_ticks(&game, walk_ticks(4) + (int)(stone_work * 4.0f));
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 3);
     game_shutdown(&game);
@@ -1644,13 +1647,13 @@ static void test_gatherer_fetches_a_digging_stick(void)
     for (int stick = 0; stick <= 1; stick++) {
         Game game;
         REQUIRE(init_flat_game(&game));
-        Plant *cattail = &game.map.plants[map_index(&game.map, 26, 20)];
+        Plant *cattail = &game.map.plants[map_index(&game.map, 26, 20, 0)];
         *cattail = (Plant){.type = PLANT_CATTAIL, .growth = 1.0f};
         plant_settle(cattail, GAME_START_DAY);
         int rhizomes = plant_stock_available(cattail, PLANT_STOCK_FOOD);
         REQUIRE(rhizomes > 0);
         if (stick) {
-            items_add(&game.items, 20, 23, item_stack_pristine(ITEM_DIGGING_STICK, 1));
+            items_add(&game.items, 20, 23, 0, item_stack_pristine(ITEM_DIGGING_STICK, 1));
         }
         Colonist *colonist = spawn_rested(&game, 20, 20);
         REQUIRE(colonist != NULL);
@@ -1682,7 +1685,7 @@ static void test_only_skilled_gatherers_pick_mushrooms(void)
         REQUIRE(init_flat_game(&game));
         game.clock.tick = (uint64_t)SEASON_DAY(SEASON_AUTUMN, 2) * TICKS_PER_DAY +
                           12 * TICKS_PER_HOUR;
-        Plant *patch = &game.map.plants[map_index(&game.map, 24, 20)];
+        Plant *patch = &game.map.plants[map_index(&game.map, 24, 20, 0)];
         *patch = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
         plant_settle(patch, game_day_of_year(game.clock.tick));
         Colonist *colonist = spawn_rested(&game, 20, 20);
@@ -1725,7 +1728,7 @@ static void test_orders_need_the_knowledge(void)
 static void test_work_speed_follows_knowledge(void)
 {
     Colonist colonist;
-    colonist_init(&colonist, "Ada", 30, 0, 0);
+    colonist_init(&colonist, "Ada", 30, 0, 0, 0);
     REQUIRE(colonist_set_knowledge_level(&colonist, KNOWLEDGE_GATHERING, KNOWLEDGE_LEVEL_MAX));
     REQUIRE(colonist_set_knowledge_level(&colonist, KNOWLEDGE_FIRE, KNOWLEDGE_MASTERY_LEVEL));
     CHECK_NEAR(colonist_work_speed(&colonist, KNOWLEDGE_GATHERING), COLONIST_WORK_SPEED * 1.5,
@@ -1742,9 +1745,9 @@ static void test_colonist_cleans_dirty_tiles(void)
     Colonist *colonist = spawn_rested(&game, 10, 10);
     REQUIRE(colonist != NULL);
     CHECK_EQ_INT(colonist->work_priorities[WORK_CLEANING], WORK_PRIORITY_DEFAULT_CLEANING);
-    dirt_add(&game.dirt, &game.map, 14, 10, 50);
-    dirt_add(&game.dirt, &game.map, 15, 10, 20);
-    dirt_add(&game.dirt, &game.map, 15, 11, 30);
+    dirt_add(&game.dirt, &game.map, 14, 10, 0, 50);
+    dirt_add(&game.dirt, &game.map, 15, 10, 0, 20);
+    dirt_add(&game.dirt, &game.map, 15, 11, 0, 30);
     bool seen_cleaning = false;
     for (int i = 0; i < 1200 && game.dirt.dirty_count > 0; i++) {
         game_tick(&game);
@@ -1770,17 +1773,17 @@ static void test_cleaning_can_be_disabled(void)
     Colonist *colonist = spawn_rested(&game, 10, 10);
     REQUIRE(colonist != NULL);
     EntityId id = game_colonist_id_at(&game, 0);
-    dirt_add(&game.dirt, &game.map, 12, 10, 100);
+    dirt_add(&game.dirt, &game.map, 12, 10, 0, 100);
     run_ticks(&game, 120);
     CHECK_EQ_INT(colonist->task, TASK_CLEAN);
     /* Disabled on the way or while cleaning: the colonist stops. */
     CHECK(game_set_work_priority(&game, id, WORK_CLEANING, WORK_PRIORITY_DISABLED));
     run_ticks(&game, 60);
     CHECK(colonist->task != TASK_CLEAN);
-    int left = dirt_at(&game.dirt, 12, 10);
+    int left = dirt_at(&game.dirt, 12, 10, 0);
     CHECK(left > 0);
     run_ticks(&game, 2000);
-    CHECK_EQ_INT(dirt_at(&game.dirt, 12, 10), left);
+    CHECK_EQ_INT(dirt_at(&game.dirt, 12, 10, 0), left);
     game_shutdown(&game);
 }
 
@@ -1794,9 +1797,9 @@ static ColonistTask first_job(int hauling, int cleaning)
     }
     Colonist *colonist = spawn_rested(&game, 10, 10);
     EntityId id = game_colonist_id_at(&game, 0);
-    stockpile_create(&game.stockpiles, &game.map, 20, 20, 21, 21);
-    dirt_add(&game.dirt, &game.map, 11, 10, 100);
-    items_add(&game.items, 16, 10, item_stack_pristine(ITEM_COBBLE, 1));
+    stockpile_create(&game.stockpiles, &game.map, 20, 20, 21, 21, 0);
+    dirt_add(&game.dirt, &game.map, 11, 10, 0, 100);
+    items_add(&game.items, 16, 10, 0, item_stack_pristine(ITEM_COBBLE, 1));
     game_set_work_priority(&game, id, WORK_HAULING, hauling);
     game_set_work_priority(&game, id, WORK_CLEANING, cleaning);
     run_ticks(&game, 30);

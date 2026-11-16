@@ -34,13 +34,14 @@ const char *colonist_name_at(size_t index)
     return index < COLONY_ARRAY_COUNT(NAMES) ? NAMES[index] : NULL;
 }
 
-void colonist_init(Colonist *colonist, const char *name, int age, int x, int y)
+void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, int z)
 {
     memset(colonist, 0, sizeof(*colonist));
     snprintf(colonist->name, sizeof(colonist->name), "%s", name);
     colonist->age = age;
     colonist->x = x;
     colonist->y = y;
+    colonist->z = z;
     colonist->task = TASK_IDLE;
     for (int need = 0; need < NEED_COUNT; need++) {
         colonist->needs[need] = 1.0f;
@@ -290,7 +291,7 @@ void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map)
 {
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
         if (colonist->tools[i].count > 0) {
-            items_drop(items, map, colonist->x, colonist->y, colonist->tools[i]);
+            items_drop(items, map, colonist->x, colonist->y, colonist->z, colonist->tools[i]);
             colonist->tools[i] = (ItemStack){.type = ITEM_NONE};
             colonist->tool_wear[i] = 0;
         }
@@ -520,7 +521,8 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
     case TASK_CONSTRUCT: return at_station ? COLONIST_ACTION_STRIKE : COLONIST_ACTION_NONE;
     case TASK_CRAFT: return at_station ? craft_action(colonist, tool) : COLONIST_ACTION_NONE;
     case TASK_CLEAN: /* Picking up chips and shavings. */
-        return colonist->x == colonist->target.x && colonist->y == colonist->target.y
+        return colonist->x == colonist->target.x && colonist->y == colonist->target.y &&
+                       colonist->z == colonist->target.z
                    ? COLONIST_ACTION_GATHER
                    : COLONIST_ACTION_NONE;
     case TASK_LIGHT: /* Wrapping embers, or twirling a stick on a board. */
@@ -627,7 +629,7 @@ const char *need_level_key(NeedType need, NeedLevel level)
 
 static TilePos current_tile(const Colonist *colonist)
 {
-    return (TilePos){(int16_t)colonist->x, (int16_t)colonist->y};
+    return (TilePos){(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z};
 }
 
 /* Gives up the materials a colonist promised to bring to a site. */
@@ -667,7 +669,8 @@ static void begin_task(Colonist *colonist, const ColonistContext *context, Colon
     }
     if (colonist->carried.count > 0) {
         /* Whatever is in hand is put down where the colonist stands. */
-        items_drop(context->items, context->map, colonist->x, colonist->y, colonist->carried);
+        items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z,
+                   colonist->carried);
         colonist->carried = (ItemStack){.type = ITEM_NONE};
     }
     reservations_release_all(context->reservations, context->worker_id);
@@ -723,9 +726,10 @@ static int random_idle_ticks(Rng *rng)
 }
 
 /* Food on a tile: edible items on the ground, or a ripe plant. */
-static bool tile_has_food(const Map *map, const Items *items, int x, int y)
+static bool tile_has_food(const Map *map, const Items *items, int x, int y, int z)
 {
-    return item_is_food((ItemType)items_get(items, x, y).type) || map_has_edible_plant(map, x, y);
+    return item_is_food((ItemType)items_get(items, x, y, z).type) ||
+           map_has_edible_plant(map, x, y, z);
 }
 
 /* Search filter: food that nobody else is about to eat. */
@@ -737,39 +741,41 @@ typedef struct FoodSearch {
     uint8_t self;
 } FoodSearch;
 
-static bool is_free_food(const Map *map, int x, int y, void *userdata)
+static bool is_free_food(const Map *map, int x, int y, int z, void *userdata)
 {
     const FoodSearch *search = userdata;
-    return tile_has_food(map, search->items, x, y) &&
+    return tile_has_food(map, search->items, x, y, z) &&
            !reservations_taken_by_other(search->reservations, RESERVATION_FOOD,
-                                        (TilePos){(int16_t)x, (int16_t)y}, search->self);
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                        search->self);
 }
 
 /* Search filter: free food lying on the ground that rots away soon. */
-static bool is_free_spoiling_food(const Map *map, int x, int y, void *userdata)
+static bool is_free_spoiling_food(const Map *map, int x, int y, int z, void *userdata)
 {
     const FoodSearch *search = userdata;
-    ItemStack stack = items_get(search->items, x, y);
+    ItemStack stack = items_get(search->items, x, y, z);
     if (!item_is_food((ItemType)stack.type) || !item_rots((ItemType)stack.type)) {
         return false;
     }
     float hours = item_stack_rot_hours(
-        stack, temperature_rot_rate(search->temperatures, map, x, y, search->rains));
+        stack, temperature_rot_rate(search->temperatures, map, x, y, z, search->rains));
     return hours >= 0.0f && hours < COLONIST_SPOILING_FOOD_HOURS &&
            !reservations_taken_by_other(search->reservations, RESERVATION_FOOD,
-                                        (TilePos){(int16_t)x, (int16_t)y}, search->self);
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                        search->self);
 }
 
-static bool is_drinking_spot(const Map *map, int x, int y, void *userdata)
+static bool is_drinking_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)userdata;
-    return map_is_drinking_spot(map, x, y);
+    return map_is_drinking_spot(map, x, y, z);
 }
 
 /* Region the colonist stands in (REGION_NONE when unknown). */
 static uint32_t current_region(const Colonist *colonist, const ColonistContext *context)
 {
-    return regions_at(context->regions, context->map, colonist->x, colonist->y);
+    return regions_at(context->regions, context->map, colonist->x, colonist->y, colonist->z);
 }
 
 /*
@@ -786,7 +792,7 @@ static bool any_tile_reachable(const ColonistContext *context, TilePos from,
                                TilePredicate predicate, void *userdata, float max_cost)
 {
     const Map *map = context->map;
-    uint32_t region = regions_at(context->regions, map, from.x, from.y);
+    uint32_t region = regions_at(context->regions, map, from.x, from.y, from.z);
     if (region == REGION_NONE) {
         return true;
     }
@@ -802,9 +808,9 @@ static bool any_tile_reachable(const ColonistContext *context, TilePos from,
         if (y < 0) {
             continue;
         }
-        const uint32_t *ids = &context->regions->id[(size_t)y * (size_t)map->width];
+        const uint32_t *ids = &context->regions->id[map_index(map, 0, y, from.z)];
         for (int x = x0; x <= x1; x++) {
-            if (ids[x] == region && predicate(map, x, y, userdata)) {
+            if (ids[x] == region && predicate(map, x, y, from.z, userdata)) {
                 return true;
             }
         }
@@ -882,14 +888,15 @@ static bool try_satisfy_urgent(Colonist *colonist, const ColonistContext *contex
 }
 
 /* Search filter: the head of a bed nobody else owns, sleeps in or walks to. */
-static bool is_free_bed(const Map *map, int x, int y, void *userdata)
+static bool is_free_bed(const Map *map, int x, int y, int z, void *userdata)
 {
     const ColonistContext *context = userdata;
-    uint8_t owner = beds_owner(context->beds, x, y);
-    return map_structure_is_origin(map, x, y) && structure_is_bed(map_structure(map, x, y)) &&
+    uint8_t owner = beds_owner(context->beds, x, y, z);
+    return map_structure_is_origin(map, x, y, z) && structure_is_bed(map_structure(map, x, y, z)) &&
            (owner == BED_NO_OWNER || owner == context->worker_id) &&
            !reservations_taken_by_other(context->reservations, RESERVATION_BED,
-                                        (TilePos){(int16_t)x, (int16_t)y}, context->worker_id);
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                        context->worker_id);
 }
 
 typedef struct OwnBedSearch {
@@ -897,11 +904,11 @@ typedef struct OwnBedSearch {
     TilePos bed;
 } OwnBedSearch;
 
-static bool is_own_bed(const Map *map, int x, int y, void *userdata)
+static bool is_own_bed(const Map *map, int x, int y, int z, void *userdata)
 {
     const OwnBedSearch *search = userdata;
-    return x == search->bed.x && y == search->bed.y &&
-           is_free_bed(map, x, y, (void *)search->context);
+    return x == search->bed.x && y == search->bed.y && z == search->bed.z &&
+           is_free_bed(map, x, y, z, (void *)search->context);
 }
 
 static bool go_to_warm_spot(Colonist *colonist, const ColonistContext *context);
@@ -919,7 +926,7 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
         return;
     }
     TilePos bed;
-    OwnBedSearch own = {context, {-1, -1}};
+    OwnBedSearch own = {context, {-1, -1, -1}};
     bool found = false;
     if (beds_owned(context->beds, context->worker_id, &own.bed)) {
         found = pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
@@ -933,7 +940,7 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
                                 is_free_bed, (void *)context, COLONIST_BED_SEARCH_MAX_COST,
                                 &colonist->path, &bed)) {
         found = true;
-        beds_assign(context->beds, context->worker_id, bed.x, bed.y);
+        beds_assign(context->beds, context->worker_id, bed.x, bed.y, bed.z);
     }
     if (found) {
         colonist->target = bed;
@@ -954,13 +961,13 @@ float colonist_sleep_temperature_factor(float celsius)
 }
 
 /* Temperature the colonist feels on a tile (mild without temperatures). */
-static float felt_temperature(const ColonistContext *context, int x, int y)
+static float felt_temperature(const ColonistContext *context, int x, int y, int z)
 {
     if (context->temperatures == NULL) {
         return (COLONIST_COLD_SLEEP_BELOW + COLONIST_HOT_SLEEP_ABOVE) * 0.5f;
     }
     return hearths_felt_temperature(context->workstations, context->map, context->temperatures, x,
-                                    y);
+                                    y, z);
 }
 
 /* Degrees colder a settler feels for being wet. */
@@ -972,7 +979,7 @@ static float wet_chill(const Colonist *colonist)
 /* Temperature the colonist feels where it is, wet or not. */
 static float felt_here(const Colonist *colonist, const ColonistContext *context)
 {
-    return felt_temperature(context, colonist->x, colonist->y) - wet_chill(colonist);
+    return felt_temperature(context, colonist->x, colonist->y, colonist->z) - wet_chill(colonist);
 }
 
 /* Out in the rain or snow, the colonist gets wet; elsewhere it dries, fast
@@ -980,13 +987,13 @@ static float felt_here(const Colonist *colonist, const ColonistContext *context)
 static void update_wetness(Colonist *colonist, const ColonistContext *context)
 {
     bool exposed = context->wetting > 0.0f &&
-                   temperature_cover(context->map, colonist->x, colonist->y) ==
+                   temperature_cover(context->map, colonist->x, colonist->y, colonist->z) ==
                        TEMPERATURE_COVER_OPEN;
     if (exposed) {
         colonist->wetness = fminf(1.0f, colonist->wetness + context->wetting / TICKS_PER_HOUR);
     } else if (colonist->wetness > 0.0f) {
-        bool warm =
-            felt_temperature(context, colonist->x, colonist->y) >= COLONIST_DRY_WARM_CELSIUS;
+        bool warm = felt_temperature(context, colonist->x, colonist->y, colonist->z) >=
+                    COLONIST_DRY_WARM_CELSIUS;
         float rate = warm ? COLONIST_DRY_WARM_PER_HOUR : COLONIST_DRY_PER_HOUR;
         colonist->wetness = fmaxf(0.0f, colonist->wetness - rate / TICKS_PER_HOUR);
     }
@@ -998,16 +1005,16 @@ static bool comfortable_to_sleep(float celsius)
 }
 
 /* Search filter: a free tile beside a fire where it feels right to sleep. */
-static bool is_warm_spot(const Map *map, int x, int y, void *userdata)
+static bool is_warm_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     const ColonistContext *context = userdata;
-    TilePos tile = {(int16_t)x, (int16_t)y};
-    return workstation_at(context->workstations, x, y) == WORKSTATION_NONE &&
-           map_structure(map, x, y) == STRUCTURE_NONE &&
+    TilePos tile = {(int16_t)x, (int16_t)y, (int16_t)z};
+    return workstation_at(context->workstations, x, y, z) == WORKSTATION_NONE &&
+           map_structure(map, x, y, z) == STRUCTURE_NONE &&
            !reservations_taken_by_other(context->reservations, RESERVATION_BED, tile,
                                         context->worker_id) &&
-           hearths_radiant_warmth(context->workstations, map, x, y) > 0.0f &&
-           comfortable_to_sleep(felt_temperature(context, x, y));
+           hearths_radiant_warmth(context->workstations, map, x, y, z) > 0.0f &&
+           comfortable_to_sleep(felt_temperature(context, x, y, z));
 }
 
 static bool any_fire_burning(const ColonistContext *context)
@@ -1046,7 +1053,7 @@ static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context)
 {
     if (colonist_is_moving(colonist) || context->temperatures == NULL ||
         !search_allowed(colonist, SEARCH_WARM_SPOT) ||
-        structure_is_bed(map_structure(context->map, colonist->x, colonist->y)) ||
+        structure_is_bed(map_structure(context->map, colonist->x, colonist->y, colonist->z)) ||
         comfortable_to_sleep(felt_here(colonist, context)) || !any_fire_burning(context)) {
         return;
     }
@@ -1064,7 +1071,7 @@ static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context)
 /* Rest gain multiplier asleep where the colonist lies, feeling `felt`. */
 static float rest_factor(const Colonist *colonist, const ColonistContext *context, float felt)
 {
-    StructureType bed = map_structure(context->map, colonist->x, colonist->y);
+    StructureType bed = map_structure(context->map, colonist->x, colonist->y, colonist->z);
     float factor =
         structure_is_bed(bed) ? structure_def(bed)->rest_factor : COLONIST_GROUND_REST_FACTOR;
     return factor * colonist_sleep_temperature_factor(felt);
@@ -1076,8 +1083,9 @@ static void remember_sleep(Colonist *colonist, const ColonistContext *context)
     int ticks = colonist->sleep_ticks;
     if (ticks >= MOOD_SLEEP_MIN_TICKS) {
         Mood *mood = &colonist->mood;
-        bool bed = structure_is_bed(map_structure(context->map, colonist->x, colonist->y));
-        bool outside = temperature_cover(context->map, colonist->x, colonist->y) ==
+        bool bed =
+            structure_is_bed(map_structure(context->map, colonist->x, colonist->y, colonist->z));
+        bool outside = temperature_cover(context->map, colonist->x, colonist->y, colonist->z) ==
                        TEMPERATURE_COVER_OPEN;
         float bad = MOOD_SLEEP_BAD_SHARE * (float)ticks;
         bool cold = (float)colonist->sleep_cold_ticks > bad;
@@ -1148,16 +1156,16 @@ static WorkTypeMask enabled_work_types(const Colonist *colonist)
     return mask;
 }
 
-static bool is_open_job(const WorkSearch *search, int x, int y)
+static bool is_open_job(const WorkSearch *search, int x, int y, int z)
 {
     if (search->zones) {
-        if (gather_zone_priority_at(search->gather_zones, x, y) != search->zone_priority ||
-            gather_tile_job(search->gather_zones, search->map, x, y, search->jobs) ==
+        if (gather_zone_priority_at(search->gather_zones, x, y, z) != search->zone_priority ||
+            gather_tile_job(search->gather_zones, search->map, x, y, z, search->jobs) ==
                 GATHER_JOB_NONE) {
             return false;
         }
     } else {
-        DesignationType type = designation_get(search->designations, x, y);
+        DesignationType type = designation_get(search->designations, x, y, z);
         if (type == DESIGNATION_NONE ||
             !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type)) ||
             !colonist_can_do(search->worker, type)) {
@@ -1165,17 +1173,18 @@ static bool is_open_job(const WorkSearch *search, int x, int y)
         }
     }
     return !reservations_taken_by_other(search->reservations, RESERVATION_WORK,
-                                        (TilePos){(int16_t)x, (int16_t)y}, search->self);
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                        search->self);
 }
 
 /* First open job next to (x, y), in a fixed order (deterministic). */
-static bool find_adjacent_job(const WorkSearch *search, int x, int y, TilePos *out)
+static bool find_adjacent_job(const WorkSearch *search, int x, int y, int z, TilePos *out)
 {
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i];
         int ny = y + NEIGHBOR_DY[i];
-        if (is_open_job(search, nx, ny)) {
-            *out = (TilePos){(int16_t)nx, (int16_t)ny};
+        if (is_open_job(search, nx, ny, z)) {
+            *out = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)z};
             return true;
         }
     }
@@ -1183,10 +1192,10 @@ static bool find_adjacent_job(const WorkSearch *search, int x, int y, TilePos *o
 }
 
 /* A tile to stand on while working: passable, next to an open job. */
-static bool is_work_spot(const Map *map, int x, int y, void *userdata)
+static bool is_work_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     TilePos unused;
-    return map_is_passable(map, x, y) && find_adjacent_job(userdata, x, y, &unused);
+    return map_is_passable(map, x, y, z) && find_adjacent_job(userdata, x, y, z, &unused);
 }
 
 /*
@@ -1201,29 +1210,32 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
     const Designations *designations = search->designations;
     const Regions *regions = context->regions;
     const int width = designations->width, height = designations->height;
+    const int depth = designations->depth;
     if (region == REGION_NONE || !regions_current(regions, context->map) ||
-        regions->width != width || regions->height != height) {
+        regions->width != width || regions->height != height || regions->depth != depth) {
         return true;
     }
     /* Designated tiles, or tiles of the zones that want something. */
     int remaining = search->zones ? search->gather_zones->wanting_cells : designations->count;
-    for (int y = 0; y < height && remaining > 0; y++) {
-        const uint8_t *types = search->zones
-                                   ? &search->gather_zones->zone[(size_t)y * (size_t)width]
-                                   : &designations->type[(size_t)y * (size_t)width];
-        const uint32_t *ids = &regions->id[(size_t)y * (size_t)width];
-        for (int x = 0; x < width; x++) {
-            if (types[x] == 0 || (search->zones && search->gather_zones->list[types[x] - 1]
-                                                           .wanted == 0)) {
-                continue;
-            }
-            remaining--; /* The scan stops once every order has been seen. */
-            bool next_to_region =
-                (x > 0 && ids[x - 1] == region) || (x + 1 < width && ids[x + 1] == region) ||
-                (y > 0 && ids[x - width] == region) ||
-                (y + 1 < height && ids[x + width] == region);
-            if (next_to_region && is_open_job(search, x, y)) {
-                return true;
+    for (int z = 0; z < depth && remaining > 0; z++) {
+        for (int y = 0; y < height && remaining > 0; y++) {
+            size_t row = ((size_t)z * (size_t)height + (size_t)y) * (size_t)width;
+            const uint8_t *types = search->zones ? &search->gather_zones->zone[row]
+                                                 : &designations->type[row];
+            const uint32_t *ids = &regions->id[row];
+            for (int x = 0; x < width; x++) {
+                if (types[x] == 0 || (search->zones && search->gather_zones->list[types[x] - 1]
+                                                               .wanted == 0)) {
+                    continue;
+                }
+                remaining--; /* The scan stops once every order has been seen. */
+                bool next_to_region =
+                    (x > 0 && ids[x - 1] == region) || (x + 1 < width && ids[x + 1] == region) ||
+                    (y > 0 && ids[x - width] == region) ||
+                    (y + 1 < height && ids[x + width] == region);
+                if (next_to_region && is_open_job(search, x, y, z)) {
+                    return true;
+                }
             }
         }
     }
@@ -1254,13 +1266,14 @@ typedef struct CleanSearch {
     uint8_t self;
 } CleanSearch;
 
-static bool is_dirty_tile(const Map *map, int x, int y, void *userdata)
+static bool is_dirty_tile(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const CleanSearch *search = userdata;
-    return dirt_at(search->dirt, x, y) > 0 &&
+    return dirt_at(search->dirt, x, y, z) > 0 &&
            !reservations_taken_by_other(search->reservations, RESERVATION_CLEAN,
-                                        (TilePos){(int16_t)x, (int16_t)y}, search->self);
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                        search->self);
 }
 
 /* Walks to the nearest dirty tile to clean it. */
@@ -1282,7 +1295,7 @@ static bool try_clean_job(Colonist *colonist, const ColonistContext *context)
 static bool clean_job_still_valid(const Colonist *colonist, const ColonistContext *context)
 {
     return colonist->work_priorities[WORK_CLEANING] != WORK_PRIORITY_DISABLED &&
-           dirt_at(context->dirt, colonist->target.x, colonist->target.y) > 0;
+           dirt_at(context->dirt, colonist->target.x, colonist->target.y, colonist->target.z) > 0;
 }
 
 /* Cleans the tile it stands on, 1 % at a time. */
@@ -1298,7 +1311,7 @@ static void clean(Colonist *colonist, const ColonistContext *context)
         return;
     }
     colonist->timer = 0;
-    if (dirt_clean(context->dirt, target.x, target.y, 1) == 0) {
+    if (dirt_clean(context->dirt, target.x, target.y, target.z, 1) == 0) {
         set_idle(colonist, context, 0); /* The next dirty tile is probably next to it. */
     }
 }
@@ -1307,7 +1320,8 @@ static HaulWorld haul_world(const ColonistContext *context)
 {
     HaulWorld world = {context->map,         context->items,      context->stockpiles,
                        context->reservations, context->pathfinder, context->worker_id,
-                       context->regions,      REGION_NONE,         0};
+                       context->regions,      REGION_NONE,         0,
+                       0};
     return world;
 }
 
@@ -1370,13 +1384,13 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
         return false;
     }
     /* The search only stops on a spot next to an open job. */
-    find_adjacent_job(&search, spot.x, spot.y, &target);
+    find_adjacent_job(&search, spot.x, spot.y, spot.z, &target);
     begin_task(colonist, context, TASK_WORK);
     colonist->target = target;
     colonist->work_type =
         (uint8_t)(zones ? gather_tile_job(context->gather_zones, context->map, target.x,
-                                          target.y, jobs)
-                        : designation_get(designations, target.x, target.y));
+                                          target.y, target.z, jobs)
+                        : designation_get(designations, target.x, target.y, target.z));
     colonist->gathering = zones;
     colonist->station_phase = STATION_JOB_GO;
     reservations_add(context->reservations, RESERVATION_WORK, target, context->worker_id);
@@ -1391,6 +1405,7 @@ static bool try_haul_job(Colonist *colonist, const ColonistContext *context)
     HaulWorld world = haul_world(context);
     world.region = current_region(colonist, context);
     world.from_y = colonist->y;
+    world.from_z = colonist->z;
     if (!haul_any_job_possible(&world)) {
         return false;
     }
@@ -1418,8 +1433,8 @@ static uint32_t construction_stamp(const ColonistContext *context);
 static bool try_assist(Colonist *colonist, const ColonistContext *context, WorkType type);
 static bool try_refuel_job(Colonist *colonist, const ColonistContext *context);
 static bool try_light_job(Colonist *colonist, const ColonistContext *context);
-static bool next_to(int x, int y, TilePos tile);
-static bool is_next_to_target(const Map *map, int x, int y, void *userdata);
+static bool next_to(int x, int y, int z, TilePos tile);
+static bool is_next_to_target(const Map *map, int x, int y, int z, void *userdata);
 
 /*
  * Takes the nearest job of the highest priority level that has one. Within a
@@ -1620,7 +1635,8 @@ static bool haul_destination_valid(const Colonist *colonist, const ColonistConte
                                    ItemStack stack)
 {
     TilePos dest = colonist->haul_destination;
-    return haul_destination_room(context->stockpiles, context->items, dest.x, dest.y, stack) > 0;
+    return haul_destination_room(context->stockpiles, context->items, dest.x, dest.y, dest.z,
+                                 stack) > 0;
 }
 
 /* Items of the load in hand (or of `stack` when empty) that can still be
@@ -1631,7 +1647,8 @@ static int haul_room_left(const Colonist *colonist, const ColonistContext *conte
 {
     TilePos dest = colonist->haul_destination;
     ItemStack load = colonist->carried.count > 0 ? colonist->carried : stack;
-    int room = haul_destination_room(context->stockpiles, context->items, dest.x, dest.y, load);
+    int room =
+        haul_destination_room(context->stockpiles, context->items, dest.x, dest.y, dest.z, load);
     int capacity = colonist_carry_capacity(colonist, (ItemType)load.type);
     int left = (room < capacity ? room : capacity) - (int)colonist->carried.count;
     return left > 0 ? left : 0;
@@ -1681,7 +1698,8 @@ static bool collect_more(Colonist *colonist, const ColonistContext *context)
 static bool haul_still_valid(Colonist *colonist, const ColonistContext *context)
 {
     if (!colonist->haul_delivering) {
-        ItemStack stack = items_get(context->items, colonist->target.x, colonist->target.y);
+        ItemStack stack =
+            items_get(context->items, colonist->target.x, colonist->target.y, colonist->target.z);
         bool holding = colonist->carried.count > 0;
         if (colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED &&
             stack.type != ITEM_NONE && (!holding || item_stacks_match(stack, colonist->carried)) &&
@@ -1723,9 +1741,9 @@ static void haul(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
             return;
         }
-        ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+        ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
         int wanted = haul_room_left(colonist, context, stack);
-        int taken = items_remove(context->items, colonist->x, colonist->y,
+        int taken = items_remove(context->items, colonist->x, colonist->y, colonist->z,
                                  stack.count < wanted ? stack.count : wanted);
         ItemStack picked = stack; /* Same condition as the stack it comes from. */
         picked.count = (uint16_t)taken;
@@ -1741,7 +1759,7 @@ static void haul(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0);
         return;
     }
-    int added = items_add(context->items, dest.x, dest.y, colonist->carried);
+    int added = items_add(context->items, dest.x, dest.y, dest.z, colonist->carried);
     colonist->carried.count = (uint16_t)(colonist->carried.count - added);
     if (colonist->carried.count == 0) {
         colonist->carried = (ItemStack){.type = ITEM_NONE};
@@ -1760,13 +1778,14 @@ static bool job_still_valid(const Colonist *colonist, const ColonistContext *con
         GatherJob job = (GatherJob)colonist->work_type;
         return own && (unsigned)job < GATHER_JOB_COUNT &&
                (gather_jobs_for(colonist, enabled_work_types(colonist)) & GATHER_JOB_BIT(job)) &&
-               gather_job_available(context->gather_zones, context->map, target.x, target.y, job);
+               gather_job_available(context->gather_zones, context->map, target.x, target.y,
+                                    target.z, job);
     }
     const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
-    return def != NULL &&
-           colonist->work_priorities[def->work_type] != WORK_PRIORITY_DISABLED &&
+    return def != NULL && colonist->work_priorities[def->work_type] != WORK_PRIORITY_DISABLED &&
            colonist_can_do(colonist, (DesignationType)colonist->work_type) &&
-           designation_get(context->designations, target.x, target.y) == colonist->work_type &&
+           designation_get(context->designations, target.x, target.y, target.z) ==
+               colonist->work_type &&
            reservations_owner(context->reservations, RESERVATION_WORK, target) ==
                context->worker_id;
 }
@@ -1782,7 +1801,7 @@ static void work(Colonist *colonist, const ColonistContext *context)
     Designations *designations = context->designations;
     TilePos target = colonist->target;
     int distance = abs(colonist->x - target.x) + abs(colonist->y - target.y);
-    DesignationType type = designation_get(designations, target.x, target.y);
+    DesignationType type = designation_get(designations, target.x, target.y, target.z);
     if (!job_still_valid(colonist, context)) {
         set_idle(colonist, context, 0); /* The order was cancelled. */
         return;
@@ -1803,7 +1822,7 @@ static void work(Colonist *colonist, const ColonistContext *context)
                       assistance(colonist, context);
         /* Products depend on the level before this tick's learning. */
         bool done = gather_zone_add_work(context->gather_zones, context->map, context->items,
-                                         target.x, target.y, job, speed,
+                                         target.x, target.y, target.z, job, speed,
                                          colonist_work_level(colonist, knowledge),
                                          context->rng);
         colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
@@ -1814,20 +1833,20 @@ static void work(Colonist *colonist, const ColonistContext *context)
         }
         return;
     }
-    if (!designation_can_apply(context->map, target.x, target.y, type)) {
-        designation_set(designations, context->map, target.x, target.y, DESIGNATION_NONE);
+    if (!designation_can_apply(context->map, target.x, target.y, target.z, type)) {
+        designation_set(designations, context->map, target.x, target.y, target.z, DESIGNATION_NONE);
         set_idle(colonist, context, 0);
         return;
     }
     KnowledgeType knowledge = designation_def(type)->knowledge;
     /* Products depend on the level before this tick's learning. */
     bool done = designation_add_work(designations, context->map, context->items, target.x,
-                                     target.y,
+                                     target.y, target.z,
                                      colonist_work_speed(colonist, knowledge) *
                                          assistance(colonist, context),
                                      colonist_work_level(colonist, knowledge), context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
-    int site = construction_at(context->constructions, target.x, target.y);
+    int site = construction_at(context->constructions, target.x, target.y, target.z);
     const ConstructionSite *refresh = construction_get(context->constructions, site);
     if (done && type == DESIGNATION_DECONSTRUCT && refresh != NULL && refresh->refresh &&
         !site_still_wanted(context, refresh)) {
@@ -1835,7 +1854,7 @@ static void work(Colonist *colonist, const ColonistContext *context)
         ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
         int count = constructions_remove(context->constructions, site, returned);
         for (int i = 0; i < count; i++) {
-            items_drop(context->items, context->map, target.x, target.y, returned[i]);
+            items_drop(context->items, context->map, target.x, target.y, target.z, returned[i]);
         }
     }
     if (done) {
@@ -1854,7 +1873,7 @@ static Workstation *job_station(const Colonist *colonist, const ColonistContext 
 
 static TilePos station_tile(const Workstation *station)
 {
-    return (TilePos){station->x, station->y};
+    return (TilePos){station->x, station->y, station->z};
 }
 
 /* Whether some item of these types lies anywhere (a cheap first check). */
@@ -1936,13 +1955,13 @@ typedef struct StationSearch {
     const Colonist *worker;
 } StationSearch;
 
-static bool is_station_job(const Map *map, int x, int y, void *userdata)
+static bool is_station_job(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const StationSearch *search = userdata;
     const ColonistContext *context = search->context;
     const Workstation *station = workstation_get_const(
-        context->workstations, workstation_at(context->workstations, x, y));
+        context->workstations, workstation_at(context->workstations, x, y, z));
     if (station == NULL ||
         reservations_taken_by_other(context->reservations, RESERVATION_STATION,
                                     station_tile(station), context->worker_id)) {
@@ -1978,18 +1997,19 @@ typedef struct FetchSearch {
     float min_factor;
 } FetchSearch;
 
-static bool is_fetchable(const Map *map, int x, int y, void *userdata)
+static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const FetchSearch *search = userdata;
-    ItemStack stack = items_get(search->items, x, y);
+    ItemStack stack = items_get(search->items, x, y, z);
     return stack.type != ITEM_NONE && (search->types & ITEM_TYPE_BIT(stack.type)) &&
            stack.quality >= search->min_quality && stack.count >= search->min_count &&
            (search->match.count == 0 || item_stacks_match(stack, search->match)) &&
            (search->min_factor <= 0.0f ||
             tool_speed_factor(search->use, stack) > search->min_factor) &&
            !reservations_taken_by_other(search->reservations, RESERVATION_HAUL_SOURCE,
-                                        (TilePos){(int16_t)x, (int16_t)y}, search->self);
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                        search->self);
 }
 
 /* Heads for a stack found by `search`, looked for around `from` within
@@ -2056,7 +2076,7 @@ static bool go_to_station(Colonist *colonist, const ColonistContext *context,
     colonist->path_index = 0;
     TilePos tile = station_tile(station);
     if (hearth_is(station)) { /* Worked from beside, not from inside the fire. */
-        if (next_to(colonist->x, colonist->y, tile)) {
+        if (next_to(colonist->x, colonist->y, colonist->z, tile)) {
             path_clear(&colonist->path);
             return true;
         }
@@ -2065,7 +2085,7 @@ static bool go_to_station(Colonist *colonist, const ColonistContext *context,
                                        is_next_to_target, &tile, COLONIST_WORK_SEARCH_MAX_COST,
                                        &colonist->path, &spot);
     }
-    if (colonist->x == tile.x && colonist->y == tile.y) {
+    if (colonist->x == tile.x && colonist->y == tile.y && colonist->z == tile.z) {
         path_clear(&colonist->path);
         return true;
     }
@@ -2133,15 +2153,16 @@ static bool fetch_gather_tool(Colonist *colonist, const ColonistContext *context
 static void take_gather_tool(Colonist *colonist, const ColonistContext *context)
 {
     ToolUse use = gather_job_def((GatherJob)colonist->work_type)->tool_use;
-    ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+    ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
     ItemStack replaced;
     if (colonist->x == colonist->fetch.x && colonist->y == colonist->fetch.y &&
-        stack.type != ITEM_NONE &&
+        colonist->z == colonist->fetch.z && stack.type != ITEM_NONE &&
         tool_speed_factor(use, stack) > colonist_tool_factor(colonist, use, ~(ItemTypeMask)0) &&
         colonist_swap_tool(colonist, stack, &replaced)) {
-        items_remove(context->items, colonist->x, colonist->y, 1);
+        items_remove(context->items, colonist->x, colonist->y, colonist->z, 1);
         if (replaced.count > 0) {
-            items_drop(context->items, context->map, colonist->x, colonist->y, replaced);
+            items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z,
+                       replaced);
         }
     }
     reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
@@ -2149,7 +2170,7 @@ static void take_gather_tool(Colonist *colonist, const ColonistContext *context)
     colonist->station_phase = STATION_JOB_GO;
     colonist->path_index = 0;
     TilePos spot;
-    if (next_to(colonist->x, colonist->y, colonist->target)) {
+    if (next_to(colonist->x, colonist->y, colonist->z, colonist->target)) {
         path_clear(&colonist->path);
     } else if (!pathfinder_find_nearest(context->pathfinder, context->map,
                                         current_tile(colonist), is_next_to_target,
@@ -2227,7 +2248,7 @@ static bool try_station_job(Colonist *colonist, const ColonistContext *context)
                                  &tile)) {
         return false;
     }
-    int index = workstation_at(context->workstations, tile.x, tile.y);
+    int index = workstation_at(context->workstations, tile.x, tile.y, tile.z);
     const Workstation *station = workstation_get_const(context->workstations, index);
     int bill = choose_bill(colonist, context, station);
     begin_task(colonist, context, TASK_CRAFT);
@@ -2248,7 +2269,7 @@ static bool try_station_job(Colonist *colonist, const ColonistContext *context)
 /* At the stack being fetched: takes a tool, or the input of the craft. */
 static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
 {
-    ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+    ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
     if (stack.type == ITEM_NONE) {
         return false;
     }
@@ -2267,9 +2288,10 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
             !colonist_swap_tool(colonist, stack, &replaced)) {
             return false;
         }
-        items_remove(context->items, colonist->x, colonist->y, 1);
+        items_remove(context->items, colonist->x, colonist->y, colonist->z, 1);
         if (replaced.count > 0) {
-            items_drop(context->items, context->map, colonist->x, colonist->y, replaced);
+            items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z,
+                       replaced);
         }
         return true;
     }
@@ -2282,7 +2304,7 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
         return false;
     }
-    int taken = items_remove(context->items, colonist->x, colonist->y,
+    int taken = items_remove(context->items, colonist->x, colonist->y, colonist->z,
                              stack.count < wanted ? stack.count : wanted);
     ItemStack picked = stack;
     picked.count = (uint16_t)taken;
@@ -2321,15 +2343,15 @@ static bool arrive_at_station(Colonist *colonist, const ColonistContext *context
 static bool clear_plant_first(Colonist *colonist, const ColonistContext *context, TilePos tile,
                               float *progress)
 {
-    float needed = gather_clear_work(context->map, tile.x, tile.y);
+    float needed = gather_clear_work(context->map, tile.x, tile.y, tile.z);
     if (needed <= 0.0f) {
         return false;
     }
     *progress += colonist_work_speed(colonist, KNOWLEDGE_NONE) *
                  work_with_tool(colonist, context,
-                                gather_clear_tool_use(context->map, tile.x, tile.y));
+                                gather_clear_tool_use(context->map, tile.x, tile.y, tile.z));
     if (*progress >= needed) {
-        gather_clear_plant(context->map, context->items, tile.x, tile.y,
+        gather_clear_plant(context->map, context->items, tile.x, tile.y, tile.z,
                            colonist_work_level(colonist, KNOWLEDGE_GATHERING), context->rng);
         *progress = 0.0f;
     }
@@ -2386,8 +2408,9 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
         }
         return;
     case STATION_JOB_GO:
-        if (!(hearth_is(station) ? next_to(colonist->x, colonist->y, tile)
-                                 : colonist->x == tile.x && colonist->y == tile.y) ||
+        if (!(hearth_is(station) ? next_to(colonist->x, colonist->y, colonist->z, tile)
+                                 : colonist->x == tile.x && colonist->y == tile.y &&
+                                       colonist->z == tile.z) ||
             !arrive_at_station(colonist, context)) {
             set_idle(colonist, context, 0);
         }
@@ -2414,7 +2437,7 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
                                            context->rng);
     colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     if (done) {
-        dirt_spread(context->dirt, context->map, tile.x, tile.y,
+        dirt_spread(context->dirt, context->map, tile.x, tile.y, tile.z,
                     recipe_def((RecipeType)colonist->recipe)->dirt);
         set_idle(colonist, context, 0);
     }
@@ -2429,22 +2452,22 @@ static const ConstructionSite *job_site(const Colonist *colonist, const Colonist
     return site != NULL && site->number == colonist->site_number ? site : NULL;
 }
 
-static bool next_to(int x, int y, TilePos tile)
+static bool next_to(int x, int y, int z, TilePos tile)
 {
-    return abs(x - tile.x) + abs(y - tile.y) == 1;
+    return z == tile.z && abs(x - tile.x) + abs(y - tile.y) == 1;
 }
 
 /* A site is reserved on its head, whichever of its tiles a builder works by. */
 static TilePos site_origin(const ConstructionSite *site)
 {
-    return (TilePos){site->x, site->y};
+    return (TilePos){site->x, site->y, site->z};
 }
 
 /* A refresh site is only worth it while its structure stands. */
 static bool site_still_wanted(const ColonistContext *context, const ConstructionSite *site)
 {
-    return !site->refresh || (map_structure_is_origin(context->map, site->x, site->y) &&
-                              map_structure(context->map, site->x, site->y) ==
+    return !site->refresh || (map_structure_is_origin(context->map, site->x, site->y, site->z) &&
+                              map_structure(context->map, site->x, site->y, site->z) ==
                                   (StructureType)site->type);
 }
 
@@ -2509,14 +2532,15 @@ typedef struct SiteSearch {
 
 /* First site with a job next to (x, y), in a fixed order (on each tile, the
  * structure's site before the roof's): its tile and index. */
-static bool find_adjacent_site(const SiteSearch *search, int x, int y, TilePos *out, int *index)
+static bool find_adjacent_site(const SiteSearch *search, int x, int y, int z, TilePos *out,
+                               int *index)
 {
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i], ny = y + NEIGHBOR_DY[i];
         for (int roof = 0; roof < 2; roof++) {
-            int site = construction_in_layer(search->context->constructions, nx, ny, roof);
+            int site = construction_in_layer(search->context->constructions, nx, ny, z, roof);
             if (site_has_job(search->context, search->worker, site)) {
-                *out = (TilePos){(int16_t)nx, (int16_t)ny};
+                *out = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)z};
                 *index = site;
                 return true;
             }
@@ -2525,16 +2549,16 @@ static bool find_adjacent_site(const SiteSearch *search, int x, int y, TilePos *
     return false;
 }
 
-static bool is_site_spot(const Map *map, int x, int y, void *userdata)
+static bool is_site_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     TilePos unused;
     int index;
-    return map_is_passable(map, x, y) && find_adjacent_site(userdata, x, y, &unused, &index);
+    return map_is_passable(map, x, y, z) && find_adjacent_site(userdata, x, y, z, &unused, &index);
 }
 
-static bool is_next_to_target(const Map *map, int x, int y, void *userdata)
+static bool is_next_to_target(const Map *map, int x, int y, int z, void *userdata)
 {
-    return map_is_passable(map, x, y) && next_to(x, y, *(const TilePos *)userdata);
+    return map_is_passable(map, x, y, z) && next_to(x, y, z, *(const TilePos *)userdata);
 }
 
 /* Heads for a tile next to the site: the delivery or the work happens there. */
@@ -2544,7 +2568,7 @@ static bool go_to_site(Colonist *colonist, const ColonistContext *context)
                               context->worker_id);
     colonist->station_phase = STATION_JOB_GO;
     colonist->path_index = 0;
-    if (next_to(colonist->x, colonist->y, colonist->target)) {
+    if (next_to(colonist->x, colonist->y, colonist->z, colonist->target)) {
         path_clear(&colonist->path);
         return true;
     }
@@ -2637,7 +2661,7 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
         return false;
     }
     int index = CONSTRUCTION_NONE;
-    find_adjacent_site(&search, spot.x, spot.y, &target, &index);
+    find_adjacent_site(&search, spot.x, spot.y, spot.z, &target, &index);
     const ConstructionSite *site = construction_get(context->constructions, index);
     begin_task(colonist, context, TASK_CONSTRUCT);
     colonist->site = index;
@@ -2655,17 +2679,17 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
 
 /* First site next to (x, y), in a fixed order (as find_adjacent_site()),
  * missing a material nobody brings yet that lies about. */
-static bool find_supply_site(const ColonistContext *context, int x, int y, TilePos *out,
+static bool find_supply_site(const ColonistContext *context, int x, int y, int z, TilePos *out,
                              int *index)
 {
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i], ny = y + NEIGHBOR_DY[i];
         for (int roof = 0; roof < 2; roof++) {
-            int found = construction_in_layer(context->constructions, nx, ny, roof);
+            int found = construction_in_layer(context->constructions, nx, ny, z, roof);
             const ConstructionSite *site = construction_get(context->constructions, found);
             if (site != NULL && site_still_wanted(context, site) &&
                 site_wants_material(context, site)) {
-                *out = (TilePos){(int16_t)nx, (int16_t)ny};
+                *out = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)z};
                 *index = found;
                 return true;
             }
@@ -2674,11 +2698,11 @@ static bool find_supply_site(const ColonistContext *context, int x, int y, TileP
     return false;
 }
 
-static bool is_supply_spot(const Map *map, int x, int y, void *userdata)
+static bool is_supply_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     TilePos unused;
     int index;
-    return map_is_passable(map, x, y) && find_supply_site(userdata, x, y, &unused, &index);
+    return map_is_passable(map, x, y, z) && find_supply_site(userdata, x, y, z, &unused, &index);
 }
 
 /* A hauler brings materials to the nearest site that waits for some. */
@@ -2694,7 +2718,7 @@ static bool try_supply_job(Colonist *colonist, const ColonistContext *context)
         return false;
     }
     int index = CONSTRUCTION_NONE;
-    find_supply_site(context, spot.x, spot.y, &target, &index);
+    find_supply_site(context, spot.x, spot.y, spot.z, &target, &index);
     begin_task(colonist, context, TASK_SUPPLY);
     colonist->site = index;
     colonist->site_number = construction_get(context->constructions, index)->number;
@@ -2711,7 +2735,7 @@ static bool try_supply_job(Colonist *colonist, const ColonistContext *context)
 static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
                              const ConstructionSite *site)
 {
-    ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+    ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
     if (colonist->supply_promised <= 0 ||
         construction_material(site, colonist->supply_slot) != stack.type ||
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
@@ -2723,7 +2747,7 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
     if (wanted <= 0) {
         return false;
     }
-    int taken = items_remove(context->items, colonist->x, colonist->y,
+    int taken = items_remove(context->items, colonist->x, colonist->y, colonist->z,
                              stack.count < wanted ? stack.count : wanted);
     ItemStack picked = stack;
     picked.count = (uint16_t)taken;
@@ -2738,10 +2762,10 @@ static void structure_built(const ColonistContext *context, const ConstructionSi
     bool takes_tiles = construction_workstation(site) != WORKSTATION_TYPE_COUNT ||
                        structure_blocks((StructureType)site->type);
     for (int part = 0; takes_tiles && part < construction_length(site); part++) {
-        int x, y;
-        construction_tile(site, part, &x, &y);
-        stockpiles_remove_rect(context->stockpiles, x, y, x, y);
-        gather_zones_remove_rect(context->gather_zones, x, y, x, y);
+        int x, y, z;
+        construction_tile(site, part, &x, &y, &z);
+        stockpiles_remove_rect(context->stockpiles, x, y, x, y, z);
+        gather_zones_remove_rect(context->gather_zones, x, y, x, y, z);
     }
 }
 
@@ -2751,9 +2775,9 @@ static bool clear_site_first(Colonist *colonist, const ColonistContext *context,
                              ConstructionSite *site)
 {
     for (int part = 0; part < construction_length(site); part++) {
-        int x, y;
-        construction_tile(site, part, &x, &y);
-        if (clear_plant_first(colonist, context, (TilePos){(int16_t)x, (int16_t)y},
+        int x, y, z;
+        construction_tile(site, part, &x, &y, &z);
+        if (clear_plant_first(colonist, context, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
                               &site->clear_progress)) {
             return true;
         }
@@ -2780,7 +2804,7 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
         }
         return;
     case STATION_JOB_GO:
-        if (!next_to(colonist->x, colonist->y, colonist->target)) {
+        if (!next_to(colonist->x, colonist->y, colonist->z, colonist->target)) {
             set_idle(colonist, context, 0);
             return;
         }
@@ -2805,7 +2829,7 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
         return;
     case STATION_JOB_WORK: break;
     }
-    if (!next_to(colonist->x, colonist->y, colonist->target)) {
+    if (!next_to(colonist->x, colonist->y, colonist->z, colonist->target)) {
         set_idle(colonist, context, 0);
         return;
     }
@@ -2916,7 +2940,7 @@ bool colonist_at_work(const Colonist *colonist)
     switch (colonist->task) {
     case TASK_CRAFT:
     case TASK_CONSTRUCT: return colonist->station_phase == STATION_JOB_WORK;
-    case TASK_WORK: return next_to(colonist->x, colonist->y, colonist->target);
+    case TASK_WORK: return next_to(colonist->x, colonist->y, colonist->z, colonist->target);
     default: return false;
     }
 }
@@ -2958,23 +2982,23 @@ static bool has_apprentice(const ColonistContext *context, EntityId master, Enti
 }
 
 /* One of the 8 tiles around (x, y), not (x, y) itself. */
-static bool beside(int x, int y, int to_x, int to_y)
+static bool beside(int x, int y, int z, int to_x, int to_y, int to_z)
 {
     int dx = abs(x - to_x), dy = abs(y - to_y);
-    return dx <= 1 && dy <= 1 && (dx | dy) != 0;
+    return z == to_z && dx <= 1 && dy <= 1 && (dx | dy) != 0;
 }
 
-static bool is_beside_target(const Map *map, int x, int y, void *userdata)
+static bool is_beside_target(const Map *map, int x, int y, int z, void *userdata)
 {
     const TilePos *target = userdata;
-    return map_is_passable(map, x, y) && beside(x, y, target->x, target->y);
+    return map_is_passable(map, x, y, z) && beside(x, y, z, target->x, target->y, target->z);
 }
 
 /* Heads for one of the 8 tiles around `at`. */
 static bool go_beside_tile(Colonist *colonist, const ColonistContext *context, TilePos at)
 {
     colonist->path_index = 0;
-    if (beside(colonist->x, colonist->y, at.x, at.y)) {
+    if (beside(colonist->x, colonist->y, colonist->z, at.x, at.y, at.z)) {
         path_clear(&colonist->path);
         return true;
     }
@@ -2988,7 +3012,7 @@ static bool go_beside_tile(Colonist *colonist, const ColonistContext *context, T
 static bool go_beside(Colonist *colonist, const ColonistContext *context, const Colonist *master)
 {
     return go_beside_tile(colonist, context,
-                          (TilePos){(int16_t)master->x, (int16_t)master->y});
+                          (TilePos){(int16_t)master->x, (int16_t)master->y, (int16_t)master->z});
 }
 
 /* Looks for the nearest master doing a job of this work type the colonist
@@ -3011,7 +3035,7 @@ static bool try_assist(Colonist *colonist, const ColonistContext *context, WorkT
             continue;
         }
         int distance = abs(master->x - colonist->x) + abs(master->y - colonist->y);
-        TilePos at = {(int16_t)master->x, (int16_t)master->y};
+        TilePos at = {(int16_t)master->x, (int16_t)master->y, (int16_t)master->z};
         if (distance >= best_distance ||
             !regions_connected(context->regions, context->map, here, at) ||
             has_apprentice(context, id, self)) {
@@ -3053,7 +3077,7 @@ static void assist(Colonist *colonist, const ColonistContext *context)
     colonist->assist_wait = 0;
     colonist->assist_work = (uint8_t)need.work_type;
     colonist->assist_knowledge = (uint8_t)need.knowledge;
-    if (!beside(colonist->x, colonist->y, master->x, master->y)) {
+    if (!beside(colonist->x, colonist->y, colonist->z, master->x, master->y, master->z)) {
         /* Catches up once the master stands still. */
         if (!colonist_is_moving(master) && !go_beside(colonist, context, master)) {
             set_idle(colonist, context, 0);
@@ -3077,7 +3101,7 @@ static void assist(Colonist *colonist, const ColonistContext *context)
 static bool go_next_to(Colonist *colonist, const ColonistContext *context, TilePos tile)
 {
     colonist->path_index = 0;
-    if (next_to(colonist->x, colonist->y, tile)) {
+    if (next_to(colonist->x, colonist->y, colonist->z, tile)) {
         path_clear(&colonist->path);
         return true;
     }
@@ -3099,10 +3123,10 @@ static bool any_station(const ColonistContext *context, bool (*wants)(const Work
     return false;
 }
 
-static const Workstation *station_on(const ColonistContext *context, int x, int y)
+static const Workstation *station_on(const ColonistContext *context, int x, int y, int z)
 {
     return workstation_get_const(context->workstations,
-                                 workstation_at(context->workstations, x, y));
+                                 workstation_at(context->workstations, x, y, z));
 }
 
 static bool wants_fuel(const Workstation *station)
@@ -3123,11 +3147,11 @@ static ItemTypeMask fuel_wanted_types(const Workstation *station)
 }
 
 /* Search filter: a hearth wanting fuel of a type that lies somewhere. */
-static bool is_hearth_wanting_fuel(const Map *map, int x, int y, void *userdata)
+static bool is_hearth_wanting_fuel(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const ColonistContext *context = userdata;
-    const Workstation *station = station_on(context, x, y);
+    const Workstation *station = station_on(context, x, y, z);
     return station != NULL && wants_fuel(station) &&
            items_exist(context->items, fuel_wanted_types(station), 1);
 }
@@ -3143,7 +3167,7 @@ static bool try_refuel_job(Colonist *colonist, const ColonistContext *context)
                                  COLONIST_WORK_SEARCH_MAX_COST, NULL, &tile)) {
         return false;
     }
-    int index = workstation_at(context->workstations, tile.x, tile.y);
+    int index = workstation_at(context->workstations, tile.x, tile.y, tile.z);
     const Workstation *station = workstation_get_const(context->workstations, index);
     begin_task(colonist, context, TASK_REFUEL);
     colonist->station = index;
@@ -3178,7 +3202,7 @@ static void refuel(Colonist *colonist, const ColonistContext *context)
     }
     TilePos hearth = station_tile(station);
     if (colonist->station_phase == STATION_JOB_FETCH) {
-        ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+        ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
         float value = hearth_fuel_value((ItemType)stack.type);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
             value <= 0.0f || !(station->fuel_types & ITEM_TYPE_BIT(stack.type))) {
@@ -3194,7 +3218,7 @@ static void refuel(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
             return;
         }
-        items_remove(context->items, colonist->x, colonist->y, count);
+        items_remove(context->items, colonist->x, colonist->y, colonist->z, count);
         colonist->carried = stack;
         colonist->carried.count = (uint16_t)count;
         /* What is promised now is what is in hand. */
@@ -3209,7 +3233,7 @@ static void refuel(Colonist *colonist, const ColonistContext *context)
         }
         return;
     }
-    if (!next_to(colonist->x, colonist->y, hearth)) {
+    if (!next_to(colonist->x, colonist->y, colonist->z, hearth)) {
         set_idle(colonist, context, 0);
         return;
     }
@@ -3239,11 +3263,11 @@ static bool needs_lighting(const Workstation *station)
     return hearth_needs_lighting(station);
 }
 
-static bool is_hearth_to_light(const Map *map, int x, int y, void *userdata)
+static bool is_hearth_to_light(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const ColonistContext *context = userdata;
-    return hearth_to_light(context, station_on(context, x, y));
+    return hearth_to_light(context, station_on(context, x, y, z));
 }
 
 typedef struct FireSourceSearch {
@@ -3251,11 +3275,11 @@ typedef struct FireSourceSearch {
     TilePos hearth; /* The one to light: not a source. */
 } FireSourceSearch;
 
-static bool is_fire_source(const Map *map, int x, int y, void *userdata)
+static bool is_fire_source(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const FireSourceSearch *search = userdata;
-    const Workstation *station = station_on(search->context, x, y);
+    const Workstation *station = station_on(search->context, x, y, z);
     return station != NULL && station->burning &&
            (station->x != search->hearth.x || station->y != search->hearth.y);
 }
@@ -3284,8 +3308,8 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
     TilePos source;
     if (pathfinder_find_nearest(context->pathfinder, context->map, hearth, is_fire_source,
                                 &sources, HEARTH_FIRE_CARRY_MAX_COST, NULL, &source)) {
-        const Workstation *fire = station_on(context, source.x, source.y);
-        colonist->fire_source = workstation_at(context->workstations, source.x, source.y);
+        const Workstation *fire = station_on(context, source.x, source.y, source.z);
+        colonist->fire_source = workstation_at(context->workstations, source.x, source.y, source.z);
         colonist->fire_source_number = fire->number;
         colonist->light_step = LIGHT_TO_SOURCE;
         return go_next_to(colonist, context, source);
@@ -3306,7 +3330,7 @@ static bool try_light_job(Colonist *colonist, const ColonistContext *context)
                                  COLONIST_WORK_SEARCH_MAX_COST, NULL, &tile)) {
         return false;
     }
-    int index = workstation_at(context->workstations, tile.x, tile.y);
+    int index = workstation_at(context->workstations, tile.x, tile.y, tile.z);
     begin_task(colonist, context, TASK_LIGHT);
     colonist->station = index;
     colonist->station_number = workstation_get_const(context->workstations, index)->number;
@@ -3351,13 +3375,13 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
     float speed = colonist_work_speed(colonist, KNOWLEDGE_FIRE);
     switch ((LightStep)colonist->light_step) {
     case LIGHT_FETCH_TINDER: {
-        ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+        ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
             stack.type != ITEM_GRASS) {
             set_idle(colonist, context, 0);
             return;
         }
-        items_remove(context->items, colonist->x, colonist->y, 1);
+        items_remove(context->items, colonist->x, colonist->y, colonist->z, 1);
         colonist->carried = stack;
         colonist->carried.count = 1;
         reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
@@ -3366,7 +3390,8 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
     }
     case LIGHT_TO_SOURCE: {
         const Workstation *source = fire_source(colonist, context);
-        if (source != NULL && next_to(colonist->x, colonist->y, station_tile(source))) {
+        if (source != NULL &&
+            next_to(colonist->x, colonist->y, colonist->z, station_tile(source))) {
             colonist->light_step = LIGHT_EMBERS;
             colonist->light_progress = 0.0f;
             return;
@@ -3385,7 +3410,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
         colonist->ember_ticks = HEARTH_EMBER_TICKS;
         break;
     case LIGHT_GO:
-        if (!next_to(colonist->x, colonist->y, hearth)) {
+        if (!next_to(colonist->x, colonist->y, colonist->z, hearth)) {
             break;
         }
         if (colonist->ember_ticks > 0) {
@@ -3401,7 +3426,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
         }
         break;
     case LIGHT_FRICTION: {
-        if (!carries_tinder(colonist) || !next_to(colonist->x, colonist->y, hearth)) {
+        if (!carries_tinder(colonist) || !next_to(colonist->x, colonist->y, colonist->z, hearth)) {
             break;
         }
         /* The chance depends on the level before this attempt's learning. */
@@ -3436,7 +3461,7 @@ bool colonist_telling(const Colonist *colonist, const Workstations *workstations
     }
     const Workstation *station = workstation_get_const(workstations, colonist->station);
     return station != NULL && station->number == colonist->station_number && station->burning &&
-           beside(colonist->x, colonist->y, station->x, station->y);
+           beside(colonist->x, colonist->y, colonist->z, station->x, station->y, station->z);
 }
 
 KnowledgeType colonist_story_topic(const Colonist *colonist, const bool *teach)
@@ -3473,11 +3498,11 @@ static bool hearth_has_storyteller(const ColonistContext *context, const Worksta
     return false;
 }
 
-static bool is_story_hearth(const Map *map, int x, int y, void *userdata)
+static bool is_story_hearth(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const FiresideSearch *search = userdata;
-    const Workstation *station = station_on(search->context, x, y);
+    const Workstation *station = station_on(search->context, x, y, z);
     return station != NULL && station->burning &&
            !hearth_has_storyteller(search->context, station, search->self);
 }
@@ -3487,7 +3512,7 @@ static bool is_story_hearth(const Map *map, int x, int y, void *userdata)
 static bool try_tell(Colonist *colonist, const ColonistContext *context, EntityId self)
 {
     KnowledgeType topic = colonist_story_topic(colonist, context->teach);
-    FiresideSearch search = {context, self, {0, 0}};
+    FiresideSearch search = {context, self, {0, 0, 0}};
     TilePos tile;
     if (topic == KNOWLEDGE_NONE ||
         !pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
@@ -3496,9 +3521,9 @@ static bool try_tell(Colonist *colonist, const ColonistContext *context, EntityI
         !go_beside_tile(colonist, context, tile)) {
         return false;
     }
-    const Workstation *station = station_on(context, tile.x, tile.y);
+    const Workstation *station = station_on(context, tile.x, tile.y, tile.z);
     begin_task(colonist, context, TASK_STORY);
-    colonist->station = workstation_at(context->workstations, tile.x, tile.y);
+    colonist->station = workstation_at(context->workstations, tile.x, tile.y, tile.z);
     colonist->station_number = station->number;
     colonist->target = tile;
     colonist->story_topic = (uint8_t)topic;
@@ -3519,12 +3544,12 @@ static int listener_count(const ColonistContext *context, EntityId teller)
 }
 
 /* A free place to sit around the hearth: not the hearth, nobody else's. */
-static bool is_listen_spot(const Map *map, int x, int y, void *userdata)
+static bool is_listen_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     const FiresideSearch *search = userdata;
     int dx = abs(x - search->hearth.x), dy = abs(y - search->hearth.y);
     int distance = dx > dy ? dx : dy;
-    if (distance < 1 || distance > HEARTH_LISTEN_SPOT_RANGE || !map_is_passable(map, x, y)) {
+    if (distance < 1 || distance > HEARTH_LISTEN_SPOT_RANGE || !map_is_passable(map, x, y, z)) {
         return false;
     }
     const ColonistContext *context = search->context;
@@ -3609,7 +3634,7 @@ static void story(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0);
         return;
     }
-    if (!beside(colonist->x, colonist->y, station->x, station->y)) {
+    if (!beside(colonist->x, colonist->y, colonist->z, station->x, station->y, station->z)) {
         if (!go_beside_tile(colonist, context, station_tile(station))) {
             set_idle(colonist, context, 0);
         }
@@ -3651,8 +3676,9 @@ static void start_wandering(Colonist *colonist, const ColonistContext *context)
     for (int attempt = 0; attempt < 8; attempt++) {
         int dx = rng_range_i32(context->rng, -radius, radius);
         int dy = rng_range_i32(context->rng, -radius, radius);
-        TilePos goal = {(int16_t)(colonist->x + dx), (int16_t)(colonist->y + dy)};
-        if ((dx == 0 && dy == 0) || !map_is_passable(context->map, goal.x, goal.y) ||
+        TilePos goal = {(int16_t)(colonist->x + dx), (int16_t)(colonist->y + dy),
+                        (int16_t)colonist->z};
+        if ((dx == 0 && dy == 0) || !map_is_passable(context->map, goal.x, goal.y, goal.z) ||
             !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
             continue; /* Blocked, or on the other side of a wall or of water. */
         }
@@ -3696,18 +3722,18 @@ static ThoughtMask mood_states(Colonist *colonist, const ColonistContext *contex
         } else if (!asleep && felt > MOOD_HOT_CELSIUS) {
             states |= THOUGHT_BIT(THOUGHT_HOT);
         }
-        if (temperature_at(context->temperatures, colonist->x, colonist->y) <
+        if (temperature_at(context->temperatures, colonist->x, colonist->y, colonist->z) <
                 MOOD_FIRE_COLD_AIR &&
             hearths_radiant_warmth(context->workstations, context->map, colonist->x,
-                                   colonist->y) >= MOOD_FIRE_WARMTH) {
+                                   colonist->y, colonist->z) >= MOOD_FIRE_WARMTH) {
             mood_remember(&colonist->mood, THOUGHT_WARMED_BY_FIRE);
         }
     }
     if (colonist->wetness >= MOOD_SOAKED_WETNESS) {
         states |= THOUGHT_BIT(THOUGHT_SOAKED);
     }
-    if (context->wetting > 0.0f &&
-        temperature_cover(context->map, colonist->x, colonist->y) == TEMPERATURE_COVER_OPEN) {
+    if (context->wetting > 0.0f && temperature_cover(context->map, colonist->x, colonist->y,
+                                                     colonist->z) == TEMPERATURE_COVER_OPEN) {
         states |= THOUGHT_BIT(THOUGHT_IN_THE_RAIN);
     }
     return states;
@@ -3751,7 +3777,7 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
     }
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist)) {
         float felt = context->temperatures != NULL ? felt_here(colonist, context)
-                                                   : felt_temperature(context, 0, 0);
+                                                   : felt_temperature(context, 0, 0, 0);
         float gain = NEED_REST_GAIN_PER_TICK * rest_factor(colonist, context, felt);
         *rest = clampf(*rest + gain, 0.0f, 1.0f);
         colonist->sleep_ticks++;
@@ -3788,8 +3814,9 @@ static bool go_off_alone(Colonist *colonist, const ColonistContext *context)
         if (abs(dx) < near && abs(dy) < near) {
             continue; /* Not far enough. */
         }
-        TilePos goal = {(int16_t)(colonist->x + dx), (int16_t)(colonist->y + dy)};
-        if (!map_is_passable(context->map, goal.x, goal.y) ||
+        TilePos goal = {(int16_t)(colonist->x + dx), (int16_t)(colonist->y + dy),
+                        (int16_t)colonist->z};
+        if (!map_is_passable(context->map, goal.x, goal.y, goal.z) ||
             !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
             continue;
         }
@@ -3859,7 +3886,7 @@ static void decide(Colonist *colonist, const ColonistContext *context)
         return;
     case TASK_EAT:
         if (!tile_has_food(context->map, context->items, colonist->target.x,
-                           colonist->target.y)) {
+                           colonist->target.y, colonist->target.z)) {
             set_idle(colonist, context, 0); /* The fruit is gone: decide again below. */
             break;
         }
@@ -3954,7 +3981,7 @@ static void decide(Colonist *colonist, const ColonistContext *context)
 static void walk(Colonist *colonist, const ColonistContext *context)
 {
     TilePos next = colonist->path.steps[colonist->path_index];
-    float cost = map_move_cost(context->map, next.x, next.y);
+    float cost = map_move_cost(context->map, next.x, next.y, next.z);
     if (cost <= 0.0f) {
         set_idle(colonist, context, random_idle_ticks(context->rng)); /* Path became blocked. */
         return;
@@ -3967,6 +3994,7 @@ static void walk(Colonist *colonist, const ColonistContext *context)
     if (colonist->move_progress >= 1.0f) {
         colonist->x = next.x;
         colonist->y = next.y;
+        colonist->z = next.z;
         colonist->move_progress = 0.0f;
         colonist->path_index++;
         if (colonist->path_index >= colonist->path.count) {
@@ -3980,7 +4008,7 @@ static void eat(Colonist *colonist, const ColonistContext *context)
 {
     Map *map = context->map;
     if (colonist->x != colonist->target.x || colonist->y != colonist->target.y ||
-        !tile_has_food(map, context->items, colonist->x, colonist->y)) {
+        !tile_has_food(map, context->items, colonist->x, colonist->y, colonist->z)) {
         /* Not there, or the food is gone: look again soon. */
         set_idle(colonist, context, 0);
         return;
@@ -3996,18 +4024,19 @@ static void eat(Colonist *colonist, const ColonistContext *context)
     if (mood->break_type == MOOD_BREAK_BINGE) {
         appetite += fmaxf(mood->binge_left, 0.0f);
     }
-    ItemStack stack = items_get(context->items, colonist->x, colonist->y);
+    ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
     ItemType type;
     int eaten;
     if (item_is_food((ItemType)stack.type)) {
         /* Items on the ground first. */
         type = (ItemType)stack.type;
         int wanted = (int)ceilf(appetite / item_def(type)->nutrition);
-        eaten = items_remove(context->items, colonist->x, colonist->y, wanted > 1 ? wanted : 1);
+        eaten = items_remove(context->items, colonist->x, colonist->y, colonist->z,
+                             wanted > 1 ? wanted : 1);
         mood_meal(mood, type, item_stack_hit_points_percent(stack));
     } else {
         /* Then the plant's fruit or leaves, fresh. */
-        Plant *plant = &map->plants[map_index(map, colonist->x, colonist->y)];
+        Plant *plant = &map->plants[map_index(map, colonist->x, colonist->y, colonist->z)];
         type = plant_stock_item((PlantType)plant->type, PLANT_STOCK_FOOD);
         int wanted = (int)ceilf(appetite / item_def(type)->nutrition);
         eaten = plant_take_stock(plant, PLANT_STOCK_FOOD, wanted > 1 ? wanted : 1);
@@ -4030,7 +4059,7 @@ static void eat(Colonist *colonist, const ColonistContext *context)
 static void drink(Colonist *colonist, const ColonistContext *context)
 {
     if (colonist->x != colonist->target.x || colonist->y != colonist->target.y ||
-        !map_is_drinking_spot(context->map, colonist->x, colonist->y)) {
+        !map_is_drinking_spot(context->map, colonist->x, colonist->y, colonist->z)) {
         set_idle(colonist, context, 0); /* The water is gone: look again soon. */
         return;
     }
@@ -4047,12 +4076,12 @@ static void step_out_of_blocked_tile(Colonist *colonist, const ColonistContext *
 {
     static const int DX[8] = {0, 1, 0, -1, 1, 1, -1, -1};
     static const int DY[8] = {-1, 0, 1, 0, -1, 1, 1, -1};
-    if (map_is_passable(context->map, colonist->x, colonist->y)) {
+    if (map_is_passable(context->map, colonist->x, colonist->y, colonist->z)) {
         return;
     }
     for (int i = 0; i < 8; i++) {
         int x = colonist->x + DX[i], y = colonist->y + DY[i];
-        if (map_is_passable(context->map, x, y)) {
+        if (map_is_passable(context->map, x, y, colonist->z)) {
             colonist->x = x;
             colonist->y = y;
             colonist->move_progress = 0.0f;

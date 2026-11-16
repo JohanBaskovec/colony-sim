@@ -11,6 +11,7 @@ void camera_init(Camera *camera, float x, float y, float zoom)
     camera->zoom = clampf(zoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
     camera->viewport_width = 0.0f;
     camera->viewport_height = 0.0f;
+    camera->level = 0;
 }
 
 void camera_set_viewport(Camera *camera, float width, float height)

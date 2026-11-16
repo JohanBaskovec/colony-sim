@@ -24,13 +24,13 @@ const DesignationDef *designation_def(DesignationType type)
     return (unsigned)type < DESIGNATION_COUNT ? &DESIGNATION_DEFS[type] : NULL;
 }
 
-bool designations_init(Designations *designations, int width, int height)
+bool designations_init(Designations *designations, int width, int height, int depth)
 {
     memset(designations, 0, sizeof(*designations));
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
-    size_t count = (size_t)width * (size_t)height;
+    size_t count = (size_t)width * (size_t)height * (size_t)depth;
     designations->type = calloc(count, sizeof(*designations->type));
     designations->progress = calloc(count, sizeof(*designations->progress));
     if (designations->type == NULL || designations->progress == NULL) {
@@ -39,6 +39,7 @@ bool designations_init(Designations *designations, int width, int height)
     }
     designations->width = width;
     designations->height = height;
+    designations->depth = depth;
     return true;
 }
 
@@ -49,14 +50,16 @@ void designations_free(Designations *designations)
     memset(designations, 0, sizeof(*designations));
 }
 
-static bool in_bounds(const Designations *designations, int x, int y)
+static bool in_bounds(const Designations *designations, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && x < designations->width && y < designations->height;
+    return x >= 0 && y >= 0 && z >= 0 && x < designations->width && y < designations->height &&
+           z < designations->depth;
 }
 
-static size_t index_of(const Designations *designations, int x, int y)
+static size_t index_of(const Designations *designations, int x, int y, int z)
 {
-    return (size_t)y * (size_t)designations->width + (size_t)x;
+    return ((size_t)z * (size_t)designations->height + (size_t)y) * (size_t)designations->width +
+           (size_t)x;
 }
 
 bool designation_doable_at(DesignationType type, double level)
@@ -71,25 +74,25 @@ bool designation_is_roof(DesignationType type)
     return type == DESIGNATION_REMOVE_ROOF;
 }
 
-bool designation_can_apply(const Map *map, int x, int y, DesignationType type)
+bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType type)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return false;
     }
     switch (type) {
-    case DESIGNATION_MINE: return map->rock[map_index(map, x, y)] != ROCK_NONE;
-    case DESIGNATION_DECONSTRUCT: return map_structure(map, x, y) != STRUCTURE_NONE;
-    case DESIGNATION_REMOVE_ROOF: return map_roof(map, x, y) != STRUCTURE_NONE;
+    case DESIGNATION_MINE: return map->rock[map_index(map, x, y, z)] != ROCK_NONE;
+    case DESIGNATION_DECONSTRUCT: return map_structure(map, x, y, z) != STRUCTURE_NONE;
+    case DESIGNATION_REMOVE_ROOF: return map_roof(map, x, y, z) != STRUCTURE_NONE;
     default: return false;
     }
 }
 
-DesignationType designation_get(const Designations *designations, int x, int y)
+DesignationType designation_get(const Designations *designations, int x, int y, int z)
 {
-    if (!in_bounds(designations, x, y)) {
+    if (!in_bounds(designations, x, y, z)) {
         return DESIGNATION_NONE;
     }
-    return (DesignationType)designations->type[index_of(designations, x, y)];
+    return (DesignationType)designations->type[index_of(designations, x, y, z)];
 }
 
 /* Removes the order on a tile, keeping the counters in sync. */
@@ -105,17 +108,17 @@ static void clear_tile(Designations *designations, size_t index)
     designations->progress[index] = 0.0f;
 }
 
-bool designation_set(Designations *designations, const Map *map, int x, int y,
+bool designation_set(Designations *designations, const Map *map, int x, int y, int z,
                      DesignationType type)
 {
-    if (!in_bounds(designations, x, y) || (unsigned)type >= DESIGNATION_COUNT) {
+    if (!in_bounds(designations, x, y, z) || (unsigned)type >= DESIGNATION_COUNT) {
         return false;
     }
-    size_t index = index_of(designations, x, y);
+    size_t index = index_of(designations, x, y, z);
     if (designations->type[index] == type) {
         return false;
     }
-    if (type != DESIGNATION_NONE && !designation_can_apply(map, x, y, type)) {
+    if (type != DESIGNATION_NONE && !designation_can_apply(map, x, y, z, type)) {
         return false;
     }
     clear_tile(designations, index);
@@ -129,7 +132,7 @@ bool designation_set(Designations *designations, const Map *map, int x, int y,
 }
 
 int designations_set_rect(Designations *designations, const Map *map, int x0, int y0, int x1,
-                          int y1, DesignationType type)
+                          int y1, int z, DesignationType type)
 {
     int min_x = clampi(x0 < x1 ? x0 : x1, 0, designations->width - 1);
     int max_x = clampi(x0 < x1 ? x1 : x0, 0, designations->width - 1);
@@ -138,7 +141,7 @@ int designations_set_rect(Designations *designations, const Map *map, int x0, in
     int changed = 0;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            changed += designation_set(designations, map, x, y, type) ? 1 : 0;
+            changed += designation_set(designations, map, x, y, z, type) ? 1 : 0;
         }
     }
     return changed;
@@ -155,13 +158,13 @@ int designations_count_for_work(const Designations *designations, WorkTypeMask m
     return total;
 }
 
-float designation_work_needed(const Designations *designations, const Map *map, int x, int y)
+float designation_work_needed(const Designations *designations, const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return 0.0f;
     }
-    size_t index = map_index(map, x, y);
-    switch (designation_get(designations, x, y)) {
+    size_t index = map_index(map, x, y, z);
+    switch (designation_get(designations, x, y, z)) {
     case DESIGNATION_MINE: {
         const RockDef *rock = rock_def((RockType)map->rock[index]);
         return rock != NULL ? rock->mine_work : 0.0f;
@@ -175,24 +178,24 @@ float designation_work_needed(const Designations *designations, const Map *map, 
 }
 
 float designation_progress_fraction(const Designations *designations, const Map *map, int x,
-                                    int y)
+                                    int y, int z)
 {
-    float needed = designation_work_needed(designations, map, x, y);
+    float needed = designation_work_needed(designations, map, x, y, z);
     if (needed <= 0.0f) {
         return 0.0f;
     }
-    return clampf(designations->progress[index_of(designations, x, y)] / needed, 0.0f, 1.0f);
+    return clampf(designations->progress[index_of(designations, x, y, z)] / needed, 0.0f, 1.0f);
 }
 
-ItemType designation_yield(const Designations *designations, const Map *map, int x, int y,
+ItemType designation_yield(const Designations *designations, const Map *map, int x, int y, int z,
                            int *count)
 {
     *count = 0;
-    if (!map_in_bounds(map, x, y)) {
+    if (!map_in_bounds(map, x, y, z)) {
         return ITEM_NONE;
     }
-    size_t index = map_index(map, x, y);
-    switch (designation_get(designations, x, y)) {
+    size_t index = map_index(map, x, y, z);
+    switch (designation_get(designations, x, y, z)) {
     case DESIGNATION_MINE: {
         const RockDef *def = rock_def((RockType)map->rock[index]);
         *count = def->mined_yield;
@@ -203,59 +206,59 @@ ItemType designation_yield(const Designations *designations, const Map *map, int
 }
 
 /* Half the materials of a structure taken apart, dropped on its tile. */
-static void drop_salvage(StructureType type, Map *map, Items *items, int x, int y)
+static void drop_salvage(StructureType type, Map *map, Items *items, int x, int y, int z)
 {
     const StructureDef *def = structure_def(type);
     for (int slot = 0; def != NULL && items != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         int count = structure_salvage_count(type, slot);
         if (count > 0) {
-            items_drop(items, map, x, y, item_stack_pristine(def->materials[slot].type, count));
+            items_drop(items, map, x, y, z, item_stack_pristine(def->materials[slot].type, count));
         }
     }
 }
 
 /* Carries out a completed order on the map. */
-static void complete(Map *map, Items *items, int x, int y, DesignationType type)
+static void complete(Map *map, Items *items, int x, int y, int z, DesignationType type)
 {
     switch (type) {
     case DESIGNATION_MINE:
         /* The rough stone floor under the rock stays. */
-        map_set_rock(map, x, y, ROCK_NONE);
+        map_set_rock(map, x, y, z, ROCK_NONE);
         break;
     case DESIGNATION_DECONSTRUCT: {
-        StructureType structure = map_structure(map, x, y);
-        map_set_structure(map, x, y, STRUCTURE_NONE);
-        drop_salvage(structure, map, items, x, y);
+        StructureType structure = map_structure(map, x, y, z);
+        map_set_structure(map, x, y, z, STRUCTURE_NONE);
+        drop_salvage(structure, map, items, x, y, z);
         break;
     }
     case DESIGNATION_REMOVE_ROOF: {
-        StructureType roof = map_roof(map, x, y);
-        map_set_roof(map, x, y, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
-        drop_salvage(roof, map, items, x, y);
+        StructureType roof = map_roof(map, x, y, z);
+        map_set_roof(map, x, y, z, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
+        drop_salvage(roof, map, items, x, y, z);
         break;
     }
     default: break;
     }
 }
 
-bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y,
+bool designation_add_work(Designations *designations, Map *map, Items *items, int x, int y, int z,
                           float work, double level, Rng *rng)
 {
-    DesignationType type = designation_get(designations, x, y);
+    DesignationType type = designation_get(designations, x, y, z);
     if (type == DESIGNATION_NONE) {
         return false;
     }
-    size_t index = index_of(designations, x, y);
+    size_t index = index_of(designations, x, y, z);
     designations->progress[index] += work;
-    if (designations->progress[index] < designation_work_needed(designations, map, x, y)) {
+    if (designations->progress[index] < designation_work_needed(designations, map, x, y, z)) {
         return false;
     }
     int count;
-    ItemType product = designation_yield(designations, map, x, y, &count);
-    complete(map, items, x, y, type);
+    ItemType product = designation_yield(designations, map, x, y, z, &count);
+    complete(map, items, x, y, z, type);
     if (items != NULL && product != ITEM_NONE) {
         /* After mining: the tile is open. */
-        items_drop(items, map, x, y, knowledge_product(product, count, level, rng));
+        items_drop(items, map, x, y, z, knowledge_product(product, count, level, rng));
     }
     clear_tile(designations, index);
     designations->revision++; /* The map changed: new tiles may be reachable. */
@@ -264,7 +267,8 @@ bool designation_add_work(Designations *designations, Map *map, Items *items, in
 
 uint64_t designations_hash(const Designations *designations, uint64_t hash)
 {
-    size_t count = (size_t)designations->width * (size_t)designations->height;
+    size_t count = (size_t)designations->width * (size_t)designations->height *
+                   (size_t)designations->depth;
     hash = hash_fnv1a64(hash, designations->type, count);
     hash = hash_fnv1a64(hash, designations->progress, count * sizeof(*designations->progress));
     return hash;

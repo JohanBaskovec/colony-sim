@@ -91,13 +91,13 @@ static uint32_t heap_pop(Pathfinder *finder)
 
 /* ---- Pathfinder ---------------------------------------------------------- */
 
-bool pathfinder_init(Pathfinder *finder, int width, int height)
+bool pathfinder_init(Pathfinder *finder, int width, int height, int depth)
 {
     memset(finder, 0, sizeof(*finder));
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
-    size_t count = (size_t)width * (size_t)height;
+    size_t count = (size_t)width * (size_t)height * (size_t)depth;
     finder->cost_so_far = malloc(count * sizeof(*finder->cost_so_far));
     finder->came_from = malloc(count * sizeof(*finder->came_from));
     finder->seen_stamp = calloc(count, sizeof(*finder->seen_stamp));
@@ -109,6 +109,7 @@ bool pathfinder_init(Pathfinder *finder, int width, int height)
     }
     finder->width = width;
     finder->height = height;
+    finder->depth = depth;
     return true;
 }
 
@@ -126,7 +127,7 @@ static void begin_search(Pathfinder *finder)
 {
     finder->stamp++;
     if (finder->stamp == 0) { /* Wrapped around: stale stamps could match again. */
-        size_t count = (size_t)finder->width * (size_t)finder->height;
+        size_t count = (size_t)finder->width * (size_t)finder->height * (size_t)finder->depth;
         memset(finder->seen_stamp, 0, count * sizeof(*finder->seen_stamp));
         memset(finder->closed_stamp, 0, count * sizeof(*finder->closed_stamp));
         finder->stamp = 1;
@@ -160,9 +161,12 @@ static bool build_path(const Pathfinder *finder, uint32_t start, uint32_t end, P
     }
     out->count = count;
     int slot = count - 1;
+    const uint32_t width = (uint32_t)finder->width;
+    const uint32_t level = width * (uint32_t)finder->height;
     for (uint32_t i = end; i != start; i = (uint32_t)finder->came_from[i]) {
-        out->steps[slot].x = (int16_t)(i % (uint32_t)finder->width);
-        out->steps[slot].y = (int16_t)(i / (uint32_t)finder->width);
+        out->steps[slot].x = (int16_t)(i % width);
+        out->steps[slot].y = (int16_t)(i % level / width);
+        out->steps[slot].z = (int16_t)(i / level);
         slot--;
     }
     return true;
@@ -177,21 +181,28 @@ typedef struct SearchGoal {
 static const int DIRECTIONS[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1},
                                      {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
-/* Returns the tile index reached, or -1. */
+/* Returns the tile index reached, or -1. Searches the start's level only
+ * (nothing links the levels yet). */
 static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const SearchGoal *target,
                       float max_cost)
 {
     begin_search(finder);
-    if (!map_in_bounds(map, start.x, start.y) || map->width != finder->width ||
-        map->height != finder->height) {
+    if (!map_in_bounds(map, start.x, start.y, start.z) || map->width != finder->width ||
+        map->height != finder->height || map->depth != finder->depth) {
         return -1;
     }
-    if (target->goal != NULL && !map_is_passable(map, target->goal->x, target->goal->y)) {
+    if (target->goal != NULL &&
+        (target->goal->z != start.z ||
+         !map_is_passable(map, target->goal->x, target->goal->y, target->goal->z))) {
         return -1; /* Would explore the whole reachable area for nothing. */
     }
 
+    const int z = start.z;
     const uint32_t width = (uint32_t)map->width;
-    const uint32_t start_index = (uint32_t)map_index(map, start.x, start.y);
+    /* Index of the level's first tile: indices within the level are offsets
+     * from it. */
+    const uint32_t base = (uint32_t)map_index(map, 0, 0, z);
+    const uint32_t start_index = (uint32_t)map_index(map, start.x, start.y, start.z);
     finder->cost_so_far[start_index] = 0.0f;
     finder->came_from[start_index] = -1;
     finder->seen_stamp[start_index] = finder->stamp;
@@ -209,12 +220,12 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
         finder->closed_stamp[current] = finder->stamp;
         finder->last_expanded++;
 
-        int x = (int)(current % width);
-        int y = (int)(current / width);
+        int x = (int)((current - base) % width);
+        int y = (int)((current - base) / width);
         bool reached = target->goal != NULL
                            ? (x == target->goal->x && y == target->goal->y)
                            : (target->predicate != NULL &&
-                              target->predicate(map, x, y, target->userdata));
+                              target->predicate(map, x, y, z, target->userdata));
         if (reached) {
             finder->last_cost = finder->cost_so_far[current];
             return current;
@@ -227,8 +238,8 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
         for (int d = 0; d < 4; d++) {
             int nx = x + DIRECTIONS[d][0];
             int ny = y + DIRECTIONS[d][1];
-            side[d] = map_in_bounds(map, nx, ny)
-                          ? map_move_cost_at(map, (size_t)ny * width + (size_t)nx)
+            side[d] = map_in_bounds(map, nx, ny, z)
+                          ? map_move_cost_at(map, base + (size_t)ny * width + (size_t)nx)
                           : 0.0f;
         }
         const float base_cost = finder->cost_so_far[current];
@@ -238,7 +249,8 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
             int dy = DIRECTIONS[d][1];
             int nx = x + dx;
             int ny = y + dy;
-            uint32_t next = (uint32_t)ny * width + (uint32_t)nx; /* Checked below if d >= 4. */
+            /* Checked below if d >= 4. */
+            uint32_t next = base + (uint32_t)ny * width + (uint32_t)nx;
             float step;
             if (d < 4) {
                 step = side[d];
@@ -285,7 +297,8 @@ bool pathfinder_find(Pathfinder *finder, const Map *map, TilePos start, TilePos 
     if (end < 0) {
         return false;
     }
-    return build_path(finder, (uint32_t)map_index(map, start.x, start.y), (uint32_t)end, out);
+    return build_path(finder, (uint32_t)map_index(map, start.x, start.y, start.z), (uint32_t)end,
+                      out);
 }
 
 bool pathfinder_find_nearest(Pathfinder *finder, const Map *map, TilePos start,
@@ -298,10 +311,12 @@ bool pathfinder_find_nearest(Pathfinder *finder, const Map *map, TilePos start,
         return false;
     }
     if (found != NULL) {
-        found->x = (int16_t)(end % map->width);
-        found->y = (int16_t)(end / map->width);
+        int x, y, z;
+        map_tile_of(map, (size_t)end, &x, &y, &z);
+        *found = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
     }
-    return build_path(finder, (uint32_t)map_index(map, start.x, start.y), (uint32_t)end, out);
+    return build_path(finder, (uint32_t)map_index(map, start.x, start.y, start.z), (uint32_t)end,
+                      out);
 }
 
 size_t pathfinder_reachable_count(Pathfinder *finder, const Map *map, TilePos start,

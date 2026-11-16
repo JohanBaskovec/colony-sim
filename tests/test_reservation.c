@@ -3,8 +3,8 @@
 
 #include "test_framework.h"
 
-static const TilePos A = {3, 4};
-static const TilePos B = {5, 6};
+static const TilePos A = {3, 4, 0};
+static const TilePos B = {5, 6, 0};
 
 static void test_add_and_query(void)
 {
@@ -83,9 +83,9 @@ static void test_table_full(void)
     Reservations r;
     reservations_init(&r);
     for (int i = 0; i < RESERVATION_MAX; i++) {
-        REQUIRE(reservations_add(&r, RESERVATION_WORK, (TilePos){(int16_t)i, 0}, 1));
+        REQUIRE(reservations_add(&r, RESERVATION_WORK, (TilePos){(int16_t)i, 0, 0}, 1));
     }
-    CHECK(!reservations_add(&r, RESERVATION_WORK, (TilePos){0, 1}, 1));
+    CHECK(!reservations_add(&r, RESERVATION_WORK, (TilePos){0, 1, 0}, 1));
     reservations_release_all(&r, 1);
     CHECK_EQ_INT(r.count, 0);
 }
@@ -100,7 +100,7 @@ static void test_lookups_survive_churn(void)
     for (int round = 0; round < 2000; round++) {
         state = state * 1664525u + 1013904223u;
         ReservationKind kind = (ReservationKind)((state >> 8) % RESERVATION_KIND_COUNT);
-        TilePos tile = {(int16_t)((state >> 12) % 24), (int16_t)((state >> 20) % 24)};
+        TilePos tile = {(int16_t)((state >> 12) % 24), (int16_t)((state >> 20) % 24), 0};
         uint8_t owner = (uint8_t)(1 + (state >> 28) % 12);
         if (round % 7 == 3) {
             reservations_release_all(&r, owner);
