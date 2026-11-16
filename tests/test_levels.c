@@ -188,6 +188,44 @@ static void test_zones_cover_the_levels_seen(void)
     game_shutdown(&game);
 }
 
+static void test_selection_covers_the_levels_seen(void)
+{
+    Game game;
+    REQUIRE(init_raised_game(&game));
+    EntityId plains = game_spawn_colonist(&game, 20, 10, LOW);
+    EntityId plateau = game_spawn_colonist(&game, 30, 10, HIGH);
+    REQUIRE(!entity_id_is_none(plains) && !entity_id_is_none(plateau));
+
+    /* From the plateau's level, the plains below are seen (open air over them). */
+    EntityId found[4];
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, HIGH, found, 4), 2);
+    CHECK(entity_id_equal(game_colonist_at(&game, 20.5f, 10.5f, HIGH), plains));
+    CHECK(entity_id_equal(game_colonist_at(&game, 30.5f, 10.5f, HIGH), plateau));
+    /* Likewise from higher up, through more open air. */
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, HIGH + 1, found, 4), 2);
+    /* The rectangle still limits which. */
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 18.0f, 8.0f, 22.0f, 12.0f, HIGH, found, 4), 1);
+    CHECK(entity_id_equal(found[0], plains));
+
+    /* From the plains' level the plateau is above, and its wall hides nothing: only
+     * the plains' colonist is seen. */
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, LOW, found, 4), 1);
+    CHECK(entity_id_equal(found[0], plains));
+    CHECK(entity_id_is_none(game_colonist_at(&game, 30.5f, 10.5f, LOW)));
+
+    /* Under the roof of earth of the plateau, the level above does not show the colonist
+     * standing in a tunnel: a closed tile hides what is below it. */
+    Map *map = &game.map;
+    int i = map_index(map, 40, 30, HIGH - 1);
+    map->rock[i] = ROCK_NONE; /* A walkable cell of soil, with ground over it. */
+    map_topology_changed(map);
+    EntityId hidden = game_spawn_colonist(&game, 40, 30, HIGH - 1);
+    REQUIRE(!entity_id_is_none(hidden));
+    CHECK(entity_id_is_none(game_colonist_at(&game, 40.5f, 30.5f, HIGH)));
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 39.0f, 29.0f, 41.0f, 31.0f, HIGH, found, 4), 0);
+    game_shutdown(&game);
+}
+
 static void test_stockpiles_on_their_level(void)
 {
     Game game;
@@ -353,6 +391,7 @@ int main(void)
 {
     RUN_TEST(test_view_level);
     RUN_TEST(test_zones_cover_the_levels_seen);
+    RUN_TEST(test_selection_covers_the_levels_seen);
     RUN_TEST(test_stockpiles_on_their_level);
     RUN_TEST(test_gather_zones_on_their_level);
     RUN_TEST(test_stations_on_their_level);

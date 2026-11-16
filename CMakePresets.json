@@ -25,11 +25,12 @@
     {
       "name": "asan",
       "displayName": "Debug + sanitizers",
-      "description": "Game + tests with AddressSanitizer and UBSan",
+      "description": "Game + tests with AddressSanitizer and UBSan, warnings as errors",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "COLONY_ENABLE_SANITIZERS": "ON"
+        "COLONY_ENABLE_SANITIZERS": "ON",
+        "COLONY_WARNINGS_AS_ERRORS": "ON"
       }
     },
     {

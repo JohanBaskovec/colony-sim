@@ -527,6 +527,13 @@ points in percent of the maximum). `stockpile_accepts()` checks all three;
 items that are always perfect count as superb and 100 %. Zones only cover
 passable, buildable tiles. Every change bumps a `revision` counter.
 
+Drag tools (zones, orders, structures, the selection box) keep the corner
+where the button was pressed as a point of the world (`App.drag_world_x/y`), not
+of the screen: when the camera moves under a held button (pan, zoom, level), the
+rectangle stretches towards the cursor instead of sliding with the view. The
+anchor has no level: changing level under a held button moves the whole
+rectangle (or selection box) to the level shown, which is where it is applied.
+
 The zone tools (stockpiles and gathering zones alike) add a dragged rectangle
 with `stockpiles_add_rect()` / `gather_zones_add_rect()`: the selected zone and
 every zone of the same kind the rectangle overlaps are merged into one, which
@@ -545,6 +552,10 @@ it is open space, the first level below that is not (at most
 `MAP_VIEW_LEVELS_BELOW`, the levels the renderer draws below). A zone drawn
 from a high level thus covers the ground it sees below too, and is drawn in
 the blurred view of the levels below.
+Picking works on what is seen too: `game_colonist_at()` and
+`game_colonists_in_rect()` take the level shown and also return the colonists
+on a lower level that `map_view_level()` shows over their tile (a click and the
+selection box alike).
 The other way round, `game_place_workstation()` takes the station's tile out
 of the zone it was in (blueprints included). Tiles
 are taken out of zones with Shift+drag or the removal tools of the build menu;

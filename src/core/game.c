@@ -1573,13 +1573,28 @@ int game_remove_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int
 
 /* ---- Picking ------------------------------------------------------------- */
 
+/* Whether the level shown, z, lets one see a colonist: it is on that level, or
+ * on the level seen through the open space over its tile (see map_view_level). */
+static bool colonist_in_view(const Game *game, const Colonist *colonist, int z)
+{
+    if (colonist->z == z) {
+        return true;
+    }
+    if (colonist->z > z) {
+        return false;
+    }
+    float x, y;
+    colonist_position(colonist, &x, &y);
+    return map_view_level(&game->map, (int)floorf(x), (int)floorf(y), z) == colonist->z;
+}
+
 EntityId game_colonist_at(const Game *game, float world_x, float world_y, int z)
 {
     EntityId best = ENTITY_NONE;
     float best_distance = GAME_PICK_RADIUS * GAME_PICK_RADIUS;
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
-        if (entity_id_is_none(id) || game->colonists[slot].z != z) {
+        if (entity_id_is_none(id) || !colonist_in_view(game, &game->colonists[slot], z)) {
             continue;
         }
         float x, y;
@@ -1601,7 +1616,7 @@ int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float
     int count = 0;
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game) && count < max_count; slot++) {
         EntityId id = game_colonist_id_at(game, slot);
-        if (entity_id_is_none(id) || game->colonists[slot].z != z) {
+        if (entity_id_is_none(id) || !colonist_in_view(game, &game->colonists[slot], z)) {
             continue;
         }
         float x, y;

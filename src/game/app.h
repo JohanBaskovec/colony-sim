@@ -129,8 +129,14 @@ typedef struct App {
     int selected_count;
     bool left_button_down;
     bool box_selecting; /* Left button dragged far enough to become a box. */
-    float drag_start_x; /* Screen coordinates where the left button was pressed. */
+    float drag_start_x; /* Screen coordinates where the left button was pressed (drag threshold). */
     float drag_start_y;
+    /* The same point in world coordinates: the fixed corner of a drag rectangle
+     * or selection box. The camera may move under a held button; only the
+     * corner at the cursor follows it. No level is kept: the level shown when
+     * the button is released is the one used. */
+    float drag_world_x;
+    float drag_world_y;
 
     /* Selected stockpile zone (STOCKPILE_NONE if none), exclusive with the
      * colonist selection. The number guards against a reused index. */

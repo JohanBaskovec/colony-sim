@@ -211,12 +211,13 @@ const Colonist *game_colonist_const(const Game *game, EntityId id);
 uint32_t game_colonist_slot_count(const Game *game);
 EntityId game_colonist_id_at(const Game *game, uint32_t slot);
 
-/* Colonist of level z closest to a world point, within GAME_PICK_RADIUS, or
- * ENTITY_NONE. */
+/* Colonist seen from level z closest to a world point, within GAME_PICK_RADIUS,
+ * or ENTITY_NONE. Seen: on level z, or on a lower level visible through the
+ * open space over its tile (map_view_level(), as for the zone tools). */
 EntityId game_colonist_at(const Game *game, float world_x, float world_y, int z);
 
-/* Colonists of level z whose center lies in the rectangle (corners in any
- * order). Returns the count. */
+/* Colonists seen from level z (as game_colonist_at()) whose center lies in the
+ * rectangle (corners in any order). Returns the count. */
 int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
                            EntityId *out, int max_count);
 

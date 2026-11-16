@@ -708,11 +708,12 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     }
 }
 
-static void select_in_box(App *app, float x0, float y0, float x1, float y1, bool additive)
+/* Selects the colonists in the box from the drag's world corner to the cursor. */
+static void select_in_box(App *app, float screen_x, float screen_y, bool additive)
 {
-    float wx0, wy0, wx1, wy1;
-    camera_screen_to_world(&app->camera, x0, y0, &wx0, &wy0);
-    camera_screen_to_world(&app->camera, x1, y1, &wx1, &wy1);
+    const float wx0 = app->drag_world_x, wy0 = app->drag_world_y;
+    float wx1, wy1;
+    camera_screen_to_world(&app->camera, screen_x, screen_y, &wx1, &wy1);
     EntityId found[COLONIST_MAX];
     int count = game_colonists_in_rect(&app->game, wx0, wy0, wx1, wy1, app->camera.level, found,
                                        COLONIST_MAX);
@@ -735,11 +736,13 @@ static void screen_to_tile(const App *app, float screen_x, float screen_y, int *
     *y = (int)floorf(world_y);
 }
 
-/* Tool drag rectangle in tiles, from where the button was pressed to the cursor. */
+/* Tool drag rectangle in tiles, from where the button was pressed (a fixed
+ * point of the world, even if the camera moved since) to the cursor. */
 static void tool_rect(const App *app, float screen_x, float screen_y, int *x0, int *y0, int *x1,
                       int *y1)
 {
-    screen_to_tile(app, app->drag_start_x, app->drag_start_y, x0, y0);
+    *x0 = (int)floorf(app->drag_world_x);
+    *y0 = (int)floorf(app->drag_world_y);
     screen_to_tile(app, screen_x, screen_y, x1, y1);
 }
 
@@ -831,6 +834,8 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         app->box_selecting = false;
         app->drag_start_x = button->x;
         app->drag_start_y = button->y;
+        camera_screen_to_world(&app->camera, button->x, button->y, &app->drag_world_x,
+                               &app->drag_world_y);
         return;
     }
     if (!app->left_button_down) {
@@ -873,7 +878,7 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
     } else if (app->tool == APP_TOOL_GATHER) {
         apply_gather_tool(app, button->x, button->y);
     } else if (app->box_selecting) {
-        select_in_box(app, app->drag_start_x, app->drag_start_y, button->x, button->y, additive);
+        select_in_box(app, button->x, button->y, additive);
     } else {
         select_at_point(app, button->x, button->y, additive);
     }
@@ -1066,7 +1071,10 @@ static void render_frame(App *app)
     } else if (app->box_selecting) {
         float mouse_x, mouse_y;
         SDL_GetMouseState(&mouse_x, &mouse_y);
-        render_selection_box(app->renderer, app->drag_start_x, app->drag_start_y, mouse_x, mouse_y);
+        float start_x, start_y;
+        camera_world_to_screen(&app->camera, app->drag_world_x, app->drag_world_y, &start_x,
+                               &start_y);
+        render_selection_box(app->renderer, start_x, start_y, mouse_x, mouse_y);
     }
     float mouse_x, mouse_y;
     SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_x, &mouse_y);

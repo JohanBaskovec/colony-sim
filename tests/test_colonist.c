@@ -1530,13 +1530,14 @@ static void test_picking(void)
     CHECK(entity_id_equal(game_colonist_at(&game, 10.5f, 10.5f, 0), a));
     CHECK(entity_id_equal(game_colonist_at(&game, 12.3f, 10.6f, 0), b));
     CHECK(entity_id_is_none(game_colonist_at(&game, 11.5f, 10.5f, 0)));
-    CHECK(entity_id_is_none(game_colonist_at(&game, 10.5f, 10.5f, 1))); /* Another level. */
+    /* Seen from the level above (open air over the ground), not from below it. */
+    CHECK(entity_id_equal(game_colonist_at(&game, 10.5f, 10.5f, 1), a));
 
     EntityId found[8];
     CHECK_EQ_INT(game_colonists_in_rect(&game, 13.0f, 9.0f, 9.0f, 12.0f, 0, found, 8), 2);
     CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, 0, found, 8), 3);
     CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, 0, found, 1), 1);
-    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, 1, found, 8), 0);
+    CHECK_EQ_INT(game_colonists_in_rect(&game, 0.0f, 0.0f, 48.0f, 48.0f, 1, found, 8), 3);
     game_shutdown(&game);
 }
 

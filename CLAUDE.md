@@ -48,6 +48,9 @@ clang-format -i src/core/foo.c                 # format what you changed (config
 clang-format --dry-run --Werror $(git ls-files '*.c' '*.h')  # check the whole tree: must print nothing
 ```
 
+The `asan` preset builds the whole game (frontend included) with `-Werror` and
+AddressSanitizer + UBSan: run it (`cmake --preset asan && cmake --build --preset asan
+&& ctest --preset asan`) after touching `src/game/`.
 The first `debug`/`release`/`asan` configure downloads and builds SDL3 (minutes).
 Prefer the `headless` preset while working on the simulation core.
 
