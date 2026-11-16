@@ -674,12 +674,13 @@ bool map_is_open(const Map *map, int x, int y, int z)
 
 int map_view_level(const Map *map, int x, int y, int z)
 {
-    int lowest = z - MAP_VIEW_LEVELS_BELOW > 0 ? z - MAP_VIEW_LEVELS_BELOW : 0;
     if (!map_in_bounds(map, x, y, z)) {
         return -1;
     }
-    for (int level = z; level >= lowest; level--) {
-        if (!map_is_open(map, x, y, level)) {
+    size_t index = map_index(map, x, y, z);
+    const size_t layer = (size_t)map->width * (size_t)map->height;
+    for (int level = z; level >= 0; level--, index -= layer) {
+        if (!map_is_open_at(map, index)) {
             return level;
         }
     }

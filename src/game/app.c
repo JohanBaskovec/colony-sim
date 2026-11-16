@@ -987,10 +987,13 @@ static void render_frame(App *app)
     SDL_SetRenderDrawColor(app->renderer, 10, 10, 12, 255);
     SDL_RenderClear(app->renderer);
 
-    /* The levels below, through open space: the deepest first. */
-    if (render_below_begin(app->renderer, &app->game.map, &app->camera)) {
-        int lowest = app->camera.level - MAP_VIEW_LEVELS_BELOW;
-        for (int z = lowest > 0 ? lowest : 0; z < app->camera.level; z++) {
+    /* The levels below, through open space: those seen somewhere, the deepest first. */
+    uint32_t levels;
+    if (render_below_begin(app->renderer, &app->game.map, &app->camera, &levels)) {
+        for (int z = 0; z < app->camera.level; z++) {
+            if ((levels & (1u << z)) == 0) {
+                continue;
+            }
             Camera below = app->camera;
             below.level = z;
             render_map(app->renderer, app->sprites, &app->game.map, &below);
@@ -1001,7 +1004,11 @@ static void render_frame(App *app)
             render_workstations(app->renderer, &app->game, &below, WORKSTATION_NONE);
             render_items(app->renderer, &app->game, &below);
             render_world_sprites(app->renderer, app->sprites, &app->game, &below, NULL, 0);
-            render_below_shade(app->renderer);
+            int next = z + 1;
+            while (next < app->camera.level && (levels & (1u << next)) == 0) {
+                next++;
+            }
+            render_below_shade(app->renderer, z, next);
         }
         render_below_end(app->renderer);
     }

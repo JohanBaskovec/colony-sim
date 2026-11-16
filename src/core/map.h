@@ -502,13 +502,10 @@ bool map_has_floor(const Map *map, int x, int y, int z);
 /* Open space: in bounds, no rock and no floor. */
 bool map_is_open(const Map *map, int x, int y, int z);
 
-/* Levels below the one shown that are seen through open space (and drawn). */
-#define MAP_VIEW_LEVELS_BELOW 6
-
 /* The level of what is seen on the tile (x, y) with level z shown: z itself
- * unless it is open space, else the first level down that is not, within
- * MAP_VIEW_LEVELS_BELOW levels of it. -1 when nothing is seen there (open
- * space all the way, or off the map). */
+ * unless it is open space, else the first level down that is not, however
+ * deep. -1 when nothing is seen there (open space all the way, or off the
+ * map). */
 int map_view_level(const Map *map, int x, int y, int z);
 
 /* Whether a natural slope rises from the tile to the level above. */

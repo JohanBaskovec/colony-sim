@@ -38,11 +38,15 @@ static const SDL_Color RING_COLOR = {120, 84, 50, 255};
 #define TREE_DETAIL_MIN_ZOOM 10.0f
 
 /* Levels below the one shown (render_below_begin()): drawn this many times
- * smaller, then stretched back with smoothing (a blur), each level deeper
- * darkened by BELOW_SHADE more. */
+ * smaller, then stretched back with smoothing (a blur), and veiled towards
+ * BELOW_HAZE the deeper they are. What lies `depth` levels down keeps
+ * BELOW_FLOOR + (1 - BELOW_FLOOR) * BELOW_DECAY^depth of its color: a little
+ * less each level, never less than BELOW_FLOOR (never all dark). */
 #define BELOW_SCALE 3
-static const SDL_Color BELOW_SHADE = {14, 16, 24, 70};
-static const SDL_Color BELOW_ABYSS = {14, 16, 24, 255}; /* Deeper than drawn. */
+#define BELOW_FLOOR 0.4f
+#define BELOW_DECAY 0.8f
+static const SDL_Color BELOW_HAZE = {14, 16, 24, 255};
+static const SDL_Color BELOW_ABYSS = {14, 16, 24, 255}; /* Open space to the bottom. */
 /* Edges of the ground over a drop to the levels below. */
 /* Ramps: a triangle pointing up on a ramp leading up from the level shown,
  * down over one leading down from it (map_ramp_at()). */
@@ -62,6 +66,15 @@ static const SDL_Color ALLOW_COLOR = {84, 176, 92, 255};
 
 /* The offscreen image of the levels below, and the render scale it replaced. */
 static SDL_Texture *below_texture;
+/* The pass over the levels below (render_below_begin() to render_below_end()):
+ * the level seen on each visible tile (map_view_level()), so that each level
+ * draws only the tiles where nothing higher covers it. */
+static bool below_active;
+static const Map *below_map;
+static int below_shown;
+static TileRect below_rect;
+static int8_t *below_view;
+static size_t below_view_capacity;
 static float below_saved_scale_x = 1.0f, below_saved_scale_y = 1.0f;
 
 static const SDL_Color TREE_COLOR = {34, 88, 40, 255};
@@ -276,6 +289,9 @@ void render_shutdown(void)
         SDL_DestroyTexture(below_texture);
         below_texture = NULL;
     }
+    SDL_free(below_view);
+    below_view = NULL;
+    below_view_capacity = 0;
     SDL_free(light_corners);
     light_corners = NULL;
     light_corner_capacity = 0;
@@ -406,21 +422,76 @@ static void render_ground_shape(SDL_Renderer *renderer, const Map *map, int x, i
     }
 }
 
-bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera)
+/* The level seen on a tile from the level shown, during the pass. */
+static int below_view_level(int x, int y)
 {
+    if (x >= below_rect.x0 && x < below_rect.x1 && y >= below_rect.y0 && y < below_rect.y1) {
+        size_t columns = (size_t)(below_rect.x1 - below_rect.x0);
+        return below_view[(size_t)(y - below_rect.y0) * columns + (size_t)(x - below_rect.x0)];
+    }
+    return map_view_level(below_map, x, y, below_shown); /* A sprite's foot out of view. */
+}
+
+/* Whether what stands on (x, y, z) is to be drawn: always on the level shown;
+ * on a level below, only where it is what is seen (not under a higher floor). */
+static bool tile_seen(int x, int y, int z)
+{
+    return !below_active || below_view_level(x, y) == z;
+}
+
+/* Fills the table of the levels seen; returns the set of the levels below the
+ * one shown that are seen somewhere (bit z for level z), 0 if none. */
+static uint32_t below_fill_view(const Map *map, const Camera *camera)
+{
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    if (visible.x1 <= visible.x0 || visible.y1 <= visible.y0) {
+        return 0;
+    }
+    size_t count = (size_t)(visible.x1 - visible.x0) * (size_t)(visible.y1 - visible.y0);
+    if (count > below_view_capacity) {
+        int8_t *grown = SDL_realloc(below_view, count);
+        if (grown == NULL) {
+            return 0;
+        }
+        below_view = grown;
+        below_view_capacity = count;
+    }
+    uint32_t levels = 0;
+    size_t i = 0;
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            int level = map_view_level(map, x, y, camera->level);
+            below_view[i++] = (int8_t)level;
+            if (level >= 0 && level < camera->level) {
+                levels |= 1u << level;
+            }
+        }
+    }
+    below_rect = visible;
+    return levels;
+}
+
+/* How much of its color what lies `depth` levels below the level shown keeps. */
+static float below_brightness(int depth)
+{
+    return BELOW_FLOOR + (1.0f - BELOW_FLOOR) * powf(BELOW_DECAY, (float)depth);
+}
+
+bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera,
+                        uint32_t *levels)
+{
+    SDL_COMPILE_TIME_ASSERT(below_levels_fit, MAP_MAX_LEVELS <= 32);
+    *levels = 0;
     if (camera->level <= 0 || camera->level >= map->depth) {
         return false;
     }
-    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
-    bool open = false;
-    for (int y = visible.y0; y < visible.y1 && !open; y++) {
-        for (int x = visible.x0; x < visible.x1 && !open; x++) {
-            open = map_is_open(map, x, y, camera->level);
-        }
-    }
     int width = (int)ceilf(camera->viewport_width / (float)BELOW_SCALE);
     int height = (int)ceilf(camera->viewport_height / (float)BELOW_SCALE);
-    if (!open || width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+    uint32_t seen = below_fill_view(map, camera);
+    if (seen == 0) {
         return false;
     }
     if (below_texture != NULL && (below_texture->w != width || below_texture->h != height)) {
@@ -443,18 +514,30 @@ bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *ca
                        below_saved_scale_y / (float)BELOW_SCALE);
     SDL_SetRenderDrawColor(renderer, BELOW_ABYSS.r, BELOW_ABYSS.g, BELOW_ABYSS.b, 255);
     SDL_RenderClear(renderer);
+    below_active = true;
+    below_map = map;
+    below_shown = camera->level;
+    *levels = seen;
     return true;
 }
 
-void render_below_shade(SDL_Renderer *renderer)
+/* Each level drawn is veiled by its own shade and by those of the levels drawn
+ * after it: a shade that takes it from its brightness to that of the next
+ * level gives every level exactly below_brightness() of its depth, whichever
+ * levels lie between. */
+void render_below_shade(SDL_Renderer *renderer, int level, int next_level)
 {
+    float kept = below_brightness(below_shown - level) / below_brightness(below_shown - next_level);
+    float alpha = clampf(1.0f - kept, 0.0f, 1.0f);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, BELOW_SHADE.r, BELOW_SHADE.g, BELOW_SHADE.b, BELOW_SHADE.a);
+    SDL_SetRenderDrawColor(renderer, BELOW_HAZE.r, BELOW_HAZE.g, BELOW_HAZE.b,
+                           (Uint8)(alpha * 255.0f + 0.5f));
     SDL_RenderFillRect(renderer, NULL);
 }
 
 void render_below_end(SDL_Renderer *renderer)
 {
+    below_active = false;
     SDL_SetRenderTarget(renderer, NULL);
     SDL_SetRenderScale(renderer, below_saved_scale_x, below_saved_scale_y);
     SDL_RenderTexture(renderer, below_texture, NULL, NULL);
@@ -483,7 +566,7 @@ static void visit_ground_tiles(const Map *map, const Camera *camera, TileVisitor
             SDL_FRect tile = {floorf(left), floorf(top), floorf(right) - floorf(left),
                               floorf(bottom) - floorf(top)};
             size_t index = map_index(map, x, y, z);
-            if (!map_is_open_at(map, index)) {
+            if (!map_is_open_at(map, index) && tile_seen(x, y, z)) {
                 visit(map, x, y, z, index, &tile, userdata);
             }
         }
@@ -770,7 +853,7 @@ void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *c
     for (int y = visible.y0; y < visible.y1; y++) {
         int run = -1; /* First tile of the current run of snowy tiles. */
         for (int x = visible.x0; x <= visible.x1; x++) {
-            bool snowy = x < visible.x1 && !map_is_water(map, x, y, z) &&
+            bool snowy = x < visible.x1 && tile_seen(x, y, z) && !map_is_water(map, x, y, z) &&
                          map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
                          map_has_floor(map, x, y, z) &&
                          temperature_cover(map, x, y, z) == TEMPERATURE_COVER_OPEN;
@@ -1114,6 +1197,9 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
     TileRect visible = camera_visible_tiles(camera, items->width, items->height);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
+            if (!tile_seen(x, y, z)) {
+                continue;
+            }
             SDL_FRect tile = tile_rect(camera, x, y);
             render_litter(renderer, &game->map, x, y, z, &tile);
             ItemStack stack = items_get(items, x, y, z);
@@ -1224,7 +1310,7 @@ static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, cons
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
             int index = zone_at(zones, x, y, z);
-            if (index < 0) {
+            if (index < 0 || !tile_seen(x, y, z)) {
                 continue;
             }
             SDL_FRect tile = tile_rect(camera, x, y);
@@ -1419,7 +1505,8 @@ void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera 
     for (int i = 0; i < WORKSTATION_MAX; i++) {
         const Workstation *station = workstation_get_const(workstations, i);
         if (station == NULL || station->z != camera->level || station->x < visible.x0 ||
-            station->x >= visible.x1 || station->y < visible.y0 || station->y >= visible.y1) {
+            station->x >= visible.x1 || station->y < visible.y0 || station->y >= visible.y1 ||
+            !tile_seen(station->x, station->y, station->z)) {
             continue;
         }
         SDL_FRect tile = tile_rect(camera, station->x, station->y);
@@ -1631,7 +1718,7 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
         TileRect visible = visible_heads(camera, map->width, map->height);
         for (int y = visible.y0; y < visible.y1; y++) {
             for (int x = visible.x0; x < visible.x1; x++) {
-                if (map_structure_is_origin(map, x, y, z)) {
+                if (map_structure_is_origin(map, x, y, z) && tile_seen(x, y, z)) {
                     StructureType type = map_structure(map, x, y, z);
                     Direction direction = map_structure_direction(map, x, y, z);
                     SDL_FRect rect = footprint_rect(camera, x, y, type, direction);
@@ -1649,7 +1736,8 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
     for (int i = 0; i < CONSTRUCTION_MAX; i++) {
         const ConstructionSite *site = construction_get(constructions, i);
         if (site == NULL || site->z != camera->level || site->x < visible.x0 ||
-            site->x >= visible.x1 || site->y < visible.y0 || site->y >= visible.y1) {
+            site->x >= visible.x1 || site->y < visible.y0 || site->y >= visible.y1 ||
+            !tile_seen(site->x, site->y, site->z)) {
             continue;
         }
         int needed = 0, delivered = 0;
@@ -2287,11 +2375,33 @@ static bool hides_colonist(const SDL_FRect *rect, float depth, const DepthEntry 
     return false;
 }
 
-static void render_plant(Sprites *sprites, const Camera *camera, const Plant *plant, int x, int y,
-                         const DepthEntry *colonists, int colonist_count)
+/* Whether a plant standing on (x, y, z) is to be drawn: as tile_seen(), but a
+ * tree on a level below also shows when only its own trunk or foliage covers
+ * its foot (its sprite is the whole tree, seen from above). */
+static bool plant_seen(const Map *map, const Plant *plant, int x, int y, int z)
 {
-    if (plant->type == PLANT_NONE || plant_is_dormant(plant)) {
-        return; /* Nothing above ground. */
+    if (!below_active) {
+        return true;
+    }
+    int seen = below_view_level(x, y);
+    if (seen == z) {
+        return true;
+    }
+    if ((plant->type != PLANT_TREE && plant->type != PLANT_HAZEL) || seen < z ||
+        seen - z >= TREE_MAX_LEVELS) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, seen);
+    return map->rock[index] == ROCK_WOOD ||
+           (map->rock[index] == ROCK_NONE && map->terrain[index] == TERRAIN_FOLIAGE);
+}
+
+static void render_plant(Sprites *sprites, const Camera *camera, const Map *map, int x, int y,
+                         int z, const DepthEntry *colonists, int colonist_count)
+{
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    if (plant->type == PLANT_NONE || plant_is_dormant(plant) || !plant_seen(map, plant, x, y, z)) {
+        return; /* Nothing above ground, or nothing seen. */
     }
     SpriteId id =
         sprite_plant((PlantType)plant->type, plant_growth_stage(plant), plant_has_food(plant));
@@ -2328,6 +2438,9 @@ static void render_chat_bubbles(SDL_Renderer *renderer, const Game *game, const 
         }
         float wx, wy, sx, sy;
         colonist_position(colonist, &wx, &wy);
+        if (!tile_seen((int)floorf(wx), (int)floorf(wy), colonist->z)) {
+            continue;
+        }
         camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &sx, &sy);
         float width = floorf(camera->zoom * 0.42f), height = floorf(camera->zoom * 0.24f);
         SDL_FRect bubble = {floorf(sx + camera->zoom * 0.08f),
@@ -2375,6 +2488,9 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
         }
         float wx, wy;
         colonist_position(&game->colonists[slot], &wx, &wy);
+        if (!tile_seen((int)floorf(wx), (int)floorf(wy), z)) {
+            continue; /* Under a higher floor (the levels below). */
+        }
         if (wx < (float)x0 - 1.0f || wx > (float)x1 + 1.0f || wy < (float)visible.y0 - 1.0f ||
             wy > (float)y1 + 1.0f) {
             continue;
@@ -2398,8 +2514,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
                             is_selected(game_colonist_id_at(game, slot), selected, selected_count));
         }
         for (int x = x0; x < x1; x++) {
-            render_plant(sprites, camera, &map->plants[map_index(map, x, y, z)], x, y, order,
-                         count);
+            render_plant(sprites, camera, map, x, y, z, order, count);
         }
     }
     while (next < count) {

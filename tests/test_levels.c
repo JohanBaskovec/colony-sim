@@ -118,7 +118,7 @@ static int station_on(const Game *game, WorkstationType type, int x, int y, int 
 }
 
 /* What is seen on a tile: the level shown, or the first one below that is not
- * open space, within MAP_VIEW_LEVELS_BELOW levels. */
+ * open space, however deep. */
 static void test_view_level(void)
 {
     Game game;
@@ -131,7 +131,10 @@ static void test_view_level(void)
     CHECK_EQ_INT(map_view_level(map, 30, 10, LOW), LOW); /* Earth: the wall is what is seen. */
     CHECK_EQ_INT(map_view_level(map, -1, 10, LOW), -1);
     CHECK_EQ_INT(map_view_level(map, 10, 10, map->depth), -1);
-    /* Too deep to be seen: more than MAP_VIEW_LEVELS_BELOW levels of air. */
+    /* However much air there is: from the top of the map, the plains are seen. */
+    CHECK(map->depth - 1 - LOW > 6);
+    CHECK_EQ_INT(map_view_level(map, 10, 10, map->depth - 1), LOW);
+    /* Nothing seen down a pit open to the bottom of the map. */
     Game deep;
     REQUIRE(init_raised_game(&deep));
     Map *pit = &deep.map;

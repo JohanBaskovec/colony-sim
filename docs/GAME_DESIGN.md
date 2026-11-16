@@ -100,7 +100,8 @@ map: 256 × 256 tiles, small enough to simulate every tile in depth.
   Natural relief (hills, cliffs, caves; no mountains, they would take too
   many levels), dug mines and cellars, buildings with storeys.
   - View: the current level is sharp, the levels below show through open
-    space, blurred (more with depth).
+    space however deep, blurred and a little darker with each level (never
+    black).
   - Going up and down: natural slopes on foot; dug ramps, ladders and stairs
     made by the settlers; cliffs cannot be crossed.
   - Support: nothing overhangs more than 2 tiles from what holds it up, the

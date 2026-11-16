@@ -19,16 +19,22 @@
 void render_map(SDL_Renderer *renderer, Sprites *sprites, const Map *map, const Camera *camera);
 
 /*
- * The levels below the one shown, seen through open space: blurred and
- * darker with depth. render_below_begin() returns false when there is no
- * open space in view (nothing to draw); otherwise what is drawn until
- * render_below_end() goes to a smaller offscreen image, which
- * render_below_end() stretches over the screen. Draw the deepest level first
- * and call render_below_shade() after each level: it darkens what is already
- * drawn.
+ * The levels below the one shown, seen through open space however deep:
+ * blurred and veiled a little more with each level, never all dark.
+ * render_below_begin() works out the level seen on each visible tile
+ * (map_view_level()) and sets `levels` to those seen somewhere (bit z for
+ * level z); it returns false when no level below is seen (nothing to draw).
+ * Otherwise what is drawn until render_below_end() goes to a smaller
+ * offscreen image, which render_below_end() stretches over the screen, and
+ * the render functions given a camera on one of these levels only draw the
+ * tiles where that level is the one seen: each tile is drawn once, whatever
+ * the depth. Draw the levels of `levels` deepest first, and after each call
+ * render_below_shade() with that level and the next one drawn (the level
+ * shown after the last): it veils what is already drawn.
  */
-bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera);
-void render_below_shade(SDL_Renderer *renderer);
+bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera,
+                        uint32_t *levels);
+void render_below_shade(SDL_Renderer *renderer, int level, int next_level);
 void render_below_end(SDL_Renderer *renderer);
 
 /* A triangle on every ramp of the level shown: pointing up on a ramp that

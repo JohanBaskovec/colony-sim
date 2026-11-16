@@ -548,8 +548,8 @@ NULL-terminated list), so their tiles are left out (the low-level
 The tools work on what is seen: they call the `*_add_view_rect()` /
 `*_remove_view_rect()` variants, whose `z` is the level shown, and each tile of
 the rectangle stands for `map_view_level()` of it, the level itself or, where
-it is open space, the first level below that is not (at most
-`MAP_VIEW_LEVELS_BELOW`, the levels the renderer draws below). A zone drawn
+it is open space, the first level below that is not, however deep (what the
+renderer shows there). A zone drawn
 from a high level thus covers the ground it sees below too, and is drawn in
 the blurred view of the levels below.
 Picking works on what is seen too: `game_colonist_at()` and
@@ -1443,11 +1443,19 @@ station, the tile (a structure, a roof, a site, items or a plant: its window,
 `game/tile_panel.h`), the stockpile, the gathering zone, the tile for its
 grass alone; a click on what is selected goes to the next one. What is
 forbidden carries a "no entry" sign (`render_forbidden_markers()`). Where the level shown is
-open space, the levels below show through (`render_below_begin()`): up to
-`APP_LEVELS_SHOWN_BELOW` of them, deepest first, each with its ground,
-structures, stations, items and sprites, drawn on an offscreen image three
-times smaller then stretched back with smoothing (a cheap blur), each level
-darkened once more than the one above. The ground of the level shown has a
+open space, the levels below show through (`render_below_begin()`), however
+deep. The level seen on each visible tile (`map_view_level()`) is worked out
+once a frame; only the levels seen somewhere are drawn, deepest first, each
+with its ground, structures, stations, items and sprites, but only on the
+tiles where it is the level seen (`tile_seen()`; a tree also shows when only
+its own trunk or foliage covers its foot). Each tile is thus drawn once
+whatever the depth, on an offscreen image three times smaller then stretched
+back with smoothing (a cheap blur). After each level a veil of haze makes up
+the difference with the next level drawn, so that what lies d levels down
+keeps `BELOW_FLOOR + (1 - BELOW_FLOOR) * BELOW_DECAY^d` of its color: a little
+darker with each level, never black. (Drawing every level in full, as before,
+cost a quarter of the frame rate at the surface level, the ground under it
+drawn though hidden, and had to stop 6 levels down.) The ground of the level shown has a
 dark edge over each drop, and slopes are lit towards the higher side.
 Ramps (natural slopes and dug ones, not ladders) carry a triangle on the
 level shown only (`render_ramp_markers()`, from `map_ramp_at()`): pointing up
