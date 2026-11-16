@@ -153,14 +153,15 @@ static void test_levels(void)
     CHECK_EQ_INT(map_structure(&map, 4, 4, 0), STRUCTURE_NONE);
     CHECK(!map_is_passable(&map, 4, 4, 1));
     CHECK(map_is_passable(&map, 4, 4, 0));
-    CHECK(map_roof_supported(&map, 5, 4, 1));
-    CHECK(!map_roof_supported(&map, 5, 4, 0));
+    CHECK(map_roof_supported(&map, 5, 4, 2)); /* A roof over level 1. */
+    CHECK(!map_roof_supported(&map, 5, 4, 1));
     CHECK_EQ_INT(map.build_log[map.build_revision % MAP_BUILD_LOG_SIZE].z, 1);
     map_set_rock(&map, 8, 8, 2, ROCK_GRANITE);
     CHECK_EQ_INT(map.topology_log[map.topology_revision % MAP_TOPOLOGY_LOG_SIZE].z, 2);
-    map_set_roof(&map, 5, 4, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(&map, 5, 4, 2, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     CHECK(map_is_roofed(&map, 5, 4, 1));
-    CHECK(!map_is_roofed(&map, 5, 4, 0));
+    CHECK(!map_is_roofed(&map, 5, 4, 2));
+    CHECK(map_is_roofed(&map, 5, 4, 0)); /* Under the floor of level 1 anyway. */
     map_set_stones(&map, 2, 2, 2, 5, 1);
     CHECK_EQ_INT(map_stones(&map, 2, 2, 2, ITEM_COBBLE), 5);
     CHECK_EQ_INT(map_stones(&map, 2, 2, 0, ITEM_COBBLE), 0);
@@ -531,6 +532,9 @@ static void test_ladders(void)
     CHECK(!map_ladder_fits(&map, 1, 2, 0)); /* Plains all around. */
     CHECK(!map_ladder_fits(&map, 6, 6, 0)); /* In the room: ground over it. */
     CHECK(!map_ladder_fits(&map, 3, 2, 2)); /* The top level. */
+    map_set_roof(&map, 2, 2, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK(!map_ladder_fits(&map, 1, 2, 0)); /* Nobody climbs onto a roof. */
+    map_set_roof(&map, 2, 2, 1, STRUCTURE_NONE, ITEM_QUALITY_STANDARD);
     CHECK_NEAR(map_climb_cost(&map, 3, 2, 0), 0.0, 1e-6);
     CHECK(!map_can_climb(&map, 3, 2, 0, 4, 2));
     map_set_structure(&map, 3, 2, 0, STRUCTURE_LADDER);
@@ -579,13 +583,24 @@ static void test_ceilings_need_support(void)
     CHECK(map_dig_keeps_ceilings(&map, 13, 13, 0, false));
     /* A ramp leaves its tile no ceiling: only its neighbors count. */
     CHECK(map_dig_keeps_ceilings(&map, 4, 12, 0, true));
+
+    /* A built roof is the ceiling of the tile under it: on the plains, held
+     * up by a lone boulder of earth only, which may not be dug out. */
+    map_set_rock(&map, 1, 12, 0, ROCK_EARTH);
+    map_set_roof(&map, 1, 14, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK(map_has_ceiling(&map, 1, 14, 0));
+    CHECK(map_ceiling_supported(&map, 1, 14, 0));
+    CHECK(map_roof_supported(&map, 1, 14, 1));
+    CHECK(!map_dig_keeps_ceilings(&map, 1, 12, 0, false));
+    map_set_structure(&map, 0, 15, 0, STRUCTURE_WALL);
+    CHECK(map_dig_keeps_ceilings(&map, 1, 12, 0, false));
     map_free(&map);
 }
 
 static void test_change_logs(void)
 {
     Map map;
-    REQUIRE(map_init(&map, 20, 16, 1));
+    REQUIRE(map_init(&map, 20, 16, 2));
     /* Structures and roofs: the build log. */
     uint32_t build = map.build_revision;
     map_set_structure(&map, 3, 4, 0, STRUCTURE_WALL);
@@ -593,10 +608,11 @@ static void test_change_logs(void)
     const MapBuildChange *change = &map.build_log[map.build_revision % MAP_BUILD_LOG_SIZE];
     CHECK_EQ_INT(change->x, 3);
     CHECK_EQ_INT(change->y, 4);
-    map_set_roof(&map, 7, 8, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(&map, 7, 8, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     change = &map.build_log[map.build_revision % MAP_BUILD_LOG_SIZE];
     CHECK_EQ_INT(change->x, 7);
     CHECK_EQ_INT(change->y, 8);
+    CHECK_EQ_INT(change->z, 1);
     /* Rock on a wall: nobody could walk there anyway, but it is a change. */
     uint32_t topology = map.topology_revision;
     build = map.build_revision;

@@ -5,7 +5,8 @@
  * rivers in hollows (shallows and beaches one level down, deep water two);
  * hills rising level by level with natural slopes, rock outcrops one level
  * higher behind cliffs. The inside of the ground is earth near the surface
- * and rock deeper down (rock all the way under stony ground).
+ * and rock deeper down (rock all the way under stony ground). One open level
+ * tops the highest ground, where roofs go (a flat world has two levels).
  */
 #ifndef COLONY_CORE_WORLDGEN_H
 #define COLONY_CORE_WORLDGEN_H

@@ -53,7 +53,6 @@ typedef enum AppTool {
 #define APP_KEY_DEBUG SDL_SCANCODE_F3      /* Debug information. */
 #define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4 /* Cheats (game/debug_panel.h). */
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H /* Temperature view on or off. */
-#define APP_KEY_ROOF_VIEW SDL_SCANCODE_Y   /* Roof view on or off (see app_roof_view()). */
 #define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
 
@@ -127,10 +126,8 @@ typedef struct App {
     int selected_gather_zone_number;
     /* Groups of resources folded in the gathering zone window (UI state). */
     bool gather_group_folded[GATHER_GROUP_COUNT];
-    /* Selected structure or construction site (its tile), same rules; in the
-     * roof layer when selected in the roof view. */
+    /* Selected structure, roof or construction site (its tile), same rules. */
     bool structure_selected;
-    bool selected_structure_roof;
     int selected_structure_x, selected_structure_y, selected_structure_z;
     /* A right click on the map (not dragged to pan) steps back like Escape. */
     bool right_click_pending;
@@ -141,7 +138,6 @@ typedef struct App {
     bool show_help;
     bool show_debug_menu; /* Debug menu (game/debug_panel.h). */
     bool show_temperature; /* The temperature of each tile over the map. */
-    bool show_roofs; /* Roof view turned on by the player (see app_roof_view()). */
     float level_wheel; /* Wheel steps with Shift held, towards the next level. */
     /* Build menu (game/menu_bar.h): open, and which category is shown. */
     bool build_menu_open;
@@ -186,12 +182,6 @@ void app_toggle_tool(App *app, AppTool tool, int type);
 
 /* Whether this tool (same `type` rules) is the one in use. */
 bool app_tool_active(const App *app, AppTool tool, int type);
-
-/* Whether the roof view is on: turned on by the player, or while planning
- * roofs or ordering them taken down. Roofs, their sites and their orders are
- * only drawn there, and clicks and the cancel tool only deal with roofs
- * there. */
-bool app_roof_view(const App *app);
 
 /* What the key at a physical position is labeled on the active layout. */
 const char *app_key_name(SDL_Scancode key);

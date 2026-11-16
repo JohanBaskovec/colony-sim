@@ -243,10 +243,6 @@ static void build_status_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.temperature_view"), cold, hot,
                   app_key_name(APP_KEY_TEMPERATURE));
     }
-    if (app_roof_view(app)) {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.roof_view"),
-                  app_key_name(APP_KEY_ROOF_VIEW));
-    }
 }
 
 /* A construction site's lines in the tile inspector: progress and materials. */
@@ -370,11 +366,15 @@ static void build_tile_panel(App *app, Panel *panel)
             add_bed_owner_line(app, panel, x, y);
         }
     }
-    StructureType roof = map_roof(map, x, y, z);
+    StructureType roof = map_roof(map, x, y, z); /* The tile is a roof. */
+    StructureType over = map_roof_over(map, x, y, z);
     if (roof != STRUCTURE_NONE) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.roof"),
                   tr(structure_def(roof)->name_key),
                   tr(item_quality_name_key(map_roof_quality(map, x, y, z))));
+    } else if (over != STRUCTURE_NONE) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.under_roof"),
+                  tr(structure_def(over)->name_key));
     } else if (map_natural_roof(map, x, y, z)) {
         panel_add_text(panel, tr("hud.tile.natural_roof"));
     }
@@ -402,10 +402,7 @@ static void build_tile_panel(App *app, Panel *panel)
     }
     const ConstructionSite *site = construction_get(
         &app->game.constructions, construction_at(&app->game.constructions, x, y, z));
-    const ConstructionSite *roof_site = construction_get(
-        &app->game.constructions, construction_roof_at(&app->game.constructions, x, y, z));
     add_site_lines(panel, site);
-    add_site_lines(panel, roof_site);
 
     if (site != NULL && gather_clear_work(map, x, y, z) > 0.0f) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("blueprint.clear_first"),
@@ -933,7 +930,7 @@ static void help_window(App *app)
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.temperature"),
               app_key_name(APP_KEY_TEMPERATURE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.roofs"),
-              app_key_name(APP_KEY_ROOF_VIEW));
+              app_key_name(APP_KEY_LEVEL_UP), tr("designation.deconstruct"));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.levels"),
               app_key_name(APP_KEY_LEVEL_UP), app_key_name(APP_KEY_LEVEL_DOWN));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.debug"),
@@ -1102,7 +1099,8 @@ void hud_draw(App *app)
             if (structure_is_roof(app->structure_type)) {
                 char range[16];
                 tr_integer(range, sizeof(range), ROOF_SUPPORT_RANGE);
-                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.roof_support"), range);
+                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.roof_support"), range,
+                          app_key_name(APP_KEY_LEVEL_UP));
             }
             panel_add_text(&tool, tr(def->drawn_as_outline ? "hud.tool.outline_help"
                                                            : "hud.tool.structure_help"));
@@ -1116,10 +1114,6 @@ void hud_draw(App *app)
         } else {
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool"),
                       tr(tool_name_key(app->tool_type)));
-            if (app->tool_type == DESIGNATION_NONE) {
-                panel_add_text(&tool, tr(app_roof_view(app) ? "hud.tool.cancel_roofs"
-                                                            : "hud.tool.cancel_ground"));
-            }
             if (app->tool_type != DESIGNATION_NONE &&
                 !game_designation_available(&app->game, app->tool_type)) {
                 panel_add_text(&tool, tr("hud.tool.unavailable"));

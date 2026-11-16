@@ -1138,6 +1138,9 @@ typedef struct WorkSearch {
     const Reservations *reservations;
     const Colonist *worker; /* Only jobs its knowledge allows. */
     WorkTypeMask mask;
+    /* Whether orders on roofs (taken down from below) may be open: the
+     * search's hot path skips them otherwise. */
+    bool roof_jobs;
     uint8_t self;
 } WorkSearch;
 
@@ -1188,7 +1191,39 @@ static bool is_open_job(const WorkSearch *search, int x, int y, int z)
                                         search->self);
 }
 
-/* First open job next to (x, y), in a fixed order (deterministic). */
+/* Whether an order on a tile is worked on from the level below: a roof's
+ * (taken down from under it, as it is built). */
+static bool worked_from_below(const Map *map, int x, int y, int z)
+{
+    return map->roof_count > 0 && map_roof(map, x, y, z) != STRUCTURE_NONE;
+}
+
+/* The tile beside which one stands to work on `target`: on the level below
+ * for a roof. */
+static TilePos work_reach(const Map *map, TilePos target)
+{
+    if (worked_from_below(map, target.x, target.y, target.z)) {
+        target.z--;
+    }
+    return target;
+}
+
+/* First open order on a roof over a tile next to (x, y): worked from below. */
+static bool find_adjacent_roof_job(const WorkSearch *search, int x, int y, int z, TilePos *out)
+{
+    for (int i = 0; i < 4; i++) {
+        int nx = x + NEIGHBOR_DX[i];
+        int ny = y + NEIGHBOR_DY[i];
+        if (worked_from_below(search->map, nx, ny, z + 1) && is_open_job(search, nx, ny, z + 1)) {
+            *out = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)(z + 1)};
+            return true;
+        }
+    }
+    return false;
+}
+
+/* First open job next to (x, y), in a fixed order (deterministic): the
+ * orders of the tiles, then the orders on the roofs over them. */
 static bool find_adjacent_job(const WorkSearch *search, int x, int y, int z, TilePos *out)
 {
     for (int i = 0; i < 4; i++) {
@@ -1199,7 +1234,7 @@ static bool find_adjacent_job(const WorkSearch *search, int x, int y, int z, Til
             return true;
         }
     }
-    return false;
+    return search->roof_jobs && find_adjacent_roof_job(search, x, y, z, out);
 }
 
 /* A tile to stand on while working: passable, next to an open job. */
@@ -1215,6 +1250,27 @@ static bool is_work_spot(const Map *map, int x, int y, int z, void *userdata)
  * designation layer: far cheaper than a path search that fails, but not
  * meant for every tick.
  */
+/* Whether a tile of `ids` (a row of the regions layer) next to x belongs to
+ * `region`. */
+static bool beside_region(const uint32_t *ids, int x, int y, int width, int height,
+                          uint32_t region)
+{
+    return (x > 0 && ids[x - 1] == region) || (x + 1 < width && ids[x + 1] == region) ||
+           (y > 0 && ids[x - width] == region) || (y + 1 < height && ids[x + width] == region);
+}
+
+/* Whether an order on a roof tile is worked on from `region` (the level
+ * below). Kept out of open_job_reachable()'s scan, which stays tight. */
+static __attribute__((noinline)) bool roof_beside_region(const ColonistContext *context,
+                                                         const uint32_t *row_ids, int x, int y,
+                                                         int z, uint32_t region)
+{
+    const Map *map = context->map;
+    return z > 0 && worked_from_below(map, x, y, z) &&
+           beside_region(row_ids - (size_t)map->width * (size_t)map->height, x, y, map->width,
+                         map->height, region);
+}
+
 static bool open_job_reachable(const WorkSearch *search, const ColonistContext *context,
                                uint32_t region)
 {
@@ -1222,6 +1278,7 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
     const Regions *regions = context->regions;
     const int width = designations->width, height = designations->height;
     const int depth = designations->depth;
+    const bool roofs = search->roof_jobs;
     if (region == REGION_NONE || !regions_current(regions, context->map) ||
         regions->width != width || regions->height != height || regions->depth != depth) {
         return true;
@@ -1240,10 +1297,9 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
                     continue;
                 }
                 remaining--; /* The scan stops once every order has been seen. */
-                bool next_to_region =
-                    (x > 0 && ids[x - 1] == region) || (x + 1 < width && ids[x + 1] == region) ||
-                    (y > 0 && ids[x - width] == region) ||
-                    (y + 1 < height && ids[x + width] == region);
+                /* A roof is worked on from the level below. */
+                bool next_to_region = beside_region(ids, x, y, width, height, region) ||
+                                      (roofs && roof_beside_region(context, ids, x, y, z, region));
                 if (next_to_region && is_open_job(search, x, y, z)) {
                     return true;
                 }
@@ -1373,10 +1429,15 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
                          .worker = colonist,
                          .mask = mask,
                          .self = context->worker_id};
+    /* Only taking a roof apart is ordered on a roof tile (a roof site is
+     * found among the construction sites). */
+    search.roof_jobs = !zones && context->map->roof_count > 0 &&
+                       (mask & WORK_TYPE_BIT(WORK_CONSTRUCTION)) &&
+                       designations->count_by_work[WORK_CONSTRUCTION] > 0;
     /* Zones of the highest priority first, whatever the distance. */
     uint32_t priorities = zones ? gather_zones_wanting_priorities(context->gather_zones) : 1u;
     uint32_t region = current_region(colonist, context);
-    TilePos spot, target;
+    TilePos spot, target = {0, 0, 0};
     bool found = false;
     for (int priority = 0; priority < 32 && !found; priority++) {
         if (!(priorities & (1u << (unsigned)priority))) {
@@ -1820,7 +1881,7 @@ static void work(Colonist *colonist, const ColonistContext *context)
         take_job_tool(colonist, context);
         return;
     }
-    if (distance != 1) {
+    if (distance != 1 || colonist->z != work_reach(context->map, target).z) {
         set_idle(colonist, context, 0); /* Not there. */
         return;
     }
@@ -2206,13 +2267,12 @@ static void take_job_tool(Colonist *colonist, const ColonistContext *context)
                               context->worker_id);
     colonist->station_phase = STATION_JOB_GO;
     colonist->path_index = 0;
-    TilePos spot;
-    if (next_to(colonist->x, colonist->y, colonist->z, colonist->target)) {
+    TilePos spot, reach = work_reach(context->map, colonist->target);
+    if (next_to(colonist->x, colonist->y, colonist->z, reach)) {
         path_clear(&colonist->path);
     } else if (!pathfinder_find_nearest(context->pathfinder, context->map,
-                                        current_tile(colonist), is_next_to_target,
-                                        &colonist->target, COLONIST_WORK_SEARCH_MAX_COST,
-                                        &colonist->path, &spot)) {
+                                        current_tile(colonist), is_next_to_target, &reach,
+                                        COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot)) {
         set_idle(colonist, context, 0);
     }
 }
@@ -2521,20 +2581,13 @@ static bool site_wants_material(const ColonistContext *context, const Constructi
     return false;
 }
 
-/* Builders reserve a site on its head: in a reservation kind of its layer,
- * as a roof's site may lie over a wall's. */
-static ReservationKind site_reservation(const ConstructionSite *site)
-{
-    return construction_is_roof(site) ? RESERVATION_ROOF_CONSTRUCTION : RESERVATION_CONSTRUCTION;
-}
-
 /* Whether a site offers work to this colonist: free, buildable by it, and
  * either ready for work or missing a material it can go for. */
 static bool site_has_job(const ColonistContext *context, const Colonist *worker, int index)
 {
     const ConstructionSite *site = construction_get(context->constructions, index);
     if (site == NULL || !colonist_can_build_site(worker, site) ||
-        reservations_taken_by_other(context->reservations, site_reservation(site),
+        reservations_taken_by_other(context->reservations, RESERVATION_CONSTRUCTION,
                                     site_origin(site), context->worker_id)) {
         return false;
     }
@@ -2568,14 +2621,15 @@ typedef struct SiteSearch {
 } SiteSearch;
 
 /* First site with a job next to (x, y), in a fixed order (on each tile, the
- * structure's site before the roof's): its tile and index. */
+ * structure's site before the roof's over it): the tile it is worked by (on
+ * level z) and its index. */
 static bool find_adjacent_site(const SiteSearch *search, int x, int y, int z, TilePos *out,
                                int *index)
 {
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i], ny = y + NEIGHBOR_DY[i];
         for (int roof = 0; roof < 2; roof++) {
-            int site = construction_in_layer(search->context->constructions, nx, ny, z, roof);
+            int site = construction_worked_from(search->context->constructions, nx, ny, z, roof);
             if (site_has_job(search->context, search->worker, site)) {
                 *out = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)z};
                 *index = site;
@@ -2673,7 +2727,7 @@ static bool construction_job_still_valid(const Colonist *colonist,
 {
     const ConstructionSite *site = job_site(colonist, context);
     return site != NULL && site_still_wanted(context, site) &&
-           reservations_owner(context->reservations, site_reservation(site),
+           reservations_owner(context->reservations, RESERVATION_CONSTRUCTION,
                               site_origin(site)) == context->worker_id &&
            colonist->work_priorities[WORK_CONSTRUCTION] != WORK_PRIORITY_DISABLED &&
            colonist_can_build_site(colonist, site);
@@ -2704,7 +2758,7 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
     colonist->site = index;
     colonist->site_number = site->number;
     colonist->target = target; /* The tile of the site worked by, its head or another. */
-    reservations_add(context->reservations, site_reservation(site), site_origin(site),
+    reservations_add(context->reservations, RESERVATION_CONSTRUCTION, site_origin(site),
                      context->worker_id);
     if (!plan_construction(colonist, context)) {
         set_idle(colonist, context, 0);
@@ -2722,7 +2776,7 @@ static bool find_supply_site(const ColonistContext *context, int x, int y, int z
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i], ny = y + NEIGHBOR_DY[i];
         for (int roof = 0; roof < 2; roof++) {
-            int found = construction_in_layer(context->constructions, nx, ny, z, roof);
+            int found = construction_worked_from(context->constructions, nx, ny, z, roof);
             const ConstructionSite *site = construction_get(context->constructions, found);
             if (site != NULL && site_still_wanted(context, site) &&
                 site_wants_material(context, site)) {
@@ -2871,9 +2925,7 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
         return;
     }
     ConstructionSite *clearing = construction_get_mutable(context->constructions, colonist->site);
-    /* A roof goes over the plants, as over anything else. */
-    if (!structure_is_roof((StructureType)site->type) &&
-        clear_site_first(colonist, context, clearing)) {
+    if (clear_site_first(colonist, context, clearing)) {
         return;
     }
     ConstructionSite done = *site; /* Gone from the list once built. */
@@ -2977,7 +3029,9 @@ bool colonist_at_work(const Colonist *colonist)
     switch (colonist->task) {
     case TASK_CRAFT:
     case TASK_CONSTRUCT: return colonist->station_phase == STATION_JOB_WORK;
-    case TASK_WORK: return next_to(colonist->x, colonist->y, colonist->z, colonist->target);
+    case TASK_WORK: /* Beside its target, or under the roof's edge. */
+        return next_to(colonist->x, colonist->y, colonist->z, colonist->target) ||
+               next_to(colonist->x, colonist->y, colonist->z + 1, colonist->target);
     default: return false;
     }
 }

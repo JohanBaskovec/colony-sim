@@ -325,7 +325,9 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
             highest = height > highest ? height : highest;
         }
     }
-    if (!map_init(map, params->width, params->height, highest + 1)) {
+    /* One open level over the highest ground: room for roofs everywhere. */
+    int depth = highest + 2 < MAP_MAX_LEVELS ? highest + 2 : MAP_MAX_LEVELS;
+    if (!map_init(map, params->width, params->height, depth)) {
         free(heights);
         free(surfaces);
         free(moistures);

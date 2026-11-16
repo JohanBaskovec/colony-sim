@@ -16,9 +16,9 @@
  * map_dig_keeps_ceilings()): such orders wait for a prop or a wall.
  * Mining rock needs a pick and a knowledge that are not in the game yet:
  * nobody can do it for now, but the order exists. Taking a structure apart
- * gives back half of its materials, and so does taking a roof down. Roof
- * orders belong to the roof layer (see designation_is_roof()): the player
- * places them in the roof view.
+ * gives back half of its materials, and so does taking a roof down: the
+ * order goes on the roof's tile (the level above the hut), the work is done
+ * from below and the materials fall onto the floor under it.
  *
  * Each designated tile also stores how much work has been done, so that
  * interrupted work resumes where it stopped. Who works on which tile is
@@ -41,8 +41,7 @@
 typedef enum DesignationType {
     DESIGNATION_NONE = 0,
     DESIGNATION_MINE, /* Dig out a rock wall. */
-    DESIGNATION_DECONSTRUCT, /* Take a built structure apart (core/structure.h), not its roof. */
-    DESIGNATION_REMOVE_ROOF, /* Take the roof over a tile down. */
+    DESIGNATION_DECONSTRUCT, /* Take a built structure apart (core/structure.h), or a roof down. */
     DESIGNATION_DIG,      /* Dig out earth (ROCK_EARTH). */
     DESIGNATION_DIG_RAMP, /* Cut a ramp into a bank of earth one level high. */
     DESIGNATION_DIG_DOWN, /* Dig the ground and the earth under it out. */
@@ -85,9 +84,6 @@ void designations_free(Designations *designations);
 
 /* Whether a settler at `level` in the order's knowledge can carry it out. */
 bool designation_doable_at(DesignationType type, double level);
-
-/* Whether an order is about roofs (the roof layer), not what stands below. */
-bool designation_is_roof(DesignationType type);
 
 /* Whether the order makes sense on this tile (a wall to mine...). */
 bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType type);

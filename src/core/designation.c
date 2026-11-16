@@ -16,10 +16,6 @@ static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
                                  N_("colonist.task.deconstruct"), WORK_CONSTRUCTION,
                                  KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
                                  TOOL_USE_NONE},
-    [DESIGNATION_REMOVE_ROOF] = {"remove_roof", N_("designation.remove_roof"),
-                                 N_("colonist.task.remove_roof"), WORK_CONSTRUCTION,
-                                 KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
-                                 TOOL_USE_NONE},
     /* Pit dwellings and dugouts: the shelter builders dig. */
     [DESIGNATION_DIG] = {"dig", N_("designation.dig"), N_("colonist.task.dig_earth"), WORK_MINING,
                          KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_DIGGING},
@@ -83,11 +79,6 @@ bool designation_doable_at(DesignationType type, double level)
            level >= def->min_level;
 }
 
-bool designation_is_roof(DesignationType type)
-{
-    return type == DESIGNATION_REMOVE_ROOF;
-}
-
 /* Whether a ramp can be cut into this tile: earth, with bare ground over it
  * (nothing standing on it, open air above, so that it can be taken away) and
  * ground to lead up to beside it. */
@@ -100,7 +91,7 @@ static bool ramp_possible(const Map *map, int x, int y, int z)
     }
     size_t over = map_index(map, x, y, z + 1);
     if (!map_has_floor(map, x, y, z + 1) || map->rock[over] != ROCK_NONE || map->slope[over] ||
-        map->structure[over] != STRUCTURE_NONE || map->roof[over] != STRUCTURE_NONE ||
+        map->structure[over] != STRUCTURE_NONE || map_roof(map, x, y, z + 1) != STRUCTURE_NONE ||
         map_plant_blocks_building(map, x, y, z + 1) ||
         (map_in_bounds(map, x, y, z + 2) && !map_is_open(map, x, y, z + 2))) {
         return false;
@@ -108,7 +99,8 @@ static bool ramp_possible(const Map *map, int x, int y, int z)
     for (int i = 0; i < 4; i++) {
         int nx = x + DX[i], ny = y + DY[i];
         if (map_in_bounds(map, nx, ny, z + 1) && map_has_floor(map, nx, ny, z + 1) &&
-            map->rock[map_index(map, nx, ny, z + 1)] == ROCK_NONE) {
+            map->rock[map_index(map, nx, ny, z + 1)] == ROCK_NONE &&
+            map_roof(map, nx, ny, z + 1) == STRUCTURE_NONE) {
             return true;
         }
     }
@@ -116,13 +108,13 @@ static bool ramp_possible(const Map *map, int x, int y, int z)
 }
 
 /* Whether a hole can be dug down from this tile: bare ground (nothing
- * standing on it, no roof over it) over earth. */
+ * standing on it) over earth. */
 static bool dig_down_possible(const Map *map, int x, int y, int z)
 {
     return map_in_bounds(map, x, y, z - 1) &&
            map->rock[map_index(map, x, y, z - 1)] == ROCK_EARTH &&
            map_is_buildable(map, x, y, z) && map_structure(map, x, y, z) == STRUCTURE_NONE &&
-           map_roof(map, x, y, z) == STRUCTURE_NONE && !map_plant_blocks_building(map, x, y, z);
+           !map_plant_blocks_building(map, x, y, z);
 }
 
 /* The tile whose earth an order digs out: the one under the ground for a
@@ -144,8 +136,9 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
     case DESIGNATION_DIG: return rock == ROCK_EARTH;
     case DESIGNATION_DIG_RAMP: return ramp_possible(map, x, y, z);
     case DESIGNATION_DIG_DOWN: return dig_down_possible(map, x, y, z);
-    case DESIGNATION_DECONSTRUCT: return map_structure(map, x, y, z) != STRUCTURE_NONE;
-    case DESIGNATION_REMOVE_ROOF: return map_roof(map, x, y, z) != STRUCTURE_NONE;
+    case DESIGNATION_DECONSTRUCT:
+        return map_structure(map, x, y, z) != STRUCTURE_NONE ||
+               map_roof(map, x, y, z) != STRUCTURE_NONE;
     default: return false;
     }
 }
@@ -159,7 +152,6 @@ bool designation_ground_free(const Constructions *constructions, const Workstati
     }
     int ground = type == DESIGNATION_DIG_RAMP ? z + 1 : z;
     return construction_at(constructions, x, y, ground) == CONSTRUCTION_NONE &&
-           construction_roof_at(constructions, x, y, ground) == CONSTRUCTION_NONE &&
            workstation_at(workstations, x, y, ground) == WORKSTATION_NONE &&
            stockpile_at(stockpiles, x, y, ground) == STOCKPILE_NONE;
 }
@@ -267,9 +259,9 @@ float designation_work_needed(const Designations *designations, const Map *map, 
         return rock != NULL ? rock->mine_work * DESIGNATION_RAMP_WORK_FACTOR : 0.0f;
     }
     case DESIGNATION_DECONSTRUCT:
-        return structure_deconstruct_work((StructureType)map->structure[index]);
-    case DESIGNATION_REMOVE_ROOF:
-        return structure_deconstruct_work((StructureType)map->roof[index]);
+        return structure_deconstruct_work(map->structure[index] != STRUCTURE_NONE
+                                              ? (StructureType)map->structure[index]
+                                              : map_roof(map, x, y, z));
     default: return 0.0f;
     }
 }
@@ -374,14 +366,14 @@ static void complete(Map *map, Items *items, int x, int y, int z, DesignationTyp
     case DESIGNATION_DIG_DOWN: dig_down(map, items, x, y, z); break;
     case DESIGNATION_DECONSTRUCT: {
         StructureType structure = map_structure(map, x, y, z);
-        map_set_structure(map, x, y, z, STRUCTURE_NONE);
-        drop_salvage(structure, map, items, x, y, z);
-        break;
-    }
-    case DESIGNATION_REMOVE_ROOF: {
         StructureType roof = map_roof(map, x, y, z);
-        map_set_roof(map, x, y, z, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
-        drop_salvage(roof, map, items, x, y, z);
+        if (structure != STRUCTURE_NONE) {
+            map_set_structure(map, x, y, z, STRUCTURE_NONE);
+            drop_salvage(structure, map, items, x, y, z);
+        } else if (roof != STRUCTURE_NONE) { /* Taken down onto the floor below. */
+            map_set_roof(map, x, y, z, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
+            drop_salvage(roof, map, items, x, y, z - 1);
+        }
         break;
     }
     default: break;

@@ -261,15 +261,14 @@ typedef struct GatherWorkInfo {
 bool game_gather_work_at(const Game *game, int x, int y, int z, GatherWorkInfo *info);
 
 /* Places (or with DESIGNATION_NONE, removes) an order on every valid tile of a
- * rectangle (corners in any order). An order of the other layer
- * (designation_is_roof()) already on a tile stays: taking a wall apart does
- * not call off taking its roof down. Returns the number of tiles changed. */
+ * rectangle (corners in any order), in place of the order already there.
+ * Returns the number of tiles changed. */
 int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, int z, DesignationType type);
 
-/* The cancel tool: removes the orders and the construction sites of a layer
- * (roofs, or everything else) in a rectangle (corners in any order). Returns
- * how many orders and sites were removed. */
-int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool roofs);
+/* The cancel tool: removes the orders and the construction sites in a
+ * rectangle (corners in any order). Returns how many orders and sites were
+ * removed. */
+int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, int z);
 
 /* ---- Zones --------------------------------------------------------------- */
 
@@ -322,10 +321,9 @@ bool game_place_workstation(Game *game, WorkstationType type, int x, int y, int 
  * tile. Colonists working there give up. */
 bool game_remove_workstation(Game *game, int index);
 
-/* Removes the construction sites in a rectangle, of roofs (`roofs`) or of
- * structures and workstations; their materials are dropped. Returns how
- * many. */
-int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool roofs);
+/* Removes the construction sites in a rectangle; their materials are
+ * dropped. Returns how many. */
+int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, int z);
 
 /* Removes a bill; the input of a craft in progress that no other bill can
  * finish is dropped on the station's tile. */
@@ -338,8 +336,8 @@ bool game_structure_buildable(const Game *game, StructureType type);
 
 /* Whether a structure may be planned with its head at (x, y), facing
  * `direction`: every tile it would take is off stockpiles and workstations,
- * and passes construction_can_place(); a roof goes over stockpiles and
- * workstations, where construction_can_place_roof() allows. */
+ * and passes construction_can_place() (construction_can_place_roof() for a
+ * roof, on the open tile over the walls). */
 bool game_can_place_structure(const Game *game, StructureType type, int x, int y, int z,
                               Direction direction);
 

@@ -15,6 +15,7 @@ static const SDL_Color TERRAIN_COLORS[TERRAIN_COUNT] = {
     [TERRAIN_RICH_SOIL] = {90, 66, 44, 255},
     [TERRAIN_GRAVEL] = {138, 132, 122, 255},
     [TERRAIN_ROUGH_STONE] = {106, 102, 98, 255},
+    [TERRAIN_GRASS_ROOF] = {196, 168, 96, 255}, /* Its thatch: see render_structures(). */
 };
 
 static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
@@ -51,13 +52,11 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_NONE] = {230, 70, 60, 255},
     [DESIGNATION_MINE] = {250, 140, 60, 255},
     [DESIGNATION_DECONSTRUCT] = {240, 200, 70, 255},
-    [DESIGNATION_REMOVE_ROOF] = {240, 200, 70, 255},
     [DESIGNATION_DIG] = {250, 140, 60, 255},
     [DESIGNATION_DIG_RAMP] = {250, 170, 90, 255},
     [DESIGNATION_DIG_DOWN] = {250, 120, 70, 255},
 };
-/* Roof view: rock overhead (caves), and where a roof could rest. */
-static const SDL_Color NATURAL_ROOF_COLOR = {150, 120, 200, 90};
+/* Where a roof could rest, while planning roofs. */
 static const SDL_Color ROOF_SUPPORT_COLOR = {120, 220, 140, 60};
 static const SDL_Color STOCKPILE_COLOR = {90, 170, 230, 255};
 static const SDL_Color STOCKPILE_REMOVE_COLOR = {230, 70, 60, 255};
@@ -807,8 +806,7 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
     batch_flush(renderer);
 }
 
-void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                         bool roofs)
+void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
     const Designations *designations = &game->designations;
@@ -822,12 +820,11 @@ void render_designations(SDL_Renderer *renderer, const Game *game, const Camera 
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
             DesignationType type = designation_get(designations, x, y, z);
-            if (type == DESIGNATION_NONE || (designation_is_roof(type) && !roofs)) {
+            if (type == DESIGNATION_NONE) {
                 continue;
             }
             SDL_FRect tile = tile_rect(camera, x, y);
-            /* A roof's order around the tile, as a roof covers it all. */
-            SDL_FRect mark = inset(&tile, designation_is_roof(type) ? 0.96f : 0.8f);
+            SDL_FRect mark = inset(&tile, 0.8f);
             outline(renderer, mark, thickness, DESIGNATION_COLORS[type]);
 
             float progress = designation_progress_fraction(designations, map, x, y, z);
@@ -1243,10 +1240,6 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
     }
 }
 
-/* Opacity of built roofs in the roof view: clearly seen, what is under them
- * still shows through. */
-#define ROOF_ALPHA 190
-
 /* Screen rectangle of all the tiles of a structure whose head is at (x, y). */
 static SDL_FRect footprint_rect(const Camera *camera, int x, int y, StructureType type,
                                 Direction direction)
@@ -1272,8 +1265,7 @@ static TileRect visible_heads(const Camera *camera, int width, int height)
     return visible;
 }
 
-void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                       bool roofs)
+void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
     const Map *map = &game->map;
@@ -1290,16 +1282,15 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
             }
         }
     }
-    if (roofs) {
+    /* Built roofs: the floor of their level, over the huts below. */
+    if (map->roof_count > 0) {
         TileRect visible = camera_visible_tiles(camera, map->width, map->height);
         for (int y = visible.y0; y < visible.y1; y++) {
             for (int x = visible.x0; x < visible.x1; x++) {
                 StructureType roof = map_roof(map, x, y, z);
-                SDL_FRect rect = tile_rect(camera, x, y);
                 if (roof != STRUCTURE_NONE) {
-                    render_structure_shape(renderer, &rect, roof, DIRECTION_SOUTH, ROOF_ALPHA);
-                } else if (map_natural_roof(map, x, y, z)) {
-                    fill(renderer, NATURAL_ROOF_COLOR, &rect);
+                    SDL_FRect rect = tile_rect(camera, x, y);
+                    render_structure_shape(renderer, &rect, roof, DIRECTION_SOUTH, 255);
                 }
             }
         }
@@ -1313,8 +1304,7 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
     for (int i = 0; i < CONSTRUCTION_MAX; i++) {
         const ConstructionSite *site = construction_get(constructions, i);
         if (site == NULL || site->z != camera->level || site->x < visible.x0 ||
-            site->x >= visible.x1 || site->y < visible.y0 || site->y >= visible.y1 ||
-            (construction_is_roof(site) && !roofs)) {
+            site->x >= visible.x1 || site->y < visible.y0 || site->y >= visible.y1) {
             continue;
         }
         int needed = 0, delivered = 0;
@@ -1348,7 +1338,7 @@ void render_roof_support(SDL_Renderer *renderer, const Game *game, const Camera 
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            if (map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
+            if (map_is_open(map, x, y, z) &&
                 construction_roof_held(&game->constructions, map, x, y, z)) {
                 SDL_FRect rect = tile_rect(camera, x, y);
                 fill(renderer, ROOF_SUPPORT_COLOR, &rect);
@@ -1501,12 +1491,6 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         SDL_FRect area = inset(&rect, 0.7f);
         render_structure_shape(renderer, &area, STRUCTURE_WALL, DIRECTION_SOUTH, 255);
         outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_DECONSTRUCT]);
-        break;
-    }
-    case RENDER_ICON_REMOVE_ROOF: {
-        SDL_FRect area = inset(&rect, 0.7f);
-        render_structure_shape(renderer, &area, STRUCTURE_ROOF, DIRECTION_SOUTH, 255);
-        outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_REMOVE_ROOF]);
         break;
     }
     case RENDER_ICON_CANCEL: {

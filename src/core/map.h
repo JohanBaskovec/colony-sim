@@ -10,7 +10,8 @@
  * (TERRAIN_OPEN: the air above lower ground, where nobody can stand). One
  * walks on floors; natural slopes lead up to the level above (see
  * map_can_climb()). A floor or rock anywhere above a tile covers it (a
- * natural roof).
+ * natural roof). A built roof is a floor too: laid on the open tile over a
+ * hut's walls (the level above), nobody can stand on it (see map_roof()).
  */
 #ifndef COLONY_CORE_MAP_H
 #define COLONY_CORE_MAP_H
@@ -36,6 +37,7 @@ typedef enum Terrain {
     TERRAIN_GRAVEL,
     TERRAIN_ROUGH_STONE,
     TERRAIN_OPEN, /* No floor: open space over lower ground (impassable). */
+    TERRAIN_GRASS_ROOF, /* A built roof (STRUCTURE_ROOF): too frail to stand on. */
     TERRAIN_COUNT
 } Terrain;
 
@@ -74,6 +76,9 @@ typedef struct TerrainDef {
     float fertility; /* Plant growth multiplier (1.0 = normal soil). */
     bool buildable; /* Whether structures can be built on it. */
     bool stony; /* Whether stones lie about on it (see Map.cobbles). */
+    /* The roof built as this floor (see map_set_roof()), STRUCTURE_NONE for
+     * natural ground. */
+    StructureType built;
 } TerrainDef;
 
 typedef struct RockDef {
@@ -214,11 +219,9 @@ typedef struct Map {
     uint8_t *structure_quality;
     uint16_t *structure_hit_points;
     int structure_counts[STRUCTURE_TYPE_COUNT]; /* Tiles holding each type. */
-    /* Built roofs: the roof's StructureType over each tile (0: none) and its
-     * grade. A layer of its own: a roof covers a bed, a wall or open ground. */
-    uint8_t *roof;
+    /* The grade of each built roof (a terrain, see map_roof()), 0 elsewhere. */
     uint8_t *roof_quality;
-    int roof_count; /* Roofed tiles. */
+    int roof_count; /* Built roof tiles. */
     /* Incremented whenever a structure or a roof changes. Data derived from
      * it (core/room.h) compares it. Not part of map_hash(). */
     uint32_t build_revision;
@@ -385,28 +388,35 @@ void map_set_structure_hit_points(Map *map, int x, int y, int z, int hit_points)
 /* STRUCTURE_NONE out of bounds. */
 StructureType map_structure(const Map *map, int x, int y, int z);
 
-/* The roof built over a tile (STRUCTURE_NONE without one or out of bounds)
- * and its grade. */
+/* The roof built as the floor of a tile (its terrain; STRUCTURE_NONE
+ * without one or out of bounds) and its grade. The roof of a hut is on the
+ * level above its walls: it covers the tiles under it (map_roof_over()). */
 StructureType map_roof(const Map *map, int x, int y, int z);
 ItemQuality map_roof_quality(const Map *map, int x, int y, int z);
 
-/* Builds a roof (a type for which structure_is_roof()) of a grade over a
- * tile, or removes it (STRUCTURE_NONE). Other types and out-of-bounds tiles
- * are ignored. */
+/* Builds a roof (a type for which structure_is_roof()) of a grade as the
+ * floor of an open tile, or removes the roof of a tile (STRUCTURE_NONE: the
+ * tile is open again). Other types, tiles with something else on them and
+ * out-of-bounds tiles are ignored. */
 void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality);
 
-/* Whether a roof over the tile would rest on something: a wall (a structure
+/* Whether a roof on the tile would rest on something: a wall (a structure
  * that blocks movement: walls, props) or rock within ROOF_SUPPORT_RANGE
- * tiles. */
+ * tiles on the level below. */
 bool map_roof_supported(const Map *map, int x, int y, int z);
+
+/* The built roof that covers a tile: the first floor above it, when that is
+ * a roof (STRUCTURE_NONE otherwise). */
+StructureType map_roof_over(const Map *map, int x, int y, int z);
 
 /* Whether the tile has a ceiling to hold up: no rock on it, and right above
  * it the ground of the level over it (a floor) or rock (a dug gallery). */
 bool map_has_ceiling(const Map *map, int x, int y, int z);
 
-/* Whether a ceiling over the tile is held up: the same rule as roofs, rock
- * or a wall (a prop...) within ROOF_SUPPORT_RANGE tiles on its level (see
- * map_roof_supported()). Tiles without a ceiling need nothing. */
+/* Whether a ceiling over the tile is held up: rock or a wall (a prop...)
+ * within ROOF_SUPPORT_RANGE tiles on its level. A built roof is the ceiling
+ * of the tile under it (see map_roof_supported()). Tiles without a ceiling
+ * need nothing. */
 bool map_ceiling_supported(const Map *map, int x, int y, int z);
 
 /* Whether digging the rock of (x, y, z) out would leave every ceiling around
@@ -414,12 +424,17 @@ bool map_ceiling_supported(const Map *map, int x, int y, int z);
  * (a ramp), leaving it no ceiling. */
 bool map_dig_keeps_ceilings(const Map *map, int x, int y, int z, bool opens_above);
 
-/* Whether something natural covers the tile: a tile without rock with a
- * floor or rock somewhere above it (a cave, a gallery dug into a hill). */
-bool map_natural_roof(const Map *map, int x, int y, int z);
+/* The level of what covers a tile without rock: the first floor or rock
+ * above it (a built roof, a cave, a gallery dug into a hill); -1 when
+ * nothing does (open sky), when the tile is rock or out of bounds. */
+int map_cover_level(const Map *map, int x, int y, int z);
 
-/* A built roof or a natural one. */
+/* Whether something covers the tile (map_cover_level() is not -1). */
 bool map_is_roofed(const Map *map, int x, int y, int z);
+
+/* Whether it is covered by something natural, not a built roof (see
+ * map_roof_over()). */
+bool map_natural_roof(const Map *map, int x, int y, int z);
 
 /* False when out of bounds, on impassable terrain (deep water, no floor), on
  * a rock wall or on a structure that blocks movement. */

@@ -14,9 +14,10 @@
  * structure's origin: where its grade and hit points are kept, where a
  * settler lies down.
  *
- * A roof is built over a tile and whatever stands on it (a bed, a wall, a
- * stockpile): it lives in a map layer of its own (see map_roof()), and must
- * rest on a wall or rock nearby (ROOF_SUPPORT_RANGE).
+ * A roof is built as the floor of the open tile over a hut (the level above
+ * its walls, see map_roof()): it covers whatever stands under it (a bed, a
+ * wall, a stockpile), nobody stands on it, and it must rest on a wall or
+ * rock nearby on the level below (ROOF_SUPPORT_RANGE).
  *
  * A built structure has a grade (the builder's level, capped by the grade of
  * its materials) and hit points (more for a better grade). Some wear by
@@ -90,7 +91,7 @@ typedef struct StructureDef {
      * when the work is 0. Asked for below STRUCTURE_REFRESH_BELOW. */
     StructureMaterial refresh_material;
     float refresh_work;
-    bool roof; /* Built in the roof layer, over the tile (see map_roof()). */
+    bool roof; /* Built as a floor, over the walls (see map_roof()). */
 } StructureDef;
 
 /* A roof tile needs a wall (a structure that blocks movement) or rock at
@@ -114,7 +115,7 @@ bool structure_is_bed(StructureType type);
 /* Whether it is a door: passable, but it closes a room (core/room.h). */
 bool structure_is_door(StructureType type);
 
-/* Whether it is a roof (built in the roof layer). */
+/* Whether it is a roof (built as a floor over the walls). */
 bool structure_is_roof(StructureType type);
 
 /* Whether it is a ladder: built where it leads up (map_ladder_fits()). */

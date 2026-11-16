@@ -14,7 +14,7 @@ static bool init_flat_game(Game *game)
 {
     NewGameParams params;
     game_default_params(&params);
-    params.world.flat = true; /* One level, as the tiles below expect. */
+    params.world.flat = true; /* One level of ground, open air over it. */
     params.world.seed = 5;
     params.world.width = 48;
     params.world.height = 48;
@@ -23,7 +23,7 @@ static bool init_flat_game(Game *game)
         return false;
     }
     Map *map = &game->map;
-    for (size_t i = 0; i < map_tile_count(map); i++) {
+    for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->cobbles[i] = MAP_STONES_MAX; /* Cobbles everywhere, no flint. */
         map->flint[i] = 0;

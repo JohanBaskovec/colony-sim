@@ -14,10 +14,8 @@ bool constructions_init(Constructions *constructions, int width, int height, int
     }
     size_t tiles = (size_t)width * (size_t)height * (size_t)depth;
     constructions->at = calloc(tiles, sizeof(*constructions->at));
-    constructions->roof_at = calloc(tiles, sizeof(*constructions->roof_at));
     constructions->workstation_tiles = calloc(tiles, 1);
-    if (constructions->at == NULL || constructions->roof_at == NULL ||
-        constructions->workstation_tiles == NULL) {
+    if (constructions->at == NULL || constructions->workstation_tiles == NULL) {
         constructions_free(constructions);
         return false;
     }
@@ -31,7 +29,6 @@ bool constructions_init(Constructions *constructions, int width, int height, int
 void constructions_free(Constructions *constructions)
 {
     free(constructions->at);
-    free(constructions->roof_at);
     free(constructions->workstation_tiles);
     memset(constructions, 0, sizeof(*constructions));
 }
@@ -56,23 +53,17 @@ int construction_at(const Constructions *constructions, int x, int y, int z)
     return (int)constructions->at[index_of(constructions, x, y, z)] - 1;
 }
 
-int construction_roof_at(const Constructions *constructions, int x, int y, int z)
-{
-    if (!in_bounds(constructions, x, y, z)) {
-        return CONSTRUCTION_NONE;
-    }
-    return (int)constructions->roof_at[index_of(constructions, x, y, z)] - 1;
-}
-
-int construction_in_layer(const Constructions *constructions, int x, int y, int z, bool roof)
-{
-    return roof ? construction_roof_at(constructions, x, y, z)
-                : construction_at(constructions, x, y, z);
-}
-
 bool construction_is_roof(const ConstructionSite *site)
 {
     return site->workstation == 0 && structure_is_roof((StructureType)site->type);
+}
+
+int construction_worked_from(const Constructions *constructions, int x, int y, int z,
+                             bool overhead)
+{
+    int index = construction_at(constructions, x, y, overhead ? z + 1 : z);
+    const ConstructionSite *site = construction_get(constructions, index);
+    return site != NULL && construction_is_roof(site) == overhead ? index : CONSTRUCTION_NONE;
 }
 
 static ConstructionSite *site_get(Constructions *constructions, int index)
@@ -109,11 +100,11 @@ bool construction_roof_held(const Constructions *constructions, const Map *map, 
     if (map_roof_supported(map, x, y, z)) {
         return true;
     }
-    /* A wall planned in reach will hold it up. */
+    /* A wall planned in reach, on the level below, will hold it up. */
     for (int dy = -ROOF_SUPPORT_RANGE; dy <= ROOF_SUPPORT_RANGE; dy++) {
         for (int dx = -ROOF_SUPPORT_RANGE; dx <= ROOF_SUPPORT_RANGE; dx++) {
-            const ConstructionSite *site =
-                construction_get(constructions, construction_at(constructions, x + dx, y + dy, z));
+            const ConstructionSite *site = construction_get(
+                constructions, construction_at(constructions, x + dx, y + dy, z - 1));
             if (site != NULL && !site->refresh && structure_blocks((StructureType)site->type)) {
                 return true;
             }
@@ -125,14 +116,15 @@ bool construction_roof_held(const Constructions *constructions, const Map *map, 
 bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
                                  int y, int z)
 {
-    if (!in_bounds(constructions, x, y, z) || !map_in_bounds(map, x, y, z)) {
+    if (!in_bounds(constructions, x, y, z) || !map_in_bounds(map, x, y, z - 1)) {
         return false;
     }
-    size_t index = map_index(map, x, y, z);
-    return terrain_def((Terrain)map->terrain[index])->buildable &&
-           map->rock[index] == ROCK_NONE && map->roof[index] == STRUCTURE_NONE &&
-           !map_plant_blocks_building(map, x, y, z) &&
-           construction_roof_at(constructions, x, y, z) == CONSTRUCTION_NONE &&
+    size_t below = map_index(map, x, y, z - 1);
+    return map_is_open(map, x, y, z) && !map_has_ceiling(map, x, y, z) &&
+           map_has_floor(map, x, y, z - 1) && map->rock[below] == ROCK_NONE &&
+           map_roof(map, x, y, z - 1) == STRUCTURE_NONE &&
+           map_climb_cost(map, x, y, z - 1) == 0.0f && /* Nor the way up of a slope or ladder. */
+           construction_at(constructions, x, y, z) == CONSTRUCTION_NONE &&
            construction_roof_held(constructions, map, x, y, z);
 }
 
@@ -216,13 +208,9 @@ static void mark_tiles(Constructions *constructions, const ConstructionSite *sit
         if (!in_bounds(constructions, x, y, z)) {
             continue;
         }
-        if (construction_is_roof(site)) {
-            constructions->roof_at[index_of(constructions, x, y, z)] = value;
-        } else {
-            constructions->at[index_of(constructions, x, y, z)] = value;
-            constructions->workstation_tiles[index_of(constructions, x, y, z)] =
-                value != 0 && site->workstation != 0;
-        }
+        constructions->at[index_of(constructions, x, y, z)] = value;
+        constructions->workstation_tiles[index_of(constructions, x, y, z)] =
+            value != 0 && site->workstation != 0;
     }
 }
 

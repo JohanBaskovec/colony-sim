@@ -62,7 +62,8 @@ typedef enum TemperatureMaterial {
     TEMPERATURE_MATERIAL_WALL,
     TEMPERATURE_MATERIAL_DOOR,
     TEMPERATURE_MATERIAL_ROCK,
-    /* Open space under the sky (core/map.h): the outdoor air, as it is. */
+    /* Open space under the sky (core/map.h), and roofs out in it: the
+     * outdoor air, as it is. */
     TEMPERATURE_MATERIAL_OPEN,
     TEMPERATURE_MATERIAL_COUNT
 } TemperatureMaterial;

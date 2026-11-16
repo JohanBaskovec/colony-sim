@@ -4,9 +4,12 @@
  * built.
  *
  * Builders and haulers bring the materials, one kind at a time; a builder
- * then does the work, always from a neighboring tile (as for walls, which cannot be stood on once
- * built). When the work is done the structure appears on the map
- * (map_set_structure()), or the workstation is placed, and the site is gone.
+ * then does the work, always from a neighboring tile (as for walls, which
+ * cannot be stood on once built). A roof is planned on the open tile over a
+ * hut's walls, the level above: it is brought to and built from beside the
+ * tile under it, overhead (see construction_worked_from()). When the work is
+ * done the structure appears on the map (map_set_structure(),
+ * map_set_roof()), or the workstation is placed, and the site is gone.
  * A blocking structure (wall) pushes the items lying on its tile to a
  * neighboring open tile.
  *
@@ -26,9 +29,8 @@
  *
  * A site takes every tile of its structure (a bed: its head and its foot);
  * its position is the structure's head. Sites are kept in a fixed list with
- * dense layers of indices the size of the map: one for structures and
- * workstations, one for roofs, so that a roof can be planned over the site
- * of a wall or a bed. Removing a site gives its delivered materials back.
+ * a dense layer of indices the size of the map. Removing a site gives its
+ * delivered materials back.
  */
 #ifndef COLONY_CORE_CONSTRUCTION_H
 #define COLONY_CORE_CONSTRUCTION_H
@@ -67,10 +69,8 @@ typedef struct Constructions {
     int width;
     int height;
     int depth;
-    /* Site index + 1 on every tile of a site, 0 when none: structures and
-     * workstations, and roofs. */
+    /* Site index + 1 on every tile of a site, 0 when none. */
     uint16_t *at;
-    uint16_t *roof_at;
     /* 1 on the tile of a workstation's site: zones leave it out, as they do
      * the tiles of stations (see game_add_stockpile_rect()). */
     uint8_t *workstation_tiles;
@@ -86,39 +86,38 @@ typedef struct Constructions {
 bool constructions_init(Constructions *constructions, int width, int height, int depth);
 void constructions_free(Constructions *constructions);
 
-/* Index of the site of a structure or a workstation on a tile, or
- * CONSTRUCTION_NONE. */
+/* Index of the site on a tile, or CONSTRUCTION_NONE. */
 int construction_at(const Constructions *constructions, int x, int y, int z);
 
-/* Index of the site of a roof over a tile, or CONSTRUCTION_NONE. */
-int construction_roof_at(const Constructions *constructions, int x, int y, int z);
-
-/* The site on a tile, of a roof (`roof`) or of the rest; CONSTRUCTION_NONE. */
-int construction_in_layer(const Constructions *constructions, int x, int y, int z, bool roof);
-
-/* Whether a site is a roof's (it lies in the roof layer). */
+/* Whether a site is a roof's. */
 bool construction_is_roof(const ConstructionSite *site);
+
+/* The site worked on from beside (x, y, z) (CONSTRUCTION_NONE): the one on
+ * the tile when it is not a roof's, or (`overhead`) the roof's over it, on
+ * (x, y, z + 1). */
+int construction_worked_from(const Constructions *constructions, int x, int y, int z,
+                             bool overhead);
 
 /* NULL for an unused or invalid index. */
 const ConstructionSite *construction_get(const Constructions *constructions, int index);
 ConstructionSite *construction_get_mutable(Constructions *constructions, int index);
 
 /* Whether a structure may be planned on a tile: passable buildable ground
- * (map_is_buildable(): not a slope), no structure or site yet (a roof or its
- * site above does not count), no tree (grass and bushes are cleared by the
- * builder first). */
+ * (map_is_buildable(): not a slope), no structure or site yet, no tree
+ * (grass and bushes are cleared by the builder first). */
 bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y,
                             int z);
 
-/* Whether a roof over a tile would be held up: by a wall or rock in reach
- * (map_roof_supported()), or by the site of a wall in reach, so that a whole
- * hut can be planned at once. */
+/* Whether a roof on a tile would be held up: by a wall or rock in reach on
+ * the level below (map_roof_supported()), or by the site of a wall there, so
+ * that a whole hut can be planned at once. */
 bool construction_roof_held(const Constructions *constructions, const Map *map, int x, int y,
                             int z);
 
-/* Whether a roof may be planned over a tile: buildable ground, no rock, no
- * tree, no roof nor roof site yet, held up (construction_roof_held()).
- * Whatever stands or is planned there (a bed, a wall) stays under it. */
+/* Whether a roof may be planned on a tile: open, with open sky over it and
+ * a floor without rock under it (not a roof, nor a slope or a ladder that
+ * leads up through it), no site yet, held up (construction_roof_held()).
+ * Whatever stands or is planned under it (a bed, a wall) stays. */
 bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
                                  int y, int z);
 

@@ -719,8 +719,7 @@ static void finish_constructions_now(Game *game)
         }
         ConstructionSite done = *site; /* Gone from the list once built. */
         int length = construction_length(&done);
-        for (int part = 0; !structure_is_roof((StructureType)done.type) && part < length;
-             part++) {
+        for (int part = 0; part < length; part++) {
             int x, y, z;
             construction_tile(&done, part, &x, &y, &z);
             if (gather_clear_work(&game->map, x, y, z) > 0.0f) {
@@ -783,8 +782,8 @@ void game_debug_sadden(Game *game)
     }
 }
 
-/* GameDebug.instant_deconstruct: every order to take a structure apart or a
- * roof down is carried out, as a settler's work would (a refresh site on a
+/* GameDebug.instant_deconstruct: every order to take a structure apart (or
+ * a roof down) is carried out, as a settler's work would (a refresh site on a
  * structure taken apart goes too, its materials dropped). */
 static void deconstruct_now(Game *game)
 {
@@ -797,16 +796,14 @@ static void deconstruct_now(Game *game)
         for (int y = 0; y < map->height; y++) {
             for (int x = 0; x < map->width; x++) {
                 DesignationType type = designation_get(designations, x, y, z);
-                if (type != DESIGNATION_DECONSTRUCT && type != DESIGNATION_REMOVE_ROOF) {
+                if (type != DESIGNATION_DECONSTRUCT) {
                     continue;
                 }
                 if (!designation_can_apply(map, x, y, z, type)) {
                     designation_set(designations, map, x, y, z, DESIGNATION_NONE);
                     continue;
                 }
-                int site = type == DESIGNATION_DECONSTRUCT
-                               ? construction_at(&game->constructions, x, y, z)
-                               : CONSTRUCTION_NONE;
+                int site = construction_at(&game->constructions, x, y, z);
                 designation_add_work(designations, map, &game->items, x, y, z,
                                      designation_work_needed(designations, map, x, y, z),
                                      GAME_DEBUG_BUILD_LEVEL, NULL);
@@ -834,14 +831,15 @@ static void drop_beside(Game *game, int x, int y, int z, ItemStack stack)
     }
 }
 
-/* A gallery filled up again: the sites, stations and zones on it go (what
- * they held is put beside it). Settlers caught there step out by themselves
- * (see colonist_tick()). */
+/* A gallery filled up again: the sites, stations and zones on it go (and
+ * the site of a roof over it; what they held is put beside it). Settlers
+ * caught there step out by themselves (see colonist_tick()). */
 static void clear_caved_in(Game *game, TilePos tile)
 {
     int x = tile.x, y = tile.y, z = tile.z;
-    for (int roofs = 0; roofs <= 1; roofs++) {
-        int site = construction_in_layer(&game->constructions, x, y, z, roofs != 0);
+    for (int overhead = 0; overhead <= 1; overhead++) {
+        int site = overhead ? construction_worked_from(&game->constructions, x, y, z, true)
+                            : construction_at(&game->constructions, x, y, z);
         ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
         int count = site != CONSTRUCTION_NONE
                         ? constructions_remove(&game->constructions, site, returned)
@@ -1190,32 +1188,21 @@ int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, int z, Desig
     int changed = 0;
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            DesignationType old = designation_get(&game->designations, x, y, z);
             if (!designation_ground_free(&game->constructions, &game->workstations,
                                          &game->stockpiles, type, x, y, z)) {
                 continue;
             }
-            if (old == DESIGNATION_NONE || designation_is_roof(old) == designation_is_roof(type)) {
-                changed += designation_set(&game->designations, &game->map, x, y, z, type);
-            }
+            changed += designation_set(&game->designations, &game->map, x, y, z, type);
         }
     }
     return changed;
 }
 
-int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool roofs)
+int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, int z)
 {
-    int removed = 0;
-    for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
-        for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            DesignationType old = designation_get(&game->designations, x, y, z);
-            if (old != DESIGNATION_NONE && designation_is_roof(old) == roofs) {
-                removed +=
-                    designation_set(&game->designations, &game->map, x, y, z, DESIGNATION_NONE);
-            }
-        }
-    }
-    return removed + game_remove_blueprints_rect(game, x0, y0, x1, y1, z, roofs);
+    int removed = designations_set_rect(&game->designations, &game->map, x0, y0, x1, y1, z,
+                                        DESIGNATION_NONE);
+    return removed + game_remove_blueprints_rect(game, x0, y0, x1, y1, z);
 }
 
 /* ---- Zones --------------------------------------------------------------- */
@@ -1414,12 +1401,12 @@ bool game_remove_workstation(Game *game, int index)
     return true;
 }
 
-int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool roofs)
+int game_remove_blueprints_rect(Game *game, int x0, int y0, int x1, int y1, int z)
 {
     int removed = 0;
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            int site = construction_in_layer(&game->constructions, x, y, z, roofs);
+            int site = construction_at(&game->constructions, x, y, z);
             if (game_remove_construction(game, site)) {
                 removed++;
             }
@@ -1462,9 +1449,7 @@ bool game_can_place_structure(const Game *game, StructureType type, int x, int y
     if (length <= 0 || (unsigned)direction >= DIRECTION_COUNT) {
         return false;
     }
-    /* A roof goes over anything: a stockpile or a workstation under a roof is
-     * the point. */
-    for (int part = 0; !structure_is_roof(type) && part < length; part++) {
+    for (int part = 0; part < length; part++) {
         int px = x + part * direction_dx(direction), py = y + part * direction_dy(direction);
         if (stockpile_at(&game->stockpiles, px, py, z) != STOCKPILE_NONE ||
             workstation_at(&game->workstations, px, py, z) != WORKSTATION_NONE) {

@@ -16,7 +16,7 @@ static bool init_small_game(Game *game, uint64_t seed)
     return game_init(game, &params);
 }
 
-/* The same on a single level (see make_grove()). */
+/* The same on a single level of ground (see make_grove()). */
 static bool init_flat_game(Game *game, uint64_t seed)
 {
     NewGameParams params;
@@ -84,7 +84,7 @@ static void test_settlers_arrive_near_food(void)
 /* Soil everywhere: a grove on the west half, a meadow on the east. */
 static void make_grove(Map *map)
 {
-    for (size_t i = 0; i < map_tile_count(map); i++) {
+    for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->rock[i] = ROCK_NONE;
         map->structure[i] = STRUCTURE_NONE;

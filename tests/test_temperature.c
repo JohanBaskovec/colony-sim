@@ -22,7 +22,7 @@ static bool init_flat_game(Game *game, uint64_t tick)
 {
     NewGameParams params;
     game_default_params(&params);
-    params.world.flat = true; /* One level, as the tiles below expect. */
+    params.world.flat = true; /* One level of ground, open air over it. */
     params.world.seed = 5;
     params.world.width = 40;
     params.world.height = 40;
@@ -31,7 +31,7 @@ static bool init_flat_game(Game *game, uint64_t tick)
         return false;
     }
     Map *map = &game->map;
-    for (size_t i = 0; i < map_tile_count(map); i++) {
+    for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
@@ -57,7 +57,8 @@ static void run_hours(Game *game, float hours)
 }
 
 /* A hut: walls around (x0, y0)-(x1, y1) (their tiles included), a door in
- * the middle of the south wall, roofed over everything when `roofed`. */
+ * the middle of the south wall, roofed over everything (on the level
+ * above) when `roofed`. */
 static void build_hut(Game *game, int x0, int y0, int x1, int y1, bool roofed)
 {
     for (int y = y0; y <= y1; y++) {
@@ -68,7 +69,7 @@ static void build_hut(Game *game, int x0, int y0, int x1, int y1, bool roofed)
                 map_set_structure(&game->map, x, y, 0, door ? STRUCTURE_DOOR : STRUCTURE_WALL);
             }
             if (roofed) {
-                map_set_roof(&game->map, x, y, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+                map_set_roof(&game->map, x, y, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
             }
         }
     }
@@ -154,7 +155,7 @@ static void test_materials_and_covers(void)
     map_set_structure(map, 5, 5, 0, STRUCTURE_WALL);
     map_set_structure(map, 6, 5, 0, STRUCTURE_DOOR);
     map_set_structure(map, 7, 5, 0, STRUCTURE_GRASS_BED);
-    map_set_roof(map, 6, 6, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(map, 6, 6, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     CHECK_EQ_INT(temperature_material(map, 1, 1, 0), TEMPERATURE_MATERIAL_ROCK);
     CHECK_EQ_INT(temperature_material(map, -1, 1, 0), TEMPERATURE_MATERIAL_ROCK);
     CHECK_EQ_INT(temperature_material(map, 5, 5, 0), TEMPERATURE_MATERIAL_WALL);
@@ -162,6 +163,9 @@ static void test_materials_and_covers(void)
     CHECK_EQ_INT(temperature_material(map, 8, 8, 0), TEMPERATURE_MATERIAL_AIR);
     CHECK_EQ_INT(temperature_cover(map, 6, 6, 0), TEMPERATURE_COVER_ROOFED);
     CHECK_EQ_INT(temperature_cover(map, 8, 8, 0), TEMPERATURE_COVER_OPEN);
+    /* The roof itself is out in the open air, as the air around it. */
+    CHECK_EQ_INT(temperature_material(map, 6, 6, 1), TEMPERATURE_MATERIAL_OPEN);
+    CHECK_EQ_INT(temperature_material(map, 7, 6, 1), TEMPERATURE_MATERIAL_OPEN);
     /* Rock stays at the ground's temperature. */
     run_hours(&game, 0.1f);
     CHECK_NEAR(temperature_at(&game.temperatures, 1, 1, 0), TEMPERATURE_GROUND, 1e-6);
@@ -173,7 +177,7 @@ static void test_rot_rate_on_a_tile(void)
     Game game;
     REQUIRE(init_flat_game(&game, mid_season(SEASON_SPRING)));
     Map *map = &game.map;
-    map_set_roof(map, 6, 6, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(map, 6, 6, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 8, 8, 0, false),
                item_rot_rate(temperature_at(&game.temperatures, 8, 8, 0), false), 1e-6);
     CHECK_NEAR(temperature_rot_rate(&game.temperatures, map, 6, 6, 0, false),
@@ -193,8 +197,14 @@ static void test_levels_keep_their_heat(void)
 {
     Map map;
     Temperatures temperatures;
-    REQUIRE(map_init(&map, 16, 16, 2));
-    /* A closed, roofed room of rock walls on level 1, none on level 0. */
+    REQUIRE(map_init(&map, 16, 16, 3));
+    /* A closed room of rock walls on a floor of level 1, roofed on level 2;
+     * none on level 0. */
+    for (int y = 4; y <= 10; y++) {
+        for (int x = 4; x <= 10; x++) {
+            map_set_terrain(&map, x, y, 1, TERRAIN_SOIL);
+        }
+    }
     for (int i = 4; i <= 10; i++) {
         map_set_rock(&map, i, 4, 1, ROCK_GRANITE);
         map_set_rock(&map, i, 10, 1, ROCK_GRANITE);
@@ -203,15 +213,16 @@ static void test_levels_keep_their_heat(void)
     }
     for (int y = 5; y < 10; y++) {
         for (int x = 5; x < 10; x++) {
-            map_set_roof(&map, x, y, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+            map_set_roof(&map, x, y, 2, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
         }
     }
     const float outdoor = 10.0f;
     REQUIRE(temperatures_init(&temperatures, &map, outdoor));
-    CHECK_EQ_INT(temperatures.depth, 2);
+    CHECK_EQ_INT(temperatures.depth, 3);
+    CHECK_EQ_INT(temperature_cover(&map, 7, 7, 1), TEMPERATURE_COVER_ROOFED);
     CHECK_NEAR(temperature_at(&temperatures, 4, 4, 1), TEMPERATURE_GROUND, 1e-6); /* Rock. */
     CHECK_NEAR(temperature_at(&temperatures, 4, 4, 0), outdoor, 1e-6);
-    CHECK_NEAR(temperature_at(&temperatures, 4, 4, 2), TEMPERATURE_GROUND, 1e-6); /* Out. */
+    CHECK_NEAR(temperature_at(&temperatures, 4, 4, 3), TEMPERATURE_GROUND, 1e-6); /* Out. */
     /* Heat on level 1, in the room: it spreads there, never down to level 0. */
     for (uint64_t tick = 0; tick < (uint64_t)TICKS_PER_HOUR; tick++) {
         temperatures_add_heat(&temperatures, 7, 7, 1, 0.05f);
@@ -258,7 +269,7 @@ static void test_cache_follows_the_map(void)
     game_tick(&game);
     CHECK_EQ_INT(cached_kind(&game, 5, 5),
                  kind_of(TEMPERATURE_MATERIAL_WALL, TEMPERATURE_COVER_OPEN));
-    map_set_roof(map, 5, 5, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(map, 5, 5, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     game_tick(&game);
     CHECK_EQ_INT(cached_kind(&game, 5, 5),
                  kind_of(TEMPERATURE_MATERIAL_WALL, TEMPERATURE_COVER_ROOFED));

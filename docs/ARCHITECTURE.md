@@ -163,9 +163,10 @@ cliff a ramp cannot be cut into (rock) or in a pit. A slope covered by a
 floor or rock leads nowhere. Slopes are not buildable (`map_is_buildable()`).
 Stairs come with floors and storeys.
 
-A floor or rock **anywhere above** a tile covers it: `map_natural_roof()`
-(caves and galleries dug into hills). It replaced the earlier one-level
-rule (rock all around a tile).
+A floor or rock **anywhere above** a tile covers it: `map_is_roofed()`
+(caves and galleries dug into hills, and built roofs, which are floors too:
+see *Roofs*); `map_natural_roof()` when that cover is not a built roof. It
+replaced the earlier one-level rule (rock all around a tile).
 
 Hashes only mix in a level when it is not 0 (or when the map has more than
 one level), the slope layer once a slope exists.
@@ -183,10 +184,11 @@ ground is rock all the way down. Where soft ground or shallow water rises
 one level to an orthogonal neighbor, the lower tile is a slope (one wades up
 the bank to the beach, then walks up to the plains); rock outcrops, deep
 water and steeper rises stay cliffs. The levels under the ground are solid
-until dug (see *Digging*). The map has as many levels as
-the highest ground needs (about 12 on default maps, 4 of them underground). `WorldGenParams.flat` makes the old single-level world, for tests and
-for benchmarks that compare with older versions (`flat` argument of the
-benchmarks).
+until dug (see *Digging*). The map has as many levels as the highest ground
+needs, plus one open level over it where roofs go (about 13 on default
+maps, 4 of them underground). `WorldGenParams.flat` makes a world of one
+level of ground (and the open level over it), for tests and for benchmarks
+that compare with older versions (`flat` argument of the benchmarks).
 
 The layers:
 
@@ -256,8 +258,9 @@ or rock right over it has a ceiling (`map_has_ceiling()`), held up by the
 roofs' rule: rock or a structure that blocks movement (a wall, a branch
 prop, `STRUCTURE_PROP`) within `ROOF_SUPPORT_RANGE` (2) tiles on its level
 (`map_ceiling_supported()`): a gallery one or two tiles wide always holds, a
-room up to 4 × 4 inside rock too, a wider one needs props. The roof view's
-support overlay shows the same reach. Diggers never dig what would leave a
+room up to 4 × 4 inside rock too, a wider one needs props. A built roof is
+the ceiling of the tile under it, held up the same way. Diggers never dig
+what would leave a
 ceiling around without support (`map_dig_keeps_ceilings()`,
 `designation_waits_for_support()`): such orders are skipped by the job
 search and say so in the tile inspector; the work stamp includes
@@ -769,35 +772,46 @@ it gives (cut grass, its twigs and branches, its food, with quality from
 the builder's gathering level). Only then does the construction work start.
 `map_set_structure()` still clears any plant left, as a safety net.
 
-**Roofs**: `STRUCTURE_ROOF` is planned and built like any structure (a
-rectangle filled with sites), but lives in a map layer of its own
-(`Map.roof`, `Map.roof_quality`, `map_set_roof()`): a roof covers a bed, a
-wall, a stockpile or a workstation, and is not cleared of plants. Its sites
-have a layer of their own too (`Constructions.roof_at`,
-`construction_roof_at()`, `construction_is_roof()`), so a roof can be
-planned over the site of a wall or a bed and the other way round; builders
-reserve a roof's site in a kind of its own (`RESERVATION_ROOF_CONSTRUCTION`)
-and look at both sites of each tile next to them, the structure's first. A
-roof tile needs a wall or rock within `ROOF_SUPPORT_RANGE` (2) tiles; a
-planned wall counts when planning (`construction_roof_held()`), so a whole
-hut is planned at once, but the work waits until a wall stands
-(`construction_can_work()`). Taking a roof down is an order of its own
-(`DESIGNATION_REMOVE_ROOF`, half the materials back); *take apart* only
-deals with structures. Orders and sites belong to a layer
-(`designation_is_roof()`): `game_designate_rect()` leaves orders of the other
-layer alone and `game_cancel_rect()` (the cancel tool) removes one layer's.
-When the last support of a roof goes (a wall taken apart or fallen apart, a
-door in its place, rock dug out), the roof falls in (`core/roof.h`): half its
-materials drop on the tile, an order to take it down goes, and the game
-raises a notice. A branch prop holds roofs up as a wall does (open
-shelters). `roofs_collapse()` runs every tick after the settlers and only
-checks the roofs and ceilings within `ROOF_SUPPORT_RANGE` of what the map
-logged as changed (`Map.build_log`, `Map.topology_log`), or every roof and
-ceiling of every level when the logs overflowed; the `RoofWatch` it keeps is derived, not hashed. A light grass
-roof hurts nobody. `map_natural_roof()` covers tiles with a
-floor or rock somewhere above them (see *World representation*).
-`map_hash()` only hashes the roof layers once a roof exists, so
-older hashes stay valid.
+**Roofs** work like floors: a built roof is the floor of the open tile over
+a hut, on the level above its walls, a terrain of its own
+(`TERRAIN_GRASS_ROOF`, whose `TerrainDef.built` is the `STRUCTURE_ROOF` it
+was built as; `map_roof()`, `map_set_roof()`), with its grade in
+`Map.roof_quality`. Being a floor, it covers what is under it (a bed, a
+wall, a stockpile, a workstation: `map_is_roofed()`, `map_roof_over()`), and
+nobody stands on it: a thatch of grass on branch rafters is too frail
+(future plank floors will be walked on). There is no roof view: the player
+goes up a level to plan roofs, see them and order them taken down.
+`STRUCTURE_ROOF` is planned like any structure (a rectangle filled with
+sites), on open tiles with open sky over them and a floor under them that
+is no roof, slope or ladder (`construction_can_place_roof()`). Its sites lie
+in the same index layer as the others, on the roof's tile, so a roof can be
+planned over the site of a wall or a bed and the other way round. Builders
+work from below, overhead, as for anything else from a tile next to the
+one under the site: `construction_worked_from()` gives the site worked on
+from beside a tile, the structure's on it or (`overhead`) the roof's over
+it, and the searches look at both, the structure's first. A roof tile needs
+a wall, a prop or rock within `ROOF_SUPPORT_RANGE` (2) tiles on the level
+below (`map_roof_supported()`); a planned wall counts when planning
+(`construction_roof_held()`), so a whole hut is planned at once, but the
+work waits until a wall stands (`construction_can_work()`). *Take apart*
+(`DESIGNATION_DECONSTRUCT`) takes roofs down too, ordered on the roof's tile:
+the worker stands on the level below beside it (`work_reach()` in
+`colonist.c`; the order search also looks at the tile over each neighbor,
+and `open_job_reachable()` at the regions of the level below), half the
+materials fall onto the floor under it. Since a roof is the ceiling of the
+tile under it, it follows the ceilings' rule: when its last support goes (a
+wall taken apart or fallen apart, a door in its place, rock dug out), the
+roof falls in (`core/roof.h`): its tile is open again, half its materials
+drop on the floor under it, an order to take it down goes, and the game
+raises a notice; and diggers do not dig out rock that alone holds up a roof.
+A branch prop holds roofs up as a wall does (open shelters).
+`roofs_collapse()` runs every tick after the settlers and only checks the
+tiles within `ROOF_SUPPORT_RANGE` of what the map logged as changed
+(`Map.build_log`, `Map.topology_log`), or every tile of every level when the
+logs overflowed; the `RoofWatch` it keeps is derived, not hashed. A light
+grass roof hurts nobody. The roof itself is out in the open air, for heat
+(`TEMPERATURE_MATERIAL_OPEN`). `map_hash()` only hashes the grade layer once
+a roof exists, so older hashes stay valid.
 
 **Rooms** (`core/room.h`, owned by `Game`): every tile without rock, a wall
 or a door belongs to an area (flood fill over orthogonal neighbors, water
@@ -819,7 +833,8 @@ temperature; every tick `temperatures_tick()` updates one band of rows in
 place, a whole pass every `TEMPERATURE_SWEEP_TICKS` (100), explicitly: a
 tile moves toward its four neighbors at the lower conductance of the two
 (air 4/h, door 1.5, wall and rock 0.5), toward the outdoor air at a rate
-set by its cover (open sky 6/h, built roof 0.3, natural roof none) and,
+set by its cover (open sky 6/h, built roof 0.3, natural roof none; the
+first floor above a tile decides) and,
 under a natural roof, toward the ground (10 °C, 0.3/h). Rock stays at the
 ground's temperature; open space under the sky is the outdoor air
 (`TEMPERATURE_MATERIAL_OPEN`): a tile with a side open to it exchanges heat
@@ -1263,13 +1278,14 @@ selected (`build_like_selection()`).
 The structure tool (`APP_TOOL_STRUCTURE`) previews the sites a drag would
 place (`render_structure_preview()`); structures and sites are drawn by
 `render_structures()`.
-Roofs would hide what is under them, so they are only drawn in the roof view
-(`app_roof_view()`: Y, `App.show_roofs`, or while the roof tool or the
-order to take roofs down is active): built roofs, the sites and orders of
-roofs, natural roofs; while planning roofs, the tiles a roof could rest on
-(`render_roof_support()`). In the roof view a click selects a roof or its
-site, and the cancel tool only deals with roofs; elsewhere it leaves them
-alone. The tile inspector always tells about the roof over a tile.
+Built roofs are drawn as the floor of their level (thatch, by
+`render_structures()`), their sites and orders on that level too: seen from
+the hut's level they do not hide it, seen from the level above they cover
+it. While planning roofs, the open tiles a roof could rest on are shown
+(`render_roof_support()`). A click on a roof selects it like a structure,
+and the cancel tool works on the level shown. The tile inspector tells
+about the roof a tile is, or the roof over it (`map_roof_over()`). (The
+earlier roof view, with roofs in a layer of their own, is gone.)
 
 The UI is immediate-mode (`game/ui.h`): panels and widgets are laid out and
 drawn every frame. Everything drawn belongs to an owner: a window (an

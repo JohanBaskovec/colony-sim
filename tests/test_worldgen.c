@@ -157,6 +157,7 @@ static void test_relief(void)
                 int ground = map_ground_level(&map, x, y);
                 levels[ground]++;
                 CHECK(ground >= surface - 2); /* Solid deeper down. */
+                CHECK(ground < map.depth - 1); /* Open air over it, for a roof. */
                 for (int z = 0; z < map.depth; z++) {
                     size_t i = map_index(&map, x, y, z);
                     if (z < ground) {
@@ -241,15 +242,21 @@ static void test_slopes(void)
     map_free(&map);
 }
 
-/* Flat worlds: one level, rock outcrops as rock walls on it. */
+/* Flat worlds: one level of ground, rock outcrops as rock walls on it, open
+ * air over it (room for roofs). */
 static void test_flat(void)
 {
     WorldGenParams params = params_for_seed(3);
     params.flat = true;
     Map map;
     REQUIRE(worldgen_generate(&map, &params));
-    CHECK_EQ_INT(map.depth, 1);
+    CHECK_EQ_INT(map.depth, 2);
     CHECK_EQ_INT(map.surface_level, 0);
+    for (int y = 0; y < map.height; y++) {
+        for (int x = 0; x < map.width; x++) {
+            CHECK(map_is_open(&map, x, y, 1));
+        }
+    }
     CHECK_EQ_INT(map.slope_count, 0);
     size_t rock = 0;
     for (size_t i = 0; i < map_tile_count(&map); i++) {

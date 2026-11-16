@@ -1,20 +1,22 @@
 /*
- * Roofs and ceilings falling in. A built roof stands while a wall or rock
- * holds it up within ROOF_SUPPORT_RANGE tiles (map_roof_supported()). When
- * its last support in reach goes (a wall taken apart or fallen apart, rock
- * dug out), the roof falls in: half its materials drop on the tile, as when
- * it is taken down, and an order to take it down there is dropped. A light
- * roof of grass and branches hurts nobody.
+ * Roofs and ceilings falling in. Whatever lies over a tile without rock (a
+ * built roof, the ground over a dug gallery) is its ceiling, held up while
+ * rock or a wall (a prop...) stands within ROOF_SUPPORT_RANGE tiles on its
+ * level (map_ceiling_supported()). When its last support in reach goes (a
+ * wall taken apart or fallen apart, rock dug out):
  *
- * The ceiling of a dug gallery follows the same rule (map_ceiling_supported():
- * rock, a wall or a prop in reach). Without support it caves in: the tile
- * fills up again (with earth, or with the rock above it); what lay on it is
- * pushed beside it, what stood on it (a bed, a screen) is broken (half its
- * materials beside it), and the order on it is dropped. The caller deals with
- * what lives outside the map (sites, stations, zones) and with the settlers.
+ * - a built roof falls in: its tile is open again, half its materials drop
+ *   on the floor under it, as when it is taken down, and an order to take it
+ *   down is dropped. A light roof of grass and branches hurts nobody;
+ * - the ceiling of a gallery caves in: the tile fills up again (with earth,
+ *   or with the rock above it); what lay on it is pushed beside it, what
+ *   stood on it (a bed, a screen) is broken (half its materials beside it),
+ *   and the order on it is dropped. The caller deals with what lives outside
+ *   the map (sites, stations, zones) and with the settlers.
  *
- * Only roofs around what the map logged as changed (Map.build_log,
- * Map.topology_log) are checked, or every roof when too much changed at once.
+ * Only tiles around what the map logged as changed (Map.build_log,
+ * Map.topology_log) are checked, or every tile when too much changed at
+ * once.
  */
 #ifndef COLONY_CORE_ROOF_H
 #define COLONY_CORE_ROOF_H

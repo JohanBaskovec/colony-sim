@@ -265,7 +265,9 @@ TemperatureMaterial temperature_material(const Map *map, int x, int y, int z)
     if (!map_in_bounds(map, x, y, z) || map->rock[map_index(map, x, y, z)] != ROCK_NONE) {
         return TEMPERATURE_MATERIAL_ROCK;
     }
-    if (map_is_open(map, x, y, z) && !map_is_roofed(map, x, y, z)) {
+    /* Open space under the sky, and the roofs out in it, are outdoors. */
+    if ((map_is_open(map, x, y, z) || map_roof(map, x, y, z) != STRUCTURE_NONE) &&
+        !map_is_roofed(map, x, y, z)) {
         return TEMPERATURE_MATERIAL_OPEN;
     }
     StructureType structure = map_structure(map, x, y, z);
@@ -277,10 +279,12 @@ TemperatureMaterial temperature_material(const Map *map, int x, int y, int z)
 
 TemperatureCover temperature_cover(const Map *map, int x, int y, int z)
 {
-    if (map_roof(map, x, y, z) != STRUCTURE_NONE) {
-        return TEMPERATURE_COVER_ROOFED;
+    int cover = map_cover_level(map, x, y, z); /* The first floor above decides. */
+    if (cover < 0) {
+        return TEMPERATURE_COVER_OPEN;
     }
-    return map_natural_roof(map, x, y, z) ? TEMPERATURE_COVER_NATURAL : TEMPERATURE_COVER_OPEN;
+    return map_roof(map, x, y, cover) != STRUCTURE_NONE ? TEMPERATURE_COVER_ROOFED
+                                                        : TEMPERATURE_COVER_NATURAL;
 }
 
 float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y, int z,

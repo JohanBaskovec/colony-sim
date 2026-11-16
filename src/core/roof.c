@@ -51,9 +51,7 @@ static void cave_in(Map *map, Items *items, Designations *designations, int x, i
         items_remove(items, x, y, z, lying.count);
     }
     StructureType structure = map_structure(map, x, y, z);
-    StructureType roof = map_roof(map, x, y, z);
     map_set_structure(map, x, y, z, STRUCTURE_NONE);
-    map_set_roof(map, x, y, z, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
     map_set_slope(map, x, y, z, false);
     map->plants[map_index(map, x, y, z)] = (Plant){0};
     if (designations != NULL) {
@@ -62,7 +60,6 @@ static void cave_in(Map *map, Items *items, Designations *designations, int x, i
     map_set_rock(map, x, y, z, above != ROCK_NONE ? above : ROCK_EARTH);
     drop_beside(map, items, x, y, z, lying);
     drop_salvage(map, items, structure, x, y, z, true);
-    drop_salvage(map, items, roof, x, y, z, true);
     if (cave_ins != NULL) {
         if (cave_ins->count < ROOF_CAVE_IN_MAX) {
             cave_ins->tiles[cave_ins->count] = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
@@ -71,8 +68,20 @@ static void cave_in(Map *map, Items *items, Designations *designations, int x, i
     }
 }
 
-/* Brings down the unsupported roofs and ceilings in a rectangle (clipped to
- * the map). Returns the roofs fallen. */
+/* The roof over (x, y, z) falls in: its tile is open again, half its
+ * materials fall onto the tile, and the order to take it down goes. */
+static void roof_falls(Map *map, Items *items, Designations *designations, int x, int y, int z)
+{
+    StructureType roof = map_roof(map, x, y, z + 1);
+    map_set_roof(map, x, y, z + 1, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
+    drop_salvage(map, items, roof, x, y, z, false);
+    if (designations != NULL) {
+        designation_set(designations, map, x, y, z + 1, DESIGNATION_NONE);
+    }
+}
+
+/* Brings down the unsupported roofs and ceilings over the tiles of a
+ * rectangle (clipped to the map). Returns the roofs fallen. */
 static int collapse_area(Map *map, Items *items, Designations *designations, int x0, int y0,
                          int x1, int y1, int z, CaveIns *cave_ins)
 {
@@ -86,17 +95,13 @@ static int collapse_area(Map *map, Items *items, Designations *designations, int
     int fallen = 0;
     for (int y = y0; y <= y1; y++) {
         for (int x = x0; x <= x1; x++) {
-            StructureType roof = map_roof(map, x, y, z);
-            if (roof != STRUCTURE_NONE && !map_roof_supported(map, x, y, z)) {
-                map_set_roof(map, x, y, z, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
-                drop_salvage(map, items, roof, x, y, z, false);
-                if (designations != NULL &&
-                    designation_get(designations, x, y, z) == DESIGNATION_REMOVE_ROOF) {
-                    designation_set(designations, map, x, y, z, DESIGNATION_NONE);
-                }
-                fallen++;
+            if (map_ceiling_supported(map, x, y, z)) {
+                continue;
             }
-            if (!map_ceiling_supported(map, x, y, z)) {
+            if (map_roof(map, x, y, z + 1) != STRUCTURE_NONE) {
+                roof_falls(map, items, designations, x, y, z);
+                fallen++;
+            } else {
                 cave_in(map, items, designations, x, y, z, cave_ins);
             }
         }

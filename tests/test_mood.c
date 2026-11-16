@@ -13,7 +13,7 @@ static bool init_flat_game(Game *game)
 {
     NewGameParams params;
     game_default_params(&params);
-    params.world.flat = true; /* One level, as the tiles below expect. */
+    params.world.flat = true; /* One level of ground, open air over it. */
     params.world.seed = 5;
     params.world.width = 48;
     params.world.height = 48;
@@ -22,7 +22,7 @@ static bool init_flat_game(Game *game)
         return false;
     }
     Map *map = &game->map;
-    for (size_t i = 0; i < map_tile_count(map); i++) {
+    for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
@@ -358,7 +358,7 @@ static void test_settlers_remember_their_nights(void)
     REQUIRE(init_flat_game(&game));
     map_set_structure(&game.map, 13, 10, 0, STRUCTURE_GRASS_BED);
     map_set_structure(&game.map, 14, 10, 0, STRUCTURE_WALL); /* Holds the roof up. */
-    map_set_roof(&game.map, 13, 10, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(&game.map, 13, 10, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     game.weather.spell = WEATHER_SPELL_MAX; /* A mild night. */
     Colonist *sleeper = spawn_rested(&game, 12, 10);
     Colonist *other = spawn_rested(&game, 30, 30);

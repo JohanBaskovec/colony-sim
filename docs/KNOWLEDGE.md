@@ -914,8 +914,9 @@ planned).
 **Roof**: branches covered with dry grass over walled tiles, for a small hut
 (a lean-to was planned, dropped: a hut with a roof does the same).
 - Per tile: 3 branches (rafters and battens) and 20 dry grass (thatch 20 cm
-  thick), 1.5 h of work, level 50, 50 hit points. Over whatever stands on
-  the tile (a bed, a wall, a stockpile).
+  thick), 1.5 h of work, level 50, 50 hit points. Laid on the level above
+  the walls, over whatever stands under it (a bed, a wall, a stockpile),
+  worked on from below; too frail to stand on.
 - Rests on a wall or rock at most 2 tiles away (branch rafters span about
   2.5 m): a hut of up to 4 × 4 tiles inside its walls can be roofed.
 - Rain protection, "under a roof" for rot and fire (M4), no "slept outside"

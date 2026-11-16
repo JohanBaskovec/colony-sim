@@ -11,7 +11,7 @@ static bool init_flat_game(Game *game)
 {
     NewGameParams params;
     game_default_params(&params);
-    params.world.flat = true; /* One level, as the tiles below expect. */
+    params.world.flat = true; /* One level of ground, open air over it. */
     params.world.seed = 7;
     params.world.width = 48;
     params.world.height = 48;
@@ -20,7 +20,7 @@ static bool init_flat_game(Game *game)
         return false;
     }
     Map *map = &game->map;
-    for (size_t i = 0; i < map_tile_count(map); i++) {
+    for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->cobbles[i] = MAP_STONES_MAX;
         map->flint[i] = 0;
@@ -85,10 +85,10 @@ static void test_instant_build(void)
             CONSTRUCTION_NONE);
     REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
     REQUIRE(construction_at(&game.constructions, 14, 10, 0) != CONSTRUCTION_NONE);
-    /* A roof planned on a wall's site, then left with nothing to rest on. */
+    /* A roof planned over a wall's site, then left with nothing to rest on. */
     int wall = game_place_structure(&game, STRUCTURE_WALL, 31, 30, 0, DIRECTION_EAST);
     REQUIRE(wall != CONSTRUCTION_NONE);
-    REQUIRE(game_place_structure(&game, STRUCTURE_ROOF, 30, 30, 0, DIRECTION_EAST) !=
+    REQUIRE(game_place_structure(&game, STRUCTURE_ROOF, 30, 30, 1, DIRECTION_EAST) !=
             CONSTRUCTION_NONE);
     REQUIRE(game_remove_construction(&game, wall));
 
@@ -106,7 +106,7 @@ static void test_instant_build(void)
     CHECK_EQ_INT(bush->type, PLANT_NONE); /* Cleared first. */
     /* The roof waits for support. */
     CHECK_EQ_INT(game.constructions.used_count, 1);
-    CHECK_EQ_INT(map_roof(&game.map, 30, 30, 0), STRUCTURE_NONE);
+    CHECK_EQ_INT(map_roof(&game.map, 30, 30, 1), STRUCTURE_NONE);
     CHECK(game.rng.state == rng_state); /* Grades are the average, not drawn. */
 
     /* A wall beside it: built, then the roof it holds up. */
@@ -115,7 +115,7 @@ static void test_instant_build(void)
     long items = items_total(&game);
     run_ticks(&game, 2);
     CHECK_EQ_INT(map_structure(&game.map, 31, 30, 0), STRUCTURE_WALL);
-    CHECK_EQ_INT(map_roof(&game.map, 30, 30, 0), STRUCTURE_ROOF);
+    CHECK_EQ_INT(map_roof(&game.map, 30, 30, 1), STRUCTURE_ROOF);
     CHECK_EQ_INT(game.constructions.used_count, 0);
     CHECK_EQ_INT((int)items_total(&game), (int)items); /* Nothing used, nothing dropped. */
 
@@ -285,8 +285,8 @@ static void test_instant_deconstruct(void)
     map_set_structure(&game.map, 14, 10, 0, STRUCTURE_WALL);
     map_place_structure(&game.map, 10, 14, 0, STRUCTURE_GRASS_BED, DIRECTION_EAST,
                         ITEM_QUALITY_STANDARD);
-    map_set_roof(&game.map, 11, 10, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD); /* (10, 10)'s. */
-    map_set_roof(&game.map, 13, 10, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD); /* (14, 10)'s. */
+    map_set_roof(&game.map, 11, 10, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD); /* (10, 10)'s. */
+    map_set_roof(&game.map, 13, 10, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD); /* (14, 10)'s. */
     int refresh = constructions_place_refresh(&game.constructions, &game.map, 10, 14, 0);
     REQUIRE(refresh != CONSTRUCTION_NONE);
     const ConstructionSite *site = construction_get(&game.constructions, refresh);
@@ -294,7 +294,7 @@ static void test_instant_deconstruct(void)
                          item_stack_pristine(construction_material(site, 0), 1));
     CHECK_EQ_INT(game_designate_rect(&game, 10, 10, 10, 10, 0, DESIGNATION_DECONSTRUCT), 1);
     CHECK_EQ_INT(game_designate_rect(&game, 11, 14, 11, 14, 0, DESIGNATION_DECONSTRUCT), 1);
-    CHECK_EQ_INT(game_designate_rect(&game, 13, 10, 13, 10, 0, DESIGNATION_REMOVE_ROOF), 1);
+    CHECK_EQ_INT(game_designate_rect(&game, 13, 10, 13, 10, 1, DESIGNATION_DECONSTRUCT), 1);
     run_ticks(&game, 10);
     CHECK_EQ_INT(map_structure(&game.map, 10, 10, 0), STRUCTURE_WALL); /* Nobody to do it. */
 
@@ -306,8 +306,9 @@ static void test_instant_deconstruct(void)
     CHECK_EQ_INT(map_structure(&game.map, 10, 14, 0), STRUCTURE_NONE);
     CHECK_EQ_INT(map_structure(&game.map, 11, 14, 0), STRUCTURE_NONE);
     CHECK_EQ_INT(map_structure(&game.map, 14, 10, 0), STRUCTURE_WALL);
-    CHECK_EQ_INT(map_roof(&game.map, 13, 10, 0), STRUCTURE_NONE); /* Taken down. */
-    CHECK_EQ_INT(map_roof(&game.map, 11, 10, 0), STRUCTURE_NONE); /* Fell in. */
+    CHECK_EQ_INT(map_roof(&game.map, 13, 10, 1), STRUCTURE_NONE); /* Taken down. */
+    CHECK_EQ_INT(map_roof(&game.map, 11, 10, 1), STRUCTURE_NONE); /* Fell in. */
+    CHECK(map_is_open(&game.map, 11, 10, 1));
     CHECK_EQ_INT(game.notices.count, notices + 1);
     CHECK_EQ_INT(game.constructions.used_count, 0);
     CHECK(game.items.totals[ITEM_GRASS] > 0);
