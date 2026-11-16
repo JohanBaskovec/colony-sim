@@ -138,6 +138,20 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Gender (or body types) for colonists, to tie beards and names together
 - [ ] Data-driven definitions (terrain, plants, items) + mod loading
 
+## Living world (long term, design under discussion)
+
+See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
+
+- [ ] **Levels (priority)**: several levels below and above the ground: natural relief (hills, cliffs, caves), dug mines and cellars, buildings with storeys. Comes before wildlife, vision and combat, which all depend on it (map API, pathfinding, regions, temperature, roofs, rendering, UI); the rest of M4 waits. Steps: (1) the map becomes a volume with a single level used, behavior unchanged; (2) relief, paths and regions in the volume, view by level; (3) digging and building: mines, ramps, ladders, stairs, storeys, support, collapses, falls, climbing trees; (4) temperature, light, roofs and rain in the volume; (5) flowing water
+- [ ] Levels, decided: 2 m per level (one storey), hills but no mountains, around 32 levels; trees span several levels (a trunk to climb, foliage above, drawn see-through from below); a felled tree falls full length, always exactly where aimed (away from buildings, else the least harmful side, with a warning), then the trunk is limbed and cut into logs; current level sharp, lower levels blurred; natural slopes, dug ramps, ladders and stairs; nothing overhangs more than 2 tiles from its support (mines and storeys collapse otherwise); water flows between levels
+- [ ] Aging speed chosen per game (up to ×10, the same for settlers and animals; plants follow the seasons): generations within a game (with pregnancy, children, aging)
+- [ ] Soil: moisture and fertility per tile; light from the sun, the canopy and roofs
+- [ ] Vegetation spreading: seeds by wind and animals, roots and runners; competition for light, water and fertile soil
+- [ ] Wildlife as a living population: eating plants, hunting, fighting, breeding, dying of old age (extends M5 "Wildlife, hunting")
+- [ ] Health by body part: injuries, bleeding, infection, lost limbs, for settlers and animals (extends M6 "Health")
+- [ ] Genetics: inherited traits with random mutations for plants (varieties), animals and settlers; selection by the player (crops, breeding)
+- [ ] Performance: spread long work over ticks (budget per tick for path and job searches) so that no single tick drops a frame
+
 ## Later
 
 - [ ] Social life: relationships, sexual needs (abstract representation)

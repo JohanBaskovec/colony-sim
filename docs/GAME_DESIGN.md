@@ -90,6 +90,66 @@ diplomatic, religious...
 - Natural resources: wood (trees), stone and ores (rock walls, mined), wild
   food, water (lakes, rivers).
 
+### Living world **(long term)**
+
+The land is alive on its own, whether the settlers are there or not. Target
+map: 256 × 256 tiles, small enough to simulate every tile in depth.
+
+- **Levels** (priority): several levels below and above the ground, 2 m
+  each (a tile is 1 m × 1 m, a wall 2 m high: one level is one storey).
+  Natural relief (hills, cliffs, caves; no mountains, they would take too
+  many levels), dug mines and cellars, buildings with storeys.
+  - View: the current level is sharp, the levels below show through open
+    space, blurred (more with depth).
+  - Going up and down: natural slopes on foot; dug ramps, ladders and stairs
+    made by the settlers; cliffs cannot be crossed.
+  - Support: nothing overhangs more than 2 tiles from what holds it up, the
+    rule roofs already follow (`ROOF_SUPPORT_RANGE`): mine galleries need
+    props or pillars, storeys need bearing walls, and what is not held
+    collapses.
+  - Water flows between levels: flooded mines, waterfalls, wells filling up.
+  - Trees span several levels: a trunk that can be climbed, foliage in the
+    levels above (shade, shelter from rain, gathering nuts and fruit, a
+    lookout, a refuge from animals that cannot climb; tree houses later).
+    Seen from the ground level, the foliage above is drawn lightly
+    see-through, with a key to hide it.
+  - Felling: a tree falls in one piece, full length, on the side the
+    woodcutter chooses, away from buildings as a real woodcutter would aim
+    it. The fall is always exactly where intended, whatever the woodcutter's
+    level (a missed fall would be unfair to the player). With no clear side,
+    the tree falls where it does the least harm, after a warning on the
+    order. The fallen trunk lies across the tiles until it is limbed and cut
+    into logs.
+  - Number of levels **(open)**: around 32 (64 m: mines below the plains,
+    hills, then room for trees and buildings on the hilltops), to be tuned
+    with world generation.
+- **Soil**: moisture and fertility simulated per tile (rain, shade, nearby
+  water, what grows and rots there); light computed from the sun, the canopy
+  and roofs.
+- **Vegetation** spreads and reproduces believably: seeds carried by the
+  wind and by animals, roots and runners; plants compete for light, water
+  and fertile soil.
+- **Wildlife**: many animals living their own lives: they eat plants, hunt,
+  fight, get hurt, breed and die of old age. Large animals are individuals;
+  small fauna (mice, insects, birds) may be a density per area **(open)**.
+- **Health**: every body part can be hurt, bleed, get infected, be cut off or
+  torn away, for settlers and animals alike.
+- **Genetics**, semi-realistic (no real DNA): every animal, human and plant
+  has traits passed on to its offspring, with random mutations. The world
+  drifts on its own, and the player can use it: selecting the best plants
+  and animals, and even settlers. Plants carry a variety (a shared set of
+  genes) rather than a genome each.
+- **Generations**: an aging speed chosen per game (up to ×10, the same for
+  every living being; plants follow the seasons), so that
+  families grow within a game: children become adults, elders teach the
+  young, and knowledge has to be handed down before its masters die.
+
+Performance rules that keep this at 60 frames per second: each system runs at
+its own pace (every tick only for what moves; hourly for soil; daily for
+plants; at birth for genetics); long work is spread over several ticks
+(decisions, path searches with a budget per tick); only what the player can
+see or use is simulated as individuals.
+
 ### Vision and fog of war
 - At the start the whole map is covered by fog of war; it is uncovered by what
   settlers see.
