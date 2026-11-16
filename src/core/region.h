@@ -14,6 +14,7 @@
 
 #include "core/map.h"
 #include "core/pathfinding.h"
+#include "core/tile_box.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -24,9 +25,14 @@ typedef struct Regions {
     int width;
     int height;
     int depth;
-    uint32_t *id;          /* Region of each tile, REGION_NONE when impassable. */
-    uint32_t count;        /* Regions are numbered 1..count. */
-    uint8_t *drinkable;    /* Per region id: whether it contains a drinking spot. */
+    uint32_t *id;       /* Region of each tile, REGION_NONE when impassable. */
+    uint32_t count;     /* Regions are numbered 1..count. */
+    uint8_t *drinkable; /* Per region id: whether it contains a drinking spot. */
+    /* Per region id: a box holding its tiles, for scans of a region. Given up
+     * (boxes_lost) until the next full rebuild if memory ran out. */
+    TileBox *boxes;
+    uint32_t box_capacity;
+    bool boxes_lost;
     uint32_t *stack;       /* Scratch for the flood fill. */
     uint32_t map_revision; /* Map.topology_revision the regions were built for. */
     bool built;
@@ -49,6 +55,11 @@ uint32_t regions_at(const Regions *regions, const Map *map, int x, int y, int z)
 
 /* False only when both tiles are known to be in different regions. */
 bool regions_connected(const Regions *regions, const Map *map, TilePos a, TilePos b);
+
+/* A box holding every tile of the region (core/tile_box.h): scans of a
+ * region can skip the rest of the map. The whole map when unknown (no
+ * region, regions not current). */
+TileBox regions_box(const Regions *regions, const Map *map, uint32_t region);
 
 /* False only when the region is known to have no drinking spot
  * (map_is_drinking_spot()). */

@@ -223,9 +223,16 @@ static bool warmth_reaches(const Map *map, int x0, int y0, int x1, int y1, int z
 float hearths_radiant_warmth(const Workstations *workstations, const Map *map, int x, int y, int z)
 {
     float warmth = 0.0f;
-    for (int index = 0; index < WORKSTATION_MAX; index++) {
+    /* Stops once every station in use has been seen: the slots past the last
+     * one are free. */
+    int seen = 0;
+    for (int index = 0; index < WORKSTATION_MAX && seen < workstations->used_count; index++) {
         const Workstation *station = &workstations->list[index];
-        if (!station->used || !station->burning || station->z != z) {
+        if (!station->used) {
+            continue;
+        }
+        seen++;
+        if (!station->burning || station->z != z) {
             continue;
         }
         int dx = x - station->x, dy = y - station->y;

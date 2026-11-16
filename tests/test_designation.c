@@ -444,6 +444,32 @@ static void test_definitions(void)
     CHECK(designation_def(DESIGNATION_COUNT) == NULL);
 }
 
+/* The box of the designated tiles holds them all, and empties with the last. */
+static void test_designated_tiles_box(void)
+{
+    Map map;
+    Designations d;
+    REQUIRE(init_world(&map, &d));
+    CHECK(tile_box_is_empty(&d.box));
+    REQUIRE(designation_set(&d, &map, 5, 5, 0, DESIGNATION_MINE));
+    REQUIRE(designation_set(&d, &map, 3, 3, 0, DESIGNATION_CHOP));
+    CHECK(tile_box_contains(&d.box, 5, 5, 0));
+    CHECK(tile_box_contains(&d.box, 3, 3, 0));
+    CHECK(!tile_box_contains(&d.box, 6, 5, 0));
+    CHECK(!tile_box_contains(&d.box, 3, 2, 0));
+    /* Taking one away keeps the box (it may hold more than the tiles)... */
+    REQUIRE(designation_set(&d, &map, 3, 3, 0, DESIGNATION_NONE));
+    CHECK(tile_box_contains(&d.box, 5, 5, 0));
+    /* ...the last one empties it. */
+    REQUIRE(designation_set(&d, &map, 5, 5, 0, DESIGNATION_NONE));
+    CHECK_EQ_INT(d.count, 0);
+    CHECK(tile_box_is_empty(&d.box));
+    REQUIRE(designation_set(&d, &map, 6, 5, 0, DESIGNATION_MINE));
+    CHECK(tile_box_contains(&d.box, 6, 5, 0));
+    CHECK(!tile_box_contains(&d.box, 5, 5, 0));
+    free_world(&map, &d);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -462,5 +488,6 @@ int main(void)
     RUN_TEST(test_digging_down);
     RUN_TEST(test_digging_waits_for_support);
     RUN_TEST(test_definitions);
+    RUN_TEST(test_designated_tiles_box);
     return test_summary();
 }

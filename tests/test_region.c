@@ -193,11 +193,14 @@ static void test_dug_tiles_are_added_without_rebuilding(void)
     CHECK_EQ_UINT(regions.rebuilds, 1);
     CHECK_EQ_UINT(regions.count, 2);
 
-    /* Digging into the block from its edge: the tile joins the region next to it. */
+    /* Digging into the block from its edge: the tile joins the region next to it,
+     * and its box. */
     map_set_rock(&map, 9, 8, 0, ROCK_NONE);
     regions_update(&regions, &map);
     CHECK_EQ_UINT(regions.rebuilds, 1);
     CHECK_EQ_UINT(regions_at(&regions, &map, 9, 8, 0), regions_at(&regions, &map, 8, 8, 0));
+    TileBox joined = regions_box(&regions, &map, regions_at(&regions, &map, 9, 8, 0));
+    CHECK(tile_box_contains(&joined, 9, 8, 0));
 
     /* A pocket in the middle of the block, cut off from everything: a new region. */
     map_set_rock(&map, 11, 8, 0, ROCK_NONE);
@@ -205,6 +208,10 @@ static void test_dug_tiles_are_added_without_rebuilding(void)
     CHECK_EQ_UINT(regions.rebuilds, 1);
     CHECK_EQ_UINT(regions.count, 3);
     CHECK(!regions_connected(&regions, &map, (TilePos){11, 8, 0}, (TilePos){8, 8, 0}));
+    TileBox pocket = regions_box(&regions, &map, regions_at(&regions, &map, 11, 8, 0));
+    CHECK(tile_box_contains(&pocket, 11, 8, 0));
+    CHECK(!tile_box_contains(&pocket, 10, 8, 0));
+    CHECK(!tile_box_contains(&pocket, 11, 9, 0));
 
     /* Several tiles dug between two updates. */
     map_set_rock(&map, 13, 6, 0, ROCK_NONE);
@@ -372,6 +379,12 @@ static void test_regions_match_pathfinding_on_generated_maps(void)
         size_t sizes[8] = {0};
         for (size_t i = 0; i < map_tile_count(&map); i++) {
             CHECK((regions.id[i] != REGION_NONE) == (map_move_cost_at(&map, i) > 0.0f));
+            if (regions.id[i] != REGION_NONE) { /* Every tile inside its region's box. */
+                int x, y, z;
+                map_tile_of(&map, i, &x, &y, &z);
+                TileBox box = regions_box(&regions, &map, regions.id[i]);
+                CHECK(tile_box_contains(&box, x, y, z));
+            }
             if (regions.id[i] != REGION_NONE && regions.id[i] <= 8) {
                 sizes[regions.id[i] - 1]++;
             }
@@ -413,6 +426,26 @@ static void test_regions_match_pathfinding_on_generated_maps(void)
     }
 }
 
+/* Without up-to-date regions, or for no region, the box is the whole map. */
+static void test_unknown_region_box_is_the_map(void)
+{
+    Map map;
+    Regions regions;
+    REQUIRE(init_split_map(&map));
+    REQUIRE(regions_init(&regions, 16, 16, 1));
+    TileBox box = regions_box(&regions, &map, 1); /* Not built yet. */
+    CHECK(box.x0 == 0 && box.y0 == 0 && box.z0 == 0);
+    CHECK(box.x1 == 15 && box.y1 == 15 && box.z1 == 0);
+    regions_update(&regions, &map);
+    box = regions_box(&regions, &map, REGION_NONE);
+    CHECK(box.x1 == 15 && box.y1 == 15);
+    map_set_rock(&map, 3, 3, 0, ROCK_GRANITE); /* Stale until the next update. */
+    box = regions_box(&regions, &map, 1);
+    CHECK(box.x0 == 0 && box.x1 == 15);
+    regions_free(&regions);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_regions_follow_walls);
@@ -423,5 +456,6 @@ int main(void)
     RUN_TEST(test_diagonal_gaps_do_not_connect);
     RUN_TEST(test_drinking_spots_per_region);
     RUN_TEST(test_regions_match_pathfinding_on_generated_maps);
+    RUN_TEST(test_unknown_region_box_is_the_map);
     return test_summary();
 }

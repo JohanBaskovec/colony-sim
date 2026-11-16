@@ -47,6 +47,7 @@
 #include "core/knowledge.h"
 #include "core/map.h"
 #include "core/rng.h"
+#include "core/tile_box.h"
 #include "core/tool.h"
 #include "core/tree.h"
 #include "core/work.h"
@@ -224,6 +225,7 @@ typedef struct GatherZones {
     int height;
     int depth;
     uint8_t *zone;   /* Zone index + 1 per tile, 0 when outside any zone. */
+    TileBox box;     /* Holds every tile of a zone (core/tile_box.h). */
     uint8_t *job;    /* GatherJob the tile's progress belongs to. */
     float *progress; /* Work done on the tile's current job. */
     GatherZone list[GATHER_ZONE_MAX];

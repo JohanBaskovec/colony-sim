@@ -174,6 +174,7 @@ bool gather_zones_init(GatherZones *zones, int width, int height, int depth)
         return false;
     }
     size_t count = (size_t)width * (size_t)height * (size_t)depth;
+    zones->box = tile_box_empty();
     zones->zone = calloc(count, sizeof(*zones->zone));
     zones->job = calloc(count, sizeof(*zones->job));
     zones->progress = calloc(count, sizeof(*zones->progress));
@@ -288,6 +289,7 @@ static int extend(GatherZones *zones, const Map *map, int index, int x0, int y0,
             if (zones->zone[i] == 0 && !layers_any_set(blocked, i) &&
                 gather_zone_can_cover(map, x, y, level)) {
                 zones->zone[i] = (uint8_t)(index + 1);
+                tile_box_add(&zones->box, x, y, level);
                 clear_progress(zones, i);
                 added++;
             }
@@ -427,7 +429,9 @@ static int remove_rect(GatherZones *zones, const Map *map, int x0, int y0, int x
                 GatherZone *zone = &zones->list[zones->zone[i] - 1];
                 if (--zone->cell_count == 0) {
                     zone->used = false;
-                    zones->used_count--;
+                    if (--zones->used_count == 0) {
+                        zones->box = tile_box_empty();
+                    }
                 }
                 zones->zone[i] = 0;
                 clear_progress(zones, i);
@@ -465,7 +469,9 @@ void gather_zone_delete(GatherZones *zones, int index)
         }
     }
     zones->list[index] = (GatherZone){.used = false};
-    zones->used_count--;
+    if (--zones->used_count == 0) {
+        zones->box = tile_box_empty();
+    }
     changed(zones);
 }
 

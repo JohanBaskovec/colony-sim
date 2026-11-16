@@ -1163,6 +1163,31 @@ static void test_clearing_plants(void)
     free_world(&map, &zones, &items);
 }
 
+/* The box of the zone tiles holds them all, and empties with the last zone. */
+static void test_zone_tiles_box(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    CHECK(tile_box_is_empty(&zones.box));
+    int a = gather_zone_create(&zones, &map, 1, 1, 2, 2, 0);
+    int b = gather_zone_create(&zones, &map, 10, 12, 12, 13, 0);
+    REQUIRE(a != GATHER_ZONE_NONE && b != GATHER_ZONE_NONE);
+    CHECK(tile_box_contains(&zones.box, 1, 1, 0));
+    CHECK(tile_box_contains(&zones.box, 12, 13, 0));
+    CHECK(!tile_box_contains(&zones.box, 0, 1, 0));
+    CHECK(!tile_box_contains(&zones.box, 13, 13, 0));
+    gather_zone_delete(&zones, a);
+    CHECK(tile_box_contains(&zones.box, 12, 13, 0));
+    CHECK_EQ_INT(gather_zones_remove_rect(&zones, 0, 0, 15, 15, 0), 6);
+    CHECK(tile_box_is_empty(&zones.box));
+    REQUIRE(gather_zone_create(&zones, &map, 7, 7, 7, 7, 0) != GATHER_ZONE_NONE);
+    CHECK(tile_box_contains(&zones.box, 7, 7, 0));
+    CHECK(!tile_box_contains(&zones.box, 12, 13, 0));
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -1192,5 +1217,6 @@ int main(void)
     RUN_TEST(test_overlapping_rectangle_merges_zones);
     RUN_TEST(test_blocked_tiles_are_left_out);
     RUN_TEST(test_clearing_plants);
+    RUN_TEST(test_zone_tiles_box);
     return test_summary();
 }

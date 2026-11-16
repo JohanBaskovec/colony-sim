@@ -169,20 +169,24 @@ bool haul_any_job_possible(const HaulWorld *world)
     if (world->from_z < 0 || world->from_z >= map->depth) {
         return false;
     }
+    /* Only stacks in the hauler's region count: within its box. */
+    TileBox box = regions != NULL
+                      ? regions_box(world->regions, map, world->region)
+                      : (TileBox){0, 0, 0, map->width - 1, map->height - 1, map->depth - 1};
     /* The hauler's level first, from its row outwards: a stack nearby is
      * found at once. */
     for (int level = 0; level < map->depth; level++) {
         int z = (world->from_z + level) % map->depth;
-        if (world->items->level_stacks[z] == 0) {
+        if (world->items->level_stacks[z] == 0 || z < box.z0 || z > box.z1) {
             continue;
         }
         for (int step = 0; step < 2 * map->height; step++) {
             int y = row_outwards(world->from_y, step, map->height);
-            if (y < 0) {
-                continue;
+            if (y < box.y0 || y > box.y1) {
+                continue; /* Out of the map (-1) or of the region. */
             }
             const ItemStack *row = &world->items->stacks[map_index(map, 0, y, z)];
-            for (int x = 0; x < map->width; x++) {
+            for (int x = box.x0; x <= box.x1; x++) {
                 if (row[x].type == ITEM_NONE || storage.levels[row[x].type] == 0 ||
                     (regions != NULL && regions[map_index(map, x, y, z)] != world->region)) {
                     continue;

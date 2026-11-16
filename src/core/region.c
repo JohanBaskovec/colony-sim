@@ -26,6 +26,7 @@ bool regions_init(Regions *regions, int width, int height, int depth)
 
 void regions_free(Regions *regions)
 {
+    free(regions->boxes);
     free(regions->id);
     free(regions->stack);
     free(regions->drinkable);
@@ -37,6 +38,31 @@ bool regions_current(const Regions *regions, const Map *map)
     return regions->built && regions->map_revision == map->topology_revision &&
            regions->width == map->width && regions->height == map->height &&
            regions->depth == map->depth;
+}
+
+/* Makes room for the box of a new region id; without memory, boxes are
+ * given up (regions_box() then answers the whole map). */
+static void new_region_box(Regions *regions, uint32_t region, uint32_t tile)
+{
+    if (regions->boxes_lost) {
+        return;
+    }
+    if (region >= regions->box_capacity) {
+        uint32_t capacity = regions->box_capacity > 0 ? regions->box_capacity * 2 : 256;
+        while (capacity <= region) {
+            capacity *= 2;
+        }
+        TileBox *grown = realloc(regions->boxes, (size_t)capacity * sizeof(*grown));
+        if (grown == NULL) {
+            regions->boxes_lost = true;
+            return;
+        }
+        regions->boxes = grown;
+        regions->box_capacity = capacity;
+    }
+    const uint32_t width = (uint32_t)regions->width, level = width * (uint32_t)regions->height;
+    int x = (int)(tile % width), y = (int)(tile % level / width), z = (int)(tile / level);
+    regions->boxes[region] = (TileBox){x, y, z, x, y, z};
 }
 
 /*
@@ -52,6 +78,8 @@ static void fill(Regions *regions, const Map *map, uint32_t start, uint32_t regi
     uint32_t top = 0;
     regions->stack[top++] = start;
     regions->id[start] = region;
+    new_region_box(regions, region, start);
+    TileBox *box = regions->boxes_lost ? NULL : &regions->boxes[region];
     while (top > 0) {
         uint32_t tile = regions->stack[--top];
         uint32_t x = tile % width;
@@ -59,6 +87,9 @@ static void fill(Regions *regions, const Map *map, uint32_t start, uint32_t regi
         uint32_t z = tile / (width * height);
         if (map_is_drinking_spot(map, (int)x, (int)y, (int)z)) {
             regions->drinkable[region] = 1;
+        }
+        if (box != NULL) {
+            tile_box_add(box, (int)x, (int)y, (int)z);
         }
         uint32_t neighbors[4 + MAP_MAX_LEVEL_LINKS];
         TilePos links[MAP_MAX_LEVEL_LINKS];
@@ -126,6 +157,9 @@ static bool open_tile(Regions *regions, const Map *map, int x, int y, int z)
     if (region == REGION_NONE) {
         region = ++regions->count;
         regions->drinkable[region] = 0;
+        new_region_box(regions, region, (uint32_t)tile);
+    } else if (!regions->boxes_lost) {
+        tile_box_add(&regions->boxes[region], x, y, z);
     }
     regions->id[tile] = region;
     if (map_is_drinking_spot(map, x, y, z)) {
@@ -168,6 +202,7 @@ void regions_update(Regions *regions, const Map *map)
     memset(regions->id, 0, tiles * sizeof(*regions->id));
     memset(regions->drinkable, 0, (size_t)regions->count + 1);
     regions->count = 0;
+    regions->boxes_lost = false; /* Every box is made again. */
     for (size_t tile = 0; tile < tiles; tile++) {
         if (regions->id[tile] == REGION_NONE && map_move_cost_at(map, tile) > 0.0f) {
             fill(regions, map, (uint32_t)tile, ++regions->count);
@@ -190,6 +225,15 @@ bool regions_connected(const Regions *regions, const Map *map, TilePos a, TilePo
     uint32_t region_a = regions_at(regions, map, a.x, a.y, a.z);
     uint32_t region_b = regions_at(regions, map, b.x, b.y, b.z);
     return region_a == REGION_NONE || region_b == REGION_NONE || region_a == region_b;
+}
+
+TileBox regions_box(const Regions *regions, const Map *map, uint32_t region)
+{
+    if (!regions_current(regions, map) || region == REGION_NONE || region > regions->count ||
+        regions->boxes_lost) {
+        return (TileBox){0, 0, 0, map->width - 1, map->height - 1, map->depth - 1};
+    }
+    return regions->boxes[region];
 }
 
 bool regions_has_drinking_spot(const Regions *regions, const Map *map, uint32_t region)

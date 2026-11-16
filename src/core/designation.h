@@ -32,6 +32,7 @@
 #include "core/construction.h"
 #include "core/knowledge.h"
 #include "core/map.h"
+#include "core/tile_box.h"
 #include "core/rng.h"
 #include "core/stockpile.h"
 #include "core/tool.h"
@@ -73,6 +74,7 @@ typedef struct Designations {
     uint8_t *type;                      /* DesignationType per tile. */
     float *progress;                    /* Work done so far, in work ticks. */
     int count;                          /* Designated tiles. */
+    TileBox box;                        /* Holds every designated tile (core/tile_box.h). */
     int count_by_work[WORK_TYPE_COUNT]; /* Designated tiles per work type. */
     /* Incremented whenever work may have become available (new designation,
      * completed work that opens access...), so that settlers who found

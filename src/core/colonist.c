@@ -795,8 +795,10 @@ static bool any_tile_reachable(const ColonistContext *context, TilePos from,
     }
     float tiles = floorf(max_cost / PATH_MIN_TILE_COST);
     int reach = tiles < (float)(map->width + map->height) ? (int)tiles : map->width + map->height;
-    int x0 = from.x - reach > 0 ? from.x - reach : 0;
-    int x1 = from.x + reach < map->width - 1 ? from.x + reach : map->width - 1;
+    /* Within reach and within the region's box. */
+    TileBox box = regions_box(context->regions, map, region);
+    int x0 = from.x - reach > box.x0 ? from.x - reach : box.x0;
+    int x1 = from.x + reach < box.x1 ? from.x + reach : box.x1;
     int rows = 2 * (reach < map->height ? reach : map->height) + 1;
     float climbs = floorf(max_cost / (MAP_CLIMB_COST * PATH_MIN_TILE_COST));
     int levels = climbs < (float)map->depth ? (int)climbs : map->depth;
@@ -804,13 +806,13 @@ static bool any_tile_reachable(const ColonistContext *context, TilePos from,
      * of `from` outwards: what is near is found at once. */
     for (int level = 0; level < 2 * levels + 1; level++) {
         int z = from.z + (level % 2 == 0 ? level / 2 : -(level + 1) / 2);
-        if (z < 0 || z >= map->depth) {
+        if (z < box.z0 || z > box.z1) {
             continue;
         }
         for (int step = 0; step < rows; step++) {
             int y = row_outwards(from.y, step, map->height);
-            if (y < 0) {
-                continue;
+            if (y < box.y0 || y > box.y1) {
+                continue; /* Out of the map (-1) or of the region. */
             }
             const uint32_t *ids = &context->regions->id[map_index(map, 0, y, z)];
             for (int x = x0; x <= x1; x++) {
@@ -1289,15 +1291,25 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
         regions->width != width || regions->height != height || regions->depth != depth) {
         return true;
     }
-    /* Designated tiles, or tiles of the zones that want something. */
+    /* Designated tiles, or tiles of the zones that want something; all inside
+     * the box of the layer. Only those next to the region count (on the level
+     * over it for a roof): within its box grown by a tile. */
     int remaining = search->zones ? search->gather_zones->wanting_cells : designations->count;
-    for (int z = 0; z < depth && remaining > 0; z++) {
-        for (int y = 0; y < height && remaining > 0; y++) {
+    TileBox box = search->zones ? search->gather_zones->box : designations->box;
+    TileBox near = regions_box(regions, context->map, region);
+    box.x0 = box.x0 > near.x0 - 1 ? box.x0 : near.x0 - 1;
+    box.y0 = box.y0 > near.y0 - 1 ? box.y0 : near.y0 - 1;
+    box.z0 = box.z0 > near.z0 ? box.z0 : near.z0;
+    box.x1 = box.x1 < near.x1 + 1 ? box.x1 : near.x1 + 1;
+    box.y1 = box.y1 < near.y1 + 1 ? box.y1 : near.y1 + 1;
+    box.z1 = box.z1 < near.z1 + 1 ? box.z1 : near.z1 + 1;
+    for (int z = box.z0; z <= box.z1 && remaining > 0; z++) {
+        for (int y = box.y0; y <= box.y1 && remaining > 0; y++) {
             size_t row = ((size_t)z * (size_t)height + (size_t)y) * (size_t)width;
             const uint8_t *types =
                 search->zones ? &search->gather_zones->zone[row] : &designations->type[row];
             const uint32_t *ids = &regions->id[row];
-            for (int x = 0; x < width; x++) {
+            for (int x = box.x0; x <= box.x1; x++) {
                 if (types[x] == 0 ||
                     (search->zones && search->gather_zones->list[types[x] - 1].wanted == 0)) {
                     continue;

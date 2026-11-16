@@ -42,6 +42,7 @@ bool designations_init(Designations *designations, int width, int height, int de
         return false;
     }
     size_t count = (size_t)width * (size_t)height * (size_t)depth;
+    designations->box = tile_box_empty();
     designations->type = calloc(count, sizeof(*designations->type));
     designations->progress = calloc(count, sizeof(*designations->progress));
     if (designations->type == NULL || designations->progress == NULL) {
@@ -214,7 +215,9 @@ static void clear_tile(Designations *designations, size_t index)
     if (type == DESIGNATION_NONE) {
         return;
     }
-    designations->count--;
+    if (--designations->count == 0) {
+        designations->box = tile_box_empty();
+    }
     designations->count_by_work[DESIGNATION_DEFS[type].work_type]--;
     designations->type[index] = DESIGNATION_NONE;
     designations->progress[index] = 0.0f;
@@ -241,6 +244,7 @@ bool designation_set(Designations *designations, const Map *map, int x, int y, i
     if (type != DESIGNATION_NONE) {
         designations->type[index] = (uint8_t)type;
         designations->count++;
+        tile_box_add(&designations->box, x, y, z);
         designations->count_by_work[DESIGNATION_DEFS[type].work_type]++;
         designations->revision++;
     }

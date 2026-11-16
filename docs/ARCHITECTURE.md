@@ -66,6 +66,7 @@ simulation:
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level |
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
+| `tile_box`   | Box of tiles holding every tile of a sparse layer (designations, gathering zones, a region), so that scans skip the rest of the map |
 | `tree`       | Trees in the volume: a trunk of solid wood and floors of foliage built into the map as the tree grows, finding the tree of a tile, where a felled tree falls (aimed away from structures) and what it leaves along its length |
 | `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
@@ -1302,6 +1303,12 @@ knows whether it contains a drinking spot.
   would otherwise leave every later one with "maybe" answers, hence full
   failing searches, for the rest of the tick). A dug-out tile (the common case) is added in place from the map's
   change log; a change that joins or splits regions rebuilds everything.
+- Each region keeps a box holding its tiles (`regions_box()`, grown as tiles
+  join, made again on a rebuild); designations and gathering zones keep one
+  for their tiles (`Designations.box`, `GatherZones.box`, emptied with the last
+  tile). The pre-check scans below only go over the intersection of these
+  boxes: the map has 18 levels, mostly rock or open air, which they used to
+  read through on every search.
 - Queries check the revision: if the map changed since the last refresh
   (mining earlier in the same tick), they answer "maybe connected", never a
   stale "no".
@@ -1320,8 +1327,29 @@ knows whether it contains a drinking spot.
 
 `bench/bench_simulation [colonists] [days] [scenario] [size] [seed]` runs a
 colony without a window (scenarios: `core/scenario.h`, which the game can
-also start on with `--scenario`) and prints the average and worst tick time and the
-final state hash. An optimization that is not supposed to change behavior
+also start on with `--scenario`) and prints the cost of a tick in processor
+time of the thread (steady on a busy machine, where the wall clock counts the
+time other programs ran): average, percentiles, the slowest ticks with their
+number and in-game time, then how often the connectivity regions were rebuilt
+and the final state hash. The simulation being deterministic, a slow tick can
+be looked at under perf: with `BENCH_TIMESTAMPS=1` and `perf record -g -k
+CLOCK_MONOTONIC`, the benchmark prints the time range of each slowest tick for
+`perf report --time`. The `profile` preset (optimized, debug symbols, frame
+pointers) gives readable call stacks. Compare a baseline build and the change
+one after the other on the same machine: the numbers drift by 10 % or more
+from one session to the next.
+
+The game has its own: `--bench-render <frames>` draws that many frames from
+a few fixed views (the start level, 1, 5 and 10 levels up, then zoomed out),
+the simulation paused and without vsync, prints the time of a frame and of
+its drawing (the draw calls carried out, the wait for the screen left out),
+then quits; `--no-vsync` uncaps the frame rate, and the debug overlay (F3)
+shows the drawing time per frame.
+
+In November 2026 the box scans above took scenario 3 from 49 to 39 µs per
+tick and scenario 1 from 34 to 26 (64 colonists, 10 days, same hashes); the
+slowest ticks (60 ms in scenario 3) are single searches of a gathering zone
+that succeed far away, left as they are. An optimization that is not supposed to change behavior
 must leave that hash unchanged. Reference (Release, 200 × 200, 64 colonists,
 10 in-game days): about 8 µs per tick left alone, 10 µs with every tree, rock
 and bush designated; food searches when no food is within reach are
@@ -1357,7 +1385,7 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 
 ## Rendering
 
-- SDL3 2D renderer (`SDL_Renderer`), VSync on, alpha blending enabled.
+- SDL3 2D renderer (`SDL_Renderer`), VSync on (off with `--no-vsync` and `--bench-render`), alpha blending enabled.
 - Only visible tiles are drawn (`camera_visible_tiles()`); tile edges are
   snapped to whole pixels to avoid seams.
 - Tiles and item shapes are batched: they are accumulated as quads
