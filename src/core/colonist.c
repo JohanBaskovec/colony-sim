@@ -1178,7 +1178,8 @@ static bool is_open_job(const WorkSearch *search, int x, int y, int z)
         DesignationType type = designation_get(search->designations, x, y, z);
         if (type == DESIGNATION_NONE ||
             !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type)) ||
-            !colonist_can_do(search->worker, type)) {
+            !colonist_can_do(search->worker, type) ||
+            designation_waits_for_support(search->designations, search->map, x, y, z)) {
             return false;
         }
     }
@@ -1254,7 +1255,8 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
 
 static uint32_t work_stamp(const ColonistContext *context)
 {
-    return context->designations->revision +
+    /* Built props and walls: digging orders waiting for support may go on. */
+    return context->designations->revision + context->map->build_revision +
            context->reservations->releases_by_kind[RESERVATION_WORK];
 }
 
@@ -1839,6 +1841,11 @@ static void work(Colonist *colonist, const ColonistContext *context)
         if (done) {
             set_idle(colonist, context, 0);
         }
+        return;
+    }
+    if (designation_waits_for_support(designations, context->map, target.x, target.y,
+                                      target.z)) {
+        set_idle(colonist, context, 0); /* A support went: the order waits. */
         return;
     }
     if (!designation_can_apply(context->map, target.x, target.y, target.z, type) ||
@@ -4109,12 +4116,25 @@ static void drink(Colonist *colonist, const ColonistContext *context)
 }
 
 /* A structure built where the colonist stands (a wall finished by someone
- * else): it steps to a free neighboring tile and decides again. */
+ * else, a gallery filled up by a cave-in): it steps to a free neighboring
+ * tile and decides again. The ground gone under its feet (a ramp cut): it
+ * falls to the ground below. */
 static void step_out_of_blocked_tile(Colonist *colonist, const ColonistContext *context)
 {
     static const int DX[8] = {0, 1, 0, -1, 1, 1, -1, -1};
     static const int DY[8] = {-1, 0, 1, 0, -1, 1, 1, -1};
-    if (map_is_passable(context->map, colonist->x, colonist->y, colonist->z)) {
+    const Map *map = context->map;
+    if (map_is_passable(map, colonist->x, colonist->y, colonist->z)) {
+        return;
+    }
+    int ground = colonist->z;
+    while (ground > 0 && map_is_open(map, colonist->x, colonist->y, ground)) {
+        ground--;
+    }
+    if (ground != colonist->z && map_is_passable(map, colonist->x, colonist->y, ground)) {
+        colonist->z = ground;
+        colonist->move_progress = 0.0f;
+        set_idle(colonist, context, 0);
         return;
     }
     for (int i = 0; i < 8; i++) {

@@ -383,8 +383,23 @@ ItemQuality map_roof_quality(const Map *map, int x, int y, int z);
 void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality);
 
 /* Whether a roof over the tile would rest on something: a wall (a structure
- * that blocks movement) or rock within ROOF_SUPPORT_RANGE tiles. */
+ * that blocks movement: walls, props) or rock within ROOF_SUPPORT_RANGE
+ * tiles. */
 bool map_roof_supported(const Map *map, int x, int y, int z);
+
+/* Whether the tile has a ceiling to hold up: no rock on it, and right above
+ * it the ground of the level over it (a floor) or rock (a dug gallery). */
+bool map_has_ceiling(const Map *map, int x, int y, int z);
+
+/* Whether a ceiling over the tile is held up: the same rule as roofs, rock
+ * or a wall (a prop...) within ROOF_SUPPORT_RANGE tiles on its level (see
+ * map_roof_supported()). Tiles without a ceiling need nothing. */
+bool map_ceiling_supported(const Map *map, int x, int y, int z);
+
+/* Whether digging the rock of (x, y, z) out would leave every ceiling around
+ * it held up (its own included). `opens_above`: the ground over it goes too
+ * (a ramp), leaving it no ceiling. */
+bool map_dig_keeps_ceilings(const Map *map, int x, int y, int z, bool opens_above);
 
 /* Whether something natural covers the tile: a tile without rock with a
  * floor or rock somewhere above it (a cave, a gallery dug into a hill). */

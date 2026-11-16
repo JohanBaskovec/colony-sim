@@ -10,6 +10,8 @@
  * builders' knowledge, faster with a digging stick: galleries into hills,
  * and ramps cut into a one-level bank of earth (the bank's tile becomes a
  * slope up to the ground behind it, the ground over it is taken away).
+ * Nobody digs where a ceiling would be left without support (see
+ * map_dig_keeps_ceilings()): such orders wait for a prop or a wall.
  * Mining rock needs a pick and a knowledge that are not in the game yet:
  * nobody can do it for now, but the order exists. Taking a structure apart
  * gives back half of its materials, and so does taking a roof down. Roof
@@ -94,6 +96,11 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
 bool designation_ramp_ground_free(const Constructions *constructions,
                                   const Workstations *workstations, const Stockpiles *stockpiles,
                                   int x, int y, int z);
+
+/* Whether the order on the tile digs (earth, rock, a ramp) and has to wait:
+ * carrying it out now would leave a ceiling around without support. */
+bool designation_waits_for_support(const Designations *designations, const Map *map, int x,
+                                   int y, int z);
 
 DesignationType designation_get(const Designations *designations, int x, int y, int z);
 

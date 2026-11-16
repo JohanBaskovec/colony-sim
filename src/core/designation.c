@@ -137,6 +137,16 @@ bool designation_ramp_ground_free(const Constructions *constructions,
            stockpile_at(stockpiles, x, y, z + 1) == STOCKPILE_NONE;
 }
 
+bool designation_waits_for_support(const Designations *designations, const Map *map, int x,
+                                   int y, int z)
+{
+    DesignationType type = designation_get(designations, x, y, z);
+    if (type != DESIGNATION_DIG && type != DESIGNATION_MINE && type != DESIGNATION_DIG_RAMP) {
+        return false;
+    }
+    return !map_dig_keeps_ceilings(map, x, y, z, type == DESIGNATION_DIG_RAMP);
+}
+
 DesignationType designation_get(const Designations *designations, int x, int y, int z)
 {
     if (!in_bounds(designations, x, y, z)) {

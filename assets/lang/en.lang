@@ -53,7 +53,7 @@ tool.zone_remove.description = Takes the area you drag out of the zones; the res
 tool.gather_zone.description = Settlers gather the resources you pick in it: wood, wild food, branches, twigs, grass, stones
 tool.stockpile.description = Settlers store the items you allow in it
 tool.mine.description = Settlers dig out the marked rock and bring back stone
-tool.dig.description = Settlers dig out the marked earth (galleries into hills, dugouts), faster with a digging stick
+tool.dig.description = Settlers dig out the marked earth (galleries into hills, dugouts), faster with a digging stick; a ceiling needs rock, a wall or a prop within 2 tiles
 tool.dig_ramp.description = Mark a bank of earth one level high: settlers cut a ramp into it, to walk up to the ground behind
 tool.cancel.description = Removes the orders in the area you drag
 tool.deconstruct.description = Settlers take the marked beds, walls and doors apart and get half of the materials back
@@ -245,6 +245,7 @@ hud.tile.structure = Construction: {0}
 # {0} = roof, {1} = grade
 hud.tile.roof = Roof: {0} ({1})
 hud.tile.natural_roof = Roof: rock or ground overhead
+hud.tile.needs_support = Waiting for support: dug now, a ceiling would cave in (a prop or a wall within 2 tiles)
 # {0} = number of tiles of the room
 hud.tile.room_roofed.one = Room: {0} tile, roofed
 hud.tile.room_roofed.other = Room: {0} tiles, roofed
@@ -482,7 +483,9 @@ structure.wall.description = Posts and rails of branches thatched with dry grass
 structure.door = Branch screen
 structure.door.description = A woven frame of branches pushed aside to pass: the door of grass walls
 structure.roof = Grass roof
-structure.roof.description = Branch rafters thatched with dry grass, over whatever stands on the tile: it rests on a wall or rock close by
+structure.roof.description = Branch rafters thatched with dry grass, over whatever stands on the tile: it rests on a wall, a prop or rock close by
+structure.prop = Branch prop
+structure.prop.description = A post of thick branches with a forked top: it holds up the ceiling of a gallery, or a roof, within 2 tiles
 
 # Recipes (named after what they make)
 recipe.chopper = Chopper
@@ -583,6 +586,7 @@ notice.knowledge_last_master = {0}: {1} is the last one who masters it
 notice.knowledge_lost = {0}: nobody masters it any more
 notice.knowledge_forgotten = {0}: forgotten, nobody knows anything of it any more
 notice.roof_collapsed = A roof fell in: no wall or rock held it up any more
+notice.cave_in = A gallery caved in: no rock, wall or prop held its ceiling up any more
 # A settler breaks down (bad mood). {1} = name
 notice.break_sulk = {1} is sulking and refuses to work
 notice.break_wander_off = {1} has had enough and goes off alone

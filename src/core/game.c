@@ -821,6 +821,47 @@ static void deconstruct_now(Game *game)
     }
 }
 
+/* Drops a stack on the first passable tile beside (x, y, z), if any. */
+static void drop_beside(Game *game, int x, int y, int z, ItemStack stack)
+{
+    static const int DX[4] = {0, 1, 0, -1};
+    static const int DY[4] = {-1, 0, 1, 0};
+    for (int i = 0; stack.count > 0 && i < 4; i++) {
+        if (map_is_passable(&game->map, x + DX[i], y + DY[i], z)) {
+            items_drop(&game->items, &game->map, x + DX[i], y + DY[i], z, stack);
+            return;
+        }
+    }
+}
+
+/* A gallery filled up again: the sites, stations and zones on it go (what
+ * they held is put beside it). Settlers caught there step out by themselves
+ * (see colonist_tick()). */
+static void clear_caved_in(Game *game, TilePos tile)
+{
+    int x = tile.x, y = tile.y, z = tile.z;
+    for (int roofs = 0; roofs <= 1; roofs++) {
+        int site = construction_in_layer(&game->constructions, x, y, z, roofs != 0);
+        ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
+        int count = site != CONSTRUCTION_NONE
+                        ? constructions_remove(&game->constructions, site, returned)
+                        : 0;
+        for (int i = 0; i < count; i++) {
+            drop_beside(game, x, y, z, returned[i]);
+        }
+    }
+    int station = workstation_at(&game->workstations, x, y, z);
+    if (station != WORKSTATION_NONE) {
+        ItemStack returned[1];
+        int count = workstations_remove(&game->workstations, station, returned);
+        for (int i = 0; i < count; i++) {
+            drop_beside(game, x, y, z, returned[i]);
+        }
+    }
+    stockpiles_remove_rect(&game->stockpiles, x, y, x, y, z);
+    gather_zones_remove_rect(&game->gather_zones, x, y, x, y, z);
+}
+
 void game_tick(Game *game)
 {
     game->clock.tick++;
@@ -855,11 +896,19 @@ void game_tick(Game *game)
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game->items.totals, game_daily_food(game));
     update_colonists(game);
-    /* Walls taken apart or fallen apart, rock dug out: roofs left without
-     * support fall in. */
-    if (roofs_collapse(&game->roof_watch, &game->map, &game->items, &game->designations) > 0) {
+    /* Walls and props taken apart or fallen apart, rock dug out: roofs and
+     * ceilings left without support fall in. */
+    CaveIns cave_ins;
+    if (roofs_collapse(&game->roof_watch, &game->map, &game->items, &game->designations,
+                       &cave_ins) > 0) {
         notices_push(&game->notices, NOTICE_ROOF_COLLAPSED, KNOWLEDGE_NONE, NULL,
                      game->clock.tick);
+    }
+    for (int i = 0; i < cave_ins.count && i < ROOF_CAVE_IN_MAX; i++) {
+        clear_caved_in(game, cave_ins.tiles[i]);
+    }
+    if (cave_ins.count > 0) {
+        notices_push(&game->notices, NOTICE_CAVE_IN, KNOWLEDGE_NONE, NULL, game->clock.tick);
     }
     if (game->clock.tick % CONVERSATION_CHECK_TICKS == 0) {
         conversations_update(game->colonists, &game->colonist_pool, game->clock.tick,

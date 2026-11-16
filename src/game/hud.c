@@ -471,6 +471,9 @@ static void build_tile_panel(App *app, Panel *panel)
         } else {
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.designation"), name);
         }
+        if (designation_waits_for_support(&app->game.designations, map, x, y, z)) {
+            panel_add_text(panel, tr("hud.tile.needs_support"));
+        }
     }
 
     int dirt = dirt_at(&app->game.dirt, x, y, z);

@@ -16,13 +16,16 @@
  *   woven with thinner branches (4.5 kg), gaps stuffed with twigs;
  * - roof, 1 m² of ground, about 1.2 m² of slope: rafters 4 cm thick every
  *   50 cm (2.4 m, 2 kg) and thin battens every 25 cm (5 m, 1 kg): 3 branches;
- *   thatch 20 cm thick to shed rain: 0.24 m³ of dry grass, 20 kg.
+ *   thatch 20 cm thick to shed rain: 0.24 m³ of dry grass, 20 kg;
+ * - prop, 2 m high: a bundle of the thickest branches tied into a post, with
+ *   a forked top and a cross piece pressed under the ceiling: 6 branches.
  * Work: about 15 minutes to spread a bed; 2 hours for a wall segment (dig
  * the post holes with a stick, tie the rails, thatch); 1.5 hours to weave a
- * screen or to roof a tile, working overhead (TICKS_PER_HOUR = 2,500).
+ * screen or to roof a tile, working overhead; 1 hour to set a prop
+ * (TICKS_PER_HOUR = 2,500).
  * Hit points: a bed 20 (it packs down, a hit point a day, and is refreshed
  * with 4 armfuls of dry grass in 125 ticks), a wall 60, a screen 40, a roof
- * 50.
+ * 50, a prop 40.
  */
 static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
     [STRUCTURE_NONE] = {"none", NULL, NULL, {{ITEM_NONE, 0}, {ITEM_NONE, 0}}, 0.0f,
@@ -43,6 +46,10 @@ static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
     [STRUCTURE_ROOF] = {"grass_roof", N_("structure.roof"), N_("structure.roof.description"),
                         {{ITEM_BRANCHES, 3}, {ITEM_GRASS, 20}}, 3750.0f, KNOWLEDGE_BASIC_SHELTERS,
                         50.0f, 1.0f, 0.0f, false, 1, 50, 0, {ITEM_NONE, 0}, 0.0f, true},
+    /* Blocks its tile, as a wall does: it holds up ceilings and roofs. */
+    [STRUCTURE_PROP] = {"branch_prop", N_("structure.prop"), N_("structure.prop.description"),
+                        {{ITEM_BRANCHES, 6}, {ITEM_NONE, 0}}, 2500.0f, KNOWLEDGE_BASIC_SHELTERS,
+                        50.0f, 0.0f, 0.0f, false, 1, 40, 0, {ITEM_NONE, 0}, 0.0f, false},
 };
 
 /* Hit points by grade, crude to superb. */

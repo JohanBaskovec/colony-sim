@@ -17,7 +17,7 @@ static void test_collapse(void)
     REQUIRE(designations_init(&designations, 24, 24, 1));
     RoofWatch watch;
     roof_watch_init(&watch, &map);
-    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, &designations), 0);
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, &designations, NULL), 0);
 
     /* Two walls; a roof held by both, one held by the first only, one by the
      * second only, at the edge of its reach. */
@@ -28,12 +28,12 @@ static void test_collapse(void)
     map_set_roof(&map, 9 + ROOF_SUPPORT_RANGE, 5 + ROOF_SUPPORT_RANGE, 0, STRUCTURE_ROOF,
                  ITEM_QUALITY_STANDARD);
     CHECK(designation_set(&designations, &map, 4, 6, 0, DESIGNATION_REMOVE_ROOF));
-    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, &designations), 0); /* All held up. */
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, &designations, NULL), 0); /* All held up. */
 
     /* The first wall goes: the roof it alone held falls in, half of its
      * materials on the tile, and the order to take it down goes with it. */
     map_set_structure(&map, 5, 5, 0, STRUCTURE_NONE);
-    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, &designations), 1);
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, &designations, NULL), 1);
     CHECK_EQ_INT(map_roof(&map, 4, 6, 0), STRUCTURE_NONE);
     CHECK_EQ_INT(map_roof(&map, 7, 5, 0), STRUCTURE_ROOF);
     CHECK_EQ_INT(map.roof_count, 2);
@@ -42,19 +42,19 @@ static void test_collapse(void)
     CHECK_EQ_INT((int)items.totals[roof->materials[1].type], roof->materials[1].count / 2);
     CHECK_EQ_INT(designation_get(&designations, 4, 6, 0), DESIGNATION_NONE);
     CHECK_EQ_INT(designations.count, 0);
-    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, &designations), 0); /* Nothing new. */
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, &designations, NULL), 0); /* Nothing new. */
 
     /* A door holds nothing up: the second wall turned into a door. */
     map_set_structure(&map, 9, 5, 0, STRUCTURE_DOOR);
-    CHECK_EQ_INT(roofs_collapse(&watch, &map, NULL, NULL), 2);
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, NULL, NULL, NULL), 2);
     CHECK_EQ_INT(map.roof_count, 0);
 
     /* Rock holds roofs up too, until it is dug out. */
     map_set_rock(&map, 15, 15, 0, ROCK_GRANITE);
     map_set_roof(&map, 16, 16, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
-    CHECK_EQ_INT(roofs_collapse(&watch, &map, NULL, NULL), 0);
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, NULL, NULL, NULL), 0);
     map_set_rock(&map, 15, 15, 0, ROCK_NONE);
-    CHECK_EQ_INT(roofs_collapse(&watch, &map, NULL, NULL), 1);
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, NULL, NULL, NULL), 1);
 
     designations_free(&designations);
     items_free(&items);
@@ -74,8 +74,86 @@ static void test_collapse_after_many_changes(void)
     for (int i = 0; i < 2 * MAP_BUILD_LOG_SIZE; i++) { /* Far away. */
         map_set_structure(&map, 30, 30, 0, i % 2 == 0 ? STRUCTURE_WALL : STRUCTURE_NONE);
     }
-    CHECK_EQ_INT(roofs_collapse(&watch, &map, NULL, NULL), 1);
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, NULL, NULL, NULL), 1);
     CHECK_EQ_INT(map.roof_count, 0);
+    map_free(&map);
+}
+
+/* 16 x 16, 3 levels: plains on level `floor`, rock under them; a hill of
+ * earth for x >= 4 one level higher; a 5 x 5 room dug into it (x and y 5 to
+ * 9) on level `floor`, held up by a prop in its middle (7, 7), the one tile
+ * out of reach of the rock around. */
+static bool init_propped_room(Map *map, int floor)
+{
+    if (!map_init(map, 16, 16, 3)) {
+        return false;
+    }
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            bool hill = x >= 4, room = x >= 5 && x <= 9 && y >= 5 && y <= 9;
+            for (int z = 0; z < 3; z++) {
+                size_t i = map_index(map, x, y, z);
+                bool solid = z < floor || (z == floor && hill && !room);
+                map->terrain[i] = (uint8_t)(z <= floor || (z == floor + 1 && hill)
+                                                ? TERRAIN_SOIL
+                                                : TERRAIN_OPEN);
+                map->rock[i] = (uint8_t)(solid ? ROCK_EARTH : ROCK_NONE);
+            }
+        }
+    }
+    map_topology_changed(map); /* The layers were written directly. */
+    map_set_structure(map, 7, 7, floor, STRUCTURE_PROP);
+    return true;
+}
+
+/* A prop taken away: the ceiling it held caves in, the tile fills up again
+ * (with the rock above it), what lay there is pushed beside it. */
+static void test_cave_in(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(init_propped_room(&map, 0));
+    REQUIRE(items_init(&items, 16, 16, 3));
+    map_set_rock(&map, 7, 7, 1, ROCK_GRANITE); /* A boulder in the ground above. */
+    RoofWatch watch;
+    roof_watch_init(&watch, &map);
+    CaveIns cave_ins;
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, NULL, &cave_ins), 0);
+    CHECK_EQ_INT(cave_ins.count, 0);
+
+    map_set_structure(&map, 7, 7, 0, STRUCTURE_NONE);
+    REQUIRE(items_add(&items, 7, 7, 0, item_stack_pristine(ITEM_WOOD, 3)) == 3);
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, NULL, &cave_ins), 0);
+    REQUIRE(cave_ins.count == 1);
+    CHECK(cave_ins.tiles[0].x == 7 && cave_ins.tiles[0].y == 7 && cave_ins.tiles[0].z == 0);
+    CHECK_EQ_INT(map.rock[map_index(&map, 7, 7, 0)], ROCK_GRANITE);
+    CHECK_EQ_INT(items_get(&items, 7, 7, 0).count, 0);
+    CHECK_EQ_INT((int)items.totals[ITEM_WOOD], 3);
+    CHECK_EQ_INT(items_get(&items, 7, 6, 0).count, 3);
+    /* The rest of the room is within reach of the rock, the new rock too. */
+    CHECK_EQ_INT(roofs_collapse(&watch, &map, &items, NULL, &cave_ins), 0);
+    CHECK_EQ_INT(cave_ins.count, 0);
+    CHECK(map_is_passable(&map, 6, 6, 0));
+    items_free(&items);
+    map_free(&map);
+}
+
+/* More changes than the map remembers at once: every level is checked. */
+static void test_cave_in_after_many_changes(void)
+{
+    Map map;
+    REQUIRE(init_propped_room(&map, 1));
+    RoofWatch watch;
+    roof_watch_init(&watch, &map);
+    map_set_structure(&map, 7, 7, 1, STRUCTURE_NONE);
+    for (int i = 0; i < 2 * MAP_BUILD_LOG_SIZE; i++) { /* Far away. */
+        map_set_structure(&map, 1, 14, 1, i % 2 == 0 ? STRUCTURE_WALL : STRUCTURE_NONE);
+    }
+    CaveIns cave_ins;
+    roofs_collapse(&watch, &map, NULL, NULL, &cave_ins);
+    REQUIRE(cave_ins.count == 1);
+    CHECK_EQ_INT(cave_ins.tiles[0].z, 1);
+    CHECK(map.rock[map_index(&map, 7, 7, 1)] == ROCK_EARTH);
     map_free(&map);
 }
 
@@ -207,6 +285,8 @@ int main(void)
 {
     RUN_TEST(test_collapse);
     RUN_TEST(test_collapse_after_many_changes);
+    RUN_TEST(test_cave_in);
+    RUN_TEST(test_cave_in_after_many_changes);
     RUN_TEST(test_collapse_in_game);
     RUN_TEST(test_roof_over_planned_wall);
     return test_summary();

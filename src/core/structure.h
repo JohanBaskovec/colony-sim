@@ -37,6 +37,7 @@ typedef enum StructureType {
     STRUCTURE_WALL, /* Grass and branch wall. */
     STRUCTURE_DOOR, /* Branch screen: pushed aside to pass. */
     STRUCTURE_ROOF, /* Grass roof on branch rafters, over a tile. */
+    STRUCTURE_PROP, /* Forked post of branches: holds up a ceiling or a roof. */
     STRUCTURE_TYPE_COUNT
 } StructureType;
 

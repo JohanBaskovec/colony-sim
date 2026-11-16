@@ -66,7 +66,7 @@ simulation:
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level |
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
-| `roof`       | Roofs falling in when their last support goes (half the materials drop), checked around what the map logged as changed |
+| `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
 | `room`       | Rooms: areas closed by walls, doors and rock, and whether roofs cover them (a cache) |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain |
@@ -237,6 +237,27 @@ stockpiles there refuse the order, or drop it when they come later
 (`designation_ramp_ground_free()`). Orders with a `tool_use` (digging) are
 sped up by the tool and send the worker to a better one lying nearby first,
 as digging jobs in gathering zones do. Digging down is not possible yet.
+
+**Support** (step 3b): a tile without rock whose next level up has a floor
+or rock right over it has a ceiling (`map_has_ceiling()`), held up by the
+roofs' rule: rock or a structure that blocks movement (a wall, a branch
+prop, `STRUCTURE_PROP`) within `ROOF_SUPPORT_RANGE` (2) tiles on its level
+(`map_ceiling_supported()`): a gallery one or two tiles wide always holds, a
+room up to 4 × 4 inside rock too, a wider one needs props. The roof view's
+support overlay shows the same reach. Diggers never dig what would leave a
+ceiling around without support (`map_dig_keeps_ceilings()`,
+`designation_waits_for_support()`): such orders are skipped by the job
+search and say so in the tile inspector; the work stamp includes
+`Map.build_revision`, so a prop built nearby wakes the diggers up. When a
+support goes anyway (a prop or wall taken apart or fallen apart), the
+ceiling caves in (`roofs_collapse()`, see below): the tile fills up again,
+with the rock right above it or with earth, what lay on it goes beside it,
+what stood on it breaks (half its materials beside it), its order goes; the
+game removes the sites, station and zones there (`clear_caved_in()`) and
+raises a notice; a settler caught there steps out the next tick
+(`step_out_of_blocked_tile()`), and one whose ground went from under its
+feet (a ramp cut) falls to the ground below. Falls do no harm until there is
+health (M6).
 
 Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
 `Game`): at most one stack per tile (one item type, up to its stack limit),
@@ -755,10 +776,11 @@ layer alone and `game_cancel_rect()` (the cancel tool) removes one layer's.
 When the last support of a roof goes (a wall taken apart or fallen apart, a
 door in its place, rock dug out), the roof falls in (`core/roof.h`): half its
 materials drop on the tile, an order to take it down goes, and the game
-raises a notice. `roofs_collapse()` runs every tick after the settlers and
-only checks the roofs within `ROOF_SUPPORT_RANGE` of what the map logged as
-changed (`Map.build_log`, `Map.topology_log`), or every roof when the logs
-overflowed; the `RoofWatch` it keeps is derived, not hashed. A light grass
+raises a notice. A branch prop holds roofs up as a wall does (open
+shelters). `roofs_collapse()` runs every tick after the settlers and only
+checks the roofs and ceilings within `ROOF_SUPPORT_RANGE` of what the map
+logged as changed (`Map.build_log`, `Map.topology_log`), or every roof and
+ceiling of every level when the logs overflowed; the `RoofWatch` it keeps is derived, not hashed. A light grass
 roof hurts nobody. `map_natural_roof()` covers tiles with a
 floor or rock somewhere above them (see *World representation*).
 `map_hash()` only hashes the roof layers once a roof exists, so

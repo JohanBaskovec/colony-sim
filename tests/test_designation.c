@@ -332,6 +332,30 @@ static void test_ramps_need_bare_ground(void)
     free_world(&map, &d);
 }
 
+/* Nobody digs where a ceiling would be left without support: the order
+ * waits for a prop. */
+static void test_digging_waits_for_support(void)
+{
+    Map map;
+    Designations d;
+    REQUIRE(init_bank(&map, &d));
+    /* A room of 5 x 5 dug into the bank (x and y 5 to 9) but its corner
+     * (9, 9), the last rock within reach of its middle (7, 7). */
+    for (int y = 5; y <= 9; y++) {
+        for (int x = 5; x <= 9; x++) {
+            map_set_rock(&map, x, y, 0, x == 9 && y == 9 ? ROCK_EARTH : ROCK_NONE);
+        }
+    }
+    REQUIRE(designation_set(&d, &map, 9, 9, 0, DESIGNATION_DIG));
+    REQUIRE(designation_set(&d, &map, 7, 11, 0, DESIGNATION_DIG)); /* Away from it. */
+    CHECK(designation_waits_for_support(&d, &map, 9, 9, 0));
+    CHECK(!designation_waits_for_support(&d, &map, 7, 11, 0));
+    CHECK(!designation_waits_for_support(&d, &map, 3, 3, 0)); /* No order. */
+    map_set_structure(&map, 7, 7, 0, STRUCTURE_PROP);
+    CHECK(!designation_waits_for_support(&d, &map, 9, 9, 0));
+    free_world(&map, &d);
+}
+
 static void test_definitions(void)
 {
     for (int type = DESIGNATION_NONE + 1; type < DESIGNATION_COUNT; type++) {
@@ -371,6 +395,7 @@ int main(void)
     RUN_TEST(test_earth_is_dug_rock_is_mined);
     RUN_TEST(test_ramps_are_cut_into_banks);
     RUN_TEST(test_ramps_need_bare_ground);
+    RUN_TEST(test_digging_waits_for_support);
     RUN_TEST(test_definitions);
     return test_summary();
 }

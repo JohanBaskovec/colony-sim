@@ -1192,6 +1192,23 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
         }
         break;
     }
+    case STRUCTURE_PROP: {
+        /* Seen from above: the cross piece under the ceiling, the post's top
+         * in the middle. */
+        float thick = SDL_max(2.0f, floorf(w * 0.16f));
+        SDL_FRect beam = {tile->x + floorf(w * 0.1f), tile->y + floorf((h - thick) * 0.5f),
+                          w - 2.0f * floorf(w * 0.1f), thick};
+        fill(renderer, edge, &beam);
+        SDL_FRect inner = {beam.x + 1.0f, beam.y + 1.0f, beam.w - 2.0f, beam.h - 2.0f};
+        fill(renderer, wood, &inner);
+        float post = SDL_max(3.0f, floorf(w * 0.34f));
+        SDL_FRect top = {tile->x + floorf((w - post) * 0.5f), tile->y + floorf((h - post) * 0.5f),
+                         post, post};
+        fill(renderer, edge, &top);
+        SDL_FRect core = {top.x + 1.0f, top.y + 1.0f, top.w - 2.0f, top.h - 2.0f};
+        fill(renderer, shade(wood, 20), &core);
+        break;
+    }
     case STRUCTURE_ROOF: {
         /* Rows of thatch, overlapping: they line up from one tile to the next. */
         fill(renderer, straw, tile);

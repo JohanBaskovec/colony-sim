@@ -678,6 +678,51 @@ bool map_roof_supported(const Map *map, int x, int y, int z)
     return false;
 }
 
+bool map_has_ceiling(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) && map_in_bounds(map, x, y, z + 1) &&
+           map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
+           !map_is_open_at(map, map_index(map, x, y, z + 1));
+}
+
+bool map_ceiling_supported(const Map *map, int x, int y, int z)
+{
+    return !map_has_ceiling(map, x, y, z) || map_roof_supported(map, x, y, z);
+}
+
+/* Whether something other than the tile (ex, ey) holds up (x, y, z). */
+static bool supported_without(const Map *map, int x, int y, int z, int ex, int ey)
+{
+    for (int dy = -ROOF_SUPPORT_RANGE; dy <= ROOF_SUPPORT_RANGE; dy++) {
+        for (int dx = -ROOF_SUPPORT_RANGE; dx <= ROOF_SUPPORT_RANGE; dx++) {
+            if ((x + dx != ex || y + dy != ey) && holds_up_roof(map, x + dx, y + dy, z)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool map_dig_keeps_ceilings(const Map *map, int x, int y, int z, bool opens_above)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return true;
+    }
+    for (int dy = -ROOF_SUPPORT_RANGE; dy <= ROOF_SUPPORT_RANGE; dy++) {
+        for (int dx = -ROOF_SUPPORT_RANGE; dx <= ROOF_SUPPORT_RANGE; dx++) {
+            int cx = x + dx, cy = y + dy;
+            bool ceiling = dx == 0 && dy == 0
+                               ? !opens_above && map_in_bounds(map, x, y, z + 1) &&
+                                     !map_is_open_at(map, map_index(map, x, y, z + 1))
+                               : map_has_ceiling(map, cx, cy, z);
+            if (ceiling && !supported_without(map, cx, cy, z, x, y)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool map_natural_roof(const Map *map, int x, int y, int z)
 {
     if (!map_in_bounds(map, x, y, z) || map->rock[map_index(map, x, y, z)] != ROCK_NONE) {

@@ -1125,6 +1125,90 @@ static void test_ramps_spare_stockpiles(void)
     game_shutdown(&game);
 }
 
+/* A 5 x 5 room dug into the hill of init_hill_game() (x 27 to 31, y 20 to
+ * 24), reached from the plains through (26, 22); its middle (29, 22) is out
+ * of reach of the rock around, held up by a prop when `propped`. */
+static void dig_room(Game *game, bool propped)
+{
+    for (int y = 20; y <= 24; y++) {
+        for (int x = 27; x <= 31; x++) {
+            map_set_rock(&game->map, x, y, 0, ROCK_NONE);
+        }
+    }
+    map_set_rock(&game->map, 26, 22, 0, ROCK_NONE);
+    if (propped) {
+        map_set_structure(&game->map, 29, 22, 0, STRUCTURE_PROP);
+    }
+}
+
+/* Diggers leave alone what would bring a ceiling down, until a prop holds
+ * it up. */
+static void test_diggers_wait_for_props(void)
+{
+    Game game;
+    REQUIRE(init_hill_game(&game));
+    dig_room(&game, false);
+    map_set_rock(&game.map, 29, 22, 0, ROCK_EARTH); /* A pillar in the middle. */
+    Colonist *colonist = spawn_rested(&game, 20, 22);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    REQUIRE(game_designate_rect(&game, 29, 22, 29, 22, 0, DESIGNATION_DIG) == 1);
+    run_ticks(&game, walk_ticks(12));
+    CHECK(colonist->task != TASK_WORK);
+    CHECK(game.map.rock[map_index(&game.map, 29, 22, 0)] == ROCK_EARTH);
+
+    /* A prop beside it: the pillar can go. */
+    map_set_structure(&game.map, 28, 22, 0, STRUCTURE_PROP);
+    uint32_t notices = game.notices.count;
+    for (int i = 0; i < 3 * TICKS_PER_HOUR && game.map.rock[map_index(&game.map, 29, 22, 0)];
+         i++) { /* Bare-handed: slow. */
+        game_tick(&game);
+    }
+    CHECK(game.map.rock[map_index(&game.map, 29, 22, 0)] == ROCK_NONE);
+    CHECK_EQ_INT(game.notices.count, notices); /* Nothing caved in. */
+    game_shutdown(&game);
+}
+
+/* Settlers walking over ground that is taken away fall to the ground
+ * below. */
+static void test_colonist_falls(void)
+{
+    Game game;
+    REQUIRE(init_hill_game(&game));
+    Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 30, 10, 1));
+    REQUIRE(colonist != NULL);
+    REQUIRE(colonist->z == 1);
+    map_set_rock(&game.map, 30, 10, 0, ROCK_NONE);
+    map_set_terrain(&game.map, 30, 10, 1, TERRAIN_OPEN);
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->z, 0);
+    CHECK(colonist->x == 30 && colonist->y == 10);
+    game_shutdown(&game);
+}
+
+/* A prop taken away in a game: the ceiling caves in, the stockpile there
+ * goes, the settler there steps out, and the player is told. */
+static void test_cave_in_in_game(void)
+{
+    Game game;
+    REQUIRE(init_hill_game(&game));
+    dig_room(&game, true);
+    game_tick(&game);
+    map_set_structure(&game.map, 29, 22, 0, STRUCTURE_NONE);
+    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 29, 22, 29, 22, 0) != STOCKPILE_NONE);
+    Colonist *colonist = spawn_rested(&game, 29, 22);
+    REQUIRE(colonist != NULL);
+    uint32_t notices = game.notices.count;
+    game_tick(&game);
+    CHECK(game.map.rock[map_index(&game.map, 29, 22, 0)] == ROCK_EARTH);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 29, 22, 0), STOCKPILE_NONE);
+    REQUIRE(game.notices.count == notices + 1);
+    CHECK_EQ_INT(notices_get(&game.notices, notices)->type, NOTICE_CAVE_IN);
+    game_tick(&game);
+    CHECK(map_is_passable(&game.map, colonist->x, colonist->y, colonist->z));
+    game_shutdown(&game);
+}
+
 static void test_hungry_colonist_eats_spoiling_food_first(void)
 {
     Game game;
@@ -2003,6 +2087,9 @@ int main(void)
     RUN_TEST(test_colonist_climbs_to_food_on_a_hill);
     RUN_TEST(test_colonist_cuts_a_ramp);
     RUN_TEST(test_ramps_spare_stockpiles);
+    RUN_TEST(test_diggers_wait_for_props);
+    RUN_TEST(test_colonist_falls);
+    RUN_TEST(test_cave_in_in_game);
     RUN_TEST(test_hungry_colonist_eats_spoiling_food_first);
     RUN_TEST(test_colonist_harvests_blackberries);
     RUN_TEST(test_starting_knowledge_is_random_and_valid);

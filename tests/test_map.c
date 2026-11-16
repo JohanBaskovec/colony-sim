@@ -500,6 +500,62 @@ static void test_tree_near(void)
     map_free(&map);
 }
 
+/* 16 x 16, 3 levels: plains on level 0; a hill of earth for x >= 4 (earth
+ * on level 0, its ground on level 1); a 5 x 5 room dug into it (x and y 5 to
+ * 9), its middle (7, 7) out of reach of the rock around it. */
+static bool init_dug_room(Map *map)
+{
+    if (!map_init(map, 16, 16, 3)) {
+        return false;
+    }
+    for (int y = 0; y < 16; y++) {
+        for (int x = 4; x < 16; x++) {
+            bool room = x >= 5 && x <= 9 && y >= 5 && y <= 9;
+            map->rock[map_index(map, x, y, 0)] = room ? ROCK_NONE : ROCK_EARTH;
+            map->terrain[map_index(map, x, y, 1)] = TERRAIN_SOIL;
+        }
+    }
+    map_topology_changed(map); /* The layers were written directly. */
+    return true;
+}
+
+/* Ceilings: the ground over a dug tile, held up by rock, a wall or a prop
+ * within ROOF_SUPPORT_RANGE tiles. */
+static void test_ceilings_need_support(void)
+{
+    Map map;
+    REQUIRE(init_dug_room(&map));
+    CHECK(map_has_ceiling(&map, 5, 5, 0));
+    CHECK(!map_has_ceiling(&map, 2, 5, 0)); /* Open sky. */
+    CHECK(!map_has_ceiling(&map, 4, 5, 0)); /* Rock. */
+    CHECK(!map_has_ceiling(&map, 5, 5, 2)); /* The top level. */
+    CHECK(map_ceiling_supported(&map, 5, 5, 0));
+    CHECK(map_ceiling_supported(&map, 2, 5, 0)); /* Nothing to hold up. */
+    CHECK(!map_ceiling_supported(&map, 7, 7, 0)); /* 3 tiles from the rock. */
+    CHECK(map_ceiling_supported(&map, 7, 5, 0));
+
+    /* A prop holds up what is within reach, its own tile included. */
+    map_set_structure(&map, 7, 7, 0, STRUCTURE_PROP);
+    CHECK(map_ceiling_supported(&map, 7, 7, 0));
+    CHECK(map_dig_keeps_ceilings(&map, 10, 7, 0, false)); /* Widening the room. */
+    map_set_structure(&map, 7, 7, 0, STRUCTURE_NONE);
+
+    /* Digging: the rock dug out holds nothing up any more. */
+    map_set_rock(&map, 7, 7, 0, ROCK_EARTH); /* A pillar left in the middle. */
+    CHECK(map_dig_keeps_ceilings(&map, 4, 2, 0, false)); /* Away from the room. */
+    CHECK(!map_dig_keeps_ceilings(&map, 7, 7, 0, false)); /* The pillar. */
+    /* The room's wall: other rock of the wall still holds the room up. */
+    CHECK(map_dig_keeps_ceilings(&map, 7, 10, 0, false));
+    map_set_rock(&map, 7, 7, 0, ROCK_NONE);
+    map_set_structure(&map, 7, 7, 0, STRUCTURE_PROP);
+    /* A tile of rock deep inside the hill, far from the room: its own
+     * ceiling is held by the rock around it. */
+    CHECK(map_dig_keeps_ceilings(&map, 13, 13, 0, false));
+    /* A ramp leaves its tile no ceiling: only its neighbors count. */
+    CHECK(map_dig_keeps_ceilings(&map, 4, 12, 0, true));
+    map_free(&map);
+}
+
 static void test_change_logs(void)
 {
     Map map;
@@ -554,6 +610,7 @@ int main(void)
     RUN_TEST(test_plants_rest_out_of_season);
     RUN_TEST(test_mushrooms_vanish);
     RUN_TEST(test_tree_near);
+    RUN_TEST(test_ceilings_need_support);
     RUN_TEST(test_change_logs);
     return test_summary();
 }
