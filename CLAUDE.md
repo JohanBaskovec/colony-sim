@@ -44,6 +44,8 @@ ctest --preset debug -L i18n          # translation checks only (label)
 ./build/headless/bench/bench_pathfinding 200 2000   # benchmark (use an optimized build for real numbers)
 ./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times + state hash (3: construction)
 python3 tools/generate_sprites.py --preview /tmp/sheet.png  # redraw assets/sprites/*.png (Pillow + numpy)
+clang-format -i src/core/foo.c                 # format what you changed (config: .clang-format)
+clang-format --dry-run --Werror $(git ls-files '*.c' '*.h')  # check the whole tree: must print nothing
 ```
 
 The first `debug`/`release`/`asan` configure downloads and builds SDL3 (minutes).
@@ -95,6 +97,8 @@ Prefer the `headless` preset while working on the simulation core.
   `en.lang` (missing/extra keys, placeholder mismatch) and every literal key
   used in `src/` must exist in `en.lang`.
 - Before declaring a task done: build with `-Werror` (headless preset) and make `ctest` pass.
+- Before declaring a task done, also run `clang-format -i` on every `.c`/`.h` file you changed: the whole tree is kept clang-format clean.
+- A pre-commit hook (`tools/git-hooks/pre-commit`) refuses staged C files that are not clang-format clean. Enable it once per clone: `git config core.hooksPath tools/git-hooks` (already done in this one).
 - Frontend code (`src/game/`) is not unit-tested: keep logic out of it and move
   anything testable into the core.
 - Visual checks of the running game: use a virtual display, never the user's
