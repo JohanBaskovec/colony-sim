@@ -199,10 +199,16 @@ typedef struct App {
     float fps;
     double fps_elapsed;
     int fps_frames;
+    /* Time spent drawing a frame (the wait for the screen left out), averaged
+     * like the frame rate: what the frame rate would allow without vsync. */
+    float render_ms;
+    double render_elapsed;
+    int bench_render_frames; /* --bench-render: frames per view, 0 for a normal game. */
 } App;
 
 /* On failure, app_shutdown() must still be called to release what was created. */
 bool app_init(App *app, const CliOptions *options);
+/* The game loop, or the render benchmark with --bench-render. */
 void app_run(App *app);
 void app_shutdown(App *app);
 

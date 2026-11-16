@@ -34,6 +34,12 @@ const char *cli_usage(void)
                              "                  free_crafts, no_tools, instant_deconstruct, "
                              "learn_all,\n"
                              "                  instant_fell_and_mine, or all.\n"
+                             "  --no-vsync      Draw frames as fast as possible.\n"
+                             "  --bench-render <n>  Render benchmark: draws n frames from each of "
+                             "a few fixed\n"
+                             "                  views (simulation paused, no vsync), prints the "
+                             "frame times\n"
+                             "                  and quits. Use with a fixed --seed.\n"
                              "  --help          Show this message.\n";
 }
 
@@ -182,6 +188,17 @@ bool cli_parse(CliOptions *options, int argc, char **argv, char *error, size_t e
                 return false;
             }
             options->scenario = (int)scenario;
+        } else if (strcmp(arg, "--no-vsync") == 0) {
+            options->no_vsync = true;
+        } else if ((match = match_option("--bench-render", argc, argv, &i, &value)) != 0) {
+            uint64_t frames = 0;
+            if (match < 0 || !parse_u64(value, &frames) || frames < 1 ||
+                frames > CLI_BENCH_RENDER_MAX_FRAMES) {
+                snprintf(error, error_size, "--bench-render expects an integer between 1 and %d",
+                         CLI_BENCH_RENDER_MAX_FRAMES);
+                return false;
+            }
+            options->bench_render_frames = (int)frames;
         } else if ((match = match_option("--debug", argc, argv, &i, &value)) != 0) {
             if (match < 0 || !parse_debug(value, &options->debug)) {
                 snprintf(error, error_size,

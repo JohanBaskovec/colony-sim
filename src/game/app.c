@@ -12,6 +12,8 @@
 
 #include <SDL3_ttf/SDL_ttf.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #define APP_WINDOW_WIDTH 1280
 #define APP_WINDOW_HEIGHT 720
@@ -404,7 +406,9 @@ bool app_init(App *app, const CliOptions *options)
         LOG_ERROR("Cannot create the window: %s", SDL_GetError());
         return false;
     }
-    SDL_SetRenderVSync(app->renderer, 1);
+    app->bench_render_frames = options->bench_render_frames;
+    bool vsync = !options->no_vsync && app->bench_render_frames == 0;
+    SDL_SetRenderVSync(app->renderer, vsync ? 1 : 0);
     LOG_INFO("Renderer: %s", SDL_GetRendererName(app->renderer));
     SDL_SetRenderDrawBlendMode(app->renderer, SDL_BLENDMODE_BLEND);
 
@@ -977,7 +981,9 @@ static void update_fps(App *app, double dt)
             app->debug_tree_count = map_count_plants(&app->game.map, PLANT_TREE);
         }
         app->fps = (float)(app->fps_frames / app->fps_elapsed);
+        app->render_ms = (float)(app->render_elapsed * 1000.0 / app->fps_frames);
         app->fps_elapsed = 0.0;
+        app->render_elapsed = 0.0;
         app->fps_frames = 0;
     }
 }
@@ -1091,11 +1097,109 @@ static void render_frame(App *app)
     ui_end_frame(&app->ui);
 
     text_renderer_end_frame(app->text);
+}
+
+/* Draws a frame and shows it; returns the seconds spent drawing (the draw
+ * calls carried out: SDL queues them until a flush), the wait for the screen
+ * left out. */
+static double draw_frame(App *app)
+{
+    uint64_t begin = SDL_GetTicksNS();
+    render_frame(app);
+    SDL_FlushRenderer(app->renderer);
+    double seconds = (double)(SDL_GetTicksNS() - begin) / 1e9;
     SDL_RenderPresent(app->renderer);
+    return seconds;
+}
+
+static int compare_doubles(const void *a, const void *b)
+{
+    double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
+/* --bench-render: the simulation paused, a few fixed views over the first
+ * colonist (the start level and higher up, where the levels below show
+ * through, then zoomed out), each drawn as fast as possible; prints the time
+ * of a frame (from one shown to the next) and of its drawing, then quits. */
+static void bench_render(App *app)
+{
+    static const struct {
+        int levels_up;
+        float zoom;
+        const char *name;
+    } VIEWS[] = {
+        {0, 1.0f, "start level"},   {1, 1.0f, "1 level up"},       {5, 1.0f, "5 levels up"},
+        {10, 1.0f, "10 levels up"}, {0, 0.4f, "start level, far"}, {5, 0.4f, "5 levels up, far"},
+    };
+    const int frames = app->bench_render_frames;
+    const int warmup = frames < 10 ? frames : 10;
+    double *frame_times = SDL_malloc((size_t)frames * sizeof(double));
+    double *draw_times = SDL_malloc((size_t)frames * sizeof(double));
+    if (frame_times == NULL || draw_times == NULL) {
+        LOG_ERROR("Out of memory for the render benchmark");
+        SDL_free(frame_times);
+        SDL_free(draw_times);
+        return;
+    }
+    const Camera start = app->camera;
+    printf("render benchmark: seed %" SDL_PRIu64 ", %d frames per view, renderer %s\n",
+           app->game.seed, frames, SDL_GetRendererName(app->renderer));
+    printf("  %-18s %10s %10s %10s %10s\n", "view", "frame avg", "frame p99", "draw avg",
+           "draw p99");
+    double total = 0.0;
+    for (size_t view = 0; view < sizeof(VIEWS) / sizeof(VIEWS[0]) && app->running; view++) {
+        app->camera = start;
+        int level = start.level + VIEWS[view].levels_up;
+        app->camera.level = level < app->game.map.depth ? level : app->game.map.depth - 1;
+        update_camera(app, 0.0f); /* The viewport. */
+        camera_zoom_at(&app->camera, VIEWS[view].zoom, app->camera.viewport_width * 0.5f,
+                       app->camera.viewport_height * 0.5f);
+        uint64_t previous = 0;
+        for (int i = -warmup; i < frames && app->running; i++) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_EVENT_QUIT) {
+                    app->running = false;
+                }
+            }
+            double draw = draw_frame(app);
+            uint64_t now = SDL_GetTicksNS();
+            if (i >= 0) {
+                frame_times[i] = (double)(now - previous) / 1e9;
+                draw_times[i] = draw;
+                total += frame_times[i];
+            }
+            previous = now;
+        }
+        if (!app->running) {
+            break;
+        }
+        double frame_sum = 0.0, draw_sum = 0.0;
+        for (int i = 0; i < frames; i++) {
+            frame_sum += frame_times[i];
+            draw_sum += draw_times[i];
+        }
+        qsort(frame_times, (size_t)frames, sizeof(double), compare_doubles);
+        qsort(draw_times, (size_t)frames, sizeof(double), compare_doubles);
+        int p99 = (int)((double)frames * 0.99);
+        p99 = p99 < frames ? p99 : frames - 1;
+        printf("  %-18s %7.2f ms %7.2f ms %7.2f ms %7.2f ms\n", VIEWS[view].name,
+               frame_sum * 1e3 / frames, frame_times[p99] * 1e3, draw_sum * 1e3 / frames,
+               draw_times[p99] * 1e3);
+    }
+    printf("  total %.2f s\n", total);
+    fflush(stdout);
+    SDL_free(frame_times);
+    SDL_free(draw_times);
 }
 
 void app_run(App *app)
 {
+    if (app->bench_render_frames > 0) {
+        bench_render(app);
+        return;
+    }
     uint64_t previous = SDL_GetTicksNS();
     while (app->running) {
         uint64_t now = SDL_GetTicksNS();
@@ -1118,6 +1222,6 @@ void app_run(App *app)
         prune_gather_zone_selection(app);
         prune_tile_selection(app);
         update_fps(app, dt);
-        render_frame(app);
+        app->render_elapsed += draw_frame(app);
     }
 }

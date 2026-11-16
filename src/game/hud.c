@@ -524,6 +524,9 @@ static void build_debug_panel(App *app, Panel *panel)
     tr_integer(value, sizeof(value), (long long)(app->fps + 0.5f));
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.debug.fps"), value);
 
+    tr_decimal(value, sizeof(value), app->render_ms, 1);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.debug.render_time"), value);
+
     tr_integer(value, sizeof(value), (long long)app->game.clock.tick);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.debug.tick"), value);
 

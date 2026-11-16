@@ -18,7 +18,34 @@ static void test_no_arguments_gives_defaults(void)
     CHECK_EQ_INT(options.colonist_count, 0);
     CHECK_EQ_INT(options.scenario, SCENARIO_NONE);
     CHECK_EQ_UINT(options.debug, 0);
+    CHECK(!options.no_vsync);
+    CHECK_EQ_INT(options.bench_render_frames, 0);
     CHECK(!options.show_help);
+}
+
+static void test_measurement_options(void)
+{
+    CliOptions options;
+    char error[128];
+    char *argv[] = {"colony_sim", "--no-vsync", "--bench-render", "300"};
+    CHECK(cli_parse(&options, ARGC(argv), argv, error, sizeof(error)));
+    CHECK(options.no_vsync);
+    CHECK_EQ_INT(options.bench_render_frames, 300);
+
+    char *equals[] = {"colony_sim", "--bench-render=1"};
+    CHECK(cli_parse(&options, ARGC(equals), equals, error, sizeof(error)));
+    CHECK_EQ_INT(options.bench_render_frames, 1);
+    CHECK(!options.no_vsync);
+
+    char *zero[] = {"colony_sim", "--bench-render", "0"};
+    CHECK(!cli_parse(&options, ARGC(zero), zero, error, sizeof(error)));
+    CHECK(strstr(error, "--bench-render") != NULL);
+    char *missing[] = {"colony_sim", "--bench-render"};
+    CHECK(!cli_parse(&options, ARGC(missing), missing, error, sizeof(error)));
+    char *huge[] = {"colony_sim", "--bench-render", "100001"};
+    CHECK(!cli_parse(&options, ARGC(huge), huge, error, sizeof(error)));
+    char *value[] = {"colony_sim", "--no-vsync=1"};
+    CHECK(!cli_parse(&options, ARGC(value), value, error, sizeof(error)));
 }
 
 static void test_all_options_both_syntaxes(void)
@@ -103,6 +130,7 @@ int main(void)
 {
     RUN_TEST(test_no_arguments_gives_defaults);
     RUN_TEST(test_all_options_both_syntaxes);
+    RUN_TEST(test_measurement_options);
     RUN_TEST(test_rejects_invalid_input);
     RUN_TEST(test_test_options);
     return test_summary();

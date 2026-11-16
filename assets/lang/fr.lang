@@ -250,6 +250,7 @@ hud.item_quality = Qualité : {0}
 hud.item_hit_points = Points de vie : {0}/{1} ({2})
 
 hud.debug.fps = IPS : {0}
+hud.debug.render_time = Dessin : {0} ms par image
 hud.debug.tick = Tick : {0}
 hud.debug.seed = Graine : {0}
 hud.debug.zoom = Zoom : {0} px/case

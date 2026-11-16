@@ -285,6 +285,7 @@ hud.item_hit_points = Hit points: {0}/{1} ({2})
 
 # Debug overlay (F3)
 hud.debug.fps = FPS: {0}
+hud.debug.render_time = Drawing: {0} ms per frame
 hud.debug.tick = Tick: {0}
 hud.debug.seed = Seed: {0}
 hud.debug.zoom = Zoom: {0} px/tile

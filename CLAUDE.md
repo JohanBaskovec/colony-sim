@@ -42,7 +42,12 @@ cmake --preset debug && cmake --build --preset debug && ctest --preset debug    
 ctest --preset debug -R i18n          # only one test (regex on the test name)
 ctest --preset debug -L i18n          # translation checks only (label)
 ./build/headless/bench/bench_pathfinding 200 2000   # benchmark (use an optimized build for real numbers)
-./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times + state hash (3: construction)
+./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times (processor time: steady on a busy machine), percentiles, slowest ticks, state hash (3: construction)
+./build/release/bin/colony_sim --seed 42 --bench-render 300  # render benchmark: frame and drawing times of fixed views, no vsync, then quits
+./build/release/bin/colony_sim --no-vsync           # uncapped frame rate; F3 also shows the drawing time per frame
+cmake --preset profile && cmake --build --preset profile  # optimized + debug symbols + frame pointers, for perf
+perf record -g ./build/profile/bench/bench_simulation 64 4 3 && perf report  # where the time goes
+BENCH_TIMESTAMPS=1 perf record -g -k CLOCK_MONOTONIC ./build/profile/bench/bench_simulation 64 10 3  # then perf report --time <printed range>: one slow tick
 python3 tools/generate_sprites.py --preview /tmp/sheet.png  # redraw assets/sprites/*.png (Pillow + numpy)
 clang-format -i src/core/foo.c                 # format what you changed (config: .clang-format)
 clang-format --dry-run --Werror $(git ls-files '*.c' '*.h')  # check the whole tree: must print nothing
@@ -70,8 +75,11 @@ Prefer the `headless` preset while working on the simulation core.
 - Terrain and rock are changed through `map_set_terrain()` / `map_set_rock()`
   (never by writing the layers directly once a `Game` runs): caches such as
   connectivity regions rely on `Map.topology_revision`.
-- Performance work is measured with `bench_simulation`; a change that should
-  not alter behavior must leave its state hash unchanged.
+- Performance work is measured with `bench_simulation` (simulation) and
+  `--bench-render` (drawing), and profiled with `perf` on the `profile` preset;
+  compare a baseline and the change run one after the other on the same
+  machine. A change that should not alter behavior must leave the state hash
+  of `bench_simulation` unchanged.
 - Entities (colonists...) live in fixed arrays managed by a `Pool` and are
   referenced by generational `EntityId` handles, never by pointers kept across
   ticks. UI state (selection, camera) stays in the frontend (`App`).
@@ -105,8 +113,9 @@ Prefer the `headless` preset while working on the simulation core.
 - Frontend code (`src/game/`) is not unit-tested: keep logic out of it and move
   anything testable into the core.
 - Visual checks of the running game: use a virtual display, never the user's
-  desktop (`Xvfb :99 -screen 0 1280x800x24 &`, then `DISPLAY=:99` for the game,
-  `xdotool` and `import -window root shot.png`).
+  desktop (`Xvfb :99 -screen 0 1280x800x24 &`, then `SDL_VIDEO_DRIVER=x11 DISPLAY=:99`
+  for the game, so that SDL never falls back to the Wayland desktop, `xdotool`
+  and `import -window root shot.png`).
 
 ## Workflow
 

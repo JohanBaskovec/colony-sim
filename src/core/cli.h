@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #define CLI_LANGUAGE_CODE_SIZE 16
+#define CLI_BENCH_RENDER_MAX_FRAMES 100000
 
 /* Cheats turned on from the start (--debug), see GameDebug in core/game.h. */
 #define CLI_DEBUG_INSTANT_BUILD (1u << 0)
@@ -28,6 +29,9 @@ typedef struct CliOptions {
     int colonist_count; /* 0: default count. */
     int scenario;       /* A Scenario (core/scenario.h), SCENARIO_NONE by default. */
     unsigned debug;     /* CLI_DEBUG_* bits. */
+    bool no_vsync;      /* Frames as fast as possible (frame time measurements). */
+    /* Render benchmark (--bench-render): frames drawn per view, 0 when off. */
+    int bench_render_frames;
     bool show_help;
 } CliOptions;
 
