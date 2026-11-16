@@ -964,27 +964,33 @@ static void progress_bar(SDL_Renderer *renderer, const SDL_FRect *tile, float fr
     fill(renderer, PROGRESS_COLOR, &bar);
 }
 
-/* Zone id of a tile in a layer of zone index + 1 (0 outside), or -1. */
-static int zone_id(const uint8_t *layer, int width, int height, int x, int y)
+/* Zone index of a tile, or -1 outside any zone and off the map. */
+typedef int (*ZoneAt)(const void *zones, int x, int y, int z);
+
+static int stockpile_zone_at(const void *zones, int x, int y, int z)
 {
-    if (x < 0 || y < 0 || x >= width || y >= height) {
-        return -1;
-    }
-    return (int)layer[(size_t)y * (size_t)width + (size_t)x] - 1;
+    return stockpile_at(zones, x, y, z);
 }
 
-/* Zones as a translucent overlay with their borders; the selected one
- * (index, or -1) is brighter. */
-static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, const uint8_t *layer,
-                              int width, int height, int selected, SDL_Color color)
+static int gather_zone_zone_at(const void *zones, int x, int y, int z)
 {
+    return gather_zone_at(zones, x, y, z);
+}
+
+/* The zones of the level shown as a translucent overlay with their borders;
+ * the selected one (index, or -1) is brighter. */
+static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, const void *zones,
+                              ZoneAt zone_at, int width, int height, int selected,
+                              SDL_Color color)
+{
+    const int z = camera->level; /* The level shown. */
     TileRect visible = camera_visible_tiles(camera, width, height);
     SDL_Color normal = color, highlight = color;
     normal.a = 45;
     highlight.a = 90;
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            int index = zone_id(layer, width, height, x, y);
+            int index = zone_at(zones, x, y, z);
             if (index < 0) {
                 continue;
             }
@@ -995,16 +1001,16 @@ static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, cons
             edge.a = index == selected ? 255 : 140;
             SDL_SetRenderDrawColor(renderer, edge.r, edge.g, edge.b, edge.a);
             float l = tile.x, t = tile.y, r = tile.x + tile.w - 1.0f, b = tile.y + tile.h - 1.0f;
-            if (zone_id(layer, width, height, x - 1, y) != index) {
+            if (zone_at(zones, x - 1, y, z) != index) {
                 SDL_RenderLine(renderer, l, t, l, b);
             }
-            if (zone_id(layer, width, height, x + 1, y) != index) {
+            if (zone_at(zones, x + 1, y, z) != index) {
                 SDL_RenderLine(renderer, r, t, r, b);
             }
-            if (zone_id(layer, width, height, x, y - 1) != index) {
+            if (zone_at(zones, x, y - 1, z) != index) {
                 SDL_RenderLine(renderer, l, t, r, t);
             }
-            if (zone_id(layer, width, height, x, y + 1) != index) {
+            if (zone_at(zones, x, y + 1, z) != index) {
                 SDL_RenderLine(renderer, l, b, r, b);
             }
         }
@@ -1028,8 +1034,8 @@ void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *c
                        int selected)
 {
     const Stockpiles *stockpiles = &game->stockpiles;
-    render_zone_layer(renderer, camera, stockpiles->zone, stockpiles->width, stockpiles->height,
-                      selected, STOCKPILE_COLOR);
+    render_zone_layer(renderer, camera, stockpiles, stockpile_zone_at, stockpiles->width,
+                      stockpiles->height, selected, STOCKPILE_COLOR);
 }
 
 void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
@@ -1047,8 +1053,8 @@ void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera 
     if (zones->used_count == 0) {
         return;
     }
-    render_zone_layer(renderer, camera, zones->zone, zones->width, zones->height, selected,
-                      GATHER_ZONE_COLOR);
+    render_zone_layer(renderer, camera, zones, gather_zone_zone_at, zones->width, zones->height,
+                      selected, GATHER_ZONE_COLOR);
     /* Progress of the job under way on each tile. */
     TileRect visible = camera_visible_tiles(camera, zones->width, zones->height);
     for (int y = visible.y0; y < visible.y1; y++) {
@@ -1769,7 +1775,7 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
     for (int y = box.y0; y <= box.y1; y++) {
         for (int x = box.x0; x <= box.x1; x++) {
             light_corners[(y - box.y0) * columns + (x - box.x0)] =
-                hearths_light_at(workstations, (float)x, (float)y);
+                hearths_light_at(workstations, (float)x, (float)y, camera->level);
         }
     }
     lit_quads(renderer, camera, box, NIGHT_COLOR, darkness, false);

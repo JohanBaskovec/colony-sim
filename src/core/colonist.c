@@ -3416,7 +3416,8 @@ static bool is_fire_source(const Map *map, int x, int y, int z, void *userdata)
     const FireSourceSearch *search = userdata;
     const Workstation *station = station_on(search->context, x, y, z);
     return station != NULL && station->burning &&
-           (station->x != search->hearth.x || station->y != search->hearth.y);
+           (station->x != search->hearth.x || station->y != search->hearth.y ||
+            station->z != search->hearth.z);
 }
 
 static bool carries_tinder(const Colonist *colonist)
@@ -3790,7 +3791,7 @@ static void listen_to_story(Colonist *colonist, const ColonistContext *context)
         return;
     }
     int dx = abs(colonist->x - station->x), dy = abs(colonist->y - station->y);
-    if ((dx > dy ? dx : dy) > HEARTH_STORY_RANGE) {
+    if ((dx > dy ? dx : dy) > HEARTH_STORY_RANGE || colonist->z != station->z) {
         set_idle(colonist, context, 0); /* Did not get there. */
         return;
     }

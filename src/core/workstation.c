@@ -123,6 +123,7 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
         station->type = (uint8_t)type;
         station->x = (int16_t)x;
         station->y = (int16_t)y;
+        station->z = (int16_t)z;
         station->number = workstations->next_number++;
         station->work_recipe = RECIPE_COUNT;
         if (WORKSTATION_DEFS[type].hearth) {

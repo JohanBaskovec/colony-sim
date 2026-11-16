@@ -230,17 +230,17 @@ static void test_chance_light_and_time(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     int index = built_hearth(&game, 10, 10, 5.0f);
-    CHECK_NEAR(hearths_light_at(&game.workstations, 10.5f, 10.5f), 0.0, 1e-9); /* Out. */
+    CHECK_NEAR(hearths_light_at(&game.workstations, 10.5f, 10.5f, 0), 0.0, 1e-9); /* Out. */
     REQUIRE(hearth_light(&game.workstations, index));
-    CHECK_NEAR(hearths_light_at(&game.workstations, 10.5f, 10.5f), 1.0, 1e-6);
-    CHECK_NEAR(hearths_light_at(&game.workstations, 13.5f, 10.5f), 0.5, 1e-6);
-    CHECK_NEAR(hearths_light_at(&game.workstations, 10.5f + HEARTH_LIGHT_RADIUS, 10.5f), 0.0,
+    CHECK_NEAR(hearths_light_at(&game.workstations, 10.5f, 10.5f, 0), 1.0, 1e-6);
+    CHECK_NEAR(hearths_light_at(&game.workstations, 13.5f, 10.5f, 0), 0.5, 1e-6);
+    CHECK_NEAR(hearths_light_at(&game.workstations, 10.5f + HEARTH_LIGHT_RADIUS, 10.5f, 0), 0.0,
                1e-6);
-    CHECK_NEAR(hearths_light_at(&game.workstations, 30.5f, 30.5f), 0.0, 1e-9);
+    CHECK_NEAR(hearths_light_at(&game.workstations, 30.5f, 30.5f, 0), 0.0, 1e-9);
     /* The brightest fire wins. */
     int other = built_hearth(&game, 13, 10, 5.0f);
     REQUIRE(hearth_light(&game.workstations, other));
-    CHECK_NEAR(hearths_light_at(&game.workstations, 13.5f, 10.5f), 1.0, 1e-6);
+    CHECK_NEAR(hearths_light_at(&game.workstations, 13.5f, 10.5f, 0), 1.0, 1e-6);
     game_shutdown(&game);
 
     CHECK(!hearth_story_time(19 * TICKS_PER_HOUR - 1));

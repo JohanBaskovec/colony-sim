@@ -20,6 +20,7 @@ set(COLONY_UNIT_TESTS
     test_item
     test_knowledge
     test_learning
+    test_levels
     test_hearth
     test_map
     test_mood

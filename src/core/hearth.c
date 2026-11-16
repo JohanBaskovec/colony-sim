@@ -174,12 +174,12 @@ float hearth_friction_chance(double level)
                   0.0f, 1.0f);
 }
 
-float hearths_light_at(const Workstations *workstations, float x, float y)
+float hearths_light_at(const Workstations *workstations, float x, float y, int z)
 {
     float light = 0.0f;
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = &workstations->list[index];
-        if (!station->used || !station->burning) {
+        if (!station->used || !station->burning || station->z != z) {
             continue;
         }
         float dx = x - ((float)station->x + 0.5f), dy = y - ((float)station->y + 0.5f);

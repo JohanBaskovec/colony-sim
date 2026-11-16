@@ -1114,8 +1114,8 @@ searches backed off on that revision look again.
 - **Rendering**: a ring of stones, sticks for the fuel, flames moving with
   real time; at night `render_daylight()` darkens plain rectangles around
   the area lit by burning hearths and a grid of per-corner alpha quads
-  inside it (`hearths_light_at()`, linear over 6 tiles), plus an additive
-  warm glow.
+  inside it (`hearths_light_at()`, linear over 6 tiles, fires of the level
+  shown only), plus an additive warm glow.
 
 Stones are two map layers (`Map.cobbles`, `Map.flint`): how many of each lie
 about a tile, `MAP_STONES_MAX` (20) at most together, taken one by one by

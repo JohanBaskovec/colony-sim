@@ -119,8 +119,9 @@ int hearths_burn(Workstations *workstations, const Map *map, float wetting);
 /* Chance (0..1) that an attempt at lighting by friction succeeds at a level. */
 float hearth_friction_chance(double level);
 
-/* Light (0..1) burning hearths give at a world point (tile centers at +0.5). */
-float hearths_light_at(const Workstations *workstations, float x, float y);
+/* Light (0..1) burning hearths on level z give at a world point of that level
+ * (tile centers at +0.5). */
+float hearths_light_at(const Workstations *workstations, float x, float y, int z);
 
 /* Degrees felt on a tile from the warmth burning hearths radiate (added
  * up, 0 when none reaches it). */
