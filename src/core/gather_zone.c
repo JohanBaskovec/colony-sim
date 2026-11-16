@@ -8,9 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Felling a tree: a fixed part plus a part proportional to its size. */
-#define CHOP_BASE_WORK 400.0f
-#define CHOP_GROWTH_WORK 1600.0f
 /* Wild food, per item taken: 360 for a bramble's nine handfuls, 480 for a
  * hazel's twelve nuts; 500 to dig four cattail rhizomes up. */
 #define HARVEST_WORK 40.0f
@@ -978,7 +975,6 @@ static int plant_yield(const Map *map, int x, int y, int z, GatherJob job)
             return 0;
         }
     }
-    const PlantDef *def = plant_def((PlantType)plant->type);
     switch (job) {
     case GATHER_JOB_HARVEST:
     case GATHER_JOB_HARVEST_CAREFULLY:
@@ -990,10 +986,7 @@ static int plant_yield(const Map *map, int x, int y, int z, GatherJob job)
         int armfuls = (int)(CUT_GRASS_YIELD * plant->growth + 0.5f);
         return armfuls > 1 ? armfuls : 1;
     }
-    case GATHER_JOB_CHOP: { /* Wider trunks by their area. */
-        int area = tree_size(plant) * tree_size(plant);
-        return (int)((float)(def->cut_yield * area) * plant->growth + 0.5f);
-    }
+    case GATHER_JOB_CHOP: return tree_wood_yield(plant);
     default: return 0;
     }
 }
@@ -1150,10 +1143,7 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
         return TWIGS_WORK * (float)(available > 1 ? available : 1);
     }
     case GATHER_JOB_CUT_GRASS: return CUT_GRASS_WORK;
-    case GATHER_JOB_CHOP: { /* Wider trunks by their area. */
-        int area = tree_size(plant) * tree_size(plant);
-        return CHOP_BASE_WORK + CHOP_GROWTH_WORK * plant->growth * (float)area;
-    }
+    case GATHER_JOB_CHOP: return tree_fell_work(plant);
     case GATHER_JOB_STONES: return STONE_WORK;
     default: return 0.0f;
     }

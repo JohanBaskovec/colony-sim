@@ -26,6 +26,23 @@ int tree_size(const Plant *plant)
     return plant->size > 1 ? (plant->size < TREE_MAX_SIZE ? plant->size : TREE_MAX_SIZE) : 1;
 }
 
+float tree_fell_work(const Plant *plant)
+{
+    int area = tree_size(plant) * tree_size(plant);
+    return area > 0 ? TREE_FELL_BASE_WORK + TREE_FELL_GROWTH_WORK * plant->growth * (float)area
+                    : 0.0f;
+}
+
+int tree_wood_yield(const Plant *plant)
+{
+    int area = tree_size(plant) * tree_size(plant);
+    const PlantDef *def = plant_def((PlantType)plant->type);
+    if (area == 0 || def == NULL) {
+        return 0;
+    }
+    return (int)((float)(def->cut_yield * area) * plant->growth + 0.5f);
+}
+
 bool tree_shape(const Plant *plant, TreeShape *out)
 {
     if (plant->type != PLANT_TREE || plant_is_dormant(plant)) {

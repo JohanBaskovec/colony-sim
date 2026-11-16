@@ -308,6 +308,16 @@ refuse it. Orders with a `tool_use` (digging) are sped up by the tool and
 send the worker to a better one lying nearby first, as digging jobs in
 gathering zones do.
 
+**Felling** (`DESIGNATION_CHOP`, "Woodcutting" work, nobody can yet: it
+waits for the woodcutting knowledge and an axe): the order goes on a tree's
+foot, or on a sapling. Any tile of a trunk, on any level, points to its foot
+(`designation_target()`, through `tree_at()`), so a rectangle over a wide
+trunk marks it once and cancelling works from any of its tiles. The work
+and the wood are those of the gathering zones' felling (`tree_fell_work()`,
+`tree_wood_yield()`: by growth and the trunk's area); once done the tree
+falls as `tree_fell()` aims it, and a fall onto a structure is counted in
+`Designations.harmful_tree_falls` (a notice, as for zones).
+
 **Support** (step 3b): a tile without rock whose next level up has a floor
 or rock right over it has a ceiling (`map_has_ceiling()`), held up by the
 roofs' rule: rock or a structure that blocks movement (a wall, a branch
@@ -1131,8 +1141,8 @@ patch otherwise. The tile inspector shows the stones left in the ground.
 
 `Game.debug` (`GameDebug`) holds cheats for testing, switched from the debug
 menu (F4, `game/debug_panel.c`) through `game_set_instant_build()`,
-`game_set_free_crafts()`, `game_set_no_tools()` and
-`game_set_instant_deconstruct()`. They are simulation state: `game_hash()` includes
+`game_set_free_crafts()`, `game_set_no_tools()`,
+`game_set_instant_deconstruct()` and `game_set_instant_fell_and_mine()`. They are simulation state: `game_hash()` includes
 them, but only while one is on, so that hashes stay those of a game without
 them (`bench_simulation` hashes are unchanged).
 
@@ -1162,6 +1172,12 @@ them (`bench_simulation` hashes are unchanged).
   (`designation_add_work()` with all the work needed: half the materials
   back), removing the refresh site of a structure taken apart; roofs left
   without support fall in later in the same tick.
+- **Instant felling and mining**: the same for orders to fell trees and to
+  mine rock (`fell_and_mine_now()`), which nobody can carry out yet: rock
+  holding a ceiling up waits, orders left with nothing to do go.
+  `game_designation_available()` accepts both orders while it is on, so that
+  the player can give them. Hashed apart from the other cheats (earlier
+  hashes with cheats on stay as they were).
 - **Weather**: `game_debug_next_weather()` switches to the next sky at once,
   `game_debug_cold_snap()` sets the coldest spell (until the next day's
   draw). They change `Game.weather` directly (always in the hash).

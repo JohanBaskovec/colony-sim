@@ -1,6 +1,7 @@
 #include "core/designation.h"
 
 #include "core/i18n.h"
+#include "core/tree.h"
 #include "core/util.h"
 
 #include <stdlib.h>
@@ -27,6 +28,10 @@ static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
                               N_("colonist.task.dig_down"), WORK_MINING,
                               KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
                               TOOL_USE_DIGGING},
+    /* Felling needs an axe and the Woodcutting knowledge: neither exists yet. */
+    [DESIGNATION_CHOP] = {"chop", N_("designation.chop"), N_("colonist.task.chop"),
+                          WORK_WOODCUTTING, KNOWLEDGE_NONE, KNOWLEDGE_MASTERY_LEVEL,
+                          TOOL_USE_NONE},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -139,7 +144,19 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
     case DESIGNATION_DECONSTRUCT:
         return map_structure(map, x, y, z) != STRUCTURE_NONE ||
                map_roof(map, x, y, z) != STRUCTURE_NONE;
+    case DESIGNATION_CHOP: return map->plants[map_index(map, x, y, z)].type == PLANT_TREE;
     default: return false;
+    }
+}
+
+void designation_target(const Map *map, int *x, int *y, int *z)
+{
+    TreeRef tree;
+    if (map != NULL && map_in_bounds(map, *x, *y, *z) &&
+        map->rock[map_index(map, *x, *y, *z)] == ROCK_WOOD && tree_at(map, *x, *y, *z, &tree)) {
+        *x = tree.x;
+        *y = tree.y;
+        *z = tree.z;
     }
 }
 
@@ -193,6 +210,7 @@ static void clear_tile(Designations *designations, size_t index)
 bool designation_set(Designations *designations, const Map *map, int x, int y, int z,
                      DesignationType type)
 {
+    designation_target(map, &x, &y, &z);
     if (!in_bounds(designations, x, y, z) || (unsigned)type >= DESIGNATION_COUNT) {
         return false;
     }
@@ -262,6 +280,7 @@ float designation_work_needed(const Designations *designations, const Map *map, 
         return structure_deconstruct_work(map->structure[index] != STRUCTURE_NONE
                                               ? (StructureType)map->structure[index]
                                               : map_roof(map, x, y, z));
+    case DESIGNATION_CHOP: return tree_fell_work(&map->plants[index]);
     default: return 0.0f;
     }
 }
@@ -294,6 +313,12 @@ ItemType designation_yield(const Designations *designations, const Map *map, int
         }
         *count = def->mined_yield;
         return *count > 0 ? def->mined_item : ITEM_NONE;
+    }
+    case DESIGNATION_CHOP: {
+        const Plant *plant = &map->plants[map_index(map, x, y, z)];
+        const PlantDef *def = plant_def((PlantType)plant->type);
+        *count = tree_wood_yield(plant);
+        return *count > 0 && def != NULL ? def->cut_item : ITEM_NONE;
     }
     default: return ITEM_NONE;
     }
@@ -394,8 +419,17 @@ bool designation_add_work(Designations *designations, Map *map, Items *items, in
     }
     int count;
     ItemType product = designation_yield(designations, map, x, y, z, &count);
-    complete(map, items, x, y, z, type);
-    if (items != NULL && product != ITEM_NONE) {
+    if (type == DESIGNATION_CHOP) { /* Its wood falls with it. */
+        ItemStack wood = items != NULL && product != ITEM_NONE
+                             ? knowledge_product(product, count, level, rng)
+                             : (ItemStack){0};
+        if (tree_fell(map, items, x, y, z, wood).harmed > 0) {
+            designations->harmful_tree_falls++;
+        }
+    } else {
+        complete(map, items, x, y, z, type);
+    }
+    if (type != DESIGNATION_CHOP && items != NULL && product != ITEM_NONE) {
         /* After mining: the tile is open. */
         items_drop(items, map, x, y, z, knowledge_product(product, count, level, rng));
     }

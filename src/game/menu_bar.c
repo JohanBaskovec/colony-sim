@@ -39,6 +39,8 @@ static const MenuTool TOOLS[] = {
      N_("designation.dig_ramp"), N_("tool.dig_ramp.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DIG_DOWN, RENDER_ICON_DIG_DOWN,
      N_("designation.dig_down"), N_("tool.dig_down.description"), SDL_SCANCODE_UNKNOWN},
+    {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_CHOP, RENDER_ICON_CHOP,
+     N_("designation.chop"), N_("tool.chop.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DECONSTRUCT, RENDER_ICON_DECONSTRUCT,
      N_("designation.deconstruct"), N_("tool.deconstruct.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_NONE, RENDER_ICON_CANCEL,

@@ -15,7 +15,9 @@
  * Nobody digs where a ceiling would be left without support (see
  * map_dig_keeps_ceilings()): such orders wait for a prop or a wall.
  * Mining rock needs a pick and a knowledge that are not in the game yet:
- * nobody can do it for now, but the order exists. Taking a structure apart
+ * nobody can do it for now, but the order exists. So does felling trees
+ * (woodcutting, with an axe): the order goes on the tree's foot (any tile of
+ * its trunk points there) and the tree falls as tree_fell() says. Taking a structure apart
  * gives back half of its materials, and so does taking a roof down: the
  * order goes on the roof's tile (the level above the hut), the work is done
  * from below and the materials fall onto the floor under it.
@@ -45,6 +47,7 @@ typedef enum DesignationType {
     DESIGNATION_DIG,      /* Dig out earth (ROCK_EARTH). */
     DESIGNATION_DIG_RAMP, /* Cut a ramp into a bank of earth one level high. */
     DESIGNATION_DIG_DOWN, /* Dig the ground and the earth under it out. */
+    DESIGNATION_CHOP,     /* Fell a tree (core/tree.h), or cut a sapling. */
     DESIGNATION_COUNT
 } DesignationType;
 
@@ -75,6 +78,8 @@ typedef struct Designations {
      * completed work that opens access...), so that settlers who found
      * nothing to do know when to look again. */
     uint32_t revision;
+    /* Trees felled onto a structure (no side was clear, see tree_fell()). */
+    uint32_t harmful_tree_falls;
 } Designations;
 
 const DesignationDef *designation_def(DesignationType type);
@@ -85,8 +90,13 @@ void designations_free(Designations *designations);
 /* Whether a settler at `level` in the order's knowledge can carry it out. */
 bool designation_doable_at(DesignationType type, double level);
 
-/* Whether the order makes sense on this tile (a wall to mine...). */
+/* Whether the order makes sense on this tile (a wall to mine, the foot of a
+ * tree to fell...). */
 bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType type);
+
+/* The tile an order given on (x, y, z) goes on: the foot of the tree for a
+ * tile of trunk (see tree_at()), the tile itself otherwise. */
+void designation_target(const Map *map, int *x, int *y, int *z);
 
 /* Whether an order of this type at (x, y, z) leaves alone what lives
  * outside the map: construction sites, workstations, stockpiles. A ramp
@@ -105,9 +115,10 @@ bool designation_waits_for_support(const Designations *designations, const Map *
 DesignationType designation_get(const Designations *designations, int x, int y, int z);
 
 /*
- * Places an order on a tile. DESIGNATION_NONE removes the order. Invalid
- * orders (nothing to mine...) are ignored. Re-placing the same order keeps
- * its progress. Returns whether the tile changed.
+ * Places an order on a tile (on its designation_target()). DESIGNATION_NONE
+ * removes the order. Invalid orders (nothing to mine...) are ignored.
+ * Re-placing the same order keeps its progress. Returns whether the tile
+ * changed.
  */
 bool designation_set(Designations *designations, const Map *map, int x, int y, int z,
                      DesignationType type);

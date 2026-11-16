@@ -39,6 +39,10 @@
 #define TREE_MAX_LEVELS 7
 /* Tiles a trunk covers on the ground once fallen, per level of its height. */
 #define TREE_FALL_TILES_PER_LEVEL 2
+/* Work to fell a tree: a fixed part plus a part proportional to its growth
+ * and its trunk's area. */
+#define TREE_FELL_BASE_WORK 400.0f
+#define TREE_FELL_GROWTH_WORK 1600.0f
 /* Hit points a structure under a falling tree loses, in percent of its
  * maximum. It keeps 1 at least: wear finishes it off (and its refresh site
  * goes with it, see constructions_wear_day()). */
@@ -64,6 +68,13 @@ static inline int tree_shape_levels(const TreeShape *shape)
 /* Trunk width of a plant (1 for a tree of the default size; 0 for other
  * plants). */
 int tree_size(const Plant *plant);
+
+/* Work needed to fell a tree (0 for other plants). */
+float tree_fell_work(const Plant *plant);
+
+/* Wood a felled tree gives (its cut item, by its growth and its trunk's
+ * area; 0 for other plants). */
+int tree_wood_yield(const Plant *plant);
 
 /* The shape of a tree that takes room (a tree from TREE_VOLUME_MIN_STAGE on);
  * false for saplings and other plants. */

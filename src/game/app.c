@@ -281,6 +281,8 @@ static void apply_test_options(Game *game, const CliOptions *options)
     game_set_free_crafts(game, (options->debug & CLI_DEBUG_FREE_CRAFTS) != 0);
     game_set_no_tools(game, (options->debug & CLI_DEBUG_NO_TOOLS) != 0);
     game_set_instant_deconstruct(game, (options->debug & CLI_DEBUG_INSTANT_DECONSTRUCT) != 0);
+    game_set_instant_fell_and_mine(game,
+                                   (options->debug & CLI_DEBUG_INSTANT_FELL_AND_MINE) != 0);
     if (options->debug & CLI_DEBUG_LEARN_ALL) {
         game_debug_learn_all(game);
     }

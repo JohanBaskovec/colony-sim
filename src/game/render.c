@@ -74,6 +74,7 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_DIG] = {250, 140, 60, 255},
     [DESIGNATION_DIG_RAMP] = {250, 170, 90, 255},
     [DESIGNATION_DIG_DOWN] = {250, 120, 70, 255},
+    [DESIGNATION_CHOP] = {240, 90, 80, 255},
 };
 /* Where a roof could rest, while planning roofs. */
 static const SDL_Color ROOF_SUPPORT_COLOR = {120, 220, 140, 60};
@@ -1656,6 +1657,21 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
                            area.y + area.h * 0.6f - d);
         }
         outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_DIG_DOWN]);
+        break;
+    }
+    case RENDER_ICON_CHOP: { /* A cut trunk seen from above, a notch in its side. */
+        SDL_FRect area = inset(&rect, 0.8f);
+        fill(renderer, BARK_COLOR, &area);
+        SDL_FRect wood = inset(&area, 0.8f);
+        fill(renderer, ROCK_COLORS[ROCK_WOOD], &wood);
+        SDL_FRect ring = inset(&area, 0.45f);
+        fill(renderer, RING_COLOR, &ring);
+        SDL_FRect heart = inset(&area, 0.25f);
+        fill(renderer, ROCK_COLORS[ROCK_WOOD], &heart);
+        SDL_FRect notch = {area.x + area.w * 0.62f, area.y + area.h * 0.4f, area.w * 0.38f,
+                           area.h * 0.2f};
+        fill(renderer, (SDL_Color){40, 28, 20, 255}, &notch);
+        outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_CHOP]);
         break;
     }
     case RENDER_ICON_DECONSTRUCT: {

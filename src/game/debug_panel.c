@@ -10,6 +10,7 @@ typedef struct DebugRows {
     bool toggle_free_crafts;
     bool toggle_no_tools;
     bool toggle_instant_deconstruct;
+    bool toggle_instant_fell_and_mine;
     const char *weather; /* Name of the sky now. */
     bool next_weather;
     bool cold_snap;
@@ -55,6 +56,8 @@ static void debug_rows(UiLayout *layout, void *userdata)
     rows->toggle_no_tools |= checkbox_row(layout, tr("debug.no_tools"), rows->debug->no_tools);
     rows->toggle_instant_deconstruct |= checkbox_row(layout, tr("debug.instant_deconstruct"),
                                                      rows->debug->instant_deconstruct);
+    rows->toggle_instant_fell_and_mine |= checkbox_row(
+        layout, tr("debug.instant_fell_and_mine"), rows->debug->instant_fell_and_mine);
     char label[128];
     TR_FORMAT(label, sizeof(label), tr("debug.next_weather"), rows->weather);
     rows->next_weather |= button_row(layout, label);
@@ -103,6 +106,9 @@ void debug_panel_draw(App *app)
     }
     if (rows.toggle_instant_deconstruct) {
         game_set_instant_deconstruct(game, !game->debug.instant_deconstruct);
+    }
+    if (rows.toggle_instant_fell_and_mine) {
+        game_set_instant_fell_and_mine(game, !game->debug.instant_fell_and_mine);
     }
     if (rows.next_weather) {
         game_debug_next_weather(game);

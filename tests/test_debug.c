@@ -1,7 +1,8 @@
 /* Debug cheats (GameDebug): instant free construction, free crafts, work without
- * tools, instant taking apart; and the one-shot debug commands (knowledge,
- * time, items, teleport). */
+ * tools, instant taking apart, instant felling and mining; and the one-shot
+ * debug commands (knowledge, time, items, teleport). */
 #include "core/game.h"
+#include "core/tree.h"
 
 #include "test_framework.h"
 
@@ -321,6 +322,55 @@ static void test_instant_deconstruct(void)
     game_shutdown(&game);
 }
 
+/* Orders to fell trees and to mine rock, which nobody can carry out yet, can
+ * be given with the cheat on, and are carried out at once. */
+static void test_instant_fell_and_mine(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    REQUIRE(spawn_worker(&game, 30, 30) != NULL);
+    Map *map = &game.map;
+    map->plants[map_index(map, 10, 10, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    tree_build(map, 10, 10, 0);
+    map_set_rock(map, 20, 20, 0, ROCK_GRANITE);
+    map_set_rock(map, 22, 20, 0, ROCK_GRANITE);
+    CHECK(!game_designation_available(&game, DESIGNATION_CHOP));
+    CHECK(!game_designation_available(&game, DESIGNATION_MINE));
+    CHECK(game_designation_available(&game, DESIGNATION_DIG)); /* A shelter builder digs. */
+    /* Given from a tile of the trunk: the order goes on its foot. */
+    CHECK_EQ_INT(game_designate_rect(&game, 10, 10, 10, 10, 1, DESIGNATION_CHOP), 1);
+    CHECK_EQ_INT(designation_get(&game.designations, 10, 10, 0), DESIGNATION_CHOP);
+    CHECK_EQ_INT(game_designate_rect(&game, 20, 20, 20, 20, 0, DESIGNATION_MINE), 1);
+    run_ticks(&game, 10);
+    CHECK(map->rock[map_index(map, 10, 10, 0)] == ROCK_WOOD); /* Nobody to do it. */
+    CHECK(map->rock[map_index(map, 20, 20, 0)] == ROCK_GRANITE);
+
+    game_set_instant_fell_and_mine(&game, true);
+    CHECK(game_designation_available(&game, DESIGNATION_CHOP));
+    CHECK(game_designation_available(&game, DESIGNATION_MINE));
+    CHECK_EQ_INT(game_designate_rect(&game, 22, 20, 22, 20, 0, DESIGNATION_MINE), 1);
+    long before = items_total(&game);
+    run_ticks(&game, 1);
+    CHECK_EQ_INT(game.designations.count, 0);
+    CHECK_EQ_INT(map->plants[map_index(map, 10, 10, 0)].type, PLANT_NONE);
+    CHECK(map->rock[map_index(map, 10, 10, 0)] == ROCK_NONE);
+    CHECK(map->rock[map_index(map, 10, 10, 1)] == ROCK_NONE);
+    CHECK(map->rock[map_index(map, 20, 20, 0)] == ROCK_NONE);
+    CHECK(map->rock[map_index(map, 22, 20, 0)] == ROCK_NONE);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
+    CHECK(items_total(&game) > before + plant_def(PLANT_TREE)->cut_yield); /* And stone. */
+
+    /* An order whose tree is gone goes. */
+    map->plants[map_index(map, 14, 14, 0)] = (Plant){.type = PLANT_TREE, .growth = 0.3f};
+    game_set_instant_fell_and_mine(&game, false);
+    REQUIRE(game_designate_rect(&game, 14, 14, 14, 14, 0, DESIGNATION_CHOP) == 1);
+    map->plants[map_index(map, 14, 14, 0)] = (Plant){0};
+    game_set_instant_fell_and_mine(&game, true);
+    run_ticks(&game, 1);
+    CHECK_EQ_INT(game.designations.count, 0);
+    game_shutdown(&game);
+}
+
 static void test_weather_cheats(void)
 {
     Game game;
@@ -360,6 +410,10 @@ static void test_hash(void)
     game_set_instant_deconstruct(&b, true);
     CHECK(game_hash(&a) != game_hash(&b));
     game_set_instant_deconstruct(&b, false);
+    CHECK(game_hash(&a) == game_hash(&b));
+    game_set_instant_fell_and_mine(&b, true);
+    CHECK(game_hash(&a) != game_hash(&b));
+    game_set_instant_fell_and_mine(&b, false);
     CHECK(game_hash(&a) == game_hash(&b));
     game_shutdown(&a);
     game_shutdown(&b);
@@ -487,6 +541,7 @@ int main(void)
     RUN_TEST(test_free_input_is_not_given_back);
     RUN_TEST(test_no_tools);
     RUN_TEST(test_instant_deconstruct);
+    RUN_TEST(test_instant_fell_and_mine);
     RUN_TEST(test_weather_cheats);
     RUN_TEST(test_hash);
     RUN_TEST(test_learn_all);

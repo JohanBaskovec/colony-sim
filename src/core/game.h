@@ -83,6 +83,11 @@ typedef struct GameDebug {
      * start of each tick, with nobody there (half the materials back, as
      * usual). */
     bool instant_deconstruct;
+    /* Orders to fell trees and to mine rock are carried out at the start of
+     * each tick, with nobody there (what they give is dropped as usual; rock
+     * that holds a ceiling up waits, as for a settler). Nobody can do either
+     * yet: with this on, they can be ordered. */
+    bool instant_fell_and_mine;
 } GameDebug;
 
 typedef struct NewGameParams {
@@ -166,6 +171,7 @@ void game_set_instant_build(Game *game, bool on);
 void game_set_free_crafts(Game *game, bool on);
 void game_set_no_tools(Game *game, bool on);
 void game_set_instant_deconstruct(Game *game, bool on);
+void game_set_instant_fell_and_mine(Game *game, bool on);
 /* Debug: the next sky at once (clear → cloudy → fog → rain → storm), and a
  * cold snap (the coldest spell, until the next day's draw). */
 void game_debug_next_weather(Game *game);
@@ -265,8 +271,9 @@ void game_count_knowledge(Game *game);
  * Fails on a stale handle or invalid values. */
 bool game_set_work_priority(Game *game, EntityId id, WorkType type, int priority);
 
-/* Whether some living colonist knows enough to carry out this kind of order
- * (the player may only place orders someone can do). */
+/* Whether some living colonist knows enough to carry out this kind of order,
+ * or a cheat carries it out (GameDebug.instant_fell_and_mine): the player
+ * may only place orders someone can do. */
 bool game_designation_available(const Game *game, DesignationType type);
 
 /* Whether some living colonist knows enough to do this gathering job. */

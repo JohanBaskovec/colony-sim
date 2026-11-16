@@ -46,6 +46,7 @@ designation.deconstruct = Take apart
 designation.dig = Dig earth
 designation.dig_ramp = Cut a ramp
 designation.dig_down = Dig down
+designation.chop = Fell trees
 tool.cancel = Cancel orders
 tool.stockpile = Stockpile zone
 tool.gather_zone = Gathering zone
@@ -58,6 +59,7 @@ tool.mine.description = Settlers dig out the marked rock and bring back stone
 tool.dig.description = Settlers dig out the marked earth (galleries into hills, dugouts), faster with a digging stick; a ceiling needs rock, a wall or a prop within 2 tiles
 tool.dig_ramp.description = Mark a bank of earth one level high: settlers cut a ramp into it, to walk up to the ground behind
 tool.dig_down.description = Settlers dig the marked ground and the earth under it out: the hole slopes up to where its digger stood, the way into a cellar
+tool.chop.description = Settlers fell the marked trees, away from buildings, and the wood lies along the fallen trunk
 tool.cancel.description = Removes the orders in the area you drag
 tool.deconstruct.description = Settlers take the marked beds, walls, doors and roofs apart (a roof is marked on its level, above the walls) and get half of the materials back
 
@@ -80,6 +82,7 @@ debug.instant_build = Instant free construction (every blueprint is built at onc
 debug.free_crafts = Free crafts (no ingredients needed)
 debug.no_tools = Work without tools (crafts need none, work goes at least at a standard tool's speed)
 debug.instant_deconstruct = Instant taking apart (marked structures and roofs come down at once)
+debug.instant_fell_and_mine = Instant felling and mining (marked trees and rock come down at once)
 # {0} = the sky now (e.g. Rain)
 debug.next_weather = Weather: {0} (next)
 debug.cold_snap = Cold snap (until tomorrow)
@@ -181,7 +184,7 @@ hud.language = Language: {0}
 # {0} = movement keys (e.g. WASD, adapted to the keyboard layout)
 hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
 hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · {0}: language · F3: debug · Esc or right click: back
-# {0}, {1}, {2}, {3} = keys of the chop, mine, harvest and cancel tools
+# hud.help.gathering: {0} = key of the gathering zone tool; hud.help.orders: {0}, {1} = keys of the mine and cancel tools
 hud.help.gathering = {0}: gathering zones (wood, wild food, branches, twigs, grass, stones)
 hud.help.orders = {0}: mine rock · {1}: cancel orders
 # {0} = key of the stockpile zone tool, {1} = key of the build tool, {2} = key of the work priorities grid

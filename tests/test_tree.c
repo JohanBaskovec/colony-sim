@@ -458,6 +458,97 @@ static void test_fell(void)
     map_free(&map);
 }
 
+/* The order to fell trees: on the tree's foot (any tile of its trunk points
+ * there), carried out as tree_fell() says, its wood by the tree's size. */
+static void test_chop_order(void)
+{
+    Map map;
+    Items items;
+    Designations designations;
+    REQUIRE(init_world(&map, &items));
+    REQUIRE(designations_init(&designations, SIZE, SIZE, DEPTH));
+    grow_tree(&map, 4, 4, 0, GROWN, 1);
+    grow_tree(&map, 12, 12, 0, GROWN, 2);
+    put_tree(&map, 16, 4, 0, SAPLING);
+
+    /* Nobody can fell yet (woodcutting and axes come later). */
+    const DesignationDef *def = designation_def(DESIGNATION_CHOP);
+    REQUIRE(def != NULL);
+    CHECK_EQ_INT(def->work_type, WORK_WOODCUTTING);
+    CHECK(!designation_doable_at(DESIGNATION_CHOP, 100.0));
+
+    /* On a tree's foot or a sapling; the order's tile from any trunk tile. */
+    CHECK(designation_can_apply(&map, 4, 4, 0, DESIGNATION_CHOP));
+    CHECK(designation_can_apply(&map, 16, 4, 0, DESIGNATION_CHOP));
+    CHECK(!designation_can_apply(&map, 5, 4, 0, DESIGNATION_CHOP));
+    CHECK(!designation_can_apply(&map, 4, 4, 1, DESIGNATION_CHOP)); /* Trunk, not the foot. */
+    CHECK(!designation_can_apply(&map, 4, 4, 0, DESIGNATION_MINE)); /* Wood is not mined. */
+    int x = 13, y = 13, z = 2;
+    designation_target(&map, &x, &y, &z);
+    CHECK(x == 12 && y == 12 && z == 0);
+    x = 5, y = 4, z = 2; /* Foliage: stays. */
+    REQUIRE(is_foliage(&map, 5, 4, 2));
+    designation_target(&map, &x, &y, &z);
+    CHECK(x == 5 && y == 4 && z == 2);
+
+    /* Marking the four trunk tiles of the wide tree marks its foot once. */
+    CHECK_EQ_INT(designations_set_rect(&designations, &map, 12, 12, 13, 13, 1, DESIGNATION_CHOP),
+                 1);
+    CHECK_EQ_INT(designation_get(&designations, 12, 12, 0), DESIGNATION_CHOP);
+    CHECK_EQ_INT(designation_get(&designations, 13, 13, 1), DESIGNATION_NONE);
+    CHECK(designation_set(&designations, &map, 4, 4, 2, DESIGNATION_CHOP)); /* Top of trunk. */
+    CHECK_EQ_INT(designation_get(&designations, 4, 4, 0), DESIGNATION_CHOP);
+    CHECK(designation_set(&designations, &map, 16, 4, 0, DESIGNATION_CHOP));
+    CHECK(!designation_set(&designations, &map, 8, 8, 0, DESIGNATION_CHOP)); /* No tree. */
+    CHECK_EQ_INT(designations.count, 3);
+    CHECK_EQ_INT(designations_count_for_work(&designations, WORK_TYPE_BIT(WORK_WOODCUTTING)), 3);
+
+    /* Work and wood by the tree's size. */
+    const Plant *small = &map.plants[map_index(&map, 4, 4, 0)];
+    const Plant *wide = &map.plants[map_index(&map, 12, 12, 0)];
+    float needed = designation_work_needed(&designations, &map, 4, 4, 0);
+    CHECK_NEAR(needed, tree_fell_work(small), 1e-3);
+    CHECK_NEAR(needed, TREE_FELL_BASE_WORK + TREE_FELL_GROWTH_WORK, 1e-3);
+    CHECK_NEAR(designation_work_needed(&designations, &map, 12, 12, 0),
+               TREE_FELL_BASE_WORK + 4.0f * TREE_FELL_GROWTH_WORK, 1e-3);
+    int count;
+    CHECK_EQ_INT(designation_yield(&designations, &map, 4, 4, 0, &count), ITEM_WOOD);
+    CHECK_EQ_INT(count, tree_wood_yield(small));
+    CHECK_EQ_INT(count, plant_def(PLANT_TREE)->cut_yield);
+    CHECK_EQ_INT(designation_yield(&designations, &map, 12, 12, 0, &count), ITEM_WOOD);
+    CHECK_EQ_INT(count, tree_wood_yield(wide));
+    CHECK_EQ_INT(count, 4 * plant_def(PLANT_TREE)->cut_yield);
+
+    /* Felled once the work is done: the tree falls with its wood. */
+    CHECK(!designation_add_work(&designations, &map, &items, 4, 4, 0, needed * 0.5f, 75.0, NULL));
+    CHECK(is_trunk(&map, 4, 4, 0));
+    CHECK(designation_add_work(&designations, &map, &items, 4, 4, 0, needed * 0.5f, 75.0, NULL));
+    CHECK_EQ_INT(map.plants[map_index(&map, 4, 4, 0)].type, PLANT_NONE);
+    CHECK(!is_trunk(&map, 4, 4, 0) && !is_trunk(&map, 4, 4, 2));
+    CHECK(!is_foliage(&map, 5, 4, 2));
+    CHECK_EQ_INT((int)items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
+    CHECK_EQ_INT(designation_get(&designations, 4, 4, 0), DESIGNATION_NONE);
+    CHECK_EQ_INT(designations.harmful_tree_falls, 0u);
+
+    /* Cancelled from a trunk tile too. */
+    CHECK_EQ_INT(designations_set_rect(&designations, &map, 13, 13, 13, 13, 2, DESIGNATION_NONE),
+                 1);
+    CHECK_EQ_INT(designation_get(&designations, 12, 12, 0), DESIGNATION_NONE);
+
+    /* A tree with no clear side falls onto a building: counted. */
+    grow_tree(&map, 4, 4, 0, GROWN, 1);
+    map_set_structure(&map, 4, 5, 0, STRUCTURE_WALL);
+    map_set_structure(&map, 5, 4, 0, STRUCTURE_WALL);
+    map_set_structure(&map, 4, 3, 0, STRUCTURE_WALL);
+    map_set_structure(&map, 3, 4, 0, STRUCTURE_WALL);
+    REQUIRE(designation_set(&designations, &map, 4, 4, 0, DESIGNATION_CHOP));
+    CHECK(designation_add_work(&designations, &map, &items, 4, 4, 0, needed, 75.0, NULL));
+    CHECK_EQ_INT(designations.harmful_tree_falls, 1u);
+    designations_free(&designations);
+    items_free(&items);
+    map_free(&map);
+}
+
 /* A tree on the edge of a hill, aimed out over the drop: what lies over open
  * space falls to the ground below. Walls hit lose half their hit points. */
 static void test_fell_over_drop_and_onto_walls(void)
@@ -643,6 +734,7 @@ int main(void)
     RUN_TEST(test_aim);
     RUN_TEST(test_fell);
     RUN_TEST(test_fell_over_drop_and_onto_walls);
+    RUN_TEST(test_chop_order);
     RUN_TEST(test_gathering_on_trees);
     RUN_TEST(test_settler_climbs_for_twigs);
     return test_summary();

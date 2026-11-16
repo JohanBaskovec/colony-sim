@@ -826,6 +826,11 @@ void game_set_instant_deconstruct(Game *game, bool on)
     game->debug.instant_deconstruct = on;
 }
 
+void game_set_instant_fell_and_mine(Game *game, bool on)
+{
+    game->debug.instant_fell_and_mine = on;
+}
+
 void game_debug_next_weather(Game *game)
 {
     game->weather.type = (uint8_t)((game->weather.type + 1u) % WEATHER_TYPE_COUNT);
@@ -957,6 +962,39 @@ static void deconstruct_now(Game *game)
     }
 }
 
+/* GameDebug.instant_fell_and_mine: every order to fell a tree or to mine
+ * rock is carried out, as a settler's work would (rock holding a ceiling up
+ * waits); orders left with nothing to do go. */
+static void fell_and_mine_now(Game *game)
+{
+    Designations *designations = &game->designations;
+    Map *map = &game->map;
+    if (designations->count_by_work[WORK_WOODCUTTING] == 0 &&
+        designations->count_by_work[WORK_MINING] == 0) {
+        return;
+    }
+    for (int z = 0; z < map->depth; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                DesignationType type = designation_get(designations, x, y, z);
+                if (type != DESIGNATION_CHOP && type != DESIGNATION_MINE) {
+                    continue;
+                }
+                if (!designation_can_apply(map, x, y, z, type)) {
+                    designation_set(designations, map, x, y, z, DESIGNATION_NONE);
+                    continue;
+                }
+                if (designation_waits_for_support(designations, map, x, y, z)) {
+                    continue;
+                }
+                designation_add_work(designations, map, &game->items, x, y, z,
+                                     designation_work_needed(designations, map, x, y, z),
+                                     GAME_DEBUG_BUILD_LEVEL, NULL);
+            }
+        }
+    }
+}
+
 /* Drops a stack on the first passable tile beside (x, y, z), if any. */
 static void drop_beside(Game *game, int x, int y, int z, ItemStack stack)
 {
@@ -1003,8 +1041,13 @@ void game_tick(Game *game)
 {
     game->clock.tick++;
     weather_tick(&game->weather, game->clock.tick);
+    uint32_t harmful_falls =
+        game->gather_zones.harmful_tree_falls + game->designations.harmful_tree_falls;
     if (game->debug.instant_deconstruct) {
         deconstruct_now(game);
+    }
+    if (game->debug.instant_fell_and_mine) {
+        fell_and_mine_now(game);
     }
     if (game->debug.instant_build) {
         finish_constructions_now(game);
@@ -1032,9 +1075,9 @@ void game_tick(Game *game)
     beds_forget_missing(&game->beds, &game->map); /* Beds taken apart or fallen apart. */
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game->items.totals, game_daily_food(game));
-    uint32_t harmful_falls = game->gather_zones.harmful_tree_falls;
     update_colonists(game);
-    if (game->gather_zones.harmful_tree_falls != harmful_falls) {
+    if (game->gather_zones.harmful_tree_falls + game->designations.harmful_tree_falls !=
+        harmful_falls) {
         notices_push(&game->notices, NOTICE_TREE_FELL_ON_BUILDING, KNOWLEDGE_NONE, NULL,
                      game->clock.tick);
     }
@@ -1098,6 +1141,10 @@ uint64_t game_hash(const Game *game)
         uint8_t debug[4] = {game->debug.instant_build, game->debug.free_crafts,
                             game->debug.no_tools, game->debug.instant_deconstruct};
         hash = hash_fnv1a64(hash, debug, sizeof(debug));
+    }
+    if (game->debug.instant_fell_and_mine) { /* Apart: earlier hashes stay as they were. */
+        uint8_t fell_and_mine = 1;
+        hash = hash_fnv1a64(hash, &fell_and_mine, sizeof(fell_and_mine));
     }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
@@ -1275,6 +1322,10 @@ bool game_set_work_priority(Game *game, EntityId id, WorkType type, int priority
 
 bool game_designation_available(const Game *game, DesignationType type)
 {
+    if (game->debug.instant_fell_and_mine &&
+        (type == DESIGNATION_CHOP || type == DESIGNATION_MINE)) {
+        return true; /* The cheat does it. */
+    }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
             colonist_can_do(&game->colonists[slot], type)) {
