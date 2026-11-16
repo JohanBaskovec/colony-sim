@@ -186,6 +186,24 @@ bool designation_waits_for_support(const Designations *designations, const Map *
     return !map_dig_keeps_ceilings(map, x, y, z, type == DESIGNATION_DIG_RAMP);
 }
 
+bool designation_forbidden(const Designations *designations, const Map *map, int x, int y,
+                           int z)
+{
+    if (map->forbidden_count == 0) {
+        return false;
+    }
+    switch (designation_get(designations, x, y, z)) {
+    case DESIGNATION_DECONSTRUCT:
+        return map_structure(map, x, y, z) != STRUCTURE_NONE
+                   ? map_forbidden(map, x, y, z, MAP_FORBID_STRUCTURE)
+                   : map_forbidden(map, x, y, z, MAP_FORBID_ROOF);
+    case DESIGNATION_CHOP:
+    case DESIGNATION_DIG_DOWN: return map_forbidden(map, x, y, z, MAP_FORBID_PLANT);
+    case DESIGNATION_DIG_RAMP: return map_forbidden(map, x, y, z + 1, MAP_FORBID_PLANT);
+    default: return false;
+    }
+}
+
 DesignationType designation_get(const Designations *designations, int x, int y, int z)
 {
     if (!in_bounds(designations, x, y, z)) {
@@ -341,8 +359,7 @@ static void drop_salvage(StructureType type, Map *map, Items *items, int x, int 
 static void cut_ramp(Map *map, Items *items, int x, int y, int z)
 {
     map_set_rock(map, x, y, z, ROCK_NONE);
-    size_t over = map_index(map, x, y, z + 1);
-    map->plants[over] = (Plant){0};
+    map_remove_plant(map, x, y, z + 1);
     map_set_terrain(map, x, y, z + 1, TERRAIN_OPEN);
     map_set_slope(map, x, y, z, true);
     ItemStack lying = items != NULL ? items_get(items, x, y, z + 1) : (ItemStack){0};
@@ -361,7 +378,7 @@ static void dig_down(Map *map, Items *items, int x, int y, int z)
     if (lying.type != ITEM_NONE) {
         items_remove(items, x, y, z, lying.count);
     }
-    map->plants[map_index(map, x, y, z)] = (Plant){0};
+    map_remove_plant(map, x, y, z);
     map_set_terrain(map, x, y, z, TERRAIN_OPEN);
     map_set_rock(map, x, y, z - 1, ROCK_NONE);
     map_set_slope(map, x, y, z - 1, true);

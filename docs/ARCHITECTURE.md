@@ -98,7 +98,8 @@ simulation:
 | `menu_bar`     | Bottom left menus: Build (categories, icon buttons), Work, ? (help)     |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
 | `gather_zone_panel` | Inspector of the selected gathering zone (priority; foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings) |
-| `station_panel` | Inspector of the selected workstation (bills, warnings) |
+| `station_panel` | Inspector of the selected workstation (forbid, bills, warnings) |
+| `tile_panel`   | Inspector of the selected tile: what lies there (structure, roof, items, plant) with a Forbid/Allow button each, and its construction site |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (spawn items, move settlers) |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
@@ -1137,6 +1138,38 @@ flint with the patch's share, up to 60 %. The spawn makes sure a tile with at
 least `GAME_SPAWN_FLINT_STONES` flint lies near the settlers, laying a small
 patch otherwise. The tile inspector shows the stones left in the ground.
 
+### Forbidding
+
+The player may forbid the settlers things in the colony; each flag lives
+with the owner of the thing, so that it goes when the thing goes:
+`Map.forbidden` (`MapForbid` bits: the plant of a tile, a structure on its
+head tile, a roof; cleared by `set_tile_structure()`, `map_set_roof()` and
+`map_remove_plant()`, the only way plants are taken away once a game runs),
+`Items.forbidden` (per tile, cleared when the stack is gone) and
+`Workstation.forbidden`. `game_set_forbidden()` (`ForbidTarget`) resolves a
+tile of a tree's trunk or foliage to its foot; `game_set_forbidden_rect()`
+(the Forbid and Allow tools) takes everything on a rectangle but grass, the
+ground cover nearly everywhere.
+
+Settlers see forbidden things as absent rather than through checks
+scattered over every job: they read stacks through `items_get_allowed()`
+(an empty stack where it is forbidden), so pickups, hauls, deliveries, meals
+and fuel skip them; `items_drop()` and haul destinations never add to a
+forbidden stack; `map_has_edible_plant()`, `covered_tile_holds()` (gathering),
+`designation_forbidden()` (orders on a forbidden structure, roof or tree) and
+`construction_forbidden()` (a refresh site on a forbidden structure, a plant
+to clear) close the jobs on plants, orders and sites; `job_station()`,
+`station_on()` and the station searches skip forbidden stations; beds are
+looked up with `map_forbidden()`. The validity checks run every tick, so a
+job under way on something forbidden meanwhile is dropped (a settler asleep
+keeps sleeping). A forbidden door or ladder is locked: `map_locked_at()`
+makes `map_move_cost_at()` and `map_climb_cost_at()` return 0, and
+forbidding one logs a topology change. Allowing something counts as new work
+for the searches that backed off (`Items.additions`, `Workstations.revision`,
+`Designations.revision`, `Constructions.revision`, the gathering zones'
+revision). The new layers enter the hashes only while something is
+forbidden, so the hashes of games without any are unchanged.
+
 ### Debug cheats
 
 `Game.debug` (`GameDebug`) holds cheats for testing, switched from the debug
@@ -1348,12 +1381,17 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 ## Frontend state
 
 UI state that is not part of the simulation (camera, selection, selected
-stockpile, gathering zone, workstation or structure, active tool, drag
+stockpile, gathering zone, workstation or tile, active tool, drag
 rectangle, debug overlay and menu toggles) lives in `App`. The level shown is
 `Camera.level` (Page Up / Page Down, or Shift + wheel; it starts on the
 level of the first settler; the HUD numbers it from `Map.surface_level`): the map, the entities and the overlays are
 drawn for that level, and clicks and tools act on it (a selected structure
-keeps its level in `App.selected_structure_z`). Where the level shown is
+keeps its level in `App.selected_tile_z`). A click on the map selects a
+colonist, else the first of what lies on the tile (`ClickTarget`): the
+station, the tile (a structure, a roof, a site, items or a plant: its window,
+`game/tile_panel.h`), the stockpile, the gathering zone, the tile for its
+grass alone; a click on what is selected goes to the next one. What is
+forbidden carries a "no entry" sign (`render_forbidden_markers()`). Where the level shown is
 open space, the levels below show through (`render_below_begin()`): up to
 `APP_LEVELS_SHOWN_BELOW` of them, deepest first, each with its ground,
 structures, stations, items and sprites, drawn on an offscreen image three

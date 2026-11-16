@@ -336,7 +336,8 @@ bool items_init(Items *items, int width, int height, int depth)
     }
     items->stacks = calloc((size_t)width * (size_t)height * (size_t)depth, sizeof(*items->stacks));
     items->level_stacks = calloc((size_t)depth, sizeof(*items->level_stacks));
-    if (items->stacks == NULL || items->level_stacks == NULL) {
+    items->forbidden = calloc((size_t)width * (size_t)height * (size_t)depth, 1);
+    if (items->stacks == NULL || items->level_stacks == NULL || items->forbidden == NULL) {
         items_free(items);
         return false;
     }
@@ -350,6 +351,7 @@ void items_free(Items *items)
 {
     free(items->stacks);
     free(items->level_stacks);
+    free(items->forbidden);
     memset(items, 0, sizeof(*items));
 }
 
@@ -375,6 +377,47 @@ ItemStack items_get(const Items *items, int x, int y, int z)
         return (ItemStack){.type = ITEM_NONE};
     }
     return items->stacks[index_of(items, x, y, z)];
+}
+
+ItemStack items_get_allowed(const Items *items, int x, int y, int z)
+{
+    if (!in_bounds(items, x, y, z) ||
+        (items->forbidden_count > 0 && items->forbidden[index_of(items, x, y, z)])) {
+        return (ItemStack){.type = ITEM_NONE};
+    }
+    return items->stacks[index_of(items, x, y, z)];
+}
+
+bool items_forbidden(const Items *items, int x, int y, int z)
+{
+    return items->forbidden_count > 0 && in_bounds(items, x, y, z) &&
+           items->forbidden[index_of(items, x, y, z)] != 0;
+}
+
+bool items_set_forbidden(Items *items, int x, int y, int z, bool forbidden)
+{
+    if (!in_bounds(items, x, y, z)) {
+        return false;
+    }
+    size_t index = index_of(items, x, y, z);
+    if (items->stacks[index].type == ITEM_NONE || (items->forbidden[index] != 0) == forbidden) {
+        return false;
+    }
+    items->forbidden[index] = forbidden;
+    items->forbidden_count += forbidden ? 1 : -1;
+    if (!forbidden) {
+        items->additions++; /* Something to store again. */
+    }
+    return true;
+}
+
+/* A stack is gone from a tile (an index): it was forbidden no more. */
+static void stack_gone(Items *items, size_t index)
+{
+    if (items->forbidden[index]) {
+        items->forbidden[index] = 0;
+        items->forbidden_count--;
+    }
 }
 
 int items_add(Items *items, int x, int y, int z, ItemStack batch)
@@ -427,6 +470,7 @@ int items_remove(Items *items, int x, int y, int z, int count)
     if (stack->count == 0) {
         *stack = (ItemStack){.type = ITEM_NONE};
         items->level_stacks[z]--;
+        stack_gone(items, index_of(items, x, y, z));
     }
     return removed;
 }
@@ -455,7 +499,9 @@ int items_drop(Items *items, const Map *map, int x, int y, int z, ItemStack batc
         int cy = y + cell / SIDE - ITEM_DROP_RADIUS;
         ItemStack rest = batch;
         rest.count = (uint16_t)(count - placed);
-        placed += items_add(items, cx, cy, z, rest);
+        if (!items_forbidden(items, cx, cy, z)) { /* Left alone. */
+            placed += items_add(items, cx, cy, z, rest);
+        }
         for (int i = 0; i < 4; i++) {
             int rx = cell % SIDE + DX[i];
             int ry = cell / SIDE + DY[i];
@@ -499,6 +545,7 @@ static bool rot(Items *items, ItemStack *stack, int hours, float rate)
         *stack = (ItemStack){0};
         size_t level_size = (size_t)items->width * (size_t)items->height;
         items->level_stacks[(size_t)(stack - items->stacks) / level_size]--;
+        stack_gone(items, (size_t)(stack - items->stacks));
         return true;
     }
     stack->hit_points = (uint16_t)(stack->hit_points - lost);
@@ -562,6 +609,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
         hash = hash_fnv1a64(hash, &stack->quality, sizeof(stack->quality));
         hash = hash_fnv1a64(hash, &stack->hit_points, sizeof(stack->hit_points));
         hash = hash_fnv1a64(hash, &stack->progress, sizeof(stack->progress));
+    }
+    if (items->forbidden_count > 0) { /* Hashes without anything forbidden stay as they were. */
+        hash = hash_fnv1a64(hash, items->forbidden, count);
     }
     return hash;
 }

@@ -9,7 +9,7 @@
 #define ICON_SIZE 48.0f
 #define ICON_INSET 6.0f
 #define TEXT_SIZE 256
-#define MAX_ROW_BUTTONS 8
+#define MAX_ROW_BUTTONS 12
 
 /* Zones and orders of the build menu (workstations come from their table). */
 typedef struct MenuTool {
@@ -43,6 +43,10 @@ static const MenuTool TOOLS[] = {
      N_("designation.chop"), N_("tool.chop.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DECONSTRUCT, RENDER_ICON_DECONSTRUCT,
      N_("designation.deconstruct"), N_("tool.deconstruct.description"), SDL_SCANCODE_UNKNOWN},
+    {BUILD_CATEGORY_ORDERS, APP_TOOL_FORBID, APP_FORBID, RENDER_ICON_FORBID, N_("tool.forbid"),
+     N_("tool.forbid.description"), SDL_SCANCODE_UNKNOWN},
+    {BUILD_CATEGORY_ORDERS, APP_TOOL_FORBID, APP_ALLOW, RENDER_ICON_ALLOW, N_("tool.allow"),
+     N_("tool.allow.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_NONE, RENDER_ICON_CANCEL,
      N_("tool.cancel"), N_("tool.cancel.description"), APP_KEY_CANCEL},
 };

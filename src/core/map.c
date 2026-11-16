@@ -302,7 +302,8 @@ bool map_init(Map *map, int width, int height, int depth)
     map->structure_quality = calloc(count, 1);
     map->structure_hit_points = calloc(count, sizeof(*map->structure_hit_points));
     map->roof_quality = calloc(count, 1);
-    if (map->terrain == NULL || map->rock == NULL || map->slope == NULL || map->plants == NULL ||
+    map->forbidden = calloc(count, 1);
+    if (map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL || map->plants == NULL ||
         map->cobbles == NULL || map->flint == NULL || map->structure == NULL ||
         map->structure_part == NULL || map->structure_quality == NULL ||
         map->structure_hit_points == NULL || map->roof_quality == NULL) {
@@ -333,6 +334,7 @@ void map_free(Map *map)
     free(map->structure_quality);
     free(map->structure_hit_points);
     free(map->roof_quality);
+    free(map->forbidden);
     memset(map, 0, sizeof(*map));
 }
 
@@ -399,6 +401,15 @@ void map_set_slope(Map *map, int x, int y, int z, bool slope)
 #define PART_DIRECTION_MASK 0x3u
 #define PART_INDEX_SHIFT 2
 
+/* Clears bits of Map.forbidden on a tile (an index in bounds). */
+static void clear_forbidden(Map *map, size_t index, unsigned bits)
+{
+    if (map->forbidden[index] & bits) {
+        map->forbidden[index] = (uint8_t)(map->forbidden[index] & ~bits);
+        map->forbidden_count -= map->forbidden[index] == 0;
+    }
+}
+
 /* Puts a structure tile (or none) on a tile: counts, plant, topology. */
 static void set_tile_structure(Map *map, int x, int y, int z, StructureType type, uint8_t part,
                                ItemQuality quality, int hit_points)
@@ -406,6 +417,10 @@ static void set_tile_structure(Map *map, int x, int y, int z, StructureType type
     size_t index = map_index(map, x, y, z);
     StructureType old = (StructureType)map->structure[index];
     bool was_passable = map_move_cost_at(map, index) > 0.0f;
+    /* A new structure (or none): what was forbidden there went with the old
+     * one, and with the plant the builders cleared. */
+    clear_forbidden(map, index,
+                    MAP_FORBID_STRUCTURE | (type != STRUCTURE_NONE ? MAP_FORBID_PLANT : 0u));
     map->structure_counts[old]--;
     map->structure_counts[type]++;
     map->structure[index] = (uint8_t)type;
@@ -566,7 +581,7 @@ void map_topology_changed(Map *map)
 
 float map_move_cost_at(const Map *map, size_t index)
 {
-    if (map->rock[index] != ROCK_NONE) {
+    if (map->rock[index] != ROCK_NONE || map_locked_at(map, index)) {
         return 0.0f;
     }
     float cost = TERRAIN_DEFS[map->terrain[index]].move_cost;
@@ -747,6 +762,9 @@ void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality
         return; /* Nothing to take down, or no room for a roof. */
     }
     map->roof_count += (roof != STRUCTURE_NONE) - had_roof;
+    if (roof == STRUCTURE_NONE) {
+        clear_forbidden(map, index, MAP_FORBID_ROOF);
+    }
     map->roof_quality[index] =
         roof != STRUCTURE_NONE
             ? (uint8_t)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST)
@@ -900,6 +918,9 @@ uint64_t map_hash(const Map *map)
     if (map->roof_count > 0) { /* Hashes of maps without roofs stay as they were. */
         hash = hash_fnv1a64(hash, map->roof_quality, count);
     }
+    if (map->forbidden_count > 0) { /* Likewise without anything forbidden. */
+        hash = hash_fnv1a64(hash, map->forbidden, count);
+    }
     /* Hash plant fields one by one: struct padding bytes are unspecified. */
     for (size_t i = 0; i < count; i++) {
         const Plant *plant = &map->plants[i];
@@ -974,7 +995,82 @@ bool map_has_edible_plant(const Map *map, int x, int y, int z)
     }
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
     const PlantDef *def = &PLANT_DEFS[plant->type];
-    return !def->food_dug && !def->food_confusable && plant_has_food(plant);
+    return !def->food_dug && !def->food_confusable && plant_has_food(plant) &&
+           !map_forbidden(map, x, y, z, MAP_FORBID_PLANT);
+}
+
+/* The tile whose Map.forbidden holds `what` for (x, y, z), in bounds: the
+ * structure's head for MAP_FORBID_STRUCTURE. False when there is no such
+ * thing there. */
+static bool forbid_tile(const Map *map, int x, int y, int z, MapForbid what, size_t *index)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    switch (what) {
+    case MAP_FORBID_PLANT:
+        *index = map_index(map, x, y, z);
+        return map->plants[*index].type != PLANT_NONE;
+    case MAP_FORBID_STRUCTURE: {
+        int head_x, head_y;
+        if (!map_structure_origin(map, x, y, z, &head_x, &head_y)) {
+            return false;
+        }
+        *index = map_index(map, head_x, head_y, z);
+        return true;
+    }
+    case MAP_FORBID_ROOF:
+        *index = map_index(map, x, y, z);
+        return map_roof(map, x, y, z) != STRUCTURE_NONE;
+    }
+    return false;
+}
+
+bool map_forbidden(const Map *map, int x, int y, int z, MapForbid what)
+{
+    size_t index;
+    return map->forbidden_count > 0 && forbid_tile(map, x, y, z, what, &index) &&
+           (map->forbidden[index] & what) != 0;
+}
+
+void map_remove_plant(Map *map, int x, int y, int z)
+{
+    if (map_in_bounds(map, x, y, z)) {
+        size_t index = map_index(map, x, y, z);
+        memset(&map->plants[index], 0, sizeof(Plant));
+        clear_forbidden(map, index, MAP_FORBID_PLANT);
+    }
+}
+
+bool map_can_forbid(const Map *map, int x, int y, int z, MapForbid what)
+{
+    size_t index;
+    return forbid_tile(map, x, y, z, what, &index);
+}
+
+bool map_set_forbidden(Map *map, int x, int y, int z, MapForbid what, bool forbidden)
+{
+    size_t index;
+    if (!forbid_tile(map, x, y, z, what, &index) ||
+        ((map->forbidden[index] & what) != 0) == forbidden) {
+        return false;
+    }
+    bool was_passable = map_move_cost_at(map, index) > 0.0f;
+    float was_climb = map_climb_cost_at(map, index);
+    if (forbidden) {
+        map->forbidden_count += map->forbidden[index] == 0;
+        map->forbidden[index] = (uint8_t)(map->forbidden[index] | what);
+    } else {
+        clear_forbidden(map, index, what);
+    }
+    bool is_passable = map_move_cost_at(map, index) > 0.0f;
+    if (was_passable != is_passable || was_climb != map_climb_cost_at(map, index)) {
+        int tx, ty, tz;
+        map_tile_of(map, index, &tx, &ty, &tz);
+        /* A door or a ladder (un)locked; a ladder's way up is no simple opening. */
+        log_topology_change(map, tx, ty, tz, was_passable != is_passable && is_passable);
+    }
+    return true;
 }
 
 bool map_tree_near(const Map *map, int x, int y, int z, int range)

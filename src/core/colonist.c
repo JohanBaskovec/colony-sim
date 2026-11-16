@@ -729,7 +729,7 @@ static int random_idle_ticks(Rng *rng)
 /* Food on a tile: edible items on the ground, or a ripe plant. */
 static bool tile_has_food(const Map *map, const Items *items, int x, int y, int z)
 {
-    return item_is_food((ItemType)items_get(items, x, y, z).type) ||
+    return item_is_food((ItemType)items_get_allowed(items, x, y, z).type) ||
            map_has_edible_plant(map, x, y, z);
 }
 
@@ -755,7 +755,7 @@ static bool is_free_food(const Map *map, int x, int y, int z, void *userdata)
 static bool is_free_spoiling_food(const Map *map, int x, int y, int z, void *userdata)
 {
     const FoodSearch *search = userdata;
-    ItemStack stack = items_get(search->items, x, y, z);
+    ItemStack stack = items_get_allowed(search->items, x, y, z);
     if (!item_is_food((ItemType)stack.type) || !item_rots((ItemType)stack.type)) {
         return false;
     }
@@ -904,6 +904,7 @@ static bool is_free_bed(const Map *map, int x, int y, int z, void *userdata)
     const ColonistContext *context = userdata;
     uint8_t owner = beds_owner(context->beds, x, y, z);
     return map_structure_is_origin(map, x, y, z) && structure_is_bed(map_structure(map, x, y, z)) &&
+           !map_forbidden(map, x, y, z, MAP_FORBID_STRUCTURE) &&
            (owner == BED_NO_OWNER || owner == context->worker_id) &&
            !reservations_taken_by_other(context->reservations, RESERVATION_BED,
                                         (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
@@ -1182,7 +1183,8 @@ static bool is_open_job(const WorkSearch *search, int x, int y, int z)
         if (type == DESIGNATION_NONE ||
             !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type)) ||
             !colonist_can_do(search->worker, type) ||
-            designation_waits_for_support(search->designations, search->map, x, y, z)) {
+            designation_waits_for_support(search->designations, search->map, x, y, z) ||
+            designation_forbidden(search->designations, search->map, x, y, z)) {
             return false;
         }
     }
@@ -1814,7 +1816,7 @@ static bool haul_still_valid(Colonist *colonist, const ColonistContext *context)
 {
     if (!colonist->haul_delivering) {
         ItemStack stack =
-            items_get(context->items, colonist->target.x, colonist->target.y, colonist->target.z);
+            items_get_allowed(context->items, colonist->target.x, colonist->target.y, colonist->target.z);
         bool holding = colonist->carried.count > 0;
         if (colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED &&
             stack.type != ITEM_NONE && (!holding || item_stacks_match(stack, colonist->carried)) &&
@@ -1856,7 +1858,7 @@ static void haul(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
             return;
         }
-        ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
+        ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
         int wanted = haul_room_left(colonist, context, stack);
         int taken = items_remove(context->items, colonist->x, colonist->y, colonist->z,
                                  stack.count < wanted ? stack.count : wanted);
@@ -1874,7 +1876,9 @@ static void haul(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0);
         return;
     }
-    int added = items_add(context->items, dest.x, dest.y, dest.z, colonist->carried);
+    int added = items_forbidden(context->items, dest.x, dest.y, dest.z) /* Left alone. */
+                    ? 0
+                    : items_add(context->items, dest.x, dest.y, dest.z, colonist->carried);
     colonist->carried.count = (uint16_t)(colonist->carried.count - added);
     if (colonist->carried.count == 0) {
         colonist->carried = (ItemStack){.type = ITEM_NONE};
@@ -1901,6 +1905,8 @@ static bool job_still_valid(const Colonist *colonist, const ColonistContext *con
            colonist_can_do(colonist, (DesignationType)colonist->work_type) &&
            designation_get(context->designations, target.x, target.y, target.z) ==
                colonist->work_type &&
+           !designation_forbidden(context->designations, context->map, target.x, target.y,
+                                  target.z) &&
            reservations_owner(context->reservations, RESERVATION_WORK, target) ==
                context->worker_id;
 }
@@ -1993,7 +1999,10 @@ static void work(Colonist *colonist, const ColonistContext *context)
 static Workstation *job_station(const Colonist *colonist, const ColonistContext *context)
 {
     Workstation *station = workstation_get(context->workstations, colonist->station);
-    return station != NULL && station->number == colonist->station_number ? station : NULL;
+    /* A forbidden station is as good as gone: the job stops. */
+    return station != NULL && station->number == colonist->station_number && !station->forbidden
+               ? station
+               : NULL;
 }
 
 static TilePos station_tile(const Workstation *station)
@@ -2087,7 +2096,7 @@ static bool is_station_job(const Map *map, int x, int y, int z, void *userdata)
     const ColonistContext *context = search->context;
     const Workstation *station = workstation_get_const(
         context->workstations, workstation_at(context->workstations, x, y, z));
-    if (station == NULL ||
+    if (station == NULL || station->forbidden ||
         reservations_taken_by_other(context->reservations, RESERVATION_STATION,
                                     station_tile(station), context->worker_id)) {
         return false;
@@ -2126,7 +2135,7 @@ static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const FetchSearch *search = userdata;
-    ItemStack stack = items_get(search->items, x, y, z);
+    ItemStack stack = items_get_allowed(search->items, x, y, z);
     return stack.type != ITEM_NONE && (search->types & ITEM_TYPE_BIT(stack.type)) &&
            stack.quality >= search->min_quality && stack.count >= search->min_count &&
            (search->match.count == 0 || item_stacks_match(stack, search->match)) &&
@@ -2295,7 +2304,7 @@ static void take_job_tool(Colonist *colonist, const ColonistContext *context)
 {
     bool fetches;
     ToolUse use = job_tool_use(colonist, &fetches);
-    ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
+    ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
     ItemStack replaced;
     if (colonist->x == colonist->fetch.x && colonist->y == colonist->fetch.y &&
         colonist->z == colonist->fetch.z && stack.type != ITEM_NONE &&
@@ -2410,7 +2419,7 @@ static bool try_station_job(Colonist *colonist, const ColonistContext *context)
 /* At the stack being fetched: takes a tool, or the input of the craft. */
 static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
 {
-    ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
+    ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
     if (stack.type == ITEM_NONE) {
         return false;
     }
@@ -2616,6 +2625,9 @@ static bool site_still_wanted(const ColonistContext *context, const Construction
  * and some lies about. */
 static bool site_wants_material(const ColonistContext *context, const ConstructionSite *site)
 {
+    if (construction_forbidden(site, context->map)) {
+        return false;
+    }
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         if (construction_unpromised(site, slot) > 0 &&
             items_exist(context->items, ITEM_TYPE_BIT(construction_material(site, slot)), 1)) {
@@ -2870,7 +2882,7 @@ static bool try_supply_job(Colonist *colonist, const ColonistContext *context)
 static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
                              const ConstructionSite *site)
 {
-    ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
+    ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
     if (colonist->supply_promised <= 0 ||
         construction_material(site, colonist->supply_slot) != stack.type ||
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
@@ -3258,10 +3270,12 @@ static bool any_station(const ColonistContext *context, bool (*wants)(const Work
     return false;
 }
 
+/* The station on a tile that settlers may use (none when forbidden). */
 static const Workstation *station_on(const ColonistContext *context, int x, int y, int z)
 {
-    return workstation_get_const(context->workstations,
-                                 workstation_at(context->workstations, x, y, z));
+    const Workstation *station = workstation_get_const(
+        context->workstations, workstation_at(context->workstations, x, y, z));
+    return station != NULL && !station->forbidden ? station : NULL;
 }
 
 static bool wants_fuel(const Workstation *station)
@@ -3337,7 +3351,7 @@ static void refuel(Colonist *colonist, const ColonistContext *context)
     }
     TilePos hearth = station_tile(station);
     if (colonist->station_phase == STATION_JOB_FETCH) {
-        ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
+        ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
         float value = hearth_fuel_value((ItemType)stack.type);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
             value <= 0.0f || !(station->fuel_types & ITEM_TYPE_BIT(stack.type))) {
@@ -3496,7 +3510,8 @@ static const Workstation *fire_source(const Colonist *colonist, const ColonistCo
 {
     const Workstation *source =
         workstation_get_const(context->workstations, colonist->fire_source);
-    return source != NULL && source->number == colonist->fire_source_number && source->burning
+    return source != NULL && source->number == colonist->fire_source_number && source->burning &&
+                   !source->forbidden
                ? source
                : NULL;
 }
@@ -3511,7 +3526,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
     float speed = colonist_work_speed(colonist, KNOWLEDGE_FIRE);
     switch ((LightStep)colonist->light_step) {
     case LIGHT_FETCH_TINDER: {
-        ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
+        ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
             stack.type != ITEM_GRASS) {
             set_idle(colonist, context, 0);
@@ -4014,6 +4029,13 @@ static void decide(Colonist *colonist, const ColonistContext *context)
     case TASK_SLEEP:
         if (rest >= 1.0f) {
             set_idle(colonist, context, random_idle_ticks(context->rng));
+        } else if (colonist_is_moving(colonist) &&
+                   map_forbidden(context->map, colonist->target.x, colonist->target.y,
+                                 colonist->target.z, MAP_FORBID_STRUCTURE)) {
+            /* The bed it walks to was forbidden meanwhile: another one, or the
+             * ground (asleep in it, it sleeps on). */
+            reservations_release_kind(context->reservations, RESERVATION_BED, context->worker_id);
+            start_sleeping(colonist, context);
         } else if (!try_satisfy_urgent(colonist, context, NEED_CRITICAL_THRESHOLD)) {
             /* Severe hunger or thirst wakes colonists up; the cold or the heat
              * of the night moves them. */
@@ -4174,7 +4196,7 @@ static void eat(Colonist *colonist, const ColonistContext *context)
     if (mood->break_type == MOOD_BREAK_BINGE) {
         appetite += fmaxf(mood->binge_left, 0.0f);
     }
-    ItemStack stack = items_get(context->items, colonist->x, colonist->y, colonist->z);
+    ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
     ItemType type;
     int eaten;
     if (item_is_food((ItemType)stack.type)) {

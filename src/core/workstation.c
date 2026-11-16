@@ -155,6 +155,17 @@ int workstations_remove(Workstations *workstations, int index, ItemStack returne
     return count;
 }
 
+bool workstation_set_forbidden(Workstations *workstations, int index, bool forbidden)
+{
+    Workstation *station = workstation_get(workstations, index);
+    if (station == NULL || station->forbidden == forbidden) {
+        return false;
+    }
+    station->forbidden = forbidden;
+    workstations->revision++;
+    return true;
+}
+
 static Bill *get_bill(Workstations *workstations, int index, int bill)
 {
     Workstation *station = workstation_get(workstations, index);
@@ -454,6 +465,9 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         hash = hash_fnv1a64(hash, craft, sizeof(craft));
         if (station->free_input) { /* (Only then: hashes stay as they were without it.) */
             hash = hash_fnv1a64(hash, &station->free_input, sizeof(station->free_input));
+        }
+        if (station->forbidden) { /* Likewise. */
+            hash = hash_fnv1a64(hash, &station->forbidden, sizeof(station->forbidden));
         }
         float fire[3] = {station->fuel, station->fuel_promised, station->soaked};
         hash = hash_fnv1a64(hash, fire, sizeof(fire));

@@ -35,6 +35,15 @@ void render_below_end(SDL_Renderer *renderer);
  * See-through, drawn over what stands there (items, plants, settlers). */
 void render_ramp_markers(SDL_Renderer *renderer, const Map *map, const Camera *camera);
 
+/* A "no entry" sign in the corner of what is forbidden to the settlers on
+ * the level shown (game_forbidden()): stacks, plants (a tree on its foot and
+ * its trunk), structures (on their head tile), roofs, stations. */
+void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+
+/* Rectangle of tiles being forbidden (red) or allowed (green) with the tool. */
+void render_forbid_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                        int y1, bool forbid);
+
 /* Dark spots on dirty tiles. */
 void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera);
 
@@ -134,6 +143,8 @@ typedef enum RenderIcon {
     RENDER_ICON_DIG_DOWN,
     RENDER_ICON_CHOP,
     RENDER_ICON_DECONSTRUCT,
+    RENDER_ICON_FORBID, /* The "no entry" sign. */
+    RENDER_ICON_ALLOW,
     RENDER_ICON_CANCEL,
 } RenderIcon;
 

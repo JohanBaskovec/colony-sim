@@ -112,6 +112,13 @@ bool designation_ground_free(const Constructions *constructions, const Workstati
 bool designation_waits_for_support(const Designations *designations, const Map *map, int x,
                                    int y, int z);
 
+/* Whether the order on the tile touches something the player forbade (see
+ * map_forbidden()): the structure or roof to take apart, the tree to fell,
+ * the plant on the ground a ramp or a hole takes away. Nobody carries it out
+ * meanwhile. */
+bool designation_forbidden(const Designations *designations, const Map *map, int x, int y,
+                           int z);
+
 DesignationType designation_get(const Designations *designations, int x, int y, int z);
 
 /*

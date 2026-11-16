@@ -30,6 +30,9 @@ typedef enum AppTool {
      * or with `debug_teleport` (tool type APP_DEBUG_TELEPORT), the selected
      * colonists moved there. */
     APP_TOOL_DEBUG,
+    /* Forbid (type APP_FORBID) or allow (APP_ALLOW) everything in a rectangle
+     * (game_set_forbidden_rect()). */
+    APP_TOOL_FORBID,
 } AppTool;
 
 /*
@@ -64,6 +67,10 @@ typedef enum AppTool {
 #define APP_DEBUG_SPAWN 0
 #define APP_DEBUG_TELEPORT 1
 
+/* Types of the forbid tool (see app_toggle_tool()). */
+#define APP_FORBID 0
+#define APP_ALLOW 1
+
 /* Types of the zone tools (see app_toggle_tool()). */
 #define APP_ZONE_ADD 0
 #define APP_ZONE_REMOVE 1
@@ -75,6 +82,7 @@ typedef enum AppWindow {
     APP_WINDOW_STATION,
     APP_WINDOW_STOCKPILE,
     APP_WINDOW_GATHER_ZONE,
+    APP_WINDOW_TILE, /* What lies on the selected tile (game/tile_panel.h). */
     APP_WINDOW_WORK, /* Work priorities grid. */
     APP_WINDOW_HELP, /* Controls. */
     APP_WINDOW_DEBUG, /* Debug menu (cheats). */
@@ -134,9 +142,10 @@ typedef struct App {
     int selected_gather_zone_number;
     /* Groups of resources folded in the gathering zone window (UI state). */
     bool gather_group_folded[GATHER_GROUP_COUNT];
-    /* Selected structure, roof or construction site (its tile), same rules. */
-    bool structure_selected;
-    int selected_structure_x, selected_structure_y, selected_structure_z;
+    /* Selected tile (a structure, a roof, a construction site, items or a
+     * plant on it: game/tile_panel.h), same rules. */
+    bool tile_selected;
+    int selected_tile_x, selected_tile_y, selected_tile_z;
     /* A right click on the map (not dragged to pan) steps back like Escape. */
     bool right_click_pending;
     float right_down_x, right_down_y;
@@ -161,6 +170,7 @@ typedef struct App {
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
     bool debug_teleport;           /* For APP_TOOL_DEBUG: moves the selection instead. */
+    bool forbid_allows;            /* For APP_TOOL_FORBID: allows instead. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;
@@ -186,7 +196,8 @@ void app_run(App *app);
 void app_shutdown(App *app);
 
 /* Selects a tool (`type`: DesignationType for APP_TOOL_DESIGNATE,
- * WorkstationType for APP_TOOL_BUILD, StructureType for APP_TOOL_STRUCTURE),
+ * WorkstationType for APP_TOOL_BUILD, StructureType for APP_TOOL_STRUCTURE,
+ * APP_FORBID or APP_ALLOW for APP_TOOL_FORBID),
  * or goes back to selection if it is already active. */
 void app_toggle_tool(App *app, AppTool tool, int type);
 

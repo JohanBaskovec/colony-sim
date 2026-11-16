@@ -29,6 +29,7 @@ typedef enum ActionType {
     ACTION_TOGGLE_KEEP_BURNING,
     ACTION_TOGGLE_FUEL,
     ACTION_TOGGLE_TEACH,
+    ACTION_TOGGLE_FORBIDDEN,
 } ActionType;
 
 typedef struct Action {
@@ -474,9 +475,25 @@ static void station_rows(UiLayout *layout, void *userdata)
     const Game *game = rows->game;
     const Workstation *station = rows->station;
     Action *action = &rows->action;
-    if (ui_layout_label_with_button(layout, "", tr("station.delete"))) {
+    /* Forbid or allow it, delete it; whether the settlers leave it alone. */
+    const char *forbid = tr(station->forbidden ? "forbid.allow" : "forbid.forbid");
+    const char *remove = tr("station.delete");
+    const char *state = station->forbidden ? tr("tile_panel.left_alone") : "";
+    float forbid_width = ui_button_width(layout->ui, forbid);
+    float remove_width = ui_button_width(layout->ui, remove);
+    ui_layout_measure(layout, ui_text_width(layout->ui, state) + GAP + forbid_width + GAP +
+                                  remove_width);
+    float right = layout->x + layout->width;
+    if (ui_layout_button(layout, right - remove_width - GAP - forbid_width, forbid)) {
+        *action = (Action){ACTION_TOGGLE_FORBIDDEN, 0, 0};
+    }
+    if (ui_layout_button(layout, right - remove_width, remove)) {
         *action = (Action){ACTION_DELETE_STATION, 0, 0};
     }
+    if (layout->draw && station->forbidden) {
+        ui_label_dim(layout->ui, state, layout->x, layout->y + layout->text_offset);
+    }
+    layout->y += layout->row;
     if (hearth_is(station)) {
         hearth_rows(layout, game, station, action);
     }
@@ -551,6 +568,10 @@ static void apply(App *app, int index, const Action *action)
     case ACTION_TOGGLE_TEACH:
         game_set_teach(&app->game, (KnowledgeType)action->value,
                        !app->game.teach[action->value]);
+        break;
+    case ACTION_TOGGLE_FORBIDDEN:
+        game_set_forbidden(&app->game, station->x, station->y, station->z, FORBID_STATION,
+                           !station->forbidden);
         break;
     case ACTION_NONE: break;
     }

@@ -436,7 +436,7 @@ TreeFall tree_fell(Map *map, Items *items, int x, int y, int z, ItemStack wood)
                                           plant_stock_available(plant, PLANT_STOCK_TWIGS));
     branches.quality = twigs.quality = ITEM_QUALITY_STANDARD;
     tree_clear(map, items, x, y, z);
-    memset(plant, 0, sizeof(*plant));
+    map_remove_plant(map, x, y, z);
     /* The trunk: its foot's tile and the first two thirds of the line; the
      * crown on the rest (on the foot when nothing lies beyond it). */
     int crown_from = fall.length - fall.length / 3 + 1;

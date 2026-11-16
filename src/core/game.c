@@ -568,7 +568,9 @@ static void mushrooms_day(Game *game, size_t index, int day)
     Plant *plant = &map->plants[index];
     if (plant->type == PLANT_MUSHROOMS) {
         if (world_roll(game->seed, index, day, 1) < MUSHROOM_VANISH_CHANCE) {
-            memset(plant, 0, sizeof(*plant));
+            int x, y, z;
+            map_tile_of(map, index, &x, &y, &z);
+            map_remove_plant(map, x, y, z);
         }
         return;
     }
@@ -677,6 +679,10 @@ static void update_plants(Game *game)
                           GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR, day);
             if (plant->type == PLANT_TREE) {
                 grow_tree(game, i, old_growth);
+            } else if (plant->type == PLANT_NONE && map->forbidden_count > 0) {
+                int x, y, z; /* Vanished: what was forbidden of it goes too. */
+                map_tile_of(map, i, &x, &y, &z);
+                map_remove_plant(map, x, y, z);
             }
         }
     }
@@ -781,6 +787,9 @@ static void finish_constructions_now(Game *game)
         const ConstructionSite *site = construction_get(&game->constructions, index);
         if (site == NULL) {
             continue;
+        }
+        if (construction_forbidden(site, &game->map)) {
+            continue; /* Left alone, as by builders. */
         }
         ConstructionSite done = *site; /* Gone from the list once built. */
         int length = construction_length(&done);
@@ -940,7 +949,8 @@ static void deconstruct_now(Game *game)
         for (int y = 0; y < map->height; y++) {
             for (int x = 0; x < map->width; x++) {
                 DesignationType type = designation_get(designations, x, y, z);
-                if (type != DESIGNATION_DECONSTRUCT) {
+                if (type != DESIGNATION_DECONSTRUCT ||
+                    designation_forbidden(designations, map, x, y, z)) {
                     continue;
                 }
                 if (!designation_can_apply(map, x, y, z, type)) {
@@ -984,7 +994,8 @@ static void fell_and_mine_now(Game *game)
                     designation_set(designations, map, x, y, z, DESIGNATION_NONE);
                     continue;
                 }
-                if (designation_waits_for_support(designations, map, x, y, z)) {
+                if (designation_waits_for_support(designations, map, x, y, z) ||
+                    designation_forbidden(designations, map, x, y, z)) {
                     continue;
                 }
                 designation_add_work(designations, map, &game->items, x, y, z,
@@ -1398,6 +1409,125 @@ int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, int z)
     int removed = designations_set_rect(&game->designations, &game->map, x0, y0, x1, y1, z,
                                         DESIGNATION_NONE);
     return removed + game_remove_blueprints_rect(game, x0, y0, x1, y1, z);
+}
+
+/* ---- Forbidding ---------------------------------------------------------- */
+
+/* The map bit of a target (0 for items and stations, kept elsewhere). */
+static MapForbid forbid_bit(ForbidTarget target)
+{
+    switch (target) {
+    case FORBID_PLANT:
+        return MAP_FORBID_PLANT;
+    case FORBID_STRUCTURE:
+        return MAP_FORBID_STRUCTURE;
+    case FORBID_ROOF:
+        return MAP_FORBID_ROOF;
+    case FORBID_ITEMS:
+    case FORBID_STATION:
+    case FORBID_TARGET_COUNT:
+        break;
+    }
+    return (MapForbid)0;
+}
+
+/* The tile that holds the thing: the foot of the tree for a tile of its
+ * trunk or foliage. */
+static void forbid_tile(const Game *game, ForbidTarget target, int *x, int *y, int *z)
+{
+    TreeRef tree;
+    if (target == FORBID_PLANT && map_in_bounds(&game->map, *x, *y, *z) &&
+        game->map.plants[map_index(&game->map, *x, *y, *z)].type == PLANT_NONE &&
+        tree_at(&game->map, *x, *y, *z, &tree)) {
+        *x = tree.x;
+        *y = tree.y;
+        *z = tree.z;
+    }
+}
+
+bool game_can_forbid(const Game *game, int x, int y, int z, ForbidTarget target)
+{
+    forbid_tile(game, target, &x, &y, &z);
+    switch (target) {
+    case FORBID_ITEMS:
+        return items_get(&game->items, x, y, z).type != ITEM_NONE;
+    case FORBID_STATION:
+        return workstation_at(&game->workstations, x, y, z) != WORKSTATION_NONE;
+    case FORBID_PLANT:
+    case FORBID_STRUCTURE:
+    case FORBID_ROOF:
+        return map_can_forbid(&game->map, x, y, z, forbid_bit(target));
+    case FORBID_TARGET_COUNT:
+        break;
+    }
+    return false;
+}
+
+bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target)
+{
+    forbid_tile(game, target, &x, &y, &z);
+    switch (target) {
+    case FORBID_ITEMS:
+        return items_forbidden(&game->items, x, y, z);
+    case FORBID_STATION: {
+        const Workstation *station = workstation_get_const(
+            &game->workstations, workstation_at(&game->workstations, x, y, z));
+        return station != NULL && station->forbidden;
+    }
+    case FORBID_PLANT:
+    case FORBID_STRUCTURE:
+    case FORBID_ROOF:
+        return map_forbidden(&game->map, x, y, z, forbid_bit(target));
+    case FORBID_TARGET_COUNT:
+        break;
+    }
+    return false;
+}
+
+bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bool forbidden)
+{
+    forbid_tile(game, target, &x, &y, &z);
+    switch (target) {
+    case FORBID_ITEMS:
+        return items_set_forbidden(&game->items, x, y, z, forbidden); /* Counts as an addition. */
+    case FORBID_STATION:
+        return workstation_set_forbidden(&game->workstations,
+                                         workstation_at(&game->workstations, x, y, z), forbidden);
+    case FORBID_PLANT:
+    case FORBID_STRUCTURE:
+    case FORBID_ROOF:
+        if (!map_set_forbidden(&game->map, x, y, z, forbid_bit(target), forbidden)) {
+            return false;
+        }
+        if (!forbidden) { /* Orders, sites and gathering held up by it may go on. */
+            game->designations.revision++;
+            game->constructions.revision++;
+            if (target == FORBID_PLANT) {
+                gather_zones_plants_changed(&game->gather_zones);
+            }
+        }
+        return true;
+    case FORBID_TARGET_COUNT:
+        break;
+    }
+    return false;
+}
+
+int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool forbidden)
+{
+    int changed = 0;
+    for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
+        for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
+            for (int target = 0; target < FORBID_TARGET_COUNT; target++) {
+                if (target == FORBID_PLANT && map_in_bounds(&game->map, x, y, z) &&
+                    game->map.plants[map_index(&game->map, x, y, z)].type == PLANT_GRASS) {
+                    continue; /* Ground cover: one tile at a time (game_set_forbidden()). */
+                }
+                changed += game_set_forbidden(game, x, y, z, (ForbidTarget)target, forbidden);
+            }
+        }
+    }
+    return changed;
 }
 
 /* ---- Zones --------------------------------------------------------------- */

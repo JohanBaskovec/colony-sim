@@ -23,8 +23,8 @@ _Static_assert(ITEM_QUALITY_COUNT <= 8, "grade masks are bytes");
 int haul_storage_room(const Items *items, int x, int y, int z, ItemStack stack)
 {
     int limit = item_stack_limit((ItemType)stack.type);
-    if (limit == 0) {
-        return 0;
+    if (limit == 0 || items_forbidden(items, x, y, z)) {
+        return 0; /* A forbidden stack is left alone: nothing is added to it. */
     }
     ItemStack there = items_get(items, x, y, z);
     if (there.type != ITEM_NONE && !item_stacks_match(there, stack)) {
@@ -74,6 +74,9 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
                                                      (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
                                                      world->self))) {
                         continue; /* Other zone, or someone is already bringing items there. */
+                    }
+                    if (items_forbidden(world->items, x, y, z)) {
+                        continue; /* Left alone: no room there. */
                     }
                     ItemStack stack = items_get(world->items, x, y, z);
                     if (stack.type == ITEM_NONE) {
@@ -198,7 +201,7 @@ static bool is_haul_source(const Map *map, int x, int y, int z, void *userdata)
     (void)map;
     const SourceSearch *search = userdata;
     const HaulWorld *world = search->world;
-    ItemStack stack = items_get(world->items, x, y, z);
+    ItemStack stack = items_get_allowed(world->items, x, y, z);
     if (stack.type == ITEM_NONE || search->storage->levels[stack.type] == 0) {
         return false;
     }
@@ -260,7 +263,7 @@ bool haul_find_job(const HaulWorld *world, TilePos from, float max_cost, HaulJob
                                  max_cost, NULL, &source)) {
         return false;
     }
-    ItemStack stack = items_get(world->items, source.x, source.y, source.z);
+    ItemStack stack = items_get_allowed(world->items, source.x, source.y, source.z);
     int current =
         stockpile_storage_priority(world->stockpiles, source.x, source.y, source.z, stack);
     TilePos destination;
@@ -288,7 +291,7 @@ static bool is_extra_source(const Map *map, int x, int y, int z, void *userdata)
     (void)map;
     const ExtraSearch *search = userdata;
     const HaulWorld *world = search->world;
-    ItemStack stack = items_get(world->items, x, y, z);
+    ItemStack stack = items_get_allowed(world->items, x, y, z);
     if (stack.type == ITEM_NONE || !item_stacks_match(stack, search->load) ||
         !stockpile_accepts(search->zone, stack)) {
         return false;

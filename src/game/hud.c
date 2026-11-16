@@ -8,6 +8,7 @@
 #include "game/station_panel.h"
 #include "game/ui_layout.h"
 #include "game/stockpile_panel.h"
+#include "game/tile_panel.h"
 #include "game/work_panel.h"
 
 #include <limits.h>
@@ -316,6 +317,9 @@ static void build_tile_panel(App *app, Panel *panel)
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant"), tr(def->name_key),
                       a);
         }
+        if (game_forbidden(&app->game, x, y, z, FORBID_PLANT)) {
+            panel_add_text(panel, tr("tile_panel.left_alone"));
+        }
         int today = game_day_of_year(app->game.clock.tick);
         for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {
             if (plant_stock_capacity(plant, (PlantStock)stock) <= 0) {
@@ -342,6 +346,9 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
                   tr(item_def((ItemType)stack.type)->name_key), a, weight);
         add_item_condition_line(panel, stack);
+        if (items_forbidden(&app->game.items, x, y, z)) {
+            panel_add_text(panel, tr("tile_panel.left_alone"));
+        }
         const ItemDef *def = item_def((ItemType)stack.type);
         if (def->transforms_into != ITEM_NONE && def->transform_hours > stack.progress) {
             tr_integer(a, sizeof(a), def->transform_hours - stack.progress);
@@ -370,12 +377,19 @@ static void build_tile_panel(App *app, Panel *panel)
     if (station != NULL) {
         const char *name = tr(workstation_def((WorkstationType)station->type)->name_key);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.station"), name);
+        if (station->forbidden) {
+            panel_add_text(panel, tr("tile_panel.left_alone"));
+        }
     }
     StructureType structure = map_structure(map, x, y, z);
     if (structure != STRUCTURE_NONE) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.structure"),
                   tr(structure_def(structure)->name_key));
         add_structure_condition_line(panel, map, x, y, z);
+        if (map_forbidden(map, x, y, z, MAP_FORBID_STRUCTURE)) {
+            bool locked = structure == STRUCTURE_DOOR || structure == STRUCTURE_LADDER;
+            panel_add_text(panel, tr(locked ? "tile_panel.locked" : "tile_panel.left_alone"));
+        }
         if (structure_is_bed(structure)) {
             add_bed_owner_line(app, panel, x, y);
         }
@@ -386,6 +400,9 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.roof"),
                   tr(structure_def(roof)->name_key),
                   tr(item_quality_name_key(map_roof_quality(map, x, y, z))));
+        if (map_forbidden(map, x, y, z, MAP_FORBID_ROOF)) {
+            panel_add_text(panel, tr("tile_panel.left_alone"));
+        }
     } else if (over != STRUCTURE_NONE) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.under_roof"),
                   tr(structure_def(over)->name_key));
@@ -964,6 +981,7 @@ static void draw_window(App *app, AppWindow window)
     case APP_WINDOW_STATION: station_panel_draw(app); break;
     case APP_WINDOW_STOCKPILE: stockpile_panel_draw(app); break;
     case APP_WINDOW_GATHER_ZONE: gather_zone_panel_draw(app); break;
+    case APP_WINDOW_TILE: tile_panel_draw(app); break;
     case APP_WINDOW_WORK: work_panel_draw(app); break;
     case APP_WINDOW_HELP: help_window(app); break;
     case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
@@ -987,6 +1005,8 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
         out[count++] = APP_WINDOW_GATHER_ZONE;
     } else if (app->selected_stockpile != STOCKPILE_NONE) {
         out[count++] = APP_WINDOW_STOCKPILE;
+    } else if (app->tile_selected) {
+        out[count++] = APP_WINDOW_TILE;
     } else if (app->selected_count > 0) {
         out[count++] = APP_WINDOW_COLONIST;
     }
@@ -1125,6 +1145,11 @@ void hud_draw(App *app)
             if (!game_structure_buildable(&app->game, app->structure_type)) {
                 panel_add_text(&tool, tr("hud.tool.unavailable"));
             }
+        } else if (app->tool == APP_TOOL_FORBID) {
+            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"),
+                      tr(app->forbid_allows ? "tool.allow" : "tool.forbid"));
+            panel_add_text(&tool, tr(app->forbid_allows ? "hud.tool.allow_help"
+                                                        : "hud.tool.forbid_help"));
         } else if (app->tool == APP_TOOL_DEBUG) {
             if (app->debug_teleport) {
                 char count[16];

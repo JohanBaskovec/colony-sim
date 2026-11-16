@@ -239,6 +239,11 @@ typedef struct Map {
     /* The grade of each built roof (a terrain, see map_roof()), 0 elsewhere. */
     uint8_t *roof_quality;
     int roof_count; /* Built roof tiles. */
+    /* What the player forbade the settlers on each tile (MapForbid bits, see
+     * map_forbidden()): the plant, the structure (on its head tile), the
+     * roof. */
+    uint8_t *forbidden;
+    int forbidden_count; /* Tiles with some bit set. */
     /* Incremented whenever a structure or a roof changes. Data derived from
      * it (core/room.h) compares it. Not part of map_hash(). */
     uint32_t build_revision;
@@ -323,15 +328,37 @@ static inline bool map_is_open_at(const Map *map, size_t index)
     return map->rock[index] == 0 && map->terrain[index] == TERRAIN_OPEN;
 }
 
+/* Things on a tile the player may forbid the settlers (bits of
+ * Map.forbidden). Items and workstations keep theirs (core/item.h,
+ * core/workstation.h). */
+typedef enum MapForbid {
+    MAP_FORBID_PLANT = 1 << 0,     /* Not picked, cut, felled nor climbed. */
+    MAP_FORBID_STRUCTURE = 1 << 1, /* Not used, taken apart nor refreshed; a door or a
+                                    * ladder is locked: nobody goes through. */
+    MAP_FORBID_ROOF = 1 << 2,      /* Not taken down. */
+} MapForbid;
+
+/* Whether a structure forbidden on the tile (an index in bounds, the
+ * structure's head) locks the way: a door or a ladder nobody may use. */
+static inline bool map_locked_at(const Map *map, size_t index)
+{
+    return (map->structure[index] == STRUCTURE_DOOR ||
+            map->structure[index] == STRUCTURE_LADDER) &&
+           (map->forbidden[index] & MAP_FORBID_STRUCTURE) != 0;
+}
+
 /* What a step up from the tile, or down onto it, costs (a multiplier of the
  * tile reached): MAP_CLIMB_COST on a slope, MAP_LADDER_CLIMB_COST on a
- * ladder, 0 when the tile leads nowhere (see map_can_climb()). */
+ * ladder (none when it is locked), 0 when the tile leads nowhere (see
+ * map_can_climb()). */
 static inline float map_climb_cost_at(const Map *map, size_t index)
 {
     if (map->slope[index] != 0) {
         return MAP_CLIMB_COST;
     }
-    return map->structure[index] == STRUCTURE_LADDER ? MAP_LADDER_CLIMB_COST : 0.0f;
+    return map->structure[index] == STRUCTURE_LADDER && !map_locked_at(map, index)
+               ? MAP_LADDER_CLIMB_COST
+               : 0.0f;
 }
 
 /* Tiles of one level. */
@@ -512,6 +539,23 @@ bool map_ladder_fits(const Map *map, int x, int y, int z);
  * returns how many. */
 #define MAP_MAX_LEVEL_LINKS 10
 int map_level_links(const Map *map, int x, int y, int z, TilePos out[MAP_MAX_LEVEL_LINKS]);
+
+/* Whether the settlers are forbidden `what` (one MapForbid bit) on a tile:
+ * only while there is such a thing there (a plant, a structure, given any of
+ * its tiles, a roof). */
+bool map_forbidden(const Map *map, int x, int y, int z, MapForbid what);
+
+/* Removes the plant on a tile, and what the player forbade of it. */
+void map_remove_plant(Map *map, int x, int y, int z);
+
+/* Whether there is something to forbid on the tile (see map_forbidden()). */
+bool map_can_forbid(const Map *map, int x, int y, int z, MapForbid what);
+
+/* Forbids or allows `what` (one MapForbid bit) on a tile, when there is such
+ * a thing there. Locking or unlocking a door or a ladder changes where one
+ * can walk (topology_revision). Returns whether it changed. The bit goes
+ * with what it is on: a structure taken apart, a roof taken down. */
+bool map_set_forbidden(Map *map, int x, int y, int z, MapForbid what, bool forbidden);
 
 /* Whether structures, stations and stockpiles can go on the tile: a floor of
  * buildable terrain, without rock, not a slope. */

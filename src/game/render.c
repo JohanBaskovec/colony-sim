@@ -52,6 +52,14 @@ static const SDL_Color RAMP_MARKER_EDGE = {28, 24, 20, 120};
 #define RAMP_MARKER_SIZE 0.42f    /* Width, in tiles. */
 #define RAMP_MARKER_MIN_ZOOM 6.0f /* Pixels per tile below which none is drawn. */
 static const SDL_Color DROP_EDGE_COLOR = {16, 12, 8, 120};
+/* Things forbidden to the settlers: a "no entry" sign in the tile's corner;
+ * the allow tool's icon is a green sign with a tick. */
+static const SDL_Color FORBID_COLOR = {214, 52, 44, 235};
+static const SDL_Color FORBID_BACK_COLOR = {250, 244, 236, 210};
+static const SDL_Color ALLOW_COLOR = {84, 176, 92, 255};
+#define FORBID_MARKER_RADIUS 0.17f /* In tiles. */
+#define FORBID_MARKER_MIN_RADIUS 3.0f /* Pixels. */
+#define FORBID_RING_SEGMENTS 16
 
 /* The offscreen image of the levels below, and the render scale it replaced. */
 static SDL_Texture *below_texture;
@@ -619,6 +627,114 @@ void render_ramp_markers(SDL_Renderer *renderer, const Map *map, const Camera *c
     batch_flush(renderer);
 }
 
+/* A filled disc (a fan of triangles), drawn with the batch. */
+static void batch_disc(SDL_Renderer *renderer, SDL_Color color, float cx, float cy, float radius)
+{
+    for (int i = 0; i < FORBID_RING_SEGMENTS; i++) {
+        float a0 = 2.0f * SDL_PI_F * (float)i / FORBID_RING_SEGMENTS;
+        float a1 = 2.0f * SDL_PI_F * (float)(i + 1) / FORBID_RING_SEGMENTS;
+        SDL_FPoint points[3] = {{cx, cy},
+                                {cx + SDL_cosf(a0) * radius, cy + SDL_sinf(a0) * radius},
+                                {cx + SDL_cosf(a1) * radius, cy + SDL_sinf(a1) * radius}};
+        batch_shape(renderer, color, points, 3);
+    }
+}
+
+/* A ring between two radii, drawn with the batch. */
+static void batch_ring(SDL_Renderer *renderer, SDL_Color color, float cx, float cy, float inner,
+                       float outer)
+{
+    for (int i = 0; i < FORBID_RING_SEGMENTS; i++) {
+        float a0 = 2.0f * SDL_PI_F * (float)i / FORBID_RING_SEGMENTS;
+        float a1 = 2.0f * SDL_PI_F * (float)(i + 1) / FORBID_RING_SEGMENTS;
+        float c0 = SDL_cosf(a0), s0 = SDL_sinf(a0), c1 = SDL_cosf(a1), s1 = SDL_sinf(a1);
+        SDL_FPoint points[4] = {{cx + c0 * outer, cy + s0 * outer},
+                                {cx + c1 * outer, cy + s1 * outer},
+                                {cx + c1 * inner, cy + s1 * inner},
+                                {cx + c0 * inner, cy + s0 * inner}};
+        batch_shape(renderer, color, points, 4);
+    }
+}
+
+/* A straight bar from (x0, y0) to (x1, y1), `half` thick on each side. */
+static void batch_bar(SDL_Renderer *renderer, SDL_Color color, float x0, float y0, float x1,
+                      float y1, float half)
+{
+    float dx = x1 - x0, dy = y1 - y0;
+    float length = SDL_sqrtf(dx * dx + dy * dy);
+    if (length <= 0.0f) {
+        return;
+    }
+    float nx = -dy / length * half, ny = dx / length * half;
+    SDL_FPoint points[4] = {
+        {x0 + nx, y0 + ny}, {x1 + nx, y1 + ny}, {x1 - nx, y1 - ny}, {x0 - nx, y0 - ny}};
+    batch_shape(renderer, color, points, 4);
+}
+
+/* The "no entry" sign: a red ring crossed from top left to bottom right. */
+static void render_forbid_sign(SDL_Renderer *renderer, float cx, float cy, float radius)
+{
+    batch_disc(renderer, FORBID_BACK_COLOR, cx, cy, radius);
+    batch_ring(renderer, FORBID_COLOR, cx, cy, radius * 0.7f, radius);
+    float d = radius * 0.72f * 0.7071f;
+    batch_bar(renderer, FORBID_COLOR, cx - d, cy - d, cx + d, cy + d, radius * 0.15f);
+}
+
+/* Whether the tile shows something forbidden: a stack, a plant (a tree on
+ * its foot and its trunk), a structure (on its head), a roof. */
+static bool forbidden_marked(const Game *game, int x, int y, int z)
+{
+    const Map *map = &game->map;
+    if (game->items.forbidden_count > 0 && items_forbidden(&game->items, x, y, z)) {
+        return true;
+    }
+    if (map->forbidden_count == 0) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    if ((map->forbidden[index] & (MAP_FORBID_PLANT | MAP_FORBID_STRUCTURE | MAP_FORBID_ROOF)) !=
+        0) {
+        return map_forbidden(map, x, y, z, MAP_FORBID_PLANT) ||
+               map_forbidden(map, x, y, z, MAP_FORBID_STRUCTURE) ||
+               map_forbidden(map, x, y, z, MAP_FORBID_ROOF);
+    }
+    return map->rock[index] == ROCK_WOOD && game_forbidden(game, x, y, z, FORBID_PLANT);
+}
+
+static void forbid_marker(SDL_Renderer *renderer, const SDL_FRect *tile)
+{
+    float radius = SDL_max(FORBID_MARKER_MIN_RADIUS, tile->w * FORBID_MARKER_RADIUS);
+    render_forbid_sign(renderer, tile->x + tile->w - radius * 1.25f,
+                       tile->y + radius * 1.25f, radius);
+}
+
+void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    const int z = camera->level; /* The level shown. */
+    const Map *map = &game->map;
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    if (map->forbidden_count > 0 || game->items.forbidden_count > 0) {
+        for (int y = visible.y0; y < visible.y1; y++) {
+            for (int x = visible.x0; x < visible.x1; x++) {
+                if (forbidden_marked(game, x, y, z)) {
+                    SDL_FRect tile = tile_rect(camera, x, y);
+                    forbid_marker(renderer, &tile);
+                }
+            }
+        }
+    }
+    for (int i = 0; i < WORKSTATION_MAX; i++) {
+        const Workstation *station = workstation_get_const(&game->workstations, i);
+        if (station != NULL && station->forbidden && station->z == z &&
+            station->x >= visible.x0 && station->x < visible.x1 && station->y >= visible.y0 &&
+            station->y < visible.y1) {
+            SDL_FRect tile = tile_rect(camera, station->x, station->y);
+            forbid_marker(renderer, &tile);
+        }
+    }
+    batch_flush(renderer);
+}
+
 void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
@@ -1013,6 +1129,19 @@ void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x
     SDL_FRect b = tile_rect(camera, SDL_max(x0, x1), SDL_max(y0, y1));
     SDL_FRect area = {a.x, a.y, b.x + b.w - a.x, b.y + b.h - a.y};
     SDL_Color color = DESIGNATION_COLORS[(unsigned)type < DESIGNATION_COUNT ? type : 0];
+    SDL_Color translucent = color;
+    translucent.a = 50;
+    fill(renderer, translucent, &area);
+    outline(renderer, area, 2.0f, color);
+}
+
+void render_forbid_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                        int y1, bool forbid)
+{
+    SDL_FRect a = tile_rect(camera, SDL_min(x0, x1), SDL_min(y0, y1));
+    SDL_FRect b = tile_rect(camera, SDL_max(x0, x1), SDL_max(y0, y1));
+    SDL_FRect area = {a.x, a.y, b.x + b.w - a.x, b.y + b.h - a.y};
+    SDL_Color color = forbid ? FORBID_COLOR : ALLOW_COLOR;
     SDL_Color translucent = color;
     translucent.a = 50;
     fill(renderer, translucent, &area);
@@ -1678,6 +1807,22 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         SDL_FRect area = inset(&rect, 0.7f);
         render_structure_shape(renderer, &area, STRUCTURE_WALL, DIRECTION_SOUTH, 255);
         outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_DECONSTRUCT]);
+        break;
+    }
+    case RENDER_ICON_FORBID:
+        render_forbid_sign(renderer, rect.x + w * 0.5f, rect.y + h * 0.5f, w * 0.4f);
+        batch_flush(renderer);
+        break;
+    case RENDER_ICON_ALLOW: { /* A green ring with a tick. */
+        float cx = rect.x + w * 0.5f, cy = rect.y + h * 0.5f, radius = w * 0.4f;
+        batch_disc(renderer, FORBID_BACK_COLOR, cx, cy, radius);
+        batch_ring(renderer, ALLOW_COLOR, cx, cy, radius * 0.7f, radius);
+        float half = radius * 0.13f;
+        batch_bar(renderer, ALLOW_COLOR, cx - radius * 0.42f, cy + radius * 0.02f,
+                  cx - radius * 0.1f, cy + radius * 0.34f, half);
+        batch_bar(renderer, ALLOW_COLOR, cx - radius * 0.18f, cy + radius * 0.34f,
+                  cx + radius * 0.44f, cy - radius * 0.32f, half);
+        batch_flush(renderer);
         break;
     }
     case RENDER_ICON_CANCEL: {

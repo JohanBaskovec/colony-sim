@@ -906,6 +906,8 @@ static Plant *stock_plant(const Map *map, int x, int y, int z)
     return &map->plants[index];
 }
 
+static bool takes_stock(GatherJob job);
+
 /* tile_holds() on a tile a zone can cover (checked by the caller); `stocks`
  * is stock_plant() of the tile (only looked at by the branch and twig jobs). */
 static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, int y, int z,
@@ -915,6 +917,13 @@ static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, in
         return false;
     }
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    if (map->forbidden_count > 0 && job != GATHER_JOB_STONES) {
+        /* The plant the job takes from: the tree's, for its branches and twigs. */
+        const Plant *taken = takes_stock(job) ? stocks : plant;
+        if (taken != NULL && (map->forbidden[(size_t)(taken - map->plants)] & MAP_FORBID_PLANT)) {
+            return false;
+        }
+    }
     switch (job) {
     case GATHER_JOB_HARVEST:
     case GATHER_JOB_HARVEST_CAREFULLY:
@@ -1186,7 +1195,7 @@ static ItemType complete(Map *map, int x, int y, int z, GatherJob job, GatherRes
         item = def->food_item;
         *count = plant_take_stock(plant, PLANT_STOCK_FOOD, INT16_MAX);
         if (def->vanishes) {
-            memset(plant, 0, sizeof(*plant)); /* The patch is gone. */
+            map_remove_plant(map, x, y, z); /* The patch is gone. */
         } else if (def->dug_whole) {
             plant->growth = 0.0f; /* Grows again from what is left in the ground. */
             memset(plant->stock, 0, sizeof(plant->stock));
@@ -1359,7 +1368,7 @@ void gather_clear_plant(Map *map, Items *items, int x, int y, int z, double leve
             items_drop(items, map, x, y, z, knowledge_product(item, count, level, rng));
         }
     }
-    memset(plant, 0, sizeof(*plant));
+    map_remove_plant(map, x, y, z);
 }
 
 uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)

@@ -61,6 +61,10 @@ tool.dig_ramp.description = Mark a bank of earth one level high: settlers cut a 
 tool.dig_down.description = Settlers dig the marked ground and the earth under it out: the hole slopes up to where its digger stood, the way into a cellar
 tool.chop.description = Settlers fell the marked trees, away from buildings, and the wood lies along the fallen trunk
 tool.cancel.description = Removes the orders in the area you drag
+tool.forbid = Forbid
+tool.forbid.description = Settlers leave alone what lies in the area you drag (but grass): nothing picked up, eaten, used, taken apart or felled, no way through doors and ladders
+tool.allow = Allow
+tool.allow.description = Settlers may use again what is in the area you drag
 tool.deconstruct.description = Settlers take the marked beds, walls, doors and roofs apart (a roof is marked on its level, above the walls) and get half of the materials back
 
 # Menus (bottom left)
@@ -199,6 +203,8 @@ hud.help.manage = {0}: stockpile zones · {1}: workstations · click a zone or s
 hud.tool = Tool: {0} · Left click/drag: apply · Esc: back
 # {0} = tool name (stockpile zone tool: first line, help on the second line)
 hud.tool.name = Tool: {0}
+hud.tool.forbid_help = Drag over what the settlers must leave alone
+hud.tool.allow_help = Drag over what the settlers may use again
 hud.tool.spawn = Debug: spawn {0} · Click: one stack on the tile · Esc: back
 hud.tool.teleport.one = Debug: move {0} settler · Click: the tile to go to · Esc: back
 hud.tool.teleport.other = Debug: move {0} settlers · Click: the tile to go to · Esc: back
@@ -531,6 +537,14 @@ recipe.both = {0} and {1}
 
 # Workstation inspector
 station.delete = Delete
+forbid.forbid = Forbid
+forbid.allow = Allow
+tile_panel.title = Tile {0}, {1}
+tile_panel.items = {0} ({1})
+tile_panel.left_alone = The settlers leave it alone
+tile_panel.locked = Locked: nobody goes through
+tile_panel.site = Blueprint: {0}
+tile_panel.nothing = Nothing here to forbid
 # Grass or a bush on a blueprint's tile, removed by the builder before building.
 # {0} = plant
 blueprint.clear_first = To clear first: {0}

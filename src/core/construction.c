@@ -401,9 +401,27 @@ bool construction_materials_complete(const ConstructionSite *site)
     return true;
 }
 
+bool construction_forbidden(const ConstructionSite *site, const Map *map)
+{
+    if (map->forbidden_count == 0) {
+        return false;
+    }
+    if (site->refresh) {
+        return map_forbidden(map, site->x, site->y, site->z, MAP_FORBID_STRUCTURE);
+    }
+    for (int part = 0; part < construction_length(site); part++) {
+        int x, y, z;
+        construction_tile(site, part, &x, &y, &z);
+        if (map_forbidden(map, x, y, z, MAP_FORBID_PLANT)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool construction_can_work(const ConstructionSite *site, const Map *map)
 {
-    return construction_materials_complete(site) &&
+    return construction_materials_complete(site) && !construction_forbidden(site, map) &&
            (!structure_is_roof((StructureType)site->type) ||
             map_roof_supported(map, site->x, site->y, site->z));
 }

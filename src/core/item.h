@@ -147,6 +147,10 @@ typedef struct Items {
     long totals[ITEM_TYPE_COUNT]; /* Items of each type on the whole map. */
     uint32_t *level_stacks;       /* Stacks lying on each level (searches skip empty levels). */
     uint32_t additions; /* Incremented whenever items are added (haulers look again). */
+    /* Stacks the player forbade the settlers (non-zero per tile): neither
+     * picked up, eaten, used nor added to. Cleared when the stack is gone. */
+    uint8_t *forbidden;
+    int forbidden_count;
 } Items;
 
 /* Items dropped by a single action spread at most this far (in steps). */
@@ -218,6 +222,18 @@ void items_free(Items *items);
 /* Empty stack when out of bounds. */
 ItemStack items_get(const Items *items, int x, int y, int z);
 
+/* What settlers see of a tile: items_get(), but an empty stack where it is
+ * forbidden. */
+ItemStack items_get_allowed(const Items *items, int x, int y, int z);
+
+/* Whether the stack on a tile is forbidden (false without a stack). */
+bool items_forbidden(const Items *items, int x, int y, int z);
+
+/* Forbids or allows the stack on a tile (nothing without one). Allowing
+ * counts as an addition (Items.additions: haulers look again). Returns
+ * whether it changed. */
+bool items_set_forbidden(Items *items, int x, int y, int z, bool forbidden);
+
 /* Adds items to a tile that is empty or holds a matching stack (same type and
  * grade), up to the stack limit; the tile's stack takes the average hit
  * points. Returns the number actually added. */
@@ -228,8 +244,8 @@ int items_add(Items *items, int x, int y, int z, ItemStack batch);
 int items_remove(Items *items, int x, int y, int z, int count);
 
 /*
- * Puts items on (x, y) and, when it is full or holds something else (another
- * type or grade), on the
+ * Puts items on (x, y) and, when it is full, forbidden or holds something
+ * else (another type or grade), on the
  * nearest passable tiles reachable from it (breadth-first, fixed order,
  * within ITEM_DROP_RADIUS). Returns the number placed: items that find no
  * room are lost.

@@ -60,6 +60,10 @@ tool.dig_down.description = Les colons creusent le sol marqué et la terre en de
 tool.chop.description = Les colons abattent les arbres marqués, loin des constructions, et le bois reste le long du tronc tombé
 tool.dig_ramp.description = Marquez un talus de terre d’un niveau : les colons y taillent une rampe pour monter sur le sol derrière
 tool.cancel.description = Retire les ordres de la zone glissée
+tool.forbid = Interdire
+tool.forbid.description = Les colons laissent tranquille ce qui se trouve dans la zone glissée (sauf l’herbe) : rien de ramassé, mangé, utilisé, démonté ni abattu, et ni porte ni échelle franchie
+tool.allow = Autoriser
+tool.allow.description = Les colons peuvent de nouveau se servir de ce qui se trouve dans la zone glissée
 tool.deconstruct.description = Les colons démontent les lits, murs, portes et toits marqués (un toit se marque sur son niveau, au-dessus des murs) et récupèrent la moitié des matériaux
 
 # Menus (bas gauche)
@@ -187,6 +191,8 @@ hud.help.debug = {0} : menu de débogage (triches pour tester)
 hud.help.manage = {0} : zones de stockage · {1} : postes de travail · clic sur une zone ou un poste : ses réglages · {2} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 hud.tool.name = Outil : {0}
+hud.tool.forbid_help = Glissez sur ce que les colons doivent laisser tranquille
+hud.tool.allow_help = Glissez sur ce dont les colons peuvent de nouveau se servir
 hud.tool.spawn = Débogage : faire apparaître {0} · Clic : une pile sur la case · Échap : retour
 hud.tool.teleport.one = Débogage : déplacer {0} colon · Clic : la case où aller · Échap : retour
 hud.tool.teleport.other = Débogage : déplacer {0} colons · Clic : la case où aller · Échap : retour
@@ -447,6 +453,14 @@ recipe.both = {0} et {1}
 
 # Inspecteur de poste de travail
 station.delete = Supprimer
+forbid.forbid = Interdire
+forbid.allow = Autoriser
+tile_panel.title = Case {0}, {1}
+tile_panel.items = {0} ({1})
+tile_panel.left_alone = Les colons n’y touchent pas
+tile_panel.locked = Accès fermé : personne ne passe
+tile_panel.site = Plan : {0}
+tile_panel.nothing = Rien à interdire ici
 blueprint.clear_first = À défricher d’abord : {0}
 station.in_progress = En cours : {0} ({1})
 station.bills = Commandes (traitées de haut en bas)

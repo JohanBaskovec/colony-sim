@@ -192,9 +192,14 @@ void construction_release_promise(Constructions *constructions, int index, int n
 /* Whether every material is in. */
 bool construction_materials_complete(const ConstructionSite *site);
 
-/* Whether the work can start: every material is in and, for a roof, a wall
- * or rock holds it up now (map_roof_supported(); its walls may still be
- * sites). */
+/* Whether the site touches something the player forbade (see
+ * map_forbidden()): the structure a refresh site is on, a plant to clear on
+ * one of its tiles. Nobody brings materials nor works there meanwhile. */
+bool construction_forbidden(const ConstructionSite *site, const Map *map);
+
+/* Whether the work can start: every material is in, nothing is forbidden
+ * (construction_forbidden()) and, for a roof, a wall or rock holds it up now
+ * (map_roof_supported(); its walls may still be sites). */
 bool construction_can_work(const ConstructionSite *site, const Map *map);
 
 /* Delivers items to the slot of their type; returns how many were taken. */

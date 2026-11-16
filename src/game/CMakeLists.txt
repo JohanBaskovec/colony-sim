@@ -10,6 +10,7 @@ add_executable(colony_sim
     sprites.c
     station_panel.c
     stockpile_panel.c
+    tile_panel.c
     text.c
     ui.c
     ui_layout.c

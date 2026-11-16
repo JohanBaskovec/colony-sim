@@ -53,7 +53,7 @@ static void cave_in(Map *map, Items *items, Designations *designations, int x, i
     StructureType structure = map_structure(map, x, y, z);
     map_set_structure(map, x, y, z, STRUCTURE_NONE);
     map_set_slope(map, x, y, z, false);
-    map->plants[map_index(map, x, y, z)] = (Plant){0};
+    map_remove_plant(map, x, y, z);
     if (designations != NULL) {
         designation_set(designations, map, x, y, z, DESIGNATION_NONE);
     }

@@ -302,6 +302,36 @@ int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, int z, Desig
  * removed. */
 int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, int z);
 
+/* ---- Forbidding ---------------------------------------------------------- */
+
+/* What on a tile the player may forbid the settlers: they neither pick up,
+ * eat, use, take apart, cut nor fell it, nor go through a forbidden door or
+ * ladder (see map_forbidden(), items_forbidden(), Workstation.forbidden). */
+typedef enum ForbidTarget {
+    FORBID_ITEMS,     /* The stack lying there. */
+    FORBID_PLANT,     /* The plant; on a tile of trunk or foliage, its tree. */
+    FORBID_STRUCTURE, /* The structure (bed, wall, door, ladder...), given any of its tiles. */
+    FORBID_ROOF,      /* The built roof. */
+    FORBID_STATION,   /* The built workstation. */
+    FORBID_TARGET_COUNT
+} ForbidTarget;
+
+/* Whether there is such a thing on the tile to forbid or allow. */
+bool game_can_forbid(const Game *game, int x, int y, int z, ForbidTarget target);
+
+/* Whether the thing on the tile is forbidden (false when there is none). */
+bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target);
+
+/* Forbids or allows the thing on the tile. Allowing it makes the settlers
+ * who found nothing to do look again. Returns whether it changed. */
+bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bool forbidden);
+
+/* The forbid and allow tools: forbids or allows everything on the tiles of a
+ * rectangle (corners in any order) but grass, the ground cover nearly
+ * everywhere (game_set_forbidden() takes it one tile at a time). Returns how
+ * many things changed. */
+int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool forbidden);
+
 /* ---- Zones --------------------------------------------------------------- */
 
 /* Zones of different kinds never overlap: these add a rectangle (corners in
