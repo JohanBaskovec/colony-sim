@@ -13,6 +13,7 @@
 #define COLONY_CORE_PATHFINDING_H
 
 #include "core/map.h"
+#include "core/tile_box.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -32,6 +33,15 @@ typedef struct Path {
 void path_clear(Path *path);
 void path_free(Path *path);
 
+/* What a search knows of a tile; the fields of a tile side by side, so that
+ * looking at one costs a single cache miss. */
+typedef struct PathNode {
+    uint32_t seen_stamp;   /* The search that reached the tile... */
+    uint32_t closed_stamp; /* ...and the one that expanded it. */
+    float cost_so_far;     /* g cost, valid when seen_stamp matches. */
+    int32_t came_from;
+} PathNode;
+
 typedef struct PathHeapItem {
     float priority;
     uint32_t index;
@@ -41,11 +51,8 @@ typedef struct Pathfinder {
     int width;
     int height;
     int depth;
-    float *cost_so_far; /* g cost per tile, valid when seen_stamp matches. */
-    int32_t *came_from;
-    uint32_t *seen_stamp;
-    uint32_t *closed_stamp;
-    uint32_t stamp; /* Incremented per search instead of clearing the arrays. */
+    PathNode *nodes; /* One per tile. */
+    uint32_t stamp;  /* Incremented per search instead of clearing the nodes. */
     PathHeapItem *heap;
     size_t heap_count;
     size_t heap_capacity;
@@ -74,6 +81,17 @@ bool pathfinder_find(Pathfinder *finder, const Map *map, TilePos start, TilePos 
 bool pathfinder_find_nearest(Pathfinder *finder, const Map *map, TilePos start,
                              TilePredicate predicate, void *userdata, float max_cost, Path *out,
                              TilePos *found);
+
+/*
+ * As pathfinder_find_nearest(), when every tile the predicate accepts lies in
+ * `box`: an A* search with the distance to the box as heuristic, which heads
+ * for it instead of spreading evenly (a far zone costs a narrow strip, not a
+ * disk). The tile found is as cheap to reach as the nearest one, but where
+ * several are, it may be another one than pathfinder_find_nearest() picks.
+ */
+bool pathfinder_find_nearest_in_box(Pathfinder *finder, const Map *map, TilePos start,
+                                    const TileBox *box, TilePredicate predicate, void *userdata,
+                                    float max_cost, Path *out, TilePos *found);
 
 /* Number of tiles reachable from `start` within `max_cost`. */
 size_t pathfinder_reachable_count(Pathfinder *finder, const Map *map, TilePos start,

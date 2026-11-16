@@ -824,6 +824,65 @@ static void test_new_order_is_noticed_despite_backoff(void)
     game_shutdown(&game);
 }
 
+/* In a wide zone where only a far tile holds something, the search still
+ * finds it (it heads for the open jobs, not for the zone). */
+static void test_far_job_in_a_wide_zone(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_hazel(&game.map, 40, 40);
+    Colonist *colonist = spawn_rested(&game, 4, 4);
+    REQUIRE(colonist != NULL);
+    order_zone(&game, 2, 2, 40, 40, GATHER_BRANCHES);
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_WORK);
+    CHECK_EQ_INT(colonist->target.x, 40);
+    CHECK_EQ_INT(colonist->target.y, 40);
+    game_shutdown(&game);
+}
+
+/* Settlers whose searches failed together do not all search again on the
+ * same tick when something changes: each has its own tick. */
+static void test_retries_after_a_change_are_staggered(void)
+{
+    enum { COUNT = COLONIST_SEARCH_STAGGER_TICKS };
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_hazel(&game.map, 10, 10);
+    set_rock_ring(&game.map, 10, 10, ROCK_GRANITE);
+    Colonist *colonists[COUNT];
+    for (int i = 0; i < COUNT; i++) {
+        colonists[i] = spawn_rested(&game, 20, 20 + i);
+        REQUIRE(colonists[i] != NULL);
+    }
+    order_zone(&game, 10, 10, 10, 10, GATHER_BRANCHES);
+    game_tick(&game);
+    for (int i = 0; i < COUNT; i++) {
+        CHECK(colonists[i]->task != TASK_WORK);
+    }
+
+    for (int i = 0; i < COUNT; i++) {
+        add_hazel(&game.map, 30, 16 + 2 * i);
+    }
+    order_zone(&game, 30, 16, 30, 16 + 2 * (COUNT - 1), GATHER_BRANCHES);
+    uint64_t started[COUNT] = {0};
+    for (int t = 0; t < COLONIST_SEARCH_MIN_RETRY_TICKS + 2 * COUNT; t++) {
+        game_tick(&game);
+        for (int i = 0; i < COUNT; i++) {
+            if (started[i] == 0 && colonists[i]->task == TASK_WORK) {
+                started[i] = game.clock.tick;
+            }
+        }
+    }
+    for (int i = 0; i < COUNT; i++) {
+        CHECK(started[i] != 0);
+        for (int j = 0; j < i; j++) {
+            CHECK(started[i] != started[j]);
+        }
+    }
+    game_shutdown(&game);
+}
+
 static void test_hungry_colonists_go_to_different_brambles(void)
 {
     Game game;
@@ -1647,6 +1706,31 @@ static void test_night_hours(void)
     CHECK(colonist_is_night((uint64_t)TICKS_PER_DAY * 7 + 23 * TICKS_PER_HOUR));
 }
 
+/* Each settler's night starts and ends a little later, on its own tick. */
+static void test_bedtimes_are_spread(void)
+{
+    const uint64_t evening = (uint64_t)TICKS_PER_DAY * 3 + 22 * TICKS_PER_HOUR;
+    const uint64_t morning = (uint64_t)TICKS_PER_DAY * 4 + 6 * TICKS_PER_HOUR;
+    uint64_t bedtimes[64];
+    for (int slot = 0; slot < 64; slot++) {
+        uint8_t worker = (uint8_t)(slot + 1);
+        CHECK(!colonist_is_night_for(evening - 1, worker));
+        CHECK(colonist_is_night_for(evening + COLONIST_BEDTIME_SPREAD_TICKS, worker));
+        CHECK(colonist_is_night_for(morning - 1, worker));
+        CHECK(!colonist_is_night_for(morning + COLONIST_BEDTIME_SPREAD_TICKS, worker));
+        uint64_t tick = evening;
+        while (!colonist_is_night_for(tick, worker)) {
+            tick++;
+        }
+        bedtimes[slot] = tick;
+        for (int other = 0; other < slot; other++) {
+            CHECK(bedtimes[other] != tick);
+        }
+        /* The same hours on the first day of a game. */
+        CHECK(colonist_is_night_for(0, worker));
+    }
+}
+
 /* A colonist walled in on a map without water: the regions tell that neither
  * water nor any wandering goal can be reached, so no path search runs at all. */
 static void test_no_search_when_region_has_no_water(void)
@@ -2141,6 +2225,8 @@ int main(void)
     RUN_TEST(test_cancelled_order_stops_the_worker);
     RUN_TEST(test_removed_worker_releases_its_job);
     RUN_TEST(test_new_order_is_noticed_despite_backoff);
+    RUN_TEST(test_far_job_in_a_wide_zone);
+    RUN_TEST(test_retries_after_a_change_are_staggered);
     RUN_TEST(test_hungry_colonists_go_to_different_brambles);
     RUN_TEST(test_disabled_work_type_is_never_done);
     RUN_TEST(test_set_work_priority_validates);
@@ -2178,6 +2264,7 @@ int main(void)
     RUN_TEST(test_strength_sets_carry_weight);
     RUN_TEST(test_random_strength);
     RUN_TEST(test_night_hours);
+    RUN_TEST(test_bedtimes_are_spread);
     RUN_TEST(test_no_search_when_region_has_no_water);
     RUN_TEST(test_no_search_when_orders_are_out_of_reach);
     RUN_TEST(test_colonist_cleans_dirty_tiles);

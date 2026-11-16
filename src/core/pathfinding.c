@@ -98,13 +98,8 @@ bool pathfinder_init(Pathfinder *finder, int width, int height, int depth)
         return false;
     }
     size_t count = (size_t)width * (size_t)height * (size_t)depth;
-    finder->cost_so_far = malloc(count * sizeof(*finder->cost_so_far));
-    finder->came_from = malloc(count * sizeof(*finder->came_from));
-    finder->seen_stamp = calloc(count, sizeof(*finder->seen_stamp));
-    finder->closed_stamp = calloc(count, sizeof(*finder->closed_stamp));
-    if (finder->cost_so_far == NULL || finder->came_from == NULL || finder->seen_stamp == NULL ||
-        finder->closed_stamp == NULL) {
-        pathfinder_free(finder);
+    finder->nodes = calloc(count, sizeof(*finder->nodes));
+    if (finder->nodes == NULL) {
         return false;
     }
     finder->width = width;
@@ -115,10 +110,7 @@ bool pathfinder_init(Pathfinder *finder, int width, int height, int depth)
 
 void pathfinder_free(Pathfinder *finder)
 {
-    free(finder->cost_so_far);
-    free(finder->came_from);
-    free(finder->seen_stamp);
-    free(finder->closed_stamp);
+    free(finder->nodes);
     free(finder->heap);
     memset(finder, 0, sizeof(*finder));
 }
@@ -128,8 +120,7 @@ static void begin_search(Pathfinder *finder)
     finder->stamp++;
     if (finder->stamp == 0) { /* Wrapped around: stale stamps could match again. */
         size_t count = (size_t)finder->width * (size_t)finder->height * (size_t)finder->depth;
-        memset(finder->seen_stamp, 0, count * sizeof(*finder->seen_stamp));
-        memset(finder->closed_stamp, 0, count * sizeof(*finder->closed_stamp));
+        memset(finder->nodes, 0, count * sizeof(*finder->nodes));
         finder->stamp = 1;
     }
     finder->heap_count = 0;
@@ -152,10 +143,24 @@ static float heuristic(int x, int y, int z, const TilePos *goal)
            ((float)straight + SQRT2 * (float)diagonal + (MAP_CLIMB_COST - 1.0f) * (float)dz);
 }
 
+/* As heuristic(), towards the nearest tile of a box: the distance on each
+ * axis is to the box's span (0 within it). Consistent as heuristic() is: a
+ * step changes it by at most what the step costs at least. */
+static float box_heuristic(int x, int y, int z, const TileBox *box)
+{
+    int dx = x < box->x0 ? box->x0 - x : (x > box->x1 ? x - box->x1 : 0);
+    int dy = y < box->y0 ? box->y0 - y : (y > box->y1 ? y - box->y1 : 0);
+    int dz = z < box->z0 ? box->z0 - z : (z > box->z1 ? z - box->z1 : 0);
+    int diagonal = dx < dy ? dx : dy;
+    int straight = (dx > dy ? dx : dy) - diagonal;
+    return PATH_MIN_TILE_COST *
+           ((float)straight + SQRT2 * (float)diagonal + (MAP_CLIMB_COST - 1.0f) * (float)dz);
+}
+
 static bool build_path(const Pathfinder *finder, uint32_t start, uint32_t end, Path *out)
 {
     int count = 0;
-    for (uint32_t i = end; i != start; i = (uint32_t)finder->came_from[i]) {
+    for (uint32_t i = end; i != start; i = (uint32_t)finder->nodes[i].came_from) {
         count++;
     }
     if (out == NULL) {
@@ -168,7 +173,7 @@ static bool build_path(const Pathfinder *finder, uint32_t start, uint32_t end, P
     int slot = count - 1;
     const uint32_t width = (uint32_t)finder->width;
     const uint32_t level = width * (uint32_t)finder->height;
-    for (uint32_t i = end; i != start; i = (uint32_t)finder->came_from[i]) {
+    for (uint32_t i = end; i != start; i = (uint32_t)finder->nodes[i].came_from) {
         out->steps[slot].x = (int16_t)(i % width);
         out->steps[slot].y = (int16_t)(i % level / width);
         out->steps[slot].z = (int16_t)(i / level);
@@ -179,9 +184,19 @@ static bool build_path(const Pathfinder *finder, uint32_t start, uint32_t end, P
 
 typedef struct SearchGoal {
     const TilePos *goal;     /* A* when set... */
-    TilePredicate predicate; /* ...Dijkstra towards a predicate otherwise. */
+    TilePredicate predicate; /* ...Dijkstra towards a predicate otherwise... */
     void *userdata;
+    const TileBox *box; /* ...or A* towards a predicate true only in this box. */
 } SearchGoal;
+
+/* The heuristic of a search: 0 for Dijkstra. */
+static float goal_heuristic(const SearchGoal *target, int x, int y, int z)
+{
+    if (target->goal != NULL) {
+        return heuristic(x, y, z, target->goal);
+    }
+    return target->box != NULL ? box_heuristic(x, y, z, target->box) : 0.0f;
+}
 
 static const int DIRECTIONS[8][2] = {{1, 0}, {-1, 0}, {0, 1},  {0, -1},
                                      {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
@@ -191,14 +206,15 @@ static const int DIRECTIONS[8][2] = {{1, 0}, {-1, 0}, {0, 1},  {0, -1},
 static bool relax(Pathfinder *finder, const SearchGoal *target, uint32_t current, uint32_t next,
                   float cost, int nx, int ny, int nz)
 {
-    if (finder->closed_stamp[next] == finder->stamp ||
-        (finder->seen_stamp[next] == finder->stamp && cost >= finder->cost_so_far[next])) {
+    PathNode *node = &finder->nodes[next];
+    if (node->closed_stamp == finder->stamp ||
+        (node->seen_stamp == finder->stamp && cost >= node->cost_so_far)) {
         return true;
     }
-    finder->seen_stamp[next] = finder->stamp;
-    finder->cost_so_far[next] = cost;
-    finder->came_from[next] = (int32_t)current;
-    float priority = cost + (target->goal ? heuristic(nx, ny, nz, target->goal) : 0.0f);
+    node->seen_stamp = finder->stamp;
+    node->cost_so_far = cost;
+    node->came_from = (int32_t)current;
+    float priority = cost + goal_heuristic(target, nx, ny, nz);
     return heap_push(finder, priority, next);
 }
 
@@ -219,20 +235,19 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
     const uint32_t width = (uint32_t)map->width;
     const uint32_t level = width * (uint32_t)map->height; /* Tiles of a level. */
     const uint32_t start_index = (uint32_t)map_index(map, start.x, start.y, start.z);
-    finder->cost_so_far[start_index] = 0.0f;
-    finder->came_from[start_index] = -1;
-    finder->seen_stamp[start_index] = finder->stamp;
-    float start_h = target->goal ? heuristic(start.x, start.y, start.z, target->goal) : 0.0f;
+    finder->nodes[start_index] = (PathNode){finder->stamp, 0, 0.0f, -1};
+    float start_h = goal_heuristic(target, start.x, start.y, start.z);
     if (!heap_push(finder, start_h, start_index)) {
         return -1;
     }
 
     while (finder->heap_count > 0) {
         uint32_t current = heap_pop(finder);
-        if (finder->closed_stamp[current] == finder->stamp) {
+        PathNode *node = &finder->nodes[current];
+        if (node->closed_stamp == finder->stamp) {
             continue; /* Outdated duplicate entry. */
         }
-        finder->closed_stamp[current] = finder->stamp;
+        node->closed_stamp = finder->stamp;
         finder->last_expanded++;
 
         int z = (int)(current / level);
@@ -243,7 +258,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                 ? (x == target->goal->x && y == target->goal->y && z == target->goal->z)
                 : (target->predicate != NULL && target->predicate(map, x, y, z, target->userdata));
         if (reached) {
-            finder->last_cost = finder->cost_so_far[current];
+            finder->last_cost = node->cost_so_far;
             return current;
         }
 
@@ -261,7 +276,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                                                                  DIRECTIONS[d][0]))
                                 : 0.0f;
         }
-        const float base_cost = finder->cost_so_far[current];
+        const float base_cost = node->cost_so_far;
 
         for (int d = 0; d < 8; d++) {
             int dx = DIRECTIONS[d][0];
@@ -275,7 +290,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                 /* No corner cutting: both orthogonal neighbors must be passable
                  * (which also means the diagonal one is in bounds). */
                 if (side[dx > 0 ? 0 : 1] <= 0.0f || side[dy > 0 ? 2 : 3] <= 0.0f ||
-                    finder->closed_stamp[next] == finder->stamp) {
+                    finder->nodes[next].closed_stamp == finder->stamp) {
                     continue;
                 }
                 step = map_move_cost_at(map, next) * SQRT2;
@@ -355,7 +370,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
 bool pathfinder_find(Pathfinder *finder, const Map *map, TilePos start, TilePos goal,
                      float max_cost, Path *out)
 {
-    SearchGoal target = {&goal, NULL, NULL};
+    SearchGoal target = {&goal, NULL, NULL, NULL};
     int64_t end = search(finder, map, start, &target, max_cost);
     if (end < 0) {
         return false;
@@ -364,12 +379,10 @@ bool pathfinder_find(Pathfinder *finder, const Map *map, TilePos start, TilePos 
                       out);
 }
 
-bool pathfinder_find_nearest(Pathfinder *finder, const Map *map, TilePos start,
-                             TilePredicate predicate, void *userdata, float max_cost, Path *out,
-                             TilePos *found)
+static bool find_nearest(Pathfinder *finder, const Map *map, TilePos start,
+                         const SearchGoal *target, float max_cost, Path *out, TilePos *found)
 {
-    SearchGoal target = {NULL, predicate, userdata};
-    int64_t end = search(finder, map, start, &target, max_cost);
+    int64_t end = search(finder, map, start, target, max_cost);
     if (end < 0) {
         return false;
     }
@@ -382,9 +395,29 @@ bool pathfinder_find_nearest(Pathfinder *finder, const Map *map, TilePos start,
                       out);
 }
 
+bool pathfinder_find_nearest(Pathfinder *finder, const Map *map, TilePos start,
+                             TilePredicate predicate, void *userdata, float max_cost, Path *out,
+                             TilePos *found)
+{
+    SearchGoal target = {NULL, predicate, userdata, NULL};
+    return find_nearest(finder, map, start, &target, max_cost, out, found);
+}
+
+bool pathfinder_find_nearest_in_box(Pathfinder *finder, const Map *map, TilePos start,
+                                    const TileBox *box, TilePredicate predicate, void *userdata,
+                                    float max_cost, Path *out, TilePos *found)
+{
+    if (tile_box_is_empty(box)) {
+        begin_search(finder);
+        return false; /* Nothing to find. */
+    }
+    SearchGoal target = {NULL, predicate, userdata, box};
+    return find_nearest(finder, map, start, &target, max_cost, out, found);
+}
+
 size_t pathfinder_reachable_count(Pathfinder *finder, const Map *map, TilePos start, float max_cost)
 {
-    SearchGoal target = {NULL, NULL, NULL}; /* Never reached: floods the whole area. */
+    SearchGoal target = {NULL, NULL, NULL, NULL}; /* Never reached: floods the whole area. */
     search(finder, map, start, &target, max_cost);
     return finder->last_expanded;
 }

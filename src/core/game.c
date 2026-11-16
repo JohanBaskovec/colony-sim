@@ -163,7 +163,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .stock = game->stock,
         .rng = &game->rng,
         .tick = game->clock.tick,
-        .night = colonist_is_night(game->clock.tick),
+        .night = colonist_is_night_for(game->clock.tick, (uint8_t)(slot + 1)),
         .worker_id = (uint8_t)(slot + 1),
         .colonists = game->colonists,
         .colonist_pool = &game->colonist_pool,

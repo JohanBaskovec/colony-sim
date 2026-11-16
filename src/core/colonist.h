@@ -194,6 +194,10 @@
  * many settlers something changes every tick, and idle ones would search
  * again and again for the few jobs left. */
 #define COLONIST_SEARCH_MIN_RETRY_TICKS 60
+/* Such early retries are spread over this many ticks, each settler on its
+ * own: those that failed together (all idle when the last jobs went) would
+ * otherwise all search again on the same tick when something changes. */
+#define COLONIST_SEARCH_STAGGER_TICKS 8
 #define COLONIST_WANDER_RADIUS 6
 #define COLONIST_IDLE_MIN_TICKS 120
 #define COLONIST_IDLE_MAX_TICKS 360
@@ -310,6 +314,9 @@ typedef struct Colonist {
     int search_cooldown[SEARCH_COUNT]; /* Ticks before searching again. */
     int search_failures[SEARCH_COUNT]; /* Consecutive failed searches. */
     int search_quiet[SEARCH_COUNT];    /* Ticks before a change may cut the delay short. */
+    /* Ticks lived (wrapping): when a change may cut a delay short, see
+     * COLONIST_SEARCH_STAGGER_TICKS. Not the clock, which tests may hold still. */
+    uint32_t search_phase;
     /* Designations revision + work reservation releases at the last failed
      * work search. */
     uint32_t work_search_stamp;
@@ -438,7 +445,7 @@ typedef struct ColonistContext {
     const long *stock; /* Game.stock: items in stock per type. */
     Rng *rng;
     uint64_t tick;
-    bool night;        /* colonist_is_night(tick), computed once per tick for everyone. */
+    bool night;        /* colonist_is_night_for(tick, worker_id). */
     uint8_t worker_id; /* Reservation owner for this colonist (slot + 1), never 0. */
     /* Every colonist (Game.colonists) and who is alive, to find a master to
      * assist; NULL: nobody assists anyone. */
@@ -462,6 +469,14 @@ void colonist_free(Colonist *colonist);
 
 /* Whether it is time to be in bed (22:00 to 06:00). */
 bool colonist_is_night(uint64_t tick);
+
+/* Settlers do not all go to bed, nor get up, on the same tick (each would
+ * look for food or work at once): each one's night comes later by up to
+ * this, after its slot. */
+#define COLONIST_BEDTIME_SPREAD_TICKS (TICKS_PER_HOUR / 4)
+
+/* Whether it is night for the settler of `worker_id` (slot + 1). */
+bool colonist_is_night_for(uint64_t tick, uint8_t worker_id);
 
 void colonist_tick(Colonist *colonist, const ColonistContext *context);
 

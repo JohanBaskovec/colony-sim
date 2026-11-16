@@ -353,6 +353,69 @@ static void test_shortest_paths_over_hills(void)
     cleanup(&map, &finder, &path);
 }
 
+/* Passable tiles of a box whose (x + y) is a multiple of 5: a scattered set
+ * of targets, as the tiles of a zone. */
+static bool is_scattered_in_box(const Map *map, int x, int y, int z, void *userdata)
+{
+    const TileBox *box = userdata;
+    return tile_box_contains(box, x, y, z) && (x + y) % 5 == 0 && map_is_passable(map, x, y, z);
+}
+
+/* Searching for the nearest tile of a box with the box as a guide finds one as
+ * cheap to reach as the plain search does, over hills too, exploring less when
+ * the box is far. */
+static void test_nearest_in_box_is_as_cheap(void)
+{
+    WorldGenParams params;
+    worldgen_default_params(&params);
+    params.seed = 3;
+    params.width = 64;
+    params.height = 64;
+    Map map;
+    Pathfinder finder;
+    Path path = {0};
+    REQUIRE(worldgen_generate(&map, &params));
+    REQUIRE(pathfinder_init(&finder, 64, 64, map.depth));
+    int compared = 0, fewer = 0;
+    for (int i = 0; i < 200 && compared < 60; i++) {
+        TilePos start = {(int16_t)(i * 7 % 64), (int16_t)(i * 13 % 64), 0};
+        start.z = (int16_t)map_ground_level(&map, start.x, start.y);
+        int bx = i * 29 % 56, by = i * 31 % 56;
+        TileBox box = {bx, by, 0, bx + 7, by + 7, map.depth - 1};
+        if (i % 3 == 0) {
+            box.z0 = box.z1 = map_ground_level(&map, bx, by); /* One level only. */
+        }
+        TilePos plain_found, guided_found;
+        bool plain = pathfinder_find_nearest(&finder, &map, start, is_scattered_in_box, &box,
+                                             PATH_NO_COST_LIMIT, NULL, &plain_found);
+        float plain_cost = finder.last_cost;
+        size_t plain_expanded = finder.last_expanded;
+        bool guided =
+            pathfinder_find_nearest_in_box(&finder, &map, start, &box, is_scattered_in_box, &box,
+                                           PATH_NO_COST_LIMIT, &path, &guided_found);
+        CHECK_EQ_INT(plain, guided);
+        if (!plain || !guided) {
+            continue;
+        }
+        CHECK_NEAR(plain_cost, finder.last_cost, 1e-3);
+        CHECK(is_scattered_in_box(&map, guided_found.x, guided_found.y, guided_found.z, &box));
+        check_path_is_valid(&map, start, guided_found, &path);
+        fewer += finder.last_expanded < plain_expanded;
+        compared++;
+    }
+    CHECK(compared >= 30);
+    CHECK(fewer > compared / 2);
+    /* Within a cost limit: both give up alike. */
+    TilePos corner = {0, 0, (int16_t)map_ground_level(&map, 0, 0)};
+    TileBox far = {56, 56, 0, 63, 63, map.depth - 1};
+    CHECK(!pathfinder_find_nearest_in_box(&finder, &map, corner, &far, is_scattered_in_box, &far,
+                                          10.0f, NULL, NULL));
+    TileBox empty = tile_box_empty();
+    CHECK(!pathfinder_find_nearest_in_box(&finder, &map, corner, &empty, is_scattered_in_box,
+                                          &empty, PATH_NO_COST_LIMIT, NULL, NULL));
+    cleanup(&map, &finder, &path);
+}
+
 static void test_many_searches_reuse_memory(void)
 {
     Map map;
@@ -381,6 +444,7 @@ int main(void)
     RUN_TEST(test_paths_climb_slopes);
     RUN_TEST(test_paths_climb_ladders);
     RUN_TEST(test_shortest_paths_over_hills);
+    RUN_TEST(test_nearest_in_box_is_as_cheap);
     RUN_TEST(test_many_searches_reuse_memory);
     return test_summary();
 }

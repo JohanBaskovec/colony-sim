@@ -636,6 +636,10 @@ Each tick, `colonist_tick()`:
    nearest edible plant or drinking spot (Dijkstra search), most urgent need
    first; tired, or night and not fully rested → eat/drink first if below
    50 %, then sleep in place; otherwise wander nearby after a random pause.
+   Each settler's night (`colonist_is_night_for()`) comes up to
+   `COLONIST_BEDTIME_SPREAD_TICKS` (a quarter of an hour) later than 22:00
+   and 06:00, after its slot, so that they do not all look for food, a bed or
+   work on the same tick;
    Severe hunger or thirst wakes a sleeping colonist up;
 3. acts: walks one tick along its path (speed / tile cost), eats, drinks, or sleeps.
 
@@ -695,8 +699,9 @@ type got disabled is given up at the next decision (a hauler first delivers
 what it already holds).
 
 When nothing more urgent is needed, an idle or wandering colonist looks for a
-job, one priority level at a time (1 first): a Dijkstra search for the nearest
-passable tile next to an open job (designated, work type at that level, not
+job, one priority level at a time (1 first): a search for the nearest
+passable tile next to an open job (A* towards the box of the orders or of
+the gathering zones, `pathfinder_find_nearest_in_box()`) (designated, work type at that level, not
 reserved), 4-neighborhood, fixed neighbor order. Priority therefore beats
 distance. The colonist reserves the job, walks there and adds
 `colonist_work_speed()` work per tick (`COLONIST_WORK_SPEED` scaled by its
@@ -787,7 +792,11 @@ storage tile. Owners are colonist slot + 1.
   ×1) after the failure: in a busy colony something changes almost every
   tick, and 64 idle colonists searching again each time cost milliseconds
   per tick. Each stamp only counts the reservation kinds its search cares
-  about (`Reservations.releases_by_kind`).
+  about (`Reservations.releases_by_kind`). Such early retries also wait for
+  the settler's own tick out of `COLONIST_SEARCH_STAGGER_TICKS` (8), counted
+  by `Colonist.search_phase` (ticks lived, not the clock, which tests hold
+  still): settlers whose searches failed together, idle when the last jobs
+  went, would otherwise all search again on the tick something changes.
 
 The table is a small array kept in creation order (which is what gets
 hashed), with a hash index from (kind, tile) to the entry: every working
@@ -1274,8 +1283,19 @@ them (`bench_simulation` hashes are unchanged).
   long as no passable tile is cheaper: checked by a test).
 - `pathfinder_find_nearest()` runs Dijkstra until a predicate matches (food,
   free tile...), with a cost limit to bound the search.
-- A `Pathfinder` owns per-tile scratch arrays reused across searches (stamps
-  instead of clearing), so searches do not allocate.
+- `pathfinder_find_nearest_in_box()` does the same for a predicate true only
+  inside a `TileBox` (tiles next to orders or zone tiles): A* with the
+  distance to the box as heuristic (consistent, since every step between
+  levels costs at least `MAP_CLIMB_COST` tiles), so a far search heads for
+  the box instead of flooding a disk around the start. The cost found is
+  the same as Dijkstra's; among spots or paths of equal cost the one taken
+  may differ.
+- A walk to a known tile (a settler's own bed) is a plain A*, not a search
+  for a predicate true on that tile only.
+- A `Pathfinder` owns per-tile scratch nodes reused across searches (stamps
+  instead of clearing), so searches do not allocate. The fields of a tile
+  (`PathNode`: stamps, cost, parent) sit side by side: one cache miss per
+  tile looked at.
 - Slopes and ladders lead to the levels above and below (orthogonal steps
   only, ×2 and ×3: see *World representation*); the heuristic adds the
   least those climbs cost (`MAP_CLIMB_COST - 1` per level), so it stays

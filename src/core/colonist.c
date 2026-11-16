@@ -700,10 +700,14 @@ static bool search_allowed(const Colonist *colonist, SearchKind kind)
 
 /* Whether a work search of this kind may run: its delay is over, or what it
  * looks for changed since it failed (`stamp` then, `now` now), once
- * COLONIST_SEARCH_MIN_RETRY_TICKS have gone by. */
-static bool retry_allowed(const Colonist *colonist, SearchKind kind, uint32_t stamp, uint32_t now)
+ * COLONIST_SEARCH_MIN_RETRY_TICKS have gone by, on the settler's own tick
+ * out of COLONIST_SEARCH_STAGGER_TICKS. */
+static bool retry_allowed(const Colonist *colonist, const ColonistContext *context, SearchKind kind,
+                          uint32_t stamp, uint32_t now)
 {
-    return search_allowed(colonist, kind) || (stamp != now && colonist->search_quiet[kind] <= 0);
+    return search_allowed(colonist, kind) ||
+           (stamp != now && colonist->search_quiet[kind] <= 0 &&
+            (colonist->search_phase + context->worker_id) % COLONIST_SEARCH_STAGGER_TICKS == 0);
 }
 
 static void search_failed(Colonist *colonist, SearchKind kind)
@@ -905,18 +909,6 @@ static bool is_free_bed(const Map *map, int x, int y, int z, void *userdata)
                                         context->worker_id);
 }
 
-typedef struct OwnBedSearch {
-    const ColonistContext *context;
-    TilePos bed;
-} OwnBedSearch;
-
-static bool is_own_bed(const Map *map, int x, int y, int z, void *userdata)
-{
-    const OwnBedSearch *search = userdata;
-    return x == search->bed.x && y == search->bed.y && z == search->bed.z &&
-           is_free_bed(map, x, y, z, (void *)search->context);
-}
-
 static bool go_to_warm_spot(Colonist *colonist, const ColonistContext *context);
 static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context);
 
@@ -943,13 +935,11 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
         return;
     }
     TilePos bed;
-    OwnBedSearch own = {context, {-1, -1, -1}};
-    bool found = false;
-    if (beds_owned(context->beds, context->worker_id, &own.bed)) {
-        found = pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                        is_own_bed, &own, COLONIST_BED_SEARCH_MAX_COST,
-                                        &colonist->path, &bed);
-    }
+    /* Its own bed: straight there. */
+    bool found = beds_owned(context->beds, context->worker_id, &bed) &&
+                 is_free_bed(context->map, bed.x, bed.y, bed.z, (void *)context) &&
+                 pathfinder_find(context->pathfinder, context->map, current_tile(colonist), bed,
+                                 COLONIST_BED_SEARCH_MAX_COST, &colonist->path);
     if (!found &&
         any_tile_reachable(context, current_tile(colonist), is_free_bed, (void *)context,
                            COLONIST_BED_SEARCH_MAX_COST) &&
@@ -1253,12 +1243,6 @@ static bool is_work_spot(const Map *map, int x, int y, int z, void *userdata)
     return map_is_passable(map, x, y, z) && find_adjacent_job(userdata, x, y, z, &unused);
 }
 
-/*
- * Whether some open job has a tile to stand on in `region`. False only when
- * it is certain that none has (an unknown region gives true). Scans the
- * designation layer: far cheaper than a path search that fails, but not
- * meant for every tick.
- */
 /* Whether a tile of `ids` (a row of the regions layer) next to x belongs to
  * `region`. */
 static bool beside_region(const uint32_t *ids, int x, int y, int width, int height, uint32_t region)
@@ -1279,6 +1263,12 @@ static __attribute__((noinline)) bool roof_beside_region(const ColonistContext *
                          map->height, region);
 }
 
+/*
+ * Whether some open job has a tile to stand on in `region`. False only when
+ * it is certain that none has (an unknown region gives true). Scans the
+ * designation layer: far cheaper than a path search that fails, but not
+ * meant for every tick.
+ */
 static bool open_job_reachable(const WorkSearch *search, const ColonistContext *context,
                                uint32_t region)
 {
@@ -1461,6 +1451,16 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
     /* Zones of the highest priority first, whatever the distance. */
     uint32_t priorities = zones ? gather_zones_wanting_priorities(context->gather_zones) : 1u;
     uint32_t region = current_region(colonist, context);
+    /* Every tile to work from is next to an order or a zone tile (under it for
+     * a roof): the search heads for their box. */
+    TileBox spots = zones ? context->gather_zones->box : designations->box;
+    if (!tile_box_is_empty(&spots)) {
+        spots.x0--;
+        spots.y0--;
+        spots.x1++;
+        spots.y1++;
+        spots.z0 -= search.roof_jobs ? 1 : 0;
+    }
     TilePos spot, target = {0, 0, 0};
     bool found = false;
     for (int priority = 0; priority < 32 && !found; priority++) {
@@ -1473,9 +1473,9 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
          * explore the whole area for nothing. The path is untouched on failure:
          * a wanderer keeps walking. */
         found = open_job_reachable(&search, context, region) &&
-                pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                        is_work_spot, &search, COLONIST_WORK_SEARCH_MAX_COST,
-                                        &colonist->path, &spot);
+                pathfinder_find_nearest_in_box(
+                    context->pathfinder, context->map, current_tile(colonist), &spots, is_work_spot,
+                    &search, COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot);
     }
     if (!found) {
         return false;
@@ -1544,37 +1544,37 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context, i
     int open_jobs =
         context->designations->count - context->reservations->count_by_kind[RESERVATION_WORK];
     bool designations_allowed =
-        open_jobs > 0 &&
-        retry_allowed(colonist, SEARCH_WORK, colonist->work_search_stamp, work_stamp(context));
-    bool hauling_allowed =
-        retry_allowed(colonist, SEARCH_HAUL, colonist->haul_search_stamp, haul_stamp(context));
-    bool stations_allowed = retry_allowed(colonist, SEARCH_STATION, colonist->station_search_stamp,
-                                          station_stamp(context));
+        open_jobs > 0 && retry_allowed(colonist, context, SEARCH_WORK, colonist->work_search_stamp,
+                                       work_stamp(context));
+    bool hauling_allowed = retry_allowed(colonist, context, SEARCH_HAUL,
+                                         colonist->haul_search_stamp, haul_stamp(context));
+    bool stations_allowed = retry_allowed(colonist, context, SEARCH_STATION,
+                                          colonist->station_search_stamp, station_stamp(context));
     bool constructions_allowed =
         context->constructions->used_count > 0 &&
-        retry_allowed(colonist, SEARCH_CONSTRUCTION, colonist->construction_search_stamp,
+        retry_allowed(colonist, context, SEARCH_CONSTRUCTION, colonist->construction_search_stamp,
                       construction_stamp(context));
     bool searched_constructions = false;
     bool supply_allowed = context->constructions->used_count > 0 &&
-                          retry_allowed(colonist, SEARCH_SUPPLY, colonist->supply_search_stamp,
-                                        construction_stamp(context));
+                          retry_allowed(colonist, context, SEARCH_SUPPLY,
+                                        colonist->supply_search_stamp, construction_stamp(context));
     bool searched_supply = false;
     bool gathering_allowed = context->gather_zones->wanting_cells > 0 &&
-                             retry_allowed(colonist, SEARCH_GATHER, colonist->gather_search_stamp,
-                                           gather_stamp(context));
+                             retry_allowed(colonist, context, SEARCH_GATHER,
+                                           colonist->gather_search_stamp, gather_stamp(context));
     bool searched_designations = false, searched_hauling = false, searched_stations = false;
     bool searched_gathering = false;
     int open_cleaning =
         context->dirt->dirty_count - context->reservations->count_by_kind[RESERVATION_CLEAN];
     bool cleaning_allowed =
-        open_cleaning > 0 &&
-        retry_allowed(colonist, SEARCH_CLEAN, colonist->clean_search_stamp, clean_stamp(context));
+        open_cleaning > 0 && retry_allowed(colonist, context, SEARCH_CLEAN,
+                                           colonist->clean_search_stamp, clean_stamp(context));
     bool searched_cleaning = false;
     uint32_t hearth_stamp = station_stamp(context);
-    bool refuel_allowed =
-        retry_allowed(colonist, SEARCH_REFUEL, colonist->refuel_search_stamp, hearth_stamp);
+    bool refuel_allowed = retry_allowed(colonist, context, SEARCH_REFUEL,
+                                        colonist->refuel_search_stamp, hearth_stamp);
     bool light_allowed =
-        retry_allowed(colonist, SEARCH_LIGHT, colonist->light_search_stamp, hearth_stamp);
+        retry_allowed(colonist, context, SEARCH_LIGHT, colonist->light_search_stamp, hearth_stamp);
     bool searched_refuel = false, searched_light = false;
     /* Apprenticeship: a master doing a job of the work type that the colonist
      * lacks the level for, once its own jobs of that type are all out of
@@ -3875,6 +3875,14 @@ bool colonist_is_night(uint64_t tick)
     return hour >= 22 || hour < 6;
 }
 
+bool colonist_is_night_for(uint64_t tick, uint8_t worker_id)
+{
+    /* Coprime with the spread: settlers of nearby slots are far apart. */
+    uint64_t delay = (uint64_t)worker_id * 97u % (uint64_t)COLONIST_BEDTIME_SPREAD_TICKS;
+    /* The same time of day, the day before when too early. */
+    return colonist_is_night(tick >= delay ? tick - delay : tick + TICKS_PER_DAY - delay);
+}
+
 /* States thought now (hungry, cold, out in the rain...). */
 static ThoughtMask mood_states(Colonist *colonist, const ColonistContext *context, bool asleep)
 {
@@ -3970,6 +3978,7 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
     } else {
         *rest = clampf(*rest - NEED_REST_DECAY_PER_TICK, 0.0f, 1.0f);
     }
+    colonist->search_phase++;
     for (int kind = 0; kind < SEARCH_COUNT; kind++) {
         if (colonist->search_cooldown[kind] > 0) {
             colonist->search_cooldown[kind]--;
