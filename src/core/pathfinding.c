@@ -137,14 +137,19 @@ static void begin_search(Pathfinder *finder)
     finder->last_cost = 0.0f;
 }
 
-/* Octile distance: exact cost of the shortest path on uniform cheapest terrain. */
-static float heuristic(int x, int y, int goal_x, int goal_y)
+/* Octile distance on the level (the exact cost of the shortest path on uniform
+ * cheapest terrain), plus what climbing to the goal's level costs at least:
+ * each step up or down a slope moves one tile across too, at MAP_CLIMB_COST
+ * times the tile instead of once. */
+static float heuristic(int x, int y, int z, const TilePos *goal)
 {
-    int dx = abs(x - goal_x);
-    int dy = abs(y - goal_y);
+    int dx = abs(x - goal->x);
+    int dy = abs(y - goal->y);
+    int dz = abs(z - goal->z);
     int diagonal = dx < dy ? dx : dy;
     int straight = (dx > dy ? dx : dy) - diagonal;
-    return PATH_MIN_TILE_COST * ((float)straight + SQRT2 * (float)diagonal);
+    return PATH_MIN_TILE_COST *
+           ((float)straight + SQRT2 * (float)diagonal + (MAP_CLIMB_COST - 1.0f) * (float)dz);
 }
 
 static bool build_path(const Pathfinder *finder, uint32_t start, uint32_t end, Path *out)
@@ -181,8 +186,23 @@ typedef struct SearchGoal {
 static const int DIRECTIONS[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1},
                                      {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
-/* Returns the tile index reached, or -1. Searches the start's level only
- * (nothing links the levels yet). */
+/* Records a step from `current` to `next` costing `cost` in all, if it is
+ * the cheapest way to `next` found so far. False when out of memory. */
+static bool relax(Pathfinder *finder, const SearchGoal *target, uint32_t current, uint32_t next,
+                  float cost, int nx, int ny, int nz)
+{
+    if (finder->closed_stamp[next] == finder->stamp ||
+        (finder->seen_stamp[next] == finder->stamp && cost >= finder->cost_so_far[next])) {
+        return true;
+    }
+    finder->seen_stamp[next] = finder->stamp;
+    finder->cost_so_far[next] = cost;
+    finder->came_from[next] = (int32_t)current;
+    float priority = cost + (target->goal ? heuristic(nx, ny, nz, target->goal) : 0.0f);
+    return heap_push(finder, priority, next);
+}
+
+/* Returns the tile index reached, or -1. */
 static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const SearchGoal *target,
                       float max_cost)
 {
@@ -192,22 +212,17 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
         return -1;
     }
     if (target->goal != NULL &&
-        (target->goal->z != start.z ||
-         !map_is_passable(map, target->goal->x, target->goal->y, target->goal->z))) {
+        !map_is_passable(map, target->goal->x, target->goal->y, target->goal->z)) {
         return -1; /* Would explore the whole reachable area for nothing. */
     }
 
-    const int z = start.z;
     const uint32_t width = (uint32_t)map->width;
-    /* Index of the level's first tile: indices within the level are offsets
-     * from it. */
-    const uint32_t base = (uint32_t)map_index(map, 0, 0, z);
+    const uint32_t level = width * (uint32_t)map->height; /* Tiles of a level. */
     const uint32_t start_index = (uint32_t)map_index(map, start.x, start.y, start.z);
     finder->cost_so_far[start_index] = 0.0f;
     finder->came_from[start_index] = -1;
     finder->seen_stamp[start_index] = finder->stamp;
-    float start_h = target->goal ? heuristic(start.x, start.y, target->goal->x, target->goal->y)
-                                 : 0.0f;
+    float start_h = target->goal ? heuristic(start.x, start.y, start.z, target->goal) : 0.0f;
     if (!heap_push(finder, start_h, start_index)) {
         return -1;
     }
@@ -220,10 +235,11 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
         finder->closed_stamp[current] = finder->stamp;
         finder->last_expanded++;
 
-        int x = (int)((current - base) % width);
-        int y = (int)((current - base) / width);
+        int z = (int)(current / level);
+        int x = (int)(current % width);
+        int y = (int)(current % level / width);
         bool reached = target->goal != NULL
-                           ? (x == target->goal->x && y == target->goal->y)
+                           ? (x == target->goal->x && y == target->goal->y && z == target->goal->z)
                            : (target->predicate != NULL &&
                               target->predicate(map, x, y, z, target->userdata));
         if (reached) {
@@ -235,22 +251,23 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
          * blocked), in DIRECTIONS order. They are computed once: they also
          * decide which diagonal moves are allowed. */
         float side[4];
+        bool inside[4];
         for (int d = 0; d < 4; d++) {
             int nx = x + DIRECTIONS[d][0];
             int ny = y + DIRECTIONS[d][1];
-            side[d] = map_in_bounds(map, nx, ny, z)
-                          ? map_move_cost_at(map, base + (size_t)ny * width + (size_t)nx)
-                          : 0.0f;
+            inside[d] = nx >= 0 && ny >= 0 && nx < map->width && ny < map->height;
+            side[d] = inside[d] ? map_move_cost_at(map, (size_t)((int64_t)current +
+                                                                 DIRECTIONS[d][1] * (int64_t)width +
+                                                                 DIRECTIONS[d][0]))
+                                : 0.0f;
         }
         const float base_cost = finder->cost_so_far[current];
 
         for (int d = 0; d < 8; d++) {
             int dx = DIRECTIONS[d][0];
             int dy = DIRECTIONS[d][1];
-            int nx = x + dx;
-            int ny = y + dy;
             /* Checked below if d >= 4. */
-            uint32_t next = base + (uint32_t)ny * width + (uint32_t)nx;
+            uint32_t next = (uint32_t)((int64_t)current + dy * (int64_t)width + dx);
             float step;
             if (d < 4) {
                 step = side[d];
@@ -263,26 +280,50 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                 }
                 step = map_move_cost_at(map, next) * SQRT2;
             }
-            if (step <= 0.0f) {
+            if (step <= 0.0f || base_cost + step > max_cost) {
                 continue;
             }
-            float cost = base_cost + step;
-            if (cost > max_cost) {
-                continue;
-            }
-            if (finder->closed_stamp[next] == finder->stamp) {
-                continue;
-            }
-            if (finder->seen_stamp[next] == finder->stamp && cost >= finder->cost_so_far[next]) {
-                continue;
-            }
-            finder->seen_stamp[next] = finder->stamp;
-            finder->cost_so_far[next] = cost;
-            finder->came_from[next] = (int32_t)current;
-            float priority =
-                cost + (target->goal ? heuristic(nx, ny, target->goal->x, target->goal->y) : 0.0f);
-            if (!heap_push(finder, priority, next)) {
+            if (!relax(finder, target, current, next, base_cost + step, x + dx, y + dy, z)) {
                 return -1;
+            }
+        }
+
+        /* Up a slope, to the orthogonal neighbors of the level above. */
+        if (map->slope[current] != 0 && z + 1 < map->depth &&
+            map_is_open_at(map, current + level)) {
+            for (int d = 0; d < 4; d++) {
+                if (!inside[d]) {
+                    continue;
+                }
+                int dx = DIRECTIONS[d][0], dy = DIRECTIONS[d][1];
+                uint32_t next = (uint32_t)((int64_t)current + level + dy * (int64_t)width + dx);
+                float step = map_move_cost_at(map, next) * MAP_CLIMB_COST;
+                if (step > 0.0f && base_cost + step <= max_cost &&
+                    !relax(finder, target, current, next, base_cost + step, x + dx, y + dy,
+                           z + 1)) {
+                    return -1;
+                }
+            }
+        }
+        /* Down a slope: over the open space next to this tile, onto the slope
+         * below it. */
+        if (z > 0) {
+            for (int d = 0; d < 4; d++) {
+                if (side[d] > 0.0f || !inside[d]) {
+                    continue;
+                }
+                int dx = DIRECTIONS[d][0], dy = DIRECTIONS[d][1];
+                uint32_t beside = (uint32_t)((int64_t)current + dy * (int64_t)width + dx);
+                uint32_t next = beside - level;
+                if (!map_is_open_at(map, beside) || map->slope[next] == 0) {
+                    continue;
+                }
+                float step = map_move_cost_at(map, next) * MAP_CLIMB_COST;
+                if (step > 0.0f && base_cost + step <= max_cost &&
+                    !relax(finder, target, current, next, base_cost + step, x + dx, y + dy,
+                           z - 1)) {
+                    return -1;
+                }
             }
         }
     }

@@ -221,6 +221,10 @@ static void build_status_panel(App *app, Panel *panel)
         tr_integer(multiplier, sizeof(multiplier), game_speed_multiplier(clock->speed));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.speed"), multiplier);
     }
+    char level[16];
+    /* Counted from the plains': negative underground. */
+    tr_integer(level, sizeof(level), app->camera.level - app->game.map.surface_level);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.level"), level);
     char outdoor[32];
     temperature_text(outdoor, sizeof(outdoor), game_outdoor_temperature(&app->game), 0);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.outdoor_temperature"), outdoor);
@@ -282,6 +286,9 @@ static void build_tile_panel(App *app, Panel *panel)
 
     const TerrainDef *terrain = terrain_def((Terrain)map->terrain[index]);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.terrain"), tr(terrain->name_key));
+    if (map_is_slope(map, x, y, z)) {
+        panel_add_text(panel, tr("hud.tile.slope"));
+    }
 
     if (map->rock[index] != ROCK_NONE) {
         const RockDef *rock = rock_def((RockType)map->rock[index]);
@@ -924,6 +931,8 @@ static void help_window(App *app)
               app_key_name(APP_KEY_TEMPERATURE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.roofs"),
               app_key_name(APP_KEY_ROOF_VIEW));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.levels"),
+              app_key_name(APP_KEY_LEVEL_UP), app_key_name(APP_KEY_LEVEL_DOWN));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.debug"),
               app_key_name(APP_KEY_DEBUG_MENU));
     bool open = true;

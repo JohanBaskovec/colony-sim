@@ -40,10 +40,10 @@ bool regions_current(const Regions *regions, const Map *map)
 }
 
 /*
- * Flood fill over the four orthogonal neighbors. Walking also allows
- * diagonal steps, but only between tiles whose two shared orthogonal
- * neighbors are passable (no corner cutting), so diagonals never connect
- * more than orthogonal steps do.
+ * Flood fill over the four orthogonal neighbors and the slopes to other
+ * levels (map_level_links()). Walking also allows diagonal steps, but only
+ * between tiles whose two shared orthogonal neighbors are passable (no corner
+ * cutting), so diagonals never connect more than orthogonal steps do.
  */
 static void fill(Regions *regions, const Map *map, uint32_t start, uint32_t region)
 {
@@ -55,13 +55,18 @@ static void fill(Regions *regions, const Map *map, uint32_t start, uint32_t regi
     while (top > 0) {
         uint32_t tile = regions->stack[--top];
         uint32_t x = tile % width;
-        uint32_t y = tile % (width * height) / width; /* Neighbors: on the same level. */
+        uint32_t y = tile % (width * height) / width;
         uint32_t z = tile / (width * height);
         if (map_is_drinking_spot(map, (int)x, (int)y, (int)z)) {
             regions->drinkable[region] = 1;
         }
-        uint32_t neighbors[4];
+        uint32_t neighbors[4 + MAP_MAX_LEVEL_LINKS];
+        TilePos links[MAP_MAX_LEVEL_LINKS];
+        int link_count = map_level_links(map, (int)x, (int)y, (int)z, links);
         int count = 0;
+        for (int i = 0; i < link_count; i++) {
+            neighbors[count++] = (uint32_t)map_index(map, links[i].x, links[i].y, links[i].z);
+        }
         if (x > 0) {
             neighbors[count++] = tile - 1;
         }
@@ -86,8 +91,9 @@ static void fill(Regions *regions, const Map *map, uint32_t start, uint32_t regi
 
 /*
  * Adds a tile that just became passable. It joins the region of its passable
- * neighbors, or starts a new one if it has none. Returns false when it joins
- * several regions together: the caller has to rebuild.
+ * neighbors (on its level and up or down slopes), or starts a new one if it
+ * has none. Returns false when it joins several regions together: the caller
+ * has to rebuild.
  */
 static bool open_tile(Regions *regions, const Map *map, int x, int y, int z)
 {
@@ -97,13 +103,18 @@ static bool open_tile(Regions *regions, const Map *map, int x, int y, int z)
     }
     static const int DX[4] = {-1, 1, 0, 0};
     static const int DY[4] = {0, 0, -1, 1};
-    uint32_t region = REGION_NONE;
+    TilePos neighbors[4 + MAP_MAX_LEVEL_LINKS];
+    int count = map_level_links(map, x, y, z, neighbors);
     for (int i = 0; i < 4; i++) {
-        int nx = x + DX[i], ny = y + DY[i];
-        if (!map_in_bounds(map, nx, ny, z)) {
+        neighbors[count++] = (TilePos){(int16_t)(x + DX[i]), (int16_t)(y + DY[i]), (int16_t)z};
+    }
+    uint32_t region = REGION_NONE;
+    for (int i = 0; i < count; i++) {
+        const TilePos *n = &neighbors[i];
+        if (!map_in_bounds(map, n->x, n->y, n->z)) {
             continue;
         }
-        uint32_t neighbor = regions->id[map_index(map, nx, ny, z)];
+        uint32_t neighbor = regions->id[map_index(map, n->x, n->y, n->z)];
         if (neighbor == REGION_NONE) {
             continue;
         }

@@ -2,6 +2,7 @@
 
 #include "core/i18n.h"
 #include "core/log.h"
+#include "core/util.h"
 #include "game/hud.h"
 #include "game/render.h"
 #include "game/stockpile_panel.h"
@@ -18,6 +19,9 @@
 #define APP_PAN_SPEED 900.0f /* Pixels per second. */
 #define APP_PAN_FAST_FACTOR 2.5f
 #define APP_ZOOM_STEP 1.15f
+/* Levels below the one shown that show through open space (deeper ones are
+ * too dark to see). */
+#define APP_LEVELS_SHOWN_BELOW 6
 /* Height of a colonist's body above its position, in tiles (for clicks). */
 #define APP_PICK_BODY_OFFSET 0.7f
 #define APP_DRAG_THRESHOLD 5.0f /* Pixels before a click becomes a box selection. */
@@ -345,6 +349,9 @@ bool app_init(App *app, const CliOptions *options)
         colonist_position(first, &start_x, &start_y);
     }
     camera_init(&app->camera, start_x, start_y, APP_INITIAL_ZOOM);
+    app->camera.level = first != NULL ? first->z
+                                      : map_ground_level(&app->game.map, (int)start_x,
+                                                         (int)start_y);
     ui_init(&app->ui, app->renderer, app->text);
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
@@ -465,6 +472,12 @@ static void build_like_selection(App *app)
     }
 }
 
+/* Shows another level (clamped to the map's). */
+static void set_level(App *app, int level)
+{
+    app->camera.level = clampi(level, 0, app->game.map.depth - 1);
+}
+
 static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
 {
     if (key->repeat) {
@@ -485,6 +498,8 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_DEBUG_MENU: app->show_debug_menu = !app->show_debug_menu; return;
     case APP_KEY_TEMPERATURE: app->show_temperature = !app->show_temperature; return;
     case APP_KEY_ROOF_VIEW: app->show_roofs = !app->show_roofs; return;
+    case APP_KEY_LEVEL_UP: set_level(app, app->camera.level + 1); return;
+    case APP_KEY_LEVEL_DOWN: set_level(app, app->camera.level - 1); return;
     case APP_KEY_MINE: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); return;
     case APP_KEY_GATHER: app_toggle_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD); return;
     case APP_KEY_CANCEL: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); return;
@@ -754,6 +769,18 @@ static void handle_event(App *app, const SDL_Event *event)
         if (ui_scroll(&app->ui, event->wheel.mouse_x, event->wheel.mouse_y, steps)) {
             break; /* The wheel does not zoom the map through a panel. */
         }
+        if (SDL_GetModState() & SDL_KMOD_SHIFT) { /* Up and down the levels. */
+            app->level_wheel += steps;
+            while (app->level_wheel >= 1.0f) {
+                set_level(app, app->camera.level + 1);
+                app->level_wheel -= 1.0f;
+            }
+            while (app->level_wheel <= -1.0f) {
+                set_level(app, app->camera.level - 1);
+                app->level_wheel += 1.0f;
+            }
+            break;
+        }
         if (steps != 0.0f) {
             camera_zoom_at(&app->camera, powf(APP_ZOOM_STEP, steps), event->wheel.mouse_x,
                            event->wheel.mouse_y);
@@ -828,6 +855,22 @@ static void render_frame(App *app)
     SDL_SetRenderDrawColor(app->renderer, 10, 10, 12, 255);
     SDL_RenderClear(app->renderer);
 
+    /* The levels below, through open space: the deepest first. */
+    if (render_below_begin(app->renderer, &app->game.map, &app->camera)) {
+        int lowest = app->camera.level - APP_LEVELS_SHOWN_BELOW;
+        for (int z = lowest > 0 ? lowest : 0; z < app->camera.level; z++) {
+            Camera below = app->camera;
+            below.level = z;
+            render_map(app->renderer, &app->game.map, &below);
+            render_snow_cover(app->renderer, &app->game, &below);
+            render_structures(app->renderer, &app->game, &below, false);
+            render_workstations(app->renderer, &app->game, &below, WORKSTATION_NONE);
+            render_items(app->renderer, &app->game, &below);
+            render_world_sprites(app->renderer, app->sprites, &app->game, &below, NULL, 0);
+            render_below_shade(app->renderer);
+        }
+        render_below_end(app->renderer);
+    }
     render_map(app->renderer, &app->game.map, &app->camera);
     render_dirt(app->renderer, &app->game.dirt, &app->camera);
     render_snow_cover(app->renderer, &app->game, &app->camera);

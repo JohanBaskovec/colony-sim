@@ -11,6 +11,7 @@ static bool init_flat_game(Game *game)
 {
     NewGameParams params;
     game_default_params(&params);
+    params.world.flat = true; /* One level, as the tiles below expect. */
     params.world.seed = 5;
     params.world.width = 48;
     params.world.height = 48;

@@ -103,9 +103,10 @@ bool construction_is_roof(const ConstructionSite *site);
 const ConstructionSite *construction_get(const Constructions *constructions, int index);
 ConstructionSite *construction_get_mutable(Constructions *constructions, int index);
 
-/* Whether a structure may be planned on a tile: passable buildable ground,
- * no structure or site yet (a roof or its site above does not count), no
- * tree (grass and bushes are cleared by the builder first). */
+/* Whether a structure may be planned on a tile: passable buildable ground
+ * (map_is_buildable(): not a slope), no structure or site yet (a roof or its
+ * site above does not count), no tree (grass and bushes are cleared by the
+ * builder first). */
 bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y,
                             int z);
 

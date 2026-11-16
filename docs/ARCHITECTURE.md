@@ -73,7 +73,7 @@ simulation:
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with their branch, twig and food stocks, cobbles and flint in the ground), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
-| `worldgen`   | Procedural map generation from a seed                                        |
+| `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, plants, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
 | `i18n`       | Translation catalogs, `tr()`, plurals, placeholders, number formatting       |
@@ -139,16 +139,48 @@ tile takes `x, y, z` (rectangles take `x0, y0, x1, y1, z`), every position
 (`TilePos`, colonists, stations, sites, stockpiles) carries its level, and
 every module that keeps a per-tile array (items, designations, dirt, beds,
 stockpiles, zones, regions, rooms, temperature, pathfinder) sizes it for all
-the levels. `map_ground_level()` says on which level the ground of a column
-is (0 for now: world generation makes one level).
+the levels.
 
-For now **nothing links the levels**: searches, region and room floods stay
-on the level they start from, a goal on another level is unreachable, heat
-does not cross between levels and a hearth only warms its own level. The
-links (slopes, ramps, ladders, stairs) come with the next steps of the levels
-milestone (see `ROADMAP.md`). Hashes only mix in a level when it is not 0 (or
-when the map has more than one level), so one-level games keep the hashes
-they had before levels existed.
+A tile is **solid** (rock: a wall, or the inside of a hill), **open with a
+floor** (its terrain) or **open space** (`TERRAIN_OPEN`: the air over lower
+ground, where nobody can stand: `map_is_open()`). Rock tiles keep a floor
+under the rock, which shows once it is dug out. A floor stays when the tile
+below is dug out (as in a gallery under a hill): what holds it up comes with
+digging and building (support, collapses). `map_ground_level()` is the
+highest tile of a column one could stand on.
+
+**Slopes** (`Map.slope`, `map_set_slope()`) link the levels: from a slope
+with open space above it, one walks up to an orthogonal neighbor on the
+level above where one can stand, and back down the same way
+(`map_can_climb()`, `map_level_links()`), at `MAP_CLIMB_COST` (×2) times the
+tile reached. Nothing else links levels yet (dug ramps, ladders and stairs
+come later); a slope covered by a floor or rock leads nowhere. Slopes are
+not buildable (`map_is_buildable()`).
+
+A floor or rock **anywhere above** a tile covers it: `map_natural_roof()`
+(caves and galleries dug into hills). It replaced the earlier one-level
+rule (rock all around a tile).
+
+Hashes only mix in a level when it is not 0 (or when the map has more than
+one level), the slope layer once a slope exists.
+
+**Relief** (`core/worldgen.h`): the elevation noise decides each column's
+ground level. The plains lie on `Map.surface_level` (`underground_levels`,
+4 by default; the player sees it as level 0, the levels below as negative);
+lakes and rivers lie in hollows below it, shallows and beaches one level
+down, deep water two; the ground rises one level every `level_step` of
+elevation above `hill_level` (half as fast above `mountain_level`: hills,
+not mountains), rock outcrops one level above the ground around them behind
+cliffs. Under the ground's surface lie `WORLDGEN_EARTH_LEVELS` (2) of earth
+(`ROCK_EARTH`: dug out, it gives nothing), then granite or sandstone; stony
+ground is rock all the way down. Where soft ground or shallow water rises
+one level to an orthogonal neighbor, the lower tile is a slope (one wades up
+the bank to the beach, then walks up to the plains); rock outcrops, deep
+water and steeper rises stay cliffs. Digging down is not possible yet: the
+levels under the hollows are solid for now. The map has as many levels as
+the highest ground needs (about 12 on default maps, 4 of them underground). `WorldGenParams.flat` makes the old single-level world, for tests and
+for benchmarks that compare with older versions (`flat` argument of the
+benchmarks).
 
 The layers:
 
@@ -192,7 +224,9 @@ dense layers of the same size: order type and work progress per tile.
 
 Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
 `Game`): at most one stack per tile (one item type, up to its stack limit),
-plus map-wide totals per type. Each `ItemDef` has a realistic `weight` (kg per
+plus map-wide totals per type and a count of stacks per level
+(`level_stacks`: haulers' searches skip the empty levels, underground ones
+first). Each `ItemDef` has a realistic `weight` (kg per
 unit: a 7 kg log, a 20 kg stone block, a 1 kg cobble, a 300 g handful of blackberries) and a `bulk`
 (room taken, about half a liter per unit, gaps included). A tile holds
 `ITEM_TILE_BULK` (1000) of bulk, so the stack limit is derived:
@@ -708,9 +742,9 @@ raises a notice. `roofs_collapse()` runs every tick after the settlers and
 only checks the roofs within `ROOF_SUPPORT_RANGE` of what the map logged as
 changed (`Map.build_log`, `Map.topology_log`), or every roof when the logs
 overflowed; the `RoofWatch` it keeps is derived, not hashed. A light grass
-roof hurts nobody. `map_natural_roof()` covers open tiles
-with rock within 3 tiles in at least 6 of the 8 directions (caves,
-overhangs). `map_hash()` only hashes the roof layers once a roof exists, so
+roof hurts nobody. `map_natural_roof()` covers tiles with a
+floor or rock somewhere above them (see *World representation*).
+`map_hash()` only hashes the roof layers once a roof exists, so
 older hashes stay valid.
 
 **Rooms** (`core/room.h`, owned by `Game`): every tile without rock, a wall
@@ -735,17 +769,23 @@ tile moves toward its four neighbors at the lower conductance of the two
 (air 4/h, door 1.5, wall and rock 0.5), toward the outdoor air at a rate
 set by its cover (open sky 6/h, built roof 0.3, natural roof none) and,
 under a natural roof, toward the ground (10 °C, 0.3/h). Rock stays at the
-ground's temperature. The step is stable while a tile's rates add up to
-less than 25/h. The bands of rows run through all the levels one after the
-other (`height × depth` rows); for now a tile only exchanges heat with the
-tiles of its own level (the edges between levels have a rate of 0). What each tile is made of and covered by, and the rate on
-each edge, are caches: updated around the tiles of the map's change logs
+ground's temperature; open space under the sky is the outdoor air
+(`TEMPERATURE_MATERIAL_OPEN`): a tile with a side open to it exchanges heat
+with the outdoor air through that side instead (`Temperatures.exposure`:
+the cover's rate plus the air's conductance for each open side). The step
+is stable while a tile's rates add up to less than 25/h. The bands of rows
+run through all the levels one after the other (`height × depth` rows),
+and only the tiles of a bitset (`Temperatures.active`) are worked out: rock
+and open space, most of a hilly map, are skipped 64 at a time. For now a
+tile only exchanges heat with the tiles of its own level (the edges between
+levels have a rate of 0). What each tile is made of and covered by, the
+exposures and the rate on each edge are caches: updated for the tiles of
+the map's change logs and the tiles below them, whose cover they may change
 (`Map.topology_log`, and `Map.build_log` for structures, roofs and rock
-where one could not walk anyway; within `MAP_NATURAL_ROOF_REACH`, since
-rock makes natural roofs around it), rebuilt whole when the logs overflowed
-or the layers were written directly (`MapTopologyChange.anywhere`). Edge
-rates of 0 and a padded layer let tiles on the edges of the map go through
-the same loop.
+where one could not walk anyway), rebuilt whole when the logs overflowed or
+the layers were written directly (`MapTopologyChange.anywhere`). Edge rates
+of 0 and a padded layer let tiles on the edges of the map go through the
+same loop.
 
 What settlers feel is not only the air: a burning fire radiates warmth
 (`hearths_radiant_warmth()`: `HEARTH_RADIANT_WARMTH` one tile away, falling
@@ -1014,11 +1054,12 @@ them (`bench_simulation` hashes are unchanged).
   free tile...), with a cost limit to bound the search.
 - A `Pathfinder` owns per-tile scratch arrays reused across searches (stamps
   instead of clearing), so searches do not allocate.
-- A search stays on the level of its start (nothing links the levels yet):
-  its scratch arrays are indexed relative to the first tile of that level,
-  and a goal on another level is unreachable.
-- Benchmark: `bench/bench_pathfinding [size] [searches] [seed]`; about 0.7 ms
-  per cross-map search on a 200 × 200 map in Release.
+- Slopes lead to the levels above and below (orthogonal steps only, ×2: see
+  *World representation*); the heuristic adds the least those climbs cost
+  (`MAP_CLIMB_COST - 1` per level), so it stays admissible (a test compares
+  A* with Dijkstra on hilly maps).
+- Benchmark: `bench/bench_pathfinding [size] [searches] [seed] [flat]`;
+  about 0.8 ms per cross-map search on a flat 200 × 200 map in Release.
 
 ### Connectivity regions
 
@@ -1026,9 +1067,9 @@ A search for something that cannot be reached explores everything within its
 cost limit before giving up. `Regions` (`core/region.h`, owned by `Game`)
 avoids that: every passable tile gets the id of its region, two tiles being in
 the same region exactly when one can walk between them (flood fill over
-orthogonal neighbors; diagonal moves never connect more because corners
-cannot be cut). Floods stay on their level, so two levels never share a
-region. Each region also knows whether it contains a drinking spot.
+orthogonal neighbors and up and down slopes, `map_level_links()`; diagonal
+moves never connect more because corners cannot be cut). Each region also
+knows whether it contains a drinking spot.
 
 - Regions are a **cache**, not simulation state: they are not hashed, and
   every use is an exact shortcut for a search that would fail anyway, so they
@@ -1148,9 +1189,17 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 UI state that is not part of the simulation (camera, selection, selected
 stockpile, gathering zone, workstation or structure, active tool, drag
 rectangle, debug overlay and menu toggles) lives in `App`. The level shown is
-`Camera.level`: the map, the entities and the overlays are drawn for that
-level only, and clicks and tools act on it (a selected structure keeps its
-level in `App.selected_structure_z`). Escape and a right click on the map
+`Camera.level` (Page Up / Page Down, or Shift + wheel; it starts on the
+level of the first settler; the HUD numbers it from `Map.surface_level`): the map, the entities and the overlays are
+drawn for that level, and clicks and tools act on it (a selected structure
+keeps its level in `App.selected_structure_z`). Where the level shown is
+open space, the levels below show through (`render_below_begin()`): up to
+`APP_LEVELS_SHOWN_BELOW` of them, deepest first, each with its ground,
+structures, stations, items and sprites, drawn on an offscreen image three
+times smaller then stretched back with smoothing (a cheap blur), each level
+darkened once more than the one above. The ground of the level shown has a
+dark edge over each drop, and slopes are lit towards the higher side.
+Escape and a right click on the map
 (released where it was pressed: otherwise it pans) step back one level
 (`step_back()`). Every keyboard control is a physical position (`APP_KEY_*`
 scancodes in `game/app.h`): the controls are laid out the same on any

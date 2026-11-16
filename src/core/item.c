@@ -335,7 +335,9 @@ bool items_init(Items *items, int width, int height, int depth)
         return false;
     }
     items->stacks = calloc((size_t)width * (size_t)height * (size_t)depth, sizeof(*items->stacks));
-    if (items->stacks == NULL) {
+    items->level_stacks = calloc((size_t)depth, sizeof(*items->level_stacks));
+    if (items->stacks == NULL || items->level_stacks == NULL) {
+        items_free(items);
         return false;
     }
     items->width = width;
@@ -347,6 +349,7 @@ bool items_init(Items *items, int width, int height, int depth)
 void items_free(Items *items)
 {
     free(items->stacks);
+    free(items->level_stacks);
     memset(items, 0, sizeof(*items));
 }
 
@@ -396,6 +399,7 @@ int items_add(Items *items, int x, int y, int z, ItemStack batch)
     if (stack->type == ITEM_NONE) {
         *stack = batch;
         stack->count = 0;
+        items->level_stacks[z]++;
     } else {
         stack->hit_points =
             (uint16_t)weighted_average(stack->hit_points, stack->count, batch.hit_points, added);
@@ -422,6 +426,7 @@ int items_remove(Items *items, int x, int y, int z, int count)
     stack->count = (uint16_t)(stack->count - removed);
     if (stack->count == 0) {
         *stack = (ItemStack){.type = ITEM_NONE};
+        items->level_stacks[z]--;
     }
     return removed;
 }
@@ -492,6 +497,8 @@ static bool rot(Items *items, ItemStack *stack, int hours, float rate)
     if (lost >= stack->hit_points) {
         items->totals[stack->type] -= stack->count;
         *stack = (ItemStack){0};
+        size_t level_size = (size_t)items->width * (size_t)items->height;
+        items->level_stacks[(size_t)(stack - items->stacks) / level_size]--;
         return true;
     }
     stack->hit_points = (uint16_t)(stack->hit_points - lost);

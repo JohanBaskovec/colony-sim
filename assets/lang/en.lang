@@ -19,10 +19,12 @@ terrain.soil = Soil
 terrain.rich_soil = Rich soil
 terrain.gravel = Gravel
 terrain.rough_stone = Rough stone
+terrain.open = Open space
 
 # Natural rock
 rock.granite = Granite
 rock.sandstone = Sandstone
+rock.earth = Earth
 
 # Plants
 plant.grass = Grass
@@ -153,6 +155,7 @@ weather.snowstorm = Snowstorm
 hud.date = {1} {0}, year {2} · {3}:{4}
 # {0} = speed multiplier
 hud.speed = Speed: {0}×
+hud.level = Level: {0}
 hud.outdoor_temperature = Outdoors: {0}
 # {0} = the sky (e.g. Rain)
 hud.weather = Weather: {0}
@@ -173,7 +176,8 @@ hud.help.orders = {0}: mine rock · {1}: cancel orders
 hud.help.copy = {0}: build another of what is selected (zone, workstation, bed, wall, door)
 hud.help.rotate = {0}: turn the bed being placed (head and foot)
 hud.help.temperature = {0}: temperature view (felt on each tile, the warmth of fires included: blue for cold, red for hot)
-hud.help.roofs = {0}: roof view (built roofs, roof blueprints, rock overhead; the roof tools show it by themselves)
+hud.help.roofs = {0}: roof view (built roofs, roof blueprints, rock or ground overhead; the roof tools show it by themselves)
+hud.help.levels = {0}/{1} or Shift+wheel: the level above / below (the levels below show through open space, blurred)
 hud.help.debug = {0}: debug menu (cheats for testing)
 hud.help.manage = {0}: stockpile zones · {1}: workstations · click a zone or station: its settings · {2}: work priorities
 # {0} = tool name
@@ -196,6 +200,7 @@ hud.tool.rotate_help = {0}: turn it
 # Tile inspector. {0}, {1} = tile coordinates
 hud.tile.position = Tile {0}, {1}
 hud.tile.terrain = Terrain: {0}
+hud.tile.slope = Slope: leads up to the level above
 hud.tile.rock = Rock wall: {0}
 # {0} = plant name, {1} = growth percentage
 hud.tile.plant = Plant: {0} ({1}% grown)
@@ -235,7 +240,7 @@ hud.tile.blueprint = Blueprint: {0} ({1}% built)
 hud.tile.structure = Construction: {0}
 # {0} = roof, {1} = grade
 hud.tile.roof = Roof: {0} ({1})
-hud.tile.natural_roof = Roof: rock overhead
+hud.tile.natural_roof = Roof: rock or ground overhead
 # {0} = number of tiles of the room
 hud.tile.room_roofed.one = Room: {0} tile, roofed
 hud.tile.room_roofed.other = Room: {0} tiles, roofed

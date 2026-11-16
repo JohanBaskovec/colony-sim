@@ -15,6 +15,7 @@ static const float CONDUCTANCES[TEMPERATURE_MATERIAL_COUNT] = {
     [TEMPERATURE_MATERIAL_WALL] = TEMPERATURE_CONDUCTANCE_WALL,
     [TEMPERATURE_MATERIAL_DOOR] = TEMPERATURE_CONDUCTANCE_DOOR,
     [TEMPERATURE_MATERIAL_ROCK] = TEMPERATURE_CONDUCTANCE_ROCK,
+    [TEMPERATURE_MATERIAL_OPEN] = TEMPERATURE_CONDUCTANCE_AIR,
 };
 
 static const float EXPOSURES[TEMPERATURE_COVER_COUNT] = {
@@ -42,6 +43,19 @@ static float kind_conductance(uint8_t kind)
     return CONDUCTANCES[kind / TEMPERATURE_COVER_COUNT];
 }
 
+static int kind_material(uint8_t kind)
+{
+    return kind / TEMPERATURE_COVER_COUNT;
+}
+
+/* Whether the sweep works out the temperature of a tile of this kind (rock
+ * keeps the ground's, open space under the sky is the outdoor air). */
+static bool kind_active(uint8_t kind)
+{
+    int material = kind_material(kind);
+    return material != TEMPERATURE_MATERIAL_ROCK && material != TEMPERATURE_MATERIAL_OPEN;
+}
+
 /* Refreshes the caches over tiles x0..x1, y0..y1 of level z (clamped to the
  * map). */
 static void refresh_area(Temperatures *temperatures, const Map *map, int x0, int y0, int x1,
@@ -52,28 +66,76 @@ static void refresh_area(Temperatures *temperatures, const Map *map, int x0, int
     y0 = y0 < 0 ? 0 : y0;
     x1 = x1 >= width ? width - 1 : x1;
     y1 = y1 >= height ? height - 1 : y1;
+    uint8_t *kind = temperatures->kind;
     for (int y = y0; y <= y1; y++) {
         for (int x = x0; x <= x1; x++) {
             size_t i = map_index(map, x, y, z);
-            temperatures->kind[i] = tile_kind(map, x, y, z);
-            if (temperatures->kind[i] / TEMPERATURE_COVER_COUNT == TEMPERATURE_MATERIAL_ROCK) {
+            kind[i] = tile_kind(map, x, y, z);
+            if (kind_material(kind[i]) == TEMPERATURE_MATERIAL_ROCK) {
                 temperatures->celsius[i] = TEMPERATURE_GROUND;
+            }
+            uint64_t bit = (uint64_t)1 << (i % 64);
+            if (kind_active(kind[i])) {
+                temperatures->active[i / 64] |= bit;
+            } else {
+                temperatures->active[i / 64] &= ~bit;
             }
         }
     }
     /* The edges of those tiles, those with their west and north neighbors
-     * included. */
+     * included. Open space is not a neighbor: it is the outdoor air (see
+     * the exposures below). */
     for (int y = y0 > 0 ? y0 - 1 : 0; y <= y1; y++) {
         for (int x = x0 > 0 ? x0 - 1 : 0; x <= x1; x++) {
             size_t i = map_index(map, x, y, z);
-            float here = kind_conductance(temperatures->kind[i]);
-            float east = x + 1 < width ? kind_conductance(temperatures->kind[i + 1]) : 0.0f;
-            float south = y + 1 < height
-                              ? kind_conductance(temperatures->kind[i + (size_t)width])
+            bool open = kind_material(kind[i]) == TEMPERATURE_MATERIAL_OPEN;
+            float here = kind_conductance(kind[i]);
+            float east = x + 1 < width && !open &&
+                                 kind_material(kind[i + 1]) != TEMPERATURE_MATERIAL_OPEN
+                             ? kind_conductance(kind[i + 1])
+                             : 0.0f;
+            size_t below = i + (size_t)width;
+            float south = y + 1 < height && !open &&
+                                  kind_material(kind[below]) != TEMPERATURE_MATERIAL_OPEN
+                              ? kind_conductance(kind[below])
                               : 0.0f;
             temperatures->edge_east[i] = fminf(here, east);
             temperatures->edge_south[i] = fminf(here, south);
         }
+    }
+    /* Exposures to the outdoor air: what covers the tile, and its sides open
+     * to open space; those of the tiles around too. */
+    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+    for (int y = y0 > 0 ? y0 - 1 : 0; y <= y1 + 1 && y < height; y++) {
+        for (int x = x0 > 0 ? x0 - 1 : 0; x <= x1 + 1 && x < width; x++) {
+            size_t i = map_index(map, x, y, z);
+            float exposure = 0.0f;
+            if (kind_active(kind[i])) {
+                float here = kind_conductance(kind[i]);
+                exposure = EXPOSURES[kind[i] % TEMPERATURE_COVER_COUNT];
+                for (int d = 0; d < 4; d++) {
+                    int nx = x + DX[d], ny = y + DY[d];
+                    if (nx >= 0 && ny >= 0 && nx < width && ny < height &&
+                        kind_material(kind[map_index(map, nx, ny, z)]) ==
+                            TEMPERATURE_MATERIAL_OPEN) {
+                        exposure += fminf(here, TEMPERATURE_CONDUCTANCE_AIR);
+                    }
+                }
+            }
+            temperatures->exposure[i] = exposure;
+        }
+    }
+}
+
+/* Refreshes the caches after a change on a tile: the tile, and the tiles
+ * below it, whose natural roof it may make or take away. */
+static void refresh_column(Temperatures *temperatures, const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return;
+    }
+    for (int level = 0; level <= z; level++) {
+        refresh_area(temperatures, map, x, y, x, y, level);
     }
 }
 
@@ -98,8 +160,11 @@ bool temperatures_init(Temperatures *temperatures, const Map *map, float outdoor
     temperatures->buffers[1] = calloc(count + 1, sizeof(float));
     temperatures->buffers[2] = calloc(count + width, sizeof(float));
     temperatures->kind = calloc(count, sizeof(*temperatures->kind));
+    temperatures->exposure = calloc(count, sizeof(*temperatures->exposure));
+    temperatures->active = calloc((count + 63) / 64, sizeof(*temperatures->active));
     if (temperatures->buffers[0] == NULL || temperatures->buffers[1] == NULL ||
-        temperatures->buffers[2] == NULL || temperatures->kind == NULL) {
+        temperatures->buffers[2] == NULL || temperatures->kind == NULL ||
+        temperatures->exposure == NULL || temperatures->active == NULL) {
         temperatures_free(temperatures);
         return false;
     }
@@ -109,6 +174,7 @@ bool temperatures_init(Temperatures *temperatures, const Map *map, float outdoor
     temperatures->width = map->width;
     temperatures->height = map->height;
     temperatures->depth = map->depth;
+    temperatures->outdoor = outdoor;
     for (size_t i = 0; i < count; i++) {
         temperatures->celsius[i] = outdoor;
     }
@@ -124,6 +190,8 @@ void temperatures_free(Temperatures *temperatures)
         free(temperatures->buffers[i]);
     }
     free(temperatures->kind);
+    free(temperatures->exposure);
+    free(temperatures->active);
     memset(temperatures, 0, sizeof(*temperatures));
 }
 
@@ -179,7 +247,10 @@ float temperature_at(const Temperatures *temperatures, int x, int y, int z)
     if (!in_bounds(temperatures, x, y, z)) {
         return TEMPERATURE_GROUND;
     }
-    return temperatures->celsius[index_of(temperatures, x, y, z)];
+    size_t i = index_of(temperatures, x, y, z);
+    return kind_material(temperatures->kind[i]) == TEMPERATURE_MATERIAL_OPEN
+               ? temperatures->outdoor
+               : temperatures->celsius[i];
 }
 
 void temperatures_add_heat(Temperatures *temperatures, int x, int y, int z, float degrees)
@@ -193,6 +264,9 @@ TemperatureMaterial temperature_material(const Map *map, int x, int y, int z)
 {
     if (!map_in_bounds(map, x, y, z) || map->rock[map_index(map, x, y, z)] != ROCK_NONE) {
         return TEMPERATURE_MATERIAL_ROCK;
+    }
+    if (map_is_open(map, x, y, z) && !map_is_roofed(map, x, y, z)) {
+        return TEMPERATURE_MATERIAL_OPEN;
     }
     StructureType structure = map_structure(map, x, y, z);
     if (structure == STRUCTURE_DOOR) {
@@ -238,19 +312,15 @@ static void update_caches(Temperatures *temperatures, const Map *map)
     if (everything) {
         refresh_all(temperatures, map);
     } else {
-        /* Rock makes natural roofs around it; other changes stay on their tile. */
-        const int reach = MAP_NATURAL_ROOF_REACH;
         for (uint32_t r = 1; r <= topology; r++) {
             uint32_t revision = temperatures->topology_revision + r;
             const MapTopologyChange *change = &map->topology_log[revision % MAP_TOPOLOGY_LOG_SIZE];
-            refresh_area(temperatures, map, change->x - reach, change->y - reach,
-                         change->x + reach, change->y + reach, change->z);
+            refresh_column(temperatures, map, change->x, change->y, change->z);
         }
         for (uint32_t r = 1; r <= build; r++) {
             uint32_t revision = temperatures->build_revision + r;
             const MapBuildChange *change = &map->build_log[revision % MAP_BUILD_LOG_SIZE];
-            refresh_area(temperatures, map, change->x - reach, change->y - reach,
-                         change->x + reach, change->y + reach, change->z);
+            refresh_column(temperatures, map, change->x, change->y, change->z);
         }
     }
     temperatures->topology_revision = map->topology_revision;
@@ -264,6 +334,7 @@ void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick
         return;
     }
     update_caches(temperatures, map);
+    temperatures->outdoor = outdoor;
     int band = (int)(tick % TEMPERATURE_SWEEP_TICKS);
     /* Rows of every level, one after the other. */
     int width = temperatures->width, rows = temperatures->height * temperatures->depth;
@@ -272,24 +343,36 @@ void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick
     const float hours = (float)TEMPERATURE_SWEEP_TICKS / (float)TICKS_PER_HOUR;
     float *celsius = temperatures->celsius;
     const float *east = temperatures->edge_east, *south = temperatures->edge_south;
+    const float *exposure = temperatures->exposure;
     const uint8_t *kind = temperatures->kind;
+    const uint64_t *active = temperatures->active;
     size_t row = (size_t)width;
-    for (size_t i = (size_t)y0 * row, end = (size_t)y1 * row; i < end; i++) {
-        uint8_t here_kind = kind[i];
-        if (here_kind / TEMPERATURE_COVER_COUNT == TEMPERATURE_MATERIAL_ROCK) {
-            continue; /* Always the ground's. */
+    /* The active tiles of the band, in order, 64 at a time. */
+    size_t first = (size_t)y0 * row, last = (size_t)y1 * row;
+    for (size_t word = first / 64; word * 64 < last; word++) {
+        uint64_t bits = active[word];
+        if (word * 64 < first) {
+            bits &= ~(uint64_t)0 << (first % 64);
         }
-        int cover = here_kind % TEMPERATURE_COVER_COUNT;
-        float here = celsius[i];
-        /* Edges past the map have a rate of 0 (and read the padding). The
-         * west neighbor was updated just before: kept for last, so that
-         * tiles wait for each other as little as possible. */
-        float west = east[i - 1];
-        float flow = EXPOSURES[cover] * (outdoor - here) +
-                     GROUND_RATES[cover] * (TEMPERATURE_GROUND - here) +
-                     east[i] * (celsius[i + 1] - here) + south[i] * (celsius[i + row] - here) +
-                     south[i - row] * (celsius[i - row] - here) - west * here;
-        celsius[i] = here + flow * hours + (west * hours) * celsius[i - 1];
+        if ((word + 1) * 64 > last) {
+            bits &= ~(~(uint64_t)0 << (last % 64));
+        }
+        while (bits != 0) {
+            size_t i = word * 64 + (size_t)lowest_bit64(bits);
+            bits &= bits - 1;
+            int cover = kind[i] % TEMPERATURE_COVER_COUNT;
+            float here = celsius[i];
+            /* Edges past the map have a rate of 0 (and read the padding). The
+             * west neighbor was updated just before: kept for last, so that
+             * tiles wait for each other as little as possible. */
+            float west = east[i - 1];
+            float flow = exposure[i] * (outdoor - here) +
+                         GROUND_RATES[cover] * (TEMPERATURE_GROUND - here) +
+                         east[i] * (celsius[i + 1] - here) +
+                         south[i] * (celsius[i + row] - here) +
+                         south[i - row] * (celsius[i - row] - here) - west * here;
+            celsius[i] = here + flow * hours + (west * hours) * celsius[i - 1];
+        }
     }
 }
 

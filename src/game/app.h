@@ -54,6 +54,8 @@ typedef enum AppTool {
 #define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4 /* Cheats (game/debug_panel.h). */
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H /* Temperature view on or off. */
 #define APP_KEY_ROOF_VIEW SDL_SCANCODE_Y   /* Roof view on or off (see app_roof_view()). */
+#define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP /* The level above (also Shift + wheel). */
+#define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
 
 /* Types of the zone tools (see app_toggle_tool()). */
 #define APP_ZONE_ADD 0
@@ -140,6 +142,7 @@ typedef struct App {
     bool show_debug_menu; /* Debug menu (game/debug_panel.h). */
     bool show_temperature; /* The temperature of each tile over the map. */
     bool show_roofs; /* Roof view turned on by the player (see app_roof_view()). */
+    float level_wheel; /* Wheel steps with Shift held, towards the next level. */
     /* Build menu (game/menu_bar.h): open, and which category is shown. */
     bool build_menu_open;
     BuildCategory build_category;

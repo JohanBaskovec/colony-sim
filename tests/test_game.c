@@ -16,6 +16,18 @@ static bool init_small_game(Game *game, uint64_t seed)
     return game_init(game, &params);
 }
 
+/* The same on a single level (see make_grove()). */
+static bool init_flat_game(Game *game, uint64_t seed)
+{
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = seed;
+    params.world.width = 64;
+    params.world.height = 64;
+    params.world.flat = true;
+    return game_init(game, &params);
+}
+
 static void test_init_and_shutdown(void)
 {
     Game game;
@@ -89,7 +101,7 @@ static void make_grove(Map *map)
 static unsigned mushrooms_after(double rain)
 {
     Game game;
-    if (!init_small_game(&game, 3)) {
+    if (!init_flat_game(&game, 3)) {
         return 0;
     }
     make_grove(&game.map);
@@ -114,7 +126,7 @@ static void test_mushrooms_come_after_rain(void)
 static void test_mushrooms_come_and_go(void)
 {
     Game game;
-    REQUIRE(init_small_game(&game, 3));
+    REQUIRE(init_flat_game(&game, 3));
     Map *map = &game.map;
     make_grove(map);
     /* Summer: none. */
@@ -358,7 +370,7 @@ static void test_hash_covers_knowledge_and_carried_condition(void)
 static void test_fresh_grass_dries_on_the_ground(void)
 {
     Game game;
-    REQUIRE(init_small_game(&game, 8));
+    REQUIRE(init_flat_game(&game, 8));
     /* Somewhere passable, away from anyone's hands. */
     int x = -1, y = -1;
     for (int ty = 0; ty < game.map.height && x < 0; ty++) {
@@ -399,7 +411,7 @@ static void test_fresh_grass_dries_on_the_ground(void)
 static void test_food_rots_on_the_ground(void)
 {
     Game game;
-    REQUIRE(init_small_game(&game, 8));
+    REQUIRE(init_flat_game(&game, 8));
     for (uint32_t slot = 0; slot < game_colonist_slot_count(&game); slot++) {
         game_remove_colonist(&game, game_colonist_id_at(&game, slot));
     }
@@ -445,7 +457,7 @@ static void test_food_rots_on_the_ground(void)
 static void test_grass_does_not_dry_in_a_storm(void)
 {
     Game game;
-    REQUIRE(init_small_game(&game, 8));
+    REQUIRE(init_flat_game(&game, 8));
     for (uint32_t slot = 0; slot < game_colonist_slot_count(&game); slot++) {
         game_remove_colonist(&game, game_colonist_id_at(&game, slot));
     }

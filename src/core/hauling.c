@@ -163,24 +163,30 @@ bool haul_any_job_possible(const HaulWorld *world)
         regions = world->regions->id;
     }
     SourceSearch search = {world, &storage};
-    const int z = world->from_z;
-    if (z < 0 || z >= map->depth) {
+    if (world->from_z < 0 || world->from_z >= map->depth) {
         return false;
     }
-    /* From the hauler's row outwards: a stack nearby is found at once. */
-    for (int step = 0; step < 2 * map->height; step++) {
-        int y = row_outwards(world->from_y, step, map->height);
-        if (y < 0) {
+    /* The hauler's level first, from its row outwards: a stack nearby is
+     * found at once. */
+    for (int level = 0; level < map->depth; level++) {
+        int z = (world->from_z + level) % map->depth;
+        if (world->items->level_stacks[z] == 0) {
             continue;
         }
-        const ItemStack *row = &world->items->stacks[map_index(map, 0, y, z)];
-        for (int x = 0; x < map->width; x++) {
-            if (row[x].type == ITEM_NONE || storage.levels[row[x].type] == 0 ||
-                (regions != NULL && regions[map_index(map, x, y, z)] != world->region)) {
+        for (int step = 0; step < 2 * map->height; step++) {
+            int y = row_outwards(world->from_y, step, map->height);
+            if (y < 0) {
                 continue;
             }
-            if (is_haul_source(map, x, y, z, &search)) {
-                return true;
+            const ItemStack *row = &world->items->stacks[map_index(map, 0, y, z)];
+            for (int x = 0; x < map->width; x++) {
+                if (row[x].type == ITEM_NONE || storage.levels[row[x].type] == 0 ||
+                    (regions != NULL && regions[map_index(map, x, y, z)] != world->region)) {
+                    continue;
+                }
+                if (is_haul_source(map, x, y, z, &search)) {
+                    return true;
+                }
             }
         }
     }

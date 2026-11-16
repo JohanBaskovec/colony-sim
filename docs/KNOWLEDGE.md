@@ -924,10 +924,10 @@ planned).
   not reaching the map's edge); a room is roofed when all its tiles are.
 
 **Caves**: settling in natural caves and under overhangs.
-- A **natural roof** covers floor tiles surrounded by rock: rock within 3 tiles
-  in at least 6 of the 8 directions *(tuning: within 2, the corners of a
-  3 × 3 cave would be open)*. Like a
-  roof, plus a stable temperature (done: near 10 °C, `core/temperature.h`).
+- A **natural roof** covers tiles with ground or rock somewhere above them
+  (since the map has levels; before, rock within 3 tiles in at least 6 of
+  the 8 directions stood for it). Like a roof, plus a stable temperature
+  (done: near 10 °C, `core/temperature.h`).
 - **Clear cave floor** *(later: caves cannot be dug out before mining
   exists)*: removes loose rock and levels the ground; the tile becomes
   "cleared floor" (move cost 1.0 instead of 1.2, nicer room). No pick needed.

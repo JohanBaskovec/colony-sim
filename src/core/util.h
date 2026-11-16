@@ -48,6 +48,21 @@ static inline int row_outwards(int center, int step, int height)
     return row >= 0 && row < height ? row : -1;
 }
 
+/* Index of the lowest set bit of a non-zero value. */
+static inline int lowest_bit64(uint64_t value)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_ctzll(value);
+#else
+    int bit = 0;
+    while ((value & 1u) == 0) {
+        value >>= 1;
+        bit++;
+    }
+    return bit;
+#endif
+}
+
 /* Incremental 64-bit FNV-1a: feed the previous result (or HASH_FNV1A64_INIT) as `hash`. */
 uint64_t hash_fnv1a64(uint64_t hash, const void *data, size_t size);
 

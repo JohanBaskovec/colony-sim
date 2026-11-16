@@ -145,6 +145,7 @@ typedef struct Items {
     int depth;
     ItemStack *stacks;
     long totals[ITEM_TYPE_COUNT]; /* Items of each type on the whole map. */
+    uint32_t *level_stacks;       /* Stacks lying on each level (searches skip empty levels). */
     uint32_t additions; /* Incremented whenever items are added (haulers look again). */
 } Items;
 

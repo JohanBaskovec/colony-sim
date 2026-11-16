@@ -14,6 +14,7 @@ static bool init_flat_game(Game *game)
 {
     NewGameParams params;
     game_default_params(&params);
+    params.world.flat = true; /* One level, as the tiles below expect. */
     params.world.seed = 5;
     params.world.width = 48;
     params.world.height = 48;
@@ -995,6 +996,82 @@ static void test_hungry_colonist_eats_fruit_from_the_ground(void)
     game_shutdown(&game);
 }
 
+/* A game on two levels: plains of soil on level 0, a hill of earth over
+ * x >= 26 with its top on level 1, a slope up its side at (25, 20). */
+static bool init_hill_game(Game *game)
+{
+    for (uint64_t seed = 1; seed < 50; seed++) {
+        NewGameParams params;
+        game_default_params(&params);
+        params.world.seed = seed;
+        params.world.width = 48;
+        params.world.height = 48;
+        params.colonist_count = 0;
+        if (!game_init(game, &params)) {
+            return false;
+        }
+        if (game->map.depth >= 2) {
+            break;
+        }
+        game_shutdown(game);
+    }
+    Map *map = &game->map;
+    if (map->depth < 2) {
+        return false;
+    }
+    for (size_t i = 0; i < map_tile_count(map); i++) {
+        int x, y, z;
+        map_tile_of(map, i, &x, &y, &z);
+        bool hill = x >= 26;
+        map->terrain[i] = (uint8_t)(z == 0 || (z == 1 && hill) ? TERRAIN_SOIL : TERRAIN_OPEN);
+        map->rock[i] = (uint8_t)(z == 0 && hill ? ROCK_EARTH : ROCK_NONE);
+        map->slope[i] = 0;
+        map->cobbles[i] = 0;
+        map->flint[i] = 0;
+        memset(&map->plants[i], 0, sizeof(map->plants[i]));
+    }
+    map->slope[map_index(map, 25, 20, 0)] = 1;
+    map->slope_count = 1;
+    map_topology_changed(map); /* The layers were written directly. */
+    game->clock.tick = TODAY + 12 * TICKS_PER_HOUR;
+    return true;
+}
+
+/* Settlers walk up and down slopes to what they need on other levels. */
+static void test_colonist_climbs_to_food_on_a_hill(void)
+{
+    Game game;
+    REQUIRE(init_hill_game(&game));
+    items_add(&game.items, 30, 20, 1, item_stack_pristine(ITEM_BLACKBERRIES, 20));
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_FOOD] = 0.2f;
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_EAT);
+    CHECK(colonist->target.x == 30 && colonist->target.z == 1);
+    bool climbed = false;
+    for (int i = 0; i < walk_ticks(20) && colonist->z == 0; i++) {
+        int x = colonist->x, y = colonist->y;
+        game_tick(&game);
+        if (colonist->z == 1) {
+            climbed = x == 25 && y == 20 && colonist->x == 26 && colonist->y == 20;
+        }
+    }
+    CHECK(climbed); /* Up the slope. */
+    run_ticks(&game, walk_ticks(6) + COLONIST_EAT_TICKS);
+    CHECK(colonist->needs[NEED_FOOD] >= COLONIST_SATED_FOOD - 0.01f);
+    CHECK(items_get(&game.items, 30, 20, 1).count < 20);
+
+    /* Food back down on the plains: down the slope again. */
+    colonist->needs[NEED_FOOD] = 0.2f;
+    items_add(&game.items, 18, 20, 0, item_stack_pristine(ITEM_HAZELNUTS, 20));
+    items_remove(&game.items, 30, 20, 1, 20);
+    run_ticks(&game, walk_ticks(20) + COLONIST_EAT_TICKS);
+    CHECK_EQ_INT(colonist->z, 0);
+    CHECK(items_get(&game.items, 18, 20, 0).count < 20);
+    game_shutdown(&game);
+}
+
 static void test_hungry_colonist_eats_spoiling_food_first(void)
 {
     Game game;
@@ -1870,6 +1947,7 @@ int main(void)
     RUN_TEST(test_disabling_work_type_stops_the_current_job);
     RUN_TEST(test_priority_beats_distance);
     RUN_TEST(test_hungry_colonist_eats_fruit_from_the_ground);
+    RUN_TEST(test_colonist_climbs_to_food_on_a_hill);
     RUN_TEST(test_hungry_colonist_eats_spoiling_food_first);
     RUN_TEST(test_colonist_harvests_blackberries);
     RUN_TEST(test_starting_knowledge_is_random_and_valid);

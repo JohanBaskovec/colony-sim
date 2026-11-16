@@ -785,8 +785,9 @@ static uint32_t current_region(const Colonist *colonist, const ColonistContext *
  * and finds nothing (every stack of a material taken, no free bed left, no
  * food nearby). Within reach: a step costs at least PATH_MIN_TILE_COST, so
  * nothing farther than max_cost / PATH_MIN_TILE_COST tiles in a straight or
- * diagonal line can be reached. True without up-to-date regions: search
- * anyway.
+ * diagonal line can be reached, nor more than max_cost / (MAP_CLIMB_COST *
+ * PATH_MIN_TILE_COST) levels up or down. True without up-to-date regions:
+ * search anyway.
  */
 static bool any_tile_reachable(const ColonistContext *context, TilePos from,
                                TilePredicate predicate, void *userdata, float max_cost)
@@ -802,16 +803,25 @@ static bool any_tile_reachable(const ColonistContext *context, TilePos from,
     int x0 = from.x - reach > 0 ? from.x - reach : 0;
     int x1 = from.x + reach < map->width - 1 ? from.x + reach : map->width - 1;
     int rows = 2 * (reach < map->height ? reach : map->height) + 1;
-    /* From the row of `from` outwards: what is near is found at once. */
-    for (int step = 0; step < rows; step++) {
-        int y = row_outwards(from.y, step, map->height);
-        if (y < 0) {
+    float climbs = floorf(max_cost / (MAP_CLIMB_COST * PATH_MIN_TILE_COST));
+    int levels = climbs < (float)map->depth ? (int)climbs : map->depth;
+    /* The level of `from` first, then the others nearest first; from the row
+     * of `from` outwards: what is near is found at once. */
+    for (int level = 0; level < 2 * levels + 1; level++) {
+        int z = from.z + (level % 2 == 0 ? level / 2 : -(level + 1) / 2);
+        if (z < 0 || z >= map->depth) {
             continue;
         }
-        const uint32_t *ids = &context->regions->id[map_index(map, 0, y, from.z)];
-        for (int x = x0; x <= x1; x++) {
-            if (ids[x] == region && predicate(map, x, y, from.z, userdata)) {
-                return true;
+        for (int step = 0; step < rows; step++) {
+            int y = row_outwards(from.y, step, map->height);
+            if (y < 0) {
+                continue;
+            }
+            const uint32_t *ids = &context->regions->id[map_index(map, 0, y, z)];
+            for (int x = x0; x <= x1; x++) {
+                if (ids[x] == region && predicate(map, x, y, z, userdata)) {
+                    return true;
+                }
             }
         }
     }
@@ -3982,6 +3992,13 @@ static void walk(Colonist *colonist, const ColonistContext *context)
 {
     TilePos next = colonist->path.steps[colonist->path_index];
     float cost = map_move_cost(context->map, next.x, next.y, next.z);
+    if (next.z != colonist->z && cost > 0.0f) { /* Up or down a slope. */
+        bool open = next.z > colonist->z ? map_can_climb(context->map, colonist->x, colonist->y,
+                                                         colonist->z, next.x, next.y)
+                                         : map_can_climb(context->map, next.x, next.y, next.z,
+                                                         colonist->x, colonist->y);
+        cost = open ? cost * MAP_CLIMB_COST : 0.0f;
+    }
     if (cost <= 0.0f) {
         set_idle(colonist, context, random_idle_ticks(context->rng)); /* Path became blocked. */
         return;

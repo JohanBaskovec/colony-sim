@@ -3,8 +3,14 @@
  * (one array per layer). The map is a volume: `depth` levels of width x height
  * tiles, each level 2 m high (a storey); a tile is (x, y, z), z the level, and
  * the layers hold the levels one after the other (index (z * height + y) *
- * width + x, see map_index()). For now nothing links the levels: every map
- * function looks at one level only.
+ * width + x, see map_index()).
+ *
+ * A tile is solid (rock: a wall, or the inside of a hill), open with a floor
+ * (its terrain: soil, sand, water...) or open without a floor
+ * (TERRAIN_OPEN: the air above lower ground, where nobody can stand). One
+ * walks on floors; natural slopes lead up to the level above (see
+ * map_can_climb()). A floor or rock anywhere above a tile covers it (a
+ * natural roof).
  */
 #ifndef COLONY_CORE_MAP_H
 #define COLONY_CORE_MAP_H
@@ -29,6 +35,7 @@ typedef enum Terrain {
     TERRAIN_RICH_SOIL,
     TERRAIN_GRAVEL,
     TERRAIN_ROUGH_STONE,
+    TERRAIN_OPEN, /* No floor: open space over lower ground (impassable). */
     TERRAIN_COUNT
 } Terrain;
 
@@ -36,6 +43,7 @@ typedef enum RockType {
     ROCK_NONE = 0,
     ROCK_GRANITE,
     ROCK_SANDSTONE,
+    ROCK_EARTH, /* The inside of soft hills: dug out, it gives nothing. */
     ROCK_COUNT
 } RockType;
 
@@ -148,8 +156,15 @@ typedef struct Plant {
  * Map.build_log). */
 #define MAP_BUILD_LOG_SIZE 16
 
-/* A natural roof needs rock within this many tiles (see map_natural_roof()). */
-#define MAP_NATURAL_ROOF_REACH 3
+/* Movement cost multiplier of a step up or down a slope (see map_can_climb()). */
+#define MAP_CLIMB_COST 2.0f
+
+/* A tile of the map. */
+typedef struct TilePos {
+    int16_t x;
+    int16_t y;
+    int16_t z; /* The level. */
+} TilePos;
 
 /* One change of where one can walk. */
 typedef struct MapTopologyChange {
@@ -172,8 +187,15 @@ typedef struct Map {
     int width;
     int height;
     int depth; /* Levels, 1..MAP_MAX_LEVELS. */
+    /* The level of the plains (shown to the player as level 0; the levels
+     * below it are underground). Set by world generation, 0 by map_init(). */
+    int surface_level;
     uint8_t *terrain; /* Terrain per tile. */
     uint8_t *rock; /* RockType per tile; non-zero means a solid rock wall. */
+    /* Natural slopes: non-zero where the ground rises to the level above
+     * (see map_can_climb()). */
+    uint8_t *slope;
+    int slope_count; /* Slope tiles. */
     Plant *plants;
     /* Stones lying about each tile, that gathering takes one by one: cobbles
      * and flint nodules (on flint patches), MAP_STONES_MAX at most together.
@@ -257,8 +279,8 @@ bool plant_is_dormant(const Plant *plant);
  * stock full otherwise (food in season only). */
 void plant_settle(Plant *plant, int day_of_year);
 
-/* Allocates a map of `depth` levels filled with soil, without rock, plants
- * nor stones. */
+/* Allocates a map of `depth` levels, level 0 a floor of soil and the levels
+ * above open (TERRAIN_OPEN), without rock, slopes, plants nor stones. */
 bool map_init(Map *map, int width, int height, int depth);
 void map_free(Map *map);
 
@@ -270,6 +292,12 @@ static inline bool map_in_bounds(const Map *map, int x, int y, int z)
 static inline size_t map_index(const Map *map, int x, int y, int z)
 {
     return ((size_t)z * (size_t)map->height + (size_t)y) * (size_t)map->width + (size_t)x;
+}
+
+/* Whether a tile index (in bounds) is open space: no rock and no floor. */
+static inline bool map_is_open_at(const Map *map, size_t index)
+{
+    return map->rock[index] == 0 && map->terrain[index] == TERRAIN_OPEN;
 }
 
 /* Tiles of one level. */
@@ -302,6 +330,7 @@ static inline void map_tile_of(const Map *map, size_t index, int *x, int *y, int
  */
 void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain);
 void map_set_rock(Map *map, int x, int y, int z, RockType rock);
+void map_set_slope(Map *map, int x, int y, int z, bool slope);
 void map_topology_changed(Map *map);
 
 /* Same rule for structures (a wall blocks movement, a door slows it). The
@@ -357,19 +386,42 @@ void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality
  * that blocks movement) or rock within ROOF_SUPPORT_RANGE tiles. */
 bool map_roof_supported(const Map *map, int x, int y, int z);
 
-/*
- * Whether rock covers the tile: an open tile with rock at most 3 tiles away
- * in at least 6 of the 8 directions (inside a cave, under an overhang).
- * docs/KNOWLEDGE.md §10.
- */
+/* Whether something natural covers the tile: a tile without rock with a
+ * floor or rock somewhere above it (a cave, a gallery dug into a hill). */
 bool map_natural_roof(const Map *map, int x, int y, int z);
 
 /* A built roof or a natural one. */
 bool map_is_roofed(const Map *map, int x, int y, int z);
 
-/* False when out of bounds, on impassable terrain, on a rock wall or on a
- * structure that blocks movement. */
+/* False when out of bounds, on impassable terrain (deep water, no floor), on
+ * a rock wall or on a structure that blocks movement. */
 bool map_is_passable(const Map *map, int x, int y, int z);
+
+/* Whether the tile has a floor (its terrain is not TERRAIN_OPEN; false out
+ * of bounds). Rock tiles have one under the rock. */
+bool map_has_floor(const Map *map, int x, int y, int z);
+
+/* Open space: in bounds, no rock and no floor. */
+bool map_is_open(const Map *map, int x, int y, int z);
+
+/* Whether a natural slope rises from the tile to the level above. */
+bool map_is_slope(const Map *map, int x, int y, int z);
+
+/* Whether one can walk from (x, y, z) up to the orthogonal neighbor
+ * (nx, ny, z + 1): (x, y, z) is a slope with open space above it, and one
+ * can stand on (nx, ny, z + 1). The same step taken backwards leads down.
+ * Such steps cost MAP_CLIMB_COST times the tile reached. */
+bool map_can_climb(const Map *map, int x, int y, int z, int nx, int ny);
+
+/* The tiles of other levels one can step to from (x, y, z) (up and down
+ * slopes, see map_can_climb()): at most MAP_MAX_LEVEL_LINKS, stored in `out`;
+ * returns how many. */
+#define MAP_MAX_LEVEL_LINKS 8
+int map_level_links(const Map *map, int x, int y, int z, TilePos out[MAP_MAX_LEVEL_LINKS]);
+
+/* Whether structures, stations and stockpiles can go on the tile: a floor of
+ * buildable terrain, without rock, not a slope. */
+bool map_is_buildable(const Map *map, int x, int y, int z);
 
 /* Movement cost multiplier of a tile, or 0 when impassable. */
 float map_move_cost(const Map *map, int x, int y, int z);
@@ -406,8 +458,8 @@ void map_set_stones(Map *map, int x, int y, int z, int cobbles, int flint);
 /* Takes one stone of a type from a tile; false when there is none. */
 bool map_take_stone(Map *map, int x, int y, int z, ItemType type);
 
-/* The level of the ground at (x, y), where settlers arrive and the world is
- * generated: level 0 for now (no relief yet). */
+/* The level of the ground at (x, y): the highest tile of the column one
+ * could stand on (the top of the highest rock or floor). */
 int map_ground_level(const Map *map, int x, int y);
 
 /* Shallow or deep water (false out of bounds). */

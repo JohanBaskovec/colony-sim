@@ -15,12 +15,14 @@ static const TerrainDef TERRAIN_DEFS[TERRAIN_COUNT] = {
     [TERRAIN_RICH_SOIL] = {"rich_soil", N_("terrain.rich_soil"), 1.0f, 1.4f, true, true},
     [TERRAIN_GRAVEL] = {"gravel", N_("terrain.gravel"), 1.1f, 0.5f, true, true},
     [TERRAIN_ROUGH_STONE] = {"rough_stone", N_("terrain.rough_stone"), 1.2f, 0.0f, true, true},
+    [TERRAIN_OPEN] = {"open", N_("terrain.open"), 0.0f, 0.0f, false, false},
 };
 
 static const RockDef ROCK_DEFS[ROCK_COUNT] = {
     [ROCK_NONE] = {"none", NULL, 0.0f, ITEM_NONE, 0},
     [ROCK_GRANITE] = {"granite", N_("rock.granite"), 3500.0f, ITEM_STONE_BLOCK, 10},
     [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f, ITEM_STONE_BLOCK, 12},
+    [ROCK_EARTH] = {"earth", N_("rock.earth"), 1200.0f, ITEM_NONE, 0},
 };
 
 /* Seasons' days, for the plant tables. */
@@ -284,6 +286,7 @@ bool map_init(Map *map, int width, int height, int depth)
     size_t count = (size_t)width * (size_t)height * (size_t)depth;
     map->terrain = malloc(count);
     map->rock = calloc(count, 1);
+    map->slope = calloc(count, 1);
     map->plants = calloc(count, sizeof(Plant));
     map->cobbles = calloc(count, 1);
     map->flint = calloc(count, 1);
@@ -293,14 +296,16 @@ bool map_init(Map *map, int width, int height, int depth)
     map->structure_hit_points = calloc(count, sizeof(*map->structure_hit_points));
     map->roof = calloc(count, 1);
     map->roof_quality = calloc(count, 1);
-    if (map->terrain == NULL || map->rock == NULL || map->plants == NULL ||
+    if (map->terrain == NULL || map->rock == NULL || map->slope == NULL || map->plants == NULL ||
         map->cobbles == NULL || map->flint == NULL || map->structure == NULL ||
         map->structure_part == NULL || map->structure_quality == NULL ||
         map->structure_hit_points == NULL || map->roof == NULL || map->roof_quality == NULL) {
         map_free(map);
         return false;
     }
-    memset(map->terrain, TERRAIN_SOIL, count);
+    size_t level = (size_t)width * (size_t)height;
+    memset(map->terrain, TERRAIN_SOIL, level);
+    memset(map->terrain + level, TERRAIN_OPEN, count - level);
     map->structure_counts[STRUCTURE_NONE] = (int)count;
     map->width = width;
     map->height = height;
@@ -312,6 +317,7 @@ void map_free(Map *map)
 {
     free(map->terrain);
     free(map->rock);
+    free(map->slope);
     free(map->plants);
     free(map->cobbles);
     free(map->flint);
@@ -359,12 +365,28 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
     size_t index = map_index(map, x, y, z);
     bool was_passable = map_move_cost_at(map, index) > 0.0f;
     bool was_rock = map->rock[index] != ROCK_NONE;
+    bool was_open = map_is_open_at(map, index);
     map->rock[index] = (uint8_t)rock;
     bool is_passable = map_move_cost_at(map, index) > 0.0f;
     if (was_passable != is_passable) {
         log_topology_change(map, x, y, z, is_passable);
+    } else if (was_open != map_is_open_at(map, index)) {
+        log_topology_change(map, x, y, z, false); /* Over a slope: closes or opens it. */
     } else if (was_rock != (rock != ROCK_NONE)) {
         log_build_change(map, x, y, z); /* Rock where a wall stood: rooms, warmth. */
+    }
+}
+
+void map_set_slope(Map *map, int x, int y, int z, bool slope)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return;
+    }
+    size_t index = map_index(map, x, y, z);
+    if ((map->slope[index] != 0) != slope) {
+        map->slope[index] = slope;
+        map->slope_count += slope ? 1 : -1;
+        log_topology_change(map, x, y, z, false);
     }
 }
 
@@ -556,6 +578,57 @@ bool map_is_passable(const Map *map, int x, int y, int z)
     return map_move_cost(map, x, y, z) > 0.0f;
 }
 
+bool map_has_floor(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) && map->terrain[map_index(map, x, y, z)] != TERRAIN_OPEN;
+}
+
+bool map_is_open(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) && map_is_open_at(map, map_index(map, x, y, z));
+}
+
+bool map_is_slope(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) && map->slope[map_index(map, x, y, z)] != 0;
+}
+
+bool map_can_climb(const Map *map, int x, int y, int z, int nx, int ny)
+{
+    return abs(nx - x) + abs(ny - y) == 1 && map_is_slope(map, x, y, z) &&
+           map_is_passable(map, x, y, z) && map_is_open(map, x, y, z + 1) &&
+           map_is_passable(map, nx, ny, z + 1);
+}
+
+int map_level_links(const Map *map, int x, int y, int z, TilePos out[MAP_MAX_LEVEL_LINKS])
+{
+    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+    int count = 0;
+    if (!map_is_passable(map, x, y, z)) {
+        return 0;
+    }
+    for (int d = 0; d < 4; d++) {
+        int nx = x + DX[d], ny = y + DY[d];
+        if (map_can_climb(map, x, y, z, nx, ny)) {
+            out[count++] = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)(z + 1)};
+        }
+        if (map_can_climb(map, nx, ny, z - 1, x, y)) {
+            out[count++] = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)(z - 1)};
+        }
+    }
+    return count;
+}
+
+bool map_is_buildable(const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    return map->rock[index] == ROCK_NONE && map->slope[index] == 0 &&
+           TERRAIN_DEFS[map->terrain[index]].buildable;
+}
+
 StructureType map_roof(const Map *map, int x, int y, int z)
 {
     return map_in_bounds(map, x, y, z) ? (StructureType)map->roof[map_index(map, x, y, z)]
@@ -605,32 +678,17 @@ bool map_roof_supported(const Map *map, int x, int y, int z)
     return false;
 }
 
-/* Rock within this many tiles, in at least NATURAL_ROOF_DIRECTIONS of the 8
- * directions, covers a tile (tuning). */
-#define NATURAL_ROOF_DIRECTIONS 6
-
 bool map_natural_roof(const Map *map, int x, int y, int z)
 {
     if (!map_in_bounds(map, x, y, z) || map->rock[map_index(map, x, y, z)] != ROCK_NONE) {
         return false;
     }
-    static const int DX[8] = {0, 1, 1, 1, 0, -1, -1, -1};
-    static const int DY[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
-    int covered = 0;
-    for (int i = 0; i < 8; i++) {
-        for (int step = 1; step <= MAP_NATURAL_ROOF_REACH; step++) {
-            int nx = x + DX[i] * step, ny = y + DY[i] * step;
-            if (map_in_bounds(map, nx, ny, z) &&
-                map->rock[map_index(map, nx, ny, z)] != ROCK_NONE) {
-                covered++;
-                break;
-            }
-        }
-        if (covered + (7 - i) < NATURAL_ROOF_DIRECTIONS) {
-            return false; /* Not enough directions left. */
+    for (int above = z + 1; above < map->depth; above++) {
+        if (!map_is_open_at(map, map_index(map, x, y, above))) {
+            return true;
         }
     }
-    return covered >= NATURAL_ROOF_DIRECTIONS;
+    return false;
 }
 
 bool map_is_roofed(const Map *map, int x, int y, int z)
@@ -646,10 +704,16 @@ uint64_t map_hash(const Map *map)
     if (map->depth != 1) { /* Hashes of one-level maps stay as they were. */
         hash = hash_fnv1a64(hash, &map->depth, sizeof(map->depth));
     }
+    if (map->surface_level != 0) {
+        hash = hash_fnv1a64(hash, &map->surface_level, sizeof(map->surface_level));
+    }
 
     size_t count = map_tile_count(map);
     hash = hash_fnv1a64(hash, map->terrain, count);
     hash = hash_fnv1a64(hash, map->rock, count);
+    if (map->slope_count > 0) { /* Hashes of maps without slopes stay as they were. */
+        hash = hash_fnv1a64(hash, map->slope, count);
+    }
     hash = hash_fnv1a64(hash, map->cobbles, count);
     hash = hash_fnv1a64(hash, map->flint, count);
     hash = hash_fnv1a64(hash, map->structure, count);
@@ -771,8 +835,17 @@ bool map_is_drinking_spot(const Map *map, int x, int y, int z)
 
 int map_ground_level(const Map *map, int x, int y)
 {
-    (void)map;
-    (void)x;
-    (void)y;
+    if (!map_in_bounds(map, x, y, 0)) {
+        return 0;
+    }
+    for (int z = map->depth - 1; z >= 0; z--) {
+        size_t index = map_index(map, x, y, z);
+        if (map->rock[index] != ROCK_NONE) {
+            return z + 1 < map->depth ? z + 1 : z;
+        }
+        if (map->terrain[index] != TERRAIN_OPEN) {
+            return z;
+        }
+    }
     return 0;
 }

@@ -155,8 +155,9 @@ int workstation_at(const Workstations *workstations, int x, int y, int z);
 Workstation *workstation_get(Workstations *workstations, int index);
 const Workstation *workstation_get_const(const Workstations *workstations, int index);
 
-/* Whether a station may be placed here: passable, buildable ground, no tree
- * (grass and bushes are cleared by the builder first), no station yet. */
+/* Whether a station may be placed here: passable, buildable ground (not a
+ * slope, see map_is_buildable()), no tree (grass and bushes are cleared by
+ * the builder first), no station yet. */
 bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y, int z);
 
 /* Whether a station of this type is built on a construction site (it needs

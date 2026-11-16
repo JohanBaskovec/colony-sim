@@ -5,6 +5,8 @@
 #include "core/util.h"
 
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 void worldgen_default_params(WorldGenParams *params)
 {
@@ -13,6 +15,10 @@ void worldgen_default_params(WorldGenParams *params)
     params->height = WORLDGEN_DEFAULT_SIZE;
     params->water_level = 0.24f;
     params->mountain_level = 0.75f;
+    params->hill_level = 0.55f;
+    params->level_step = 0.06f;
+    params->underground_levels = WORLDGEN_UNDERGROUND_LEVELS;
+    params->flat = false;
     params->tree_density = 0.5f;
     params->feature_scale = 48.0f;
 }
@@ -79,6 +85,10 @@ static void place_stones(Map *map, int x, int y, int z, Rng *rng, int chance)
     map_set_stones(map, x, y, z, stones - flint, flint);
 }
 
+/* The sand along the water, up to this elevation above the water level, lies
+ * in the hollow of the water, one level down (see ground_height()). */
+#define BEACH_ELEVATION 0.03f
+
 static Terrain pick_terrain(const WorldGenParams *params, float elevation, float moisture)
 {
     if (elevation < params->water_level - 0.08f) {
@@ -87,7 +97,7 @@ static Terrain pick_terrain(const WorldGenParams *params, float elevation, float
     if (elevation < params->water_level) {
         return TERRAIN_SHALLOW_WATER;
     }
-    if (elevation < params->water_level + 0.03f) {
+    if (elevation < params->water_level + BEACH_ELEVATION) {
         return TERRAIN_SAND;
     }
     if (elevation > params->mountain_level) {
@@ -202,18 +212,126 @@ static void place_cattails(Map *map, Rng *rng)
     }
 }
 
+/* Level of the ground of a column, from the plains' (0): lakes and rivers
+ * lie in hollows, their shallows and beaches one level down, deep water two;
+ * the ground rises one level every `level_step` of elevation above
+ * `hill_level`, half as fast above `mountain_level` (hills, not mountains);
+ * rock outcrops stand one level above the ground around them, behind
+ * cliffs. */
+static int ground_height(const WorldGenParams *params, float elevation, Terrain surface)
+{
+    if (params->flat) {
+        return 0;
+    }
+    if (surface == TERRAIN_DEEP_WATER) {
+        return -2;
+    }
+    if (elevation < params->water_level + BEACH_ELEVATION) { /* Shallows and beaches. */
+        return -1;
+    }
+    if (elevation < params->hill_level || params->level_step <= 0.0f) {
+        return surface == TERRAIN_ROUGH_STONE ? 1 : 0;
+    }
+    float rise = fminf(elevation, params->mountain_level) - params->hill_level;
+    if (elevation > params->mountain_level) {
+        rise += (elevation - params->mountain_level) * 0.5f;
+    }
+    int height = 1 + (int)(rise / params->level_step);
+    if (surface == TERRAIN_ROUGH_STONE) {
+        height++;
+    }
+    return height;
+}
+
+/* Whether the ground of a column is stony: its inside is rock, not earth, and
+ * no slope climbs it. */
+static bool stony_column(Terrain surface)
+{
+    return surface == TERRAIN_ROUGH_STONE || surface == TERRAIN_GRAVEL;
+}
+
+/* Natural slopes: where soft ground or shallow water rises one level to an
+ * orthogonal neighbor (not a rock outcrop), the lower tile slopes up to it.
+ * Rock outcrops, deep water and steeper rises stay cliffs. */
+static void place_slopes(Map *map, const uint8_t *heights, const uint8_t *surfaces)
+{
+    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            size_t column = (size_t)y * (size_t)map->width + (size_t)x;
+            Terrain surface = (Terrain)surfaces[column];
+            if (surface == TERRAIN_ROUGH_STONE || surface == TERRAIN_DEEP_WATER) {
+                continue; /* Shallows slope up their banks: one wades out. */
+            }
+            for (int d = 0; d < 4; d++) {
+                int nx = x + DX[d], ny = y + DY[d];
+                if (nx < 0 || ny < 0 || nx >= map->width || ny >= map->height) {
+                    continue;
+                }
+                size_t neighbor = (size_t)ny * (size_t)map->width + (size_t)nx;
+                if (heights[neighbor] == heights[column] + 1 &&
+                    surfaces[neighbor] != TERRAIN_ROUGH_STONE) {
+                    map->slope[map_index(map, x, y, heights[column])] = 1;
+                    map->slope_count++;
+                    break;
+                }
+            }
+        }
+    }
+}
+
 bool worldgen_generate(Map *map, const WorldGenParams *params)
 {
-    if (!map_init(map, params->width, params->height, 1)) { /* One level for now. */
+    memset(map, 0, sizeof(*map));
+    if (params->width < MAP_MIN_SIZE || params->height < MAP_MIN_SIZE ||
+        params->width > MAP_MAX_SIZE || params->height > MAP_MAX_SIZE) {
         return false;
     }
-
     const uint32_t elevation_seed = derive_seed(params->seed, 1);
     const uint32_t moisture_seed = derive_seed(params->seed, 2);
     const uint32_t rock_seed = derive_seed(params->seed, 3);
     const uint32_t forest_seed = derive_seed(params->seed, 4);
     const uint32_t flint_seed = derive_seed(params->seed, 5);
     const float frequency = 1.0f / (params->feature_scale > 1.0f ? params->feature_scale : 1.0f);
+
+    /* First the relief, which decides how many levels the map needs. */
+    size_t columns = (size_t)params->width * (size_t)params->height;
+    uint8_t *heights = malloc(columns);
+    uint8_t *surfaces = malloc(columns);
+    float *moistures = malloc(columns * sizeof(*moistures));
+    if (heights == NULL || surfaces == NULL || moistures == NULL) {
+        free(heights);
+        free(surfaces);
+        free(moistures);
+        return false;
+    }
+    /* The plains' level: the levels below are underground. */
+    const int surface_level = params->flat ? 0 : clampi(params->underground_levels, 2, 16);
+    int highest = 0;
+    for (int y = 0; y < params->height; y++) {
+        for (int x = 0; x < params->width; x++) {
+            size_t column = (size_t)y * (size_t)params->width + (size_t)x;
+            float nx = (float)x * frequency;
+            float ny = (float)y * frequency;
+            float elevation = stretch(noise_fbm2d(elevation_seed, nx, ny, 5, 2.0f, 0.5f));
+            float moisture =
+                stretch(noise_fbm2d(moisture_seed, nx * 1.3f, ny * 1.3f, 4, 2.0f, 0.5f));
+            Terrain surface = pick_terrain(params, elevation, moisture);
+            int height = clampi(surface_level + ground_height(params, elevation, surface), 0,
+                                MAP_MAX_LEVELS - 1);
+            heights[column] = (uint8_t)height;
+            surfaces[column] = (uint8_t)surface;
+            moistures[column] = moisture;
+            highest = height > highest ? height : highest;
+        }
+    }
+    if (!map_init(map, params->width, params->height, highest + 1)) {
+        free(heights);
+        free(surfaces);
+        free(moistures);
+        return false;
+    }
+    map->surface_level = surface_level;
 
     Rng rng;
     rng_seed(&rng, params->seed, 0x776f726c64ULL /* "world" */);
@@ -222,32 +340,51 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
 
     for (int y = 0; y < map->height; y++) {
         for (int x = 0; x < map->width; x++) {
+            size_t column = (size_t)y * (size_t)map->width + (size_t)x;
             float nx = (float)x * frequency;
             float ny = (float)y * frequency;
-            float elevation = stretch(noise_fbm2d(elevation_seed, nx, ny, 5, 2.0f, 0.5f));
-            float moisture =
-                stretch(noise_fbm2d(moisture_seed, nx * 1.3f, ny * 1.3f, 4, 2.0f, 0.5f));
+            Terrain terrain = (Terrain)surfaces[column];
+            int z = heights[column];
 
-            int z = map_ground_level(map, x, y);
+            /* The inside of the ground: earth near the surface (rock under
+             * stony ground), rock deeper down, each with a floor under it
+             * should it be dug out. */
+            float rock_noise = noise_value2d(rock_seed, nx * 2.0f, ny * 2.0f);
+            RockType stone = rock_noise < 0.5f ? ROCK_GRANITE : ROCK_SANDSTONE;
+            for (int below = 0; below < z; below++) {
+                RockType fill = stony_column(terrain) || z - below > WORLDGEN_EARTH_LEVELS
+                                    ? stone
+                                    : ROCK_EARTH;
+                size_t inside = map_index(map, x, y, below);
+                map->rock[inside] = (uint8_t)fill;
+                map->terrain[inside] =
+                    (uint8_t)(fill == ROCK_EARTH ? TERRAIN_SOIL : TERRAIN_ROUGH_STONE);
+            }
+
             size_t index = map_index(map, x, y, z);
-            Terrain terrain = pick_terrain(params, elevation, moisture);
             map->terrain[index] = (uint8_t)terrain;
             if (terrain_def(terrain)->stony) {
                 float flint =
                     stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
                 place_stones(map, x, y, z, &stone_rng, flint_chance(terrain, flint));
             }
-
             if (terrain == TERRAIN_ROUGH_STONE) {
-                float rock_noise = noise_value2d(rock_seed, nx * 2.0f, ny * 2.0f);
-                map->rock[index] = (uint8_t)(rock_noise < 0.5f ? ROCK_GRANITE : ROCK_SANDSTONE);
-                continue;
+                if (params->flat) { /* Rock walls on the only level. */
+                    map->rock[index] = (uint8_t)stone;
+                }
+                continue; /* Bare rock on the top of outcrops. */
             }
-
             float forest = stretch(noise_fbm2d(forest_seed, nx * 2.0f, ny * 2.0f, 3, 2.0f, 0.5f));
-            place_plant(map, index, &rng, params, moisture, forest);
+            place_plant(map, index, &rng, params, moistures[column], forest);
         }
     }
+    if (!params->flat) {
+        place_slopes(map, heights, surfaces);
+    }
+    free(heights);
+    free(surfaces);
+    free(moistures);
+
     Rng shore_rng; /* A stream of its own: the inland plants do not depend on the shores. */
     rng_seed(&shore_rng, params->seed, 0x73686f7265ULL /* "shore" */);
     place_cattails(map, &shore_rng);

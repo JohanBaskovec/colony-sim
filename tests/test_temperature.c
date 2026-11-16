@@ -22,6 +22,7 @@ static bool init_flat_game(Game *game, uint64_t tick)
 {
     NewGameParams params;
     game_default_params(&params);
+    params.world.flat = true; /* One level, as the tiles below expect. */
     params.world.seed = 5;
     params.world.width = 40;
     params.world.height = 40;
@@ -193,12 +194,17 @@ static void test_levels_keep_their_heat(void)
     Map map;
     Temperatures temperatures;
     REQUIRE(map_init(&map, 16, 16, 2));
-    /* A closed room of rock walls on level 1, none on level 0. */
+    /* A closed, roofed room of rock walls on level 1, none on level 0. */
     for (int i = 4; i <= 10; i++) {
         map_set_rock(&map, i, 4, 1, ROCK_GRANITE);
         map_set_rock(&map, i, 10, 1, ROCK_GRANITE);
         map_set_rock(&map, 4, i, 1, ROCK_GRANITE);
         map_set_rock(&map, 10, i, 1, ROCK_GRANITE);
+    }
+    for (int y = 5; y < 10; y++) {
+        for (int x = 5; x < 10; x++) {
+            map_set_roof(&map, x, y, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+        }
     }
     const float outdoor = 10.0f;
     REQUIRE(temperatures_init(&temperatures, &map, outdoor));
@@ -260,17 +266,9 @@ static void test_cache_follows_the_map(void)
     game_tick(&game);
     CHECK_EQ_INT(cached_kind(&game, 5, 5),
                  kind_of(TEMPERATURE_MATERIAL_AIR, TEMPERATURE_COVER_ROOFED));
-    /* Rock put around a tile, one by one, makes a natural roof over it. */
-    for (int y = 28; y <= 32; y++) {
-        for (int x = 28; x <= 32; x++) {
-            if (x != 30 || y != 30) {
-                map_set_rock(map, x, y, 0, ROCK_GRANITE);
-                game_tick(&game);
-            }
-        }
-    }
-    CHECK_EQ_INT(cached_kind(&game, 30, 30),
-                 kind_of(TEMPERATURE_MATERIAL_AIR, TEMPERATURE_COVER_NATURAL));
+    /* Rock put on a tile. */
+    map_set_rock(map, 28, 28, 0, ROCK_GRANITE);
+    game_tick(&game);
     CHECK_EQ_INT(cached_kind(&game, 28, 28),
                  kind_of(TEMPERATURE_MATERIAL_ROCK, TEMPERATURE_COVER_NATURAL));
     CHECK_NEAR(temperature_at(&game.temperatures, 28, 28, 0), TEMPERATURE_GROUND, 1e-6);
@@ -334,29 +332,74 @@ static void test_hut_keeps_the_warmth(void)
     CHECK(fabsf(inside[2]) < 6.0f);
 }
 
+/* Floors and rock above a tile cover it, and the cache follows them. */
+static void test_cover_follows_the_levels_above(void)
+{
+    Map map;
+    Temperatures temperatures;
+    REQUIRE(map_init(&map, 16, 16, 3));
+    REQUIRE(temperatures_init(&temperatures, &map, 10.0f));
+    const int open = kind_of(TEMPERATURE_MATERIAL_AIR, TEMPERATURE_COVER_OPEN);
+    const int natural = kind_of(TEMPERATURE_MATERIAL_AIR, TEMPERATURE_COVER_NATURAL);
+    size_t low = map_index(&map, 5, 5, 0), middle = map_index(&map, 5, 5, 1);
+    CHECK_EQ_INT(temperatures.kind[low], open);
+    map_set_terrain(&map, 5, 5, 2, TERRAIN_SOIL); /* A floor two levels up. */
+    temperatures_tick(&temperatures, &map, 0, 10.0f);
+    CHECK_EQ_INT(temperatures.kind[low], natural);
+    CHECK_EQ_INT(temperatures.kind[middle], natural);
+    CHECK_EQ_INT(temperatures.kind[map_index(&map, 6, 5, 0)], open);
+    map_set_terrain(&map, 5, 5, 2, TERRAIN_OPEN);
+    map_set_rock(&map, 5, 5, 1, ROCK_GRANITE); /* Rock right above. */
+    temperatures_tick(&temperatures, &map, 1, 10.0f);
+    CHECK_EQ_INT(temperatures.kind[low], natural);
+    CHECK_EQ_INT(temperatures.kind[middle],
+                 kind_of(TEMPERATURE_MATERIAL_ROCK, TEMPERATURE_COVER_NATURAL));
+    map_set_rock(&map, 5, 5, 1, ROCK_NONE);
+    temperatures_tick(&temperatures, &map, 2, 10.0f);
+    CHECK_EQ_INT(temperatures.kind[low], open);
+    /* Open space under the sky is the outdoor air, whatever happens. */
+    CHECK_EQ_INT(temperatures.kind[middle],
+                 kind_of(TEMPERATURE_MATERIAL_OPEN, TEMPERATURE_COVER_OPEN));
+    temperatures_add_heat(&temperatures, 5, 5, 1, 30.0f);
+    for (uint64_t tick = 0; tick < TEMPERATURE_SWEEP_TICKS; tick++) {
+        temperatures_tick(&temperatures, &map, tick, -3.0f);
+    }
+    CHECK_NEAR(temperature_at(&temperatures, 5, 5, 1), -3.0f, 1e-6);
+    temperatures_free(&temperatures);
+    map_free(&map);
+}
+
+/* A cave dug into a hill stays near the ground's temperature on a cold day. */
 static void test_cave_stays_mild(void)
 {
-    Game game;
-    uint64_t night = mid_season(SEASON_WINTER) + 3 * TICKS_PER_HOUR;
-    REQUIRE(init_flat_game(&game, night));
-    /* A rock mass with a hollow of 3 × 3 tiles in it, and a passage out. */
+    Map map;
+    Temperatures temperatures;
+    REQUIRE(map_init(&map, 40, 40, 2));
+    /* The hill: rock on level 0 under a floor on level 1, with a hollow of
+     * 3 × 3 tiles in it and a passage out. */
     for (int y = 10; y <= 24; y++) {
         for (int x = 10; x <= 24; x++) {
             bool hollow = x >= 16 && x <= 18 && y >= 16 && y <= 18;
             bool passage = x == 17 && y > 18;
+            map_set_terrain(&map, x, y, 1, TERRAIN_SOIL);
             if (!hollow && !passage) {
-                map_set_rock(&game.map, x, y, 0, ROCK_GRANITE);
+                map_set_rock(&map, x, y, 0, ROCK_GRANITE);
             }
         }
     }
-    CHECK_EQ_INT(temperature_cover(&game.map, 17, 17, 0), TEMPERATURE_COVER_NATURAL);
-    run_hours(&game, 24.0f);
-    float outdoor = game_outdoor_temperature(&game);
-    CHECK(outdoor < 2.0f);
-    float cave = temperature_at(&game.temperatures, 17, 16, 0);
+    CHECK_EQ_INT(temperature_cover(&map, 17, 17, 0), TEMPERATURE_COVER_NATURAL);
+    CHECK_EQ_INT(temperature_cover(&map, 17, 26, 0), TEMPERATURE_COVER_OPEN);
+    const float outdoor = -6.0f;
+    REQUIRE(temperatures_init(&temperatures, &map, outdoor));
+    for (uint64_t tick = 0; tick < 24 * (uint64_t)TICKS_PER_HOUR; tick++) {
+        temperatures_tick(&temperatures, &map, tick, outdoor);
+    }
+    float cave = temperature_at(&temperatures, 17, 16, 0);
     CHECK(cave > outdoor + 5.0f);
     CHECK(cave <= TEMPERATURE_GROUND + 0.01f);
-    game_shutdown(&game);
+    CHECK_NEAR(temperature_at(&temperatures, 17, 30, 0), outdoor, 0.5); /* Outside. */
+    temperatures_free(&temperatures);
+    map_free(&map);
 }
 
 static void test_sleep_temperature_factor(void)
@@ -574,6 +617,7 @@ int main(void)
     RUN_TEST(test_levels_keep_their_heat);
     RUN_TEST(test_hearth_warms_around_it);
     RUN_TEST(test_hut_keeps_the_warmth);
+    RUN_TEST(test_cover_follows_the_levels_above);
     RUN_TEST(test_cave_stays_mild);
     RUN_TEST(test_sleep_temperature_factor);
     RUN_TEST(test_cold_sleep_is_longer);

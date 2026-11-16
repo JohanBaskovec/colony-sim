@@ -12,7 +12,8 @@
  * in between), and with the outdoor air at a rate set by what covers it:
  * open sky (fast), a built roof (slow), a natural roof (none: it slowly
  * takes the temperature of the ground instead). Rock stays at the
- * temperature of the ground, TEMPERATURE_GROUND. Burning hearths add heat
+ * temperature of the ground, TEMPERATURE_GROUND; open space under the sky
+ * (the air over lower ground, see core/map.h) is the outdoor air. Burning hearths add heat
  * (temperatures_add_heat()). So a walled and roofed hut keeps the warmth of
  * its fire, a walled yard open to the sky does not, and a cave stays mild
  * all year.
@@ -61,6 +62,8 @@ typedef enum TemperatureMaterial {
     TEMPERATURE_MATERIAL_WALL,
     TEMPERATURE_MATERIAL_DOOR,
     TEMPERATURE_MATERIAL_ROCK,
+    /* Open space under the sky (core/map.h): the outdoor air, as it is. */
+    TEMPERATURE_MATERIAL_OPEN,
     TEMPERATURE_MATERIAL_COUNT
 } TemperatureMaterial;
 
@@ -88,6 +91,13 @@ typedef struct Temperatures {
     uint8_t *kind;
     float *edge_east;
     float *edge_south;
+    /* Per tile, the rate of exchange with the outdoor air: by its cover,
+     * plus each side open to open space (0 for rock and open space). */
+    float *exposure;
+    /* One bit per tile: whether the sweep works it out (all but rock and
+     * open space). */
+    uint64_t *active;
+    float outdoor; /* The outdoor air at the last tick: open space's. */
     float *buffers[3]; /* Allocations behind celsius, edge_east, edge_south. */
     uint32_t topology_revision; /* The map revisions the caches were built for. */
     uint32_t build_revision;

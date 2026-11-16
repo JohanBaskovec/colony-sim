@@ -12,7 +12,23 @@
 
 #include <SDL3/SDL.h>
 
+/* The ground of the level shown (Camera.level): terrain, rock, slopes, the
+ * edges of drops. Open space is left as it is: the levels below show there
+ * (render_below_begin()). */
 void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera);
+
+/*
+ * The levels below the one shown, seen through open space: blurred and
+ * darker with depth. render_below_begin() returns false when there is no
+ * open space in view (nothing to draw); otherwise what is drawn until
+ * render_below_end() goes to a smaller offscreen image, which
+ * render_below_end() stretches over the screen. Draw the deepest level first
+ * and call render_below_shade() after each level: it darkens what is already
+ * drawn.
+ */
+bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera);
+void render_below_shade(SDL_Renderer *renderer);
+void render_below_end(SDL_Renderer *renderer);
 
 /* Dark spots on dirty tiles. */
 void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera);

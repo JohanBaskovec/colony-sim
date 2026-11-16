@@ -239,7 +239,7 @@ typedef struct GatherZones {
 bool gather_zones_init(GatherZones *zones, int width, int height, int depth);
 void gather_zones_free(GatherZones *zones);
 
-/* Whether a zone may cover a tile: open ground (no rock wall, no built
+/* Whether a zone may cover a tile: ground (a floor, no rock wall, no built
  * wall) or shallow water (cattails grow there), not deep water. */
 bool gather_zone_can_cover(const Map *map, int x, int y, int z);
 

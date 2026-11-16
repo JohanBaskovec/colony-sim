@@ -1,4 +1,5 @@
 #include "core/pathfinding.h"
+#include "core/worldgen.h"
 
 #include "test_framework.h"
 
@@ -29,7 +30,8 @@ static void wall_column(Map *map, int x, int y0, int y1)
     }
 }
 
-/* Every step is adjacent to the previous one, passable, and the path ends at `goal`. */
+/* Every step is adjacent to the previous one (or up or down a slope from
+ * it), passable, and the path ends at `goal`. */
 static void check_path_is_valid(const Map *map, TilePos start, TilePos goal, const Path *path)
 {
     TilePos previous = start;
@@ -38,9 +40,16 @@ static void check_path_is_valid(const Map *map, TilePos start, TilePos goal, con
         CHECK(abs(step.x - previous.x) <= 1 && abs(step.y - previous.y) <= 1);
         CHECK(!(step.x == previous.x && step.y == previous.y));
         CHECK(map_is_passable(map, step.x, step.y, step.z));
+        if (step.z == previous.z + 1) {
+            CHECK(map_can_climb(map, previous.x, previous.y, previous.z, step.x, step.y));
+        } else if (step.z == previous.z - 1) {
+            CHECK(map_can_climb(map, step.x, step.y, step.z, previous.x, previous.y));
+        } else {
+            CHECK_EQ_INT(step.z, previous.z);
+        }
         previous = step;
     }
-    CHECK(previous.x == goal.x && previous.y == goal.y);
+    CHECK(previous.x == goal.x && previous.y == goal.y && previous.z == goal.z);
 }
 
 static void test_straight_and_diagonal_paths(void)
@@ -205,39 +214,109 @@ static void test_reachable_count(void)
     cleanup(&map, &finder, &path);
 }
 
-/* Searches stay on the level they start from (nothing links the levels yet). */
-static void test_searches_stay_on_their_level(void)
+/* Plains on level 0 over x < 8; a hill over x >= 8: earth on level 0 under
+ * a floor on level 1. */
+static void make_hill(Map *map)
+{
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 8; x < map->width; x++) {
+            map_set_rock(map, x, y, 0, ROCK_EARTH);
+            map_set_terrain(map, x, y, 1, TERRAIN_SOIL);
+        }
+    }
+}
+
+/* Slopes lead up and down, one level at a time, orthogonally. */
+static void test_paths_climb_slopes(void)
 {
     Map map;
     Pathfinder finder;
     Path path = {0};
     TilePos found;
-    REQUIRE(map_init(&map, 16, 16, 3));
-    REQUIRE(pathfinder_init(&finder, 16, 16, 3));
-    TilePos start = {2, 2, 1}, goal = {12, 9, 1};
-    /* A wall on level 1 only: the path goes around it. */
-    for (int y = 0; y < 14; y++) {
-        map.rock[map_index(&map, 7, y, 1)] = ROCK_GRANITE;
-    }
+    REQUIRE(map_init(&map, 16, 16, 2));
+    REQUIRE(pathfinder_init(&finder, 16, 16, 2));
+    make_hill(&map);
+    TilePos start = {2, 5, 0}, goal = {12, 5, 1};
+    CHECK(!pathfinder_find(&finder, &map, start, goal, PATH_NO_COST_LIMIT, &path)); /* A cliff. */
+    CHECK(!pathfinder_find(&finder, &map, start, (TilePos){2, 5, 1}, PATH_NO_COST_LIMIT,
+                           &path)); /* Open space. */
+
+    map_set_slope(&map, 7, 9, 0, true);
     REQUIRE(pathfinder_find(&finder, &map, start, goal, PATH_NO_COST_LIMIT, &path));
     check_path_is_valid(&map, start, goal, &path);
+    CHECK(path.steps[path.count - 1].z == 1);
+    /* Up to the slope (1 straight and 4 diagonal moves), the climb, then 4
+     * diagonal moves on the hilltop. */
+    CHECK_NEAR(finder.last_cost, 1.0 + 8.0 * SQRT2 + MAP_CLIMB_COST, 1e-3);
+    TilePos previous = start;
     for (int i = 0; i < path.count; i++) {
-        CHECK_EQ_INT(path.steps[i].z, 1);
+        TilePos step = path.steps[i];
+        if (step.z != previous.z) { /* The climb: orthogonal, from the slope. */
+            CHECK(previous.x == 7 && previous.y == 9 && previous.z == 0);
+            CHECK(step.x == 8 && step.y == 9 && step.z == 1);
+        }
+        previous = step;
     }
-    CHECK(finder.last_cost > 10.0f + 7.0f * (float)(SQRT2 - 1.0)); /* The detour. */
-    /* No path to another level. */
-    CHECK(!pathfinder_find(&finder, &map, start, (TilePos){12, 9, 2}, PATH_NO_COST_LIMIT,
-                           &path));
-    /* The nearest tree on the start's level, not the one just below. */
-    map.plants[map_index(&map, 3, 2, 0)].type = PLANT_TREE;
-    map.plants[map_index(&map, 2, 6, 1)].type = PLANT_TREE;
-    REQUIRE(pathfinder_find_nearest(&finder, &map, start, has_tree, NULL, PATH_NO_COST_LIMIT,
+    /* Down again, the same way. */
+    REQUIRE(pathfinder_find(&finder, &map, goal, start, PATH_NO_COST_LIMIT, &path));
+    check_path_is_valid(&map, goal, start, &path);
+    CHECK_NEAR(finder.last_cost, 1.0 + 8.0 * SQRT2 + MAP_CLIMB_COST, 1e-3);
+
+    /* The nearest tree, down on the plains. */
+    map.plants[map_index(&map, 3, 9, 0)].type = PLANT_TREE;
+    REQUIRE(pathfinder_find_nearest(&finder, &map, goal, has_tree, NULL, PATH_NO_COST_LIMIT,
                                     &path, &found));
-    CHECK(found.x == 2 && found.y == 6 && found.z == 1);
-    /* One level: 256 tiles reachable, not 768. */
-    CHECK_EQ_UINT(pathfinder_reachable_count(&finder, &map, (TilePos){0, 0, 2},
-                                             PATH_NO_COST_LIMIT),
-                  256);
+    CHECK(found.x == 3 && found.y == 9 && found.z == 0);
+    /* The plains and the hilltop: 128 tiles each. */
+    CHECK_EQ_UINT(pathfinder_reachable_count(&finder, &map, start, PATH_NO_COST_LIMIT), 256);
+
+    /* Rock over the slope: no way up. */
+    map_set_rock(&map, 7, 9, 1, ROCK_GRANITE);
+    CHECK(!pathfinder_find(&finder, &map, start, goal, PATH_NO_COST_LIMIT, &path));
+    CHECK_EQ_UINT(pathfinder_reachable_count(&finder, &map, start, PATH_NO_COST_LIMIT), 128);
+    cleanup(&map, &finder, &path);
+}
+
+static bool is_tile(const Map *map, int x, int y, int z, void *userdata)
+{
+    (void)map;
+    const TilePos *goal = userdata;
+    return x == goal->x && y == goal->y && z == goal->z;
+}
+
+/* On hilly generated maps, A* finds paths as cheap as a plain Dijkstra search
+ * (its heuristic never overestimates, climbs included). */
+static void test_shortest_paths_over_hills(void)
+{
+    WorldGenParams params;
+    worldgen_default_params(&params);
+    params.seed = 3;
+    params.width = 64;
+    params.height = 64;
+    Map map;
+    Pathfinder finder;
+    Path path = {0};
+    REQUIRE(worldgen_generate(&map, &params));
+    REQUIRE(pathfinder_init(&finder, 64, 64, map.depth));
+    int compared = 0, climbing = 0;
+    for (int i = 0; i < 400 && compared < 60; i++) {
+        TilePos start = {(int16_t)(i * 7 % 64), (int16_t)(i * 13 % 64), 0};
+        TilePos goal = {(int16_t)(i * 29 % 64), (int16_t)(i * 31 % 64), 0};
+        start.z = (int16_t)map_ground_level(&map, start.x, start.y);
+        goal.z = (int16_t)map_ground_level(&map, goal.x, goal.y);
+        if (!pathfinder_find(&finder, &map, start, goal, PATH_NO_COST_LIMIT, &path)) {
+            continue;
+        }
+        check_path_is_valid(&map, start, goal, &path);
+        float cost = finder.last_cost;
+        REQUIRE(pathfinder_find_nearest(&finder, &map, start, is_tile, &goal, PATH_NO_COST_LIMIT,
+                                        NULL, NULL));
+        CHECK_NEAR(cost, finder.last_cost, 1e-3);
+        compared++;
+        climbing += start.z != goal.z;
+    }
+    CHECK(compared >= 30);
+    CHECK(climbing > 0);
     cleanup(&map, &finder, &path);
 }
 
@@ -266,7 +345,8 @@ int main(void)
     RUN_TEST(test_cost_limit);
     RUN_TEST(test_find_nearest_matching_tile);
     RUN_TEST(test_reachable_count);
-    RUN_TEST(test_searches_stay_on_their_level);
+    RUN_TEST(test_paths_climb_slopes);
+    RUN_TEST(test_shortest_paths_over_hills);
     RUN_TEST(test_many_searches_reuse_memory);
     return test_summary();
 }

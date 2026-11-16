@@ -21,7 +21,21 @@ static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
     [ROCK_NONE] = {0, 0, 0, 0},
     [ROCK_GRANITE] = {92, 92, 100, 255},
     [ROCK_SANDSTONE] = {150, 118, 88, 255},
+    [ROCK_EARTH] = {104, 78, 54, 255},
 };
+
+/* Levels below the one shown (render_below_begin()): drawn this many times
+ * smaller, then stretched back with smoothing (a blur), each level deeper
+ * darkened by BELOW_SHADE more. */
+#define BELOW_SCALE 3
+static const SDL_Color BELOW_SHADE = {14, 16, 24, 70};
+static const SDL_Color BELOW_ABYSS = {14, 16, 24, 255}; /* Deeper than drawn. */
+/* Edges of the ground over a drop to the levels below. */
+static const SDL_Color DROP_EDGE_COLOR = {16, 12, 8, 120};
+
+/* The offscreen image of the levels below, and the render scale it replaced. */
+static SDL_Texture *below_texture;
+static float below_saved_scale_x = 1.0f, below_saved_scale_y = 1.0f;
 
 static const SDL_Color GRASS_COLOR = {92, 138, 60, 255};
 static const SDL_Color TREE_COLOR = {34, 88, 40, 255};
@@ -213,6 +227,10 @@ static void batch_gradient_quad(SDL_Renderer *renderer, const SDL_Color colors[4
 
 void render_shutdown(void)
 {
+    if (below_texture != NULL) {
+        SDL_DestroyTexture(below_texture);
+        below_texture = NULL;
+    }
     SDL_free(light_corners);
     light_corners = NULL;
     light_corner_capacity = 0;
@@ -229,6 +247,107 @@ static SDL_FRect inset(const SDL_FRect *tile, float fraction)
     SDL_FRect rect = {tile->x + floorf((tile->w - size) * 0.5f),
                       tile->y + floorf((tile->h - size) * 0.5f), size, size};
     return rect;
+}
+
+/* Slopes lighter towards the higher ground they lead up to; a dark edge on
+ * each side of the tile over a drop to the levels below. */
+static void render_ground_shape(SDL_Renderer *renderer, const Map *map, int x, int y, int z,
+                                const SDL_FRect *tile)
+{
+    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+    if (map_is_slope(map, x, y, z)) {
+        for (int d = 0; d < 4; d++) {
+            if (!map_can_climb(map, x, y, z, x + DX[d], y + DY[d])) {
+                continue;
+            }
+            const SDL_Color low = {0, 0, 0, 40}, high = {255, 250, 235, 50};
+            /* Corners clockwise from the top left: the high side lit. */
+            SDL_Color corners[4] = {low, low, low, low};
+            if (DX[d] > 0) {
+                corners[1] = corners[2] = high;
+            } else if (DX[d] < 0) {
+                corners[0] = corners[3] = high;
+            } else if (DY[d] > 0) {
+                corners[2] = corners[3] = high;
+            } else {
+                corners[0] = corners[1] = high;
+            }
+            batch_gradient_quad(renderer, corners, *tile);
+        }
+    }
+    float edge = SDL_max(1.0f, floorf(tile->w * 0.08f));
+    for (int d = 0; d < 4; d++) {
+        if (!map_is_open(map, x + DX[d], y + DY[d], z)) {
+            continue;
+        }
+        SDL_FRect strip = *tile;
+        if (DX[d] > 0) {
+            strip.x += strip.w - edge;
+        }
+        if (DY[d] > 0) {
+            strip.y += strip.h - edge;
+        }
+        if (DX[d] != 0) {
+            strip.w = edge;
+        } else {
+            strip.h = edge;
+        }
+        batch_quad(renderer, DROP_EDGE_COLOR, &strip);
+    }
+}
+
+bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera)
+{
+    if (camera->level <= 0 || camera->level >= map->depth) {
+        return false;
+    }
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    bool open = false;
+    for (int y = visible.y0; y < visible.y1 && !open; y++) {
+        for (int x = visible.x0; x < visible.x1 && !open; x++) {
+            open = map_is_open(map, x, y, camera->level);
+        }
+    }
+    int width = (int)ceilf(camera->viewport_width / (float)BELOW_SCALE);
+    int height = (int)ceilf(camera->viewport_height / (float)BELOW_SCALE);
+    if (!open || width <= 0 || height <= 0) {
+        return false;
+    }
+    if (below_texture != NULL && (below_texture->w != width || below_texture->h != height)) {
+        SDL_DestroyTexture(below_texture);
+        below_texture = NULL;
+    }
+    if (below_texture == NULL) {
+        below_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+                                          SDL_TEXTUREACCESS_TARGET, width, height);
+        if (below_texture == NULL) {
+            return false;
+        }
+        SDL_SetTextureScaleMode(below_texture, SDL_SCALEMODE_LINEAR);
+    }
+    SDL_GetRenderScale(renderer, &below_saved_scale_x, &below_saved_scale_y);
+    if (!SDL_SetRenderTarget(renderer, below_texture)) {
+        return false;
+    }
+    SDL_SetRenderScale(renderer, below_saved_scale_x / (float)BELOW_SCALE,
+                       below_saved_scale_y / (float)BELOW_SCALE);
+    SDL_SetRenderDrawColor(renderer, BELOW_ABYSS.r, BELOW_ABYSS.g, BELOW_ABYSS.b, 255);
+    SDL_RenderClear(renderer);
+    return true;
+}
+
+void render_below_shade(SDL_Renderer *renderer)
+{
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, BELOW_SHADE.r, BELOW_SHADE.g, BELOW_SHADE.b, BELOW_SHADE.a);
+    SDL_RenderFillRect(renderer, NULL);
+}
+
+void render_below_end(SDL_Renderer *renderer)
+{
+    SDL_SetRenderTarget(renderer, NULL);
+    SDL_SetRenderScale(renderer, below_saved_scale_x, below_saved_scale_y);
+    SDL_RenderTexture(renderer, below_texture, NULL, NULL);
 }
 
 void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
@@ -252,6 +371,9 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
             size_t index = map_index(map, x, y, z);
             int variation = tile_variation(x, y);
 
+            if (map_is_open_at(map, index)) {
+                continue; /* The levels below show (render_below_begin()). */
+            }
             if (map->rock[index] != ROCK_NONE) {
                 batch_quad(renderer, shade(ROCK_COLORS[map->rock[index]], variation), &tile);
                 continue;
@@ -263,7 +385,7 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
                 ground = mix(ground, GRASS_COLOR, 0.35f + 0.5f * plant->growth);
             }
             batch_quad(renderer, shade(ground, variation), &tile);
-
+            render_ground_shape(renderer, map, x, y, z, &tile);
         }
     }
     batch_flush(renderer);
@@ -344,6 +466,7 @@ void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *c
         for (int x = visible.x0; x <= visible.x1; x++) {
             bool snowy = x < visible.x1 && !map_is_water(map, x, y, z) &&
                          map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
+                         map_has_floor(map, x, y, z) &&
                          temperature_cover(map, x, y, z) == TEMPERATURE_COVER_OPEN;
             if (snowy && run < 0) {
                 run = x;
@@ -1422,6 +1545,9 @@ void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *
     }
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
+            if (map_is_open(&game->map, x, y, z)) {
+                continue; /* Nothing here: the levels below show. */
+            }
             float celsius = temperature_at(temperatures, x, y, z);
             if (burning && near_fire(workstations, x, y, z)) {
                 celsius += hearths_radiant_warmth(workstations, &game->map, x, y, z);

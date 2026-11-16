@@ -2,10 +2,12 @@
  * Grid pathfinding: A* towards a goal tile, or Dijkstra towards the nearest
  * tile matching a predicate (e.g. "nearest edible plant").
  *
- * Movement is 8-directional. Entering a tile costs map_move_cost() (times
- * sqrt(2) diagonally); diagonal moves may not cut corners next to impassable
- * tiles. A Pathfinder owns reusable scratch memory sized for one map, so
- * searches do not allocate (except when the open list grows).
+ * Movement is 8-directional on a level. Entering a tile costs map_move_cost()
+ * (times sqrt(2) diagonally); diagonal moves may not cut corners next to
+ * impassable tiles. Slopes lead to the levels above and below (orthogonal
+ * steps only, MAP_CLIMB_COST times the tile reached, see map_can_climb()).
+ * A Pathfinder owns reusable scratch memory sized for one map, so searches
+ * do not allocate (except when the open list grows).
  */
 #ifndef COLONY_CORE_PATHFINDING_H
 #define COLONY_CORE_PATHFINDING_H
@@ -19,12 +21,6 @@
 /* Cheapest possible tile cost: keeps the A* heuristic admissible. */
 #define PATH_MIN_TILE_COST 1.0f
 #define PATH_NO_COST_LIMIT 1e30f
-
-typedef struct TilePos {
-    int16_t x;
-    int16_t y;
-    int16_t z; /* The level. */
-} TilePos;
 
 /* Sequence of tiles to walk through: excludes the start, ends at the destination. */
 typedef struct Path {

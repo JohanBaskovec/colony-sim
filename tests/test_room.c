@@ -115,12 +115,14 @@ static void test_natural_roof(void)
 {
     Map map;
     Rooms rooms;
-    REQUIRE(map_init(&map, 32, 32, 1));
-    REQUIRE(rooms_init(&rooms, 32, 32, 1));
-    /* Solid rock with a 3 × 3 cave and a 3-wide gallery leading out east. */
+    REQUIRE(map_init(&map, 32, 32, 3));
+    REQUIRE(rooms_init(&rooms, 32, 32, 3));
+    /* A hill: solid rock on level 0 under a floor on level 1, with a 3 × 3
+     * cave dug into it. */
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {
             map.rock[map_index(&map, x, y, 0)] = ROCK_GRANITE;
+            map.terrain[map_index(&map, x, y, 1)] = TERRAIN_SOIL;
         }
     }
     for (int y = 10; y <= 12; y++) {
@@ -131,9 +133,10 @@ static void test_natural_roof(void)
     map_topology_changed(&map);
     CHECK(!map_natural_roof(&map, 9, 9, 0)); /* Rock itself. */
     CHECK(!map_natural_roof(&map, -1, 0, 0));
+    CHECK(!map_natural_roof(&map, 11, 11, 1)); /* The hilltop: open sky. */
     for (int y = 10; y <= 12; y++) {
         for (int x = 10; x <= 12; x++) {
-            CHECK(map_natural_roof(&map, x, y, 0)); /* Corners too. */
+            CHECK(map_natural_roof(&map, x, y, 0));
             CHECK(map_is_roofed(&map, x, y, 0));
         }
     }
@@ -147,13 +150,20 @@ static void test_natural_roof(void)
     for (int y = 20; y < 32; y++) {
         for (int x = 0; x < 32; x++) {
             map.rock[map_index(&map, x, y, 0)] = ROCK_NONE;
+            map.terrain[map_index(&map, x, y, 1)] = TERRAIN_OPEN;
         }
     }
+    map_topology_changed(&map);
     CHECK(!map_natural_roof(&map, 16, 20, 0));
     CHECK(!map_natural_roof(&map, 16, 25, 0));
+    /* Anything higher up covers too: rock two levels up. */
+    map.rock[map_index(&map, 16, 25, 2)] = ROCK_SANDSTONE;
+    CHECK(map_natural_roof(&map, 16, 25, 0));
+    CHECK(map_natural_roof(&map, 16, 25, 1));
     /* A built roof counts as well. */
-    map_set_roof(&map, 16, 25, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
-    CHECK(map_is_roofed(&map, 16, 25, 0));
+    CHECK(!map_is_roofed(&map, 17, 25, 0));
+    map_set_roof(&map, 17, 25, 0, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK(map_is_roofed(&map, 17, 25, 0));
     rooms_free(&rooms);
     map_free(&map);
 }

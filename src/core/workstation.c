@@ -87,7 +87,7 @@ const Workstation *workstation_get_const(const Workstations *workstations, int i
 bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y, int z)
 {
     return in_bounds(workstations, x, y, z) && map_is_passable(map, x, y, z) &&
-           terrain_def((Terrain)map->terrain[map_index(map, x, y, z)])->buildable &&
+           map_is_buildable(map, x, y, z) &&
            !map_plant_blocks_building(map, x, y, z) &&
            workstation_at(workstations, x, y, z) == WORKSTATION_NONE;
 }

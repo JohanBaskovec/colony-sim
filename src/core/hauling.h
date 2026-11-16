@@ -31,8 +31,8 @@ typedef struct HaulWorld {
      * walk to in haul_any_job_possible(); NULL (or REGION_NONE): no check. */
     const Regions *regions;
     uint32_t region;
-    /* The hauler's row, looked around first, and its level, the only one
-     * haul_any_job_possible() looks at (nothing links the levels yet). */
+    /* The hauler's row and level, looked around first by
+     * haul_any_job_possible(). */
     int from_y;
     int from_z;
 } HaulWorld;

@@ -3,6 +3,8 @@
 
 #include "test_framework.h"
 
+#include <stdlib.h>
+
 /* 16 x 16 soil map split in two by a rock wall at x = 6, with deep water in
  * the top left corner. */
 static bool init_split_map(Map *map)
@@ -52,35 +54,59 @@ static void test_regions_follow_walls(void)
     map_free(&map);
 }
 
-/* Each level has regions of its own (nothing links the levels yet). */
-static void test_regions_of_each_level(void)
+/* A hill: earth under a floor on level 1 over x >= 8, plains on level 0
+ * elsewhere (open space above them). */
+static bool init_hill_map(Map *map)
+{
+    if (!map_init(map, 16, 16, 2)) {
+        return false;
+    }
+    for (int y = 0; y < 16; y++) {
+        for (int x = 8; x < 16; x++) {
+            map_set_rock(map, x, y, 0, ROCK_EARTH);
+            map_set_terrain(map, x, y, 1, TERRAIN_SOIL);
+        }
+    }
+    return true;
+}
+
+/* Levels are linked by slopes only. */
+static void test_regions_across_levels(void)
 {
     Map map;
     Regions regions;
-    REQUIRE(map_init(&map, 16, 16, 2));
+    REQUIRE(init_hill_map(&map));
     REQUIRE(regions_init(&regions, 16, 16, 2));
-    for (int y = 0; y < 16; y++) {
-        map_set_rock(&map, 6, y, 0, ROCK_GRANITE);
-    }
-    map_set_terrain(&map, 12, 12, 1, TERRAIN_DEEP_WATER);
+    map_set_terrain(&map, 12, 12, 1, TERRAIN_SHALLOW_WATER);
     regions_update(&regions, &map);
     CHECK(regions_current(&regions, &map));
-    CHECK_EQ_UINT(regions.count, 3);
-    uint32_t left = regions_at(&regions, &map, 2, 2, 0);
-    uint32_t right = regions_at(&regions, &map, 9, 2, 0);
-    uint32_t above = regions_at(&regions, &map, 2, 2, 1);
-    CHECK(left != right && above != left && above != right);
-    CHECK_EQ_UINT(regions_at(&regions, &map, 9, 2, 1), above); /* No wall up there. */
-    CHECK(!regions_connected(&regions, &map, (TilePos){2, 2, 0}, (TilePos){2, 2, 1}));
-    /* Water to drink on level 1 only. */
-    CHECK(regions_has_drinking_spot(&regions, &map, above));
-    CHECK(!regions_has_drinking_spot(&regions, &map, left));
-    /* A tile opened on level 1 joins the region of level 1. */
-    map_set_rock(&map, 3, 3, 1, ROCK_GRANITE);
+    CHECK_EQ_UINT(regions.count, 2); /* The plains and the hilltop: a cliff between. */
+    uint32_t plains = regions_at(&regions, &map, 2, 2, 0);
+    uint32_t hilltop = regions_at(&regions, &map, 12, 2, 1);
+    CHECK(plains != REGION_NONE && hilltop != REGION_NONE && plains != hilltop);
+    CHECK_EQ_UINT(regions_at(&regions, &map, 2, 2, 1), REGION_NONE); /* Open space. */
+    CHECK_EQ_UINT(regions_at(&regions, &map, 12, 2, 0), REGION_NONE); /* Earth. */
+    CHECK(regions_has_drinking_spot(&regions, &map, hilltop));
+    CHECK(!regions_has_drinking_spot(&regions, &map, plains));
+
+    /* A slope up the side of the hill joins them. */
+    map_set_slope(&map, 7, 5, 0, true);
     regions_update(&regions, &map);
-    map_set_rock(&map, 3, 3, 1, ROCK_NONE);
+    CHECK_EQ_UINT(regions.count, 1);
+    CHECK(regions_connected(&regions, &map, (TilePos){2, 2, 0}, (TilePos){12, 2, 1}));
+    CHECK(regions_has_drinking_spot(&regions, &map, regions_at(&regions, &map, 2, 2, 0)));
+
+    /* A gallery dug into the hill from the plains joins their region in place. */
+    uint32_t rebuilds = regions.rebuilds;
+    map_set_rock(&map, 8, 10, 0, ROCK_NONE);
     regions_update(&regions, &map);
-    CHECK_EQ_UINT(regions_at(&regions, &map, 3, 3, 1), regions_at(&regions, &map, 2, 2, 1));
+    CHECK_EQ_UINT(regions.rebuilds, rebuilds);
+    CHECK_EQ_UINT(regions_at(&regions, &map, 8, 10, 0), regions_at(&regions, &map, 2, 2, 0));
+
+    /* Rock over the slope closes it: the hilltop is cut off again. */
+    map_set_rock(&map, 7, 5, 1, ROCK_GRANITE);
+    regions_update(&regions, &map);
+    CHECK(!regions_connected(&regions, &map, (TilePos){2, 2, 0}, (TilePos){12, 2, 1}));
     regions_free(&regions);
     map_free(&map);
 }
@@ -339,8 +365,8 @@ static void test_regions_match_pathfinding_on_generated_maps(void)
         Regions regions;
         Pathfinder finder;
         REQUIRE(worldgen_generate(&map, &params));
-        REQUIRE(regions_init(&regions, 64, 64, 1));
-        REQUIRE(pathfinder_init(&finder, 64, 64, 1));
+        REQUIRE(regions_init(&regions, 64, 64, map.depth));
+        REQUIRE(pathfinder_init(&finder, 64, 64, map.depth));
         regions_update(&regions, &map);
 
         size_t sizes[8] = {0};
@@ -352,18 +378,35 @@ static void test_regions_match_pathfinding_on_generated_maps(void)
         }
         /* The area reachable from one tile of each of the first regions is the region. */
         bool checked[8] = {false};
-        for (int y = 0; y < 64; y++) {
-            for (int x = 0; x < 64; x++) {
-                uint32_t region = regions_at(&regions, &map, x, y, 0);
-                if (region == REGION_NONE || region > 8 || checked[region - 1]) {
-                    continue;
-                }
-                checked[region - 1] = true;
-                pathfinder_find_nearest(&finder, &map, (TilePos){(int16_t)x, (int16_t)y, 0}, never,
-                                        NULL, PATH_NO_COST_LIMIT, NULL, NULL);
-                CHECK_EQ_UINT(finder.last_expanded, sizes[region - 1]);
+        for (size_t i = 0; i < map_tile_count(&map); i++) {
+            uint32_t region = regions.id[i];
+            if (region == REGION_NONE || region > 8 || checked[region - 1]) {
+                continue;
+            }
+            checked[region - 1] = true;
+            int x, y, z;
+            map_tile_of(&map, i, &x, &y, &z);
+            pathfinder_find_nearest(&finder, &map, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                    never, NULL, PATH_NO_COST_LIMIT, NULL, NULL);
+            CHECK_EQ_UINT(finder.last_expanded, sizes[region - 1]);
+        }
+        /* Slopes join the hills and the shores to the plains: a region on several
+         * levels. */
+        uint8_t *on_plains = calloc((size_t)regions.count + 1, 1);
+        REQUIRE(on_plains != NULL);
+        bool spans_levels = false;
+        size_t plains = (size_t)map.surface_level * map_level_tile_count(&map);
+        for (size_t i = plains; i < plains + map_level_tile_count(&map); i++) {
+            on_plains[regions.id[i]] = 1;
+        }
+        for (size_t i = 0; i < map_tile_count(&map); i++) {
+            if ((i < plains || i >= plains + map_level_tile_count(&map)) &&
+                regions.id[i] != REGION_NONE && on_plains[regions.id[i]]) {
+                spans_levels = true;
             }
         }
+        CHECK(spans_levels);
+        free(on_plains);
         pathfinder_free(&finder);
         regions_free(&regions);
         map_free(&map);
@@ -373,7 +416,7 @@ static void test_regions_match_pathfinding_on_generated_maps(void)
 int main(void)
 {
     RUN_TEST(test_regions_follow_walls);
-    RUN_TEST(test_regions_of_each_level);
+    RUN_TEST(test_regions_across_levels);
     RUN_TEST(test_regions_notice_map_changes);
     RUN_TEST(test_dug_tiles_are_added_without_rebuilding);
     RUN_TEST(test_incremental_updates_match_rebuilds);

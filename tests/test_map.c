@@ -45,6 +45,87 @@ static void test_bounds_and_index(void)
 
 /* A map of several levels: the layers hold them one after the other, and
  * every map function looks at one level only. */
+/* Floors, open space, slopes and the ground level. */
+static void test_floors_and_slopes(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 3));
+    /* A fresh map: a floor of soil on level 0, open space above. */
+    CHECK(map_has_floor(&map, 3, 3, 0));
+    CHECK(!map_has_floor(&map, 3, 3, 1));
+    CHECK(map_is_open(&map, 3, 3, 2));
+    CHECK(!map_is_open(&map, 3, 3, 0));
+    CHECK(!map_is_open(&map, 3, 3, 3)); /* Out of bounds. */
+    CHECK(!map_is_passable(&map, 3, 3, 1)); /* Nothing to stand on. */
+    CHECK_EQ_INT(map_ground_level(&map, 3, 3), 0);
+    CHECK(!map_natural_roof(&map, 3, 3, 0));
+
+    /* A hill over x >= 8: earth on level 0, a floor on level 1. */
+    for (int y = 0; y < 16; y++) {
+        for (int x = 8; x < 16; x++) {
+            map_set_rock(&map, x, y, 0, ROCK_EARTH);
+            map_set_terrain(&map, x, y, 1, TERRAIN_SOIL);
+        }
+    }
+    CHECK_EQ_INT(map_ground_level(&map, 10, 3), 1);
+    CHECK_EQ_INT(map_ground_level(&map, 3, 3), 0);
+    CHECK(map_is_passable(&map, 10, 3, 1));
+    CHECK(!map_is_open(&map, 10, 3, 0)); /* Earth. */
+    CHECK(map_is_buildable(&map, 10, 3, 1));
+    CHECK(!map_is_buildable(&map, 10, 3, 0));
+    CHECK(!map_is_buildable(&map, 3, 3, 1));
+    CHECK_EQ_INT(rock_def(ROCK_EARTH)->mined_item, ITEM_NONE);
+
+    /* A slope at the foot of the hill leads up, orthogonally only. */
+    TilePos links[MAP_MAX_LEVEL_LINKS];
+    CHECK(!map_can_climb(&map, 7, 5, 0, 8, 5));
+    CHECK_EQ_INT(map_level_links(&map, 7, 5, 0, links), 0);
+    uint32_t revision = map.topology_revision;
+    map_set_slope(&map, 7, 5, 0, true);
+    CHECK(map.topology_revision != revision);
+    CHECK_EQ_INT(map.slope_count, 1);
+    CHECK(map_is_slope(&map, 7, 5, 0));
+    CHECK(!map_is_buildable(&map, 7, 5, 0));
+    CHECK(map_can_climb(&map, 7, 5, 0, 8, 5));
+    CHECK(!map_can_climb(&map, 7, 5, 0, 8, 6)); /* Diagonal. */
+    CHECK(!map_can_climb(&map, 7, 5, 0, 6, 5)); /* Open space up there. */
+    CHECK_EQ_INT(map_level_links(&map, 7, 5, 0, links), 1);
+    CHECK(links[0].x == 8 && links[0].y == 5 && links[0].z == 1);
+    CHECK_EQ_INT(map_level_links(&map, 8, 5, 1, links), 1); /* And back down. */
+    CHECK(links[0].x == 7 && links[0].y == 5 && links[0].z == 0);
+    CHECK_EQ_INT(map_level_links(&map, 9, 5, 1, links), 0);
+
+    /* A slope at a corner of the hill leads two ways. */
+    for (int y = 10; y < 16; y++) {
+        map_set_rock(&map, 8, y, 0, ROCK_NONE);
+        map_set_terrain(&map, 8, y, 1, TERRAIN_OPEN);
+    }
+    map_set_slope(&map, 8, 10, 0, true);
+    CHECK_EQ_INT(map_level_links(&map, 8, 10, 0, links), 2); /* East and north. */
+
+    /* Something over the slope, or on it, blocks the way. */
+    map_set_terrain(&map, 7, 5, 1, TERRAIN_SOIL);
+    CHECK(!map_can_climb(&map, 7, 5, 0, 8, 5));
+    CHECK(map_natural_roof(&map, 7, 5, 0));
+    map_set_terrain(&map, 7, 5, 1, TERRAIN_OPEN);
+    revision = map.topology_revision;
+    map_set_rock(&map, 7, 5, 1, ROCK_GRANITE); /* Was open: a topology change. */
+    CHECK(map.topology_revision != revision);
+    CHECK(!map_can_climb(&map, 7, 5, 0, 8, 5));
+    map_set_rock(&map, 7, 5, 1, ROCK_NONE);
+    map_set_structure(&map, 7, 5, 0, STRUCTURE_WALL);
+    CHECK(!map_can_climb(&map, 7, 5, 0, 8, 5));
+    map_set_structure(&map, 7, 5, 0, STRUCTURE_NONE);
+    CHECK(map_can_climb(&map, 7, 5, 0, 8, 5));
+
+    /* Slopes are part of the hash. */
+    uint64_t hash = map_hash(&map);
+    map_set_slope(&map, 7, 5, 0, false);
+    CHECK_EQ_INT(map.slope_count, 1);
+    CHECK(map_hash(&map) != hash);
+    map_free(&map);
+}
+
 static void test_levels(void)
 {
     Map map;
@@ -460,6 +541,7 @@ int main(void)
     RUN_TEST(test_init_fills_with_soil);
     RUN_TEST(test_bounds_and_index);
     RUN_TEST(test_levels);
+    RUN_TEST(test_floors_and_slopes);
     RUN_TEST(test_passability_and_move_cost);
     RUN_TEST(test_hash_detects_changes);
     RUN_TEST(test_count_plants);

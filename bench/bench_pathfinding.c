@@ -1,8 +1,11 @@
 /*
  * Pathfinding benchmark: runs many A* searches between random passable tiles
- * of a generated map and reports timings. Not part of the test suite.
+ * on the ground of a generated map (hills included) and reports timings.
+ * Not part of the test suite.
  *
- *     bench_pathfinding [map_size] [searches] [seed]
+ *     bench_pathfinding [map_size] [searches] [seed] [flat]
+ *
+ * `flat`: a world without relief (one level), to compare with older versions.
  */
 #include "core/pathfinding.h"
 #include "core/rng.h"
@@ -10,6 +13,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 static TilePos random_passable_tile(const Map *map, Rng *rng)
@@ -17,8 +21,9 @@ static TilePos random_passable_tile(const Map *map, Rng *rng)
     for (;;) {
         int x = (int)rng_range_u32(rng, (uint32_t)map->width);
         int y = (int)rng_range_u32(rng, (uint32_t)map->height);
-        if (map_is_passable(map, x, y, 0)) {
-            return (TilePos){(int16_t)x, (int16_t)y, 0};
+        int z = map_ground_level(map, x, y);
+        if (map_is_passable(map, x, y, z)) {
+            return (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
         }
     }
 }
@@ -34,11 +39,12 @@ int main(int argc, char **argv)
     params.seed = seed;
     params.width = size;
     params.height = size;
+    params.flat = argc > 4 && strcmp(argv[4], "flat") == 0;
 
     Map map;
     Pathfinder finder;
     Path path = {0};
-    if (!worldgen_generate(&map, &params) || !pathfinder_init(&finder, size, size, 1)) {
+    if (!worldgen_generate(&map, &params) || !pathfinder_init(&finder, size, size, map.depth)) {
         fprintf(stderr, "initialization failed\n");
         return EXIT_FAILURE;
     }
@@ -61,8 +67,8 @@ int main(int argc, char **argv)
     }
     double seconds = (double)(clock() - begin) / CLOCKS_PER_SEC;
 
-    printf("map %dx%d, seed %llu: %d searches, %d found\n", size, size, (unsigned long long)seed,
-           searches, found);
+    printf("map %dx%dx%d, seed %llu: %d searches, %d found\n", size, size, map.depth,
+           (unsigned long long)seed, searches, found);
     printf("  total %.3f s, %.1f us/search, %.0f nodes expanded/search, avg path %.1f steps\n",
            seconds, seconds * 1e6 / searches, (double)expanded / searches,
            found > 0 ? total_length / found : 0.0);

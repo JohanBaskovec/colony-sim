@@ -171,6 +171,9 @@ static void test_where_zones_and_stones_lie(void)
     CHECK(!gather_zone_can_cover(&map, 12, 8, 0));
     CHECK(!gather_zone_can_cover(&map, 5, 5, 0));
     CHECK(!gather_zone_can_cover(&map, -1, 0, 0));
+    map.terrain[map_index(&map, 13, 8, 0)] = TERRAIN_OPEN; /* No floor. */
+    CHECK(!gather_zone_can_cover(&map, 13, 8, 0));
+    map.terrain[map_index(&map, 13, 8, 0)] = TERRAIN_SOIL;
     /* Stones lie on soil, gravel and rough stone, not on sand. */
     CHECK(gather_stone_ground(&map, 8, 8, 0));
     CHECK(gather_stone_ground(&map, 9, 8, 0));

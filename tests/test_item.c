@@ -433,6 +433,31 @@ static void test_grass_does_not_dry_in_the_rain(void)
     items_free(&items);
 }
 
+/* Stacks are counted per level, for searches to skip the empty ones. */
+static void test_stacks_per_level(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 3));
+    CHECK_EQ_UINT(items.level_stacks[0] + items.level_stacks[1] + items.level_stacks[2], 0);
+    REQUIRE(items_add(&items, 1, 1, 2, item_stack_pristine(ITEM_WOOD, 5)) == 5);
+    REQUIRE(items_add(&items, 1, 1, 2, item_stack_pristine(ITEM_WOOD, 5)) == 5); /* Same stack. */
+    REQUIRE(items_add(&items, 2, 1, 2, item_stack_pristine(ITEM_MUSHROOMS, 5)) == 5);
+    REQUIRE(items_add(&items, 0, 3, 0, item_stack_pristine(ITEM_WOOD, 1)) == 1);
+    CHECK_EQ_UINT(items.level_stacks[0], 1);
+    CHECK_EQ_UINT(items.level_stacks[1], 0);
+    CHECK_EQ_UINT(items.level_stacks[2], 2);
+    CHECK_EQ_INT(items_remove(&items, 1, 1, 2, 4), 4); /* Some left. */
+    CHECK_EQ_UINT(items.level_stacks[2], 2);
+    CHECK_EQ_INT(items_remove(&items, 1, 1, 2, 99), 6);
+    CHECK_EQ_UINT(items.level_stacks[2], 1);
+    /* Rotted away: gone from the count too. */
+    int hours = (int)(item_def(ITEM_MUSHROOMS)->rot_days * 24.0f) + 2;
+    CHECK_EQ_INT(items_advance(&items, 0, 48, hours, NULL, NULL), 1);
+    CHECK_EQ_UINT(items.level_stacks[2], 0);
+    CHECK_EQ_UINT(items.level_stacks[0], 1);
+    items_free(&items);
+}
+
 static void test_food_rots_away(void)
 {
     Items items;
@@ -535,6 +560,7 @@ int main(void)
     RUN_TEST(test_categories);
     RUN_TEST(test_additions_counter);
     RUN_TEST(test_add_and_remove);
+    RUN_TEST(test_stacks_per_level);
     RUN_TEST(test_condition_definitions);
     RUN_TEST(test_quality_grades);
     RUN_TEST(test_stack_make_keeps_condition_valid);

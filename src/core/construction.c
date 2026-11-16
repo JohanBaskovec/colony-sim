@@ -99,8 +99,8 @@ bool construction_can_place(const Constructions *constructions, const Map *map, 
         return false;
     }
     size_t index = map_index(map, x, y, z);
-    return terrain_def((Terrain)map->terrain[index])->buildable &&
-           map->structure[index] == STRUCTURE_NONE && !map_plant_blocks_building(map, x, y, z) &&
+    return map_is_buildable(map, x, y, z) && map->structure[index] == STRUCTURE_NONE &&
+           !map_plant_blocks_building(map, x, y, z) &&
            construction_at(constructions, x, y, z) == CONSTRUCTION_NONE;
 }
 

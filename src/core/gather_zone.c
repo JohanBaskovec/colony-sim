@@ -247,6 +247,7 @@ bool gather_zone_can_cover(const Map *map, int x, int y, int z)
     size_t index = map_index(map, x, y, z);
     Terrain terrain = (Terrain)map->terrain[index];
     return map->rock[index] == ROCK_NONE && terrain != TERRAIN_DEEP_WATER &&
+           terrain != TERRAIN_OPEN &&
            !structure_blocks((StructureType)map->structure[index]);
 }
 
