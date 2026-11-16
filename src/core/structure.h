@@ -38,6 +38,7 @@ typedef enum StructureType {
     STRUCTURE_DOOR, /* Branch screen: pushed aside to pass. */
     STRUCTURE_ROOF, /* Grass roof on branch rafters, over a tile. */
     STRUCTURE_PROP, /* Forked post of branches: holds up a ceiling or a roof. */
+    STRUCTURE_LADDER, /* Branch ladder: up to the level above (see map_can_climb()). */
     STRUCTURE_TYPE_COUNT
 } StructureType;
 
@@ -115,6 +116,9 @@ bool structure_is_door(StructureType type);
 
 /* Whether it is a roof (built in the roof layer). */
 bool structure_is_roof(StructureType type);
+
+/* Whether it is a ladder: built where it leads up (map_ladder_fits()). */
+bool structure_is_ladder(StructureType type);
 
 /* Tiles it takes: 1 for most, 2 for a bed (0 for STRUCTURE_NONE). Part `i`
  * of a structure whose head is at (x, y) lies at (x + i × direction_dx(),

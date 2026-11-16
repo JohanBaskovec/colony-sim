@@ -521,6 +521,32 @@ static bool init_dug_room(Map *map)
 
 /* Ceilings: the ground over a dug tile, held up by rock, a wall or a prop
  * within ROOF_SUPPORT_RANGE tiles. */
+/* A ladder leads up where a slope would, slower; it needs somewhere to lead
+ * to. */
+static void test_ladders(void)
+{
+    Map map;
+    REQUIRE(init_dug_room(&map));
+    CHECK(map_ladder_fits(&map, 3, 2, 0)); /* At the foot of the hill. */
+    CHECK(!map_ladder_fits(&map, 1, 2, 0)); /* Plains all around. */
+    CHECK(!map_ladder_fits(&map, 6, 6, 0)); /* In the room: ground over it. */
+    CHECK(!map_ladder_fits(&map, 3, 2, 2)); /* The top level. */
+    CHECK_NEAR(map_climb_cost(&map, 3, 2, 0), 0.0, 1e-6);
+    CHECK(!map_can_climb(&map, 3, 2, 0, 4, 2));
+    map_set_structure(&map, 3, 2, 0, STRUCTURE_LADDER);
+    CHECK(map_is_passable(&map, 3, 2, 0)); /* Walked past. */
+    CHECK_NEAR(map_climb_cost(&map, 3, 2, 0), MAP_LADDER_CLIMB_COST, 1e-6);
+    CHECK(map_can_climb(&map, 3, 2, 0, 4, 2));
+    CHECK(!map_can_climb(&map, 3, 2, 0, 2, 2)); /* No ground up there. */
+    TilePos links[MAP_MAX_LEVEL_LINKS];
+    CHECK_EQ_INT(map_level_links(&map, 4, 2, 1, links), 1); /* Down the ladder. */
+    CHECK(links[0].x == 3 && links[0].y == 2 && links[0].z == 0);
+    map_set_slope(&map, 3, 3, 0, true);
+    CHECK_NEAR(map_climb_cost(&map, 3, 3, 0), MAP_CLIMB_COST, 1e-6);
+    CHECK_NEAR(map_climb_cost(&map, -1, 3, 0), 0.0, 1e-6);
+    map_free(&map);
+}
+
 static void test_ceilings_need_support(void)
 {
     Map map;
@@ -610,6 +636,7 @@ int main(void)
     RUN_TEST(test_plants_rest_out_of_season);
     RUN_TEST(test_mushrooms_vanish);
     RUN_TEST(test_tree_near);
+    RUN_TEST(test_ladders);
     RUN_TEST(test_ceilings_need_support);
     RUN_TEST(test_change_logs);
     return test_summary();

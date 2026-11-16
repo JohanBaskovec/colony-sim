@@ -54,6 +54,7 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_REMOVE_ROOF] = {240, 200, 70, 255},
     [DESIGNATION_DIG] = {250, 140, 60, 255},
     [DESIGNATION_DIG_RAMP] = {250, 170, 90, 255},
+    [DESIGNATION_DIG_DOWN] = {250, 120, 70, 255},
 };
 /* Roof view: rock overhead (caves), and where a roof could rest. */
 static const SDL_Color NATURAL_ROOF_COLOR = {150, 120, 200, 90};
@@ -1209,6 +1210,25 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
         fill(renderer, shade(wood, 20), &core);
         break;
     }
+    case STRUCTURE_LADDER: {
+        /* Two side poles and their rungs, seen leaning from above. */
+        float pole = SDL_max(2.0f, floorf(w * 0.1f));
+        SDL_FRect left = {tile->x + floorf(w * 0.22f), tile->y + 1.0f, pole, h - 2.0f};
+        SDL_FRect right = {tile->x + w - floorf(w * 0.22f) - pole, tile->y + 1.0f, pole, h - 2.0f};
+        float rung = SDL_max(1.0f, floorf(h * 0.07f));
+        for (int i = 0; i < 4; i++) {
+            SDL_FRect bar = {left.x, tile->y + floorf(h * (0.16f + 0.22f * (float)i)),
+                             right.x + pole - left.x, rung};
+            fill(renderer, wood, &bar);
+        }
+        fill(renderer, edge, &left);
+        fill(renderer, edge, &right);
+        SDL_FRect left_core = {left.x + 0.5f, left.y, left.w - 1.0f, left.h};
+        SDL_FRect right_core = {right.x + 0.5f, right.y, right.w - 1.0f, right.h};
+        fill(renderer, wood, &left_core);
+        fill(renderer, wood, &right_core);
+        break;
+    }
     case STRUCTURE_ROOF: {
         /* Rows of thatch, overlapping: they line up from one tile to the next. */
         fill(renderer, straw, tile);
@@ -1456,6 +1476,25 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         outline(renderer, area, 2.0f,
                 DESIGNATION_COLORS[icon == RENDER_ICON_DIG ? DESIGNATION_DIG
                                                            : DESIGNATION_DIG_RAMP]);
+        break;
+    }
+    case RENDER_ICON_DIG_DOWN: { /* A hole in the ground, an arrow into it. */
+        SDL_FRect area = inset(&rect, 0.8f);
+        fill(renderer, ROCK_COLORS[ROCK_EARTH], &area);
+        SDL_FRect hole = {area.x + area.w * 0.2f, area.y + area.h * 0.55f, area.w * 0.6f,
+                          area.h * 0.3f};
+        fill(renderer, (SDL_Color){40, 28, 20, 255}, &hole);
+        SDL_SetRenderDrawColor(renderer, 236, 220, 190, 255);
+        float cx = area.x + area.w * 0.5f;
+        for (float d = -1.0f; d <= 1.0f; d += 1.0f) {
+            SDL_RenderLine(renderer, cx + d, area.y + area.h * 0.12f, cx + d,
+                           area.y + area.h * 0.6f);
+        }
+        for (float d = 0.0f; d < area.w * 0.18f; d += 1.0f) {
+            SDL_RenderLine(renderer, cx - d, area.y + area.h * 0.6f - d, cx + d,
+                           area.y + area.h * 0.6f - d);
+        }
+        outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_DIG_DOWN]);
         break;
     }
     case RENDER_ICON_DECONSTRUCT: {

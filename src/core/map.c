@@ -593,11 +593,31 @@ bool map_is_slope(const Map *map, int x, int y, int z)
     return map_in_bounds(map, x, y, z) && map->slope[map_index(map, x, y, z)] != 0;
 }
 
+float map_climb_cost(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) ? map_climb_cost_at(map, map_index(map, x, y, z)) : 0.0f;
+}
+
 bool map_can_climb(const Map *map, int x, int y, int z, int nx, int ny)
 {
-    return abs(nx - x) + abs(ny - y) == 1 && map_is_slope(map, x, y, z) &&
+    return abs(nx - x) + abs(ny - y) == 1 && map_climb_cost(map, x, y, z) > 0.0f &&
            map_is_passable(map, x, y, z) && map_is_open(map, x, y, z + 1) &&
            map_is_passable(map, nx, ny, z + 1);
+}
+
+bool map_ladder_fits(const Map *map, int x, int y, int z)
+{
+    static const int DX[4] = {0, 1, 0, -1}, DY[4] = {-1, 0, 1, 0};
+    if (!map_in_bounds(map, x, y, z + 1) || !map_is_open(map, x, y, z + 1)) {
+        return false;
+    }
+    for (int d = 0; d < 4; d++) {
+        int nx = x + DX[d], ny = y + DY[d];
+        if (map_has_floor(map, nx, ny, z + 1) && map->rock[map_index(map, nx, ny, z + 1)] == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int map_level_links(const Map *map, int x, int y, int z, TilePos out[MAP_MAX_LEVEL_LINKS])

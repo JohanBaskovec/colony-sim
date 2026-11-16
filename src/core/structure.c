@@ -18,14 +18,16 @@
  *   50 cm (2.4 m, 2 kg) and thin battens every 25 cm (5 m, 1 kg): 3 branches;
  *   thatch 20 cm thick to shed rain: 0.24 m³ of dry grass, 20 kg;
  * - prop, 2 m high: a bundle of the thickest branches tied into a post, with
- *   a forked top and a cross piece pressed under the ceiling: 6 branches.
+ *   a forked top and a cross piece pressed under the ceiling: 6 branches;
+ * - ladder, 2.5 m: two side poles (2 branches) and 8 rungs of thinner
+ *   branches (2 more), lashed with twisted grass: 4 branches, 2 armfuls.
  * Work: about 15 minutes to spread a bed; 2 hours for a wall segment (dig
  * the post holes with a stick, tie the rails, thatch); 1.5 hours to weave a
- * screen or to roof a tile, working overhead; 1 hour to set a prop
- * (TICKS_PER_HOUR = 2,500).
+ * screen or to roof a tile, working overhead; 1 hour to set a prop or to
+ * lash a ladder (TICKS_PER_HOUR = 2,500).
  * Hit points: a bed 20 (it packs down, a hit point a day, and is refreshed
  * with 4 armfuls of dry grass in 125 ticks), a wall 60, a screen 40, a roof
- * 50, a prop 40.
+ * 50, a prop 40, a ladder 30.
  */
 static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
     [STRUCTURE_NONE] = {"none", NULL, NULL, {{ITEM_NONE, 0}, {ITEM_NONE, 0}}, 0.0f,
@@ -50,6 +52,12 @@ static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
     [STRUCTURE_PROP] = {"branch_prop", N_("structure.prop"), N_("structure.prop.description"),
                         {{ITEM_BRANCHES, 6}, {ITEM_NONE, 0}}, 2500.0f, KNOWLEDGE_BASIC_SHELTERS,
                         50.0f, 0.0f, 0.0f, false, 1, 40, 0, {ITEM_NONE, 0}, 0.0f, false},
+    /* Walked past as over open ground; climbed at MAP_LADDER_CLIMB_COST. */
+    [STRUCTURE_LADDER] = {"branch_ladder", N_("structure.ladder"),
+                          N_("structure.ladder.description"),
+                          {{ITEM_BRANCHES, 4}, {ITEM_GRASS, 2}}, 2500.0f,
+                          KNOWLEDGE_BASIC_SHELTERS, 50.0f, 1.0f, 0.0f, false, 1, 30, 0,
+                          {ITEM_NONE, 0}, 0.0f, false},
 };
 
 /* Hit points by grade, crude to superb. */
@@ -134,6 +142,11 @@ bool structure_is_door(StructureType type)
 bool structure_is_roof(StructureType type)
 {
     return (unsigned)type < STRUCTURE_TYPE_COUNT && STRUCTURE_DEFS[type].roof;
+}
+
+bool structure_is_ladder(StructureType type)
+{
+    return type == STRUCTURE_LADDER;
 }
 
 float structure_deconstruct_work(StructureType type)

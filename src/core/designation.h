@@ -8,8 +8,10 @@
  * Each order belongs to a knowledge (core/knowledge.h): only settlers with at
  * least its minimum level carry it out. Earth is dug out with the shelter
  * builders' knowledge, faster with a digging stick: galleries into hills,
- * and ramps cut into a one-level bank of earth (the bank's tile becomes a
- * slope up to the ground behind it, the ground over it is taken away).
+ * ramps cut into a one-level bank of earth (the bank's tile becomes a slope
+ * up to the ground behind it, the ground over it is taken away), and holes
+ * dug down from the ground (the ground goes with the earth under it; the
+ * hole slopes up to where its digger stood: the way into a cellar).
  * Nobody digs where a ceiling would be left without support (see
  * map_dig_keeps_ceilings()): such orders wait for a prop or a wall.
  * Mining rock needs a pick and a knowledge that are not in the game yet:
@@ -43,11 +45,12 @@ typedef enum DesignationType {
     DESIGNATION_REMOVE_ROOF, /* Take the roof over a tile down. */
     DESIGNATION_DIG,      /* Dig out earth (ROCK_EARTH). */
     DESIGNATION_DIG_RAMP, /* Cut a ramp into a bank of earth one level high. */
+    DESIGNATION_DIG_DOWN, /* Dig the ground and the earth under it out. */
     DESIGNATION_COUNT
 } DesignationType;
 
-/* A ramp takes this many times the work of digging its tile out (the ground
- * over it goes too). */
+/* A ramp, or a hole dug down, takes this many times the work of digging its
+ * earth out (the ground goes too). */
 #define DESIGNATION_RAMP_WORK_FACTOR 1.5f
 
 typedef struct DesignationDef {
@@ -89,13 +92,14 @@ bool designation_is_roof(DesignationType type);
 /* Whether the order makes sense on this tile (a wall to mine...). */
 bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType type);
 
-/* Whether the ground over a ramp to cut at (x, y, z) is free of what lives
+/* Whether an order of this type at (x, y, z) leaves alone what lives
  * outside the map: construction sites, workstations, stockpiles. A ramp
- * takes that ground away: such orders are refused, or dropped when the
- * ground gets used before the work is done. */
-bool designation_ramp_ground_free(const Constructions *constructions,
-                                  const Workstations *workstations, const Stockpiles *stockpiles,
-                                  int x, int y, int z);
+ * takes the ground over it away, a hole dug down the ground it is ordered
+ * on: such orders are refused there, or dropped when the ground gets used
+ * before the work is done. Other orders: always true. */
+bool designation_ground_free(const Constructions *constructions, const Workstations *workstations,
+                             const Stockpiles *stockpiles, DesignationType type, int x, int y,
+                             int z);
 
 /* Whether the order on the tile digs (earth, rock, a ramp) and has to wait:
  * carrying it out now would leave a ceiling around without support. */

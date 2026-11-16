@@ -146,6 +146,9 @@ bool construction_can_place_structure(const Constructions *constructions, const 
     if (structure_is_roof(type)) {
         return construction_can_place_roof(constructions, map, x, y, z);
     }
+    if (structure_is_ladder(type) && !map_ladder_fits(map, x, y, z)) {
+        return false; /* It would lead nowhere. */
+    }
     for (int part = 0; part < length; part++) {
         if (!construction_can_place(constructions, map, x + part * direction_dx(direction),
                                     y + part * direction_dy(direction), z)) {

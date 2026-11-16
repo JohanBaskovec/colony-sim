@@ -227,6 +227,35 @@ static void make_hill(Map *map)
 }
 
 /* Slopes lead up and down, one level at a time, orthogonally. */
+/* Ladders lead up like slopes, at a slower MAP_LADDER_CLIMB_COST; a slope
+ * wins over a ladder for the same detour. */
+static void test_paths_climb_ladders(void)
+{
+    Map map;
+    Pathfinder finder;
+    Path path = {0};
+    REQUIRE(map_init(&map, 16, 16, 2));
+    REQUIRE(pathfinder_init(&finder, 16, 16, 2));
+    make_hill(&map);
+    TilePos start = {2, 5, 0}, goal = {12, 5, 1};
+    REQUIRE(map_ladder_fits(&map, 7, 9, 0));
+    map_set_structure(&map, 7, 9, 0, STRUCTURE_LADDER);
+    REQUIRE(pathfinder_find(&finder, &map, start, goal, PATH_NO_COST_LIMIT, &path));
+    check_path_is_valid(&map, start, goal, &path);
+    CHECK_NEAR(finder.last_cost, 1.0 + 8.0 * SQRT2 + MAP_LADDER_CLIMB_COST, 1e-3);
+    REQUIRE(pathfinder_find(&finder, &map, goal, start, PATH_NO_COST_LIMIT, &path));
+    check_path_is_valid(&map, goal, start, &path);
+    CHECK_NEAR(finder.last_cost, 1.0 + 8.0 * SQRT2 + MAP_LADDER_CLIMB_COST, 1e-3);
+
+    /* A slope on the same row as the ladder, one tile up: taken instead. */
+    map_set_slope(&map, 7, 8, 0, true);
+    REQUIRE(pathfinder_find(&finder, &map, start, goal, PATH_NO_COST_LIMIT, &path));
+    CHECK(finder.last_cost < 1.0 + 8.0 * SQRT2 + MAP_LADDER_CLIMB_COST - 0.5);
+    path_free(&path);
+    pathfinder_free(&finder);
+    map_free(&map);
+}
+
 static void test_paths_climb_slopes(void)
 {
     Map map;
@@ -346,6 +375,7 @@ int main(void)
     RUN_TEST(test_find_nearest_matching_tile);
     RUN_TEST(test_reachable_count);
     RUN_TEST(test_paths_climb_slopes);
+    RUN_TEST(test_paths_climb_ladders);
     RUN_TEST(test_shortest_paths_over_hills);
     RUN_TEST(test_many_searches_reuse_memory);
     return test_summary();

@@ -288,16 +288,17 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
             }
         }
 
-        /* Up a slope, to the orthogonal neighbors of the level above. */
-        if (map->slope[current] != 0 && z + 1 < map->depth &&
-            map_is_open_at(map, current + level)) {
+        /* Up a slope or a ladder, to the orthogonal neighbors of the level
+         * above. */
+        float climb = map_climb_cost_at(map, current);
+        if (climb > 0.0f && z + 1 < map->depth && map_is_open_at(map, current + level)) {
             for (int d = 0; d < 4; d++) {
                 if (!inside[d]) {
                     continue;
                 }
                 int dx = DIRECTIONS[d][0], dy = DIRECTIONS[d][1];
                 uint32_t next = (uint32_t)((int64_t)current + level + dy * (int64_t)width + dx);
-                float step = map_move_cost_at(map, next) * MAP_CLIMB_COST;
+                float step = map_move_cost_at(map, next) * climb;
                 if (step > 0.0f && base_cost + step <= max_cost &&
                     !relax(finder, target, current, next, base_cost + step, x + dx, y + dy,
                            z + 1)) {
@@ -305,8 +306,8 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                 }
             }
         }
-        /* Down a slope: over the open space next to this tile, onto the slope
-         * below it. */
+        /* Down a slope or a ladder: over the open space next to this tile,
+         * onto the slope or ladder below it. */
         if (z > 0) {
             for (int d = 0; d < 4; d++) {
                 if (side[d] > 0.0f || !inside[d]) {
@@ -315,10 +316,11 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                 int dx = DIRECTIONS[d][0], dy = DIRECTIONS[d][1];
                 uint32_t beside = (uint32_t)((int64_t)current + dy * (int64_t)width + dx);
                 uint32_t next = beside - level;
-                if (!map_is_open_at(map, beside) || map->slope[next] == 0) {
+                float down = map_climb_cost_at(map, next);
+                if (!map_is_open_at(map, beside) || down <= 0.0f) {
                     continue;
                 }
-                float step = map_move_cost_at(map, next) * MAP_CLIMB_COST;
+                float step = map_move_cost_at(map, next) * down;
                 if (step > 0.0f && base_cost + step <= max_cost &&
                     !relax(finder, target, current, next, base_cost + step, x + dx, y + dy,
                            z - 1)) {

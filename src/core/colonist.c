@@ -1849,9 +1849,8 @@ static void work(Colonist *colonist, const ColonistContext *context)
         return;
     }
     if (!designation_can_apply(context->map, target.x, target.y, target.z, type) ||
-        (type == DESIGNATION_DIG_RAMP &&
-         !designation_ramp_ground_free(context->constructions, context->workstations,
-                                       context->stockpiles, target.x, target.y, target.z))) {
+        !designation_ground_free(context->constructions, context->workstations,
+                                 context->stockpiles, type, target.x, target.y, target.z)) {
         designation_set(designations, context->map, target.x, target.y, target.z, DESIGNATION_NONE);
         set_idle(colonist, context, 0);
         return;
@@ -4020,12 +4019,13 @@ static void walk(Colonist *colonist, const ColonistContext *context)
 {
     TilePos next = colonist->path.steps[colonist->path_index];
     float cost = map_move_cost(context->map, next.x, next.y, next.z);
-    if (next.z != colonist->z && cost > 0.0f) { /* Up or down a slope. */
-        bool open = next.z > colonist->z ? map_can_climb(context->map, colonist->x, colonist->y,
-                                                         colonist->z, next.x, next.y)
-                                         : map_can_climb(context->map, next.x, next.y, next.z,
-                                                         colonist->x, colonist->y);
-        cost = open ? cost * MAP_CLIMB_COST : 0.0f;
+    if (next.z != colonist->z && cost > 0.0f) { /* Up or down a slope or a ladder. */
+        bool up = next.z > colonist->z;
+        TilePos low = up ? current_tile(colonist) : next;
+        TilePos high = up ? next : current_tile(colonist);
+        cost = map_can_climb(context->map, low.x, low.y, low.z, high.x, high.y)
+                   ? cost * map_climb_cost(context->map, low.x, low.y, low.z)
+                   : 0.0f;
     }
     if (cost <= 0.0f) {
         set_idle(colonist, context, random_idle_ticks(context->rng)); /* Path became blocked. */

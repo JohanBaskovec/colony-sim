@@ -27,6 +27,10 @@ static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
                               N_("colonist.task.dig_ramp"), WORK_MINING,
                               KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
                               TOOL_USE_DIGGING},
+    [DESIGNATION_DIG_DOWN] = {"dig_down", N_("designation.dig_down"),
+                              N_("colonist.task.dig_down"), WORK_MINING,
+                              KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
+                              TOOL_USE_DIGGING},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -111,6 +115,24 @@ static bool ramp_possible(const Map *map, int x, int y, int z)
     return false;
 }
 
+/* Whether a hole can be dug down from this tile: bare ground (nothing
+ * standing on it, no roof over it) over earth. */
+static bool dig_down_possible(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z - 1) &&
+           map->rock[map_index(map, x, y, z - 1)] == ROCK_EARTH &&
+           map_is_buildable(map, x, y, z) && map_structure(map, x, y, z) == STRUCTURE_NONE &&
+           map_roof(map, x, y, z) == STRUCTURE_NONE && !map_plant_blocks_building(map, x, y, z);
+}
+
+/* The tile whose earth an order digs out: the one under the ground for a
+ * hole dug down, the order's own otherwise. */
+static size_t dug_index(const Designations *designations, const Map *map, int x, int y, int z)
+{
+    int dug = designation_get(designations, x, y, z) == DESIGNATION_DIG_DOWN && z > 0 ? z - 1 : z;
+    return map_index(map, x, y, dug);
+}
+
 bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType type)
 {
     if (!map_in_bounds(map, x, y, z)) {
@@ -121,26 +143,34 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
     case DESIGNATION_MINE: return rock != ROCK_NONE && rock != ROCK_EARTH;
     case DESIGNATION_DIG: return rock == ROCK_EARTH;
     case DESIGNATION_DIG_RAMP: return ramp_possible(map, x, y, z);
+    case DESIGNATION_DIG_DOWN: return dig_down_possible(map, x, y, z);
     case DESIGNATION_DECONSTRUCT: return map_structure(map, x, y, z) != STRUCTURE_NONE;
     case DESIGNATION_REMOVE_ROOF: return map_roof(map, x, y, z) != STRUCTURE_NONE;
     default: return false;
     }
 }
 
-bool designation_ramp_ground_free(const Constructions *constructions,
-                                  const Workstations *workstations, const Stockpiles *stockpiles,
-                                  int x, int y, int z)
+bool designation_ground_free(const Constructions *constructions, const Workstations *workstations,
+                             const Stockpiles *stockpiles, DesignationType type, int x, int y,
+                             int z)
 {
-    return construction_at(constructions, x, y, z + 1) == CONSTRUCTION_NONE &&
-           construction_roof_at(constructions, x, y, z + 1) == CONSTRUCTION_NONE &&
-           workstation_at(workstations, x, y, z + 1) == WORKSTATION_NONE &&
-           stockpile_at(stockpiles, x, y, z + 1) == STOCKPILE_NONE;
+    if (type != DESIGNATION_DIG_RAMP && type != DESIGNATION_DIG_DOWN) {
+        return true;
+    }
+    int ground = type == DESIGNATION_DIG_RAMP ? z + 1 : z;
+    return construction_at(constructions, x, y, ground) == CONSTRUCTION_NONE &&
+           construction_roof_at(constructions, x, y, ground) == CONSTRUCTION_NONE &&
+           workstation_at(workstations, x, y, ground) == WORKSTATION_NONE &&
+           stockpile_at(stockpiles, x, y, ground) == STOCKPILE_NONE;
 }
 
 bool designation_waits_for_support(const Designations *designations, const Map *map, int x,
                                    int y, int z)
 {
     DesignationType type = designation_get(designations, x, y, z);
+    if (type == DESIGNATION_DIG_DOWN) {
+        return z > 0 && !map_dig_keeps_ceilings(map, x, y, z - 1, true);
+    }
     if (type != DESIGNATION_DIG && type != DESIGNATION_MINE && type != DESIGNATION_DIG_RAMP) {
         return false;
     }
@@ -230,8 +260,10 @@ float designation_work_needed(const Designations *designations, const Map *map, 
         const RockDef *rock = rock_def((RockType)map->rock[index]);
         return rock != NULL ? rock->mine_work : 0.0f;
     }
-    case DESIGNATION_DIG_RAMP: {
-        const RockDef *rock = rock_def((RockType)map->rock[index]);
+    case DESIGNATION_DIG_RAMP:
+    case DESIGNATION_DIG_DOWN: {
+        const RockDef *rock =
+            rock_def((RockType)map->rock[dug_index(designations, map, x, y, z)]);
         return rock != NULL ? rock->mine_work * DESIGNATION_RAMP_WORK_FACTOR : 0.0f;
     }
     case DESIGNATION_DECONSTRUCT:
@@ -259,12 +291,15 @@ ItemType designation_yield(const Designations *designations, const Map *map, int
     if (!map_in_bounds(map, x, y, z)) {
         return ITEM_NONE;
     }
-    size_t index = map_index(map, x, y, z);
     switch (designation_get(designations, x, y, z)) {
     case DESIGNATION_MINE:
     case DESIGNATION_DIG:
-    case DESIGNATION_DIG_RAMP: {
-        const RockDef *def = rock_def((RockType)map->rock[index]);
+    case DESIGNATION_DIG_RAMP:
+    case DESIGNATION_DIG_DOWN: {
+        const RockDef *def = rock_def((RockType)map->rock[dug_index(designations, map, x, y, z)]);
+        if (def == NULL) {
+            return ITEM_NONE;
+        }
         *count = def->mined_yield;
         return *count > 0 ? def->mined_item : ITEM_NONE;
     }
@@ -300,6 +335,32 @@ static void cut_ramp(Map *map, Items *items, int x, int y, int z)
     }
 }
 
+/* Digs a hole down: the ground goes, then the earth under it; the hole
+ * slopes up to the ground beside it where it can (where its digger stood),
+ * and what lay on the ground falls into it. */
+static void dig_down(Map *map, Items *items, int x, int y, int z)
+{
+    ItemStack lying = items != NULL ? items_get(items, x, y, z) : (ItemStack){0};
+    if (lying.type != ITEM_NONE) {
+        items_remove(items, x, y, z, lying.count);
+    }
+    map->plants[map_index(map, x, y, z)] = (Plant){0};
+    map_set_terrain(map, x, y, z, TERRAIN_OPEN);
+    map_set_rock(map, x, y, z - 1, ROCK_NONE);
+    map_set_slope(map, x, y, z - 1, true);
+    static const int DX[4] = {0, 1, 0, -1}, DY[4] = {-1, 0, 1, 0};
+    bool leads_up = false;
+    for (int d = 0; d < 4; d++) {
+        leads_up |= map_can_climb(map, x, y, z - 1, x + DX[d], y + DY[d]);
+    }
+    if (!leads_up) {
+        map_set_slope(map, x, y, z - 1, false); /* A pit: a ladder gets out of it. */
+    }
+    if (lying.type != ITEM_NONE) {
+        items_drop(items, map, x, y, z - 1, lying);
+    }
+}
+
 /* Carries out a completed order on the map. */
 static void complete(Map *map, Items *items, int x, int y, int z, DesignationType type)
 {
@@ -310,6 +371,7 @@ static void complete(Map *map, Items *items, int x, int y, int z, DesignationTyp
         map_set_rock(map, x, y, z, ROCK_NONE);
         break;
     case DESIGNATION_DIG_RAMP: cut_ramp(map, items, x, y, z); break;
+    case DESIGNATION_DIG_DOWN: dig_down(map, items, x, y, z); break;
     case DESIGNATION_DECONSTRUCT: {
         StructureType structure = map_structure(map, x, y, z);
         map_set_structure(map, x, y, z, STRUCTURE_NONE);

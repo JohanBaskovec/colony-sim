@@ -322,10 +322,18 @@ static void test_ramps_need_bare_ground(void)
     REQUIRE(constructions_init(&constructions, 16, 16, 3));
     REQUIRE(workstations_init(&workstations, 16, 16, 3));
     REQUIRE(stockpiles_init(&stockpiles, 16, 16, 3));
-    CHECK(designation_ramp_ground_free(&constructions, &workstations, &stockpiles, 5, 2, 0));
+    CHECK(designation_ground_free(&constructions, &workstations, &stockpiles,
+                                  DESIGNATION_DIG_RAMP, 5, 2, 0));
     REQUIRE(stockpile_create(&stockpiles, &map, 5, 2, 5, 2, 1) != STOCKPILE_NONE);
-    CHECK(!designation_ramp_ground_free(&constructions, &workstations, &stockpiles, 5, 2, 0));
-    CHECK(designation_ramp_ground_free(&constructions, &workstations, &stockpiles, 5, 3, 0));
+    CHECK(!designation_ground_free(&constructions, &workstations, &stockpiles,
+                                   DESIGNATION_DIG_RAMP, 5, 2, 0));
+    CHECK(designation_ground_free(&constructions, &workstations, &stockpiles,
+                                  DESIGNATION_DIG_RAMP, 5, 3, 0));
+    /* Digging down takes the ground it is ordered on; other orders take none. */
+    CHECK(!designation_ground_free(&constructions, &workstations, &stockpiles,
+                                   DESIGNATION_DIG_DOWN, 5, 2, 1));
+    CHECK(designation_ground_free(&constructions, &workstations, &stockpiles, DESIGNATION_DIG,
+                                  5, 2, 1));
     stockpiles_free(&stockpiles);
     workstations_free(&workstations);
     constructions_free(&constructions);
@@ -334,6 +342,48 @@ static void test_ramps_need_bare_ground(void)
 
 /* Nobody digs where a ceiling would be left without support: the order
  * waits for a prop. */
+/* Digging down from the plains' ground: the earth under it goes too, and
+ * the hole slopes up to the ground beside it. */
+static void test_digging_down(void)
+{
+    Map map;
+    Designations d;
+    Items items;
+    REQUIRE(init_bank(&map, &d));
+    REQUIRE(items_init(&items, 16, 16, 3));
+    CHECK(designation_can_apply(&map, 8, 8, 1, DESIGNATION_DIG_DOWN)); /* On the bank. */
+    CHECK(!designation_can_apply(&map, 2, 8, 0, DESIGNATION_DIG_DOWN)); /* Nothing below. */
+    CHECK(!designation_can_apply(&map, 8, 8, 0, DESIGNATION_DIG_DOWN)); /* Earth, no ground. */
+    CHECK(!designation_can_apply(&map, 2, 8, 1, DESIGNATION_DIG_DOWN)); /* Open space. */
+    map_set_structure(&map, 9, 9, 1, STRUCTURE_PROP);
+    CHECK(!designation_can_apply(&map, 9, 9, 1, DESIGNATION_DIG_DOWN));
+
+    REQUIRE(items_add(&items, 8, 8, 1, item_stack_pristine(ITEM_WOOD, 3)) == 3);
+    REQUIRE(designation_set(&d, &map, 8, 8, 1, DESIGNATION_DIG_DOWN));
+    float needed = designation_work_needed(&d, &map, 8, 8, 1);
+    CHECK_NEAR(needed, rock_def(ROCK_EARTH)->mine_work * DESIGNATION_RAMP_WORK_FACTOR, 1e-3);
+    CHECK(!designation_waits_for_support(&d, &map, 8, 8, 1));
+    CHECK(designation_add_work(&d, &map, &items, 8, 8, 1, needed, 50.0, NULL));
+    CHECK(map_is_open(&map, 8, 8, 1));
+    CHECK(map.rock[map_index(&map, 8, 8, 0)] == ROCK_NONE);
+    CHECK(map_is_slope(&map, 8, 8, 0));
+    CHECK(map_can_climb(&map, 8, 8, 0, 7, 8)); /* Back up to the ground. */
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).count, 3); /* Fell in. */
+
+    /* A pit with nowhere to climb to (walled in): no slope, a ladder's job. */
+    map_set_structure(&map, 11, 10, 1, STRUCTURE_WALL);
+    map_set_structure(&map, 13, 10, 1, STRUCTURE_WALL);
+    map_set_structure(&map, 12, 9, 1, STRUCTURE_WALL);
+    map_set_structure(&map, 12, 11, 1, STRUCTURE_WALL);
+    REQUIRE(designation_set(&d, &map, 12, 10, 1, DESIGNATION_DIG_DOWN));
+    CHECK(designation_add_work(&d, &map, &items, 12, 10, 1, needed, 50.0, NULL));
+    CHECK(map_is_passable(&map, 12, 10, 0));
+    CHECK(!map_is_slope(&map, 12, 10, 0));
+    CHECK_EQ_INT(map.slope_count, 1);
+    items_free(&items);
+    free_world(&map, &d);
+}
+
 static void test_digging_waits_for_support(void)
 {
     Map map;
@@ -395,6 +445,7 @@ int main(void)
     RUN_TEST(test_earth_is_dug_rock_is_mined);
     RUN_TEST(test_ramps_are_cut_into_banks);
     RUN_TEST(test_ramps_need_bare_ground);
+    RUN_TEST(test_digging_down);
     RUN_TEST(test_digging_waits_for_support);
     RUN_TEST(test_definitions);
     return test_summary();

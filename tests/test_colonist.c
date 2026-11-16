@@ -1209,6 +1209,60 @@ static void test_cave_in_in_game(void)
     game_shutdown(&game);
 }
 
+/* Digging down into the hill's ground: the hole slopes back up to where the
+ * digger stood, and settlers walk down into it. */
+static void test_colonist_digs_down(void)
+{
+    Game game;
+    REQUIRE(init_hill_game(&game));
+    Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 30, 10, 1));
+    REQUIRE(colonist != NULL);
+    for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
+        colonist_set_knowledge_level(colonist, (KnowledgeType)k, STANDARD_LEVEL);
+    }
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    REQUIRE(game_designate_rect(&game, 32, 10, 32, 10, 1, DESIGNATION_DIG_DOWN) == 1);
+    for (int i = 0; i < 3 * TICKS_PER_HOUR && !map_is_open(&game.map, 32, 10, 1); i++) {
+        for (int need = 0; need < NEED_COUNT; need++) {
+            colonist->needs[need] = 1.0f;
+        }
+        game_tick(&game);
+    }
+    CHECK(map_is_open(&game.map, 32, 10, 1));
+    CHECK(map_is_slope(&game.map, 32, 10, 0));
+    CHECK_EQ_INT(colonist->z, 1);
+
+    /* Food at the bottom of the hole: down it goes. */
+    items_add(&game.items, 32, 10, 0, item_stack_pristine(ITEM_BLACKBERRIES, 20));
+    colonist->needs[NEED_FOOD] = 0.2f;
+    run_ticks(&game, walk_ticks(6) + COLONIST_EAT_TICKS);
+    CHECK(items_get(&game.items, 32, 10, 0).count < 20);
+    game_shutdown(&game);
+}
+
+/* A ladder up the hill's cliff, where no slope leads: settlers climb it. */
+static void test_colonist_climbs_a_ladder(void)
+{
+    Game game;
+    REQUIRE(init_hill_game(&game));
+    map_set_slope(&game.map, 25, 20, 0, false);
+    REQUIRE(game_place_structure(&game, STRUCTURE_LADDER, 25, 14, 0, DIRECTION_SOUTH) !=
+            CONSTRUCTION_NONE);
+    CHECK_EQ_INT(game_place_structure(&game, STRUCTURE_LADDER, 18, 14, 0, DIRECTION_SOUTH),
+                 CONSTRUCTION_NONE); /* Leads nowhere. */
+    game.debug.instant_build = true;
+    game_tick(&game);
+    REQUIRE(map_structure(&game.map, 25, 14, 0) == STRUCTURE_LADDER);
+    items_add(&game.items, 30, 14, 1, item_stack_pristine(ITEM_BLACKBERRIES, 20));
+    Colonist *colonist = spawn_rested(&game, 20, 14);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_FOOD] = 0.2f;
+    run_ticks(&game, walk_ticks(20) + COLONIST_EAT_TICKS);
+    CHECK_EQ_INT(colonist->z, 1);
+    CHECK(items_get(&game.items, 30, 14, 1).count < 20);
+    game_shutdown(&game);
+}
+
 static void test_hungry_colonist_eats_spoiling_food_first(void)
 {
     Game game;
@@ -2090,6 +2144,8 @@ int main(void)
     RUN_TEST(test_diggers_wait_for_props);
     RUN_TEST(test_colonist_falls);
     RUN_TEST(test_cave_in_in_game);
+    RUN_TEST(test_colonist_digs_down);
+    RUN_TEST(test_colonist_climbs_a_ladder);
     RUN_TEST(test_hungry_colonist_eats_spoiling_food_first);
     RUN_TEST(test_colonist_harvests_blackberries);
     RUN_TEST(test_starting_knowledge_is_random_and_valid);

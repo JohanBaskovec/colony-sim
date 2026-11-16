@@ -156,8 +156,10 @@ typedef struct Plant {
  * Map.build_log). */
 #define MAP_BUILD_LOG_SIZE 16
 
-/* Movement cost multiplier of a step up or down a slope (see map_can_climb()). */
+/* Movement cost multiplier of a step up or down a slope (see map_can_climb()),
+ * and of one up or down a ladder (slower, hands on the rungs). */
 #define MAP_CLIMB_COST 2.0f
+#define MAP_LADDER_CLIMB_COST 3.0f
 
 /* A tile of the map. */
 typedef struct TilePos {
@@ -300,6 +302,17 @@ static inline bool map_is_open_at(const Map *map, size_t index)
     return map->rock[index] == 0 && map->terrain[index] == TERRAIN_OPEN;
 }
 
+/* What a step up from the tile, or down onto it, costs (a multiplier of the
+ * tile reached): MAP_CLIMB_COST on a slope, MAP_LADDER_CLIMB_COST on a
+ * ladder, 0 when the tile leads nowhere (see map_can_climb()). */
+static inline float map_climb_cost_at(const Map *map, size_t index)
+{
+    if (map->slope[index] != 0) {
+        return MAP_CLIMB_COST;
+    }
+    return map->structure[index] == STRUCTURE_LADDER ? MAP_LADDER_CLIMB_COST : 0.0f;
+}
+
 /* Tiles of one level. */
 static inline size_t map_level_tile_count(const Map *map)
 {
@@ -423,10 +436,19 @@ bool map_is_open(const Map *map, int x, int y, int z);
 bool map_is_slope(const Map *map, int x, int y, int z);
 
 /* Whether one can walk from (x, y, z) up to the orthogonal neighbor
- * (nx, ny, z + 1): (x, y, z) is a slope with open space above it, and one
- * can stand on (nx, ny, z + 1). The same step taken backwards leads down.
- * Such steps cost MAP_CLIMB_COST times the tile reached. */
+ * (nx, ny, z + 1): (x, y, z) is a slope or holds a ladder, with open space
+ * above it, and one can stand on (nx, ny, z + 1). The same step taken
+ * backwards leads down. Such steps cost map_climb_cost_at() times the tile
+ * reached. */
 bool map_can_climb(const Map *map, int x, int y, int z, int nx, int ny);
+
+/* What a step up from (x, y, z), or down onto it, costs: see
+ * map_climb_cost_at(); 0 out of bounds. */
+float map_climb_cost(const Map *map, int x, int y, int z);
+
+/* Whether a ladder on (x, y, z) would lead somewhere: open space above it
+ * and the ground of an orthogonal neighbor on the level above. */
+bool map_ladder_fits(const Map *map, int x, int y, int z);
 
 /* The tiles of other levels one can step to from (x, y, z) (up and down
  * slopes, see map_can_climb()): at most MAP_MAX_LEVEL_LINKS, stored in `out`;

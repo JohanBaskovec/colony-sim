@@ -704,6 +704,30 @@ static void test_roof_sites(void)
     free_world(&map, &constructions, &items);
 }
 
+/* A ladder is only planned where it leads up: open space over it, the
+ * ground of a neighbor on the level above. */
+static void test_ladders_need_a_cliff(void)
+{
+    Map map;
+    Constructions constructions;
+    REQUIRE(map_init(&map, 16, 16, 2));
+    REQUIRE(constructions_init(&constructions, 16, 16, 2));
+    for (int y = 0; y < 16; y++) { /* A hill over x >= 8. */
+        for (int x = 8; x < 16; x++) {
+            map_set_rock(&map, x, y, 0, ROCK_GRANITE);
+            map_set_terrain(&map, x, y, 1, TERRAIN_SOIL);
+        }
+    }
+    CHECK(construction_can_place_structure(&constructions, &map, STRUCTURE_LADDER, 7, 4, 0,
+                                           DIRECTION_SOUTH));
+    CHECK(!construction_can_place_structure(&constructions, &map, STRUCTURE_LADDER, 3, 4, 0,
+                                            DIRECTION_SOUTH));
+    CHECK(construction_can_place_structure(&constructions, &map, STRUCTURE_PROP, 3, 4, 0,
+                                           DIRECTION_SOUTH));
+    constructions_free(&constructions);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -722,5 +746,6 @@ int main(void)
     RUN_TEST(test_workstation_site);
     RUN_TEST(test_roof_layer);
     RUN_TEST(test_roof_sites);
+    RUN_TEST(test_ladders_need_a_cliff);
     return test_summary();
 }

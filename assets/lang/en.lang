@@ -44,6 +44,7 @@ designation.deconstruct = Take apart
 designation.remove_roof = Take roofs down
 designation.dig = Dig earth
 designation.dig_ramp = Cut a ramp
+designation.dig_down = Dig down
 tool.cancel = Cancel orders
 tool.stockpile = Stockpile zone
 tool.gather_zone = Gathering zone
@@ -55,6 +56,7 @@ tool.stockpile.description = Settlers store the items you allow in it
 tool.mine.description = Settlers dig out the marked rock and bring back stone
 tool.dig.description = Settlers dig out the marked earth (galleries into hills, dugouts), faster with a digging stick; a ceiling needs rock, a wall or a prop within 2 tiles
 tool.dig_ramp.description = Mark a bank of earth one level high: settlers cut a ramp into it, to walk up to the ground behind
+tool.dig_down.description = Settlers dig the marked ground and the earth under it out: the hole slopes up to where its digger stood, the way into a cellar
 tool.cancel.description = Removes the orders in the area you drag
 tool.deconstruct.description = Settlers take the marked beds, walls and doors apart and get half of the materials back
 tool.remove_roof.description = Settlers take the marked roofs down (in the roof view) and get half of the materials back
@@ -289,6 +291,7 @@ colonist.task.mine = Mining
 colonist.task.deconstruct = Taking apart
 colonist.task.dig_earth = Digging earth
 colonist.task.dig_ramp = Cutting a ramp
+colonist.task.dig_down = Digging down
 colonist.task.remove_roof = Taking a roof down
 colonist.task.harvest = Harvesting
 # Picking food easily mistaken for a poisonous plant (mushrooms, wild garlic)
@@ -486,6 +489,8 @@ structure.roof = Grass roof
 structure.roof.description = Branch rafters thatched with dry grass, over whatever stands on the tile: it rests on a wall, a prop or rock close by
 structure.prop = Branch prop
 structure.prop.description = A post of thick branches with a forked top: it holds up the ceiling of a gallery, or a roof, within 2 tiles
+structure.ladder = Branch ladder
+structure.ladder.description = Two poles and their rungs lashed with grass: up a cliff or out of a pit, to the ground of the level above
 
 # Recipes (named after what they make)
 recipe.chopper = Chopper

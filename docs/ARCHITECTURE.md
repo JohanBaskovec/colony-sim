@@ -153,9 +153,15 @@ highest tile of a column one could stand on.
 with open space above it, one walks up to an orthogonal neighbor on the
 level above where one can stand, and back down the same way
 (`map_can_climb()`, `map_level_links()`), at `MAP_CLIMB_COST` (×2) times the
-tile reached. Nothing else links levels yet (dug ramps, ladders and stairs
-come later); a slope covered by a floor or rock leads nowhere. Slopes are
-not buildable (`map_is_buildable()`).
+tile reached. Slopes are natural, cut as ramps, or left by holes dug down
+(see *Digging*). A branch ladder (`STRUCTURE_LADDER`, walked past like open
+ground) links the levels the same way from its tile, slower
+(`MAP_LADDER_CLIMB_COST`, ×3): `map_climb_cost_at()` gives either cost, and
+a ladder is only planned where it leads up (`map_ladder_fits()`: open space
+over it, the ground of a neighbor one level up), at the foot of a one-level
+cliff a ramp cannot be cut into (rock) or in a pit. A slope covered by a
+floor or rock leads nowhere. Slopes are not buildable (`map_is_buildable()`).
+Stairs come with floors and storeys.
 
 A floor or rock **anywhere above** a tile covers it: `map_natural_roof()`
 (caves and galleries dug into hills). It replaced the earlier one-level
@@ -176,8 +182,8 @@ cliffs. Under the ground's surface lie `WORLDGEN_EARTH_LEVELS` (2) of earth
 ground is rock all the way down. Where soft ground or shallow water rises
 one level to an orthogonal neighbor, the lower tile is a slope (one wades up
 the bank to the beach, then walks up to the plains); rock outcrops, deep
-water and steeper rises stay cliffs. Digging down is not possible yet: the
-levels under the hollows are solid for now. The map has as many levels as
+water and steeper rises stay cliffs. The levels under the ground are solid
+until dug (see *Digging*). The map has as many levels as
 the highest ground needs (about 12 on default maps, 4 of them underground). `WorldGenParams.flat` makes the old single-level world, for tests and
 for benchmarks that compare with older versions (`flat` argument of the
 benchmarks).
@@ -234,9 +240,16 @@ it slide down onto the ramp). It needs bare ground over the bank (no tree,
 structure, roof or slope; open air above it) and ground beside it to lead
 up to (`designation_can_apply()`); construction sites, workstations and
 stockpiles there refuse the order, or drop it when they come later
-(`designation_ramp_ground_free()`). Orders with a `tool_use` (digging) are
-sped up by the tool and send the worker to a better one lying nearby first,
-as digging jobs in gathering zones do. Digging down is not possible yet.
+(`designation_ground_free()`). `DESIGNATION_DIG_DOWN`, ordered on bare
+ground over earth, digs the ground and the earth under it out from beside
+the hole: the hole's floor slopes up to the ground beside it (where its
+digger stood: the way into a cellar, widened from inside with `DIG`), or
+stays a pit when nothing up there can be stood on (a ladder gets out of
+it); what lay on the ground falls in, settlers standing there fall too. It
+takes the ground it is ordered on, so sites, stations and stockpiles there
+refuse it. Orders with a `tool_use` (digging) are sped up by the tool and
+send the worker to a better one lying nearby first, as digging jobs in
+gathering zones do.
 
 **Support** (step 3b): a tile without rock whose next level up has a floor
 or rock right over it has a ceiling (`map_has_ceiling()`), held up by the
@@ -1093,9 +1106,10 @@ them (`bench_simulation` hashes are unchanged).
   free tile...), with a cost limit to bound the search.
 - A `Pathfinder` owns per-tile scratch arrays reused across searches (stamps
   instead of clearing), so searches do not allocate.
-- Slopes lead to the levels above and below (orthogonal steps only, ×2: see
-  *World representation*); the heuristic adds the least those climbs cost
-  (`MAP_CLIMB_COST - 1` per level), so it stays admissible (a test compares
+- Slopes and ladders lead to the levels above and below (orthogonal steps
+  only, ×2 and ×3: see *World representation*); the heuristic adds the
+  least those climbs cost (`MAP_CLIMB_COST - 1` per level), so it stays
+  admissible (a test compares
   A* with Dijkstra on hilly maps).
 - Benchmark: `bench/bench_pathfinding [size] [searches] [seed] [flat]`;
   about 0.8 ms per cross-map search on a flat 200 × 200 map in Release.
