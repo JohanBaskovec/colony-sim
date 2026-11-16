@@ -23,7 +23,7 @@ typedef enum AppTool {
     /* Zone tools: create, extend or merge zones; remove zone tiles with Shift
      * or in the removal mode (`zone_remove`, tool type APP_ZONE_REMOVE). */
     APP_TOOL_STOCKPILE,
-    APP_TOOL_BUILD,     /* Place a blueprint of `build_type` on the clicked tile. */
+    APP_TOOL_BUILD, /* Place a blueprint of `build_type` on the clicked tile. */
     APP_TOOL_GATHER,
     APP_TOOL_STRUCTURE, /* Plan structures of `structure_type` (click, or drag a rectangle). */
     /* Debug (game/debug_panel.h): a stack of `debug_item` on the clicked tile,
@@ -57,9 +57,9 @@ typedef enum AppTool {
 #define APP_KEY_PAUSE SDL_SCANCODE_SPACE
 #define APP_KEY_BACK SDL_SCANCODE_ESCAPE
 #define APP_KEY_HELP SDL_SCANCODE_F1
-#define APP_KEY_DEBUG SDL_SCANCODE_F3      /* Debug information. */
-#define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4 /* Cheats (game/debug_panel.h). */
-#define APP_KEY_TEMPERATURE SDL_SCANCODE_H /* Temperature view on or off. */
+#define APP_KEY_DEBUG SDL_SCANCODE_F3        /* Debug information. */
+#define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4   /* Cheats (game/debug_panel.h). */
+#define APP_KEY_TEMPERATURE SDL_SCANCODE_H   /* Temperature view on or off. */
 #define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
 
@@ -82,9 +82,9 @@ typedef enum AppWindow {
     APP_WINDOW_STATION,
     APP_WINDOW_STOCKPILE,
     APP_WINDOW_GATHER_ZONE,
-    APP_WINDOW_TILE, /* What lies on the selected tile (game/tile_panel.h). */
-    APP_WINDOW_WORK, /* Work priorities grid. */
-    APP_WINDOW_HELP, /* Controls. */
+    APP_WINDOW_TILE,  /* What lies on the selected tile (game/tile_panel.h). */
+    APP_WINDOW_WORK,  /* Work priorities grid. */
+    APP_WINDOW_HELP,  /* Controls. */
     APP_WINDOW_DEBUG, /* Debug menu (cheats). */
     APP_WINDOW_COUNT
 } AppWindow;
@@ -153,9 +153,9 @@ typedef struct App {
     /* Work priorities grid (game/work_panel.h) and controls help. */
     bool show_work_panel;
     bool show_help;
-    bool show_debug_menu; /* Debug menu (game/debug_panel.h). */
+    bool show_debug_menu;  /* Debug menu (game/debug_panel.h). */
     bool show_temperature; /* The temperature of each tile over the map. */
-    float level_wheel; /* Wheel steps with Shift held, towards the next level. */
+    float level_wheel;     /* Wheel steps with Shift held, towards the next level. */
     /* Build menu (game/menu_bar.h): open, and which category is shown. */
     bool build_menu_open;
     BuildCategory build_category;
@@ -163,10 +163,10 @@ typedef struct App {
     bool pan_blocked;
 
     AppTool tool;
-    DesignationType tool_type; /* For APP_TOOL_DESIGNATE. */
-    bool zone_remove;          /* For the zone tools: drags remove tiles from zones. */
-    WorkstationType build_type; /* For APP_TOOL_BUILD. */
-    StructureType structure_type; /* For APP_TOOL_STRUCTURE. */
+    DesignationType tool_type;     /* For APP_TOOL_DESIGNATE. */
+    bool zone_remove;              /* For the zone tools: drags remove tiles from zones. */
+    WorkstationType build_type;    /* For APP_TOOL_BUILD. */
+    StructureType structure_type;  /* For APP_TOOL_STRUCTURE. */
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
     bool debug_teleport;           /* For APP_TOOL_DEBUG: moves the selection instead. */

@@ -8,30 +8,25 @@
 #include <string.h>
 
 static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
-    [DESIGNATION_NONE] = {"none", NULL, NULL, WORK_TYPE_COUNT, KNOWLEDGE_NONE, 0.0f,
-                          TOOL_USE_NONE},
+    [DESIGNATION_NONE] = {"none", NULL, NULL, WORK_TYPE_COUNT, KNOWLEDGE_NONE, 0.0f, TOOL_USE_NONE},
     /* Mining needs a pick and the Mining knowledge: neither exists yet. */
     [DESIGNATION_MINE] = {"mine", N_("designation.mine"), N_("colonist.task.mine"), WORK_MINING,
                           KNOWLEDGE_NONE, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_NONE},
     [DESIGNATION_DECONSTRUCT] = {"deconstruct", N_("designation.deconstruct"),
                                  N_("colonist.task.deconstruct"), WORK_CONSTRUCTION,
-                                 KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
-                                 TOOL_USE_NONE},
+                                 KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_NONE},
     /* Pit dwellings and dugouts: the shelter builders dig. */
     [DESIGNATION_DIG] = {"dig", N_("designation.dig"), N_("colonist.task.dig_earth"), WORK_MINING,
                          KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_DIGGING},
-    [DESIGNATION_DIG_RAMP] = {"dig_ramp", N_("designation.dig_ramp"),
-                              N_("colonist.task.dig_ramp"), WORK_MINING,
-                              KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
+    [DESIGNATION_DIG_RAMP] = {"dig_ramp", N_("designation.dig_ramp"), N_("colonist.task.dig_ramp"),
+                              WORK_MINING, KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
                               TOOL_USE_DIGGING},
-    [DESIGNATION_DIG_DOWN] = {"dig_down", N_("designation.dig_down"),
-                              N_("colonist.task.dig_down"), WORK_MINING,
-                              KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
+    [DESIGNATION_DIG_DOWN] = {"dig_down", N_("designation.dig_down"), N_("colonist.task.dig_down"),
+                              WORK_MINING, KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
                               TOOL_USE_DIGGING},
     /* Felling needs an axe and the Woodcutting knowledge: neither exists yet. */
     [DESIGNATION_CHOP] = {"chop", N_("designation.chop"), N_("colonist.task.chop"),
-                          WORK_WOODCUTTING, KNOWLEDGE_NONE, KNOWLEDGE_MASTERY_LEVEL,
-                          TOOL_USE_NONE},
+                          WORK_WOODCUTTING, KNOWLEDGE_NONE, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_NONE},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -117,8 +112,8 @@ static bool ramp_possible(const Map *map, int x, int y, int z)
 static bool dig_down_possible(const Map *map, int x, int y, int z)
 {
     return map_in_bounds(map, x, y, z - 1) &&
-           map->rock[map_index(map, x, y, z - 1)] == ROCK_EARTH &&
-           map_is_buildable(map, x, y, z) && map_structure(map, x, y, z) == STRUCTURE_NONE &&
+           map->rock[map_index(map, x, y, z - 1)] == ROCK_EARTH && map_is_buildable(map, x, y, z) &&
+           map_structure(map, x, y, z) == STRUCTURE_NONE &&
            !map_plant_blocks_building(map, x, y, z);
 }
 
@@ -173,8 +168,8 @@ bool designation_ground_free(const Constructions *constructions, const Workstati
            stockpile_at(stockpiles, x, y, ground) == STOCKPILE_NONE;
 }
 
-bool designation_waits_for_support(const Designations *designations, const Map *map, int x,
-                                   int y, int z)
+bool designation_waits_for_support(const Designations *designations, const Map *map, int x, int y,
+                                   int z)
 {
     DesignationType type = designation_get(designations, x, y, z);
     if (type == DESIGNATION_DIG_DOWN) {
@@ -186,8 +181,7 @@ bool designation_waits_for_support(const Designations *designations, const Map *
     return !map_dig_keeps_ceilings(map, x, y, z, type == DESIGNATION_DIG_RAMP);
 }
 
-bool designation_forbidden(const Designations *designations, const Map *map, int x, int y,
-                           int z)
+bool designation_forbidden(const Designations *designations, const Map *map, int x, int y, int z)
 {
     if (map->forbidden_count == 0) {
         return false;
@@ -290,8 +284,7 @@ float designation_work_needed(const Designations *designations, const Map *map, 
     }
     case DESIGNATION_DIG_RAMP:
     case DESIGNATION_DIG_DOWN: {
-        const RockDef *rock =
-            rock_def((RockType)map->rock[dug_index(designations, map, x, y, z)]);
+        const RockDef *rock = rock_def((RockType)map->rock[dug_index(designations, map, x, y, z)]);
         return rock != NULL ? rock->mine_work * DESIGNATION_RAMP_WORK_FACTOR : 0.0f;
     }
     case DESIGNATION_DECONSTRUCT:
@@ -303,8 +296,8 @@ float designation_work_needed(const Designations *designations, const Map *map, 
     }
 }
 
-float designation_progress_fraction(const Designations *designations, const Map *map, int x,
-                                    int y, int z)
+float designation_progress_fraction(const Designations *designations, const Map *map, int x, int y,
+                                    int z)
 {
     float needed = designation_work_needed(designations, map, x, y, z);
     if (needed <= 0.0f) {
@@ -457,8 +450,8 @@ bool designation_add_work(Designations *designations, Map *map, Items *items, in
 
 uint64_t designations_hash(const Designations *designations, uint64_t hash)
 {
-    size_t count = (size_t)designations->width * (size_t)designations->height *
-                   (size_t)designations->depth;
+    size_t count =
+        (size_t)designations->width * (size_t)designations->height * (size_t)designations->depth;
     hash = hash_fnv1a64(hash, designations->type, count);
     hash = hash_fnv1a64(hash, designations->progress, count * sizeof(*designations->progress));
     return hash;

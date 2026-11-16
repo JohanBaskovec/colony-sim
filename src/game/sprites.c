@@ -25,10 +25,10 @@ static const char *const EXPRESSION_NAMES[EXPRESSION_COUNT] = {
     [EXPRESSION_SAD] = "sad",
     [EXPRESSION_ANGRY] = "angry",
 };
-static const char *const HAIR_NAMES[APPEARANCE_HAIR_STYLE_COUNT] = {
-    NULL, "short", "long", "curly", "bun", "braids"};
+static const char *const HAIR_NAMES[APPEARANCE_HAIR_STYLE_COUNT] = {NULL,    "short", "long",
+                                                                    "curly", "bun",   "braids"};
 static const char *const BEARD_NAMES[APPEARANCE_BEARD_COUNT] = {NULL, "stubble", "short", "full",
-                                                               "mustache"};
+                                                                "mustache"};
 /* Plants with sprites: file name, sizes drawn (the growth stages drawn are
  * shared out among them), the growth stages drawn (a tree's later ones are
  * trunk and foliage tiles, see core/tree.h), and whether a variant shows its
@@ -67,12 +67,11 @@ static const char *const TOOL_NAMES[] = {"cobble", "chopper", "flake", "hand_axe
 #define TILE_SPRITE_PADDING SPRITE_ALIGN
 #define TILE_SPRITE_SIZE (SPRITE_PIXELS_PER_TILE + 2 * TILE_SPRITE_PADDING)
 static const Terrain GROUND_TERRAINS[] = {
-    TERRAIN_DEEP_WATER, TERRAIN_SHALLOW_WATER, TERRAIN_SOIL,       TERRAIN_RICH_SOIL,
-    TERRAIN_SAND,       TERRAIN_GRAVEL,        TERRAIN_ROUGH_STONE, TERRAIN_FOLIAGE,
-    TERRAIN_GRASS_ROOF};
-static const char *const GROUND_NAMES[] = {"deep_water", "shallow_water", "soil",    "rich_soil",
-                                           "sand",       "gravel",        "rough_stone", "foliage",
-                                           "grass_roof"};
+    TERRAIN_DEEP_WATER, TERRAIN_SHALLOW_WATER, TERRAIN_SOIL,    TERRAIN_RICH_SOIL, TERRAIN_SAND,
+    TERRAIN_GRAVEL,     TERRAIN_ROUGH_STONE,   TERRAIN_FOLIAGE, TERRAIN_GRASS_ROOF};
+static const char *const GROUND_NAMES[] = {"deep_water",  "shallow_water", "soil",
+                                           "rich_soil",   "sand",          "gravel",
+                                           "rough_stone", "foliage",       "grass_roof"};
 static const RockType WALL_ROCKS[] = {ROCK_GRANITE, ROCK_SANDSTONE, ROCK_EARTH};
 static const char *const WALL_NAMES[] = {"granite", "sandstone", "earth"};
 #define GROUND_SPRITE_COUNT 9
@@ -189,7 +188,8 @@ SpriteId sprite_wall(RockType rock)
 
 SpriteId sprite_grass(float growth)
 {
-    return GRASS_FIRST + clampi((int)(growth * (float)GRASS_SPRITE_COUNT), 0, GRASS_SPRITE_COUNT - 1);
+    return GRASS_FIRST +
+           clampi((int)(growth * (float)GRASS_SPRITE_COUNT), 0, GRASS_SPRITE_COUNT - 1);
 }
 
 /* File name (without directory nor extension) of a sprite. */
@@ -266,8 +266,9 @@ static bool halve(const Pixels *source, Pixels *out)
             int color[3] = {0, 0, 0}, plain[3] = {0, 0, 0};
             int alpha = 0;
             for (int k = 0; k < 4; k++) {
-                const uint8_t *p = source->data + (((size_t)(y * 2 + k / 2) * source->width) +
-                                                   (size_t)(x * 2 + k % 2)) * 4;
+                const uint8_t *p =
+                    source->data +
+                    (((size_t)(y * 2 + k / 2) * source->width) + (size_t)(x * 2 + k % 2)) * 4;
                 for (int c = 0; c < 3; c++) {
                     color[c] += p[c] * p[3];
                     plain[c] += p[c];
@@ -302,8 +303,8 @@ static SDL_Surface *load_sprite(const char *assets_dir, SpriteId id)
     }
     if (surface->w % SPRITE_ALIGN != 0 || surface->h % SPRITE_ALIGN != 0 ||
         surface->w + SPRITE_GUTTER > ATLAS_WIDTH) {
-        LOG_ERROR("Sprite %s is %dx%d: sizes must be multiples of %d", path, surface->w,
-                  surface->h, SPRITE_ALIGN);
+        LOG_ERROR("Sprite %s is %dx%d: sizes must be multiples of %d", path, surface->w, surface->h,
+                  SPRITE_ALIGN);
         SDL_DestroySurface(surface);
         return NULL;
     }
@@ -346,9 +347,8 @@ static void pack(Sprites *sprites, SDL_Surface *const surfaces[SPRITE_COUNT])
 
 static SDL_Texture *create_level_texture(SDL_Renderer *renderer, const Pixels *pixels)
 {
-    SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
-                                             SDL_TEXTUREACCESS_STATIC, pixels->width,
-                                             pixels->height);
+    SDL_Texture *texture = SDL_CreateTexture(
+        renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, pixels->width, pixels->height);
     if (texture == NULL) {
         LOG_ERROR("Cannot create the sprite atlas: %s", SDL_GetError());
         return NULL;
@@ -488,8 +488,8 @@ void sprites_size(const Sprites *sprites, SpriteId id, float *width, float *heig
 
 /* Queues a quad given its four screen corners (clockwise from the top left
  * of the unmirrored sprite). A tile texture shows without its border. */
-static void queue_quad(Sprites *sprites, SpriteId id, const SDL_FPoint corners[4],
-                       SDL_FColor color, bool flip)
+static void queue_quad(Sprites *sprites, SpriteId id, const SDL_FPoint corners[4], SDL_FColor color,
+                       bool flip)
 {
     if (sprites->count == SPRITE_BATCH_QUADS) {
         sprites_flush(sprites);

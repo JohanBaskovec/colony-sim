@@ -42,12 +42,12 @@
 
 typedef enum DesignationType {
     DESIGNATION_NONE = 0,
-    DESIGNATION_MINE, /* Dig out a rock wall. */
+    DESIGNATION_MINE,        /* Dig out a rock wall. */
     DESIGNATION_DECONSTRUCT, /* Take a built structure apart (core/structure.h), or a roof down. */
-    DESIGNATION_DIG,      /* Dig out earth (ROCK_EARTH). */
-    DESIGNATION_DIG_RAMP, /* Cut a ramp into a bank of earth one level high. */
-    DESIGNATION_DIG_DOWN, /* Dig the ground and the earth under it out. */
-    DESIGNATION_CHOP,     /* Fell a tree (core/tree.h), or cut a sapling. */
+    DESIGNATION_DIG,         /* Dig out earth (ROCK_EARTH). */
+    DESIGNATION_DIG_RAMP,    /* Cut a ramp into a bank of earth one level high. */
+    DESIGNATION_DIG_DOWN,    /* Dig the ground and the earth under it out. */
+    DESIGNATION_CHOP,        /* Fell a tree (core/tree.h), or cut a sapling. */
     DESIGNATION_COUNT
 } DesignationType;
 
@@ -56,13 +56,13 @@ typedef enum DesignationType {
 #define DESIGNATION_RAMP_WORK_FACTOR 1.5f
 
 typedef struct DesignationDef {
-    const char *id; /* Stable identifier (saves), never shown. */
-    const char *name_key; /* Order name, e.g. "Mine rock". */
+    const char *id;           /* Stable identifier (saves), never shown. */
+    const char *name_key;     /* Order name, e.g. "Mine rock". */
     const char *activity_key; /* What a settler doing it is busy with, e.g. "Mining". */
     WorkType work_type;
     /* Knowledge needed, KNOWLEDGE_NONE when nobody can carry it out yet. */
     KnowledgeType knowledge;
-    float min_level; /* At least KNOWLEDGE_MASTERY_LEVEL. */
+    float min_level;  /* At least KNOWLEDGE_MASTERY_LEVEL. */
     ToolUse tool_use; /* A tool that speeds the work up (fetched on the way), or none. */
 } DesignationDef;
 
@@ -70,9 +70,9 @@ typedef struct Designations {
     int width;
     int height;
     int depth;
-    uint8_t *type; /* DesignationType per tile. */
-    float *progress; /* Work done so far, in work ticks. */
-    int count; /* Designated tiles. */
+    uint8_t *type;                      /* DesignationType per tile. */
+    float *progress;                    /* Work done so far, in work ticks. */
+    int count;                          /* Designated tiles. */
     int count_by_work[WORK_TYPE_COUNT]; /* Designated tiles per work type. */
     /* Incremented whenever work may have become available (new designation,
      * completed work that opens access...), so that settlers who found
@@ -109,15 +109,14 @@ bool designation_ground_free(const Constructions *constructions, const Workstati
 
 /* Whether the order on the tile digs (earth, rock, a ramp) and has to wait:
  * carrying it out now would leave a ceiling around without support. */
-bool designation_waits_for_support(const Designations *designations, const Map *map, int x,
-                                   int y, int z);
+bool designation_waits_for_support(const Designations *designations, const Map *map, int x, int y,
+                                   int z);
 
 /* Whether the order on the tile touches something the player forbade (see
  * map_forbidden()): the structure or roof to take apart, the tree to fell,
  * the plant on the ground a ramp or a hole takes away. Nobody carries it out
  * meanwhile. */
-bool designation_forbidden(const Designations *designations, const Map *map, int x, int y,
-                           int z);
+bool designation_forbidden(const Designations *designations, const Map *map, int x, int y, int z);
 
 DesignationType designation_get(const Designations *designations, int x, int y, int z);
 
@@ -143,8 +142,8 @@ float designation_work_needed(const Designations *designations, const Map *map, 
                               int z);
 
 /* Work done as a fraction 0..1 of the work needed. */
-float designation_progress_fraction(const Designations *designations, const Map *map, int x,
-                                    int y, int z);
+float designation_progress_fraction(const Designations *designations, const Map *map, int x, int y,
+                                    int z);
 
 /*
  * Adds work to a designated tile. When enough work is done, the order is

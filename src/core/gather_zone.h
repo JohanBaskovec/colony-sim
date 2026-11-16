@@ -86,17 +86,17 @@ typedef uint32_t GatherResourceMask;
 
 /* What a settler does on a tile, in order of preference on the same tile. */
 typedef enum GatherJob {
-    GATHER_JOB_BRANCHES,  /* Take the dead branches lying on a tile (and a shrub's). */
-    GATHER_JOB_TWIGS,     /* Take the twigs lying on a tile (and a shrub's). */
-    GATHER_JOB_HARVEST,   /* Pick fruit, nuts or leaves; the plant stays. */
+    GATHER_JOB_BRANCHES, /* Take the dead branches lying on a tile (and a shrub's). */
+    GATHER_JOB_TWIGS,    /* Take the twigs lying on a tile (and a shrub's). */
+    GATHER_JOB_HARVEST,  /* Pick fruit, nuts or leaves; the plant stays. */
     /* Pick what is easily mistaken for a poisonous plant (mushrooms, wild
      * garlic): skilled gatherers only. */
     GATHER_JOB_HARVEST_CAREFULLY,
     GATHER_JOB_DIG,           /* Dig roots up (a digging stick helps). */
     GATHER_JOB_DIG_CAREFULLY, /* The same, easily mistaken for a poisonous plant. */
     GATHER_JOB_CUT_GRASS,     /* Cut grass, which grows back. */
-    GATHER_JOB_CHOP,      /* Fell a tree. */
-    GATHER_JOB_STONES,    /* Search the ground for a stone. */
+    GATHER_JOB_CHOP,          /* Fell a tree. */
+    GATHER_JOB_STONES,        /* Search the ground for a stone. */
     GATHER_JOB_COUNT
 } GatherJob;
 
@@ -125,7 +125,7 @@ typedef struct GatherResourceDef {
     ItemType item;        /* What gathering gives. */
     ItemTypeMask counted; /* Items counted as this resource in the colony (grass: fresh or dry). */
     GatherJob job;
-    bool ripe_option; /* Whether the order may wait for the full harvest. */
+    bool ripe_option;  /* Whether the order may wait for the full harvest. */
     GatherGroup group; /* GATHER_GROUP_NONE: on its own. */
 } GatherResourceDef;
 
@@ -133,7 +133,7 @@ typedef struct GatherGroupDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
     GatherResourceMask members; /* In display order. */
-    bool food; /* May be gathered until a number of days of food. */
+    bool food;                  /* May be gathered until a number of days of food. */
 } GatherGroupDef;
 
 typedef struct GatherJobDef {
@@ -145,7 +145,7 @@ typedef struct GatherJobDef {
     KnowledgeType knowledge;
     float min_level;
     GatherResourceMask resources; /* The resources it gives. */
-    ToolUse tool_use; /* What a carried tool speeds up (TOOL_USE_NONE: nothing). */
+    ToolUse tool_use;             /* What a carried tool speeds up (TOOL_USE_NONE: nothing). */
     /* A better tool for it lying close by is worth fetching on the way (the
      * other jobs use whatever tool the settler carries). */
     bool fetches_tool;
@@ -304,12 +304,9 @@ int gather_zone_at(const GatherZones *zones, int x, int y, int z);
  * gather_zones_update() afterwards (the game does it every tick).
  */
 void gather_zone_set_enabled(GatherZones *zones, int index, GatherResource resource, bool on);
-void gather_zone_set_mode(GatherZones *zones, int index, GatherResource resource,
-                          GatherMode mode);
-void gather_zone_set_unit(GatherZones *zones, int index, GatherResource resource,
-                          GatherUnit unit);
-void gather_zone_set_target(GatherZones *zones, int index, GatherResource resource,
-                            int target);
+void gather_zone_set_mode(GatherZones *zones, int index, GatherResource resource, GatherMode mode);
+void gather_zone_set_unit(GatherZones *zones, int index, GatherResource resource, GatherUnit unit);
+void gather_zone_set_target(GatherZones *zones, int index, GatherResource resource, int target);
 void gather_zone_set_ripe_only(GatherZones *zones, int index, GatherResource resource,
                                bool ripe_only);
 
@@ -317,10 +314,8 @@ void gather_zone_set_ripe_only(GatherZones *zones, int index, GatherResource res
  * each of its resources (turning it on starts the group's count over); its
  * full harvest option is set for each of its resources that has it. */
 void gather_zone_set_group_enabled(GatherZones *zones, int index, GatherGroup group, bool on);
-void gather_zone_set_group_mode(GatherZones *zones, int index, GatherGroup group,
-                                GatherMode mode);
-void gather_zone_set_group_unit(GatherZones *zones, int index, GatherGroup group,
-                                GatherUnit unit);
+void gather_zone_set_group_mode(GatherZones *zones, int index, GatherGroup group, GatherMode mode);
+void gather_zone_set_group_unit(GatherZones *zones, int index, GatherGroup group, GatherUnit unit);
 void gather_zone_set_group_target(GatherZones *zones, int index, GatherGroup group, int target);
 void gather_zone_set_group_ripe_only(GatherZones *zones, int index, GatherGroup group,
                                      bool ripe_only);
@@ -370,8 +365,7 @@ GatherResourceMask gather_zone_wanted(const GatherZone *zone, const long totals[
                                       float daily_food);
 
 /* Recomputes what every zone wants. */
-void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT],
-                         float daily_food);
+void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT], float daily_food);
 
 /* Plants grew: tiles may offer new jobs. */
 void gather_zones_plants_changed(GatherZones *zones);

@@ -134,11 +134,10 @@ static void test_definitions(void)
         }
         REQUIRE(resource != GATHER_RESOURCE_COUNT);
         GatherJob job = gather_resource_def(resource)->job;
-        GatherJob expected = plant->food_dug
-                                 ? (plant->food_confusable ? GATHER_JOB_DIG_CAREFULLY
-                                                           : GATHER_JOB_DIG)
-                                 : (plant->food_confusable ? GATHER_JOB_HARVEST_CAREFULLY
-                                                           : GATHER_JOB_HARVEST);
+        GatherJob expected =
+            plant->food_dug
+                ? (plant->food_confusable ? GATHER_JOB_DIG_CAREFULLY : GATHER_JOB_DIG)
+                : (plant->food_confusable ? GATHER_JOB_HARVEST_CAREFULLY : GATHER_JOB_HARVEST);
         CHECK_EQ_INT(job, expected);
     }
     /* Gathering from 50 on, food that looks like poison from higher up;
@@ -393,8 +392,8 @@ static void test_tile_jobs_in_order(void)
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
     /* What lies under the tree before felling it, and stones last. */
     GatherJobMask no_branches = ALL_JOBS & ~GATHER_JOB_BIT(GATHER_JOB_BRANCHES);
-    GatherJobMask chop_or_stones = GATHER_JOB_BIT(GATHER_JOB_CHOP) |
-                                   GATHER_JOB_BIT(GATHER_JOB_STONES);
+    GatherJobMask chop_or_stones =
+        GATHER_JOB_BIT(GATHER_JOB_CHOP) | GATHER_JOB_BIT(GATHER_JOB_STONES);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ALL_JOBS), GATHER_JOB_BRANCHES);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, no_branches), GATHER_JOB_TWIGS);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, chop_or_stones), GATHER_JOB_CHOP);
@@ -762,22 +761,22 @@ static void test_branches_twigs_grass_and_nuts(void)
     map_add_litter(&map, 1, 1, 0, ITEM_TWIGS);
     float one_branch = gather_job_work_needed(&map, 1, 1, 0, GATHER_JOB_BRANCHES) / (float)branches;
     CHECK(one_branch > 0.0f);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 1, 1, 0, GATHER_JOB_BRANCHES, 1e6f, 60.0,
-                               NULL));
+    CHECK(
+        gather_zone_add_work(&zones, &map, &items, 1, 1, 0, GATHER_JOB_BRANCHES, 1e6f, 60.0, NULL));
     CHECK_EQ_INT(map_litter(&map, 1, 1, 0, ITEM_BRANCHES), 0);
     CHECK_EQ_INT((int)items.totals[ITEM_BRANCHES], branches);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, 0, ALL_JOBS), GATHER_JOB_TWIGS);
 
     /* The hazel's branches and twigs come before its nuts. */
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_BRANCHES);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_BRANCHES, 1e6f, 60.0,
-                               NULL));
+    CHECK(
+        gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_BRANCHES, 1e6f, 60.0, NULL));
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_TWIGS);
     CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_TWIGS, 1e6f, 60.0, NULL));
     CHECK(items.totals[ITEM_TWIGS] > 0);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_HARVEST);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_HARVEST, 1e6f, 60.0,
-                               NULL));
+    CHECK(
+        gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_HARVEST, 1e6f, 60.0, NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_HAZELNUTS],
                  plant_def(PLANT_HAZEL)->stock_capacity[PLANT_STOCK_FOOD]);
     CHECK_NEAR(hazel->growth, 1.0f, 1e-6);
@@ -816,8 +815,8 @@ static void test_fixed_count_stops(void)
     CHECK_EQ_INT(zone->orders[GATHER_COBBLES].done, 3);
     CHECK_EQ_INT(zone->wanted, 0);
     CHECK_EQ_INT(zones.wanting_cells, 0);
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 0, 0, 0, GATHER_JOB_STONES, stone, 60.0,
-                                NULL));
+    CHECK(
+        !gather_zone_add_work(&zones, &map, &items, 0, 0, 0, GATHER_JOB_STONES, stone, 60.0, NULL));
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, 0);
     /* A higher target: more to do. Another mode starts over. */
@@ -839,8 +838,8 @@ static void test_progress_belongs_to_one_job(void)
     int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
     order(&zones, &items, index, GATHER_TWIGS, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_TWIGS, 100.0f, 60.0,
-                                NULL));
+    CHECK(
+        !gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_TWIGS, 100.0f, 60.0, NULL));
     CHECK(gather_zone_progress_fraction(&zones, &map, 2, 2, 0) > 0.0f);
     /* Work on another job there starts from scratch. */
     CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_STONES, 100.0f, 60.0,

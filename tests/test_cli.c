@@ -70,8 +70,9 @@ static void test_test_options(void)
 {
     CliOptions options;
     char error[128];
-    char *argv[] = {"colony_sim", "--colonists", "64", "--scenario=3", "--debug",
-                    "no_tools,instant_build", "--debug=learn_all"};
+    char *argv[] = {"colony_sim",       "--colonists", "64",
+                    "--scenario=3",     "--debug",     "no_tools,instant_build",
+                    "--debug=learn_all"};
     CHECK(cli_parse(&options, ARGC(argv), argv, error, sizeof(error)));
     CHECK_EQ_INT(options.colonist_count, 64);
     CHECK_EQ_INT(options.scenario, SCENARIO_CONSTRUCTION);
@@ -88,12 +89,9 @@ static void test_test_options(void)
     CHECK(cli_parse(&options, ARGC(fell), fell, error, sizeof(error)));
     CHECK_EQ_UINT(options.debug, CLI_DEBUG_INSTANT_FELL_AND_MINE);
 
-    char *bad[][3] = {{"colony_sim", "--colonists", "0"},
-                      {"colony_sim", "--colonists", "65"},
-                      {"colony_sim", "--scenario", "4"},
-                      {"colony_sim", "--debug", "fly"},
-                      {"colony_sim", "--debug", "no_tools,"},
-                      {"colony_sim", "--debug", ""},
+    char *bad[][3] = {{"colony_sim", "--colonists", "0"},     {"colony_sim", "--colonists", "65"},
+                      {"colony_sim", "--scenario", "4"},      {"colony_sim", "--debug", "fly"},
+                      {"colony_sim", "--debug", "no_tools,"}, {"colony_sim", "--debug", ""},
                       {"colony_sim", "--debug", "no_tool"}};
     for (int i = 0; i < ARGC(bad); i++) {
         CHECK(!cli_parse(&options, 3, bad[i], error, sizeof(error)));

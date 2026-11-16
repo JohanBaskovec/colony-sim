@@ -52,17 +52,17 @@ typedef struct ConstructionSite {
     uint8_t type; /* StructureType; STRUCTURE_NONE for a workstation. */
     /* WorkstationType + 1 when the site is a workstation's blueprint, else 0. */
     uint8_t workstation;
-    int16_t x, y, z; /* The structure's head. */
+    int16_t x, y, z;   /* The structure's head. */
     uint8_t direction; /* Direction: where its other tiles lie (core/structure.h). */
-    int number; /* Unique, never reused: tells a site from a later one in the same slot. */
+    int number;        /* Unique, never reused: tells a site from a later one in the same slot. */
     /* Materials brought so far, per slot of the structure's definition (a
      * slot keeps the lowest grade delivered). */
     ItemStack delivered[STRUCTURE_MATERIAL_SLOTS];
     /* Items of each slot on their way: promised by settlers fetching them. */
     uint16_t promised[STRUCTURE_MATERIAL_SLOTS];
-    float progress; /* Work done, once every material is in. */
+    float progress;       /* Work done, once every material is in. */
     float clear_progress; /* Work done clearing the plant of a tile, before building. */
-    bool refresh; /* Refreshing the built structure of the tile, not building one. */
+    bool refresh;         /* Refreshing the built structure of the tile, not building one. */
 } ConstructionSite;
 
 typedef struct Constructions {
@@ -118,8 +118,8 @@ bool construction_roof_held(const Constructions *constructions, const Map *map, 
  * a floor without rock under it (not a roof, nor a slope or a ladder that
  * leads up through it), no site yet, held up (construction_roof_held()).
  * Whatever stands or is planned under it (a bed, a wall) stays. */
-bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
-                                 int y, int z);
+bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x, int y,
+                                 int z);
 
 /* construction_can_place() on every tile a structure with its head at
  * (x, y) would take (construction_can_place_roof() for a roof). */

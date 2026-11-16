@@ -55,7 +55,7 @@ static void test_floors_and_slopes(void)
     CHECK(!map_has_floor(&map, 3, 3, 1));
     CHECK(map_is_open(&map, 3, 3, 2));
     CHECK(!map_is_open(&map, 3, 3, 0));
-    CHECK(!map_is_open(&map, 3, 3, 3)); /* Out of bounds. */
+    CHECK(!map_is_open(&map, 3, 3, 3));     /* Out of bounds. */
     CHECK(!map_is_passable(&map, 3, 3, 1)); /* Nothing to stand on. */
     CHECK_EQ_INT(map_ground_level(&map, 3, 3), 0);
     CHECK(!map_natural_roof(&map, 3, 3, 0));
@@ -345,7 +345,7 @@ static void test_water_and_drinking_spots(void)
     CHECK(map_is_drinking_spot(&map, 5, 5, 0)); /* Standing in shallow water. */
     CHECK(map_is_drinking_spot(&map, 6, 5, 0)); /* Shore tiles, 4-neighborhood. */
     CHECK(map_is_drinking_spot(&map, 5, 4, 0));
-    CHECK(!map_is_drinking_spot(&map, 6, 6, 0)); /* Diagonal only. */
+    CHECK(!map_is_drinking_spot(&map, 6, 6, 0));   /* Diagonal only. */
     CHECK(!map_is_drinking_spot(&map, 10, 10, 0)); /* Deep water is not walkable. */
     CHECK(map_is_drinking_spot(&map, 10, 11, 0));
     CHECK(map_is_drinking_spot(&map, 1, 0, 0)); /* Map edge does not break the lookup. */
@@ -540,7 +540,7 @@ static void test_ladders(void)
 {
     Map map;
     REQUIRE(init_dug_room(&map));
-    CHECK(map_ladder_fits(&map, 3, 2, 0)); /* At the foot of the hill. */
+    CHECK(map_ladder_fits(&map, 3, 2, 0));  /* At the foot of the hill. */
     CHECK(!map_ladder_fits(&map, 1, 2, 0)); /* Plains all around. */
     CHECK(!map_ladder_fits(&map, 6, 6, 0)); /* In the room: ground over it. */
     CHECK(!map_ladder_fits(&map, 3, 2, 2)); /* The top level. */
@@ -575,7 +575,7 @@ static void test_ceilings_need_support(void)
     CHECK(!map_has_ceiling(&map, 4, 5, 0)); /* Rock. */
     CHECK(!map_has_ceiling(&map, 5, 5, 2)); /* The top level. */
     CHECK(map_ceiling_supported(&map, 5, 5, 0));
-    CHECK(map_ceiling_supported(&map, 2, 5, 0)); /* Nothing to hold up. */
+    CHECK(map_ceiling_supported(&map, 2, 5, 0));  /* Nothing to hold up. */
     CHECK(!map_ceiling_supported(&map, 7, 7, 0)); /* 3 tiles from the rock. */
     CHECK(map_ceiling_supported(&map, 7, 5, 0));
 
@@ -586,8 +586,8 @@ static void test_ceilings_need_support(void)
     map_set_structure(&map, 7, 7, 0, STRUCTURE_NONE);
 
     /* Digging: the rock dug out holds nothing up any more. */
-    map_set_rock(&map, 7, 7, 0, ROCK_EARTH); /* A pillar left in the middle. */
-    CHECK(map_dig_keeps_ceilings(&map, 4, 2, 0, false)); /* Away from the room. */
+    map_set_rock(&map, 7, 7, 0, ROCK_EARTH);              /* A pillar left in the middle. */
+    CHECK(map_dig_keeps_ceilings(&map, 4, 2, 0, false));  /* Away from the room. */
     CHECK(!map_dig_keeps_ceilings(&map, 7, 7, 0, false)); /* The pillar. */
     /* The room's wall: other rock of the wall still holds the room up. */
     CHECK(map_dig_keeps_ceilings(&map, 7, 10, 0, false));
@@ -636,8 +636,8 @@ static void test_change_logs(void)
     CHECK_EQ_UINT(map.build_revision, build + 1);
     /* Rock on open ground: the topology log, on its tile. */
     map_set_rock(&map, 10, 10, 0, ROCK_GRANITE);
-    const MapTopologyChange *moved = &map.topology_log[map.topology_revision %
-                                                       MAP_TOPOLOGY_LOG_SIZE];
+    const MapTopologyChange *moved =
+        &map.topology_log[map.topology_revision % MAP_TOPOLOGY_LOG_SIZE];
     CHECK_EQ_INT(moved->x, 10);
     CHECK_EQ_INT(moved->y, 10);
     CHECK(!moved->opened && !moved->anywhere);

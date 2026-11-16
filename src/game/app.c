@@ -140,7 +140,7 @@ static bool structure_or_site_at(const App *app, int x, int y, int z)
  * nearly everywhere). */
 typedef enum ClickTarget {
     CLICK_STATION,
-    CLICK_TILE,       /* A structure, a roof, a site, items or a plant (game/tile_panel.h). */
+    CLICK_TILE, /* A structure, a roof, a site, items or a plant (game/tile_panel.h). */
     CLICK_STOCKPILE,
     CLICK_GATHER_ZONE,
     CLICK_GRASS_TILE, /* The tile, for its grass alone. */
@@ -173,8 +173,7 @@ static bool click_target_at(const App *app, ClickTarget target, int x, int y, in
                (plant != PLANT_NONE && plant != PLANT_GRASS);
     }
     case CLICK_STOCKPILE: return stockpile_at(&game->stockpiles, x, y, z) != STOCKPILE_NONE;
-    case CLICK_GATHER_ZONE:
-        return gather_zone_at(&game->gather_zones, x, y, z) != GATHER_ZONE_NONE;
+    case CLICK_GATHER_ZONE: return gather_zone_at(&game->gather_zones, x, y, z) != GATHER_ZONE_NONE;
     case CLICK_GRASS_TILE:
         return !click_target_at(app, CLICK_TILE, x, y, z) &&
                plant_type_at(app, x, y, z) == PLANT_GRASS;
@@ -237,8 +236,8 @@ static void select_tile(App *app, int x, int y, int z)
  * apart, picked up). */
 static void prune_tile_selection(App *app)
 {
-    if (app->tile_selected && !tile_selectable(app, app->selected_tile_x, app->selected_tile_y,
-                                               app->selected_tile_z)) {
+    if (app->tile_selected &&
+        !tile_selectable(app, app->selected_tile_x, app->selected_tile_y, app->selected_tile_z)) {
         app->tile_selected = false;
     }
 }
@@ -363,8 +362,7 @@ static void apply_test_options(Game *game, const CliOptions *options)
     game_set_free_crafts(game, (options->debug & CLI_DEBUG_FREE_CRAFTS) != 0);
     game_set_no_tools(game, (options->debug & CLI_DEBUG_NO_TOOLS) != 0);
     game_set_instant_deconstruct(game, (options->debug & CLI_DEBUG_INSTANT_DECONSTRUCT) != 0);
-    game_set_instant_fell_and_mine(game,
-                                   (options->debug & CLI_DEBUG_INSTANT_FELL_AND_MINE) != 0);
+    game_set_instant_fell_and_mine(game, (options->debug & CLI_DEBUG_INSTANT_FELL_AND_MINE) != 0);
     if (options->debug & CLI_DEBUG_LEARN_ALL) {
         game_debug_learn_all(game);
     }
@@ -377,7 +375,7 @@ bool app_init(App *app, const CliOptions *options)
 {
     SDL_zerop(app);
     app->structure_direction = DIRECTION_SOUTH; /* Beds' heads at the top. */
-    app->debug_item = ITEM_BRANCHES; /* What the debug tool spawns first. */
+    app->debug_item = ITEM_BRANCHES;            /* What the debug tool spawns first. */
     log_set_sink(sdl_log_sink, NULL);
     SDL_SetAppMetadata("Colony Sim", COLONY_VERSION, "io.github.colony-sim");
 
@@ -439,9 +437,8 @@ bool app_init(App *app, const CliOptions *options)
     }
     app->game_ready = true;
     apply_test_options(&app->game, options);
-    LOG_INFO("World generated: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists",
-             params.world.seed, params.world.width, params.world.height,
-             app->game.colonist_pool.count);
+    LOG_INFO("World generated: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists", params.world.seed,
+             params.world.width, params.world.height, app->game.colonist_pool.count);
 
     /* Start centered on the first colonist (or the map center if there is none). */
     float start_x = (float)params.world.width * 0.5f;
@@ -451,9 +448,8 @@ bool app_init(App *app, const CliOptions *options)
         colonist_position(first, &start_x, &start_y);
     }
     camera_init(&app->camera, start_x, start_y, APP_INITIAL_ZOOM);
-    app->camera.level = first != NULL ? first->z
-                                      : map_ground_level(&app->game.map, (int)start_x,
-                                                         (int)start_y);
+    app->camera.level =
+        first != NULL ? first->z : map_ground_level(&app->game.map, (int)start_x, (int)start_y);
     ui_init(&app->ui, app->renderer, app->text);
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
@@ -541,16 +537,15 @@ static void build_like_selection(App *app)
 {
     const Workstation *station =
         workstation_get_const(&app->game.workstations, app->selected_station);
-    StructureType structure =
-        app->tile_selected
-            ? structure_type_at(app, app->selected_tile_x, app->selected_tile_y,
-                                app->selected_tile_z)
-            : STRUCTURE_NONE;
+    StructureType structure = app->tile_selected
+                                  ? structure_type_at(app, app->selected_tile_x,
+                                                      app->selected_tile_y, app->selected_tile_z)
+                                  : STRUCTURE_NONE;
     /* A workstation's site: another of that workstation. */
     const ConstructionSite *site =
-        app->tile_selected ? site_at(app, app->selected_tile_x,
-                                          app->selected_tile_y, app->selected_tile_z)
-                                : NULL;
+        app->tile_selected
+            ? site_at(app, app->selected_tile_x, app->selected_tile_y, app->selected_tile_z)
+            : NULL;
     WorkstationType site_station =
         site != NULL ? construction_workstation(site) : WORKSTATION_TYPE_COUNT;
     if (app->selected_stockpile != STOCKPILE_NONE) {
@@ -560,14 +555,12 @@ static void build_like_selection(App *app)
         clear_selection(app);
         set_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD);
     } else if (station != NULL || site_station != WORKSTATION_TYPE_COUNT) {
-        WorkstationType type =
-            station != NULL ? (WorkstationType)station->type : site_station;
+        WorkstationType type = station != NULL ? (WorkstationType)station->type : site_station;
         clear_selection(app);
         set_tool(app, APP_TOOL_BUILD, (int)type);
     } else if (structure != STRUCTURE_NONE) {
-        app->structure_direction =
-            structure_direction_at(app, app->selected_tile_x, app->selected_tile_y,
-                                   app->selected_tile_z);
+        app->structure_direction = structure_direction_at(
+            app, app->selected_tile_x, app->selected_tile_y, app->selected_tile_z);
         clear_selection(app);
         set_tool(app, APP_TOOL_STRUCTURE, (int)structure);
     }
@@ -786,8 +779,8 @@ static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
         stockpiles_remove_rect(stockpiles, x0, y0, x1, y1, z);
         prune_stockpile_selection(app);
     } else {
-        select_stockpile(app, game_add_stockpile_rect(&app->game, x0, y0, x1, y1, z,
-                                                      app->selected_stockpile));
+        select_stockpile(
+            app, game_add_stockpile_rect(&app->game, x0, y0, x1, y1, z, app->selected_stockpile));
     }
 }
 
@@ -868,8 +861,8 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         int x0, y0, x1, y1;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
         if (game_structure_buildable(&app->game, app->structure_type)) {
-            game_place_structure_rect(&app->game, app->structure_type, app->structure_direction,
-                                      x0, y0, x1, y1, z);
+            game_place_structure_rect(&app->game, app->structure_type, app->structure_direction, x0,
+                                      y0, x1, y1, z);
         }
     } else if (app->tool == APP_TOOL_FORBID) {
         int x0, y0, x1, y1;
@@ -1027,8 +1020,7 @@ static void render_frame(App *app)
         render_temperature(app->renderer, &app->game, &app->camera);
     }
     if (app->hover_valid) {
-        render_tile_outline(app->renderer, &app->camera, app->hover_x, app->hover_y,
-                            HOVER_COLOR);
+        render_tile_outline(app->renderer, &app->camera, app->hover_x, app->hover_y, HOVER_COLOR);
     }
     if (app->tile_selected) {
         render_tile_selection(app->renderer, &app->camera, app->selected_tile_x,
@@ -1049,13 +1041,12 @@ static void render_frame(App *app)
             SDL_GetMouseState(&mouse_x, &mouse_y);
             int x0, y0, x1, y1;
             tool_rect(app, mouse_x, mouse_y, &x0, &y0, &x1, &y1);
-            render_structure_preview(app->renderer, &app->game, &app->camera,
-                                     app->structure_type, app->structure_direction, x0, y0, x1,
-                                     y1);
+            render_structure_preview(app->renderer, &app->game, &app->camera, app->structure_type,
+                                     app->structure_direction, x0, y0, x1, y1);
         } else if (app->hover_valid) {
-            render_structure_preview(app->renderer, &app->game, &app->camera,
-                                     app->structure_type, app->structure_direction, app->hover_x,
-                                     app->hover_y, app->hover_x, app->hover_y);
+            render_structure_preview(app->renderer, &app->game, &app->camera, app->structure_type,
+                                     app->structure_direction, app->hover_x, app->hover_y,
+                                     app->hover_x, app->hover_y);
         }
     } else if (app->tool != APP_TOOL_NONE && app->left_button_down) {
         float mouse_x, mouse_y;
@@ -1070,14 +1061,12 @@ static void render_frame(App *app)
         } else if (app->tool == APP_TOOL_FORBID) {
             render_forbid_area(app->renderer, &app->camera, x0, y0, x1, y1, !app->forbid_allows);
         } else {
-            render_designation_area(app->renderer, &app->camera, x0, y0, x1, y1,
-                                    app->tool_type);
+            render_designation_area(app->renderer, &app->camera, x0, y0, x1, y1, app->tool_type);
         }
     } else if (app->box_selecting) {
         float mouse_x, mouse_y;
         SDL_GetMouseState(&mouse_x, &mouse_y);
-        render_selection_box(app->renderer, app->drag_start_x, app->drag_start_y, mouse_x,
-                             mouse_y);
+        render_selection_box(app->renderer, app->drag_start_x, app->drag_start_y, mouse_x, mouse_y);
     }
     float mouse_x, mouse_y;
     SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_x, &mouse_y);

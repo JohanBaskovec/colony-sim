@@ -51,8 +51,8 @@ static bool is_foliage(const Map *map, int x, int y, int z)
            map->rock[map_index(map, x, y, z)] == ROCK_NONE;
 }
 
-static int count_on_line(const Items *items, int x, int y, int z, int dx, int dy, int from,
-                         int to, ItemType type)
+static int count_on_line(const Items *items, int x, int y, int z, int dx, int dy, int from, int to,
+                         ItemType type)
 {
     int count = 0;
     for (int i = from; i <= to; i++) {
@@ -423,8 +423,8 @@ static void test_fell(void)
     int twigs = tree_crown_yield(plant, ITEM_TWIGS);
     CHECK_EQ_INT(branches, TREE_CROWN_BRANCHES);
     CHECK_EQ_INT(twigs, TREE_CROWN_TWIGS);
-    ItemStack wood = item_stack_make(ITEM_WOOD, 24, ITEM_QUALITY_STANDARD,
-                                     item_def(ITEM_WOOD)->max_hit_points);
+    ItemStack wood =
+        item_stack_make(ITEM_WOOD, 24, ITEM_QUALITY_STANDARD, item_def(ITEM_WOOD)->max_hit_points);
     TreeFall fall = tree_fell(&map, &items, 10, 2, 0, wood);
     CHECK_EQ_INT(fall.direction, DIRECTION_SOUTH);
     CHECK_EQ_INT(fall.length, 8);
@@ -568,8 +568,8 @@ static void test_fell_over_drop_and_onto_walls(void)
     map_set_structure(&map, 8, 7, 1, STRUCTURE_WALL); /* South, north and west: walls. */
     map_set_structure(&map, 8, 2, 1, STRUCTURE_WALL);
     map_set_structure(&map, 5, 5, 1, STRUCTURE_WALL);
-    ItemStack wood = item_stack_make(ITEM_WOOD, 14, ITEM_QUALITY_STANDARD,
-                                     item_def(ITEM_WOOD)->max_hit_points);
+    ItemStack wood =
+        item_stack_make(ITEM_WOOD, 14, ITEM_QUALITY_STANDARD, item_def(ITEM_WOOD)->max_hit_points);
     TreeFall fall = tree_fell(&map, &items, 8, 5, 1, wood);
     CHECK_EQ_INT(fall.direction, DIRECTION_EAST);
     CHECK_EQ_INT(fall.harmed, 0);
@@ -776,7 +776,7 @@ static void test_gathering_on_trees(void)
     }
     map_add_litter(&map, 11, 10, 1, ITEM_TWIGS); /* On the foliage. */
     map_add_litter(&map, 11, 10, 1, ITEM_TWIGS);
-    map_add_litter(&map, 9, 10, 0, ITEM_TWIGS); /* On the ground. */
+    map_add_litter(&map, 9, 10, 0, ITEM_TWIGS);    /* On the ground. */
     CHECK(gather_zone_can_cover(&map, 10, 10, 0)); /* The foot of the trunk. */
     CHECK(!gather_zone_can_cover(&map, 10, 10, 1));
     CHECK(gather_zone_can_cover(&map, 11, 10, 1)); /* Foliage. */
@@ -793,11 +793,10 @@ static void test_gathering_on_trees(void)
     long available[GATHER_RESOURCE_COUNT];
     gather_zone_available(&zones, &map, zone, available);
     CHECK_EQ_INT((int)available[GATHER_TWIGS], 1); /* The foliage's are not counted. */
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 11, 10, 1, GATHER_JOB_TWIGS, 1e6f, 60.0,
-                                NULL));
+    CHECK(
+        !gather_zone_add_work(&zones, &map, &items, 11, 10, 1, GATHER_JOB_TWIGS, 1e6f, 60.0, NULL));
     CHECK_EQ_INT(map_litter(&map, 11, 10, 1, ITEM_TWIGS), 2);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 9, 10, 0, GATHER_JOB_TWIGS, 1e6f, 60.0,
-                               NULL));
+    CHECK(gather_zone_add_work(&zones, &map, &items, 9, 10, 0, GATHER_JOB_TWIGS, 1e6f, 60.0, NULL));
     CHECK_EQ_INT(items_get(&items, 9, 10, 0).type, ITEM_TWIGS);
     CHECK_EQ_INT(items_get(&items, 9, 10, 0).count, 1);
     CHECK_EQ_INT(map_litter(&map, 9, 10, 0, ITEM_TWIGS), 0);
@@ -815,8 +814,8 @@ static void test_gathering_on_trees(void)
     CHECK_EQ_INT(gather_tile_job_in(&zones, &map, 11, 10, 1, ~0u, priority + 1), GATHER_JOB_NONE);
     gather_zone_available(&zones, &map, upper, available);
     CHECK_EQ_INT((int)available[GATHER_TWIGS], 2);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 11, 10, 1, GATHER_JOB_TWIGS, 1e6f, 60.0,
-                               NULL));
+    CHECK(
+        gather_zone_add_work(&zones, &map, &items, 11, 10, 1, GATHER_JOB_TWIGS, 1e6f, 60.0, NULL));
     CHECK_EQ_INT(items_get(&items, 11, 10, 1).type, ITEM_TWIGS); /* Up there. */
     CHECK_EQ_INT(items_get(&items, 11, 10, 1).count, 2);
     CHECK_EQ_INT(map_litter(&map, 11, 10, 1, ITEM_TWIGS), 0);
@@ -828,8 +827,7 @@ static void test_gathering_on_trees(void)
     gather_zones_update(&zones, items.totals, 1.0f);
     CHECK(gather_job_available(&zones, &map, 10, 10, 0, GATHER_JOB_CHOP));
     CHECK(!gather_job_available(&zones, &map, 11, 10, 1, GATHER_JOB_CHOP));
-    CHECK(gather_zone_add_work(&zones, &map, &items, 10, 10, 0, GATHER_JOB_CHOP, 1e6f, 60.0,
-                               NULL));
+    CHECK(gather_zone_add_work(&zones, &map, &items, 10, 10, 0, GATHER_JOB_CHOP, 1e6f, 60.0, NULL));
     CHECK_EQ_INT(map.plants[map_index(&map, 10, 10, 0)].type, PLANT_NONE);
     CHECK(!is_trunk(&map, 10, 10, 0));
     CHECK_EQ_INT(items_get(&items, 10, 12, 0).type, ITEM_WOOD); /* Along the trunk. */
@@ -862,8 +860,8 @@ static void test_settler_climbs_only_for_a_zone_on_the_foliage(void)
         for (int need = 0; need < NEED_COUNT; need++) {
             colonist->needs[need] = 1.0f;
         }
-        int zone = gather_zone_create(&game.gather_zones, map, 14, 14, 18, 18,
-                                      over_foliage ? 1 : 0);
+        int zone =
+            gather_zone_create(&game.gather_zones, map, 14, 14, 18, 18, over_foliage ? 1 : 0);
         REQUIRE(zone != GATHER_ZONE_NONE);
         gather_zone_set_enabled(&game.gather_zones, zone, GATHER_TWIGS, true);
         gather_zone_set_mode(&game.gather_zones, zone, GATHER_TWIGS, GATHER_FOREVER);

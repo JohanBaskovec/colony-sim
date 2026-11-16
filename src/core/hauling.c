@@ -311,8 +311,8 @@ bool haul_find_extra_source(const HaulWorld *world, TilePos from, ItemStack load
                             TilePos destination, float max_cost, TilePos *out, Path *path)
 {
     const Stockpile *zone =
-        stockpile_get(world->stockpiles, stockpile_at(world->stockpiles, destination.x,
-                                                      destination.y, destination.z));
+        stockpile_get(world->stockpiles,
+                      stockpile_at(world->stockpiles, destination.x, destination.y, destination.z));
     if (zone == NULL || load.type == ITEM_NONE) {
         return false;
     }

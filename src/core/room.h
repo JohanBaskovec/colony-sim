@@ -27,7 +27,7 @@
 
 typedef struct Room {
     int tiles;
-    int roofed; /* Tiles under a roof (counted for rooms only). */
+    int roofed;  /* Tiles under a roof (counted for rooms only). */
     bool closed; /* A room; false: outdoors. */
 } Room;
 
@@ -35,10 +35,10 @@ typedef struct Rooms {
     int width;
     int height;
     int depth;
-    uint32_t *id; /* Area of each tile, ROOM_NONE on rock, walls and doors. */
-    uint32_t count; /* Areas are numbered 1..count. */
-    Room *list; /* Per area id (index 0 unused). */
-    uint32_t *stack; /* Scratch for the flood fill. */
+    uint32_t *id;               /* Area of each tile, ROOM_NONE on rock, walls and doors. */
+    uint32_t count;             /* Areas are numbered 1..count. */
+    Room *list;                 /* Per area id (index 0 unused). */
+    uint32_t *stack;            /* Scratch for the flood fill. */
     uint32_t topology_revision; /* The map revisions the areas were built for. */
     uint32_t build_revision;
     bool built;

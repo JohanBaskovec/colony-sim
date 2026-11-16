@@ -57,8 +57,7 @@ static void cave_in(Map *map, Items *items, Designations *designations, int x, i
     if (designations != NULL) {
         designation_set(designations, map, x, y, z, DESIGNATION_NONE);
     }
-    map_set_rock(map, x, y, z,
-                 above != ROCK_NONE && above != ROCK_WOOD ? above : ROCK_EARTH);
+    map_set_rock(map, x, y, z, above != ROCK_NONE && above != ROCK_WOOD ? above : ROCK_EARTH);
     drop_beside(map, items, x, y, z, lying);
     drop_salvage(map, items, structure, x, y, z, true);
     if (cave_ins != NULL) {
@@ -83,8 +82,8 @@ static void roof_falls(Map *map, Items *items, Designations *designations, int x
 
 /* Brings down the unsupported roofs and ceilings over the tiles of a
  * rectangle (clipped to the map). Returns the roofs fallen. */
-static int collapse_area(Map *map, Items *items, Designations *designations, int x0, int y0,
-                         int x1, int y1, int z, CaveIns *cave_ins)
+static int collapse_area(Map *map, Items *items, Designations *designations, int x0, int y0, int x1,
+                         int y1, int z, CaveIns *cave_ins)
 {
     if (z < 0 || z >= map->depth) {
         return 0;
@@ -135,16 +134,16 @@ int roofs_collapse(RoofWatch *watch, Map *map, Items *items, Designations *desig
             for (uint32_t r = 1; r <= topology; r++) {
                 MapTopologyChange change =
                     map->topology_log[(watch->topology_revision + r) % MAP_TOPOLOGY_LOG_SIZE];
-                fallen += collapse_area(map, items, designations, change.x - reach,
-                                        change.y - reach, change.x + reach, change.y + reach,
-                                        change.z, cave_ins);
+                fallen +=
+                    collapse_area(map, items, designations, change.x - reach, change.y - reach,
+                                  change.x + reach, change.y + reach, change.z, cave_ins);
             }
             for (uint32_t r = 1; r <= build; r++) {
                 MapBuildChange change =
                     map->build_log[(watch->build_revision + r) % MAP_BUILD_LOG_SIZE];
-                fallen += collapse_area(map, items, designations, change.x - reach,
-                                        change.y - reach, change.x + reach, change.y + reach,
-                                        change.z, cave_ins);
+                fallen +=
+                    collapse_area(map, items, designations, change.x - reach, change.y - reach,
+                                  change.x + reach, change.y + reach, change.z, cave_ins);
             }
         }
     }

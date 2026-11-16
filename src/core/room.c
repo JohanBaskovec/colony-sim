@@ -36,8 +36,7 @@ bool rooms_current(const Rooms *rooms, const Map *map)
 {
     return rooms->built && rooms->topology_revision == map->topology_revision &&
            rooms->build_revision == map->build_revision && rooms->width == map->width &&
-           rooms->height == map->height &&
-           rooms->depth == map->depth;
+           rooms->height == map->height && rooms->depth == map->depth;
 }
 
 /* Rock, a wall or a door: what closes a room. */

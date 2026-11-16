@@ -53,8 +53,8 @@ static void test_gray_hair_comes_with_age(void)
     rng_seed(&rng, 7u, 3u);
     int young_gray = 0, old_gray = 0;
     for (int i = 0; i < ROLLS; i++) {
-        young_gray += appearance_roll(&rng, APPEARANCE_GRAYING_AGE - 1).hair_color ==
-                      HAIR_COLOR_GRAY;
+        young_gray +=
+            appearance_roll(&rng, APPEARANCE_GRAYING_AGE - 1).hair_color == HAIR_COLOR_GRAY;
         old_gray += appearance_roll(&rng, APPEARANCE_GRAY_AGE).hair_color == HAIR_COLOR_GRAY;
     }
     CHECK_EQ_INT(young_gray, 0);

@@ -14,8 +14,8 @@
 #include <SDL3/SDL.h>
 
 /* The ground of the level shown (Camera.level): terrain seen from above with
- * its grass, the cut face of rock walls, slopes, the edges of drops. Open space is left as it is: the levels below show there
- * (render_below_begin()). */
+ * its grass, the cut face of rock walls, slopes, the edges of drops. Open space is left as it is:
+ * the levels below show there (render_below_begin()). */
 void render_map(SDL_Renderer *renderer, Sprites *sprites, const Map *map, const Camera *camera);
 
 /*
@@ -53,8 +53,7 @@ void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *c
 
 /* What falls from the sky (rain, snow, lightning in a storm) or fog, over
  * the whole view; `now_ms`: real time, which animates it. */
-void render_weather(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                    Uint64 now_ms);
+void render_weather(SDL_Renderer *renderer, const Game *game, const Camera *camera, Uint64 now_ms);
 
 /* Darkens the screen according to the light level of the hour and the
  * clouds, less around burning hearths, which also glow warm. */
@@ -71,8 +70,8 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
 void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
 /* Rectangle of tiles being designated with a tool (corners in any order). */
-void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0,
-                             int x1, int y1, DesignationType type);
+void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                             int y1, DesignationType type);
 
 /* Stockpile zones as a translucent overlay; the selected one (index, or
  * STOCKPILE_NONE) is brighter and outlined. */

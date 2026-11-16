@@ -34,8 +34,8 @@ typedef enum ToolUse {
 #define TOOL_WEAR_TICKS TICKS_PER_HOUR
 
 typedef struct ToolUseDef {
-    const char *id;   /* Stable identifier, never shown. */
-    float bare_hands; /* Speed factor without a tool; 0: impossible. */
+    const char *id;                /* Stable identifier, never shown. */
+    float bare_hands;              /* Speed factor without a tool; 0: impossible. */
     float factor[ITEM_TYPE_COUNT]; /* Per item type used as the tool; 0: useless. */
 } ToolUseDef;
 

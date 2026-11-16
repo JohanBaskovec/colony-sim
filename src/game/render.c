@@ -17,7 +17,7 @@ static const SDL_Color TERRAIN_COLORS[TERRAIN_COUNT] = {
     [TERRAIN_GRAVEL] = {138, 132, 122, 255},
     [TERRAIN_ROUGH_STONE] = {106, 102, 98, 255},
     [TERRAIN_GRASS_ROOF] = {196, 168, 96, 255}, /* Textured: sprite_ground(). */
-    [TERRAIN_FOLIAGE] = {62, 106, 48, 255}, /* Textured: sprite_ground(). */
+    [TERRAIN_FOLIAGE] = {62, 106, 48, 255},     /* Textured: sprite_ground(). */
 };
 
 static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
@@ -56,7 +56,7 @@ static const SDL_Color DROP_EDGE_COLOR = {16, 12, 8, 120};
 static const SDL_Color FORBID_COLOR = {214, 52, 44, 235};
 static const SDL_Color FORBID_BACK_COLOR = {250, 244, 236, 210};
 static const SDL_Color ALLOW_COLOR = {84, 176, 92, 255};
-#define FORBID_MARKER_RADIUS 0.17f /* In tiles. */
+#define FORBID_MARKER_RADIUS 0.17f    /* In tiles. */
 #define FORBID_MARKER_MIN_RADIUS 3.0f /* Pixels. */
 #define FORBID_RING_SEGMENTS 16
 
@@ -69,18 +69,15 @@ static const SDL_FColor WHITE = {1.0f, 1.0f, 1.0f, 1.0f};
 
 /* Tints of the (light gray) hair and beard sprites. */
 static const SDL_Color HAIR_COLORS[HAIR_COLOR_COUNT] = {
-    [HAIR_COLOR_BLACK] = {58, 46, 40, 255},     [HAIR_COLOR_DARK_BROWN] = {100, 66, 44, 255},
-    [HAIR_COLOR_BROWN] = {146, 102, 64, 255},   [HAIR_COLOR_AUBURN] = {172, 86, 48, 255},
-    [HAIR_COLOR_BLOND] = {226, 190, 118, 255},  [HAIR_COLOR_GRAY] = {188, 184, 178, 255},
+    [HAIR_COLOR_BLACK] = {58, 46, 40, 255},    [HAIR_COLOR_DARK_BROWN] = {100, 66, 44, 255},
+    [HAIR_COLOR_BROWN] = {146, 102, 64, 255},  [HAIR_COLOR_AUBURN] = {172, 86, 48, 255},
+    [HAIR_COLOR_BLOND] = {226, 190, 118, 255}, [HAIR_COLOR_GRAY] = {188, 184, 178, 255},
 };
 /* Designation marks; index DESIGNATION_NONE is the color of the cancel tool. */
 static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
-    [DESIGNATION_NONE] = {230, 70, 60, 255},
-    [DESIGNATION_MINE] = {250, 140, 60, 255},
-    [DESIGNATION_DECONSTRUCT] = {240, 200, 70, 255},
-    [DESIGNATION_DIG] = {250, 140, 60, 255},
-    [DESIGNATION_DIG_RAMP] = {250, 170, 90, 255},
-    [DESIGNATION_DIG_DOWN] = {250, 120, 70, 255},
+    [DESIGNATION_NONE] = {230, 70, 60, 255},         [DESIGNATION_MINE] = {250, 140, 60, 255},
+    [DESIGNATION_DECONSTRUCT] = {240, 200, 70, 255}, [DESIGNATION_DIG] = {250, 140, 60, 255},
+    [DESIGNATION_DIG_RAMP] = {250, 170, 90, 255},    [DESIGNATION_DIG_DOWN] = {250, 120, 70, 255},
     [DESIGNATION_CHOP] = {240, 90, 80, 255},
 };
 /* Where a roof could rest, while planning roofs. */
@@ -235,8 +232,7 @@ static void batch_quad(SDL_Renderer *renderer, SDL_Color color, const SDL_FRect 
 }
 
 /* Like batch_quad(), each corner (clockwise from the top left) its own color. */
-static void batch_gradient_quad(SDL_Renderer *renderer, const SDL_Color colors[4],
-                                SDL_FRect rect)
+static void batch_gradient_quad(SDL_Renderer *renderer, const SDL_Color colors[4], SDL_FRect rect)
 {
     if (!batch_ready()) {
         fill(renderer, colors[0], &rect);
@@ -514,8 +510,7 @@ static void ground_flat(const Map *map, int x, int y, int z, size_t index, const
     } else if (sprite_ground((Terrain)map->terrain[index]) < 0) {
         int shadow = under_foliage(map, x, y, z) ? FOLIAGE_SHADOW : 0;
         batch_quad(pass->renderer,
-                   shade(TERRAIN_COLORS[map->terrain[index]], tile_variation(x, y) + shadow),
-                   tile);
+                   shade(TERRAIN_COLORS[map->terrain[index]], tile_variation(x, y) + shadow), tile);
     }
 }
 
@@ -622,9 +617,8 @@ static void render_ramp_marker(SDL_Renderer *renderer, const SDL_FRect *tile, bo
     float half = tile->w * RAMP_MARKER_SIZE * 0.5f, rise = tile->h * RAMP_MARKER_SIZE * 0.45f;
     float rim = SDL_max(1.0f, floorf(tile->w * 0.05f)) * 1.8f;
     float tip = up ? -1.0f : 1.0f; /* Which way the point goes on screen. */
-    SDL_FPoint inside[3] = {{cx, cy + tip * rise},
-                            {cx - half, cy - tip * rise},
-                            {cx + half, cy - tip * rise}};
+    SDL_FPoint inside[3] = {
+        {cx, cy + tip * rise}, {cx - half, cy - tip * rise}, {cx + half, cy - tip * rise}};
     SDL_FPoint outside[3] = {{cx, cy + tip * (rise + rim)},
                              {cx - half - rim, cy - tip * (rise + rim * 0.5f)},
                              {cx + half + rim, cy - tip * (rise + rim * 0.5f)}};
@@ -732,8 +726,8 @@ static bool forbidden_marked(const Game *game, int x, int y, int z)
 static void forbid_marker(SDL_Renderer *renderer, const SDL_FRect *tile)
 {
     float radius = SDL_max(FORBID_MARKER_MIN_RADIUS, tile->w * FORBID_MARKER_RADIUS);
-    render_forbid_sign(renderer, tile->x + tile->w - radius * 1.25f,
-                       tile->y + radius * 1.25f, radius);
+    render_forbid_sign(renderer, tile->x + tile->w - radius * 1.25f, tile->y + radius * 1.25f,
+                       radius);
 }
 
 void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Camera *camera)
@@ -753,9 +747,8 @@ void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Ca
     }
     for (int i = 0; i < WORKSTATION_MAX; i++) {
         const Workstation *station = workstation_get_const(&game->workstations, i);
-        if (station != NULL && station->forbidden && station->z == z &&
-            station->x >= visible.x0 && station->x < visible.x1 && station->y >= visible.y0 &&
-            station->y < visible.y1) {
+        if (station != NULL && station->forbidden && station->z == z && station->x >= visible.x0 &&
+            station->x < visible.x1 && station->y >= visible.y0 && station->y < visible.y1) {
             SDL_FRect tile = tile_rect(camera, station->x, station->y);
             forbid_marker(renderer, &tile);
         }
@@ -803,8 +796,7 @@ static float particle_roll(uint32_t index, uint32_t salt)
     return (float)(h >> 8) / (float)(1u << 24);
 }
 
-void render_weather(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                    Uint64 now_ms)
+void render_weather(SDL_Renderer *renderer, const Game *game, const Camera *camera, Uint64 now_ms)
 {
     WeatherType type = (WeatherType)game->weather.type;
     float width = camera->viewport_width, height = camera->viewport_height;
@@ -935,8 +927,7 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
                            floorf(size * 0.85f)};
         fill_outlined(renderer, stone, shade(STONE_COLOR, 6));
         if (size >= 6.0f) {
-            SDL_FRect edge = {stone.x + 1.0f, stone.y + 1.0f, floorf(size * 0.3f),
-                              stone.h - 2.0f};
+            SDL_FRect edge = {stone.x + 1.0f, stone.y + 1.0f, floorf(size * 0.3f), stone.h - 2.0f};
             batch_quad(renderer, shade(STONE_COLOR, -40), &edge);
         }
         break;
@@ -946,8 +937,8 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         float thickness = SDL_max(1.0f, floorf(h * 0.08f));
         for (int i = 0; i < 3; i++) {
             SDL_FRect sliver = {tile->x + floorf(w * (0.24f + 0.12f * (float)(i % 2))),
-                                tile->y + floorf(h * (0.38f + 0.14f * (float)i)),
-                                floorf(w * 0.34f), thickness};
+                                tile->y + floorf(h * (0.38f + 0.14f * (float)i)), floorf(w * 0.34f),
+                                thickness};
             fill_outlined(renderer, sliver, shade(FLAKE_COLOR, i * 10));
         }
         break;
@@ -993,8 +984,8 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         for (int i = 0; i < count; i++) {
             float x = twigs ? 0.2f + 0.24f * (float)(i % 2) : 0.16f + 0.04f * (float)(i % 2);
             SDL_FRect stick = {tile->x + floorf(w * x),
-                               tile->y + floorf(h * (0.3f + 0.15f * (float)i)),
-                               floorf(w * length), thickness};
+                               tile->y + floorf(h * (0.3f + 0.15f * (float)i)), floorf(w * length),
+                               thickness};
             fill_outlined(renderer, stick, shade(twigs ? TWIG_COLOR : BRANCH_COLOR, i * 10));
         }
         break;
@@ -1007,8 +998,7 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         for (int i = 0; i < 5; i++) {
             float top = (i % 2 == 0) ? 0.26f : 0.34f;
             SDL_FRect blade = {tile->x + floorf(w * (0.24f + 0.1f * (float)i)),
-                               tile->y + floorf(h * top), blade_w,
-                               floorf(h * (0.76f - top))};
+                               tile->y + floorf(h * top), blade_w, floorf(h * (0.76f - top))};
             fill_outlined(renderer, blade, shade(color, (i % 3) * 10));
         }
         break;
@@ -1021,8 +1011,8 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         bool nuts = type == ITEM_HAZELNUTS;
         float size = SDL_max(1.0f, floorf(w * (nuts ? 0.18f : 0.16f)));
         for (int i = 0; i < 5; i++) {
-            SDL_FRect spot = {tile->x + floorf(w * SPOTS[i][0]),
-                              tile->y + floorf(h * SPOTS[i][1]), size, size};
+            SDL_FRect spot = {tile->x + floorf(w * SPOTS[i][0]), tile->y + floorf(h * SPOTS[i][1]),
+                              size, size};
             fill_outlined(renderer, spot, shade(nuts ? HAZELNUT_COLOR : BERRY_COLOR, i * 8));
         }
         break;
@@ -1168,8 +1158,8 @@ void render_designations(SDL_Renderer *renderer, const Game *game, const Camera 
     }
 }
 
-void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0,
-                             int x1, int y1, DesignationType type)
+void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                             int y1, DesignationType type)
 {
     SDL_FRect a = tile_rect(camera, SDL_min(x0, x1), SDL_min(y0, y1));
     SDL_FRect b = tile_rect(camera, SDL_max(x0, x1), SDL_max(y0, y1));
@@ -1223,8 +1213,7 @@ static int gather_zone_zone_at(const void *zones, int x, int y, int z)
 /* The zones of the level shown as a translucent overlay with their borders;
  * the selected one (index, or -1) is brighter. */
 static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, const void *zones,
-                              ZoneAt zone_at, int width, int height, int selected,
-                              SDL_Color color)
+                              ZoneAt zone_at, int width, int height, int selected, SDL_Color color)
 {
     const int z = camera->level; /* The level shown. */
     TileRect visible = camera_visible_tiles(camera, width, height);
@@ -1273,8 +1262,7 @@ static void render_zone_area(SDL_Renderer *renderer, const Camera *camera, int x
     outline(renderer, area, 2.0f, color);
 }
 
-void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                       int selected)
+void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *camera, int selected)
 {
     const Stockpiles *stockpiles = &game->stockpiles;
     render_zone_layer(renderer, camera, stockpiles, stockpile_zone_at, stockpiles->width,
@@ -1328,7 +1316,6 @@ static float craft_fraction(const Workstation *station)
     return clampf(station->work_progress / recipe->work, 0.0f, 1.0f);
 }
 
-
 /* An open hearth: a ring of stones around a pit with ashes. */
 static void render_hearth_shape(SDL_Renderer *renderer, const SDL_FRect *tile, Uint8 alpha)
 {
@@ -1354,8 +1341,7 @@ static void render_hearth_shape(SDL_Renderer *renderer, const SDL_FRect *tile, U
 
 /* Flames over the middle of a tile, flickering with `time` (seconds), as
  * tall as `strength` (0..1) allows. */
-static void render_flames(SDL_Renderer *renderer, const SDL_FRect *tile, float time,
-                          float strength)
+static void render_flames(SDL_Renderer *renderer, const SDL_FRect *tile, float time, float strength)
 {
     float width = SDL_max(2.0f, floorf(tile->w * 0.12f));
     float cx = tile->x + tile->w * 0.5f, base = tile->y + floorf(tile->h * 0.58f);
@@ -1491,10 +1477,9 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
         bool vertical = direction == DIRECTION_NORTH || direction == DIRECTION_SOUTH;
         float across = vertical ? w : h; /* One tile. */
         float side = floorf(across * 0.12f), end = floorf(across * 0.06f);
-        SDL_FRect bed = vertical ? (SDL_FRect){tile->x + side, tile->y + end, w - 2.0f * side,
-                                               h - 2.0f * end}
-                                 : (SDL_FRect){tile->x + end, tile->y + side, w - 2.0f * end,
-                                               h - 2.0f * side};
+        SDL_FRect bed =
+            vertical ? (SDL_FRect){tile->x + side, tile->y + end, w - 2.0f * side, h - 2.0f * end}
+                     : (SDL_FRect){tile->x + end, tile->y + side, w - 2.0f * end, h - 2.0f * side};
         fill(renderer, edge, &bed);
         SDL_FRect litter = {bed.x + 1.0f, bed.y + 1.0f, bed.w - 2.0f, bed.h - 2.0f};
         fill(renderer, straw, &litter);
@@ -1745,8 +1730,8 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         /* A sapling and a stone. */
         SDL_FRect trunk = {rect.x + floorf(w * 0.3f), rect.y + floorf(h * 0.45f),
                            SDL_max(2.0f, floorf(w * 0.08f)), floorf(h * 0.25f)};
-        SDL_FRect crown = {rect.x + floorf(w * 0.2f), rect.y + floorf(h * 0.25f),
-                           floorf(w * 0.28f), floorf(h * 0.24f)};
+        SDL_FRect crown = {rect.x + floorf(w * 0.2f), rect.y + floorf(h * 0.25f), floorf(w * 0.28f),
+                           floorf(h * 0.24f)};
         SDL_FRect stone = {rect.x + floorf(w * 0.58f), rect.y + floorf(h * 0.56f),
                            floorf(w * 0.18f), floorf(h * 0.14f)};
         fill(renderer, WOOD_COLOR, &trunk);
@@ -1797,9 +1782,9 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
                                area.x + area.w * 0.85f, area.y + area.h * 0.8f - row);
             }
         }
-        outline(renderer, area, 2.0f,
-                DESIGNATION_COLORS[icon == RENDER_ICON_DIG ? DESIGNATION_DIG
-                                                           : DESIGNATION_DIG_RAMP]);
+        outline(
+            renderer, area, 2.0f,
+            DESIGNATION_COLORS[icon == RENDER_ICON_DIG ? DESIGNATION_DIG : DESIGNATION_DIG_RAMP]);
         break;
     }
     case RENDER_ICON_DIG_DOWN: { /* A hole in the ground, an arrow into it. */
@@ -1903,8 +1888,8 @@ static TileRect lit_tiles(const Workstations *workstations, TileRect visible, in
 
 /* One quad per tile of `box`, each corner colored `color` with an alpha from
  * the light there. */
-static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box,
-                      SDL_Color color, float darkness, bool glow)
+static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box, SDL_Color color,
+                      float darkness, bool glow)
 {
     int columns = box.x1 - box.x0 + 1;
     float flicker = 0.95f + 0.05f * sinf((float)(SDL_GetTicks() % 100000u) * 0.011f);
@@ -1912,8 +1897,7 @@ static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box
         for (int x = box.x0; x < box.x1; x++) {
             int corner = (y - box.y0) * columns + (x - box.x0);
             float light[4] = {light_corners[corner], light_corners[corner + 1],
-                              light_corners[corner + columns + 1],
-                              light_corners[corner + columns]};
+                              light_corners[corner + columns + 1], light_corners[corner + columns]};
             if (glow && light[0] + light[1] + light[2] + light[3] <= 0.0f) {
                 continue;
             }
@@ -1934,15 +1918,15 @@ static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box
 #define TEMPERATURE_VIEW_COLDEST (-10.0f)
 #define TEMPERATURE_VIEW_STEP 10.0f
 static const SDL_Color TEMPERATURE_COLORS[] = {
-    {40, 60, 200, 255}, {60, 150, 235, 255}, {90, 200, 150, 255}, {240, 210, 70, 255},
-    {225, 60, 40, 255},
+    {40, 60, 200, 255},  {60, 150, 235, 255}, {90, 200, 150, 255},
+    {240, 210, 70, 255}, {225, 60, 40, 255},
 };
 
 static SDL_Color temperature_color(float celsius)
 {
     const int last = (int)SDL_arraysize(TEMPERATURE_COLORS) - 1;
-    float position = clampf((celsius - TEMPERATURE_VIEW_COLDEST) / TEMPERATURE_VIEW_STEP, 0.0f,
-                            (float)last);
+    float position =
+        clampf((celsius - TEMPERATURE_VIEW_COLDEST) / TEMPERATURE_VIEW_STEP, 0.0f, (float)last);
     int from = SDL_min((int)position, last - 1);
     return mix(TEMPERATURE_COLORS[from], TEMPERATURE_COLORS[from + 1], position - (float)from);
 }
@@ -2085,7 +2069,6 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
 #define CHAT_BUBBLE_MIN_ZOOM 14.0f
 #define TREE_SEE_THROUGH_ALPHA 0.4f
 
-
 /* ---- Hand animation ------------------------------------------------------ */
 
 /* Where the hand of a working colonist is: offsets from its feet in tiles
@@ -2192,8 +2175,7 @@ static SDL_FColor tint(SDL_Color color, float brightness)
 /* A colonist from its layers: body, head (with the face), beard, hair. */
 /* A fist (holding the tool of the job, if any) moving beside a working colonist. */
 static void render_hand(Sprites *sprites, const Camera *camera, const Colonist *colonist,
-                        uint32_t slot, uint64_t tick, float feet_x, float feet_y,
-                        SDL_FColor color)
+                        uint32_t slot, uint64_t tick, float feet_x, float feet_y, SDL_FColor color)
 {
     ItemType tool;
     ColonistAction action = colonist_action(colonist, &tool);
@@ -2218,8 +2200,7 @@ static void render_hand(Sprites *sprites, const Camera *camera, const Colonist *
 }
 
 static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera,
-                            const Colonist *colonist, uint32_t slot, uint64_t tick,
-                            bool selected)
+                            const Colonist *colonist, uint32_t slot, uint64_t tick, bool selected)
 {
     float wx, wy, feet_x, feet_y, anchor_x, anchor_y;
     colonist_position(colonist, &wx, &wy);
@@ -2250,8 +2231,8 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
         /* What it carries, held in front of it at waist height. */
         sprites_flush(sprites);
         float size = floorf(SDL_max(4.0f, camera->zoom * 0.42f));
-        SDL_FRect held = {floorf(feet_x - size * 0.5f), floorf(feet_y - camera->zoom * 0.62f),
-                          size, size};
+        SDL_FRect held = {floorf(feet_x - size * 0.5f), floorf(feet_y - camera->zoom * 0.62f), size,
+                          size};
         render_item_stack(renderer, &held, (ItemType)colonist->carried.type);
         batch_flush(renderer);
     }
@@ -2295,8 +2276,8 @@ static void render_plant(Sprites *sprites, const Camera *camera, const Plant *pl
     if (plant->type == PLANT_NONE || plant_is_dormant(plant)) {
         return; /* Nothing above ground. */
     }
-    SpriteId id = sprite_plant((PlantType)plant->type, plant_growth_stage(plant),
-                               plant_has_food(plant));
+    SpriteId id =
+        sprite_plant((PlantType)plant->type, plant_growth_stage(plant), plant_has_food(plant));
     if (id < 0) {
         return; /* Grass is part of the ground. */
     }
@@ -2371,8 +2352,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
     /* Colonists in depth order, merged with the rows of plants below. */
     DepthEntry order[COLONIST_MAX];
     int count = 0;
-    for (uint32_t slot = 0; slot < game_colonist_slot_count(game) && count < COLONIST_MAX;
-         slot++) {
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game) && count < COLONIST_MAX; slot++) {
         if (entity_id_is_none(game_colonist_id_at(game, slot)) || game->colonists[slot].z != z) {
             continue;
         }
@@ -2398,8 +2378,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
         while (next < count && order[next].depth < (float)y + PLANT_DEPTH) {
             uint32_t slot = order[next++].slot;
             render_colonist(renderer, sprites, camera, &game->colonists[slot], slot, tick,
-                            is_selected(game_colonist_id_at(game, slot), selected,
-                                        selected_count));
+                            is_selected(game_colonist_id_at(game, slot), selected, selected_count));
         }
         for (int x = x0; x < x1; x++) {
             render_plant(sprites, camera, &map->plants[map_index(map, x, y, z)], x, y, order,

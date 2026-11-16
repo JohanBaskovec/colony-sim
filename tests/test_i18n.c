@@ -38,7 +38,9 @@ static void test_parse_basic_entries(void)
 static void test_parse_handles_bom_crlf_and_missing_final_newline(void)
 {
     bool ok = false;
-    I18nCatalog *catalog = parse_text("\xEF\xBB\xBF" "a = one\r\nb = two", &ok);
+    I18nCatalog *catalog = parse_text("\xEF\xBB\xBF"
+                                      "a = one\r\nb = two",
+                                      &ok);
     CHECK(ok);
     CHECK_STR_EQ(i18n_catalog_get(catalog, "a"), "one");
     CHECK_STR_EQ(i18n_catalog_get(catalog, "b"), "two");
@@ -286,9 +288,12 @@ static void test_number_formatting_follows_language(void)
 
     i18n_set_catalogs(french, english);
     tr_integer(out, sizeof(out), 1234567);
-    CHECK_STR_EQ(out, "1\xC2\xA0" "234\xC2\xA0" "567");
+    CHECK_STR_EQ(out, "1\xC2\xA0"
+                      "234\xC2\xA0"
+                      "567");
     tr_decimal(out, sizeof(out), 1234.5, 2);
-    CHECK_STR_EQ(out, "1\xC2\xA0" "234,50");
+    CHECK_STR_EQ(out, "1\xC2\xA0"
+                      "234,50");
 
     i18n_set_catalogs(NULL, NULL);
     tr_integer(out, sizeof(out), 1000);

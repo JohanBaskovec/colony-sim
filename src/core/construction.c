@@ -58,8 +58,7 @@ bool construction_is_roof(const ConstructionSite *site)
     return site->workstation == 0 && structure_is_roof((StructureType)site->type);
 }
 
-int construction_worked_from(const Constructions *constructions, int x, int y, int z,
-                             bool overhead)
+int construction_worked_from(const Constructions *constructions, int x, int y, int z, bool overhead)
 {
     int index = construction_at(constructions, x, y, overhead ? z + 1 : z);
     const ConstructionSite *site = construction_get(constructions, index);
@@ -113,8 +112,8 @@ bool construction_roof_held(const Constructions *constructions, const Map *map, 
     return false;
 }
 
-bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x,
-                                 int y, int z)
+bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x, int y,
+                                 int z)
 {
     if (!in_bounds(constructions, x, y, z) || !map_in_bounds(map, x, y, z - 1)) {
         return false;
@@ -199,8 +198,7 @@ void construction_tile(const ConstructionSite *site, int part, int *x, int *y, i
 }
 
 /* Writes `value` (site index + 1, or 0) on every tile of a site. */
-static void mark_tiles(Constructions *constructions, const ConstructionSite *site,
-                       uint16_t value)
+static void mark_tiles(Constructions *constructions, const ConstructionSite *site, uint16_t value)
 {
     for (int part = 0; part < construction_length(site); part++) {
         int x, y, z;
@@ -215,8 +213,8 @@ static void mark_tiles(Constructions *constructions, const ConstructionSite *sit
 }
 
 /* Takes a free slot for a site; CONSTRUCTION_NONE when the list is full. */
-static int add_site(Constructions *constructions, StructureType type, int workstation, int x,
-                    int y, int z, Direction direction, bool refresh)
+static int add_site(Constructions *constructions, StructureType type, int workstation, int x, int y,
+                    int z, Direction direction, bool refresh)
 {
     for (int index = 0; index < CONSTRUCTION_MAX; index++) {
         ConstructionSite *site = &constructions->list[index];

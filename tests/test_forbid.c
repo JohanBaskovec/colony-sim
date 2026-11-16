@@ -86,8 +86,7 @@ static void run_ticks(Game *game, int ticks)
 static void wall_with_door(Game *game, int wall_x, int door_y)
 {
     for (int y = 0; y < game->map.height; y++) {
-        map_set_structure(&game->map, wall_x, y, 0,
-                          y == door_y ? STRUCTURE_DOOR : STRUCTURE_WALL);
+        map_set_structure(&game->map, wall_x, y, 0, y == door_y ? STRUCTURE_DOOR : STRUCTURE_WALL);
     }
 }
 
@@ -249,8 +248,7 @@ static void test_forbidden_items(void)
     CHECK_EQ_INT((int)items->totals[ITEM_BRANCHES], 4);
 
     /* Items dropped there go around it, even of the same kind. */
-    CHECK_EQ_INT(items_drop(items, &game.map, 10, 10, 0, item_stack_pristine(ITEM_BRANCHES, 3)),
-                 3);
+    CHECK_EQ_INT(items_drop(items, &game.map, 10, 10, 0, item_stack_pristine(ITEM_BRANCHES, 3)), 3);
     CHECK_EQ_INT(items_get(items, 10, 10, 0).count, 4);
 
     /* Allowed again: settlers see it, and haulers look again. */
@@ -477,8 +475,8 @@ static void test_forbidden_station_is_not_used(void)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     REQUIRE(colonist != NULL);
     colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD, 0));
-    int index = workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 14,
-                                   10, 0);
+    int index =
+        workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
     REQUIRE(index != WORKSTATION_NONE);
     items_add(&game.items, 15, 10, 0, item_stack_make(ITEM_FLINT, 2, ITEM_QUALITY_STANDARD, 0));
     workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
@@ -518,7 +516,7 @@ static void test_forbid_rect(void)
     CHECK(game_forbidden(&game, 5, 3, 0, FORBID_STRUCTURE));
     CHECK(game_forbidden(&game, 6, 3, 0, FORBID_STATION));
     CHECK(!game_forbidden(&game, 9, 9, 0, FORBID_ITEMS));
-    CHECK(!game_forbidden(&game, 3, 4, 0, FORBID_PLANT)); /* Grass is left out. */
+    CHECK(!game_forbidden(&game, 3, 4, 0, FORBID_PLANT));          /* Grass is left out. */
     CHECK(game_set_forbidden(&game, 3, 4, 0, FORBID_PLANT, true)); /* One tile at a time. */
     CHECK_EQ_INT(game_set_forbidden_rect(&game, 0, 0, 47, 47, 0, false), 4);
     CHECK(game_forbidden(&game, 3, 4, 0, FORBID_PLANT));

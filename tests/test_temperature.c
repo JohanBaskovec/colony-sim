@@ -145,8 +145,7 @@ static void test_open_ground_follows_the_air(void)
     CHECK_NEAR(temperature_at(&game.temperatures, -1, 5, 0), TEMPERATURE_GROUND, 1e-6);
     /* Following the day. */
     run_hours(&game, 10.0f);
-    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20, 0), game_outdoor_temperature(&game),
-               1.0);
+    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20, 0), game_outdoor_temperature(&game), 1.0);
     game_shutdown(&game);
 }
 

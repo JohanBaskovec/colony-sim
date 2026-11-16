@@ -8,12 +8,16 @@
 
 /* A state: value, half-life once over, growing worse up to `grow_max` times
  * after `grow` hours (tuning). */
-#define STATE(id, key, value, half_life, grow, grow_max)                                   \
-    {id, key, true, value, 0.0f, half_life, 1, grow, grow_max}
+#define STATE(id, key, value, half_life, grow, grow_max)                                           \
+    {                                                                                              \
+        id, key, true, value, 0.0f, half_life, 1, grow, grow_max                                   \
+    }
 /* A memory: value, full for `plateau` hours, then halving every `half_life`
  * hours; renewed (stack 1) or adding up to `stack` times (tuning). */
-#define MEMORY(id, key, value, plateau, half_life, stack)                                  \
-    {id, key, false, value, plateau, half_life, stack, 0.0f, 1.0f}
+#define MEMORY(id, key, value, plateau, half_life, stack)                                          \
+    {                                                                                              \
+        id, key, false, value, plateau, half_life, stack, 0.0f, 1.0f                               \
+    }
 
 static const ThoughtDef THOUGHT_DEFS[THOUGHT_COUNT] = {
     [THOUGHT_HUNGRY] = STATE("hungry", N_("thought.hungry"), -6.0f, 1.0f, 24.0f, 2.0f),
@@ -25,25 +29,25 @@ static const ThoughtDef THOUGHT_DEFS[THOUGHT_COUNT] = {
     [THOUGHT_COLD] = STATE("cold", N_("thought.cold"), -8.0f, 1.0f, 0.0f, 1.0f),
     [THOUGHT_HOT] = STATE("hot", N_("thought.hot"), -6.0f, 1.0f, 0.0f, 1.0f),
     [THOUGHT_SOAKED] = STATE("soaked", N_("thought.soaked"), -6.0f, 1.0f, 0.0f, 1.0f),
-    [THOUGHT_IN_THE_RAIN] = STATE("in_the_rain", N_("thought.in_the_rain"),
-                                  -4.0f, 1.0f, 0.0f, 1.0f),
+    [THOUGHT_IN_THE_RAIN] =
+        STATE("in_the_rain", N_("thought.in_the_rain"), -4.0f, 1.0f, 0.0f, 1.0f),
     [THOUGHT_SLEPT_WELL] = MEMORY("slept_well", N_("thought.slept_well"), 6.0f, 4.0f, 6.0f, 1),
-    [THOUGHT_SLEPT_ON_GROUND] = MEMORY("slept_on_ground", N_("thought.slept_on_ground"),
-                                       -5.0f, 2.0f, 4.0f, 1),
-    [THOUGHT_SLEPT_OUTSIDE] = MEMORY("slept_outside", N_("thought.slept_outside"),
-                                     -4.0f, 2.0f, 4.0f, 1),
+    [THOUGHT_SLEPT_ON_GROUND] =
+        MEMORY("slept_on_ground", N_("thought.slept_on_ground"), -5.0f, 2.0f, 4.0f, 1),
+    [THOUGHT_SLEPT_OUTSIDE] =
+        MEMORY("slept_outside", N_("thought.slept_outside"), -4.0f, 2.0f, 4.0f, 1),
     [THOUGHT_SLEPT_COLD] = MEMORY("slept_cold", N_("thought.slept_cold"), -6.0f, 2.0f, 4.0f, 1),
     [THOUGHT_SLEPT_HOT] = MEMORY("slept_hot", N_("thought.slept_hot"), -4.0f, 2.0f, 4.0f, 1),
-    [THOUGHT_VARIED_MEALS] = MEMORY("varied_meals", N_("thought.varied_meals"),
-                                    5.0f, 12.0f, 12.0f, 1),
+    [THOUGHT_VARIED_MEALS] =
+        MEMORY("varied_meals", N_("thought.varied_meals"), 5.0f, 12.0f, 12.0f, 1),
     [THOUGHT_SAME_FOOD] = MEMORY("same_food", N_("thought.same_food"), -6.0f, 12.0f, 12.0f, 1),
     [THOUGHT_COOKED_MEAL] = MEMORY("cooked_meal", N_("thought.cooked_meal"), 4.0f, 2.0f, 4.0f, 1),
-    [THOUGHT_SPOILED_FOOD] = MEMORY("spoiled_food", N_("thought.spoiled_food"),
-                                    -6.0f, 2.0f, 4.0f, 1),
-    [THOUGHT_WARMED_BY_FIRE] = MEMORY("warmed_by_fire", N_("thought.warmed_by_fire"),
-                                      4.0f, 1.0f, 2.0f, 1),
-    [THOUGHT_FIRESIDE_STORY] = MEMORY("fireside_story", N_("thought.fireside_story"),
-                                      6.0f, 6.0f, 8.0f, 1),
+    [THOUGHT_SPOILED_FOOD] =
+        MEMORY("spoiled_food", N_("thought.spoiled_food"), -6.0f, 2.0f, 4.0f, 1),
+    [THOUGHT_WARMED_BY_FIRE] =
+        MEMORY("warmed_by_fire", N_("thought.warmed_by_fire"), 4.0f, 1.0f, 2.0f, 1),
+    [THOUGHT_FIRESIDE_STORY] =
+        MEMORY("fireside_story", N_("thought.fireside_story"), 6.0f, 6.0f, 8.0f, 1),
     [THOUGHT_CHAT] = MEMORY("chat", N_("thought.chat"), 2.0f, 1.0f, 3.0f, 3),
     [THOUGHT_RELIEF] = MEMORY("relief", N_("thought.relief"), 10.0f, 6.0f, 12.0f, 1),
     [THOUGHT_DEBUG_GLOOM] = MEMORY("debug_gloom", N_("thought.debug_gloom"), -45.0f, 2.0f, 2.0f, 1),
@@ -280,8 +284,8 @@ float mood_break_chance(float value)
     if (!(value < MOOD_MINOR_BREAK_BELOW)) {
         return 0.0f;
     }
-    float depth = (MOOD_MINOR_BREAK_BELOW - clampf(value, MOOD_MIN, MOOD_MAX)) /
-                  MOOD_MINOR_BREAK_BELOW;
+    float depth =
+        (MOOD_MINOR_BREAK_BELOW - clampf(value, MOOD_MIN, MOOD_MAX)) / MOOD_MINOR_BREAK_BELOW;
     return MOOD_BREAK_CHANCE_PER_HOUR * depth;
 }
 
@@ -377,7 +381,7 @@ uint64_t mood_hash(const Mood *mood, uint64_t hash)
     hash = hash_fnv1a64(hash, mood->peak, sizeof(mood->peak));
     hash = hash_fnv1a64(hash, mood->age, sizeof(mood->age));
     hash = hash_fnv1a64(hash, mood->meals, sizeof(mood->meals));
-    int32_t fields[6] = {mood->meal_count, mood->meal_next,  mood->break_type,
+    int32_t fields[6] = {mood->meal_count,  mood->meal_next, mood->break_type,
                          mood->break_ticks, mood->went_off,  mood->break_cooldown};
     return hash_fnv1a64(hash, fields, sizeof(fields));
 }

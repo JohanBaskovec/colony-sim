@@ -41,8 +41,8 @@ static void test_next_moves_one_step_at_most(void)
             for (int hour = 0; hour < HOURS_PER_DAY; hour += WEATHER_PERIOD_HOURS) {
                 for (int roll = 0; roll < 100; roll++) {
                     float draw = (float)roll / 100.0f;
-                    WeatherType next = weather_next((WeatherType)current, (Season)season, hour,
-                                                    0.99f, draw);
+                    WeatherType next =
+                        weather_next((WeatherType)current, (Season)season, hour, 0.99f, draw);
                     int from = weather_def((WeatherType)current)->cloudiness;
                     int to = weather_def(next)->cloudiness;
                     CHECK(abs(to - from) <= 1);
@@ -118,8 +118,7 @@ static void test_same_seed_same_weather(void)
     weather_init(&c, 6, GAME_START_TICK);
     CHECK_EQ_INT(a.type, WEATHER_CLEAR); /* The settlers arrive on a fine day. */
     int differences = 0;
-    for (uint64_t tick = GAME_START_TICK + 1; tick < GAME_START_TICK + 10 * TICKS_PER_DAY;
-         tick++) {
+    for (uint64_t tick = GAME_START_TICK + 1; tick < GAME_START_TICK + 10 * TICKS_PER_DAY; tick++) {
         weather_tick(&a, tick);
         weather_tick(&b, tick);
         weather_tick(&c, tick);
@@ -175,7 +174,9 @@ static void test_spells_drift_within_bounds(void)
 static void test_snow_falls_and_melts(void)
 {
     uint64_t noon = mid_season(SEASON_WINTER) + 12 * TICKS_PER_HOUR;
-    Weather weather = {.type = WEATHER_RAIN, .spell = -8.0f, .period = noon / WEATHER_PERIOD_TICKS,
+    Weather weather = {.type = WEATHER_RAIN,
+                       .spell = -8.0f,
+                       .period = noon / WEATHER_PERIOD_TICKS,
                        .day = (uint32_t)(noon / TICKS_PER_DAY)};
     REQUIRE(weather_outdoor(&weather, noon) <= WEATHER_SNOW_CELSIUS);
     CHECK_EQ_INT(weather_precipitation(&weather, noon), PRECIPITATION_SNOW);

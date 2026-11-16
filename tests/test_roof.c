@@ -98,9 +98,8 @@ static bool init_propped_room(Map *map, int floor)
             for (int z = 0; z < 3; z++) {
                 size_t i = map_index(map, x, y, z);
                 bool solid = z < floor || (z == floor && hill && !room);
-                map->terrain[i] = (uint8_t)(z <= floor || (z == floor + 1 && hill)
-                                                ? TERRAIN_SOIL
-                                                : TERRAIN_OPEN);
+                map->terrain[i] =
+                    (uint8_t)(z <= floor || (z == floor + 1 && hill) ? TERRAIN_SOIL : TERRAIN_OPEN);
                 map->rock[i] = (uint8_t)(solid ? ROCK_EARTH : ROCK_NONE);
             }
         }
@@ -248,9 +247,8 @@ static void test_roof_over_planned_wall(void)
     REQUIRE(init_flat_game(&game));
     int wall = game_place_structure(&game, STRUCTURE_WALL, 20, 20, 0, DIRECTION_SOUTH);
     REQUIRE(wall != CONSTRUCTION_NONE);
-    CHECK_EQ_INT(game_place_structure_rect(&game, STRUCTURE_ROOF, DIRECTION_SOUTH, 20, 20, 22,
-                                           20, 1),
-                 3);
+    CHECK_EQ_INT(
+        game_place_structure_rect(&game, STRUCTURE_ROOF, DIRECTION_SOUTH, 20, 20, 22, 20, 1), 3);
     int roof = construction_at(&game.constructions, 20, 20, 1);
     REQUIRE(roof != CONSTRUCTION_NONE);
     CHECK(roof != wall);

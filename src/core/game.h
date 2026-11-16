@@ -98,15 +98,15 @@ typedef struct NewGameParams {
 typedef struct Game {
     uint64_t seed;
     Map map;
-    Designations designations; /* Player orders (chop, mine...), same size as the map. */
-    Dirt dirt; /* How dirty each tile is. */
-    GatherZones gather_zones; /* Where wood, wild food, grass, stones... are gathered. */
-    Items items; /* Items lying on the ground, same size as the map. */
-    Stockpiles stockpiles; /* Storage zones drawn by the player. */
-    Workstations workstations; /* Crafting spots, knapping spots... and their bills. */
+    Designations designations;   /* Player orders (chop, mine...), same size as the map. */
+    Dirt dirt;                   /* How dirty each tile is. */
+    GatherZones gather_zones;    /* Where wood, wild food, grass, stones... are gathered. */
+    Items items;                 /* Items lying on the ground, same size as the map. */
+    Stockpiles stockpiles;       /* Storage zones drawn by the player. */
+    Workstations workstations;   /* Crafting spots, knapping spots... and their bills. */
     Constructions constructions; /* Blueprints of beds, walls, doors... being built. */
-    Beds beds; /* Who owns which bed. */
-    Reservations reservations; /* Who is busy with which job or food. */
+    Beds beds;                   /* Who owns which bed. */
+    Reservations reservations;   /* Who is busy with which job or food. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */
     Pathfinder pathfinder;
@@ -117,7 +117,7 @@ typedef struct Game {
      * asked for (game_rooms()), not part of game_hash(). */
     Rooms rooms;
     Temperatures temperatures; /* Per tile, warmed by burning hearths. */
-    Weather weather; /* The sky, warm and cold spells, snow on the ground. */
+    Weather weather;           /* The sky, warm and cold spells, snow on the ground. */
     /* Where roofs were last checked for support (core/roof.h): derived from
      * the map, not part of game_hash(). */
     RoofWatch roof_watch;
@@ -414,14 +414,14 @@ typedef void (*StructurePlanVisit)(int x, int y, int z, bool allowed, void *user
  * order: along its edges for types drawn as an outline (walls), on every
  * tile otherwise; long ones (beds) side by side, in rows of their length
  * along `direction`, the rectangle stretched that way to hold at least one. */
-void game_plan_structure_rect(const Game *game, StructureType type, Direction direction,
-                              int x0, int y0, int x1, int y1, int z, StructurePlanVisit visit,
+void game_plan_structure_rect(const Game *game, StructureType type, Direction direction, int x0,
+                              int y0, int x1, int y1, int z, StructurePlanVisit visit,
                               void *userdata);
 
 /* Places what game_plan_structure_rect() plans where allowed. Returns how
  * many sites were placed. */
-int game_place_structure_rect(Game *game, StructureType type, Direction direction, int x0,
-                              int y0, int x1, int y1, int z);
+int game_place_structure_rect(Game *game, StructureType type, Direction direction, int x0, int y0,
+                              int x1, int y1, int z);
 
 /* Removes a construction site; its delivered materials are dropped on its
  * tile. */

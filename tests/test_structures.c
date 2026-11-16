@@ -159,8 +159,7 @@ static void only_work(Colonist *colonist, WorkType type)
 {
     for (int t = 0; t < WORK_TYPE_COUNT; t++) {
         colonist_set_work_priority(colonist, (WorkType)t,
-                                   t == (int)type ? WORK_PRIORITY_HIGHEST
-                                                  : WORK_PRIORITY_DISABLED);
+                                   t == (int)type ? WORK_PRIORITY_HIGHEST : WORK_PRIORITY_DISABLED);
     }
 }
 
@@ -445,9 +444,9 @@ static void test_planning_beds(void)
     CHECK(stockpile_create(&game.stockpiles, &game.map, 30, 31, 30, 31, 0) != STOCKPILE_NONE);
     CHECK(!game_can_place_structure(&game, STRUCTURE_GRASS_BED, 30, 30, 0, DIRECTION_SOUTH));
     CHECK(game_can_place_structure(&game, STRUCTURE_GRASS_BED, 30, 30, 0, DIRECTION_NORTH));
-    CHECK_EQ_INT(game_place_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_EAST, 10, 20,
-                                           13, 20, 0),
-                 2);
+    CHECK_EQ_INT(
+        game_place_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_EAST, 10, 20, 13, 20, 0),
+        2);
     CHECK_EQ_INT(construction_at(&game.constructions, 13, 20, 0),
                  construction_at(&game.constructions, 12, 20, 0));
     game_shutdown(&game);
@@ -534,8 +533,8 @@ static void test_worn_bed_is_refreshed(void)
     REQUIRE(site != CONSTRUCTION_NONE);
     CHECK(construction_get(&game.constructions, site)->refresh);
     /* A builder brings 4 armfuls of dry grass and refreshes it. */
-    for (int i = 0; i < TICKS_PER_HOUR &&
-                    construction_at(&game.constructions, 12, 12, 0) != CONSTRUCTION_NONE;
+    for (int i = 0;
+         i < TICKS_PER_HOUR && construction_at(&game.constructions, 12, 12, 0) != CONSTRUCTION_NONE;
          i++) {
         game_tick(&game);
     }
@@ -587,9 +586,8 @@ static void test_roofing_a_hut(void)
     CHECK(game_can_place_structure(&game, STRUCTURE_ROOF, 16, 15, 1, DIRECTION_SOUTH));
     CHECK(!game_can_place_structure(&game, STRUCTURE_ROOF, 16, 15, 0, DIRECTION_SOUTH));
     CHECK(!game_can_place_structure(&game, STRUCTURE_ROOF, 30, 30, 1, DIRECTION_SOUTH));
-    CHECK_EQ_INT(game_place_structure_rect(&game, STRUCTURE_ROOF, DIRECTION_SOUTH, 15, 15, 16,
-                                           15, 1),
-                 2);
+    CHECK_EQ_INT(
+        game_place_structure_rect(&game, STRUCTURE_ROOF, DIRECTION_SOUTH, 15, 15, 16, 15, 1), 2);
     game_tick(&game);
     const Room *room = rooms_at(game_rooms(&game), &game.map, 15, 15, 0);
     REQUIRE(room != NULL);

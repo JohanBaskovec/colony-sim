@@ -48,8 +48,7 @@ static void test_grade_factors(void)
     CHECK_NEAR(tool_grade_factor(tool(ITEM_TWIGS, ITEM_QUALITY_CRUDE, 10)), 1.0, 1e-6);
     CHECK_NEAR(tool_speed_factor(TOOL_USE_CUT_GRASS, tool(ITEM_HAND_AXE, ITEM_QUALITY_FINE, 9)),
                0.9 * 1.1, 1e-5);
-    CHECK_NEAR(tool_speed_factor(TOOL_USE_CUT_GRASS, (ItemStack){.type = ITEM_NONE}), 0.6,
-               1e-6);
+    CHECK_NEAR(tool_speed_factor(TOOL_USE_CUT_GRASS, (ItemStack){.type = ITEM_NONE}), 0.6, 1e-6);
     CHECK_NEAR(tool_best_possible_factor(TOOL_USE_CUT_GRASS), 1.2, 1e-5);
     CHECK_NEAR(tool_best_possible_factor(TOOL_USE_NONE), 1.0, 1e-6);
 }

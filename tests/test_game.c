@@ -51,8 +51,7 @@ static bool count_food_plant(const Map *map, int x, int y, int z, void *userdata
 {
     FoodPlantCount *count = userdata;
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
-    if (plant->type == count->type &&
-        plant->growth >= plant_def(count->type)->min_food_growth) {
+    if (plant->type == count->type && plant->growth >= plant_def(count->type)->min_food_growth) {
         count->count++;
     }
     return false;
@@ -95,7 +94,7 @@ static void make_grove(Map *map)
         /* A grove on the west half, meadow on the east. */
         bool grove = (int)(i % (size_t)map->width) < map->width / 2;
         map->plants[i] = grove && i % 7 == 0 ? (Plant){.type = PLANT_TREE, .growth = 1.0f}
-                                              : (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+                                             : (Plant){.type = PLANT_GRASS, .growth = 1.0f};
     }
     map_topology_changed(map);
 }
@@ -236,8 +235,8 @@ static void test_plants_grow_over_time(void)
         game_tick(&game);
     }
 
-    float expected = 0.1f + plant_def(PLANT_GRASS)->growth_per_day *
-                                terrain_def(TERRAIN_SOIL)->fertility;
+    float expected =
+        0.1f + plant_def(PLANT_GRASS)->growth_per_day * terrain_def(TERRAIN_SOIL)->fertility;
     CHECK_NEAR(map->plants[fertile].growth, expected, 1e-4);
     /* Sand is below the minimum fertility of grass: no growth. */
     CHECK_NEAR(map->plants[barren].growth, 0.1, 1e-6);
@@ -296,9 +295,9 @@ static void test_plant_growth_is_spread_over_ticks(void)
 
     /* Not twice: one more interval gives each plant one more step. */
     size_t index = 0;
-    while (index < count && (map->plants[index].type == PLANT_NONE ||
-                             map->plants[index].growth == before[index] ||
-                             map->plants[index].growth >= 0.9f)) {
+    while (index < count &&
+           (map->plants[index].type == PLANT_NONE || map->plants[index].growth == before[index] ||
+            map->plants[index].growth >= 0.9f)) {
         index++;
     }
     REQUIRE(index < count);

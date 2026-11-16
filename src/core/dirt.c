@@ -29,8 +29,7 @@ void dirt_free(Dirt *dirt)
 
 static bool in_bounds(const Dirt *dirt, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && z >= 0 && x < dirt->width && y < dirt->height &&
-           z < dirt->depth;
+    return x >= 0 && y >= 0 && z >= 0 && x < dirt->width && y < dirt->height && z < dirt->depth;
 }
 
 static size_t index_of(const Dirt *dirt, int x, int y, int z)

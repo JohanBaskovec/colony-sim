@@ -28,13 +28,13 @@ static void setup_gathering(Game *game, const Colonist *first)
     if (first != NULL) {
         int x = first->x, y = first->y, z = first->z;
         /* Stones forever: keeps some colonists busy to the end. */
-        int stones = gather_zone_create(&game->gather_zones, &game->map, x - 14, y + 8, x - 10,
-                                        y + 12, z);
+        int stones =
+            gather_zone_create(&game->gather_zones, &game->map, x - 14, y + 8, x - 10, y + 12, z);
         gather_forever(game, stones, GATHER_COBBLES);
         gather_forever(game, stones, GATHER_FLINT);
         stockpile_create(&game->stockpiles, &game->map, x - 6, y - 6, x + 6, y + 6, z);
-        int better = stockpile_create(&game->stockpiles, &game->map, x + 10, y - 4, x + 16, y + 4,
-                                      z);
+        int better =
+            stockpile_create(&game->stockpiles, &game->map, x + 10, y - 4, x + 16, y + 4, z);
         stockpile_set_priority(&game->stockpiles, better, 2);
     }
     /* Everything else the land offers, on the whole map. */
@@ -54,8 +54,8 @@ static void setup_unreachable(Game *game, const Colonist *first)
     regions_update(&game->regions, map);
     int land = whole_map_zone(game);
     gather_forever(game, land, GATHER_BRANCHES);
-    uint32_t home = first != NULL ? regions_at(&game->regions, map, first->x, first->y, first->z)
-                                  : REGION_NONE;
+    uint32_t home =
+        first != NULL ? regions_at(&game->regions, map, first->x, first->y, first->z) : REGION_NONE;
     for (int z = 0; z < map->depth; z++) {
         for (int y = 0; y < map->height; y++) {
             for (int x = 0; x < map->width; x++) {
@@ -74,8 +74,8 @@ static void setup_construction(Game *game, const Colonist *first)
     }
     int x = first->x, y = first->y, z = first->z;
     stockpile_create(&game->stockpiles, &game->map, x - 8, y - 3, x - 3, y + 3, z);
-    int land = gather_zone_create(&game->gather_zones, &game->map, x - 30, y - 30, x + 30, y + 30,
-                                  z);
+    int land =
+        gather_zone_create(&game->gather_zones, &game->map, x - 30, y - 30, x + 30, y + 30, z);
     gather_forever(game, land, GATHER_GRASS);
     gather_forever(game, land, GATHER_BRANCHES);
     gather_forever(game, land, GATHER_TWIGS);
@@ -84,8 +84,8 @@ static void setup_construction(Game *game, const Colonist *first)
     game_place_structure(game, STRUCTURE_DOOR, x + 7, y + 3, z, DIRECTION_SOUTH);
     game_place_structure_rect(game, STRUCTURE_WALL, DIRECTION_SOUTH, x + 4, y - 2, x + 10, y + 3,
                               z);
-    game_place_structure_rect(game, STRUCTURE_GRASS_BED, DIRECTION_EAST, x + 5, y - 1, x + 8,
-                              y + 1, z);
+    game_place_structure_rect(game, STRUCTURE_GRASS_BED, DIRECTION_EAST, x + 5, y - 1, x + 8, y + 1,
+                              z);
 }
 
 bool scenario_apply(Game *game, Scenario scenario)

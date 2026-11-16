@@ -41,9 +41,9 @@ typedef enum Terrain {
     TERRAIN_RICH_SOIL,
     TERRAIN_GRAVEL,
     TERRAIN_ROUGH_STONE,
-    TERRAIN_OPEN, /* No floor: open space over lower ground (impassable). */
+    TERRAIN_OPEN,       /* No floor: open space over lower ground (impassable). */
     TERRAIN_GRASS_ROOF, /* A built roof (STRUCTURE_ROOF): too frail to stand on. */
-    TERRAIN_FOLIAGE, /* The branches of a tree around its trunk: walked on (core/tree.h). */
+    TERRAIN_FOLIAGE,    /* The branches of a tree around its trunk: walked on (core/tree.h). */
     TERRAIN_COUNT
 } Terrain;
 
@@ -52,7 +52,7 @@ typedef enum RockType {
     ROCK_GRANITE,
     ROCK_SANDSTONE,
     ROCK_EARTH, /* The inside of soft hills: dug out, it gives nothing. */
-    ROCK_WOOD, /* The trunk of a tree (core/tree.h): felled, never mined. */
+    ROCK_WOOD,  /* The trunk of a tree (core/tree.h): felled, never mined. */
     ROCK_COUNT
 } RockType;
 
@@ -81,8 +81,8 @@ typedef struct TerrainDef {
     const char *name_key;
     float move_cost; /* Movement cost multiplier; 0 means impassable. */
     float fertility; /* Plant growth multiplier (1.0 = normal soil). */
-    bool buildable; /* Whether structures can be built on it. */
-    bool stony; /* Whether stones lie about on it (see Map.cobbles). */
+    bool buildable;  /* Whether structures can be built on it. */
+    bool stony;      /* Whether stones lie about on it (see Map.cobbles). */
     /* The roof built as this floor (see map_set_roof()), STRUCTURE_NONE for
      * natural ground. */
     StructureType built;
@@ -91,7 +91,7 @@ typedef struct TerrainDef {
 typedef struct RockDef {
     const char *id;
     const char *name_key;
-    float mine_work; /* Work (in ticks of a settler working) needed to mine one tile. */
+    float mine_work;     /* Work (in ticks of a settler working) needed to mine one tile. */
     ItemType mined_item; /* Dropped when a tile is mined. */
     int mined_yield;
 } RockDef;
@@ -117,17 +117,17 @@ typedef struct PlantDef {
     const char *id;
     const char *name_key;
     float growth_per_day; /* Growth gained per in-game day on fertility 1.0. */
-    float min_fertility; /* Does not spawn nor grow below this fertility. */
+    float min_fertility;  /* Does not spawn nor grow below this fertility. */
     /* Grows in shallow water and along the shore whatever the ground: the
      * fertility counts as 1.0 (see plant_advance()). */
     bool wetland;
-    float move_cost; /* Movement cost multiplier while walking through. */
+    float move_cost;       /* Movement cost multiplier while walking through. */
     PlantDays growth_days; /* When it grows (and when its stocks grow back). */
     /* Withers on the other days: back to growth 0, nothing above ground, its
      * stocks gone, until it grows again. */
     bool dies_back;
     ItemType cut_item; /* Dropped when the plant is cut down (ITEM_NONE: nothing). */
-    int cut_yield; /* Items dropped at full growth, proportionally less when younger. */
+    int cut_yield;     /* Items dropped at full growth, proportionally less when younger. */
     /* Stocks: at most `stock_capacity` items at full growth (proportionally
      * fewer when younger), one growing back every `stock_regrow_hours`. */
     int stock_capacity[PLANT_STOCK_COUNT];
@@ -219,7 +219,7 @@ typedef struct Map {
      * map_init(). */
     int top_ground_level;
     uint8_t *terrain; /* Terrain per tile. */
-    uint8_t *rock; /* RockType per tile; non-zero means a solid rock wall. */
+    uint8_t *rock;    /* RockType per tile; non-zero means a solid rock wall. */
     /* Natural slopes: non-zero where the ground rises to the level above
      * (see map_can_climb()). */
     uint8_t *slope;
@@ -351,8 +351,7 @@ typedef enum MapForbid {
  * structure's head) locks the way: a door or a ladder nobody may use. */
 static inline bool map_locked_at(const Map *map, size_t index)
 {
-    return (map->structure[index] == STRUCTURE_DOOR ||
-            map->structure[index] == STRUCTURE_LADDER) &&
+    return (map->structure[index] == STRUCTURE_DOOR || map->structure[index] == STRUCTURE_LADDER) &&
            (map->forbidden[index] & MAP_FORBID_STRUCTURE) != 0;
 }
 

@@ -132,8 +132,7 @@ static void test_stockpiles_on_their_level(void)
     /* Not inside the ground nor in the air over it. */
     CHECK_EQ_INT(stockpile_create(stockpiles, &game.map, 2, 10, 6, 14, LOW - 1), STOCKPILE_NONE);
     CHECK_EQ_INT(stockpile_create(stockpiles, &game.map, 2, 10, 6, 14, LOW + 1), STOCKPILE_NONE);
-    CHECK_EQ_INT(stockpile_create(stockpiles, &game.map, 28, 10, 32, 14, HIGH + 1),
-                 STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_create(stockpiles, &game.map, 28, 10, 32, 14, HIGH + 1), STOCKPILE_NONE);
 
     /* Items there are stored, on their level only. */
     ItemStack cobbles = item_stack_pristine(ITEM_COBBLE, 2);
@@ -161,8 +160,7 @@ static void test_gather_zones_on_their_level(void)
         CHECK_EQ_INT(gather_zone_at(zones, 30, 4, z), z == HIGH ? high : GATHER_ZONE_NONE);
     }
     CHECK_EQ_INT(gather_zone_create(zones, &game.map, 2, 10, 6, 14, LOW - 1), GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zone_create(zones, &game.map, 28, 10, 32, 14, HIGH + 1),
-                 GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_create(zones, &game.map, 28, 10, 32, 14, HIGH + 1), GATHER_ZONE_NONE);
 
     /* One zone over both levels, each tile on its own level. */
     int both = gather_zone_create(zones, &game.map, 10, 30, 14, 34, LOW);
@@ -245,8 +243,8 @@ static void test_crafting_on_a_raised_level(void)
     REQUIRE(init_raised_game(&game));
     Colonist *colonist = spawn_worker(&game, 10, 20, LOW);
     REQUIRE(colonist != NULL);
-    int index = workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 30,
-                                   12, HIGH);
+    int index =
+        workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 30, 12, HIGH);
     REQUIRE(index != WORKSTATION_NONE);
     station_on(&game, WORKSTATION_KNAPPING_SPOT, 30, 12, HIGH);
     items_add(&game.items, 12, 20, LOW, item_stack_pristine(ITEM_COBBLE, 1)); /* The hammer. */
@@ -276,8 +274,7 @@ static void test_hearth_on_its_level(void)
     CHECK_NEAR(hearths_light_at(&game.workstations, 30.5f, 30.5f, HIGH + 1), 0.0, 1e-9);
     CHECK_NEAR(hearths_light_at(&game.workstations, 30.5f, 30.5f, LOW), 0.0, 1e-9);
     CHECK(hearths_radiant_warmth(&game.workstations, &game.map, 31, 30, HIGH) > 0.0f);
-    CHECK_NEAR(hearths_radiant_warmth(&game.workstations, &game.map, 31, 30, HIGH + 1), 0.0,
-               1e-9);
+    CHECK_NEAR(hearths_radiant_warmth(&game.workstations, &game.map, 31, 30, HIGH + 1), 0.0, 1e-9);
     game_shutdown(&game);
 }
 

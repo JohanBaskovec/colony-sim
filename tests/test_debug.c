@@ -174,8 +174,8 @@ static int knapping_without_flint(Game *game, Colonist **knapper)
     *knapper = spawn_worker(game, 10, 10);
     colonist_set_knowledge_level(*knapper, KNOWLEDGE_STONE_KNAPPING, 95.0);
     colonist_add_tool(*knapper, item_stack_pristine(ITEM_COBBLE, 1));
-    int index = workstations_place(&game->workstations, &game->map, WORKSTATION_KNAPPING_SPOT,
-                                   14, 10, 0);
+    int index =
+        workstations_place(&game->workstations, &game->map, WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
     workstation_add_bill(&game->workstations, index, RECIPE_HAND_AXE);
     return index;
 }
@@ -263,8 +263,8 @@ static void test_no_tools(void)
     Colonist *knapper = spawn_worker(&game, 10, 10);
     REQUIRE(knapper != NULL);
     colonist_set_knowledge_level(knapper, KNOWLEDGE_STONE_KNAPPING, 95.0);
-    int index = workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT,
-                                   14, 10, 0);
+    int index =
+        workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
     workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
     items_add(&game.items, 16, 10, 0, item_stack_pristine(ITEM_FLINT, 3));
     CHECK(game_recipe_missing_tools(&game, RECIPE_HAND_AXE) != 0);
@@ -377,8 +377,7 @@ static void test_weather_cheats(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     CHECK_EQ_INT(game.weather.type, WEATHER_CLEAR);
-    WeatherType order[] = {WEATHER_CLOUDY, WEATHER_FOG, WEATHER_RAIN, WEATHER_STORM,
-                           WEATHER_CLEAR};
+    WeatherType order[] = {WEATHER_CLOUDY, WEATHER_FOG, WEATHER_RAIN, WEATHER_STORM, WEATHER_CLEAR};
     for (int i = 0; i < 5; i++) {
         game_debug_next_weather(&game);
         CHECK_EQ_INT(game.weather.type, order[i]);
@@ -436,8 +435,8 @@ static void test_learn_all(void)
     game.clock.tick += 5 * TICKS_PER_DAY;
     game_debug_learn_all(&game);
     for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
-        CHECK_NEAR(colonist_knowledge_level(novice, (KnowledgeType)k),
-                   GAME_DEBUG_KNOWLEDGE_LEVEL, 1e-9);
+        CHECK_NEAR(colonist_knowledge_level(novice, (KnowledgeType)k), GAME_DEBUG_KNOWLEDGE_LEVEL,
+                   1e-9);
         CHECK(novice->knowledge_peak[k] >= GAME_DEBUG_KNOWLEDGE_LEVEL);
         CHECK(!colonist_knowledge_fading(novice, (KnowledgeType)k, game.clock.tick));
     }
@@ -521,8 +520,7 @@ static void test_teleport(void)
     CHECK_EQ_INT(walker->z, 0);
     CHECK_EQ_INT(walker->task, TASK_IDLE);
     CHECK_EQ_INT(walker->path.count, 0);
-    CHECK_EQ_INT(reservations_owner(&game.reservations, RESERVATION_WORK, (TilePos){30, 30, 0}),
-                 0);
+    CHECK_EQ_INT(reservations_owner(&game.reservations, RESERVATION_WORK, (TilePos){30, 30, 0}), 0);
     run_ticks(&game, 5); /* Carries on from there. */
     CHECK(abs(walker->x - 40) <= 1 && abs(walker->y - 5) <= 1);
     /* Not into open air or out of the map; not a stale handle. */

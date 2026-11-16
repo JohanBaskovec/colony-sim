@@ -22,8 +22,7 @@ struct TextRenderer {
     uint64_t frame;
 };
 
-TextRenderer *text_renderer_create(SDL_Renderer *renderer, const char *font_path,
-                                   float point_size)
+TextRenderer *text_renderer_create(SDL_Renderer *renderer, const char *font_path, float point_size)
 {
     TextRenderer *text = SDL_calloc(1, sizeof(*text));
     if (text == NULL) {

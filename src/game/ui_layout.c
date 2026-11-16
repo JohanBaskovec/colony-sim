@@ -49,7 +49,7 @@ void ui_layout_window(Ui *ui, int id, const char *title, UiPlacement placement, 
 {
     float row = ui_row_height(ui);
     float line = (float)text_line_height(ui->text);
-    UiLayout layout = {ui, false, 0.0f, 0.0f, 0.0f, row, SDL_floorf((row - line) * 0.5f),
+    UiLayout layout = {ui,        false, 0.0f, 0.0f, 0.0f, row, SDL_floorf((row - line) * 0.5f),
                        row - 2.0f};
     rows(&layout, userdata);
     float width = SDL_ceilf(layout.width);

@@ -308,10 +308,9 @@ static void test_trees(void)
                     CHECK_EQ_INT(map.rock[i], tree_shape(plant, &shape) ? ROCK_WOOD : ROCK_NONE);
                     for (int dy = -1; dy <= 1; dy++) {
                         for (int dx = -1; dx <= 1; dx++) {
-                            bool other = (dx != 0 || dy != 0) &&
-                                         map_in_bounds(&map, x + dx, y + dy, z) &&
-                                         map.plants[map_index(&map, x + dx, y + dy, z)].type ==
-                                             PLANT_TREE;
+                            bool other =
+                                (dx != 0 || dy != 0) && map_in_bounds(&map, x + dx, y + dy, z) &&
+                                map.plants[map_index(&map, x + dx, y + dy, z)].type == PLANT_TREE;
                             CHECK(!other);
                         }
                     }

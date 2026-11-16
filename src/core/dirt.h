@@ -21,7 +21,7 @@ typedef struct Dirt {
     int width;
     int height;
     int depth;
-    uint8_t *level; /* 0..DIRT_MAX per tile. */
+    uint8_t *level;  /* 0..DIRT_MAX per tile. */
     int dirty_count; /* Tiles with some dirt. */
     /* Incremented whenever a tile gets dirtier: settlers who found nothing to
      * clean look again. */

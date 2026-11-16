@@ -19,12 +19,12 @@ typedef struct LanguageInfo {
 } LanguageInfo;
 
 typedef struct Localization {
-    char lang_dir[1024]; /* Ends with a path separator. */
+    char lang_dir[1024];                                /* Ends with a path separator. */
     LanguageInfo languages[LOCALIZATION_MAX_LANGUAGES]; /* Sorted by code. */
     int language_count;
     int active_index;
     I18nCatalog *fallback; /* English, always loaded. */
-    I18nCatalog *active; /* May point to `fallback`. */
+    I18nCatalog *active;   /* May point to `fallback`. */
 } Localization;
 
 /* `requested_code` may be NULL or empty to use the system locale. */

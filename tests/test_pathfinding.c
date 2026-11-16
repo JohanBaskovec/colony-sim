@@ -42,8 +42,8 @@ static void check_path_is_valid(const Map *map, TilePos start, TilePos goal, con
         CHECK(map_is_passable(map, step.x, step.y, step.z));
         if (step.x == previous.x && step.y == previous.y) {
             CHECK(abs(step.z - previous.z) == 1);
-            CHECK(map_can_climb_tree(map, step.x, step.y, step.z < previous.z ? step.z
-                                                                               : previous.z));
+            CHECK(
+                map_can_climb_tree(map, step.x, step.y, step.z < previous.z ? step.z : previous.z));
         } else if (step.z == previous.z + 1) {
             CHECK(map_can_climb(map, previous.x, previous.y, previous.z, step.x, step.y));
         } else if (step.z == previous.z - 1) {
@@ -187,19 +187,19 @@ static void test_find_nearest_matching_tile(void)
     map.plants[map_index(&map, 20, 10, 0)].type = PLANT_TREE;
     map.plants[map_index(&map, 13, 10, 0)].type = PLANT_TREE;
 
-    REQUIRE(pathfinder_find_nearest(&finder, &map, tile(10, 10), has_tree, NULL,
-                                    PATH_NO_COST_LIMIT, &path, &found));
+    REQUIRE(pathfinder_find_nearest(&finder, &map, tile(10, 10), has_tree, NULL, PATH_NO_COST_LIMIT,
+                                    &path, &found));
     CHECK_EQ_INT(found.x, 13);
     CHECK_EQ_INT(found.y, 10);
     check_path_is_valid(&map, tile(10, 10), found, &path);
 
     /* Out of range. */
-    CHECK(!pathfinder_find_nearest(&finder, &map, tile(10, 10), has_tree, NULL, 2.0f, &path,
-                                   &found));
+    CHECK(
+        !pathfinder_find_nearest(&finder, &map, tile(10, 10), has_tree, NULL, 2.0f, &path, &found));
 
     /* The start tile itself counts. */
-    REQUIRE(pathfinder_find_nearest(&finder, &map, tile(13, 10), has_tree, NULL,
-                                    PATH_NO_COST_LIMIT, &path, &found));
+    REQUIRE(pathfinder_find_nearest(&finder, &map, tile(13, 10), has_tree, NULL, PATH_NO_COST_LIMIT,
+                                    &path, &found));
     CHECK_EQ_INT(path.count, 0);
     CHECK_EQ_INT(found.x, 13);
     cleanup(&map, &finder, &path);
@@ -297,8 +297,8 @@ static void test_paths_climb_slopes(void)
 
     /* The nearest tree, down on the plains. */
     map.plants[map_index(&map, 3, 9, 0)].type = PLANT_TREE;
-    REQUIRE(pathfinder_find_nearest(&finder, &map, goal, has_tree, NULL, PATH_NO_COST_LIMIT,
-                                    &path, &found));
+    REQUIRE(pathfinder_find_nearest(&finder, &map, goal, has_tree, NULL, PATH_NO_COST_LIMIT, &path,
+                                    &found));
     CHECK(found.x == 3 && found.y == 9 && found.z == 0);
     /* The plains and the hilltop: 128 tiles each. */
     CHECK_EQ_UINT(pathfinder_reachable_count(&finder, &map, start, PATH_NO_COST_LIMIT), 256);

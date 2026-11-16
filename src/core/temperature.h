@@ -34,7 +34,10 @@
 
 /* Outdoor temperature in the middle of spring, summer, autumn and winter
  * (tuning). */
-#define TEMPERATURE_SEASON_MEANS {12.0f, 22.0f, 10.0f, -2.0f}
+#define TEMPERATURE_SEASON_MEANS                                                                   \
+    {                                                                                              \
+        12.0f, 22.0f, 10.0f, -2.0f                                                                 \
+    }
 #define TEMPERATURE_DAILY_SWING 5.0f
 #define TEMPERATURE_COLDEST_HOUR 5
 #define TEMPERATURE_WARMEST_HOUR 15
@@ -98,8 +101,8 @@ typedef struct Temperatures {
     /* One bit per tile: whether the sweep works it out (all but rock and
      * open space). */
     uint64_t *active;
-    float outdoor; /* The outdoor air at the last tick: open space's. */
-    float *buffers[3]; /* Allocations behind celsius, edge_east, edge_south. */
+    float outdoor;              /* The outdoor air at the last tick: open space's. */
+    float *buffers[3];          /* Allocations behind celsius, edge_east, edge_south. */
     uint32_t topology_revision; /* The map revisions the caches were built for. */
     uint32_t build_revision;
 } Temperatures;

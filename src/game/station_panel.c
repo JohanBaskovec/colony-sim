@@ -213,8 +213,8 @@ static void bill_pause_row(UiLayout *layout, const Bill *bill, int index, Action
     float pair = 2.0f * small + 2.0f;
     ui_layout_measure(layout, INDENT + box_width + GAP + pair + GAP + ui_text_width(ui, text));
     float x = layout->x + INDENT;
-    if (layout->draw && ui_checkbox(ui, x, layout->y, box_width,
-                                    bill->paused ? UI_CHECKED : UI_UNCHECKED, pause)) {
+    if (layout->draw &&
+        ui_checkbox(ui, x, layout->y, box_width, bill->paused ? UI_CHECKED : UI_UNCHECKED, pause)) {
         *action = (Action){ACTION_TOGGLE_PAUSE, index, 0};
     }
     x += box_width + GAP;
@@ -296,8 +296,7 @@ static void bill_warning_rows(UiLayout *layout, const Game *game, const Workstat
         TR_FORMAT(text, sizeof(text), tr("station.warning.tool"), names);
         ui_layout_label(layout, text, INDENT, true);
     }
-    if (bill_wants_more(bill, (int)game->stock[def->product]) &&
-        !game_bill_has_input(game, bill)) {
+    if (bill_wants_more(bill, (int)game->stock[def->product]) && !game_bill_has_input(game, bill)) {
         ui_layout_label(layout, tr("station.warning.no_input"), INDENT, true);
     }
 }
@@ -344,8 +343,8 @@ static void hearth_fuel_row(UiLayout *layout, const Workstation *station, Action
         const char *name = tr(item_def((ItemType)type)->name_key);
         float box_width = ui_checkbox_width(ui, name);
         bool allowed = (station->fuel_types & ITEM_TYPE_BIT(type)) != 0;
-        if (layout->draw && ui_checkbox(ui, x, layout->y, box_width,
-                                        allowed ? UI_CHECKED : UI_UNCHECKED, name)) {
+        if (layout->draw &&
+            ui_checkbox(ui, x, layout->y, box_width, allowed ? UI_CHECKED : UI_UNCHECKED, name)) {
             *action = (Action){ACTION_TOGGLE_FUEL, 0, type};
         }
         x += box_width + GAP;
@@ -363,8 +362,8 @@ static void hearth_rows(UiLayout *layout, const Game *game, const Workstation *s
     kilograms_text(capacity, sizeof(capacity), HEARTH_FUEL_CAPACITY);
     TR_FORMAT(text, sizeof(text), tr("station.hearth.fuel"), fuel, capacity);
     ui_layout_label(layout, text, 0.0f, false);
-    bool rained_on = hearth_rained_on(station, &game->map,
-                                      weather_wetting(&game->weather, game->clock.tick));
+    bool rained_on =
+        hearth_rained_on(station, &game->map, weather_wetting(&game->weather, game->clock.tick));
     if (station->burning) {
         tr_decimal(number, sizeof(number), station->fuel / HEARTH_BURN_PER_HOUR, 1);
         TR_FORMAT(text, sizeof(text), tr("station.hearth.burning"), number);
@@ -413,9 +412,8 @@ static void built_rows(UiLayout *layout, const Game *game, const Workstation *st
         TR_FORMAT(text, sizeof(text), tr("station.in_progress"), tr(current->name_key), percent);
         ui_layout_label(layout, text, 0.0f, false);
     }
-    ui_layout_label(layout,
-                    tr(station->bill_count > 0 ? "station.bills" : "station.no_bills"), 0.0f,
-                    station->bill_count == 0);
+    ui_layout_label(layout, tr(station->bill_count > 0 ? "station.bills" : "station.no_bills"),
+                    0.0f, station->bill_count == 0);
     for (int i = 0; i < station->bill_count; i++) {
         const Bill *bill = &station->bills[i];
         tr_integer(number, sizeof(number), i + 1);
@@ -481,8 +479,8 @@ static void station_rows(UiLayout *layout, void *userdata)
     const char *state = station->forbidden ? tr("tile_panel.left_alone") : "";
     float forbid_width = ui_button_width(layout->ui, forbid);
     float remove_width = ui_button_width(layout->ui, remove);
-    ui_layout_measure(layout, ui_text_width(layout->ui, state) + GAP + forbid_width + GAP +
-                                  remove_width);
+    ui_layout_measure(layout,
+                      ui_text_width(layout->ui, state) + GAP + forbid_width + GAP + remove_width);
     float right = layout->x + layout->width;
     if (ui_layout_button(layout, right - remove_width - GAP - forbid_width, forbid)) {
         *action = (Action){ACTION_TOGGLE_FORBIDDEN, 0, 0};
@@ -527,8 +525,7 @@ static void apply(App *app, int index, const Action *action)
         break;
     case ACTION_TOGGLE_INPUT:
         if (bill != NULL) {
-            workstation_set_bill_input(workstations, index, action->bill,
-                                       (ItemType)action->value,
+            workstation_set_bill_input(workstations, index, action->bill, (ItemType)action->value,
                                        !(bill->inputs & ITEM_TYPE_BIT(action->value)));
         }
         break;
@@ -566,8 +563,7 @@ static void apply(App *app, int index, const Action *action)
                              !(station->fuel_types & ITEM_TYPE_BIT(action->value)));
         break;
     case ACTION_TOGGLE_TEACH:
-        game_set_teach(&app->game, (KnowledgeType)action->value,
-                       !app->game.teach[action->value]);
+        game_set_teach(&app->game, (KnowledgeType)action->value, !app->game.teach[action->value]);
         break;
     case ACTION_TOGGLE_FORBIDDEN:
         game_set_forbidden(&app->game, station->x, station->y, station->z, FORBID_STATION,

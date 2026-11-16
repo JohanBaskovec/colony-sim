@@ -70,12 +70,12 @@
 /* The room a tree takes, counted from its foot (the north-west tile of its
  * trunk, on the level of the ground it grows on). */
 typedef struct TreeShape {
-    int size;   /* Width and depth of the trunk in tiles, 1..TREE_MAX_SIZE. */
-    int trunk;  /* Levels of trunk, the foot's included. */
+    int size;  /* Width and depth of the trunk in tiles, 1..TREE_MAX_SIZE. */
+    int trunk; /* Levels of trunk, the foot's included. */
     /* Levels of foliage: from `foliage_from` (1 or more) up to `trunk`, the
      * level over the top of the trunk. */
     int foliage_from;
-    int reach;  /* Tiles the foliage reaches out from the trunk. */
+    int reach; /* Tiles the foliage reaches out from the trunk. */
 } TreeShape;
 
 /* Levels a tree of this shape takes, its foot's included. */
@@ -169,8 +169,8 @@ int tree_fall_length(int levels);
  * tiles in it. */
 typedef struct TreeFall {
     Direction direction;
-    int length;  /* Tiles reached, 0 .. tree_fall_length(). */
-    int harmed;  /* Structure tiles among them. */
+    int length; /* Tiles reached, 0 .. tree_fall_length(). */
+    int harmed; /* Structure tiles among them. */
 } TreeFall;
 TreeFall tree_fall_toward(const Map *map, int x, int y, int z, Direction direction);
 

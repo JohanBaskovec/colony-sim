@@ -4,8 +4,7 @@
 
 #include <stdio.h>
 
-void notices_push(Notices *notices, NoticeType type, int knowledge, const char *name,
-                  uint64_t tick)
+void notices_push(Notices *notices, NoticeType type, int knowledge, const char *name, uint64_t tick)
 {
     Notice *notice = &notices->list[notices->count % NOTICE_MAX];
     notice->type = (uint8_t)type;

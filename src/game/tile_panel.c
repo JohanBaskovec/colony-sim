@@ -76,8 +76,7 @@ static void tile_rows(UiLayout *layout, void *userdata)
             StructureType structure = map_structure(&game->map, x, y, z);
             bool locked = target == FORBID_STRUCTURE &&
                           (structure == STRUCTURE_DOOR || structure == STRUCTURE_LADDER);
-            ui_layout_label(layout,
-                            tr(locked ? "tile_panel.locked" : "tile_panel.left_alone"),
+            ui_layout_label(layout, tr(locked ? "tile_panel.locked" : "tile_panel.left_alone"),
                             UI_LAYOUT_INDENT, true);
         }
     }

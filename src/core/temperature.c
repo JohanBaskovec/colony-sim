@@ -58,8 +58,8 @@ static bool kind_active(uint8_t kind)
 
 /* Refreshes the caches over tiles x0..x1, y0..y1 of level z (clamped to the
  * map). */
-static void refresh_area(Temperatures *temperatures, const Map *map, int x0, int y0, int x1,
-                         int y1, int z)
+static void refresh_area(Temperatures *temperatures, const Map *map, int x0, int y0, int x1, int y1,
+                         int z)
 {
     int width = temperatures->width, height = temperatures->height;
     x0 = x0 < 0 ? 0 : x0;
@@ -90,15 +90,15 @@ static void refresh_area(Temperatures *temperatures, const Map *map, int x0, int
             size_t i = map_index(map, x, y, z);
             bool open = kind_material(kind[i]) == TEMPERATURE_MATERIAL_OPEN;
             float here = kind_conductance(kind[i]);
-            float east = x + 1 < width && !open &&
-                                 kind_material(kind[i + 1]) != TEMPERATURE_MATERIAL_OPEN
-                             ? kind_conductance(kind[i + 1])
-                             : 0.0f;
+            float east =
+                x + 1 < width && !open && kind_material(kind[i + 1]) != TEMPERATURE_MATERIAL_OPEN
+                    ? kind_conductance(kind[i + 1])
+                    : 0.0f;
             size_t below = i + (size_t)width;
-            float south = y + 1 < height && !open &&
-                                  kind_material(kind[below]) != TEMPERATURE_MATERIAL_OPEN
-                              ? kind_conductance(kind[below])
-                              : 0.0f;
+            float south =
+                y + 1 < height && !open && kind_material(kind[below]) != TEMPERATURE_MATERIAL_OPEN
+                    ? kind_conductance(kind[below])
+                    : 0.0f;
             temperatures->edge_east[i] = fminf(here, east);
             temperatures->edge_south[i] = fminf(here, south);
         }
@@ -232,8 +232,8 @@ float temperature_outdoor(uint64_t tick)
 
 static bool in_bounds(const Temperatures *temperatures, int x, int y, int z)
 {
-    return temperatures->celsius != NULL && x >= 0 && y >= 0 && z >= 0 &&
-           x < temperatures->width && y < temperatures->height && z < temperatures->depth;
+    return temperatures->celsius != NULL && x >= 0 && y >= 0 && z >= 0 && x < temperatures->width &&
+           y < temperatures->height && z < temperatures->depth;
 }
 
 static size_t index_of(const Temperatures *temperatures, int x, int y, int z)
@@ -372,8 +372,7 @@ void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick
             float west = east[i - 1];
             float flow = exposure[i] * (outdoor - here) +
                          GROUND_RATES[cover] * (TEMPERATURE_GROUND - here) +
-                         east[i] * (celsius[i + 1] - here) +
-                         south[i] * (celsius[i + row] - here) +
+                         east[i] * (celsius[i + 1] - here) + south[i] * (celsius[i + row] - here) +
                          south[i - row] * (celsius[i - row] - here) - west * here;
             celsius[i] = here + flow * hours + (west * hours) * celsius[i - 1];
         }

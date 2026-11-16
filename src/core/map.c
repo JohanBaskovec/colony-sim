@@ -37,7 +37,10 @@ static const RockDef ROCK_DEFS[ROCK_COUNT] = {
 #define WINTER(day) SEASON_DAY(SEASON_WINTER, day)
 /* Plants grow from spring to autumn and rest in winter. */
 #define GROWING_SEASON PLANT_DAYS(SPRING(1), AUTUMN(DAYS_PER_SEASON))
-#define STOCKS(branches, twigs, food) {branches, twigs, food}
+#define STOCKS(branches, twigs, food)                                                              \
+    {                                                                                              \
+        branches, twigs, food                                                                      \
+    }
 
 /*
  * Wild plants and their seasons in a temperate climate (docs/KNOWLEDGE.md §7).
@@ -47,72 +50,127 @@ static const RockDef ROCK_DEFS[ROCK_COUNT] = {
  */
 static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_NONE] = {.id = "none", .move_cost = 1.0f},
-    [PLANT_GRASS] = {.id = "grass", .name_key = N_("plant.grass"), .growth_per_day = 0.35f,
-                     .min_fertility = 0.3f, .move_cost = 1.0f, .growth_days = GROWING_SEASON},
+    [PLANT_GRASS] = {.id = "grass",
+                     .name_key = N_("plant.grass"),
+                     .growth_per_day = 0.35f,
+                     .min_fertility = 0.3f,
+                     .move_cost = 1.0f,
+                     .growth_days = GROWING_SEASON},
     /* 60 logs of 7 kg: the usable wood of a mature tree (see item.c). Its
      * dead branches and twigs fall to the ground and lie on its foliage
      * (core/tree.h): no stock on the plant. */
-    [PLANT_TREE] = {.id = "tree", .name_key = N_("plant.tree"), .growth_per_day = 0.03f,
-                    .min_fertility = 0.6f, .move_cost = 1.6f, .growth_days = GROWING_SEASON,
-                    .cut_item = ITEM_WOOD, .cut_yield = 60},
-    [PLANT_HAZEL] = {.id = "hazel", .name_key = N_("plant.hazel"), .growth_per_day = 0.04f,
-                     .min_fertility = 0.6f, .move_cost = 1.4f, .growth_days = GROWING_SEASON,
-                     .stock_capacity = STOCKS(3, 6, 12), .stock_regrow_hours = STOCKS(72, 24, 20),
+    [PLANT_TREE] = {.id = "tree",
+                    .name_key = N_("plant.tree"),
+                    .growth_per_day = 0.03f,
+                    .min_fertility = 0.6f,
+                    .move_cost = 1.6f,
+                    .growth_days = GROWING_SEASON,
+                    .cut_item = ITEM_WOOD,
+                    .cut_yield = 60},
+    [PLANT_HAZEL] = {.id = "hazel",
+                     .name_key = N_("plant.hazel"),
+                     .growth_per_day = 0.04f,
+                     .min_fertility = 0.6f,
+                     .move_cost = 1.4f,
+                     .growth_days = GROWING_SEASON,
+                     .stock_capacity = STOCKS(3, 6, 12),
+                     .stock_regrow_hours = STOCKS(72, 24, 20),
                      .food_item = ITEM_HAZELNUTS,
                      .food_days = PLANT_DAYS(AUTUMN(1), AUTUMN(DAYS_PER_SEASON)),
                      .min_food_growth = 0.6f},
     /* Thorny canes: slow to walk through. */
-    [PLANT_BRAMBLE] = {.id = "bramble", .name_key = N_("plant.bramble"), .growth_per_day = 0.12f,
-                       .min_fertility = 0.5f, .move_cost = 2.0f, .growth_days = GROWING_SEASON,
-                       .stock_capacity = STOCKS(0, 0, 9), .stock_regrow_hours = STOCKS(0, 0, 12),
+    [PLANT_BRAMBLE] = {.id = "bramble",
+                       .name_key = N_("plant.bramble"),
+                       .growth_per_day = 0.12f,
+                       .min_fertility = 0.5f,
+                       .move_cost = 2.0f,
+                       .growth_days = GROWING_SEASON,
+                       .stock_capacity = STOCKS(0, 0, 9),
+                       .stock_regrow_hours = STOCKS(0, 0, 12),
                        .food_item = ITEM_BLACKBERRIES,
-                       .food_days = PLANT_DAYS(SUMMER(8), AUTUMN(7)), .min_food_growth = 0.5f},
+                       .food_days = PLANT_DAYS(SUMMER(8), AUTUMN(7)),
+                       .min_food_growth = 0.5f},
     /* Easily mistaken for lily of the valley or autumn crocus. */
-    [PLANT_WILD_GARLIC] = {.id = "wild_garlic", .name_key = N_("plant.wild_garlic"),
-                           .growth_per_day = 0.25f, .min_fertility = 1.2f, .move_cost = 1.0f,
-                           .growth_days = PLANT_DAYS(SPRING(1), SUMMER(3)), .dies_back = true,
+    [PLANT_WILD_GARLIC] = {.id = "wild_garlic",
+                           .name_key = N_("plant.wild_garlic"),
+                           .growth_per_day = 0.25f,
+                           .min_fertility = 1.2f,
+                           .move_cost = 1.0f,
+                           .growth_days = PLANT_DAYS(SPRING(1), SUMMER(3)),
+                           .dies_back = true,
                            .stock_capacity = STOCKS(0, 0, 3),
-                           .stock_regrow_hours = STOCKS(0, 0, 24), .food_item = ITEM_WILD_GARLIC,
+                           .stock_regrow_hours = STOCKS(0, 0, 24),
+                           .food_item = ITEM_WILD_GARLIC,
                            .food_days = PLANT_DAYS(SPRING(1), SPRING(DAYS_PER_SEASON)),
-                           .min_food_growth = 0.3f, .food_confusable = true},
+                           .min_food_growth = 0.3f,
+                           .food_confusable = true},
     /* Young shoots in spring, and again when it grows back in autumn. */
-    [PLANT_NETTLE] = {.id = "nettle", .name_key = N_("plant.nettle"), .growth_per_day = 0.2f,
-                      .min_fertility = 1.2f, .move_cost = 1.2f, .growth_days = GROWING_SEASON,
-                      .dies_back = true, .stock_capacity = STOCKS(0, 0, 3),
-                      .stock_regrow_hours = STOCKS(0, 0, 24), .food_item = ITEM_NETTLES,
+    [PLANT_NETTLE] = {.id = "nettle",
+                      .name_key = N_("plant.nettle"),
+                      .growth_per_day = 0.2f,
+                      .min_fertility = 1.2f,
+                      .move_cost = 1.2f,
+                      .growth_days = GROWING_SEASON,
+                      .dies_back = true,
+                      .stock_capacity = STOCKS(0, 0, 3),
+                      .stock_regrow_hours = STOCKS(0, 0, 24),
+                      .food_item = ITEM_NETTLES,
                       .food_days = PLANT_DAYS(SPRING(1), SPRING(DAYS_PER_SEASON)) |
                                    PLANT_DAYS(AUTUMN(3), AUTUMN(DAYS_PER_SEASON)),
                       .min_food_growth = 0.2f},
-    [PLANT_PLANTAIN] = {.id = "plantain", .name_key = N_("plant.plantain"),
-                        .growth_per_day = 0.15f, .min_fertility = 0.6f, .move_cost = 1.0f,
-                        .growth_days = GROWING_SEASON, .stock_capacity = STOCKS(0, 0, 2),
-                        .stock_regrow_hours = STOCKS(0, 0, 24), .food_item = ITEM_PLANTAIN,
-                        .food_days = GROWING_SEASON, .min_food_growth = 0.3f},
+    [PLANT_PLANTAIN] = {.id = "plantain",
+                        .name_key = N_("plant.plantain"),
+                        .growth_per_day = 0.15f,
+                        .min_fertility = 0.6f,
+                        .move_cost = 1.0f,
+                        .growth_days = GROWING_SEASON,
+                        .stock_capacity = STOCKS(0, 0, 2),
+                        .stock_regrow_hours = STOCKS(0, 0, 24),
+                        .food_item = ITEM_PLANTAIN,
+                        .food_days = GROWING_SEASON,
+                        .min_food_growth = 0.3f},
     /* Its root is tender from autumn until early spring, woody once it
      * flowers; easily mistaken for hemlock. */
-    [PLANT_WILD_CARROT] = {.id = "wild_carrot", .name_key = N_("plant.wild_carrot"),
-                           .growth_per_day = 0.08f, .min_fertility = 0.6f, .move_cost = 1.0f,
-                           .growth_days = GROWING_SEASON, .stock_capacity = STOCKS(0, 0, 3),
+    [PLANT_WILD_CARROT] = {.id = "wild_carrot",
+                           .name_key = N_("plant.wild_carrot"),
+                           .growth_per_day = 0.08f,
+                           .min_fertility = 0.6f,
+                           .move_cost = 1.0f,
+                           .growth_days = GROWING_SEASON,
+                           .stock_capacity = STOCKS(0, 0, 3),
                            .stock_regrow_hours = STOCKS(0, 0, 24),
                            .food_item = ITEM_WILD_CARROTS,
                            .food_days = PLANT_DAYS(AUTUMN(1), WINTER(DAYS_PER_SEASON)) |
                                         PLANT_DAYS(SPRING(1), SPRING(6)),
-                           .min_food_growth = 0.6f, .food_dug = true, .food_confusable = true,
+                           .min_food_growth = 0.6f,
+                           .food_dug = true,
+                           .food_confusable = true,
                            .dug_whole = true},
     /* In the shallows and on the shore. A spreading rootstock: digging part
      * of it up leaves the rest growing. */
-    [PLANT_CATTAIL] = {.id = "cattail", .name_key = N_("plant.cattail"), .growth_per_day = 0.1f,
-                       .wetland = true, .move_cost = 1.3f, .growth_days = GROWING_SEASON,
-                       .stock_capacity = STOCKS(0, 0, 4), .stock_regrow_hours = STOCKS(0, 0, 48),
-                       .food_item = ITEM_CATTAIL_RHIZOMES, .food_days = PLANT_ALL_YEAR,
-                       .min_food_growth = 0.5f, .food_dug = true},
+    [PLANT_CATTAIL] = {.id = "cattail",
+                       .name_key = N_("plant.cattail"),
+                       .growth_per_day = 0.1f,
+                       .wetland = true,
+                       .move_cost = 1.3f,
+                       .growth_days = GROWING_SEASON,
+                       .stock_capacity = STOCKS(0, 0, 4),
+                       .stock_regrow_hours = STOCKS(0, 0, 48),
+                       .food_item = ITEM_CATTAIL_RHIZOMES,
+                       .food_days = PLANT_ALL_YEAR,
+                       .min_food_growth = 0.5f,
+                       .food_dug = true},
     /* Appear fully grown, picked or gone within days (see core/game.c). Some
      * are deadly: a matter for skilled gatherers. */
-    [PLANT_MUSHROOMS] = {.id = "mushrooms", .name_key = N_("plant.mushrooms"),
-                         .move_cost = 1.0f, .stock_capacity = STOCKS(0, 0, 3),
-                         .stock_regrow_hours = STOCKS(0, 0, 24), .food_item = ITEM_MUSHROOMS,
+    [PLANT_MUSHROOMS] = {.id = "mushrooms",
+                         .name_key = N_("plant.mushrooms"),
+                         .move_cost = 1.0f,
+                         .stock_capacity = STOCKS(0, 0, 3),
+                         .stock_regrow_hours = STOCKS(0, 0, 24),
+                         .food_item = ITEM_MUSHROOMS,
                          .food_days = PLANT_DAYS(AUTUMN(1), AUTUMN(DAYS_PER_SEASON)),
-                         .food_confusable = true, .vanishes = true},
+                         .food_confusable = true,
+                         .vanishes = true},
 };
 
 #undef SPRING
@@ -238,8 +296,8 @@ void plant_advance(Plant *plant, float fertility, int hours, int day_of_year)
     } else {
         plant_regrow_stocks(plant, hours, day_of_year);
         if (growing && plant->growth < 1.0f && fertility >= def->min_fertility) {
-            float growth = plant->growth + def->growth_per_day * fertility * (float)hours /
-                                               (float)HOURS_PER_DAY;
+            float growth = plant->growth +
+                           def->growth_per_day * fertility * (float)hours / (float)HOURS_PER_DAY;
             plant->growth = growth < 1.0f ? growth : 1.0f;
         }
     }
@@ -305,9 +363,9 @@ bool map_init(Map *map, int width, int height, int depth)
     map->structure_hit_points = calloc(count, sizeof(*map->structure_hit_points));
     map->roof_quality = calloc(count, 1);
     map->forbidden = calloc(count, 1);
-    if (map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL || map->plants == NULL ||
-        map->cobbles == NULL || map->flint == NULL || map->branches == NULL || map->twigs == NULL ||
-        map->structure == NULL ||
+    if (map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL ||
+        map->plants == NULL || map->cobbles == NULL || map->flint == NULL ||
+        map->branches == NULL || map->twigs == NULL || map->structure == NULL ||
         map->structure_part == NULL || map->structure_quality == NULL ||
         map->structure_hit_points == NULL || map->roof_quality == NULL) {
         map_free(map);
@@ -575,7 +633,7 @@ void map_set_structure_hit_points(Map *map, int x, int y, int z, int hit_points)
 StructureType map_structure(const Map *map, int x, int y, int z)
 {
     return map_in_bounds(map, x, y, z) ? (StructureType)map->structure[map_index(map, x, y, z)]
-                                    : STRUCTURE_NONE;
+                                       : STRUCTURE_NONE;
 }
 
 void map_topology_changed(Map *map)
@@ -734,8 +792,7 @@ StructureType map_roof(const Map *map, int x, int y, int z)
         return STRUCTURE_NONE;
     }
     size_t index = map_index(map, x, y, z);
-    return map->rock[index] == ROCK_NONE ? TERRAIN_DEFS[map->terrain[index]].built
-                                         : STRUCTURE_NONE;
+    return map->rock[index] == ROCK_NONE ? TERRAIN_DEFS[map->terrain[index]].built : STRUCTURE_NONE;
 }
 
 /* The terrain a roof is built as (TERRAIN_COUNT for other types). */
@@ -752,7 +809,7 @@ static Terrain roof_terrain(StructureType roof)
 ItemQuality map_roof_quality(const Map *map, int x, int y, int z)
 {
     return map_in_bounds(map, x, y, z) ? (ItemQuality)map->roof_quality[map_index(map, x, y, z)]
-                                    : ITEM_QUALITY_CRUDE;
+                                       : ITEM_QUALITY_CRUDE;
 }
 
 void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality)
@@ -852,12 +909,11 @@ bool map_dig_keeps_ceilings(const Map *map, int x, int y, int z, bool opens_abov
             int cx = x + dx, cy = y + dy;
             /* The tile itself has rock on it: what its ceiling would be. */
             size_t over = map_in_bounds(map, x, y, z + 1) ? map_index(map, x, y, z + 1) : 0;
-            bool ceiling = dx == 0 && dy == 0
-                               ? !opens_above && map_in_bounds(map, x, y, z + 1) &&
-                                     !map_is_open_at(map, over) &&
-                                     (map->rock[over] != ROCK_NONE ||
-                                      map->terrain[over] != TERRAIN_FOLIAGE)
-                               : map_has_ceiling(map, cx, cy, z);
+            bool ceiling = dx == 0 && dy == 0 ? !opens_above && map_in_bounds(map, x, y, z + 1) &&
+                                                    !map_is_open_at(map, over) &&
+                                                    (map->rock[over] != ROCK_NONE ||
+                                                     map->terrain[over] != TERRAIN_FOLIAGE)
+                                              : map_has_ceiling(map, cx, cy, z);
             if (ceiling && !supported_without(map, cx, cy, z, x, y)) {
                 return false;
             }
@@ -920,8 +976,8 @@ uint64_t map_hash(const Map *map)
     hash = hash_fnv1a64(hash, map->structure, count);
     hash = hash_fnv1a64(hash, map->structure_part, count);
     hash = hash_fnv1a64(hash, map->structure_quality, count);
-    hash = hash_fnv1a64(hash, map->structure_hit_points,
-                        count * sizeof(*map->structure_hit_points));
+    hash =
+        hash_fnv1a64(hash, map->structure_hit_points, count * sizeof(*map->structure_hit_points));
     if (map->roof_count > 0) { /* Hashes of maps without roofs stay as they were. */
         hash = hash_fnv1a64(hash, map->roof_quality, count);
     }
@@ -983,12 +1039,8 @@ bool map_take_stone(Map *map, int x, int y, int z, ItemType type)
 static uint8_t *litter_layer(const Map *map, ItemType type, int *max)
 {
     switch (type) {
-    case ITEM_BRANCHES:
-        *max = MAP_BRANCHES_MAX;
-        return map->branches;
-    case ITEM_TWIGS:
-        *max = MAP_TWIGS_MAX;
-        return map->twigs;
+    case ITEM_BRANCHES: *max = MAP_BRANCHES_MAX; return map->branches;
+    case ITEM_TWIGS: *max = MAP_TWIGS_MAX; return map->twigs;
     default: return NULL;
     }
 }

@@ -58,8 +58,7 @@ static bool ends_with(const char *text, const char *suffix)
 {
     size_t text_length = strlen(text);
     size_t suffix_length = strlen(suffix);
-    return text_length >= suffix_length &&
-           strcmp(text + text_length - suffix_length, suffix) == 0;
+    return text_length >= suffix_length && strcmp(text + text_length - suffix_length, suffix) == 0;
 }
 
 int main(int argc, char **argv)

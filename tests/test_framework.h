@@ -28,83 +28,83 @@ static int test_check_count = 0;
 static int test_run_count = 0;
 static const char *test_current_name = "";
 
-#define TEST_FAIL_(...)                                                                    \
-    do {                                                                                   \
-        test_failure_count++;                                                              \
-        fprintf(stderr, "%s:%d: [%s] ", __FILE__, __LINE__, test_current_name);            \
-        fprintf(stderr, __VA_ARGS__);                                                      \
-        fputc('\n', stderr);                                                               \
+#define TEST_FAIL_(...)                                                                            \
+    do {                                                                                           \
+        test_failure_count++;                                                                      \
+        fprintf(stderr, "%s:%d: [%s] ", __FILE__, __LINE__, test_current_name);                    \
+        fprintf(stderr, __VA_ARGS__);                                                              \
+        fputc('\n', stderr);                                                                       \
     } while (0)
 
-#define CHECK(condition)                                                                   \
-    do {                                                                                   \
-        test_check_count++;                                                                \
-        if (!(condition)) {                                                                \
-            TEST_FAIL_("CHECK failed: %s", #condition);                                    \
-        }                                                                                  \
+#define CHECK(condition)                                                                           \
+    do {                                                                                           \
+        test_check_count++;                                                                        \
+        if (!(condition)) {                                                                        \
+            TEST_FAIL_("CHECK failed: %s", #condition);                                            \
+        }                                                                                          \
     } while (0)
 
 /* Aborts the current test function (which must return void) on failure. */
-#define REQUIRE(condition)                                                                 \
-    do {                                                                                   \
-        test_check_count++;                                                                \
-        if (!(condition)) {                                                                \
-            TEST_FAIL_("REQUIRE failed: %s", #condition);                                  \
-            return;                                                                        \
-        }                                                                                  \
+#define REQUIRE(condition)                                                                         \
+    do {                                                                                           \
+        test_check_count++;                                                                        \
+        if (!(condition)) {                                                                        \
+            TEST_FAIL_("REQUIRE failed: %s", #condition);                                          \
+            return;                                                                                \
+        }                                                                                          \
     } while (0)
 
-#define CHECK_EQ_INT(actual, expected)                                                     \
-    do {                                                                                   \
-        long long actual_ = (long long)(actual);                                           \
-        long long expected_ = (long long)(expected);                                       \
-        test_check_count++;                                                                \
-        if (actual_ != expected_) {                                                        \
-            TEST_FAIL_("%s == %lld, expected %lld", #actual, actual_, expected_);          \
-        }                                                                                  \
+#define CHECK_EQ_INT(actual, expected)                                                             \
+    do {                                                                                           \
+        long long actual_ = (long long)(actual);                                                   \
+        long long expected_ = (long long)(expected);                                               \
+        test_check_count++;                                                                        \
+        if (actual_ != expected_) {                                                                \
+            TEST_FAIL_("%s == %lld, expected %lld", #actual, actual_, expected_);                  \
+        }                                                                                          \
     } while (0)
 
-#define CHECK_EQ_UINT(actual, expected)                                                    \
-    do {                                                                                   \
-        unsigned long long actual_ = (unsigned long long)(actual);                         \
-        unsigned long long expected_ = (unsigned long long)(expected);                     \
-        test_check_count++;                                                                \
-        if (actual_ != expected_) {                                                        \
-            TEST_FAIL_("%s == %llu (0x%llx), expected %llu (0x%llx)", #actual, actual_,    \
-                       actual_, expected_, expected_);                                     \
-        }                                                                                  \
+#define CHECK_EQ_UINT(actual, expected)                                                            \
+    do {                                                                                           \
+        unsigned long long actual_ = (unsigned long long)(actual);                                 \
+        unsigned long long expected_ = (unsigned long long)(expected);                             \
+        test_check_count++;                                                                        \
+        if (actual_ != expected_) {                                                                \
+            TEST_FAIL_("%s == %llu (0x%llx), expected %llu (0x%llx)", #actual, actual_, actual_,   \
+                       expected_, expected_);                                                      \
+        }                                                                                          \
     } while (0)
 
-#define CHECK_NEAR(actual, expected, tolerance)                                            \
-    do {                                                                                   \
-        double actual_ = (double)(actual);                                                 \
-        double expected_ = (double)(expected);                                             \
-        test_check_count++;                                                                \
-        if (fabs(actual_ - expected_) > (double)(tolerance)) {                             \
-            TEST_FAIL_("%s == %g, expected %g (+/- %g)", #actual, actual_, expected_,      \
-                       (double)(tolerance));                                               \
-        }                                                                                  \
+#define CHECK_NEAR(actual, expected, tolerance)                                                    \
+    do {                                                                                           \
+        double actual_ = (double)(actual);                                                         \
+        double expected_ = (double)(expected);                                                     \
+        test_check_count++;                                                                        \
+        if (fabs(actual_ - expected_) > (double)(tolerance)) {                                     \
+            TEST_FAIL_("%s == %g, expected %g (+/- %g)", #actual, actual_, expected_,              \
+                       (double)(tolerance));                                                       \
+        }                                                                                          \
     } while (0)
 
-#define CHECK_STR_EQ(actual, expected)                                                     \
-    do {                                                                                   \
-        const char *actual_ = (actual);                                                    \
-        const char *expected_ = (expected);                                                \
-        test_check_count++;                                                                \
-        if (actual_ == NULL || expected_ == NULL || strcmp(actual_, expected_) != 0) {     \
-            TEST_FAIL_("%s == \"%s\", expected \"%s\"", #actual,                           \
-                       actual_ ? actual_ : "(null)", expected_ ? expected_ : "(null)");    \
-        }                                                                                  \
+#define CHECK_STR_EQ(actual, expected)                                                             \
+    do {                                                                                           \
+        const char *actual_ = (actual);                                                            \
+        const char *expected_ = (expected);                                                        \
+        test_check_count++;                                                                        \
+        if (actual_ == NULL || expected_ == NULL || strcmp(actual_, expected_) != 0) {             \
+            TEST_FAIL_("%s == \"%s\", expected \"%s\"", #actual, actual_ ? actual_ : "(null)",     \
+                       expected_ ? expected_ : "(null)");                                          \
+        }                                                                                          \
     } while (0)
 
-#define RUN_TEST(function)                                                                 \
-    do {                                                                                   \
-        int failures_before_ = test_failure_count;                                         \
-        test_current_name = #function;                                                     \
-        test_run_count++;                                                                  \
-        function();                                                                        \
-        printf("%s %s\n", test_failure_count == failures_before_ ? "[ OK ]" : "[FAIL]",    \
-               #function);                                                                 \
+#define RUN_TEST(function)                                                                         \
+    do {                                                                                           \
+        int failures_before_ = test_failure_count;                                                 \
+        test_current_name = #function;                                                             \
+        test_run_count++;                                                                          \
+        function();                                                                                \
+        printf("%s %s\n", test_failure_count == failures_before_ ? "[ OK ]" : "[FAIL]",            \
+               #function);                                                                         \
     } while (0)
 
 /* Prints the totals; returns the process exit code. */

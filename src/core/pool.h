@@ -32,8 +32,8 @@ static inline bool entity_id_is_none(EntityId id)
 
 typedef struct Pool {
     uint32_t capacity;
-    uint32_t count; /* Live slots. */
-    uint32_t high_water; /* Slots [0, high_water) have been used at least once. */
+    uint32_t count;        /* Live slots. */
+    uint32_t high_water;   /* Slots [0, high_water) have been used at least once. */
     uint32_t *generations; /* Current generation of each slot. */
     bool *alive;
     uint32_t *free_list; /* Released slots, reused last-in first-out. */

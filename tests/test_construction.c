@@ -194,12 +194,12 @@ static void test_building(void)
     construction_deliver(&constructions, index, item_stack_pristine(ITEM_GRASS, 24));
     items_add(&items, 8, 8, 0, item_stack_pristine(ITEM_COBBLE, 3)); /* In the way. */
     float work = structure_def(STRUCTURE_WALL)->build_work;
-    CHECK(!construction_add_work(&constructions, &map, &items, NULL, index, work * 0.5f, 60.0,
-                                 NULL));
+    CHECK(
+        !construction_add_work(&constructions, &map, &items, NULL, index, work * 0.5f, 60.0, NULL));
     CHECK_NEAR(construction_work_fraction(construction_get(&constructions, index)), 0.5f, 0.001f);
     CHECK(map_is_passable(&map, 8, 8, 0)); /* Not built yet. */
-    CHECK(construction_add_work(&constructions, &map, &items, NULL, index, work * 0.5f, 60.0,
-                                NULL));
+    CHECK(
+        construction_add_work(&constructions, &map, &items, NULL, index, work * 0.5f, 60.0, NULL));
     /* Built: the wall blocks, the grass is gone, the site is gone, the
      * stones were pushed next door, the materials are used up. */
     CHECK_EQ_INT(map_structure(&map, 8, 8, 0), STRUCTURE_WALL);
@@ -362,7 +362,7 @@ static void test_beds_wear_by_the_day(void)
     REQUIRE(site != CONSTRUCTION_NONE);
     CHECK(construction_get(&constructions, site)->refresh);
     CHECK_EQ_INT(construction_at(&constructions, 2, 3, 0), site); /* On the foot too. */
-    CHECK_EQ_INT(map_structure_hit_points(&map, 3, 3, 0), 60); /* Walls do not wear. */
+    CHECK_EQ_INT(map_structure_hit_points(&map, 3, 3, 0), 60);    /* Walls do not wear. */
     /* Nobody refreshes it: it falls apart, the grass brought is dropped. */
     construction_deliver(&constructions, site, item_stack_pristine(ITEM_GRASS, 2));
     for (int day = 0; day < 8; day++) {
@@ -389,8 +389,8 @@ static void test_long_structures(void)
     CHECK_EQ_INT(direction_dx(DIRECTION_EAST) + direction_dy(DIRECTION_NORTH), 0);
 
     /* A bed facing east: its foot east of its head. */
-    REQUIRE(map_place_structure(&map, 5, 5, 0, STRUCTURE_GRASS_BED, DIRECTION_EAST,
-                                ITEM_QUALITY_FINE));
+    REQUIRE(
+        map_place_structure(&map, 5, 5, 0, STRUCTURE_GRASS_BED, DIRECTION_EAST, ITEM_QUALITY_FINE));
     CHECK_EQ_INT(map_structure(&map, 6, 5, 0), STRUCTURE_GRASS_BED);
     CHECK_EQ_INT(map_structure(&map, 4, 5, 0), STRUCTURE_NONE);
     int x = -1, y = -1;
@@ -433,12 +433,12 @@ static void test_bed_sites(void)
     Items items;
     REQUIRE(init_world(&map, &constructions, &items));
     /* Both tiles must qualify: not with its foot on rock or across the edge. */
-    CHECK_EQ_INT(constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 5, 6, 0,
-                                     DIRECTION_NORTH),
-                 CONSTRUCTION_NONE);
-    CHECK_EQ_INT(constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 15, 2, 0,
-                                     DIRECTION_EAST),
-                 CONSTRUCTION_NONE);
+    CHECK_EQ_INT(
+        constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 5, 6, 0, DIRECTION_NORTH),
+        CONSTRUCTION_NONE);
+    CHECK_EQ_INT(
+        constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 15, 2, 0, DIRECTION_EAST),
+        CONSTRUCTION_NONE);
     int index =
         constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 2, 3, 0, DIRECTION_NORTH);
     REQUIRE(index != CONSTRUCTION_NONE);
@@ -507,9 +507,9 @@ static void test_workstation_site(void)
     Workstations stations;
     REQUIRE(init_world(&map, &constructions, &items));
     REQUIRE(workstations_init(&stations, 16, 16, 1));
-    CHECK_EQ_INT(constructions_place_workstation(&constructions, &map, WORKSTATION_TYPE_COUNT, 3,
-                                                 4, 0),
-                 CONSTRUCTION_NONE);
+    CHECK_EQ_INT(
+        constructions_place_workstation(&constructions, &map, WORKSTATION_TYPE_COUNT, 3, 4, 0),
+        CONSTRUCTION_NONE);
     CHECK_EQ_INT(
         constructions_place_workstation(&constructions, &map, WORKSTATION_KNAPPING_SPOT, 5, 5, 0),
         CONSTRUCTION_NONE); /* Rock. */
@@ -546,17 +546,15 @@ static void test_workstation_site(void)
     CHECK_EQ_INT(construction_deliver(&constructions, index, item_stack_pristine(ITEM_COBBLE, 3)),
                  1);
     float work = construction_work_needed(site);
-    CHECK(!construction_add_work(&constructions, &map, &items, &stations, index, work * 0.5f,
-                                 60.0, NULL));
+    CHECK(!construction_add_work(&constructions, &map, &items, &stations, index, work * 0.5f, 60.0,
+                                 NULL));
     /* A tree grown on the tile meanwhile: the station waits, the site stays. */
     map.plants[map_index(&map, 3, 4, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
-    CHECK(!construction_add_work(&constructions, &map, &items, &stations, index, work, 60.0,
-                                 NULL));
+    CHECK(!construction_add_work(&constructions, &map, &items, &stations, index, work, 60.0, NULL));
     CHECK(construction_get(&constructions, index) != NULL);
     CHECK_NEAR(construction_work_fraction(site), 1.0, 1e-6);
     map.plants[map_index(&map, 3, 4, 0)] = (Plant){0};
-    CHECK(construction_add_work(&constructions, &map, &items, &stations, index, 1.0f, 60.0,
-                                NULL));
+    CHECK(construction_add_work(&constructions, &map, &items, &stations, index, 1.0f, 60.0, NULL));
     CHECK_EQ_INT(construction_at(&constructions, 3, 4, 0), CONSTRUCTION_NONE);
     CHECK_EQ_INT(constructions.workstation_count, 0);
     CHECK_EQ_INT(constructions.workstation_tiles[map_index(&map, 3, 4, 0)], 0);
@@ -580,8 +578,7 @@ static void test_workstation_site(void)
     index =
         constructions_place_workstation(&constructions, &map, WORKSTATION_CRAFTING_SPOT, 9, 4, 0);
     CHECK(construction_materials_complete(construction_get(&constructions, index)));
-    CHECK(construction_add_work(&constructions, &map, &items, &stations, index, 0.0f, 60.0,
-                                NULL));
+    CHECK(construction_add_work(&constructions, &map, &items, &stations, index, 0.0f, 60.0, NULL));
     CHECK(workstation_at(&stations, 9, 4, 0) != WORKSTATION_NONE);
     workstations_free(&stations);
     free_world(&map, &constructions, &items);
@@ -689,7 +686,7 @@ static void test_roof_sites(void)
     CHECK(construction_can_place_roof(&constructions, &map, 4, 4, 1));  /* Next to the rock. */
     CHECK(!construction_can_place_roof(&constructions, &map, 8, 8, 1)); /* 3 tiles from the rock. */
     map_set_structure(&map, 9, 10, 0, STRUCTURE_WALL);
-    CHECK(construction_can_place_roof(&constructions, &map, 8, 8, 1)); /* Over grass. */
+    CHECK(construction_can_place_roof(&constructions, &map, 8, 8, 1));    /* Over grass. */
     CHECK(!construction_can_place_roof(&constructions, &map, 12, 13, 1)); /* Nothing to rest on. */
     CHECK(!construction_can_place_roof(&constructions, &map, -1, 0, 1));
     map_set_structure(&map, 12, 10, 0, STRUCTURE_WALL);

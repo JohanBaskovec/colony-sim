@@ -80,8 +80,7 @@ void hearth_release_fuel(Workstations *workstations, int index, int number, floa
 
 bool hearth_needs_lighting(const Workstation *station)
 {
-    return hearth_is(station) && station->keep_burning && !station->burning &&
-           station->fuel > 0.0f;
+    return hearth_is(station) && station->keep_burning && !station->burning && station->fuel > 0.0f;
 }
 
 bool hearth_light(Workstations *workstations, int index)
@@ -233,9 +232,9 @@ float hearths_radiant_warmth(const Workstations *workstations, const Map *map, i
              !warmth_reaches(map, station->x, station->y, x, y, station->z))) {
             continue;
         }
-        float fire = HEARTH_RADIANT_LOW_FIRE + (1.0f - HEARTH_RADIANT_LOW_FIRE) *
-                                                   clampf(station->fuel / HEARTH_RADIANT_FULL_FUEL,
-                                                          0.0f, 1.0f);
+        float fire = HEARTH_RADIANT_LOW_FIRE +
+                     (1.0f - HEARTH_RADIANT_LOW_FIRE) *
+                         clampf(station->fuel / HEARTH_RADIANT_FULL_FUEL, 0.0f, 1.0f);
         float beyond = fmaxf(distance, 1.0f) - 1.0f;
         warmth += HEARTH_RADIANT_WARMTH * fire * expf(-HEARTH_RADIANT_FALLOFF * beyond);
     }

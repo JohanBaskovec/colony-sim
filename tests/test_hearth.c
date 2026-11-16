@@ -139,8 +139,7 @@ static void test_fuel(void)
     CHECK_EQ_INT(hearth_fuel_items_wanted(station, ITEM_GRASS), 0);
 
     /* Filled up to the capacity; the rest is left. */
-    int taken =
-        hearth_add_fuel(workstations, index, item_stack_make(ITEM_BRANCHES, 40, 0, 0));
+    int taken = hearth_add_fuel(workstations, index, item_stack_make(ITEM_BRANCHES, 40, 0, 0));
     CHECK_EQ_INT(taken, (int)(HEARTH_FUEL_CAPACITY / branch));
     CHECK(station->fuel <= HEARTH_FUEL_CAPACITY);
     CHECK(station->fuel > HEARTH_FUEL_CAPACITY - branch);
@@ -286,8 +285,8 @@ static void test_radiant_warmth(void)
     /* A fire low on fuel radiates less. */
     workstation_get(&game.workstations, index)->fuel = HEARTH_RADIANT_FULL_FUEL * 0.5f;
     CHECK_NEAR(hearths_radiant_warmth(workstations, &game.map, 21, 20, 0),
-               HEARTH_RADIANT_WARMTH * (HEARTH_RADIANT_LOW_FIRE +
-                                        (1.0f - HEARTH_RADIANT_LOW_FIRE) * 0.5f),
+               HEARTH_RADIANT_WARMTH *
+                   (HEARTH_RADIANT_LOW_FIRE + (1.0f - HEARTH_RADIANT_LOW_FIRE) * 0.5f),
                1e-4);
     /* Two fires add up. */
     workstation_get(&game.workstations, index)->fuel = HEARTH_FUEL_CAPACITY;
@@ -338,8 +337,7 @@ static void test_haulers_refuel(void)
     CHECK_NEAR(station->fuel_promised, 0.0, 1e-6);
     CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 30);
     float branch = hearth_fuel_value(ITEM_BRANCHES);
-    CHECK_EQ_INT(20 - (int)game.items.totals[ITEM_BRANCHES],
-                 (int)(station->fuel / branch + 0.5f));
+    CHECK_EQ_INT(20 - (int)game.items.totals[ITEM_BRANCHES], (int)(station->fuel / branch + 0.5f));
     CHECK_EQ_INT(hauler->carried.count, 0);
 
     /* Above the refuel mark: nothing more brought. */

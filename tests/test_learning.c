@@ -97,8 +97,7 @@ static void test_learning_helpers(void)
      * never below 80% of the peak. */
     CHECK_NEAR(knowledge_fade_floor(70.0), 56.0, 1e-9);
     CHECK_NEAR(knowledge_fade_day(70.0, 70.0, KNOWLEDGE_FADE_AFTER_DAYS - 1), 70.0, 1e-9);
-    CHECK_NEAR(knowledge_fade_day(70.0, 70.0, KNOWLEDGE_FADE_AFTER_DAYS), 70.0 - 1.0 / 15.0,
-               1e-9);
+    CHECK_NEAR(knowledge_fade_day(70.0, 70.0, KNOWLEDGE_FADE_AFTER_DAYS), 70.0 - 1.0 / 15.0, 1e-9);
     CHECK_NEAR(knowledge_fade_day(56.01, 70.0, 100), 56.0, 1e-9);
     CHECK_NEAR(knowledge_fade_day(50.0, 70.0, 100), 50.0, 1e-9); /* Below the floor: kept. */
 }
@@ -123,25 +122,22 @@ static void test_gains_of_the_day_and_peak(void)
     CHECK_NEAR(colonist_knowledge_gain_today(&colonist, KNOWLEDGE_FIRE,
                                              KNOWLEDGE_SOURCE_APPRENTICESHIP, tick),
                gain, 1e-6);
-    CHECK_NEAR(colonist_knowledge_gain_today(&colonist, KNOWLEDGE_FIRE, KNOWLEDGE_SOURCE_DOING,
-                                             tick),
-               0.0, 1e-12);
+    CHECK_NEAR(
+        colonist_knowledge_gain_today(&colonist, KNOWLEDGE_FIRE, KNOWLEDGE_SOURCE_DOING, tick), 0.0,
+        1e-12);
     /* The next day starts from nothing. */
     CHECK_NEAR(colonist_knowledge_gain_today(&colonist, KNOWLEDGE_FIRE,
-                                             KNOWLEDGE_SOURCE_APPRENTICESHIP,
-                                             tick + TICKS_PER_DAY),
+                                             KNOWLEDGE_SOURCE_APPRENTICESHIP, tick + TICKS_PER_DAY),
                0.0, 1e-12);
     colonist_learn_by_doing(&colonist, KNOWLEDGE_FIRE, 10, tick + TICKS_PER_DAY);
     CHECK(colonist_knowledge_gain_today(&colonist, KNOWLEDGE_FIRE, KNOWLEDGE_SOURCE_DOING,
                                         tick + TICKS_PER_DAY) > 0.0);
     CHECK_NEAR(colonist_knowledge_gain_today(&colonist, KNOWLEDGE_FIRE,
-                                             KNOWLEDGE_SOURCE_APPRENTICESHIP,
-                                             tick + TICKS_PER_DAY),
+                                             KNOWLEDGE_SOURCE_APPRENTICESHIP, tick + TICKS_PER_DAY),
                0.0, 1e-12);
     /* Doing is practice. */
     CHECK_EQ_UINT(colonist.knowledge_practice[KNOWLEDGE_FIRE], tick + TICKS_PER_DAY);
-    CHECK_EQ_INT(colonist_days_unpractised(&colonist, KNOWLEDGE_FIRE, tick + 3 * TICKS_PER_DAY),
-                 2);
+    CHECK_EQ_INT(colonist_days_unpractised(&colonist, KNOWLEDGE_FIRE, tick + 3 * TICKS_PER_DAY), 2);
     colonist_free(&colonist);
 }
 
@@ -256,8 +252,8 @@ static void test_conversations_need_nearby_free_settlers(void)
     int chats = 0, far_chats = 0;
     for (int i = 0; i < 1000; i++) {
         ca->chat_ticks = cb->chat_ticks = cfar->chat_ticks = 0;
-        chats += conversations_update(game.colonists, &game.colonist_pool, game.clock.tick,
-                                      &game.rng);
+        chats +=
+            conversations_update(game.colonists, &game.colonist_pool, game.clock.tick, &game.rng);
         far_chats += cfar->chat_ticks > 0;
     }
     CHECK(chats > 60 && chats < 140); /* Once an hour: a tenth of the checks. */
@@ -268,8 +264,8 @@ static void test_conversations_need_nearby_free_settlers(void)
     ca->chat_ticks = cb->chat_ticks = 0;
     int asleep = 0;
     for (int i = 0; i < 200; i++) {
-        asleep += conversations_update(game.colonists, &game.colonist_pool, game.clock.tick,
-                                       &game.rng);
+        asleep +=
+            conversations_update(game.colonists, &game.colonist_pool, game.clock.tick, &game.rng);
     }
     CHECK_EQ_INT(asleep, 0);
     game_shutdown(&game);
@@ -278,8 +274,8 @@ static void test_conversations_need_nearby_free_settlers(void)
 /* A station knapping hand axes forever, flint and hammers ready. */
 static int knapping_workshop(Game *game)
 {
-    int station = workstations_place(&game->workstations, &game->map,
-                                     WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
+    int station =
+        workstations_place(&game->workstations, &game->map, WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
     items_add(&game->items, 18, 12, 0, item_stack_make(ITEM_FLINT, 20, ITEM_QUALITY_FINE, 0));
     items_add(&game->items, 18, 10, 0, item_stack_make(ITEM_COBBLE, 6, ITEM_QUALITY_FINE, 0));
     int bill = workstation_add_bill(&game->workstations, station, RECIPE_HAND_AXE);
@@ -301,8 +297,8 @@ static float hand_axe_work(bool apprentice, int ticks)
     }
     run_ticks(&game, ticks);
     const Workstation *spot = workstation_get_const(&game.workstations, station);
-    float done = spot->work_progress +
-                 (float)spot->bills[0].done * recipe_def(RECIPE_HAND_AXE)->work;
+    float done =
+        spot->work_progress + (float)spot->bills[0].done * recipe_def(RECIPE_HAND_AXE)->work;
     game_shutdown(&game);
     return done;
 }
@@ -348,8 +344,7 @@ static void test_apprentice_assists_a_master(void)
     CHECK(abs(apprentice->x - master->x) <= 1 && abs(apprentice->y - master->y) <= 1);
     CHECK(apprentice->knowledge[KNOWLEDGE_STONE_KNAPPING] > 55.0);
     CHECK(colonist_knowledge_gain_today(apprentice, KNOWLEDGE_STONE_KNAPPING,
-                                        KNOWLEDGE_SOURCE_APPRENTICESHIP,
-                                        game.clock.tick) > 0.0);
+                                        KNOWLEDGE_SOURCE_APPRENTICESHIP, game.clock.tick) > 0.0);
     CHECK(second->knowledge[KNOWLEDGE_STONE_KNAPPING] == 55.0);
     CHECK(master->assisted_until >= game.clock.tick);
     CHECK_EQ_UINT(master->knowledge_practice[KNOWLEDGE_STONE_KNAPPING], game.clock.tick);
@@ -471,7 +466,7 @@ static void test_notice_ring(void)
     for (int i = 0; i < NOTICE_MAX + 8; i++) {
         notices_push(&notices, NOTICE_KNOWLEDGE_LOST, i % KNOWLEDGE_COUNT, NULL, (uint64_t)i);
     }
-    CHECK(notices_get(&notices, 0) == NULL); /* Forgotten. */
+    CHECK(notices_get(&notices, 0) == NULL);              /* Forgotten. */
     CHECK(notices_get(&notices, NOTICE_MAX + 8) == NULL); /* Not raised yet. */
     const Notice *last = notices_get(&notices, NOTICE_MAX + 7);
     REQUIRE(last != NULL);

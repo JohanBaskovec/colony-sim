@@ -248,7 +248,9 @@ static void test_hash(void)
 
 static void test_bill_inputs_after_tools(void)
 {
-    Bill bill = {.recipe = RECIPE_CHOPPER, .mode = BILL_DO_TIMES, .target = 1,
+    Bill bill = {.recipe = RECIPE_CHOPPER,
+                 .mode = BILL_DO_TIMES,
+                 .target = 1,
                  .inputs = recipe_inputs(RECIPE_CHOPPER)};
     long totals[ITEM_TYPE_COUNT] = {0};
     ItemTypeMask hammer[RECIPE_TOOL_MAX] = {ITEM_TYPE_BIT(ITEM_COBBLE), 0};

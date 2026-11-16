@@ -34,8 +34,7 @@ void beds_free(Beds *beds)
 
 static bool in_bounds(const Beds *beds, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && z >= 0 && x < beds->width && y < beds->height &&
-           z < beds->depth;
+    return x >= 0 && y >= 0 && z >= 0 && x < beds->width && y < beds->height && z < beds->depth;
 }
 
 static size_t index_of(const Beds *beds, int x, int y, int z)

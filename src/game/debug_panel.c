@@ -54,10 +54,10 @@ static void debug_rows(UiLayout *layout, void *userdata)
     rows->toggle_free_crafts |=
         checkbox_row(layout, tr("debug.free_crafts"), rows->debug->free_crafts);
     rows->toggle_no_tools |= checkbox_row(layout, tr("debug.no_tools"), rows->debug->no_tools);
-    rows->toggle_instant_deconstruct |= checkbox_row(layout, tr("debug.instant_deconstruct"),
-                                                     rows->debug->instant_deconstruct);
-    rows->toggle_instant_fell_and_mine |= checkbox_row(
-        layout, tr("debug.instant_fell_and_mine"), rows->debug->instant_fell_and_mine);
+    rows->toggle_instant_deconstruct |=
+        checkbox_row(layout, tr("debug.instant_deconstruct"), rows->debug->instant_deconstruct);
+    rows->toggle_instant_fell_and_mine |=
+        checkbox_row(layout, tr("debug.instant_fell_and_mine"), rows->debug->instant_fell_and_mine);
     char label[128];
     TR_FORMAT(label, sizeof(label), tr("debug.next_weather"), rows->weather);
     rows->next_weather |= button_row(layout, label);
@@ -70,8 +70,7 @@ static void debug_rows(UiLayout *layout, void *userdata)
     TR_FORMAT(label, sizeof(label), tr("debug.item"), rows->item);
     rows->next_item |= button_row(layout, label);
     rows->toggle_spawn |= checkbox_row(layout, tr("debug.spawn_tool"), rows->spawn_active);
-    rows->toggle_teleport |=
-        checkbox_row(layout, tr("debug.teleport_tool"), rows->teleport_active);
+    rows->toggle_teleport |= checkbox_row(layout, tr("debug.teleport_tool"), rows->teleport_active);
 }
 
 /* The next item type the debug tool spawns, after `type` (wrapping round). */
@@ -90,11 +89,10 @@ void debug_panel_draw(App *app)
                       .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
                       .item = tr(item_def(app->debug_item)->name_key),
                       .spawn_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_SPAWN),
-                      .teleport_active =
-                          app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT)};
+                      .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT)};
     bool open = true;
-    ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER,
-                     debug_rows, &rows, &open);
+    ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER, debug_rows,
+                     &rows, &open);
     if (rows.toggle_instant_build) {
         game_set_instant_build(game, !game->debug.instant_build);
     }

@@ -135,8 +135,8 @@ static void test_builder_brings_the_materials(void)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
     /* A blueprint: a construction site, no station yet. */
-    const ConstructionSite *site = construction_get(
-        &game.constructions, construction_at(&game.constructions, 14, 10, 0));
+    const ConstructionSite *site =
+        construction_get(&game.constructions, construction_at(&game.constructions, 14, 10, 0));
     REQUIRE(site != NULL);
     CHECK_EQ_INT(construction_workstation(site), WORKSTATION_KNAPPING_SPOT);
     CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
@@ -200,8 +200,8 @@ static void test_haulers_supply_station_sites(void)
     REQUIRE(hauler != NULL);
     colonist_set_knowledge_level(hauler, KNOWLEDGE_STONE_KNAPPING, 40.0); /* Cannot build it. */
     REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
-    const ConstructionSite *site = construction_get(
-        &game.constructions, construction_at(&game.constructions, 14, 10, 0));
+    const ConstructionSite *site =
+        construction_get(&game.constructions, construction_at(&game.constructions, 14, 10, 0));
     REQUIRE(site != NULL);
     items_add(&game.items, 6, 14, 0, stones(ITEM_COBBLE, 3, ITEM_QUALITY_STANDARD));
     bool supplied = false;
@@ -805,8 +805,8 @@ static void test_plants_are_cleared_before_building(void)
     REQUIRE(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 14, 10, 0));
     /* The hazel is in the way: a site, to clear it first. */
     CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
-    const ConstructionSite *site = construction_get(
-        &game.constructions, construction_at(&game.constructions, 14, 10, 0));
+    const ConstructionSite *site =
+        construction_get(&game.constructions, construction_at(&game.constructions, 14, 10, 0));
     REQUIRE(site != NULL);
 
     /* Interrupted while clearing: the work done is kept. */

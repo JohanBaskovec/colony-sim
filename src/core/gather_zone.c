@@ -37,9 +37,8 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
                           ONE(ITEM_HAZELNUTS), GATHER_JOB_HARVEST, true, FOOD},
     [GATHER_MUSHROOMS] = {"mushrooms", N_("gather_zone.resource.mushrooms"), ITEM_MUSHROOMS,
                           ONE(ITEM_MUSHROOMS), GATHER_JOB_HARVEST_CAREFULLY, true, FOOD},
-    [GATHER_WILD_GARLIC] = {"wild_garlic", N_("gather_zone.resource.wild_garlic"),
-                            ITEM_WILD_GARLIC, ONE(ITEM_WILD_GARLIC), GATHER_JOB_HARVEST_CAREFULLY,
-                            true, FOOD},
+    [GATHER_WILD_GARLIC] = {"wild_garlic", N_("gather_zone.resource.wild_garlic"), ITEM_WILD_GARLIC,
+                            ONE(ITEM_WILD_GARLIC), GATHER_JOB_HARVEST_CAREFULLY, true, FOOD},
     [GATHER_NETTLES] = {"nettles", N_("gather_zone.resource.nettles"), ITEM_NETTLES,
                         ONE(ITEM_NETTLES), GATHER_JOB_HARVEST, true, FOOD},
     [GATHER_PLANTAIN] = {"plantain", N_("gather_zone.resource.plantain"), ITEM_PLANTAIN,
@@ -113,8 +112,7 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
     [GATHER_JOB_CHOP] = {"chop", N_("colonist.task.chop"), WORK_WOODCUTTING, KNOWLEDGE_NONE,
                          KNOWLEDGE_MASTERY_LEVEL, RESOURCE(GATHER_WOOD), TOOL_USE_NONE, false},
     [GATHER_JOB_STONES] = {"stones", N_("colonist.task.gather_stones"), GATHERING,
-                           RESOURCE(GATHER_FLINT) | RESOURCE(GATHER_COBBLES), TOOL_USE_NONE,
-                           false},
+                           RESOURCE(GATHER_FLINT) | RESOURCE(GATHER_COBBLES), TOOL_USE_NONE, false},
 };
 
 #undef GATHERING
@@ -200,8 +198,7 @@ void gather_zones_free(GatherZones *zones)
 
 static bool in_bounds(const GatherZones *zones, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && z >= 0 && x < zones->width && y < zones->height &&
-           z < zones->depth;
+    return x >= 0 && y >= 0 && z >= 0 && x < zones->width && y < zones->height && z < zones->depth;
 }
 
 static size_t index_of(const GatherZones *zones, int x, int y, int z)
@@ -247,8 +244,7 @@ bool gather_zone_can_cover(const Map *map, int x, int y, int z)
     /* The foot of a trunk (ground under the wood) is felled from beside it. */
     RockType rock = (RockType)map->rock[index];
     return (rock == ROCK_NONE || rock == ROCK_WOOD) && terrain != TERRAIN_DEEP_WATER &&
-           terrain != TERRAIN_OPEN &&
-           !structure_blocks((StructureType)map->structure[index]);
+           terrain != TERRAIN_OPEN && !structure_blocks((StructureType)map->structure[index]);
 }
 
 bool gather_stone_ground(const Map *map, int x, int y, int z)
@@ -320,9 +316,8 @@ static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, in
         return GATHER_ZONE_NONE;
     }
     GatherZone *zone = &zones->list[index];
-    *zone = (GatherZone){.used = true,
-                         .number = zones->next_number,
-                         .priority = GATHER_ZONE_PRIORITY_DEFAULT};
+    *zone = (GatherZone){
+        .used = true, .number = zones->next_number, .priority = GATHER_ZONE_PRIORITY_DEFAULT};
     for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
         /* Wood: young trees give little. */
         zone->orders[r] = (GatherOrder){.ripe_only = r == GATHER_WOOD,
@@ -331,13 +326,11 @@ static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, in
                                         .target = GATHER_TARGET_DEFAULT};
     }
     for (int g = 0; g < GATHER_GROUP_COUNT; g++) {
-        zone->groups[g] = (GatherGroupOrder){.mode = GATHER_FOREVER,
-                                             .unit = GATHER_UNIT_ITEMS,
-                                             .target = GATHER_TARGET_DEFAULT};
+        zone->groups[g] = (GatherGroupOrder){
+            .mode = GATHER_FOREVER, .unit = GATHER_UNIT_ITEMS, .target = GATHER_TARGET_DEFAULT};
     }
-    zone->groups[GATHER_GROUP_FOOD] = (GatherGroupOrder){.mode = GATHER_UNTIL,
-                                                         .unit = GATHER_UNIT_FOOD_DAYS,
-                                                         .target = GATHER_FOOD_DAYS_DEFAULT};
+    zone->groups[GATHER_GROUP_FOOD] = (GatherGroupOrder){
+        .mode = GATHER_UNTIL, .unit = GATHER_UNIT_FOOD_DAYS, .target = GATHER_FOOD_DAYS_DEFAULT};
     if (extend(zones, map, index, x0, y0, x1, y1, z, blocked) == 0) {
         zone->used = false;
         return GATHER_ZONE_NONE;
@@ -503,8 +496,7 @@ static bool set_mode(uint8_t *order_mode, uint8_t unit, uint16_t *target, uint16
     return true;
 }
 
-void gather_zone_set_mode(GatherZones *zones, int index, GatherResource resource,
-                          GatherMode mode)
+void gather_zone_set_mode(GatherZones *zones, int index, GatherResource resource, GatherMode mode)
 {
     GatherOrder *order = get_order(zones, index, resource);
     if (order != NULL && set_mode(&order->mode, order->unit, &order->target, &order->done, mode)) {
@@ -518,8 +510,7 @@ static bool unit_allowed(GatherUnit unit, bool food)
     return unit == GATHER_UNIT_ITEMS || (unit == GATHER_UNIT_FOOD_DAYS && food);
 }
 
-void gather_zone_set_unit(GatherZones *zones, int index, GatherResource resource,
-                          GatherUnit unit)
+void gather_zone_set_unit(GatherZones *zones, int index, GatherResource resource, GatherUnit unit)
 {
     GatherOrder *order = get_order(zones, index, resource);
     if (order != NULL && unit_allowed(unit, gather_resource_is_food(resource)) &&
@@ -530,8 +521,7 @@ void gather_zone_set_unit(GatherZones *zones, int index, GatherResource resource
     }
 }
 
-void gather_zone_set_target(GatherZones *zones, int index, GatherResource resource,
-                            int target)
+void gather_zone_set_target(GatherZones *zones, int index, GatherResource resource, int target)
 {
     GatherOrder *order = get_order(zones, index, resource);
     if (order == NULL) {
@@ -579,8 +569,7 @@ void gather_zone_set_group_enabled(GatherZones *zones, int index, GatherGroup gr
     changed(zones);
 }
 
-void gather_zone_set_group_mode(GatherZones *zones, int index, GatherGroup group,
-                                GatherMode mode)
+void gather_zone_set_group_mode(GatherZones *zones, int index, GatherGroup group, GatherMode mode)
 {
     GatherGroupOrder *order = get_group_order(zones, index, group);
     if (order != NULL && set_mode(&order->mode, order->unit, &order->target, &order->done, mode)) {
@@ -588,8 +577,7 @@ void gather_zone_set_group_mode(GatherZones *zones, int index, GatherGroup group
     }
 }
 
-void gather_zone_set_group_unit(GatherZones *zones, int index, GatherGroup group,
-                                GatherUnit unit)
+void gather_zone_set_group_unit(GatherZones *zones, int index, GatherGroup group, GatherUnit unit)
 {
     GatherGroupOrder *order = get_group_order(zones, index, group);
     if (order != NULL && unit_allowed(unit, GROUP_DEFS[group].food) && order->unit != unit) {
@@ -713,8 +701,7 @@ long gather_group_count(GatherGroup group, const long totals[ITEM_TYPE_COUNT])
 
 float gather_daily_food(int settlers)
 {
-    return settlers > 0 ? (float)settlers * NEED_FOOD_DECAY_PER_TICK * (float)TICKS_PER_DAY
-                        : 0.0f;
+    return settlers > 0 ? (float)settlers * NEED_FOOD_DECAY_PER_TICK * (float)TICKS_PER_DAY : 0.0f;
 }
 
 long gather_food_days(ItemTypeMask counted, const long totals[ITEM_TYPE_COUNT], float daily_food)
@@ -739,8 +726,7 @@ long gather_resource_food_days(GatherResource resource, const long totals[ITEM_T
     return def != NULL ? gather_food_days(def->counted, totals, daily_food) : 0;
 }
 
-long gather_group_food_days(GatherGroup group, const long totals[ITEM_TYPE_COUNT],
-                            float daily_food)
+long gather_group_food_days(GatherGroup group, const long totals[ITEM_TYPE_COUNT], float daily_food)
 {
     if ((unsigned)group >= GATHER_GROUP_COUNT || !GROUP_DEFS[group].food) {
         return 0;
@@ -808,8 +794,7 @@ GatherResourceMask gather_zone_wanted(const GatherZone *zone, const long totals[
     return wanted;
 }
 
-void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT],
-                         float daily_food)
+void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT], float daily_food)
 {
     bool any_change = false;
     for (int i = 0; i < GATHER_ZONE_MAX; i++) {
@@ -876,8 +861,8 @@ static GatherResource resource_of_item(ItemType item)
 /* Whether a plant bears food now, of one of `resources`, ready for the zone's order. */
 static bool food_among(const GatherZone *zone, const Plant *plant, GatherResourceMask resources)
 {
-    GatherResource resource = resource_of_item(plant_stock_item((PlantType)plant->type,
-                                                                PLANT_STOCK_FOOD));
+    GatherResource resource =
+        resource_of_item(plant_stock_item((PlantType)plant->type, PLANT_STOCK_FOOD));
     return resource != GATHER_RESOURCE_COUNT && (resources & GATHER_RESOURCE_BIT(resource)) &&
            plant_has_food(plant) && ripe_enough(zone, resource, plant);
 }
@@ -936,8 +921,7 @@ static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, in
     case GATHER_JOB_CUT_GRASS:
         return plant->type == PLANT_GRASS && plant->growth >= CUT_GRASS_MIN_GROWTH &&
                ripe_enough(zone, GATHER_GRASS, plant);
-    case GATHER_JOB_CHOP:
-        return plant->type == PLANT_TREE && ripe_enough(zone, GATHER_WOOD, plant);
+    case GATHER_JOB_CHOP: return plant->type == PLANT_TREE && ripe_enough(zone, GATHER_WOOD, plant);
     case GATHER_JOB_STONES:
         return gather_stone_ground(map, x, y, z) &&
                (((resources & GATHER_RESOURCE_BIT(GATHER_COBBLES)) &&
@@ -1093,16 +1077,15 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
  * `rng`). ITEM_NONE when there is none. */
 static ItemType find_stone(const Map *map, int x, int y, int z, GatherResourceMask wanted, Rng *rng)
 {
-    int cobbles = wanted & GATHER_RESOURCE_BIT(GATHER_COBBLES)
-                      ? stones_of(map, x, y, z, GATHER_COBBLES)
-                      : 0;
-    int flint = wanted & GATHER_RESOURCE_BIT(GATHER_FLINT) ? stones_of(map, x, y, z, GATHER_FLINT)
-                                                            : 0;
+    int cobbles =
+        wanted & GATHER_RESOURCE_BIT(GATHER_COBBLES) ? stones_of(map, x, y, z, GATHER_COBBLES) : 0;
+    int flint =
+        wanted & GATHER_RESOURCE_BIT(GATHER_FLINT) ? stones_of(map, x, y, z, GATHER_FLINT) : 0;
     if (cobbles + flint == 0) {
         return ITEM_NONE;
     }
-    if (cobbles == 0 || (flint > 0 && rng != NULL && rng_range_i32(rng, 1, cobbles + flint) <=
-                                                         flint)) {
+    if (cobbles == 0 ||
+        (flint > 0 && rng != NULL && rng_range_i32(rng, 1, cobbles + flint) <= flint)) {
         return ITEM_FLINT;
     }
     return ITEM_COBBLE;
@@ -1311,8 +1294,8 @@ uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)
         hash = hash_fnv1a64(hash, fields, sizeof(fields));
         for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
             const GatherOrder *order = &zone->orders[r];
-            int32_t values[6] = {order->enabled, order->ripe_only, order->mode, order->unit,
-                                 order->target, order->done};
+            int32_t values[6] = {order->enabled, order->ripe_only, order->mode,
+                                 order->unit,    order->target,    order->done};
             hash = hash_fnv1a64(hash, values, sizeof(values));
         }
         for (int g = 0; g < GATHER_GROUP_COUNT; g++) {

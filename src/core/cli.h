@@ -24,10 +24,10 @@ typedef struct CliOptions {
     char language[CLI_LANGUAGE_CODE_SIZE]; /* Empty: use the system locale. */
     bool has_seed;
     uint64_t seed;
-    int map_size; /* 0: default size. */
+    int map_size;       /* 0: default size. */
     int colonist_count; /* 0: default count. */
-    int scenario; /* A Scenario (core/scenario.h), SCENARIO_NONE by default. */
-    unsigned debug; /* CLI_DEBUG_* bits. */
+    int scenario;       /* A Scenario (core/scenario.h), SCENARIO_NONE by default. */
+    unsigned debug;     /* CLI_DEBUG_* bits. */
     bool show_help;
 } CliOptions;
 

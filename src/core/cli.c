@@ -23,19 +23,24 @@ const char *cli_usage(void)
            "  --lang <code>   Interface language (e.g. en, fr). Default: system locale.\n"
            "  --seed <n>      World seed (unsigned integer). Default: random.\n"
            "  --size <n>      Map width and height in tiles (16-1024). Default: 200.\n"
-           "  --colonists <n> Starting colonists (1-" STRINGIFY(COLONIST_MAX) "). Default: 3.\n"
-           "  --scenario <n>  Test situation set up at the start, as in bench_simulation:\n"
-           "                  0 none, 1 gathering, 2 unreachable jobs, 3 construction.\n"
-           "  --debug <list>  Cheats on from the start, separated by commas: instant_build,\n"
-           "                  free_crafts, no_tools, instant_deconstruct, learn_all,\n"
-           "                  instant_fell_and_mine, or all.\n"
-           "  --help          Show this message.\n";
+           "  --colonists <n> Starting colonists (1-" STRINGIFY(
+               COLONIST_MAX) "). Default: 3.\n"
+                             "  --scenario <n>  Test situation set up at the start, as in "
+                             "bench_simulation:\n"
+                             "                  0 none, 1 gathering, 2 unreachable jobs, 3 "
+                             "construction.\n"
+                             "  --debug <list>  Cheats on from the start, separated by commas: "
+                             "instant_build,\n"
+                             "                  free_crafts, no_tools, instant_deconstruct, "
+                             "learn_all,\n"
+                             "                  instant_fell_and_mine, or all.\n"
+                             "  --help          Show this message.\n";
 }
 
 /* Names of the CLI_DEBUG_* bits, in bit order. */
-static const char *const DEBUG_NAMES[] = {"instant_build",       "free_crafts",
-                                          "no_tools",            "instant_deconstruct",
-                                          "learn_all",           "instant_fell_and_mine"};
+static const char *const DEBUG_NAMES[] = {"instant_build", "free_crafts",
+                                          "no_tools",      "instant_deconstruct",
+                                          "learn_all",     "instant_fell_and_mine"};
 _Static_assert(sizeof(DEBUG_NAMES) / sizeof(DEBUG_NAMES[0]) == 6, "one name per debug bit");
 
 /* Parses a comma-separated list of DEBUG_NAMES (or "all"), adding its bits
@@ -90,8 +95,8 @@ static bool is_valid_language_code(const char *code)
     }
     for (const char *p = code; *p != '\0'; p++) {
         char ch = *p;
-        bool allowed = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' ||
-                       ch == '-';
+        bool allowed =
+            (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' || ch == '-';
         if (!allowed) {
             return false;
         }

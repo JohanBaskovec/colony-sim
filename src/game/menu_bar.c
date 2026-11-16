@@ -254,9 +254,7 @@ void menu_bar_draw(App *app)
     bool active[3] = {app->build_menu_open, app->show_work_panel, app->show_help};
     int hovered;
     switch (text_row(ui, BAR_MARGIN, y, labels, active, 3, &hovered)) {
-    case 0:
-        app->build_menu_open = !app->build_menu_open;
-        break;
+    case 0: app->build_menu_open = !app->build_menu_open; break;
     case 1: app->show_work_panel = !app->show_work_panel; break;
     case 2: app->show_help = !app->show_help; break;
     default: break;
@@ -283,8 +281,7 @@ void menu_bar_draw(App *app)
         categories[i] = tr(CATEGORY_KEYS[i + 1]);
         open[i] = (int)app->build_category == i + 1;
     }
-    int clicked = text_row(ui, BAR_MARGIN, y, categories, open, BUILD_CATEGORY_COUNT - 1,
-                           &hovered);
+    int clicked = text_row(ui, BAR_MARGIN, y, categories, open, BUILD_CATEGORY_COUNT - 1, &hovered);
     if (clicked >= 0) {
         BuildCategory category = (BuildCategory)(clicked + 1);
         app->build_category = app->build_category == category ? BUILD_CATEGORY_NONE : category;

@@ -84,7 +84,7 @@ static void test_regions_across_levels(void)
     uint32_t plains = regions_at(&regions, &map, 2, 2, 0);
     uint32_t hilltop = regions_at(&regions, &map, 12, 2, 1);
     CHECK(plains != REGION_NONE && hilltop != REGION_NONE && plains != hilltop);
-    CHECK_EQ_UINT(regions_at(&regions, &map, 2, 2, 1), REGION_NONE); /* Open space. */
+    CHECK_EQ_UINT(regions_at(&regions, &map, 2, 2, 1), REGION_NONE);  /* Open space. */
     CHECK_EQ_UINT(regions_at(&regions, &map, 12, 2, 0), REGION_NONE); /* Earth. */
     CHECK(regions_has_drinking_spot(&regions, &map, hilltop));
     CHECK(!regions_has_drinking_spot(&regions, &map, plains));

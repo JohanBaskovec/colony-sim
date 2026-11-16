@@ -56,8 +56,7 @@ static void discover_languages(Localization *loc)
         loc->language_count++;
     }
     SDL_free(files);
-    SDL_qsort(loc->languages, (size_t)loc->language_count, sizeof(LanguageInfo),
-              compare_languages);
+    SDL_qsort(loc->languages, (size_t)loc->language_count, sizeof(LanguageInfo), compare_languages);
 }
 
 static int find_language(const Localization *loc, const char *code)
@@ -103,8 +102,7 @@ bool localization_init(Localization *loc, const char *assets_dir, const char *re
     discover_languages(loc);
     loc->fallback = load_catalog(loc, LOCALIZATION_FALLBACK_CODE);
     if (loc->fallback == NULL) {
-        LOG_ERROR("The reference language file '%s.lang' is required",
-                  LOCALIZATION_FALLBACK_CODE);
+        LOG_ERROR("The reference language file '%s.lang' is required", LOCALIZATION_FALLBACK_CODE);
         return false;
     }
 

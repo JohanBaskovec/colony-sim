@@ -145,8 +145,7 @@ static void test_memories_add_up(void)
     for (int i = 0; i < chat->max_stack + 2; i++) {
         mood_remember(&mood, THOUGHT_CHAT);
     }
-    CHECK_NEAR(mood_thought_value(&mood, THOUGHT_CHAT), chat->value * (float)chat->max_stack,
-               1e-5);
+    CHECK_NEAR(mood_thought_value(&mood, THOUGHT_CHAT), chat->value * (float)chat->max_stack, 1e-5);
     /* A faded chat adds to what is left of it. */
     int fade = (int)((chat->plateau_hours + chat->half_life_hours) * (float)TICKS_PER_HOUR);
     mood_advance(&mood, fade);
@@ -212,8 +211,7 @@ static void test_hunger_grows_worse(void)
     CHECK_NEAR(mood_state_value(THOUGHT_HUNGRY, grow / 2),
                hungry->value * (1.0f + hungry->grow_max) / 2.0f, 1e-4);
     CHECK_NEAR(mood_state_value(THOUGHT_HUNGRY, grow), hungry->value * hungry->grow_max, 1e-5);
-    CHECK_NEAR(mood_state_value(THOUGHT_HUNGRY, 10 * grow), hungry->value * hungry->grow_max,
-               1e-5);
+    CHECK_NEAR(mood_state_value(THOUGHT_HUNGRY, 10 * grow), hungry->value * hungry->grow_max, 1e-5);
     CHECK_NEAR(mood_state_value(THOUGHT_COLD, 1000000), thought_def(THOUGHT_COLD)->value, 1e-6);
 
     Mood mood;

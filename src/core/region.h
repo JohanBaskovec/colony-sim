@@ -24,10 +24,10 @@ typedef struct Regions {
     int width;
     int height;
     int depth;
-    uint32_t *id;       /* Region of each tile, REGION_NONE when impassable. */
-    uint32_t count;     /* Regions are numbered 1..count. */
-    uint8_t *drinkable; /* Per region id: whether it contains a drinking spot. */
-    uint32_t *stack;    /* Scratch for the flood fill. */
+    uint32_t *id;          /* Region of each tile, REGION_NONE when impassable. */
+    uint32_t count;        /* Regions are numbered 1..count. */
+    uint8_t *drinkable;    /* Per region id: whether it contains a drinking spot. */
+    uint32_t *stack;       /* Scratch for the flood fill. */
     uint32_t map_revision; /* Map.topology_revision the regions were built for. */
     bool built;
     uint32_t rebuilds; /* Full rebuilds so far (statistics, tests). */

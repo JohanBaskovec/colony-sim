@@ -8,18 +8,29 @@
 
 static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
     /* A place to sit and work: nothing to bring, so it is ready at once. */
-    [WORKSTATION_CRAFTING_SPOT] = {"crafting_spot", N_("workstation.crafting_spot"),
+    [WORKSTATION_CRAFTING_SPOT] = {"crafting_spot",
+                                   N_("workstation.crafting_spot"),
                                    N_("workstation.crafting_spot.description"),
-                                   {{ITEM_NONE, 0}, {ITEM_NONE, 0}}, 0.0f, KNOWLEDGE_NONE, 0.0f},
+                                   {{ITEM_NONE, 0}, {ITEM_NONE, 0}},
+                                   0.0f,
+                                   KNOWLEDGE_NONE,
+                                   0.0f},
     /* An anvil stone to knap on. */
-    [WORKSTATION_KNAPPING_SPOT] = {"knapping_spot", N_("workstation.knapping_spot"),
+    [WORKSTATION_KNAPPING_SPOT] = {"knapping_spot",
+                                   N_("workstation.knapping_spot"),
                                    N_("workstation.knapping_spot.description"),
-                                   {{ITEM_COBBLE, 1}, {ITEM_NONE, 0}}, 250.0f,
-                                   KNOWLEDGE_STONE_KNAPPING, 50.0f},
+                                   {{ITEM_COBBLE, 1}, {ITEM_NONE, 0}},
+                                   250.0f,
+                                   KNOWLEDGE_STONE_KNAPPING,
+                                   50.0f},
     /* A shallow pit ringed with stones: nothing to bring, a little digging. */
-    [WORKSTATION_OPEN_HEARTH] = {"open_hearth", N_("workstation.open_hearth"),
+    [WORKSTATION_OPEN_HEARTH] = {"open_hearth",
+                                 N_("workstation.open_hearth"),
                                  N_("workstation.open_hearth.description"),
-                                 {{ITEM_NONE, 0}, {ITEM_NONE, 0}}, 250.0f, KNOWLEDGE_FIRE, 50.0f,
+                                 {{ITEM_NONE, 0}, {ITEM_NONE, 0}},
+                                 250.0f,
+                                 KNOWLEDGE_FIRE,
+                                 50.0f,
                                  .hearth = true},
 };
 
@@ -87,8 +98,7 @@ const Workstation *workstation_get_const(const Workstations *workstations, int i
 bool workstation_can_place(const Workstations *workstations, const Map *map, int x, int y, int z)
 {
     return in_bounds(workstations, x, y, z) && map_is_passable(map, x, y, z) &&
-           map_is_buildable(map, x, y, z) &&
-           !map_plant_blocks_building(map, x, y, z) &&
+           map_is_buildable(map, x, y, z) && !map_plant_blocks_building(map, x, y, z) &&
            workstation_at(workstations, x, y, z) == WORKSTATION_NONE;
 }
 
@@ -196,8 +206,7 @@ int workstation_add_bill(Workstations *workstations, int index, RecipeType recip
     return station->bill_count++;
 }
 
-bool workstation_remove_bill(Workstations *workstations, int index, int bill,
-                             ItemStack *returned)
+bool workstation_remove_bill(Workstations *workstations, int index, int bill, ItemStack *returned)
 {
     Workstation *station = workstation_get(workstations, index);
     if (get_bill(workstations, index, bill) == NULL) {
@@ -300,15 +309,13 @@ bool workstation_set_bill_paused(Workstations *workstations, int index, int bill
     return true;
 }
 
-bool workstation_set_bill_input_radius(Workstations *workstations, int index, int bill,
-                                       int radius)
+bool workstation_set_bill_input_radius(Workstations *workstations, int index, int bill, int radius)
 {
     Bill *entry = get_bill(workstations, index, bill);
     if (entry == NULL) {
         return false;
     }
-    entry->input_radius =
-        (uint16_t)clampi(radius, BILL_INPUT_RADIUS_MIN, BILL_INPUT_RADIUS_MAX);
+    entry->input_radius = (uint16_t)clampi(radius, BILL_INPUT_RADIUS_MIN, BILL_INPUT_RADIUS_MAX);
     workstations->revision++;
     return true;
 }
@@ -373,8 +380,7 @@ bool workstation_start_craft(Workstations *workstations, int index, RecipeType r
                              ItemStack input)
 {
     Workstation *station = workstation_get(workstations, index);
-    if (station == NULL || station->work_input.count > 0 ||
-        !recipe_accepts_input(recipe, input)) {
+    if (station == NULL || station->work_input.count > 0 || !recipe_accepts_input(recipe, input)) {
         return false;
     }
     station->work_recipe = (uint8_t)recipe;
@@ -402,9 +408,8 @@ ItemStack bill_free_input(const Bill *bill)
 bool workstation_start_free_craft(Workstations *workstations, int index, int bill)
 {
     Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL ||
-        !workstation_start_craft(workstations, index, (RecipeType)entry->recipe,
-                                 bill_free_input(entry))) {
+    if (entry == NULL || !workstation_start_craft(workstations, index, (RecipeType)entry->recipe,
+                                                  bill_free_input(entry))) {
         return false;
     }
     workstations->list[index].free_input = true;
@@ -475,9 +480,9 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         hash = hash_fnv1a64(hash, fire_state, sizeof(fire_state));
         for (int b = 0; b < station->bill_count; b++) {
             const Bill *bill = &station->bills[b];
-            uint32_t fields[9] = {bill->recipe,    bill->mode,      bill->target,
-                                  bill->done,      bill->inputs,    bill->min_level,
-                                  bill->max_level, bill->paused,    bill->input_radius};
+            uint32_t fields[9] = {bill->recipe,    bill->mode,   bill->target,
+                                  bill->done,      bill->inputs, bill->min_level,
+                                  bill->max_level, bill->paused, bill->input_radius};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
         }
     }

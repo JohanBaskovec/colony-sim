@@ -96,12 +96,12 @@ typedef struct ItemDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
     ItemCategory category;
-    float weight;    /* Kilograms per item. */
-    float bulk;      /* Room taken per item (see ITEM_TILE_BULK). */
-    float nutrition; /* Food need restored by eating one item; 0 = not food. */
+    float weight;       /* Kilograms per item. */
+    float bulk;         /* Room taken per item (see ITEM_TILE_BULK). */
+    float nutrition;    /* Food need restored by eating one item; 0 = not food. */
     int max_hit_points; /* Hit points of one item in perfect condition. */
-    bool has_quality; /* false: always ITEM_QUALITY_BEST. */
-    bool damageable;  /* false: always at max_hit_points. */
+    bool has_quality;   /* false: always ITEM_QUALITY_BEST. */
+    bool damageable;    /* false: always at max_hit_points. */
     /* Items lying on a tile turn into `transforms_into` after
      * `transform_hours` (fresh grass dries); ITEM_NONE: never. */
     ItemType transforms_into;
@@ -146,7 +146,7 @@ typedef struct Items {
     ItemStack *stacks;
     long totals[ITEM_TYPE_COUNT]; /* Items of each type on the whole map. */
     uint32_t *level_stacks;       /* Stacks lying on each level (searches skip empty levels). */
-    uint32_t additions; /* Incremented whenever items are added (haulers look again). */
+    uint32_t additions;           /* Incremented whenever items are added (haulers look again). */
     /* Stacks the player forbade the settlers (non-zero per tile): neither
      * picked up, eaten, used nor added to. Cleared when the stack is gone. */
     uint8_t *forbidden;
@@ -182,7 +182,6 @@ float item_rot_rate(float celsius, bool sheltered);
 /* Hours until a stack rots away at `rate` (item_rot_rate()); a negative
  * value when it never does (a type that does not rot, a rate of 0). */
 float item_stack_rot_hours(ItemStack stack, float rate);
-
 
 /* Maximum number of items of a type in one stack (one tile); 0 for ITEM_NONE. */
 int item_stack_limit(ItemType type);
@@ -271,8 +270,8 @@ typedef ItemConditions (*ItemConditionsFn)(const void *context, size_t tile);
  * of types that rot lose hit points and are gone when none are left. Returns
  * the number of stacks that transformed or rotted away.
  */
-int items_advance(Items *items, size_t begin, size_t end, int hours,
-                  ItemConditionsFn conditions, const void *context);
+int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditionsFn conditions,
+                  const void *context);
 
 uint64_t items_hash(const Items *items, uint64_t hash);
 

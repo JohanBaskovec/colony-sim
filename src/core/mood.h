@@ -105,7 +105,7 @@ typedef enum ThoughtType {
     THOUGHT_WARMED_BY_FIRE,
     THOUGHT_FIRESIDE_STORY,
     THOUGHT_CHAT,
-    THOUGHT_RELIEF, /* After a break. */
+    THOUGHT_RELIEF,      /* After a break. */
     THOUGHT_DEBUG_GLOOM, /* The debug cheat (game_debug_sadden()). */
     THOUGHT_COUNT
 } ThoughtType;
@@ -114,11 +114,11 @@ typedef uint32_t ThoughtMask;
 #define THOUGHT_BIT(type) ((ThoughtMask)1u << (unsigned)(type))
 
 typedef struct ThoughtDef {
-    const char *id;       /* Stable identifier (saves), never shown. */
-    const char *name_key; /* What the settler thinks, shown to the player. */
-    bool state;           /* A state (set while it lasts), else a memory. */
-    float value;          /* What it weighs in full (points of mood). */
-    float plateau_hours;  /* Memories: full value for this long, then fading. */
+    const char *id;        /* Stable identifier (saves), never shown. */
+    const char *name_key;  /* What the settler thinks, shown to the player. */
+    bool state;            /* A state (set while it lasts), else a memory. */
+    float value;           /* What it weighs in full (points of mood). */
+    float plateau_hours;   /* Memories: full value for this long, then fading. */
     float half_life_hours; /* Fading: half of it gone in this long. */
     /* Memories: renewed (1), or adding up to this many times the value. */
     int max_stack;
@@ -130,15 +130,15 @@ typedef struct ThoughtDef {
 
 typedef enum MoodBreak {
     MOOD_BREAK_NONE,
-    MOOD_BREAK_SULK,      /* Does no work, wanders about. */
+    MOOD_BREAK_SULK,       /* Does no work, wanders about. */
     MOOD_BREAK_WANDER_OFF, /* Goes off alone, far away. */
-    MOOD_BREAK_BINGE,     /* Eats far more than it needs. */
+    MOOD_BREAK_BINGE,      /* Eats far more than it needs. */
     MOOD_BREAK_COUNT
 } MoodBreak;
 
 typedef struct Mood {
-    float value; /* MOOD_NEUTRAL plus every thought, MOOD_MIN..MOOD_MAX. */
-    ThoughtMask states; /* States on now. */
+    float value;                 /* MOOD_NEUTRAL plus every thought, MOOD_MIN..MOOD_MAX. */
+    ThoughtMask states;          /* States on now. */
     float weight[THOUGHT_COUNT]; /* What each thought weighs now (0: none). */
     float peak[THOUGHT_COUNT];   /* The most it weighed since it was last renewed. */
     /* Memories: ticks since renewed; states: ticks on (0 when off). */
@@ -150,9 +150,9 @@ typedef struct Mood {
     /* The break under way: its kind, ticks left, and what is left to do. */
     uint8_t break_type; /* MoodBreak */
     int32_t break_ticks;
-    float binge_left;    /* MOOD_BREAK_BINGE: food need still to eat. */
-    bool went_off;       /* MOOD_BREAK_WANDER_OFF: walked away already. */
-    bool break_started;  /* A break started (the game raises a notice, then clears it). */
+    float binge_left;       /* MOOD_BREAK_BINGE: food need still to eat. */
+    bool went_off;          /* MOOD_BREAK_WANDER_OFF: walked away already. */
+    bool break_started;     /* A break started (the game raises a notice, then clears it). */
     int32_t break_cooldown; /* Ticks before another break may start. */
 } Mood;
 

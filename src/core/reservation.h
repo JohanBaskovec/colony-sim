@@ -22,15 +22,15 @@
 #define RESERVATION_INDEX_SIZE 1024
 
 typedef enum ReservationKind {
-    RESERVATION_WORK, /* A designated tile being worked on. */
-    RESERVATION_FOOD, /* Food (plant or items) about to be eaten. */
-    RESERVATION_HAUL_SOURCE, /* An item stack about to be picked up. */
-    RESERVATION_STORAGE, /* A storage tile items are being brought to. */
-    RESERVATION_STATION, /* A workstation being built or worked at. */
+    RESERVATION_WORK,         /* A designated tile being worked on. */
+    RESERVATION_FOOD,         /* Food (plant or items) about to be eaten. */
+    RESERVATION_HAUL_SOURCE,  /* An item stack about to be picked up. */
+    RESERVATION_STORAGE,      /* A storage tile items are being brought to. */
+    RESERVATION_STATION,      /* A workstation being built or worked at. */
     RESERVATION_CONSTRUCTION, /* A construction site being built. */
-    RESERVATION_BED, /* A bed or a warm spot slept in (or walked to). */
-    RESERVATION_CLEAN, /* A dirty tile being cleaned. */
-    RESERVATION_FIRE, /* A hearth being lit. */
+    RESERVATION_BED,          /* A bed or a warm spot slept in (or walked to). */
+    RESERVATION_CLEAN,        /* A dirty tile being cleaned. */
+    RESERVATION_FIRE,         /* A hearth being lit. */
     RESERVATION_KIND_COUNT
 } ReservationKind;
 

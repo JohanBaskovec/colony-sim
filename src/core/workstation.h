@@ -40,7 +40,7 @@ typedef enum WorkstationType {
 #define WORKSTATION_BIT(type) (1u << (unsigned)(type))
 
 /* What a hearth burns (core/hearth.h): branches, twigs and logs. */
-#define HEARTH_FUEL_TYPES                                                                    \
+#define HEARTH_FUEL_TYPES                                                                          \
     (ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS) | ITEM_TYPE_BIT(ITEM_WOOD))
 
 typedef struct WorkstationDef {
@@ -85,7 +85,7 @@ typedef struct Bill {
     uint8_t recipe; /* RecipeType */
     uint8_t mode;   /* BillMode */
     uint16_t target;
-    uint16_t done; /* Crafts completed (counted by BILL_DO_TIMES). */
+    uint16_t done;       /* Crafts completed (counted by BILL_DO_TIMES). */
     ItemTypeMask inputs; /* Input types allowed, among the recipe's. */
     /* Settlers whose level in the recipe's knowledge lies in this inclusive
      * range may take the bill (beginners for cheap things, masters for the
@@ -191,8 +191,7 @@ int workstation_add_bill(Workstations *workstations, int index, RecipeType recip
  * this recipe is given back in `returned` when no other bill makes it
  * (returns whether it was; a free input is not given back: the craft is
  * just called off). */
-bool workstation_remove_bill(Workstations *workstations, int index, int bill,
-                             ItemStack *returned);
+bool workstation_remove_bill(Workstations *workstations, int index, int bill, ItemStack *returned);
 
 /* Changing a bill. Invalid values are refused (targets are clamped to
  * BILL_TARGET_MIN..BILL_TARGET_MAX). */
@@ -207,8 +206,7 @@ bool workstation_set_bill_min_level(Workstations *workstations, int index, int b
 bool workstation_set_bill_max_level(Workstations *workstations, int index, int bill, int level);
 bool workstation_set_bill_paused(Workstations *workstations, int index, int bill, bool paused);
 /* Clamped to BILL_INPUT_RADIUS_MIN..BILL_INPUT_RADIUS_MAX. */
-bool workstation_set_bill_input_radius(Workstations *workstations, int index, int bill,
-                                       int radius);
+bool workstation_set_bill_input_radius(Workstations *workstations, int index, int bill, int radius);
 
 /* Whether a settler at `level` in the recipe's knowledge may take the bill
  * (always true for recipes that need no knowledge). */

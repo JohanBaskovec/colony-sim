@@ -314,8 +314,7 @@ static void build_tile_panel(App *app, Panel *panel)
                       tr(def->name_key));
         } else {
             tr_integer(a, sizeof(a), (long long)(plant->growth * 100.0f + 0.5f));
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant"), tr(def->name_key),
-                      a);
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant"), tr(def->name_key), a);
         }
         if (game_forbidden(&app->game, x, y, z, FORBID_PLANT)) {
             panel_add_text(panel, tr("tile_panel.left_alone"));
@@ -325,11 +324,11 @@ static void build_tile_panel(App *app, Panel *panel)
             if (plant_stock_capacity(plant, (PlantStock)stock) <= 0) {
                 continue;
             }
-            const char *item = tr(
-                item_def(plant_stock_item((PlantType)plant->type, (PlantStock)stock))->name_key);
+            const char *item =
+                tr(item_def(plant_stock_item((PlantType)plant->type, (PlantStock)stock))->name_key);
             if (stock == PLANT_STOCK_FOOD && !plant_days_contain(def->food_days, today)) {
-                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
-                          tr("hud.tile.plant_food_out_of_season"), item);
+                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant_food_out_of_season"),
+                          item);
                 continue;
             }
             tr_integer(a, sizeof(a), plant_stock_available(plant, (PlantStock)stock));
@@ -415,8 +414,7 @@ static void build_tile_panel(App *app, Panel *panel)
     temperature_text(celsius, sizeof(celsius), air, 1);
     if (radiant >= 0.05f) {
         temperature_text(felt, sizeof(felt), air + radiant, 1);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature_felt"), celsius,
-                  felt);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature_felt"), celsius, felt);
     } else {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature"), celsius);
     }
@@ -494,8 +492,7 @@ static void build_tile_panel(App *app, Panel *panel)
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.gather_worker"), worker->name,
                       activity, a);
         } else {
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.gather_left_off"), activity,
-                      a);
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.gather_left_off"), activity, a);
         }
     }
 
@@ -505,8 +502,8 @@ static void build_tile_panel(App *app, Panel *panel)
         float progress = designation_progress_fraction(&app->game.designations, map, x, y, z);
         if (progress > 0.0f) {
             tr_integer(a, sizeof(a), (long long)(progress * 100.0f));
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.designation_progress"),
-                      name, a);
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.designation_progress"), name,
+                      a);
         } else {
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.designation"), name);
         }
@@ -560,8 +557,8 @@ static void add_need_line(Panel *panel, const Colonist *colonist, NeedType need)
     tr_integer(percent, sizeof(percent), (long long)(value * 100.0f + 0.5f));
     const char *state_key = need_level_key(need, need_level(value));
     if (state_key == NULL) {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.need"),
-                  tr(need_name_key(need)), percent);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.need"), tr(need_name_key(need)),
+                  percent);
     } else {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.need_state"),
                   tr(need_name_key(need)), percent, tr(state_key));
@@ -595,8 +592,7 @@ static void add_mood_lines(Panel *panel, const Colonist *colonist)
     tr_decimal(work, sizeof(work), mood_work_factor(mood->value), 2);
     tr_decimal(learn, sizeof(learn), (float)mood_learn_factor(mood->value), 2);
     format_signed(level, sizeof(level), SDL_lround(mood_level_offset(mood->value)));
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.mood_effects"), work, learn,
-              level);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.mood_effects"), work, learn, level);
     const char *break_key = mood_break_key((MoodBreak)mood->break_type);
     if (break_key != NULL) {
         int left = hours_left(mood->break_ticks);
@@ -642,8 +638,7 @@ static void add_social_lines(App *app, Panel *panel, const Colonist *colonist, E
     }
     const KnowledgeDef *story = knowledge_def((KnowledgeType)colonist->story_topic);
     if (colonist->task == TASK_STORY && story != NULL) {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.telling"),
-                  tr(story->name_key));
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.telling"), tr(story->name_key));
     }
     if (colonist->task == TASK_LISTEN && mentor != NULL) {
         const KnowledgeDef *told = knowledge_def((KnowledgeType)mentor->story_topic);
@@ -658,8 +653,7 @@ static void add_social_lines(App *app, Panel *panel, const Colonist *colonist, E
     const Colonist *apprentice =
         game_colonist_const(&app->game, game_apprentice_of(&app->game, id));
     if (apprentice != NULL) {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.teaching"),
-                  apprentice->name);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.teaching"), apprentice->name);
     }
     const Colonist *partner = game_colonist_const(&app->game, colonist->chat_partner);
     if (colonist->chat_ticks > 0 && partner != NULL) {
@@ -668,8 +662,7 @@ static void add_social_lines(App *app, Panel *panel, const Colonist *colonist, E
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.chatting_about"),
                       partner->name, tr(topic->name_key));
         } else {
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.chatting"),
-                      partner->name);
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.chatting"), partner->name);
         }
     }
 }
@@ -697,8 +690,8 @@ static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType 
     }
     bool gained = false;
     for (int source = 0; source < KNOWLEDGE_SOURCE_COUNT; source++) {
-        double gain = colonist_knowledge_gain_today(colonist, knowledge,
-                                                    (KnowledgeSource)source, tick);
+        double gain =
+            colonist_knowledge_gain_today(colonist, knowledge, (KnowledgeSource)source, tick);
         if (gain >= 0.005) {
             tr_decimal(a, sizeof(a), (float)gain, 2);
             TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr(GAIN_KEYS[source]), a);
@@ -715,8 +708,8 @@ static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType 
         TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr_plural("hud.knowledge.fading", days), a, b);
     } else if (days >= 1) {
         tr_integer(b, sizeof(b), KNOWLEDGE_FADE_AFTER_DAYS);
-        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr_plural("hud.knowledge.unpractised", days),
-                  a, b);
+        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr_plural("hud.knowledge.unpractised", days), a,
+                  b);
     } else {
         SDL_strlcpy(lines[count++], tr("hud.knowledge.practised"), HUD_LINE_SIZE);
     }
@@ -725,8 +718,7 @@ static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType 
         SDL_strlcpy(lines[count++], tr("hud.knowledge.no_master"), HUD_LINE_SIZE);
     } else {
         tr_integer(a, sizeof(a), masters);
-        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr_plural("hud.knowledge.masters", masters),
-                  a);
+        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr_plural("hud.knowledge.masters", masters), a);
     }
     for (int i = 0; i < count; i++) {
         pointers[i] = lines[i];
@@ -799,10 +791,10 @@ static void build_selection_panel(App *app, Panel *panel)
         temperature_text(degrees, sizeof(degrees), chill, 0);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.wet"), percent, degrees);
     }
-    float sleep_celsius = hearths_felt_temperature(&app->game.workstations, &app->game.map,
-                                                   &app->game.temperatures, colonist->x,
-                                                   colonist->y, colonist->z) -
-                          chill;
+    float sleep_celsius =
+        hearths_felt_temperature(&app->game.workstations, &app->game.map, &app->game.temperatures,
+                                 colonist->x, colonist->y, colonist->z) -
+        chill;
     float sleep_factor = colonist_sleep_temperature_factor(sleep_celsius);
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist) && sleep_factor < 1.0f) {
         char celsius[32], factor[16];
@@ -847,10 +839,10 @@ static void build_selection_panel(App *app, Panel *panel)
         }
         char speed[16];
         tr_decimal(speed, sizeof(speed), knowledge_work_speed(value), 2);
-        TR_FORMAT(line, HUD_LINE_SIZE,
-                  tr(fading ? "hud.colonist.knowledge_level_fading"
-                            : "hud.colonist.knowledge_level"),
-                  name, level, speed);
+        TR_FORMAT(
+            line, HUD_LINE_SIZE,
+            tr(fading ? "hud.colonist.knowledge_level_fading" : "hud.colonist.knowledge_level"),
+            name, level, speed);
     }
 }
 
@@ -956,8 +948,7 @@ static void help_window(App *app)
     char keys[32];
     movement_keys_label(keys, sizeof(keys));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.game"),
-              app_key_name(APP_KEY_LANGUAGE));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.game"), app_key_name(APP_KEY_LANGUAGE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.gathering"),
               app_key_name(APP_KEY_GATHER));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), app_key_name(APP_KEY_MINE),
@@ -967,12 +958,11 @@ static void help_window(App *app)
               app_key_name(APP_KEY_WORK));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.copy"),
               app_key_name(APP_KEY_BUILD_LIKE));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.rotate"),
-              app_key_name(APP_KEY_ROTATE));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.rotate"), app_key_name(APP_KEY_ROTATE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.temperature"),
               app_key_name(APP_KEY_TEMPERATURE));
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.roofs"),
-              app_key_name(APP_KEY_LEVEL_UP), tr("designation.deconstruct"));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.roofs"), app_key_name(APP_KEY_LEVEL_UP),
+              tr("designation.deconstruct"));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.levels"),
               app_key_name(APP_KEY_LEVEL_UP), app_key_name(APP_KEY_LEVEL_DOWN));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.debug"),
@@ -1159,8 +1149,8 @@ void hud_draw(App *app)
         } else if (app->tool == APP_TOOL_FORBID) {
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"),
                       tr(app->forbid_allows ? "tool.allow" : "tool.forbid"));
-            panel_add_text(&tool, tr(app->forbid_allows ? "hud.tool.allow_help"
-                                                        : "hud.tool.forbid_help"));
+            panel_add_text(&tool,
+                           tr(app->forbid_allows ? "hud.tool.allow_help" : "hud.tool.forbid_help"));
         } else if (app->tool == APP_TOOL_DEBUG) {
             if (app->debug_teleport) {
                 char count[16];
@@ -1181,8 +1171,8 @@ void hud_draw(App *app)
         }
         panel_size(app, &tool, &width, &height);
         /* Centered, but never over the date. */
-        float x = SDL_max(SDL_floorf((screen_width - width) * 0.5f),
-                          HUD_MARGIN * 2.0f + status_width);
+        float x =
+            SDL_max(SDL_floorf((screen_width - width) * 0.5f), HUD_MARGIN * 2.0f + status_width);
         panel_draw(app, &tool, x, HUD_MARGIN);
     }
 

@@ -249,8 +249,8 @@ static bool wide_trunk_fits(const Map *map, int x, int y, int z, int size)
             bool under = dx >= 0 && dy >= 0 && dx < size && dy < size;
             if (under && (!map_in_bounds(map, tx, ty, z) || !map_is_buildable(map, tx, ty, z) ||
                           slope_leads_to(map, tx, ty, z) ||
-                          terrain_def((Terrain)map->terrain[map_index(map, tx, ty, z)])
-                                  ->fertility < plant_def(PLANT_TREE)->min_fertility)) {
+                          terrain_def((Terrain)map->terrain[map_index(map, tx, ty, z)])->fertility <
+                              plant_def(PLANT_TREE)->min_fertility)) {
                 return false;
             }
         }
@@ -314,8 +314,8 @@ static void place_tree_volumes(Map *map, Rng *rng)
                     tree_build(map, x, y, z);
                 } else {
                     plant->size = 0; /* A sapling, the last stage before a trunk. */
-                    plant->growth = ((float)TREE_VOLUME_MIN_STAGE - 0.5f) /
-                                    (float)PLANT_GROWTH_STAGES;
+                    plant->growth =
+                        ((float)TREE_VOLUME_MIN_STAGE - 0.5f) / (float)PLANT_GROWTH_STAGES;
                     plant_settle(plant, GAME_START_DAY);
                 }
             }
@@ -452,8 +452,8 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
     }
     /* Open levels over the highest ground: room for the tallest trees, and
      * for roofs everywhere. */
-    int depth = highest + TREE_MAX_LEVELS < MAP_MAX_LEVELS ? highest + TREE_MAX_LEVELS
-                                                           : MAP_MAX_LEVELS;
+    int depth =
+        highest + TREE_MAX_LEVELS < MAP_MAX_LEVELS ? highest + TREE_MAX_LEVELS : MAP_MAX_LEVELS;
     if (!map_init(map, params->width, params->height, depth)) {
         free(heights);
         free(surfaces);
@@ -482,9 +482,8 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
             float rock_noise = noise_value2d(rock_seed, nx * 2.0f, ny * 2.0f);
             RockType stone = rock_noise < 0.5f ? ROCK_GRANITE : ROCK_SANDSTONE;
             for (int below = 0; below < z; below++) {
-                RockType fill = stony_column(terrain) || z - below > WORLDGEN_EARTH_LEVELS
-                                    ? stone
-                                    : ROCK_EARTH;
+                RockType fill =
+                    stony_column(terrain) || z - below > WORLDGEN_EARTH_LEVELS ? stone : ROCK_EARTH;
                 size_t inside = map_index(map, x, y, below);
                 map->rock[inside] = (uint8_t)fill;
                 map->terrain[inside] =
@@ -494,8 +493,7 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
             size_t index = map_index(map, x, y, z);
             map->terrain[index] = (uint8_t)terrain;
             if (terrain_def(terrain)->stony) {
-                float flint =
-                    stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
+                float flint = stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
                 place_stones(map, x, y, z, &stone_rng, flint_chance(terrain, flint));
             }
             if (terrain == TERRAIN_ROUGH_STONE) {

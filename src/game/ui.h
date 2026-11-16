@@ -56,16 +56,16 @@ typedef struct UiArea {
 } UiArea;
 
 typedef struct UiWindow {
-    int id; /* 0: free slot. */
-    float x, y; /* Top left corner. */
-    float w, h; /* Size at the last frame. */
-    unsigned z; /* Higher: in front. */
-    bool drawn; /* This frame. */
+    int id;         /* 0: free slot. */
+    float x, y;     /* Top left corner. */
+    float w, h;     /* Size at the last frame. */
+    unsigned z;     /* Higher: in front. */
+    bool drawn;     /* This frame. */
     bool was_drawn; /* Last frame: a window opened again comes to the front. */
-    float scroll; /* Content pixels scrolled out at the top. */
+    float scroll;   /* Content pixels scrolled out at the top. */
     float max_scroll;
     float visible_height; /* Of the content area. */
-    SDL_FRect track; /* Scroll bar (w = 0: none). */
+    SDL_FRect track;      /* Scroll bar (w = 0: none). */
     SDL_FRect thumb;
 } UiWindow;
 
@@ -76,19 +76,19 @@ typedef struct Ui {
     float screen_height;
     float mouse_x;
     float mouse_y;
-    bool mouse_down; /* Left button held. */
+    bool mouse_down;   /* Left button held. */
     int active_slider; /* Id of the slider being dragged, 0 if none. */
     int active_handle; /* 0: low handle, 1: high handle. */
     bool click_pending;
     int click_button; /* SDL_BUTTON_LEFT or SDL_BUTTON_RIGHT. */
     float click_x;
     float click_y;
-    int click_owner; /* Topmost owner under the pending click. */
-    int hover_owner; /* Topmost owner under the mouse (last frame's areas), 0: none. */
-    int owner; /* Owner of what is being drawn now. */
+    int click_owner;     /* Topmost owner under the pending click. */
+    int hover_owner;     /* Topmost owner under the mouse (last frame's areas), 0: none. */
+    int owner;           /* Owner of what is being drawn now. */
     int anonymous_count; /* Plain panels drawn this frame. */
     bool clipping;
-    SDL_FRect clip; /* Content area of the window being drawn. */
+    SDL_FRect clip;             /* Content area of the window being drawn. */
     UiArea areas[UI_MAX_AREAS]; /* Drawn this frame, back to front. */
     int area_count;
     UiArea previous_areas[UI_MAX_AREAS]; /* Drawn last frame: they capture clicks. */
@@ -96,7 +96,7 @@ typedef struct Ui {
     UiWindow windows[UI_MAX_WINDOWS];
     unsigned next_z;
     int current_window; /* Index in `windows` between begin and end, -1 otherwise. */
-    int drag_window; /* Id of the window moved by its title bar, 0 if none. */
+    int drag_window;    /* Id of the window moved by its title bar, 0 if none. */
     float drag_dx, drag_dy;
     int scroll_drag_window; /* Id of the window whose scroll thumb is dragged, 0 if none. */
     float scroll_drag_offset;
@@ -129,8 +129,8 @@ bool ui_capture_click(Ui *ui, float x, float y, int button);
  * panel or window (the world does not see the wheel then). */
 bool ui_scroll(Ui *ui, float x, float y, float steps);
 
-void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y, bool left_button_down,
-                    float screen_width, float screen_height);
+void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y, bool left_button_down, float screen_width,
+                    float screen_height);
 void ui_end_frame(Ui *ui); /* Unconsumed clicks are dropped. */
 
 /* Panel background; also blocks clicks to the world from the next frame on.

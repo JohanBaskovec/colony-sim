@@ -30,7 +30,7 @@ static bool init_flat_game(Game *game)
         map->plants[i].type = PLANT_NONE;
         map->plants[i].growth = 0.0f;
     }
-    map_topology_changed(map); /* The layers were written directly. */
+    map_topology_changed(map);              /* The layers were written directly. */
     game->clock.tick = 12 * TICKS_PER_HOUR; /* Noon. */
     return true;
 }
@@ -62,9 +62,15 @@ static void run_ticks(Game *game, int ticks)
 
 static HaulWorld world_of(Game *game)
 {
-    HaulWorld world = {&game->map,          &game->items,      &game->stockpiles,
-                       &game->reservations, &game->pathfinder, 1,
-                       NULL,                REGION_NONE,       0,
+    HaulWorld world = {&game->map,
+                       &game->items,
+                       &game->stockpiles,
+                       &game->reservations,
+                       &game->pathfinder,
+                       1,
+                       NULL,
+                       REGION_NONE,
+                       0,
                        0};
     return world;
 }
@@ -236,9 +242,8 @@ static void test_colonist_hauls_items_into_stockpile(void)
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_HAUL);
     CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.haul");
-    CHECK_EQ_INT(reservations_owner(&game.reservations, RESERVATION_HAUL_SOURCE,
-                                    (TilePos){10, 10, 0}),
-                 1);
+    CHECK_EQ_INT(
+        reservations_owner(&game.reservations, RESERVATION_HAUL_SOURCE, (TilePos){10, 10, 0}), 1);
     run_ticks(&game, 200);
     CHECK_EQ_INT(colonist->carried.type, ITEM_BLACKBERRIES); /* Picked up on the way. */
     CHECK_EQ_INT(colonist->carried.count, 30);

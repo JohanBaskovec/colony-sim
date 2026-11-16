@@ -79,8 +79,8 @@ static void test_counts_per_work_type(void)
     designation_set(&d, &map, 6, 5, 0, DESIGNATION_MINE);
     CHECK_EQ_INT(d.count_by_work[WORK_MINING], 2);
     CHECK_EQ_INT(designations_count_for_work(&d, WORK_TYPE_BIT(WORK_MINING)), 2);
-    CHECK_EQ_INT(designations_count_for_work(
-                     &d, WORK_TYPE_BIT(WORK_MINING) | WORK_TYPE_BIT(WORK_WOODCUTTING)),
+    CHECK_EQ_INT(designations_count_for_work(&d, WORK_TYPE_BIT(WORK_MINING) |
+                                                     WORK_TYPE_BIT(WORK_WOODCUTTING)),
                  2);
     CHECK_EQ_INT(designations_count_for_work(&d, WORK_TYPE_BIT(WORK_GATHERING)), 0);
     CHECK_EQ_INT(designations_count_for_work(&d, 0), 0);
@@ -282,7 +282,7 @@ static void test_ramps_are_cut_into_banks(void)
     CHECK(map_is_slope(&map, 4, 3, 0));
     CHECK(map_is_open(&map, 4, 3, 1));
     CHECK_EQ_INT(map.plants[map_index(&map, 4, 3, 1)].type, PLANT_NONE);
-    CHECK(map_can_climb(&map, 4, 3, 0, 5, 3)); /* Up onto the bank. */
+    CHECK(map_can_climb(&map, 4, 3, 0, 5, 3));             /* Up onto the bank. */
     CHECK_EQ_INT(map_ramp_at(&map, 4, 3, 0), MAP_RAMP_UP); /* Shown both ways. */
     CHECK_EQ_INT(map_ramp_at(&map, 4, 3, 1), MAP_RAMP_DOWN);
     CHECK_EQ_INT(items_get(&items, 4, 3, 1).count, 0);
@@ -324,18 +324,18 @@ static void test_ramps_need_bare_ground(void)
     REQUIRE(constructions_init(&constructions, 16, 16, 3));
     REQUIRE(workstations_init(&workstations, 16, 16, 3));
     REQUIRE(stockpiles_init(&stockpiles, 16, 16, 3));
-    CHECK(designation_ground_free(&constructions, &workstations, &stockpiles,
-                                  DESIGNATION_DIG_RAMP, 5, 2, 0));
+    CHECK(designation_ground_free(&constructions, &workstations, &stockpiles, DESIGNATION_DIG_RAMP,
+                                  5, 2, 0));
     REQUIRE(stockpile_create(&stockpiles, &map, 5, 2, 5, 2, 1) != STOCKPILE_NONE);
-    CHECK(!designation_ground_free(&constructions, &workstations, &stockpiles,
-                                   DESIGNATION_DIG_RAMP, 5, 2, 0));
-    CHECK(designation_ground_free(&constructions, &workstations, &stockpiles,
-                                  DESIGNATION_DIG_RAMP, 5, 3, 0));
+    CHECK(!designation_ground_free(&constructions, &workstations, &stockpiles, DESIGNATION_DIG_RAMP,
+                                   5, 2, 0));
+    CHECK(designation_ground_free(&constructions, &workstations, &stockpiles, DESIGNATION_DIG_RAMP,
+                                  5, 3, 0));
     /* Digging down takes the ground it is ordered on; other orders take none. */
-    CHECK(!designation_ground_free(&constructions, &workstations, &stockpiles,
-                                   DESIGNATION_DIG_DOWN, 5, 2, 1));
-    CHECK(designation_ground_free(&constructions, &workstations, &stockpiles, DESIGNATION_DIG,
-                                  5, 2, 1));
+    CHECK(!designation_ground_free(&constructions, &workstations, &stockpiles, DESIGNATION_DIG_DOWN,
+                                   5, 2, 1));
+    CHECK(designation_ground_free(&constructions, &workstations, &stockpiles, DESIGNATION_DIG, 5, 2,
+                                  1));
     stockpiles_free(&stockpiles);
     workstations_free(&workstations);
     constructions_free(&constructions);
@@ -353,7 +353,7 @@ static void test_digging_down(void)
     Items items;
     REQUIRE(init_bank(&map, &d));
     REQUIRE(items_init(&items, 16, 16, 3));
-    CHECK(designation_can_apply(&map, 8, 8, 1, DESIGNATION_DIG_DOWN)); /* On the bank. */
+    CHECK(designation_can_apply(&map, 8, 8, 1, DESIGNATION_DIG_DOWN));  /* On the bank. */
     CHECK(!designation_can_apply(&map, 2, 8, 0, DESIGNATION_DIG_DOWN)); /* Nothing below. */
     CHECK(!designation_can_apply(&map, 8, 8, 0, DESIGNATION_DIG_DOWN)); /* Earth, no ground. */
     CHECK(!designation_can_apply(&map, 2, 8, 1, DESIGNATION_DIG_DOWN)); /* Open space. */

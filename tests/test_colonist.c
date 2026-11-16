@@ -214,8 +214,7 @@ static void test_needs_decay_over_time(void)
 
     run_ticks(&game, TICKS_PER_HOUR);
     CHECK_NEAR(colonist->needs[NEED_FOOD], 1.0 - NEED_FOOD_DECAY_PER_TICK * TICKS_PER_HOUR, 1e-4);
-    CHECK_NEAR(colonist->needs[NEED_WATER], 1.0 - NEED_WATER_DECAY_PER_TICK * TICKS_PER_HOUR,
-               1e-4);
+    CHECK_NEAR(colonist->needs[NEED_WATER], 1.0 - NEED_WATER_DECAY_PER_TICK * TICKS_PER_HOUR, 1e-4);
     CHECK_NEAR(colonist->needs[NEED_REST], 1.0 - NEED_REST_DECAY_PER_TICK * TICKS_PER_HOUR, 1e-4);
     game_shutdown(&game);
 }
@@ -516,7 +515,7 @@ static void test_idle_colonist_gathers_branches(void)
 
     run_ticks(&game, (int)(work * 0.5f));
     const Plant *hazel = &game.map.plants[map_index(&game.map, 26, 20, 0)];
-    CHECK_EQ_INT(hazel->type, PLANT_HAZEL); /* The hazel stays... */
+    CHECK_EQ_INT(hazel->type, PLANT_HAZEL);                              /* The hazel stays... */
     CHECK_EQ_INT(plant_stock_available(hazel, PLANT_STOCK_BRANCHES), 0); /* ...bare. */
     CHECK_EQ_INT(items_get(&game.items, 26, 20, 0).type, ITEM_BRANCHES);
     CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], hazel_branches());
@@ -1493,13 +1492,13 @@ static void test_action_follows_the_job(void)
     CHECK_EQ_INT(colonist_action(&colonist, NULL), COLONIST_ACTION_NONE);
     colonist.station_phase = STATION_JOB_WORK;
     REQUIRE(colonist_add_tool(&colonist, (ItemStack){.type = ITEM_COBBLE,
-                                                    .quality = ITEM_QUALITY_STANDARD,
-                                                    .count = 1,
-                                                    .hit_points = 100}));
+                                                     .quality = ITEM_QUALITY_STANDARD,
+                                                     .count = 1,
+                                                     .hit_points = 100}));
     REQUIRE(colonist_add_tool(&colonist, (ItemStack){.type = ITEM_FLAKE,
-                                                    .quality = ITEM_QUALITY_STANDARD,
-                                                    .count = 1,
-                                                    .hit_points = 100}));
+                                                     .quality = ITEM_QUALITY_STANDARD,
+                                                     .count = 1,
+                                                     .hit_points = 100}));
     CHECK_EQ_INT(colonist_action(&colonist, &tool), COLONIST_ACTION_STRIKE);
     CHECK_EQ_INT(tool, ITEM_COBBLE);
     colonist.recipe = RECIPE_THROWING_SPEAR;
@@ -1946,8 +1945,7 @@ static void test_gatherer_fetches_a_digging_stick(void)
             game_tick(&game);
         }
         CHECK_EQ_INT((int)game.items.totals[ITEM_CATTAIL_RHIZOMES], rhizomes);
-        CHECK_EQ_INT(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_DIGGING_STICK)) >= 0,
-                     stick);
+        CHECK_EQ_INT(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_DIGGING_STICK)) >= 0, stick);
         CHECK_EQ_INT((int)game.items.totals[ITEM_DIGGING_STICK], 0);
         ticks[stick] = i;
         game_shutdown(&game);
@@ -1962,8 +1960,8 @@ static void test_only_skilled_gatherers_pick_mushrooms(void)
     for (int skilled = 0; skilled <= 1; skilled++) {
         Game game;
         REQUIRE(init_flat_game(&game));
-        game.clock.tick = (uint64_t)SEASON_DAY(SEASON_AUTUMN, 2) * TICKS_PER_DAY +
-                          12 * TICKS_PER_HOUR;
+        game.clock.tick =
+            (uint64_t)SEASON_DAY(SEASON_AUTUMN, 2) * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
         Plant *patch = &game.map.plants[map_index(&game.map, 24, 20, 0)];
         *patch = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
         plant_settle(patch, game_day_of_year(game.clock.tick));
@@ -2030,8 +2028,8 @@ static void test_colonist_cleans_dirty_tiles(void)
     bool seen_cleaning = false;
     for (int i = 0; i < 1200 && game.dirt.dirty_count > 0; i++) {
         game_tick(&game);
-        if (colonist->task == TASK_CLEAN && colonist_action(colonist, NULL) ==
-                                                COLONIST_ACTION_GATHER) {
+        if (colonist->task == TASK_CLEAN &&
+            colonist_action(colonist, NULL) == COLONIST_ACTION_GATHER) {
             seen_cleaning = true;
             CHECK(colonist->x == colonist->target.x && colonist->y == colonist->target.y);
         }
@@ -2039,8 +2037,7 @@ static void test_colonist_cleans_dirty_tiles(void)
     CHECK(seen_cleaning);
     CHECK_EQ_INT(game.dirt.dirty_count, 0);
     /* 100 % of dirt at COLONIST_CLEAN_TICKS_PER_PERCENT ticks each, and the walk. */
-    CHECK(game.clock.tick - TODAY - 12 * TICKS_PER_HOUR >=
-          100 * COLONIST_CLEAN_TICKS_PER_PERCENT);
+    CHECK(game.clock.tick - TODAY - 12 * TICKS_PER_HOUR >= 100 * COLONIST_CLEAN_TICKS_PER_PERCENT);
     CHECK_EQ_INT(game.reservations.count_by_kind[RESERVATION_CLEAN], 0);
     game_shutdown(&game);
 }

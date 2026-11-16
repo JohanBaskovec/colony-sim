@@ -20,8 +20,8 @@ static const WeatherDef WEATHER_DEFS[WEATHER_TYPE_COUNT] = {
     [WEATHER_FOG] = {"fog", N_("weather.fog"), NULL, 0.4f, -1.0f, 0.8f, 1, false},
     [WEATHER_RAIN] = {"rain", N_("weather.rain"), N_("weather.snow"), 0.4f, -2.0f, 0.7f, 2, true},
     /* Wind and heavy rain chill the air. */
-    [WEATHER_STORM] = {"storm", N_("weather.storm"), N_("weather.snowstorm"), 0.3f, -4.0f, 0.55f,
-                       3, true},
+    [WEATHER_STORM] = {"storm", N_("weather.storm"), N_("weather.snowstorm"), 0.3f, -4.0f, 0.55f, 3,
+                       true},
 };
 
 /* The sky at each step of cloudiness (fog is drawn, never stepped to). */
@@ -111,10 +111,9 @@ void weather_tick(Weather *weather, uint64_t tick)
     if (period != weather->period) {
         weather->period = period;
         GameDate date = game_date_from_tick(tick);
-        weather->type = (uint8_t)weather_next(
-            (WeatherType)weather->type, date.season, date.hour,
-            weather_roll(weather->seed, period, ROLL_KEEP),
-            weather_roll(weather->seed, period, ROLL_DRAW));
+        weather->type = (uint8_t)weather_next((WeatherType)weather->type, date.season, date.hour,
+                                              weather_roll(weather->seed, period, ROLL_KEEP),
+                                              weather_roll(weather->seed, period, ROLL_DRAW));
     }
     uint32_t day = (uint32_t)(tick / TICKS_PER_DAY);
     if (day != weather->day) {
@@ -140,8 +139,8 @@ void weather_tick(Weather *weather, uint64_t tick)
         }
     }
     weather->snow = clampf(weather->snow, 0.0f, 1.0f);
-    weather->recent_rain = weather->recent_rain * WEATHER_RAIN_MEMORY +
-                           (falling == PRECIPITATION_RAIN ? 1.0f : 0.0f);
+    weather->recent_rain =
+        weather->recent_rain * WEATHER_RAIN_MEMORY + (falling == PRECIPITATION_RAIN ? 1.0f : 0.0f);
 }
 
 float weather_outdoor(const Weather *weather, uint64_t tick)
@@ -160,7 +159,7 @@ Precipitation weather_precipitation(const Weather *weather, uint64_t tick)
         return PRECIPITATION_NONE;
     }
     return weather_outdoor(weather, tick) <= WEATHER_SNOW_CELSIUS ? PRECIPITATION_SNOW
-                                                                   : PRECIPITATION_RAIN;
+                                                                  : PRECIPITATION_RAIN;
 }
 
 float weather_wetting(const Weather *weather, uint64_t tick)

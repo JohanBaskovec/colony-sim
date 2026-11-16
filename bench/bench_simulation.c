@@ -82,9 +82,9 @@ int main(int argc, char **argv)
     }
     double seconds = now_seconds() - begin;
 
-    printf("map %dx%dx%d, seed %llu, scenario %d: %u colonists, %d days (%ld ticks)\n", size,
-           size, game.map.depth, (unsigned long long)seed, scenario, game.colonist_pool.count,
-           days, ticks);
+    printf("map %dx%dx%d, seed %llu, scenario %d: %u colonists, %d days (%ld ticks)\n", size, size,
+           game.map.depth, (unsigned long long)seed, scenario, game.colonist_pool.count, days,
+           ticks);
     printf("  total %.2f s, %.2f us/tick, worst tick %.2f ms, %ld ticks over 1 ms\n", seconds,
            seconds * 1e6 / (double)ticks, worst * 1e3, slow_ticks);
     printf("  zone tiles %d, items:", orders);

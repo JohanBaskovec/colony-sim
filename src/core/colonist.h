@@ -208,17 +208,17 @@
 typedef enum ColonistTask {
     TASK_IDLE,
     TASK_WANDER,
-    TASK_EAT, /* Walking to food, then eating. */
+    TASK_EAT,   /* Walking to food, then eating. */
     TASK_DRINK, /* Walking to a drinking spot, then drinking. */
     TASK_SLEEP,
-    TASK_WORK, /* Walking next to a designated tile, then working on it. */
-    TASK_HAUL, /* Walking to an item stack, picking it up, carrying it to storage. */
+    TASK_WORK,  /* Walking next to a designated tile, then working on it. */
+    TASK_HAUL,  /* Walking to an item stack, picking it up, carrying it to storage. */
     TASK_CRAFT, /* Fetching tools and input, then working through a bill at a station. */
     /* Bringing materials to a construction site (a structure's or a
      * workstation's), then building it from a neighboring tile. */
     TASK_CONSTRUCT,
     TASK_SUPPLY, /* Bringing materials to a construction site (hauling work). */
-    TASK_CLEAN, /* Walking to a dirty tile, then cleaning it. */
+    TASK_CLEAN,  /* Walking to a dirty tile, then cleaning it. */
     /* Following a master (Colonist.mentor) and helping with their job. */
     TASK_ASSIST,
     TASK_REFUEL, /* Bringing fuel to a hearth (hauling work). */
@@ -228,12 +228,7 @@ typedef enum ColonistTask {
     TASK_COUNT
 } ColonistTask;
 
-typedef enum NeedType {
-    NEED_FOOD,
-    NEED_WATER,
-    NEED_REST,
-    NEED_COUNT
-} NeedType;
+typedef enum NeedType { NEED_FOOD, NEED_WATER, NEED_REST, NEED_COUNT } NeedType;
 
 /* Things a colonist searches the map for; failed searches back off per kind. */
 typedef enum SearchKind {
@@ -241,8 +236,8 @@ typedef enum SearchKind {
     SEARCH_WATER,
     SEARCH_WORK,
     SEARCH_HAUL,
-    SEARCH_STATION, /* Crafting jobs at workstations. */
-    SEARCH_GATHER,  /* Gathering zones. */
+    SEARCH_STATION,      /* Crafting jobs at workstations. */
+    SEARCH_GATHER,       /* Gathering zones. */
     SEARCH_CONSTRUCTION, /* Construction sites. */
     SEARCH_CLEAN,        /* Dirty tiles. */
     SEARCH_SUPPLY,       /* Construction sites missing materials, for haulers. */
@@ -290,11 +285,7 @@ typedef enum ColonistAction {
     COLONIST_ACTION_COUNT
 } ColonistAction;
 
-typedef enum NeedLevel {
-    NEED_LEVEL_OK,
-    NEED_LEVEL_LOW,
-    NEED_LEVEL_CRITICAL
-} NeedLevel;
+typedef enum NeedLevel { NEED_LEVEL_OK, NEED_LEVEL_LOW, NEED_LEVEL_CRITICAL } NeedLevel;
 
 typedef struct Colonist {
     char name[COLONIST_NAME_SIZE]; /* Proper noun: never translated. */
@@ -303,7 +294,7 @@ typedef struct Colonist {
     int y;
     int z;
     Path path;
-    int path_index; /* Next step of `path` to walk to. */
+    int path_index;      /* Next step of `path` to walk to. */
     float move_progress; /* 0..1 from the current tile to the next step. */
     ColonistTask task;
     /* Food tile (TASK_EAT), drinking spot (TASK_DRINK), designated tile
@@ -316,7 +307,7 @@ typedef struct Colonist {
     bool gathering;
     int search_cooldown[SEARCH_COUNT]; /* Ticks before searching again. */
     int search_failures[SEARCH_COUNT]; /* Consecutive failed searches. */
-    int search_quiet[SEARCH_COUNT]; /* Ticks before a change may cut the delay short. */
+    int search_quiet[SEARCH_COUNT];    /* Ticks before a change may cut the delay short. */
     /* Designations revision + work reservation releases at the last failed
      * work search. */
     uint32_t work_search_stamp;
@@ -341,7 +332,7 @@ typedef struct Colonist {
      * refuel and lighting searches. */
     uint32_t refuel_search_stamp;
     uint32_t light_search_stamp;
-    ItemStack carried; /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
+    ItemStack carried;        /* Items in hand (TASK_HAUL), dropped if the task is abandoned. */
     TilePos haul_destination; /* Storage tile the carried items go to (TASK_HAUL). */
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
      * for `haul_destination`. */
@@ -375,8 +366,8 @@ typedef struct Colonist {
     ItemStack tools[COLONIST_TOOL_MAX];
     /* Ticks of work done with each tool since it last lost a hit point. */
     uint16_t tool_wear[COLONIST_TOOL_MAX];
-    int tools_broken; /* Tools worn out so far (for the player's information). */
-    int strength; /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
+    int tools_broken;       /* Tools worn out so far (for the player's information). */
+    int strength;           /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
     float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
     float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
     uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */
@@ -444,7 +435,7 @@ typedef struct ColonistContext {
     const long *stock; /* Game.stock: items in stock per type. */
     Rng *rng;
     uint64_t tick;
-    bool night; /* colonist_is_night(tick), computed once per tick for everyone. */
+    bool night;        /* colonist_is_night(tick), computed once per tick for everyone. */
     uint8_t worker_id; /* Reservation owner for this colonist (slot + 1), never 0. */
     /* Every colonist (Game.colonists) and who is alive, to find a master to
      * assist; NULL: nobody assists anyone. */
@@ -496,8 +487,7 @@ double colonist_learn(Colonist *colonist, KnowledgeType knowledge, KnowledgeSour
 /* Learning by doing: `ticks` of work on something of this knowledge at
  * `tick`, which also counts as practice. Ignored for KNOWLEDGE_NONE and
  * invalid values. */
-void colonist_learn_by_doing(Colonist *colonist, KnowledgeType knowledge, int ticks,
-                             uint64_t tick);
+void colonist_learn_by_doing(Colonist *colonist, KnowledgeType knowledge, int ticks, uint64_t tick);
 
 /* Points gained today (the day of `tick`) in a knowledge by one way of
  * learning. */

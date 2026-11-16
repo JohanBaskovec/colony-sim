@@ -27,8 +27,8 @@
  * hour. */
 #define GAME_START_DAY SEASON_DAY(SEASON_SUMMER, 11)
 #define GAME_START_HOUR 6
-#define GAME_START_TICK (((uint64_t)GAME_START_DAY * HOURS_PER_DAY + GAME_START_HOUR) * \
-                         TICKS_PER_HOUR)
+#define GAME_START_TICK                                                                            \
+    (((uint64_t)GAME_START_DAY * HOURS_PER_DAY + GAME_START_HOUR) * TICKS_PER_HOUR)
 
 /* Upper bound of ticks run per update, so a slow frame cannot snowball. */
 #define GAME_CLOCK_MAX_TICKS_PER_UPDATE 30
@@ -56,14 +56,14 @@ typedef struct GameClock {
     uint64_t tick; /* Ticks since the start of year 1. */
     GameSpeed speed;
     GameSpeed resume_speed; /* Speed restored when unpausing. */
-    double pending_ticks; /* Fractional ticks carried over between updates. */
+    double pending_ticks;   /* Fractional ticks carried over between updates. */
 } GameClock;
 
 typedef struct GameDate {
     int year; /* 1-based */
     Season season;
-    int day; /* 1-based, within the season */
-    int hour; /* 0..23 */
+    int day;    /* 1-based, within the season */
+    int hour;   /* 0..23 */
     int minute; /* 0..59 */
 } GameDate;
 

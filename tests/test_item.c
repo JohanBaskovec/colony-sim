@@ -369,8 +369,7 @@ static void test_rot_definitions(void)
     CHECK(item_def(ITEM_CATTAIL_RHIZOMES)->rot_days > item_def(ITEM_BLACKBERRIES)->rot_days);
     CHECK(item_def(ITEM_BLACKBERRIES)->rot_days > item_def(ITEM_NETTLES)->rot_days);
     /* Roasting gives more food. */
-    CHECK(item_def(ITEM_ROASTED_RHIZOMES)->nutrition >
-          item_def(ITEM_CATTAIL_RHIZOMES)->nutrition);
+    CHECK(item_def(ITEM_ROASTED_RHIZOMES)->nutrition > item_def(ITEM_CATTAIL_RHIZOMES)->nutrition);
     CHECK(item_def(ITEM_ROASTED_CARROTS)->nutrition > item_def(ITEM_WILD_CARROTS)->nutrition);
 }
 

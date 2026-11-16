@@ -139,8 +139,7 @@ static bool tree_of_trunk(const Map *map, int x, int y, int z, TreeRef *out)
 /* The tree whose foliage is on (x, y, z), but the one with its foot on
  * `skip` (NULL: none). Its trunk is on the same level, or on the level below
  * (the foliage over the top of the trunk). */
-static bool tree_of_foliage(const Map *map, int x, int y, int z, const TreeRef *skip,
-                            TreeRef *out)
+static bool tree_of_foliage(const Map *map, int x, int y, int z, const TreeRef *skip, TreeRef *out)
 {
     /* Nearest trunk tiles first, ring by ring (often in the first two):
      * called for every tile of foliage a job search looks at. */
@@ -423,8 +422,8 @@ void tree_scatter_litter(Map *map, int x, int y, int z, Rng *rng)
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
     static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS};
     for (size_t i = 0; i < sizeof(KINDS) / sizeof(KINDS[0]); i++) {
-        float expected = tree_shed_chance(plant, KINDS[i]) *
-                         (float)(HOURS_PER_DAY * TREE_SCATTER_DAYS);
+        float expected =
+            tree_shed_chance(plant, KINDS[i]) * (float)(HOURS_PER_DAY * TREE_SCATTER_DAYS);
         int count = (int)expected;
         count += rng_next_float(rng) < expected - (float)count ? 1 : 0;
         for (int n = 0; n < count; n++) {
@@ -440,8 +439,8 @@ int tree_fall_length(int levels)
 
 /* Tile `across` (0..size-1) of the band a trunk of `size` covers `along`
  * tiles from its side (0: the foot's own tiles) in a direction. */
-static void band_tile(int x, int y, int size, Direction direction, int along, int across,
-                      int *tx, int *ty)
+static void band_tile(int x, int y, int size, Direction direction, int along, int across, int *tx,
+                      int *ty)
 {
     int dx = direction_dx(direction), dy = direction_dy(direction);
     if (dx != 0) {
@@ -472,8 +471,8 @@ TreeFall tree_fall_toward(const Map *map, int x, int y, int z, Direction directi
         for (int j = 0; j < shape.size && !blocked; j++) {
             int tx, ty;
             band_tile(x, y, shape.size, direction, i, j, &tx, &ty);
-            blocked = !map_in_bounds(map, tx, ty, z) ||
-                      map->rock[map_index(map, tx, ty, z)] != ROCK_NONE;
+            blocked =
+                !map_in_bounds(map, tx, ty, z) || map->rock[map_index(map, tx, ty, z)] != ROCK_NONE;
             harmed += !blocked && map_structure(map, tx, ty, z) != STRUCTURE_NONE;
         }
         if (blocked) {

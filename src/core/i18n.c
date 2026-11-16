@@ -17,7 +17,7 @@ struct I18nCatalog {
     I18nEntry *entries; /* Insertion order. */
     size_t count;
     size_t capacity;
-    int32_t *slots; /* Open-addressing index into `entries`; -1 means empty. */
+    int32_t *slots;    /* Open-addressing index into `entries`; -1 means empty. */
     size_t slot_count; /* Power of two (or 0 before the first insertion). */
     PluralRule plural_rule;
 };
@@ -28,7 +28,7 @@ typedef struct StrWriter {
     char *out;
     size_t capacity;
     size_t written; /* Bytes actually stored in `out`. */
-    size_t length; /* Bytes the complete result would have. */
+    size_t length;  /* Bytes the complete result would have. */
     bool truncated;
 } StrWriter;
 
@@ -273,8 +273,7 @@ static bool is_blank(char ch)
 }
 
 /* Decodes \n, \t, \s (space) and \\ escapes. The result is malloc'ed. */
-static char *unescape_value(const char *text, size_t size, const char *source, int line,
-                            bool *ok)
+static char *unescape_value(const char *text, size_t size, const char *source, int line, bool *ok)
 {
     char *out = malloc(size + 1);
     if (out == NULL) {

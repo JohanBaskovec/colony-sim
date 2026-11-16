@@ -119,9 +119,9 @@ size_t tr_format(char *out, size_t out_size, const char *pattern, int arg_count,
                  const char *const *args);
 
 /* Convenience wrapper: TR_FORMAT(buffer, sizeof(buffer), pattern, arg0, arg1, ...). */
-#define TR_FORMAT(out, out_size, pattern, ...)                                                   \
-    tr_format((out), (out_size), (pattern),                                                      \
-              (int)(sizeof((const char *const[]){__VA_ARGS__}) / sizeof(const char *)),          \
+#define TR_FORMAT(out, out_size, pattern, ...)                                                     \
+    tr_format((out), (out_size), (pattern),                                                        \
+              (int)(sizeof((const char *const[]){__VA_ARGS__}) / sizeof(const char *)),            \
               (const char *const[]){__VA_ARGS__})
 
 /*

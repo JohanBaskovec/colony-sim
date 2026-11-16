@@ -183,8 +183,8 @@ bool ui_scroll(Ui *ui, float x, float y, float steps)
     return owner != 0;
 }
 
-void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y, bool left_button_down,
-                    float screen_width, float screen_height)
+void ui_begin_frame(Ui *ui, float mouse_x, float mouse_y, bool left_button_down, float screen_width,
+                    float screen_height)
 {
     ui->mouse_x = mouse_x;
     ui->mouse_y = mouse_y;
@@ -291,9 +291,9 @@ static void handle_scroll_bar(Ui *ui, UiWindow *window)
         window->scroll = (thumb_y - track.y) / travel * window->max_scroll;
     }
     window->scroll = SDL_clamp(window->scroll, 0.0f, window->max_scroll);
-    window->thumb = (SDL_FRect){track.x, SDL_floorf(track.y + travel * window->scroll /
-                                                                  window->max_scroll),
-                                track.w, thumb_height};
+    window->thumb =
+        (SDL_FRect){track.x, SDL_floorf(track.y + travel * window->scroll / window->max_scroll),
+                    track.w, thumb_height};
 }
 
 SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_width,
@@ -307,8 +307,8 @@ SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_widt
     ui->current_window = (int)(window - ui->windows);
     /* Size: the content, unless it is taller than the screen allows. */
     float title_h = title_height(ui);
-    float max_visible = ui->screen_height - 2.0f * UI_WINDOW_MARGIN - title_h -
-                        2.0f * UI_WINDOW_PADDING;
+    float max_visible =
+        ui->screen_height - 2.0f * UI_WINDOW_MARGIN - title_h - 2.0f * UI_WINDOW_PADDING;
     window->visible_height = SDL_max(ui_row_height(ui), SDL_min(content_height, max_visible));
     window->max_scroll = SDL_max(0.0f, content_height - window->visible_height);
     float scrollbar = window->max_scroll > 0.0f ? UI_SCROLLBAR_WIDTH + UI_WINDOW_PADDING : 0.0f;
@@ -358,8 +358,7 @@ SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_widt
     centered_label(ui, close, "×");
 
     SDL_FRect content = {window->x + UI_WINDOW_PADDING, window->y + title_h + UI_WINDOW_PADDING,
-                         window->w - 2.0f * UI_WINDOW_PADDING - scrollbar,
-                         window->visible_height};
+                         window->w - 2.0f * UI_WINDOW_PADDING - scrollbar, window->visible_height};
     window->track = (SDL_FRect){window->x + window->w - UI_WINDOW_PADDING - UI_SCROLLBAR_WIDTH,
                                 content.y, UI_SCROLLBAR_WIDTH, content.h};
     handle_scroll_bar(ui, window);
@@ -469,8 +468,7 @@ float ui_dropdown_width(Ui *ui, const char *const *options, int count)
     return SDL_ceilf(widest) + 2.0f * UI_BUTTON_PADDING + dropdown_arrow_width(ui);
 }
 
-int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int count,
-                int selected)
+int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int count, int selected)
 {
     int picked = -1;
     if (ui->picked_id == id) {
@@ -567,8 +565,7 @@ bool ui_checkbox(Ui *ui, float x, float y, float width, UiCheck state, const cha
     border(ui, box, BORDER_COLOR);
     if (state != UI_UNCHECKED) {
         float inset = state == UI_CHECKED ? 3.0f : SDL_floorf(size * 0.35f);
-        SDL_FRect mark = {box.x + inset, box.y + inset, box.w - 2.0f * inset,
-                          box.h - 2.0f * inset};
+        SDL_FRect mark = {box.x + inset, box.y + inset, box.w - 2.0f * inset, box.h - 2.0f * inset};
         fill(ui, mark, CHECK_COLOR);
     }
     float line = (float)text_line_height(ui->text);
@@ -624,12 +621,14 @@ bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *h
     }
 
     float center = SDL_floorf(rect.y + rect.h * 0.5f);
-    fill(ui, (SDL_FRect){rect.x, center - UI_SLIDER_TRACK_HEIGHT * 0.5f, rect.w,
-                         UI_SLIDER_TRACK_HEIGHT},
-         TRACK_COLOR);
+    fill(
+        ui,
+        (SDL_FRect){rect.x, center - UI_SLIDER_TRACK_HEIGHT * 0.5f, rect.w, UI_SLIDER_TRACK_HEIGHT},
+        TRACK_COLOR);
     float low_x = slider_x_of(rect, steps, *low), high_x = slider_x_of(rect, steps, *high);
-    fill(ui, (SDL_FRect){low_x, center - UI_SLIDER_TRACK_HEIGHT * 0.5f, high_x - low_x,
-                         UI_SLIDER_TRACK_HEIGHT},
+    fill(ui,
+         (SDL_FRect){low_x, center - UI_SLIDER_TRACK_HEIGHT * 0.5f, high_x - low_x,
+                     UI_SLIDER_TRACK_HEIGHT},
          CHECK_COLOR);
     bool hover = ui_hovered(ui, rect) || ui->active_slider == id;
     SDL_Color handle = hover ? brighter(HANDLE_COLOR, 40) : HANDLE_COLOR;

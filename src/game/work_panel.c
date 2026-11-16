@@ -9,7 +9,7 @@
 
 /* From WORK_PRIORITY_DISABLED (dark) to the highest priority (bright green). */
 static const SDL_Color PRIORITY_COLORS[WORK_PRIORITY_LOWEST + 1] = {
-    {34, 38, 46, 255}, {52, 150, 74, 255}, {108, 140, 58, 255},
+    {34, 38, 46, 255},   {52, 150, 74, 255}, {108, 140, 58, 255},
     {142, 118, 54, 255}, {112, 84, 70, 255},
 };
 static const SDL_Color ROW_COLOR = {255, 255, 255, 14};
@@ -95,8 +95,8 @@ void work_panel_draw(App *app)
     /* Header, rows, hint, two legends; the window scrolls when they do not fit. */
     int shown = SDL_max(1, count); /* One line for "no colonists". */
     bool open = true;
-    SDL_FPoint origin = ui_window_begin(ui, APP_WINDOW_WORK, title, width,
-                                        (float)(shown + 4) * row, UI_PLACE_TOP_CENTER, &open);
+    SDL_FPoint origin = ui_window_begin(ui, APP_WINDOW_WORK, title, width, (float)(shown + 4) * row,
+                                        UI_PLACE_TOP_CENTER, &open);
     float x = origin.x, y = origin.y;
     float text_offset = SDL_floorf((row - (float)text_line_height(app->text)) * 0.5f);
 
@@ -123,11 +123,11 @@ void work_panel_draw(App *app)
         const Colonist *colonist = &game->colonists[id.index];
         SDL_FRect band = {x - 4.0f, y, grid_width + 4.0f, row};
         bool hovered = ui_hovered(ui, band);
-        ui_fill(ui, band, is_selected(app, id) ? ROW_SELECTED_COLOR
-                                               : (hovered ? ROW_HOVER_COLOR : ROW_COLOR));
+        ui_fill(ui, band,
+                is_selected(app, id) ? ROW_SELECTED_COLOR
+                                     : (hovered ? ROW_HOVER_COLOR : ROW_COLOR));
         ui_label(ui, colonist->name, x, y + text_offset);
-        if (ui_take_click(ui, (SDL_FRect){band.x, y, name_width + 4.0f, row}) ==
-            SDL_BUTTON_LEFT) {
+        if (ui_take_click(ui, (SDL_FRect){band.x, y, name_width + 4.0f, row}) == SDL_BUTTON_LEFT) {
             focus_colonist(app, id);
         }
 
@@ -158,8 +158,7 @@ void work_panel_draw(App *app)
             if (button == SDL_BUTTON_LEFT) {
                 game_set_work_priority(game, id, (WorkType)type, work_priority_raised(priority));
             } else if (button == SDL_BUTTON_RIGHT) {
-                game_set_work_priority(game, id, (WorkType)type,
-                                       work_priority_lowered(priority));
+                game_set_work_priority(game, id, (WorkType)type, work_priority_lowered(priority));
             }
             column_x += column_width[type];
         }

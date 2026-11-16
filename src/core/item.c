@@ -44,9 +44,9 @@
  * digging stick (1 kg, a stout pointed branch) digs roots up (§7); hardened
  * in the fire, it lasts half as long again too.
  */
-#define DEF(id_, key, category_, weight_, bulk_, nutrition_, hp, quality, damage)                 \
-    .id = (id_), .name_key = (key), .category = (category_), .weight = (weight_),              \
-    .bulk = (bulk_), .nutrition = (nutrition_), .max_hit_points = (hp), .has_quality = (quality), \
+#define DEF(id_, key, category_, weight_, bulk_, nutrition_, hp, quality, damage)                  \
+    .id = (id_), .name_key = (key), .category = (category_), .weight = (weight_), .bulk = (bulk_), \
+    .nutrition = (nutrition_), .max_hit_points = (hp), .has_quality = (quality),                   \
     .damageable = (damage)
 
 static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
@@ -54,8 +54,8 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_NONE] = {DEF("none", NULL, ITEM_CATEGORY_COUNT, 0.0f, 0.0f, 0.0f, 0, false, false)},
     [ITEM_WOOD] = {DEF("wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 7.0f, 20.0f, 0.0f, 60,
                        true, true)},
-    [ITEM_STONE_BLOCK] = {DEF("stone_block", N_("item.stone_block"), ITEM_CATEGORY_RESOURCES,
-                              20.0f, 20.0f, 0.0f, 150, false, false)},
+    [ITEM_STONE_BLOCK] = {DEF("stone_block", N_("item.stone_block"), ITEM_CATEGORY_RESOURCES, 20.0f,
+                              20.0f, 0.0f, 150, false, false)},
     [ITEM_BLACKBERRIES] = {DEF("blackberries", N_("item.blackberries"), ITEM_CATEGORY_FOOD, 0.3f,
                                1.0f, 0.05f, 10, true, true),
                            .rot_days = 3.0f},
@@ -75,36 +75,34 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                         true, false)},
     [ITEM_CHOPPER] = {DEF("chopper", N_("item.chopper"), ITEM_CATEGORY_TOOLS, 1.0f, 2.0f, 0.0f, 80,
                           true, true)},
-    [ITEM_FLAKE] = {DEF("flake", N_("item.flake"), ITEM_CATEGORY_TOOLS, 0.03f, 0.2f, 0.0f, 15,
-                        true, true)},
+    [ITEM_FLAKE] = {DEF("flake", N_("item.flake"), ITEM_CATEGORY_TOOLS, 0.03f, 0.2f, 0.0f, 15, true,
+                        true)},
     [ITEM_HAND_AXE] = {DEF("hand_axe", N_("item.hand_axe"), ITEM_CATEGORY_TOOLS, 0.6f, 1.5f, 0.0f,
                            120, true, true)},
-    [ITEM_THROWING_SPEAR] = {DEF("throwing_spear", N_("item.throwing_spear"),
-                                 ITEM_CATEGORY_WEAPONS, 0.8f, 10.0f, 0.0f, 50, true, true)},
+    [ITEM_THROWING_SPEAR] = {DEF("throwing_spear", N_("item.throwing_spear"), ITEM_CATEGORY_WEAPONS,
+                                 0.8f, 10.0f, 0.0f, 50, true, true)},
     [ITEM_THRUSTING_SPEAR] = {DEF("thrusting_spear", N_("item.thrusting_spear"),
                                   ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 70, true, true)},
     [ITEM_THROWING_SPEAR_HARDENED] = {DEF("throwing_spear_hardened",
-                                          N_("item.throwing_spear_hardened"),
-                                          ITEM_CATEGORY_WEAPONS, 0.8f, 10.0f, 0.0f, 75, true,
-                                          true)},
-    [ITEM_THRUSTING_SPEAR_HARDENED] = {DEF("thrusting_spear_hardened",
-                                           N_("item.thrusting_spear_hardened"),
-                                           ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 105, true,
-                                           true)},
+                                          N_("item.throwing_spear_hardened"), ITEM_CATEGORY_WEAPONS,
+                                          0.8f, 10.0f, 0.0f, 75, true, true)},
+    [ITEM_THRUSTING_SPEAR_HARDENED] = {DEF(
+        "thrusting_spear_hardened", N_("item.thrusting_spear_hardened"), ITEM_CATEGORY_WEAPONS,
+        1.5f, 12.0f, 0.0f, 105, true, true)},
     [ITEM_HAZELNUTS] = {DEF("hazelnuts", N_("item.hazelnuts"), ITEM_CATEGORY_FOOD, 0.1f, 0.4f,
                             0.075f, 100, true, true),
                         .rot_days = 90.0f},
     [ITEM_MUSHROOMS] = {DEF("mushrooms", N_("item.mushrooms"), ITEM_CATEGORY_FOOD, 0.1f, 0.5f,
                             0.01f, 5, true, true),
                         .rot_days = 2.0f},
-    [ITEM_WILD_GARLIC] = {DEF("wild_garlic", N_("item.wild_garlic"), ITEM_CATEGORY_FOOD, 0.2f,
-                              1.5f, 0.016f, 5, true, true),
+    [ITEM_WILD_GARLIC] = {DEF("wild_garlic", N_("item.wild_garlic"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f,
+                              0.016f, 5, true, true),
                           .rot_days = 2.0f},
     [ITEM_NETTLES] = {DEF("nettles", N_("item.nettles"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f, 0.016f, 5,
                           true, true),
                       .rot_days = 2.0f},
-    [ITEM_PLANTAIN] = {DEF("plantain", N_("item.plantain"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f,
-                           0.013f, 5, true, true),
+    [ITEM_PLANTAIN] = {DEF("plantain", N_("item.plantain"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f, 0.013f,
+                           5, true, true),
                        .rot_days = 2.0f},
     [ITEM_WILD_CARROTS] = {DEF("wild_carrots", N_("item.wild_carrots"), ITEM_CATEGORY_FOOD, 0.25f,
                                1.0f, 0.027f, 30, true, true),
@@ -120,8 +118,8 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_ROASTED_RHIZOMES] = {DEF("roasted_rhizomes", N_("item.roasted_rhizomes"),
                                    ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.07f, 15, true, true),
                                .rot_days = 4.0f},
-    [ITEM_ROASTED_CARROTS] = {DEF("roasted_carrots", N_("item.roasted_carrots"),
-                                  ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.035f, 15, true, true),
+    [ITEM_ROASTED_CARROTS] = {DEF("roasted_carrots", N_("item.roasted_carrots"), ITEM_CATEGORY_FOOD,
+                                  0.25f, 1.0f, 0.035f, 15, true, true),
                               .rot_days = 4.0f},
 };
 
@@ -245,8 +243,8 @@ ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points)
     }
     return (ItemStack){
         .type = (uint8_t)type,
-        .quality = (uint8_t)(def->has_quality ? clampi(quality, 0, ITEM_QUALITY_BEST)
-                                              : ITEM_QUALITY_BEST),
+        .quality =
+            (uint8_t)(def->has_quality ? clampi(quality, 0, ITEM_QUALITY_BEST) : ITEM_QUALITY_BEST),
         .count = (uint16_t)count,
         .hit_points = (uint16_t)(def->damageable ? clampi(hit_points, 1, def->max_hit_points)
                                                  : def->max_hit_points),
@@ -357,8 +355,7 @@ void items_free(Items *items)
 
 static bool in_bounds(const Items *items, int x, int y, int z)
 {
-    return x >= 0 && y >= 0 && z >= 0 && x < items->width && y < items->height &&
-           z < items->depth;
+    return x >= 0 && y >= 0 && z >= 0 && x < items->width && y < items->height && z < items->depth;
 }
 
 static size_t index_of(const Items *items, int x, int y, int z)
@@ -553,8 +550,8 @@ static bool rot(Items *items, ItemStack *stack, int hours, float rate)
     return false;
 }
 
-int items_advance(Items *items, size_t begin, size_t end, int hours,
-                  ItemConditionsFn conditions, const void *context)
+int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditionsFn conditions,
+                  const void *context)
 {
     size_t count = (size_t)items->width * (size_t)items->height * (size_t)items->depth;
     if (end > count) {

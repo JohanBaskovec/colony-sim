@@ -134,8 +134,7 @@ static void triangle(SDL_Renderer *renderer, SDL_FPoint a, SDL_FPoint b, SDL_FPo
 }
 
 /* A leaf from the stem at (x, y), towards `side` (-1 left, 1 right). */
-static void leaf(SDL_Renderer *renderer, float x, float y, float size, float side,
-                 SDL_Color color)
+static void leaf(SDL_Renderer *renderer, float x, float y, float size, float side, SDL_Color color)
 {
     SDL_FPoint base = {x, y};
     SDL_FPoint tip = {x + side * 0.26f * size, y - 0.16f * size};
@@ -255,10 +254,10 @@ static void order_controls(UiLayout *layout, const Columns *columns, Subject sub
         return;
     }
     float height = layout->button_height;
-    int picked = ui_dropdown(ui, dropdown_id(subject, 0),
-                             (SDL_FRect){left + columns->mode, layout->y, columns->mode_width,
-                                         height},
-                             columns->modes, GATHER_MODE_COUNT, (int)order->mode);
+    int picked =
+        ui_dropdown(ui, dropdown_id(subject, 0),
+                    (SDL_FRect){left + columns->mode, layout->y, columns->mode_width, height},
+                    columns->modes, GATHER_MODE_COUNT, (int)order->mode);
     if (picked >= 0) {
         *action = (Action){ACTION_SET_MODE, subject, picked};
     }
@@ -310,8 +309,7 @@ static OrderView resource_view(const ZoneRows *rows, const GatherOrder *order,
     };
 }
 
-static OrderView group_view(const ZoneRows *rows, const GatherGroupOrder *order,
-                            GatherGroup group)
+static OrderView group_view(const ZoneRows *rows, const GatherGroupOrder *order, GatherGroup group)
 {
     const long *totals = rows->app->game.items.totals;
     return (OrderView){
@@ -328,8 +326,7 @@ static OrderView group_view(const ZoneRows *rows, const GatherGroupOrder *order,
 /* A resource: check box and name (`indent` from the name column's start),
  * how many the zone holds, the full harvest option, and when on, its order;
  * warnings below. */
-static void resource_rows(UiLayout *layout, ZoneRows *rows, GatherResource resource,
-                          float indent)
+static void resource_rows(UiLayout *layout, ZoneRows *rows, GatherResource resource, float indent)
 {
     Ui *ui = layout->ui;
     const Columns *columns = &rows->columns;
@@ -349,9 +346,8 @@ static void resource_rows(UiLayout *layout, ZoneRows *rows, GatherResource resou
     if (layout->draw) {
         ui_label_dim(ui, count, layout->x + columns->available, layout->y + layout->text_offset);
     }
-    if (def->ripe_option &&
-        ripe_button(layout, layout->x + columns->ripe, columns->icon,
-                    order->ripe_only ? UI_CHECKED : UI_UNCHECKED, false)) {
+    if (def->ripe_option && ripe_button(layout, layout->x + columns->ripe, columns->icon,
+                                        order->ripe_only ? UI_CHECKED : UI_UNCHECKED, false)) {
         rows->action = (Action){ACTION_TOGGLE_RIPE, subject, 0};
     }
     if (order->enabled) {
@@ -406,9 +402,8 @@ static void group_rows(UiLayout *layout, ZoneRows *rows, GatherGroup group)
         ui_label_dim(ui, count, layout->x + columns->available, layout->y + layout->text_offset);
     }
     GatherResourceMask options = gather_ripe_options() & def->members;
-    if (options != 0 &&
-        ripe_button(layout, layout->x + columns->ripe, columns->icon,
-                    check_of(gather_zone_ripe_mask(zone), options), false)) {
+    if (options != 0 && ripe_button(layout, layout->x + columns->ripe, columns->icon,
+                                    check_of(gather_zone_ripe_mask(zone), options), false)) {
         rows->action = (Action){ACTION_TOGGLE_RIPE, subject, 0};
     }
     if (enabled != UI_UNCHECKED) {
@@ -435,8 +430,8 @@ static void priority_row(UiLayout *layout, const GatherZone *zone, Action *actio
     const char *minus = "−", *plus = "+";
     float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
     float label_width = ui_text_width(ui, priority);
-    ui_layout_measure(layout, label_width + GAP + 2.0f * small + 2.0f + GAP +
-                                  ui_text_width(ui, hint));
+    ui_layout_measure(layout,
+                      label_width + GAP + 2.0f * small + 2.0f + GAP + ui_text_width(ui, hint));
     float x = layout->x + label_width + GAP;
     if (ui_layout_button_sized(layout, x, small, minus)) {
         *action = (Action){ACTION_ADD_PRIORITY, WHOLE_ZONE, -1};
@@ -453,8 +448,7 @@ static void priority_row(UiLayout *layout, const GatherZone *zone, Action *actio
 
 /* Where the columns start: after the widest name (groups and grass at the
  * left, the resources of groups indented) and the widest count. */
-static void measure_columns(Ui *ui, const UiLayout *layout, const long *available,
-                            Columns *columns)
+static void measure_columns(Ui *ui, const UiLayout *layout, const long *available, Columns *columns)
 {
     columns->icon = layout->button_height;
     float names = 0.0f;
@@ -476,12 +470,12 @@ static void measure_columns(Ui *ui, const UiLayout *layout, const long *availabl
     float counts = 0.0f;
     char count[TEXT_SIZE];
     for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
-        counts = SDL_max(counts, ui_text_width(ui, available_text(count, sizeof(count),
-                                                                  available[r])));
+        counts =
+            SDL_max(counts, ui_text_width(ui, available_text(count, sizeof(count), available[r])));
     }
     for (int g = 0; g < GATHER_GROUP_COUNT; g++) {
-        counts = SDL_max(counts, ui_text_width(ui, available_text(count, sizeof(count),
-                                                                  group_available[g])));
+        counts = SDL_max(
+            counts, ui_text_width(ui, available_text(count, sizeof(count), group_available[g])));
     }
     for (int m = 0; m < GATHER_MODE_COUNT; m++) {
         columns->modes[m] = tr(MODE_KEYS[m]);

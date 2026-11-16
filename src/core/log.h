@@ -9,7 +9,7 @@
 #define COLONY_CORE_LOG_H
 
 #if defined(__GNUC__) || defined(__clang__)
-#define COLONY_PRINTF_FORMAT(format_index, args_index) \
+#define COLONY_PRINTF_FORMAT(format_index, args_index)                                             \
     __attribute__((format(printf, format_index, args_index)))
 #else
 #define COLONY_PRINTF_FORMAT(format_index, args_index)

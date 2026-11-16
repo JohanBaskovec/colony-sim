@@ -102,8 +102,8 @@ bool pathfinder_init(Pathfinder *finder, int width, int height, int depth)
     finder->came_from = malloc(count * sizeof(*finder->came_from));
     finder->seen_stamp = calloc(count, sizeof(*finder->seen_stamp));
     finder->closed_stamp = calloc(count, sizeof(*finder->closed_stamp));
-    if (finder->cost_so_far == NULL || finder->came_from == NULL ||
-        finder->seen_stamp == NULL || finder->closed_stamp == NULL) {
+    if (finder->cost_so_far == NULL || finder->came_from == NULL || finder->seen_stamp == NULL ||
+        finder->closed_stamp == NULL) {
         pathfinder_free(finder);
         return false;
     }
@@ -178,12 +178,12 @@ static bool build_path(const Pathfinder *finder, uint32_t start, uint32_t end, P
 }
 
 typedef struct SearchGoal {
-    const TilePos *goal; /* A* when set... */
+    const TilePos *goal;     /* A* when set... */
     TilePredicate predicate; /* ...Dijkstra towards a predicate otherwise. */
     void *userdata;
 } SearchGoal;
 
-static const int DIRECTIONS[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1},
+static const int DIRECTIONS[8][2] = {{1, 0}, {-1, 0}, {0, 1},  {0, -1},
                                      {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
 /* Records a step from `current` to `next` costing `cost` in all, if it is
@@ -238,10 +238,10 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
         int z = (int)(current / level);
         int x = (int)(current % width);
         int y = (int)(current % level / width);
-        bool reached = target->goal != NULL
-                           ? (x == target->goal->x && y == target->goal->y && z == target->goal->z)
-                           : (target->predicate != NULL &&
-                              target->predicate(map, x, y, z, target->userdata));
+        bool reached =
+            target->goal != NULL
+                ? (x == target->goal->x && y == target->goal->y && z == target->goal->z)
+                : (target->predicate != NULL && target->predicate(map, x, y, z, target->userdata));
         if (reached) {
             finder->last_cost = finder->cost_so_far[current];
             return current;
@@ -382,8 +382,7 @@ bool pathfinder_find_nearest(Pathfinder *finder, const Map *map, TilePos start,
                       out);
 }
 
-size_t pathfinder_reachable_count(Pathfinder *finder, const Map *map, TilePos start,
-                                  float max_cost)
+size_t pathfinder_reachable_count(Pathfinder *finder, const Map *map, TilePos start, float max_cost)
 {
     SearchGoal target = {NULL, NULL, NULL}; /* Never reached: floods the whole area. */
     search(finder, map, start, &target, max_cost);

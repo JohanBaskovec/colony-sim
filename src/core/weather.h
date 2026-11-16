@@ -52,8 +52,13 @@ typedef enum Precipitation {
 #define WEATHER_PERSISTENCE 0.4f
 /* Odds of each sky (clear, cloudy, fog, rain, storm) per season (spring,
  * summer, autumn, winter), in percent (tuning). */
-#define WEATHER_SEASON_ODDS                                                                    \
-    {{35, 30, 5, 25, 5}, {55, 20, 0, 13, 12}, {25, 30, 15, 25, 5}, {25, 35, 10, 25, 5}}
+#define WEATHER_SEASON_ODDS                                                                        \
+    {                                                                                              \
+        {35, 30, 5, 25, 5}, {55, 20, 0, 13, 12}, {25, 30, 15, 25, 5},                              \
+        {                                                                                          \
+            25, 35, 10, 25, 5                                                                      \
+        }                                                                                          \
+    }
 /* Fog forms only in periods starting before this hour. */
 #define WEATHER_FOG_BEFORE_HOUR 12
 /* Rain and storms fall as snow at or below this outdoor temperature. */

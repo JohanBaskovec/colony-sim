@@ -45,8 +45,7 @@ static void index_insert(Reservations *reservations, int i)
     reservations->index[slot] = (uint16_t)(i + 1);
 }
 
-bool reservations_add(Reservations *reservations, ReservationKind kind, TilePos tile,
-                      uint8_t owner)
+bool reservations_add(Reservations *reservations, ReservationKind kind, TilePos tile, uint8_t owner)
 {
     if (owner == RESERVATION_NO_OWNER || (unsigned)kind >= RESERVATION_KIND_COUNT ||
         reservations->count >= RESERVATION_MAX || find(reservations, kind, tile) >= 0) {

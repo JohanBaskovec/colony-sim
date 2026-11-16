@@ -9,8 +9,7 @@
 
 typedef struct TextRenderer TextRenderer;
 
-TextRenderer *text_renderer_create(SDL_Renderer *renderer, const char *font_path,
-                                   float point_size);
+TextRenderer *text_renderer_create(SDL_Renderer *renderer, const char *font_path, float point_size);
 void text_renderer_destroy(TextRenderer *text);
 
 /* Draws a single line of UTF-8 text with its top-left corner at (x, y). */

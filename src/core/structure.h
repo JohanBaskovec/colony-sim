@@ -35,10 +35,10 @@
 typedef enum StructureType {
     STRUCTURE_NONE = 0,
     STRUCTURE_GRASS_BED,
-    STRUCTURE_WALL, /* Grass and branch wall. */
-    STRUCTURE_DOOR, /* Branch screen: pushed aside to pass. */
-    STRUCTURE_ROOF, /* Grass roof on branch rafters, over a tile. */
-    STRUCTURE_PROP, /* Forked post of branches: holds up a ceiling or a roof. */
+    STRUCTURE_WALL,   /* Grass and branch wall. */
+    STRUCTURE_DOOR,   /* Branch screen: pushed aside to pass. */
+    STRUCTURE_ROOF,   /* Grass roof on branch rafters, over a tile. */
+    STRUCTURE_PROP,   /* Forked post of branches: holds up a ceiling or a roof. */
     STRUCTURE_LADDER, /* Branch ladder: up to the level above (see map_can_climb()). */
     STRUCTURE_TYPE_COUNT
 } StructureType;
@@ -75,7 +75,7 @@ typedef struct StructureDef {
     const char *name_key;
     const char *description_key; /* One short sentence for the build menu. */
     StructureMaterial materials[STRUCTURE_MATERIAL_SLOTS];
-    float build_work; /* Work ticks at speed ×1. */
+    float build_work;        /* Work ticks at speed ×1. */
     KnowledgeType knowledge; /* Needed to build it. */
     float min_level;
     /* Movement cost multiplier of a tile holding it; 0: blocks movement. */
@@ -84,7 +84,7 @@ typedef struct StructureDef {
     float rest_factor;
     /* Placed along the edges of a dragged rectangle (walls), not one by one. */
     bool drawn_as_outline;
-    int length; /* Tiles, from the head along its direction (a bed: 2). */
+    int length;         /* Tiles, from the head along its direction (a bed: 2). */
     int max_hit_points; /* At standard grade (see structure_max_hit_points()). */
     int wear_per_day;   /* Hit points lost each day by itself (bedding packs down). */
     /* Refreshing (a new layer of bedding): material and work; no refresh

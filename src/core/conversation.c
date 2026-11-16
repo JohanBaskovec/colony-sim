@@ -50,8 +50,7 @@ KnowledgeType conversation_pick_topic(const Colonist *speaker, uint64_t tick, Rn
 }
 
 /* `listener` learns what `speaker` talks about for the length of a chat. */
-static void listen(Colonist *listener, const Colonist *speaker, KnowledgeType topic,
-                   uint64_t tick)
+static void listen(Colonist *listener, const Colonist *speaker, KnowledgeType topic, uint64_t tick)
 {
     if (topic == KNOWLEDGE_NONE) {
         return;
