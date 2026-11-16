@@ -101,7 +101,8 @@ simulation:
 | `station_panel` | Inspector of the selected workstation (forbid, bills, warnings) |
 | `tile_panel`   | Inspector of the selected tile: what lies there (structure, roof, items, plant) with a Forbid/Allow button each, and its construction site |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
-| `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (spawn items, move settlers) |
+| `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
+| `items_panel`  | Items menu (F5): every item with a 1× and a Max button, which arm the debug tool to drop it on the next clicked tile |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
 | `localization` | Discovers `.lang` files, selects the language, loads catalogs           |
 

@@ -26,7 +26,8 @@ typedef enum AppTool {
     APP_TOOL_BUILD, /* Place a blueprint of `build_type` on the clicked tile. */
     APP_TOOL_GATHER,
     APP_TOOL_STRUCTURE, /* Plan structures of `structure_type` (click, or drag a rectangle). */
-    /* Debug (game/debug_panel.h): a stack of `debug_item` on the clicked tile,
+    /* Debug (game/debug_panel.h, game/items_panel.h): `debug_item` (one, or a
+     * full stack) on the clicked tile,
      * or with `debug_teleport` (tool type APP_DEBUG_TELEPORT), the selected
      * colonists moved there. */
     APP_TOOL_DEBUG,
@@ -59,6 +60,7 @@ typedef enum AppTool {
 #define APP_KEY_HELP SDL_SCANCODE_F1
 #define APP_KEY_DEBUG SDL_SCANCODE_F3        /* Debug information. */
 #define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4   /* Cheats (game/debug_panel.h). */
+#define APP_KEY_ITEMS_MENU SDL_SCANCODE_F5   /* Spawning items (game/items_panel.h). */
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H   /* Temperature view on or off. */
 #define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
@@ -86,6 +88,7 @@ typedef enum AppWindow {
     APP_WINDOW_WORK,  /* Work priorities grid. */
     APP_WINDOW_HELP,  /* Controls. */
     APP_WINDOW_DEBUG, /* Debug menu (cheats). */
+    APP_WINDOW_ITEMS, /* Items menu (debug). */
     APP_WINDOW_COUNT
 } AppWindow;
 
@@ -154,6 +157,7 @@ typedef struct App {
     bool show_work_panel;
     bool show_help;
     bool show_debug_menu;  /* Debug menu (game/debug_panel.h). */
+    bool show_items_menu;  /* Items menu (game/items_panel.h). */
     bool show_temperature; /* The temperature of each tile over the map. */
     float level_wheel;     /* Wheel steps with Shift held, towards the next level. */
     /* Build menu (game/menu_bar.h): open, and which category is shown. */
@@ -169,6 +173,7 @@ typedef struct App {
     StructureType structure_type;  /* For APP_TOOL_STRUCTURE. */
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
+    bool debug_item_max;           /* ... a full stack of it, else one item. */
     bool debug_teleport;           /* For APP_TOOL_DEBUG: moves the selection instead. */
     bool forbid_allows;            /* For APP_TOOL_FORBID: allows instead. */
 

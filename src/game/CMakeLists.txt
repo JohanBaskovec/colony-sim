@@ -1,6 +1,7 @@
 add_executable(colony_sim
     app.c
     debug_panel.c
+    items_panel.c
     gather_zone_panel.c
     hud.c
     localization.c

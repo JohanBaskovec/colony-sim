@@ -19,10 +19,7 @@ typedef struct DebugRows {
     bool skip_hour;
     bool skip_day;
     bool next_season;
-    const char *item; /* Name of what the debug tool spawns. */
-    bool next_item;
-    bool spawn_active, teleport_active; /* Whether the debug tool is on in that mode. */
-    bool toggle_spawn;
+    bool teleport_active; /* Whether the debug tool is on in teleport mode. */
     bool toggle_teleport;
 } DebugRows;
 
@@ -67,16 +64,7 @@ static void debug_rows(UiLayout *layout, void *userdata)
     rows->skip_hour |= button_row(layout, tr("debug.skip_hour"));
     rows->skip_day |= button_row(layout, tr("debug.skip_day"));
     rows->next_season |= button_row(layout, tr("debug.next_season"));
-    TR_FORMAT(label, sizeof(label), tr("debug.item"), rows->item);
-    rows->next_item |= button_row(layout, label);
-    rows->toggle_spawn |= checkbox_row(layout, tr("debug.spawn_tool"), rows->spawn_active);
     rows->toggle_teleport |= checkbox_row(layout, tr("debug.teleport_tool"), rows->teleport_active);
-}
-
-/* The next item type the debug tool spawns, after `type` (wrapping round). */
-static ItemType next_item_type(ItemType type)
-{
-    return (ItemType)(type + 1 < ITEM_TYPE_COUNT ? type + 1 : ITEM_NONE + 1);
 }
 
 void debug_panel_draw(App *app)
@@ -87,8 +75,6 @@ void debug_panel_draw(App *app)
     Game *game = &app->game;
     DebugRows rows = {.debug = &game->debug,
                       .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
-                      .item = tr(item_def(app->debug_item)->name_key),
-                      .spawn_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_SPAWN),
                       .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT)};
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER, debug_rows,
@@ -125,12 +111,6 @@ void debug_panel_draw(App *app)
     }
     if (rows.next_season) {
         game_debug_next_season(game);
-    }
-    if (rows.next_item) {
-        app->debug_item = next_item_type(app->debug_item);
-    }
-    if (rows.toggle_spawn) {
-        app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_SPAWN);
     }
     if (rows.toggle_teleport) {
         app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT);

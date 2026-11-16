@@ -1,6 +1,7 @@
 /*
  * Debug menu: cheats for testing (GameDebug in core/game.h), each a check
- * box. Opened and closed with APP_KEY_DEBUG_MENU.
+ * box. Opened and closed with APP_KEY_DEBUG_MENU. Spawning items has its own
+ * menu (game/items_panel.h).
  */
 #ifndef COLONY_GAME_DEBUG_PANEL_H
 #define COLONY_GAME_DEBUG_PANEL_H

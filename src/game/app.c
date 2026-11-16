@@ -375,7 +375,6 @@ bool app_init(App *app, const CliOptions *options)
 {
     SDL_zerop(app);
     app->structure_direction = DIRECTION_SOUTH; /* Beds' heads at the top. */
-    app->debug_item = ITEM_BRANCHES;            /* What the debug tool spawns first. */
     log_set_sink(sdl_log_sink, NULL);
     SDL_SetAppMetadata("Colony Sim", COLONY_VERSION, "io.github.colony-sim");
 
@@ -496,6 +495,7 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_WORK: app->show_work_panel = false; break;
     case APP_WINDOW_HELP: app->show_help = false; break;
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
+    case APP_WINDOW_ITEMS: app->show_items_menu = false; break;
     default: break;
     }
 }
@@ -590,6 +590,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_BACK: step_back(app); return;
     case APP_KEY_HELP: app->show_help = !app->show_help; return;
     case APP_KEY_DEBUG_MENU: app->show_debug_menu = !app->show_debug_menu; return;
+    case APP_KEY_ITEMS_MENU: app->show_items_menu = !app->show_items_menu; return;
     case APP_KEY_TEMPERATURE: app->show_temperature = !app->show_temperature; return;
     case APP_KEY_LEVEL_UP: set_level(app, app->camera.level + 1); return;
     case APP_KEY_LEVEL_DOWN: set_level(app, app->camera.level - 1); return;
@@ -752,8 +753,8 @@ static bool zone_tool_removes(const App *app)
 /* Stockpile tool release: adds the rectangle to the selected stockpile and
  * those it overlaps (merged into one), or creates a new one, which becomes
  * selected; or removes zone tiles. */
-/* The debug tool: a stack of the chosen item on the tile, or the selected
- * colonists moved there. */
+/* The debug tool: the chosen item (one, or a full stack) on the tile, or the
+ * selected colonists moved there. */
 static void apply_debug_tool(App *app, float screen_x, float screen_y)
 {
     int x, y;
@@ -761,7 +762,7 @@ static void apply_debug_tool(App *app, float screen_x, float screen_y)
     const int z = app->camera.level;
     if (!app->debug_teleport) {
         game_debug_spawn_items(&app->game, x, y, z, app->debug_item,
-                               item_stack_limit(app->debug_item));
+                               app->debug_item_max ? item_stack_limit(app->debug_item) : 1);
         return;
     }
     for (int i = 0; i < app->selected_count; i++) {

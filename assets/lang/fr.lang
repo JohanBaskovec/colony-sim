@@ -91,8 +91,9 @@ debug.learn_all = Tout le monde sait tout (niveau 75 dans chaque savoir)
 debug.skip_hour = Avancer d’une heure (simulée)
 debug.skip_day = Avancer d’un jour (simulé, le jeu attend un instant)
 debug.next_season = Saison suivante (les jours entre-temps ne sont pas simulés)
-debug.item = Objets à faire apparaître : {0} (suivant)
-debug.spawn_tool = Faire apparaître des objets (clic sur la carte : une pile)
+debug.items.title = Faire apparaître des objets
+debug.items.one = 1×
+debug.items.max = Max
 debug.teleport_tool = Déplacer les colons choisis (clic sur la carte)
 
 # Objets
@@ -185,13 +186,13 @@ hud.help.rotate = {0} : tourner le lit à placer (tête et pied)
 hud.help.temperature = {0} : vue thermique (température ressentie sur chaque case, chaleur des feux comprise : bleu pour le froid, rouge pour le chaud)
 hud.help.roofs = Toits : construits au niveau au-dessus des murs ({0}), depuis le dessous ; démontés là aussi ({1})
 hud.help.levels = {0}/{1} ou Maj+molette : niveau du dessus / du dessous (les niveaux inférieurs se voient, flous, par les vides)
-hud.help.debug = {0} : menu de débogage (triches pour tester)
+hud.help.debug = {0} : menu de débogage (triches pour tester) · {1} : faire apparaître des objets
 hud.help.manage = {0} : zones de stockage · {1} : postes de travail · clic sur une zone ou un poste : ses réglages · {2} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 hud.tool.name = Outil : {0}
 hud.tool.forbid_help = Glissez sur ce que les colons doivent laisser tranquille
 hud.tool.allow_help = Glissez sur ce dont les colons peuvent de nouveau se servir
-hud.tool.spawn = Débogage : faire apparaître {0} · Clic : une pile sur la case · Échap : retour
+hud.tool.spawn = Débogage : faire apparaître {1} × {0} · Clic : sur la case · Échap : retour
 hud.tool.teleport.one = Débogage : déplacer {0} colon · Clic : la case où aller · Échap : retour
 hud.tool.teleport.other = Débogage : déplacer {0} colons · Clic : la case où aller · Échap : retour
 hud.tool.unavailable = Personne dans la colonie ne sait encore faire cela

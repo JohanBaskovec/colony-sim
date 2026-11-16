@@ -198,5 +198,5 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 - [x] Simulation benchmark (`bench/bench_simulation`: many colonists, long runs, state hash)
 - [ ] Windows and macOS CI builds
 - [ ] Choose a license
-- [x] Debug menu (F4): instant free construction, free crafts, work without tools, instant taking apart (`GameDebug`)
+- [x] Debug menu (F4): instant free construction, free crafts, work without tools, instant taking apart (`GameDebug`); items menu (F5): every item of the game, one or a full stack, dropped on the clicked tile
 - [x] Test tools: `--debug` (cheats from the start), `--scenario` (the benchmark's situations in the game, `core/scenario.h`), `--colonists`; everyone knows everything, skip an hour or a day, next season, spawn items, move settlers (debug tool)
