@@ -108,6 +108,11 @@ ConstructionSite *construction_get_mutable(Constructions *constructions, int ind
 bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y,
                             int z);
 
+/* construction_can_place() with a site on the tile not counting: what a new
+ * plan may replace. */
+bool construction_can_replace(const Constructions *constructions, const Map *map, int x, int y,
+                              int z);
+
 /* Whether a roof on a tile would be held up: by a wall or rock in reach on
  * the level below (map_roof_supported()), or by the site of a wall there, so
  * that a whole hut can be planned at once. */
@@ -125,6 +130,20 @@ bool construction_can_place_roof(const Constructions *constructions, const Map *
  * (x, y) would take (construction_can_place_roof() for a roof). */
 bool construction_can_place_structure(const Constructions *constructions, const Map *map,
                                       StructureType type, int x, int y, int z, Direction direction);
+
+/* construction_can_place_structure() with the sites on the tiles it would
+ * take not counting: what a new plan may replace (the caller removes them). */
+bool construction_can_replace_structure(const Constructions *constructions, const Map *map,
+                                        StructureType type, int x, int y, int z,
+                                        Direction direction);
+
+/* Whether this very structure is already planned there (the same type, head
+ * and direction): replacing it would only lose its progress. Likewise for a
+ * workstation on a tile. */
+bool construction_is_planned(const Constructions *constructions, StructureType type, int x, int y,
+                             int z, Direction direction);
+bool construction_workstation_is_planned(const Constructions *constructions, WorkstationType type,
+                                         int x, int y, int z);
 
 /* Places a site, its head at (x, y). Returns its index, or CONSTRUCTION_NONE
  * when the type is invalid, a tile does not qualify or the list is full. */

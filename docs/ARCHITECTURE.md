@@ -806,7 +806,10 @@ or another plant but a tree on the tile is cleared first (see *Clearing plants* 
 is done the site is gone, the structure appears; a blocking one pushes the
 items of its tile next door and takes the tile out of stockpiles and
 gathering zones, and a colonist left standing on it steps aside at its next
-tick. The cancel tool removes sites (their materials are dropped); the
+tick. The cancel tool removes sites (their materials are dropped), and so
+does a new plan on a site in progress, which replaces it
+(`construction_can_replace_structure()`, `game_place_structure()`; the very
+same plan again changes nothing, `construction_is_planned()`); the
 *take apart* order (`DESIGNATION_DECONSTRUCT`, construction work) removes a
 built structure and gives back half of its materials.
 

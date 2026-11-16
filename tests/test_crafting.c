@@ -229,14 +229,16 @@ static void test_placement_rules(void)
     REQUIRE(init_flat_game(&game));
     CHECK(game_can_place_workstation(&game, 5, 5, 0));
     CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 5, 5, 0));
-    CHECK(!game_can_place_workstation(&game, 5, 5, 0)); /* One station per tile. */
+    /* Its site may be replaced by another plan, but not by the same one. */
+    CHECK(game_can_place_workstation(&game, 5, 5, 0));
     CHECK(!game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 5, 5, 0));
+    CHECK_EQ_INT(game.constructions.workstation_count, 1);
     CHECK(!game_place_workstation(&game, WORKSTATION_TYPE_COUNT, 7, 5, 0));
     CHECK(!game_can_place_workstation(&game, -1, 5, 0));
-    /* Nor on a structure's site. */
+    /* A structure's site may be replaced too. */
     REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 8, 5, 0, DIRECTION_SOUTH) !=
             CONSTRUCTION_NONE);
-    CHECK(!game_can_place_workstation(&game, 8, 5, 0));
+    CHECK(game_can_place_workstation(&game, 8, 5, 0));
     int built = built_station(&game, WORKSTATION_CRAFTING_SPOT, 6, 5);
     /* Cancelling orders removes blueprints (the station's and the wall's), not
      * built stations. */

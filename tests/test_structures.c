@@ -98,10 +98,68 @@ static void test_placing(void)
     CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 25, 25, 0));
     CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 25, 25, 0, DIRECTION_SOUTH));
     CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 3, 3, 0, DIRECTION_SOUTH));
-    CHECK(!game_can_place_workstation(&game, 3, 3, 0));
+    CHECK(game_can_place_workstation(&game, 3, 3, 0)); /* A site is replaced. */
     map_set_structure(&game.map, 30, 30, 0, STRUCTURE_GRASS_BED);
     CHECK(!game_can_place_workstation(&game, 30, 30, 0));
     CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 30, 30, 0, DIRECTION_SOUTH));
+    game_shutdown(&game);
+}
+
+/* A new plan on a site in progress cancels it and takes its place. */
+static void test_a_new_plan_replaces_the_one_in_progress(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int wall = game_place_structure(&game, STRUCTURE_WALL, 5, 5, 0, DIRECTION_SOUTH);
+    REQUIRE(wall != CONSTRUCTION_NONE);
+    construction_deliver(&game.constructions, wall, item_stack_pristine(ITEM_BRANCHES, 4));
+
+    /* The same plan again changes nothing: the materials stay delivered. */
+    CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 5, 5, 0, DIRECTION_SOUTH));
+    CHECK_EQ_INT(game_place_structure(&game, STRUCTURE_WALL, 5, 5, 0, DIRECTION_SOUTH),
+                 CONSTRUCTION_NONE);
+    CHECK_EQ_INT(construction_at(&game.constructions, 5, 5, 0), wall);
+    CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 0);
+
+    /* A bed over the wall (and the free tile beside it): the wall is given
+     * up and its materials dropped. */
+    CHECK(game_can_place_structure(&game, STRUCTURE_GRASS_BED, 5, 5, 0, DIRECTION_SOUTH));
+    int bed = game_place_structure(&game, STRUCTURE_GRASS_BED, 5, 5, 0, DIRECTION_SOUTH);
+    REQUIRE(bed != CONSTRUCTION_NONE);
+    CHECK_EQ_INT(game.constructions.used_count, 1);
+    CHECK_EQ_INT(construction_get(&game.constructions, bed)->type, STRUCTURE_GRASS_BED);
+    CHECK_EQ_INT(construction_at(&game.constructions, 5, 6, 0), bed);
+    CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 4);
+
+    /* The bed turned the other way: its old second tile is free again. */
+    int turned = game_place_structure(&game, STRUCTURE_GRASS_BED, 5, 5, 0, DIRECTION_EAST);
+    REQUIRE(turned != CONSTRUCTION_NONE);
+    CHECK_EQ_INT(game.constructions.used_count, 1);
+    CHECK_EQ_INT(construction_at(&game.constructions, 5, 6, 0), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(construction_at(&game.constructions, 6, 5, 0), turned);
+
+    /* A workstation over a structure's site, and the other way round. */
+    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 6, 5, 0));
+    CHECK_EQ_INT(game.constructions.used_count, 1);
+    CHECK_EQ_INT(construction_at(&game.constructions, 5, 5, 0), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(game.constructions.workstation_count, 1);
+    CHECK(!game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 6, 5, 0));
+    CHECK_EQ_INT(game.constructions.workstation_count, 1);
+    int replacing = game_place_structure(&game, STRUCTURE_WALL, 6, 5, 0, DIRECTION_SOUTH);
+    REQUIRE(replacing != CONSTRUCTION_NONE);
+    CHECK_EQ_INT(game.constructions.used_count, 1);
+    CHECK_EQ_INT(game.constructions.workstation_count, 0);
+
+    /* What is built is not replaced. */
+    map_set_structure(&game.map, 12, 12, 0, STRUCTURE_WALL);
+    CHECK(!game_can_place_structure(&game, STRUCTURE_GRASS_BED, 12, 12, 0, DIRECTION_SOUTH));
+
+    /* Dragging a rectangle of walls over walls in progress keeps them. */
+    int before = game.constructions.used_count;
+    int placed = game_place_structure_rect(&game, STRUCTURE_WALL, DIRECTION_SOUTH, 5, 5, 8, 8, 0);
+    CHECK(placed > 0);
+    CHECK_EQ_INT(construction_at(&game.constructions, 6, 5, 0), replacing);
+    CHECK_EQ_INT(game.constructions.used_count, before + placed);
     game_shutdown(&game);
 }
 
@@ -657,6 +715,7 @@ static void test_taking_a_roof_apart(void)
 int main(void)
 {
     RUN_TEST(test_placing);
+    RUN_TEST(test_a_new_plan_replaces_the_one_in_progress);
     RUN_TEST(test_cancelling_gives_materials_back);
     RUN_TEST(test_builder_brings_materials_and_builds_a_wall);
     RUN_TEST(test_haulers_bring_materials);

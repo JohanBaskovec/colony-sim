@@ -1708,15 +1708,18 @@ bool game_can_place_workstation(const Game *game, int x, int y, int z)
     return game->workstations.used_count + game->constructions.workstation_count <
                WORKSTATION_MAX &&
            map_structure(&game->map, x, y, z) == STRUCTURE_NONE &&
-           construction_can_place(&game->constructions, &game->map, x, y, z) &&
+           construction_can_replace(&game->constructions, &game->map, x, y, z) &&
            workstation_can_place(&game->workstations, &game->map, x, y, z);
 }
 
 bool game_place_workstation(Game *game, WorkstationType type, int x, int y, int z)
 {
-    if ((unsigned)type >= WORKSTATION_TYPE_COUNT || !game_can_place_workstation(game, x, y, z)) {
+    if ((unsigned)type >= WORKSTATION_TYPE_COUNT || !game_can_place_workstation(game, x, y, z) ||
+        construction_workstation_is_planned(&game->constructions, type, x, y, z)) {
         return false;
     }
+    /* What was planned there is given up, its materials dropped. */
+    game_remove_construction(game, construction_at(&game->constructions, x, y, z));
     /* Ready at once when there is nothing to bring, to build or to clear. */
     bool ready = !workstation_needs_construction(type) &&
                  game->map.plants[map_index(&game->map, x, y, z)].type == PLANT_NONE;
@@ -1802,14 +1805,21 @@ bool game_can_place_structure(const Game *game, StructureType type, int x, int y
             return false;
         }
     }
-    return construction_can_place_structure(&game->constructions, &game->map, type, x, y, z,
-                                            direction);
+    return !construction_is_planned(&game->constructions, type, x, y, z, direction) &&
+           construction_can_replace_structure(&game->constructions, &game->map, type, x, y, z,
+                                              direction);
 }
 
 int game_place_structure(Game *game, StructureType type, int x, int y, int z, Direction direction)
 {
     if (!game_can_place_structure(game, type, x, y, z, direction)) {
         return CONSTRUCTION_NONE;
+    }
+    /* What was planned on its tiles is given up, its materials dropped. */
+    for (int part = 0; part < structure_length(type); part++) {
+        game_remove_construction(game, construction_at(&game->constructions,
+                                                       x + part * direction_dx(direction),
+                                                       y + part * direction_dy(direction), z));
     }
     return constructions_place(&game->constructions, &game->map, type, x, y, z, direction);
 }

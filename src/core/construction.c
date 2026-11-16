@@ -83,7 +83,10 @@ ConstructionSite *construction_get_mutable(Constructions *constructions, int ind
     return site_get(constructions, index);
 }
 
-bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y, int z)
+/* construction_can_place() with, when `replacing`, a site on the tile not
+ * counting. */
+static bool can_place_tile(const Constructions *constructions, const Map *map, int x, int y, int z,
+                           bool replacing)
 {
     if (!in_bounds(constructions, x, y, z) || !map_is_passable(map, x, y, z)) {
         return false;
@@ -91,7 +94,18 @@ bool construction_can_place(const Constructions *constructions, const Map *map, 
     size_t index = map_index(map, x, y, z);
     return map_is_buildable(map, x, y, z) && map->structure[index] == STRUCTURE_NONE &&
            !map_plant_blocks_building(map, x, y, z) &&
-           construction_at(constructions, x, y, z) == CONSTRUCTION_NONE;
+           (replacing || construction_at(constructions, x, y, z) == CONSTRUCTION_NONE);
+}
+
+bool construction_can_place(const Constructions *constructions, const Map *map, int x, int y, int z)
+{
+    return can_place_tile(constructions, map, x, y, z, false);
+}
+
+bool construction_can_replace(const Constructions *constructions, const Map *map, int x, int y,
+                              int z)
+{
+    return can_place_tile(constructions, map, x, y, z, true);
 }
 
 bool construction_roof_held(const Constructions *constructions, const Map *map, int x, int y, int z)
@@ -112,8 +126,8 @@ bool construction_roof_held(const Constructions *constructions, const Map *map, 
     return false;
 }
 
-bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x, int y,
-                                 int z)
+static bool can_place_roof(const Constructions *constructions, const Map *map, int x, int y, int z,
+                           bool replacing)
 {
     if (!in_bounds(constructions, x, y, z) || !map_in_bounds(map, x, y, z - 1)) {
         return false;
@@ -123,30 +137,68 @@ bool construction_can_place_roof(const Constructions *constructions, const Map *
            map_has_floor(map, x, y, z - 1) && map->rock[below] == ROCK_NONE &&
            map_roof(map, x, y, z - 1) == STRUCTURE_NONE &&
            map_climb_cost(map, x, y, z - 1) == 0.0f && /* Nor the way up of a slope or ladder. */
-           construction_at(constructions, x, y, z) == CONSTRUCTION_NONE &&
+           (replacing || construction_at(constructions, x, y, z) == CONSTRUCTION_NONE) &&
            construction_roof_held(constructions, map, x, y, z);
 }
 
-bool construction_can_place_structure(const Constructions *constructions, const Map *map,
-                                      StructureType type, int x, int y, int z, Direction direction)
+bool construction_can_place_roof(const Constructions *constructions, const Map *map, int x, int y,
+                                 int z)
+{
+    return can_place_roof(constructions, map, x, y, z, false);
+}
+
+static bool can_place_structure(const Constructions *constructions, const Map *map,
+                                StructureType type, int x, int y, int z, Direction direction,
+                                bool replacing)
 {
     int length = structure_length(type);
     if (length <= 0 || (unsigned)direction >= DIRECTION_COUNT) {
         return false;
     }
     if (structure_is_roof(type)) {
-        return construction_can_place_roof(constructions, map, x, y, z);
+        return can_place_roof(constructions, map, x, y, z, replacing);
     }
     if (structure_is_ladder(type) && !map_ladder_fits(map, x, y, z)) {
         return false; /* It would lead nowhere. */
     }
     for (int part = 0; part < length; part++) {
-        if (!construction_can_place(constructions, map, x + part * direction_dx(direction),
-                                    y + part * direction_dy(direction), z)) {
+        if (!can_place_tile(constructions, map, x + part * direction_dx(direction),
+                            y + part * direction_dy(direction), z, replacing)) {
             return false;
         }
     }
     return true;
+}
+
+bool construction_can_place_structure(const Constructions *constructions, const Map *map,
+                                      StructureType type, int x, int y, int z, Direction direction)
+{
+    return can_place_structure(constructions, map, type, x, y, z, direction, false);
+}
+
+bool construction_can_replace_structure(const Constructions *constructions, const Map *map,
+                                        StructureType type, int x, int y, int z,
+                                        Direction direction)
+{
+    return can_place_structure(constructions, map, type, x, y, z, direction, true);
+}
+
+bool construction_is_planned(const Constructions *constructions, StructureType type, int x, int y,
+                             int z, Direction direction)
+{
+    const ConstructionSite *site =
+        construction_get(constructions, construction_at(constructions, x, y, z));
+    return site != NULL && !site->refresh && site->workstation == 0 && site->type == type &&
+           site->x == x && site->y == y && site->z == z &&
+           (structure_length(type) == 1 || site->direction == direction);
+}
+
+bool construction_workstation_is_planned(const Constructions *constructions, WorkstationType type,
+                                         int x, int y, int z)
+{
+    const ConstructionSite *site =
+        construction_get(constructions, construction_at(constructions, x, y, z));
+    return site != NULL && site->workstation == type + 1;
 }
 
 int construction_length(const ConstructionSite *site)

@@ -368,13 +368,16 @@ ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe);
 bool game_bill_has_input(const Game *game, const Bill *bill);
 
 /* Whether a workstation may be placed on a tile: not on a structure, where
- * construction_can_place() and workstation_can_place() say yes, with room
- * left in the station list once every station site is finished. */
+ * construction_can_replace() and workstation_can_place() say yes (a site
+ * there is replaced), with room left in the station list once every station
+ * site is finished. */
 bool game_can_place_workstation(const Game *game, int x, int y, int z);
 
 /* Places a workstation where game_can_place_workstation() allows: ready at
  * once when it needs no construction (workstation_needs_construction()) and
- * no plant is in the way, else its construction site. A zone (stockpile,
+ * no plant is in the way, else its construction site. A site already on the
+ * tile is cancelled (materials dropped) and replaced, unless it is the same
+ * workstation (nothing is done then). A zone (stockpile,
  * gathering zone) on the tile loses it: no zone lies under a station.
  * Returns whether something was placed. */
 bool game_place_workstation(Game *game, WorkstationType type, int x, int y, int z);
@@ -398,13 +401,15 @@ bool game_structure_buildable(const Game *game, StructureType type);
 
 /* Whether a structure may be planned with its head at (x, y), facing
  * `direction`: every tile it would take is off stockpiles and workstations,
- * and passes construction_can_place() (construction_can_place_roof() for a
- * roof, on the open tile over the walls). */
+ * and passes construction_can_replace_structure() (sites in the way do not
+ * count, but the very same plan already there does), roofs on the open tile
+ * over the walls. */
 bool game_can_place_structure(const Game *game, StructureType type, int x, int y, int z,
                               Direction direction);
 
-/* Plans a structure where game_can_place_structure() allows. Returns the
- * site's index or CONSTRUCTION_NONE. */
+/* Plans a structure where game_can_place_structure() allows. The sites on
+ * its tiles are cancelled (their materials dropped): a new order replaces
+ * one in progress. Returns the site's index or CONSTRUCTION_NONE. */
 int game_place_structure(Game *game, StructureType type, int x, int y, int z, Direction direction);
 
 /* One structure of a plan: its head, and whether it can be placed. */
