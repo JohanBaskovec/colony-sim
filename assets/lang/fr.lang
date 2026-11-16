@@ -19,11 +19,13 @@ terrain.rich_soil = Terre fertile
 terrain.gravel = Gravier
 terrain.rough_stone = Pierre brute
 terrain.open = Vide
+terrain.foliage = Branchages
 
 # Roche naturelle
 rock.granite = Granite
 rock.sandstone = Grès
 rock.earth = Terre
+rock.wood = Tronc d’arbre
 
 # Plantes
 plant.grass = Herbe
@@ -199,6 +201,8 @@ hud.tile.terrain = Terrain : {0}
 hud.tile.slope = Pente : mène au niveau du dessus
 hud.tile.rock = Paroi rocheuse : {0}
 hud.tile.plant = Plante : {0} ({1} % de croissance)
+hud.tile.tree_levels.one = Arbre haut de {0} niveau
+hud.tile.tree_levels.other = Arbre haut de {0} niveaux
 hud.tile.plant_dormant = Plante : {0} (flétrie, repousse au printemps)
 hud.tile.plant_food_out_of_season = {0} : hors saison
 hud.tile.plant_stock = {0} à ramasser : {1}/{2}
@@ -496,6 +500,7 @@ notice.knowledge_lost = {0} : plus personne ne maîtrise ce savoir
 notice.knowledge_forgotten = {0} : savoir oublié, plus personne n’en sait rien
 notice.roof_collapsed = Un toit s’est effondré : plus aucun mur ni roche ne le soutenait
 notice.cave_in = Une galerie s’est effondrée : plus aucune roche, aucun mur ni aucun étai ne soutenait son plafond
+notice.tree_fell_on_building = Un arbre abattu est tombé sur une construction : aucun côté n’était dégagé
 notice.break_sulk = {1} boude et refuse de travailler
 notice.break_wander_off = {1} en a assez et part s’isoler au loin
 notice.break_binge = {1} se gave de la nourriture de la colonie

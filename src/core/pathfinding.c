@@ -306,6 +306,26 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                 }
             }
         }
+        /* Up or down a tree's trunk: straight to the foliage over this tile,
+         * or from the foliage down to the ground beside the trunk. */
+        if (z + 1 < map->depth && map->terrain[current + level] == TERRAIN_FOLIAGE &&
+            map_can_climb_tree(map, x, y, z)) {
+            uint32_t next = current + level;
+            float step = map_move_cost_at(map, next) * MAP_TREE_CLIMB_COST;
+            if (base_cost + step <= max_cost &&
+                !relax(finder, target, current, next, base_cost + step, x, y, z + 1)) {
+                return -1;
+            }
+        }
+        if (z > 0 && map->terrain[current] == TERRAIN_FOLIAGE &&
+            map_can_climb_tree(map, x, y, z - 1)) {
+            uint32_t next = current - level;
+            float step = map_move_cost_at(map, next) * MAP_TREE_CLIMB_COST;
+            if (base_cost + step <= max_cost &&
+                !relax(finder, target, current, next, base_cost + step, x, y, z - 1)) {
+                return -1;
+            }
+        }
         /* Down a slope or a ladder: over the open space next to this tile,
          * onto the slope or ladder below it. */
         if (z > 0) {

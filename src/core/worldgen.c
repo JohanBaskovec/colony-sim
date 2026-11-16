@@ -2,6 +2,7 @@
 
 #include "core/noise.h"
 #include "core/rng.h"
+#include "core/tree.h"
 #include "core/util.h"
 
 #include <math.h>
@@ -212,6 +213,116 @@ static void place_cattails(Map *map, Rng *rng)
     }
 }
 
+/* Chances that a grown tree is old (a 2 x 2 trunk) or ancient (3 x 3), where
+ * it has room. */
+#define OLD_TREE_CHANCE 0.04f
+#define ANCIENT_TREE_CHANCE 0.01f
+
+/* Whether a slope leads up to (x, y, z) from beside it. */
+static bool slope_leads_to(const Map *map, int x, int y, int z)
+{
+    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+    for (int d = 0; d < 4; d++) {
+        if (map_can_climb(map, x + DX[d], y + DY[d], z - 1, x, y)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Whether a tree stands on (x, y, z). */
+static bool tree_on(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) && map->plants[map_index(map, x, y, z)].type == PLANT_TREE;
+}
+
+/* Whether a trunk of `size` with its foot on (x, y, z) has room: flat,
+ * fertile ground under it, no other tree on it nor around it. */
+static bool wide_trunk_fits(const Map *map, int x, int y, int z, int size)
+{
+    for (int dy = -1; dy <= size; dy++) {
+        for (int dx = -1; dx <= size; dx++) {
+            int tx = x + dx, ty = y + dy;
+            if ((dx != 0 || dy != 0) && tree_on(map, tx, ty, z)) {
+                return false;
+            }
+            bool under = dx >= 0 && dy >= 0 && dx < size && dy < size;
+            if (under && (!map_in_bounds(map, tx, ty, z) || !map_is_buildable(map, tx, ty, z) ||
+                          slope_leads_to(map, tx, ty, z) ||
+                          terrain_def((Terrain)map->terrain[map_index(map, tx, ty, z)])
+                                  ->fertility < plant_def(PLANT_TREE)->min_fertility)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/*
+ * Trees take room (core/tree.h). No tree grows on a tile touching another
+ * one's (the 8 neighbors), so that trunks never touch and woods stay
+ * passable: of two, the first in reading order stays, the other gives way
+ * to grass; nor on a slope or where a slope leads up. A few grown trees
+ * are old or ancient, where they have room (the plants under their trunk
+ * go). Then every tree is written into the map;
+ * one whose trunk has no room (under an overhang) stays a sapling.
+ */
+static void place_tree_volumes(Map *map, Rng *rng)
+{
+    for (int z = 0; z <= map->top_ground_level; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                if (!tree_on(map, x, y, z)) {
+                    continue;
+                }
+                Plant *plant = &map->plants[map_index(map, x, y, z)];
+                /* Nor on a slope or at its top, where it would bar the way. */
+                if (tree_on(map, x - 1, y - 1, z) || tree_on(map, x, y - 1, z) ||
+                    tree_on(map, x + 1, y - 1, z) || tree_on(map, x - 1, y, z) ||
+                    map_is_slope(map, x, y, z) || slope_leads_to(map, x, y, z)) {
+                    *plant = (Plant){.type = PLANT_GRASS, .growth = plant->growth};
+                    plant_settle(plant, GAME_START_DAY);
+                    continue;
+                }
+                float roll = rng_next_float(rng);
+                int size = roll < ANCIENT_TREE_CHANCE                     ? 3
+                           : roll < ANCIENT_TREE_CHANCE + OLD_TREE_CHANCE ? 2
+                                                                          : 1;
+                if (size == 1 || plant_growth_stage(plant) < PLANT_GROWTH_STAGES - 1 ||
+                    !wide_trunk_fits(map, x, y, z, size)) {
+                    continue;
+                }
+                for (int dy = 0; dy < size; dy++) {
+                    for (int dx = 0; dx < size; dx++) {
+                        memset(&map->plants[map_index(map, x + dx, y + dy, z)], 0, sizeof(Plant));
+                    }
+                }
+                *plant = (Plant){.type = PLANT_TREE, .size = (uint8_t)size, .growth = 1.0f};
+                plant_settle(plant, GAME_START_DAY);
+            }
+        }
+    }
+    for (int z = 0; z <= map->top_ground_level; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                Plant *plant = &map->plants[map_index(map, x, y, z)];
+                TreeShape shape;
+                if (!tree_shape(plant, &shape)) {
+                    continue;
+                }
+                if (tree_room_to_grow(map, x, y, z, &shape)) {
+                    tree_build(map, x, y, z);
+                } else {
+                    plant->size = 0; /* A sapling, the last stage before a trunk. */
+                    plant->growth = ((float)TREE_VOLUME_MIN_STAGE - 0.5f) /
+                                    (float)PLANT_GROWTH_STAGES;
+                    plant_settle(plant, GAME_START_DAY);
+                }
+            }
+        }
+    }
+}
+
 /* Level of the ground of a column, from the plains' (0): lakes and rivers
  * lie in hollows, their shallows and beaches one level down, deep water two;
  * the ground rises one level every `level_step` of elevation above
@@ -325,8 +436,10 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
             highest = height > highest ? height : highest;
         }
     }
-    /* One open level over the highest ground: room for roofs everywhere. */
-    int depth = highest + 2 < MAP_MAX_LEVELS ? highest + 2 : MAP_MAX_LEVELS;
+    /* Open levels over the highest ground: room for the tallest trees, and
+     * for roofs everywhere. */
+    int depth = highest + TREE_MAX_LEVELS < MAP_MAX_LEVELS ? highest + TREE_MAX_LEVELS
+                                                           : MAP_MAX_LEVELS;
     if (!map_init(map, params->width, params->height, depth)) {
         free(heights);
         free(surfaces);
@@ -334,6 +447,7 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
         return false;
     }
     map->surface_level = surface_level;
+    map->top_ground_level = highest;
 
     Rng rng;
     rng_seed(&rng, params->seed, 0x776f726c64ULL /* "world" */);
@@ -390,5 +504,8 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
     Rng shore_rng; /* A stream of its own: the inland plants do not depend on the shores. */
     rng_seed(&shore_rng, params->seed, 0x73686f7265ULL /* "shore" */);
     place_cattails(map, &shore_rng);
+    Rng tree_rng; /* A stream of its own: the other plants do not depend on the trees. */
+    rng_seed(&tree_rng, params->seed, 0x7472656573ULL /* "trees" */);
+    place_tree_volumes(map, &tree_rng);
     return true;
 }

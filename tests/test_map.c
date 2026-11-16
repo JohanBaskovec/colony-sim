@@ -251,7 +251,8 @@ static void test_definitions_are_complete(void)
     }
     for (int r = ROCK_NONE + 1; r < ROCK_COUNT; r++) {
         CHECK(i18n_is_valid_key(rock_def((RockType)r)->name_key));
-        CHECK(rock_def((RockType)r)->mine_work > 0.0f);
+        /* Trunks are felled, not mined (core/tree.h). */
+        CHECK(r == ROCK_WOOD || rock_def((RockType)r)->mine_work > 0.0f);
         CHECK(item_def(rock_def((RockType)r)->mined_item) != NULL);
     }
     for (int p = PLANT_NONE + 1; p < PLANT_COUNT; p++) {

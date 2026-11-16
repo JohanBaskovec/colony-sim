@@ -684,10 +684,11 @@ static void test_felling_a_tree(void)
     CHECK(gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CHOP, full * 0.5f, 60.0,
                                NULL));
     CHECK_EQ_INT(map.plants[map_index(&map, 3, 3, 0)].type, PLANT_NONE);
+    /* It fell full length (the map has room for its trunk only: one level,
+     * see core/tree.h): its wood lies along the trunk. */
     ItemStack wood = items_get(&items, 3, 3, 0);
     CHECK_EQ_INT(wood.type, ITEM_WOOD);
-    /* A full tile, the rest spread around. */
-    CHECK_EQ_INT(wood.count, item_stack_limit(ITEM_WOOD));
+    CHECK_EQ_INT(items_get(&items, 3, 4, 0).type, ITEM_WOOD);
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
     CHECK(!gather_job_available(&zones, &map, 3, 3, 0, GATHER_JOB_CHOP));
     /* A half-grown tree gives half the wood. */

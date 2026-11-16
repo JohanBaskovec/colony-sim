@@ -2,6 +2,7 @@
 
 #include "core/hauling.h"
 #include "core/i18n.h"
+#include "core/tree.h"
 #include "core/util.h"
 
 #include <limits.h>
@@ -1172,9 +1173,8 @@ static WorkTypeMask enabled_work_types(const Colonist *colonist)
 static bool is_open_job(const WorkSearch *search, int x, int y, int z)
 {
     if (search->zones) {
-        if (gather_zone_priority_at(search->gather_zones, x, y, z) != search->zone_priority ||
-            gather_tile_job(search->gather_zones, search->map, x, y, z, search->jobs) ==
-                GATHER_JOB_NONE) {
+        if (gather_tile_job_in(search->gather_zones, search->map, x, y, z, search->jobs,
+                               search->zone_priority) == GATHER_JOB_NONE) {
             return false;
         }
     } else {
@@ -1271,6 +1271,46 @@ static __attribute__((noinline)) bool roof_beside_region(const ColonistContext *
                          map->height, region);
 }
 
+/* Whether the tree whose foot is on (x, y, z) has an open job on its
+ * foliage (its branches and twigs follow the zone of its foot) with a tile
+ * to stand on in `region`. Kept out of open_job_reachable()'s scan. */
+static __attribute__((noinline)) bool tree_job_reachable(const WorkSearch *search,
+                                                         const ColonistContext *context, int x,
+                                                         int y, int z, uint32_t region)
+{
+    const Map *map = context->map;
+    TreeRef tree;
+    if (!tree_at(map, x, y, z, &tree) || tree.x != x || tree.y != y || tree.z != z) {
+        return false;
+    }
+    if (gather_tree_job_in(search->gather_zones, map, &tree, search->jobs,
+                           search->zone_priority) == GATHER_JOB_NONE) {
+        return false; /* None of its tiles has one (no stock, not wanted...). */
+    }
+    const TreeShape *shape = &tree.shape;
+    int far = shape->size - 1 + shape->reach;
+    for (int dz = shape->foliage_from; dz <= shape->trunk && z + dz < map->depth; dz++) {
+        for (int dy = -shape->reach; dy <= far; dy++) {
+            for (int dx = -shape->reach; dx <= far; dx++) {
+                int fx = x + dx, fy = y + dy, fz = z + dz;
+                if (!tree_foliage_holds(shape, dx, dy, dz) || !map_in_bounds(map, fx, fy, fz)) {
+                    continue;
+                }
+                size_t level = (size_t)fz * (size_t)map->height;
+                const uint32_t *ids = &context->regions->id[(level + (size_t)fy) *
+                                                             (size_t)map->width];
+                /* Foliage shared with another tree is that tree's (tree_at()):
+                 * each tile is asked, as the search will. */
+                if (beside_region(ids, fx, fy, map->width, map->height, region) &&
+                    is_open_job(search, fx, fy, fz)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 static bool open_job_reachable(const WorkSearch *search, const ColonistContext *context,
                                uint32_t region)
 {
@@ -1301,6 +1341,10 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
                 bool next_to_region = beside_region(ids, x, y, width, height, region) ||
                                       (roofs && roof_beside_region(context, ids, x, y, z, region));
                 if (next_to_region && is_open_job(search, x, y, z)) {
+                    return true;
+                }
+                if (search->zones && context->map->rock[row + (size_t)x] == ROCK_WOOD &&
+                    tree_job_reachable(search, context, x, y, z, region)) {
                     return true;
                 }
             }
@@ -4073,13 +4117,19 @@ static void walk(Colonist *colonist, const ColonistContext *context)
 {
     TilePos next = colonist->path.steps[colonist->path_index];
     float cost = map_move_cost(context->map, next.x, next.y, next.z);
-    if (next.z != colonist->z && cost > 0.0f) { /* Up or down a slope or a ladder. */
+    if (next.z != colonist->z && cost > 0.0f) { /* Up or down a slope, a ladder, a tree. */
         bool up = next.z > colonist->z;
         TilePos low = up ? current_tile(colonist) : next;
         TilePos high = up ? next : current_tile(colonist);
-        cost = map_can_climb(context->map, low.x, low.y, low.z, high.x, high.y)
-                   ? cost * map_climb_cost(context->map, low.x, low.y, low.z)
-                   : 0.0f;
+        if (low.x == high.x && low.y == high.y) {
+            cost = map_can_climb_tree(context->map, low.x, low.y, low.z)
+                       ? cost * MAP_TREE_CLIMB_COST
+                       : 0.0f;
+        } else {
+            cost = map_can_climb(context->map, low.x, low.y, low.z, high.x, high.y)
+                       ? cost * map_climb_cost(context->map, low.x, low.y, low.z)
+                       : 0.0f;
+        }
     }
     if (cost <= 0.0f) {
         set_idle(colonist, context, random_idle_ticks(context->rng)); /* Path became blocked. */

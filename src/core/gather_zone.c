@@ -2,6 +2,7 @@
 
 #include "core/colonist.h"
 #include "core/i18n.h"
+#include "core/tree.h"
 #include "core/util.h"
 
 #include <stdlib.h>
@@ -246,7 +247,9 @@ bool gather_zone_can_cover(const Map *map, int x, int y, int z)
     }
     size_t index = map_index(map, x, y, z);
     Terrain terrain = (Terrain)map->terrain[index];
-    return map->rock[index] == ROCK_NONE && terrain != TERRAIN_DEEP_WATER &&
+    /* The foot of a trunk (ground under the wood) is felled from beside it. */
+    RockType rock = (RockType)map->rock[index];
+    return (rock == ROCK_NONE || rock == ROCK_WOOD) && terrain != TERRAIN_DEEP_WATER &&
            terrain != TERRAIN_OPEN &&
            !structure_blocks((StructureType)map->structure[index]);
 }
@@ -889,9 +892,27 @@ static int stones_of(const Map *map, int x, int y, int z, GatherResource resourc
     return def->job == GATHER_JOB_STONES ? map_stones(map, x, y, z, def->item) : 0;
 }
 
-/* tile_holds() on a tile a zone can cover (checked by the caller). */
+/* The plant whose branches and twigs are taken on a tile: a tree's from its
+ * foliage (core/tree.h), not from its trunk; the tile's own plant elsewhere
+ * (saplings, shrubs). NULL when there is none. */
+static Plant *stock_plant(const Map *map, int x, int y, int z)
+{
+    size_t index = map_index(map, x, y, z);
+    if (map->rock[index] == ROCK_WOOD) {
+        return NULL;
+    }
+    if (map->terrain[index] == TERRAIN_FOLIAGE) {
+        TreeRef tree;
+        return tree_at(map, x, y, z, &tree) ? &map->plants[map_index(map, tree.x, tree.y, tree.z)]
+                                            : NULL;
+    }
+    return &map->plants[index];
+}
+
+/* tile_holds() on a tile a zone can cover (checked by the caller); `stocks`
+ * is stock_plant() of the tile (only looked at by the branch and twig jobs). */
 static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, int y, int z,
-                               GatherJob job, GatherResourceMask resources)
+                               GatherJob job, GatherResourceMask resources, const Plant *stocks)
 {
     if (resources == 0) {
         return false;
@@ -903,11 +924,11 @@ static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, in
     case GATHER_JOB_DIG:
     case GATHER_JOB_DIG_CAREFULLY: return food_among(zone, plant, resources);
     case GATHER_JOB_BRANCHES:
-        return plant_stock_available(plant, PLANT_STOCK_BRANCHES) > 0 &&
-               ripe_enough(zone, GATHER_BRANCHES, plant);
+        return stocks != NULL && plant_stock_available(stocks, PLANT_STOCK_BRANCHES) > 0 &&
+               ripe_enough(zone, GATHER_BRANCHES, stocks);
     case GATHER_JOB_TWIGS:
-        return plant_stock_available(plant, PLANT_STOCK_TWIGS) > 0 &&
-               ripe_enough(zone, GATHER_TWIGS, plant);
+        return stocks != NULL && plant_stock_available(stocks, PLANT_STOCK_TWIGS) > 0 &&
+               ripe_enough(zone, GATHER_TWIGS, stocks);
     case GATHER_JOB_CUT_GRASS:
         return plant->type == PLANT_GRASS && plant->growth >= CUT_GRASS_MIN_GROWTH &&
                ripe_enough(zone, GATHER_GRASS, plant);
@@ -923,13 +944,22 @@ static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, in
     }
 }
 
+/* Whether the job takes a plant's branches or twigs. */
+static bool takes_stock(GatherJob job)
+{
+    return job == GATHER_JOB_BRANCHES || job == GATHER_JOB_TWIGS;
+}
+
 /* Whether the tile holds something for the job, among `resources` (only
  * stones care which: a tile may hold cobbles and no flint). */
 static bool tile_holds(const GatherZone *zone, const Map *map, int x, int y, int z, GatherJob job,
                        GatherResourceMask resources)
 {
-    return resources != 0 && gather_zone_can_cover(map, x, y, z) &&
-           covered_tile_holds(zone, map, x, y, z, job, resources);
+    if (resources == 0 || !gather_zone_can_cover(map, x, y, z)) {
+        return false;
+    }
+    const Plant *stocks = takes_stock(job) ? stock_plant(map, x, y, z) : NULL;
+    return covered_tile_holds(zone, map, x, y, z, job, resources, stocks);
 }
 
 /* Whether the tile holds something for the job that the zone wants. */
@@ -942,6 +972,12 @@ static bool job_open(const GatherZone *zone, const Map *map, int x, int y, int z
 static int plant_yield(const Map *map, int x, int y, int z, GatherJob job)
 {
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    if (takes_stock(job)) {
+        plant = stock_plant(map, x, y, z);
+        if (plant == NULL) {
+            return 0;
+        }
+    }
     const PlantDef *def = plant_def((PlantType)plant->type);
     switch (job) {
     case GATHER_JOB_HARVEST:
@@ -954,37 +990,95 @@ static int plant_yield(const Map *map, int x, int y, int z, GatherJob job)
         int armfuls = (int)(CUT_GRASS_YIELD * plant->growth + 0.5f);
         return armfuls > 1 ? armfuls : 1;
     }
-    case GATHER_JOB_CHOP: return (int)((float)def->cut_yield * plant->growth + 0.5f);
+    case GATHER_JOB_CHOP: { /* Wider trunks by their area. */
+        int area = tree_size(plant) * tree_size(plant);
+        return (int)((float)(def->cut_yield * area) * plant->growth + 0.5f);
+    }
     default: return 0;
     }
+}
+
+/* Whether a tile is foliage (in bounds). */
+static bool is_foliage(const Map *map, int x, int y, int z)
+{
+    size_t index = map_index(map, x, y, z);
+    return map->terrain[index] == TERRAIN_FOLIAGE && map->rock[index] == ROCK_NONE;
+}
+
+int gather_job_zone_at(const GatherZones *zones, const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z) || !is_foliage(map, x, y, z)) {
+        return gather_zone_at(zones, x, y, z);
+    }
+    TreeRef tree;
+    return tree_at(map, x, y, z, &tree) ? gather_zone_at(zones, tree.x, tree.y, tree.z)
+                                        : GATHER_ZONE_NONE;
 }
 
 bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y, int z,
                           GatherJob job)
 {
-    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y, z));
+    const GatherZone *zone = gather_zone_get(zones, gather_job_zone_at(zones, map, x, y, z));
     return zone != NULL && (unsigned)job < GATHER_JOB_COUNT && job_open(zone, map, x, y, z, job);
 }
 
-GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y, int z,
-                          GatherJobMask allowed)
+/* The jobs taken on a tree's foliage. */
+#define TREE_JOBS (GATHER_JOB_BIT(GATHER_JOB_BRANCHES) | GATHER_JOB_BIT(GATHER_JOB_TWIGS))
+
+/* First job among `allowed` that a covered tile (x, y, z) of `zone` holds,
+ * with `stocks` for the branch and twig jobs; none unless the zone has
+ * `priority` (0: any). */
+static GatherJob first_job(const GatherZone *zone, const Map *map, int x, int y, int z,
+                           GatherJobMask allowed, int priority, const Plant *stocks)
 {
-    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y, z));
-    if (zone == NULL || zone->wanted == 0) {
-        return GATHER_JOB_NONE;
-    }
-    /* Called for every tile a job search looks at: the cover is checked once. */
-    if (!gather_zone_can_cover(map, x, y, z)) {
+    if (zone->wanted == 0 || (priority != 0 && zone->priority != priority)) {
         return GATHER_JOB_NONE;
     }
     for (int job = 0; job < GATHER_JOB_COUNT; job++) {
         GatherResourceMask wanted = zone->wanted & JOB_DEFS[job].resources;
         if ((allowed & GATHER_JOB_BIT(job)) && wanted != 0 &&
-            covered_tile_holds(zone, map, x, y, z, (GatherJob)job, wanted)) {
+            covered_tile_holds(zone, map, x, y, z, (GatherJob)job, wanted, stocks)) {
             return (GatherJob)job;
         }
     }
     return GATHER_JOB_NONE;
+}
+
+GatherJob gather_tile_job_in(const GatherZones *zones, const Map *map, int x, int y, int z,
+                             GatherJobMask allowed, int priority)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return GATHER_JOB_NONE;
+    }
+    /* Called for every tile a job search looks at: the cover is checked once,
+     * the tree of foliage looked for once. */
+    if (is_foliage(map, x, y, z)) {
+        TreeRef tree;
+        return (allowed & TREE_JOBS) && tree_at(map, x, y, z, &tree)
+                   ? gather_tree_job_in(zones, map, &tree, allowed, priority)
+                   : GATHER_JOB_NONE;
+    }
+    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y, z));
+    if (zone == NULL || !gather_zone_can_cover(map, x, y, z)) {
+        return GATHER_JOB_NONE;
+    }
+    return first_job(zone, map, x, y, z, allowed, priority, stock_plant(map, x, y, z));
+}
+
+GatherJob gather_tree_job_in(const GatherZones *zones, const Map *map, const TreeRef *tree,
+                             GatherJobMask allowed, int priority)
+{
+    const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, tree->x, tree->y,
+                                                                   tree->z));
+    return zone == NULL ? GATHER_JOB_NONE
+                        : first_job(zone, map, tree->x, tree->y, tree->z, allowed & TREE_JOBS,
+                                    priority, tree_plant(map, tree));
+}
+
+GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y, int z,
+                          GatherJobMask allowed)
+{
+    return gather_tile_job_in(zones, map, x, y, z, allowed, 0);
 }
 
 void gather_zone_available(const GatherZones *zones, const Map *map, int index,
@@ -998,12 +1092,28 @@ void gather_zone_available(const GatherZones *zones, const Map *map, int index,
     for (int z = 0; z < zones->depth; z++) {
         for (int y = 0; y < zones->height; y++) {
             for (int x = 0; x < zones->width; x++) {
-                if (zones->zone[index_of(zones, x, y, z)] != index + 1) {
+                size_t tile = index_of(zones, x, y, z);
+                if (zones->zone[tile] != index + 1 || !gather_zone_can_cover(map, x, y, z)) {
                     continue;
                 }
+                /* A tree's branches and twigs follow the zone of its foot
+                 * (taken on its foliage): counted there, once. */
+                const Plant *stocks = map->rock[tile] == ROCK_WOOD ? &map->plants[tile]
+                                      : is_foliage(map, x, y, z)   ? NULL
+                                                                   : &map->plants[tile];
                 for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
                     GatherJob job = RESOURCE_DEFS[r].job;
-                    if (!tile_holds(zone, map, x, y, z, job, GATHER_RESOURCE_BIT(r))) {
+                    GatherResourceMask bit = GATHER_RESOURCE_BIT(r);
+                    if (takes_stock(job)) {
+                        if (stocks != NULL && covered_tile_holds(zone, map, x, y, z, job, bit,
+                                                                 stocks)) {
+                            available[r] += plant_stock_available(
+                                stocks, job == GATHER_JOB_BRANCHES ? PLANT_STOCK_BRANCHES
+                                                                   : PLANT_STOCK_TWIGS);
+                        }
+                        continue;
+                    }
+                    if (!covered_tile_holds(zone, map, x, y, z, job, bit, NULL)) {
                         continue;
                     }
                     available[r] += job == GATHER_JOB_STONES
@@ -1022,21 +1132,28 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
     }
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
     int food = plant_stock_available(plant, PLANT_STOCK_FOOD);
+    const Plant *stocks = takes_stock(job) ? stock_plant(map, x, y, z) : NULL;
+    if (takes_stock(job) && stocks == NULL) {
+        return 0.0f;
+    }
     switch (job) {
     case GATHER_JOB_HARVEST:
     case GATHER_JOB_HARVEST_CAREFULLY: return HARVEST_WORK * (float)(food > 1 ? food : 1);
     case GATHER_JOB_DIG:
     case GATHER_JOB_DIG_CAREFULLY: return DIG_WORK * (float)(food > 1 ? food : 1);
     case GATHER_JOB_BRANCHES: {
-        int available = plant_stock_available(plant, PLANT_STOCK_BRANCHES);
+        int available = plant_stock_available(stocks, PLANT_STOCK_BRANCHES);
         return BRANCH_WORK * (float)(available > 1 ? available : 1);
     }
     case GATHER_JOB_TWIGS: {
-        int available = plant_stock_available(plant, PLANT_STOCK_TWIGS);
+        int available = plant_stock_available(stocks, PLANT_STOCK_TWIGS);
         return TWIGS_WORK * (float)(available > 1 ? available : 1);
     }
     case GATHER_JOB_CUT_GRASS: return CUT_GRASS_WORK;
-    case GATHER_JOB_CHOP: return CHOP_BASE_WORK + CHOP_GROWTH_WORK * plant->growth;
+    case GATHER_JOB_CHOP: { /* Wider trunks by their area. */
+        int area = tree_size(plant) * tree_size(plant);
+        return CHOP_BASE_WORK + CHOP_GROWTH_WORK * plant->growth * (float)area;
+    }
     case GATHER_JOB_STONES: return STONE_WORK;
     default: return 0.0f;
     }
@@ -1088,17 +1205,18 @@ static ItemType complete(Map *map, int x, int y, int z, GatherJob job, GatherRes
     case GATHER_JOB_BRANCHES:
     case GATHER_JOB_TWIGS: {
         PlantStock stock = job == GATHER_JOB_BRANCHES ? PLANT_STOCK_BRANCHES : PLANT_STOCK_TWIGS;
-        item = plant_stock_item((PlantType)plant->type, stock);
-        *count = plant_take_stock(plant, stock, INT16_MAX);
+        Plant *stocks = stock_plant(map, x, y, z);
+        if (stocks == NULL) {
+            *count = 0;
+            break;
+        }
+        item = plant_stock_item((PlantType)stocks->type, stock);
+        *count = plant_take_stock(stocks, stock, INT16_MAX);
         break;
     }
     case GATHER_JOB_CUT_GRASS:
         item = ITEM_FRESH_GRASS;
         plant->growth = 0.0f;
-        break;
-    case GATHER_JOB_CHOP:
-        item = def->cut_item;
-        memset(plant, 0, sizeof(*plant));
         break;
     case GATHER_JOB_STONES:
         item = find_stone(map, x, y, z, wanted, rng);
@@ -1123,7 +1241,7 @@ static GatherResource resource_of(GatherJob job, ItemType item)
 bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
                           GatherJob job, float work, double level, Rng *rng)
 {
-    int zone_index = gather_zone_at(zones, x, y, z);
+    int zone_index = gather_job_zone_at(zones, map, x, y, z);
     if (!gather_job_available(zones, map, x, y, z, job)) {
         return false;
     }
@@ -1139,15 +1257,29 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
     }
     clear_progress(zones, index);
     int count;
-    ItemType item = complete(map, x, y, z, job, zone->wanted, rng, &count);
-    GatherResource resource = resource_of(job, item);
-    if (resource == GATHER_RESOURCE_COUNT || count <= 0 ||
-        !(zone->wanted & GATHER_RESOURCE_BIT(resource))) {
-        return true; /* Nothing. */
+    ItemType item;
+    if (job == GATHER_JOB_CHOP) { /* The tree stays until it falls, below. */
+        item = plant_def(PLANT_TREE)->cut_item;
+        count = plant_yield(map, x, y, z, job);
+    } else {
+        item = complete(map, x, y, z, job, zone->wanted, rng, &count);
     }
-    if (items != NULL) {
-        ItemStack stack = knowledge_product(item, count, level, rng);
+    GatherResource resource = resource_of(job, item);
+    bool wanted = resource != GATHER_RESOURCE_COUNT && count > 0 &&
+                  (zone->wanted & GATHER_RESOURCE_BIT(resource));
+    ItemStack stack = {0};
+    if (wanted && items != NULL) {
+        stack = knowledge_product(item, count, level, rng);
+    }
+    if (job == GATHER_JOB_CHOP) {
+        if (tree_fell(map, items, x, y, z, stack).harmed > 0) {
+            zones->harmful_tree_falls++;
+        }
+    } else if (stack.count > 0) {
         items_drop(items, map, x, y, z, stack);
+    }
+    if (!wanted) {
+        return true; /* Nothing. */
     }
     GatherOrder *order = &zone->orders[resource];
     order->done = (uint16_t)clampi(order->done + count, 0, UINT16_MAX);

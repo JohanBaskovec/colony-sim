@@ -1,6 +1,7 @@
 #include "game/hud.h"
 
 #include "core/i18n.h"
+#include "core/tree.h"
 #include "game/debug_panel.h"
 #include "game/gather_zone_panel.h"
 #include "game/menu_bar.h"
@@ -281,17 +282,30 @@ static void build_tile_panel(App *app, Panel *panel)
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.position"), a, b);
 
     const TerrainDef *terrain = terrain_def((Terrain)map->terrain[index]);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.terrain"), tr(terrain->name_key));
+    /* Up a trunk, no terrain to speak of. */
+    if (map->terrain[index] != TERRAIN_OPEN || map->rock[index] != ROCK_WOOD) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.terrain"), tr(terrain->name_key));
+    }
     if (map_is_slope(map, x, y, z)) {
         panel_add_text(panel, tr("hud.tile.slope"));
     }
 
-    if (map->rock[index] != ROCK_NONE) {
+    if (map->rock[index] == ROCK_WOOD) { /* Not a rock wall: a tree's trunk. */
+        panel_add_text(panel, tr(rock_def(ROCK_WOOD)->name_key));
+    } else if (map->rock[index] != ROCK_NONE) {
         const RockDef *rock = rock_def((RockType)map->rock[index]);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.rock"), tr(rock->name_key));
     }
 
+    /* On a tree's trunk or foliage: the tree (its plant is on its foot). */
     const Plant *plant = &map->plants[index];
+    TreeRef tree;
+    if (tree_at(map, x, y, z, &tree)) {
+        plant = tree_plant(map, &tree);
+        int levels = tree_shape_levels(&tree.shape);
+        tr_integer(a, sizeof(a), levels);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.tile.tree_levels", levels), a);
+    }
     if (plant->type != PLANT_NONE) {
         const PlantDef *def = plant_def((PlantType)plant->type);
         if (plant_is_dormant(plant)) {

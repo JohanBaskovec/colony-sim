@@ -329,6 +329,9 @@ Speed factor by job and tool (— = impossible with it; "none" = bare hands):
 Felling needs an **axe** (the first one is the hafted axe) and mining needs a
 **pick** (the first one is the antler pick): neither comes from a starting
 knowledge. The first wood of a colony is branches and twigs.
+A felled tree falls full length (2 tiles per level of its height) exactly
+where the woodcutter aims it, whatever their level: away from buildings, else
+on the side that does the least harm (see `core/tree.h`).
 
 ### 2.4 Work accidents and dirt
 

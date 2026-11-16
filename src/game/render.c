@@ -1,6 +1,7 @@
 #include "game/render.h"
 
 #include "core/hearth.h"
+#include "core/tree.h"
 #include "core/util.h"
 
 #include <limits.h>
@@ -16,6 +17,7 @@ static const SDL_Color TERRAIN_COLORS[TERRAIN_COUNT] = {
     [TERRAIN_GRAVEL] = {138, 132, 122, 255},
     [TERRAIN_ROUGH_STONE] = {106, 102, 98, 255},
     [TERRAIN_GRASS_ROOF] = {196, 168, 96, 255}, /* Its thatch: see render_structures(). */
+    [TERRAIN_FOLIAGE] = {62, 106, 48, 255}, /* Leaf clumps over it: render_foliage(). */
 };
 
 static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
@@ -23,7 +25,18 @@ static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
     [ROCK_GRANITE] = {92, 92, 100, 255},
     [ROCK_SANDSTONE] = {150, 118, 88, 255},
     [ROCK_EARTH] = {104, 78, 54, 255},
+    [ROCK_WOOD] = {150, 110, 70, 255}, /* The cut face of a trunk: render_trunk(). */
 };
+/* A trunk's bark, around its cut face, and its growth rings. */
+static const SDL_Color BARK_COLOR = {78, 54, 34, 255};
+static const SDL_Color RING_COLOR = {120, 84, 50, 255};
+/* Leaf clumps on foliage, darker and lighter than its floor. */
+static const SDL_Color LEAVES_DARK = {38, 76, 34, 255};
+static const SDL_Color LEAVES_LIGHT = {104, 150, 66, 255};
+/* The shade of the foliage above on the ground under it. */
+#define FOLIAGE_SHADOW (-26)
+/* Leaf clumps and growth rings are drawn from this zoom on (pixels per tile). */
+#define TREE_DETAIL_MIN_ZOOM 10.0f
 
 /* Levels below the one shown (render_below_begin()): drawn this many times
  * smaller, then stretched back with smoothing (a blur), each level deeper
@@ -251,6 +264,93 @@ static SDL_FRect inset(const SDL_FRect *tile, float fraction)
     return rect;
 }
 
+/* Bits of a deterministic hash of a tile and a number (spot positions). */
+static uint32_t tile_hash(int x, int y, int n)
+{
+    uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u ^ (uint32_t)n * 83492791u;
+    h ^= h >> 13;
+    h *= 0x5bd1e995u;
+    h ^= h >> 15;
+    return h;
+}
+
+/* Whether the ground of a tile is in the shade of foliage above it (the
+ * first floor over it, within a tree's height). */
+static bool under_foliage(const Map *map, int x, int y, int z)
+{
+    for (int above = z + 1; above < map->depth && above < z + TREE_MAX_LEVELS; above++) {
+        size_t index = map_index(map, x, y, above);
+        if (map->terrain[index] == TERRAIN_FOLIAGE && map->rock[index] == ROCK_NONE) {
+            return true;
+        }
+        if (!map_is_open_at(map, index)) {
+            return false;
+        }
+    }
+    return false;
+}
+
+/* A tile of trunk, as the cut face of a wall of wood: bark on the sides
+ * facing out of the trunk; a single tile also shows growth rings. */
+static void render_trunk(SDL_Renderer *renderer, const Map *map, int x, int y, int z,
+                         const SDL_FRect *tile, float zoom)
+{
+    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+    batch_quad(renderer, shade(ROCK_COLORS[ROCK_WOOD], tile_variation(x, y) / 2), tile);
+    float bark = SDL_max(1.0f, floorf(tile->w * 0.14f));
+    int sides = 0;
+    for (int d = 0; d < 4; d++) {
+        int nx = x + DX[d], ny = y + DY[d];
+        if (map_in_bounds(map, nx, ny, z) && map->rock[map_index(map, nx, ny, z)] == ROCK_WOOD) {
+            continue;
+        }
+        sides++;
+        SDL_FRect strip = *tile;
+        if (DX[d] > 0) {
+            strip.x += strip.w - bark;
+        }
+        if (DY[d] > 0) {
+            strip.y += strip.h - bark;
+        }
+        if (DX[d] != 0) {
+            strip.w = bark;
+        } else {
+            strip.h = bark;
+        }
+        batch_quad(renderer, BARK_COLOR, &strip);
+    }
+    if (sides == 4 && zoom >= TREE_DETAIL_MIN_ZOOM) {
+        SDL_FRect ring = inset(tile, 0.5f);
+        SDL_FRect heart = inset(tile, 0.36f);
+        SDL_FRect pith = inset(tile, 0.1f);
+        batch_quad(renderer, RING_COLOR, &ring);
+        batch_quad(renderer, ROCK_COLORS[ROCK_WOOD], &heart);
+        batch_quad(renderer, RING_COLOR, &pith);
+    }
+}
+
+/* Leaf clumps scattered over a tile of foliage, at fixed places per tile. */
+static void render_foliage(SDL_Renderer *renderer, int x, int y, const SDL_FRect *tile,
+                           float zoom)
+{
+    if (zoom < TREE_DETAIL_MIN_ZOOM) {
+        return;
+    }
+    for (int i = 0; i < 6; i++) {
+        uint32_t h = tile_hash(x, y, 100 + i);
+        float size = tile->w * (0.18f + 0.14f * (float)(h & 0xffu) / 255.0f);
+        float cx = tile->x + tile->w * (0.1f + 0.8f * (float)((h >> 8) & 0xffu) / 255.0f);
+        float cy = tile->y + tile->h * (0.1f + 0.8f * (float)((h >> 16) & 0xffu) / 255.0f);
+        SDL_FRect wide = {floorf(cx - size * 0.5f), floorf(cy - size * 0.3f), floorf(size),
+                          floorf(size * 0.6f)};
+        SDL_FRect tall = {floorf(cx - size * 0.3f), floorf(cy - size * 0.5f), floorf(size * 0.6f),
+                          floorf(size)};
+        SDL_Color color = (h >> 24) & 1u ? LEAVES_LIGHT : LEAVES_DARK;
+        batch_quad(renderer, color, &wide);
+        batch_quad(renderer, color, &tall);
+    }
+}
+
 /* Slopes lighter towards the higher ground they lead up to; a dark edge on
  * each side of the tile over a drop to the levels below. */
 static void render_ground_shape(SDL_Renderer *renderer, const Map *map, int x, int y, int z,
@@ -376,6 +476,10 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
             if (map_is_open_at(map, index)) {
                 continue; /* The levels below show (render_below_begin()). */
             }
+            if (map->rock[index] == ROCK_WOOD) {
+                render_trunk(renderer, map, x, y, z, &tile, camera->zoom);
+                continue;
+            }
             if (map->rock[index] != ROCK_NONE) {
                 batch_quad(renderer, shade(ROCK_COLORS[map->rock[index]], variation), &tile);
                 continue;
@@ -386,21 +490,15 @@ void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
             if (plant->type == PLANT_GRASS) {
                 ground = mix(ground, GRASS_COLOR, 0.35f + 0.5f * plant->growth);
             }
-            batch_quad(renderer, shade(ground, variation), &tile);
+            int shadow = under_foliage(map, x, y, z) ? FOLIAGE_SHADOW : 0;
+            batch_quad(renderer, shade(ground, variation + shadow), &tile);
+            if (map->terrain[index] == TERRAIN_FOLIAGE) {
+                render_foliage(renderer, x, y, &tile, camera->zoom);
+            }
             render_ground_shape(renderer, map, x, y, z, &tile);
         }
     }
     batch_flush(renderer);
-}
-
-/* Bits of a deterministic hash of a tile and a number (spot positions). */
-static uint32_t tile_hash(int x, int y, int n)
-{
-    uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u ^ (uint32_t)n * 83492791u;
-    h ^= h >> 13;
-    h *= 0x5bd1e995u;
-    h ^= h >> 15;
-    return h;
 }
 
 /* Dirt: dark spots scattered on the tile, more and darker as it gets dirtier;

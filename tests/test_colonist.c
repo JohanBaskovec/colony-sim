@@ -23,6 +23,10 @@ static bool init_flat_game(Game *game)
         return false;
     }
     Map *map = &game->map;
+    for (size_t i = map_level_tile_count(map); i < map_tile_count(map); i++) {
+        map->terrain[i] = TERRAIN_OPEN; /* Open air over it: no trees rising there. */
+        map->rock[i] = ROCK_NONE;
+    }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->cobbles[i] = MAP_STONES_MAX; /* Cobbles everywhere, no flint. */
@@ -59,7 +63,7 @@ static Colonist *spawn_rested(Game *game, int x, int y)
 
 /* Ticks until the order on (x, y) is gone (at most `max_ticks`); returns the
  * number of ticks during which work was done on it. */
-/* Runs until the branches of the tree at (x, y), in a zone, are taken;
+/* Runs until the branches of the hazel at (x, y), in a zone, are taken;
  * returns the ticks spent working on them. */
 static int run_until_done(Game *game, int x, int y, int max_ticks)
 {
@@ -447,18 +451,20 @@ static void test_colonists_drink_before_sleeping(void)
 
 /* ---- Work on designations ---------------------------------------------- */
 
-static void add_tree(Map *map, int x, int y)
+/* A grown hazel: its branches are taken from beside it (a tree's are taken
+ * on its foliage, see core/tree.h). */
+static void add_hazel(Map *map, int x, int y)
 {
-    Plant *tree = &map->plants[map_index(map, x, y, 0)];
-    tree->type = PLANT_TREE;
-    tree->growth = 1.0f;
-    plant_settle(tree, GAME_START_DAY);
+    Plant *hazel = &map->plants[map_index(map, x, y, 0)];
+    hazel->type = PLANT_HAZEL;
+    hazel->growth = 1.0f;
+    plant_settle(hazel, GAME_START_DAY);
 }
 
-/* Branches a mature tree holds. */
-static int tree_branches(void)
+/* Branches a grown hazel holds. */
+static int hazel_branches(void)
 {
-    return plant_def(PLANT_TREE)->stock_capacity[PLANT_STOCK_BRANCHES];
+    return plant_def(PLANT_HAZEL)->stock_capacity[PLANT_STOCK_BRANCHES];
 }
 
 /* Ticks needed to walk `tiles` tiles on cheap terrain, plus some margin. */
@@ -489,7 +495,7 @@ static void test_idle_colonist_gathers_branches(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 26, 20);
+    add_hazel(&game.map, 26, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     CHECK_EQ_INT(order_zone(&game, 26, 20, 26, 20, GATHER_BRANCHES), 1);
@@ -508,11 +514,11 @@ static void test_idle_colonist_gathers_branches(void)
     CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 26, 20, 0) > 0.0f);
 
     run_ticks(&game, (int)(work * 0.5f));
-    const Plant *tree = &game.map.plants[map_index(&game.map, 26, 20, 0)];
-    CHECK_EQ_INT(tree->type, PLANT_TREE); /* The tree stays... */
-    CHECK_EQ_INT(plant_stock_available(tree, PLANT_STOCK_BRANCHES), 0); /* ...bare. */
+    const Plant *hazel = &game.map.plants[map_index(&game.map, 26, 20, 0)];
+    CHECK_EQ_INT(hazel->type, PLANT_HAZEL); /* The hazel stays... */
+    CHECK_EQ_INT(plant_stock_available(hazel, PLANT_STOCK_BRANCHES), 0); /* ...bare. */
     CHECK_EQ_INT(items_get(&game.items, 26, 20, 0).type, ITEM_BRANCHES);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], tree_branches());
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], hazel_branches());
     CHECK(!branches_open(&game, 26, 20));
     CHECK(colonist->task != TASK_WORK);
     game_shutdown(&game);
@@ -522,7 +528,7 @@ static void test_gather_work_under_way(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 26, 20);
+    add_hazel(&game.map, 26, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     EntityId id = game_colonist_id_at(&game, 0);
@@ -540,9 +546,12 @@ static void test_gather_work_under_way(void)
     CHECK(entity_id_equal(info.worker, id));
     CHECK_NEAR(info.fraction, 0.0, 1e-6);
 
-    /* Half done. */
+    /* Half done, once there. */
     float work = gather_job_work_needed(&game.map, 26, 20, 0, GATHER_JOB_BRANCHES);
-    run_ticks(&game, walk_ticks(6) + (int)(work * 0.5f));
+    for (int i = 0; i < walk_ticks(6) && colonist->x != 25; i++) {
+        game_tick(&game);
+    }
+    run_ticks(&game, (int)(work * 0.5f));
     REQUIRE(game_gather_work_at(&game, 26, 20, 0, &info));
     CHECK(info.fraction > 0.3f && info.fraction < 0.7f);
     CHECK(entity_id_equal(info.worker, id));
@@ -558,9 +567,9 @@ static void test_gather_work_under_way(void)
     game_shutdown(&game);
 }
 
-/* Where a settler at (20, 20) first goes to take branches, with a tree in a
+/* Where a settler at (20, 20) first goes to take branches, with a hazel in a
  * zone of its own at x = 23, 32 and 40 (zone priorities in that order); the
- * tree at x = 40 is bare when `far_bare`. */
+ * hazel at x = 40 is bare when `far_bare`. */
 static int first_branches_target(int near, int middle, int far, bool far_bare)
 {
     Game game;
@@ -570,14 +579,14 @@ static int first_branches_target(int near, int middle, int far, bool far_bare)
     const int xs[3] = {23, 32, 40};
     const int priorities[3] = {near, middle, far};
     for (int i = 0; i < 3; i++) {
-        add_tree(&game.map, xs[i], 20);
+        add_hazel(&game.map, xs[i], 20);
         order_zone(&game, xs[i], 20, xs[i], 20, GATHER_BRANCHES);
         gather_zone_set_priority(&game.gather_zones,
                                  gather_zone_at(&game.gather_zones, xs[i], 20, 0), priorities[i]);
     }
     if (far_bare) {
-        Plant *tree = &game.map.plants[map_index(&game.map, 40, 20, 0)];
-        plant_take_stock(tree, PLANT_STOCK_BRANCHES, 1000);
+        Plant *hazel = &game.map.plants[map_index(&game.map, 40, 20, 0)];
+        plant_take_stock(hazel, PLANT_STOCK_BRANCHES, 1000);
     }
     Colonist *colonist = spawn_rested(&game, 20, 20);
     int target = -1;
@@ -671,7 +680,7 @@ static void test_nobody_fells_or_mines_yet(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     map_set_rock(&game.map, 25, 20, 0, ROCK_SANDSTONE);
-    add_tree(&game.map, 20, 25);
+    add_hazel(&game.map, 20, 25);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
@@ -686,7 +695,7 @@ static void test_nobody_fells_or_mines_yet(void)
 
     run_ticks(&game, walk_ticks(5) + 4000);
     CHECK(!map_is_passable(&game.map, 25, 20, 0));
-    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 20, 25, 0)].type, PLANT_TREE);
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 20, 25, 0)].type, PLANT_HAZEL);
     CHECK_EQ_INT(game.designations.count, 1);
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.reservations.count, 0);
@@ -697,8 +706,8 @@ static void test_one_worker_per_designation(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 26, 20);
-    add_tree(&game.map, 26, 30);
+    add_hazel(&game.map, 26, 20);
+    add_hazel(&game.map, 26, 30);
     Colonist *a = spawn_rested(&game, 20, 20);
     Colonist *b = spawn_rested(&game, 20, 22);
     REQUIRE(a != NULL && b != NULL);
@@ -723,7 +732,7 @@ static void test_hungry_worker_leaves_work_and_resumes_later(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 22, 20);
+    add_hazel(&game.map, 22, 20);
     add_bramble(&game.map, 15, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
@@ -751,7 +760,7 @@ static void test_cancelled_order_stops_the_worker(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 22, 20);
+    add_hazel(&game.map, 22, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     order_zone(&game, 22, 20, 22, 20, GATHER_BRANCHES);
@@ -761,8 +770,8 @@ static void test_cancelled_order_stops_the_worker(void)
     CHECK_EQ_INT(gather_zones_remove_rect(&game.gather_zones, 22, 20, 22, 20, 0), 1);
     game_tick(&game);
     CHECK(colonist->task != TASK_WORK);
-    const Plant *tree = &game.map.plants[map_index(&game.map, 22, 20, 0)];
-    CHECK_EQ_INT(plant_stock_available(tree, PLANT_STOCK_BRANCHES), tree_branches());
+    const Plant *hazel = &game.map.plants[map_index(&game.map, 22, 20, 0)];
+    CHECK_EQ_INT(plant_stock_available(hazel, PLANT_STOCK_BRANCHES), hazel_branches());
     game_shutdown(&game);
 }
 
@@ -770,7 +779,7 @@ static void test_removed_worker_releases_its_job(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 22, 20);
+    add_hazel(&game.map, 22, 20);
     EntityId id = game_spawn_colonist(&game, 20, 20, 0);
     REQUIRE(game_colonist(&game, id) != NULL);
     order_zone(&game, 22, 20, 22, 20, GATHER_BRANCHES);
@@ -788,8 +797,8 @@ static void test_new_order_is_noticed_despite_backoff(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    /* A tree enclosed in rock: designated but unreachable. */
-    add_tree(&game.map, 10, 10);
+    /* A hazel enclosed in rock: designated but unreachable. */
+    add_hazel(&game.map, 10, 10);
     set_rock_ring(&game.map, 10, 10, ROCK_GRANITE);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
@@ -802,7 +811,7 @@ static void test_new_order_is_noticed_despite_backoff(void)
 
     /* A reachable order is picked up without waiting for the whole cooldown, but not
      * before the minimum delay: a busy colony changes orders all the time. */
-    add_tree(&game.map, 24, 20);
+    add_hazel(&game.map, 24, 20);
     order_zone(&game, 24, 20, 24, 20, GATHER_BRANCHES);
     run_ticks(&game, COLONIST_SEARCH_MIN_RETRY_TICKS - 2);
     CHECK(colonist->task != TASK_WORK);
@@ -845,7 +854,7 @@ static void test_disabled_work_type_is_never_done(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 23, 20);
+    add_hazel(&game.map, 23, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DISABLED;
@@ -918,7 +927,7 @@ static void test_disabling_work_type_stops_the_current_job(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 22, 20);
+    add_hazel(&game.map, 22, 20);
     EntityId id = game_spawn_colonist(&game, 20, 20, 0);
     Colonist *colonist = game_colonist(&game, id);
     REQUIRE(colonist != NULL);
@@ -945,7 +954,7 @@ static void test_priority_beats_distance(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 32, 20);
+    add_hazel(&game.map, 32, 20);
     /* Something to haul right next to the colonist. */
     items_add(&game.items, 22, 20, 0, item_stack_pristine(ITEM_COBBLE, 5));
     REQUIRE(stockpile_create(&game.stockpiles, &game.map, 18, 24, 20, 26, 0) != STOCKPILE_NONE);
@@ -1357,8 +1366,8 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
     REQUIRE(init_flat_game(&game));
     add_water_band(&game.map, 44);
     for (int y = 4; y < 44; y += 3) {
-        add_tree(&game.map, 10, y);
-        add_tree(&game.map, 30, y);
+        add_hazel(&game.map, 10, y);
+        add_hazel(&game.map, 30, y);
         map_set_rock(&game.map, 38, y, 0, ROCK_SANDSTONE);
         add_bramble(&game.map, 20, y);
     }
@@ -1671,11 +1680,11 @@ static void test_no_search_when_orders_are_out_of_reach(void)
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     set_rock_ring(&game.map, 20, 20, ROCK_GRANITE);
-    /* A tree walled in elsewhere: nothing to stand on next to it. */
-    add_tree(&game.map, 32, 32);
+    /* A hazel walled in elsewhere: nothing to stand on next to it. */
+    add_hazel(&game.map, 32, 32);
     set_rock_ring(&game.map, 32, 32, ROCK_SANDSTONE);
     CHECK_EQ_INT(order_zone(&game, 32, 32, 32, 32, GATHER_BRANCHES), 1);
-    add_tree(&game.map, 40, 40); /* Reachable only from outside the ring. */
+    add_hazel(&game.map, 40, 40); /* Reachable only from outside the ring. */
     CHECK_EQ_INT(order_zone(&game, 40, 40, 40, 40, GATHER_BRANCHES), 1);
 
     uint32_t searches = game.pathfinder.stamp;
@@ -1684,7 +1693,7 @@ static void test_no_search_when_orders_are_out_of_reach(void)
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.reservations.count, 0);
 
-    /* Once the ring opens, the tree outside is reached (after the search
+    /* Once the ring opens, the hazel outside is reached (after the search
      * backoff: no order changed). */
     map_set_rock(&game.map, 21, 20, 0, ROCK_NONE);
     int wait = (COLONIST_SEARCH_RETRY_TICKS << COLONIST_SEARCH_MAX_BACKOFF) + walk_ticks(1);
@@ -1780,7 +1789,7 @@ static void test_working_teaches_the_order_knowledge(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 26, 20);
+    add_hazel(&game.map, 26, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
@@ -1790,9 +1799,9 @@ static void test_working_teaches_the_order_knowledge(void)
     int working = run_until_done(&game, 26, 20, 20000);
     REQUIRE(!branches_open(&game, 26, 20));
 
-    /* A beginner works at half speed: the branches (1,800 work) take about
-     * 3,600 ticks, worth about 1.4 points of gathering at this level. */
-    CHECK(working > 3400);
+    /* A beginner works at half speed: the branches (900 work) take about
+     * 1,800 ticks, worth about 0.7 points of gathering at this level. */
+    CHECK(working > 1700);
     double gained = colonist_knowledge_level(colonist, KNOWLEDGE_GATHERING) - 50.0;
     double hours = (double)working / TICKS_PER_HOUR;
     CHECK(gained > hours * 0.97 && gained <= hours);
@@ -1806,14 +1815,14 @@ static void test_working_teaches_the_order_knowledge(void)
 
 static void test_gatherer_level_sets_branch_condition(void)
 {
-    /* The same tree, gathered from by a beginner and by a master. */
+    /* The same hazel, gathered from by a beginner and by a master. */
     ItemStack results[2];
     int working[2];
     double levels[2] = {KNOWLEDGE_MASTERY_LEVEL, KNOWLEDGE_LEVEL_MAX};
     for (int run = 0; run < 2; run++) {
         Game game;
         REQUIRE(init_flat_game(&game));
-        add_tree(&game.map, 26, 20);
+        add_hazel(&game.map, 26, 20);
         Colonist *colonist = spawn_rested(&game, 20, 20);
         REQUIRE(colonist != NULL);
         REQUIRE(colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, levels[run]));
@@ -1972,7 +1981,7 @@ static void test_orders_need_the_knowledge(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_tree(&game.map, 24, 20);
+    add_hazel(&game.map, 24, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     REQUIRE(colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, 49.0));

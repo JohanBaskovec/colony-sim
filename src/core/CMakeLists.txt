@@ -29,6 +29,7 @@ add_library(colony_core STATIC
     scenario.c
     room.c
     temperature.c
+    tree.c
     reservation.c
     rng.c
     stockpile.c

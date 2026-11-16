@@ -5,8 +5,11 @@
  * rivers in hollows (shallows and beaches one level down, deep water two);
  * hills rising level by level with natural slopes, rock outcrops one level
  * higher behind cliffs. The inside of the ground is earth near the surface
- * and rock deeper down (rock all the way under stony ground). One open level
- * tops the highest ground, where roofs go (a flat world has two levels).
+ * and rock deeper down (rock all the way under stony ground). Open levels
+ * top the highest ground, where trees rise and roofs go (TREE_MAX_LEVELS - 1
+ * of them: a flat world has TREE_MAX_LEVELS levels). Trees stand apart (no
+ * two on touching tiles), a few of the grown ones old or ancient (wider
+ * trunks), and are written into the map (core/tree.h).
  */
 #ifndef COLONY_CORE_WORLDGEN_H
 #define COLONY_CORE_WORLDGEN_H

@@ -20,11 +20,13 @@ terrain.rich_soil = Rich soil
 terrain.gravel = Gravel
 terrain.rough_stone = Rough stone
 terrain.open = Open space
+terrain.foliage = Foliage
 
 # Natural rock
 rock.granite = Granite
 rock.sandstone = Sandstone
 rock.earth = Earth
+rock.wood = Tree trunk
 
 # Plants
 plant.grass = Grass
@@ -215,6 +217,8 @@ hud.tile.slope = Slope: leads up to the level above
 hud.tile.rock = Rock wall: {0}
 # {0} = plant name, {1} = growth percentage
 hud.tile.plant = Plant: {0} ({1}% grown)
+hud.tile.tree_levels.one = Tree {0} level high
+hud.tile.tree_levels.other = Tree {0} levels high
 # A plant withered out of its season (wild garlic in summer, nettles in winter)
 hud.tile.plant_dormant = Plant: {0} (withered, grows back in spring)
 # {0} = the food a plant bears in another season (hazelnuts in summer...)
@@ -597,6 +601,7 @@ notice.knowledge_lost = {0}: nobody masters it any more
 notice.knowledge_forgotten = {0}: forgotten, nobody knows anything of it any more
 notice.roof_collapsed = A roof fell in: no wall or rock held it up any more
 notice.cave_in = A gallery caved in: no rock, wall or prop held its ceiling up any more
+notice.tree_fell_on_building = A felled tree came down on a building: no side was clear
 # A settler breaks down (bad mood). {1} = name
 notice.break_sulk = {1} is sulking and refuses to work
 notice.break_wander_off = {1} has had enough and goes off alone

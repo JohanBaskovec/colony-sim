@@ -18,6 +18,8 @@ static const TerrainDef TERRAIN_DEFS[TERRAIN_COUNT] = {
     [TERRAIN_OPEN] = {"open", N_("terrain.open"), 0.0f, 0.0f, false, false},
     [TERRAIN_GRASS_ROOF] = {"grass_roof", N_("structure.roof"), 0.0f, 0.0f, false, false,
                             STRUCTURE_ROOF},
+    /* Branches underfoot, leaves in the face: slow going. */
+    [TERRAIN_FOLIAGE] = {"foliage", N_("terrain.foliage"), 1.5f, 0.0f, false, false},
 };
 
 static const RockDef ROCK_DEFS[ROCK_COUNT] = {
@@ -25,6 +27,7 @@ static const RockDef ROCK_DEFS[ROCK_COUNT] = {
     [ROCK_GRANITE] = {"granite", N_("rock.granite"), 3500.0f, ITEM_STONE_BLOCK, 10},
     [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f, ITEM_STONE_BLOCK, 12},
     [ROCK_EARTH] = {"earth", N_("rock.earth"), 1200.0f, ITEM_NONE, 0},
+    [ROCK_WOOD] = {"wood", N_("rock.wood"), 0.0f, ITEM_NONE, 0}, /* Felled (core/tree.h). */
 };
 
 /* Seasons' days, for the plant tables. */
@@ -156,7 +159,9 @@ int plant_stock_capacity(const Plant *plant, PlantStock stock)
         (def->food_item == ITEM_NONE || growth < def->min_food_growth)) {
         return 0;
     }
-    return (int)((float)def->stock_capacity[stock] * growth + 0.5f);
+    /* Wider trees (core/tree.h) hold more, by the area of their trunk. */
+    int area = plant->size > 1 ? plant->size * plant->size : 1;
+    return (int)((float)(def->stock_capacity[stock] * area) * growth + 0.5f);
 }
 
 /* Regrowth hours a full stock holds. */
@@ -311,6 +316,7 @@ bool map_init(Map *map, int width, int height, int depth)
     map->width = width;
     map->height = height;
     map->depth = depth;
+    map->top_ground_level = depth - 1;
     return true;
 }
 
@@ -598,6 +604,26 @@ float map_climb_cost(const Map *map, int x, int y, int z)
     return map_in_bounds(map, x, y, z) ? map_climb_cost_at(map, map_index(map, x, y, z)) : 0.0f;
 }
 
+bool map_beside_trunk(const Map *map, int x, int y, int z)
+{
+    static const int DX[4] = {0, 1, 0, -1}, DY[4] = {-1, 0, 1, 0};
+    for (int d = 0; d < 4; d++) {
+        int nx = x + DX[d], ny = y + DY[d];
+        if (map_in_bounds(map, nx, ny, z) && map->rock[map_index(map, nx, ny, z)] == ROCK_WOOD) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool map_can_climb_tree(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z + 1) &&
+           map->terrain[map_index(map, x, y, z + 1)] == TERRAIN_FOLIAGE &&
+           map_is_passable(map, x, y, z + 1) && map_is_passable(map, x, y, z) &&
+           map_beside_trunk(map, x, y, z);
+}
+
 bool map_can_climb(const Map *map, int x, int y, int z, int nx, int ny)
 {
     return abs(nx - x) + abs(ny - y) == 1 && map_climb_cost(map, x, y, z) > 0.0f &&
@@ -636,6 +662,12 @@ int map_level_links(const Map *map, int x, int y, int z, TilePos out[MAP_MAX_LEV
         if (map_can_climb(map, nx, ny, z - 1, x, y)) {
             out[count++] = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)(z - 1)};
         }
+    }
+    if (map_can_climb_tree(map, x, y, z)) {
+        out[count++] = (TilePos){(int16_t)x, (int16_t)y, (int16_t)(z + 1)};
+    }
+    if (map_can_climb_tree(map, x, y, z - 1)) {
+        out[count++] = (TilePos){(int16_t)x, (int16_t)y, (int16_t)(z - 1)};
     }
     return count;
 }
@@ -734,9 +766,13 @@ StructureType map_roof_over(const Map *map, int x, int y, int z)
 
 bool map_has_ceiling(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y, z) && map_in_bounds(map, x, y, z + 1) &&
-           map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
-           !map_is_open_at(map, map_index(map, x, y, z + 1));
+    if (!map_in_bounds(map, x, y, z) || !map_in_bounds(map, x, y, z + 1) ||
+        map->rock[map_index(map, x, y, z)] != ROCK_NONE) {
+        return false;
+    }
+    size_t over = map_index(map, x, y, z + 1);
+    return !map_is_open_at(map, over) &&
+           (map->rock[over] != ROCK_NONE || map->terrain[over] != TERRAIN_FOLIAGE);
 }
 
 bool map_ceiling_supported(const Map *map, int x, int y, int z)
@@ -765,9 +801,13 @@ bool map_dig_keeps_ceilings(const Map *map, int x, int y, int z, bool opens_abov
     for (int dy = -ROOF_SUPPORT_RANGE; dy <= ROOF_SUPPORT_RANGE; dy++) {
         for (int dx = -ROOF_SUPPORT_RANGE; dx <= ROOF_SUPPORT_RANGE; dx++) {
             int cx = x + dx, cy = y + dy;
+            /* The tile itself has rock on it: what its ceiling would be. */
+            size_t over = map_in_bounds(map, x, y, z + 1) ? map_index(map, x, y, z + 1) : 0;
             bool ceiling = dx == 0 && dy == 0
                                ? !opens_above && map_in_bounds(map, x, y, z + 1) &&
-                                     !map_is_open_at(map, map_index(map, x, y, z + 1))
+                                     !map_is_open_at(map, over) &&
+                                     (map->rock[over] != ROCK_NONE ||
+                                      map->terrain[over] != TERRAIN_FOLIAGE)
                                : map_has_ceiling(map, cx, cy, z);
             if (ceiling && !supported_without(map, cx, cy, z, x, y)) {
                 return false;
@@ -783,7 +823,9 @@ int map_cover_level(const Map *map, int x, int y, int z)
         return -1;
     }
     for (int above = z + 1; above < map->depth; above++) {
-        if (!map_is_open_at(map, map_index(map, x, y, above))) {
+        size_t index = map_index(map, x, y, above);
+        if (!map_is_open_at(map, index) &&
+            (map->rock[index] != ROCK_NONE || map->terrain[index] != TERRAIN_FOLIAGE)) {
             return above;
         }
     }
@@ -809,6 +851,9 @@ uint64_t map_hash(const Map *map)
     if (map->depth != 1) { /* Hashes of one-level maps stay as they were. */
         hash = hash_fnv1a64(hash, &map->depth, sizeof(map->depth));
     }
+    if (map->top_ground_level != map->depth - 1) {
+        hash = hash_fnv1a64(hash, &map->top_ground_level, sizeof(map->top_ground_level));
+    }
     if (map->surface_level != 0) {
         hash = hash_fnv1a64(hash, &map->surface_level, sizeof(map->surface_level));
     }
@@ -833,6 +878,9 @@ uint64_t map_hash(const Map *map)
     for (size_t i = 0; i < count; i++) {
         const Plant *plant = &map->plants[i];
         hash = hash_fnv1a64(hash, &plant->type, sizeof(plant->type));
+        if (plant->size != 0) { /* Rare: big trees. */
+            hash = hash_fnv1a64(hash, &plant->size, sizeof(plant->size));
+        }
         hash = hash_fnv1a64(hash, plant->stock, sizeof(plant->stock));
         hash = hash_fnv1a64(hash, &plant->growth, sizeof(plant->growth));
     }
@@ -944,12 +992,21 @@ int map_ground_level(const Map *map, int x, int y)
     }
     for (int z = map->depth - 1; z >= 0; z--) {
         size_t index = map_index(map, x, y, z);
+        Terrain terrain = (Terrain)map->terrain[index];
+        if (terrain == TERRAIN_FOLIAGE) {
+            continue; /* Trees are left out. */
+        }
+        if (map->rock[index] == ROCK_WOOD) {
+            if (terrain != TERRAIN_OPEN) {
+                return z; /* The ground under the foot of a trunk. */
+            }
+            continue;
+        }
         if (map->rock[index] != ROCK_NONE) {
             return z + 1 < map->depth ? z + 1 : z;
         }
-        if (map->terrain[index] != TERRAIN_OPEN && TERRAIN_DEFS[map->terrain[index]].built ==
-                                                        STRUCTURE_NONE) { /* Not a roof. */
-            return z;
+        if (terrain != TERRAIN_OPEN && TERRAIN_DEFS[terrain].built == STRUCTURE_NONE) {
+            return z; /* Not a roof. */
         }
     }
     return 0;

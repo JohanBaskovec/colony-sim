@@ -22,6 +22,10 @@ static bool init_flat_game(Game *game)
         return false;
     }
     Map *map = &game->map;
+    for (size_t i = map_level_tile_count(map); i < map_tile_count(map); i++) {
+        map->terrain[i] = TERRAIN_OPEN; /* Open air over it: no trees rising there. */
+        map->rock[i] = ROCK_NONE;
+    }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->rock[i] = ROCK_NONE;

@@ -212,9 +212,11 @@ TREE_LEAVES_LIGHT = (122, 170, 74)
 TREE_OUTLINE = (24, 38, 22)
 GROUND_SHADOW = (0, 0, 0)
 
-# Canvas (width, height) and scale of each growth stage.
-TREE_STAGES = [((128, 128), 0.24), ((128, 192), 0.42), ((192, 256), 0.6),
-               ((256, 320), 0.8), ((256, 384), 1.0)]
+# Canvas (width, height) and scale of each growth stage of the saplings: from
+# TREE_VOLUME_MIN_STAGE (src/core/tree.h) on, a tree takes room in the map (a
+# trunk of wood and a floor of foliage, drawn as tiles), not a sprite.
+TREE_SAPLING_STAGES = 2
+TREE_STAGES = [((128, 128), 0.24), ((128, 192), 0.42)]
 
 
 def foliage(canvas, blobs, scale, rng, base, dark, light, clip_extra=None):
@@ -252,6 +254,7 @@ def foliage(canvas, blobs, scale, rng, base, dark, light, clip_extra=None):
 
 
 def draw_tree(stage):
+    """A sapling (the grown trees are tiles of trunk and foliage)."""
     (width, height), scale = TREE_STAGES[stage]
     canvas = Canvas(width, height)
     rng = random.Random(1000 + stage)
@@ -266,30 +269,11 @@ def draw_tree(stage):
     # Trunk, slightly tapering, with a root flare.
     canvas.polygon([(cx - trunk_w * 0.5, base_y), (cx - trunk_w * 0.32, top_y),
                     (cx + trunk_w * 0.32, top_y), (cx + trunk_w * 0.5, base_y)], TREE_TRUNK)
-    if stage >= 2:
-        canvas.ellipse(cx, base_y - 2, trunk_w * 0.85, trunk_w * 0.28, TREE_TRUNK)
-        # Bark: a darker right side and a few vertical marks.
-        canvas.polygon([(cx + trunk_w * 0.1, base_y), (cx + trunk_w * 0.12, top_y),
-                        (cx + trunk_w * 0.32, top_y), (cx + trunk_w * 0.5, base_y)],
-                       shade(TREE_TRUNK, 0.72))
-        for i in range(3):
-            x = cx - trunk_w * 0.25 + i * trunk_w * 0.2
-            y0 = base_y - trunk_h * rng.uniform(0.15, 0.4)
-            canvas.line([(x, y0), (x + rng.uniform(-1, 1), y0 - trunk_h * 0.25)],
-                        max(1.0, 2.2 * scale), shade(TREE_TRUNK, 0.6))
-        # Two branches reaching into the crown.
-        for side in (-1, 1):
-            y = top_y + trunk_h * 0.18
-            canvas.line([(cx + side * trunk_w * 0.2, y + trunk_h * 0.1),
-                         (cx + side * 46 * scale, y - 30 * scale)], max(2.0, 9 * scale),
-                        TREE_TRUNK)
-    # Crown: overlapping clumps, broadest in the middle.
+    # Crown: overlapping clumps.
     crown_y = top_y - 20 * scale
-    layout = [(0, -70, 58), (-52, -34, 54), (52, -34, 54), (0, -20, 66), (-62, 18, 46),
-              (62, 18, 46), (-26, 34, 50), (30, 34, 50), (-30, -96, 40), (32, -92, 42)]
     if stage == 0:
         layout = [(0, -20, 34), (-26, 6, 26), (26, 4, 26)]
-    elif stage == 1:
+    else:
         layout = [(0, -40, 50), (-44, -6, 44), (44, -6, 44), (0, 12, 52), (-18, -70, 36)]
     blobs = [(cx + dx * scale, crown_y + dy * scale, r * scale) for dx, dy, r in layout]
     foliage(canvas, blobs, scale, rng, rgb(TREE_LEAVES), rgb(TREE_LEAVES_DARK),
@@ -1002,7 +986,7 @@ BEARD_STYLE_NAMES = {1: "stubble", 2: "short", 3: "full", 4: "mustache"}
 def generate(output):
     os.makedirs(output, exist_ok=True)
     sprites = {}
-    for stage in range(len(TREE_STAGES)):
+    for stage in range(TREE_SAPLING_STAGES):
         sprites[f"tree_{stage}.png"] = draw_tree(stage)
     for stage in range(len(HAZEL_STAGES)):
         sprites[f"hazel_{stage}.png"] = draw_hazel(stage, False)
@@ -1047,7 +1031,7 @@ def preview(images, path):
     """Contact sheet on a grass-colored background, for a quick look."""
     sheet = Image.new("RGBA", (1600, 1000), (96, 128, 64, 255))
     x = 10
-    for stage in range(5):
+    for stage in range(TREE_SAPLING_STAGES):
         image = images[f"tree_{stage}.png"]
         sheet.alpha_composite(image, (x, 400 - image.height))
         x += image.width + 4

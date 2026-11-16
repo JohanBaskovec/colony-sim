@@ -66,6 +66,7 @@ simulation:
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level |
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
+| `tree`       | Trees in the volume: a trunk of solid wood and floors of foliage built into the map as the tree grows, finding the tree of a tile, where a felled tree falls (aimed away from structures) and what it leaves along its length |
 | `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
 | `room`       | Rooms: areas closed by walls, doors and rock, and whether roofs cover them (a cache) |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
@@ -186,10 +187,14 @@ one level to an orthogonal neighbor, the lower tile is a slope (one wades up
 the bank to the beach, then walks up to the plains); rock outcrops, deep
 water and steeper rises stay cliffs. The levels under the ground are solid
 until dug (see *Digging*). The map has as many levels as the highest ground
-needs, plus one open level over it where roofs go (about 13 on default
-maps, 4 of them underground). `WorldGenParams.flat` makes a world of one
-level of ground (and the open level over it), for tests and for benchmarks
-that compare with older versions (`flat` argument of the benchmarks).
+needs, plus `TREE_MAX_LEVELS` (7) open levels over it where the
+tallest trees rise and roofs go (about 18 on default maps, 4 of them
+underground; 32 at most). `Map.top_ground_level` keeps the highest level
+with ground: no plant grows above it, so the plant update stops there; items
+may lie higher (on foliage), and the item update skips the levels without
+any (`Items.level_stacks`). `WorldGenParams.flat` makes a world of one level of ground (and the
+open levels over it), for tests and for benchmarks that compare with older
+versions (`flat` argument of the benchmarks).
 
 The layers:
 
@@ -222,6 +227,55 @@ changed through `map_set_terrain()` / `map_set_rock()`, which bump
 `Map.topology_revision` and log the change, so that caches derived from
 passability (connectivity regions) know when they are out of date. Plants
 never block movement.
+
+**Trees in the volume** (`core/tree.h`, step 3d of the levels): a sapling
+(the first two growth stages) is a plant like the others, walked through.
+From `TREE_VOLUME_MIN_STAGE` on, a tree takes room like a building: its
+trunk is solid wood (`ROCK_WOOD`, over open terrain above the foot) from the
+foot up, and its foliage is a floor of branches (`TERRAIN_FOLIAGE`, walked
+on at ×1.5, nothing built on it) around the trunk on its upper levels, the
+top one covering the trunk too. The plant stays on the foot's tile (the
+north-west one of a wider trunk) with the growth, stocks and trunk width
+(`Plant.size`, 0 meaning 1); the shape follows from them (`tree_shape()`):
+
+| Tree | Trunk | Levels of trunk | Foliage from level | Reach | Levels |
+|---|---|---|---|---|---|
+| Stage 2 | 1 × 1 | 1 | 1 | 1 | 2 |
+| Stage 3 | 1 × 1 | 2 | 1 | 1 | 3 |
+| Grown (stage 4) | 1 × 1 | 3 | 1 | 1 | 4 |
+| Old | 2 × 2 | 5 | 3 | 2 | 6 |
+| Ancient | 3 × 3 | 6 | 3 | 3 | 7 (`TREE_MAX_LEVELS`) |
+
+The crown is rounded (corners left out of the wider ones). Old and ancient
+trees only come from world generation (`OLD_TREE_CHANCE` 4 %,
+`ANCIENT_TREE_CHANCE` 1 % of the grown trees where the wider trunk fits);
+their stocks scale with the trunk's area, as does the wood they give.
+`tree_build()` writes a tree into the map through `map_set_rock()` /
+`map_set_terrain()`: foliage only fills open space, not over a slope or a
+ladder (whose way up it would close). When a growth stage changes the
+shape, the game checks that the trunk has room (`tree_room_to_grow()`: no
+rock, structure, item nor settler where it would go) and builds it, or
+waits for the next growth step; stockpile cells under the new trunk go.
+`tree_at()` finds the tree of any trunk or foliage tile (foliage two trees
+share: the first found). Foliage is held by its tree, not by the ceiling
+rule, is no ceiling for digging and closes no room (no shelter from rain
+yet). A roof cannot be planned through a tree (the trunk and foliage are in
+the way). Settlers climb up a trunk to the foliage above a tile beside it
+(`map_can_climb_tree()`, `MAP_TREE_CLIMB_COST` ×3, both ways), and gather
+the tree's branches and twigs up there: those jobs follow the orders of the
+zone that covers the tree's foot (`gather_job_zone_at()`), and the tree's
+stocks are counted there once. A felled tree falls full length
+(`TREE_FALL_TILES_PER_LEVEL` = 2 tiles per level, stopping before rock and
+the edge of the map) where the woodcutter aims it (`tree_fall_aim()`): the
+side with the fewest structures in the way, then the longest, then south,
+east, north, west. Structures it lands on lose `TREE_FALL_DAMAGE_PERCENT`
+(50 %) of their hit points (1 kept at least) and the player gets a notice;
+the fall is a band as wide as the trunk, `tree_fall_length()` tiles long;
+the wood lies along the trunk's part of it, the branches and twigs where the
+crown came down, what lands over a drop falls to the ground below, and what
+lay on the foliage falls to the ground under it (`tree_fell()`,
+`tree_clear()`). Settlers on the foliage fall with it on their own. Other
+uses of climbing trees wait for vision and wildlife (a lookout, a refuge).
 
 Dense layers are cache-friendly, trivially serializable and hashable
 (`map_hash()`). Upcoming layers: floors, buildings/walls, zones, room IDs,
@@ -1238,13 +1292,20 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   (hair color, darker when asleep) or fades them.
 - A sprite is anchored by the middle of its bottom edge on a point of the
   world (the bottom middle of a plant's tile, a colonist's feet) and may
-  overflow its tile: trees reach up to 3 tiles high and 2 wide. Plants and
+  overflow its tile: grown hazels reach 2 tiles high and 1.5 wide. Plants and
   colonists are drawn together from the back (top of the screen) to the
   front (`render_world_sprites()`): rows of plants merged with colonists
-  sorted by the depth of their feet. A tree that would hide a colonist
-  standing behind it is drawn see-through (a hazel too).
-- Plants: a table in `sprites.c` gives each plant type its sprites: trees,
-  hazels and brambles one per growth stage (`plant_growth_stage()`, 5
+  sorted by the depth of their feet. A plant (a hazel, a sapling) that
+  would hide a colonist standing behind it is drawn see-through.
+- Trees that take room are drawn like walls and floors, no sprite: a trunk
+  tile shows its cut face (wood with growth rings on a 1 × 1 trunk, bark on
+  the sides that face out, `render_trunk()`), a foliage tile a floor of
+  leaf clumps (`render_foliage()`), and the ground under foliage is shaded
+  (`under_foliage()`). Viewed from above, the levels below are blurred as
+  usual.
+- Plants: a table in `sprites.c` gives each plant type its sprites: trees
+  (saplings, the first two stages only), hazels and brambles one per growth
+  stage (`plant_growth_stage()`, 5
   stages), low plants three sizes the stages are shared out among, mushrooms
   one; hazels and brambles have a second set showing their food
   (`plant_has_food()`). Withered plants are not drawn. Sprites are mirrored
@@ -1263,8 +1324,8 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   around the grip (`sprites_draw_rotated()`). The movement depends on the
   game tick, so it follows the game speed and stops when paused; colonists
   are out of step (offset by slot).
-- Tree see-through test: the head and chest of a colonist behind the middle
-  of a tree sprite (its canvas has empty corners).
+- Plant see-through test: the head and chest of a colonist behind the middle
+  of a plant sprite (its canvas has empty corners).
 - Text: SDL3_ttf renderer text engine, with a cache keyed by string content;
   entries unused for 120 frames are evicted.
 

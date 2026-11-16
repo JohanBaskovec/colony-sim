@@ -2,6 +2,7 @@
 #include "core/i18n.h"
 #include "core/knowledge.h"
 #include "core/structure.h"
+#include "core/tree.h"
 
 #include "test_framework.h"
 
@@ -676,7 +677,15 @@ static void test_roof_sites(void)
     CHECK(!construction_can_place_roof(&constructions, &map, 4, 4, 0)); /* Not open. */
     CHECK(!construction_can_place_roof(&constructions, &map, 5, 5, 1)); /* Over rock. */
     CHECK(construction_can_place_roof(&constructions, &map, 6, 6, 1));  /* Over water. */
-    CHECK(construction_can_place_roof(&constructions, &map, 7, 7, 1));  /* Over a tree. */
+    /* Over a tree: its trunk (core/tree.h) is in the way, once it has grown
+     * into the map; over a sapling, a roof goes (the sapling then grows no
+     * higher). */
+    tree_build(&map, 7, 7, 0);
+    CHECK(!construction_can_place_roof(&constructions, &map, 7, 7, 1));
+    CHECK(!construction_can_place_roof(&constructions, &map, 8, 7, 1)); /* Its foliage. */
+    tree_clear(&map, NULL, 7, 7, 0);
+    map.plants[map_index(&map, 7, 7, 0)].growth = 0.2f;
+    CHECK(construction_can_place_roof(&constructions, &map, 7, 7, 1));
     CHECK(construction_can_place_roof(&constructions, &map, 4, 4, 1));  /* Next to the rock. */
     CHECK(!construction_can_place_roof(&constructions, &map, 8, 8, 1)); /* 3 tiles from the rock. */
     map_set_structure(&map, 9, 10, 0, STRUCTURE_WALL);

@@ -84,6 +84,10 @@ static void test_settlers_arrive_near_food(void)
 /* Soil everywhere: a grove on the west half, a meadow on the east. */
 static void make_grove(Map *map)
 {
+    for (size_t i = map_level_tile_count(map); i < map_tile_count(map); i++) {
+        map->terrain[i] = TERRAIN_OPEN; /* Open air over it: no trees rising there. */
+        map->rock[i] = ROCK_NONE;
+    }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->rock[i] = ROCK_NONE;

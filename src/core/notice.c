@@ -33,6 +33,7 @@ const char *notice_text_key(NoticeType type)
         [NOTICE_KNOWLEDGE_FORGOTTEN] = N_("notice.knowledge_forgotten"),
         [NOTICE_ROOF_COLLAPSED] = N_("notice.roof_collapsed"),
         [NOTICE_CAVE_IN] = N_("notice.cave_in"),
+        [NOTICE_TREE_FELL_ON_BUILDING] = N_("notice.tree_fell_on_building"),
         [NOTICE_BREAK_SULK] = N_("notice.break_sulk"),
         [NOTICE_BREAK_WANDER_OFF] = N_("notice.break_wander_off"),
         [NOTICE_BREAK_BINGE] = N_("notice.break_binge"),

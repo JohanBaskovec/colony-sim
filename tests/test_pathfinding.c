@@ -31,16 +31,20 @@ static void wall_column(Map *map, int x, int y0, int y1)
 }
 
 /* Every step is adjacent to the previous one (or up or down a slope from
- * it), passable, and the path ends at `goal`. */
+ * it, or straight up or down a tree), passable, and the path ends at
+ * `goal`. */
 static void check_path_is_valid(const Map *map, TilePos start, TilePos goal, const Path *path)
 {
     TilePos previous = start;
     for (int i = 0; i < path->count; i++) {
         TilePos step = path->steps[i];
         CHECK(abs(step.x - previous.x) <= 1 && abs(step.y - previous.y) <= 1);
-        CHECK(!(step.x == previous.x && step.y == previous.y));
         CHECK(map_is_passable(map, step.x, step.y, step.z));
-        if (step.z == previous.z + 1) {
+        if (step.x == previous.x && step.y == previous.y) {
+            CHECK(abs(step.z - previous.z) == 1);
+            CHECK(map_can_climb_tree(map, step.x, step.y, step.z < previous.z ? step.z
+                                                                               : previous.z));
+        } else if (step.z == previous.z + 1) {
             CHECK(map_can_climb(map, previous.x, previous.y, previous.z, step.x, step.y));
         } else if (step.z == previous.z - 1) {
             CHECK(map_can_climb(map, step.x, step.y, step.z, previous.x, previous.y));

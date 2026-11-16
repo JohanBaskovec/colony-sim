@@ -132,7 +132,7 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
     }
     RockType rock = (RockType)map->rock[map_index(map, x, y, z)];
     switch (type) {
-    case DESIGNATION_MINE: return rock != ROCK_NONE && rock != ROCK_EARTH;
+    case DESIGNATION_MINE: return rock != ROCK_NONE && rock != ROCK_EARTH && rock != ROCK_WOOD;
     case DESIGNATION_DIG: return rock == ROCK_EARTH;
     case DESIGNATION_DIG_RAMP: return ramp_possible(map, x, y, z);
     case DESIGNATION_DIG_DOWN: return dig_down_possible(map, x, y, z);

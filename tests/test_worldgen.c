@@ -1,5 +1,7 @@
 #include "core/worldgen.h"
 
+#include "core/tree.h"
+
 #include "test_framework.h"
 
 static WorldGenParams params_for_seed(uint64_t seed)
@@ -57,7 +59,9 @@ static void test_tiles_are_valid_and_consistent(void)
         const Plant *plant = &map.plants[i];
         if (plant->type != PLANT_NONE) {
             float fertility = terrain_def((Terrain)map.terrain[i])->fertility;
-            CHECK(map.rock[i] == ROCK_NONE);
+            /* A tree's foot is under its trunk (core/tree.h). */
+            CHECK(map.rock[i] == ROCK_NONE ||
+                  (plant->type == PLANT_TREE && map.rock[i] == ROCK_WOOD));
             CHECK(fertility >= plant_def((PlantType)plant->type)->min_fertility);
             /* Withered plants (wild garlic at the end of summer) wait at 0. */
             CHECK(plant->growth > 0.0f || plant_is_dormant(plant));
@@ -66,7 +70,7 @@ static void test_tiles_are_valid_and_consistent(void)
         /* A floor under the rock, should it be dug out. */
         if (map.rock[i] == ROCK_EARTH) {
             CHECK_EQ_INT(map.terrain[i], TERRAIN_SOIL);
-        } else if (map.rock[i] != ROCK_NONE) {
+        } else if (map.rock[i] != ROCK_NONE && map.rock[i] != ROCK_WOOD) {
             CHECK_EQ_INT(map.terrain[i], TERRAIN_ROUGH_STONE);
         }
     }
@@ -149,7 +153,8 @@ static void test_relief(void)
         const int surface = map.surface_level;
         CHECK_EQ_INT(surface, WORLDGEN_UNDERGROUND_LEVELS);
         CHECK(map.depth > surface + 2);
-        CHECK(map.depth <= surface + 10); /* Hills, not mountains. */
+        CHECK(map.depth <= surface + 8 + TREE_MAX_LEVELS); /* Hills, not mountains. */
+        CHECK_EQ_INT(map.depth, map.top_ground_level + TREE_MAX_LEVELS);
         size_t levels[MAP_MAX_LEVELS] = {0};
         size_t water = 0;
         for (int y = 0; y < map.height; y++) {
@@ -157,7 +162,8 @@ static void test_relief(void)
                 int ground = map_ground_level(&map, x, y);
                 levels[ground]++;
                 CHECK(ground >= surface - 2); /* Solid deeper down. */
-                CHECK(ground < map.depth - 1); /* Open air over it, for a roof. */
+                /* Open air over it, for the tallest tree (and a roof). */
+                CHECK(ground <= map.top_ground_level);
                 for (int z = 0; z < map.depth; z++) {
                     size_t i = map_index(&map, x, y, z);
                     if (z < ground) {
@@ -167,9 +173,10 @@ static void test_relief(void)
                         }
                     } else if (z == ground) {
                         CHECK(map_has_floor(&map, x, y, z));
-                        CHECK(map.rock[i] == ROCK_NONE);
+                        CHECK(map.rock[i] == ROCK_NONE || map.rock[i] == ROCK_WOOD); /* A trunk. */
                     } else {
-                        CHECK(map_is_open(&map, x, y, z));
+                        TreeRef tree; /* Open air, but for the trees. */
+                        CHECK(map_is_open(&map, x, y, z) || tree_at(&map, x, y, z, &tree));
                         CHECK(map.plants[i].type == PLANT_NONE);
                     }
                 }
@@ -243,28 +250,79 @@ static void test_slopes(void)
 }
 
 /* Flat worlds: one level of ground, rock outcrops as rock walls on it, open
- * air over it (room for roofs). */
+ * air over it (room for trees and roofs). */
 static void test_flat(void)
 {
     WorldGenParams params = params_for_seed(3);
     params.flat = true;
     Map map;
     REQUIRE(worldgen_generate(&map, &params));
-    CHECK_EQ_INT(map.depth, 2);
+    CHECK_EQ_INT(map.depth, TREE_MAX_LEVELS);
     CHECK_EQ_INT(map.surface_level, 0);
-    for (int y = 0; y < map.height; y++) {
-        for (int x = 0; x < map.width; x++) {
-            CHECK(map_is_open(&map, x, y, 1));
+    CHECK_EQ_INT(map.top_ground_level, 0);
+    TreeRef tree;
+    for (int z = 1; z < map.depth; z++) { /* Open air, but for the trees. */
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                CHECK(map_is_open(&map, x, y, z) || tree_at(&map, x, y, z, &tree));
+            }
         }
     }
     CHECK_EQ_INT(map.slope_count, 0);
     size_t rock = 0;
     for (size_t i = 0; i < map_tile_count(&map); i++) {
-        rock += map.rock[i] != ROCK_NONE;
-        CHECK(map.rock[i] == ROCK_NONE || map.terrain[i] == TERRAIN_ROUGH_STONE);
+        rock += map.rock[i] != ROCK_NONE && map.rock[i] != ROCK_WOOD;
+        CHECK(map.rock[i] == ROCK_NONE || map.rock[i] == ROCK_WOOD ||
+              map.terrain[i] == TERRAIN_ROUGH_STONE);
     }
     CHECK(rock > 0);
     map_free(&map);
+}
+
+/* Trees stand apart and are written into the map: every tree past its
+ * sapling stages has its trunk, every tile of trunk or foliage belongs to a
+ * tree; old and ancient trees turn up, rarely. */
+static void test_trees(void)
+{
+    long trees = 0, wide = 0;
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        for (int z = 0; z < map.depth; z++) {
+            for (int y = 0; y < map.height; y++) {
+                for (int x = 0; x < map.width; x++) {
+                    size_t i = map_index(&map, x, y, z);
+                    TreeRef tree;
+                    if (map.rock[i] == ROCK_WOOD ||
+                        (map.rock[i] == ROCK_NONE && map.terrain[i] == TERRAIN_FOLIAGE)) {
+                        CHECK(tree_at(&map, x, y, z, &tree));
+                    }
+                    const Plant *plant = &map.plants[i];
+                    if (plant->type != PLANT_TREE) {
+                        continue;
+                    }
+                    trees++;
+                    wide += plant->size > 1;
+                    TreeShape shape;
+                    CHECK_EQ_INT(map.rock[i], tree_shape(plant, &shape) ? ROCK_WOOD : ROCK_NONE);
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            bool other = (dx != 0 || dy != 0) &&
+                                         map_in_bounds(&map, x + dx, y + dy, z) &&
+                                         map.plants[map_index(&map, x + dx, y + dy, z)].type ==
+                                             PLANT_TREE;
+                            CHECK(!other);
+                        }
+                    }
+                }
+            }
+        }
+        map_free(&map);
+    }
+    CHECK(trees > 0);
+    CHECK(wide > 0);
+    CHECK(wide < trees / 20);
 }
 
 int main(void)
@@ -278,5 +336,6 @@ int main(void)
     RUN_TEST(test_relief);
     RUN_TEST(test_slopes);
     RUN_TEST(test_flat);
+    RUN_TEST(test_trees);
     return test_summary();
 }

@@ -517,7 +517,12 @@ int items_advance(Items *items, size_t begin, size_t end, int hours,
         return 0;
     }
     int transformed = 0;
+    const size_t level_size = (size_t)items->width * (size_t)items->height;
     for (size_t i = begin; i < end; i++) {
+        if (items->level_stacks[i / level_size] == 0) {
+            i = (i / level_size + 1) * level_size - 1; /* Nothing on this level. */
+            continue;
+        }
         ItemStack *stack = &items->stacks[i];
         if (stack->type == ITEM_NONE) {
             continue;

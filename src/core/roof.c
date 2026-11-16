@@ -57,7 +57,8 @@ static void cave_in(Map *map, Items *items, Designations *designations, int x, i
     if (designations != NULL) {
         designation_set(designations, map, x, y, z, DESIGNATION_NONE);
     }
-    map_set_rock(map, x, y, z, above != ROCK_NONE ? above : ROCK_EARTH);
+    map_set_rock(map, x, y, z,
+                 above != ROCK_NONE && above != ROCK_WOOD ? above : ROCK_EARTH);
     drop_beside(map, items, x, y, z, lying);
     drop_salvage(map, items, structure, x, y, z, true);
     if (cave_ins != NULL) {

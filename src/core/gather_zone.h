@@ -48,6 +48,7 @@
 #include "core/map.h"
 #include "core/rng.h"
 #include "core/tool.h"
+#include "core/tree.h"
 #include "core/work.h"
 
 #include <stdbool.h>
@@ -234,6 +235,9 @@ typedef struct GatherZones {
      * orders, wanted resources, plants that grew): settlers who found nothing
      * to do look again. */
     uint32_t revision;
+    /* Trees felled onto a structure (no side was clear, see tree_fell()):
+     * the game raises a notice when it grows. Not part of the hash. */
+    uint32_t harmful_tree_falls;
 } GatherZones;
 
 bool gather_zones_init(GatherZones *zones, int width, int height, int depth);
@@ -372,15 +376,28 @@ void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT],
 /* Plants grew: tiles may offer new jobs. */
 void gather_zones_plants_changed(GatherZones *zones);
 
+/* The zone whose orders the jobs of a tile follow: the zone covering it; for
+ * a tree's foliage, the zone covering the tree's foot (its branches and
+ * twigs are taken up there, on the orders of the zone drawn over the
+ * wood). GATHER_ZONE_NONE when there is none. */
+int gather_job_zone_at(const GatherZones *zones, const Map *map, int x, int y, int z);
+
 /* Whether a tile offers a job to anyone: in a zone that wants something the
- * tile holds. */
+ * tile holds (see gather_job_zone_at()). */
 bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y, int z,
                           GatherJob job);
 
 /* First job a tile offers among `allowed`, in order of preference, or
- * GATHER_JOB_NONE. */
+ * GATHER_JOB_NONE; gather_tile_job_in() only when the zone whose orders it
+ * follows has `priority` (0: any). */
 GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y, int z,
                           GatherJobMask allowed);
+GatherJob gather_tile_job_in(const GatherZones *zones, const Map *map, int x, int y, int z,
+                             GatherJobMask allowed, int priority);
+/* gather_tile_job_in() for any tile of the foliage of `tree` (found by
+ * tree_at()). */
+GatherJob gather_tree_job_in(const GatherZones *zones, const Map *map, const TreeRef *tree,
+                             GatherJobMask allowed, int priority);
 
 /* How many items of each resource a zone's tiles hold now: wood of the trees,
  * ripe fruit, branches, twigs, grass to cut, cobbles and flint in the ground.
@@ -400,7 +417,9 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
  * (core/knowledge.h; `rng` may be NULL for average products, and a cobble is
  * then found before flint), the orders count them, and true is returned.
  * Stones are found among the wanted types the tile holds, at random in
- * proportion to their numbers. False when the job is not available.
+ * proportion to their numbers. A felled tree falls full length (tree_fell():
+ * its wood along the trunk, its branches and twigs at the crown). False when
+ * the job is not available.
  */
 bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
                           GatherJob job, float work, double level, Rng *rng);

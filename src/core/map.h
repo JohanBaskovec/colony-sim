@@ -12,6 +12,11 @@
  * map_can_climb()). A floor or rock anywhere above a tile covers it (a
  * natural roof). A built roof is a floor too: laid on the open tile over a
  * hut's walls (the level above), nobody can stand on it (see map_roof()).
+ *
+ * Trees take room in the volume (see core/tree.h): their trunk is rock of
+ * its own (ROCK_WOOD), their foliage a floor of branches (TERRAIN_FOLIAGE)
+ * around the trunk, walked on, that one climbs up to along the trunk (see
+ * map_can_climb_tree()).
  */
 #ifndef COLONY_CORE_MAP_H
 #define COLONY_CORE_MAP_H
@@ -38,6 +43,7 @@ typedef enum Terrain {
     TERRAIN_ROUGH_STONE,
     TERRAIN_OPEN, /* No floor: open space over lower ground (impassable). */
     TERRAIN_GRASS_ROOF, /* A built roof (STRUCTURE_ROOF): too frail to stand on. */
+    TERRAIN_FOLIAGE, /* The branches of a tree around its trunk: walked on (core/tree.h). */
     TERRAIN_COUNT
 } Terrain;
 
@@ -46,6 +52,7 @@ typedef enum RockType {
     ROCK_GRANITE,
     ROCK_SANDSTONE,
     ROCK_EARTH, /* The inside of soft hills: dug out, it gives nothing. */
+    ROCK_WOOD, /* The trunk of a tree (core/tree.h): felled, never mined. */
     ROCK_COUNT
 } RockType;
 
@@ -143,6 +150,9 @@ typedef struct PlantDef {
 
 typedef struct Plant {
     uint8_t type; /* PlantType */
+    /* A tree's trunk width in tiles (core/tree.h), 0 meaning 1; 0 for other
+     * plants. */
+    uint8_t size;
     /* Stocks, in hours of regrowth: one item per stock_regrow_hours. */
     uint16_t stock[PLANT_STOCK_COUNT];
     float growth; /* 0 (seedling) .. 1 (mature) */
@@ -162,9 +172,11 @@ typedef struct Plant {
 #define MAP_BUILD_LOG_SIZE 16
 
 /* Movement cost multiplier of a step up or down a slope (see map_can_climb()),
- * and of one up or down a ladder (slower, hands on the rungs). */
+ * of one up or down a ladder (slower, hands on the rungs), and of climbing
+ * a tree's trunk to its foliage (map_can_climb_tree()). */
 #define MAP_CLIMB_COST 2.0f
 #define MAP_LADDER_CLIMB_COST 3.0f
+#define MAP_TREE_CLIMB_COST 3.0f
 
 /* A tile of the map. */
 typedef struct TilePos {
@@ -197,6 +209,11 @@ typedef struct Map {
     /* The level of the plains (shown to the player as level 0; the levels
      * below it are underground). Set by world generation, 0 by map_init(). */
     int surface_level;
+    /* The highest level with ground at world generation: nothing above it
+     * holds plants (open space where trees rise and roofs go, foliage where
+     * nothing grows), so the game updates plants up to it only. depth - 1 by
+     * map_init(). */
+    int top_ground_level;
     uint8_t *terrain; /* Terrain per tile. */
     uint8_t *rock; /* RockType per tile; non-zero means a solid rock wall. */
     /* Natural slopes: non-zero where the ground rises to the level above
@@ -243,7 +260,8 @@ const PlantDef *plant_def(PlantType plant);
 ItemType plant_stock_item(PlantType type, PlantStock stock);
 
 /* Most items of a stock the plant can hold at its current growth (food:
- * none below PlantDef.min_food_growth, whatever the season). */
+ * none below PlantDef.min_food_growth, whatever the season), times the area
+ * of a wide tree's trunk (Plant.size). */
 int plant_stock_capacity(const Plant *plant, PlantStock stock);
 
 /* Items of a stock that can be taken now. */
@@ -410,7 +428,8 @@ bool map_roof_supported(const Map *map, int x, int y, int z);
 StructureType map_roof_over(const Map *map, int x, int y, int z);
 
 /* Whether the tile has a ceiling to hold up: no rock on it, and right above
- * it the ground of the level over it (a floor) or rock (a dug gallery). */
+ * it the ground of the level over it (a floor) or rock (a dug gallery). A
+ * tree's foliage is no ceiling: its tree holds it. */
 bool map_has_ceiling(const Map *map, int x, int y, int z);
 
 /* Whether a ceiling over the tile is held up: rock or a wall (a prop...)
@@ -426,7 +445,8 @@ bool map_dig_keeps_ceilings(const Map *map, int x, int y, int z, bool opens_abov
 
 /* The level of what covers a tile without rock: the first floor or rock
  * above it (a built roof, a cave, a gallery dug into a hill); -1 when
- * nothing does (open sky), when the tile is rock or out of bounds. */
+ * nothing does (open sky), when the tile is rock or out of bounds. The
+ * foliage of trees lets the sky through: it covers nothing. */
 int map_cover_level(const Map *map, int x, int y, int z);
 
 /* Whether something covers the tile (map_cover_level() is not -1). */
@@ -461,14 +481,25 @@ bool map_can_climb(const Map *map, int x, int y, int z, int nx, int ny);
  * map_climb_cost_at(); 0 out of bounds. */
 float map_climb_cost(const Map *map, int x, int y, int z);
 
+/* Whether the tile is beside a tree's trunk (ROCK_WOOD on an orthogonal
+ * neighbor, same level). */
+bool map_beside_trunk(const Map *map, int x, int y, int z);
+
+/* Whether one can climb from (x, y, z) straight up to (x, y, z + 1) along a
+ * tree's trunk: both can be stood on, (x, y, z) is beside a trunk, and
+ * (x, y, z + 1) is foliage. The same step taken backwards leads down. Such
+ * steps cost MAP_TREE_CLIMB_COST times the tile reached. */
+bool map_can_climb_tree(const Map *map, int x, int y, int z);
+
 /* Whether a ladder on (x, y, z) would lead somewhere: open space above it
  * and the ground of an orthogonal neighbor on the level above. */
 bool map_ladder_fits(const Map *map, int x, int y, int z);
 
 /* The tiles of other levels one can step to from (x, y, z) (up and down
- * slopes, see map_can_climb()): at most MAP_MAX_LEVEL_LINKS, stored in `out`;
+ * slopes and ladders, see map_can_climb(); up and down trees, see
+ * map_can_climb_tree()): at most MAP_MAX_LEVEL_LINKS, stored in `out`;
  * returns how many. */
-#define MAP_MAX_LEVEL_LINKS 8
+#define MAP_MAX_LEVEL_LINKS 10
 int map_level_links(const Map *map, int x, int y, int z, TilePos out[MAP_MAX_LEVEL_LINKS]);
 
 /* Whether structures, stations and stockpiles can go on the tile: a floor of
@@ -486,9 +517,9 @@ uint64_t map_hash(const Map *map);
 
 size_t map_count_plants(const Map *map, PlantType type);
 
-/* Whether the plant on a tile keeps anything from being built there: a tree
- * (felling needs an axe). Grass and bushes are cleared by hand first (see
- * gather_clear_plant()). */
+/* Whether the plant on a tile keeps anything from being built there: a tree,
+ * even a sapling (felling needs an axe). Grass and bushes are cleared by
+ * hand first (see gather_clear_plant()). */
 bool map_plant_blocks_building(const Map *map, int x, int y, int z);
 
 /* Whether the plant on this tile bears food a settler may eat in place right
@@ -511,7 +542,8 @@ void map_set_stones(Map *map, int x, int y, int z, int cobbles, int flint);
 bool map_take_stone(Map *map, int x, int y, int z, ItemType type);
 
 /* The level of the ground at (x, y): the highest tile of the column one
- * could stand on (the top of the highest rock or floor). */
+ * could stand on (the top of the highest rock or floor), trees left out
+ * (their trunks and foliage). */
 int map_ground_level(const Map *map, int x, int y);
 
 /* Shallow or deep water (false out of bounds). */

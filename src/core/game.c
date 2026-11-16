@@ -2,6 +2,7 @@
 
 #include "core/conversation.h"
 #include "core/log.h"
+#include "core/tree.h"
 #include "core/util.h"
 
 #include <math.h>
@@ -590,16 +591,75 @@ static void mushrooms_day(Game *game, size_t index, int day)
     plant_settle(plant, day);
 }
 
+/* Whether an item or a settler is on a tile the trunk of a tree of `shape`
+ * on (x, y, z) would grow into. */
+static bool tree_in_the_way(const Game *game, int x, int y, int z, const TreeShape *shape)
+{
+    const Map *map = &game->map;
+    for (int dz = 0; dz < shape->trunk; dz++) {
+        for (int dy = 0; dy < shape->size; dy++) {
+            for (int dx = 0; dx < shape->size; dx++) {
+                int tx = x + dx, ty = y + dy, tz = z + dz;
+                if (map_in_bounds(map, tx, ty, tz) &&
+                    map->rock[map_index(map, tx, ty, tz)] != ROCK_WOOD &&
+                    (items_get(&game->items, tx, ty, tz).count > 0 ||
+                     game_tile_has_colonist(game, tx, ty, tz))) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/* A tree whose shape changed as it grew (or that takes room and is not in
+ * the map yet) is written into the map; one whose trunk has no room, or
+ * would grow into something, waits at its stage (`old_growth`). */
+static void grow_tree(Game *game, size_t index, float old_growth)
+{
+    Map *map = &game->map;
+    Plant *plant = &map->plants[index];
+    TreeShape shape, before;
+    if (!tree_shape(plant, &shape)) {
+        return;
+    }
+    Plant old = *plant;
+    old.growth = old_growth;
+    bool had_shape = tree_shape(&old, &before);
+    bool built = map->rock[index] == ROCK_WOOD;
+    if (built && had_shape && before.trunk == shape.trunk) {
+        return;
+    }
+    int x, y, z;
+    map_tile_of(map, index, &x, &y, &z);
+    if (!tree_room_to_grow(map, x, y, z, &shape) || tree_in_the_way(game, x, y, z, &shape)) {
+        if (built || !had_shape) {
+            plant->growth = old_growth;
+        }
+        return;
+    }
+    tree_build(map, x, y, z);
+    /* No stockpile on a trunk. */
+    stockpiles_remove_rect(&game->stockpiles, x, y, x + shape.size - 1, y + shape.size - 1, z);
+}
+
 /*
  * Every plant grows once per GAME_PLANT_UPDATE_INTERVAL ticks, but not all in
- * the same tick: each tick handles the next slice of the map, so that a large
+ * the same tick: each tick handles the next slice of the ground levels, so that a large
  * map does not stall the simulation once per in-game hour. In the first hour
  * of the day, each tile also has its daily events (mushrooms).
  */
+/* Tiles that may hold plants: the levels up to the highest ground
+ * (Map.top_ground_level), not the open space and foliage over it. */
+static uint64_t ground_tile_count(const Map *map)
+{
+    return (uint64_t)map_level_tile_count(map) * (uint64_t)(map->top_ground_level + 1);
+}
+
 static void update_plants(Game *game)
 {
     Map *map = &game->map;
-    uint64_t count = map_tile_count(map);
+    uint64_t count = ground_tile_count(map);
     uint64_t phase = game->clock.tick % GAME_PLANT_UPDATE_INTERVAL;
     size_t begin = (size_t)(phase * count / GAME_PLANT_UPDATE_INTERVAL);
     size_t end = (size_t)((phase + 1) * count / GAME_PLANT_UPDATE_INTERVAL);
@@ -612,8 +672,12 @@ static void update_plants(Game *game)
         }
         Plant *plant = &map->plants[i];
         if (plant->type != PLANT_NONE) {
+            float old_growth = plant->growth;
             plant_advance(plant, terrain_def((Terrain)map->terrain[i])->fertility,
                           GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR, day);
+            if (plant->type == PLANT_TREE) {
+                grow_tree(game, i, old_growth);
+            }
         }
     }
 }
@@ -648,7 +712,8 @@ static ItemConditions tile_conditions(const void *context, size_t tile)
 }
 
 /* Items lying on the ground change over time (fresh grass dries, food
- * rots), slice by slice like plants. */
+ * rots), slice by slice like plants, over every level (foliage holds items
+ * too; levels without any are skipped). */
 static void update_items(Game *game)
 {
     uint64_t count = map_tile_count(&game->map);
@@ -967,7 +1032,12 @@ void game_tick(Game *game)
     beds_forget_missing(&game->beds, &game->map); /* Beds taken apart or fallen apart. */
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game->items.totals, game_daily_food(game));
+    uint32_t harmful_falls = game->gather_zones.harmful_tree_falls;
     update_colonists(game);
+    if (game->gather_zones.harmful_tree_falls != harmful_falls) {
+        notices_push(&game->notices, NOTICE_TREE_FELL_ON_BUILDING, KNOWLEDGE_NONE, NULL,
+                     game->clock.tick);
+    }
     /* Walls and props taken apart or fallen apart, rock dug out: roofs and
      * ceilings left without support fall in. */
     CaveIns cave_ins;

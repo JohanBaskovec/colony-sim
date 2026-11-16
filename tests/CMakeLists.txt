@@ -36,6 +36,7 @@ set(COLONY_UNIT_TESTS
     test_stockpile
     test_temperature
     test_tool
+    test_tree
     test_util
     test_weather
     test_structures
