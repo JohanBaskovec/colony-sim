@@ -284,6 +284,7 @@ hud.tile.material = {0}: {1}/{2}
 # Stones lying about a tile, that gathering may still find: {0} = item name, {1} = count
 hud.tile.ground_stones = In the ground: {0} ×{1}
 hud.tile.no_stones = No stones left in the ground
+hud.tile.litter = Lying on the tile: {0} ×{1}
 # Items on a tile or carried. {0} = quality grade, {1} = hit points,
 # {2} = maximum hit points, {3} = hit points in percent (e.g. 75%)
 hud.item_condition = Quality: {0} · Hit points: {1}/{2} ({3})

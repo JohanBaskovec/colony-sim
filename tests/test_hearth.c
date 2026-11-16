@@ -30,6 +30,7 @@ static bool init_flat_game(Game *game)
         map->terrain[i] = TERRAIN_SOIL;
         map->cobbles[i] = 0;
         map->flint[i] = 0;
+        map->branches[i] = map->twigs[i] = 0;
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }

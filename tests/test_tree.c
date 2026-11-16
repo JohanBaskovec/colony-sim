@@ -6,6 +6,7 @@
 #include "core/game.h"
 #include "core/gather_zone.h"
 #include "core/pathfinding.h"
+#include "core/worldgen.h"
 
 #include "test_framework.h"
 
@@ -187,11 +188,11 @@ static void test_build_and_find(void)
     CHECK(!is_foliage(&map, 5, 3, 1)); /* A bare trunk under its crown. */
     REQUIRE(tree_at(&map, 6, 4, tree.shape.foliage_from, &tree));
     CHECK_EQ_INT(tree.x, 3);
-    /* It holds more branches and twigs (by its area). */
+    /* It sheds more branches and twigs (by its area), and gives more when felled. */
     Plant *old = &map.plants[map_index(&map, 3, 3, 0)];
-    CHECK_EQ_INT(plant_stock_capacity(old, PLANT_STOCK_TWIGS),
-                 4 * plant_stock_capacity(&map.plants[map_index(&map, 10, 10, 0)],
-                                          PLANT_STOCK_TWIGS));
+    Plant *grown = &map.plants[map_index(&map, 10, 10, 0)];
+    CHECK(tree_shed_chance(old, ITEM_TWIGS) == 4.0f * tree_shed_chance(grown, ITEM_TWIGS));
+    CHECK_EQ_INT(tree_crown_yield(old, ITEM_BRANCHES), 4 * tree_crown_yield(grown, ITEM_BRANCHES));
 
     /* Foliage leaves the way up a slope open. */
     map_set_slope(&map, 15, 16, 0, true);
@@ -305,6 +306,7 @@ static bool init_flat_game(Game *game)
         map->terrain[i] = ground ? TERRAIN_SOIL : TERRAIN_OPEN;
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
+        map->branches[i] = map->twigs[i] = 0;
     }
     map_topology_changed(map);
     return true;
@@ -417,11 +419,10 @@ static void test_fell(void)
     REQUIRE(init_world(&map, &items));
     grow_tree(&map, 10, 2, 0, GROWN, 1);
     Plant *plant = &map.plants[map_index(&map, 10, 2, 0)];
-    plant->stock[PLANT_STOCK_BRANCHES] = (uint16_t)(6 * 48); /* 6 branches. */
-    plant->stock[PLANT_STOCK_TWIGS] = (uint16_t)(9 * 24);    /* 9 twigs. */
-    int branches = plant_stock_available(plant, PLANT_STOCK_BRANCHES);
-    int twigs = plant_stock_available(plant, PLANT_STOCK_TWIGS);
-    REQUIRE(branches > 0 && twigs > 0);
+    int branches = tree_crown_yield(plant, ITEM_BRANCHES);
+    int twigs = tree_crown_yield(plant, ITEM_TWIGS);
+    CHECK_EQ_INT(branches, TREE_CROWN_BRANCHES);
+    CHECK_EQ_INT(twigs, TREE_CROWN_TWIGS);
     ItemStack wood = item_stack_make(ITEM_WOOD, 24, ITEM_QUALITY_STANDARD,
                                      item_def(ITEM_WOOD)->max_hit_points);
     TreeFall fall = tree_fell(&map, &items, 10, 2, 0, wood);
@@ -603,9 +604,163 @@ static void test_fell_over_drop_and_onto_walls(void)
     map_free(&map);
 }
 
-/* Felling in a gathering zone (from beside the trunk's foot): the tree
- * falls, and a fall onto a building is counted for the game's notice. Twigs
- * and branches are taken on the foliage, not at the foot. */
+/* Branches and twigs lying on a tile (Map.branches, Map.twigs) of a map. */
+static int litter_total(const Map *map, ItemType type)
+{
+    int total = 0;
+    for (int z = 0; z < map->depth; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                total += map_litter(map, x, y, z, type);
+            }
+        }
+    }
+    return total;
+}
+
+/* Where a tree's litter lies: on the foliage or on the ground, at most
+ * MAP_*_MAX of each on a tile, never on a trunk. */
+static void test_shedding(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    grow_tree(&map, 10, 10, 0, GROWN, 1);
+    int on_foliage = 0, on_ground = 0;
+    for (uint32_t pick = 0; pick < 4000; pick++) {
+        tree_shed(&map, 10, 10, 0, ITEM_TWIGS, pick * 2654435761u);
+    }
+    for (int z = 0; z < DEPTH; z++) {
+        for (int y = 0; y < SIZE; y++) {
+            for (int x = 0; x < SIZE; x++) {
+                int twigs = map_litter(&map, x, y, z, ITEM_TWIGS);
+                CHECK(twigs <= MAP_TWIGS_MAX);
+                if (twigs > 0) {
+                    CHECK(!is_trunk(&map, x, y, z));
+                    CHECK(abs(x - 10) <= 1 && abs(y - 10) <= 1); /* Under the crown. */
+                    on_foliage += is_foliage(&map, x, y, z);
+                    on_ground += z == 0;
+                }
+            }
+        }
+    }
+    CHECK(on_foliage > 0);
+    CHECK(on_ground > 0);
+    /* Tiles fill up: 8 ground tiles around the trunk, 8 on each of its 3
+     * levels of foliage (and the top one over the trunk, 9). */
+    CHECK(litter_total(&map, ITEM_TWIGS) > 8 * MAP_TWIGS_MAX);
+    CHECK(litter_total(&map, ITEM_TWIGS) <= (8 + 8 + 8 + 9) * MAP_TWIGS_MAX);
+    CHECK_EQ_INT(litter_total(&map, ITEM_BRANCHES), 0);
+    /* A full tile takes no more. */
+    int before = litter_total(&map, ITEM_TWIGS);
+    for (uint32_t pick = 0; pick < 200; pick++) {
+        tree_shed(&map, 10, 10, 0, ITEM_TWIGS, pick);
+    }
+    CHECK(litter_total(&map, ITEM_TWIGS) >= before);
+    /* Not a tree, nor a sapling: nothing falls. */
+    CHECK(!tree_shed(&map, 1, 1, 0, ITEM_TWIGS, 0));
+    put_tree(&map, 15, 15, 0, SAPLING);
+    CHECK(!tree_shed(&map, 15, 15, 0, ITEM_TWIGS, 0));
+    items_free(&items);
+    map_free(&map);
+}
+
+/* Young trees shed twigs only, half as often; grown trees shed both. */
+static void test_shedding_by_age(void)
+{
+    Plant plant = {.type = PLANT_TREE, .growth = SAPLING};
+    CHECK(tree_shed_chance(&plant, ITEM_TWIGS) == 0.0f);
+    CHECK(tree_shed_chance(&plant, ITEM_BRANCHES) == 0.0f);
+    plant.growth = YOUNG;
+    float young_twigs = tree_shed_chance(&plant, ITEM_TWIGS);
+    CHECK(young_twigs > 0.0f);
+    CHECK(tree_shed_chance(&plant, ITEM_BRANCHES) == 0.0f);
+    plant.growth = HALF_GROWN;
+    CHECK(tree_shed_chance(&plant, ITEM_BRANCHES) == 0.0f);
+    plant.growth = GROWN;
+    CHECK(tree_shed_chance(&plant, ITEM_TWIGS) == 2.0f * young_twigs);
+    CHECK(tree_shed_chance(&plant, ITEM_BRANCHES) > 0.0f);
+    plant.type = PLANT_HAZEL;
+    CHECK(tree_shed_chance(&plant, ITEM_TWIGS) == 0.0f);
+    CHECK_EQ_INT(tree_crown_yield(&plant, ITEM_TWIGS), 0);
+}
+
+/* A new world has twigs and branches under its grown trees and twigs under
+ * the young ones, and the same ones from the same seed. */
+static void test_litter_in_a_new_world(void)
+{
+    WorldGenParams params;
+    worldgen_default_params(&params);
+    params.seed = 42;
+    params.width = params.height = 64;
+    Map map;
+    REQUIRE(worldgen_generate(&map, &params));
+    int grown = 0, young = 0, twigs_under_grown = 0, branches_under_young = 0;
+    for (int z = 0; z <= map.top_ground_level; z++) {
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                const Plant *plant = &map.plants[map_index(&map, x, y, z)];
+                TreeShape shape;
+                if (!tree_shape(plant, &shape) || !is_trunk(&map, x, y, z)) {
+                    continue;
+                }
+                bool is_grown = shape.size > 1 || shape.trunk == 3;
+                grown += is_grown;
+                young += !is_grown;
+                for (int dy = -shape.reach; dy < shape.size + shape.reach; dy++) {
+                    for (int dx = -shape.reach; dx < shape.size + shape.reach; dx++) {
+                        int tx = x + dx, ty = y + dy;
+                        if (!map_in_bounds(&map, tx, ty, z)) {
+                            continue;
+                        }
+                        bool twigs = map_litter(&map, tx, ty, z, ITEM_TWIGS) > 0;
+                        bool branches = map_litter(&map, tx, ty, z, ITEM_BRANCHES) > 0;
+                        twigs_under_grown += is_grown && twigs;
+                        branches_under_young += !is_grown && branches;
+                    }
+                }
+            }
+        }
+    }
+    REQUIRE(grown > 0);
+    CHECK(young > 0);
+    CHECK(twigs_under_grown > 0);
+    CHECK(litter_total(&map, ITEM_BRANCHES) > 0);
+    /* Branches near a young tree only come from a grown neighbour's crown. */
+    CHECK(branches_under_young < litter_total(&map, ITEM_BRANCHES));
+    uint64_t hash = map_hash(&map);
+    map_free(&map);
+    REQUIRE(worldgen_generate(&map, &params));
+    CHECK(map_hash(&map) == hash);
+    map_free(&map);
+}
+
+/* The litter of a felled tree's foliage falls to the ground (what does not
+ * fit lies as items). */
+static void test_felling_drops_the_litter_of_the_foliage(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    grow_tree(&map, 10, 10, 0, GROWN, 1);
+    CHECK(map_add_litter(&map, 11, 10, 2, ITEM_TWIGS)); /* On the foliage. */
+    CHECK(map_add_litter(&map, 11, 10, 2, ITEM_BRANCHES));
+    for (int i = 0; i < MAP_TWIGS_MAX; i++) {
+        map_add_litter(&map, 11, 10, 0, ITEM_TWIGS); /* The ground below is full. */
+    }
+    tree_clear(&map, &items, 10, 10, 0);
+    CHECK_EQ_INT(map_litter(&map, 11, 10, 2, ITEM_TWIGS), 0);
+    CHECK_EQ_INT(map_litter(&map, 11, 10, 2, ITEM_BRANCHES), 0);
+    CHECK_EQ_INT(map_litter(&map, 11, 10, 0, ITEM_BRANCHES), 1);
+    CHECK_EQ_INT(map_litter(&map, 11, 10, 0, ITEM_TWIGS), MAP_TWIGS_MAX);
+    CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], 1);
+    items_free(&items);
+    map_free(&map);
+}
+
+/* A zone on the ground gathers what lies on the ground, whatever hangs in the
+ * foliage above: nobody has to climb. A zone drawn over the foliage gathers
+ * what lies there. Felling still works from the foot. */
 static void test_gathering_on_trees(void)
 {
     Map map;
@@ -619,54 +774,52 @@ static void test_gathering_on_trees(void)
         map_set_structure(&map, 3 + direction_dx((Direction)d) * 2,
                           3 + direction_dy((Direction)d) * 2, 0, STRUCTURE_WALL);
     }
-    Plant *plant = &map.plants[map_index(&map, 10, 10, 0)];
-    plant->stock[PLANT_STOCK_TWIGS] = (uint16_t)(5 * 24);
+    map_add_litter(&map, 11, 10, 1, ITEM_TWIGS); /* On the foliage. */
+    map_add_litter(&map, 11, 10, 1, ITEM_TWIGS);
+    map_add_litter(&map, 9, 10, 0, ITEM_TWIGS); /* On the ground. */
     CHECK(gather_zone_can_cover(&map, 10, 10, 0)); /* The foot of the trunk. */
     CHECK(!gather_zone_can_cover(&map, 10, 10, 1));
     CHECK(gather_zone_can_cover(&map, 11, 10, 1)); /* Foliage. */
-    /* A zone on the ground: the trees whose foot it covers give their twigs
-     * up on their foliage. */
+    /* A zone on the ground. */
     int zone = gather_zone_create(&zones, &map, 0, 0, SIZE - 1, SIZE - 1, 0);
     gather_zone_set_enabled(&zones, zone, GATHER_TWIGS, true);
     gather_zone_set_mode(&zones, zone, GATHER_TWIGS, GATHER_FOREVER);
-    gather_zone_set_ripe_only(&zones, zone, GATHER_TWIGS, false);
     gather_zones_update(&zones, items.totals, 1.0f);
-    CHECK_EQ_INT(gather_job_zone_at(&zones, &map, 11, 10, 1), zone);
-    CHECK_EQ_INT(gather_job_zone_at(&zones, &map, 12, 10, 0), zone);
-    CHECK_EQ_INT(gather_job_zone_at(&zones, &map, 0, 0, 1), GATHER_ZONE_NONE);
-    CHECK(!gather_job_available(&zones, &map, 10, 10, 0, GATHER_JOB_TWIGS));
-    CHECK(gather_job_available(&zones, &map, 11, 10, 1, GATHER_JOB_TWIGS));
-    CHECK(gather_job_available(&zones, &map, 10, 10, 3, GATHER_JOB_TWIGS));
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 11, 10, 1, ~0u), GATHER_JOB_TWIGS);
-    int priority = gather_zone_get(&zones, zone)->priority;
-    CHECK_EQ_INT(gather_tile_job_in(&zones, &map, 11, 10, 1, ~0u, priority), GATHER_JOB_TWIGS);
-    CHECK_EQ_INT(gather_tile_job_in(&zones, &map, 11, 10, 1, ~0u, priority + 1), GATHER_JOB_NONE);
-    /* The tree's twigs are counted once, at its foot. */
+    CHECK_EQ_INT(gather_zone_at(&zones, 11, 10, 1), GATHER_ZONE_NONE);
+    CHECK(gather_job_available(&zones, &map, 9, 10, 0, GATHER_JOB_TWIGS));
+    CHECK(!gather_job_available(&zones, &map, 11, 10, 1, GATHER_JOB_TWIGS));
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 11, 10, 1, ~0u), GATHER_JOB_NONE);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 9, 10, 0, ~0u), GATHER_JOB_TWIGS);
     long available[GATHER_RESOURCE_COUNT];
     gather_zone_available(&zones, &map, zone, available);
-    int twigs = plant_stock_available(plant, PLANT_STOCK_TWIGS) +
-                plant_stock_available(&map.plants[map_index(&map, 3, 3, 0)], PLANT_STOCK_TWIGS);
-    CHECK_EQ_INT((int)available[GATHER_TWIGS], twigs);
-    /* Without its foot, a zone over the foliage gets nothing from the tree. */
-    gather_zones_remove_rect(&zones, 10, 10, 10, 10, 0);
+    CHECK_EQ_INT((int)available[GATHER_TWIGS], 1); /* The foliage's are not counted. */
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 11, 10, 1, GATHER_JOB_TWIGS, 1e6f, 60.0,
+                                NULL));
+    CHECK_EQ_INT(map_litter(&map, 11, 10, 1, ITEM_TWIGS), 2);
+    CHECK(gather_zone_add_work(&zones, &map, &items, 9, 10, 0, GATHER_JOB_TWIGS, 1e6f, 60.0,
+                               NULL));
+    CHECK_EQ_INT(items_get(&items, 9, 10, 0).type, ITEM_TWIGS);
+    CHECK_EQ_INT(items_get(&items, 9, 10, 0).count, 1);
+    CHECK_EQ_INT(map_litter(&map, 9, 10, 0, ITEM_TWIGS), 0);
+
+    /* A zone over the foliage itself gets what lies there. */
     int upper = gather_zone_create(&zones, &map, 0, 0, SIZE - 1, SIZE - 1, 1);
     REQUIRE(upper != GATHER_ZONE_NONE);
     gather_zone_set_enabled(&zones, upper, GATHER_TWIGS, true);
     gather_zone_set_mode(&zones, upper, GATHER_TWIGS, GATHER_FOREVER);
-    gather_zone_set_ripe_only(&zones, upper, GATHER_TWIGS, false);
     gather_zones_update(&zones, items.totals, 1.0f);
-    CHECK_EQ_INT(gather_job_zone_at(&zones, &map, 11, 10, 1), GATHER_ZONE_NONE);
-    CHECK(!gather_job_available(&zones, &map, 11, 10, 1, GATHER_JOB_TWIGS));
-    gather_zone_available(&zones, &map, upper, available);
-    CHECK_EQ_INT((int)available[GATHER_TWIGS], 0);
-    gather_zone_delete(&zones, upper);
-    gather_zone_extend(&zones, &map, zone, 10, 10, 10, 10, 0);
+    CHECK_EQ_INT(gather_zone_at(&zones, 11, 10, 1), upper);
     CHECK(gather_job_available(&zones, &map, 11, 10, 1, GATHER_JOB_TWIGS));
-    CHECK(gather_zone_add_work(&zones, &map, &items, 9, 11, 2, GATHER_JOB_TWIGS, 1e6f, 60.0,
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 11, 10, 1, ~0u), GATHER_JOB_TWIGS);
+    int priority = gather_zone_get(&zones, upper)->priority;
+    CHECK_EQ_INT(gather_tile_job_in(&zones, &map, 11, 10, 1, ~0u, priority + 1), GATHER_JOB_NONE);
+    gather_zone_available(&zones, &map, upper, available);
+    CHECK_EQ_INT((int)available[GATHER_TWIGS], 2);
+    CHECK(gather_zone_add_work(&zones, &map, &items, 11, 10, 1, GATHER_JOB_TWIGS, 1e6f, 60.0,
                                NULL));
-    CHECK_EQ_INT(items_get(&items, 9, 11, 2).type, ITEM_TWIGS); /* Up there. */
-    CHECK_EQ_INT(items_get(&items, 9, 11, 2).count, 5);
-    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_TWIGS), 0);
+    CHECK_EQ_INT(items_get(&items, 11, 10, 1).type, ITEM_TWIGS); /* Up there. */
+    CHECK_EQ_INT(items_get(&items, 11, 10, 1).count, 2);
+    CHECK_EQ_INT(map_litter(&map, 11, 10, 1, ITEM_TWIGS), 0);
     CHECK(!gather_job_available(&zones, &map, 11, 10, 1, GATHER_JOB_TWIGS));
 
     gather_zone_set_enabled(&zones, zone, GATHER_WOOD, true);
@@ -680,7 +833,8 @@ static void test_gathering_on_trees(void)
     CHECK_EQ_INT(map.plants[map_index(&map, 10, 10, 0)].type, PLANT_NONE);
     CHECK(!is_trunk(&map, 10, 10, 0));
     CHECK_EQ_INT(items_get(&items, 10, 12, 0).type, ITEM_WOOD); /* Along the trunk. */
-    CHECK_EQ_INT(items_get(&items, 9, 11, 0).type, ITEM_TWIGS); /* Fell with the foliage. */
+    /* The crown came down with its twigs (what was gathered is gone). */
+    CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], 3 + TREE_CROWN_TWIGS);
     CHECK_EQ_UINT(zones.harmful_tree_falls, 0);
     CHECK(gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CHOP, 1e6f, 60.0, NULL));
     CHECK_EQ_UINT(zones.harmful_tree_falls, 1);
@@ -689,9 +843,43 @@ static void test_gathering_on_trees(void)
     map_free(&map);
 }
 
-/* A settler sent for twigs by a zone drawn on the ground climbs the tree
- * whose foot it covers and takes them on the foliage. */
-static void test_settler_climbs_for_twigs(void)
+/* A settler sent for twigs by a zone on the ground never climbs the tree
+ * above them; with a zone over the foliage, it climbs and takes them there. */
+static void test_settler_climbs_only_for_a_zone_on_the_foliage(void)
+{
+    for (int over_foliage = 0; over_foliage < 2; over_foliage++) {
+        Game game;
+        REQUIRE(init_flat_game(&game));
+        Map *map = &game.map;
+        put_tree(map, 16, 16, 0, GROWN);
+        game_debug_skip(&game, GAME_PLANT_UPDATE_INTERVAL); /* Takes room. */
+        REQUIRE(is_trunk(map, 16, 16, 0));
+        map_add_litter(map, 17, 16, 1, ITEM_TWIGS); /* On the foliage. */
+        map_add_litter(map, 17, 16, 1, ITEM_TWIGS);
+        EntityId id = game_spawn_colonist(&game, 10, 16, 0);
+        Colonist *colonist = game_colonist(&game, id);
+        REQUIRE(colonist != NULL);
+        for (int need = 0; need < NEED_COUNT; need++) {
+            colonist->needs[need] = 1.0f;
+        }
+        int zone = gather_zone_create(&game.gather_zones, map, 14, 14, 18, 18,
+                                      over_foliage ? 1 : 0);
+        REQUIRE(zone != GATHER_ZONE_NONE);
+        gather_zone_set_enabled(&game.gather_zones, zone, GATHER_TWIGS, true);
+        gather_zone_set_mode(&game.gather_zones, zone, GATHER_TWIGS, GATHER_FOREVER);
+        bool climbed = false;
+        for (int tick = 0; tick < 4 * 3600; tick++) {
+            game_tick(&game);
+            climbed = climbed || colonist->z > 0;
+        }
+        CHECK_EQ_INT(climbed, over_foliage);
+        CHECK_EQ_INT(map_litter(map, 17, 16, 1, ITEM_TWIGS) == 0, over_foliage);
+        game_shutdown(&game);
+    }
+}
+
+/* In the running game, trees shed twigs and branches over the hours. */
+static void test_trees_shed_in_the_game(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
@@ -699,27 +887,20 @@ static void test_settler_climbs_for_twigs(void)
     put_tree(map, 16, 16, 0, GROWN);
     game_debug_skip(&game, GAME_PLANT_UPDATE_INTERVAL); /* Takes room. */
     REQUIRE(is_trunk(map, 16, 16, 0));
-    Plant *plant = &map->plants[map_index(map, 16, 16, 0)];
-    plant->stock[PLANT_STOCK_TWIGS] = (uint16_t)(5 * 24);
-    EntityId id = game_spawn_colonist(&game, 10, 16, 0);
-    Colonist *colonist = game_colonist(&game, id);
-    REQUIRE(colonist != NULL);
-    for (int need = 0; need < NEED_COUNT; need++) {
-        colonist->needs[need] = 1.0f;
-    }
-    int zone = gather_zone_create(&game.gather_zones, map, 14, 14, 18, 18, 0);
-    REQUIRE(zone != GATHER_ZONE_NONE);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_TWIGS, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_TWIGS, GATHER_FOREVER);
-    gather_zone_set_ripe_only(&game.gather_zones, zone, GATHER_TWIGS, false);
-    bool climbed = false;
-    for (int tick = 0; tick < 4 * 3600 && plant_stock_available(plant, PLANT_STOCK_TWIGS) > 0;
-         tick++) {
-        game_tick(&game);
-        climbed = climbed || colonist->z > 0;
-    }
-    CHECK(climbed);
-    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_TWIGS), 0);
+    CHECK_EQ_INT(litter_total(map, ITEM_TWIGS), 0);
+    game_debug_skip(&game, 10 * 24 * GAME_PLANT_UPDATE_INTERVAL);
+    CHECK(litter_total(map, ITEM_TWIGS) > 0);
+    CHECK(litter_total(map, ITEM_BRANCHES) > 0);
+    game_shutdown(&game);
+    /* A young tree: twigs only. */
+    REQUIRE(init_flat_game(&game));
+    map = &game.map;
+    put_tree(map, 16, 16, 0, YOUNG);
+    game_debug_skip(&game, GAME_PLANT_UPDATE_INTERVAL);
+    REQUIRE(is_trunk(map, 16, 16, 0));
+    game_debug_skip(&game, 6 * 24 * GAME_PLANT_UPDATE_INTERVAL); /* Still young. */
+    CHECK(litter_total(map, ITEM_TWIGS) > 0);
+    CHECK_EQ_INT(litter_total(map, ITEM_BRANCHES), 0);
     game_shutdown(&game);
 }
 
@@ -735,7 +916,12 @@ int main(void)
     RUN_TEST(test_fell);
     RUN_TEST(test_fell_over_drop_and_onto_walls);
     RUN_TEST(test_chop_order);
+    RUN_TEST(test_shedding);
+    RUN_TEST(test_shedding_by_age);
+    RUN_TEST(test_litter_in_a_new_world);
+    RUN_TEST(test_felling_drops_the_litter_of_the_foliage);
     RUN_TEST(test_gathering_on_trees);
-    RUN_TEST(test_settler_climbs_for_twigs);
+    RUN_TEST(test_settler_climbs_only_for_a_zone_on_the_foliage);
+    RUN_TEST(test_trees_shed_in_the_game);
     return test_summary();
 }

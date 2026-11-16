@@ -164,6 +164,10 @@ typedef struct Plant {
 /* Most stones (cobbles and flint nodules together) lying about one tile. */
 #define MAP_STONES_MAX 20
 
+/* Most dead branches, and most twigs, lying on one tile (Map.branches). */
+#define MAP_BRANCHES_MAX 2
+#define MAP_TWIGS_MAX 4
+
 /* How many recent topology changes the map remembers (see Map.topology_log). */
 #define MAP_TOPOLOGY_LOG_SIZE 16
 
@@ -226,6 +230,11 @@ typedef struct Map {
      * World generation puts none on sand (see gather_stone_ground()). */
     uint8_t *cobbles;
     uint8_t *flint;
+    /* Dead branches and twigs lying on each tile that gathering takes: shed
+     * by the trees onto the ground under their crown and onto their foliage
+     * (see core/tree.h), up to MAP_BRANCHES_MAX and MAP_TWIGS_MAX a tile. */
+    uint8_t *branches;
+    uint8_t *twigs;
     /* Built structures (StructureType on every tile they take): beds,
      * walls, doors. `structure_part` holds the structure's Direction (bits
      * 0-1) and which of its tiles this is (bits 2-3, 0 for the head); the
@@ -595,6 +604,18 @@ void map_set_stones(Map *map, int x, int y, int z, int cobbles, int flint);
 
 /* Takes one stone of a type from a tile; false when there is none. */
 bool map_take_stone(Map *map, int x, int y, int z, ItemType type);
+
+/* Branches (ITEM_BRANCHES) or twigs (ITEM_TWIGS) lying on a tile; 0 for other
+ * types and out of bounds. */
+int map_litter(const Map *map, int x, int y, int z, ItemType type);
+
+/* Lays one branch or twig on a tile; false when the tile is full, out of
+ * bounds or for another type. Does not look at what the tile is (see
+ * tree_shed()). */
+bool map_add_litter(Map *map, int x, int y, int z, ItemType type);
+
+/* Takes all the branches or twigs of a tile; returns how many were there. */
+int map_take_litter(Map *map, int x, int y, int z, ItemType type);
 
 /* The level of the ground at (x, y): the highest tile of the column one
  * could stand on (the top of the highest rock or floor), trees left out

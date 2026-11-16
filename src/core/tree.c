@@ -1,5 +1,7 @@
 #include "core/tree.h"
 
+#include "core/game_clock.h"
+
 #include <string.h>
 
 /* The order in which directions are tried when nothing tells them apart. */
@@ -41,6 +43,30 @@ int tree_wood_yield(const Plant *plant)
         return 0;
     }
     return (int)((float)(def->cut_yield * area) * plant->growth + 0.5f);
+}
+
+float tree_shed_chance(const Plant *plant, ItemType item)
+{
+    TreeShape shape;
+    if (!tree_shape(plant, &shape)) {
+        return 0.0f;
+    }
+    /* Old and ancient trees are grown; a younger one sheds twigs only. */
+    bool grown = shape.size > 1 || plant_growth_stage(plant) >= PLANT_GROWTH_STAGES - 1;
+    float area = (float)(shape.size * shape.size);
+    if (item == ITEM_TWIGS) {
+        return TREE_SHED_TWIG_CHANCE * area * (grown ? 1.0f : 0.5f);
+    }
+    return item == ITEM_BRANCHES && grown ? TREE_SHED_BRANCH_CHANCE * area : 0.0f;
+}
+
+int tree_crown_yield(const Plant *plant, ItemType item)
+{
+    int area = tree_size(plant) * tree_size(plant);
+    int full = item == ITEM_BRANCHES ? TREE_CROWN_BRANCHES
+               : item == ITEM_TWIGS  ? TREE_CROWN_TWIGS
+                                     : 0;
+    return (int)((float)(full * area) * plant->growth + 0.5f);
 }
 
 bool tree_shape(const Plant *plant, TreeShape *out)
@@ -258,6 +284,41 @@ static void drop_items_from(Map *map, Items *items, int x, int y, int z)
     }
 }
 
+/* Whether branches and twigs can lie on a tile: a floor or foliage, not
+ * rock, water, open space nor a wall. */
+static bool holds_litter(const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    Terrain terrain = (Terrain)map->terrain[index];
+    return map->rock[index] == ROCK_NONE && terrain != TERRAIN_OPEN &&
+           terrain != TERRAIN_DEEP_WATER && terrain != TERRAIN_SHALLOW_WATER &&
+           !structure_blocks((StructureType)map->structure[index]);
+}
+
+/* The branches and twigs on (x, y, z), its floor gone, fall to the ground
+ * below (what does not fit there lies as items). */
+static void drop_litter_from(Map *map, Items *items, int x, int y, int z)
+{
+    static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS};
+    for (size_t i = 0; i < sizeof(KINDS) / sizeof(KINDS[0]); i++) {
+        int count = map_take_litter(map, x, y, z, KINDS[i]);
+        int level = count > 0 ? landing_level(map, x, y, z) : -1;
+        int left = 0;
+        for (int n = 0; n < count; n++) {
+            left += level < 0 || !holds_litter(map, x, y, level) ||
+                    !map_add_litter(map, x, y, level, KINDS[i]);
+        }
+        if (left > 0 && level >= 0 && items != NULL) {
+            ItemStack stack = item_stack_pristine(KINDS[i], left);
+            stack.quality = ITEM_QUALITY_STANDARD;
+            items_drop(items, map, x, y, level, stack);
+        }
+    }
+}
+
 void tree_clear(Map *map, Items *items, int x, int y, int z)
 {
     if (!map_in_bounds(map, x, y, z)) {
@@ -300,8 +361,74 @@ void tree_clear(Map *map, Items *items, int x, int y, int z)
                 int tx = x + dx, ty = y + dy, tz = z + dz;
                 if (tree_foliage_holds(&shape, dx, dy, dz) && map_is_open(map, tx, ty, tz)) {
                     drop_items_from(map, items, tx, ty, tz);
+                    drop_litter_from(map, items, tx, ty, tz);
                 }
             }
+        }
+    }
+}
+
+bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick)
+{
+    TreeShape shape;
+    if (!map_in_bounds(map, x, y, z) ||
+        !tree_shape(&map->plants[map_index(map, x, y, z)], &shape)) {
+        return false;
+    }
+    int span = shape.size + 2 * shape.reach;
+    int tiles = 0;
+    for (int pass = 0; pass < 2; pass++) { /* Count the foliage, then find the chosen tile. */
+        int chosen = tiles > 0 ? (int)(pick % (uint32_t)tiles) : 0;
+        int seen = 0;
+        for (int dz = shape.foliage_from; dz <= shape.trunk && z + dz < map->depth; dz++) {
+            for (int dy = -shape.reach; dy < span - shape.reach; dy++) {
+                for (int dx = -shape.reach; dx < span - shape.reach; dx++) {
+                    if (!tree_foliage_holds(&shape, dx, dy, dz)) {
+                        continue;
+                    }
+                    if (pass == 0) {
+                        tiles++;
+                        continue;
+                    }
+                    if (seen++ != chosen) {
+                        continue;
+                    }
+                    int tx = x + dx, ty = y + dy, tz = z + dz;
+                    /* Caught in the leaves, or down to the first floor below. */
+                    bool stays = ((pick >> 23) & 1u) == 0 && holds_litter(map, tx, ty, tz);
+                    int level = tz;
+                    if (!stays) {
+                        level = tz - 1;
+                        while (level >= 0 && map_is_open(map, tx, ty, level)) {
+                            level--;
+                        }
+                    }
+                    return level >= 0 && holds_litter(map, tx, ty, level) &&
+                           map_add_litter(map, tx, ty, level, item);
+                }
+            }
+        }
+        if (tiles == 0) {
+            return false;
+        }
+    }
+    return false;
+}
+
+void tree_scatter_litter(Map *map, int x, int y, int z, Rng *rng)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return;
+    }
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS};
+    for (size_t i = 0; i < sizeof(KINDS) / sizeof(KINDS[0]); i++) {
+        float expected = tree_shed_chance(plant, KINDS[i]) *
+                         (float)(HOURS_PER_DAY * TREE_SCATTER_DAYS);
+        int count = (int)expected;
+        count += rng_next_float(rng) < expected - (float)count ? 1 : 0;
+        for (int n = 0; n < count; n++) {
+            tree_shed(map, x, y, z, KINDS[i], rng_next_u32(rng));
         }
     }
 }
@@ -429,11 +556,8 @@ TreeFall tree_fell(Map *map, Items *items, int x, int y, int z, ItemStack wood)
             }
         }
     }
-    ItemStack branches =
-        item_stack_pristine(plant_stock_item(PLANT_TREE, PLANT_STOCK_BRANCHES),
-                            plant_stock_available(plant, PLANT_STOCK_BRANCHES));
-    ItemStack twigs = item_stack_pristine(plant_stock_item(PLANT_TREE, PLANT_STOCK_TWIGS),
-                                          plant_stock_available(plant, PLANT_STOCK_TWIGS));
+    ItemStack branches = item_stack_pristine(ITEM_BRANCHES, tree_crown_yield(plant, ITEM_BRANCHES));
+    ItemStack twigs = item_stack_pristine(ITEM_TWIGS, tree_crown_yield(plant, ITEM_TWIGS));
     branches.quality = twigs.quality = ITEM_QUALITY_STANDARD;
     tree_clear(map, items, x, y, z);
     map_remove_plant(map, x, y, z);

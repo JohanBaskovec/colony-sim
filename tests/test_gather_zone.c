@@ -383,13 +383,15 @@ static void test_tile_jobs_in_order(void)
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
     put_plant(&map, 2, 2, PLANT_TREE, 1.0f);
+    map_add_litter(&map, 2, 2, 0, ITEM_BRANCHES);
+    map_add_litter(&map, 2, 2, 0, ITEM_TWIGS);
     int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ALL_JOBS), GATHER_JOB_NONE);
     order(&zones, &items, index, GATHER_WOOD, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_TWIGS, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_BRANCHES, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
-    /* The tree's stocks before felling it, and stones last. */
+    /* What lies under the tree before felling it, and stones last. */
     GatherJobMask no_branches = ALL_JOBS & ~GATHER_JOB_BIT(GATHER_JOB_BRANCHES);
     GatherJobMask chop_or_stones = GATHER_JOB_BIT(GATHER_JOB_CHOP) |
                                    GATHER_JOB_BIT(GATHER_JOB_STONES);
@@ -506,7 +508,7 @@ static void test_full_harvest(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    Plant *tree = put_plant(&map, 1, 1, PLANT_TREE, 1.0f);
+    Plant *hazel = put_plant(&map, 1, 1, PLANT_HAZEL, 1.0f);
     const PlantDef *bramble_def = plant_def(PLANT_BRAMBLE);
     Plant *young = put_plant(&map, 3, 1, PLANT_BRAMBLE, bramble_def->min_food_growth);
     Plant *bramble = put_plant(&map, 5, 1, PLANT_BRAMBLE, 1.0f);
@@ -526,7 +528,7 @@ static void test_full_harvest(void)
     CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
     /* Some taken: what is left waits until the stock is full again. */
     CHECK_EQ_INT(plant_take_stock(bramble, PLANT_STOCK_FOOD, 1), 1);
-    CHECK_EQ_INT(plant_take_stock(tree, PLANT_STOCK_BRANCHES, 1), 1);
+    CHECK_EQ_INT(plant_take_stock(hazel, PLANT_STOCK_BRANCHES, 1), 1);
     CHECK(!gather_job_available(&zones, &map, 5, 1, 0, GATHER_JOB_HARVEST));
     CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
     long available[GATHER_RESOURCE_COUNT];
@@ -543,6 +545,11 @@ static void test_full_harvest(void)
     CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
     CHECK(!(gather_zone_ripe_mask(zone) & GATHER_RESOURCE_BIT(GATHER_HAZELNUTS)));
     CHECK(gather_zone_ripe_mask(zone) & GATHER_RESOURCE_BIT(GATHER_TWIGS));
+    /* What lies on the ground is always ready: no waiting for a full stock. */
+    map_add_litter(&map, 1, 1, 0, ITEM_BRANCHES);
+    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
+    map_take_litter(&map, 1, 1, 0, ITEM_BRANCHES);
+    CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
     gather_zone_set_all_ripe_only(&zones, index, false);
     CHECK_EQ_INT(gather_zone_ripe_mask(zone), 0);
     CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_BRANCHES));
@@ -735,7 +742,6 @@ static void test_branches_twigs_grass_and_nuts(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    Plant *tree = put_plant(&map, 1, 1, PLANT_TREE, 1.0f);
     Plant *hazel = put_plant(&map, 3, 1, PLANT_HAZEL, 1.0f);
     Plant *grass = put_plant(&map, 1, 3, PLANT_GRASS, 1.0f);
     Plant *short_grass = put_plant(&map, 3, 3, PLANT_GRASS, 0.4f);
@@ -746,15 +752,19 @@ static void test_branches_twigs_grass_and_nuts(void)
     order(&zones, &items, index, GATHER_HAZELNUTS, GATHER_FOREVER);
     plant_settle(hazel, SEASON_DAY(SEASON_AUTUMN, 2));
 
-    /* Branches: all at once, the work growing with their number; the tree stays. */
-    int branches = plant_stock_available(tree, PLANT_STOCK_BRANCHES);
+    /* Branches lying on a tile (shed by a tree): all at once, the work growing
+     * with their number. */
+    int branches = MAP_BRANCHES_MAX;
     REQUIRE(branches > 1);
+    for (int i = 0; i < branches; i++) {
+        map_add_litter(&map, 1, 1, 0, ITEM_BRANCHES);
+    }
+    map_add_litter(&map, 1, 1, 0, ITEM_TWIGS);
     float one_branch = gather_job_work_needed(&map, 1, 1, 0, GATHER_JOB_BRANCHES) / (float)branches;
     CHECK(one_branch > 0.0f);
     CHECK(gather_zone_add_work(&zones, &map, &items, 1, 1, 0, GATHER_JOB_BRANCHES, 1e6f, 60.0,
                                NULL));
-    CHECK_EQ_INT(tree->type, PLANT_TREE);
-    CHECK_EQ_INT(plant_stock_available(tree, PLANT_STOCK_BRANCHES), 0);
+    CHECK_EQ_INT(map_litter(&map, 1, 1, 0, ITEM_BRANCHES), 0);
     CHECK_EQ_INT((int)items.totals[ITEM_BRANCHES], branches);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, 0, ALL_JOBS), GATHER_JOB_TWIGS);
 
@@ -825,7 +835,7 @@ static void test_progress_belongs_to_one_job(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    put_plant(&map, 2, 2, PLANT_TREE, 1.0f);
+    map_add_litter(&map, 2, 2, 0, ITEM_TWIGS);
     int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
     order(&zones, &items, index, GATHER_TWIGS, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_COBBLES, GATHER_FOREVER);
@@ -973,17 +983,21 @@ static void test_available_resources(void)
     map_set_stones(&map, 8, 8, 0, 4, 2);
     map_set_stones(&map, 9, 8, 0, 6, 0);
     map_set_stones(&map, 10, 8, 0, 9, 9); /* Sand: never found. */
-    Plant *tree = put_plant(&map, 8, 8, PLANT_TREE, 1.0f);
-    Plant *young = put_plant(&map, 9, 8, PLANT_TREE, 0.5f);
+    put_plant(&map, 8, 8, PLANT_TREE, 1.0f);
+    put_plant(&map, 9, 8, PLANT_TREE, 0.5f);
+    /* Branches and twigs lying on the tiles, a shrub's stock too. */
+    map_add_litter(&map, 8, 8, 0, ITEM_BRANCHES);
+    map_add_litter(&map, 8, 8, 0, ITEM_BRANCHES);
+    map_add_litter(&map, 9, 8, 0, ITEM_BRANCHES);
+    map_add_litter(&map, 9, 8, 0, ITEM_TWIGS);
+    map_add_litter(&map, 10, 8, 0, ITEM_TWIGS);
+    map_add_litter(&map, 10, 8, 0, ITEM_TWIGS);
+    map_add_litter(&map, 11, 8, 0, ITEM_TWIGS); /* Out of the zone. */
     gather_zone_available(&zones, &map, index, available);
     CHECK_EQ_INT((int)available[GATHER_COBBLES], 10);
     CHECK_EQ_INT((int)available[GATHER_FLINT], 2);
-    CHECK_EQ_INT((int)available[GATHER_BRANCHES],
-                 plant_stock_available(tree, PLANT_STOCK_BRANCHES) +
-                     plant_stock_available(young, PLANT_STOCK_BRANCHES));
-    CHECK_EQ_INT((int)available[GATHER_TWIGS],
-                 plant_stock_available(tree, PLANT_STOCK_TWIGS) +
-                     plant_stock_available(young, PLANT_STOCK_TWIGS));
+    CHECK_EQ_INT((int)available[GATHER_BRANCHES], 3);
+    CHECK_EQ_INT((int)available[GATHER_TWIGS], 3);
     /* Wood: fully grown trees only by default, all of them without the option. */
     int full_wood = plant_def(PLANT_TREE)->cut_yield;
     int young_wood = (int)((float)full_wood * 0.5f + 0.5f);

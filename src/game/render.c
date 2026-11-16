@@ -1099,6 +1099,23 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
     }
 }
 
+/* Branches and twigs lying on a tile (shed by the trees): the item's icon
+ * small, branches in the upper left corner and twigs in the lower right one,
+ * under the items. */
+static void render_litter(SDL_Renderer *renderer, const Map *map, int x, int y, int z,
+                          const SDL_FRect *tile)
+{
+    if (map_litter(map, x, y, z, ITEM_BRANCHES) > 0) {
+        SDL_FRect corner = {tile->x, tile->y, tile->w * 0.6f, tile->h * 0.6f};
+        render_item_stack(renderer, &corner, ITEM_BRANCHES);
+    }
+    if (map_litter(map, x, y, z, ITEM_TWIGS) > 0) {
+        SDL_FRect corner = {tile->x + tile->w * 0.4f, tile->y + tile->h * 0.4f, tile->w * 0.6f,
+                            tile->h * 0.6f};
+        render_item_stack(renderer, &corner, ITEM_TWIGS);
+    }
+}
+
 void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
@@ -1106,9 +1123,10 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
     TileRect visible = camera_visible_tiles(camera, items->width, items->height);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
+            SDL_FRect tile = tile_rect(camera, x, y);
+            render_litter(renderer, &game->map, x, y, z, &tile);
             ItemStack stack = items_get(items, x, y, z);
             if (stack.type != ITEM_NONE) {
-                SDL_FRect tile = tile_rect(camera, x, y);
                 render_item_stack(renderer, &tile, (ItemType)stack.type);
             }
         }

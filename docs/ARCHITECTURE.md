@@ -73,7 +73,7 @@ simulation:
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
-| `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with their branch, twig and food stocks, cobbles and flint in the ground), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
+| `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with their branch, twig and food stocks, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, plants, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
@@ -204,9 +204,13 @@ The layers:
 - `rock[]`: natural rock walls (`RockType`, 0 = none), impassable;
 - `plants[]`: at most one plant per tile (`Plant`: type, growth, and stocks
   of what can be gathered from it without felling it: branches, twigs and
-  food). Stocks are counted in hours of regrowth (`PlantDef.stock_regrow_hours`
-  per item), capped by `stock_capacity` scaled by growth, and grow back with
-  the plant's hourly update, even on mature plants.
+  food; a tree has none, see below). Stocks are counted in hours of
+  regrowth (`PlantDef.stock_regrow_hours` per item), capped by
+  `stock_capacity` scaled by growth, and grow back with the plant's hourly
+  update, even on mature plants;
+- `branches[]`, `twigs[]`: the dead branches and twigs lying on each tile (at
+  most `MAP_BRANCHES_MAX` and `MAP_TWIGS_MAX`), on the ground and on the
+  foliage of trees (`map_litter()`, `map_add_litter()`, `map_take_litter()`).
 
 **Seasons** are days of the year: a `PlantDays` bit set (60 days fit in 64
 bits) says when a plant grows (`growth_days`: spring to autumn for all of
@@ -262,10 +266,26 @@ share: the first found). Foliage is held by its tree, not by the ceiling
 rule, is no ceiling for digging and closes no room (no shelter from rain
 yet). A roof cannot be planned through a tree (the trunk and foliage are in
 the way). Settlers climb up a trunk to the foliage above a tile beside it
-(`map_can_climb_tree()`, `MAP_TREE_CLIMB_COST` ×3, both ways), and gather
-the tree's branches and twigs up there: those jobs follow the orders of the
-zone that covers the tree's foot (`gather_job_zone_at()`), and the tree's
-stocks are counted there once. A felled tree falls full length
+(`map_can_climb_tree()`, `MAP_TREE_CLIMB_COST` ×3, both ways).
+
+**Branches and twigs** are not stocks of the tree: a tree with a crown
+sheds them at random (`tree_shed()`), once an hour per tree
+(`TREE_SHED_TWIG_CHANCE`, `TREE_SHED_BRANCH_CHANCE` times the trunk's area,
+rolled from the seed, the tile and the hour like the mushrooms, so that the
+game's random stream is left alone). A young tree (not yet grown) sheds twigs
+only, half as often; saplings shed nothing. Each one comes from a random tile
+of the foliage and either stays caught there or falls to the first floor
+below, where the crown's shadow lies; it is laid only if that tile can hold
+it (no rock, water, wall nor trunk) and is not full. A new world lays
+`TREE_SCATTER_DAYS` days of it around its trees (`tree_scatter_litter()`,
+a random stream of its own). Gathering treats what lies on a tile like
+anything on the ground: every tile follows the zone covering **it**, so a
+zone drawn on the ground only gathers from the ground and nobody climbs for
+the foliage's twigs; a zone drawn over the foliage sends settlers up to take
+them there. What lay on foliage that goes with a felled tree falls to the
+ground below (`tree_clear()`; what does not fit lies as items). Shrubs
+(hazel) keep their own stock of branches and twigs, taken on the same jobs.
+A felled tree falls full length
 (`TREE_FALL_TILES_PER_LEVEL` = 2 tiles per level, stopping before rock and
 the edge of the map) where the woodcutter aims it (`tree_fall_aim()`): the
 side with the fewest structures in the way, then the longest, then south,

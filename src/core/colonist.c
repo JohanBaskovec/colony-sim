@@ -1273,46 +1273,6 @@ static __attribute__((noinline)) bool roof_beside_region(const ColonistContext *
                          map->height, region);
 }
 
-/* Whether the tree whose foot is on (x, y, z) has an open job on its
- * foliage (its branches and twigs follow the zone of its foot) with a tile
- * to stand on in `region`. Kept out of open_job_reachable()'s scan. */
-static __attribute__((noinline)) bool tree_job_reachable(const WorkSearch *search,
-                                                         const ColonistContext *context, int x,
-                                                         int y, int z, uint32_t region)
-{
-    const Map *map = context->map;
-    TreeRef tree;
-    if (!tree_at(map, x, y, z, &tree) || tree.x != x || tree.y != y || tree.z != z) {
-        return false;
-    }
-    if (gather_tree_job_in(search->gather_zones, map, &tree, search->jobs,
-                           search->zone_priority) == GATHER_JOB_NONE) {
-        return false; /* None of its tiles has one (no stock, not wanted...). */
-    }
-    const TreeShape *shape = &tree.shape;
-    int far = shape->size - 1 + shape->reach;
-    for (int dz = shape->foliage_from; dz <= shape->trunk && z + dz < map->depth; dz++) {
-        for (int dy = -shape->reach; dy <= far; dy++) {
-            for (int dx = -shape->reach; dx <= far; dx++) {
-                int fx = x + dx, fy = y + dy, fz = z + dz;
-                if (!tree_foliage_holds(shape, dx, dy, dz) || !map_in_bounds(map, fx, fy, fz)) {
-                    continue;
-                }
-                size_t level = (size_t)fz * (size_t)map->height;
-                const uint32_t *ids = &context->regions->id[(level + (size_t)fy) *
-                                                             (size_t)map->width];
-                /* Foliage shared with another tree is that tree's (tree_at()):
-                 * each tile is asked, as the search will. */
-                if (beside_region(ids, fx, fy, map->width, map->height, region) &&
-                    is_open_job(search, fx, fy, fz)) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
 static bool open_job_reachable(const WorkSearch *search, const ColonistContext *context,
                                uint32_t region)
 {
@@ -1343,10 +1303,6 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
                 bool next_to_region = beside_region(ids, x, y, width, height, region) ||
                                       (roofs && roof_beside_region(context, ids, x, y, z, region));
                 if (next_to_region && is_open_job(search, x, y, z)) {
-                    return true;
-                }
-                if (search->zones && context->map->rock[row + (size_t)x] == ROCK_WOOD &&
-                    tree_job_reachable(search, context, x, y, z, region)) {
                     return true;
                 }
             }

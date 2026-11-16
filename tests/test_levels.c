@@ -40,6 +40,7 @@ static bool init_raised_game(Game *game)
         map->slope[i] = 0;
         map->cobbles[i] = 0;
         map->flint[i] = 0;
+        map->branches[i] = map->twigs[i] = 0;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
     map->slope[map_index(map, PLATEAU_X - 1, 20, LOW)] = 1;

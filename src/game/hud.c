@@ -458,6 +458,17 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
+    /* Branches and twigs the trees shed, on the ground or on their foliage. */
+    static const ItemType LITTER[] = {ITEM_BRANCHES, ITEM_TWIGS};
+    for (size_t i = 0; i < SDL_arraysize(LITTER); i++) {
+        int count = map_litter(map, x, y, z, LITTER[i]);
+        if (count > 0) {
+            tr_integer(a, sizeof(a), count);
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.litter"),
+                      tr(item_def(LITTER[i])->name_key), a);
+        }
+    }
+
     const Stockpile *stockpile =
         stockpile_get(&app->game.stockpiles, stockpile_at(&app->game.stockpiles, x, y, z));
     if (stockpile != NULL) {

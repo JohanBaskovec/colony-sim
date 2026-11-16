@@ -27,6 +27,7 @@ static bool init_flat_game(Game *game)
         map->terrain[i] = TERRAIN_SOIL;
         map->cobbles[i] = MAP_STONES_MAX; /* Cobbles everywhere, no flint. */
         map->flint[i] = 0;
+        map->branches[i] = map->twigs[i] = 0;
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
@@ -844,9 +845,7 @@ static ColonistTask first_task(int crafting, int gathering)
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
     items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 1, ITEM_QUALITY_FINE));
     workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
-    Plant *tree = &game.map.plants[map_index(&game.map, 11, 11, 0)];
-    *tree = (Plant){.type = PLANT_TREE, .growth = 1.0f};
-    plant_settle(tree, GAME_START_DAY);
+    map_add_litter(&game.map, 11, 11, 0, ITEM_BRANCHES);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 11, 11, 12, 12, 0);
     gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BRANCHES, true);
     gather_zone_set_mode(&game.gather_zones, zone, GATHER_BRANCHES, GATHER_FOREVER);

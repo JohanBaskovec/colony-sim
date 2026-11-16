@@ -31,6 +31,7 @@ static bool init_flat_game(Game *game)
         map->terrain[i] = TERRAIN_SOIL;
         map->cobbles[i] = MAP_STONES_MAX; /* Cobbles everywhere, no flint. */
         map->flint[i] = 0;
+        map->branches[i] = map->twigs[i] = 0;
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
@@ -1037,6 +1038,7 @@ static bool init_hill_game(Game *game)
         map->slope[i] = 0;
         map->cobbles[i] = 0;
         map->flint[i] = 0;
+        map->branches[i] = map->twigs[i] = 0;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
     map->slope[map_index(map, 25, 20, 0)] = 1;

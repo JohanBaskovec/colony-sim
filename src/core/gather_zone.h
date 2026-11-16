@@ -86,8 +86,8 @@ typedef uint32_t GatherResourceMask;
 
 /* What a settler does on a tile, in order of preference on the same tile. */
 typedef enum GatherJob {
-    GATHER_JOB_BRANCHES,  /* Take the dead branches of a tree. */
-    GATHER_JOB_TWIGS,     /* Take the twigs of a tree or shrub. */
+    GATHER_JOB_BRANCHES,  /* Take the dead branches lying on a tile (and a shrub's). */
+    GATHER_JOB_TWIGS,     /* Take the twigs lying on a tile (and a shrub's). */
     GATHER_JOB_HARVEST,   /* Pick fruit, nuts or leaves; the plant stays. */
     /* Pick what is easily mistaken for a poisonous plant (mushrooms, wild
      * garlic): skilled gatherers only. */
@@ -376,14 +376,9 @@ void gather_zones_update(GatherZones *zones, const long totals[ITEM_TYPE_COUNT],
 /* Plants grew: tiles may offer new jobs. */
 void gather_zones_plants_changed(GatherZones *zones);
 
-/* The zone whose orders the jobs of a tile follow: the zone covering it; for
- * a tree's foliage, the zone covering the tree's foot (its branches and
- * twigs are taken up there, on the orders of the zone drawn over the
- * wood). GATHER_ZONE_NONE when there is none. */
-int gather_job_zone_at(const GatherZones *zones, const Map *map, int x, int y, int z);
-
 /* Whether a tile offers a job to anyone: in a zone that wants something the
- * tile holds (see gather_job_zone_at()). */
+ * tile holds. Each tile follows the zone covering it: a tree's foliage is
+ * gathered from only when a zone covers the foliage itself. */
 bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y, int z,
                           GatherJob job);
 
@@ -394,11 +389,6 @@ GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y
                           GatherJobMask allowed);
 GatherJob gather_tile_job_in(const GatherZones *zones, const Map *map, int x, int y, int z,
                              GatherJobMask allowed, int priority);
-/* gather_tile_job_in() for any tile of the foliage of `tree` (found by
- * tree_at()). */
-GatherJob gather_tree_job_in(const GatherZones *zones, const Map *map, const TreeRef *tree,
-                             GatherJobMask allowed, int priority);
-
 /* How many items of each resource a zone's tiles hold now: wood of the trees,
  * ripe fruit, branches, twigs, grass to cut, cobbles and flint in the ground.
  * Plants the zone's orders leave alone (not ready, when waiting for the full

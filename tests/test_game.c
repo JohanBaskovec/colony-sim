@@ -496,19 +496,10 @@ static void test_plant_stocks_grow_back(void)
 {
     Game game;
     REQUIRE(init_small_game(&game, 8));
-    size_t tree = SIZE_MAX;
-    for (size_t i = 0; i < map_tile_count(&game.map) && tree == SIZE_MAX; i++) {
-        if (game.map.plants[i].type == PLANT_TREE && game.map.plants[i].growth >= 1.0f) {
-            tree = i;
-        }
-    }
-    if (tree == SIZE_MAX) {
-        tree = 0;
-        game.map.rock[0] = ROCK_NONE;
-        game.map.plants[0].type = PLANT_TREE;
-        game.map.plants[0].growth = 1.0f;
-    }
-    Plant *plant = &game.map.plants[tree];
+    /* A hazel (a tree's branches and twigs lie on the ground, not on the plant). */
+    Plant *plant = &game.map.plants[0];
+    game.map.rock[0] = ROCK_NONE;
+    *plant = (Plant){.type = PLANT_HAZEL, .growth = 1.0f};
     /* Generated plants start with full stocks. */
     plant_settle(plant, GAME_START_DAY);
     int capacity = plant_stock_capacity(plant, PLANT_STOCK_BRANCHES);
@@ -516,7 +507,7 @@ static void test_plant_stocks_grow_back(void)
     CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_BRANCHES), capacity);
     plant_take_stock(plant, PLANT_STOCK_BRANCHES, capacity);
     plant_take_stock(plant, PLANT_STOCK_TWIGS, 1000);
-    int regrow = plant_def(PLANT_TREE)->stock_regrow_hours[PLANT_STOCK_BRANCHES];
+    int regrow = plant_def(PLANT_HAZEL)->stock_regrow_hours[PLANT_STOCK_BRANCHES];
     for (int i = 0; i < (regrow + 1) * TICKS_PER_HOUR; i++) {
         game_tick(&game);
     }

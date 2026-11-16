@@ -15,16 +15,23 @@
  * over a slope or a ladder, whose way up it would close), and a tree grows
  * no further while its trunk has no room (tree_room_to_grow()).
  *
+ * Trees shed dead twigs, and branches once grown, at random: they land on
+ * the ground under the crown or stay on the foliage (tree_shed(), Map.twigs
+ * and Map.branches), where gathering zones take them like anything lying on
+ * the ground: a zone drawn on the ground never sends anyone up a tree, one
+ * drawn over the foliage does.
+ *
  * A felled tree falls full length to one side, where the woodcutter aims it:
  * away from buildings, else where it does the least harm. Its wood lies
  * along the trunk, its branches and twigs where the crown came down, and
- * what lay on its foliage falls to the ground.
+ * what lay on its foliage (items, branches and twigs) falls to the ground.
  */
 #ifndef COLONY_CORE_TREE_H
 #define COLONY_CORE_TREE_H
 
 #include "core/item.h"
 #include "core/map.h"
+#include "core/rng.h"
 #include "core/structure.h"
 
 #include <stdbool.h>
@@ -47,6 +54,18 @@
  * maximum. It keeps 1 at least: wear finishes it off (and its refresh site
  * goes with it, see constructions_wear_day()). */
 #define TREE_FALL_DAMAGE_PERCENT 50
+
+/* Chance per in-game hour that a tree sheds a twig, or a branch, for a
+ * tree with a 1 x 1 trunk (more by the area of a wider one). A young tree
+ * (not yet grown, TREE_VOLUME_MIN_STAGE..) sheds twigs only, half as often. */
+#define TREE_SHED_TWIG_CHANCE 0.12f
+#define TREE_SHED_BRANCH_CHANCE 0.03f
+/* Days of shedding lying under the trees of a new world. */
+#define TREE_SCATTER_DAYS 3
+/* What the crown of a fully grown tree with a 1 x 1 trunk gives when it is
+ * felled (less when younger, more by the area of a wider trunk). */
+#define TREE_CROWN_BRANCHES 6
+#define TREE_CROWN_TWIGS 10
 
 /* The room a tree takes, counted from its foot (the north-west tile of its
  * trunk, on the level of the ground it grows on). */
@@ -75,6 +94,13 @@ float tree_fell_work(const Plant *plant);
 /* Wood a felled tree gives (its cut item, by its growth and its trunk's
  * area; 0 for other plants). */
 int tree_wood_yield(const Plant *plant);
+
+/* Hourly chance that a tree sheds an item (ITEM_TWIGS, or ITEM_BRANCHES);
+ * 0 for saplings, other plants and other items. */
+float tree_shed_chance(const Plant *plant, ItemType item);
+
+/* Branches or twigs a felled tree's crown gives (0 for other plants). */
+int tree_crown_yield(const Plant *plant, ItemType item);
 
 /* The shape of a tree that takes room (a tree from TREE_VOLUME_MIN_STAGE on);
  * false for saplings and other plants. */
@@ -114,9 +140,24 @@ bool tree_grows_into(int x, int y, int z, const TreeShape *shape, int tx, int ty
  * for a sapling. Check tree_room_to_grow() first. */
 void tree_build(Map *map, int x, int y, int z);
 
+/*
+ * The tree on (x, y, z) sheds a branch or a twig (ITEM_BRANCHES or
+ * ITEM_TWIGS) from one of the tiles of its foliage, chosen by `pick` (any
+ * number: the caller's roll): it stays on that tile or falls to the first
+ * floor below it. Nothing happens when that floor cannot hold it (rock,
+ * water, a wall, a trunk) or is full of that item (MAP_BRANCHES_MAX...).
+ * Returns whether something was laid.
+ */
+bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick);
+
+/* A new world: lays about TREE_SCATTER_DAYS days of what the tree on
+ * (x, y, z) sheds around it (tree_shed() with rolls drawn from `rng`). */
+void tree_scatter_litter(Map *map, int x, int y, int z, Rng *rng);
+
 /* Takes the trunk and foliage of the tree on (x, y, z) out of the map (the
  * plant stays): foliage another tree shares stays, what lay on the rest
- * falls to the ground below it (settlers there fall by themselves). */
+ * (items, branches and twigs) falls to the ground below it (settlers there
+ * fall by themselves). */
 void tree_clear(Map *map, Items *items, int x, int y, int z);
 
 /* Tiles a tree of `levels` levels covers once fallen. */
@@ -143,7 +184,7 @@ TreeFall tree_fall_aim(const Map *map, int x, int y, int z);
  * with its trunk and foliage (tree_clear()), structures in the way lose
  * TREE_FALL_DAMAGE_PERCENT of their hit points, and what it gives is dropped
  * (items_drop()): `wood` shared out along the trunk, the branches and twigs
- * of its stocks where the crown came down. Where the trunk lies over a
+ * of its crown (tree_crown_yield()) where it came down. Where the trunk lies over a
  * drop, its share falls to the ground below. A sapling is cut where it
  * stands (length 0). Returns how it fell (length 0 and nothing done
  * without a tree).

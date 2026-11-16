@@ -323,6 +323,20 @@ static void place_tree_volumes(Map *map, Rng *rng)
     }
 }
 
+/* The twigs and branches the trees shed lie under them and on their foliage. */
+static void place_litter(Map *map, Rng *rng)
+{
+    for (int z = 0; z <= map->top_ground_level; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                if (map->plants[map_index(map, x, y, z)].type == PLANT_TREE) {
+                    tree_scatter_litter(map, x, y, z, rng);
+                }
+            }
+        }
+    }
+}
+
 /* Level of the ground of a column, from the plains' (0): lakes and rivers
  * lie in hollows, their shallows and beaches one level down, deep water two;
  * the ground rises one level every `level_step` of elevation above
@@ -507,5 +521,8 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
     Rng tree_rng; /* A stream of its own: the other plants do not depend on the trees. */
     rng_seed(&tree_rng, params->seed, 0x7472656573ULL /* "trees" */);
     place_tree_volumes(map, &tree_rng);
+    Rng litter_rng; /* A stream of its own: nothing else depends on the litter. */
+    rng_seed(&litter_rng, params->seed, 0x6c697474657200ULL /* "litter" */);
+    place_litter(map, &litter_rng);
     return true;
 }

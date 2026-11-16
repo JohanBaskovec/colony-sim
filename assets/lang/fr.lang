@@ -250,6 +250,7 @@ hud.tile.bed_free = Lit libre : le prochain colon qui y dort le prend
 hud.tile.material = {0} : {1}/{2}
 hud.tile.ground_stones = Dans le sol : {0} ×{1}
 hud.tile.no_stones = Plus de pierres dans le sol
+hud.tile.litter = Sur la case : {0} ×{1}
 hud.item_condition = Qualité : {0} · Points de vie : {1}/{2} ({3})
 hud.item_quality = Qualité : {0}
 hud.item_hit_points = Points de vie : {0}/{1} ({2})

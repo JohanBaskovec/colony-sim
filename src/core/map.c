@@ -49,12 +49,12 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_NONE] = {.id = "none", .move_cost = 1.0f},
     [PLANT_GRASS] = {.id = "grass", .name_key = N_("plant.grass"), .growth_per_day = 0.35f,
                      .min_fertility = 0.3f, .move_cost = 1.0f, .growth_days = GROWING_SEASON},
-    /* 60 logs of 7 kg: the usable wood of a mature tree (see item.c). Dead
-     * branches can be gathered without felling it. */
+    /* 60 logs of 7 kg: the usable wood of a mature tree (see item.c). Its
+     * dead branches and twigs fall to the ground and lie on its foliage
+     * (core/tree.h): no stock on the plant. */
     [PLANT_TREE] = {.id = "tree", .name_key = N_("plant.tree"), .growth_per_day = 0.03f,
                     .min_fertility = 0.6f, .move_cost = 1.6f, .growth_days = GROWING_SEASON,
-                    .cut_item = ITEM_WOOD, .cut_yield = 60, .stock_capacity = STOCKS(6, 10, 0),
-                    .stock_regrow_hours = STOCKS(48, 24, 0)},
+                    .cut_item = ITEM_WOOD, .cut_yield = 60},
     [PLANT_HAZEL] = {.id = "hazel", .name_key = N_("plant.hazel"), .growth_per_day = 0.04f,
                      .min_fertility = 0.6f, .move_cost = 1.4f, .growth_days = GROWING_SEASON,
                      .stock_capacity = STOCKS(3, 6, 12), .stock_regrow_hours = STOCKS(72, 24, 20),
@@ -297,6 +297,8 @@ bool map_init(Map *map, int width, int height, int depth)
     map->plants = calloc(count, sizeof(Plant));
     map->cobbles = calloc(count, 1);
     map->flint = calloc(count, 1);
+    map->branches = calloc(count, 1);
+    map->twigs = calloc(count, 1);
     map->structure = calloc(count, 1);
     map->structure_part = calloc(count, 1);
     map->structure_quality = calloc(count, 1);
@@ -304,7 +306,8 @@ bool map_init(Map *map, int width, int height, int depth)
     map->roof_quality = calloc(count, 1);
     map->forbidden = calloc(count, 1);
     if (map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL || map->plants == NULL ||
-        map->cobbles == NULL || map->flint == NULL || map->structure == NULL ||
+        map->cobbles == NULL || map->flint == NULL || map->branches == NULL || map->twigs == NULL ||
+        map->structure == NULL ||
         map->structure_part == NULL || map->structure_quality == NULL ||
         map->structure_hit_points == NULL || map->roof_quality == NULL) {
         map_free(map);
@@ -329,6 +332,8 @@ void map_free(Map *map)
     free(map->plants);
     free(map->cobbles);
     free(map->flint);
+    free(map->branches);
+    free(map->twigs);
     free(map->structure);
     free(map->structure_part);
     free(map->structure_quality);
@@ -910,6 +915,8 @@ uint64_t map_hash(const Map *map)
     }
     hash = hash_fnv1a64(hash, map->cobbles, count);
     hash = hash_fnv1a64(hash, map->flint, count);
+    hash = hash_fnv1a64(hash, map->branches, count);
+    hash = hash_fnv1a64(hash, map->twigs, count);
     hash = hash_fnv1a64(hash, map->structure, count);
     hash = hash_fnv1a64(hash, map->structure_part, count);
     hash = hash_fnv1a64(hash, map->structure_quality, count);
@@ -969,6 +976,51 @@ bool map_take_stone(Map *map, int x, int y, int z, ItemType type)
     }
     layer[map_index(map, x, y, z)]--;
     return true;
+}
+
+/* The layer holding branches or twigs, and the most a tile holds; NULL for
+ * other types. */
+static uint8_t *litter_layer(const Map *map, ItemType type, int *max)
+{
+    switch (type) {
+    case ITEM_BRANCHES:
+        *max = MAP_BRANCHES_MAX;
+        return map->branches;
+    case ITEM_TWIGS:
+        *max = MAP_TWIGS_MAX;
+        return map->twigs;
+    default: return NULL;
+    }
+}
+
+int map_litter(const Map *map, int x, int y, int z, ItemType type)
+{
+    int max;
+    const uint8_t *layer = litter_layer(map, type, &max);
+    return layer != NULL && map_in_bounds(map, x, y, z) ? layer[map_index(map, x, y, z)] : 0;
+}
+
+bool map_add_litter(Map *map, int x, int y, int z, ItemType type)
+{
+    int max;
+    uint8_t *layer = litter_layer(map, type, &max);
+    if (layer == NULL || !map_in_bounds(map, x, y, z) || layer[map_index(map, x, y, z)] >= max) {
+        return false;
+    }
+    layer[map_index(map, x, y, z)]++;
+    return true;
+}
+
+int map_take_litter(Map *map, int x, int y, int z, ItemType type)
+{
+    int max;
+    uint8_t *layer = litter_layer(map, type, &max);
+    if (layer == NULL || !map_in_bounds(map, x, y, z)) {
+        return 0;
+    }
+    int count = layer[map_index(map, x, y, z)];
+    layer[map_index(map, x, y, z)] = 0;
+    return count;
 }
 
 size_t map_count_plants(const Map *map, PlantType type)

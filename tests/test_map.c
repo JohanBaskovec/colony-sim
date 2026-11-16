@@ -648,6 +648,36 @@ static void test_change_logs(void)
     map_free(&map);
 }
 
+/* Branches and twigs lying on tiles: at most MAP_*_MAX of each, taken all at once. */
+static void test_litter(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 2));
+    CHECK_EQ_INT(map_litter(&map, 3, 3, 1, ITEM_TWIGS), 0);
+    uint64_t empty = map_hash(&map);
+    for (int i = 0; i < MAP_TWIGS_MAX; i++) {
+        CHECK(map_add_litter(&map, 3, 3, 1, ITEM_TWIGS));
+    }
+    CHECK(!map_add_litter(&map, 3, 3, 1, ITEM_TWIGS)); /* Full. */
+    CHECK_EQ_INT(map_litter(&map, 3, 3, 1, ITEM_TWIGS), MAP_TWIGS_MAX);
+    CHECK_EQ_INT(map_litter(&map, 3, 3, 1, ITEM_BRANCHES), 0); /* Kept apart. */
+    CHECK_EQ_INT(map_litter(&map, 3, 3, 0, ITEM_TWIGS), 0);
+    for (int i = 0; i < MAP_BRANCHES_MAX; i++) {
+        CHECK(map_add_litter(&map, 3, 3, 1, ITEM_BRANCHES));
+    }
+    CHECK(!map_add_litter(&map, 3, 3, 1, ITEM_BRANCHES));
+    CHECK(map_hash(&map) != empty);
+    CHECK(!map_add_litter(&map, 3, 3, 1, ITEM_WOOD)); /* Not litter. */
+    CHECK(!map_add_litter(&map, -1, 3, 1, ITEM_TWIGS));
+    CHECK_EQ_INT(map_litter(&map, 16, 3, 1, ITEM_TWIGS), 0);
+    CHECK_EQ_INT(map_take_litter(&map, 3, 3, 1, ITEM_TWIGS), MAP_TWIGS_MAX);
+    CHECK_EQ_INT(map_take_litter(&map, 3, 3, 1, ITEM_TWIGS), 0);
+    CHECK_EQ_INT(map_take_litter(&map, 3, 3, 1, ITEM_BRANCHES), MAP_BRANCHES_MAX);
+    CHECK_EQ_INT(map_take_litter(&map, 3, 3, 1, ITEM_COBBLE), 0);
+    CHECK(map_hash(&map) == empty);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -670,5 +700,6 @@ int main(void)
     RUN_TEST(test_ladders);
     RUN_TEST(test_ceilings_need_support);
     RUN_TEST(test_change_logs);
+    RUN_TEST(test_litter);
     return test_summary();
 }
