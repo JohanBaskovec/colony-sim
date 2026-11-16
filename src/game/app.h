@@ -26,6 +26,10 @@ typedef enum AppTool {
     APP_TOOL_BUILD,     /* Place a blueprint of `build_type` on the clicked tile. */
     APP_TOOL_GATHER,
     APP_TOOL_STRUCTURE, /* Plan structures of `structure_type` (click, or drag a rectangle). */
+    /* Debug (game/debug_panel.h): a stack of `debug_item` on the clicked tile,
+     * or with `debug_teleport` (tool type APP_DEBUG_TELEPORT), the selected
+     * colonists moved there. */
+    APP_TOOL_DEBUG,
 } AppTool;
 
 /*
@@ -55,6 +59,10 @@ typedef enum AppTool {
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H /* Temperature view on or off. */
 #define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
+
+/* Types of the debug tool (see app_toggle_tool()). */
+#define APP_DEBUG_SPAWN 0
+#define APP_DEBUG_TELEPORT 1
 
 /* Types of the zone tools (see app_toggle_tool()). */
 #define APP_ZONE_ADD 0
@@ -151,6 +159,8 @@ typedef struct App {
     WorkstationType build_type; /* For APP_TOOL_BUILD. */
     StructureType structure_type; /* For APP_TOOL_STRUCTURE. */
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
+    ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
+    bool debug_teleport;           /* For APP_TOOL_DEBUG: moves the selection instead. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;

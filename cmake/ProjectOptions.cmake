@@ -2,6 +2,11 @@
 # (never to third-party dependencies such as SDL).
 
 function(colony_configure_target target)
+    # SDL3_ttf caches CMAKE_POSITION_INDEPENDENT_CODE=ON: our code is never
+    # part of a shared library, and -fPIC keeps the compiler from inlining
+    # exported functions (a slower simulation). Executables stay PIE (the
+    # toolchain's default).
+    set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE OFF)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /utf-8)
         if(COLONY_WARNINGS_AS_ERRORS)

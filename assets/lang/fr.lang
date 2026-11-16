@@ -80,6 +80,13 @@ debug.instant_deconstruct = Déconstruction instantanée (les constructions et t
 debug.next_weather = Temps : {0} (suivant)
 debug.cold_snap = Vague de froid (jusqu’à demain)
 debug.sadden = Démoraliser tout le monde (cafard passager)
+debug.learn_all = Tout le monde sait tout (niveau 75 dans chaque savoir)
+debug.skip_hour = Avancer d’une heure (simulée)
+debug.skip_day = Avancer d’un jour (simulé, le jeu attend un instant)
+debug.next_season = Saison suivante (les jours entre-temps ne sont pas simulés)
+debug.item = Objets à faire apparaître : {0} (suivant)
+debug.spawn_tool = Faire apparaître des objets (clic sur la carte : une pile)
+debug.teleport_tool = Déplacer les colons choisis (clic sur la carte)
 
 # Objets
 item.wood = Bois
@@ -175,6 +182,9 @@ hud.help.debug = {0} : menu de débogage (triches pour tester)
 hud.help.manage = {0} : zones de stockage · {1} : postes de travail · clic sur une zone ou un poste : ses réglages · {2} : priorités de travail
 hud.tool = Outil : {0} · Clic/glisser gauche : appliquer · Échap : retour
 hud.tool.name = Outil : {0}
+hud.tool.spawn = Débogage : faire apparaître {0} · Clic : une pile sur la case · Échap : retour
+hud.tool.teleport.one = Débogage : déplacer {0} colon · Clic : la case où aller · Échap : retour
+hud.tool.teleport.other = Débogage : déplacer {0} colons · Clic : la case où aller · Échap : retour
 hud.tool.unavailable = Personne dans la colonie ne sait encore faire cela
 hud.tool.stockpile_help = Glisser : créer ou agrandir, en fusionnant les zones chevauchées · Maj+glisser : retirer · Échap : retour
 hud.tool.zone_remove_help = Glisser : retirer la surface des zones · Échap : retour

@@ -782,6 +782,80 @@ void game_debug_sadden(Game *game)
     }
 }
 
+void game_debug_learn_all(Game *game)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (entity_id_is_none(game_colonist_id_at(game, slot))) {
+            continue;
+        }
+        Colonist *colonist = &game->colonists[slot];
+        for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
+            if (colonist->knowledge[k] < GAME_DEBUG_KNOWLEDGE_LEVEL) {
+                colonist_set_knowledge_level(colonist, (KnowledgeType)k,
+                                             GAME_DEBUG_KNOWLEDGE_LEVEL);
+            }
+            colonist->knowledge_practice[k] = game->clock.tick;
+        }
+    }
+}
+
+void game_debug_skip(Game *game, uint64_t ticks)
+{
+    for (uint64_t i = 0; i < ticks; i++) {
+        game_tick(game);
+    }
+}
+
+void game_debug_next_season(Game *game)
+{
+    uint64_t tick = game->clock.tick;
+    uint64_t season_ticks = (uint64_t)DAYS_PER_SEASON * TICKS_PER_DAY;
+    uint64_t time_of_day = tick % TICKS_PER_DAY;
+    game->clock.tick = (tick / season_ticks + 1) * season_ticks + time_of_day;
+}
+
+int game_debug_spawn_items(Game *game, int x, int y, int z, ItemType type, int count)
+{
+    if (type == ITEM_NONE || (unsigned)type >= ITEM_TYPE_COUNT || count <= 0 ||
+        !map_is_passable(&game->map, x, y, z)) {
+        return 0;
+    }
+    int placed = 0;
+    while (placed < count) { /* One stack at a time: drops spread past a full tile. */
+        int limit = item_stack_limit(type);
+        int batch = count - placed < limit ? count - placed : limit;
+        ItemStack stack = item_stack_make(type, batch, ITEM_QUALITY_STANDARD,
+                                          item_def(type)->max_hit_points);
+        int dropped = items_drop(&game->items, &game->map, x, y, z, stack);
+        placed += dropped;
+        if (dropped < batch) {
+            break; /* No room left around. */
+        }
+    }
+    return placed;
+}
+
+bool game_debug_teleport(Game *game, EntityId id, int x, int y, int z)
+{
+    Colonist *colonist = game_colonist(game, id);
+    if (colonist == NULL || !map_is_passable(&game->map, x, y, z)) {
+        return false;
+    }
+    ColonistContext context = colonist_context(game, id.index);
+    colonist_abandon_task(colonist, &context); /* Frees its reservations. */
+    colonist->x = x;
+    colonist->y = y;
+    colonist->z = z;
+    colonist->path_index = 0;
+    colonist->move_progress = 0.0f;
+    for (int kind = 0; kind < SEARCH_COUNT; kind++) { /* Somewhere new: look again. */
+        colonist->search_cooldown[kind] = 0;
+        colonist->search_failures[kind] = 0;
+        colonist->search_quiet[kind] = 0;
+    }
+    return true;
+}
+
 /* GameDebug.instant_deconstruct: every order to take a structure apart (or
  * a roof down) is carried out, as a settler's work would (a refresh site on a
  * structure taken apart goes too, its materials dropped). */

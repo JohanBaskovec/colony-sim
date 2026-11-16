@@ -14,6 +14,15 @@ typedef struct DebugRows {
     bool next_weather;
     bool cold_snap;
     bool sadden;
+    bool learn_all;
+    bool skip_hour;
+    bool skip_day;
+    bool next_season;
+    const char *item; /* Name of what the debug tool spawns. */
+    bool next_item;
+    bool spawn_active, teleport_active; /* Whether the debug tool is on in that mode. */
+    bool toggle_spawn;
+    bool toggle_teleport;
 } DebugRows;
 
 /* A button on its own row. Returns whether it was clicked. */
@@ -51,6 +60,21 @@ static void debug_rows(UiLayout *layout, void *userdata)
     rows->next_weather |= button_row(layout, label);
     rows->cold_snap |= button_row(layout, tr("debug.cold_snap"));
     rows->sadden |= button_row(layout, tr("debug.sadden"));
+    rows->learn_all |= button_row(layout, tr("debug.learn_all"));
+    rows->skip_hour |= button_row(layout, tr("debug.skip_hour"));
+    rows->skip_day |= button_row(layout, tr("debug.skip_day"));
+    rows->next_season |= button_row(layout, tr("debug.next_season"));
+    TR_FORMAT(label, sizeof(label), tr("debug.item"), rows->item);
+    rows->next_item |= button_row(layout, label);
+    rows->toggle_spawn |= checkbox_row(layout, tr("debug.spawn_tool"), rows->spawn_active);
+    rows->toggle_teleport |=
+        checkbox_row(layout, tr("debug.teleport_tool"), rows->teleport_active);
+}
+
+/* The next item type the debug tool spawns, after `type` (wrapping round). */
+static ItemType next_item_type(ItemType type)
+{
+    return (ItemType)(type + 1 < ITEM_TYPE_COUNT ? type + 1 : ITEM_NONE + 1);
 }
 
 void debug_panel_draw(App *app)
@@ -60,7 +84,11 @@ void debug_panel_draw(App *app)
     }
     Game *game = &app->game;
     DebugRows rows = {.debug = &game->debug,
-                      .weather = tr(weather_name_key(&game->weather, game->clock.tick))};
+                      .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
+                      .item = tr(item_def(app->debug_item)->name_key),
+                      .spawn_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_SPAWN),
+                      .teleport_active =
+                          app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT)};
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER,
                      debug_rows, &rows, &open);
@@ -84,6 +112,24 @@ void debug_panel_draw(App *app)
     }
     if (rows.cold_snap) {
         game_debug_cold_snap(game);
+    }
+    if (rows.learn_all) {
+        game_debug_learn_all(game);
+    }
+    if (rows.skip_hour || rows.skip_day) { /* Simulated at once: the frame waits. */
+        game_debug_skip(game, rows.skip_day ? TICKS_PER_DAY : TICKS_PER_HOUR);
+    }
+    if (rows.next_season) {
+        game_debug_next_season(game);
+    }
+    if (rows.next_item) {
+        app->debug_item = next_item_type(app->debug_item);
+    }
+    if (rows.toggle_spawn) {
+        app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_SPAWN);
+    }
+    if (rows.toggle_teleport) {
+        app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT);
     }
     if (!open) {
         app->show_debug_menu = false;

@@ -78,7 +78,8 @@ simulation:
 | `rng`        | PCG32 random number generator                                                |
 | `i18n`       | Translation catalogs, `tr()`, plurals, placeholders, number formatting       |
 | `camera`     | World ↔ screen transforms, zoom, visible tile range, the level shown         |
-| `cli`        | Command-line parsing                                                         |
+| `cli`        | Command-line parsing (language, seed, size, colonists, test scenario, cheats) |
+| `scenario`   | Ready-made test situations on a new game (`bench_simulation`, `--scenario`) |
 | `log`        | Logging with a pluggable sink                                                |
 | `util`       | Small helpers (clamp, lerp, FNV hashes)                                      |
 
@@ -98,7 +99,7 @@ simulation:
 | `gather_zone_panel` | Inspector of the selected gathering zone (priority; foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings) |
 | `station_panel` | Inspector of the selected workstation (bills, warnings) |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
-| `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`)                    |
+| `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (spawn items, move settlers) |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
 | `localization` | Discovers `.lang` files, selects the language, loads catalogs           |
 
@@ -1110,6 +1111,20 @@ them (`bench_simulation` hashes are unchanged).
 - **Weather**: `game_debug_next_weather()` switches to the next sky at once,
   `game_debug_cold_snap()` sets the coldest spell (until the next day's
   draw). They change `Game.weather` directly (always in the hash).
+- **One-shot commands** change the state directly (hashed as any state):
+  `game_debug_learn_all()` (every knowledge at least at
+  `GAME_DEBUG_KNOWLEDGE_LEVEL`, practised now), `game_debug_skip()` (ticks
+  run at once: an hour or a day from the menu, the frame waits),
+  `game_debug_next_season()` (the calendar jumps, nothing simulated in
+  between), `game_debug_spawn_items()` (a stack dropped as `items_drop()`
+  would) and `game_debug_teleport()` (the colonist gives up its task, its
+  search delays are reset). The debug tool (`APP_TOOL_DEBUG`) applies the
+  last two where the player clicks.
+- **From the command line**: `--debug instant_build,learn_all,...` (or
+  `all`) turns cheats on from the start, `--scenario <n>` sets up a test
+  situation of `core/scenario.h` (the benchmark's), `--colonists <n>` sets
+  the number of settlers: a visual check starts where it needs to, without
+  clicking its way there.
 
 ## Pathfinding
 
@@ -1165,7 +1180,8 @@ knows whether it contains a drinking spot.
 ### Measuring
 
 `bench/bench_simulation [colonists] [days] [scenario] [size] [seed]` runs a
-colony without a window and prints the average and worst tick time and the
+colony without a window (scenarios: `core/scenario.h`, which the game can
+also start on with `--scenario`) and prints the average and worst tick time and the
 final state hash. An optimization that is not supposed to change behavior
 must leave that hash unchanged. Reference (Release, 200 × 200, 64 colonists,
 10 in-game days): about 8 µs per tick left alone, 10 µs with every tree, rock

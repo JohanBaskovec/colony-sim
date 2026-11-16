@@ -30,6 +30,7 @@ set(COLONY_UNIT_TESTS
     test_region
     test_roof
     test_room
+    test_scenario
     test_reservation
     test_rng
     test_stockpile

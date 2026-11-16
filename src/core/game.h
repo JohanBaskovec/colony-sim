@@ -60,6 +60,9 @@
 /* Level of the builder behind debug instant construction (a standard grade,
  * on average). */
 #define GAME_DEBUG_BUILD_LEVEL 65.0
+/* Level of every knowledge after game_debug_learn_all(): work at a standard
+ * speed (×1). */
+#define GAME_DEBUG_KNOWLEDGE_LEVEL 75.0
 
 /* Cheats for testing, set from the debug menu. They change the simulation,
  * so game_hash() includes them (only when one is on, so that hashes stay as
@@ -171,6 +174,28 @@ void game_debug_cold_snap(Game *game);
 /* Debug: every colonist gets a gloomy memory (THOUGHT_DEBUG_GLOOM, enough to
  * break down soon, fading within hours), and nothing holds a break back. */
 void game_debug_sadden(Game *game);
+
+/* Debug: every living colonist knows everything at least at
+ * GAME_DEBUG_KNOWLEDGE_LEVEL (practised now: nothing fades yet). */
+void game_debug_learn_all(Game *game);
+
+/* Debug: runs `ticks` simulation ticks at once (time goes by as usual). */
+void game_debug_skip(Game *game, uint64_t ticks);
+
+/* Debug: jumps the calendar to the first day of the next season, at the
+ * same time of day, without simulating the days between (plants do not
+ * grow, nobody gets hungry). */
+void game_debug_next_season(Game *game);
+
+/* Debug: `count` new items of a type (standard grade, undamaged) dropped on
+ * a tile as items_drop() would. Returns how many found room (0 for an
+ * invalid type or tile). */
+int game_debug_spawn_items(Game *game, int x, int y, int z, ItemType type, int count);
+
+/* Debug: moves a colonist to a passable tile at once; it gives up its task
+ * and looks around afresh. Fails on a stale handle or a tile nobody can
+ * stand on. */
+bool game_debug_teleport(Game *game, EntityId id, int x, int y, int z);
 
 /* ---- Colonists ----------------------------------------------------------- */
 

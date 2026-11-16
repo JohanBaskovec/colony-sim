@@ -1,9 +1,11 @@
 /* Debug cheats (GameDebug): instant free construction, free crafts, work without
- * tools, instant taking apart. */
+ * tools, instant taking apart; and the one-shot debug commands (knowledge,
+ * time, items, teleport). */
 #include "core/game.h"
 
 #include "test_framework.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 /* A small game on a flat, empty soil map with no starting colonists, at noon. */
@@ -359,6 +361,119 @@ static void test_hash(void)
     game_shutdown(&b);
 }
 
+static void test_learn_all(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *novice = game_colonist(&game, game_spawn_colonist(&game, 10, 10, 0));
+    Colonist *expert = spawn_worker(&game, 12, 10);
+    REQUIRE(novice != NULL && expert != NULL);
+    for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
+        colonist_set_knowledge_level(novice, (KnowledgeType)k, 0.0);
+    }
+    colonist_set_knowledge_level(expert, KNOWLEDGE_BASIC_SHELTERS, 90.0);
+    CHECK(!game_structure_buildable(&game, STRUCTURE_ROOF) ||
+          colonist_knowledge_level(expert, KNOWLEDGE_BASIC_SHELTERS) >= 50.0);
+    game.clock.tick += 5 * TICKS_PER_DAY;
+    game_debug_learn_all(&game);
+    for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
+        CHECK_NEAR(colonist_knowledge_level(novice, (KnowledgeType)k),
+                   GAME_DEBUG_KNOWLEDGE_LEVEL, 1e-9);
+        CHECK(novice->knowledge_peak[k] >= GAME_DEBUG_KNOWLEDGE_LEVEL);
+        CHECK(!colonist_knowledge_fading(novice, (KnowledgeType)k, game.clock.tick));
+    }
+    /* Nobody loses what they knew better. */
+    CHECK_NEAR(colonist_knowledge_level(expert, KNOWLEDGE_BASIC_SHELTERS), 90.0, 1e-9);
+    for (int s = STRUCTURE_NONE + 1; s < STRUCTURE_TYPE_COUNT; s++) {
+        CHECK(game_structure_buildable(&game, (StructureType)s));
+    }
+    game_shutdown(&game);
+}
+
+static void test_skip_and_next_season(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    game.clock.tick = GAME_START_TICK + 1234;
+    game_debug_skip(&game, 100);
+    CHECK_EQ_UINT(game.clock.tick, GAME_START_TICK + 1334);
+    GameDate before = game_date_from_tick(game.clock.tick);
+    game_debug_next_season(&game);
+    GameDate after = game_date_from_tick(game.clock.tick);
+    CHECK_EQ_INT(after.season, SEASON_AUTUMN);
+    CHECK_EQ_INT(after.day, 1);
+    CHECK_EQ_INT(after.year, before.year);
+    CHECK_EQ_INT(after.hour, before.hour);
+    CHECK_EQ_INT(after.minute, before.minute);
+    /* Winter turns into the spring of the next year. */
+    game_debug_next_season(&game);
+    game_debug_next_season(&game);
+    after = game_date_from_tick(game.clock.tick);
+    CHECK_EQ_INT(after.season, SEASON_SPRING);
+    CHECK_EQ_INT(after.year, before.year + 1);
+    game_debug_skip(&game, 10); /* The simulation goes on from there. */
+    CHECK_EQ_INT(game_date_from_tick(game.clock.tick).season, SEASON_SPRING);
+    game_shutdown(&game);
+}
+
+static void test_spawn_items(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    CHECK_EQ_INT(game_debug_spawn_items(&game, 10, 10, 0, ITEM_BRANCHES, 3), 3);
+    ItemStack stack = items_get(&game.items, 10, 10, 0);
+    CHECK_EQ_INT(stack.type, ITEM_BRANCHES);
+    CHECK_EQ_INT(stack.count, 3);
+    CHECK_EQ_INT(stack.quality, ITEM_QUALITY_STANDARD);
+    CHECK_EQ_INT(item_stack_hit_points_percent(stack), 100);
+    CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 3);
+    /* More than a tile holds spreads around it. */
+    int many = 3 * item_stack_limit(ITEM_BRANCHES);
+    CHECK_EQ_INT(game_debug_spawn_items(&game, 20, 20, 0, ITEM_BRANCHES, many), many);
+    CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 3 + many);
+    CHECK_EQ_INT(items_get(&game.items, 20, 20, 0).count, item_stack_limit(ITEM_BRANCHES));
+    /* Nothing on open air, out of the map, nor of no type. */
+    CHECK_EQ_INT(game_debug_spawn_items(&game, 10, 10, 1, ITEM_BRANCHES, 3), 0);
+    CHECK_EQ_INT(game_debug_spawn_items(&game, -1, 10, 0, ITEM_BRANCHES, 3), 0);
+    CHECK_EQ_INT(game_debug_spawn_items(&game, 11, 10, 0, ITEM_NONE, 3), 0);
+    CHECK_EQ_INT(game_debug_spawn_items(&game, 11, 10, 0, ITEM_TYPE_COUNT, 3), 0);
+    CHECK_EQ_INT(game_debug_spawn_items(&game, 11, 10, 0, ITEM_BRANCHES, 0), 0);
+    game_shutdown(&game);
+}
+
+static void test_teleport(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *walker = spawn_worker(&game, 10, 10);
+    REQUIRE(walker != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    /* Someone walking to a job: it gives it up, and nobody holds the job. */
+    map_set_structure(&game.map, 30, 30, 0, STRUCTURE_WALL);
+    CHECK_EQ_INT(game_designate_rect(&game, 30, 30, 30, 30, 0, DESIGNATION_DECONSTRUCT), 1);
+    for (int i = 0; i < 2000 && walker->task != TASK_WORK; i++) {
+        run_ticks(&game, 1);
+    }
+    REQUIRE(walker->task == TASK_WORK);
+    REQUIRE(walker->x != 40 || walker->y != 5);
+    CHECK(game_debug_teleport(&game, id, 40, 5, 0));
+    CHECK_EQ_INT(walker->x, 40);
+    CHECK_EQ_INT(walker->y, 5);
+    CHECK_EQ_INT(walker->z, 0);
+    CHECK_EQ_INT(walker->task, TASK_IDLE);
+    CHECK_EQ_INT(walker->path.count, 0);
+    CHECK_EQ_INT(reservations_owner(&game.reservations, RESERVATION_WORK, (TilePos){30, 30, 0}),
+                 0);
+    run_ticks(&game, 5); /* Carries on from there. */
+    CHECK(abs(walker->x - 40) <= 1 && abs(walker->y - 5) <= 1);
+    /* Not into open air or out of the map; not a stale handle. */
+    CHECK(!game_debug_teleport(&game, id, 20, 20, 1));
+    CHECK(!game_debug_teleport(&game, id, 48, 20, 0));
+    CHECK(game_remove_colonist(&game, id));
+    CHECK(!game_debug_teleport(&game, id, 20, 20, 0));
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_instant_build);
@@ -370,5 +485,9 @@ int main(void)
     RUN_TEST(test_instant_deconstruct);
     RUN_TEST(test_weather_cheats);
     RUN_TEST(test_hash);
+    RUN_TEST(test_learn_all);
+    RUN_TEST(test_skip_and_next_season);
+    RUN_TEST(test_spawn_items);
+    RUN_TEST(test_teleport);
     return test_summary();
 }

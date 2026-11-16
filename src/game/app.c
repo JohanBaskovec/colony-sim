@@ -2,6 +2,7 @@
 
 #include "core/i18n.h"
 #include "core/log.h"
+#include "core/scenario.h"
 #include "core/util.h"
 #include "game/hud.h"
 #include "game/render.h"
@@ -44,6 +45,7 @@ bool app_tool_active(const App *app, AppTool tool, int type)
     case APP_TOOL_STRUCTURE: return (int)app->structure_type == type;
     case APP_TOOL_STOCKPILE:
     case APP_TOOL_GATHER: return app->zone_remove == (type == APP_ZONE_REMOVE);
+    case APP_TOOL_DEBUG: return app->debug_teleport == (type == APP_DEBUG_TELEPORT);
     default: return true;
     }
 }
@@ -62,6 +64,8 @@ void app_toggle_tool(App *app, AppTool tool, int type)
             app->structure_type = (StructureType)type;
         } else if (tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER) {
             app->zone_remove = type == APP_ZONE_REMOVE;
+        } else if (tool == APP_TOOL_DEBUG) {
+            app->debug_teleport = type == APP_DEBUG_TELEPORT;
         }
     }
     app->left_button_down = false;
@@ -269,10 +273,27 @@ static void update_window_title(App *app)
     SDL_SetWindowTitle(app->window, tr("game.title"));
 }
 
+/* The test situation and the cheats asked for on the command line. */
+static void apply_test_options(Game *game, const CliOptions *options)
+{
+    scenario_apply(game, (Scenario)options->scenario);
+    game_set_instant_build(game, (options->debug & CLI_DEBUG_INSTANT_BUILD) != 0);
+    game_set_free_crafts(game, (options->debug & CLI_DEBUG_FREE_CRAFTS) != 0);
+    game_set_no_tools(game, (options->debug & CLI_DEBUG_NO_TOOLS) != 0);
+    game_set_instant_deconstruct(game, (options->debug & CLI_DEBUG_INSTANT_DECONSTRUCT) != 0);
+    if (options->debug & CLI_DEBUG_LEARN_ALL) {
+        game_debug_learn_all(game);
+    }
+    if (options->scenario != SCENARIO_NONE || options->debug != 0) {
+        LOG_INFO("Scenario %d, debug flags 0x%x", options->scenario, options->debug);
+    }
+}
+
 bool app_init(App *app, const CliOptions *options)
 {
     SDL_zerop(app);
     app->structure_direction = DIRECTION_SOUTH; /* Beds' heads at the top. */
+    app->debug_item = ITEM_BRANCHES; /* What the debug tool spawns first. */
     log_set_sink(sdl_log_sink, NULL);
     SDL_SetAppMetadata("Colony Sim", COLONY_VERSION, "io.github.colony-sim");
 
@@ -325,11 +346,15 @@ bool app_init(App *app, const CliOptions *options)
         params.world.width = options->map_size;
         params.world.height = options->map_size;
     }
+    if (options->colonist_count > 0) {
+        params.colonist_count = options->colonist_count;
+    }
     if (!game_init(&app->game, &params)) {
         LOG_ERROR("World generation failed");
         return false;
     }
     app->game_ready = true;
+    apply_test_options(&app->game, options);
     LOG_INFO("World generated: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists",
              params.world.seed, params.world.width, params.world.height,
              app->game.colonist_pool.count);
@@ -635,6 +660,23 @@ static bool zone_tool_removes(const App *app)
 /* Stockpile tool release: adds the rectangle to the selected stockpile and
  * those it overlaps (merged into one), or creates a new one, which becomes
  * selected; or removes zone tiles. */
+/* The debug tool: a stack of the chosen item on the tile, or the selected
+ * colonists moved there. */
+static void apply_debug_tool(App *app, float screen_x, float screen_y)
+{
+    int x, y;
+    screen_to_tile(app, screen_x, screen_y, &x, &y);
+    const int z = app->camera.level;
+    if (!app->debug_teleport) {
+        game_debug_spawn_items(&app->game, x, y, z, app->debug_item,
+                               item_stack_limit(app->debug_item));
+        return;
+    }
+    for (int i = 0; i < app->selected_count; i++) {
+        game_debug_teleport(&app->game, app->selected[i], x, y, z);
+    }
+}
+
 static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
 {
     const int z = app->camera.level; /* The level shown. */
@@ -730,6 +772,8 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
             game_place_structure_rect(&app->game, app->structure_type, app->structure_direction,
                                       x0, y0, x1, y1, z);
         }
+    } else if (app->tool == APP_TOOL_DEBUG) {
+        apply_debug_tool(app, button->x, button->y);
     } else if (app->tool == APP_TOOL_STOCKPILE) {
         apply_stockpile_tool(app, button->x, button->y);
     } else if (app->tool == APP_TOOL_GATHER) {

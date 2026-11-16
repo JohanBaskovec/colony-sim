@@ -1111,6 +1111,16 @@ void hud_draw(App *app)
             if (!game_structure_buildable(&app->game, app->structure_type)) {
                 panel_add_text(&tool, tr("hud.tool.unavailable"));
             }
+        } else if (app->tool == APP_TOOL_DEBUG) {
+            if (app->debug_teleport) {
+                char count[16];
+                tr_integer(count, sizeof(count), app->selected_count);
+                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE,
+                          tr_plural("hud.tool.teleport", app->selected_count), count);
+            } else {
+                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.spawn"),
+                          tr(item_def(app->debug_item)->name_key));
+            }
         } else {
             TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool"),
                       tr(tool_name_key(app->tool_type)));

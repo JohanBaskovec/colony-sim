@@ -11,11 +11,22 @@
 
 #define CLI_LANGUAGE_CODE_SIZE 16
 
+/* Cheats turned on from the start (--debug), see GameDebug in core/game.h. */
+#define CLI_DEBUG_INSTANT_BUILD (1u << 0)
+#define CLI_DEBUG_FREE_CRAFTS (1u << 1)
+#define CLI_DEBUG_NO_TOOLS (1u << 2)
+#define CLI_DEBUG_INSTANT_DECONSTRUCT (1u << 3)
+#define CLI_DEBUG_LEARN_ALL (1u << 4) /* game_debug_learn_all() once, at the start. */
+#define CLI_DEBUG_ALL ((1u << 5) - 1)
+
 typedef struct CliOptions {
     char language[CLI_LANGUAGE_CODE_SIZE]; /* Empty: use the system locale. */
     bool has_seed;
     uint64_t seed;
     int map_size; /* 0: default size. */
+    int colonist_count; /* 0: default count. */
+    int scenario; /* A Scenario (core/scenario.h), SCENARIO_NONE by default. */
+    unsigned debug; /* CLI_DEBUG_* bits. */
     bool show_help;
 } CliOptions;
 

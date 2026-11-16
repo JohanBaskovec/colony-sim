@@ -82,6 +82,13 @@ debug.instant_deconstruct = Instant taking apart (marked structures and roofs co
 debug.next_weather = Weather: {0} (next)
 debug.cold_snap = Cold snap (until tomorrow)
 debug.sadden = Sadden everyone (gloom, fading)
+debug.learn_all = Everyone knows everything (level 75 in every knowledge)
+debug.skip_hour = Skip an hour (simulated)
+debug.skip_day = Skip a day (simulated, the game waits a moment)
+debug.next_season = Next season (the days between are not simulated)
+debug.item = Items to spawn: {0} (next)
+debug.spawn_tool = Spawn items (click on the map: one stack)
+debug.teleport_tool = Move the selected settlers (click on the map)
 
 # Items
 item.wood = Wood
@@ -187,6 +194,9 @@ hud.help.manage = {0}: stockpile zones · {1}: workstations · click a zone or s
 hud.tool = Tool: {0} · Left click/drag: apply · Esc: back
 # {0} = tool name (stockpile zone tool: first line, help on the second line)
 hud.tool.name = Tool: {0}
+hud.tool.spawn = Debug: spawn {0} · Click: one stack on the tile · Esc: back
+hud.tool.teleport.one = Debug: move {0} settler · Click: the tile to go to · Esc: back
+hud.tool.teleport.other = Debug: move {0} settlers · Click: the tile to go to · Esc: back
 hud.tool.unavailable = Nobody in the colony knows how to do this yet
 hud.tool.stockpile_help = Drag: create or extend, merging the zones it overlaps · Shift+drag: remove · Esc: back
 hud.tool.zone_remove_help = Drag: take the area out of the zones · Esc: back
