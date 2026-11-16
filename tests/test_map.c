@@ -94,6 +94,15 @@ static void test_floors_and_slopes(void)
     CHECK_EQ_INT(map_level_links(&map, 8, 5, 1, links), 1); /* And back down. */
     CHECK(links[0].x == 7 && links[0].y == 5 && links[0].z == 0);
     CHECK_EQ_INT(map_level_links(&map, 9, 5, 1, links), 0);
+    /* Shown as a ramp up on its level, down from the level above. */
+    CHECK_EQ_INT(map_ramp_at(&map, 7, 5, 0), MAP_RAMP_UP);
+    CHECK_EQ_INT(map_ramp_at(&map, 7, 5, 1), MAP_RAMP_DOWN);
+    CHECK_EQ_INT(map_ramp_at(&map, 7, 5, 2), MAP_RAMP_NONE);
+    CHECK_EQ_INT(map_ramp_at(&map, 8, 5, 1), MAP_RAMP_NONE); /* Its top: ground. */
+    CHECK_EQ_INT(map_ramp_at(&map, 6, 5, 0), MAP_RAMP_NONE);
+    CHECK_EQ_INT(map_ramp_at(&map, 6, 5, 1), MAP_RAMP_NONE); /* Open, no slope below. */
+    CHECK_EQ_INT(map_ramp_at(&map, 7, 5, -1), MAP_RAMP_NONE);
+    CHECK_EQ_INT(map_ramp_at(&map, -1, 5, 0), MAP_RAMP_NONE);
 
     /* A slope at a corner of the hill leads two ways. */
     for (int y = 10; y < 16; y++) {
@@ -112,6 +121,8 @@ static void test_floors_and_slopes(void)
     map_set_rock(&map, 7, 5, 1, ROCK_GRANITE); /* Was open: a topology change. */
     CHECK(map.topology_revision != revision);
     CHECK(!map_can_climb(&map, 7, 5, 0, 8, 5));
+    CHECK_EQ_INT(map_ramp_at(&map, 7, 5, 0), MAP_RAMP_NONE); /* Leads nowhere. */
+    CHECK_EQ_INT(map_ramp_at(&map, 7, 5, 1), MAP_RAMP_NONE);
     map_set_rock(&map, 7, 5, 1, ROCK_NONE);
     map_set_structure(&map, 7, 5, 0, STRUCTURE_WALL);
     CHECK(!map_can_climb(&map, 7, 5, 0, 8, 5));
@@ -546,6 +557,9 @@ static void test_ladders(void)
     TilePos links[MAP_MAX_LEVEL_LINKS];
     CHECK_EQ_INT(map_level_links(&map, 4, 2, 1, links), 1); /* Down the ladder. */
     CHECK(links[0].x == 3 && links[0].y == 2 && links[0].z == 0);
+    /* A ladder is no ramp. */
+    CHECK_EQ_INT(map_ramp_at(&map, 3, 2, 0), MAP_RAMP_NONE);
+    CHECK_EQ_INT(map_ramp_at(&map, 3, 2, 1), MAP_RAMP_NONE);
     map_set_slope(&map, 3, 3, 0, true);
     CHECK_NEAR(map_climb_cost(&map, 3, 3, 0), MAP_CLIMB_COST, 1e-6);
     CHECK_NEAR(map_climb_cost(&map, -1, 3, 0), 0.0, 1e-6);

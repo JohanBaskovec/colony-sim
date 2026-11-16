@@ -30,6 +30,11 @@ bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *ca
 void render_below_shade(SDL_Renderer *renderer);
 void render_below_end(SDL_Renderer *renderer);
 
+/* A triangle on every ramp of the level shown: pointing up on a ramp that
+ * leads up from it, down over one that leads down from it (map_ramp_at()).
+ * See-through, drawn over what stands there (items, plants, settlers). */
+void render_ramp_markers(SDL_Renderer *renderer, const Map *map, const Camera *camera);
+
 /* Dark spots on dirty tiles. */
 void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera);
 

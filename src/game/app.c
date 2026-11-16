@@ -914,6 +914,7 @@ static void render_frame(App *app)
     render_items(app->renderer, &app->game, &app->camera);
     render_world_sprites(app->renderer, app->sprites, &app->game, &app->camera, app->selected,
                          app->selected_count);
+    render_ramp_markers(app->renderer, &app->game.map, &app->camera);
     render_designations(app->renderer, &app->game, &app->camera);
     hud_draw_item_counts(app);
     render_daylight(app->renderer, &app->game, &app->camera);

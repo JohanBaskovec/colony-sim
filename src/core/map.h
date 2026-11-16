@@ -477,6 +477,17 @@ bool map_is_slope(const Map *map, int x, int y, int z);
  * reached. */
 bool map_can_climb(const Map *map, int x, int y, int z, int nx, int ny);
 
+/* The way a ramp (a natural slope or a dug one) leads, as shown on a tile of
+ * a level: up on a slope one can walk up from (map_can_climb()), down on
+ * the open space over such a slope, where one walks down it from the level
+ * above. Ladders are not ramps. */
+typedef enum MapRamp {
+    MAP_RAMP_NONE,
+    MAP_RAMP_UP,
+    MAP_RAMP_DOWN,
+} MapRamp;
+MapRamp map_ramp_at(const Map *map, int x, int y, int z);
+
 /* What a step up from (x, y, z), or down onto it, costs: see
  * map_climb_cost_at(); 0 out of bounds. */
 float map_climb_cost(const Map *map, int x, int y, int z);

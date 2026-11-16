@@ -631,6 +631,32 @@ bool map_can_climb(const Map *map, int x, int y, int z, int nx, int ny)
            map_is_passable(map, nx, ny, z + 1);
 }
 
+/* Whether (x, y, z) is a slope one can walk up from. */
+static bool slope_leads_up(const Map *map, int x, int y, int z)
+{
+    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+    if (!map_is_slope(map, x, y, z)) {
+        return false;
+    }
+    for (int d = 0; d < 4; d++) {
+        if (map_can_climb(map, x, y, z, x + DX[d], y + DY[d])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+MapRamp map_ramp_at(const Map *map, int x, int y, int z)
+{
+    if (slope_leads_up(map, x, y, z)) {
+        return MAP_RAMP_UP;
+    }
+    if (map_is_open(map, x, y, z) && slope_leads_up(map, x, y, z - 1)) {
+        return MAP_RAMP_DOWN;
+    }
+    return MAP_RAMP_NONE;
+}
+
 bool map_ladder_fits(const Map *map, int x, int y, int z)
 {
     static const int DX[4] = {0, 1, 0, -1}, DY[4] = {-1, 0, 1, 0};

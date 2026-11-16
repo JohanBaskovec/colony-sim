@@ -45,6 +45,12 @@ static const SDL_Color LEAVES_LIGHT = {104, 150, 66, 255};
 static const SDL_Color BELOW_SHADE = {14, 16, 24, 70};
 static const SDL_Color BELOW_ABYSS = {14, 16, 24, 255}; /* Deeper than drawn. */
 /* Edges of the ground over a drop to the levels below. */
+/* Ramps: a triangle pointing up on a ramp leading up from the level shown,
+ * down over one leading down from it (map_ramp_at()). */
+static const SDL_Color RAMP_MARKER_COLOR = {244, 236, 212, 110};
+static const SDL_Color RAMP_MARKER_EDGE = {28, 24, 20, 120};
+#define RAMP_MARKER_SIZE 0.42f    /* Width, in tiles. */
+#define RAMP_MARKER_MIN_ZOOM 6.0f /* Pixels per tile below which none is drawn. */
 static const SDL_Color DROP_EDGE_COLOR = {16, 12, 8, 120};
 
 /* The offscreen image of the levels below, and the render scale it replaced. */
@@ -237,6 +243,25 @@ static void batch_gradient_quad(SDL_Renderer *renderer, const SDL_Color colors[4
     vertex[1] = (SDL_Vertex){{right, top}, to_fcolor(colors[1]), {0.0f, 0.0f}};
     vertex[2] = (SDL_Vertex){{right, bottom}, to_fcolor(colors[2]), {0.0f, 0.0f}};
     vertex[3] = (SDL_Vertex){{left, bottom}, to_fcolor(colors[3]), {0.0f, 0.0f}};
+    batch_count++;
+}
+
+/* A filled convex shape of 3 or 4 corners in order, drawn with the batch (a
+ * triangle is a quad with two corners at the same place). */
+static void batch_shape(SDL_Renderer *renderer, SDL_Color color, const SDL_FPoint *points,
+                        int count)
+{
+    if (!batch_ready()) {
+        return;
+    }
+    if (batch_count == BATCH_MAX_QUADS) {
+        batch_flush(renderer);
+    }
+    SDL_Vertex *vertex = &batch_vertices[batch_count * 4];
+    SDL_FColor fcolor = to_fcolor(color);
+    for (int i = 0; i < 4; i++) {
+        vertex[i] = (SDL_Vertex){points[i < count ? i : count - 1], fcolor, {0.0f, 0.0f}};
+    }
     batch_count++;
 }
 
@@ -551,6 +576,48 @@ static SDL_FRect tile_rect(const Camera *camera, int x, int y)
 
 /* Snow lying on open ground: a white veil over each tile under the open
  * sky (not on water, rock or under a roof), thicker as the cover grows. */
+/* A triangle in the middle of a tile, pointing up or down: see-through, light
+ * with a dark rim (the rim drawn around the inside, not under it, so that
+ * both stay see-through). */
+static void render_ramp_marker(SDL_Renderer *renderer, const SDL_FRect *tile, bool up)
+{
+    float cx = tile->x + tile->w * 0.5f, cy = tile->y + tile->h * 0.5f;
+    float half = tile->w * RAMP_MARKER_SIZE * 0.5f, rise = tile->h * RAMP_MARKER_SIZE * 0.45f;
+    float rim = SDL_max(1.0f, floorf(tile->w * 0.05f)) * 1.8f;
+    float tip = up ? -1.0f : 1.0f; /* Which way the point goes on screen. */
+    SDL_FPoint inside[3] = {{cx, cy + tip * rise},
+                            {cx - half, cy - tip * rise},
+                            {cx + half, cy - tip * rise}};
+    SDL_FPoint outside[3] = {{cx, cy + tip * (rise + rim)},
+                             {cx - half - rim, cy - tip * (rise + rim * 0.5f)},
+                             {cx + half + rim, cy - tip * (rise + rim * 0.5f)}};
+    batch_shape(renderer, RAMP_MARKER_COLOR, inside, 3);
+    for (int i = 0; i < 3; i++) {
+        int next = (i + 1) % 3;
+        SDL_FPoint band[4] = {outside[i], outside[next], inside[next], inside[i]};
+        batch_shape(renderer, RAMP_MARKER_EDGE, band, 4);
+    }
+}
+
+void render_ramp_markers(SDL_Renderer *renderer, const Map *map, const Camera *camera)
+{
+    const int z = camera->level; /* The level shown. */
+    if (map->slope_count == 0 || camera->zoom < RAMP_MARKER_MIN_ZOOM) {
+        return;
+    }
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            MapRamp ramp = map_ramp_at(map, x, y, z);
+            if (ramp != MAP_RAMP_NONE) {
+                SDL_FRect tile = tile_rect(camera, x, y);
+                render_ramp_marker(renderer, &tile, ramp == MAP_RAMP_UP);
+            }
+        }
+    }
+    batch_flush(renderer);
+}
+
 void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */

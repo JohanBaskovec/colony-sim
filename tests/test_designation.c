@@ -283,6 +283,8 @@ static void test_ramps_are_cut_into_banks(void)
     CHECK(map_is_open(&map, 4, 3, 1));
     CHECK_EQ_INT(map.plants[map_index(&map, 4, 3, 1)].type, PLANT_NONE);
     CHECK(map_can_climb(&map, 4, 3, 0, 5, 3)); /* Up onto the bank. */
+    CHECK_EQ_INT(map_ramp_at(&map, 4, 3, 0), MAP_RAMP_UP); /* Shown both ways. */
+    CHECK_EQ_INT(map_ramp_at(&map, 4, 3, 1), MAP_RAMP_DOWN);
     CHECK_EQ_INT(items_get(&items, 4, 3, 1).count, 0);
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD], 3);
     CHECK_EQ_INT(map.slope_count, 1);
@@ -368,6 +370,8 @@ static void test_digging_down(void)
     CHECK(map.rock[map_index(&map, 8, 8, 0)] == ROCK_NONE);
     CHECK(map_is_slope(&map, 8, 8, 0));
     CHECK(map_can_climb(&map, 8, 8, 0, 7, 8)); /* Back up to the ground. */
+    CHECK_EQ_INT(map_ramp_at(&map, 8, 8, 0), MAP_RAMP_UP);
+    CHECK_EQ_INT(map_ramp_at(&map, 8, 8, 1), MAP_RAMP_DOWN);
     CHECK_EQ_INT(items_get(&items, 8, 8, 0).count, 3); /* Fell in. */
 
     /* A pit with nowhere to climb to (walled in): no slope, a ladder's job. */
@@ -379,6 +383,8 @@ static void test_digging_down(void)
     CHECK(designation_add_work(&d, &map, &items, 12, 10, 1, needed, 50.0, NULL));
     CHECK(map_is_passable(&map, 12, 10, 0));
     CHECK(!map_is_slope(&map, 12, 10, 0));
+    CHECK_EQ_INT(map_ramp_at(&map, 12, 10, 0), MAP_RAMP_NONE);
+    CHECK_EQ_INT(map_ramp_at(&map, 12, 10, 1), MAP_RAMP_NONE);
     CHECK_EQ_INT(map.slope_count, 1);
     items_free(&items);
     free_world(&map, &d);

@@ -1344,6 +1344,10 @@ structures, stations, items and sprites, drawn on an offscreen image three
 times smaller then stretched back with smoothing (a cheap blur), each level
 darkened once more than the one above. The ground of the level shown has a
 dark edge over each drop, and slopes are lit towards the higher side.
+Ramps (natural slopes and dug ones, not ladders) carry a triangle on the
+level shown only (`render_ramp_markers()`, from `map_ramp_at()`): pointing up
+on a ramp leading up from it, down on the open space over one leading down
+from it; see-through, over the items, plants and settlers there.
 Escape and a right click on the map
 (released where it was pressed: otherwise it pans) step back one level
 (`step_back()`). Every keyboard control is a physical position (`APP_KEY_*`
