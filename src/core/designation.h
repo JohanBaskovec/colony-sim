@@ -42,9 +42,9 @@
 
 typedef enum DesignationType {
     DESIGNATION_NONE = 0,
-    DESIGNATION_MINE,        /* Dig out a rock wall. */
+    DESIGNATION_MINE,        /* Dig out a rock wall, or earth (stored as DESIGNATION_DIG). */
     DESIGNATION_DECONSTRUCT, /* Take a built structure apart (core/structure.h), or a roof down. */
-    DESIGNATION_DIG,         /* Dig out earth (ROCK_EARTH). */
+    DESIGNATION_DIG,         /* Dig out earth (ROCK_EARTH): what "mine" gives on earth. */
     DESIGNATION_DIG_RAMP,    /* Cut a ramp into a bank of earth one level high. */
     DESIGNATION_DIG_DOWN,    /* Dig the ground and the earth under it out. */
     DESIGNATION_CHOP,        /* Fell a tree (core/tree.h), or cut a sapling. */
@@ -57,7 +57,7 @@ typedef enum DesignationType {
 
 typedef struct DesignationDef {
     const char *id;           /* Stable identifier (saves), never shown. */
-    const char *name_key;     /* Order name, e.g. "Mine rock". */
+    const char *name_key;     /* Order name, e.g. "Mine". */
     const char *activity_key; /* What a settler doing it is busy with, e.g. "Mining". */
     WorkType work_type;
     /* Knowledge needed, KNOWLEDGE_NONE when nobody can carry it out yet. */

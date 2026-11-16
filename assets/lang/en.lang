@@ -41,9 +41,8 @@ plant.mushrooms = Mushrooms
 plant.tree = Tree
 
 # Designations (player orders)
-designation.mine = Mine rock
+designation.mine = Mine
 designation.deconstruct = Take apart
-designation.dig = Dig earth
 designation.dig_ramp = Cut a ramp
 designation.dig_down = Dig down
 designation.chop = Fell trees
@@ -55,8 +54,7 @@ tool.stockpile_remove = Remove from stockpiles
 tool.zone_remove.description = Takes the area you drag out of the zones; the rest of each zone stays
 tool.gather_zone.description = Settlers gather the resources you pick in it: wood, wild food, branches, twigs, grass, stones
 tool.stockpile.description = Settlers store the items you allow in it
-tool.mine.description = Settlers dig out the marked rock and bring back stone
-tool.dig.description = Settlers dig out the marked earth (galleries into hills, dugouts), faster with a digging stick; a ceiling needs rock, a wall or a prop within 2 tiles
+tool.mine.description = Settlers dig out the marked rock and bring back stone, or the marked earth (galleries into hills, dugouts), faster with a digging stick; a ceiling needs rock, a wall or a prop within 2 tiles
 tool.dig_ramp.description = Mark a bank of earth one level high: settlers cut a ramp into it, to walk up to the ground behind
 tool.dig_down.description = Settlers dig the marked ground and the earth under it out: the hole slopes up to where its digger stood, the way into a cellar
 tool.chop.description = Settlers fell the marked trees, away from buildings, and the wood lies along the fallen trunk
@@ -190,7 +188,7 @@ hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
 hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · {0}: language · F3: debug · Esc or right click: back
 # hud.help.gathering: {0} = key of the gathering zone tool; hud.help.orders: {0}, {1} = keys of the mine and cancel tools
 hud.help.gathering = {0}: gathering zones (wood, wild food, branches, twigs, grass, stones)
-hud.help.orders = {0}: mine rock · {1}: cancel orders
+hud.help.orders = {0}: mine · {1}: cancel orders
 # {0} = key of the stockpile zone tool, {1} = key of the build tool, {2} = key of the work priorities grid
 hud.help.copy = {0}: build another of what is selected (zone, workstation, bed, wall, door)
 hud.help.rotate = {0}: turn the bed being placed (head and foot)

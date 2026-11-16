@@ -689,7 +689,8 @@ static void test_nobody_fells_or_mines_yet(void)
     /* Orders can exist, but nobody can carry them out: no axe, no pick. */
     CHECK_EQ_INT(game_designate_rect(&game, 25, 20, 25, 20, 0, DESIGNATION_MINE), 1);
     CHECK_EQ_INT(order_zone(&game, 20, 25, 20, 25, GATHER_WOOD), 1);
-    CHECK(!game_designation_available(&game, DESIGNATION_MINE));
+    CHECK(game_designation_available(&game, DESIGNATION_MINE)); /* Earth can be dug. */
+    CHECK(!colonist_can_do(colonist, DESIGNATION_MINE));        /* Rock cannot. */
     CHECK(!game_gather_job_known(&game, GATHER_JOB_CHOP));
     CHECK(game_gather_job_known(&game, GATHER_JOB_HARVEST));
 

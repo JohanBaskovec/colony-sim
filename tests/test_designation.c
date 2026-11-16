@@ -230,7 +230,7 @@ static bool init_bank(Map *map, Designations *designations)
     return true;
 }
 
-/* Earth is dug, rock is mined: two orders. */
+/* One order, "mine", on earth and on rock; earth is stored as digging. */
 static void test_earth_is_dug_rock_is_mined(void)
 {
     Map map;
@@ -238,13 +238,21 @@ static void test_earth_is_dug_rock_is_mined(void)
     REQUIRE(init_bank(&map, &d));
     map.rock[map_index(&map, 6, 6, 0)] = ROCK_GRANITE;
     CHECK(designation_can_apply(&map, 4, 2, 0, DESIGNATION_DIG));
-    CHECK(!designation_can_apply(&map, 4, 2, 0, DESIGNATION_MINE));
+    CHECK(designation_can_apply(&map, 4, 2, 0, DESIGNATION_MINE));
     CHECK(designation_can_apply(&map, 6, 6, 0, DESIGNATION_MINE));
     CHECK(!designation_can_apply(&map, 6, 6, 0, DESIGNATION_DIG));
     CHECK(!designation_can_apply(&map, 2, 2, 0, DESIGNATION_DIG)); /* Soil: nothing to dig. */
 
+    CHECK(strcmp(designation_def(DESIGNATION_DIG)->name_key,
+                 designation_def(DESIGNATION_MINE)->name_key) == 0); /* Same name. */
+    REQUIRE(designation_set(&d, &map, 6, 6, 0, DESIGNATION_MINE));
+    CHECK_EQ_INT(designation_get(&d, 6, 6, 0), DESIGNATION_MINE);
+    REQUIRE(designation_set(&d, &map, 6, 6, 0, DESIGNATION_NONE));
+
     /* A gallery into the bank: its ground stays overhead. */
-    REQUIRE(designation_set(&d, &map, 4, 2, 0, DESIGNATION_DIG));
+    REQUIRE(designation_set(&d, &map, 4, 2, 0, DESIGNATION_MINE));
+    CHECK_EQ_INT(designation_get(&d, 4, 2, 0), DESIGNATION_DIG);
+    CHECK(!designation_set(&d, &map, 4, 2, 0, DESIGNATION_MINE)); /* Already there. */
     float needed = designation_work_needed(&d, &map, 4, 2, 0);
     CHECK_NEAR(needed, rock_def(ROCK_EARTH)->mine_work, 1e-3);
     int count;

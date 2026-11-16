@@ -45,7 +45,7 @@ simulation:
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work, what its mood thinks of (states, sleep, meals) and its breaks, facial expression from the mood, the action its hands are doing |
 | `appearance` | Looks of a colonist (skin, body shape, hair style and color, beard), rolled at creation |
-| `designation`| Player work orders per tile (dig earth, cut a ramp, mine rock, take a structure apart), the knowledge, level and tool each needs, work progress |
+| `designation`| Player work orders per tile (mine, which digs earth or rock, cut a ramp, dig down, take a structure apart), the knowledge, level and tool each needs, work progress |
 | `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
 | `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying), rot |
@@ -309,8 +309,10 @@ dense layers of the same size: order type and work progress per tile.
 **Digging** (step 3 of the levels, first part): earth (`ROCK_EARTH`) is dug
 with the shelter builders' knowledge (`DESIGNATION_DIG`, a pit dwelling or
 a gallery into a hill; its ground stays overhead as a natural roof), rock is
-mined (`DESIGNATION_MINE`, nobody can yet). Both are "Digging" work
-(`WORK_MINING`). `DESIGNATION_DIG_RAMP` cuts a ramp into a bank of earth
+mined (`DESIGNATION_MINE`, nobody can yet). The player has one order, "Mine":
+`designation_set()` stores `DESIGNATION_DIG` on an earth tile and
+`DESIGNATION_MINE` on rock, as they need different knowledge and tools (same
+name, no menu entry of its own). Both are "Digging" work (`WORK_MINING`). `DESIGNATION_DIG_RAMP` cuts a ramp into a bank of earth
 one level high: the order goes on the bank's earth tile, from the level
 below; the earth goes, the tile becomes a slope (`map_set_slope()`), and
 the ground over it is taken away (open space; its plants go, the items on

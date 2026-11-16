@@ -336,8 +336,8 @@ static void test_instant_fell_and_mine(void)
     map_set_rock(map, 20, 20, 0, ROCK_GRANITE);
     map_set_rock(map, 22, 20, 0, ROCK_GRANITE);
     CHECK(!game_designation_available(&game, DESIGNATION_CHOP));
-    CHECK(!game_designation_available(&game, DESIGNATION_MINE));
-    CHECK(game_designation_available(&game, DESIGNATION_DIG)); /* A shelter builder digs. */
+    CHECK(game_designation_available(&game, DESIGNATION_MINE)); /* A shelter builder digs earth. */
+    CHECK(game_designation_available(&game, DESIGNATION_DIG));
     /* Given from a tile of the trunk: the order goes on its foot. */
     CHECK_EQ_INT(game_designate_rect(&game, 10, 10, 10, 10, 1, DESIGNATION_CHOP), 1);
     CHECK_EQ_INT(designation_get(&game.designations, 10, 10, 0), DESIGNATION_CHOP);

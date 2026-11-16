@@ -33,8 +33,6 @@ static const MenuTool TOOLS[] = {
      N_("tool.stockpile_remove"), N_("tool.zone_remove.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_MINE, RENDER_ICON_MINE,
      N_("designation.mine"), N_("tool.mine.description"), APP_KEY_MINE},
-    {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DIG, RENDER_ICON_DIG,
-     N_("designation.dig"), N_("tool.dig.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DIG_RAMP, RENDER_ICON_DIG_RAMP,
      N_("designation.dig_ramp"), N_("tool.dig_ramp.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DIG_DOWN, RENDER_ICON_DIG_DOWN,

@@ -1370,8 +1370,10 @@ bool game_designation_available(const Game *game, DesignationType type)
     }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
-            colonist_can_do(&game->colonists[slot], type)) {
-            return true;
+            (colonist_can_do(&game->colonists[slot], type) ||
+             (type == DESIGNATION_MINE &&
+              colonist_can_do(&game->colonists[slot], DESIGNATION_DIG)))) {
+            return true; /* Mining covers earth too. */
         }
     }
     return false;

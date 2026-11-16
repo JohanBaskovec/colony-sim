@@ -15,8 +15,9 @@ static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
     [DESIGNATION_DECONSTRUCT] = {"deconstruct", N_("designation.deconstruct"),
                                  N_("colonist.task.deconstruct"), WORK_CONSTRUCTION,
                                  KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_NONE},
-    /* Pit dwellings and dugouts: the shelter builders dig. */
-    [DESIGNATION_DIG] = {"dig", N_("designation.dig"), N_("colonist.task.dig_earth"), WORK_MINING,
+    /* What "mine" becomes on earth (designation_set()): pit dwellings and
+     * dugouts, which the shelter builders dig. Same name for the player. */
+    [DESIGNATION_DIG] = {"dig", N_("designation.mine"), N_("colonist.task.dig_earth"), WORK_MINING,
                          KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_DIGGING},
     [DESIGNATION_DIG_RAMP] = {"dig_ramp", N_("designation.dig_ramp"), N_("colonist.task.dig_ramp"),
                               WORK_MINING, KNOWLEDGE_BASIC_SHELTERS, KNOWLEDGE_MASTERY_LEVEL,
@@ -132,7 +133,7 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
     }
     RockType rock = (RockType)map->rock[map_index(map, x, y, z)];
     switch (type) {
-    case DESIGNATION_MINE: return rock != ROCK_NONE && rock != ROCK_EARTH && rock != ROCK_WOOD;
+    case DESIGNATION_MINE: return rock != ROCK_NONE && rock != ROCK_WOOD; /* Rock or earth. */
     case DESIGNATION_DIG: return rock == ROCK_EARTH;
     case DESIGNATION_DIG_RAMP: return ramp_possible(map, x, y, z);
     case DESIGNATION_DIG_DOWN: return dig_down_possible(map, x, y, z);
@@ -227,6 +228,9 @@ bool designation_set(Designations *designations, const Map *map, int x, int y, i
         return false;
     }
     size_t index = index_of(designations, x, y, z);
+    if (type == DESIGNATION_MINE && map->rock[map_index(map, x, y, z)] == ROCK_EARTH) {
+        type = DESIGNATION_DIG; /* One order for the player, two jobs. */
+    }
     if (designations->type[index] == type) {
         return false;
     }
