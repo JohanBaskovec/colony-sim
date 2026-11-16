@@ -16,8 +16,8 @@ static const SDL_Color TERRAIN_COLORS[TERRAIN_COUNT] = {
     [TERRAIN_RICH_SOIL] = {90, 66, 44, 255},
     [TERRAIN_GRAVEL] = {138, 132, 122, 255},
     [TERRAIN_ROUGH_STONE] = {106, 102, 98, 255},
-    [TERRAIN_GRASS_ROOF] = {196, 168, 96, 255}, /* Its thatch: see render_structures(). */
-    [TERRAIN_FOLIAGE] = {62, 106, 48, 255}, /* Leaf clumps over it: render_foliage(). */
+    [TERRAIN_GRASS_ROOF] = {196, 168, 96, 255}, /* Textured: sprite_ground(). */
+    [TERRAIN_FOLIAGE] = {62, 106, 48, 255}, /* Textured: sprite_ground(). */
 };
 
 static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
@@ -30,12 +30,11 @@ static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
 /* A trunk's bark, around its cut face, and its growth rings. */
 static const SDL_Color BARK_COLOR = {78, 54, 34, 255};
 static const SDL_Color RING_COLOR = {120, 84, 50, 255};
-/* Leaf clumps on foliage, darker and lighter than its floor. */
-static const SDL_Color LEAVES_DARK = {38, 76, 34, 255};
-static const SDL_Color LEAVES_LIGHT = {104, 150, 66, 255};
-/* The shade of the foliage above on the ground under it. */
+/* The shade of the foliage above on the ground under it: darker by this
+ * much, or times this for textured ground. */
 #define FOLIAGE_SHADOW (-26)
-/* Leaf clumps and growth rings are drawn from this zoom on (pixels per tile). */
+#define FOLIAGE_SHADOW_TINT 0.74f
+/* Growth rings are drawn from this zoom on (pixels per tile). */
 #define TREE_DETAIL_MIN_ZOOM 10.0f
 
 /* Levels below the one shown (render_below_begin()): drawn this many times
@@ -65,8 +64,8 @@ static const SDL_Color ALLOW_COLOR = {84, 176, 92, 255};
 static SDL_Texture *below_texture;
 static float below_saved_scale_x = 1.0f, below_saved_scale_y = 1.0f;
 
-static const SDL_Color GRASS_COLOR = {92, 138, 60, 255};
 static const SDL_Color TREE_COLOR = {34, 88, 40, 255};
+static const SDL_FColor WHITE = {1.0f, 1.0f, 1.0f, 1.0f};
 
 /* Tints of the (light gray) hair and beard sprites. */
 static const SDL_Color HAIR_COLORS[HAIR_COLOR_COUNT] = {
@@ -363,28 +362,6 @@ static void render_trunk(SDL_Renderer *renderer, const Map *map, int x, int y, i
     }
 }
 
-/* Leaf clumps scattered over a tile of foliage, at fixed places per tile. */
-static void render_foliage(SDL_Renderer *renderer, int x, int y, const SDL_FRect *tile,
-                           float zoom)
-{
-    if (zoom < TREE_DETAIL_MIN_ZOOM) {
-        return;
-    }
-    for (int i = 0; i < 6; i++) {
-        uint32_t h = tile_hash(x, y, 100 + i);
-        float size = tile->w * (0.18f + 0.14f * (float)(h & 0xffu) / 255.0f);
-        float cx = tile->x + tile->w * (0.1f + 0.8f * (float)((h >> 8) & 0xffu) / 255.0f);
-        float cy = tile->y + tile->h * (0.1f + 0.8f * (float)((h >> 16) & 0xffu) / 255.0f);
-        SDL_FRect wide = {floorf(cx - size * 0.5f), floorf(cy - size * 0.3f), floorf(size),
-                          floorf(size * 0.6f)};
-        SDL_FRect tall = {floorf(cx - size * 0.3f), floorf(cy - size * 0.5f), floorf(size * 0.6f),
-                          floorf(size)};
-        SDL_Color color = (h >> 24) & 1u ? LEAVES_LIGHT : LEAVES_DARK;
-        batch_quad(renderer, color, &wide);
-        batch_quad(renderer, color, &tall);
-    }
-}
-
 /* Slopes lighter towards the higher ground they lead up to; a dark edge on
  * each side of the tile over a drop to the levels below. */
 static void render_ground_shape(SDL_Renderer *renderer, const Map *map, int x, int y, int z,
@@ -486,52 +463,103 @@ void render_below_end(SDL_Renderer *renderer)
     SDL_RenderTexture(renderer, below_texture, NULL, NULL);
 }
 
-void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera)
-{
-    const int z = camera->level; /* The level shown. */
-    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+/* Screen rectangles of the visible tiles of the level shown, row by row,
+ * their edges snapped to whole pixels so that neighboring tiles never leave
+ * gaps; `visit` is called for each tile that is not open space (the levels
+ * below show there, see render_below_begin()). */
+typedef void (*TileVisitor)(const Map *map, int x, int y, int z, size_t index,
+                            const SDL_FRect *tile, void *userdata);
 
+static void visit_ground_tiles(const Map *map, const Camera *camera, TileVisitor visit,
+                               void *userdata)
+{
+    const int z = camera->level;
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
     for (int y = visible.y0; y < visible.y1; y++) {
         float top, bottom, left, right, unused;
         camera_world_to_screen(camera, 0.0f, (float)y, &unused, &top);
         camera_world_to_screen(camera, 0.0f, (float)(y + 1), &unused, &bottom);
         camera_world_to_screen(camera, (float)visible.x0, 0.0f, &right, &unused);
-
         for (int x = visible.x0; x < visible.x1; x++) {
             left = right; /* The right edge of the previous tile. */
             camera_world_to_screen(camera, (float)(x + 1), 0.0f, &right, &unused);
-            /* Snap edges to whole pixels so neighboring tiles never leave gaps. */
             SDL_FRect tile = {floorf(left), floorf(top), floorf(right) - floorf(left),
                               floorf(bottom) - floorf(top)};
-
             size_t index = map_index(map, x, y, z);
-            int variation = tile_variation(x, y);
-
-            if (map_is_open_at(map, index)) {
-                continue; /* The levels below show (render_below_begin()). */
+            if (!map_is_open_at(map, index)) {
+                visit(map, x, y, z, index, &tile, userdata);
             }
-            if (map->rock[index] == ROCK_WOOD) {
-                render_trunk(renderer, map, x, y, z, &tile, camera->zoom);
-                continue;
-            }
-            if (map->rock[index] != ROCK_NONE) {
-                batch_quad(renderer, shade(ROCK_COLORS[map->rock[index]], variation), &tile);
-                continue;
-            }
-
-            const Plant *plant = &map->plants[index];
-            SDL_Color ground = TERRAIN_COLORS[map->terrain[index]];
-            if (plant->type == PLANT_GRASS) {
-                ground = mix(ground, GRASS_COLOR, 0.35f + 0.5f * plant->growth);
-            }
-            int shadow = under_foliage(map, x, y, z) ? FOLIAGE_SHADOW : 0;
-            batch_quad(renderer, shade(ground, variation + shadow), &tile);
-            if (map->terrain[index] == TERRAIN_FOLIAGE) {
-                render_foliage(renderer, x, y, &tile, camera->zoom);
-            }
-            render_ground_shape(renderer, map, x, y, z, &tile);
         }
     }
+}
+
+typedef struct GroundPass {
+    SDL_Renderer *renderer;
+    Sprites *sprites;
+    float zoom;
+} GroundPass;
+
+/* First pass: the tiles without a texture, as flat colors. */
+static void ground_flat(const Map *map, int x, int y, int z, size_t index, const SDL_FRect *tile,
+                        void *userdata)
+{
+    const GroundPass *pass = userdata;
+    RockType rock = (RockType)map->rock[index];
+    if (rock == ROCK_WOOD) {
+        render_trunk(pass->renderer, map, x, y, z, tile, pass->zoom);
+    } else if (rock != ROCK_NONE) {
+        if (sprite_wall(rock) < 0) {
+            batch_quad(pass->renderer, shade(ROCK_COLORS[rock], tile_variation(x, y)), tile);
+        }
+    } else if (sprite_ground((Terrain)map->terrain[index]) < 0) {
+        int shadow = under_foliage(map, x, y, z) ? FOLIAGE_SHADOW : 0;
+        batch_quad(pass->renderer,
+                   shade(TERRAIN_COLORS[map->terrain[index]], tile_variation(x, y) + shadow),
+                   tile);
+    }
+}
+
+/* Second pass: tile textures, then grass over the ground. */
+static void ground_textures(const Map *map, int x, int y, int z, size_t index,
+                            const SDL_FRect *tile, void *userdata)
+{
+    const GroundPass *pass = userdata;
+    RockType rock = (RockType)map->rock[index];
+    if (rock != ROCK_NONE) {
+        sprites_draw_tile(pass->sprites, sprite_wall(rock), tile, WHITE);
+        return;
+    }
+    SDL_FColor color = WHITE;
+    if (under_foliage(map, x, y, z)) {
+        color.r = color.g = color.b = FOLIAGE_SHADOW_TINT;
+    }
+    sprites_draw_tile(pass->sprites, sprite_ground((Terrain)map->terrain[index]), tile, color);
+    const Plant *plant = &map->plants[index];
+    if (plant->type == PLANT_GRASS) {
+        sprites_draw_tile(pass->sprites, sprite_grass(plant->growth), tile, color);
+    }
+}
+
+/* Last pass: what goes over the ground (slopes, drop edges). */
+static void ground_overlays(const Map *map, int x, int y, int z, size_t index,
+                            const SDL_FRect *tile, void *userdata)
+{
+    const GroundPass *pass = userdata;
+    if (map->rock[index] != ROCK_NONE) {
+        return;
+    }
+    render_ground_shape(pass->renderer, map, x, y, z, tile);
+}
+
+void render_map(SDL_Renderer *renderer, Sprites *sprites, const Map *map, const Camera *camera)
+{
+    GroundPass pass = {renderer, sprites, camera->zoom};
+    visit_ground_tiles(map, camera, ground_flat, &pass);
+    batch_flush(renderer);
+    sprites_begin(sprites, camera->zoom);
+    visit_ground_tiles(map, camera, ground_textures, &pass);
+    sprites_flush(sprites);
+    visit_ground_tiles(map, camera, ground_overlays, &pass);
     batch_flush(renderer);
 }
 
@@ -1583,19 +1611,6 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
             }
         }
     }
-    /* Built roofs: the floor of their level, over the huts below. */
-    if (map->roof_count > 0) {
-        TileRect visible = camera_visible_tiles(camera, map->width, map->height);
-        for (int y = visible.y0; y < visible.y1; y++) {
-            for (int x = visible.x0; x < visible.x1; x++) {
-                StructureType roof = map_roof(map, x, y, z);
-                if (roof != STRUCTURE_NONE) {
-                    SDL_FRect rect = tile_rect(camera, x, y);
-                    render_structure_shape(renderer, &rect, roof, DIRECTION_SOUTH, 255);
-                }
-            }
-        }
-    }
     /* Blueprints: a ghost that fills in as the materials arrive, outlined. */
     const Constructions *constructions = &game->constructions;
     if (constructions->used_count == 0) {
@@ -2052,7 +2067,6 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
 #define CHAT_BUBBLE_MIN_ZOOM 14.0f
 #define TREE_SEE_THROUGH_ALPHA 0.4f
 
-static const SDL_FColor WHITE = {1.0f, 1.0f, 1.0f, 1.0f};
 
 /* ---- Hand animation ------------------------------------------------------ */
 

@@ -1,6 +1,7 @@
 /*
- * World rendering. The ground, zones and items are still drawn as colored
- * shapes; plants and colonists are sprites (see game/sprites.h).
+ * World rendering. Plants, colonists and most of the ground (tile textures)
+ * are sprites (see game/sprites.h); zones, items and the other terrains are
+ * still drawn as colored shapes.
  */
 #ifndef COLONY_GAME_RENDER_H
 #define COLONY_GAME_RENDER_H
@@ -12,10 +13,10 @@
 
 #include <SDL3/SDL.h>
 
-/* The ground of the level shown (Camera.level): terrain, rock, slopes, the
- * edges of drops. Open space is left as it is: the levels below show there
+/* The ground of the level shown (Camera.level): terrain seen from above with
+ * its grass, the cut face of rock walls, slopes, the edges of drops. Open space is left as it is: the levels below show there
  * (render_below_begin()). */
-void render_map(SDL_Renderer *renderer, const Map *map, const Camera *camera);
+void render_map(SDL_Renderer *renderer, Sprites *sprites, const Map *map, const Camera *camera);
 
 /*
  * The levels below the one shown, seen through open space: blurred and

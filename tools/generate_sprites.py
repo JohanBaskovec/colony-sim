@@ -14,6 +14,7 @@ Hair and beards are drawn in light grays: the game tints them with the hair
 color of each character.
 
 Usage: python3 tools/generate_sprites.py [--output DIR] [--preview FILE]
+(--preview also writes FILE_ground with the tile textures.)
 Requires Pillow and numpy. The output is deterministic.
 """
 
@@ -979,6 +980,449 @@ def draw_tool(name):
 TOOL_NAMES = ["cobble", "chopper", "flake", "hand_axe"]
 
 
+# ---------------------------------------------------------------------------
+# Tile textures: the ground seen from above, the cut face of rock walls seen
+# from inside them, and grass over the ground. Each one is the same on every
+# tile of its kind, so it must tile seamlessly: noise is periodic and shapes
+# crossing an edge come back in on the other side. The files are TILE plus a
+# wrapped border of TILE_PADDING pixels on every side, so that the game's
+# filtering blends each tile with the texture of the next one, never with
+# its neighbor in the atlas.
+#
+# The ground is loose and lit from the upper left (crumbs, pebbles with a
+# shadow); walls are flat, dense and dark, without relief, so that they never
+# read as ground.
+# ---------------------------------------------------------------------------
+
+TILE_PADDING = 32
+
+
+class WrapCanvas:
+    """A tileable TILE x TILE canvas, drawn at SUPERSAMPLING times the size,
+    storing premultiplied colors like Canvas."""
+
+    def __init__(self, base=None):
+        s = SUPERSAMPLING
+        self.size = TILE * s
+        if base is None:
+            self.color = np.zeros((self.size, self.size, 3), dtype=np.float32)
+            self.alpha = np.zeros((self.size, self.size), dtype=np.float32)
+        else:
+            self.color = np.repeat(np.repeat(base.astype(np.float32), s, 0), s, 1)
+            self.alpha = np.ones((self.size, self.size), dtype=np.float32)
+
+    def window(self, x0, y0, x1, y1):
+        """Wrapped indices of a box in final pixels and the (unwrapped)
+        coordinate grids, in final pixels, of its sample centers."""
+        s = SUPERSAMPLING
+        bx = np.arange(int(math.floor(x0 * s)) - 1, int(math.ceil(x1 * s)) + 1)
+        by = np.arange(int(math.floor(y0 * s)) - 1, int(math.ceil(y1 * s)) + 1)
+        gx, gy = np.meshgrid((bx + 0.5) / s, (by + 0.5) / s)
+        return np.ix_(by % self.size, bx % self.size), gx, gy
+
+    def paint(self, where, mask, color):
+        m = mask[..., None]
+        self.color[where] = np.asarray(color, dtype=np.float32) * m + self.color[where] * (1.0 - m)
+        self.alpha[where] = mask + self.alpha[where] * (1.0 - mask)
+
+    def ellipse(self, cx, cy, rx, ry, color, angle=0.0, opacity=1.0, light=0.0):
+        """Ellipse turned by `angle` (radians), optionally shaded like a lit
+        dome (light from the upper left)."""
+        r = max(rx, ry)
+        where, gx, gy = self.window(cx - r, cy - r, cx + r, cy + r)
+        c, s = math.cos(angle), math.sin(angle)
+        u = ((gx - cx) * c + (gy - cy) * s) / rx
+        v = (-(gx - cx) * s + (gy - cy) * c) / ry
+        inside = (u * u + v * v <= 1.0).astype(np.float32)
+        base = np.asarray(color, dtype=np.float32)
+        if light:
+            # Back to screen directions: lit towards the upper left.
+            du, dv = (gx - cx) / r, (gy - cy) / r
+            factor = 1.0 + light * (-0.55 * du - 0.8 * dv)
+            base = np.clip(base[None, None, :] * factor[..., None], 0.0, 1.0)
+        self.paint(where, inside * opacity, base)
+
+    def stroke(self, points, r0, r1, color, opacity=1.0):
+        """Polyline whose radius goes from r0 at its start to r1 at its end."""
+        lengths = [math.dist(points[i], points[i + 1]) for i in range(len(points) - 1)]
+        total = max(sum(lengths), 1e-6)
+        done = 0.0
+        for (ax, ay), (bx, by), length in zip(points, points[1:], lengths):
+            ra = r0 + (r1 - r0) * done / total
+            rb = r0 + (r1 - r0) * (done + length) / total
+            done += length
+            r = max(ra, rb)
+            where, gx, gy = self.window(min(ax, bx) - r, min(ay, by) - r, max(ax, bx) + r,
+                                        max(ay, by) + r)
+            dx, dy = bx - ax, by - ay
+            t = np.clip(((gx - ax) * dx + (gy - ay) * dy) / max(dx * dx + dy * dy, 1e-9), 0, 1)
+            d = np.hypot(gx - ax - t * dx, gy - ay - t * dy)
+            inside = (d <= ra + (rb - ra) * t).astype(np.float32)
+            self.paint(where, inside * opacity, color)
+
+    def to_pixels(self):
+        """Straight RGBA floats at the final size."""
+        s = SUPERSAMPLING
+        color = self.color.reshape(TILE, s, TILE, s, 3).mean(axis=(1, 3))
+        alpha = self.alpha.reshape(TILE, s, TILE, s).mean(axis=(1, 3))
+        straight = np.where(alpha[..., None] > 1e-4, color / np.maximum(alpha[..., None], 1e-4), 0)
+        return np.dstack([np.clip(straight, 0.0, 1.0), alpha])
+
+
+def periodic_noise(rng, scale_x, scale_y=None):
+    """Tileable noise with features about `scale` pixels wide (stretched when
+    the two scales differ): zero mean, unit deviation."""
+    scale_y = scale_x if scale_y is None else scale_y
+    frequencies = np.fft.fftfreq(TILE)
+    fx, fy = np.meshgrid(frequencies, frequencies)
+    spectrum = np.fft.fft2(rng.standard_normal((TILE, TILE)))
+    spectrum *= np.exp(-2.0 * ((fx * scale_x) ** 2 + (fy * scale_y) ** 2))
+    noise = np.real(np.fft.ifft2(spectrum))
+    return ((noise - noise.mean()) / max(noise.std(), 1e-9)).astype(np.float32)
+
+
+def cells(rng, cell):
+    """Tileable Voronoi cells over a jittered grid of `cell` pixels (a divisor
+    of TILE): for each pixel, the index of its cell and the distances to the
+    nearest and second nearest cell centers."""
+    count = TILE // cell
+    jitter = rng.random((count, count, 2))
+    ys, xs = np.mgrid[0:TILE, 0:TILE].astype(np.float32) + 0.5
+    best = np.full((TILE, TILE), np.inf, dtype=np.float32)
+    second = np.full((TILE, TILE), np.inf, dtype=np.float32)
+    index = np.zeros((TILE, TILE), dtype=np.int32)
+    home_x, home_y = (xs // cell).astype(int), (ys // cell).astype(int)
+    for oy in (-1, 0, 1):
+        for ox in (-1, 0, 1):
+            gx, gy = home_x + ox, home_y + oy
+            wx, wy = gx % count, gy % count
+            px = (gx + jitter[wy, wx, 0]) * cell
+            py = (gy + jitter[wy, wx, 1]) * cell
+            d = np.hypot(xs - px, ys - py)
+            closer = d < best
+            second = np.where(closer, best, np.minimum(second, d))
+            index = np.where(closer, wy * count + wx, index)
+            best = np.where(closer, d, best)
+    return index, best, second
+
+
+def wrap_bleed(pixels, steps=4):
+    """bleed() for tileable textures: the colors of visible pixels spread
+    into the transparent ones around them, across the edges too."""
+    color, alpha = pixels[..., :3].copy(), pixels[..., 3]
+    known = alpha > 1e-4
+    for _ in range(steps):
+        total = np.zeros_like(color)
+        count = np.zeros(known.shape, dtype=np.float32)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                weight = np.roll(known, (dy, dx), (0, 1)).astype(np.float32)
+                total += np.roll(color, (dy, dx), (0, 1)) * weight[..., None]
+                count += weight
+        grow = (~known) & (count > 0)
+        color[grow] = total[grow] / count[grow][..., None]
+        known = known | grow
+    return np.dstack([color, alpha])
+
+
+def tile_image(pixels):
+    """The file of a tile texture: the texture with its wrapped border."""
+    padded = np.pad(pixels, ((TILE_PADDING, TILE_PADDING), (TILE_PADDING, TILE_PADDING), (0, 0)),
+                    mode="wrap")
+    return Image.fromarray(np.round(np.clip(padded, 0, 1) * 255.0).astype(np.uint8), "RGBA")
+
+
+def tinted(base, factors):
+    """A base color (0..255) times a brightness field."""
+    return np.clip(rgb(base)[None, None, :] * factors[..., None], 0.0, 1.0)
+
+
+def crumbs(canvas, rng, count, base, radius, spread, light=0.7, shadow=0.35):
+    """Loose clods lit from the upper left, each with its shadow."""
+    for _ in range(count):
+        x, y = rng.random() * TILE, rng.random() * TILE
+        r = radius[0] + (radius[1] - radius[0]) * rng.random() ** 2
+        ry = r * (0.65 + 0.35 * rng.random())
+        angle = rng.random() * math.pi
+        color = np.clip(rgb(base) * (1.0 + spread * (rng.random() * 2.0 - 1.0)), 0, 1)
+        canvas.ellipse(x + r * 0.45, y + r * 0.55, r, ry, (0.0, 0.0, 0.0), angle, shadow)
+        canvas.ellipse(x, y, r, ry, color, angle, 1.0, light)
+
+
+def draw_soil():
+    rng = np.random.default_rng(6000)
+    field = 1.0 + 0.07 * periodic_noise(rng, 9.0) + 0.05 * periodic_noise(rng, 2.5)
+    canvas = WrapCanvas(tinted((122, 94, 64), field))
+    for _ in range(90):  # Pores and little hollows.
+        canvas.ellipse(rng.random() * TILE, rng.random() * TILE, 0.5 + rng.random() * 0.6,
+                       0.4 + rng.random() * 0.4, (0.27, 0.2, 0.13), rng.random() * math.pi, 0.6)
+    crumbs(canvas, rng, 150, (128, 99, 68), (0.7, 2.3), 0.14)
+    crumbs(canvas, rng, 9, (136, 126, 110), (1.0, 1.9), 0.1, light=0.9)  # Small pebbles.
+    return canvas.to_pixels()
+
+
+def draw_rich_soil():
+    rng = np.random.default_rng(6100)
+    field = 1.0 + 0.09 * periodic_noise(rng, 7.0) + 0.06 * periodic_noise(rng, 2.0)
+    canvas = WrapCanvas(tinted((86, 63, 42), field))
+    for _ in range(26):  # Bits of rotten leaves and rootlets.
+        x, y = rng.random() * TILE, rng.random() * TILE
+        angle, length = rng.random() * math.tau, 2.5 + rng.random() * 4.0
+        bend = (rng.random() - 0.5) * 1.2
+        points = [(x + math.cos(angle + bend * t) * length * t,
+                   y + math.sin(angle + bend * t) * length * t) for t in (0.0, 0.5, 1.0)]
+        color = rgb((112, 84, 48)) if rng.random() < 0.5 else rgb((58, 40, 26))
+        canvas.stroke(points, 0.45, 0.3, color, 0.9)
+    crumbs(canvas, rng, 230, (90, 66, 44), (0.6, 2.0), 0.18, light=0.6, shadow=0.45)
+    crumbs(canvas, rng, 3, (120, 112, 98), (0.9, 1.5), 0.1, light=0.9)
+    return canvas.to_pixels()
+
+
+def caustics(rng, cell, width):
+    """A network of thin bright lines, like light focused by ripples."""
+    _, best, second = cells(rng, cell)
+    return np.clip(1.0 - (second - best) / width, 0.0, 1.0) ** 2
+
+
+def draw_shallow_water():
+    rng = np.random.default_rng(6200)
+    bottom = periodic_noise(rng, 12.0)  # The bottom, seen through the water.
+    base = mix(rgb((58, 106, 154)), rgb((86, 122, 132)), np.clip(0.3 + 0.2 * bottom, 0, 1)[..., None])
+    light = caustics(rng, 16, 2.2) * (0.6 + 0.4 * np.clip(periodic_noise(rng, 14.0), -1, 1))
+    color = base * (1.0 + 0.05 * periodic_noise(rng, 5.0))[..., None]
+    color = mix(color, rgb((170, 206, 226)), (0.32 * np.clip(light, 0, 1))[..., None])
+    return np.dstack([np.clip(color, 0, 1), np.ones((TILE, TILE), dtype=np.float32)])
+
+
+def draw_deep_water():
+    rng = np.random.default_rng(6300)
+    swell = periodic_noise(rng, 22.0, 13.0)
+    color = rgb((26, 52, 96))[None, None, :] * (1.0 + 0.1 * swell + 0.04 *
+                                                  periodic_noise(rng, 6.0))[..., None]
+    crests = np.clip((periodic_noise(rng, 10.0, 4.0) - 1.6) / 0.8, 0, 1)  # Long soft glints.
+    color = mix(color, rgb((64, 98, 140)), (0.45 * crests)[..., None])
+    return np.dstack([np.clip(color, 0, 1), np.ones((TILE, TILE), dtype=np.float32)])
+
+
+def draw_granite_wall():
+    """Interlocking crystals, polished flat: dark gray, black mica, dim
+    feldspar and smoky quartz, with a few hairline cracks."""
+    rng = np.random.default_rng(6400)
+    index, best, second = cells(rng, 4)
+    minerals = np.array([rgb((70, 70, 76)), rgb((30, 30, 34)), rgb((96, 92, 92)),
+                         rgb((92, 74, 70)), rgb((56, 60, 70))], dtype=np.float32)
+    weights = np.array([0.36, 0.22, 0.14, 0.14, 0.14])
+    picks = rng.choice(len(minerals), size=index.max() + 1, p=weights)
+    color = minerals[picks[index]]
+    color *= (1.0 + 0.06 * rng.standard_normal(index.max() + 1).astype(np.float32))[index][..., None]
+    color *= (1.0 - 0.18 * np.clip(1.0 - (second - best) / 0.8, 0, 1))[..., None]  # Grain edges.
+    color *= (1.0 + 0.05 * periodic_noise(rng, 18.0))[..., None]
+    canvas = WrapCanvas(np.clip(color, 0, 1))
+    for _ in range(3):
+        x, y, angle = rng.random() * TILE, rng.random() * TILE, rng.random() * math.tau
+        points = [(x, y)]
+        for _ in range(6):
+            angle += (rng.random() - 0.5) * 0.9
+            x, y = x + math.cos(angle) * 6.0, y + math.sin(angle) * 6.0
+            points.append((x, y))
+        canvas.stroke(points, 0.35, 0.2, rgb((18, 18, 22)), 0.8)
+    return canvas.to_pixels()
+
+
+def draw_sandstone_wall():
+    """Fine sand pressed into layers: dark ocher and red-brown beds."""
+    rng = np.random.default_rng(6500)
+    ys = (np.arange(TILE, dtype=np.float32) + 0.5)[:, None] / TILE * math.tau
+    warp = 0.35 * periodic_noise(rng, 30.0, 10.0)
+    beds = (np.sin(ys * 5 + warp) * 0.5 + np.sin(ys * 11 + 1.3 + warp * 2.0) * 0.3 +
+            np.sin(ys * 23 + 0.4 + warp * 3.0) * 0.2)
+    color = mix(rgb((50, 32, 28)), rgb((78, 52, 40)), np.clip(0.5 + 0.5 * beds, 0, 1)[..., None])
+    grain = 1.0 + 0.07 * rng.standard_normal((TILE, TILE)).astype(np.float32)
+    color *= (grain + 0.04 * periodic_noise(rng, 3.0, 1.2))[..., None]
+    canvas = WrapCanvas(np.clip(color, 0, 1))
+    for _ in range(14):  # Iron spots.
+        canvas.ellipse(rng.random() * TILE, rng.random() * TILE, 0.6 + rng.random(),
+                       0.5 + rng.random() * 0.5, rgb((36, 20, 15)), 0.0, 0.7)
+    return canvas.to_pixels()
+
+
+def draw_earth_wall():
+    """Packed earth: dark, smooth, faintly layered, with stones and dead
+    roots caught in it, flat with the cut."""
+    rng = np.random.default_rng(6600)
+    field = (1.0 + 0.05 * periodic_noise(rng, 14.0) + 0.05 * periodic_noise(rng, 1.5) +
+             0.04 * rng.standard_normal((TILE, TILE)).astype(np.float32))
+    canvas = WrapCanvas(tinted((46, 35, 26), field))
+    for _ in range(5):  # Roots.
+        x, y, angle = rng.random() * TILE, rng.random() * TILE, math.pi / 2 + rng.random() - 0.5
+        points = [(x, y)]
+        for _ in range(5):
+            angle += (rng.random() - 0.5) * 1.0
+            x, y = x + math.cos(angle) * 3.5, y + math.sin(angle) * 3.5
+            points.append((x, y))
+        canvas.stroke(points, 0.5, 0.25, rgb((30, 21, 15)), 0.9)
+    for _ in range(9):  # Stones, cut flat: a dark rim, no light.
+        x, y = rng.random() * TILE, rng.random() * TILE
+        r, angle = 2.0 + rng.random() * 2.5, rng.random() * math.pi
+        canvas.ellipse(x, y, r + 0.6, r * 0.7 + 0.6, rgb((24, 19, 16)), angle)
+        canvas.ellipse(x, y, r, r * 0.7, rgb((70, 65, 60)) * (0.8 + 0.3 * rng.random()), angle)
+    return canvas.to_pixels()
+
+
+# Grass over the ground, by growth: blade length and count, in tufts.
+GRASS_STAGES = [(3.0, 150), (5.0, 380), (8.0, 700), (11.0, 1050)]
+
+
+def draw_grass(stage):
+    """Tufts of blades seen from above: they spread out from their base, the
+    lower ones darker, the tips lighter."""
+    length, count = GRASS_STAGES[stage]
+    rng = np.random.default_rng(6700 + stage)
+    canvas = WrapCanvas()
+    blades = []
+    tufts = [(rng.random() * TILE, rng.random() * TILE) for _ in range(count // 5)]
+    for i in range(count):
+        tx, ty = tufts[i % len(tufts)]
+        x, y = tx + rng.normal() * 1.5, ty + rng.normal() * 1.5
+        angle = math.atan2(y - ty, x - tx) + rng.normal() * 0.6
+        blade = length * (0.6 + 0.6 * rng.random())
+        blades.append((rng.random(), x, y, angle, blade, (rng.random() - 0.5) * 0.8))
+    blades.sort()  # From the lowest (darkest) to the highest.
+    dark, light, tip = rgb((44, 78, 30)), rgb((92, 140, 54)), rgb((150, 178, 86))
+    for height, x, y, angle, blade, bend in blades:
+        body = mix(dark, light, height)
+        points = [(x + math.cos(angle + bend * t) * blade * t,
+                   y + math.sin(angle + bend * t) * blade * t) for t in (0.0, 0.35, 0.7, 1.0)]
+        width = 0.9 + 0.5 * min(1.0, length / 8.0)
+        canvas.stroke(points[:3], width, width * 0.7, body)
+        canvas.stroke(points[2:], width * 0.7, 0.2, mix(body, tip, 0.5 * height + 0.2))
+    return wrap_bleed(canvas.to_pixels())
+
+
+def draw_sand():
+    """Fine grains in faint wind ripples, pale; a few shell-like specks."""
+    rng = np.random.default_rng(6800)
+    ripple = periodic_noise(rng, 26.0, 6.0)
+    waves = np.sin((np.arange(TILE, dtype=np.float32)[:, None] / TILE * math.tau * 4.0) +
+                   1.2 * periodic_noise(rng, 18.0, 8.0))
+    field = (1.0 + 0.035 * ripple + 0.03 * waves + 0.035 * rng.standard_normal((TILE, TILE))
+             .astype(np.float32) + 0.02 * periodic_noise(rng, 2.0))
+    canvas = WrapCanvas(tinted((212, 194, 140), field))
+    for _ in range(40):  # Coarser grains with a hint of shadow.
+        x, y = rng.random() * TILE, rng.random() * TILE
+        light = rng.random() < 0.5
+        color = rgb((236, 220, 170)) if light else rgb((176, 154, 104))
+        canvas.ellipse(x, y, 0.5 + rng.random() * 0.4, 0.4 + rng.random() * 0.3, color,
+                       rng.random() * math.pi, 0.8)
+    return canvas.to_pixels()
+
+
+def draw_gravel():
+    """Closely packed pebbles of several grays and browns, each lit from the
+    upper left and shadowed, over dark gaps."""
+    rng = np.random.default_rng(6900)
+    canvas = WrapCanvas(tinted((78, 72, 66), 1.0 + 0.05 * periodic_noise(rng, 3.0)))
+    palette = [(138, 132, 122), (156, 148, 134), (118, 114, 108), (150, 130, 106),
+               (104, 104, 108), (170, 164, 152)]
+    for _ in range(330):
+        x, y = rng.random() * TILE, rng.random() * TILE
+        r = 2.2 + rng.random() * 3.2
+        ry = r * (0.6 + 0.4 * rng.random())
+        angle = rng.random() * math.pi
+        color = np.clip(rgb(palette[rng.integers(len(palette))]) *
+                        (0.9 + 0.2 * rng.random()), 0, 1)
+        canvas.ellipse(x + r * 0.3, y + r * 0.4, r, ry, (0.0, 0.0, 0.0), angle, 0.45)
+        canvas.ellipse(x, y, r, ry, color, angle, 1.0, 0.8)
+    return canvas.to_pixels()
+
+
+def draw_rough_stone():
+    """Bare rock seen from above: broken slabs with lit edges and dark
+    cracks between them, lichen-gray; relief, unlike the flat wall faces."""
+    rng = np.random.default_rng(7000)
+    index, best, second = cells(rng, 32)
+    tones = 1.0 + 0.12 * rng.standard_normal(index.max() + 1).astype(np.float32)
+    slope = rng.standard_normal((index.max() + 1, 2)).astype(np.float32)
+    ys, xs = np.mgrid[0:TILE, 0:TILE].astype(np.float32)
+    tilt = (slope[index, 0] * (xs % 32 - 16) + slope[index, 1] * (ys % 32 - 16)) / 160.0
+    field = (tones[index] + tilt + 0.05 * periodic_noise(rng, 5.0) +
+             0.035 * periodic_noise(rng, 1.5))
+    # Cracks fade in and out along their length, and wander: not paving.
+    wander = 1.2 * periodic_noise(rng, 4.0)
+    reach = np.clip((periodic_noise(rng, 7.0) + 0.6) / 1.2, 0.0, 1.0)
+    crack = np.clip(1.0 - (second - best + wander) / 1.6, 0.0, 1.0) * reach
+    grain = 0.06 * rng.standard_normal((TILE, TILE)).astype(np.float32)
+    field = field + grain + 0.07 * periodic_noise(rng, 2.5)
+    field = field * (1.0 - 0.6 * crack ** 1.3) + 0.10 * np.roll(crack, (1, 1), (0, 1)) ** 2
+    color = tinted((112, 108, 102), field)
+    lichen = np.clip((periodic_noise(rng, 6.0) - 1.1) / 0.6, 0, 1)
+    color = mix(color, rgb((120, 128, 96)), (0.35 * lichen)[..., None])
+    return np.dstack([np.clip(color, 0, 1), np.ones((TILE, TILE), dtype=np.float32)])
+
+
+def draw_foliage():
+    """The floor of branches of a tree: a dense canopy of overlapping leaf
+    clumps, darker in the gaps, lit on top."""
+    rng = np.random.default_rng(7100)
+    canvas = WrapCanvas(tinted((34, 66, 30), 1.0 + 0.08 * periodic_noise(rng, 6.0)))
+    palette = [(52, 98, 40), (66, 114, 46), (84, 136, 56), (44, 84, 38), (102, 150, 64)]
+    for layer in range(3):
+        for _ in range(70 - 12 * layer):
+            x, y = rng.random() * TILE, rng.random() * TILE
+            r = 5.0 + rng.random() * 5.0
+            angle = rng.random() * math.pi
+            color = np.clip(rgb(palette[min(len(palette) - 1, rng.integers(len(palette)) +
+                                            layer // 2)]) * (0.85 + 0.3 * rng.random()), 0, 1)
+            canvas.ellipse(x + 1.5, y + 2.0, r, r * 0.6, (0.0, 0.0, 0.0), angle, 0.3)
+            canvas.ellipse(x, y, r, r * 0.6, color, angle, 1.0, 0.7)
+            canvas.stroke([(x - r * 0.7 * math.cos(angle), y - r * 0.7 * math.sin(angle)),
+                           (x + r * 0.7 * math.cos(angle), y + r * 0.7 * math.sin(angle))],
+                          0.35, 0.35, color * 0.7, 0.6)
+    return canvas.to_pixels()
+
+
+def draw_grass_roof():
+    """Thatch: overlapping rows of dry straw laid across the tile, each row
+    shadowed under the one above it, so that rows line up from tile to tile."""
+    rng = np.random.default_rng(7200)
+    rows = 8
+    pitch = TILE / rows
+    canvas = WrapCanvas(tinted((196, 168, 96), 1.0 + 0.05 * periodic_noise(rng, 8.0, 3.0)))
+    palette = [(200, 172, 98), (216, 188, 112), (180, 150, 80), (190, 160, 90), (222, 198, 126)]
+    for row in range(rows):
+        y0 = row * pitch
+        for _ in range(70):  # Straws lying along the row, slanted every which way.
+            x = rng.random() * TILE
+            length = 10.0 + rng.random() * 22.0
+            slant = (rng.random() - 0.5) * 0.55
+            y = y0 + rng.random() * pitch * 0.8
+            color = np.clip(rgb(palette[rng.integers(len(palette))]) *
+                            (0.92 + 0.16 * rng.random()), 0, 1)
+            canvas.stroke([(x, y), (x + length, y + length * slant)], 0.95, 0.6, color)
+        # A dark band at the bottom edge of the row and a light one under it.
+        canvas.stroke([(-4.0, y0 + pitch - 0.9), (TILE + 4.0, y0 + pitch - 0.9)], 1.1, 1.1,
+                      rgb((96, 74, 38)), 0.75)
+        canvas.stroke([(-4.0, y0 + pitch + 0.8), (TILE + 4.0, y0 + pitch + 0.8)], 0.5, 0.5,
+                      rgb((236, 214, 150)), 0.35)
+    return canvas.to_pixels()
+
+
+GROUND_TEXTURES = {
+    "ground_deep_water": draw_deep_water,
+    "ground_shallow_water": draw_shallow_water,
+    "ground_soil": draw_soil,
+    "ground_rich_soil": draw_rich_soil,
+    "ground_sand": draw_sand,
+    "ground_gravel": draw_gravel,
+    "ground_rough_stone": draw_rough_stone,
+    "ground_foliage": draw_foliage,
+    "ground_grass_roof": draw_grass_roof,
+    "wall_granite": draw_granite_wall,
+    "wall_sandstone": draw_sandstone_wall,
+    "wall_earth": draw_earth_wall,
+}
+
+
 HAIR_STYLE_NAMES = {1: "short", 2: "long", 3: "curly", 4: "bun", 5: "braids"}
 BEARD_STYLE_NAMES = {1: "stubble", 2: "short", 3: "full", 4: "mustache"}
 
@@ -1014,10 +1458,14 @@ def generate(output):
         sprites[f"tool_{name}.png"] = draw_tool(name)
     images = {}
     for filename, canvas in sprites.items():
-        image = canvas.to_image()
+        images[filename] = canvas.to_image()
+    for name, draw in GROUND_TEXTURES.items():
+        images[f"{name}.png"] = tile_image(draw())
+    for stage in range(len(GRASS_STAGES)):
+        images[f"grass_{stage}.png"] = tile_image(draw_grass(stage))
+    for filename, image in images.items():
         assert image.width % 32 == 0 and image.height % 32 == 0, filename
         image.save(os.path.join(output, filename), optimize=True)
-        images[filename] = image
     return images
 
 
@@ -1080,6 +1528,38 @@ def preview(images, path):
     sheet.save(path)
 
 
+def preview_ground(images, path):
+    """Each tile texture repeated over 3 x 3 tiles (seams would show), grass
+    over soil at every stage, and a wall next to the ground, at full and at
+    a quarter size."""
+    def tile(name):
+        image = images[f"{name}.png"]
+        return image.crop((TILE_PADDING, TILE_PADDING, TILE_PADDING + TILE, TILE_PADDING + TILE))
+
+    def block(layers, tiles=3):
+        out = Image.new("RGBA", (TILE * tiles, TILE * tiles))
+        for y in range(tiles):
+            for x in range(tiles):
+                for layer in layers(x, y):
+                    out.alpha_composite(tile(layer), (x * TILE, y * TILE))
+        return out
+
+    blocks = [block(lambda x, y, n=name: [n]) for name in GROUND_TEXTURES]
+    blocks += [block(lambda x, y, k=stage: ["ground_soil", f"grass_{k}"])
+               for stage in range(len(GRASS_STAGES))]
+    blocks.append(block(lambda x, y: ["wall_granite" if x == 0 else "wall_earth" if x == 1 and y
+                                      else "ground_soil"] + (["grass_2"] if x == 2 else [])))
+    size = TILE * 3 + 8
+    rows = (len(blocks) + 5) // 6
+    sheet = Image.new("RGBA", (size * 6, size * rows + size // 2), (20, 20, 24, 255))
+    for i, image in enumerate(blocks):
+        sheet.alpha_composite(image, ((i % 6) * size, (i // 6) * size))
+    for i, image in enumerate(blocks):
+        small = image.resize((size // 4 - 2, size // 4 - 2), Image.LANCZOS)
+        sheet.alpha_composite(small, ((i % 18) * (size // 4), size * rows + 8))
+    sheet.save(path)
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -1090,6 +1570,8 @@ def main():
     print(f"Wrote {len(images)} sprites to {args.output}")
     if args.preview:
         preview(images, args.preview)
+        stem, extension = os.path.splitext(args.preview)
+        preview_ground(images, f"{stem}_ground{extension}")
 
 
 if __name__ == "__main__":

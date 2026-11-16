@@ -90,7 +90,7 @@ simulation:
 |----------------|-------------------------------------------------------------------------|
 | `main`         | Parses the command line, runs the app                                   |
 | `app`          | SDL init/shutdown, main loop, input → camera/clock, frame orchestration |
-| `render`       | Draws the map (colored ground tiles), zones, items, plants and colonists (sprites, depth sorted), daylight overlay, highlights |
+| `render`       | Draws the map (ground and wall textures, colored tiles for the other terrains), zones, items, plants and colonists (sprites, depth sorted), daylight overlay, highlights |
 | `sprites`      | Loads `assets/sprites/*.png` into a texture atlas with halved copies, batches sprite quads |
 | `hud`          | Builds and draws the HUD panels and the windows in stacking order; all text goes through `tr()` |
 | `ui`           | Immediate-mode widgets (panel, window, button, check box, slider, dropdown, tooltip) and click capture |
@@ -1327,8 +1327,23 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 - Tiles and item shapes are batched: they are accumulated as quads
   and sent with a few `SDL_RenderGeometry()` calls instead of one fill per
   rectangle (zoomed out, a 1280 × 720 window shows about 57,000 tiles).
-- The ground is still colored rectangles with a per-tile brightness
-  variation; grass tints the soil.
+- Ground tiles: tile textures (`sprite_ground()`, `sprite_wall()`,
+  `sprite_grass()`) for the terrains seen from
+  above (also sand, gravel, rough stone, the foliage of trees and the thatch
+  of built roofs, which are terrains), and the cut face of granite, sandstone
+  and earth walls seen from inside them; terrains without a texture would be
+  colored rectangles with a per-tile brightness variation. A texture is the same on every tile of its
+  kind (no transitions between terrains yet), so it tiles seamlessly: the
+  generator uses periodic noise and draws shapes wrapped around the edges,
+  and each file is the 128 × 128 texture with a 32-pixel wrapped border, so
+  that filtering at a tile's edge blends with the next tile, never with a
+  neighbor in the atlas (`sprites_draw_tile()` draws the inside only). The
+  ground is loose and lit from the upper left (crumbs, pebbles with their
+  shadow); walls are flat, dense and much darker, so that they never read as
+  ground. Grass is a transparent texture over the ground, in 4 stages by
+  growth (short sparse blades to a cover hiding the soil). `render_map()`
+  draws in three passes: flat colors (trunks), then textures and grass (one
+  sprite batch), then what goes over the ground (slopes, drop edges).
 - Sprites (`game/sprites.h`): 128 sprite pixels per tile (the largest zoom
   shows them 1:1). `tools/generate_sprites.py` draws them procedurally
   (Pillow, 4× supersampling) into `assets/sprites/`; run it again after

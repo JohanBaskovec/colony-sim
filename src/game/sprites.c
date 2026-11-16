@@ -60,6 +60,25 @@ static const ItemType TOOL_TYPES[] = {ITEM_COBBLE, ITEM_CHOPPER, ITEM_FLAKE, ITE
 static const char *const TOOL_NAMES[] = {"cobble", "chopper", "flake", "hand_axe"};
 #define TOOL_SPRITE_COUNT ((int)SDL_arraysize(TOOL_TYPES))
 
+/* Tile textures: TILE_SPRITE_SIZE square files, the texture of one tile with
+ * a copy of its opposite edges around it (TILE_SPRITE_PADDING pixels on each
+ * side), so that filtering at the edge of a tile blends it with the next
+ * tile, never with a neighbor in the atlas. */
+#define TILE_SPRITE_PADDING SPRITE_ALIGN
+#define TILE_SPRITE_SIZE (SPRITE_PIXELS_PER_TILE + 2 * TILE_SPRITE_PADDING)
+static const Terrain GROUND_TERRAINS[] = {
+    TERRAIN_DEEP_WATER, TERRAIN_SHALLOW_WATER, TERRAIN_SOIL,       TERRAIN_RICH_SOIL,
+    TERRAIN_SAND,       TERRAIN_GRAVEL,        TERRAIN_ROUGH_STONE, TERRAIN_FOLIAGE,
+    TERRAIN_GRASS_ROOF};
+static const char *const GROUND_NAMES[] = {"deep_water", "shallow_water", "soil",    "rich_soil",
+                                           "sand",       "gravel",        "rough_stone", "foliage",
+                                           "grass_roof"};
+static const RockType WALL_ROCKS[] = {ROCK_GRANITE, ROCK_SANDSTONE, ROCK_EARTH};
+static const char *const WALL_NAMES[] = {"granite", "sandstone", "earth"};
+#define GROUND_SPRITE_COUNT 9
+#define WALL_SPRITE_COUNT 3
+#define GRASS_SPRITE_COUNT 4 /* Growth stages. */
+
 enum {
     PLANT_FIRST = 0,
     BODY_FIRST = PLANT_FIRST + PLANT_SPRITE_COUNT,
@@ -68,10 +87,22 @@ enum {
     HAIR_FIRST = BEARD_FIRST + APPEARANCE_BEARD_COUNT - 1,
     FIST_FIRST = HAIR_FIRST + APPEARANCE_HAIR_STYLE_COUNT - 1,
     TOOL_FIRST = FIST_FIRST + APPEARANCE_SKIN_COUNT,
-    SPRITE_COUNT = TOOL_FIRST + 4
+    GROUND_FIRST = TOOL_FIRST + 4,
+    WALL_FIRST = GROUND_FIRST + GROUND_SPRITE_COUNT,
+    GRASS_FIRST = WALL_FIRST + WALL_SPRITE_COUNT,
+    SPRITE_COUNT = GRASS_FIRST + GRASS_SPRITE_COUNT
 };
-SDL_COMPILE_TIME_ASSERT(tool_sprites, SDL_arraysize(TOOL_TYPES) == SPRITE_COUNT - TOOL_FIRST &&
+SDL_COMPILE_TIME_ASSERT(tool_sprites, SDL_arraysize(TOOL_TYPES) == GROUND_FIRST - TOOL_FIRST &&
                                           SDL_arraysize(TOOL_NAMES) == SDL_arraysize(TOOL_TYPES));
+SDL_COMPILE_TIME_ASSERT(ground_sprites, SDL_arraysize(GROUND_TERRAINS) == GROUND_SPRITE_COUNT &&
+                                            SDL_arraysize(GROUND_NAMES) == GROUND_SPRITE_COUNT);
+SDL_COMPILE_TIME_ASSERT(wall_sprites, SDL_arraysize(WALL_ROCKS) == WALL_SPRITE_COUNT &&
+                                          SDL_arraysize(WALL_NAMES) == WALL_SPRITE_COUNT);
+
+static bool is_tile_sprite(SpriteId id)
+{
+    return id >= GROUND_FIRST && id < SPRITE_COUNT;
+}
 
 /* Sprites of the plants before entry `index` of PLANT_SPRITES. */
 static int plant_sprites_before(int index)
@@ -136,6 +167,31 @@ SpriteId sprite_tool(ItemType type)
     return -1;
 }
 
+SpriteId sprite_ground(Terrain terrain)
+{
+    for (int i = 0; i < GROUND_SPRITE_COUNT; i++) {
+        if (GROUND_TERRAINS[i] == terrain) {
+            return GROUND_FIRST + i;
+        }
+    }
+    return -1;
+}
+
+SpriteId sprite_wall(RockType rock)
+{
+    for (int i = 0; i < WALL_SPRITE_COUNT; i++) {
+        if (WALL_ROCKS[i] == rock) {
+            return WALL_FIRST + i;
+        }
+    }
+    return -1;
+}
+
+SpriteId sprite_grass(float growth)
+{
+    return GRASS_FIRST + clampi((int)(growth * (float)GRASS_SPRITE_COUNT), 0, GRASS_SPRITE_COUNT - 1);
+}
+
 /* File name (without directory nor extension) of a sprite. */
 static void sprite_file_name(SpriteId id, char *out, size_t size)
 {
@@ -165,8 +221,14 @@ static void sprite_file_name(SpriteId id, char *out, size_t size)
         SDL_snprintf(out, size, "hair_%s", HAIR_NAMES[id - HAIR_FIRST + 1]);
     } else if (id < TOOL_FIRST) {
         SDL_snprintf(out, size, "fist_%d", id - FIST_FIRST);
-    } else {
+    } else if (id < GROUND_FIRST) {
         SDL_snprintf(out, size, "tool_%s", TOOL_NAMES[id - TOOL_FIRST]);
+    } else if (id < WALL_FIRST) {
+        SDL_snprintf(out, size, "ground_%s", GROUND_NAMES[id - GROUND_FIRST]);
+    } else if (id < GRASS_FIRST) {
+        SDL_snprintf(out, size, "wall_%s", WALL_NAMES[id - WALL_FIRST]);
+    } else {
+        SDL_snprintf(out, size, "grass_%d", id - GRASS_FIRST);
     }
 }
 
@@ -242,6 +304,12 @@ static SDL_Surface *load_sprite(const char *assets_dir, SpriteId id)
         surface->w + SPRITE_GUTTER > ATLAS_WIDTH) {
         LOG_ERROR("Sprite %s is %dx%d: sizes must be multiples of %d", path, surface->w,
                   surface->h, SPRITE_ALIGN);
+        SDL_DestroySurface(surface);
+        return NULL;
+    }
+    if (is_tile_sprite(id) && (surface->w != TILE_SPRITE_SIZE || surface->h != TILE_SPRITE_SIZE)) {
+        LOG_ERROR("Tile texture %s is %dx%d instead of %dx%d", path, surface->w, surface->h,
+                  TILE_SPRITE_SIZE, TILE_SPRITE_SIZE);
         SDL_DestroySurface(surface);
         return NULL;
     }
@@ -419,7 +487,7 @@ void sprites_size(const Sprites *sprites, SpriteId id, float *width, float *heig
 }
 
 /* Queues a quad given its four screen corners (clockwise from the top left
- * of the unmirrored sprite). */
+ * of the unmirrored sprite). A tile texture shows without its border. */
 static void queue_quad(Sprites *sprites, SpriteId id, const SDL_FPoint corners[4],
                        SDL_FColor color, bool flip)
 {
@@ -427,6 +495,10 @@ static void queue_quad(Sprites *sprites, SpriteId id, const SDL_FPoint corners[4
         sprites_flush(sprites);
     }
     SDL_Rect rect = sprites->rects[id];
+    if (is_tile_sprite(id)) {
+        rect = (SDL_Rect){rect.x + TILE_SPRITE_PADDING, rect.y + TILE_SPRITE_PADDING,
+                          rect.w - 2 * TILE_SPRITE_PADDING, rect.h - 2 * TILE_SPRITE_PADDING};
+    }
     /* Texture coordinates are the same at every level: they are fractions. */
     float u0 = (float)rect.x / (float)sprites->atlas_width;
     float u1 = (float)(rect.x + rect.w) / (float)sprites->atlas_width;
@@ -479,4 +551,16 @@ void sprites_draw_rotated(Sprites *sprites, SpriteId id, float center_x, float c
         corners[i] = (SDL_FPoint){center_x + x * c - y * s, center_y + x * s + y * c};
     }
     queue_quad(sprites, id, corners, color, flip);
+}
+
+void sprites_draw_tile(Sprites *sprites, SpriteId id, const SDL_FRect *rect, SDL_FColor color)
+{
+    if (!is_tile_sprite(id)) {
+        return;
+    }
+    SDL_FPoint corners[4] = {{rect->x, rect->y},
+                             {rect->x + rect->w, rect->y},
+                             {rect->x + rect->w, rect->y + rect->h},
+                             {rect->x, rect->y + rect->h}};
+    queue_quad(sprites, id, corners, color, false);
 }

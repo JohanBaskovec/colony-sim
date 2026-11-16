@@ -133,7 +133,9 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Main menu, new game options (seed, map size, difficulty)
 - [ ] Sound and music
 - [x] Sprites (128 × 128 pixels per tile) in a texture atlas with halved copies for zoomed-out views: trees, hazels and brambles (5 growth stages, hazels and brambles with and without fruit), low plants (3 stages), mushrooms, colonists in 4 layers (naked limbless body in 3 shapes, head with 4 expressions, beard, hair) in front view, a moving fist (with the tool of the job) while working
-- [ ] Ground textures (soil, sand, gravel, stone, water, rock walls) with transitions between terrains
+- [x] Ground textures, the same on every tile of a terrain: soil, rich soil, shallow and deep water seen from above; grass over the ground, taller with its growth; the cut face of granite, sandstone and earth walls, dark and compact so that they never read as ground
+- [x] Textures for sand, gravel, rough stone, foliage (leaf canopy) and grass roofs (thatch)
+- [ ] Transitions between terrains
 - [ ] Colonist sprites seen from the back and the sides, walking and sleeping poses
 - [ ] Sprites for items, workstations and structures
 - [ ] Clothes as sprite layers over the body (hide tunic, fur wrap...), once clothing exists

@@ -5,7 +5,8 @@
  * through a vertex batch, so thousands of trees cost a few draw calls.
  *
  * Scale: SPRITE_PIXELS_PER_TILE sprite pixels per tile. A sprite is anchored by
- * the middle of its bottom edge and may overflow its tile upward and sideways.
+ * the middle of its bottom edge and may overflow its tile upward and sideways;
+ * tile textures (ground, walls, grass) cover exactly one tile.
  */
 #ifndef COLONY_GAME_SPRITES_H
 #define COLONY_GAME_SPRITES_H
@@ -34,6 +35,14 @@ SpriteId sprite_hair(int style);  /* Style 1 .. APPEARANCE_HAIR_STYLE_COUNT - 1.
  * drawn centered on the hand: the grip is the middle of the sprite. */
 SpriteId sprite_fist(int skin);
 SpriteId sprite_tool(ItemType type);
+/* Tile textures, drawn with sprites_draw_tile(), the same on every tile of
+ * their kind (they tile seamlessly): the ground of a terrain seen from above,
+ * the cut face of a rock wall seen from inside it (dark and flat, unlike any
+ * ground), and grass over the ground, taller with its growth (0 .. 1). -1 for
+ * terrains and rocks without a texture. */
+SpriteId sprite_ground(Terrain terrain);
+SpriteId sprite_wall(RockType rock);
+SpriteId sprite_grass(float growth);
 
 typedef struct Sprites Sprites;
 
@@ -55,6 +64,9 @@ void sprites_draw(Sprites *sprites, SpriteId id, float anchor_x, float anchor_y,
  * around its center (after mirroring when `flip`). */
 void sprites_draw_rotated(Sprites *sprites, SpriteId id, float center_x, float center_y,
                           float degrees, SDL_FColor color, bool flip);
+
+/* Queues a tile texture stretched over a screen rectangle (a whole tile). */
+void sprites_draw_tile(Sprites *sprites, SpriteId id, const SDL_FRect *rect, SDL_FColor color);
 
 /* Size of a sprite on screen at the zoom of the current batch, in pixels. */
 void sprites_size(const Sprites *sprites, SpriteId id, float *width, float *height);

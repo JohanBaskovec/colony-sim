@@ -997,7 +997,7 @@ static void render_frame(App *app)
         for (int z = lowest > 0 ? lowest : 0; z < app->camera.level; z++) {
             Camera below = app->camera;
             below.level = z;
-            render_map(app->renderer, &app->game.map, &below);
+            render_map(app->renderer, app->sprites, &app->game.map, &below);
             render_snow_cover(app->renderer, &app->game, &below);
             render_structures(app->renderer, &app->game, &below);
             render_workstations(app->renderer, &app->game, &below, WORKSTATION_NONE);
@@ -1007,7 +1007,7 @@ static void render_frame(App *app)
         }
         render_below_end(app->renderer);
     }
-    render_map(app->renderer, &app->game.map, &app->camera);
+    render_map(app->renderer, app->sprites, &app->game.map, &app->camera);
     render_dirt(app->renderer, &app->game.dirt, &app->camera);
     render_snow_cover(app->renderer, &app->game, &app->camera);
     render_gather_zones(app->renderer, &app->game, &app->camera, app->selected_gather_zone);
