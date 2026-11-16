@@ -414,6 +414,8 @@ workstation.open_hearth = Foyer
 workstation.open_hearth.description = Un cercle de pierres autour d’une fosse : un feu pour éclairer la nuit, les veillées et durcir le bois
 
 # Constructions (bâties à partir d’un plan)
+structure.ground_bedding = Couchage au sol
+structure.ground_bedding.description = Un emplacement de terre foulée pour dormir, sur 2 cases : aucun matériau, pas mieux que la terre nue, mais les colons dorment près du camp
 structure.grass_bed = Lit d’herbe
 structure.grass_bed.description = Une litière d’herbe sèche pour dormir : on récupère plus vite que sur la terre nue
 structure.wall = Mur d’herbe et de branches

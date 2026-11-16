@@ -24,10 +24,12 @@
  * Work: about 15 minutes to spread a bed; 2 hours for a wall segment (dig
  * the post holes with a stick, tie the rails, thatch); 1.5 hours to weave a
  * screen or to roof a tile, working overhead; 1 hour to set a prop or to
- * lash a ladder (TICKS_PER_HOUR = 2,500).
+ * lash a ladder (TICKS_PER_HOUR = 2,500); 6 minutes to clear and tread down
+ * a sleeping place on the ground, with no material (it rests as the bare
+ * ground does, 0.8: a place where settlers lie down, not a better night).
  * Hit points: a bed 20 (it packs down, a hit point a day, and is refreshed
  * with 4 armfuls of dry grass in 125 ticks), a wall 60, a screen 40, a roof
- * 50, a prop 40, a ladder 30.
+ * 50, a prop 40, a ladder 30, a ground bedding 20 (it does not wear).
  */
 static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
     [STRUCTURE_NONE] = {"none",
@@ -145,6 +147,22 @@ static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
                           {ITEM_NONE, 0},
                           0.0f,
                           false},
+    [STRUCTURE_GROUND_BEDDING] = {"ground_bedding",
+                                  N_("structure.ground_bedding"),
+                                  N_("structure.ground_bedding.description"),
+                                  {{ITEM_NONE, 0}, {ITEM_NONE, 0}},
+                                  250.0f,
+                                  KNOWLEDGE_BASIC_SHELTERS,
+                                  50.0f,
+                                  1.0f,
+                                  0.8f,
+                                  false,
+                                  2,
+                                  20,
+                                  0,
+                                  {ITEM_NONE, 0},
+                                  0.0f,
+                                  false},
 };
 
 /* Hit points by grade, crude to superb. */

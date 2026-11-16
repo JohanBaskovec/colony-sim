@@ -36,7 +36,9 @@ static void test_definitions(void)
         REQUIRE(def != NULL);
         CHECK(def->id != NULL && i18n_is_valid_key(def->name_key));
         CHECK(i18n_is_valid_key(def->description_key));
-        CHECK(def->materials[0].type != ITEM_NONE && def->materials[0].count > 0);
+        /* Everything takes material but the ground bedding, which is only work. */
+        CHECK((def->materials[0].type != ITEM_NONE && def->materials[0].count > 0) ||
+              type == STRUCTURE_GROUND_BEDDING);
         CHECK(def->build_work > 0.0f);
         CHECK(def->knowledge == KNOWLEDGE_BASIC_SHELTERS);
         CHECK(structure_deconstruct_work((StructureType)type) < def->build_work);

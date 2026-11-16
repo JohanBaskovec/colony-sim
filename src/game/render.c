@@ -100,6 +100,7 @@ static const SDL_Color BRANCH_COLOR = {122, 86, 50, 255};
 static const SDL_Color TWIG_COLOR = {168, 128, 82, 255};
 static const SDL_Color FRESH_GRASS_COLOR = {92, 168, 64, 255};
 static const SDL_Color DRY_GRASS_COLOR = {206, 184, 104, 255};
+static const SDL_Color TRODDEN_EARTH_COLOR = {146, 114, 80, 255};
 static const SDL_Color FLINT_COLOR = {72, 78, 96, 255};
 static const SDL_Color FLAKE_COLOR = {128, 136, 156, 255};
 static const SDL_Color SPEAR_COLOR = {176, 134, 84, 255};
@@ -1493,6 +1494,31 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
             pillow.w = roll;
         }
         fill(renderer, dark, &pillow);
+        break;
+    }
+    case STRUCTURE_GROUND_BEDDING: {
+        /* A patch of trodden earth, a darker hollow at the head end. */
+        bool vertical = direction == DIRECTION_NORTH || direction == DIRECTION_SOUTH;
+        float across = vertical ? w : h;
+        float side = floorf(across * 0.14f), end = floorf(across * 0.08f);
+        SDL_FRect patch =
+            vertical ? (SDL_FRect){tile->x + side, tile->y + end, w - 2.0f * side, h - 2.0f * end}
+                     : (SDL_FRect){tile->x + end, tile->y + side, w - 2.0f * end, h - 2.0f * side};
+        SDL_Color earth = TRODDEN_EARTH_COLOR, hollow = shade(TRODDEN_EARTH_COLOR, -36);
+        earth.a = hollow.a = alpha;
+        fill(renderer, edge, &patch);
+        SDL_FRect ground = {patch.x + 1.0f, patch.y + 1.0f, patch.w - 2.0f, patch.h - 2.0f};
+        fill(renderer, earth, &ground);
+        float hollow_size = floorf(across * 0.3f);
+        SDL_FRect head = ground;
+        if (vertical) {
+            head.y += direction == DIRECTION_NORTH ? ground.h - hollow_size : 0.0f;
+            head.h = hollow_size;
+        } else {
+            head.x += direction == DIRECTION_WEST ? ground.w - hollow_size : 0.0f;
+            head.w = hollow_size;
+        }
+        fill(renderer, hollow, &head);
         break;
     }
     case STRUCTURE_WALL: {

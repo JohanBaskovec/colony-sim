@@ -35,11 +35,12 @@
 typedef enum StructureType {
     STRUCTURE_NONE = 0,
     STRUCTURE_GRASS_BED,
-    STRUCTURE_WALL,   /* Grass and branch wall. */
-    STRUCTURE_DOOR,   /* Branch screen: pushed aside to pass. */
-    STRUCTURE_ROOF,   /* Grass roof on branch rafters, over a tile. */
-    STRUCTURE_PROP,   /* Forked post of branches: holds up a ceiling or a roof. */
-    STRUCTURE_LADDER, /* Branch ladder: up to the level above (see map_can_climb()). */
+    STRUCTURE_WALL,           /* Grass and branch wall. */
+    STRUCTURE_DOOR,           /* Branch screen: pushed aside to pass. */
+    STRUCTURE_ROOF,           /* Grass roof on branch rafters, over a tile. */
+    STRUCTURE_PROP,           /* Forked post of branches: holds up a ceiling or a roof. */
+    STRUCTURE_LADDER,         /* Branch ladder: up to the level above (see map_can_climb()). */
+    STRUCTURE_GROUND_BEDDING, /* A spot of trodden ground to sleep on, no material. */
     STRUCTURE_TYPE_COUNT
 } StructureType;
 

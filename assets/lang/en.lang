@@ -490,6 +490,8 @@ workstation.open_hearth = Open hearth
 workstation.open_hearth.description = A ring of stones around a pit: a fire for light at night, fireside stories and hardening wood
 
 # Structures (built from blueprints)
+structure.ground_bedding = Ground bedding
+structure.ground_bedding.description = A spot of trodden ground, 2 tiles, to sleep on: no material, and no better than the bare ground, but settlers sleep close to the camp
 structure.grass_bed = Grass bed
 structure.grass_bed.description = A litter of dry grass to sleep on: rest comes back faster than on the bare ground
 structure.wall = Grass and branch wall

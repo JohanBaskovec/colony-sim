@@ -105,6 +105,59 @@ static void test_placing(void)
     game_shutdown(&game);
 }
 
+/* A ground bedding costs nothing: a builder just treads the spot down. */
+static void test_ground_bedding_needs_no_material(void)
+{
+    const StructureDef *def = structure_def(STRUCTURE_GROUND_BEDDING);
+    REQUIRE(def != NULL);
+    CHECK_EQ_INT(def->length, 2);
+    CHECK_EQ_INT(def->materials[0].type, ITEM_NONE);
+    CHECK_EQ_INT(def->materials[1].type, ITEM_NONE);
+    CHECK(structure_is_bed(STRUCTURE_GROUND_BEDDING));
+    CHECK_NEAR(def->rest_factor, COLONIST_GROUND_REST_FACTOR,
+               1e-6); /* No better than the ground. */
+    CHECK_EQ_INT(def->wear_per_day, 0);
+
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *builder = spawn_rested(&game, 10, 10);
+    REQUIRE(builder != NULL);
+    CHECK(game_structure_buildable(&game, STRUCTURE_GROUND_BEDDING));
+    REQUIRE(game_place_structure(&game, STRUCTURE_GROUND_BEDDING, 10, 14, 0, DIRECTION_SOUTH) !=
+            CONSTRUCTION_NONE);
+    CHECK(run_until_built(&game, 10, 14, 3000));
+    CHECK_EQ_INT(map_structure(&game.map, 10, 14, 0), STRUCTURE_GROUND_BEDDING);
+    CHECK_EQ_INT(map_structure(&game.map, 10, 15, 0), STRUCTURE_GROUND_BEDDING);
+    CHECK_EQ_INT(game.constructions.used_count, 0);
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        CHECK_EQ_INT(game.items.totals[type], 0); /* Nothing was brought. */
+    }
+    game_shutdown(&game);
+}
+
+/* With nothing but ground beddings around, settlers go and sleep on one,
+ * and remember a night on the ground all the same. */
+static void test_settlers_sleep_on_a_ground_bedding(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    map_set_structure(&game.map, 13, 10, 0, STRUCTURE_GROUND_BEDDING);
+    game.weather.spell = WEATHER_SPELL_MAX; /* A mild night. */
+    Colonist *sleeper = spawn_rested(&game, 20, 20);
+    REQUIRE(sleeper != NULL);
+    sleeper->needs[NEED_REST] = 0.2f;
+    run_ticks(&game, 1);
+    CHECK_EQ_INT(sleeper->task, TASK_SLEEP);
+    CHECK_EQ_INT(reservations_owner(&game.reservations, RESERVATION_BED, (TilePos){13, 10, 0}), 1);
+    run_ticks(&game, 3 * TICKS_PER_HOUR);
+    CHECK(sleeper->x == 13 && sleeper->y == 10);
+    run_ticks(&game, 6 * TICKS_PER_HOUR);
+    REQUIRE(sleeper->task != TASK_SLEEP);
+    CHECK(mood_has(&sleeper->mood, THOUGHT_SLEPT_ON_GROUND));
+    CHECK(!mood_has(&sleeper->mood, THOUGHT_SLEPT_WELL));
+    game_shutdown(&game);
+}
+
 /* A new plan on a site in progress cancels it and takes its place. */
 static void test_a_new_plan_replaces_the_one_in_progress(void)
 {
@@ -711,6 +764,8 @@ int main(void)
     RUN_TEST(test_a_new_plan_replaces_the_one_in_progress);
     RUN_TEST(test_cancelling_gives_materials_back);
     RUN_TEST(test_builder_brings_materials_and_builds_a_wall);
+    RUN_TEST(test_ground_bedding_needs_no_material);
+    RUN_TEST(test_settlers_sleep_on_a_ground_bedding);
     RUN_TEST(test_haulers_bring_materials);
     RUN_TEST(test_haulers_share_a_site);
     RUN_TEST(test_a_bush_is_cleared_before_building);

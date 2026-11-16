@@ -56,7 +56,7 @@ simulation:
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
 | `hearth`     | The fire of an open hearth: fuel values, fuel wanted, burning, lighting rules, light around burning hearths, the hours of fireside stories |
-| `structure`  | Structure definitions (grass bed, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, length in tiles and `Direction`, hit points, wear and refresh; hit points by grade, grade cap from the materials |
+| `structure`  | Structure definitions (grass bed, ground bedding, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, length in tiles and `Direction`, hit points, wear and refresh; hit points by grade, grade cap from the materials |
 | `bed`        | Bed ownership: one bed per settler, one settler per bed, kept on the bed's head; beds gone from the map are forgotten |
 | `construction`| Construction sites: blueprints of structures and of workstations, refresh sites on worn structures, materials delivered per slot, work, built grade; daily wear; built structures go to the map's structure layers, finished workstations to `Workstations` |
 | `work`       | Work types (mining, fire, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
@@ -816,7 +816,7 @@ built structure and gives back half of its materials.
 Material counts come from real structures, for a tile of about 1 m²: see
 `structure.c` and `docs/KNOWLEDGE.md` §10.
 
-**Long structures**: a grass bed takes two tiles (`StructureDef.length`),
+**Long structures**: a grass bed (and the ground bedding, a bed made of no material, resting as the bare ground does: it is not a "bed" for the mood memories) takes two tiles (`StructureDef.length`),
 its head and its foot in one of four `Direction`s. Every tile holds the
 type (movement cost, blocking and the inspector work per tile as before);
 `Map.structure_part` holds the direction and the tile's place in the

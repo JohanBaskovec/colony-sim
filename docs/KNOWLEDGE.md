@@ -884,6 +884,9 @@ twigs 0.2 kg):
 - branch screen, 1 m × 2 m: a frame of 2 uprights and 3 cross bars (3 kg)
   woven with thinner branches (4.5 kg): **5 branches**, the gaps stuffed with
   **5 handfuls of twigs**; about 1.5 hours.
+- ground bedding, 1 × 2 tiles: no material, only clearing and treading the
+  spot down, about 6 minutes (250 ticks); it rests as the bare ground does
+  (×0.8) and does not wear.
 Taking a structure apart takes a quarter of the building work and gives back
 half of the materials.
 
@@ -895,6 +898,10 @@ and size implemented: a settler takes the nearest free bed the first night
 and keeps it.)*
 - Bare ground: rest gain ×0.8, mood "slept on the ground". Grass bed: ×1.0, no
   penalty; comfort by grade.
+- **Ground bedding**: the same two tiles, with no material: a place where
+  settlers lie down when they have nothing better, so that they do not
+  wander off to sleep; it rests as the bare ground (×0.8) and the night still
+  counts as "slept on the ground".
 - Loses 1 hit point a day; below 50%, "slept on old bedding"; at 0, gone.
   Refreshing replaces the grass (4 grass, 125 ticks).
 - Hit points: bed 20, wall 60, screen 40 at standard grade, ×0.6 (crude) to

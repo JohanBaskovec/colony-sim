@@ -918,6 +918,17 @@ static bool is_own_bed(const Map *map, int x, int y, int z, void *userdata)
 static bool go_to_warm_spot(Colonist *colonist, const ColonistContext *context);
 static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context);
 
+/* Whether some bed (any structure settlers sleep on) stands on the map. */
+static bool any_bed(const Map *map)
+{
+    for (int type = STRUCTURE_NONE + 1; type < STRUCTURE_TYPE_COUNT; type++) {
+        if (structure_is_bed((StructureType)type) && map->structure_counts[type] > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* Goes to sleep in its own bed, else in the nearest free one (which becomes
  * its own), else at a spot beside a fire when too cold or hot where the
  * colonist stands, else there. */
@@ -925,7 +936,7 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
 {
     begin_task(colonist, context, TASK_SLEEP);
     path_clear(&colonist->path);
-    if (context->map->structure_counts[STRUCTURE_GRASS_BED] == 0) {
+    if (!any_bed(context->map)) {
         go_to_warm_spot(colonist, context);
         return;
     }
@@ -1087,8 +1098,10 @@ static void remember_sleep(Colonist *colonist, const ColonistContext *context)
     int ticks = colonist->sleep_ticks;
     if (ticks >= MOOD_SLEEP_MIN_TICKS) {
         Mood *mood = &colonist->mood;
-        bool bed =
-            structure_is_bed(map_structure(context->map, colonist->x, colonist->y, colonist->z));
+        /* A bed rests better than the bare ground; a ground bedding does not. */
+        StructureType lain_on = map_structure(context->map, colonist->x, colonist->y, colonist->z);
+        bool bed = structure_is_bed(lain_on) &&
+                   structure_def(lain_on)->rest_factor > COLONIST_GROUND_REST_FACTOR;
         float bad = MOOD_SLEEP_BAD_SHARE * (float)ticks;
         bool cold = (float)colonist->sleep_cold_ticks > bad;
         bool hot = (float)colonist->sleep_hot_ticks > bad;
