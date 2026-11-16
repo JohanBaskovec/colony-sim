@@ -281,6 +281,18 @@ int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, in
 int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z,
                           int preferred, const uint8_t *const *blocked);
 
+/*
+ * As gather_zones_add_rect(), with `z` the level shown: each tile of the
+ * rectangle stands for what is seen there (map_view_level()), the level
+ * below when it is open space. A zone may thus cover several levels.
+ */
+int gather_zones_add_view_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
+                               int z, int preferred, const uint8_t *const *blocked);
+
+/* gather_zones_remove_rect() on what is seen (map_view_level()) with level z shown. */
+int gather_zones_remove_view_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1,
+                                  int y1, int z);
+
 /* Removes every tile of a rectangle from its zone; zones left without tiles
  * are deleted. Returns the number of tiles removed. */
 int gather_zones_remove_rect(GatherZones *zones, int x0, int y0, int x1, int y1, int z);

@@ -89,6 +89,18 @@ int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, 
 int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
                         int z, int preferred, const uint8_t *const *blocked);
 
+/*
+ * As stockpiles_add_rect(), with `z` the level shown: each tile of the
+ * rectangle stands for what is seen there (map_view_level()), the level
+ * below when it is open space. A stockpile may thus cover several levels.
+ */
+int stockpiles_add_view_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
+                             int z, int preferred, const uint8_t *const *blocked);
+
+/* stockpiles_remove_rect() on what is seen (map_view_level()) with level z shown. */
+int stockpiles_remove_view_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1,
+                                int y1, int z);
+
 /* Removes every tile of a rectangle from whatever stockpile it belongs to;
  * stockpiles left without tiles are deleted. Returns the number of tiles removed. */
 int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1, int z);

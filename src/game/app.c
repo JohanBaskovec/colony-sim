@@ -23,7 +23,6 @@
 #define APP_ZOOM_STEP 1.15f
 /* Levels below the one shown that show through open space (deeper ones are
  * too dark to see). */
-#define APP_LEVELS_SHOWN_BELOW 6
 /* Height of a colonist's body above its position, in tiles (for clicks). */
 #define APP_PICK_BODY_OFFSET 0.7f
 #define APP_DRAG_THRESHOLD 5.0f /* Pixels before a click becomes a box selection. */
@@ -773,11 +772,10 @@ static void apply_debug_tool(App *app, float screen_x, float screen_y)
 static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
 {
     const int z = app->camera.level; /* The level shown. */
-    Stockpiles *stockpiles = &app->game.stockpiles;
     int x0, y0, x1, y1;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
     if (zone_tool_removes(app)) {
-        stockpiles_remove_rect(stockpiles, x0, y0, x1, y1, z);
+        game_remove_stockpile_rect(&app->game, x0, y0, x1, y1, z);
         prune_stockpile_selection(app);
     } else {
         select_stockpile(
@@ -789,11 +787,10 @@ static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
 static void apply_gather_tool(App *app, float screen_x, float screen_y)
 {
     const int z = app->camera.level; /* The level shown. */
-    GatherZones *zones = &app->game.gather_zones;
     int x0, y0, x1, y1;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
     if (zone_tool_removes(app)) {
-        gather_zones_remove_rect(zones, x0, y0, x1, y1, z);
+        game_remove_gather_zone_rect(&app->game, x0, y0, x1, y1, z);
         prune_gather_zone_selection(app);
     } else {
         select_gather_zone(app, game_add_gather_zone_rect(&app->game, x0, y0, x1, y1, z,
@@ -987,12 +984,14 @@ static void render_frame(App *app)
 
     /* The levels below, through open space: the deepest first. */
     if (render_below_begin(app->renderer, &app->game.map, &app->camera)) {
-        int lowest = app->camera.level - APP_LEVELS_SHOWN_BELOW;
+        int lowest = app->camera.level - MAP_VIEW_LEVELS_BELOW;
         for (int z = lowest > 0 ? lowest : 0; z < app->camera.level; z++) {
             Camera below = app->camera;
             below.level = z;
             render_map(app->renderer, app->sprites, &app->game.map, &below);
             render_snow_cover(app->renderer, &app->game, &below);
+            render_gather_zones(app->renderer, &app->game, &below, GATHER_ZONE_NONE);
+            render_stockpiles(app->renderer, &app->game, &below, STOCKPILE_NONE);
             render_structures(app->renderer, &app->game, &below);
             render_workstations(app->renderer, &app->game, &below, WORKSTATION_NONE);
             render_items(app->renderer, &app->game, &below);

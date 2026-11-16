@@ -538,6 +538,13 @@ pass the other kind's tile layer, the workstation layer and the tiles of
 workstation sites (`Constructions.workstation_tiles`) as `blocked` layers (a
 NULL-terminated list), so their tiles are left out (the low-level
 `*_create()` / `*_extend()` do not check, for tests and benchmark scenarios).
+The tools work on what is seen: they call the `*_add_view_rect()` /
+`*_remove_view_rect()` variants, whose `z` is the level shown, and each tile of
+the rectangle stands for `map_view_level()` of it, the level itself or, where
+it is open space, the first level below that is not (at most
+`MAP_VIEW_LEVELS_BELOW`, the levels the renderer draws below). A zone drawn
+from a high level thus covers the ground it sees below too, and is drawn in
+the blurred view of the levels below.
 The other way round, `game_place_workstation()` takes the station's tile out
 of the zone it was in (blueprints included). Tiles
 are taken out of zones with Shift+drag or the removal tools of the build menu;

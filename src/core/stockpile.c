@@ -105,7 +105,7 @@ static void shrink_bounds(Stockpiles *stockpiles, int index)
 /* Adds the free, coverable tiles of a rectangle that no layer of `blocked`
  * (see stockpiles_add_rect()) covers. */
 static int extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1, int y1,
-                  int z, const uint8_t *const *blocked)
+                  int z, const uint8_t *const *blocked, bool view)
 {
     if (!is_valid(stockpiles, index)) {
         return 0;
@@ -115,12 +115,17 @@ static int extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int
     int added = 0;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            size_t i = index_of(stockpiles, x, y, z);
+            int level = view ? map_view_level(map, x, y, z) : z;
+            if (level < 0) {
+                continue;
+            }
+            size_t i = index_of(stockpiles, x, y, level);
             uint8_t *zone = &stockpiles->zone[i];
-            if (*zone == 0 && !layers_any_set(blocked, i) && stockpile_can_cover(map, x, y, z)) {
+            if (*zone == 0 && !layers_any_set(blocked, i) &&
+                stockpile_can_cover(map, x, y, level)) {
                 *zone = (uint8_t)(index + 1);
                 added++;
-                grow_bounds(&stockpiles->list[index], x, y, z);
+                grow_bounds(&stockpiles->list[index], x, y, level);
             }
         }
     }
@@ -134,11 +139,11 @@ static int extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int
 int stockpile_extend(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
                      int y1, int z)
 {
-    return extend(stockpiles, map, index, x0, y0, x1, y1, z, NULL);
+    return extend(stockpiles, map, index, x0, y0, x1, y1, z, NULL, false);
 }
 
 static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1, int z,
-                  const uint8_t *const *blocked)
+                  const uint8_t *const *blocked, bool view)
 {
     int index = STOCKPILE_NONE;
     for (int i = 0; i < STOCKPILE_MAX; i++) {
@@ -158,7 +163,7 @@ static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1
                              .hit_points = {0, 100},
                              .priority = STOCKPILE_PRIORITY_DEFAULT};
     clear_bounds(stockpile);
-    if (extend(stockpiles, map, index, x0, y0, x1, y1, z, blocked) == 0) {
+    if (extend(stockpiles, map, index, x0, y0, x1, y1, z, blocked, view) == 0) {
         stockpile->used = false;
         return STOCKPILE_NONE;
     }
@@ -169,7 +174,7 @@ static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1
 
 int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1, int z)
 {
-    return create(stockpiles, map, x0, y0, x1, y1, z, NULL);
+    return create(stockpiles, map, x0, y0, x1, y1, z, NULL, false);
 }
 
 /* Moves every tile of `from` to `into` and deletes `from`. */
@@ -196,8 +201,8 @@ static void merge(Stockpiles *stockpiles, int into, int from)
     stockpiles->revision++;
 }
 
-int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
-                        int z, int preferred, const uint8_t *const *blocked)
+static int add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1, int z,
+                    int preferred, const uint8_t *const *blocked, bool view)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(stockpiles, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
@@ -205,7 +210,11 @@ int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, 
     int into = is_valid(stockpiles, preferred) ? preferred : STOCKPILE_NONE;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            int zone = stockpiles->zone[index_of(stockpiles, x, y, z)] - 1;
+            int level = view ? map_view_level(map, x, y, z) : z;
+            if (level < 0) {
+                continue;
+            }
+            int zone = stockpiles->zone[index_of(stockpiles, x, y, level)] - 1;
             if (zone == STOCKPILE_NONE || overlapped[zone]) {
                 continue;
             }
@@ -218,18 +227,31 @@ int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, 
         }
     }
     if (into == STOCKPILE_NONE) {
-        return create(stockpiles, map, x0, y0, x1, y1, z, blocked);
+        return create(stockpiles, map, x0, y0, x1, y1, z, blocked, view);
     }
     for (int zone = 0; zone < STOCKPILE_MAX; zone++) {
         if (overlapped[zone] && zone != into) {
             merge(stockpiles, into, zone);
         }
     }
-    extend(stockpiles, map, into, x0, y0, x1, y1, z, blocked);
+    extend(stockpiles, map, into, x0, y0, x1, y1, z, blocked, view);
     return into;
 }
 
-int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1, int z)
+int stockpiles_add_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
+                        int z, int preferred, const uint8_t *const *blocked)
+{
+    return add_rect(stockpiles, map, x0, y0, x1, y1, z, preferred, blocked, false);
+}
+
+int stockpiles_add_view_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
+                             int z, int preferred, const uint8_t *const *blocked)
+{
+    return add_rect(stockpiles, map, x0, y0, x1, y1, z, preferred, blocked, true);
+}
+
+static int remove_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
+                       int z)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(stockpiles, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
@@ -237,7 +259,11 @@ int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y
     bool touched[STOCKPILE_MAX] = {false};
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y, z)];
+            int level = map != NULL ? map_view_level(map, x, y, z) : z;
+            if (level < 0) {
+                continue;
+            }
+            uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y, level)];
             if (*zone != 0) {
                 Stockpile *stockpile = &stockpiles->list[*zone - 1];
                 touched[*zone - 1] = true;
@@ -259,6 +285,17 @@ int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y
         stockpiles->revision++; /* Items there may now need hauling. */
     }
     return removed;
+}
+
+int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1, int z)
+{
+    return remove_rect(stockpiles, NULL, x0, y0, x1, y1, z);
+}
+
+int stockpiles_remove_view_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1,
+                                int y1, int z)
+{
+    return remove_rect(stockpiles, map, x0, y0, x1, y1, z);
 }
 
 void stockpile_delete(Stockpiles *stockpiles, int index)

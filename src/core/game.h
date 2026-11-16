@@ -327,12 +327,20 @@ int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, b
 
 /* Zones of different kinds never overlap: these add a rectangle (corners in
  * any order) to the stockpiles or to the gathering zones as the zone tools do
- * (see stockpiles_add_rect() and gather_zones_add_rect(): zones of the same
- * kind it overlaps, and `preferred`, merge), leaving out the tiles of the
- * other kind of zone and of workstations (built or not). Return the zone's
- * index, or STOCKPILE_NONE / GATHER_ZONE_NONE when nothing could be added. */
+ * (see stockpiles_add_view_rect() and gather_zones_add_view_rect(): zones of
+ * the same kind it overlaps, and `preferred`, merge), leaving out the tiles
+ * of the other kind of zone and of workstations (built or not). `z` is the
+ * level shown: the zone covers what is seen in the rectangle, so the levels
+ * below too where the level shown is open space (map_view_level()). Return
+ * the zone's index, or STOCKPILE_NONE / GATHER_ZONE_NONE when nothing could
+ * be added. */
 int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred);
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred);
+
+/* Takes what is seen in a rectangle (level z shown) out of the stockpiles, or
+ * of the gathering zones. Returns the number of tiles removed. */
+int game_remove_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z);
+int game_remove_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z);
 
 /* ---- Workstations -------------------------------------------------------- */
 

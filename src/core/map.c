@@ -672,6 +672,20 @@ bool map_is_open(const Map *map, int x, int y, int z)
     return map_in_bounds(map, x, y, z) && map_is_open_at(map, map_index(map, x, y, z));
 }
 
+int map_view_level(const Map *map, int x, int y, int z)
+{
+    int lowest = z - MAP_VIEW_LEVELS_BELOW > 0 ? z - MAP_VIEW_LEVELS_BELOW : 0;
+    if (!map_in_bounds(map, x, y, z)) {
+        return -1;
+    }
+    for (int level = z; level >= lowest; level--) {
+        if (!map_is_open(map, x, y, level)) {
+            return level;
+        }
+    }
+    return -1;
+}
+
 bool map_is_slope(const Map *map, int x, int y, int z)
 {
     return map_in_bounds(map, x, y, z) && map->slope[map_index(map, x, y, z)] != 0;

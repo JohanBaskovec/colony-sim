@@ -117,6 +117,77 @@ static int station_on(const Game *game, WorkstationType type, int x, int y, int 
     return index;
 }
 
+/* What is seen on a tile: the level shown, or the first one below that is not
+ * open space, within MAP_VIEW_LEVELS_BELOW levels. */
+static void test_view_level(void)
+{
+    Game game;
+    REQUIRE(init_raised_game(&game));
+    const Map *map = &game.map;
+    CHECK_EQ_INT(map_view_level(map, 30, 10, HIGH), HIGH);    /* The plateau itself. */
+    CHECK_EQ_INT(map_view_level(map, 10, 10, HIGH), LOW);     /* Open air over the plains. */
+    CHECK_EQ_INT(map_view_level(map, 10, 10, HIGH + 1), LOW); /* From higher up. */
+    CHECK_EQ_INT(map_view_level(map, 10, 10, LOW), LOW);
+    CHECK_EQ_INT(map_view_level(map, 30, 10, LOW), LOW); /* Earth: the wall is what is seen. */
+    CHECK_EQ_INT(map_view_level(map, -1, 10, LOW), -1);
+    CHECK_EQ_INT(map_view_level(map, 10, 10, map->depth), -1);
+    /* Too deep to be seen: more than MAP_VIEW_LEVELS_BELOW levels of air. */
+    Game deep;
+    REQUIRE(init_raised_game(&deep));
+    Map *pit = &deep.map;
+    for (int z = 0; z <= LOW; z++) {
+        size_t i = map_index(pit, 5, 5, z);
+        pit->terrain[i] = TERRAIN_OPEN;
+        pit->rock[i] = ROCK_NONE;
+    }
+    map_topology_changed(pit);
+    int top = LOW + 1; /* Open from the ground up to here. */
+    CHECK_EQ_INT(map_view_level(pit, 5, 5, top), -1);
+    CHECK_EQ_INT(map_view_level(pit, 5, 5, 0), -1);
+    game_shutdown(&deep);
+    game_shutdown(&game);
+}
+
+/* A zone drawn from a level covers what is seen there: its own ground, and
+ * the ground below where it is open space; the tools that remove tiles do
+ * the same. */
+static void test_zones_cover_the_levels_seen(void)
+{
+    Game game;
+    REQUIRE(init_raised_game(&game));
+    /* Seen from the plateau's level: x 20..23 is the plains below. */
+    int stockpile = game_add_stockpile_rect(&game, 20, 10, 27, 11, HIGH, STOCKPILE_NONE);
+    REQUIRE(stockpile != STOCKPILE_NONE);
+    for (int y = 10; y <= 11; y++) {
+        for (int x = 20; x <= 27; x++) {
+            int level = x < PLATEAU_X ? LOW : HIGH;
+            CHECK_EQ_INT(stockpile_at(&game.stockpiles, x, y, level), stockpile);
+            CHECK_EQ_INT(stockpile_at(&game.stockpiles, x, y, level == LOW ? HIGH : LOW),
+                         STOCKPILE_NONE);
+        }
+    }
+    CHECK_EQ_INT(stockpile_get(&game.stockpiles, stockpile)->cell_count, 16);
+
+    /* A gathering zone likewise, but not over the stockpile's tiles. */
+    int zone = game_add_gather_zone_rect(&game, 18, 10, 21, 12, HIGH, GATHER_ZONE_NONE);
+    REQUIRE(zone != GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 18, 12, LOW), zone);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 21, 12, LOW), zone);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 21, 10, LOW), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_get(&game.gather_zones, zone)->cell_count, 4 * 3 - 2 * 2);
+
+    /* From the plains' level the plateau is a wall: nothing there to cover. */
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 30, 20, 33, 21, LOW, STOCKPILE_NONE),
+                 STOCKPILE_NONE);
+
+    /* Removing from the level shown takes what is seen there. */
+    CHECK_EQ_INT(game_remove_stockpile_rect(&game, 20, 10, 27, 11, HIGH), 16);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 10, LOW), STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 25, 10, HIGH), STOCKPILE_NONE);
+    CHECK_EQ_INT(game_remove_gather_zone_rect(&game, 0, 0, 47, 47, HIGH), 4 * 3 - 2 * 2);
+    game_shutdown(&game);
+}
+
 static void test_stockpiles_on_their_level(void)
 {
     Game game;
@@ -280,6 +351,8 @@ static void test_hearth_on_its_level(void)
 
 int main(void)
 {
+    RUN_TEST(test_view_level);
+    RUN_TEST(test_zones_cover_the_levels_seen);
     RUN_TEST(test_stockpiles_on_their_level);
     RUN_TEST(test_gather_zones_on_their_level);
     RUN_TEST(test_stations_on_their_level);

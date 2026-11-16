@@ -1549,16 +1549,26 @@ int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z, i
 {
     const uint8_t *blocked[] = {game->gather_zones.zone, game->workstations.at,
                                 game->constructions.workstation_tiles, NULL};
-    return stockpiles_add_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, z, preferred,
-                               blocked);
+    return stockpiles_add_view_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, z, preferred,
+                                    blocked);
 }
 
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred)
 {
     const uint8_t *blocked[] = {game->stockpiles.zone, game->workstations.at,
                                 game->constructions.workstation_tiles, NULL};
-    return gather_zones_add_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, z, preferred,
-                                 blocked);
+    return gather_zones_add_view_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, z, preferred,
+                                      blocked);
+}
+
+int game_remove_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z)
+{
+    return stockpiles_remove_view_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, z);
+}
+
+int game_remove_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z)
+{
+    return gather_zones_remove_view_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, z);
 }
 
 /* ---- Picking ------------------------------------------------------------- */
