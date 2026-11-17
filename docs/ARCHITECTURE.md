@@ -1375,6 +1375,19 @@ them (`bench_simulation` hashes are unchanged).
   the number of settlers: a visual check starts where it needs to, without
   clicking its way there.
 
+### Vision (planned)
+
+Designed in `docs/VISION.md`, not implemented yet. The decision that shapes
+the code: settlers' choices (paths, regions, every search) will read a
+**known world**, a second copy of the map's layers and of those of items,
+structures and sites, of the same types, where unexplored tiles have an
+unknown terrain; the simulation keeps writing the real map, and changes to
+tiles someone sees are copied over. With the See everything cheat (the
+default of tests and benchmarks not about vision) the known world is the real
+map, so behavior and state hashes stay those of today. Who sees what goes in
+`core/vision.h` (fields of view in 3D across the whole map, at a cost that grows
+with what is seen, a count per tile of the settlers who see it).
+
 ## Pathfinding
 
 - 8-directional grid, cost of entering a tile = `map_move_cost()` (× √2

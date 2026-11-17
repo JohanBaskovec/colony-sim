@@ -202,6 +202,16 @@ Notices from the game (a knowledge discovered, a roof fallen in, a settler
 breaking down) appear centered below the colonist bar, each in a box of its
 own, newest at the bottom, for 15 seconds, fading out over the last 2.
 
+### Fog of war
+
+What the colony knows (`docs/VISION.md`), on every level and in the view of
+the levels below: unexplored tiles are black, tiles seen before but out of
+view now are drawn as last seen under a grey veil, tiles in view as they are.
+The tile readout says "Unexplored" or that a tile is as last seen; the
+temperature view only covers tiles in view. Tools refuse unexplored tiles
+(the card says why), except the **Explore** order (Orders category), which is
+dragged over the fog.
+
 ### Colony log
 
 A main window docked at the bottom left like the work grid (the Log button,
@@ -232,7 +242,9 @@ folder: `~/.local/share/colony-sim/` on Linux). The command line
 ### Debug
 
 The debug windows (F4 cheats, F5 items) and the debug readout (F3) have no
-buttons: keyboard only. The readout goes to the top right corner.
+buttons: keyboard only. The readout goes to the top right corner. With
+vision, F4 gets Reveal map and See everything, and an overlay of what the
+selected settler sees.
 
 ## Theme, scale and accessibility
 

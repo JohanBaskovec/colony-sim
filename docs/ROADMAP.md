@@ -147,8 +147,13 @@ theme and migration plan).
 
 ## M5: Vision and exploration
 
-- [ ] Field of view per settler, walls block sight, peeking around corners
-- [ ] Fog of war: unexplored map hidden, explored areas shown as last seen
+- [x] Design of vision and the fog of war (`docs/VISION.md`)
+- [ ] Vision, step 1: sight in 3D per settler with no range limit (only rock, walls and floors stop it; thin foliage does not), peeking round corners (five eye points), fields of view whose cost grows with what is seen (prototype and benchmark first), near view refreshed on a new tile, on sleep and waking and on a change nearby, the rest after a few tiles or seconds, spread over ticks; a count per tile of who sees it; debug overlay of the selected settler's view; nothing hidden yet
+- [ ] Vision, step 2: the colony's picture (known world: a copy of the layers, unexplored tiles unknown), the start (view from the arrival point and the path from a random map edge, guarantees in view), drawing (unexplored black, remembered under a veil, seen live), tile readout, tools refusing unexplored tiles, Reveal map and See everything cheats (See everything by default in tests and benchmarks that are not about vision)
+- [ ] Vision, step 3: settlers act on the picture: paths, regions and every search on the known world, plans redone on a change met on the way, targets found gone, orders and zones on explored tiles only, resources list, alerts and bills on what is known, messages about the map when seen
+- [ ] Vision, step 4: exploring: the Explore order (Orders category) and work type
+- [ ] Vision, step 5: measure (bench_simulation and --bench-render with vision on), tune, checks on screen
+- [ ] Vision, later: darkness shortens sight, eyesight attribute, lookouts (trees, towers), hearing, saving the picture (M7)
 - [ ] Wildlife, hunting
 
 ## M6: Danger

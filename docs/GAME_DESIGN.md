@@ -160,6 +160,10 @@ see or use is simulated as individuals.
 - Explored areas that no settler currently sees keep being **simulated**, but
   are **displayed as they were last seen**.
 - Vision makes exploration valuable and combat more tactical.
+- Sight is three-dimensional with no range limit (only floors, walls, hills
+  and trunks stop it; a tower sees further), the fog is a real constraint (settlers only act on what the
+  colony has seen), and the game starts with what is in view plus the way the
+  settlers came from a map edge: `docs/VISION.md`.
 
 ### Settlers
 - **Needs**:
