@@ -93,7 +93,7 @@ Tick items as they land and add newly discovered tasks.
 - [x] Roofs: a grass roof built like any structure, tile by tile over anything (bed, wall, stockpile), resting on a wall or rock within 2 tiles (planned walls count, the work waits for them); natural rock roof in caves
 - [x] Roof layer: roofs and their sites only drawn in the roof view (Y, or while using a roof tool), roofs planned over the sites of walls and beds, an order of its own to take roofs down, the cancel tool working on one layer at a time; a roof falls in when its last support in reach goes (half its materials drop, a notice) (replaced by roofs as floors, see *Levels*)
 - [ ] Clearing cave floors, once mining exists (rock cannot be mined yet: it needs a pick)
-- [x] Knowledge spreading: conversation (nearby settlers chat now and then, a speech bubble, a little learned from what the other talks about, never past 30), apprenticeship (a settler lacking the level for a job assists a master doing it: learns up to the master's level, the work goes 25% faster, one apprentice per master), fading after 15 days without practice (down to 80% of the best level); only discovered knowledges in the colonist inspector, a tooltip per knowledge (gains of the day by source, practice, fading, masters); notices in the top right corner (a knowledge left to a single master, lost, forgotten, mastered again)
+- [x] Knowledge spreading: conversation (nearby settlers chat now and then, a speech bubble, a little learned from what the other talks about, never past 30), apprenticeship (a settler lacking the level for a job assists a master doing it: learns up to the master's level, the work goes 25% faster, one apprentice per master), fading after 15 days without practice (down to 80% of the best level); only discovered knowledges in the colonist inspector, a tooltip per knowledge (gains of the day by source, practice, fading, masters); notices (a knowledge left to a single master, lost, forgotten, mastered again)
 - [x] Fireside stories and the "teach" mark (with the open hearth, M4)
 - [ ] Knowledge spreading, later: related practice and inventing knowledges (with the first knowledges that are not starting ones); a colony log keeping the notices; chats feeding relationships (social system)
 - [x] UI framework: buttons, panels, tooltips, windows sized to their content (title bar to drag, × to close, stacking order, scroll bar and wheel when too tall), measured layouts that adapt to text length
@@ -133,7 +133,7 @@ theme and migration plan); moods come after it.
 - [x] Colonist bar (portrait, name, current action; click selects, Shift adds, double click centers the view; shrinks, dropping the action then the name, then wraps onto rows: 64 colonists fit)
 - [ ] Alerts column above the date (core module first)
 - [x] Inspector box with tabs and action buttons for every selection: colonist (summary; Needs, Mood, Knowledge, Gear, Social), several colonists (their names), workstation (Bills, Fire), stockpile (Storage), gathering zone (Resources), tile; actions forbid/allow, build another, delete as icon buttons with tooltips; docked windows that scroll; the floating inspectors are gone
-- [ ] Work grid as a main window; messages under the colonist bar; debug readout top right
+- [x] Work grid as a main window; messages under the colonist bar; debug readout top right
 - [ ] Resources list (top left, folding groups)
 - [ ] Settings: UI scale (font included), remembered between sessions; colorblind palette
 - [ ] Alerts (core module), Log tab

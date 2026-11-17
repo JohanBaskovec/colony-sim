@@ -108,7 +108,7 @@ simulation:
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
 | `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills and (hearths) Fire tabs; forbid, build another, delete |
 | `tile_panel`   | Tile in the inspector: what lies there (structure, roof, items, plant) with a Forbid/Allow button each, and its construction site; build another |
-| `work_panel`   | Work priorities grid (colonists × work types)                           |
+| `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
 | `items_panel`  | Items menu (F5): every item with a 1× and a Max button, which arm the debug tool to drop it on the next clicked tile |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
@@ -541,7 +541,8 @@ tooltip); it raises `knowledge_peak`.
   knowledge is discovered, mastered again, mastered by a single settler, lost
   (nobody at 50) or forgotten (nobody at 1). The count made by `game_init()`
   raises none. Notices are not part of the simulation state (`game_hash()`);
-  the frontend shows the new ones in the top right corner for 15 seconds.
+  the frontend shows the new ones below the colonist bar, centered, each in
+  a box of its own, for 15 seconds (fading out over the last 2).
 
 Food items have a
 `nutrition` per unit; a hungry colonist first looks for food lying on the
@@ -1623,9 +1624,13 @@ with their content up to the colonist bar and scroll beyond, and they cannot
 be dragged. Each kind of selection draws its summary, its tabs and its
 actions through the inspector's functions; Escape closes the open tab
 first, then the selection. Selecting something on the map closes the build
-menu, which hides the inspector while it is open.
+menu and the work grid, which hide the inspector while they are open.
 
-Other windows (work grid, controls help, debug, game menu) keep their position, stacking
+The work grid, a main window opened from the bottom bar, is docked the same
+way at the bottom left corner, above the bottom bar; its hint and legends
+wrap to the width of the grid rather than widening it.
+
+Other windows (controls help, debug, game menu) keep their position, stacking
 order and scroll in `Ui` from one frame to the next. They are sized to their
 content: `ui_layout_window()` runs the rows once to measure them, then again
 to draw them. A window taller than the screen allows scrolls, with its

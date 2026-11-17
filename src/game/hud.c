@@ -1132,11 +1132,15 @@ void hud_update_notices(App *app, double dt)
     }
 }
 
-/* The notices on screen, in the top right corner from `top` down, newest
- * last. */
-static void draw_notices(App *app, float top)
+/* Seconds a notice takes to fade out at the end of its time on screen. */
+#define NOTICE_FADE_SECONDS 2.0
+
+/* The notices on screen, centered under the colonist bar, oldest first; each
+ * fades out at the end of its time. */
+static void draw_notices(App *app)
 {
-    Panel panel = {0};
+    float y = colonist_bar_bottom(app) + HUD_MARGIN;
+    float line = (float)text_line_height(app->text);
     for (int i = 0; i < app->notices_shown_count; i++) {
         const Notice *notice = notices_get(&app->game.notices, app->notices_shown[i]);
         if (notice == NULL) {
@@ -1144,12 +1148,27 @@ static void draw_notices(App *app, float top)
         }
         /* Not every notice is about a knowledge (a roof falling in). */
         const KnowledgeDef *def = knowledge_def(notice->knowledge);
-        TR_FORMAT(panel_add(&panel), HUD_LINE_SIZE, tr(notice_text_key((NoticeType)notice->type)),
+        char text[HUD_LINE_SIZE];
+        TR_FORMAT(text, sizeof(text), tr(notice_text_key((NoticeType)notice->type)),
                   def != NULL ? tr(def->name_key) : "", notice->name);
+        double left = APP_NOTICE_SECONDS - app->notices_age[i];
+        float alpha = (float)SDL_clamp(left / NOTICE_FADE_SECONDS, 0.0, 1.0);
+        int width, height;
+        text_measure(app->text, text, &width, &height);
+        SDL_FRect box = {SDL_floorf((app->camera.viewport_width - (float)width) * 0.5f) -
+                             HUD_PADDING,
+                         y, (float)width + 2.0f * HUD_PADDING, line + HUD_PADDING};
+        SDL_Color background = THEME_COLOR(app, THEME_HUD_PANEL);
+        SDL_Color color = THEME_COLOR(app, THEME_TEXT);
+        background.a = (Uint8)((float)background.a * alpha);
+        color.a = (Uint8)((float)color.a * alpha);
+        SDL_SetRenderDrawColor(app->renderer, background.r, background.g, background.b,
+                               background.a);
+        SDL_RenderFillRect(app->renderer, &box);
+        text_draw(app->text, text, box.x + HUD_PADDING, box.y + SDL_floorf(HUD_PADDING * 0.5f),
+                  color);
+        y += box.h + 2.0f;
     }
-    float width, height;
-    panel_size(app, &panel, &width, &height);
-    panel_draw(app, &panel, app->camera.viewport_width - width - HUD_MARGIN, top);
 }
 
 void hud_draw(App *app)
@@ -1169,16 +1188,14 @@ void hud_draw(App *app)
     panel_draw_aligned(app, &status, status_right - width, status_bottom - height,
                        THEME_COLOR(app, THEME_HUD_PANEL), true);
 
-    /* Top right: the debug readout (F3), then the notices. */
-    float notices_top = HUD_MARGIN;
+    /* Top right: the debug readout (F3). */
     if (app->show_debug) {
         Panel debug = {0};
         build_debug_panel(app, &debug);
         panel_size(app, &debug, &width, &height);
         panel_draw(app, &debug, screen_width - width - HUD_MARGIN, HUD_MARGIN);
-        notices_top += height + HUD_MARGIN;
     }
-    draw_notices(app, notices_top);
+    draw_notices(app);
 
     /* Bottom left: the tile inspector above the menus. */
     float menu_top = build_menu_top(app);

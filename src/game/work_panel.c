@@ -1,11 +1,14 @@
 #include "game/work_panel.h"
 
 #include "core/i18n.h"
+#include "game/colonist_bar.h"
+#include "game/layout.h"
 
 #define COLUMN_GAP 6.0f
-#define MIN_CELL_WIDTH 44.0f
+#define MIN_CELL_WIDTH 72.0f
 #define TEXT_SIZE 256
 #define LEVEL_LABEL_INSET 4.0f
+#define NOTE_LINES 12
 
 /* From WORK_PRIORITY_DISABLED (dark) to the highest priority (bright green). */
 static const SDL_Color PRIORITY_COLORS[WORK_PRIORITY_LOWEST + 1] = {
@@ -24,19 +27,6 @@ static bool is_selected(const App *app, EntityId id)
         }
     }
     return false;
-}
-
-/* Selects one colonist and centers the view on them. */
-static void focus_colonist(App *app, EntityId id)
-{
-    const Colonist *colonist = game_colonist_const(&app->game, id);
-    if (colonist == NULL) {
-        return;
-    }
-    app->selected[0] = id;
-    app->selected_count = 1;
-    app->selected_stockpile = STOCKPILE_NONE;
-    colonist_position(colonist, &app->camera.x, &app->camera.y);
 }
 
 void work_panel_draw(App *app)
@@ -83,20 +73,25 @@ void work_panel_draw(App *app)
         column_width[type] = SDL_ceilf(SDL_max(header, MIN_CELL_WIDTH)) + COLUMN_GAP;
         grid_width += column_width[type];
     }
-    float width = SDL_max(grid_width, SDL_max(ui_text_width(ui, hint), ui_text_width(ui, legend)));
-    width = SDL_ceilf(SDL_max(width, ui_text_width(ui, level_legend)));
-    /* The work columns share whatever width the text lines add. */
-    float extra = SDL_floorf((width - grid_width) / (float)WORK_TYPE_COUNT);
-    for (int type = 0; type < WORK_TYPE_COUNT; type++) {
-        column_width[type] += extra;
+    float width = SDL_ceilf(grid_width);
+    /* The hint and legends wrap to the grid's width. */
+    char notes[NOTE_LINES][UI_WRAP_LINE_SIZE];
+    int note_count = 0;
+    const char *texts[3] = {hint, legend, level_legend};
+    for (int i = 0; i < 3; i++) {
+        note_count +=
+            ui_wrap_text(ui, texts[i], width, notes + note_count, NOTE_LINES - note_count);
     }
-    grid_width += extra * (float)WORK_TYPE_COUNT;
 
     /* Header, rows, hint, two legends; the window scrolls when they do not fit. */
     int shown = SDL_max(1, count); /* One line for "no colonists". */
+    /* A main window: docked on the bottom bar at the left edge. */
+    ScreenLayout layout;
+    layout_screen(ui, &layout);
+    UiDock dock = {0.0f, layout.bar_top, colonist_bar_bottom(app) + ui->theme.margin, 0.0f};
     bool open = true;
-    SDL_FPoint origin = ui_window_begin(ui, APP_WINDOW_WORK, title, width, (float)(shown + 4) * row,
-                                        UI_PLACE_TOP_CENTER, &open);
+    SDL_FPoint origin = ui_window_begin_docked(ui, APP_WINDOW_WORK, title, width,
+                                               (float)(shown + 1 + note_count) * row, &dock, &open);
     float x = origin.x, y = origin.y;
     float text_offset = SDL_floorf((row - (float)text_line_height(app->text)) * 0.5f);
 
@@ -128,7 +123,8 @@ void work_panel_draw(App *app)
                                      : (hovered ? ROW_HOVER_COLOR : ROW_COLOR));
         ui_label(ui, colonist->name, x, y + text_offset);
         if (ui_take_click(ui, (SDL_FRect){band.x, y, name_width + 4.0f, row}) == SDL_BUTTON_LEFT) {
-            focus_colonist(app, id);
+            app_select_colonist(app, id, false);
+            app_focus_colonist(app, id);
         }
 
         column_x = x + name_width;
@@ -166,11 +162,10 @@ void work_panel_draw(App *app)
     }
     y = rows_top + (float)shown * row;
 
-    ui_label(ui, hint, x, y + text_offset);
-    y += row;
-    ui_label(ui, legend, x, y + text_offset);
-    y += row;
-    ui_label(ui, level_legend, x, y + text_offset);
+    for (int i = 0; i < note_count; i++) {
+        ui_label(ui, notes[i], x, y + text_offset);
+        y += row;
+    }
     ui_window_end(ui);
     if (!open) {
         app->show_work_panel = false;

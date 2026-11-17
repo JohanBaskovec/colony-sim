@@ -2,7 +2,8 @@
  * Work priorities grid: one row per colonist, one column per work type. Each
  * cell shows the priority (1 = done first, empty = never); left click raises
  * it, right click lowers it. Clicking a name selects the colonist and centers
- * the view on them.
+ * the view on them. A main window (docs/UI.md), docked at the bottom left
+ * corner above the bottom bar.
  */
 #ifndef COLONY_GAME_WORK_PANEL_H
 #define COLONY_GAME_WORK_PANEL_H

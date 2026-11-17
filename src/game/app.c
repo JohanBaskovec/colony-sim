@@ -967,7 +967,9 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
             select_at_point(app, button->x, button->y, additive);
         }
         if (has_selection(app)) {
-            app->build_menu_open = false; /* The inspector takes its place. */
+            /* The inspector takes the place of the main menus and windows. */
+            app->build_menu_open = false;
+            app->show_work_panel = false;
         }
     }
     app->left_button_down = false;

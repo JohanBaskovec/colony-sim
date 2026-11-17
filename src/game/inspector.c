@@ -14,8 +14,8 @@
 
 InspectorKind inspector_kind(const App *app)
 {
-    if (app->build_menu_open) {
-        return INSPECT_NONE;
+    if (app->build_menu_open || app->show_work_panel) {
+        return INSPECT_NONE; /* A main menu or window takes its place. */
     }
     if (app->selected_station != WORKSTATION_NONE) {
         return INSPECT_STATION;

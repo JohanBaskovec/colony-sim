@@ -5,7 +5,8 @@
  * buttons to the right of the box. Each kind of selection draws its own
  * content through these functions, in this order: inspector_box(), then
  * inspector_tabs() and inspector_tab_panel() for the open tab, then
- * inspector_action() for each action. Hidden while the build menu is open.
+ * inspector_action() for each action. Hidden while the build menu or a main
+ * window (work) is open.
  */
 #ifndef COLONY_GAME_INSPECTOR_H
 #define COLONY_GAME_INSPECTOR_H

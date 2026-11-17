@@ -140,8 +140,10 @@ food...), each line with its count; a tooltip tells where they are.
 
 ### Messages
 
-Notices from the game (a knowledge discovered, a roof fallen in) appear for
-a while below the colonist bar, then fade.
+Notices from the game (a knowledge discovered, a roof fallen in, a settler
+breaking down) appear centered below the colonist bar, each in a box of its
+own, newest at the bottom, for 15 seconds, fading out over the last 2. They
+will be kept in the colony log (Log tab, step 10).
 
 ### Game menu
 
@@ -182,7 +184,7 @@ Each step keeps the game playable and is checked on screen (Xvfb).
 6. [x] Inspector box with empty tabs, then its content: colonist (summary, Needs, Mood,
        Skills, Gear, Social), workstation, stockpile, gathering zone, tile;
        the floating inspectors go
-7. [ ] Work grid as a main window above the bottom bar; messages (the debug readout is
+7. [x] Work grid as a main window above the bottom bar; messages (the debug readout is
        top right already)
 8. [ ] Resources list (top left)
 9. [ ] Settings: UI scale (font included), remembered between sessions
