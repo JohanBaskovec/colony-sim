@@ -147,11 +147,12 @@ bool inspector_action(App *app, int slot, bool lit, SDL_FRect *icon, const char 
     return clicked;
 }
 
-bool inspector_forbid_action(App *app, int slot, bool forbidden)
+bool inspector_forbid_action(App *app, int slot, bool forbidden, const char *forbid_hint)
 {
     const char *lines[2] = {
         tr(forbidden ? "forbid.allow" : "forbid.forbid"),
-        tr(forbidden ? "inspector.allow.description" : "inspector.forbid.description")};
+        forbidden ? tr("inspector.allow.description")
+                  : (forbid_hint != NULL ? forbid_hint : tr("inspector.forbid.description"))};
     SDL_FRect icon;
     bool clicked = inspector_action(app, slot, forbidden, &icon, lines, 2);
     render_tool_icon(app->renderer, icon, forbidden ? RENDER_ICON_ALLOW : RENDER_ICON_FORBID);

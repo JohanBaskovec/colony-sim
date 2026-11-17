@@ -1428,6 +1428,20 @@ for the searches that backed off (`Items.additions`, `Workstations.revision`,
 revision). The new layers enter the hashes only while something is
 forbidden, so the hashes of games without any are unchanged.
 
+Plans and zones are forbidden as a whole, with a flag of their own:
+`ConstructionSite.forbidden` (`FORBID_SITE`: `construction_forbidden()` is
+true, so no material is brought and no work done, and `finish_constructions_now()`
+leaves it), `Stockpile.forbidden` (`FORBID_STOCKPILE`: nothing is hauled onto
+its tiles, `haul_destination_room()` and `storage_levels()`, nor off them,
+`is_haul_source()` and `is_extra_source()`; what lies there still counts as
+stored) and `GatherZone.forbidden` (`FORBID_GATHER_ZONE`: the zone wants
+nothing, `gather_zone_wanted()`, so every gathering search skips it while its
+orders stay). From any tile of the zone or plan, `game_set_forbidden()` takes
+the whole. The forbid rectangle takes plans in and leaves zones out. The flags
+enter the hashes only when set. The frontend draws the "no entry" sign on a
+forbidden plan's head and every third tile of a forbidden zone (all of a
+small one).
+
 ### Debug cheats
 
 `Game.debug` (`GameDebug`) holds cheats for testing, switched from the debug

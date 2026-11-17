@@ -868,6 +868,10 @@ inspector.delete = Delete
 station.delete.description = Removes the workstation and its bills
 stockpile.delete.description = Removes the zone; the items stay where they lie
 gather_zone.delete.description = Removes the zone and its orders
+stockpile.forbid.description = The settlers bring no items to this stockpile and take none away; what lies there still counts as stored
+stockpile.left_alone = The settlers neither bring items here nor take any away
+gather_zone.forbid.description = The settlers gather nothing in this zone; its orders stay as they are
+gather_zone.left_alone = The settlers gather nothing here
 station.bill_count.one = {0} bill
 station.bill_count.other = {0} bills
 

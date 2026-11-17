@@ -765,6 +765,10 @@ inspector.delete = Supprimer
 station.delete.description = Retire le poste de travail et ses commandes
 stockpile.delete.description = Retire la zone ; les objets restent où ils sont
 gather_zone.delete.description = Retire la zone et ses consignes
+stockpile.forbid.description = Les colons n’apportent aucun objet dans ce stock et n’en retirent aucun ; ce qui s’y trouve compte toujours comme rangé
+stockpile.left_alone = Les colons n’y apportent rien et n’en retirent rien
+gather_zone.forbid.description = Les colons ne récoltent rien dans cette zone ; ses consignes restent telles quelles
+gather_zone.left_alone = Les colons n’y récoltent rien
 station.bill_count.one = {0} commande
 station.bill_count.other = {0} commandes
 

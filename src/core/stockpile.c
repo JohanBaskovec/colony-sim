@@ -398,6 +398,20 @@ void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority)
     }
 }
 
+void stockpile_set_forbidden(Stockpiles *stockpiles, int index, bool forbidden)
+{
+    if (is_valid(stockpiles, index) && stockpiles->list[index].forbidden != forbidden) {
+        stockpiles->list[index].forbidden = forbidden;
+        stockpiles->revision++;
+    }
+}
+
+bool stockpile_forbidden_at(const Stockpiles *stockpiles, int x, int y, int z)
+{
+    const Stockpile *stockpile = stockpile_get(stockpiles, stockpile_at(stockpiles, x, y, z));
+    return stockpile != NULL && stockpile->forbidden;
+}
+
 int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, int z, ItemStack stack)
 {
     const Stockpile *stockpile = stockpile_get(stockpiles, stockpile_at(stockpiles, x, y, z));
@@ -446,6 +460,9 @@ uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
                                  s->hit_points.min,
                                  s->hit_points.max};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
+            if (s->forbidden) { /* Hashes of games that forbid nothing stay as they were. */
+                hash = hash_fnv1a64(hash, &s->forbidden, sizeof(s->forbidden));
+            }
         }
     }
     return hash;

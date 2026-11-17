@@ -124,8 +124,8 @@ become tabs:
 | One colonist        | Name, age, current action, needs and mood at a glance | Needs, Mood, Character, Knowledge, Gear, Social; Log, Health | Move (later: draft, attack)   |
 | Several colonists   | How many, their names                         | —                                                 | Move                          |
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
-| Stockpile zone      | Name, priority, size                          | Storage (filters)                                 | Build another, delete         |
-| Gathering zone      | Name, priority, size                          | Resources                                         | Build another, delete         |
+| Stockpile zone      | Name, priority, size, "left alone" when forbidden | Storage (filters)                             | Forbid, build another, delete |
+| Gathering zone      | Name, priority, size, "left alone" when forbidden | Resources                                     | Forbid, build another, delete |
 | Tile                | What lies there: structure, roof, site, items, plant, each with Forbid/Allow | —                          | Build another; items: Carry elsewhere |
 | Wild animal         | What it is called (a hind, a stag) as the title; species, sex, activity, needs as bars (tooltips), herd | — | (later: hunt)                 |
 

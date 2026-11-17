@@ -4,6 +4,7 @@
  * game_set_forbidden() API). */
 #include "core/game.h"
 #include "core/gather_zone.h"
+#include "core/hauling.h"
 #include "core/pathfinding.h"
 #include "core/tree.h"
 
@@ -528,6 +529,180 @@ static void test_forbid_rect(void)
     game_shutdown(&game);
 }
 
+/* A forbidden stockpile gets nothing and gives nothing back; what lies in it
+ * still counts as stored. */
+static void test_forbidden_stockpile(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_BLACKBERRIES, 10));
+    items_add(&game.items, 30, 10, 0, item_stack_pristine(ITEM_BRANCHES, 4));
+    int near = game_add_stockpile_rect(&game, 20, 10, 20, 10, 0, STOCKPILE_NONE);
+    int far = game_add_stockpile_rect(&game, 30, 10, 30, 10, 0, STOCKPILE_NONE);
+    REQUIRE(near != STOCKPILE_NONE && far != STOCKPILE_NONE);
+    stockpile_set_allowed(&game.stockpiles, far, ITEM_TYPE_BIT(ITEM_BRANCHES));
+    stockpile_set_allowed(&game.stockpiles, near, ITEM_TYPE_BIT(ITEM_BLACKBERRIES));
+    CHECK(game_can_forbid(&game, 20, 10, 0, FORBID_STOCKPILE));
+    CHECK(!game_can_forbid(&game, 21, 10, 0, FORBID_STOCKPILE));
+    CHECK(!game_forbidden(&game, 20, 10, 0, FORBID_STOCKPILE));
+    uint32_t revision = game.stockpiles.revision;
+    CHECK(game_set_forbidden(&game, 20, 10, 0, FORBID_STOCKPILE, true));
+    CHECK(!game_set_forbidden(&game, 20, 10, 0, FORBID_STOCKPILE, true)); /* Already. */
+    CHECK(game_forbidden(&game, 20, 10, 0, FORBID_STOCKPILE));
+    CHECK(game.stockpiles.revision != revision); /* Haulers look again. */
+    CHECK_EQ_INT(haul_destination_room(&game.stockpiles, &game.items, 20, 10, 0,
+                                       item_stack_pristine(ITEM_BLACKBERRIES, 1)),
+                 0);
+    /* The branches lie stored in the forbidden far stockpile and a better one
+     * for them appears: they stay put until it is allowed. */
+    CHECK(game_set_forbidden(&game, 30, 10, 0, FORBID_STOCKPILE, true));
+    int better = game_add_stockpile_rect(&game, 25, 10, 25, 10, 0, STOCKPILE_NONE);
+    REQUIRE(better != STOCKPILE_NONE);
+    stockpile_set_allowed(&game.stockpiles, better, ITEM_TYPE_BIT(ITEM_BRANCHES));
+    stockpile_set_priority(&game.stockpiles, better, STOCKPILE_PRIORITY_HIGHEST);
+    long stored[ITEM_TYPE_COUNT] = {0};
+    stockpiles_count_stored(&game.stockpiles, &game.items, stored);
+    CHECK_EQ_INT((int)stored[ITEM_BRANCHES], 4); /* Still counts. */
+    REQUIRE(spawn_worker(&game, 14, 14) != NULL);
+    run_ticks(&game, 1500);
+    CHECK_EQ_INT(items_get(&game.items, 10, 10, 0).count, 10);
+    CHECK_EQ_INT(items_get(&game.items, 30, 10, 0).count, 4);
+    CHECK_EQ_INT(items_get(&game.items, 25, 10, 0).count, 0);
+
+    /* Both allowed again: the berries go in, the branches to the better one. */
+    CHECK(game_set_forbidden(&game, 20, 10, 0, FORBID_STOCKPILE, false));
+    CHECK(game_set_forbidden(&game, 30, 10, 0, FORBID_STOCKPILE, false));
+    run_ticks(&game, 3000);
+    CHECK_EQ_INT(items_get(&game.items, 20, 10, 0).count, 10);
+    CHECK_EQ_INT(items_get(&game.items, 25, 10, 0).count, 4);
+    game_shutdown(&game);
+}
+
+/* Nobody gathers in a forbidden zone; allowed again, the zone's orders stand. */
+static void test_forbidden_gather_zone(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Map *map = &game.map;
+    Plant *bramble = &map->plants[map_index(map, 5, 5, 0)];
+    bramble->type = PLANT_BRAMBLE;
+    bramble->growth = 1.0f;
+    plant_settle(bramble, GAME_START_DAY);
+    int zone = game_add_gather_zone_rect(&game, 4, 4, 6, 6, 0, GATHER_ZONE_NONE);
+    REQUIRE(zone != GATHER_ZONE_NONE);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BLACKBERRIES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BLACKBERRIES, GATHER_FOREVER);
+    gather_zones_update(&game.gather_zones, game.items.totals, 0.0f);
+    GatherJobMask all = (GatherJobMask)((1u << GATHER_JOB_COUNT) - 1u);
+    GatherJob job = gather_tile_job(&game.gather_zones, map, 5, 5, 0, all);
+    REQUIRE(job != GATHER_JOB_NONE);
+    CHECK(game.gather_zones.wanting_cells > 0);
+
+    CHECK(game_can_forbid(&game, 4, 4, 0, FORBID_GATHER_ZONE));
+    CHECK(!game_can_forbid(&game, 8, 8, 0, FORBID_GATHER_ZONE));
+    uint32_t revision = game.gather_zones.revision;
+    CHECK(game_set_forbidden(&game, 6, 6, 0, FORBID_GATHER_ZONE, true)); /* From any tile. */
+    CHECK(!game_set_forbidden(&game, 4, 4, 0, FORBID_GATHER_ZONE, true));
+    CHECK(game_forbidden(&game, 5, 5, 0, FORBID_GATHER_ZONE));
+    CHECK(game.gather_zones.revision != revision);
+    CHECK_EQ_INT(gather_tile_job(&game.gather_zones, map, 5, 5, 0, all), GATHER_JOB_NONE);
+    CHECK_EQ_INT(game.gather_zones.wanting_cells, 0);
+    gather_zones_update(&game.gather_zones, game.items.totals, 0.0f); /* Stays so. */
+    CHECK_EQ_INT(gather_tile_job(&game.gather_zones, map, 5, 5, 0, all), GATHER_JOB_NONE);
+    REQUIRE(spawn_worker(&game, 10, 10) != NULL);
+    run_ticks(&game, TICKS_PER_HOUR);
+    CHECK_EQ_INT(game.items.totals[ITEM_BLACKBERRIES], 0);
+
+    CHECK(game_set_forbidden(&game, 5, 5, 0, FORBID_GATHER_ZONE, false));
+    gather_zones_update(&game.gather_zones, game.items.totals, 0.0f);
+    CHECK_EQ_INT(gather_tile_job(&game.gather_zones, map, 5, 5, 0, all), job);
+    CHECK(gather_zone_get(&game.gather_zones, zone)->orders[GATHER_BLACKBERRIES].enabled);
+    run_ticks(&game, 2 * TICKS_PER_HOUR);
+    CHECK(game.items.totals[ITEM_BLACKBERRIES] > 0);
+    game_shutdown(&game);
+}
+
+/* A forbidden plan gets no material and no work; allowed, it goes on. */
+static void test_forbidden_site(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int wall = game_place_structure(&game, STRUCTURE_WALL, 12, 10, 0, DIRECTION_EAST);
+    REQUIRE(wall != CONSTRUCTION_NONE);
+    const ConstructionSite *site = construction_get(&game.constructions, wall);
+    REQUIRE(site != NULL);
+    CHECK(game_can_forbid(&game, 12, 10, 0, FORBID_SITE));
+    CHECK(!game_can_forbid(&game, 13, 10, 0, FORBID_SITE) ||
+          construction_at(&game.constructions, 13, 10, 0) == wall); /* Any tile of the site. */
+    CHECK(!construction_forbidden(site, &game.map));
+    uint32_t revision = game.constructions.revision;
+    CHECK(game_set_forbidden(&game, 12, 10, 0, FORBID_SITE, true));
+    CHECK(!game_set_forbidden(&game, 12, 10, 0, FORBID_SITE, true));
+    CHECK(game_forbidden(&game, 12, 10, 0, FORBID_SITE));
+    CHECK(game.constructions.revision != revision);
+    CHECK(construction_forbidden(site, &game.map));
+    CHECK(!construction_can_work(site, &game.map));
+
+    /* Even the cheat that builds at once leaves it. */
+    game_set_instant_build(&game, true);
+    run_ticks(&game, 5);
+    CHECK_EQ_INT(map_structure(&game.map, 12, 10, 0), STRUCTURE_NONE);
+    CHECK_EQ_INT(construction_at(&game.constructions, 12, 10, 0), wall);
+    CHECK(game_set_forbidden(&game, 12, 10, 0, FORBID_SITE, false));
+    run_ticks(&game, 5);
+    CHECK_EQ_INT(map_structure(&game.map, 12, 10, 0), STRUCTURE_WALL);
+    CHECK(!game_can_forbid(&game, 12, 10, 0, FORBID_SITE)); /* The plan is gone. */
+    game_shutdown(&game);
+}
+
+/* Settlers bring no material to a forbidden plan and build nothing. */
+static void test_settlers_leave_a_forbidden_site(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int wall = game_place_structure(&game, STRUCTURE_WALL, 12, 10, 0, DIRECTION_EAST);
+    REQUIRE(wall != CONSTRUCTION_NONE);
+    for (int i = 0; i < 6; i++) {
+        items_add(&game.items, 8 + i, 6, 0, item_stack_pristine(ITEM_GRASS, 40));
+        items_add(&game.items, 8 + i, 7, 0, item_stack_pristine(ITEM_BRANCHES, 20));
+    }
+    CHECK(game_set_forbidden(&game, 12, 10, 0, FORBID_SITE, true));
+    REQUIRE(spawn_worker(&game, 10, 10) != NULL);
+    run_ticks(&game, 2 * TICKS_PER_HOUR);
+    const ConstructionSite *site = construction_get(&game.constructions, wall);
+    REQUIRE(site != NULL);
+    CHECK_EQ_INT(map_structure(&game.map, 12, 10, 0), STRUCTURE_NONE);
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        CHECK_EQ_INT(site->delivered[slot].count, 0);
+    }
+    CHECK_EQ_INT(game.reservations.count, 0);
+
+    /* Allowed: the materials come and the wall is built. */
+    CHECK(game_set_forbidden(&game, 12, 10, 0, FORBID_SITE, false));
+    run_ticks(&game, 6 * TICKS_PER_HOUR);
+    CHECK_EQ_INT(map_structure(&game.map, 12, 10, 0), STRUCTURE_WALL);
+    game_shutdown(&game);
+}
+
+/* The forbid rectangle takes plans in, but not whole zones. */
+static void test_forbid_rect_plans_and_zones(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int wall = game_place_structure(&game, STRUCTURE_WALL, 12, 10, 0, DIRECTION_EAST);
+    REQUIRE(wall != CONSTRUCTION_NONE);
+    int stockpile = game_add_stockpile_rect(&game, 20, 10, 22, 10, 0, STOCKPILE_NONE);
+    int zone = game_add_gather_zone_rect(&game, 30, 10, 32, 10, 0, GATHER_ZONE_NONE);
+    REQUIRE(stockpile != STOCKPILE_NONE && zone != GATHER_ZONE_NONE);
+    CHECK_EQ_INT(game_set_forbidden_rect(&game, 0, 0, 47, 47, 0, true), 1);
+    CHECK(game_forbidden(&game, 12, 10, 0, FORBID_SITE));
+    CHECK(!game_forbidden(&game, 21, 10, 0, FORBID_STOCKPILE));
+    CHECK(!game_forbidden(&game, 31, 10, 0, FORBID_GATHER_ZONE));
+    CHECK_EQ_INT(game_set_forbidden_rect(&game, 0, 0, 47, 47, 0, false), 1);
+    CHECK(!game_forbidden(&game, 12, 10, 0, FORBID_SITE));
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_map_forbid_bits);
@@ -543,5 +718,10 @@ int main(void)
     RUN_TEST(test_forbidden_plants_are_not_gathered);
     RUN_TEST(test_forbidden_station_is_not_used);
     RUN_TEST(test_forbid_rect);
+    RUN_TEST(test_forbidden_stockpile);
+    RUN_TEST(test_forbidden_gather_zone);
+    RUN_TEST(test_forbidden_site);
+    RUN_TEST(test_settlers_leave_a_forbidden_site);
+    RUN_TEST(test_forbid_rect_plans_and_zones);
     return test_summary();
 }

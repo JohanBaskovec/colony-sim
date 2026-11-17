@@ -37,7 +37,7 @@ int haul_destination_room(const Stockpiles *stockpiles, const Items *items, int 
                           ItemStack stack)
 {
     const Stockpile *stockpile = stockpile_get(stockpiles, stockpile_at(stockpiles, x, y, z));
-    if (!stockpile_accepts(stockpile, stack)) {
+    if (!stockpile_accepts(stockpile, stack) || stockpile->forbidden) {
         return 0;
     }
     ItemStack there = items_get(items, x, y, z);
@@ -57,8 +57,8 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
     bool any_reserved = world->reservations->count_by_kind[RESERVATION_STORAGE] > 0;
     for (int index = 0; index < STOCKPILE_MAX; index++) {
         const Stockpile *stockpile = stockpile_get(stockpiles, index);
-        if (stockpile == NULL || stockpile->allowed == 0) {
-            continue;
+        if (stockpile == NULL || stockpile->allowed == 0 || stockpile->forbidden) {
+            continue; /* Forbidden: nothing is brought there. */
         }
         uint8_t *grades = out->grades[out->zone_count];
         for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
@@ -209,6 +209,9 @@ static bool is_haul_source(const Map *map, int x, int y, int z, void *userdata)
     if (stack.type == ITEM_NONE || search->storage->levels[stack.type] == 0) {
         return false;
     }
+    if (stockpile_forbidden_at(world->stockpiles, x, y, z)) {
+        return false; /* Nothing leaves a forbidden stockpile. */
+    }
     int current = stockpile_storage_priority(world->stockpiles, x, y, z, stack);
     return has_better_level(levels_for(world, search->storage, stack), current) &&
            !reservations_taken_by_other(world->reservations, RESERVATION_HAUL_SOURCE,
@@ -298,6 +301,9 @@ static bool is_extra_source(const Map *map, int x, int y, int z, void *userdata)
     ItemStack stack = items_get_allowed(world->items, x, y, z);
     if (stack.type == ITEM_NONE || !item_stacks_match(stack, search->load) ||
         !stockpile_accepts(search->zone, stack)) {
+        return false;
+    }
+    if (stockpile_forbidden_at(world->stockpiles, x, y, z)) {
         return false;
     }
     int current = stockpile_storage_priority(world->stockpiles, x, y, z, stack);

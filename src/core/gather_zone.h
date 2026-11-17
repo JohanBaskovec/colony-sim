@@ -214,6 +214,9 @@ typedef struct GatherZone {
     /* Zones of a higher priority (smaller number) are gathered in first, at
      * any distance; then the nearest job among zones of the same priority. */
     int priority;
+    /* Forbidden by the player: the settlers gather nothing in it (its orders
+     * stay as they are). */
+    bool forbidden;
     GatherOrder orders[GATHER_RESOURCE_COUNT];
     GatherGroupOrder groups[GATHER_GROUP_COUNT];
     /* Resources wanted now (orders enabled and not satisfied, see
@@ -342,6 +345,10 @@ void gather_zone_set_all_ripe_only(GatherZones *zones, int index, bool ripe_only
 GatherResourceMask gather_zone_enabled_mask(const GatherZone *zone);
 GatherResourceMask gather_zone_ripe_mask(const GatherZone *zone);
 
+/* Forbids or allows the zone: while forbidden it wants nothing, so that
+ * nobody gathers in it. */
+void gather_zone_set_forbidden(GatherZones *zones, int index, bool forbidden);
+
 /* GATHER_ZONE_PRIORITY_HIGHEST..GATHER_ZONE_PRIORITY_LOWEST (clamped). */
 void gather_zone_set_priority(GatherZones *zones, int index, int priority);
 
@@ -375,7 +382,7 @@ long gather_group_food_days(GatherGroup group, const long totals[ITEM_TYPE_COUNT
                             float daily_food);
 
 /* Resources a zone wants given the items lying in the colony and the food
- * the settlers eat in a day (gather_daily_food()). */
+ * the settlers eat in a day (gather_daily_food()); none while it is forbidden. */
 GatherResourceMask gather_zone_wanted(const GatherZone *zone, const long totals[ITEM_TYPE_COUNT],
                                       float daily_food);
 

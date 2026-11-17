@@ -623,7 +623,7 @@ void station_panel_draw(App *app)
     } else if (tab == 1) {
         inspector_tab_panel(app, fire_rows, &rows);
     }
-    if (inspector_forbid_action(app, 0, station->forbidden)) {
+    if (inspector_forbid_action(app, 0, station->forbidden, NULL)) {
         rows.action = (Action){ACTION_TOGGLE_FORBIDDEN, 0, 0};
     }
     inspector_build_like_action(app, 1);

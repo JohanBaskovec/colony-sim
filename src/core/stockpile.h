@@ -37,6 +37,9 @@ typedef struct Stockpile {
     IntRange quality;    /* Accepted grades (ItemQuality). */
     IntRange hit_points; /* Accepted hit points, in percent of the maximum (0..100). */
     int priority;
+    /* Forbidden by the player: nothing is hauled onto its tiles nor off them
+     * (what lies there still counts as stored). */
+    bool forbidden;
     int cell_count;
     /* Bounding box of the zone's tiles (inclusive), kept tight: lets searches
      * visit the zone without scanning the whole map. */
@@ -126,6 +129,13 @@ bool stockpile_accepts(const Stockpile *stockpile, ItemStack stack);
 
 /* Clamped to STOCKPILE_PRIORITY_HIGHEST..STOCKPILE_PRIORITY_LOWEST. */
 void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority);
+
+/* Forbids or allows the whole zone (the settlers neither bring items to it nor
+ * take any away). */
+void stockpile_set_forbidden(Stockpiles *stockpiles, int index, bool forbidden);
+
+/* Whether the tile is in a forbidden stockpile. */
+bool stockpile_forbidden_at(const Stockpiles *stockpiles, int x, int y, int z);
 
 /* Priority at which these items are stored on a tile: the stockpile's
  * priority if the tile is in a stockpile accepting them, 0 otherwise

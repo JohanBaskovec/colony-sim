@@ -63,6 +63,7 @@ typedef struct ConstructionSite {
     float progress;       /* Work done, once every material is in. */
     float clear_progress; /* Work done clearing the plant of a tile, before building. */
     bool refresh;         /* Refreshing the built structure of the tile, not building one. */
+    bool forbidden;       /* Forbidden by the player: no material brought, no work done. */
 } ConstructionSite;
 
 typedef struct Constructions {
@@ -211,9 +212,13 @@ void construction_release_promise(Constructions *constructions, int index, int n
 /* Whether every material is in. */
 bool construction_materials_complete(const ConstructionSite *site);
 
-/* Whether the site touches something the player forbade (see
- * map_forbidden()): the structure a refresh site is on, a plant to clear on
- * one of its tiles. Nobody brings materials nor works there meanwhile. */
+/* Forbids or allows a site: nobody brings it materials nor works on it
+ * meanwhile (jobs under way are dropped). */
+void construction_set_forbidden(Constructions *constructions, int index, bool forbidden);
+
+/* Whether the site is forbidden itself or touches something the player forbade
+ * (see map_forbidden()): the structure a refresh site is on, a plant to clear
+ * on one of its tiles. Nobody brings materials nor works there meanwhile. */
 bool construction_forbidden(const ConstructionSite *site, const Map *map);
 
 /* Whether the work can start: every material is in, nothing is forbidden

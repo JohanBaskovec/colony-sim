@@ -51,8 +51,9 @@ bool inspector_action(App *app, int slot, bool lit, SDL_FRect *icon, const char 
                       int count);
 
 /* The usual actions. Forbid or allow (lit while forbidden): true when
- * clicked. */
-bool inspector_forbid_action(App *app, int slot, bool forbidden);
+ * clicked. `forbid_hint` is the tooltip's second line while it is not
+ * forbidden (NULL: the usual one). */
+bool inspector_forbid_action(App *app, int slot, bool forbidden, const char *forbid_hint);
 
 /* Move the selected settlers: lit while the Move tool is armed, a click arms
  * it (or puts it away); the next click on the map sends them there. */

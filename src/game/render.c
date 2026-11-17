@@ -835,6 +835,52 @@ static bool forbidden_marked(const Game *game, int x, int y, int z)
     return map->rock[index] == ROCK_WOOD && game_forbidden(game, x, y, z, FORBID_PLANT);
 }
 
+/* Whether some zone or plan is forbidden (so that the tiles are worth a look). */
+static bool any_zone_or_site_forbidden(const Game *game)
+{
+    for (int i = 0; i < STOCKPILE_MAX; i++) {
+        const Stockpile *stockpile = stockpile_get(&game->stockpiles, i);
+        if (stockpile != NULL && stockpile->forbidden) {
+            return true;
+        }
+    }
+    for (int i = 0; i < GATHER_ZONE_MAX; i++) {
+        const GatherZone *zone = gather_zone_get(&game->gather_zones, i);
+        if (zone != NULL && zone->forbidden) {
+            return true;
+        }
+    }
+    for (int i = 0; i < CONSTRUCTION_MAX; i++) {
+        const ConstructionSite *site = construction_get(&game->constructions, i);
+        if (site != NULL && site->forbidden) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Zones are marked every few tiles (all of a small one), a plan on its head. */
+#define FORBID_ZONE_SPACING 3
+#define FORBID_ZONE_SMALL 6
+static bool zone_or_site_marked(const Game *game, int x, int y, int z)
+{
+    bool spaced = x % FORBID_ZONE_SPACING == 0 && y % FORBID_ZONE_SPACING == 0;
+    const Stockpile *stockpile =
+        stockpile_get(&game->stockpiles, stockpile_at(&game->stockpiles, x, y, z));
+    if (stockpile != NULL && stockpile->forbidden &&
+        (spaced || stockpile->cell_count < FORBID_ZONE_SMALL)) {
+        return true;
+    }
+    const GatherZone *zone =
+        gather_zone_get(&game->gather_zones, gather_zone_at(&game->gather_zones, x, y, z));
+    if (zone != NULL && zone->forbidden && (spaced || zone->cell_count < FORBID_ZONE_SMALL)) {
+        return true;
+    }
+    const ConstructionSite *site =
+        construction_get(&game->constructions, construction_at(&game->constructions, x, y, z));
+    return site != NULL && site->forbidden && site->x == x && site->y == y && site->z == z;
+}
+
 static void forbid_marker(SDL_Renderer *renderer, const SDL_FRect *tile)
 {
     float radius = SDL_max(FORBID_MARKER_MIN_RADIUS, tile->w * FORBID_MARKER_RADIUS);
@@ -851,6 +897,16 @@ void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Ca
         for (int y = visible.y0; y < visible.y1; y++) {
             for (int x = visible.x0; x < visible.x1; x++) {
                 if (forbidden_marked(game, x, y, z)) {
+                    SDL_FRect tile = tile_rect(camera, x, y);
+                    forbid_marker(renderer, &tile);
+                }
+            }
+        }
+    }
+    if (any_zone_or_site_forbidden(game)) {
+        for (int y = visible.y0; y < visible.y1; y++) {
+            for (int x = visible.x0; x < visible.x1; x++) {
+                if (zone_or_site_marked(game, x, y, z)) {
                     SDL_FRect tile = tile_rect(camera, x, y);
                     forbid_marker(renderer, &tile);
                 }

@@ -1890,6 +1890,9 @@ static MapForbid forbid_bit(ForbidTarget target)
     case FORBID_ROOF: return MAP_FORBID_ROOF;
     case FORBID_ITEMS:
     case FORBID_STATION:
+    case FORBID_SITE:
+    case FORBID_STOCKPILE:
+    case FORBID_GATHER_ZONE:
     case FORBID_TARGET_COUNT: break;
     }
     return (MapForbid)0;
@@ -1918,6 +1921,10 @@ bool game_can_forbid(const Game *game, int x, int y, int z, ForbidTarget target)
     case FORBID_PLANT:
     case FORBID_STRUCTURE:
     case FORBID_ROOF: return map_can_forbid(&game->map, x, y, z, forbid_bit(target));
+    case FORBID_SITE: return construction_at(&game->constructions, x, y, z) != CONSTRUCTION_NONE;
+    case FORBID_STOCKPILE: return stockpile_at(&game->stockpiles, x, y, z) != STOCKPILE_NONE;
+    case FORBID_GATHER_ZONE:
+        return gather_zone_at(&game->gather_zones, x, y, z) != GATHER_ZONE_NONE;
     case FORBID_TARGET_COUNT: break;
     }
     return false;
@@ -1936,6 +1943,17 @@ bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target)
     case FORBID_PLANT:
     case FORBID_STRUCTURE:
     case FORBID_ROOF: return map_forbidden(&game->map, x, y, z, forbid_bit(target));
+    case FORBID_SITE: {
+        const ConstructionSite *site =
+            construction_get(&game->constructions, construction_at(&game->constructions, x, y, z));
+        return site != NULL && site->forbidden;
+    }
+    case FORBID_STOCKPILE: return stockpile_forbidden_at(&game->stockpiles, x, y, z);
+    case FORBID_GATHER_ZONE: {
+        const GatherZone *zone =
+            gather_zone_get(&game->gather_zones, gather_zone_at(&game->gather_zones, x, y, z));
+        return zone != NULL && zone->forbidden;
+    }
     case FORBID_TARGET_COUNT: break;
     }
     return false;
@@ -1967,6 +1985,30 @@ bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bo
             }
         }
         return true;
+    case FORBID_SITE: {
+        int index = construction_at(&game->constructions, x, y, z);
+        if (index == CONSTRUCTION_NONE || game_forbidden(game, x, y, z, target) == forbidden) {
+            return false;
+        }
+        construction_set_forbidden(&game->constructions, index, forbidden);
+        return true;
+    }
+    case FORBID_STOCKPILE: {
+        int index = stockpile_at(&game->stockpiles, x, y, z);
+        if (index == STOCKPILE_NONE || game_forbidden(game, x, y, z, target) == forbidden) {
+            return false;
+        }
+        stockpile_set_forbidden(&game->stockpiles, index, forbidden);
+        return true;
+    }
+    case FORBID_GATHER_ZONE: {
+        int index = gather_zone_at(&game->gather_zones, x, y, z);
+        if (index == GATHER_ZONE_NONE || game_forbidden(game, x, y, z, target) == forbidden) {
+            return false;
+        }
+        gather_zone_set_forbidden(&game->gather_zones, index, forbidden);
+        return true;
+    }
     case FORBID_TARGET_COUNT: break;
     }
     return false;
@@ -1977,7 +2019,7 @@ int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, b
     int changed = 0;
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            for (int target = 0; target < FORBID_TARGET_COUNT; target++) {
+            for (int target = 0; target <= FORBID_SITE; target++) { /* Whole zones are left out. */
                 if (target == FORBID_PLANT && map_in_bounds(&game->map, x, y, z) &&
                     game->map.plants[map_index(&game->map, x, y, z)].type == PLANT_GRASS) {
                     continue; /* Ground cover: one tile at a time (game_set_forbidden()). */

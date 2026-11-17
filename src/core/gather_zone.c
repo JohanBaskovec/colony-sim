@@ -702,6 +702,18 @@ void gather_zone_set_priority(GatherZones *zones, int index, int priority)
     }
 }
 
+void gather_zone_set_forbidden(GatherZones *zones, int index, bool forbidden)
+{
+    if (is_valid(zones, index) && zones->list[index].forbidden != forbidden) {
+        GatherZone *zone = &zones->list[index];
+        zone->forbidden = forbidden;
+        if (forbidden) {
+            zone->wanted = 0; /* At once; allowed again, gather_zones_update() says. */
+        }
+        changed(zones);
+    }
+}
+
 int gather_zone_priority_at(const GatherZones *zones, int x, int y, int z)
 {
     const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y, z));
@@ -811,7 +823,7 @@ static bool group_wants(const GatherGroupOrder *order, GatherGroup group,
 GatherResourceMask gather_zone_wanted(const GatherZone *zone, const long totals[ITEM_TYPE_COUNT],
                                       float daily_food)
 {
-    if (zone == NULL) {
+    if (zone == NULL || zone->forbidden) {
         return 0;
     }
     bool groups_want[GATHER_GROUP_COUNT + 1];
@@ -1427,6 +1439,9 @@ uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)
         }
         int32_t fields[4] = {i, zone->number, (int32_t)zone->wanted, zone->priority};
         hash = hash_fnv1a64(hash, fields, sizeof(fields));
+        if (zone->forbidden) { /* Hashes of games that forbid nothing stay as they were. */
+            hash = hash_fnv1a64(hash, &zone->forbidden, sizeof(zone->forbidden));
+        }
         for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
             const GatherOrder *order = &zone->orders[r];
             int32_t values[6] = {order->enabled, order->ripe_only, order->mode,

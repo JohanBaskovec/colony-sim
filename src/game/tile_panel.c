@@ -42,7 +42,7 @@ static ForbidTarget thing_forbid_target(TileThing thing)
     case THING_ROOF: return FORBID_ROOF;
     case THING_ITEMS: return FORBID_ITEMS;
     case THING_PLANT: return FORBID_PLANT;
-    case THING_SITE:
+    case THING_SITE: return FORBID_SITE;
     case THING_COUNT: break;
     }
     return FORBID_TARGET_COUNT;
@@ -261,7 +261,7 @@ static void thing_actions(App *app, const ThingRows *rows)
     ForbidTarget target = thing_forbid_target(rows->thing);
     if (target != FORBID_TARGET_COUNT && game_can_forbid(game, x, y, z, target)) {
         bool forbidden = game_forbidden(game, x, y, z, target);
-        if (inspector_forbid_action(app, slot, forbidden)) {
+        if (inspector_forbid_action(app, slot, forbidden, NULL)) {
             game_set_forbidden(game, x, y, z, target, !forbidden);
         }
         slot++;

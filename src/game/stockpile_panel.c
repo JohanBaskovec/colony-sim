@@ -54,6 +54,9 @@ static void summary_rows(UiLayout *layout, void *userdata)
         ui_label_dim(ui, hint, bx + 2.0f * small + GAP, layout->y + layout->text_offset);
     }
     layout->y += layout->row;
+    if (stockpile->forbidden) {
+        ui_layout_label(layout, tr("stockpile.left_alone"), 0.0f, true);
+    }
 }
 
 /* Accepted quality grades and hit points (steps of HIT_POINTS_STEP %). */
@@ -180,10 +183,15 @@ void stockpile_panel_draw(App *app)
     if (inspector_tabs(app, tabs, 1) == 0) {
         inspector_tab_panel(app, storage_rows, &rows);
     }
-    bool deleted = inspector_delete_action(app, 1, tr("stockpile.delete.description"));
-    inspector_build_like_action(app, 0);
+    bool toggle_forbidden =
+        inspector_forbid_action(app, 0, stockpile->forbidden, tr("stockpile.forbid.description"));
+    inspector_build_like_action(app, 1);
+    bool deleted = inspector_delete_action(app, 2, tr("stockpile.delete.description"));
     if (app->selected_stockpile != index) {
         return; /* Building another: the zone is no longer selected. */
+    }
+    if (toggle_forbidden) {
+        stockpile_set_forbidden(stockpiles, index, !stockpile->forbidden);
     }
     if (rows.allowed != stockpile->allowed) {
         stockpile_set_allowed(stockpiles, index, rows.allowed);

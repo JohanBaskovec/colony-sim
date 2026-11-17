@@ -451,8 +451,20 @@ bool construction_materials_complete(const ConstructionSite *site)
     return true;
 }
 
+void construction_set_forbidden(Constructions *constructions, int index, bool forbidden)
+{
+    ConstructionSite *site = site_get(constructions, index);
+    if (site != NULL && site->forbidden != forbidden) {
+        site->forbidden = forbidden;
+        constructions->revision++; /* Settlers who found nothing to do look again. */
+    }
+}
+
 bool construction_forbidden(const ConstructionSite *site, const Map *map)
 {
+    if (site->forbidden) {
+        return true;
+    }
     if (map->forbidden_count == 0) {
         return false;
     }
@@ -691,6 +703,9 @@ uint64_t constructions_hash(const Constructions *constructions, uint64_t hash)
         }
         hash = hash_fnv1a64(hash, &site->progress, sizeof(site->progress));
         hash = hash_fnv1a64(hash, &site->clear_progress, sizeof(site->clear_progress));
+        if (site->forbidden) { /* Hashes of games that forbid nothing stay as they were. */
+            hash = hash_fnv1a64(hash, &site->forbidden, sizeof(site->forbidden));
+        }
     }
     return hash;
 }

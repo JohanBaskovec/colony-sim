@@ -13,6 +13,7 @@
 typedef enum ActionType {
     ACTION_NONE,
     ACTION_DELETE,
+    ACTION_TOGGLE_FORBIDDEN,
     ACTION_TOGGLE,      /* A resource or a group on or off. */
     ACTION_TOGGLE_RIPE, /* Of a resource, a group, or the whole zone. */
     ACTION_SET_MODE,
@@ -508,6 +509,9 @@ static void summary_rows(UiLayout *layout, void *userdata)
     TR_FORMAT(tiles, sizeof(tiles), tr_plural("gather_zone.tiles", zone->cell_count), number);
     ui_layout_label(layout, tiles, 0.0f, false);
     priority_row(layout, zone, &rows->action);
+    if (zone->forbidden) {
+        ui_layout_label(layout, tr("gather_zone.left_alone"), 0.0f, true);
+    }
 }
 
 /* What to gather in it. */
@@ -551,6 +555,7 @@ static void apply(App *app, int index, const Action *action)
         gather_zone_delete(zones, index);
         app->selected_gather_zone = GATHER_ZONE_NONE;
         break;
+    case ACTION_TOGGLE_FORBIDDEN: gather_zone_set_forbidden(zones, index, !zone->forbidden); break;
     case ACTION_TOGGLE: {
         /* Partly on: all on. */
         bool on = check_of(gather_zone_enabled_mask(zone), members) != UI_CHECKED;
@@ -628,10 +633,13 @@ void gather_zone_panel_draw(App *app)
     if (inspector_tabs(app, tabs, 1) == 0) {
         inspector_tab_panel(app, resources_rows, &rows);
     }
-    if (inspector_delete_action(app, 1, tr("gather_zone.delete.description"))) {
+    if (inspector_forbid_action(app, 0, zone->forbidden, tr("gather_zone.forbid.description"))) {
+        rows.action = (Action){ACTION_TOGGLE_FORBIDDEN, WHOLE_ZONE, 0};
+    }
+    inspector_build_like_action(app, 1);
+    if (inspector_delete_action(app, 2, tr("gather_zone.delete.description"))) {
         rows.action = (Action){ACTION_DELETE, WHOLE_ZONE, 0};
     }
-    inspector_build_like_action(app, 0);
     if (app->selected_gather_zone != index) {
         return; /* Building another: the zone is no longer selected. */
     }

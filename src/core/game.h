@@ -428,13 +428,19 @@ int game_cancel_rect(Game *game, int x0, int y0, int x1, int y1, int z);
 
 /* What on a tile the player may forbid the settlers: they neither pick up,
  * eat, use, take apart, cut nor fell it, nor go through a forbidden door or
- * ladder (see map_forbidden(), items_forbidden(), Workstation.forbidden). */
+ * ladder (see map_forbidden(), items_forbidden(), Workstation.forbidden). Plans
+ * and zones may be forbidden too: a forbidden plan gets no material and no work,
+ * a forbidden stockpile no hauling in nor out, a forbidden gathering zone no
+ * gathering. */
 typedef enum ForbidTarget {
-    FORBID_ITEMS,     /* The stack lying there. */
-    FORBID_PLANT,     /* The plant; on a tile of trunk or foliage, its tree. */
-    FORBID_STRUCTURE, /* The structure (bed, wall, door, ladder...), given any of its tiles. */
-    FORBID_ROOF,      /* The built roof. */
-    FORBID_STATION,   /* The built workstation. */
+    FORBID_ITEMS,       /* The stack lying there. */
+    FORBID_PLANT,       /* The plant; on a tile of trunk or foliage, its tree. */
+    FORBID_STRUCTURE,   /* The structure (bed, wall, door, ladder...), given any of its tiles. */
+    FORBID_ROOF,        /* The built roof. */
+    FORBID_STATION,     /* The built workstation. */
+    FORBID_SITE,        /* The blueprint (construction site): no material brought, no work done. */
+    FORBID_STOCKPILE,   /* The whole stockpile the tile is in: nothing hauled onto it nor off it. */
+    FORBID_GATHER_ZONE, /* The whole gathering zone the tile is in: nothing gathered in it. */
     FORBID_TARGET_COUNT
 } ForbidTarget;
 
@@ -449,9 +455,9 @@ bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target);
 bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bool forbidden);
 
 /* The forbid and allow tools: forbids or allows everything on the tiles of a
- * rectangle (corners in any order) but grass, the ground cover nearly
- * everywhere (game_set_forbidden() takes it one tile at a time). Returns how
- * many things changed. */
+ * rectangle (corners in any order), plans included, but grass, the ground cover
+ * nearly everywhere (game_set_forbidden() takes it one tile at a time), and
+ * zones, which are forbidden as a whole. Returns how many things changed. */
 int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool forbidden);
 
 /*
