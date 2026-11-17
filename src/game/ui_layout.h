@@ -32,6 +32,10 @@ bool ui_layout_button(UiLayout *layout, float x, const char *label);
 /* A button of a given width at `x` on the current row. */
 bool ui_layout_button_sized(UiLayout *layout, float x, float width, const char *label);
 
+/* A button as wide as the content, on a row of its own with a gap under it
+ * (advances). */
+bool ui_layout_wide_button(UiLayout *layout, const char *label);
+
 /* Label on the left, button on the right of the same row (advances). */
 bool ui_layout_label_with_button(UiLayout *layout, const char *text, const char *label);
 

@@ -93,9 +93,13 @@ simulation:
 | `render`       | Draws the map (ground and wall textures, colored tiles for the other terrains), zones, items, plants and colonists (sprites, depth sorted), daylight overlay, highlights |
 | `sprites`      | Loads `assets/sprites/*.png` into a texture atlas with halved copies, batches sprite quads |
 | `hud`          | Builds and draws the HUD panels and the windows in stacking order; all text goes through `tr()` |
-| `ui`           | Immediate-mode widgets (panel, window, button, check box, slider, dropdown, tooltip) and click capture |
+| `theme`        | Color roles and every size of the interface, the UI scale applied (`--ui-scale`) |
+| `layout`       | Zones of the screen (bottom bar, what lies above it), from the screen size and the theme |
+| `ui`           | Immediate-mode widgets (panel, window, button, check box, slider, dropdown, tooltip with wrapped lines) and click capture |
 | `ui_layout`    | Rows of a window laid out twice: measured, then drawn (window sized to its content) |
-| `menu_bar`     | Bottom left menus: Build (categories, icon buttons), Work, ? (help)     |
+| `bottom_bar`   | Full-width bar along the bottom: Build, Work, Menu                      |
+| `build_menu`   | Build menu: category column, icon row, card of the hovered icon or the tool in use |
+| `game_menu`    | Game menu (Menu button or Escape): resume, controls, language, quit; pauses the game |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
 | `gather_zone_panel` | Inspector of the selected gathering zone (priority; foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings) |
 | `station_panel` | Inspector of the selected workstation (forbid, bills, warnings) |
@@ -1537,6 +1541,13 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 
 ## Frontend state
 
+The target layout of the interface, its behaviors and the plan to get there
+are in `docs/UI.md`. Colors and sizes come from the theme (`game/theme.h`):
+a color per role and every size multiplied by the UI scale (`--ui-scale`,
+the font included); widgets never use literal colors or pixel sizes. The
+zones of the screen are worked out in `game/layout.h`; windows stay above
+the bottom bar (`Ui.reserved_bottom`).
+
 UI state that is not part of the simulation (camera, selection, selected
 stockpile, gathering zone, workstation or tile, active tool, drag
 rectangle, debug overlay and menu toggles) lives in `App`. The level shown is
@@ -1569,7 +1580,9 @@ on a ramp leading up from it, down on the open space over one leading down
 from it; see-through, over the items, plants and settlers there.
 Escape and a right click on the map
 (released where it was pressed: otherwise it pans) step back one level
-(`step_back()`). Every keyboard control is a physical position (`APP_KEY_*`
+(`step_back()`); with nothing left to close, Escape opens the game menu,
+which pauses the game while it is open. Keys without a character (Escape,
+Space, Page Up/Down) are named through translations. Every keyboard control is a physical position (`APP_KEY_*`
 scancodes in `game/app.h`): the controls are laid out the same on any
 keyboard (WASD on QWERTY is ZQSD on AZERTY), and the help and tooltips show
 the labels of the active layout (`app_key_name()`). The key at the physical position of A on AZERTY (Q on QWERTY,
@@ -1605,7 +1618,7 @@ content: `ui_layout_window()` runs the rows once to measure them, then again
 to draw them. A window taller than the screen allows scrolls, with its
 content clipped. A click brings a window to the front, and a window opened
 again comes to the front; the HUD draws the open windows back to front
-(`hud_open_windows()`), then the menus on top, then an open dropdown list,
+(`hud_open_windows()`), then the build menu and the bottom bar on top, then an open dropdown list,
 then the tooltip. Widgets act on the game directly through core functions
 (`stockpile_set_priority()`...). It never influences the simulation,
 so the same seed gives the same game whatever the player looks at.

@@ -91,10 +91,11 @@ typedef enum AppWindow {
     APP_WINDOW_HELP,  /* Controls. */
     APP_WINDOW_DEBUG, /* Debug menu (cheats). */
     APP_WINDOW_ITEMS, /* Items menu (debug). */
+    APP_WINDOW_GAME_MENU,
     APP_WINDOW_COUNT
 } AppWindow;
 
-/* Second level of the build menu (game/menu_bar.h). */
+/* Second level of the build menu (game/build_menu.h). */
 typedef enum BuildCategory {
     BUILD_CATEGORY_NONE,
     BUILD_CATEGORY_STATIONS,
@@ -168,9 +169,13 @@ typedef struct App {
     bool show_items_menu;  /* Items menu (game/items_panel.h). */
     bool show_temperature; /* The temperature of each tile over the map. */
     float level_wheel;     /* Wheel steps with Shift held, towards the next level. */
-    /* Build menu (game/menu_bar.h): open, and which category is shown. */
+    /* Build menu (game/build_menu.h): open, which category is shown, and the
+     * icon under the mouse (APP_TOOL_NONE: none) whose card is shown. */
     bool build_menu_open;
     BuildCategory build_category;
+    AppTool build_hover_tool;
+    int build_hover_type;
+    bool show_game_menu; /* Game menu (game/game_menu.h): the game is paused meanwhile. */
     /* A middle/right button press that started on a panel does not pan the view. */
     bool pan_blocked;
 
@@ -222,6 +227,9 @@ void app_toggle_tool(App *app, AppTool tool, int type);
 
 /* Whether this tool (same `type` rules) is the one in use. */
 bool app_tool_active(const App *app, AppTool tool, int type);
+
+/* Switches to the next language. */
+void app_cycle_language(App *app);
 
 /* What the key at a physical position is labeled on the active layout. */
 const char *app_key_name(SDL_Scancode key);

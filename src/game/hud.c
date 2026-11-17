@@ -4,8 +4,11 @@
 #include "core/tree.h"
 #include "game/debug_panel.h"
 #include "game/items_panel.h"
+#include "game/layout.h"
 #include "game/gather_zone_panel.h"
-#include "game/menu_bar.h"
+#include "game/bottom_bar.h"
+#include "game/build_menu.h"
+#include "game/game_menu.h"
 #include "game/station_panel.h"
 #include "game/ui_layout.h"
 #include "game/stockpile_panel.h"
@@ -19,11 +22,7 @@
 #define HUD_MAX_LINES 64
 #define HUD_LINE_SIZE 256
 
-static const SDL_Color HUD_TEXT_COLOR = {236, 236, 228, 255};
-static const SDL_Color HUD_PANEL_COLOR = {12, 14, 18, 170};
-/* The tile inspector lets the world show through. */
-static const SDL_Color HUD_TILE_PANEL_COLOR = {12, 14, 18, 120};
-static const SDL_Color LABEL_SHADOW_COLOR = {0, 0, 0, 200};
+#define THEME_COLOR(app, role) ((app)->ui.theme.colors[(role)])
 
 /* Colonist names are drawn under them from this zoom level (pixels per tile). */
 #define HUD_LABEL_MIN_ZOOM 10.0f
@@ -81,13 +80,13 @@ static void panel_draw_colored(App *app, const Panel *panel, float x, float y, S
     float line_height = (float)text_line_height(app->text);
     for (int i = 0; i < panel->count; i++) {
         text_draw(app->text, panel->lines[i], x + HUD_PADDING,
-                  y + HUD_PADDING + (float)i * line_height, HUD_TEXT_COLOR);
+                  y + HUD_PADDING + (float)i * line_height, THEME_COLOR(app, THEME_TEXT));
     }
 }
 
 static void panel_draw(App *app, const Panel *panel, float x, float y)
 {
-    panel_draw_colored(app, panel, x, y, HUD_PANEL_COLOR);
+    panel_draw_colored(app, panel, x, y, THEME_COLOR(app, THEME_HUD_PANEL));
 }
 
 /* The lines of a panel as the rows of a window (game/ui_layout.h). */
@@ -117,12 +116,6 @@ static void format_weight(char *out, size_t size, float kilograms)
     int decimals = (kilograms < 10.0f && SDL_fabsf(kilograms - rounded) > 0.05f) ? 1 : 0;
     tr_decimal(number, sizeof(number), decimals ? kilograms : rounded, decimals);
     TR_FORMAT(out, size, tr("unit.kg"), number);
-}
-
-static const char *tool_name_key(DesignationType type)
-{
-    const DesignationDef *def = designation_def(type);
-    return type == DESIGNATION_NONE || def == NULL ? N_("tool.cancel") : def->name_key;
 }
 
 /* "Quality: fine · Hit points: 45/60 (75%)" line of an item stack, with only
@@ -861,8 +854,8 @@ void hud_draw_item_counts(App *app)
             text_measure(app->text, count, &width, &height);
             float tx = SDL_floorf(sx - (float)width - 2.0f);
             float ty = SDL_floorf(sy - (float)height);
-            text_draw(app->text, count, tx + 1.0f, ty + 1.0f, LABEL_SHADOW_COLOR);
-            text_draw(app->text, count, tx, ty, HUD_TEXT_COLOR);
+            text_draw(app->text, count, tx + 1.0f, ty + 1.0f, THEME_COLOR(app, THEME_TEXT_SHADOW));
+            text_draw(app->text, count, tx, ty, THEME_COLOR(app, THEME_TEXT));
         }
     }
 }
@@ -887,8 +880,9 @@ void hud_draw_world_labels(App *app)
         text_measure(app->text, colonist->name, &width, &height);
         float x = SDL_floorf(sx - (float)width * 0.5f);
         float y = SDL_floorf(sy + offset);
-        text_draw(app->text, colonist->name, x + 1.0f, y + 1.0f, LABEL_SHADOW_COLOR);
-        text_draw(app->text, colonist->name, x, y, HUD_TEXT_COLOR);
+        text_draw(app->text, colonist->name, x + 1.0f, y + 1.0f,
+                  THEME_COLOR(app, THEME_TEXT_SHADOW));
+        text_draw(app->text, colonist->name, x, y, THEME_COLOR(app, THEME_TEXT));
     }
 }
 
@@ -980,6 +974,7 @@ static void draw_window(App *app, AppWindow window)
     case APP_WINDOW_HELP: help_window(app); break;
     case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
     case APP_WINDOW_ITEMS: items_panel_draw(app); break;
+    case APP_WINDOW_GAME_MENU: game_menu_draw(app); break;
     default: break;
     }
 }
@@ -1016,6 +1011,9 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     }
     if (app->show_items_menu) {
         out[count++] = APP_WINDOW_ITEMS;
+    }
+    if (app->show_game_menu) {
+        out[count++] = APP_WINDOW_GAME_MENU;
     }
     /* Insertion sort, back to front. */
     for (int i = 1; i < count; i++) {
@@ -1089,114 +1087,34 @@ void hud_draw(App *app)
 {
     const float screen_width = app->camera.viewport_width;
     float width, height;
+    ScreenLayout layout;
+    layout_screen(&app->ui, &layout);
+    app->ui.reserved_bottom = layout.bottom_bar.h; /* Windows stay above the bar. */
 
-    /* Top left: date and speed, then the debug overlay below. */
+    /* Top left: date and speed. */
     Panel status = {0};
     build_status_panel(app, &status);
     panel_draw(app, &status, HUD_MARGIN, HUD_MARGIN);
-    float status_width, status_height;
-    panel_size(app, &status, &status_width, &status_height);
 
+    /* Top right: the debug readout (F3), then the notices. */
+    float notices_top = HUD_MARGIN;
     if (app->show_debug) {
         Panel debug = {0};
         build_debug_panel(app, &debug);
-        panel_size(app, &status, &width, &height);
-        panel_draw(app, &debug, HUD_MARGIN, HUD_MARGIN * 2.0f + height);
+        panel_size(app, &debug, &width, &height);
+        panel_draw(app, &debug, screen_width - width - HUD_MARGIN, HUD_MARGIN);
+        notices_top += height + HUD_MARGIN;
     }
-
-    /* Top center: active tool. */
-    if (app->tool != APP_TOOL_NONE) {
-        Panel tool = {0};
-        if (app->tool == APP_TOOL_STOCKPILE || app->tool == APP_TOOL_GATHER) {
-            bool stockpile = app->tool == APP_TOOL_STOCKPILE;
-            const char *name = app->zone_remove
-                                   ? (stockpile ? "tool.stockpile_remove" : "tool.gather_remove")
-                                   : (stockpile ? "tool.stockpile" : "tool.gather_zone");
-            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(name));
-            panel_add_text(&tool, tr(app->zone_remove ? "hud.tool.zone_remove_help"
-                                                      : "hud.tool.stockpile_help"));
-        } else if (app->tool == APP_TOOL_BUILD) {
-            const WorkstationDef *def = workstation_def(app->build_type);
-            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(def->name_key));
-            menu_bar_materials_cost(panel_add(&tool), HUD_LINE_SIZE, def->materials);
-            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.build_help"),
-                      app_key_name(APP_KEY_BUILD));
-            if (!game_workstation_buildable(&app->game, app->build_type)) {
-                panel_add_text(&tool, tr("hud.tool.unavailable"));
-            }
-        } else if (app->tool == APP_TOOL_STRUCTURE) {
-            const StructureDef *def = structure_def(app->structure_type);
-            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"), tr(def->name_key));
-            menu_bar_structure_cost(panel_add(&tool), HUD_LINE_SIZE, app->structure_type);
-            if (structure_is_roof(app->structure_type)) {
-                char range[16];
-                tr_integer(range, sizeof(range), ROOF_SUPPORT_RANGE);
-                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.roof_support"), range,
-                          app_key_name(APP_KEY_LEVEL_UP));
-            }
-            panel_add_text(&tool, tr(def->drawn_as_outline ? "hud.tool.outline_help"
-                                                           : "hud.tool.structure_help"));
-            if (def->length > 1) {
-                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.rotate_help"),
-                          app_key_name(APP_KEY_ROTATE));
-            }
-            if (!game_structure_buildable(&app->game, app->structure_type)) {
-                panel_add_text(&tool, tr("hud.tool.unavailable"));
-            }
-        } else if (app->tool == APP_TOOL_FORBID) {
-            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.name"),
-                      tr(app->forbid_allows ? "tool.allow" : "tool.forbid"));
-            panel_add_text(&tool,
-                           tr(app->forbid_allows ? "hud.tool.allow_help" : "hud.tool.forbid_help"));
-        } else if (app->tool == APP_TOOL_DEBUG) {
-            if (app->debug_mode == APP_DEBUG_PLANT_TREE) {
-                panel_add_text(&tool, tr("hud.tool.plant_tree"));
-            } else if (app->debug_mode == APP_DEBUG_GROW_TREE) {
-                panel_add_text(&tool, tr("hud.tool.grow_tree"));
-            } else if (app->debug_mode == APP_DEBUG_TELEPORT) {
-                char count[16];
-                tr_integer(count, sizeof(count), app->selected_count);
-                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE,
-                          tr_plural("hud.tool.teleport", app->selected_count), count);
-            } else {
-                char count[16];
-                tr_integer(count, sizeof(count),
-                           app->debug_item_max ? item_stack_limit(app->debug_item) : 1);
-                TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool.spawn"),
-                          tr(item_def(app->debug_item)->name_key), count);
-            }
-        } else {
-            TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE, tr("hud.tool"),
-                      tr(tool_name_key(app->tool_type)));
-            if (app->tool_type != DESIGNATION_NONE &&
-                !game_designation_available(&app->game, app->tool_type)) {
-                panel_add_text(&tool, tr("hud.tool.unavailable"));
-            }
-        }
-        panel_size(app, &tool, &width, &height);
-        /* Centered, but never over the date. */
-        float x =
-            SDL_max(SDL_floorf((screen_width - width) * 0.5f), HUD_MARGIN * 2.0f + status_width);
-        panel_draw(app, &tool, x, HUD_MARGIN);
-    }
-
-    /* Top right: current language. */
-    Panel language = {0};
-    const LanguageInfo *info = localization_active_language(&app->localization);
-    TR_FORMAT(panel_add(&language), HUD_LINE_SIZE, tr("hud.language"),
-              info != NULL ? info->name : "?");
-    panel_size(app, &language, &width, &height);
-    panel_draw(app, &language, screen_width - width - HUD_MARGIN, HUD_MARGIN);
-    draw_notices(app, HUD_MARGIN * 2.0f + height);
+    draw_notices(app, notices_top);
 
     /* Bottom left: the tile inspector above the menus. */
-    float menu_top = menu_bar_top(app);
+    float menu_top = build_menu_top(app);
     if (app->hover_valid) {
         Panel tile = {0};
         build_tile_panel(app, &tile);
         panel_size(app, &tile, &width, &height);
         panel_draw_colored(app, &tile, HUD_MARGIN, menu_top - height - HUD_MARGIN,
-                           HUD_TILE_PANEL_COLOR);
+                           THEME_COLOR(app, THEME_READOUT));
     }
 
     /* Windows, back to front. */
@@ -1205,7 +1123,8 @@ void hud_draw(App *app)
     for (int i = 0; i < open_count; i++) {
         draw_window(app, open[i]);
     }
-    menu_bar_draw(app);
+    build_menu_draw(app);
+    bottom_bar_draw(app);
     ui_draw_popup(&app->ui);
     ui_draw_tooltip(&app->ui);
 }

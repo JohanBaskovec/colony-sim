@@ -1,35 +1,7 @@
 #include "game/ui.h"
 
-#define UI_BUTTON_PADDING 6.0f
-#define UI_CHECKBOX_GAP 6.0f
-#define UI_ROW_SPACING 4.0f
-#define UI_WINDOW_PADDING 8.0f
-#define UI_WINDOW_MARGIN 8.0f /* Kept free around windows at the screen edges. */
-#define UI_SCROLLBAR_WIDTH 8.0f
 #define UI_SCROLL_STEP_ROWS 3.0f /* Rows scrolled per wheel step. */
-#define UI_TOOLTIP_PADDING 6.0f
-#define UI_TOOLTIP_OFFSET 16.0f
-#define UI_TOP_CENTER_Y 72.0f /* Below the status and tool panels. */
-
-static const SDL_Color PANEL_COLOR = {12, 14, 18, 200};
-static const SDL_Color WINDOW_COLOR = {16, 18, 24, 242};
-static const SDL_Color TITLE_COLOR = {40, 46, 58, 240};
-static const SDL_Color TOOLTIP_COLOR = {8, 9, 12, 235};
-static const SDL_Color TEXT_COLOR = {236, 236, 228, 255};
-static const SDL_Color DIM_TEXT_COLOR = {176, 180, 188, 255};
-static const SDL_Color BUTTON_COLOR = {54, 60, 72, 255};
-static const SDL_Color BUTTON_HOVER_COLOR = {80, 88, 104, 255};
-static const SDL_Color BUTTON_ACTIVE_COLOR = {62, 104, 70, 255};
-static const SDL_Color BORDER_COLOR = {130, 136, 150, 255};
-static const SDL_Color ACTIVE_BORDER_COLOR = {150, 230, 140, 255};
-static const SDL_Color CHECK_COLOR = {120, 210, 110, 255};
-static const SDL_Color TRACK_COLOR = {54, 60, 72, 255};
-static const SDL_Color HANDLE_COLOR = {200, 204, 214, 255};
-static const SDL_Color SCROLL_TRACK_COLOR = {255, 255, 255, 24};
-static const SDL_Color SCROLL_THUMB_COLOR = {200, 204, 214, 200};
-
-#define UI_SLIDER_HANDLE_WIDTH 8.0f
-#define UI_SLIDER_TRACK_HEIGHT 4.0f
+#define COLOR(role) (ui->theme.colors[(role)])
 
 static bool contains(SDL_FRect rect, float x, float y)
 {
@@ -95,18 +67,19 @@ bool ui_hovered(const Ui *ui, SDL_FRect rect)
 int ui_cell(Ui *ui, SDL_FRect rect, const char *label, SDL_Color color)
 {
     fill(ui, rect, ui_hovered(ui, rect) ? brighter(color, 40) : color);
-    border(ui, rect, BORDER_COLOR);
+    border(ui, rect, COLOR(THEME_BORDER));
     if (label[0] != '\0') {
         centered_label(ui, rect, label);
     }
     return ui_take_click(ui, rect);
 }
 
-void ui_init(Ui *ui, SDL_Renderer *renderer, TextRenderer *text)
+void ui_init(Ui *ui, SDL_Renderer *renderer, TextRenderer *text, const Theme *theme)
 {
     SDL_zerop(ui);
     ui->renderer = renderer;
     ui->text = text;
+    ui->theme = *theme;
     ui->current_window = -1;
 }
 
@@ -224,18 +197,23 @@ static void add_area(Ui *ui, SDL_FRect rect, int owner)
     }
 }
 
-void ui_panel(Ui *ui, SDL_FRect rect)
+void ui_panel_colored(Ui *ui, SDL_FRect rect, ThemeColor color)
 {
     ui->owner = UI_ANONYMOUS_OWNER + ui->anonymous_count++;
     add_area(ui, rect, ui->owner);
-    fill(ui, rect, PANEL_COLOR);
+    fill(ui, rect, COLOR(color));
+}
+
+void ui_panel(Ui *ui, SDL_FRect rect)
+{
+    ui_panel_colored(ui, rect, THEME_PANEL);
 }
 
 /* ---- Windows ---------------------------------------------------------------- */
 
 static float title_height(const Ui *ui)
 {
-    return ui_row_height(ui) + 4.0f;
+    return ui_row_height(ui) + ui->theme.gap;
 }
 
 static UiWindow *window_slot(Ui *ui, int id)
@@ -254,16 +232,16 @@ static void place(const Ui *ui, UiWindow *window, UiPlacement placement)
 {
     switch (placement) {
     case UI_PLACE_BOTTOM_RIGHT:
-        window->x = ui->screen_width - window->w - UI_WINDOW_MARGIN;
-        window->y = ui->screen_height - window->h - UI_WINDOW_MARGIN;
+        window->x = ui->screen_width - window->w - ui->theme.margin;
+        window->y = ui->screen_height - ui->reserved_bottom - window->h - ui->theme.margin;
         break;
     case UI_PLACE_TOP_CENTER:
         window->x = SDL_floorf((ui->screen_width - window->w) * 0.5f);
-        window->y = UI_TOP_CENTER_Y;
+        window->y = SDL_roundf(72.0f * ui->theme.scale); /* Below the top panels. */
         break;
     case UI_PLACE_CENTER:
         window->x = SDL_floorf((ui->screen_width - window->w) * 0.5f);
-        window->y = SDL_floorf((ui->screen_height - window->h) * 0.5f);
+        window->y = SDL_floorf((ui->screen_height - ui->reserved_bottom - window->h) * 0.5f);
         break;
     }
 }
@@ -307,16 +285,17 @@ SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_widt
     ui->current_window = (int)(window - ui->windows);
     /* Size: the content, unless it is taller than the screen allows. */
     float title_h = title_height(ui);
-    float max_visible =
-        ui->screen_height - 2.0f * UI_WINDOW_MARGIN - title_h - 2.0f * UI_WINDOW_PADDING;
+    float max_visible = ui->screen_height - ui->reserved_bottom - 2.0f * ui->theme.margin -
+                        title_h - 2.0f * ui->theme.window_padding;
     window->visible_height = SDL_max(ui_row_height(ui), SDL_min(content_height, max_visible));
     window->max_scroll = SDL_max(0.0f, content_height - window->visible_height);
-    float scrollbar = window->max_scroll > 0.0f ? UI_SCROLLBAR_WIDTH + UI_WINDOW_PADDING : 0.0f;
+    float scrollbar =
+        window->max_scroll > 0.0f ? ui->theme.scrollbar_width + ui->theme.window_padding : 0.0f;
     float close_width = ui_button_width(ui, "×");
-    float title_width = ui_text_width(ui, title) + UI_WINDOW_PADDING + close_width;
+    float title_width = ui_text_width(ui, title) + ui->theme.window_padding + close_width;
     float width = SDL_max(content_width, title_width);
-    window->w = SDL_ceilf(width + scrollbar + 2.0f * UI_WINDOW_PADDING);
-    window->h = SDL_ceilf(title_h + window->visible_height + 2.0f * UI_WINDOW_PADDING);
+    window->w = SDL_ceilf(width + scrollbar + 2.0f * ui->theme.window_padding);
+    window->h = SDL_ceilf(title_h + window->visible_height + 2.0f * ui->theme.window_padding);
     if (window->x < 0.0f) {
         place(ui, window, placement);
     }
@@ -341,26 +320,28 @@ SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_widt
         window->y = ui->mouse_y - ui->drag_dy;
     }
     window->x = SDL_floorf(SDL_clamp(window->x, 0.0f, SDL_max(0.0f, ui->screen_width - window->w)));
-    float max_y = SDL_max(0.0f, ui->screen_height - window->h);
+    float max_y = SDL_max(0.0f, ui->screen_height - ui->reserved_bottom - window->h);
     window->y = SDL_floorf(SDL_clamp(window->y, 0.0f, max_y));
 
     SDL_FRect frame = {window->x, window->y, window->w, window->h};
     add_area(ui, frame, id);
-    fill(ui, frame, WINDOW_COLOR);
+    fill(ui, frame, COLOR(THEME_WINDOW));
     title_bar = (SDL_FRect){window->x, window->y, window->w, title_h};
-    fill(ui, title_bar, TITLE_COLOR);
+    fill(ui, title_bar, COLOR(THEME_TITLE));
     float line = (float)text_line_height(ui->text);
-    ui_label(ui, title, window->x + UI_WINDOW_PADDING,
+    ui_label(ui, title, window->x + ui->theme.window_padding,
              SDL_floorf(window->y + (title_h - line) * 0.5f));
     close = (SDL_FRect){window->x + window->w - close_width - 2.0f, window->y + 2.0f, close_width,
                         title_h - 4.0f};
-    fill(ui, close, ui_hovered(ui, close) ? BUTTON_HOVER_COLOR : TITLE_COLOR);
+    fill(ui, close, ui_hovered(ui, close) ? COLOR(THEME_BUTTON_HOVER) : COLOR(THEME_TITLE));
     centered_label(ui, close, "×");
 
-    SDL_FRect content = {window->x + UI_WINDOW_PADDING, window->y + title_h + UI_WINDOW_PADDING,
-                         window->w - 2.0f * UI_WINDOW_PADDING - scrollbar, window->visible_height};
-    window->track = (SDL_FRect){window->x + window->w - UI_WINDOW_PADDING - UI_SCROLLBAR_WIDTH,
-                                content.y, UI_SCROLLBAR_WIDTH, content.h};
+    SDL_FRect content = {
+        window->x + ui->theme.window_padding, window->y + title_h + ui->theme.window_padding,
+        window->w - 2.0f * ui->theme.window_padding - scrollbar, window->visible_height};
+    window->track =
+        (SDL_FRect){window->x + window->w - ui->theme.window_padding - ui->theme.scrollbar_width,
+                    content.y, ui->theme.scrollbar_width, content.h};
     handle_scroll_bar(ui, window);
 
     ui->clipping = true;
@@ -385,8 +366,8 @@ void ui_window_end(Ui *ui)
     if (ui->current_window >= 0) {
         UiWindow *window = &ui->windows[ui->current_window];
         if (window->track.w > 0.0f) {
-            fill(ui, window->track, SCROLL_TRACK_COLOR);
-            fill(ui, window->thumb, SCROLL_THUMB_COLOR);
+            fill(ui, window->track, COLOR(THEME_SCROLL_TRACK));
+            fill(ui, window->thumb, COLOR(THEME_SCROLL_THUMB));
         }
     }
     ui->current_window = -1;
@@ -394,12 +375,17 @@ void ui_window_end(Ui *ui)
 
 void ui_label(Ui *ui, const char *text, float x, float y)
 {
-    text_draw(ui->text, text, x, y, TEXT_COLOR);
+    text_draw(ui->text, text, x, y, COLOR(THEME_TEXT));
 }
 
 void ui_label_dim(Ui *ui, const char *text, float x, float y)
 {
-    text_draw(ui->text, text, x, y, DIM_TEXT_COLOR);
+    text_draw(ui->text, text, x, y, COLOR(THEME_TEXT_DIM));
+}
+
+void ui_label_colored(Ui *ui, const char *text, float x, float y, ThemeColor color)
+{
+    text_draw(ui->text, text, x, y, COLOR(color));
 }
 
 float ui_text_width(Ui *ui, const char *text)
@@ -411,21 +397,21 @@ float ui_text_width(Ui *ui, const char *text)
 
 float ui_row_height(const Ui *ui)
 {
-    return (float)text_line_height(ui->text) + UI_ROW_SPACING;
+    return (float)text_line_height(ui->text) + ui->theme.row_spacing;
 }
 
 float ui_button_width(Ui *ui, const char *label)
 {
-    return ui_text_width(ui, label) + 2.0f * UI_BUTTON_PADDING;
+    return ui_text_width(ui, label) + 2.0f * ui->theme.button_padding;
 }
 
 /* Button background and border; true when it was left-clicked this frame. */
 static bool button_frame(Ui *ui, SDL_FRect rect, bool active)
 {
     bool hover = ui_hovered(ui, rect);
-    SDL_Color color = active ? BUTTON_ACTIVE_COLOR : BUTTON_COLOR;
+    SDL_Color color = active ? COLOR(THEME_BUTTON_LIT) : COLOR(THEME_BUTTON);
     fill(ui, rect, hover ? brighter(color, 26) : color);
-    border(ui, rect, active ? ACTIVE_BORDER_COLOR : BORDER_COLOR);
+    border(ui, rect, active ? COLOR(THEME_BORDER_LIT) : COLOR(THEME_BORDER));
     return ui_take_click(ui, rect) == SDL_BUTTON_LEFT;
 }
 
@@ -456,7 +442,7 @@ bool ui_disclosure(Ui *ui, SDL_FRect rect, bool open)
 /* Room for the arrow of a dropdown, after its label. */
 static float dropdown_arrow_width(Ui *ui)
 {
-    return ui_text_width(ui, "▾") + UI_BUTTON_PADDING;
+    return ui_text_width(ui, "▾") + ui->theme.button_padding;
 }
 
 float ui_dropdown_width(Ui *ui, const char *const *options, int count)
@@ -465,7 +451,7 @@ float ui_dropdown_width(Ui *ui, const char *const *options, int count)
     for (int i = 0; i < count; i++) {
         widest = SDL_max(widest, ui_text_width(ui, options[i]));
     }
-    return SDL_ceilf(widest) + 2.0f * UI_BUTTON_PADDING + dropdown_arrow_width(ui);
+    return SDL_ceilf(widest) + 2.0f * ui->theme.button_padding + dropdown_arrow_width(ui);
 }
 
 int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int count, int selected)
@@ -481,7 +467,7 @@ int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int 
     float line = (float)text_line_height(ui->text);
     float text_y = SDL_floorf(rect.y + (rect.h - line) * 0.5f);
     if (selected >= 0 && selected < count) {
-        ui_label(ui, options[selected], rect.x + UI_BUTTON_PADDING, text_y);
+        ui_label(ui, options[selected], rect.x + ui->theme.button_padding, text_y);
     }
     ui_label_dim(ui, "▾", rect.x + rect.w - dropdown_arrow_width(ui), text_y);
     if (clicked && open) {
@@ -513,7 +499,8 @@ void ui_draw_popup(Ui *ui)
     float row = ui_row_height(ui);
     float width = ui->popup_anchor.w;
     for (int i = 0; i < ui->popup_count; i++) {
-        width = SDL_max(width, ui_text_width(ui, ui->popup_options[i]) + 2.0f * UI_BUTTON_PADDING);
+        width = SDL_max(width,
+                        ui_text_width(ui, ui->popup_options[i]) + 2.0f * ui->theme.button_padding);
     }
     width = SDL_ceilf(width);
     float height = row * (float)ui->popup_count;
@@ -525,23 +512,23 @@ void ui_draw_popup(Ui *ui)
     SDL_FRect box = {SDL_max(0.0f, x), SDL_max(0.0f, y), width, height};
     ui->owner = UI_POPUP_OWNER;
     add_area(ui, box, UI_POPUP_OWNER);
-    fill(ui, box, WINDOW_COLOR);
+    fill(ui, box, COLOR(THEME_WINDOW));
     float line = (float)text_line_height(ui->text);
     int picked = -1;
     for (int i = 0; i < ui->popup_count; i++) {
         SDL_FRect item = {box.x, box.y + row * (float)i, box.w, row};
         if (ui_hovered(ui, item)) {
-            fill(ui, item, BUTTON_HOVER_COLOR);
+            fill(ui, item, COLOR(THEME_BUTTON_HOVER));
         } else if (i == ui->popup_selected) {
-            fill(ui, item, BUTTON_ACTIVE_COLOR);
+            fill(ui, item, COLOR(THEME_BUTTON_LIT));
         }
-        ui_label(ui, ui->popup_options[i], item.x + UI_BUTTON_PADDING,
+        ui_label(ui, ui->popup_options[i], item.x + ui->theme.button_padding,
                  SDL_floorf(item.y + (row - line) * 0.5f));
         if (ui_take_click(ui, item) == SDL_BUTTON_LEFT) {
             picked = i;
         }
     }
-    border(ui, box, BORDER_COLOR);
+    border(ui, box, COLOR(THEME_BORDER));
     if (picked >= 0) {
         ui->picked_id = ui->popup_id;
         ui->picked_option = picked;
@@ -551,7 +538,7 @@ void ui_draw_popup(Ui *ui)
 
 float ui_checkbox_width(Ui *ui, const char *label)
 {
-    return SDL_floorf(ui_row_height(ui) * 0.6f) + UI_CHECKBOX_GAP + ui_text_width(ui, label);
+    return SDL_floorf(ui_row_height(ui) * 0.6f) + ui->theme.checkbox_gap + ui_text_width(ui, label);
 }
 
 bool ui_checkbox(Ui *ui, float x, float y, float width, UiCheck state, const char *label)
@@ -561,24 +548,24 @@ bool ui_checkbox(Ui *ui, float x, float y, float width, UiCheck state, const cha
     SDL_FRect area = {x, y, width, row};
     SDL_FRect box = {x, SDL_floorf(y + (row - size) * 0.5f), size, size};
     bool hover = ui_hovered(ui, area);
-    fill(ui, box, hover ? BUTTON_HOVER_COLOR : BUTTON_COLOR);
-    border(ui, box, BORDER_COLOR);
+    fill(ui, box, hover ? COLOR(THEME_BUTTON_HOVER) : COLOR(THEME_BUTTON));
+    border(ui, box, COLOR(THEME_BORDER));
     if (state != UI_UNCHECKED) {
         float inset = state == UI_CHECKED ? 3.0f : SDL_floorf(size * 0.35f);
         SDL_FRect mark = {box.x + inset, box.y + inset, box.w - 2.0f * inset, box.h - 2.0f * inset};
-        fill(ui, mark, CHECK_COLOR);
+        fill(ui, mark, COLOR(THEME_CHECK));
     }
     float line = (float)text_line_height(ui->text);
-    ui_label(ui, label, x + size + UI_CHECKBOX_GAP, SDL_floorf(y + (row - line) * 0.5f));
+    ui_label(ui, label, x + size + ui->theme.checkbox_gap, SDL_floorf(y + (row - line) * 0.5f));
     return ui_take_click(ui, area) == SDL_BUTTON_LEFT;
 }
 
 /* Step under a horizontal position, steps spread evenly between the two ends
  * of the track (inset by half a handle). */
-static int slider_step_at(SDL_FRect rect, int steps, float x)
+static int slider_step_at(SDL_FRect rect, float handle, int steps, float x)
 {
-    float left = rect.x + UI_SLIDER_HANDLE_WIDTH * 0.5f;
-    float span = rect.w - UI_SLIDER_HANDLE_WIDTH;
+    float left = rect.x + handle * 0.5f;
+    float span = rect.w - handle;
     if (steps <= 1 || span <= 0.0f) {
         return 0;
     }
@@ -586,11 +573,11 @@ static int slider_step_at(SDL_FRect rect, int steps, float x)
     return SDL_clamp(step, 0, steps - 1);
 }
 
-static float slider_x_of(SDL_FRect rect, int steps, int step)
+static float slider_x_of(SDL_FRect rect, float handle, int steps, int step)
 {
-    float span = rect.w - UI_SLIDER_HANDLE_WIDTH;
+    float span = rect.w - handle;
     float t = steps > 1 ? (float)step / (float)(steps - 1) : 0.0f;
-    return SDL_floorf(rect.x + UI_SLIDER_HANDLE_WIDTH * 0.5f + span * t);
+    return SDL_floorf(rect.x + handle * 0.5f + span * t);
 }
 
 bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *high)
@@ -599,7 +586,7 @@ bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *h
     float target_x = 0.0f;
     bool moving = false;
     if (ui_take_click(ui, rect) == SDL_BUTTON_LEFT) {
-        int step = slider_step_at(rect, steps, ui->click_x);
+        int step = slider_step_at(rect, ui->theme.slider_handle_width, steps, ui->click_x);
         /* The nearest handle; between equal handles, the side clicked on. */
         int to_low = SDL_abs(step - *low), to_high = SDL_abs(step - *high);
         ui->active_slider = id;
@@ -612,7 +599,7 @@ bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *h
         moving = true;
     }
     if (moving) {
-        int step = slider_step_at(rect, steps, target_x);
+        int step = slider_step_at(rect, ui->theme.slider_handle_width, steps, target_x);
         if (ui->active_handle == 0) {
             *low = SDL_min(step, *high);
         } else {
@@ -621,24 +608,25 @@ bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *h
     }
 
     float center = SDL_floorf(rect.y + rect.h * 0.5f);
-    fill(
-        ui,
-        (SDL_FRect){rect.x, center - UI_SLIDER_TRACK_HEIGHT * 0.5f, rect.w, UI_SLIDER_TRACK_HEIGHT},
-        TRACK_COLOR);
-    float low_x = slider_x_of(rect, steps, *low), high_x = slider_x_of(rect, steps, *high);
     fill(ui,
-         (SDL_FRect){low_x, center - UI_SLIDER_TRACK_HEIGHT * 0.5f, high_x - low_x,
-                     UI_SLIDER_TRACK_HEIGHT},
-         CHECK_COLOR);
+         (SDL_FRect){rect.x, center - ui->theme.slider_track_height * 0.5f, rect.w,
+                     ui->theme.slider_track_height},
+         COLOR(THEME_TRACK));
+    float low_x = slider_x_of(rect, ui->theme.slider_handle_width, steps, *low),
+          high_x = slider_x_of(rect, ui->theme.slider_handle_width, steps, *high);
+    fill(ui,
+         (SDL_FRect){low_x, center - ui->theme.slider_track_height * 0.5f, high_x - low_x,
+                     ui->theme.slider_track_height},
+         COLOR(THEME_CHECK));
     bool hover = ui_hovered(ui, rect) || ui->active_slider == id;
-    SDL_Color handle = hover ? brighter(HANDLE_COLOR, 40) : HANDLE_COLOR;
+    SDL_Color handle = hover ? brighter(COLOR(THEME_HANDLE), 40) : COLOR(THEME_HANDLE);
     float handle_height = SDL_floorf(rect.h * 0.8f);
     for (int i = 0; i < 2; i++) {
         float hx = i == 0 ? low_x : high_x;
-        SDL_FRect knob = {hx - UI_SLIDER_HANDLE_WIDTH * 0.5f, center - handle_height * 0.5f,
-                          UI_SLIDER_HANDLE_WIDTH, handle_height};
+        SDL_FRect knob = {hx - ui->theme.slider_handle_width * 0.5f, center - handle_height * 0.5f,
+                          ui->theme.slider_handle_width, handle_height};
         fill(ui, knob, handle);
-        border(ui, knob, BORDER_COLOR);
+        border(ui, knob, COLOR(THEME_BORDER));
     }
     return *low != old_low || *high != old_high;
 }
@@ -653,37 +641,83 @@ void ui_tooltip(Ui *ui, const char *const *lines, int count)
     }
 }
 
+int ui_wrap_text(Ui *ui, const char *text, float width, char (*lines)[UI_WRAP_LINE_SIZE],
+                 int max_lines)
+{
+    int count = 0;
+    char line[UI_WRAP_LINE_SIZE] = "";
+    const char *p = text;
+    while (*p != '\0' && count < max_lines) {
+        while (*p == ' ') {
+            p++;
+        }
+        const char *end = p;
+        while (*end != '\0' && *end != ' ') {
+            end++;
+        }
+        if (end == p) {
+            break;
+        }
+        char word[UI_WRAP_LINE_SIZE];
+        SDL_strlcpy(word, p, SDL_min((size_t)(end - p) + 1, sizeof(word)));
+        char candidate[UI_WRAP_LINE_SIZE];
+        SDL_snprintf(candidate, sizeof(candidate), "%s%s%s", line, line[0] != '\0' ? " " : "",
+                     word);
+        if (line[0] != '\0' && ui_text_width(ui, candidate) > width) {
+            SDL_strlcpy(lines[count++], line, UI_WRAP_LINE_SIZE);
+            SDL_strlcpy(line, word, sizeof(line));
+        } else {
+            SDL_strlcpy(line, candidate, sizeof(line));
+        }
+        p = end;
+    }
+    if (line[0] != '\0' && count < max_lines) {
+        SDL_strlcpy(lines[count++], line, UI_WRAP_LINE_SIZE);
+    }
+    return count;
+}
+
 void ui_draw_tooltip(Ui *ui)
 {
     if (ui->tooltip_count == 0) {
         return;
     }
+    /* Long lines wrap; the first line is the title, the others are details. */
+    char lines[UI_TOOLTIP_WRAPPED_LINES][UI_WRAP_LINE_SIZE];
+    int title_lines = 0, count = 0;
+    for (int i = 0; i < ui->tooltip_count; i++) {
+        count += ui_wrap_text(ui, ui->tooltip[i], ui->theme.tooltip_width, lines + count,
+                              UI_TOOLTIP_WRAPPED_LINES - count);
+        if (i == 0) {
+            title_lines = count;
+        }
+    }
+    float padding = ui->theme.tooltip_padding, offset = ui->theme.tooltip_offset;
     float line = (float)text_line_height(ui->text);
     float width = 0.0f;
-    for (int i = 0; i < ui->tooltip_count; i++) {
-        width = SDL_max(width, ui_text_width(ui, ui->tooltip[i]));
+    for (int i = 0; i < count; i++) {
+        width = SDL_max(width, ui_text_width(ui, lines[i]));
     }
-    width = SDL_ceilf(width) + 2.0f * UI_TOOLTIP_PADDING;
-    float height = line * (float)ui->tooltip_count + 2.0f * UI_TOOLTIP_PADDING;
+    width = SDL_ceilf(width) + 2.0f * padding;
+    float height = line * (float)count + 2.0f * padding;
     /* Above and to the right of the mouse, kept on the screen. */
-    float x = ui->mouse_x + UI_TOOLTIP_OFFSET;
-    float y = ui->mouse_y - UI_TOOLTIP_OFFSET - height;
+    float x = ui->mouse_x + offset;
+    float y = ui->mouse_y - offset - height;
     if (x + width > ui->screen_width) {
-        x = ui->mouse_x - UI_TOOLTIP_OFFSET - width;
+        x = ui->mouse_x - offset - width;
     }
     if (y < 0.0f) {
-        y = ui->mouse_y + UI_TOOLTIP_OFFSET;
+        y = ui->mouse_y + offset;
     }
     SDL_FRect box = {SDL_floorf(SDL_max(0.0f, x)), SDL_floorf(y), width, height};
-    fill(ui, box, TOOLTIP_COLOR);
-    border(ui, box, BORDER_COLOR);
-    for (int i = 0; i < ui->tooltip_count; i++) {
-        /* The first line is the title, the others are details. */
-        float ty = box.y + UI_TOOLTIP_PADDING + line * (float)i;
-        if (i == 0) {
-            ui_label(ui, ui->tooltip[i], box.x + UI_TOOLTIP_PADDING, ty);
+    fill(ui, box, COLOR(THEME_TOOLTIP));
+    border(ui, box, COLOR(THEME_BORDER));
+    for (int i = 0; i < count; i++) {
+        float ty = box.y + padding + line * (float)i;
+        if (i < title_lines) {
+            ui_label(ui, lines[i], box.x + padding, ty);
         } else {
-            ui_label_dim(ui, ui->tooltip[i], box.x + UI_TOOLTIP_PADDING, ty);
+            ui_label_dim(ui, lines[i], box.x + padding, ty);
         }
     }
 }

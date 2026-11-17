@@ -34,6 +34,8 @@ const char *cli_usage(void)
                              "                  free_crafts, no_tools, instant_deconstruct, "
                              "learn_all,\n"
                              "                  instant_fell_and_mine, or all.\n"
+                             "  --ui-scale <n>  Interface scale in percent (75-200). Default: "
+                             "100.\n"
                              "  --no-vsync      Draw frames as fast as possible.\n"
                              "  --bench-render <n>  Render benchmark: draws n frames from each of "
                              "a few fixed\n"
@@ -188,6 +190,15 @@ bool cli_parse(CliOptions *options, int argc, char **argv, char *error, size_t e
                 return false;
             }
             options->scenario = (int)scenario;
+        } else if ((match = match_option("--ui-scale", argc, argv, &i, &value)) != 0) {
+            uint64_t percent = 0;
+            if (match < 0 || !parse_u64(value, &percent) || percent < CLI_UI_SCALE_MIN ||
+                percent > CLI_UI_SCALE_MAX) {
+                snprintf(error, error_size, "--ui-scale expects an integer between %d and %d",
+                         CLI_UI_SCALE_MIN, CLI_UI_SCALE_MAX);
+                return false;
+            }
+            options->ui_scale = (int)percent;
         } else if (strcmp(arg, "--no-vsync") == 0) {
             options->no_vsync = true;
         } else if ((match = match_option("--bench-render", argc, argv, &i, &value)) != 0) {

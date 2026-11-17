@@ -32,6 +32,14 @@ bool ui_layout_button(UiLayout *layout, float x, const char *label)
     return ui_layout_button_sized(layout, x, ui_button_width(layout->ui, label), label);
 }
 
+bool ui_layout_wide_button(UiLayout *layout, const char *label)
+{
+    ui_layout_measure(layout, ui_button_width(layout->ui, label));
+    bool clicked = ui_layout_button_sized(layout, layout->x, layout->width, label);
+    layout->y += layout->row + layout->ui->theme.gap;
+    return clicked;
+}
+
 bool ui_layout_label_with_button(UiLayout *layout, const char *text, const char *label)
 {
     float button_width = ui_button_width(layout->ui, label);

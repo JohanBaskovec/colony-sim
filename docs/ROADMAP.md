@@ -122,6 +122,21 @@ Tick items as they land and add newly discovered tasks.
 - [x] Moods, fading thoughts: no all-or-nothing thought and no drift, the mood is 50 plus what every thought weighs now; states set in over an hour, hunger, thirst and exhaustion grow worse the longer they last, and a state over fades; memories weigh in full for a while, then halve at their own pace until forgotten; renewed or adding up (chats) when they come back; the inspector shows what each thought weighs and the most it weighed while it fades
 - [ ] Moods, later: personality traits changing thoughts; expectations rising with the colony's wealth; inspiration in a very good mood; destructive breaks; clothes, deaths and injuries, meal quality; the mood in the work grid
 
+## UI redesign (in progress, before moods)
+
+The interface takes its final layout (`docs/UI.md`: screen map, behaviors,
+theme and migration plan); moods come after it.
+
+- [x] Foundations: theme (color roles, sizes, UI scale with `--ui-scale`), screen zones; tooltips wrap their long lines; floating windows stay above the bottom bar; names of keys without a character translated (Esc/Échap, Space/Espace...)
+- [x] Bottom bar (Build, Work, Menu), three-level build menu (category column, icon row with shortcut letters, unavailable icons veiled) with its card (hovered icon or tool in use: name, cost, description, how to use it one line each, shortcut, why unavailable), game menu (resume, controls, language, quit; pauses the game; Escape opens it when nothing else is left to close); the debug readout (F3) moved top right
+- [ ] Bottom right: speeds, overlay toggles, level slider; date, season, temperature, weather; alerts column
+- [ ] Colonist bar (portrait, name, current action; shrinks then wraps with many colonists)
+- [ ] Inspector box with tabs and action buttons for every selection (colonist, workstation, zones, tile)
+- [ ] Work grid as a main window; messages under the colonist bar; debug readout top right
+- [ ] Resources list (top left, folding groups)
+- [ ] Settings: UI scale (font included), remembered between sessions; colorblind palette
+- [ ] Alerts (core module), Log tab
+
 ## M5: Vision and exploration
 
 - [ ] Field of view per settler, walls block sight, peeking around corners

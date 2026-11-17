@@ -27,6 +27,7 @@
 #define COLONY_GAME_UI_H
 
 #include "game/text.h"
+#include "game/theme.h"
 
 #include <SDL3/SDL.h>
 #include <stdbool.h>
@@ -35,6 +36,8 @@
 #define UI_MAX_WINDOWS 16
 #define UI_TOOLTIP_LINES 8
 #define UI_TOOLTIP_LINE_SIZE 256
+#define UI_TOOLTIP_WRAPPED_LINES 24
+#define UI_WRAP_LINE_SIZE 256
 /* Window ids are 1 .. UI_POPUP_OWNER - 1. */
 #define UI_ANONYMOUS_OWNER 1000
 #define UI_POPUP_OWNER (UI_ANONYMOUS_OWNER - 1) /* The open dropdown list. */
@@ -72,8 +75,10 @@ typedef struct UiWindow {
 typedef struct Ui {
     SDL_Renderer *renderer;
     TextRenderer *text;
+    Theme theme;
     float screen_width;
     float screen_height;
+    float reserved_bottom; /* Kept free of windows at the bottom (the bottom bar). */
     float mouse_x;
     float mouse_y;
     bool mouse_down;   /* Left button held. */
@@ -114,7 +119,7 @@ typedef struct Ui {
     int picked_option;
 } Ui;
 
-void ui_init(Ui *ui, SDL_Renderer *renderer, TextRenderer *text);
+void ui_init(Ui *ui, SDL_Renderer *renderer, TextRenderer *text, const Theme *theme);
 
 /* Whether a point is over a panel or window drawn last frame. */
 bool ui_is_over_panel(const Ui *ui, float x, float y);
@@ -136,6 +141,9 @@ void ui_end_frame(Ui *ui); /* Unconsumed clicks are dropped. */
 /* Panel background; also blocks clicks to the world from the next frame on.
  * Widgets drawn after it belong to it. */
 void ui_panel(Ui *ui, SDL_FRect rect);
+
+/* ui_panel() in another color of the theme. */
+void ui_panel_colored(Ui *ui, SDL_FRect rect, ThemeColor color);
 
 /*
  * Opens a window of `content_width` x `content_height` pixels of content:
@@ -160,6 +168,9 @@ void ui_label(Ui *ui, const char *text, float x, float y);
 
 /* Label in a dimmer color, for secondary information. */
 void ui_label_dim(Ui *ui, const char *text, float x, float y);
+
+/* Label in a color of the theme. */
+void ui_label_colored(Ui *ui, const char *text, float x, float y, ThemeColor color);
 float ui_text_width(Ui *ui, const char *text);
 
 /* Plain rectangle (row backgrounds...). */
@@ -233,7 +244,14 @@ float ui_row_height(const Ui *ui);
  * a widget is hovered; the last call of the frame wins). */
 void ui_tooltip(Ui *ui, const char *const *lines, int count);
 
-/* Draws the tooltip asked for this frame, over everything else. */
+/* Splits `text` at spaces into lines no wider than `width` (a word wider
+ * than that keeps a line of its own), at most `max_lines`. Non-breaking
+ * spaces do not split. Returns the number of lines. */
+int ui_wrap_text(Ui *ui, const char *text, float width, char (*lines)[UI_WRAP_LINE_SIZE],
+                 int max_lines);
+
+/* Draws the tooltip asked for this frame (long lines wrapped), over
+ * everything else. */
 void ui_draw_tooltip(Ui *ui);
 
 #endif /* COLONY_GAME_UI_H */

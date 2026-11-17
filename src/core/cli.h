@@ -11,6 +11,9 @@
 
 #define CLI_LANGUAGE_CODE_SIZE 16
 #define CLI_BENCH_RENDER_MAX_FRAMES 100000
+/* Interface scale (--ui-scale), in percent. */
+#define CLI_UI_SCALE_MIN 75
+#define CLI_UI_SCALE_MAX 200
 
 /* Cheats turned on from the start (--debug), see GameDebug in core/game.h. */
 #define CLI_DEBUG_INSTANT_BUILD (1u << 0)
@@ -30,6 +33,7 @@ typedef struct CliOptions {
     int scenario;       /* A Scenario (core/scenario.h), SCENARIO_NONE by default. */
     unsigned debug;     /* CLI_DEBUG_* bits. */
     bool no_vsync;      /* Frames as fast as possible (frame time measurements). */
+    int ui_scale;       /* Interface scale in percent, 0: default (100). */
     /* Render benchmark (--bench-render): frames drawn per view, 0 when off. */
     int bench_render_frames;
     bool show_help;

@@ -126,6 +126,27 @@ static void test_test_options(void)
     }
 }
 
+static void test_ui_scale(void)
+{
+    CliOptions options;
+    char error[128];
+    char *none[] = {"colony_sim"};
+    CHECK(cli_parse(&options, ARGC(none), none, error, sizeof(error)));
+    CHECK_EQ_INT(options.ui_scale, 0);
+
+    char *large[] = {"colony_sim", "--ui-scale", "150"};
+    CHECK(cli_parse(&options, ARGC(large), large, error, sizeof(error)));
+    CHECK_EQ_INT(options.ui_scale, 150);
+
+    char *bad[][3] = {{"colony_sim", "--ui-scale", "74"},
+                      {"colony_sim", "--ui-scale", "201"},
+                      {"colony_sim", "--ui-scale", "1.5"}};
+    for (int i = 0; i < ARGC(bad); i++) {
+        CHECK(!cli_parse(&options, 3, bad[i], error, sizeof(error)));
+        CHECK(strstr(error, "--ui-scale") != NULL);
+    }
+}
+
 int main(void)
 {
     RUN_TEST(test_no_arguments_gives_defaults);
@@ -133,5 +154,6 @@ int main(void)
     RUN_TEST(test_measurement_options);
     RUN_TEST(test_rejects_invalid_input);
     RUN_TEST(test_test_options);
+    RUN_TEST(test_ui_scale);
     return test_summary();
 }

@@ -1,8 +1,9 @@
 /*
- * Heads-up display: date and speed, language, active tool, the menus
- * (game/menu_bar.h) with the tile inspector above them, the windows
- * (inspectors, work priorities, controls help) in their stacking order,
- * tooltips and the debug overlay. Every visible string goes through tr().
+ * Heads-up display: date and speed, the debug readout and the notices, what
+ * lies under the mouse above the build menu, the windows (inspectors, work
+ * priorities, controls help, game menu) in their stacking order, then the
+ * build menu (game/build_menu.h), the bottom bar (game/bottom_bar.h) and the
+ * tooltips. Every visible string goes through tr().
  */
 #ifndef COLONY_GAME_HUD_H
 #define COLONY_GAME_HUD_H

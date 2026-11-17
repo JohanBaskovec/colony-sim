@@ -1,18 +1,22 @@
 add_executable(colony_sim
     app.c
+    bottom_bar.c
+    build_menu.c
     debug_panel.c
-    items_panel.c
+    game_menu.c
     gather_zone_panel.c
     hud.c
+    items_panel.c
+    layout.c
     localization.c
     main.c
-    menu_bar.c
     render.c
     sprites.c
     station_panel.c
     stockpile_panel.c
-    tile_panel.c
     text.c
+    theme.c
+    tile_panel.c
     ui.c
     ui_layout.c
     work_panel.c)

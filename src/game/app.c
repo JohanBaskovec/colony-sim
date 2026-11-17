@@ -18,7 +18,6 @@
 #define APP_WINDOW_WIDTH 1280
 #define APP_WINDOW_HEIGHT 720
 #define APP_FONT_FILE "fonts/DejaVuSans.ttf"
-#define APP_FONT_SIZE 15.0f
 #define APP_INITIAL_ZOOM 48.0f
 #define APP_PAN_SPEED 900.0f /* Pixels per second. */
 #define APP_PAN_FAST_FACTOR 2.5f
@@ -33,7 +32,14 @@ static const SDL_Color HOVER_COLOR = {255, 255, 255, 200};
 
 const char *app_key_name(SDL_Scancode key)
 {
-    return SDL_GetKeyName(SDL_GetKeyFromScancode(key, SDL_KMOD_NONE, false));
+    /* Keys without a character: SDL names them in English. */
+    switch (key) {
+    case SDL_SCANCODE_ESCAPE: return tr("key.escape");
+    case SDL_SCANCODE_SPACE: return tr("key.space");
+    case SDL_SCANCODE_PAGEUP: return tr("key.page_up");
+    case SDL_SCANCODE_PAGEDOWN: return tr("key.page_down");
+    default: return SDL_GetKeyName(SDL_GetKeyFromScancode(key, SDL_KMOD_NONE, false));
+    }
 }
 
 bool app_tool_active(const App *app, AppTool tool, int type)
@@ -355,6 +361,12 @@ static void update_window_title(App *app)
     SDL_SetWindowTitle(app->window, tr("game.title"));
 }
 
+void app_cycle_language(App *app)
+{
+    localization_cycle(&app->localization);
+    update_window_title(app);
+}
+
 /* The test situation and the cheats asked for on the command line. */
 static void apply_test_options(Game *game, const CliOptions *options)
 {
@@ -414,7 +426,9 @@ bool app_init(App *app, const CliOptions *options)
 
     char font_path[1200];
     SDL_snprintf(font_path, sizeof(font_path), "%s%s", app->assets_dir, APP_FONT_FILE);
-    app->text = text_renderer_create(app->renderer, font_path, APP_FONT_SIZE);
+    Theme theme;
+    theme_init(&theme, options->ui_scale > 0 ? (float)options->ui_scale / 100.0f : 1.0f);
+    app->text = text_renderer_create(app->renderer, font_path, theme.font_size);
     if (app->text == NULL) {
         return false;
     }
@@ -452,7 +466,7 @@ bool app_init(App *app, const CliOptions *options)
     camera_init(&app->camera, start_x, start_y, APP_INITIAL_ZOOM);
     app->camera.level =
         first != NULL ? first->z : map_ground_level(&app->game.map, (int)start_x, (int)start_y);
-    ui_init(&app->ui, app->renderer, app->text);
+    ui_init(&app->ui, app->renderer, app->text, &theme);
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
     app->selected_gather_zone = GATHER_ZONE_NONE;
@@ -499,15 +513,16 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_HELP: app->show_help = false; break;
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
     case APP_WINDOW_ITEMS: app->show_items_menu = false; break;
+    case APP_WINDOW_GAME_MENU: app->show_game_menu = false; break;
     default: break;
     }
 }
 
 /* Escape (or a right click) steps back: cancels the drag under way, leaves
  * the tool, closes the build menu, then the window in front (closing an
- * inspector clears the selection), then forgets a selection without window.
- * It never quits: the window's close button does. */
-static void step_back(App *app)
+ * inspector clears the selection); with nothing left to close, Escape opens
+ * the game menu (a right click does nothing more). */
+static void step_back(App *app, bool escape)
 {
     AppWindow open[APP_WINDOW_COUNT];
     int open_count = hud_open_windows(app, open);
@@ -520,8 +535,8 @@ static void step_back(App *app)
         app->build_menu_open = false;
     } else if (open_count > 0) {
         close_window(app, open[open_count - 1]);
-    } else {
-        app->tile_selected = false;
+    } else if (escape) {
+        app->show_game_menu = true;
     }
 }
 
@@ -590,7 +605,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case SDL_SCANCODE_KP_2: game_clock_set_speed(&app->game.clock, GAME_SPEED_FAST); return;
     case SDL_SCANCODE_3:
     case SDL_SCANCODE_KP_3: game_clock_set_speed(&app->game.clock, GAME_SPEED_FASTEST); return;
-    case APP_KEY_BACK: step_back(app); return;
+    case APP_KEY_BACK: step_back(app, true); return;
     case APP_KEY_HELP: app->show_help = !app->show_help; return;
     case APP_KEY_DEBUG_MENU: app->show_debug_menu = !app->show_debug_menu; return;
     case APP_KEY_ITEMS_MENU: app->show_items_menu = !app->show_items_menu; return;
@@ -610,10 +625,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
         app->show_debug = !app->show_debug;
         app->debug_tree_count = map_count_plants(&app->game.map, PLANT_TREE);
         return;
-    case APP_KEY_LANGUAGE:
-        localization_cycle(&app->localization);
-        update_window_title(app);
-        return;
+    case APP_KEY_LANGUAGE: app_cycle_language(app); return;
     default: return;
     }
 }
@@ -832,7 +844,7 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
             app->right_click_pending = false;
             float dx = button->x - app->right_down_x, dy = button->y - app->right_down_y;
             if (dx * dx + dy * dy <= APP_DRAG_THRESHOLD * APP_DRAG_THRESHOLD) {
-                step_back(app);
+                step_back(app, false);
             }
         }
         return;
@@ -1221,7 +1233,9 @@ void app_run(App *app)
             handle_event(app, &event);
         }
         update_camera(app, (float)dt);
-        game_update(&app->game, dt);
+        if (!app->show_game_menu) {
+            game_update(&app->game, dt); /* The game menu pauses the game. */
+        }
         hud_update_notices(app, dt);
         prune_selection(app);
         prune_stockpile_selection(app);
