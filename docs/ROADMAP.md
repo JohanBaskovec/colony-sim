@@ -136,7 +136,8 @@ theme and migration plan); moods come after it.
 - [x] Work grid as a main window; messages under the colonist bar; debug readout top right
 - [x] Resources list (top left): the stock by item category with totals, groups folded with a click, an icon per item, tooltips with where the items lie (stockpiles, workstations, haulers), their weight and the days of food; stops above the inspector, the work grid and the build menu (the lines left out are counted)
 - [ ] Colonist bar with many colonists at a large UI scale (64 at 150 % on 1280 × 720: eight rows reaching the date and leaving the work grid no room): let the entries shrink further, or show a row of initials beyond some rows
-- [ ] Settings: UI scale (font included), remembered between sessions; colorblind palette
+- [x] Settings window from the game menu (instead of its Language button): interface size 75 to 200 % applied at once (the font opened again at its size, windows placed again), colorblind-friendly palette (blues for lit and checked, a blue to orange temperature view), language; saved in `settings.cfg` in the user's data folder (`core/settings`: a forgiving `key = value` text), the command line winning for the session
+- [ ] Colorblind palette, later: the work grid's priority shades and the map's markers (forbidden, zones) checked with a simulator once they settle
 - [ ] Alerts (core module), Log tab
 
 ## M5: Vision and exploration

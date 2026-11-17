@@ -82,9 +82,8 @@ menu.structure_cost = Needs: {0} ({1})
 menu.work.description = Who does which work, and in what order
 menu.build.description = Workstations, constructions, zones and orders
 menu.game = Menu
-menu.game.description = Controls, language, quit (the game is paused meanwhile)
+menu.game.description = Controls, settings, quit (the game is paused meanwhile)
 game_menu.resume = Resume
-game_menu.language = Language: {0}
 game_menu.quit = Quit
 controls.pause = Pause
 controls.speed = Speed ×{0}
@@ -712,3 +711,16 @@ resources.food_days.less = Food for less than a day
 resources.more.one = {0} more line…
 resources.more.other = {0} more lines…
 resources.more.description = Not enough room: fold a group to see the rest
+
+# Settings window (game menu)
+settings.title = Settings
+settings.ui_scale = Interface size
+settings.ui_scale.description = Text, buttons and panels grow or shrink together (for a large or distant screen)
+settings.percent = {0} %
+settings.palette = Colors
+settings.palette.description = Colorblind-friendly: blues instead of greens for what is selected or on, and a temperature view from blue to orange
+settings.palette.standard = Standard
+settings.palette.colorblind = Colorblind-friendly
+settings.language = Language
+settings.language.description = The language of the game (shortcut: {0})
+settings.saved = Choices apply at once and are kept for the next games

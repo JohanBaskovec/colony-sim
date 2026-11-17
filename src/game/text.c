@@ -18,9 +18,22 @@ typedef struct TextCacheEntry {
 struct TextRenderer {
     TTF_TextEngine *engine;
     TTF_Font *font;
+    char *font_path; /* To open it again at another size. */
     TextCacheEntry entries[TEXT_CACHE_CAPACITY];
     uint64_t frame;
 };
+
+static TTF_Font *open_font(const char *font_path, float point_size)
+{
+    TTF_Font *font = TTF_OpenFont(font_path, point_size);
+    if (font == NULL) {
+        LOG_ERROR("Cannot open font '%s': %s", font_path, SDL_GetError());
+        return NULL;
+    }
+    /* Without HarfBuzz, SDL_ttf mispositions glyphs after kerned pairs ("Te rrain"). */
+    TTF_SetFontKerning(font, false);
+    return font;
+}
 
 TextRenderer *text_renderer_create(SDL_Renderer *renderer, const char *font_path, float point_size)
 {
@@ -28,14 +41,12 @@ TextRenderer *text_renderer_create(SDL_Renderer *renderer, const char *font_path
     if (text == NULL) {
         return NULL;
     }
-    text->font = TTF_OpenFont(font_path, point_size);
-    if (text->font == NULL) {
-        LOG_ERROR("Cannot open font '%s': %s", font_path, SDL_GetError());
+    text->font_path = SDL_strdup(font_path);
+    text->font = open_font(font_path, point_size);
+    if (text->font_path == NULL || text->font == NULL) {
         text_renderer_destroy(text);
         return NULL;
     }
-    /* Without HarfBuzz, SDL_ttf mispositions glyphs after kerned pairs ("Te rrain"). */
-    TTF_SetFontKerning(text->font, false);
     text->engine = TTF_CreateRendererTextEngine(renderer);
     if (text->engine == NULL) {
         LOG_ERROR("Cannot create the text engine: %s", SDL_GetError());
@@ -68,7 +79,24 @@ void text_renderer_destroy(TextRenderer *text)
     if (text->font != NULL) {
         TTF_CloseFont(text->font);
     }
+    SDL_free(text->font_path);
     SDL_free(text);
+}
+
+bool text_renderer_set_size(TextRenderer *text, float point_size)
+{
+    /* Opened again rather than resized (TTF_SetFontSize()): the sizes measured
+     * after a resize did not always match the text drawn. */
+    TTF_Font *font = open_font(text->font_path, point_size);
+    if (font == NULL) {
+        return false;
+    }
+    for (int i = 0; i < TEXT_CACHE_CAPACITY; i++) {
+        free_entry(&text->entries[i]); /* Laid out with the old font. */
+    }
+    TTF_CloseFont(text->font);
+    text->font = font;
+    return true;
 }
 
 /* Returns the cached layout of `utf8`, creating it (and evicting the LRU entry) if needed. */

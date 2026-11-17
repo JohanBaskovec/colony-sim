@@ -8,6 +8,7 @@
 #include "core/camera.h"
 #include "core/cli.h"
 #include "core/game.h"
+#include "core/settings.h"
 #include "game/localization.h"
 #include "game/sprites.h"
 #include "game/text.h"
@@ -89,6 +90,7 @@ typedef enum AppWindow {
     APP_WINDOW_DEBUG,         /* Debug menu (cheats). */
     APP_WINDOW_ITEMS,         /* Items menu (debug). */
     APP_WINDOW_GAME_MENU,
+    APP_WINDOW_SETTINGS, /* Settings (game/settings_window.h), from the game menu. */
     APP_WINDOW_COUNT
 } AppWindow;
 
@@ -116,6 +118,10 @@ typedef struct App {
     Game game;
     Camera camera;
     char assets_dir[1024]; /* Ends with a path separator. */
+    /* The player's settings as saved (the command line may override some
+     * for the session), and the file they are saved in (empty: none). */
+    Settings settings;
+    char settings_path[1100];
 
     bool sdl_initialized;
     bool ttf_initialized;
@@ -173,6 +179,7 @@ typedef struct App {
     AppTool build_hover_tool;
     int build_hover_type;
     bool show_game_menu; /* Game menu (game/game_menu.h): the game is paused meanwhile. */
+    bool show_settings;  /* Settings window, opened from the game menu (paused too). */
     /* Inspector (game/inspector.h): the kind of selection shown last frame
      * (an InspectorKind), its open tab (-1: none) and how many tabs it has. */
     int inspector_kind;
@@ -251,8 +258,21 @@ void app_build_like_selection(App *app);
 /* Centers the view on a colonist, on its level. */
 void app_focus_colonist(App *app, EntityId id);
 
-/* Switches to the next language. */
+/* Switches to the next language, and remembers it (settings). */
 void app_cycle_language(App *app);
+
+/* Switches to a language (an index in Localization.languages) and remembers it. */
+void app_select_language(App *app, int index);
+
+/* Applies an interface size (percent, clamped to CLI_UI_SCALE_MIN..MAX) at
+ * once, font included, and remembers it. */
+void app_set_ui_scale(App *app, int percent);
+
+/* Applies a palette at once and remembers it. */
+void app_set_palette(App *app, SettingsPalette palette);
+
+/* The interface size in use, in percent. */
+int app_ui_scale(const App *app);
 
 /* What the key at a physical position is labeled on the active layout. */
 const char *app_key_name(SDL_Scancode key);

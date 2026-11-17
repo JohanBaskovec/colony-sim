@@ -10,6 +10,7 @@
 #include "core/game.h"
 #include "core/map.h"
 #include "game/sprites.h"
+#include "game/theme.h"
 
 #include <SDL3/SDL.h>
 
@@ -66,8 +67,9 @@ void render_weather(SDL_Renderer *renderer, const Game *game, const Camera *came
 void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
 /* The temperature felt on each visible tile (the warmth of fires
- * included), from blue (cold) to red (hot). */
-void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+ * included), from blue (cold) to red or orange (hot): the theme's colors. */
+void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                        const Theme *theme);
 
 /* Items lying on the ground (placeholder shapes per item type). */
 void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera);

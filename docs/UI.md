@@ -158,9 +158,23 @@ will be kept in the colony log (Log tab, step 10).
 
 ### Game menu
 
-A centered window: Resume, Controls (the old "?" help, F1), Language,
-Settings (UI scale, colors), Quit. Later: save, load, new game. The game is
-paused while it is open.
+A centered window: Resume, Controls (the old "?" help, F1), Settings, Quit.
+Later: save, load, new game. The game is paused while it is open.
+
+### Settings
+
+Opened from the game menu, which it replaces (closing it, with × or Escape,
+goes back to the menu); the game stays paused. One row per setting, a label
+and a dropdown, with a dim line under it telling what it does:
+
+- **Interface size**: 75 to 200 % in steps of 25 (the font included).
+- **Colors**: standard or colorblind-friendly.
+- **Language**: every language found in `assets/lang` (the language key
+  still switches to the next one).
+
+A choice applies at once and is saved (`settings.cfg` in the user's data
+folder: `~/.local/share/colony-sim/` on Linux). The command line
+(`--ui-scale`, `--lang`) wins for the session without changing the file.
 
 ### Debug
 
@@ -171,13 +185,15 @@ buttons: keyboard only. The readout goes to the top right corner.
 
 - **Every color has a role in the theme** (`game/theme.h`): panel, window,
   button, button lit, text, dim text, border, good, warning, bad... Widgets
-  never use literal colors. A palette for colorblind players will be another
-  set of the same roles.
+  never use literal colors. The colorblind-friendly palette is another set
+  of the same roles: what is lit or checked turns blue instead of green
+  (against the oranges of warnings), and the temperature view goes from
+  blue to orange through grey instead of through green and yellow.
 - **Information never relies on color alone**: a mark, an icon, a text or a
   pattern goes with it (a lit button also has a bright border).
 - **Every size comes from the theme**, multiplied by the UI scale: margins,
   paddings, bar height, button widths, icon size, and the font size. A
-  "large" mode is a scale setting (1.25, 1.5...). New code never uses
+  "large" mode is the interface size setting (125 %, 150 %...). New code never uses
   literal pixel sizes; old panels are converted when they are migrated.
 
 ## Migration plan
@@ -198,5 +214,5 @@ Each step keeps the game playable and is checked on screen (Xvfb).
 7. [x] Work grid as a main window above the bottom bar; messages (the debug readout is
        top right already)
 8. [x] Resources list (top left)
-9. [ ] Settings: UI scale (font included), remembered between sessions
+9. [x] Settings: UI scale (font included), colors, language, remembered between sessions
 10. [ ] Alerts (core module), Log tab

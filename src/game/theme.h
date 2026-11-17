@@ -7,6 +7,8 @@
 #ifndef COLONY_GAME_THEME_H
 #define COLONY_GAME_THEME_H
 
+#include "core/settings.h"
+
 #include <SDL3/SDL.h>
 
 typedef enum ThemeColor {
@@ -36,9 +38,14 @@ typedef enum ThemeColor {
     THEME_COLOR_COUNT
 } ThemeColor;
 
+/* Colors of the temperature view, coldest to hottest (render_temperature()). */
+#define THEME_TEMPERATURE_STEPS 5
+
 typedef struct Theme {
     float scale; /* 1: the default size. */
+    SettingsPalette palette;
     SDL_Color colors[THEME_COLOR_COUNT];
+    SDL_Color temperature[THEME_TEMPERATURE_STEPS];
     /* Sizes in pixels, the scale applied. */
     float font_size;           /* Points. */
     float margin;              /* Kept free at the screen edges. */
@@ -60,7 +67,7 @@ typedef struct Theme {
     float inspector_width;  /* The inspector's box (and its tab panels, at least). */
 } Theme;
 
-/* The default palette at a scale (1: default size; 1.5: half as large again). */
-void theme_init(Theme *theme, float scale);
+/* A palette at a scale (1: default size; 1.5: half as large again). */
+void theme_init(Theme *theme, float scale, SettingsPalette palette);
 
 #endif /* COLONY_GAME_THEME_H */

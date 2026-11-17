@@ -82,6 +82,7 @@ simulation:
 | `cli`        | Command-line parsing (language, seed, size, colonists, test scenario, cheats) |
 | `entry_strip` | Fits same-sized entries (the colonist bar) into a width: shrunk, then wrapped onto rows |
 | `scenario`   | Ready-made test situations on a new game (`bench_simulation`, `--scenario`) |
+| `settings`   | Player settings kept between sessions (interface size, palette, language) as a forgiving `key = value` text; the frontend loads and saves the file |
 | `log`        | Logging with a pluggable sink                                                |
 | `util`       | Small helpers (clamp, lerp, FNV hashes)                                      |
 
@@ -103,7 +104,8 @@ simulation:
 | `resources_list` | Top left: the stock by item category (`Game.stock`), groups folded with a click, tooltips with where the items lie and the days of food |
 | `colonist_bar` | Top center: portrait, name and current action per colonist; click selects, double click centers the view |
 | `view_controls` | Bottom right: temperature overlay, speeds, level slider (date and weather beside it) |
-| `game_menu`    | Game menu (Menu button or Escape): resume, controls, language, quit; pauses the game |
+| `game_menu`    | Game menu (Menu button or Escape): resume, controls, settings, quit; pauses the game |
+| `settings_window` | Settings (from the game menu): interface size, colors, language, applied at once and saved |
 | `inspector`    | Bottom left: summary box of the selection, tabs opening a panel above it, action buttons beside it; dispatches to the panels below (colonists: `hud`) |
 | `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (condition sliders, filters); build another, delete |
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
@@ -1590,7 +1592,14 @@ from it; see-through, over the items, plants and settlers there.
 Escape and a right click on the map
 (released where it was pressed: otherwise it pans) step back one level
 (`step_back()`); with nothing left to close, Escape opens the game menu,
-which pauses the game while it is open. Keys without a character (Escape,
+which pauses the game while it is open (as does the settings window opened
+from it). The settings (`core/settings.h`) are read at start from
+`settings.cfg` in `SDL_GetPrefPath("", "colony-sim")` and written again at
+each change; `--ui-scale` and `--lang` override them for the session
+without being saved. A new interface size builds a new `Theme`, opens the
+font again at its size (`text_renderer_set_size()`) and places the windows
+again (`ui_set_theme()`); a palette only swaps the theme's colors (the
+temperature view takes its colors from the theme too). Keys without a character (Escape,
 Space, Page Up/Down) are named through translations. Every keyboard control is a physical position (`APP_KEY_*`
 scancodes in `game/app.h`): the controls are laid out the same on any
 keyboard (WASD on QWERTY is ZQSD on AZERTY), and the help and tooltips show

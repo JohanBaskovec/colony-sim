@@ -20,7 +20,8 @@ void cli_default_options(CliOptions *options)
 const char *cli_usage(void)
 {
     return "Usage: colony_sim [options]\n"
-           "  --lang <code>   Interface language (e.g. en, fr). Default: system locale.\n"
+           "  --lang <code>   Interface language (e.g. en, fr). Default: the saved setting,\n"
+           "                  else the system locale.\n"
            "  --seed <n>      World seed (unsigned integer). Default: random.\n"
            "  --size <n>      Map width and height in tiles (16-1024). Default: 200.\n"
            "  --colonists <n> Starting colonists (1-" STRINGIFY(
@@ -35,7 +36,7 @@ const char *cli_usage(void)
                              "learn_all,\n"
                              "                  instant_fell_and_mine, or all.\n"
                              "  --ui-scale <n>  Interface scale in percent (75-200). Default: "
-                             "100.\n"
+                             "the saved setting, else 100.\n"
                              "  --no-vsync      Draw frames as fast as possible.\n"
                              "  --bench-render <n>  Render benchmark: draws n frames from each of "
                              "a few fixed\n"

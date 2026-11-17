@@ -12,6 +12,10 @@ typedef struct TextRenderer TextRenderer;
 TextRenderer *text_renderer_create(SDL_Renderer *renderer, const char *font_path, float point_size);
 void text_renderer_destroy(TextRenderer *text);
 
+/* Changes the font size (the UI scale changed): the cached strings are laid
+ * out again. Returns false (the size unchanged) on failure. */
+bool text_renderer_set_size(TextRenderer *text, float point_size);
+
 /* Draws a single line of UTF-8 text with its top-left corner at (x, y). */
 void text_draw(TextRenderer *text, const char *utf8, float x, float y, SDL_Color color);
 

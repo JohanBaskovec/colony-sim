@@ -18,6 +18,8 @@
 #define APP_WINDOW_WIDTH 1280
 #define APP_WINDOW_HEIGHT 720
 #define APP_FONT_FILE "fonts/DejaVuSans.ttf"
+#define APP_SETTINGS_FOLDER "colony-sim" /* In the user's data folder. */
+#define APP_SETTINGS_FILE "settings.cfg"
 #define APP_INITIAL_ZOOM 48.0f
 #define APP_PAN_SPEED 900.0f /* Pixels per second. */
 #define APP_PAN_FAST_FACTOR 2.5f
@@ -368,10 +370,101 @@ static void update_window_title(App *app)
     SDL_SetWindowTitle(app->window, tr("game.title"));
 }
 
+/* The settings file: in the user's data folder (XDG_DATA_HOME on Linux). */
+static void find_settings_path(App *app)
+{
+    app->settings_path[0] = '\0';
+    char *folder = SDL_GetPrefPath("", APP_SETTINGS_FOLDER);
+    if (folder == NULL) {
+        LOG_WARN("No folder for the settings, they will not be kept: %s", SDL_GetError());
+        return;
+    }
+    SDL_snprintf(app->settings_path, sizeof(app->settings_path), "%s%s", folder, APP_SETTINGS_FILE);
+    SDL_free(folder);
+}
+
+static void load_settings(App *app)
+{
+    settings_default(&app->settings);
+    if (app->settings_path[0] == '\0' || !file_exists(app->settings_path)) {
+        return;
+    }
+    size_t length = 0;
+    char *text = SDL_LoadFile(app->settings_path, &length);
+    if (text == NULL) {
+        LOG_WARN("Cannot read the settings '%s': %s", app->settings_path, SDL_GetError());
+        return;
+    }
+    settings_parse(&app->settings, text, length);
+    SDL_free(text);
+}
+
+static void save_settings(const App *app)
+{
+    if (app->settings_path[0] == '\0') {
+        return;
+    }
+    char text[512];
+    size_t length = settings_format(&app->settings, text, sizeof(text));
+    if (length >= sizeof(text) || !SDL_SaveFile(app->settings_path, text, length)) {
+        LOG_WARN("Cannot save the settings '%s': %s", app->settings_path, SDL_GetError());
+    }
+}
+
+/* Remembers the language in use. */
+static void language_changed(App *app)
+{
+    update_window_title(app);
+    const LanguageInfo *info = localization_active_language(&app->localization);
+    if (info != NULL) {
+        SDL_strlcpy(app->settings.language, info->code, sizeof(app->settings.language));
+        save_settings(app);
+    }
+}
+
 void app_cycle_language(App *app)
 {
     localization_cycle(&app->localization);
-    update_window_title(app);
+    language_changed(app);
+}
+
+void app_select_language(App *app, int index)
+{
+    if (localization_select(&app->localization, index)) {
+        language_changed(app);
+    }
+}
+
+int app_ui_scale(const App *app)
+{
+    return (int)SDL_lroundf(app->ui.theme.scale * 100.0f);
+}
+
+/* A new theme for this scale and palette, the font resized to it. */
+static void apply_theme(App *app, int percent, SettingsPalette palette)
+{
+    Theme theme;
+    theme_init(&theme, (float)percent / 100.0f, palette);
+    if (theme.font_size != app->ui.theme.font_size &&
+        !text_renderer_set_size(app->text, theme.font_size)) {
+        return;
+    }
+    ui_set_theme(&app->ui, &theme);
+}
+
+void app_set_ui_scale(App *app, int percent)
+{
+    percent = SDL_clamp(percent, CLI_UI_SCALE_MIN, CLI_UI_SCALE_MAX);
+    apply_theme(app, percent, app->ui.theme.palette);
+    app->settings.ui_scale = percent;
+    save_settings(app);
+}
+
+void app_set_palette(App *app, SettingsPalette palette)
+{
+    apply_theme(app, app_ui_scale(app), palette);
+    app->settings.palette = app->ui.theme.palette;
+    save_settings(app);
 }
 
 /* The test situation and the cheats asked for on the command line. */
@@ -415,7 +508,12 @@ bool app_init(App *app, const CliOptions *options)
         return false;
     }
 
-    if (!localization_init(&app->localization, app->assets_dir, options->language)) {
+    /* The command line wins over the saved settings, for this session. */
+    find_settings_path(app);
+    load_settings(app);
+    const char *language =
+        options->language[0] != '\0' ? options->language : app->settings.language;
+    if (!localization_init(&app->localization, app->assets_dir, language)) {
         return false;
     }
     app->localization_ready = true;
@@ -434,7 +532,8 @@ bool app_init(App *app, const CliOptions *options)
     char font_path[1200];
     SDL_snprintf(font_path, sizeof(font_path), "%s%s", app->assets_dir, APP_FONT_FILE);
     Theme theme;
-    theme_init(&theme, options->ui_scale > 0 ? (float)options->ui_scale / 100.0f : 1.0f);
+    int ui_scale = options->ui_scale > 0 ? options->ui_scale : app->settings.ui_scale;
+    theme_init(&theme, (float)ui_scale / 100.0f, app->settings.palette);
     app->text = text_renderer_create(app->renderer, font_path, theme.font_size);
     if (app->text == NULL) {
         return false;
@@ -526,6 +625,10 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
     case APP_WINDOW_ITEMS: app->show_items_menu = false; break;
     case APP_WINDOW_GAME_MENU: app->show_game_menu = false; break;
+    case APP_WINDOW_SETTINGS:
+        app->show_settings = false;
+        app->show_game_menu = true; /* Back where they were opened from. */
+        break;
     default: break;
     }
 }
@@ -1121,7 +1224,7 @@ static void render_frame(App *app)
     render_daylight(app->renderer, &app->game, &app->camera);
     render_weather(app->renderer, &app->game, &app->camera, SDL_GetTicks());
     if (app->show_temperature) {
-        render_temperature(app->renderer, &app->game, &app->camera);
+        render_temperature(app->renderer, &app->game, &app->camera, &app->ui.theme);
     }
     if (app->hover_valid) {
         render_tile_outline(app->renderer, &app->camera, app->hover_x, app->hover_y, HOVER_COLOR);
@@ -1300,8 +1403,8 @@ void app_run(App *app)
             handle_event(app, &event);
         }
         update_camera(app, (float)dt);
-        if (!app->show_game_menu) {
-            game_update(&app->game, dt); /* The game menu pauses the game. */
+        if (!app->show_game_menu && !app->show_settings) {
+            game_update(&app->game, dt); /* The game menu and the settings pause the game. */
         }
         hud_update_notices(app, dt);
         prune_selection(app);

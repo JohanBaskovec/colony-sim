@@ -14,6 +14,7 @@
 #include "game/station_panel.h"
 #include "game/ui_layout.h"
 #include "game/resources_list.h"
+#include "game/settings_window.h"
 #include "game/stockpile_panel.h"
 #include "game/tile_panel.h"
 #include "game/view_controls.h"
@@ -1049,6 +1050,7 @@ static void draw_window(App *app, AppWindow window)
     case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
     case APP_WINDOW_ITEMS: items_panel_draw(app); break;
     case APP_WINDOW_GAME_MENU: game_menu_draw(app); break;
+    case APP_WINDOW_SETTINGS: settings_window_draw(app); break;
     default: break;
     }
 }
@@ -1084,6 +1086,9 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     }
     if (app->show_game_menu) {
         out[count++] = APP_WINDOW_GAME_MENU;
+    }
+    if (app->show_settings) {
+        out[count++] = APP_WINDOW_SETTINGS;
     }
     /* Insertion sort, back to front. */
     for (int i = 1; i < count; i++) {

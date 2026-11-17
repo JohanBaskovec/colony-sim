@@ -116,7 +116,9 @@ Prefer the `headless` preset while working on the simulation core.
 - Visual checks of the running game: use a virtual display, never the user's
   desktop (`Xvfb :99 -screen 0 1280x800x24 &`, then `SDL_VIDEO_DRIVER=x11 DISPLAY=:99`
   for the game, so that SDL never falls back to the Wayland desktop, `xdotool`
-  and `import -window root shot.png`).
+  and `import -window root shot.png`). Also set `XDG_DATA_HOME` to a scratch
+  folder: changing a setting in the game saves it, and it must not overwrite
+  the user's own `settings.cfg`.
 
 ## Workflow
 

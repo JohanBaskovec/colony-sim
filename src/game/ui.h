@@ -127,6 +127,11 @@ typedef struct Ui {
 
 void ui_init(Ui *ui, SDL_Renderer *renderer, TextRenderer *text, const Theme *theme);
 
+/* Another scale or palette (the font size changed with it, see
+ * text_renderer_set_size()); at another scale, windows are placed again
+ * (centered...). */
+void ui_set_theme(Ui *ui, const Theme *theme);
+
 /* Whether a point is over a panel or window drawn last frame. */
 bool ui_is_over_panel(const Ui *ui, float x, float y);
 

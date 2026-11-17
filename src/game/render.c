@@ -2058,18 +2058,13 @@ static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box
 /* Colors of the temperature view, every 10 degrees from -10 to 30 °C. */
 #define TEMPERATURE_VIEW_COLDEST (-10.0f)
 #define TEMPERATURE_VIEW_STEP 10.0f
-static const SDL_Color TEMPERATURE_COLORS[] = {
-    {40, 60, 200, 255},  {60, 150, 235, 255}, {90, 200, 150, 255},
-    {240, 210, 70, 255}, {225, 60, 40, 255},
-};
-
-static SDL_Color temperature_color(float celsius)
+static SDL_Color temperature_color(const Theme *theme, float celsius)
 {
-    const int last = (int)SDL_arraysize(TEMPERATURE_COLORS) - 1;
+    const int last = THEME_TEMPERATURE_STEPS - 1;
     float position =
         clampf((celsius - TEMPERATURE_VIEW_COLDEST) / TEMPERATURE_VIEW_STEP, 0.0f, (float)last);
     int from = SDL_min((int)position, last - 1);
-    return mix(TEMPERATURE_COLORS[from], TEMPERATURE_COLORS[from + 1], position - (float)from);
+    return mix(theme->temperature[from], theme->temperature[from + 1], position - (float)from);
 }
 
 /* Whether a tile is within reach of the warmth of a burning hearth. */
@@ -2086,7 +2081,8 @@ static bool near_fire(const Workstations *workstations, int x, int y, int z)
     return false;
 }
 
-void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                        const Theme *theme)
 {
     const int z = camera->level; /* The level shown. */
     const Temperatures *temperatures = &game->temperatures;
@@ -2106,7 +2102,7 @@ void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *
             if (burning && near_fire(workstations, x, y, z)) {
                 celsius += hearths_radiant_warmth(workstations, &game->map, x, y, z);
             }
-            SDL_Color color = temperature_color(celsius);
+            SDL_Color color = temperature_color(theme, celsius);
             color.a = 120;
             SDL_FRect tile = tile_rect(camera, x, y);
             batch_quad(renderer, color, &tile);

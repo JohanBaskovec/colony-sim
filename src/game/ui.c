@@ -83,6 +83,20 @@ void ui_init(Ui *ui, SDL_Renderer *renderer, TextRenderer *text, const Theme *th
     ui->current_window = -1;
 }
 
+void ui_set_theme(Ui *ui, const Theme *theme)
+{
+    bool resized = theme->scale != ui->theme.scale;
+    ui->theme = *theme;
+    if (!resized) {
+        return; /* Another palette only. */
+    }
+    ui->popup_id = 0; /* Its list was placed at the old size. */
+    for (int i = 0; i < UI_MAX_WINDOWS; i++) {
+        ui->windows[i].x = -1.0f; /* Placed again at their new size. */
+        ui->windows[i].scroll = 0.0f;
+    }
+}
+
 /* Owner of the topmost area drawn last frame under a point, 0 if none. */
 static int owner_at(const Ui *ui, float x, float y)
 {

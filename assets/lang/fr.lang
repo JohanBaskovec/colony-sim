@@ -81,9 +81,8 @@ menu.structure_cost = Nécessite : {0} ({1})
 menu.work.description = Qui fait quel travail, et dans quel ordre
 menu.build.description = Postes de travail, constructions, zones et ordres
 menu.game = Menu
-menu.game.description = Commandes, langue, quitter (le jeu est en pause pendant ce temps)
+menu.game.description = Commandes, réglages, quitter (le jeu est en pause pendant ce temps)
 game_menu.resume = Reprendre
-game_menu.language = Langue : {0}
 game_menu.quit = Quitter
 controls.pause = Pause
 controls.speed = Vitesse ×{0}
@@ -609,3 +608,16 @@ resources.food_days.less = De quoi manger moins d’un jour
 resources.more.one = {0} ligne de plus…
 resources.more.other = {0} lignes de plus…
 resources.more.description = Pas assez de place : repliez un groupe pour voir la suite
+
+# Settings window (game menu)
+settings.title = Réglages
+settings.ui_scale = Taille de l’interface
+settings.ui_scale.description = Le texte, les boutons et les panneaux grandissent ou rétrécissent ensemble (pour un grand écran ou un écran éloigné)
+settings.percent = {0} %
+settings.palette = Couleurs
+settings.palette.description = Adaptées aux daltoniens : des bleus au lieu des verts pour ce qui est choisi ou activé, et une vue thermique du bleu à l’orange
+settings.palette.standard = Standard
+settings.palette.colorblind = Adaptées aux daltoniens
+settings.language = Langue
+settings.language.description = La langue du jeu (raccourci : {0})
+settings.saved = Les choix s’appliquent tout de suite et sont gardés pour les prochaines parties
