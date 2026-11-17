@@ -248,8 +248,8 @@ typedef struct Map {
     uint8_t *cobbles;
     uint8_t *flint;
     /* Dead branches and twigs lying on each tile that gathering takes: shed
-     * by the trees onto the ground under their crown and onto their foliage
-     * (see core/tree.h), up to MAP_BRANCHES_MAX and MAP_TWIGS_MAX a tile. */
+     * by the trees onto the ground under their crown (see core/tree.h), up to MAP_BRANCHES_MAX and
+     * MAP_TWIGS_MAX a tile. */
     uint8_t *branches;
     uint8_t *twigs;
     /* Hazelnuts lying on each tile, fallen from the trees in autumn like twigs

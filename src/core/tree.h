@@ -9,8 +9,7 @@
  * dense branches next to it (TERRAIN_FOLIAGE), then thinner ones
  * (TERRAIN_FOLIAGE_MEDIUM), then sparse ones (TERRAIN_FOLIAGE_SPARSE). One
  * walks on the dense foliage only, climbing up to it along the trunk
- * (map_can_climb_tree()), and takes the tree's branches and twigs there;
- * what falls on the thinner foliage goes through it.
+ * (map_can_climb_tree()); what falls on the thinner foliage goes through it.
  *
  * The plant stays on the foot's tile (the north-west one of a wider trunk):
  * growth, stocks and the trunk's size live there, and the shape follows
@@ -19,11 +18,10 @@
  * over a slope or a ladder, whose way up it would close), and a tree grows
  * no further while its trunk has no room (tree_room_to_grow()).
  *
- * Trees shed dead twigs, and branches once grown, at random: they land on
- * the ground under the crown or stay on the foliage (tree_shed(), Map.twigs
- * and Map.branches), where gathering zones take them like anything lying on
- * the ground: a zone drawn on the ground never sends anyone up a tree, one
- * drawn over the foliage does.
+ * Trees shed dead twigs, and branches once grown, at random: they fall
+ * through the crown, whatever its density, and land on the ground under it,
+ * never staying in the foliage (tree_shed(), Map.twigs and Map.branches);
+ * gathering zones take them there like anything lying on the ground.
  *
  * A felled tree falls full length to one side, where the woodcutter aims it:
  * away from buildings, else where it does the least harm. Its wood lies
@@ -204,10 +202,11 @@ void tree_build(Map *map, int x, int y, int z);
 
 /*
  * The tree on (x, y, z) sheds a branch or a twig (ITEM_BRANCHES or
- * ITEM_TWIGS) from one of the tiles of its foliage, chosen by `pick` (any
- * number: the caller's roll): it stays on that tile or falls to the first
- * floor below it. Nothing happens when that floor cannot hold it (rock,
- * water, a wall, a trunk) or is full of that item (MAP_BRANCHES_MAX...).
+ * ITEM_TWIGS, or a hazel's nuts) from one of the tiles of its foliage, chosen
+ * by `pick` (any number: the caller's roll): it falls through the foliage,
+ * of any density, to the first floor below it that is not a tree's. Nothing
+ * happens when that floor cannot hold it (rock, water, a wall, a trunk) or is
+ * full of that item (MAP_BRANCHES_MAX...).
  * Returns whether something was laid.
  */
 bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick);

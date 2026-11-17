@@ -324,7 +324,7 @@ static void place_tree_volumes(Map *map, Rng *rng)
     }
 }
 
-/* The twigs and branches the trees shed lie under them and on their foliage. */
+/* The twigs and branches the trees shed lie on the ground under them. */
 static void place_litter(Map *map, Rng *rng)
 {
     for (int z = 0; z <= map->top_ground_level; z++) {

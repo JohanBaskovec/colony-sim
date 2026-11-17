@@ -1150,8 +1150,8 @@ static int litter_total(const Map *map, ItemType type)
     return total;
 }
 
-/* Where a tree's litter lies: on the foliage or on the ground, at most
- * MAP_*_MAX of each on a tile, never on a trunk. */
+/* Where a tree's litter lies: on the ground under the crown, never in the
+ * foliage nor on a trunk, at most MAP_*_MAX of each on a tile. */
 static void test_shedding(void)
 {
     Map map;
@@ -1177,13 +1177,12 @@ static void test_shedding(void)
             }
         }
     }
-    CHECK(on_foliage > 0);
+    CHECK_EQ_INT(on_foliage, 0);
     CHECK(on_ground > 0);
     /* Tiles fill up: the ground tiles around the trunk (24 under a crown of
-     * two rings), the dense foliage on each of its 3 levels (8 next to the
-     * trunk, and the top one over the trunk, 9). */
+     * two rings), and nothing else. */
     CHECK(litter_total(&map, ITEM_TWIGS) > 8 * MAP_TWIGS_MAX);
-    CHECK(litter_total(&map, ITEM_TWIGS) <= (24 + 8 + 8 + 9) * MAP_TWIGS_MAX);
+    CHECK(litter_total(&map, ITEM_TWIGS) <= 24 * MAP_TWIGS_MAX);
     CHECK_EQ_INT(litter_total(&map, ITEM_BRANCHES), 0);
     /* A full tile takes no more. */
     int before = litter_total(&map, ITEM_TWIGS);

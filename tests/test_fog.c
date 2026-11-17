@@ -361,6 +361,30 @@ static void test_settlers_plan_on_the_known_world(void)
     game_shutdown(&game);
 }
 
+/* Items that change where they are seen are copied into the known world at once: a settler
+ * acts on what the one before it just did. */
+static void test_known_items_follow_at_once(void)
+{
+    Game game;
+    REQUIRE(walled_plain(&game));
+    int z = game.map.surface_level;
+    EntityId id = game_spawn_colonist(&game, 20, 30, z);
+    REQUIRE(game_colonist(&game, id) != NULL);
+    REQUIRE(game_set_fog(&game, true));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    int tx = 23, ty = 30;
+    REQUIRE(game_tile_seen(&game, tx, ty, z));
+    size_t index = map_index(&game.map, tx, ty, z);
+    REQUIRE(items_add(&game.items, tx, ty, z, item_stack_pristine(ITEM_BRANCHES, 3)) == 3);
+    CHECK_EQ_INT(game.known.items.stacks[index].count, 3); /* No tick in between. */
+    CHECK_EQ_INT(items_remove(&game.items, tx, ty, z, 2), 2);
+    CHECK_EQ_INT(game.known.items.stacks[index].count, 1);
+    CHECK_EQ_INT(game.known.items.totals[ITEM_BRANCHES], game.items.totals[ITEM_BRANCHES]);
+    game_shutdown(&game);
+}
+
 /* A workstation destroyed out of view is still remembered where it was. */
 static void test_remembers_workstations(void)
 {
@@ -490,6 +514,7 @@ int main(void)
     RUN_TEST(test_tools_refuse_unexplored_tiles);
     RUN_TEST(test_stock_is_what_is_known);
     RUN_TEST(test_settlers_plan_on_the_known_world);
+    RUN_TEST(test_known_items_follow_at_once);
     RUN_TEST(test_remembers_workstations);
     RUN_TEST(test_reveal_map);
     RUN_TEST(test_fog_off_sees_everything);

@@ -226,8 +226,8 @@ The layers:
   `stock_capacity` scaled by growth, and grow back with the plant's hourly
   update, even on mature plants;
 - `branches[]`, `twigs[]`: the dead branches and twigs lying on each tile (at
-  most `MAP_BRANCHES_MAX` and `MAP_TWIGS_MAX`), on the ground and on the
-  foliage of trees (`map_litter()`, `map_add_litter()`, `map_take_litter()`).
+  most `MAP_BRANCHES_MAX` and `MAP_TWIGS_MAX`), on the ground under the
+  trees (`map_litter()`, `map_add_litter()`, `map_take_litter()`).
 
 **Seasons** are days of the year: a `PlantDays` bit set (60 days fit in 64
 bits) says when a plant grows (`growth_days`: spring to autumn for all of
@@ -334,12 +334,10 @@ of the foliage and either stays caught there or falls to the first floor
 below, where the crown's shadow lies; it is laid only if that tile can hold
 it (no rock, water, wall nor trunk) and is not full. A new world lays
 `TREE_SCATTER_DAYS` days of it around its trees (`tree_scatter_litter()`,
-a random stream of its own). Gathering treats what lies on a tile like
-anything on the ground: every tile follows the zone covering **it**, so a
-zone drawn on the ground only gathers from the ground and nobody climbs for
-the foliage's twigs; a zone drawn over the foliage sends settlers up to take
-them there. What lay on foliage that goes with a felled tree falls to the
-ground below (`tree_clear()`; what does not fit lies as items). No shrub
+a random stream of its own). What a tree sheds falls through its crown, of
+any density, and lands on the ground under it (`litter_landing_level()`): it
+never stays in the foliage, so nobody climbs for it. What lay on foliage that
+goes with a felled tree (items) falls to the ground below (`tree_clear()`; what does not fit lies as items). No shrub
 bears branches or twigs of its own any more (the plant stocks for them stay
 for one that will).
 
@@ -351,7 +349,7 @@ wood (`PlantDef.cut_yield`) and lets its nuts fall in autumn
 (`PlantDef.fall_item`, `fall_days`, `fall_yield`): once an hour per tree
 (`tree_fall_chance()`: the season's yield spread over its hours, scaled by
 growth) a nut is shed by `tree_shed()` like a twig, onto the ground under the
-crown or onto its dense foliage. Nuts lie in a map layer of their own,
+crown. Nuts lie in a map layer of their own,
 `Map.nuts` (`MAP_NUTS_MAX` a tile, `map_litter()` and friends take
 `ITEM_HAZELNUTS`), have no state of their own and **rot on average**
 (`rot_nuts()` in game.c, with the items' sweep): each hour a tile with nuts
@@ -1471,7 +1469,23 @@ positions, so it is not part of `game_hash()`:
   stack to haul) is only checked against the real world while the tile is in
   view (`items_checked()`, `map_checked()`), else against what is known.
   Connectivity regions are still the real ones: they only decide where a
-  pre-check looks, and say "unreachable" at most too early.
+  pre-check looks, and say "unreachable" at most too early. Items are
+  mirrored: `Items.mirror` (the known items) and `mirror_when` (the tiles in
+  view) make `items_add()`, `items_remove()`, `items_set_forbidden()` and rot
+  copy a changed stack into the known world at once where it is in view, so a
+  settler that has just picked something up does not plan on the stale stack
+  (before this, settlers re-fetched what they had just taken, 570,000 times in
+  two days of the benchmark). The rest of what is in view is copied a 48th at
+  a time (`KNOWN_SYNC_SLICES`), in runs of consecutive tiles
+  (`known_copy_run()`).
+- **Cost of the fog** (`bench_simulation ... fog-revealed`, 12 settlers,
+  release): about 28 µs a tick on average against 8 µs without, a tick in a
+  hundred at 3 ms (a whole field cast, 2 ms). Limits: `VISION_NEAR_PER_TICK`
+  near casts and `VISION_FAR_PER_TICK` whole ones a tick (`vision_limit_casts()`,
+  turned on by the game: a settler that does not get its turn keeps its field
+  and the turns rotate), a near field (12 tiles) recast after 2 tiles walked.
+  With `fog` instead the settlers also search in vain for what they have not
+  found yet.
 - **Cost** (`bench/bench_vision`, release, 200 × 200 × 18 world): about 2 ms
   for a whole cast (3.8 ms the slowest of 100), 0.3 ms for a near cast. Most of
   a whole cast is rays crossing open ground to the edge of the map (a tile a

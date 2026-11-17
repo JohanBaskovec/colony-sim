@@ -401,6 +401,20 @@ static int landing_level(const Map *map, int x, int y, int z)
     return z;
 }
 
+/* The level where what a tree sheds over (x, y, z) comes to rest: twigs,
+ * branches and nuts go through every density of foliage (and open space)
+ * down to the first floor that is not a tree's: they never stay in a crown
+ * (-1 if none). */
+static int litter_landing_level(const Map *map, int x, int y, int z)
+{
+    while (z >= 0 && (lets_fall(map, x, y, z) ||
+                      (map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
+                       terrain_is_foliage(map->terrain[map_index(map, x, y, z)])))) {
+        z--;
+    }
+    return z;
+}
+
 /* What lies on (x, y, z), its floor gone, falls to the ground below. */
 static void drop_items_from(Map *map, Items *items, int x, int y, int z)
 {
@@ -418,8 +432,8 @@ static void drop_items_from(Map *map, Items *items, int x, int y, int z)
     }
 }
 
-/* Whether branches and twigs can lie on a tile: a floor or dense foliage,
- * not rock, water, open space, thin foliage nor a wall. */
+/* Whether branches and twigs can lie on a tile: a floor, not rock, water,
+ * open space, foliage of any density nor a wall. */
 static bool holds_litter(const Map *map, int x, int y, int z)
 {
     if (!map_in_bounds(map, x, y, z)) {
@@ -428,8 +442,8 @@ static bool holds_litter(const Map *map, int x, int y, int z)
     size_t index = map_index(map, x, y, z);
     Terrain terrain = (Terrain)map->terrain[index];
     return map->rock[index] == ROCK_NONE && terrain != TERRAIN_OPEN &&
-           terrain != TERRAIN_FOLIAGE_MEDIUM && terrain != TERRAIN_FOLIAGE_SPARSE &&
-           terrain != TERRAIN_DEEP_WATER && terrain != TERRAIN_SHALLOW_WATER &&
+           !terrain_is_foliage(terrain) && terrain != TERRAIN_DEEP_WATER &&
+           terrain != TERRAIN_SHALLOW_WATER &&
            !structure_blocks((StructureType)map->structure[index]);
 }
 
@@ -440,7 +454,7 @@ static void drop_litter_from(Map *map, Items *items, int x, int y, int z)
     static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS};
     for (size_t i = 0; i < sizeof(KINDS) / sizeof(KINDS[0]); i++) {
         int count = map_take_litter(map, x, y, z, KINDS[i]);
-        int level = count > 0 ? landing_level(map, x, y, z) : -1;
+        int level = count > 0 ? litter_landing_level(map, x, y, z) : -1;
         int left = 0;
         for (int n = 0; n < count; n++) {
             left += level < 0 || !holds_litter(map, x, y, level) ||
@@ -529,15 +543,8 @@ bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick)
                         continue;
                     }
                     int tx = x + dx, ty = y + dy, tz = z + dz;
-                    /* Caught in the leaves, or down to the first floor below. */
-                    bool stays = ((pick >> 23) & 1u) == 0 && holds_litter(map, tx, ty, tz);
-                    int level = tz;
-                    if (!stays) {
-                        level = tz - 1;
-                        while (level >= 0 && lets_fall(map, tx, ty, level)) {
-                            level--;
-                        }
-                    }
+                    /* Through the crown, down to the first floor below it. */
+                    int level = litter_landing_level(map, tx, ty, tz);
                     return level >= 0 && holds_litter(map, tx, ty, level) &&
                            map_add_litter(map, tx, ty, level, item);
                 }
