@@ -51,6 +51,7 @@ typedef enum AppTool {
 #define APP_KEY_BUILD SDL_SCANCODE_E      /* Workstation blueprints, one kind after the other. */
 #define APP_KEY_GATHER SDL_SCANCODE_R
 #define APP_KEY_WORK SDL_SCANCODE_T
+#define APP_KEY_LOG SDL_SCANCODE_J    /* The colony log. */
 #define APP_KEY_ROTATE SDL_SCANCODE_F /* Turns the structure being planned (beds). */
 #define APP_KEY_STOCKPILE SDL_SCANCODE_P
 #define APP_KEY_LANGUAGE SDL_SCANCODE_L
@@ -86,6 +87,7 @@ typedef enum AppWindow {
     APP_WINDOW_INSPECTOR,     /* Summary of the selection (game/inspector.h). */
     APP_WINDOW_INSPECTOR_TAB, /* The inspector's open tab. */
     APP_WINDOW_WORK,          /* Work priorities grid. */
+    APP_WINDOW_LOG,           /* Colony log (game/log_window.h). */
     APP_WINDOW_HELP,          /* Controls. */
     APP_WINDOW_DEBUG,         /* Debug menu (cheats). */
     APP_WINDOW_ITEMS,         /* Items menu (debug). */
@@ -167,6 +169,7 @@ typedef struct App {
 
     /* Work priorities grid (game/work_panel.h) and controls help. */
     bool show_work_panel;
+    bool show_log; /* Colony log (game/log_window.h): a main window like the work grid. */
     bool show_help;
     bool show_debug_menu;  /* Debug menu (game/debug_panel.h). */
     bool show_items_menu;  /* Items menu (game/items_panel.h). */

@@ -7,6 +7,7 @@
 #   tr("some.key")          -> "some.key" must exist
 #   N_("some.key")          -> "some.key" must exist
 #   tr_plural("some.key"    -> "some.key.other" must exist
+#   NP_("some.key")         -> "some.key.other" must exist (a plural stored in a table)
 #
 # Keys built at runtime cannot be checked: store them in tables wrapped in N_().
 
@@ -31,11 +32,11 @@ set(missing_count 0)
 set(reference_count 0)
 foreach(source_file IN LISTS source_files)
     file(READ "${source_file}" content)
-    string(REGEX MATCHALL "[^A-Za-z0-9_](tr|tr_plural|N_)\\(\"[a-z0-9_.-]+\"" matches "${content}")
+    string(REGEX MATCHALL "[^A-Za-z0-9_](tr|tr_plural|N_|NP_)\\(\"[a-z0-9_.-]+\"" matches "${content}")
     foreach(match IN LISTS matches)
-        string(REGEX REPLACE "^.(tr|tr_plural|N_)\\(\"([a-z0-9_.-]+)\"$" "\\1" function "${match}")
-        string(REGEX REPLACE "^.(tr|tr_plural|N_)\\(\"([a-z0-9_.-]+)\"$" "\\2" key "${match}")
-        if(function STREQUAL "tr_plural")
+        string(REGEX REPLACE "^.(tr|tr_plural|N_|NP_)\\(\"([a-z0-9_.-]+)\"$" "\\1" function "${match}")
+        string(REGEX REPLACE "^.(tr|tr_plural|N_|NP_)\\(\"([a-z0-9_.-]+)\"$" "\\2" key "${match}")
+        if(function STREQUAL "tr_plural" OR function STREQUAL "NP_")
             set(key "${key}.other")
         endif()
         math(EXPR reference_count "${reference_count} + 1")

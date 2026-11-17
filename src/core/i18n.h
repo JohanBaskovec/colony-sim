@@ -27,6 +27,10 @@
  */
 #define N_(key) (key)
 
+/* N_() for the key of a plural stored in a table, later passed to tr_plural():
+ * the check verifies its ".other" form. */
+#define NP_(key) (key)
+
 /* Maximum key length in bytes, including the terminating NUL. */
 #define I18N_MAX_KEY_LENGTH 128
 

@@ -6,7 +6,9 @@
 #include "game/inspector.h"
 #include "game/items_panel.h"
 #include "game/layout.h"
+#include "game/log_window.h"
 #include "game/gather_zone_panel.h"
+#include "game/alerts_list.h"
 #include "game/bottom_bar.h"
 #include "game/build_menu.h"
 #include "game/colonist_bar.h"
@@ -1021,7 +1023,7 @@ static void help_window(App *app)
               app_key_name(APP_KEY_CANCEL));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"),
               app_key_name(APP_KEY_STOCKPILE), app_key_name(APP_KEY_BUILD),
-              app_key_name(APP_KEY_WORK));
+              app_key_name(APP_KEY_WORK), app_key_name(APP_KEY_LOG));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.copy"),
               app_key_name(APP_KEY_BUILD_LIKE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.rotate"), app_key_name(APP_KEY_ROTATE));
@@ -1046,6 +1048,7 @@ static void draw_window(App *app, AppWindow window)
     switch (window) {
     case APP_WINDOW_INSPECTOR: inspector_draw(app); break;
     case APP_WINDOW_WORK: work_panel_draw(app); break;
+    case APP_WINDOW_LOG: log_window_draw(app); break;
     case APP_WINDOW_HELP: help_window(app); break;
     case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
     case APP_WINDOW_ITEMS: items_panel_draw(app); break;
@@ -1074,6 +1077,9 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     }
     if (app->show_work_panel) {
         out[count++] = APP_WINDOW_WORK;
+    }
+    if (app->show_log) {
+        out[count++] = APP_WINDOW_LOG;
     }
     if (app->show_help) {
         out[count++] = APP_WINDOW_HELP;
@@ -1152,11 +1158,8 @@ static void draw_notices(App *app)
         if (notice == NULL) {
             continue;
         }
-        /* Not every notice is about a knowledge (a roof falling in). */
-        const KnowledgeDef *def = knowledge_def(notice->knowledge);
         char text[HUD_LINE_SIZE];
-        TR_FORMAT(text, sizeof(text), tr(notice_text_key((NoticeType)notice->type)),
-                  def != NULL ? tr(def->name_key) : "", notice->name);
+        log_notice_text(notice, text, sizeof(text));
         double left = APP_NOTICE_SECONDS - app->notices_age[i];
         float alpha = (float)SDL_clamp(left / NOTICE_FADE_SECONDS, 0.0, 1.0);
         int width, height;
@@ -1181,7 +1184,7 @@ static void draw_notices(App *app)
  * drawn last frame; the bottom of the screen when none is open. */
 static float left_windows_top(const App *app)
 {
-    AppWindow windows[3];
+    AppWindow windows[4];
     int count = 0;
     if (inspector_kind(app) != INSPECT_NONE) {
         windows[count++] = APP_WINDOW_INSPECTOR;
@@ -1191,6 +1194,9 @@ static float left_windows_top(const App *app)
     }
     if (app->show_work_panel) {
         windows[count++] = APP_WINDOW_WORK;
+    }
+    if (app->show_log) {
+        windows[count++] = APP_WINDOW_LOG;
     }
     float top = app->ui.screen_height;
     for (int i = 0; i < count; i++) {
@@ -1218,6 +1224,8 @@ void hud_draw(App *app)
     panel_size(app, &status, &width, &height);
     panel_draw_aligned(app, &status, status_right - width, status_bottom - height,
                        THEME_COLOR(app, THEME_HUD_PANEL), true);
+    /* Above it, the alerts. */
+    alerts_list_draw(app, status_right, status_bottom - height - app->ui.theme.gap);
 
     /* Top right: the debug readout (F3). */
     if (app->show_debug) {
@@ -1231,7 +1239,9 @@ void hud_draw(App *app)
     /* Bottom left: the tile inspector above the menus. */
     float menu_top = build_menu_top(app);
     float left_top = menu_top; /* Top of what the left side shows, under the resources. */
-    if (app->hover_valid && inspector_kind(app) == INSPECT_NONE) {
+    /* The main windows take the place of the readout. */
+    if (app->hover_valid && inspector_kind(app) == INSPECT_NONE && !app->show_work_panel &&
+        !app->show_log) {
         Panel tile = {0};
         build_tile_panel(app, &tile);
         panel_size(app, &tile, &width, &height);

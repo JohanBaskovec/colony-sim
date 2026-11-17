@@ -131,14 +131,15 @@ theme and migration plan); moods come after it.
 - [x] Bottom bar (Build, Work, Menu), three-level build menu (category column, icon row with shortcut letters, unavailable icons veiled) with its card (hovered icon or tool in use: name, cost, description, how to use it one line each, shortcut, why unavailable), game menu (resume, controls, language, quit; pauses the game; Escape opens it when nothing else is left to close); the debug readout (F3) moved top right
 - [x] Bottom right: temperature overlay and speed buttons (drawn icons, tooltips with shortcuts), vertical level slider (drag, +/−, "level/levels" counted from 1, a tick at the ground level); date, season, temperature and weather right aligned beside it, "Paused" there too
 - [x] Colonist bar (portrait, name, current action; click selects, Shift adds, double click centers the view; shrinks, dropping the action then the name, then wraps onto rows: 64 colonists fit)
-- [ ] Alerts column above the date (core module first)
+- [x] Alerts: a core module looking at the game afresh (critical food, water or rest, food for less than a day, colonists breaking down, without a bed), listed above the date with a tooltip and a click that jumps to the first colonist concerned
 - [x] Inspector box with tabs and action buttons for every selection: colonist (summary; Needs, Mood, Knowledge, Gear, Social), several colonists (their names), workstation (Bills, Fire), stockpile (Storage), gathering zone (Resources), tile; actions forbid/allow, build another, delete as icon buttons with tooltips; docked windows that scroll; the floating inspectors are gone
 - [x] Work grid as a main window; messages under the colonist bar; debug readout top right
 - [x] Resources list (top left): the stock by item category with totals, groups folded with a click, an icon per item, tooltips with where the items lie (stockpiles, workstations, haulers), their weight and the days of food; stops above the inspector, the work grid and the build menu (the lines left out are counted)
 - [ ] Colonist bar with many colonists at a large UI scale (64 at 150 % on 1280 × 720: eight rows reaching the date and leaving the work grid no room): let the entries shrink further, or show a row of initials beyond some rows
 - [x] Settings window from the game menu (instead of its Language button): interface size 75 to 200 % applied at once (the font opened again at its size, windows placed again), colorblind-friendly palette (blues for lit and checked, a blue to orange temperature view), language; saved in `settings.cfg` in the user's data folder (`core/settings`: a forgiving `key = value` text), the command line winning for the session
 - [ ] Colorblind palette, later: the work grid's priority shades and the map's markers (forbidden, zones) checked with a simulator once they settle
-- [ ] Alerts (core module), Log tab
+- [x] Colony log: a main window (Log button, J) with the last 200 notices and their dates
+- [ ] Alerts, later: idle colonists, and the alerts of future systems (enemies, fire, unmet orders); a colonist's own Log tab in the inspector
 
 ## M5: Vision and exploration
 

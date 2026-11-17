@@ -5,17 +5,19 @@
 
 #define TEXT_SIZE 256
 
-typedef enum BarButton { BAR_BUILD, BAR_WORK, BAR_MENU, BAR_BUTTON_COUNT } BarButton;
+typedef enum BarButton { BAR_BUILD, BAR_WORK, BAR_LOG, BAR_MENU, BAR_BUTTON_COUNT } BarButton;
 
 static const char *const LABEL_KEYS[BAR_BUTTON_COUNT] = {
     [BAR_BUILD] = N_("menu.build"),
     [BAR_WORK] = N_("menu.work"),
+    [BAR_LOG] = N_("menu.log"),
     [BAR_MENU] = N_("menu.game"),
 };
 
 static const char *const DESCRIPTION_KEYS[BAR_BUTTON_COUNT] = {
     [BAR_BUILD] = N_("menu.build.description"),
     [BAR_WORK] = N_("menu.work.description"),
+    [BAR_LOG] = N_("menu.log.description"),
     [BAR_MENU] = N_("menu.game.description"),
 };
 
@@ -23,6 +25,7 @@ static const char *const DESCRIPTION_KEYS[BAR_BUTTON_COUNT] = {
 static const SDL_Scancode KEYS[BAR_BUTTON_COUNT] = {
     [BAR_BUILD] = SDL_SCANCODE_UNKNOWN,
     [BAR_WORK] = APP_KEY_WORK,
+    [BAR_LOG] = APP_KEY_LOG,
     [BAR_MENU] = APP_KEY_BACK,
 };
 
@@ -31,9 +34,32 @@ static bool button_lit(const App *app, BarButton button)
     switch (button) {
     case BAR_BUILD: return app->build_menu_open;
     case BAR_WORK: return app->show_work_panel;
+    case BAR_LOG: return app->show_log;
     case BAR_MENU: return app->show_game_menu;
     default: return false;
     }
+}
+
+/* Opens a main window (or closes it): one at a time, and not with the build menu. */
+static void toggle_main_window(App *app, bool *window)
+{
+    bool open = !*window;
+    app->show_work_panel = false;
+    app->show_log = false;
+    *window = open;
+    if (open) {
+        app->build_menu_open = false;
+    }
+}
+
+void bottom_bar_press_work(App *app)
+{
+    toggle_main_window(app, &app->show_work_panel);
+}
+
+void bottom_bar_press_log(App *app)
+{
+    toggle_main_window(app, &app->show_log);
 }
 
 static void press(App *app, BarButton button)
@@ -43,14 +69,11 @@ static void press(App *app, BarButton button)
         app->build_menu_open = !app->build_menu_open;
         if (app->build_menu_open) {
             app->show_work_panel = false;
+            app->show_log = false;
         }
         break;
-    case BAR_WORK:
-        app->show_work_panel = !app->show_work_panel;
-        if (app->show_work_panel) {
-            app->build_menu_open = false;
-        }
-        break;
+    case BAR_WORK: bottom_bar_press_work(app); break;
+    case BAR_LOG: bottom_bar_press_log(app); break;
     case BAR_MENU: app->show_game_menu = !app->show_game_menu; break;
     default: break;
     }

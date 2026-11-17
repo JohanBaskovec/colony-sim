@@ -46,7 +46,7 @@ or button; `docs/ARCHITECTURE.md` describes how the code is organized.
 | | Inspector: summary      | [action buttons]        Temperature  |     |
 | |                         |                         Date, hour   v     |
 | +-------------------------+                   [overlays] [speeds] 4/9  |
-| Build  | Work  | (Schedule) | (Assign) | ...                     | Menu  |
+| Build  | Work  | (Schedule) | (Assign) | ... | Log               | Menu  |
 +--------------------------------------------------------------------------+
 ```
 
@@ -54,7 +54,9 @@ or button; `docs/ARCHITECTURE.md` describes how the code is organized.
 
 - A full-width bar along the bottom edge. Text buttons of the same width,
   left aligned: **Build** (`menu.build`), **Work** (`menu.work`), and later
-  Schedule, Assign, Animals, Wildlife, Research, in that order.
+  Schedule, Assign, Animals, Wildlife, Research, in that order, then
+  **Log** (`menu.log`, key J) last: with the others missing it sits right
+  after Work for now.
 - **Menu** at the right end: opens the game menu (same as Escape with nothing
   else to close).
 - A button stays lit while its menu or window is open; its tooltip gives its
@@ -128,10 +130,21 @@ From the bottom up, above the bottom bar:
 
 ### Alerts (right side)
 
-A column of short lines above the date, each with a tooltip explaining it
-and a click that jumps to the cause (a colonist, a place). They come from a
-core module (testable): idle colonists, no food, a starving or exhausted
-colonist, no bed... Until it exists the column stays empty.
+A column of short lines right aligned above the date, the most pressing at
+the bottom (`game/alerts_list.h`). Each line is a "!" mark and a sentence with
+the number of colonists concerned ("2 colonists starving"); a tooltip
+explains it, and a click selects the first colonist concerned and centers the
+view on it. They come from a core module (`core/alert.h`, tested) that looks
+at the game afresh each frame, so a line goes away by itself when its cause
+does:
+
+- colonists whose food, water or rest need is critical (starving, thirsty,
+  exhausted);
+- the colony's food lasting less than a day;
+- colonists breaking down (mood);
+- colonists without a bed (sleeping on the ground).
+
+Later: idle colonists, enemies, a fire, no workstation for an order...
 
 ### Resources (top left)
 
@@ -153,8 +166,14 @@ corner left of the colonist bar (`ScreenLayout.corner_width`):
 
 Notices from the game (a knowledge discovered, a roof fallen in, a settler
 breaking down) appear centered below the colonist bar, each in a box of its
-own, newest at the bottom, for 15 seconds, fading out over the last 2. They
-will be kept in the colony log (Log tab, step 10).
+own, newest at the bottom, for 15 seconds, fading out over the last 2.
+
+### Colony log
+
+A main window docked at the bottom left like the work grid (the Log button,
+or J): the last 200 notices, the newest first, each with its date above it.
+One line says so when there is nothing to report yet. A colonist's own log
+(what they did, said, suffered) will be a tab of their inspector, later.
 
 ### Game menu
 
@@ -206,7 +225,7 @@ Each step keeps the game playable and is checked on screen (Xvfb).
 3. [x] Bottom bar (Build, Work, Menu) and the three-level build menu with its card;
        game menu (controls help, language, quit)
 4. [x] Bottom right: speeds, temperature overlay, level slider; date, season,
-       temperature and weather; empty alerts column
+       temperature and weather
 5. [x] Colonist bar
 6. [x] Inspector box with empty tabs, then its content: colonist (summary, Needs, Mood,
        Skills, Gear, Social), workstation, stockpile, gathering zone, tile;
@@ -215,4 +234,4 @@ Each step keeps the game playable and is checked on screen (Xvfb).
        top right already)
 8. [x] Resources list (top left)
 9. [x] Settings: UI scale (font included), colors, language, remembered between sessions
-10. [ ] Alerts (core module), Log tab
+10. [x] Alerts (core module, column above the date), colony log (main window)

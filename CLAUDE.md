@@ -22,7 +22,8 @@ current milestone.
   - New key → add it to `assets/lang/en.lang` **and** every other language file
     (French included: translate it properly, with French typography: a
     non-breaking space U+00A0 before `:` and `%`, and as thousands separator).
-  - Keys stored in static tables must be wrapped in `N_("...")`.
+  - Keys stored in static tables must be wrapped in `N_("...")` (`NP_("...")` for
+    the base of a plural passed to `tr_plural()`).
   - Use positional placeholders `{0}`, `{1}`: never build sentences by
     concatenating fragments (word order differs between languages).
   - Numbers shown to the player use `tr_integer()` / `tr_decimal()`.

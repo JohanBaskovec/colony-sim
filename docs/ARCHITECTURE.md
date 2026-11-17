@@ -62,7 +62,8 @@ simulation:
 | `work`       | Work types (mining, fire, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning (rates, caps, fading), quality and condition of what a worker produces |
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
-| `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), kept in a ring |
+| `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
+| `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level |
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
@@ -99,7 +100,9 @@ simulation:
 | `layout`       | Zones of the screen (bottom bar, what lies above it, the free top corners), from the screen size and the theme |
 | `ui`           | Immediate-mode widgets (panel, window, button, check box, slider, dropdown, tooltip with wrapped lines) and click capture |
 | `ui_layout`    | Rows of a window laid out twice: measured, then drawn (window sized to its content) |
-| `bottom_bar`   | Full-width bar along the bottom: Build, Work, Menu                      |
+| `bottom_bar`   | Full-width bar along the bottom: Build, Work, Log, Menu                 |
+| `alerts_list`  | The alerts column above the date: a line per alert, tooltip, click jumps to the first colonist |
+| `log_window`   | The colony log: the notices kept, newest first with their dates, a docked main window |
 | `build_menu`   | Build menu: category column, icon row, card of the hovered icon or the tool in use |
 | `resources_list` | Top left: the stock by item category (`Game.stock`), groups folded with a click, tooltips with where the items lie and the days of food |
 | `colonist_bar` | Top center: portrait, name and current action per colonist; click selects, double click centers the view |
@@ -545,7 +548,11 @@ tooltip); it raises `knowledge_peak`.
   (nobody at 50) or forgotten (nobody at 1). The count made by `game_init()`
   raises none. Notices are not part of the simulation state (`game_hash()`);
   the frontend shows the new ones below the colonist bar, centered, each in
-  a box of its own, for 15 seconds (fading out over the last 2).
+  a box of its own, for 15 seconds (fading out over the last 2). The colony log
+  window lists all those the ring still holds. *Alerts* (`core/alert.h`) are the
+  other way to tell the player: not events but states (a settler about to
+  starve), found again from the game each time, so they need no storage and
+  vanish with their cause.
 
 Food items have a
 `nutrition` per unit; a hungry colonist first looks for food lying on the
@@ -1639,7 +1646,8 @@ actions through the inspector's functions; Escape closes the open tab
 first, then the selection. Selecting something on the map closes the build
 menu and the work grid, which hide the inspector while they are open.
 
-The work grid, a main window opened from the bottom bar, is docked the same
+The work grid and the colony log, main windows opened from the bottom bar
+(one at a time, never with the build menu), are docked the same
 way at the bottom left corner, above the bottom bar; its hint and legends
 wrap to the width of the grid rather than widening it.
 

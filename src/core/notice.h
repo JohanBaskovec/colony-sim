@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define NOTICE_MAX 32
+#define NOTICE_MAX 200 /* The colony log keeps this many. */
 #define NOTICE_NAME_SIZE 32
 
 typedef enum NoticeType {

@@ -2,6 +2,7 @@
 # They link only colony_core, so they run headless (no SDL, no display).
 
 set(COLONY_UNIT_TESTS
+    test_alert
     test_appearance
     test_bed
     test_camera

@@ -5,6 +5,7 @@
 #include "core/scenario.h"
 #include "core/tree.h"
 #include "core/util.h"
+#include "game/bottom_bar.h"
 #include "game/hud.h"
 #include "game/render.h"
 #include "game/stockpile_panel.h"
@@ -621,6 +622,7 @@ static void close_window(App *app, AppWindow window)
         break;
     case APP_WINDOW_INSPECTOR_TAB: app->inspector_tab = -1; break;
     case APP_WINDOW_WORK: app->show_work_panel = false; break;
+    case APP_WINDOW_LOG: app->show_log = false; break;
     case APP_WINDOW_HELP: app->show_help = false; break;
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
     case APP_WINDOW_ITEMS: app->show_items_menu = false; break;
@@ -752,7 +754,8 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_GATHER: app_toggle_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD); return;
     case APP_KEY_CANCEL: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); return;
     case APP_KEY_STOCKPILE: app_toggle_tool(app, APP_TOOL_STOCKPILE, APP_ZONE_ADD); return;
-    case APP_KEY_WORK: app->show_work_panel = !app->show_work_panel; return;
+    case APP_KEY_WORK: bottom_bar_press_work(app); return;
+    case APP_KEY_LOG: bottom_bar_press_log(app); return;
     case APP_KEY_BUILD: cycle_build_tool(app); return;
     case APP_KEY_ROTATE:
         app->structure_direction = direction_turn(app->structure_direction);
@@ -1073,6 +1076,7 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
             /* The inspector takes the place of the main menus and windows. */
             app->build_menu_open = false;
             app->show_work_panel = false;
+            app->show_log = false;
         }
     }
     app->left_button_down = false;
