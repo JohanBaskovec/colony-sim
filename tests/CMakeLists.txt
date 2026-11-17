@@ -34,6 +34,7 @@ set(COLONY_UNIT_TESTS
     test_recipe
     test_region
     test_roof
+    test_vision
     test_scenario
     test_settings
     test_reservation

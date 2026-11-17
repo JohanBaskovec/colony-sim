@@ -2111,6 +2111,30 @@ void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *
     batch_flush(renderer);
 }
 
+void render_vision(SDL_Renderer *renderer, const Game *game, const Camera *camera, int slot)
+{
+    const Map *map = &game->map;
+    const Vision *vision = &game->vision;
+    const int z = camera->level; /* The level shown. */
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    SDL_Color veil = {8, 8, 20, 150};
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            int level = map_view_level(map, x, y, z); /* What is drawn there. */
+            if (level < 0) {
+                continue;
+            }
+            bool seen = slot >= 0 ? vision_viewer_sees(vision, slot, x, y, level)
+                                  : vision_seen(vision, x, y, level);
+            if (!seen) {
+                SDL_FRect tile = tile_rect(camera, x, y);
+                batch_quad(renderer, veil, &tile);
+            }
+        }
+    }
+    batch_flush(renderer);
+}
+
 void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     /* Clouds and rain dim the day (and the night a little more). */

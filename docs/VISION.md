@@ -5,8 +5,9 @@ the colony only knows what its settlers see or have seen. This document is
 the design of milestone M5's first part (field of view and fog of war);
 wildlife and hunting come after it.
 
-Status: design, nothing implemented. Values marked *(tuning)* are first
-guesses.
+Status: step 1 (sight) is implemented (`core/vision.h`, shown by a debug
+overlay), nothing is hidden yet; the rest is design. Values marked *(tuning)*
+are first guesses.
 
 ## 1. Principles
 
@@ -46,42 +47,56 @@ guesses.
 
 ### 2.2 Eyes and peeking
 
-- The eyes are 1.6 m above the floor of the settler's tile *(tuning)*.
-- A settler standing next to a wall corner can look round it: sight starts
-  from the middle of its tile and from four points near the middle of its
-  edges (it leans), and what any of the five sees is seen. Without that, a
-  settler in a doorway would only see a narrow wedge of the room.
+- The eyes are 1.6 m above the floor of the settler's tile, in the middle of
+  it. The settler's own tile never blocks its sight (a settler in a doorway
+  sees both ways).
+- With a wall in one of the eight tiles around (rock, a wall or a door),
+  the settler also leans: from points 0.4 tile from the middle towards each
+  open side. What any of the eyes sees is seen. Leaning moves along a wall
+  face, which is what shows what lies past a corner. The leaning eyes only look
+  as far as 8 tiles *(tuning)*: what a lean shows is mostly what is near the
+  corner, and each eye costs a cast.
 
 ### 2.3 What blocks sight
 
 | Thing | Sight |
 |-------|-------|
 | Rock, earth, the trunk of a tree, walls | Blocked. The face of the wall is seen (the tile is known), not what lies behind |
-| A floor (ground, a built floor, a roof, dense foliage, deep or shallow water) | Blocks sight between its level and the one below: one sees it from above and from below, not through it |
+| Doors (a screen of branches) | Blocked, like a wall |
+| A floor (ground, a built floor, a roof, dense foliage, deep or shallow water) | A plane at the bottom of its tile: blocks sight between its level and the one below, from above and from below |
 | Open space | Seen through |
 | Thin and sparse foliage | Seen through (as drawn: `map_sees_through_at()`) |
-| Plants on the ground, items, settlers, ladders, props, workstations | Seen through |
+| Plants on the ground, items, settlers, ladders, props, workstations, beds | Seen through |
 | A slope | Its tile has a floor, so it blocks like one |
-| Doors (later) | Blocked when closed |
 
+- **What "seen" means.** A tile with rock or a wall is seen when sight
+  reaches its box. Any other tile is seen when sight reaches its floor, from
+  above or from below (a ceiling): a tile over the edge of a cliff is not seen
+  from the foot of the cliff, whose eyes are below the edge, though the ray
+  that would pass over the edge flies over it. Whatever lies on a floor (a
+  plant, items, a bed) is known when the floor is seen.
+- Open space is not looked at: only tiles with something in them (rock, a
+  floor, a structure) are made of, so the field of view of a settler on open
+  plains is its ground, not the thin air over it.
 - Foliage does not block sight sideways for now (a settler in a tree sees
   between the branches) *(tuning)*.
-- A tile is **seen** when sight reaches it. Sight reaching a wall stops in
-  it: the wall is seen. A floor seen from below counts as seeing its tile
-  (rare: roofs, the foliage over one's head).
+- A sleeping settler sees its own tile, the eight around it and the ones over
+  and under it. A settler knocked out (with health) will see nothing.
 
 ### 2.4 Refreshing
 
-- Close to the settler (within 16 m *(tuning)*) its field of view is worked
-  out again when it enters a new tile, when it falls asleep or wakes up, and
-  when something that blocks sight changes there (a wall built, a tree
-  fallen, a tile dug: the map's change log).
-- Further away, one step changes little: the whole field of view is worked
-  out again after a few tiles walked or a few seconds of game time, and after
-  a change that blocks sight in view *(tuning)*. These refreshes are spread
-  over the ticks, so that no tick does them all.
-- Between two refreshes nothing new is seen, but what is seen stays seen:
-  a bush eaten in view of a settler standing still is seen eaten.
+- A viewer's **near field** (the square of 16 tiles around it, on every level)
+  is cast again whenever the settler changes tile, goes to sleep or wakes up,
+  and when the map changes there (a wall built, a tree fallen, a tile dug:
+  the map's change logs).
+- Its **whole field** is cast again every 300 ticks (5 s at ×1, staggered
+  from one settler to the next so that they do not all cast at once), and
+  when the settler has walked 16 tiles or 3 levels from where it was last
+  cast. A change far away is seen at the next whole cast. Between two
+  casts what is far away is as it was, which is the point of a far view that
+  changes slowly.
+- Fields are kept as one bit per tile and per viewer; a count per tile
+  (`Vision.seen`) says how many viewers see it now.
 
 ## 3. The colony's picture
 
@@ -175,15 +190,8 @@ going to the edge of what it knows:
 
 ## 6. In the code
 
-The details go to `docs/ARCHITECTURE.md` as they land; the plan:
+`core/vision.h` (step 1, see `docs/ARCHITECTURE.md`), then:
 
-- **`core/vision.h`**: who sees what. Sight blockers per tile, fields of
-  view, a count per tile of the settlers that see it now. With no range
-  limit, the cost of a field of view must grow with what is seen, not with
-  the map: shadow casting in 3D outward from the eye (a cell behind a blocker
-  is never looked at), with whole columns of open air above the ground
-  crossed at once. Step 1 starts with a prototype and its benchmark before
-  settling the method.
 - **The known world**: a second copy of the map's layers and of the
   layers of items, structures and sites, of the same types (`Map`, `Items`...),
   where unexplored tiles have an unknown terrain (impassable, not buildable).
@@ -193,20 +201,22 @@ The details go to `docs/ARCHITECTURE.md` as they land; the plan:
 - **See everything** (the debug cheat, and the default of tests and
   benchmarks that are not about vision): the known world is the real map,
   nothing is copied, behavior and state hashes are those of today.
-- **Cost**: the benchmark (`bench_simulation`, 64 settlers) measures vision
-  on and off. Target: about half a millisecond per tick on average and no
-  tick above 2 ms because of vision *(tuning)*: at ×3 (180 ticks a second)
-  that is under a tenth of the processor.
-  Saving the picture comes with saves (M7).
+- **Cost**: measured by `bench_vision` (a cast) and `bench_simulation` (the
+  whole game, 64 settlers). Target: about half a millisecond per tick on
+  average and no tick above 2 ms because of vision *(tuning)*: at ×3 (180
+  ticks a second) that is under a tenth of the processor. Saving the picture
+  comes with saves (M7).
 
 ## 7. Steps
 
-1. **Sight** (`core/vision.h`): blockers, eye points, fields of view in 3D
-   across the whole map (prototype and benchmark first), near and far
-   refreshes, seen counts; a debug overlay of what the selected settler
-   sees. Tested: walls and floors block, peeking round a corner, a tower sees
-   further than the ground, thin foliage seen through, the far side of open
-   plains seen, a forest hiding what is behind it. Nothing hidden yet.
+1. [x] **Sight** (`core/vision.h`): blockers, eye points, fields of view in 3D
+   across the whole map, near and whole refreshes, seen counts; a debug
+   overlay of what the selected settler sees (F4: "Show what the selected
+   settler sees", or `--debug vision`). Tested: walls and floors block,
+   peeking round a corner, a tower sees further than the ground, thin foliage
+   seen through, the far side of open plains seen, counts equal to the
+   fields' sums, and an agreement with a brute-force line of sight on
+   generated worlds. Nothing hidden yet.
 2. **Picture and fog**: the known world, the start (view from the arrival
    point and the path from an edge), drawing (black, veil, seen), the tile
    readout, tools refusing unexplored tiles, the Reveal map and See

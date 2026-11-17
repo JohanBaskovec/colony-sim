@@ -477,6 +477,7 @@ static void apply_test_options(Game *game, const CliOptions *options)
     game_set_no_tools(game, (options->debug & CLI_DEBUG_NO_TOOLS) != 0);
     game_set_instant_deconstruct(game, (options->debug & CLI_DEBUG_INSTANT_DECONSTRUCT) != 0);
     game_set_instant_fell_and_mine(game, (options->debug & CLI_DEBUG_INSTANT_FELL_AND_MINE) != 0);
+    game_set_vision(game, (options->debug & CLI_DEBUG_VISION) != 0);
     if (options->debug & CLI_DEBUG_LEARN_ALL) {
         game_debug_learn_all(game);
     }
@@ -1229,6 +1230,10 @@ static void render_frame(App *app)
     render_weather(app->renderer, &app->game, &app->camera, SDL_GetTicks());
     if (app->show_temperature) {
         render_temperature(app->renderer, &app->game, &app->camera, &app->ui.theme);
+    }
+    if (app->game.vision_on) {
+        render_vision(app->renderer, &app->game, &app->camera,
+                      app->selected_count > 0 ? (int)app->selected[0].index : -1);
     }
     if (app->hover_valid) {
         render_tile_outline(app->renderer, &app->camera, app->hover_x, app->hover_y, HOVER_COLOR);

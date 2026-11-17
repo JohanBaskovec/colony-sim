@@ -72,6 +72,7 @@ simulation:
 | `tree`       | Trees in the volume: a trunk of solid wood and floors of foliage built into the map as the tree grows, finding the tree of a tile, where a felled tree falls (aimed away from structures) and what it leaves along its length |
 | `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
+| `vision`     | Who sees what: sight in 3D through the map's volume (rock, walls and floors block it, no range limit), fields of view per settler, how many see each tile (see *Vision*) |
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
@@ -1375,18 +1376,61 @@ them (`bench_simulation` hashes are unchanged).
   the number of settlers: a visual check starts where it needs to, without
   clicking its way there.
 
-### Vision (planned)
+### Vision
 
-Designed in `docs/VISION.md`, not implemented yet. The decision that shapes
-the code: settlers' choices (paths, regions, every search) will read a
-**known world**, a second copy of the map's layers and of those of items,
-structures and sites, of the same types, where unexplored tiles have an
+Designed in `docs/VISION.md`; `core/vision.h` is step 1 (sight). The decision
+that shapes the rest: settlers' choices (paths, regions, every search) will
+read a **known world**, a second copy of the map's layers and of those of
+items, structures and sites, of the same types, where unexplored tiles have an
 unknown terrain; the simulation keeps writing the real map, and changes to
 tiles someone sees are copied over. With the See everything cheat (the
 default of tests and benchmarks not about vision) the known world is the real
-map, so behavior and state hashes stay those of today. Who sees what goes in
-`core/vision.h` (fields of view in 3D across the whole map, at a cost that grows
-with what is seen, a count per tile of the settlers who see it).
+map, so behavior and state hashes stay those of today.
+
+`Vision` (owned by `Game`, built by `game_set_vision()`, which nothing but
+the debug menu and `--debug vision` calls yet, and updated at the end of each
+tick while `Game.vision_on`) is derived from the map and the settlers'
+positions, so it is not part of `game_hash()`:
+
+- **A field** is a bit per tile (`map_index()` order) over the tiles with
+  something in them ("tracked": rock, a floor or a structure; open space is
+  left out), so that a field of plains is its ground and not the air over it.
+  `vision_cast()` makes one for a tile (with the eyes leaning when a wall is
+  next to it, a sleeper's being the nine tiles around it), `vision_cast_eye()`
+  for a single eye.
+- **A cast** shoots one ray per tile of the border of the region looked at (the
+  whole map, or a square of `radius` tiles), two per tile near the eye
+  (`RAYS_PER_TILE_NEAR`) and one over the map. A ray goes column by column
+  along the grid (an Amanatides and Woo walk) and is a problem in its own
+  vertical plane: it keeps the intervals of slopes (height over distance)
+  still open, and each column looks at the levels the open slopes can reach
+  there, going up through the levels for the slopes above 0 and down for those
+  below. A solid tile (rock, a wall, a door) is seen when an open slope
+  reaches its box and takes those slopes off the set; any other tile is seen
+  when one reaches its floor, a plane at the bottom of the tile that stops the
+  ray too, unless it is thin foliage. `Vision.column_top` (1 + the highest
+  tracked level of each column, kept right from the map's change logs and a
+  slow sweep for what they miss) keeps columns from looking at the air above
+  them; the ray also ends when its set is empty or beyond what is left to see.
+  A set that would split in more than `OPEN_MAX` pieces is left open
+  (permissive, not wrong). Nothing calls a math function but `sqrtf()`, which
+  is exact.
+- **Viewers** (`vision_viewer_set()`, one per settler slot) own a field. Their
+  near square is cast again on every step, posture change or nearby map change
+  and replaces what the field held there (`replace_bits()` updates
+  `Vision.seen`, the number of viewers seeing each tile, from the difference);
+  the whole field every `VISION_FAR_INTERVAL` ticks or after
+  `VISION_FAR_MOVE` tiles of walking.
+- **Cost** (`bench/bench_vision`, release, 200 × 200 × 18 world): about 2 ms
+  for a whole cast (3.8 ms the slowest of 100), 0.3 ms for a near cast. Most of
+  a whole cast is rays crossing open ground to the edge of the map (a tile a
+  step, about 30 ns); the leaning eyes' short range halves it. Both are
+  tuned in step 5, with `bench_simulation` measuring the game.
+- **Tested** (`tests/test_vision.c`): hand-built scenes, the counts against
+  the fields, and generated worlds against a brute-force line of sight (27
+  sample points per tile and a 3D grid walk): the rays miss about 2 % of
+  what the brute force sees near the eye and 6 % over the map, and add 4 %
+  and 6 % at the edges of shadows.
 
 ## Pathfinding
 

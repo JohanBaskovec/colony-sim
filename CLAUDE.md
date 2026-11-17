@@ -45,6 +45,7 @@ ctest --preset debug -R i18n          # only one test (regex on the test name)
 ctest --preset debug -L i18n          # translation checks only (label)
 ./build/headless/bench/bench_pathfinding 200 2000   # benchmark (use an optimized build for real numbers)
 ./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times (processor time: steady on a busy machine), percentiles, slowest ticks, state hash (3: construction)
+./build/release/bench/bench_vision 200 100 1      # field of view: cost of a whole cast and of a near cast, tiles seen, ray steps
 ./build/release/bin/colony_sim --seed 42 --bench-render 300  # render benchmark: frame and drawing times of fixed views, no vsync, then quits
 ./build/release/bin/colony_sim --no-vsync           # uncapped frame rate; F3 also shows the drawing time per frame
 cmake --preset profile && cmake --build --preset profile  # optimized + debug symbols + frame pointers, for perf

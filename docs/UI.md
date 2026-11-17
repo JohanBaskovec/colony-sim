@@ -243,8 +243,9 @@ folder: `~/.local/share/colony-sim/` on Linux). The command line
 
 The debug windows (F4 cheats, F5 items) and the debug readout (F3) have no
 buttons: keyboard only. The readout goes to the top right corner. With
-vision, F4 gets Reveal map and See everything, and an overlay of what the
-selected settler sees.
+vision, F4 gets Reveal map and See everything. Already there: an option
+that veils what the selected settler does not see (what no settler sees when
+nobody is selected), on the level shown.
 
 ## Theme, scale and accessibility
 

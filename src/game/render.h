@@ -71,6 +71,11 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
 void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                         const Theme *theme);
 
+/* Debug: veils the tiles of the level shown that the settler in `slot` does
+ * not see (slot -1: that nobody sees), as the vision tracks them
+ * (core/vision.h). */
+void render_vision(SDL_Renderer *renderer, const Game *game, const Camera *camera, int slot);
+
 /* Items lying on the ground (placeholder shapes per item type). */
 void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 

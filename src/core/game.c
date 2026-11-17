@@ -554,6 +554,8 @@ void game_shutdown(Game *game)
     pool_free(&game->colonist_pool);
     pathfinder_free(&game->pathfinder);
     regions_free(&game->regions);
+    vision_free(&game->vision);
+    game->vision_on = false;
     temperatures_free(&game->temperatures);
     designations_free(&game->designations);
     dirt_free(&game->dirt);
@@ -897,6 +899,41 @@ static void finish_constructions_now(Game *game)
     }
 }
 
+bool game_set_vision(Game *game, bool on)
+{
+    if (on == game->vision_on) {
+        return true;
+    }
+    if (!on) {
+        vision_free(&game->vision);
+        game->vision_on = false;
+        return true;
+    }
+    if (!vision_init(&game->vision, &game->map)) {
+        return false;
+    }
+    game->vision_on = true;
+    return true;
+}
+
+/* Puts every settler where it stands in the vision (fields are recast when it
+ * moved or fell asleep), and takes away those who are gone. */
+static void update_vision(Game *game)
+{
+    vision_update_map(&game->vision, &game->map);
+    _Static_assert(COLONIST_MAX <= VISION_MAX_VIEWERS, "a viewer for each settler");
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = &game->colonists[slot];
+        if (entity_id_is_none(game_colonist_id_at(game, slot)) ||
+            !pool_is_alive(&game->colonist_pool, game_colonist_id_at(game, slot))) {
+            vision_viewer_remove(&game->vision, (int)slot);
+            continue;
+        }
+        vision_viewer_set(&game->vision, &game->map, (int)slot, colonist->x, colonist->y,
+                          colonist->z, colonist->task == TASK_SLEEP, game->clock.tick);
+    }
+}
+
 void game_set_instant_build(Game *game, bool on)
 {
     game->debug.instant_build = on;
@@ -1223,6 +1260,9 @@ void game_tick(Game *game)
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game->items.totals, game_daily_food(game));
     update_colonists(game);
+    if (game->vision_on) {
+        update_vision(game);
+    }
     if (game->gather_zones.harmful_tree_falls + game->designations.harmful_tree_falls !=
         harmful_falls) {
         notices_push(&game->notices, NOTICE_TREE_FELL_ON_BUILDING, KNOWLEDGE_NONE, NULL,

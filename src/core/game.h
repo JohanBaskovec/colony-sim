@@ -24,6 +24,7 @@
 #include "core/roof.h"
 #include "core/stockpile.h"
 #include "core/temperature.h"
+#include "core/vision.h"
 #include "core/weather.h"
 #include "core/workstation.h"
 #include "core/worldgen.h"
@@ -113,7 +114,12 @@ typedef struct Game {
      * each tick, not part of game_hash(). */
     Regions regions;
     Temperatures temperatures; /* Per tile, warmed by burning hearths. */
-    Weather weather;           /* The sky, warm and cold spells, snow on the ground. */
+    /* Who sees what (core/vision.h): derived from the map and where the
+     * settlers stand, not part of game_hash(). Only kept up to date while
+     * `vision_on` (see game_set_vision()). */
+    Vision vision;
+    bool vision_on;
+    Weather weather; /* The sky, warm and cold spells, snow on the ground. */
     /* Where roofs were last checked for support (core/roof.h): derived from
      * the map, not part of game_hash(). */
     RoofWatch roof_watch;
@@ -161,6 +167,11 @@ void game_tick(Game *game);
 
 /* Content hash of the whole simulation state (determinism checks). */
 uint64_t game_hash(const Game *game);
+
+/* Turns the tracking of what the settlers see on or off (it costs time, and
+ * nothing depends on it yet: for the debug overlay). Off frees it. Returns
+ * false when it cannot be allocated. */
+bool game_set_vision(Game *game, bool on);
 
 /* Turns a cheat of GameDebug on or off. */
 void game_set_instant_build(Game *game, bool on);
