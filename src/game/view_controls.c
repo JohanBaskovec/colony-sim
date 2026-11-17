@@ -12,6 +12,7 @@ typedef struct CornerLayout {
     SDL_FRect row;    /* Overlay toggles and speed buttons. */
     SDL_FRect column; /* Level slider, its buttons and its number. */
     float button;     /* Side of the square buttons. */
+    float small;      /* Side of the level buttons (half of the others). */
 } CornerLayout;
 
 static float level_label_width(const Ui *ui)
@@ -20,7 +21,7 @@ static float level_label_width(const Ui *ui)
     TR_FORMAT(widest, sizeof(widest), tr("controls.level_count"), "00", "00");
     int width = 0, height = 0;
     text_measure(ui->text, widest, &width, &height);
-    return (float)width + 2.0f * ui->theme.button_padding;
+    return (float)width;
 }
 
 static void corner_layout(const App *app, CornerLayout *out)
@@ -38,8 +39,10 @@ static void corner_layout(const App *app, CornerLayout *out)
                            button + 2.0f * gap};
     float line = (float)text_line_height(ui->text);
     float slider = SDL_roundf(SLIDER_HEIGHT * theme->scale);
-    float width = SDL_max(button, level_label_width(ui)) + 2.0f * gap;
-    float height = 2.0f * button + slider + line + 5.0f * gap;
+    float small = SDL_roundf(button * 0.5f);
+    out->small = small;
+    float width = SDL_max(small, level_label_width(ui)) + gap;
+    float height = 2.0f * small + slider + line + 5.0f * gap;
     out->column = (SDL_FRect){layout.width - theme->margin - width,
                               out->row.y - theme->margin - height, width, height};
 }
@@ -176,7 +179,7 @@ static void level_tooltip(App *app)
 static void draw_level_column(App *app, const CornerLayout *layout)
 {
     Ui *ui = &app->ui;
-    float gap = ui->theme.gap, button = layout->button;
+    float gap = ui->theme.gap, button = layout->small;
     const SDL_FRect column = layout->column;
     int depth = app->game.map.depth;
     ui_panel(ui, column);

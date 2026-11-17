@@ -159,9 +159,11 @@ using it, disliking it bad ones.
 
 - Attributes are known from the start: the inspector shows them as soon as
   the settler arrives, nothing is found out over time.
-- The inspector shows the notable attributes of a settler (from "a little")
-  as words, grouped by body, mind and social; the
-  ordinary ones are not listed. A tooltip tells what each one does, in words.
+- The Character tab of the inspector is a table of every attribute, grouped
+  by body, mind and social: the name on the left, the word for its position
+  on the right ("very slow", "ordinary"), then the exact position in percent
+  in a third column (−100 % to +100 %); the row is colored by that position,
+  red at the lowest, white at the ordinary, green at the highest. A tooltip tells what each one does, in words.
 - Sexuality is shown in words too ("mostly attracted to men", "asexual").
 
 ## 8. Open questions

@@ -626,7 +626,7 @@ void gather_zone_panel_draw(App *app)
     bool open = inspector_box(app, INSPECT_GATHER_ZONE, title, summary_rows, &rows);
     const char *tabs[1] = {tr("inspector.tab.resources")};
     if (inspector_tabs(app, tabs, 1) == 0) {
-        inspector_tab_panel(app, tabs[0], resources_rows, &rows);
+        inspector_tab_panel(app, resources_rows, &rows);
     }
     if (inspector_delete_action(app, 1, tr("gather_zone.delete.description"))) {
         rows.action = (Action){ACTION_DELETE, WHOLE_ZONE, 0};

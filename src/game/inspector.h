@@ -38,8 +38,9 @@ bool inspector_box(App *app, InspectorKind kind, const char *title, UiRowsFn row
 /* Tab buttons above the box; returns the open tab (-1: none). */
 int inspector_tabs(App *app, const char *const *labels, int count);
 
-/* The open tab's panel, above the tabs. */
-void inspector_tab_panel(App *app, const char *title, UiRowsFn rows, void *userdata);
+/* The open tab's panel, above the tabs: no title (the tab's button says it),
+ * only a × to close it. */
+void inspector_tab_panel(App *app, UiRowsFn rows, void *userdata);
 
 /* Action button `slot` (0, 1...) right of the box, lit while `lit`: true
  * when it was clicked. *icon is where to draw its icon; the tooltip shows

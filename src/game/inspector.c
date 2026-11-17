@@ -10,7 +10,7 @@
 #include "game/tile_panel.h"
 #include "game/hud.h"
 
-#define BOX_MIN_ROWS 5
+#define BOX_MIN_ROWS 6
 
 InspectorKind inspector_kind(const App *app)
 {
@@ -69,10 +69,13 @@ bool inspector_box(App *app, InspectorKind kind, const char *title, UiRowsFn row
         app->inspector_tab = -1;
     }
     app->inspector_tab_count = 0;
+    /* The box is as wide as its row of tabs (drawn last frame). */
+    float tabs_width = app->inspector_tabs_width;
+    app->inspector_tabs_width = 0.0f;
     ScreenLayout layout;
     layout_screen(&app->ui, &layout);
     UiDock dock = {0.0f, layout.bar_top, dock_top(app) + tab_row_height(app),
-                   app->ui.theme.inspector_width};
+                   SDL_max(app->ui.theme.inspector_width, tabs_width)};
     BoxRows box = {rows, userdata};
     bool open = true;
     ui_layout_docked(&app->ui, APP_WINDOW_INSPECTOR, title, &dock, box_rows, &box, &open);
@@ -95,6 +98,7 @@ int inspector_tabs(App *app, const char *const *labels, int count)
     for (int i = 0; i < count; i++) {
         width += SDL_ceilf(ui_button_width(ui, labels[i])) + gap;
     }
+    app->inspector_tabs_width = width;
     SDL_FRect row = {box.x, box.y - height, SDL_max(width, box.w), height};
     ui_panel(ui, row);
     float x = row.x + gap;
@@ -109,12 +113,12 @@ int inspector_tabs(App *app, const char *const *labels, int count)
     return app->inspector_tab;
 }
 
-void inspector_tab_panel(App *app, const char *title, UiRowsFn rows, void *userdata)
+void inspector_tab_panel(App *app, UiRowsFn rows, void *userdata)
 {
     SDL_FRect box = ui_window_rect(&app->ui, APP_WINDOW_INSPECTOR);
     UiDock dock = {box.x, box.y - tab_row_height(app), dock_top(app), box.w};
     bool open = true;
-    ui_layout_docked(&app->ui, APP_WINDOW_INSPECTOR_TAB, title, &dock, rows, userdata, &open);
+    ui_layout_docked(&app->ui, APP_WINDOW_INSPECTOR_TAB, NULL, &dock, rows, userdata, &open);
     if (!open) {
         app->inspector_tab = -1;
     }

@@ -349,15 +349,17 @@ colonist.task.listen = Listening to a story
 need.food = Food
 need.food.low = Hungry
 need.food.critical = Starving
+need.food.description = Falls as time goes by. A settler eats when it gets low; hunger weighs on the mood.
 need.water = Water
 need.water.low = Thirsty
 need.water.critical = Dehydrated
+need.water.description = Falls as time goes by. A settler drinks when it gets low; thirst weighs on the mood.
 need.rest = Rest
 need.rest.low = Tired
 need.rest.critical = Exhausted
+need.rest.description = Falls while awake and is regained asleep, better in a bed and in comfortable warmth; tiredness weighs on the mood.
 
 # Colonist inspector. {0} = age
-hud.colonist.age = Age: {0}
 # {0} = strength (1 to 20), {1} = weight carried without slowing down (e.g. 44 kg)
 hud.colonist.strength = Strength: {0} (carries up to {1})
 # Mood: {0} = mood (0 to 100), {1} = how it feels (mood.level.*), {2} = the mood it is heading for
@@ -368,12 +370,9 @@ hud.colonist.mood_effects = Works ×{0}, learns ×{1}, quality {2} levels
 hud.colonist.break.one = Breaking down: {0} ({1} hour left)
 hud.colonist.break.other = Breaking down: {0} ({1} hours left)
 # A thought: {0} = what it adds to the mood (e.g. +6, -8), {1} = the thought (thought.*); {2} = hours left of a memory
-hud.colonist.thought = • {1}: {0}
-hud.colonist.thought_fading = • {1}: {0} (fading, was {2})
 # {0} = how wet, in percent; {1} = degrees felt colder (e.g. 6 °C)
 hud.colonist.wet = Wet ({0}%): feels {1} colder
 # {0} = activity name
-hud.colonist.activity = Activity: {0}
 # {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
 hud.colonist.carrying = Carrying: {0} ×{1} ({2})
 # {0} = tool name, {1} = quality grade, {2} = hit points (e.g. 80%)
@@ -391,11 +390,7 @@ hud.colonist.need = {0}: {1}%
 hud.colonist.need_state = {0}: {1}% ({2})
 hud.colonist.knowledge = Knowledge (levels out of 100)
 # {0} = knowledge name, {1} = level (e.g. 63.4), {2} = work speed multiplier (e.g. 1.25)
-hud.colonist.knowledge_level = {0}: {1} (speed ×{2})
-hud.colonist.knowledge_level_fading = {0}: {1} (speed ×{2}, fading)
 # {0} = knowledge name, {1} = level, too low to use the knowledge yet
-hud.colonist.knowledge_learning = {0}: {1} (not mastered yet)
-hud.colonist.knowledge_learning_fading = {0}: {1} (not mastered yet, fading)
 # {0} = the master's name, {1} = knowledge name
 hud.colonist.apprentice = Learning from {0}: {1}
 hud.colonist.telling = Telling about: {0}
@@ -639,29 +634,53 @@ notice.break_binge = {1} is gorging on the colony's food
 
 # Moods: thoughts (what a settler thinks, with what it adds to its mood)
 thought.hungry = Hungry
+thought.hungry.description = The stomach is empty. The longer it lasts, the worse it feels.
 thought.starving = Starving
+thought.starving.description = Nothing eaten for far too long: it is hard to think of anything else.
 thought.thirsty = Thirsty
+thought.thirsty.description = The throat is dry. The longer it lasts, the worse it feels.
 thought.parched = Parched
+thought.parched.description = Nothing to drink for far too long: it is hard to think of anything else.
 thought.tired = Tired
+thought.tired.description = Eyelids are heavy. Some rest would do good.
 thought.exhausted = Exhausted
+thought.exhausted.description = Barely standing. The longer it lasts, the heavier it gets.
 thought.cold = Cold
+thought.cold.description = Too cold for comfort, for as long as it lasts. Hardy settlers feel it less.
 thought.hot = Too hot
+thought.hot.description = Too hot for comfort, for as long as it lasts. Settlers at ease in the heat feel it less.
 thought.soaked = Soaked to the bone
+thought.soaked.description = Clothes and skin are drenched. A fire or shelter will dry them.
 thought.in_the_rain = Out in the rain
+thought.in_the_rain.description = Rain keeps falling on the head. A roof would help.
 thought.slept_well = Slept well in a bed
+thought.slept_well.description = A night in a proper bed. It stays pleasant for a good while.
 thought.slept_on_ground = Slept on the bare ground
+thought.slept_on_ground.description = A night on the bare ground, with an aching back to show for it.
 thought.slept_wet = A wet night
+thought.slept_wet.description = A night spent in wet clothes or wet bedding.
 thought.slept_cold = A cold night
+thought.slept_cold.description = A night too cold to sleep properly.
 thought.slept_hot = A night too hot
+thought.slept_hot.description = A night too hot to sleep properly.
 thought.varied_meals = Varied meals
+thought.varied_meals.description = Different foods lately: eating is a pleasure again.
 thought.same_food = The same food again and again
+thought.same_food.description = Only one kind of food in the last meals: it is getting dull.
 thought.cooked_meal = A cooked meal
+thought.cooked_meal.description = A hot, cooked meal: much better than raw food.
 thought.spoiled_food = Ate spoiled food
+thought.spoiled_food.description = The food was spoiled, and it showed.
 thought.warmed_by_fire = Warmed by a fire
+thought.warmed_by_fire.description = The warmth of a fire after the cold feels wonderful.
 thought.fireside_story = A story by the fire
+thought.fireside_story.description = Listening to a story by the fire: a moment to remember.
 thought.chat = A good chat
+thought.chat.description = A friendly word with someone. Several in a row add up.
 thought.relief = Relief after letting it out
+thought.relief.description = After a breakdown, it feels good to have let it out.
 thought.debug_gloom = Gloom out of nowhere (debug)
+thought.debug_gloom.description = Added with the debug cheat.
 # Breaks: what a settler in a very bad mood does
 mood.break.sulk = Sulking
 mood.break.wander_off = Gone off alone
@@ -778,8 +797,6 @@ attribute.temperament.high.3 = extremely sensitive
 attribute.temperament.high.4 = exceptionally sensitive
 attribute.group.body = Body
 attribute.group.mind = Mind
-hud.colonist.attribute = {0}: {1}
-inspector.character.ordinary = Nothing stands out: an ordinary settler in every way
 inspector.forbid.description = The settlers will leave it alone
 inspector.allow.description = The settlers may use it again
 inspector.build_like = Build another
@@ -846,3 +863,19 @@ menu.log = Log
 menu.log.description = What happened in the colony: knowledge discovered or lost, roofs fallen in, colonists breaking down
 log.title = Colony log
 log.empty = Nothing to report yet
+
+need.mood = Weighs {0} on the mood
+inspector.mood.none = Nothing on their mind.
+attribute.ordinary = Ordinary
+hud.thought.original = Original value: {0}
+hud.thought.memory = Keeps its full value for {0} h, then fades: it halves every {1} h.
+hud.thought.state = Lasts as long as the situation does, then fades: it halves every {0} h.
+hud.thought.grows = Grows heavier the longer it lasts: up to {0} after {1} h.
+hud.thought.stacks = Adds up when it happens again, up to {0} times.
+hud.thought.fading = It is fading away now.
+hud.knowledge.speed = Work speed ×{0}
+hud.knowledge.not_mastered = Not mastered yet: nothing is unlocked before level {0}.
+hud.mood.state = Mood: {0}
+hud.summary.age = Age
+hud.summary.activity = Activity
+hud.summary.mood = Mood

@@ -178,7 +178,7 @@ void stockpile_panel_draw(App *app)
     bool open = inspector_box(app, INSPECT_STOCKPILE, title, summary_rows, &rows);
     const char *tabs[1] = {tr("inspector.tab.storage")};
     if (inspector_tabs(app, tabs, 1) == 0) {
-        inspector_tab_panel(app, tabs[0], storage_rows, &rows);
+        inspector_tab_panel(app, storage_rows, &rows);
     }
     bool deleted = inspector_delete_action(app, 1, tr("stockpile.delete.description"));
     inspector_build_like_action(app, 0);

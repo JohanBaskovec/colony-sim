@@ -599,9 +599,9 @@ void station_panel_draw(App *app)
     const char *tabs[2] = {tr("inspector.tab.bills"), tr("inspector.tab.fire")};
     int tab = inspector_tabs(app, tabs, hearth_is(station) ? 2 : 1);
     if (tab == 0) {
-        inspector_tab_panel(app, tabs[0], bills_rows, &rows);
+        inspector_tab_panel(app, bills_rows, &rows);
     } else if (tab == 1) {
-        inspector_tab_panel(app, tabs[1], fire_rows, &rows);
+        inspector_tab_panel(app, fire_rows, &rows);
     }
     if (inspector_forbid_action(app, 0, station->forbidden)) {
         rows.action = (Action){ACTION_TOGGLE_FORBIDDEN, 0, 0};

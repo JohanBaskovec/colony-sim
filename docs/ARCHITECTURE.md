@@ -1674,7 +1674,12 @@ wrap to the width of the grid rather than widening it.
 Other windows (controls help, debug, game menu) keep their position, stacking
 order and scroll in `Ui` from one frame to the next. They are sized to their
 content: `ui_layout_window()` runs the rows once to measure them, then again
-to draw them. A window taller than the screen allows scrolls, with its
+to draw them (a NULL title gives a window without a title bar, its × at the top
+right: the tab panels of the inspector) (rows of text, and `ui_layout_meter()`, `ui_layout_bar_row()`,
+`ui_layout_pair()` and `ui_layout_triple()` for a bar under its label, a table row with a bar or
+with two or three columns of text, colored with
+`theme_scale_color()` / `theme_sign_color()`: red to green, orange to blue in
+the colorblind palette). A window taller than the screen allows scrolls, with its
 content clipped. A click brings a window to the front, and a window opened
 again comes to the front; the HUD draws the open windows back to front
 (`hud_open_windows()`), then the build menu and the bottom bar on top, then an open dropdown list,

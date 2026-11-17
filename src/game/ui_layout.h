@@ -26,6 +26,30 @@ void ui_layout_measure(UiLayout *layout, float width);
 /* A row of text (dimmer when `dim`), indented. */
 void ui_layout_label(UiLayout *layout, const char *text, float indent, bool dim);
 
+/* A meter: the label (when not NULL), then a bar under it, as wide as the
+ * content, filled up to `fraction` (0..1) in the color of that point of the
+ * scale (red at 0, white in the middle, green at 1) (advances). Returns the
+ * rectangle of both, to show a tooltip on. */
+SDL_FRect ui_layout_meter(UiLayout *layout, const char *label, float fraction);
+
+/* A table row with a bar: the label on the left and, on the right, a bar of
+ * a fixed width (so that the bars line up) filled up to `fraction` (0..1) in
+ * the color of that point of the scale (advances). Returns the row's
+ * rectangle; it lights up under the mouse when `hoverable`. */
+SDL_FRect ui_layout_bar_row(UiLayout *layout, const char *label, float fraction, bool hoverable);
+
+/* A table row: `left` on the left, `right` on the right in `color`
+ * (advances). Returns the row's rectangle; when `hoverable`, it lights up
+ * under the mouse (the caller shows a tooltip). */
+SDL_FRect ui_layout_pair(UiLayout *layout, const char *left, const char *right, SDL_Color color,
+                         bool hoverable);
+
+/* ui_layout_pair() with a narrow column of text on the far right, in the same
+ * color, `slot` wide (the width of the widest text it may hold) so that the
+ * columns line up from row to row. */
+SDL_FRect ui_layout_triple(UiLayout *layout, const char *left, const char *middle,
+                           const char *right, const char *slot, SDL_Color color, bool hoverable);
+
 /* A button at `x` on the current row (the row does not advance). */
 bool ui_layout_button(UiLayout *layout, float x, const char *label);
 

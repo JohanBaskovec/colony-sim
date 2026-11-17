@@ -38,10 +38,6 @@
 
 typedef struct Panel {
     char lines[HUD_MAX_LINES][HUD_LINE_SIZE];
-    /* KnowledgeType + 1 of a line that has a knowledge's tooltip (the knowledge
-     * tab), AttributeType + 1 of one that has an attribute's (the character
-     * tab), else 0. */
-    uint8_t tip[HUD_MAX_LINES];
     int count;
 } Panel;
 
@@ -53,7 +49,6 @@ static char *panel_add(Panel *panel)
     }
     char *line = panel->lines[panel->count - 1];
     line[0] = '\0';
-    panel->tip[panel->count - 1] = 0;
     return line;
 }
 
@@ -549,21 +544,6 @@ static void build_debug_panel(App *app, Panel *panel)
               value);
 }
 
-static void add_need_line(Panel *panel, const Colonist *colonist, NeedType need)
-{
-    float value = colonist->needs[need];
-    char percent[16];
-    tr_integer(percent, sizeof(percent), (long long)(value * 100.0f + 0.5f));
-    const char *state_key = need_level_key(need, need_level(value));
-    if (state_key == NULL) {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.need"), tr(need_name_key(need)),
-                  percent);
-    } else {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.need_state"),
-                  tr(need_name_key(need)), percent, tr(state_key));
-    }
-}
-
 /* A whole number with its sign ("+6", "-8"). */
 static void format_signed(char *out, size_t size, long long value)
 {
@@ -578,45 +558,165 @@ static int hours_left(int ticks)
     return (ticks + TICKS_PER_HOUR - 1) / TICKS_PER_HOUR;
 }
 
-/* The mood and what it does, a break under way, then every thought with what
- * it weighs now (and, fading, the most it weighed). */
-static void add_mood_lines(Panel *panel, const Colonist *colonist)
+/* The lines of a tooltip being put together. */
+typedef struct TooltipText {
+    char lines[UI_TOOLTIP_LINES][HUD_LINE_SIZE];
+    int count;
+} TooltipText;
+
+static char *tooltip_add(TooltipText *text)
 {
-    const Mood *mood = &colonist->mood;
-    char value[16];
+    if (text->count < UI_TOOLTIP_LINES) {
+        text->count++;
+    }
+    char *line = text->lines[text->count - 1];
+    line[0] = '\0';
+    return line;
+}
+
+static void tooltip_show(App *app, const TooltipText *text)
+{
+    const char *pointers[UI_TOOLTIP_LINES];
+    for (int i = 0; i < text->count; i++) {
+        pointers[i] = text->lines[i];
+    }
+    ui_tooltip(&app->ui, pointers, text->count);
+}
+
+/* The thoughts a need brings on, from the lightest to the heaviest. */
+static const ThoughtType NEED_THOUGHTS[NEED_COUNT][2] = {
+    [NEED_FOOD] = {THOUGHT_HUNGRY, THOUGHT_STARVING},
+    [NEED_WATER] = {THOUGHT_THIRSTY, THOUGHT_PARCHED},
+    [NEED_REST] = {THOUGHT_TIRED, THOUGHT_EXHAUSTED},
+};
+
+/* A need: its exact value and state, what it does, and what it weighs on the
+ * mood now. */
+static void need_tooltip(App *app, const Colonist *colonist, NeedType need)
+{
+    TooltipText text = {0};
+    float value = colonist->needs[need];
+    char percent[16];
+    tr_integer(percent, sizeof(percent), (long long)(value * 100.0f + 0.5f));
+    const char *state_key = need_level_key(need, need_level(value));
+    if (state_key == NULL) {
+        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.colonist.need"),
+                  tr(need_name_key(need)), percent);
+    } else {
+        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.colonist.need_state"),
+                  tr(need_name_key(need)), percent, tr(state_key));
+    }
+    static const char *const DESCRIPTION_KEYS[NEED_COUNT] = {
+        [NEED_FOOD] = N_("need.food.description"),
+        [NEED_WATER] = N_("need.water.description"),
+        [NEED_REST] = N_("need.rest.description"),
+    };
+    SDL_strlcpy(tooltip_add(&text), tr(DESCRIPTION_KEYS[need]), HUD_LINE_SIZE);
+    for (int i = 0; i < 2; i++) {
+        ThoughtType thought = NEED_THOUGHTS[need][i];
+        if (mood_has(&colonist->mood, thought)) {
+            char amount[16];
+            format_signed(amount, sizeof(amount),
+                          SDL_lroundf(mood_thought_value(&colonist->mood, thought)));
+            TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("need.mood"), amount);
+        }
+    }
+    tooltip_show(app, &text);
+}
+
+/* The mood: its exact value and what it does to work, learning and quality. */
+static void mood_tooltip(App *app, const Mood *mood)
+{
+    TooltipText text = {0};
+    char value[16], work[16], learn[16], level[16];
     tr_integer(value, sizeof(value), SDL_lroundf(mood->value));
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.mood"), value,
+    TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.colonist.mood"), value,
               tr(mood_level_key(mood->value)));
-    char work[16], learn[16], level[16];
     tr_decimal(work, sizeof(work), mood_work_factor(mood->value), 2);
     tr_decimal(learn, sizeof(learn), (float)mood_learn_factor(mood->value), 2);
     format_signed(level, sizeof(level), SDL_lround(mood_level_offset(mood->value)));
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.mood_effects"), work, learn, level);
+    TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.colonist.mood_effects"), work, learn,
+              level);
+    tooltip_show(app, &text);
+}
+
+/* A thought: what it is about, its original value, and how it fades. */
+static void thought_tooltip(App *app, const Mood *mood, ThoughtType type)
+{
+    TooltipText text = {0};
+    const ThoughtDef *def = thought_def(type);
+    char a[16], b[16];
+    SDL_strlcpy(tooltip_add(&text), tr(def->name_key), HUD_LINE_SIZE);
+    SDL_strlcpy(tooltip_add(&text), tr(def->description_key), HUD_LINE_SIZE);
+    format_signed(a, sizeof(a), SDL_lroundf(mood_thought_peak(mood, type)));
+    TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.original"), a);
+    if (def->state) {
+        tr_integer(a, sizeof(a), SDL_lroundf(def->half_life_hours));
+        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.state"), a);
+        if (def->grow_max > 1.0f) {
+            format_signed(a, sizeof(a),
+                          SDL_lroundf(def->value * mood->sensitivity * def->grow_max));
+            tr_integer(b, sizeof(b), SDL_lroundf(def->grow_hours));
+            TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.grows"), a, b);
+        }
+    } else {
+        tr_integer(a, sizeof(a), SDL_lroundf(def->plateau_hours));
+        tr_integer(b, sizeof(b), SDL_lroundf(def->half_life_hours));
+        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.memory"), a, b);
+    }
+    if (def->max_stack > 1) {
+        tr_integer(a, sizeof(a), def->max_stack);
+        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.stacks"), a);
+    }
+    if (mood_fading(mood, type)) {
+        SDL_strlcpy(tooltip_add(&text), tr("hud.thought.fading"), HUD_LINE_SIZE);
+    }
+    tooltip_show(app, &text);
+}
+
+/* The mood meter, a break under way and a table of the thoughts: what each
+ * weighs now. */
+static void mood_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
+    if (colonist == NULL) {
+        return;
+    }
+    const Mood *mood = &colonist->mood;
+    char state[HUD_LINE_SIZE];
+    TR_FORMAT(state, sizeof(state), tr("hud.mood.state"), tr(mood_level_key(mood->value)));
+    SDL_FRect meter =
+        ui_layout_meter(layout, state, (mood->value - MOOD_MIN) / (MOOD_MAX - MOOD_MIN));
+    if (layout->draw && ui_hovered(layout->ui, meter)) {
+        mood_tooltip(app, mood);
+    }
     const char *break_key = mood_break_key((MoodBreak)mood->break_type);
     if (break_key != NULL) {
         int left = hours_left(mood->break_ticks);
-        char hours[16];
+        char hours[16], line[HUD_LINE_SIZE];
         tr_integer(hours, sizeof(hours), left);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.colonist.break", left),
-                  tr(break_key), hours);
+        TR_FORMAT(line, sizeof(line), tr_plural("hud.colonist.break", left), tr(break_key), hours);
+        ui_layout_label(layout, line, 0.0f, false);
     }
+    bool any = false;
     for (int type = 0; type < THOUGHT_COUNT; type++) {
         ThoughtType thought = (ThoughtType)type;
         if (!mood_has(mood, thought)) {
             continue;
         }
-        const ThoughtDef *def = thought_def(thought);
+        any = true;
+        float value = mood_thought_value(mood, thought);
         char amount[16];
-        format_signed(amount, sizeof(amount), SDL_lroundf(mood_thought_value(mood, thought)));
-        if (mood_fading(mood, thought)) {
-            char peak[16];
-            format_signed(peak, sizeof(peak), SDL_lroundf(mood_thought_peak(mood, thought)));
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.thought_fading"), amount,
-                      tr(def->name_key), peak);
-        } else {
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.thought"), amount,
-                      tr(def->name_key));
+        format_signed(amount, sizeof(amount), SDL_lroundf(value));
+        SDL_FRect row = ui_layout_pair(layout, tr(thought_def(thought)->name_key), amount,
+                                       theme_sign_color(&layout->ui->theme, value), true);
+        if (layout->draw && ui_hovered(layout->ui, row)) {
+            thought_tooltip(app, mood, thought);
         }
+    }
+    if (!any) {
+        ui_layout_label(layout, tr("inspector.mood.none"), 0.0f, true);
     }
 }
 
@@ -683,6 +783,14 @@ static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType 
     char a[32], b[32];
     double peak = colonist->knowledge_peak[knowledge];
     SDL_strlcpy(lines[count++], tr(knowledge_def(knowledge)->name_key), HUD_LINE_SIZE);
+    double level = colonist_knowledge_level(colonist, knowledge);
+    if (knowledge_is_mastered(level)) {
+        tr_decimal(a, sizeof(a), knowledge_work_speed(level), 2);
+        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr("hud.knowledge.speed"), a);
+    } else {
+        tr_integer(a, sizeof(a), (long long)KNOWLEDGE_MASTERY_LEVEL);
+        TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr("hud.knowledge.not_mastered"), a);
+    }
     if (peak - colonist->knowledge[knowledge] >= 0.05) {
         format_level(a, sizeof(a), peak);
         TR_FORMAT(lines[count++], HUD_LINE_SIZE, tr("hud.knowledge.peak"), a);
@@ -747,30 +855,9 @@ static const char *const SECTION_KEYS[SECTION_COUNT] = {
     [SECTION_SOCIAL] = N_("inspector.tab.social"),
 };
 
-/* Age, what it does, its needs and mood at a glance. */
-static void add_summary_lines(App *app, Panel *panel, const Colonist *colonist)
+/* Wetness, the warmth of its sleep, its bed. */
+static void add_needs_extra_lines(App *app, Panel *panel, const Colonist *colonist, EntityId id)
 {
-    (void)app;
-    char age[16];
-    tr_integer(age, sizeof(age), colonist->age);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.age"), age);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
-              tr(colonist_activity_key(colonist)));
-    for (int need = 0; need < NEED_COUNT; need++) {
-        add_need_line(panel, colonist, (NeedType)need);
-    }
-    char value[16];
-    tr_integer(value, sizeof(value), SDL_lroundf(colonist->mood.value));
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.mood"), value,
-              tr(mood_level_key(colonist->mood.value)));
-}
-
-/* Needs, wetness, the warmth of its sleep, its bed. */
-static void add_needs_lines(App *app, Panel *panel, const Colonist *colonist, EntityId id)
-{
-    for (int need = 0; need < NEED_COUNT; need++) {
-        add_need_line(panel, colonist, (NeedType)need);
-    }
     float chill = COLONIST_WET_CHILL * colonist->wetness;
     long long wet = (long long)SDL_lroundf(colonist->wetness * 100.0f);
     if (wet > 0) {
@@ -803,6 +890,58 @@ static void add_needs_lines(App *app, Panel *panel, const Colonist *colonist, En
     } else {
         panel_add_text(panel, tr("hud.colonist.no_bed"));
     }
+}
+
+/* A need as a table row: its name, and a bar; the tooltip has the details. */
+static void need_row(UiLayout *layout, App *app, const Colonist *colonist, NeedType need)
+{
+    SDL_FRect row = ui_layout_bar_row(layout, tr(need_name_key(need)), colonist->needs[need], true);
+    if (layout->draw && ui_hovered(layout->ui, row)) {
+        need_tooltip(app, colonist, need);
+    }
+}
+
+/* The summary of the selected colonist, as a table: age and activity as text,
+ * needs and mood as bars (the details are in tooltips). */
+static void summary_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
+    if (colonist == NULL) {
+        return;
+    }
+    const SDL_Color text = layout->ui->theme.colors[THEME_TEXT];
+    char age[16];
+    tr_integer(age, sizeof(age), colonist->age);
+    ui_layout_pair(layout, tr("hud.summary.age"), age, text, false);
+    ui_layout_pair(layout, tr("hud.summary.activity"), tr(colonist_activity_key(colonist)), text,
+                   false);
+    for (int need = 0; need < NEED_COUNT; need++) {
+        need_row(layout, app, colonist, (NeedType)need);
+    }
+    SDL_FRect row =
+        ui_layout_bar_row(layout, tr("hud.summary.mood"),
+                          (colonist->mood.value - MOOD_MIN) / (MOOD_MAX - MOOD_MIN), true);
+    if (layout->draw && ui_hovered(layout->ui, row)) {
+        mood_tooltip(app, &colonist->mood);
+    }
+}
+
+/* Every need as a table row, then wetness, the warmth of its sleep and its bed. */
+static void needs_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    EntityId id = app->selected[0];
+    const Colonist *colonist = game_colonist_const(&app->game, id);
+    if (colonist == NULL) {
+        return;
+    }
+    for (int need = 0; need < NEED_COUNT; need++) {
+        need_row(layout, app, colonist, (NeedType)need);
+    }
+    Panel extra = {0};
+    add_needs_extra_lines(app, &extra, colonist, id);
+    panel_rows(layout, &extra);
 }
 
 /* Strength, what it carries, its tools. */
@@ -840,68 +979,77 @@ static void add_gear_lines(Panel *panel, const Colonist *colonist)
     }
 }
 
-/* Discovered knowledges the settler has started to learn: level with one
- * decimal, the work speed once it is high enough to use, and a tooltip. */
-static void add_knowledge_lines(App *app, Panel *panel, const Colonist *colonist)
+/* Discovered knowledges the settler has started to learn, as a table: the
+ * level with one decimal, from red (0) through white (the mastery, 50) to
+ * green (100). The work speed is in the tooltip. */
+static void knowledge_rows(UiLayout *layout, void *userdata)
 {
-    panel_add_text(panel, tr("hud.colonist.knowledge"));
+    App *app = userdata;
+    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
+    if (colonist == NULL) {
+        return;
+    }
+    ui_layout_label(layout, tr("hud.colonist.knowledge"), 0.0f, true);
     for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
         double value = colonist_knowledge_level(colonist, (KnowledgeType)knowledge);
         if (!(value > 0.0) || !game_knowledge_discovered(&app->game, (KnowledgeType)knowledge)) {
             continue;
         }
-        const char *name = tr(knowledge_def((KnowledgeType)knowledge)->name_key);
         char level[16];
         format_level(level, sizeof(level), value);
-        bool fading =
-            colonist_knowledge_fading(colonist, (KnowledgeType)knowledge, app->game.clock.tick);
-        char *line = panel_add(panel);
-        panel->tip[panel->count - 1] = (uint8_t)(knowledge + 1);
-        if (!knowledge_is_mastered(value)) {
-            TR_FORMAT(line, HUD_LINE_SIZE,
-                      tr(fading ? "hud.colonist.knowledge_learning_fading"
-                                : "hud.colonist.knowledge_learning"),
-                      name, level);
-            continue;
+        SDL_FRect row = ui_layout_pair(
+            layout, tr(knowledge_def((KnowledgeType)knowledge)->name_key), level,
+            theme_scale_color(&layout->ui->theme, (float)(value / KNOWLEDGE_LEVEL_MAX)), true);
+        if (layout->draw && ui_hovered(layout->ui, row)) {
+            knowledge_tooltip(app, colonist, (KnowledgeType)knowledge);
         }
-        char speed[16];
-        tr_decimal(speed, sizeof(speed), knowledge_work_speed(value), 2);
-        TR_FORMAT(
-            line, HUD_LINE_SIZE,
-            tr(fading ? "hud.colonist.knowledge_level_fading" : "hud.colonist.knowledge_level"),
-            name, level, speed);
     }
 }
 
-/* What stands out in the colonist's attributes, as words, body then mind;
- * the ordinary ones are not listed. */
-static void add_character_lines(Panel *panel, const Colonist *colonist)
+/* What an attribute does, in words. */
+static void attribute_tooltip(App *app, AttributeType type)
+{
+    const char *lines[1] = {tr(attribute_description_key(type))};
+    ui_tooltip(&app->ui, lines, 1);
+}
+
+/* Every attribute as a table by group, body then mind: the name, the word for
+ * its position and its exact position in percent, all colored by that position (red at the
+ * lowest, white at the ordinary, green at the highest). */
+static void character_rows(UiLayout *layout, void *userdata)
 {
     static const char *const GROUP_KEYS[ATTRIBUTE_GROUP_COUNT] = {
         [ATTRIBUTE_GROUP_BODY] = N_("attribute.group.body"),
         [ATTRIBUTE_GROUP_MIND] = N_("attribute.group.mind"),
     };
-    bool any = false;
+    App *app = userdata;
+    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
+    if (colonist == NULL) {
+        return;
+    }
     for (int group = 0; group < ATTRIBUTE_GROUP_COUNT; group++) {
-        bool heading = false;
+        ui_layout_label(layout, tr(GROUP_KEYS[group]), 0.0f, true);
         for (int type = 0; type < ATTRIBUTE_COUNT; type++) {
-            int position = colonist->attributes.position[type];
-            const char *word = attribute_word_key((AttributeType)type, position);
-            if (word == NULL || attribute_group((AttributeType)type) != (AttributeGroup)group) {
+            if (attribute_group((AttributeType)type) != (AttributeGroup)group) {
                 continue;
             }
-            if (!heading) {
-                panel_add_text(panel, tr(GROUP_KEYS[group]));
-                heading = true;
+            int position = colonist->attributes.position[type];
+            const char *word = attribute_word_key((AttributeType)type, position);
+            /* Red at the lowest position, white at the ordinary, green at the highest. */
+            SDL_Color color =
+                theme_scale_color(&layout->ui->theme,
+                                  0.5f + (float)position / (2.0f * (float)ATTRIBUTE_POSITION_MAX));
+            /* The exact position, as a percentage of the way to either end. */
+            char number[16], percent[32];
+            format_signed(number, sizeof(number), SDL_lround((double)position / 10.0));
+            TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
+            SDL_FRect row = ui_layout_triple(layout, tr(attribute_name_key((AttributeType)type)),
+                                             tr(word != NULL ? word : "attribute.ordinary"),
+                                             percent, "-100 %", color, true);
+            if (layout->draw && ui_hovered(layout->ui, row)) {
+                attribute_tooltip(app, (AttributeType)type);
             }
-            any = true;
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.attribute"),
-                      tr(attribute_name_key((AttributeType)type)), tr(word));
-            panel->tip[panel->count - 1] = (uint8_t)(type + 1);
         }
-    }
-    if (!any) {
-        panel_add_text(panel, tr("inspector.character.ordinary"));
     }
 }
 
@@ -913,11 +1061,11 @@ static void build_colonist_section(App *app, Panel *panel, EntityId id, Colonist
         return;
     }
     switch (section) {
-    case SECTION_SUMMARY: add_summary_lines(app, panel, colonist); break;
-    case SECTION_NEEDS: add_needs_lines(app, panel, colonist, id); break;
-    case SECTION_MOOD: add_mood_lines(panel, colonist); break;
-    case SECTION_CHARACTER: add_character_lines(panel, colonist); break;
-    case SECTION_KNOWLEDGE: add_knowledge_lines(app, panel, colonist); break;
+    case SECTION_SUMMARY: break; /* summary_rows() */
+    case SECTION_NEEDS:
+    case SECTION_MOOD:
+    case SECTION_CHARACTER:
+    case SECTION_KNOWLEDGE: break; /* Drawn by their own rows (colonist_tab_rows()). */
     case SECTION_GEAR: add_gear_lines(panel, colonist); break;
     case SECTION_SOCIAL:
         add_social_lines(app, panel, colonist, id);
@@ -983,35 +1131,15 @@ void hud_draw_world_labels(App *app)
     }
 }
 
-typedef struct ColonistRows {
-    App *app;
-    const Panel *panel;
-    ColonistSection section;
-} ColonistRows;
-
-/* What an attribute does, in words. */
-static void attribute_tooltip(App *app, AttributeType type)
+/* The rows of the tabs that are more than lines of text; NULL for the others. */
+static UiRowsFn colonist_tab_rows(ColonistSection section)
 {
-    const char *lines[1] = {tr(attribute_description_key(type))};
-    ui_tooltip(&app->ui, lines, 1);
-}
-
-/* A section's lines; a line with a tooltip shows it under the mouse. */
-static void colonist_rows(UiLayout *layout, void *userdata)
-{
-    const ColonistRows *rows = userdata;
-    const Colonist *colonist = game_colonist_const(&rows->app->game, rows->app->selected[0]);
-    for (int i = 0; i < rows->panel->count; i++) {
-        SDL_FRect rect = {layout->x, layout->y, layout->width, layout->row};
-        ui_layout_label(layout, rows->panel->lines[i], 0.0f, false);
-        int tip = rows->panel->tip[i];
-        if (layout->draw && tip > 0 && colonist != NULL && ui_hovered(layout->ui, rect)) {
-            if (rows->section == SECTION_CHARACTER) {
-                attribute_tooltip(rows->app, (AttributeType)(tip - 1));
-            } else {
-                knowledge_tooltip(rows->app, colonist, (KnowledgeType)(tip - 1));
-            }
-        }
+    switch (section) {
+    case SECTION_NEEDS: return needs_rows;
+    case SECTION_MOOD: return mood_rows;
+    case SECTION_CHARACTER: return character_rows;
+    case SECTION_KNOWLEDGE: return knowledge_rows;
+    default: return NULL;
     }
 }
 
@@ -1023,7 +1151,6 @@ void hud_inspect_colonists(App *app)
     bool one = app->selected_count == 1 && colonist != NULL;
     if (one) {
         SDL_strlcpy(title, colonist->name, sizeof(title));
-        build_colonist_section(app, &summary, app->selected[0], SECTION_SUMMARY);
     } else {
         char count[16];
         tr_integer(count, sizeof(count), app->selected_count);
@@ -1036,9 +1163,8 @@ void hud_inspect_colonists(App *app)
             }
         }
     }
-    ColonistRows rows = {app, &summary, SECTION_SUMMARY};
-    bool open =
-        inspector_box(app, one ? INSPECT_COLONIST : INSPECT_COLONISTS, title, colonist_rows, &rows);
+    bool open = one ? inspector_box(app, INSPECT_COLONIST, title, summary_rows, app)
+                    : inspector_box(app, INSPECT_COLONISTS, title, panel_rows, &summary);
     if (one) {
         const char *labels[SECTION_COUNT - 1];
         for (int i = 1; i < SECTION_COUNT; i++) {
@@ -1046,10 +1172,15 @@ void hud_inspect_colonists(App *app)
         }
         int tab = inspector_tabs(app, labels, SECTION_COUNT - 1);
         if (tab >= 0) {
-            Panel section = {0};
-            build_colonist_section(app, &section, app->selected[0], (ColonistSection)(tab + 1));
-            ColonistRows section_rows = {app, &section, (ColonistSection)(tab + 1)};
-            inspector_tab_panel(app, labels[tab], colonist_rows, &section_rows);
+            ColonistSection section = (ColonistSection)(tab + 1);
+            UiRowsFn special = colonist_tab_rows(section);
+            if (special != NULL) {
+                inspector_tab_panel(app, special, app);
+            } else {
+                Panel lines = {0};
+                build_colonist_section(app, &lines, app->selected[0], section);
+                inspector_tab_panel(app, panel_rows, &lines);
+            }
         }
     } else {
         inspector_tabs(app, NULL, 0);

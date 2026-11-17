@@ -75,6 +75,8 @@ static void test_definitions(void)
         REQUIRE(def != NULL);
         CHECK(def->id != NULL);
         CHECK(i18n_is_valid_key(def->name_key));
+        CHECK(i18n_is_valid_key(def->description_key));
+        CHECK(strcmp(def->description_key, def->name_key) != 0);
         CHECK(def->value != 0.0f);
         CHECK(def->half_life_hours > 0.0f && def->plateau_hours >= 0.0f);
         CHECK(def->max_stack >= 1 && def->grow_max >= 1.0f);

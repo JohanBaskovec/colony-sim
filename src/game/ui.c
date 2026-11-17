@@ -298,7 +298,8 @@ static SDL_FPoint window_begin(Ui *ui, int id, const char *title, float content_
     }
     ui->current_window = (int)(window - ui->windows);
     /* Size: the content, unless it is taller than the screen allows. */
-    float title_h = title_height(ui);
+    bool titled = title != NULL;
+    float title_h = titled ? title_height(ui) : 0.0f;
     float max_visible = ui->screen_height - ui->reserved_bottom - 2.0f * ui->theme.margin -
                         title_h - 2.0f * ui->theme.window_padding;
     if (dock != NULL) {
@@ -309,9 +310,12 @@ static SDL_FPoint window_begin(Ui *ui, int id, const char *title, float content_
     float scrollbar =
         window->max_scroll > 0.0f ? ui->theme.scrollbar_width + ui->theme.window_padding : 0.0f;
     float close_width = ui_button_width(ui, "×");
-    float title_width = ui_text_width(ui, title) + ui->theme.window_padding + close_width;
+    /* Without a title bar, the × sits at the top right, in a strip of its own. */
+    float reserved = titled ? 0.0f : close_width + ui->theme.gap;
+    float title_width =
+        titled ? ui_text_width(ui, title) + ui->theme.window_padding + close_width : 0.0f;
     float width = SDL_max(content_width, title_width);
-    window->w = SDL_ceilf(width + scrollbar + 2.0f * ui->theme.window_padding);
+    window->w = SDL_ceilf(width + scrollbar + reserved + 2.0f * ui->theme.window_padding);
     window->h = SDL_ceilf(title_h + window->visible_height + 2.0f * ui->theme.window_padding);
     if (dock != NULL) {
         window->w = SDL_max(window->w, dock->width);
@@ -327,11 +331,12 @@ static SDL_FPoint window_begin(Ui *ui, int id, const char *title, float content_
 
     /* Title bar: × closes, dragging the rest moves the window. */
     SDL_FRect title_bar = {window->x, window->y, window->w, title_h};
+    float close_height = title_height(ui) - 4.0f;
     SDL_FRect close = {window->x + window->w - close_width - 2.0f, window->y + 2.0f, close_width,
-                       title_h - 4.0f};
+                       close_height};
     if (ui_take_click(ui, close) == SDL_BUTTON_LEFT && open != NULL) {
         *open = false;
-    } else if (ui_take_click(ui, title_bar) == SDL_BUTTON_LEFT && dock == NULL) {
+    } else if (titled && ui_take_click(ui, title_bar) == SDL_BUTTON_LEFT && dock == NULL) {
         ui->drag_window = id;
         ui->drag_dx = ui->click_x - window->x;
         ui->drag_dy = ui->click_y - window->y;
@@ -348,21 +353,22 @@ static SDL_FPoint window_begin(Ui *ui, int id, const char *title, float content_
     add_area(ui, frame, id);
     fill(ui, frame, COLOR(THEME_WINDOW));
     title_bar = (SDL_FRect){window->x, window->y, window->w, title_h};
-    fill(ui, title_bar, COLOR(THEME_TITLE));
-    float line = (float)text_line_height(ui->text);
-    ui_label(ui, title, window->x + ui->theme.window_padding,
-             SDL_floorf(window->y + (title_h - line) * 0.5f));
-    close = (SDL_FRect){window->x + window->w - close_width - 2.0f, window->y + 2.0f, close_width,
-                        title_h - 4.0f};
-    fill(ui, close, ui_hovered(ui, close) ? COLOR(THEME_BUTTON_HOVER) : COLOR(THEME_TITLE));
+    if (titled) {
+        fill(ui, title_bar, COLOR(THEME_TITLE));
+        float line = (float)text_line_height(ui->text);
+        ui_label(ui, title, window->x + ui->theme.window_padding,
+                 SDL_floorf(window->y + (title_h - line) * 0.5f));
+    }
+    ThemeColor close_color = titled ? THEME_TITLE : THEME_BUTTON;
+    fill(ui, close, ui_hovered(ui, close) ? COLOR(THEME_BUTTON_HOVER) : COLOR(close_color));
     centered_label(ui, close, "×");
 
     SDL_FRect content = {
         window->x + ui->theme.window_padding, window->y + title_h + ui->theme.window_padding,
-        window->w - 2.0f * ui->theme.window_padding - scrollbar, window->visible_height};
-    window->track =
-        (SDL_FRect){window->x + window->w - ui->theme.window_padding - ui->theme.scrollbar_width,
-                    content.y, ui->theme.scrollbar_width, content.h};
+        window->w - 2.0f * ui->theme.window_padding - scrollbar - reserved, window->visible_height};
+    window->track = (SDL_FRect){window->x + window->w - ui->theme.window_padding - reserved -
+                                    ui->theme.scrollbar_width,
+                                content.y, ui->theme.scrollbar_width, content.h};
     handle_scroll_bar(ui, window);
 
     ui->clipping = true;
@@ -430,6 +436,11 @@ void ui_label_dim(Ui *ui, const char *text, float x, float y)
 void ui_label_colored(Ui *ui, const char *text, float x, float y, ThemeColor color)
 {
     text_draw(ui->text, text, x, y, COLOR(color));
+}
+
+void ui_label_rgba(Ui *ui, const char *text, float x, float y, SDL_Color color)
+{
+    text_draw(ui->text, text, x, y, color);
 }
 
 float ui_text_width(Ui *ui, const char *text)

@@ -188,6 +188,7 @@ typedef struct App {
     int inspector_kind;
     int inspector_tab;
     int inspector_tab_count;
+    float inspector_tabs_width; /* What the tab buttons need, drawn last frame (0: none). */
     /* Colonist bar (game/colonist_bar.h): the last click on an entry, to
      * tell a double click (centers the view on the colonist). */
     EntityId bar_last_click;

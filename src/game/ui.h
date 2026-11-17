@@ -34,7 +34,7 @@
 
 #define UI_MAX_AREAS 32
 #define UI_MAX_WINDOWS 16
-#define UI_TOOLTIP_LINES 8
+#define UI_TOOLTIP_LINES 10
 #define UI_TOOLTIP_LINE_SIZE 256
 #define UI_TOOLTIP_WRAPPED_LINES 24
 #define UI_WRAP_LINE_SIZE 256
@@ -157,6 +157,9 @@ void ui_panel(Ui *ui, SDL_FRect rect);
 void ui_panel_colored(Ui *ui, SDL_FRect rect, ThemeColor color);
 
 /*
+ * (A NULL `title` opens a window without a title bar: its × sits at the top
+ * right, with a strip of its own at the right of the content.)
+ *
  * Opens a window of `content_width` x `content_height` pixels of content:
  * draws its frame and title bar, handles moving, closing (sets *open to false
  * when × is clicked) and scrolling, and clips what follows to the content
@@ -189,6 +192,9 @@ void ui_label_dim(Ui *ui, const char *text, float x, float y);
 
 /* Label in a color of the theme. */
 void ui_label_colored(Ui *ui, const char *text, float x, float y, ThemeColor color);
+
+/* Label in any color (a value on a scale, theme_scale_color()). */
+void ui_label_rgba(Ui *ui, const char *text, float x, float y, SDL_Color color);
 float ui_text_width(Ui *ui, const char *text);
 
 /* Plain rectangle (row backgrounds...). */

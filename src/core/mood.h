@@ -118,12 +118,13 @@ typedef uint32_t ThoughtMask;
 #define THOUGHT_BIT(type) ((ThoughtMask)1u << (unsigned)(type))
 
 typedef struct ThoughtDef {
-    const char *id;        /* Stable identifier (saves), never shown. */
-    const char *name_key;  /* What the settler thinks, shown to the player. */
-    bool state;            /* A state (set while it lasts), else a memory. */
-    float value;           /* What it weighs in full (points of mood). */
-    float plateau_hours;   /* Memories: full value for this long, then fading. */
-    float half_life_hours; /* Fading: half of it gone in this long. */
+    const char *id;              /* Stable identifier (saves), never shown. */
+    const char *name_key;        /* What the settler thinks, shown to the player. */
+    const char *description_key; /* What it is about, in a sentence or two. */
+    bool state;                  /* A state (set while it lasts), else a memory. */
+    float value;                 /* What it weighs in full (points of mood). */
+    float plateau_hours;         /* Memories: full value for this long, then fading. */
+    float half_life_hours;       /* Fading: half of it gone in this long. */
     /* Memories: renewed (1), or adding up to this many times the value. */
     int max_stack;
     /* States: growing worse the longer they last, up to grow_max times the

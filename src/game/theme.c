@@ -12,21 +12,22 @@ static const SDL_Color DEFAULT_COLORS[THEME_COLOR_COUNT] = {
     [THEME_TRACK] = {54, 60, 72, 255},          [THEME_HANDLE] = {200, 204, 214, 255},
     [THEME_SCROLL_TRACK] = {255, 255, 255, 24}, [THEME_SCROLL_THUMB] = {200, 204, 214, 200},
     [THEME_WARNING] = {240, 180, 90, 255},      [THEME_DISABLED_VEIL] = {10, 12, 16, 150},
-    [THEME_ICON_WELL] = {150, 136, 112, 255},
+    [THEME_ICON_WELL] = {150, 136, 112, 255},   [THEME_VALUE_LOW] = {232, 84, 74, 255},
+    [THEME_VALUE_MID] = {236, 236, 228, 255},   [THEME_VALUE_HIGH] = {104, 208, 98, 255},
 };
 
 /* The colorblind palette changes the colors told apart by hue alone: the
  * greens of what is lit or checked become blues (against the oranges of
  * warnings), and the temperature view goes from blue to orange through grey
- * instead of through green and yellow. */
+ * instead of through green and yellow. Scales of values go from orange to
+ * blue instead of from red to green. */
 static const struct {
     ThemeColor role;
     SDL_Color color;
 } COLORBLIND_COLORS[] = {
-    {THEME_BUTTON_LIT, {44, 84, 142, 255}},
-    {THEME_BORDER_LIT, {130, 190, 255, 255}},
-    {THEME_CHECK, {96, 168, 240, 255}},
-    {THEME_WARNING, {245, 165, 60, 255}},
+    {THEME_BUTTON_LIT, {44, 84, 142, 255}}, {THEME_BORDER_LIT, {130, 190, 255, 255}},
+    {THEME_CHECK, {96, 168, 240, 255}},     {THEME_WARNING, {245, 165, 60, 255}},
+    {THEME_VALUE_LOW, {240, 140, 40, 255}}, {THEME_VALUE_HIGH, {90, 160, 245, 255}},
 };
 
 static const SDL_Color TEMPERATURE_COLORS[SETTINGS_PALETTE_COUNT][THEME_TEMPERATURE_STEPS] = {
@@ -46,6 +47,31 @@ static const SDL_Color TEMPERATURE_COLORS[SETTINGS_PALETTE_COUNT][THEME_TEMPERAT
 static float scaled(const Theme *theme, float pixels)
 {
     return SDL_max(1.0f, SDL_roundf(pixels * theme->scale));
+}
+
+static SDL_Color mix(SDL_Color a, SDL_Color b, float t)
+{
+    return (SDL_Color){(Uint8)SDL_roundf((float)a.r + ((float)b.r - (float)a.r) * t),
+                       (Uint8)SDL_roundf((float)a.g + ((float)b.g - (float)a.g) * t),
+                       (Uint8)SDL_roundf((float)a.b + ((float)b.b - (float)a.b) * t), 255};
+}
+
+SDL_Color theme_scale_color(const Theme *theme, float t)
+{
+    t = SDL_clamp(t, 0.0f, 1.0f);
+    const SDL_Color *colors = theme->colors;
+    if (t < 0.5f) {
+        return mix(colors[THEME_VALUE_LOW], colors[THEME_VALUE_MID], t * 2.0f);
+    }
+    return mix(colors[THEME_VALUE_MID], colors[THEME_VALUE_HIGH], (t - 0.5f) * 2.0f);
+}
+
+SDL_Color theme_sign_color(const Theme *theme, float value)
+{
+    if (value < 0.0f) {
+        return theme->colors[THEME_VALUE_LOW];
+    }
+    return theme->colors[value > 0.0f ? THEME_VALUE_HIGH : THEME_TEXT];
 }
 
 void theme_init(Theme *theme, float scale, SettingsPalette palette)

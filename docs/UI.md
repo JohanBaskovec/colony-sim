@@ -95,7 +95,10 @@ A fixed-width box above the bottom bar, shown when something is selected:
 
 - **Summary** of the selection, always visible.
 - **Tabs above it**, depending on what is selected; a tab opens its panel
-  above the tabs (one at a time, click again to close).
+  above the tabs (one at a time, click again to close). The panel has no
+  title (the tab's button says it): only a × at the top right, with a strip
+  of its own at the right of the rows. The box and the
+  panel are as wide as the row of tabs when it is wider than the default.
 - **Action buttons to the right** of the box (later: draft, attack...;
   now: forbid/allow, build another, delete a zone...), each with a tooltip
   and its shortcut.
@@ -115,6 +118,37 @@ become tabs:
 When nothing is selected and no tool is in use, the box shows what lies
 under the mouse (the old tile readout).
 
+The summary of a colonist is a table too: age and activity as text on the
+right, then the needs and the mood as bars (same tooltips as the Needs tab
+and the Mood bar).
+
+Tabs of a colonist (exact values and effects are in tooltips, not in the
+rows):
+
+- **Needs**: a table, the name of each need on the left and a bar on the
+  right, filled up to the value and colored along a scale (red at 0, white in
+  the middle, green at 100; orange to blue in the colorblind palette). The
+  tooltip gives the exact value, the state (hungry...), what the need does and
+  what it weighs on the mood now. Wetness, the warmth of sleep and the bed
+  come under the bars.
+- **Mood**: a bar on top (same scale), a break under way, then a table of
+  thoughts: the name on the left, what it weighs on the right (red when
+  negative, green when positive). The bar's tooltip gives the exact mood and
+  its effects (work, learning, quality); a thought's tooltip says what it is
+  about, its original value and how it fades.
+- **Character**: a table of every attribute: the name, the word for its
+  position and, in a third column, the exact position in percent of the way to
+  either end; the three are colored by the exact position: red at the lowest,
+  white at the ordinary, green at the highest.
+- **Knowledge**: a table, the level on the right from red (0) through white
+  (mastery, 50) to green (100). The tooltip gives the work speed, what was
+  learned today, fading and the masters in the colony.
+
+Row widgets of windows: `ui_layout_meter()` (label, bar under it),
+`ui_layout_bar_row()` (label left, bar right), `ui_layout_pair()` and
+`ui_layout_triple()` (columns of text, colored), with
+`theme_scale_color()` / `theme_sign_color()` (`game/theme.h`).
+
 ### Bottom right
 
 From the bottom up, above the bottom bar:
@@ -122,7 +156,7 @@ From the bottom up, above the bottom bar:
 - **Overlay toggles** (icon buttons with a tooltip): temperature for now.
 - **Speed buttons**: pause, ×1, ×2, ×3 (Space pauses).
 - **Level slider**, vertical, at the right edge: the current level as a
-  handle that can be dragged, + and − buttons at its ends, the number below
+  handle that can be dragged, small + and − buttons (half the size of the others) at its ends, the number below
   it as "level / levels" (counted from 1, the deepest level), a mark at the
   ground level. Page Up / Page Down and Shift + wheel still work.
 - Above, right aligned: **date and hour**, **season**, **outdoor

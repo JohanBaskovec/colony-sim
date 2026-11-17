@@ -35,6 +35,9 @@ typedef enum ThemeColor {
     THEME_WARNING,       /* Something stands in the way (a tool unavailable). */
     THEME_DISABLED_VEIL, /* Over a button that cannot be used yet (a text says why). */
     THEME_ICON_WELL,     /* Behind the small item icons, like bare ground. */
+    THEME_VALUE_LOW,     /* Worst end of a scale (meters, signed numbers): red. */
+    THEME_VALUE_MID,     /* Middle of a scale: white. */
+    THEME_VALUE_HIGH,    /* Best end of a scale: green. */
     THEME_COLOR_COUNT
 } ThemeColor;
 
@@ -66,6 +69,13 @@ typedef struct Theme {
     float card_width;       /* Build menu: the category column and the card above it. */
     float inspector_width;  /* The inspector's box (and its tab panels, at least). */
 } Theme;
+
+/* Color along a scale from 0 (THEME_VALUE_LOW) through 0.5 (THEME_VALUE_MID) to 1
+ * (THEME_VALUE_HIGH); `t` is clamped. */
+SDL_Color theme_scale_color(const Theme *theme, float t);
+
+/* THEME_VALUE_LOW below zero, THEME_VALUE_HIGH above, THEME_TEXT at zero. */
+SDL_Color theme_sign_color(const Theme *theme, float value);
 
 /* A palette at a scale (1: default size; 1.5: half as large again). */
 void theme_init(Theme *theme, float scale, SettingsPalette palette);
