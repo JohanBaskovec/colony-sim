@@ -283,6 +283,7 @@ colonist.task.dig_carefully = Déterrage prudent de racines
 colonist.task.gather_stones = Ramasse des pierres
 colonist.task.gather_branches = Ramasse des branches
 colonist.task.gather_twigs = Ramasse des brindilles
+colonist.task.gather_nuts = Ramasse des noisettes
 colonist.task.cut_grass = Coupe de l’herbe
 colonist.task.craft = Fabrique
 colonist.task.construct = Construit

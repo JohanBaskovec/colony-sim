@@ -286,6 +286,9 @@ def draw_tree(stage):
 # Canvas (width, height) and scale of each growth stage of the shrubs.
 HAZEL_STAGES = [((128, 128), 0.34), ((128, 160), 0.52), ((128, 192), 0.7),
                 ((160, 224), 0.86), ((192, 256), 1.0)]
+# A hazel is a small tree: only its seedling stages are sprites (growth stages
+# below the one where it takes room, see core/tree.h).
+HAZEL_SEEDLING_STAGES = 2
 BRAMBLE_STAGES = [((128, 128), 0.34), ((128, 128), 0.52), ((128, 128), 0.7),
                   ((160, 128), 0.86), ((192, 160), 1.0)]
 # Low plants are drawn in three sizes: young, growing, grown.
@@ -1474,9 +1477,8 @@ def generate(output):
     sprites = {}
     for stage in range(TREE_SAPLING_STAGES):
         sprites[f"tree_{stage}.png"] = draw_tree(stage)
-    for stage in range(len(HAZEL_STAGES)):
+    for stage in range(HAZEL_SEEDLING_STAGES):  # The grown hazels are tiles, like the trees.
         sprites[f"hazel_{stage}.png"] = draw_hazel(stage, False)
-        sprites[f"hazel_fruit_{stage}.png"] = draw_hazel(stage, True)
     for stage in range(len(BRAMBLE_STAGES)):
         sprites[f"bramble_{stage}.png"] = draw_bramble(stage, False)
         sprites[f"bramble_fruit_{stage}.png"] = draw_bramble(stage, True)
@@ -1526,12 +1528,12 @@ def preview(images, path):
         sheet.alpha_composite(image, (x, 400 - image.height))
         x += image.width + 4
     x = 10
-    for name in ("hazel", "bramble"):
-        for fruit in (False, True):
-            for stage in (2, 4):
-                image = images[f"{name}_fruit_{stage}.png" if fruit else f"{name}_{stage}.png"]
-                sheet.alpha_composite(image, (x, 600 - image.height))
-                x += image.width
+    for name, fruit, stages in (("hazel", False, (0, 1)), ("bramble", False, (2, 4)),
+                                ("bramble", True, (2, 4))):
+        for stage in stages:
+            image = images[f"{name}_fruit_{stage}.png" if fruit else f"{name}_{stage}.png"]
+            sheet.alpha_composite(image, (x, 600 - image.height))
+            x += image.width
     x = 10 + 128 * 5 + 300
     for name, _ in HERBS:
         image = images[f"{name}_2.png"]

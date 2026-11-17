@@ -320,6 +320,7 @@ colonist.task.dig_carefully = Digging up roots with care
 colonist.task.gather_stones = Gathering stones
 colonist.task.gather_branches = Gathering branches
 colonist.task.gather_twigs = Gathering twigs
+colonist.task.gather_nuts = Picking up hazelnuts
 colonist.task.cut_grass = Cutting grass
 colonist.task.craft = Crafting
 colonist.task.construct = Building

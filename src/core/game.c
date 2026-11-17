@@ -280,7 +280,11 @@ static bool count_food_plant(const Map *map, int x, int y, int z, void *userdata
 {
     FoodPlantCount *count = userdata;
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
-    if (plant->type == count->type && plant->growth >= plant_def(count->type)->min_food_growth) {
+    /* A tree counts once it is grown (though only the young ones, with no
+     * trunk yet, can be reached by the search). */
+    float grown =
+        plant_is_tree(count->type) ? TREE_CROWN_FROM : plant_def(count->type)->min_food_growth;
+    if (plant->type == count->type && plant->growth >= grown) {
         count->count++;
     }
     return false;
@@ -308,6 +312,16 @@ static bool is_plant_spot(const Map *map, int x, int y, int z, void *userdata)
             plant_def(search->type)->min_fertility ||
         abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_PLANT_MIN_DISTANCE) {
         return false;
+    }
+    if (plant_is_tree(search->type)) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (map_in_bounds(map, x + dx, y + dy, z) &&
+                    plant_is_tree(map->plants[map_index(map, x + dx, y + dy, z)].type)) {
+                    return false; /* Trunks never touch. */
+                }
+            }
+        }
     }
     return search->chance >= 1.0f || rng_next_float(search->rng) < search->chance;
 }
@@ -340,6 +354,11 @@ static void ensure_food_plants_near(Game *game, TilePos center, PlantType type, 
         plant->type = (uint8_t)type;
         plant->growth = 1.0f;
         plant_settle(plant, day);
+        TreeShape shape;
+        if (tree_shape(plant, spot.x, spot.y, spot.z, &shape) &&
+            tree_room_to_grow(&game->map, spot.x, spot.y, spot.z, &shape)) {
+            tree_build(&game->map, spot.x, spot.y, spot.z); /* A tree has its volume. */
+        }
     }
 }
 
@@ -642,16 +661,21 @@ static void grow_tree(Game *game, size_t index, float old_growth)
 
 /* Once an hour per tree: twigs, and branches from a grown tree, fall at
  * random (TREE_SHED_*_CHANCE, rolled from the seed, the tile and the hour so
- * that the game's random stream is left alone). */
+ * that the game's random stream is left alone), and in autumn a hazel's nuts
+ * (tree_fall_chance()). */
 static void shed_litter(Game *game, size_t index)
 {
-    static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS};
+    static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS};
     if (game->map.rock[index] != ROCK_WOOD) {
         return; /* No crown yet: the trunk has no room. */
     }
     int hour = (int)(game->clock.tick / GAME_PLANT_UPDATE_INTERVAL);
     for (uint32_t kind = 0; kind < sizeof(KINDS) / sizeof(KINDS[0]); kind++) {
-        float chance = tree_shed_chance(&game->map.plants[index], KINDS[kind]);
+        ItemType nut = ITEM_NONE;
+        float chance = KINDS[kind] == ITEM_HAZELNUTS
+                           ? tree_fall_chance(&game->map.plants[index],
+                                              game_day_of_year(game->clock.tick), &nut)
+                           : tree_shed_chance(&game->map.plants[index], KINDS[kind]);
         if (chance <= 0.0f || world_roll(game->seed, index, hour, 2 * kind + 10) >= chance) {
             continue;
         }
@@ -695,7 +719,7 @@ static void update_plants(Game *game)
             float old_growth = plant->growth;
             plant_advance(plant, terrain_def((Terrain)map->terrain[i])->fertility,
                           GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR, day);
-            if (plant->type == PLANT_TREE) {
+            if (plant_is_tree(plant->type)) {
                 grow_tree(game, i, old_growth);
                 shed_litter(game, i);
             } else if (plant->type == PLANT_NONE && map->forbidden_count > 0) {
@@ -736,6 +760,28 @@ static ItemConditions tile_conditions(const void *context, size_t tile)
                             !(rains && open)};
 }
 
+/* The nuts lying on a tile (Map.nuts) have no state of their own: they rot
+ * on average, as many of them as the rot of one pristine nut would take in
+ * that time on that tile (item_rot_rate(), ItemDef.rot_days), a fraction
+ * rolled from the seed, the tile and the hour like the other chance events of
+ * the world. */
+static void rot_nuts(Game *game, size_t begin, size_t end, int hours)
+{
+    float rot_hours = item_def(ITEM_HAZELNUTS)->rot_days * (float)HOURS_PER_DAY;
+    int hour = (int)(game->clock.tick / TICKS_PER_HOUR);
+    for (size_t tile = begin; tile < end; tile++) {
+        int nuts = game->map.nuts[tile];
+        if (nuts == 0) {
+            continue;
+        }
+        float rate = tile_conditions(game, tile).rot_rate;
+        float expected = (float)nuts * rate * (float)hours / rot_hours;
+        int lost = (int)expected;
+        lost += world_roll(game->seed, tile, hour, 40) < expected - (float)lost ? 1 : 0;
+        game->map.nuts[tile] = (uint8_t)(nuts - (lost < nuts ? lost : nuts));
+    }
+}
+
 /* Items lying on the ground change over time (fresh grass dries, food
  * rots), slice by slice like plants, over every level (foliage holds items
  * too; levels without any are skipped). */
@@ -745,8 +791,9 @@ static void update_items(Game *game)
     uint64_t phase = game->clock.tick % GAME_ITEM_UPDATE_INTERVAL;
     size_t begin = (size_t)(phase * count / GAME_ITEM_UPDATE_INTERVAL);
     size_t end = (size_t)((phase + 1) * count / GAME_ITEM_UPDATE_INTERVAL);
-    items_advance(&game->items, begin, end, GAME_ITEM_UPDATE_INTERVAL / TICKS_PER_HOUR,
-                  tile_conditions, game);
+    int hours = GAME_ITEM_UPDATE_INTERVAL / TICKS_PER_HOUR;
+    items_advance(&game->items, begin, end, hours, tile_conditions, game);
+    rot_nuts(game, begin, end, hours);
 }
 
 static void update_colonists(Game *game)
@@ -949,12 +996,12 @@ bool game_debug_plant_tree(Game *game, int x, int y, int z)
     for (int dy = -1; dy <= 1; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
             if ((dx != 0 || dy != 0) && map_in_bounds(map, x + dx, y + dy, z) &&
-                map->plants[map_index(map, x + dx, y + dy, z)].type == PLANT_TREE) {
+                plant_is_tree(map->plants[map_index(map, x + dx, y + dy, z)].type)) {
                 return false; /* Trunks never touch (see worldgen). */
             }
         }
     }
-    if (map->plants[index].type == PLANT_TREE) {
+    if (plant_is_tree(map->plants[index].type)) {
         return false;
     }
     map->plants[index] = (Plant){.type = PLANT_TREE};
@@ -968,7 +1015,7 @@ bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully)
     if (!map_in_bounds(map, x, y, z)) {
         return false;
     }
-    if (map->plants[map_index(map, x, y, z)].type == PLANT_TREE) {
+    if (plant_is_tree(map->plants[map_index(map, x, y, z)].type)) {
         tree = (TreeRef){.x = x, .y = y, .z = z}; /* A seedling or the foot. */
     } else if (!tree_at(map, x, y, z, &tree)) {
         return false;

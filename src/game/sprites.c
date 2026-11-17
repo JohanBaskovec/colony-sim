@@ -42,7 +42,7 @@ typedef struct PlantSprites {
 } PlantSprites;
 static const PlantSprites PLANT_SPRITES[] = {
     {PLANT_TREE, "tree", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
-    {PLANT_HAZEL, "hazel", PLANT_GROWTH_STAGES, PLANT_GROWTH_STAGES, true},
+    {PLANT_HAZEL, "hazel", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
     {PLANT_BRAMBLE, "bramble", PLANT_GROWTH_STAGES, PLANT_GROWTH_STAGES, true},
     {PLANT_WILD_GARLIC, "wild_garlic", 3, PLANT_GROWTH_STAGES, false},
     {PLANT_NETTLE, "nettle", 3, PLANT_GROWTH_STAGES, false},
@@ -53,7 +53,7 @@ static const PlantSprites PLANT_SPRITES[] = {
 };
 /* Sum of the sizes (twice for plants with a food variant), checked when the
  * sprites are loaded. */
-#define PLANT_SPRITE_COUNT 38
+#define PLANT_SPRITE_COUNT 30
 
 /* Tools with a sprite, and their file names. */
 static const ItemType TOOL_TYPES[] = {ITEM_COBBLE, ITEM_CHOPPER, ITEM_FLAKE, ITEM_HAND_AXE};

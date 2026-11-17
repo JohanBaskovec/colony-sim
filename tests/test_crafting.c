@@ -798,14 +798,13 @@ static void test_plants_are_cleared_before_building(void)
     Plant *tree = &game.map.plants[map_index(&game.map, 20, 20, 0)];
     *tree = (Plant){.type = PLANT_TREE, .growth = 1.0f};
     CHECK(!game_can_place_workstation(&game, 20, 20, 0));
-    Plant *hazel = &game.map.plants[map_index(&game.map, 14, 10, 0)];
-    *hazel = (Plant){.type = PLANT_HAZEL, .growth = 1.0f};
-    plant_settle(hazel, game_day_of_year(game.clock.tick));
-    int twigs = plant_stock_available(hazel, PLANT_STOCK_TWIGS);
-    int branches = plant_stock_available(hazel, PLANT_STOCK_BRANCHES);
-    REQUIRE(twigs > 0 && branches > 0);
+    Plant *bramble = &game.map.plants[map_index(&game.map, 14, 10, 0)];
+    *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
+    plant_settle(bramble, GAME_START_DAY); /* In fruit. */
+    int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
+    REQUIRE(berries > 0);
     REQUIRE(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 14, 10, 0));
-    /* The hazel is in the way: a site, to clear it first. */
+    /* The bramble is in the way: a site, to clear it first. */
     CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
     const ConstructionSite *site =
         construction_get(&game.constructions, construction_at(&game.constructions, 14, 10, 0));
@@ -821,16 +820,15 @@ static void test_plants_are_cleared_before_building(void)
     run_ticks(&game, 30);
     CHECK(colonist->task != TASK_CONSTRUCT);
     CHECK_NEAR(site->clear_progress, cleared, 1e-4);
-    CHECK_EQ_INT(hazel->type, PLANT_HAZEL);
+    CHECK_EQ_INT(bramble->type, PLANT_BRAMBLE);
 
     game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_CONSTRUCTION, 1);
     run_ticks(&game, 30); /* Picked up again at once. */
     CHECK_EQ_INT(colonist->task, TASK_CONSTRUCT);
     run_ticks(&game, 1000);
     CHECK(workstation_at(&game.workstations, 14, 10, 0) != WORKSTATION_NONE);
-    CHECK_EQ_INT(hazel->type, PLANT_NONE);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], twigs);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], branches);
+    CHECK_EQ_INT(bramble->type, PLANT_NONE);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], berries);
     game_shutdown(&game);
 }
 

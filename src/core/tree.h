@@ -89,6 +89,8 @@
 #define TREE_CROWN_REACH 2
 #define TREE_SECOND_LEVEL_AT 0.49f
 #define TREE_THIRD_LEVEL_AT 0.55f
+/* A hazel stays small: two levels of trunk at most. */
+#define TREE_HAZEL_SECOND_LEVEL_AT 0.52f
 #define TREE_DENSIFY_GROWTH 0.1f
 /* How out of order the tiles of a crown come in (in tiles of distance). */
 #define TREE_CROWN_DISORDER 0.8f
@@ -140,6 +142,13 @@ int tree_wood_yield(const Plant *plant);
 /* Hourly chance that a tree sheds an item (ITEM_TWIGS, or ITEM_BRANCHES);
  * 0 for saplings, other plants and other items. */
 float tree_shed_chance(const Plant *plant, ItemType item);
+
+/* Chance per in-game hour that a tree lets one of its nuts fall on a day of
+ * the year (PlantDef.fall_item, ITEM_HAZELNUTS for a hazel; `item` receives
+ * it): PlantDef.fall_yield over the season for a fully grown tree, less for a
+ * younger one. 0 out of season and for trees that bear none (`item`
+ * untouched). */
+float tree_fall_chance(const Plant *plant, int day_of_year, ItemType *item);
 
 /* Branches or twigs a felled tree's crown gives (0 for other plants). */
 int tree_crown_yield(const Plant *plant, ItemType item);

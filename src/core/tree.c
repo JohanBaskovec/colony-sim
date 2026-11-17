@@ -20,8 +20,11 @@ _Static_assert(6 + 1 == TREE_MAX_LEVELS, "the ancient tree is the tallest");
 
 int tree_size(const Plant *plant)
 {
-    if (plant->type != PLANT_TREE) {
+    if (!plant_is_tree(plant->type)) {
         return 0;
+    }
+    if (plant->type != PLANT_TREE) {
+        return 1; /* Only the great trees have wide trunks. */
     }
     return plant->size > 1 ? (plant->size < TREE_MAX_SIZE ? plant->size : TREE_MAX_SIZE) : 1;
 }
@@ -58,6 +61,21 @@ float tree_shed_chance(const Plant *plant, ItemType item)
     return item == ITEM_BRANCHES && grown ? TREE_SHED_BRANCH_CHANCE * area : 0.0f;
 }
 
+float tree_fall_chance(const Plant *plant, int day_of_year, ItemType *item)
+{
+    const PlantDef *def = plant_def((PlantType)plant->type);
+    if (!plant_is_tree(plant->type) || def->fall_item == ITEM_NONE ||
+        !plant_days_contain(def->fall_days, day_of_year)) {
+        return 0.0f;
+    }
+    int days = 0;
+    for (int day = 0; day < DAYS_PER_YEAR; day++) {
+        days += plant_days_contain(def->fall_days, day);
+    }
+    *item = def->fall_item;
+    return (float)def->fall_yield * plant->growth / (float)(days * HOURS_PER_DAY);
+}
+
 int tree_crown_yield(const Plant *plant, ItemType item)
 {
     int area = tree_size(plant) * tree_size(plant);
@@ -80,7 +98,7 @@ static uint32_t mix_bits(uint32_t h)
 
 bool tree_shape(const Plant *plant, int x, int y, int z, TreeShape *out)
 {
-    if (plant->type != PLANT_TREE || plant_is_dormant(plant)) {
+    if (!plant_is_tree(plant->type) || plant_is_dormant(plant)) {
         return false;
     }
     int size = tree_size(plant);
@@ -92,7 +110,9 @@ bool tree_shape(const Plant *plant, int x, int y, int z, TreeShape *out)
         }
         float growth = plant->growth;
         *out = (TreeShape){.size = 1,
-                           .trunk = growth >= TREE_THIRD_LEVEL_AT    ? 3
+                           .trunk = plant->type == PLANT_HAZEL
+                                        ? (growth >= TREE_HAZEL_SECOND_LEVEL_AT ? 2 : 1)
+                                    : growth >= TREE_THIRD_LEVEL_AT  ? 3
                                     : growth >= TREE_SECOND_LEVEL_AT ? 2
                                                                      : 1,
                            .foliage_from = 1,
@@ -417,7 +437,7 @@ static bool holds_litter(const Map *map, int x, int y, int z)
  * below (what does not fit there lies as items). */
 static void drop_litter_from(Map *map, Items *items, int x, int y, int z)
 {
-    static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS};
+    static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS};
     for (size_t i = 0; i < sizeof(KINDS) / sizeof(KINDS[0]); i++) {
         int count = map_take_litter(map, x, y, z, KINDS[i]);
         int level = count > 0 ? landing_level(map, x, y, z) : -1;

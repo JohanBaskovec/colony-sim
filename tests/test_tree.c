@@ -106,9 +106,9 @@ static void test_shapes(void)
     CHECK_EQ_INT(tree_shape_levels(&shape), TREE_MAX_LEVELS);
     CHECK(shape.reach <= TREE_MAX_REACH);
 
-    Plant hazel = {.type = PLANT_HAZEL, .growth = 1.0f};
-    CHECK(!tree_shape(&hazel, 0, 0, 0, &shape));
-    CHECK_EQ_INT(tree_size(&hazel), 0);
+    Plant garlic = {.type = PLANT_WILD_GARLIC, .growth = 1.0f};
+    CHECK(!tree_shape(&garlic, 0, 0, 0, &shape)); /* Not a tree. */
+    CHECK_EQ_INT(tree_size(&garlic), 0);
 
     /* Where trunk and foliage are, from the foot (fully grown). */
     plant = (Plant){.type = PLANT_TREE, .growth = GROWN};
@@ -507,6 +507,151 @@ static void test_thin_foliage_is_seen_through(void)
     CHECK_EQ_INT(map_view_level(&map, 5, 5, 2), 2);
     items_free(&items);
     map_free(&map);
+}
+
+/* A hazel is a small tree: a shrub as a seedling, then a trunk of at most two
+ * levels with a crown like the other trees'. */
+static void test_hazel_is_a_small_tree(void)
+{
+    CHECK(plant_is_tree(PLANT_TREE) && plant_is_tree(PLANT_HAZEL));
+    CHECK(!plant_is_tree(PLANT_BRAMBLE) && !plant_is_tree(PLANT_GRASS));
+    Plant hazel = {.type = PLANT_HAZEL, .growth = SAPLING};
+    TreeShape shape;
+    CHECK(!tree_shape(&hazel, 3, 4, 0, &shape)); /* A seedling takes no room. */
+    hazel.growth = YOUNG;
+    REQUIRE(tree_shape(&hazel, 3, 4, 0, &shape));
+    CHECK_EQ_INT(shape.size, 1);
+    CHECK_EQ_INT(shape.trunk, 1);
+    hazel.growth = GROWN;
+    REQUIRE(tree_shape(&hazel, 3, 4, 0, &shape));
+    CHECK_EQ_INT(shape.trunk, 2); /* Never taller than that. */
+    CHECK_EQ_INT(tree_size(&hazel), 1);
+    hazel.size = 3; /* Only the oaks grow wide. */
+    CHECK_EQ_INT(tree_size(&hazel), 1);
+    /* Less wood than a tree, felled like one. */
+    Plant oak = {.type = PLANT_TREE, .growth = 1.0f};
+    CHECK(tree_wood_yield(&hazel) > 0 && tree_wood_yield(&hazel) < tree_wood_yield(&oak));
+    CHECK(tree_fell_work(&hazel) > 0.0f);
+
+    /* In the map: a trunk, foliage, and nothing built over it. */
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    map.plants[map_index(&map, 10, 10, 0)] = (Plant){.type = PLANT_HAZEL, .growth = GROWN};
+    REQUIRE(tree_shape(&map.plants[map_index(&map, 10, 10, 0)], 10, 10, 0, &shape));
+    REQUIRE(tree_room_to_grow(&map, 10, 10, 0, &shape));
+    tree_build(&map, 10, 10, 0);
+    CHECK(is_trunk(&map, 10, 10, 0));
+    CHECK(is_trunk(&map, 10, 10, 1));
+    CHECK(!is_trunk(&map, 10, 10, 2));
+    CHECK(is_foliage(&map, 10, 10, 2)); /* Over the trunk. */
+    TreeRef tree;
+    REQUIRE(tree_at(&map, 10, 10, 1, &tree));
+    CHECK_EQ_INT(tree_plant(&map, &tree)->type, PLANT_HAZEL);
+    CHECK(map_plant_blocks_building(&map, 10, 10, 0));
+    items_free(&items);
+    map_free(&map);
+}
+
+/* The nuts fall in autumn only, the more the more grown the tree is, and only
+ * from trees that bear any. */
+static void test_nuts_fall_in_autumn(void)
+{
+    ItemType item = ITEM_NONE;
+    Plant hazel = {.type = PLANT_HAZEL, .growth = GROWN};
+    int summer = SEASON_DAY(SEASON_SUMMER, 5), autumn = SEASON_DAY(SEASON_AUTUMN, 5);
+    CHECK(tree_fall_chance(&hazel, summer, &item) == 0.0f);
+    CHECK_EQ_INT(item, ITEM_NONE);
+    float chance = tree_fall_chance(&hazel, autumn, &item);
+    CHECK_EQ_INT(item, ITEM_HAZELNUTS);
+    CHECK(chance > 0.0f && chance < 1.0f);
+    /* The whole yield of the season, on average. */
+    float days = (float)DAYS_PER_SEASON;
+    CHECK_NEAR(chance * days * HOURS_PER_DAY, (float)plant_def(PLANT_HAZEL)->fall_yield, 0.5);
+    hazel.growth = 0.5f;
+    CHECK(tree_fall_chance(&hazel, autumn, &item) < chance);
+    item = ITEM_NONE;
+    Plant oak = {.type = PLANT_TREE, .growth = 1.0f};
+    CHECK(tree_fall_chance(&oak, autumn, &item) == 0.0f);
+    CHECK_EQ_INT(item, ITEM_NONE);
+    CHECK(tree_fall_chance(&(Plant){.type = PLANT_BRAMBLE, .growth = 1.0f}, autumn, &item) == 0.0f);
+}
+
+static int litter_total(const Map *map, ItemType type);
+
+/* Total nuts lying on the map. */
+static int nuts_total(const Map *map)
+{
+    return litter_total(map, ITEM_HAZELNUTS);
+}
+
+/* In the game, a grown hazel lets its nuts fall in autumn, on the ground and
+ * on its dense foliage, never in other seasons. */
+static void test_hazel_drops_nuts_in_the_game(void)
+{
+    for (int autumn = 0; autumn < 2; autumn++) {
+        Game game;
+        REQUIRE(init_flat_game(&game));
+        Map *map = &game.map;
+        game.clock.tick =
+            (uint64_t)SEASON_DAY(autumn ? SEASON_AUTUMN : SEASON_SPRING, 2) * TICKS_PER_DAY;
+        map->plants[map_index(map, 16, 16, 0)] = (Plant){.type = PLANT_HAZEL, .growth = 1.0f};
+        game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL); /* Takes room. */
+        REQUIRE(is_trunk(map, 16, 16, 0));
+        game_debug_skip(&game, 150 * TICKS_PER_HOUR);
+        int nuts = nuts_total(map);
+        if (!autumn) {
+            CHECK_EQ_INT(nuts, 0);
+        } else {
+            CHECK(nuts > 5); /* About 30 over the season: 12 or so in 150 hours. */
+            for (int z = 0; z < DEPTH; z++) {
+                for (int y = 0; y < SIZE; y++) {
+                    for (int x = 0; x < SIZE; x++) {
+                        int here = map_litter(map, x, y, z, ITEM_HAZELNUTS);
+                        CHECK(here <= MAP_NUTS_MAX);
+                        if (here > 0) {
+                            CHECK(abs(x - 16) <= TREE_CROWN_REACH &&
+                                  abs(y - 16) <= TREE_CROWN_REACH);
+                            CHECK(!is_trunk(map, x, y, z));
+                            CHECK(z == 0 || map_is_passable(map, x, y, z)); /* Dense foliage. */
+                        }
+                    }
+                }
+            }
+        }
+        game_shutdown(&game);
+    }
+}
+
+/* Nuts have no state of their own: a few rot every hour, on average as many
+ * as the rot of nuts lying there says, the faster the warmer and wetter. */
+static void test_nuts_rot_on_average(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Map *map = &game.map;
+    int tiles = 0;
+    for (int y = 0; y < SIZE; y++) {
+        for (int x = 0; x < SIZE; x++) {
+            for (int n = 0; n < MAP_NUTS_MAX; n++) {
+                map_add_litter(map, x, y, 0, ITEM_HAZELNUTS);
+            }
+            tiles++;
+        }
+    }
+    int before = nuts_total(map);
+    REQUIRE(before == tiles * MAP_NUTS_MAX);
+    float rate = game_item_rot_rate(&game, 5, 5, 0);
+    CHECK(rate > 0.0f);
+    game_debug_skip(&game, 24 * TICKS_PER_HOUR); /* A day. */
+    int lost = before - nuts_total(map);
+    /* rate / (90 days) of them, give or take the dice. */
+    float expected = (float)before * rate / item_def(ITEM_HAZELNUTS)->rot_days;
+    CHECK(lost > 0);
+    CHECK(lost > (int)(expected * 0.6f) && lost < (int)(expected * 1.4f) + 2);
+    /* They are never made up. */
+    CHECK(nuts_total(map) < before);
+    game_shutdown(&game);
 }
 
 static void test_build_and_find(void)
@@ -1069,7 +1214,7 @@ static void test_shedding_by_age(void)
     plant.growth = GROWN;
     CHECK(tree_shed_chance(&plant, ITEM_TWIGS) == 2.0f * young_twigs);
     CHECK(tree_shed_chance(&plant, ITEM_BRANCHES) > 0.0f);
-    plant.type = PLANT_HAZEL;
+    plant.type = PLANT_WILD_GARLIC;
     CHECK(tree_shed_chance(&plant, ITEM_TWIGS) == 0.0f);
     CHECK_EQ_INT(tree_crown_yield(&plant, ITEM_TWIGS), 0);
 }
@@ -1304,6 +1449,10 @@ int main(void)
     RUN_TEST(test_debug_plants_and_grows_a_tree);
     RUN_TEST(test_young_tree_growth_leaves_the_topology_alone);
     RUN_TEST(test_thin_foliage_is_seen_through);
+    RUN_TEST(test_hazel_is_a_small_tree);
+    RUN_TEST(test_nuts_fall_in_autumn);
+    RUN_TEST(test_hazel_drops_nuts_in_the_game);
+    RUN_TEST(test_nuts_rot_on_average);
     RUN_TEST(test_build_and_find);
     RUN_TEST(test_climbing);
     RUN_TEST(test_room_to_grow);

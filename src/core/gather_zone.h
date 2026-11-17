@@ -89,6 +89,7 @@ typedef uint32_t GatherResourceMask;
 typedef enum GatherJob {
     GATHER_JOB_BRANCHES, /* Take the dead branches lying on a tile (and a shrub's). */
     GATHER_JOB_TWIGS,    /* Take the twigs lying on a tile (and a shrub's). */
+    GATHER_JOB_NUTS,     /* Pick up the hazelnuts lying on a tile. */
     GATHER_JOB_HARVEST,  /* Pick fruit, nuts or leaves; the plant stays. */
     /* Pick what is easily mistaken for a poisonous plant (mushrooms, wild
      * garlic): skilled gatherers only. */

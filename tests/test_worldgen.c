@@ -61,7 +61,7 @@ static void test_tiles_are_valid_and_consistent(void)
             float fertility = terrain_def((Terrain)map.terrain[i])->fertility;
             /* A tree's foot is under its trunk (core/tree.h). */
             CHECK(map.rock[i] == ROCK_NONE ||
-                  (plant->type == PLANT_TREE && map.rock[i] == ROCK_WOOD));
+                  (plant_is_tree(plant->type) && map.rock[i] == ROCK_WOOD));
             CHECK(fertility >= plant_def((PlantType)plant->type)->min_fertility);
             /* Withered plants (wild garlic at the end of summer) wait at 0. */
             CHECK(plant->growth > 0.0f || plant_is_dormant(plant));

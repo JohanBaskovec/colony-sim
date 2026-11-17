@@ -450,10 +450,7 @@ static void test_gathering_comes_before_hauling_at_same_priority(void)
     REQUIRE(init_flat_game(&game));
     items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_WOOD, 10));
     stockpile_create(&game.stockpiles, &game.map, 12, 10, 12, 10, 0);
-    Plant *hazel = &game.map.plants[map_index(&game.map, 30, 30, 0)];
-    hazel->type = PLANT_HAZEL;
-    hazel->growth = 1.0f;
-    plant_settle(hazel, GAME_START_DAY);
+    map_add_litter(&game.map, 30, 30, 0, ITEM_BRANCHES);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 30, 30, 30, 30, 0);
     gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BRANCHES, true);
     gather_zone_set_mode(&game.gather_zones, zone, GATHER_BRANCHES, GATHER_FOREVER);

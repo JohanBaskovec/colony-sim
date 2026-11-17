@@ -233,7 +233,7 @@ static bool slope_leads_to(const Map *map, int x, int y, int z)
 /* Whether a tree stands on (x, y, z). */
 static bool tree_on(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y, z) && map->plants[map_index(map, x, y, z)].type == PLANT_TREE;
+    return map_in_bounds(map, x, y, z) && plant_is_tree(map->plants[map_index(map, x, y, z)].type);
 }
 
 /* Whether a trunk of `size` with its foot on (x, y, z) has room: flat,
@@ -288,7 +288,8 @@ static void place_tree_volumes(Map *map, Rng *rng)
                 int size = roll < ANCIENT_TREE_CHANCE                     ? 3
                            : roll < ANCIENT_TREE_CHANCE + OLD_TREE_CHANCE ? 2
                                                                           : 1;
-                if (size == 1 || plant_growth_stage(plant) < PLANT_GROWTH_STAGES - 1 ||
+                if (size == 1 || plant->type != PLANT_TREE ||
+                    plant_growth_stage(plant) < PLANT_GROWTH_STAGES - 1 ||
                     !wide_trunk_fits(map, x, y, z, size)) {
                     continue;
                 }
@@ -329,7 +330,7 @@ static void place_litter(Map *map, Rng *rng)
     for (int z = 0; z <= map->top_ground_level; z++) {
         for (int y = 0; y < map->height; y++) {
             for (int x = 0; x < map->width; x++) {
-                if (map->plants[map_index(map, x, y, z)].type == PLANT_TREE) {
+                if (plant_is_tree(map->plants[map_index(map, x, y, z)].type)) {
                     tree_scatter_litter(map, x, y, z, rng);
                 }
             }

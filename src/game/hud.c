@@ -446,8 +446,8 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
-    /* Branches and twigs the trees shed, on the ground or on their foliage. */
-    static const ItemType LITTER[] = {ITEM_BRANCHES, ITEM_TWIGS};
+    /* Branches, twigs and nuts the trees shed, on the ground or on their foliage. */
+    static const ItemType LITTER[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS};
     for (size_t i = 0; i < SDL_arraysize(LITTER); i++) {
         int count = map_litter(map, x, y, z, LITTER[i]);
         if (count > 0) {

@@ -216,7 +216,7 @@ The layers:
 **Seasons** are days of the year: a `PlantDays` bit set (60 days fit in 64
 bits) says when a plant grows (`growth_days`: spring to autumn for all of
 them) and when its food ripens (`food_days`: blackberries at the end of
-summer, hazelnuts in autumn, rhizomes all year...). Out of its food days the
+summer, rhizomes all year...). Out of its food days the
 food stock is gone; plants that die back (wild garlic after spring, nettles
 in winter) wither to growth 0 and show nothing until their growing days come
 back. `plant_advance()` does one step of all this; `plant_settle()` puts a
@@ -323,8 +323,27 @@ anything on the ground: every tile follows the zone covering **it**, so a
 zone drawn on the ground only gathers from the ground and nobody climbs for
 the foliage's twigs; a zone drawn over the foliage sends settlers up to take
 them there. What lay on foliage that goes with a felled tree falls to the
-ground below (`tree_clear()`; what does not fit lies as items). Shrubs
-(hazel) keep their own stock of branches and twigs, taken on the same jobs.
+ground below (`tree_clear()`; what does not fit lies as items). No shrub
+bears branches or twigs of its own any more (the plant stocks for them stay
+for one that will).
+
+**Hazels** are trees too (`plant_is_tree()`: `PLANT_TREE` and `PLANT_HAZEL`;
+a seedling below growth 0.4 is a shrub sprite, as for the other trees). A
+hazel has no wide trunk, at most two levels of trunk
+(`TREE_HAZEL_SECOND_LEVEL_AT`), a crown that grows like the others', less
+wood (`PlantDef.cut_yield`) and lets its nuts fall in autumn
+(`PlantDef.fall_item`, `fall_days`, `fall_yield`): once an hour per tree
+(`tree_fall_chance()`: the season's yield spread over its hours, scaled by
+growth) a nut is shed by `tree_shed()` like a twig, onto the ground under the
+crown or onto its dense foliage. Nuts lie in a map layer of their own,
+`Map.nuts` (`MAP_NUTS_MAX` a tile, `map_litter()` and friends take
+`ITEM_HAZELNUTS`), have no state of their own and **rot on average**
+(`rot_nuts()` in game.c, with the items' sweep): each hour a tile with nuts
+loses as many as `item_rot_rate()` of its conditions says over
+`ItemDef.rot_days` (90 days at 15 °C), the fraction rolled from the seed, the
+tile and the hour. Gathering zones pick them up on `GATHER_JOB_NUTS` (all the
+nuts of the tile at once, like twigs), and a hungry settler eats the nuts
+lying where it stands.
 A felled tree falls full length
 (`TREE_FALL_TILES_PER_LEVEL` = 2 tiles per level, stopping before rock and
 the edge of the map) where the woodcutter aims it (`tree_fall_aim()`): the
@@ -688,8 +707,8 @@ in. A failed food or water search floods everything within its cost limit, so
 retries back off exponentially (½ h, 1 h, 2 h, then every 4 in-game hours)
 and reset on success. The starting position prefers fertile land with water
 within reach. The first settlers bring nothing, so world generation then
-plants grown brambles (bearing fruit at the start) and hazels (nuts in
-autumn) nearby until there are `GAME_SPAWN_BRAMBLES` and `GAME_SPAWN_HAZELS`
+plants grown brambles (bearing fruit at the start) and hazels (small trees,
+whose nuts fall in autumn) nearby until there are `GAME_SPAWN_BRAMBLES` and `GAME_SPAWN_HAZELS`
 within `GAME_SPAWN_FOOD_MAX_COST` of travel.
 
 Decisions only happen on tile centers, so a colonist never jumps back when it
@@ -1479,10 +1498,10 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   (hair color, darker when asleep) or fades them.
 - A sprite is anchored by the middle of its bottom edge on a point of the
   world (the bottom middle of a plant's tile, a colonist's feet) and may
-  overflow its tile: grown hazels reach 2 tiles high and 1.5 wide. Plants and
+  overflow its tile: grown brambles reach 2 tiles high and 1.5 wide. Plants and
   colonists are drawn together from the back (top of the screen) to the
   front (`render_world_sprites()`): rows of plants merged with colonists
-  sorted by the depth of their feet. A plant (a hazel, a sapling) that
+  sorted by the depth of their feet. A plant (a bramble, a sapling) that
   would hide a colonist standing behind it is drawn see-through.
 - Trees that take room are drawn like walls and floors, no sprite: a trunk
   tile shows its cut face (wood with growth rings on a 1 × 1 trunk, bark on
@@ -1490,11 +1509,11 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   leaf clumps (`render_foliage()`), and the ground under foliage is shaded
   (`under_foliage()`). Viewed from above, the levels below are blurred as
   usual.
-- Plants: a table in `sprites.c` gives each plant type its sprites: trees
-  (saplings, the first two stages only), hazels and brambles one per growth
+- Plants: a table in `sprites.c` gives each plant type its sprites: trees and
+  hazels (seedlings, the first two stages only), brambles one per growth
   stage (`plant_growth_stage()`, 5
   stages), low plants three sizes the stages are shared out among, mushrooms
-  one; hazels and brambles have a second set showing their food
+  one; brambles have a second set showing their food
   (`plant_has_food()`). Withered plants are not drawn. Sprites are mirrored
   on some tiles for variety.
 - Colonists: four layers drawn in order on the same 128 × 192 canvas: body

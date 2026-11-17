@@ -141,7 +141,7 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
     case DESIGNATION_DECONSTRUCT:
         return map_structure(map, x, y, z) != STRUCTURE_NONE ||
                map_roof(map, x, y, z) != STRUCTURE_NONE;
-    case DESIGNATION_CHOP: return map->plants[map_index(map, x, y, z)].type == PLANT_TREE;
+    case DESIGNATION_CHOP: return plant_is_tree(map->plants[map_index(map, x, y, z)].type);
     default: return false;
     }
 }

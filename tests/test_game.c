@@ -67,13 +67,24 @@ static void test_settlers_arrive_near_food(void)
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         REQUIRE(first != NULL);
         TilePos start = {(int16_t)first->x, (int16_t)first->y, (int16_t)first->z};
-        FoodPlantCount brambles = {PLANT_BRAMBLE, 0}, hazels = {PLANT_HAZEL, 0};
+        FoodPlantCount brambles = {PLANT_BRAMBLE, 0};
         pathfinder_find_nearest(&game.pathfinder, &game.map, start, count_food_plant, &brambles,
                                 GAME_SPAWN_FOOD_MAX_COST, NULL, NULL);
-        pathfinder_find_nearest(&game.pathfinder, &game.map, start, count_food_plant, &hazels,
-                                GAME_SPAWN_FOOD_MAX_COST, NULL, NULL);
         CHECK(brambles.count >= GAME_SPAWN_BRAMBLES);
-        CHECK(hazels.count >= GAME_SPAWN_HAZELS);
+        /* Hazels are trees now: their trunks are not walked through, so they
+         * are counted around the settlers' start. */
+        int hazels = 0;
+        for (int z = 0; z < game.map.depth; z++) {
+            for (int y = start.y - 45; y <= start.y + 45; y++) {
+                for (int x = start.x - 45; x <= start.x + 45; x++) {
+                    if (map_in_bounds(&game.map, x, y, z)) {
+                        const Plant *plant = &game.map.plants[map_index(&game.map, x, y, z)];
+                        hazels += plant->type == PLANT_HAZEL && plant->growth >= TREE_CROWN_FROM;
+                    }
+                }
+            }
+        }
+        CHECK(hazels >= GAME_SPAWN_HAZELS);
         game_shutdown(&game);
     }
 }
@@ -495,23 +506,21 @@ static void test_plant_stocks_grow_back(void)
 {
     Game game;
     REQUIRE(init_small_game(&game, 8));
-    /* A hazel (a tree's branches and twigs lie on the ground, not on the plant). */
+    /* A bramble in fruit (a tree's branches and twigs lie on the ground, not on the plant). */
     Plant *plant = &game.map.plants[0];
     game.map.rock[0] = ROCK_NONE;
-    *plant = (Plant){.type = PLANT_HAZEL, .growth = 1.0f};
+    *plant = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
     /* Generated plants start with full stocks. */
     plant_settle(plant, GAME_START_DAY);
-    int capacity = plant_stock_capacity(plant, PLANT_STOCK_BRANCHES);
+    int capacity = plant_stock_capacity(plant, PLANT_STOCK_FOOD);
     REQUIRE(capacity > 0);
-    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_BRANCHES), capacity);
-    plant_take_stock(plant, PLANT_STOCK_BRANCHES, capacity);
-    plant_take_stock(plant, PLANT_STOCK_TWIGS, 1000);
-    int regrow = plant_def(PLANT_HAZEL)->stock_regrow_hours[PLANT_STOCK_BRANCHES];
+    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_FOOD), capacity);
+    plant_take_stock(plant, PLANT_STOCK_FOOD, capacity);
+    int regrow = plant_def(PLANT_BRAMBLE)->stock_regrow_hours[PLANT_STOCK_FOOD];
     for (int i = 0; i < (regrow + 1) * TICKS_PER_HOUR; i++) {
         game_tick(&game);
     }
-    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_BRANCHES), 1);
-    CHECK(plant_stock_available(plant, PLANT_STOCK_TWIGS) >= 2); /* Twigs grow back faster. */
+    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_FOOD), 1);
     game_shutdown(&game);
 }
 

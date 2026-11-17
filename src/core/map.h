@@ -62,7 +62,7 @@ typedef enum PlantType {
     PLANT_NONE = 0,
     PLANT_GRASS,
     PLANT_TREE,
-    PLANT_HAZEL,       /* Shrub: hazelnuts in autumn, branches and twigs. */
+    PLANT_HAZEL,       /* A small tree (a shrub as a seedling): hazelnuts fall in autumn. */
     PLANT_BRAMBLE,     /* Thorny: blackberries at the end of summer. */
     PLANT_WILD_GARLIC, /* Leaves in spring, then withers under the trees. */
     PLANT_NETTLE,      /* Young shoots in spring and autumn. */
@@ -148,7 +148,19 @@ typedef struct PlantDef {
     /* Gone once its food is (taken, or out of season); appears on its own
      * (see core/game.c). */
     bool vanishes;
+    /* What a tree lets fall in a season (see core/tree.h): `fall_yield` items of
+     * `fall_item` over `fall_days` for a fully grown tree (ITEM_NONE: none). They
+     * lie under it like its twigs (Map.nuts). */
+    ItemType fall_item;
+    PlantDays fall_days;
+    int fall_yield;
 } PlantDef;
+
+/* Whether a plant type is a tree (takes room once grown, see core/tree.h). */
+static inline bool plant_is_tree(uint8_t type)
+{
+    return type == PLANT_TREE || type == PLANT_HAZEL;
+}
 
 typedef struct Plant {
     uint8_t type; /* PlantType */
@@ -169,6 +181,9 @@ typedef struct Plant {
 /* Most dead branches, and most twigs, lying on one tile (Map.branches). */
 #define MAP_BRANCHES_MAX 2
 #define MAP_TWIGS_MAX 4
+
+/* Most hazelnuts lying on one tile (Map.nuts). */
+#define MAP_NUTS_MAX 8
 
 /* How many recent topology changes the map remembers (see Map.topology_log). */
 #define MAP_TOPOLOGY_LOG_SIZE 16
@@ -237,6 +252,9 @@ typedef struct Map {
      * (see core/tree.h), up to MAP_BRANCHES_MAX and MAP_TWIGS_MAX a tile. */
     uint8_t *branches;
     uint8_t *twigs;
+    /* Hazelnuts lying on each tile, fallen from the trees in autumn like twigs
+     * (up to MAP_NUTS_MAX). They rot away on average (see core/game.c). */
+    uint8_t *nuts;
     /* Built structures (StructureType on every tile they take): beds,
      * walls, doors. `structure_part` holds the structure's Direction (bits
      * 0-1) and which of its tiles this is (bits 2-3, 0 for the head); the
@@ -629,17 +647,20 @@ void map_set_stones(Map *map, int x, int y, int z, int cobbles, int flint);
 /* Takes one stone of a type from a tile; false when there is none. */
 bool map_take_stone(Map *map, int x, int y, int z, ItemType type);
 
-/* Branches (ITEM_BRANCHES) or twigs (ITEM_TWIGS) lying on a tile; 0 for other
- * types and out of bounds. */
+/* Branches (ITEM_BRANCHES), twigs (ITEM_TWIGS) or hazelnuts (ITEM_HAZELNUTS)
+ * lying on a tile; 0 for other types and out of bounds. */
 int map_litter(const Map *map, int x, int y, int z, ItemType type);
 
-/* Lays one branch or twig on a tile; false when the tile is full, out of
+/* Lays one branch, twig or nut on a tile; false when the tile is full, out of
  * bounds or for another type. Does not look at what the tile is (see
  * tree_shed()). */
 bool map_add_litter(Map *map, int x, int y, int z, ItemType type);
 
-/* Takes all the branches or twigs of a tile; returns how many were there. */
+/* Takes all the branches, twigs or nuts of a tile; returns how many were there. */
 int map_take_litter(Map *map, int x, int y, int z, ItemType type);
+
+/* Takes up to `count` of them; returns how many were taken. */
+int map_take_litter_count(Map *map, int x, int y, int z, ItemType type, int count);
 
 /* The level of the ground at (x, y): the highest tile of the column one
  * could stand on (the top of the highest rock or floor), trees left out

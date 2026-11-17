@@ -62,18 +62,13 @@ static Colonist *spawn_rested(Game *game, int x, int y)
     return colonist;
 }
 
-/* Ticks until the order on (x, y) is gone (at most `max_ticks`); returns the
- * number of ticks during which work was done on it. */
-/* Runs until the branches of the hazel at (x, y), in a zone, are taken;
- * returns the ticks spent working on them. */
+/* Runs until the branches lying on the tile (x, y), in a zone, are taken (at
+ * most `max_ticks`); returns the ticks spent working on them. */
 static int run_until_done(Game *game, int x, int y, int max_ticks)
 {
     int working = 0;
     const float *progress = &game->gather_zones.progress[map_index(&game->map, x, y, 0)];
-    for (int i = 0;
-         i < max_ticks && plant_stock_available(&game->map.plants[map_index(&game->map, x, y, 0)],
-                                                PLANT_STOCK_BRANCHES) > 0;
-         i++) {
+    for (int i = 0; i < max_ticks && map_litter(&game->map, x, y, 0, ITEM_BRANCHES) > 0; i++) {
         float before = *progress;
         game_tick(game);
         if (*progress != before) {
@@ -451,20 +446,22 @@ static void test_colonists_drink_before_sleeping(void)
 
 /* ---- Work on designations ---------------------------------------------- */
 
-/* A grown hazel: its branches are taken from beside it (a tree's are taken
- * on its foliage, see core/tree.h). */
+/* Dead branches and twigs lying on a tile, as under a tree: taken from the
+ * tile itself. */
 static void add_hazel(Map *map, int x, int y)
 {
-    Plant *hazel = &map->plants[map_index(map, x, y, 0)];
-    hazel->type = PLANT_HAZEL;
-    hazel->growth = 1.0f;
-    plant_settle(hazel, GAME_START_DAY);
+    for (int i = 0; i < MAP_BRANCHES_MAX; i++) {
+        map_add_litter(map, x, y, 0, ITEM_BRANCHES);
+    }
+    for (int i = 0; i < MAP_TWIGS_MAX; i++) {
+        map_add_litter(map, x, y, 0, ITEM_TWIGS);
+    }
 }
 
-/* Branches a grown hazel holds. */
+/* Branches lying on a tile at most. */
 static int hazel_branches(void)
 {
-    return plant_def(PLANT_HAZEL)->stock_capacity[PLANT_STOCK_BRANCHES];
+    return MAP_BRANCHES_MAX;
 }
 
 /* Ticks needed to walk `tiles` tiles on cheap terrain, plus some margin. */
@@ -514,9 +511,7 @@ static void test_idle_colonist_gathers_branches(void)
     CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 26, 20, 0) > 0.0f);
 
     run_ticks(&game, (int)(work * 0.5f));
-    const Plant *hazel = &game.map.plants[map_index(&game.map, 26, 20, 0)];
-    CHECK_EQ_INT(hazel->type, PLANT_HAZEL);                              /* The hazel stays... */
-    CHECK_EQ_INT(plant_stock_available(hazel, PLANT_STOCK_BRANCHES), 0); /* ...bare. */
+    CHECK_EQ_INT(map_litter(&game.map, 26, 20, 0, ITEM_BRANCHES), 0); /* Taken from the tile. */
     CHECK_EQ_INT(items_get(&game.items, 26, 20, 0).type, ITEM_BRANCHES);
     CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], hazel_branches());
     CHECK(!branches_open(&game, 26, 20));
@@ -585,8 +580,7 @@ static int first_branches_target(int near, int middle, int far, bool far_bare)
                                  gather_zone_at(&game.gather_zones, xs[i], 20, 0), priorities[i]);
     }
     if (far_bare) {
-        Plant *hazel = &game.map.plants[map_index(&game.map, 40, 20, 0)];
-        plant_take_stock(hazel, PLANT_STOCK_BRANCHES, 1000);
+        map_take_litter(&game.map, 40, 20, 0, ITEM_BRANCHES);
     }
     Colonist *colonist = spawn_rested(&game, 20, 20);
     int target = -1;
@@ -696,7 +690,8 @@ static void test_nobody_fells_or_mines_yet(void)
 
     run_ticks(&game, walk_ticks(5) + 4000);
     CHECK(!map_is_passable(&game.map, 25, 20, 0));
-    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 20, 25, 0)].type, PLANT_HAZEL);
+    CHECK_EQ_INT(map_litter(&game.map, 20, 25, 0, ITEM_BRANCHES),
+                 MAP_BRANCHES_MAX); /* Untouched. */
     CHECK_EQ_INT(game.designations.count, 1);
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.reservations.count, 0);
@@ -771,8 +766,7 @@ static void test_cancelled_order_stops_the_worker(void)
     CHECK_EQ_INT(gather_zones_remove_rect(&game.gather_zones, 22, 20, 22, 20, 0), 1);
     game_tick(&game);
     CHECK(colonist->task != TASK_WORK);
-    const Plant *hazel = &game.map.plants[map_index(&game.map, 22, 20, 0)];
-    CHECK_EQ_INT(plant_stock_available(hazel, PLANT_STOCK_BRANCHES), hazel_branches());
+    CHECK_EQ_INT(map_litter(&game.map, 22, 20, 0, ITEM_BRANCHES), hazel_branches());
     game_shutdown(&game);
 }
 
@@ -1886,9 +1880,9 @@ static void test_working_teaches_the_order_knowledge(void)
     int working = run_until_done(&game, 26, 20, 20000);
     REQUIRE(!branches_open(&game, 26, 20));
 
-    /* A beginner works at half speed: the branches (900 work) take about
-     * 1,800 ticks, worth about 0.7 points of gathering at this level. */
-    CHECK(working > 1700);
+    /* A beginner works at half speed: the branches (600 work) take about
+     * 1,200 ticks, worth about 0.5 points of gathering at this level. */
+    CHECK(working > 1100);
     double gained = colonist_knowledge_level(colonist, KNOWLEDGE_GATHERING) - 50.0;
     double hours = (double)working / TICKS_PER_HOUR;
     CHECK(gained > hours * 0.97 && gained <= hours);
