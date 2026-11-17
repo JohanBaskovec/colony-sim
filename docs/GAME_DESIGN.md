@@ -14,8 +14,8 @@ interaction of systems rather than from a script.
 
 ## Pillars
 
-1. **Emergent stories**: every settler is a person with traits, relationships
-   and a mood; systems interact and produce memorable situations.
+1. **Emergent stories**: every settler is a person with attributes, tastes,
+   relationships and a mood; systems interact and produce memorable situations.
 2. **Grounded simulation**: everyday life is simulated believably (thirst,
    bodily needs, warmth, fire, hygiene). Like in real life, it takes effort;
    organizing that effort efficiently is part of the game (see *Logistics*).
@@ -177,7 +177,14 @@ see or use is simulated as individuals.
 - Knowledge levels (fire, stone knapping, gathering, building, medicine,
   combat...) improving with practice and teaching: see *Knowledge and
   progression*.
-- Traits that modify behavior and mood.
+- Attributes instead of all-or-nothing traits (`docs/ATTRIBUTES.md`): body
+  (walking, work pace, learning, sleep, appetite, cold and heat tolerance,
+  toughness, pain), mind (outlook, temperament, sociability, demands, courage)
+  and social self (kindness, social ease, self-confidence, beauty, sexuality),
+  each on a continuous scale where most settlers are ordinary and extremes are
+  very rare; shown in words, never in numbers.
+- Tastes, later: liking or disliking drugs, foods, animals, women or men,
+  kinds of work...
 - Mood: sum of situational modifiers (ate a good meal, slept in the rain, saw a
   death...). Low mood → reduced work, then mental breaks.
 - Relationships between settlers (friendship, rivalry, romance, family).

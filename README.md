@@ -122,6 +122,9 @@ tools/         Development scripts (procedural sprite generator)
 ## Documentation
 
 - [Game design](docs/GAME_DESIGN.md): vision, pillars and planned systems
+- [Knowledge](docs/KNOWLEDGE.md): knowledges, learning, crafting and building
+- [Settler attributes](docs/ATTRIBUTES.md): body, mind and social values on a bell curve
+- [Interface](docs/UI.md): screen map, behaviors and theme
 - [Architecture](docs/ARCHITECTURE.md): modules, game loop, determinism, rendering
 - [Roadmap](docs/ROADMAP.md): milestones and progress
 - [Internationalization](docs/I18N.md): file format, plurals, adding a language

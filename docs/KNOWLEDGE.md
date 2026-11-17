@@ -55,8 +55,10 @@ detailed when they are developed.
   Knowledge replaces skills: there are no separate skills any more.
 - **Knowledge spreads** by conversation, evening fireside stories, lessons,
   apprenticeship, related practice, and above all by doing (§1.5).
-- **Settlers differ by what they know**, not by innate talents: their levels
-  come from their life before the colony (§3) and from what they do in it.
+- **Settlers differ above all by what they know**: their levels come from
+  their life before the colony (§3) and from what they do in it. Innate
+  attributes (`docs/ATTRIBUTES.md`) add rarer differences, among them how fast
+  a settler learns and works (×0.5 to ×2, most settlers near ×1).
 - **Knowledge fades** without practice (§1.6), and **is lost** when nobody alive
   has it any more.
 - **No eras.** Eras survive only as a way to group knowledges on screen and as
@@ -238,8 +240,9 @@ today: chatting with Idris; +1.4: knapping") and the fading (§1.6).
 | Elder (60 and over) | ×0.5 |
 
 Elders learn slowly but know a lot: they are the colony's memory and its best
-storytellers. There are no innate talents (§1.1): age is the only personal
-factor of learning speed. Babies start with 0 in everything and learn from
+storytellers. The age factor multiplies the settler's innate learning
+attribute (`docs/ATTRIBUTES.md`: ×0.5 to ×2 on a bell curve, most settlers near
+×1); both apply to every source of learning. Babies start with 0 in everything and learn from
 their family by conversation, stories and apprenticeship.
 
 ### 1.9 Data and determinism
@@ -260,7 +263,7 @@ their family by conversation, stories and apprenticeship.
 | Quantity    | Rule |
 |-------------|------|
 | Time        | 2,500 ticks = 1 in-game hour. Work amounts are in ticks at speed ×1. |
-| Work speed  | Knowledge level (§1.4) × tool (§2.3) × tool grade (§2.3). |
+| Work speed  | Knowledge level (§1.4) × tool (§2.3) × tool grade (§2.3) × mood × the settler's work pace (`docs/ATTRIBUTES.md`). |
 | Weight      | Kilograms per item, realistic. |
 | Bulk        | Room per item, about half liters with packing gaps; a tile holds 1,000. Stack limit = 1,000 / bulk. |
 | Nutrition   | Food need restored per item. 1.0 lasts 36 h, so 1.0 ≈ 3,750 kcal (2,500 kcal a day). Blackberries: 0.3 kg ≈ 190 kcal = 0.05. |
@@ -1137,7 +1140,8 @@ None at the moment.
 Settled so far: stones are gathered in zones with a target per stone type
 (or forever); grass drying is
 simulated; dirt and work accidents exist (no sharp knapping debris); the interface
-shows only discovered knowledges; no innate aptitudes; felling and mining are
+shows only discovered knowledges; innate aptitudes are continuous attributes
+(`docs/ATTRIBUTES.md`), not all-or-nothing traits; felling and mining are
 the knowledges **Felling** and **Mining**; the hafted axe comes from Hafting
 (§13), the knowledge that makes the antler pick is decided when it is
 detailed; two stone types at the start (cobble and flint); workstations are

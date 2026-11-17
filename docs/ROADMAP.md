@@ -120,12 +120,14 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Containers (buckets) and roles: water carrier filling buckets near dwellings
 - [x] Moods, step A: a mood from 0 to 100 drifting towards the sum of thoughts; states (hungry, thirsty, tired, cold, too hot, soaked, out in the rain) and memories (how the last night went: in a bed, on the ground, cold, hot or wet; varied, monotonous, cooked or spoiled meals; warmed by a fire; a fireside story; chats); mood speeds work up or slows it down (±20 %), changes quality and condition (±10 levels) and learning (±25 %), replacing the slower work after a night on the ground; breaks below 25 (sulking without working) and 10 (going off alone, binging on the colony's food), a notice, relief afterwards; mood, its effects, thoughts and breaks in the colonist inspector, faces from the mood; a debug button to sadden everyone
 - [x] Moods, fading thoughts: no all-or-nothing thought and no drift, the mood is 50 plus what every thought weighs now; states set in over an hour, hunger, thirst and exhaustion grow worse the longer they last, and a state over fades; memories weigh in full for a while, then halve at their own pace until forgotten; renewed or adding up (chats) when they come back; the inspector shows what each thought weighs and the most it weighed while it fades
-- [ ] Moods, later: personality traits changing thoughts; expectations rising with the colony's wealth; inspiration in a very good mood; destructive breaks; clothes, deaths and injuries, meal quality; the mood in the work grid
+- [ ] Moods, later: outlook and temperament (attributes); expectations rising with the colony's wealth; inspiration in a very good mood; destructive breaks; clothes, deaths and injuries, meal quality; the mood in the work grid
+- [ ] Attributes, step A (`docs/ATTRIBUTES.md`): continuous values on a bell curve, no all-or-nothing traits; body (walking, work pace, learning, sleep, appetite, cold and heat tolerance) and mind (outlook, temperament); notable ones in words in the colonist inspector
+- [ ] Attributes, later: kindness (compliments and insults), social ease, self-confidence, beauty and sexuality (with relationships); sociability and demands (with the social need and expectations); toughness and pain tolerance (with health); courage (with danger); inherited (with genetics)
 
-## UI redesign (in progress, before moods)
+## UI redesign ✅
 
-The interface takes its final layout (`docs/UI.md`: screen map, behaviors,
-theme and migration plan); moods come after it.
+The interface took its final layout (`docs/UI.md`: screen map, behaviors,
+theme and migration plan).
 
 - [x] Foundations: theme (color roles, sizes, UI scale with `--ui-scale`), screen zones; tooltips wrap their long lines; floating windows stay above the bottom bar; names of keys without a character translated (Esc/Échap, Space/Espace...)
 - [x] Bottom bar (Build, Work, Menu), three-level build menu (category column, icon row with shortcut letters, unavailable icons veiled) with its card (hovered icon or tool in use: name, cost, description, how to use it one line each, shortcut, why unavailable), game menu (resume, controls, language, quit; pauses the game; Escape opens it when nothing else is left to close); the debug readout (F3) moved top right
@@ -211,7 +213,7 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 ## Later
 
 - [ ] Social life: relationships, sexual needs (abstract representation)
-- [ ] Traits; related practice and the knowledges after the starting ones; classes with classrooms and schedules
+- [ ] Tastes (`docs/ATTRIBUTES.md` §6: drugs, foods, animals, women or men, kinds of work); related practice and the knowledges after the starting ones; classes with classrooms and schedules
 - [ ] Content of the later historical periods (Mesolithic to Iron Age, then beyond)
 - [ ] Earth building with settling down: clay deposits, wattle and daub on the branch frame of grass walls, then cob, mud bricks, rammed earth, fired bricks (`docs/KNOWLEDGE.md` §13)
 - [ ] Pregnancy, children, aging
