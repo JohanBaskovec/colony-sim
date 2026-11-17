@@ -157,6 +157,10 @@ void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, Workstation
 void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon);
 void render_structure_icon(SDL_Renderer *renderer, SDL_FRect rect, StructureType type);
 
+/* A colonist's head and shoulders filling `rect` (the colonist bar). */
+void render_colonist_portrait(SDL_Renderer *renderer, Sprites *sprites, const Colonist *colonist,
+                              SDL_FRect rect);
+
 void render_shutdown(void);
 
 #endif /* COLONY_GAME_RENDER_H */

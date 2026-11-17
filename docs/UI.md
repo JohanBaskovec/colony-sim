@@ -176,9 +176,9 @@ Each step keeps the game playable and is checked on screen (Xvfb).
        wrapped tooltips, windows kept above the bottom bar
 3. [x] Bottom bar (Build, Work, Menu) and the three-level build menu with its card;
        game menu (controls help, language, quit)
-4. [ ] Bottom right: speeds, temperature overlay, level slider; date, season,
+4. [x] Bottom right: speeds, temperature overlay, level slider; date, season,
        temperature and weather; empty alerts column
-5. [ ] Colonist bar
+5. [x] Colonist bar
 6. [ ] Inspector box with empty tabs, then its content: colonist (summary, Needs, Mood,
        Skills, Gear, Social), workstation, stockpile, gathering zone, tile;
        the floating inspectors go

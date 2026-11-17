@@ -8,11 +8,13 @@
 #include "game/gather_zone_panel.h"
 #include "game/bottom_bar.h"
 #include "game/build_menu.h"
+#include "game/colonist_bar.h"
 #include "game/game_menu.h"
 #include "game/station_panel.h"
 #include "game/ui_layout.h"
 #include "game/stockpile_panel.h"
 #include "game/tile_panel.h"
+#include "game/view_controls.h"
 #include "game/work_panel.h"
 
 #include <limits.h>
@@ -65,8 +67,9 @@ static void panel_size(App *app, const Panel *panel, float *width, float *height
     *height = (float)(panel->count * text_line_height(app->text)) + 2.0f * HUD_PADDING;
 }
 
-/* Text panel that does not catch clicks. */
-static void panel_draw_colored(App *app, const Panel *panel, float x, float y, SDL_Color color)
+/* Text panel that does not catch clicks, its lines aligned left or right. */
+static void panel_draw_aligned(App *app, const Panel *panel, float x, float y, SDL_Color color,
+                               bool right)
 {
     if (panel->count == 0) {
         return;
@@ -79,9 +82,20 @@ static void panel_draw_colored(App *app, const Panel *panel, float x, float y, S
 
     float line_height = (float)text_line_height(app->text);
     for (int i = 0; i < panel->count; i++) {
-        text_draw(app->text, panel->lines[i], x + HUD_PADDING,
-                  y + HUD_PADDING + (float)i * line_height, THEME_COLOR(app, THEME_TEXT));
+        float tx = x + HUD_PADDING;
+        if (right) {
+            int w, h;
+            text_measure(app->text, panel->lines[i], &w, &h);
+            tx = x + width - HUD_PADDING - (float)w;
+        }
+        text_draw(app->text, panel->lines[i], tx, y + HUD_PADDING + (float)i * line_height,
+                  THEME_COLOR(app, THEME_TEXT));
     }
+}
+
+static void panel_draw_colored(App *app, const Panel *panel, float x, float y, SDL_Color color)
+{
+    panel_draw_aligned(app, panel, x, y, color, false);
 }
 
 static void panel_draw(App *app, const Panel *panel, float x, float y)
@@ -212,15 +226,7 @@ static void build_status_panel(App *app, Panel *panel)
 
     if (clock->speed == GAME_SPEED_PAUSED) {
         panel_add_text(panel, tr("hud.paused"));
-    } else {
-        char multiplier[8];
-        tr_integer(multiplier, sizeof(multiplier), game_speed_multiplier(clock->speed));
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.speed"), multiplier);
     }
-    char level[16];
-    /* Counted from the plains': negative underground. */
-    tr_integer(level, sizeof(level), app->camera.level - app->game.map.surface_level);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.level"), level);
     char outdoor[32];
     temperature_text(outdoor, sizeof(outdoor), game_outdoor_temperature(&app->game), 0);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.outdoor_temperature"), outdoor);
@@ -1090,11 +1096,16 @@ void hud_draw(App *app)
     ScreenLayout layout;
     layout_screen(&app->ui, &layout);
     app->ui.reserved_bottom = layout.bottom_bar.h; /* Windows stay above the bar. */
+    app->ui.reserved_right = view_controls_width(app);
 
-    /* Top left: date and speed. */
+    /* Bottom right, left of the level slider: date and weather. */
     Panel status = {0};
     build_status_panel(app, &status);
-    panel_draw(app, &status, HUD_MARGIN, HUD_MARGIN);
+    float status_right, status_bottom;
+    view_controls_info_corner(app, &status_right, &status_bottom);
+    panel_size(app, &status, &width, &height);
+    panel_draw_aligned(app, &status, status_right - width, status_bottom - height,
+                       THEME_COLOR(app, THEME_HUD_PANEL), true);
 
     /* Top right: the debug readout (F3), then the notices. */
     float notices_top = HUD_MARGIN;
@@ -1117,6 +1128,8 @@ void hud_draw(App *app)
                            THEME_COLOR(app, THEME_READOUT));
     }
 
+    colonist_bar_draw(app);
+
     /* Windows, back to front. */
     AppWindow open[APP_WINDOW_COUNT];
     int open_count = hud_open_windows(app, open);
@@ -1124,6 +1137,7 @@ void hud_draw(App *app)
         draw_window(app, open[i]);
     }
     build_menu_draw(app);
+    view_controls_draw(app);
     bottom_bar_draw(app);
     ui_draw_popup(&app->ui);
     ui_draw_tooltip(&app->ui);

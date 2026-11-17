@@ -724,6 +724,32 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     }
 }
 
+void app_select_colonist(App *app, EntityId id, bool additive)
+{
+    if (!additive) {
+        app->selected_count = 0;
+    }
+    app->selected_stockpile = STOCKPILE_NONE;
+    app->selected_station = WORKSTATION_NONE;
+    app->selected_gather_zone = GATHER_ZONE_NONE;
+    app->tile_selected = false;
+    int index = find_selected(app, id);
+    if (additive && index >= 0) {
+        select_remove_at(app, index);
+    } else {
+        select_add(app, id);
+    }
+}
+
+void app_focus_colonist(App *app, EntityId id)
+{
+    const Colonist *colonist = game_colonist_const(&app->game, id);
+    if (colonist != NULL) {
+        colonist_position(colonist, &app->camera.x, &app->camera.y);
+        app->camera.level = colonist->z;
+    }
+}
+
 /* Selects the colonists in the box from the drag's world corner to the cursor. */
 static void select_in_box(App *app, float screen_x, float screen_y, bool additive)
 {

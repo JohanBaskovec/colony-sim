@@ -8,6 +8,7 @@ set(COLONY_UNIT_TESTS
     test_cli
     test_crafting
     test_debug
+    test_entry_strip
     test_colonist
     test_construction
     test_designation

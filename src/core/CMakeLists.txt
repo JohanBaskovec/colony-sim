@@ -3,6 +3,7 @@ add_library(colony_core STATIC
     bed.c
     camera.c
     cli.c
+    entry_strip.c
     colonist.c
     construction.c
     conversation.c

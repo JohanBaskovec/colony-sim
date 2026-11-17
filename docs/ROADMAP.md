@@ -129,8 +129,9 @@ theme and migration plan); moods come after it.
 
 - [x] Foundations: theme (color roles, sizes, UI scale with `--ui-scale`), screen zones; tooltips wrap their long lines; floating windows stay above the bottom bar; names of keys without a character translated (Esc/Échap, Space/Espace...)
 - [x] Bottom bar (Build, Work, Menu), three-level build menu (category column, icon row with shortcut letters, unavailable icons veiled) with its card (hovered icon or tool in use: name, cost, description, how to use it one line each, shortcut, why unavailable), game menu (resume, controls, language, quit; pauses the game; Escape opens it when nothing else is left to close); the debug readout (F3) moved top right
-- [ ] Bottom right: speeds, overlay toggles, level slider; date, season, temperature, weather; alerts column
-- [ ] Colonist bar (portrait, name, current action; shrinks then wraps with many colonists)
+- [x] Bottom right: temperature overlay and speed buttons (drawn icons, tooltips with shortcuts), vertical level slider (drag, +/−, "level/levels" counted from 1, a tick at the ground level); date, season, temperature and weather right aligned beside it, "Paused" there too
+- [x] Colonist bar (portrait, name, current action; click selects, Shift adds, double click centers the view; shrinks, dropping the action then the name, then wraps onto rows: 64 colonists fit)
+- [ ] Alerts column above the date (core module first)
 - [ ] Inspector box with tabs and action buttons for every selection (colonist, workstation, zones, tile)
 - [ ] Work grid as a main window; messages under the colonist bar; debug readout top right
 - [ ] Resources list (top left, folding groups)

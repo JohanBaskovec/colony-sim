@@ -85,6 +85,15 @@ menu.game.description = Commandes, langue, quitter (le jeu est en pause pendant 
 game_menu.resume = Reprendre
 game_menu.language = Langue : {0}
 game_menu.quit = Quitter
+controls.pause = Pause
+controls.speed = Vitesse ×{0}
+controls.temperature = Vue thermique
+controls.temperature.description = La température ressentie sur chaque case, chaleur des feux comprise : bleu pour le froid, rouge pour le chaud
+controls.level = Niveau affiché
+controls.level.description = Faites glisser la poignée, ou {0}/{1}, ou Maj + molette ; le trait marque le niveau du sol ; compté à partir de 1, le niveau le plus profond
+controls.level_up = Niveau au-dessus
+controls.level_down = Niveau en dessous
+controls.level_count = {0}/{1}
 key.escape = Échap
 key.space = Espace
 key.page_up = Page préc.
@@ -183,8 +192,6 @@ weather.snowstorm = Tempête de neige
 
 # Interface
 hud.date = {1}, jour {0}, an {2} · {3}h{4}
-hud.speed = Vitesse : {0}×
-hud.level = Niveau : {0}
 hud.outdoor_temperature = Dehors : {0}
 hud.weather = Temps : {0}
 hud.snow_cover = Neige au sol : {0} %

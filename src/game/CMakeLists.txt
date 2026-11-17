@@ -2,6 +2,7 @@ add_executable(colony_sim
     app.c
     bottom_bar.c
     build_menu.c
+    colonist_bar.c
     debug_panel.c
     game_menu.c
     gather_zone_panel.c
@@ -19,6 +20,7 @@ add_executable(colony_sim
     tile_panel.c
     ui.c
     ui_layout.c
+    view_controls.c
     work_panel.c)
 
 target_link_libraries(colony_sim PRIVATE colony_core SDL3_ttf::SDL3_ttf SDL3::SDL3)

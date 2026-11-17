@@ -2334,6 +2334,37 @@ static void render_hand(Sprites *sprites, const Camera *camera, const Colonist *
                          color, side < 0.0f);
 }
 
+void render_colonist_portrait(SDL_Renderer *renderer, Sprites *sprites, const Colonist *colonist,
+                              SDL_FRect rect)
+{
+    /* Head and shoulders: the figure is drawn larger than the rectangle and
+     * cut at its bottom edge. */
+    float zoom = rect.h * 1.45f;
+    float anchor_x = rect.x + rect.w * 0.5f;
+    float anchor_y = rect.y + zoom * (COLONIST_HEIGHT + COLONIST_SPRITE_MARGIN) - rect.h * 0.04f;
+    SDL_Rect clip = {(int)rect.x, (int)rect.y, (int)rect.w, (int)rect.h};
+    SDL_Rect previous;
+    bool clipped = SDL_RenderClipEnabled(renderer);
+    SDL_GetRenderClipRect(renderer, &previous);
+    SDL_SetRenderClipRect(renderer, &clip);
+    ColonistAppearance looks = colonist->appearance;
+    float brightness = colonist->task == TASK_SLEEP ? COLONIST_SLEEP_SHADE : 1.0f;
+    SDL_FColor skin = tint((SDL_Color){255, 255, 255, 255}, brightness);
+    SDL_FColor hair = tint(HAIR_COLORS[looks.hair_color % HAIR_COLOR_COUNT], brightness);
+    sprites_begin(sprites, zoom);
+    sprites_draw(sprites, sprite_body(looks.body, looks.skin), anchor_x, anchor_y, skin, false);
+    sprites_draw(sprites, sprite_head(looks.skin, colonist_expression(colonist)), anchor_x,
+                 anchor_y, skin, false);
+    if (looks.beard > 0) {
+        sprites_draw(sprites, sprite_beard(looks.beard), anchor_x, anchor_y, hair, false);
+    }
+    if (looks.hair_style > 0) {
+        sprites_draw(sprites, sprite_hair(looks.hair_style), anchor_x, anchor_y, hair, false);
+    }
+    sprites_flush(sprites);
+    SDL_SetRenderClipRect(renderer, clipped ? &previous : NULL);
+}
+
 static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera,
                             const Colonist *colonist, uint32_t slot, uint64_t tick, bool selected)
 {

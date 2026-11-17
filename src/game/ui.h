@@ -79,6 +79,7 @@ typedef struct Ui {
     float screen_width;
     float screen_height;
     float reserved_bottom; /* Kept free of windows at the bottom (the bottom bar). */
+    float reserved_right;  /* Left free by windows placed bottom right (view controls). */
     float mouse_x;
     float mouse_y;
     bool mouse_down;   /* Left button held. */
@@ -237,12 +238,25 @@ float ui_checkbox_width(Ui *ui, const char *label);
  */
 bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *high);
 
+/*
+ * Slider choosing a step 0..steps-1 along a vertical track, 0 at the bottom.
+ * A click moves the handle there, and it follows the mouse while the left
+ * button is held. A tick marks step `mark` (-1: none). `id` (non-zero)
+ * identifies the slider from one frame to the next. Returns true when
+ * *value changed.
+ */
+bool ui_vertical_slider(Ui *ui, int id, SDL_FRect rect, int steps, int mark, int *value);
+
 /* Height of one widget row. */
 float ui_row_height(const Ui *ui);
 
 /* Shows these lines next to the mouse at the end of the frame (call it while
  * a widget is hovered; the last call of the frame wins). */
 void ui_tooltip(Ui *ui, const char *const *lines, int count);
+
+/* `text` cut short with an ellipsis to be no wider than `width` (whole
+ * when it fits). */
+void ui_fit_text(Ui *ui, const char *text, float width, char *out, size_t size);
 
 /* Splits `text` at spaces into lines no wider than `width` (a word wider
  * than that keeps a line of its own), at most `max_lines`. Non-breaking

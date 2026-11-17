@@ -176,6 +176,10 @@ typedef struct App {
     AppTool build_hover_tool;
     int build_hover_type;
     bool show_game_menu; /* Game menu (game/game_menu.h): the game is paused meanwhile. */
+    /* Colonist bar (game/colonist_bar.h): the last click on an entry, to
+     * tell a double click (centers the view on the colonist). */
+    EntityId bar_last_click;
+    Uint64 bar_last_click_ms;
     /* A middle/right button press that started on a panel does not pan the view. */
     bool pan_blocked;
 
@@ -227,6 +231,13 @@ void app_toggle_tool(App *app, AppTool tool, int type);
 
 /* Whether this tool (same `type` rules) is the one in use. */
 bool app_tool_active(const App *app, AppTool tool, int type);
+
+/* Selects a colonist (the other selections are dropped); `additive` adds it
+ * to the colonists selected, or takes it out when it already is. */
+void app_select_colonist(App *app, EntityId id, bool additive);
+
+/* Centers the view on a colonist, on its level. */
+void app_focus_colonist(App *app, EntityId id);
 
 /* Switches to the next language. */
 void app_cycle_language(App *app);

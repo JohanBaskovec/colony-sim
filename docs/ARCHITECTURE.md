@@ -80,6 +80,7 @@ simulation:
 | `i18n`       | Translation catalogs, `tr()`, plurals, placeholders, number formatting       |
 | `camera`     | World ↔ screen transforms, zoom, visible tile range, the level shown         |
 | `cli`        | Command-line parsing (language, seed, size, colonists, test scenario, cheats) |
+| `entry_strip` | Fits same-sized entries (the colonist bar) into a width: shrunk, then wrapped onto rows |
 | `scenario`   | Ready-made test situations on a new game (`bench_simulation`, `--scenario`) |
 | `log`        | Logging with a pluggable sink                                                |
 | `util`       | Small helpers (clamp, lerp, FNV hashes)                                      |
@@ -99,6 +100,8 @@ simulation:
 | `ui_layout`    | Rows of a window laid out twice: measured, then drawn (window sized to its content) |
 | `bottom_bar`   | Full-width bar along the bottom: Build, Work, Menu                      |
 | `build_menu`   | Build menu: category column, icon row, card of the hovered icon or the tool in use |
+| `colonist_bar` | Top center: portrait, name and current action per colonist; click selects, double click centers the view |
+| `view_controls` | Bottom right: temperature overlay, speeds, level slider (date and weather beside it) |
 | `game_menu`    | Game menu (Menu button or Escape): resume, controls, language, quit; pauses the game |
 | `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
 | `gather_zone_panel` | Inspector of the selected gathering zone (priority; foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings) |

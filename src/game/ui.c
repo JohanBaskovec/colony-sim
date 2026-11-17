@@ -232,7 +232,7 @@ static void place(const Ui *ui, UiWindow *window, UiPlacement placement)
 {
     switch (placement) {
     case UI_PLACE_BOTTOM_RIGHT:
-        window->x = ui->screen_width - window->w - ui->theme.margin;
+        window->x = ui->screen_width - ui->reserved_right - window->w - ui->theme.margin;
         window->y = ui->screen_height - ui->reserved_bottom - window->h - ui->theme.margin;
         break;
     case UI_PLACE_TOP_CENTER:
@@ -631,6 +631,59 @@ bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *h
     return *low != old_low || *high != old_high;
 }
 
+/* Step under a vertical position, 0 at the bottom of the track (inset by
+ * half a handle). */
+static int vertical_step_at(SDL_FRect rect, float handle, int steps, float y)
+{
+    float bottom = rect.y + rect.h - handle * 0.5f;
+    float span = rect.h - handle;
+    if (steps <= 1 || span <= 0.0f) {
+        return 0;
+    }
+    int step = (int)SDL_roundf((bottom - y) / span * (float)(steps - 1));
+    return SDL_clamp(step, 0, steps - 1);
+}
+
+static float vertical_y_of(SDL_FRect rect, float handle, int steps, int step)
+{
+    float span = rect.h - handle;
+    float t = steps > 1 ? (float)step / (float)(steps - 1) : 0.0f;
+    return SDL_floorf(rect.y + rect.h - handle * 0.5f - span * t);
+}
+
+bool ui_vertical_slider(Ui *ui, int id, SDL_FRect rect, int steps, int mark, int *value)
+{
+    int old = *value;
+    float handle = ui->theme.slider_handle_width;
+    if (ui_take_click(ui, rect) == SDL_BUTTON_LEFT) {
+        ui->active_slider = id;
+        *value = vertical_step_at(rect, handle, steps, ui->click_y);
+    }
+    if (ui->active_slider == id && ui->mouse_down) {
+        *value = vertical_step_at(rect, handle, steps, ui->mouse_y);
+    }
+    float center = SDL_floorf(rect.x + rect.w * 0.5f);
+    float track = ui->theme.slider_track_height;
+    fill(ui, (SDL_FRect){center - track * 0.5f, rect.y, track, rect.h}, COLOR(THEME_TRACK));
+    float value_y = vertical_y_of(rect, handle, steps, *value);
+    float bottom = rect.y + rect.h - handle * 0.5f;
+    fill(ui, (SDL_FRect){center - track * 0.5f, value_y, track, bottom - value_y},
+         COLOR(THEME_CHECK));
+    if (mark >= 0 && mark < steps) {
+        float mark_y = vertical_y_of(rect, handle, steps, mark);
+        float half = SDL_floorf(rect.w * 0.35f);
+        fill(ui, (SDL_FRect){center - half, mark_y, 2.0f * half, SDL_max(1.0f, track * 0.5f)},
+             COLOR(THEME_HANDLE));
+    }
+    bool hover = ui_hovered(ui, rect) || ui->active_slider == id;
+    SDL_Color color = hover ? brighter(COLOR(THEME_HANDLE), 40) : COLOR(THEME_HANDLE);
+    float handle_width = SDL_floorf(rect.w * 0.8f);
+    SDL_FRect knob = {center - handle_width * 0.5f, value_y - handle * 0.5f, handle_width, handle};
+    fill(ui, knob, color);
+    border(ui, knob, COLOR(THEME_BORDER));
+    return *value != old;
+}
+
 /* ---- Tooltips --------------------------------------------------------------- */
 
 void ui_tooltip(Ui *ui, const char *const *lines, int count)
@@ -638,6 +691,32 @@ void ui_tooltip(Ui *ui, const char *const *lines, int count)
     ui->tooltip_count = SDL_min(count, UI_TOOLTIP_LINES);
     for (int i = 0; i < ui->tooltip_count; i++) {
         SDL_strlcpy(ui->tooltip[i], lines[i], UI_TOOLTIP_LINE_SIZE);
+    }
+}
+
+void ui_fit_text(Ui *ui, const char *text, float width, char *out, size_t size)
+{
+    SDL_strlcpy(out, text, size);
+    if (ui_text_width(ui, out) <= width) {
+        return;
+    }
+    static const char ELLIPSIS[] = "\u2026";
+    size_t length = SDL_strlen(out);
+    while (length > 0) {
+        /* Back to the start of the previous UTF-8 character. */
+        do {
+            length--;
+        } while (length > 0 && ((unsigned char)out[length] & 0xC0) == 0x80);
+        while (length > 0 && out[length - 1] == ' ') {
+            length--;
+        }
+        char candidate[UI_WRAP_LINE_SIZE];
+        SDL_strlcpy(candidate, out, SDL_min(length + 1, sizeof(candidate)));
+        SDL_strlcat(candidate, ELLIPSIS, sizeof(candidate));
+        if (ui_text_width(ui, candidate) <= width || length == 0) {
+            SDL_strlcpy(out, candidate, size);
+            return;
+        }
     }
 }
 
