@@ -110,6 +110,17 @@ typedef enum BuildCategory {
 #define APP_NOTICES_SHOWN 5
 #define APP_NOTICE_SECONDS 15.0
 
+/* What can be selected on a tile besides a workstation and the zones: each
+ * has a window of its own (game/tile_panel.h). */
+typedef enum TileThing {
+    THING_STRUCTURE, /* A wall, a door, a bed... */
+    THING_ROOF,      /* The roof the tile is. */
+    THING_SITE,      /* A construction site (a structure's or a workstation's). */
+    THING_ITEMS,     /* The stack lying there. */
+    THING_PLANT,     /* The plant (grass too), or the tree whose trunk or foliage it is. */
+    THING_COUNT
+} TileThing;
+
 typedef struct App {
     SDL_Window *window;
     SDL_Renderer *renderer;
@@ -159,10 +170,11 @@ typedef struct App {
     int selected_gather_zone_number;
     /* Groups of resources folded in the gathering zone window (UI state). */
     bool gather_group_folded[GATHER_GROUP_COUNT];
-    /* Selected tile (a structure, a roof, a construction site, items or a
-     * plant on it: game/tile_panel.h), same rules. */
+    /* Selected thing on a tile (a structure, a roof, a construction site,
+     * items or a plant: game/tile_panel.h), same rules. */
     bool tile_selected;
     int selected_tile_x, selected_tile_y, selected_tile_z;
+    TileThing selected_thing;
     /* A right click on the map (not dragged to pan) steps back like Escape. */
     bool right_click_pending;
     float right_down_x, right_down_y;
@@ -256,6 +268,13 @@ void app_select_colonist(App *app, EntityId id, bool additive);
  * its site, a structure): the tool and its type (see app_toggle_tool());
  * false when there is nothing to build like it. */
 bool app_build_like_target(const App *app, AppTool *tool, int *type);
+
+/* Whether the thing is on the tile, as the colony knows it (game_view_map()). */
+bool app_thing_at(const App *app, TileThing thing, int x, int y, int z);
+
+/* The plant on a tile as the colony knows it; on a tile of trunk or foliage,
+ * its tree's (PLANT_NONE: none). */
+PlantType app_plant_type_at(const App *app, int x, int y, int z);
 
 /* Starts building another of what is selected (APP_KEY_BUILD_LIKE). */
 void app_build_like_selection(App *app);

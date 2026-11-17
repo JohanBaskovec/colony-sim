@@ -115,7 +115,7 @@ simulation:
 | `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (condition sliders, filters); build another, delete |
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
 | `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills and (hearths) Fire tabs; forbid, build another, delete |
-| `tile_panel`   | Tile in the inspector: what lies there (structure, roof, items, plant) with a Forbid/Allow button each, and its construction site; build another |
+| `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
 | `items_panel`  | Items menu (F5): every item with a 1× and a Max button, which arm the debug tool to drop it on the next clicked tile |
@@ -1716,9 +1716,15 @@ level of the first settler; the HUD numbers it from `Map.surface_level`): the ma
 drawn for that level, and clicks and tools act on it (a selected structure
 keeps its level in `App.selected_tile_z`). A click on the map selects a
 colonist, else the first of what lies on the tile (`ClickTarget`): the
-station, the tile (a structure, a roof, a site, items or a plant: its window,
-`game/tile_panel.h`), the stockpile, the gathering zone, the tile for its
-grass alone; a click on what is selected goes to the next one. What is
+station, the structure, the roof, the construction site, the items, the
+plant (a tree from any tile of its trunk or foliage), the stockpile, the
+gathering zone, the grass; a click on what is selected goes to the next one.
+Each thing on a tile (`TileThing`, `App.selected_thing`) has a window like a
+workstation's (`game/tile_panel.h`): its name as the title and the action menu
+right of it (`inspector_forbid_action()`, `inspector_order_action()` for
+orders that toggle: lit while given, veiled while nobody knows how; a click
+again takes the order back). Selection reads what the colony knows
+(`game_view_map()`, `app_thing_at()`). What is
 forbidden carries a "no entry" sign (`render_forbidden_markers()`). Where the level shown is
 open space, the levels below show through (`render_below_begin()`), however
 deep. The level seen on each visible tile (`map_view_level()`) is worked out

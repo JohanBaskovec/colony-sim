@@ -15,6 +15,19 @@ void hud_draw(App *app);
 /* The inspector of the selected colonist(s) (game/inspector.h). */
 void hud_inspect_colonists(App *app);
 
+/* Lines shared by the tile readout and the windows of the things on a tile
+ * (game/tile_panel.h); false when there is nothing to say. The grade and
+ * hit points of a stack, or of the structure on a tile: */
+bool hud_item_condition_text(char *out, size_t size, ItemStack stack);
+bool hud_structure_condition_text(char *out, size_t size, const Map *map, int x, int y, int z);
+/* "21 kg", "0.3 kg" (see the tile readout). */
+void hud_weight_text(char *out, size_t size, float kilograms);
+/* Who owns the bed on a tile (or that it is free). */
+void hud_bed_owner_text(const App *app, char *out, size_t size, int x, int y, int z);
+/* A construction site's line `line`: 0 its progress, then one per material
+ * (false for a slot with none, or past the last). */
+bool hud_site_line(const ConstructionSite *site, int line, char *out, size_t size);
+
 /* Takes the notices the game raised since the last frame and ages those on
  * screen by `dt` real seconds. */
 void hud_update_notices(App *app, double dt);

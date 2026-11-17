@@ -125,7 +125,7 @@ static void movement_keys_label(char *out, size_t size)
 }
 
 /* "21 kg", "0.3 kg": one decimal only for small, non-whole weights. */
-static void format_weight(char *out, size_t size, float kilograms)
+void hud_weight_text(char *out, size_t size, float kilograms)
 {
     char number[32];
     float rounded = SDL_roundf(kilograms);
@@ -136,16 +136,16 @@ static void format_weight(char *out, size_t size, float kilograms)
 
 /* "Quality: fine · Hit points: 45/60 (75%)" line of an item stack, with only
  * the parts its type has (none for stone blocks, no quality for grass). */
-static void add_item_condition_line(Panel *panel, ItemStack stack)
+bool hud_item_condition_text(char *out, size_t size, ItemStack stack)
 {
     const ItemDef *def = item_def((ItemType)stack.type);
     if (def == NULL || stack.type == ITEM_NONE || (!def->has_quality && !def->damageable)) {
-        return;
+        return false;
     }
     const char *quality = tr(item_quality_name_key((ItemQuality)stack.quality));
     if (!def->damageable) {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_quality"), quality);
-        return;
+        TR_FORMAT(out, size, tr("hud.item_quality"), quality);
+        return true;
     }
     char hit_points[16], max_hit_points[16], number[16], percent[32];
     tr_integer(hit_points, sizeof(hit_points), stack.hit_points);
@@ -153,22 +153,28 @@ static void add_item_condition_line(Panel *panel, ItemStack stack)
     tr_integer(number, sizeof(number), item_stack_hit_points_percent(stack));
     TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
     if (!def->has_quality) {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_hit_points"), hit_points,
-                  max_hit_points, percent);
-        return;
+        TR_FORMAT(out, size, tr("hud.item_hit_points"), hit_points, max_hit_points, percent);
+        return true;
     }
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_condition"), quality, hit_points,
-              max_hit_points, percent);
+    TR_FORMAT(out, size, tr("hud.item_condition"), quality, hit_points, max_hit_points, percent);
+    return true;
 }
 
-/* Grade and hit points of the structure built on a tile. */
-static void add_structure_condition_line(Panel *panel, const Map *map, int x, int y, int z)
+static void add_item_condition_line(Panel *panel, ItemStack stack)
+{
+    char line[HUD_LINE_SIZE];
+    if (hud_item_condition_text(line, sizeof(line), stack)) {
+        panel_add_text(panel, line);
+    }
+}
+
+bool hud_structure_condition_text(char *out, size_t size, const Map *map, int x, int y, int z)
 {
     StructureType type = map_structure(map, x, y, z);
     ItemQuality grade = map_structure_quality(map, x, y, z);
     int max = structure_max_hit_points(type, grade);
     if (max <= 0) {
-        return;
+        return false;
     }
     int current = map_structure_hit_points(map, x, y, z);
     char hit_points[16], max_hit_points[16], number[16], percent[32];
@@ -176,8 +182,18 @@ static void add_structure_condition_line(Panel *panel, const Map *map, int x, in
     tr_integer(max_hit_points, sizeof(max_hit_points), max);
     tr_integer(number, sizeof(number), (long long)current * 100 / max);
     TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.item_condition"),
-              tr(item_quality_name_key(grade)), hit_points, max_hit_points, percent);
+    TR_FORMAT(out, size, tr("hud.item_condition"), tr(item_quality_name_key(grade)), hit_points,
+              max_hit_points, percent);
+    return true;
+}
+
+/* Grade and hit points of the structure built on a tile. */
+static void add_structure_condition_line(Panel *panel, const Map *map, int x, int y, int z)
+{
+    char line[HUD_LINE_SIZE];
+    if (hud_structure_condition_text(line, sizeof(line), map, x, y, z)) {
+        panel_add_text(panel, line);
+    }
 }
 
 /* Owner of a bed (the settler's id is its slot + 1, core/bed.h). */
@@ -194,15 +210,21 @@ static const Colonist *bed_owner(const Game *game, int x, int y, int z)
     return game_colonist_const(game, game_colonist_id_at(game, (uint32_t)owner - 1));
 }
 
-static void add_bed_owner_line(const App *app, Panel *panel, int x, int y)
+void hud_bed_owner_text(const App *app, char *out, size_t size, int x, int y, int z)
 {
-    const int z = app->camera.level; /* The level shown. */
     const Colonist *owner = bed_owner(&app->game, x, y, z);
     if (owner != NULL) {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.bed_owner"), owner->name);
+        TR_FORMAT(out, size, tr("hud.tile.bed_owner"), owner->name);
     } else {
-        panel_add_text(panel, tr("hud.tile.bed_free"));
+        SDL_strlcpy(out, tr("hud.tile.bed_free"), size);
     }
+}
+
+static void add_bed_owner_line(const App *app, Panel *panel, int x, int y)
+{
+    char line[HUD_LINE_SIZE];
+    hud_bed_owner_text(app, line, sizeof(line), x, y, app->camera.level);
+    panel_add_text(panel, line);
 }
 
 /* "12.5 °C", with `decimals` decimals. */
@@ -249,26 +271,38 @@ static void build_status_panel(App *app, Panel *panel)
     }
 }
 
-/* A construction site's lines in the tile inspector: progress and materials. */
+bool hud_site_line(const ConstructionSite *site, int line, char *out, size_t size)
+{
+    char a[32], b[32];
+    if (line == 0) {
+        tr_integer(a, sizeof(a), (long long)(construction_work_fraction(site) * 100.0f));
+        TR_FORMAT(out, size, tr(site->refresh ? "hud.tile.refresh" : "hud.tile.blueprint"),
+                  tr(construction_name_key(site)), a);
+        return true;
+    }
+    int slot = line - 1;
+    ItemType material =
+        slot < STRUCTURE_MATERIAL_SLOTS ? construction_material(site, slot) : ITEM_NONE;
+    if (material == ITEM_NONE) {
+        return false;
+    }
+    tr_integer(a, sizeof(a), site->delivered[slot].count);
+    tr_integer(b, sizeof(b), construction_material_count(site, slot));
+    TR_FORMAT(out, size, tr("hud.tile.material"), tr(item_def(material)->name_key), a, b);
+    return true;
+}
+
+/* A construction site's lines in the tile readout: progress and materials. */
 static void add_site_lines(Panel *panel, const ConstructionSite *site)
 {
     if (site == NULL) {
         return;
     }
-    char a[32], b[32];
-    tr_integer(a, sizeof(a), (long long)(construction_work_fraction(site) * 100.0f));
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
-              tr(site->refresh ? "hud.tile.refresh" : "hud.tile.blueprint"),
-              tr(construction_name_key(site)), a);
-    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-        ItemType material = construction_material(site, slot);
-        if (material == ITEM_NONE) {
-            continue;
+    char line[HUD_LINE_SIZE];
+    for (int i = 0; i <= STRUCTURE_MATERIAL_SLOTS; i++) {
+        if (hud_site_line(site, i, line, sizeof(line))) {
+            panel_add_text(panel, line);
         }
-        tr_integer(a, sizeof(a), site->delivered[slot].count);
-        tr_integer(b, sizeof(b), construction_material_count(site, slot));
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.material"),
-                  tr(item_def(material)->name_key), a, b);
     }
 }
 
@@ -355,7 +389,8 @@ static void build_tile_panel(App *app, Panel *panel)
     if (stack.type != ITEM_NONE) {
         char weight[32];
         tr_integer(a, sizeof(a), stack.count);
-        format_weight(weight, sizeof(weight), item_stack_weight((ItemType)stack.type, stack.count));
+        hud_weight_text(weight, sizeof(weight),
+                        item_stack_weight((ItemType)stack.type, stack.count));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
                   tr(item_def((ItemType)stack.type)->name_key), a, weight);
         add_item_condition_line(panel, stack);
@@ -966,12 +1001,12 @@ static void add_gear_lines(Panel *panel, const Colonist *colonist)
 {
     char strength[16], carry[32];
     tr_integer(strength, sizeof(strength), colonist->strength);
-    format_weight(carry, sizeof(carry), colonist->max_carry_weight);
+    hud_weight_text(carry, sizeof(carry), colonist->max_carry_weight);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.strength"), strength, carry);
     if (colonist->carried.count > 0) {
         char count[16], weight[32];
         tr_integer(count, sizeof(count), colonist->carried.count);
-        format_weight(weight, sizeof(weight), colonist_carried_weight(colonist));
+        hud_weight_text(weight, sizeof(weight), colonist_carried_weight(colonist));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.carrying"),
                   tr(item_def((ItemType)colonist->carried.type)->name_key), count, weight);
         add_item_condition_line(panel, colonist->carried);

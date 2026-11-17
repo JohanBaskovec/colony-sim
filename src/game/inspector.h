@@ -12,6 +12,7 @@
 #define COLONY_GAME_INSPECTOR_H
 
 #include "game/app.h"
+#include "game/render.h"
 #include "game/ui_layout.h"
 
 typedef enum InspectorKind {
@@ -56,6 +57,13 @@ bool inspector_forbid_action(App *app, int slot, bool forbidden);
  * false (nothing drawn, the slot stays free) when there is nothing to build
  * like it. */
 bool inspector_build_like_action(App *app, int slot);
+
+/* An order on what is selected (fell it, take it apart...), shown with
+ * `icon`, lit while it is `ordered` (a click then cancels it). Veiled while
+ * not `available` (nobody knows how: the tooltip says so). True when
+ * clicked and it may be given or cancelled. */
+bool inspector_order_action(App *app, int slot, RenderIcon icon, const char *name,
+                            const char *description, bool ordered, bool available);
 
 /* Delete what is selected: true when clicked. */
 bool inspector_delete_action(App *app, int slot, const char *description);

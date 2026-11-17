@@ -130,44 +130,24 @@ static const ConstructionSite *site_at(const App *app, int x, int y, int z)
     return construction_get(sites, construction_at(sites, x, y, z));
 }
 
-/* Type of what is built (a structure, or the roof the tile is), else of the
- * construction site, on a tile (STRUCTURE_NONE for a workstation's site). */
-static StructureType structure_type_at(const App *app, int x, int y, int z)
-{
-    StructureType built = map_structure(&app->game.map, x, y, z);
-    if (built == STRUCTURE_NONE) {
-        built = map_roof(&app->game.map, x, y, z);
-    }
-    if (built != STRUCTURE_NONE) {
-        return built;
-    }
-    const ConstructionSite *site = site_at(app, x, y, z);
-    return site != NULL ? (StructureType)site->type : STRUCTURE_NONE;
-}
-
-/* Whether a structure, a roof or a construction site (a workstation's too)
- * lies on a tile. */
-static bool structure_or_site_at(const App *app, int x, int y, int z)
-{
-    return structure_type_at(app, x, y, z) != STRUCTURE_NONE || site_at(app, x, y, z) != NULL;
-}
-
 /* What a click on a tile may select there, in the order repeated clicks go
- * through them. A tile with only grass comes after the zones (it grows
- * nearly everywhere). */
+ * through them. Grass comes after the zones (it grows nearly everywhere). */
 typedef enum ClickTarget {
     CLICK_STATION,
-    CLICK_TILE, /* A structure, a roof, a site, items or a plant (game/tile_panel.h). */
+    CLICK_STRUCTURE,
+    CLICK_ROOF,
+    CLICK_SITE,
+    CLICK_ITEMS,
+    CLICK_PLANT, /* Any plant or tree but grass. */
     CLICK_STOCKPILE,
     CLICK_GATHER_ZONE,
-    CLICK_GRASS_TILE, /* The tile, for its grass alone. */
+    CLICK_GRASS,
     CLICK_TARGET_COUNT
 } ClickTarget;
 
-/* The plant on a tile; on a tile of trunk or foliage, its tree's. */
-static PlantType plant_type_at(const App *app, int x, int y, int z)
+PlantType app_plant_type_at(const App *app, int x, int y, int z)
 {
-    const Map *map = &app->game.map;
+    const Map *map = game_view_map(&app->game);
     if (!map_in_bounds(map, x, y, z)) {
         return PLANT_NONE;
     }
@@ -179,21 +159,53 @@ static PlantType plant_type_at(const App *app, int x, int y, int z)
     return type;
 }
 
+bool app_thing_at(const App *app, TileThing thing, int x, int y, int z)
+{
+    const Map *map = game_view_map(&app->game);
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    switch (thing) {
+    case THING_STRUCTURE: return map_structure(map, x, y, z) != STRUCTURE_NONE;
+    case THING_ROOF: return map_roof(map, x, y, z) != STRUCTURE_NONE;
+    case THING_SITE: return site_at(app, x, y, z) != NULL;
+    case THING_ITEMS: return items_get(game_view_items(&app->game), x, y, z).type != ITEM_NONE;
+    case THING_PLANT: return app_plant_type_at(app, x, y, z) != PLANT_NONE;
+    case THING_COUNT: break;
+    }
+    return false;
+}
+
+/* The thing a click target selects on a tile (THING_COUNT: not a thing). */
+static TileThing click_thing(ClickTarget target)
+{
+    switch (target) {
+    case CLICK_STRUCTURE: return THING_STRUCTURE;
+    case CLICK_ROOF: return THING_ROOF;
+    case CLICK_SITE: return THING_SITE;
+    case CLICK_ITEMS: return THING_ITEMS;
+    case CLICK_PLANT:
+    case CLICK_GRASS: return THING_PLANT;
+    default: return THING_COUNT;
+    }
+}
+
 static bool click_target_at(const App *app, ClickTarget target, int x, int y, int z)
 {
     const Game *game = &app->game;
     switch (target) {
     case CLICK_STATION: return workstation_at(&game->workstations, x, y, z) != WORKSTATION_NONE;
-    case CLICK_TILE: {
-        PlantType plant = plant_type_at(app, x, y, z);
-        return structure_or_site_at(app, x, y, z) || game_can_forbid(game, x, y, z, FORBID_ITEMS) ||
-               (plant != PLANT_NONE && plant != PLANT_GRASS);
+    case CLICK_STRUCTURE:
+    case CLICK_ROOF:
+    case CLICK_SITE:
+    case CLICK_ITEMS: return app_thing_at(app, click_thing(target), x, y, z);
+    case CLICK_PLANT: {
+        PlantType plant = app_plant_type_at(app, x, y, z);
+        return plant != PLANT_NONE && plant != PLANT_GRASS;
     }
     case CLICK_STOCKPILE: return stockpile_at(&game->stockpiles, x, y, z) != STOCKPILE_NONE;
     case CLICK_GATHER_ZONE: return gather_zone_at(&game->gather_zones, x, y, z) != GATHER_ZONE_NONE;
-    case CLICK_GRASS_TILE:
-        return !click_target_at(app, CLICK_TILE, x, y, z) &&
-               plant_type_at(app, x, y, z) == PLANT_GRASS;
+    case CLICK_GRASS: return app_plant_type_at(app, x, y, z) == PLANT_GRASS;
     case CLICK_TARGET_COUNT: break;
     }
     return false;
@@ -209,7 +221,15 @@ static ClickTarget click_target_selected(const App *app, int x, int y, int z)
     }
     if (app->tile_selected && app->selected_tile_x == x && app->selected_tile_y == y &&
         app->selected_tile_z == z) {
-        return click_target_at(app, CLICK_TILE, x, y, z) ? CLICK_TILE : CLICK_GRASS_TILE;
+        switch (app->selected_thing) {
+        case THING_STRUCTURE: return CLICK_STRUCTURE;
+        case THING_ROOF: return CLICK_ROOF;
+        case THING_SITE: return CLICK_SITE;
+        case THING_ITEMS: return CLICK_ITEMS;
+        case THING_PLANT:
+            return app_plant_type_at(app, x, y, z) == PLANT_GRASS ? CLICK_GRASS : CLICK_PLANT;
+        case THING_COUNT: break;
+        }
     }
     if (app->selected_stockpile != STOCKPILE_NONE &&
         stockpile_at(&game->stockpiles, x, y, z) == app->selected_stockpile) {
@@ -220,13 +240,6 @@ static ClickTarget click_target_selected(const App *app, int x, int y, int z)
         return CLICK_GATHER_ZONE;
     }
     return CLICK_TARGET_COUNT;
-}
-
-/* Whether something on a tile can be selected as a tile (see CLICK_TILE). */
-static bool tile_selectable(const App *app, int x, int y, int z)
-{
-    return click_target_at(app, CLICK_TILE, x, y, z) ||
-           click_target_at(app, CLICK_GRASS_TILE, x, y, z);
 }
 
 /* Direction of the structure, or of the construction site, on a tile. */
@@ -240,21 +253,22 @@ static Direction structure_direction_at(const App *app, int x, int y, int z)
     return site != NULL ? (Direction)site->direction : DIRECTION_SOUTH;
 }
 
-static void select_tile(App *app, int x, int y, int z)
+static void select_thing(App *app, TileThing thing, int x, int y, int z)
 {
     clear_selection(app);
-    app->tile_selected = tile_selectable(app, x, y, z);
+    app->tile_selected = app_thing_at(app, thing, x, y, z);
+    app->selected_thing = thing;
     app->selected_tile_x = x;
     app->selected_tile_y = y;
     app->selected_tile_z = z;
 }
 
-/* Forgets the selected tile once nothing is left on it to select (taken
- * apart, picked up). */
+/* Forgets the selected thing once it is gone (taken apart, picked up,
+ * felled). */
 static void prune_tile_selection(App *app)
 {
-    if (app->tile_selected &&
-        !tile_selectable(app, app->selected_tile_x, app->selected_tile_y, app->selected_tile_z)) {
+    if (app->tile_selected && !app_thing_at(app, app->selected_thing, app->selected_tile_x,
+                                            app->selected_tile_y, app->selected_tile_z)) {
         app->tile_selected = false;
     }
 }
@@ -699,14 +713,24 @@ bool app_build_like_target(const App *app, AppTool *tool, int *type)
         return false;
     }
     int x = app->selected_tile_x, y = app->selected_tile_y, z = app->selected_tile_z;
-    /* A workstation's site: another of that workstation. */
-    const ConstructionSite *site = site_at(app, x, y, z);
-    if (site != NULL && construction_workstation(site) != WORKSTATION_TYPE_COUNT) {
-        *tool = APP_TOOL_BUILD;
-        *type = (int)construction_workstation(site);
-        return true;
+    const Map *map = game_view_map(&app->game);
+    StructureType structure = STRUCTURE_NONE;
+    switch (app->selected_thing) {
+    case THING_STRUCTURE: structure = map_structure(map, x, y, z); break;
+    case THING_ROOF: structure = map_roof(map, x, y, z); break;
+    case THING_SITE: {
+        /* A workstation's site: another of that workstation. */
+        const ConstructionSite *site = site_at(app, x, y, z);
+        if (site != NULL && construction_workstation(site) != WORKSTATION_TYPE_COUNT) {
+            *tool = APP_TOOL_BUILD;
+            *type = (int)construction_workstation(site);
+            return true;
+        }
+        structure = site != NULL ? (StructureType)site->type : STRUCTURE_NONE;
+        break;
     }
-    StructureType structure = structure_type_at(app, x, y, z);
+    default: break;
+    }
     if (structure != STRUCTURE_NONE) {
         *tool = APP_TOOL_STRUCTURE;
         *type = (int)structure;
@@ -849,8 +873,12 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
             case CLICK_STATION:
                 select_station(app, workstation_at(&app->game.workstations, x, y, z));
                 break;
-            case CLICK_TILE:
-            case CLICK_GRASS_TILE: select_tile(app, x, y, z); break;
+            case CLICK_STRUCTURE:
+            case CLICK_ROOF:
+            case CLICK_SITE:
+            case CLICK_ITEMS:
+            case CLICK_PLANT:
+            case CLICK_GRASS: select_thing(app, click_thing(target), x, y, z); break;
             case CLICK_STOCKPILE:
                 select_stockpile(app, stockpile_at(&app->game.stockpiles, x, y, z));
                 break;

@@ -2,94 +2,304 @@
 
 #include "core/i18n.h"
 #include "core/tree.h"
+#include "game/hud.h"
 #include "game/inspector.h"
 
-#define TEXT_SIZE 128
+#define TEXT_SIZE 256
 
-/* The things a tile window lists, top to bottom (stations have their own
- * window, game/station_panel.h). */
-static const ForbidTarget LISTED[] = {FORBID_STRUCTURE, FORBID_ROOF, FORBID_ITEMS, FORBID_PLANT};
-
-typedef struct TileRows {
+typedef struct ThingRows {
     App *app;
+    TileThing thing;
     int x, y, z;
-    /* What the player clicked, applied once the window is drawn. */
-    int clicked; /* Index in LISTED, or -1. */
-} TileRows;
+} ThingRows;
 
-/* The name of a thing on the tile ("Branches (4)" for items). */
-static void thing_name(const App *app, int x, int y, int z, ForbidTarget target, char *out,
-                       size_t size)
+/* The plant of the thing, as the colony knows it: on a tile of trunk or
+ * foliage, its tree's; `foot` receives the tile it grows on (where orders and
+ * forbidding go). NULL without one. */
+static const Plant *thing_plant(const App *app, int x, int y, int z, TilePos *foot, TreeRef *tree,
+                                bool *is_tree)
 {
-    const Game *game = &app->game;
+    const Map *map = game_view_map(&app->game);
+    *foot = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
+    *is_tree = false;
+    if (!map_in_bounds(map, x, y, z)) {
+        return NULL;
+    }
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    if (tree_at(map, x, y, z, tree)) {
+        *is_tree = true;
+        *foot = (TilePos){(int16_t)tree->x, (int16_t)tree->y, (int16_t)tree->z};
+        return tree_plant(map, tree);
+    }
+    return plant->type != PLANT_NONE ? plant : NULL;
+}
+
+/* What the player may forbid of the thing (FORBID_TARGET_COUNT: nothing). */
+static ForbidTarget thing_forbid_target(TileThing thing)
+{
+    switch (thing) {
+    case THING_STRUCTURE: return FORBID_STRUCTURE;
+    case THING_ROOF: return FORBID_ROOF;
+    case THING_ITEMS: return FORBID_ITEMS;
+    case THING_PLANT: return FORBID_PLANT;
+    case THING_SITE:
+    case THING_COUNT: break;
+    }
+    return FORBID_TARGET_COUNT;
+}
+
+/* The window's title: the thing's name. */
+static void thing_title(const ThingRows *rows, char *out, size_t size)
+{
+    const Game *game = &rows->app->game;
     const Map *map = game_view_map(game);
+    int x = rows->x, y = rows->y, z = rows->z;
     out[0] = '\0';
-    switch (target) {
-    case FORBID_STRUCTURE:
+    switch (rows->thing) {
+    case THING_STRUCTURE:
         SDL_strlcpy(out, tr(structure_def(map_structure(map, x, y, z))->name_key), size);
         break;
-    case FORBID_ROOF:
+    case THING_ROOF:
         SDL_strlcpy(out, tr(structure_def(map_roof(map, x, y, z))->name_key), size);
         break;
-    case FORBID_ITEMS: {
-        ItemStack stack = items_get(game_view_items(game), x, y, z);
-        char count[16];
-        tr_integer(count, sizeof(count), stack.count);
-        TR_FORMAT(out, size, tr("tile_panel.items"), tr(item_def((ItemType)stack.type)->name_key),
-                  count);
-        break;
-    }
-    case FORBID_PLANT: {
-        const Plant *plant = &map->plants[map_index(map, x, y, z)];
-        TreeRef tree;
-        if (plant->type == PLANT_NONE && tree_at(map, x, y, z, &tree)) {
-            plant = tree_plant(map, &tree);
+    case THING_SITE: {
+        const ConstructionSite *site =
+            construction_get(&game->constructions, construction_at(&game->constructions, x, y, z));
+        if (site != NULL) {
+            TR_FORMAT(out, size, tr(site->refresh ? "tile_panel.refresh" : "tile_panel.site"),
+                      tr(construction_name_key(site)));
         }
-        SDL_strlcpy(out, tr(plant_def((PlantType)plant->type)->name_key), size);
         break;
     }
-    case FORBID_STATION:
-    case FORBID_TARGET_COUNT: break;
+    case THING_ITEMS: {
+        ItemStack stack = items_get(game_view_items(game), x, y, z);
+        SDL_strlcpy(out, tr(item_def((ItemType)stack.type)->name_key), size);
+        break;
+    }
+    case THING_PLANT: {
+        TilePos foot;
+        TreeRef tree;
+        bool is_tree;
+        const Plant *plant = thing_plant(rows->app, x, y, z, &foot, &tree, &is_tree);
+        if (plant != NULL) {
+            SDL_strlcpy(out, tr(plant_def((PlantType)plant->type)->name_key), size);
+        }
+        break;
+    }
+    case THING_COUNT: break;
     }
 }
 
-static void tile_rows(UiLayout *layout, void *userdata)
+static void plant_rows(UiLayout *layout, const ThingRows *rows)
 {
-    TileRows *rows = userdata;
     const Game *game = &rows->app->game;
-    int x = rows->x, y = rows->y, z = rows->z;
-    bool any = false;
-    for (int i = 0; i < (int)SDL_arraysize(LISTED); i++) {
-        ForbidTarget target = LISTED[i];
-        if (!game_can_forbid(game, x, y, z, target)) {
+    TilePos foot;
+    TreeRef tree;
+    bool is_tree;
+    const Plant *plant = thing_plant(rows->app, rows->x, rows->y, rows->z, &foot, &tree, &is_tree);
+    if (plant == NULL) {
+        return;
+    }
+    char a[32], b[32], text[TEXT_SIZE];
+    if (is_tree) {
+        int levels = tree_shape_levels(&tree.shape);
+        tr_integer(a, sizeof(a), levels);
+        TR_FORMAT(text, sizeof(text), tr_plural("hud.tile.tree_levels", levels), a);
+        ui_layout_label(layout, text, 0.0f, false);
+    }
+    if (plant_is_dormant(plant)) {
+        ui_layout_label(layout, tr("tile_panel.dormant"), 0.0f, false);
+    } else {
+        tr_integer(a, sizeof(a), (long long)(plant->growth * 100.0f + 0.5f));
+        TR_FORMAT(text, sizeof(text), tr("tile_panel.growth"), a);
+        ui_layout_label(layout, text, 0.0f, false);
+    }
+    const PlantDef *def = plant_def((PlantType)plant->type);
+    int today = game_day_of_year(game->clock.tick);
+    for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {
+        if (plant_stock_capacity(plant, (PlantStock)stock) <= 0) {
             continue;
         }
-        any = true;
-        char name[TEXT_SIZE];
-        thing_name(rows->app, x, y, z, target, name, sizeof(name));
-        bool forbidden = game_forbidden(game, x, y, z, target);
-        if (ui_layout_label_with_button(layout, name,
-                                        tr(forbidden ? "forbid.allow" : "forbid.forbid"))) {
-            rows->clicked = i;
+        const char *item =
+            tr(item_def(plant_stock_item((PlantType)plant->type, (PlantStock)stock))->name_key);
+        if (stock == PLANT_STOCK_FOOD && !plant_days_contain(def->food_days, today)) {
+            TR_FORMAT(text, sizeof(text), tr("hud.tile.plant_food_out_of_season"), item);
+        } else {
+            tr_integer(a, sizeof(a), plant_stock_available(plant, (PlantStock)stock));
+            tr_integer(b, sizeof(b), plant_stock_capacity(plant, (PlantStock)stock));
+            TR_FORMAT(text, sizeof(text), tr("hud.tile.plant_stock"), item, a, b);
         }
-        if (forbidden) {
-            StructureType structure = map_structure(game_view_map(game), x, y, z);
-            bool locked = target == FORBID_STRUCTURE &&
-                          (structure == STRUCTURE_DOOR || structure == STRUCTURE_LADDER);
-            ui_layout_label(layout, tr(locked ? "tile_panel.locked" : "tile_panel.left_alone"),
-                            UI_LAYOUT_INDENT, true);
-        }
-    }
-    const ConstructionSite *site =
-        construction_get(&game->constructions, construction_at(&game->constructions, x, y, z));
-    if (site != NULL) {
-        char text[TEXT_SIZE];
-        TR_FORMAT(text, sizeof(text), tr("tile_panel.site"), tr(construction_name_key(site)));
         ui_layout_label(layout, text, 0.0f, false);
-        any = true;
     }
-    if (!any) {
-        ui_layout_label(layout, tr("tile_panel.nothing"), 0.0f, true);
+}
+
+/* The order on a tile ("Order: Take apart (40% done)"), if any. */
+static void order_row(UiLayout *layout, const Game *game, int x, int y, int z)
+{
+    DesignationType designation = designation_get(&game->designations, x, y, z);
+    if (designation == DESIGNATION_NONE) {
+        return;
+    }
+    char a[32], text[TEXT_SIZE];
+    const char *name = tr(designation_def(designation)->name_key);
+    float progress =
+        designation_progress_fraction(&game->designations, game_view_map(game), x, y, z);
+    if (progress > 0.0f) {
+        tr_integer(a, sizeof(a), (long long)(progress * 100.0f));
+        TR_FORMAT(text, sizeof(text), tr("hud.tile.designation_progress"), name, a);
+    } else {
+        TR_FORMAT(text, sizeof(text), tr("hud.tile.designation"), name);
+    }
+    ui_layout_label(layout, text, 0.0f, false);
+}
+
+static void thing_rows(UiLayout *layout, void *userdata)
+{
+    const ThingRows *rows = userdata;
+    const Game *game = &rows->app->game;
+    const Map *map = game_view_map(game);
+    int x = rows->x, y = rows->y, z = rows->z;
+    char text[TEXT_SIZE];
+    if (game->fog_on && !game_tile_seen(game, x, y, z)) {
+        ui_layout_label(layout, tr("hud.tile.remembered"), 0.0f, true);
+    }
+    switch (rows->thing) {
+    case THING_STRUCTURE: {
+        StructureType structure = map_structure(map, x, y, z);
+        if (hud_structure_condition_text(text, sizeof(text), map, x, y, z)) {
+            ui_layout_label(layout, text, 0.0f, false);
+        }
+        if (structure_is_bed(structure)) {
+            hud_bed_owner_text(rows->app, text, sizeof(text), x, y, z);
+            ui_layout_label(layout, text, 0.0f, false);
+        }
+        order_row(layout, game, x, y, z);
+        break;
+    }
+    case THING_ROOF:
+        TR_FORMAT(text, sizeof(text), tr("hud.item_quality"),
+                  tr(item_quality_name_key(map_roof_quality(map, x, y, z))));
+        ui_layout_label(layout, text, 0.0f, false);
+        order_row(layout, game, x, y, z);
+        break;
+    case THING_SITE: {
+        const ConstructionSite *site =
+            construction_get(&game->constructions, construction_at(&game->constructions, x, y, z));
+        if (site == NULL) {
+            break;
+        }
+        for (int line = 0; line <= STRUCTURE_MATERIAL_SLOTS; line++) {
+            if (hud_site_line(site, line, text, sizeof(text))) {
+                ui_layout_label(layout, text, 0.0f, false);
+            }
+        }
+        if (gather_clear_work(map, x, y, z) > 0.0f) {
+            TR_FORMAT(
+                text, sizeof(text), tr("blueprint.clear_first"),
+                tr(plant_def((PlantType)map->plants[map_index(map, x, y, z)].type)->name_key));
+            ui_layout_label(layout, text, 0.0f, true);
+        }
+        break;
+    }
+    case THING_ITEMS: {
+        ItemStack stack = items_get(game_view_items(game), x, y, z);
+        char count[32], weight[32];
+        tr_integer(count, sizeof(count), stack.count);
+        hud_weight_text(weight, sizeof(weight),
+                        item_stack_weight((ItemType)stack.type, stack.count));
+        TR_FORMAT(text, sizeof(text), tr("tile_panel.count"), count, weight);
+        ui_layout_label(layout, text, 0.0f, false);
+        if (hud_item_condition_text(text, sizeof(text), stack)) {
+            ui_layout_label(layout, text, 0.0f, false);
+        }
+        break;
+    }
+    case THING_PLANT: {
+        plant_rows(layout, rows);
+        TilePos foot;
+        TreeRef tree;
+        bool is_tree;
+        thing_plant(rows->app, x, y, z, &foot, &tree, &is_tree);
+        order_row(layout, game, foot.x, foot.y, foot.z);
+        break;
+    }
+    case THING_COUNT: break;
+    }
+    ForbidTarget target = thing_forbid_target(rows->thing);
+    if (target != FORBID_TARGET_COUNT && game_forbidden(game, x, y, z, target)) {
+        StructureType structure = map_structure(map, x, y, z);
+        bool locked = target == FORBID_STRUCTURE &&
+                      (structure == STRUCTURE_DOOR || structure == STRUCTURE_LADDER);
+        ui_layout_label(layout, tr(locked ? "tile_panel.locked" : "tile_panel.left_alone"), 0.0f,
+                        true);
+    }
+}
+
+/* An order that toggles on a tile (fell a tree, take a structure apart):
+ * placed, or taken back when it is there. */
+static void toggle_order(App *app, DesignationType type, TilePos tile)
+{
+    bool ordered = designation_get(&app->game.designations, tile.x, tile.y, tile.z) == type;
+    game_designate_rect(&app->game, tile.x, tile.y, tile.x, tile.y, tile.z,
+                        ordered ? DESIGNATION_NONE : type);
+}
+
+/* The action menu, right of the box: forbid, the orders the thing takes,
+ * build another. */
+static void thing_actions(App *app, const ThingRows *rows)
+{
+    Game *game = &app->game;
+    int x = rows->x, y = rows->y, z = rows->z;
+    int slot = 0;
+    ForbidTarget target = thing_forbid_target(rows->thing);
+    if (target != FORBID_TARGET_COUNT && game_can_forbid(game, x, y, z, target)) {
+        bool forbidden = game_forbidden(game, x, y, z, target);
+        if (inspector_forbid_action(app, slot, forbidden)) {
+            game_set_forbidden(game, x, y, z, target, !forbidden);
+        }
+        slot++;
+    }
+    switch (rows->thing) {
+    case THING_STRUCTURE:
+    case THING_ROOF: {
+        TilePos tile = {(int16_t)x, (int16_t)y, (int16_t)z};
+        bool ordered = designation_get(&game->designations, x, y, z) == DESIGNATION_DECONSTRUCT;
+        if (inspector_order_action(
+                app, slot++, RENDER_ICON_DECONSTRUCT, tr("tile_panel.deconstruct"),
+                tr(rows->thing == THING_ROOF ? "tile_panel.deconstruct_roof.description"
+                                             : "tile_panel.deconstruct.description"),
+                ordered, game_designation_available(game, DESIGNATION_DECONSTRUCT))) {
+            toggle_order(app, DESIGNATION_DECONSTRUCT, tile);
+        }
+        break;
+    }
+    case THING_PLANT: {
+        TilePos foot;
+        TreeRef tree;
+        bool is_tree;
+        const Plant *plant = thing_plant(app, x, y, z, &foot, &tree, &is_tree);
+        if (plant == NULL || !plant_is_tree(plant->type)) {
+            break;
+        }
+        bool ordered =
+            designation_get(&game->designations, foot.x, foot.y, foot.z) == DESIGNATION_CHOP;
+        if (inspector_order_action(app, slot++, RENDER_ICON_CHOP, tr("tile_panel.chop"),
+                                   tr("tile_panel.chop.description"), ordered,
+                                   game_designation_available(game, DESIGNATION_CHOP))) {
+            toggle_order(app, DESIGNATION_CHOP, foot);
+        }
+        break;
+    }
+    case THING_SITE:
+        if (inspector_delete_action(app, slot++, tr("tile_panel.cancel_site.description"))) {
+            game_remove_blueprints_rect(game, x, y, x, y, z);
+        }
+        break;
+    case THING_ITEMS:
+    case THING_COUNT: break;
+    }
+    if (rows->thing == THING_STRUCTURE || rows->thing == THING_ROOF || rows->thing == THING_SITE) {
+        inspector_build_like_action(app, slot);
     }
 }
 
@@ -98,19 +308,13 @@ void tile_panel_draw(App *app)
     if (!app->tile_selected) {
         return;
     }
-    TileRows rows = {app, app->selected_tile_x, app->selected_tile_y, app->selected_tile_z, -1};
-    char a[16], b[16], title[TEXT_SIZE];
-    tr_integer(a, sizeof(a), rows.x);
-    tr_integer(b, sizeof(b), rows.y);
-    TR_FORMAT(title, sizeof(title), tr("tile_panel.title"), a, b);
-    bool open = inspector_box(app, INSPECT_TILE, title, tile_rows, &rows);
+    ThingRows rows = {app, app->selected_thing, app->selected_tile_x, app->selected_tile_y,
+                      app->selected_tile_z};
+    char title[TEXT_SIZE];
+    thing_title(&rows, title, sizeof(title));
+    bool open = inspector_box(app, INSPECT_TILE, title, thing_rows, &rows);
     inspector_tabs(app, NULL, 0);
-    inspector_build_like_action(app, 0);
-    if (rows.clicked >= 0) {
-        ForbidTarget target = LISTED[rows.clicked];
-        game_set_forbidden(&app->game, rows.x, rows.y, rows.z, target,
-                           !game_forbidden(&app->game, rows.x, rows.y, rows.z, target));
-    }
+    thing_actions(app, &rows);
     if (!open) {
         app->tile_selected = false;
     }
