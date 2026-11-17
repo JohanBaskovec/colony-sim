@@ -6,13 +6,16 @@
 /* What the player clicked in the drawing pass, applied after it. */
 typedef struct DebugRows {
     const GameDebug *debug;
-    bool vision_on;
+    bool vision_shown;
+    bool fog_on;
     bool toggle_instant_build;
     bool toggle_free_crafts;
     bool toggle_no_tools;
     bool toggle_instant_deconstruct;
     bool toggle_instant_fell_and_mine;
     bool toggle_vision;
+    bool toggle_fog;
+    bool reveal_map;
     const char *weather; /* Name of the sky now. */
     bool next_weather;
     bool cold_snap;
@@ -59,7 +62,9 @@ static void debug_rows(UiLayout *layout, void *userdata)
         checkbox_row(layout, tr("debug.instant_deconstruct"), rows->debug->instant_deconstruct);
     rows->toggle_instant_fell_and_mine |=
         checkbox_row(layout, tr("debug.instant_fell_and_mine"), rows->debug->instant_fell_and_mine);
-    rows->toggle_vision |= checkbox_row(layout, tr("debug.vision"), rows->vision_on);
+    rows->toggle_fog |= checkbox_row(layout, tr("debug.see_everything"), !rows->fog_on);
+    rows->reveal_map |= button_row(layout, tr("debug.reveal_map"));
+    rows->toggle_vision |= checkbox_row(layout, tr("debug.vision"), rows->vision_shown);
     char label[128];
     TR_FORMAT(label, sizeof(label), tr("debug.next_weather"), rows->weather);
     rows->next_weather |= button_row(layout, label);
@@ -84,7 +89,8 @@ void debug_panel_draw(App *app)
     Game *game = &app->game;
     DebugRows rows = {
         .debug = &game->debug,
-        .vision_on = game->vision_on,
+        .vision_shown = app->show_vision,
+        .fog_on = game->fog_on,
         .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
         .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
         .plant_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE),
@@ -107,8 +113,18 @@ void debug_panel_draw(App *app)
     if (rows.toggle_instant_fell_and_mine) {
         game_set_instant_fell_and_mine(game, !game->debug.instant_fell_and_mine);
     }
+    if (rows.toggle_fog) {
+        game_set_fog(game, !game->fog_on);
+    }
+    if (rows.reveal_map) {
+        game_set_vision(game, true); /* Revealing needs the tracking. */
+        game_reveal_map(game);
+    }
     if (rows.toggle_vision) {
-        game_set_vision(game, !game->vision_on);
+        app->show_vision = !app->show_vision;
+        if (app->show_vision) {
+            game_set_vision(game, true);
+        }
     }
     if (rows.next_weather) {
         game_debug_next_weather(game);

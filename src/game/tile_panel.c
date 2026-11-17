@@ -22,7 +22,7 @@ static void thing_name(const App *app, int x, int y, int z, ForbidTarget target,
                        size_t size)
 {
     const Game *game = &app->game;
-    const Map *map = &game->map;
+    const Map *map = game_view_map(game);
     out[0] = '\0';
     switch (target) {
     case FORBID_STRUCTURE:
@@ -32,7 +32,7 @@ static void thing_name(const App *app, int x, int y, int z, ForbidTarget target,
         SDL_strlcpy(out, tr(structure_def(map_roof(map, x, y, z))->name_key), size);
         break;
     case FORBID_ITEMS: {
-        ItemStack stack = items_get(&game->items, x, y, z);
+        ItemStack stack = items_get(game_view_items(game), x, y, z);
         char count[16];
         tr_integer(count, sizeof(count), stack.count);
         TR_FORMAT(out, size, tr("tile_panel.items"), tr(item_def((ItemType)stack.type)->name_key),
@@ -73,7 +73,7 @@ static void tile_rows(UiLayout *layout, void *userdata)
             rows->clicked = i;
         }
         if (forbidden) {
-            StructureType structure = map_structure(&game->map, x, y, z);
+            StructureType structure = map_structure(game_view_map(game), x, y, z);
             bool locked = target == FORBID_STRUCTURE &&
                           (structure == STRUCTURE_DOOR || structure == STRUCTURE_LADDER);
             ui_layout_label(layout, tr(locked ? "tile_panel.locked" : "tile_panel.left_alone"),

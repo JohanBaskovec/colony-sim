@@ -275,7 +275,7 @@ static void add_site_lines(Panel *panel, const ConstructionSite *site)
 static void build_tile_panel(App *app, Panel *panel)
 {
     const int z = app->camera.level; /* The level shown. */
-    const Map *map = &app->game.map;
+    const Map *map = game_view_map(&app->game);
     int x = app->hover_x, y = app->hover_y;
     size_t index = map_index(map, x, y, z);
     char a[32], b[32];
@@ -283,6 +283,18 @@ static void build_tile_panel(App *app, Panel *panel)
     tr_integer(a, sizeof(a), x);
     tr_integer(b, sizeof(b), y);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.position"), a, b);
+
+    if (app->game.fog_on) {
+        /* What the colony has not seen is not told; what it has, as it saw it. */
+        int seen_level = map_view_level(map, x, y, z);
+        if (seen_level < 0) {
+            panel_add_text(panel, tr("hud.tile.unexplored"));
+            return;
+        }
+        if (!game_tile_seen(&app->game, x, y, seen_level)) {
+            panel_add_text(panel, tr("hud.tile.remembered"));
+        }
+    }
 
     const TerrainDef *terrain = terrain_def((Terrain)map->terrain[index]);
     /* Up a trunk, no terrain to speak of. */
@@ -339,7 +351,7 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
-    ItemStack stack = items_get(&app->game.items, x, y, z);
+    ItemStack stack = items_get(game_view_items(&app->game), x, y, z);
     if (stack.type != ITEM_NONE) {
         char weight[32];
         tr_integer(a, sizeof(a), stack.count);
@@ -347,7 +359,7 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
                   tr(item_def((ItemType)stack.type)->name_key), a, weight);
         add_item_condition_line(panel, stack);
-        if (items_forbidden(&app->game.items, x, y, z)) {
+        if (items_forbidden(game_view_items(&app->game), x, y, z)) {
             panel_add_text(panel, tr("tile_panel.left_alone"));
         }
         const ItemDef *def = item_def((ItemType)stack.type);
@@ -411,14 +423,19 @@ static void build_tile_panel(App *app, Panel *panel)
         panel_add_text(panel, tr("hud.tile.natural_roof"));
     }
     char celsius[32], felt[32];
-    float air = temperature_at(&app->game.temperatures, x, y, z);
-    float radiant = hearths_radiant_warmth(&app->game.workstations, map, x, y, z);
-    temperature_text(celsius, sizeof(celsius), air, 1);
-    if (radiant >= 0.05f) {
-        temperature_text(felt, sizeof(felt), air + radiant, 1);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature_felt"), celsius, felt);
+    if (!game_tile_seen(&app->game, x, y, z)) {
+        panel_add_text(panel, tr("hud.tile.temperature_unknown")); /* Nobody measures it. */
     } else {
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature"), celsius);
+        float air = temperature_at(&app->game.temperatures, x, y, z);
+        float radiant = hearths_radiant_warmth(&app->game.workstations, map, x, y, z);
+        temperature_text(celsius, sizeof(celsius), air, 1);
+        if (radiant >= 0.05f) {
+            temperature_text(felt, sizeof(felt), air + radiant, 1);
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature_felt"), celsius,
+                      felt);
+        } else {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature"), celsius);
+        }
     }
     const ConstructionSite *site = construction_get(
         &app->game.constructions, construction_at(&app->game.constructions, x, y, z));
@@ -503,7 +520,7 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
-    int dirt = dirt_at(&app->game.dirt, x, y, z);
+    int dirt = dirt_at(game_view_dirt(&app->game), x, y, z);
     if (dirt > 0) {
         tr_integer(a, sizeof(a), dirt);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.dirt"), a);
@@ -1083,7 +1100,7 @@ void hud_draw_item_counts(App *app)
     if (app->camera.zoom < HUD_ITEM_COUNT_MIN_ZOOM) {
         return;
     }
-    const Items *items = &app->game.items;
+    const Items *items = game_view_items(&app->game);
     TileRect visible = camera_visible_tiles(&app->camera, items->width, items->height);
     char count[16];
     for (int y = visible.y0; y < visible.y1; y++) {

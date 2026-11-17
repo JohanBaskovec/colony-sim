@@ -297,7 +297,7 @@ static void order_controls(UiLayout *layout, const Columns *columns, Subject sub
 static OrderView resource_view(const ZoneRows *rows, const GatherOrder *order,
                                GatherResource resource)
 {
-    const long *totals = rows->app->game.items.totals;
+    const long *totals = game_view_items(&rows->app->game)->totals;
     return (OrderView){
         .mode = (GatherMode)order->mode,
         .unit = (GatherUnit)order->unit,
@@ -311,7 +311,7 @@ static OrderView resource_view(const ZoneRows *rows, const GatherOrder *order,
 
 static OrderView group_view(const ZoneRows *rows, const GatherGroupOrder *order, GatherGroup group)
 {
-    const long *totals = rows->app->game.items.totals;
+    const long *totals = game_view_items(&rows->app->game)->totals;
     return (OrderView){
         .mode = (GatherMode)order->mode,
         .unit = (GatherUnit)order->unit,

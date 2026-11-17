@@ -13,6 +13,7 @@
 #include "core/map.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define DIRT_MAX 100
@@ -35,6 +36,10 @@ void dirt_free(Dirt *dirt);
 int dirt_at(const Dirt *dirt, int x, int y, int z);
 
 /* Whether dirt may lie on a tile: open ground, not water. */
+/* Copies the dirt of the tile at `index` from `src` to `dst` (same size), keeping
+ * dst's count right: dst is a picture of src (see core/known.h). */
+void dirt_copy_tile(Dirt *dst, const Dirt *src, size_t index);
+
 bool dirt_can_lie(const Map *map, int x, int y, int z);
 
 /* Makes a tile dirtier (capped at DIRT_MAX) where dirt_can_lie() allows.

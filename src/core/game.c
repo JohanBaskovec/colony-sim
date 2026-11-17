@@ -1,4 +1,5 @@
 #include "core/game.h"
+#include "core/exploration.h"
 
 #include "core/conversation.h"
 #include "core/log.h"
@@ -446,6 +447,8 @@ static void spawn_starting_colonists(Game *game, int count)
     if (count <= 0 || !find_spawn_center(game, &center)) {
         return;
     }
+    game->arrival = center;
+    game->has_arrival = true;
     ensure_food_plants_near(game, center, PLANT_BRAMBLE, GAME_SPAWN_BRAMBLES);
     ensure_food_plants_near(game, center, PLANT_HAZEL, GAME_SPAWN_HAZELS);
     ensure_flint_near(game, center);
@@ -518,16 +521,19 @@ static bool stock_counted(const Game *game)
 
 void game_update_stock(Game *game)
 {
+    /* What the colony has is what it knows of: the known world under the fog,
+     * so that items out of view count as they were last seen. */
+    const Items *items = game_view_items(game);
     memset(game->stock_stored, 0, sizeof(game->stock_stored));
     memset(game->stock_on_stations, 0, sizeof(game->stock_on_stations));
     memset(game->stock_hauled, 0, sizeof(game->stock_hauled));
-    stockpiles_count_stored(&game->stockpiles, &game->items, game->stock_stored);
+    stockpiles_count_stored(&game->stockpiles, items, game->stock_stored);
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = workstation_get_const(&game->workstations, index);
         if (station == NULL) {
             continue;
         }
-        ItemStack stack = items_get(&game->items, station->x, station->y, station->z);
+        ItemStack stack = items_get(items, station->x, station->y, station->z);
         if (stack.count > 0 && stockpile_storage_priority(&game->stockpiles, station->x, station->y,
                                                           station->z, stack) == 0) {
             game->stock_on_stations[stack.type] += stack.count; /* Not counted as stored. */
@@ -556,6 +562,9 @@ void game_shutdown(Game *game)
     regions_free(&game->regions);
     vision_free(&game->vision);
     game->vision_on = false;
+    known_free(&game->known);
+    game->known_ready = false;
+    game->fog_on = false;
     temperatures_free(&game->temperatures);
     designations_free(&game->designations);
     dirt_free(&game->dirt);
@@ -907,6 +916,8 @@ bool game_set_vision(Game *game, bool on)
     if (!on) {
         vision_free(&game->vision);
         game->vision_on = false;
+        game->fog_on = false; /* The fog needs the vision. */
+        game->fog_started = false;
         return true;
     }
     if (!vision_init(&game->vision, &game->map)) {
@@ -914,6 +925,43 @@ bool game_set_vision(Game *game, bool on)
     }
     game->vision_on = true;
     return true;
+}
+
+/* Slices over which the tiles in view are copied into the known world again
+ * (they change: plants grow, items are carried off). */
+#define KNOWN_SYNC_SLICES 12
+
+/* Copies into the known world the tiles that came into view, went out of it
+ * or were explored since the last call (a last time for those leaving, so
+ * that the known world holds what was seen last), and a slice of those in
+ * view. */
+static void sync_known(Game *game)
+{
+    Vision *vision = &game->vision;
+    if (vision->snapshot_pending) {
+        for (size_t word = 0; word < vision->words; word++) {
+            uint64_t bits = vision->snapshot[word];
+            vision->snapshot[word] = 0;
+            while (bits != 0) {
+                size_t index = word * 64 + (size_t)lowest_bit64(bits);
+                bits &= bits - 1;
+                known_copy_tile(&game->known, &game->map, &game->items, &game->dirt,
+                                &game->workstations, index);
+            }
+        }
+        vision->snapshot_pending = false;
+    }
+    size_t slice = (size_t)(game->clock.tick % KNOWN_SYNC_SLICES);
+    for (size_t word = vision->words * slice / KNOWN_SYNC_SLICES;
+         word < vision->words * (slice + 1) / KNOWN_SYNC_SLICES; word++) {
+        uint64_t bits = vision->seen_bits[word];
+        while (bits != 0) {
+            size_t index = word * 64 + (size_t)lowest_bit64(bits);
+            bits &= bits - 1;
+            known_copy_tile(&game->known, &game->map, &game->items, &game->dirt,
+                            &game->workstations, index);
+        }
+    }
 }
 
 /* Puts every settler where it stands in the vision (fields are recast when it
@@ -932,6 +980,65 @@ static void update_vision(Game *game)
         vision_viewer_set(&game->vision, &game->map, (int)slot, colonist->x, colonist->y,
                           colonist->z, colonist->task == TASK_SLEEP, game->clock.tick);
     }
+    if (game->fog_on) {
+        sync_known(game);
+    }
+}
+
+bool game_set_fog(Game *game, bool on)
+{
+    if (!on) {
+        game->fog_on = false;
+        return true;
+    }
+    if (game->fog_on) {
+        return true;
+    }
+    if (!game_set_vision(game, true)) {
+        return false;
+    }
+    if (!game->known_ready) {
+        if (!known_init(&game->known, &game->map)) {
+            return false;
+        }
+        game->known_ready = true;
+    }
+    if (!game->fog_started) {
+        game->fog_started = true;
+        TilePos center = game->arrival;
+        if (!game->has_arrival) {
+            int x = game->map.width / 2, y = game->map.height / 2;
+            center = (TilePos){(int16_t)x, (int16_t)y, (int16_t)map_ground_level(&game->map, x, y)};
+        }
+        exploration_start(&game->vision, &game->map, &game->pathfinder, center, game->seed);
+    }
+    /* Everything explored is copied afresh, then what the settlers see now. */
+    Vision *vision = &game->vision;
+    for (size_t word = 0; word < vision->words; word++) {
+        vision->snapshot[word] |= vision->explored[word];
+    }
+    vision->snapshot_pending = true;
+    game->fog_on = true;
+    update_vision(game);
+    return true;
+}
+
+void game_reveal_map(Game *game)
+{
+    if (game->vision_on) {
+        vision_explore_all(&game->vision, &game->map);
+    }
+}
+
+bool game_tile_explored(const Game *game, int x, int y, int z)
+{
+    return !game->fog_on ? map_in_bounds(&game->map, x, y, z)
+                         : vision_explored(&game->vision, x, y, z);
+}
+
+bool game_tile_seen(const Game *game, int x, int y, int z)
+{
+    return !game->fog_on ? map_in_bounds(&game->map, x, y, z) : vision_seen(&game->vision, x, y, z);
 }
 
 void game_set_instant_build(Game *game, bool on)
@@ -1258,7 +1365,7 @@ void game_tick(Game *game)
     }
     beds_forget_missing(&game->beds, &game->map); /* Beds taken apart or fallen apart. */
     /* What gathering zones want, from what lies in the colony now. */
-    gather_zones_update(&game->gather_zones, game->items.totals, game_daily_food(game));
+    gather_zones_update(&game->gather_zones, game_view_items(game)->totals, game_daily_food(game));
     update_colonists(game);
     if (game->vision_on) {
         update_vision(game);
@@ -1324,6 +1431,10 @@ uint64_t game_hash(const Game *game)
     if (game->debug.instant_fell_and_mine) { /* Apart: earlier hashes stay as they were. */
         uint8_t fell_and_mine = 1;
         hash = hash_fnv1a64(hash, &fell_and_mine, sizeof(fell_and_mine));
+    }
+    if (game->fog_on) { /* What the colony has seen: apart too. */
+        uint64_t explored = vision_explored_hash(&game->vision);
+        hash = hash_fnv1a64(hash, &explored, sizeof(explored));
     }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
@@ -1579,7 +1690,8 @@ int game_designate_rect(Game *game, int x0, int y0, int x1, int y1, int z, Desig
     int changed = 0;
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
-            if (!designation_ground_free(&game->constructions, &game->workstations,
+            if (!game_tile_explored(game, x, y, z) ||
+                !designation_ground_free(&game->constructions, &game->workstations,
                                          &game->stockpiles, type, x, y, z)) {
                 continue;
             }
@@ -1661,6 +1773,9 @@ bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target)
 bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bool forbidden)
 {
     forbid_tile(game, target, &x, &y, &z);
+    if (!game_tile_explored(game, x, y, z)) {
+        return false; /* Nobody has seen it: nothing to forbid. */
+    }
     switch (target) {
     case FORBID_ITEMS:
         return items_set_forbidden(&game->items, x, y, z, forbidden); /* Counts as an addition. */
@@ -1709,16 +1824,17 @@ int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z, i
 {
     const uint8_t *blocked[] = {game->gather_zones.zone, game->workstations.at,
                                 game->constructions.workstation_tiles, NULL};
-    return stockpiles_add_view_rect(&game->stockpiles, &game->map, x0, y0, x1, y1, z, preferred,
-                                    blocked);
+    /* Through the known world: tiles nobody has seen are not there. */
+    return stockpiles_add_view_rect(&game->stockpiles, game_view_map(game), x0, y0, x1, y1, z,
+                                    preferred, blocked);
 }
 
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred)
 {
     const uint8_t *blocked[] = {game->stockpiles.zone, game->workstations.at,
                                 game->constructions.workstation_tiles, NULL};
-    return gather_zones_add_view_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, z, preferred,
-                                      blocked);
+    return gather_zones_add_view_rect(&game->gather_zones, game_view_map(game), x0, y0, x1, y1, z,
+                                      preferred, blocked);
 }
 
 int game_remove_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z)
@@ -1876,13 +1992,14 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
             tools[slot] = def->tools[slot];
         }
     }
-    return bill_has_input(bill, game->items.totals, tools);
+    return bill_has_input(bill, game_view_items(game)->totals, tools);
 }
 
 bool game_can_place_workstation(const Game *game, int x, int y, int z)
 {
     /* Room in the list for every station whose site is finished. */
-    return game->workstations.used_count + game->constructions.workstation_count <
+    return game_tile_explored(game, x, y, z) &&
+           game->workstations.used_count + game->constructions.workstation_count <
                WORKSTATION_MAX &&
            map_structure(&game->map, x, y, z) == STRUCTURE_NONE &&
            construction_can_replace(&game->constructions, &game->map, x, y, z) &&
@@ -1976,6 +2093,10 @@ bool game_can_place_structure(const Game *game, StructureType type, int x, int y
         return false;
     }
     for (int part = 0; part < length; part++) {
+        if (!game_tile_explored(game, x + part * direction_dx(direction),
+                                y + part * direction_dy(direction), z)) {
+            return false;
+        }
         int px = x + part * direction_dx(direction), py = y + part * direction_dy(direction);
         if (stockpile_at(&game->stockpiles, px, py, z) != STOCKPILE_NONE ||
             workstation_at(&game->workstations, px, py, z) != WORKSTATION_NONE) {

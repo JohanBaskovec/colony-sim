@@ -22,8 +22,9 @@
 #define CLI_DEBUG_INSTANT_DECONSTRUCT (1u << 3)
 #define CLI_DEBUG_LEARN_ALL (1u << 4) /* game_debug_learn_all() once, at the start. */
 #define CLI_DEBUG_INSTANT_FELL_AND_MINE (1u << 5)
-#define CLI_DEBUG_VISION (1u << 6) /* Keep track of what the settlers see (overlay). */
-#define CLI_DEBUG_ALL ((1u << 7) - 1)
+#define CLI_DEBUG_VISION (1u << 6)         /* The overlay of what the selected settler sees. */
+#define CLI_DEBUG_SEE_EVERYTHING (1u << 7) /* No fog of war. */
+#define CLI_DEBUG_ALL ((1u << 8) - 1)
 
 typedef struct CliOptions {
     char language[CLI_LANGUAGE_CODE_SIZE]; /* Empty: use the system locale. */

@@ -221,6 +221,11 @@ void items_free(Items *items);
 /* Empty stack when out of bounds. */
 ItemStack items_get(const Items *items, int x, int y, int z);
 
+/* Copies the stack lying on the tile at `index` (and whether it is forbidden)
+ * from `src` to `dst` (same size), keeping dst's totals and counters right: dst
+ * is a picture of src (see core/known.h). */
+void items_copy_tile(Items *dst, const Items *src, size_t index);
+
 /* What settlers see of a tile: items_get(), but an empty stack where it is
  * forbidden. */
 ItemStack items_get_allowed(const Items *items, int x, int y, int z);

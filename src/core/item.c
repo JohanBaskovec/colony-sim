@@ -326,6 +326,24 @@ bool item_stack_merge(ItemStack *into, ItemStack from)
     return true;
 }
 
+void items_copy_tile(Items *dst, const Items *src, size_t index)
+{
+    size_t level = (size_t)dst->width * (size_t)dst->height;
+    size_t z = index / level;
+    ItemStack *held = &dst->stacks[index];
+    if (held->type != ITEM_NONE) {
+        dst->totals[held->type] -= held->count;
+        dst->level_stacks[z]--;
+    }
+    *held = src->stacks[index];
+    if (held->type != ITEM_NONE) {
+        dst->totals[held->type] += held->count;
+        dst->level_stacks[z]++;
+    }
+    dst->forbidden_count += (src->forbidden[index] != 0) - (dst->forbidden[index] != 0);
+    dst->forbidden[index] = src->forbidden[index];
+}
+
 bool items_init(Items *items, int width, int height, int depth)
 {
     memset(items, 0, sizeof(*items));

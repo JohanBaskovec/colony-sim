@@ -24,7 +24,8 @@ static bool food_runs_short(const Game *game)
             food |= ITEM_TYPE_BIT(type);
         }
     }
-    return gather_food_days(food, game->items.totals, game_daily_food(game)) < ALERT_FOOD_DAYS;
+    return gather_food_days(food, game_view_items(game)->totals, game_daily_food(game)) <
+           ALERT_FOOD_DAYS;
 }
 
 void alerts_compute(const Game *game, Alerts *out)

@@ -5,6 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+void dirt_copy_tile(Dirt *dst, const Dirt *src, size_t index)
+{
+    dst->dirty_count += (src->level[index] != 0) - (dst->level[index] != 0);
+    dst->level[index] = src->level[index];
+}
+
 bool dirt_init(Dirt *dirt, int width, int height, int depth)
 {
     memset(dirt, 0, sizeof(*dirt));

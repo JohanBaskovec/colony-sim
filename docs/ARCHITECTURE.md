@@ -1387,9 +1387,8 @@ tiles someone sees are copied over. With the See everything cheat (the
 default of tests and benchmarks not about vision) the known world is the real
 map, so behavior and state hashes stay those of today.
 
-`Vision` (owned by `Game`, built by `game_set_vision()`, which nothing but
-the debug menu and `--debug vision` calls yet, and updated at the end of each
-tick while `Game.vision_on`) is derived from the map and the settlers'
+`Vision` (owned by `Game`, built by `game_set_vision()` or by the fog, and
+updated at the end of each tick while `Game.vision_on`) is derived from the map and the settlers'
 positions, so it is not part of `game_hash()`:
 
 - **A field** is a bit per tile (`map_index()` order) over the tiles with
@@ -1421,6 +1420,35 @@ positions, so it is not part of `game_hash()`:
   `Vision.seen`, the number of viewers seeing each tile, from the difference);
   the whole field every `VISION_FAR_INTERVAL` ticks or after
   `VISION_FAR_MOVE` tiles of walking.
+- **Explored tiles** (`Vision.explored`, a bit per tile: seen by anyone ever,
+  or marked) and the tiles in view now (`seen_bits`) are kept by the same
+  bookkeeping as the counts; `Vision.snapshot` collects the tiles that came into
+  view, went out of it or were explored without being seen, for the known
+  world to copy. `vision_explored_hash()` goes into `game_hash()` while the
+  fog is on.
+- **The known world** (`core/known.h`, `Game.known`): pictures of the map, the
+  items and the dirt of the same types and sizes (all open space at first),
+  and per tile what a workstation there looked like (`KnownStation`: type,
+  fire, fuel, what lies on it; workstations can be destroyed, unlike the
+  player's zones, orders and blueprints, which are plans and always known), with `map_copy_tile()`, `items_copy_tile()` and `dirt_copy_tile()` keeping
+  their counters right. `sync_known()` (game.c), at the end of each tick,
+  copies the snapshot tiles, and a twelfth of the tiles in view (the
+  `KNOWN_SYNC_SLICES` slices), so that a tile out of view holds what was
+  seen last. `game_view_map()`, `game_view_items()` and `game_view_dirt()`
+  give the pictures under the fog and the real ones without: the renderer,
+  the tile readout, the tile inspector and the resources list read them.
+  Nothing in the simulation does yet.
+- **The fog** (`game_set_fog()`; `Game.fog_on`, off by default so that tests
+  and benchmarks are as before; the application turns it on unless
+  `--debug see_everything`): needs the vision, allocates the known world,
+  explores the start once (`core/exploration.h`: tiles within 14 steps of
+  the arrival point, what is seen from it, and what is seen along a walk from
+  a random edge, drawn from a `Rng` of its own) and copies everything explored.
+  `game_reveal_map()` explores every tile. Tools are refused on unexplored
+  tiles in the core (`game_designate_rect()`, `game_set_forbidden()`,
+  `game_can_place_structure()`, `game_can_place_workstation()`); zones go
+  through the known world (`game_add_stockpile_rect()`, `game_add_gather_zone_rect()`).
+  `render_fog()` veils the tiles seen before and not in view.
 - **Cost** (`bench/bench_vision`, release, 200 × 200 × 18 world): about 2 ms
   for a whole cast (3.8 ms the slowest of 100), 0.3 ms for a near cast. Most of
   a whole cast is rays crossing open ground to the edge of the map (a tile a

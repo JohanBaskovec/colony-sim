@@ -6,6 +6,7 @@ add_library(colony_core STATIC
     camera.c
     cli.c
     entry_strip.c
+    exploration.c
     colonist.c
     construction.c
     conversation.c
@@ -18,6 +19,7 @@ add_library(colony_core STATIC
     hauling.c
     i18n.c
     item.c
+    known.c
     knowledge.c
     log.c
     map.c

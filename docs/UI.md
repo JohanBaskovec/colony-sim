@@ -207,7 +207,7 @@ own, newest at the bottom, for 15 seconds, fading out over the last 2.
 What the colony knows (`docs/VISION.md`), on every level and in the view of
 the levels below: unexplored tiles are black, tiles seen before but out of
 view now are drawn as last seen under a grey veil, tiles in view as they are.
-The tile readout says "Unexplored" or that a tile is as last seen; the
+The tile readout says "Unexplored" or that a tile is out of sight and shown as last seen; the
 temperature view only covers tiles in view. Tools refuse unexplored tiles
 (the card says why), except the **Explore** order (Orders category), which is
 dragged over the fog.
@@ -243,7 +243,7 @@ folder: `~/.local/share/colony-sim/` on Linux). The command line
 
 The debug windows (F4 cheats, F5 items) and the debug readout (F3) have no
 buttons: keyboard only. The readout goes to the top right corner. With
-vision, F4 gets Reveal map and See everything. Already there: an option
+vision, F4 gets Reveal map and See everything. Both there, with the option
 that veils what the selected settler does not see (what no settler sees when
 nobody is selected), on the level shown.
 

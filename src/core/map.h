@@ -618,6 +618,12 @@ float map_move_cost(const Map *map, int x, int y, int z);
 /* Same for a tile index known to be in bounds (hot loops: pathfinding). */
 float map_move_cost_at(const Map *map, size_t index);
 
+/* Copies every layer of the tile at `index` from `src` to `dst` (maps of the
+ * same size), keeping dst's counters (slopes, structures, roofs, forbidden
+ * tiles) right. Not the revisions nor the change logs: dst is a picture of
+ * src, not a map in use (see core/known.h). */
+void map_copy_tile(Map *dst, const Map *src, size_t index);
+
 /* Content hash of all layers; equal maps give equal hashes. */
 uint64_t map_hash(const Map *map);
 

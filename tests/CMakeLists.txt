@@ -35,6 +35,7 @@ set(COLONY_UNIT_TESTS
     test_region
     test_roof
     test_vision
+    test_fog
     test_scenario
     test_settings
     test_reservation

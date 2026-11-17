@@ -40,6 +40,7 @@ cmake --preset headless && cmake --build --preset headless && ctest --preset hea
 cmake --preset debug && cmake --build --preset debug && ctest --preset debug           # everything
 ./build/debug/bin/colony_sim --lang fr --seed 42                                        # run the game
 ./build/debug/bin/colony_sim --seed 42 --colonists 8 --scenario 3 --debug instant_build,learn_all  # test setup
+./build/debug/bin/colony_sim --seed 42 --debug see_everything                          # no fog of war (docs/VISION.md)
 ./build/debug/bin/colony_sim --ui-scale 150         # larger interface (75 to 200 percent)
 ctest --preset debug -R i18n          # only one test (regex on the test name)
 ctest --preset debug -L i18n          # translation checks only (label)

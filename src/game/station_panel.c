@@ -481,10 +481,29 @@ typedef struct StationRows {
 
 /* The summary: whether the settlers leave it alone, its fire, what is being
  * made, how many bills. */
+/* The station as the colony knows it: what the player decided is exact (bills,
+ * settings), but what the station does of itself (its fuel, its fire, a craft
+ * under way) is what was last seen while it is out of view. */
+static Workstation as_known(const Game *game, const Workstation *station)
+{
+    Workstation known = *station;
+    if (game->fog_on && !game_tile_seen(game, station->x, station->y, station->z)) {
+        const KnownStation *picture =
+            &game->known.stations[map_index(&game->known.map, station->x, station->y, station->z)];
+        known.burning = picture->burning;
+        known.fuel = (float)picture->fuel * 0.1f;
+        known.soaked = 0.0f;
+        known.work_recipe = RECIPE_COUNT;
+        known.work_progress = 0.0f;
+    }
+    return known;
+}
+
 static void summary_rows(UiLayout *layout, void *userdata)
 {
     StationRows *rows = userdata;
-    const Workstation *station = rows->station;
+    Workstation known = as_known(rows->game, rows->station);
+    const Workstation *station = &known;
     if (station->forbidden) {
         ui_layout_label(layout, tr("tile_panel.left_alone"), 0.0f, true);
     }
@@ -501,7 +520,8 @@ static void summary_rows(UiLayout *layout, void *userdata)
 static void bills_rows(UiLayout *layout, void *userdata)
 {
     StationRows *rows = userdata;
-    bills_rows_of(layout, rows->game, rows->station, &rows->action);
+    Workstation known = as_known(rows->game, rows->station);
+    bills_rows_of(layout, rows->game, &known, &rows->action);
 }
 
 static void fire_rows(UiLayout *layout, void *userdata)

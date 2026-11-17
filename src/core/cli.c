@@ -34,8 +34,9 @@ const char *cli_usage(void)
                              "instant_build,\n"
                              "                  free_crafts, no_tools, instant_deconstruct, "
                              "learn_all,\n"
-                             "                  instant_fell_and_mine, vision (track what the "
-                             "settlers see), or all.\n"
+                             "                  instant_fell_and_mine, vision (overlay of what "
+                             "a settler sees),\n"
+                             "                  see_everything (no fog of war), or all.\n"
                              "  --ui-scale <n>  Interface scale in percent (75-200). Default: "
                              "the saved setting, else 100.\n"
                              "  --no-vsync      Draw frames as fast as possible.\n"
@@ -50,8 +51,8 @@ const char *cli_usage(void)
 /* Names of the CLI_DEBUG_* bits, in bit order. */
 static const char *const DEBUG_NAMES[] = {
     "instant_build", "free_crafts",           "no_tools", "instant_deconstruct",
-    "learn_all",     "instant_fell_and_mine", "vision"};
-_Static_assert(sizeof(DEBUG_NAMES) / sizeof(DEBUG_NAMES[0]) == 7, "one name per debug bit");
+    "learn_all",     "instant_fell_and_mine", "vision",   "see_everything"};
+_Static_assert(sizeof(DEBUG_NAMES) / sizeof(DEBUG_NAMES[0]) == 8, "one name per debug bit");
 
 /* Parses a comma-separated list of DEBUG_NAMES (or "all"), adding its bits
  * to `out` (left unchanged on failure). */

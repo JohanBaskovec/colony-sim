@@ -74,6 +74,16 @@ typedef struct Vision {
     int top_level;     /* The highest of them, over the map. */
     uint16_t *seen;    /* Per tile: viewers seeing it now. */
     uint64_t *scratch; /* A field being cast. */
+    /* One bit per tile, like a field: seen by someone now (`seen_bits`), seen
+     * by anyone ever or marked explored (`explored`), and to copy into the
+     * known world (`snapshot`: it came into view, or went out of it, or was
+     * explored without being seen; core/known.h). `snapshot_pending`: some
+     * bit of it is set. */
+    uint64_t *seen_bits;
+    uint64_t *explored;
+    uint64_t *snapshot;
+    size_t explored_count;
+    bool snapshot_pending;
     VisionViewer viewers[VISION_MAX_VIEWERS];
     /* The map revisions columns were last checked at, and the column the
      * slow sweep over all of them has reached. */
@@ -129,6 +139,23 @@ void vision_viewer_remove(Vision *vision, int slot);
  * field: call for every tile the map logged as changed (vision_update_map()
  * does it itself with the logs). */
 void vision_tile_changed(Vision *vision, int x, int y, int z);
+
+/* Whether anyone has ever seen the tile (or it was marked explored). False
+ * out of bounds. */
+bool vision_explored(const Vision *vision, int x, int y, int z);
+
+/* Marks as explored the tiles of a field (see vision_cast()): they will be
+ * copied into the known world. */
+void vision_explore_field(Vision *vision, const uint64_t *bits);
+
+/* Marks every tracked tile of the map explored (the Reveal map cheat). */
+void vision_explore_all(Vision *vision, const Map *map);
+
+/* Marks a tile explored. */
+void vision_explore_tile(Vision *vision, size_t index);
+
+/* A hash of what is explored, for the game hash. */
+uint64_t vision_explored_hash(const Vision *vision);
 
 /* Whether some viewer sees the tile now; whether a given viewer does. False
  * out of bounds. */

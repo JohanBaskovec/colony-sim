@@ -14,6 +14,7 @@
 #include "core/dirt.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
+#include "core/known.h"
 #include "core/map.h"
 #include "core/notice.h"
 #include "core/pathfinding.h"
@@ -119,6 +120,17 @@ typedef struct Game {
      * `vision_on` (see game_set_vision()). */
     Vision vision;
     bool vision_on;
+    /* The fog of war (docs/VISION.md): what the colony has seen. While
+     * `fog_on` (which needs `vision_on`), `known` holds pictures of the map,
+     * the items and the dirt, kept as game_set_fog() says, and what is
+     * unexplored is hidden: the frontend draws the known world instead of the
+     * real one (game_view_map()...). With it off, everything is seen. */
+    KnownWorld known;
+    bool known_ready; /* `known` is allocated. */
+    bool fog_on;
+    bool fog_started; /* The start was explored. */
+    TilePos arrival;  /* Where the starting settlers arrived. */
+    bool has_arrival;
     Weather weather; /* The sky, warm and cold spells, snow on the ground. */
     /* Where roofs were last checked for support (core/roof.h): derived from
      * the map, not part of game_hash(). */
@@ -172,6 +184,36 @@ uint64_t game_hash(const Game *game);
  * nothing depends on it yet: for the debug overlay). Off frees it. Returns
  * false when it cannot be allocated. */
 bool game_set_vision(Game *game, bool on);
+
+/* Turns the fog of war on or off (off: "see everything", as before the fog;
+ * the known world is not kept up to date meanwhile). The first time it comes
+ * on, the colony explores the start: around the arrival point and along the
+ * way in from a map edge (core/exploration.h). It needs the vision, which it
+ * turns on. Returns false when something cannot be allocated. */
+bool game_set_fog(Game *game, bool on);
+
+/* Debug: every tile of the map becomes explored, as it is now. */
+void game_reveal_map(Game *game);
+
+/* What to draw and to read of the world: the known world under the fog, the
+ * real one without. */
+static inline const Map *game_view_map(const Game *game)
+{
+    return game->fog_on ? &game->known.map : &game->map;
+}
+static inline const Items *game_view_items(const Game *game)
+{
+    return game->fog_on ? &game->known.items : &game->items;
+}
+static inline const Dirt *game_view_dirt(const Game *game)
+{
+    return game->fog_on ? &game->known.dirt : &game->dirt;
+}
+
+/* Whether a tile has been seen (always true without the fog), and whether
+ * someone sees it now (likewise). False out of bounds. */
+bool game_tile_explored(const Game *game, int x, int y, int z);
+bool game_tile_seen(const Game *game, int x, int y, int z);
 
 /* Turns a cheat of GameDebug on or off. */
 void game_set_instant_build(Game *game, bool on);

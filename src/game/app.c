@@ -477,7 +477,13 @@ static void apply_test_options(Game *game, const CliOptions *options)
     game_set_no_tools(game, (options->debug & CLI_DEBUG_NO_TOOLS) != 0);
     game_set_instant_deconstruct(game, (options->debug & CLI_DEBUG_INSTANT_DECONSTRUCT) != 0);
     game_set_instant_fell_and_mine(game, (options->debug & CLI_DEBUG_INSTANT_FELL_AND_MINE) != 0);
-    game_set_vision(game, (options->debug & CLI_DEBUG_VISION) != 0);
+    /* The fog of war is on, unless everything is to be seen. */
+    if ((options->debug & CLI_DEBUG_SEE_EVERYTHING) == 0 && !game_set_fog(game, true)) {
+        LOG_ERROR("Cannot start the fog of war");
+    }
+    if (options->debug & CLI_DEBUG_VISION) {
+        game_set_vision(game, true);
+    }
     if (options->debug & CLI_DEBUG_LEARN_ALL) {
         game_debug_learn_all(game);
     }
@@ -561,6 +567,7 @@ bool app_init(App *app, const CliOptions *options)
     }
     app->game_ready = true;
     apply_test_options(&app->game, options);
+    app->show_vision = (options->debug & CLI_DEBUG_VISION) != 0;
     LOG_INFO("World generated: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists", params.world.seed,
              params.world.width, params.world.height, app->game.colonist_pool.count);
 
@@ -1189,14 +1196,14 @@ static void render_frame(App *app)
 
     /* The levels below, through open space: those seen somewhere, the deepest first. */
     uint32_t levels;
-    if (render_below_begin(app->renderer, &app->game.map, &app->camera, &levels)) {
+    if (render_below_begin(app->renderer, game_view_map(&app->game), &app->camera, &levels)) {
         for (int z = 0; z < app->camera.level; z++) {
             if ((levels & (1u << z)) == 0) {
                 continue;
             }
             Camera below = app->camera;
             below.level = z;
-            render_map(app->renderer, app->sprites, &app->game.map, &below);
+            render_map(app->renderer, app->sprites, game_view_map(&app->game), &below);
             render_snow_cover(app->renderer, &app->game, &below);
             render_gather_zones(app->renderer, &app->game, &below, GATHER_ZONE_NONE);
             render_stockpiles(app->renderer, &app->game, &below, STOCKPILE_NONE);
@@ -1212,8 +1219,8 @@ static void render_frame(App *app)
         }
         render_below_end(app->renderer);
     }
-    render_map(app->renderer, app->sprites, &app->game.map, &app->camera);
-    render_dirt(app->renderer, &app->game.dirt, &app->camera);
+    render_map(app->renderer, app->sprites, game_view_map(&app->game), &app->camera);
+    render_dirt(app->renderer, game_view_dirt(&app->game), &app->camera);
     render_snow_cover(app->renderer, &app->game, &app->camera);
     render_gather_zones(app->renderer, &app->game, &app->camera, app->selected_gather_zone);
     render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
@@ -1222,7 +1229,10 @@ static void render_frame(App *app)
     render_items(app->renderer, &app->game, &app->camera);
     render_world_sprites(app->renderer, app->sprites, &app->game, &app->camera, app->selected,
                          app->selected_count);
-    render_ramp_markers(app->renderer, &app->game.map, &app->camera);
+    if (app->game.fog_on) {
+        render_fog(app->renderer, &app->game, &app->camera);
+    }
+    render_ramp_markers(app->renderer, game_view_map(&app->game), &app->camera);
     render_forbidden_markers(app->renderer, &app->game, &app->camera);
     render_designations(app->renderer, &app->game, &app->camera);
     hud_draw_item_counts(app);
@@ -1231,7 +1241,7 @@ static void render_frame(App *app)
     if (app->show_temperature) {
         render_temperature(app->renderer, &app->game, &app->camera, &app->ui.theme);
     }
-    if (app->game.vision_on) {
+    if (app->show_vision && app->game.vision_on) {
         render_vision(app->renderer, &app->game, &app->camera,
                       app->selected_count > 0 ? (int)app->selected[0].index : -1);
     }

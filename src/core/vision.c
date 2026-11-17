@@ -84,7 +84,11 @@ bool vision_init(Vision *vision, const Map *map)
     vision->column_top = malloc(map_level_tile_count(map));
     vision->seen = calloc(tiles, sizeof(*vision->seen));
     vision->scratch = malloc(vision->words * sizeof(*vision->scratch));
-    if (vision->column_top == NULL || vision->seen == NULL || vision->scratch == NULL) {
+    vision->seen_bits = calloc(vision->words, sizeof(*vision->seen_bits));
+    vision->explored = calloc(vision->words, sizeof(*vision->explored));
+    vision->snapshot = calloc(vision->words, sizeof(*vision->snapshot));
+    if (vision->column_top == NULL || vision->seen == NULL || vision->scratch == NULL ||
+        vision->seen_bits == NULL || vision->explored == NULL || vision->snapshot == NULL) {
         vision_free(vision);
         return false;
     }
@@ -102,6 +106,9 @@ void vision_free(Vision *vision)
     free(vision->column_top);
     free(vision->seen);
     free(vision->scratch);
+    free(vision->seen_bits);
+    free(vision->explored);
+    free(vision->snapshot);
     memset(vision, 0, sizeof(*vision));
 }
 
@@ -551,11 +558,27 @@ static void replace_bits(Vision *vision, uint64_t *field, const uint64_t *fresh,
         }
         uint64_t gained = after & changed, lost = before & changed;
         while (gained != 0) {
-            vision->seen[word * 64 + (size_t)lowest_bit64(gained)]++;
+            int bit = lowest_bit64(gained);
+            if (vision->seen[word * 64 + (size_t)bit]++ == 0) {
+                uint64_t tile_bit = (uint64_t)1 << bit;
+                vision->seen_bits[word] |= tile_bit;
+                vision->snapshot[word] |= tile_bit;
+                vision->snapshot_pending = true;
+                if ((vision->explored[word] & tile_bit) == 0) {
+                    vision->explored[word] |= tile_bit;
+                    vision->explored_count++;
+                }
+            }
             gained &= gained - 1;
         }
         while (lost != 0) {
-            vision->seen[word * 64 + (size_t)lowest_bit64(lost)]--;
+            int bit = lowest_bit64(lost);
+            if (--vision->seen[word * 64 + (size_t)bit] == 0) {
+                uint64_t tile_bit = (uint64_t)1 << bit;
+                vision->seen_bits[word] &= ~tile_bit;
+                vision->snapshot[word] |= tile_bit;
+                vision->snapshot_pending = true;
+            }
             lost &= lost - 1;
         }
         field[word] = (field[word] & ~mask) | after;
@@ -671,6 +694,57 @@ void vision_tile_changed(Vision *vision, int x, int y, int z)
             viewer->near_dirty = true;
         }
     }
+}
+
+void vision_explore_tile(Vision *vision, size_t index)
+{
+    uint64_t mask = (uint64_t)1 << (index & 63);
+    if ((vision->explored[index >> 6] & mask) == 0) {
+        vision->explored[index >> 6] |= mask;
+        vision->explored_count++;
+        vision->snapshot[index >> 6] |= mask;
+        vision->snapshot_pending = true;
+    }
+}
+
+void vision_explore_field(Vision *vision, const uint64_t *bits)
+{
+    for (size_t word = 0; word < vision->words; word++) {
+        uint64_t fresh = bits[word] & ~vision->explored[word];
+        if (fresh != 0) {
+            vision->explored[word] |= fresh;
+            vision->explored_count += (size_t)__builtin_popcountll(fresh);
+            vision->snapshot[word] |= fresh;
+            vision->snapshot_pending = true;
+        }
+    }
+}
+
+void vision_explore_all(Vision *vision, const Map *map)
+{
+    size_t tiles = map_tile_count(map);
+    for (size_t i = 0; i < tiles; i++) {
+        if (tracked_at(map, i)) {
+            vision_explore_tile(vision, i);
+        }
+    }
+}
+
+bool vision_explored(const Vision *vision, int x, int y, int z)
+{
+    if (x < 0 || y < 0 || z < 0 || x >= vision->width || y >= vision->height ||
+        z >= vision->depth) {
+        return false;
+    }
+    size_t index =
+        ((size_t)z * (size_t)vision->height + (size_t)y) * (size_t)vision->width + (size_t)x;
+    return (vision->explored[index >> 6] >> (index & 63) & 1u) != 0;
+}
+
+uint64_t vision_explored_hash(const Vision *vision)
+{
+    return hash_fnv1a64(HASH_FNV1A64_INIT, vision->explored,
+                        vision->words * sizeof(*vision->explored));
 }
 
 bool vision_seen(const Vision *vision, int x, int y, int z)

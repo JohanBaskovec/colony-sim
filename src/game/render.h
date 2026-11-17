@@ -71,6 +71,11 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
 void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                         const Theme *theme);
 
+/* The fog of war on the level shown: tiles that were seen but are not in view
+ * now are veiled (what nobody has seen is not drawn: the known world has
+ * nothing there). */
+void render_fog(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+
 /* Debug: veils the tiles of the level shown that the settler in `slot` does
  * not see (slot -1: that nobody sees), as the vision tracks them
  * (core/vision.h). */

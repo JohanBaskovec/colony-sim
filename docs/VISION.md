@@ -5,9 +5,11 @@ the colony only knows what its settlers see or have seen. This document is
 the design of milestone M5's first part (field of view and fog of war);
 wildlife and hunting come after it.
 
-Status: step 1 (sight) is implemented (`core/vision.h`, shown by a debug
-overlay), nothing is hidden yet; the rest is design. Values marked *(tuning)*
-are first guesses.
+Status: steps 1 (sight) and 2 (the colony's picture and the fog of war on
+screen) are implemented: what nobody has seen is not shown, the tools refuse
+it, and the start explores the arrival point and the way in. The settlers
+themselves still know everything (step 3); the rest is design. Values marked
+*(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -116,10 +118,16 @@ construction site, dirt. Creatures (settlers of other groups, animals later)
 are only shown where they are seen, since they move.
 
 The colony's own settlers are always known (where they are, what they do):
-they belong to it. The colony's plans are known too: its zones, orders,
-bills and the settings of its workstations, wherever they are. What lies on
-their tiles is remembered like the rest: a stockpile out of view shows the
-items last seen in it.
+they belong to it. So are its **plans**, which are the player's intent and
+cannot be destroyed: zones, orders, blueprints and the bills of workstations,
+wherever they are. The **things** are remembered like the rest, since they
+can be destroyed (by enemies, later): structures and roofs are layers of the
+map, and workstations (what they are, their fire, what lies on them to be
+worked) are remembered per tile too, so that one destroyed out of view is
+still believed to be there until someone sees it gone. What lies on a zone's
+tiles is remembered like the rest: a stockpile out of view shows the items
+last seen in it. Whatever is not in view is dim, the same by day and by
+night, and no fire lights it: nobody knows whether something does.
 
 ### 3.3 Acting on the picture
 
@@ -132,10 +140,18 @@ Every choice a settler makes reads the colony's picture, never the real map:
 - **Searches** (food, water, hauling, materials, work, gathering zones, beds,
   wandering) look only at known tiles. A settler walking to remembered food
   that is gone gives up when it sees it gone, and looks again.
-- **Orders and zones** can only be placed on explored tiles.
+- **Orders and zones** can only be placed on explored tiles. **Anything the
+  colony remembers can be selected and given orders**, in view or not (a
+  workstation to add a bill to, a tree to fell, stones to cut at a station out
+  of sight): making the player walk a settler there first to see it would make
+  the game a chore. The order is on the picture; the settler goes, and on
+  arrival, when it sees the thing, it finds out whether it is still there: if
+  not, the order falls and it chooses something else.
 - **What the colony has** (the resources list, the food alert, bills "until N
-  lie in the colony") counts what the colony knows: items last seen in a
-  stockpile out of view still count.
+  lie in the colony", the targets of gathering zones) counts what the colony
+  knows: items last seen in a stockpile out of view still count (decided:
+  the known world's items, `game_view_items()`, even where the settlers have
+  not looked for a while). Implemented with the fog.
 - **Messages** about the map (a roof fallen in, a gallery caved in) come when
   a settler sees it happen, or when the change is first seen. Messages about
   the colony's settlers (a breakdown, a knowledge learned) come at once.
@@ -162,45 +178,59 @@ going to the edge of what it knows:
 ## 4. The start of a game
 
 - At the start the colony knows only what its settlers see from where they
-  stand, plus **the way they came**: a path from a map edge to the arrival
-  point, as if they had walked to it before the game began.
-- The edge is drawn at random (seeded `Rng`, part of the world's draws). The
-  path is the cheapest walk between them on the real map; everything seen
-  along it is explored (seen from every tile of it, as if walked), and
-  remembered as it is at the start.
-- What the start guarantees (berry bushes, flint, drinkable water near the
-  arrival point, `docs/KNOWLEDGE.md`) must lie in the picture: within sight of
-  the arrival point, or along the path. When drinkable water is within reach
-  but out of sight, the path passes by it (they followed the river).
+  stand, plus the land around the camp and **the way they came**: a path from
+  a map edge to the arrival point, as if they had walked to it before the game
+  began.
+- **The camp**: every tile within 14 steps of the arrival point (and its
+  neighbors) is explored, and so is everything seen from the arrival point.
+  Food, water and flint are placed within reach of it (`GAME_SPAWN_*`), so
+  they lie in the picture without a special rule.
+- **The way in**: an edge tile of the map is drawn at random (a `Rng` of its
+  own, seeded from the game's seed, so that the game's stream is left alone;
+  up to 64 tries, the first one with a walkable path to the arrival point),
+  and the cheapest walk from it is made: everything seen from its tiles (the
+  whole field every 8th tile, the near one on every tile) is explored.
+  `core/exploration.h`.
+- Everything explored at the start is remembered as it is then.
 
 ## 5. Shown to the player
 
-- **Unexplored** tiles are black (on every level), **remembered** ones are
-  drawn from the picture under a grey veil, **seen** ones as they are. The
-  view of the lower levels through open space shows the picture too.
-- The tile readout and the inspector of a tile show the picture: an
-  unexplored tile only says "Unexplored", a remembered one says that it is
-  as last seen.
-- The temperature view shows only seen tiles.
-- Tools refuse unexplored tiles (except the Explore order), like any tile
-  where an order cannot go, and say why on the build card.
-- Debug (F4): **Reveal map** (everything explored, remembered as it is now)
-  and **See everything** (every tile always seen: the game as before the fog,
-  for tests and comparisons).
+- **Unexplored** tiles are not drawn (the known world has nothing there: the
+  dark background shows), **remembered** ones are drawn from the known world
+  under a bluish veil, **seen** ones as they are. The view of the lower levels
+  through open space shows the same.
+- The tile readout shows the known world: an unexplored tile only says
+  "Unexplored", a remembered one says "Out of sight: as last seen". The tile
+  inspector and the resources list (items counted in the known world) follow.
+- Whatever is not in view is dim, the same by day and by night, and the
+  glow of a fire only lights what is in view. The temperature view only covers
+  tiles in view, and the readout of a tile out of view says "Temperature:
+  unknown". A workstation out of view shows its fuel and its fire as they were
+  last seen.
+- Orders, zones, buildings and forbidding are refused on unexplored tiles
+  (in the core: `game_tile_explored()`); zones go through the known world, so
+  an unexplored tile is simply not there. The Explore order is step 4.
+- Debug (F4): **See everything** (no fog: the game as before it, the default
+  of tests and benchmarks; `--debug see_everything`), **Reveal the map**
+  (every tile explored, as it is now) and the overlay of what the selected
+  settler sees.
 
 ## 6. In the code
 
-`core/vision.h` (step 1, see `docs/ARCHITECTURE.md`), then:
+`core/vision.h`, `core/known.h` and `core/exploration.h`
+(`docs/ARCHITECTURE.md`, *Vision*), then:
 
-- **The known world**: a second copy of the map's layers and of the
-  layers of items, structures and sites, of the same types (`Map`, `Items`...),
-  where unexplored tiles have an unknown terrain (impassable, not buildable).
-  Paths, regions and searches run on it unchanged; the simulation writes the
-  real map as today, and every change to a tile that someone sees is copied
-  to the known world, as is every tile coming into view.
-- **See everything** (the debug cheat, and the default of tests and
-  benchmarks that are not about vision): the known world is the real map,
-  nothing is copied, behavior and state hashes are those of today.
+- **The known world** is not a second simulation: pictures of the map, the
+  items and the dirt (same types, same sizes, so code made for the real ones
+  reads them unchanged), written by copying tiles from the real world: when a
+  tile comes into view, a slice of the tiles in view every tick (a twelfth of
+  them: they change), and a last time when it goes out of view, so that what
+  is held of a tile out of view is what was seen last. Nothing is copied from
+  the real world to anything but these pictures, and the simulation never
+  reads them yet (step 3: paths, regions and searches will).
+- **See everything** (fog off, the default of the core): the pictures are not
+  kept, `game_view_map()` is the real map, behavior and state hashes are those
+  of today; with the fog the hash also covers what is explored.
 - **Cost**: measured by `bench_vision` (a cast) and `bench_simulation` (the
   whole game, 64 settlers). Target: about half a millisecond per tick on
   average and no tick above 2 ms because of vision *(tuning)*: at ×3 (180
@@ -217,10 +247,12 @@ going to the edge of what it knows:
    seen through, the far side of open plains seen, counts equal to the
    fields' sums, and an agreement with a brute-force line of sight on
    generated worlds. Nothing hidden yet.
-2. **Picture and fog**: the known world, the start (view from the arrival
-   point and the path from an edge), drawing (black, veil, seen), the tile
-   readout, tools refusing unexplored tiles, the Reveal map and See
-   everything cheats.
+2. [x] **Picture and fog**: the known world (pictures of the map, items and
+   dirt, copied from the real ones as tiles come into and go out of view), the
+   explored tiles, the start (the camp, the way in from a random edge),
+   drawing (unexplored not drawn, remembered veiled, seen as it is), the tile
+   readout, orders, zones and buildings refused on unexplored tiles, the
+   Reveal map and See everything cheats. Tested in `tests/test_fog.c`.
 3. **Acting on the picture**: paths, regions and every search on the known
    world; plans redone on a change met on the way; targets gone; orders on
    explored tiles; resources list, alerts and bills on what is known;

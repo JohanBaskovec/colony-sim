@@ -816,8 +816,9 @@ static void render_forbid_sign(SDL_Renderer *renderer, float cx, float cy, float
  * its foot and its trunk), a structure (on its head), a roof. */
 static bool forbidden_marked(const Game *game, int x, int y, int z)
 {
-    const Map *map = &game->map;
-    if (game->items.forbidden_count > 0 && items_forbidden(&game->items, x, y, z)) {
+    const Map *map = game_view_map(game);
+    if (game_view_items(game)->forbidden_count > 0 &&
+        items_forbidden(game_view_items(game), x, y, z)) {
         return true;
     }
     if (map->forbidden_count == 0) {
@@ -843,9 +844,9 @@ static void forbid_marker(SDL_Renderer *renderer, const SDL_FRect *tile)
 void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
-    const Map *map = &game->map;
+    const Map *map = game_view_map(game);
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
-    if (map->forbidden_count > 0 || game->items.forbidden_count > 0) {
+    if (map->forbidden_count > 0 || game_view_items(game)->forbidden_count > 0) {
         for (int y = visible.y0; y < visible.y1; y++) {
             for (int x = visible.x0; x < visible.x1; x++) {
                 if (forbidden_marked(game, x, y, z)) {
@@ -873,7 +874,7 @@ void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *c
     if (snow <= 0.0f) {
         return;
     }
-    const Map *map = &game->map;
+    const Map *map = game_view_map(game);
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
     SDL_SetRenderDrawColor(renderer, 240, 244, 250, (Uint8)(clampf(snow, 0.0f, 1.0f) * 200.0f));
     for (int y = visible.y0; y < visible.y1; y++) {
@@ -1223,7 +1224,7 @@ static void render_litter(SDL_Renderer *renderer, const Map *map, int x, int y, 
 void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
-    const Items *items = &game->items;
+    const Items *items = game_view_items(game);
     TileRect visible = camera_visible_tiles(camera, items->width, items->height);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
@@ -1231,7 +1232,7 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
                 continue;
             }
             SDL_FRect tile = tile_rect(camera, x, y);
-            render_litter(renderer, &game->map, x, y, z, &tile);
+            render_litter(renderer, game_view_map(game), x, y, z, &tile);
             ItemStack stack = items_get(items, x, y, z);
             if (stack.type != ITEM_NONE) {
                 render_item_stack(renderer, &tile, (ItemType)stack.type);
@@ -1248,7 +1249,7 @@ void render_designations(SDL_Renderer *renderer, const Game *game, const Camera 
     if (designations->count == 0) {
         return;
     }
-    const Map *map = &game->map;
+    const Map *map = game_view_map(game);
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
     float thickness = camera->zoom >= 24.0f ? 2.0f : 1.0f;
 
@@ -1524,9 +1525,55 @@ static void render_station_shape(SDL_Renderer *renderer, const SDL_FRect *tile,
     }
 }
 
+/* Under the fog: the workstations the colony remembers on the level shown, as
+ * it last saw them (one may be gone, or burning no more); only what is in view
+ * now gets its progress bar and its selection. */
+static void render_known_workstations(SDL_Renderer *renderer, const Game *game,
+                                      const Camera *camera, int selected)
+{
+    const Workstations *workstations = &game->workstations;
+    const int z = camera->level; /* The level shown. */
+    TileRect visible = camera_visible_tiles(camera, workstations->width, workstations->height);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            const KnownStation *picture =
+                &game->known.stations[map_index(&game->known.map, x, y, z)];
+            if (picture->type_plus_one == 0 || !tile_seen(x, y, z)) {
+                continue;
+            }
+            Workstation remembered = {.type = (uint8_t)(picture->type_plus_one - 1),
+                                      .burning = picture->burning,
+                                      .fuel = (float)picture->fuel * 0.1f};
+            remembered.work_input.type = picture->input;
+            SDL_FRect tile = tile_rect(camera, x, y);
+            render_station_shape(renderer, &tile, (WorkstationType)remembered.type, 255);
+            if (hearth_is(&remembered)) {
+                render_hearth_fire(renderer, &tile, &remembered);
+            }
+            if (remembered.work_input.type != ITEM_NONE) {
+                render_item_stack(renderer, &tile, (ItemType)remembered.work_input.type);
+                batch_flush(renderer);
+            }
+            int index = vision_seen(&game->vision, x, y, z) ? workstation_at(workstations, x, y, z)
+                                                            : WORKSTATION_NONE;
+            const Workstation *station = workstation_get_const(workstations, index);
+            if (station != NULL) {
+                progress_bar(renderer, &tile, craft_fraction(station));
+                if (index == selected) {
+                    outline(renderer, tile, 2.0f, SELECTION_COLOR);
+                }
+            }
+        }
+    }
+}
+
 void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                          int selected)
 {
+    if (game->fog_on) {
+        render_known_workstations(renderer, game, camera, selected);
+        return;
+    }
     const Workstations *workstations = &game->workstations;
     if (workstations->used_count == 0) {
         return;
@@ -1743,7 +1790,7 @@ static TileRect visible_heads(const Camera *camera, int width, int height)
 void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
-    const Map *map = &game->map;
+    const Map *map = game_view_map(game);
     if (map->structure_counts[STRUCTURE_NONE] < (int)map_tile_count(map)) {
         TileRect visible = visible_heads(camera, map->width, map->height);
         for (int y = visible.y0; y < visible.y1; y++) {
@@ -1797,7 +1844,7 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
 void render_roof_support(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
-    const Map *map = &game->map;
+    const Map *map = game_view_map(game);
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
@@ -2029,8 +2076,10 @@ static TileRect lit_tiles(const Workstations *workstations, TileRect visible, in
 
 /* One quad per tile of `box`, each corner colored `color` with an alpha from
  * the light there. */
+static bool fog_tile_seen(const Game *game, const Camera *camera, int x, int y);
+
 static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box, SDL_Color color,
-                      float darkness, bool glow)
+                      float darkness, bool glow, const Game *fog)
 {
     int columns = box.x1 - box.x0 + 1;
     float flicker = 0.95f + 0.05f * sinf((float)(SDL_GetTicks() % 100000u) * 0.011f);
@@ -2039,8 +2088,9 @@ static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box
             int corner = (y - box.y0) * columns + (x - box.x0);
             float light[4] = {light_corners[corner], light_corners[corner + 1],
                               light_corners[corner + columns + 1], light_corners[corner + columns]};
-            if (glow && light[0] + light[1] + light[2] + light[3] <= 0.0f) {
-                continue;
+            if ((glow && light[0] + light[1] + light[2] + light[3] <= 0.0f) ||
+                (fog != NULL && !fog_tile_seen(fog, camera, x, y))) {
+                continue; /* Nothing lights what is not in view: what is known of it is dim. */
             }
             SDL_Color colors[4];
             for (int i = 0; i < 4; i++) {
@@ -2095,8 +2145,8 @@ void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *
     }
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            if (map_is_open(&game->map, x, y, z)) {
-                continue; /* Nothing here: the levels below show. */
+            if (map_is_open(&game->map, x, y, z) || !game_tile_seen(game, x, y, z)) {
+                continue; /* Nothing here (the levels below show), or out of view. */
             }
             float celsius = temperature_at(temperatures, x, y, z);
             if (burning && near_fire(workstations, x, y, z)) {
@@ -2111,9 +2161,53 @@ void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *
     batch_flush(renderer);
 }
 
+/* Whether the tile drawn at (x, y) on the level shown is in view now. */
+static bool fog_tile_seen(const Game *game, const Camera *camera, int x, int y)
+{
+    int level = map_view_level(game_view_map(game), x, y, camera->level);
+    return level >= 0 && vision_seen(&game->vision, x, y, level);
+}
+
+/* The night over the tiles in view that lie outside `box`, in plain darkness.
+ * What is not in view is dim whatever the time of day: nobody knows whether
+ * something lights it. */
+static void fog_night(SDL_Renderer *renderer, const Game *game, const Camera *camera, TileRect box,
+                      SDL_Color color)
+{
+    TileRect visible = camera_visible_tiles(camera, game->map.width, game->map.height);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            bool lit_box = x >= box.x0 && x < box.x1 && y >= box.y0 && y < box.y1;
+            if (!lit_box && fog_tile_seen(game, camera, x, y)) {
+                SDL_FRect tile = tile_rect(camera, x, y);
+                batch_quad(renderer, color, &tile);
+            }
+        }
+    }
+    batch_flush(renderer);
+}
+
+void render_fog(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    const Map *map = game_view_map(game);
+    const int z = camera->level; /* The level shown. */
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    SDL_Color veil = {14, 16, 28, 165}; /* The same dim light by day and by night. */
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            int level = map_view_level(map, x, y, z); /* What is drawn there. */
+            if (level >= 0 && !vision_seen(&game->vision, x, y, level)) {
+                SDL_FRect tile = tile_rect(camera, x, y);
+                batch_quad(renderer, veil, &tile);
+            }
+        }
+    }
+    batch_flush(renderer);
+}
+
 void render_vision(SDL_Renderer *renderer, const Game *game, const Camera *camera, int slot)
 {
-    const Map *map = &game->map;
+    const Map *map = game_view_map(game);
     const Vision *vision = &game->vision;
     const int z = camera->level; /* The level shown. */
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
@@ -2160,6 +2254,11 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
         }
     }
     if (corners == 0 || corners > light_corner_capacity) {
+        if (game->fog_on) { /* Only over what is in view. */
+            SDL_Color night = {NIGHT_COLOR.r, NIGHT_COLOR.g, NIGHT_COLOR.b, alpha};
+            fog_night(renderer, game, camera, (TileRect){0, 0, 0, 0}, night);
+            return;
+        }
         SDL_FRect screen = {0.0f, 0.0f, width, height};
         SDL_RenderFillRect(renderer, &screen);
         return;
@@ -2172,11 +2271,17 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
                            {0.0f, bottom, width, height - bottom},
                            {0.0f, top, left, bottom - top},
                            {right, top, width - right, bottom - top}};
-    for (int i = 0; i < 4; i++) {
-        if (around[i].w > 0.0f && around[i].h > 0.0f) {
-            SDL_RenderFillRect(renderer, &around[i]);
+    if (game->fog_on) {
+        SDL_Color night = {NIGHT_COLOR.r, NIGHT_COLOR.g, NIGHT_COLOR.b, alpha};
+        fog_night(renderer, game, camera, box, night);
+    } else {
+        for (int i = 0; i < 4; i++) {
+            if (around[i].w > 0.0f && around[i].h > 0.0f) {
+                SDL_RenderFillRect(renderer, &around[i]);
+            }
         }
     }
+    const Game *fog = game->fog_on ? game : NULL;
     int columns = box.x1 - box.x0 + 1;
     for (int y = box.y0; y <= box.y1; y++) {
         for (int x = box.x0; x <= box.x1; x++) {
@@ -2184,9 +2289,9 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
                 hearths_light_at(workstations, (float)x, (float)y, camera->level);
         }
     }
-    lit_quads(renderer, camera, box, NIGHT_COLOR, darkness, false);
+    lit_quads(renderer, camera, box, NIGHT_COLOR, darkness, false, fog);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-    lit_quads(renderer, camera, box, GLOW_COLOR, darkness, true);
+    lit_quads(renderer, camera, box, GLOW_COLOR, darkness, true, fog);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 }
 
@@ -2560,7 +2665,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
         }
     }
 
-    const Map *map = &game->map;
+    const Map *map = game_view_map(game);
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
     int x0 = SDL_max(0, visible.x0 - SPRITE_OVERFLOW_COLUMNS);
     int x1 = SDL_min(map->width, visible.x1 + SPRITE_OVERFLOW_COLUMNS);

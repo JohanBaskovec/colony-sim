@@ -1001,6 +1001,32 @@ bool map_natural_roof(const Map *map, int x, int y, int z)
     return cover >= 0 && map_roof(map, x, y, cover) == STRUCTURE_NONE;
 }
 
+void map_copy_tile(Map *dst, const Map *src, size_t index)
+{
+    dst->slope_count += (src->slope[index] != 0) - (dst->slope[index] != 0);
+    dst->structure_counts[dst->structure[index]]--;
+    dst->structure_counts[src->structure[index]]++;
+    bool had_roof = terrain_def((Terrain)dst->terrain[index])->built != STRUCTURE_NONE;
+    bool has_roof = terrain_def((Terrain)src->terrain[index])->built != STRUCTURE_NONE;
+    dst->roof_count += has_roof - had_roof;
+    dst->forbidden_count += (src->forbidden[index] != 0) - (dst->forbidden[index] != 0);
+    dst->terrain[index] = src->terrain[index];
+    dst->rock[index] = src->rock[index];
+    dst->slope[index] = src->slope[index];
+    dst->plants[index] = src->plants[index];
+    dst->cobbles[index] = src->cobbles[index];
+    dst->flint[index] = src->flint[index];
+    dst->branches[index] = src->branches[index];
+    dst->twigs[index] = src->twigs[index];
+    dst->nuts[index] = src->nuts[index];
+    dst->structure[index] = src->structure[index];
+    dst->structure_part[index] = src->structure_part[index];
+    dst->structure_quality[index] = src->structure_quality[index];
+    dst->structure_hit_points[index] = src->structure_hit_points[index];
+    dst->roof_quality[index] = src->roof_quality[index];
+    dst->forbidden[index] = src->forbidden[index];
+}
+
 uint64_t map_hash(const Map *map)
 {
     uint64_t hash = HASH_FNV1A64_INIT;
