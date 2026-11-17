@@ -831,7 +831,7 @@ static bool any_tile_reachable(const ColonistContext *context, TilePos from,
             }
             const uint32_t *ids = &context->regions->id[map_index(map, 0, y, z)];
             for (int x = x0; x <= x1; x++) {
-                if (ids[x] == region && predicate(map, x, y, z, userdata)) {
+                if (ids[x] == region && predicate(context->plan_map, x, y, z, userdata)) {
                     return true;
                 }
             }
@@ -847,7 +847,7 @@ static bool find_spoiling_food(Colonist *colonist, const ColonistContext *contex
 {
     return any_tile_reachable(context, current_tile(colonist), is_free_spoiling_food, food,
                               COLONIST_SPOILING_FOOD_MAX_COST) &&
-           pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+           pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                    is_free_spoiling_food, food, COLONIST_SPOILING_FOOD_MAX_COST,
                                    &colonist->path, found);
 }
@@ -862,7 +862,7 @@ static bool try_satisfy(Colonist *colonist, const ColonistContext *context, Need
         return false;
     }
     TilePos found;
-    FoodSearch food = {context->items, context->reservations, context->temperatures,
+    FoodSearch food = {context->plan_items, context->reservations, context->temperatures,
                        context->wetting > 0.0f, context->worker_id};
     /* No water anywhere the colonist can walk to, no food within reach: the
      * search would explore everything within its cost limit for nothing. */
@@ -873,7 +873,7 @@ static bool try_satisfy(Colonist *colonist, const ColonistContext *context, Need
     bool spoiling = !drink && !hopeless && find_spoiling_food(colonist, context, &food, &found);
     if (hopeless ||
         (!spoiling && !pathfinder_find_nearest(
-                          context->pathfinder, context->map, current_tile(colonist),
+                          context->pathfinder, context->plan_map, current_tile(colonist),
                           drink ? is_drinking_spot : is_free_food, &food,
                           drink ? COLONIST_WATER_SEARCH_MAX_COST : COLONIST_FOOD_SEARCH_MAX_COST,
                           &colonist->path, &found))) {
@@ -949,12 +949,12 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
     /* Its own bed: straight there. */
     bool found = beds_owned(context->beds, context->worker_id, &bed) &&
                  is_free_bed(context->map, bed.x, bed.y, bed.z, (void *)context) &&
-                 pathfinder_find(context->pathfinder, context->map, current_tile(colonist), bed,
-                                 COLONIST_BED_SEARCH_MAX_COST, &colonist->path);
+                 pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist),
+                                 bed, COLONIST_BED_SEARCH_MAX_COST, &colonist->path);
     if (!found &&
         any_tile_reachable(context, current_tile(colonist), is_free_bed, (void *)context,
                            COLONIST_BED_SEARCH_MAX_COST) &&
-        pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+        pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                 is_free_bed, (void *)context, COLONIST_BED_SEARCH_MAX_COST,
                                 &colonist->path, &bed)) {
         found = true;
@@ -1074,7 +1074,7 @@ static bool go_to_warm_spot(Colonist *colonist, const ColonistContext *context)
     }
     TilePos spot;
     WarmSpotSearch search = {colonist, context};
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                  is_warm_spot, &search, COLONIST_WARM_SPOT_MAX_COST,
                                  &colonist->path, &spot)) {
         return false;
@@ -1388,7 +1388,7 @@ static bool try_clean_job(Colonist *colonist, const ColonistContext *context)
 {
     CleanSearch search = {context->dirt, context->reservations, context->worker_id};
     TilePos found;
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                  is_dirty_tile, &search, COLONIST_WORK_SEARCH_MAX_COST,
                                  &colonist->path, &found)) {
         return false;
@@ -1425,8 +1425,8 @@ static void clean(Colonist *colonist, const ColonistContext *context)
 
 static HaulWorld haul_world(const ColonistContext *context)
 {
-    HaulWorld world = {context->map,
-                       context->items,
+    HaulWorld world = {context->plan_map,
+                       context->plan_items,
                        context->stockpiles,
                        context->reservations,
                        context->pathfinder,
@@ -1505,8 +1505,8 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
          * a wanderer keeps walking. */
         found = open_job_reachable(&search, context, region) &&
                 pathfinder_find_nearest_in_box(
-                    context->pathfinder, context->map, current_tile(colonist), &spots, is_work_spot,
-                    &search, COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot);
+                    context->pathfinder, context->plan_map, current_tile(colonist), &spots,
+                    is_work_spot, &search, COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot);
     }
     if (!found) {
         return false;
@@ -1537,7 +1537,7 @@ static bool try_haul_job(Colonist *colonist, const ColonistContext *context)
     }
     HaulJob job;
     if (!haul_find_job(&world, current_tile(colonist), COLONIST_WORK_SEARCH_MAX_COST, &job) ||
-        !pathfinder_find(context->pathfinder, context->map, current_tile(colonist), job.source,
+        !pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist), job.source,
                          COLONIST_WORK_SEARCH_MAX_COST, &colonist->path)) {
         return false;
     }
@@ -1782,7 +1782,7 @@ static bool start_delivery(Colonist *colonist, const ColonistContext *context)
     reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE, context->worker_id);
     colonist->haul_delivering = true;
     colonist->path_index = 0;
-    return pathfinder_find(context->pathfinder, context->map, current_tile(colonist),
+    return pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist),
                            colonist->haul_destination, PATH_NO_COST_LIMIT, &colonist->path);
 }
 
@@ -1815,11 +1815,27 @@ static bool collect_more(Colonist *colonist, const ColonistContext *context)
  * removed, tile filled), the hauler looks for another storage tile and only
  * gives up (dropping its load) if there is none.
  */
+/* The items a settler checks on a tile: the real ones when it can see the
+ * tile, else what it remembers of it (it finds out what changed there when it
+ * gets there). */
+static const Items *items_checked(const ColonistContext *context, int x, int y, int z)
+{
+    return context->vision == NULL || vision_seen(context->vision, x, y, z) ? context->items
+                                                                            : context->plan_items;
+}
+
+static const Map *map_checked(const ColonistContext *context, int x, int y, int z)
+{
+    return context->vision == NULL || vision_seen(context->vision, x, y, z) ? context->map
+                                                                            : context->plan_map;
+}
+
 static bool haul_still_valid(Colonist *colonist, const ColonistContext *context)
 {
     if (!colonist->haul_delivering) {
-        ItemStack stack = items_get_allowed(context->items, colonist->target.x, colonist->target.y,
-                                            colonist->target.z);
+        ItemStack stack = items_get_allowed(
+            items_checked(context, colonist->target.x, colonist->target.y, colonist->target.z),
+            colonist->target.x, colonist->target.y, colonist->target.z);
         bool holding = colonist->carried.count > 0;
         if (colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED &&
             stack.type != ITEM_NONE && (!holding || item_stacks_match(stack, colonist->carried)) &&
@@ -2154,9 +2170,9 @@ static bool start_fetch(Colonist *colonist, const ColonistContext *context, Fetc
 {
     TilePos found;
     if (!any_tile_reachable(context, from, is_fetchable, search, max_cost) ||
-        !pathfinder_find_nearest(context->pathfinder, context->map, from, is_fetchable, search,
+        !pathfinder_find_nearest(context->pathfinder, context->plan_map, from, is_fetchable, search,
                                  max_cost, NULL, &found) ||
-        !pathfinder_find(context->pathfinder, context->map, current_tile(colonist), found,
+        !pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist), found,
                          COLONIST_WORK_SEARCH_MAX_COST, &colonist->path)) {
         return false;
     }
@@ -2171,7 +2187,7 @@ static bool start_fetch(Colonist *colonist, const ColonistContext *context, Fetc
 
 static FetchSearch fetch_search(const ColonistContext *context, ItemTypeMask types)
 {
-    FetchSearch search = {context->items,
+    FetchSearch search = {context->plan_items,
                           context->reservations,
                           context->worker_id,
                           types,
@@ -2220,15 +2236,15 @@ static bool go_to_station(Colonist *colonist, const ColonistContext *context,
             return true;
         }
         TilePos spot;
-        return pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                       is_next_to_target, &tile, COLONIST_WORK_SEARCH_MAX_COST,
-                                       &colonist->path, &spot);
+        return pathfinder_find_nearest(context->pathfinder, context->plan_map,
+                                       current_tile(colonist), is_next_to_target, &tile,
+                                       COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot);
     }
     if (colonist->x == tile.x && colonist->y == tile.y && colonist->z == tile.z) {
         path_clear(&colonist->path);
         return true;
     }
-    return pathfinder_find(context->pathfinder, context->map, current_tile(colonist), tile,
+    return pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist), tile,
                            COLONIST_WORK_SEARCH_MAX_COST, &colonist->path);
 }
 
@@ -2327,9 +2343,9 @@ static void take_job_tool(Colonist *colonist, const ColonistContext *context)
     TilePos spot, reach = work_reach(context->map, colonist->target);
     if (next_to(colonist->x, colonist->y, colonist->z, reach)) {
         path_clear(&colonist->path);
-    } else if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                        is_next_to_target, &reach, COLONIST_WORK_SEARCH_MAX_COST,
-                                        &colonist->path, &spot)) {
+    } else if (!pathfinder_find_nearest(context->pathfinder, context->plan_map,
+                                        current_tile(colonist), is_next_to_target, &reach,
+                                        COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot)) {
         set_idle(colonist, context, 0);
     }
 }
@@ -2396,7 +2412,7 @@ static bool try_station_job(Colonist *colonist, const ColonistContext *context)
     }
     StationSearch search = {context, colonist};
     TilePos tile;
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                  is_station_job, &search, COLONIST_WORK_SEARCH_MAX_COST, NULL,
                                  &tile)) {
         return false;
@@ -2719,7 +2735,7 @@ static bool go_to_site(Colonist *colonist, const ColonistContext *context)
         return true;
     }
     TilePos spot;
-    return pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    return pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                    is_next_to_target, &colonist->target,
                                    COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot);
 }
@@ -2799,7 +2815,7 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
     }
     SiteSearch search = {context, colonist};
     TilePos spot, target;
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                  is_site_spot, &search, COLONIST_WORK_SEARCH_MAX_COST, NULL,
                                  &spot)) {
         return false;
@@ -2856,7 +2872,7 @@ static bool try_supply_job(Colonist *colonist, const ColonistContext *context)
         return false;
     }
     TilePos spot, target;
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                  is_supply_spot, (void *)context, COLONIST_WORK_SEARCH_MAX_COST,
                                  NULL, &spot)) {
         return false;
@@ -3146,7 +3162,7 @@ static bool go_beside_tile(Colonist *colonist, const ColonistContext *context, T
         return true;
     }
     TilePos spot;
-    return pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    return pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                    is_beside_target, &at, COLONIST_WORK_SEARCH_MAX_COST,
                                    &colonist->path, &spot);
 }
@@ -3249,7 +3265,7 @@ static bool go_next_to(Colonist *colonist, const ColonistContext *context, TileP
         return true;
     }
     TilePos spot;
-    return pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    return pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                    is_next_to_target, &tile, COLONIST_WORK_SEARCH_MAX_COST,
                                    &colonist->path, &spot);
 }
@@ -3307,7 +3323,7 @@ static bool try_refuel_job(Colonist *colonist, const ColonistContext *context)
         return false;
     }
     TilePos tile;
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                  is_hearth_wanting_fuel, (void *)context,
                                  COLONIST_WORK_SEARCH_MAX_COST, NULL, &tile)) {
         return false;
@@ -3478,8 +3494,8 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
     }
     FireSourceSearch sources = {context, hearth};
     TilePos source;
-    if (pathfinder_find_nearest(context->pathfinder, context->map, hearth, is_fire_source, &sources,
-                                HEARTH_FIRE_CARRY_MAX_COST, NULL, &source)) {
+    if (pathfinder_find_nearest(context->pathfinder, context->plan_map, hearth, is_fire_source,
+                                &sources, HEARTH_FIRE_CARRY_MAX_COST, NULL, &source)) {
         const Workstation *fire = station_on(context, source.x, source.y, source.z);
         colonist->fire_source = workstation_at(context->workstations, source.x, source.y, source.z);
         colonist->fire_source_number = fire->number;
@@ -3497,7 +3513,7 @@ static bool try_light_job(Colonist *colonist, const ColonistContext *context)
         return false;
     }
     TilePos tile;
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                  is_hearth_to_light, (void *)context, COLONIST_WORK_SEARCH_MAX_COST,
                                  NULL, &tile)) {
         return false;
@@ -3725,7 +3741,7 @@ static bool try_tell(Colonist *colonist, const ColonistContext *context, EntityI
     FiresideSearch search = {context, self, {0, 0, 0}};
     TilePos tile;
     if (topic == KNOWLEDGE_NONE ||
-        !pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
+        !pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
                                  is_story_hearth, &search, COLONIST_WORK_SEARCH_MAX_COST, NULL,
                                  &tile) ||
         !go_beside_tile(colonist, context, tile)) {
@@ -3804,8 +3820,8 @@ static bool try_listen(Colonist *colonist, const ColonistContext *context, Entit
     }
     FiresideSearch search = {context, self, teller->target};
     TilePos spot;
-    if (!pathfinder_find_nearest(context->pathfinder, context->map, here, is_listen_spot, &search,
-                                 COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot)) {
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, here, is_listen_spot,
+                                 &search, COLONIST_WORK_SEARCH_MAX_COST, &colonist->path, &spot)) {
         return false;
     }
     begin_task(colonist, context, TASK_LISTEN);
@@ -3891,7 +3907,7 @@ static void start_wandering(Colonist *colonist, const ColonistContext *context)
             !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
             continue; /* Blocked, or on the other side of a wall or of water. */
         }
-        if (pathfinder_find(context->pathfinder, context->map, current_tile(colonist), goal,
+        if (pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist), goal,
                             (float)radius * 3.0f, &colonist->path)) {
             begin_task(colonist, context, TASK_WANDER);
             return;
@@ -4045,7 +4061,7 @@ static bool go_off_alone(Colonist *colonist, const ColonistContext *context)
             !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
             continue;
         }
-        if (pathfinder_find(context->pathfinder, context->map, current_tile(colonist), goal,
+        if (pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist), goal,
                             MOOD_WANDER_OFF_MAX_COST, &colonist->path)) {
             begin_task(colonist, context, TASK_WANDER);
             return true;
@@ -4117,8 +4133,10 @@ static void decide(Colonist *colonist, const ColonistContext *context)
         }
         return;
     case TASK_EAT:
-        if (!tile_has_food(context->map, context->items, colonist->target.x, colonist->target.y,
-                           colonist->target.z)) {
+        if (!tile_has_food(
+                map_checked(context, colonist->target.x, colonist->target.y, colonist->target.z),
+                items_checked(context, colonist->target.x, colonist->target.y, colonist->target.z),
+                colonist->target.x, colonist->target.y, colonist->target.z)) {
             set_idle(colonist, context, 0); /* The fruit is gone: decide again below. */
             break;
         }

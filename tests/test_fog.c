@@ -302,6 +302,65 @@ static void test_stock_is_what_is_known(void)
     game_shutdown(&game);
 }
 
+/* Settlers only plan through what the colony knows: food on a tile nobody has seen is not
+ * looked for, however hungry they are; once it is known, they go for it. */
+static void test_settlers_plan_on_the_known_world(void)
+{
+    Game game;
+    REQUIRE(walled_plain(&game));
+    Map *map = &game.map;
+    int z = map->surface_level;
+    /* A wall of 17 tiles hiding what lies behind it from the settler, who can walk round. */
+    for (int y = 0; y < map->height; y++) {
+        map->rock[map_index(map, 30, y, z)] = ROCK_NONE;
+    }
+    for (int y = 22; y <= 38; y++) {
+        map->rock[map_index(map, 20, y, z)] = ROCK_GRANITE;
+    }
+    map_topology_changed(map);
+    EntityId id = game_spawn_colonist(&game, 10, 30, z);
+    Colonist *colonist = game_colonist(&game, id);
+    REQUIRE(colonist != NULL);
+    int fx = 23, fy = 30;
+    REQUIRE(game_debug_spawn_items(&game, fx, fy, z, ITEM_BLACKBERRIES, 3) > 0);
+    game.arrival = (TilePos){10, 30, (int16_t)z};
+    game.has_arrival = true;
+    REQUIRE(game_set_fog(&game, true));
+    /* The way in may have shown what lies behind the wall: forget it (the known world there goes
+     * back to nothing). */
+    for (int y = fy - 3; y <= fy + 3; y++) {
+        for (int x = fx - 3; x <= fx + 3; x++) {
+            size_t index = map_index(map, x, y, z);
+            game.vision.explored[index >> 6] &= ~((uint64_t)1 << (index & 63));
+            game.known.map.terrain[index] = TERRAIN_OPEN;
+            game.known.map.rock[index] = 0;
+            memset(&game.known.map.plants[index], 0, sizeof(game.known.map.plants[index]));
+            game.known.items.stacks[index] = (ItemStack){0};
+        }
+    }
+    REQUIRE(!game_tile_explored(&game, fx, fy, z)); /* Hidden behind the wall. */
+    colonist->needs[NEED_FOOD] = 0.02f;
+    bool went = false;
+    for (int i = 0; i < 900; i++) {
+        game_tick(&game);
+        colonist = game_colonist(&game, id);
+        went |= colonist->task == TASK_EAT && colonist->target.x == fx && colonist->target.y == fy;
+    }
+    CHECK(!went);
+    CHECK_EQ_INT(game.items.stacks[map_index(map, fx, fy, z)].count, 3);
+    /* The map is revealed: the food is known, and the settler goes for it. */
+    game_reveal_map(&game);
+    colonist = game_colonist(&game, id);
+    colonist->needs[NEED_FOOD] = 0.02f;
+    for (int i = 0; i < 1500 && !went; i++) {
+        game_tick(&game);
+        colonist = game_colonist(&game, id);
+        went |= colonist->task == TASK_EAT && colonist->target.x == fx && colonist->target.y == fy;
+    }
+    CHECK(went);
+    game_shutdown(&game);
+}
+
 /* A workstation destroyed out of view is still remembered where it was. */
 static void test_remembers_workstations(void)
 {
@@ -392,6 +451,7 @@ int main(void)
     RUN_TEST(test_remembers_what_was_last_seen);
     RUN_TEST(test_tools_refuse_unexplored_tiles);
     RUN_TEST(test_stock_is_what_is_known);
+    RUN_TEST(test_settlers_plan_on_the_known_world);
     RUN_TEST(test_remembers_workstations);
     RUN_TEST(test_reveal_map);
     RUN_TEST(test_fog_off_sees_everything);

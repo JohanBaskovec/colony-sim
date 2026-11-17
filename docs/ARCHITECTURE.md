@@ -1449,6 +1449,19 @@ positions, so it is not part of `game_hash()`:
   `game_can_place_structure()`, `game_can_place_workstation()`); zones go
   through the known world (`game_add_stockpile_rect()`, `game_add_gather_zone_rect()`).
   `render_fog()` veils the tiles seen before and not in view.
+- **Settlers plan on the known world** (`ColonistContext.plan_map`,
+  `plan_items`, set by `colonist_context()`: the known world under the fog,
+  the real one without): every path and every search (`pathfinder_find*()` in
+  colonist.c, the food and fetch filters, the hauling world) reads them, so a
+  tile nobody has seen is open space that nobody walks to or finds anything
+  on, and a remembered tile is as it was last seen. What a settler does
+  (picking up, eating, mining) is done on the real map and items, so it finds
+  out what changed when it gets there (a path blocked meanwhile is given up,
+  food gone is looked for again). A target checked while walking (food, a
+  stack to haul) is only checked against the real world while the tile is in
+  view (`items_checked()`, `map_checked()`), else against what is known.
+  Connectivity regions are still the real ones: they only decide where a
+  pre-check looks, and say "unreachable" at most too early.
 - **Cost** (`bench/bench_vision`, release, 200 × 200 × 18 world): about 2 ms
   for a whole cast (3.8 ms the slowest of 100), 0.3 ms for a near cast. Most of
   a whole cast is rays crossing open ground to the edge of the map (a tile a

@@ -73,6 +73,7 @@
 #include "core/stockpile.h"
 #include "core/temperature.h"
 #include "core/tool.h"
+#include "core/vision.h"
 #include "core/work.h"
 #include "core/workstation.h"
 
@@ -437,6 +438,15 @@ typedef struct Colonist {
 /* What a colonist needs to see of the world to make decisions. */
 typedef struct ColonistContext {
     Map *map;
+    /* What a settler plans on (docs/VISION.md): the known world under the fog
+     * (a tile nobody has seen is open space, a tile out of view is as it was
+     * last seen), the real map and items without. Paths and every search
+     * read these; what a settler does (picking up, mining...) is done on the
+     * real ones, and finds out there what is no longer so. */
+    const Map *plan_map;
+    const Items *plan_items;
+    /* Who sees what, under the fog (NULL without: everything is in view). */
+    const Vision *vision;
     Designations *designations;
     Dirt *dirt;
     GatherZones *gather_zones;

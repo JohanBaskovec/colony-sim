@@ -160,6 +160,9 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
 {
     ColonistContext context = {
         .map = &game->map,
+        .plan_map = game_view_map(game),
+        .plan_items = game_view_items(game),
+        .vision = game->fog_on ? &game->vision : NULL,
         .designations = &game->designations,
         .dirt = &game->dirt,
         .gather_zones = &game->gather_zones,

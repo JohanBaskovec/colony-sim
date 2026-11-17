@@ -253,7 +253,12 @@ going to the edge of what it knows:
    drawing (unexplored not drawn, remembered veiled, seen as it is), the tile
    readout, orders, zones and buildings refused on unexplored tiles, the
    Reveal map and See everything cheats. Tested in `tests/test_fog.c`.
-3. **Acting on the picture**: paths, regions and every search on the known
+3. [~] **Acting on the picture** (started: paths, and the searches for food,
+   things to fetch and things to haul, plan on the known map and items, and a
+   walk is only checked against the real world while its target is in view;
+   to do: the other searches' reads of the real world (designations, gathering
+   zones, work spots), regions, messages about the map, alerts, the Explore
+   order's discovery rule): paths, regions and every search on the known
    world; plans redone on a change met on the way; targets gone; orders on
    explored tiles; resources list, alerts and bills on what is known;
    messages about the map when seen.
