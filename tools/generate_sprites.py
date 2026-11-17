@@ -1360,25 +1360,43 @@ def draw_rough_stone():
     return np.dstack([np.clip(color, 0, 1), np.ones((TILE, TILE), dtype=np.float32)])
 
 
-def draw_foliage():
-    """The floor of branches of a tree: a dense canopy of overlapping leaf
-    clumps, darker in the gaps, lit on top."""
-    rng = np.random.default_rng(7100)
-    canvas = WrapCanvas(tinted((34, 66, 30), 1.0 + 0.08 * periodic_noise(rng, 6.0)))
+def draw_foliage_of_density(seed, clumps, gap, shade):
+    """A floor of branches: overlapping leaf clumps over dark gaps, lit on top.
+    The thinner the foliage (fewer clumps, darker gaps, dimmer leaves), the
+    more of the gaps shows."""
+    rng = np.random.default_rng(seed)
+    canvas = WrapCanvas(tinted(gap, 1.0 + 0.08 * periodic_noise(rng, 6.0)))
     palette = [(52, 98, 40), (66, 114, 46), (84, 136, 56), (44, 84, 38), (102, 150, 64)]
     for layer in range(3):
-        for _ in range(70 - 12 * layer):
+        for _ in range(clumps - round(clumps * 12 / 70) * layer):
             x, y = rng.random() * TILE, rng.random() * TILE
             r = 5.0 + rng.random() * 5.0
             angle = rng.random() * math.pi
             color = np.clip(rgb(palette[min(len(palette) - 1, rng.integers(len(palette)) +
-                                            layer // 2)]) * (0.85 + 0.3 * rng.random()), 0, 1)
+                                            layer // 2)]) * (0.85 + 0.3 * rng.random()) * shade,
+                            0, 1)
             canvas.ellipse(x + 1.5, y + 2.0, r, r * 0.6, (0.0, 0.0, 0.0), angle, 0.3)
             canvas.ellipse(x, y, r, r * 0.6, color, angle, 1.0, 0.7)
             canvas.stroke([(x - r * 0.7 * math.cos(angle), y - r * 0.7 * math.sin(angle)),
                            (x + r * 0.7 * math.cos(angle), y + r * 0.7 * math.sin(angle))],
                           0.35, 0.35, color * 0.7, 0.6)
     return canvas.to_pixels()
+
+
+def draw_foliage():
+    """Dense foliage, the floor of branches of a tree next to its trunk: a
+    dense canopy, darker in the gaps, lit on top."""
+    return draw_foliage_of_density(7100, 70, (34, 66, 30), 1.0)
+
+
+def draw_foliage_medium():
+    """Thinner branches: a patchier canopy, with the shade showing through."""
+    return draw_foliage_of_density(7101, 34, (22, 42, 22), 0.9)
+
+
+def draw_foliage_sparse():
+    """The thinnest branches, at the edge of the crown: a few leaf clumps."""
+    return draw_foliage_of_density(7102, 14, (14, 28, 16), 0.8)
 
 
 def draw_grass_roof():
@@ -1416,6 +1434,8 @@ GROUND_TEXTURES = {
     "ground_gravel": draw_gravel,
     "ground_rough_stone": draw_rough_stone,
     "ground_foliage": draw_foliage,
+    "ground_foliage_medium": draw_foliage_medium,
+    "ground_foliage_sparse": draw_foliage_sparse,
     "ground_grass_roof": draw_grass_roof,
     "wall_granite": draw_granite_wall,
     "wall_sandstone": draw_sandstone_wall,

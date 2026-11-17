@@ -295,7 +295,7 @@ static void test_trees(void)
                     size_t i = map_index(&map, x, y, z);
                     TreeRef tree;
                     if (map.rock[i] == ROCK_WOOD ||
-                        (map.rock[i] == ROCK_NONE && map.terrain[i] == TERRAIN_FOLIAGE)) {
+                        (map.rock[i] == ROCK_NONE && terrain_is_foliage(map.terrain[i]))) {
                         CHECK(tree_at(&map, x, y, z, &tree));
                     }
                     const Plant *plant = &map.plants[i];
@@ -305,7 +305,8 @@ static void test_trees(void)
                     trees++;
                     wide += plant->size > 1;
                     TreeShape shape;
-                    CHECK_EQ_INT(map.rock[i], tree_shape(plant, &shape) ? ROCK_WOOD : ROCK_NONE);
+                    CHECK_EQ_INT(map.rock[i],
+                                 tree_shape(plant, x, y, z, &shape) ? ROCK_WOOD : ROCK_NONE);
                     for (int dy = -1; dy <= 1; dy++) {
                         for (int dx = -1; dx <= 1; dx++) {
                             bool other =

@@ -307,7 +307,7 @@ static void place_tree_volumes(Map *map, Rng *rng)
             for (int x = 0; x < map->width; x++) {
                 Plant *plant = &map->plants[map_index(map, x, y, z)];
                 TreeShape shape;
-                if (!tree_shape(plant, &shape)) {
+                if (!tree_shape(plant, x, y, z, &shape)) {
                     continue;
                 }
                 if (tree_room_to_grow(map, x, y, z, &shape)) {

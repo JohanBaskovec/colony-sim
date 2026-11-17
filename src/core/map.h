@@ -43,7 +43,9 @@ typedef enum Terrain {
     TERRAIN_ROUGH_STONE,
     TERRAIN_OPEN,       /* No floor: open space over lower ground (impassable). */
     TERRAIN_GRASS_ROOF, /* A built roof (STRUCTURE_ROOF): too frail to stand on. */
-    TERRAIN_FOLIAGE,    /* The branches of a tree around its trunk: walked on (core/tree.h). */
+    TERRAIN_FOLIAGE,    /* Dense branches of a tree around its trunk: walked on (core/tree.h). */
+    TERRAIN_FOLIAGE_MEDIUM, /* Thinner branches further out: not walked on. */
+    TERRAIN_FOLIAGE_SPARSE, /* The thinnest, at the edge of the crown: not walked on. */
     TERRAIN_COUNT
 } Terrain;
 
@@ -329,6 +331,13 @@ static inline bool map_in_bounds(const Map *map, int x, int y, int z)
 static inline size_t map_index(const Map *map, int x, int y, int z)
 {
     return ((size_t)z * (size_t)map->height + (size_t)y) * (size_t)map->width + (size_t)x;
+}
+
+/* Whether a terrain is a tree's foliage, of any density (the dense one is the
+ * only one to walk on). */
+static inline bool terrain_is_foliage(uint8_t terrain)
+{
+    return terrain >= TERRAIN_FOLIAGE && terrain <= TERRAIN_FOLIAGE_SPARSE;
 }
 
 /* Whether a tile index (in bounds) is open space: no rock and no floor. */

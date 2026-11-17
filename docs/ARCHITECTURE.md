@@ -238,9 +238,13 @@ never block movement.
 (the first two growth stages) is a plant like the others, walked through.
 From `TREE_VOLUME_MIN_STAGE` on, a tree takes room like a building: its
 trunk is solid wood (`ROCK_WOOD`, over open terrain above the foot) from the
-foot up, and its foliage is a floor of branches (`TERRAIN_FOLIAGE`, walked
-on at ×1.5, nothing built on it) around the trunk on its upper levels, the
-top one covering the trunk too. The plant stays on the foot's tile (the
+foot up, and its foliage is a floor of branches around the trunk on its
+upper levels, the top one covering the trunk too. The branches thin out
+from the trunk in three densities, each a terrain: dense
+(`TERRAIN_FOLIAGE`, walked on at ×1.5, nothing built on it), thin
+(`TERRAIN_FOLIAGE_MEDIUM`) and sparse (`TERRAIN_FOLIAGE_SPARSE`), the last
+two too weak to stand on (impassable, whatever falls on them goes through,
+see `lets_fall()` in `tree.c`). `terrain_is_foliage()` is true for all three. The plant stays on the foot's tile (the
 north-west one of a wider trunk) with the growth, stocks and trunk width
 (`Plant.size`, 0 meaning 1); the shape follows from them (`tree_shape()`):
 
@@ -248,11 +252,27 @@ north-west one of a wider trunk) with the growth, stocks and trunk width
 |---|---|---|---|---|---|
 | Stage 2 | 1 × 1 | 1 | 1 | 1 | 2 |
 | Stage 3 | 1 × 1 | 2 | 1 | 1 | 3 |
-| Grown (stage 4) | 1 × 1 | 3 | 1 | 1 | 4 |
+| Stage 4 | 1 × 1 | 3 | 1 | 1, then 2 (see below) | 4 |
 | Old | 2 × 2 | 5 | 3 | 2 | 6 |
 | Ancient | 3 × 3 | 6 | 3 | 3 | 7 (`TREE_MAX_LEVELS`) |
 
-The crown is rounded (corners left out of the wider ones). Old and ancient
+The crown is rounded and ragged (`tree_foliage_density()`): the shape
+above gives the outline, then the further a tile is from the trunk the likelier it is
+missing (`TREE_FOLIAGE_RAGGEDNESS`; never next to the trunk, so that
+a tree stays climbable). The density follows the ring around the trunk
+(1: dense, 2: thin, 3: sparse), a tile of the outer rings being a notch
+thinner now and then (`TREE_FOLIAGE_PATCHINESS`). The noise comes from the
+tile and `TreeShape.seed`, a hash of the foot's position (`tree_shape()`
+takes it), nothing is stored: two trees differ, and a growing tree only
+adds foliage. The crown also spreads as the tree ripens (`TreeShape.ripe`,
+0..1 from `TREE_RIPENING_FROM`, the growth where stage 4 begins, to full
+growth: about 6.7 days on plain soil): a tree of the default size gets a
+second ring of foliage (`TREE_GROWN_REACH`), each tile of it coming in at
+its own moment (noise) a notch thinner than its final density, then
+thickening; old and ancient trees are fully ripe. `grow_tree()` (game.c)
+rewrites the crown whenever the shape or `ripe` changed, and `tree_build()`
+raises the density of foliage already there (never lowers it: where two
+trees share a tile the thicker wins). Old and ancient
 trees only come from world generation (`OLD_TREE_CHANCE` 4 %,
 `ANCIENT_TREE_CHANCE` 1 % of the grown trees where the wider trunk fits);
 their stocks scale with the trunk's area, as does the wood they give.

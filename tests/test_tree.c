@@ -47,7 +47,7 @@ static bool is_trunk(const Map *map, int x, int y, int z)
 
 static bool is_foliage(const Map *map, int x, int y, int z)
 {
-    return map->terrain[map_index(map, x, y, z)] == TERRAIN_FOLIAGE &&
+    return terrain_is_foliage(map->terrain[map_index(map, x, y, z)]) &&
            map->rock[map_index(map, x, y, z)] == ROCK_NONE;
 }
 
@@ -66,43 +66,47 @@ static void test_shapes(void)
 {
     Plant plant = {.type = PLANT_TREE, .growth = SAPLING};
     TreeShape shape;
-    CHECK(!tree_shape(&plant, &shape)); /* Saplings take no room. */
+    CHECK(!tree_shape(&plant, 0, 0, 0, &shape)); /* Saplings take no room. */
     plant.growth = 0.1f;
-    CHECK(!tree_shape(&plant, &shape));
+    CHECK(!tree_shape(&plant, 0, 0, 0, &shape));
     plant.growth = YOUNG;
-    REQUIRE(tree_shape(&plant, &shape));
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK_EQ_INT(shape.size, 1);
     CHECK_EQ_INT(shape.trunk, 1);
     CHECK_EQ_INT(shape.foliage_from, 1);
     CHECK_EQ_INT(tree_shape_levels(&shape), 2);
     plant.growth = HALF_GROWN;
-    REQUIRE(tree_shape(&plant, &shape));
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK_EQ_INT(shape.trunk, 2);
     plant.growth = GROWN;
-    REQUIRE(tree_shape(&plant, &shape));
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
+    CHECK_EQ_INT(shape.trunk, 3);
+    CHECK_EQ_INT(shape.reach, TREE_GROWN_REACH); /* The crown has spread. */
+    CHECK_EQ_INT(tree_size(&plant), 1);
+    plant.growth = TREE_RIPENING_FROM; /* Not yet. */
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK_EQ_INT(shape.trunk, 3);
     CHECK_EQ_INT(shape.reach, 1);
-    CHECK_EQ_INT(tree_size(&plant), 1);
 
     plant.size = 2; /* Old: a bare trunk under its crown. */
-    REQUIRE(tree_shape(&plant, &shape));
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK_EQ_INT(shape.size, 2);
     CHECK_EQ_INT(shape.reach, 2);
     CHECK(shape.foliage_from > 1);
     CHECK_EQ_INT(tree_size(&plant), 2);
     plant.size = 3; /* Ancient: the tallest. */
-    REQUIRE(tree_shape(&plant, &shape));
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK_EQ_INT(shape.size, 3);
     CHECK_EQ_INT(tree_shape_levels(&shape), TREE_MAX_LEVELS);
     CHECK(shape.reach <= TREE_MAX_REACH);
 
     Plant hazel = {.type = PLANT_HAZEL, .growth = 1.0f};
-    CHECK(!tree_shape(&hazel, &shape));
+    CHECK(!tree_shape(&hazel, 0, 0, 0, &shape));
     CHECK_EQ_INT(tree_size(&hazel), 0);
 
-    /* Where trunk and foliage are, from the foot. */
-    plant = (Plant){.type = PLANT_TREE, .growth = GROWN};
-    REQUIRE(tree_shape(&plant, &shape));
+    /* Where trunk and foliage are, from the foot (before the crown spreads). */
+    plant = (Plant){.type = PLANT_TREE, .growth = TREE_RIPENING_FROM};
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK(tree_trunk_holds(&shape, 0, 0, 0));
     CHECK(tree_trunk_holds(&shape, 0, 0, 2));
     CHECK(!tree_trunk_holds(&shape, 0, 0, 3));
@@ -110,17 +114,254 @@ static void test_shapes(void)
     CHECK(!tree_foliage_holds(&shape, 0, 0, 1)); /* The trunk is there. */
     CHECK(tree_foliage_holds(&shape, 0, 0, 3));  /* Over the top of the trunk. */
     CHECK(tree_foliage_holds(&shape, 1, 0, 1));
-    CHECK(tree_foliage_holds(&shape, -1, -1, 2)); /* A small crown is square. */
     CHECK(!tree_foliage_holds(&shape, 2, 0, 1));
     CHECK(!tree_foliage_holds(&shape, 1, 0, 0)); /* Nothing on the ground. */
     CHECK(!tree_foliage_holds(&shape, 1, 0, 4));
     plant.size = 3; /* A wide crown is rounded. */
-    REQUIRE(tree_shape(&plant, &shape));
-    CHECK(tree_foliage_holds(&shape, -3, 0, shape.trunk));
-    CHECK(tree_foliage_holds(&shape, -2, -2, shape.trunk));
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK(!tree_foliage_holds(&shape, -3, -3, shape.trunk));
     CHECK(!tree_foliage_holds(&shape, -3, -2, shape.trunk));
     CHECK(!tree_foliage_holds(&shape, 0, -1, shape.foliage_from - 1));
+}
+
+/* How far a coordinate is outside the trunk's span 0..size-1. */
+static int outside(int d, int size)
+{
+    return d < 0 ? -d : (d >= size ? d - size + 1 : 0);
+}
+
+/* The crowns are ragged: the same position gives the same crown, two trees
+ * differ, and a corner of a small one is there or not. Next to the trunk the
+ * branches are dense; further out they thin, and only the dense ones are
+ * walked on. */
+static void test_crown_is_ragged_and_thins_out(void)
+{
+    Plant small = {.type = PLANT_TREE, .growth = TREE_RIPENING_FROM};
+    Plant ancient = {.type = PLANT_TREE, .size = 3, .growth = 1.0f};
+    int corners = 0, trees = 40;
+    int found[TREE_DENSITY_DENSE + 1] = {0};
+    for (int i = 0; i < trees; i++) {
+        TreeShape shape, again;
+        REQUIRE(tree_shape(&small, 7 * i, 3 * i + 1, 0, &shape));
+        REQUIRE(tree_shape(&small, 7 * i, 3 * i + 1, 0, &again));
+        for (int dz = shape.foliage_from; dz <= shape.trunk; dz++) {
+            /* The same tree always has the same crown. */
+            CHECK_EQ_INT(tree_foliage_density(&shape, -1, -1, dz),
+                         tree_foliage_density(&again, -1, -1, dz));
+            /* Next to the trunk, always dense: the tree stays climbable. */
+            CHECK_EQ_INT(tree_foliage_density(&shape, 1, 0, dz), TREE_DENSITY_DENSE);
+            CHECK_EQ_INT(tree_foliage_density(&shape, 0, -1, dz), TREE_DENSITY_DENSE);
+        }
+        CHECK_EQ_INT(tree_foliage_density(&shape, 0, 0, shape.trunk), TREE_DENSITY_DENSE);
+        corners += tree_foliage_holds(&shape, -1, -1, 2);
+        /* A small crown has nothing but dense branches. */
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                TreeDensity density = tree_foliage_density(&shape, dx, dy, 2);
+                CHECK(density == TREE_DENSITY_NONE || density == TREE_DENSITY_DENSE);
+            }
+        }
+        /* A wide crown thins out from the trunk. */
+        REQUIRE(tree_shape(&ancient, 5 * i, 11 * i, 0, &shape));
+        for (int dy = -4; dy <= shape.size + 3; dy++) {
+            for (int dx = -4; dx <= shape.size + 3; dx++) {
+                TreeDensity density = tree_foliage_density(&shape, dx, dy, shape.trunk - 1);
+                found[density]++;
+                int ex = outside(dx, shape.size), ey = outside(dy, shape.size);
+                int ring = ex > ey ? ex : ey;
+                CHECK(ring <= 3 || density == TREE_DENSITY_NONE);
+                CHECK(ring <= 1 || density != TREE_DENSITY_DENSE);
+                CHECK(ring <= 2 || density != TREE_DENSITY_MEDIUM);
+            }
+        }
+    }
+    CHECK(corners > 0 && corners < trees); /* Sometimes there, sometimes not. */
+    CHECK(found[TREE_DENSITY_DENSE] > 0);
+    CHECK(found[TREE_DENSITY_MEDIUM] > 0);
+    CHECK(found[TREE_DENSITY_SPARSE] > 0);
+}
+
+/* A tree that grows only adds foliage, of the density it already had. */
+static void test_growing_keeps_the_foliage(void)
+{
+    for (int i = 0; i < 30; i++) {
+        int x = 3 * i, y = 5 * i + 2;
+        Plant plant = {.type = PLANT_TREE, .growth = 0.5f};
+        TreeShape before, after;
+        REQUIRE(tree_shape(&plant, x, y, 0, &before));
+        plant.growth = 1.0f;
+        REQUIRE(tree_shape(&plant, x, y, 0, &after));
+        for (int dz = before.foliage_from; dz < before.trunk; dz++) {
+            for (int dy = -2; dy <= 2; dy++) {
+                for (int dx = -2; dx <= 2; dx++) {
+                    TreeDensity was = tree_foliage_density(&before, dx, dy, dz);
+                    if (was != TREE_DENSITY_NONE && !tree_trunk_holds(&after, dx, dy, dz)) {
+                        CHECK_EQ_INT(tree_foliage_density(&after, dx, dy, dz), was);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* Branches too thin to stand on: nobody walks there and what falls goes
+ * through, down to the first dense foliage or ground. */
+static void test_thin_foliage_is_not_walked_on(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    grow_tree(&map, 8, 8, 0, GROWN, 3);
+    TreeShape shape;
+    REQUIRE(tree_shape(&map.plants[map_index(&map, 8, 8, 0)], 8, 8, 0, &shape));
+    int thin = 0, dense = 0;
+    for (int dz = shape.foliage_from; dz <= shape.trunk; dz++) {
+        for (int dy = -shape.reach; dy < shape.size + shape.reach; dy++) {
+            for (int dx = -shape.reach; dx < shape.size + shape.reach; dx++) {
+                TreeDensity density = tree_foliage_density(&shape, dx, dy, dz);
+                int x = 8 + dx, y = 8 + dy, z = dz;
+                if (density == TREE_DENSITY_NONE) {
+                    CHECK(!is_foliage(&map, x, y, z));
+                    continue;
+                }
+                CHECK_EQ_INT(map.terrain[map_index(&map, x, y, z)], tree_density_terrain(density));
+                CHECK_EQ_INT(map_is_passable(&map, x, y, z), density == TREE_DENSITY_DENSE);
+                thin += density != TREE_DENSITY_DENSE;
+                dense += density == TREE_DENSITY_DENSE;
+            }
+        }
+    }
+    CHECK(thin > 0 && dense > 0);
+    /* What the tree sheds never stays on thin branches. */
+    int laid = 0;
+    for (uint32_t pick = 0; pick < 2000; pick++) {
+        laid += tree_shed(&map, 8, 8, 0, ITEM_TWIGS, pick * 2654435761u);
+    }
+    CHECK(laid > 0);
+    for (int z = 0; z < DEPTH; z++) {
+        for (int y = 0; y < SIZE; y++) {
+            for (int x = 0; x < SIZE; x++) {
+                if (is_foliage(&map, x, y, z) && !map_is_passable(&map, x, y, z)) {
+                    CHECK_EQ_INT(map_litter(&map, x, y, z, ITEM_TWIGS), 0);
+                }
+            }
+        }
+    }
+    items_free(&items);
+    map_free(&map);
+}
+
+static bool init_flat_game(Game *game);
+
+/* How many tiles of foliage of each density lie around (x, y), on every level. */
+static void count_foliage(const Map *map, int x, int y, int counts[TREE_DENSITY_DENSE + 1])
+{
+    for (int d = 0; d <= TREE_DENSITY_DENSE; d++) {
+        counts[d] = 0;
+    }
+    for (int z = 0; z < map->depth; z++) {
+        for (int ty = y - 3; ty <= y + 3; ty++) {
+            for (int tx = x - 3; tx <= x + 3; tx++) {
+                if (map->rock[map_index(map, tx, ty, z)] == ROCK_NONE) {
+                    counts[tree_terrain_density(
+                        (Terrain)map->terrain[map_index(map, tx, ty, z)])]++;
+                }
+            }
+        }
+    }
+}
+
+/* The last stage's crown spreads: from the growth it starts at to a fully
+ * grown tree, tiles come in and thicken, none goes or thins. */
+static void test_crown_spreads_as_the_tree_ripens(void)
+{
+    for (int i = 0; i < 20; i++) {
+        int x = 2 * i + 5, y = 3 * i + 4;
+        TreeShape shape;
+        Plant plant = {.type = PLANT_TREE, .growth = TREE_RIPENING_FROM};
+        REQUIRE(tree_shape(&plant, x, y, 0, &shape));
+        CHECK_EQ_INT(shape.reach, 1);
+        CHECK_EQ_INT(tree_foliage_density(&shape, 2, 0, 1), TREE_DENSITY_NONE);
+        TreeDensity last[5][5][4] = {{{TREE_DENSITY_NONE}}};
+        int tiles_before = 0;
+        for (int step = 1; step <= 20; step++) {
+            plant.growth = TREE_RIPENING_FROM + (1.0f - TREE_RIPENING_FROM) * (float)step / 20.0f;
+            REQUIRE(tree_shape(&plant, x, y, 0, &shape));
+            CHECK_EQ_INT(shape.reach, TREE_GROWN_REACH);
+            int tiles = 0;
+            for (int dz = 1; dz <= 3; dz++) {
+                for (int dy = -2; dy <= 2; dy++) {
+                    for (int dx = -2; dx <= 2; dx++) {
+                        TreeDensity density = tree_foliage_density(&shape, dx, dy, dz);
+                        CHECK(density >= last[dy + 2][dx + 2][dz]); /* Never less. */
+                        last[dy + 2][dx + 2][dz] = density;
+                        tiles += density != TREE_DENSITY_NONE;
+                    }
+                }
+            }
+            CHECK(tiles >= tiles_before);
+            tiles_before = tiles;
+        }
+        /* Fully grown, the outer ring is at most thin, the inner one dense. */
+        for (int dz = 1; dz <= 3; dz++) {
+            CHECK(tree_foliage_density(&shape, 2, 0, dz) <= TREE_DENSITY_MEDIUM);
+        }
+        CHECK_EQ_INT(tree_foliage_density(&shape, 1, 0, 1), TREE_DENSITY_DENSE);
+    }
+}
+
+/* In the game, the crown of a tree growing up spreads and thickens in the
+ * map, hour after hour. */
+static void test_crown_spreads_in_the_game(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Map *map = &game.map;
+    Plant *plant = &map->plants[map_index(map, 16, 16, 0)];
+    put_tree(map, 16, 16, 0, TREE_RIPENING_FROM);
+    game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL);
+    REQUIRE(is_trunk(map, 16, 16, 2));
+    int young[TREE_DENSITY_DENSE + 1], older[TREE_DENSITY_DENSE + 1], full[TREE_DENSITY_DENSE + 1];
+    count_foliage(map, 16, 16, young);
+    CHECK(young[TREE_DENSITY_DENSE] > 0);
+    CHECK_EQ_INT(young[TREE_DENSITY_MEDIUM] + young[TREE_DENSITY_SPARSE], 0);
+    plant->growth = 0.9f;
+    game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL);
+    count_foliage(map, 16, 16, older);
+    CHECK(older[TREE_DENSITY_SPARSE] + older[TREE_DENSITY_MEDIUM] > 0); /* A second ring. */
+    plant->growth = 0.999f; /* Fully grown within the hour. */
+    game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL);
+    CHECK(plant->growth >= 1.0f);
+    count_foliage(map, 16, 16, full);
+    CHECK(full[TREE_DENSITY_MEDIUM] > older[TREE_DENSITY_MEDIUM]); /* It thickens... */
+    CHECK(full[TREE_DENSITY_SPARSE] + full[TREE_DENSITY_MEDIUM] >=
+          older[TREE_DENSITY_SPARSE] + older[TREE_DENSITY_MEDIUM]);    /* ...and spreads. */
+    CHECK_EQ_INT(full[TREE_DENSITY_DENSE], young[TREE_DENSITY_DENSE]); /* Next to the trunk. */
+    game_shutdown(&game);
+}
+
+/* Thin foliage coming and going leaves the connectivity alone (crowns spread
+ * all the time); dense foliage, that is walked on, and thin foliage over a
+ * slope, that would close its way up, do not. */
+static void test_thin_foliage_leaves_the_topology_alone(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    uint32_t revision = map.topology_revision;
+    map_set_terrain(&map, 5, 5, 2, TERRAIN_FOLIAGE_SPARSE);
+    map_set_terrain(&map, 5, 5, 2, TERRAIN_FOLIAGE_MEDIUM);
+    map_set_terrain(&map, 5, 5, 2, TERRAIN_OPEN);
+    CHECK_EQ_UINT(map.topology_revision, revision);
+    map_set_terrain(&map, 5, 5, 2, TERRAIN_FOLIAGE); /* Walked on. */
+    CHECK(map.topology_revision != revision);
+    map_set_terrain(&map, 5, 5, 2, TERRAIN_OPEN);
+    map_set_slope(&map, 6, 5, 1, true);
+    revision = map.topology_revision;
+    map_set_terrain(&map, 6, 5, 2, TERRAIN_FOLIAGE_SPARSE); /* Over a slope. */
+    CHECK(map.topology_revision != revision);
+    items_free(&items);
+    map_free(&map);
 }
 
 static void test_build_and_find(void)
@@ -128,7 +369,7 @@ static void test_build_and_find(void)
     Map map;
     Items items;
     REQUIRE(init_world(&map, &items));
-    grow_tree(&map, 10, 10, 0, GROWN, 1);
+    grow_tree(&map, 10, 10, 0, TREE_RIPENING_FROM, 1);
     /* The trunk: wood on three levels, nothing under it over the foot. */
     for (int z = 0; z < 3; z++) {
         CHECK(is_trunk(&map, 10, 10, z));
@@ -140,9 +381,8 @@ static void test_build_and_find(void)
     CHECK(!map_is_passable(&map, 10, 10, 2));
     /* Foliage around it on levels 1 to 3, over it on the top. */
     CHECK(is_foliage(&map, 11, 10, 1));
-    CHECK(is_foliage(&map, 9, 9, 2));
+    CHECK(is_foliage(&map, 10, 9, 2));
     CHECK(is_foliage(&map, 10, 10, 3));
-    CHECK(is_foliage(&map, 11, 11, 3));
     CHECK(!is_foliage(&map, 12, 10, 1));
     CHECK(!is_foliage(&map, 11, 10, 0));
     CHECK(!is_foliage(&map, 11, 10, 4));
@@ -192,7 +432,9 @@ static void test_build_and_find(void)
     Plant *old = &map.plants[map_index(&map, 3, 3, 0)];
     Plant *grown = &map.plants[map_index(&map, 10, 10, 0)];
     CHECK(tree_shed_chance(old, ITEM_TWIGS) == 4.0f * tree_shed_chance(grown, ITEM_TWIGS));
-    CHECK_EQ_INT(tree_crown_yield(old, ITEM_BRANCHES), 4 * tree_crown_yield(grown, ITEM_BRANCHES));
+    Plant full = *grown;
+    full.growth = 1.0f;
+    CHECK_EQ_INT(tree_crown_yield(old, ITEM_BRANCHES), 4 * tree_crown_yield(&full, ITEM_BRANCHES));
 
     /* Foliage leaves the way up a slope open. */
     map_set_slope(&map, 15, 16, 0, true);
@@ -256,9 +498,9 @@ static void test_room_to_grow(void)
     REQUIRE(init_world(&map, &items));
     TreeShape grown, half;
     Plant plant = {.type = PLANT_TREE, .growth = GROWN};
-    REQUIRE(tree_shape(&plant, &grown));
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &grown));
     plant.growth = HALF_GROWN;
-    REQUIRE(tree_shape(&plant, &half));
+    REQUIRE(tree_shape(&plant, 0, 0, 0, &half));
     CHECK(tree_room_to_grow(&map, 5, 5, 0, &grown));
     CHECK(!tree_room_to_grow(&map, 5, 5, DEPTH - 2, &grown)); /* Out of the map. */
     /* Under an overhang: no room for the trunk. */
@@ -326,13 +568,13 @@ static void test_growing_in_the_game(void)
     stockpile_create(&game.stockpiles, map, 4, 4, 6, 6, 0);
     game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL);
     TreeShape shape;
-    CHECK(tree_shape(&map->plants[map_index(map, 5, 5, 0)], &shape));
+    CHECK(tree_shape(&map->plants[map_index(map, 5, 5, 0)], 5, 5, 0, &shape));
     CHECK(is_trunk(map, 5, 5, 0));
     CHECK(is_foliage(map, 6, 5, 1));
     CHECK_EQ_INT(stockpile_at(&game.stockpiles, 5, 5, 0), -1); /* No stockpile on a trunk. */
     CHECK(stockpile_at(&game.stockpiles, 4, 4, 0) >= 0);
     /* The other waits for the twigs to go. */
-    CHECK(!tree_shape(&map->plants[map_index(map, 20, 20, 0)], &shape));
+    CHECK(!tree_shape(&map->plants[map_index(map, 20, 20, 0)], 20, 20, 0, &shape));
     CHECK(!is_trunk(map, 20, 20, 0));
     items_remove(&game.items, 20, 20, 0, 1);
     game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL);
@@ -637,7 +879,8 @@ static void test_shedding(void)
                 CHECK(twigs <= MAP_TWIGS_MAX);
                 if (twigs > 0) {
                     CHECK(!is_trunk(&map, x, y, z));
-                    CHECK(abs(x - 10) <= 1 && abs(y - 10) <= 1); /* Under the crown. */
+                    CHECK(abs(x - 10) <= TREE_GROWN_REACH &&
+                          abs(y - 10) <= TREE_GROWN_REACH); /* Under the crown. */
                     on_foliage += is_foliage(&map, x, y, z);
                     on_ground += z == 0;
                 }
@@ -646,10 +889,11 @@ static void test_shedding(void)
     }
     CHECK(on_foliage > 0);
     CHECK(on_ground > 0);
-    /* Tiles fill up: 8 ground tiles around the trunk, 8 on each of its 3
-     * levels of foliage (and the top one over the trunk, 9). */
+    /* Tiles fill up: the ground tiles around the trunk (24 under a crown of
+     * two rings), the dense foliage on each of its 3 levels (8 next to the
+     * trunk, and the top one over the trunk, 9). */
     CHECK(litter_total(&map, ITEM_TWIGS) > 8 * MAP_TWIGS_MAX);
-    CHECK(litter_total(&map, ITEM_TWIGS) <= (8 + 8 + 8 + 9) * MAP_TWIGS_MAX);
+    CHECK(litter_total(&map, ITEM_TWIGS) <= (24 + 8 + 8 + 9) * MAP_TWIGS_MAX);
     CHECK_EQ_INT(litter_total(&map, ITEM_BRANCHES), 0);
     /* A full tile takes no more. */
     int before = litter_total(&map, ITEM_TWIGS);
@@ -701,7 +945,7 @@ static void test_litter_in_a_new_world(void)
             for (int x = 0; x < map.width; x++) {
                 const Plant *plant = &map.plants[map_index(&map, x, y, z)];
                 TreeShape shape;
-                if (!tree_shape(plant, &shape) || !is_trunk(&map, x, y, z)) {
+                if (!tree_shape(plant, x, y, z, &shape) || !is_trunk(&map, x, y, z)) {
                     continue;
                 }
                 bool is_grown = shape.size > 1 || shape.trunk == 3;
@@ -905,6 +1149,12 @@ static void test_trees_shed_in_the_game(void)
 int main(void)
 {
     RUN_TEST(test_shapes);
+    RUN_TEST(test_crown_is_ragged_and_thins_out);
+    RUN_TEST(test_growing_keeps_the_foliage);
+    RUN_TEST(test_thin_foliage_is_not_walked_on);
+    RUN_TEST(test_crown_spreads_as_the_tree_ripens);
+    RUN_TEST(test_crown_spreads_in_the_game);
+    RUN_TEST(test_thin_foliage_leaves_the_topology_alone);
     RUN_TEST(test_build_and_find);
     RUN_TEST(test_climbing);
     RUN_TEST(test_room_to_grow);

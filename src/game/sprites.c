@@ -67,14 +67,15 @@ static const char *const TOOL_NAMES[] = {"cobble", "chopper", "flake", "hand_axe
 #define TILE_SPRITE_PADDING SPRITE_ALIGN
 #define TILE_SPRITE_SIZE (SPRITE_PIXELS_PER_TILE + 2 * TILE_SPRITE_PADDING)
 static const Terrain GROUND_TERRAINS[] = {
-    TERRAIN_DEEP_WATER, TERRAIN_SHALLOW_WATER, TERRAIN_SOIL,    TERRAIN_RICH_SOIL, TERRAIN_SAND,
-    TERRAIN_GRAVEL,     TERRAIN_ROUGH_STONE,   TERRAIN_FOLIAGE, TERRAIN_GRASS_ROOF};
-static const char *const GROUND_NAMES[] = {"deep_water",  "shallow_water", "soil",
-                                           "rich_soil",   "sand",          "gravel",
-                                           "rough_stone", "foliage",       "grass_roof"};
+    TERRAIN_DEEP_WATER, TERRAIN_SHALLOW_WATER,  TERRAIN_SOIL,          TERRAIN_RICH_SOIL,
+    TERRAIN_SAND,       TERRAIN_GRAVEL,         TERRAIN_ROUGH_STONE,   TERRAIN_FOLIAGE,
+    TERRAIN_GRASS_ROOF, TERRAIN_FOLIAGE_MEDIUM, TERRAIN_FOLIAGE_SPARSE};
+static const char *const GROUND_NAMES[] = {
+    "deep_water",  "shallow_water", "soil",       "rich_soil",      "sand",          "gravel",
+    "rough_stone", "foliage",       "grass_roof", "foliage_medium", "foliage_sparse"};
 static const RockType WALL_ROCKS[] = {ROCK_GRANITE, ROCK_SANDSTONE, ROCK_EARTH};
 static const char *const WALL_NAMES[] = {"granite", "sandstone", "earth"};
-#define GROUND_SPRITE_COUNT 9
+#define GROUND_SPRITE_COUNT 11
 #define WALL_SPRITE_COUNT 3
 #define GRASS_SPRITE_COUNT 4 /* Growth stages. */
 

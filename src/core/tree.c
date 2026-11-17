@@ -12,12 +12,14 @@ static const Direction AIM_ORDER[DIRECTION_COUNT] = {DIRECTION_SOUTH, DIRECTION_
  * level of trunk (and of foliage) per stage, so that growing only adds to
  * it; old and ancient trees are grown, with a bare trunk under their crown. */
 static const TreeShape SHAPES_BY_STAGE[PLANT_GROWTH_STAGES] = {
-    [2] = {1, 1, 1, 1},
-    [3] = {1, 2, 1, 1},
-    [4] = {1, 3, 1, 1},
+    [2] = {.size = 1, .trunk = 1, .foliage_from = 1, .reach = 1},
+    [3] = {.size = 1, .trunk = 2, .foliage_from = 1, .reach = 1},
+    [4] = {.size = 1, .trunk = 3, .foliage_from = 1, .reach = 1},
 };
-static const TreeShape OLD_SHAPE = {2, 5, 3, 2};
-static const TreeShape ANCIENT_SHAPE = {3, 6, 3, 3};
+static const TreeShape OLD_SHAPE = {
+    .size = 2, .trunk = 5, .foliage_from = 3, .reach = 2, .ripe = 1.0f};
+static const TreeShape ANCIENT_SHAPE = {
+    .size = 3, .trunk = 6, .foliage_from = 3, .reach = 3, .ripe = 1.0f};
 _Static_assert(6 + 1 == TREE_MAX_LEVELS, "the ancient tree is the tallest");
 
 int tree_size(const Plant *plant)
@@ -48,7 +50,7 @@ int tree_wood_yield(const Plant *plant)
 float tree_shed_chance(const Plant *plant, ItemType item)
 {
     TreeShape shape;
-    if (!tree_shape(plant, &shape)) {
+    if (!tree_shape(plant, 0, 0, 0, &shape)) {
         return 0.0f;
     }
     /* Old and ancient trees are grown; a younger one sheds twigs only. */
@@ -69,7 +71,18 @@ int tree_crown_yield(const Plant *plant, ItemType item)
     return (int)((float)(full * area) * plant->growth + 0.5f);
 }
 
-bool tree_shape(const Plant *plant, TreeShape *out)
+/* Scrambles bits (the finalizer of MurmurHash3). */
+static uint32_t mix_bits(uint32_t h)
+{
+    h ^= h >> 16;
+    h *= 0x85EBCA6Bu;
+    h ^= h >> 13;
+    h *= 0xC2B2AE35u;
+    h ^= h >> 16;
+    return h;
+}
+
+bool tree_shape(const Plant *plant, int x, int y, int z, TreeShape *out)
 {
     if (plant->type != PLANT_TREE || plant_is_dormant(plant)) {
         return false;
@@ -77,13 +90,22 @@ bool tree_shape(const Plant *plant, TreeShape *out)
     int size = tree_size(plant);
     if (size > 1) {
         *out = size == 2 ? OLD_SHAPE : ANCIENT_SHAPE;
-        return true;
+    } else {
+        int stage = plant_growth_stage(plant);
+        if (stage < TREE_VOLUME_MIN_STAGE) {
+            return false;
+        }
+        *out = SHAPES_BY_STAGE[stage];
+        /* The last stage's crown keeps spreading and thickening until the
+         * tree is fully grown: a second ring of foliage appears. */
+        out->ripe = (plant->growth - TREE_RIPENING_FROM) / (1.0f - TREE_RIPENING_FROM);
+        out->ripe = out->ripe < 0.0f ? 0.0f : (out->ripe > 1.0f ? 1.0f : out->ripe);
+        if (stage == PLANT_GROWTH_STAGES - 1 && out->ripe > 0.0f) {
+            out->reach = TREE_GROWN_REACH;
+        }
     }
-    int stage = plant_growth_stage(plant);
-    if (stage < TREE_VOLUME_MIN_STAGE) {
-        return false;
-    }
-    *out = SHAPES_BY_STAGE[stage];
+    out->seed = mix_bits((uint32_t)x * 0x9E3779B1u ^
+                         mix_bits((uint32_t)y * 0x85EBCA77u ^ mix_bits((uint32_t)z + 0x27D4EB2Fu)));
     return true;
 }
 
@@ -99,18 +121,86 @@ bool tree_trunk_holds(const TreeShape *shape, int dx, int dy, int dz)
            dy < shape->size;
 }
 
-bool tree_foliage_holds(const TreeShape *shape, int dx, int dy, int dz)
+/* A number in 0..1 that is the same every time for a tile of the tree. */
+static float foliage_noise(const TreeShape *shape, int dx, int dy, int dz, uint32_t salt)
+{
+    uint32_t h = shape->seed + salt * 0x9E3779B9u;
+    h = mix_bits(h ^ (uint32_t)(dx + 16) * 0x85EBCA77u);
+    h = mix_bits(h ^ (uint32_t)(dy + 16) * 0xC2B2AE3Du);
+    h = mix_bits(h ^ (uint32_t)(dz + 16) * 0x27D4EB2Fu);
+    return (float)(h >> 8) / 16777216.0f;
+}
+
+TreeDensity tree_foliage_density(const TreeShape *shape, int dx, int dy, int dz)
 {
     if (dz < shape->foliage_from || dz > shape->trunk) {
-        return false;
+        return TREE_DENSITY_NONE;
     }
     int ex = outside(dx, shape->size), ey = outside(dy, shape->size);
     if (ex == 0 && ey == 0) {
-        return dz == shape->trunk; /* Over the top of the trunk. */
+        return dz == shape->trunk ? TREE_DENSITY_DENSE : TREE_DENSITY_NONE; /* Over the trunk. */
     }
-    /* A rounded crown: the corners of the wider ones are left out. */
+    /* A rounded crown... */
     int reach = shape->reach;
-    return ex <= reach && ey <= reach && ex * ex + ey * ey <= reach * reach + reach;
+    int limit = reach * reach + reach;
+    int distance = ex * ex + ey * ey;
+    if (ex > reach || ey > reach || distance > limit) {
+        return TREE_DENSITY_NONE;
+    }
+    /* ...with ragged edges: the further out, the likelier a tile is missing
+     * (never one next to the trunk, which keeps the tree climbable). The
+     * noise depends on the tile, not on the tree's stage: a tree that grows
+     * only adds foliage. */
+    float outwards = (float)distance / (float)limit;
+    if (outwards > 0.5f &&
+        foliage_noise(shape, dx, dy, dz, 1) < (outwards - 0.5f) * TREE_FOLIAGE_RAGGEDNESS) {
+        return TREE_DENSITY_NONE;
+    }
+    /* Thickest next to the trunk, thinning out ring by ring; the outer rings
+     * are patchy. */
+    int ring = ex > ey ? ex : ey;
+    TreeDensity density =
+        ring <= 1 ? TREE_DENSITY_DENSE : (ring == 2 ? TREE_DENSITY_MEDIUM : TREE_DENSITY_SPARSE);
+    if (ring >= 2 && density > TREE_DENSITY_SPARSE &&
+        foliage_noise(shape, dx, dy, dz, 2) < TREE_FOLIAGE_PATCHINESS) {
+        density--;
+    }
+    /* The outer rings of a crown still spreading: each tile comes in at its
+     * own time as the tree ripens, a notch thinner for a while. */
+    if (ring >= 2) {
+        float comes = 0.5f * foliage_noise(shape, dx, dy, dz, 3);
+        if (shape->ripe <= comes) {
+            return TREE_DENSITY_NONE;
+        }
+        if (shape->ripe < comes + 0.5f && density > TREE_DENSITY_SPARSE) {
+            density--;
+        }
+    }
+    return density;
+}
+
+bool tree_foliage_holds(const TreeShape *shape, int dx, int dy, int dz)
+{
+    return tree_foliage_density(shape, dx, dy, dz) != TREE_DENSITY_NONE;
+}
+
+TreeDensity tree_terrain_density(Terrain terrain)
+{
+    switch (terrain) {
+    case TERRAIN_FOLIAGE: return TREE_DENSITY_DENSE;
+    case TERRAIN_FOLIAGE_MEDIUM: return TREE_DENSITY_MEDIUM;
+    case TERRAIN_FOLIAGE_SPARSE: return TREE_DENSITY_SPARSE;
+    default: return TREE_DENSITY_NONE;
+    }
+}
+
+Terrain tree_density_terrain(TreeDensity density)
+{
+    switch (density) {
+    case TREE_DENSITY_DENSE: return TERRAIN_FOLIAGE;
+    case TREE_DENSITY_MEDIUM: return TERRAIN_FOLIAGE_MEDIUM;
+    default: return TERRAIN_FOLIAGE_SPARSE;
+    }
 }
 
 /* The tree whose trunk is on (x, y, z), a ROCK_WOOD tile. */
@@ -125,7 +215,7 @@ static bool tree_of_trunk(const Map *map, int x, int y, int z, TreeRef *out)
             int fx = x - dx, fy = y - dy;
             TreeShape shape;
             if (!map_in_bounds(map, fx, fy, bottom) ||
-                !tree_shape(&map->plants[map_index(map, fx, fy, bottom)], &shape) ||
+                !tree_shape(&map->plants[map_index(map, fx, fy, bottom)], fx, fy, bottom, &shape) ||
                 !tree_trunk_holds(&shape, dx, dy, z - bottom)) {
                 continue;
             }
@@ -178,7 +268,7 @@ bool tree_at(const Map *map, int x, int y, int z, TreeRef *out)
     if (map->rock[index] == ROCK_WOOD) {
         return tree_of_trunk(map, x, y, z, out);
     }
-    return map->rock[index] == ROCK_NONE && map->terrain[index] == TERRAIN_FOLIAGE &&
+    return map->rock[index] == ROCK_NONE && terrain_is_foliage(map->terrain[index]) &&
            tree_of_foliage(map, x, y, z, NULL, out);
 }
 
@@ -213,7 +303,7 @@ bool tree_room_to_grow(const Map *map, int x, int y, int z, const TreeShape *sha
                     continue;
                 }
                 TreeRef owner;
-                if (map->terrain[index] != TERRAIN_FOLIAGE || !tree_at(map, tx, ty, tz, &owner) ||
+                if (!terrain_is_foliage(map->terrain[index]) || !tree_at(map, tx, ty, tz, &owner) ||
                     owner.x != x || owner.y != y || owner.z != z) {
                     return false; /* Ground, a roof, or another tree's foliage. */
                 }
@@ -229,7 +319,7 @@ void tree_build(Map *map, int x, int y, int z)
         return;
     }
     TreeShape shape;
-    if (!tree_shape(&map->plants[map_index(map, x, y, z)], &shape)) {
+    if (!tree_shape(&map->plants[map_index(map, x, y, z)], x, y, z, &shape)) {
         return;
     }
     for (int dz = 0; dz < shape.trunk && z + dz < map->depth; dz++) {
@@ -247,20 +337,44 @@ void tree_build(Map *map, int x, int y, int z)
         for (int dy = -shape.reach; dy < span - shape.reach; dy++) {
             for (int dx = -shape.reach; dx < span - shape.reach; dx++) {
                 int tx = x + dx, ty = y + dy, tz = z + dz;
-                if (tree_foliage_holds(&shape, dx, dy, dz) && map_is_open(map, tx, ty, tz) &&
-                    map_climb_cost(map, tx, ty, tz - 1) == 0.0f) {
-                    map_set_terrain(map, tx, ty, tz, TERRAIN_FOLIAGE);
+                TreeDensity density = tree_foliage_density(&shape, dx, dy, dz);
+                if (density == TREE_DENSITY_NONE || !map_in_bounds(map, tx, ty, tz)) {
+                    continue;
+                }
+                size_t index = map_index(map, tx, ty, tz);
+                if (map_is_open_at(map, index)) {
+                    if (map_climb_cost(map, tx, ty, tz - 1) == 0.0f) {
+                        map_set_terrain(map, tx, ty, tz, tree_density_terrain(density));
+                    }
+                } else if (map->rock[index] == ROCK_NONE &&
+                           terrain_is_foliage(map->terrain[index]) &&
+                           tree_terrain_density((Terrain)map->terrain[index]) < density) {
+                    /* Foliage that thickens (never the other way). */
+                    map_set_terrain(map, tx, ty, tz, tree_density_terrain(density));
                 }
             }
         }
     }
 }
 
+/* Whether things fall through a tile: open space, or branches too thin to
+ * hold anything (medium and sparse foliage). */
+static bool lets_fall(const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    return map_is_open_at(map, index) ||
+           (map->rock[index] == ROCK_NONE && (map->terrain[index] == TERRAIN_FOLIAGE_MEDIUM ||
+                                              map->terrain[index] == TERRAIN_FOLIAGE_SPARSE));
+}
+
 /* The level where something dropped over (x, y, z) comes to rest: z on a
- * floor, the first floor below over open space (-1 if none). */
+ * floor, the first floor below over open space or thin foliage (-1 if none). */
 static int landing_level(const Map *map, int x, int y, int z)
 {
-    while (z >= 0 && map_is_open(map, x, y, z)) {
+    while (z >= 0 && lets_fall(map, x, y, z)) {
         z--;
     }
     return z;
@@ -283,8 +397,8 @@ static void drop_items_from(Map *map, Items *items, int x, int y, int z)
     }
 }
 
-/* Whether branches and twigs can lie on a tile: a floor or foliage, not
- * rock, water, open space nor a wall. */
+/* Whether branches and twigs can lie on a tile: a floor or dense foliage,
+ * not rock, water, open space, thin foliage nor a wall. */
 static bool holds_litter(const Map *map, int x, int y, int z)
 {
     if (!map_in_bounds(map, x, y, z)) {
@@ -293,6 +407,7 @@ static bool holds_litter(const Map *map, int x, int y, int z)
     size_t index = map_index(map, x, y, z);
     Terrain terrain = (Terrain)map->terrain[index];
     return map->rock[index] == ROCK_NONE && terrain != TERRAIN_OPEN &&
+           terrain != TERRAIN_FOLIAGE_MEDIUM && terrain != TERRAIN_FOLIAGE_SPARSE &&
            terrain != TERRAIN_DEEP_WATER && terrain != TERRAIN_SHALLOW_WATER &&
            !structure_blocks((StructureType)map->structure[index]);
 }
@@ -324,7 +439,7 @@ void tree_clear(Map *map, Items *items, int x, int y, int z)
         return;
     }
     TreeShape shape;
-    if (!tree_shape(&map->plants[map_index(map, x, y, z)], &shape)) {
+    if (!tree_shape(&map->plants[map_index(map, x, y, z)], x, y, z, &shape)) {
         return;
     }
     TreeRef self = {x, y, z, shape};
@@ -337,7 +452,7 @@ void tree_clear(Map *map, Items *items, int x, int y, int z)
                 TreeRef other;
                 if (!tree_foliage_holds(&shape, dx, dy, dz) || !map_in_bounds(map, tx, ty, tz) ||
                     map->rock[map_index(map, tx, ty, tz)] != ROCK_NONE ||
-                    map->terrain[map_index(map, tx, ty, tz)] != TERRAIN_FOLIAGE ||
+                    !terrain_is_foliage(map->terrain[map_index(map, tx, ty, tz)]) ||
                     tree_of_foliage(map, tx, ty, tz, &self, &other)) {
                     continue;
                 }
@@ -371,7 +486,7 @@ bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick)
 {
     TreeShape shape;
     if (!map_in_bounds(map, x, y, z) ||
-        !tree_shape(&map->plants[map_index(map, x, y, z)], &shape)) {
+        !tree_shape(&map->plants[map_index(map, x, y, z)], x, y, z, &shape)) {
         return false;
     }
     int span = shape.size + 2 * shape.reach;
@@ -398,7 +513,7 @@ bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick)
                     int level = tz;
                     if (!stays) {
                         level = tz - 1;
-                        while (level >= 0 && map_is_open(map, tx, ty, level)) {
+                        while (level >= 0 && lets_fall(map, tx, ty, level)) {
                             level--;
                         }
                     }
@@ -461,7 +576,7 @@ TreeFall tree_fall_toward(const Map *map, int x, int y, int z, Direction directi
     TreeFall fall = {direction, 0, 0};
     TreeShape shape;
     if (!map_in_bounds(map, x, y, z) ||
-        !tree_shape(&map->plants[map_index(map, x, y, z)], &shape)) {
+        !tree_shape(&map->plants[map_index(map, x, y, z)], x, y, z, &shape)) {
         return fall;
     }
     int length = tree_fall_length(tree_shape_levels(&shape));

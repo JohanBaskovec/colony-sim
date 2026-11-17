@@ -3,10 +3,14 @@
  * From TREE_VOLUME_MIN_STAGE on, a tree takes room like a building: its
  * trunk is solid wood (ROCK_WOOD) from its foot up, 1 x 1 tile (2 x 2 for
  * old trees, 3 x 3 for ancient ones, both rare and only from world
- * generation), and its foliage is a floor of branches (TERRAIN_FOLIAGE)
- * around the trunk on its upper levels, the top one covering the trunk too.
- * One walks on the foliage, climbing up to it along the trunk
- * (map_can_climb_tree()), and takes the tree's branches and twigs there.
+ * generation), and its foliage is a floor of branches around the trunk on
+ * its upper levels, the top one covering the trunk too. The crown is ragged
+ * at its edges (never the same on two trees) and thins out from the trunk:
+ * dense branches next to it (TERRAIN_FOLIAGE), then thinner ones
+ * (TERRAIN_FOLIAGE_MEDIUM), then sparse ones (TERRAIN_FOLIAGE_SPARSE). One
+ * walks on the dense foliage only, climbing up to it along the trunk
+ * (map_can_climb_tree()), and takes the tree's branches and twigs there;
+ * what falls on the thinner foliage goes through it.
  *
  * The plant stays on the foot's tile (the north-west one of a wider trunk):
  * growth, stocks and the trunk's size live there, and the shape follows
@@ -67,6 +71,26 @@
 #define TREE_CROWN_BRANCHES 6
 #define TREE_CROWN_TWIGS 10
 
+/* Shape of the crown (tuning): how likely the outermost tiles of the crown
+ * are missing (0..1 at the very edge), and how likely a tile is one density
+ * thinner than its distance from the trunk says. */
+#define TREE_FOLIAGE_RAGGEDNESS 0.9f
+#define TREE_FOLIAGE_PATCHINESS 0.25f
+/* From this growth on, the crown of a tree of the default size keeps
+ * spreading until it is fully grown (1): its foliage reaches
+ * TREE_GROWN_REACH tiles, the outer ring coming in tile by tile, thin at
+ * first. */
+#define TREE_RIPENING_FROM 0.8f
+#define TREE_GROWN_REACH 2
+
+/* How thick the branches are on a tile of foliage. */
+typedef enum TreeDensity {
+    TREE_DENSITY_NONE = 0, /* No foliage. */
+    TREE_DENSITY_SPARSE,
+    TREE_DENSITY_MEDIUM,
+    TREE_DENSITY_DENSE
+} TreeDensity;
+
 /* The room a tree takes, counted from its foot (the north-west tile of its
  * trunk, on the level of the ground it grows on). */
 typedef struct TreeShape {
@@ -76,6 +100,12 @@ typedef struct TreeShape {
      * level over the top of the trunk. */
     int foliage_from;
     int reach; /* Tiles the foliage reaches out from the trunk. */
+    /* What makes the crown of this tree differ from another's (from the
+     * position of its foot): same for the whole life of the tree. */
+    uint32_t seed;
+    /* How far the crown has spread, 0..1 (the outer rings come in and thicken
+     * as it grows; 1 for old and ancient trees). */
+    float ripe;
 } TreeShape;
 
 /* Levels a tree of this shape takes, its foot's included. */
@@ -102,13 +132,23 @@ float tree_shed_chance(const Plant *plant, ItemType item);
 /* Branches or twigs a felled tree's crown gives (0 for other plants). */
 int tree_crown_yield(const Plant *plant, ItemType item);
 
-/* The shape of a tree that takes room (a tree from TREE_VOLUME_MIN_STAGE on);
- * false for saplings and other plants. */
-bool tree_shape(const Plant *plant, TreeShape *out);
+/* The shape of the tree with its foot on (x, y, z) (a tree from
+ * TREE_VOLUME_MIN_STAGE on); false for saplings and other plants. */
+bool tree_shape(const Plant *plant, int x, int y, int z, TreeShape *out);
 
 /* Whether the tile at (dx, dy, dz) from the foot holds trunk, or foliage. */
 bool tree_trunk_holds(const TreeShape *shape, int dx, int dy, int dz);
 bool tree_foliage_holds(const TreeShape *shape, int dx, int dy, int dz);
+
+/* The foliage on the tile at (dx, dy, dz) from the foot (TREE_DENSITY_NONE
+ * where there is none). Next to the trunk it is always dense. A tree that
+ * grows keeps the foliage it had, as dense or denser. */
+TreeDensity tree_foliage_density(const TreeShape *shape, int dx, int dy, int dz);
+
+/* The terrain of a tile of foliage of this density (not TREE_DENSITY_NONE),
+ * and the other way round (TREE_DENSITY_NONE for other terrains). */
+Terrain tree_density_terrain(TreeDensity density);
+TreeDensity tree_terrain_density(Terrain terrain);
 
 /* A tree found in the map: its foot and its shape. */
 typedef struct TreeRef {
@@ -135,8 +175,9 @@ bool tree_room_to_grow(const Map *map, int x, int y, int z, const TreeShape *sha
 bool tree_grows_into(int x, int y, int z, const TreeShape *shape, int tx, int ty, int tz);
 
 /* Writes the trunk and foliage of the tree on (x, y, z) into the map
- * (map_set_rock(), map_set_terrain()): trunk on its tiles, foliage on those
- * of its tiles that are open space, not over a slope or a ladder. Nothing
+ * (map_set_rock(), map_set_terrain()): trunk on its tiles, foliage (of the
+ * terrain of its density) on those of its tiles that are open space, not
+ * over a slope or a ladder. Nothing
  * for a sapling. Check tree_room_to_grow() first. */
 void tree_build(Map *map, int x, int y, int z);
 

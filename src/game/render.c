@@ -16,8 +16,10 @@ static const SDL_Color TERRAIN_COLORS[TERRAIN_COUNT] = {
     [TERRAIN_RICH_SOIL] = {90, 66, 44, 255},
     [TERRAIN_GRAVEL] = {138, 132, 122, 255},
     [TERRAIN_ROUGH_STONE] = {106, 102, 98, 255},
-    [TERRAIN_GRASS_ROOF] = {196, 168, 96, 255}, /* Textured: sprite_ground(). */
-    [TERRAIN_FOLIAGE] = {62, 106, 48, 255},     /* Textured: sprite_ground(). */
+    [TERRAIN_GRASS_ROOF] = {196, 168, 96, 255},   /* Textured: sprite_ground(). */
+    [TERRAIN_FOLIAGE] = {62, 106, 48, 255},       /* Textured: sprite_ground(). */
+    [TERRAIN_FOLIAGE_MEDIUM] = {52, 90, 42, 255}, /* Textured: sprite_ground(). */
+    [TERRAIN_FOLIAGE_SPARSE] = {42, 74, 36, 255}, /* Textured: sprite_ground(). */
 };
 
 static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
@@ -326,7 +328,7 @@ static bool under_foliage(const Map *map, int x, int y, int z)
 {
     for (int above = z + 1; above < map->depth && above < z + TREE_MAX_LEVELS; above++) {
         size_t index = map_index(map, x, y, above);
-        if (map->terrain[index] == TERRAIN_FOLIAGE && map->rock[index] == ROCK_NONE) {
+        if (terrain_is_foliage(map->terrain[index]) && map->rock[index] == ROCK_NONE) {
             return true;
         }
         if (!map_is_open_at(map, index)) {
@@ -2393,7 +2395,7 @@ static bool plant_seen(const Map *map, const Plant *plant, int x, int y, int z)
     }
     size_t index = map_index(map, x, y, seen);
     return map->rock[index] == ROCK_WOOD ||
-           (map->rock[index] == ROCK_NONE && map->terrain[index] == TERRAIN_FOLIAGE);
+           (map->rock[index] == ROCK_NONE && terrain_is_foliage(map->terrain[index]));
 }
 
 static void render_plant(Sprites *sprites, const Camera *camera, const Map *map, int x, int y,

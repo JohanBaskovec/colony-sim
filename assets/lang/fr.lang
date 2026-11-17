@@ -20,6 +20,8 @@ terrain.gravel = Gravier
 terrain.rough_stone = Pierre brute
 terrain.open = Vide
 terrain.foliage = Branchages
+terrain.foliage_medium = Branchages fins
+terrain.foliage_sparse = Branchages épars
 
 # Roche naturelle
 rock.granite = Granite

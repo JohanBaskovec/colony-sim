@@ -614,19 +614,21 @@ static void grow_tree(Game *game, size_t index, float old_growth)
 {
     Map *map = &game->map;
     Plant *plant = &map->plants[index];
+    int x, y, z;
+    map_tile_of(map, index, &x, &y, &z);
     TreeShape shape, before;
-    if (!tree_shape(plant, &shape)) {
+    if (!tree_shape(plant, x, y, z, &shape)) {
         return;
     }
     Plant old = *plant;
     old.growth = old_growth;
-    bool had_shape = tree_shape(&old, &before);
+    bool had_shape = tree_shape(&old, x, y, z, &before);
     bool built = map->rock[index] == ROCK_WOOD;
-    if (built && had_shape && before.trunk == shape.trunk) {
+    /* Nothing to write while the crown stays as it was. */
+    if (built && had_shape && before.trunk == shape.trunk && before.reach == shape.reach &&
+        before.ripe == shape.ripe) {
         return;
     }
-    int x, y, z;
-    map_tile_of(map, index, &x, &y, &z);
     if (!tree_room_to_grow(map, x, y, z, &shape) || tree_in_the_way(game, x, y, z, &shape)) {
         if (built || !had_shape) {
             plant->growth = old_growth;

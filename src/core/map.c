@@ -20,6 +20,11 @@ static const TerrainDef TERRAIN_DEFS[TERRAIN_COUNT] = {
                             STRUCTURE_ROOF},
     /* Branches underfoot, leaves in the face: slow going. */
     [TERRAIN_FOLIAGE] = {"foliage", N_("terrain.foliage"), 1.5f, 0.0f, false, false},
+    /* Too thin to stand on. */
+    [TERRAIN_FOLIAGE_MEDIUM] = {"foliage_medium", N_("terrain.foliage_medium"), 0.0f, 0.0f, false,
+                                false},
+    [TERRAIN_FOLIAGE_SPARSE] = {"foliage_sparse", N_("terrain.foliage_sparse"), 0.0f, 0.0f, false,
+                                false},
 };
 
 static const RockDef ROCK_DEFS[ROCK_COUNT] = {
@@ -415,14 +420,30 @@ static void log_build_change(Map *map, int x, int y, int z)
         (MapBuildChange){(int16_t)x, (int16_t)y, (int16_t)z};
 }
 
+/* Whether a terrain is open space or thin foliage: nobody can stand on it. */
+static bool unstandable_air(uint8_t terrain)
+{
+    return terrain == TERRAIN_OPEN || terrain == TERRAIN_FOLIAGE_MEDIUM ||
+           terrain == TERRAIN_FOLIAGE_SPARSE;
+}
+
 void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
 {
     if (!map_in_bounds(map, x, y, z) || (unsigned)terrain >= TERRAIN_COUNT) {
         return;
     }
     size_t index = map_index(map, x, y, z);
-    if (map->terrain[index] != terrain) {
+    uint8_t old = map->terrain[index];
+    if (old != terrain) {
         map->terrain[index] = (uint8_t)terrain;
+        /* Open space turning into thin foliage, and back, changes no way
+         * unless a slope or a ladder below leads up into it (trees are only
+         * built where none does): crowns spreading are not worth a new look
+         * at the connectivity. */
+        if (unstandable_air(old) && unstandable_air(terrain) &&
+            map_climb_cost(map, x, y, z - 1) == 0.0f) {
+            return;
+        }
         /* May also turn neighbors into (or out of) drinking spots. */
         log_topology_change(map, x, y, z, false);
     }
@@ -893,7 +914,7 @@ bool map_has_ceiling(const Map *map, int x, int y, int z)
     }
     size_t over = map_index(map, x, y, z + 1);
     return !map_is_open_at(map, over) &&
-           (map->rock[over] != ROCK_NONE || map->terrain[over] != TERRAIN_FOLIAGE);
+           (map->rock[over] != ROCK_NONE || !terrain_is_foliage(map->terrain[over]));
 }
 
 bool map_ceiling_supported(const Map *map, int x, int y, int z)
@@ -927,7 +948,7 @@ bool map_dig_keeps_ceilings(const Map *map, int x, int y, int z, bool opens_abov
             bool ceiling = dx == 0 && dy == 0 ? !opens_above && map_in_bounds(map, x, y, z + 1) &&
                                                     !map_is_open_at(map, over) &&
                                                     (map->rock[over] != ROCK_NONE ||
-                                                     map->terrain[over] != TERRAIN_FOLIAGE)
+                                                     !terrain_is_foliage(map->terrain[over]))
                                               : map_has_ceiling(map, cx, cy, z);
             if (ceiling && !supported_without(map, cx, cy, z, x, y)) {
                 return false;
@@ -945,7 +966,7 @@ int map_cover_level(const Map *map, int x, int y, int z)
     for (int above = z + 1; above < map->depth; above++) {
         size_t index = map_index(map, x, y, above);
         if (!map_is_open_at(map, index) &&
-            (map->rock[index] != ROCK_NONE || map->terrain[index] != TERRAIN_FOLIAGE)) {
+            (map->rock[index] != ROCK_NONE || !terrain_is_foliage(map->terrain[index]))) {
             return above;
         }
     }
@@ -1234,7 +1255,7 @@ int map_ground_level(const Map *map, int x, int y)
     for (int z = map->depth - 1; z >= 0; z--) {
         size_t index = map_index(map, x, y, z);
         Terrain terrain = (Terrain)map->terrain[index];
-        if (terrain == TERRAIN_FOLIAGE) {
+        if (terrain_is_foliage(terrain)) {
             continue; /* Trees are left out. */
         }
         if (map->rock[index] == ROCK_WOOD) {

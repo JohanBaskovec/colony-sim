@@ -21,6 +21,8 @@ terrain.gravel = Gravel
 terrain.rough_stone = Rough stone
 terrain.open = Open space
 terrain.foliage = Foliage
+terrain.foliage_medium = Thin foliage
+terrain.foliage_sparse = Sparse foliage
 
 # Natural rock
 rock.granite = Granite
