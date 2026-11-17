@@ -2427,6 +2427,9 @@ static void render_path(SDL_Renderer *renderer, const Camera *camera, const Colo
         SDL_SetRenderDrawColor(renderer, PATH_COLOR.r, PATH_COLOR.g, PATH_COLOR.b, PATH_COLOR.a);
         SDL_RenderLines(renderer, points, count);
     }
+    if (colonist->task == TASK_MOVE && colonist->target.z == camera->level) {
+        render_tile_outline(renderer, camera, colonist->target.x, colonist->target.y, PATH_COLOR);
+    }
 }
 
 static SDL_FColor tint(SDL_Color color, float brightness)

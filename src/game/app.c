@@ -998,6 +998,14 @@ static void apply_gather_tool(App *app, float screen_x, float screen_y)
     }
 }
 
+/* A right click on the map sends the selected settlers there, unless it has
+ * something to step back from first (a tool, the build menu, a drag). */
+static bool can_order_move(const App *app)
+{
+    return app->selected_count > 0 && app->tool == APP_TOOL_NONE && !app->build_menu_open &&
+           !app->left_button_down;
+}
+
 static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
 {
     if (button->button != SDL_BUTTON_LEFT) {
@@ -1018,7 +1026,14 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
             app->right_click_pending = false;
             float dx = button->x - app->right_down_x, dy = button->y - app->right_down_y;
             if (dx * dx + dy * dy <= APP_DRAG_THRESHOLD * APP_DRAG_THRESHOLD) {
-                step_back(app, false);
+                if (can_order_move(app)) {
+                    int x, y;
+                    screen_to_tile(app, button->x, button->y, &x, &y);
+                    game_order_move(&app->game, app->selected, app->selected_count, x, y,
+                                    app->camera.level);
+                } else {
+                    step_back(app, false);
+                }
             }
         }
         return;

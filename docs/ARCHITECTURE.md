@@ -1267,6 +1267,16 @@ searches backed off on that revision look again.
   `KNOWLEDGE_STORY_CAP` (60), as `KNOWLEDGE_SOURCE_STORIES`. Both end at
   22:00 or when the fire goes out. The evening search backs off like the
   apprenticeship one.
+- **Move orders**: `game_order_move()` (a right click on the map with settlers
+  selected) gives each a goal of its own near the spot (the first gets the
+  spot, the others the nearest free tiles within 4; unexplored tiles and tiles
+  not reachable on the known map are left out) through `colonist_order_move()`:
+  the job is given up (`begin_task()` releases reservations and puts down what
+  is carried), the path is found on `plan_map`, and the settler walks it as
+  `TASK_MOVE`, stands `COLONIST_MOVE_HOLD_TICKS` (5 s) at the end, then goes
+  idle. Between two tiles the order waits for the next one
+  (`Colonist.move_pending`). `decide()` leaves a `TASK_MOVE` alone except for
+  a break, critical hunger or thirst, or critical tiredness.
 - **Heat**: a burning hearth adds `HEARTH_HEAT_PER_HOUR` degrees to its
   tile every tick (`temperatures_add_heat()`, see below).
 - **Rendering**: a ring of stones, sticks for the fuel, flames moving with
@@ -1716,7 +1726,8 @@ on a ramp leading up from it, down on the open space over one leading down
 from it; see-through, over the items, plants and settlers there.
 Escape and a right click on the map
 (released where it was pressed: otherwise it pans) step back one level
-(`step_back()`); with nothing left to close, Escape opens the game menu,
+(`step_back()`), except that a right click with settlers selected and no tool,
+menu or drag sends them there (`can_order_move()`, `game_order_move()`); with nothing left to close, Escape opens the game menu,
 which pauses the game while it is open (as does the settings window opened
 from it). The settings (`core/settings.h`) are read at start from
 `settings.cfg` in `SDL_GetPrefPath("", "colony-sim")` and written again at

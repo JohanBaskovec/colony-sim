@@ -2196,8 +2196,172 @@ static void test_translation_keys(void)
     CHECK(colonist_name_count() >= 32);
 }
 
+/* ---- Move orders --------------------------------------------------------- */
+
+/* Ticks until the colonist stands on (x, y) (at most `max_ticks`). */
+static bool run_until_at(Game *game, EntityId id, int x, int y, int max_ticks)
+{
+    for (int i = 0; i < max_ticks; i++) {
+        const Colonist *colonist = game_colonist(game, id);
+        if (colonist->x == x && colonist->y == y && !colonist_is_moving(colonist)) {
+            return true;
+        }
+        game_tick(game);
+    }
+    return false;
+}
+
+/* An ordered settler walks to the tile, stands there a while, then takes up its life again. */
+static void test_move_order_walks_holds_and_releases(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 5, 5);
+    REQUIRE(colonist != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 20, 9, 0), 1);
+    colonist = game_colonist(&game, id);
+    CHECK_EQ_INT(colonist->task, TASK_MOVE);
+    CHECK_EQ_INT(colonist->target.x, 20);
+    CHECK_EQ_INT(colonist->target.y, 9);
+    CHECK(run_until_at(&game, id, 20, 9, 2000));
+    run_ticks(&game, COLONIST_MOVE_HOLD_TICKS / 2);
+    colonist = game_colonist(&game, id);
+    CHECK_EQ_INT(colonist->task, TASK_MOVE); /* Still standing there. */
+    CHECK_EQ_INT(colonist->x, 20);
+    run_ticks(&game, COLONIST_MOVE_HOLD_TICKS);
+    CHECK(game_colonist(&game, id)->task != TASK_MOVE);
+    game_shutdown(&game);
+}
+
+/* An order puts what is in hand down, and wakes a sleeper. */
+static void test_move_order_interrupts_what_the_settler_does(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 5, 5);
+    REQUIRE(colonist != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    colonist->carried = (ItemStack){.type = ITEM_BRANCHES, .count = 3};
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 12, 5, 0), 1);
+    colonist = game_colonist(&game, id);
+    CHECK_EQ_INT(colonist->carried.count, 0);
+    CHECK_EQ_INT(game.items.stacks[map_index(&game.map, 5, 5, 0)].count, 3);
+    colonist->task = TASK_SLEEP;
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 3, 3, 0), 1);
+    CHECK_EQ_INT(game_colonist(&game, id)->task, TASK_MOVE);
+    game_shutdown(&game);
+}
+
+/* Nobody stands on rock; a spot walled in is refused. */
+static void test_move_order_refuses_unreachable_tiles(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Map *map = &game.map;
+    Colonist *colonist = spawn_rested(&game, 5, 5);
+    REQUIRE(colonist != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    for (int y = 25; y <= 40; y++) { /* A walled-in square with a ring of rock. */
+        for (int x = 25; x <= 40; x++) {
+            bool ring = x < 27 || x > 38 || y < 27 || y > 38;
+            if (ring) {
+                map->rock[map_index(map, x, y, 0)] = ROCK_GRANITE;
+            }
+        }
+    }
+    map_topology_changed(map);
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 32, 32, 0), 0);
+    CHECK(game_colonist(&game, id)->task != TASK_MOVE);
+    /* Onto rock: to the nearest tile that can be stood on. */
+    map->rock[map_index(map, 12, 12, 0)] = ROCK_GRANITE;
+    map_topology_changed(map);
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 12, 12, 0), 1);
+    const Colonist *c = game_colonist(&game, id);
+    CHECK(c->target.x != 12 || c->target.y != 12);
+    CHECK(abs(c->target.x - 12) <= 1 && abs(c->target.y - 12) <= 1);
+    game_shutdown(&game);
+}
+
+/* A group ordered to one spot spreads out round it. */
+static void test_move_order_spreads_a_group(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId ids[5];
+    for (int i = 0; i < 5; i++) {
+        REQUIRE(spawn_rested(&game, 3 + i, 4) != NULL);
+        ids[i] = game_colonist_id_at(&game, (uint32_t)i);
+    }
+    CHECK_EQ_INT(game_order_move(&game, ids, 5, 24, 24, 0), 5);
+    for (int i = 0; i < 5; i++) {
+        const Colonist *c = game_colonist(&game, ids[i]);
+        CHECK(abs(c->target.x - 24) <= 2 && abs(c->target.y - 24) <= 2);
+        for (int j = 0; j < i; j++) {
+            const Colonist *other = game_colonist(&game, ids[j]);
+            CHECK(c->target.x != other->target.x || c->target.y != other->target.y);
+        }
+    }
+    CHECK_EQ_INT(game_colonist(&game, ids[0])->target.x, 24); /* The first gets the spot. */
+    CHECK_EQ_INT(game_colonist(&game, ids[0])->target.y, 24);
+    game_shutdown(&game);
+}
+
+/* Starving, a settler eats before walking on; merely hungry, it obeys. */
+static void test_move_order_gives_way_to_dire_needs(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 5, 5);
+    REQUIRE(colonist != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    REQUIRE(game_debug_spawn_items(&game, 8, 5, 0, ITEM_BLACKBERRIES, 3) > 0);
+    colonist->needs[NEED_FOOD] = NEED_LOW_THRESHOLD * 0.5f;
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 30, 5, 0), 1);
+    run_ticks(&game, 5);
+    CHECK_EQ_INT(game_colonist(&game, id)->task, TASK_MOVE);
+    colonist->needs[NEED_FOOD] = NEED_CRITICAL_THRESHOLD * 0.5f;
+    run_ticks(&game, 120);
+    CHECK_EQ_INT(game_colonist(&game, id)->task, TASK_EAT);
+    game_shutdown(&game);
+}
+
+/* Ordered between two tiles, a settler finishes the step, then goes. */
+static void test_move_order_between_tiles_waits_for_the_next(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 5, 5);
+    REQUIRE(colonist != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    bool between = false;
+    for (int i = 0; i < 3000 && !between; i++) {
+        game_tick(&game);
+        colonist = game_colonist(&game, id);
+        between = colonist_is_moving(colonist) && colonist->move_progress > 0.0f;
+    }
+    REQUIRE(between);
+    int from_x = colonist->x, from_y = colonist->y;
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 40, 40, 0), 1);
+    colonist = game_colonist(&game, id);
+    CHECK(colonist->move_pending);
+    CHECK(colonist->task != TASK_MOVE);
+    run_ticks(&game, 200);
+    colonist = game_colonist(&game, id);
+    CHECK(!colonist->move_pending);
+    CHECK_EQ_INT(colonist->task, TASK_MOVE);
+    CHECK(colonist->x != from_x || colonist->y != from_y);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
+    RUN_TEST(test_move_order_walks_holds_and_releases);
+    RUN_TEST(test_move_order_interrupts_what_the_settler_does);
+    RUN_TEST(test_move_order_refuses_unreachable_tiles);
+    RUN_TEST(test_move_order_spreads_a_group);
+    RUN_TEST(test_move_order_gives_way_to_dire_needs);
+    RUN_TEST(test_move_order_between_tiles_waits_for_the_next);
     RUN_TEST(test_spawn_requires_passable_tile);
     RUN_TEST(test_names_are_unique);
     RUN_TEST(test_remove_invalidates_handle);

@@ -151,11 +151,13 @@ typedef struct Items {
      * picked up, eaten, used nor added to. Cleared when the stack is gone. */
     uint8_t *forbidden;
     int forbidden_count;
-    /* A bit per tile whose stack was added to, taken from, forbidden or lost
-     * since the bits were last cleared, and the range of words holding some:
-     * the known world copies what changed where it is seen (core/known.h). */
-    uint64_t *changed;
-    size_t changed_first, changed_last; /* Words; changed_first == SIZE_MAX: none. */
+    /* The picture of these items in the known world (core/known.h), and the
+     * tiles in view as a bit per tile: while both are set, a stack that is
+     * added to, taken from, forbidden or lost on a tile in view is copied
+     * into the picture at once (a settler acting on what the one before it just did).
+     * NULL: none. */
+    struct Items *mirror;
+    const uint64_t *mirror_when;
 } Items;
 
 /* Items dropped by a single action spread at most this far (in steps). */

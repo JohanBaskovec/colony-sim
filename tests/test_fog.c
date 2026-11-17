@@ -442,8 +442,46 @@ static void test_fog_off_sees_everything(void)
     game_shutdown(&game);
 }
 
+/* A move order only goes to what the colony has explored: the way into the fog is step by step
+ * (the nearest explored tiles are taken when the spot clicked is not). */
+static void test_move_order_stays_in_the_explored(void)
+{
+    Game game;
+    REQUIRE(walled_plain(&game));
+    Map *map = &game.map;
+    int z = map->surface_level;
+    for (int y = 0; y < map->height; y++) {
+        map->rock[map_index(map, 30, y, z)] = ROCK_NONE; /* No wall. */
+    }
+    map_topology_changed(map);
+    EntityId id = game_spawn_colonist(&game, 10, 30, z);
+    REQUIRE(game_colonist(&game, id) != NULL);
+    game.arrival = (TilePos){10, 30, (int16_t)z};
+    game.has_arrival = true;
+    REQUIRE(game_set_fog(&game, true));
+    /* Forget a patch far away. */
+    for (int y = 40; y <= 60; y++) {
+        for (int x = 40; x <= 60; x++) {
+            size_t index = map_index(map, x, y, z);
+            game.vision.explored[index >> 6] &= ~((uint64_t)1 << (index & 63));
+            game.known.map.terrain[index] = TERRAIN_OPEN;
+        }
+    }
+    REQUIRE(!game_tile_explored(&game, 50, 50, z));
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 50, 50, z), 0);
+    CHECK(game_colonist(&game, id)->task != TASK_MOVE);
+    game_reveal_map(&game);
+    for (int i = 0; i < 400; i++) { /* The picture catches up. */
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 50, 50, z), 1);
+    CHECK_EQ_INT(game_colonist(&game, id)->task, TASK_MOVE);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
+    RUN_TEST(test_move_order_stays_in_the_explored);
     RUN_TEST(test_known_world_starts_unknown);
     RUN_TEST(test_copy_tiles);
     RUN_TEST(test_fog_explores_the_start);

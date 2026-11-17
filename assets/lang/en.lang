@@ -208,7 +208,7 @@ hud.paused = Paused
 # {0} = language name
 # {0} = movement keys (e.g. WASD, adapted to the keyboard layout)
 hud.help.camera = {0}/Arrows: move · Wheel: zoom · Middle/right drag: pan
-hud.help.game = Left click/drag: select · Space: pause · 1-3: speed · {0}: language · F3: debug · Esc or right click: back
+hud.help.game = Left click/drag: select · Right click: send the selected settlers · Space: pause · 1-3: speed · {0}: language · F3: debug · Esc or right click: back
 # hud.help.gathering: {0} = key of the gathering zone tool; hud.help.orders: {0}, {1} = keys of the mine and cancel tools
 hud.help.gathering = {0}: gathering zones (wood, wild food, branches, twigs, grass, stones)
 hud.help.orders = {0}: mine · {1}: cancel orders
@@ -351,6 +351,7 @@ colonist.task.refuel = Feeding a fire
 colonist.task.light = Lighting a fire
 colonist.task.story = Telling a story
 colonist.task.listen = Listening to a story
+colonist.task.move = Moving as ordered
 
 need.food = Food
 need.food.low = Hungry

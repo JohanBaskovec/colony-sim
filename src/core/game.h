@@ -274,6 +274,13 @@ bool game_debug_teleport(Game *game, EntityId id, int x, int y, int z);
 
 /* ---- Colonists ----------------------------------------------------------- */
 
+/* The player's order to move: each of the `count` colonists given gives up
+ * what it does and walks to a tile of its own near (x, y, z) (the tile itself
+ * for the first that can stand on it: they do not pile up on one tile).
+ * Tiles nobody has explored, nobody can stand on or reach on what the colony
+ * knows are left out. Returns how many were sent. */
+int game_order_move(Game *game, const EntityId *ids, int count, int x, int y, int z);
+
 /*
  * Creates a colonist on a tile with a random unused name, age and needs.
  * Returns ENTITY_NONE if the tile is not passable or the colony is full.

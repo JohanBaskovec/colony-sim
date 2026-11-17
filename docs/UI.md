@@ -17,7 +17,10 @@ or button; `docs/ARCHITECTURE.md` describes how the code is organized.
 - **One main window open at a time** (Work, later Schedule, Assign...):
   opening one closes the other and closes the build menu. Escape or a right
   click steps back one level (drag, tool, menu, front window, selection);
-  with nothing left to close, Escape opens the game menu.
+  with nothing left to close, Escape opens the game menu. With settlers
+  selected and nothing to step back from (no tool, no menu, no drag), a right
+  click on the map sends them there instead (`game_order_move()`; Escape
+  still steps back). Their path and the tile they go to are drawn.
 - **Never on top of each other.** Each zone of the screen has its own
   content; zones are computed in one place (`game/layout.h`) from the screen
   size and the theme.

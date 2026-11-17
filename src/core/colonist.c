@@ -540,6 +540,7 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
         return colonist->light_step == LIGHT_FRICTION ? COLONIST_ACTION_CUT : COLONIST_ACTION_NONE;
     case TASK_IDLE:
     case TASK_WANDER:
+    case TASK_MOVE:
     case TASK_ASSIST:
     case TASK_REFUEL:
     case TASK_STORY:
@@ -583,6 +584,7 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_LIGHT] = N_("colonist.task.light"),
         [TASK_STORY] = N_("colonist.task.story"),
         [TASK_LISTEN] = N_("colonist.task.listen"),
+        [TASK_MOVE] = N_("colonist.task.move"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
 }
@@ -701,6 +703,41 @@ static void set_idle(Colonist *colonist, const ColonistContext *context, int tic
 void colonist_abandon_task(Colonist *colonist, const ColonistContext *context)
 {
     set_idle(colonist, context, 0);
+}
+
+/* Starts walking to `goal` for a player's order (at the middle of a tile). */
+static bool start_move(Colonist *colonist, const ColonistContext *context, TilePos goal)
+{
+    Path path = {0};
+    TilePos here = current_tile(colonist);
+    if (here.x != goal.x || here.y != goal.y || here.z != goal.z) {
+        if (!pathfinder_find(context->pathfinder, context->plan_map, here, goal,
+                             COLONIST_MOVE_MAX_COST, &path)) {
+            path_free(&path);
+            return false;
+        }
+    }
+    begin_task(colonist, context, TASK_MOVE);
+    path_free(&colonist->path);
+    colonist->path = path; /* Empty when already there. */
+    colonist->target = goal;
+    return true;
+}
+
+bool colonist_order_move(Colonist *colonist, const ColonistContext *context, TilePos goal)
+{
+    if (!map_is_passable(context->plan_map, goal.x, goal.y, goal.z) ||
+        !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
+        return false;
+    }
+    if (colonist->move_progress > 0.0f) {
+        /* Between two tiles: on the next one (the search is made then). */
+        colonist->move_pending = true;
+        colonist->move_goal = goal;
+        return true;
+    }
+    colonist->move_pending = false;
+    return start_move(colonist, context, goal);
 }
 
 static bool search_allowed(const Colonist *colonist, SearchKind kind)
@@ -3035,6 +3072,7 @@ bool colonist_can_chat(const Colonist *colonist)
     case TASK_LIGHT:
     case TASK_ASSIST: return !colonist_is_moving(colonist);
     case TASK_REFUEL:
+    case TASK_MOVE:
     case TASK_STORY:
     case TASK_LISTEN:
     case TASK_SLEEP:
@@ -4196,6 +4234,14 @@ static void decide(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0); /* Bedtime. */
         }
         break;
+    case TASK_MOVE:
+        /* An order comes before everything but a break and dire needs. */
+        if (!colonist_in_break(colonist) &&
+            (try_satisfy_urgent(colonist, context, NEED_CRITICAL_THRESHOLD) ||
+             rest >= NEED_CRITICAL_THRESHOLD)) {
+            return;
+        }
+        break; /* Dropped for a break, or sleep (below). */
     default: break;
     }
 
@@ -4382,6 +4428,10 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     step_out_of_blocked_tile(colonist, context);
     update_needs(colonist, context);
     if (colonist->move_progress == 0.0f) {
+        if (colonist->move_pending) {
+            colonist->move_pending = false;
+            start_move(colonist, context, colonist->move_goal);
+        }
         decide(colonist, context);
     }
 
@@ -4412,6 +4462,11 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     case TASK_LIGHT: light_job(colonist, context); break;
     case TASK_STORY: story(colonist, context); break;
     case TASK_LISTEN: listen_to_story(colonist, context); break;
+    case TASK_MOVE: /* There: stands a while, then takes up its life again. */
+        if (++colonist->timer >= COLONIST_MOVE_HOLD_TICKS) {
+            set_idle(colonist, context, 0);
+        }
+        break;
     case TASK_SLEEP:
     case TASK_COUNT: break;
     }

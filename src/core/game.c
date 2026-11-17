@@ -205,6 +205,63 @@ bool game_remove_colonist(Game *game, EntityId id)
     return pool_release(&game->colonist_pool, id);
 }
 
+/* Tiles round a spot, nearest first (the spot's own first): where a group
+ * ordered to move spreads out. */
+#define MOVE_SPREAD_RADIUS 4
+#define MOVE_SPREAD_TILES ((2 * MOVE_SPREAD_RADIUS + 1) * (2 * MOVE_SPREAD_RADIUS + 1))
+
+typedef struct SpreadOffset {
+    int dx, dy;
+} SpreadOffset;
+
+static int compare_spread(const void *a, const void *b)
+{
+    const SpreadOffset *oa = a, *ob = b;
+    int da = oa->dx * oa->dx + oa->dy * oa->dy, db = ob->dx * ob->dx + ob->dy * ob->dy;
+    if (da != db) {
+        return da - db;
+    }
+    return oa->dy != ob->dy ? oa->dy - ob->dy : oa->dx - ob->dx;
+}
+
+int game_order_move(Game *game, const EntityId *ids, int count, int x, int y, int z)
+{
+    SpreadOffset offsets[MOVE_SPREAD_TILES];
+    int offset_count = 0;
+    for (int dy = -MOVE_SPREAD_RADIUS; dy <= MOVE_SPREAD_RADIUS; dy++) {
+        for (int dx = -MOVE_SPREAD_RADIUS; dx <= MOVE_SPREAD_RADIUS; dx++) {
+            offsets[offset_count++] = (SpreadOffset){dx, dy};
+        }
+    }
+    qsort(offsets, (size_t)offset_count, sizeof(offsets[0]), compare_spread);
+
+    TilePos taken[COLONIST_MAX];
+    int taken_count = 0;
+    int sent = 0;
+    for (int i = 0; i < count && taken_count < COLONIST_MAX; i++) {
+        Colonist *colonist = game_colonist(game, ids[i]);
+        if (colonist == NULL) {
+            continue;
+        }
+        ColonistContext context = colonist_context(game, ids[i].index);
+        for (int o = 0; o < offset_count; o++) {
+            TilePos goal = {(int16_t)(x + offsets[o].dx), (int16_t)(y + offsets[o].dy), (int16_t)z};
+            bool free = true;
+            for (int t = 0; t < taken_count && free; t++) {
+                free = taken[t].x != goal.x || taken[t].y != goal.y;
+            }
+            if (!free || !game_tile_explored(game, goal.x, goal.y, goal.z) ||
+                !colonist_order_move(colonist, &context, goal)) {
+                continue;
+            }
+            taken[taken_count++] = goal;
+            sent++;
+            break;
+        }
+    }
+    return sent;
+}
+
 /* ---- Starting colonists -------------------------------------------------- */
 
 static bool is_drinking_spot(const Map *map, int x, int y, int z, void *userdata)
@@ -563,6 +620,7 @@ void game_shutdown(Game *game)
     pool_free(&game->colonist_pool);
     pathfinder_free(&game->pathfinder);
     regions_free(&game->regions);
+    game->items.mirror = NULL;
     vision_free(&game->vision);
     game->vision_on = false;
     known_free(&game->known);
@@ -826,8 +884,6 @@ static void update_items(Game *game)
     rot_nuts(game, begin, end, hours);
 }
 
-static void sync_known_items(Game *game);
-
 static void update_colonists(Game *game)
 {
     /* Fixed slot order keeps the simulation deterministic. */
@@ -838,9 +894,6 @@ static void update_colonists(Game *game)
             /* Someone before may have changed the map (a felled tree, a new wall): stale
              * regions would make every search pre-check answer "maybe". */
             regions_update(&game->regions, &game->map);
-            if (game->fog_on) {
-                sync_known_items(game); /* What someone before moved, where it is seen. */
-            }
             Colonist *colonist = &game->colonists[slot];
             colonist_tick(colonist, &context);
             if (colonist->mood.break_started) {
@@ -922,6 +975,7 @@ bool game_set_vision(Game *game, bool on)
         return true;
     }
     if (!on) {
+        game->items.mirror = NULL;
         vision_free(&game->vision);
         game->vision_on = false;
         game->fog_on = false; /* The fog needs the vision. */
@@ -959,23 +1013,6 @@ static void copy_known_bits(Game *game, size_t word, uint64_t bits)
  * or were explored since the last call (a last time for those leaving, so
  * that the known world holds what was seen last), and a slice of those in
  * view. */
-/* What moves (items) is copied into the known world as soon as it changes
- * where it is seen (a settler acts on what the one before it just did). */
-static void sync_known_items(Game *game)
-{
-    Items *items = &game->items;
-    if (items->changed_first == SIZE_MAX) {
-        return;
-    }
-    for (size_t word = items->changed_first; word <= items->changed_last; word++) {
-        uint64_t bits = items->changed[word];
-        items->changed[word] = 0;
-        copy_known_bits(game, word, bits & game->vision.seen_bits[word]);
-    }
-    items->changed_first = SIZE_MAX;
-    items->changed_last = 0;
-}
-
 static void sync_known(Game *game)
 {
     Vision *vision = &game->vision;
@@ -987,7 +1024,6 @@ static void sync_known(Game *game)
         }
         vision->snapshot_pending = false;
     }
-    sync_known_items(game);
     size_t slice = (size_t)(game->clock.tick % KNOWN_SYNC_SLICES);
     for (size_t word = vision->words * slice / KNOWN_SYNC_SLICES;
          word < vision->words * (slice + 1) / KNOWN_SYNC_SLICES; word++) {
@@ -1023,6 +1059,7 @@ bool game_set_fog(Game *game, bool on)
 {
     if (!on) {
         game->fog_on = false;
+        game->items.mirror = NULL;
         return true;
     }
     if (game->fog_on) {
@@ -1053,6 +1090,8 @@ bool game_set_fog(Game *game, bool on)
     }
     vision->snapshot_pending = true;
     game->fog_on = true;
+    game->items.mirror = &game->known.items;
+    game->items.mirror_when = game->vision.seen_bits;
     update_vision(game);
     return true;
 }

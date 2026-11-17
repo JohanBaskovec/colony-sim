@@ -353,12 +353,7 @@ bool items_init(Items *items, int width, int height, int depth)
     items->stacks = calloc((size_t)width * (size_t)height * (size_t)depth, sizeof(*items->stacks));
     items->level_stacks = calloc((size_t)depth, sizeof(*items->level_stacks));
     items->forbidden = calloc((size_t)width * (size_t)height * (size_t)depth, 1);
-    size_t tiles = (size_t)width * (size_t)height * (size_t)depth;
-    items->changed = calloc((tiles + 63) / 64, sizeof(*items->changed));
-    items->changed_first = SIZE_MAX;
-    items->changed_last = 0;
-    if (items->stacks == NULL || items->level_stacks == NULL || items->forbidden == NULL ||
-        items->changed == NULL) {
+    if (items->stacks == NULL || items->level_stacks == NULL || items->forbidden == NULL) {
         items_free(items);
         return false;
     }
@@ -373,7 +368,6 @@ void items_free(Items *items)
     free(items->stacks);
     free(items->level_stacks);
     free(items->forbidden);
-    free(items->changed);
     memset(items, 0, sizeof(*items));
 }
 
@@ -444,15 +438,12 @@ static void stack_gone(Items *items, size_t index)
     }
 }
 
-/* Notes that the stack on a tile (an index) changed. */
+/* Notes that the stack on a tile (an index) changed: copied into the picture at once
+ * where it is in view. */
 static void note_change(Items *items, size_t index)
 {
-    items->changed[index >> 6] |= (uint64_t)1 << (index & 63);
-    if (index >> 6 < items->changed_first) {
-        items->changed_first = index >> 6;
-    }
-    if (index >> 6 > items->changed_last) {
-        items->changed_last = index >> 6;
+    if (items->mirror != NULL && (items->mirror_when[index >> 6] >> (index & 63) & 1u) != 0) {
+        items_copy_tile(items->mirror, items, index);
     }
 }
 
@@ -502,7 +493,6 @@ int items_remove(Items *items, int x, int y, int z, int count)
     if (removed <= 0) {
         return 0;
     }
-    note_change(items, index_of(items, x, y, z));
     items->totals[stack->type] -= removed;
     stack->count = (uint16_t)(stack->count - removed);
     if (stack->count == 0) {
@@ -510,6 +500,7 @@ int items_remove(Items *items, int x, int y, int z, int count)
         items->level_stacks[z]--;
         stack_gone(items, index_of(items, x, y, z));
     }
+    note_change(items, index_of(items, x, y, z));
     return removed;
 }
 
@@ -580,11 +571,12 @@ static bool rot(Items *items, ItemStack *stack, int hours, float rate)
     long lost = total / ITEM_ROT_STEP;
     if (lost >= stack->hit_points) {
         items->totals[stack->type] -= stack->count;
-        note_change(items, (size_t)(stack - items->stacks));
+        size_t lost_index = (size_t)(stack - items->stacks);
         *stack = (ItemStack){0};
         size_t level_size = (size_t)items->width * (size_t)items->height;
-        items->level_stacks[(size_t)(stack - items->stacks) / level_size]--;
-        stack_gone(items, (size_t)(stack - items->stacks));
+        items->level_stacks[lost_index / level_size]--;
+        stack_gone(items, lost_index);
+        note_change(items, lost_index);
         return true;
     }
     stack->hit_points = (uint16_t)(stack->hit_points - lost);

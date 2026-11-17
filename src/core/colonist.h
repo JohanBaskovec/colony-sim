@@ -206,6 +206,11 @@
  * otherwise all search again on the same tick when something changes. */
 #define COLONIST_SEARCH_STAGGER_TICKS 8
 #define COLONIST_WANDER_RADIUS 6
+/* A settler ordered to a spot stays this long once there before it takes up
+ * its life again (5 s): long enough to look around and give the next order. */
+#define COLONIST_MOVE_HOLD_TICKS 300
+/* No limit to how far an order may send a settler. */
+#define COLONIST_MOVE_MAX_COST 1.0e9f
 #define COLONIST_IDLE_MIN_TICKS 120
 #define COLONIST_IDLE_MAX_TICKS 360
 /* Apprentices add this share of a worker to their master's work. */
@@ -236,6 +241,9 @@ typedef enum ColonistTask {
     TASK_LIGHT,  /* Lighting a hearth: embers from a burning fire, or friction. */
     TASK_STORY,  /* Telling about a knowledge beside a burning hearth. */
     TASK_LISTEN, /* Sitting near a storyteller (Colonist.mentor) and listening. */
+    /* Walking where the player ordered (`target`), then standing there a while
+     * (COLONIST_MOVE_HOLD_TICKS). Only critical needs and breaks cut it short. */
+    TASK_MOVE,
     TASK_COUNT
 } ColonistTask;
 
@@ -313,6 +321,10 @@ typedef struct Colonist {
     /* Food tile (TASK_EAT), drinking spot (TASK_DRINK), designated tile
      * (TASK_WORK) or dirty tile (TASK_CLEAN). */
     TilePos target;
+    /* A move order given between two tiles: carried out on the next tile
+     * (colonist_order_move()). */
+    bool move_pending;
+    TilePos move_goal;
     int timer; /* Idle countdown (TASK_IDLE), eating or drinking progress. */
     /* TASK_WORK: the DesignationType being worked on, or the GatherJob when
      * `gathering` (in a gathering zone rather than on a designation). */
@@ -652,6 +664,15 @@ void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map);
 
 /* Gives up the current task, releasing any reservation (e.g. before removal). */
 void colonist_abandon_task(Colonist *colonist, const ColonistContext *context);
+
+/*
+ * Sends the colonist to a tile, whatever it was doing (a player's order): the
+ * job is given up, anything carried put down, a sleeper woken. Refused (false,
+ * nothing changed) when the tile cannot be stood on, or reached on what the
+ * colonist knows of the map (context->plan_map). Between two tiles the order
+ * waits for the next one.
+ */
+bool colonist_order_move(Colonist *colonist, const ColonistContext *context, TilePos goal);
 
 bool colonist_is_moving(const Colonist *colonist);
 
