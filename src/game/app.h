@@ -38,6 +38,9 @@ typedef enum AppTool {
     /* Move: a click sends the selected settlers there (game_order_move()); armed
      * by the Move action of the settlers' window. */
     APP_TOOL_MOVE,
+    /* Move items: a click sends the stack at `move_item_source` there
+     * (game_order_item_move()); armed by the Move action of its tile. */
+    APP_TOOL_MOVE_ITEM,
 } AppTool;
 
 /*
@@ -229,6 +232,7 @@ typedef struct App {
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
     bool debug_item_max;           /* ... a full stack of it, else one item. */
+    TilePos move_item_source;      /* For APP_TOOL_MOVE_ITEM: the stack to carry. */
     int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
     AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */
     AnimalSex debug_animal_sex;    /* ... and its sex. */

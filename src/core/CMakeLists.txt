@@ -20,6 +20,7 @@ add_library(colony_core STATIC
     hauling.c
     i18n.c
     item.c
+    item_move.c
     known.c
     knowledge.c
     log.c

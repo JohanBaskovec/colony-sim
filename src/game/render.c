@@ -868,6 +868,25 @@ void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Ca
     batch_flush(renderer);
 }
 
+void render_item_moves(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    const ItemMoves *moves = &game->item_moves;
+    for (int i = 0; i < moves->count; i++) {
+        TilePos from = moves->orders[i].source, to = moves->orders[i].destination;
+        if (from.z == camera->level && to.z == camera->level) {
+            float x0, y0, x1, y1;
+            camera_world_to_screen(camera, (float)from.x + 0.5f, (float)from.y + 0.5f, &x0, &y0);
+            camera_world_to_screen(camera, (float)to.x + 0.5f, (float)to.y + 0.5f, &x1, &y1);
+            SDL_SetRenderDrawColor(renderer, PATH_COLOR.r, PATH_COLOR.g, PATH_COLOR.b,
+                                   PATH_COLOR.a);
+            SDL_RenderLine(renderer, x0, y0, x1, y1);
+        }
+        if (to.z == camera->level) {
+            render_tile_outline(renderer, camera, to.x, to.y, ALLOW_COLOR);
+        }
+    }
+}
+
 void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */

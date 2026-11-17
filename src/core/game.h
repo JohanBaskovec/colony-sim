@@ -15,6 +15,7 @@
 #include "core/dirt.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
+#include "core/item_move.h"
 #include "core/known.h"
 #include "core/map.h"
 #include "core/notice.h"
@@ -117,6 +118,7 @@ typedef struct Game {
     Constructions constructions; /* Blueprints of beds, walls, doors... being built. */
     Beds beds;                   /* Who owns which bed. */
     Reservations reservations;   /* Who is busy with which job or food. */
+    ItemMoves item_moves;        /* Stacks the player ordered carried to a chosen tile. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */
     Pathfinder pathfinder;
@@ -451,6 +453,25 @@ bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bo
  * everywhere (game_set_forbidden() takes it one tile at a time). Returns how
  * many things changed. */
 int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool forbidden);
+
+/*
+ * Orders the stack of items on (x, y, z) carried to the tile (dx, dy, dz),
+ * which may be anywhere a settler can stand and has room (a stockpile or
+ * not): hauling settlers do it before their ordinary hauls (core/item_move.h).
+ * The stack is forbidden at once so that nobody else takes it, and so is
+ * what lands on the destination, until the player allows it. An order on a
+ * stack that already has one replaces it. Refused (false) when the source
+ * holds nothing or has not been seen, when the destination is unexplored, not
+ * standable, the same tile or has no room, or when there are too many orders.
+ */
+bool game_order_item_move(Game *game, int x, int y, int z, int dx, int dy, int dz);
+
+/* Takes the order on the stack at (x, y, z) back (what was forbidden stays so).
+ * Returns whether there was one. */
+bool game_cancel_item_move(Game *game, int x, int y, int z);
+
+/* Where the stack at (x, y, z) is ordered to go; false when it is not. */
+bool game_item_move_at(const Game *game, int x, int y, int z, TilePos *destination);
 
 /* ---- Zones --------------------------------------------------------------- */
 

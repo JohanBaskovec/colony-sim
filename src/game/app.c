@@ -1144,6 +1144,13 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         } else {
             app->tool = APP_TOOL_NONE; /* Nobody left to send. */
         }
+    } else if (app->tool == APP_TOOL_MOVE_ITEM) {
+        int x, y;
+        screen_to_tile(app, button->x, button->y, &x, &y);
+        TilePos from = app->move_item_source;
+        if (game_order_item_move(&app->game, from.x, from.y, from.z, x, y, z)) {
+            app->tool = APP_TOOL_NONE; /* Done: the stack is on its way. */
+        } /* Else the tool stays for another try (the card says what to do). */
     } else if (app->tool == APP_TOOL_DEBUG) {
         apply_debug_tool(app, button->x, button->y);
     } else if (app->tool == APP_TOOL_STOCKPILE) {
@@ -1311,6 +1318,7 @@ static void render_frame(App *app)
     }
     render_ramp_markers(app->renderer, game_view_map(&app->game), &app->camera);
     render_forbidden_markers(app->renderer, &app->game, &app->camera);
+    render_item_moves(app->renderer, &app->game, &app->camera);
     render_designations(app->renderer, &app->game, &app->camera);
     hud_draw_item_counts(app);
     render_daylight(app->renderer, &app->game, &app->camera);

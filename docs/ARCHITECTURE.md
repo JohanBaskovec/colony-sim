@@ -54,6 +54,7 @@ simulation:
 | `tool`       | Tool speed factors by kind of work (bare hands included) and grade, best carried tool, wear and breaking |
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, branches, twigs, grass, flint, cobbles: gather N, until N in the colony or N days of food, forever; full harvest only) and per group of resources (wood, food, stones: limits each of its resources), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
+| `item_move`  | Item moves ordered by the player: stack → chosen tile (`ItemMoves`, 64 orders), room at a destination, pruning |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
 | `hearth`     | The fire of an open hearth: fuel values, fuel wanted, burning, lighting rules, light around burning hearths, the hours of fireside stories |
@@ -712,7 +713,23 @@ limit, walking speed is multiplied by limit / load (at least
 `COLONIST_MIN_LOAD_SPEED`); it does not happen with today's items, but will
 with huge ones and equipment. If the destination stops
 accepting the items on the way (filter changed, zone removed), it looks for
-another storage tile, else drops its load. Any interruption (eating,
+another storage tile, else drops its load.
+
+**Item moves** (`core/item_move.h`): the player can order a stack carried to
+any tile a settler can stand on (`game_order_item_move()`, from the *Carry
+elsewhere* action of the stack's tile window). The order forbids the stack,
+so nobody else takes it. Haulers try these orders before the ordinary hauls
+(`try_forced_haul_job()`, which needs no stockpile; `Colonist.haul_forced`
+marks the job): the nearest unreserved source they can walk to, picked up
+whatever its forbidden flag, carried as much as the settler can at a time
+(several trips for a big stack, no gathering on the way), put down on the
+destination if it is empty or holds a matching stack with room (items_add()
+ignoring the destination's forbidden flag), which is forbidden at once so
+that no hauler takes it to storage; the player allows it when they want. An
+order that is taken back drops what the settler holds; one whose source is
+empty goes (`item_moves_prune()`, not while a settler is still delivering
+the last load). `ItemMoves.revision` is part of the haul search stamp. The
+orders are in `game_hash()` only when there are some. Any interruption (eating,
 sleeping...) goes through `begin_task()`, which drops carried items where the
 colonist stands, so items are never lost. Before searching, a scan of the
 item layer (rows outward from the hauler, tiles of its region only) checks

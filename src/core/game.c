@@ -173,6 +173,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .constructions = &game->constructions,
         .beds = &game->beds,
         .reservations = &game->reservations,
+        .item_moves = &game->item_moves,
         .pathfinder = &game->pathfinder,
         .regions = &game->regions,
         .stock = game->stock,
@@ -550,6 +551,7 @@ bool game_init(Game *game, const NewGameParams *params)
     }
     game->seed = params->world.seed;
     reservations_init(&game->reservations);
+    item_moves_init(&game->item_moves);
     game_clock_init(&game->clock);
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
     rng_seed(&game->wildlife_rng, params->world.seed, 0x77696c64ULL /* "wild" */);
@@ -890,6 +892,22 @@ static void update_items(Game *game)
     int hours = GAME_ITEM_UPDATE_INTERVAL / TICKS_PER_HOUR;
     items_advance(&game->items, begin, end, hours, tile_conditions, game);
     rot_nuts(game, begin, end, hours);
+}
+
+/* Whether a settler is carrying out the order and holds what it took. */
+static bool item_move_busy(const void *context, const ItemMove *order)
+{
+    const Game *game = context;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = &game->colonists[slot];
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) && colonist->task == TASK_HAUL &&
+            colonist->haul_forced && colonist->carried.count > 0 &&
+            colonist->target.x == order->source.x && colonist->target.y == order->source.y &&
+            colonist->target.z == order->source.z) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static void update_colonists(Game *game)
@@ -1495,6 +1513,7 @@ void game_tick(Game *game)
     beds_forget_missing(&game->beds, &game->map); /* Beds taken apart or fallen apart. */
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game_view_items(game)->totals, game_daily_food(game));
+    item_moves_prune(&game->item_moves, &game->items, item_move_busy, game); /* Emptied sources. */
     update_colonists(game);
     update_animals(game);
     if (game->vision_on) {
@@ -1548,6 +1567,9 @@ uint64_t game_hash(const Game *game)
     hash = constructions_hash(&game->constructions, hash);
     hash = beds_hash(&game->beds, hash);
     hash = reservations_hash(&game->reservations, hash);
+    if (game->item_moves.count > 0) { /* Hashes without orders stay as they were. */
+        hash = item_moves_hash(&game->item_moves, hash);
+    }
     hash = hash_fnv1a64(hash, &game->clock.tick, sizeof(game->clock.tick));
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
     hash = hash_fnv1a64(hash, game->teach, sizeof(game->teach));
@@ -1965,6 +1987,39 @@ int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, b
         }
     }
     return changed;
+}
+
+bool game_order_item_move(Game *game, int x, int y, int z, int dx, int dy, int dz)
+{
+    TilePos source = {(int16_t)x, (int16_t)y, (int16_t)z};
+    TilePos destination = {(int16_t)dx, (int16_t)dy, (int16_t)dz};
+    ItemStack stack = items_get(&game->items, x, y, z);
+    if (stack.type == ITEM_NONE || !game_tile_explored(game, x, y, z) ||
+        !game_tile_explored(game, dx, dy, dz) ||
+        !path_walker_can_stand(PATH_WALKER_SETTLER, game_view_map(game), dx, dy, dz) ||
+        item_move_room(&game->items, destination, stack) == 0) {
+        return false;
+    }
+    if (!item_moves_add(&game->item_moves, source, destination)) {
+        return false;
+    }
+    items_set_forbidden(&game->items, x, y, z, true);
+    return true;
+}
+
+bool game_cancel_item_move(Game *game, int x, int y, int z)
+{
+    return item_moves_remove(&game->item_moves, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z});
+}
+
+bool game_item_move_at(const Game *game, int x, int y, int z, TilePos *destination)
+{
+    int index = item_moves_find(&game->item_moves, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z});
+    if (index < 0) {
+        return false;
+    }
+    *destination = game->item_moves.orders[index].destination;
+    return true;
 }
 
 /* ---- Zones --------------------------------------------------------------- */

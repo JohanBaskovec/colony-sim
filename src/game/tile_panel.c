@@ -322,7 +322,20 @@ static void thing_actions(App *app, const ThingRows *rows)
             game_remove_blueprints_rect(game, x, y, x, y, z);
         }
         break;
-    case THING_ITEMS:
+    case THING_ITEMS: {
+        TilePos destination;
+        bool ordered = game_item_move_at(game, x, y, z, &destination);
+        if (inspector_order_action(app, slot++, RENDER_ICON_MOVE, tr("tile_panel.move_items"),
+                                   tr("tile_panel.move_items.description"), ordered, NULL)) {
+            if (ordered) {
+                game_cancel_item_move(game, x, y, z);
+            } else {
+                app->move_item_source = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
+                app_toggle_tool(app, APP_TOOL_MOVE_ITEM, 0);
+            }
+        }
+        break;
+    }
     case THING_COUNT: break;
     }
     if (rows->thing == THING_STRUCTURE || rows->thing == THING_ROOF || rows->thing == THING_SITE) {

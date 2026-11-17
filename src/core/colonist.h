@@ -62,6 +62,7 @@
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
 #include "core/hearth.h"
+#include "core/item_move.h"
 #include "core/knowledge.h"
 #include "core/map.h"
 #include "core/mood.h"
@@ -365,6 +366,10 @@ typedef struct Colonist {
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
      * for `haul_destination`. */
     bool haul_delivering;
+    /* TASK_HAUL: carrying out an item move ordered by the player (core/item_move.h)
+     * rather than hauling to a stockpile: `target` is the source,
+     * `haul_destination` the tile chosen. */
+    bool haul_forced;
     /* TASK_CRAFT: the station (index, and number to notice a
      * replacement in the same slot), the bill being worked through and its
      * recipe, the current step, and the stack being fetched (a tool when
@@ -468,6 +473,7 @@ typedef struct ColonistContext {
     Constructions *constructions;
     Beds *beds;
     Reservations *reservations;
+    ItemMoves *item_moves; /* Stacks the player ordered carried somewhere. */
     Pathfinder *pathfinder;
     /* Connectivity regions (may be out of date, never wrong: see core/region.h). */
     const Regions *regions;

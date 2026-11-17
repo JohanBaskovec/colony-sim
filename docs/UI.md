@@ -124,7 +124,7 @@ become tabs:
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size                          | Storage (filters)                                 | Build another, delete         |
 | Gathering zone      | Name, priority, size                          | Resources                                         | Build another, delete         |
-| Tile                | What lies there: structure, roof, site, items, plant, each with Forbid/Allow | —                          | Build another                 |
+| Tile                | What lies there: structure, roof, site, items, plant, each with Forbid/Allow | —                          | Build another; items: Carry elsewhere |
 | Wild animal         | What it is called (a hind, a stag) as the title; species, sex, activity, needs as bars (tooltips), herd | — | (later: hunt)                 |
 
 A wild animal is selected by a click on it, where the colony sees it (after

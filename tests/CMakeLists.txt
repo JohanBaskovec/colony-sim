@@ -23,6 +23,7 @@ set(COLONY_UNIT_TESTS
     test_hauling
     test_i18n
     test_item
+    test_item_move
     test_knowledge
     test_learning
     test_levels

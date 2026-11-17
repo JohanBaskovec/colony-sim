@@ -2308,6 +2308,150 @@ static void test_heading_follows_the_walk(void)
     game_shutdown(&game);
 }
 
+/* Ticks until `count` items lie on a tile (at most `max_ticks`). */
+static bool run_until_items(Game *game, int x, int y, int count, int max_ticks)
+{
+    for (int i = 0; i < max_ticks; i++) {
+        if (items_get(&game->items, x, y, 0).count >= count) {
+            return true;
+        }
+        game_tick(game);
+    }
+    return false;
+}
+
+/* The order forbids the stack, a settler carries it where the player chose
+ * (no stockpile there) and what lands is forbidden too, until allowed. */
+static void test_item_move_carries_the_stack_to_the_tile(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_COBBLE, 3));
+    CHECK(game_order_item_move(&game, 10, 10, 0, 30, 20, 0));
+    CHECK(items_forbidden(&game.items, 10, 10, 0));
+    TilePos destination;
+    CHECK(game_item_move_at(&game, 10, 10, 0, &destination));
+    CHECK_EQ_INT(destination.x, 30);
+    CHECK_EQ_INT(destination.y, 20);
+    REQUIRE(spawn_rested(&game, 12, 10) != NULL);
+    CHECK(run_until_items(&game, 30, 20, 3, 4000));
+    CHECK_EQ_INT(items_get(&game.items, 30, 20, 0).type, ITEM_COBBLE);
+    CHECK(items_forbidden(&game.items, 30, 20, 0));
+    CHECK_EQ_INT(items_get(&game.items, 10, 10, 0).type, ITEM_NONE);
+    run_ticks(&game, 2);
+    CHECK_EQ_INT(game.item_moves.count, 0); /* Done: the order went with the source. */
+    CHECK_EQ_INT(game.items.totals[ITEM_COBBLE], 3);
+    game_shutdown(&game);
+}
+
+/* What the destination cannot take, or cannot be stood on, is refused. */
+static void test_item_move_refuses_bad_orders(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_COBBLE, 3));
+    items_add(&game.items, 20, 20, 0, item_stack_pristine(ITEM_BRANCHES, 3));
+    map_set_terrain(&game.map, 25, 25, 0, TERRAIN_DEEP_WATER);
+    CHECK(!game_order_item_move(&game, 11, 10, 0, 30, 20, 0)); /* Nothing there. */
+    CHECK(!game_order_item_move(&game, 10, 10, 0, 10, 10, 0)); /* The same tile. */
+    CHECK(!game_order_item_move(&game, 10, 10, 0, 20, 20, 0)); /* Another kind lies there. */
+    CHECK(!game_order_item_move(&game, 10, 10, 0, 25, 25, 0)); /* Deep water. */
+    CHECK(!game_order_item_move(&game, 10, 10, 0, 99, 99, 0)); /* Off the map. */
+    CHECK(!items_forbidden(&game.items, 10, 10, 0));           /* Refused: nothing forbidden. */
+    CHECK_EQ_INT(game.item_moves.count, 0);
+    CHECK(game_order_item_move(&game, 10, 10, 0, 30, 20, 0));
+    CHECK(game_order_item_move(&game, 10, 10, 0, 31, 21, 0)); /* A new order replaces it. */
+    CHECK_EQ_INT(game.item_moves.count, 1);
+    TilePos destination;
+    CHECK(game_item_move_at(&game, 10, 10, 0, &destination));
+    CHECK_EQ_INT(destination.x, 31);
+    CHECK(game_cancel_item_move(&game, 10, 10, 0));
+    CHECK(!game_cancel_item_move(&game, 10, 10, 0));
+    game_shutdown(&game);
+}
+
+/* More than a settler carries: it makes several trips. */
+static void test_item_move_makes_several_trips(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 12, 10);
+    REQUIRE(colonist != NULL);
+    int capacity = colonist_carry_capacity(colonist, ITEM_COBBLE);
+    int count = capacity * 2 + 1;
+    REQUIRE(count <= item_stack_limit(ITEM_COBBLE));
+    items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_COBBLE, count));
+    CHECK(game_order_item_move(&game, 10, 10, 0, 28, 14, 0));
+    CHECK(run_until_items(&game, 28, 14, count, 20000));
+    CHECK_EQ_INT(items_get(&game.items, 10, 10, 0).type, ITEM_NONE);
+    CHECK(items_forbidden(&game.items, 28, 14, 0));
+    game_shutdown(&game);
+}
+
+/* Taking the order back while the settler carries the stack: it puts it down,
+ * nothing is lost, and the rest of the stack stays where it is. */
+static void test_item_move_cancelled_on_the_way(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 12, 10);
+    REQUIRE(colonist != NULL);
+    items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_COBBLE, 3));
+    CHECK(game_order_item_move(&game, 10, 10, 0, 40, 40, 0));
+    for (int i = 0; i < 2000 && colonist->carried.count == 0; i++) {
+        game_tick(&game);
+    }
+    REQUIRE(colonist->carried.count > 0);
+    CHECK_EQ_INT(colonist->task, TASK_HAUL);
+    CHECK(game_cancel_item_move(&game, 10, 10, 0));
+    run_ticks(&game, 5);
+    CHECK_EQ_INT(colonist->carried.count, 0);
+    CHECK(colonist->task != TASK_HAUL || !colonist->haul_forced);
+    CHECK_EQ_INT(game.items.totals[ITEM_COBBLE], 3);
+    CHECK_EQ_INT(items_get(&game.items, 40, 40, 0).type, ITEM_NONE); /* Never got there. */
+    game_shutdown(&game);
+}
+
+/* A stockpile does not take back what the player put down: it is forbidden. */
+static void test_item_move_leaves_the_stack_out_of_stockpiles(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 4, 4, 8, 8, 0) != STOCKPILE_NONE);
+    items_add(&game.items, 10, 20, 0, item_stack_pristine(ITEM_COBBLE, 3));
+    CHECK(game_order_item_move(&game, 10, 20, 0, 30, 20, 0));
+    REQUIRE(spawn_rested(&game, 12, 20) != NULL);
+    CHECK(run_until_items(&game, 30, 20, 3, 4000));
+    run_ticks(&game, 3000); /* Plenty of time to take it to the stockpile. */
+    CHECK_EQ_INT(items_get(&game.items, 30, 20, 0).count, 3);
+    CHECK_EQ_INT(items_get(&game.items, 5, 5, 0).type, ITEM_NONE);
+    /* Allowed again, it goes to storage like any other stack. */
+    CHECK(items_set_forbidden(&game.items, 30, 20, 0, false));
+    for (int i = 0; i < 6000 && items_get(&game.items, 30, 20, 0).type != ITEM_NONE; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(items_get(&game.items, 30, 20, 0).type, ITEM_NONE);
+    game_shutdown(&game);
+}
+
+/* Nobody who does no hauling carries it out. */
+static void test_item_move_waits_for_a_hauler(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 12, 10);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_COBBLE, 3));
+    CHECK(game_order_item_move(&game, 10, 10, 0, 30, 20, 0));
+    run_ticks(&game, 1500);
+    CHECK_EQ_INT(items_get(&game.items, 10, 10, 0).count, 3);
+    CHECK_EQ_INT(game.item_moves.count, 1);
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DEFAULT;
+    CHECK(run_until_items(&game, 30, 20, 3, 6000)); /* It looks again when it can. */
+    game_shutdown(&game);
+}
+
 /* An order puts what is in hand down, and wakes a sleeper. */
 static void test_move_order_interrupts_what_the_settler_does(void)
 {
@@ -2434,6 +2578,12 @@ int main(void)
     RUN_TEST(test_careful_plants_need_a_careful_gatherer);
     RUN_TEST(test_move_order_walks_holds_and_releases);
     RUN_TEST(test_heading_follows_the_walk);
+    RUN_TEST(test_item_move_carries_the_stack_to_the_tile);
+    RUN_TEST(test_item_move_refuses_bad_orders);
+    RUN_TEST(test_item_move_makes_several_trips);
+    RUN_TEST(test_item_move_cancelled_on_the_way);
+    RUN_TEST(test_item_move_leaves_the_stack_out_of_stockpiles);
+    RUN_TEST(test_item_move_waits_for_a_hauler);
     RUN_TEST(test_move_order_interrupts_what_the_settler_does);
     RUN_TEST(test_move_order_refuses_unreachable_tiles);
     RUN_TEST(test_move_order_spreads_a_group);

@@ -48,6 +48,10 @@ void render_ramp_markers(SDL_Renderer *renderer, const Map *map, const Camera *c
  * its trunk), structures (on their head tile), roofs, stations. */
 void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
+/* The item moves ordered: a line from each stack to the tile it goes to, which
+ * is outlined. */
+void render_item_moves(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+
 /* Rectangle of tiles being forbidden (red) or allowed (green) with the tool. */
 void render_forbid_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                         int y1, bool forbid);
