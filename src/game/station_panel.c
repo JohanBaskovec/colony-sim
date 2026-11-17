@@ -2,7 +2,7 @@
 
 #include "core/hearth.h"
 #include "core/i18n.h"
-#include "game/ui_layout.h"
+#include "game/inspector.h"
 
 #define GAP UI_LAYOUT_GAP
 #define INDENT UI_LAYOUT_INDENT
@@ -354,8 +354,8 @@ static void hearth_fuel_row(UiLayout *layout, const Workstation *station, Action
 
 /* The fire: fuel, burning or out, what the player wants of it, and which
  * knowledge is told at fireside stories (a colony setting, shown here). */
-static void hearth_rows(UiLayout *layout, const Game *game, const Workstation *station,
-                        Action *action)
+/* The hearth's state: fuel, fire. */
+static void hearth_status_rows(UiLayout *layout, const Game *game, const Workstation *station)
 {
     char text[TEXT_SIZE], fuel[32], capacity[32], number[16];
     kilograms_text(fuel, sizeof(fuel), station->fuel);
@@ -380,6 +380,12 @@ static void hearth_rows(UiLayout *layout, const Game *game, const Workstation *s
             ui_layout_label(layout, tr("station.hearth.rained_on"), 0.0f, true);
         }
     }
+}
+
+/* The hearth's settings: keep it burning, its fuels, what is taught by it. */
+static void hearth_settings_rows(UiLayout *layout, const Game *game, const Workstation *station,
+                                 Action *action)
+{
     if (checkbox_row(layout, 0.0f, tr("station.hearth.keep_burning"), station->keep_burning)) {
         *action = (Action){ACTION_TOGGLE_KEEP_BURNING, 0, 0};
     }
@@ -402,16 +408,22 @@ static void hearth_rows(UiLayout *layout, const Game *game, const Workstation *s
     }
 }
 
-static void built_rows(UiLayout *layout, const Game *game, const Workstation *station,
-                       Action *action)
+/* What is being made, if anything. */
+static void progress_row(UiLayout *layout, const Workstation *station)
 {
-    char text[TEXT_SIZE], number[16], percent[32];
+    char text[TEXT_SIZE], percent[32];
     const RecipeDef *current = recipe_def((RecipeType)station->work_recipe);
     if (current != NULL && station->work_input.count > 0) {
         percent_text(percent, sizeof(percent), station->work_progress / current->work);
         TR_FORMAT(text, sizeof(text), tr("station.in_progress"), tr(current->name_key), percent);
         ui_layout_label(layout, text, 0.0f, false);
     }
+}
+
+static void bills_rows_of(UiLayout *layout, const Game *game, const Workstation *station,
+                          Action *action)
+{
+    char text[TEXT_SIZE], number[16];
     ui_layout_label(layout, tr(station->bill_count > 0 ? "station.bills" : "station.no_bills"),
                     0.0f, station->bill_count == 0);
     for (int i = 0; i < station->bill_count; i++) {
@@ -467,35 +479,35 @@ typedef struct StationRows {
     Action action;
 } StationRows;
 
-static void station_rows(UiLayout *layout, void *userdata)
+/* The summary: whether the settlers leave it alone, its fire, what is being
+ * made, how many bills. */
+static void summary_rows(UiLayout *layout, void *userdata)
 {
     StationRows *rows = userdata;
-    const Game *game = rows->game;
     const Workstation *station = rows->station;
-    Action *action = &rows->action;
-    /* Forbid or allow it, delete it; whether the settlers leave it alone. */
-    const char *forbid = tr(station->forbidden ? "forbid.allow" : "forbid.forbid");
-    const char *remove = tr("station.delete");
-    const char *state = station->forbidden ? tr("tile_panel.left_alone") : "";
-    float forbid_width = ui_button_width(layout->ui, forbid);
-    float remove_width = ui_button_width(layout->ui, remove);
-    ui_layout_measure(layout,
-                      ui_text_width(layout->ui, state) + GAP + forbid_width + GAP + remove_width);
-    float right = layout->x + layout->width;
-    if (ui_layout_button(layout, right - remove_width - GAP - forbid_width, forbid)) {
-        *action = (Action){ACTION_TOGGLE_FORBIDDEN, 0, 0};
+    if (station->forbidden) {
+        ui_layout_label(layout, tr("tile_panel.left_alone"), 0.0f, true);
     }
-    if (ui_layout_button(layout, right - remove_width, remove)) {
-        *action = (Action){ACTION_DELETE_STATION, 0, 0};
-    }
-    if (layout->draw && station->forbidden) {
-        ui_label_dim(layout->ui, state, layout->x, layout->y + layout->text_offset);
-    }
-    layout->y += layout->row;
     if (hearth_is(station)) {
-        hearth_rows(layout, game, station, action);
+        hearth_status_rows(layout, rows->game, station);
     }
-    built_rows(layout, game, station, action);
+    progress_row(layout, station);
+    char text[TEXT_SIZE], number[16];
+    tr_integer(number, sizeof(number), station->bill_count);
+    TR_FORMAT(text, sizeof(text), tr_plural("station.bill_count", station->bill_count), number);
+    ui_layout_label(layout, text, 0.0f, station->bill_count == 0);
+}
+
+static void bills_rows(UiLayout *layout, void *userdata)
+{
+    StationRows *rows = userdata;
+    bills_rows_of(layout, rows->game, rows->station, &rows->action);
+}
+
+static void fire_rows(UiLayout *layout, void *userdata)
+{
+    StationRows *rows = userdata;
+    hearth_settings_rows(layout, rows->game, rows->station, &rows->action);
 }
 
 static void apply(App *app, int index, const Action *action)
@@ -583,10 +595,22 @@ void station_panel_draw(App *app)
     game_update_stock(&app->game); /* Up to date even while paused. */
     const char *title = tr(workstation_def((WorkstationType)station->type)->name_key);
     StationRows rows = {&app->game, station, {ACTION_NONE, -1, 0}};
-    bool open = true;
-    ui_layout_window(&app->ui, APP_WINDOW_STATION, title, UI_PLACE_BOTTOM_RIGHT, station_rows,
-                     &rows, &open);
-    if (rows.action.type != ACTION_NONE) {
+    bool open = inspector_box(app, INSPECT_STATION, title, summary_rows, &rows);
+    const char *tabs[2] = {tr("inspector.tab.bills"), tr("inspector.tab.fire")};
+    int tab = inspector_tabs(app, tabs, hearth_is(station) ? 2 : 1);
+    if (tab == 0) {
+        inspector_tab_panel(app, tabs[0], bills_rows, &rows);
+    } else if (tab == 1) {
+        inspector_tab_panel(app, tabs[1], fire_rows, &rows);
+    }
+    if (inspector_forbid_action(app, 0, station->forbidden)) {
+        rows.action = (Action){ACTION_TOGGLE_FORBIDDEN, 0, 0};
+    }
+    inspector_build_like_action(app, 1);
+    if (inspector_delete_action(app, 2, tr("station.delete.description"))) {
+        rows.action = (Action){ACTION_DELETE_STATION, 0, 0};
+    }
+    if (rows.action.type != ACTION_NONE && app->selected_station == index) {
         apply(app, index, &rows.action);
     }
     if (!open) {

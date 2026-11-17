@@ -2,7 +2,7 @@
 
 #include "core/i18n.h"
 #include "core/tree.h"
-#include "game/ui_layout.h"
+#include "game/inspector.h"
 
 #define TEXT_SIZE 128
 
@@ -103,9 +103,9 @@ void tile_panel_draw(App *app)
     tr_integer(a, sizeof(a), rows.x);
     tr_integer(b, sizeof(b), rows.y);
     TR_FORMAT(title, sizeof(title), tr("tile_panel.title"), a, b);
-    bool open = true;
-    ui_layout_window(&app->ui, APP_WINDOW_TILE, title, UI_PLACE_BOTTOM_RIGHT, tile_rows, &rows,
-                     &open);
+    bool open = inspector_box(app, INSPECT_TILE, title, tile_rows, &rows);
+    inspector_tabs(app, NULL, 0);
+    inspector_build_like_action(app, 0);
     if (rows.clicked >= 0) {
         ForbidTarget target = LISTED[rows.clicked];
         game_set_forbidden(&app->game, rows.x, rows.y, rows.z, target,

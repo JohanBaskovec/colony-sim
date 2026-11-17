@@ -82,15 +82,12 @@ typedef enum AppTool {
 /* Windows (game/ui.h ids). */
 typedef enum AppWindow {
     APP_WINDOW_NONE,
-    APP_WINDOW_COLONIST, /* Inspector of the selected colonist(s). */
-    APP_WINDOW_STATION,
-    APP_WINDOW_STOCKPILE,
-    APP_WINDOW_GATHER_ZONE,
-    APP_WINDOW_TILE,  /* What lies on the selected tile (game/tile_panel.h). */
-    APP_WINDOW_WORK,  /* Work priorities grid. */
-    APP_WINDOW_HELP,  /* Controls. */
-    APP_WINDOW_DEBUG, /* Debug menu (cheats). */
-    APP_WINDOW_ITEMS, /* Items menu (debug). */
+    APP_WINDOW_INSPECTOR,     /* Summary of the selection (game/inspector.h). */
+    APP_WINDOW_INSPECTOR_TAB, /* The inspector's open tab. */
+    APP_WINDOW_WORK,          /* Work priorities grid. */
+    APP_WINDOW_HELP,          /* Controls. */
+    APP_WINDOW_DEBUG,         /* Debug menu (cheats). */
+    APP_WINDOW_ITEMS,         /* Items menu (debug). */
     APP_WINDOW_GAME_MENU,
     APP_WINDOW_COUNT
 } AppWindow;
@@ -176,6 +173,11 @@ typedef struct App {
     AppTool build_hover_tool;
     int build_hover_type;
     bool show_game_menu; /* Game menu (game/game_menu.h): the game is paused meanwhile. */
+    /* Inspector (game/inspector.h): the kind of selection shown last frame
+     * (an InspectorKind), its open tab (-1: none) and how many tabs it has. */
+    int inspector_kind;
+    int inspector_tab;
+    int inspector_tab_count;
     /* Colonist bar (game/colonist_bar.h): the last click on an entry, to
      * tell a double click (centers the view on the colonist). */
     EntityId bar_last_click;
@@ -235,6 +237,14 @@ bool app_tool_active(const App *app, AppTool tool, int type);
 /* Selects a colonist (the other selections are dropped); `additive` adds it
  * to the colonists selected, or takes it out when it already is. */
 void app_select_colonist(App *app, EntityId id, bool additive);
+
+/* What building another of the selection takes (a zone, a workstation or
+ * its site, a structure): the tool and its type (see app_toggle_tool());
+ * false when there is nothing to build like it. */
+bool app_build_like_target(const App *app, AppTool *tool, int *type);
+
+/* Starts building another of what is selected (APP_KEY_BUILD_LIKE). */
+void app_build_like_selection(App *app);
 
 /* Centers the view on a colonist, on its level. */
 void app_focus_colonist(App *app, EntityId id);

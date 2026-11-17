@@ -7,6 +7,7 @@ add_executable(colony_sim
     game_menu.c
     gather_zone_panel.c
     hud.c
+    inspector.c
     items_panel.c
     layout.c
     localization.c

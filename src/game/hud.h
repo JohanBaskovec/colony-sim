@@ -12,6 +12,9 @@
 
 void hud_draw(App *app);
 
+/* The inspector of the selected colonist(s) (game/inspector.h). */
+void hud_inspect_colonists(App *app);
+
 /* Takes the notices the game raised since the last frame and ages those on
  * screen by `dt` real seconds. */
 void hud_update_notices(App *app, double dt);

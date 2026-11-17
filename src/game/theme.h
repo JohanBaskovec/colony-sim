@@ -56,6 +56,7 @@ typedef struct Theme {
     float bar_button_width; /* Buttons of the bottom bar (wider if a label needs it). */
     float icon_size;        /* Icon buttons of the build menu. */
     float card_width;       /* Build menu: the category column and the card above it. */
+    float inspector_width;  /* The inspector's box (and its tab panels, at least). */
 } Theme;
 
 /* The default palette at a scale (1: default size; 1.5: half as large again). */

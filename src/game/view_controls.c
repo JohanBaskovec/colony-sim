@@ -44,13 +44,6 @@ static void corner_layout(const App *app, CornerLayout *out)
                               out->row.y - theme->margin - height, width, height};
 }
 
-float view_controls_width(const App *app)
-{
-    CornerLayout layout;
-    corner_layout(app, &layout);
-    return app->ui.screen_width - SDL_min(layout.row.x, layout.column.x);
-}
-
 void view_controls_info_corner(const App *app, float *right, float *bottom)
 {
     CornerLayout layout;

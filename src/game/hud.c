@@ -3,6 +3,7 @@
 #include "core/i18n.h"
 #include "core/tree.h"
 #include "game/debug_panel.h"
+#include "game/inspector.h"
 #include "game/items_panel.h"
 #include "game/layout.h"
 #include "game/gather_zone_panel.h"
@@ -718,33 +719,91 @@ static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType 
     ui_tooltip(&app->ui, pointers, count);
 }
 
-/* Lines of the colonist inspector (its title is the colonist's name), or the
- * names of the colonists selected. */
-static void build_selection_panel(App *app, Panel *panel)
+/* Sections of the colonist inspector: its summary and its tabs. */
+typedef enum ColonistSection {
+    SECTION_SUMMARY,
+    SECTION_NEEDS,
+    SECTION_MOOD,
+    SECTION_KNOWLEDGE,
+    SECTION_GEAR,
+    SECTION_SOCIAL,
+    SECTION_COUNT
+} ColonistSection;
+
+static const char *const SECTION_KEYS[SECTION_COUNT] = {
+    [SECTION_SUMMARY] = NULL,
+    [SECTION_NEEDS] = N_("inspector.tab.needs"),
+    [SECTION_MOOD] = N_("inspector.tab.mood"),
+    [SECTION_KNOWLEDGE] = N_("inspector.tab.knowledge"),
+    [SECTION_GEAR] = N_("inspector.tab.gear"),
+    [SECTION_SOCIAL] = N_("inspector.tab.social"),
+};
+
+/* Age, what it does, its needs and mood at a glance. */
+static void add_summary_lines(App *app, Panel *panel, const Colonist *colonist)
 {
-    if (app->selected_count != 1) {
-        for (int i = 0; i < app->selected_count && panel->count < HUD_MAX_LINES; i++) {
-            const Colonist *colonist = game_colonist_const(&app->game, app->selected[i]);
-            if (colonist != NULL) {
-                panel_add_text(panel, colonist->name);
-            }
-        }
-        return;
-    }
-    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
-    if (colonist == NULL) {
-        return;
-    }
+    (void)app;
     char age[16];
     tr_integer(age, sizeof(age), colonist->age);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.age"), age);
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
+              tr(colonist_activity_key(colonist)));
+    for (int need = 0; need < NEED_COUNT; need++) {
+        add_need_line(panel, colonist, (NeedType)need);
+    }
+    char value[16];
+    tr_integer(value, sizeof(value), SDL_lroundf(colonist->mood.value));
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.mood"), value,
+              tr(mood_level_key(colonist->mood.value)));
+}
+
+/* Needs, wetness, the warmth of its sleep, its bed. */
+static void add_needs_lines(App *app, Panel *panel, const Colonist *colonist, EntityId id)
+{
+    for (int need = 0; need < NEED_COUNT; need++) {
+        add_need_line(panel, colonist, (NeedType)need);
+    }
+    float chill = COLONIST_WET_CHILL * colonist->wetness;
+    long long wet = (long long)SDL_lroundf(colonist->wetness * 100.0f);
+    if (wet > 0) {
+        char percent[16], degrees[32];
+        tr_integer(percent, sizeof(percent), wet);
+        temperature_text(degrees, sizeof(degrees), chill, 0);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.wet"), percent, degrees);
+    }
+    float sleep_celsius =
+        hearths_felt_temperature(&app->game.workstations, &app->game.map, &app->game.temperatures,
+                                 colonist->x, colonist->y, colonist->z) -
+        chill;
+    float sleep_factor = colonist_sleep_temperature_factor(sleep_celsius);
+    if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist) && sleep_factor < 1.0f) {
+        char celsius[32], factor[16];
+        temperature_text(celsius, sizeof(celsius), sleep_celsius, 0);
+        tr_decimal(factor, sizeof(factor), sleep_factor, 2);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+                  tr(sleep_celsius < COLONIST_COLD_SLEEP_BELOW ? "hud.colonist.cold_sleep"
+                                                               : "hud.colonist.hot_sleep"),
+                  celsius, factor);
+    }
+    TilePos bed;
+    if (beds_owned(&app->game.beds, (uint8_t)(id.index + 1), &bed)) {
+        StructureType type = map_structure(&app->game.map, bed.x, bed.y, bed.z);
+        TR_FORMAT(
+            panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.bed"),
+            tr(structure_def(type)->name_key),
+            tr(item_quality_name_key(map_structure_quality(&app->game.map, bed.x, bed.y, bed.z))));
+    } else {
+        panel_add_text(panel, tr("hud.colonist.no_bed"));
+    }
+}
+
+/* Strength, what it carries, its tools. */
+static void add_gear_lines(Panel *panel, const Colonist *colonist)
+{
     char strength[16], carry[32];
     tr_integer(strength, sizeof(strength), colonist->strength);
     format_weight(carry, sizeof(carry), colonist->max_carry_weight);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.strength"), strength, carry);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.activity"),
-              tr(colonist_activity_key(colonist)));
-    add_social_lines(app, panel, colonist, app->selected[0]);
     if (colonist->carried.count > 0) {
         char count[16], weight[32];
         tr_integer(count, sizeof(count), colonist->carried.count);
@@ -771,44 +830,12 @@ static void build_selection_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
                   tr_plural("hud.colonist.tools_broken", colonist->tools_broken), count);
     }
-    for (int need = 0; need < NEED_COUNT; need++) {
-        add_need_line(panel, colonist, (NeedType)need);
-    }
-    add_mood_lines(panel, colonist);
-    float chill = COLONIST_WET_CHILL * colonist->wetness;
-    long long wet = (long long)SDL_lroundf(colonist->wetness * 100.0f);
-    if (wet > 0) {
-        char percent[16], degrees[32];
-        tr_integer(percent, sizeof(percent), wet);
-        temperature_text(degrees, sizeof(degrees), chill, 0);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.wet"), percent, degrees);
-    }
-    float sleep_celsius =
-        hearths_felt_temperature(&app->game.workstations, &app->game.map, &app->game.temperatures,
-                                 colonist->x, colonist->y, colonist->z) -
-        chill;
-    float sleep_factor = colonist_sleep_temperature_factor(sleep_celsius);
-    if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist) && sleep_factor < 1.0f) {
-        char celsius[32], factor[16];
-        temperature_text(celsius, sizeof(celsius), sleep_celsius, 0);
-        tr_decimal(factor, sizeof(factor), sleep_factor, 2);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
-                  tr(sleep_celsius < COLONIST_COLD_SLEEP_BELOW ? "hud.colonist.cold_sleep"
-                                                               : "hud.colonist.hot_sleep"),
-                  celsius, factor);
-    }
-    TilePos bed;
-    if (beds_owned(&app->game.beds, (uint8_t)(app->selected[0].index + 1), &bed)) {
-        StructureType type = map_structure(&app->game.map, bed.x, bed.y, bed.z);
-        TR_FORMAT(
-            panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.bed"),
-            tr(structure_def(type)->name_key),
-            tr(item_quality_name_key(map_structure_quality(&app->game.map, bed.x, bed.y, bed.z))));
-    } else {
-        panel_add_text(panel, tr("hud.colonist.no_bed"));
-    }
-    /* Discovered knowledges the settler has started to learn: level with one
-     * decimal, the work speed once it is high enough to use, and a tooltip. */
+}
+
+/* Discovered knowledges the settler has started to learn: level with one
+ * decimal, the work speed once it is high enough to use, and a tooltip. */
+static void add_knowledge_lines(App *app, Panel *panel, const Colonist *colonist)
+{
     panel_add_text(panel, tr("hud.colonist.knowledge"));
     for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
         double value = colonist_knowledge_level(colonist, (KnowledgeType)knowledge);
@@ -835,6 +862,29 @@ static void build_selection_panel(App *app, Panel *panel)
             line, HUD_LINE_SIZE,
             tr(fading ? "hud.colonist.knowledge_level_fading" : "hud.colonist.knowledge_level"),
             name, level, speed);
+    }
+}
+
+/* The lines of one section of the colonist inspector. */
+static void build_colonist_section(App *app, Panel *panel, EntityId id, ColonistSection section)
+{
+    const Colonist *colonist = game_colonist_const(&app->game, id);
+    if (colonist == NULL) {
+        return;
+    }
+    switch (section) {
+    case SECTION_SUMMARY: add_summary_lines(app, panel, colonist); break;
+    case SECTION_NEEDS: add_needs_lines(app, panel, colonist, id); break;
+    case SECTION_MOOD: add_mood_lines(panel, colonist); break;
+    case SECTION_KNOWLEDGE: add_knowledge_lines(app, panel, colonist); break;
+    case SECTION_GEAR: add_gear_lines(panel, colonist); break;
+    case SECTION_SOCIAL:
+        add_social_lines(app, panel, colonist, id);
+        if (panel->count == 0) {
+            panel_add_text(panel, tr("inspector.social.none"));
+        }
+        break;
+    case SECTION_COUNT: break;
     }
 }
 
@@ -897,7 +947,7 @@ typedef struct ColonistRows {
     const Panel *panel;
 } ColonistRows;
 
-/* The inspector's lines; a knowledge line shows its tooltip under the mouse. */
+/* A section's lines; a knowledge line shows its tooltip under the mouse. */
 static void colonist_rows(UiLayout *layout, void *userdata)
 {
     const ColonistRows *rows = userdata;
@@ -912,24 +962,45 @@ static void colonist_rows(UiLayout *layout, void *userdata)
     }
 }
 
-static void colonist_window(App *app)
+void hud_inspect_colonists(App *app)
 {
-    Panel lines = {0};
-    build_selection_panel(app, &lines);
-    ColonistRows rows = {app, &lines};
+    Panel summary = {0};
     char title[HUD_LINE_SIZE];
     const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
-    if (app->selected_count == 1 && colonist != NULL) {
+    bool one = app->selected_count == 1 && colonist != NULL;
+    if (one) {
         SDL_strlcpy(title, colonist->name, sizeof(title));
+        build_colonist_section(app, &summary, app->selected[0], SECTION_SUMMARY);
     } else {
         char count[16];
         tr_integer(count, sizeof(count), app->selected_count);
         TR_FORMAT(title, sizeof(title), tr_plural("hud.selection.count", app->selected_count),
                   count);
+        for (int i = 0; i < app->selected_count && summary.count < HUD_MAX_LINES; i++) {
+            const Colonist *each = game_colonist_const(&app->game, app->selected[i]);
+            if (each != NULL) {
+                panel_add_text(&summary, each->name);
+            }
+        }
     }
-    bool open = true;
-    ui_layout_window(&app->ui, APP_WINDOW_COLONIST, title, UI_PLACE_BOTTOM_RIGHT, colonist_rows,
-                     &rows, &open);
+    ColonistRows rows = {app, &summary};
+    bool open =
+        inspector_box(app, one ? INSPECT_COLONIST : INSPECT_COLONISTS, title, colonist_rows, &rows);
+    if (one) {
+        const char *labels[SECTION_COUNT - 1];
+        for (int i = 1; i < SECTION_COUNT; i++) {
+            labels[i - 1] = tr(SECTION_KEYS[i]);
+        }
+        int tab = inspector_tabs(app, labels, SECTION_COUNT - 1);
+        if (tab >= 0) {
+            Panel section = {0};
+            build_colonist_section(app, &section, app->selected[0], (ColonistSection)(tab + 1));
+            ColonistRows section_rows = {app, &section};
+            inspector_tab_panel(app, labels[tab], colonist_rows, &section_rows);
+        }
+    } else {
+        inspector_tabs(app, NULL, 0);
+    }
     if (!open) {
         app->selected_count = 0;
     }
@@ -971,11 +1042,7 @@ static void help_window(App *app)
 static void draw_window(App *app, AppWindow window)
 {
     switch (window) {
-    case APP_WINDOW_COLONIST: colonist_window(app); break;
-    case APP_WINDOW_STATION: station_panel_draw(app); break;
-    case APP_WINDOW_STOCKPILE: stockpile_panel_draw(app); break;
-    case APP_WINDOW_GATHER_ZONE: gather_zone_panel_draw(app); break;
-    case APP_WINDOW_TILE: tile_panel_draw(app); break;
+    case APP_WINDOW_INSPECTOR: inspector_draw(app); break;
     case APP_WINDOW_WORK: work_panel_draw(app); break;
     case APP_WINDOW_HELP: help_window(app); break;
     case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
@@ -995,16 +1062,12 @@ static unsigned window_order(const App *app, AppWindow window)
 int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
 {
     int count = 0;
-    if (app->selected_station != WORKSTATION_NONE) {
-        out[count++] = APP_WINDOW_STATION;
-    } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
-        out[count++] = APP_WINDOW_GATHER_ZONE;
-    } else if (app->selected_stockpile != STOCKPILE_NONE) {
-        out[count++] = APP_WINDOW_STOCKPILE;
-    } else if (app->tile_selected) {
-        out[count++] = APP_WINDOW_TILE;
-    } else if (app->selected_count > 0) {
-        out[count++] = APP_WINDOW_COLONIST;
+    /* The inspector draws its open tab itself (APP_WINDOW_INSPECTOR_TAB). */
+    if (inspector_kind(app) != INSPECT_NONE) {
+        out[count++] = APP_WINDOW_INSPECTOR;
+        if (app->inspector_tab >= 0) {
+            out[count++] = APP_WINDOW_INSPECTOR_TAB;
+        }
     }
     if (app->show_work_panel) {
         out[count++] = APP_WINDOW_WORK;
@@ -1096,7 +1159,6 @@ void hud_draw(App *app)
     ScreenLayout layout;
     layout_screen(&app->ui, &layout);
     app->ui.reserved_bottom = layout.bottom_bar.h; /* Windows stay above the bar. */
-    app->ui.reserved_right = view_controls_width(app);
 
     /* Bottom right, left of the level slider: date and weather. */
     Panel status = {0};
@@ -1120,7 +1182,7 @@ void hud_draw(App *app)
 
     /* Bottom left: the tile inspector above the menus. */
     float menu_top = build_menu_top(app);
-    if (app->hover_valid) {
+    if (app->hover_valid && inspector_kind(app) == INSPECT_NONE) {
         Panel tile = {0};
         build_tile_panel(app, &tile);
         panel_size(app, &tile, &width, &height);

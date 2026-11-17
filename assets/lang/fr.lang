@@ -381,7 +381,6 @@ stockpile.allow_all = Tout
 stockpile.allow_none = Rien
 stockpile.quality = Qualité : de {0} à {1}
 stockpile.hit_points = Points de vie : de {0} à {1}
-stockpile.delete = Supprimer
 
 # Inspecteur de zone de récolte
 gather_zone.name = Zone de récolte {0}
@@ -425,7 +424,6 @@ gather_zone.ripe.all = S’applique à toutes les récoltes de la zone
 gather_zone.warning.none_left = Rien de cela à récolter dans cette zone pour l’instant
 gather_zone.available.one = {0} disponible
 gather_zone.available.other = {0} disponibles
-gather_zone.delete = Supprimer
 
 # Postes de travail
 workstation.crafting_spot = Coin d’artisanat
@@ -471,7 +469,6 @@ recipe.either = {0} ou {1}
 recipe.both = {0} et {1}
 
 # Inspecteur de poste de travail
-station.delete = Supprimer
 forbid.forbid = Interdire
 forbid.allow = Autoriser
 tile_panel.title = Case {0}, {1}
@@ -574,3 +571,25 @@ mood.level.upset = moral en berne
 mood.level.neutral = moral correct
 mood.level.content = bon moral
 mood.level.happy = excellent moral
+
+# Inspector
+inspector.tab.needs = Besoins
+inspector.tab.mood = Humeur
+inspector.tab.knowledge = Savoirs
+inspector.tab.gear = Équipement
+inspector.tab.social = Social
+inspector.tab.bills = Commandes
+inspector.tab.fire = Feu
+inspector.tab.storage = Stockage
+inspector.tab.resources = Ressources
+inspector.social.none = Personne avec qui parler ou de qui apprendre en ce moment
+inspector.forbid.description = Les colons le laisseront tranquille
+inspector.allow.description = Les colons pourront de nouveau s’en servir
+inspector.build_like = En construire un autre
+inspector.build_like.description = Choisit l’outil qui construit la même chose
+inspector.delete = Supprimer
+station.delete.description = Retire le poste de travail et ses commandes
+stockpile.delete.description = Retire la zone ; les objets restent où ils sont
+gather_zone.delete.description = Retire la zone et ses consignes
+station.bill_count.one = {0} commande
+station.bill_count.other = {0} commandes

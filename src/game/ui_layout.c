@@ -52,8 +52,9 @@ bool ui_layout_label_with_button(UiLayout *layout, const char *text, const char 
     return clicked;
 }
 
-void ui_layout_window(Ui *ui, int id, const char *title, UiPlacement placement, UiRowsFn rows,
-                      void *userdata, bool *open)
+/* ui_layout_window(), docked when `dock` is not NULL. */
+static void layout_window(Ui *ui, int id, const char *title, UiPlacement placement,
+                          const UiDock *dock, UiRowsFn rows, void *userdata, bool *open)
 {
     float row = ui_row_height(ui);
     float line = (float)text_line_height(ui->text);
@@ -61,11 +62,25 @@ void ui_layout_window(Ui *ui, int id, const char *title, UiPlacement placement, 
                        row - 2.0f};
     rows(&layout, userdata);
     float width = SDL_ceilf(layout.width);
-    SDL_FPoint origin = ui_window_begin(ui, id, title, width, layout.y, placement, open);
+    SDL_FPoint origin = dock != NULL
+                            ? ui_window_begin_docked(ui, id, title, width, layout.y, dock, open)
+                            : ui_window_begin(ui, id, title, width, layout.y, placement, open);
     layout.draw = true;
     layout.x = origin.x;
     layout.y = origin.y;
     layout.width = SDL_max(width, ui_window_content_width(ui));
     rows(&layout, userdata);
     ui_window_end(ui);
+}
+
+void ui_layout_window(Ui *ui, int id, const char *title, UiPlacement placement, UiRowsFn rows,
+                      void *userdata, bool *open)
+{
+    layout_window(ui, id, title, placement, NULL, rows, userdata, open);
+}
+
+void ui_layout_docked(Ui *ui, int id, const char *title, const UiDock *dock, UiRowsFn rows,
+                      void *userdata, bool *open)
+{
+    layout_window(ui, id, title, UI_PLACE_CENTER, dock, rows, userdata, open);
 }

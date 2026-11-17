@@ -1,0 +1,200 @@
+#include "game/inspector.h"
+
+#include "core/i18n.h"
+#include "game/colonist_bar.h"
+#include "game/layout.h"
+#include "game/render.h"
+#include "game/station_panel.h"
+#include "game/stockpile_panel.h"
+#include "game/gather_zone_panel.h"
+#include "game/tile_panel.h"
+#include "game/hud.h"
+
+#define BOX_MIN_ROWS 5
+
+InspectorKind inspector_kind(const App *app)
+{
+    if (app->build_menu_open) {
+        return INSPECT_NONE;
+    }
+    if (app->selected_station != WORKSTATION_NONE) {
+        return INSPECT_STATION;
+    }
+    if (app->selected_gather_zone != GATHER_ZONE_NONE) {
+        return INSPECT_GATHER_ZONE;
+    }
+    if (app->selected_stockpile != STOCKPILE_NONE) {
+        return INSPECT_STOCKPILE;
+    }
+    if (app->tile_selected) {
+        return INSPECT_TILE;
+    }
+    if (app->selected_count == 1) {
+        return INSPECT_COLONIST;
+    }
+    return app->selected_count > 1 ? INSPECT_COLONISTS : INSPECT_NONE;
+}
+
+/* How high the docked windows may reach: under the colonist bar. */
+static float dock_top(const App *app)
+{
+    return colonist_bar_bottom(app) + app->ui.theme.margin;
+}
+
+static float tab_row_height(const App *app)
+{
+    ScreenLayout layout;
+    layout_screen(&app->ui, &layout);
+    return layout.button_height + 2.0f * app->ui.theme.gap;
+}
+
+typedef struct BoxRows {
+    UiRowsFn rows;
+    void *userdata;
+} BoxRows;
+
+/* The summary, at least BOX_MIN_ROWS rows high: the box keeps its size. */
+static void box_rows(UiLayout *layout, void *userdata)
+{
+    const BoxRows *box = userdata;
+    float start = layout->y;
+    box->rows(layout, box->userdata);
+    layout->y = SDL_max(layout->y, start + (float)BOX_MIN_ROWS * layout->row);
+}
+
+bool inspector_box(App *app, InspectorKind kind, const char *title, UiRowsFn rows, void *userdata)
+{
+    if (app->inspector_kind != (int)kind) {
+        app->inspector_kind = (int)kind;
+        app->inspector_tab = -1;
+    }
+    app->inspector_tab_count = 0;
+    ScreenLayout layout;
+    layout_screen(&app->ui, &layout);
+    UiDock dock = {0.0f, layout.bar_top, dock_top(app) + tab_row_height(app),
+                   app->ui.theme.inspector_width};
+    BoxRows box = {rows, userdata};
+    bool open = true;
+    ui_layout_docked(&app->ui, APP_WINDOW_INSPECTOR, title, &dock, box_rows, &box, &open);
+    return open;
+}
+
+int inspector_tabs(App *app, const char *const *labels, int count)
+{
+    Ui *ui = &app->ui;
+    app->inspector_tab_count = count;
+    if (app->inspector_tab >= count) {
+        app->inspector_tab = -1;
+    }
+    if (count == 0) {
+        return -1;
+    }
+    SDL_FRect box = ui_window_rect(ui, APP_WINDOW_INSPECTOR);
+    float gap = ui->theme.gap, height = tab_row_height(app);
+    float width = gap;
+    for (int i = 0; i < count; i++) {
+        width += SDL_ceilf(ui_button_width(ui, labels[i])) + gap;
+    }
+    SDL_FRect row = {box.x, box.y - height, SDL_max(width, box.w), height};
+    ui_panel(ui, row);
+    float x = row.x + gap;
+    for (int i = 0; i < count; i++) {
+        SDL_FRect rect = {x, row.y + gap, SDL_ceilf(ui_button_width(ui, labels[i])),
+                          height - 2.0f * gap};
+        if (ui_toggle_button(ui, rect, labels[i], app->inspector_tab == i)) {
+            app->inspector_tab = app->inspector_tab == i ? -1 : i;
+        }
+        x += rect.w + gap;
+    }
+    return app->inspector_tab;
+}
+
+void inspector_tab_panel(App *app, const char *title, UiRowsFn rows, void *userdata)
+{
+    SDL_FRect box = ui_window_rect(&app->ui, APP_WINDOW_INSPECTOR);
+    UiDock dock = {box.x, box.y - tab_row_height(app), dock_top(app), box.w};
+    bool open = true;
+    ui_layout_docked(&app->ui, APP_WINDOW_INSPECTOR_TAB, title, &dock, rows, userdata, &open);
+    if (!open) {
+        app->inspector_tab = -1;
+    }
+}
+
+bool inspector_action(App *app, int slot, bool lit, SDL_FRect *icon, const char *const *lines,
+                      int count)
+{
+    Ui *ui = &app->ui;
+    SDL_FRect box = ui_window_rect(ui, APP_WINDOW_INSPECTOR);
+    float size = ui->theme.icon_size, gap = ui->theme.gap;
+    SDL_FRect rect = {box.x + box.w + gap + (float)slot * (size + 2.0f * gap) + gap,
+                      box.y + box.h - size - gap, size, size};
+    ui_panel(ui, (SDL_FRect){rect.x - gap, rect.y - gap, size + 2.0f * gap, size + 2.0f * gap});
+    bool clicked = ui_icon_button(ui, rect, lit);
+    float inset = SDL_roundf(size * 0.12f);
+    *icon =
+        (SDL_FRect){rect.x + inset, rect.y + inset, rect.w - 2.0f * inset, rect.h - 2.0f * inset};
+    if (ui_hovered(ui, rect)) {
+        ui_tooltip(ui, lines, count);
+    }
+    return clicked;
+}
+
+bool inspector_forbid_action(App *app, int slot, bool forbidden)
+{
+    const char *lines[2] = {
+        tr(forbidden ? "forbid.allow" : "forbid.forbid"),
+        tr(forbidden ? "inspector.allow.description" : "inspector.forbid.description")};
+    SDL_FRect icon;
+    bool clicked = inspector_action(app, slot, forbidden, &icon, lines, 2);
+    render_tool_icon(app->renderer, icon, forbidden ? RENDER_ICON_ALLOW : RENDER_ICON_FORBID);
+    return clicked;
+}
+
+bool inspector_build_like_action(App *app, int slot)
+{
+    AppTool tool;
+    int type;
+    if (!app_build_like_target(app, &tool, &type)) {
+        return false;
+    }
+    char shortcut[128];
+    TR_FORMAT(shortcut, sizeof(shortcut), tr("menu.shortcut"), app_key_name(APP_KEY_BUILD_LIKE));
+    const char *lines[3] = {tr("inspector.build_like"), tr("inspector.build_like.description"),
+                            shortcut};
+    SDL_FRect icon;
+    if (inspector_action(app, slot, false, &icon, lines, 3)) {
+        app_build_like_selection(app);
+    }
+    switch (tool) {
+    case APP_TOOL_BUILD: render_workstation_icon(app->renderer, icon, (WorkstationType)type); break;
+    case APP_TOOL_STRUCTURE: render_structure_icon(app->renderer, icon, (StructureType)type); break;
+    case APP_TOOL_STOCKPILE: render_tool_icon(app->renderer, icon, RENDER_ICON_STOCKPILE); break;
+    default: render_tool_icon(app->renderer, icon, RENDER_ICON_GATHER_ZONE); break;
+    }
+    return true;
+}
+
+bool inspector_delete_action(App *app, int slot, const char *description)
+{
+    const char *lines[2] = {tr("inspector.delete"), description};
+    SDL_FRect icon;
+    bool clicked = inspector_action(app, slot, false, &icon, lines, 2);
+    render_tool_icon(app->renderer, icon, RENDER_ICON_CANCEL);
+    return clicked;
+}
+
+void inspector_draw(App *app)
+{
+    switch (inspector_kind(app)) {
+    case INSPECT_COLONIST:
+    case INSPECT_COLONISTS: hud_inspect_colonists(app); break;
+    case INSPECT_STATION: station_panel_draw(app); break;
+    case INSPECT_STOCKPILE: stockpile_panel_draw(app); break;
+    case INSPECT_GATHER_ZONE: gather_zone_panel_draw(app); break;
+    case INSPECT_TILE: tile_panel_draw(app); break;
+    case INSPECT_NONE: break;
+    }
+    if (app->inspector_tab >= app->inspector_tab_count) {
+        app->inspector_tab = -1;
+    }
+}

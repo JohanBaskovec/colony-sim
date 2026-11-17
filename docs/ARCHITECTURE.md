@@ -103,10 +103,11 @@ simulation:
 | `colonist_bar` | Top center: portrait, name and current action per colonist; click selects, double click centers the view |
 | `view_controls` | Bottom right: temperature overlay, speeds, level slider (date and weather beside it) |
 | `game_menu`    | Game menu (Menu button or Escape): resume, controls, language, quit; pauses the game |
-| `stockpile_panel` | Inspector of the selected stockpile zone (priority, filters, delete) |
-| `gather_zone_panel` | Inspector of the selected gathering zone (priority; foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings) |
-| `station_panel` | Inspector of the selected workstation (forbid, bills, warnings) |
-| `tile_panel`   | Inspector of the selected tile: what lies there (structure, roof, items, plant) with a Forbid/Allow button each, and its construction site |
+| `inspector`    | Bottom left: summary box of the selection, tabs opening a panel above it, action buttons beside it; dispatches to the panels below (colonists: `hud`) |
+| `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (condition sliders, filters); build another, delete |
+| `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
+| `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills and (hearths) Fire tabs; forbid, build another, delete |
+| `tile_panel`   | Tile in the inspector: what lies there (structure, roof, items, plant) with a Forbid/Allow button each, and its construction site; build another |
 | `work_panel`   | Work priorities grid (colonists × work types)                           |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
 | `items_panel`  | Items menu (F5): every item with a 1× and a Max button, which arm the debug tool to drop it on the next clicked tile |
@@ -1615,7 +1616,16 @@ owner of its own (`UI_POPUP_OWNER`), so that it captures the clicks on it;
 the option picked is returned by the dropdown at the next frame, and a click
 anywhere else closes the list (on the map, it does nothing else).
 
-Windows (inspectors, work grid, controls help) keep their position, stacking
+The inspector (`game/inspector.h`) is made of docked windows
+(`ui_layout_docked()`): their bottom left corner is fixed (the box on the
+bottom bar, the open tab's panel on the tab row above the box), they grow
+with their content up to the colonist bar and scroll beyond, and they cannot
+be dragged. Each kind of selection draws its summary, its tabs and its
+actions through the inspector's functions; Escape closes the open tab
+first, then the selection. Selecting something on the map closes the build
+menu, which hides the inspector while it is open.
+
+Other windows (work grid, controls help, debug, game menu) keep their position, stacking
 order and scroll in `Ui` from one frame to the next. They are sized to their
 content: `ui_layout_window()` runs the rows once to measure them, then again
 to draw them. A window taller than the screen allows scrolls, with its

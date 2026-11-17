@@ -132,7 +132,7 @@ theme and migration plan); moods come after it.
 - [x] Bottom right: temperature overlay and speed buttons (drawn icons, tooltips with shortcuts), vertical level slider (drag, +/−, "level/levels" counted from 1, a tick at the ground level); date, season, temperature and weather right aligned beside it, "Paused" there too
 - [x] Colonist bar (portrait, name, current action; click selects, Shift adds, double click centers the view; shrinks, dropping the action then the name, then wraps onto rows: 64 colonists fit)
 - [ ] Alerts column above the date (core module first)
-- [ ] Inspector box with tabs and action buttons for every selection (colonist, workstation, zones, tile)
+- [x] Inspector box with tabs and action buttons for every selection: colonist (summary; Needs, Mood, Knowledge, Gear, Social), several colonists (their names), workstation (Bills, Fire), stockpile (Storage), gathering zone (Resources), tile; actions forbid/allow, build another, delete as icon buttons with tooltips; docked windows that scroll; the floating inspectors are gone
 - [ ] Work grid as a main window; messages under the colonist bar; debug readout top right
 - [ ] Resources list (top left, folding groups)
 - [ ] Settings: UI scale (font included), remembered between sessions; colorblind palette

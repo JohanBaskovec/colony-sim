@@ -231,10 +231,6 @@ static UiWindow *window_slot(Ui *ui, int id)
 static void place(const Ui *ui, UiWindow *window, UiPlacement placement)
 {
     switch (placement) {
-    case UI_PLACE_BOTTOM_RIGHT:
-        window->x = ui->screen_width - ui->reserved_right - window->w - ui->theme.margin;
-        window->y = ui->screen_height - ui->reserved_bottom - window->h - ui->theme.margin;
-        break;
     case UI_PLACE_TOP_CENTER:
         window->x = SDL_floorf((ui->screen_width - window->w) * 0.5f);
         window->y = SDL_roundf(72.0f * ui->theme.scale); /* Below the top panels. */
@@ -274,8 +270,12 @@ static void handle_scroll_bar(Ui *ui, UiWindow *window)
                     track.w, thumb_height};
 }
 
-SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_width,
-                           float content_height, UiPlacement placement, bool *open)
+/* A window placed by the player (dragged), or docked (`dock` not NULL: its
+ * bottom left corner fixed, as tall as fits between dock->top and
+ * dock->bottom, at least dock->width wide). */
+static SDL_FPoint window_begin(Ui *ui, int id, const char *title, float content_width,
+                               float content_height, UiPlacement placement, const UiDock *dock,
+                               bool *open)
 {
     UiWindow *window = window_slot(ui, id);
     ui->owner = id;
@@ -287,6 +287,9 @@ SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_widt
     float title_h = title_height(ui);
     float max_visible = ui->screen_height - ui->reserved_bottom - 2.0f * ui->theme.margin -
                         title_h - 2.0f * ui->theme.window_padding;
+    if (dock != NULL) {
+        max_visible = dock->bottom - dock->top - title_h - 2.0f * ui->theme.window_padding;
+    }
     window->visible_height = SDL_max(ui_row_height(ui), SDL_min(content_height, max_visible));
     window->max_scroll = SDL_max(0.0f, content_height - window->visible_height);
     float scrollbar =
@@ -296,7 +299,11 @@ SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_widt
     float width = SDL_max(content_width, title_width);
     window->w = SDL_ceilf(width + scrollbar + 2.0f * ui->theme.window_padding);
     window->h = SDL_ceilf(title_h + window->visible_height + 2.0f * ui->theme.window_padding);
-    if (window->x < 0.0f) {
+    if (dock != NULL) {
+        window->w = SDL_max(window->w, dock->width);
+        window->x = dock->x;
+        window->y = dock->bottom - window->h;
+    } else if (window->x < 0.0f) {
         place(ui, window, placement);
     }
     if (!window->was_drawn && !window->drawn) {
@@ -310,7 +317,7 @@ SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_widt
                        title_h - 4.0f};
     if (ui_take_click(ui, close) == SDL_BUTTON_LEFT && open != NULL) {
         *open = false;
-    } else if (ui_take_click(ui, title_bar) == SDL_BUTTON_LEFT) {
+    } else if (ui_take_click(ui, title_bar) == SDL_BUTTON_LEFT && dock == NULL) {
         ui->drag_window = id;
         ui->drag_dx = ui->click_x - window->x;
         ui->drag_dy = ui->click_y - window->y;
@@ -350,6 +357,29 @@ SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_widt
                      (int)SDL_ceilf(content.h)};
     SDL_SetRenderClipRect(ui->renderer, &clip);
     return (SDL_FPoint){content.x, content.y - SDL_floorf(window->scroll)};
+}
+
+SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_width,
+                           float content_height, UiPlacement placement, bool *open)
+{
+    return window_begin(ui, id, title, content_width, content_height, placement, NULL, open);
+}
+
+SDL_FPoint ui_window_begin_docked(Ui *ui, int id, const char *title, float content_width,
+                                  float content_height, const UiDock *dock, bool *open)
+{
+    return window_begin(ui, id, title, content_width, content_height, UI_PLACE_CENTER, dock, open);
+}
+
+SDL_FRect ui_window_rect(const Ui *ui, int id)
+{
+    for (int i = 0; i < UI_MAX_WINDOWS; i++) {
+        if (id != 0 && ui->windows[i].id == id) {
+            const UiWindow *w = &ui->windows[i];
+            return (SDL_FRect){w->x, w->y, w->w, w->h};
+        }
+    }
+    return (SDL_FRect){0.0f, 0.0f, 0.0f, 0.0f};
 }
 
 float ui_window_content_width(const Ui *ui)

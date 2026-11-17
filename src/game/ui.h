@@ -48,10 +48,16 @@ typedef enum UiCheck { UI_UNCHECKED, UI_PARTIAL, UI_CHECKED } UiCheck;
 
 /* Where a window first appears (the player may move it afterwards). */
 typedef enum UiPlacement {
-    UI_PLACE_BOTTOM_RIGHT, /* Inspectors. */
     UI_PLACE_TOP_CENTER,
     UI_PLACE_CENTER,
 } UiPlacement;
+
+/* Where a docked window goes: its bottom left corner at (x, bottom), as tall
+ * as its content up to `top` (it scrolls beyond), at least `width` wide. It
+ * cannot be dragged. */
+typedef struct UiDock {
+    float x, bottom, top, width;
+} UiDock;
 
 typedef struct UiArea {
     SDL_FRect rect;
@@ -79,7 +85,6 @@ typedef struct Ui {
     float screen_width;
     float screen_height;
     float reserved_bottom; /* Kept free of windows at the bottom (the bottom bar). */
-    float reserved_right;  /* Left free by windows placed bottom right (view controls). */
     float mouse_x;
     float mouse_y;
     bool mouse_down;   /* Left button held. */
@@ -156,6 +161,13 @@ void ui_panel_colored(Ui *ui, SDL_FRect rect, ThemeColor color);
 SDL_FPoint ui_window_begin(Ui *ui, int id, const char *title, float content_width,
                            float content_height, UiPlacement placement, bool *open);
 void ui_window_end(Ui *ui);
+
+/* ui_window_begin() for a docked window. */
+SDL_FPoint ui_window_begin_docked(Ui *ui, int id, const char *title, float content_width,
+                                  float content_height, const UiDock *dock, bool *open);
+
+/* Frame of a window as last drawn (empty if it never was). */
+SDL_FRect ui_window_rect(const Ui *ui, int id);
 
 /* Width of the content area of the window being drawn (at least the width
  * asked for: the title may make the window wider). */

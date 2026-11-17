@@ -103,12 +103,12 @@ become tabs:
 
 | Selection           | Summary                                       | Tabs (now; later)                                 | Actions                       |
 |---------------------|-----------------------------------------------|---------------------------------------------------|-------------------------------|
-| One colonist        | Name, age, current action, needs at a glance | Needs, Mood, Skills, Gear, Social, Log; Health   | (later: draft, attack)        |
+| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Mood, Knowledge, Gear, Social; Log, Health | (later: draft, attack)        |
 | Several colonists   | How many, their names                         | —                                                 | —                             |
-| Workstation         | Name, quality, state (fire, warnings)         | Bills; Fuel (hearth)                              | Forbid, build another         |
+| Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size                          | Storage (filters)                                 | Build another, delete         |
 | Gathering zone      | Name, priority, size                          | Resources                                         | Build another, delete         |
-| Tile                | What lies there: structure, roof, site, items, plant | —                                          | Forbid/allow each, build another |
+| Tile                | What lies there: structure, roof, site, items, plant, each with Forbid/Allow | —                          | Build another                 |
 
 When nothing is selected and no tool is in use, the box shows what lies
 under the mouse (the old tile readout).
@@ -179,7 +179,7 @@ Each step keeps the game playable and is checked on screen (Xvfb).
 4. [x] Bottom right: speeds, temperature overlay, level slider; date, season,
        temperature and weather; empty alerts column
 5. [x] Colonist bar
-6. [ ] Inspector box with empty tabs, then its content: colonist (summary, Needs, Mood,
+6. [x] Inspector box with empty tabs, then its content: colonist (summary, Needs, Mood,
        Skills, Gear, Social), workstation, stockpile, gathering zone, tile;
        the floating inspectors go
 7. [ ] Work grid as a main window above the bottom bar; messages (the debug readout is

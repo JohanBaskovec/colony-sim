@@ -104,6 +104,13 @@ static void cycle_build_tool(App *app)
 }
 
 /* Colonists, a station or a zone: one kind of selection at a time. */
+static bool has_selection(const App *app)
+{
+    return app->selected_count > 0 || app->selected_stockpile != STOCKPILE_NONE ||
+           app->selected_station != WORKSTATION_NONE ||
+           app->selected_gather_zone != GATHER_ZONE_NONE || app->tile_selected;
+}
+
 static void clear_selection(App *app)
 {
     app->selected_count = 0;
@@ -470,6 +477,7 @@ bool app_init(App *app, const CliOptions *options)
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
     app->selected_gather_zone = GATHER_ZONE_NONE;
+    app->inspector_tab = -1;
     app->running = true;
     return true;
 }
@@ -504,11 +512,15 @@ void app_shutdown(App *app)
 static void close_window(App *app, AppWindow window)
 {
     switch (window) {
-    case APP_WINDOW_COLONIST: app->selected_count = 0; break;
-    case APP_WINDOW_STATION: app->selected_station = WORKSTATION_NONE; break;
-    case APP_WINDOW_STOCKPILE: app->selected_stockpile = STOCKPILE_NONE; break;
-    case APP_WINDOW_GATHER_ZONE: app->selected_gather_zone = GATHER_ZONE_NONE; break;
-    case APP_WINDOW_TILE: app->tile_selected = false; break;
+    case APP_WINDOW_INSPECTOR:
+        /* Its open tab first. */
+        if (app->inspector_tab >= 0) {
+            app->inspector_tab = -1;
+        } else {
+            clear_selection(app);
+        }
+        break;
+    case APP_WINDOW_INSPECTOR_TAB: app->inspector_tab = -1; break;
     case APP_WINDOW_WORK: app->show_work_panel = false; break;
     case APP_WINDOW_HELP: app->show_help = false; break;
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
@@ -551,37 +563,58 @@ static void set_tool(App *app, AppTool tool, int type)
 /* Starts building another of what is selected: a zone of the same kind (a
  * new one: the selection is dropped, or drags would extend it), a
  * workstation or a structure of the same type. */
-static void build_like_selection(App *app)
+bool app_build_like_target(const App *app, AppTool *tool, int *type)
 {
+    if (app->selected_stockpile != STOCKPILE_NONE) {
+        *tool = APP_TOOL_STOCKPILE;
+        *type = APP_ZONE_ADD;
+        return true;
+    }
+    if (app->selected_gather_zone != GATHER_ZONE_NONE) {
+        *tool = APP_TOOL_GATHER;
+        *type = APP_ZONE_ADD;
+        return true;
+    }
     const Workstation *station =
         workstation_get_const(&app->game.workstations, app->selected_station);
-    StructureType structure = app->tile_selected
-                                  ? structure_type_at(app, app->selected_tile_x,
-                                                      app->selected_tile_y, app->selected_tile_z)
-                                  : STRUCTURE_NONE;
+    if (station != NULL) {
+        *tool = APP_TOOL_BUILD;
+        *type = (int)station->type;
+        return true;
+    }
+    if (!app->tile_selected) {
+        return false;
+    }
+    int x = app->selected_tile_x, y = app->selected_tile_y, z = app->selected_tile_z;
     /* A workstation's site: another of that workstation. */
-    const ConstructionSite *site =
-        app->tile_selected
-            ? site_at(app, app->selected_tile_x, app->selected_tile_y, app->selected_tile_z)
-            : NULL;
-    WorkstationType site_station =
-        site != NULL ? construction_workstation(site) : WORKSTATION_TYPE_COUNT;
-    if (app->selected_stockpile != STOCKPILE_NONE) {
-        clear_selection(app);
-        set_tool(app, APP_TOOL_STOCKPILE, APP_ZONE_ADD);
-    } else if (app->selected_gather_zone != GATHER_ZONE_NONE) {
-        clear_selection(app);
-        set_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD);
-    } else if (station != NULL || site_station != WORKSTATION_TYPE_COUNT) {
-        WorkstationType type = station != NULL ? (WorkstationType)station->type : site_station;
-        clear_selection(app);
-        set_tool(app, APP_TOOL_BUILD, (int)type);
-    } else if (structure != STRUCTURE_NONE) {
+    const ConstructionSite *site = site_at(app, x, y, z);
+    if (site != NULL && construction_workstation(site) != WORKSTATION_TYPE_COUNT) {
+        *tool = APP_TOOL_BUILD;
+        *type = (int)construction_workstation(site);
+        return true;
+    }
+    StructureType structure = structure_type_at(app, x, y, z);
+    if (structure != STRUCTURE_NONE) {
+        *tool = APP_TOOL_STRUCTURE;
+        *type = (int)structure;
+        return true;
+    }
+    return false;
+}
+
+void app_build_like_selection(App *app)
+{
+    AppTool tool;
+    int type;
+    if (!app_build_like_target(app, &tool, &type)) {
+        return;
+    }
+    if (tool == APP_TOOL_STRUCTURE) {
         app->structure_direction = structure_direction_at(
             app, app->selected_tile_x, app->selected_tile_y, app->selected_tile_z);
-        clear_selection(app);
-        set_tool(app, APP_TOOL_STRUCTURE, (int)structure);
     }
+    clear_selection(app);
+    set_tool(app, tool, type);
 }
 
 /* Shows another level (clamped to the map's). */
@@ -598,7 +631,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     /* Physical positions (scancodes): the same controls on any layout (app.h). */
     switch (key->scancode) {
     case APP_KEY_PAUSE: game_clock_toggle_pause(&app->game.clock); return;
-    case APP_KEY_BUILD_LIKE: build_like_selection(app); return;
+    case APP_KEY_BUILD_LIKE: app_build_like_selection(app); return;
     case SDL_SCANCODE_1:
     case SDL_SCANCODE_KP_1: game_clock_set_speed(&app->game.clock, GAME_SPEED_NORMAL); return;
     case SDL_SCANCODE_2:
@@ -739,6 +772,7 @@ void app_select_colonist(App *app, EntityId id, bool additive)
     } else {
         select_add(app, id);
     }
+    app->build_menu_open = false;
 }
 
 void app_focus_colonist(App *app, EntityId id)
@@ -926,10 +960,15 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         apply_stockpile_tool(app, button->x, button->y);
     } else if (app->tool == APP_TOOL_GATHER) {
         apply_gather_tool(app, button->x, button->y);
-    } else if (app->box_selecting) {
-        select_in_box(app, button->x, button->y, additive);
     } else {
-        select_at_point(app, button->x, button->y, additive);
+        if (app->box_selecting) {
+            select_in_box(app, button->x, button->y, additive);
+        } else {
+            select_at_point(app, button->x, button->y, additive);
+        }
+        if (has_selection(app)) {
+            app->build_menu_open = false; /* The inspector takes its place. */
+        }
     }
     app->left_button_down = false;
     app->box_selecting = false;

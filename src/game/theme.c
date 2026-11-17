@@ -42,4 +42,5 @@ void theme_init(Theme *theme, float scale)
     theme->bar_button_width = scaled(theme, 136.0f);
     theme->icon_size = scaled(theme, 56.0f);
     theme->card_width = scaled(theme, 240.0f);
+    theme->inspector_width = scaled(theme, 400.0f);
 }

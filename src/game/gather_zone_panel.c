@@ -1,7 +1,7 @@
 #include "game/gather_zone_panel.h"
 
 #include "core/i18n.h"
-#include "game/ui_layout.h"
+#include "game/inspector.h"
 
 #define GAP UI_LAYOUT_GAP
 #define INDENT UI_LAYOUT_INDENT
@@ -498,18 +498,24 @@ static void measure_columns(Ui *ui, const UiLayout *layout, const long *availabl
     columns->progress = columns->unit + columns->unit_width + GAP;
 }
 
-static void zone_rows(UiLayout *layout, void *userdata)
+/* Size and priority. */
+static void summary_rows(UiLayout *layout, void *userdata)
 {
     ZoneRows *rows = userdata;
-    Ui *ui = layout->ui;
     const GatherZone *zone = gather_zone_get(&rows->app->game.gather_zones, rows->index);
     char number[16], tiles[TEXT_SIZE];
     tr_integer(number, sizeof(number), zone->cell_count);
     TR_FORMAT(tiles, sizeof(tiles), tr_plural("gather_zone.tiles", zone->cell_count), number);
-    if (ui_layout_label_with_button(layout, tiles, tr("gather_zone.delete"))) {
-        rows->action = (Action){ACTION_DELETE, WHOLE_ZONE, 0};
-    }
+    ui_layout_label(layout, tiles, 0.0f, false);
     priority_row(layout, zone, &rows->action);
+}
+
+/* What to gather in it. */
+static void resources_rows(UiLayout *layout, void *userdata)
+{
+    ZoneRows *rows = userdata;
+    Ui *ui = layout->ui;
+    const GatherZone *zone = gather_zone_get(&rows->app->game.gather_zones, rows->index);
     ui_layout_label(layout, tr("gather_zone.hint"), 0.0f, true);
     ui_layout_label(layout, tr("gather_zone.hint_group"), 0.0f, true);
 
@@ -617,9 +623,18 @@ void gather_zone_panel_draw(App *app)
                      .daily_food = game_daily_food(&app->game),
                      .action = {ACTION_NONE, WHOLE_ZONE, 0}};
     gather_zone_available(&app->game.gather_zones, &app->game.map, index, rows.available);
-    bool open = true;
-    ui_layout_window(&app->ui, APP_WINDOW_GATHER_ZONE, title, UI_PLACE_BOTTOM_RIGHT, zone_rows,
-                     &rows, &open);
+    bool open = inspector_box(app, INSPECT_GATHER_ZONE, title, summary_rows, &rows);
+    const char *tabs[1] = {tr("inspector.tab.resources")};
+    if (inspector_tabs(app, tabs, 1) == 0) {
+        inspector_tab_panel(app, tabs[0], resources_rows, &rows);
+    }
+    if (inspector_delete_action(app, 1, tr("gather_zone.delete.description"))) {
+        rows.action = (Action){ACTION_DELETE, WHOLE_ZONE, 0};
+    }
+    inspector_build_like_action(app, 0);
+    if (app->selected_gather_zone != index) {
+        return; /* Building another: the zone is no longer selected. */
+    }
     if (rows.action.type != ACTION_NONE) {
         apply(app, index, &rows.action);
     }

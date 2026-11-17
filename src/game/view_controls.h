@@ -13,9 +13,6 @@
 
 void view_controls_draw(App *app);
 
-/* Width taken at the right edge of the screen. */
-float view_controls_width(const App *app);
-
 /* Where the date and weather go: their bottom right corner. */
 void view_controls_info_corner(const App *app, float *right, float *bottom);
 

@@ -446,7 +446,6 @@ stockpile.allow_none = None
 stockpile.quality = Quality: {0} to {1}
 # {0} = lowest accepted hit points (e.g. 50%), {1} = highest
 stockpile.hit_points = Hit points: {0} to {1}
-stockpile.delete = Delete
 
 # Gathering zone inspector. {0} = zone number
 gather_zone.name = Gathering zone {0}
@@ -501,7 +500,6 @@ gather_zone.warning.none_left = Nothing of it to gather in this zone now
 # {0} = how many items of a resource the zone holds now (wood of the trees, stones in the ground...)
 gather_zone.available.one = {0} available
 gather_zone.available.other = {0} available
-gather_zone.delete = Delete
 
 # Workstations
 workstation.crafting_spot = Crafting spot
@@ -553,7 +551,6 @@ recipe.either = {0} or {1}
 recipe.both = {0} and {1}
 
 # Workstation inspector
-station.delete = Delete
 forbid.forbid = Forbid
 forbid.allow = Allow
 tile_panel.title = Tile {0}, {1}
@@ -677,3 +674,25 @@ mood.level.upset = upset
 mood.level.neutral = neutral
 mood.level.content = content
 mood.level.happy = happy
+
+# Inspector
+inspector.tab.needs = Needs
+inspector.tab.mood = Mood
+inspector.tab.knowledge = Knowledge
+inspector.tab.gear = Gear
+inspector.tab.social = Social
+inspector.tab.bills = Bills
+inspector.tab.fire = Fire
+inspector.tab.storage = Storage
+inspector.tab.resources = Resources
+inspector.social.none = Nobody to talk to or learn from right now
+inspector.forbid.description = The settlers will leave it alone
+inspector.allow.description = The settlers may use it again
+inspector.build_like = Build another
+inspector.build_like.description = Picks the tool that builds the same thing
+inspector.delete = Delete
+station.delete.description = Removes the workstation and its bills
+stockpile.delete.description = Removes the zone; the items stay where they lie
+gather_zone.delete.description = Removes the zone and its orders
+station.bill_count.one = {0} bill
+station.bill_count.other = {0} bills

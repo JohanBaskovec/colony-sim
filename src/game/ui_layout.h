@@ -46,4 +46,8 @@ typedef void (*UiRowsFn)(UiLayout *layout, void *userdata);
 void ui_layout_window(Ui *ui, int id, const char *title, UiPlacement placement, UiRowsFn rows,
                       void *userdata, bool *open);
 
+/* ui_layout_window() for a docked window (game/ui.h). */
+void ui_layout_docked(Ui *ui, int id, const char *title, const UiDock *dock, UiRowsFn rows,
+                      void *userdata, bool *open);
+
 #endif /* COLONY_GAME_UI_LAYOUT_H */
