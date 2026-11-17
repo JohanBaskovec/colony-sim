@@ -112,7 +112,9 @@ A fixed-width box above the bottom bar, shown when something is selected:
   Every selectable thing has such a window, titled with its name:
   workstations, zones, and each thing on a tile (structure, roof, blueprint,
   items, plant or tree, grass), one at a time (a click again on the tile
-  goes to the next one).
+  goes to the next one). A click reaches everything seen on the tile: on the
+  level shown, then on the ground seen below it through open space (a zone or
+  a stack seen from a level higher), top first.
 
 The same box serves every kind of selection; the floating windows of today
 become tabs:

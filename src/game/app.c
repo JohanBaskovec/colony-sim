@@ -854,10 +854,51 @@ static void prune_selection(App *app)
     }
 }
 
-/* Click: select the colonist under the cursor, or else the workstation, the
- * tile (what lies on it), the stockpile zone or the gathering zone there; a
- * click on what is selected goes to the next one of these on the tile. Shift
- * adds colonists to / removes them from the selection. */
+/* What a click on a tile may select, and on which level. */
+typedef struct ClickPick {
+    ClickTarget target;
+    int z;
+} ClickPick;
+
+/* Most levels a click reaches: the level shown, the level seen there, and the
+ * open levels between (they only hold plants: foliage). */
+#define CLICK_PICK_MAX (CLICK_TARGET_COUNT * MAP_MAX_LEVELS)
+
+/* Whether a click on a tile reaches what lies on level z: on the level shown
+ * and the level seen there (map_view_level(): the ground under open space),
+ * and, for plants, the levels between (a tree's foliage over what is seen). */
+static bool click_reaches(ClickTarget target, int z, int shown, int seen)
+{
+    return z == shown || z == seen || (target == CLICK_PLANT && z > seen && z < shown);
+}
+
+/* Everything a click on (x, y) from the level shown may select, in the order
+ * repeated clicks go through it: level by level from the top, then in the
+ * order of ClickTarget. Returns how many. */
+static int click_picks(const App *app, int x, int y, ClickPick *out, int max)
+{
+    const int shown = app->camera.level;
+    int seen = map_view_level(game_view_map(&app->game), x, y, shown);
+    if (seen < 0 || seen > shown) {
+        seen = shown;
+    }
+    int count = 0;
+    for (int z = shown; z >= seen; z--) {
+        for (int target = 0; target < CLICK_TARGET_COUNT && count < max; target++) {
+            if (click_reaches((ClickTarget)target, z, shown, seen) &&
+                click_target_at(app, (ClickTarget)target, x, y, z)) {
+                out[count++] = (ClickPick){(ClickTarget)target, z};
+            }
+        }
+    }
+    return count;
+}
+
+/* Click: select the colonist or the animal under the cursor, or else what is
+ * seen on the tile: the workstation, a structure, an item, a plant, a
+ * stockpile zone or a gathering zone, on the level shown or on the ground seen
+ * below it; a click on what is selected goes to the next one of these on the
+ * tile. Shift adds colonists to / removes them from the selection. */
 static void select_at_point(App *app, float screen_x, float screen_y, bool additive)
 {
     const int z = app->camera.level; /* The level shown. */
@@ -870,7 +911,15 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
         id = game_colonist_at(&app->game, world_x, world_y + APP_PICK_BODY_OFFSET, z);
     }
     int x = (int)floorf(world_x), y = (int)floorf(world_y);
-    ClickTarget current = click_target_selected(app, x, y, z);
+    ClickPick picks[CLICK_PICK_MAX];
+    int pick_count = click_picks(app, x, y, picks, CLICK_PICK_MAX);
+    /* Where the selection stands among them (-1: not on this tile). */
+    int current = -1;
+    for (int i = 0; i < pick_count && current < 0; i++) {
+        if (click_target_selected(app, x, y, picks[i].z) == picks[i].target) {
+            current = i;
+        }
+    }
     /* A click on the selected animal goes on to what is under it. */
     EntityId was_animal = app->selected_animal;
     if (!additive) {
@@ -894,31 +943,27 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
             app->selected_animal = animal;
             return;
         }
-        int first = current == CLICK_TARGET_COUNT ? 0 : (int)current + 1;
-        for (int step = 0; step < CLICK_TARGET_COUNT; step++) {
-            ClickTarget target = (ClickTarget)((first + step) % CLICK_TARGET_COUNT);
-            if (!click_target_at(app, target, x, y, z)) {
-                continue;
-            }
-            switch (target) {
-            case CLICK_STATION:
-                select_station(app, workstation_at(&app->game.workstations, x, y, z));
-                break;
-            case CLICK_STRUCTURE:
-            case CLICK_ROOF:
-            case CLICK_SITE:
-            case CLICK_ITEMS:
-            case CLICK_PLANT:
-            case CLICK_GRASS: select_thing(app, click_thing(target), x, y, z); break;
-            case CLICK_STOCKPILE:
-                select_stockpile(app, stockpile_at(&app->game.stockpiles, x, y, z));
-                break;
-            case CLICK_GATHER_ZONE:
-                select_gather_zone(app, gather_zone_at(&app->game.gather_zones, x, y, z));
-                break;
-            case CLICK_TARGET_COUNT: break;
-            }
+        if (pick_count == 0) {
             return;
+        }
+        ClickPick pick = picks[(current + 1) % pick_count];
+        switch (pick.target) {
+        case CLICK_STATION:
+            select_station(app, workstation_at(&app->game.workstations, x, y, pick.z));
+            break;
+        case CLICK_STRUCTURE:
+        case CLICK_ROOF:
+        case CLICK_SITE:
+        case CLICK_ITEMS:
+        case CLICK_PLANT:
+        case CLICK_GRASS: select_thing(app, click_thing(pick.target), x, y, pick.z); break;
+        case CLICK_STOCKPILE:
+            select_stockpile(app, stockpile_at(&app->game.stockpiles, x, y, pick.z));
+            break;
+        case CLICK_GATHER_ZONE:
+            select_gather_zone(app, gather_zone_at(&app->game.gather_zones, x, y, pick.z));
+            break;
+        case CLICK_TARGET_COUNT: break;
         }
         return;
     }
