@@ -440,6 +440,31 @@ ToolUse gather_clear_tool_use(const Map *map, int x, int y, int z);
  * worker's `level`; `rng` may be NULL. */
 void gather_clear_plant(Map *map, Items *items, int x, int y, int z, double level, Rng *rng);
 
+/*
+ * Single plants, for the Harvest and Uproot orders (core/designation.h).
+ * The job that takes what the plant on a tile gives without uprooting it:
+ * picking its food (digging it up for roots, which grow again or are gone
+ * as for a zone), cutting grass. GATHER_JOB_NONE without a plant, for a tree
+ * (felled instead), or a plant that gives nothing.
+ */
+GatherJob gather_plant_harvest_job(const Map *map, int x, int y, int z);
+
+/* Whether the plant on a tile has something to harvest now (ripe food, grass
+ * grown enough to cut). */
+bool gather_plant_harvestable(const Map *map, int x, int y, int z);
+
+/* Takes what the plant gives (gather_plant_harvest_job()) and drops it on
+ * the tile with quality from the worker's `level`; `rng` may be NULL. False
+ * when there is nothing to harvest. */
+bool gather_harvest_plant(Map *map, Items *items, int x, int y, int z, double level, Rng *rng);
+
+/* Whether the plant on a tile can be uprooted: any plant but a tree. */
+bool gather_plant_uprootable(const Map *map, int x, int y, int z);
+
+/* Work to uproot the plant on a tile: harvesting what it bears, then pulling
+ * it up (gather_clear_plant() carries it out). */
+float gather_uproot_work(const Map *map, int x, int y, int z);
+
 uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash);
 
 #endif /* COLONY_CORE_GATHER_ZONE_H */

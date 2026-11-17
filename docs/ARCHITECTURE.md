@@ -414,6 +414,21 @@ and the wood are those of the gathering zones' felling (`tree_fell_work()`,
 falls as `tree_fell()` aims it, and a fall onto a structure is counted in
 `Designations.harmful_tree_falls` (a notice, as for zones).
 
+**Harvest and Uproot** (`DESIGNATION_HARVEST`, `DESIGNATION_UPROOT`,
+"Gathering" work): orders on a single plant, outside any zone. Harvest takes
+what the plant gives without felling it, with the zones' job for it
+(`gather_plant_harvest_job()`: picking its food, digging roots up, which grow
+again or are gone as in a zone, cutting grass); it is refused while the plant
+has nothing to take (`gather_plant_harvestable()`), and dropped when what it
+bore is gone before the work is done. Uproot pulls any plant but a tree up:
+what it bears is harvested first, then the plant goes (`gather_clear_plant()`,
+as when a building site is cleared); its work is the harvest's plus the
+clearing's (`gather_uproot_work()`). The plant decides the level and the tool
+(`designation_min_level_at()`, `designation_tool_use_at()`): a plant easily
+mistaken for a poisonous one needs `GATHER_CAREFUL_MIN_LEVEL`, roots the
+digging stick; work searches and the action menu check it on the tile
+(`colonist_can_do_at()`, `game_designation_available_at()`).
+
 **Support** (step 3b): a tile without rock whose next level up has a floor
 or rock right over it has a ceiling (`map_has_ceiling()`), held up by the
 roofs' rule: rock or a structure that blocks movement (a wall, a branch

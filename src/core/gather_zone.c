@@ -1343,6 +1343,77 @@ void gather_clear_plant(Map *map, Items *items, int x, int y, int z, double leve
     map_remove_plant(map, x, y, z);
 }
 
+GatherJob gather_plant_harvest_job(const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return GATHER_JOB_NONE;
+    }
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    if (plant->type == PLANT_NONE || plant_is_tree(plant->type)) {
+        return GATHER_JOB_NONE;
+    }
+    if (plant->type == PLANT_GRASS) {
+        return GATHER_JOB_CUT_GRASS;
+    }
+    GatherResource resource =
+        resource_of_item(plant_stock_item((PlantType)plant->type, PLANT_STOCK_FOOD));
+    if (resource == GATHER_RESOURCE_COUNT) {
+        return GATHER_JOB_NONE;
+    }
+    GatherJob job = RESOURCE_DEFS[resource].job;
+    return job == GATHER_JOB_HARVEST || job == GATHER_JOB_HARVEST_CAREFULLY ||
+                   job == GATHER_JOB_DIG || job == GATHER_JOB_DIG_CAREFULLY
+               ? job
+               : GATHER_JOB_NONE;
+}
+
+bool gather_plant_harvestable(const Map *map, int x, int y, int z)
+{
+    GatherJob job = gather_plant_harvest_job(map, x, y, z);
+    if (job == GATHER_JOB_NONE) {
+        return false;
+    }
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    return job == GATHER_JOB_CUT_GRASS ? plant->growth >= CUT_GRASS_MIN_GROWTH
+                                       : plant_has_food(plant);
+}
+
+bool gather_harvest_plant(Map *map, Items *items, int x, int y, int z, double level, Rng *rng)
+{
+    if (!gather_plant_harvestable(map, x, y, z)) {
+        return false;
+    }
+    int count;
+    ItemType item = complete(map, x, y, z, gather_plant_harvest_job(map, x, y, z), 0, rng, &count);
+    if (item != ITEM_NONE && count > 0 && items != NULL) {
+        items_drop(items, map, x, y, z, knowledge_product(item, count, level, rng));
+    }
+    return true;
+}
+
+bool gather_plant_uprootable(const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    uint8_t type = map->plants[map_index(map, x, y, z)].type;
+    return type != PLANT_NONE && !plant_is_tree(type);
+}
+
+float gather_uproot_work(const Map *map, int x, int y, int z)
+{
+    if (!gather_plant_uprootable(map, x, y, z)) {
+        return 0.0f;
+    }
+    float work = gather_clear_work(map, x, y, z);
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    GatherJob job = gather_plant_harvest_job(map, x, y, z);
+    if (job != GATHER_JOB_CUT_GRASS && plant_has_food(plant)) {
+        work += gather_job_work_needed(map, x, y, z, job); /* Its food first. */
+    }
+    return work > HARVEST_WORK ? work : HARVEST_WORK; /* Even what is left in the ground. */
+}
+
 uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)
 {
     size_t count = (size_t)zones->width * (size_t)zones->height * (size_t)zones->depth;

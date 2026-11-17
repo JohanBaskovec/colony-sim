@@ -93,7 +93,8 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
     [DESIGNATION_NONE] = {230, 70, 60, 255},         [DESIGNATION_MINE] = {250, 140, 60, 255},
     [DESIGNATION_DECONSTRUCT] = {240, 200, 70, 255}, [DESIGNATION_DIG] = {250, 140, 60, 255},
     [DESIGNATION_DIG_RAMP] = {250, 170, 90, 255},    [DESIGNATION_DIG_DOWN] = {250, 120, 70, 255},
-    [DESIGNATION_CHOP] = {240, 90, 80, 255},
+    [DESIGNATION_CHOP] = {240, 90, 80, 255},         [DESIGNATION_HARVEST] = {130, 210, 90, 255},
+    [DESIGNATION_UPROOT] = {220, 120, 200, 255},
 };
 /* Where a roof could rest, while planning roofs. */
 static const SDL_Color ROOF_SUPPORT_COLOR = {120, 220, 140, 60};
@@ -2007,6 +2008,54 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
                            area.h * 0.2f};
         fill(renderer, (SDL_Color){40, 28, 20, 255}, &notch);
         outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_CHOP]);
+        break;
+    }
+    case RENDER_ICON_HARVEST: { /* A bush bearing berries. */
+        SDL_FRect area = inset(&rect, 0.8f);
+        fill(renderer, ROCK_COLORS[ROCK_EARTH], &area);
+        SDL_FRect bush = {area.x + area.w * 0.12f, area.y + area.h * 0.18f, area.w * 0.76f,
+                          area.h * 0.66f};
+        fill(renderer, TREE_COLOR, &bush);
+        SDL_FRect leaves = inset(&bush, 0.7f);
+        fill(renderer, FRESH_GRASS_COLOR, &leaves);
+        static const float SPOTS[4][2] = {
+            {0.3f, 0.35f}, {0.6f, 0.3f}, {0.45f, 0.6f}, {0.7f, 0.62f}};
+        float size = SDL_max(2.0f, floorf(area.w * 0.14f));
+        for (int i = 0; i < 4; i++) {
+            SDL_FRect berry = {floorf(area.x + area.w * SPOTS[i][0]),
+                               floorf(area.y + area.h * SPOTS[i][1]), size, size};
+            fill(renderer, BERRY_COLOR, &berry);
+        }
+        outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_HARVEST]);
+        break;
+    }
+    case RENDER_ICON_UPROOT: { /* A plant pulled out of the ground, roots and all. */
+        SDL_FRect area = inset(&rect, 0.8f);
+        SDL_FRect ground = {area.x, area.y + area.h * 0.62f, area.w, area.h * 0.38f};
+        fill(renderer, ROCK_COLORS[ROCK_EARTH], &ground);
+        float cx = floorf(area.x + area.w * 0.42f);
+        float base = area.y + area.h * 0.5f;
+        SDL_SetRenderDrawColor(renderer, 230, 214, 180, 255); /* Roots. */
+        for (float d = -1.0f; d <= 1.0f; d += 1.0f) {
+            SDL_RenderLine(renderer, cx, base, cx + d * area.w * 0.16f, base + area.h * 0.28f);
+        }
+        SDL_FRect stem = {cx - 1.0f, area.y + area.h * 0.3f, 2.0f, area.h * 0.2f};
+        fill(renderer, TREE_COLOR, &stem);
+        SDL_FRect leaf = {cx - area.w * 0.16f, area.y + area.h * 0.12f, area.w * 0.32f,
+                          area.h * 0.2f};
+        fill(renderer, FRESH_GRASS_COLOR, &leaf);
+        /* An arrow up beside it. */
+        float ax = floorf(area.x + area.w * 0.8f);
+        SDL_SetRenderDrawColor(renderer, 236, 220, 190, 255);
+        for (float d = -1.0f; d <= 0.0f; d += 1.0f) {
+            SDL_RenderLine(renderer, ax + d, area.y + area.h * 0.2f, ax + d,
+                           area.y + area.h * 0.7f);
+        }
+        for (float d = 0.0f; d < area.w * 0.12f; d += 1.0f) {
+            SDL_RenderLine(renderer, ax - d, area.y + area.h * 0.2f + d, ax + d - 1.0f,
+                           area.y + area.h * 0.2f + d);
+        }
+        outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_UPROOT]);
         break;
     }
     case RENDER_ICON_DECONSTRUCT: {

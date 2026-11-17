@@ -1,4 +1,5 @@
 #include "core/designation.h"
+#include "core/gather_zone.h"
 #include "core/i18n.h"
 #include "core/util.h"
 
@@ -470,8 +471,63 @@ static void test_designated_tiles_box(void)
     free_world(&map, &d);
 }
 
+/* Harvest and Uproot: on plants only (not trees), carried out like a
+ * gatherer's work, uprooting harvesting what the plant bears first. */
+static void test_harvest_and_uproot_orders(void)
+{
+    Map map;
+    Designations d;
+    Items items;
+    REQUIRE(init_world(&map, &d));
+    REQUIRE(items_init(&items, 16, 16, 1));
+    int autumn = SEASON_DAY(SEASON_AUTUMN, 4);
+    Plant *bramble = &map.plants[map_index(&map, 8, 8, 0)];
+    *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
+    plant_settle(bramble, autumn);
+    Plant *other = &map.plants[map_index(&map, 9, 8, 0)];
+    *other = *bramble;
+    Plant *mushrooms = &map.plants[map_index(&map, 10, 8, 0)];
+    *mushrooms = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
+    plant_settle(mushrooms, autumn);
+    CHECK(!designation_can_apply(&map, 3, 3, 0, DESIGNATION_HARVEST)); /* A tree. */
+    CHECK(!designation_can_apply(&map, 3, 3, 0, DESIGNATION_UPROOT));
+    CHECK(!designation_can_apply(&map, 12, 12, 0, DESIGNATION_UPROOT)); /* Nothing. */
+    CHECK(designation_can_apply(&map, 8, 8, 0, DESIGNATION_HARVEST));
+    CHECK(designation_can_apply(&map, 8, 8, 0, DESIGNATION_UPROOT));
+    /* Gatherers' work; mushrooms need a careful gatherer. */
+    CHECK_EQ_INT(designation_def(DESIGNATION_HARVEST)->work_type, WORK_GATHERING);
+    CHECK_EQ_INT(designation_def(DESIGNATION_UPROOT)->knowledge, KNOWLEDGE_GATHERING);
+    CHECK_NEAR(designation_min_level_at(&map, 8, 8, 0, DESIGNATION_HARVEST),
+               KNOWLEDGE_MASTERY_LEVEL, 1e-6);
+    CHECK_NEAR(designation_min_level_at(&map, 10, 8, 0, DESIGNATION_UPROOT),
+               GATHER_CAREFUL_MIN_LEVEL, 1e-6);
+    CHECK_NEAR(designation_min_level_at(&map, 5, 5, 0, DESIGNATION_MINE),
+               designation_def(DESIGNATION_MINE)->min_level, 1e-6);
+    /* Harvest: the berries, the bramble stays. */
+    int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
+    REQUIRE(designation_set(&d, &map, 8, 8, 0, DESIGNATION_HARVEST));
+    CHECK(designation_work_needed(&d, &map, 8, 8, 0) > 0.0f);
+    CHECK(designation_add_work(&d, &map, &items, 8, 8, 0, 1e6f, 60.0, NULL));
+    CHECK_EQ_INT((int)items.totals[ITEM_BLACKBERRIES], berries);
+    CHECK_EQ_INT(bramble->type, PLANT_BRAMBLE);
+    CHECK_EQ_INT(designation_get(&d, 8, 8, 0), DESIGNATION_NONE);
+    CHECK(!designation_set(&d, &map, 8, 8, 0, DESIGNATION_HARVEST)); /* Nothing left. */
+    /* Uproot: the berries first, then the bramble goes. */
+    REQUIRE(designation_set(&d, &map, 9, 8, 0, DESIGNATION_UPROOT));
+    CHECK(designation_add_work(&d, &map, &items, 9, 8, 0, 1e6f, 60.0, NULL));
+    CHECK_EQ_INT((int)items.totals[ITEM_BLACKBERRIES], 2 * berries);
+    CHECK_EQ_INT(other->type, PLANT_NONE);
+    /* Forbidden plants are left alone. */
+    REQUIRE(designation_set(&d, &map, 10, 8, 0, DESIGNATION_UPROOT));
+    REQUIRE(map_set_forbidden(&map, 10, 8, 0, MAP_FORBID_PLANT, true));
+    CHECK(designation_forbidden(&d, &map, 10, 8, 0));
+    items_free(&items);
+    free_world(&map, &d);
+}
+
 int main(void)
 {
+    RUN_TEST(test_harvest_and_uproot_orders);
     RUN_TEST(test_init_rejects_invalid_sizes);
     RUN_TEST(test_orders_need_a_valid_target);
     RUN_TEST(test_rectangle_only_marks_valid_tiles);

@@ -60,10 +60,10 @@ bool inspector_build_like_action(App *app, int slot);
 
 /* An order on what is selected (fell it, take it apart...), shown with
  * `icon`, lit while it is `ordered` (a click then cancels it). Veiled while
- * not `available` (nobody knows how: the tooltip says so). True when
- * clicked and it may be given or cancelled. */
+ * it cannot be given, `unavailable` saying why in the tooltip (NULL: it can).
+ * True when clicked and it may be given or cancelled. */
 bool inspector_order_action(App *app, int slot, RenderIcon icon, const char *name,
-                            const char *description, bool ordered, bool available);
+                            const char *description, bool ordered, const char *unavailable);
 
 /* Delete what is selected: true when clicked. */
 bool inspector_delete_action(App *app, int slot, const char *description);

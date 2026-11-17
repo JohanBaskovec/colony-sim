@@ -49,6 +49,11 @@ typedef enum DesignationType {
     DESIGNATION_DIG_RAMP,    /* Cut a ramp into a bank of earth one level high. */
     DESIGNATION_DIG_DOWN,    /* Dig the ground and the earth under it out. */
     DESIGNATION_CHOP,        /* Fell a tree (core/tree.h), or cut a sapling. */
+    /* Take what a plant gives without uprooting it: its ripe food (roots dug
+     * up), grass cut (gather_plant_harvest_job()). */
+    DESIGNATION_HARVEST,
+    /* Pull a plant up (not a tree): what it bears is harvested first. */
+    DESIGNATION_UPROOT,
     DESIGNATION_COUNT
 } DesignationType;
 
@@ -95,6 +100,15 @@ bool designation_doable_at(DesignationType type, double level);
 /* Whether the order makes sense on this tile (a wall to mine, the foot of a
  * tree to fell...). */
 bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType type);
+
+/* The level the order needs on this tile, in its knowledge: the order's
+ * min_level, or more for a plant easily mistaken for a poisonous one
+ * (GATHER_CAREFUL_MIN_LEVEL) to harvest or uproot. */
+float designation_min_level_at(const Map *map, int x, int y, int z, DesignationType type);
+
+/* What a tool speeds up in the order on this tile (harvesting roots: the
+ * digging stick; cutting grass), TOOL_USE_NONE for nothing. */
+ToolUse designation_tool_use_at(const Map *map, int x, int y, int z, DesignationType type);
 
 /* The tile an order given on (x, y, z) goes on: the foot of the tree for a
  * tile of trunk (see tree_at()), the tile itself otherwise. */

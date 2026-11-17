@@ -199,6 +199,14 @@ bool colonist_can_do(const Colonist *colonist, DesignationType type)
            designation_doable_at(type, colonist_knowledge_level(colonist, def->knowledge));
 }
 
+bool colonist_can_do_at(const Colonist *colonist, const Map *map, int x, int y, int z,
+                        DesignationType type)
+{
+    return colonist_can_do(colonist, type) &&
+           colonist_knowledge_level(colonist, designation_def(type)->knowledge) >=
+               designation_min_level_at(map, x, y, z, type);
+}
+
 bool colonist_can_gather(const Colonist *colonist, GatherJob job)
 {
     const GatherJobDef *def = gather_job_def(job);
@@ -1247,7 +1255,7 @@ static bool is_open_job(const WorkSearch *search, int x, int y, int z)
         DesignationType type = designation_get(search->designations, x, y, z);
         if (type == DESIGNATION_NONE ||
             !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type)) ||
-            !colonist_can_do(search->worker, type) ||
+            !colonist_can_do_at(search->worker, search->map, x, y, z, type) ||
             designation_waits_for_support(search->designations, search->map, x, y, z) ||
             designation_forbidden(search->designations, search->map, x, y, z)) {
             return false;
@@ -1959,7 +1967,8 @@ static bool job_still_valid(const Colonist *colonist, const ColonistContext *con
     }
     const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
     return def != NULL && colonist->work_priorities[def->work_type] != WORK_PRIORITY_DISABLED &&
-           colonist_can_do(colonist, (DesignationType)colonist->work_type) &&
+           colonist_can_do_at(colonist, context->map, target.x, target.y, target.z,
+                              (DesignationType)colonist->work_type) &&
            designation_get(context->designations, target.x, target.y, target.z) ==
                colonist->work_type &&
            !designation_forbidden(context->designations, context->map, target.x, target.y,
@@ -2022,7 +2031,7 @@ static void work(Colonist *colonist, const ColonistContext *context)
         return;
     }
     KnowledgeType knowledge = designation_def(type)->knowledge;
-    ToolUse use = designation_def(type)->tool_use;
+    ToolUse use = designation_tool_use_at(context->map, target.x, target.y, target.z, type);
     float speed = colonist_work_speed(colonist, knowledge) * assistance(colonist, context);
     if (use != TOOL_USE_NONE) {
         speed *= work_with_tool(colonist, context, use);
@@ -2317,10 +2326,23 @@ static bool fetch_better_tool(Colonist *colonist, const ColonistContext *context
 
 /* The tool use of the current work job (gathering or order), and whether it
  * is worth a detour for a better tool (digging). */
-static ToolUse job_tool_use(const Colonist *colonist, bool *fetches)
+static ToolUse job_tool_use(const Colonist *colonist, const Map *map, bool *fetches)
 {
+    GatherJob job = GATHER_JOB_NONE;
     if (colonist->gathering) {
-        const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
+        job = (GatherJob)colonist->work_type;
+    } else if (colonist->work_type == DESIGNATION_HARVEST ||
+               colonist->work_type == DESIGNATION_UPROOT) {
+        /* A gatherer's work on a single plant: as a zone's. */
+        job = gather_plant_harvest_job(map, colonist->target.x, colonist->target.y,
+                                       colonist->target.z);
+        if (job == GATHER_JOB_NONE) {
+            *fetches = false;
+            return TOOL_USE_NONE;
+        }
+    }
+    if (job != GATHER_JOB_NONE) {
+        const GatherJobDef *def = gather_job_def(job);
         *fetches = def != NULL && def->fetches_tool;
         return def != NULL ? def->tool_use : TOOL_USE_NONE;
     }
@@ -2336,7 +2358,7 @@ static ToolUse job_tool_use(const Colonist *colonist, bool *fetches)
 static bool fetch_job_tool(Colonist *colonist, const ColonistContext *context)
 {
     bool fetches;
-    ToolUse use = job_tool_use(colonist, &fetches);
+    ToolUse use = job_tool_use(colonist, context->plan_map, &fetches);
     if (!fetches || context->no_tools) {
         return false;
     }
@@ -2362,7 +2384,7 @@ static bool fetch_job_tool(Colonist *colonist, const ColonistContext *context)
 static void take_job_tool(Colonist *colonist, const ColonistContext *context)
 {
     bool fetches;
-    ToolUse use = job_tool_use(colonist, &fetches);
+    ToolUse use = job_tool_use(colonist, context->plan_map, &fetches);
     ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
     ItemStack replaced;
     if (colonist->x == colonist->fetch.x && colonist->y == colonist->fetch.y &&

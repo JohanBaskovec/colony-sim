@@ -581,6 +581,11 @@ bool colonist_at_work(const Colonist *colonist);
 /* Whether the colonist knows enough to carry out this kind of order. */
 bool colonist_can_do(const Colonist *colonist, DesignationType type);
 
+/* The same for the order on a given tile: some need more there (a plant easily
+ * mistaken for a poisonous one, designation_min_level_at()). */
+bool colonist_can_do_at(const Colonist *colonist, const Map *map, int x, int y, int z,
+                        DesignationType type);
+
 /* Sets the attributes, and the character of the mood that follows from them
  * (outlook, temperament). */
 void colonist_set_attributes(Colonist *colonist, const Attributes *attributes);

@@ -1,5 +1,6 @@
 #include "core/designation.h"
 
+#include "core/gather_zone.h"
 #include "core/i18n.h"
 #include "core/tree.h"
 #include "core/util.h"
@@ -28,6 +29,14 @@ static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
     /* Felling needs an axe and the Woodcutting knowledge: neither exists yet. */
     [DESIGNATION_CHOP] = {"chop", N_("designation.chop"), N_("colonist.task.chop"),
                           WORK_WOODCUTTING, KNOWLEDGE_NONE, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_NONE},
+    /* Gatherers' work; the plant decides the level and the tool
+     * (designation_min_level_at(), designation_tool_use_at()). */
+    [DESIGNATION_HARVEST] = {"harvest", N_("designation.harvest"), N_("colonist.task.harvest"),
+                             WORK_GATHERING, KNOWLEDGE_GATHERING, KNOWLEDGE_MASTERY_LEVEL,
+                             TOOL_USE_NONE},
+    [DESIGNATION_UPROOT] = {"uproot", N_("designation.uproot"), N_("colonist.task.uproot"),
+                            WORK_GATHERING, KNOWLEDGE_GATHERING, KNOWLEDGE_MASTERY_LEVEL,
+                            TOOL_USE_NONE},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -142,8 +151,38 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
         return map_structure(map, x, y, z) != STRUCTURE_NONE ||
                map_roof(map, x, y, z) != STRUCTURE_NONE;
     case DESIGNATION_CHOP: return plant_is_tree(map->plants[map_index(map, x, y, z)].type);
+    case DESIGNATION_HARVEST: return gather_plant_harvestable(map, x, y, z);
+    case DESIGNATION_UPROOT: return gather_plant_uprootable(map, x, y, z);
     default: return false;
     }
+}
+
+float designation_min_level_at(const Map *map, int x, int y, int z, DesignationType type)
+{
+    const DesignationDef *def = designation_def(type);
+    if (def == NULL) {
+        return 0.0f;
+    }
+    if (type == DESIGNATION_HARVEST || type == DESIGNATION_UPROOT) {
+        const GatherJobDef *job = gather_job_def(gather_plant_harvest_job(map, x, y, z));
+        if (job != NULL && job->min_level > def->min_level) {
+            return job->min_level;
+        }
+    }
+    return def->min_level;
+}
+
+ToolUse designation_tool_use_at(const Map *map, int x, int y, int z, DesignationType type)
+{
+    const DesignationDef *def = designation_def(type);
+    if (def == NULL) {
+        return TOOL_USE_NONE;
+    }
+    if (type == DESIGNATION_HARVEST || type == DESIGNATION_UPROOT) {
+        const GatherJobDef *job = gather_job_def(gather_plant_harvest_job(map, x, y, z));
+        return job != NULL ? job->tool_use : TOOL_USE_NONE;
+    }
+    return def->tool_use;
 }
 
 void designation_target(const Map *map, int *x, int *y, int *z)
@@ -194,6 +233,8 @@ bool designation_forbidden(const Designations *designations, const Map *map, int
                    ? map_forbidden(map, x, y, z, MAP_FORBID_STRUCTURE)
                    : map_forbidden(map, x, y, z, MAP_FORBID_ROOF);
     case DESIGNATION_CHOP:
+    case DESIGNATION_HARVEST:
+    case DESIGNATION_UPROOT:
     case DESIGNATION_DIG_DOWN: return map_forbidden(map, x, y, z, MAP_FORBID_PLANT);
     case DESIGNATION_DIG_RAMP: return map_forbidden(map, x, y, z + 1, MAP_FORBID_PLANT);
     default: return false;
@@ -300,6 +341,9 @@ float designation_work_needed(const Designations *designations, const Map *map, 
                                               ? (StructureType)map->structure[index]
                                               : map_roof(map, x, y, z));
     case DESIGNATION_CHOP: return tree_fell_work(&map->plants[index]);
+    case DESIGNATION_HARVEST:
+        return gather_job_work_needed(map, x, y, z, gather_plant_harvest_job(map, x, y, z));
+    case DESIGNATION_UPROOT: return gather_uproot_work(map, x, y, z);
     default: return 0.0f;
     }
 }
@@ -437,7 +481,13 @@ bool designation_add_work(Designations *designations, Map *map, Items *items, in
     }
     int count;
     ItemType product = designation_yield(designations, map, x, y, z, &count);
-    if (type == DESIGNATION_CHOP) { /* Its wood falls with it. */
+    if (type == DESIGNATION_HARVEST) {
+        gather_harvest_plant(map, items, x, y, z, level, rng);
+        product = ITEM_NONE; /* Dropped there. */
+    } else if (type == DESIGNATION_UPROOT) {
+        gather_clear_plant(map, items, x, y, z, level, rng); /* What it bears first. */
+        product = ITEM_NONE;
+    } else if (type == DESIGNATION_CHOP) { /* Its wood falls with it. */
         ItemStack wood = items != NULL && product != ITEM_NONE
                              ? knowledge_product(product, count, level, rng)
                              : (ItemStack){0};

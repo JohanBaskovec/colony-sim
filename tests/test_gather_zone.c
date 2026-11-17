@@ -1189,8 +1189,63 @@ static void test_zone_tiles_box(void)
     free_world(&map, &zones, &items);
 }
 
+/* A single plant, for the Harvest and Uproot orders: what a harvest takes and
+ * from which plants, and uprooting harvests before the plant goes. */
+static void test_single_plant_harvest_and_uproot(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    int autumn = SEASON_DAY(SEASON_AUTUMN, 4);
+    Plant *bramble = put_plant(&map, 1, 1, PLANT_BRAMBLE, 1.0f);
+    Plant *cattail = put_plant(&map, 2, 1, PLANT_CATTAIL, 1.0f);
+    Plant *mushrooms = put_plant(&map, 3, 1, PLANT_MUSHROOMS, 1.0f);
+    Plant *grass = put_plant(&map, 4, 1, PLANT_GRASS, 1.0f);
+    put_plant(&map, 6, 6, PLANT_TREE, 1.0f);
+    plant_settle(bramble, autumn);
+    plant_settle(mushrooms, autumn);
+    /* Which job, on which plant. */
+    CHECK_EQ_INT(gather_plant_harvest_job(&map, 1, 1, 0), GATHER_JOB_HARVEST);
+    CHECK_EQ_INT(gather_plant_harvest_job(&map, 2, 1, 0), GATHER_JOB_DIG);
+    CHECK_EQ_INT(gather_plant_harvest_job(&map, 3, 1, 0), GATHER_JOB_HARVEST_CAREFULLY);
+    CHECK_EQ_INT(gather_plant_harvest_job(&map, 4, 1, 0), GATHER_JOB_CUT_GRASS);
+    CHECK_EQ_INT(gather_plant_harvest_job(&map, 6, 6, 0), GATHER_JOB_NONE); /* Felled instead. */
+    CHECK_EQ_INT(gather_plant_harvest_job(&map, 8, 8, 0), GATHER_JOB_NONE);
+    CHECK(gather_plant_uprootable(&map, 1, 1, 0));
+    CHECK(gather_plant_uprootable(&map, 4, 1, 0));
+    CHECK(!gather_plant_uprootable(&map, 6, 6, 0));
+    CHECK(!gather_plant_uprootable(&map, 8, 8, 0));
+    /* A harvest takes the food, the bramble stays and has nothing left. */
+    int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
+    REQUIRE(berries > 0);
+    CHECK(gather_plant_harvestable(&map, 1, 1, 0));
+    CHECK(gather_harvest_plant(&map, &items, 1, 1, 0, 60.0, NULL));
+    CHECK_EQ_INT((int)items.totals[ITEM_BLACKBERRIES], berries);
+    CHECK_EQ_INT(bramble->type, PLANT_BRAMBLE);
+    CHECK(!gather_plant_harvestable(&map, 1, 1, 0));
+    CHECK(!gather_harvest_plant(&map, &items, 1, 1, 0, 60.0, NULL));
+    /* Grass cut grows again. */
+    CHECK(gather_harvest_plant(&map, &items, 4, 1, 0, 60.0, NULL));
+    CHECK(items.totals[ITEM_FRESH_GRASS] > 0);
+    CHECK_EQ_INT(grass->type, PLANT_GRASS);
+    CHECK(!gather_plant_harvestable(&map, 4, 1, 0));
+    /* Uprooting the cattail: its rhizomes first, then it is gone. */
+    int rhizomes = plant_stock_available(cattail, PLANT_STOCK_FOOD);
+    REQUIRE(rhizomes > 0);
+    CHECK(gather_uproot_work(&map, 2, 1, 0) > gather_clear_work(&map, 2, 1, 0));
+    gather_clear_plant(&map, &items, 2, 1, 0, 60.0, NULL);
+    CHECK_EQ_INT((int)items.totals[ITEM_CATTAIL_RHIZOMES], rhizomes);
+    CHECK_EQ_INT(cattail->type, PLANT_NONE);
+    /* Even a bare plant takes some work to pull up. */
+    CHECK(gather_uproot_work(&map, 1, 1, 0) > 0.0f);
+    CHECK_NEAR(gather_uproot_work(&map, 6, 6, 0), 0.0f, 1e-6);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
+    RUN_TEST(test_single_plant_harvest_and_uproot);
     RUN_TEST(test_init_rejects_invalid_sizes);
     RUN_TEST(test_definitions);
     RUN_TEST(test_where_zones_and_stones_lie);

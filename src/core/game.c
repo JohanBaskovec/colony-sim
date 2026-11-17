@@ -1736,6 +1736,20 @@ bool game_designation_available(const Game *game, DesignationType type)
     return false;
 }
 
+bool game_designation_available_at(const Game *game, DesignationType type, int x, int y, int z)
+{
+    if (type == DESIGNATION_HARVEST || type == DESIGNATION_UPROOT) {
+        for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+            if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+                colonist_can_do_at(&game->colonists[slot], game_view_map(game), x, y, z, type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return game_designation_available(game, type);
+}
+
 bool game_gather_job_known(const Game *game, GatherJob job)
 {
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {

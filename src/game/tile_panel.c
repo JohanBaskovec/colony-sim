@@ -244,6 +244,13 @@ static void toggle_order(App *app, DesignationType type, TilePos tile)
                         ordered ? DESIGNATION_NONE : type);
 }
 
+/* Why an order cannot be given on a tile now (nobody knows how), NULL when
+ * it can. */
+static const char *unavailable(const Game *game, DesignationType type, int x, int y, int z)
+{
+    return game_designation_available_at(game, type, x, y, z) ? NULL : tr("hud.tool.unavailable");
+}
+
 /* The action menu, right of the box: forbid, the orders the thing takes,
  * build another. */
 static void thing_actions(App *app, const ThingRows *rows)
@@ -268,7 +275,7 @@ static void thing_actions(App *app, const ThingRows *rows)
                 app, slot++, RENDER_ICON_DECONSTRUCT, tr("tile_panel.deconstruct"),
                 tr(rows->thing == THING_ROOF ? "tile_panel.deconstruct_roof.description"
                                              : "tile_panel.deconstruct.description"),
-                ordered, game_designation_available(game, DESIGNATION_DECONSTRUCT))) {
+                ordered, unavailable(game, DESIGNATION_DECONSTRUCT, x, y, z))) {
             toggle_order(app, DESIGNATION_DECONSTRUCT, tile);
         }
         break;
@@ -278,15 +285,35 @@ static void thing_actions(App *app, const ThingRows *rows)
         TreeRef tree;
         bool is_tree;
         const Plant *plant = thing_plant(app, x, y, z, &foot, &tree, &is_tree);
-        if (plant == NULL || !plant_is_tree(plant->type)) {
+        if (plant == NULL) {
             break;
         }
-        bool ordered =
-            designation_get(&game->designations, foot.x, foot.y, foot.z) == DESIGNATION_CHOP;
-        if (inspector_order_action(app, slot++, RENDER_ICON_CHOP, tr("tile_panel.chop"),
-                                   tr("tile_panel.chop.description"), ordered,
-                                   game_designation_available(game, DESIGNATION_CHOP))) {
-            toggle_order(app, DESIGNATION_CHOP, foot);
+        DesignationType order = designation_get(&game->designations, foot.x, foot.y, foot.z);
+        if (plant_is_tree(plant->type)) {
+            if (inspector_order_action(app, slot++, RENDER_ICON_CHOP, tr("tile_panel.chop"),
+                                       tr("tile_panel.chop.description"), order == DESIGNATION_CHOP,
+                                       unavailable(game, DESIGNATION_CHOP, x, y, z))) {
+                toggle_order(app, DESIGNATION_CHOP, foot);
+            }
+            break;
+        }
+        const Map *map = game_view_map(game);
+        if (gather_plant_harvest_job(map, x, y, z) != GATHER_JOB_NONE) {
+            const char *reason = unavailable(game, DESIGNATION_HARVEST, x, y, z);
+            if (reason == NULL && !gather_plant_harvestable(map, x, y, z)) {
+                reason = tr("tile_panel.nothing_to_harvest");
+            }
+            if (inspector_order_action(app, slot++, RENDER_ICON_HARVEST, tr("designation.harvest"),
+                                       tr("tile_panel.harvest.description"),
+                                       order == DESIGNATION_HARVEST, reason)) {
+                toggle_order(app, DESIGNATION_HARVEST, foot);
+            }
+        }
+        if (gather_plant_uprootable(map, x, y, z) &&
+            inspector_order_action(app, slot++, RENDER_ICON_UPROOT, tr("designation.uproot"),
+                                   tr("tile_panel.uproot.description"), order == DESIGNATION_UPROOT,
+                                   unavailable(game, DESIGNATION_UPROOT, x, y, z))) {
+            toggle_order(app, DESIGNATION_UPROOT, foot);
         }
         break;
     }

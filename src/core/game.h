@@ -353,6 +353,10 @@ bool game_set_work_priority(Game *game, EntityId id, WorkType type, int priority
  * may only place orders someone can do. */
 bool game_designation_available(const Game *game, DesignationType type);
 
+/* The same for the order on a given tile, as the colony knows it: some need
+ * more there (colonist_can_do_at()). */
+bool game_designation_available_at(const Game *game, DesignationType type, int x, int y, int z);
+
 /* Whether some living colonist knows enough to do this gathering job. */
 bool game_gather_job_known(const Game *game, GatherJob job);
 

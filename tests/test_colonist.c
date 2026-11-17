@@ -2196,6 +2196,54 @@ static void test_translation_keys(void)
     CHECK(colonist_name_count() >= 32);
 }
 
+/* ---- Harvest and Uproot orders ------------------------------------------- */
+
+/* A settler harvests a plant on order (the bramble stays), and uproots one
+ * (its berries first, then it is gone). */
+static void test_harvest_and_uproot_orders_are_carried_out(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    REQUIRE(spawn_rested(&game, 10, 10) != NULL);
+    Plant *kept = add_bramble(&game.map, 16, 10);
+    add_bramble(&game.map, 16, 14);
+    REQUIRE(plant_has_food(kept));
+    CHECK_EQ_INT(game_designate_rect(&game, 16, 10, 16, 10, 0, DESIGNATION_HARVEST), 1);
+    CHECK_EQ_INT(game_designate_rect(&game, 16, 14, 16, 14, 0, DESIGNATION_UPROOT), 1);
+    for (int i = 0; i < 6000 && game.designations.count > 0; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(game.designations.count, 0);
+    kept = &game.map.plants[map_index(&game.map, 16, 10, 0)];
+    CHECK_EQ_INT(kept->type, PLANT_BRAMBLE);
+    CHECK(!plant_has_food(kept));
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 16, 14, 0)].type, PLANT_NONE);
+    const Colonist *colonist = game_colonist(&game, game_colonist_id_at(&game, 0));
+    long berries = game.items.totals[ITEM_BLACKBERRIES] +
+                   (colonist->carried.type == ITEM_BLACKBERRIES ? colonist->carried.count : 0);
+    CHECK(berries >= bramble_fruit()); /* Both brambles' (some may have been eaten). */
+    game_shutdown(&game);
+}
+
+/* A plant easily mistaken for a poisonous one: only a careful gatherer takes the order. */
+static void test_careful_plants_need_a_careful_gatherer(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    Plant *mushrooms = &game.map.plants[map_index(&game.map, 12, 10, 0)];
+    *mushrooms = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, KNOWLEDGE_MASTERY_LEVEL);
+    CHECK(colonist_can_do(colonist, DESIGNATION_UPROOT));
+    CHECK(!colonist_can_do_at(colonist, &game.map, 12, 10, 0, DESIGNATION_UPROOT));
+    CHECK(!game_designation_available_at(&game, DESIGNATION_UPROOT, 12, 10, 0));
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, GATHER_CAREFUL_MIN_LEVEL);
+    CHECK(colonist_can_do_at(colonist, &game.map, 12, 10, 0, DESIGNATION_UPROOT));
+    CHECK(game_designation_available_at(&game, DESIGNATION_UPROOT, 12, 10, 0));
+    game_shutdown(&game);
+}
+
 /* ---- Move orders --------------------------------------------------------- */
 
 /* Ticks until the colonist stands on (x, y) (at most `max_ticks`). */
@@ -2356,6 +2404,8 @@ static void test_move_order_between_tiles_waits_for_the_next(void)
 
 int main(void)
 {
+    RUN_TEST(test_harvest_and_uproot_orders_are_carried_out);
+    RUN_TEST(test_careful_plants_need_a_careful_gatherer);
     RUN_TEST(test_move_order_walks_holds_and_releases);
     RUN_TEST(test_move_order_interrupts_what_the_settler_does);
     RUN_TEST(test_move_order_refuses_unreachable_tiles);

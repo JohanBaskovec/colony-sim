@@ -179,17 +179,18 @@ bool inspector_build_like_action(App *app, int slot)
 }
 
 bool inspector_order_action(App *app, int slot, RenderIcon icon, const char *name,
-                            const char *description, bool ordered, bool available)
+                            const char *description, bool ordered, const char *unavailable)
 {
+    bool veiled = unavailable != NULL && !ordered;
     const char *lines[3] = {ordered ? tr("inspector.order.cancel") : name, description,
-                            tr("hud.tool.unavailable")};
+                            unavailable};
     SDL_FRect rect;
-    bool clicked = inspector_action(app, slot, ordered, &rect, lines, available || ordered ? 2 : 3);
+    bool clicked = inspector_action(app, slot, ordered, &rect, lines, veiled ? 3 : 2);
     render_tool_icon(app->renderer, rect, icon);
-    if (!available && !ordered) {
+    if (veiled) {
         ui_fill(&app->ui, rect, app->ui.theme.colors[THEME_DISABLED_VEIL]);
     }
-    return clicked && (available || ordered);
+    return clicked && !veiled;
 }
 
 bool inspector_delete_action(App *app, int slot, const char *description)
