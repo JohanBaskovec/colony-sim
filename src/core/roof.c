@@ -100,6 +100,13 @@ static int collapse_area(Map *map, Items *items, Designations *designations, int
             }
             if (map_roof(map, x, y, z + 1) != STRUCTURE_NONE) {
                 roof_falls(map, items, designations, x, y, z);
+                if (cave_ins != NULL) {
+                    if (cave_ins->roof_count < ROOF_CAVE_IN_MAX) {
+                        cave_ins->roofs[cave_ins->roof_count] =
+                            (TilePos){(int16_t)x, (int16_t)y, (int16_t)(z + 1)};
+                    }
+                    cave_ins->roof_count++;
+                }
                 fallen++;
             } else {
                 cave_in(map, items, designations, x, y, z, cave_ins);
@@ -117,6 +124,7 @@ int roofs_collapse(RoofWatch *watch, Map *map, Items *items, Designations *desig
     int fallen = 0;
     if (cave_ins != NULL) {
         cave_ins->count = 0;
+        cave_ins->roof_count = 0;
     }
     if (topology > 0 || build > 0) {
         bool everything = topology > MAP_TOPOLOGY_LOG_SIZE || build > MAP_BUILD_LOG_SIZE;

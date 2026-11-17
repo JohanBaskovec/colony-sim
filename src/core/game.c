@@ -926,13 +926,29 @@ bool game_set_vision(Game *game, bool on)
     if (!vision_init(&game->vision, &game->map)) {
         return false;
     }
+    vision_limit_casts(&game->vision, true);
     game->vision_on = true;
     return true;
 }
 
 /* Slices over which the tiles in view are copied into the known world again
  * (they change: plants grow, items are carried off). */
-#define KNOWN_SYNC_SLICES 12
+#define KNOWN_SYNC_SLICES 48
+
+/* Copies the tiles of a field of bits into the known world, a run of
+ * consecutive tiles at a time. */
+static void copy_known_bits(Game *game, size_t word, uint64_t bits)
+{
+    while (bits != 0) {
+        int start = lowest_bit64(bits);
+        uint64_t rest = ~(bits >> start);
+        int length = rest == 0 ? 64 - start : lowest_bit64(rest);
+        known_copy_run(&game->known, &game->map, &game->items, &game->dirt, &game->workstations,
+                       word * 64 + (size_t)start, (size_t)length);
+        uint64_t run = length == 64 ? ~(uint64_t)0 : (((uint64_t)1 << length) - 1) << start;
+        bits &= ~run;
+    }
+}
 
 /* Copies into the known world the tiles that came into view, went out of it
  * or were explored since the last call (a last time for those leaving, so
@@ -945,25 +961,25 @@ static void sync_known(Game *game)
         for (size_t word = 0; word < vision->words; word++) {
             uint64_t bits = vision->snapshot[word];
             vision->snapshot[word] = 0;
-            while (bits != 0) {
-                size_t index = word * 64 + (size_t)lowest_bit64(bits);
-                bits &= bits - 1;
-                known_copy_tile(&game->known, &game->map, &game->items, &game->dirt,
-                                &game->workstations, index);
-            }
+            copy_known_bits(game, word, bits);
         }
         vision->snapshot_pending = false;
+    }
+    /* What moves (items) is copied as soon as it changes where it is seen. */
+    Items *items = &game->items;
+    if (items->changed_first != SIZE_MAX) {
+        for (size_t word = items->changed_first; word <= items->changed_last; word++) {
+            uint64_t bits = items->changed[word];
+            items->changed[word] = 0;
+            copy_known_bits(game, word, bits & vision->seen_bits[word]);
+        }
+        items->changed_first = SIZE_MAX;
+        items->changed_last = 0;
     }
     size_t slice = (size_t)(game->clock.tick % KNOWN_SYNC_SLICES);
     for (size_t word = vision->words * slice / KNOWN_SYNC_SLICES;
          word < vision->words * (slice + 1) / KNOWN_SYNC_SLICES; word++) {
-        uint64_t bits = vision->seen_bits[word];
-        while (bits != 0) {
-            size_t index = word * 64 + (size_t)lowest_bit64(bits);
-            bits &= bits - 1;
-            known_copy_tile(&game->known, &game->map, &game->items, &game->dirt,
-                            &game->workstations, index);
-        }
+        copy_known_bits(game, word, vision->seen_bits[word]);
     }
 }
 
@@ -973,7 +989,10 @@ static void update_vision(Game *game)
 {
     vision_update_map(&game->vision, &game->map);
     _Static_assert(COLONIST_MAX <= VISION_MAX_VIEWERS, "a viewer for each settler");
-    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+    /* Starting from a different settler each tick, so that none always waits. */
+    uint32_t slots = game_colonist_slot_count(game);
+    for (uint32_t turn = 0; turn < slots; turn++) {
+        uint32_t slot = (turn + (uint32_t)game->clock.tick) % slots;
         const Colonist *colonist = &game->colonists[slot];
         if (entity_id_is_none(game_colonist_id_at(game, slot)) ||
             !pool_is_alive(&game->colonist_pool, game_colonist_id_at(game, slot))) {
@@ -1031,6 +1050,11 @@ void game_reveal_map(Game *game)
     if (game->vision_on) {
         vision_explore_all(&game->vision, &game->map);
     }
+}
+
+const Items *game_items_at(const Game *game, int x, int y, int z)
+{
+    return !game->fog_on || vision_seen(&game->vision, x, y, z) ? &game->items : &game->known.items;
 }
 
 bool game_tile_explored(const Game *game, int x, int y, int z)
@@ -1331,6 +1355,21 @@ static void clear_caved_in(Game *game, TilePos tile)
     gather_zones_remove_rect(&game->gather_zones, x, y, x, y, z);
 }
 
+/* Whether anyone sees one of the tiles of a collapse (always without the fog):
+ * the colony only hears of what happens to the map when someone sees it. */
+static bool collapse_seen(const Game *game, const TilePos *tiles, int count)
+{
+    if (!game->fog_on) {
+        return true;
+    }
+    for (int i = 0; i < count && i < ROOF_CAVE_IN_MAX; i++) {
+        if (vision_seen(&game->vision, tiles[i].x, tiles[i].y, tiles[i].z)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void game_tick(Game *game)
 {
     game->clock.tick++;
@@ -1382,13 +1421,14 @@ void game_tick(Game *game)
      * ceilings left without support fall in. */
     CaveIns cave_ins;
     if (roofs_collapse(&game->roof_watch, &game->map, &game->items, &game->designations,
-                       &cave_ins) > 0) {
+                       &cave_ins) > 0 &&
+        collapse_seen(game, cave_ins.roofs, cave_ins.roof_count)) {
         notices_push(&game->notices, NOTICE_ROOF_COLLAPSED, KNOWLEDGE_NONE, NULL, game->clock.tick);
     }
     for (int i = 0; i < cave_ins.count && i < ROOF_CAVE_IN_MAX; i++) {
         clear_caved_in(game, cave_ins.tiles[i]);
     }
-    if (cave_ins.count > 0) {
+    if (cave_ins.count > 0 && collapse_seen(game, cave_ins.tiles, cave_ins.count)) {
         notices_push(&game->notices, NOTICE_CAVE_IN, KNOWLEDGE_NONE, NULL, game->clock.tick);
     }
     if (game->clock.tick % CONVERSATION_CHECK_TICKS == 0) {

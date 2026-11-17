@@ -48,12 +48,20 @@
 #define VISION_PEEK_RADIUS 8
 /* Tiles around a viewer (a square, any level) whose field is recast at every
  * step it takes. */
-#define VISION_NEAR_RADIUS 16
+#define VISION_NEAR_RADIUS 12
 /* Ticks between two recasts of a viewer's whole field (staggered per viewer),
  * and the tiles it may walk (on a level, or by levels) before that. */
 #define VISION_FAR_INTERVAL 300
 #define VISION_FAR_MOVE 16
 #define VISION_FAR_MOVE_LEVELS 3
+/* Casts a tick pays for, once a viewer has its first field: the near ones of
+ * settlers who moved (or whose surroundings changed) and the whole ones. A viewer that does
+ * not get its turn keeps its field and waits for the next tick. */
+#define VISION_NEAR_PER_TICK 4
+/* A viewer's near field is cast again once it has moved this many tiles from where it was cast
+ * (at once on a change of level or of posture). */
+#define VISION_NEAR_MOVE 2
+#define VISION_FAR_PER_TICK 1
 
 typedef struct VisionViewer {
     bool active;
@@ -84,6 +92,10 @@ typedef struct Vision {
     uint64_t *snapshot;
     size_t explored_count;
     bool snapshot_pending;
+    /* Casts left this tick (reset by vision_update_map() when `limited`). */
+    bool limited;
+    int near_budget;
+    int far_budget;
     VisionViewer viewers[VISION_MAX_VIEWERS];
     /* The map revisions columns were last checked at, and the column the
      * slow sweep over all of them has reached. */
@@ -104,6 +116,12 @@ void vision_free(Vision *vision);
  * call (the logs of the map, and a slow sweep over every column for what is
  * not logged: thin foliage). Called before looking at viewers. */
 void vision_update_map(Vision *vision, const Map *map);
+
+/* Limits the casts a tick pays for (VISION_NEAR_PER_TICK, VISION_FAR_PER_TICK),
+ * counted from the next vision_update_map(): the game's setting, so that a
+ * crowd moving or building does not recast every field at once. Off by
+ * default. */
+void vision_limit_casts(Vision *vision, bool limited);
 
 /* Whether a tile holds something to see (rock, a floor or a structure): the
  * tiles fields are made of. */

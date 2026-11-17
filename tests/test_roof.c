@@ -290,6 +290,31 @@ static void test_collapse_in_game(void)
     game_shutdown(&game);
 }
 
+/* Under the fog the colony hears of a roof falling only when someone sees it. */
+static void test_collapse_notice_needs_sight(void)
+{
+    for (int watched = 0; watched < 2; watched++) {
+        Game game;
+        REQUIRE(init_flat_game(&game));
+        game.clock.tick = 12 * TICKS_PER_HOUR; /* Noon: nobody asleep. */
+        map_set_structure(&game.map, 10, 10, 0, STRUCTURE_WALL);
+        map_set_roof(&game.map, 11, 10, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+        if (watched) {
+            REQUIRE(game_spawn_colonist(&game, 14, 10, 0).generation != 0);
+        }
+        game.arrival = (TilePos){40, 40, 0};
+        game.has_arrival = true;
+        REQUIRE(game_set_fog(&game, true));
+        run_ticks(&game, 2);
+        uint32_t notices = game.notices.count;
+        map_set_structure(&game.map, 10, 10, 0, STRUCTURE_NONE);
+        run_ticks(&game, 1);
+        CHECK_EQ_INT(map_roof(&game.map, 11, 10, 1), STRUCTURE_NONE);
+        CHECK_EQ_INT(game.notices.count, notices + (watched ? 1 : 0));
+        game_shutdown(&game);
+    }
+}
+
 /* A roof planned over the site of a wall (and a wall under the site of a
  * roof): both are built, each by its own builder or one after the other,
  * the roofs from below. Cancelling works on one level at a time. */
@@ -352,6 +377,7 @@ int main(void)
     RUN_TEST(test_cave_in);
     RUN_TEST(test_cave_in_after_many_changes);
     RUN_TEST(test_collapse_in_game);
+    RUN_TEST(test_collapse_notice_needs_sight);
     RUN_TEST(test_roof_over_planned_wall);
     return test_summary();
 }

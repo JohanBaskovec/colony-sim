@@ -103,6 +103,11 @@ int main(int argc, char **argv)
     int size = argc > 4 ? atoi(argv[4]) : 200;
     uint64_t seed = argc > 5 ? strtoull(argv[5], NULL, 10) : 42;
     bool flat = argc > 6 && strcmp(argv[6], "flat") == 0;
+    /* 7th argument "fog": with the fog of war (settlers plan on what they know); "fog-revealed":
+     * the same with the whole map explored from the start (the cost of the fog itself, without
+     * settlers searching in vain for what they have not found yet). */
+    bool fog_revealed = argc > 7 && strcmp(argv[7], "fog-revealed") == 0;
+    bool fog = fog_revealed || (argc > 7 && strcmp(argv[7], "fog") == 0);
 
     NewGameParams params;
     game_default_params(&params);
@@ -121,6 +126,15 @@ int main(int argc, char **argv)
         fprintf(stderr, "unknown scenario %d\n", scenario);
         game_shutdown(&game);
         return EXIT_FAILURE;
+    }
+    if (fog && !game_set_fog(&game, true)) {
+        fprintf(stderr, "cannot start the fog of war\n");
+        game_shutdown(&game);
+        return EXIT_FAILURE;
+    }
+    if (fog_revealed) {
+        game_reveal_map(&game);
+        game_tick(&game); /* The known world catches up. */
     }
     int orders = zone_tiles(&game);
     int sites = game.constructions.used_count;

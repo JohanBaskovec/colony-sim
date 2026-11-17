@@ -163,17 +163,14 @@ temperature) uses the real map everywhere.
 ### 3.4 Exploring
 
 Since settlers never walk into the unknown, the colony grows its picture by
-going to the edge of what it knows:
+going to the edge of what it knows. There is no Explore order: the player
+explores by hand, by sending settlers where they want (direct move orders,
+once they exist, `docs/ROADMAP.md`).
 
-- **Explore order** (Orders category of the build menu): drag a rectangle,
-  over unexplored tiles too. A settler walks to the known tile nearest to the
-  target that it can reach, and goes on as more comes into view, until the
-  marked tiles are explored or nothing more can be reached. The order then
-  goes. A new work type, **Exploring** *(tuning: its place in the grid)*.
 - Settlers see while doing everything else: a gatherer at the edge of a zone,
   a hauler, a wanderer all add to the picture.
-- Wandering prefers nothing for now: an idle settler does not explore on its
-  own *(tuning)*.
+- Wandering prefers nothing: an idle settler does not explore on its own
+  (it only walks over what is known).
 
 ## 4. The start of a game
 
@@ -209,7 +206,7 @@ going to the edge of what it knows:
   last seen.
 - Orders, zones, buildings and forbidding are refused on unexplored tiles
   (in the core: `game_tile_explored()`); zones go through the known world, so
-  an unexplored tile is simply not there. The Explore order is step 4.
+  an unexplored tile is simply not there.
 - Debug (F4): **See everything** (no fog: the game as before it, the default
   of tests and benchmarks; `--debug see_everything`), **Reveal the map**
   (every tile explored, as it is now) and the overlay of what the selected
@@ -253,16 +250,19 @@ going to the edge of what it knows:
    drawing (unexplored not drawn, remembered veiled, seen as it is), the tile
    readout, orders, zones and buildings refused on unexplored tiles, the
    Reveal map and See everything cheats. Tested in `tests/test_fog.c`.
-3. [~] **Acting on the picture** (started: paths, and the searches for food,
-   things to fetch and things to haul, plan on the known map and items, and a
-   walk is only checked against the real world while its target is in view;
-   to do: the other searches' reads of the real world (designations, gathering
-   zones, work spots), regions, messages about the map, alerts, the Explore
-   order's discovery rule): paths, regions and every search on the known
-   world; plans redone on a change met on the way; targets gone; orders on
-   explored tiles; resources list, alerts and bills on what is known;
-   messages about the map when seen.
-4. **Exploring**: the Explore order and work type.
+3. [x] **Acting on the picture**: every path and search plans on the known
+   map and items (food, things to fetch and haul, beds, work spots, gathering
+   and construction jobs, whether materials exist); what a settler does is
+   done on the real world, so it finds out on arrival what changed; a walk's
+   target is only checked against the real world while it is in view; the
+   resources list, the food alert, bills and gathering targets count the known
+   items; the messages about the map (a roof fallen in, a cave-in) come when
+   someone sees it. Connectivity regions stay the real ones (they only decide
+   where a pre-check looks, and may say "unreachable" too early). Orders on
+   things the colony remembers are allowed; a destroyed thing's order is only
+   given up on arrival (keeping a destroyed workstation's bills waits for
+   enemies, `docs/ROADMAP.md`). Tested in `tests/test_fog.c` and `test_roof.c`.
+4. ~~Exploring: the Explore order~~: dropped, the player explores by hand.
 5. **Measure and tune**: benchmarks with vision on, the render benchmark,
    checks on screen.
 

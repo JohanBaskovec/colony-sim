@@ -210,6 +210,10 @@ static inline const Dirt *game_view_dirt(const Game *game)
     return game->fog_on ? &game->known.dirt : &game->dirt;
 }
 
+/* The items to show on a tile: the real ones where someone sees it now (what
+ * moves is shown as it moves), the known world's elsewhere. */
+const Items *game_items_at(const Game *game, int x, int y, int z);
+
 /* Whether a tile has been seen (always true without the fog), and whether
  * someone sees it now (likewise). False out of bounds. */
 bool game_tile_explored(const Game *game, int x, int y, int z);

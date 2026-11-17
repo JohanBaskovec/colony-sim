@@ -39,6 +39,10 @@ typedef struct RoofWatch {
 typedef struct CaveIns {
     TilePos tiles[ROOF_CAVE_IN_MAX];
     int count;
+    /* Where built roofs fell in (the tile of the roof, on the level over what
+     * it covered): the first ROOF_CAVE_IN_MAX of them. */
+    TilePos roofs[ROOF_CAVE_IN_MAX];
+    int roof_count;
 } CaveIns;
 
 /* Starts watching the map as it is now. */

@@ -351,7 +351,7 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
-    ItemStack stack = items_get(game_view_items(&app->game), x, y, z);
+    ItemStack stack = items_get(game_items_at(&app->game, x, y, z), x, y, z);
     if (stack.type != ITEM_NONE) {
         char weight[32];
         tr_integer(a, sizeof(a), stack.count);
@@ -1105,7 +1105,7 @@ void hud_draw_item_counts(App *app)
     char count[16];
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            ItemStack stack = items_get(items, x, y, z);
+            ItemStack stack = items_get(game_items_at(&app->game, x, y, z), x, y, z);
             if (stack.type == ITEM_NONE) {
                 continue;
             }

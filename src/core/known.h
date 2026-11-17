@@ -44,4 +44,9 @@ void known_free(KnownWorld *known);
 void known_copy_tile(KnownWorld *known, const Map *map, const Items *items, const Dirt *dirt,
                      const Workstations *workstations, size_t index);
 
+/* The same for `count` consecutive tiles from `first` (a run along the layers: far
+ * cheaper than tile by tile, which touches every layer's memory for each). */
+void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const Dirt *dirt,
+                    const Workstations *workstations, size_t first, size_t count);
+
 #endif /* COLONY_CORE_KNOWN_H */

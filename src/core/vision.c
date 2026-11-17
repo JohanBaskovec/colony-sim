@@ -115,11 +115,18 @@ void vision_free(Vision *vision)
 /* Columns the slow sweep checks per call. */
 #define SWEEP_COLUMNS 256
 
+void vision_limit_casts(Vision *vision, bool limited)
+{
+    vision->limited = limited;
+}
+
 void vision_update_map(Vision *vision, const Map *map)
 {
     if (vision->column_top == NULL) {
         return;
     }
+    vision->near_budget = vision->limited ? VISION_NEAR_PER_TICK : -1;
+    vision->far_budget = vision->limited ? VISION_FAR_PER_TICK : -1;
     uint32_t topology = map->topology_revision - vision->topology_revision;
     uint32_t build = map->build_revision - vision->build_revision;
     if (topology != 0 || build != 0) {
@@ -636,14 +643,23 @@ void vision_viewer_set(Vision *vision, const Map *map, int slot, int x, int y, i
         }
     }
     bool first = !viewer->active;
-    bool moved =
-        first || viewer->x != x || viewer->y != y || viewer->z != z || viewer->asleep != asleep;
+    bool moved = first || viewer->z != z || viewer->asleep != asleep ||
+                 abs(viewer->x - x) >= VISION_NEAR_MOVE || abs(viewer->y - y) >= VISION_NEAR_MOVE;
     bool far_due = first || tick - viewer->far_tick >= VISION_FAR_INTERVAL ||
                    abs(viewer->far_x - x) >= VISION_FAR_MOVE ||
                    abs(viewer->far_y - y) >= VISION_FAR_MOVE ||
                    abs(viewer->far_z - z) >= VISION_FAR_MOVE_LEVELS;
     if (!moved && !far_due && !viewer->near_dirty) {
         return;
+    }
+    /* Past its first field, a viewer waits for its turn when the tick has paid for enough
+     * casts: it keeps what it sees until then. */
+    if (!first && vision->limited) {
+        int *budget = far_due ? &vision->far_budget : &vision->near_budget;
+        if (*budget <= 0) {
+            return;
+        }
+        (*budget)--;
     }
     viewer->x = (int16_t)x;
     viewer->y = (int16_t)y;

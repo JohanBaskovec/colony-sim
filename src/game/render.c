@@ -1233,7 +1233,7 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
             }
             SDL_FRect tile = tile_rect(camera, x, y);
             render_litter(renderer, game_view_map(game), x, y, z, &tile);
-            ItemStack stack = items_get(items, x, y, z);
+            ItemStack stack = items_get(game_items_at(game, x, y, z), x, y, z);
             if (stack.type != ITEM_NONE) {
                 render_item_stack(renderer, &tile, (ItemType)stack.type);
             }

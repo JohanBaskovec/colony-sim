@@ -209,8 +209,7 @@ the levels below: unexplored tiles are black, tiles seen before but out of
 view now are drawn as last seen under a grey veil, tiles in view as they are.
 The tile readout says "Unexplored" or that a tile is out of sight and shown as last seen; the
 temperature view only covers tiles in view. Tools refuse unexplored tiles
-(the card says why), except the **Explore** order (Orders category), which is
-dragged over the fog.
+(the card says why): the colony explores by sending settlers.
 
 ### Colony log
 

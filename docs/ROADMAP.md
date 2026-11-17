@@ -150,8 +150,9 @@ theme and migration plan).
 - [x] Design of vision and the fog of war (`docs/VISION.md`)
 - [x] Vision, step 1: sight in 3D per settler with no range limit (only rock, walls and floors stop it; thin foliage does not), peeking round corners (five eye points), fields of view whose cost grows with what is seen (prototype and benchmark first), near view refreshed on a new tile, on sleep and waking and on a change nearby, the rest after a few tiles or seconds, spread over ticks; a count per tile of who sees it; debug overlay of the selected settler's view; nothing hidden yet
 - [x] Vision, step 2: the colony's picture (known world: a copy of the layers, unexplored tiles unknown), the start (view from the arrival point and the path from a random map edge, guarantees in view), drawing (unexplored black, remembered under a veil, seen live), tile readout, tools refusing unexplored tiles, Reveal map and See everything cheats (See everything by default in tests and benchmarks that are not about vision)
-- [~] Vision, step 3 (started: paths and the food, fetch and haul searches on the known world; settlers only re-check a walk's target against the real world when it is in view): settlers act on the picture (orders on remembered things, found out when seen on arrival): paths, regions and every search on the known world, plans redone on a change met on the way, targets found gone, orders and zones on explored tiles only, resources list, alerts and bills on what is known, messages about the map when seen
-- [ ] Vision, step 4: exploring: the Explore order (Orders category) and work type
+- [x] Vision, step 3: settlers act on the picture: every path and search on the known map and items, targets re-checked against the real world only while in view, stock, food alert, bills and gathering targets from the known items, messages about the map only when seen
+- [ ] Direct move orders for settlers (also how the player explores the fog; there is no Explore order)
+- [ ] Orders on a workstation destroyed out of view: keep its bills until someone sees it gone (with enemies)
 - [ ] Vision, step 5: measure (bench_simulation and --bench-render with vision on), tune, checks on screen
 - [ ] Vision, later: darkness shortens sight, eyesight attribute, lookouts (trees, towers), hearing, saving the picture (M7)
 - [ ] Wildlife, hunting

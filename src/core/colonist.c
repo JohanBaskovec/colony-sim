@@ -941,14 +941,14 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
 {
     begin_task(colonist, context, TASK_SLEEP);
     path_clear(&colonist->path);
-    if (!any_bed(context->map)) {
+    if (!any_bed(context->plan_map)) {
         go_to_warm_spot(colonist, context);
         return;
     }
     TilePos bed;
     /* Its own bed: straight there. */
     bool found = beds_owned(context->beds, context->worker_id, &bed) &&
-                 is_free_bed(context->map, bed.x, bed.y, bed.z, (void *)context) &&
+                 is_free_bed(context->plan_map, bed.x, bed.y, bed.z, (void *)context) &&
                  pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist),
                                  bed, COLONIST_BED_SEARCH_MAX_COST, &colonist->path);
     if (!found &&
@@ -1469,14 +1469,14 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
                          .zones = zones,
                          .jobs = jobs,
                          .gather_zones = context->gather_zones,
-                         .map = context->map,
+                         .map = context->plan_map,
                          .reservations = context->reservations,
                          .worker = colonist,
                          .mask = mask,
                          .self = context->worker_id};
     /* Only taking a roof apart is ordered on a roof tile (a roof site is
      * found among the construction sites). */
-    search.roof_jobs = !zones && context->map->roof_count > 0 &&
+    search.roof_jobs = !zones && context->plan_map->roof_count > 0 &&
                        (mask & WORK_TYPE_BIT(WORK_CONSTRUCTION)) &&
                        designations->count_by_work[WORK_CONSTRUCTION] > 0;
     /* Zones of the highest priority first, whatever the distance. */
@@ -1516,8 +1516,8 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
     begin_task(colonist, context, TASK_WORK);
     colonist->target = target;
     colonist->work_type =
-        (uint8_t)(zones ? gather_tile_job(context->gather_zones, context->map, target.x, target.y,
-                                          target.z, jobs)
+        (uint8_t)(zones ? gather_tile_job(context->gather_zones, context->plan_map, target.x,
+                                          target.y, target.z, jobs)
                         : designation_get(designations, target.x, target.y, target.z));
     colonist->gathering = zones;
     colonist->station_phase = STATION_JOB_GO;
@@ -1916,8 +1916,9 @@ static bool job_still_valid(const Colonist *colonist, const ColonistContext *con
         GatherJob job = (GatherJob)colonist->work_type;
         return own && (unsigned)job < GATHER_JOB_COUNT &&
                (gather_jobs_for(colonist, enabled_work_types(colonist)) & GATHER_JOB_BIT(job)) &&
-               gather_job_available(context->gather_zones, context->map, target.x, target.y,
-                                    target.z, job);
+               gather_job_available(context->gather_zones,
+                                    map_checked(context, target.x, target.y, target.z), target.x,
+                                    target.y, target.z, job);
     }
     const DesignationDef *def = designation_def((DesignationType)colonist->work_type);
     return def != NULL && colonist->work_priorities[def->work_type] != WORK_PRIORITY_DISABLED &&
@@ -2053,7 +2054,7 @@ static bool tools_obtainable(const Colonist *colonist, const ColonistContext *co
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
         ItemTypeMask types = def->tools[slot];
         if (types != 0 && colonist_tool_index(colonist, types) < 0 &&
-            !items_exist(context->items, types, 1)) {
+            !items_exist(context->plan_items, types, 1)) {
             return false;
         }
     }
@@ -2092,7 +2093,7 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
         }
         if (!in_progress &&
             (context->free_crafts ? bill_free_input(bill).count == 0
-                                  : !bill_has_input(bill, context->items->totals, to_fetch))) {
+                                  : !bill_has_input(bill, context->plan_items->totals, to_fetch))) {
             continue;
         }
         return index;
@@ -2175,6 +2176,19 @@ static bool start_fetch(Colonist *colonist, const ColonistContext *context, Fetc
         !pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist), found,
                          COLONIST_WORK_SEARCH_MAX_COST, &colonist->path)) {
         return false;
+    }
+    {
+        static int shown;
+        if (shown < 6 && context->tick > 120000 && found.x == from.x && found.y == from.y) {
+            shown++;
+            ItemStack real = items_get(context->items, found.x, found.y, found.z);
+            ItemStack known = items_get(context->plan_items, found.x, found.y, found.z);
+            fprintf(stderr, "own tile: real x%d known x%d seen=%d explored=%d\n", real.count,
+                    known.count,
+                    context->vision ? vision_seen(context->vision, found.x, found.y, found.z) : -1,
+                    context->vision ? vision_explored(context->vision, found.x, found.y, found.z)
+                                    : -1);
+        }
     }
     reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE, context->worker_id);
     reservations_add(context->reservations, RESERVATION_HAUL_SOURCE, found, context->worker_id);
@@ -2633,20 +2647,22 @@ static TilePos site_origin(const ConstructionSite *site)
 static bool site_still_wanted(const ColonistContext *context, const ConstructionSite *site)
 {
     return !site->refresh ||
-           (map_structure_is_origin(context->map, site->x, site->y, site->z) &&
-            map_structure(context->map, site->x, site->y, site->z) == (StructureType)site->type);
+           (map_structure_is_origin(map_checked(context, site->x, site->y, site->z), site->x,
+                                    site->y, site->z) &&
+            map_structure(map_checked(context, site->x, site->y, site->z), site->x, site->y,
+                          site->z) == (StructureType)site->type);
 }
 
 /* Whether some material of a site is still to bring, nobody brings it yet,
  * and some lies about. */
 static bool site_wants_material(const ColonistContext *context, const ConstructionSite *site)
 {
-    if (construction_forbidden(site, context->map)) {
+    if (construction_forbidden(site, context->plan_map)) {
         return false;
     }
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         if (construction_unpromised(site, slot) > 0 &&
-            items_exist(context->items, ITEM_TYPE_BIT(construction_material(site, slot)), 1)) {
+            items_exist(context->plan_items, ITEM_TYPE_BIT(construction_material(site, slot)), 1)) {
             return true;
         }
     }
@@ -2663,7 +2679,7 @@ static bool site_has_job(const ColonistContext *context, const Colonist *worker,
                                     site_origin(site), context->worker_id)) {
         return false;
     }
-    return construction_can_work(site, context->map) || site_wants_material(context, site);
+    return construction_can_work(site, context->plan_map) || site_wants_material(context, site);
 }
 
 /* Cheap check before searching the map: whether some site offers a job,
@@ -3314,7 +3330,7 @@ static bool is_hearth_wanting_fuel(const Map *map, int x, int y, int z, void *us
     const ColonistContext *context = userdata;
     const Workstation *station = station_on(context, x, y, z);
     return station != NULL && wants_fuel(station) &&
-           items_exist(context->items, fuel_wanted_types(station), 1);
+           items_exist(context->plan_items, fuel_wanted_types(station), 1);
 }
 
 static bool try_refuel_job(Colonist *colonist, const ColonistContext *context)
@@ -3417,7 +3433,7 @@ static bool light_wanted(const ColonistContext *context, const Workstation *stat
 {
     return hearth_needs_lighting(station) ||
            (hearth_needs_kindling(station) &&
-            items_exist(context->items, fuel_wanted_types(station), 1));
+            items_exist(context->plan_items, fuel_wanted_types(station), 1));
 }
 
 static bool hearth_to_light(const ColonistContext *context, const Workstation *station)
