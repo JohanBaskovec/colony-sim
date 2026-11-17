@@ -696,3 +696,19 @@ stockpile.delete.description = Removes the zone; the items stay where they lie
 gather_zone.delete.description = Removes the zone and its orders
 station.bill_count.one = {0} bill
 station.bill_count.other = {0} bills
+
+# Resources list (top left)
+resources.none = Nothing in stock
+resources.none.description = Items lying in stockpiles are listed here, by group
+resources.fold = Click to fold the group
+resources.unfold = Click to unfold the group
+resources.stored = In stockpiles: {0}
+resources.on_stations = On workstations, waiting for a hauler: {0}
+resources.hauled = Being hauled: {0}
+resources.weight = Weight: {0} kg
+resources.food_days.one = Food for {0} day
+resources.food_days.other = Food for {0} days
+resources.food_days.less = Food for less than a day
+resources.more.one = {0} more line…
+resources.more.other = {0} more lines…
+resources.more.description = Not enough room: fold a group to see the rest

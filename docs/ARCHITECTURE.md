@@ -95,11 +95,12 @@ simulation:
 | `sprites`      | Loads `assets/sprites/*.png` into a texture atlas with halved copies, batches sprite quads |
 | `hud`          | Builds and draws the HUD panels and the windows in stacking order; all text goes through `tr()` |
 | `theme`        | Color roles and every size of the interface, the UI scale applied (`--ui-scale`) |
-| `layout`       | Zones of the screen (bottom bar, what lies above it), from the screen size and the theme |
+| `layout`       | Zones of the screen (bottom bar, what lies above it, the free top corners), from the screen size and the theme |
 | `ui`           | Immediate-mode widgets (panel, window, button, check box, slider, dropdown, tooltip with wrapped lines) and click capture |
 | `ui_layout`    | Rows of a window laid out twice: measured, then drawn (window sized to its content) |
 | `bottom_bar`   | Full-width bar along the bottom: Build, Work, Menu                      |
 | `build_menu`   | Build menu: category column, icon row, card of the hovered icon or the tool in use |
+| `resources_list` | Top left: the stock by item category (`Game.stock`), groups folded with a click, tooltips with where the items lie and the days of food |
 | `colonist_bar` | Top center: portrait, name and current action per colonist; click selects, double click centers the view |
 | `view_controls` | Bottom right: temperature overlay, speeds, level slider (date and weather beside it) |
 | `game_menu`    | Game menu (Menu button or Escape): resume, controls, language, quit; pauses the game |
@@ -1127,7 +1128,10 @@ crafter make more while the last ones wait for a hauler; counting every item
 on the map (as gathering zones do) would count tools lost in the wild.
 `game_update_stock()` scans the stockpiles (their bounding boxes), the
 stations and the colonists; `game_tick()` only calls it while some bill is in
-"until N" mode (it costs as much as the rest of a small colony's tick).
+"until N" mode (it costs as much as the rest of a small colony's tick). It
+also keeps where the stock lies (`stock_stored`, `stock_on_stations`,
+`stock_hauled`, adding up to `stock`) for the resources list, which
+refreshes it every frame.
 
 Bills are worked through from the top: a crafter takes the first one that
 is not paused, wants more, whose recipe it knows at a level the bill accepts

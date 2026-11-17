@@ -182,6 +182,8 @@ typedef struct App {
      * tell a double click (centers the view on the colonist). */
     EntityId bar_last_click;
     Uint64 bar_last_click_ms;
+    /* Resources list (game/resources_list.h): the groups folded. */
+    bool resources_folded[ITEM_CATEGORY_COUNT];
     /* A middle/right button press that started on a panel does not pan the view. */
     bool pan_blocked;
 
@@ -200,7 +202,7 @@ typedef struct App {
     int hover_x;
     int hover_y;
 
-    /* Notices (core/notice.h) in the top right corner: the number of the
+    /* Notices (core/notice.h) below the colonist bar: the number of the
      * next one to take from the game, and those on screen with how long (real
      * seconds) they have been there, oldest first. */
     uint32_t next_notice;

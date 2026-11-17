@@ -2,6 +2,7 @@
 
 #include "core/entry_strip.h"
 #include "core/i18n.h"
+#include "game/layout.h"
 #include "game/render.h"
 
 #define TEXT_SIZE 128
@@ -10,7 +11,6 @@
 #define MIN_SCALE 0.45f
 #define NAME_MIN_SCALE 0.6f    /* Smaller entries show the portrait alone. */
 #define ACTION_MIN_SCALE 0.85f /* Smaller entries leave the action to the tooltip. */
-#define SIDE_ROOM 0.75f        /* Of the card width, kept free at each side. */
 #define DOUBLE_CLICK_MS 400
 
 typedef struct BarLayout {
@@ -36,8 +36,10 @@ static void bar_layout(const App *app, BarLayout *out)
     const Ui *ui = &app->ui;
     const Theme *theme = &ui->theme;
     float line = (float)text_line_height(ui->text);
-    /* The corners stay free for the resources (left) and the notices (right). */
-    float width = ui->screen_width - 2.0f * SIDE_ROOM * theme->card_width;
+    /* The corners stay free for the resources (left) and the debug readout (right). */
+    ScreenLayout screen;
+    layout_screen(ui, &screen);
+    float width = ui->screen_width - 2.0f * screen.corner_width;
     float entry = SDL_roundf(ENTRY_WIDTH * theme->scale);
     out->count = colonist_count(app);
     out->gap = theme->gap;

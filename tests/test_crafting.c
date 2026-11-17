@@ -735,7 +735,18 @@ static void test_stock_counts_stored_and_waiting_items(void)
     hauler->carried = item_stack_pristine(ITEM_FLAKE, 1);
     game_update_stock(&game);
     CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 2 + 3 + 1);
+    CHECK_EQ_INT((int)game.stock_stored[ITEM_FLAKE], 2);
+    CHECK_EQ_INT((int)game.stock_on_stations[ITEM_FLAKE], 3);
+    CHECK_EQ_INT((int)game.stock_hauled[ITEM_FLAKE], 1);
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 2 + 3 + 7);
+
+    /* Counted afresh: nothing is left over from the last count. */
+    items_remove(&game.items, 14, 10, 0, 3);
+    hauler->task = TASK_IDLE;
+    game_update_stock(&game);
+    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 2);
+    CHECK_EQ_INT((int)game.stock_on_stations[ITEM_FLAKE], 0);
+    CHECK_EQ_INT((int)game.stock_hauled[ITEM_FLAKE], 0);
     game_shutdown(&game);
 }
 

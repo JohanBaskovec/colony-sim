@@ -508,8 +508,10 @@ static bool stock_counted(const Game *game)
 
 void game_update_stock(Game *game)
 {
-    memset(game->stock, 0, sizeof(game->stock));
-    stockpiles_count_stored(&game->stockpiles, &game->items, game->stock);
+    memset(game->stock_stored, 0, sizeof(game->stock_stored));
+    memset(game->stock_on_stations, 0, sizeof(game->stock_on_stations));
+    memset(game->stock_hauled, 0, sizeof(game->stock_hauled));
+    stockpiles_count_stored(&game->stockpiles, &game->items, game->stock_stored);
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = workstation_get_const(&game->workstations, index);
         if (station == NULL) {
@@ -518,15 +520,19 @@ void game_update_stock(Game *game)
         ItemStack stack = items_get(&game->items, station->x, station->y, station->z);
         if (stack.count > 0 && stockpile_storage_priority(&game->stockpiles, station->x, station->y,
                                                           station->z, stack) == 0) {
-            game->stock[stack.type] += stack.count; /* Not counted as stored already. */
+            game->stock_on_stations[stack.type] += stack.count; /* Not counted as stored. */
         }
     }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         const Colonist *colonist = &game->colonists[slot];
         if (!entity_id_is_none(game_colonist_id_at(game, slot)) && colonist->task == TASK_HAUL &&
             colonist->carried.count > 0) {
-            game->stock[colonist->carried.type] += colonist->carried.count;
+            game->stock_hauled[colonist->carried.type] += colonist->carried.count;
         }
+    }
+    for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
+        game->stock[type] =
+            game->stock_stored[type] + game->stock_on_stations[type] + game->stock_hauled[type];
     }
 }
 

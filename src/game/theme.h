@@ -32,6 +32,7 @@ typedef enum ThemeColor {
     THEME_SCROLL_THUMB,
     THEME_WARNING,       /* Something stands in the way (a tool unavailable). */
     THEME_DISABLED_VEIL, /* Over a button that cannot be used yet (a text says why). */
+    THEME_ICON_WELL,     /* Behind the small item icons, like bare ground. */
     THEME_COLOR_COUNT
 } ThemeColor;
 

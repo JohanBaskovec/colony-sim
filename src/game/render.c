@@ -1863,6 +1863,12 @@ static void zone_remove_icon(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color c
     batch_flush(renderer);
 }
 
+void render_item_icon(SDL_Renderer *renderer, SDL_FRect rect, ItemType type)
+{
+    render_item_stack(renderer, &rect, type);
+    batch_flush(renderer);
+}
+
 void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
 {
     float w = rect.w, h = rect.h;

@@ -126,7 +126,12 @@ typedef struct Game {
      * hauler. Refreshed at the start of each tick while some bill counts it
      * (see game_update_stock()), not part of game_hash(). */
     long stock[ITEM_TYPE_COUNT];
-    Notices notices; /* Messages for the player, not part of game_hash(). */
+    /* Where the stock lies (the three add up to `stock`), refreshed with it:
+     * for the player only. */
+    long stock_stored[ITEM_TYPE_COUNT];      /* In stockpiles that accept them. */
+    long stock_on_stations[ITEM_TYPE_COUNT]; /* On workstations, out of storage. */
+    long stock_hauled[ITEM_TYPE_COUNT];      /* Carried by haulers. */
+    Notices notices;                         /* Messages for the player, not part of game_hash(). */
     /* Who knew what at the last count (see GAME_KNOWLEDGE_CHECK_TICKS):
      * settlers mastering each knowledge, and whether anyone had it at
      * KNOWLEDGE_DISCOVERED_LEVEL. Only used for notices. */
@@ -143,7 +148,7 @@ void game_default_params(NewGameParams *params);
 /* Generates a new world. On failure the game is left empty (safe to shut down). */
 bool game_init(Game *game, const NewGameParams *params);
 
-/* Recomputes Game.stock (game_tick() does it first thing when a bill needs
+/* Recomputes Game.stock and where it lies (game_tick() does it first thing when a bill needs
  * it; the frontend calls it before showing the stock). */
 void game_update_stock(Game *game);
 void game_shutdown(Game *game);

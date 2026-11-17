@@ -593,3 +593,19 @@ stockpile.delete.description = Retire la zone ; les objets restent où ils sont
 gather_zone.delete.description = Retire la zone et ses consignes
 station.bill_count.one = {0} commande
 station.bill_count.other = {0} commandes
+
+# Resources list (top left)
+resources.none = Rien en stock
+resources.none.description = Les objets rangés dans les zones de stockage sont listés ici, par groupe
+resources.fold = Cliquer pour replier le groupe
+resources.unfold = Cliquer pour déplier le groupe
+resources.stored = Dans les zones de stockage : {0}
+resources.on_stations = Sur les postes de travail, en attente d’un porteur : {0}
+resources.hauled = En cours de transport : {0}
+resources.weight = Poids : {0} kg
+resources.food_days.one = De quoi manger {0} jour
+resources.food_days.other = De quoi manger {0} jours
+resources.food_days.less = De quoi manger moins d’un jour
+resources.more.one = {0} ligne de plus…
+resources.more.other = {0} lignes de plus…
+resources.more.description = Pas assez de place : repliez un groupe pour voir la suite

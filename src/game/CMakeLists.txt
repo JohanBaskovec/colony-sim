@@ -13,6 +13,7 @@ add_executable(colony_sim
     localization.c
     main.c
     render.c
+    resources_list.c
     sprites.c
     station_panel.c
     stockpile_panel.c

@@ -135,8 +135,19 @@ colonist, no bed... Until it exists the column stays empty.
 
 ### Resources (top left)
 
-What the colony has in its stockpiles, by groups that fold (wood, stone,
-food...), each line with its count; a tooltip tells where they are.
+What the colony has in stock (in stockpiles, on workstations, being
+hauled), by item category (food, resources, tools, weapons), in the free
+corner left of the colonist bar (`ScreenLayout.corner_width`):
+
+- A group's header shows its total; a click folds or unfolds it. Groups with
+  nothing in stock are left out; with nothing at all, one dim line says so.
+- One line per item: an icon (the stack as drawn on the map, on a ground
+  colored well so that it reads on the dark panel), the name, the count.
+- Tooltips: on an item, where its items lie, their weight and the days of
+  food they make; on the food header, the days of food of the whole colony.
+- The list stops above what the left side shows below it (the inspector and
+  its tab, the work grid, the build menu, the tile readout); when lines do
+  not fit, the last one says how many are left out (fold a group).
 
 ### Messages
 
@@ -186,6 +197,6 @@ Each step keeps the game playable and is checked on screen (Xvfb).
        the floating inspectors go
 7. [x] Work grid as a main window above the bottom bar; messages (the debug readout is
        top right already)
-8. [ ] Resources list (top left)
+8. [x] Resources list (top left)
 9. [ ] Settings: UI scale (font included), remembered between sessions
 10. [ ] Alerts (core module), Log tab

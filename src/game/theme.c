@@ -12,6 +12,7 @@ static const SDL_Color DEFAULT_COLORS[THEME_COLOR_COUNT] = {
     [THEME_TRACK] = {54, 60, 72, 255},          [THEME_HANDLE] = {200, 204, 214, 255},
     [THEME_SCROLL_TRACK] = {255, 255, 255, 24}, [THEME_SCROLL_THUMB] = {200, 204, 214, 200},
     [THEME_WARNING] = {240, 180, 90, 255},      [THEME_DISABLED_VEIL] = {10, 12, 16, 150},
+    [THEME_ICON_WELL] = {150, 136, 112, 255},
 };
 
 /* A size at the default scale, scaled and rounded to whole pixels (never 0). */

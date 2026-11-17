@@ -13,6 +13,7 @@
 #include "game/game_menu.h"
 #include "game/station_panel.h"
 #include "game/ui_layout.h"
+#include "game/resources_list.h"
 #include "game/stockpile_panel.h"
 #include "game/tile_panel.h"
 #include "game/view_controls.h"
@@ -1171,6 +1172,31 @@ static void draw_notices(App *app)
     }
 }
 
+/* Top of the docked windows at the bottom left (inspector, work grid), as
+ * drawn last frame; the bottom of the screen when none is open. */
+static float left_windows_top(const App *app)
+{
+    AppWindow windows[3];
+    int count = 0;
+    if (inspector_kind(app) != INSPECT_NONE) {
+        windows[count++] = APP_WINDOW_INSPECTOR;
+        if (app->inspector_tab >= 0) {
+            windows[count++] = APP_WINDOW_INSPECTOR_TAB;
+        }
+    }
+    if (app->show_work_panel) {
+        windows[count++] = APP_WINDOW_WORK;
+    }
+    float top = app->ui.screen_height;
+    for (int i = 0; i < count; i++) {
+        SDL_FRect rect = ui_window_rect(&app->ui, (int)windows[i]);
+        if (rect.h > 0.0f) {
+            top = SDL_min(top, rect.y);
+        }
+    }
+    return top;
+}
+
 void hud_draw(App *app)
 {
     const float screen_width = app->camera.viewport_width;
@@ -1199,13 +1225,19 @@ void hud_draw(App *app)
 
     /* Bottom left: the tile inspector above the menus. */
     float menu_top = build_menu_top(app);
+    float left_top = menu_top; /* Top of what the left side shows, under the resources. */
     if (app->hover_valid && inspector_kind(app) == INSPECT_NONE) {
         Panel tile = {0};
         build_tile_panel(app, &tile);
         panel_size(app, &tile, &width, &height);
-        panel_draw_colored(app, &tile, HUD_MARGIN, menu_top - height - HUD_MARGIN,
-                           THEME_COLOR(app, THEME_READOUT));
+        float tile_y = menu_top - height - HUD_MARGIN;
+        panel_draw_colored(app, &tile, HUD_MARGIN, tile_y, THEME_COLOR(app, THEME_READOUT));
+        left_top = SDL_min(left_top, tile_y);
     }
+    left_top = SDL_min(left_top, left_windows_top(app));
+
+    /* Top left: the resources list. */
+    resources_list_draw(app, left_top - app->ui.theme.margin);
 
     colonist_bar_draw(app);
 

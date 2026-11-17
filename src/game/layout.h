@@ -13,6 +13,9 @@ typedef struct ScreenLayout {
     float button_height;  /* Text buttons of the menus. */
     SDL_FRect bottom_bar; /* Full width, along the bottom edge. */
     float bar_top;        /* The zones above the bar end here. */
+    /* Width kept free at each top corner, beside the colonist bar: the
+     * resources list (left), the debug readout (right). */
+    float corner_width;
 } ScreenLayout;
 
 void layout_screen(const Ui *ui, ScreenLayout *layout);
