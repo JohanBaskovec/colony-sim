@@ -2313,6 +2313,15 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
     return bill_has_input(bill, game_view_items(game)->totals, tools);
 }
 
+/* What is built at once leaves the plants under it alone: they are ordered
+ * uprooted (a settler does it, as for any plant in the way). */
+static void order_uprooting(Game *game, int x, int y, int z)
+{
+    if (gather_plant_uprootable(&game->map, x, y, z)) {
+        game_designate_rect(game, x, y, x, y, z, DESIGNATION_UPROOT);
+    }
+}
+
 bool game_can_place_workstation(const Game *game, int x, int y, int z)
 {
     /* Room in the list for every station whose site is finished. */
@@ -2332,13 +2341,15 @@ bool game_place_workstation(Game *game, WorkstationType type, int x, int y, int 
     }
     /* What was planned there is given up, its materials dropped. */
     game_remove_construction(game, construction_at(&game->constructions, x, y, z));
-    /* Ready at once when there is nothing to bring, to build or to clear. */
-    bool ready = !workstation_needs_construction(type) &&
-                 game->map.plants[map_index(&game->map, x, y, z)].type == PLANT_NONE;
+    /* Ready at once when there is nothing to bring nor to build. */
+    bool ready = !workstation_needs_construction(type);
     bool placed = ready ? workstations_place(&game->workstations, &game->map, type, x, y, z) !=
                               WORKSTATION_NONE
                         : constructions_place_workstation(&game->constructions, &game->map, type, x,
                                                           y, z) != CONSTRUCTION_NONE;
+    if (placed && ready) {
+        order_uprooting(game, x, y, z); /* The plant under it is left to a settler. */
+    }
     if (placed) {
         /* No zone on a station: the tile leaves the zone it was in. */
         stockpiles_remove_rect(&game->stockpiles, x, y, x, y, z);
@@ -2445,6 +2456,25 @@ int game_place_structure(Game *game, StructureType type, int x, int y, int z, Di
         game_remove_construction(game, construction_at(&game->constructions,
                                                        x + part * direction_dx(direction),
                                                        y + part * direction_dy(direction), z));
+    }
+    if (!structure_needs_construction(type)) { /* Nothing to bring nor to do: built at once. */
+        /* The map clears the plants of the tiles it builds on (as builders do);
+         * these are left as they are, and ordered uprooted. */
+        Plant plants[STRUCTURE_MAX_LENGTH];
+        int length = structure_length(type);
+        _Static_assert(STRUCTURE_MAX_LENGTH >= 2, "a bed is two tiles long");
+        for (int part = 0; part < length && part < STRUCTURE_MAX_LENGTH; part++) {
+            plants[part] =
+                game->map.plants[map_index(&game->map, x + part * direction_dx(direction),
+                                           y + part * direction_dy(direction), z)];
+        }
+        map_place_structure(&game->map, x, y, z, type, direction, ITEM_QUALITY_STANDARD);
+        for (int part = 0; part < length && part < STRUCTURE_MAX_LENGTH; part++) {
+            int px = x + part * direction_dx(direction), py = y + part * direction_dy(direction);
+            game->map.plants[map_index(&game->map, px, py, z)] = plants[part];
+            order_uprooting(game, px, py, z);
+        }
+        return CONSTRUCTION_BUILT_AT_ONCE;
     }
     return constructions_place(&game->constructions, &game->map, type, x, y, z, direction);
 }

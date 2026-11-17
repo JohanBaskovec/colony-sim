@@ -45,6 +45,8 @@ typedef enum StructureType {
 } StructureType;
 
 #define STRUCTURE_MATERIAL_SLOTS 2
+/* The longest structure, in tiles (a bed or a ladder run): see structure_length(). */
+#define STRUCTURE_MAX_LENGTH 4
 
 /* Tiles of the longest structure. */
 #define STRUCTURE_LENGTH_MAX 2
@@ -112,6 +114,10 @@ bool structure_blocks(StructureType type);
 
 /* Whether settlers sleep on it. */
 bool structure_is_bed(StructureType type);
+
+/* Whether it takes building: a material to bring or work to do. A structure
+ * with neither (ground bedding) is built at once where the player puts it. */
+bool structure_needs_construction(StructureType type);
 
 /* Whether it is a roof (built as a floor over the walls). */
 bool structure_is_roof(StructureType type);

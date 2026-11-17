@@ -529,8 +529,9 @@ bool game_bill_has_input(const Game *game, const Bill *bill);
 bool game_can_place_workstation(const Game *game, int x, int y, int z);
 
 /* Places a workstation where game_can_place_workstation() allows: ready at
- * once when it needs no construction (workstation_needs_construction()) and
- * no plant is in the way, else its construction site. A site already on the
+ * once when it needs no construction (workstation_needs_construction(); the
+ * plant under it is ordered uprooted, not destroyed), else its construction
+ * site. A site already on the
  * tile is cancelled (materials dropped) and replaced, unless it is the same
  * workstation (nothing is done then). A zone (stockpile,
  * gathering zone) on the tile loses it: no zone lies under a station.
@@ -571,7 +572,9 @@ bool game_can_place_structure(const Game *game, StructureType type, int x, int y
 
 /* Plans a structure where game_can_place_structure() allows. The sites on
  * its tiles are cancelled (their materials dropped): a new order replaces
- * one in progress. Returns the site's index or CONSTRUCTION_NONE. */
+ * one in progress. Returns the site's index, CONSTRUCTION_BUILT_AT_ONCE when
+ * it needs no construction (structure_needs_construction(): it stands there
+ * at once, the plants under it ordered uprooted) or CONSTRUCTION_NONE. */
 int game_place_structure(Game *game, StructureType type, int x, int y, int z, Direction direction);
 
 /* One structure of a plan: its head, and whether it can be placed. */

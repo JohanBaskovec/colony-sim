@@ -46,6 +46,8 @@
 
 #define CONSTRUCTION_MAX 512
 #define CONSTRUCTION_NONE (-1)
+/* Returned by game_place_structure() for a structure built at once: no site. */
+#define CONSTRUCTION_BUILT_AT_ONCE (-2)
 
 typedef struct ConstructionSite {
     bool used;

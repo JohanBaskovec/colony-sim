@@ -802,6 +802,26 @@ static void test_crafts_make_the_station_dirty(void)
     game_shutdown(&game);
 }
 
+/* A spot placed on grass stands at once; the grass is uprooted by a settler,
+ * on an order, and the spot stays. */
+static void test_grass_under_a_free_station_is_uprooted(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Plant *grass = &game.map.plants[map_index(&game.map, 14, 10, 0)];
+    *grass = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    REQUIRE(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 14, 10, 0));
+    CHECK(workstation_at(&game.workstations, 14, 10, 0) != WORKSTATION_NONE);
+    CHECK_EQ_INT(grass->type, PLANT_GRASS);
+    CHECK_EQ_INT(designation_get(&game.designations, 14, 10, 0), DESIGNATION_UPROOT);
+    REQUIRE(spawn_worker(&game, 10, 10) != NULL);
+    run_ticks(&game, 3000);
+    CHECK_EQ_INT(grass->type, PLANT_NONE);
+    CHECK_EQ_INT(designation_get(&game.designations, 14, 10, 0), DESIGNATION_NONE);
+    CHECK(workstation_at(&game.workstations, 14, 10, 0) != WORKSTATION_NONE);
+    game_shutdown(&game);
+}
+
 static void test_plants_are_cleared_before_building(void)
 {
     Game game;
@@ -816,8 +836,21 @@ static void test_plants_are_cleared_before_building(void)
     plant_settle(bramble, GAME_START_DAY); /* In fruit. */
     int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
     REQUIRE(berries > 0);
+    /* A spot with nothing to bring is there at once; the bramble is not
+     * destroyed, a settler is ordered to uproot it. */
     REQUIRE(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 14, 10, 0));
-    /* The bramble is in the way: a site, to clear it first. */
+    CHECK(workstation_at(&game.workstations, 14, 10, 0) != WORKSTATION_NONE);
+    CHECK_EQ_INT(construction_at(&game.constructions, 14, 10, 0), CONSTRUCTION_NONE);
+    CHECK_EQ_INT(bramble->type, PLANT_BRAMBLE);
+    CHECK_EQ_INT(designation_get(&game.designations, 14, 10, 0), DESIGNATION_UPROOT);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], 0);
+    /* Taken back, the station removed and the bramble as it was. */
+    designations_set_rect(&game.designations, &game.map, 14, 10, 14, 10, 0, DESIGNATION_NONE);
+    REQUIRE(game_remove_workstation(&game, workstation_at(&game.workstations, 14, 10, 0)));
+    items_add(&game.items, 12, 12, 0, item_stack_pristine(ITEM_COBBLE, 1));
+    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
+    /* A knapping spot takes a stone and work: the bramble is in the way, a
+     * site, to clear it first. */
     CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
     const ConstructionSite *site =
         construction_get(&game.constructions, construction_at(&game.constructions, 14, 10, 0));
@@ -909,6 +942,7 @@ int main(void)
     RUN_TEST(test_stock_counts_stored_and_waiting_items);
     RUN_TEST(test_until_stock_ignores_items_out_of_storage);
     RUN_TEST(test_crafts_make_the_station_dirty);
+    RUN_TEST(test_grass_under_a_free_station_is_uprooted);
     RUN_TEST(test_plants_are_cleared_before_building);
     RUN_TEST(test_same_priority_follows_the_columns);
     return test_summary();

@@ -151,7 +151,7 @@ static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
                                   N_("structure.ground_bedding"),
                                   N_("structure.ground_bedding.description"),
                                   {{ITEM_NONE, 0}, {ITEM_NONE, 0}},
-                                  250.0f,
+                                  0.0f, /* No material, no work: built at once. */
                                   KNOWLEDGE_BASIC_SHELTERS,
                                   50.0f,
                                   1.0f,
@@ -237,6 +237,20 @@ bool structure_blocks(StructureType type)
 bool structure_is_bed(StructureType type)
 {
     return (unsigned)type < STRUCTURE_TYPE_COUNT && STRUCTURE_DEFS[type].rest_factor > 0.0f;
+}
+
+bool structure_needs_construction(StructureType type)
+{
+    if ((unsigned)type >= STRUCTURE_TYPE_COUNT || type == STRUCTURE_NONE) {
+        return false;
+    }
+    const StructureDef *def = &STRUCTURE_DEFS[type];
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        if (def->materials[slot].type != ITEM_NONE) {
+            return true;
+        }
+    }
+    return def->build_work > 0.0f;
 }
 
 bool structure_is_roof(StructureType type)

@@ -39,9 +39,13 @@ static void test_definitions(void)
         /* Everything takes material but the ground bedding, which is only work. */
         CHECK((def->materials[0].type != ITEM_NONE && def->materials[0].count > 0) ||
               type == STRUCTURE_GROUND_BEDDING);
-        CHECK(def->build_work > 0.0f);
+        /* ... and it is built at once: no work to do either. */
+        CHECK(def->build_work > 0.0f || type == STRUCTURE_GROUND_BEDDING);
+        CHECK_EQ_INT(structure_needs_construction((StructureType)type),
+                     type != STRUCTURE_GROUND_BEDDING);
+        CHECK(def->length >= 1 && def->length <= STRUCTURE_MAX_LENGTH);
         CHECK(def->knowledge == KNOWLEDGE_BASIC_SHELTERS);
-        CHECK(structure_deconstruct_work((StructureType)type) < def->build_work);
+        CHECK(structure_deconstruct_work((StructureType)type) <= def->build_work);
     }
     CHECK(structure_def(STRUCTURE_TYPE_COUNT) == NULL);
     /* Beds and doors can be walked through, walls cannot. */

@@ -23,11 +23,11 @@ static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
                                    250.0f,
                                    KNOWLEDGE_STONE_KNAPPING,
                                    50.0f},
-    /* A shallow pit ringed with stones: nothing to bring, a little digging. */
+    /* A shallow pit ringed with six stones, dug and built by a settler. */
     [WORKSTATION_OPEN_HEARTH] = {"open_hearth",
                                  N_("workstation.open_hearth"),
                                  N_("workstation.open_hearth.description"),
-                                 {{ITEM_NONE, 0}, {ITEM_NONE, 0}},
+                                 {{ITEM_COBBLE, 6}, {ITEM_NONE, 0}},
                                  250.0f,
                                  KNOWLEDGE_FIRE,
                                  50.0f,

@@ -378,7 +378,7 @@ static void test_built_stations_on_their_level(void)
     CHECK(construction_at(&game.constructions, 14, 16, LOW) != CONSTRUCTION_NONE);
     CHECK(construction_at(&game.constructions, 30, 16, HIGH) != CONSTRUCTION_NONE);
     CHECK_EQ_INT(game.workstations.used_count, 0);
-    items_add(&game.items, 8, 14, LOW, item_stack_pristine(ITEM_COBBLE, 3));
+    items_add(&game.items, 8, 14, LOW, item_stack_pristine(ITEM_COBBLE, 9));
 
     run_ticks(&game, 6000);
     CHECK_EQ_INT(game.constructions.workstation_count, 0);

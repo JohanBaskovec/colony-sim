@@ -1243,9 +1243,14 @@ colonist with the construction work type and the knowledge the station
 needs (`colonist_can_build_site()`) fetches what is still missing and does
 the work from a neighboring tile; `construction_add_work()` then places the
 station in `Workstations`, ready for bills. A station made of nothing
-(crafting spot, `workstation_needs_construction()` false) is placed ready,
-unless a plant is in the way: its site then only has the plant to
-clear. `game_can_place_workstation()` keeps room in the station list for
+(crafting spot, `workstation_needs_construction()` false) is placed ready at
+once; a structure with no material and no work (ground bedding,
+`structure_needs_construction()` false) is built at once likewise
+(`game_place_structure()` returns `CONSTRUCTION_BUILT_AT_ONCE`, no site). The
+plants under them are left alone and ordered uprooted (`DESIGNATION_UPROOT`,
+`order_uprooting()`), a settler does it. They are drawn as an outline only,
+since nothing was built. A knapping spot or a hearth (six cobbles) is a site
+as before, its plant cleared first. `game_can_place_workstation()` keeps room in the station list for
 every site (`Constructions.workstation_count`); should a station still not
 fit when its work is done (a tree grown on the tile), the site waits. The
 cancel tool removes blueprints; removing a station drops the input of a
@@ -1334,7 +1339,7 @@ searches with the zones revision and work reservation releases.
 ### Hearths and fire
 
 An open hearth (`WORKSTATION_OPEN_HEARTH`, `WorkstationDef.hearth`) is a
-workstation dug like a site (no material, 250 work, Fire 50) and walked over
+workstation built like a site (six cobbles, 250 work, Fire 50) and walked over
 like the other stations for now; crafters and refuellers work from a
 4-neighbor tile. Its fire lives on the `Workstation` (`fuel` in kilograms,
 `burning`, the player's `keep_burning` and `fuel_types`, and `fuel_promised`,

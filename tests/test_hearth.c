@@ -299,7 +299,7 @@ static void test_radiant_warmth(void)
     game_shutdown(&game);
 }
 
-static void test_hearth_is_dug_by_builders(void)
+static void test_hearth_is_built_from_six_stones(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
@@ -308,8 +308,13 @@ static void test_hearth_is_dug_by_builders(void)
     REQUIRE(game_place_workstation(&game, WORKSTATION_OPEN_HEARTH, 14, 10, 0));
     CHECK(construction_at(&game.constructions, 14, 10, 0) != CONSTRUCTION_NONE);
     CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
-    /* No material to bring: just the work. */
+    /* Without the stones, nothing is built. */
     run_ticks(&game, 1200, true);
+    CHECK_EQ_INT(workstation_at(&game.workstations, 14, 10, 0), WORKSTATION_NONE);
+    /* Six cobbles are brought, then the work is done. */
+    items_add(&game.items, 6, 14, 0, item_stack_pristine(ITEM_COBBLE, 6));
+    run_ticks(&game, 3000, true);
+    CHECK_EQ_INT(game.items.totals[ITEM_COBBLE], 0);
     int index = workstation_at(&game.workstations, 14, 10, 0);
     REQUIRE(index != WORKSTATION_NONE);
     CHECK_EQ_INT(construction_at(&game.constructions, 14, 10, 0), CONSTRUCTION_NONE);
@@ -716,7 +721,7 @@ int main(void)
     RUN_TEST(test_burning);
     RUN_TEST(test_chance_light_and_time);
     RUN_TEST(test_radiant_warmth);
-    RUN_TEST(test_hearth_is_dug_by_builders);
+    RUN_TEST(test_hearth_is_built_from_six_stones);
     RUN_TEST(test_haulers_refuel);
     RUN_TEST(test_lighting_by_friction);
     RUN_TEST(test_lighter_brings_fuel_to_an_empty_hearth);

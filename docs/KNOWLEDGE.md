@@ -556,7 +556,7 @@ food. Fire must be lit, fed and watched.*
 |-------------|-------|
 | id          | `open_hearth` |
 | Footprint   | 1 × 1, not passable |
-| Materials   | none (a shallow pit) |
+| Materials   | 6 cobbles (the ring of stones around a shallow pit) |
 | Work        | 250 ticks (0.1 h), Fire 50 |
 | Hit points  | 50 |
 | Placement   | Soil, sand, gravel, rough stone; indoors allowed (smoke, M4) |
@@ -887,9 +887,9 @@ twigs 0.2 kg):
 - branch screen, 1 m × 2 m: a frame of 2 uprights and 3 cross bars (3 kg)
   woven with thinner branches (4.5 kg): **5 branches**, the gaps stuffed with
   **5 handfuls of twigs**; about 1.5 hours.
-- ground bedding, 1 × 2 tiles: no material, only clearing and treading the
-  spot down, about 6 minutes (250 ticks); it rests as the bare ground does
-  (×0.8) and does not wear.
+- ground bedding, 1 × 2 tiles: no material and no work: it is there at once
+  where the player puts it (plants under it are left, ordered uprooted),
+  drawn as an outline only; it rests as the bare ground does (×0.8) and does not wear.
 Taking a structure apart takes a quarter of the building work and gives back
 half of the materials.
 

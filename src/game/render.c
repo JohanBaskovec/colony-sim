@@ -116,7 +116,6 @@ static const SDL_Color BRANCH_COLOR = {122, 86, 50, 255};
 static const SDL_Color TWIG_COLOR = {168, 128, 82, 255};
 static const SDL_Color FRESH_GRASS_COLOR = {92, 168, 64, 255};
 static const SDL_Color DRY_GRASS_COLOR = {206, 184, 104, 255};
-static const SDL_Color TRODDEN_EARTH_COLOR = {146, 114, 80, 255};
 static const SDL_Color FLINT_COLOR = {72, 78, 96, 255};
 static const SDL_Color FLAKE_COLOR = {128, 136, 156, 255};
 static const SDL_Color SPEAR_COLOR = {176, 134, 84, 255};
@@ -1053,6 +1052,22 @@ static void outline(SDL_Renderer *renderer, SDL_FRect rect, float thickness, SDL
     }
 }
 
+/* What needs no material and no work (a crafting spot, a ground bedding) is
+ * only marked on the ground: a thick light line with a dark one around it,
+ * nothing filled. */
+static void free_outline(SDL_Renderer *renderer, SDL_FRect rect, Uint8 alpha)
+{
+    SDL_Color light = {238, 226, 196, alpha}, dark = ITEM_OUTLINE;
+    dark.a = alpha;
+    float thickness = SDL_max(3.0f, floorf(SDL_min(rect.w, rect.h) * 0.1f));
+    outline(renderer, rect, 1.0f, dark);
+    rect.x += 1.0f;
+    rect.y += 1.0f;
+    rect.w -= 2.0f;
+    rect.h -= 2.0f;
+    outline(renderer, rect, thickness, light);
+}
+
 /* Filled rectangle with a dark one-pixel border (batched: see batch_flush()). */
 static void fill_outlined(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color color)
 {
@@ -1578,6 +1593,10 @@ static void render_hearth_fire(SDL_Renderer *renderer, const SDL_FRect *tile,
 static void render_station_shape(SDL_Renderer *renderer, const SDL_FRect *tile,
                                  WorkstationType type, Uint8 alpha)
 {
+    if (!workstation_needs_construction(type)) {
+        free_outline(renderer, inset(tile, 0.84f), alpha); /* Nothing built: only marked. */
+        return;
+    }
     if (workstation_def(type)->hearth) {
         render_hearth_shape(renderer, tile, alpha);
         return;
@@ -1713,6 +1732,17 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
     SDL_Color straw = DRY_GRASS_COLOR, dark = shade(DRY_GRASS_COLOR, -40);
     SDL_Color wood = BRANCH_COLOR, edge = ITEM_OUTLINE;
     straw.a = dark.a = wood.a = edge.a = alpha;
+    if (!structure_needs_construction(type)) {
+        bool vertical = direction == DIRECTION_NORTH || direction == DIRECTION_SOUTH;
+        float across = vertical ? w : h;
+        float side = floorf(across * 0.14f), end = floorf(across * 0.08f);
+        free_outline(
+            renderer,
+            vertical ? (SDL_FRect){tile->x + side, tile->y + end, w - 2.0f * side, h - 2.0f * end}
+                     : (SDL_FRect){tile->x + end, tile->y + side, w - 2.0f * end, h - 2.0f * side},
+            alpha);
+        return;
+    }
     switch (type) {
     case STRUCTURE_GRASS_BED: {
         bool vertical = direction == DIRECTION_NORTH || direction == DIRECTION_SOUTH;
@@ -1736,31 +1766,7 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
         fill(renderer, dark, &pillow);
         break;
     }
-    case STRUCTURE_GROUND_BEDDING: {
-        /* A patch of trodden earth, a darker hollow at the head end. */
-        bool vertical = direction == DIRECTION_NORTH || direction == DIRECTION_SOUTH;
-        float across = vertical ? w : h;
-        float side = floorf(across * 0.14f), end = floorf(across * 0.08f);
-        SDL_FRect patch =
-            vertical ? (SDL_FRect){tile->x + side, tile->y + end, w - 2.0f * side, h - 2.0f * end}
-                     : (SDL_FRect){tile->x + end, tile->y + side, w - 2.0f * end, h - 2.0f * side};
-        SDL_Color earth = TRODDEN_EARTH_COLOR, hollow = shade(TRODDEN_EARTH_COLOR, -36);
-        earth.a = hollow.a = alpha;
-        fill(renderer, edge, &patch);
-        SDL_FRect ground = {patch.x + 1.0f, patch.y + 1.0f, patch.w - 2.0f, patch.h - 2.0f};
-        fill(renderer, earth, &ground);
-        float hollow_size = floorf(across * 0.3f);
-        SDL_FRect head = ground;
-        if (vertical) {
-            head.y += direction == DIRECTION_NORTH ? ground.h - hollow_size : 0.0f;
-            head.h = hollow_size;
-        } else {
-            head.x += direction == DIRECTION_WEST ? ground.w - hollow_size : 0.0f;
-            head.w = hollow_size;
-        }
-        fill(renderer, hollow, &head);
-        break;
-    }
+    case STRUCTURE_GROUND_BEDDING: break; /* Only an outline, above. */
     case STRUCTURE_WALL: {
         fill(renderer, dark, tile);
         float step = SDL_max(2.0f, floorf(w / 6.0f));

@@ -107,7 +107,8 @@ static void test_placing(void)
     game_shutdown(&game);
 }
 
-/* A ground bedding costs nothing: a builder just treads the spot down. */
+/* A ground bedding costs nothing, in material or work: it is there at once,
+ * the plants under it cleared, and nobody has to build it. */
 static void test_ground_bedding_needs_no_material(void)
 {
     const StructureDef *def = structure_def(STRUCTURE_GROUND_BEDDING);
@@ -125,9 +126,15 @@ static void test_ground_bedding_needs_no_material(void)
     Colonist *builder = spawn_rested(&game, 10, 10);
     REQUIRE(builder != NULL);
     CHECK(game_structure_buildable(&game, STRUCTURE_GROUND_BEDDING));
-    REQUIRE(game_place_structure(&game, STRUCTURE_GROUND_BEDDING, 10, 14, 0, DIRECTION_SOUTH) !=
-            CONSTRUCTION_NONE);
-    CHECK(run_until_built(&game, 10, 14, 3000));
+    CHECK(!structure_needs_construction(STRUCTURE_GROUND_BEDDING));
+    game.map.plants[map_index(&game.map, 10, 15, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    CHECK_EQ_INT(game_place_structure(&game, STRUCTURE_GROUND_BEDDING, 10, 14, 0, DIRECTION_SOUTH),
+                 CONSTRUCTION_BUILT_AT_ONCE);
+    CHECK_EQ_INT(game.constructions.used_count, 0); /* No site. */
+    /* The grass under it is not destroyed: it is ordered uprooted. */
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 10, 15, 0)].type, PLANT_GRASS);
+    CHECK_EQ_INT(designation_get(&game.designations, 10, 15, 0), DESIGNATION_UPROOT);
+    CHECK_EQ_INT(designation_get(&game.designations, 10, 14, 0), DESIGNATION_NONE);
     CHECK_EQ_INT(map_structure(&game.map, 10, 14, 0), STRUCTURE_GROUND_BEDDING);
     CHECK_EQ_INT(map_structure(&game.map, 10, 15, 0), STRUCTURE_GROUND_BEDDING);
     CHECK_EQ_INT(game.constructions.used_count, 0);

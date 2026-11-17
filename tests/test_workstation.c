@@ -49,9 +49,12 @@ static void test_definitions(void)
     CHECK(!workstation_needs_construction(WORKSTATION_CRAFTING_SPOT));
     CHECK_EQ_INT(workstation_def(WORKSTATION_CRAFTING_SPOT)->knowledge, KNOWLEDGE_NONE);
     CHECK_EQ_INT(workstation_def(WORKSTATION_KNAPPING_SPOT)->materials[0].type, ITEM_COBBLE);
-    /* A hearth is a pit to dig: no material, some work, and fire. */
+    /* A hearth is a pit ringed with six stones, built by a settler, and
+     * holds a fire. */
     CHECK(workstation_needs_construction(WORKSTATION_OPEN_HEARTH));
-    CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->materials[0].type, ITEM_NONE);
+    CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->materials[0].type, ITEM_COBBLE);
+    CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->materials[0].count, 6);
+    CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->materials[1].type, ITEM_NONE);
     CHECK(workstation_def(WORKSTATION_OPEN_HEARTH)->hearth);
     CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->knowledge, KNOWLEDGE_FIRE);
 }
