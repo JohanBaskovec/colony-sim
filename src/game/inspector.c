@@ -158,6 +158,17 @@ bool inspector_forbid_action(App *app, int slot, bool forbidden)
     return clicked;
 }
 
+void inspector_move_action(App *app, int slot)
+{
+    const char *lines[2] = {tr("inspector.move"), tr("inspector.move.description")};
+    SDL_FRect icon;
+    bool lit = app->tool == APP_TOOL_MOVE;
+    if (inspector_action(app, slot, lit, &icon, lines, 2)) {
+        app_toggle_tool(app, APP_TOOL_MOVE, 0);
+    }
+    render_tool_icon(app->renderer, icon, RENDER_ICON_MOVE);
+}
+
 bool inspector_build_like_action(App *app, int slot)
 {
     AppTool tool;

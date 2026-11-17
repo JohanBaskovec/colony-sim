@@ -1351,7 +1351,7 @@ searches backed off on that revision look again.
   `KNOWLEDGE_STORY_CAP` (60), as `KNOWLEDGE_SOURCE_STORIES`. Both end at
   22:00 or when the fire goes out. The evening search backs off like the
   apprenticeship one.
-- **Move orders**: `game_order_move()` (a right click on the map with settlers
+- **Move orders**: `game_order_move()` (the Move tool: a left click on the map with settlers
   selected) gives each a goal of its own near the spot (the first gets the
   spot, the others the nearest free tiles within 4; unexplored tiles and tiles
   not reachable on the known map are left out) through `colonist_order_move()`:

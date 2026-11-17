@@ -54,6 +54,10 @@ bool inspector_action(App *app, int slot, bool lit, SDL_FRect *icon, const char 
  * clicked. */
 bool inspector_forbid_action(App *app, int slot, bool forbidden);
 
+/* Move the selected settlers: lit while the Move tool is armed, a click arms
+ * it (or puts it away); the next click on the map sends them there. */
+void inspector_move_action(App *app, int slot);
+
 /* Build another of the selection (app_build_like_selection(), done here);
  * false (nothing drawn, the slot stays free) when there is nothing to build
  * like it. */

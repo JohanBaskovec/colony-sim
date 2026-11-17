@@ -1218,6 +1218,7 @@ void hud_inspect_colonists(App *app)
     }
     bool open = one ? inspector_box(app, INSPECT_COLONIST, title, summary_rows, app)
                     : inspector_box(app, INSPECT_COLONISTS, title, panel_rows, &summary);
+    inspector_move_action(app, 0);
     if (one) {
         const char *labels[SECTION_COUNT - 1];
         for (int i = 1; i < SECTION_COUNT; i++) {

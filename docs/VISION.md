@@ -165,8 +165,8 @@ temperature) uses the real map everywhere.
 
 Since settlers never walk into the unknown, the colony grows its picture by
 going to the edge of what it knows. There is no Explore order: the player
-explores by hand, by sending settlers where they want (a right click on the map with
-settlers selected: `TASK_MOVE`, `game_order_move()`). A spot not explored yet is
+explores by hand, by sending settlers where they want (the Move action of the settlers' window, then a click on the map:
+`TASK_MOVE`, `game_order_move()`). A spot not explored yet is
 refused, and a group aimed at it is sent to the explored tiles round it: the
 fog is crossed a few tiles at a time, from its edge.
 

@@ -2080,6 +2080,18 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         batch_flush(renderer);
         break;
     }
+    case RENDER_ICON_MOVE: { /* An arrow leading to a ring on the ground. */
+        float cx = rect.x + w * 0.5f, cy = rect.y + h * 0.5f, half = w * 0.05f;
+        SDL_Color color = {236, 230, 210, 255};
+        batch_bar(renderer, color, cx - w * 0.36f, cy + h * 0.3f, cx + w * 0.22f, cy - h * 0.28f,
+                  half);
+        batch_bar(renderer, color, cx + w * 0.3f, cy - h * 0.36f, cx + w * 0.3f, cy - h * 0.06f,
+                  half);
+        batch_bar(renderer, color, cx + w * 0.3f, cy - h * 0.36f, cx, cy - h * 0.36f, half);
+        batch_ring(renderer, ALLOW_COLOR, cx + w * 0.2f, cy + h * 0.28f, w * 0.12f, w * 0.18f);
+        batch_flush(renderer);
+        break;
+    }
     case RENDER_ICON_CANCEL: {
         SDL_FRect area = inset(&rect, 0.5f);
         SDL_Color red = DESIGNATION_COLORS[DESIGNATION_NONE];

@@ -226,6 +226,10 @@ static void card_for(App *app, AppTool tool, int type, Card *card)
     case APP_TOOL_BUILD: station_card(app, (WorkstationType)type, card); break;
     case APP_TOOL_STRUCTURE: structure_card(app, (StructureType)type, card); break;
     case APP_TOOL_DEBUG: debug_card(app, type, card); break;
+    case APP_TOOL_MOVE:
+        card_add_text(card, CARD_TITLE, tr("inspector.move"));
+        card_add_text(card, CARD_DIM, tr("hud.tool.move_help"));
+        break;
     case APP_TOOL_NONE: break;
     default: tool_card(app, tool, type, card); break;
     }

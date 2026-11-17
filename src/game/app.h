@@ -35,6 +35,9 @@ typedef enum AppTool {
     /* Forbid (type APP_FORBID) or allow (APP_ALLOW) everything in a rectangle
      * (game_set_forbidden_rect()). */
     APP_TOOL_FORBID,
+    /* Move: a click sends the selected settlers there (game_order_move()); armed
+     * by the Move action of the settlers' window. */
+    APP_TOOL_MOVE,
 } AppTool;
 
 /*

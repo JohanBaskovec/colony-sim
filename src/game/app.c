@@ -1066,14 +1066,6 @@ static void apply_gather_tool(App *app, float screen_x, float screen_y)
     }
 }
 
-/* A right click on the map sends the selected settlers there, unless it has
- * something to step back from first (a tool, the build menu, a drag). */
-static bool can_order_move(const App *app)
-{
-    return app->selected_count > 0 && app->tool == APP_TOOL_NONE && !app->build_menu_open &&
-           !app->left_button_down;
-}
-
 static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
 {
     if (button->button != SDL_BUTTON_LEFT) {
@@ -1094,14 +1086,7 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
             app->right_click_pending = false;
             float dx = button->x - app->right_down_x, dy = button->y - app->right_down_y;
             if (dx * dx + dy * dy <= APP_DRAG_THRESHOLD * APP_DRAG_THRESHOLD) {
-                if (can_order_move(app)) {
-                    int x, y;
-                    screen_to_tile(app, button->x, button->y, &x, &y);
-                    game_order_move(&app->game, app->selected, app->selected_count, x, y,
-                                    app->camera.level);
-                } else {
-                    step_back(app, false);
-                }
+                step_back(app, false);
             }
         }
         return;
@@ -1151,6 +1136,14 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         int x0, y0, x1, y1;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
         game_set_forbidden_rect(&app->game, x0, y0, x1, y1, z, !app->forbid_allows);
+    } else if (app->tool == APP_TOOL_MOVE) {
+        if (app->selected_count > 0) {
+            int x, y;
+            screen_to_tile(app, button->x, button->y, &x, &y);
+            game_order_move(&app->game, app->selected, app->selected_count, x, y, z);
+        } else {
+            app->tool = APP_TOOL_NONE; /* Nobody left to send. */
+        }
     } else if (app->tool == APP_TOOL_DEBUG) {
         apply_debug_tool(app, button->x, button->y);
     } else if (app->tool == APP_TOOL_STOCKPILE) {

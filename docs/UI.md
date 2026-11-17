@@ -17,10 +17,10 @@ or button; `docs/ARCHITECTURE.md` describes how the code is organized.
 - **One main window open at a time** (Work, later Schedule, Assign...):
   opening one closes the other and closes the build menu. Escape or a right
   click steps back one level (drag, tool, menu, front window, selection);
-  with nothing left to close, Escape opens the game menu. With settlers
-  selected and nothing to step back from (no tool, no menu, no drag), a right
-  click on the map sends them there instead (`game_order_move()`; Escape
-  still steps back). Their path and the tile they go to are drawn.
+  with nothing left to close, Escape opens the game menu. The *Move* action
+  in the action menu of the selected settlers arms a tool: each left click
+  on the map sends them there (`game_order_move()`), until Escape or a right
+  click puts it away. Their path and the tile they go to are drawn.
 - **Never on top of each other.** Each zone of the screen has its own
   content; zones are computed in one place (`game/layout.h`) from the screen
   size and the theme.
@@ -119,8 +119,8 @@ become tabs:
 
 | Selection           | Summary                                       | Tabs (now; later)                                 | Actions                       |
 |---------------------|-----------------------------------------------|---------------------------------------------------|-------------------------------|
-| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Mood, Character, Knowledge, Gear, Social; Log, Health | (later: draft, attack)        |
-| Several colonists   | How many, their names                         | —                                                 | —                             |
+| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Mood, Character, Knowledge, Gear, Social; Log, Health | Move (later: draft, attack)   |
+| Several colonists   | How many, their names                         | —                                                 | Move                          |
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size                          | Storage (filters)                                 | Build another, delete         |
 | Gathering zone      | Name, priority, size                          | Resources                                         | Build another, delete         |
