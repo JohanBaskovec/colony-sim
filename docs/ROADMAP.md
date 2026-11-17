@@ -161,7 +161,7 @@ theme and migration plan).
 - [x] Wildlife, step 1: wild plant eaters living their own life (`core/animal.h`): roe deer, red deer, wild boar and hare, males and females, each with food, water and rest; they graze the grass down, eat what wild plants bear (blackberries, greens, mushrooms, the roots boars dig up, fallen hazelnuts: less for the gatherers), drink at the nearest water and sleep in the hours of their species (deer at night, boars and hares by day); herds by species (hinds and sows in herds behind a leader, stags in small groups, boars, roe deer and hares alone or nearly); they fear the settlers (flight on sight, the herd with them, nothing done near a settler) and are ignored by them; no door, ladder nor tree for them; a fixed number placed with the world (`--animals`, none in tests and benchmarks unless asked), nothing dies yet; drawn from the side in three poses, only where a settler sees them under the fog; an animal's window (species, sex, activity, needs, herd); a debug menu (F6) to spawn them one at a time, a female or a male of each species, with a click on the map
 - [ ] Wildlife, step 2: carnivores that attack and eat other animals; comes after *Health, step A* (M6), which brings injuries, death and carcasses
 - [ ] Wildlife, step 3: the population renews itself (births, or arrivals from the map's edges), so that predators and hunters do not empty the map
-- [ ] Wildlife, later: hunting; animals raiding the colony's food and fields; tracks and droppings; winter food (bark, twigs) when the grass is gone; young; walking and grazing animated beyond a bob
+- [ ] Wildlife, later: hunting; animals raiding the colony's food and fields; tracks and droppings; winter food (bark, twigs) when the grass is gone; young; grazing animated
 
 ## M6: Danger
 
@@ -186,7 +186,10 @@ theme and migration plan).
 - [x] Ground textures, the same on every tile of a terrain: soil, rich soil, shallow and deep water seen from above; grass over the ground, taller with its growth; the cut face of granite, sandstone and earth walls, dark and compact so that they never read as ground
 - [x] Textures for sand, gravel, rough stone, foliage (leaf canopy) and grass roofs (thatch)
 - [ ] Transitions between terrains
-- [ ] Colonist sprites seen from the back and the sides, walking and sleeping poses
+- [x] Walking shown without new sprites: settlers and animals hop at every step (0.06 tile) and rock from side to side around their feet (5.5°), all layers together, faster for a fleeing animal (`gait_at()` in `game/render.c`)
+- [x] Walkers seen the way they head (`colonist_heading()`, `animal_heading()`): settlers from the front, the side and behind (bodies, heads, hair and beards in three views; no face nor beard from behind), animals standing from the front and from behind besides their side poses; legs stay still, the gait does the walking
+- [ ] Views, later: animals eating and asleep seen from the front and from behind (they turn side on to eat and sleep); settlers remembering where they face once they stop (they turn to the viewer); the working hand and its tool for a settler seen from the side or from behind
+- [ ] Colonist sleeping pose
 - [ ] Sprites for items, workstations and structures
 - [ ] Clothes as sprite layers over the body (hide tunic, fur wrap...), once clothing exists
 - [ ] Gender (or body types) for colonists, to tie beards and names together

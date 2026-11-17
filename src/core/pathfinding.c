@@ -18,6 +18,17 @@ void path_free(Path *path)
     memset(path, 0, sizeof(*path));
 }
 
+Heading path_step_heading(TilePos from, TilePos to, Heading fallback)
+{
+    if (to.x != from.x) {
+        return to.x < from.x ? HEADING_WEST : HEADING_EAST;
+    }
+    if (to.y != from.y) {
+        return to.y < from.y ? HEADING_NORTH : HEADING_SOUTH;
+    }
+    return fallback;
+}
+
 static bool path_reserve(Path *path, int count)
 {
     if (count <= path->capacity) {

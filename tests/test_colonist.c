@@ -2282,6 +2282,32 @@ static void test_move_order_walks_holds_and_releases(void)
     game_shutdown(&game);
 }
 
+/* A settler faces where it walks, and the viewer once it stands. */
+static void test_heading_follows_the_walk(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    REQUIRE(spawn_rested(&game, 10, 10) != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    CHECK_EQ_INT(colonist_heading(game_colonist(&game, id)), HEADING_SOUTH);
+    static const struct {
+        int x, y;
+        Heading heading;
+    } LEGS[] = {{10, 5, HEADING_NORTH},
+                {16, 5, HEADING_EAST},
+                {16, 11, HEADING_SOUTH},
+                {9, 11, HEADING_WEST}};
+    for (int i = 0; i < 4; i++) {
+        CHECK_EQ_INT(game_order_move(&game, &id, 1, LEGS[i].x, LEGS[i].y, 0), 1);
+        run_ticks(&game, 5);
+        REQUIRE(colonist_is_moving(game_colonist(&game, id)));
+        CHECK_EQ_INT(colonist_heading(game_colonist(&game, id)), LEGS[i].heading);
+        CHECK(run_until_at(&game, id, LEGS[i].x, LEGS[i].y, 2000));
+        CHECK_EQ_INT(colonist_heading(game_colonist(&game, id)), HEADING_SOUTH);
+    }
+    game_shutdown(&game);
+}
+
 /* An order puts what is in hand down, and wakes a sleeper. */
 static void test_move_order_interrupts_what_the_settler_does(void)
 {
@@ -2407,6 +2433,7 @@ int main(void)
     RUN_TEST(test_harvest_and_uproot_orders_are_carried_out);
     RUN_TEST(test_careful_plants_need_a_careful_gatherer);
     RUN_TEST(test_move_order_walks_holds_and_releases);
+    RUN_TEST(test_heading_follows_the_walk);
     RUN_TEST(test_move_order_interrupts_what_the_settler_does);
     RUN_TEST(test_move_order_refuses_unreachable_tiles);
     RUN_TEST(test_move_order_spreads_a_group);

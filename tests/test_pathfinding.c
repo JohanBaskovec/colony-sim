@@ -497,6 +497,21 @@ static void test_many_searches_reuse_memory(void)
     cleanup(&map, &finder, &path);
 }
 
+/* Sideways wins on a diagonal; a step straight up or down a level keeps the heading. */
+static void test_step_heading(void)
+{
+    TilePos here = {10, 10, 0};
+    CHECK_EQ_INT(path_step_heading(here, (TilePos){10, 11, 0}, HEADING_EAST), HEADING_SOUTH);
+    CHECK_EQ_INT(path_step_heading(here, (TilePos){10, 9, 0}, HEADING_EAST), HEADING_NORTH);
+    CHECK_EQ_INT(path_step_heading(here, (TilePos){11, 10, 0}, HEADING_SOUTH), HEADING_EAST);
+    CHECK_EQ_INT(path_step_heading(here, (TilePos){9, 10, 0}, HEADING_SOUTH), HEADING_WEST);
+    CHECK_EQ_INT(path_step_heading(here, (TilePos){11, 11, 0}, HEADING_SOUTH), HEADING_EAST);
+    CHECK_EQ_INT(path_step_heading(here, (TilePos){9, 9, 0}, HEADING_SOUTH), HEADING_WEST);
+    CHECK_EQ_INT(path_step_heading(here, (TilePos){10, 9, 1}, HEADING_SOUTH), HEADING_NORTH);
+    CHECK_EQ_INT(path_step_heading(here, (TilePos){10, 10, 1}, HEADING_WEST), HEADING_WEST);
+    CHECK_EQ_INT(path_step_heading(here, (TilePos){10, 10, 1}, HEADING_NORTH), HEADING_NORTH);
+}
+
 int main(void)
 {
     RUN_TEST(test_straight_and_diagonal_paths);
@@ -514,5 +529,6 @@ int main(void)
     RUN_TEST(test_shortest_paths_over_hills);
     RUN_TEST(test_nearest_in_box_is_as_cheap);
     RUN_TEST(test_many_searches_reuse_memory);
+    RUN_TEST(test_step_heading);
     return test_summary();
 }

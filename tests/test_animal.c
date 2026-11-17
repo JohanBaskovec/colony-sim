@@ -921,6 +921,34 @@ static void test_debug_spawn_joins_a_herd(void)
     game_shutdown(&game);
 }
 
+/* An animal faces where its step leads; standing, the side it last turned to. */
+static void test_heading(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Animal *boar = spawn(&game, ANIMAL_BOAR, ANIMAL_MALE, 20, 20);
+    REQUIRE(boar != NULL);
+    boar->facing_left = true;
+    CHECK_EQ_INT(animal_heading(boar), HEADING_WEST);
+    boar->facing_left = false;
+    CHECK_EQ_INT(animal_heading(boar), HEADING_EAST);
+    /* A step of its path: owned by the animal, freed with it. */
+    path_free(&boar->path);
+    boar->path.steps = malloc(sizeof(TilePos));
+    REQUIRE(boar->path.steps != NULL);
+    boar->path.count = boar->path.capacity = 1;
+    boar->path_index = 0;
+    boar->path.steps[0] = (TilePos){20, 21, 0};
+    CHECK_EQ_INT(animal_heading(boar), HEADING_SOUTH);
+    boar->path.steps[0] = (TilePos){20, 19, 0};
+    CHECK_EQ_INT(animal_heading(boar), HEADING_NORTH);
+    boar->path.steps[0] = (TilePos){19, 19, 0};
+    CHECK_EQ_INT(animal_heading(boar), HEADING_WEST);
+    boar->path.steps[0] = (TilePos){21, 20, 0};
+    CHECK_EQ_INT(animal_heading(boar), HEADING_EAST);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_species_definitions);
@@ -943,5 +971,6 @@ int main(void)
     RUN_TEST(test_wild_games_are_deterministic);
     RUN_TEST(test_seen_and_picked);
     RUN_TEST(test_debug_spawn_joins_a_herd);
+    RUN_TEST(test_heading);
     return test_summary();
 }

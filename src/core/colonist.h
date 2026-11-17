@@ -681,6 +681,10 @@ bool colonist_order_move(Colonist *colonist, const ColonistContext *context, Til
 
 bool colonist_is_moving(const Colonist *colonist);
 
+/* The way the colonist faces: where its step leads while it walks, south
+ * (toward the viewer) when it stands, works or sleeps. */
+Heading colonist_heading(const Colonist *colonist);
+
 /* Interpolated position of the colonist's center, in world (tile) coordinates. */
 void colonist_position(const Colonist *colonist, float *x, float *y);
 

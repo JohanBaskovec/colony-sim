@@ -627,13 +627,14 @@ def compose(shadow, canvas, shadow_opacity):
 
 
 # ---------------------------------------------------------------------------
-# Animals (side view, facing right; the game mirrors them). One sprite per
-# species, sex and pose: standing, eating (head down) and asleep (lying).
+# Animals. One sprite per species, sex and pose: standing, eating (head down)
+# and asleep (lying), all three seen from the side, facing right (the game
+# mirrors them), then standing seen from the front and from behind.
 # The feet are on the bottom center of the canvas, like the characters'.
 # ---------------------------------------------------------------------------
 
 ANIMAL_OUTLINE = (34, 26, 20)
-ANIMAL_POSES = ["stand", "eat", "sleep"]
+ANIMAL_POSES = ["stand", "eat", "sleep", "front", "back"]
 ANIMAL_SEXES = ["female", "male"]
 ANIMAL_GROUND = 10.0  # Pixels under the feet (the shadow).
 ANTLER = (206, 190, 160)
@@ -762,11 +763,11 @@ def draw_deer(spec, male, pose):
 
 
 DEER = {
-    "roe_deer": {"canvas": (128, 128), "size": 1.0, "female_size": 0.94, "body": (70.0, 26.0),
+    "roe_deer": {"canvas": (128, 128), "facing_canvas": (96, 128), "size": 1.0, "female_size": 0.94, "body": (70.0, 26.0),
                  "leg": 34.0, "leg_width": 5.0, "neck": (24.0, 11.0), "head": (17.0, 13.0),
                  "ear": 14.0, "antlers": (20.0, 2), "coat": (176, 112, 62),
                  "belly": (222, 190, 150), "rump": (244, 236, 220), "tail": (244, 236, 220)},
-    "red_deer": {"canvas": (224, 192), "size": 1.0, "female_size": 0.88, "body": (124.0, 44.0),
+    "red_deer": {"canvas": (224, 192), "facing_canvas": (128, 192), "size": 1.0, "female_size": 0.88, "body": (124.0, 44.0),
                  "leg": 56.0, "leg_width": 8.0, "neck": (42.0, 19.0), "head": (30.0, 21.0),
                  "ear": 19.0, "antlers": (58.0, 4), "coat": (150, 96, 60),
                  "belly": (196, 160, 122), "rump": (226, 200, 158), "tail": (118, 76, 50)},
@@ -881,7 +882,213 @@ def draw_hare(pose):
     return compose(shadow, canvas, shadow_opacity=0.3)
 
 
+# Standing animals seen from the front (walking down the screen) and from
+# behind (walking up): the same sizes and colors as the side views, the feet
+# on the bottom center of a narrower canvas.
+
+def antlers_facing(canvas, cx, base_y, head_w, size, points):
+    """Both antlers seen from the front or from behind: beams spreading up
+    and out, tines pointing up."""
+    for side in (-1, 1):
+        base = (cx + side * head_w * 0.24, base_y)
+        elbow = (cx + side * size * 0.3, base_y - size * 0.32)
+        tip = (cx + side * size * 0.36, base_y - size * 0.68)
+        canvas.line([base, elbow, tip], max(2.0, size * 0.07), ANTLER)
+        for i in range(points):
+            t = (i + 0.5) / (points + 0.3)
+            start = (base[0] + (tip[0] - base[0]) * t + side * size * 0.06 * math.sin(math.pi * t),
+                     base[1] + (tip[1] - base[1]) * t)
+            lean = -side * (0.12 if i else -0.2)
+            canvas.line([start, (start[0] + size * lean, start[1] - size * (0.26 - 0.03 * i))],
+                        max(1.6, size * 0.05), ANTLER)
+
+
+def draw_deer_facing(spec, male, back):
+    width, height = spec["facing_canvas"]
+    k = spec["size"] * (1.0 if male else spec["female_size"])
+    coat, belly, dark = spec["coat"], spec["belly"], shade(spec["coat"], 0.62)
+    hoof = shade(dark, 0.5)
+    canvas, shadow = Canvas(width, height), Canvas(width, height)
+    ground = height - ANIMAL_GROUND
+    body_h, leg_len = spec["body"][1] * k, spec["leg"] * k
+    body_w = body_h * 0.92
+    leg_w = spec["leg_width"] * k
+    cx = width * 0.5
+    cy = ground - leg_len - body_h * 0.5
+    shadow.ellipse(cx, ground, body_w * 0.75, 6.0 * k + 3.0, (0, 0, 0))
+    neck_len, neck_w = spec["neck"][0] * k, spec["neck"][1] * k
+    head_len, head_w = spec["head"][0] * k, spec["head"][1] * k
+    shoulder = (cx, cy - body_h * 0.2)
+    nape = (cx, shoulder[1] - neck_len * 0.85)
+
+    def far_legs():
+        for side in (-1, 1):
+            leg(canvas, (cx + side * body_w * 0.36, cy), ground - 2, leg_len + body_h * 0.4, leg_w,
+                dark, 0.0, hoof)
+
+    def near_legs():
+        for side in (-1, 1):
+            leg(canvas, (cx + side * body_w * 0.24, cy + body_h * 0.15), ground,
+                leg_len + body_h * 0.3, leg_w, coat, 0.0, hoof)
+
+    def ears_and_antlers():
+        for side in (-1, 1):
+            ear(canvas, (cx + side * head_w * 0.34, nape[1] - head_w * 0.12), 90 - side * 58,
+                spec["ear"] * k, head_w * 0.52, shade(coat, 0.85) if back else dark)
+        if male and spec["antlers"]:
+            size, points = spec["antlers"]
+            antlers_facing(canvas, cx, nape[1] - head_w * 0.38, head_w, size * k, points)
+
+    def trunk():
+        canvas.ellipse(cx, cy, body_w * 0.5, body_h * 0.54, coat, light=0.22)
+
+    if back:
+        far_legs()  # The forelegs, between the hind ones.
+        taper(canvas, shoulder, nape, neck_w * 1.25, neck_w * 0.82, shade(coat, 0.92))
+        ears_and_antlers()
+        canvas.ellipse(nape[0], nape[1], head_w * 0.52, head_w * 0.54, coat, light=0.2)
+        trunk()
+        mask = canvas.coverage()
+        canvas.ellipse(cx, cy + body_h * 0.08, body_w * 0.34, body_h * 0.4, spec["rump"], clip=mask)
+        canvas.line([(cx, cy - body_h * 0.3), (cx, cy + body_h * 0.02)], 3.0 * k + 1.0,
+                    spec["tail"])
+        near_legs()
+    else:
+        far_legs()  # The hind legs, behind and wider apart.
+        trunk()
+        mask = canvas.coverage()
+        canvas.ellipse(cx, cy + body_h * 0.42, body_w * 0.36, body_h * 0.2, belly, clip=mask,
+                       opacity=0.6)
+        near_legs()
+        taper(canvas, shoulder, nape, neck_w * 1.3, neck_w * 0.85, coat)
+        ears_and_antlers()
+        nose = (cx, nape[1] + head_len * 0.6)
+        canvas.ellipse(nape[0], nape[1], head_w * 0.52, head_w * 0.54, coat, light=0.2)
+        taper(canvas, nape, nose, head_w * 0.92, head_w * 0.46, coat)
+        canvas.ellipse(nose[0], nose[1] + head_w * 0.06, head_w * 0.2, head_w * 0.15, (40, 30, 28))
+        for side in (-1, 1):
+            canvas.ellipse(cx + side * head_w * 0.3, nape[1] + head_len * 0.08, 2.2 * k + 0.4,
+                           2.2 * k + 0.4, (24, 18, 16))
+    canvas.outline(2.0, ANIMAL_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.3)
+
+
+def draw_boar_facing(male, back):
+    width, height = 128, 128
+    k = 1.0 if male else 0.88
+    coat, dark, light = (86, 70, 58), (50, 40, 34), (122, 104, 88)
+    hoof = (24, 20, 18)
+    canvas, shadow = Canvas(width, height), Canvas(width, height)
+    ground = height - ANIMAL_GROUND
+    body_w, body_h, leg_len = 54.0 * k, 46.0 * k, 22.0 * k
+    cx = width * 0.5
+    cy = ground - leg_len - body_h * 0.5
+    leg_w = 8.5 * k
+    shadow.ellipse(cx, ground, body_w * 0.62, 8.0, (0, 0, 0))
+    for side in (-1, 1):  # The legs of the far end, wider apart.
+        leg(canvas, (cx + side * body_w * 0.36, cy), ground - 2, leg_len + body_h * 0.4,
+            leg_w * 0.9, dark, 0.0, hoof)
+    if back:  # The ears show over the back.
+        for side in (-1, 1):
+            ear(canvas, (cx + side * 13.0 * k, cy - body_h * 0.36), 90 - side * 30, 16.0 * k,
+                11.0 * k, dark)
+    # Bristles on top of the back.
+    rng = random.Random(7)
+    top = cy - body_h * 0.5
+    for i in range(9):
+        t = i / 8.0 - 0.5
+        x = cx + t * body_w * 0.5
+        y = top + body_h * 0.5 * t * t
+        canvas.line([(x, y + 6), (x + t * 5 + rng.random() - 0.5, y - 5 * k - rng.random() * 3)],
+                    2.4, dark)
+    canvas.ellipse(cx, cy, body_w * 0.5, body_h * 0.52, coat, light=0.22)
+    trunk = canvas.coverage()
+    canvas.ellipse(cx, cy + body_h * 0.42, body_w * 0.4, body_h * 0.16, light, clip=trunk,
+                   opacity=0.5)
+    for side in (-1, 1):
+        leg(canvas, (cx + side * body_w * 0.25, cy + body_h * 0.2), ground,
+            leg_len + body_h * 0.25, leg_w, coat, 0.0, hoof)
+    if back:
+        # The ridge of bristles runs down the middle of the back, to the tail.
+        for i in range(7):
+            y = top + 3.0 + i * body_h * 0.07
+            canvas.line([(cx - 3.5 * k, y - 2.0), (cx, y + 2.5), (cx + 3.5 * k, y - 2.0)], 2.0,
+                        dark, clip=trunk)
+        canvas.line([(cx, cy + body_h * 0.02), (cx + 2.0 * k, cy + body_h * 0.2),
+                     (cx + 1.0 * k, cy + body_h * 0.34)], 2.6, dark)
+        canvas.ellipse(cx + 1.0 * k, cy + body_h * 0.36, 2.4 * k, 3.4 * k, dark)
+    else:
+        # The head, low in front of the chest: a wedge narrowing down to the snout.
+        skull = (cx, cy + body_h * 0.02)
+        snout = (cx, skull[1] + 24.0 * k)
+        for side in (-1, 1):
+            ear(canvas, (skull[0] + side * 14.0 * k, skull[1] - 11.0 * k), 90 - side * 38,
+                17.0 * k, 12.0 * k, dark)
+        canvas.ellipse(skull[0], skull[1], 20.0 * k, 19.0 * k, shade(coat, 1.12), light=0.2)
+        taper(canvas, skull, snout, 37.0 * k, 17.0 * k, shade(coat, 1.12))
+        canvas.line([(cx, skull[1] - 4.0 * k), (cx, snout[1] - 7.0 * k)], 5.0 * k,
+                    shade(coat, 0.95), opacity=0.7)
+        canvas.ellipse(snout[0], snout[1] + 1.0 * k, 8.5 * k, 6.5 * k, (58, 44, 44))
+        for side in (-1, 1):
+            canvas.ellipse(snout[0] + side * 3.2 * k, snout[1] + 1.2 * k, 1.5 * k, 2.2 * k,
+                           (28, 20, 20))
+            if male:
+                jaw = (snout[0] + side * 8.0 * k, snout[1] - 1.0 * k)
+                canvas.line([jaw, (jaw[0] + side * 4.0, jaw[1] - 5.0),
+                             (jaw[0] + side * 4.5, jaw[1] - 11.0)], 3.0, (240, 232, 210))
+            canvas.ellipse(skull[0] + side * 10.0 * k, skull[1] - 0.5 * k, 2.4, 2.4, (16, 12, 10))
+    canvas.outline(2.0, ANIMAL_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.3)
+
+
+def draw_hare_facing(back):
+    width, height = 64, 64
+    coat, dark, belly = (176, 142, 100), (112, 86, 60), (232, 218, 196)
+    canvas, shadow = Canvas(width, height), Canvas(width, height)
+    ground = height - 6.0
+    cx = width * 0.5
+    cy = ground - 13.5
+    shadow.ellipse(cx, ground, 15.0, 4.0, (0, 0, 0))
+    skull = (cx, cy - 11.0)
+
+    def ears():
+        for side in (-1, 1):
+            root = (skull[0] + side * 3.0, skull[1] - 3.0)
+            tip = (skull[0] + side * 6.5, skull[1] - 21.0)
+            canvas.line([root, tip], 4.4, coat)
+            canvas.line([(root[0] + (tip[0] - root[0]) * 0.75, root[1] + (tip[1] - root[1]) * 0.75),
+                         tip], 4.0, (40, 32, 28))
+
+    if back:
+        ears()
+        canvas.ellipse(skull[0], skull[1], 7.2, 6.8, coat, light=0.2)
+    for side in (-1, 1):  # Hind feet, out on both sides.
+        canvas.line([(cx + side * 6.0, ground - 2.0), (cx + side * 12.0, ground - 1.5)], 4.2, dark)
+    canvas.ellipse(cx, cy + 1.0, 12.0, 13.0, coat, light=0.22)
+    trunk = canvas.coverage()
+    if back:
+        canvas.ellipse(cx, cy + 7.0, 4.2, 4.0, (244, 240, 230))  # Scut.
+    else:
+        canvas.ellipse(cx, cy + 6.0, 6.5, 7.5, belly, clip=trunk, opacity=0.8)
+        for side in (-1, 1):  # Forelegs.
+            canvas.line([(cx + side * 3.5, cy + 3.0), (cx + side * 3.5, ground - 1.5)], 3.4, coat)
+        ears()
+        canvas.ellipse(skull[0], skull[1], 7.4, 7.0, coat, light=0.2)
+        canvas.ellipse(skull[0], skull[1] + 3.6, 4.6, 3.6, shade(coat, 1.12))
+        canvas.ellipse(skull[0], skull[1] + 2.6, 1.6, 1.3, (60, 40, 40))
+        for side in (-1, 1):
+            canvas.ellipse(skull[0] + side * 4.6, skull[1] - 0.8, 1.8, 1.9, (24, 18, 16))
+    canvas.outline(1.6, ANIMAL_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.3)
+
+
 def draw_animal(species, male, pose):
+    if pose in ("front", "back"):
+        if species in DEER:
+            return draw_deer_facing(DEER[species], male, pose == "back")
+        if species == "boar":
+            return draw_boar_facing(male, pose == "back")
+        return draw_hare_facing(pose == "back")
     if species in DEER:
         return draw_deer(DEER[species], male, pose)
     if species == "boar":
@@ -893,9 +1100,15 @@ ANIMAL_SPECIES = ["roe_deer", "red_deer", "boar", "hare"]
 
 
 # ---------------------------------------------------------------------------
-# Characters (front view). All layers share one canvas: 128x192, feet at the
-# bottom center. Layers: body, head (with the face), beard, hair.
+# Characters. All layers share one canvas: 128x192, feet at the bottom
+# center. Layers: body, head (with the face), beard, hair. Each comes in three
+# views: from the front, from the side (facing right, the game mirrors it) and
+# from behind (no face: one head per skin, no beard).
 # ---------------------------------------------------------------------------
+
+CHAR_VIEWS = ["front", "side", "back"]
+# Seen from the side, a body is this much of its width from the front.
+BODY_DEPTH = 0.68
 
 CHAR_W, CHAR_H = 128, 192
 CX = 64.0
@@ -935,19 +1148,34 @@ def body_half_width(t, half_width, taper, bulge):
     return width
 
 
-def draw_body(shape, skin):
+def draw_body(shape, skin, view="front"):
     """Naked body without arms nor legs: a rounded trunk the head sits on.
     Clothes will be layers drawn over it."""
     _, half_width, taper, bulge = BODY_SHAPES[shape]
     skin_color = SKIN_TONES[skin]
     canvas = Canvas(CHAR_W, CHAR_H)
     shadow = Canvas(CHAR_W, CHAR_H)
-    shadow.ellipse(CX, FEET_Y - 3, half_width * 0.9, 7, (0, 0, 0))
     steps = 48
     height = BODY_BOTTOM - BODY_TOP
-    right = [(CX + body_half_width(i / steps, half_width, taper, bulge),
-              BODY_TOP + height * i / steps) for i in range(steps + 1)]
-    outline = right + [(2 * CX - x, y) for x, y in reversed(right)]
+    if view == "side":
+        # The belly leads, the back is straighter with a hint of buttocks.
+        depth = half_width * BODY_DEPTH
+        half_width = depth
+        shadow.ellipse(CX, FEET_Y - 3, depth * 1.05, 7, (0, 0, 0))
+        front = [(CX + body_half_width(i / steps, depth, taper, bulge * 2.4 + 0.06),
+                  BODY_TOP + height * i / steps) for i in range(steps + 1)]
+        behind = []
+        for i in range(steps + 1):
+            t = i / steps
+            rump = 0.12 * math.sin(math.pi * min(1.0, max(0.0, (t - 0.45) / 0.5)))
+            behind.append((CX - body_half_width(t, depth, taper * 0.5, 0.0) * (1.0 + rump),
+                           BODY_TOP + height * t))
+        outline = front + list(reversed(behind))
+    else:
+        shadow.ellipse(CX, FEET_Y - 3, half_width * 0.9, 7, (0, 0, 0))
+        right = [(CX + body_half_width(i / steps, half_width, taper, bulge),
+                  BODY_TOP + height * i / steps) for i in range(steps + 1)]
+        outline = right + [(2 * CX - x, y) for x, y in reversed(right)]
     mask = canvas.polygon_mask(outline)
     # Lit from the upper left, rounder looking with darker sides.
     gx, gy = canvas.full_grids()
@@ -956,34 +1184,110 @@ def draw_body(shape, skin):
     factor = 1.06 - 0.16 * u - 0.12 * v - 0.14 * np.clip(np.abs(u) - 0.55, 0.0, 1.0) * 2.0
     color = np.clip(rgb(skin_color)[None, None, :] * factor[..., None], 0.0, 1.0)
     canvas.paint_full(mask, color)
-    # Shoulder highlight and a hint of the navel.
+    # Shoulder highlight.
     canvas.ellipse(CX - half_width * 0.45, BODY_TOP + 14, half_width * 0.35, 6,
                    shade(skin_color, 1.1), clip=mask, opacity=0.5)
-    navel_y = BODY_TOP + height * (0.62 if bulge <= 0 else 0.6)
-    canvas.ellipse(CX + 1, navel_y, 1.6, 2.2, shade(skin_color, 0.62), opacity=0.8)
-    if bulge > 0:  # Fold under the belly.
-        canvas.line([(CX - half_width * 0.5, BODY_TOP + height * 0.8),
-                     (CX, BODY_TOP + height * 0.83),
-                     (CX + half_width * 0.5, BODY_TOP + height * 0.8)], 1.6,
-                    shade(skin_color, 0.75), clip=mask, opacity=0.7)
+    crease = shade(skin_color, 0.75)
+    if view == "front":  # A hint of the navel, a fold under a belly.
+        navel_y = BODY_TOP + height * (0.62 if bulge <= 0 else 0.6)
+        canvas.ellipse(CX + 1, navel_y, 1.6, 2.2, shade(skin_color, 0.62), opacity=0.8)
+        if bulge > 0:
+            canvas.line([(CX - half_width * 0.5, BODY_TOP + height * 0.8),
+                         (CX, BODY_TOP + height * 0.83),
+                         (CX + half_width * 0.5, BODY_TOP + height * 0.8)], 1.6, crease,
+                        clip=mask, opacity=0.7)
+    elif view == "back":  # The spine and the buttocks.
+        canvas.line([(CX, BODY_TOP + height * 0.2), (CX, BODY_TOP + height * 0.62)], 1.6, crease,
+                    clip=mask, opacity=0.45)
+        canvas.line([(CX, BODY_TOP + height * 0.78), (CX, BODY_TOP + height * 0.97)], 1.6, crease,
+                    clip=mask, opacity=0.7)
     canvas.outline(2.0, CHAR_OUTLINE)
     return compose(shadow, canvas, shadow_opacity=0.3)
 
 
-def eye(canvas, x, y, expression):
+def eye(canvas, x, y, expression, squeeze=1.0):
+    """An eye; `squeeze` narrows it for a head seen from the side."""
     dark = (40, 30, 26)
     if expression == "smiling":
         # Closed, happy eyes: upward arcs.
-        canvas.line([(x - 4.5, y + 1.5), (x, y - 2.5), (x + 4.5, y + 1.5)], 2.4, dark)
+        canvas.line([(x - 4.5 * squeeze, y + 1.5), (x, y - 2.5), (x + 4.5 * squeeze, y + 1.5)],
+                    2.4, dark)
         return
     ry = 4.6 if expression != "sad" else 4.0
     oy = 0.0 if expression != "sad" else 1.0
-    canvas.ellipse(x, y + oy, 5.2, ry + 0.6, (250, 248, 240))
-    canvas.ellipse(x + 0.5, y + oy + 0.5, 3.4, ry * 0.85, dark)
-    canvas.ellipse(x - 0.6, y + oy - 1.4, 1.2, 1.2, (255, 255, 255))
+    look = 0.5 if squeeze == 1.0 else 1.2  # Looking ahead.
+    canvas.ellipse(x, y + oy, 5.2 * squeeze, ry + 0.6, (250, 248, 240))
+    canvas.ellipse(x + look, y + oy + 0.5, 3.4 * squeeze, ry * 0.85, dark)
+    canvas.ellipse(x + look - 1.1, y + oy - 1.4, 1.2, 1.2, (255, 255, 255))
 
 
-def draw_head(skin, expression):
+# A head seen from the side: the skull sits a little back, the face leads.
+SIDE_SKULL_X = CX - 2.0
+SIDE_EAR_X = CX - 6.0
+
+
+def draw_head_side(skin, expression):
+    skin_color = SKIN_TONES[skin]
+    canvas = Canvas(CHAR_W, CHAR_H)
+    # The jaw first: only its chin shows under the skull.
+    canvas.ellipse(CX + 3, HEAD_CY + 12, HEAD_RX * 0.82, HEAD_RY * 0.62, shade(skin_color, 0.94),
+                   light=0.2)
+    canvas.ellipse(SIDE_SKULL_X, HEAD_CY, HEAD_RX, HEAD_RY, skin_color, light=0.32)
+    # The nose sticks out of the profile.
+    canvas.ellipse(CX + 25.5, HEAD_CY + 10.5, 4.6, 3.8, skin_color, light=0.2)
+    canvas.ellipse(CX + 24, HEAD_CY + 13.5, 2.6, 1.4, shade(skin_color, 0.8))
+    canvas.ellipse(SIDE_EAR_X, HEAD_CY + 4, 5.5, 8, shade(skin_color, 0.9))
+    canvas.ellipse(SIDE_EAR_X - 0.5, HEAD_CY + 4, 2.8, 4.8, shade(skin_color, 0.75))
+    eye_x, eye_y = CX + 15.0, HEAD_CY + 4
+    brow = shade(skin_color, 0.42)
+    eye(canvas, eye_x, eye_y, expression, squeeze=0.72)
+    front, behind = eye_x + 5.5, eye_x - 5
+    if expression == "neutral":
+        canvas.line([(front, eye_y - 9), (behind, eye_y - 9.5)], 2.6, brow)
+    elif expression == "smiling":
+        canvas.line([(front, eye_y - 9.5), (eye_x, eye_y - 11.5), (behind, eye_y - 10)], 2.6, brow)
+    elif expression == "sad":
+        canvas.line([(front, eye_y - 12), (behind, eye_y - 8)], 2.6, brow)
+    else:  # angry
+        canvas.line([(front, eye_y - 6.5), (behind, eye_y - 11)], 3.0, brow)
+    mouth_y = HEAD_CY + 20
+    lips = (120, 52, 48)
+    if expression == "neutral":
+        canvas.line([(CX + 13, mouth_y), (CX + 21.5, mouth_y)], 2.2, lips)
+    elif expression == "smiling":
+        canvas.line([(CX + 21.5, mouth_y + 1), (CX + 15, mouth_y + 1.5), (CX + 10.5, mouth_y - 3)],
+                    2.4, (110, 40, 40))
+        canvas.ellipse(CX + 9, HEAD_CY + 13, 5, 3, (236, 120, 110), opacity=0.35)
+    elif expression == "sad":
+        canvas.line([(CX + 21.5, mouth_y), (CX + 15, mouth_y), (CX + 11, mouth_y + 3.5)], 2.2,
+                    lips)
+    else:  # angry
+        canvas.polygon([(CX + 11, mouth_y - 1), (CX + 21.5, mouth_y - 1), (CX + 21.5, mouth_y + 3),
+                        (CX + 10, mouth_y + 3)], (110, 40, 40))
+        canvas.line([(CX + 12, mouth_y + 1), (CX + 21, mouth_y + 1)], 1.6, (250, 246, 236))
+    canvas.outline(2.0, CHAR_OUTLINE)
+    return canvas
+
+
+def draw_head_back(skin):
+    """The back of a head: no face, so one sprite per skin serves every mood."""
+    skin_color = SKIN_TONES[skin]
+    canvas = Canvas(CHAR_W, CHAR_H)
+    for side in (-1, 1):
+        canvas.ellipse(CX + side * (HEAD_RX - 1), HEAD_CY + 3, 6, 8, shade(skin_color, 0.9))
+    # The jaw first: only its lower edge shows under the skull.
+    canvas.ellipse(CX, HEAD_CY + 12, HEAD_RX * 0.86, HEAD_RY * 0.62, shade(skin_color, 0.9),
+                   light=0.2)
+    canvas.ellipse(CX, HEAD_CY, HEAD_RX, HEAD_RY, skin_color, light=0.32)
+    canvas.outline(2.0, CHAR_OUTLINE)
+    return canvas
+
+
+def draw_head(skin, expression, view="front"):
+    if view == "side":
+        return draw_head_side(skin, expression)
+    if view == "back":
+        return draw_head_back(skin)
     skin_color = SKIN_TONES[skin]
     canvas = Canvas(CHAR_W, CHAR_H)
     # Ears, then the face.
@@ -1054,7 +1358,155 @@ def hair_strands(canvas, rng, count, x0, x1, y0, y1, length):
                     clip=clip, opacity=0.65)
 
 
-def draw_hair(style):
+def side_face_hole(canvas, top, ear=False):
+    """Mask of the face of a head seen from the side, below the hairline
+    `top`; with the ear when the hair is short enough to show it."""
+    result = Canvas(CHAR_W, CHAR_H)
+    result.ellipse(CX + 21, HEAD_CY + 8, 23, HEAD_RY - 1, (1.0, 1.0, 1.0))
+    hole = result.alpha
+    _, gy = canvas.full_grids()
+    hole = hole * np.clip((gy - top) * SUPERSAMPLING, 0.0, 1.0)
+    if ear:
+        lobe = Canvas(CHAR_W, CHAR_H)
+        lobe.ellipse(SIDE_EAR_X + 1, HEAD_CY + 6, 7.5, 10, (1.0, 1.0, 1.0))
+        hole = np.maximum(hole, lobe.alpha)
+    return hole
+
+
+def braid(canvas, x, top, side):
+    """A braid hanging from `top`, leaning a little to `side`, with its tie."""
+    base = rgb(HAIR_BASE)
+    for k in range(6):
+        y = top + k * 9.5
+        r = 6.5 - k * 0.35
+        bx = x - side * k * 0.6
+        canvas.ellipse(bx, y, r, r * 1.05, base, light=0.4)
+        canvas.line([(bx - r * 0.7, y - r * 0.3), (bx + r * 0.7, y + r * 0.3)], 1.2, HAIR_DARK)
+    end = x - side * 3.0
+    canvas.ellipse(end, top + 59, 4.5, 3, HAIR_DARK)  # Tie.
+    canvas.polygon([(end - 3, top + 60), (end + 3, top + 60), (end + 1, top + 70),
+                    (end - 2, top + 70)], HAIR_BASE)
+
+
+def draw_hair_side(style):
+    canvas = Canvas(CHAR_W, CHAR_H)
+    rng = random.Random(4100 + style)
+    base = rgb(HAIR_BASE)
+    sx = SIDE_SKULL_X
+    if style == 1:  # Short crop.
+        canvas.ellipse(sx, HEAD_CY - 6, HEAD_RX + 2.5, HEAD_RY - 1, base, light=0.3)
+        canvas.erase_full(side_face_hole(canvas, HEAD_CY - 15, ear=True))
+        for i in range(4):  # Fringe tufts over the forehead.
+            x = CX + 6 + i * 6
+            canvas.polygon([(x - 4, HEAD_CY - 17), (x + 4, HEAD_CY - 17), (x + 2, HEAD_CY - 10)],
+                           HAIR_BASE)
+        hair_strands(canvas, rng, 40, sx - 28, sx + 26, HEAD_CY - 32, HEAD_CY + 10, 7)
+    elif style == 2:  # Long, falling down the back.
+        canvas.ellipse(sx, HEAD_CY - 5, HEAD_RX + 3.5, HEAD_RY, base, light=0.3)
+        canvas.polygon([(sx - 29, HEAD_CY - 8), (sx - 32, HEAD_CY + 48), (sx - 24, HEAD_CY + 55),
+                        (CX - 2, HEAD_CY + 51), (CX + 5, HEAD_CY + 30), (CX + 5, HEAD_CY - 10)],
+                       HAIR_BASE)
+        canvas.polygon([(sx - 29, HEAD_CY), (sx - 32, HEAD_CY + 48), (sx - 27, HEAD_CY + 53),
+                        (sx - 24, HEAD_CY + 4)], shade(HAIR_BASE, 0.85))
+        canvas.erase_full(side_face_hole(canvas, HEAD_CY - 12))
+        # The lock in front of the ear.
+        canvas.polygon([(CX + 2, HEAD_CY - 24), (CX + 17, HEAD_CY - 13), (CX + 9, HEAD_CY - 4),
+                        (CX + 5, HEAD_CY + 14), (CX - 6, HEAD_CY + 10)], HAIR_BASE)
+        hair_strands(canvas, rng, 90, sx - 32, CX + 14, HEAD_CY - 32, HEAD_CY + 40, 12)
+    elif style == 3:  # Curly volume.
+        for i in range(18):
+            angle = math.pi * (0.62 + 1.3 * i / 17.0)
+            canvas.ellipse(sx - 1 + math.cos(angle) * 30, HEAD_CY - 6 + math.sin(angle) * 30, 11,
+                           11, base, light=0.35)
+        canvas.ellipse(sx - 2, HEAD_CY - 8, 30, 28, base, light=0.3)
+        canvas.erase_full(side_face_hole(canvas, HEAD_CY - 12))
+        clip = canvas.coverage()
+        for _ in range(70):  # Curls.
+            x = rng.uniform(sx - 42, sx + 40)
+            y = rng.uniform(HEAD_CY - 46, HEAD_CY + 26)
+            r = rng.uniform(2.5, 4.5)
+            canvas.ellipse(x, y, r, r, HAIR_DARK, clip=clip, opacity=0.55)
+            canvas.ellipse(x - 0.8, y - 0.8, r * 0.7, r * 0.7, HAIR_LIGHT, clip=clip, opacity=0.6)
+    elif style == 4:  # Bun, on top toward the back.
+        bun = (sx - 10, HEAD_CY - 32)
+        canvas.ellipse(bun[0], bun[1], 13, 11, base, light=0.4)
+        canvas.ellipse(sx, HEAD_CY - 6, HEAD_RX + 2, HEAD_RY - 1, base, light=0.3)
+        canvas.erase_full(side_face_hole(canvas, HEAD_CY - 18, ear=True))
+        canvas.line([(bun[0] - 10, bun[1] + 7), (bun[0] + 9, bun[1] + 5)], 3, HAIR_DARK)
+        clip = canvas.coverage()
+        for i in range(11):  # Combed back: strands converging to the bun.
+            x = sx - 26 + i * 5.0
+            canvas.line([(x, HEAD_CY - 8 + abs(i - 5) * 1.5),
+                         (bun[0] + (x - bun[0]) * 0.3, bun[1] + 7)], 1.3, HAIR_DARK, clip=clip,
+                        opacity=0.6)
+    elif style == 5:  # Two braids: the near one hangs over the ear.
+        canvas.ellipse(sx, HEAD_CY - 5, HEAD_RX + 2.5, HEAD_RY - 1, base, light=0.3)
+        canvas.erase_full(side_face_hole(canvas, HEAD_CY - 13))
+        braid(canvas, SIDE_EAR_X - 2, HEAD_CY + 4, 1)
+        hair_strands(canvas, rng, 30, sx - 28, sx + 26, HEAD_CY - 32, HEAD_CY - 6, 7)
+    canvas.outline(1.8, HAIR_OUTLINE)
+    return canvas
+
+
+def draw_hair_back(style):
+    canvas = Canvas(CHAR_W, CHAR_H)
+    rng = random.Random(4200 + style)
+    base = rgb(HAIR_BASE)
+    if style == 1:  # Short crop, down to the nape.
+        canvas.ellipse(CX, HEAD_CY - 6, HEAD_RX + 2.5, HEAD_RY - 1, base, light=0.3)
+        for i in range(7):  # Tufts on the nape.
+            x = CX - 18 + i * 6
+            canvas.polygon([(x - 4, HEAD_CY + 16), (x + 4, HEAD_CY + 16), (x + 1, HEAD_CY + 25)],
+                           HAIR_BASE)
+        hair_strands(canvas, rng, 70, CX - 26, CX + 26, HEAD_CY - 32, HEAD_CY + 14, 7)
+    elif style == 2:  # Long, covering the back down to the shoulder blades.
+        canvas.ellipse(CX, HEAD_CY - 5, HEAD_RX + 3.5, HEAD_RY, base, light=0.3)
+        canvas.polygon([(CX - 31, HEAD_CY - 4), (CX - 33, HEAD_CY + 48), (CX - 25, HEAD_CY + 54),
+                        (CX, HEAD_CY + 58), (CX + 25, HEAD_CY + 54), (CX + 33, HEAD_CY + 48),
+                        (CX + 31, HEAD_CY - 4)], HAIR_BASE)
+        for side in (-1, 1):
+            canvas.polygon([(CX + side * 26, HEAD_CY), (CX + side * 31, HEAD_CY - 4),
+                            (CX + side * 33, HEAD_CY + 48), (CX + side * 28, HEAD_CY + 52)],
+                           shade(HAIR_BASE, 0.85))
+        canvas.line([(CX, HEAD_CY - 33), (CX + 1, HEAD_CY - 12)], 1.6, HAIR_DARK)
+        hair_strands(canvas, rng, 140, CX - 32, CX + 32, HEAD_CY - 32, HEAD_CY + 44, 12)
+    elif style == 3:  # Curly volume.
+        for i in range(24):
+            angle = math.pi * 2.0 * i / 24.0
+            canvas.ellipse(CX + math.cos(angle) * 30, HEAD_CY - 6 + math.sin(angle) * 30, 11, 11,
+                           base, light=0.35)
+        canvas.ellipse(CX, HEAD_CY - 6, 32, 32, base, light=0.3)
+        clip = canvas.coverage()
+        for _ in range(110):  # Curls.
+            x = rng.uniform(CX - 40, CX + 40)
+            y = rng.uniform(HEAD_CY - 46, HEAD_CY + 34)
+            r = rng.uniform(2.5, 4.5)
+            canvas.ellipse(x, y, r, r, HAIR_DARK, clip=clip, opacity=0.55)
+            canvas.ellipse(x - 0.8, y - 0.8, r * 0.7, r * 0.7, HAIR_LIGHT, clip=clip, opacity=0.6)
+    elif style == 4:  # Bun on top.
+        canvas.ellipse(CX, HEAD_CY - 6, HEAD_RX + 2, HEAD_RY - 1, base, light=0.3)
+        clip = canvas.coverage()
+        for i in range(13):  # Combed up: strands converging to the bun.
+            x = CX - 26 + i * 4.3
+            canvas.line([(x, HEAD_CY + 16 - abs(i - 6) * 2.0), (CX + (x - CX) * 0.25, HEAD_CY - 26)],
+                        1.3, HAIR_DARK, clip=clip, opacity=0.6)
+        canvas.ellipse(CX, HEAD_CY - 31, 13, 11, base, light=0.4)
+        canvas.line([(CX - 10, HEAD_CY - 23), (CX + 10, HEAD_CY - 23)], 3, HAIR_DARK)
+    elif style == 5:  # Two braids down the back.
+        canvas.ellipse(CX, HEAD_CY - 5, HEAD_RX + 2.5, HEAD_RY - 1, base, light=0.3)
+        canvas.line([(CX, HEAD_CY - 33), (CX, HEAD_CY + 20)], 1.6, HAIR_DARK)
+        hair_strands(canvas, rng, 50, CX - 26, CX + 26, HEAD_CY - 32, HEAD_CY + 10, 7)
+        for side in (-1, 1):
+            braid(canvas, CX + side * 20, HEAD_CY + 12, side)
+    canvas.outline(1.8, HAIR_OUTLINE)
+    return canvas
+
+
+def draw_hair(style, view="front"):
+    if view == "side":
+        return draw_hair_side(style)
+    if view == "back":
+        return draw_hair_back(style)
     canvas = Canvas(CHAR_W, CHAR_H)
     rng = random.Random(4000 + style)
     base = rgb(HAIR_BASE)
@@ -1129,7 +1581,44 @@ def draw_hair(style):
     return canvas
 
 
-def draw_beard(style):
+def draw_beard_side(style):
+    canvas = Canvas(CHAR_W, CHAR_H)
+    rng = random.Random(5100 + style)
+    mouth_y = HEAD_CY + 20
+    base = rgb(HAIR_BASE)
+    mouth = Canvas(CHAR_W, CHAR_H)
+    mouth.ellipse(CX + 17.5, mouth_y + 1, 7.5, 4.6, (1.0, 1.0, 1.0))
+    if style == 1:  # Stubble: sparse dots on the jaw.
+        jaw = Canvas(CHAR_W, CHAR_H)
+        jaw.ellipse(CX + 4, HEAD_CY + 14, HEAD_RX * 0.8, HEAD_RY * 0.58, (1.0, 1.0, 1.0))
+        gx, gy = canvas.full_grids()
+        clip = jaw.alpha * np.clip((gy - (HEAD_CY + 9)) * SUPERSAMPLING, 0, 1)
+        clip *= np.clip((gx - (SIDE_EAR_X + 5)) * SUPERSAMPLING, 0, 1) * (1.0 - mouth.alpha)
+        for _ in range(170):
+            x = rng.uniform(CX - 4, CX + 26)
+            y = rng.uniform(HEAD_CY + 8, HEAD_CY + 32)
+            canvas.ellipse(x, y, 0.8, 0.8, (0.5, 0.5, 0.5), clip=clip, opacity=0.5)
+        return canvas
+    if style in (2, 3):  # Short or full beard, from the ear around the chin.
+        drop = 10 if style == 2 else 26
+        canvas.polygon([(SIDE_EAR_X + 4, HEAD_CY + 3), (SIDE_EAR_X + 4, HEAD_CY + 18),
+                        (CX + 8, HEAD_CY + 28 + drop * 0.7), (CX + 17, HEAD_CY + 30 + drop),
+                        (CX + 24, HEAD_CY + 27 + drop * 0.6), (CX + 23, HEAD_CY + 23),
+                        (CX + 10, HEAD_CY + 15), (SIDE_EAR_X + 9, HEAD_CY + 3)], HAIR_BASE)
+        canvas.ellipse(CX + 14, HEAD_CY + 23 + drop * 0.5, 11, 9 + drop * 0.45, base, light=0.4)
+        canvas.erase_full(mouth.alpha)
+        hair_strands(canvas, rng, 45 if style == 3 else 25, CX - 2, CX + 24, HEAD_CY + 8,
+                     HEAD_CY + 26 + drop, 6)
+    if style in (3, 4):  # Mustache.
+        canvas.polygon([(CX + 23, mouth_y - 5.5), (CX + 14, mouth_y - 5), (CX + 9, mouth_y + 1),
+                        (CX + 15, mouth_y - 1.5), (CX + 23.5, mouth_y - 1.5)], HAIR_BASE)
+    canvas.outline(1.5, HAIR_OUTLINE)
+    return canvas
+
+
+def draw_beard(style, view="front"):
+    if view == "side":
+        return draw_beard_side(style)
     canvas = Canvas(CHAR_W, CHAR_H)
     rng = random.Random(5000 + style)
     mouth_y = HEAD_CY + 20
@@ -1752,16 +2241,24 @@ def generate(output):
         for size in range(len(HERB_SCALES)):
             sprites[f"{name}_{size}.png"] = draw(size)
     sprites["mushrooms_0.png"] = draw_mushrooms()
-    for shape, (name, _, _, _) in enumerate(BODY_SHAPES):
+    # The front view keeps the bare name; the others end with their view.
+    for view in CHAR_VIEWS:
+        suffix = "" if view == "front" else f"_{view}"
+        for shape, (name, _, _, _) in enumerate(BODY_SHAPES):
+            for skin in range(len(SKIN_TONES)):
+                sprites[f"body_{name}_{skin}{suffix}.png"] = draw_body(shape, skin, view)
         for skin in range(len(SKIN_TONES)):
-            sprites[f"body_{name}_{skin}.png"] = draw_body(shape, skin)
-    for skin in range(len(SKIN_TONES)):
-        for expression in EXPRESSIONS:
-            sprites[f"head_{skin}_{expression}.png"] = draw_head(skin, expression)
-    for style, name in HAIR_STYLE_NAMES.items():
-        sprites[f"hair_{name}.png"] = draw_hair(style)
-    for style, name in BEARD_STYLE_NAMES.items():
-        sprites[f"beard_{name}.png"] = draw_beard(style)
+            if view == "back":  # No face: one head for every expression.
+                sprites[f"head_{skin}_back.png"] = draw_head(skin, None, view)
+                continue
+            for expression in EXPRESSIONS:
+                sprites[f"head_{skin}_{expression}{suffix}.png"] = draw_head(skin, expression,
+                                                                             view)
+        for style, name in HAIR_STYLE_NAMES.items():
+            sprites[f"hair_{name}{suffix}.png"] = draw_hair(style, view)
+        if view != "back":  # A beard does not show from behind.
+            for style, name in BEARD_STYLE_NAMES.items():
+                sprites[f"beard_{name}{suffix}.png"] = draw_beard(style, view)
     for skin in range(len(SKIN_TONES)):
         sprites[f"fist_{skin}.png"] = draw_fist(skin)
     for name in TOOL_NAMES:
@@ -1860,6 +2357,45 @@ def preview(images, path):
     sheet.save(path)
 
 
+def preview_views(images, path):
+    """Settlers from the front, the side and behind (one row per view), then
+    every animal standing: side on, from the front and from behind."""
+    hair_colors = [(44, 34, 30), (92, 60, 38), (140, 96, 58), (164, 78, 44), (220, 184, 112),
+                   (176, 172, 166)]
+    people = [  # Body, skin, expression, hair style, beard style.
+        (0, 0, "neutral", 1, 0), (1, 1, "smiling", 2, 0), (2, 2, "sad", 3, 3),
+        (1, 3, "angry", 4, 2), (0, 4, "neutral", 5, 0), (2, 1, "smiling", 0, 4),
+        (1, 2, "neutral", 1, 1), (2, 0, "angry", 0, 0)]
+    step_x, step_y = CHAR_W - 20, CHAR_H - 30
+    sheet = Image.new("RGBA", (1560, 3 * step_y + 440), (96, 128, 64, 255))
+    for column, (body, skin, expression, hair, beard) in enumerate(people):
+        for row, view in enumerate(CHAR_VIEWS):
+            suffix = "" if view == "front" else f"_{view}"
+            head = f"head_{skin}_back" if view == "back" else f"head_{skin}_{expression}{suffix}"
+            layers = [images[f"body_{BODY_SHAPES[body][0]}_{skin}{suffix}.png"],
+                      images[f"{head}.png"]]
+            if beard and view != "back":
+                layers.append(tint(images[f"beard_{BEARD_STYLE_NAMES[beard]}{suffix}.png"],
+                                   hair_colors[column % 6]))
+            if hair:
+                layers.append(tint(images[f"hair_{HAIR_STYLE_NAMES[hair]}{suffix}.png"],
+                                   hair_colors[(column * 5) % 6]))
+            for layer in layers:
+                sheet.alpha_composite(layer, (10 + column * step_x, 10 + row * step_y))
+    left, top = 10, 3 * step_y + 30
+    for species in ANIMAL_SPECIES:
+        right = left
+        for row, sex in enumerate(ANIMAL_SEXES):
+            x = left
+            for pose in ("stand", "front", "back"):
+                image = images[f"animal_{species}_{sex}_{pose}.png"]
+                sheet.alpha_composite(image, (x, top + row * 200 + 192 - image.height))
+                x += image.width - 10
+            right = max(right, x)
+        left = right + 20
+    sheet.save(path)
+
+
 def preview_ground(images, path):
     """Each tile texture repeated over 3 x 3 tiles (seams would show), grass
     over soil at every stage, and a wall next to the ground, at full and at
@@ -1904,6 +2440,7 @@ def main():
         preview(images, args.preview)
         stem, extension = os.path.splitext(args.preview)
         preview_ground(images, f"{stem}_ground{extension}")
+        preview_views(images, f"{stem}_views{extension}")
 
 
 if __name__ == "__main__":

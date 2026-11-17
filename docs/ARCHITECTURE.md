@@ -1782,8 +1782,23 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   (per skin tone and expression), beard, hair. Clothes will be extra layers
   between the body and the head.
   Hair and beard sprites are light gray, tinted with the hair color. The
-  expression comes from the needs (`colonist_expression()`). Front view
-  only.
+  expression comes from the needs (`colonist_expression()`). Every layer
+  comes in three views (`SpriteView`): from the front, from the side (facing
+  right, mirrored for the left) and from behind, where a head shows no
+  expression (one sprite per skin) and a beard is not drawn.
+- Views: a walker is seen the way it heads (`colonist_heading()`,
+  `animal_heading()`, from the step it is on: `path_step_heading()`): from
+  the front going down the screen, from behind going up, from the side as
+  soon as it moves sideways (diagonals too). A settler that stands, works or
+  sleeps faces the viewer. Animals stand, eat and sleep side on (the side
+  they last turned to) and have a standing sprite from the front and from
+  behind for walking (`ANIMAL_POSE_FRONT`, `ANIMAL_POSE_BACK`). What a
+  settler carries is drawn behind the body of one walking away, and ahead
+  of one seen from the side.
+- Gait: nobody has moving legs. Whoever walks hops at every step and rocks
+  from side to side around its feet (`gait_at()`, `draw_walker()`), all
+  layers as one; a fleeing animal steps faster. It depends on the game tick,
+  like the hands.
 - Hands: while a colonist works (`colonist_action()`: blows, cutting,
   picking, eating), a fist moves beside it on the side of its job, holding
   the tool of the job when there is one (only crafting uses tools so far:

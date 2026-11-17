@@ -29,6 +29,16 @@ static const char *const HAIR_NAMES[APPEARANCE_HAIR_STYLE_COUNT] = {NULL,    "sh
                                                                     "curly", "bun",   "braids"};
 static const char *const BEARD_NAMES[APPEARANCE_BEARD_COUNT] = {NULL, "stubble", "short", "full",
                                                                 "mustache"};
+/* What the file names of the views end with. */
+static const char *const VIEW_SUFFIXES[SPRITE_VIEW_COUNT] = {
+    [SPRITE_VIEW_FRONT] = "",
+    [SPRITE_VIEW_SIDE] = "_side",
+    [SPRITE_VIEW_BACK] = "_back",
+};
+/* Heads of a skin: every expression from the front, then from the side, and
+ * one from behind. Beards have no view from behind. */
+#define HEADS_PER_SKIN (EXPRESSION_COUNT * 2 + 1)
+#define BEARD_VIEW_COUNT 2
 /* Plants with sprites: file name, sizes drawn (the growth stages drawn are
  * shared out among them), the growth stages drawn (a tree's later ones are
  * trunk and foliage tiles, see core/tree.h), and whether a variant shows its
@@ -66,9 +76,8 @@ static const char *const ANIMAL_SEX_NAMES[ANIMAL_SEX_COUNT] = {
     [ANIMAL_MALE] = "male",
 };
 static const char *const ANIMAL_POSE_NAMES[ANIMAL_POSE_COUNT] = {
-    [ANIMAL_POSE_STAND] = "stand",
-    [ANIMAL_POSE_EAT] = "eat",
-    [ANIMAL_POSE_SLEEP] = "sleep",
+    [ANIMAL_POSE_STAND] = "stand", [ANIMAL_POSE_EAT] = "eat",   [ANIMAL_POSE_SLEEP] = "sleep",
+    [ANIMAL_POSE_FRONT] = "front", [ANIMAL_POSE_BACK] = "back",
 };
 #define ANIMAL_SPRITE_COUNT (ANIMAL_SPECIES_COUNT * ANIMAL_SEX_COUNT * ANIMAL_POSE_COUNT)
 
@@ -94,10 +103,10 @@ static const char *const WALL_NAMES[] = {"granite", "sandstone", "earth"};
 enum {
     PLANT_FIRST = 0,
     BODY_FIRST = PLANT_FIRST + PLANT_SPRITE_COUNT,
-    HEAD_FIRST = BODY_FIRST + APPEARANCE_BODY_COUNT * APPEARANCE_SKIN_COUNT,
-    BEARD_FIRST = HEAD_FIRST + APPEARANCE_SKIN_COUNT * EXPRESSION_COUNT,
-    HAIR_FIRST = BEARD_FIRST + APPEARANCE_BEARD_COUNT - 1,
-    FIST_FIRST = HAIR_FIRST + APPEARANCE_HAIR_STYLE_COUNT - 1,
+    HEAD_FIRST = BODY_FIRST + APPEARANCE_BODY_COUNT * APPEARANCE_SKIN_COUNT * SPRITE_VIEW_COUNT,
+    BEARD_FIRST = HEAD_FIRST + APPEARANCE_SKIN_COUNT * HEADS_PER_SKIN,
+    HAIR_FIRST = BEARD_FIRST + (APPEARANCE_BEARD_COUNT - 1) * BEARD_VIEW_COUNT,
+    FIST_FIRST = HAIR_FIRST + (APPEARANCE_HAIR_STYLE_COUNT - 1) * SPRITE_VIEW_COUNT,
     TOOL_FIRST = FIST_FIRST + APPEARANCE_SKIN_COUNT,
     ANIMAL_FIRST = TOOL_FIRST + 4,
     GROUND_FIRST = ANIMAL_FIRST + ANIMAL_SPRITE_COUNT,
@@ -143,26 +152,42 @@ SpriteId sprite_plant(PlantType type, int stage, bool fruit)
     return -1;
 }
 
-SpriteId sprite_body(int body, int skin)
+static int view_index(SpriteView view)
 {
-    return BODY_FIRST + clampi(body, 0, APPEARANCE_BODY_COUNT - 1) * APPEARANCE_SKIN_COUNT +
+    return clampi((int)view, 0, SPRITE_VIEW_COUNT - 1);
+}
+
+SpriteId sprite_body(int body, int skin, SpriteView view)
+{
+    return BODY_FIRST +
+           (view_index(view) * APPEARANCE_BODY_COUNT + clampi(body, 0, APPEARANCE_BODY_COUNT - 1)) *
+               APPEARANCE_SKIN_COUNT +
            clampi(skin, 0, APPEARANCE_SKIN_COUNT - 1);
 }
 
-SpriteId sprite_head(int skin, ColonistExpression expression)
+SpriteId sprite_head(int skin, ColonistExpression expression, SpriteView view)
 {
-    return HEAD_FIRST + clampi(skin, 0, APPEARANCE_SKIN_COUNT - 1) * EXPRESSION_COUNT +
+    int first = HEAD_FIRST + clampi(skin, 0, APPEARANCE_SKIN_COUNT - 1) * HEADS_PER_SKIN;
+    if (view_index(view) == SPRITE_VIEW_BACK) {
+        return first + EXPRESSION_COUNT * 2;
+    }
+    return first + view_index(view) * EXPRESSION_COUNT +
            clampi((int)expression, 0, EXPRESSION_COUNT - 1);
 }
 
-SpriteId sprite_beard(int style)
+SpriteId sprite_beard(int style, SpriteView view)
 {
-    return BEARD_FIRST + clampi(style, 1, APPEARANCE_BEARD_COUNT - 1) - 1;
+    if (view_index(view) == SPRITE_VIEW_BACK) {
+        return -1;
+    }
+    return BEARD_FIRST + view_index(view) * (APPEARANCE_BEARD_COUNT - 1) +
+           clampi(style, 1, APPEARANCE_BEARD_COUNT - 1) - 1;
 }
 
-SpriteId sprite_hair(int style)
+SpriteId sprite_hair(int style, SpriteView view)
 {
-    return HAIR_FIRST + clampi(style, 1, APPEARANCE_HAIR_STYLE_COUNT - 1) - 1;
+    return HAIR_FIRST + view_index(view) * (APPEARANCE_HAIR_STYLE_COUNT - 1) +
+           clampi(style, 1, APPEARANCE_HAIR_STYLE_COUNT - 1) - 1;
 }
 
 SpriteId sprite_fist(int skin)
@@ -232,16 +257,27 @@ static void sprite_file_name(SpriteId id, char *out, size_t size)
                      offset % plant->sizes);
     } else if (id < HEAD_FIRST) {
         int index = id - BODY_FIRST;
-        SDL_snprintf(out, size, "body_%s_%d", BODY_NAMES[index / APPEARANCE_SKIN_COUNT],
-                     index % APPEARANCE_SKIN_COUNT);
+        SDL_snprintf(out, size, "body_%s_%d%s",
+                     BODY_NAMES[index / APPEARANCE_SKIN_COUNT % APPEARANCE_BODY_COUNT],
+                     index % APPEARANCE_SKIN_COUNT,
+                     VIEW_SUFFIXES[index / (APPEARANCE_SKIN_COUNT * APPEARANCE_BODY_COUNT)]);
     } else if (id < BEARD_FIRST) {
         int index = id - HEAD_FIRST;
-        SDL_snprintf(out, size, "head_%d_%s", index / EXPRESSION_COUNT,
-                     EXPRESSION_NAMES[index % EXPRESSION_COUNT]);
+        int skin = index / HEADS_PER_SKIN, head = index % HEADS_PER_SKIN;
+        if (head == EXPRESSION_COUNT * 2) {
+            SDL_snprintf(out, size, "head_%d_back", skin);
+        } else {
+            SDL_snprintf(out, size, "head_%d_%s%s", skin, EXPRESSION_NAMES[head % EXPRESSION_COUNT],
+                         VIEW_SUFFIXES[head / EXPRESSION_COUNT]);
+        }
     } else if (id < HAIR_FIRST) {
-        SDL_snprintf(out, size, "beard_%s", BEARD_NAMES[id - BEARD_FIRST + 1]);
+        int index = id - BEARD_FIRST, styles = APPEARANCE_BEARD_COUNT - 1;
+        SDL_snprintf(out, size, "beard_%s%s", BEARD_NAMES[index % styles + 1],
+                     VIEW_SUFFIXES[index / styles]);
     } else if (id < FIST_FIRST) {
-        SDL_snprintf(out, size, "hair_%s", HAIR_NAMES[id - HAIR_FIRST + 1]);
+        int index = id - HAIR_FIRST, styles = APPEARANCE_HAIR_STYLE_COUNT - 1;
+        SDL_snprintf(out, size, "hair_%s%s", HAIR_NAMES[index % styles + 1],
+                     VIEW_SUFFIXES[index / styles]);
     } else if (id < TOOL_FIRST) {
         SDL_snprintf(out, size, "fist_%d", id - FIST_FIRST);
     } else if (id < ANIMAL_FIRST) {

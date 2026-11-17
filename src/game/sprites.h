@@ -26,22 +26,36 @@ typedef int SpriteId;
  * not; -1 for plants without a sprite (grass is part of the ground, a tree
  * past its sapling stages is trunk and foliage tiles). */
 SpriteId sprite_plant(PlantType type, int stage, bool fruit);
+/* How a character is seen: from the front, from the side (facing right:
+ * mirror it when it faces left) or from behind. */
+typedef enum SpriteView {
+    SPRITE_VIEW_FRONT,
+    SPRITE_VIEW_SIDE,
+    SPRITE_VIEW_BACK,
+    SPRITE_VIEW_COUNT
+} SpriteView;
 /* Character layers, drawn in this order. The body is naked, without arms nor
- * legs: clothes will be layers drawn over it. */
-SpriteId sprite_body(int body, int skin);
-SpriteId sprite_head(int skin, ColonistExpression expression);
-SpriteId sprite_beard(int style); /* Style 1 .. APPEARANCE_BEARD_COUNT - 1. */
-SpriteId sprite_hair(int style);  /* Style 1 .. APPEARANCE_HAIR_STYLE_COUNT - 1. */
+ * legs: clothes will be layers drawn over it. From behind a head shows no
+ * expression, and a beard does not show at all (-1). */
+SpriteId sprite_body(int body, int skin, SpriteView view);
+SpriteId sprite_head(int skin, ColonistExpression expression, SpriteView view);
+/* Style 1 .. APPEARANCE_BEARD_COUNT - 1. */
+SpriteId sprite_beard(int style, SpriteView view);
+/* Style 1 .. APPEARANCE_HAIR_STYLE_COUNT - 1. */
+SpriteId sprite_hair(int style, SpriteView view);
 /* A fist, and a tool held in it (-1 for items without a sprite). Both are
  * drawn centered on the hand: the grip is the middle of the sprite. */
 SpriteId sprite_fist(int skin);
 SpriteId sprite_tool(ItemType type);
 /* An animal seen from the side, facing right (mirror it when it faces left):
- * standing, eating (head down) or asleep (lying). */
+ * standing, eating (head down) or asleep (lying); and standing seen from the
+ * front and from behind, for one that walks down or up the screen. */
 typedef enum AnimalPose {
     ANIMAL_POSE_STAND,
     ANIMAL_POSE_EAT,
     ANIMAL_POSE_SLEEP,
+    ANIMAL_POSE_FRONT,
+    ANIMAL_POSE_BACK,
     ANIMAL_POSE_COUNT
 } AnimalPose;
 SpriteId sprite_animal(AnimalSpecies species, AnimalSex sex, AnimalPose pose);

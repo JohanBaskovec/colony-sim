@@ -361,6 +361,16 @@ bool animal_is_moving(const Animal *animal)
     return animal->path_index < animal->path.count;
 }
 
+Heading animal_heading(const Animal *animal)
+{
+    Heading side = animal->facing_left ? HEADING_WEST : HEADING_EAST;
+    if (!animal_is_moving(animal)) {
+        return side;
+    }
+    TilePos here = {(int16_t)animal->x, (int16_t)animal->y, (int16_t)animal->z};
+    return path_step_heading(here, animal->path.steps[animal->path_index], side);
+}
+
 void animal_position(const Animal *animal, float *x, float *y)
 {
     float px = (float)animal->x;

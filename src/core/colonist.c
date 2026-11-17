@@ -475,6 +475,15 @@ bool colonist_is_moving(const Colonist *colonist)
     return colonist->path_index < colonist->path.count;
 }
 
+Heading colonist_heading(const Colonist *colonist)
+{
+    if (!colonist_is_moving(colonist)) {
+        return HEADING_SOUTH;
+    }
+    TilePos here = {(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z};
+    return path_step_heading(here, colonist->path.steps[colonist->path_index], HEADING_SOUTH);
+}
+
 void colonist_position(const Colonist *colonist, float *x, float *y)
 {
     float px = (float)colonist->x;

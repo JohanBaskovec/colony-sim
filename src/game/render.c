@@ -2377,11 +2377,17 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
 #define COLONIST_SLEEP_SHADE 0.55f
 /* Animal sprites leave this much under the feet (the shadow), in tiles. */
 #define ANIMAL_SPRITE_MARGIN (8.0f / SPRITE_PIXELS_PER_TILE)
-/* An animal on the move bobs up and down: how high (tiles) and how fast
- * (radians per tick) at a walk and on the run. */
-#define ANIMAL_BOB_HEIGHT 0.04f
-#define ANIMAL_WALK_BOB_RATE 0.2f
-#define ANIMAL_RUN_BOB_RATE 0.5f
+/* Whoever walks hops at every step and rocks from side to side around its
+ * feet, one way then the other: how high (tiles), how far (degrees), and how
+ * many ticks a step takes at a walk and on the run. */
+#define GAIT_HOP_HEIGHT 0.06f
+#define GAIT_ROCK_DEGREES 5.5f
+#define GAIT_WALK_STEP_TICKS 16
+#define GAIT_RUN_STEP_TICKS 6
+/* Height of what a colonist carries above its feet, and how far ahead of it
+ * when it is seen from the side, in tiles. */
+#define COLONIST_CARRY_HEIGHT 0.62f
+#define COLONIST_CARRY_AHEAD 0.18f
 /* Room an animal takes on screen for sorting and for what hides it, in tiles. */
 #define ANIMAL_HALF_WIDTH 0.5f
 #define ANIMAL_HEIGHT 0.8f
@@ -2500,7 +2506,51 @@ static SDL_FColor tint(SDL_Color color, float brightness)
     return result;
 }
 
-/* A colonist from its layers: body, head (with the face), beard, hair. */
+/* How a walker's sprite is moved at a tick: lifted (screen pixels) and turned
+ * clockwise around its feet (degrees). Nothing when it stands. */
+typedef struct Gait {
+    float lift;
+    float degrees;
+} Gait;
+
+/* Walkers side by side do not move in step. */
+static Gait gait_at(bool moving, int step_ticks, uint32_t slot, uint64_t tick, float zoom)
+{
+    if (!moving) {
+        return (Gait){0.0f, 0.0f};
+    }
+    /* Two steps to rock one way and back. */
+    uint64_t cycle = (uint64_t)step_ticks * 2u;
+    float swing =
+        SDL_sinf((float)((tick + (uint64_t)slot * 7u) % cycle) / (float)cycle * 2.0f * SDL_PI_F);
+    return (Gait){SDL_fabsf(swing) * GAIT_HOP_HEIGHT * zoom, swing * GAIT_ROCK_DEGREES};
+}
+
+/* Where a point `height` screen pixels above the feet goes with a gait. */
+static void gait_move(Gait gait, float height, float *x, float *y)
+{
+    float radians = gait.degrees * (SDL_PI_F / 180.0f);
+    *x += height * SDL_sinf(radians);
+    *y += height * (1.0f - SDL_cosf(radians)) - gait.lift;
+}
+
+/* A sprite of something that walks, anchored like sprites_draw(), moved by
+ * its gait around its feet at `feet_y`. */
+static void draw_walker(Sprites *sprites, SpriteId id, float anchor_x, float anchor_y, float feet_y,
+                        Gait gait, SDL_FColor color, bool flip)
+{
+    if (gait.lift == 0.0f && gait.degrees == 0.0f) {
+        sprites_draw(sprites, id, anchor_x, anchor_y, color, flip);
+        return;
+    }
+    float width, height;
+    sprites_size(sprites, id, &width, &height);
+    float center_x = anchor_x;
+    float center_y = anchor_y - height * 0.5f;
+    gait_move(gait, feet_y - center_y, &center_x, &center_y);
+    sprites_draw_rotated(sprites, id, center_x, center_y, gait.degrees, color, flip);
+}
+
 /* A fist (holding the tool of the job, if any) moving beside a working colonist. */
 static void render_hand(Sprites *sprites, const Camera *camera, const Colonist *colonist,
                         uint32_t slot, uint64_t tick, float feet_x, float feet_y, SDL_FColor color)
@@ -2545,14 +2595,17 @@ void render_colonist_portrait(SDL_Renderer *renderer, Sprites *sprites, const Co
     SDL_FColor skin = tint((SDL_Color){255, 255, 255, 255}, brightness);
     SDL_FColor hair = tint(HAIR_COLORS[looks.hair_color % HAIR_COLOR_COUNT], brightness);
     sprites_begin(sprites, zoom);
-    sprites_draw(sprites, sprite_body(looks.body, looks.skin), anchor_x, anchor_y, skin, false);
-    sprites_draw(sprites, sprite_head(looks.skin, colonist_expression(colonist)), anchor_x,
+    sprites_draw(sprites, sprite_body(looks.body, looks.skin, SPRITE_VIEW_FRONT), anchor_x,
                  anchor_y, skin, false);
+    sprites_draw(sprites, sprite_head(looks.skin, colonist_expression(colonist), SPRITE_VIEW_FRONT),
+                 anchor_x, anchor_y, skin, false);
     if (looks.beard > 0) {
-        sprites_draw(sprites, sprite_beard(looks.beard), anchor_x, anchor_y, hair, false);
+        sprites_draw(sprites, sprite_beard(looks.beard, SPRITE_VIEW_FRONT), anchor_x, anchor_y,
+                     hair, false);
     }
     if (looks.hair_style > 0) {
-        sprites_draw(sprites, sprite_hair(looks.hair_style), anchor_x, anchor_y, hair, false);
+        sprites_draw(sprites, sprite_hair(looks.hair_style, SPRITE_VIEW_FRONT), anchor_x, anchor_y,
+                     hair, false);
     }
     sprites_flush(sprites);
     SDL_SetRenderClipRect(renderer, clipped ? &previous : NULL);
@@ -2576,29 +2629,54 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
     float brightness = colonist->task == TASK_SLEEP ? COLONIST_SLEEP_SHADE : 1.0f;
     SDL_FColor skin = tint((SDL_Color){255, 255, 255, 255}, brightness);
     SDL_FColor hair = tint(HAIR_COLORS[looks.hair_color % HAIR_COLOR_COUNT], brightness);
-    sprites_draw(sprites, sprite_body(looks.body, looks.skin), anchor_x, anchor_y, skin, false);
-    sprites_draw(sprites, sprite_head(looks.skin, colonist_expression(colonist)), anchor_x,
-                 anchor_y, skin, false);
-    if (looks.beard > 0) {
-        sprites_draw(sprites, sprite_beard(looks.beard), anchor_x, anchor_y, hair, false);
+    /* Seen from the side or from behind while it walks that way; every layer
+     * moves as one around the feet. */
+    Heading heading = colonist_heading(colonist);
+    SpriteView view = heading == HEADING_SOUTH   ? SPRITE_VIEW_FRONT
+                      : heading == HEADING_NORTH ? SPRITE_VIEW_BACK
+                                                 : SPRITE_VIEW_SIDE;
+    bool flip = heading == HEADING_WEST;
+    Gait gait =
+        gait_at(colonist_is_moving(colonist), GAIT_WALK_STEP_TICKS, slot, tick, camera->zoom);
+    /* What it carries is held in front of it at waist height and follows the
+     * body: hidden by the body of someone walking away, ahead of someone seen
+     * from the side. */
+    bool carrying = colonist->carried.count > 0;
+    float size = floorf(SDL_max(4.0f, camera->zoom * 0.42f));
+    float held_x = feet_x, held_y = feet_y - camera->zoom * COLONIST_CARRY_HEIGHT;
+    if (view == SPRITE_VIEW_SIDE) {
+        held_x += (flip ? -1.0f : 1.0f) * camera->zoom * COLONIST_CARRY_AHEAD;
+    }
+    gait_move(gait, camera->zoom * COLONIST_CARRY_HEIGHT - size * 0.5f, &held_x, &held_y);
+    SDL_FRect held = {floorf(held_x - size * 0.5f), floorf(held_y), size, size};
+    if (carrying && view == SPRITE_VIEW_BACK) {
+        sprites_flush(sprites);
+        render_item_stack(renderer, &held, (ItemType)colonist->carried.type);
+        batch_flush(renderer);
+    }
+    draw_walker(sprites, sprite_body(looks.body, looks.skin, view), anchor_x, anchor_y, feet_y,
+                gait, skin, flip);
+    draw_walker(sprites, sprite_head(looks.skin, colonist_expression(colonist), view), anchor_x,
+                anchor_y, feet_y, gait, skin, flip);
+    if (looks.beard > 0) { /* No sprite from behind: nothing drawn. */
+        draw_walker(sprites, sprite_beard(looks.beard, view), anchor_x, anchor_y, feet_y, gait,
+                    hair, flip);
     }
     if (looks.hair_style > 0) {
-        sprites_draw(sprites, sprite_hair(looks.hair_style), anchor_x, anchor_y, hair, false);
+        draw_walker(sprites, sprite_hair(looks.hair_style, view), anchor_x, anchor_y, feet_y, gait,
+                    hair, flip);
     }
     render_hand(sprites, camera, colonist, slot, tick, feet_x, feet_y, skin);
-    if (colonist->carried.count > 0) {
-        /* What it carries, held in front of it at waist height. */
+    if (carrying && view != SPRITE_VIEW_BACK) {
         sprites_flush(sprites);
-        float size = floorf(SDL_max(4.0f, camera->zoom * 0.42f));
-        SDL_FRect held = {floorf(feet_x - size * 0.5f), floorf(feet_y - camera->zoom * 0.62f), size,
-                          size};
         render_item_stack(renderer, &held, (ItemType)colonist->carried.type);
         batch_flush(renderer);
     }
 }
 
 /* An animal seen from the side: standing, head down while it eats or drinks,
- * lying asleep; mirrored when it faces left, bobbing a little as it walks. */
+ * lying asleep; mirrored when it faces left, hopping and rocking as it walks.
+ * Seen from the front or from behind while it walks down or up the screen. */
 static void render_animal(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera,
                           const Animal *animal, uint32_t slot, uint64_t tick, bool selected)
 {
@@ -2608,11 +2686,16 @@ static void render_animal(SDL_Renderer *renderer, Sprites *sprites, const Camera
     camera_world_to_screen(camera, wx, wy + COLONIST_FEET + ANIMAL_SPRITE_MARGIN, &anchor_x,
                            &anchor_y);
     bool moving = animal_is_moving(animal);
+    Heading heading = animal_heading(animal);
     AnimalPose pose = ANIMAL_POSE_STAND;
     if (animal->task == ANIMAL_TASK_SLEEP) {
         pose = ANIMAL_POSE_SLEEP;
     } else if (!moving && (animal->task == ANIMAL_TASK_EAT || animal->task == ANIMAL_TASK_DRINK)) {
         pose = ANIMAL_POSE_EAT;
+    } else if (heading == HEADING_SOUTH) {
+        pose = ANIMAL_POSE_FRONT;
+    } else if (heading == HEADING_NORTH) {
+        pose = ANIMAL_POSE_BACK;
     }
     SpriteId id = sprite_animal((AnimalSpecies)animal->species, (AnimalSex)animal->sex, pose);
     if (selected) {
@@ -2623,12 +2706,10 @@ static void render_animal(SDL_Renderer *renderer, Sprites *sprites, const Camera
         fill_ring(renderer, feet_x, feet_y, rx, SDL_max(2.0f, rx * 0.3f),
                   SDL_max(1.5f, camera->zoom * 0.04f), SELECTION_COLOR);
     }
-    if (moving) { /* Faster on the run. */
-        float pace = animal->task == ANIMAL_TASK_FLEE ? ANIMAL_RUN_BOB_RATE : ANIMAL_WALK_BOB_RATE;
-        float phase = (float)((tick + (uint64_t)slot * 7u) % 100000u) * pace;
-        anchor_y -= SDL_fabsf(SDL_sinf(phase)) * ANIMAL_BOB_HEIGHT * camera->zoom;
-    }
-    sprites_draw(sprites, id, anchor_x, anchor_y, WHITE, animal->facing_left);
+    Gait gait = gait_at(
+        moving, animal->task == ANIMAL_TASK_FLEE ? GAIT_RUN_STEP_TICKS : GAIT_WALK_STEP_TICKS, slot,
+        tick, camera->zoom);
+    draw_walker(sprites, id, anchor_x, anchor_y, feet_y, gait, WHITE, heading == HEADING_WEST);
 }
 
 typedef struct DepthEntry {

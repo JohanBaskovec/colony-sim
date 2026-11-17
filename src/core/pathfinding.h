@@ -37,6 +37,15 @@ typedef struct Path {
 void path_clear(Path *path);
 void path_free(Path *path);
 
+/* The way a walker faces on the map: south is down the screen (toward the
+ * viewer, who sees it from the front), north up the screen (seen from behind). */
+typedef enum Heading { HEADING_SOUTH, HEADING_NORTH, HEADING_WEST, HEADING_EAST } Heading;
+
+/* Where a step from one tile to the next heads. A diagonal step heads east or
+ * west (a walker is shown from the side as soon as it moves sideways); a step
+ * that only changes level keeps `fallback`. */
+Heading path_step_heading(TilePos from, TilePos to, Heading fallback);
+
 /* What a search knows of a tile; the fields of a tile side by side, so that
  * looking at one costs a single cache miss. */
 typedef struct PathNode {

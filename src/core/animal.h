@@ -304,6 +304,10 @@ bool animal_notices(AnimalSpecies species, const Map *map, int x, int y, int z, 
 
 bool animal_is_moving(const Animal *animal);
 
+/* The way the animal faces: where its step leads while it walks, else the
+ * side it last turned to (east or west: it stands, eats and sleeps side on). */
+Heading animal_heading(const Animal *animal);
+
 /* Interpolated position of the animal's center, in world (tile) coordinates. */
 void animal_position(const Animal *animal, float *x, float *y);
 
