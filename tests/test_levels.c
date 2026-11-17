@@ -191,6 +191,48 @@ static void test_zones_cover_the_levels_seen(void)
     game_shutdown(&game);
 }
 
+/* Building follows what is seen: from the plateau's level, the plains below are
+ * built on as if they were the level shown; a roof goes on the open level over
+ * the ground seen. */
+static void test_building_on_the_levels_seen(void)
+{
+    Game game;
+    REQUIRE(init_raised_game(&game));
+    CHECK_EQ_INT(game_build_level(&game, 10, 10, HIGH, false), LOW);
+    CHECK_EQ_INT(game_build_level(&game, 10, 10, HIGH + 2, false), LOW);
+    CHECK_EQ_INT(game_build_level(&game, 10, 10, LOW, false), LOW);
+    CHECK_EQ_INT(game_build_level(&game, 30, 10, HIGH, false), HIGH);
+    CHECK_EQ_INT(game_build_level(&game, 10, 10, HIGH, true), HIGH); /* Over the plains. */
+    CHECK_EQ_INT(game_build_level(&game, 10, 10, HIGH + 2, true), HIGH);
+    CHECK_EQ_INT(game_build_level(&game, 30, 10, HIGH, true), HIGH); /* The plateau itself. */
+
+    /* A row of walls drawn from the plateau's level: each on the ground seen. */
+    CHECK_EQ_INT(
+        game_place_structure_rect(&game, STRUCTURE_WALL, DIRECTION_EAST, 20, 10, 27, 10, HIGH), 8);
+    for (int x = 20; x <= 27; x++) {
+        int level = x < PLATEAU_X ? LOW : HIGH;
+        CHECK(construction_at(&game.constructions, x, 10, level) != CONSTRUCTION_NONE);
+        CHECK_EQ_INT(construction_at(&game.constructions, x, 10, level == LOW ? HIGH : LOW),
+                     CONSTRUCTION_NONE);
+    }
+
+    /* A workstation likewise. */
+    CHECK(game_can_place_workstation(&game, 10, 12, game_build_level(&game, 10, 12, HIGH, false)));
+    CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 10, 12,
+                                 game_build_level(&game, 10, 12, HIGH, false)));
+    CHECK(workstation_at(&game.workstations, 10, 12, LOW) != WORKSTATION_NONE ||
+          construction_at(&game.constructions, 10, 12, LOW) != CONSTRUCTION_NONE);
+    CHECK_EQ_INT(workstation_at(&game.workstations, 10, 12, HIGH), WORKSTATION_NONE);
+    CHECK_EQ_INT(construction_at(&game.constructions, 10, 12, HIGH), CONSTRUCTION_NONE);
+
+    /* A roof drawn from higher up goes on the open level over the wall's. */
+    map_set_structure(&game.map, 5, 5, LOW, STRUCTURE_WALL);
+    CHECK_EQ_INT(
+        game_place_structure_rect(&game, STRUCTURE_ROOF, DIRECTION_EAST, 5, 5, 5, 5, HIGH + 2), 1);
+    CHECK(construction_at(&game.constructions, 5, 5, HIGH) != CONSTRUCTION_NONE);
+    game_shutdown(&game);
+}
+
 static void test_selection_covers_the_levels_seen(void)
 {
     Game game;
@@ -395,6 +437,7 @@ int main(void)
     RUN_TEST(test_view_level);
     RUN_TEST(test_zones_cover_the_levels_seen);
     RUN_TEST(test_selection_covers_the_levels_seen);
+    RUN_TEST(test_building_on_the_levels_seen);
     RUN_TEST(test_stockpiles_on_their_level);
     RUN_TEST(test_gather_zones_on_their_level);
     RUN_TEST(test_stations_on_their_level);

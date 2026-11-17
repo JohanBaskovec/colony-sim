@@ -2403,6 +2403,15 @@ bool game_structure_buildable(const Game *game, StructureType type)
     return false;
 }
 
+int game_build_level(const Game *game, int x, int y, int shown, bool roof)
+{
+    int seen = map_view_level(game_view_map(game), x, y, shown);
+    if (seen < 0 || seen > shown) {
+        return shown;
+    }
+    return roof && seen < shown ? seen + 1 : seen;
+}
+
 bool game_can_place_structure(const Game *game, StructureType type, int x, int y, int z,
                               Direction direction)
 {
@@ -2478,8 +2487,9 @@ void game_plan_structure_rect(const Game *game, StructureType type, Direction di
             }
             int head_x = dx < 0 ? x + length - 1 : x;
             int head_y = dy < 0 ? y + length - 1 : y;
-            visit(head_x, head_y, z,
-                  game_can_place_structure(game, type, head_x, head_y, z, direction), userdata);
+            int level = game_build_level(game, head_x, head_y, z, structure_is_roof(type));
+            visit(head_x, head_y, level,
+                  game_can_place_structure(game, type, head_x, head_y, level, direction), userdata);
         }
     }
 }

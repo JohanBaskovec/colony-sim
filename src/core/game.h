@@ -554,6 +554,13 @@ bool game_remove_bill(Game *game, int station, int bill);
 /* Whether some living colonist knows enough to build this kind of structure. */
 bool game_structure_buildable(const Game *game, StructureType type);
 
+/* The level to build on at (x, y) when level `shown` is the one on screen: the
+ * ground seen there, the level below when the level shown is open space
+ * (map_view_level(), as for the zone tools), so that one builds on whatever one
+ * sees as if it were the level shown. A roof goes on the open level over it
+ * (`roof`). `shown` itself when nothing is seen. */
+int game_build_level(const Game *game, int x, int y, int shown, bool roof);
+
 /* Whether a structure may be planned with its head at (x, y), facing
  * `direction`: every tile it would take is off stockpiles and workstations,
  * and passes construction_can_replace_structure() (sites in the way do not
@@ -570,7 +577,8 @@ int game_place_structure(Game *game, StructureType type, int x, int y, int z, Di
 /* One structure of a plan: its head, and whether it can be placed. */
 typedef void (*StructurePlanVisit)(int x, int y, int z, bool allowed, void *userdata);
 
-/* Where structures go on a rectangle (corners in any order), in a fixed
+/* Where structures go on a rectangle (corners in any order) drawn on level
+ * `z` shown (each structure on its own tile's level, game_build_level()), in a fixed
  * order: along its edges for types drawn as an outline (walls), on every
  * tile otherwise; long ones (beds) side by side, in rows of their length
  * along `direction`, the rectangle stretched that way to hold at least one. */
@@ -578,8 +586,8 @@ void game_plan_structure_rect(const Game *game, StructureType type, Direction di
                               int y0, int x1, int y1, int z, StructurePlanVisit visit,
                               void *userdata);
 
-/* Places what game_plan_structure_rect() plans where allowed. Returns how
- * many sites were placed. */
+/* Places what game_plan_structure_rect() plans where allowed (`z`: the level
+ * shown). Returns how many sites were placed. */
 int game_place_structure_rect(Game *game, StructureType type, Direction direction, int x0, int y0,
                               int x1, int y1, int z);
 

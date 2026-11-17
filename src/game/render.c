@@ -1683,7 +1683,7 @@ void render_blueprint_preview(SDL_Renderer *renderer, const Game *game, const Ca
 {
     const int z = camera->level; /* The level shown. */
     SDL_FRect tile = tile_rect(camera, x, y);
-    bool allowed = game_can_place_workstation(game, x, y, z);
+    bool allowed = game_can_place_workstation(game, x, y, game_build_level(game, x, y, z, false));
     if (allowed) {
         render_station_shape(renderer, &tile, type, 110);
     }
@@ -1888,9 +1888,17 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
     TileRect visible = visible_heads(camera, constructions->width, constructions->height);
     for (int i = 0; i < CONSTRUCTION_MAX; i++) {
         const ConstructionSite *site = construction_get(constructions, i);
-        if (site == NULL || site->z != camera->level || site->x < visible.x0 ||
-            site->x >= visible.x1 || site->y < visible.y0 || site->y >= visible.y1 ||
-            !tile_seen(site->x, site->y, site->z)) {
+        if (site == NULL || site->x < visible.x0 || site->x >= visible.x1 || site->y < visible.y0 ||
+            site->y >= visible.y1) {
+            continue;
+        }
+        /* A roof over ground seen from higher up stands on open space the
+         * passes skip: it is drawn with the ground under it. */
+        bool roof_seen_from_above = below_active && construction_is_roof(site) &&
+                                    site->z - 1 == camera->level && below_shown > site->z;
+        if (roof_seen_from_above
+                ? !tile_seen(site->x, site->y, camera->level)
+                : (site->z != camera->level || !tile_seen(site->x, site->y, site->z))) {
             continue;
         }
         int needed = 0, delivered = 0;
@@ -1942,7 +1950,7 @@ typedef struct StructurePreview {
 
 static void preview_planned(int x, int y, int z, bool allowed, void *userdata)
 {
-    (void)z; /* The level shown. */
+    (void)z; /* Where it would stand: the tile drawn is the same. */
     const StructurePreview *preview = userdata;
     SDL_FRect rect = footprint_rect(preview->camera, x, y, preview->type, preview->direction);
     if (allowed) {

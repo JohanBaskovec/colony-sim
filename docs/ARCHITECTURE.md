@@ -672,6 +672,12 @@ Picking works on what is seen too: `game_colonist_at()` and
 `game_colonists_in_rect()` take the level shown and also return the colonists
 on a lower level that `map_view_level()` shows over their tile (a click and the
 selection box alike).
+Building does too: `game_build_level()` turns the level shown and a tile into the
+level to build on (what is seen there; a roof goes on the open level over it),
+`game_plan_structure_rect()` / `game_place_structure_rect()` take the level
+shown and resolve each structure's tile, and the frontend resolves a
+workstation's tile the same way (`game_place_workstation()` itself takes the
+real level).
 The other way round, `game_place_workstation()` takes the station's tile out
 of the zone it was in (blueprints included). Tiles
 are taken out of zones with Shift+drag or the removal tools of the build menu;

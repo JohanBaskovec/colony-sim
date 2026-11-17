@@ -1168,7 +1168,8 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         int x, y;
         screen_to_tile(app, button->x, button->y, &x, &y);
         if (game_workstation_buildable(&app->game, app->build_type)) {
-            game_place_workstation(&app->game, app->build_type, x, y, z);
+            game_place_workstation(&app->game, app->build_type, x, y,
+                                   game_build_level(&app->game, x, y, z, false));
         }
     } else if (app->tool == APP_TOOL_STRUCTURE) {
         int x0, y0, x1, y1;
