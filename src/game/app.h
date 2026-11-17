@@ -27,7 +27,7 @@ typedef enum AppTool {
     APP_TOOL_BUILD, /* Place a blueprint of `build_type` on the clicked tile. */
     APP_TOOL_GATHER,
     APP_TOOL_STRUCTURE, /* Plan structures of `structure_type` (click, or drag a rectangle). */
-    /* Debug (game/debug_panel.h, game/items_panel.h): `debug_item` (one, or a
+    /* Debug (game/debug_panel.h, game/items_panel.h, game/animals_panel.h): `debug_item` (one, or a
      * full stack) on the clicked tile,
      * or, by `debug_mode` (tool type), the selected colonists moved there, a
      * tree seedling planted, or the tree grown a step. */
@@ -63,6 +63,7 @@ typedef enum AppTool {
 #define APP_KEY_DEBUG SDL_SCANCODE_F3        /* Debug information. */
 #define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4   /* Cheats (game/debug_panel.h). */
 #define APP_KEY_ITEMS_MENU SDL_SCANCODE_F5   /* Spawning items (game/items_panel.h). */
+#define APP_KEY_ANIMALS_MENU SDL_SCANCODE_F6 /* Spawning animals (game/animals_panel.h). */
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H   /* Temperature view on or off. */
 #define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
@@ -92,6 +93,7 @@ typedef enum AppWindow {
     APP_WINDOW_HELP,          /* Controls. */
     APP_WINDOW_DEBUG,         /* Debug menu (cheats). */
     APP_WINDOW_ITEMS,         /* Items menu (debug). */
+    APP_WINDOW_ANIMALS,       /* Animals menu (debug). */
     APP_WINDOW_GAME_MENU,
     APP_WINDOW_SETTINGS, /* Settings (game/settings_window.h), from the game menu. */
     APP_WINDOW_COUNT
@@ -187,11 +189,12 @@ typedef struct App {
     bool show_work_panel;
     bool show_log; /* Colony log (game/log_window.h): a main window like the work grid. */
     bool show_help;
-    bool show_debug_menu;  /* Debug menu (game/debug_panel.h). */
-    bool show_items_menu;  /* Items menu (game/items_panel.h). */
-    bool show_temperature; /* The temperature of each tile over the map. */
-    bool show_vision;      /* Debug: what the selected settler sees, the rest veiled. */
-    float level_wheel;     /* Wheel steps with Shift held, towards the next level. */
+    bool show_debug_menu;   /* Debug menu (game/debug_panel.h). */
+    bool show_items_menu;   /* Items menu (game/items_panel.h). */
+    bool show_animals_menu; /* Animals menu (game/animals_panel.h). */
+    bool show_temperature;  /* The temperature of each tile over the map. */
+    bool show_vision;       /* Debug: what the selected settler sees, the rest veiled. */
+    float level_wheel;      /* Wheel steps with Shift held, towards the next level. */
     /* Build menu (game/build_menu.h): open, which category is shown, and the
      * icon under the mouse (APP_TOOL_NONE: none) whose card is shown. */
     bool build_menu_open;
@@ -224,7 +227,8 @@ typedef struct App {
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
     bool debug_item_max;           /* ... a full stack of it, else one item. */
     int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
-    AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned. */
+    AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */
+    AnimalSex debug_animal_sex;    /* ... and its sex. */
     bool forbid_allows;            /* For APP_TOOL_FORBID: allows instead. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */

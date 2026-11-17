@@ -665,6 +665,7 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_HELP: app->show_help = false; break;
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
     case APP_WINDOW_ITEMS: app->show_items_menu = false; break;
+    case APP_WINDOW_ANIMALS: app->show_animals_menu = false; break;
     case APP_WINDOW_GAME_MENU: app->show_game_menu = false; break;
     case APP_WINDOW_SETTINGS:
         app->show_settings = false;
@@ -796,6 +797,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_HELP: app->show_help = !app->show_help; return;
     case APP_KEY_DEBUG_MENU: app->show_debug_menu = !app->show_debug_menu; return;
     case APP_KEY_ITEMS_MENU: app->show_items_menu = !app->show_items_menu; return;
+    case APP_KEY_ANIMALS_MENU: app->show_animals_menu = !app->show_animals_menu; return;
     case APP_KEY_TEMPERATURE: app->show_temperature = !app->show_temperature; return;
     case APP_KEY_LEVEL_UP: set_level(app, app->camera.level + 1); return;
     case APP_KEY_LEVEL_DOWN: set_level(app, app->camera.level - 1); return;
@@ -1019,12 +1021,10 @@ static void apply_debug_tool(App *app, float screen_x, float screen_y)
         }
         break;
     case APP_DEBUG_PLANT_TREE: game_debug_plant_tree(&app->game, x, y, z); break;
-    case APP_DEBUG_SPAWN_ANIMAL: { /* Shift: a male. On the ground seen there, however deep. */
+    case APP_DEBUG_SPAWN_ANIMAL: { /* On the ground seen there, however deep. */
         int level = map_view_level(&app->game.map, x, y, z);
-        game_debug_spawn_animal(&app->game, app->debug_animal,
-                                (SDL_GetModState() & SDL_KMOD_SHIFT) != 0 ? ANIMAL_MALE
-                                                                          : ANIMAL_FEMALE,
-                                x, y, level >= 0 ? level : z);
+        game_debug_spawn_animal(&app->game, app->debug_animal, app->debug_animal_sex, x, y,
+                                level >= 0 ? level : z);
         break;
     }
     case APP_DEBUG_GROW_TREE: /* Shift: all the way. */

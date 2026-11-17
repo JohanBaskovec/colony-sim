@@ -170,7 +170,7 @@ static void structure_card(App *app, StructureType type, Card *card)
     }
 }
 
-/* The debug tool (game/debug_panel.h, game/items_panel.h): what a click does. */
+/* The debug tool (game/debug_panel.h, items_panel.h, animals_panel.h): what a click does. */
 static void debug_card(App *app, int mode, Card *card)
 {
     char count[16];
@@ -180,7 +180,7 @@ static void debug_card(App *app, int mode, Card *card)
         card_add_text(card, CARD_TITLE, tr("hud.tool.grow_tree"));
     } else if (mode == APP_DEBUG_SPAWN_ANIMAL) {
         TR_FORMAT(card_add(card, CARD_TITLE), TEXT_SIZE, tr("hud.tool.spawn_animal"),
-                  tr(animal_def(app->debug_animal)->name_key));
+                  tr(animal_name_key(app->debug_animal, app->debug_animal_sex)));
     } else if (mode == APP_DEBUG_TELEPORT) {
         tr_integer(count, sizeof(count), app->selected_count);
         TR_FORMAT(card_add(card, CARD_TITLE), TEXT_SIZE,

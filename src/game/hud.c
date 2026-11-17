@@ -2,6 +2,7 @@
 
 #include "core/i18n.h"
 #include "core/tree.h"
+#include "game/animals_panel.h"
 #include "game/debug_panel.h"
 #include "game/inspector.h"
 #include "game/items_panel.h"
@@ -1266,7 +1267,8 @@ static void help_window(App *app)
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.levels"),
               app_key_name(APP_KEY_LEVEL_UP), app_key_name(APP_KEY_LEVEL_DOWN));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.debug"),
-              app_key_name(APP_KEY_DEBUG_MENU), app_key_name(APP_KEY_ITEMS_MENU));
+              app_key_name(APP_KEY_DEBUG_MENU), app_key_name(APP_KEY_ITEMS_MENU),
+              app_key_name(APP_KEY_ANIMALS_MENU));
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_HELP, tr("help.title"), UI_PLACE_CENTER, panel_rows,
                      &help, &open);
@@ -1284,6 +1286,7 @@ static void draw_window(App *app, AppWindow window)
     case APP_WINDOW_HELP: help_window(app); break;
     case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
     case APP_WINDOW_ITEMS: items_panel_draw(app); break;
+    case APP_WINDOW_ANIMALS: animals_panel_draw(app); break;
     case APP_WINDOW_GAME_MENU: game_menu_draw(app); break;
     case APP_WINDOW_SETTINGS: settings_window_draw(app); break;
     default: break;
@@ -1321,6 +1324,9 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     }
     if (app->show_items_menu) {
         out[count++] = APP_WINDOW_ITEMS;
+    }
+    if (app->show_animals_menu) {
+        out[count++] = APP_WINDOW_ANIMALS;
     }
     if (app->show_game_menu) {
         out[count++] = APP_WINDOW_GAME_MENU;

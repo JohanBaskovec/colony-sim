@@ -120,6 +120,7 @@ simulation:
 | `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
+| `animals_panel` | Animals menu (F6): a Female and a Male button per species, which arm the debug tool to put one on every clicked tile |
 | `items_panel`  | Items menu (F5): every item with a 1× and a Max button, which arm the debug tool to drop it on the next clicked tile |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
 | `localization` | Discovers `.lang` files, selects the language, loads catalogs           |

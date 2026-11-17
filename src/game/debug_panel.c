@@ -28,10 +28,6 @@ typedef struct DebugRows {
     bool toggle_teleport;
     bool plant_tree_active, grow_tree_active; /* ... in the tree modes. */
     bool toggle_plant_tree, toggle_grow_tree;
-    /* The species the debug tool spawns (-1: it is off, or in another mode),
-     * and the one whose row was clicked (-1: none). */
-    int animal_active;
-    int toggle_animal;
 } DebugRows;
 
 /* A button on its own row. Returns whether it was clicked. */
@@ -83,13 +79,6 @@ static void debug_rows(UiLayout *layout, void *userdata)
         checkbox_row(layout, tr("debug.plant_tree_tool"), rows->plant_tree_active);
     rows->toggle_grow_tree |=
         checkbox_row(layout, tr("debug.grow_tree_tool"), rows->grow_tree_active);
-    for (int species = 0; species < ANIMAL_SPECIES_COUNT; species++) {
-        TR_FORMAT(label, sizeof(label), tr("debug.spawn_animal_tool"),
-                  tr(animal_def((AnimalSpecies)species)->name_key));
-        if (checkbox_row(layout, label, rows->animal_active == species)) {
-            rows->toggle_animal = species;
-        }
-    }
 }
 
 void debug_panel_draw(App *app)
@@ -98,18 +87,14 @@ void debug_panel_draw(App *app)
         return;
     }
     Game *game = &app->game;
-    DebugRows rows = {.debug = &game->debug,
-                      .vision_shown = app->show_vision,
-                      .fog_on = game->fog_on,
-                      .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
-                      .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
-                      .plant_tree_active =
-                          app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE),
-                      .grow_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE),
-                      .animal_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_SPAWN_ANIMAL)
-                                           ? (int)app->debug_animal
-                                           : -1,
-                      .toggle_animal = -1};
+    DebugRows rows = {
+        .debug = &game->debug,
+        .vision_shown = app->show_vision,
+        .fog_on = game->fog_on,
+        .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
+        .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
+        .plant_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE),
+        .grow_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE)};
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER, debug_rows,
                      &rows, &open);
@@ -167,16 +152,6 @@ void debug_panel_draw(App *app)
     }
     if (rows.toggle_grow_tree) {
         app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE);
-    }
-    if (rows.toggle_animal >= 0) {
-        /* Another species: the tool stays on. */
-        bool same = rows.animal_active == rows.toggle_animal;
-        if (rows.animal_active >= 0 && !same) {
-            app->debug_animal = (AnimalSpecies)rows.toggle_animal;
-        } else {
-            app->debug_animal = (AnimalSpecies)rows.toggle_animal;
-            app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_SPAWN_ANIMAL);
-        }
     }
     if (!open) {
         app->show_debug_menu = false;

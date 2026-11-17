@@ -258,12 +258,13 @@ folder: `~/.local/share/colony-sim/` on Linux). The command line
 
 ### Debug
 
-The debug windows (F4 cheats, F5 items) and the debug readout (F3) have no
+The debug windows (F4 cheats, F5 items, F6 animals) and the debug readout (F3) have no
 buttons: keyboard only. The readout goes to the top right corner. With
 vision, F4 gets Reveal map and See everything. Both there, with the option
 that veils what the selected settler does not see (what no settler sees when
-nobody is selected), on the level shown. F4 also has a tool per species to
-spawn wild animals with a click (Shift: a male).
+nobody is selected), on the level shown. F6 has a Female and a
+Male button per species of wild animal: each arms a tool that puts one more
+of them on every clicked tile.
 
 ## Theme, scale and accessibility
 
