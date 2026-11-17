@@ -53,7 +53,10 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                                    PLANT_BIT(PLANT_MUSHROOMS),
                          .eats_nuts = true,
                          .bite_items = 2,
-                         .food_value = 1.5f},
+                         .food_value = 1.5f,
+                         .body = BODY_QUADRUPED,
+                         .size = 0.7f,
+                         .carcass = ITEM_ROE_DEER_CARCASS},
     /* A grazer of the open ground. Hinds live in herds, stags in small
      * groups of their own. */
     [ANIMAL_RED_DEER] = {.id = "red_deer",
@@ -81,7 +84,10 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                                    PLANT_BIT(PLANT_NETTLE) | PLANT_BIT(PLANT_MUSHROOMS),
                          .eats_nuts = true,
                          .bite_items = 3,
-                         .food_value = 0.5f},
+                         .food_value = 0.5f,
+                         .body = BODY_QUADRUPED,
+                         .size = 1.4f,
+                         .carcass = ITEM_RED_DEER_CARCASS},
     /* Roots about by night for what is in the ground and under the trees:
      * roots, bulbs, nuts, mushrooms. Sows live in sounders, boars alone. */
     [ANIMAL_BOAR] =
@@ -112,7 +118,10 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .digs = true,
          .eats_nuts = true,
          .bite_items = 3,
-         .food_value = 0.8f},
+         .food_value = 0.8f,
+         .body = BODY_QUADRUPED,
+         .size = 1.2f,
+         .carcass = ITEM_BOAR_CARCASS},
     /* Nibbles grass and herbs at dusk and at night, alone. */
     [ANIMAL_HARE] =
         {.id = "hare",
@@ -138,7 +147,10 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .graze_value = 4.0f,
          .plants = PLANT_BIT(PLANT_PLANTAIN) | PLANT_BIT(PLANT_NETTLE),
          .bite_items = 1,
-         .food_value = 6.0f},
+         .food_value = 6.0f,
+         .body = BODY_HARE,
+         .size = 0.15f,
+         .carcass = ITEM_HARE_CARCASS},
 };
 
 const AnimalDef *animal_def(AnimalSpecies species)
@@ -165,6 +177,9 @@ const char *animal_activity_key(const Animal *animal)
         return moving ? N_("animal.activity.to_water") : N_("animal.activity.drink");
     case ANIMAL_TASK_SLEEP: return N_("animal.activity.sleep");
     case ANIMAL_TASK_FLEE: return N_("animal.activity.flee");
+    case ANIMAL_TASK_DOWN:
+        return health_is_unconscious(&animal->health) ? N_("animal.activity.unconscious")
+                                                      : N_("animal.activity.cannot_walk");
     case ANIMAL_TASK_COUNT: break;
     }
     return N_("animal.activity.idle");
@@ -248,6 +263,7 @@ EntityId animals_spawn(Animals *animals, const Map *map, AnimalSpecies species, 
     animal->needs[ANIMAL_NEED_FOOD] = 0.55f + 0.4f * rng_next_float(rng);
     animal->needs[ANIMAL_NEED_WATER] = 0.6f + 0.4f * rng_next_float(rng);
     animal->needs[ANIMAL_NEED_REST] = 0.6f + 0.4f * rng_next_float(rng);
+    health_init(&animal->health, ANIMAL_DEFS[species].body, ANIMAL_DEFS[species].size, 1.0f, 1.0f);
     animal->leader = id;
     animal->alert_wait = (int)(id.index % ANIMAL_ALERT_TICKS); /* Not all on the same tick. */
     animal->facing_left = rng_chance(rng, 0.5f);
@@ -843,7 +859,8 @@ static void walk(Animal *animal, const AnimalDef *def, const AnimalContext *cont
     if (next.x != animal->x) {
         animal->facing_left = next.x < animal->x;
     }
-    float speed = animal->task == ANIMAL_TASK_FLEE ? def->flee_speed : def->walk_speed;
+    float speed = (animal->task == ANIMAL_TASK_FLEE ? def->flee_speed : def->walk_speed) *
+                  health_ability(&animal->health, HEALTH_WALKING);
     animal->move_progress += speed / (float)TICKS_PER_SECOND / cost;
     if (animal->move_progress >= 1.0f) {
         animal->x = next.x;
@@ -938,7 +955,27 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
 {
     Animal *animal = &animals->list[slot];
     const AnimalDef *def = &ANIMAL_DEFS[animal->species];
+    if (health_is_dead(&animal->health)) {
+        return; /* The game leaves its carcass (core/game.h). */
+    }
+    if (health_is_hurt(&animal->health) &&
+        health_update(&animal->health, 1.0f / (float)TICKS_PER_HOUR)) {
+        return; /* Died. */
+    }
     update_needs(animal, def);
+    if (health_is_down(&animal->health)) {
+        if (animal->task != ANIMAL_TASK_DOWN) {
+            animal->task = ANIMAL_TASK_DOWN; /* Falls where it is. */
+            animal->move_progress = 0.0f;
+            animal->path_index = 0;
+            path_clear(&animal->path);
+            animal->alarmed = false;
+        }
+        return;
+    }
+    if (animal->task == ANIMAL_TASK_DOWN) {
+        stand(animal, 0); /* Gets up. */
+    }
     for (int search = 0; search < ANIMAL_SEARCH_COUNT; search++) {
         if (animal->search_cooldown[search] > 0) {
             animal->search_cooldown[search]--;
@@ -971,6 +1008,7 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
     case ANIMAL_TASK_EAT: eat(animal, def, context); break;
     case ANIMAL_TASK_DRINK: drink(animal, context); break;
     case ANIMAL_TASK_SLEEP: sleep_on(animal, context); break;
+    case ANIMAL_TASK_DOWN:
     case ANIMAL_TASK_COUNT: break;
     }
 }
@@ -1103,6 +1141,7 @@ uint64_t animals_hash(const Animals *animals, uint64_t hash)
         hash = hash_fnv1a64(hash, fields, sizeof(fields));
         hash = hash_fnv1a64(hash, &animal->move_progress, sizeof(animal->move_progress));
         hash = hash_fnv1a64(hash, animal->needs, sizeof(animal->needs));
+        hash = health_hash(&animal->health, hash);
     }
     return hash;
 }

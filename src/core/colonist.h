@@ -58,6 +58,7 @@
 #include "core/bed.h"
 #include "core/construction.h"
 #include "core/designation.h"
+#include "core/health.h"
 #include "core/dirt.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
@@ -245,6 +246,9 @@ typedef enum ColonistTask {
     /* Walking where the player ordered (`target`), then standing there a while
      * (COLONIST_MOVE_HOLD_TICKS). Only critical needs and breaks cut it short. */
     TASK_MOVE,
+    /* Lying where it fell: unconscious, or unable to walk (core/health.h).
+     * Gets up by itself once able to. */
+    TASK_DOWN,
     TASK_COUNT
 } ColonistTask;
 
@@ -449,6 +453,7 @@ typedef struct Colonist {
     float wetness; /* 0 (dry) .. 1 (wet through). */
     Mood mood;
     Attributes attributes;         /* Set with colonist_set_attributes(). */
+    Health health;                 /* Its factors follow the attributes. */
     ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
 
@@ -612,7 +617,8 @@ bool colonist_can_gather(const Colonist *colonist, GatherJob job);
 
 /* Work done per tick on something of `knowledge`: COLONIST_WORK_SPEED scaled
  * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE), by the mood
- * (mood_work_factor()) and by the colonist's work pace. */
+ * (mood_work_factor()), by the colonist's work pace and by the use of its
+ * hands (core/health.h). */
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge);
 
 /* The level what the colonist makes comes from (quality and condition of
@@ -622,6 +628,13 @@ double colonist_work_level(const Colonist *colonist, KnowledgeType knowledge);
 
 /* Whether the colonist is having a break (core/mood.h). */
 bool colonist_in_break(const Colonist *colonist);
+
+/* Whether the colonist is down (TASK_DOWN): unconscious or unable to walk. */
+bool colonist_is_down(const Colonist *colonist);
+
+/* Walking speed multiplier from the colonist's body: its walking attribute
+ * and the walking its health leaves (core/health.h). */
+float colonist_walk_factor(const Colonist *colonist);
 
 /* Whether the colonist knows enough to build this kind of workstation. */
 bool colonist_can_build(const Colonist *colonist, WorkstationType type);
@@ -679,9 +692,9 @@ void colonist_abandon_task(Colonist *colonist, const ColonistContext *context);
 /*
  * Sends the colonist to a tile, whatever it was doing (a player's order): the
  * job is given up, anything carried put down, a sleeper woken. Refused (false,
- * nothing changed) when the tile cannot be stood on, or reached on what the
- * colonist knows of the map (context->plan_map). Between two tiles the order
- * waits for the next one.
+ * nothing changed) when the colonist is down, or the tile cannot be stood on,
+ * or reached on what the colonist knows of the map (context->plan_map).
+ * Between two tiles the order waits for the next one.
  */
 bool colonist_order_move(Colonist *colonist, const ColonistContext *context, TilePos goal);
 
@@ -704,11 +717,16 @@ int colonist_random_strength(Rng *rng, int age);
  * value out of range. */
 bool colonist_set_strength(Colonist *colonist, int strength);
 
+/* Kilograms the colonist carries without slowing down: the limit of its
+ * strength, times the use of its hands (core/health.h). */
+float colonist_max_carry_weight(const Colonist *colonist);
+
 /* Kilograms the colonist is carrying: the load in hand and the tools. */
 float colonist_carried_weight(const Colonist *colonist);
 
 /* How many items of a type the colonist can pick up at once, in what the
- * weight and bulk limits leave once its tools are counted (at least 1: an
+ * weight (colonist_max_carry_weight()) and bulk limits leave once its tools
+ * are counted (at least 1: an
  * item too heavy or too bulky is dragged). */
 int colonist_carry_capacity(const Colonist *colonist, ItemType type);
 

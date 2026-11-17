@@ -13,8 +13,9 @@
  *
  * Food rots while it lies on a tile: it loses hit points, faster when warm,
  * not at all when frozen, a little slower under a roof, faster in the rain,
- * and is gone when they run out (see item_rot_rate()). Fresh grass does not
- * dry in the rain. Items in hands do not rot.
+ * and is gone when they run out (see item_rot_rate()). Bodies rot the same
+ * way; they are not food. Fresh grass does not dry in the rain. Items in
+ * hands do not rot.
  */
 #ifndef COLONY_CORE_ITEM_H
 #define COLONY_CORE_ITEM_H
@@ -54,6 +55,12 @@ typedef enum ItemType {
     ITEM_DIGGING_STICK_HARDENED,
     ITEM_ROASTED_RHIZOMES,
     ITEM_ROASTED_CARROTS,
+    /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
+    ITEM_SETTLER_BODY,
+    ITEM_ROE_DEER_CARCASS,
+    ITEM_RED_DEER_CARCASS,
+    ITEM_BOAR_CARCASS,
+    ITEM_HARE_CARCASS,
     ITEM_TYPE_COUNT
 } ItemType;
 
@@ -63,12 +70,13 @@ typedef enum ItemCategory {
     ITEM_CATEGORY_RESOURCES,
     ITEM_CATEGORY_TOOLS,
     ITEM_CATEGORY_WEAPONS,
+    ITEM_CATEGORY_BODIES, /* Not stored unless the player allows it. */
     ITEM_CATEGORY_COUNT
 } ItemCategory;
 
 /* Bit mask with one bit per ItemType. */
-typedef uint32_t ItemTypeMask;
-_Static_assert(ITEM_TYPE_COUNT <= 32, "item types must fit in an ItemTypeMask");
+typedef uint64_t ItemTypeMask;
+_Static_assert(ITEM_TYPE_COUNT <= 64, "item types must fit in an ItemTypeMask");
 
 #define ITEM_TYPE_BIT(type) ((ItemTypeMask)1u << (unsigned)(type))
 

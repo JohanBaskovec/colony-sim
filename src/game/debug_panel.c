@@ -28,6 +28,7 @@ typedef struct DebugRows {
     bool toggle_teleport;
     bool plant_tree_active, grow_tree_active; /* ... in the tree modes. */
     bool toggle_plant_tree, toggle_grow_tree;
+    bool hurt_active, toggle_hurt; /* ... in the blow mode. */
 } DebugRows;
 
 /* A button on its own row. Returns whether it was clicked. */
@@ -79,6 +80,7 @@ static void debug_rows(UiLayout *layout, void *userdata)
         checkbox_row(layout, tr("debug.plant_tree_tool"), rows->plant_tree_active);
     rows->toggle_grow_tree |=
         checkbox_row(layout, tr("debug.grow_tree_tool"), rows->grow_tree_active);
+    rows->toggle_hurt |= checkbox_row(layout, tr("debug.hurt_tool"), rows->hurt_active);
 }
 
 void debug_panel_draw(App *app)
@@ -87,14 +89,15 @@ void debug_panel_draw(App *app)
         return;
     }
     Game *game = &app->game;
-    DebugRows rows = {
-        .debug = &game->debug,
-        .vision_shown = app->show_vision,
-        .fog_on = game->fog_on,
-        .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
-        .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
-        .plant_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE),
-        .grow_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE)};
+    DebugRows rows = {.debug = &game->debug,
+                      .vision_shown = app->show_vision,
+                      .fog_on = game->fog_on,
+                      .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
+                      .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
+                      .plant_tree_active =
+                          app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE),
+                      .grow_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE),
+                      .hurt_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_HURT)};
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER, debug_rows,
                      &rows, &open);
@@ -152,6 +155,9 @@ void debug_panel_draw(App *app)
     }
     if (rows.toggle_grow_tree) {
         app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE);
+    }
+    if (rows.toggle_hurt) {
+        app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_HURT);
     }
     if (!open) {
         app->show_debug_menu = false;

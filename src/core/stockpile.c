@@ -156,12 +156,13 @@ static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1
         return STOCKPILE_NONE;
     }
     Stockpile *stockpile = &stockpiles->list[index];
-    *stockpile = (Stockpile){.used = true,
-                             .number = stockpiles->next_number,
-                             .allowed = item_types_all(),
-                             .quality = {0, ITEM_QUALITY_BEST},
-                             .hit_points = {0, 100},
-                             .priority = STOCKPILE_PRIORITY_DEFAULT};
+    *stockpile =
+        (Stockpile){.used = true,
+                    .number = stockpiles->next_number,
+                    .allowed = item_types_all() & ~item_types_in_category(ITEM_CATEGORY_BODIES),
+                    .quality = {0, ITEM_QUALITY_BEST},
+                    .hit_points = {0, 100},
+                    .priority = STOCKPILE_PRIORITY_DEFAULT};
     clear_bounds(stockpile);
     if (extend(stockpiles, map, index, x0, y0, x1, y1, z, blocked, view) == 0) {
         stockpile->used = false;
@@ -460,6 +461,10 @@ uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
                                  s->hit_points.min,
                                  s->hit_points.max};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
+            uint32_t high = (uint32_t)(s->allowed >> 32); /* Only then: as before without. */
+            if (high != 0) {
+                hash = hash_fnv1a64(hash, &high, sizeof(high));
+            }
             if (s->forbidden) { /* Hashes of games that forbid nothing stay as they were. */
                 hash = hash_fnv1a64(hash, &s->forbidden, sizeof(s->forbidden));
             }

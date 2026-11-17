@@ -1,6 +1,7 @@
 #include "game/animal_panel.h"
 
 #include "core/i18n.h"
+#include "game/health_panel.h"
 #include "game/inspector.h"
 #include "game/ui_layout.h"
 
@@ -56,6 +57,7 @@ static void animal_rows(UiLayout *layout, void *userdata)
         SDL_strlcpy(size, tr("animal_panel.herd.alone"), sizeof(size));
     }
     ui_layout_pair(layout, tr("animal_panel.herd"), size, text, false);
+    health_panel_rows(layout, &animal->health);
 }
 
 void animal_panel_draw(App *app)

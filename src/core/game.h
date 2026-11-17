@@ -53,6 +53,23 @@
  * gathered, within the same distance: knapping needs flint. */
 #define GAME_SPAWN_FLINT_STONES 5
 
+/* Without vision (game_set_vision()), settlers within this many tiles on
+ * the same level see a death (docs/HEALTH.md §8). */
+#define GAME_WITNESS_RADIUS 12
+
+/* Injuries from the world (docs/HEALTH.md §9), points (tuning): a gallery
+ * caving in on someone crushes them, a felled tree crushes those under its
+ * trunk and bruises those under its crown (the woodcutter, beside its foot,
+ * steps back), a debug blow is of any kind. */
+#define GAME_CAVE_IN_DAMAGE_MIN 15.0f
+#define GAME_CAVE_IN_DAMAGE_MAX 30.0f
+#define GAME_TRUNK_DAMAGE_MIN 10.0f
+#define GAME_TRUNK_DAMAGE_MAX 25.0f
+#define GAME_CROWN_DAMAGE_MIN 3.0f
+#define GAME_CROWN_DAMAGE_MAX 8.0f
+#define GAME_DEBUG_BLOW_MIN 6.0f
+#define GAME_DEBUG_BLOW_MAX 16.0f
+
 /* How often the game counts who knows what, to raise notices (a knowledge
  * only one settler still masters...). */
 #define GAME_KNOWLEDGE_CHECK_TICKS 250
@@ -148,6 +165,12 @@ typedef struct Game {
     RoofWatch roof_watch;
     Pool colonist_pool;
     Colonist colonists[COLONIST_MAX]; /* Indexed by EntityId.index. */
+    /* The last settler died (docs/HEALTH.md §8): the game paused itself
+     * then. Part of game_hash() once set. */
+    bool colony_lost;
+    /* Felled trees dealt with (Map.tree_fall_revision): those under them
+     * were hurt. */
+    uint32_t tree_falls_seen;
     /* Wild animals (core/animal.h), ticked after the settlers, and their own
      * randomness: what the animals do does not shift the settlers' draws.
      * Part of game_hash() once an animal has lived in the game. */
@@ -282,6 +305,10 @@ bool game_debug_plant_tree(Game *game, int x, int y, int z);
  * tree, for one fully grown already, or one that waits for room (something
  * where its trunk would rise stops it, as in play). */
 bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully);
+
+/* Debug: a blow of a random kind (GAME_DEBUG_BLOW_*, times the body's size)
+ * on every settler and animal on the tile. Returns how many were hurt. */
+int game_debug_hurt(Game *game, int x, int y, int z);
 
 /* Debug: moves a colonist to a passable tile at once; it gives up its task
  * and looks around afresh. Fails on a stale handle or a tile nobody can

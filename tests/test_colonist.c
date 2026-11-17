@@ -1249,11 +1249,17 @@ static void test_colonist_falls(void)
     game_tick(&game);
     CHECK_EQ_INT(colonist->z, 0);
     CHECK(colonist->x == 30 && colonist->y == 10);
+    /* A level: bruised, nothing broken. */
+    REQUIRE(colonist->health.injury_count >= 1);
+    for (int i = 0; i < colonist->health.injury_count; i++) {
+        CHECK_EQ_INT(colonist->health.injuries[i].type, INJURY_BRUISE);
+    }
+    CHECK(!health_is_down(&colonist->health));
     game_shutdown(&game);
 }
 
 /* A prop taken away in a game: the ceiling caves in, the stockpile there
- * goes, the settler there steps out, and the player is told. */
+ * goes, the settler there is crushed and steps out, and the player is told. */
 static void test_cave_in_in_game(void)
 {
     Game game;
@@ -1270,6 +1276,9 @@ static void test_cave_in_in_game(void)
     CHECK_EQ_INT(stockpile_at(&game.stockpiles, 29, 22, 0), STOCKPILE_NONE);
     REQUIRE(game.notices.count == notices + 1);
     CHECK_EQ_INT(notices_get(&game.notices, notices)->type, NOTICE_CAVE_IN);
+    REQUIRE(colonist->health.injury_count >= 1);
+    CHECK_EQ_INT(colonist->health.injuries[0].type, INJURY_CRUSH);
+    CHECK(colonist->health.injuries[0].damage >= GAME_CAVE_IN_DAMAGE_MIN * 0.5f);
     game_tick(&game);
     CHECK(map_is_passable(&game.map, colonist->x, colonist->y, colonist->z));
     game_shutdown(&game);

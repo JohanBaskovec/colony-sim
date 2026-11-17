@@ -66,6 +66,7 @@ simulation:
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
+| `health`     | Bodies for settlers and animals alike: body plans and parts, injuries that bleed and hurt, abilities (consciousness, walking, the hands, sight, eating), clotting, natural healing, blood coming back, death; falls (see `docs/HEALTH.md`) |
 | `attributes` | Settler attributes: positions in thousandths drawn on a bell curve, their effects (factors, thought weight, outlook points, temperature shifts), the word bands and translation keys |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level; for a kind of walker (`PathWalker`: settlers, or animals who open no door and climb neither ladders nor trees) |
@@ -117,7 +118,8 @@ simulation:
 | `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (condition sliders, filters); build another, delete |
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
 | `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills and (hearths) Fire tabs; forbid, build another, delete |
-| `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd |
+| `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd, health |
+| `health_panel` | The health of a settler (its Health tab) or an animal as table rows: the state, blood, bleeding, pain, abilities, injuries with tooltips |
 | `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
@@ -860,6 +862,38 @@ their hashes are what they were.
 Cost: about 3 µs a tick for 70 animals (200 × 200 map, Release);
 `bench_simulation ... wildlife` prints how they fare (what they do, their
 needs on average and at worst).
+
+### Health
+
+`core/health.h` (design in `docs/HEALTH.md`): a `Health` lives in each
+`Colonist` and each `Animal`; only the body plan and the size differ. Blows
+land on a part (`health_hurt()`, `health_blow()`, `health_fall()`); each tick
+of a hurt being `health_update()` runs bleeding, clotting, healing and blood
+coming back, and says when it died. Abilities are read from the state when
+needed (`health_ability()`): nothing derived is stored, and a healthy body
+returns exactly 1, so that the simulation and `game_hash()` stay as they were
+while nobody is hurt (`health_hash()` adds nothing then).
+
+- Settlers: the Toughness and Pain tolerance attributes set the damage and
+  pain factors (`colonist_set_attributes()`); walking scales the walk
+  (`colonist_walk_factor()`), the hands the work speed and the weight carried
+  (`colonist_max_carry_weight()`). Unconscious or unable to walk, the colonist
+  is `TASK_DOWN`: `colonist_tick()` only runs its needs; it gets up by itself.
+  An unconscious settler is no viewer (`update_vision()`) and frightens no
+  animal.
+- Animals: `AnimalDef.body`, `.size` and `.carcass`; `ANIMAL_TASK_DOWN`.
+- Death: the game deals with it after each turn (`settler_died()` in
+  `update_colonists()`, the carcasses in `update_animals()`): the body is an
+  item (`ITEM_CATEGORY_BODIES`, rotting like food, left out of new
+  stockpiles), the colonist goes through `game_remove_colonist()` (bed,
+  reservations, tools), a notice, memories (`THOUGHT_DEATH`,
+  `THOUGHT_SAW_DEATH`); the last one dead sets `Game.colony_lost` and pauses
+  the clock (`game_update()` stops there). A dead animal's herd follows
+  another leader (`animals_remove()`).
+- Injuries from the world: falls in `step_out_of_blocked_tile()`; galleries
+  caving in (`roofs_collapse()`'s tiles) and felled trees, which the map logs
+  (`Map.tree_fall_log`, read by `hurt_under_felled_trees()`), hurt whoever
+  stands there; `game_debug_hurt()` for the debug tool.
 
 ### Dirt and cleaning
 

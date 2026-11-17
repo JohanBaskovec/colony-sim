@@ -1052,8 +1052,9 @@ static bool zone_tool_removes(const App *app)
 /* Stockpile tool release: adds the rectangle to the selected stockpile and
  * those it overlaps (merged into one), or creates a new one, which becomes
  * selected; or removes zone tiles. */
-/* The debug tool: the chosen item (one, or a full stack) on the tile, or the
- * selected colonists moved there. */
+/* The debug tool: the chosen item (one, or a full stack) on the tile, the
+ * selected colonists moved there, a tree planted or grown, an animal, or a
+ * blow on whoever is there. */
 static void apply_debug_tool(App *app, float screen_x, float screen_y)
 {
     int x, y;
@@ -1070,6 +1071,11 @@ static void apply_debug_tool(App *app, float screen_x, float screen_y)
         int level = map_view_level(&app->game.map, x, y, z);
         game_debug_spawn_animal(&app->game, app->debug_animal, app->debug_animal_sex, x, y,
                                 level >= 0 ? level : z);
+        break;
+    }
+    case APP_DEBUG_HURT: { /* Whoever stands on the ground seen there. */
+        int level = map_view_level(&app->game.map, x, y, z);
+        game_debug_hurt(&app->game, x, y, level >= 0 ? level : z);
         break;
     }
     case APP_DEBUG_GROW_TREE: /* Shift: all the way. */

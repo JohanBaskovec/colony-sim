@@ -192,6 +192,9 @@ typedef struct Plant {
  * Map.build_log). */
 #define MAP_BUILD_LOG_SIZE 16
 
+/* How many recent felled trees the map remembers (see Map.tree_fall_log). */
+#define MAP_TREE_FALL_LOG_SIZE 16
+
 /* Movement cost multiplier of a step up or down a slope (see map_can_climb()),
  * of one up or down a ladder (slower, hands on the rungs), and of climbing
  * a tree's trunk to its foliage (map_can_climb_tree()). */
@@ -222,6 +225,17 @@ typedef struct MapTopologyChange {
 typedef struct MapBuildChange {
     int16_t x, y, z;
 } MapBuildChange;
+
+/* A tree felled (tree_fell(), core/tree.h): where its foot stood, how wide
+ * its trunk was, which way it fell (a Direction) and how many tiles it
+ * covers; the trunk lies on the first `trunk` of them, the crown beyond. */
+typedef struct MapTreeFall {
+    int16_t x, y, z;
+    uint8_t size;
+    uint8_t direction;
+    uint8_t length;
+    uint8_t trunk;
+} MapTreeFall;
 
 typedef struct Map {
     int width;
@@ -284,6 +298,11 @@ typedef struct Map {
     uint32_t topology_revision;
     /* The change that led to revision r is at index r % MAP_TOPOLOGY_LOG_SIZE. */
     MapTopologyChange topology_log[MAP_TOPOLOGY_LOG_SIZE];
+    /* Incremented whenever a tree is felled: who stood where it came down is
+     * the game's business. Fall number r is at index r % MAP_TREE_FALL_LOG_SIZE.
+     * Not part of map_hash(). */
+    uint32_t tree_fall_revision;
+    MapTreeFall tree_fall_log[MAP_TREE_FALL_LOG_SIZE];
 } Map;
 
 const TerrainDef *terrain_def(Terrain terrain);

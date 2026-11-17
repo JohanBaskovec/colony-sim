@@ -247,9 +247,14 @@ TreeFall tree_fall_aim(const Map *map, int x, int y, int z);
  * (items_drop()): `wood` shared out along the trunk, the branches and twigs
  * of its crown (tree_crown_yield()) where it came down. Where the trunk lies over a
  * drop, its share falls to the ground below. A sapling is cut where it
- * stands (length 0). Returns how it fell (length 0 and nothing done
- * without a tree).
+ * stands (length 0). The fall is logged (Map.tree_fall_log). Returns how it
+ * fell (length 0 and nothing done without a tree).
  */
 TreeFall tree_fell(Map *map, Items *items, int x, int y, int z, ItemStack wood);
+
+/* Tile `across` (0..size-1) of the band a trunk of `size` on (x, y) covers
+ * `along` tiles from its side (0: the foot's own tiles) in a direction. */
+void tree_fall_band_tile(int x, int y, int size, Direction direction, int along, int across,
+                         int *tx, int *ty);
 
 #endif /* COLONY_CORE_TREE_H */

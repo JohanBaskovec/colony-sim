@@ -87,6 +87,31 @@ static void centered_text(Ui *ui, const char *text, SDL_FRect rect, float y, boo
     }
 }
 
+/* A hurt settler's mark in the top right corner of its portrait: a cross,
+ * pale while it only heals, red while it bleeds or is down. */
+static void health_mark(App *app, const Colonist *colonist, SDL_FRect portrait)
+{
+    const Health *health = &colonist->health;
+    if (!health_is_hurt(health)) {
+        return;
+    }
+    bool bad = health_bleeding(health) > 0.0f || colonist_is_down(colonist);
+    SDL_Color color = theme_scale_color(&app->ui.theme, bad ? 0.0f : 0.25f);
+    float size = SDL_max(7.0f, SDL_floorf(portrait.w * 0.3f));
+    float bar = SDL_max(2.0f, SDL_floorf(size / 3.0f));
+    float x = portrait.x + portrait.w - size, y = portrait.y;
+    SDL_FRect across = {x, SDL_floorf(y + (size - bar) * 0.5f), size, bar};
+    SDL_FRect down = {SDL_floorf(x + (size - bar) * 0.5f), y, bar, size};
+    SDL_FRect outline_across = {across.x - 1.0f, across.y - 1.0f, across.w + 2.0f, across.h + 2.0f};
+    SDL_FRect outline_down = {down.x - 1.0f, down.y - 1.0f, down.w + 2.0f, down.h + 2.0f};
+    SDL_SetRenderDrawColor(app->renderer, 20, 16, 14, 255);
+    SDL_RenderFillRect(app->renderer, &outline_across);
+    SDL_RenderFillRect(app->renderer, &outline_down);
+    SDL_SetRenderDrawColor(app->renderer, color.r, color.g, color.b, 255);
+    SDL_RenderFillRect(app->renderer, &across);
+    SDL_RenderFillRect(app->renderer, &down);
+}
+
 static void click(App *app, EntityId id)
 {
     bool shift = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
@@ -141,6 +166,7 @@ void colonist_bar_draw(App *app)
             SDL_FRect portrait = {SDL_floorf(rect.x + (rect.w - layout.portrait) * 0.5f),
                                   rect.y + layout.gap, layout.portrait, layout.portrait};
             render_colonist_portrait(app->renderer, app->sprites, colonist, portrait);
+            health_mark(app, colonist, portrait);
             float text_y = portrait.y + portrait.h + SDL_floorf(layout.gap * 0.5f);
             const char *activity = tr(colonist_activity_key(colonist));
             if (layout.name) {
@@ -151,8 +177,9 @@ void colonist_bar_draw(App *app)
                 centered_text(ui, activity, rect, text_y, true);
             }
             if (ui_hovered(ui, rect)) {
-                const char *lines[2] = {colonist->name, activity};
-                ui_tooltip(ui, lines, 2);
+                const char *lines[3] = {colonist->name, activity,
+                                        tr(health_status_key(&colonist->health))};
+                ui_tooltip(ui, lines, health_is_hurt(&colonist->health) ? 3 : 2);
             }
         }
     }

@@ -41,7 +41,10 @@ static void test_create_covers_valid_tiles_only(void)
     REQUIRE(stockpile != NULL);
     CHECK_EQ_INT(stockpile->cell_count, 5 * 6 - 1);
     CHECK_EQ_INT(stockpile->priority, STOCKPILE_PRIORITY_DEFAULT);
-    CHECK_EQ_UINT(stockpile->allowed, item_types_all());
+    /* Everything but bodies, unless the player allows them. */
+    CHECK_EQ_UINT(stockpile->allowed,
+                  item_types_all() & ~item_types_in_category(ITEM_CATEGORY_BODIES));
+    CHECK(!(stockpile->allowed & ITEM_TYPE_BIT(ITEM_SETTLER_BODY)));
     CHECK_EQ_INT(stockpile_at(&s, 3, 3, 0), a);
     CHECK_EQ_INT(stockpile_at(&s, 0, 3, 0), STOCKPILE_NONE);
     CHECK_EQ_INT(stockpile_at(&s, 5, 5, 0), STOCKPILE_NONE);
@@ -187,7 +190,7 @@ static void test_filter_and_priority(void)
     stockpile_set_allowed(&s, a, item_types_in_category(ITEM_CATEGORY_FOOD));
     CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, 0, wood), 0);
     CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, 0, berries), STOCKPILE_PRIORITY_DEFAULT);
-    stockpile_set_allowed(&s, a, 0xFFFFFFFFu); /* Unknown bits are dropped. */
+    stockpile_set_allowed(&s, a, ~(ItemTypeMask)0); /* Unknown bits are dropped. */
     CHECK_EQ_UINT(stockpile_get(&s, a)->allowed, item_types_all());
 
     stockpile_set_priority(&s, a, 2);

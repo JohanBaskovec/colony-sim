@@ -110,6 +110,8 @@ typedef enum ThoughtType {
     THOUGHT_FIRESIDE_STORY,
     THOUGHT_CHAT,
     THOUGHT_RELIEF,      /* After a break. */
+    THOUGHT_DEATH,       /* A settler of the colony died. */
+    THOUGHT_SAW_DEATH,   /* ...before its eyes. */
     THOUGHT_DEBUG_GLOOM, /* The debug cheat (game_debug_sadden()). */
     THOUGHT_COUNT
 } ThoughtType;

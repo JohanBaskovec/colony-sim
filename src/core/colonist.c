@@ -58,6 +58,7 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, 
     colonist->chat_topic = KNOWLEDGE_NONE;
     mood_init(&colonist->mood);
     attributes_init(&colonist->attributes);
+    health_init(&colonist->health, BODY_HUMAN, 1.0f, 1.0f, 1.0f);
 }
 
 void colonist_set_attributes(Colonist *colonist, const Attributes *attributes)
@@ -65,6 +66,8 @@ void colonist_set_attributes(Colonist *colonist, const Attributes *attributes)
     colonist->attributes = *attributes;
     mood_set_character(&colonist->mood, attribute_outlook_points(attributes),
                        attribute_thought_weight(attributes));
+    health_set_factors(&colonist->health, attribute_damage_factor(attributes),
+                       attribute_pain_factor(attributes));
 }
 
 bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority)
@@ -386,7 +389,8 @@ float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge)
         speed *= knowledge_work_speed(colonist->knowledge[knowledge]);
     }
     return speed * mood_work_factor(colonist->mood.value) *
-           attribute_factor(&colonist->attributes, ATTRIBUTE_WORK_PACE);
+           attribute_factor(&colonist->attributes, ATTRIBUTE_WORK_PACE) *
+           health_ability(&colonist->health, HEALTH_HANDS);
 }
 
 double colonist_work_level(const Colonist *colonist, KnowledgeType knowledge)
@@ -401,6 +405,17 @@ double colonist_work_level(const Colonist *colonist, KnowledgeType knowledge)
 bool colonist_in_break(const Colonist *colonist)
 {
     return colonist->mood.break_type != MOOD_BREAK_NONE;
+}
+
+bool colonist_is_down(const Colonist *colonist)
+{
+    return colonist->task == TASK_DOWN;
+}
+
+float colonist_walk_factor(const Colonist *colonist)
+{
+    return attribute_factor(&colonist->attributes, ATTRIBUTE_WALKING) *
+           health_ability(&colonist->health, HEALTH_WALKING);
 }
 
 float colonist_carry_weight_for_strength(int strength)
@@ -430,6 +445,11 @@ bool colonist_set_strength(Colonist *colonist, int strength)
     return true;
 }
 
+float colonist_max_carry_weight(const Colonist *colonist)
+{
+    return colonist->max_carry_weight * health_ability(&colonist->health, HEALTH_HANDS);
+}
+
 float colonist_carried_weight(const Colonist *colonist)
 {
     float tools_weight, tools_bulk;
@@ -446,7 +466,7 @@ int colonist_carry_capacity(const Colonist *colonist, ItemType type)
     }
     float tools_weight, tools_bulk;
     tools_load(colonist, &tools_weight, &tools_bulk);
-    float by_weight = floorf((colonist->max_carry_weight - tools_weight) / def->weight);
+    float by_weight = floorf((colonist_max_carry_weight(colonist) - tools_weight) / def->weight);
     float by_bulk = floorf((colonist->max_carry_bulk - tools_bulk) / def->bulk);
     float capacity = by_weight < by_bulk ? by_weight : by_bulk;
     if (capacity < 1.0f) {
@@ -458,10 +478,11 @@ int colonist_carry_capacity(const Colonist *colonist, ItemType type)
 float colonist_load_speed_factor(const Colonist *colonist)
 {
     float load = colonist_carried_weight(colonist);
-    if (load <= colonist->max_carry_weight) {
+    float limit = colonist_max_carry_weight(colonist);
+    if (load <= limit) {
         return 1.0f;
     }
-    float factor = colonist->max_carry_weight / load;
+    float factor = limit / load;
     return factor < COLONIST_MIN_LOAD_SPEED ? COLONIST_MIN_LOAD_SPEED : factor;
 }
 
@@ -565,6 +586,7 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
     case TASK_HAUL:
     case TASK_SUPPLY:
     case TASK_SLEEP:
+    case TASK_DOWN:
     case TASK_COUNT: break;
     }
     return COLONIST_ACTION_NONE;
@@ -602,12 +624,17 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_STORY] = N_("colonist.task.story"),
         [TASK_LISTEN] = N_("colonist.task.listen"),
         [TASK_MOVE] = N_("colonist.task.move"),
+        [TASK_DOWN] = N_("colonist.task.down"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
 }
 
 const char *colonist_activity_key(const Colonist *colonist)
 {
+    if (colonist->task == TASK_DOWN) {
+        return health_is_unconscious(&colonist->health) ? N_("colonist.activity.unconscious")
+                                                        : N_("colonist.activity.cannot_walk");
+    }
     const char *break_key = mood_break_key((MoodBreak)colonist->mood.break_type);
     if (break_key != NULL && colonist->task != TASK_SLEEP && colonist->task != TASK_EAT &&
         colonist->task != TASK_DRINK) {
@@ -744,7 +771,7 @@ static bool start_move(Colonist *colonist, const ColonistContext *context, TileP
 
 bool colonist_order_move(Colonist *colonist, const ColonistContext *context, TilePos goal)
 {
-    if (!map_is_passable(context->plan_map, goal.x, goal.y, goal.z) ||
+    if (colonist_is_down(colonist) || !map_is_passable(context->plan_map, goal.x, goal.y, goal.z) ||
         !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
         return false;
     }
@@ -3173,8 +3200,8 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
 
 bool colonist_can_chat(const Colonist *colonist)
 {
-    if (colonist_in_break(colonist)) {
-        return false; /* Wants to be left alone. */
+    if (colonist_in_break(colonist) || health_is_dead(&colonist->health)) {
+        return false; /* Wants to be left alone; or is gone. */
     }
     switch (colonist->task) {
     case TASK_IDLE:
@@ -3194,6 +3221,7 @@ bool colonist_can_chat(const Colonist *colonist)
     case TASK_SLEEP:
     case TASK_HAUL:
     case TASK_SUPPLY:
+    case TASK_DOWN:
     case TASK_COUNT: break;
     }
     return false;
@@ -4417,8 +4445,7 @@ static void walk(Colonist *colonist, const ColonistContext *context)
         cost *= SQRT2;
     }
     colonist->move_progress += COLONIST_WALK_SPEED * colonist_load_speed_factor(colonist) *
-                               attribute_factor(&colonist->attributes, ATTRIBUTE_WALKING) /
-                               (float)TICKS_PER_SECOND / cost;
+                               colonist_walk_factor(colonist) / (float)TICKS_PER_SECOND / cost;
     if (colonist->move_progress >= 1.0f) {
         colonist->x = next.x;
         colonist->y = next.y;
@@ -4507,8 +4534,9 @@ static void drink(Colonist *colonist, const ColonistContext *context)
 
 /* A structure built where the colonist stands (a wall finished by someone
  * else, a gallery filled up by a cave-in): it steps to a free neighboring
- * tile and decides again. The ground gone under its feet (a ramp cut): it
- * falls to the ground below. */
+ * tile and decides again. The ground gone under its feet (a ramp cut, the
+ * tree it was in felled): it falls to the ground below, and is hurt
+ * (health_fall()). */
 static void step_out_of_blocked_tile(Colonist *colonist, const ColonistContext *context)
 {
     static const int DX[8] = {0, 1, 0, -1, 1, 1, -1, -1};
@@ -4522,6 +4550,8 @@ static void step_out_of_blocked_tile(Colonist *colonist, const ColonistContext *
         ground--;
     }
     if (ground != colonist->z && map_is_passable(map, colonist->x, colonist->y, ground)) {
+        /* Falls: from a tree felled under it, with the ground giving way. */
+        health_fall(&colonist->health, context->rng, colonist->z - ground);
         colonist->z = ground;
         colonist->move_progress = 0.0f;
         set_idle(colonist, context, 0);
@@ -4539,10 +4569,41 @@ static void step_out_of_blocked_tile(Colonist *colonist, const ColonistContext *
     }
 }
 
+/* Falls where it is (TASK_DOWN): whatever it did is given up, what it
+ * carried put down. */
+static void lie_down(Colonist *colonist, const ColonistContext *context)
+{
+    if (colonist->task == TASK_DOWN) {
+        return;
+    }
+    begin_task(colonist, context, TASK_DOWN);
+    path_clear(&colonist->path);
+    colonist->move_progress = 0.0f;
+    colonist->move_pending = false;
+    colonist->chat_ticks = 0;
+}
+
 void colonist_tick(Colonist *colonist, const ColonistContext *context)
 {
+    if (health_is_dead(&colonist->health)) {
+        return; /* The game leaves its body (core/game.h). */
+    }
+    if (health_is_hurt(&colonist->health) &&
+        health_update(&colonist->health, 1.0f / (float)TICKS_PER_HOUR)) {
+        return; /* Died. */
+    }
     step_out_of_blocked_tile(colonist, context);
+    if (health_is_dead(&colonist->health)) {
+        return; /* Killed by the fall. */
+    }
     update_needs(colonist, context);
+    if (health_is_down(&colonist->health)) {
+        lie_down(colonist, context);
+        return;
+    }
+    if (colonist->task == TASK_DOWN) {
+        set_idle(colonist, context, 0); /* Gets up. */
+    }
     if (colonist->move_progress == 0.0f) {
         if (colonist->move_pending) {
             colonist->move_pending = false;
@@ -4584,6 +4645,7 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
         }
         break;
     case TASK_SLEEP:
+    case TASK_DOWN:
     case TASK_COUNT: break;
     }
 }

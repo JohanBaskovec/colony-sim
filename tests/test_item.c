@@ -356,7 +356,8 @@ static void test_rot_definitions(void)
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
         const ItemDef *def = item_def((ItemType)type);
         if (item_rots((ItemType)type)) {
-            CHECK(item_is_food((ItemType)type));
+            /* Food, or a body: not food. */
+            CHECK(item_is_food((ItemType)type) != (def->category == ITEM_CATEGORY_BODIES));
             CHECK(def->damageable);
             CHECK_EQ_INT(def->transforms_into, ITEM_NONE);
         }
@@ -368,6 +369,14 @@ static void test_rot_definitions(void)
     CHECK(item_def(ITEM_HAZELNUTS)->rot_days > item_def(ITEM_CATTAIL_RHIZOMES)->rot_days);
     CHECK(item_def(ITEM_CATTAIL_RHIZOMES)->rot_days > item_def(ITEM_BLACKBERRIES)->rot_days);
     CHECK(item_def(ITEM_BLACKBERRIES)->rot_days > item_def(ITEM_NETTLES)->rot_days);
+    /* Bodies rot too; a big one lies alone on its tile. */
+    ItemTypeMask bodies = item_types_in_category(ITEM_CATEGORY_BODIES);
+    CHECK(bodies & ITEM_TYPE_BIT(ITEM_SETTLER_BODY));
+    CHECK(bodies & ITEM_TYPE_BIT(ITEM_HARE_CARCASS));
+    CHECK(item_rots(ITEM_SETTLER_BODY) && !item_is_food(ITEM_SETTLER_BODY));
+    CHECK_EQ_INT(item_stack_limit(ITEM_SETTLER_BODY), 1);
+    CHECK(item_stack_limit(ITEM_HARE_CARCASS) > 1);
+    CHECK(item_types_all() & ITEM_TYPE_BIT(ITEM_TYPE_COUNT - 1));
     /* Roasting gives more food. */
     CHECK(item_def(ITEM_ROASTED_RHIZOMES)->nutrition > item_def(ITEM_CATTAIL_RHIZOMES)->nutrition);
     CHECK(item_def(ITEM_ROASTED_CARROTS)->nutrition > item_def(ITEM_WILD_CARROTS)->nutrition);

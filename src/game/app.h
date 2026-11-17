@@ -80,6 +80,7 @@ typedef enum AppTool {
 #define APP_DEBUG_PLANT_TREE 2
 #define APP_DEBUG_GROW_TREE 3
 #define APP_DEBUG_SPAWN_ANIMAL 4 /* App.debug_animal. */
+#define APP_DEBUG_HURT 5         /* A blow on whoever is on the tile. */
 
 /* Types of the forbid tool (see app_toggle_tool()). */
 #define APP_FORBID 0

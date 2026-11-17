@@ -5,7 +5,7 @@ innate **attributes** of the body, the mind and the social self. There are no
 all-or-nothing traits: every attribute is a value on a continuous scale, and
 most settlers are ordinary in most of them.
 
-Status: step A is implemented (walking, work pace, learning, sleep, appetite, cold and heat tolerance, outlook, temperament); the rest is design. Values marked *(tuning)* are first guesses.
+Status: step A is implemented (walking, work pace, learning, sleep, appetite, cold and heat tolerance, outlook, temperament), and toughness and pain tolerance with health (`docs/HEALTH.md`); the rest is design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 

@@ -44,8 +44,8 @@ themselves still know everything (step 3); the rest is design. Values marked
 - The same by day and by night for now. Darkness will limit it once light
   exists (levels step 4), and an eyesight attribute may change it later.
 - A settler asleep sees only its own tile and the ones touching it (it would
-  wake to what happens there) *(tuning)*. A settler knocked out (with health)
-  sees nothing.
+  wake to what happens there) *(tuning)*. A settler knocked out
+  (`docs/HEALTH.md`) sees nothing: it is no viewer until it comes to.
 
 ### 2.2 Eyes and peeking
 

@@ -53,6 +53,10 @@ typedef enum AttributeType {
     /* Mind. */
     ATTRIBUTE_OUTLOOK,     /* Points added to the mood: gloomy or cheerful. */
     ATTRIBUTE_TEMPERAMENT, /* Weight of every thought: stoic or sensitive. */
+    /* Body again: added later, they come last so that the earlier ones are
+     * still rolled the same. */
+    ATTRIBUTE_TOUGHNESS,      /* Damage taken from blows. */
+    ATTRIBUTE_PAIN_TOLERANCE, /* Pain felt from injuries. */
     ATTRIBUTE_COUNT
 } AttributeType;
 
@@ -84,6 +88,12 @@ float attribute_position(const Attributes *attributes, AttributeType type);
 /* Effects. The factor goes from 1/ATTRIBUTE_FACTOR_MAX to ATTRIBUTE_FACTOR_MAX
  * (walking, work pace, learning, sleep, appetite; 1 for the others). */
 float attribute_factor(const Attributes *attributes, AttributeType type);
+
+/* Factors of the health (docs/HEALTH.md): damage taken (toughness) and pain
+ * felt (pain tolerance), from ATTRIBUTE_FACTOR_MAX at -1 down to its inverse
+ * at +1. */
+float attribute_damage_factor(const Attributes *attributes);
+float attribute_pain_factor(const Attributes *attributes);
 
 /* Weight of every thought, ATTRIBUTE_STOIC_MIN to ATTRIBUTE_SENSITIVE_MAX. */
 float attribute_thought_weight(const Attributes *attributes);

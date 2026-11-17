@@ -70,6 +70,19 @@ static const AttributeDef ATTRIBUTE_DEFS[ATTRIBUTE_COUNT] = {
           N_("attribute.temperament.low.3"), N_("attribute.temperament.low.4")},
          {N_("attribute.temperament.high.1"), N_("attribute.temperament.high.2"),
           N_("attribute.temperament.high.3"), N_("attribute.temperament.high.4")}},
+    [ATTRIBUTE_TOUGHNESS] = {N_("attribute.toughness"),
+                             N_("attribute.toughness.description"),
+                             {N_("attribute.toughness.low.1"), N_("attribute.toughness.low.2"),
+                              N_("attribute.toughness.low.3"), N_("attribute.toughness.low.4")},
+                             {N_("attribute.toughness.high.1"), N_("attribute.toughness.high.2"),
+                              N_("attribute.toughness.high.3"), N_("attribute.toughness.high.4")}},
+    [ATTRIBUTE_PAIN_TOLERANCE] =
+        {N_("attribute.pain_tolerance"),
+         N_("attribute.pain_tolerance.description"),
+         {N_("attribute.pain_tolerance.low.1"), N_("attribute.pain_tolerance.low.2"),
+          N_("attribute.pain_tolerance.low.3"), N_("attribute.pain_tolerance.low.4")},
+         {N_("attribute.pain_tolerance.high.1"), N_("attribute.pain_tolerance.high.2"),
+          N_("attribute.pain_tolerance.high.3"), N_("attribute.pain_tolerance.high.4")}},
 };
 
 static const int BAND_STARTS[ATTRIBUTE_BANDS] = ATTRIBUTE_BAND_STARTS;
@@ -129,6 +142,18 @@ float attribute_factor(const Attributes *attributes, AttributeType type)
     }
     /* 2^p for ATTRIBUTE_FACTOR_MAX 2; written for any maximum. */
     return exp2f(attribute_position(attributes, type) * log2f(ATTRIBUTE_FACTOR_MAX));
+}
+
+float attribute_damage_factor(const Attributes *attributes)
+{
+    return exp2f(-attribute_position(attributes, ATTRIBUTE_TOUGHNESS) *
+                 log2f(ATTRIBUTE_FACTOR_MAX));
+}
+
+float attribute_pain_factor(const Attributes *attributes)
+{
+    return exp2f(-attribute_position(attributes, ATTRIBUTE_PAIN_TOLERANCE) *
+                 log2f(ATTRIBUTE_FACTOR_MAX));
 }
 
 float attribute_thought_weight(const Attributes *attributes)

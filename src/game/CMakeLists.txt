@@ -9,6 +9,7 @@ add_executable(colony_sim
     debug_panel.c
     game_menu.c
     gather_zone_panel.c
+    health_panel.c
     hud.c
     inspector.c
     items_panel.c

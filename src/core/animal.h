@@ -21,7 +21,11 @@
  * and sows live in herds, stags in small groups, boars and hares alone.
  *
  * Animals walk on four legs (PATH_WALKER_ANIMAL): slopes, but no ladder, no
- * tree and no door. They cannot die yet (health comes later), nor breed.
+ * tree and no door. They do not breed yet.
+ *
+ * Health (core/health.h): each animal has a body of its species' plan and
+ * size. Hurt, it walks slower; unconscious or unable to walk, it lies where
+ * it is (ANIMAL_TASK_DOWN) until it can get up.
  *
  * Animals are stored here in a fixed array managed by a Pool and referenced
  * by EntityId; the Game owns the Animals and ticks them after the settlers.
@@ -30,6 +34,7 @@
 #define COLONY_CORE_ANIMAL_H
 
 #include "core/game_clock.h"
+#include "core/health.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
 #include "core/pool.h"
@@ -65,6 +70,8 @@ typedef enum AnimalTask {
     ANIMAL_TASK_DRINK,  /* Walking to water, then drinking. */
     ANIMAL_TASK_SLEEP,
     ANIMAL_TASK_FLEE, /* Running away from a settler. */
+    /* Lying where it fell: unconscious, or unable to walk (core/health.h). */
+    ANIMAL_TASK_DOWN,
     ANIMAL_TASK_COUNT
 } AnimalTask;
 
@@ -129,6 +136,11 @@ typedef struct AnimalDef {
     bool eats_nuts;
     int bite_items;
     float food_value;
+    /* Its body (core/health.h): the plan, its size next to a human's, and
+     * the carcass it leaves. */
+    BodyPlan body;
+    float size;
+    ItemType carcass;
 } AnimalDef;
 
 typedef struct Animal {
@@ -146,6 +158,7 @@ typedef struct Animal {
     /* Idle countdown (ANIMAL_TASK_IDLE), progress of a bite or of a drink. */
     int timer;
     float needs[ANIMAL_NEED_COUNT];
+    Health health;
     /* The animal its herd follows: itself for a leader and for a loner. */
     EntityId leader;
     /* A herd mate ran off from a settler: so will it, the next time it looks

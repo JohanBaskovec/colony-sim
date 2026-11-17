@@ -36,6 +36,8 @@
  * ground dries in three days. Food lying in the open at 15 °C keeps (rot_days):
  * greens and mushrooms 2 days, blackberries 3, roasted roots 4 (moist and
  * soft), cattail rhizomes 15, wild carrots 20, hazelnuts in their shells 90.
+ * Bodies (one to a tile but a hare's, dragged by whoever moves them) rot
+ * away in 4 (a hare) to 10 days (a settler, a red deer, a boar).
  * Tools and weapons (docs/KNOWLEDGE.md §6, §8; a plain cobble serves as
  * the knapper's hammer): a chopper (1 kg), a sharp flake (30 g, razor sharp
  * but soon worn out), a hand axe (600 g); a throwing spear (0.8 kg, a long
@@ -121,6 +123,21 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_ROASTED_CARROTS] = {DEF("roasted_carrots", N_("item.roasted_carrots"), ITEM_CATEGORY_FOOD,
                                   0.25f, 1.0f, 0.035f, 15, true, true),
                               .rot_days = 4.0f},
+    [ITEM_SETTLER_BODY] = {DEF("settler_body", N_("item.settler_body"), ITEM_CATEGORY_BODIES, 65.0f,
+                               1000.0f, 0.0f, 100, false, true),
+                           .rot_days = 10.0f},
+    [ITEM_ROE_DEER_CARCASS] = {DEF("roe_deer_carcass", N_("item.roe_deer_carcass"),
+                                   ITEM_CATEGORY_BODIES, 22.0f, 500.0f, 0.0f, 100, false, true),
+                               .rot_days = 8.0f},
+    [ITEM_RED_DEER_CARCASS] = {DEF("red_deer_carcass", N_("item.red_deer_carcass"),
+                                   ITEM_CATEGORY_BODIES, 120.0f, 1000.0f, 0.0f, 100, false, true),
+                               .rot_days = 10.0f},
+    [ITEM_BOAR_CARCASS] = {DEF("boar_carcass", N_("item.boar_carcass"), ITEM_CATEGORY_BODIES, 70.0f,
+                               1000.0f, 0.0f, 100, false, true),
+                           .rot_days = 10.0f},
+    [ITEM_HARE_CARCASS] = {DEF("hare_carcass", N_("item.hare_carcass"), ITEM_CATEGORY_BODIES, 3.5f,
+                               60.0f, 0.0f, 100, false, true),
+                           .rot_days = 4.0f},
 };
 
 #undef DEF
@@ -143,6 +160,7 @@ static const char *const CATEGORY_KEYS[ITEM_CATEGORY_COUNT] = {
     [ITEM_CATEGORY_RESOURCES] = N_("item.category.resources"),
     [ITEM_CATEGORY_TOOLS] = N_("item.category.tools"),
     [ITEM_CATEGORY_WEAPONS] = N_("item.category.weapons"),
+    [ITEM_CATEGORY_BODIES] = N_("item.category.bodies"),
 };
 
 const char *item_category_name_key(ItemCategory category)

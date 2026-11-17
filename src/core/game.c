@@ -556,6 +556,7 @@ bool game_init(Game *game, const NewGameParams *params)
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
     rng_seed(&game->wildlife_rng, params->world.seed, 0x77696c64ULL /* "wild" */);
     roof_watch_init(&game->roof_watch, &game->map);
+    game->tree_falls_seen = game->map.tree_fall_revision;
     weather_init(&game->weather, game->seed, game->clock.tick);
     if (!temperatures_init(&game->temperatures, &game->map,
                            weather_outdoor(&game->weather, game->clock.tick))) {
@@ -910,6 +911,48 @@ static bool item_move_busy(const void *context, const ItemMove *order)
     return false;
 }
 
+/* A settler died: its body is left where it fell, the player told, and the
+ * others remember it (worse for those who saw it). When it was the last,
+ * the colony is lost and the game pauses. */
+static void settler_died(Game *game, uint32_t slot)
+{
+    Colonist *dead = &game->colonists[slot];
+    EntityId id = game_colonist_id_at(game, slot);
+    int x = dead->x, y = dead->y, z = dead->z;
+    _Static_assert(NOTICE_NAME_SIZE >= COLONIST_NAME_SIZE, "a settler's name fits in a notice");
+    char name[NOTICE_NAME_SIZE] = {0};
+    memcpy(name, dead->name, sizeof(dead->name));
+    NoticeType notice =
+        dead->health.death == DEATH_BLOOD_LOSS ? NOTICE_DEATH_BLOOD_LOSS : NOTICE_DEATH_INJURY;
+    for (uint32_t other = 0; other < game_colonist_slot_count(game); other++) {
+        Colonist *mourner = &game->colonists[other];
+        if (other == slot || entity_id_is_none(game_colonist_id_at(game, other)) ||
+            health_is_dead(&mourner->health)) {
+            continue;
+        }
+        mood_remember(&mourner->mood, THOUGHT_DEATH);
+        /* Without vision (core/vision.h), whoever stands near on the level. */
+        int dx = mourner->x - x, dy = mourner->y - y;
+        bool saw =
+            game->vision_on
+                ? vision_viewer_sees(&game->vision, (int)other, x, y, z)
+                : mourner->z == z && dx * dx + dy * dy <= GAME_WITNESS_RADIUS * GAME_WITNESS_RADIUS;
+        if (saw) {
+            mood_remember(&mourner->mood, THOUGHT_SAW_DEATH);
+        }
+    }
+    /* The body first, where it fell; what it carried around it. */
+    items_drop(&game->items, &game->map, x, y, z, item_stack_pristine(ITEM_SETTLER_BODY, 1));
+    game_remove_colonist(game, id);
+    vision_viewer_remove(&game->vision, (int)slot);
+    notices_push(&game->notices, notice, KNOWLEDGE_NONE, name, game->clock.tick);
+    if (game->colonist_pool.count == 0) {
+        game->colony_lost = true;
+        notices_push(&game->notices, NOTICE_COLONY_LOST, KNOWLEDGE_NONE, NULL, game->clock.tick);
+        game_clock_set_speed(&game->clock, GAME_SPEED_PAUSED);
+    }
+}
+
 static void update_colonists(Game *game)
 {
     /* Fixed slot order keeps the simulation deterministic. */
@@ -932,6 +975,9 @@ static void update_colonists(Game *game)
                 notices_push(&game->notices, NOTICES[colonist->mood.break_type], KNOWLEDGE_NONE,
                              colonist->name, game->clock.tick);
             }
+            if (health_is_dead(&colonist->health)) {
+                settler_died(game, slot);
+            }
         }
     }
 }
@@ -946,8 +992,10 @@ static void update_animals(Game *game)
     TilePos threats[COLONIST_MAX];
     int threat_count = 0;
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
-        if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
-            const Colonist *colonist = &game->colonists[slot];
+        const Colonist *colonist = &game->colonists[slot];
+        /* (Someone lying unconscious frightens nobody.) */
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            !health_is_unconscious(&colonist->health) && !health_is_dead(&colonist->health)) {
             threats[threat_count++] =
                 (TilePos){(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z};
         }
@@ -963,6 +1011,19 @@ static void update_animals(Game *game)
         .threat_count = threat_count,
     };
     animals_tick(&game->animals, &context);
+    /* The dead leave their carcass where they fell; their herd follows
+     * another leader. */
+    for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
+        EntityId id = animals_id_at(&game->animals, slot);
+        const Animal *animal = &game->animals.list[slot];
+        if (entity_id_is_none(id) || !health_is_dead(&animal->health)) {
+            continue;
+        }
+        int x = animal->x, y = animal->y, z = animal->z;
+        ItemType carcass = animal_def((AnimalSpecies)animal->species)->carcass;
+        animals_remove(&game->animals, id);
+        items_drop(&game->items, &game->map, x, y, z, item_stack_pristine(carcass, 1));
+    }
 }
 
 static void fade_knowledge(Game *game)
@@ -1086,7 +1147,7 @@ static void sync_known(Game *game)
 }
 
 /* Puts every settler where it stands in the vision (fields are recast when it
- * moved or fell asleep), and takes away those who are gone. */
+ * moved or fell asleep), and takes away those who are gone or unconscious. */
 static void update_vision(Game *game)
 {
     vision_update_map(&game->vision, &game->map);
@@ -1099,6 +1160,10 @@ static void update_vision(Game *game)
         if (entity_id_is_none(game_colonist_id_at(game, slot)) ||
             !pool_is_alive(&game->colonist_pool, game_colonist_id_at(game, slot))) {
             vision_viewer_remove(&game->vision, (int)slot);
+            continue;
+        }
+        if (health_is_unconscious(&colonist->health) || health_is_dead(&colonist->health)) {
+            vision_viewer_remove(&game->vision, (int)slot); /* Sees nothing. */
             continue;
         }
         vision_viewer_set(&game->vision, &game->map, (int)slot, colonist->x, colonist->y,
@@ -1326,6 +1391,79 @@ bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully)
     return plant->growth > old_growth;
 }
 
+/* A number between `min` and `max` from the game's draws. */
+static float roll_between(Game *game, float min, float max)
+{
+    return min + (max - min) * rng_next_float(&game->rng);
+}
+
+/* A blow of `min` to `max` points (times the body's size when `sized`) on
+ * every settler and animal on the tile; `type` INJURY_TYPE_COUNT: of a random
+ * kind for each. Returns how many were hurt. */
+static int hurt_beings_at(Game *game, int x, int y, int z, InjuryType type, float min, float max,
+                          bool sized)
+{
+    int hurt = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        Colonist *colonist = &game->colonists[slot];
+        if (entity_id_is_none(game_colonist_id_at(game, slot)) || colonist->x != x ||
+            colonist->y != y || colonist->z != z) {
+            continue;
+        }
+        InjuryType kind = type == INJURY_TYPE_COUNT
+                              ? (InjuryType)rng_range_i32(&game->rng, 0, INJURY_TYPE_COUNT - 1)
+                              : type;
+        float damage = roll_between(game, min, max) * (sized ? colonist->health.size : 1.0f);
+        hurt += health_blow(&colonist->health, &game->rng, kind, damage) > 0.0f;
+    }
+    for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
+        Animal *animal = &game->animals.list[slot];
+        if (entity_id_is_none(animals_id_at(&game->animals, slot)) || animal->x != x ||
+            animal->y != y || animal->z != z) {
+            continue;
+        }
+        InjuryType kind = type == INJURY_TYPE_COUNT
+                              ? (InjuryType)rng_range_i32(&game->rng, 0, INJURY_TYPE_COUNT - 1)
+                              : type;
+        float damage = roll_between(game, min, max) * (sized ? animal->health.size : 1.0f);
+        hurt += health_blow(&animal->health, &game->rng, kind, damage) > 0.0f;
+    }
+    return hurt;
+}
+
+int game_debug_hurt(Game *game, int x, int y, int z)
+{
+    return hurt_beings_at(game, x, y, z, INJURY_TYPE_COUNT, GAME_DEBUG_BLOW_MIN,
+                          GAME_DEBUG_BLOW_MAX, true);
+}
+
+/* Trees felled since the last call came down on whoever stood there: the
+ * trunk crushes, the crown bruises; the woodcutter, beside the foot, steps
+ * back (the first tiles of the band are spared). */
+static void hurt_under_felled_trees(Game *game)
+{
+    const Map *map = &game->map;
+    uint32_t falls = map->tree_fall_revision - game->tree_falls_seen;
+    if (falls > MAP_TREE_FALL_LOG_SIZE) {
+        falls = MAP_TREE_FALL_LOG_SIZE; /* (Older ones are lost.) */
+    }
+    for (uint32_t r = map->tree_fall_revision - falls + 1; falls > 0; r++, falls--) {
+        MapTreeFall fall = map->tree_fall_log[r % MAP_TREE_FALL_LOG_SIZE];
+        for (int along = 2; along <= fall.length; along++) {
+            bool trunk = along <= fall.trunk;
+            for (int across = 0; across < fall.size; across++) {
+                int tx, ty;
+                tree_fall_band_tile(fall.x, fall.y, fall.size, (Direction)fall.direction, along,
+                                    across, &tx, &ty);
+                hurt_beings_at(game, tx, ty, fall.z, trunk ? INJURY_CRUSH : INJURY_BRUISE,
+                               trunk ? GAME_TRUNK_DAMAGE_MIN : GAME_CROWN_DAMAGE_MIN,
+                               trunk ? GAME_TRUNK_DAMAGE_MAX : GAME_CROWN_DAMAGE_MAX, false);
+            }
+        }
+    }
+    game->tree_falls_seen = map->tree_fall_revision;
+}
+
 bool game_debug_teleport(Game *game, EntityId id, int x, int y, int z)
 {
     Colonist *colonist = game_colonist(game, id);
@@ -1514,7 +1652,9 @@ void game_tick(Game *game)
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game_view_items(game)->totals, game_daily_food(game));
     item_moves_prune(&game->item_moves, &game->items, item_move_busy, game); /* Emptied sources. */
+    hurt_under_felled_trees(game); /* (Felled by the debug tools.) */
     update_colonists(game);
+    hurt_under_felled_trees(game); /* Felled by the woodcutters: they die on their next turn. */
     update_animals(game);
     if (game->vision_on) {
         update_vision(game);
@@ -1534,6 +1674,9 @@ void game_tick(Game *game)
     }
     for (int i = 0; i < cave_ins.count && i < ROOF_CAVE_IN_MAX; i++) {
         clear_caved_in(game, cave_ins.tiles[i]);
+        /* Whoever stood there is crushed (and pushed out on its next turn). */
+        hurt_beings_at(game, cave_ins.tiles[i].x, cave_ins.tiles[i].y, cave_ins.tiles[i].z,
+                       INJURY_CRUSH, GAME_CAVE_IN_DAMAGE_MIN, GAME_CAVE_IN_DAMAGE_MAX, false);
     }
     if (cave_ins.count > 0 && collapse_seen(game, cave_ins.tiles, cave_ins.count)) {
         notices_push(&game->notices, NOTICE_CAVE_IN, KNOWLEDGE_NONE, NULL, game->clock.tick);
@@ -1551,6 +1694,9 @@ int game_update(Game *game, double real_seconds)
     int due = game_clock_consume(&game->clock, real_seconds);
     for (int i = 0; i < due; i++) {
         game_tick(game);
+        if (game->clock.speed == GAME_SPEED_PAUSED) {
+            return i + 1; /* The game paused itself (the colony was lost). */
+        }
     }
     return due;
 }
@@ -1588,6 +1734,9 @@ uint64_t game_hash(const Game *game)
     if (game->fog_on) { /* What the colony has seen: apart too. */
         uint64_t explored = vision_explored_hash(&game->vision);
         hash = hash_fnv1a64(hash, &explored, sizeof(explored));
+    }
+    if (game->colony_lost) { /* Only then: hashes stay as they were. */
+        hash = hash_fnv1a64(hash, &game->colony_lost, sizeof(game->colony_lost));
     }
     if (animals_slot_count(&game->animals) > 0) { /* Apart: hashes without animals stay. */
         hash = animals_hash(&game->animals, hash);
@@ -1649,6 +1798,7 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, &c->strength, sizeof(c->strength));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
+        hash = health_hash(&c->health, hash);
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));
         int32_t job[14] = {c->station,       c->station_number, c->bill,    c->recipe,
                            c->station_phase, c->fetch.x,        c->fetch.y, c->fetch_tool,

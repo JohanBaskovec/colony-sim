@@ -121,13 +121,13 @@ become tabs:
 
 | Selection           | Summary                                       | Tabs (now; later)                                 | Actions                       |
 |---------------------|-----------------------------------------------|---------------------------------------------------|-------------------------------|
-| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Mood, Character, Knowledge, Gear, Social; Log, Health | Move (later: draft, attack)   |
+| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social; Log | Move (later: draft, attack)   |
 | Several colonists   | How many, their names                         | —                                                 | Move                          |
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size, "left alone" when forbidden | Storage (filters)                             | Forbid, build another, delete |
 | Gathering zone      | Name, priority, size, "left alone" when forbidden | Resources                                     | Forbid, build another, delete |
 | Tile                | What lies there: structure, roof, site, items, plant, each with Forbid/Allow | —                          | Build another; items: Carry elsewhere |
-| Wild animal         | What it is called (a hind, a stag) as the title; species, sex, activity, needs as bars (tooltips), herd | — | (later: hunt)                 |
+| Wild animal         | What it is called (a hind, a stag) as the title; species, sex, activity, needs as bars (tooltips), herd, health (as the Health tab) | — | (later: hunt)                 |
 
 A wild animal is selected by a click on it, where the colony sees it (after
 the settlers, before what lies on the tile; a click again on it goes on to
@@ -149,6 +149,14 @@ rows):
   tooltip gives the exact value, the state (hungry...), what the need does and
   what it weighs on the mood now. Wetness, the warmth of sleep and the bed
   come under the bars.
+- **Health** (`docs/HEALTH.md`): the state in a word (healthy, hurt, unable
+  to walk, unconscious, in red once hurt); once hurt, the blood as a bar
+  (empty where it kills), the bleeding per hour, the pain, what the body can
+  do (each ability in percent, white at 100, red toward 0), then each injury:
+  the part, the kind and how bad (in percent of the part, white to red). An
+  injury's tooltip says whether it is serious (it bleeds on), clotting or
+  healing. A hurt settler's portrait in the colonist bar bears a cross, red
+  while it bleeds or is down.
 - **Mood**: a bar on top (same scale), a break under way, then a table of
   thoughts: the name on the left, what it weighs on the right (red when
   negative, green when positive). The bar's tooltip gives the exact mood and

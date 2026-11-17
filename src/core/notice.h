@@ -26,6 +26,11 @@ typedef enum NoticeType {
     NOTICE_BREAK_SULK,
     NOTICE_BREAK_WANDER_OFF,
     NOTICE_BREAK_BINGE,
+    /* A settler died (docs/HEALTH.md §8): bled to death, or of a destroyed
+     * vital part. */
+    NOTICE_DEATH_BLOOD_LOSS,
+    NOTICE_DEATH_INJURY,
+    NOTICE_COLONY_LOST, /* The last settler died. */
     NOTICE_TYPE_COUNT
 } NoticeType;
 

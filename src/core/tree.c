@@ -580,10 +580,8 @@ int tree_fall_length(int levels)
     return levels > 0 ? levels * TREE_FALL_TILES_PER_LEVEL : 0;
 }
 
-/* Tile `across` (0..size-1) of the band a trunk of `size` covers `along`
- * tiles from its side (0: the foot's own tiles) in a direction. */
-static void band_tile(int x, int y, int size, Direction direction, int along, int across, int *tx,
-                      int *ty)
+void tree_fall_band_tile(int x, int y, int size, Direction direction, int along, int across,
+                         int *tx, int *ty)
 {
     int dx = direction_dx(direction), dy = direction_dy(direction);
     if (dx != 0) {
@@ -613,7 +611,7 @@ TreeFall tree_fall_toward(const Map *map, int x, int y, int z, Direction directi
         bool blocked = false;
         for (int j = 0; j < shape.size && !blocked; j++) {
             int tx, ty;
-            band_tile(x, y, shape.size, direction, i, j, &tx, &ty);
+            tree_fall_band_tile(x, y, shape.size, direction, i, j, &tx, &ty);
             blocked =
                 !map_in_bounds(map, tx, ty, z) || map->rock[map_index(map, tx, ty, z)] != ROCK_NONE;
             harmed += !blocked && map_structure(map, tx, ty, z) != STRUCTURE_NONE;
@@ -668,7 +666,7 @@ static void drop_along(Map *map, Items *items, int x, int y, int z, int size, Di
     for (int i = first; i <= last; i++) {
         int count = each + (i - first < rest ? 1 : 0);
         int tx, ty;
-        band_tile(x, y, size, direction, i, size / 2, &tx, &ty);
+        tree_fall_band_tile(x, y, size, direction, i, size / 2, &tx, &ty);
         drop_share(map, items, tx, ty, z, stack, count);
     }
 }
@@ -688,7 +686,7 @@ TreeFall tree_fell(Map *map, Items *items, int x, int y, int z, ItemStack wood)
     for (int i = 1; i <= fall.length; i++) {
         for (int j = 0; j < size; j++) {
             int tx, ty;
-            band_tile(x, y, size, fall.direction, i, j, &tx, &ty);
+            tree_fall_band_tile(x, y, size, fall.direction, i, j, &tx, &ty);
             StructureType type = map_structure(map, tx, ty, z);
             if (type != STRUCTURE_NONE) {
                 int max = structure_max_hit_points(type, map_structure_quality(map, tx, ty, z));
@@ -712,5 +710,9 @@ TreeFall tree_fell(Map *map, Items *items, int x, int y, int z, ItemStack wood)
     int crown_last = crown_from <= fall.length ? fall.length : 0;
     drop_along(map, items, x, y, z, size, fall.direction, crown_first, crown_last, branches);
     drop_along(map, items, x, y, z, size, fall.direction, crown_first, crown_last, twigs);
+    map->tree_fall_revision++;
+    map->tree_fall_log[map->tree_fall_revision % MAP_TREE_FALL_LOG_SIZE] = (MapTreeFall){
+        (int16_t)x,           (int16_t)y,       (int16_t)z, (uint8_t)size, (uint8_t)fall.direction,
+        (uint8_t)fall.length, (uint8_t)trunk_to};
     return fall;
 }

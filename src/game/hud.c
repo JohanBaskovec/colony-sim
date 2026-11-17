@@ -9,6 +9,7 @@
 #include "game/layout.h"
 #include "game/log_window.h"
 #include "game/gather_zone_panel.h"
+#include "game/health_panel.h"
 #include "game/alerts_list.h"
 #include "game/bottom_bar.h"
 #include "game/build_menu.h"
@@ -890,6 +891,7 @@ static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType 
 typedef enum ColonistSection {
     SECTION_SUMMARY,
     SECTION_NEEDS,
+    SECTION_HEALTH,
     SECTION_MOOD,
     SECTION_CHARACTER,
     SECTION_KNOWLEDGE,
@@ -901,6 +903,7 @@ typedef enum ColonistSection {
 static const char *const SECTION_KEYS[SECTION_COUNT] = {
     [SECTION_SUMMARY] = NULL,
     [SECTION_NEEDS] = N_("inspector.tab.needs"),
+    [SECTION_HEALTH] = N_("inspector.tab.health"),
     [SECTION_MOOD] = N_("inspector.tab.mood"),
     [SECTION_CHARACTER] = N_("inspector.tab.character"),
     [SECTION_KNOWLEDGE] = N_("inspector.tab.knowledge"),
@@ -997,12 +1000,22 @@ static void needs_rows(UiLayout *layout, void *userdata)
     panel_rows(layout, &extra);
 }
 
+/* The Health tab (game/health_panel.h). */
+static void health_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
+    if (colonist != NULL) {
+        health_panel_rows(layout, &colonist->health);
+    }
+}
+
 /* Strength, what it carries, its tools. */
 static void add_gear_lines(Panel *panel, const Colonist *colonist)
 {
     char strength[16], carry[32];
     tr_integer(strength, sizeof(strength), colonist->strength);
-    hud_weight_text(carry, sizeof(carry), colonist->max_carry_weight);
+    hud_weight_text(carry, sizeof(carry), colonist_max_carry_weight(colonist));
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.strength"), strength, carry);
     if (colonist->carried.count > 0) {
         char count[16], weight[32];
@@ -1116,6 +1129,7 @@ static void build_colonist_section(App *app, Panel *panel, EntityId id, Colonist
     switch (section) {
     case SECTION_SUMMARY: break; /* summary_rows() */
     case SECTION_NEEDS:
+    case SECTION_HEALTH:
     case SECTION_MOOD:
     case SECTION_CHARACTER:
     case SECTION_KNOWLEDGE: break; /* Drawn by their own rows (colonist_tab_rows()). */
@@ -1189,6 +1203,7 @@ static UiRowsFn colonist_tab_rows(ColonistSection section)
 {
     switch (section) {
     case SECTION_NEEDS: return needs_rows;
+    case SECTION_HEALTH: return health_rows;
     case SECTION_MOOD: return mood_rows;
     case SECTION_CHARACTER: return character_rows;
     case SECTION_KNOWLEDGE: return knowledge_rows;
@@ -1386,12 +1401,34 @@ void hud_update_notices(App *app, double dt)
 /* Seconds a notice takes to fade out at the end of its time on screen. */
 #define NOTICE_FADE_SECONDS 2.0
 
+/* A line of notice centered under the colonist bar at `y`, `alpha` opaque.
+ * Returns where the next one goes. */
+static float draw_notice_line(App *app, const char *text, float y, float alpha)
+{
+    float line = (float)text_line_height(app->text);
+    int width, height;
+    text_measure(app->text, text, &width, &height);
+    SDL_FRect box = {SDL_floorf((app->camera.viewport_width - (float)width) * 0.5f) - HUD_PADDING,
+                     y, (float)width + 2.0f * HUD_PADDING, line + HUD_PADDING};
+    SDL_Color background = THEME_COLOR(app, THEME_HUD_PANEL);
+    SDL_Color color = THEME_COLOR(app, THEME_TEXT);
+    background.a = (Uint8)((float)background.a * alpha);
+    color.a = (Uint8)((float)color.a * alpha);
+    SDL_SetRenderDrawColor(app->renderer, background.r, background.g, background.b, background.a);
+    SDL_RenderFillRect(app->renderer, &box);
+    text_draw(app->text, text, box.x + HUD_PADDING, box.y + SDL_floorf(HUD_PADDING * 0.5f), color);
+    return y + box.h + 2.0f;
+}
+
 /* The notices on screen, centered under the colonist bar, oldest first; each
- * fades out at the end of its time. */
+ * fades out at the end of its time. Once the colony is lost, that stays on
+ * top. */
 static void draw_notices(App *app)
 {
     float y = colonist_bar_bottom(app) + HUD_MARGIN;
-    float line = (float)text_line_height(app->text);
+    if (app->game.colony_lost) {
+        y = draw_notice_line(app, tr("hud.colony_lost"), y, 1.0f);
+    }
     for (int i = 0; i < app->notices_shown_count; i++) {
         const Notice *notice = notices_get(&app->game.notices, app->notices_shown[i]);
         if (notice == NULL) {
@@ -1400,22 +1437,7 @@ static void draw_notices(App *app)
         char text[HUD_LINE_SIZE];
         log_notice_text(notice, text, sizeof(text));
         double left = APP_NOTICE_SECONDS - app->notices_age[i];
-        float alpha = (float)SDL_clamp(left / NOTICE_FADE_SECONDS, 0.0, 1.0);
-        int width, height;
-        text_measure(app->text, text, &width, &height);
-        SDL_FRect box = {SDL_floorf((app->camera.viewport_width - (float)width) * 0.5f) -
-                             HUD_PADDING,
-                         y, (float)width + 2.0f * HUD_PADDING, line + HUD_PADDING};
-        SDL_Color background = THEME_COLOR(app, THEME_HUD_PANEL);
-        SDL_Color color = THEME_COLOR(app, THEME_TEXT);
-        background.a = (Uint8)((float)background.a * alpha);
-        color.a = (Uint8)((float)color.a * alpha);
-        SDL_SetRenderDrawColor(app->renderer, background.r, background.g, background.b,
-                               background.a);
-        SDL_RenderFillRect(app->renderer, &box);
-        text_draw(app->text, text, box.x + HUD_PADDING, box.y + SDL_floorf(HUD_PADDING * 0.5f),
-                  color);
-        y += box.h + 2.0f;
+        y = draw_notice_line(app, text, y, (float)SDL_clamp(left / NOTICE_FADE_SECONDS, 0.0, 1.0));
     }
 }
 

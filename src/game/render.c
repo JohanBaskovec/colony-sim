@@ -1079,10 +1079,58 @@ static void fill_outlined(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color colo
 }
 
 /* Adds the shapes of a stack to the batch: the caller flushes it. */
+/* Bodies lying on their side across the tile. A settler's: legs to the left,
+ * head to the right, pale; an animal's: its coat, legs stretched out, the size
+ * of its species. */
+static void render_body(SDL_Renderer *renderer, const SDL_FRect *tile, ItemType type)
+{
+    float w = tile->w, h = tile->h;
+    float cy = tile->y + h * 0.55f;
+    if (type == ITEM_SETTLER_BODY) { /* Across the whole tile. */
+        SDL_Color skin = {196, 184, 172, 255}, cloth = {104, 88, 70, 255};
+        float half = SDL_max(1.0f, h * 0.075f);
+        batch_bar(renderer, shade(cloth, -20), tile->x + w * 0.04f, cy - half, tile->x + w * 0.4f,
+                  cy - half, half);
+        batch_bar(renderer, shade(cloth, -32), tile->x + w * 0.04f, cy + half, tile->x + w * 0.4f,
+                  cy + half, half);
+        SDL_FRect torso = {floorf(tile->x + w * 0.36f), floorf(cy - h * 0.17f), floorf(w * 0.38f),
+                           floorf(h * 0.34f)};
+        fill_outlined(renderer, torso, cloth);
+        batch_disc(renderer, shade(skin, -40), tile->x + w * 0.85f, cy, w * 0.13f);
+        batch_disc(renderer, skin, tile->x + w * 0.85f, cy, w * 0.13f - 1.0f);
+        return;
+    }
+    SDL_Color coat;
+    float scale;
+    switch (type) {
+    case ITEM_ROE_DEER_CARCASS: coat = (SDL_Color){158, 104, 62, 255}, scale = 0.75f; break;
+    case ITEM_RED_DEER_CARCASS: coat = (SDL_Color){128, 82, 52, 255}, scale = 1.0f; break;
+    case ITEM_BOAR_CARCASS: coat = (SDL_Color){78, 66, 56, 255}, scale = 0.9f; break;
+    default: coat = (SDL_Color){150, 130, 104, 255}, scale = 0.45f; break;
+    }
+    float cx = tile->x + w * 0.5f;
+    float length = w * 0.9f * scale, depth = h * 0.38f * scale;
+    float leg = SDL_max(1.0f, depth * 0.16f);
+    for (int i = 0; i < 4; i++) { /* Two pairs, stretched out under the body. */
+        float x =
+            cx - length * 0.32f + length * (i < 2 ? 0.0f : 0.6f) + (float)(i % 2) * leg * 2.5f;
+        batch_bar(renderer, shade(coat, -40), x, cy, x + depth * 0.4f, cy + depth * 0.9f, leg);
+    }
+    SDL_FRect body = {floorf(cx - length * 0.4f), floorf(cy - depth * 0.5f), floorf(length * 0.8f),
+                      floorf(depth)};
+    fill_outlined(renderer, body, coat);
+    batch_disc(renderer, shade(coat, -15), cx + length * 0.45f, cy - depth * 0.35f, depth * 0.38f);
+}
+
 static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, ItemType type)
 {
     float w = tile->w, h = tile->h;
     switch (type) {
+    case ITEM_SETTLER_BODY:
+    case ITEM_ROE_DEER_CARCASS:
+    case ITEM_RED_DEER_CARCASS:
+    case ITEM_BOAR_CARCASS:
+    case ITEM_HARE_CARCASS: render_body(renderer, tile, type); break;
     case ITEM_WOOD: {
         /* Three logs. */
         float log_h = SDL_max(1.0f, floorf(h * 0.16f));
@@ -2491,6 +2539,10 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
  * when it is seen from the side, in tiles. */
 #define COLONIST_CARRY_HEIGHT 0.62f
 #define COLONIST_CARRY_AHEAD 0.18f
+/* A colonist down lies across its tile: its feet moved left by this much and
+ * its body raised by this much (tiles), so that it lies about the middle. */
+#define COLONIST_DOWN_SHIFT 0.45f
+#define COLONIST_DOWN_LIFT 0.25f
 /* Room an animal takes on screen for sorting and for what hides it, in tiles. */
 #define ANIMAL_HALF_WIDTH 0.5f
 #define ANIMAL_HEIGHT 0.8f
@@ -2692,7 +2744,8 @@ void render_colonist_portrait(SDL_Renderer *renderer, Sprites *sprites, const Co
                  anchor_y, skin, false);
     sprites_draw(sprites, sprite_head(looks.skin, colonist_expression(colonist), SPRITE_VIEW_FRONT),
                  anchor_x, anchor_y, skin, false);
-    if (colonist->task == TASK_SLEEP) {
+    if (colonist->task == TASK_SLEEP ||
+        (colonist_is_down(colonist) && health_is_unconscious(&colonist->health))) {
         sprites_draw(sprites, sprite_closed_eyes(looks.skin), anchor_x, anchor_y, skin, false);
     }
     if (looks.beard > 0) {
@@ -2753,6 +2806,14 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
     bool flip = heading == HEADING_WEST;
     Gait gait =
         gait_at(colonist_is_moving(colonist), GAIT_WALK_STEP_TICKS, slot, tick, camera->zoom);
+    /* Down: lying on its side across the tile, head to the right. */
+    bool down = colonist_is_down(colonist);
+    bool eyes_closed =
+        colonist->task == TASK_SLEEP || (down && health_is_unconscious(&colonist->health));
+    if (down) {
+        gait = (Gait){camera->zoom * COLONIST_DOWN_LIFT, 90.0f};
+        anchor_x -= camera->zoom * COLONIST_DOWN_SHIFT;
+    }
     /* What it carries is held in front of it at waist height and follows the
      * body: hidden by the body of someone walking away, ahead of someone seen
      * from the side. */
@@ -2773,7 +2834,7 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
                 gait, skin, flip);
     draw_walker(sprites, sprite_head(looks.skin, colonist_expression(colonist), view), anchor_x,
                 anchor_y, feet_y, gait, skin, flip);
-    if (colonist->task == TASK_SLEEP && view == SPRITE_VIEW_FRONT) {
+    if (eyes_closed && view == SPRITE_VIEW_FRONT) {
         draw_walker(sprites, sprite_closed_eyes(looks.skin), anchor_x, anchor_y, feet_y, gait, skin,
                     false);
     }
@@ -2810,7 +2871,7 @@ static void render_animal(SDL_Renderer *renderer, Sprites *sprites, const Camera
     bool moving = animal_is_moving(animal);
     Heading heading = animal_heading(animal);
     AnimalPose pose = ANIMAL_POSE_STAND;
-    if (animal->task == ANIMAL_TASK_SLEEP) {
+    if (animal->task == ANIMAL_TASK_SLEEP || animal->task == ANIMAL_TASK_DOWN) {
         pose = ANIMAL_POSE_SLEEP;
     } else if (!moving && (animal->task == ANIMAL_TASK_EAT || animal->task == ANIMAL_TASK_DRINK)) {
         pose = ANIMAL_POSE_EAT;

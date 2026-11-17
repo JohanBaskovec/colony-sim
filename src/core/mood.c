@@ -69,6 +69,10 @@ static const ThoughtDef THOUGHT_DEFS[THOUGHT_COUNT] = {
         MEMORY("chat", N_("thought.chat"), N_("thought.chat.description"), 2.0f, 1.0f, 3.0f, 3),
     [THOUGHT_RELIEF] = MEMORY("relief", N_("thought.relief"), N_("thought.relief.description"),
                               10.0f, 6.0f, 12.0f, 1),
+    [THOUGHT_DEATH] = MEMORY("death", N_("thought.death"), N_("thought.death.description"), -8.0f,
+                             48.0f, 48.0f, 3),
+    [THOUGHT_SAW_DEATH] = MEMORY("saw_death", N_("thought.saw_death"),
+                                 N_("thought.saw_death.description"), -10.0f, 24.0f, 24.0f, 2),
     [THOUGHT_DEBUG_GLOOM] = MEMORY("debug_gloom", N_("thought.debug_gloom"),
                                    N_("thought.debug_gloom.description"), -45.0f, 2.0f, 2.0f, 1),
 };
