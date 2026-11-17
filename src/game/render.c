@@ -434,6 +434,21 @@ static int below_view_level(int x, int y)
     return map_view_level(below_map, x, y, below_shown); /* A sprite's foot out of view. */
 }
 
+/* Whether a tile is thin foliage (leaves and bare branches over nothing: the
+ * levels below show through it, see map_view_level()). */
+static bool is_thin_foliage(const Map *map, size_t index)
+{
+    return map->rock[index] == ROCK_NONE && (map->terrain[index] == TERRAIN_FOLIAGE_MEDIUM ||
+                                             map->terrain[index] == TERRAIN_FOLIAGE_SPARSE);
+}
+
+/* Whether thin foliage on (x, y, z) is to be drawn: it is, over what the
+ * levels below show, unless something higher than the level seen covers it. */
+static bool thin_foliage_seen(int x, int y, int z)
+{
+    return !below_active || below_view_level(x, y) < z;
+}
+
 /* Whether what stands on (x, y, z) is to be drawn: always on the level shown;
  * on a level below, only where it is what is seen (not under a higher floor). */
 static bool tile_seen(int x, int y, int z)
@@ -466,6 +481,12 @@ static uint32_t below_fill_view(const Map *map, const Camera *camera)
             below_view[i++] = (int8_t)level;
             if (level >= 0 && level < camera->level) {
                 levels |= 1u << level;
+            }
+            /* The thin foliage over what is seen is drawn too. */
+            for (int z = camera->level - 1; z > level; z--) {
+                if (is_thin_foliage(map, map_index(map, x, y, z))) {
+                    levels |= 1u << z;
+                }
             }
         }
     }
@@ -568,7 +589,10 @@ static void visit_ground_tiles(const Map *map, const Camera *camera, TileVisitor
             SDL_FRect tile = {floorf(left), floorf(top), floorf(right) - floorf(left),
                               floorf(bottom) - floorf(top)};
             size_t index = map_index(map, x, y, z);
-            if (!map_is_open_at(map, index) && tile_seen(x, y, z)) {
+            if (map_is_open_at(map, index)) {
+                continue;
+            }
+            if (is_thin_foliage(map, index) ? thin_foliage_seen(x, y, z) : tile_seen(x, y, z)) {
                 visit(map, x, y, z, index, &tile, userdata);
             }
         }
@@ -626,7 +650,7 @@ static void ground_overlays(const Map *map, int x, int y, int z, size_t index,
                             const SDL_FRect *tile, void *userdata)
 {
     const GroundPass *pass = userdata;
-    if (map->rock[index] != ROCK_NONE) {
+    if (map->rock[index] != ROCK_NONE || is_thin_foliage(map, index)) {
         return;
     }
     render_ground_shape(pass->renderer, map, x, y, z, tile);

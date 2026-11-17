@@ -626,7 +626,7 @@ static void grow_tree(Game *game, size_t index, float old_growth)
     bool built = map->rock[index] == ROCK_WOOD;
     /* Nothing to write while the crown stays as it was. */
     if (built && had_shape && before.trunk == shape.trunk && before.reach == shape.reach &&
-        before.ripe == shape.ripe) {
+        before.growth == shape.growth) {
         return;
     }
     if (!tree_room_to_grow(map, x, y, z, &shape) || tree_in_the_way(game, x, y, z, &shape)) {
@@ -931,6 +931,60 @@ int game_debug_spawn_items(Game *game, int x, int y, int z, ItemType type, int c
         }
     }
     return placed;
+}
+
+bool game_debug_plant_tree(Game *game, int x, int y, int z)
+{
+    Map *map = &game->map;
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    if (map->rock[index] != ROCK_NONE || map->structure[index] != STRUCTURE_NONE ||
+        map_is_slope(map, x, y, z) ||
+        terrain_def((Terrain)map->terrain[index])->fertility <
+            plant_def(PLANT_TREE)->min_fertility) {
+        return false;
+    }
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if ((dx != 0 || dy != 0) && map_in_bounds(map, x + dx, y + dy, z) &&
+                map->plants[map_index(map, x + dx, y + dy, z)].type == PLANT_TREE) {
+                return false; /* Trunks never touch (see worldgen). */
+            }
+        }
+    }
+    if (map->plants[index].type == PLANT_TREE) {
+        return false;
+    }
+    map->plants[index] = (Plant){.type = PLANT_TREE};
+    return true;
+}
+
+bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully)
+{
+    Map *map = &game->map;
+    TreeRef tree;
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    if (map->plants[map_index(map, x, y, z)].type == PLANT_TREE) {
+        tree = (TreeRef){.x = x, .y = y, .z = z}; /* A seedling or the foot. */
+    } else if (!tree_at(map, x, y, z, &tree)) {
+        return false;
+    }
+    size_t index = map_index(map, tree.x, tree.y, tree.z);
+    Plant *plant = &map->plants[index];
+    float old_growth = plant->growth;
+    if (old_growth >= 1.0f) {
+        return false;
+    }
+    /* To the next multiple of the step (no drift from adding 0.1 again and again). */
+    float steps = floorf(old_growth / GAME_DEBUG_TREE_GROWTH_STEP + 0.01f) + 1.0f;
+    float growth = fully ? 1.0f : steps * GAME_DEBUG_TREE_GROWTH_STEP;
+    plant->growth = growth < 1.0f ? growth : 1.0f;
+    grow_tree(game, index, old_growth); /* Back to `old_growth` if it has no room. */
+    return plant->growth > old_growth;
 }
 
 bool game_debug_teleport(Game *game, EntityId id, int x, int y, int z)

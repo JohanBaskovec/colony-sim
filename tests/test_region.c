@@ -127,7 +127,6 @@ static void test_regions_notice_map_changes(void)
     CHECK(regions_has_drinking_spot(&regions, &map, 1));
 
     regions_update(&regions, &map);
-    CHECK_EQ_UINT(regions.count, 1);
     CHECK_EQ_UINT(regions_at(&regions, &map, 2, 2, 0), regions_at(&regions, &map, 9, 2, 0));
 
     /* Closed again, and a third area walled in. */
@@ -222,18 +221,27 @@ static void test_dug_tiles_are_added_without_rebuilding(void)
     regions_update(&fresh, &map);
     CHECK(same_partition(&regions, &fresh, &map));
 
-    /* Joining the pocket to the outside merges two regions: rebuilt. */
+    /* Joining the pocket to the outside merges two regions: no rebuild, the
+     * smaller one's tiles and box go to the other. */
     map_set_rock(&map, 10, 8, 0, ROCK_NONE);
     regions_update(&regions, &map);
-    CHECK_EQ_UINT(regions.rebuilds, 2);
-    CHECK_EQ_UINT(regions.count, 2);
+    CHECK_EQ_UINT(regions.rebuilds, 1);
     CHECK(regions_connected(&regions, &map, (TilePos){11, 8, 0}, (TilePos){8, 8, 0}));
+    CHECK_EQ_UINT(regions_at(&regions, &map, 11, 8, 0), regions_at(&regions, &map, 8, 8, 0));
+    TileBox merged = regions_box(&regions, &map, regions_at(&regions, &map, 11, 8, 0));
+    CHECK(tile_box_contains(&merged, 11, 8, 0));
+    CHECK(tile_box_contains(&merged, 8, 8, 0));
+    regions_update(&fresh, &map);
+    CHECK(same_partition(&regions, &fresh, &map));
 
     /* Breaking through the wall between both sides as well. */
+    CHECK(!regions_connected(&regions, &map, (TilePos){2, 2, 0}, (TilePos){8, 8, 0}));
     map_set_rock(&map, 6, 3, 0, ROCK_NONE);
     regions_update(&regions, &map);
-    CHECK_EQ_UINT(regions.rebuilds, 3);
-    CHECK_EQ_UINT(regions.count, 1);
+    CHECK_EQ_UINT(regions.rebuilds, 1);
+    CHECK(regions_connected(&regions, &map, (TilePos){2, 2, 0}, (TilePos){8, 8, 0}));
+    regions_update(&fresh, &map);
+    CHECK(same_partition(&regions, &fresh, &map));
 
     /* Changing the kind of rock is not a change of topology. */
     uint32_t revision = map.topology_revision;
@@ -245,16 +253,16 @@ static void test_dug_tiles_are_added_without_rebuilding(void)
      * remembers: rebuilt. */
     map_set_rock(&map, 6, 3, 0, ROCK_GRANITE);
     regions_update(&regions, &map);
-    CHECK_EQ_UINT(regions.rebuilds, 4);
+    CHECK_EQ_UINT(regions.rebuilds, 2);
     map_set_terrain(&map, 3, 3, 0, TERRAIN_SAND);
     regions_update(&regions, &map);
-    CHECK_EQ_UINT(regions.rebuilds, 5);
+    CHECK_EQ_UINT(regions.rebuilds, 3);
     for (int x = 0; x <= MAP_TOPOLOGY_LOG_SIZE; x++) {
         map_set_rock(&map, x % 16, 15, 0, ROCK_GRANITE);
         map_set_rock(&map, x % 16, 15, 0, ROCK_NONE);
     }
     regions_update(&regions, &map);
-    CHECK_EQ_UINT(regions.rebuilds, 6);
+    CHECK_EQ_UINT(regions.rebuilds, 4);
     regions_update(&fresh, &map);
     CHECK(same_partition(&regions, &fresh, &map));
 

@@ -1149,7 +1149,11 @@ void hud_draw(App *app)
             panel_add_text(&tool,
                            tr(app->forbid_allows ? "hud.tool.allow_help" : "hud.tool.forbid_help"));
         } else if (app->tool == APP_TOOL_DEBUG) {
-            if (app->debug_teleport) {
+            if (app->debug_mode == APP_DEBUG_PLANT_TREE) {
+                panel_add_text(&tool, tr("hud.tool.plant_tree"));
+            } else if (app->debug_mode == APP_DEBUG_GROW_TREE) {
+                panel_add_text(&tool, tr("hud.tool.grow_tree"));
+            } else if (app->debug_mode == APP_DEBUG_TELEPORT) {
                 char count[16];
                 tr_integer(count, sizeof(count), app->selected_count);
                 TR_FORMAT(panel_add(&tool), HUD_LINE_SIZE,

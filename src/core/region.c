@@ -120,11 +120,31 @@ static void fill(Regions *regions, const Map *map, uint32_t start, uint32_t regi
     }
 }
 
+/* Merges region `from` into region `into`: its tiles, box and drinking spot.
+ * One look at every tile, far cheaper than a flood fill of the whole map. */
+static void merge_regions(Regions *regions, const Map *map, uint32_t into, uint32_t from)
+{
+    size_t tiles = map_tile_count(map);
+    for (size_t tile = 0; tile < tiles; tile++) {
+        if (regions->id[tile] == from) {
+            regions->id[tile] = into;
+        }
+    }
+    if (!regions->boxes_lost) {
+        const TileBox *box = &regions->boxes[from];
+        if (!tile_box_is_empty(box)) {
+            tile_box_add(&regions->boxes[into], box->x0, box->y0, box->z0);
+            tile_box_add(&regions->boxes[into], box->x1, box->y1, box->z1);
+        }
+    }
+    regions->drinkable[into] |= regions->drinkable[from];
+    regions->drinkable[from] = 0;
+}
+
 /*
  * Adds a tile that just became passable. It joins the region of its passable
  * neighbors (on its level and up or down slopes), or starts a new one if it
- * has none. Returns false when it joins several regions together: the caller
- * has to rebuild.
+ * has none; when it touches several regions, they become one.
  */
 static bool open_tile(Regions *regions, const Map *map, int x, int y, int z)
 {
@@ -140,19 +160,31 @@ static bool open_tile(Regions *regions, const Map *map, int x, int y, int z)
         neighbors[count++] = (TilePos){(int16_t)(x + DX[i]), (int16_t)(y + DY[i]), (int16_t)z};
     }
     uint32_t region = REGION_NONE;
+    uint32_t others[4 + MAP_MAX_LEVEL_LINKS];
+    int other_count = 0;
     for (int i = 0; i < count; i++) {
         const TilePos *n = &neighbors[i];
         if (!map_in_bounds(map, n->x, n->y, n->z)) {
             continue;
         }
         uint32_t neighbor = regions->id[map_index(map, n->x, n->y, n->z)];
-        if (neighbor == REGION_NONE) {
+        if (neighbor == REGION_NONE || neighbor == region) {
             continue;
         }
-        if (region != REGION_NONE && neighbor != region) {
-            return false;
+        if (region == REGION_NONE) {
+            region = neighbor;
+            continue;
         }
-        region = neighbor;
+        bool known = false;
+        for (int k = 0; k < other_count; k++) {
+            known = known || others[k] == neighbor;
+        }
+        if (!known) {
+            others[other_count++] = neighbor;
+        }
+    }
+    for (int k = 0; k < other_count; k++) {
+        merge_regions(regions, map, region, others[k]);
     }
     if (region == REGION_NONE) {
         region = ++regions->count;

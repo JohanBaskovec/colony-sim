@@ -248,32 +248,51 @@ see `lets_fall()` in `tree.c`). `terrain_is_foliage()` is true for all three. Th
 north-west one of a wider trunk) with the growth, stocks and trunk width
 (`Plant.size`, 0 meaning 1); the shape follows from them (`tree_shape()`):
 
+A tree of the default size grows continuously (`tree_shape()` takes the
+plant's growth, 0..1; the first two growth stages are a sapling). From
+`TREE_CROWN_FROM` (0.4) it takes room, and its trunk rises with its growth:
+
+| Growth | Trunk (levels) | Crown |
+|---|---|---|
+| from 0.4 | 1 | the foliage over the trunk, sparse |
+| from `TREE_SECOND_LEVEL_AT` (0.49) | 2 | tiles come in around the trunk on every level, nearest first |
+| from `TREE_THIRD_LEVEL_AT` (0.55) | 3 | up to `TREE_CROWN_REACH` (2) tiles from the trunk, all in by 0.8 |
+
+Old and ancient trees (only from world generation) have a fixed shape,
+fully grown (`TREE_FULL_GROWTH`):
+
 | Tree | Trunk | Levels of trunk | Foliage from level | Reach | Levels |
 |---|---|---|---|---|---|
-| Stage 2 | 1 × 1 | 1 | 1 | 1 | 2 |
-| Stage 3 | 1 × 1 | 2 | 1 | 1 | 3 |
-| Stage 4 | 1 × 1 | 3 | 1 | 1, then 2 (see below) | 4 |
 | Old | 2 × 2 | 5 | 3 | 2 | 6 |
 | Ancient | 3 × 3 | 6 | 3 | 3 | 7 (`TREE_MAX_LEVELS`) |
 
-The crown is rounded and ragged (`tree_foliage_density()`): the shape
-above gives the outline, then the further a tile is from the trunk the likelier it is
-missing (`TREE_FOLIAGE_RAGGEDNESS`; never next to the trunk, so that
-a tree stays climbable). The density follows the ring around the trunk
-(1: dense, 2: thin, 3: sparse), a tile of the outer rings being a notch
-thinner now and then (`TREE_FOLIAGE_PATCHINESS`). The noise comes from the
-tile and `TreeShape.seed`, a hash of the foot's position (`tree_shape()`
-takes it), nothing is stored: two trees differ, and a growing tree only
-adds foliage. The crown also spreads as the tree ripens (`TreeShape.ripe`,
-0..1 from `TREE_RIPENING_FROM`, the growth where stage 4 begins, to full
-growth: about 6.7 days on plain soil): a tree of the default size gets a
-second ring of foliage (`TREE_GROWN_REACH`), each tile of it coming in at
-its own moment (noise) a notch thinner than its final density, then
-thickening; old and ancient trees are fully ripe. `grow_tree()` (game.c)
-rewrites the crown whenever the shape or `ripe` changed, and `tree_build()`
-raises the density of foliage already there (never lowers it: where two
-trees share a tile the thicker wins). Old and ancient
+The crown is rounded and ragged, and it grows tile by tile
+(`tree_foliage_density()`, a function of the tile's offset from the foot
+and `TreeShape.growth` only). The outline: a rounded disc, the further a
+tile is from the trunk the likelier it never comes (`TREE_FOLIAGE_RAGGEDNESS`).
+Each tile that does comes in at a growth that rises with its distance from the
+trunk, blurred by noise (`TREE_CROWN_DISORDER`), within `TREE_CROWN_SPREAD`
+of growth: nearest first, differently on each level. It comes in sparse and
+thickens a notch every `TREE_DENSIFY_GROWTH` (about 3.3 days on plain soil)
+up to the density of its ring around the trunk (1: dense, 2: thin; a tile of
+an outer ring a notch thinner now and then, `TREE_FOLIAGE_PATCHINESS`). The
+noise comes from the tile and `TreeShape.seed`, a hash of the foot's
+position, nothing is stored: two trees differ, a growing tree only adds
+foliage, and what it had never thins. A young tree has no walkable
+foliage yet (only dense foliage is walked on) and cannot be climbed.
+`grow_tree()` (game.c) rewrites the crown whenever the shape or growth
+changed (every update hour of a growing tree), and `tree_build()` raises the
+density of foliage already there (never lowers it: where two trees share a
+tile the thicker wins). Thin foliage is seen through: `map_view_level()` (what the tile selection,
+zones and the drawing call "what is seen") goes through it like through open
+space, and the renderer draws its tiles over the levels below with textures
+of leaves and bare branches on a transparent background
+(`ground_foliage_medium` and `_sparse`); things fall through it
+(`map_sees_through_at()`). `map_set_terrain()` tells the connectivity regions
+(`core/region.h`) only of a floor appearing (simple to add) or going: thin
+foliage coming and going leaves them alone. Old and ancient
 trees only come from world generation (`OLD_TREE_CHANCE` 4 %,
+`OLD_TREE_CHANCE` 4 %,
 `ANCIENT_TREE_CHANCE` 1 % of the grown trees where the wider trunk fits);
 their stocks scale with the trunk's area, as does the wood they give.
 `tree_build()` writes a tree into the map through `map_set_rock()` /

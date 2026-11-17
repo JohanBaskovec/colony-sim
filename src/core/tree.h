@@ -76,12 +76,24 @@
  * thinner than its distance from the trunk says. */
 #define TREE_FOLIAGE_RAGGEDNESS 0.9f
 #define TREE_FOLIAGE_PATCHINESS 0.25f
-/* From this growth on, the crown of a tree of the default size keeps
- * spreading until it is fully grown (1): its foliage reaches
- * TREE_GROWN_REACH tiles, the outer ring coming in tile by tile, thin at
- * first. */
-#define TREE_RIPENING_FROM 0.8f
-#define TREE_GROWN_REACH 2
+/* How a tree of the default size grows (growth 0..1, see Plant.growth). From
+ * TREE_CROWN_FROM (growth stage TREE_VOLUME_MIN_STAGE) it takes room: one
+ * level of trunk with foliage over it. Its crown then grows tile by tile on
+ * every level, nearest tiles first, over TREE_CROWN_SPREAD of growth, out to
+ * TREE_CROWN_REACH tiles from the trunk; the trunk rises to two levels at
+ * TREE_SECOND_LEVEL_AT, three at TREE_THIRD_LEVEL_AT. A tile of foliage comes
+ * in thin (sparse) and thickens a notch every TREE_DENSIFY_GROWTH of growth,
+ * up to its distance's density (see tree_foliage_density()). */
+#define TREE_CROWN_FROM ((float)TREE_VOLUME_MIN_STAGE / (float)PLANT_GROWTH_STAGES)
+#define TREE_CROWN_SPREAD 0.4f
+#define TREE_CROWN_REACH 2
+#define TREE_SECOND_LEVEL_AT 0.49f
+#define TREE_THIRD_LEVEL_AT 0.55f
+#define TREE_DENSIFY_GROWTH 0.1f
+/* How out of order the tiles of a crown come in (in tiles of distance). */
+#define TREE_CROWN_DISORDER 0.8f
+/* How far an old or ancient tree is grown (past every tile's time). */
+#define TREE_FULL_GROWTH 2.0f
 
 /* How thick the branches are on a tile of foliage. */
 typedef enum TreeDensity {
@@ -103,9 +115,9 @@ typedef struct TreeShape {
     /* What makes the crown of this tree differ from another's (from the
      * position of its foot): same for the whole life of the tree. */
     uint32_t seed;
-    /* How far the crown has spread, 0..1 (the outer rings come in and thicken
-     * as it grows; 1 for old and ancient trees). */
-    float ripe;
+    /* How grown the crown is: the plant's growth, TREE_FULL_GROWTH for old
+     * and ancient trees (its foliage comes in and thickens with it). */
+    float growth;
 } TreeShape;
 
 /* Levels a tree of this shape takes, its foot's included. */
@@ -141,8 +153,8 @@ bool tree_trunk_holds(const TreeShape *shape, int dx, int dy, int dz);
 bool tree_foliage_holds(const TreeShape *shape, int dx, int dy, int dz);
 
 /* The foliage on the tile at (dx, dy, dz) from the foot (TREE_DENSITY_NONE
- * where there is none). Next to the trunk it is always dense. A tree that
- * grows keeps the foliage it had, as dense or denser. */
+ * where there is none). A tree that grows keeps the foliage it had, as dense
+ * or denser. */
 TreeDensity tree_foliage_density(const TreeShape *shape, int dx, int dy, int dz);
 
 /* The terrain of a tile of foliage of this density (not TREE_DENSITY_NONE),

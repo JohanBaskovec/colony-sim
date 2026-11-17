@@ -434,19 +434,25 @@ void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
     }
     size_t index = map_index(map, x, y, z);
     uint8_t old = map->terrain[index];
-    if (old != terrain) {
-        map->terrain[index] = (uint8_t)terrain;
-        /* Open space turning into thin foliage, and back, changes no way
-         * unless a slope or a ladder below leads up into it (trees are only
-         * built where none does): crowns spreading are not worth a new look
-         * at the connectivity. */
-        if (unstandable_air(old) && unstandable_air(terrain) &&
-            map_climb_cost(map, x, y, z - 1) == 0.0f) {
-            return;
-        }
-        /* May also turn neighbors into (or out of) drinking spots. */
-        log_topology_change(map, x, y, z, false);
+    if (old == terrain) {
+        return;
     }
+    map->terrain[index] = (uint8_t)terrain;
+    /* Trees: open space, thin foliage (nobody stands on it) and dense foliage
+     * (a floor) change into each other all the time as crowns spread. */
+    bool tree_terrain = (unstandable_air(old) || old == TERRAIN_FOLIAGE) &&
+                        (unstandable_air(terrain) || terrain == TERRAIN_FOLIAGE);
+    if (tree_terrain && map_climb_cost(map, x, y, z - 1) == 0.0f) {
+        /* Only a floor appearing or going matters, and the first is simple to
+         * add (no slope or ladder below leads up into the tile: trees are
+         * only built where none does). */
+        if (old == TERRAIN_FOLIAGE || terrain == TERRAIN_FOLIAGE) {
+            log_topology_change(map, x, y, z, terrain == TERRAIN_FOLIAGE);
+        }
+        return;
+    }
+    /* May also turn neighbors into (or out of) drinking spots. */
+    log_topology_change(map, x, y, z, false);
 }
 
 void map_set_rock(Map *map, int x, int y, int z, RockType rock)
@@ -458,12 +464,19 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
     bool was_passable = map_move_cost_at(map, index) > 0.0f;
     bool was_rock = map->rock[index] != ROCK_NONE;
     bool was_open = map_is_open_at(map, index);
+    RockType old_rock = (RockType)map->rock[index];
     map->rock[index] = (uint8_t)rock;
     bool is_passable = map_move_cost_at(map, index) > 0.0f;
     if (was_passable != is_passable) {
         log_topology_change(map, x, y, z, is_passable);
     } else if (was_open != map_is_open_at(map, index)) {
-        log_topology_change(map, x, y, z, false); /* Over a slope: closes or opens it. */
+        /* Over a slope or a ladder: closes or opens its way up. Elsewhere,
+         * nobody stood there and nobody does when it is a trunk rising into
+         * thin foliage (or felled): nothing for the connectivity to know. */
+        bool trunk = rock == ROCK_WOOD || old_rock == ROCK_WOOD;
+        if (!trunk || map_climb_cost(map, x, y, z - 1) != 0.0f) {
+            log_topology_change(map, x, y, z, false);
+        }
     } else if (was_rock != (rock != ROCK_NONE)) {
         log_build_change(map, x, y, z); /* Rock where a wall stood: roofs, warmth. */
     }
@@ -701,7 +714,7 @@ int map_view_level(const Map *map, int x, int y, int z)
     size_t index = map_index(map, x, y, z);
     const size_t layer = (size_t)map->width * (size_t)map->height;
     for (int level = z; level >= 0; level--, index -= layer) {
-        if (!map_is_open_at(map, index)) {
+        if (!map_sees_through_at(map, index)) {
             return level;
         }
     }

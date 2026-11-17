@@ -2,24 +2,20 @@
 
 #include "core/game_clock.h"
 
+#include <math.h>
 #include <string.h>
 
 /* The order in which directions are tried when nothing tells them apart. */
 static const Direction AIM_ORDER[DIRECTION_COUNT] = {DIRECTION_SOUTH, DIRECTION_EAST,
                                                      DIRECTION_NORTH, DIRECTION_WEST};
 
-/* Shapes of the trees that take room. A tree of the default size grows a
- * level of trunk (and of foliage) per stage, so that growing only adds to
- * it; old and ancient trees are grown, with a bare trunk under their crown. */
-static const TreeShape SHAPES_BY_STAGE[PLANT_GROWTH_STAGES] = {
-    [2] = {.size = 1, .trunk = 1, .foliage_from = 1, .reach = 1},
-    [3] = {.size = 1, .trunk = 2, .foliage_from = 1, .reach = 1},
-    [4] = {.size = 1, .trunk = 3, .foliage_from = 1, .reach = 1},
-};
+/* Shapes of the old and ancient trees, which only world generation makes: a
+ * bare trunk under their crown. A tree of the default size grows: its shape
+ * follows from its growth (tree_shape()). */
 static const TreeShape OLD_SHAPE = {
-    .size = 2, .trunk = 5, .foliage_from = 3, .reach = 2, .ripe = 1.0f};
+    .size = 2, .trunk = 5, .foliage_from = 3, .reach = 2, .growth = TREE_FULL_GROWTH};
 static const TreeShape ANCIENT_SHAPE = {
-    .size = 3, .trunk = 6, .foliage_from = 3, .reach = 3, .ripe = 1.0f};
+    .size = 3, .trunk = 6, .foliage_from = 3, .reach = 3, .growth = TREE_FULL_GROWTH};
 _Static_assert(6 + 1 == TREE_MAX_LEVELS, "the ancient tree is the tallest");
 
 int tree_size(const Plant *plant)
@@ -91,18 +87,17 @@ bool tree_shape(const Plant *plant, int x, int y, int z, TreeShape *out)
     if (size > 1) {
         *out = size == 2 ? OLD_SHAPE : ANCIENT_SHAPE;
     } else {
-        int stage = plant_growth_stage(plant);
-        if (stage < TREE_VOLUME_MIN_STAGE) {
+        if (plant_growth_stage(plant) < TREE_VOLUME_MIN_STAGE) {
             return false;
         }
-        *out = SHAPES_BY_STAGE[stage];
-        /* The last stage's crown keeps spreading and thickening until the
-         * tree is fully grown: a second ring of foliage appears. */
-        out->ripe = (plant->growth - TREE_RIPENING_FROM) / (1.0f - TREE_RIPENING_FROM);
-        out->ripe = out->ripe < 0.0f ? 0.0f : (out->ripe > 1.0f ? 1.0f : out->ripe);
-        if (stage == PLANT_GROWTH_STAGES - 1 && out->ripe > 0.0f) {
-            out->reach = TREE_GROWN_REACH;
-        }
+        float growth = plant->growth;
+        *out = (TreeShape){.size = 1,
+                           .trunk = growth >= TREE_THIRD_LEVEL_AT    ? 3
+                                    : growth >= TREE_SECOND_LEVEL_AT ? 2
+                                                                     : 1,
+                           .foliage_from = 1,
+                           .reach = TREE_CROWN_REACH,
+                           .growth = growth};
     }
     out->seed = mix_bits((uint32_t)x * 0x9E3779B1u ^
                          mix_bits((uint32_t)y * 0x85EBCA77u ^ mix_bits((uint32_t)z + 0x27D4EB2Fu)));
@@ -131,6 +126,17 @@ static float foliage_noise(const TreeShape *shape, int dx, int dy, int dz, uint3
     return (float)(h >> 8) / 16777216.0f;
 }
 
+/* The foliage of a tile that comes in when the tree has grown to `comes`, as
+ * dense as `final` in the end: none before, then sparse, thickening. */
+static TreeDensity grown_foliage(const TreeShape *shape, float comes, TreeDensity final)
+{
+    if (shape->growth < comes) {
+        return TREE_DENSITY_NONE;
+    }
+    int density = TREE_DENSITY_SPARSE + (int)((shape->growth - comes) / TREE_DENSIFY_GROWTH);
+    return density < (int) final ? (TreeDensity)density : final;
+}
+
 TreeDensity tree_foliage_density(const TreeShape *shape, int dx, int dy, int dz)
 {
     if (dz < shape->foliage_from || dz > shape->trunk) {
@@ -138,7 +144,9 @@ TreeDensity tree_foliage_density(const TreeShape *shape, int dx, int dy, int dz)
     }
     int ex = outside(dx, shape->size), ey = outside(dy, shape->size);
     if (ex == 0 && ey == 0) {
-        return dz == shape->trunk ? TREE_DENSITY_DENSE : TREE_DENSITY_NONE; /* Over the trunk. */
+        /* Over the trunk: the first foliage of a tree. */
+        return dz == shape->trunk ? grown_foliage(shape, TREE_CROWN_FROM, TREE_DENSITY_DENSE)
+                                  : TREE_DENSITY_NONE;
     }
     /* A rounded crown... */
     int reach = shape->reach;
@@ -165,18 +173,14 @@ TreeDensity tree_foliage_density(const TreeShape *shape, int dx, int dy, int dz)
         foliage_noise(shape, dx, dy, dz, 2) < TREE_FOLIAGE_PATCHINESS) {
         density--;
     }
-    /* The outer rings of a crown still spreading: each tile comes in at its
-     * own time as the tree ripens, a notch thinner for a while. */
-    if (ring >= 2) {
-        float comes = 0.5f * foliage_noise(shape, dx, dy, dz, 3);
-        if (shape->ripe <= comes) {
-            return TREE_DENSITY_NONE;
-        }
-        if (shape->ripe < comes + 0.5f && density > TREE_DENSITY_SPARSE) {
-            density--;
-        }
-    }
-    return density;
+    /* The crown grows tile by tile, nearest first (with some disorder): the
+     * tile comes in at a growth that rises with its distance. It starts
+     * sparse and thickens with the tree's age. */
+    float far =
+        sqrtf((float)distance) - 1.0f + TREE_CROWN_DISORDER * foliage_noise(shape, dx, dy, dz, 3);
+    float comes = TREE_CROWN_FROM +
+                  TREE_CROWN_SPREAD * far / (sqrtf((float)limit) - 1.0f + TREE_CROWN_DISORDER);
+    return grown_foliage(shape, comes, density);
 }
 
 bool tree_foliage_holds(const TreeShape *shape, int dx, int dy, int dz)
@@ -302,10 +306,13 @@ bool tree_room_to_grow(const Map *map, int x, int y, int z, const TreeShape *sha
                 if (dz == 0 || map_is_open_at(map, index)) {
                     continue;
                 }
-                TreeRef owner;
-                if (!terrain_is_foliage(map->terrain[index]) || !tree_at(map, tx, ty, tz, &owner) ||
-                    owner.x != x || owner.y != y || owner.z != z) {
-                    return false; /* Ground, a roof, or another tree's foliage. */
+                /* Its own foliage (which the new shape no longer holds as
+                 * foliage: the plant already has it), not ground, a roof nor
+                 * the foliage of another tree. */
+                TreeRef self = {x, y, z, *shape}, other;
+                if (!terrain_is_foliage(map->terrain[index]) ||
+                    tree_of_foliage(map, tx, ty, tz, &self, &other)) {
+                    return false;
                 }
             }
         }
@@ -361,13 +368,7 @@ void tree_build(Map *map, int x, int y, int z)
  * hold anything (medium and sparse foliage). */
 static bool lets_fall(const Map *map, int x, int y, int z)
 {
-    if (!map_in_bounds(map, x, y, z)) {
-        return false;
-    }
-    size_t index = map_index(map, x, y, z);
-    return map_is_open_at(map, index) ||
-           (map->rock[index] == ROCK_NONE && (map->terrain[index] == TERRAIN_FOLIAGE_MEDIUM ||
-                                              map->terrain[index] == TERRAIN_FOLIAGE_SPARSE));
+    return map_in_bounds(map, x, y, z) && map_sees_through_at(map, map_index(map, x, y, z));
 }
 
 /* The level where something dropped over (x, y, z) comes to rest: z on a

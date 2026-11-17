@@ -346,6 +346,16 @@ static inline bool map_is_open_at(const Map *map, size_t index)
     return map->rock[index] == 0 && map->terrain[index] == TERRAIN_OPEN;
 }
 
+/* Whether the eye (and whatever falls) goes through a tile index: open space,
+ * or thin foliage (the medium and sparse densities: leaves and bare branches
+ * over nothing). */
+static inline bool map_sees_through_at(const Map *map, size_t index)
+{
+    return map->rock[index] == 0 &&
+           (map->terrain[index] == TERRAIN_OPEN || map->terrain[index] == TERRAIN_FOLIAGE_MEDIUM ||
+            map->terrain[index] == TERRAIN_FOLIAGE_SPARSE);
+}
+
 /* Things on a tile the player may forbid the settlers (bits of
  * Map.forbidden). Items and workstations keep theirs (core/item.h,
  * core/workstation.h). */
@@ -512,9 +522,9 @@ bool map_has_floor(const Map *map, int x, int y, int z);
 bool map_is_open(const Map *map, int x, int y, int z);
 
 /* The level of what is seen on the tile (x, y) with level z shown: z itself
- * unless it is open space, else the first level down that is not, however
- * deep. -1 when nothing is seen there (open space all the way, or off the
- * map). */
+ * unless it is open space or thin foliage (map_sees_through_at()), else the
+ * first level down that is not, however deep. -1 when nothing is seen there
+ * (open space all the way, or off the map). */
 int map_view_level(const Map *map, int x, int y, int z);
 
 /* Whether a natural slope rises from the tile to the level above. */

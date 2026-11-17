@@ -49,7 +49,7 @@ void items_panel_draw(App *app)
     if (rows.clicked != ITEM_NONE) {
         app->debug_item = rows.clicked;
         app->debug_item_max = rows.max;
-        app->debug_teleport = false;
+        app->debug_mode = APP_DEBUG_SPAWN;
         app->tool = APP_TOOL_DEBUG;
         app->left_button_down = false;
         app->box_selecting = false;

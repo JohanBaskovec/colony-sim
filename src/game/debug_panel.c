@@ -21,6 +21,8 @@ typedef struct DebugRows {
     bool next_season;
     bool teleport_active; /* Whether the debug tool is on in teleport mode. */
     bool toggle_teleport;
+    bool plant_tree_active, grow_tree_active; /* ... in the tree modes. */
+    bool toggle_plant_tree, toggle_grow_tree;
 } DebugRows;
 
 /* A button on its own row. Returns whether it was clicked. */
@@ -65,6 +67,10 @@ static void debug_rows(UiLayout *layout, void *userdata)
     rows->skip_day |= button_row(layout, tr("debug.skip_day"));
     rows->next_season |= button_row(layout, tr("debug.next_season"));
     rows->toggle_teleport |= checkbox_row(layout, tr("debug.teleport_tool"), rows->teleport_active);
+    rows->toggle_plant_tree |=
+        checkbox_row(layout, tr("debug.plant_tree_tool"), rows->plant_tree_active);
+    rows->toggle_grow_tree |=
+        checkbox_row(layout, tr("debug.grow_tree_tool"), rows->grow_tree_active);
 }
 
 void debug_panel_draw(App *app)
@@ -73,9 +79,12 @@ void debug_panel_draw(App *app)
         return;
     }
     Game *game = &app->game;
-    DebugRows rows = {.debug = &game->debug,
-                      .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
-                      .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT)};
+    DebugRows rows = {
+        .debug = &game->debug,
+        .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
+        .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
+        .plant_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE),
+        .grow_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE)};
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER, debug_rows,
                      &rows, &open);
@@ -114,6 +123,12 @@ void debug_panel_draw(App *app)
     }
     if (rows.toggle_teleport) {
         app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT);
+    }
+    if (rows.toggle_plant_tree) {
+        app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE);
+    }
+    if (rows.toggle_grow_tree) {
+        app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE);
     }
     if (!open) {
         app->show_debug_menu = false;

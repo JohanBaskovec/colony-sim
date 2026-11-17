@@ -1360,13 +1360,32 @@ def draw_rough_stone():
     return np.dstack([np.clip(color, 0, 1), np.ones((TILE, TILE), dtype=np.float32)])
 
 
-def draw_foliage_of_density(seed, clumps, gap, shade):
+def draw_foliage_of_density(seed, clumps, gap, shade, twigs=0):
     """A floor of branches: overlapping leaf clumps over dark gaps, lit on top.
-    The thinner the foliage (fewer clumps, darker gaps, dimmer leaves), the
-    more of the gaps shows."""
+    Without a `gap` color the foliage is thin: leaves and bare branches on a
+    transparent background, so that what lies below shows through (the
+    thinner, the more of it); `twigs` branches are drawn under the leaves."""
     rng = np.random.default_rng(seed)
-    canvas = WrapCanvas(tinted(gap, 1.0 + 0.08 * periodic_noise(rng, 6.0)))
+    thin = gap is None
+    canvas = WrapCanvas(None if thin else tinted(gap, 1.0 + 0.08 * periodic_noise(rng, 6.0)))
     palette = [(52, 98, 40), (66, 114, 46), (84, 136, 56), (44, 84, 38), (102, 150, 64)]
+    bark = [(86, 62, 38), (104, 76, 46), (70, 50, 32)]
+    for _ in range(twigs):  # Bare branches, slightly bent, some forked.
+        x, y = rng.random() * TILE, rng.random() * TILE
+        angle = rng.random() * math.pi * 2.0
+        length = 22.0 + rng.random() * 34.0
+        bend = (rng.random() - 0.5) * 0.9
+        points = []
+        for k in range(5):
+            a = angle + bend * k / 4.0
+            points.append((x + math.cos(a) * length * k / 4.0, y + math.sin(a) * length * k / 4.0))
+        color = rgb(bark[rng.integers(len(bark))]) * (0.9 + 0.2 * rng.random())
+        canvas.stroke(points, 1.7, 0.7, color, 0.95)
+        fork = 2 + int(rng.integers(2))
+        fa = angle + (0.7 if rng.random() < 0.5 else -0.7)
+        sx, sy = points[fork]
+        canvas.stroke([(sx, sy), (sx + math.cos(fa) * length * 0.4, sy + math.sin(fa) * length * 0.4)],
+                      1.1, 0.5, color * 0.9, 0.9)
     for layer in range(3):
         for _ in range(clumps - round(clumps * 12 / 70) * layer):
             x, y = rng.random() * TILE, rng.random() * TILE
@@ -1375,7 +1394,8 @@ def draw_foliage_of_density(seed, clumps, gap, shade):
             color = np.clip(rgb(palette[min(len(palette) - 1, rng.integers(len(palette)) +
                                             layer // 2)]) * (0.85 + 0.3 * rng.random()) * shade,
                             0, 1)
-            canvas.ellipse(x + 1.5, y + 2.0, r, r * 0.6, (0.0, 0.0, 0.0), angle, 0.3)
+            canvas.ellipse(x + 1.5, y + 2.0, r, r * 0.6, (0.0, 0.0, 0.0), angle,
+                           0.12 if thin else 0.3)
             canvas.ellipse(x, y, r, r * 0.6, color, angle, 1.0, 0.7)
             canvas.stroke([(x - r * 0.7 * math.cos(angle), y - r * 0.7 * math.sin(angle)),
                            (x + r * 0.7 * math.cos(angle), y + r * 0.7 * math.sin(angle))],
@@ -1390,13 +1410,15 @@ def draw_foliage():
 
 
 def draw_foliage_medium():
-    """Thinner branches: a patchier canopy, with the shade showing through."""
-    return draw_foliage_of_density(7101, 34, (22, 42, 22), 0.9)
+    """Thinner branches: leaves and branches over a transparent background,
+    the ground showing through between them."""
+    return draw_foliage_of_density(7101, 30, None, 0.95, twigs=9)
 
 
 def draw_foliage_sparse():
-    """The thinnest branches, at the edge of the crown: a few leaf clumps."""
-    return draw_foliage_of_density(7102, 14, (14, 28, 16), 0.8)
+    """The thinnest branches, at the edge of the crown: a few leaf clumps on
+    bare branches."""
+    return draw_foliage_of_density(7102, 11, None, 0.9, twigs=7)
 
 
 def draw_grass_roof():

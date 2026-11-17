@@ -47,7 +47,7 @@ bool app_tool_active(const App *app, AppTool tool, int type)
     case APP_TOOL_STRUCTURE: return (int)app->structure_type == type;
     case APP_TOOL_STOCKPILE:
     case APP_TOOL_GATHER: return app->zone_remove == (type == APP_ZONE_REMOVE);
-    case APP_TOOL_DEBUG: return app->debug_teleport == (type == APP_DEBUG_TELEPORT);
+    case APP_TOOL_DEBUG: return app->debug_mode == type;
     case APP_TOOL_FORBID: return app->forbid_allows == (type == APP_ALLOW);
     default: return true;
     }
@@ -68,7 +68,7 @@ void app_toggle_tool(App *app, AppTool tool, int type)
         } else if (tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER) {
             app->zone_remove = type == APP_ZONE_REMOVE;
         } else if (tool == APP_TOOL_DEBUG) {
-            app->debug_teleport = type == APP_DEBUG_TELEPORT;
+            app->debug_mode = type;
         } else if (tool == APP_TOOL_FORBID) {
             app->forbid_allows = type == APP_ALLOW;
         }
@@ -766,13 +766,20 @@ static void apply_debug_tool(App *app, float screen_x, float screen_y)
     int x, y;
     screen_to_tile(app, screen_x, screen_y, &x, &y);
     const int z = app->camera.level;
-    if (!app->debug_teleport) {
+    switch (app->debug_mode) {
+    case APP_DEBUG_TELEPORT:
+        for (int i = 0; i < app->selected_count; i++) {
+            game_debug_teleport(&app->game, app->selected[i], x, y, z);
+        }
+        break;
+    case APP_DEBUG_PLANT_TREE: game_debug_plant_tree(&app->game, x, y, z); break;
+    case APP_DEBUG_GROW_TREE: /* Shift: all the way. */
+        game_debug_grow_tree(&app->game, x, y, z, (SDL_GetModState() & SDL_KMOD_SHIFT) != 0);
+        break;
+    default:
         game_debug_spawn_items(&app->game, x, y, z, app->debug_item,
                                app->debug_item_max ? item_stack_limit(app->debug_item) : 1);
-        return;
-    }
-    for (int i = 0; i < app->selected_count; i++) {
-        game_debug_teleport(&app->game, app->selected[i], x, y, z);
+        break;
     }
 }
 

@@ -189,6 +189,22 @@ void game_debug_next_season(Game *game);
  * invalid type or tile). */
 int game_debug_spawn_items(Game *game, int x, int y, int z, ItemType type, int count);
 
+/* Growth a click of the debug "grow a tree" tool adds (a tenth: the trunk
+ * rises at 0.4, 0.6 and 0.8, then the crown spreads until 1). */
+#define GAME_DEBUG_TREE_GROWTH_STEP 0.1f
+
+/* Debug: a tree seedling (growth 0) on a tile, replacing the plant there.
+ * Fails (false) where no tree grows: out of the map, rock, a structure, a
+ * slope, ground less fertile than trees need, or touching another tree. */
+bool game_debug_plant_tree(Game *game, int x, int y, int z);
+
+/* Debug: the tree on (x, y, z), from any tile of its trunk, foliage or foot,
+ * grows by GAME_DEBUG_TREE_GROWTH_STEP (to full growth with `fully`) and is
+ * written into the map at once. Returns whether it grew: false without a
+ * tree, for one fully grown already, or one that waits for room (something
+ * where its trunk would rise stops it, as in play). */
+bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully);
+
 /* Debug: moves a colonist to a passable tile at once; it gives up its task
  * and looks around afresh. Fails on a stale handle or a tile nobody can
  * stand on. */

@@ -28,8 +28,8 @@ typedef enum AppTool {
     APP_TOOL_STRUCTURE, /* Plan structures of `structure_type` (click, or drag a rectangle). */
     /* Debug (game/debug_panel.h, game/items_panel.h): `debug_item` (one, or a
      * full stack) on the clicked tile,
-     * or with `debug_teleport` (tool type APP_DEBUG_TELEPORT), the selected
-     * colonists moved there. */
+     * or, by `debug_mode` (tool type), the selected colonists moved there, a
+     * tree seedling planted, or the tree grown a step. */
     APP_TOOL_DEBUG,
     /* Forbid (type APP_FORBID) or allow (APP_ALLOW) everything in a rectangle
      * (game_set_forbidden_rect()). */
@@ -68,6 +68,8 @@ typedef enum AppTool {
 /* Types of the debug tool (see app_toggle_tool()). */
 #define APP_DEBUG_SPAWN 0
 #define APP_DEBUG_TELEPORT 1
+#define APP_DEBUG_PLANT_TREE 2
+#define APP_DEBUG_GROW_TREE 3
 
 /* Types of the forbid tool (see app_toggle_tool()). */
 #define APP_FORBID 0
@@ -180,7 +182,7 @@ typedef struct App {
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
     bool debug_item_max;           /* ... a full stack of it, else one item. */
-    bool debug_teleport;           /* For APP_TOOL_DEBUG: moves the selection instead. */
+    int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
     bool forbid_allows;            /* For APP_TOOL_FORBID: allows instead. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */

@@ -97,6 +97,8 @@ debug.items.title = Faire apparaître des objets
 debug.items.one = 1×
 debug.items.max = Max
 debug.teleport_tool = Déplacer les colons choisis (clic sur la carte)
+debug.plant_tree_tool = Planter une pousse d’arbre (clic sur la carte)
+debug.grow_tree_tool = Faire grandir un arbre d’un cran (clic sur la carte)
 
 # Objets
 item.wood = Bois
@@ -197,6 +199,8 @@ hud.tool.allow_help = Glissez sur ce dont les colons peuvent de nouveau se servi
 hud.tool.spawn = Débogage : faire apparaître {1} × {0} · Clic : sur la case · Échap : retour
 hud.tool.teleport.one = Débogage : déplacer {0} colon · Clic : la case où aller · Échap : retour
 hud.tool.teleport.other = Débogage : déplacer {0} colons · Clic : la case où aller · Échap : retour
+hud.tool.plant_tree = Débogage : planter une pousse d’arbre · Clic : sur la case · Échap : retour
+hud.tool.grow_tree = Débogage : faire grandir un arbre · Clic : d’un cran · Maj + clic : jusqu’au bout · Échap : retour
 hud.tool.unavailable = Personne dans la colonie ne sait encore faire cela
 hud.tool.stockpile_help = Glisser : créer ou agrandir, en fusionnant les zones chevauchées · Maj+glisser : retirer · Échap : retour
 hud.tool.zone_remove_help = Glisser : retirer la surface des zones · Échap : retour

@@ -3,8 +3,10 @@
  * when one can walk from one to the other. Lets searches answer "there is no
  * way" or "there is none in reach" without flooding the whole area.
  *
- * Regions are a cache derived from the map: regions_update() rebuilds them
- * when the map topology changed (Map.topology_revision). Queries take the map
+ * Regions are a cache derived from the map: regions_update() brings them up to
+ * date when the map topology changed (Map.topology_revision): tiles that became
+ * passable are added one by one (a tile touching several regions merges them),
+ * anything else, or many changes at once, rebuilds everything. Queries take the map
  * to check that the data is current; when it is not (the map changed since
  * the last update), they answer as if everything were connected, so a stale
  * cache can only cost time, never give a wrong "no".
@@ -26,7 +28,8 @@ typedef struct Regions {
     int height;
     int depth;
     uint32_t *id;       /* Region of each tile, REGION_NONE when impassable. */
-    uint32_t count;     /* Regions are numbered 1..count. */
+    uint32_t count;     /* Regions are numbered 1..count (some ids may be unused: regions
+                           merged since the last full rebuild leave theirs). */
     uint8_t *drinkable; /* Per region id: whether it contains a drinking spot. */
     /* Per region id: a box holding its tiles, for scans of a region. Given up
      * (boxes_lost) until the next full rebuild if memory ran out. */
