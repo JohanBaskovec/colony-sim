@@ -105,7 +105,7 @@ become tabs:
 
 | Selection           | Summary                                       | Tabs (now; later)                                 | Actions                       |
 |---------------------|-----------------------------------------------|---------------------------------------------------|-------------------------------|
-| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Mood, Knowledge, Gear, Social; Log, Health | (later: draft, attack)        |
+| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Mood, Character, Knowledge, Gear, Social; Log, Health | (later: draft, attack)        |
 | Several colonists   | How many, their names                         | —                                                 | —                             |
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size                          | Storage (filters)                                 | Build another, delete         |
@@ -228,7 +228,7 @@ Each step keeps the game playable and is checked on screen (Xvfb).
        temperature and weather
 5. [x] Colonist bar
 6. [x] Inspector box with empty tabs, then its content: colonist (summary, Needs, Mood,
-       Skills, Gear, Social), workstation, stockpile, gathering zone, tile;
+       Character, Knowledge, Gear, Social), workstation, stockpile, gathering zone, tile;
        the floating inspectors go
 7. [x] Work grid as a main window above the bottom bar; messages (the debug readout is
        top right already)

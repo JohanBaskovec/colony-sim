@@ -70,11 +70,12 @@ static bool is_memory(ThoughtType type)
 /* Sums the thoughts up into the mood. */
 static void sum_up(Mood *mood)
 {
-    float value = MOOD_NEUTRAL;
+    float thoughts = 0.0f;
     for (int type = 0; type < THOUGHT_COUNT; type++) {
-        value += mood->weight[type];
+        thoughts += mood->weight[type];
     }
-    mood->value = clampf(value, MOOD_MIN, MOOD_MAX);
+    mood->value =
+        clampf(MOOD_NEUTRAL + mood->outlook + mood->sensitivity * thoughts, MOOD_MIN, MOOD_MAX);
 }
 
 static void forget(Mood *mood, ThoughtType type)
@@ -88,6 +89,14 @@ void mood_init(Mood *mood)
 {
     memset(mood, 0, sizeof(*mood));
     mood->value = MOOD_NEUTRAL;
+    mood->sensitivity = 1.0f;
+}
+
+void mood_set_character(Mood *mood, float outlook, float sensitivity)
+{
+    mood->outlook = outlook;
+    mood->sensitivity = sensitivity;
+    sum_up(mood);
 }
 
 void mood_remember(Mood *mood, ThoughtType type)
@@ -134,7 +143,12 @@ bool mood_has(const Mood *mood, ThoughtType type)
 
 float mood_thought_value(const Mood *mood, ThoughtType type)
 {
-    return (unsigned)type < THOUGHT_COUNT ? mood->weight[type] : 0.0f;
+    return (unsigned)type < THOUGHT_COUNT ? mood->weight[type] * mood->sensitivity : 0.0f;
+}
+
+float mood_thought_peak(const Mood *mood, ThoughtType type)
+{
+    return (unsigned)type < THOUGHT_COUNT ? mood->peak[type] * mood->sensitivity : 0.0f;
 }
 
 bool mood_fading(const Mood *mood, ThoughtType type)
@@ -373,7 +387,7 @@ const char *mood_level_key(float value)
 
 uint64_t mood_hash(const Mood *mood, uint64_t hash)
 {
-    float values[2] = {mood->value, mood->binge_left};
+    float values[4] = {mood->value, mood->binge_left, mood->outlook, mood->sensitivity};
     hash = hash_fnv1a64(hash, values, sizeof(values));
     hash = hash_fnv1a64(hash, &mood->states, sizeof(mood->states));
     hash = hash_fnv1a64(hash, mood->weight, sizeof(mood->weight));

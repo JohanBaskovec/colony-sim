@@ -16,6 +16,7 @@
 #define SPAWN_PLACEMENT_MAX_COST 40.0f
 /* Mixed into the game seed for the stream colonist looks are rolled from. */
 #define GAME_APPEARANCE_SEED 0x5eed1ce5a77ea12aULL
+#define GAME_ATTRIBUTES_SEED 0xa77a1b07e5c0de5bULL
 /* Preferred: drinkable water within this travel cost of the spawn point. */
 #define SPAWN_WATER_MAX_COST 60.0f
 /* Food plants for the first settlers are counted and planted within this
@@ -134,6 +135,15 @@ EntityId game_spawn_colonist(Game *game, int x, int y, int z)
     }
     colonist_set_strength(colonist, colonist_random_strength(&game->rng, colonist->age));
     colonist_reset_practice(colonist, game->clock.tick);
+    /* Attributes come from their own stream: the colonists made later must
+     * not depend on how many were made before, nor the rest of the game on
+     * them. */
+    Rng character;
+    rng_seed(&character, game->seed ^ GAME_ATTRIBUTES_SEED,
+             ((uint64_t)id.generation << 32) | id.index);
+    Attributes attributes;
+    attributes_roll(&attributes, &character);
+    colonist_set_attributes(colonist, &attributes);
     /* Looks come from their own stream: adding a sprite variant must not
      * change what the simulation does. */
     Rng looks;
@@ -1305,6 +1315,7 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
         hash = hash_fnv1a64(hash, &c->wetness, sizeof(c->wetness));
         hash = mood_hash(&c->mood, hash);
+        hash = attributes_hash(&c->attributes, hash);
         int32_t sleep[3] = {c->sleep_ticks, c->sleep_cold_ticks, c->sleep_hot_ticks};
         hash = hash_fnv1a64(hash, sleep, sizeof(sleep));
         hash = hash_fnv1a64(hash, c->work_priorities, sizeof(c->work_priorities));

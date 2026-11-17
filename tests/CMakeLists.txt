@@ -4,6 +4,7 @@
 set(COLONY_UNIT_TESTS
     test_alert
     test_appearance
+    test_attributes
     test_bed
     test_camera
     test_cli

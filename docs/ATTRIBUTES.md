@@ -5,7 +5,7 @@ innate **attributes** of the body, the mind and the social self. There are no
 all-or-nothing traits: every attribute is a value on a continuous scale, and
 most settlers are ordinary in most of them.
 
-Status: design, not implemented. Values marked *(tuning)* are first guesses.
+Status: step A is implemented (walking, work pace, learning, sleep, appetite, cold and heat tolerance, outlook, temperament); the rest is design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -45,9 +45,9 @@ Status: design, not implemented. Values marked *(tuning)* are first guesses.
 | Word shown | Position | Factor, high side | Factor, low side | Share of settlers |
 |------------|----------|-------------------|------------------|-------------------|
 | nothing (ordinary) | below 0.14 | below ×1.1 | above ×0.91 | 35 % |
-| "a little" | 0.14 to 0.26 | ×1.1 to ×1.2 | ×0.91 to ×0.83 | 27 % |
-| "very" | 0.26 to 0.49 | ×1.2 to ×1.4 | ×0.83 to ×0.71 | 27 % |
-| "extremely" | 0.49 to 0.77 | ×1.4 to ×1.7 | ×0.71 to ×0.59 | 9.5 % |
+| "a little" | 0.14 to 0.26 | ×1.1 to ×1.2 | ×0.91 to ×0.83 | 25 % |
+| "very" | 0.26 to 0.49 | ×1.2 to ×1.4 | ×0.83 to ×0.71 | 29 % |
+| "extremely" | 0.49 to 0.77 | ×1.4 to ×1.7 | ×0.71 to ×0.59 | 9 % |
 | "exceptionally" | 0.77 and more | ×1.7 to ×2 | ×0.59 to ×0.5 | 1 % |
 
   (shares with a standard deviation of 0.3, both sides together). Outlook
@@ -67,8 +67,8 @@ Status: design, not implemented. Values marked *(tuning)* are first guesses.
 | Thought weight (temperament) | ×1.5^p above 0, ×0.6^−p below | ×0.6 | ×1.5 |
 | Offset | p × the attribute's range | −range | +range |
 
-Powers are taken from a table or a fixed polynomial, never from the platform's
-math library (determinism).
+Powers are taken with `exp2f()`, like the other continuous effects of the core
+(rot, radiant warmth); the stored positions are integers.
 
 ## 3. Body
 

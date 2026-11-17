@@ -21,6 +21,11 @@
  * alone far away, or eats far more than it needs; it still eats, drinks and
  * sleeps when it must.
  *
+ * Attributes (core/attributes.h, docs/ATTRIBUTES.md): innate values that
+ * make a colonist walk, work, learn, sleep and eat faster or slower, find
+ * cold or heat more or less bearable, and set its mood higher or lower and
+ * how strongly its thoughts weigh.
+ *
  * Tools are simply carried, at most one of each type, and used without
  * equipping anything; they count in the carried weight. A colonist fetches a
  * tool when a recipe needs one it does not carry, and keeps it; one that
@@ -49,6 +54,7 @@
 #define COLONY_CORE_COLONIST_H
 
 #include "core/appearance.h"
+#include "core/attributes.h"
 #include "core/bed.h"
 #include "core/construction.h"
 #include "core/designation.h"
@@ -424,6 +430,7 @@ typedef struct Colonist {
     float needs[NEED_COUNT];
     float wetness; /* 0 (dry) .. 1 (wet through). */
     Mood mood;
+    Attributes attributes;         /* Set with colonist_set_attributes(). */
     ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
 
@@ -552,16 +559,27 @@ bool colonist_at_work(const Colonist *colonist);
 /* Whether the colonist knows enough to carry out this kind of order. */
 bool colonist_can_do(const Colonist *colonist, DesignationType type);
 
-/* Rest gain multiplier of sleeping at a felt temperature: 1 between
- * COLONIST_COLD_SLEEP_BELOW and COLONIST_HOT_SLEEP_ABOVE, less beyond. */
-float colonist_sleep_temperature_factor(float celsius);
+/* Sets the attributes, and the character of the mood that follows from them
+ * (outlook, temperament). */
+void colonist_set_attributes(Colonist *colonist, const Attributes *attributes);
+
+/* The coldest and warmest felt temperatures the colonist sleeps well at:
+ * COLONIST_COLD_SLEEP_BELOW and COLONIST_HOT_SLEEP_ABOVE, moved by its cold
+ * and heat tolerance. The same shifts apply to when it feels cold or hot
+ * (MOOD_COLD_CELSIUS, MOOD_HOT_CELSIUS). */
+float colonist_cold_limit(const Colonist *colonist);
+float colonist_heat_limit(const Colonist *colonist);
+
+/* Rest gain multiplier of sleeping at a felt temperature: 1 between the
+ * colonist's cold and heat limits, less beyond. */
+float colonist_sleep_temperature_factor(const Colonist *colonist, float celsius);
 
 /* Whether the colonist knows enough to do this gathering job. */
 bool colonist_can_gather(const Colonist *colonist, GatherJob job);
 
 /* Work done per tick on something of `knowledge`: COLONIST_WORK_SPEED scaled
- * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE), and by the mood
- * (mood_work_factor()). */
+ * by knowledge_work_speed() (unscaled for KNOWLEDGE_NONE), by the mood
+ * (mood_work_factor()) and by the colonist's work pace. */
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge);
 
 /* The level what the colonist makes comes from (quality and condition of

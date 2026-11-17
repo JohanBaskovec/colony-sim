@@ -4,6 +4,7 @@
 #include "core/hearth.h"
 
 #include "test_framework.h"
+#include "test_settlers.h"
 
 #include <math.h>
 #include <string.h>
@@ -58,6 +59,7 @@ static Colonist *spawn_settler(Game *game, int x, int y, double level, WorkType 
                                                          : WORK_PRIORITY_DISABLED);
         }
         colonist_set_strength(colonist, COLONIST_STRENGTH_STANDARD);
+        make_ordinary(colonist);
     }
     return colonist;
 }

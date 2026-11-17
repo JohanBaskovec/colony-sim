@@ -4,6 +4,7 @@
 #include "core/mood.h"
 
 #include "test_framework.h"
+#include "test_settlers.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -40,6 +41,7 @@ static Colonist *spawn_rested(Game *game, int x, int y)
 {
     Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
     if (colonist != NULL) {
+        make_ordinary(colonist);
         for (int need = 0; need < NEED_COUNT; need++) {
             colonist->needs[need] = 1.0f;
         }

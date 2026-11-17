@@ -8,6 +8,7 @@
 #include "core/tree.h"
 
 #include "test_framework.h"
+#include "test_settlers.h"
 
 #include <string.h>
 
@@ -54,6 +55,7 @@ static Colonist *spawn_worker(Game *game, int x, int y)
             colonist_set_knowledge_level(colonist, (KnowledgeType)k, 75.0);
         }
         colonist_set_strength(colonist, COLONIST_STRENGTH_STANDARD);
+        make_ordinary(colonist);
     }
     return colonist;
 }

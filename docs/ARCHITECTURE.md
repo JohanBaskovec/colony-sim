@@ -64,6 +64,7 @@ simulation:
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
+| `attributes` | Settler attributes: positions in thousandths drawn on a bell curve, their effects (factors, thought weight, outlook points, temperature shifts), the word bands and translation keys |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level |
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
@@ -594,6 +595,25 @@ colony's food (4 to 8 hours, a binge ends once eaten). During a break
 first, no work, no chat, no fireside. A break ends with relief (+10, fading
 after 6 hours) and 12 hours without another one. The game raises a notice when one
 starts (`Mood.break_started`). The face shown follows the mood.
+
+**Attributes** (`core/attributes.h`, `Colonist.attributes`, part of
+`game_hash()`; design in `docs/ATTRIBUTES.md`): each settler has nine
+positions from −1 to +1, kept as integers in thousandths and drawn by
+`game_spawn_colonist()` on a bell curve (twelve uniform draws, standard
+deviation 0.3) from a stream of their own (`GAME_ATTRIBUTES_SEED`, settler
+slot and generation), so that neither the game's random stream nor the other
+settlers depend on them. Effects are continuous: a factor 2^p on walking
+(`walk()`), work pace (`colonist_work_speed()`), learning
+(`colonist_learn()`), sleep (the rest gained) and appetite (the food need
+falling); cold and heat tolerance shift by up to 5 °C the comfortable range
+(`colonist_cold_limit()`, `colonist_heat_limit()`: sleeping well, the cold
+and hot states, the nights remembered, the warm spot beside a fire); outlook
+adds up to 15 points to the mood and temperament scales every thought's
+weight from ×0.6 to ×1.5 (`Mood.outlook`, `Mood.sensitivity`, set by
+`colonist_set_attributes()`; `mood_thought_value()` shows what a thought
+weighs with it counted). `attribute_word_key()` gives the word of a position
+from five bands (ordinary shows nothing). Tests make settlers ordinary with
+`make_ordinary()` (`tests/test_settlers.h`) when they count on timings.
 
 ### Stockpiles and hauling
 

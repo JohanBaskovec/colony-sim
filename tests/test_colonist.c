@@ -2,6 +2,7 @@
 #include "core/i18n.h"
 
 #include "test_framework.h"
+#include "test_settlers.h"
 
 #include <math.h>
 #include <string.h>
@@ -58,6 +59,7 @@ static Colonist *spawn_rested(Game *game, int x, int y)
             colonist_set_knowledge_level(colonist, (KnowledgeType)k, STANDARD_LEVEL);
         }
         colonist_set_strength(colonist, COLONIST_STRENGTH_STANDARD);
+        make_ordinary(colonist);
     }
     return colonist;
 }

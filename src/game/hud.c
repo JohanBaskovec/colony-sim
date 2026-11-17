@@ -38,7 +38,9 @@
 
 typedef struct Panel {
     char lines[HUD_MAX_LINES][HUD_LINE_SIZE];
-    /* KnowledgeType + 1 of a line that has a knowledge's tooltip, else 0. */
+    /* KnowledgeType + 1 of a line that has a knowledge's tooltip (the knowledge
+     * tab), AttributeType + 1 of one that has an attribute's (the character
+     * tab), else 0. */
     uint8_t tip[HUD_MAX_LINES];
     int count;
 } Panel;
@@ -608,7 +610,7 @@ static void add_mood_lines(Panel *panel, const Colonist *colonist)
         format_signed(amount, sizeof(amount), SDL_lroundf(mood_thought_value(mood, thought)));
         if (mood_fading(mood, thought)) {
             char peak[16];
-            format_signed(peak, sizeof(peak), SDL_lroundf(mood->peak[type]));
+            format_signed(peak, sizeof(peak), SDL_lroundf(mood_thought_peak(mood, thought)));
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.thought_fading"), amount,
                       tr(def->name_key), peak);
         } else {
@@ -728,6 +730,7 @@ typedef enum ColonistSection {
     SECTION_SUMMARY,
     SECTION_NEEDS,
     SECTION_MOOD,
+    SECTION_CHARACTER,
     SECTION_KNOWLEDGE,
     SECTION_GEAR,
     SECTION_SOCIAL,
@@ -738,6 +741,7 @@ static const char *const SECTION_KEYS[SECTION_COUNT] = {
     [SECTION_SUMMARY] = NULL,
     [SECTION_NEEDS] = N_("inspector.tab.needs"),
     [SECTION_MOOD] = N_("inspector.tab.mood"),
+    [SECTION_CHARACTER] = N_("inspector.tab.character"),
     [SECTION_KNOWLEDGE] = N_("inspector.tab.knowledge"),
     [SECTION_GEAR] = N_("inspector.tab.gear"),
     [SECTION_SOCIAL] = N_("inspector.tab.social"),
@@ -779,14 +783,14 @@ static void add_needs_lines(App *app, Panel *panel, const Colonist *colonist, En
         hearths_felt_temperature(&app->game.workstations, &app->game.map, &app->game.temperatures,
                                  colonist->x, colonist->y, colonist->z) -
         chill;
-    float sleep_factor = colonist_sleep_temperature_factor(sleep_celsius);
+    float sleep_factor = colonist_sleep_temperature_factor(colonist, sleep_celsius);
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist) && sleep_factor < 1.0f) {
         char celsius[32], factor[16];
         temperature_text(celsius, sizeof(celsius), sleep_celsius, 0);
         tr_decimal(factor, sizeof(factor), sleep_factor, 2);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
-                  tr(sleep_celsius < COLONIST_COLD_SLEEP_BELOW ? "hud.colonist.cold_sleep"
-                                                               : "hud.colonist.hot_sleep"),
+                  tr(sleep_celsius < colonist_cold_limit(colonist) ? "hud.colonist.cold_sleep"
+                                                                   : "hud.colonist.hot_sleep"),
                   celsius, factor);
     }
     TilePos bed;
@@ -869,6 +873,38 @@ static void add_knowledge_lines(App *app, Panel *panel, const Colonist *colonist
     }
 }
 
+/* What stands out in the colonist's attributes, as words, body then mind;
+ * the ordinary ones are not listed. */
+static void add_character_lines(Panel *panel, const Colonist *colonist)
+{
+    static const char *const GROUP_KEYS[ATTRIBUTE_GROUP_COUNT] = {
+        [ATTRIBUTE_GROUP_BODY] = N_("attribute.group.body"),
+        [ATTRIBUTE_GROUP_MIND] = N_("attribute.group.mind"),
+    };
+    bool any = false;
+    for (int group = 0; group < ATTRIBUTE_GROUP_COUNT; group++) {
+        bool heading = false;
+        for (int type = 0; type < ATTRIBUTE_COUNT; type++) {
+            int position = colonist->attributes.position[type];
+            const char *word = attribute_word_key((AttributeType)type, position);
+            if (word == NULL || attribute_group((AttributeType)type) != (AttributeGroup)group) {
+                continue;
+            }
+            if (!heading) {
+                panel_add_text(panel, tr(GROUP_KEYS[group]));
+                heading = true;
+            }
+            any = true;
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.attribute"),
+                      tr(attribute_name_key((AttributeType)type)), tr(word));
+            panel->tip[panel->count - 1] = (uint8_t)(type + 1);
+        }
+    }
+    if (!any) {
+        panel_add_text(panel, tr("inspector.character.ordinary"));
+    }
+}
+
 /* The lines of one section of the colonist inspector. */
 static void build_colonist_section(App *app, Panel *panel, EntityId id, ColonistSection section)
 {
@@ -880,6 +916,7 @@ static void build_colonist_section(App *app, Panel *panel, EntityId id, Colonist
     case SECTION_SUMMARY: add_summary_lines(app, panel, colonist); break;
     case SECTION_NEEDS: add_needs_lines(app, panel, colonist, id); break;
     case SECTION_MOOD: add_mood_lines(panel, colonist); break;
+    case SECTION_CHARACTER: add_character_lines(panel, colonist); break;
     case SECTION_KNOWLEDGE: add_knowledge_lines(app, panel, colonist); break;
     case SECTION_GEAR: add_gear_lines(panel, colonist); break;
     case SECTION_SOCIAL:
@@ -949,9 +986,17 @@ void hud_draw_world_labels(App *app)
 typedef struct ColonistRows {
     App *app;
     const Panel *panel;
+    ColonistSection section;
 } ColonistRows;
 
-/* A section's lines; a knowledge line shows its tooltip under the mouse. */
+/* What an attribute does, in words. */
+static void attribute_tooltip(App *app, AttributeType type)
+{
+    const char *lines[1] = {tr(attribute_description_key(type))};
+    ui_tooltip(&app->ui, lines, 1);
+}
+
+/* A section's lines; a line with a tooltip shows it under the mouse. */
 static void colonist_rows(UiLayout *layout, void *userdata)
 {
     const ColonistRows *rows = userdata;
@@ -961,7 +1006,11 @@ static void colonist_rows(UiLayout *layout, void *userdata)
         ui_layout_label(layout, rows->panel->lines[i], 0.0f, false);
         int tip = rows->panel->tip[i];
         if (layout->draw && tip > 0 && colonist != NULL && ui_hovered(layout->ui, rect)) {
-            knowledge_tooltip(rows->app, colonist, (KnowledgeType)(tip - 1));
+            if (rows->section == SECTION_CHARACTER) {
+                attribute_tooltip(rows->app, (AttributeType)(tip - 1));
+            } else {
+                knowledge_tooltip(rows->app, colonist, (KnowledgeType)(tip - 1));
+            }
         }
     }
 }
@@ -987,7 +1036,7 @@ void hud_inspect_colonists(App *app)
             }
         }
     }
-    ColonistRows rows = {app, &summary};
+    ColonistRows rows = {app, &summary, SECTION_SUMMARY};
     bool open =
         inspector_box(app, one ? INSPECT_COLONIST : INSPECT_COLONISTS, title, colonist_rows, &rows);
     if (one) {
@@ -999,7 +1048,7 @@ void hud_inspect_colonists(App *app)
         if (tab >= 0) {
             Panel section = {0};
             build_colonist_section(app, &section, app->selected[0], (ColonistSection)(tab + 1));
-            ColonistRows section_rows = {app, &section};
+            ColonistRows section_rows = {app, &section, (ColonistSection)(tab + 1)};
             inspector_tab_panel(app, labels[tab], colonist_rows, &section_rows);
         }
     } else {

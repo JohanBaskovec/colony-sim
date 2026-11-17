@@ -5,6 +5,7 @@
 #include "core/temperature.h"
 
 #include "test_framework.h"
+#include "test_settlers.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -418,18 +419,46 @@ static void test_cave_stays_mild(void)
 
 static void test_sleep_temperature_factor(void)
 {
-    CHECK_NEAR(colonist_sleep_temperature_factor(20.0f), 1.0, 1e-6);
-    CHECK_NEAR(colonist_sleep_temperature_factor(COLONIST_COLD_SLEEP_BELOW), 1.0, 1e-6);
-    CHECK_NEAR(colonist_sleep_temperature_factor(COLONIST_COLD_SLEEP_BELOW - 4.0f),
+    Colonist ordinary;
+    colonist_init(&ordinary, "Ada", 30, 0, 0, 0);
+    CHECK_NEAR(colonist_sleep_temperature_factor(&ordinary, 20.0f), 1.0, 1e-6);
+    CHECK_NEAR(colonist_sleep_temperature_factor(&ordinary, COLONIST_COLD_SLEEP_BELOW), 1.0, 1e-6);
+    CHECK_NEAR(colonist_sleep_temperature_factor(&ordinary, COLONIST_COLD_SLEEP_BELOW - 4.0f),
                1.0f - 4.0f * COLONIST_SLEEP_LOSS_PER_DEGREE, 1e-6);
-    CHECK_NEAR(colonist_sleep_temperature_factor(-40.0f), COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN,
-               1e-6);
+    CHECK_NEAR(colonist_sleep_temperature_factor(&ordinary, -40.0f),
+               COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN, 1e-6);
     /* Too hot too. */
-    CHECK_NEAR(colonist_sleep_temperature_factor(COLONIST_HOT_SLEEP_ABOVE), 1.0, 1e-6);
-    CHECK_NEAR(colonist_sleep_temperature_factor(COLONIST_HOT_SLEEP_ABOVE + 6.0f),
+    CHECK_NEAR(colonist_sleep_temperature_factor(&ordinary, COLONIST_HOT_SLEEP_ABOVE), 1.0, 1e-6);
+    CHECK_NEAR(colonist_sleep_temperature_factor(&ordinary, COLONIST_HOT_SLEEP_ABOVE + 6.0f),
                1.0f - 6.0f * COLONIST_SLEEP_LOSS_PER_DEGREE, 1e-6);
-    CHECK_NEAR(colonist_sleep_temperature_factor(90.0f), COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN,
-               1e-6);
+    CHECK_NEAR(colonist_sleep_temperature_factor(&ordinary, 90.0f),
+               COLONIST_SLEEP_TEMPERATURE_FACTOR_MIN, 1e-6);
+}
+
+/* Cold and heat tolerance move the range where a settler sleeps well. */
+static void test_tolerances_move_the_comfortable_range(void)
+{
+    Colonist hardy;
+    colonist_init(&hardy, "Hardy", 30, 0, 0, 0);
+    Attributes attributes;
+    attributes_init(&attributes);
+    REQUIRE(attributes_set(&attributes, ATTRIBUTE_COLD_TOLERANCE, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&attributes, ATTRIBUTE_HEAT_TOLERANCE, -ATTRIBUTE_POSITION_MAX));
+    colonist_set_attributes(&hardy, &attributes);
+    CHECK_NEAR(colonist_cold_limit(&hardy), COLONIST_COLD_SLEEP_BELOW - ATTRIBUTE_TOLERANCE_RANGE,
+               1e-4);
+    CHECK_NEAR(colonist_heat_limit(&hardy), COLONIST_HOT_SLEEP_ABOVE - ATTRIBUTE_TOLERANCE_RANGE,
+               1e-4);
+    /* Cold that would cost an ordinary settler rest costs the hardy one nothing... */
+    float chilly = COLONIST_COLD_SLEEP_BELOW - 3.0f;
+    Colonist ordinary;
+    colonist_init(&ordinary, "Ada", 30, 0, 0, 0);
+    CHECK(colonist_sleep_temperature_factor(&ordinary, chilly) < 1.0f);
+    CHECK_NEAR(colonist_sleep_temperature_factor(&hardy, chilly), 1.0, 1e-6);
+    /* ... and warmth that costs nothing to the ordinary one costs the other. */
+    float warm = COLONIST_HOT_SLEEP_ABOVE - 3.0f;
+    CHECK_NEAR(colonist_sleep_temperature_factor(&ordinary, warm), 1.0, 1e-6);
+    CHECK(colonist_sleep_temperature_factor(&hardy, warm) < 1.0f);
 }
 
 /* Ticks a settler sleeping at (x, y) takes to rest from 0.2. */
@@ -439,6 +468,7 @@ static int ticks_to_rest(Game *game, int x, int y)
     if (colonist == NULL) {
         return -1;
     }
+    make_ordinary(colonist);
     for (int type = 0; type < WORK_TYPE_COUNT; type++) {
         colonist_set_work_priority(colonist, (WorkType)type, WORK_PRIORITY_DISABLED);
     }
@@ -500,6 +530,8 @@ static void test_rain_wets_settlers(void)
     Colonist *out = game_colonist(&game, game_spawn_colonist(&game, 8, 8, 0));
     Colonist *in = game_colonist(&game, game_spawn_colonist(&game, 20, 20, 0));
     REQUIRE(out != NULL && in != NULL);
+    make_ordinary(out);
+    make_ordinary(in);
     for (int type = 0; type < WORK_TYPE_COUNT; type++) {
         colonist_set_work_priority(out, (WorkType)type, WORK_PRIORITY_DISABLED);
         colonist_set_work_priority(in, (WorkType)type, WORK_PRIORITY_DISABLED);
@@ -528,6 +560,7 @@ static Colonist *spawn_sleeper(Game *game, int x, int y)
 {
     Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
     if (colonist != NULL) {
+        make_ordinary(colonist);
         for (int type = 0; type < WORK_TYPE_COUNT; type++) {
             colonist_set_work_priority(colonist, (WorkType)type, WORK_PRIORITY_DISABLED);
         }
@@ -634,6 +667,7 @@ int main(void)
     RUN_TEST(test_cover_follows_the_levels_above);
     RUN_TEST(test_cave_stays_mild);
     RUN_TEST(test_sleep_temperature_factor);
+    RUN_TEST(test_tolerances_move_the_comfortable_range);
     RUN_TEST(test_cold_sleep_is_longer);
     RUN_TEST(test_rain_wets_settlers);
     RUN_TEST(test_sleeping_beside_a_fire);

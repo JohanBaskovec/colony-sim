@@ -3,6 +3,9 @@
  * MOOD_NEUTRAL plus what each of its thoughts weighs now.
  *
  * Nothing is all or nothing: every thought weighs more or less over time.
+ * A settler's character (docs/ATTRIBUTES.md) sets how the mood is summed up:
+ * its outlook adds points, its temperament scales what every thought weighs
+ * (mood_set_character()).
  * A state is on while something lasts (hungry, cold, soaked, out in the
  * rain...: the colonist module sets the states every MOOD_UPDATE_TICKS): it
  * sets in over MOOD_STATE_RISE_HOURS, some grow worse the longer they last
@@ -138,8 +141,10 @@ typedef enum MoodBreak {
 } MoodBreak;
 
 typedef struct Mood {
-    float value;                 /* MOOD_NEUTRAL plus every thought, MOOD_MIN..MOOD_MAX. */
-    ThoughtMask states;          /* States on now. */
+    float value;        /* MOOD_NEUTRAL, the outlook and every thought, MOOD_MIN..MOOD_MAX. */
+    float outlook;      /* Points added to the mood (0: ordinary). */
+    float sensitivity;  /* What every thought weighs, as a factor (1: ordinary). */
+    ThoughtMask states; /* States on now. */
     float weight[THOUGHT_COUNT]; /* What each thought weighs now (0: none). */
     float peak[THOUGHT_COUNT];   /* The most it weighed since it was last renewed. */
     /* Memories: ticks since renewed; states: ticks on (0 when off). */
@@ -160,8 +165,12 @@ typedef struct Mood {
 /* NULL when out of range. */
 const ThoughtDef *thought_def(ThoughtType type);
 
-/* Neutral, no thought. */
+/* Neutral, no thought, an ordinary character. */
 void mood_init(Mood *mood);
+
+/* Sets the outlook (points added to the mood) and the sensitivity (the
+ * factor every thought weighs by), and sums the mood up again. */
+void mood_set_character(Mood *mood, float outlook, float sensitivity);
 
 /* Remembers something that happened: renewed to its full value, or added
  * (up to max_stack times the value); its plateau starts over. Ignored for
@@ -174,8 +183,12 @@ void mood_set_states(Mood *mood, ThoughtMask states);
 /* Whether a thought weighs anything now (a state over may still fade). */
 bool mood_has(const Mood *mood, ThoughtType type);
 
-/* What a thought weighs now (0 when it does not). */
+/* What a thought weighs on the mood now, its sensitivity counted (0 when it
+ * does not). */
 float mood_thought_value(const Mood *mood, ThoughtType type);
+
+/* The most it weighed since it was last renewed, sensitivity counted. */
+float mood_thought_peak(const Mood *mood, ThoughtType type);
 
 /* Whether a thought is fading: a memory past its plateau, a state over. */
 bool mood_fading(const Mood *mood, ThoughtType type);

@@ -57,6 +57,14 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, 
     colonist->site = CONSTRUCTION_NONE;
     colonist->chat_topic = KNOWLEDGE_NONE;
     mood_init(&colonist->mood);
+    attributes_init(&colonist->attributes);
+}
+
+void colonist_set_attributes(Colonist *colonist, const Attributes *attributes)
+{
+    colonist->attributes = *attributes;
+    mood_set_character(&colonist->mood, attribute_outlook_points(attributes),
+                       attribute_thought_weight(attributes));
 }
 
 bool colonist_set_work_priority(Colonist *colonist, WorkType type, int priority)
@@ -111,7 +119,8 @@ double colonist_learn(Colonist *colonist, KnowledgeType knowledge, KnowledgeSour
     }
     double *level = &colonist->knowledge[knowledge];
     double before = *level;
-    rate *= mood_learn_factor(colonist->mood.value);
+    rate *= mood_learn_factor(colonist->mood.value) *
+            attribute_factor(&colonist->attributes, ATTRIBUTE_LEARNING);
     *level = knowledge_learn_capped(before, rate, hours, colonist->age, cap);
     double gain = *level - before;
     if (!(gain > 0.0)) {
@@ -368,7 +377,8 @@ float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge)
     if ((unsigned)knowledge < KNOWLEDGE_COUNT) {
         speed *= knowledge_work_speed(colonist->knowledge[knowledge]);
     }
-    return speed * mood_work_factor(colonist->mood.value);
+    return speed * mood_work_factor(colonist->mood.value) *
+           attribute_factor(&colonist->attributes, ATTRIBUTE_WORK_PACE);
 }
 
 double colonist_work_level(const Colonist *colonist, KnowledgeType knowledge)
@@ -958,9 +968,20 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
     }
 }
 
-float colonist_sleep_temperature_factor(float celsius)
+float colonist_cold_limit(const Colonist *colonist)
 {
-    float beyond = fmaxf(COLONIST_COLD_SLEEP_BELOW - celsius, celsius - COLONIST_HOT_SLEEP_ABOVE);
+    return COLONIST_COLD_SLEEP_BELOW - attribute_cold_shift(&colonist->attributes);
+}
+
+float colonist_heat_limit(const Colonist *colonist)
+{
+    return COLONIST_HOT_SLEEP_ABOVE + attribute_heat_shift(&colonist->attributes);
+}
+
+float colonist_sleep_temperature_factor(const Colonist *colonist, float celsius)
+{
+    float beyond =
+        fmaxf(colonist_cold_limit(colonist) - celsius, celsius - colonist_heat_limit(colonist));
     if (beyond <= 0.0f) {
         return 1.0f;
     }
@@ -1007,22 +1028,28 @@ static void update_wetness(Colonist *colonist, const ColonistContext *context)
     }
 }
 
-static bool comfortable_to_sleep(float celsius)
+static bool comfortable_to_sleep(const Colonist *colonist, float celsius)
 {
-    return celsius >= COLONIST_COLD_SLEEP_BELOW && celsius <= COLONIST_HOT_SLEEP_ABOVE;
+    return celsius >= colonist_cold_limit(colonist) && celsius <= colonist_heat_limit(colonist);
 }
+
+typedef struct WarmSpotSearch {
+    const Colonist *colonist;
+    const ColonistContext *context;
+} WarmSpotSearch;
 
 /* Search filter: a free tile beside a fire where it feels right to sleep. */
 static bool is_warm_spot(const Map *map, int x, int y, int z, void *userdata)
 {
-    const ColonistContext *context = userdata;
+    const WarmSpotSearch *search = userdata;
+    const ColonistContext *context = search->context;
     TilePos tile = {(int16_t)x, (int16_t)y, (int16_t)z};
     return workstation_at(context->workstations, x, y, z) == WORKSTATION_NONE &&
            map_structure(map, x, y, z) == STRUCTURE_NONE &&
            !reservations_taken_by_other(context->reservations, RESERVATION_BED, tile,
                                         context->worker_id) &&
            hearths_radiant_warmth(context->workstations, map, x, y, z) > 0.0f &&
-           comfortable_to_sleep(felt_temperature(context, x, y, z));
+           comfortable_to_sleep(search->colonist, felt_temperature(context, x, y, z));
 }
 
 static bool any_fire_burning(const ColonistContext *context)
@@ -1040,13 +1067,15 @@ static bool any_fire_burning(const ColonistContext *context)
  * burning fire that feels right, if there is one. Returns whether it goes. */
 static bool go_to_warm_spot(Colonist *colonist, const ColonistContext *context)
 {
-    if (context->temperatures == NULL || comfortable_to_sleep(felt_here(colonist, context)) ||
+    if (context->temperatures == NULL ||
+        comfortable_to_sleep(colonist, felt_here(colonist, context)) ||
         !any_fire_burning(context)) {
         return false;
     }
     TilePos spot;
+    WarmSpotSearch search = {colonist, context};
     if (!pathfinder_find_nearest(context->pathfinder, context->map, current_tile(colonist),
-                                 is_warm_spot, (void *)context, COLONIST_WARM_SPOT_MAX_COST,
+                                 is_warm_spot, &search, COLONIST_WARM_SPOT_MAX_COST,
                                  &colonist->path, &spot)) {
         return false;
     }
@@ -1062,7 +1091,8 @@ static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context)
     if (colonist_is_moving(colonist) || context->temperatures == NULL ||
         !search_allowed(colonist, SEARCH_WARM_SPOT) ||
         structure_is_bed(map_structure(context->map, colonist->x, colonist->y, colonist->z)) ||
-        comfortable_to_sleep(felt_here(colonist, context)) || !any_fire_burning(context)) {
+        comfortable_to_sleep(colonist, felt_here(colonist, context)) ||
+        !any_fire_burning(context)) {
         return;
     }
     colonist->search_cooldown[SEARCH_WARM_SPOT] = COLONIST_WARM_SPOT_CHECK_TICKS;
@@ -1082,7 +1112,7 @@ static float rest_factor(const Colonist *colonist, const ColonistContext *contex
     StructureType bed = map_structure(context->map, colonist->x, colonist->y, colonist->z);
     float factor =
         structure_is_bed(bed) ? structure_def(bed)->rest_factor : COLONIST_GROUND_REST_FACTOR;
-    return factor * colonist_sleep_temperature_factor(felt);
+    return factor * colonist_sleep_temperature_factor(colonist, felt);
 }
 
 /* A sleep ends: after a real one, the colonist remembers how it slept. */
@@ -3904,9 +3934,10 @@ static ThoughtMask mood_states(Colonist *colonist, const ColonistContext *contex
     }
     if (context->temperatures != NULL) {
         float felt = felt_here(colonist, context);
-        if (!asleep && felt < MOOD_COLD_CELSIUS) {
+        if (!asleep && felt < MOOD_COLD_CELSIUS - attribute_cold_shift(&colonist->attributes)) {
             states |= THOUGHT_BIT(THOUGHT_COLD);
-        } else if (!asleep && felt > MOOD_HOT_CELSIUS) {
+        } else if (!asleep &&
+                   felt > MOOD_HOT_CELSIUS + attribute_heat_shift(&colonist->attributes)) {
             states |= THOUGHT_BIT(THOUGHT_HOT);
         }
         if (temperature_at(context->temperatures, colonist->x, colonist->y, colonist->z) <
@@ -3952,7 +3983,9 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
     float *food = &colonist->needs[NEED_FOOD];
     float *water = &colonist->needs[NEED_WATER];
     float *rest = &colonist->needs[NEED_REST];
-    *food = clampf(*food - NEED_FOOD_DECAY_PER_TICK, 0.0f, 1.0f);
+    *food = clampf(*food - NEED_FOOD_DECAY_PER_TICK *
+                               attribute_factor(&colonist->attributes, ATTRIBUTE_APPETITE),
+                   0.0f, 1.0f);
     *water = clampf(*water - NEED_WATER_DECAY_PER_TICK, 0.0f, 1.0f);
     if (colonist->ember_ticks > 0) {
         colonist->ember_ticks--;
@@ -3965,12 +3998,13 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
     if (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist)) {
         float felt = context->temperatures != NULL ? felt_here(colonist, context)
                                                    : felt_temperature(context, 0, 0, 0);
-        float gain = NEED_REST_GAIN_PER_TICK * rest_factor(colonist, context, felt);
+        float gain = NEED_REST_GAIN_PER_TICK * rest_factor(colonist, context, felt) *
+                     attribute_factor(&colonist->attributes, ATTRIBUTE_SLEEP);
         *rest = clampf(*rest + gain, 0.0f, 1.0f);
         colonist->sleep_ticks++;
-        if (felt < COLONIST_COLD_SLEEP_BELOW) {
+        if (felt < colonist_cold_limit(colonist)) {
             colonist->sleep_cold_ticks++;
-        } else if (felt > COLONIST_HOT_SLEEP_ABOVE) {
+        } else if (felt > colonist_heat_limit(colonist)) {
             colonist->sleep_hot_ticks++;
         }
         if (colonist->wetness >= MOOD_SOAKED_WETNESS) {
@@ -4199,8 +4233,9 @@ static void walk(Colonist *colonist, const ColonistContext *context)
     if (next.x != colonist->x && next.y != colonist->y) {
         cost *= SQRT2;
     }
-    colonist->move_progress +=
-        COLONIST_WALK_SPEED * colonist_load_speed_factor(colonist) / (float)TICKS_PER_SECOND / cost;
+    colonist->move_progress += COLONIST_WALK_SPEED * colonist_load_speed_factor(colonist) *
+                               attribute_factor(&colonist->attributes, ATTRIBUTE_WALKING) /
+                               (float)TICKS_PER_SECOND / cost;
     if (colonist->move_progress >= 1.0f) {
         colonist->x = next.x;
         colonist->y = next.y;
