@@ -775,6 +775,16 @@ static void test_climbing(void)
             CHECK_EQ_INT(path.steps[i].y, path.steps[i - 1].y);
         }
     }
+    /* Animals climb no tree: neither up to the foliage, nor down from it. */
+    finder.walker = PATH_WALKER_ANIMAL;
+    CHECK(!pathfinder_find(&finder, &map, start, top, PATH_NO_COST_LIMIT, &path));
+    CHECK(!pathfinder_find(&finder, &map, top, start, PATH_NO_COST_LIMIT, &path));
+    CHECK(path_walker_can_step(PATH_WALKER_SETTLER, &map, (TilePos){11, 10, 0},
+                               (TilePos){11, 10, 1}));
+    CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){11, 10, 0},
+                                (TilePos){11, 10, 1}));
+    CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){11, 10, 1},
+                                (TilePos){11, 10, 0}));
     path_free(&path);
     pathfinder_free(&finder);
     items_free(&items);

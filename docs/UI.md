@@ -125,6 +125,11 @@ become tabs:
 | Stockpile zone      | Name, priority, size                          | Storage (filters)                                 | Build another, delete         |
 | Gathering zone      | Name, priority, size                          | Resources                                         | Build another, delete         |
 | Tile                | What lies there: structure, roof, site, items, plant, each with Forbid/Allow | —                          | Build another                 |
+| Wild animal         | What it is called (a hind, a stag) as the title; species, sex, activity, needs as bars (tooltips), herd | — | (later: hunt)                 |
+
+A wild animal is selected by a click on it, where the colony sees it (after
+the settlers, before what lies on the tile; a click again on it goes on to
+what is under it). It is dropped when the animal goes out of sight.
 
 When nothing is selected and no tool is in use, the box shows what lies
 under the mouse (the old tile readout).
@@ -220,7 +225,9 @@ the levels below: unexplored tiles are black, tiles seen before but out of
 view now are drawn as last seen under a grey veil, tiles in view as they are.
 The tile readout says "Unexplored" or that a tile is out of sight and shown as last seen; the
 temperature view only covers tiles in view. Tools refuse unexplored tiles
-(the card says why): the colony explores by sending settlers.
+(the card says why): the colony explores by sending settlers. Wild animals
+are only drawn, and can only be selected, where a settler sees them now:
+nothing of them is remembered.
 
 ### Colony log
 
@@ -255,7 +262,8 @@ The debug windows (F4 cheats, F5 items) and the debug readout (F3) have no
 buttons: keyboard only. The readout goes to the top right corner. With
 vision, F4 gets Reveal map and See everything. Both there, with the option
 that veils what the selected settler does not see (what no settler sees when
-nobody is selected), on the level shown.
+nobody is selected), on the level shown. F4 also has a tool per species to
+spawn wild animals with a click (Shift: a male).
 
 ## Theme, scale and accessibility
 

@@ -178,6 +178,9 @@ static void debug_card(App *app, int mode, Card *card)
         card_add_text(card, CARD_TITLE, tr("hud.tool.plant_tree"));
     } else if (mode == APP_DEBUG_GROW_TREE) {
         card_add_text(card, CARD_TITLE, tr("hud.tool.grow_tree"));
+    } else if (mode == APP_DEBUG_SPAWN_ANIMAL) {
+        TR_FORMAT(card_add(card, CARD_TITLE), TEXT_SIZE, tr("hud.tool.spawn_animal"),
+                  tr(animal_def(app->debug_animal)->name_key));
     } else if (mode == APP_DEBUG_TELEPORT) {
         tr_integer(count, sizeof(count), app->selected_count);
         TR_FORMAT(card_add(card, CARD_TITLE), TEXT_SIZE,

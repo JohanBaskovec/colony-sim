@@ -60,6 +60,18 @@ static const ItemType TOOL_TYPES[] = {ITEM_COBBLE, ITEM_CHOPPER, ITEM_FLAKE, ITE
 static const char *const TOOL_NAMES[] = {"cobble", "chopper", "flake", "hand_axe"};
 #define TOOL_SPRITE_COUNT ((int)SDL_arraysize(TOOL_TYPES))
 
+/* Animals: a sprite per species (AnimalDef.id in the file name), sex and pose. */
+static const char *const ANIMAL_SEX_NAMES[ANIMAL_SEX_COUNT] = {
+    [ANIMAL_FEMALE] = "female",
+    [ANIMAL_MALE] = "male",
+};
+static const char *const ANIMAL_POSE_NAMES[ANIMAL_POSE_COUNT] = {
+    [ANIMAL_POSE_STAND] = "stand",
+    [ANIMAL_POSE_EAT] = "eat",
+    [ANIMAL_POSE_SLEEP] = "sleep",
+};
+#define ANIMAL_SPRITE_COUNT (ANIMAL_SPECIES_COUNT * ANIMAL_SEX_COUNT * ANIMAL_POSE_COUNT)
+
 /* Tile textures: TILE_SPRITE_SIZE square files, the texture of one tile with
  * a copy of its opposite edges around it (TILE_SPRITE_PADDING pixels on each
  * side), so that filtering at the edge of a tile blends it with the next
@@ -87,12 +99,13 @@ enum {
     HAIR_FIRST = BEARD_FIRST + APPEARANCE_BEARD_COUNT - 1,
     FIST_FIRST = HAIR_FIRST + APPEARANCE_HAIR_STYLE_COUNT - 1,
     TOOL_FIRST = FIST_FIRST + APPEARANCE_SKIN_COUNT,
-    GROUND_FIRST = TOOL_FIRST + 4,
+    ANIMAL_FIRST = TOOL_FIRST + 4,
+    GROUND_FIRST = ANIMAL_FIRST + ANIMAL_SPRITE_COUNT,
     WALL_FIRST = GROUND_FIRST + GROUND_SPRITE_COUNT,
     GRASS_FIRST = WALL_FIRST + WALL_SPRITE_COUNT,
     SPRITE_COUNT = GRASS_FIRST + GRASS_SPRITE_COUNT
 };
-SDL_COMPILE_TIME_ASSERT(tool_sprites, SDL_arraysize(TOOL_TYPES) == GROUND_FIRST - TOOL_FIRST &&
+SDL_COMPILE_TIME_ASSERT(tool_sprites, SDL_arraysize(TOOL_TYPES) == ANIMAL_FIRST - TOOL_FIRST &&
                                           SDL_arraysize(TOOL_NAMES) == SDL_arraysize(TOOL_TYPES));
 SDL_COMPILE_TIME_ASSERT(ground_sprites, SDL_arraysize(GROUND_TERRAINS) == GROUND_SPRITE_COUNT &&
                                             SDL_arraysize(GROUND_NAMES) == GROUND_SPRITE_COUNT);
@@ -167,6 +180,15 @@ SpriteId sprite_tool(ItemType type)
     return -1;
 }
 
+SpriteId sprite_animal(AnimalSpecies species, AnimalSex sex, AnimalPose pose)
+{
+    return ANIMAL_FIRST +
+           (clampi((int)species, 0, ANIMAL_SPECIES_COUNT - 1) * ANIMAL_SEX_COUNT +
+            clampi((int)sex, 0, ANIMAL_SEX_COUNT - 1)) *
+               ANIMAL_POSE_COUNT +
+           clampi((int)pose, 0, ANIMAL_POSE_COUNT - 1);
+}
+
 SpriteId sprite_ground(Terrain terrain)
 {
     for (int i = 0; i < GROUND_SPRITE_COUNT; i++) {
@@ -222,8 +244,15 @@ static void sprite_file_name(SpriteId id, char *out, size_t size)
         SDL_snprintf(out, size, "hair_%s", HAIR_NAMES[id - HAIR_FIRST + 1]);
     } else if (id < TOOL_FIRST) {
         SDL_snprintf(out, size, "fist_%d", id - FIST_FIRST);
-    } else if (id < GROUND_FIRST) {
+    } else if (id < ANIMAL_FIRST) {
         SDL_snprintf(out, size, "tool_%s", TOOL_NAMES[id - TOOL_FIRST]);
+    } else if (id < GROUND_FIRST) {
+        int index = id - ANIMAL_FIRST;
+        SDL_snprintf(
+            out, size, "animal_%s_%s_%s",
+            animal_def((AnimalSpecies)(index / (ANIMAL_SEX_COUNT * ANIMAL_POSE_COUNT)))->id,
+            ANIMAL_SEX_NAMES[index / ANIMAL_POSE_COUNT % ANIMAL_SEX_COUNT],
+            ANIMAL_POSE_NAMES[index % ANIMAL_POSE_COUNT]);
     } else if (id < WALL_FIRST) {
         SDL_snprintf(out, size, "ground_%s", GROUND_NAMES[id - GROUND_FIRST]);
     } else if (id < GRASS_FIRST) {

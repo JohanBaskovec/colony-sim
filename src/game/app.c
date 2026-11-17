@@ -29,6 +29,8 @@
  * too dark to see). */
 /* Height of a colonist's body above its position, in tiles (for clicks). */
 #define APP_PICK_BODY_OFFSET 0.7f
+/* The same for animals, lower on their legs. */
+#define APP_PICK_ANIMAL_OFFSET 0.45f
 #define APP_DRAG_THRESHOLD 5.0f /* Pixels before a click becomes a box selection. */
 
 static const SDL_Color HOVER_COLOR = {255, 255, 255, 200};
@@ -111,7 +113,8 @@ static bool has_selection(const App *app)
 {
     return app->selected_count > 0 || app->selected_stockpile != STOCKPILE_NONE ||
            app->selected_station != WORKSTATION_NONE ||
-           app->selected_gather_zone != GATHER_ZONE_NONE || app->tile_selected;
+           app->selected_gather_zone != GATHER_ZONE_NONE || app->tile_selected ||
+           !entity_id_is_none(app->selected_animal);
 }
 
 static void clear_selection(App *app)
@@ -121,6 +124,7 @@ static void clear_selection(App *app)
     app->selected_station = WORKSTATION_NONE;
     app->selected_gather_zone = GATHER_ZONE_NONE;
     app->tile_selected = false;
+    app->selected_animal = ENTITY_NONE;
 }
 
 /* The construction site on a tile. */
@@ -301,6 +305,15 @@ static void select_gather_zone(App *app, int index)
     }
     app->selected_gather_zone = zone != NULL ? index : GATHER_ZONE_NONE;
     app->selected_gather_zone_number = zone != NULL ? zone->number : 0;
+}
+
+/* Forgets the selected animal once it is gone, or out of the colony's sight. */
+static void prune_animal_selection(App *app)
+{
+    if (!entity_id_is_none(app->selected_animal) &&
+        !game_animal_seen(&app->game, app->selected_animal)) {
+        app->selected_animal = ENTITY_NONE;
+    }
 }
 
 /* Forgets the selected gathering zone once it no longer exists. */
@@ -575,6 +588,9 @@ bool app_init(App *app, const CliOptions *options)
     if (options->colonist_count > 0) {
         params.colonist_count = options->colonist_count;
     }
+    params.wildlife = options->has_wildlife
+                          ? GAME_WILDLIFE_DENSITY * (float)options->wildlife / 100.0f
+                          : GAME_WILDLIFE_DENSITY;
     if (!game_init(&app->game, &params)) {
         LOG_ERROR("World generation failed");
         return false;
@@ -582,8 +598,9 @@ bool app_init(App *app, const CliOptions *options)
     app->game_ready = true;
     apply_test_options(&app->game, options);
     app->show_vision = (options->debug & CLI_DEBUG_VISION) != 0;
-    LOG_INFO("World generated: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists", params.world.seed,
-             params.world.width, params.world.height, app->game.colonist_pool.count);
+    LOG_INFO("World generated: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists, %u animals",
+             params.world.seed, params.world.width, params.world.height,
+             app->game.colonist_pool.count, app->game.animals.pool.count);
 
     /* Start centered on the first colonist (or the map center if there is none). */
     float start_x = (float)params.world.width * 0.5f;
@@ -852,6 +869,8 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     }
     int x = (int)floorf(world_x), y = (int)floorf(world_y);
     ClickTarget current = click_target_selected(app, x, y, z);
+    /* A click on the selected animal goes on to what is under it. */
+    EntityId was_animal = app->selected_animal;
     if (!additive) {
         app->selected_count = 0;
     }
@@ -859,8 +878,18 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     app->selected_station = WORKSTATION_NONE;
     app->selected_gather_zone = GATHER_ZONE_NONE;
     app->tile_selected = false;
+    app->selected_animal = ENTITY_NONE;
     if (entity_id_is_none(id)) {
         if (additive) {
+            return;
+        }
+        /* An animal the colony sees, before what is on the ground. */
+        EntityId animal = game_animal_at(&app->game, world_x, world_y, z);
+        if (entity_id_is_none(animal)) {
+            animal = game_animal_at(&app->game, world_x, world_y + APP_PICK_ANIMAL_OFFSET, z);
+        }
+        if (!entity_id_is_none(animal) && !entity_id_equal(animal, was_animal)) {
+            app->selected_animal = animal;
             return;
         }
         int first = current == CLICK_TARGET_COUNT ? 0 : (int)current + 1;
@@ -908,6 +937,7 @@ void app_select_colonist(App *app, EntityId id, bool additive)
     app->selected_station = WORKSTATION_NONE;
     app->selected_gather_zone = GATHER_ZONE_NONE;
     app->tile_selected = false;
+    app->selected_animal = ENTITY_NONE;
     int index = find_selected(app, id);
     if (additive && index >= 0) {
         select_remove_at(app, index);
@@ -941,6 +971,8 @@ static void select_in_box(App *app, float screen_x, float screen_y, bool additiv
     app->selected_stockpile = STOCKPILE_NONE;
     app->selected_station = WORKSTATION_NONE;
     app->selected_gather_zone = GATHER_ZONE_NONE;
+    app->tile_selected = false;
+    app->selected_animal = ENTITY_NONE;
     for (int i = 0; i < count; i++) {
         select_add(app, found[i]);
     }
@@ -987,6 +1019,14 @@ static void apply_debug_tool(App *app, float screen_x, float screen_y)
         }
         break;
     case APP_DEBUG_PLANT_TREE: game_debug_plant_tree(&app->game, x, y, z); break;
+    case APP_DEBUG_SPAWN_ANIMAL: { /* Shift: a male. On the ground seen there, however deep. */
+        int level = map_view_level(&app->game.map, x, y, z);
+        game_debug_spawn_animal(&app->game, app->debug_animal,
+                                (SDL_GetModState() & SDL_KMOD_SHIFT) != 0 ? ANIMAL_MALE
+                                                                          : ANIMAL_FEMALE,
+                                x, y, level >= 0 ? level : z);
+        break;
+    }
     case APP_DEBUG_GROW_TREE: /* Shift: all the way. */
         game_debug_grow_tree(&app->game, x, y, z, (SDL_GetModState() & SDL_KMOD_SHIFT) != 0);
         break;
@@ -1253,7 +1293,8 @@ static void render_frame(App *app)
             render_structures(app->renderer, &app->game, &below);
             render_workstations(app->renderer, &app->game, &below, WORKSTATION_NONE);
             render_items(app->renderer, &app->game, &below);
-            render_world_sprites(app->renderer, app->sprites, &app->game, &below, NULL, 0);
+            render_world_sprites(app->renderer, app->sprites, &app->game, &below, NULL, 0,
+                                 app->selected_animal);
             int next = z + 1;
             while (next < app->camera.level && (levels & (1u << next)) == 0) {
                 next++;
@@ -1271,7 +1312,7 @@ static void render_frame(App *app)
     render_workstations(app->renderer, &app->game, &app->camera, app->selected_station);
     render_items(app->renderer, &app->game, &app->camera);
     render_world_sprites(app->renderer, app->sprites, &app->game, &app->camera, app->selected,
-                         app->selected_count);
+                         app->selected_count, app->selected_animal);
     if (app->game.fog_on) {
         render_fog(app->renderer, &app->game, &app->camera);
     }
@@ -1474,6 +1515,7 @@ void app_run(App *app)
         prune_station_selection(app);
         prune_gather_zone_selection(app);
         prune_tile_selection(app);
+        prune_animal_selection(app);
         update_fps(app, dt);
         app->render_elapsed += draw_frame(app);
     }

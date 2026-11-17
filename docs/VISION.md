@@ -114,8 +114,9 @@ themselves still know everything (step 3); the rest is design. Values marked
 
 Everything a tile shows: terrain, rock, slope, the plant with its growth,
 stocks and food, litter (branches, twigs, nuts), items, a structure or a
-construction site, dirt. Creatures (settlers of other groups, animals later)
-are only shown where they are seen, since they move.
+construction site, dirt. Creatures (wild animals, `core/animal.h`; settlers
+of other groups later) are only shown where they are seen, since they move:
+`game_animal_seen()`.
 
 The colony's own settlers are always known (where they are, what they do):
 they belong to it. So are its **plans**, which are the player's intent and
@@ -274,7 +275,9 @@ fog is crossed a few tiles at a time, from its edge.
 - An eyesight attribute (`docs/ATTRIBUTES.md`).
 - Climbing a tree or a tower as a lookout (falls out of the 3D sight).
 - Hearing: noises out of view (a cave-in, a fight) known without being seen.
-- Wildlife seen and not seen; combat uses the same lines of sight (M6).
+- Combat uses the same lines of sight (M6). Wild animals have simpler senses
+  of their own for now (a straight line on their level, and hearing close
+  by: `animal_notices()`), not the settlers' 3D sight.
 - Saving the picture (M7).
 
 ## 9. Open questions

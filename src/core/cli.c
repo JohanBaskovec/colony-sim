@@ -26,6 +26,9 @@ const char *cli_usage(void)
            "  --size <n>      Map width and height in tiles (16-1024). Default: 200.\n"
            "  --colonists <n> Starting colonists (1-" STRINGIFY(
                COLONIST_MAX) "). Default: 3.\n"
+                             "  --animals <n>   Wild animals, in percent of the usual number "
+                             "(0-400, 0: none).\n"
+                             "                  Default: 100.\n"
                              "  --scenario <n>  Test situation set up at the start, as in "
                              "bench_simulation:\n"
                              "                  0 none, 1 gathering, 2 unreachable jobs, 3 "
@@ -185,6 +188,15 @@ bool cli_parse(CliOptions *options, int argc, char **argv, char *error, size_t e
                 return false;
             }
             options->colonist_count = (int)count;
+        } else if ((match = match_option("--animals", argc, argv, &i, &value)) != 0) {
+            uint64_t percent = 0;
+            if (match < 0 || !parse_u64(value, &percent) || percent > CLI_WILDLIFE_MAX) {
+                snprintf(error, error_size, "--animals expects an integer between 0 and %d",
+                         CLI_WILDLIFE_MAX);
+                return false;
+            }
+            options->has_wildlife = true;
+            options->wildlife = (int)percent;
         } else if ((match = match_option("--scenario", argc, argv, &i, &value)) != 0) {
             uint64_t scenario = 0;
             if (match < 0 || !parse_u64(value, &scenario) || scenario >= SCENARIO_COUNT) {

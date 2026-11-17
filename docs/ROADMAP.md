@@ -158,7 +158,10 @@ theme and migration plan).
 - [ ] Orders on a workstation destroyed out of view: keep its bills until someone sees it gone (with enemies)
 - [ ] Vision, step 5: measure (bench_simulation and --bench-render with vision on), tune, checks on screen
 - [ ] Vision, later: darkness shortens sight, eyesight attribute, lookouts (trees, towers), hearing, saving the picture (M7)
-- [ ] Wildlife, hunting
+- [x] Wildlife, step 1: wild plant eaters living their own life (`core/animal.h`): roe deer, red deer, wild boar and hare, males and females, each with food, water and rest; they graze the grass down, eat what wild plants bear (blackberries, greens, mushrooms, the roots boars dig up, fallen hazelnuts: less for the gatherers), drink at the nearest water and sleep in the hours of their species (deer at night, boars and hares by day); herds by species (hinds and sows in herds behind a leader, stags in small groups, boars, roe deer and hares alone or nearly); they fear the settlers (flight on sight, the herd with them, nothing done near a settler) and are ignored by them; no door, ladder nor tree for them; a fixed number placed with the world (`--animals`, none in tests and benchmarks unless asked), nothing dies yet; drawn from the side in three poses, only where a settler sees them under the fog; an animal's window (species, sex, activity, needs, herd); a debug tool to spawn them
+- [ ] Wildlife, step 2: carnivores that attack and eat other animals (it takes death and carcasses: to settle with health and injuries)
+- [ ] Wildlife, step 3: the population renews itself (births, or arrivals from the map's edges), so that predators and hunters do not empty the map
+- [ ] Wildlife, later: hunting; animals raiding the colony's food and fields; tracks and droppings; winter food (bark, twigs) when the grass is gone; young; walking and grazing animated beyond a bob
 
 ## M6: Danger
 

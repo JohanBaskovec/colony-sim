@@ -5,9 +5,12 @@
  * time (the simulation is deterministic: a slow tick can be replayed, e.g.
  * under perf). Not part of the test suite.
  *
- *     bench_simulation [colonists] [days] [scenario] [map_size] [seed] [flat]
+ *     bench_simulation [colonists] [days] [scenario] [map_size] [seed] [flat] [fog] [wildlife]
  *
  * `flat`: a world without relief (one level), to compare with older versions.
+ * `fog`, `fog-revealed`: with the fog of war. `wildlife`: with wild animals
+ * (core/animal.h), or a number: their density (1 as played). `-` skips an
+ * argument.
  *
  * Profiling a slow tick: BENCH_TIMESTAMPS=1 perf record -g -k CLOCK_MONOTONIC
  * bench_simulation ..., then perf report --time with the times printed.
@@ -34,6 +37,45 @@ static int zone_tiles(const Game *game)
         tiles += zone != NULL ? zone->cell_count : 0;
     }
     return tiles;
+}
+
+/* How the animals fare: how many of each species, what they are doing, how
+ * their needs are on average and at worst. */
+static void print_animals(const Game *game)
+{
+    const Animals *animals = &game->animals;
+    int species[ANIMAL_SPECIES_COUNT] = {0};
+    int tasks[ANIMAL_TASK_COUNT] = {0};
+    double sum[ANIMAL_NEED_COUNT] = {0.0};
+    float lowest[ANIMAL_NEED_COUNT] = {1.0f, 1.0f, 1.0f};
+    int starving = 0, parched = 0, count = 0;
+    for (uint32_t slot = 0; slot < animals_slot_count(animals); slot++) {
+        if (entity_id_is_none(animals_id_at(animals, slot))) {
+            continue;
+        }
+        const Animal *animal = &animals->list[slot];
+        count++;
+        species[animal->species]++;
+        tasks[animal->task]++;
+        for (int need = 0; need < ANIMAL_NEED_COUNT; need++) {
+            sum[need] += animal->needs[need];
+            lowest[need] = animal->needs[need] < lowest[need] ? animal->needs[need] : lowest[need];
+        }
+        starving += animal->needs[ANIMAL_NEED_FOOD] < ANIMAL_URGENT_NEED ? 1 : 0;
+        parched += animal->needs[ANIMAL_NEED_WATER] < ANIMAL_URGENT_NEED ? 1 : 0;
+    }
+    printf("  animals %d:", count);
+    for (int i = 0; i < ANIMAL_SPECIES_COUNT; i++) {
+        printf(" %d %s", species[i], animal_def((AnimalSpecies)i)->id);
+    }
+    printf("\n    idle %d, wandering %d, eating %d, drinking %d, asleep %d, fleeing %d\n",
+           tasks[ANIMAL_TASK_IDLE], tasks[ANIMAL_TASK_WANDER], tasks[ANIMAL_TASK_EAT],
+           tasks[ANIMAL_TASK_DRINK], tasks[ANIMAL_TASK_SLEEP], tasks[ANIMAL_TASK_FLEE]);
+    printf("    food %.2f (lowest %.2f, %d starving), water %.2f (lowest %.2f, %d parched), rest "
+           "%.2f (lowest %.2f)\n",
+           sum[ANIMAL_NEED_FOOD] / count, lowest[ANIMAL_NEED_FOOD], starving,
+           sum[ANIMAL_NEED_WATER] / count, lowest[ANIMAL_NEED_WATER], parched,
+           sum[ANIMAL_NEED_REST] / count, lowest[ANIMAL_NEED_REST]);
 }
 
 /* The slowest ticks listed. */
@@ -108,6 +150,14 @@ int main(int argc, char **argv)
      * settlers searching in vain for what they have not found yet). */
     bool fog_revealed = argc > 7 && strcmp(argv[7], "fog-revealed") == 0;
     bool fog = fog_revealed || (argc > 7 && strcmp(argv[7], "fog") == 0);
+    /* 8th argument "wildlife": with wild animals, as many as in a game as played; a number:
+     * that many times more. */
+    float wildlife = 0.0f;
+    if (argc > 8 && strcmp(argv[8], "wildlife") == 0) {
+        wildlife = GAME_WILDLIFE_DENSITY;
+    } else if (argc > 8) {
+        wildlife = (float)atof(argv[8]);
+    }
 
     NewGameParams params;
     game_default_params(&params);
@@ -116,6 +166,7 @@ int main(int argc, char **argv)
     params.world.height = size;
     params.world.flat = flat;
     params.colonist_count = colonists;
+    params.wildlife = wildlife;
 
     Game game;
     if (!game_init(&game, &params)) {
@@ -208,6 +259,9 @@ int main(int argc, char **argv)
            game.constructions.used_count,
            (int)map_tile_count(&game.map) - game.map.structure_counts[STRUCTURE_NONE]);
     printf("  connectivity regions rebuilt %u times\n", game.regions.rebuilds);
+    if (animals_slot_count(&game.animals) > 0) {
+        print_animals(&game);
+    }
     printf("  state hash %016llx\n", (unsigned long long)game_hash(&game));
 
     game_shutdown(&game);

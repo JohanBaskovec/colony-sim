@@ -2375,6 +2375,16 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
 #define COLONIST_SPRITE_MARGIN (8.0f / SPRITE_PIXELS_PER_TILE)
 /* Brightness of a sleeping colonist. */
 #define COLONIST_SLEEP_SHADE 0.55f
+/* Animal sprites leave this much under the feet (the shadow), in tiles. */
+#define ANIMAL_SPRITE_MARGIN (8.0f / SPRITE_PIXELS_PER_TILE)
+/* An animal on the move bobs up and down: how high (tiles) and how fast
+ * (radians per tick) at a walk and on the run. */
+#define ANIMAL_BOB_HEIGHT 0.04f
+#define ANIMAL_WALK_BOB_RATE 0.2f
+#define ANIMAL_RUN_BOB_RATE 0.5f
+/* Room an animal takes on screen for sorting and for what hides it, in tiles. */
+#define ANIMAL_HALF_WIDTH 0.5f
+#define ANIMAL_HEIGHT 0.8f
 /* Screen area of a colonist sprite (the figure, not the empty margins) in
  * tiles around its feet, and the opacity of a tree standing in front of it:
  * nobody gets lost in a forest. */
@@ -2587,10 +2597,45 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
     }
 }
 
+/* An animal seen from the side: standing, head down while it eats or drinks,
+ * lying asleep; mirrored when it faces left, bobbing a little as it walks. */
+static void render_animal(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera,
+                          const Animal *animal, uint32_t slot, uint64_t tick, bool selected)
+{
+    float wx, wy, feet_x, feet_y, anchor_x, anchor_y;
+    animal_position(animal, &wx, &wy);
+    camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &feet_x, &feet_y);
+    camera_world_to_screen(camera, wx, wy + COLONIST_FEET + ANIMAL_SPRITE_MARGIN, &anchor_x,
+                           &anchor_y);
+    bool moving = animal_is_moving(animal);
+    AnimalPose pose = ANIMAL_POSE_STAND;
+    if (animal->task == ANIMAL_TASK_SLEEP) {
+        pose = ANIMAL_POSE_SLEEP;
+    } else if (!moving && (animal->task == ANIMAL_TASK_EAT || animal->task == ANIMAL_TASK_DRINK)) {
+        pose = ANIMAL_POSE_EAT;
+    }
+    SpriteId id = sprite_animal((AnimalSpecies)animal->species, (AnimalSex)animal->sex, pose);
+    if (selected) {
+        sprites_flush(sprites);
+        float width, height;
+        sprites_size(sprites, id, &width, &height);
+        float rx = SDL_max(4.0f, width * 0.36f);
+        fill_ring(renderer, feet_x, feet_y, rx, SDL_max(2.0f, rx * 0.3f),
+                  SDL_max(1.5f, camera->zoom * 0.04f), SELECTION_COLOR);
+    }
+    if (moving) { /* Faster on the run. */
+        float pace = animal->task == ANIMAL_TASK_FLEE ? ANIMAL_RUN_BOB_RATE : ANIMAL_WALK_BOB_RATE;
+        float phase = (float)((tick + (uint64_t)slot * 7u) % 100000u) * pace;
+        anchor_y -= SDL_fabsf(SDL_sinf(phase)) * ANIMAL_BOB_HEIGHT * camera->zoom;
+    }
+    sprites_draw(sprites, id, anchor_x, anchor_y, WHITE, animal->facing_left);
+}
+
 typedef struct DepthEntry {
     float depth;
     uint32_t slot;
     SDL_FRect area; /* On screen. */
+    bool animal;    /* An animal's slot, else a colonist's. */
 } DepthEntry;
 
 static int compare_depth(const void *a, const void *b)
@@ -2598,6 +2643,9 @@ static int compare_depth(const void *a, const void *b)
     const DepthEntry *x = a, *y = b;
     if (x->depth != y->depth) {
         return x->depth < y->depth ? -1 : 1;
+    }
+    if (x->animal != y->animal) {
+        return x->animal ? -1 : 1;
     }
     return x->slot < y->slot ? -1 : (x->slot > y->slot);
 }
@@ -2705,8 +2753,26 @@ static void render_chat_bubbles(SDL_Renderer *renderer, const Game *game, const 
     }
 }
 
+/* One of the colonists and animals to draw, in depth order. */
+static void render_entry(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
+                         const Camera *camera, const DepthEntry *entry, const EntityId *selected,
+                         int selected_count, EntityId selected_animal)
+{
+    uint64_t tick = game->clock.tick;
+    if (entry->animal) {
+        EntityId id = animals_id_at(&game->animals, entry->slot);
+        render_animal(renderer, sprites, camera, &game->animals.list[entry->slot], entry->slot,
+                      tick, entity_id_equal(id, selected_animal));
+    } else {
+        render_colonist(
+            renderer, sprites, camera, &game->colonists[entry->slot], entry->slot, tick,
+            is_selected(game_colonist_id_at(game, entry->slot), selected, selected_count));
+    }
+}
+
 void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
-                          const Camera *camera, const EntityId *selected, int selected_count)
+                          const Camera *camera, const EntityId *selected, int selected_count,
+                          EntityId selected_animal)
 {
     const int z = camera->level; /* The level shown. */
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
@@ -2723,8 +2789,8 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
     int x1 = SDL_min(map->width, visible.x1 + SPRITE_OVERFLOW_COLUMNS);
     int y1 = SDL_min(map->height, visible.y1 + SPRITE_OVERFLOW_ROWS);
 
-    /* Colonists in depth order, merged with the rows of plants below. */
-    DepthEntry order[COLONIST_MAX];
+    /* Colonists and animals in depth order, merged with the rows of plants below. */
+    static DepthEntry order[COLONIST_MAX + ANIMAL_MAX];
     int count = 0;
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game) && count < COLONIST_MAX; slot++) {
         if (entity_id_is_none(game_colonist_id_at(game, slot)) || game->colonists[slot].z != z) {
@@ -2744,27 +2810,45 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
         float half_width = COLONIST_HALF_WIDTH * camera->zoom;
         float height = COLONIST_HEIGHT * camera->zoom;
         SDL_FRect area = {sx - half_width, sy - height, 2.0f * half_width, height};
-        order[count++] = (DepthEntry){wy + COLONIST_FEET, slot, area};
+        order[count++] = (DepthEntry){wy + COLONIST_FEET, slot, area, false};
+    }
+    /* Animals: only those the colony sees now (nobody knows where the others are). */
+    for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
+        EntityId id = animals_id_at(&game->animals, slot);
+        const Animal *animal = &game->animals.list[slot];
+        if (entity_id_is_none(id) || animal->z != z) {
+            continue;
+        }
+        float wx, wy;
+        animal_position(animal, &wx, &wy);
+        if (wx < (float)x0 - 2.0f || wx > (float)x1 + 2.0f || wy < (float)visible.y0 - 1.0f ||
+            wy > (float)y1 + 2.0f || !tile_seen((int)floorf(wx), (int)floorf(wy), z) ||
+            !game_animal_seen(game, id)) {
+            continue;
+        }
+        float sx, sy;
+        camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &sx, &sy);
+        float half_width = ANIMAL_HALF_WIDTH * camera->zoom;
+        float height = ANIMAL_HEIGHT * camera->zoom;
+        SDL_FRect area = {sx - half_width, sy - height, 2.0f * half_width, height};
+        order[count++] = (DepthEntry){wy + COLONIST_FEET, slot, area, true};
     }
     qsort(order, (size_t)count, sizeof(order[0]), compare_depth);
 
     sprites_begin(sprites, camera->zoom);
-    uint64_t tick = game->clock.tick;
     int next = 0;
     for (int y = visible.y0; y < y1; y++) {
         while (next < count && order[next].depth < (float)y + PLANT_DEPTH) {
-            uint32_t slot = order[next++].slot;
-            render_colonist(renderer, sprites, camera, &game->colonists[slot], slot, tick,
-                            is_selected(game_colonist_id_at(game, slot), selected, selected_count));
+            render_entry(renderer, sprites, game, camera, &order[next++], selected, selected_count,
+                         selected_animal);
         }
         for (int x = x0; x < x1; x++) {
             render_plant(sprites, camera, map, x, y, z, order, count);
         }
     }
     while (next < count) {
-        uint32_t slot = order[next++].slot;
-        render_colonist(renderer, sprites, camera, &game->colonists[slot], slot, tick,
-                        is_selected(game_colonist_id_at(game, slot), selected, selected_count));
+        render_entry(renderer, sprites, game, camera, &order[next++], selected, selected_count,
+                     selected_animal);
     }
     sprites_flush(sprites);
     render_chat_bubbles(renderer, game, camera);

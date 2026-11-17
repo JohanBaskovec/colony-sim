@@ -48,6 +48,33 @@ static void test_measurement_options(void)
     CHECK(!cli_parse(&options, ARGC(value), value, error, sizeof(error)));
 }
 
+static void test_wildlife_option(void)
+{
+    CliOptions options;
+    char error[128];
+    char *none[] = {"colony_sim"};
+    CHECK(cli_parse(&options, ARGC(none), none, error, sizeof(error)));
+    CHECK(!options.has_wildlife); /* The usual number. */
+
+    char *argv[] = {"colony_sim", "--animals", "250"};
+    CHECK(cli_parse(&options, ARGC(argv), argv, error, sizeof(error)));
+    CHECK(options.has_wildlife);
+    CHECK_EQ_INT(options.wildlife, 250);
+
+    char *zero[] = {"colony_sim", "--animals=0"};
+    CHECK(cli_parse(&options, ARGC(zero), zero, error, sizeof(error)));
+    CHECK(options.has_wildlife);
+    CHECK_EQ_INT(options.wildlife, 0);
+
+    char *huge[] = {"colony_sim", "--animals", "401"};
+    CHECK(!cli_parse(&options, ARGC(huge), huge, error, sizeof(error)));
+    CHECK(strstr(error, "--animals") != NULL);
+    char *missing[] = {"colony_sim", "--animals"};
+    CHECK(!cli_parse(&options, ARGC(missing), missing, error, sizeof(error)));
+    char *text[] = {"colony_sim", "--animals", "many"};
+    CHECK(!cli_parse(&options, ARGC(text), text, error, sizeof(error)));
+}
+
 static void test_all_options_both_syntaxes(void)
 {
     char *argv[] = {"colony_sim", "--lang", "fr", "--seed=18446744073709551615", "--size", "256"};
@@ -156,5 +183,6 @@ int main(void)
     RUN_TEST(test_rejects_invalid_input);
     RUN_TEST(test_test_options);
     RUN_TEST(test_ui_scale);
+    RUN_TEST(test_wildlife_option);
     return test_summary();
 }

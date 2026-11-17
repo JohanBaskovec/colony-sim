@@ -1,6 +1,7 @@
 #include "game/inspector.h"
 
 #include "core/i18n.h"
+#include "game/animal_panel.h"
 #include "game/colonist_bar.h"
 #include "game/layout.h"
 #include "game/render.h"
@@ -28,6 +29,9 @@ InspectorKind inspector_kind(const App *app)
     }
     if (app->tile_selected) {
         return INSPECT_TILE;
+    }
+    if (!entity_id_is_none(app->selected_animal)) {
+        return INSPECT_ANIMAL;
     }
     if (app->selected_count == 1) {
         return INSPECT_COLONIST;
@@ -211,6 +215,7 @@ void inspector_draw(App *app)
     case INSPECT_STOCKPILE: stockpile_panel_draw(app); break;
     case INSPECT_GATHER_ZONE: gather_zone_panel_draw(app); break;
     case INSPECT_TILE: tile_panel_draw(app); break;
+    case INSPECT_ANIMAL: animal_panel_draw(app); break;
     case INSPECT_NONE: break;
     }
     if (app->inspector_tab >= app->inspector_tab_count) {

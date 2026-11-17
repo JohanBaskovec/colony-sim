@@ -14,6 +14,8 @@
 /* Interface scale (--ui-scale), in percent. */
 #define CLI_UI_SCALE_MIN 75
 #define CLI_UI_SCALE_MAX 200
+/* Most wild animals (--animals), in percent of the usual density. */
+#define CLI_WILDLIFE_MAX 400
 
 /* Cheats turned on from the start (--debug), see GameDebug in core/game.h. */
 #define CLI_DEBUG_INSTANT_BUILD (1u << 0)
@@ -32,10 +34,14 @@ typedef struct CliOptions {
     uint64_t seed;
     int map_size;       /* 0: default size. */
     int colonist_count; /* 0: default count. */
-    int scenario;       /* A Scenario (core/scenario.h), SCENARIO_NONE by default. */
-    unsigned debug;     /* CLI_DEBUG_* bits. */
-    bool no_vsync;      /* Frames as fast as possible (frame time measurements). */
-    int ui_scale;       /* Interface scale in percent, 0: default (100). */
+    /* Wild animals (--animals): how many, in percent of the usual density
+     * (0: none), when `has_wildlife`. */
+    bool has_wildlife;
+    int wildlife;
+    int scenario;   /* A Scenario (core/scenario.h), SCENARIO_NONE by default. */
+    unsigned debug; /* CLI_DEBUG_* bits. */
+    bool no_vsync;  /* Frames as fast as possible (frame time measurements). */
+    int ui_scale;   /* Interface scale in percent, 0: default (100). */
     /* Render benchmark (--bench-render): frames drawn per view, 0 when off. */
     int bench_render_frames;
     bool show_help;

@@ -3,6 +3,7 @@
 
 set(COLONY_UNIT_TESTS
     test_alert
+    test_animal
     test_appearance
     test_attributes
     test_bed

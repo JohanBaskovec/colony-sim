@@ -7,6 +7,7 @@
 #ifndef COLONY_CORE_GAME_H
 #define COLONY_CORE_GAME_H
 
+#include "core/animal.h"
 #include "core/bed.h"
 #include "core/colonist.h"
 #include "core/construction.h"
@@ -91,9 +92,17 @@ typedef struct GameDebug {
     bool instant_fell_and_mine;
 } GameDebug;
 
+/* The density of wild animals in a game as played (NewGameParams.wildlife). */
+#define GAME_WILDLIFE_DENSITY 1.0f
+
 typedef struct NewGameParams {
     WorldGenParams world;
     int colonist_count; /* Starting colonists, placed near the map center. */
+    /* Wild animals living in the world (core/animal.h): how many of them,
+     * as a multiple of AnimalDef.density (GAME_WILDLIFE_DENSITY in a game as
+     * played). 0, the default: none, as for tests and benchmarks that are
+     * not about them. */
+    float wildlife;
 } NewGameParams;
 
 typedef struct Game {
@@ -137,6 +146,11 @@ typedef struct Game {
     RoofWatch roof_watch;
     Pool colonist_pool;
     Colonist colonists[COLONIST_MAX]; /* Indexed by EntityId.index. */
+    /* Wild animals (core/animal.h), ticked after the settlers, and their own
+     * randomness: what the animals do does not shift the settlers' draws.
+     * Part of game_hash() once an animal has lived in the game. */
+    Animals animals;
+    Rng wildlife_rng;
     /* Items in stock per type, what "until N in stock" bills count: lying in a
      * stockpile that accepts them, or on their way there (lying on a
      * workstation, where crafts drop their products, or carried by a hauler),
@@ -308,6 +322,31 @@ int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float
 
 /* Whether a colonist currently stands on the tile. */
 bool game_tile_has_colonist(const Game *game, int x, int y, int z);
+
+/* ---- Animals ------------------------------------------------------------- */
+
+/* Creates a wild animal on a tile, alone (animals_spawn(), with the game's
+ * wildlife randomness): for tests and the debug tool. ENTITY_NONE when it
+ * cannot stand there or there is no room left. */
+EntityId game_spawn_animal(Game *game, AnimalSpecies species, AnimalSex sex, int x, int y, int z);
+
+/* Debug: game_spawn_animal(), and the newcomer joins the herd of the nearest
+ * animal of its species and sex within ANIMAL_HERD_RADIUS tiles, if any. */
+EntityId game_debug_spawn_animal(Game *game, AnimalSpecies species, AnimalSex sex, int x, int y,
+                                 int z);
+
+/* NULL when the handle is stale. */
+const Animal *game_animal_const(const Game *game, EntityId id);
+
+/* Whether the colony sees the animal now: always without the fog of war,
+ * under it when a settler sees the tile it stands on (animals out of view
+ * are neither drawn nor picked: nobody knows where they are). False for a
+ * stale handle. */
+bool game_animal_seen(const Game *game, EntityId id);
+
+/* The animal the colony sees closest to a world point, seen from level z as
+ * game_colonist_at(), or ENTITY_NONE. */
+EntityId game_animal_at(const Game *game, float world_x, float world_y, int z);
 
 /* Speed of rot of food lying on a tile (item_rot_rate() at the tile's
  * temperature, under its roof if any, faster out in the rain); 0 out of

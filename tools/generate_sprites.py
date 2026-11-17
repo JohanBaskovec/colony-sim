@@ -627,6 +627,272 @@ def compose(shadow, canvas, shadow_opacity):
 
 
 # ---------------------------------------------------------------------------
+# Animals (side view, facing right; the game mirrors them). One sprite per
+# species, sex and pose: standing, eating (head down) and asleep (lying).
+# The feet are on the bottom center of the canvas, like the characters'.
+# ---------------------------------------------------------------------------
+
+ANIMAL_OUTLINE = (34, 26, 20)
+ANIMAL_POSES = ["stand", "eat", "sleep"]
+ANIMAL_SEXES = ["female", "male"]
+ANIMAL_GROUND = 10.0  # Pixels under the feet (the shadow).
+ANTLER = (206, 190, 160)
+
+
+def aim(angle):
+    """Unit vector at `angle` degrees: 0 = forward (right), 90 = up."""
+    rad = math.radians(angle)
+    return math.cos(rad), -math.sin(rad)
+
+
+def reach(point, angle, length):
+    dx, dy = aim(angle)
+    return point[0] + dx * length, point[1] + dy * length
+
+
+def taper(canvas, start, end, start_width, end_width, color, clip=None):
+    """A limb from `start` to `end`, getting thinner (or thicker), round at both ends."""
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length = max(math.hypot(dx, dy), 1e-3)
+    nx, ny = -dy / length, dx / length
+    a, b = start_width * 0.5, end_width * 0.5
+    canvas.polygon([(start[0] + nx * a, start[1] + ny * a), (end[0] + nx * b, end[1] + ny * b),
+                    (end[0] - nx * b, end[1] - ny * b), (start[0] - nx * a, start[1] - ny * a)],
+                   color, clip=clip)
+    canvas.ellipse(start[0], start[1], a, a, color, clip=clip)
+    canvas.ellipse(end[0], end[1], b, b, color, clip=clip)
+
+
+def leg(canvas, top, ground, length, width, color, bend, hoof):
+    """A leg from the body down to the ground, bent at the joint, thinner
+    below it, on a dark hoof."""
+    knee = (top[0] + bend, top[1] + length * 0.5)
+    foot = (top[0] + bend * 0.3, ground - width * 0.25)
+    taper(canvas, top, knee, width * 1.25, width * 0.72, color)
+    taper(canvas, knee, foot, width * 0.72, width * 0.56, color)
+    canvas.ellipse(foot[0] + width * 0.12, ground - width * 0.3, width * 0.42, width * 0.34, hoof)
+
+
+def ear(canvas, base, angle, length, width, color):
+    """A pointed ear: a leaf from its base to its tip."""
+    middle = reach(base, angle, length * 0.45)
+    canvas.polygon([base, reach(middle, angle + 90, width * 0.5), reach(base, angle, length),
+                    reach(middle, angle - 90, width * 0.5)], color)
+
+
+def antlers(canvas, base, size, points, angle):
+    """A beam leaning back from the head with tines pointing up and forward."""
+    beam = [base, reach(base, angle + 25, size * 0.45), reach(base, angle + 5, size)]
+    canvas.line(beam, max(2.0, size * 0.07), ANTLER)
+    for i in range(points):
+        t = (i + 0.6) / (points + 0.4)
+        start = (beam[0][0] + (beam[2][0] - beam[0][0]) * t,
+                 beam[0][1] + (beam[2][1] - beam[0][1]) * t - size * 0.08 * math.sin(math.pi * t))
+        canvas.line([start, reach(start, angle - 55, size * (0.34 - 0.05 * i))],
+                    max(1.6, size * 0.05), ANTLER)
+
+
+def draw_deer(spec, male, pose):
+    """Roe deer and red deer: long legs, a long neck, a short tail over a
+    pale rump; the males carry antlers."""
+    width, height = spec["canvas"]
+    k = spec["size"] * (1.0 if male else spec["female_size"])
+    coat, belly, dark = spec["coat"], spec["belly"], shade(spec["coat"], 0.62)
+    canvas, shadow = Canvas(width, height), Canvas(width, height)
+    ground = height - ANIMAL_GROUND
+    body_len, body_h, leg_len = spec["body"][0] * k, spec["body"][1] * k, spec["leg"] * k
+    lying = pose == "sleep"
+    cx = width * 0.5 - body_len * 0.1
+    cy = ground - body_h * 0.5 - (body_h * 0.12 if lying else leg_len)
+    shadow.ellipse(cx + body_len * 0.05, ground, body_len * 0.6, 6.0 * k + 3.0, (0, 0, 0))
+    front_x, hind_x = cx + body_len * 0.32, cx - body_len * 0.34
+    leg_w = spec["leg_width"] * k
+    if not lying:  # The legs of the far side, darker.
+        leg(canvas, (front_x + leg_w, cy), ground - 2, leg_len + body_h * 0.4, leg_w, dark,
+            leg_w * 0.4, shade(dark, 0.5))
+        leg(canvas, (hind_x + leg_w * 1.6, cy), ground - 2, leg_len + body_h * 0.4, leg_w, dark,
+            -leg_w * 0.8, shade(dark, 0.5))
+    # Trunk: the barrel, a deeper chest, the haunch.
+    canvas.ellipse(cx, cy, body_len * 0.5, body_h * 0.5, coat, light=0.22)
+    canvas.ellipse(cx + body_len * 0.27, cy + body_h * 0.02, body_len * 0.24, body_h * 0.54, coat,
+                   light=0.2)
+    canvas.ellipse(cx - body_len * 0.3, cy - body_h * 0.03, body_len * 0.22, body_h * 0.52, coat,
+                   light=0.22)
+    trunk = canvas.coverage()
+    canvas.ellipse(cx, cy + body_h * 0.42, body_len * 0.4, body_h * 0.16, belly, clip=trunk,
+                   opacity=0.6)
+    canvas.ellipse(cx - body_len * 0.5, cy - body_h * 0.05, body_len * 0.1, body_h * 0.34,
+                   spec["rump"], clip=trunk)
+    canvas.line([(cx - body_len * 0.49, cy - body_h * 0.3),
+                 (cx - body_len * 0.54, cy - body_h * 0.02)], 3.0 * k + 1.0, spec["tail"])
+    if lying:  # Legs folded under it: the knees show.
+        canvas.ellipse(front_x, ground - 3, body_len * 0.13, 4.0 * k + 1.5, dark)
+        canvas.ellipse(hind_x + body_len * 0.08, ground - 3, body_len * 0.16, 4.5 * k + 1.5, dark)
+    else:
+        leg(canvas, (front_x, cy + body_h * 0.1), ground, leg_len + body_h * 0.3, leg_w, coat,
+            leg_w * 0.3, shade(dark, 0.5))
+        leg(canvas, (hind_x, cy + body_h * 0.05), ground, leg_len + body_h * 0.35, leg_w, coat,
+            -leg_w * 0.9, shade(dark, 0.5))
+    # Neck and head.
+    neck_angle, head_angle = {"stand": (58, -8), "eat": (-52, -74), "sleep": (20, -30)}[pose]
+    shoulder = (cx + body_len * 0.4, cy - body_h * 0.22)
+    neck_len, neck_w = spec["neck"][0] * k, spec["neck"][1] * k
+    nape = reach(shoulder, neck_angle, neck_len)
+    taper(canvas, reach(shoulder, neck_angle + 180, neck_w * 0.4), nape, neck_w * 1.5,
+          neck_w * 0.82, coat)
+    head_len, head_w = spec["head"][0] * k, spec["head"][1] * k
+    nose = reach(nape, head_angle, head_len)
+    # Ears behind the skull, then the head.
+    ear(canvas, nape, head_angle + 152, spec["ear"] * k, head_w * 0.5, dark)
+    if male and spec["antlers"]:
+        size, points = spec["antlers"]
+        antlers(canvas, reach(nape, head_angle + 100, head_w * 0.3), size * k, points,
+                head_angle + 95)
+    ear(canvas, nape, head_angle + 118, spec["ear"] * k, head_w * 0.55, coat)
+    taper(canvas, nape, nose, head_w * 0.95, head_w * 0.46, coat)
+    canvas.ellipse(nape[0], nape[1], head_w * 0.54, head_w * 0.54, coat, light=0.2)
+    canvas.ellipse(nose[0] + head_w * 0.05, nose[1], head_w * 0.2, head_w * 0.2, (40, 30, 28))
+    eye = reach(reach(nape, head_angle, head_len * 0.2), head_angle + 90, head_w * 0.14)
+    if lying:
+        canvas.line([(eye[0] - 2.0 * k, eye[1]), (eye[0] + 2.0 * k, eye[1])], 1.6, (30, 22, 20))
+    else:
+        canvas.ellipse(eye[0], eye[1], 2.2 * k + 0.4, 2.2 * k + 0.4, (24, 18, 16))
+    canvas.outline(2.0, ANIMAL_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.3)
+
+
+DEER = {
+    "roe_deer": {"canvas": (128, 128), "size": 1.0, "female_size": 0.94, "body": (70.0, 26.0),
+                 "leg": 34.0, "leg_width": 5.0, "neck": (24.0, 11.0), "head": (17.0, 13.0),
+                 "ear": 14.0, "antlers": (20.0, 2), "coat": (176, 112, 62),
+                 "belly": (222, 190, 150), "rump": (244, 236, 220), "tail": (244, 236, 220)},
+    "red_deer": {"canvas": (224, 192), "size": 1.0, "female_size": 0.88, "body": (124.0, 44.0),
+                 "leg": 56.0, "leg_width": 8.0, "neck": (42.0, 19.0), "head": (30.0, 21.0),
+                 "ear": 19.0, "antlers": (58.0, 4), "coat": (150, 96, 60),
+                 "belly": (196, 160, 122), "rump": (226, 200, 158), "tail": (118, 76, 50)},
+}
+
+
+def draw_boar(male, pose):
+    """A wild boar: a massive front, short legs, a long head carried low, a
+    ridge of bristles along the back; the males have tusks."""
+    width, height = 160, 128
+    k = 1.0 if male else 0.88
+    coat, dark, light = (86, 70, 58), (50, 40, 34), (122, 104, 88)
+    canvas, shadow = Canvas(width, height), Canvas(width, height)
+    ground = height - ANIMAL_GROUND
+    body_len, body_h, leg_len = 96.0 * k, 46.0 * k, 22.0 * k
+    lying = pose == "sleep"
+    cx = width * 0.5 - body_len * 0.12
+    cy = ground - body_h * 0.5 - (body_h * 0.06 if lying else leg_len)
+    shadow.ellipse(cx + body_len * 0.08, ground, body_len * 0.62, 8.0, (0, 0, 0))
+    front_x, hind_x = cx + body_len * 0.28, cx - body_len * 0.32
+    leg_w = 8.0 * k
+    if not lying:
+        leg(canvas, (front_x + leg_w, cy), ground - 2, leg_len + body_h * 0.4, leg_w, dark, 1.0,
+            (24, 20, 18))
+        leg(canvas, (hind_x + leg_w * 1.4, cy), ground - 2, leg_len + body_h * 0.4, leg_w, dark,
+            -2.0, (24, 20, 18))
+    # Bristles along the back, behind the trunk.
+    rng = random.Random(7)
+    for i in range(22):
+        t = i / 21.0
+        x = cx - body_len * 0.42 + body_len * 0.8 * t
+        y = cy - body_h * (0.42 + 0.1 * math.sin(math.pi * min(1.0, t * 1.25)))
+        canvas.line([(x, y + 5), (x - 3 - rng.random() * 2, y - 5 * k - rng.random() * 3)], 2.4,
+                    dark)
+    canvas.ellipse(cx - body_len * 0.14, cy + body_h * 0.03, body_len * 0.38, body_h * 0.45, coat,
+                   light=0.2)
+    canvas.ellipse(cx + body_len * 0.16, cy - body_h * 0.03, body_len * 0.34, body_h * 0.52, coat,
+                   light=0.22)
+    trunk = canvas.coverage()
+    canvas.ellipse(cx, cy + body_h * 0.4, body_len * 0.4, body_h * 0.16, light, clip=trunk,
+                   opacity=0.5)
+    canvas.line([(cx - body_len * 0.5, cy - body_h * 0.12), (cx - body_len * 0.56, cy + 4 * k),
+                 (cx - body_len * 0.53, cy + 12 * k)], 2.6, dark)
+    if lying:
+        canvas.ellipse(front_x, ground - 3, body_len * 0.12, 5.0, dark)
+        canvas.ellipse(hind_x + body_len * 0.08, ground - 3, body_len * 0.15, 5.5, dark)
+    else:
+        leg(canvas, (front_x, cy + body_h * 0.15), ground, leg_len + body_h * 0.25, leg_w, coat,
+            1.0, (24, 20, 18))
+        leg(canvas, (hind_x, cy + body_h * 0.1), ground, leg_len + body_h * 0.3, leg_w, coat, -2.5,
+            (24, 20, 18))
+    # The head: a long wedge from the shoulders down to the snout.
+    head_angle = {"stand": -16, "eat": -46, "sleep": -24}[pose]
+    skull = (cx + body_len * 0.42, cy - body_h * (0.02 if not lying else -0.1))
+    snout = reach(skull, head_angle, 31.0 * k)
+    ear(canvas, reach(skull, head_angle + 120, 10.0 * k), head_angle + 135, 15.0 * k, 10.0 * k,
+        dark)
+    canvas.ellipse(skull[0], skull[1], 20.0 * k, 20.0 * k, coat, light=0.2)
+    taper(canvas, skull, snout, 36.0 * k, 13.0 * k, coat)
+    ear(canvas, reach(skull, head_angle + 100, 11.0 * k), head_angle + 110, 15.0 * k, 11.0 * k,
+        shade(coat, 0.8))
+    canvas.ellipse(snout[0] + 1.5 * k, snout[1], 4.5 * k, 6.5 * k, (58, 44, 44))
+    if male:
+        jaw = reach(reach(skull, head_angle, 23.0 * k), head_angle - 90, 5.0 * k)
+        canvas.line([jaw, reach(jaw, head_angle + 60, 6.0), reach(jaw, head_angle + 110, 11.0)],
+                    3.0, (240, 232, 210))
+    eye = reach(reach(skull, head_angle, 8.0 * k), head_angle + 90, 6.0 * k)
+    if lying:
+        canvas.line([(eye[0] - 2.5, eye[1]), (eye[0] + 2.5, eye[1])], 1.6, (16, 12, 10))
+    else:
+        canvas.ellipse(eye[0], eye[1], 2.4, 2.4, (16, 12, 10))
+    canvas.outline(2.0, ANIMAL_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.3)
+
+
+def draw_hare(pose):
+    """A hare, drawn larger than life so that it shows: long hind legs folded
+    under a round back, long ears with black tips."""
+    width, height = 64, 64
+    coat, dark, belly = (176, 142, 100), (112, 86, 60), (232, 218, 196)
+    canvas, shadow = Canvas(width, height), Canvas(width, height)
+    ground = height - 6.0
+    lying = pose == "sleep"
+    cx = width * 0.5 - 4.0
+    back = 11.0 if lying else 14.5
+    cy = ground - back
+    shadow.ellipse(cx + 3, ground, 21.0, 4.0, (0, 0, 0))
+    canvas.ellipse(cx - 13.0, cy + back * 0.1, 3.4, 3.4, (244, 240, 230))  # Scut.
+    canvas.ellipse(cx, cy + 1.0, 17.0, back, coat, light=0.22)
+    canvas.ellipse(cx - 6.0, cy + back * 0.3, 10.0, back * 0.72, coat, light=0.18)  # Haunch.
+    trunk = canvas.coverage()
+    canvas.ellipse(cx + 2.0, cy + back * 0.75, 12.0, back * 0.3, belly, clip=trunk, opacity=0.8)
+    canvas.line([(cx - 9.0, ground - 2.0), (cx + 2.0, ground - 1.5)], 4.2, dark)  # Hind foot.
+    if not lying:
+        canvas.line([(cx + 10.0, cy + back * 0.3), (cx + 12.0, ground - 1.5)], 3.6, coat)
+    head_angle, ear_angle = {"stand": (4, 80), "eat": (-48, 112), "sleep": (-6, 166)}[pose]
+    skull = (cx + 15.0, cy - (2.0 if lying else 7.0) + (7.0 if pose == "eat" else 0.0))
+    for offset in (10, -8):
+        tip = reach(skull, ear_angle + offset, 19.0)
+        canvas.line([reach(skull, ear_angle + offset, 3.0), tip], 4.4, coat)
+        canvas.line([reach(skull, ear_angle + offset, 15.0), tip], 4.0, (40, 32, 28))
+    nose = reach(skull, head_angle, 8.0)
+    canvas.line([skull, nose], 9.5, coat)
+    canvas.ellipse(skull[0], skull[1], 7.4, 7.0, coat, light=0.2)
+    canvas.ellipse(nose[0] + 1.0, nose[1], 1.6, 1.6, (60, 40, 40))
+    eye = reach(reach(skull, head_angle, 2.5), head_angle + 90, 2.2)
+    if lying:
+        canvas.line([(eye[0] - 1.8, eye[1]), (eye[0] + 1.8, eye[1])], 1.4, (24, 18, 16))
+    else:
+        canvas.ellipse(eye[0], eye[1], 1.9, 1.9, (24, 18, 16))
+    canvas.outline(1.6, ANIMAL_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.3)
+
+
+def draw_animal(species, male, pose):
+    if species in DEER:
+        return draw_deer(DEER[species], male, pose)
+    if species == "boar":
+        return draw_boar(male, pose)
+    return draw_hare(pose)
+
+
+ANIMAL_SPECIES = ["roe_deer", "red_deer", "boar", "hare"]
+
+
+# ---------------------------------------------------------------------------
 # Characters (front view). All layers share one canvas: 128x192, feet at the
 # bottom center. Layers: body, head (with the face), beard, hair.
 # ---------------------------------------------------------------------------
@@ -1500,6 +1766,11 @@ def generate(output):
         sprites[f"fist_{skin}.png"] = draw_fist(skin)
     for name in TOOL_NAMES:
         sprites[f"tool_{name}.png"] = draw_tool(name)
+    for species in ANIMAL_SPECIES:
+        for male, sex in enumerate(ANIMAL_SEXES):
+            for pose in ANIMAL_POSES:
+                sprites[f"animal_{species}_{sex}_{pose}.png"] = draw_animal(species, bool(male),
+                                                                            pose)
     images = {}
     for filename, canvas in sprites.items():
         images[filename] = canvas.to_image()
@@ -1567,6 +1838,23 @@ def preview(images, path):
         tool.alpha_composite(images["fist_2.png"], (16, 16))
         sheet.alpha_composite(tool.resize((128, 128), Image.LANCZOS), (x, 800))
         x += 136
+    # Animals next to a settler, for the scale: each species, both sexes, the three poses.
+    x, y = 660, 990
+    sheet.alpha_composite(images["body_average_1.png"], (520, y - CHAR_H))
+    sheet.alpha_composite(images["head_1_neutral.png"], (520, y - CHAR_H))
+    for species in ANIMAL_SPECIES:
+        for sex in ANIMAL_SEXES:
+            image = images[f"animal_{species}_{sex}_stand.png"]
+            sheet.alpha_composite(image, (x, y - image.height))
+            x += image.width - 20
+    x, y = 10, 990
+    for species in ANIMAL_SPECIES:
+        for pose in ("eat", "sleep"):
+            image = images[f"animal_{species}_male_{pose}.png"]
+            if x + image.width < 520:
+                sheet.alpha_composite(image.resize((image.width // 2, image.height // 2),
+                                                   Image.LANCZOS), (x, y - image.height // 2))
+                x += image.width // 2
     small = sheet.resize((800, 500), Image.LANCZOS)
     sheet.alpha_composite(small.resize((400, 250), Image.LANCZOS), (1190, 800 - 250 - 10))
     sheet.save(path)

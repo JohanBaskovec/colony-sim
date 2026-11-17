@@ -260,6 +260,73 @@ static void test_paths_climb_ladders(void)
     map_free(&map);
 }
 
+/* Animals walk on four legs: slopes, but no ladder, and no door. */
+static void test_animals_open_no_door_and_climb_no_ladder(void)
+{
+    Map map;
+    Pathfinder finder;
+    Path path = {0};
+    REQUIRE(map_init(&map, 16, 16, 2));
+    REQUIRE(pathfinder_init(&finder, 16, 16, 2));
+    CHECK_EQ_INT(finder.walker, PATH_WALKER_SETTLER);
+    make_hill(&map);
+    TilePos start = {2, 5, 0}, top = {12, 5, 1};
+    map_set_structure(&map, 7, 9, 0, STRUCTURE_LADDER);
+    REQUIRE(pathfinder_find(&finder, &map, start, top, PATH_NO_COST_LIMIT, &path));
+    finder.walker = PATH_WALKER_ANIMAL;
+    CHECK(!pathfinder_find(&finder, &map, start, top, PATH_NO_COST_LIMIT, &path));
+    CHECK(!pathfinder_find(&finder, &map, top, start, PATH_NO_COST_LIMIT, &path));
+    CHECK(path_walker_can_stand(PATH_WALKER_ANIMAL, &map, 7, 9, 0)); /* Under the ladder. */
+    CHECK(path_walker_can_step(PATH_WALKER_SETTLER, &map, (TilePos){7, 9, 0}, (TilePos){8, 9, 1}));
+    CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){7, 9, 0}, (TilePos){8, 9, 1}));
+    CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){8, 9, 1}, (TilePos){7, 9, 0}));
+    /* A slope: up and down like anyone. */
+    map_set_slope(&map, 7, 4, 0, true);
+    REQUIRE(pathfinder_find(&finder, &map, start, top, PATH_NO_COST_LIMIT, &path));
+    check_path_is_valid(&map, start, top, &path);
+    TilePos previous = start;
+    for (int i = 0; i < path.count; i++) {
+        CHECK(path_walker_can_step(PATH_WALKER_ANIMAL, &map, previous, path.steps[i]));
+        if (path.steps[i].z != previous.z) {
+            CHECK(previous.x == 7 && previous.y == 4);
+        }
+        previous = path.steps[i];
+    }
+    REQUIRE(pathfinder_find(&finder, &map, top, start, PATH_NO_COST_LIMIT, &path));
+    CHECK(path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){8, 4, 1}, (TilePos){7, 4, 0}));
+    CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){7, 4, 0}, (TilePos){7, 5, 1}));
+
+    /* A wall of rock with a door in it, on the plain. */
+    for (int y = 0; y < map.height; y++) {
+        map_set_rock(&map, 4, y, 0, ROCK_GRANITE);
+    }
+    map_set_rock(&map, 4, 5, 0, ROCK_NONE);
+    map_set_structure(&map, 4, 5, 0, STRUCTURE_DOOR);
+    TilePos beyond = {6, 5, 0};
+    finder.walker = PATH_WALKER_SETTLER;
+    REQUIRE(pathfinder_find(&finder, &map, start, beyond, PATH_NO_COST_LIMIT, &path));
+    finder.walker = PATH_WALKER_ANIMAL;
+    CHECK(!pathfinder_find(&finder, &map, start, beyond, PATH_NO_COST_LIMIT, &path));
+    CHECK(!pathfinder_find(&finder, &map, start, (TilePos){4, 5, 0}, PATH_NO_COST_LIMIT, &path));
+    CHECK(pathfinder_reachable_count(&finder, &map, start, PATH_NO_COST_LIMIT) == 4u * 16u);
+    CHECK(path_walker_can_stand(PATH_WALKER_SETTLER, &map, 4, 5, 0));
+    CHECK(!path_walker_can_stand(PATH_WALKER_ANIMAL, &map, 4, 5, 0));
+    CHECK(!path_walker_can_stand(PATH_WALKER_ANIMAL, &map, 4, 6, 0)); /* Rock. */
+    CHECK(!path_walker_can_stand(PATH_WALKER_ANIMAL, &map, -1, 6, 0));
+    CHECK(path_walker_can_step(PATH_WALKER_SETTLER, &map, (TilePos){3, 5, 0}, (TilePos){4, 5, 0}));
+    CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){3, 5, 0}, (TilePos){4, 5, 0}));
+    /* Steps: a neighbor, never round the corner of a wall, never far. */
+    CHECK(path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){2, 5, 0}, (TilePos){3, 6, 0}));
+    CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){2, 5, 0}, (TilePos){2, 5, 0}));
+    CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){2, 5, 0}, (TilePos){2, 7, 0}));
+    map_set_rock(&map, 2, 8, 0, ROCK_GRANITE);
+    CHECK(!path_walker_can_step(PATH_WALKER_SETTLER, &map, (TilePos){1, 8, 0}, (TilePos){2, 9, 0}));
+    CHECK(path_walker_can_step(PATH_WALKER_SETTLER, &map, (TilePos){1, 9, 0}, (TilePos){2, 9, 0}));
+    path_free(&path);
+    pathfinder_free(&finder);
+    map_free(&map);
+}
+
 static void test_paths_climb_slopes(void)
 {
     Map map;
@@ -443,6 +510,7 @@ int main(void)
     RUN_TEST(test_reachable_count);
     RUN_TEST(test_paths_climb_slopes);
     RUN_TEST(test_paths_climb_ladders);
+    RUN_TEST(test_animals_open_no_door_and_climb_no_ladder);
     RUN_TEST(test_shortest_paths_over_hills);
     RUN_TEST(test_nearest_in_box_is_as_cheap);
     RUN_TEST(test_many_searches_reuse_memory);

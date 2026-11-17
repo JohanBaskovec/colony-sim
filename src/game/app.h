@@ -72,6 +72,7 @@ typedef enum AppTool {
 #define APP_DEBUG_TELEPORT 1
 #define APP_DEBUG_PLANT_TREE 2
 #define APP_DEBUG_GROW_TREE 3
+#define APP_DEBUG_SPAWN_ANIMAL 4 /* App.debug_animal. */
 
 /* Types of the forbid tool (see app_toggle_tool()). */
 #define APP_FORBID 0
@@ -175,6 +176,9 @@ typedef struct App {
     bool tile_selected;
     int selected_tile_x, selected_tile_y, selected_tile_z;
     TileThing selected_thing;
+    /* Selected wild animal (ENTITY_NONE if none), same rules: dropped once
+     * the colony no longer sees it (game/animal_panel.h). */
+    EntityId selected_animal;
     /* A right click on the map (not dragged to pan) steps back like Escape. */
     bool right_click_pending;
     float right_down_x, right_down_y;
@@ -220,6 +224,7 @@ typedef struct App {
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
     bool debug_item_max;           /* ... a full stack of it, else one item. */
     int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
+    AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned. */
     bool forbid_allows;            /* For APP_TOOL_FORBID: allows instead. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */

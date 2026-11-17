@@ -23,6 +23,7 @@ typedef enum InspectorKind {
     INSPECT_STOCKPILE,
     INSPECT_GATHER_ZONE,
     INSPECT_TILE,
+    INSPECT_ANIMAL,
 } InspectorKind;
 
 /* What the inspector shows now (INSPECT_NONE: nothing selected, or the

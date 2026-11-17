@@ -43,6 +43,7 @@ simulation:
 | Module       | Responsibility                                                               |
 |--------------|------------------------------------------------------------------------------|
 | `game`       | Simulation root (`Game`): owns map, clock, RNG, pathfinder, colonists; spawning, picking, `game_hash()` |
+| `animal`     | Wild animals (`Animals`, a `Pool` and a fixed array): species definitions (speeds, needs, resting hours, flight distance, herd sizes, diet), needs, decisions on tile centers (drink, eat, sleep, back to the herd, stroll), grazing and eating what plants bear, fear of settlers (sight, hearing, alarm to the herd, flight), herds behind a leader, populating a generated world, hash |
 | `colonist`   | Colonist data, needs, decision making, movement along paths, work, what its mood thinks of (states, sleep, meals) and its breaks, facial expression from the mood, the action its hands are doing |
 | `appearance` | Looks of a colonist (skin, body shape, hair style and color, beard), rolled at creation |
 | `designation`| Player work orders per tile (mine, which digs earth or rock, cut a ramp, dig down, take a structure apart), the knowledge, level and tool each needs, work progress |
@@ -66,7 +67,7 @@ simulation:
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
 | `attributes` | Settler attributes: positions in thousandths drawn on a bell curve, their effects (factors, thought weight, outlook points, temperature shifts), the word bands and translation keys |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
-| `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level |
+| `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level; for a kind of walker (`PathWalker`: settlers, or animals who open no door and climb neither ladders nor trees) |
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
 | `tile_box`   | Box of tiles holding every tile of a sparse layer (designations, gathering zones, a region), so that scans skip the rest of the map |
 | `tree`       | Trees in the volume: a trunk of solid wood and floors of foliage built into the map as the tree grows, finding the tree of a tile, where a felled tree falls (aimed away from structures) and what it leaves along its length |
@@ -115,6 +116,7 @@ simulation:
 | `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (condition sliders, filters); build another, delete |
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
 | `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills and (hearths) Fire tabs; forbid, build another, delete |
+| `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd |
 | `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
@@ -734,8 +736,9 @@ entity is removed, every old handle to it is detectably stale
 keeps updates deterministic); no pointers between entities are stored, and
 the frontend keeps handles only (e.g. the selection).
 
-Colonists are the first entity type; animals, items and buildings with state
-will follow the same pattern.
+Colonists were the first entity type; wild animals follow the same pattern
+(`Animals` in `core/animal.h`, a pool of `ANIMAL_MAX`); items and buildings
+with state will too.
 
 ### Colonist behavior
 
@@ -766,6 +769,73 @@ within `GAME_SPAWN_FOOD_MAX_COST` of travel.
 
 Decisions only happen on tile centers, so a colonist never jumps back when it
 changes its mind.
+
+### Wild animals
+
+`core/animal.h`: plant eaters that live their own life (step 1 of wildlife;
+carnivores, death and births come later). `Game.animals` is ticked after the
+settlers (`animals_tick()`, slot order) with its own `Rng`
+(`Game.wildlife_rng`): what animals do never shifts the settlers' draws. A
+game has animals only when asked (`NewGameParams.wildlife`, a multiple of
+each species' density; the game as played asks for `GAME_WILDLIFE_DENSITY`,
+`--animals <percent>` changes it): tests and benchmarks that are not about
+them have none, and `game_hash()` only includes animals once one exists, so
+their hashes are what they were.
+
+- **Species** (`AnimalDef`): roe deer, red deer, wild boar, hare; walking and
+  fleeing speeds, hours for each need to run out, the hours of the day the
+  species rests in (deer at night, boars and hares by day), flight distance,
+  herd sizes by sex, density, and diet: how it grazes (growth needed, growth
+  a bite takes, what a tile of grass is worth), the plants whose food it
+  eats, whether it digs roots up and eats fallen nuts, and what a unit of
+  nutrition is worth to it.
+- **Needs**: food, water, rest, from 1 down to 0 like the settlers'. Nothing
+  happens at 0 yet (no health).
+- **Decisions** on tile centers with nothing under way (`decide()`): hunger or
+  thirst below `ANIMAL_URGENT_NEED` first; a follower far from its leader
+  walks back; sleep when worn out, or a little tired in its resting hours;
+  then water below `ANIMAL_THIRSTY` and food below `ANIMAL_HUNGRY`; else a
+  stroll (around its leader for a follower) or standing there. Failed food
+  and water searches wait longer each time, like the settlers'.
+- **Eating** (`animal_food_at()`, `bite()`): a treat within
+  `ANIMAL_TREAT_SEARCH_MAX_COST` first (the food a plant of its diet bears,
+  nuts on the ground), else the nearest food, grass included. A bite takes
+  `ANIMAL_BITE_TICKS`: items off the plant's stock (the very stock gatherers
+  pick: animals compete with them), nuts off the tile, or some of the grass's
+  growth (cutting grass needs more growth than grazing leaves). A root dug
+  up whole goes back to growth 0, an eaten mushroom patch is gone. It eats
+  until `ANIMAL_SATED`.
+- **Fear**: every `ANIMAL_ALERT_TICKS` an animal on a tile center looks out
+  (`animal_notices()`): a settler seen within its flight distance (a straight
+  line over the tiles between them; rock, walls and doors stop it), or
+  within a third of it seen or not (heard), half as far when it sleeps. It
+  then runs (`flee()`: the nearest tile `ANIMAL_FLEE_MARGIN` beyond its
+  flight distance from every settler, at its fleeing speed, faster than any
+  settler walks) and its herd mates within reach are alarmed and run too.
+  Cornered, it stays and waits `ANIMAL_CORNERED_TICKS` before it looks for a
+  way out again. Searches for food, water and strolls leave out tiles within
+  the flight distance of a settler. Settlers ignore animals.
+- **Herds**: each animal has a `leader` (itself for a leader and a loner);
+  followers stay within `ANIMAL_HERD_RADIUS` of it, so the herd roams as its
+  leader does. `animals_set_leader()` keeps herds one deep (the leader
+  followed is always the head); a leader removed is replaced by its first
+  follower.
+- **Moving**: paths from the game's `Pathfinder` as `PATH_WALKER_ANIMAL`
+  (slopes, but no door, ladder nor tree), on the real map (animals know
+  their world; the fog is the colony's). Each step is checked as it is taken
+  (`path_walker_can_step()`).
+- **Populating** (`animals_populate()`, from `game_init()`): per species,
+  density × land tiles / 10,000 animals, in herds of the species' sizes,
+  on land that leads to water when there is some, `ANIMAL_SPAWN_CLEARANCE`
+  tiles at least from where the settlers arrive.
+- **Seen or not**: `game_animal_seen()` is true where a settler sees the
+  animal's tile now (always without the fog); the frontend draws and picks
+  only those (`game_animal_at()`), and drops a selected animal that goes out
+  of sight. Nothing of animals is remembered.
+
+Cost: about 3 µs a tick for 70 animals (200 × 200 map, Release);
+`bench_simulation ... wildlife` prints how they fare (what they do, their
+needs on average and at worst).
 
 ### Dirt and cleaning
 
@@ -1392,12 +1462,16 @@ them (`bench_simulation` hashes are unchanged).
   between), `game_debug_spawn_items()` (a stack dropped as `items_drop()`
   would) and `game_debug_teleport()` (the colonist gives up its task, its
   search delays are reset). The debug tool (`APP_TOOL_DEBUG`) applies the
-  last two where the player clicks.
+  last two where the player clicks, and `game_debug_spawn_animal()` (a wild
+  animal of the species chosen in the menu, a male with Shift, on the ground
+  seen under the cursor; it joins the herd of the nearest animal of its
+  species and sex close by).
 - **From the command line**: `--debug instant_build,learn_all,...` (or
   `all`) turns cheats on from the start, `--scenario <n>` sets up a test
   situation of `core/scenario.h` (the benchmark's), `--colonists <n>` sets
-  the number of settlers: a visual check starts where it needs to, without
-  clicking its way there.
+  the number of settlers, `--animals <percent>` the number of wild animals
+  (0: none): a visual check starts where it needs to, without clicking its
+  way there.
 
 ### Vision
 
@@ -1538,6 +1612,13 @@ positions, so it is not part of `game_hash()`:
   least those climbs cost (`MAP_CLIMB_COST - 1` per level), so it stays
   admissible (a test compares
   A* with Dijkstra on hilly maps).
+- Walkers: `Pathfinder.walker` says who the next searches are for. Settlers
+  (the default) go everywhere; animals (`PATH_WALKER_ANIMAL`, set around
+  their searches by `core/animal.c` and put back) open no door and climb
+  neither ladders nor trees. `path_walker_can_stand()` and
+  `path_walker_can_step()` answer the same questions for a single tile or
+  step. Connectivity regions are the settlers': for an animal they can say
+  "maybe" where the answer is no, never the reverse.
 - Benchmark: `bench/bench_pathfinding [size] [searches] [seed] [flat]`;
   about 0.8 ms per cross-map search on a flat 200 × 200 map in Release.
 
@@ -1582,7 +1663,7 @@ knows whether it contains a drinking spot.
 
 ### Measuring
 
-`bench/bench_simulation [colonists] [days] [scenario] [size] [seed]` runs a
+`bench/bench_simulation [colonists] [days] [scenario] [size] [seed] [flat] [fog] [wildlife]` runs a
 colony without a window (scenarios: `core/scenario.h`, which the game can
 also start on with `--scenario`) and prints the cost of a tick in processor
 time of the thread (steady on a busy machine, where the wall clock counts the
@@ -1724,7 +1805,7 @@ zones of the screen are worked out in `game/layout.h`; windows stay above
 the bottom bar (`Ui.reserved_bottom`).
 
 UI state that is not part of the simulation (camera, selection, selected
-stockpile, gathering zone, workstation or tile, active tool, drag
+stockpile, gathering zone, workstation, tile or wild animal, active tool, drag
 rectangle, debug overlay and menu toggles) lives in `App`. The level shown is
 `Camera.level` (Page Up / Page Down, or Shift + wheel; it starts on the
 level of the first settler; the HUD numbers it from `Map.surface_level`): the map, the entities and the overlays are

@@ -182,6 +182,59 @@ static bool build_path(const Pathfinder *finder, uint32_t start, uint32_t end, P
     return true;
 }
 
+/* What entering a tile (an index in bounds) costs a walker, 0 when it cannot:
+ * animals open no door. */
+static inline float walk_cost(const Map *map, bool animal, size_t index)
+{
+    return animal && map->structure[index] == STRUCTURE_DOOR ? 0.0f : map_move_cost_at(map, index);
+}
+
+/* What a step up from a tile, or down onto it, costs a walker (see
+ * map_climb_cost_at()): animals climb no ladder. */
+static inline float climb_cost(const Map *map, bool animal, size_t index)
+{
+    if (animal) {
+        return map->slope[index] != 0 ? MAP_CLIMB_COST : 0.0f;
+    }
+    return map_climb_cost_at(map, index);
+}
+
+bool path_walker_can_stand(PathWalker walker, const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) &&
+           walk_cost(map, walker == PATH_WALKER_ANIMAL, map_index(map, x, y, z)) > 0.0f;
+}
+
+bool path_walker_can_step(PathWalker walker, const Map *map, TilePos from, TilePos to)
+{
+    const bool animal = walker == PATH_WALKER_ANIMAL;
+    int dx = to.x - from.x, dy = to.y - from.y;
+    if (!map_in_bounds(map, from.x, from.y, from.z) ||
+        !path_walker_can_stand(walker, map, to.x, to.y, to.z) || dx < -1 || dx > 1 || dy < -1 ||
+        dy > 1) {
+        return false;
+    }
+    if (to.z == from.z) {
+        if (dx == 0 && dy == 0) {
+            return false;
+        }
+        /* No corner cutting. */
+        return dx == 0 || dy == 0 ||
+               (path_walker_can_stand(walker, map, from.x + dx, from.y, from.z) &&
+                path_walker_can_stand(walker, map, from.x, from.y + dy, from.z));
+    }
+    TilePos low = to.z > from.z ? from : to;
+    TilePos high = to.z > from.z ? to : from;
+    if (high.z != low.z + 1) {
+        return false;
+    }
+    if (dx == 0 && dy == 0) {
+        return !animal && map_can_climb_tree(map, low.x, low.y, low.z);
+    }
+    return (dx == 0 || dy == 0) && map_can_climb(map, low.x, low.y, low.z, high.x, high.y) &&
+           climb_cost(map, animal, map_index(map, low.x, low.y, low.z)) > 0.0f;
+}
+
 typedef struct SearchGoal {
     const TilePos *goal;     /* A* when set... */
     TilePredicate predicate; /* ...Dijkstra towards a predicate otherwise... */
@@ -227,8 +280,9 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
         map->height != finder->height || map->depth != finder->depth) {
         return -1;
     }
-    if (target->goal != NULL &&
-        !map_is_passable(map, target->goal->x, target->goal->y, target->goal->z)) {
+    const bool animal = finder->walker == PATH_WALKER_ANIMAL;
+    if (target->goal != NULL && !path_walker_can_stand(finder->walker, map, target->goal->x,
+                                                       target->goal->y, target->goal->z)) {
         return -1; /* Would explore the whole reachable area for nothing. */
     }
 
@@ -271,10 +325,12 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
             int nx = x + DIRECTIONS[d][0];
             int ny = y + DIRECTIONS[d][1];
             inside[d] = nx >= 0 && ny >= 0 && nx < map->width && ny < map->height;
-            side[d] = inside[d] ? map_move_cost_at(map, (size_t)((int64_t)current +
-                                                                 DIRECTIONS[d][1] * (int64_t)width +
-                                                                 DIRECTIONS[d][0]))
-                                : 0.0f;
+            side[d] =
+                inside[d]
+                    ? walk_cost(map, animal,
+                                (size_t)((int64_t)current + DIRECTIONS[d][1] * (int64_t)width +
+                                         DIRECTIONS[d][0]))
+                    : 0.0f;
         }
         const float base_cost = node->cost_so_far;
 
@@ -293,7 +349,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                     finder->nodes[next].closed_stamp == finder->stamp) {
                     continue;
                 }
-                step = map_move_cost_at(map, next) * SQRT2;
+                step = walk_cost(map, animal, next) * SQRT2;
             }
             if (step <= 0.0f || base_cost + step > max_cost) {
                 continue;
@@ -305,7 +361,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
 
         /* Up a slope or a ladder, to the orthogonal neighbors of the level
          * above. */
-        float climb = map_climb_cost_at(map, current);
+        float climb = climb_cost(map, animal, current);
         if (climb > 0.0f && z + 1 < map->depth && map_is_open_at(map, current + level)) {
             for (int d = 0; d < 4; d++) {
                 if (!inside[d]) {
@@ -313,7 +369,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                 }
                 int dx = DIRECTIONS[d][0], dy = DIRECTIONS[d][1];
                 uint32_t next = (uint32_t)((int64_t)current + level + dy * (int64_t)width + dx);
-                float step = map_move_cost_at(map, next) * climb;
+                float step = walk_cost(map, animal, next) * climb;
                 if (step > 0.0f && base_cost + step <= max_cost &&
                     !relax(finder, target, current, next, base_cost + step, x + dx, y + dy,
                            z + 1)) {
@@ -323,7 +379,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
         }
         /* Up or down a tree's trunk: straight to the foliage over this tile,
          * or from the foliage down to the ground beside the trunk. */
-        if (z + 1 < map->depth && map->terrain[current + level] == TERRAIN_FOLIAGE &&
+        if (!animal && z + 1 < map->depth && map->terrain[current + level] == TERRAIN_FOLIAGE &&
             map_can_climb_tree(map, x, y, z)) {
             uint32_t next = current + level;
             float step = map_move_cost_at(map, next) * MAP_TREE_CLIMB_COST;
@@ -332,7 +388,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                 return -1;
             }
         }
-        if (z > 0 && map->terrain[current] == TERRAIN_FOLIAGE &&
+        if (!animal && z > 0 && map->terrain[current] == TERRAIN_FOLIAGE &&
             map_can_climb_tree(map, x, y, z - 1)) {
             uint32_t next = current - level;
             float step = map_move_cost_at(map, next) * MAP_TREE_CLIMB_COST;
@@ -351,11 +407,11 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                 int dx = DIRECTIONS[d][0], dy = DIRECTIONS[d][1];
                 uint32_t beside = (uint32_t)((int64_t)current + dy * (int64_t)width + dx);
                 uint32_t next = beside - level;
-                float down = map_climb_cost_at(map, next);
+                float down = climb_cost(map, animal, next);
                 if (!map_is_open_at(map, beside) || down <= 0.0f) {
                     continue;
                 }
-                float step = map_move_cost_at(map, next) * down;
+                float step = walk_cost(map, animal, next) * down;
                 if (step > 0.0f && base_cost + step <= max_cost &&
                     !relax(finder, target, current, next, base_cost + step, x + dx, y + dy,
                            z - 1)) {

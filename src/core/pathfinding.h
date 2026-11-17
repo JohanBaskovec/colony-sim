@@ -8,6 +8,10 @@
  * steps only, MAP_CLIMB_COST times the tile reached, see map_can_climb()).
  * A Pathfinder owns reusable scratch memory sized for one map, so searches
  * do not allocate (except when the open list grows).
+ *
+ * Who walks decides where one can go (Pathfinder.walker): settlers go
+ * everywhere; animals (core/animal.h) open no door and climb neither ladders
+ * nor trees.
  */
 #ifndef COLONY_CORE_PATHFINDING_H
 #define COLONY_CORE_PATHFINDING_H
@@ -47,10 +51,20 @@ typedef struct PathHeapItem {
     uint32_t index;
 } PathHeapItem;
 
+/* Who a search finds a way for. */
+typedef enum PathWalker {
+    PATH_WALKER_SETTLER, /* Through doors, up ladders and trees. */
+    PATH_WALKER_ANIMAL,  /* On four legs: slopes only, and no door. */
+} PathWalker;
+
 typedef struct Pathfinder {
     int width;
     int height;
     int depth;
+    /* Who the next searches are for (PATH_WALKER_SETTLER after
+     * pathfinder_init()): set it before a search for someone else, and back
+     * afterwards. */
+    PathWalker walker;
     PathNode *nodes; /* One per tile. */
     uint32_t stamp;  /* Incremented per search instead of clearing the nodes. */
     PathHeapItem *heap;
@@ -65,6 +79,16 @@ typedef bool (*TilePredicate)(const Map *map, int x, int y, int z, void *userdat
 
 bool pathfinder_init(Pathfinder *finder, int width, int height, int depth);
 void pathfinder_free(Pathfinder *finder);
+
+/* Whether a walker of this kind can stand on a tile (settlers: where
+ * map_is_passable(); animals: not in a doorway either). */
+bool path_walker_can_stand(PathWalker walker, const Map *map, int x, int y, int z);
+
+/* Whether a walker of this kind can step from a tile to a neighboring one
+ * (one of the eight around it, or the tile reached up or down a slope, a
+ * ladder or a tree), as the searches do: the path of a walker is checked
+ * with it as it goes, the map may have changed. */
+bool path_walker_can_step(PathWalker walker, const Map *map, TilePos from, TilePos to);
 
 /*
  * Finds the cheapest path from `start` to `goal`. The start tile itself may be

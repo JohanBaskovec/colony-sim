@@ -49,6 +49,7 @@ void game_default_params(NewGameParams *params)
 {
     worldgen_default_params(&params->world);
     params->colonist_count = GAME_DEFAULT_COLONIST_COUNT;
+    params->wildlife = 0.0f;
 }
 
 /* ---- Colonist storage ---------------------------------------------------- */
@@ -543,7 +544,7 @@ bool game_init(Game *game, const NewGameParams *params)
         !beds_init(&game->beds, game->map.width, game->map.height, game->map.depth) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height, game->map.depth) ||
         !regions_init(&game->regions, game->map.width, game->map.height, game->map.depth) ||
-        !pool_init(&game->colonist_pool, COLONIST_MAX)) {
+        !pool_init(&game->colonist_pool, COLONIST_MAX) || !animals_init(&game->animals)) {
         game_shutdown(game);
         return false;
     }
@@ -551,6 +552,7 @@ bool game_init(Game *game, const NewGameParams *params)
     reservations_init(&game->reservations);
     game_clock_init(&game->clock);
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
+    rng_seed(&game->wildlife_rng, params->world.seed, 0x77696c64ULL /* "wild" */);
     roof_watch_init(&game->roof_watch, &game->map);
     weather_init(&game->weather, game->seed, game->clock.tick);
     if (!temperatures_init(&game->temperatures, &game->map,
@@ -560,6 +562,11 @@ bool game_init(Game *game, const NewGameParams *params)
     }
     spawn_starting_colonists(game, params->colonist_count);
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
+    if (params->wildlife > 0.0f) {
+        animals_populate(&game->animals, &game->map, &game->pathfinder, &game->regions,
+                         &game->wildlife_rng, params->wildlife,
+                         game->has_arrival ? &game->arrival : NULL);
+    }
     game_update_stock(game);
     game_count_knowledge(game); /* Who knows what at the start: no notice for it. */
     return true;
@@ -618,6 +625,7 @@ void game_shutdown(Game *game)
         colonist_free(&game->colonists[slot]);
     }
     pool_free(&game->colonist_pool);
+    animals_free(&game->animals);
     pathfinder_free(&game->pathfinder);
     regions_free(&game->regions);
     game->items.mirror = NULL;
@@ -911,6 +919,34 @@ static void update_colonists(Game *game)
 }
 
 /* Unpractised knowledges fade a little, once a day. */
+/* The animals' turn, after the settlers': they fear every settler alive. */
+static void update_animals(Game *game)
+{
+    if (game->animals.pool.count == 0) {
+        return;
+    }
+    TilePos threats[COLONIST_MAX];
+    int threat_count = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
+            const Colonist *colonist = &game->colonists[slot];
+            threats[threat_count++] =
+                (TilePos){(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z};
+        }
+    }
+    regions_update(&game->regions, &game->map); /* A settler may have changed the map. */
+    AnimalContext context = {
+        .map = &game->map,
+        .pathfinder = &game->pathfinder,
+        .regions = &game->regions,
+        .rng = &game->wildlife_rng,
+        .tick = game->clock.tick,
+        .threats = threats,
+        .threat_count = threat_count,
+    };
+    animals_tick(&game->animals, &context);
+}
+
 static void fade_knowledge(Game *game)
 {
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
@@ -1460,6 +1496,7 @@ void game_tick(Game *game)
     /* What gathering zones want, from what lies in the colony now. */
     gather_zones_update(&game->gather_zones, game_view_items(game)->totals, game_daily_food(game));
     update_colonists(game);
+    update_animals(game);
     if (game->vision_on) {
         update_vision(game);
     }
@@ -1529,6 +1566,10 @@ uint64_t game_hash(const Game *game)
     if (game->fog_on) { /* What the colony has seen: apart too. */
         uint64_t explored = vision_explored_hash(&game->vision);
         hash = hash_fnv1a64(hash, &explored, sizeof(explored));
+    }
+    if (animals_slot_count(&game->animals) > 0) { /* Apart: hashes without animals stay. */
+        hash = animals_hash(&game->animals, hash);
+        hash = hash_fnv1a64(hash, &game->wildlife_rng.state, sizeof(game->wildlife_rng.state));
     }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
@@ -2010,6 +2051,78 @@ int game_colonists_in_rect(const Game *game, float x0, float y0, float x1, float
         }
     }
     return count;
+}
+
+/* ---- Animals ------------------------------------------------------------- */
+
+EntityId game_spawn_animal(Game *game, AnimalSpecies species, AnimalSex sex, int x, int y, int z)
+{
+    return animals_spawn(&game->animals, &game->map, species, sex, x, y, z, &game->wildlife_rng);
+}
+
+EntityId game_debug_spawn_animal(Game *game, AnimalSpecies species, AnimalSex sex, int x, int y,
+                                 int z)
+{
+    Animals *animals = &game->animals;
+    EntityId nearest = ENTITY_NONE;
+    int best = ANIMAL_HERD_RADIUS * ANIMAL_HERD_RADIUS + 1;
+    for (uint32_t slot = 0; slot < animals_slot_count(animals); slot++) {
+        const Animal *other = &animals->list[slot];
+        int dx = other->x - x, dy = other->y - y;
+        if (!entity_id_is_none(animals_id_at(animals, slot)) && other->species == species &&
+            other->sex == sex && other->z == z && dx * dx + dy * dy < best) {
+            best = dx * dx + dy * dy;
+            nearest = animals_id_at(animals, slot);
+        }
+    }
+    EntityId id = game_spawn_animal(game, species, sex, x, y, z);
+    if (!entity_id_is_none(id) && !entity_id_is_none(nearest)) {
+        animals_set_leader(animals, id, nearest);
+    }
+    return id;
+}
+
+const Animal *game_animal_const(const Game *game, EntityId id)
+{
+    return animals_get_const(&game->animals, id);
+}
+
+bool game_animal_seen(const Game *game, EntityId id)
+{
+    const Animal *animal = animals_get_const(&game->animals, id);
+    if (animal == NULL) {
+        return false;
+    }
+    float x, y;
+    animal_position(animal, &x, &y);
+    return game_tile_seen(game, (int)floorf(x), (int)floorf(y), animal->z);
+}
+
+EntityId game_animal_at(const Game *game, float world_x, float world_y, int z)
+{
+    EntityId best = ENTITY_NONE;
+    float best_distance = GAME_PICK_RADIUS * GAME_PICK_RADIUS;
+    for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
+        EntityId id = animals_id_at(&game->animals, slot);
+        if (entity_id_is_none(id)) {
+            continue;
+        }
+        const Animal *animal = &game->animals.list[slot];
+        float x, y;
+        animal_position(animal, &x, &y);
+        if (animal->z > z ||
+            (animal->z < z &&
+             map_view_level(&game->map, (int)floorf(x), (int)floorf(y), z) != animal->z) ||
+            !game_animal_seen(game, id)) {
+            continue;
+        }
+        float distance = (x - world_x) * (x - world_x) + (y - world_y) * (y - world_y);
+        if (distance <= best_distance) {
+            best_distance = distance;
+            best = id;
+        }
+    }
+    return best;
 }
 
 /* ---- Workstations -------------------------------------------------------- */

@@ -1,0 +1,73 @@
+#include "game/animal_panel.h"
+
+#include "core/i18n.h"
+#include "game/inspector.h"
+#include "game/ui_layout.h"
+
+#define TEXT_SIZE 192
+
+/* A need as a table row: its name and a bar; the tooltip has its exact
+ * value and what it does. */
+static void need_row(UiLayout *layout, const Animal *animal, AnimalNeed need)
+{
+    static const char *const DESCRIPTION_KEYS[ANIMAL_NEED_COUNT] = {
+        [ANIMAL_NEED_FOOD] = N_("animal_panel.need.food"),
+        [ANIMAL_NEED_WATER] = N_("animal_panel.need.water"),
+        [ANIMAL_NEED_REST] = N_("animal_panel.need.rest"),
+    };
+    const char *name = tr(animal_need_name_key(need));
+    SDL_FRect row = ui_layout_bar_row(layout, name, animal->needs[need], true);
+    if (layout->draw && ui_hovered(layout->ui, row)) {
+        char percent[16], value[TEXT_SIZE];
+        tr_integer(percent, sizeof(percent), (long long)(animal->needs[need] * 100.0f + 0.5f));
+        TR_FORMAT(value, sizeof(value), tr("hud.colonist.need"), name, percent);
+        const char *lines[2] = {value, tr(DESCRIPTION_KEYS[need])};
+        ui_tooltip(layout->ui, lines, 2);
+    }
+}
+
+static void animal_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    const Animal *animal = game_animal_const(&app->game, app->selected_animal);
+    if (animal == NULL) {
+        return;
+    }
+    static const char *const SEX_KEYS[ANIMAL_SEX_COUNT] = {
+        [ANIMAL_FEMALE] = N_("animal.sex.female"),
+        [ANIMAL_MALE] = N_("animal.sex.male"),
+    };
+    const SDL_Color text = layout->ui->theme.colors[THEME_TEXT];
+    ui_layout_pair(layout, tr("animal_panel.species"),
+                   tr(animal_def((AnimalSpecies)animal->species)->name_key), text, false);
+    ui_layout_pair(layout, tr("animal_panel.sex"), tr(SEX_KEYS[animal->sex]), text, false);
+    ui_layout_pair(layout, tr("hud.summary.activity"), tr(animal_activity_key(animal)), text,
+                   false);
+    for (int need = 0; need < ANIMAL_NEED_COUNT; need++) {
+        need_row(layout, animal, (AnimalNeed)need);
+    }
+    int herd = animals_herd_size(&app->game.animals, app->selected_animal);
+    char size[TEXT_SIZE];
+    if (herd > 1) {
+        char count[16];
+        tr_integer(count, sizeof(count), herd);
+        TR_FORMAT(size, sizeof(size), tr_plural("animal_panel.herd.count", herd), count);
+    } else {
+        SDL_strlcpy(size, tr("animal_panel.herd.alone"), sizeof(size));
+    }
+    ui_layout_pair(layout, tr("animal_panel.herd"), size, text, false);
+}
+
+void animal_panel_draw(App *app)
+{
+    const Animal *animal = game_animal_const(&app->game, app->selected_animal);
+    if (animal == NULL) {
+        return;
+    }
+    const char *title = tr(animal_name_key((AnimalSpecies)animal->species, (AnimalSex)animal->sex));
+    bool open = inspector_box(app, INSPECT_ANIMAL, title, animal_rows, app);
+    inspector_tabs(app, NULL, 0);
+    if (!open) {
+        app->selected_animal = ENTITY_NONE;
+    }
+}

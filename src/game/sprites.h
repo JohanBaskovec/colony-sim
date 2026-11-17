@@ -11,6 +11,7 @@
 #ifndef COLONY_GAME_SPRITES_H
 #define COLONY_GAME_SPRITES_H
 
+#include "core/animal.h"
 #include "core/appearance.h"
 #include "core/colonist.h"
 #include "core/map.h"
@@ -35,6 +36,15 @@ SpriteId sprite_hair(int style);  /* Style 1 .. APPEARANCE_HAIR_STYLE_COUNT - 1.
  * drawn centered on the hand: the grip is the middle of the sprite. */
 SpriteId sprite_fist(int skin);
 SpriteId sprite_tool(ItemType type);
+/* An animal seen from the side, facing right (mirror it when it faces left):
+ * standing, eating (head down) or asleep (lying). */
+typedef enum AnimalPose {
+    ANIMAL_POSE_STAND,
+    ANIMAL_POSE_EAT,
+    ANIMAL_POSE_SLEEP,
+    ANIMAL_POSE_COUNT
+} AnimalPose;
+SpriteId sprite_animal(AnimalSpecies species, AnimalSex sex, AnimalPose pose);
 /* Tile textures, drawn with sprites_draw_tile(), the same on every tile of
  * their kind (they tile seamlessly): the ground of a terrain seen from above,
  * the cut face of a rock wall seen from inside it (dark and flat, unlike any

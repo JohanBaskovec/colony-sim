@@ -1,5 +1,6 @@
 add_library(colony_core STATIC
     alert.c
+    animal.c
     appearance.c
     attributes.c
     bed.c

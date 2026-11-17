@@ -133,11 +133,14 @@ void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera 
 void render_gather_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                         int y1, bool remove);
 
-/* Plants (trees, shrubs, low plants) and colonists (with what they carry),
- * from the back to the front so that tall sprites overlap correctly; selected
- * colonists get a ring and their current path. */
+/* Plants (trees, shrubs, low plants), colonists (with what they carry) and
+ * the animals the colony sees (game_animal_seen()), from the back to the
+ * front so that tall sprites overlap correctly; selected colonists get a
+ * ring and their current path, the selected animal (ENTITY_NONE: none) a
+ * ring. */
 void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
-                          const Camera *camera, const EntityId *selected, int selected_count);
+                          const Camera *camera, const EntityId *selected, int selected_count,
+                          EntityId selected_animal);
 
 /* Rectangle shown while box-selecting, in screen coordinates. */
 void render_selection_box(SDL_Renderer *renderer, float x0, float y0, float x1, float y1);
