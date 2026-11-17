@@ -174,7 +174,7 @@ From the bottom up, above the bottom bar:
 - **Level slider**, vertical, at the right edge: the current level as a
   handle that can be dragged, small + and − buttons (half the size of the others) at its ends, the number below
   it as "level / levels" (counted from 1, the deepest level), a mark at the
-  ground level. Page Up / Page Down and Shift + wheel still work.
+  ground level. Page Up / Page Down and Shift + wheel (down: a level up, as the wheel down zooms out) still work.
 - Above, right aligned: **date and hour**, **season**, **outdoor
   temperature**, **weather** (sky, snow cover), and the **alerts**.
 

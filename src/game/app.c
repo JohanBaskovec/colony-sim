@@ -1189,8 +1189,9 @@ static void handle_event(App *app, const SDL_Event *event)
         if (ui_scroll(&app->ui, event->wheel.mouse_x, event->wheel.mouse_y, steps)) {
             break; /* The wheel does not zoom the map through a panel. */
         }
-        if (SDL_GetModState() & SDL_KMOD_SHIFT) { /* Up and down the levels. */
-            app->level_wheel += steps;
+        if (SDL_GetModState() & SDL_KMOD_SHIFT) {
+            /* Up and down the levels: the wheel down goes up (as it zooms out). */
+            app->level_wheel -= steps;
             while (app->level_wheel >= 1.0f) {
                 set_level(app, app->camera.level + 1);
                 app->level_wheel -= 1.0f;
