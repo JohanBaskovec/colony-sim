@@ -2385,8 +2385,10 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
  * and the margin under the feet in the character sprites. */
 #define COLONIST_FEET 0.38f
 #define COLONIST_SPRITE_MARGIN (8.0f / SPRITE_PIXELS_PER_TILE)
-/* Brightness of a sleeping colonist. */
-#define COLONIST_SLEEP_SHADE 0.55f
+/* The Z of sleep: how many rise from a sleeper's head at once, and how long
+ * one takes to rise and fade (ticks). */
+#define SLEEP_Z_COUNT 3
+#define SLEEP_Z_TICKS 216
 /* Animal sprites leave this much under the feet (the shadow), in tiles. */
 #define ANIMAL_SPRITE_MARGIN (8.0f / SPRITE_PIXELS_PER_TILE)
 /* Whoever walks hops at every step and rocks from side to side around its
@@ -2509,15 +2511,6 @@ static void render_path(SDL_Renderer *renderer, const Camera *camera, const Colo
     }
 }
 
-static SDL_FColor tint(SDL_Color color, float brightness)
-{
-    SDL_FColor result = to_fcolor(color);
-    result.r *= brightness;
-    result.g *= brightness;
-    result.b *= brightness;
-    return result;
-}
-
 /* How a walker's sprite is moved at a tick: lifted (screen pixels) and turned
  * clockwise around its feet (degrees). Nothing when it stands. */
 typedef struct Gait {
@@ -2603,14 +2596,16 @@ void render_colonist_portrait(SDL_Renderer *renderer, Sprites *sprites, const Co
     SDL_GetRenderClipRect(renderer, &previous);
     SDL_SetRenderClipRect(renderer, &clip);
     ColonistAppearance looks = colonist->appearance;
-    float brightness = colonist->task == TASK_SLEEP ? COLONIST_SLEEP_SHADE : 1.0f;
-    SDL_FColor skin = tint((SDL_Color){255, 255, 255, 255}, brightness);
-    SDL_FColor hair = tint(HAIR_COLORS[looks.hair_color % HAIR_COLOR_COUNT], brightness);
+    SDL_FColor skin = WHITE;
+    SDL_FColor hair = to_fcolor(HAIR_COLORS[looks.hair_color % HAIR_COLOR_COUNT]);
     sprites_begin(sprites, zoom);
     sprites_draw(sprites, sprite_body(looks.body, looks.skin, SPRITE_VIEW_FRONT), anchor_x,
                  anchor_y, skin, false);
     sprites_draw(sprites, sprite_head(looks.skin, colonist_expression(colonist), SPRITE_VIEW_FRONT),
                  anchor_x, anchor_y, skin, false);
+    if (colonist->task == TASK_SLEEP) {
+        sprites_draw(sprites, sprite_closed_eyes(looks.skin), anchor_x, anchor_y, skin, false);
+    }
     if (looks.beard > 0) {
         sprites_draw(sprites, sprite_beard(looks.beard, SPRITE_VIEW_FRONT), anchor_x, anchor_y,
                      hair, false);
@@ -2621,6 +2616,26 @@ void render_colonist_portrait(SDL_Renderer *renderer, Sprites *sprites, const Co
     }
     sprites_flush(sprites);
     SDL_SetRenderClipRect(renderer, clipped ? &previous : NULL);
+}
+
+/* Z's rising from a sleeper's head, up and to the right: each grows, sways and
+ * fades in and out over its life, the three a third of a life apart (and
+ * sleepers side by side out of step, by slot). `anchor_*`: the sprite's anchor. */
+static void render_sleep_zs(Sprites *sprites, const Camera *camera, uint32_t slot, uint64_t tick,
+                            float anchor_x, float anchor_y)
+{
+    for (int i = 0; i < SLEEP_Z_COUNT; i++) {
+        uint64_t offset = (uint64_t)slot * 37u + (uint64_t)i * (SLEEP_Z_TICKS / SLEEP_Z_COUNT);
+        float life = (float)((tick + offset) % SLEEP_Z_TICKS) / (float)SLEEP_Z_TICKS;
+        float x = (24.0f + 30.0f * life + 5.0f * SDL_sinf(life * 7.0f)) / SPRITE_PIXELS_PER_TILE;
+        float y = (140.0f + 50.0f * life) / SPRITE_PIXELS_PER_TILE;
+        float fade_in = SDL_min(1.0f, life * 6.0f);
+        float fade_out = 1.0f - SDL_max(0.0f, life - 0.55f) / 0.45f;
+        float alpha = fade_in * fade_out;
+        SDL_FColor color = {1.0f, 1.0f, 1.0f, alpha};
+        sprites_draw_scaled(sprites, sprite_sleep_z(), anchor_x + x * camera->zoom,
+                            anchor_y - y * camera->zoom, 0.5f + 0.65f * life, color);
+    }
 }
 
 static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera,
@@ -2638,9 +2653,8 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
                   SELECTION_COLOR);
     }
     ColonistAppearance looks = colonist->appearance;
-    float brightness = colonist->task == TASK_SLEEP ? COLONIST_SLEEP_SHADE : 1.0f;
-    SDL_FColor skin = tint((SDL_Color){255, 255, 255, 255}, brightness);
-    SDL_FColor hair = tint(HAIR_COLORS[looks.hair_color % HAIR_COLOR_COUNT], brightness);
+    SDL_FColor skin = WHITE;
+    SDL_FColor hair = to_fcolor(HAIR_COLORS[looks.hair_color % HAIR_COLOR_COUNT]);
     /* Seen from the side or from behind while it walks that way; every layer
      * moves as one around the feet. */
     Heading heading = colonist_heading(colonist);
@@ -2670,6 +2684,10 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
                 gait, skin, flip);
     draw_walker(sprites, sprite_head(looks.skin, colonist_expression(colonist), view), anchor_x,
                 anchor_y, feet_y, gait, skin, flip);
+    if (colonist->task == TASK_SLEEP && view == SPRITE_VIEW_FRONT) {
+        draw_walker(sprites, sprite_closed_eyes(looks.skin), anchor_x, anchor_y, feet_y, gait, skin,
+                    false);
+    }
     if (looks.beard > 0) { /* No sprite from behind: nothing drawn. */
         draw_walker(sprites, sprite_beard(looks.beard, view), anchor_x, anchor_y, feet_y, gait,
                     hair, flip);
@@ -2679,6 +2697,9 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
                     hair, flip);
     }
     render_hand(sprites, camera, colonist, slot, tick, feet_x, feet_y, skin);
+    if (colonist->task == TASK_SLEEP) {
+        render_sleep_zs(sprites, camera, slot, tick, anchor_x, anchor_y);
+    }
     if (carrying && view != SPRITE_VIEW_BACK) {
         sprites_flush(sprites);
         render_item_stack(renderer, &held, (ItemType)colonist->carried.type);

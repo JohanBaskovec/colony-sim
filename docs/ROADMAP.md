@@ -190,7 +190,8 @@ theme and migration plan).
 - [x] Walking shown without new sprites: settlers and animals hop at every step (0.06 tile) and rock from side to side around their feet (5.5°), all layers together, faster for a fleeing animal (`gait_at()` in `game/render.c`)
 - [x] Walkers seen the way they head (`colonist_heading()`, `animal_heading()`): settlers from the front, the side and behind (bodies, heads, hair and beards in three views; no face nor beard from behind), animals standing from the front and from behind besides their side poses; legs stay still, the gait does the walking
 - [ ] Views, later: animals eating and asleep seen from the front and from behind (they turn side on to eat and sleep); settlers remembering where they face once they stop (they turn to the viewer); the working hand and its tool for a settler seen from the side or from behind
-- [ ] Colonist sleeping pose
+- [x] Sleeping settlers: closed eyes and Z's rising from the head instead of a darker sprite
+- [ ] Colonist sleeping pose (lying down)
 - [ ] Sprites for items, workstations and structures
 - [ ] Clothes as sprite layers over the body (hide tunic, fur wrap...), once clothing exists
 - [ ] Gender (or body types) for colonists, to tie beards and names together

@@ -108,13 +108,15 @@ enum {
     HAIR_FIRST = BEARD_FIRST + (APPEARANCE_BEARD_COUNT - 1) * BEARD_VIEW_COUNT,
     FIST_FIRST = HAIR_FIRST + (APPEARANCE_HAIR_STYLE_COUNT - 1) * SPRITE_VIEW_COUNT,
     TOOL_FIRST = FIST_FIRST + APPEARANCE_SKIN_COUNT,
-    ANIMAL_FIRST = TOOL_FIRST + 4,
+    EYES_FIRST = TOOL_FIRST + 4,
+    SLEEP_Z_FIRST = EYES_FIRST + APPEARANCE_SKIN_COUNT,
+    ANIMAL_FIRST = SLEEP_Z_FIRST + 1,
     GROUND_FIRST = ANIMAL_FIRST + ANIMAL_SPRITE_COUNT,
     WALL_FIRST = GROUND_FIRST + GROUND_SPRITE_COUNT,
     GRASS_FIRST = WALL_FIRST + WALL_SPRITE_COUNT,
     SPRITE_COUNT = GRASS_FIRST + GRASS_SPRITE_COUNT
 };
-SDL_COMPILE_TIME_ASSERT(tool_sprites, SDL_arraysize(TOOL_TYPES) == ANIMAL_FIRST - TOOL_FIRST &&
+SDL_COMPILE_TIME_ASSERT(tool_sprites, SDL_arraysize(TOOL_TYPES) == EYES_FIRST - TOOL_FIRST &&
                                           SDL_arraysize(TOOL_NAMES) == SDL_arraysize(TOOL_TYPES));
 SDL_COMPILE_TIME_ASSERT(ground_sprites, SDL_arraysize(GROUND_TERRAINS) == GROUND_SPRITE_COUNT &&
                                             SDL_arraysize(GROUND_NAMES) == GROUND_SPRITE_COUNT);
@@ -205,6 +207,16 @@ SpriteId sprite_tool(ItemType type)
     return -1;
 }
 
+SpriteId sprite_closed_eyes(int skin)
+{
+    return EYES_FIRST + clampi(skin, 0, APPEARANCE_SKIN_COUNT - 1);
+}
+
+SpriteId sprite_sleep_z(void)
+{
+    return SLEEP_Z_FIRST;
+}
+
 SpriteId sprite_animal(AnimalSpecies species, AnimalSex sex, AnimalPose pose)
 {
     return ANIMAL_FIRST +
@@ -280,8 +292,12 @@ static void sprite_file_name(SpriteId id, char *out, size_t size)
                      VIEW_SUFFIXES[index / styles]);
     } else if (id < TOOL_FIRST) {
         SDL_snprintf(out, size, "fist_%d", id - FIST_FIRST);
-    } else if (id < ANIMAL_FIRST) {
+    } else if (id < EYES_FIRST) {
         SDL_snprintf(out, size, "tool_%s", TOOL_NAMES[id - TOOL_FIRST]);
+    } else if (id < SLEEP_Z_FIRST) {
+        SDL_snprintf(out, size, "eyes_closed_%d", id - EYES_FIRST);
+    } else if (id < ANIMAL_FIRST) {
+        SDL_snprintf(out, size, "sleep_z");
     } else if (id < GROUND_FIRST) {
         int index = id - ANIMAL_FIRST;
         SDL_snprintf(
@@ -617,6 +633,22 @@ void sprites_draw_rotated(Sprites *sprites, SpriteId id, float center_x, float c
         corners[i] = (SDL_FPoint){center_x + x * c - y * s, center_y + x * s + y * c};
     }
     queue_quad(sprites, id, corners, color, flip);
+}
+
+void sprites_draw_scaled(Sprites *sprites, SpriteId id, float center_x, float center_y, float scale,
+                         SDL_FColor color)
+{
+    if (id < 0 || id >= SPRITE_COUNT) {
+        return;
+    }
+    float width, height;
+    sprites_size(sprites, id, &width, &height);
+    float half_w = width * scale * 0.5f, half_h = height * scale * 0.5f;
+    SDL_FPoint corners[4] = {{center_x - half_w, center_y - half_h},
+                             {center_x + half_w, center_y - half_h},
+                             {center_x + half_w, center_y + half_h},
+                             {center_x - half_w, center_y + half_h}};
+    queue_quad(sprites, id, corners, color, false);
 }
 
 void sprites_draw_tile(Sprites *sprites, SpriteId id, const SDL_FRect *rect, SDL_FColor color)

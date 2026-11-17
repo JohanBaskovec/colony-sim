@@ -1756,7 +1756,7 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   mipmaps). A batch uses the smallest copy at least as detailed as the
   screen, so trees do not shimmer zoomed out. Sprites are queued as textured
   quads and drawn with `SDL_RenderGeometry()`; the vertex color tints them
-  (hair color, darker when asleep) or fades them.
+  (hair color) or fades them.
 - A sprite is anchored by the middle of its bottom edge on a point of the
   world (the bottom middle of a plant's tile, a colonist's feet) and may
   overflow its tile: grown brambles reach 2 tiles high and 1.5 wide. Plants and
@@ -1795,6 +1795,13 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   behind for walking (`ANIMAL_POSE_FRONT`, `ANIMAL_POSE_BACK`). What a
   settler carries is drawn behind the body of one walking away, and ahead
   of one seen from the side.
+- Sleep: a settler asleep (always seen from the front) has closed eyes, a
+  layer over the head (`eyes_closed_<skin>`: the skin of a head drawn
+  without eyes, so that it matches, with a lid line; it leaves the brows, so
+  it serves every expression), and three Z's rising from the head, growing,
+  swaying and fading in and out (`render_sleep_zs()`, one sprite scaled by
+  `sprites_draw_scaled()`, out of step by slot). The bar's portrait has the
+  closed eyes too. Nothing is darkened any more.
 - Gait: nobody has moving legs. Whoever walks hops at every step and rocks
   from side to side around its feet (`gait_at()`, `draw_walker()`), all
   layers as one; a fleeing animal steps faster. It depends on the game tick,

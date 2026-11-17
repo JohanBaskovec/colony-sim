@@ -46,6 +46,10 @@ SpriteId sprite_hair(int style, SpriteView view);
 /* A fist, and a tool held in it (-1 for items without a sprite). Both are
  * drawn centered on the hand: the grip is the middle of the sprite. */
 SpriteId sprite_fist(int skin);
+/* A layer over a head seen from the front (after the head, before beard and
+ * hair): closed eyes, for a settler asleep. And the Z of sleep. */
+SpriteId sprite_closed_eyes(int skin);
+SpriteId sprite_sleep_z(void);
 SpriteId sprite_tool(ItemType type);
 /* An animal seen from the side, facing right (mirror it when it faces left):
  * standing, eating (head down) or asleep (lying); and standing seen from the
@@ -88,6 +92,10 @@ void sprites_draw(Sprites *sprites, SpriteId id, float anchor_x, float anchor_y,
  * around its center (after mirroring when `flip`). */
 void sprites_draw_rotated(Sprites *sprites, SpriteId id, float center_x, float center_y,
                           float degrees, SDL_FColor color, bool flip);
+
+/* Queues a sprite centered on a screen position, `scale` times its size. */
+void sprites_draw_scaled(Sprites *sprites, SpriteId id, float center_x, float center_y, float scale,
+                         SDL_FColor color);
 
 /* Queues a tile texture stretched over a screen rectangle (a whole tile). */
 void sprites_draw_tile(Sprites *sprites, SpriteId id, const SDL_FRect *rect, SDL_FColor color);

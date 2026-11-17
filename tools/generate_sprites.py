@@ -1283,7 +1283,7 @@ def draw_head_back(skin):
     return canvas
 
 
-def draw_head(skin, expression, view="front"):
+def draw_head(skin, expression, view="front", eyes=True):
     if view == "side":
         return draw_head_side(skin, expression)
     if view == "back":
@@ -1301,7 +1301,8 @@ def draw_head(skin, expression, view="front"):
     brow = shade(skin_color, 0.42)
     for side in (-1, 1):
         x = CX + side * 11
-        eye(canvas, x, eye_y, expression)
+        if eyes:
+            eye(canvas, x, eye_y, expression)
         inner, outer = x - side * 5, x + side * 5
         if expression == "neutral":
             canvas.line([(inner, eye_y - 9), (outer, eye_y - 9.5)], 2.6, brow)
@@ -1335,6 +1336,42 @@ def draw_head(skin, expression, view="front"):
         canvas.line([(CX - 6.5, mouth_y + 1), (CX + 6.5, mouth_y + 1)], 1.6, (250, 246, 236))
         canvas.ellipse(CX, HEAD_CY - 6, 3, 1.4, shade(skin_color, 0.8))  # Frown wrinkle.
     canvas.outline(2.0, CHAR_OUTLINE)
+    return canvas
+
+
+def draw_closed_eyes(skin):
+    """A layer over the front head, for a settler asleep: the skin of the face
+    (copied from a head drawn without eyes, so that it matches) covering both
+    open eyes, with a closed lid line in each. It leaves the brows alone, so
+    it serves every expression."""
+    bare = draw_head(skin, "neutral", "front", eyes=False)
+    cover = Canvas(CHAR_W, CHAR_H)
+    eye_y = HEAD_CY + 4
+    for side in (-1, 1):
+        cover.ellipse(CX + side * 11, eye_y + 0.2, 6.4, 5.6, (1.0, 1.0, 1.0))
+    canvas = Canvas(CHAR_W, CHAR_H)
+    canvas.color = bare.color * cover.alpha[..., None]
+    canvas.alpha = bare.alpha * cover.alpha
+    lid = shade(SKIN_TONES[skin], 0.4)
+    for side in (-1, 1):
+        x = CX + side * 11
+        canvas.line([(x - 4.8, eye_y - 0.6), (x - 2.0, eye_y + 1.6), (x + 2.0, eye_y + 1.6),
+                     (x + 4.8, eye_y - 0.6)], 2.2, lid)
+    return canvas
+
+
+# A "Z" of sleep, white with a dark blue edge: the game draws a few of them
+# rising from a sleeper's head, growing and fading.
+SLEEP_Z_SIZE = 32
+SLEEP_Z_FILL = (236, 240, 255)
+SLEEP_Z_EDGE = (30, 40, 90)
+
+
+def draw_sleep_z():
+    canvas = Canvas(SLEEP_Z_SIZE, SLEEP_Z_SIZE)
+    canvas.polygon([(6, 6), (26, 6), (26, 11), (14, 21), (26, 21), (26, 26), (6, 26), (6, 21),
+                    (18, 11), (6, 11)], SLEEP_Z_FILL)
+    canvas.outline(2.0, SLEEP_Z_EDGE)
     return canvas
 
 
@@ -2261,6 +2298,8 @@ def generate(output):
                 sprites[f"beard_{name}{suffix}.png"] = draw_beard(style, view)
     for skin in range(len(SKIN_TONES)):
         sprites[f"fist_{skin}.png"] = draw_fist(skin)
+        sprites[f"eyes_closed_{skin}.png"] = draw_closed_eyes(skin)
+    sprites["sleep_z.png"] = draw_sleep_z()
     for name in TOOL_NAMES:
         sprites[f"tool_{name}.png"] = draw_tool(name)
     for species in ANIMAL_SPECIES:
