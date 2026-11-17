@@ -826,6 +826,8 @@ static void update_items(Game *game)
     rot_nuts(game, begin, end, hours);
 }
 
+static void sync_known_items(Game *game);
+
 static void update_colonists(Game *game)
 {
     /* Fixed slot order keeps the simulation deterministic. */
@@ -836,6 +838,9 @@ static void update_colonists(Game *game)
             /* Someone before may have changed the map (a felled tree, a new wall): stale
              * regions would make every search pre-check answer "maybe". */
             regions_update(&game->regions, &game->map);
+            if (game->fog_on) {
+                sync_known_items(game); /* What someone before moved, where it is seen. */
+            }
             Colonist *colonist = &game->colonists[slot];
             colonist_tick(colonist, &context);
             if (colonist->mood.break_started) {
@@ -954,6 +959,23 @@ static void copy_known_bits(Game *game, size_t word, uint64_t bits)
  * or were explored since the last call (a last time for those leaving, so
  * that the known world holds what was seen last), and a slice of those in
  * view. */
+/* What moves (items) is copied into the known world as soon as it changes
+ * where it is seen (a settler acts on what the one before it just did). */
+static void sync_known_items(Game *game)
+{
+    Items *items = &game->items;
+    if (items->changed_first == SIZE_MAX) {
+        return;
+    }
+    for (size_t word = items->changed_first; word <= items->changed_last; word++) {
+        uint64_t bits = items->changed[word];
+        items->changed[word] = 0;
+        copy_known_bits(game, word, bits & game->vision.seen_bits[word]);
+    }
+    items->changed_first = SIZE_MAX;
+    items->changed_last = 0;
+}
+
 static void sync_known(Game *game)
 {
     Vision *vision = &game->vision;
@@ -965,17 +987,7 @@ static void sync_known(Game *game)
         }
         vision->snapshot_pending = false;
     }
-    /* What moves (items) is copied as soon as it changes where it is seen. */
-    Items *items = &game->items;
-    if (items->changed_first != SIZE_MAX) {
-        for (size_t word = items->changed_first; word <= items->changed_last; word++) {
-            uint64_t bits = items->changed[word];
-            items->changed[word] = 0;
-            copy_known_bits(game, word, bits & vision->seen_bits[word]);
-        }
-        items->changed_first = SIZE_MAX;
-        items->changed_last = 0;
-    }
+    sync_known_items(game);
     size_t slice = (size_t)(game->clock.tick % KNOWN_SYNC_SLICES);
     for (size_t word = vision->words * slice / KNOWN_SYNC_SLICES;
          word < vision->words * (slice + 1) / KNOWN_SYNC_SLICES; word++) {

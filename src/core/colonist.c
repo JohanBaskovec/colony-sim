@@ -2177,19 +2177,6 @@ static bool start_fetch(Colonist *colonist, const ColonistContext *context, Fetc
                          COLONIST_WORK_SEARCH_MAX_COST, &colonist->path)) {
         return false;
     }
-    {
-        static int shown;
-        if (shown < 6 && context->tick > 120000 && found.x == from.x && found.y == from.y) {
-            shown++;
-            ItemStack real = items_get(context->items, found.x, found.y, found.z);
-            ItemStack known = items_get(context->plan_items, found.x, found.y, found.z);
-            fprintf(stderr, "own tile: real x%d known x%d seen=%d explored=%d\n", real.count,
-                    known.count,
-                    context->vision ? vision_seen(context->vision, found.x, found.y, found.z) : -1,
-                    context->vision ? vision_explored(context->vision, found.x, found.y, found.z)
-                                    : -1);
-        }
-    }
     reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE, context->worker_id);
     reservations_add(context->reservations, RESERVATION_HAUL_SOURCE, found, context->worker_id);
     colonist->fetch = found;
