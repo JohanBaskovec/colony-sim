@@ -42,6 +42,9 @@ void alerts_compute(const Game *game, Alerts *out)
             continue;
         }
         settlers++;
+        if (health_in_danger(&colonist->health)) {
+            count_for(&found[ALERT_IN_DANGER], id);
+        }
         if (need_level(colonist->needs[NEED_FOOD]) == NEED_LEVEL_CRITICAL) {
             count_for(&found[ALERT_STARVING], id);
         }
@@ -74,9 +77,10 @@ void alerts_compute(const Game *game, Alerts *out)
 const char *alert_name_key(AlertType type)
 {
     static const char *const KEYS[ALERT_TYPE_COUNT] = {
-        [ALERT_STARVING] = NP_("alert.starving"),   [ALERT_THIRSTY] = NP_("alert.thirsty"),
-        [ALERT_EXHAUSTED] = NP_("alert.exhausted"), [ALERT_NO_FOOD] = NP_("alert.no_food"),
-        [ALERT_BREAKDOWN] = NP_("alert.breakdown"), [ALERT_NO_BED] = NP_("alert.no_bed"),
+        [ALERT_IN_DANGER] = NP_("alert.in_danger"), [ALERT_STARVING] = NP_("alert.starving"),
+        [ALERT_THIRSTY] = NP_("alert.thirsty"),     [ALERT_EXHAUSTED] = NP_("alert.exhausted"),
+        [ALERT_NO_FOOD] = NP_("alert.no_food"),     [ALERT_BREAKDOWN] = NP_("alert.breakdown"),
+        [ALERT_NO_BED] = NP_("alert.no_bed"),
     };
     return (unsigned)type < ALERT_TYPE_COUNT ? KEYS[type] : NULL;
 }
@@ -84,6 +88,7 @@ const char *alert_name_key(AlertType type)
 const char *alert_description_key(AlertType type)
 {
     static const char *const KEYS[ALERT_TYPE_COUNT] = {
+        [ALERT_IN_DANGER] = N_("alert.in_danger.description"),
         [ALERT_STARVING] = N_("alert.starving.description"),
         [ALERT_THIRSTY] = N_("alert.thirsty.description"),
         [ALERT_EXHAUSTED] = N_("alert.exhausted.description"),

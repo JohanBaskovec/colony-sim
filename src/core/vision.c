@@ -596,7 +596,8 @@ static void replace_bits(Vision *vision, uint64_t *field, const uint64_t *fresh,
 static void recast_far(Vision *vision, const Map *map, VisionViewer *viewer)
 {
     memset(vision->scratch, 0, vision->words * sizeof(*vision->scratch));
-    vision_cast(vision, map, viewer->x, viewer->y, viewer->z, viewer->asleep, 0, vision->scratch);
+    vision_cast(vision, map, viewer->x, viewer->y, viewer->z, viewer->asleep, viewer->limit,
+                vision->scratch);
     replace_bits(vision, viewer->field, vision->scratch, 0, map_tile_count(map) - 1);
 }
 
@@ -619,7 +620,9 @@ static void recast_near(Vision *vision, const Map *map, VisionViewer *viewer)
             }
         }
     }
-    vision_cast(vision, map, viewer->x, viewer->y, viewer->z, viewer->asleep, VISION_NEAR_RADIUS,
+    int radius = viewer->limit > 0 && viewer->limit < VISION_NEAR_RADIUS ? viewer->limit
+                                                                         : VISION_NEAR_RADIUS;
+    vision_cast(vision, map, viewer->x, viewer->y, viewer->z, viewer->asleep, radius,
                 vision->scratch);
     for (int z = 0; z < map->depth; z++) {
         for (int y = y0; y <= y1; y++) {
@@ -632,6 +635,13 @@ static void recast_near(Vision *vision, const Map *map, VisionViewer *viewer)
 void vision_viewer_set(Vision *vision, const Map *map, int slot, int x, int y, int z, bool asleep,
                        uint64_t tick)
 {
+    vision_viewer_set_limited(vision, map, slot, x, y, z, asleep, 0, tick);
+}
+
+void vision_viewer_set_limited(Vision *vision, const Map *map, int slot, int x, int y, int z,
+                               bool asleep, int limit, uint64_t tick)
+{
+    limit = limit > 0 ? limit : 0;
     if ((unsigned)slot >= VISION_MAX_VIEWERS || !map_in_bounds(map, x, y, z)) {
         return;
     }
@@ -643,9 +653,10 @@ void vision_viewer_set(Vision *vision, const Map *map, int slot, int x, int y, i
         }
     }
     bool first = !viewer->active;
-    bool moved = first || viewer->z != z || viewer->asleep != asleep ||
+    bool limit_changed = viewer->limit != limit;
+    bool moved = first || limit_changed || viewer->z != z || viewer->asleep != asleep ||
                  abs(viewer->x - x) >= VISION_NEAR_MOVE || abs(viewer->y - y) >= VISION_NEAR_MOVE;
-    bool far_due = first || tick - viewer->far_tick >= VISION_FAR_INTERVAL ||
+    bool far_due = first || limit_changed || tick - viewer->far_tick >= VISION_FAR_INTERVAL ||
                    abs(viewer->far_x - x) >= VISION_FAR_MOVE ||
                    abs(viewer->far_y - y) >= VISION_FAR_MOVE ||
                    abs(viewer->far_z - z) >= VISION_FAR_MOVE_LEVELS;
@@ -665,6 +676,7 @@ void vision_viewer_set(Vision *vision, const Map *map, int slot, int x, int y, i
     viewer->y = (int16_t)y;
     viewer->z = (int16_t)z;
     viewer->asleep = asleep;
+    viewer->limit = (int16_t)limit;
     viewer->near_dirty = false;
     if (far_due) {
         /* The whole field. The first one of each viewer is staggered, so that

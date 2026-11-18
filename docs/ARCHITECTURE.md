@@ -70,7 +70,7 @@ simulation:
 | `journal`    | The journal of a settler or an animal (a ring of the last `JOURNAL_MAX` entries, in `Colonist` and `Animal`): new thoughts, wounds (who struck with what, which part, what it caused), blows given and taken (missed, dodged, harmless, wounding, fatal; the same miss again soon counted in one entry), chats; facts only, the frontend writes the sentences; presentation only |
 | `blood`      | Blood on the ground: drops on the steps of those who bleed, more and larger the worse, a pool under one who stays still, stains drying and fading (a ring of the newest; presentation only, see `docs/HEALTH.md` §9.1) |
 | `strike_anim` | How a blow is played on screen, as functions of the ticks since it was resolved: the attacker drawing back and lunging, the one struck flinching and flashing, the mark drawn, held and fading (presentation only, see `docs/COMBAT.md` §5) |
-| `health`     | Bodies for settlers and animals alike: body plans and parts, injuries that bleed and hurt, abilities (consciousness, walking, the hands, sight, eating), clotting, natural healing, blood coming back, death; falls (see `docs/HEALTH.md`) |
+| `health`     | Bodies for settlers and animals alike: body plans and parts, injuries that bleed and hurt, consciousness (the sum of what takes it off, the posture: up, collapsed, unconscious) and abilities (walking, the hands, sight, eating), clotting, natural healing, blood coming back, death; falls (see `docs/HEALTH.md`) |
 | `attributes` | Settler attributes: positions in thousandths drawn on a bell curve, their effects (factors, thought weight, outlook points, temperature shifts), the word bands and translation keys |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
 | `occupancy`  | Who stops on which tile, settlers and animals alike: one claim per tile (where a being stands, or where its path ends), yielding claims (idle, strolling), forced ones (knocked down), how many beings are on each tile now (crossing slows down), the pathfinder's stop filter |
@@ -127,7 +127,7 @@ simulation:
 | `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills (the active bills, and two windows docked to the right of the tab: the recipes to add, and the details of the one picked) and (hearths) Fire tabs; forbid, build another, delete |
 | `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd, health |
 | `journal_panel` | The Journal tab of a settler or an animal: three filter check boxes (`App.journal_hidden`), the entries newest first with their date, sentences built from the facts of `core/journal.h` (wording per language: verb by the strike mark, part and injury phrases, the owner's and the attacker's phrases by species) |
-| `health_panel` | The health of a settler (its Health tab) or an animal as table rows: the state, blood, bleeding, pain, abilities, injuries with tooltips |
+| `health_panel` | The health of a settler (its Health tab) or an animal as table rows: the state, consciousness and what takes it off, blood, bleeding, pain, afflictions, abilities, injuries with tooltips |
 | `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
@@ -903,17 +903,18 @@ needs on average and at worst).
 land on a part (`health_hurt()`, `health_blow()`, `health_fall()`); each tick
 of a hurt being `health_update()` runs bleeding, clotting, healing and blood
 coming back, and says when it died. Abilities are read from the state when
-needed (`health_ability()`): nothing derived is stored, and a healthy body
+needed (`health_ability()`): nothing derived is stored but the posture
+(consciousness, below), and a healthy body
 returns exactly 1, so that the simulation and `game_hash()` stay as they were
 while nobody is hurt (`health_hash()` adds nothing then).
 
 - Settlers: the Toughness and Pain tolerance attributes set the damage and
   pain factors (`colonist_set_attributes()`); walking scales the walk
   (`colonist_walk_factor()`), the hands the work speed and the weight carried
-  (`colonist_max_carry_weight()`). Unconscious or unable to walk, the colonist
+  (`colonist_max_carry_weight()`). Collapsed or unable to walk, the colonist
   is `TASK_DOWN`: `colonist_tick()` only runs its needs; it gets up by itself.
-  An unconscious settler is no viewer (`update_vision()`) and frightens no
-  animal.
+  An unconscious settler is no viewer (`update_vision()`); a collapsed one
+  frightens no animal and cannot strike.
 - Animals: `AnimalDef.body`, `.size` and `.carcass`; `ANIMAL_TASK_DOWN`; a
   character of their own (`Animal.attributes`, `attributes_roll_animal()`, the
   effective values in `animal_walk_speed()`, `animal_run_speed()`...).
@@ -926,10 +927,20 @@ while nobody is hurt (`health_hash()` adds nothing then).
 - Deprivation (`health_strain()`): every `COLONIST_STRAIN_TICKS` (settlers)
   or `ANIMAL_STRAIN_TICKS` (animals), spread over the beings, food or water at
   0 and the felt temperature (`colonist_cold_pressure()`,
-  `colonist_heat_pressure()`) press on the severities in `Health.deprivation`;
-  the worst, `health_weakness()`, slows walking and the hands and ends in a
-  collapse before death. `health_is_hurt()` is true while any is above 0, so
-  hashes of games where nobody suffers are unchanged.
+  `colonist_heat_pressure()`) press on the severities in `Health.deprivation`.
+  `health_is_hurt()` is true while any is above 0, so hashes of games where
+  nobody suffers are unchanged.
+- Consciousness (`docs/HEALTH.md` §11): `health_consciousness_loss()` per
+  `ConsciousnessSource` (the deprivations, blood, the head, pain), summed;
+  the only stored part is `Health.posture` (up, collapsed, unconscious),
+  which `settle()` updates after every change (`health_hurt()`,
+  `health_update()`, `health_strain()`, `health_set_factors()`) with margins
+  between falling and getting up, and where the deadly sources taking
+  everything kill. `health_vigor()` is the one factor consciousness puts on
+  the body: walking, the hands and the limbs, `combat_aim()`, an animal's
+  sprint, recovery and alertness, a settler's learning and work level. The
+  game tells the player when a settler collapses (`Colonist.collapse_noticed`,
+  `NOTICE_SETTLER_COLLAPSED`); `ALERT_IN_DANGER` counts those under 70 %.
 - Death: the game deals with it after each turn (`settler_died()` in
   `update_colonists()`, the carcasses in `update_animals()`): the body is an
   item (`ITEM_CATEGORY_BODIES`, rotting like food, left out of new
@@ -1004,7 +1015,8 @@ stands, or where the path it walks ends.
   `core/animal.c`): the being is counted on its tile (`occupancy_place()`),
   yields when idle or strolling, and claims its stop tile. A dead being holds
   nothing; one knocked down forces its tile (`occupancy_force()`: whoever
-  held it makes way). A refused claim is tried again at every tile on the
+  held it makes way, unless that one lies there too: then the newcomer crawls
+  to the nearest free tile within `OCCUPANCY_CRAWL_REACH`, `crawl_aside()`). A refused claim is tried again at every tile on the
   way; one step short of it (`walk()` never starts the last step onto a tile
   it does not hold), a being waits up to `OCCUPANCY_PATIENCE_TICKS`, then
   makes way: a player's move goes to the nearest free tile, a fight or a
@@ -1765,7 +1777,9 @@ positions, so it is not part of `game_hash()`:
   and replaces what the field held there (`replace_bits()` updates
   `Vision.seen`, the number of viewers seeing each tile, from the difference);
   the whole field every `VISION_FAR_INTERVAL` ticks or after
-  `VISION_FAR_MOVE` tiles of walking.
+  `VISION_FAR_MOVE` tiles of walking. A viewer may have a `limit` in tiles
+  (`vision_viewer_set_limited()`: a settler lying collapsed); both fields are
+  cast again when it changes.
 - **Explored tiles** (`Vision.explored`, a bit per tile: seen by anyone ever,
   or marked) and the tiles in view now (`seen_bits`) are kept by the same
   bookkeeping as the counts; `Vision.snapshot` collects the tiles that came into

@@ -34,8 +34,9 @@ typedef enum NoticeType {
     NOTICE_DEATH_DEHYDRATION,
     NOTICE_DEATH_HYPOTHERMIA,
     NOTICE_DEATH_HEATSTROKE,
-    NOTICE_COLONY_LOST,      /* The last settler died. */
-    NOTICE_SETTLER_ATTACKED, /* An animal went for a settler (docs/COMBAT.md). */
+    NOTICE_COLONY_LOST,       /* The last settler died. */
+    NOTICE_SETTLER_ATTACKED,  /* An animal went for a settler (docs/COMBAT.md). */
+    NOTICE_SETTLER_COLLAPSED, /* Its consciousness fell below half (docs/HEALTH.md §11). */
     NOTICE_TYPE_COUNT
 } NoticeType;
 

@@ -106,8 +106,8 @@ static void test_limb_ability(void)
     CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_ARMS), 1.0, 1e-6);
     CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_HEAD), 0.0, 1e-9); /* No such limb. */
     CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_NONE), 0.0, 1e-9);
-    /* One arm lost of two: half the strength (less, for the pain); the hands
-     * agree. */
+    /* One arm lost of two: half the strength (less, for the pain's toll on
+     * consciousness); the hands agree. */
     health_hurt(&health, LEFT_ARM, INJURY_BRUISE, 20.0f);
     CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_ARMS), 0.45, 0.05);
     CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_ARMS), health_ability(&health, HEALTH_HANDS),
@@ -249,19 +249,97 @@ static void test_serious_cut_kills(void)
     CHECK_EQ_INT(health.death, DEATH_BLOOD_LOSS);
 }
 
-/* Blood loss makes faint, then unconscious. */
+/* Sets the blood and lets the body take note of it (the posture). */
+static void set_blood(Health *health, float blood)
+{
+    health->blood = blood;
+    health_update(health, 1e-6f);
+}
+
+/* Blood loss lowers consciousness from 85 % of the blood: collapsed, then
+ * unconscious; getting up again takes a little more than falling. */
 static void test_blood_loss_and_consciousness(void)
 {
     Health health = human();
-    health.blood = 0.8f;
-    CHECK_NEAR(health_ability(&health, HEALTH_CONSCIOUSNESS), 1.0, 1e-6);
-    health.blood = 0.6f;
-    CHECK_NEAR(health_ability(&health, HEALTH_CONSCIOUSNESS), 0.5, 1e-5);
+    set_blood(&health, 0.9f);
+    CHECK_NEAR(health_consciousness(&health), 1.0, 1e-6);
+    CHECK_NEAR(health_consciousness_loss(&health, CONSCIOUSNESS_BLOOD), 0.0, 1e-9);
+    set_blood(&health, 0.7f);
+    CHECK_NEAR(health_consciousness(&health), 1.0 - 0.15 / 0.35, 1e-4);
+    CHECK(!health_is_collapsed(&health));
+    set_blood(&health, 0.65f);
+    CHECK(health_is_collapsed(&health));
     CHECK(!health_is_unconscious(&health));
-    health.blood = 0.55f;
-    CHECK(health_is_unconscious(&health));
     CHECK(health_is_down(&health));
+    CHECK_STR_EQ(health_status_key(&health), "health.status.collapsed");
     CHECK_NEAR(health_ability(&health, HEALTH_WALKING), 0.0, 1e-9);
+    CHECK_NEAR(health_ability(&health, HEALTH_HANDS), 0.0, 1e-9);
+    CHECK(health_ability(&health, HEALTH_SIGHT) > 0.2f); /* Still sees. */
+    set_blood(&health, 0.55f);
+    CHECK(health_is_unconscious(&health));
+    CHECK_STR_EQ(health_status_key(&health), "health.status.unconscious");
+    CHECK_NEAR(health_ability(&health, HEALTH_SIGHT), 0.0, 1e-9);
+    CHECK_NEAR(health_ability(&health, HEALTH_EATING), 0.0, 1e-9);
+
+    /* Coming back: out until 30 %, down until 55 %. */
+    set_blood(&health, 0.6f); /* 29 %. */
+    CHECK(health_is_unconscious(&health));
+    set_blood(&health, 0.62f); /* 34 %. */
+    CHECK(!health_is_unconscious(&health));
+    CHECK(health_is_collapsed(&health));
+    set_blood(&health, 0.69f); /* 54 %: above the fall, below getting up. */
+    CHECK(health_is_collapsed(&health));
+    set_blood(&health, 0.71f); /* 60 %. */
+    CHECK(!health_is_collapsed(&health));
+    CHECK(!health_is_down(&health));
+}
+
+/* Lying collapsed, one sees less and less far; up, with no limit. */
+static void test_sight_reach(void)
+{
+    Health health = human();
+    CHECK_EQ_INT(health_sight_reach(&health), 0);
+    set_blood(&health, 0.85f - 0.035f); /* 90 %: up. */
+    CHECK_EQ_INT(health_sight_reach(&health), 0);
+    set_blood(&health, 0.65f); /* 57 %... */
+    set_blood(&health, 0.62f); /* 34 %: collapsed. */
+    REQUIRE(health_is_collapsed(&health));
+    int far = health_sight_reach(&health);
+    CHECK(far > 1 && far < HEALTH_SIGHT_REACH_MAX);
+    set_blood(&health, 0.61f); /* Lower: a shorter reach. */
+    CHECK(health_sight_reach(&health) < far);
+    set_blood(&health, 0.605f);
+    CHECK(health_sight_reach(&health) >= 1);
+    /* Just collapsed: as far as it will see. */
+    Health fresh = human();
+    set_blood(&fresh, 0.672f); /* 49 %. */
+    REQUIRE(health_is_collapsed(&fresh));
+    CHECK_EQ_INT(health_sight_reach(&fresh), HEALTH_SIGHT_REACH_MAX);
+    Health dead = human();
+    health_hurt(&dead, HEAD, INJURY_CUT, 100.0f);
+    CHECK_EQ_INT(health_sight_reach(&dead), 0);
+}
+
+/* What consciousness puts on the body: nothing from 90 % up, half at 50 %. */
+static void test_vigor(void)
+{
+    Health health = human();
+    CHECK_NEAR(health_vigor(&health), 1.0, 1e-6);
+    set_blood(&health, 0.85f - 0.035f); /* 90 %. */
+    CHECK_NEAR(health_consciousness(&health), 0.9, 1e-4);
+    CHECK_NEAR(health_vigor(&health), 1.0, 1e-3);
+    set_blood(&health, 0.85f - 0.1225f); /* 65 %: in danger. */
+    CHECK_NEAR(health_vigor(&health), 0.6875, 1e-3);
+    CHECK(health_in_danger(&health));
+    CHECK_NEAR(health_ability(&health, HEALTH_WALKING), 0.6875, 1e-3);
+    CHECK_NEAR(health_ability(&health, HEALTH_HANDS), 0.6875, 1e-3);
+    CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_ARMS), 0.6875, 1e-3);
+    set_blood(&health, 0.85f - 0.0525f); /* 85 %. */
+    CHECK(!health_in_danger(&health));
+    Health dead = human();
+    health_hurt(&dead, HEAD, INJURY_CUT, 100.0f);
+    CHECK_NEAR(health_vigor(&dead), 0.0, 1e-9);
+    CHECK(!health_in_danger(&dead));
 }
 
 static void test_pain(void)
@@ -269,14 +347,26 @@ static void test_pain(void)
     Health health = human();
     health_hurt(&health, LEFT_ARM, INJURY_BRUISE, 10.0f); /* 8 points of pain over 50. */
     CHECK_NEAR(health_pain(&health), 8.0 / HEALTH_PAIN_FULL, 1e-5);
-    /* Walking slowed by the pain, the legs whole. */
-    CHECK_NEAR(health_ability(&health, HEALTH_WALKING), 1.0 - HEALTH_PAIN_SLOWDOWN * 0.16, 1e-5);
-    /* Knocked down from 80 %: 8 + 12 + 20 = 40 points of pain. */
+    /* Pain takes consciousness; a little of it slows nothing. */
+    CHECK_NEAR(health_consciousness_loss(&health, CONSCIOUSNESS_PAIN), HEALTH_PAIN_LOSS * 0.16,
+               1e-5);
+    CHECK_NEAR(health_ability(&health, HEALTH_WALKING), 1.0, 1e-5);
+    /* Down from about 80 %: 8 + 12 + 22 = 42 points of pain. */
     health_hurt(&health, RIGHT_ARM, INJURY_BRUISE, 15.0f);
-    health_hurt(&health, LEFT_LEG, INJURY_BRUISE, 25.0f);
-    CHECK_NEAR(health_pain(&health), 0.8, 1e-5);
-    CHECK(health_is_unconscious(&health));
+    health_hurt(&health, LEFT_LEG, INJURY_BRUISE, 27.5f);
+    CHECK_NEAR(health_pain(&health), 0.84, 1e-5);
+    CHECK(health_is_collapsed(&health));
+    CHECK(!health_is_unconscious(&health));
     CHECK_NEAR(health_ability(&health, HEALTH_HANDS), 0.0, 1e-9);
+    /* Full pain does not knock out by itself... */
+    health_hurt(&health, TORSO, INJURY_BRUISE, 20.0f);
+    CHECK_NEAR(health_pain(&health), 1.0, 1e-5);
+    CHECK(!health_is_unconscious(&health));
+    /* ...nor kill, whatever comes with it. */
+    health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 90.0f);
+    CHECK(!health_is_dead(&health));
+    CHECK(health_is_unconscious(&health));
+    CHECK_NEAR(health_consciousness(&health), HEALTH_CONSCIOUS_FLOOR, 1e-6);
 
     /* Hard to pain: the same blows hurt half as much. */
     Health hardy;
@@ -293,15 +383,16 @@ static void test_legs_and_walking(void)
     Health health;
     health_init(&health, BODY_HUMAN, 1.0f, 1.0f, 0.25f); /* Little pain. */
     health_hurt(&health, LEFT_LEG, INJURY_CRUSH, 25.0f); /* Destroyed. */
-    float pain = health_pain(&health);
-    CHECK_NEAR(health_ability(&health, HEALTH_WALKING), 0.5 * (1.0 - HEALTH_PAIN_SLOWDOWN * pain),
-               1e-5);
+    /* Half the legs; too little pain to slow anything else. */
+    CHECK(health_consciousness(&health) > HEALTH_VIGOR_FULL);
+    CHECK_NEAR(health_ability(&health, HEALTH_WALKING), 0.5, 1e-5);
     CHECK(!health_is_down(&health));
     health_hurt(&health, RIGHT_LEG, INJURY_FRACTURE, 1.0f);
     /* Half a leg's share at most, from the fractured one: down. */
     CHECK(health_ability(&health, HEALTH_WALKING) < HEALTH_WALKING_MIN);
     CHECK(health_is_down(&health));
-    CHECK(!health_is_unconscious(&health));
+    CHECK(!health_is_collapsed(&health));
+    CHECK_STR_EQ(health_status_key(&health), "health.status.cannot_walk");
     CHECK(health_ability(&health, HEALTH_HANDS) > 0.8f);
 }
 
@@ -450,10 +541,118 @@ static Colonist *spawn_settler(Game *game, int x, int y)
     return colonist;
 }
 
-/* Bruises all over the limbs: pain enough to knock a settler out (62 points
- * of bruises, times 0.8, over 50: 99 %), and nothing that bleeds. */
+/* How many notices of a kind the game has pushed since `from`. */
+static int notices_of(const Game *game, NoticeType type, uint32_t from)
+{
+    int count = 0;
+    for (uint32_t number = from; number < game->notices.count; number++) {
+        const Notice *notice = notices_get(&game->notices, number);
+        count += notice != NULL && notice->type == type;
+    }
+    return count;
+}
+
+/* Lowered consciousness slows the settler's walk and work, its learning, and
+ * lowers the quality of what it makes, by its vigor. */
+static void test_consciousness_slows_the_settler(void)
+{
+    Colonist healthy, dazed;
+    colonist_init(&healthy, "Ada", 30, 0, 0, 0);
+    colonist_init(&dazed, "Bea", 30, 0, 0, 0);
+    healthy.knowledge[KNOWLEDGE_FIRE] = dazed.knowledge[KNOWLEDGE_FIRE] = 40.0;
+    dazed.health.blood = 0.85f - 0.1225f; /* 65 % consciousness. */
+    health_update(&dazed.health, 1e-6f);
+    float vigor = health_vigor(&dazed.health);
+    CHECK_NEAR(vigor, 0.6875, 1e-3);
+    CHECK_NEAR(colonist_walk_factor(&dazed), colonist_walk_factor(&healthy) * vigor, 1e-4);
+    CHECK_NEAR(colonist_work_speed(&dazed, KNOWLEDGE_FIRE),
+               colonist_work_speed(&healthy, KNOWLEDGE_FIRE) * vigor, 1e-4);
+    double offset = colonist_work_level(&healthy, KNOWLEDGE_FIRE) - 40.0; /* The mood's. */
+    CHECK_NEAR(colonist_work_level(&dazed, KNOWLEDGE_FIRE), 40.0 * vigor + offset, 1e-3);
+    double quick =
+        colonist_learn(&healthy, KNOWLEDGE_FIRE, KNOWLEDGE_SOURCE_DOING, 1.0, 1.0, 100.0, 0);
+    double slow =
+        colonist_learn(&dazed, KNOWLEDGE_FIRE, KNOWLEDGE_SOURCE_DOING, 1.0, 1.0, 100.0, 0);
+    CHECK(slow > 0.0 && slow < quick * 0.8);
+    colonist_free(&healthy);
+    colonist_free(&dazed);
+}
+
+/* Two settlers who collapse on the same tile do not lie on top of each other:
+ * the second crawls to a tile of its own. */
+static void test_collapsing_on_someone_who_lies_there(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *first = spawn_settler(&game, 20, 20);
+    Colonist *second = spawn_settler(&game, 22, 20);
+    REQUIRE(first != NULL && second != NULL);
+    first->health.blood = 0.62f;
+    health_update(&first->health, 1e-6f);
+    for (int tick = 0; tick < 5; tick++) {
+        game_tick(&game);
+    }
+    REQUIRE(colonist_is_down(first));
+    int x = first->x, y = first->y;
+    /* The second walks over it (crossing is allowed) and falls on it. */
+    second->x = x;
+    second->y = y;
+    second->health.blood = 0.62f;
+    health_update(&second->health, 1e-6f);
+    for (int tick = 0; tick < 5; tick++) {
+        game_tick(&game);
+    }
+    CHECK(colonist_is_down(second));
+    CHECK_EQ_INT(first->x, x); /* The first one has not moved. */
+    CHECK_EQ_INT(first->y, y);
+    CHECK(second->x != x || second->y != y);
+    CHECK(abs(second->x - x) <= OCCUPANCY_CRAWL_REACH &&
+          abs(second->y - y) <= OCCUPANCY_CRAWL_REACH);
+    CHECK_EQ_INT(second->z, first->z);
+    /* They stay apart. */
+    for (int tick = 0; tick < 60; tick++) {
+        game_tick(&game);
+    }
+    CHECK(first->x != second->x || first->y != second->y);
+    game_shutdown(&game);
+}
+
+/* The player is told once each time a settler collapses. */
+static void test_collapse_is_noticed(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_settler(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    uint32_t from = game.notices.count;
+    game_tick(&game);
+    CHECK_EQ_INT(notices_of(&game, NOTICE_SETTLER_COLLAPSED, from), 0);
+    colonist->health.blood = 0.65f;
+    health_update(&colonist->health, 1e-6f);
+    for (int tick = 0; tick < 10; tick++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(colonist->task, TASK_DOWN);
+    CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.activity.collapsed");
+    CHECK_EQ_INT(notices_of(&game, NOTICE_SETTLER_COLLAPSED, from), 1);
+    /* Up again, then down again: told again. */
+    colonist->health.blood = 0.9f;
+    health_update(&colonist->health, 1e-6f);
+    game_tick(&game);
+    CHECK(colonist->task != TASK_DOWN);
+    colonist->health.blood = 0.65f;
+    health_update(&colonist->health, 1e-6f);
+    game_tick(&game);
+    CHECK_EQ_INT(notices_of(&game, NOTICE_SETTLER_COLLAPSED, from), 2);
+    game_shutdown(&game);
+}
+
+/* Bruises all over (72 points, times 0.8, over 50: full pain, 62 % of
+ * consciousness) and on the head (24 % more): knocked out, as pain alone
+ * only brings one down; nothing bleeds. */
 static void beat_up(Health *health)
 {
+    health_hurt(health, HEAD, INJURY_BRUISE, 10.0f);
     health_hurt(health, LEFT_ARM, INJURY_BRUISE, 19.0f);
     health_hurt(health, RIGHT_ARM, INJURY_BRUISE, 19.0f);
     health_hurt(health, LEFT_LEG, INJURY_BRUISE, 12.0f);
@@ -541,17 +740,20 @@ static void test_settler_knocked_out_lies_and_gets_up(void)
     CHECK_EQ_INT(colonist->x, x);
     CHECK_EQ_INT(colonist->y, y);
 
-    /* The bruises heal by 4.5 points a day each: under 50 points of them
-     * (pain 80 %) within a day. */
+    /* The bruises heal by 4.5 points a day each: back to 55 % of
+     * consciousness, to get up, after a day and a half. */
     int hours = 1;
-    while (colonist->task == TASK_DOWN && hours < 30) {
+    while (colonist->task == TASK_DOWN && hours < 48) {
         for (int tick = 0; tick < TICKS_PER_HOUR; tick++) {
             game_tick(&game);
         }
+        /* Nobody feeds one lying down yet (care): no thirst on top here. */
+        colonist->needs[NEED_FOOD] = 1.0f;
+        colonist->needs[NEED_WATER] = 1.0f;
         hours++;
     }
     CHECK(colonist->task != TASK_DOWN);
-    CHECK(hours > 10 && hours < 24);
+    CHECK(hours > 30 && hours < 42);
     CHECK(!health_is_dead(&colonist->health));
     CHECK(health_is_hurt(&colonist->health)); /* Still healing. */
     CHECK_EQ_INT(game_order_move(&game, &id, 1, 30, 20, 0), 1);
@@ -859,7 +1061,8 @@ static void test_deprivation_tables(void)
           deprivation_death_hours(DEPRIVATION_HUNGER));
 }
 
-/* Starving for four days: weaker and weaker, down on the third day, dead on the fourth. */
+/* Starving for four days: weaker and weaker, slowly at first, collapsed after
+ * two and a half days, out cold on the fourth, dead at its end. */
 static void test_hunger_weakens_then_kills(void)
 {
     Health health = human();
@@ -867,21 +1070,25 @@ static void test_hunger_weakens_then_kills(void)
     CHECK_STR_EQ(health_status_key(&health), "health.status.healthy");
     uint64_t healthy = health_hash(&health, 1);
     float walk = 1.0f;
-    float hours_down = -1.0f;
+    float hours_down = -1.0f, hours_out = -1.0f;
     bool died = false;
     for (int hour = 1; hour <= 100 && !died; hour++) {
         died = health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 1.0f);
         float now = health_ability(&health, HEALTH_WALKING);
         CHECK(now <= walk + 1e-6f); /* Steadily weaker. */
         walk = now;
-        if (hours_down < 0.0f && health_is_unconscious(&health)) {
+        if (hours_down < 0.0f && health_is_collapsed(&health)) {
             hours_down = (float)hour;
+        }
+        if (hours_out < 0.0f && health_is_unconscious(&health)) {
+            hours_out = (float)hour;
         }
         if (hour == 24) {
             CHECK_NEAR(health_deprivation(&health, DEPRIVATION_HUNGER), 0.25, 1e-4);
-            CHECK(walk < 0.9f && walk > 0.8f);
+            CHECK_NEAR(health_consciousness(&health), 0.875, 1e-4); /* 0.25^1.5 off. */
+            CHECK(walk < 1.0f && walk > 0.95f);
             CHECK(health_is_hurt(&health));
-            CHECK_STR_EQ(health_status_key(&health), "health.status.weak");
+            CHECK_STR_EQ(health_status_key(&health), "health.status.hurt");
             CHECK(health_hash(&health, 1) != healthy);
             CHECK(!health_is_down(&health));
         }
@@ -889,7 +1096,8 @@ static void test_hunger_weakens_then_kills(void)
     CHECK(died);
     CHECK(health_is_dead(&health));
     CHECK_EQ_INT(health.death, DEATH_STARVATION);
-    CHECK(hours_down > 70.0f && hours_down < 85.0f); /* Out cold before the end. */
+    CHECK(hours_down > 58.0f && hours_down < 64.0f);
+    CHECK(hours_out > 77.0f && hours_out < 82.0f); /* Out cold before the end. */
     CHECK_NEAR(health_deprivation(&health, DEPRIVATION_HUNGER), 0.0, 1e-9); /* Dead: none. */
     CHECK(!health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 10.0f));
 }
@@ -921,8 +1129,15 @@ static void test_deprivation_wears_off(void)
     Health health = human();
     health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 48.0f); /* Halfway to dead. */
     health_strain(&health, DEPRIVATION_THIRST, 1.0f, 8.0f);
-    CHECK(health_is_unconscious(&health) == false);
-    CHECK_NEAR(health_weakness(&health), 0.5, 1e-5); /* The worst of them. */
+    CHECK(!health_is_collapsed(&health));
+    /* They add up. */
+    CHECK_NEAR(health_consciousness(&health), 1.0 - pow(0.5, 1.5) - pow(0.2, 1.5), 1e-4);
+    CHECK_STR_EQ(deprivation_severity_key(health_deprivation(&health, DEPRIVATION_HUNGER)),
+                 "health.severity.moderate");
+    CHECK_STR_EQ(deprivation_severity_key(health_deprivation(&health, DEPRIVATION_THIRST)),
+                 "health.severity.mild");
+    CHECK_STR_EQ(deprivation_severity_key(0.9f), "health.severity.severe");
+    CHECK(deprivation_severity_key(0.0f) == NULL);
     /* Eaten and drunk: thirst goes in hours, hunger in days. */
     health_strain(&health, DEPRIVATION_THIRST, 0.0f, 10.0f);
     CHECK_NEAR(health_deprivation(&health, DEPRIVATION_THIRST), 0.0, 1e-6);
@@ -938,6 +1153,41 @@ static void test_deprivation_wears_off(void)
     CHECK_NEAR(health_deprivation(&health, DEPRIVATION_COUNT), 0.0, 1e-9);
 }
 
+/* Two deprivations kill together where neither would alone: of the worse
+ * of them. */
+static void test_deprivations_kill_together(void)
+{
+    Health health = human();
+    CHECK(!health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 0.8f * 96.0f));
+    CHECK(health_is_collapsed(&health)); /* 0.8^1.5: 72 % off. */
+    bool died = false;
+    int hours = 0;
+    while (!died && hours < 14) {
+        died = health_strain(&health, DEPRIVATION_COLD, 1.0f, 1.0f);
+        hours++;
+    }
+    CHECK(died);
+    CHECK_EQ_INT(health.death, DEATH_STARVATION);
+    CHECK(hours <= 7); /* Alone, the cold would take 14 hours. */
+
+    /* Blood loss and a hurt head, likewise. */
+    Health wounded = human();
+    health_hurt(&wounded, HEAD, INJURY_BRUISE, 20.0f); /* 48 % off. */
+    REQUIRE(!health_is_dead(&wounded));
+    set_blood(&wounded, 0.62f); /* 66 % off. */
+    CHECK(health_is_dead(&wounded));
+    CHECK_EQ_INT(wounded.death, DEATH_BLOOD_LOSS);
+
+    /* The sources' names, and which kill. */
+    for (int source = 0; source < CONSCIOUSNESS_SOURCE_COUNT; source++) {
+        CHECK(consciousness_source_name_key((ConsciousnessSource)source) != NULL);
+    }
+    CHECK(consciousness_source_name_key(CONSCIOUSNESS_SOURCE_COUNT) == NULL);
+    CHECK(consciousness_source_deadly(CONSCIOUSNESS_COLD));
+    CHECK(!consciousness_source_deadly(CONSCIOUSNESS_PAIN));
+    CHECK(!consciousness_source_deadly(CONSCIOUSNESS_SOURCE_COUNT));
+}
+
 /* Deprivation and wounds add up: a wounded settler faints sooner. */
 static void test_deprivation_with_wounds(void)
 {
@@ -947,6 +1197,7 @@ static void test_deprivation_with_wounds(void)
     health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 48.0f);
     CHECK(health_ability(&health, HEALTH_WALKING) < wounded * 0.75f);
     CHECK(health_ability(&health, HEALTH_HANDS) < 0.75f);
+    CHECK(health_in_danger(&health));
     CHECK_STR_EQ(health_status_key(&health), "health.status.hurt");
 }
 
@@ -1211,6 +1462,8 @@ int main(void)
     RUN_TEST(test_small_cut_heals);
     RUN_TEST(test_serious_cut_kills);
     RUN_TEST(test_blood_loss_and_consciousness);
+    RUN_TEST(test_vigor);
+    RUN_TEST(test_sight_reach);
     RUN_TEST(test_pain);
     RUN_TEST(test_legs_and_walking);
     RUN_TEST(test_fracture_heals_slowly);
@@ -1222,6 +1475,9 @@ int main(void)
     RUN_TEST(test_toughness_and_pain_tolerance);
     RUN_TEST(test_hurt_settler_is_slower);
     RUN_TEST(test_settler_knocked_out_lies_and_gets_up);
+    RUN_TEST(test_consciousness_slows_the_settler);
+    RUN_TEST(test_collapsing_on_someone_who_lies_there);
+    RUN_TEST(test_collapse_is_noticed);
     RUN_TEST(test_settler_unable_to_walk);
     RUN_TEST(test_hurt_animal);
     RUN_TEST(test_settler_death);
@@ -1234,6 +1490,7 @@ int main(void)
     RUN_TEST(test_hunger_weakens_then_kills);
     RUN_TEST(test_thirst_and_the_weather_kill_too);
     RUN_TEST(test_deprivation_wears_off);
+    RUN_TEST(test_deprivations_kill_together);
     RUN_TEST(test_deprivation_with_wounds);
     RUN_TEST(test_weather_pressure);
     RUN_TEST(test_settler_dies_of_thirst);

@@ -1043,6 +1043,39 @@ static void test_animals_have_characters(void)
     game_shutdown(&game);
 }
 
+/* A dazed animal (lowered consciousness) runs out of breath sooner and
+ * notices a settler later. */
+static void test_dazed_animal(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    const AnimalDef *def = animal_def(ANIMAL_ROE_DEER);
+    Animal *alert = spawn(&game, ANIMAL_ROE_DEER, ANIMAL_FEMALE, 30, 20);
+    Animal *dazed = spawn(&game, ANIMAL_ROE_DEER, ANIMAL_FEMALE, 30, 40);
+    REQUIRE(alert != NULL && dazed != NULL);
+    dazed->health.blood = 0.85f - 0.1225f; /* 65 % consciousness: vigor 0.69. */
+    health_update(&dazed->health, 1e-6f);
+    CHECK_NEAR(animal_sprint_seconds(dazed), animal_sprint_seconds(alert) * 0.6875, 1e-3);
+    alert->timer = dazed->timer = 100000; /* Standing there. */
+    run(&game, 2 * ANIMAL_ALERT_TICKS);
+    /* A settler at 80 % of the flight distance from each. */
+    int away = def->flight_distance * 8 / 10;
+    Colonist *near_alert = game_colonist(&game, game_spawn_colonist(&game, 30 - away, 20, 0));
+    Colonist *near_dazed = game_colonist(&game, game_spawn_colonist(&game, 30 - away, 40, 0));
+    REQUIRE(near_alert != NULL && near_dazed != NULL);
+    bool alert_fled = false, dazed_fled = false;
+    for (int i = 0; i < 2 * ANIMAL_ALERT_TICKS; i++) {
+        game_tick(&game);
+        alert_fled |= alert->task == ANIMAL_TASK_FLEE;
+        dazed_fled |= dazed->task == ANIMAL_TASK_FLEE;
+        hold(near_alert, 30 - away, 20);
+        hold(near_dazed, 30 - away, 40);
+    }
+    CHECK(alert_fled);
+    CHECK(!dazed_fled);
+    game_shutdown(&game);
+}
+
 /* The species' values are the ordinary ones: the attributes move them. */
 static void test_attributes_change_the_species_values(void)
 {
@@ -1188,6 +1221,7 @@ int main(void)
     RUN_TEST(test_debug_spawn_joins_a_herd);
     RUN_TEST(test_heading);
     RUN_TEST(test_animals_have_characters);
+    RUN_TEST(test_dazed_animal);
     RUN_TEST(test_attributes_change_the_species_values);
     RUN_TEST(test_appetite_and_sleep_of_animals);
     RUN_TEST(test_quick_animals_catch_up_sooner);

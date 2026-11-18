@@ -164,6 +164,10 @@ TileBox combat_spot_box(const CombatSpot *spot);
  * ability (0 for someone down: knocked out or unable to walk). */
 float combat_dodge(const Health *defender, float agility);
 
+/* The attacker's skill as the blow is struck: times its vigor (a dazed
+ * attacker aims worse, docs/HEALTH.md §11.4). */
+float combat_aim(float skill, const Health *attacker);
+
 /* Chance for a blow to land. */
 float combat_hit_chance(AttackType type, float skill, const Health *defender, float agility);
 

@@ -45,6 +45,31 @@ static const Alert *find(const Alerts *alerts, AlertType type)
     return NULL;
 }
 
+/* Consciousness under 70 %: in danger. */
+static void test_settlers_in_danger(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 5, 5, 0, item_stack_pristine(ITEM_BLACKBERRIES, 400));
+    Colonist *a = spawn_fed(&game, 10, 10);
+    Colonist *b = spawn_fed(&game, 11, 10);
+    REQUIRE(a != NULL && b != NULL);
+    Alerts alerts;
+    alerts_compute(&game, &alerts);
+    CHECK(find(&alerts, ALERT_IN_DANGER) == NULL);
+    b->health.blood = 0.7f; /* 57 % consciousness. */
+    health_update(&b->health, 1e-6f);
+    a->health.blood = 0.82f; /* 91 %: nothing to fear. */
+    health_update(&a->health, 1e-6f);
+    alerts_compute(&game, &alerts);
+    const Alert *danger = find(&alerts, ALERT_IN_DANGER);
+    REQUIRE(danger != NULL);
+    CHECK_EQ_INT(danger->count, 1);
+    CHECK(entity_id_equal(danger->first, game_colonist_id_at(&game, 1)));
+    CHECK_EQ_INT(alerts.list[0].type, ALERT_IN_DANGER); /* The first of them. */
+    game_shutdown(&game);
+}
+
 static void test_nothing_to_report_without_settlers(void)
 {
     Game game;
@@ -177,6 +202,7 @@ int main(void)
 {
     RUN_TEST(test_nothing_to_report_without_settlers);
     RUN_TEST(test_settlers_in_need_are_counted);
+    RUN_TEST(test_settlers_in_danger);
     RUN_TEST(test_alerts_come_in_a_fixed_order);
     RUN_TEST(test_no_food_in_the_colony);
     RUN_TEST(test_a_breakdown_is_an_alert);

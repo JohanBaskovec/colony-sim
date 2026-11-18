@@ -123,7 +123,8 @@ double colonist_learn(Colonist *colonist, KnowledgeType knowledge, KnowledgeSour
     double *level = &colonist->knowledge[knowledge];
     double before = *level;
     rate *= mood_learn_factor(colonist->mood.value) *
-            attribute_factor(&colonist->attributes, ATTRIBUTE_LEARNING);
+            attribute_factor(&colonist->attributes, ATTRIBUTE_LEARNING) *
+            health_vigor(&colonist->health);
     *level = knowledge_learn_capped(before, rate, hours, colonist->age, cap);
     double gain = *level - before;
     if (!(gain > 0.0)) {
@@ -395,8 +396,10 @@ float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge)
 
 double colonist_work_level(const Colonist *colonist, KnowledgeType knowledge)
 {
+    /* Dazed, one works as if one knew less (docs/HEALTH.md §11.4). */
     double level =
-        colonist_knowledge_level(colonist, knowledge) + mood_level_offset(colonist->mood.value);
+        colonist_knowledge_level(colonist, knowledge) * (double)health_vigor(&colonist->health) +
+        mood_level_offset(colonist->mood.value);
     return level < KNOWLEDGE_LEVEL_MIN   ? KNOWLEDGE_LEVEL_MIN
            : level > KNOWLEDGE_LEVEL_MAX ? KNOWLEDGE_LEVEL_MAX
                                          : level;
@@ -636,6 +639,7 @@ const char *colonist_activity_key(const Colonist *colonist)
 {
     if (colonist->task == TASK_DOWN) {
         return health_is_unconscious(&colonist->health) ? N_("colonist.activity.unconscious")
+               : health_is_collapsed(&colonist->health) ? N_("colonist.activity.collapsed")
                                                         : N_("colonist.activity.cannot_walk");
     }
     const char *break_key = mood_break_key((MoodBreak)colonist->mood.break_type);
@@ -4957,6 +4961,23 @@ static void make_way(Colonist *colonist, const ColonistContext *context)
     }
 }
 
+/* Lying on a tile where someone else lies already: it crawls to the nearest
+ * free tile close by (within CRAWL_REACH), and lies there. */
+static void crawl_aside(Colonist *colonist, const ColonistContext *context)
+{
+    TilePos here = current_tile(colonist), spot;
+    if (!free_spot_near(context, here, &spot) || spot.z != here.z ||
+        abs(spot.x - here.x) > OCCUPANCY_CRAWL_REACH ||
+        abs(spot.y - here.y) > OCCUPANCY_CRAWL_REACH) {
+        return; /* Nowhere close: it lies on top of the other. */
+    }
+    colonist->x = spot.x;
+    colonist->y = spot.y;
+    colonist->move_progress = 0.0f;
+    occupancy_place(context->occupancy, (BeingId)context->worker_id, spot);
+    occupancy_force(context->occupancy, (BeingId)context->worker_id, spot);
+}
+
 /* After its turn: counted where it is now, and holding the tile it stops on
  * (where it stands, or where its path ends). A tile someone else holds is
  * tried again as it walks; one step short of it, it waits a little, then
@@ -4973,7 +4994,9 @@ static void settle(Colonist *colonist, const ColonistContext *context)
     occupancy_place(occupancy, self, here);
     if (colonist_is_down(colonist)) {
         occupancy_set_yielding(occupancy, self, false);
-        occupancy_force(occupancy, self, here); /* It cannot move: others make way. */
+        if (!occupancy_force(occupancy, self, here)) { /* It cannot move: others make way. */
+            crawl_aside(colonist, context);            /* ...unless they lie there too. */
+        }
         return;
     }
     occupancy_set_yielding(occupancy, self,

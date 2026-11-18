@@ -1102,12 +1102,13 @@ static void resolve_strikes(Game *game)
         Fighter attacker, target;
         const AttackDef *def = attack_def((AttackType)strike->attack);
         if (def == NULL || !fighter_of(game, strike->attacker, &attacker) ||
-            !fighter_of(game, strike->target, &target) || health_is_unconscious(attacker.health) ||
+            !fighter_of(game, strike->target, &target) || health_is_collapsed(attacker.health) ||
             !combat_can_strike(&game->map, attacker.pos, target.pos, def->reach)) {
-            continue; /* Gone, dead, knocked out or out of reach by now. */
+            continue; /* Gone, dead, down or out of reach by now. */
         }
-        BlowResult blow = combat_blow((AttackType)strike->attack, strike->skill, strike->power,
-                                      target.health, target.agility, &game->combat_rng);
+        BlowResult blow =
+            combat_blow((AttackType)strike->attack, combat_aim(strike->skill, attacker.health),
+                        strike->power, target.health, target.agility, &game->combat_rng);
         game->strikes_resolved++;
         health_take_notes(target.health, NULL); /* Noted below, with the attacker. */
         JournalBlow outcome = !blow.hit ? (blow.dodged ? JOURNAL_BLOW_DODGED : JOURNAL_BLOW_MISSED)
@@ -1227,6 +1228,14 @@ static void update_colonists(Game *game)
                 notices_push(&game->notices, NOTICES[colonist->mood.break_type], KNOWLEDGE_NONE,
                              colonist->name, game->clock.tick);
             }
+            /* Told once each time it collapses (struck down by a blow too: a
+             * tick later). */
+            bool collapsed = health_is_collapsed(&colonist->health);
+            if (collapsed && !colonist->collapse_noticed) {
+                notices_push(&game->notices, NOTICE_SETTLER_COLLAPSED, KNOWLEDGE_NONE,
+                             colonist->name, game->clock.tick);
+            }
+            colonist->collapse_noticed = collapsed;
             if (health_is_dead(&colonist->health)) {
                 settler_died(game, slot);
             }
@@ -1252,9 +1261,9 @@ static void update_animals(Game *game)
                 (AnimalSettler){game_colonist_id_at(game, slot),
                                 {(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z}};
         }
-        /* (Someone lying unconscious frightens nobody.) */
+        /* (Someone lying collapsed frightens nobody.) */
         if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
-            !health_is_unconscious(&colonist->health) && !health_is_dead(&colonist->health)) {
+            !health_is_collapsed(&colonist->health) && !health_is_dead(&colonist->health)) {
             threats[threat_count++] =
                 (TilePos){(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z};
         }
@@ -1432,8 +1441,9 @@ static void update_vision(Game *game)
             vision_viewer_remove(&game->vision, (int)slot); /* Sees nothing. */
             continue;
         }
-        vision_viewer_set(&game->vision, &game->map, (int)slot, colonist->x, colonist->y,
-                          colonist->z, colonist->task == TASK_SLEEP, game->clock.tick);
+        vision_viewer_set_limited(&game->vision, &game->map, (int)slot, colonist->x, colonist->y,
+                                  colonist->z, colonist->task == TASK_SLEEP,
+                                  health_sight_reach(&colonist->health), game->clock.tick);
     }
     if (game->fog_on) {
         sync_known(game);

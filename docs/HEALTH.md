@@ -3,9 +3,8 @@
 Bodies, injuries, bleeding, pain, death and healing, for settlers and wild
 animals alike: a deer and a settler are hurt the same way (`core/health.h`).
 
-Status: steps A (injuries) and B (deprivation) are implemented; step C
-(care) and step D (consciousness, §11, which replaces parts of §5, §6 and
-§10) are design. Values marked *(tuning)* are first guesses.
+Status: steps A (injuries), B (deprivation) and D1 (consciousness, §11) are
+implemented; step C (care) and the rest of step D (§11.8) are design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -14,9 +13,10 @@ Status: steps A (injuries) and B (deprivation) are implemented; step C
 - **Parts, not a single bar.** Each part has its own hit points; what a being
   can do follows from the state of its parts (legs to walk, arms to use the
   hands, the head to stay conscious and to see).
-- **Wounds bleed and hurt.** Bleeding drains the blood; pain slows, then
-  knocks down. Death comes from losing too much blood or from a destroyed
-  vital part.
+- **Wounds bleed and hurt.** Bleeding drains the blood; pain, blood loss,
+  a hurt head and the deprivations take consciousness, which slows, then
+  brings down (§11). Death comes from losing too much blood, a destroyed
+  vital part, or all of them together.
 - **Slow natural healing only** (step A). Small wounds stop bleeding and heal
   by themselves; serious ones keep bleeding and kill without care (care is
   step C).
@@ -107,9 +107,8 @@ when the list is full adds to the largest of them.
 - Pain is the sum of the injuries' damage × their kind's pain, over 50 points
   for a human (the body's size for an animal), times the being's pain factor
   (the Pain tolerance attribute for settlers, ×2 to ×0.5), capped at 100 %.
-- Walking and the hands are slowed by up to 40 % at full pain.
-- **From 80 % pain the being is knocked down** (unconscious) *(tuning)*.
-- Step D (§11.4) replaces both: pain will act only through consciousness.
+- Pain acts only through consciousness (§11): from about 80 % pain the being
+  collapses; pain alone never knocks out nor kills.
 
 ## 6. Abilities
 
@@ -117,20 +116,18 @@ Each from 0 to 100 %:
 
 | Ability | From |
 |---------|------|
-| Consciousness | the blood (100 % down to 70 % blood, then down to 0 at 50 %) times the head (−60 % at a destroyed head); 0 at full pain (80 %) |
-| Walking | the legs, each by its share and efficiency; times the pain slowdown |
+| Consciousness | 100 % less what every source takes (§11) |
+| Walking | the legs, each by its share and efficiency; times the vigor (§11.4); 0 when collapsed |
 | Hands | the arms, likewise |
-| Limb (arms, head, forelegs, hindlegs) | the mean efficiency of the parts that carry it, times the pain slowdown and the weakness; 0 when unconscious. Below 15 % the attacks made with it cannot be made *(tuning)* |
-| Sight | the head's efficiency |
-| Eating | the head (−50 % at a destroyed head) |
+| Limb (arms, head, forelegs, hindlegs) | the mean efficiency of the parts that carry it, times the vigor; 0 when collapsed. Below 15 % the attacks made with it cannot be made *(tuning)* |
+| Sight | the head's efficiency, times the vigor; 0 when unconscious |
+| Eating | the head (−50 % at a destroyed head); 0 when unconscious |
 
-- Step D (§11) changes consciousness: a sum of sources, with *collapsed*
-  under 50 % and *unconscious* under 25 %.
-- Below 30 % consciousness the being is **unconscious**: it lies on the
-  ground and sees nothing (a settler is no viewer, `docs/VISION.md`; animals
-  do not fear it); walking, the hands, sight and eating are 0.
-- Below 15 % walking, the being cannot walk *(tuning)*: it lies where it is.
-- A settler down (unconscious or unable to walk) drops what it carried and
+- **Collapsed** (under 50 % consciousness) and **unconscious** (under 25 %):
+  §11.3.
+- Below 15 % of the legs, the being cannot walk *(tuning)*: it lies where it
+  is, awake.
+- A settler down (collapsed, unconscious or unable to walk) drops what it carried and
   gives up its task; it cannot be sent anywhere and gets up by itself once
   able to. Walking slows the walk; the hands slow all work and lower the
   weight carried without slowing down.
@@ -228,26 +225,30 @@ feels (`COLONIST_STRAIN_TICKS`, wet or by a fire as for sleep).
   comfortable spot it does not stroll off into the cold. With nowhere better,
   it waits and looks again later (a growing delay). Cold and heat wake a
   sleeper, who goes looking.
-- **Weakness** (replaced by consciousness in step D, §11) is the worst of the four. It slows walking and the hands by up
-  to 60 %, and takes consciousness from full at 0.6 to nothing at 0.85: the
-  settler collapses (unconscious, `TASK_DOWN`) shortly before it dies.
+- Each deprivation takes consciousness (§11.2): severity^1.5, so little at
+  first and more and more; they add up with each other and with wounds. A
+  settler starving alone collapses (`TASK_DOWN`) after about 60 hours at food
+  0, is knocked out at about 80 and dies at 96.
 - A settler collapsed from hunger or thirst cannot eat or drink: nobody
   feeds it until care exists (step C). A settler in the open in winter
   (mean −2 °C, −7 °C before dawn) freezes within a couple of days without a
   fire or a shelter.
-- Weakness adds to wounds: a wounded, starving settler faints sooner.
+- Deprivations add to wounds: a wounded, starving settler collapses sooner,
+  and two deprivations together kill sooner than either alone.
 - Exhaustion has no body effect of its own: a settler with no rest left
   falls asleep (`NEED_REST`), as before.
-- Seen: the Health tab lists each deprivation above 0 with its severity; the
-  state reads *Weakened* when nothing else is wrong; a notice names the cause
-  of a settler's death.
+- Seen: the Health tab lists each deprivation above 0 as an affliction
+  (§11.5); a notice names the cause of a settler's death.
 
-## 11. Consciousness (step D, design)
+## 11. Consciousness (step D)
 
-Replaces the *weakness* of §10 (the worst of the four deprivations) and the
-thresholds of §5 and §6 (knocked down at 80 % pain, unconscious below 30 %
-consciousness, the direct slowdowns of pain and weakness). Nothing of it is
-implemented yet; values are first guesses *(tuning)*.
+Replaced the *weakness* of step B (the worst of the four deprivations, which
+slowed walking and the hands by up to 60 %) and the thresholds of step A
+(knocked down at 80 % pain, unconscious below 30 % consciousness, pain
+slowing walking and the hands by up to 40 %). Step D1 is implemented: the
+sources that existed (§11.2 but exhaustion and concussion), the two levels,
+the effects, the Health tab, the alert and the notice. Values are first
+guesses *(tuning)*.
 
 ### 11.1 One figure for the whole body
 
@@ -277,12 +278,12 @@ freezing is in danger even when neither would be enough alone.
 | Starvation | 100 × severity^1.5 (severity of §10) | yes | slow at first, then steep: alone, down after about 60 h at food 0, dead at 96 h |
 | Dehydration | likewise | yes | alone, down after about 25 h at water 0, dead at 40 h |
 | Hypothermia | likewise | yes | dead in 14 h at full cold pressure |
-| Heatstroke | likewise | yes | dead in 10 h at full heat pressure |
+| Hyperthermia (heatstroke) | likewise | yes | dead in 10 h at full heat pressure |
 | Blood loss | 0 down to 85 % blood, then up to 100 at 50 % | yes | alone, down at about 67 % blood; death at 50 % blood as before |
 | Head | (1 − the head's efficiency) × 60 | yes | a destroyed head still kills at once (vital part) |
-| Pain | pain × 62.5 (80 % pain: 50 points) | no | down at about 80 % pain, as the knockdown of §5 today |
-| Exhaustion | 0 down to 20 % rest, up to 55 at 0 % | no | at 0 rest the being collapses: it falls asleep where it stands |
-| Concussion | a blunt blow (bruise, crush) to the head: about 3 points per damage point, up to 60 | no | new (§11.6); fades over about 4 hours |
+| Pain | pain × 62.5 (80 % pain: 50 points) | no | down at about 80 % pain, as the knockdown of step A did |
+| Exhaustion *(D2)* | 0 down to 20 % rest, up to 55 at 0 % | no | at 0 rest the being collapses: it falls asleep where it stands |
+| Concussion *(D2)* | a blunt blow (bruise, crush) to the head: about 3 points per damage point, up to 60 | no | new (§11.6); fades over about 4 hours |
 
 Later sources: disease and fever, an infected wound (step C), venom and
 poison, alcohol and drugs, painkillers (they lower pain, so consciousness comes
@@ -294,7 +295,7 @@ back; an injured leg still slows), anesthesia, old age.
 |---------------|-------|--------------|
 | over 90 % | normal | no effect: small hurts cost nothing |
 | 90 % to 50 % | lowered | abilities fall smoothly, ×1 at 90 % to ×0.5 at 50 % (§11.4) |
-| under 50 % | **collapsed** | lies on the ground, awake: cannot walk, work nor strike, does not dodge; drops what it carries and gives up its task; still sees, less and less far; animals do not fear it (it is helpless, easy prey) |
+| under 50 % | **collapsed** | lies on the ground, awake: cannot walk, work nor strike, does not dodge; drops what it carries and gives up its task; still sees (less and less far: 12 tiles just after the fall, down to the tiles touching it; for a settler, `docs/VISION.md`); animals do not fear it (it is helpless, easy prey) |
 | under 25 % | **unconscious** | as collapsed, and sees nothing (no viewer, `docs/VISION.md`), cannot eat nor drink |
 | 0 % | **dead** | §8 |
 
@@ -312,14 +313,19 @@ One factor for the whole body, from consciousness (×1 over 90 %, ×0.5 at
 50 %), on:
 
 - walking speed;
-- the speed of every work, and its quality (once things made have one) and
-  the risk of a work accident (`docs/KNOWLEDGE.md` §2.4);
-- combat: accuracy, the power of blows, the dodge (`docs/COMBAT.md` §3);
-- endurance: how long one runs and how fast it recovers;
-- the range of sight (`docs/VISION.md`);
-- an animal's alertness: a weakened prey notices predators later;
+- the speed of every work and the weight carried (through the hands);
+- the quality of what is made: one works as if one knew that much less (the
+  knowledge level times the vigor, before the mood's offset); later, the risk
+  of a work accident (`docs/KNOWLEDGE.md` §2.4);
+- combat: accuracy (the skill times the vigor, `combat_aim()`), the power of
+  blows and the dodge (through the limbs and walking, `docs/COMBAT.md` §3);
+- endurance: how long an animal runs, and how fast it recovers (settlers do
+  not run yet);
+- an animal's alertness: the distances it notices settlers and predators
+  from (a weakened prey notices them later);
 - the pace of learning a knowledge;
-- later: talking and mood ("I feel unwell").
+- the range of a collapsed settler's sight (§11.3);
+- not yet: talking and mood ("I feel unwell").
 
 **Consciousness and the parts are separate.** Pain acts only through
 consciousness: the direct slowdown of up to 40 % (§5) goes, and so does the
@@ -339,9 +345,9 @@ its course) and the points it takes.
 | Starvation | hunger (§10) |
 | Dehydration | thirst (§10) |
 | Hypothermia | cold (§10) |
-| Heatstroke | heat (§10) |
-| Exhaustion | rest under 20 % |
-| Concussion | a blunt blow to the head |
+| Hyperthermia | heat (§10) |
+| Exhaustion *(D2)* | rest under 20 % |
+| Concussion *(D2)* | a blunt blow to the head |
 
 ### 11.6 New injuries
 
@@ -369,13 +375,14 @@ its course) and the points it takes.
 ### 11.7 Seen by the player
 
 - The Health tab: a **Consciousness** bar; its tooltip lists each source with
-  its points ("Hunger −12 %, mild hypothermia −9 %, pain −7 %"); the list of
-  afflictions beside the injuries; the state in a word: healthy, hurt, unable
-  to walk, collapsed, unconscious, dead. *Weakened* goes.
-- Notices: a settler under 70 % (in danger), one who collapses, one who dies
-  (with the cause).
-- Journals: afflictions caught and gone, frostbite and burns ("frostbite on
-  the left foot"), collapsing and coming to.
+  its points ("Starvation: −12 %, Hypothermia: −9 %, Pain: −7 %") and what it
+  does; the afflictions with how bad they are and their points ("Moderate
+  (−21 %)"); the state in a word: healthy, hurt, unable to walk, collapsed,
+  unconscious, dead.
+- An alert counts the settlers in danger (under 70 %); a notice tells when one
+  collapses (once each time), another when one dies (with the cause).
+- Later: journals of afflictions caught and gone, frostbite and burns
+  ("frostbite on the left foot"), collapsing and coming to.
 - Animals: the same rules, with their species' tolerances.
 
 ### 11.8 Steps

@@ -277,6 +277,7 @@ const char *animal_activity_key(const Animal *animal)
     case ANIMAL_TASK_ATTACK: return N_("animal.activity.attack");
     case ANIMAL_TASK_DOWN:
         return health_is_unconscious(&animal->health) ? N_("animal.activity.unconscious")
+               : health_is_collapsed(&animal->health) ? N_("animal.activity.collapsed")
                                                       : N_("animal.activity.cannot_walk");
     case ANIMAL_TASK_COUNT: break;
     }
@@ -582,20 +583,29 @@ bool animal_sees(const Map *map, int x, int y, int z, TilePos threat, int distan
     return true;
 }
 
-bool animal_notices(AnimalSpecies species, const Map *map, int x, int y, int z, TilePos threat,
-                    bool asleep)
+/* animal_notices(), the distances times `alertness` (a dazed animal notices
+ * later, docs/HEALTH.md §11.4). */
+static bool notices_threat(AnimalSpecies species, const Map *map, int x, int y, int z,
+                           TilePos threat, bool asleep, float alertness)
 {
     const AnimalDef *def = animal_def(species);
     if (def == NULL) {
         return false;
     }
     int distance = asleep ? def->flight_distance / 2 : def->flight_distance;
+    distance = (int)((float)distance * clampf(alertness, 0.0f, 1.0f) + 0.5f);
     int scent = distance / ANIMAL_SCENT_SHARE;
     int dx = threat.x - x, dy = threat.y - y, dz = threat.z - z;
     if (dz >= -1 && dz <= 1 && dx * dx + dy * dy <= scent * scent) {
         return true; /* Heard or smelled. */
     }
     return animal_sees(map, x, y, z, threat, distance);
+}
+
+bool animal_notices(AnimalSpecies species, const Map *map, int x, int y, int z, TilePos threat,
+                    bool asleep)
+{
+    return notices_threat(species, map, x, y, z, threat, asleep, 1.0f);
 }
 
 /* Whether a settler stands within `distance` tiles of a tile (seen or not:
@@ -963,7 +973,8 @@ float animal_run_speed(const Animal *animal)
 float animal_sprint_seconds(const Animal *animal)
 {
     return ANIMAL_DEFS[animal->species].sprint_seconds *
-           attribute_factor(&animal->attributes, ATTRIBUTE_ENDURANCE);
+           attribute_factor(&animal->attributes, ATTRIBUTE_ENDURANCE) *
+           fmaxf(health_vigor(&animal->health), 0.1f);
 }
 
 float animal_nerve(const Animal *animal)
@@ -1411,20 +1422,23 @@ static void look_out(Animals *animals, uint32_t slot, const AnimalContext *conte
     /* Whoever struck it is still about: it keeps running. */
     bool seen = false;
     bool fearless = def->hunts_settlers && animal->needs[ANIMAL_NEED_FOOD] < ANIMAL_DESPERATE;
+    float alertness = health_vigor(&animal->health);
     if (!combatant_is_none(animal->enemy)) {
         int dx = animal->enemy_pos.x - animal->x, dy = animal->enemy_pos.y - animal->y;
         seen = dx * dx + dy * dy <= def->flight_distance * def->flight_distance;
     }
     for (int i = 0; i < context->threat_count && !seen && !fearless; i++) {
-        seen = animal_notices((AnimalSpecies)animal->species, context->map, animal->x, animal->y,
-                              animal->z, context->threats[i], animal->task == ANIMAL_TASK_SLEEP);
+        seen = notices_threat((AnimalSpecies)animal->species, context->map, animal->x, animal->y,
+                              animal->z, context->threats[i], animal->task == ANIMAL_TASK_SLEEP,
+                              alertness);
     }
     /* Prey fear the carnivores about. */
     if (!seen && !def->carnivore && combatant_is_none(animal->enemy)) {
         for (int i = 0; i < animals->predator_count && !seen; i++) {
             const Animal *predator = &animals->list[animals->predator_slots[i]];
-            if (animal_notices((AnimalSpecies)animal->species, context->map, animal->x, animal->y,
-                               animal->z, tile_of(predator), animal->task == ANIMAL_TASK_SLEEP)) {
+            if (notices_threat((AnimalSpecies)animal->species, context->map, animal->x, animal->y,
+                               animal->z, tile_of(predator), animal->task == ANIMAL_TASK_SLEEP,
+                               alertness)) {
                 animal->enemy = (Combatant){COMBATANT_ANIMAL,
                                             animals_id_at(animals, animals->predator_slots[i])};
                 animal->enemy_pos = tile_of(predator);
@@ -1725,7 +1739,8 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
     /* Running wears it out; resting restores it. */
     bool sprinting = (animal->task == ANIMAL_TASK_FLEE || animal->task == ANIMAL_TASK_ATTACK) &&
                      animal_is_moving(animal);
-    float endurance = attribute_factor(&animal->attributes, ATTRIBUTE_ENDURANCE);
+    float endurance =
+        attribute_factor(&animal->attributes, ATTRIBUTE_ENDURANCE) * health_vigor(&animal->health);
     float tire = sprinting ? 1.0f / (animal_sprint_seconds(animal) * (float)TICKS_PER_SECOND)
                            : -endurance / (ANIMAL_RECOVER_SECONDS * (float)TICKS_PER_SECOND);
     animal->fatigue = clampf(animal->fatigue + tire, 0.0f, 1.0f);
@@ -1817,6 +1832,26 @@ static void make_way(Animal *animal, const AnimalContext *context)
     }
 }
 
+/* Lying on a tile where someone else lies already: it crawls to the nearest
+ * free tile close by, and lies there. */
+static void crawl_aside(Animal *animal, const AnimalContext *context)
+{
+    TilePos here = tile_of(animal), spot;
+    bool found = find_nearest(context, here, is_free_spot, (void *)context,
+                              ANIMAL_MAKE_WAY_MAX_COST, &animal->path, &spot);
+    path_clear(&animal->path);
+    animal->path_index = 0;
+    if (!found || spot.z != here.z || abs(spot.x - here.x) > OCCUPANCY_CRAWL_REACH ||
+        abs(spot.y - here.y) > OCCUPANCY_CRAWL_REACH) {
+        return; /* Nowhere close: it lies on top of the other. */
+    }
+    animal->x = spot.x;
+    animal->y = spot.y;
+    animal->move_progress = 0.0f;
+    occupancy_place(context->occupancy, context->self, spot);
+    occupancy_force(context->occupancy, context->self, spot);
+}
+
 /* After its turn, as for the settlers (see settle() in core/colonist.c). */
 static void settle(Animal *animal, const AnimalContext *context)
 {
@@ -1830,7 +1865,9 @@ static void settle(Animal *animal, const AnimalContext *context)
     occupancy_place(occupancy, self, here);
     if (health_is_down(&animal->health)) {
         occupancy_set_yielding(occupancy, self, false);
-        occupancy_force(occupancy, self, here); /* It cannot move: others make way. */
+        if (!occupancy_force(occupancy, self, here)) { /* It cannot move: others make way. */
+            crawl_aside(animal, context);              /* ...unless they lie there too. */
+        }
         return;
     }
     occupancy_set_yielding(occupancy, self,

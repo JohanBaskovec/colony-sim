@@ -36,7 +36,9 @@
 #define UI_MAX_AREAS 32
 #define UI_MAX_WINDOWS 16
 #define UI_TOOLTIP_LINES 10
-#define UI_TOOLTIP_LINE_SIZE 256
+/* A tooltip line holds a whole translated text (a description is a few
+ * sentences); tests/test_i18n.c keeps every translation within TRANSLATION_MAX_BYTES. */
+#define UI_TOOLTIP_LINE_SIZE 512
 #define UI_TOOLTIP_WRAPPED_LINES 24
 #define UI_WRAP_LINE_SIZE 256
 /* Window ids are 1 .. UI_POPUP_OWNER - 1. */

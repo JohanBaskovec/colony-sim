@@ -207,6 +207,34 @@ static void parts_table(UiLayout *layout, const Health *health)
     }
 }
 
+/* The tooltip of consciousness: its value, what takes it off, and what it
+ * does. */
+static void consciousness_tooltip(UiLayout *layout, const Health *health, float level)
+{
+    char lines[UI_TOOLTIP_LINES][TEXT_SIZE];
+    const char *shown[UI_TOOLTIP_LINES];
+    int count = 0;
+    char value[32];
+    percent_text(value, sizeof(value), level);
+    TR_FORMAT(lines[count++], TEXT_SIZE, tr("health.consciousness.value"), value);
+    for (int source = 0; source < CONSCIOUSNESS_SOURCE_COUNT && count < UI_TOOLTIP_LINES - 2;
+         source++) {
+        float loss = health_consciousness_loss(health, (ConsciousnessSource)source);
+        if (loss < 0.005f) {
+            continue; /* Would read "0 %". */
+        }
+        percent_text(value, sizeof(value), loss);
+        TR_FORMAT(lines[count++], TEXT_SIZE, tr("health.consciousness.source"),
+                  tr(consciousness_source_name_key((ConsciousnessSource)source)), value);
+    }
+    for (int i = 0; i < count; i++) {
+        shown[i] = lines[i];
+    }
+    shown[count++] = tr("health.consciousness.description");
+    shown[count++] = tr("health.consciousness.thresholds");
+    ui_tooltip(layout->ui, shown, count);
+}
+
 void health_panel_rows(UiLayout *layout, const Health *health)
 {
     bool hurt = health_is_hurt(health);
@@ -220,9 +248,16 @@ void health_panel_rows(UiLayout *layout, const Health *health)
     }
     char value[TEXT_SIZE];
 
+    /* Consciousness: what every source leaves of it. */
+    float awake = health_consciousness(health);
+    SDL_FRect row = ui_layout_bar_row(layout, tr("health.ability.consciousness"), awake, true);
+    if (layout->draw && ui_hovered(layout->ui, row)) {
+        consciousness_tooltip(layout, health, awake);
+    }
+
     /* Blood: the bar empties down to where it kills. */
     float blood = (health->blood - HEALTH_BLOOD_DEATH) / (1.0f - HEALTH_BLOOD_DEATH);
-    SDL_FRect row = ui_layout_bar_row(layout, tr("health.blood"), blood, true);
+    row = ui_layout_bar_row(layout, tr("health.blood"), blood, true);
     if (layout->draw && ui_hovered(layout->ui, row)) {
         char percent[32];
         percent_text(percent, sizeof(percent), health->blood);
@@ -241,12 +276,17 @@ void health_panel_rows(UiLayout *layout, const Health *health)
         tooltip_lines(layout, tr("health.pain.description"), NULL);
     }
 
+    /* Afflictions: how bad, and what they take off consciousness. */
     for (int kind = 0; kind < DEPRIVATION_COUNT; kind++) {
         float severity = health_deprivation(health, (Deprivation)kind);
         if (severity <= 0.0f) {
             continue;
         }
-        percent_text(value, sizeof(value), severity);
+        char loss[32];
+        percent_text(loss, sizeof(loss),
+                     health_consciousness_loss(health, (ConsciousnessSource)kind));
+        TR_FORMAT(value, sizeof(value), tr("health.affliction.value"),
+                  tr(deprivation_severity_key(severity)), loss);
         row = ui_layout_pair(layout, tr(deprivation_name_key((Deprivation)kind)), value,
                              bad_color(layout, severity), true);
         if (layout->draw && ui_hovered(layout->ui, row)) {
@@ -256,8 +296,9 @@ void health_panel_rows(UiLayout *layout, const Health *health)
 
     ui_layout_label(layout, tr("health.abilities"), 0.0f, true);
     for (int ability = 0; ability < HEALTH_ABILITY_COUNT; ability++) {
-        if (ability == HEALTH_HANDS && (BodyPlan)health->plan != BODY_HUMAN) {
-            continue; /* Animals have none. */
+        if (ability == HEALTH_CONSCIOUSNESS ||
+            (ability == HEALTH_HANDS && (BodyPlan)health->plan != BODY_HUMAN)) {
+            continue; /* Its bar is above; animals have no hands. */
         }
         float level = health_ability(health, (HealthAbility)ability);
         percent_text(value, sizeof(value), level);

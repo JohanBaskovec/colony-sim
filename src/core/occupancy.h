@@ -30,6 +30,10 @@
  * giving up what it went there for. */
 #define OCCUPANCY_PATIENCE_TICKS 90
 
+/* How far, in tiles, a being that falls on one already lying crawls to find
+ * a tile of its own. */
+#define OCCUPANCY_CRAWL_REACH 2
+
 /* A being: 1..OCCUPANCY_BEINGS, OCCUPANCY_NOBODY for none. */
 typedef uint16_t BeingId;
 #define OCCUPANCY_NOBODY ((BeingId)0)
@@ -50,6 +54,7 @@ typedef struct OccupancyBeing {
     bool claiming;
     bool placed;
     bool yielding;
+    bool forced; /* Its claim was forced: it lies where it fell. */
 } OccupancyBeing;
 
 typedef struct Occupancy {
@@ -89,8 +94,10 @@ bool occupancy_can_stop(const Occupancy *occupancy, BeingId being, TilePos tile)
 bool occupancy_claim(Occupancy *occupancy, BeingId being, TilePos tile);
 
 /* For one that cannot move (knocked down): the tile is its own, taken from
- * whoever held it. */
-void occupancy_force(Occupancy *occupancy, BeingId being, TilePos tile);
+ * whoever held it, unless that one cannot move either (its claim was forced
+ * too): then nothing changes and this returns false, and the being crawls
+ * aside (it cannot lie on top of the other). */
+bool occupancy_force(Occupancy *occupancy, BeingId being, TilePos tile);
 
 /* The being stops nowhere (it holds no tile). */
 void occupancy_release(Occupancy *occupancy, BeingId being);

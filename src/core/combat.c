@@ -158,6 +158,11 @@ float combat_dodge(const Health *defender, float agility)
     return clampf(agility, 0.0f, 1.0f) * health_ability(defender, HEALTH_WALKING);
 }
 
+float combat_aim(float skill, const Health *attacker)
+{
+    return skill * health_vigor(attacker);
+}
+
 float combat_hit_chance(AttackType type, float skill, const Health *defender, float agility)
 {
     const AttackDef *def = attack_def(type);

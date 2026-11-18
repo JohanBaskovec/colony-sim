@@ -465,6 +465,7 @@ typedef struct Colonist {
     Attributes attributes; /* Set with colonist_set_attributes(). */
     Health health;         /* Its factors follow the attributes. */
     Journal journal;       /* What happened to it (for the eye only: not hashed). */
+    bool collapse_noticed; /* The player was told it collapsed (not hashed). */
     /* The animal that struck it and it fights or flees (TASK_FIGHT, TASK_FLEE);
      * NONE when nobody. `attack_cooldown`: ticks before its next blow. */
     Combatant enemy;
@@ -696,7 +697,8 @@ double colonist_work_level(const Colonist *colonist, KnowledgeType knowledge);
 /* Whether the colonist is having a break (core/mood.h). */
 bool colonist_in_break(const Colonist *colonist);
 
-/* Whether the colonist is down (TASK_DOWN): unconscious or unable to walk. */
+/* Whether the colonist is down (TASK_DOWN): collapsed, unconscious or unable
+ * to walk. */
 bool colonist_is_down(const Colonist *colonist);
 
 /* Walking speed multiplier from the colonist's body: its walking attribute

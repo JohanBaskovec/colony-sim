@@ -217,16 +217,18 @@ rows):
   what it weighs on the mood now. Wetness, the warmth of sleep and the bed
   come under the bars.
 - **Health** (`docs/HEALTH.md`): the state in a word (healthy, hurt, unable
-  to walk, unconscious, in red once hurt); once hurt, the blood as a bar
+  to walk, collapsed, unconscious, in red once hurt); once hurt, the
+  consciousness as a bar (its tooltip lists what takes it off, each with its
+  points, and what it does), the blood as a bar
   (empty where it kills), the bleeding per hour, the pain, what the body can
   do (each ability in percent, white at 100, red toward 0). The body is
   always listed as a table, even when healthy: a row per part (head, torso,
   arms, legs...) with its injuries, its efficiency in percent (white to red)
   and the blood it loses an hour; the tooltip tells what the part is for and
   each injury on it. Above
-  the abilities, each deprivation above 0 (hunger, thirst, hypothermia,
-  heatstroke) with its severity and a tooltip; the state reads *Weakened* when
-  nothing else is wrong. An
+  the abilities, each affliction (starvation, dehydration, hypothermia,
+  hyperthermia) with how bad it is (mild, moderate, severe) and what it takes
+  off consciousness, and a tooltip. An
   injury's tooltip says whether it is serious (it bleeds on), clotting or
   healing. A hurt settler's portrait in the colonist bar bears a cross, red
   while it bleeds or is down.

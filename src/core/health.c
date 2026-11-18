@@ -108,23 +108,49 @@ static const DeprivationDef DEPRIVATION_DEFS[DEPRIVATION_COUNT] = {
                           10.0f, 6.0f, DEATH_HEATSTROKE},
 };
 
-/* Consciousness lost at a destroyed head, and eating. */
-#define HEAD_CONSCIOUSNESS_LOSS 0.6f
+/* What takes consciousness off (docs/HEALTH.md §11.2): its name, whether it
+ * can kill, and the death it brings. */
+typedef struct ConsciousnessSourceDef {
+    const char *name_key;
+    bool deadly;
+    DeathCause cause;
+} ConsciousnessSourceDef;
+
+static const ConsciousnessSourceDef SOURCE_DEFS[CONSCIOUSNESS_SOURCE_COUNT] = {
+    [CONSCIOUSNESS_HUNGER] = {N_("health.deprivation.hunger"), true, DEATH_STARVATION},
+    [CONSCIOUSNESS_THIRST] = {N_("health.deprivation.thirst"), true, DEATH_DEHYDRATION},
+    [CONSCIOUSNESS_COLD] = {N_("health.deprivation.cold"), true, DEATH_HYPOTHERMIA},
+    [CONSCIOUSNESS_HEAT] = {N_("health.deprivation.heat"), true, DEATH_HEATSTROKE},
+    [CONSCIOUSNESS_BLOOD] = {N_("health.consciousness.blood"), true, DEATH_BLOOD_LOSS},
+    [CONSCIOUSNESS_HEAD] = {N_("health.consciousness.head"), true, DEATH_VITAL_PART},
+    [CONSCIOUSNESS_PAIN] = {N_("health.pain"), false, DEATH_NONE},
+};
+
+_Static_assert((int)CONSCIOUSNESS_HUNGER == (int)DEPRIVATION_HUNGER &&
+                   (int)CONSCIOUSNESS_THIRST == (int)DEPRIVATION_THIRST &&
+                   (int)CONSCIOUSNESS_COLD == (int)DEPRIVATION_COLD &&
+                   (int)CONSCIOUSNESS_HEAT == (int)DEPRIVATION_HEAT,
+               "the deprivations come first, in their order");
+
+/* Eating lost at a destroyed head. */
 #define HEAD_EATING_LOSS 0.5f
+
+static bool settle(Health *health);
 
 void health_init(Health *health, BodyPlan plan, float size, float damage_factor, float pain_factor)
 {
     memset(health, 0, sizeof(*health));
     health->plan = (uint8_t)((unsigned)plan < BODY_PLAN_COUNT ? plan : BODY_HUMAN);
     health->size = clampf(size, 0.05f, 10.0f);
-    health_set_factors(health, damage_factor, pain_factor);
     health->blood = 1.0f;
+    health_set_factors(health, damage_factor, pain_factor);
 }
 
 void health_set_factors(Health *health, float damage_factor, float pain_factor)
 {
     health->damage_factor = clampf(damage_factor, 0.25f, 4.0f);
     health->pain_factor = clampf(pain_factor, 0.25f, 4.0f);
+    settle(health); /* Pain may have changed. */
 }
 
 int body_part_count(BodyPlan plan)
@@ -323,6 +349,7 @@ float health_hurt(Health *health, int part, InjuryType type, float damage)
     if (def->vital && health_part_damage(health, part) >= health_part_hit_points(health, part)) {
         die(health, DEATH_VITAL_PART, part);
     }
+    settle(health);
     return taken;
 }
 
@@ -356,14 +383,13 @@ const char *health_status_key(const Health *health)
     if (health_is_unconscious(health)) {
         return N_("health.status.unconscious");
     }
+    if (health_is_collapsed(health)) {
+        return N_("health.status.collapsed");
+    }
     if (health_is_down(health)) {
         return N_("health.status.cannot_walk");
     }
-    if (health->injury_count == 0 && health->blood >= 1.0f) {
-        return health_weakness(health) > 0.0f ? N_("health.status.weak")
-                                              : N_("health.status.healthy");
-    }
-    return N_("health.status.hurt");
+    return health_is_hurt(health) ? N_("health.status.hurt") : N_("health.status.healthy");
 }
 
 float health_injury_bleeding(const Health *health, const Injury *injury)
@@ -424,7 +450,7 @@ bool health_update(Health *health, float hours)
         die(health, DEATH_BLOOD_LOSS, -1);
         return true;
     }
-    return false;
+    return settle(health);
 }
 
 bool health_is_dead(const Health *health)
@@ -469,7 +495,7 @@ bool health_strain(Health *health, Deprivation kind, float pressure, float hours
         die(health, def->cause, -1);
         return true;
     }
-    return false;
+    return settle(health);
 }
 
 float health_deprivation(const Health *health, Deprivation kind)
@@ -480,13 +506,24 @@ float health_deprivation(const Health *health, Deprivation kind)
     return health->deprivation[kind];
 }
 
-float health_weakness(const Health *health)
+const char *deprivation_severity_key(float severity)
 {
-    float worst = 0.0f;
-    for (int kind = 0; kind < DEPRIVATION_COUNT; kind++) {
-        worst = fmaxf(worst, health_deprivation(health, (Deprivation)kind));
+    if (!(severity > 0.0f)) {
+        return NULL;
     }
-    return worst;
+    return severity < 1.0f / 3.0f   ? N_("health.severity.mild")
+           : severity < 2.0f / 3.0f ? N_("health.severity.moderate")
+                                    : N_("health.severity.severe");
+}
+
+const char *consciousness_source_name_key(ConsciousnessSource source)
+{
+    return (unsigned)source < CONSCIOUSNESS_SOURCE_COUNT ? SOURCE_DEFS[source].name_key : NULL;
+}
+
+bool consciousness_source_deadly(ConsciousnessSource source)
+{
+    return (unsigned)source < CONSCIOUSNESS_SOURCE_COUNT && SOURCE_DEFS[source].deadly;
 }
 
 bool health_is_hurt(const Health *health)
@@ -537,20 +574,127 @@ static float role_sum(const Health *health, BodyRole role)
     return clampf(sum, 0.0f, 1.0f);
 }
 
-static float consciousness(const Health *health, float pain)
+/* Index of the part with a role (the head), -1 when the plan has none. */
+static int role_part(const Health *health, BodyRole role)
 {
-    if (pain >= HEALTH_PAIN_KNOCKDOWN) {
+    int count = body_part_count((BodyPlan)health->plan);
+    for (int part = 0; part < count; part++) {
+        if (BODY_PLANS[health->plan].parts[part].role == role) {
+            return part;
+        }
+    }
+    return -1;
+}
+
+float health_consciousness_loss(const Health *health, ConsciousnessSource source)
+{
+    if (health->death != DEATH_NONE || (unsigned)source >= CONSCIOUSNESS_SOURCE_COUNT) {
         return 0.0f;
     }
-    float blood =
-        clampf((health->blood - HEALTH_BLOOD_DEATH) / (HEALTH_BLOOD_FAINT - HEALTH_BLOOD_DEATH),
-               0.0f, 1.0f);
-    float head =
-        1.0f - HEAD_CONSCIOUSNESS_LOSS * (1.0f - role_part_efficiency(health, BODY_ROLE_MIND));
-    float faint = 1.0f - clampf((health_weakness(health) - HEALTH_WEAK_FAINT_FROM) /
-                                    (HEALTH_WEAK_FAINT_TO - HEALTH_WEAK_FAINT_FROM),
-                                0.0f, 1.0f);
-    return blood * head * faint;
+    switch (source) {
+    case CONSCIOUSNESS_HUNGER:
+    case CONSCIOUSNESS_THIRST:
+    case CONSCIOUSNESS_COLD:
+    case CONSCIOUSNESS_HEAT: {
+        float severity = health->deprivation[source];
+        return severity > 0.0f ? powf(clampf(severity, 0.0f, 1.0f), HEALTH_DEPRIVATION_CURVE)
+                               : 0.0f;
+    }
+    case CONSCIOUSNESS_BLOOD:
+        return clampf((HEALTH_BLOOD_LOSS_FROM - health->blood) /
+                          (HEALTH_BLOOD_LOSS_FROM - HEALTH_BLOOD_DEATH),
+                      0.0f, 1.0f);
+    case CONSCIOUSNESS_HEAD:
+        return health->injury_count > 0
+                   ? HEALTH_HEAD_LOSS * (1.0f - role_part_efficiency(health, BODY_ROLE_MIND))
+                   : 0.0f;
+    case CONSCIOUSNESS_PAIN: return HEALTH_PAIN_LOSS * health_pain(health);
+    case CONSCIOUSNESS_SOURCE_COUNT: break;
+    }
+    return 0.0f;
+}
+
+/* What the deadly sources take, and the others, and the deadly source taking
+ * the most. */
+static void sum_losses(const Health *health, float *deadly, float *other,
+                       ConsciousnessSource *worst)
+{
+    *deadly = 0.0f;
+    *other = 0.0f;
+    *worst = CONSCIOUSNESS_BLOOD;
+    float most = -1.0f;
+    for (int source = 0; source < CONSCIOUSNESS_SOURCE_COUNT; source++) {
+        float loss = health_consciousness_loss(health, (ConsciousnessSource)source);
+        if (!SOURCE_DEFS[source].deadly) {
+            *other += loss;
+            continue;
+        }
+        *deadly += loss;
+        if (loss > most) {
+            most = loss;
+            *worst = (ConsciousnessSource)source;
+        }
+    }
+}
+
+float health_consciousness(const Health *health)
+{
+    if (health->death != DEATH_NONE) {
+        return 0.0f;
+    }
+    if (!health_is_hurt(health)) {
+        return 1.0f;
+    }
+    float deadly, other;
+    ConsciousnessSource worst;
+    sum_losses(health, &deadly, &other, &worst);
+    return clampf(1.0f - deadly - other, HEALTH_CONSCIOUS_FLOOR, 1.0f);
+}
+
+/* The posture after a change, with margins: one does not fall and get up
+ * again from one tick to the next. Dies when the deadly sources take
+ * everything. Returns true when it dies. */
+static bool settle(Health *health)
+{
+    if (health->death != DEATH_NONE) {
+        return false;
+    }
+    if (!health_is_hurt(health)) {
+        health->posture = POSTURE_UP;
+        return false;
+    }
+    float deadly, other;
+    ConsciousnessSource worst;
+    sum_losses(health, &deadly, &other, &worst);
+    if (deadly >= 1.0f) {
+        die(health, SOURCE_DEFS[worst].cause,
+            worst == CONSCIOUSNESS_HEAD ? role_part(health, BODY_ROLE_MIND) : -1);
+        return true;
+    }
+    float level = clampf(1.0f - deadly - other, HEALTH_CONSCIOUS_FLOOR, 1.0f);
+    HealthPosture posture = (HealthPosture)health->posture;
+    if (level < HEALTH_FAINT_BELOW) {
+        posture = POSTURE_UNCONSCIOUS;
+    } else if (posture == POSTURE_UNCONSCIOUS && level < HEALTH_COME_TO_FROM) {
+        /* Still out. */
+    } else if (level < HEALTH_COLLAPSE_BELOW ||
+               (posture != POSTURE_UP && level < HEALTH_RISE_FROM)) {
+        posture = POSTURE_COLLAPSED;
+    } else {
+        posture = POSTURE_UP;
+    }
+    health->posture = (uint8_t)posture;
+    return false;
+}
+
+float health_vigor(const Health *health)
+{
+    if (health->death != DEATH_NONE) {
+        return 0.0f;
+    }
+    float level = health_consciousness(health);
+    float slope = (1.0f - HEALTH_VIGOR_AT_COLLAPSE) / (HEALTH_VIGOR_FULL - HEALTH_COLLAPSE_BELOW);
+    return clampf(HEALTH_VIGOR_AT_COLLAPSE + (level - HEALTH_COLLAPSE_BELOW) * slope, 0.0f, 1.0f);
 }
 
 float health_ability(const Health *health, HealthAbility ability)
@@ -561,22 +705,22 @@ float health_ability(const Health *health, HealthAbility ability)
     if (!health_is_hurt(health)) {
         return ability == HEALTH_HANDS && role_sum(health, BODY_ROLE_HANDS) <= 0.0f ? 0.0f : 1.0f;
     }
-    float pain = health_pain(health);
-    float awake = consciousness(health, pain);
     if (ability == HEALTH_CONSCIOUSNESS) {
-        return awake;
+        return health_consciousness(health);
     }
-    if (awake < HEALTH_CONSCIOUS_MIN) {
-        return 0.0f; /* Knocked down: nothing else works. */
-    }
-    float slowdown = (1.0f - HEALTH_PAIN_SLOWDOWN * pain) *
-                     (1.0f - HEALTH_WEAKNESS_SLOWDOWN * health_weakness(health));
+    bool out = health->posture == POSTURE_UNCONSCIOUS;
+    bool collapsed = health->posture != POSTURE_UP;
     switch (ability) {
-    case HEALTH_WALKING: return role_sum(health, BODY_ROLE_WALK) * slowdown;
-    case HEALTH_HANDS: return role_sum(health, BODY_ROLE_HANDS) * slowdown;
-    case HEALTH_SIGHT: return role_part_efficiency(health, BODY_ROLE_MIND);
+    case HEALTH_WALKING:
+        return collapsed ? 0.0f : role_sum(health, BODY_ROLE_WALK) * health_vigor(health);
+    case HEALTH_HANDS:
+        return collapsed ? 0.0f : role_sum(health, BODY_ROLE_HANDS) * health_vigor(health);
+    case HEALTH_SIGHT:
+        return out ? 0.0f : role_part_efficiency(health, BODY_ROLE_MIND) * health_vigor(health);
     case HEALTH_EATING:
-        return 1.0f - HEAD_EATING_LOSS * (1.0f - role_part_efficiency(health, BODY_ROLE_MIND));
+        return out ? 0.0f
+                   : 1.0f -
+                         HEAD_EATING_LOSS * (1.0f - role_part_efficiency(health, BODY_ROLE_MIND));
     case HEALTH_CONSCIOUSNESS:
     case HEALTH_ABILITY_COUNT: break;
     }
@@ -591,8 +735,7 @@ float health_limb_ability(const Health *health, BodyLimb limb)
     if (!health_is_hurt(health)) {
         return 1.0f;
     }
-    float pain = health_pain(health);
-    if (consciousness(health, pain) < HEALTH_CONSCIOUS_MIN) {
+    if (health->posture != POSTURE_UP) {
         return 0.0f;
     }
     float sum = 0.0f;
@@ -603,22 +746,39 @@ float health_limb_ability(const Health *health, BodyLimb limb)
             count++;
         }
     }
-    float slowdown = (1.0f - HEALTH_PAIN_SLOWDOWN * pain) *
-                     (1.0f - HEALTH_WEAKNESS_SLOWDOWN * health_weakness(health));
-    return sum / (float)count * slowdown;
+    return sum / (float)count * health_vigor(health);
+}
+
+bool health_is_collapsed(const Health *health)
+{
+    return health->death == DEATH_NONE && health->posture != POSTURE_UP;
 }
 
 bool health_is_unconscious(const Health *health)
 {
-    return health->death == DEATH_NONE &&
-           health_ability(health, HEALTH_CONSCIOUSNESS) < HEALTH_CONSCIOUS_MIN;
+    return health->death == DEATH_NONE && health->posture == POSTURE_UNCONSCIOUS;
+}
+
+int health_sight_reach(const Health *health)
+{
+    if (!health_is_collapsed(health)) {
+        return 0;
+    }
+    float share = (health_consciousness(health) - HEALTH_FAINT_BELOW) /
+                  (HEALTH_COLLAPSE_BELOW - HEALTH_FAINT_BELOW);
+    return 1 + (int)(clampf(share, 0.0f, 1.0f) * (float)(HEALTH_SIGHT_REACH_MAX - 1) + 0.5f);
+}
+
+bool health_in_danger(const Health *health)
+{
+    return health->death == DEATH_NONE && health_consciousness(health) < HEALTH_DANGER_BELOW;
 }
 
 bool health_is_down(const Health *health)
 {
-    return health_is_unconscious(health) ||
-           (health->death == DEATH_NONE &&
-            health_ability(health, HEALTH_WALKING) < HEALTH_WALKING_MIN);
+    return health_is_collapsed(health) ||
+           (health->death == DEATH_NONE && health->injury_count > 0 &&
+            role_sum(health, BODY_ROLE_WALK) < HEALTH_WALKING_MIN);
 }
 
 uint64_t health_hash(const Health *health, uint64_t hash)
@@ -626,10 +786,15 @@ uint64_t health_hash(const Health *health, uint64_t hash)
     if (!health_is_hurt(health) && health->death == DEATH_NONE) {
         return hash;
     }
-    uint8_t head[4] = {health->plan, health->death, health->death_part, health->injury_count};
+    uint8_t head[5] = {health->plan, health->death, health->death_part, health->injury_count,
+                       health->posture};
     hash = hash_fnv1a64(hash, head, sizeof(head));
     hash = hash_fnv1a64(hash, &health->blood, sizeof(health->blood));
-    if (health_weakness(health) > 0.0f || health->death != DEATH_NONE) {
+    bool deprived = false;
+    for (int kind = 0; kind < DEPRIVATION_COUNT; kind++) {
+        deprived |= health->deprivation[kind] > 0.0f;
+    }
+    if (deprived || health->death != DEATH_NONE) {
         hash = hash_fnv1a64(hash, health->deprivation, sizeof(health->deprivation)); /* Likewise. */
     }
     for (int i = 0; i < health->injury_count; i++) {

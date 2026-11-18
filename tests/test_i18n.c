@@ -305,6 +305,10 @@ static void test_number_formatting_follows_language(void)
 
 /* ---- Real language files ---- */
 
+/* The longest translated text the frontend's buffers hold (UI_TOOLTIP_LINE_SIZE
+ * in game/ui.h, less the terminator). */
+#define TRANSLATION_MAX_BYTES 511
+
 static void check_language_file(const char *code, PluralRule expected_rule)
 {
     char path[512];
@@ -318,6 +322,13 @@ static void check_language_file(const char *code, PluralRule expected_rule)
     CHECK_STR_EQ(i18n_catalog_get(catalog, I18N_KEY_LANGUAGE_CODE), code);
     CHECK(i18n_catalog_get(catalog, I18N_KEY_LANGUAGE_NAME) != NULL);
     CHECK_EQ_INT(i18n_catalog_plural_rule(catalog), expected_rule);
+    for (size_t i = 0; i < i18n_catalog_count(catalog); i++) {
+        if (strlen(i18n_catalog_value_at(catalog, i)) > TRANSLATION_MAX_BYTES) {
+            fprintf(stderr, "%s: '%s' is longer than %d bytes\n", code,
+                    i18n_catalog_key_at(catalog, i), TRANSLATION_MAX_BYTES);
+            CHECK(false);
+        }
+    }
     i18n_catalog_destroy(catalog);
     free(text);
 }

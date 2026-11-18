@@ -60,10 +60,11 @@ cornered, takes it).
 
 ## 3. A blow
 
-1. **Hit chance** = accuracy × the attacker's skill × (1 − ½ × the defender's
+1. **Hit chance** = accuracy × the attacker's skill × its vigor (a dazed
+   attacker aims worse, `docs/HEALTH.md` §11.4) × (1 − ½ × the defender's
    dodge), between 5 % and 95 %. The dodge is the defender's agility (a human
    0.25, a deer 0.35 to 0.45, a boar 0.3, a hare 0.6) times its walking
-   ability: someone who cannot walk, or lies knocked out, does not dodge.
+   ability: someone who cannot walk, or lies collapsed, does not dodge.
    A miss is a **dodge** when the same roll would have hit without the dodge
    (`BlowResult.dodged`, for the journals: no draw of its own).
 2. **Damage** = the attack's damage × the attacker's power × a random 75 % to
@@ -92,7 +93,7 @@ cornered, takes it).
   their target, each its own, never the target's. When there is no room left
   (a dead end, a pack around a deer), the others wait and look again every
   half second; an animal gives up after a few tries (and may go for another
-  prey), a settler waits. Those knocked down keep their tile.
+  prey), a settler waits. Those down keep their tile.
 - **Settlers.** A settler struck by an animal drops what it was doing
   (waking if it slept): it fights back, or flees to a tile far from it when
   past its nerve (cornered: it fights). With a thrusting spear in its

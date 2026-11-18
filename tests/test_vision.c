@@ -418,6 +418,37 @@ static void test_counts_match_fields(void)
     scene_free(&scene);
 }
 
+/* A viewer with a limit sees no further than it; lifting it brings the whole
+ * field back at once. */
+static void test_limited_viewer(void)
+{
+    Scene scene;
+    REQUIRE(scene_init(&scene, 60, 60, 3));
+    REQUIRE(scene_start(&scene));
+    Vision *vision = &scene.vision;
+    vision_viewer_set_limited(vision, &scene.map, 0, 10, 30, 0, false, 5, 0);
+    CHECK(vision_viewer_sees(vision, 0, 10, 30, 0));
+    CHECK(vision_viewer_sees(vision, 0, 15, 30, 0));
+    CHECK(!vision_viewer_sees(vision, 0, 20, 30, 0));
+    CHECK(!vision_viewer_sees(vision, 0, 40, 30, 0));
+    /* Moving about keeps the limit. */
+    vision_viewer_set_limited(vision, &scene.map, 0, 14, 30, 0, false, 5, 1);
+    CHECK(vision_viewer_sees(vision, 0, 19, 30, 0));
+    CHECK(!vision_viewer_sees(vision, 0, 40, 30, 0));
+    /* A wider limit, then none. */
+    vision_viewer_set_limited(vision, &scene.map, 0, 14, 30, 0, false, 12, 2);
+    CHECK(vision_viewer_sees(vision, 0, 26, 30, 0));
+    CHECK(!vision_viewer_sees(vision, 0, 40, 30, 0));
+    vision_viewer_set(vision, &scene.map, 0, 14, 30, 0, false, 3);
+    CHECK(vision_viewer_sees(vision, 0, 40, 30, 0));
+    /* And again. */
+    vision_viewer_set_limited(vision, &scene.map, 0, 14, 30, 0, false, 3, 4);
+    CHECK(!vision_viewer_sees(vision, 0, 40, 30, 0));
+    CHECK(vision_viewer_sees(vision, 0, 17, 30, 0));
+    CHECK(!vision_viewer_sees(vision, 0, 20, 30, 0));
+    scene_free(&scene);
+}
+
 /* A change near a viewer is seen at once, one far away at the next whole recast. */
 static void test_map_changes(void)
 {
@@ -679,6 +710,7 @@ int main(void)
     RUN_TEST(test_radius);
     RUN_TEST(test_viewers);
     RUN_TEST(test_counts_match_fields);
+    RUN_TEST(test_limited_viewer);
     RUN_TEST(test_map_changes);
     RUN_TEST(test_game_tracks_settlers);
     RUN_TEST(test_matches_brute_force);

@@ -66,6 +66,7 @@
 typedef struct VisionViewer {
     bool active;
     bool asleep;                 /* Sees only what touches its tile. */
+    int16_t limit;               /* Sees no further than this many tiles (0: no limit). */
     int16_t x, y, z;             /* Where its field was cast. */
     int16_t far_x, far_y, far_z; /* Where its whole field was last cast. */
     uint64_t far_tick;           /* The tick of its last whole recast. */
@@ -151,6 +152,11 @@ size_t vision_cast_eye(Vision *vision, const Map *map, int x, int y, int z, floa
  */
 void vision_viewer_set(Vision *vision, const Map *map, int slot, int x, int y, int z, bool asleep,
                        uint64_t tick);
+/* The same for a viewer that sees no further than `limit` tiles (0: no limit;
+ * a settler lying collapsed, docs/HEALTH.md §11.3). Its whole field is cast
+ * again when the limit changes. */
+void vision_viewer_set_limited(Vision *vision, const Map *map, int slot, int x, int y, int z,
+                               bool asleep, int limit, uint64_t tick);
 void vision_viewer_remove(Vision *vision, int slot);
 
 /* The tiles of the map around a changed tile whose viewers need a new near

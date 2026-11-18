@@ -13,6 +13,7 @@
 
 /* In the order they are listed (the most pressing first). */
 typedef enum AlertType {
+    ALERT_IN_DANGER, /* Settlers whose consciousness is low (docs/HEALTH.md §11). */
     ALERT_STARVING,  /* Settlers whose food need is critical. */
     ALERT_THIRSTY,   /* ... water. */
     ALERT_EXHAUSTED, /* ... rest. */

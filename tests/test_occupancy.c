@@ -80,6 +80,32 @@ static void test_presence_counts(void)
     occupancy_free(&occupancy);
 }
 
+/* Someone lying (forced claim) cannot be pushed off by another who falls
+ * there: it is refused, and lies elsewhere. */
+static void test_forced_claims_do_not_displace_each_other(void)
+{
+    Occupancy occupancy;
+    REQUIRE(occupancy_init(&occupancy, 8, 8, 1));
+    BeingId a = occupancy_settler(0), b = occupancy_animal(1), c = occupancy_settler(2);
+    CHECK(occupancy_force(&occupancy, a, at(2, 2)));
+    CHECK(!occupancy_force(&occupancy, b, at(2, 2))); /* Both lying: refused. */
+    CHECK(occupancy_holds(&occupancy, a, at(2, 2)));
+    CHECK(!occupancy_holds(&occupancy, b, at(2, 2)));
+    CHECK(occupancy_force(&occupancy, a, at(2, 2))); /* Its own tile: fine. */
+    CHECK(occupancy_force(&occupancy, b, at(3, 2)));
+    /* Someone standing there (not lying) does lose the tile. */
+    CHECK(occupancy_claim(&occupancy, c, at(4, 4)));
+    CHECK(occupancy_force(&occupancy, b, at(4, 4)));
+    CHECK(occupancy_holds(&occupancy, b, at(4, 4)));
+    CHECK(!occupancy_holds(&occupancy, c, at(4, 4)));
+    /* One up again (a claim) no longer lies there: its tile can be taken. */
+    CHECK(occupancy_force(&occupancy, c, at(5, 5)));
+    CHECK(occupancy_claim(&occupancy, c, at(6, 6)));
+    CHECK(occupancy_force(&occupancy, a, at(6, 6)));
+    CHECK(occupancy_holds(&occupancy, a, at(6, 6)));
+    occupancy_free(&occupancy);
+}
+
 static void test_stop_filter(void)
 {
     Occupancy occupancy;
@@ -113,8 +139,11 @@ static bool init_bare_game(Game *game, uint64_t seed)
     }
     for (size_t i = 0; i < map_level_tile_count(&game->map); i++) {
         game->map.terrain[i] = TERRAIN_SOIL;
-        game->map.rock[i] = ROCK_NONE;
         memset(&game->map.plants[i], 0, sizeof(game->map.plants[i]));
+    }
+    /* No rock anywhere: none left hanging over the cleared level to cave in. */
+    for (size_t i = 0; i < map_tile_count(&game->map); i++) {
+        game->map.rock[i] = ROCK_NONE;
     }
     map_topology_changed(&game->map);
     return true;
@@ -258,6 +287,7 @@ int main(void)
     RUN_TEST(test_one_per_tile);
     RUN_TEST(test_yielding_holders_make_way);
     RUN_TEST(test_presence_counts);
+    RUN_TEST(test_forced_claims_do_not_displace_each_other);
     RUN_TEST(test_stop_filter);
     RUN_TEST(test_crowd_spreads_out);
     RUN_TEST(test_ordered_to_one_tile);

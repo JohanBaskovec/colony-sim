@@ -139,12 +139,13 @@ static void test_choosing_an_attack(void)
     CHECK_EQ_UINT(rng.state, before.state); /* One left: nothing was drawn. */
     CHECK(combat_can_attack(&wolf, wolf_attacks));
 
-    /* A bruised head bites with less force, and a little less often. */
+    /* A bruised head bites with less force (dazed, too: less consciousness),
+     * and a little less often. */
     Health bruised;
     health_init(&bruised, BODY_CANINE, 0.7f, 1.0f, 1.0f);
     health_hurt(&bruised, HEAD, INJURY_BRUISE, 8.0f);
     CHECK_EQ_INT(combat_choose_attack(&bruised, wolf_attacks, NULL, &ability), ATTACK_WOLF_BITE);
-    CHECK(ability < 0.9f && ability > 0.3f);
+    CHECK(ability < 0.9f && ability > 0.15f);
 
     /* The deer kicks and strikes with its hooves: a deer that has lost its
      * hind legs still strikes, one with none of either does not. */
@@ -494,6 +495,19 @@ static void test_struck_animals_flee_or_fight_back(void)
     game_shutdown(&game);
 }
 
+/* A dazed attacker aims worse: its skill times its vigor. */
+static void test_dazed_attacker_aims_worse(void)
+{
+    Health health;
+    health_init(&health, BODY_HUMAN, 1.0f, 1.0f, 1.0f);
+    CHECK_NEAR(combat_aim(1.2f, &health), 1.2, 1e-6);
+    health.blood = 0.85f - 0.1225f; /* 65 % consciousness. */
+    health_update(&health, 1e-6f);
+    CHECK_NEAR(combat_aim(1.2f, &health), 1.2 * 0.6875, 1e-3);
+    CHECK(combat_hit_chance(ATTACK_FISTS, combat_aim(1.0f, &health), &health, 0.0f) <
+          combat_hit_chance(ATTACK_FISTS, 1.0f, &health, 0.0f));
+}
+
 /* A hurt animal breaks off: it runs from whom it fought. */
 static void test_hurt_animal_breaks_off(void)
 {
@@ -505,11 +519,10 @@ static void test_hurt_animal_breaks_off(void)
     REQUIRE(boar != NULL && deer != NULL);
     REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, boar_id},
                               (Combatant){COMBATANT_ANIMAL, deer_id}));
-    /* Bruised all over: past the boar's nerve (0.7). */
+    /* Bruised all over: past the boar's nerve (0.7), not yet down. */
     health_hurt(&boar->health, LEFT_LEG, INJURY_BRUISE, 20.0f);
     health_hurt(&boar->health, RIGHT_ARM, INJURY_BRUISE, 15.0f);
-    health_hurt(&boar->health, HEAD, INJURY_BRUISE, 8.0f);
-    health_hurt(&boar->health, TORSO, INJURY_BRUISE, 15.0f);
+    health_hurt(&boar->health, TORSO, INJURY_BRUISE, 18.0f);
     REQUIRE(!health_is_down(&boar->health));
     REQUIRE(combat_breaks_off(&boar->health, animal_def(ANIMAL_BOAR)->nerve));
     run_ticks(&game, 2 * TICKS_PER_SECOND);
@@ -1338,6 +1351,7 @@ int main(void)
     RUN_TEST(test_combatants_at);
     RUN_TEST(test_animal_hunts_a_hare_that_cannot_run);
     RUN_TEST(test_struck_animals_flee_or_fight_back);
+    RUN_TEST(test_dazed_attacker_aims_worse);
     RUN_TEST(test_hurt_animal_breaks_off);
     RUN_TEST(test_settler_fights_back);
     RUN_TEST(test_settler_attack_by_weapon);

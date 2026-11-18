@@ -96,6 +96,7 @@ void occupancy_release(Occupancy *occupancy, BeingId being)
         }
         state->claiming = false;
     }
+    state->forced = false;
 }
 
 void occupancy_remove(Occupancy *occupancy, BeingId being)
@@ -168,14 +169,22 @@ bool occupancy_claim(Occupancy *occupancy, BeingId being, TilePos tile)
         return false;
     }
     take(occupancy, being, tile);
+    occupancy->beings[being].forced = false;
     return true;
 }
 
-void occupancy_force(Occupancy *occupancy, BeingId being, TilePos tile)
+bool occupancy_force(Occupancy *occupancy, BeingId being, TilePos tile)
 {
-    if (valid_being(being) && occupancy->claims != NULL && in_bounds(occupancy, tile)) {
-        take(occupancy, being, tile);
+    if (!valid_being(being) || occupancy->claims == NULL || !in_bounds(occupancy, tile)) {
+        return false;
     }
+    BeingId holder = occupancy->claims[index_of(occupancy, tile)];
+    if (holder != OCCUPANCY_NOBODY && holder != being && occupancy->beings[holder].forced) {
+        return false; /* Someone else lies there already. */
+    }
+    take(occupancy, being, tile);
+    occupancy->beings[being].forced = true;
+    return true;
 }
 
 int occupancy_others_on(const Occupancy *occupancy, BeingId being, TilePos tile)

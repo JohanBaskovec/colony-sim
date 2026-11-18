@@ -6,8 +6,11 @@
  *
  * A Health is owned by the being (settler, animal). Blows land on a part
  * (health_hurt()); health_update() runs the time: bleeding, clotting, healing,
- * blood coming back, and death. Abilities (consciousness, walking, the hands,
- * sight, eating) are read from the state at any time (health_ability()).
+ * blood coming back, and death. Consciousness (docs/HEALTH.md §11) is what
+ * every deprivation, blood loss, the head and pain leave of it; it sets the
+ * posture (up, collapsed, unconscious) after every change, and a factor on
+ * what the body does. Abilities (consciousness, walking, the hands, sight,
+ * eating) are read from the state at any time (health_ability()).
  */
 #ifndef COLONY_CORE_HEALTH_H
 #define COLONY_CORE_HEALTH_H
@@ -28,33 +31,45 @@
 #define HEALTH_BLEED_PER_DAMAGE_HOUR 0.004f
 /* Hours a wound that is not serious takes to stop bleeding. */
 #define HEALTH_CLOT_HOURS 3.0f
-/* Blood: dead at HEALTH_BLOOD_DEATH, consciousness falls from
- * HEALTH_BLOOD_FAINT down to it; comes back at HEALTH_BLOOD_REGEN_PER_DAY
+/* Blood: dead at HEALTH_BLOOD_DEATH; comes back at HEALTH_BLOOD_REGEN_PER_DAY
  * while nothing bleeds. */
 #define HEALTH_BLOOD_DEATH 0.5f
-#define HEALTH_BLOOD_FAINT 0.7f
 #define HEALTH_BLOOD_REGEN_PER_DAY 0.1f
 /* Points of damage healed a day by an injury that no longer bleeds (times
  * its kind's healing and the body's size). */
 #define HEALTH_HEAL_PER_DAY 3.0f
 /* Damage × pain of all injuries that makes full pain, for a body of size 1. */
 #define HEALTH_PAIN_FULL 50.0f
-/* Pain from which the being is knocked down. */
-#define HEALTH_PAIN_KNOCKDOWN 0.8f
-/* Walking and the hands are slowed by this much at full pain. */
-#define HEALTH_PAIN_SLOWDOWN 0.4f
 /* A fracture caps its part's efficiency at this until it has healed. */
 #define HEALTH_FRACTURE_EFFICIENCY 0.1f
-/* Unconscious below this consciousness; unable to walk below this walking. */
-#define HEALTH_CONSCIOUS_MIN 0.3f
+/* Unable to walk below this share of the legs. */
 #define HEALTH_WALKING_MIN 0.15f
-/* Deprivation (docs/HEALTH.md §10): the worst of a being's deprivations (its
- * weakness) slows walking and the hands by up to this much, and takes the
- * consciousness from full at HEALTH_WEAK_FAINT_FROM to nothing at
- * HEALTH_WEAK_FAINT_TO. */
-#define HEALTH_WEAKNESS_SLOWDOWN 0.6f
-#define HEALTH_WEAK_FAINT_FROM 0.6f
-#define HEALTH_WEAK_FAINT_TO 0.85f
+
+/* Consciousness (docs/HEALTH.md §11): 1 less what every source takes off it.
+ * Blood loss takes nothing down to HEALTH_BLOOD_LOSS_FROM, everything at
+ * HEALTH_BLOOD_DEATH; a destroyed head takes HEALTH_HEAD_LOSS; full pain
+ * HEALTH_PAIN_LOSS; a deprivation its severity to the power
+ * HEALTH_DEPRIVATION_CURVE (slow at first, then steep). */
+#define HEALTH_BLOOD_LOSS_FROM 0.85f
+#define HEALTH_HEAD_LOSS 0.6f
+#define HEALTH_PAIN_LOSS 0.625f
+#define HEALTH_DEPRIVATION_CURVE 1.5f
+/* Alive, consciousness stays at this at least: what never kills (pain) can
+ * knock out, not kill. */
+#define HEALTH_CONSCIOUS_FLOOR 0.05f
+/* Collapsed below HEALTH_COLLAPSE_BELOW, up again from HEALTH_RISE_FROM;
+ * unconscious below HEALTH_FAINT_BELOW, comes to from HEALTH_COME_TO_FROM. */
+#define HEALTH_COLLAPSE_BELOW 0.5f
+#define HEALTH_RISE_FROM 0.55f
+#define HEALTH_FAINT_BELOW 0.25f
+#define HEALTH_COME_TO_FROM 0.3f
+/* In danger (an alert) below this. */
+#define HEALTH_DANGER_BELOW 0.7f
+/* The factor consciousness puts on what the body does (health_vigor()): 1
+ * from HEALTH_VIGOR_FULL up, HEALTH_VIGOR_AT_COLLAPSE at HEALTH_COLLAPSE_BELOW,
+ * on a straight line. */
+#define HEALTH_VIGOR_FULL 0.9f
+#define HEALTH_VIGOR_AT_COLLAPSE 0.5f
 
 typedef enum BodyPlan {
     BODY_HUMAN,
@@ -141,6 +156,27 @@ typedef enum Deprivation {
     DEPRIVATION_COUNT
 } Deprivation;
 
+/* What takes consciousness off (docs/HEALTH.md §11.2): the deprivations
+ * first, in their order. */
+typedef enum ConsciousnessSource {
+    CONSCIOUSNESS_HUNGER,
+    CONSCIOUSNESS_THIRST,
+    CONSCIOUSNESS_COLD,
+    CONSCIOUSNESS_HEAT,
+    CONSCIOUSNESS_BLOOD,
+    CONSCIOUSNESS_HEAD,
+    CONSCIOUSNESS_PAIN, /* Never kills. */
+    CONSCIOUSNESS_SOURCE_COUNT
+} ConsciousnessSource;
+
+/* Up, or lying where it fell (docs/HEALTH.md §11.3). */
+typedef enum HealthPosture {
+    POSTURE_UP,
+    POSTURE_COLLAPSED,   /* Awake: sees, cannot walk nor work. */
+    POSTURE_UNCONSCIOUS, /* Sees nothing either. */
+    POSTURE_COUNT
+} HealthPosture;
+
 typedef struct Injury {
     uint8_t part; /* Index in the body plan. */
     uint8_t type; /* InjuryType. */
@@ -173,6 +209,7 @@ typedef struct Health {
     uint8_t death; /* DeathCause; DEATH_NONE while alive. */
     uint8_t death_part;
     uint8_t injury_count;
+    uint8_t posture;                      /* HealthPosture, kept for the thresholds' margins. */
     float size;                           /* Hit points and pain scale: 1 for a human. */
     float damage_factor;                  /* Blows × this (toughness). */
     float pain_factor;                    /* Pain × this (pain tolerance). */
@@ -243,7 +280,8 @@ float health_blow(Health *health, Rng *rng, InjuryType type, float damage);
 void health_fall(Health *health, Rng *rng, int levels);
 
 /* Runs `hours` of time: bleeding, clotting, healing, blood coming back.
- * Returns true when the being dies during it. */
+ * Returns true when the being dies during it (blood, or the deadly sources of
+ * consciousness loss adding up to everything). */
 bool health_update(Health *health, float hours);
 
 bool health_is_dead(const Health *health);
@@ -258,16 +296,38 @@ const char *deprivation_description_key(Deprivation kind);
 /*
  * `hours` of time under a pressure from 0 (none) to 1 (full): the deprivation
  * grows by pressure × hours over its death hours, or, with no pressure,
- * recovers over its recovery hours. Returns true when it kills (it reaches 1).
+ * recovers over its recovery hours. Returns true when the being dies: the
+ * deprivation reaches 1, or the deadly sources of consciousness loss add up
+ * to everything.
  * Separate from health_update(): the caller sees to the needs and the
  * temperature.
  */
 bool health_strain(Health *health, Deprivation kind, float pressure, float hours);
 
-/* Severity of a deprivation (0 for a dead body or an invalid kind), and the
- * worst of them. */
+/* Severity of a deprivation (0 for a dead body or an invalid kind). */
 float health_deprivation(const Health *health, Deprivation kind);
-float health_weakness(const Health *health);
+
+/* How bad a deprivation is, in a word (mild, moderate, severe), for its
+ * severity; NULL at 0. */
+const char *deprivation_severity_key(float severity);
+
+/* What a source of consciousness loss is called (NULL out of range), and
+ * whether it can kill. */
+const char *consciousness_source_name_key(ConsciousnessSource source);
+bool consciousness_source_deadly(ConsciousnessSource source);
+
+/* What a source takes off consciousness now, 0..1 (0 for a dead body or an
+ * invalid source). */
+float health_consciousness_loss(const Health *health, ConsciousnessSource source);
+
+/* Consciousness, 0..1: 1 less what every source takes, at least
+ * HEALTH_CONSCIOUS_FLOOR while alive; 0 dead. */
+float health_consciousness(const Health *health);
+
+/* The factor consciousness puts on what the body does (walking, work, blows,
+ * running, learning... docs/HEALTH.md §11.4): 1 from HEALTH_VIGOR_FULL up,
+ * HEALTH_VIGOR_AT_COLLAPSE at HEALTH_COLLAPSE_BELOW, less below; 0 dead. */
+float health_vigor(const Health *health);
 
 /* Whether anything is wrong: an injury, blood not yet back, or a deprivation. */
 bool health_is_hurt(const Health *health);
@@ -278,21 +338,36 @@ float health_bleeding(const Health *health);
 /* 0..1, the pain factor included. */
 float health_pain(const Health *health);
 
-/* 0..1 (0 for a dead body). */
+/* 0..1 (0 for a dead body). Walking and the hands: the legs and the arms,
+ * times health_vigor(); 0 when collapsed. */
 float health_ability(const Health *health, HealthAbility ability);
 
 /*
  * How well the being can strike with a limb, 0..1: the mean efficiency of the
- * parts that carry it (one arm lost of two: half), slowed by pain and by
- * deprivation like the hands. 0 for a dead or knocked-out body, and for a limb
- * the plan does not have.
+ * parts that carry it (one arm lost of two: half), times health_vigor() like
+ * the hands. 0 for a dead or collapsed body, and for a limb the plan does not
+ * have.
  */
 float health_limb_ability(const Health *health, BodyLimb limb);
 
-/* Knocked down: unconscious (consciousness below HEALTH_CONSCIOUS_MIN). */
+/* Lying where it fell from lack of consciousness: collapsed or unconscious
+ * (below HEALTH_COLLAPSE_BELOW, up again from HEALTH_RISE_FROM). */
+bool health_is_collapsed(const Health *health);
+
+/* Knocked out (below HEALTH_FAINT_BELOW, comes to from HEALTH_COME_TO_FROM):
+ * sees nothing. */
 bool health_is_unconscious(const Health *health);
 
-/* Down: unconscious, or unable to walk (walking below HEALTH_WALKING_MIN). */
+/* How far a being lying collapsed sees, in tiles: from HEALTH_SIGHT_REACH_MAX
+ * at HEALTH_COLLAPSE_BELOW down to 1 (what touches it) at HEALTH_FAINT_BELOW;
+ * 0 (no limit) when it is up. */
+#define HEALTH_SIGHT_REACH_MAX 12
+int health_sight_reach(const Health *health);
+
+/* Alive with consciousness below HEALTH_DANGER_BELOW. */
+bool health_in_danger(const Health *health);
+
+/* Down: collapsed, or unable to walk (the legs below HEALTH_WALKING_MIN). */
 bool health_is_down(const Health *health);
 
 /* Damage of the injury over its part's hit points (0..1). */
@@ -301,8 +376,8 @@ float health_injury_severity(const Health *health, const Injury *injury);
 /* Whether the injury is serious (it does not clot). */
 bool health_injury_serious(const Health *health, const Injury *injury);
 
-/* Translation key of the body's state in a word: healthy, hurt, weakened (by
- * a deprivation only), unable to walk, unconscious, dead. */
+/* Translation key of the body's state in a word: healthy, hurt (an injury,
+ * blood or a deprivation), unable to walk, collapsed, unconscious, dead. */
 const char *health_status_key(const Health *health);
 
 /* Blood the injury loses per hour now. */
