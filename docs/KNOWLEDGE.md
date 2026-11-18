@@ -692,13 +692,15 @@ jobs use whatever tool the settler carries.
 
 *Plants grow, rest and die from the temperature of their tile (and soon its
 light) rather than by the calendar (`docs/PLANTS.md`); what is said here about
-growing seasons is the climate's result. Products still have their days.*
+growing seasons is the climate's result; products ripen with the warmth the
+plant has gathered.*
 
 Every plant grows from spring to autumn and rests in winter. What it bears
 (its food, or the armfuls of grass: grass is a plant like the others) is a stock
-that is there only on its days of the year, one item per regrowth period,
-up to a capacity scaled by growth (none below a minimum growth); out of its
-days the stock is gone (fallen, rotten, woody). Plants that die back wither to growth 0 out of their growing days:
+that is there only in its season, once the plant has gathered enough warmth
+and until the leaves turn tough or the autumn chill spoils the fruit, one
+item per regrowth period, up to a capacity scaled by growth (none below a
+minimum growth); out of its season the stock is gone (fallen, rotten, woody). Plants that die back wither to growth 0 out of their growing days:
 nothing shows above ground, they grow again the next season.
 
 | id            | Where | Growth / day | Move cost | Food (capacity, regrowth) | Food season | Notes |

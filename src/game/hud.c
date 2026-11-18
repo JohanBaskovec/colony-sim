@@ -388,14 +388,13 @@ static void build_tile_panel(App *app, Panel *panel)
         if (game_forbidden(&app->game, x, y, z, FORBID_PLANT)) {
             panel_add_text(panel, tr("tile_panel.left_alone"));
         }
-        int today = game_day_of_year(app->game.clock.tick);
         for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
             const PlantProduct *product = plant_product((PlantType)plant->type, slot);
             if (product == NULL || plant_stock_capacity(plant, slot) <= 0) {
                 continue;
             }
             const char *item = tr(item_def(product->item)->name_key);
-            if (!plant_days_contain(product->days, today)) {
+            if (!plant_product_in_season(plant, slot)) {
                 TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant_out_of_season"),
                           item);
                 continue;

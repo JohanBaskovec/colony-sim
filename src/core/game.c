@@ -28,7 +28,7 @@
 #define SPAWN_PLANT_MAX_COST (GAME_SPAWN_FOOD_MAX_COST - 10.0f)
 #define SPAWN_PLANT_MIN_DISTANCE 3
 #define SPAWN_PLANT_SPOT_CHANCE 0.08f
-/* Mushrooms (docs/KNOWLEDGE.md §7.3): each day of their season, a patch
+/* Mushrooms (docs/KNOWLEDGE.md §7.3): each cool night (MUSHROOM_MIN_CELSIUS), a patch
  * appears with MUSHROOM_CHANCE on open soil within MUSHROOM_TREE_RANGE tiles
  * of a mature tree, ×(1 + recent rain / MUSHROOM_RAIN_HOURS), at most
  * ×MUSHROOM_RAIN_MAX after much rain (Weather.recent_rain), and an existing
@@ -38,6 +38,11 @@
 #define MUSHROOM_RAIN_MAX 4.0f
 #define MUSHROOM_VANISH_CHANCE 0.2f
 #define MUSHROOM_TREE_RANGE 2
+/* They come up only in the cool, damp nights between these air temperatures
+ * (degrees Celsius at the first hour of the day): not in the heat of summer
+ * nor in the frost. */
+#define MUSHROOM_MIN_CELSIUS 4.0f
+#define MUSHROOM_MAX_CELSIUS 16.0f
 /* Flint patch laid for the first settlers when there is none near them:
  * SPAWN_FLINT_PATCH_STONES flint nodules in the middle, SPAWN_FLINT_PATCH_FALLOFF
  * fewer per step, over SPAWN_FLINT_PATCH_RADIUS steps (Manhattan). */
@@ -699,8 +704,11 @@ static void mushrooms_day(Game *game, size_t index, int day)
         return;
     }
     if (plant->type != PLANT_NONE ||
-        !plant_days_contain(plant_def(PLANT_MUSHROOMS)->products[0].days, day) ||
         world_roll(game->seed, index, day, 0) >= mushroom_chance(&game->weather)) {
+        return;
+    }
+    float air = weather_outdoor(&game->weather, game->clock.tick);
+    if (air < MUSHROOM_MIN_CELSIUS || air > MUSHROOM_MAX_CELSIUS) {
         return;
     }
     int x, y, z;
@@ -857,7 +865,6 @@ PlantConditions game_plant_conditions(const Game *game, int x, int y, int z)
         .fertility = terrain_def((Terrain)map->terrain[index])->fertility,
         .light = game_sunlight(tick) * sky,
         .light_peak = game_sun_noon(day) * sky,
-        .day_of_year = day,
     };
 }
 

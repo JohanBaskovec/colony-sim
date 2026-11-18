@@ -130,10 +130,14 @@ typedef struct PlantProduct {
     ItemType item; /* ITEM_NONE: no product in this slot. */
     int capacity;
     int regrow_hours;
-    /* The days of the year it is on the plant (it falls, rots or turns woody
-     * on the others: the stock is gone) and the growth the plant needs to
-     * bear any. */
-    PlantDays days;
+    /* When it is on the plant (docs/PLANTS.md §7): the warmth the plant has
+     * gathered since it woke, in degree-days above its `t_min` (Plant.warmth),
+     * must lie from `warmth_from` to `warmth_until` (0: no end: fruit ripens,
+     * young leaves turn tough), and its climate not have fallen below
+     * `lost_below` degrees (0: never: the fruit rots in the autumn chill);
+     * out of that the stock is gone. `min_growth` is the growth the plant
+     * needs to bear any. */
+    float warmth_from, warmth_until, lost_below;
     float min_growth;
     bool dug; /* Dug up (with a digging stick, best), never eaten in place. */
     /* Easily mistaken for a poisonous plant: only a skilled gatherer takes it
@@ -252,6 +256,9 @@ typedef struct Plant {
      * PLANT_DAMAGE_MAX (dead). It slows growth and heals when conditions are good. */
     uint16_t damage;
     float growth; /* 0 (seedling) .. 1 (mature) */
+    /* Degree-days gathered above its `t_min` since it woke (0 when it died back
+     * and came back): what ripens its products (PlantProduct.warmth_from). */
+    float warmth;
     /* The mean temperature of the last days at its tile, in 1/256 degrees:
      * what decides when it rests and wakes. */
     int16_t climate;
@@ -259,7 +266,7 @@ typedef struct Plant {
     uint8_t hardening;
     uint8_t state; /* PlantState, plus PLANT_CLIMATE_KNOWN. */
 } Plant;
-_Static_assert(sizeof(Plant) == 16, "a plant is four words");
+_Static_assert(sizeof(Plant) == 20, "a plant is five words");
 
 /* Set in Plant.state once `climate` holds the tile's temperatures (a plant
  * made by hand takes its first from the tile). */
@@ -274,7 +281,6 @@ typedef struct PlantConditions {
      * even that is low. */
     float light;
     float light_peak;
-    int day_of_year; /* For what its products' days say (PlantProduct.days). */
 } PlantConditions;
 
 /* What a plant is up to, for the player (the plant window). */
@@ -450,10 +456,14 @@ int plant_take_stock(Plant *plant, int slot, int count);
 /* Whether a day of the year (0-based) is in a set. */
 bool plant_days_contain(PlantDays days, int day_of_year);
 
-/* Lets the stocks grow back for `hours` on a day of the year, up to the
- * capacity: on the days of their product (the stock is gone on the others);
- * `hours` 0: only drops what is above the limit or out of its days. */
-void plant_regrow_stocks(Plant *plant, int hours, int day_of_year);
+/* Whether a product is in season on the plant: the warmth gathered and the
+ * climate say it is on it (PlantProduct.warmth_from). */
+bool plant_product_in_season(const Plant *plant, int slot);
+
+/* Lets the stocks grow back for `hours`, up to the capacity, while in
+ * season (the stock is gone out of it); `hours` 0: only drops what is above
+ * the limit or out of season. */
+void plant_regrow_stocks(Plant *plant, int hours);
 
 /*
  * `hours` hours of a plant's life in `conditions`: its climate follows the

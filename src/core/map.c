@@ -47,11 +47,6 @@ static const RockDef ROCK_DEFS[ROCK_COUNT] = {
 /* Plants grow from spring to autumn: what some products' days say. */
 #define GROWING_SEASON PLANT_DAYS(SPRING(1), AUTUMN(DAYS_PER_SEASON))
 
-/* Fungi live by no climate of ours: no growth, no frost or heat, no rest. */
-#define PLANT_CLIMATE_ANY                                                                          \
-    .t_min = -100.0f, .t_opt_low = -99.0f, .t_opt_high = 99.0f, .t_max = 100.0f,                   \
-    .t_frost_active = -101.0f, .t_frost_hardened = -101.0f, .t_lethal_heat = 101.0f
-
 /*
  * Wild plants of a temperate climate (docs/PLANTS.md §7: what each one's
  * temperatures and hardiness are, and why; docs/KNOWLEDGE.md §7 for the food).
@@ -83,7 +78,6 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                      .products = {{.item = ITEM_FRESH_GRASS,
                                    .capacity = 3,
                                    .regrow_hours = 1,
-                                   .days = PLANT_ALL_YEAR,
                                    .min_growth = 0.5f}},
                      .harvest = PLANT_HARVEST_RESETS,
                      .grazed = true},
@@ -151,7 +145,8 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                        .products = {{.item = ITEM_BLACKBERRIES,
                                      .capacity = 9,
                                      .regrow_hours = 12,
-                                     .days = PLANT_DAYS(SUMMER(8), AUTUMN(7)),
+                                     .warmth_from = 220.0f, /* The end of summer. */
+                                     .lost_below = 10.0f,   /* Rotten in the autumn chill. */
                                      .min_growth = 0.5f}}},
     /* Easily mistaken for lily of the valley or autumn crocus. */
     [PLANT_WILD_GARLIC] = {.id = "wild_garlic",
@@ -174,7 +169,8 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                            .products = {{.item = ITEM_WILD_GARLIC,
                                          .capacity = 3,
                                          .regrow_hours = 24,
-                                         .days = PLANT_DAYS(SPRING(1), SPRING(DAYS_PER_SEASON)),
+                                         .warmth_until =
+                                             145.0f, /* Spring leaves, before it flowers. */
                                          .min_growth = 0.3f,
                                          .confusable = true}}},
     /* Young shoots in spring, and again when it grows back in autumn. */
@@ -197,8 +193,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                       .products = {{.item = ITEM_NETTLES,
                                     .capacity = 3,
                                     .regrow_hours = 24,
-                                    .days = PLANT_DAYS(SPRING(1), SPRING(DAYS_PER_SEASON)) |
-                                            PLANT_DAYS(AUTUMN(3), AUTUMN(DAYS_PER_SEASON)),
+                                    .warmth_until = 100.0f, /* Young shoots, tough later. */
                                     .min_growth = 0.2f}}},
     [PLANT_PLANTAIN] = {.id = "plantain",
                         .name_key = N_("plant.plantain"),
@@ -219,7 +214,8 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                         .products = {{.item = ITEM_PLANTAIN,
                                       .capacity = 2,
                                       .regrow_hours = 24,
-                                      .days = GROWING_SEASON,
+                                      .warmth_from = 17.0f, /* Leaves from spring to autumn. */
+                                      .lost_below = 5.0f,
                                       .min_growth = 0.3f}}},
     /* Its root is tender from autumn until early spring, woody once it
      * flowers; easily mistaken for hemlock. */
@@ -242,8 +238,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                            .products = {{.item = ITEM_WILD_CARROTS,
                                          .capacity = 3,
                                          .regrow_hours = 24,
-                                         .days = PLANT_DAYS(AUTUMN(1), WINTER(DAYS_PER_SEASON)) |
-                                                 PLANT_DAYS(SPRING(1), SPRING(6)),
+                                         .warmth_from = 360.0f, /* Tender roots from autumn. */
                                          .min_growth = 0.6f,
                                          .dug = true,
                                          .confusable = true}},
@@ -269,7 +264,6 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                        .products = {{.item = ITEM_CATTAIL_RHIZOMES,
                                      .capacity = 4,
                                      .regrow_hours = 48,
-                                     .days = PLANT_ALL_YEAR,
                                      .min_growth = 0.5f,
                                      .dug = true}}},
     /* Appear fully grown, picked or gone within days (see core/game.c). Some
@@ -277,11 +271,19 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_MUSHROOMS] = {.id = "mushrooms",
                          .name_key = N_("plant.mushrooms"),
                          .move_cost = 1.0f,
-                         PLANT_CLIMATE_ANY,
+                         /* Fungi: they live between cool and mild, no light. The first
+                          * hard frost kills them. */
+                         .t_min = 2.0f,
+                         .t_opt_low = 8.0f,
+                         .t_opt_high = 18.0f,
+                         .t_max = 25.0f,
+                         .t_frost_active = -1.0f,
+                         .t_frost_hardened = -1.0f,
+                         .t_lethal_heat = 35.0f,
                          .products = {{.item = ITEM_MUSHROOMS,
                                        .capacity = 3,
                                        .regrow_hours = 24,
-                                       .days = PLANT_DAYS(AUTUMN(1), AUTUMN(DAYS_PER_SEASON)),
+                                       .lost_below = 3.0f, /* Gone at the first frosts. */
                                        .confusable = true}},
                          .harvest = PLANT_HARVEST_REMOVES},
 };
@@ -370,7 +372,19 @@ bool plant_days_contain(PlantDays days, int day_of_year)
     return day_of_year >= 0 && day_of_year < DAYS_PER_YEAR && ((days >> day_of_year) & 1u);
 }
 
-void plant_regrow_stocks(Plant *plant, int hours, int day_of_year)
+bool plant_product_in_season(const Plant *plant, int slot)
+{
+    const PlantProduct *product = plant_product((PlantType)plant->type, slot);
+    if (product == NULL) {
+        return false;
+    }
+    return plant->warmth >= product->warmth_from &&
+           (product->warmth_until <= 0.0f || plant->warmth < product->warmth_until) &&
+           (product->lost_below == 0.0f ||
+            (float)plant->climate / PLANT_CLIMATE_SCALE >= product->lost_below);
+}
+
+void plant_regrow_stocks(Plant *plant, int hours)
 {
     if (hours < 0 || (unsigned)plant->type >= PLANT_COUNT) {
         return;
@@ -380,7 +394,7 @@ void plant_regrow_stocks(Plant *plant, int hours, int day_of_year)
         if (def->products[slot].item == ITEM_NONE) {
             continue;
         }
-        if (!plant_days_contain(def->products[slot].days, day_of_year)) {
+        if (!plant_product_in_season(plant, slot)) {
             plant->stock[slot] = 0; /* Fallen, rotten or woody. */
             continue;
         }
@@ -470,6 +484,7 @@ static void set_climate(Plant *plant, float celsius)
 static void die_back(Plant *plant)
 {
     plant->growth = 0.0f;
+    plant->warmth = 0.0f;
     memset(plant->stock, 0, sizeof(plant->stock));
 }
 
@@ -509,6 +524,7 @@ static bool advance_hour(Plant *plant, const PlantDef *def, const PlantCondition
                state_in_climate(def, climate - PLANT_REST_HYSTERESIS) == PLANT_STATE_AWAKE &&
                state_in_climate(def, climate + PLANT_REST_HYSTERESIS) == PLANT_STATE_AWAKE) {
         set_state(plant, PLANT_STATE_AWAKE);
+        plant->warmth = 0.0f; /* A new year of growth: the fruit ripens again. */
     }
     state = plant_state_of(plant);
 
@@ -517,6 +533,11 @@ static bool advance_hour(Plant *plant, const PlantDef *def, const PlantCondition
         plant->hardening = (uint8_t)clampi(plant->hardening + PLANT_HARDEN_PER_HOUR, 0, 255);
     } else {
         plant->hardening = (uint8_t)clampi(plant->hardening - PLANT_SOFTEN_PER_HOUR, 0, 255);
+    }
+
+    /* An awake plant gathers the warmth that ripens its products. */
+    if (plant_state_of(plant) == PLANT_STATE_AWAKE && temperature > def->t_min) {
+        plant->warmth += (temperature - def->t_min) / (float)HOURS_PER_DAY;
     }
 
     /* Frost and heat wear it down (not what waits under the ground), good weather mends it. */
@@ -547,7 +568,7 @@ static bool advance_hour(Plant *plant, const PlantDef *def, const PlantCondition
     if (state_is_underground(state)) {
         memset(plant->stock, 0, sizeof(plant->stock));
     } else {
-        plant_regrow_stocks(plant, state == PLANT_STATE_AWAKE ? 1 : 0, conditions->day_of_year);
+        plant_regrow_stocks(plant, state == PLANT_STATE_AWAKE ? 1 : 0);
     }
 
     /* Growth. */
@@ -690,6 +711,26 @@ bool plant_is_dormant(const Plant *plant)
     return state_is_underground(plant_state_of(plant));
 }
 
+/* The degree-days a plant that woke at the start of the year has gathered
+ * above `t_min` by a day of the year, in the expected climate (a table made
+ * once: world generation settles every plant). */
+static float expected_warmth(const PlantDef *def, int day_of_year)
+{
+    static float table[PLANT_COUNT][DAYS_PER_YEAR];
+    static bool ready[PLANT_COUNT];
+    int type = (int)(def - PLANT_DEFS);
+    if (!ready[type]) {
+        float sum = 0.0f;
+        for (int day = 0; day < DAYS_PER_YEAR; day++) {
+            float mean = temperature_season_mean((uint64_t)day * TICKS_PER_DAY + TICKS_PER_DAY / 2);
+            sum += mean > def->t_min ? mean - def->t_min : 0.0f;
+            table[type][day] = sum;
+        }
+        ready[type] = true;
+    }
+    return table[type][clampi(day_of_year, 0, DAYS_PER_YEAR - 1)];
+}
+
 void plant_settle(Plant *plant, int day_of_year)
 {
     if ((unsigned)plant->type >= PLANT_COUNT) {
@@ -703,12 +744,13 @@ void plant_settle(Plant *plant, int day_of_year)
     PlantState state = state_in_climate(def, climate);
     set_state(plant, state);
     plant->hardening = climate < def->t_min ? 255 : 0;
+    plant->warmth = expected_warmth(def, day_of_year);
     if (state_is_underground(state)) {
         die_back(plant);
     }
     for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
         bool full = !state_is_underground(state) && def->products[slot].item != ITEM_NONE &&
-                    plant_days_contain(def->products[slot].days, day_of_year);
+                    plant_product_in_season(plant, slot);
         int limit = full ? stock_limit(def, plant, slot) : 0;
         plant->stock[slot] = (uint16_t)clampi(limit, 0, UINT16_MAX);
     }

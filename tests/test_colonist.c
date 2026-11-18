@@ -2009,7 +2009,7 @@ static void test_gatherer_waits_for_the_fruit_to_ripen(void)
 
     /* Once a handful has ripened, the idle colonist notices and picks it. */
     int regrow = plant_def(PLANT_BRAMBLE)->products[0].regrow_hours;
-    plant_regrow_stocks(bramble, regrow, GAME_START_DAY);
+    plant_regrow_stocks(bramble, regrow);
     REQUIRE(plant_stock_available(bramble, 0) == 1);
     run_ticks(&game, TICKS_PER_HOUR * 2);
     CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], 1);

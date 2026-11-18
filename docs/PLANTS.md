@@ -4,8 +4,9 @@ How wild plants grow, rest, suffer and die. They react to the temperature,
 the light and, later, the water of their tile, instead of following a
 calendar.
 
-Status: steps **P1** (temperature, health, rest; §2 to §4 and §7) and **P2**
-(light; §5) are implemented; P3 and P4 (§9) are design. Before it a plant grew
+Status: steps **P1** (temperature, health, rest; §2 to §4 and §7), **P2**
+(light; §5) and **P3** (ripening by warmth; §7) are implemented; P4 (§9) is
+design. Before it a plant grew
 on its growth days (spring to autumn) at a rate set by the fertility of the
 ground. Values marked *(tuning)* are first guesses.
 
@@ -199,18 +200,33 @@ above `light_min`) feed it, the night is neither good nor bad, and the
 With the present seasons (12, 22, 10 and −2 °C at mid-spring, summer,
 autumn and winter, `TEMPERATURE_SEASON_MEANS`) this gives roughly today's
 calendar: growth from spring to autumn, wild garlic in spring only, nettles
-gone in winter. **Mushrooms** keep their present rule in P1 and P2 (autumn,
-after rain, near mature trees, gone within days); in P3 they come up
-between 8 and 20 °C after rain, and go at the first frost.
+gone in winter. **Mushrooms** come up on bare ground near mature trees on
+the cool nights (4 to 16 °C at midnight, `MUSHROOM_MIN_CELSIUS`) after rain,
+in autumn and in spring, are gone within days, are lost when the climate falls
+below 3 °C and killed by a hard frost.
 
-**Products** keep their days of the year (`PlantProduct.days`) until P3,
-when ripening follows the warmth gathered since spring (degree-days): a
-cold summer brings the blackberries late, a warm one early. A plant that
-dies back loses its stocks, as today; a resting plant grows none back.
+**Products** ripen with the warmth the plant has gathered since it woke (its
+degree-days above its `t_min`, `Plant.warmth`): a cold summer brings the
+blackberries late, a warm one early. Each has a window
+(`PlantProduct.warmth_from`, `warmth_until`) and a chill that loses it
+(`lost_below`, the plant's climate):
+
+| Product | From | Until | Lost below | In this climate |
+|---|---|---|---|---|
+| Blackberries | 220 | - | 10 °C | end of summer to mid autumn |
+| Wild garlic leaves | 0 | 145 | - | spring |
+| Nettle shoots | 0 | 100 | - | spring (the autumn shoots are gone) |
+| Plantain leaves | 17 | - | 5 °C | spring to autumn |
+| Wild carrot roots | 360 | - | - | autumn to the next spring's wake |
+| Cattail rhizomes, grass | - | - | - | all year |
+
+A plant that dies back loses its stocks and its warmth; a resting plant keeps
+its warmth (and its stocks, which grow no more) until it wakes, when the warmth
+starts over. A plant of a generated world (`plant_settle()`) starts with the
+expected warmth of the day.
 
 ## 8. Later
 
-- **Ripening by degree-days** (P3) and mushrooms by temperature (P3).
 - **Water** (P4): soil moisture per tile (rain, shade, nearby water,
   drying in the heat and the wind), `f_water` in the growth, drought that
   harms and kills, waterlogging for the plants that hate it, cattails in
@@ -244,8 +260,7 @@ dies back loses its stocks, as today; a resting plant grows none back.
 - `plant_growth_rate()`, `plant_status()` and `plant_health()` feed the plant
   window (condition, rate per day, health when harmed) and the tile
   information.
-- Products keep their days of the year (`PlantProduct.days`); a resting plant
-  grows no stock back, a plant that died back has none.
+- Products: see P3 below.
 
 ## 8c. As built (P2)
 
@@ -281,6 +296,21 @@ dies back loses its stocks, as today; a resting plant grows none back.
   searching wider for grass to cut (what grass grows in a short autumn day is
   a fraction of what it did), not the plant update.
 
+## 8d. As built (P3)
+
+- `Plant` is 20 bytes (`warmth`, a float of degree-days). An awake plant adds
+  `(T - t_min) / 24` an hour when it is warmer than its `t_min`; it starts over
+  when the plant wakes from rest, and is 0 for what died back
+  (`plant_product_in_season()` says whether a product is on the plant).
+- `PlantProduct.days` and `PlantConditions.day_of_year` are gone; the
+  calendar stays only for what a tree lets fall (`PlantDef.fall_days`).
+- The expected warmth of a plant settled on a day is the year's degree-days
+  up to it in the mean climate (`expected_warmth()`, a table made once).
+- On seed 42 the blackberries are on the plants from the end of summer to
+  mid autumn, garlic and nettle shoots in spring only, carrots from autumn to
+  spring, mushrooms on cool damp nights of autumn and spring.
+- Not done: ripening of what trees shed (hazelnuts, `fall_days`) by warmth.
+
 ## 9. Steps
 
 1. **P1: temperature, health, rest** *(done)*. Growth from the temperature (§2,
@@ -295,7 +325,7 @@ dies back loses its stocks, as today; a resting plant grows none back.
 2. **P2: light** *(done)*. The sun's day by season (also on screen), the sky,
    the cover of each tile (open, foliage, roof, rock), `f_light` and death in
    the dark; mushrooms need none.
-3. **P3: ripening by degree-days**, mushrooms by temperature.
+3. **P3: ripening by degree-days** *(done)*, mushrooms by temperature.
 4. **P4: water** (soil moisture), with `docs/GAME_DESIGN.md`'s *Soil*.
 
 Each step changes the state hash of the benchmarks.

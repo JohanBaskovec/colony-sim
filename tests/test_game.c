@@ -165,8 +165,9 @@ static void test_mushrooms_come_and_go(void)
     REQUIRE(init_flat_game(&game, 3));
     Map *map = &game.map;
     make_grove(map);
-    /* Summer: none. */
-    game.clock.tick = (uint64_t)SEASON_DAY(SEASON_SUMMER, 5) * TICKS_PER_DAY;
+    /* A mild summer night is too warm for them. */
+    game.clock.tick = (uint64_t)SEASON_DAY(SEASON_SUMMER, 8) * TICKS_PER_DAY;
+    game.weather.spell = 0.0f;
     for (int i = 0; i < TICKS_PER_HOUR; i++) {
         game_tick(&game);
     }
@@ -190,7 +191,12 @@ static void test_mushrooms_come_and_go(void)
         }
     }
     CHECK(patches > 0);
-    /* Two weeks on, in winter: all gone. */
+    /* Weeks on, in the winter cold: all gone. */
+    for (size_t i = 0; i < map_tile_count(map); i++) {
+        if (map->plants[i].type == PLANT_MUSHROOMS) {
+            map->plants[i].climate = (int16_t)(-5.0f * PLANT_CLIMATE_SCALE);
+        }
+    }
     game.clock.tick = (uint64_t)SEASON_DAY(SEASON_WINTER, 2) * TICKS_PER_DAY;
     for (int i = 0; i < TICKS_PER_HOUR; i++) {
         game_tick(&game);
@@ -300,7 +306,6 @@ static void test_plant_conditions(void)
     PlantConditions open = game_plant_conditions(&game, 3, 3, 0);
     CHECK_NEAR(open.light, 1.0, 1e-3);
     CHECK_NEAR(open.light_peak, 1.0, 1e-3);
-    CHECK_EQ_INT(open.day_of_year, midsummer);
     CHECK_NEAR(open.fertility,
                terrain_def((Terrain)map->terrain[map_index(map, 3, 3, 0)])->fertility, 1e-6);
     PlantConditions shaded = game_plant_conditions(&game, 5, 5, 0);

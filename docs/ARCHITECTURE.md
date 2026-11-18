@@ -260,10 +260,12 @@ the warmth; the cold hardens it (`Plant.hardening`); frost and heat beyond its
 limits wear its health down (`Plant.damage`) and it is removed when that is
 gone, a tree with a trunk excepted. The seasons come out of the temperatures
 (`core/temperature.h`), not a calendar: a roofed room or a cave has a climate
-of its own. A `PlantDays` bit set (60 days fit in 64 bits) only says when each
-product is there (`PlantProduct.days`: blackberries at the end of summer,
-rhizomes and cut grass all year...), until ripening follows the warmth
-(P3). Out of its days a stock is gone; a plant that died back (wild garlic in
+of its own. Products ripen with the warmth the plant has gathered since it woke
+(`Plant.warmth`, degree-days; `PlantProduct.warmth_from` and `warmth_until`,
+and `lost_below` for the chill that spoils them: blackberries at the end of
+summer, rhizomes and cut grass all year...). A `PlantDays` bit set (60 days fit
+in 64 bits) only says when a tree lets its fruit fall (`PlantDef.fall_days`).
+Out of season a stock is gone; a plant that died back (wild garlic in
 the heat and the cold, nettles in winter) shows nothing above ground until the
 warmth returns. `plant_advance()` does one such step (`update_plants()` calls
 it once an hour per plant, a slice of the map per tick); `plant_settle()` puts a

@@ -1197,12 +1197,9 @@ static void test_grass_is_a_plant_with_a_stock(void)
     CHECK_EQ_INT(plant_stock_available(tall, 0), 0);
     CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_CUT_GRASS));
     /* A few days on, it has grown and bears armfuls again. */
-    for (int day = 0; day < 4; day++) {
-        PlantConditions warm = {.temperature = 20.0f,
-                                .fertility = 1.0f,
-                                .light = 1.0f,
-                                .light_peak = 1.0f,
-                                .day_of_year = SEASON_DAY(SEASON_SUMMER, 3 + day)};
+    for (int day = 0; day < 8; day++) { /* Light for half of each day. */
+        PlantConditions warm = {
+            .temperature = 20.0f, .fertility = 1.0f, .light = 1.0f, .light_peak = 1.0f};
         plant_advance(tall, &warm, HOURS_PER_DAY);
     }
     CHECK_NEAR(tall->growth, 1.0f, 1e-6);

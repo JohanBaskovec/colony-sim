@@ -289,9 +289,12 @@ static void test_definitions_are_complete(void)
             bool used = product->item != ITEM_NONE;
             CHECK(used == (product->capacity > 0));
             CHECK(used == (product->regrow_hours > 0));
-            CHECK(used == (product->days != 0));
-            CHECK((product->days & ~PLANT_ALL_YEAR) == 0);
-            CHECK(used || (!product->dug && !product->confusable && product->min_growth == 0.0f));
+            /* A window of warmth that opens before it shuts, a chill that loses it. */
+            CHECK(product->warmth_from >= 0.0f);
+            CHECK(product->warmth_until == 0.0f || product->warmth_until > product->warmth_from);
+            CHECK(product->lost_below >= 0.0f);
+            CHECK(used || (!product->dug && !product->confusable && product->min_growth == 0.0f &&
+                           product->warmth_from == 0.0f && product->lost_below == 0.0f));
             CHECK(!product->dug || item_is_food(product->item)); /* Roots to eat. */
             CHECK(plant_product((PlantType)p, slot) == (used ? product : NULL));
             products += used;
@@ -352,11 +355,8 @@ static void test_grass_stock_follows_growth(void)
     const PlantProduct *armfuls = plant_product(PLANT_GRASS, 0);
     REQUIRE(armfuls != NULL);
     CHECK_EQ_INT(plant_stock_capacity(&grass, 0), 0);
-    PlantConditions warm = {.temperature = 20.0f,
-                            .fertility = 1.0f,
-                            .light = 1.0f,
-                            .light_peak = 1.0f,
-                            .day_of_year = SEASON_DAY(SEASON_SPRING, 5)};
+    PlantConditions warm = {
+        .temperature = 20.0f, .fertility = 1.0f, .light = 1.0f, .light_peak = 1.0f};
     int previous = 0;
     for (int hours = 0; hours < 10 * HOURS_PER_DAY && grass.growth < 1.0f; hours += 6) {
         plant_advance(&grass, &warm, 6);
@@ -492,32 +492,39 @@ static void advance_days(Plant *plant, int first, int last)
                 .fertility = fertility,
                 .light = game_sunlight(tick), /* In the open, under a clear sky. */
                 .light_peak = game_sun_noon(day),
-                .day_of_year = day,
             };
             plant_advance(plant, &conditions, 1);
         }
     }
 }
 
-/* Fruit ripens in its season, two handfuls a day, and is gone after it. */
+/* Fruit ripens when the plant has gathered enough warmth (the end of summer in
+ * this climate), a bit at a time, and is spoiled by the autumn chill. */
 static void test_fruit_follows_the_season(void)
 {
     const PlantDef *def = plant_def(PLANT_BRAMBLE);
-    int ripening = SEASON_DAY(SEASON_SUMMER, 8);
     Plant plant = {.type = PLANT_BRAMBLE, .growth = 1.0f};
-    advance_days(&plant, SEASON_DAY(SEASON_SPRING, 1), ripening - 1);
-    CHECK_EQ_INT(plant_stock_available(&plant, 0), 0); /* Flowers only. */
-    advance_days(&plant, ripening, ripening);
-    CHECK_EQ_INT(plant_stock_available(&plant, 0), HOURS_PER_DAY / def->products[0].regrow_hours);
-    advance_days(&plant, ripening + 1, ripening + 10);
+    int day = SEASON_DAY(SEASON_SPRING, 1);
+    while (day < DAYS_PER_YEAR && !plant_has_food(&plant)) {
+        advance_days(&plant, day, day);
+        CHECK_EQ_INT(plant_stock_available(&plant, 0), 0); /* Flowers only, so far. */
+        day++;
+        advance_days(&plant, day, day);
+        if (plant_has_food(&plant)) {
+            break;
+        }
+    }
+    CHECK(day >= SEASON_DAY(SEASON_SUMMER, 1) && day <= SEASON_DAY(SEASON_SUMMER, 15));
+    CHECK(plant_stock_available(&plant, 0) < def->products[0].capacity); /* A few at first. */
+    advance_days(&plant, day + 1, day + 10);
     CHECK_EQ_INT(plant_stock_available(&plant, 0), def->products[0].capacity);
     /* Picked, it ripens more while the season lasts. */
     CHECK_EQ_INT(plant_take_stock(&plant, 0, 1000), def->products[0].capacity);
     CHECK_NEAR(plant.growth, 1.0f, 1e-6); /* The bramble itself is untouched. */
-    advance_days(&plant, ripening + 11, ripening + 11);
+    advance_days(&plant, day + 11, day + 11);
     CHECK(plant_has_food(&plant));
-    /* Autumn goes on: the last blackberries fall and rot. */
-    advance_days(&plant, ripening + 12, SEASON_DAY(SEASON_AUTUMN, 8));
+    /* Autumn goes on: the chill spoils the last blackberries. */
+    advance_days(&plant, day + 12, SEASON_DAY(SEASON_WINTER, 1));
     CHECK(!plant_has_food(&plant));
     CHECK_NEAR(plant.growth, 1.0f, 1e-6);
 }
@@ -560,11 +567,8 @@ static void test_growth_follows_the_temperature(void)
     const PlantDef *def = plant_def(PLANT_TREE);
     float rich = terrain_def(TERRAIN_RICH_SOIL)->fertility;
     int day = SEASON_DAY(SEASON_SUMMER, 5);
-    PlantConditions best = {.temperature = def->t_opt_low,
-                            .fertility = rich,
-                            .light = 1.0f,
-                            .light_peak = 1.0f,
-                            .day_of_year = day};
+    PlantConditions best = {
+        .temperature = def->t_opt_low, .fertility = rich, .light = 1.0f, .light_peak = 1.0f};
     Plant tree = {.type = PLANT_TREE, .growth = 0.5f};
     plant_settle(&tree, day);
     for (int hour = 0; hour < (int)PLANT_BEST_DAY_HOURS; hour++) {
@@ -607,8 +611,7 @@ static void test_growth_follows_the_temperature(void)
     PlantConditions water = {.temperature = plant_def(PLANT_CATTAIL)->t_opt_low,
                              .fertility = 0.0f,
                              .light = 1.0f,
-                             .light_peak = 1.0f,
-                             .day_of_year = day};
+                             .light_peak = 1.0f};
     for (int hour = 0; hour < (int)PLANT_BEST_DAY_HOURS; hour++) { /* A best day. */
         plant_advance(&cattail, &water, 1);
     }
@@ -635,8 +638,7 @@ static PlantConditions at_temperature(float celsius)
     return (PlantConditions){.temperature = celsius,
                              .fertility = terrain_def(TERRAIN_RICH_SOIL)->fertility,
                              .light = 1.0f,
-                             .light_peak = 1.0f,
-                             .day_of_year = SEASON_DAY(SEASON_SUMMER, 5)};
+                             .light_peak = 1.0f};
 }
 
 /* A plant goes to rest after days of cold, not on a cold night, and wakes
@@ -832,7 +834,7 @@ static void test_growth_follows_the_light(void)
     const PlantDef *def = plant_def(PLANT_GRASS);
     PlantConditions day = at_temperature(def->t_opt_low);
     Plant grass = {.type = PLANT_GRASS, .growth = 0.3f};
-    plant_settle(&grass, day.day_of_year);
+    plant_settle(&grass, SEASON_DAY(SEASON_SUMMER, 5));
     PlantConditions night = day;
     night.light = 0.0f; /* The sun is down, but the day's best light is fine. */
     plant_advance(&grass, &night, 6);
@@ -862,7 +864,7 @@ static void test_the_dark_kills(void)
     dark.light = 0.0f;
     dark.light_peak = def->light_min * 0.5f;
     Plant grass = {.type = PLANT_GRASS, .growth = 0.6f};
-    plant_settle(&grass, dark.day_of_year);
+    plant_settle(&grass, SEASON_DAY(SEASON_SUMMER, 5));
     plant_advance(&grass, &dark, (int)(def->dark_days - 1.0f) * HOURS_PER_DAY);
     CHECK_EQ_INT(grass.type, PLANT_GRASS);
     CHECK(plant_health(&grass) < 0.15f);
@@ -870,7 +872,7 @@ static void test_the_dark_kills(void)
     CHECK_EQ_INT(grass.type, PLANT_NONE);
     /* A short dark spell is mended: a few cloudy days. */
     Plant mended = {.type = PLANT_GRASS, .growth = 0.6f};
-    plant_settle(&mended, dark.day_of_year);
+    plant_settle(&mended, SEASON_DAY(SEASON_SUMMER, 5));
     plant_advance(&mended, &dark, 3 * HOURS_PER_DAY);
     CHECK(plant_health(&mended) < 0.8f);
     PlantConditions bright = at_temperature(def->t_opt_low);
@@ -887,28 +889,86 @@ static void test_the_dark_kills(void)
     Plant mushrooms = {.type = PLANT_MUSHROOMS, .growth = 1.0f};
     plant_settle(&mushrooms, SEASON_DAY(SEASON_AUTUMN, 3));
     PlantConditions black = at_temperature(10.0f);
-    black.day_of_year = SEASON_DAY(SEASON_AUTUMN, 3);
     black.light = black.light_peak = 0.0f;
     plant_advance(&mushrooms, &black, 20 * HOURS_PER_DAY);
     CHECK_EQ_INT(mushrooms.type, PLANT_MUSHROOMS);
     CHECK_NEAR(plant_health(&mushrooms), 1.0f, 1e-6);
 }
 
-/* Mushrooms go once their food is gone: picked, or out of season. */
+/* Mushrooms go once their food is gone: picked, or when the autumn turns
+ * cold; a hard frost kills them at once. */
 static void test_mushrooms_vanish(void)
 {
     Plant patch = {.type = PLANT_MUSHROOMS, .growth = 1.0f};
     plant_settle(&patch, SEASON_DAY(SEASON_AUTUMN, 3));
     REQUIRE(plant_has_food(&patch));
-    advance_days(&patch, SEASON_DAY(SEASON_AUTUMN, 3), SEASON_DAY(SEASON_AUTUMN, 15));
+    advance_days(&patch, SEASON_DAY(SEASON_AUTUMN, 3), SEASON_DAY(SEASON_AUTUMN, 8));
     CHECK_EQ_INT(patch.type, PLANT_MUSHROOMS);
-    PlantConditions frost = {.temperature = -5.0f,
-                             .fertility = 1.0f,
-                             .light = 1.0f,
-                             .light_peak = 1.0f,
-                             .day_of_year = SEASON_DAY(SEASON_WINTER, 1)};
-    plant_advance(&patch, &frost, 1);
-    CHECK_EQ_INT(patch.type, PLANT_NONE); /* The first frost. */
+    advance_days(&patch, SEASON_DAY(SEASON_AUTUMN, 9), SEASON_DAY(SEASON_WINTER, 8));
+    CHECK_EQ_INT(patch.type, PLANT_NONE); /* The cold of winter: gone. */
+
+    Plant frozen = {.type = PLANT_MUSHROOMS, .growth = 1.0f};
+    plant_settle(&frozen, SEASON_DAY(SEASON_AUTUMN, 3));
+    PlantConditions frost = {
+        .temperature = -6.0f, .fertility = 1.0f, .light = 1.0f, .light_peak = 1.0f};
+    plant_advance(&frozen, &frost, 14);
+    CHECK_EQ_INT(frozen.type, PLANT_NONE); /* The first hard frost. */
+}
+
+/* Fruit and leaves ripen with the warmth gathered since the plant woke, not on
+ * a date: a warm spring brings them early, a cold one late; they are lost
+ * when the autumn chill comes (bramble) or when the leaves turn tough (nettle). */
+static void test_products_ripen_with_the_warmth(void)
+{
+    const PlantProduct *berries = plant_product(PLANT_BRAMBLE, 0);
+    REQUIRE(berries != NULL);
+    /* A bramble that woke after a cold winter: nothing until the warmth has come. */
+    PlantConditions warm = {
+        .temperature = 25.0f, .fertility = 1.0f, .light = 1.0f, .light_peak = 1.0f};
+    PlantConditions cool = warm;
+    cool.temperature = 12.0f;
+    Plant early = {.type = PLANT_BRAMBLE, .growth = 1.0f};
+    Plant late = {.type = PLANT_BRAMBLE, .growth = 1.0f};
+    plant_settle(&early, SEASON_DAY(SEASON_SPRING, 2));
+    plant_settle(&late, SEASON_DAY(SEASON_SPRING, 2));
+    REQUIRE(!plant_has_food(&early));
+    int days_early = 0, days_late = 0;
+    while (!plant_has_food(&early) && days_early < 400) {
+        plant_advance(&early, &warm, HOURS_PER_DAY);
+        days_early++;
+    }
+    while (!plant_has_food(&late) && days_late < 400) {
+        plant_advance(&late, &cool, HOURS_PER_DAY);
+        days_late++;
+    }
+    CHECK(days_early < 400 && days_late < 400);
+    CHECK(days_early * 2 < days_late); /* A warm spell ripens it much sooner. */
+    CHECK(early.warmth >= berries->warmth_from);
+    /* The autumn chill spoils what is on it. */
+    PlantConditions chill = cool;
+    chill.temperature = berries->lost_below - 4.0f;
+    plant_advance(&early, &chill, 5 * HOURS_PER_DAY);
+    CHECK(!plant_has_food(&early));
+    CHECK(!plant_product_in_season(&early, 0));
+    /* Waking again after a rest: the warmth starts over. */
+    Plant plant = {.type = PLANT_BRAMBLE, .growth = 1.0f};
+    plant_settle(&plant, GAME_START_DAY);
+    CHECK(plant_has_food(&plant));
+    float gathered = plant.warmth;
+    CHECK(gathered > berries->warmth_from);
+    PlantConditions cold = warm;
+    cold.temperature = -2.0f;
+    plant_advance(&plant, &cold, 8 * HOURS_PER_DAY); /* To rest. */
+    CHECK_NEAR(plant.warmth, gathered, 1e-4);        /* What was gathered is kept. */
+    plant_advance(&plant, &warm, 3 * HOURS_PER_DAY); /* And wakes. */
+    CHECK(plant.warmth < gathered);
+    CHECK(!plant_product_in_season(&plant, 0));
+    /* Nettle shoots turn tough as the plant warms. */
+    Plant nettle = {.type = PLANT_NETTLE, .growth = 0.9f};
+    plant_settle(&nettle, SEASON_DAY(SEASON_SPRING, 4));
+    CHECK(plant_product_in_season(&nettle, 0));
+    plant_advance(&nettle, &warm, 6 * HOURS_PER_DAY);
+    CHECK(!plant_product_in_season(&nettle, 0));
 }
 
 static void test_tree_near(void)
@@ -1122,6 +1182,7 @@ int main(void)
     RUN_TEST(test_growth_follows_the_light);
     RUN_TEST(test_the_dark_kills);
     RUN_TEST(test_mushrooms_vanish);
+    RUN_TEST(test_products_ripen_with_the_warmth);
     RUN_TEST(test_tree_near);
     RUN_TEST(test_ladders);
     RUN_TEST(test_ceilings_need_support);

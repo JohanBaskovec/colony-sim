@@ -131,14 +131,13 @@ static void plant_rows(UiLayout *layout, const ThingRows *rows)
         TR_FORMAT(text, sizeof(text), tr("tile_panel.plant_health"), a);
         ui_layout_label(layout, text, 0.0f, false);
     }
-    int today = game_day_of_year(game->clock.tick);
     for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
         const PlantProduct *product = plant_product((PlantType)plant->type, slot);
         if (product == NULL || plant_stock_capacity(plant, slot) <= 0) {
             continue;
         }
         const char *item = tr(item_def(product->item)->name_key);
-        if (!plant_days_contain(product->days, today)) {
+        if (!plant_product_in_season(plant, slot)) {
             TR_FORMAT(text, sizeof(text), tr("hud.tile.plant_out_of_season"), item);
         } else {
             tr_integer(a, sizeof(a), plant_stock_available(plant, slot));

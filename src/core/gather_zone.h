@@ -22,7 +22,7 @@
  * plant bears (wild food, grass) is taken only from plants whose stock is full
  * (every fruit ripe, every armful grown, not only a grown plant), trees felled
  * fully grown only, so that settlers do not walk to plants that give little.
- * Wild food is there in its season only (see PlantProduct.days); what is easily mistaken
+ * Wild food is there in its season only (see PlantProduct.warmth_from); what is easily mistaken
  * for a poisonous plant is only taken by skilled gatherers
  * (GATHER_CAREFUL_MIN_LEVEL).
  *
