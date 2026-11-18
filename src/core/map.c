@@ -1,8 +1,12 @@
 #include "core/map.h"
 
+#include "core/game_clock.h"
 #include "core/i18n.h"
+#include "core/temperature.h"
+#include "core/tree.h"
 #include "core/util.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -40,14 +44,20 @@ static const RockDef ROCK_DEFS[ROCK_COUNT] = {
 #define SUMMER(day) SEASON_DAY(SEASON_SUMMER, day)
 #define AUTUMN(day) SEASON_DAY(SEASON_AUTUMN, day)
 #define WINTER(day) SEASON_DAY(SEASON_WINTER, day)
-/* Plants grow from spring to autumn and rest in winter. */
+/* Plants grow from spring to autumn: what some products' days say. */
 #define GROWING_SEASON PLANT_DAYS(SPRING(1), AUTUMN(DAYS_PER_SEASON))
 
+/* Fungi live by no climate of ours: no growth, no frost or heat, no rest. */
+#define PLANT_CLIMATE_ANY                                                                          \
+    .t_min = -100.0f, .t_opt_low = -99.0f, .t_opt_high = 99.0f, .t_max = 100.0f,                   \
+    .t_frost_active = -101.0f, .t_frost_hardened = -101.0f, .t_lethal_heat = 101.0f
+
 /*
- * Wild plants and their seasons in a temperate climate (docs/KNOWLEDGE.md §7).
+ * Wild plants of a temperate climate (docs/PLANTS.md §7: what each one's
+ * temperatures and hardiness are, and why; docs/KNOWLEDGE.md §7 for the food).
  * Food values: see the items (core/item.c). A stock grows back one item per
- * `stock_regrow_hours`: a bramble ripens two handfuls a day at the end of
- * summer, a hazel a little over one nut a day in autumn.
+ * `regrow_hours`: a bramble ripens two handfuls a day at the end of summer,
+ * a hazel a little over one nut a day in autumn.
  */
 static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_NONE] = {.id = "none", .move_cost = 1.0f},
@@ -56,7 +66,14 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                      .growth_per_day = 0.35f,
                      .min_fertility = 0.3f,
                      .move_cost = 1.0f,
-                     .growth_days = GROWING_SEASON,
+                     .t_min = 5.0f,
+                     .t_opt_low = 15.0f,
+                     .t_opt_high = 25.0f,
+                     .t_max = 35.0f,
+                     .t_frost_active = -5.0f,
+                     .t_frost_hardened = -25.0f,
+                     .t_lethal_heat = 45.0f,
+                     .rest = PLANT_REST_SLEEPS,
                      /* Armfuls cut at the ground, which grows from nothing again: the
                       * stock follows the growth (an armful is there within the hour
                       * once the grass is tall enough). */
@@ -75,7 +92,14 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                     .growth_per_day = 0.03f,
                     .min_fertility = 0.6f,
                     .move_cost = 1.6f,
-                    .growth_days = GROWING_SEASON,
+                    .t_min = 5.0f,
+                    .t_opt_low = 18.0f,
+                    .t_opt_high = 25.0f,
+                    .t_max = 35.0f,
+                    .t_frost_active = -3.0f,
+                    .t_frost_hardened = -30.0f,
+                    .t_lethal_heat = 45.0f,
+                    .rest = PLANT_REST_SLEEPS,
                     .cut_item = ITEM_WOOD,
                     .cut_yield = 60},
     /* A small tree: its hazelnuts fall to the ground in autumn (Map.nuts), its
@@ -85,7 +109,14 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                      .growth_per_day = 0.04f,
                      .min_fertility = 0.6f,
                      .move_cost = 1.4f,
-                     .growth_days = GROWING_SEASON,
+                     .t_min = 4.0f,
+                     .t_opt_low = 15.0f,
+                     .t_opt_high = 22.0f,
+                     .t_max = 32.0f,
+                     .t_frost_active = -3.0f,
+                     .t_frost_hardened = -30.0f,
+                     .t_lethal_heat = 42.0f,
+                     .rest = PLANT_REST_SLEEPS,
                      .cut_item = ITEM_WOOD,
                      .cut_yield = 20,
                      .fall_item = ITEM_HAZELNUTS,
@@ -97,7 +128,14 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                        .growth_per_day = 0.12f,
                        .min_fertility = 0.5f,
                        .move_cost = 2.0f,
-                       .growth_days = GROWING_SEASON,
+                       .t_min = 5.0f,
+                       .t_opt_low = 18.0f,
+                       .t_opt_high = 25.0f,
+                       .t_max = 35.0f,
+                       .t_frost_active = -5.0f,
+                       .t_frost_hardened = -20.0f,
+                       .t_lethal_heat = 45.0f,
+                       .rest = PLANT_REST_SLEEPS,
                        .products = {{.item = ITEM_BLACKBERRIES,
                                      .capacity = 9,
                                      .regrow_hours = 12,
@@ -109,8 +147,15 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                            .growth_per_day = 0.25f,
                            .min_fertility = 1.2f,
                            .move_cost = 1.0f,
-                           .growth_days = PLANT_DAYS(SPRING(1), SUMMER(3)),
-                           .dies_back = true,
+                           .t_min = 2.0f,
+                           .t_opt_low = 8.0f,
+                           .t_opt_high = 15.0f,
+                           .t_max = 20.0f,
+                           .t_frost_active = -5.0f,
+                           .t_frost_hardened = -20.0f,
+                           .t_lethal_heat = 30.0f,
+                           .rest = PLANT_REST_DIES_BACK,
+                           .rests_in_heat = true,
                            .products = {{.item = ITEM_WILD_GARLIC,
                                          .capacity = 3,
                                          .regrow_hours = 24,
@@ -123,8 +168,14 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                       .growth_per_day = 0.2f,
                       .min_fertility = 1.2f,
                       .move_cost = 1.2f,
-                      .growth_days = GROWING_SEASON,
-                      .dies_back = true,
+                      .t_min = 5.0f,
+                      .t_opt_low = 15.0f,
+                      .t_opt_high = 25.0f,
+                      .t_max = 32.0f,
+                      .t_frost_active = -2.0f,
+                      .t_frost_hardened = -25.0f,
+                      .t_lethal_heat = 40.0f,
+                      .rest = PLANT_REST_DIES_BACK,
                       .products = {{.item = ITEM_NETTLES,
                                     .capacity = 3,
                                     .regrow_hours = 24,
@@ -136,7 +187,14 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                         .growth_per_day = 0.15f,
                         .min_fertility = 0.6f,
                         .move_cost = 1.0f,
-                        .growth_days = GROWING_SEASON,
+                        .t_min = 5.0f,
+                        .t_opt_low = 15.0f,
+                        .t_opt_high = 25.0f,
+                        .t_max = 35.0f,
+                        .t_frost_active = -5.0f,
+                        .t_frost_hardened = -20.0f,
+                        .t_lethal_heat = 45.0f,
+                        .rest = PLANT_REST_SLEEPS,
                         .products = {{.item = ITEM_PLANTAIN,
                                       .capacity = 2,
                                       .regrow_hours = 24,
@@ -149,7 +207,14 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                            .growth_per_day = 0.08f,
                            .min_fertility = 0.6f,
                            .move_cost = 1.0f,
-                           .growth_days = GROWING_SEASON,
+                           .t_min = 4.0f,
+                           .t_opt_low = 15.0f,
+                           .t_opt_high = 22.0f,
+                           .t_max = 32.0f,
+                           .t_frost_active = -5.0f,
+                           .t_frost_hardened = -15.0f,
+                           .t_lethal_heat = 40.0f,
+                           .rest = PLANT_REST_SLEEPS,
                            .products = {{.item = ITEM_WILD_CARROTS,
                                          .capacity = 3,
                                          .regrow_hours = 24,
@@ -166,7 +231,14 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                        .growth_per_day = 0.1f,
                        .wetland = true,
                        .move_cost = 1.3f,
-                       .growth_days = GROWING_SEASON,
+                       .t_min = 10.0f,
+                       .t_opt_low = 20.0f,
+                       .t_opt_high = 30.0f,
+                       .t_max = 38.0f,
+                       .t_frost_active = -5.0f,
+                       .t_frost_hardened = -25.0f,
+                       .t_lethal_heat = 45.0f,
+                       .rest = PLANT_REST_SLEEPS,
                        .products = {{.item = ITEM_CATTAIL_RHIZOMES,
                                      .capacity = 4,
                                      .regrow_hours = 48,
@@ -178,6 +250,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_MUSHROOMS] = {.id = "mushrooms",
                          .name_key = N_("plant.mushrooms"),
                          .move_cost = 1.0f,
+                         PLANT_CLIMATE_ANY,
                          .products = {{.item = ITEM_MUSHROOMS,
                                        .capacity = 3,
                                        .regrow_hours = 24,
@@ -238,9 +311,9 @@ int plant_stock_capacity(const Plant *plant, int slot)
 }
 
 /* Regrowth hours a full stock holds. */
-static int stock_limit(const Plant *plant, int slot)
+static int stock_limit(const PlantDef *def, const Plant *plant, int slot)
 {
-    return plant_stock_capacity(plant, slot) * PLANT_DEFS[plant->type].products[slot].regrow_hours;
+    return plant_stock_capacity(plant, slot) * def->products[slot].regrow_hours;
 }
 
 int plant_stock_available(const Plant *plant, int slot)
@@ -272,7 +345,7 @@ bool plant_days_contain(PlantDays days, int day_of_year)
 
 void plant_regrow_stocks(Plant *plant, int hours, int day_of_year)
 {
-    if (hours <= 0 || (unsigned)plant->type >= PLANT_COUNT) {
+    if (hours < 0 || (unsigned)plant->type >= PLANT_COUNT) {
         return;
     }
     const PlantDef *def = &PLANT_DEFS[plant->type];
@@ -286,29 +359,176 @@ void plant_regrow_stocks(Plant *plant, int hours, int day_of_year)
         }
         /* A stock above the limit (the plant was eaten down) drops to it. */
         plant->stock[slot] =
-            (uint16_t)clampi((int)plant->stock[slot] + hours, 0, stock_limit(plant, slot));
+            (uint16_t)clampi((int)plant->stock[slot] + hours, 0, stock_limit(def, plant, slot));
     }
 }
 
-void plant_advance(Plant *plant, float fertility, int hours, int day_of_year)
+float plant_temperature_response(PlantType type, float celsius)
 {
-    if (plant->type == PLANT_NONE || (unsigned)plant->type >= PLANT_COUNT || hours <= 0) {
+    if ((unsigned)type >= PLANT_COUNT) {
+        return 0.0f;
+    }
+    const PlantDef *def = &PLANT_DEFS[type];
+    if (celsius <= def->t_min || celsius >= def->t_max) {
+        return 0.0f;
+    }
+    if (celsius < def->t_opt_low) {
+        return (celsius - def->t_min) / (def->t_opt_low - def->t_min);
+    }
+    if (celsius > def->t_opt_high) {
+        return (def->t_max - celsius) / (def->t_max - def->t_opt_high);
+    }
+    return 1.0f;
+}
+
+float plant_frost_limit(const Plant *plant)
+{
+    const PlantDef *def = &PLANT_DEFS[plant->type];
+    return lerpf(def->t_frost_active, def->t_frost_hardened, (float)plant->hardening / 255.0f);
+}
+
+float plant_health(const Plant *plant)
+{
+    return 1.0f - (float)plant->damage / (float)PLANT_DAMAGE_MAX;
+}
+
+static PlantState plant_state_of(const Plant *plant)
+{
+    return (PlantState)(plant->state & ~PLANT_CLIMATE_KNOWN);
+}
+
+static void set_state(Plant *plant, PlantState state)
+{
+    plant->state = (uint8_t)(state | (plant->state & PLANT_CLIMATE_KNOWN));
+}
+
+/* The state a plant takes in a climate that has lasted: no hysteresis. */
+static PlantState state_in_climate(const PlantDef *def, float climate)
+{
+    if (climate < def->t_min) {
+        return def->rest == PLANT_REST_DIES_BACK ? PLANT_STATE_DIED_BACK : PLANT_STATE_RESTING;
+    }
+    if (def->rests_in_heat && climate > def->t_max) {
+        return PLANT_STATE_SUMMER_DORMANT;
+    }
+    return PLANT_STATE_AWAKE;
+}
+
+/* Whether the state is that of a plant with nothing above ground. */
+static bool state_is_underground(PlantState state)
+{
+    return state == PLANT_STATE_DIED_BACK || state == PLANT_STATE_SUMMER_DORMANT;
+}
+
+static void set_climate(Plant *plant, float celsius)
+{
+    plant->climate =
+        (int16_t)clampi((int)lroundf(celsius * PLANT_CLIMATE_SCALE), INT16_MIN, INT16_MAX);
+    plant->state |= PLANT_CLIMATE_KNOWN;
+}
+
+/* What dies back leaves nothing above ground. */
+static void die_back(Plant *plant)
+{
+    plant->growth = 0.0f;
+    memset(plant->stock, 0, sizeof(plant->stock));
+}
+
+/* One hour of a plant's life. Returns false when it died. */
+static bool advance_hour(Plant *plant, const PlantDef *def, const PlantConditions *conditions)
+{
+    float temperature = conditions->temperature;
+    if (!(plant->state & PLANT_CLIMATE_KNOWN)) {
+        /* Made by hand, not settled: its climate is what it finds. */
+        set_climate(plant, temperature);
+        PlantState state = state_in_climate(def, temperature);
+        set_state(plant, state);
+        plant->hardening = temperature < def->t_min ? 255 : 0;
+        if (state_is_underground(state)) {
+            die_back(plant);
+        }
+    }
+    float climate = (float)plant->climate / PLANT_CLIMATE_SCALE;
+    climate += (temperature - climate) / PLANT_CLIMATE_HOURS;
+    set_climate(plant, climate);
+    climate = (float)plant->climate / PLANT_CLIMATE_SCALE;
+
+    /* Rest and wake: a few days of cold (or, for some, of heat) and the other way round. */
+    PlantState state = plant_state_of(plant);
+    PlantState wanted = state_in_climate(def, climate);
+    if (state == PLANT_STATE_AWAKE && wanted != PLANT_STATE_AWAKE) {
+        set_state(plant, wanted);
+        if (state_is_underground(wanted)) {
+            die_back(plant);
+        }
+    } else if (state == PLANT_STATE_SUMMER_DORMANT) {
+        if (climate < def->t_min) {
+            set_state(plant,
+                      PLANT_STATE_DIED_BACK); /* The winter has come: now it waits for spring. */
+        }
+    } else if (state != PLANT_STATE_AWAKE &&
+               state_in_climate(def, climate - PLANT_REST_HYSTERESIS) == PLANT_STATE_AWAKE &&
+               state_in_climate(def, climate + PLANT_REST_HYSTERESIS) == PLANT_STATE_AWAKE) {
+        set_state(plant, PLANT_STATE_AWAKE);
+    }
+    state = plant_state_of(plant);
+
+    /* The cold hardens, the warmth softens. */
+    if (climate < def->t_min) {
+        plant->hardening = (uint8_t)clampi(plant->hardening + PLANT_HARDEN_PER_HOUR, 0, 255);
+    } else {
+        plant->hardening = (uint8_t)clampi(plant->hardening - PLANT_SOFTEN_PER_HOUR, 0, 255);
+    }
+
+    /* Frost and heat wear it down (not what waits under the ground), good weather mends it. */
+    if (!state_is_underground(state)) {
+        float limit = plant_frost_limit(plant);
+        float harm = 0.0f;
+        if (temperature < limit) {
+            harm = PLANT_FROST_DAMAGE * (limit - temperature);
+        } else if (temperature > def->t_lethal_heat) {
+            harm = PLANT_HEAT_DAMAGE * (temperature - def->t_lethal_heat);
+        }
+        float damage = (float)plant->damage + harm * (float)PLANT_DAMAGE_MAX;
+        if (harm == 0.0f && state == PLANT_STATE_AWAKE) {
+            damage -= PLANT_RECOVERY * (float)PLANT_DAMAGE_MAX;
+        }
+        if (plant_is_tree(plant->type) && plant->growth >= TREE_CROWN_FROM) {
+            damage = fminf(damage, (1.0f - PLANT_TREE_HEALTH_FLOOR) * (float)PLANT_DAMAGE_MAX);
+        } else if (damage >= (float)PLANT_DAMAGE_MAX) {
+            return false;
+        }
+        plant->damage = (uint16_t)clampf(damage, 0.0f, (float)(PLANT_DAMAGE_MAX - 1));
+    }
+
+    /* Stocks grow back while it is awake; waiting plants only keep within their limits. */
+    if (state_is_underground(state)) {
+        memset(plant->stock, 0, sizeof(plant->stock));
+    } else {
+        plant_regrow_stocks(plant, state == PLANT_STATE_AWAKE ? 1 : 0, conditions->day_of_year);
+    }
+
+    /* Growth. */
+    float fertility = def->wetland ? 1.0f : conditions->fertility;
+    if (state == PLANT_STATE_AWAKE && plant->growth < 1.0f && fertility >= def->min_fertility) {
+        float rate = def->growth_per_day / (float)HOURS_PER_DAY * fertility *
+                     plant_temperature_response((PlantType)plant->type, temperature) *
+                     plant_health(plant);
+        plant->growth = fminf(plant->growth + rate, 1.0f);
+    }
+    return true;
+}
+
+void plant_advance(Plant *plant, const PlantConditions *conditions, int hours)
+{
+    if (plant->type == PLANT_NONE || (unsigned)plant->type >= PLANT_COUNT) {
         return;
     }
     const PlantDef *def = &PLANT_DEFS[plant->type];
-    if (def->wetland) {
-        fertility = 1.0f;
-    }
-    bool growing = plant_days_contain(def->growth_days, day_of_year);
-    if (!growing && def->dies_back) {
-        plant->growth = 0.0f;
-        memset(plant->stock, 0, sizeof(plant->stock));
-    } else {
-        plant_regrow_stocks(plant, hours, day_of_year);
-        if (growing && plant->growth < 1.0f && fertility >= def->min_fertility) {
-            float growth = plant->growth +
-                           def->growth_per_day * fertility * (float)hours / (float)HOURS_PER_DAY;
-            plant->growth = growth < 1.0f ? growth : 1.0f;
+    for (int hour = 0; hour < hours; hour++) {
+        if (!advance_hour(plant, def, conditions)) {
+            memset(plant, 0, sizeof(*plant)); /* Dead: the tile is bare. */
+            return;
         }
     }
     if (def->harvest == PLANT_HARVEST_REMOVES) {
@@ -320,6 +540,60 @@ void plant_advance(Plant *plant, float fertility, int hours, int day_of_year)
             memset(plant, 0, sizeof(*plant));
         }
     }
+}
+
+float plant_growth_rate(const Plant *plant, const PlantConditions *conditions)
+{
+    const PlantDef *def = &PLANT_DEFS[plant->type];
+    float fertility = def->wetland ? 1.0f : conditions->fertility;
+    if (plant_state_of(plant) != PLANT_STATE_AWAKE || fertility < def->min_fertility) {
+        return 0.0f;
+    }
+    return def->growth_per_day * fertility *
+           plant_temperature_response((PlantType)plant->type, conditions->temperature) *
+           plant_health(plant);
+}
+
+const char *plant_status_name_key(PlantStatus status)
+{
+    static const char *const KEYS[PLANT_STATUS_COUNT] = {
+        [PLANT_STATUS_GROWING] = N_("plant.status.growing"),
+        [PLANT_STATUS_SLOWED_COLD] = N_("plant.status.slowed_cold"),
+        [PLANT_STATUS_SLOWED_HOT] = N_("plant.status.slowed_hot"),
+        [PLANT_STATUS_TOO_COLD] = N_("plant.status.too_cold"),
+        [PLANT_STATUS_TOO_HOT] = N_("plant.status.too_hot"),
+        [PLANT_STATUS_FROST] = N_("plant.status.frost"),
+        [PLANT_STATUS_HEAT] = N_("plant.status.heat"),
+        [PLANT_STATUS_RESTING] = N_("plant.status.resting"),
+        [PLANT_STATUS_DIED_BACK] = N_("plant.status.died_back"),
+    };
+    return (unsigned)status < PLANT_STATUS_COUNT ? KEYS[status] : KEYS[PLANT_STATUS_GROWING];
+}
+
+PlantStatus plant_status(const Plant *plant, const PlantConditions *conditions)
+{
+    const PlantDef *def = &PLANT_DEFS[plant->type];
+    switch (plant_state_of(plant)) {
+    case PLANT_STATE_DIED_BACK:
+    case PLANT_STATE_SUMMER_DORMANT: return PLANT_STATUS_DIED_BACK;
+    case PLANT_STATE_RESTING: return PLANT_STATUS_RESTING;
+    case PLANT_STATE_AWAKE: break;
+    }
+    float temperature = conditions->temperature;
+    if (temperature < plant_frost_limit(plant)) {
+        return PLANT_STATUS_FROST;
+    }
+    if (temperature > def->t_lethal_heat) {
+        return PLANT_STATUS_HEAT;
+    }
+    float response = plant_temperature_response((PlantType)plant->type, temperature);
+    if (response <= 0.0f) {
+        return temperature < def->t_opt_low ? PLANT_STATUS_TOO_COLD : PLANT_STATUS_TOO_HOT;
+    }
+    if (response < 1.0f) {
+        return temperature < def->t_opt_low ? PLANT_STATUS_SLOWED_COLD : PLANT_STATUS_SLOWED_HOT;
+    }
+    return PLANT_STATUS_GROWING;
 }
 
 int plant_growth_stage(const Plant *plant)
@@ -363,8 +637,7 @@ void plant_harvested(Map *map, int x, int y, int z)
 
 bool plant_is_dormant(const Plant *plant)
 {
-    return (unsigned)plant->type < PLANT_COUNT && PLANT_DEFS[plant->type].dies_back &&
-           plant->growth <= 0.0f;
+    return state_is_underground(plant_state_of(plant));
 }
 
 void plant_settle(Plant *plant, int day_of_year)
@@ -373,13 +646,20 @@ void plant_settle(Plant *plant, int day_of_year)
         return;
     }
     const PlantDef *def = &PLANT_DEFS[plant->type];
-    if (def->dies_back && !plant_days_contain(def->growth_days, day_of_year)) {
-        plant->growth = 0.0f;
+    /* The climate it was born into: the expected one of that day. */
+    float climate =
+        temperature_season_mean((uint64_t)day_of_year * TICKS_PER_DAY + TICKS_PER_DAY / 2);
+    set_climate(plant, climate);
+    PlantState state = state_in_climate(def, climate);
+    set_state(plant, state);
+    plant->hardening = climate < def->t_min ? 255 : 0;
+    if (state_is_underground(state)) {
+        die_back(plant);
     }
     for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
-        bool full = def->products[slot].item != ITEM_NONE &&
+        bool full = !state_is_underground(state) && def->products[slot].item != ITEM_NONE &&
                     plant_days_contain(def->products[slot].days, day_of_year);
-        int limit = full ? stock_limit(plant, slot) : 0;
+        int limit = full ? stock_limit(def, plant, slot) : 0;
         plant->stock[slot] = (uint16_t)clampi(limit, 0, UINT16_MAX);
     }
 }

@@ -2,6 +2,7 @@
 #include "core/item.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
+#include "core/temperature.h"
 
 #include "test_framework.h"
 
@@ -270,10 +271,14 @@ static void test_definitions_are_complete(void)
         const PlantDef *def = plant_def((PlantType)p);
         CHECK(i18n_is_valid_key(def->name_key));
         /* Grows, or appears fully grown and goes (mushrooms). */
-        CHECK(def->harvest == PLANT_HARVEST_REMOVES ||
-              (def->growth_per_day > 0.0f && def->growth_days != 0));
+        CHECK(def->harvest == PLANT_HARVEST_REMOVES || def->growth_per_day > 0.0f);
+        /* Temperatures in order: it grows, best, then not; frost and heat beyond. */
+        CHECK(def->t_min < def->t_opt_low && def->t_opt_low <= def->t_opt_high &&
+              def->t_opt_high < def->t_max);
+        CHECK(def->t_frost_hardened <= def->t_frost_active && def->t_frost_active < def->t_min);
+        CHECK(def->t_lethal_heat > def->t_max);
+        CHECK(!def->rests_in_heat || def->rest == PLANT_REST_DIES_BACK);
         CHECK(def->move_cost >= 1.0f);
-        CHECK((def->growth_days & ~PLANT_ALL_YEAR) == 0);
         /* Either drops something when cut, or nothing at all. */
         CHECK((def->cut_item == ITEM_NONE) == (def->cut_yield == 0));
         /* A product: an item, a stock that grows back, a season; a slot
@@ -347,21 +352,22 @@ static void test_grass_stock_follows_growth(void)
     const PlantProduct *armfuls = plant_product(PLANT_GRASS, 0);
     REQUIRE(armfuls != NULL);
     CHECK_EQ_INT(plant_stock_capacity(&grass, 0), 0);
-    int day = SEASON_DAY(SEASON_SPRING, 5);
+    PlantConditions warm = {
+        .temperature = 20.0f, .fertility = 1.0f, .day_of_year = SEASON_DAY(SEASON_SPRING, 5)};
     int previous = 0;
     for (int hours = 0; hours < 10 * HOURS_PER_DAY && grass.growth < 1.0f; hours += 6) {
-        plant_advance(&grass, 1.0f, 6, day);
+        plant_advance(&grass, &warm, 6);
         int available = plant_stock_available(&grass, 0);
         CHECK(available >= previous); /* Never less as it grows. */
         CHECK(available <= plant_stock_capacity(&grass, 0));
         previous = available;
     }
     CHECK_NEAR(grass.growth, 1.0f, 1e-6);
-    plant_advance(&grass, 1.0f, HOURS_PER_DAY, day);
+    plant_advance(&grass, &warm, HOURS_PER_DAY);
     CHECK_EQ_INT(plant_stock_available(&grass, 0), armfuls->capacity);
     /* Eaten down by a grazer: the stock follows the growth. */
     grass.growth = 0.2f;
-    plant_advance(&grass, 1.0f, 1, SEASON_DAY(SEASON_WINTER, 3));
+    plant_advance(&grass, &warm, 1);
     CHECK_EQ_INT(plant_stock_available(&grass, 0), 0);
 }
 
@@ -469,14 +475,21 @@ static void test_plant_days(void)
     CHECK(plant_days_contain(PLANT_DAYS(DAYS_PER_YEAR - 1, DAYS_PER_YEAR - 1), DAYS_PER_YEAR - 1));
 }
 
-/* Advances a plant on rich soil, day by day, from `first` to `last` (days of
- * the year, both included). */
+/* Advances a plant on rich soil in the open, hour by hour in the outdoor
+ * temperatures of the days from `first` to `last` (days of the year, both
+ * included). */
 static void advance_days(Plant *plant, int first, int last)
 {
     float fertility = terrain_def(TERRAIN_RICH_SOIL)->fertility;
     for (int day = first; day <= last; day++) {
         for (int hour = 0; hour < HOURS_PER_DAY; hour++) {
-            plant_advance(plant, fertility, 1, day);
+            PlantConditions conditions = {
+                .temperature = temperature_outdoor((uint64_t)day * TICKS_PER_DAY +
+                                                   (uint64_t)hour * TICKS_PER_HOUR),
+                .fertility = fertility,
+                .day_of_year = day,
+            };
+            plant_advance(plant, &conditions, 1);
         }
     }
 }
@@ -504,25 +517,25 @@ static void test_fruit_follows_the_season(void)
     CHECK_NEAR(plant.growth, 1.0f, 1e-6);
 }
 
-/* Wild garlic withers after spring and comes back the next one; nettles rest
- * in winter only; plants grow from spring to autumn, not in winter. */
-static void test_plants_rest_out_of_season(void)
+/* Wild garlic dies back in the warmth and comes back the next spring; nettles
+ * die back in the cold; plants grow when it is warm enough, not in winter. */
+static void test_plants_rest_by_the_climate(void)
 {
     Plant garlic = {.type = PLANT_WILD_GARLIC, .growth = 1.0f};
     plant_settle(&garlic, SEASON_DAY(SEASON_SPRING, 5));
     CHECK(plant_has_food(&garlic));
     CHECK(!plant_is_dormant(&garlic));
-    advance_days(&garlic, SEASON_DAY(SEASON_SPRING, 5), SEASON_DAY(SEASON_SUMMER, 5));
+    advance_days(&garlic, SEASON_DAY(SEASON_SPRING, 5), SEASON_DAY(SEASON_SUMMER, 10));
     CHECK(plant_is_dormant(&garlic));
     CHECK_EQ_INT(garlic.type, PLANT_WILD_GARLIC); /* The bulb waits underground. */
     CHECK(!plant_has_food(&garlic));
-    advance_days(&garlic, SEASON_DAY(SEASON_SUMMER, 6), DAYS_PER_YEAR - 1);
-    CHECK(plant_is_dormant(&garlic));
-    advance_days(&garlic, SEASON_DAY(SEASON_SPRING, 1), SEASON_DAY(SEASON_SPRING, 6));
+    advance_days(&garlic, SEASON_DAY(SEASON_SUMMER, 11), DAYS_PER_YEAR - 1);
+    CHECK(plant_is_dormant(&garlic)); /* Dead above ground in the winter cold. */
+    advance_days(&garlic, SEASON_DAY(SEASON_SPRING, 1), SEASON_DAY(SEASON_SPRING, 8));
     CHECK(!plant_is_dormant(&garlic));
     CHECK(plant_has_food(&garlic));
 
-    /* Settled in the middle of summer (world generation): withered already. */
+    /* Settled in the middle of summer (world generation): died back already. */
     Plant settled = {.type = PLANT_WILD_GARLIC, .growth = 0.8f};
     plant_settle(&settled, GAME_START_DAY);
     CHECK(plant_is_dormant(&settled));
@@ -532,27 +545,224 @@ static void test_plants_rest_out_of_season(void)
     CHECK(!plant_has_food(&nettle)); /* Tough leaves in summer. */
     plant_settle(&nettle, SEASON_DAY(SEASON_WINTER, 2));
     CHECK(plant_is_dormant(&nettle));
+}
 
-    /* No growth in winter, nor on too poor a ground. */
+/* Growth follows the temperature: nothing in the cold, the best rate between
+ * the plant's optimal temperatures, nothing on too poor a ground; a cattail
+ * grows in the water, where the fertility counts as 1. */
+static void test_growth_follows_the_temperature(void)
+{
+    const PlantDef *def = plant_def(PLANT_TREE);
+    float rich = terrain_def(TERRAIN_RICH_SOIL)->fertility;
+    int day = SEASON_DAY(SEASON_SUMMER, 5);
+    PlantConditions best = {.temperature = def->t_opt_low, .fertility = rich, .day_of_year = day};
+    Plant tree = {.type = PLANT_TREE, .growth = 0.5f};
+    plant_settle(&tree, day);
+    for (int hour = 0; hour < HOURS_PER_DAY; hour++) {
+        plant_advance(&tree, &best, 1);
+    }
+    CHECK_NEAR(tree.growth, 0.5f + def->growth_per_day * rich, 0.001);
+    CHECK_NEAR(plant_growth_rate(&tree, &best), def->growth_per_day * rich, 1e-6);
+
+    /* Half way up the slope to its best temperature: half the rate. */
+    PlantConditions cool = best;
+    cool.temperature = 0.5f * (def->t_min + def->t_opt_low);
+    CHECK_NEAR(plant_temperature_response(PLANT_TREE, cool.temperature), 0.5, 1e-6);
+    CHECK_NEAR(plant_growth_rate(&tree, &cool), 0.5 * def->growth_per_day * rich, 1e-6);
+    CHECK_EQ_INT(plant_status(&tree, &cool), PLANT_STATUS_SLOWED_COLD);
+    PlantConditions hot = best;
+    hot.temperature = 0.5f * (def->t_opt_high + def->t_max);
+    CHECK_NEAR(plant_temperature_response(PLANT_TREE, hot.temperature), 0.5, 1e-6);
+    CHECK_EQ_INT(plant_status(&tree, &hot), PLANT_STATUS_SLOWED_HOT);
+    CHECK_EQ_INT(plant_status(&tree, &best), PLANT_STATUS_GROWING);
+
+    /* None below the minimum nor above the maximum, and on a poor ground. */
+    float before = tree.growth;
+    PlantConditions cold = best;
+    cold.temperature = def->t_min - 1.0f;
+    plant_advance(&tree, &cold, 1);
+    CHECK_NEAR(tree.growth, before, 1e-9);
+    CHECK_EQ_INT(plant_status(&tree, &cold), PLANT_STATUS_TOO_COLD);
+    PlantConditions scorching = best;
+    scorching.temperature = def->t_max + 1.0f;
+    plant_advance(&tree, &scorching, 1);
+    CHECK_NEAR(tree.growth, before, 1e-9);
+    CHECK_EQ_INT(plant_status(&tree, &scorching), PLANT_STATUS_TOO_HOT);
+    PlantConditions poor = best;
+    poor.fertility = 0.1f;
+    plant_advance(&tree, &poor, HOURS_PER_DAY);
+    CHECK_NEAR(tree.growth, before, 1e-9);
+
+    Plant cattail = {.type = PLANT_CATTAIL, .growth = 0.5f};
+    plant_settle(&cattail, day);
+    PlantConditions water = {
+        .temperature = plant_def(PLANT_CATTAIL)->t_opt_low, .fertility = 0.0f, .day_of_year = day};
+    for (int hour = 0; hour < HOURS_PER_DAY; hour++) {
+        plant_advance(&cattail, &water, 1);
+    }
+    CHECK_NEAR(cattail.growth, 0.5f + plant_def(PLANT_CATTAIL)->growth_per_day, 0.001);
+}
+
+/* Winter: a plant that rests grows nothing and keeps what it is; a plant that
+ * dies back is gone above ground, whatever it was. */
+static void test_nothing_grows_in_winter(void)
+{
     Plant tree = {.type = PLANT_TREE, .growth = 0.5f};
     advance_days(&tree, SEASON_DAY(SEASON_WINTER, 1), SEASON_DAY(SEASON_WINTER, 10));
     CHECK_NEAR(tree.growth, 0.5f, 1e-6);
-    for (int hour = 0; hour < HOURS_PER_DAY; hour++) {
-        plant_advance(&tree, 0.1f, 1, SEASON_DAY(SEASON_SPRING, 1));
-    }
-    CHECK_NEAR(tree.growth, 0.5f, 1e-6);
-    advance_days(&tree, SEASON_DAY(SEASON_SPRING, 1), SEASON_DAY(SEASON_SPRING, 1));
-    CHECK_NEAR(tree.growth,
-               0.5f + plant_def(PLANT_TREE)->growth_per_day *
-                          terrain_def(TERRAIN_RICH_SOIL)->fertility,
-               0.001);
+    CHECK_EQ_INT(tree.type, PLANT_TREE);
+    Plant nettle = {.type = PLANT_NETTLE, .growth = 0.8f};
+    advance_days(&nettle, SEASON_DAY(SEASON_AUTUMN, 5), SEASON_DAY(SEASON_WINTER, 10));
+    CHECK(plant_is_dormant(&nettle));
+    CHECK_NEAR(nettle.growth, 0.0f, 1e-6);
+}
 
-    /* Cattails grow in the water, where nothing else does. */
-    Plant cattail = {.type = PLANT_CATTAIL, .growth = 0.5f};
-    for (int hour = 0; hour < HOURS_PER_DAY; hour++) {
-        plant_advance(&cattail, 0.0f, 1, SEASON_DAY(SEASON_SPRING, 1));
-    }
-    CHECK_NEAR(cattail.growth, 0.5f + plant_def(PLANT_CATTAIL)->growth_per_day, 0.001);
+/* Conditions at a temperature, on rich soil, in summer (what stocks ask of the day). */
+static PlantConditions at_temperature(float celsius)
+{
+    return (PlantConditions){.temperature = celsius,
+                             .fertility = terrain_def(TERRAIN_RICH_SOIL)->fertility,
+                             .day_of_year = SEASON_DAY(SEASON_SUMMER, 5)};
+}
+
+/* A plant goes to rest after days of cold, not on a cold night, and wakes
+ * after days of warmth, not on a warm day. */
+static void test_cold_puts_plants_to_rest(void)
+{
+    Plant grass = {.type = PLANT_GRASS, .growth = 0.6f};
+    plant_settle(&grass, SEASON_DAY(SEASON_SUMMER, 5));
+    PlantConditions cold = at_temperature(0.0f);
+    plant_advance(&grass, &cold, 24);
+    CHECK_EQ_INT(plant_status(&grass, &cold), PLANT_STATUS_TOO_COLD); /* A day: still awake. */
+    plant_advance(&grass, &cold, 7 * HOURS_PER_DAY);
+    CHECK_EQ_INT(plant_status(&grass, &cold), PLANT_STATUS_RESTING);
+    float growth = grass.growth;
+    plant_advance(&grass, &cold, HOURS_PER_DAY);
+    CHECK_NEAR(grass.growth, growth, 1e-9);
+    CHECK(!plant_is_dormant(&grass)); /* Grass rests as it is: it shows. */
+    /* A mild day wakes nothing, a warm week does. */
+    PlantConditions mild = at_temperature(15.0f);
+    plant_advance(&grass, &mild, HOURS_PER_DAY);
+    CHECK_EQ_INT(plant_status(&grass, &mild), PLANT_STATUS_RESTING);
+    plant_advance(&grass, &mild, 6 * HOURS_PER_DAY);
+    CHECK_EQ_INT(plant_status(&grass, &mild), PLANT_STATUS_GROWING);
+    /* A plant made by hand takes the climate of the tile it finds itself on. */
+    Plant young = {.type = PLANT_GRASS, .growth = 0.3f};
+    plant_advance(&young, &cold, 1);
+    CHECK_EQ_INT(plant_status(&young, &cold), PLANT_STATUS_RESTING);
+    /* Settled in winter: resting and hardened. */
+    Plant winter = {.type = PLANT_GRASS, .growth = 0.5f};
+    plant_settle(&winter, SEASON_DAY(SEASON_WINTER, 8));
+    CHECK_EQ_INT(plant_status(&winter, &cold), PLANT_STATUS_RESTING);
+    CHECK_NEAR(plant_frost_limit(&winter), plant_def(PLANT_GRASS)->t_frost_hardened, 1e-3);
+}
+
+/* A plant dies back where nothing grows above ground and the roots wait: no
+ * frost harms it then. As the cold comes on, it has died back before the
+ * frosts are hard. */
+static void test_dying_back_spares_the_roots(void)
+{
+    Plant nettle = {.type = PLANT_NETTLE, .growth = 0.9f};
+    plant_settle(&nettle, SEASON_DAY(SEASON_SUMMER, 5));
+    advance_days(&nettle, SEASON_DAY(SEASON_AUTUMN, 1), SEASON_DAY(SEASON_WINTER, 8));
+    CHECK_EQ_INT(nettle.type, PLANT_NETTLE);
+    CHECK(plant_is_dormant(&nettle));
+    CHECK_NEAR(nettle.growth, 0.0f, 1e-9);
+    PlantConditions freezing = at_temperature(-30.0f);
+    plant_advance(&nettle, &freezing, 6 * HOURS_PER_DAY);
+    CHECK_EQ_INT(nettle.type, PLANT_NETTLE);
+    CHECK_NEAR(plant_health(&nettle), 1.0f, 1e-3);
+    CHECK_EQ_INT(plant_status(&nettle, &freezing), PLANT_STATUS_DIED_BACK);
+    /* A sudden freeze catches a tender plant still growing. */
+    Plant caught = {.type = PLANT_NETTLE, .growth = 0.9f};
+    plant_settle(&caught, SEASON_DAY(SEASON_SUMMER, 5));
+    plant_advance(&caught, &freezing, 6 * HOURS_PER_DAY);
+    CHECK_EQ_INT(caught.type, PLANT_NONE);
+}
+
+/* Frost kills a tender plant in hours, not a hardened one; heat too. */
+static void test_frost_and_heat_kill(void)
+{
+    const PlantDef *def = plant_def(PLANT_GRASS);
+    Plant tender = {.type = PLANT_GRASS, .growth = 0.6f};
+    plant_settle(&tender, SEASON_DAY(SEASON_SUMMER, 5));
+    PlantConditions frost = at_temperature(def->t_frost_active - 5.0f);
+    CHECK_EQ_INT(plant_status(&tender, &frost), PLANT_STATUS_FROST);
+    plant_advance(&tender, &frost, 5); /* 0.02 × 5 degrees × 5 hours: half its health. */
+    CHECK_EQ_INT(tender.type, PLANT_GRASS);
+    CHECK_NEAR(plant_health(&tender), 0.5f, 0.01);
+    CHECK_NEAR(plant_growth_rate(&tender, &frost), 0.0f, 1e-9); /* Too cold to grow anyway. */
+    plant_advance(&tender, &frost, 6);
+    CHECK_EQ_INT(tender.type, PLANT_NONE); /* Dead: the tile is bare. */
+
+    Plant hardened = {.type = PLANT_GRASS, .growth = 0.6f};
+    plant_settle(&hardened, SEASON_DAY(SEASON_WINTER, 8));
+    PlantConditions hard = at_temperature(def->t_frost_active - 5.0f);
+    plant_advance(&hardened, &hard, 2 * HOURS_PER_DAY);
+    CHECK_EQ_INT(hardened.type, PLANT_GRASS);
+    CHECK_NEAR(plant_health(&hardened), 1.0f, 1e-6);
+
+    Plant hot = {.type = PLANT_GRASS, .growth = 0.6f};
+    plant_settle(&hot, SEASON_DAY(SEASON_SUMMER, 5));
+    PlantConditions furnace = at_temperature(def->t_lethal_heat + 5.0f);
+    CHECK_EQ_INT(plant_status(&hot, &furnace), PLANT_STATUS_HEAT);
+    plant_advance(&hot, &furnace, 12);
+    CHECK_EQ_INT(hot.type, PLANT_NONE);
+}
+
+/* The cold hardens a plant over days and the warmth softens it again: a frost
+ * that a winter plant takes in stride kills a spring one. */
+static void test_hardening_takes_days(void)
+{
+    const PlantDef *def = plant_def(PLANT_BRAMBLE);
+    Plant plant = {.type = PLANT_BRAMBLE, .growth = 0.8f};
+    plant_settle(&plant, SEASON_DAY(SEASON_SUMMER, 5));
+    CHECK_NEAR(plant_frost_limit(&plant), def->t_frost_active, 1e-6);
+    PlantConditions chilly = at_temperature(def->t_min - 3.0f); /* Cold, but no frost. */
+    plant_advance(&plant, &chilly, 24);
+    float after_a_day = plant_frost_limit(&plant);
+    CHECK(after_a_day < def->t_frost_active + 1e-6f);
+    plant_advance(&plant, &chilly, 10 * HOURS_PER_DAY);
+    CHECK_NEAR(plant_frost_limit(&plant), def->t_frost_hardened, 1e-3);
+    PlantConditions warm = at_temperature(def->t_opt_low);
+    plant_advance(&plant, &warm, 10 * HOURS_PER_DAY);
+    CHECK_NEAR(plant_frost_limit(&plant), def->t_frost_active, 1e-3);
+}
+
+/* Damage mends in good weather (slowly), but not while the plant rests. */
+static void test_plants_mend(void)
+{
+    Plant plant = {.type = PLANT_PLANTAIN, .growth = 0.7f};
+    plant_settle(&plant, SEASON_DAY(SEASON_SUMMER, 5));
+    PlantConditions frost = at_temperature(plant_def(PLANT_PLANTAIN)->t_frost_active - 2.0f);
+    plant_advance(&plant, &frost, 3); /* 0.02 × 2 degrees × 3 hours = 0.12. */
+    CHECK_NEAR(plant_health(&plant), 0.88f, 0.01);
+    PlantConditions warm = at_temperature(plant_def(PLANT_PLANTAIN)->t_opt_low);
+    plant_advance(&plant, &warm, HOURS_PER_DAY);
+    CHECK(plant_health(&plant) > 0.95f);
+    plant_advance(&plant, &warm, 3 * HOURS_PER_DAY);
+    CHECK_NEAR(plant_health(&plant), 1.0f, 1e-6);
+    /* A sick plant grows slower in proportion to its health. */
+    plant.damage = PLANT_DAMAGE_MAX / 2;
+    CHECK_NEAR(plant_growth_rate(&plant, &warm),
+               0.5f * plant_def(PLANT_PLANTAIN)->growth_per_day * warm.fertility, 1e-3);
+}
+
+/* A tree with a trunk takes harm from the weather but never dies of it; a
+ * seedling dies like any plant. */
+static void test_trees_with_a_trunk_survive(void)
+{
+    Plant tree = {.type = PLANT_TREE, .growth = 0.8f};
+    plant_settle(&tree, SEASON_DAY(SEASON_SUMMER, 5));
+    PlantConditions furnace = at_temperature(plant_def(PLANT_TREE)->t_lethal_heat + 10.0f);
+    plant_advance(&tree, &furnace, 10 * HOURS_PER_DAY);
+    CHECK_EQ_INT(tree.type, PLANT_TREE);
+    CHECK(plant_health(&tree) >= PLANT_TREE_HEALTH_FLOOR - 1e-3f);
+    CHECK(plant_health(&tree) < 0.1f);
+    Plant seedling = {.type = PLANT_TREE, .growth = 0.2f};
+    plant_settle(&seedling, SEASON_DAY(SEASON_SUMMER, 5));
+    plant_advance(&seedling, &furnace, 10 * HOURS_PER_DAY);
+    CHECK_EQ_INT(seedling.type, PLANT_NONE);
 }
 
 /* Mushrooms go once their food is gone: picked, or out of season. */
@@ -563,7 +773,9 @@ static void test_mushrooms_vanish(void)
     REQUIRE(plant_has_food(&patch));
     advance_days(&patch, SEASON_DAY(SEASON_AUTUMN, 3), SEASON_DAY(SEASON_AUTUMN, 15));
     CHECK_EQ_INT(patch.type, PLANT_MUSHROOMS);
-    plant_advance(&patch, 1.0f, 1, SEASON_DAY(SEASON_WINTER, 1));
+    PlantConditions frost = {
+        .temperature = -5.0f, .fertility = 1.0f, .day_of_year = SEASON_DAY(SEASON_WINTER, 1)};
+    plant_advance(&patch, &frost, 1);
     CHECK_EQ_INT(patch.type, PLANT_NONE); /* The first frost. */
 }
 
@@ -764,7 +976,15 @@ int main(void)
     RUN_TEST(test_plant_growth_stages_and_fruit);
     RUN_TEST(test_plant_days);
     RUN_TEST(test_fruit_follows_the_season);
-    RUN_TEST(test_plants_rest_out_of_season);
+    RUN_TEST(test_plants_rest_by_the_climate);
+    RUN_TEST(test_growth_follows_the_temperature);
+    RUN_TEST(test_nothing_grows_in_winter);
+    RUN_TEST(test_cold_puts_plants_to_rest);
+    RUN_TEST(test_dying_back_spares_the_roots);
+    RUN_TEST(test_frost_and_heat_kill);
+    RUN_TEST(test_hardening_takes_days);
+    RUN_TEST(test_plants_mend);
+    RUN_TEST(test_trees_with_a_trunk_survive);
     RUN_TEST(test_mushrooms_vanish);
     RUN_TEST(test_tree_near);
     RUN_TEST(test_ladders);

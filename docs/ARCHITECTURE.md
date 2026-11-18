@@ -251,13 +251,22 @@ The layers:
   most `MAP_BRANCHES_MAX` and `MAP_TWIGS_MAX`), on the ground under the
   trees (`map_litter()`, `map_add_litter()`, `map_take_litter()`).
 
-**Seasons** are days of the year: a `PlantDays` bit set (60 days fit in 64
-bits) says when a plant grows (`growth_days`: spring to autumn for all of
-them) and when each of its products is there (`PlantProduct.days`:
-blackberries at the end of summer, rhizomes and cut grass all year...). Out of
-its days a stock is gone; plants that die back (wild garlic after spring, nettles
-in winter) wither to growth 0 and show nothing until their growing days come
-back. `plant_advance()` does one step of all this; `plant_settle()` puts a
+**Plants live by the climate** (`docs/PLANTS.md`): each hour a plant grows at
+its best rate (`PlantDef.growth_per_day`) times the response to the
+temperature of its tile (`plant_temperature_response()`: a plateau between
+`t_min` and `t_max`) and to its health, and the fertility. After a few days of
+cold (`Plant.climate`, a running mean) it rests or dies back, and wakes with
+the warmth; the cold hardens it (`Plant.hardening`); frost and heat beyond its
+limits wear its health down (`Plant.damage`) and it is removed when that is
+gone, a tree with a trunk excepted. The seasons come out of the temperatures
+(`core/temperature.h`), not a calendar: a roofed room or a cave has a climate
+of its own. A `PlantDays` bit set (60 days fit in 64 bits) only says when each
+product is there (`PlantProduct.days`: blackberries at the end of summer,
+rhizomes and cut grass all year...), until ripening follows the warmth
+(P3). Out of its days a stock is gone; a plant that died back (wild garlic in
+the heat and the cold, nettles in winter) shows nothing above ground until the
+warmth returns. `plant_advance()` does one such step (`update_plants()` calls
+it once an hour per plant, a slice of the map per tick); `plant_settle()` puts a
 new plant in the state of a day (world generation, planted food). What
 taking the products does to the plant is data (`PlantDef.harvest`,
 `plant_harvested()`): `PLANT_HARVEST_KEEPS` leaves it as it is and the stock

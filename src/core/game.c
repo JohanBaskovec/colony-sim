@@ -829,14 +829,19 @@ static void update_plants(Game *game)
         Plant *plant = &map->plants[i];
         if (plant->type != PLANT_NONE) {
             float old_growth = plant->growth;
-            plant_advance(plant, terrain_def((Terrain)map->terrain[i])->fertility,
-                          GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR, day);
+            int x, y, z;
+            map_tile_of(map, i, &x, &y, &z);
+            PlantConditions conditions = {
+                .temperature = temperature_at(&game->temperatures, x, y, z),
+                .fertility = terrain_def((Terrain)map->terrain[i])->fertility,
+                .day_of_year = day,
+            };
+            plant_advance(plant, &conditions, GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR);
             if (plant_is_tree(plant->type)) {
                 grow_tree(game, i, old_growth);
                 shed_litter(game, i);
             } else if (plant->type == PLANT_NONE && map->forbidden_count > 0) {
-                int x, y, z; /* Vanished: what was forbidden of it goes too. */
-                map_tile_of(map, i, &x, &y, &z);
+                /* Vanished or dead: what was forbidden of it goes too. */
                 map_remove_plant(map, x, y, z);
             }
         }

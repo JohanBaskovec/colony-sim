@@ -249,7 +249,7 @@ static void test_update_advances_ticks(void)
 static void test_plants_grow_over_time(void)
 {
     Game game;
-    REQUIRE(init_small_game(&game, 3));
+    REQUIRE(init_flat_game(&game, 3)); /* Open sky: the outdoor temperature. */
     Map *map = &game.map;
 
     /* Controlled setup on known terrain. */
@@ -268,9 +268,11 @@ static void test_plants_grow_over_time(void)
         game_tick(&game);
     }
 
-    float expected =
-        0.1f + plant_def(PLANT_GRASS)->growth_per_day * terrain_def(TERRAIN_SOIL)->fertility;
-    CHECK_NEAR(map->plants[fertile].growth, expected, 1e-4);
+    /* A summer day is mild: most of the best rate a day makes (a little less
+     * when it is hot or cool for the grass). */
+    float best = plant_def(PLANT_GRASS)->growth_per_day * terrain_def(TERRAIN_SOIL)->fertility;
+    float gained = map->plants[fertile].growth - 0.1f;
+    CHECK(gained > 0.8f * best && gained <= best + 1e-4f);
     /* Sand is below the minimum fertility of grass: no growth. */
     CHECK_NEAR(map->plants[barren].growth, 0.1, 1e-6);
 
@@ -302,11 +304,14 @@ static void test_plant_growth_is_spread_over_ticks(void)
     for (size_t i = 0; i < count; i++) {
         const Plant *plant = &map->plants[i];
         before[i] = plant->growth;
-        const PlantDef *def = plant_def((PlantType)plant->type);
-        if (plant->type != PLANT_NONE && plant->growth < 1.0f &&
-            plant_days_contain(def->growth_days, game_day_of_year(game.clock.tick)) &&
-            terrain_def((Terrain)map->terrain[i])->fertility >= def->min_fertility) {
-            growing++;
+        if (plant->type != PLANT_NONE && plant->growth < 1.0f) {
+            int x, y, z;
+            map_tile_of(map, i, &x, &y, &z);
+            PlantConditions conditions = {
+                .temperature = temperature_at(&game.temperatures, x, y, z),
+                .fertility = terrain_def((Terrain)map->terrain[i])->fertility,
+            };
+            growing += plant_growth_rate(plant, &conditions) > 0.0f;
         }
     }
     REQUIRE(growing > 100);
@@ -339,7 +344,9 @@ static void test_plant_growth_is_spread_over_ticks(void)
     for (int tick = 0; tick < GAME_PLANT_UPDATE_INTERVAL; tick++) {
         game_tick(&game);
     }
-    CHECK_NEAR(map->plants[index].growth - after_one, step, 1e-6);
+    /* About the same step (the temperature moved a little), not two. */
+    float second = map->plants[index].growth - after_one;
+    CHECK(second > 0.6f * step && second < 1.4f * step);
     free(before);
     game_shutdown(&game);
 }

@@ -141,19 +141,39 @@ typedef struct PlantProduct {
     bool confusable;
 } PlantProduct;
 
+/* How a plant lives through the cold (docs/PLANTS.md §4). */
+typedef enum PlantRest {
+    PLANT_REST_SLEEPS,    /* It stays as it is: nothing grows, no stock grows back. */
+    PLANT_REST_DIES_BACK, /* What is above ground dies (growth 0, stocks gone, nothing
+                             shown) and the roots wait for the warmth. */
+} PlantRest;
+
 typedef struct PlantDef {
     const char *id;
     const char *name_key;
-    float growth_per_day; /* Growth gained per in-game day on fertility 1.0. */
-    float min_fertility;  /* Does not spawn nor grow below this fertility. */
+    /* Growth gained per in-game day at its best: the temperature (and soon the
+     * light) at their best, on fertility 1.0. */
+    float growth_per_day;
+    float min_fertility; /* Does not spawn nor grow below this fertility. */
     /* Grows in shallow water and along the shore whatever the ground: the
      * fertility counts as 1.0 (see plant_advance()). */
     bool wetland;
-    float move_cost;       /* Movement cost multiplier while walking through. */
-    PlantDays growth_days; /* When it grows (and when its stocks grow back). */
-    /* Withers on the other days: back to growth 0, nothing above ground, its
-     * stocks gone, until it grows again. */
-    bool dies_back;
+    float move_cost; /* Movement cost multiplier while walking through. */
+    /* Growth by the temperature of its tile (degrees Celsius): none below
+     * `t_min` nor above `t_max`, full from `t_opt_low` to `t_opt_high`, in
+     * proportion between. */
+    float t_min, t_opt_low, t_opt_high, t_max;
+    /* What harms it: frost below `t_frost_active` while it grows, below
+     * `t_frost_hardened` when fully hardened by the cold (the limit goes from
+     * one to the other over the days, see Plant.hardening), and heat above
+     * `t_lethal_heat`. */
+    float t_frost_active, t_frost_hardened, t_lethal_heat;
+    /* How it rests when the climate (the mean temperature of the last days)
+     * falls below `t_min`; `rests_in_heat`: also when it rises above `t_max`
+     * (wild garlic, a plant of the cool spring), by dying back until the next
+     * winter has passed. */
+    PlantRest rest;
+    bool rests_in_heat;
     ItemType cut_item; /* Dropped when the plant is cut down (ITEM_NONE: nothing). */
     int cut_yield;     /* Items dropped at full growth, proportionally less when younger. */
     /* What it bears (a slot per product), and what harvesting does to it. A
@@ -178,6 +198,40 @@ static inline bool plant_is_tree(uint8_t type)
     return type == PLANT_TREE || type == PLANT_HAZEL;
 }
 
+/* What a plant is doing (Plant.state, low bits; the high bit says its
+ * climate is known). */
+typedef enum PlantState {
+    PLANT_STATE_AWAKE,     /* Growing when the weather lets it. */
+    PLANT_STATE_RESTING,   /* Rests through the cold (PLANT_REST_SLEEPS). */
+    PLANT_STATE_DIED_BACK, /* Dead above ground, the roots wait (PLANT_REST_DIES_BACK). */
+    /* The same in the heat (PlantDef.rests_in_heat): a plant of the cool spring is
+     * gone for the summer, and waits for the cold of winter before it wakes. */
+    PLANT_STATE_SUMMER_DORMANT,
+} PlantState;
+
+/* A plant's damage, up to which it is dead (0: unharmed). */
+#define PLANT_DAMAGE_MAX 65535
+
+/* A plant's life (tuning, docs/PLANTS.md): its climate is the mean of the last
+ * PLANT_CLIMATE_HOURS hours; it goes to rest below `t_min` and wakes
+ * PLANT_REST_HYSTERESIS degrees above it; its hardening moves by
+ * PLANT_HARDEN_PER_HOUR in the cold and PLANT_SOFTEN_PER_HOUR otherwise (of
+ * 255); frost and heat take PLANT_FROST_DAMAGE and PLANT_HEAT_DAMAGE of its
+ * health per degree beyond the limit and hour; it mends PLANT_RECOVERY of its
+ * health an hour when all is well. */
+#define PLANT_CLIMATE_HOURS 72.0f
+#define PLANT_REST_HYSTERESIS 1.0f
+#define PLANT_HARDEN_PER_HOUR 3
+#define PLANT_SOFTEN_PER_HOUR 5
+#define PLANT_FROST_DAMAGE 0.02f
+#define PLANT_HEAT_DAMAGE 0.02f
+#define PLANT_RECOVERY (0.25f / 24.0f)
+/* The health a tree with a trunk keeps at the least (it never dies of the weather). */
+#define PLANT_TREE_HEALTH_FLOOR 0.05f
+
+/* The climate (Plant.climate) is kept in 1/256 degrees. */
+#define PLANT_CLIMATE_SCALE 256.0f
+
 typedef struct Plant {
     uint8_t type; /* PlantType */
     /* A tree's trunk width in tiles (core/tree.h), 0 meaning 1; 0 for other
@@ -185,8 +239,43 @@ typedef struct Plant {
     uint8_t size;
     /* Stocks, in hours of regrowth: one item per PlantProduct.regrow_hours. */
     uint16_t stock[PLANT_PRODUCTS_MAX];
+    /* Worn down by frost, heat and (docs/PLANTS.md) darkness, 0 (unharmed) ..
+     * PLANT_DAMAGE_MAX (dead). It slows growth and heals when conditions are good. */
+    uint16_t damage;
     float growth; /* 0 (seedling) .. 1 (mature) */
+    /* The mean temperature of the last days at its tile, in 1/256 degrees:
+     * what decides when it rests and wakes. */
+    int16_t climate;
+    /* How hardened by the cold it is: 0 (growing, tender) .. 255 (fully hardened). */
+    uint8_t hardening;
+    uint8_t state; /* PlantState, plus PLANT_CLIMATE_KNOWN. */
 } Plant;
+_Static_assert(sizeof(Plant) == 16, "a plant is four words");
+
+/* Set in Plant.state once `climate` holds the tile's temperatures (a plant
+ * made by hand takes its first from the tile). */
+#define PLANT_CLIMATE_KNOWN 0x80
+
+/* What a plant meets on its tile in an hour. */
+typedef struct PlantConditions {
+    float temperature; /* Of its tile, in degrees Celsius. */
+    float fertility;   /* Of its ground (TerrainDef.fertility). */
+    int day_of_year;   /* For what its products' days say (PlantProduct.days). */
+} PlantConditions;
+
+/* What a plant is up to, for the player (the plant window). */
+typedef enum PlantStatus {
+    PLANT_STATUS_GROWING,
+    PLANT_STATUS_SLOWED_COLD, /* Cooler than it likes, growing slowly. */
+    PLANT_STATUS_SLOWED_HOT,
+    PLANT_STATUS_TOO_COLD, /* Too cold to grow, or too hot. */
+    PLANT_STATUS_TOO_HOT,
+    PLANT_STATUS_FROST, /* Suffering from frost. */
+    PLANT_STATUS_HEAT,  /* Suffering from heat. */
+    PLANT_STATUS_RESTING,
+    PLANT_STATUS_DIED_BACK,
+    PLANT_STATUS_COUNT
+} PlantStatus;
 
 /* Plants are drawn in this many sizes as they grow (see plant_growth_stage()). */
 #define PLANT_GROWTH_STAGES 5
@@ -346,16 +435,40 @@ int plant_take_stock(Plant *plant, int slot, int count);
 bool plant_days_contain(PlantDays days, int day_of_year);
 
 /* Lets the stocks grow back for `hours` on a day of the year, up to the
- * capacity: on the days of their product (the stock is gone on the others). */
+ * capacity: on the days of their product (the stock is gone on the others);
+ * `hours` 0: only drops what is above the limit or out of its days. */
 void plant_regrow_stocks(Plant *plant, int hours, int day_of_year);
 
 /*
- * One step of a plant's life on a tile of `fertility`, `hours` long on a day
- * of the year: its stocks grow back, it grows on its growth days (not below
- * its minimum fertility), withers on the others when it dies back, and goes
- * (type PLANT_NONE) when it vanishes and its products are gone.
+ * `hours` hours of a plant's life in `conditions`: its climate follows the
+ * tile's temperature; it goes to rest or wakes (a few days of cold, or of
+ * heat for a plant that rests in it), hardens or softens, takes damage from
+ * frost, heat (and later darkness) and mends when all is well; it grows at
+ * its best rate times the temperature's response, its health and the
+ * fertility (not below its minimum); its stocks grow back while it is awake;
+ * and it goes (type PLANT_NONE) when it dies, or when it vanishes and its
+ * products are gone. A tree with a trunk (core/tree.h) never dies of it.
  */
-void plant_advance(Plant *plant, float fertility, int hours, int day_of_year);
+void plant_advance(Plant *plant, const PlantConditions *conditions, int hours);
+
+/* The response of a plant to a temperature, 0 .. 1 (docs/PLANTS.md §2). */
+float plant_temperature_response(PlantType type, float celsius);
+
+/* Frost limit of a plant now: from its tender to its hardened one by its
+ * hardening. */
+float plant_frost_limit(const Plant *plant);
+
+/* Growth per day the plant makes in `conditions` (0 when it rests or cannot). */
+float plant_growth_rate(const Plant *plant, const PlantConditions *conditions);
+
+/* What the plant is up to in `conditions`. */
+PlantStatus plant_status(const Plant *plant, const PlantConditions *conditions);
+
+/* Translation key of the name of a status. */
+const char *plant_status_name_key(PlantStatus status);
+
+/* A plant's health, 0 (dead) .. 1. */
+float plant_health(const Plant *plant);
 
 /* Size class of a plant, 0 (seedling) .. PLANT_GROWTH_STAGES - 1 (mature):
  * growth split in equal steps. */
@@ -373,13 +486,14 @@ bool plant_has_food(const Plant *plant);
  * gone (the tile is then bare; "gone" only when no product is left). */
 void plant_harvested(Map *map, int x, int y, int z);
 
-/* Whether nothing of the plant shows above ground (withered until its growth
- * days come back). */
+/* Whether nothing of the plant shows above ground (died back until the warmth
+ * returns). */
 bool plant_is_dormant(const Plant *plant);
 
 /* Puts a new plant in the state of a day of the year (new plants of a
- * generated world): withered when it dies back out of its growth days, every
- * stock full otherwise (on the days of its product only). */
+ * generated world): its climate the expected one of that day (so it rests,
+ * hardened, in winter, and a plant that dies back has died back), every stock
+ * full (on the days of its product only). */
 void plant_settle(Plant *plant, int day_of_year);
 
 /* Allocates a map of `depth` levels, level 0 a floor of soil and the levels

@@ -359,7 +359,7 @@ static void test_crown_grows_in_the_game(void)
     count_foliage(map, 16, 16, older);
     CHECK(older[TREE_DENSITY_SPARSE] + older[TREE_DENSITY_MEDIUM] + older[TREE_DENSITY_DENSE] >
           young[TREE_DENSITY_SPARSE] + young[TREE_DENSITY_MEDIUM]);
-    plant->growth = 0.999f; /* Fully grown within the hour. */
+    plant->growth = 0.9995f; /* Fully grown within the hour. */
     game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL);
     CHECK(plant->growth >= 1.0f);
     count_foliage(map, 16, 16, full);

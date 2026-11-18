@@ -126,7 +126,8 @@ map: 256 × 256 tiles, small enough to simulate every tile in depth.
     with world generation.
 - **Soil**: moisture and fertility simulated per tile (rain, shade, nearby
   water, what grows and rots there); light computed from the sun, the canopy
-  and roofs.
+  and roofs. Plants grow from the temperature, light and water of their
+  tile (`docs/PLANTS.md`).
 - **Vegetation** spreads and reproduces believably: seeds carried by the
   wind and by animals, roots and runners; plants compete for light, water
   and fertile soil.

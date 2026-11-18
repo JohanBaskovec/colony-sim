@@ -690,6 +690,10 @@ jobs use whatever tool the settler carries.
 
 ### 7.3 Plants and seasons
 
+*Plants grow, rest and die from the temperature of their tile (and soon its
+light) rather than by the calendar (`docs/PLANTS.md`); what is said here about
+growing seasons is the climate's result. Products still have their days.*
+
 Every plant grows from spring to autumn and rests in winter. What it bears
 (its food, or the armfuls of grass: grass is a plant like the others) is a stock
 that is there only on its days of the year, one item per regrowth period,

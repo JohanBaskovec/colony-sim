@@ -1,6 +1,7 @@
 #include "game/tile_panel.h"
 
 #include "core/i18n.h"
+#include "core/temperature.h"
 #include "core/tree.h"
 #include "game/hud.h"
 #include "game/inspector.h"
@@ -107,11 +108,32 @@ static void plant_rows(UiLayout *layout, const ThingRows *rows)
         TR_FORMAT(text, sizeof(text), tr_plural("hud.tile.tree_levels", levels), a);
         ui_layout_label(layout, text, 0.0f, false);
     }
+    /* What it meets on its tile: the temperature there, the ground. */
+    const Map *map = game_view_map(game);
+    PlantConditions conditions = {
+        .temperature = temperature_at(&game->temperatures, foot.x, foot.y, foot.z),
+        .fertility =
+            terrain_def((Terrain)map->terrain[map_index(map, foot.x, foot.y, foot.z)])->fertility,
+    };
     if (plant_is_dormant(plant)) {
         ui_layout_label(layout, tr("tile_panel.dormant"), 0.0f, false);
     } else {
         tr_integer(a, sizeof(a), (long long)(plant->growth * 100.0f + 0.5f));
         TR_FORMAT(text, sizeof(text), tr("tile_panel.growth"), a);
+        ui_layout_label(layout, text, 0.0f, false);
+        TR_FORMAT(text, sizeof(text), tr("tile_panel.condition"),
+                  tr(plant_status_name_key(plant_status(plant, &conditions))));
+        ui_layout_label(layout, text, 0.0f, false);
+        float rate = plant_growth_rate(plant, &conditions);
+        if (rate > 0.0f && plant->growth < 1.0f) {
+            tr_integer(a, sizeof(a), (long long)(rate * 100.0f + 0.5f));
+            TR_FORMAT(text, sizeof(text), tr("tile_panel.growth_rate"), a);
+            ui_layout_label(layout, text, 0.0f, false);
+        }
+    }
+    if (plant->damage > 0) {
+        tr_integer(a, sizeof(a), (long long)(plant_health(plant) * 100.0f + 0.5f));
+        TR_FORMAT(text, sizeof(text), tr("tile_panel.plant_health"), a);
         ui_layout_label(layout, text, 0.0f, false);
     }
     int today = game_day_of_year(game->clock.tick);

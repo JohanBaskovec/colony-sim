@@ -1,6 +1,7 @@
 #include "game/hud.h"
 
 #include "core/i18n.h"
+#include "core/temperature.h"
 #include "core/tree.h"
 #include "game/animals_panel.h"
 #include "game/scenarios_panel.h"
@@ -362,9 +363,13 @@ static void build_tile_panel(App *app, Panel *panel)
 
     /* On a tree's trunk or foliage: the tree (its plant is on its foot). */
     const Plant *plant = &map->plants[index];
+    int foot_x = x, foot_y = y, foot_z = z; /* The tile the plant grows on. */
     TreeRef tree;
     if (tree_at(map, x, y, z, &tree)) {
         plant = tree_plant(map, &tree);
+        foot_x = tree.x;
+        foot_y = tree.y;
+        foot_z = tree.z;
         int levels = tree_shape_levels(&tree.shape);
         tr_integer(a, sizeof(a), levels);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr_plural("hud.tile.tree_levels", levels), a);
@@ -377,6 +382,11 @@ static void build_tile_panel(App *app, Panel *panel)
         } else {
             tr_integer(a, sizeof(a), (long long)(plant->growth * 100.0f + 0.5f));
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant"), tr(def->name_key), a);
+            PlantConditions conditions = {
+                .temperature = temperature_at(&app->game.temperatures, foot_x, foot_y, foot_z),
+                .fertility = 1.0f,
+            };
+            panel_add_text(panel, tr(plant_status_name_key(plant_status(plant, &conditions))));
         }
         if (game_forbidden(&app->game, x, y, z, FORBID_PLANT)) {
             panel_add_text(panel, tr("tile_panel.left_alone"));
