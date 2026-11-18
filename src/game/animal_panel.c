@@ -64,7 +64,16 @@ static void animal_rows(UiLayout *layout, void *userdata)
         SDL_strlcpy(size, tr("animal_panel.herd.alone"), sizeof(size));
     }
     ui_layout_pair(layout, tr("animal_panel.herd"), size, text, false);
-    health_panel_rows(layout, &animal->health);
+}
+
+/* The Health tab (game/health_panel.h). */
+static void health_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    const Animal *animal = game_animal_const(&app->game, app->selected_animal);
+    if (animal != NULL) {
+        health_panel_rows(layout, &animal->health);
+    }
 }
 
 /* The Character tab (game/attributes_panel.h). */
@@ -85,8 +94,11 @@ void animal_panel_draw(App *app)
     }
     const char *title = tr(animal_name_key((AnimalSpecies)animal->species, (AnimalSex)animal->sex));
     bool open = inspector_box(app, INSPECT_ANIMAL, title, animal_rows, app);
-    const char *labels[1] = {tr("inspector.tab.character")};
-    if (inspector_tabs(app, labels, 1) == 0) {
+    const char *labels[2] = {tr("inspector.tab.health"), tr("inspector.tab.character")};
+    int tab = inspector_tabs(app, labels, 2);
+    if (tab == 0) {
+        inspector_tab_panel(app, health_rows, app);
+    } else if (tab == 1) {
         inspector_tab_panel(app, character_rows, app);
     }
     if (!open) {
