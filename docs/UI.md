@@ -170,10 +170,10 @@ rows):
   negative, green when positive). The bar's tooltip gives the exact mood and
   its effects (work, learning, quality); a thought's tooltip says what it is
   about, its original value and how it fades.
-- **Character**: a table of every attribute: the name, the word for its
-  position and, in a third column, the exact position in percent of the way to
-  either end; the three are colored by the exact position: red at the lowest,
-  white at the ordinary, green at the highest.
+- **Character**: a table of every attribute: the name and the position in
+  percent of the way to either end (−100 % to +100 %), colored by the position:
+  red at the lowest, white at the ordinary, green at the highest. No words:
+  the figures say more.
 - **Knowledge**: a table, the level on the right from red (0) through white
   (mastery, 50) to green (100). The tooltip gives the work speed, what was
   learned today, fading and the masters in the colony.

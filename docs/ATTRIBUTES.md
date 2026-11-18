@@ -16,8 +16,11 @@ Status: step A is implemented (walking, work pace, learning, sleep, appetite, co
 - **Symmetric.** The best and the worst lie as far from the ordinary value:
   factors go from ×0.5 to ×2 (halving and doubling), never from ×0.25 to
   ×1.75.
-- **Words, not numbers.** The player reads "a little slow" or "very quick",
-  never a percentage. The tooltip says what the attribute does, in words.
+- **Figures.** The player reads the position in percent (−100 % to +100 %),
+  colored from red to green. The tooltip says what the attribute does, in
+  words. (The words for the bands, "a little slow", "very quick", are still
+  in the code and the translations, `attribute_word_key()`, but nothing shows
+  them now.)
 - **Independent.** No budget shared between attributes: a settler can be
   gifted in many things or in none (both are rare).
 - **Heritable** (with genetics, `GAME_DESIGN.md`): a child gets about the
@@ -164,10 +167,10 @@ using it, disliking it bad ones.
 - Attributes are known from the start: the inspector shows them as soon as
   the settler arrives, nothing is found out over time.
 - The Character tab of the inspector is a table of every attribute, grouped
-  by body, mind and social: the name on the left, the word for its position
-  on the right ("very slow", "ordinary"), then the exact position in percent
-  in a third column (−100 % to +100 %); the row is colored by that position,
-  red at the lowest, white at the ordinary, green at the highest. A tooltip tells what each one does, in words.
+  by body, mind and social: the name on the left, the position in percent on
+  the right (−100 % to +100 %); the row is colored by that position, red at the
+  lowest, white at the ordinary, green at the highest. A tooltip tells what each
+  one does, in words.
 - Sexuality is shown in words too ("mostly attracted to men", "asexual").
 
 ## 8. Open questions
