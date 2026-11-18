@@ -140,6 +140,10 @@ typedef struct Game {
     ItemMoves item_moves;        /* Stacks the player ordered carried to a chosen tile. */
     GameClock clock;
     Rng rng; /* Simulation randomness (names, AI...), seeded from `seed`. */
+    /* The crowns' leaves (Map.bare): the climates of the deciduous trees met
+     * during the hourly pass over the plants, and how many, for their mean. */
+    double leaf_climate_sum;
+    uint32_t leaf_tree_count;
     Pathfinder pathfinder;
     /* Connectivity regions of the map: a cache, refreshed at the start of
      * each tick, not part of game_hash(). */

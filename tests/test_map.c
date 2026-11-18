@@ -796,6 +796,50 @@ static void test_fibre_plants_are_cut_and_grow_back(void)
     map_free(&map);
 }
 
+/* A crown lets more light through the barer it is, and a bare crown changes what the
+ * light caches see; the target follows the climate. */
+static void test_bare_crowns_let_light_through(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 4));
+    map_set_terrain(&map, 4, 4, 1, TERRAIN_FOLIAGE);
+    map_set_terrain(&map, 4, 4, 2, TERRAIN_FOLIAGE_MEDIUM);
+    map_set_terrain(&map, 4, 4, 3, TERRAIN_FOLIAGE_SPARSE);
+    float leaf = map_light_cover(&map, 4, 4, 0);
+    CHECK_NEAR(leaf, MAP_LIGHT_FOLIAGE_DENSE * MAP_LIGHT_FOLIAGE_MEDIUM * MAP_LIGHT_FOLIAGE_SPARSE,
+               1e-5);
+    uint32_t revision = map.light_revision;
+    uint64_t in_leaf = map_hash(&map);
+    map_set_bare(&map, MAP_BARE_STEPS / 2);
+    CHECK(map.light_revision != revision);
+    float half = map_light_cover(&map, 4, 4, 0);
+    revision = map.light_revision;
+    map_set_bare(&map, MAP_BARE_STEPS / 2); /* No change, nothing to redo. */
+    CHECK_EQ_UINT(map.light_revision, revision);
+    map_set_bare(&map, 99); /* Clamped. */
+    CHECK_EQ_INT(map.bare, MAP_BARE_STEPS);
+    CHECK_NEAR(map_bare_fraction(&map), 1.0, 1e-6);
+    float bare = map_light_cover(&map, 4, 4, 0);
+    CHECK_NEAR(bare, MAP_LIGHT_BARE_DENSE * MAP_LIGHT_BARE_MEDIUM * MAP_LIGHT_BARE_SPARSE, 1e-5);
+    CHECK(leaf < half && half < bare && bare < 1.0f); /* Branches still shade a little. */
+    CHECK(map_hash(&map) != in_leaf);
+    map_set_bare(&map, 0);
+    CHECK_EQ_UINT(map_hash(&map), in_leaf); /* Back in leaf: the hash as it was. */
+    /* Rock and roofs do not care. */
+    map_set_rock(&map, 6, 6, 1, ROCK_GRANITE);
+    map_set_bare(&map, MAP_BARE_STEPS);
+    CHECK_NEAR(map_light_cover(&map, 6, 6, 0), 0.0, 1e-9);
+    map_free(&map);
+
+    CHECK_NEAR(plant_bare_target(20.0f), 0.0, 1e-6);
+    CHECK_NEAR(plant_bare_target(PLANT_LEAF_FULL_ABOVE), 0.0, 1e-6);
+    CHECK_NEAR(plant_bare_target(PLANT_LEAF_BARE_BELOW), 1.0, 1e-6);
+    CHECK_NEAR(plant_bare_target(-5.0f), 1.0, 1e-6);
+    CHECK(plant_bare_target(8.0f) > 0.0f && plant_bare_target(8.0f) < 1.0f);
+    CHECK(plant_def(PLANT_TREE)->deciduous && plant_def(PLANT_HAZEL)->deciduous);
+    CHECK(!plant_def(PLANT_BRAMBLE)->deciduous && !plant_def(PLANT_GRASS)->deciduous);
+}
+
 /* Conditions at a temperature, on rich soil, in summer (what stocks ask of the day). */
 static PlantConditions at_temperature(float celsius)
 {
@@ -1370,5 +1414,6 @@ int main(void)
     RUN_TEST(test_poor_ground_plants_grow_on_any_ground);
     RUN_TEST(test_shade_plants_live_in_the_dark);
     RUN_TEST(test_fibre_plants_are_cut_and_grow_back);
+    RUN_TEST(test_bare_crowns_let_light_through);
     return test_summary();
 }

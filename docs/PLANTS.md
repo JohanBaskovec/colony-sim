@@ -232,9 +232,8 @@ expected warmth of the day.
   drying in the heat and the wind), `f_water` in the growth, drought that
   harms and kills, waterlogging for the plants that hate it, cattails in
   the wet. `docs/GAME_DESIGN.md`, *Soil*.
-- **Deciduous trees:** their crowns bare while they rest, so that light
-  reaches the ground in winter and early spring (what wild garlic lives
-  on), with the drawing that goes with it.
+- **Evergreens** (pines): crowns that stay in leaf all winter (§12 treats all
+  trees as deciduous).
 - **Death of grown trees:** standing deadwood, a source of dry wood, that
   falls in time.
 - **Spread** (seeds, runners) and competition for light: the shade of a
@@ -416,3 +415,37 @@ sorrel. Fibres are not eaten.
   because its foot is the tile of its trunk (solid wood): it now lives in the
   outdoor air (`temperature_for_plant()`). A milder, damped temperature on
   the forest floor would be truer; P2's light is the other half of it.
+
+## 12. Deciduous trees
+
+Trees and hazels lose their leaves in the cold (`PlantDef.deciduous`), so that
+light reaches the ground in winter and early spring: what wild garlic lives
+on.
+
+- **When.** The leaves follow the climate the trees live in, the running mean
+  of the air (`Plant.climate`, §4): in full leaf from `PLANT_LEAF_FULL_ABOVE`
+  (12 °C), bare below `PLANT_LEAF_BARE_BELOW` (5 °C), and in between losing or
+  growing leaves with the climate (`plant_bare_target()`). In this climate
+  the crowns start to thin in the second half of autumn, are bare from the
+  first days of winter to the first days of spring, and are in leaf again by
+  the middle of spring.
+- **How.** Not per tree: the foliage is terrain, which belongs to no plant,
+  and every tree meets the same air. Each hourly pass over the plants adds up
+  the climates of the deciduous trees with a crown and sets `Map.bare`
+  (0 in leaf .. `MAP_BARE_STEPS` bare, in sixteenths) from their mean
+  (`game.c`, `leaf_conclude()`); a new world takes it from the trees as
+  generated. It is part of `map_hash()` once it is not 0.
+- **Light.** `map_light_cover()` lets a layer of foliage through the barer it
+  is, from `MAP_LIGHT_FOLIAGE_*` (leaf) to `MAP_LIGHT_BARE_*` (branches only:
+  0.8 for a dense layer, 0.9, 0.95; they still shade a little, and layers
+  multiply). Changing `Map.bare` bumps `Map.light_revision`, so the light
+  cache of the drawing follows. Plants under the crowns therefore get more
+  light in winter and early spring (the P2 growth sees it).
+- **Drawing.** Each crown tile has a bare texture (`ground_foliage*_bare`):
+  the branches of the leafy one without the leaves, on dark earth for a
+  dense crown, on nothing for the thin ones. In winter it is drawn with the
+  leaves fading over it as the crown comes into leaf (alpha = leaf share); the
+  young trees' sprites go browner.
+- **Not done.** Evergreens (a per-tree state: the foliage tile would have to
+  know its tree); leaf colours in autumn; leaves falling as litter.
+

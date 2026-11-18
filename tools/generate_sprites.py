@@ -2521,7 +2521,7 @@ def draw_rough_stone():
     return np.dstack([np.clip(color, 0, 1), np.ones((TILE, TILE), dtype=np.float32)])
 
 
-def draw_foliage_of_density(seed, clumps, gap, shade, twigs=0):
+def draw_foliage_of_density(seed, clumps, gap, shade, twigs=0, leaves=True):
     """A floor of branches: overlapping leaf clumps over dark gaps, lit on top.
     Without a `gap` color the foliage is thin: leaves and bare branches on a
     transparent background, so that what lies below shows through (the
@@ -2547,7 +2547,7 @@ def draw_foliage_of_density(seed, clumps, gap, shade, twigs=0):
         sx, sy = points[fork]
         canvas.stroke([(sx, sy), (sx + math.cos(fa) * length * 0.4, sy + math.sin(fa) * length * 0.4)],
                       1.1, 0.5, color * 0.9, 0.9)
-    for layer in range(3):
+    for layer in range(3 if leaves else 0):  # None in winter: bare branches only.
         for _ in range(clumps - round(clumps * 12 / 70) * layer):
             x, y = rng.random() * TILE, rng.random() * TILE
             r = 5.0 + rng.random() * 5.0
@@ -2580,6 +2580,20 @@ def draw_foliage_sparse():
     """The thinnest branches, at the edge of the crown: a few leaf clumps on
     bare branches."""
     return draw_foliage_of_density(7102, 11, None, 0.9, twigs=7)
+
+
+def draw_foliage_bare():
+    """The dense crown in winter: a net of bare branches, the ground showing
+    through (drawn under the leaves, which fade in and out with the seasons)."""
+    return draw_foliage_of_density(7103, 0, (44, 36, 28), 1.0, twigs=26, leaves=False)
+
+
+def draw_foliage_medium_bare():
+    return draw_foliage_of_density(7104, 0, None, 1.0, twigs=12, leaves=False)
+
+
+def draw_foliage_sparse_bare():
+    return draw_foliage_of_density(7105, 0, None, 1.0, twigs=6, leaves=False)
 
 
 def draw_grass_roof():
@@ -2619,6 +2633,9 @@ GROUND_TEXTURES = {
     "ground_foliage": draw_foliage,
     "ground_foliage_medium": draw_foliage_medium,
     "ground_foliage_sparse": draw_foliage_sparse,
+    "ground_foliage_bare": draw_foliage_bare,
+    "ground_foliage_medium_bare": draw_foliage_medium_bare,
+    "ground_foliage_sparse_bare": draw_foliage_sparse_bare,
     "ground_grass_roof": draw_grass_roof,
     "wall_granite": draw_granite_wall,
     "wall_sandstone": draw_sandstone_wall,

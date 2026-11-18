@@ -69,6 +69,8 @@ SpriteId sprite_animal(AnimalSpecies species, AnimalSex sex, AnimalPose pose);
  * ground), and grass over the ground, taller with its growth (0 .. 1). -1 for
  * terrains and rocks without a texture. */
 SpriteId sprite_ground(Terrain terrain);
+/* The crown of foliage in winter: bare branches (-1 for any other terrain). */
+SpriteId sprite_ground_bare(Terrain terrain);
 SpriteId sprite_wall(RockType rock);
 SpriteId sprite_grass(float growth);
 

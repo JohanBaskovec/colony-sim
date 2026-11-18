@@ -1655,6 +1655,13 @@ searches backed off on that revision look again.
   fires of the level shown only) is one of the two lights `render_daylight()`
   draws, with an additive warm glow where it is dark (see *Light and shade*).
 
+**Leaves** (`Map.bare`, docs/PLANTS.md §12): the crowns of deciduous trees
+go bare in winter. The game derives one number from the climates of the
+trees (`leaf_conclude()`, once per hourly pass over the plants), the core
+lets bare foliage through more light in `map_light_cover()` (the light cache
+follows `Map.light_revision`), and the drawing shows bare-branch textures with
+the leaves fading over them.
+
 **Light and shade** (`render_daylight()`, presentation only): the light of a
 tile is the sky (the sun's day with its dawn and dusk, `game_daylight()`, a
 night sky `NIGHT_SKY_LIT`, the weather, `weather_light()`) times what lets

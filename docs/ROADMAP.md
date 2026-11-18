@@ -273,8 +273,9 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
   - [x] Light view (key G, a sun button next to the temperature view's): the light on each tile now as an overlay, and with either view on the status panel tells the temperature, or the light now and the day's best, of the tile under the mouse
   - [x] A forest floor with its plants: world generation places the trees (with glades), builds their crowns, then the understory from each tile's light and ground, in patches (nothing generated where it would starve; bare litter in the deepest shade); eight new plants (moss, wood sorrel, bracken, wild strawberry, bilberry, dog rose, heather, reed) with their own light, ground and season, and sprites; plants of poor ground; a fibres group (grass, moss, bracken, heather, reeds) cut by zones; fibres stand in for grass in beds, walls and roofs, dry bracken and heather burn and moss and bracken are tinder; docs/PLANTS.md §10
   - [ ] P4: water: soil moisture per tile in the growth, drought and waterlogging (with "Soil" below)
+  - [x] Deciduous trees: crowns go bare in the cold and come into leaf in spring (from the climate the trees live in, in steps, with bare-branch textures), letting light through to the ground in winter; docs/PLANTS.md §12
   - [x] Wild animals eat the new food plants (deer and boar bilberries, strawberries, hips and sorrel; hares strawberries and sorrel)
-  - [ ] Later: poisonous look-alikes of the new food plants; deciduous trees bare while resting (light on the ground in winter), death of grown trees (standing deadwood), competition for light
+  - [ ] Later: poisonous look-alikes of the new food plants; evergreens; death of grown trees (standing deadwood), competition for light
 - [ ] Soil: moisture and fertility per tile; light from the sun, the canopy and roofs (light: step P2 above)
 - [ ] Vegetation spreading: seeds by wind and animals, roots and runners; competition for light, water and fertile soil
 - [ ] Wildlife as a living population: eating plants, hunting, fighting, breeding, dying of old age (extends M5 "Wildlife, hunting")

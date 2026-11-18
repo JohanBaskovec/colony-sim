@@ -332,6 +332,44 @@ static void test_plant_conditions(void)
     game_shutdown(&game);
 }
 
+/* The crowns of deciduous trees follow the climate their trees live in: in
+ * full leaf in summer, bare in winter, in between in spring and autumn, and
+ * the light under them follows (docs/PLANTS.md §12). */
+static void test_crowns_lose_their_leaves_in_the_cold(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game, 3));
+    Map *map = &game.map;
+    map_set_terrain(map, 5, 5, 1, TERRAIN_FOLIAGE);
+    CHECK_EQ_INT(map->bare, 0); /* A world starts in summer, in leaf. */
+    game.weather.type = WEATHER_CLEAR;
+    int midsummer = SEASON_DAY(SEASON_SUMMER, 8);
+    game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
+    CHECK_NEAR(game_light_at(&game, 5, 5, 0), MAP_LIGHT_FOLIAGE_DENSE, 1e-3);
+
+    /* A tree with a crown, alone, in the climate of each season. */
+    memset(map->plants, 0, map_tile_count(map) * sizeof(*map->plants));
+    map->plants[map_index(map, 9, 9, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    const float climates[] = {20.0f, 8.5f, 0.0f, 20.0f};
+    const int expected[] = {0, MAP_BARE_STEPS / 2, MAP_BARE_STEPS, 0};
+    for (size_t i = 0; i < sizeof(climates) / sizeof(climates[0]); i++) {
+        Plant *tree = &map->plants[map_index(map, 9, 9, 0)];
+        tree->state |= PLANT_CLIMATE_KNOWN;
+        tree->climate = (int16_t)(climates[i] * PLANT_CLIMATE_SCALE);
+        /* One whole pass over the plants; the tree's own climate moves a little. */
+        for (int tick = 0; tick < GAME_PLANT_UPDATE_INTERVAL; tick++) {
+            game_tick(&game);
+        }
+        CHECK(abs(map->bare - expected[i]) <= 1);
+    }
+    /* Bare, a crown lets much more light through. */
+    map_set_bare(map, MAP_BARE_STEPS);
+    game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
+    game.weather.type = WEATHER_CLEAR;
+    CHECK_NEAR(game_light_at(&game, 5, 5, 0), MAP_LIGHT_BARE_DENSE, 1e-3);
+    game_shutdown(&game);
+}
+
 /* Growth is spread over the ticks of an interval: a tick only touches a
  * slice of the map, and after a whole interval every plant grew once. */
 static void test_plant_growth_is_spread_over_ticks(void)
@@ -654,6 +692,7 @@ int main(void)
     RUN_TEST(test_update_advances_ticks);
     RUN_TEST(test_plants_grow_over_time);
     RUN_TEST(test_plant_conditions);
+    RUN_TEST(test_crowns_lose_their_leaves_in_the_cold);
     RUN_TEST(test_plant_growth_is_spread_over_ticks);
     RUN_TEST(test_simulation_is_deterministic);
     RUN_TEST(test_hash_changes_as_simulation_runs);

@@ -175,6 +175,9 @@ typedef struct PlantDef {
      * 1.0, see plant_advance()). */
     bool poor_soil;
     float move_cost; /* Movement cost multiplier while walking through. */
+    /* Loses its leaves in the cold (docs/PLANTS.md §12): the crowns of the
+     * trees of this kind let the light through in winter (Map.bare). */
+    bool deciduous;
     /* Growth by the temperature of its tile (degrees Celsius): none below
      * `t_min` nor above `t_max`, full from `t_opt_low` to `t_opt_high`, in
      * proportion between. */
@@ -439,6 +442,11 @@ typedef struct Map {
      * what lets the light through (map_light_cover()). A cache of it compares
      * this. Not part of map_hash(). */
     uint32_t light_revision;
+    /* How bare the crowns of the deciduous trees are, 0 (in full leaf) to
+     * MAP_BARE_STEPS (bare branches), set by the game from the climate (see
+     * plant_leaf_target()); a layer of foliage lets more light through the
+     * barer it is. Part of map_hash() once it is not 0. Use map_set_bare(). */
+    uint8_t bare;
     /* The change that led to revision r is at index r % MAP_TOPOLOGY_LOG_SIZE. */
     MapTopologyChange topology_log[MAP_TOPOLOGY_LOG_SIZE];
     /* Incremented whenever a tree is felled: who stood where it came down is
@@ -502,6 +510,14 @@ float plant_light_response(PlantType type, float light);
 /* Frost limit of a plant now: from its tender to its hardened one by its
  * hardening. */
 float plant_frost_limit(const Plant *plant);
+
+/* How bare the crowns of deciduous trees are in a climate (the running mean
+ * of the air's temperature, like Plant.climate): in full leaf from
+ * PLANT_LEAF_FULL_ABOVE degrees, bare below PLANT_LEAF_BARE_BELOW, in
+ * between losing or growing leaves; 0 (in leaf) .. 1 (bare). */
+#define PLANT_LEAF_BARE_BELOW 5.0f
+#define PLANT_LEAF_FULL_ABOVE 12.0f
+float plant_bare_target(float climate);
 
 /* Growth per day the plant makes in `conditions` (0 when it rests or cannot). */
 float plant_growth_rate(const Plant *plant, const PlantConditions *conditions);
@@ -733,6 +749,17 @@ int map_cover_level(const Map *map, int x, int y, int z);
  * ground of a level above nothing. The trunk of a tree over its own foot is
  * not a cover. */
 float map_light_cover(const Map *map, int x, int y, int z);
+/* Steps from full leaf to bare branches, and what a layer of foliage lets
+ * through when it is bare (instead of MAP_LIGHT_FOLIAGE_*). */
+#define MAP_BARE_STEPS 16
+#define MAP_LIGHT_BARE_DENSE 0.8f
+#define MAP_LIGHT_BARE_MEDIUM 0.9f
+#define MAP_LIGHT_BARE_SPARSE 0.95f
+/* Sets how bare the crowns are (0 .. MAP_BARE_STEPS); what lets the light
+ * through changed when it did (Map.light_revision). */
+void map_set_bare(Map *map, int steps);
+/* The same, 0 (in leaf) .. 1 (bare). */
+float map_bare_fraction(const Map *map);
 #define MAP_LIGHT_FOLIAGE_DENSE 0.35f
 #define MAP_LIGHT_FOLIAGE_MEDIUM 0.6f
 #define MAP_LIGHT_FOLIAGE_SPARSE 0.8f

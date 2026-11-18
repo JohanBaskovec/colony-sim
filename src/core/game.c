@@ -541,6 +541,43 @@ static void spawn_starting_colonists(Game *game, int count)
 
 /* ---- Lifecycle ----------------------------------------------------------- */
 
+/* The leaves of the crowns follow the climate the trees live in (the running
+ * mean of the air, see plant_bare_target()): bare in winter, in leaf from late
+ * spring to the middle of autumn. Each hourly pass over the plants adds up the
+ * climates of the deciduous trees with a crown, and at its end sets Map.bare
+ * from their mean. */
+static void leaf_meet(Game *game, const Plant *plant)
+{
+    if (plant_def((PlantType)plant->type)->deciduous && (plant->state & PLANT_CLIMATE_KNOWN) &&
+        plant->growth >= TREE_CROWN_FROM) {
+        game->leaf_climate_sum += (double)plant->climate / PLANT_CLIMATE_SCALE;
+        game->leaf_tree_count++;
+    }
+}
+
+static void leaf_conclude(Game *game)
+{
+    if (game->leaf_tree_count > 0) {
+        float mean = (float)(game->leaf_climate_sum / (double)game->leaf_tree_count);
+        map_set_bare(&game->map, (int)lroundf(plant_bare_target(mean) * (float)MAP_BARE_STEPS));
+    }
+    game->leaf_climate_sum = 0.0;
+    game->leaf_tree_count = 0;
+}
+
+/* The crowns of a new world: from the trees as generated. */
+static void leaf_settle(Game *game)
+{
+    uint64_t count =
+        (uint64_t)map_level_tile_count(&game->map) * (uint64_t)(game->map.top_ground_level + 1);
+    for (size_t i = 0; i < count; i++) {
+        if (game->map.plants[i].type != PLANT_NONE) {
+            leaf_meet(game, &game->map.plants[i]);
+        }
+    }
+    leaf_conclude(game);
+}
+
 bool game_init(Game *game, const NewGameParams *params)
 {
     memset(game, 0, sizeof(*game));
@@ -580,6 +617,7 @@ bool game_init(Game *game, const NewGameParams *params)
         game_shutdown(game);
         return false;
     }
+    leaf_settle(game);
     spawn_starting_colonists(game, params->colonist_count);
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
     if (params->wildlife > 0.0f) {
@@ -841,6 +879,7 @@ static void update_plants(Game *game)
             map_tile_of(map, i, &x, &y, &z);
             PlantConditions conditions = game_plant_conditions(game, x, y, z);
             plant_advance(plant, &conditions, GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR);
+            leaf_meet(game, plant);
             if (plant_is_tree(plant->type)) {
                 grow_tree(game, i, old_growth);
                 shed_litter(game, i);
@@ -849,6 +888,9 @@ static void update_plants(Game *game)
                 map_remove_plant(map, x, y, z);
             }
         }
+    }
+    if (phase == GAME_PLANT_UPDATE_INTERVAL - 1) {
+        leaf_conclude(game); /* The whole pass is done. */
     }
 }
 

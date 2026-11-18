@@ -646,6 +646,19 @@ static void ground_flat(const Map *map, int x, int y, int z, size_t index, const
     }
 }
 
+/* The leaves of a young tree, drawn browner as the crowns go bare (Map.bare:
+ * `bare` is 0 in leaf, 1 bare). Crown tiles are drawn as bare branches with
+ * the leaves fading over them, see ground_textures(). */
+#define BARE_SEEDLING_TINT_R 1.0f
+#define BARE_SEEDLING_TINT_G 0.78f
+#define BARE_SEEDLING_TINT_B 0.6f
+static SDL_FColor seedling_color(float bare)
+{
+    return (SDL_FColor){lerpf(1.0f, BARE_SEEDLING_TINT_R, bare),
+                        lerpf(1.0f, BARE_SEEDLING_TINT_G, bare),
+                        lerpf(1.0f, BARE_SEEDLING_TINT_B, bare), 1.0f};
+}
+
 /* Second pass: tile textures, then grass over the ground. */
 static void ground_textures(const Map *map, int x, int y, int z, size_t index,
                             const SDL_FRect *tile, void *userdata)
@@ -659,7 +672,18 @@ static void ground_textures(const Map *map, int x, int y, int z, size_t index,
         sprites_draw_tile(pass->sprites, sprite_wall(rock), tile, WHITE);
         return;
     }
-    sprites_draw_tile(pass->sprites, sprite_ground((Terrain)map->terrain[index]), tile, WHITE);
+    Terrain terrain = (Terrain)map->terrain[index];
+    if (map->bare != 0 && sprite_ground_bare(terrain) >= 0) {
+        /* A crown in winter: its branches, and the leaves it has left over them. */
+        sprites_draw_tile(pass->sprites, sprite_ground_bare(terrain), tile, WHITE);
+        float leaves = 1.0f - map_bare_fraction(map);
+        if (leaves > 0.0f) {
+            sprites_draw_tile(pass->sprites, sprite_ground(terrain), tile,
+                              (SDL_FColor){1.0f, 1.0f, 1.0f, leaves});
+        }
+    } else {
+        sprites_draw_tile(pass->sprites, sprite_ground(terrain), tile, WHITE);
+    }
     const Plant *plant = &map->plants[index];
     if (plant->type == PLANT_GRASS) {
         sprites_draw_tile(pass->sprites, sprite_grass(plant->growth), tile, WHITE);
@@ -3522,6 +3546,9 @@ static void render_plant(Sprites *sprites, const Camera *camera, const Map *map,
     camera_world_to_screen(camera, (float)x + 0.5f, (float)(y + 1), &sx, &sy);
     SDL_FColor color = WHITE;
     bool tall = plant->type == PLANT_TREE || plant->type == PLANT_HAZEL;
+    if (tall && map->bare != 0) {
+        color = seedling_color(map_bare_fraction(map)); /* The seedlings lose theirs too. */
+    }
     if (tall && colonist_count > 0) {
         float width, height;
         sprites_size(sprites, id, &width, &height);

@@ -86,6 +86,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * (core/tree.h): no stock on the plant. */
     [PLANT_TREE] = {.id = "tree",
                     .name_key = N_("plant.tree"),
+                    .deciduous = true,
                     .growth_per_day = 0.03f,
                     .min_fertility = 0.6f,
                     .move_cost = 1.6f,
@@ -106,6 +107,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * dead branches and twigs like those of the other trees (core/tree.h). */
     [PLANT_HAZEL] = {.id = "hazel",
                      .name_key = N_("plant.hazel"),
+                     .deciduous = true,
                      .growth_per_day = 0.04f,
                      .min_fertility = 0.6f,
                      .move_cost = 1.4f,
@@ -1614,6 +1616,7 @@ float map_light_cover(const Map *map, int x, int y, int z)
         return 0.0f;
     }
     float light = 1.0f;
+    const float bare = map_bare_fraction(map);
     for (int above = z + 1; above < map->depth; above++) {
         size_t index = map_index(map, x, y, above);
         if (map->rock[index] == ROCK_WOOD) {
@@ -1623,9 +1626,15 @@ float map_light_cover(const Map *map, int x, int y, int z)
             return 0.0f;
         }
         switch ((Terrain)map->terrain[index]) {
-        case TERRAIN_FOLIAGE: light *= MAP_LIGHT_FOLIAGE_DENSE; continue;
-        case TERRAIN_FOLIAGE_MEDIUM: light *= MAP_LIGHT_FOLIAGE_MEDIUM; continue;
-        case TERRAIN_FOLIAGE_SPARSE: light *= MAP_LIGHT_FOLIAGE_SPARSE; continue;
+        case TERRAIN_FOLIAGE:
+            light *= lerpf(MAP_LIGHT_FOLIAGE_DENSE, MAP_LIGHT_BARE_DENSE, bare);
+            continue;
+        case TERRAIN_FOLIAGE_MEDIUM:
+            light *= lerpf(MAP_LIGHT_FOLIAGE_MEDIUM, MAP_LIGHT_BARE_MEDIUM, bare);
+            continue;
+        case TERRAIN_FOLIAGE_SPARSE:
+            light *= lerpf(MAP_LIGHT_FOLIAGE_SPARSE, MAP_LIGHT_BARE_SPARSE, bare);
+            continue;
         default: break;
         }
         if (map_roof(map, x, y, above) != STRUCTURE_NONE) {
@@ -1635,6 +1644,27 @@ float map_light_cover(const Map *map, int x, int y, int z)
         }
     }
     return light;
+}
+
+void map_set_bare(Map *map, int steps)
+{
+    uint8_t bare = (uint8_t)clampi(steps, 0, MAP_BARE_STEPS);
+    if (bare != map->bare) {
+        map->bare = bare;
+        map->light_revision++;
+    }
+}
+
+float map_bare_fraction(const Map *map)
+{
+    return (float)map->bare / (float)MAP_BARE_STEPS;
+}
+
+float plant_bare_target(float climate)
+{
+    return 1.0f - clampf((climate - PLANT_LEAF_BARE_BELOW) /
+                             (PLANT_LEAF_FULL_ABOVE - PLANT_LEAF_BARE_BELOW),
+                         0.0f, 1.0f);
 }
 
 bool map_is_roofed(const Map *map, int x, int y, int z)
@@ -1691,6 +1721,9 @@ uint64_t map_hash(const Map *map)
     }
 
     size_t count = map_tile_count(map);
+    if (map->bare != 0) { /* Hashes of maps in full leaf stay as they were. */
+        hash = hash_fnv1a64(hash, &map->bare, sizeof(map->bare));
+    }
     hash = hash_fnv1a64(hash, map->terrain, count);
     hash = hash_fnv1a64(hash, map->rock, count);
     if (map->slope_count > 0) { /* Hashes of maps without slopes stay as they were. */
