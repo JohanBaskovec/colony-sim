@@ -4,6 +4,7 @@ add_library(colony_core STATIC
     appearance.c
     attributes.c
     bed.c
+    blood.c
     camera.c
     combat.c
     cli.c
@@ -37,6 +38,7 @@ add_library(colony_core STATIC
     roof.c
     scenario.c
     settings.c
+    strike_anim.c
     temperature.c
     tree.c
     reservation.c

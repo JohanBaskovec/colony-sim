@@ -62,6 +62,10 @@ void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera)
 /* Snow lying on open ground (Weather.snow), under everything on it. */
 void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
+/* Blood on the ground (core/blood.h): drops and pools on the level shown,
+ * drying and fading. */
+void render_blood(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+
 /* What falls from the sky (rain, snow, lightning in a storm) or fog, over
  * the whole view; `now_ms`: real time, which animates it. */
 void render_weather(SDL_Renderer *renderer, const Game *game, const Camera *camera, Uint64 now_ms);

@@ -175,6 +175,13 @@ Each from 0 to 100 %:
   hour. A tooltip on a row says what the part is for (vital, walking, the
   hands, the limb it strikes with) and gives each injury on it: kind, how bad
   (percent of the part) and how it is going (serious, clotting, healing).
+- **Blood on the ground** (`core/blood.h`): whoever bleeds leaves drops
+  behind it as it walks, on its steps: now and then a small one for a light
+  wound, one or two larger ones at every step for a serious one, some drawn
+  out along the walk. Standing or lying still, a pool grows under it. Fresh
+  blood is bright red and gleams; it dries brown over an hour and a bit and is
+  gone after two game hours. None on water, rock or walls. For the eye only
+  (nothing reads it yet: tracking, cleaning come later).
 - A cross on the portrait of a hurt settler in the colonist bar, red while it
   bleeds or is down; its state in the tooltip.
 - A settler down lies across its tile, eyes closed when unconscious; an

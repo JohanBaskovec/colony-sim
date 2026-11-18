@@ -7,6 +7,7 @@ set(COLONY_UNIT_TESTS
     test_appearance
     test_attributes
     test_bed
+    test_blood
     test_camera
     test_cli
     test_crafting
@@ -38,6 +39,7 @@ set(COLONY_UNIT_TESTS
     test_recipe
     test_region
     test_roof
+    test_strike_anim
     test_vision
     test_fog
     test_scenario

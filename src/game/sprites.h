@@ -106,4 +106,9 @@ void sprites_size(const Sprites *sprites, SpriteId id, float *width, float *heig
 /* Draws what was queued: call it before drawing anything else over sprites. */
 void sprites_flush(Sprites *sprites);
 
+/* From now on, sprites add their color times its alpha to what is under them
+ * (a flash: draw a sprite again over itself), or blend over it as usual. Flushes
+ * what was queued. */
+void sprites_set_additive(Sprites *sprites, bool additive);
+
 #endif /* COLONY_GAME_SPRITES_H */

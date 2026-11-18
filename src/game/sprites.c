@@ -560,6 +560,13 @@ void sprites_flush(Sprites *sprites)
     }
 }
 
+void sprites_set_additive(Sprites *sprites, bool additive)
+{
+    sprites_flush(sprites);
+    SDL_SetTextureBlendMode(sprites->levels[sprites->level],
+                            additive ? SDL_BLENDMODE_ADD : SDL_BLENDMODE_BLEND);
+}
+
 void sprites_size(const Sprites *sprites, SpriteId id, float *width, float *height)
 {
     float scale = sprites->pixels_per_tile / (float)SPRITE_PIXELS_PER_TILE;

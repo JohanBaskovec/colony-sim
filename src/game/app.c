@@ -1371,6 +1371,7 @@ static void render_frame(App *app)
     render_map(app->renderer, app->sprites, game_view_map(&app->game), &app->camera);
     render_dirt(app->renderer, game_view_dirt(&app->game), &app->camera);
     render_snow_cover(app->renderer, &app->game, &app->camera);
+    render_blood(app->renderer, &app->game, &app->camera);
     render_gather_zones(app->renderer, &app->game, &app->camera, app->selected_gather_zone);
     render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
     render_structures(app->renderer, &app->game, &app->camera);

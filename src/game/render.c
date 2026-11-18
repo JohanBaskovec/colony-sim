@@ -1,8 +1,10 @@
 #include "game/render.h"
 
 #include "core/hearth.h"
+#include "core/strike_anim.h"
 #include "core/tree.h"
 #include "core/util.h"
+#include "game/strike_marks.h"
 
 #include <limits.h>
 #include <math.h>
@@ -2555,6 +2557,10 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
  * nobody gets lost in a forest. */
 #define COLONIST_HALF_WIDTH 0.3f
 #define COLONIST_HEIGHT 1.05f
+/* Where a blow's mark shows on the one struck, in tiles above its feet: a
+ * settler's chest, a body lying on the ground. An animal's is half its height. */
+#define STRIKE_MARK_SETTLER_HEIGHT 0.45f
+#define STRIKE_MARK_BODY_HEIGHT 0.25f
 /* Speech bubbles over chatting colonists from this zoom level (pixels per tile). */
 #define CHAT_BUBBLE_MIN_ZOOM 14.0f
 #define TREE_SEE_THROUGH_ALPHA 0.4f
@@ -2727,6 +2733,311 @@ static void render_hand(Sprites *sprites, const Camera *camera, const Colonist *
                          color, side < 0.0f);
 }
 
+/* ---- Blows on screen (core/strike_anim.h) ---------------------------------- */
+
+/* Where a settler or an animal is now (world coordinates); false when it is
+ * gone (dead, or never was). */
+static bool combatant_position(const Game *game, Combatant who, float *x, float *y, int *z)
+{
+    if (who.kind == COMBATANT_SETTLER) {
+        const Colonist *colonist = game_colonist_const(game, who.id);
+        if (colonist == NULL) {
+            return false;
+        }
+        colonist_position(colonist, x, y);
+        *z = colonist->z;
+        return true;
+    }
+    if (who.kind == COMBATANT_ANIMAL) {
+        const Animal *animal = game_animal_const(game, who.id);
+        if (animal == NULL) {
+            return false;
+        }
+        animal_position(animal, x, y);
+        *z = animal->z;
+        return true;
+    }
+    return false;
+}
+
+/* Where the attacker and the target of a blow are (the target where it stood
+ * when it was killed); false when the attacker is gone. */
+static bool blow_positions(const Game *game, const CombatEvent *event, float *ax, float *ay,
+                           float *tx, float *ty)
+{
+    int z;
+    if (!combatant_position(game, event->attacker, ax, ay, &z)) {
+        return false;
+    }
+    if (!combatant_position(game, event->target, tx, ty, &z)) {
+        *tx = (float)event->target_at.x + 0.5f;
+        *ty = (float)event->target_at.y + 0.5f;
+    }
+    return true;
+}
+
+/* How the blows being played move someone's sprite. */
+typedef struct StrikeLook {
+    float dx, dy; /* World offset, tiles. */
+    float lean;   /* Degrees, clockwise. */
+    float flash;  /* 0..1 */
+    int face;     /* Turned toward its target: -1 left, +1 right; 0: as it was. */
+} StrikeLook;
+
+static StrikeLook strike_look(const Game *game, Combatant who)
+{
+    StrikeLook look = {0.0f, 0.0f, 0.0f, 0.0f, 0};
+    uint64_t now = game->clock.tick;
+    for (int i = 0;; i++) {
+        const CombatEvent *event = combat_log_recent(&game->combat_log, i);
+        if (event == NULL || now - event->tick >= STRIKE_ANIM_TICKS) {
+            break;
+        }
+        bool attacking = combatant_equal(event->attacker, who);
+        bool struck = event->hit && combatant_equal(event->target, who);
+        float ax, ay, tx, ty;
+        if ((!attacking && !struck) || !blow_positions(game, event, &ax, &ay, &tx, &ty)) {
+            continue;
+        }
+        float vx = tx - ax, vy = ty - ay, length = SDL_sqrtf(vx * vx + vy * vy);
+        if (length < 0.01f) {
+            continue;
+        }
+        vx /= length;
+        vy /= length;
+        int age = (int)(now - event->tick);
+        if (attacking) {
+            StrikePose pose = strike_anim_attacker(age);
+            look.dx += vx * pose.advance;
+            look.dy += vy * pose.advance;
+            if (SDL_fabsf(vx) > 0.01f) {
+                look.face = vx < 0.0f ? -1 : 1;
+                look.lean += pose.lean * (float)look.face;
+            }
+        } else {
+            float recoil = strike_anim_recoil(age);
+            look.dx += vx * recoil;
+            look.dy += vy * recoil;
+            look.flash = SDL_max(look.flash, strike_anim_flash(age));
+        }
+    }
+    return look;
+}
+
+/* Someone standing to fight faces its enemy (-1 left, +1 right; 0 when it is
+ * straight above or below, or gone). */
+static int enemy_side(const Game *game, float x, Combatant enemy)
+{
+    float ex, ey;
+    int ez;
+    if (combatant_is_none(enemy) || !combatant_position(game, enemy, &ex, &ey, &ez) ||
+        SDL_fabsf(ex - x) < 0.01f) {
+        return 0;
+    }
+    return ex < x ? -1 : 1;
+}
+
+/* The marks of the blows that landed lately, over the ones struck. */
+static void render_strike_marks(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
+                                const Camera *camera)
+{
+    uint64_t now = game->clock.tick;
+    for (int i = 0;; i++) {
+        const CombatEvent *event = combat_log_recent(&game->combat_log, i);
+        if (event == NULL || now - event->tick >= STRIKE_ANIM_TICKS) {
+            break;
+        }
+        float drawn, opacity;
+        const AttackDef *def = attack_def((AttackType)event->attack);
+        if (!event->hit || def == NULL ||
+            !strike_anim_mark((int)(now - event->tick), &drawn, &opacity)) {
+            continue;
+        }
+        float tx, ty, height = STRIKE_MARK_BODY_HEIGHT, scale = 0.8f;
+        int tz = event->target_at.z;
+        bool alive = combatant_position(game, event->target, &tx, &ty, &tz);
+        if (!alive) {
+            tx = (float)event->target_at.x + 0.5f;
+            ty = (float)event->target_at.y + 0.5f;
+        }
+        if (tz != camera->level || !tile_seen((int)floorf(tx), (int)floorf(ty), tz)) {
+            continue;
+        }
+        if (alive && event->target.kind == COMBATANT_ANIMAL) {
+            const Animal *animal = game_animal_const(game, event->target.id);
+            if (!game_animal_seen(game, event->target.id)) {
+                continue;
+            }
+            float width, sprite_height;
+            sprites_size(sprites,
+                         sprite_animal((AnimalSpecies)animal->species, (AnimalSex)animal->sex,
+                                       ANIMAL_POSE_STAND),
+                         &width, &sprite_height);
+            height = 0.5f * sprite_height / camera->zoom;
+            scale = SDL_clamp(sprite_height / camera->zoom, 0.45f, 1.3f);
+        } else if (alive) {
+            height = STRIKE_MARK_SETTLER_HEIGHT;
+            scale = 1.0f;
+        }
+        StrikeLook look =
+            alive ? strike_look(game, event->target) : (StrikeLook){0.0f, 0.0f, 0.0f, 0.0f, 0};
+        float ax, ay, side = 1.0f, bx, by;
+        if (blow_positions(game, event, &ax, &ay, &bx, &by) && SDL_fabsf(bx - ax) > 0.01f) {
+            side = bx < ax ? -1.0f : 1.0f;
+        }
+        float sx, sy;
+        camera_world_to_screen(camera, tx + look.dx, ty + look.dy + COLONIST_FEET, &sx, &sy);
+        strike_mark_draw(renderer, (StrikeMark)def->mark, sx, sy - height * camera->zoom,
+                         camera->zoom * scale, side, drawn, opacity);
+    }
+}
+
+/* ---- Blood on the ground (core/blood.h) --------------------------------------- */
+
+/* Fresh blood, and blood dried brown. */
+static const SDL_Color BLOOD_FRESH = {150, 12, 12, 255};
+static const SDL_Color BLOOD_DRY = {78, 22, 14, 255};
+/* A pool is darker at its rim. */
+static const SDL_Color BLOOD_POOL_RIM = {120, 14, 12, 255};
+static const SDL_Color BLOOD_SHINE = {220, 90, 80, 255};
+#define BLOOD_ELLIPSE_SEGMENTS 12
+#define BLOOD_BATCH_VERTICES 3000
+
+typedef struct BloodBatch {
+    SDL_Vertex vertices[BLOOD_BATCH_VERTICES];
+    int indices[BLOOD_BATCH_VERTICES * 3];
+    int vertex_count, index_count;
+} BloodBatch;
+
+static void blood_batch_flush(SDL_Renderer *renderer, BloodBatch *batch)
+{
+    if (batch->index_count > 0) {
+        SDL_RenderGeometry(renderer, NULL, batch->vertices, batch->vertex_count, batch->indices,
+                           batch->index_count);
+    }
+    batch->vertex_count = 0;
+    batch->index_count = 0;
+}
+
+static SDL_FColor blood_color(SDL_Color fresh, float dryness, float alpha)
+{
+    SDL_Color mixed = {(Uint8)(fresh.r + (BLOOD_DRY.r - fresh.r) * dryness),
+                       (Uint8)(fresh.g + (BLOOD_DRY.g - fresh.g) * dryness),
+                       (Uint8)(fresh.b + (BLOOD_DRY.b - fresh.b) * dryness), 255};
+    SDL_FColor color = to_fcolor(mixed);
+    color.a = alpha;
+    return color;
+}
+
+/* An ellipse (radii rx along (ux, uy), ry across it) into the batch. */
+static void blood_ellipse(SDL_Renderer *renderer, BloodBatch *batch, float cx, float cy, float rx,
+                          float ry, float ux, float uy, SDL_FColor color)
+{
+    if (batch->vertex_count + BLOOD_ELLIPSE_SEGMENTS + 1 > BLOOD_BATCH_VERTICES) {
+        blood_batch_flush(renderer, batch);
+    }
+    int center = batch->vertex_count;
+    batch->vertices[batch->vertex_count++] = (SDL_Vertex){{cx, cy}, color, {0.0f, 0.0f}};
+    for (int i = 0; i < BLOOD_ELLIPSE_SEGMENTS; i++) {
+        float angle = (float)i * 2.0f * SDL_PI_F / BLOOD_ELLIPSE_SEGMENTS;
+        float a = SDL_cosf(angle) * rx, b = SDL_sinf(angle) * ry;
+        batch->vertices[batch->vertex_count++] =
+            (SDL_Vertex){{cx + a * ux - b * uy, cy + a * uy + b * ux}, color, {0.0f, 0.0f}};
+        int next = (i + 1) % BLOOD_ELLIPSE_SEGMENTS;
+        batch->indices[batch->index_count++] = center;
+        batch->indices[batch->index_count++] = center + 1 + i;
+        batch->indices[batch->index_count++] = center + 1 + next;
+    }
+}
+
+/* A drop: a blot seen at a slant (squashed), drawn out along the walk when
+ * smeared, with a few droplets around it and a gleam while fresh. */
+static void render_blood_drop(SDL_Renderer *renderer, BloodBatch *batch, const BloodStain *stain,
+                              const BloodLook *look, float sx, float sy, float zoom)
+{
+    uint32_t shape = stain->shape * 2654435761u;
+    float squash = 0.5f + 0.2f * (float)(shape & 0xfu) / 15.0f;
+    float r = stain->size * zoom;
+    SDL_FColor color = blood_color(BLOOD_FRESH, look->dryness, look->opacity);
+    float ux = 1.0f, uy = 0.0f, rx = r, ry = r * squash;
+    if (stain->smear > 0.0f && (stain->dir_x != 0.0f || stain->dir_y != 0.0f)) {
+        /* Seen at a slant: what runs up or down the screen is shortened. */
+        float dx = stain->dir_x, dy = stain->dir_y * squash;
+        float length = SDL_sqrtf(dx * dx + dy * dy);
+        ux = dx / length;
+        uy = dy / length;
+        rx = r * (1.0f + stain->smear);
+        ry = r * squash;
+        sx -= ux * r * stain->smear;
+        sy -= uy * r * stain->smear;
+    }
+    blood_ellipse(renderer, batch, sx, sy, rx, ry, ux, uy, color);
+    int bits = 1 + (int)((shape >> 4) % 3u);
+    for (int i = 0; i < bits; i++) {
+        uint32_t h = shape ^ (0x9e3779b9u * (uint32_t)(i + 1));
+        h ^= h >> 15;
+        h *= 0x2c1b3c6du;
+        float bx = (-1.6f + 3.2f * (float)(h & 0xffu) / 255.0f) * r;
+        float by = (-0.9f + 1.8f * (float)((h >> 8) & 0xffu) / 255.0f) * r * squash;
+        float br = (0.15f + 0.2f * (float)((h >> 16) & 0xffu) / 255.0f) * r;
+        blood_ellipse(renderer, batch, sx + bx, sy + by, br, br * squash, 1.0f, 0.0f, color);
+    }
+    if (look->shine > 0.0f) {
+        SDL_FColor shine = to_fcolor(BLOOD_SHINE);
+        shine.a = look->opacity * look->shine * 0.5f;
+        blood_ellipse(renderer, batch, sx - r * 0.25f, sy - r * 0.15f, r * 0.3f, r * 0.18f, 1.0f,
+                      0.0f, shine);
+    }
+}
+
+/* A pool: dark at its rim, brighter inside, gleaming while fresh. */
+static void render_blood_pool(SDL_Renderer *renderer, BloodBatch *batch, const BloodStain *stain,
+                              const BloodLook *look, float sx, float sy, float zoom)
+{
+    float rx = stain->size * zoom, ry = rx * 0.45f;
+    blood_ellipse(renderer, batch, sx, sy, rx, ry, 1.0f, 0.0f,
+                  blood_color(BLOOD_POOL_RIM, look->dryness, look->opacity));
+    blood_ellipse(renderer, batch, sx - rx * 0.1f, sy - ry * 0.12f, rx * 0.7f, ry * 0.62f, 1.0f,
+                  0.0f, blood_color(BLOOD_FRESH, look->dryness, look->opacity));
+    if (look->shine > 0.0f) {
+        SDL_FColor shine = to_fcolor(BLOOD_SHINE);
+        shine.a = look->opacity * look->shine * 0.45f;
+        blood_ellipse(renderer, batch, sx - rx * 0.35f, sy - ry * 0.3f, rx * 0.2f, ry * 0.18f, 1.0f,
+                      0.0f, shine);
+    }
+}
+
+void render_blood(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    const BloodStains *stains = &game->blood;
+    if (stains->count == 0) {
+        return;
+    }
+    static BloodBatch batch;
+    const Map *map = game_view_map(game);
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    uint64_t now = game->clock.tick;
+    /* The oldest first: newer blood lies over older. */
+    for (int i = stains->count - 1; i >= 0; i--) {
+        const BloodStain *stain = blood_recent(stains, i);
+        BloodLook look;
+        int x = (int)floorf(stain->x), y = (int)floorf(stain->y);
+        if (stain->z != camera->level || x < visible.x0 - 1 || x > visible.x1 ||
+            y < visible.y0 - 1 || y > visible.y1 || !blood_look(stain, now, &look) ||
+            !tile_seen(x, y, stain->z) || !dirt_can_lie(map, x, y, stain->z)) {
+            continue;
+        }
+        float sx, sy;
+        camera_world_to_screen(camera, stain->x, stain->y + COLONIST_FEET, &sx, &sy);
+        if (stain->kind == BLOOD_POOL) {
+            render_blood_pool(renderer, &batch, stain, &look, sx, sy, camera->zoom);
+        } else {
+            render_blood_drop(renderer, &batch, stain, &look, sx, sy, camera->zoom);
+        }
+    }
+    blood_batch_flush(renderer, &batch);
+}
+
 void render_colonist_portrait(SDL_Renderer *renderer, Sprites *sprites, const Colonist *colonist,
                               SDL_FRect rect)
 {
@@ -2785,10 +3096,13 @@ static void render_sleep_zs(Sprites *sprites, const Camera *camera, uint32_t slo
 }
 
 static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera,
-                            const Colonist *colonist, uint32_t slot, uint64_t tick, bool selected)
+                            const Colonist *colonist, uint32_t slot, uint64_t tick, bool selected,
+                            StrikeLook look)
 {
     float wx, wy, feet_x, feet_y, anchor_x, anchor_y;
     colonist_position(colonist, &wx, &wy);
+    wx += look.dx;
+    wy += look.dy;
     camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &feet_x, &feet_y);
     camera_world_to_screen(camera, wx, wy + COLONIST_FEET + COLONIST_SPRITE_MARGIN, &anchor_x,
                            &anchor_y);
@@ -2812,6 +3126,11 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
         gait_at(colonist_is_moving(colonist), GAIT_WALK_STEP_TICKS, slot, tick, camera->zoom);
     /* Down: lying on its side across the tile, head to the right. */
     bool down = colonist_is_down(colonist);
+    if (look.face != 0 && !down) { /* Fighting: seen from the side, toward its enemy. */
+        view = SPRITE_VIEW_SIDE;
+        flip = look.face < 0;
+        gait.degrees += look.lean;
+    }
     bool eyes_closed =
         colonist->task == TASK_SLEEP || (down && health_is_unconscious(&colonist->health));
     if (down) {
@@ -2850,6 +3169,15 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
         draw_walker(sprites, sprite_hair(looks.hair_style, view), anchor_x, anchor_y, feet_y, gait,
                     hair, flip);
     }
+    if (look.flash > 0.0f) { /* Struck: the figure flashes. */
+        SDL_FColor flash = {1.0f, 1.0f, 1.0f, look.flash};
+        sprites_set_additive(sprites, true);
+        draw_walker(sprites, sprite_body(looks.body, looks.skin, view), anchor_x, anchor_y, feet_y,
+                    gait, flash, flip);
+        draw_walker(sprites, sprite_head(looks.skin, colonist_expression(colonist), view), anchor_x,
+                    anchor_y, feet_y, gait, flash, flip);
+        sprites_set_additive(sprites, false);
+    }
     render_hand(sprites, camera, colonist, slot, tick, feet_x, feet_y, skin);
     if (colonist->task == TASK_SLEEP) {
         render_sleep_zs(sprites, camera, slot, tick, anchor_x, anchor_y);
@@ -2865,15 +3193,21 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
  * lying asleep; mirrored when it faces left, hopping and rocking as it walks.
  * Seen from the front or from behind while it walks down or up the screen. */
 static void render_animal(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera,
-                          const Animal *animal, uint32_t slot, uint64_t tick, bool selected)
+                          const Animal *animal, uint32_t slot, uint64_t tick, bool selected,
+                          StrikeLook look)
 {
     float wx, wy, feet_x, feet_y, anchor_x, anchor_y;
     animal_position(animal, &wx, &wy);
+    wx += look.dx;
+    wy += look.dy;
     camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &feet_x, &feet_y);
     camera_world_to_screen(camera, wx, wy + COLONIST_FEET + ANIMAL_SPRITE_MARGIN, &anchor_x,
                            &anchor_y);
     bool moving = animal_is_moving(animal);
     Heading heading = animal_heading(animal);
+    if (look.face != 0) { /* Fighting: from the side, toward its enemy. */
+        heading = look.face < 0 ? HEADING_WEST : HEADING_EAST;
+    }
     AnimalPose pose = ANIMAL_POSE_STAND;
     if (animal->task == ANIMAL_TASK_SLEEP || animal->task == ANIMAL_TASK_DOWN) {
         pose = ANIMAL_POSE_SLEEP;
@@ -2896,7 +3230,16 @@ static void render_animal(SDL_Renderer *renderer, Sprites *sprites, const Camera
     Gait gait = gait_at(
         moving, animal->task == ANIMAL_TASK_FLEE ? GAIT_RUN_STEP_TICKS : GAIT_WALK_STEP_TICKS, slot,
         tick, camera->zoom);
+    if (pose != ANIMAL_POSE_SLEEP) {
+        gait.degrees += look.lean;
+    }
     draw_walker(sprites, id, anchor_x, anchor_y, feet_y, gait, WHITE, heading == HEADING_WEST);
+    if (look.flash > 0.0f) { /* Struck: it flashes. */
+        sprites_set_additive(sprites, true);
+        draw_walker(sprites, id, anchor_x, anchor_y, feet_y, gait,
+                    (SDL_FColor){1.0f, 1.0f, 1.0f, look.flash}, heading == HEADING_WEST);
+        sprites_set_additive(sprites, false);
+    }
 }
 
 typedef struct DepthEntry {
@@ -3027,14 +3370,27 @@ static void render_entry(SDL_Renderer *renderer, Sprites *sprites, const Game *g
                          int selected_count, EntityId selected_animal)
 {
     uint64_t tick = game->clock.tick;
+    float x, y;
     if (entry->animal) {
         EntityId id = animals_id_at(&game->animals, entry->slot);
-        render_animal(renderer, sprites, camera, &game->animals.list[entry->slot], entry->slot,
-                      tick, entity_id_equal(id, selected_animal));
+        const Animal *animal = &game->animals.list[entry->slot];
+        StrikeLook look = strike_look(game, (Combatant){COMBATANT_ANIMAL, id});
+        animal_position(animal, &x, &y);
+        if (look.face == 0 && animal->task == ANIMAL_TASK_ATTACK && !animal_is_moving(animal)) {
+            look.face = enemy_side(game, x, animal->enemy);
+        }
+        render_animal(renderer, sprites, camera, animal, entry->slot, tick,
+                      entity_id_equal(id, selected_animal), look);
     } else {
-        render_colonist(
-            renderer, sprites, camera, &game->colonists[entry->slot], entry->slot, tick,
-            is_selected(game_colonist_id_at(game, entry->slot), selected, selected_count));
+        EntityId id = game_colonist_id_at(game, entry->slot);
+        const Colonist *colonist = &game->colonists[entry->slot];
+        StrikeLook look = strike_look(game, (Combatant){COMBATANT_SETTLER, id});
+        colonist_position(colonist, &x, &y);
+        if (look.face == 0 && colonist->task == TASK_FIGHT && !colonist_is_moving(colonist)) {
+            look.face = enemy_side(game, x, colonist->enemy);
+        }
+        render_colonist(renderer, sprites, camera, colonist, entry->slot, tick,
+                        is_selected(id, selected, selected_count), look);
     }
 }
 
@@ -3119,6 +3475,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
                      selected_animal);
     }
     sprites_flush(sprites);
+    render_strike_marks(renderer, sprites, game, camera);
     render_chat_bubbles(renderer, game, camera);
 }
 

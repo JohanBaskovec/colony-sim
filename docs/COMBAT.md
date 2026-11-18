@@ -93,6 +93,16 @@ cornered, takes it).
 ## 5. Seen by the player
 
 - Activities: *Fighting*, *Fleeing* (settlers), *Attacking* (animals).
+- **Blows on screen.** The attacker faces its enemy, draws back a little
+  (0.2 tile, rearing, 0.3 s), then lunges (0.32 tile past its place, head
+  down, 0.12 s) and goes back (0.5 s). When the blow lands, the one struck
+  flinches back, flashes, and shows the attack's mark for under a second:
+  three white claw scratches (claws), two toothed jaws closing and leaving
+  red punctures (bites), a slash red at its heart with a few drops (spear
+  thrusts, tusks), a burst of short rays (fists, kicks, hooves). A miss is a
+  lunge alone. The simulation resolves the blow at once; the screen plays it
+  over the next 1.2 s, at the game's speed (`core/strike_anim.h`).
+  `tools/preview_attacks.py` makes a GIF of every mark with the game's sprites.
 - A debug tool (F4 menu): click the attacker, then its target (a settler or an
   animal), to make one attack the other.
 

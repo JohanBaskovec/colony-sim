@@ -8,25 +8,26 @@
 
 static const AttackDef ATTACK_DEFS[ATTACK_TYPE_COUNT] = {
     [ATTACK_FISTS] = {"fists", N_("attack.fists"), INJURY_BRUISE, 3.0f, 0.7f, 1.0f, 1,
-                      BODY_LIMB_ARMS},
+                      BODY_LIMB_ARMS, STRIKE_MARK_BLOW},
     [ATTACK_SPEAR_THRUST] = {"spear_thrust", N_("attack.spear_thrust"), INJURY_CUT, 9.0f, 0.8f,
-                             1.4f, 1, BODY_LIMB_ARMS},
+                             1.4f, 1, BODY_LIMB_ARMS, STRIKE_MARK_CUT},
     [ATTACK_HARDENED_SPEAR_THRUST] = {"hardened_spear_thrust", N_("attack.spear_thrust"),
-                                      INJURY_CUT, 11.0f, 0.8f, 1.4f, 1, BODY_LIMB_ARMS},
+                                      INJURY_CUT, 11.0f, 0.8f, 1.4f, 1, BODY_LIMB_ARMS,
+                                      STRIKE_MARK_CUT},
     [ATTACK_KICK] = {"kick", N_("attack.kick"), INJURY_BRUISE, 5.0f, 0.5f, 1.5f, 1,
-                     BODY_LIMB_HINDLEGS},
+                     BODY_LIMB_HINDLEGS, STRIKE_MARK_BLOW},
     [ATTACK_HOOF_STRIKE] = {"hoof_strike", N_("attack.hoof_strike"), INJURY_BRUISE, 4.0f, 0.5f,
-                            1.5f, 1, BODY_LIMB_FORELEGS},
-    [ATTACK_TUSKS] = {"tusks", N_("attack.tusks"), INJURY_CUT, 8.0f, 0.65f, 1.4f, 1,
-                      BODY_LIMB_HEAD},
+                            1.5f, 1, BODY_LIMB_FORELEGS, STRIKE_MARK_BLOW},
+    [ATTACK_TUSKS] = {"tusks", N_("attack.tusks"), INJURY_CUT, 8.0f, 0.65f, 1.4f, 1, BODY_LIMB_HEAD,
+                      STRIKE_MARK_CUT},
     [ATTACK_WOLF_BITE] = {"wolf_bite", N_("attack.bite"), INJURY_BITE, 8.0f, 0.7f, 1.4f, 1,
-                          BODY_LIMB_HEAD},
+                          BODY_LIMB_HEAD, STRIKE_MARK_BITE},
     [ATTACK_WOLF_CLAWS] = {"wolf_claws", N_("attack.claws"), INJURY_CUT, 4.0f, 0.6f, 1.2f, 1,
-                           BODY_LIMB_FORELEGS},
+                           BODY_LIMB_FORELEGS, STRIKE_MARK_CLAWS},
     [ATTACK_FOX_BITE] = {"fox_bite", N_("attack.bite"), INJURY_BITE, 3.0f, 0.7f, 1.0f, 1,
-                         BODY_LIMB_HEAD},
+                         BODY_LIMB_HEAD, STRIKE_MARK_BITE},
     [ATTACK_FOX_CLAWS] = {"fox_claws", N_("attack.claws"), INJURY_CUT, 1.5f, 0.6f, 1.0f, 1,
-                          BODY_LIMB_FORELEGS},
+                          BODY_LIMB_FORELEGS, STRIKE_MARK_CLAWS},
 };
 
 const AttackDef *attack_def(AttackType type)
@@ -176,4 +177,21 @@ bool combat_queue_push(CombatQueue *queue, CombatStrike strike)
     }
     queue->list[queue->count++] = strike;
     return true;
+}
+
+void combat_log_push(CombatLog *log, CombatEvent event)
+{
+    log->list[log->next] = event;
+    log->next = (log->next + 1) % COMBAT_LOG_MAX;
+    if (log->count < COMBAT_LOG_MAX) {
+        log->count++;
+    }
+}
+
+const CombatEvent *combat_log_recent(const CombatLog *log, int index)
+{
+    if (index < 0 || index >= log->count) {
+        return NULL;
+    }
+    return &log->list[(log->next - 1 - index + COMBAT_LOG_MAX) % COMBAT_LOG_MAX];
 }

@@ -9,6 +9,7 @@
 
 #include "core/animal.h"
 #include "core/bed.h"
+#include "core/blood.h"
 #include "core/colonist.h"
 #include "core/construction.h"
 #include "core/designation.h"
@@ -174,6 +175,13 @@ typedef struct Game {
     CombatQueue combat;
     Rng combat_rng;
     uint32_t strikes_resolved;
+    /* The last blows resolved, for the frontend to play (core/strike_anim.h):
+     * not part of game_hash(). */
+    CombatLog combat_log;
+    /* Blood on the ground (core/blood.h), with a random stream of its own:
+     * for the eye only, not part of game_hash(). */
+    BloodStains blood;
+    Rng blood_rng;
     /* Felled trees dealt with (Map.tree_fall_revision): those under them
      * were hurt. */
     uint32_t tree_falls_seen;

@@ -23,6 +23,28 @@ static Health human(void)
     return health;
 }
 
+/* The log of blows keeps the last COMBAT_LOG_MAX, the most recent first. */
+static void test_combat_log(void)
+{
+    CombatLog log;
+    memset(&log, 0, sizeof(log));
+    CHECK(combat_log_recent(&log, 0) == NULL);
+    for (int i = 0; i < COMBAT_LOG_MAX + 5; i++) {
+        combat_log_push(&log, (CombatEvent){(uint64_t)i,
+                                            combatant_none(),
+                                            combatant_none(),
+                                            {0, 0, 0},
+                                            ATTACK_FISTS,
+                                            i % 2 == 0});
+    }
+    CHECK_EQ_INT(log.count, COMBAT_LOG_MAX);
+    CHECK_EQ_INT((int)combat_log_recent(&log, 0)->tick, COMBAT_LOG_MAX + 4);
+    CHECK_EQ_INT((int)combat_log_recent(&log, 1)->tick, COMBAT_LOG_MAX + 3);
+    CHECK_EQ_INT((int)combat_log_recent(&log, COMBAT_LOG_MAX - 1)->tick, 5);
+    CHECK(combat_log_recent(&log, COMBAT_LOG_MAX) == NULL);
+    CHECK(combat_log_recent(&log, -1) == NULL);
+}
+
 static void test_attack_definitions(void)
 {
     CHECK(attack_def(ATTACK_NONE) == NULL);
@@ -41,6 +63,16 @@ static void test_attack_definitions(void)
         CHECK((unsigned)def->injury < INJURY_TYPE_COUNT);
         CHECK(def->limb > BODY_LIMB_NONE && def->limb < BODY_LIMB_COUNT);
     }
+    /* The mark each leaves. */
+    for (int type = ATTACK_NONE + 1; type < ATTACK_TYPE_COUNT; type++) {
+        CHECK((unsigned)attack_def((AttackType)type)->mark < STRIKE_MARK_COUNT);
+    }
+    CHECK_EQ_INT(attack_def(ATTACK_WOLF_CLAWS)->mark, STRIKE_MARK_CLAWS);
+    CHECK_EQ_INT(attack_def(ATTACK_FOX_CLAWS)->mark, STRIKE_MARK_CLAWS);
+    CHECK_EQ_INT(attack_def(ATTACK_WOLF_BITE)->mark, STRIKE_MARK_BITE);
+    CHECK_EQ_INT(attack_def(ATTACK_SPEAR_THRUST)->mark, STRIKE_MARK_CUT);
+    CHECK_EQ_INT(attack_def(ATTACK_HARDENED_SPEAR_THRUST)->mark, STRIKE_MARK_CUT);
+    CHECK_EQ_INT(attack_def(ATTACK_FISTS)->mark, STRIKE_MARK_BLOW);
     /* What each is made with. */
     CHECK_EQ_INT(attack_def(ATTACK_FISTS)->limb, BODY_LIMB_ARMS);
     CHECK_EQ_INT(attack_def(ATTACK_SPEAR_THRUST)->limb, BODY_LIMB_ARMS);
@@ -405,6 +437,16 @@ static void test_animal_hunts_a_hare_that_cannot_run(void)
     /* The boar has run to it (6 tiles in a second or two) and bitten. */
     CHECK(abs(boar->x - 26) <= 1);
     CHECK(game.strikes_resolved > 0);
+    /* Each blow is remembered for the screen: who struck whom, with what, when. */
+    CHECK_EQ_INT(game.combat_log.count, (int)game.strikes_resolved);
+    const CombatEvent *last = combat_log_recent(&game.combat_log, 0);
+    REQUIRE(last != NULL);
+    CHECK(combatant_equal(last->attacker, (Combatant){COMBATANT_ANIMAL, boar_id}));
+    CHECK(combatant_equal(last->target, (Combatant){COMBATANT_ANIMAL, hare_id}));
+    CHECK_EQ_INT(last->attack, ATTACK_TUSKS);
+    CHECK_EQ_INT(last->target_at.x, 26);
+    CHECK_EQ_INT(last->target_at.y, 20);
+    CHECK(last->tick > 0 && last->tick <= game.clock.tick);
     run_ticks(&game, 20 * TICKS_PER_SECOND);
     CHECK(animals_get(&game.animals, hare_id) == NULL);
     bool carcass = false;
@@ -940,6 +982,7 @@ static void test_fatigue(void)
 int main(void)
 {
     RUN_TEST(test_attack_definitions);
+    RUN_TEST(test_combat_log);
     RUN_TEST(test_choosing_an_attack);
     RUN_TEST(test_reach);
     RUN_TEST(test_hit_chance);

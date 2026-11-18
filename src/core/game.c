@@ -559,6 +559,7 @@ bool game_init(Game *game, const NewGameParams *params)
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
     rng_seed(&game->wildlife_rng, params->world.seed, 0x77696c64ULL /* "wild" */);
     rng_seed(&game->combat_rng, params->world.seed, 0x666967687455ULL /* "fight" */);
+    rng_seed(&game->blood_rng, params->world.seed, 0x626c6f6f64ULL /* "blood" */);
     roof_watch_init(&game->roof_watch, &game->map);
     game->tree_falls_seen = game->map.tree_fall_revision;
     weather_init(&game->weather, game->seed, game->clock.tick);
@@ -1014,6 +1015,51 @@ static void provoke(Game *game, Combatant target, Combatant attacker)
     }
 }
 
+/* Which way someone walking along `path` goes from its tile (0, 0 when still). */
+static void walk_direction(const Path *path, int index, bool moving, int x, int y, float *dx,
+                           float *dy)
+{
+    *dx = 0.0f;
+    *dy = 0.0f;
+    if (moving && index < path->count) {
+        *dx = (float)(path->steps[index].x - x);
+        *dy = (float)(path->steps[index].y - y);
+    }
+}
+
+/* Those who bleed leave blood on the ground (core/blood.h). */
+static void bleed_on_ground(Game *game)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = &game->colonists[slot];
+        if (entity_id_is_none(game_colonist_id_at(game, slot)) ||
+            colonist->health.injury_count == 0) {
+            continue;
+        }
+        BloodSource source = {
+            .z = colonist->z, .moving = colonist_is_moving(colonist), .slot = slot};
+        colonist_position(colonist, &source.x, &source.y);
+        walk_direction(&colonist->path, colonist->path_index, source.moving, colonist->x,
+                       colonist->y, &source.dir_x, &source.dir_y);
+        blood_bleed(&game->blood, &game->blood_rng, &game->map, &colonist->health, &source,
+                    game->clock.tick);
+    }
+    for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
+        const Animal *animal = &game->animals.list[slot];
+        if (entity_id_is_none(animals_id_at(&game->animals, slot)) ||
+            animal->health.injury_count == 0) {
+            continue;
+        }
+        BloodSource source = {
+            .z = animal->z, .moving = animal_is_moving(animal), .slot = COLONIST_MAX + slot};
+        animal_position(animal, &source.x, &source.y);
+        walk_direction(&animal->path, animal->path_index, source.moving, animal->x, animal->y,
+                       &source.dir_x, &source.dir_y);
+        blood_bleed(&game->blood, &game->blood_rng, &game->map, &animal->health, &source,
+                    game->clock.tick);
+    }
+}
+
 /* Resolves the blows asked for during the tick, in the order they were asked. */
 static void resolve_strikes(Game *game)
 {
@@ -1027,9 +1073,12 @@ static void resolve_strikes(Game *game)
             !combat_in_reach(attacker.pos, target.pos, def->reach)) {
             continue; /* Gone, dead, knocked out or out of reach by now. */
         }
-        combat_blow((AttackType)strike->attack, strike->skill, strike->power, target.health,
-                    target.agility, &game->combat_rng);
+        BlowResult blow = combat_blow((AttackType)strike->attack, strike->skill, strike->power,
+                                      target.health, target.agility, &game->combat_rng);
         game->strikes_resolved++;
+        combat_log_push(&game->combat_log,
+                        (CombatEvent){game->clock.tick, strike->attacker, strike->target,
+                                      target.pos, strike->attack, blow.hit});
         provoke(game, strike->target, strike->attacker);
     }
     queue->count = 0;
@@ -1857,6 +1906,7 @@ void game_tick(Game *game)
     hurt_under_felled_trees(game); /* Felled by the woodcutters: they die on their next turn. */
     update_animals(game);
     resolve_strikes(game);
+    bleed_on_ground(game);
     if (game->vision_on) {
         update_vision(game);
     }

@@ -66,7 +66,9 @@ simulation:
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
-| `combat`     | Blows between beings, for settlers and animals alike: attacks (damage, injury kind, accuracy, interval, reach), hit chance against dodge, the limb an attack is made with and the attacks a species chooses among (`AttackChoice`, `combat_choose_attack()`), a blow through `health`, the hurt fraction and breaking off, the queue of strikes the game resolves (see `docs/COMBAT.md`) |
+| `combat`     | Blows between beings, for settlers and animals alike: attacks (damage, injury kind, accuracy, interval, reach), hit chance against dodge, the limb an attack is made with and the attacks a species chooses among (`AttackChoice`, `combat_choose_attack()`), a blow through `health`, the hurt fraction and breaking off, the queue of strikes the game resolves, the mark each attack leaves on screen and the log of the last blows for the frontend (see `docs/COMBAT.md`) |
+| `blood`      | Blood on the ground: drops on the steps of those who bleed, more and larger the worse, a pool under one who stays still, stains drying and fading (a ring of the newest; presentation only, see `docs/HEALTH.md` §9.1) |
+| `strike_anim` | How a blow is played on screen, as functions of the ticks since it was resolved: the attacker drawing back and lunging, the one struck flinching and flashing, the mark drawn, held and fading (presentation only, see `docs/COMBAT.md` §5) |
 | `health`     | Bodies for settlers and animals alike: body plans and parts, injuries that bleed and hurt, abilities (consciousness, walking, the hands, sight, eating), clotting, natural healing, blood coming back, death; falls (see `docs/HEALTH.md`) |
 | `attributes` | Settler attributes: positions in thousandths drawn on a bell curve, their effects (factors, thought weight, outlook points, temperature shifts), the word bands and translation keys |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
@@ -99,8 +101,9 @@ simulation:
 |----------------|-------------------------------------------------------------------------|
 | `main`         | Parses the command line, runs the app                                   |
 | `app`          | SDL init/shutdown, main loop, input → camera/clock, frame orchestration |
-| `render`       | Draws the map (ground and wall textures, colored tiles for the other terrains), zones, items, plants and colonists (sprites, depth sorted), daylight overlay, highlights |
-| `sprites`      | Loads `assets/sprites/*.png` into a texture atlas with halved copies, batches sprite quads |
+| `render`       | Draws the map (ground and wall textures, colored tiles for the other terrains), zones, items, plants and colonists (sprites, depth sorted), blood on the ground, blows (lunges, flashes, marks), daylight overlay, highlights |
+| `sprites`      | Loads `assets/sprites/*.png` into a texture atlas with halved copies, batches sprite quads (additive for a flash) |
+| `strike_marks` | Draws the marks of blows as shapes (claw scratches, jaws, a slash, a burst); `tools/preview_attacks.py` draws the same into a GIF |
 | `hud`          | Builds and draws the HUD panels and the windows in stacking order; all text goes through `tr()` |
 | `theme`        | Color roles and every size of the interface, the UI scale applied (`--ui-scale`) |
 | `layout`       | Zones of the screen (bottom bar, what lies above it, the free top corners), from the screen size and the theme |
@@ -950,6 +953,28 @@ among those whose limb is whole enough (`combat_choose_attack()`, with the
 animals' random stream, none drawn when only one is possible); a settler's
 single attack (`colonist_attack()`) is `ATTACK_NONE` without the use of its
 arms. The debug tool (F4) names an attacker and a target (`game_debug_attack()`).
+Each resolved blow is also pushed into `Game.combat_log` (a ring of
+`CombatEvent`s: tick, attacker, target and where it stood, attack, hit), which
+no simulation code reads and `game_hash()` leaves out. The frontend plays it
+afterwards (`core/strike_anim.h`): a blow is resolved at once, the screen
+shows the attacker drawing back and lunging, and the mark (`AttackDef.mark`)
+when the lunge lands, `STRIKE_ANIM_HIT_TICKS` later; in ticks, so it follows
+the game speed and stops while paused. `render.c` offsets, turns and leans
+the sprites (`strike_look()`), flashes the one struck by drawing it again
+additively, and draws the marks after the sprites (`render_strike_marks()`,
+`game/strike_marks.h`); a mark on a target killed by the blow shows where it
+stood. `tools/preview_attacks.py` previews the timeline and the marks in a
+GIF with the game's sprites (it mirrors both: change them together).
+
+Blood on the ground (`core/blood.h`) is kept the same way: after the blows,
+`bleed_on_ground()` lets every settler and animal with injuries bleed
+(`blood_bleed()`): a drop or two on its steps while it walks (every
+`BLOOD_STEP_TICKS`, out of step by slot), a pool fed while it stays still.
+`Game.blood` is a ring of the newest `BLOOD_STAIN_MAX` stains with a random
+stream of its own (`blood_rng`); no simulation code reads it and
+`game_hash()` leaves it out. `render_blood()` draws the stains after the
+ground (dry and fading by `blood_look()`), where blood can lie now.
+`tools/preview_blood.py` previews it in a GIF.
 
 ### Dirt and cleaning
 

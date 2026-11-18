@@ -74,6 +74,16 @@ typedef enum AttackType {
     ATTACK_TYPE_COUNT
 } AttackType;
 
+/* The mark a blow that lands leaves for a moment on the one struck, for the eye
+ * only (drawn by the frontend, core/strike_anim.h). */
+typedef enum StrikeMark {
+    STRIKE_MARK_BLOW,  /* A burst of short rays: blunt blows (fists, kicks, hooves). */
+    STRIKE_MARK_CLAWS, /* Three parallel scratches. */
+    STRIKE_MARK_BITE,  /* Two toothed jaws closing. */
+    STRIKE_MARK_CUT,   /* One slash along the blow (a spear, tusks). */
+    STRIKE_MARK_COUNT
+} StrikeMark;
+
 typedef struct AttackDef {
     const char *id;       /* Stable identifier (saves), never shown. */
     const char *name_key; /* Translation key. */
@@ -83,6 +93,7 @@ typedef struct AttackDef {
     float interval; /* Seconds between two blows. */
     int reach;      /* Tiles (Chebyshev). */
     BodyLimb limb;  /* What it is made with: as good as that limb is whole. */
+    StrikeMark mark;
 } AttackDef;
 
 /* NULL for ATTACK_NONE and out of range. */
@@ -173,5 +184,29 @@ typedef struct CombatQueue {
 
 /* Whether the strike was queued (false when the queue is full). */
 bool combat_queue_push(CombatQueue *queue, CombatStrike strike);
+
+/* Blows remembered for the eye: the last ones resolved, so that the frontend
+ * can play them (core/strike_anim.h). Nothing in the simulation reads them. */
+#define COMBAT_LOG_MAX 128
+
+typedef struct CombatEvent {
+    uint64_t tick; /* When it was resolved. */
+    Combatant attacker;
+    Combatant target;
+    TilePos target_at; /* Where the target stood (it may be gone since: killed). */
+    uint8_t attack;    /* AttackType */
+    bool hit;
+} CombatEvent;
+
+/* A ring: the oldest event is overwritten once it is full. */
+typedef struct CombatLog {
+    CombatEvent list[COMBAT_LOG_MAX];
+    int next;  /* Where the next event goes. */
+    int count; /* Up to COMBAT_LOG_MAX. */
+} CombatLog;
+
+void combat_log_push(CombatLog *log, CombatEvent event);
+/* The `index`-th most recent event (0: the last one), NULL past the count. */
+const CombatEvent *combat_log_recent(const CombatLog *log, int index);
 
 #endif /* COLONY_CORE_COMBAT_H */
