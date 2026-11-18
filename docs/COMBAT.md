@@ -117,7 +117,9 @@ cornered, takes it).
 - **Hunger.** Wolves go 60 hours from full to empty, foxes 36. Below half they
   hunt; a carcass nearby comes first. A bite takes 0.6 kg (wolf) or 0.15 kg
   (fox) and fills that over the stomach (5 kg, 1 kg): a hare is a few bites for a
-  wolf, a deer many.
+  wolf, a deer many. A bite takes weight off the carcass, not hit points (those
+  are what rot takes): it stays as sound as it was, only lighter, and is gone
+  with the last bite.
 - **The hunt.** The hungry predator picks the nearest prey it sees within its
   range (30 tiles, 20 for a fox) and runs at it; its pack joins. A prey that
   sees a predator runs, its herd with it. Running tires: a spent animal runs

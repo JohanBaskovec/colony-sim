@@ -141,7 +141,8 @@ Each from 0 to 100 %:
 ## 8. Death
 
 - A body is left on its tile as an item: a settler's body, an animal's
-  carcass (one per species). It rots like food; it is not food. Later it is
+  carcass (one per species). It rots like food (rot takes hit points); it is
+  not food for settlers. Animals that eat it take weight off it, not hit points. Later it is
   buried, or butchered for meat, hide and bones.
 - A settler's death frees the bed, the orders and the selection, raises a
   notice (bled to death, or died of its injuries), leaves a memory on every

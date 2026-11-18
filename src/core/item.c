@@ -238,6 +238,16 @@ float item_stack_weight(ItemType type, int count)
     return def != NULL ? def->weight * (float)count : 0.0f;
 }
 
+float item_stack_mass(ItemStack stack)
+{
+    const ItemDef *def = item_def((ItemType)stack.type);
+    if (def == NULL || stack.type == ITEM_NONE) {
+        return 0.0f;
+    }
+    float whole = def->weight * (float)stack.count;
+    return whole * (1.0f - (float)stack.eaten / (float)ITEM_EATEN_FULL);
+}
+
 static bool is_item_type(ItemType type)
 {
     return type != ITEM_NONE && (unsigned)type < ITEM_TYPE_COUNT;
@@ -281,6 +291,29 @@ ItemStack item_stack_pristine(ItemType type, int count)
 {
     const ItemDef *def = item_def(type);
     return item_stack_make(type, count, ITEM_QUALITY_BEST, def != NULL ? def->max_hit_points : 0);
+}
+
+float item_stack_eat(ItemStack *stack, float kg)
+{
+    const ItemDef *def = item_def((ItemType)stack->type);
+    if (def == NULL || stack->type == ITEM_NONE || stack->count == 0 || kg <= 0.0f) {
+        return 0.0f;
+    }
+    float whole = def->weight * (float)stack->count;
+    float left = item_stack_mass(*stack);
+    if (kg >= left) {
+        *stack = (ItemStack){.type = ITEM_NONE};
+        return left;
+    }
+    int steps = (int)lroundf(kg / whole * (float)ITEM_EATEN_FULL);
+    steps = steps > 1 ? steps : 1;
+    int eaten = (int)stack->eaten + steps;
+    if (eaten >= ITEM_EATEN_FULL) {
+        *stack = (ItemStack){.type = ITEM_NONE};
+        return left;
+    }
+    stack->eaten = (uint16_t)eaten;
+    return kg;
 }
 
 bool item_stacks_match(ItemStack a, ItemStack b)
@@ -335,6 +368,7 @@ bool item_stack_merge(ItemStack *into, ItemStack from)
         (uint16_t)weighted_average(into->hit_points, into->count, from.hit_points, from.count);
     into->progress =
         (uint16_t)weighted_average(into->progress, into->count, from.progress, from.count);
+    into->eaten = (uint16_t)weighted_average(into->eaten, into->count, from.eaten, from.count);
     into->count = (uint16_t)count;
     return true;
 }
@@ -468,8 +502,10 @@ int items_add(Items *items, int x, int y, int z, ItemStack batch)
     }
     /* Callers may build stacks by hand: keep the condition valid for the type. */
     uint16_t progress = valid_progress(type, batch.progress);
+    int eaten = ITEM_DEFS[type].category == ITEM_CATEGORY_BODIES ? batch.eaten : 0;
     batch = item_stack_make(type, batch.count, batch.quality, batch.hit_points);
     batch.progress = progress;
+    batch.eaten = (uint16_t)clampi(eaten, 0, ITEM_EATEN_FULL - 1);
     ItemStack *stack = stack_at(items, x, y, z);
     if (stack->type != ITEM_NONE && !item_stacks_match(*stack, batch)) {
         return 0;
@@ -490,6 +526,7 @@ int items_add(Items *items, int x, int y, int z, ItemStack batch)
             (uint16_t)weighted_average(stack->hit_points, stack->count, batch.hit_points, added);
         stack->progress =
             (uint16_t)weighted_average(stack->progress, stack->count, batch.progress, added);
+        stack->eaten = (uint16_t)weighted_average(stack->eaten, stack->count, batch.eaten, added);
     }
     stack->count = (uint16_t)(stack->count + added);
     items->totals[type] += added;
@@ -655,6 +692,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
         hash = hash_fnv1a64(hash, &stack->quality, sizeof(stack->quality));
         hash = hash_fnv1a64(hash, &stack->hit_points, sizeof(stack->hit_points));
         hash = hash_fnv1a64(hash, &stack->progress, sizeof(stack->progress));
+        if (stack->eaten != 0) { /* Hashes without anything eaten stay as they were. */
+            hash = hash_fnv1a64(hash, &stack->eaten, sizeof(stack->eaten));
+        }
     }
     if (items->forbidden_count > 0) { /* Hashes without anything forbidden stay as they were. */
         hash = hash_fnv1a64(hash, items->forbidden, count);

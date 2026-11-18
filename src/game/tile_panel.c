@@ -207,8 +207,7 @@ static void thing_rows(UiLayout *layout, void *userdata)
         ItemStack stack = items_get(game_view_items(game), x, y, z);
         char count[32], weight[32];
         tr_integer(count, sizeof(count), stack.count);
-        hud_weight_text(weight, sizeof(weight),
-                        item_stack_weight((ItemType)stack.type, stack.count));
+        hud_weight_text(weight, sizeof(weight), item_stack_mass(stack));
         TR_FORMAT(text, sizeof(text), tr("tile_panel.count"), count, weight);
         ui_layout_label(layout, text, 0.0f, false);
         if (hud_item_condition_text(text, sizeof(text), stack)) {

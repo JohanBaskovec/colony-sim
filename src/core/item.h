@@ -146,7 +146,13 @@ typedef struct ItemStack {
      * transformation. Types that rot: rot toward the next hit point lost, in
      * 1/ITEM_ROT_STEP of one. Average of the items; 0 for other types. */
     uint16_t progress;
+    /* Bodies: the share of its weight eaten, in 1/ITEM_EATEN_FULL, average
+     * of the items; 0 for a whole one and for other types. Eating takes
+     * weight, never hit points (those are what rot takes). */
+    uint16_t eaten;
 } ItemStack;
+
+#define ITEM_EATEN_FULL 10000
 
 typedef struct Items {
     int width;
@@ -201,6 +207,15 @@ int item_stack_limit(ItemType type);
 
 /* Kilograms of `count` items of a type. */
 float item_stack_weight(ItemType type, int count);
+
+/* What the stack weighs, kilograms: its whole weight less what was eaten. */
+float item_stack_mass(ItemStack stack);
+
+/* An animal eats up to `kg` from one item of the stack (the stack's count is
+ * not touched: the caller splits one off): the item loses that much weight,
+ * not hit points, and is emptied (type ITEM_NONE) when none is left.
+ * Returns the kilograms taken. */
+float item_stack_eat(ItemStack *stack, float kg);
 
 /*
  * A stack with the given condition, made valid for its type: quality clamped

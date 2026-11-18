@@ -548,6 +548,48 @@ static void test_rot_progress_merges(void)
     items_free(&items);
 }
 
+/* Eating a body takes weight, not hit points; the last bite empties it; what
+ * is eaten is kept when the item is put back and averaged when stacks merge. */
+static void test_eating_takes_weight_not_hit_points(void)
+{
+    ItemStack deer = item_stack_pristine(ITEM_ROE_DEER_CARCASS, 1);
+    CHECK_NEAR(item_stack_mass(deer), 22.0f, 1e-4f);
+    CHECK_NEAR(item_stack_eat(&deer, 5.5f), 5.5f, 1e-4f);
+    CHECK_NEAR(item_stack_mass(deer), 16.5f, 0.01f);
+    CHECK_EQ_INT(deer.hit_points, 100);
+    CHECK_EQ_INT(deer.type, ITEM_ROE_DEER_CARCASS);
+    /* A tiny bite still takes something. */
+    ItemStack big = item_stack_pristine(ITEM_RED_DEER_CARCASS, 1);
+    item_stack_eat(&big, 0.00001f);
+    CHECK(big.eaten > 0);
+    /* The last bite takes what is left, no more. */
+    CHECK_NEAR(item_stack_eat(&deer, 50.0f), 16.5f, 0.01f);
+    CHECK_EQ_INT(deer.type, ITEM_NONE);
+
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    ItemStack half = item_stack_pristine(ITEM_HARE_CARCASS, 1);
+    item_stack_eat(&half, 1.75f);
+    REQUIRE(items_add(&items, 1, 1, 0, half) == 1);
+    CHECK_NEAR(item_stack_mass(items_get(&items, 1, 1, 0)), 1.75f, 0.01f);
+    /* A whole one next to it: the stack averages. */
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_HARE_CARCASS, 1)) == 1);
+    CHECK_NEAR(item_stack_mass(items_get(&items, 1, 1, 0)), 2.0f * 3.5f * 0.75f, 0.01f);
+    /* Eaten shares only mean something for bodies. */
+    ItemStack wood = item_stack_pristine(ITEM_WOOD, 1);
+    wood.eaten = 5000;
+    REQUIRE(items_add(&items, 2, 2, 0, wood) == 1);
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).eaten, 0);
+    /* The hash sees it. */
+    Items other;
+    REQUIRE(items_init(&other, 4, 4, 1));
+    items_add(&other, 1, 1, 0, item_stack_pristine(ITEM_HARE_CARCASS, 2));
+    items_add(&other, 2, 2, 0, item_stack_pristine(ITEM_WOOD, 1));
+    CHECK(items_hash(&items, HASH_FNV1A64_INIT) != items_hash(&other, HASH_FNV1A64_INIT));
+    items_free(&other);
+    items_free(&items);
+}
+
 static void test_hash(void)
 {
     Items a, b;
@@ -597,6 +639,7 @@ int main(void)
     RUN_TEST(test_food_rots_away);
     RUN_TEST(test_rot_progress_merges);
     RUN_TEST(test_grass_does_not_dry_in_the_rain);
+    RUN_TEST(test_eating_takes_weight_not_hit_points);
     RUN_TEST(test_hash);
     return test_summary();
 }

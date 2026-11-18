@@ -454,8 +454,7 @@ float colonist_carried_weight(const Colonist *colonist)
 {
     float tools_weight, tools_bulk;
     tools_load(colonist, &tools_weight, &tools_bulk);
-    return item_stack_weight((ItemType)colonist->carried.type, colonist->carried.count) +
-           tools_weight;
+    return item_stack_mass(colonist->carried) + tools_weight;
 }
 
 int colonist_carry_capacity(const Colonist *colonist, ItemType type)

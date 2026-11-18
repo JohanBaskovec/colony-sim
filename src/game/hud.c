@@ -402,8 +402,7 @@ static void build_tile_panel(App *app, Panel *panel)
     if (stack.type != ITEM_NONE) {
         char weight[32];
         tr_integer(a, sizeof(a), stack.count);
-        hud_weight_text(weight, sizeof(weight),
-                        item_stack_weight((ItemType)stack.type, stack.count));
+        hud_weight_text(weight, sizeof(weight), item_stack_mass(stack));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
                   tr(item_def((ItemType)stack.type)->name_key), a, weight);
         add_item_condition_line(panel, stack);

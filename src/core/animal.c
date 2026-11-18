@@ -1183,17 +1183,17 @@ static void eat_carcass(Animals *animals, uint32_t slot, const AnimalContext *co
         return;
     }
     animal->timer = 0;
-    /* The bite takes a share of the carcass's hit points: its weight. */
-    float weight = item_def((ItemType)stack.type)->weight;
-    int bite = (int)(100.0f * def->bite_kg / weight + 0.5f);
-    bite = bite > 1 ? bite : 1;
-    stack.hit_points = (uint16_t)(stack.hit_points > bite ? stack.hit_points - bite : 0);
+    /* The bite takes weight off the carcass, not hit points (rot takes those);
+     * what it fills is what was left to take. */
+    ItemStack one = stack;
+    one.count = 1;
+    float eaten_kg = item_stack_eat(&one, def->bite_kg);
     items_remove(items, animal->x, animal->y, animal->z, 1);
-    if (stack.hit_points > 0) {
-        items_add(items, animal->x, animal->y, animal->z, stack);
+    if (one.type != ITEM_NONE) {
+        items_add(items, animal->x, animal->y, animal->z, one);
     }
     animal->needs[ANIMAL_NEED_FOOD] =
-        clampf(animal->needs[ANIMAL_NEED_FOOD] + def->bite_kg / def->stomach_kg, 0.0f, 1.0f);
+        clampf(animal->needs[ANIMAL_NEED_FOOD] + eaten_kg / def->stomach_kg, 0.0f, 1.0f);
     if (animal->needs[ANIMAL_NEED_FOOD] >= ANIMAL_SATED) {
         stand(animal, random_idle_ticks(context->rng));
     }

@@ -484,6 +484,10 @@ after `transform_hours` (fresh grass dries into dry grass in 72 hours).
 it by count, like hit points. A stack that transforms keeps its hit points
 percentage, and its quality when the new type has one.
 
+`ItemStack.eaten` (bodies only, 0 when whole; averaged on merges, hashed only
+when not 0) is the share of a body's weight eaten away: `item_stack_mass()`
+is what the stack weighs now, and what hauling and the panels use.
+
 Food **rots** while it lies on a tile (`ItemDef.rot_days`: how long a
 pristine item lasts in the open at 15 °C; a type never both rots and
 transforms). For those types `ItemStack.progress` holds the rot toward the
@@ -857,8 +861,10 @@ their hashes are what they were.
   only below `ANIMAL_DESPERATE`) and attacks it, its herd mates with it
   (`start_hunt()`). A carnivore eats a carcass a bite at a time
   (`eat_carcass()`, `ANIMAL_CARCASS_BITE_TICKS`): a bite takes `bite_kg` of the
-  carcass, as a share of its hit points by its weight, and fills `bite_kg` /
-  `stomach_kg` of its hunger. Prey see them (`Animals.predator_slots`,
+  carcass's weight (`item_stack_eat()`: `ItemStack.eaten`, a share in
+  1/`ITEM_EATEN_FULL`, never its hit points, which only rot wears down; the
+  carcass is gone with the last bite) and fills that over `stomach_kg` of its
+  hunger. Prey see them (`Animals.predator_slots`,
   recomputed every tick) and run like from a settler, the herd with them; a
   carnivore fears settlers unless desperate, never other carnivores.
   Running tires (`Animal.fatigue`, `AnimalDef.sprint_seconds`): a spent animal

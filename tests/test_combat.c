@@ -800,7 +800,9 @@ static void test_wolf_eats_a_carcass(void)
     CHECK(wolf->needs[ANIMAL_NEED_FOOD] > food + 0.3f);
     ItemStack left = items_get(&game.items, 30, 20, 0);
     CHECK_EQ_INT(left.type, ITEM_ROE_DEER_CARCASS);
-    CHECK(left.hit_points < 100 && left.hit_points > 40); /* A few bites of 22 kg. */
+    /* A few bites of 22 kg: it weighs less, and is no less sound. */
+    CHECK_EQ_INT(left.hit_points, 100);
+    CHECK(item_stack_mass(left) < 22.0f - 2.0f && item_stack_mass(left) > 22.0f * 0.4f);
     /* Full, it leaves it be. */
     run_ticks(&game, 30 * TICKS_PER_SECOND);
     CHECK(wolf->needs[ANIMAL_NEED_FOOD] >= ANIMAL_SATED - 0.15f);
@@ -826,6 +828,11 @@ static void test_small_carcass_and_settler_bodies(void)
     run_ticks(&game, 3 * 60 * TICKS_PER_SECOND);
     CHECK(fox->needs[ANIMAL_NEED_FOOD] > 0.8f);
     CHECK_EQ_INT(items_get(&game.items, 24, 20, 0).type, ITEM_SETTLER_BODY);
+    /* The fox's 1 kg stomach took a share of the 3.5 kg hare; the rest lies there, sound. */
+    ItemStack hare = items_get(&game.items, 26, 22, 0);
+    CHECK_EQ_INT(hare.type, ITEM_HARE_CARCASS);
+    CHECK(item_stack_mass(hare) < 3.5f - 0.5f && item_stack_mass(hare) > 1.5f);
+    CHECK(hare.hit_points >= 95); /* Only rot wears it down. */
     game_shutdown(&game);
 }
 
