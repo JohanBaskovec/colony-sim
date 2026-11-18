@@ -79,15 +79,15 @@ menu.zones = Zones
 menu.orders = Ordres
 # {0} : nom de la touche.
 menu.shortcut = Raccourci : {0}
-menu.no_cost = Aucune ressource nécessaire
-# {0} : matériaux (« Branches ×5 et Herbe sèche ×24 »), {1} : leur poids total (« 31,5 kg »).
-menu.structure_cost = Nécessite : {0} ({1})
+menu.no_cost = Aucune ressource
+# {0}: how many, {1}: the resource ("6 Cobble").
+menu.card.material = {0} {1}
 # {0}: work type ("Construction").
 menu.card.work = Travail : {0}
 # {0}: knowledge, {1}: the level needed.
-menu.card.knowledge = Connaissance : {0} (niveau {1})
+menu.card.knowledge = Connaissance : {0} ({1})
 # {0}: knowledge, {1}: the lowest level needed (the plant or the material decides).
-menu.card.knowledge_from = Connaissance : {0} (à partir du niveau {1})
+menu.card.knowledge_from = Connaissance : {0} (à partir de {1})
 menu.card.knowledge.none = Connaissance : aucune
 menu.card.knowledge.unknown = Connaissance : pas encore découverte
 menu.work.description = Qui fait quel travail, et dans quel ordre
@@ -242,8 +242,6 @@ hud.tool.move_items_help = Cliquez la case où les objets doivent être transpor
 hud.tool.move_help = Cliquez là où les colons sélectionnés doivent aller · Échap : retour
 inspector.move = Déplacer
 inspector.move.description = Envoie les colons sélectionnés sur la case cliquée : ils lâchent ce qu’ils font, s’y rendent et y restent quelques secondes avant de reprendre leur vie
-hud.tool.forbid_help = Glissez sur ce que les colons doivent laisser tranquille
-hud.tool.allow_help = Glissez sur ce dont les colons peuvent de nouveau se servir
 hud.tool.spawn = Débogage : faire apparaître {1} × {0} · Clic : sur la case · Échap : retour
 hud.tool.teleport.one = Débogage : déplacer {0} colon · Clic : la case où aller · Échap : retour
 hud.tool.teleport.other = Débogage : déplacer {0} colons · Clic : la case où aller · Échap : retour
@@ -254,13 +252,7 @@ hud.tool.fight_attacker = Débogage : combat · Clic : celui qui attaque (un c
 hud.tool.fight_target = Débogage : combat · Clic : qui il attaque · Échap : retour
 hud.tool.spawn_animal = Débogage : faire apparaître un animal : {0} · Clic : un de plus · Échap : retour
 hud.tool.unavailable = Personne dans la colonie ne sait encore faire cela
-hud.tool.stockpile_help = Glisser : créer ou agrandir, en fusionnant les zones chevauchées · Maj+glisser : retirer · Échap : retour
-hud.tool.zone_remove_help = Glisser : retirer la surface des zones · Échap : retour
-hud.tool.build_help = Clic gauche : placer un plan · {0} : poste suivant · Échap : retour
-hud.tool.outline_help = Glisser : murs le long d’un rectangle · Clic : un seul segment · Échap : retour
-hud.tool.structure_help = Clic : en placer un · Glisser : remplir un rectangle · Échap : retour
-hud.tool.roof_support = Au niveau au-dessus des murs ({1}) · un mur, un étai ou de la roche à {0} cases au plus, un niveau plus bas
-hud.tool.rotate_help = {0} : le tourner
+hud.tool.roof_support = Au niveau au-dessus des murs · un mur, un étai ou de la roche à {0} cases au plus, un niveau plus bas
 
 hud.tile.position = Case {0}, {1}
 hud.tile.unexplored = Inexploré

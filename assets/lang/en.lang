@@ -80,15 +80,15 @@ menu.zones = Zones
 menu.orders = Orders
 # {0}: key name.
 menu.shortcut = Shortcut: {0}
-menu.no_cost = Needs no resources
-# {0}: materials ("Branches ×5 and Dry grass ×24"), {1}: their total weight ("31.5 kg").
-menu.structure_cost = Needs: {0} ({1})
+menu.no_cost = No resources
+# {0}: how many, {1}: the resource ("6 Cobble").
+menu.card.material = {0} {1}
 # {0}: work type ("Construction").
 menu.card.work = Work: {0}
 # {0}: knowledge, {1}: the level needed.
-menu.card.knowledge = Knowledge: {0} (level {1})
+menu.card.knowledge = Knowledge: {0} ({1})
 # {0}: knowledge, {1}: the lowest level needed (the plant or the material decides).
-menu.card.knowledge_from = Knowledge: {0} (from level {1})
+menu.card.knowledge_from = Knowledge: {0} (from {1})
 menu.card.knowledge.none = Knowledge: none
 menu.card.knowledge.unknown = Knowledge: not discovered yet
 menu.work.description = Who does which work, and in what order
@@ -255,8 +255,6 @@ hud.tool.move_items_help = Click the tile the items must be carried to · Esc: b
 hud.tool.move_help = Click where the selected settlers must go · Esc: back
 inspector.move = Move
 inspector.move.description = Sends the selected settlers to the tile you click: they drop what they are doing, walk there and stay a few seconds before going back to their life
-hud.tool.forbid_help = Drag over what the settlers must leave alone
-hud.tool.allow_help = Drag over what the settlers may use again
 hud.tool.spawn = Debug: spawn {1} × {0} · Click: on the tile · Esc: back
 hud.tool.teleport.one = Debug: move {0} settler · Click: the tile to go to · Esc: back
 hud.tool.teleport.other = Debug: move {0} settlers · Click: the tile to go to · Esc: back
@@ -267,15 +265,8 @@ hud.tool.fight_attacker = Debug: fight · Click: the one who attacks (a settler 
 hud.tool.fight_target = Debug: fight · Click: who it attacks · Esc: back
 hud.tool.spawn_animal = Debug: spawn an animal: {0} · Click: one more · Esc: back
 hud.tool.unavailable = Nobody in the colony knows how to do this yet
-hud.tool.stockpile_help = Drag: create or extend, merging the zones it overlaps · Shift+drag: remove · Esc: back
-hud.tool.zone_remove_help = Drag: take the area out of the zones · Esc: back
-# {0} = key of the build tool
-hud.tool.build_help = Left click: place a blueprint · {0}: next workstation · Esc: back
-hud.tool.outline_help = Drag: walls along the edges of a rectangle · Click: one segment · Esc: back
-hud.tool.structure_help = Click: place one · Drag: fill a rectangle · Esc: back
 # {0} = number of tiles
-hud.tool.roof_support = On the level above the walls ({1}) · a wall, prop or rock at most {0} tiles away, one level down
-hud.tool.rotate_help = {0}: turn it
+hud.tool.roof_support = On the level above the walls · a wall, prop or rock at most {0} tiles away, one level down
 
 # Tile inspector. {0}, {1} = tile coordinates
 hud.tile.position = Tile {0}, {1}

@@ -59,18 +59,11 @@ static const char *const CATEGORY_KEYS[BUILD_CATEGORY_COUNT] = {
     [BUILD_CATEGORY_ORDERS] = N_("menu.orders"),
 };
 
-/* "Shortcut: R". */
-static void shortcut_line(char *out, size_t size, SDL_Scancode key)
-{
-    TR_FORMAT(out, size, tr("menu.shortcut"), app_key_name(key));
-}
-
 void build_menu_materials_cost(char *out, size_t size,
                                const StructureMaterial materials[STRUCTURE_MATERIAL_SLOTS])
 {
     char parts[STRUCTURE_MATERIAL_SLOTS][TEXT_SIZE];
     int count = 0;
-    float weight = 0.0f;
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         StructureMaterial material = materials[slot];
         if (material.type == ITEM_NONE) {
@@ -78,24 +71,16 @@ void build_menu_materials_cost(char *out, size_t size,
         }
         char number[16];
         tr_integer(number, sizeof(number), material.count);
-        TR_FORMAT(parts[count++], TEXT_SIZE, tr("recipe.ingredient"),
-                  tr(item_def(material.type)->name_key), number);
-        weight += item_stack_weight(material.type, material.count);
+        TR_FORMAT(parts[count++], TEXT_SIZE, tr("menu.card.material"), number,
+                  tr(item_def(material.type)->name_key));
     }
     if (count == 0) {
         SDL_strlcpy(out, tr("menu.no_cost"), size);
-        return;
-    }
-    char list[TEXT_SIZE], number[16], kilograms[32];
-    if (count == 2) {
-        TR_FORMAT(list, sizeof(list), tr("recipe.both"), parts[0], parts[1]);
+    } else if (count == 2) {
+        TR_FORMAT(out, size, tr("recipe.both"), parts[0], parts[1]);
     } else {
-        SDL_strlcpy(list, count == 1 ? parts[0] : "", sizeof(list));
+        SDL_strlcpy(out, parts[0], size);
     }
-    int decimals = SDL_fabsf(weight - SDL_roundf(weight)) > 0.05f ? 1 : 0;
-    tr_decimal(number, sizeof(number), decimals ? weight : SDL_roundf(weight), decimals);
-    TR_FORMAT(kilograms, sizeof(kilograms), tr("unit.kg"), number);
-    TR_FORMAT(out, size, tr("menu.structure_cost"), list, kilograms);
 }
 
 /* ---- The card ------------------------------------------------------------ */
@@ -164,8 +149,6 @@ static void station_card(App *app, WorkstationType type, Card *card)
                       "menu.card.knowledge.none", false);
     }
     card_add_text(card, CARD_TEXT, tr(def->description_key));
-    TR_FORMAT(card_add(card, CARD_DIM), TEXT_SIZE, tr("hud.tool.build_help"),
-              app_key_name(APP_KEY_BUILD));
     if (!game_workstation_buildable(&app->game, type)) {
         card_add_text(card, CARD_WARNING, tr("hud.tool.unavailable"));
     }
@@ -184,14 +167,7 @@ static void structure_card(App *app, StructureType type, Card *card)
     if (structure_is_roof(type)) {
         char range[16];
         tr_integer(range, sizeof(range), ROOF_SUPPORT_RANGE);
-        TR_FORMAT(card_add(card, CARD_DIM), TEXT_SIZE, tr("hud.tool.roof_support"), range,
-                  app_key_name(APP_KEY_LEVEL_UP));
-    }
-    card_add_text(card, CARD_DIM,
-                  tr(def->drawn_as_outline ? "hud.tool.outline_help" : "hud.tool.structure_help"));
-    if (def->length > 1) {
-        TR_FORMAT(card_add(card, CARD_DIM), TEXT_SIZE, tr("hud.tool.rotate_help"),
-                  app_key_name(APP_KEY_ROTATE));
+        TR_FORMAT(card_add(card, CARD_DIM), TEXT_SIZE, tr("hud.tool.roof_support"), range);
     }
     if (!game_structure_buildable(&app->game, type)) {
         card_add_text(card, CARD_WARNING, tr("hud.tool.unavailable"));
@@ -245,17 +221,6 @@ static void tool_card(App *app, AppTool tool, int type, Card *card)
                       "menu.card.knowledge.unknown", plant);
     }
     card_add_text(card, CARD_TEXT, tr(menu->description_key));
-    if (tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER) {
-        card_add_text(
-            card, CARD_DIM,
-            tr(type == APP_ZONE_REMOVE ? "hud.tool.zone_remove_help" : "hud.tool.stockpile_help"));
-    } else if (tool == APP_TOOL_FORBID) {
-        card_add_text(card, CARD_DIM,
-                      tr(type == APP_ALLOW ? "hud.tool.allow_help" : "hud.tool.forbid_help"));
-    }
-    if (menu->key != SDL_SCANCODE_UNKNOWN) {
-        shortcut_line(card_add(card, CARD_DIM), TEXT_SIZE, menu->key);
-    }
     if (tool == APP_TOOL_DESIGNATE && type != DESIGNATION_NONE &&
         !game_designation_available(&app->game, (DesignationType)type)) {
         card_add_text(card, CARD_WARNING, tr("hud.tool.unavailable"));
@@ -318,7 +283,7 @@ typedef struct WrappedCard {
 static void wrap_card(Ui *ui, const Card *card, WrappedCard *out)
 {
     const Theme *theme = &ui->theme;
-    float width = theme->card_width - 2.0f * theme->padding;
+    float width = theme->build_menu_width - 2.0f * theme->padding;
     out->count = 0;
     static const char SEPARATOR[] = " \u00b7 "; /* "Click: one · Drag: many": a line each. */
     for (int i = 0; i < card->count && out->count < CARD_WRAPPED_LINES; i++) {
@@ -345,7 +310,7 @@ static void wrap_card(Ui *ui, const Card *card, WrappedCard *out)
 static void draw_card(Ui *ui, const WrappedCard *card, float bottom)
 {
     const Theme *theme = &ui->theme;
-    SDL_FRect rect = {0.0f, bottom - card->height, theme->card_width, card->height};
+    SDL_FRect rect = {0.0f, bottom - card->height, theme->build_menu_width, card->height};
     ui_panel_colored(ui, rect, THEME_WINDOW);
     float line = (float)text_line_height(ui->text);
     static const ThemeColor COLORS[] = {
@@ -431,7 +396,7 @@ static void draw_categories(App *app, const ScreenLayout *layout)
     Ui *ui = &app->ui;
     const Theme *theme = &ui->theme;
     float height = column_height(theme, layout);
-    SDL_FRect column = {0.0f, layout->bar_top - height, theme->card_width, height};
+    SDL_FRect column = {0.0f, layout->bar_top - height, theme->build_menu_width, height};
     ui_panel(ui, column);
     for (int i = 1; i < BUILD_CATEGORY_COUNT; i++) {
         SDL_FRect rect = {column.x + theme->gap,
@@ -457,7 +422,7 @@ static void draw_icons(App *app, const ScreenLayout *layout)
     }
     float icon = theme->icon_size, gap = theme->gap;
     float inset = SDL_roundf(icon * 0.12f);
-    SDL_FRect row = {theme->card_width + gap, layout->bar_top - icon - 2.0f * gap,
+    SDL_FRect row = {theme->build_menu_width + gap, layout->bar_top - icon - 2.0f * gap,
                      (float)count * (icon + gap) + gap, icon + 2.0f * gap};
     ui_panel(ui, row);
     for (int i = 0; i < count; i++) {

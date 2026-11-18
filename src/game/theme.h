@@ -66,7 +66,8 @@ typedef struct Theme {
     float slider_track_height;
     float bar_button_width; /* Buttons of the bottom bar (wider if a label needs it). */
     float icon_size;        /* Icon buttons of the build menu. */
-    float card_width;       /* Build menu: the category column and the card above it. */
+    float card_width;       /* Narrow panels (corners, meters). */
+    float build_menu_width; /* Build menu: the category column and the card above it. */
     float inspector_width;  /* The inspector's box (and its tab panels, at least). */
 } Theme;
 

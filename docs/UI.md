@@ -77,12 +77,14 @@ Three levels, opened from the bottom left corner:
    with its shortcut letter in the top left corner. Clicking an icon picks
    the tool; the menus stay open.
 3. A **card above the category column** describes the icon under the mouse,
-   or else the tool in use: name, cost, the work and the knowledge it takes
-   (constructions, workstations, orders: "Work: Construction", "Knowledge:
-   Fire (level 50)"), description, shortcut, and why it is unavailable. It replaces the tooltips of the icons and the old "active
-   tool" panel at the top of the screen; it also shows (directly above the
-   bottom bar) when a tool is picked with its shortcut, menu closed. Tool
-   specific help lines go there too (drag to remove, rotate with F...).
+   or else the tool in use: name, cost ("5 Branches and 24 Dry grass"), the
+   work and the knowledge it takes ("Work: Construction", "Knowledge: Basic
+   shelters (50)"), description, and why it is unavailable. It carries no
+   controls (no shortcut, drag or Esc hints: a shortcut is drawn in the icon's
+   corner). The column and the card are `Theme.build_menu_width` wide. It
+   replaces the tooltips of the icons and the old "active tool" panel at the
+   top of the screen; it also shows (directly above the bottom bar) when a
+   tool is picked with its shortcut, menu closed.
 
 ### Colonist bar (top center)
 
