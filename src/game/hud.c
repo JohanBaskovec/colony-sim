@@ -1261,6 +1261,9 @@ void hud_inspect_colonists(App *app)
             UiRowsFn special = colonist_tab_rows(section);
             if (special != NULL) {
                 inspector_tab_panel(app, special, app);
+                if (section == SECTION_HEALTH) {
+                    health_panel_body_window(app, &colonist->health);
+                }
             } else {
                 Panel lines = {0};
                 build_colonist_section(app, &lines, app->selected[0], section);

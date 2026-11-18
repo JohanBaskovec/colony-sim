@@ -169,10 +169,11 @@ Each from 0 to 100 %:
 
 ## 9.1 Seen by the player
 
-- The **Health** tab of the settler window and of the animal window: the state in a
-  word (healthy, hurt, unable to walk, unconscious), the blood as a bar, the
-  bleeding, the pain, what the body can do; and, always (healthy or not), a
-  **table of the body**: one row per part with its injuries (the kinds, or
+- The **Health** tab of the settler window and of the animal window always
+  shows (healthy or not) the state in a word (healthy, hurt, unable to walk,
+  collapsed, unconscious), the consciousness and the blood as bars, the
+  bleeding, the pain, the afflictions at work (§11.5) and what the body can
+  do; in a second window to its right, a **table of the body**: one row per part with its injuries (the kinds, or
   *Intact*), its efficiency (how much of it works) and the blood it loses an
   hour. A tooltip on a row says what the part is for (vital, walking, the
   hands, the limb it strikes with) and gives each injury on it: kind, how bad

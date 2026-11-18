@@ -112,6 +112,7 @@ void animal_panel_draw(App *app)
     int tab = inspector_tabs(app, labels, 3);
     if (tab == 0) {
         inspector_tab_panel(app, health_rows, app);
+        health_panel_body_window(app, &animal->health);
     } else if (tab == 1) {
         inspector_tab_panel(app, character_rows, app);
     } else if (tab == 2) {

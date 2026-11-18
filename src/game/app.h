@@ -105,9 +105,10 @@ typedef enum FollowKind { FOLLOW_NONE, FOLLOW_COLONIST, FOLLOW_ANIMAL } FollowKi
 
 typedef enum AppWindow {
     APP_WINDOW_NONE,
-    APP_WINDOW_INSPECTOR,      /* Summary of the selection (game/inspector.h). */
-    APP_WINDOW_INSPECTOR_TAB,  /* The inspector's open tab. */
-    APP_WINDOW_STATION_ADD,    /* Recipes to add to a workstation's bills (game/station_panel.h). */
+    APP_WINDOW_INSPECTOR,     /* Summary of the selection (game/inspector.h). */
+    APP_WINDOW_INSPECTOR_TAB, /* The inspector's open tab. */
+    APP_WINDOW_HEALTH_BODY,   /* The body's parts, right of the Health tab (game/health_panel.h). */
+    APP_WINDOW_STATION_ADD,   /* Recipes to add to a workstation's bills (game/station_panel.h). */
     APP_WINDOW_STATION_RECIPE, /* What the recipe picked in that list needs and makes. */
     APP_WINDOW_STATION_BILL,   /* The details of the bill picked in the Bills tab. */
     APP_WINDOW_WORK,           /* Work priorities grid. */

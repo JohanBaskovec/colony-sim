@@ -216,13 +216,14 @@ rows):
   tooltip gives the exact value, the state (hungry...), what the need does and
   what it weighs on the mood now. Wetness, the warmth of sleep and the bed
   come under the bars.
-- **Health** (`docs/HEALTH.md`): the state in a word (healthy, hurt, unable
-  to walk, collapsed, unconscious, in red once hurt); once hurt, the
+- **Health** (`docs/HEALTH.md`): always (healthy or not) the state in a word
+  (healthy, hurt, unable to walk, collapsed, unconscious, in red once hurt), the
   consciousness as a bar (its tooltip lists what takes it off, each with its
   points, and what it does), the blood as a bar
   (empty where it kills), the bleeding per hour, the pain, what the body can
   do (each ability in percent, white at 100, red toward 0). The body is
-  always listed as a table, even when healthy: a row per part (head, torso,
+  listed as a table in a second window docked right of the tab (its × closes
+  the tab, like the tab's own), healthy or not: a row per part (head, torso,
   arms, legs...) with its injuries, its efficiency in percent (white to red)
   and the blood it loses an hour; the tooltip tells what the part is for and
   each injury on it. Above

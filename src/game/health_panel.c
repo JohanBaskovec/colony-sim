@@ -1,6 +1,7 @@
 #include "game/health_panel.h"
 
 #include "core/i18n.h"
+#include "game/inspector.h"
 
 #define TEXT_SIZE 192
 
@@ -241,11 +242,6 @@ void health_panel_rows(UiLayout *layout, const Health *health)
     SDL_Color text = layout->ui->theme.colors[THEME_TEXT];
     ui_layout_pair(layout, tr("health.status"), tr(health_status_key(health)),
                    hurt ? bad_color(layout, 0.5f) : text, false);
-    if (!hurt || health_is_dead(health)) {
-        layout->y += layout->row * 0.5f;
-        parts_table(layout, health);
-        return;
-    }
     char value[TEXT_SIZE];
 
     /* Consciousness: what every source leaves of it. */
@@ -265,10 +261,9 @@ void health_panel_rows(UiLayout *layout, const Health *health)
         tooltip_lines(layout, value, tr("health.blood.description"));
     }
     float bleeding = health_bleeding(health);
-    if (bleeding > 0.0f) {
-        bleeding_text(value, sizeof(value), bleeding);
-        ui_layout_pair(layout, tr("health.bleeding"), value, bad_color(layout, 1.0f), false);
-    }
+    bleeding_text(value, sizeof(value), bleeding);
+    ui_layout_pair(layout, tr("health.bleeding"), value,
+                   bleeding > 0.0f ? bad_color(layout, 1.0f) : text, false);
     float pain = health_pain(health);
     percent_text(value, sizeof(value), pain);
     row = ui_layout_pair(layout, tr("health.pain"), value, bad_color(layout, pain), true);
@@ -305,7 +300,20 @@ void health_panel_rows(UiLayout *layout, const Health *health)
         ui_layout_triple(layout, tr(health_ability_name_key((HealthAbility)ability)), "", value,
                          "100 %", bad_color(layout, 1.0f - level), false);
     }
+}
 
-    layout->y += layout->row * 0.5f;
-    parts_table(layout, health);
+/* The rows of the body window. */
+static void body_rows(UiLayout *layout, void *userdata)
+{
+    parts_table(layout, userdata);
+}
+
+void health_panel_body_window(App *app, const Health *health)
+{
+    bool open = true;
+    inspector_side_window(app, APP_WINDOW_HEALTH_BODY, APP_WINDOW_INSPECTOR_TAB, NULL, body_rows,
+                          (void *)health, &open);
+    if (!open) {
+        app->inspector_tab = -1; /* It goes with the tab, as the tab's own × does. */
+    }
 }
