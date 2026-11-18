@@ -99,7 +99,32 @@ int game_hour_from_tick(uint64_t tick);
 /* Day of the year, 0 (spring, day 1) .. DAYS_PER_YEAR - 1. */
 int game_day_of_year(uint64_t tick);
 
-/* Light level for the given tick: GAME_DAYLIGHT_MIN at night, 1.0 at day. */
+/* The sun (docs/PLANTS.md §5): the day lasts GAME_DAY_LENGTH_WINTER hours at
+ * midwinter and GAME_DAY_LENGTH_SUMMER at midsummer (12 at the equinoxes, in
+ * between smoothly), centered on noon; the sun is stronger in summer than in
+ * winter (a noon of GAME_SUN_NOON_WINTER to 1). */
+#define GAME_DAY_LENGTH_WINTER 8.5f
+#define GAME_DAY_LENGTH_SUMMER 15.5f
+#define GAME_SUN_NOON_WINTER 0.6f
+
+/* Hours between sunrise and sunset on a day of the year. */
+float game_day_length(int day_of_year);
+
+/* Sunrise (hour of the day, fractional) on a day of the year; sunset is the
+ * day's length later. */
+float game_sunrise(int day_of_year);
+
+/* How strong the sun stands at its height on a day of the year (the noon
+ * sun), 0 .. 1. */
+float game_sun_noon(int day_of_year);
+
+/* The sun on the ground at a tick, before the sky and what covers the
+ * ground: the noon sun times the sine of its progress between sunrise and
+ * sunset; 0 at night. */
+float game_sunlight(uint64_t tick);
+
+/* Light level for the given tick as drawn: GAME_DAYLIGHT_MIN at night, 1.0 at
+ * day, dawn and dusk (two hours each) around sunrise and sunset. */
 float game_daylight(uint64_t tick);
 
 /* Translation key of a season's display name. */

@@ -352,8 +352,11 @@ static void test_grass_stock_follows_growth(void)
     const PlantProduct *armfuls = plant_product(PLANT_GRASS, 0);
     REQUIRE(armfuls != NULL);
     CHECK_EQ_INT(plant_stock_capacity(&grass, 0), 0);
-    PlantConditions warm = {
-        .temperature = 20.0f, .fertility = 1.0f, .day_of_year = SEASON_DAY(SEASON_SPRING, 5)};
+    PlantConditions warm = {.temperature = 20.0f,
+                            .fertility = 1.0f,
+                            .light = 1.0f,
+                            .light_peak = 1.0f,
+                            .day_of_year = SEASON_DAY(SEASON_SPRING, 5)};
     int previous = 0;
     for (int hours = 0; hours < 10 * HOURS_PER_DAY && grass.growth < 1.0f; hours += 6) {
         plant_advance(&grass, &warm, 6);
@@ -483,10 +486,12 @@ static void advance_days(Plant *plant, int first, int last)
     float fertility = terrain_def(TERRAIN_RICH_SOIL)->fertility;
     for (int day = first; day <= last; day++) {
         for (int hour = 0; hour < HOURS_PER_DAY; hour++) {
+            uint64_t tick = (uint64_t)day * TICKS_PER_DAY + (uint64_t)hour * TICKS_PER_HOUR;
             PlantConditions conditions = {
-                .temperature = temperature_outdoor((uint64_t)day * TICKS_PER_DAY +
-                                                   (uint64_t)hour * TICKS_PER_HOUR),
+                .temperature = temperature_outdoor(tick),
                 .fertility = fertility,
+                .light = game_sunlight(tick), /* In the open, under a clear sky. */
+                .light_peak = game_sun_noon(day),
                 .day_of_year = day,
             };
             plant_advance(plant, &conditions, 1);
@@ -555,10 +560,14 @@ static void test_growth_follows_the_temperature(void)
     const PlantDef *def = plant_def(PLANT_TREE);
     float rich = terrain_def(TERRAIN_RICH_SOIL)->fertility;
     int day = SEASON_DAY(SEASON_SUMMER, 5);
-    PlantConditions best = {.temperature = def->t_opt_low, .fertility = rich, .day_of_year = day};
+    PlantConditions best = {.temperature = def->t_opt_low,
+                            .fertility = rich,
+                            .light = 1.0f,
+                            .light_peak = 1.0f,
+                            .day_of_year = day};
     Plant tree = {.type = PLANT_TREE, .growth = 0.5f};
     plant_settle(&tree, day);
-    for (int hour = 0; hour < HOURS_PER_DAY; hour++) {
+    for (int hour = 0; hour < (int)PLANT_BEST_DAY_HOURS; hour++) {
         plant_advance(&tree, &best, 1);
     }
     CHECK_NEAR(tree.growth, 0.5f + def->growth_per_day * rich, 0.001);
@@ -595,9 +604,12 @@ static void test_growth_follows_the_temperature(void)
 
     Plant cattail = {.type = PLANT_CATTAIL, .growth = 0.5f};
     plant_settle(&cattail, day);
-    PlantConditions water = {
-        .temperature = plant_def(PLANT_CATTAIL)->t_opt_low, .fertility = 0.0f, .day_of_year = day};
-    for (int hour = 0; hour < HOURS_PER_DAY; hour++) {
+    PlantConditions water = {.temperature = plant_def(PLANT_CATTAIL)->t_opt_low,
+                             .fertility = 0.0f,
+                             .light = 1.0f,
+                             .light_peak = 1.0f,
+                             .day_of_year = day};
+    for (int hour = 0; hour < (int)PLANT_BEST_DAY_HOURS; hour++) { /* A best day. */
         plant_advance(&cattail, &water, 1);
     }
     CHECK_NEAR(cattail.growth, 0.5f + plant_def(PLANT_CATTAIL)->growth_per_day, 0.001);
@@ -622,6 +634,8 @@ static PlantConditions at_temperature(float celsius)
 {
     return (PlantConditions){.temperature = celsius,
                              .fertility = terrain_def(TERRAIN_RICH_SOIL)->fertility,
+                             .light = 1.0f,
+                             .light_peak = 1.0f,
                              .day_of_year = SEASON_DAY(SEASON_SUMMER, 5)};
 }
 
@@ -765,6 +779,121 @@ static void test_trees_with_a_trunk_survive(void)
     CHECK_EQ_INT(seedling.type, PLANT_NONE);
 }
 
+/* How much light reaches a tile through what lies over it. */
+static void test_light_cover(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 5));
+    CHECK_NEAR(map_light_cover(&map, 3, 3, 0), 1.0, 1e-6); /* The open sky. */
+    CHECK_NEAR(map_light_cover(&map, -1, 3, 0), 0.0, 1e-6);
+    /* Foliage lets part of it through, by density; the densest layer counts. */
+    map_set_terrain(&map, 4, 3, 2, TERRAIN_FOLIAGE_SPARSE);
+    CHECK_NEAR(map_light_cover(&map, 4, 3, 0), MAP_LIGHT_FOLIAGE_SPARSE, 1e-6);
+    map_set_terrain(&map, 4, 3, 3, TERRAIN_FOLIAGE_MEDIUM);
+    CHECK_NEAR(map_light_cover(&map, 4, 3, 0), MAP_LIGHT_FOLIAGE_MEDIUM, 1e-6);
+    map_set_terrain(&map, 4, 3, 1, TERRAIN_FOLIAGE);
+    CHECK_NEAR(map_light_cover(&map, 4, 3, 0), MAP_LIGHT_FOLIAGE_DENSE, 1e-6);
+    /* The trunk of the tree over its own foot is not a roof. */
+    map_set_rock(&map, 5, 3, 1, ROCK_WOOD);
+    map_set_rock(&map, 5, 3, 2, ROCK_WOOD);
+    CHECK_NEAR(map_light_cover(&map, 5, 3, 0), 1.0, 1e-6);
+    /* A built roof lets a little through, rock or the ground above nothing. */
+    map_set_roof(&map, 6, 3, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK_NEAR(map_light_cover(&map, 6, 3, 0), MAP_LIGHT_ROOF, 1e-6);
+    map_set_terrain(&map, 7, 3, 1, TERRAIN_SOIL);
+    CHECK_NEAR(map_light_cover(&map, 7, 3, 0), 0.0, 1e-6);
+    map_set_rock(&map, 8, 3, 2, ROCK_GRANITE);
+    CHECK_NEAR(map_light_cover(&map, 8, 3, 0), 0.0, 1e-6);
+    map_free(&map);
+}
+
+/* The response to light: none below the plant's minimum, full from its light
+ * level, in proportion between; a shade plant is fed where a sun plant starves. */
+static void test_light_response(void)
+{
+    const PlantDef *grass = plant_def(PLANT_GRASS), *garlic = plant_def(PLANT_WILD_GARLIC);
+    CHECK_NEAR(plant_light_response(PLANT_GRASS, 0.0f), 0.0, 1e-9);
+    CHECK_NEAR(plant_light_response(PLANT_GRASS, grass->light_min), 0.0, 1e-9);
+    CHECK_NEAR(plant_light_response(PLANT_GRASS, grass->light_full), 1.0, 1e-9);
+    CHECK_NEAR(plant_light_response(PLANT_GRASS, 0.5f * (grass->light_min + grass->light_full)),
+               0.5, 1e-6);
+    CHECK_NEAR(plant_light_response(PLANT_GRASS, 1.0f), 1.0, 1e-9);
+    CHECK_NEAR(plant_light_response(PLANT_WILD_GARLIC, garlic->light_full), 1.0, 1e-9);
+    CHECK(plant_light_response(PLANT_WILD_GARLIC, 0.3f) >
+          plant_light_response(PLANT_GRASS, 0.3f)); /* Shade suits the garlic. */
+    CHECK_NEAR(plant_light_response(PLANT_MUSHROOMS, 0.0f), 1.0, 1e-9); /* Fungi: none needed. */
+    CHECK_NEAR(plant_light_response(PLANT_COUNT, 1.0f), 0.0, 1e-9);
+}
+
+/* The light makes growth: none at night (the best day is twelve hours of full
+ * light), proportional to the response by day. */
+static void test_growth_follows_the_light(void)
+{
+    const PlantDef *def = plant_def(PLANT_GRASS);
+    PlantConditions day = at_temperature(def->t_opt_low);
+    Plant grass = {.type = PLANT_GRASS, .growth = 0.3f};
+    plant_settle(&grass, day.day_of_year);
+    PlantConditions night = day;
+    night.light = 0.0f; /* The sun is down, but the day's best light is fine. */
+    plant_advance(&grass, &night, 6);
+    CHECK_NEAR(grass.growth, 0.3f, 1e-9);
+    CHECK_NEAR(plant_health(&grass), 1.0f, 1e-9); /* And no harm done. */
+    PlantConditions dim = day;
+    dim.light = 0.5f * (def->light_min + def->light_full);
+    plant_advance(&grass, &dim, 1);
+    CHECK_NEAR(grass.growth,
+               0.3f + 0.5f * def->growth_per_day / PLANT_BEST_DAY_HOURS *
+                          terrain_def(TERRAIN_RICH_SOIL)->fertility,
+               1e-6);
+    CHECK_EQ_INT(plant_status(&grass, &day), PLANT_STATUS_GROWING);
+    PlantConditions shade = day;
+    shade.light_peak = 0.5f * (def->light_min + def->light_full);
+    CHECK_EQ_INT(plant_status(&grass, &shade), PLANT_STATUS_SLOWED_DARK);
+    shade.light_peak = def->light_min * 0.5f;
+    CHECK_EQ_INT(plant_status(&grass, &shade), PLANT_STATUS_TOO_DARK);
+}
+
+/* A plant kept in the dark dies after its `dark_days`, a plant that rests
+ * (it needs no light) or a fungus does not. */
+static void test_the_dark_kills(void)
+{
+    const PlantDef *def = plant_def(PLANT_GRASS);
+    PlantConditions dark = at_temperature(def->t_opt_low);
+    dark.light = 0.0f;
+    dark.light_peak = def->light_min * 0.5f;
+    Plant grass = {.type = PLANT_GRASS, .growth = 0.6f};
+    plant_settle(&grass, dark.day_of_year);
+    plant_advance(&grass, &dark, (int)(def->dark_days - 1.0f) * HOURS_PER_DAY);
+    CHECK_EQ_INT(grass.type, PLANT_GRASS);
+    CHECK(plant_health(&grass) < 0.15f);
+    plant_advance(&grass, &dark, 2 * HOURS_PER_DAY);
+    CHECK_EQ_INT(grass.type, PLANT_NONE);
+    /* A short dark spell is mended: a few cloudy days. */
+    Plant mended = {.type = PLANT_GRASS, .growth = 0.6f};
+    plant_settle(&mended, dark.day_of_year);
+    plant_advance(&mended, &dark, 3 * HOURS_PER_DAY);
+    CHECK(plant_health(&mended) < 0.8f);
+    PlantConditions bright = at_temperature(def->t_opt_low);
+    plant_advance(&mended, &bright, 5 * HOURS_PER_DAY);
+    CHECK_NEAR(plant_health(&mended), 1.0f, 1e-3);
+    /* Resting plants wait for the light; fungi live without. */
+    Plant resting = {.type = PLANT_GRASS, .growth = 0.6f};
+    plant_settle(&resting, SEASON_DAY(SEASON_WINTER, 8));
+    PlantConditions winter = dark;
+    winter.temperature = -3.0f;
+    plant_advance(&resting, &winter, 40 * HOURS_PER_DAY);
+    CHECK_EQ_INT(resting.type, PLANT_GRASS);
+    CHECK_NEAR(plant_health(&resting), 1.0f, 1e-6);
+    Plant mushrooms = {.type = PLANT_MUSHROOMS, .growth = 1.0f};
+    plant_settle(&mushrooms, SEASON_DAY(SEASON_AUTUMN, 3));
+    PlantConditions black = at_temperature(10.0f);
+    black.day_of_year = SEASON_DAY(SEASON_AUTUMN, 3);
+    black.light = black.light_peak = 0.0f;
+    plant_advance(&mushrooms, &black, 20 * HOURS_PER_DAY);
+    CHECK_EQ_INT(mushrooms.type, PLANT_MUSHROOMS);
+    CHECK_NEAR(plant_health(&mushrooms), 1.0f, 1e-6);
+}
+
 /* Mushrooms go once their food is gone: picked, or out of season. */
 static void test_mushrooms_vanish(void)
 {
@@ -773,8 +902,11 @@ static void test_mushrooms_vanish(void)
     REQUIRE(plant_has_food(&patch));
     advance_days(&patch, SEASON_DAY(SEASON_AUTUMN, 3), SEASON_DAY(SEASON_AUTUMN, 15));
     CHECK_EQ_INT(patch.type, PLANT_MUSHROOMS);
-    PlantConditions frost = {
-        .temperature = -5.0f, .fertility = 1.0f, .day_of_year = SEASON_DAY(SEASON_WINTER, 1)};
+    PlantConditions frost = {.temperature = -5.0f,
+                             .fertility = 1.0f,
+                             .light = 1.0f,
+                             .light_peak = 1.0f,
+                             .day_of_year = SEASON_DAY(SEASON_WINTER, 1)};
     plant_advance(&patch, &frost, 1);
     CHECK_EQ_INT(patch.type, PLANT_NONE); /* The first frost. */
 }
@@ -985,6 +1117,10 @@ int main(void)
     RUN_TEST(test_hardening_takes_days);
     RUN_TEST(test_plants_mend);
     RUN_TEST(test_trees_with_a_trunk_survive);
+    RUN_TEST(test_light_cover);
+    RUN_TEST(test_light_response);
+    RUN_TEST(test_growth_follows_the_light);
+    RUN_TEST(test_the_dark_kills);
     RUN_TEST(test_mushrooms_vanish);
     RUN_TEST(test_tree_near);
     RUN_TEST(test_ladders);

@@ -74,6 +74,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                      .t_frost_hardened = -25.0f,
                      .t_lethal_heat = 45.0f,
                      .rest = PLANT_REST_SLEEPS,
+                     .light_min = 0.2f,
+                     .light_full = 0.8f,
+                     .dark_days = 10.0f,
                      /* Armfuls cut at the ground, which grows from nothing again: the
                       * stock follows the growth (an armful is there within the hour
                       * once the grass is tall enough). */
@@ -100,6 +103,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                     .t_frost_hardened = -30.0f,
                     .t_lethal_heat = 45.0f,
                     .rest = PLANT_REST_SLEEPS,
+                    .light_min = 0.1f,
+                    .light_full = 0.6f,
+                    .dark_days = 30.0f,
                     .cut_item = ITEM_WOOD,
                     .cut_yield = 60},
     /* A small tree: its hazelnuts fall to the ground in autumn (Map.nuts), its
@@ -117,6 +123,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                      .t_frost_hardened = -30.0f,
                      .t_lethal_heat = 42.0f,
                      .rest = PLANT_REST_SLEEPS,
+                     .light_min = 0.1f,
+                     .light_full = 0.5f,
+                     .dark_days = 30.0f,
                      .cut_item = ITEM_WOOD,
                      .cut_yield = 20,
                      .fall_item = ITEM_HAZELNUTS,
@@ -136,6 +145,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                        .t_frost_hardened = -20.0f,
                        .t_lethal_heat = 45.0f,
                        .rest = PLANT_REST_SLEEPS,
+                       .light_min = 0.1f,
+                       .light_full = 0.6f,
+                       .dark_days = 20.0f,
                        .products = {{.item = ITEM_BLACKBERRIES,
                                      .capacity = 9,
                                      .regrow_hours = 12,
@@ -156,6 +168,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                            .t_lethal_heat = 30.0f,
                            .rest = PLANT_REST_DIES_BACK,
                            .rests_in_heat = true,
+                           .light_min = 0.05f,
+                           .light_full = 0.3f,
+                           .dark_days = 15.0f,
                            .products = {{.item = ITEM_WILD_GARLIC,
                                          .capacity = 3,
                                          .regrow_hours = 24,
@@ -176,6 +191,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                       .t_frost_hardened = -25.0f,
                       .t_lethal_heat = 40.0f,
                       .rest = PLANT_REST_DIES_BACK,
+                      .light_min = 0.1f,
+                      .light_full = 0.5f,
+                      .dark_days = 15.0f,
                       .products = {{.item = ITEM_NETTLES,
                                     .capacity = 3,
                                     .regrow_hours = 24,
@@ -195,6 +213,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                         .t_frost_hardened = -20.0f,
                         .t_lethal_heat = 45.0f,
                         .rest = PLANT_REST_SLEEPS,
+                        .light_min = 0.2f,
+                        .light_full = 0.8f,
+                        .dark_days = 10.0f,
                         .products = {{.item = ITEM_PLANTAIN,
                                       .capacity = 2,
                                       .regrow_hours = 24,
@@ -215,6 +236,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                            .t_frost_hardened = -15.0f,
                            .t_lethal_heat = 40.0f,
                            .rest = PLANT_REST_SLEEPS,
+                           .light_min = 0.2f,
+                           .light_full = 0.8f,
+                           .dark_days = 10.0f,
                            .products = {{.item = ITEM_WILD_CARROTS,
                                          .capacity = 3,
                                          .regrow_hours = 24,
@@ -239,6 +263,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                        .t_frost_hardened = -25.0f,
                        .t_lethal_heat = 45.0f,
                        .rest = PLANT_REST_SLEEPS,
+                       .light_min = 0.2f,
+                       .light_full = 0.8f,
+                       .dark_days = 10.0f,
                        .products = {{.item = ITEM_CATTAIL_RHIZOMES,
                                      .capacity = 4,
                                      .regrow_hours = 48,
@@ -381,6 +408,18 @@ float plant_temperature_response(PlantType type, float celsius)
     return 1.0f;
 }
 
+float plant_light_response(PlantType type, float light)
+{
+    if ((unsigned)type >= PLANT_COUNT) {
+        return 0.0f;
+    }
+    const PlantDef *def = &PLANT_DEFS[type];
+    if (def->light_full <= def->light_min) {
+        return 1.0f; /* Needs none. */
+    }
+    return clampf((light - def->light_min) / (def->light_full - def->light_min), 0.0f, 1.0f);
+}
+
 float plant_frost_limit(const Plant *plant)
 {
     const PlantDef *def = &PLANT_DEFS[plant->type];
@@ -488,6 +527,9 @@ static bool advance_hour(Plant *plant, const PlantDef *def, const PlantCondition
             harm = PLANT_FROST_DAMAGE * (limit - temperature);
         } else if (temperature > def->t_lethal_heat) {
             harm = PLANT_HEAT_DAMAGE * (temperature - def->t_lethal_heat);
+        } else if (state == PLANT_STATE_AWAKE && def->dark_days > 0.0f &&
+                   conditions->light_peak < def->light_min) {
+            harm = 1.0f / (def->dark_days * (float)HOURS_PER_DAY); /* Starving in the dark. */
         }
         float damage = (float)plant->damage + harm * (float)PLANT_DAMAGE_MAX;
         if (harm == 0.0f && state == PLANT_STATE_AWAKE) {
@@ -511,8 +553,9 @@ static bool advance_hour(Plant *plant, const PlantDef *def, const PlantCondition
     /* Growth. */
     float fertility = def->wetland ? 1.0f : conditions->fertility;
     if (state == PLANT_STATE_AWAKE && plant->growth < 1.0f && fertility >= def->min_fertility) {
-        float rate = def->growth_per_day / (float)HOURS_PER_DAY * fertility *
+        float rate = def->growth_per_day / PLANT_BEST_DAY_HOURS * fertility *
                      plant_temperature_response((PlantType)plant->type, temperature) *
+                     plant_light_response((PlantType)plant->type, conditions->light) *
                      plant_health(plant);
         plant->growth = fminf(plant->growth + rate, 1.0f);
     }
@@ -551,6 +594,7 @@ float plant_growth_rate(const Plant *plant, const PlantConditions *conditions)
     }
     return def->growth_per_day * fertility *
            plant_temperature_response((PlantType)plant->type, conditions->temperature) *
+           plant_light_response((PlantType)plant->type, conditions->light_peak) *
            plant_health(plant);
 }
 
@@ -560,6 +604,8 @@ const char *plant_status_name_key(PlantStatus status)
         [PLANT_STATUS_GROWING] = N_("plant.status.growing"),
         [PLANT_STATUS_SLOWED_COLD] = N_("plant.status.slowed_cold"),
         [PLANT_STATUS_SLOWED_HOT] = N_("plant.status.slowed_hot"),
+        [PLANT_STATUS_SLOWED_DARK] = N_("plant.status.slowed_dark"),
+        [PLANT_STATUS_TOO_DARK] = N_("plant.status.too_dark"),
         [PLANT_STATUS_TOO_COLD] = N_("plant.status.too_cold"),
         [PLANT_STATUS_TOO_HOT] = N_("plant.status.too_hot"),
         [PLANT_STATUS_FROST] = N_("plant.status.frost"),
@@ -590,10 +636,14 @@ PlantStatus plant_status(const Plant *plant, const PlantConditions *conditions)
     if (response <= 0.0f) {
         return temperature < def->t_opt_low ? PLANT_STATUS_TOO_COLD : PLANT_STATUS_TOO_HOT;
     }
+    float light = plant_light_response((PlantType)plant->type, conditions->light_peak);
+    if (light <= 0.0f) {
+        return PLANT_STATUS_TOO_DARK;
+    }
     if (response < 1.0f) {
         return temperature < def->t_opt_low ? PLANT_STATUS_SLOWED_COLD : PLANT_STATUS_SLOWED_HOT;
     }
-    return PLANT_STATUS_GROWING;
+    return light < 1.0f ? PLANT_STATUS_SLOWED_DARK : PLANT_STATUS_GROWING;
 }
 
 int plant_growth_stage(const Plant *plant)
@@ -1305,6 +1355,35 @@ int map_cover_level(const Map *map, int x, int y, int z)
         }
     }
     return -1;
+}
+
+float map_light_cover(const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return 0.0f;
+    }
+    float light = 1.0f;
+    for (int above = z + 1; above < map->depth; above++) {
+        size_t index = map_index(map, x, y, above);
+        if (map->rock[index] == ROCK_WOOD) {
+            continue; /* A trunk is a tree's own, not a roof. */
+        }
+        if (map->rock[index] != ROCK_NONE) {
+            return 0.0f;
+        }
+        switch ((Terrain)map->terrain[index]) {
+        case TERRAIN_FOLIAGE: light = fminf(light, MAP_LIGHT_FOLIAGE_DENSE); continue;
+        case TERRAIN_FOLIAGE_MEDIUM: light = fminf(light, MAP_LIGHT_FOLIAGE_MEDIUM); continue;
+        case TERRAIN_FOLIAGE_SPARSE: light = fminf(light, MAP_LIGHT_FOLIAGE_SPARSE); continue;
+        default: break;
+        }
+        if (map_roof(map, x, y, above) != STRUCTURE_NONE) {
+            light = fminf(light, MAP_LIGHT_ROOF);
+        } else if (!map_is_open_at(map, index)) {
+            return 0.0f; /* The ground of a level above. */
+        }
+    }
+    return light;
 }
 
 bool map_is_roofed(const Map *map, int x, int y, int z)

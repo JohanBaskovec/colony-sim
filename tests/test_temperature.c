@@ -417,6 +417,31 @@ static void test_cave_stays_mild(void)
     map_free(&map);
 }
 
+/* A tree stands on a tile of solid wood, which keeps the ground's temperature,
+ * but its crown is in the open air: the tree lives in the outdoor air. Other
+ * plants live in the temperature of their tile. */
+static void test_a_tree_lives_in_the_outdoor_air(void)
+{
+    Map map;
+    Temperatures temperatures;
+    REQUIRE(map_init(&map, 40, 40, 3));
+    map_set_rock(&map, 10, 10, 0, ROCK_WOOD); /* A trunk on its foot. */
+    map_set_terrain(&map, 10, 10, 1, TERRAIN_FOLIAGE);
+    const float outdoor = -6.0f;
+    REQUIRE(temperatures_init(&temperatures, &map, outdoor));
+    for (uint64_t tick = 0; tick < 24 * (uint64_t)TICKS_PER_HOUR; tick++) {
+        temperatures_tick(&temperatures, &map, tick, outdoor);
+    }
+    CHECK_NEAR(temperature_at(&temperatures, 10, 10, 0), TEMPERATURE_GROUND,
+               0.01); /* Wood: rock. */
+    CHECK_NEAR(temperature_for_plant(&temperatures, &map, 10, 10, 0), outdoor, 0.01);
+    CHECK_NEAR(temperature_for_plant(&temperatures, &map, 20, 20, 0),
+               temperature_at(&temperatures, 20, 20, 0), 1e-6);
+    CHECK_NEAR(temperature_for_plant(&temperatures, &map, -1, 0, 0), TEMPERATURE_GROUND, 1e-6);
+    temperatures_free(&temperatures);
+    map_free(&map);
+}
+
 static void test_sleep_temperature_factor(void)
 {
     Colonist ordinary;
@@ -666,6 +691,7 @@ int main(void)
     RUN_TEST(test_hut_keeps_the_warmth);
     RUN_TEST(test_cover_follows_the_levels_above);
     RUN_TEST(test_cave_stays_mild);
+    RUN_TEST(test_a_tree_lives_in_the_outdoor_air);
     RUN_TEST(test_sleep_temperature_factor);
     RUN_TEST(test_tolerances_move_the_comfortable_range);
     RUN_TEST(test_cold_sleep_is_longer);

@@ -300,6 +300,14 @@ float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int
     return rains && !sheltered ? rate * ITEM_ROT_RAINED_ON : rate;
 }
 
+float temperature_for_plant(const Temperatures *temperatures, const Map *map, int x, int y, int z)
+{
+    if (map_in_bounds(map, x, y, z) && map->rock[map_index(map, x, y, z)] == ROCK_WOOD) {
+        return temperatures->outdoor;
+    }
+    return temperature_at(temperatures, x, y, z);
+}
+
 /* Brings the caches up to date with the changes the map logged since. */
 static void update_caches(Temperatures *temperatures, const Map *map)
 {

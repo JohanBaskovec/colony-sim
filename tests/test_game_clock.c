@@ -182,27 +182,68 @@ static void test_date_rollover(void)
     CHECK_EQ_INT(game_hour_from_tick(TICKS_PER_YEAR * 5 + 13 * TICKS_PER_HOUR), 13);
 }
 
+/* The drawn light at the equinox (mid-spring: a day of 12 hours, the sun up
+ * from 6 to 18). */
 static void test_daylight_cycle(void)
 {
     const uint64_t hour = TICKS_PER_HOUR;
-    CHECK_NEAR(game_daylight(0), GAME_DAYLIGHT_MIN, 1e-6);
-    CHECK_NEAR(game_daylight(12 * hour), 1.0, 1e-6);
-    CHECK_NEAR(game_daylight(23 * hour), GAME_DAYLIGHT_MIN, 1e-6);
+    const uint64_t day = (uint64_t)SEASON_DAY(SEASON_SPRING, 8) * TICKS_PER_DAY;
+    CHECK_NEAR(game_daylight(day), GAME_DAYLIGHT_MIN, 1e-6);
+    CHECK_NEAR(game_daylight(day + 12 * hour), 1.0, 1e-6);
+    CHECK_NEAR(game_daylight(day + 23 * hour), GAME_DAYLIGHT_MIN, 1e-6);
 
-    float dawn = game_daylight(6 * hour);
+    float dawn = game_daylight(day + 6 * hour);
     CHECK(dawn > GAME_DAYLIGHT_MIN && dawn < 1.0f);
-    float dusk = game_daylight(19 * hour);
+    float dusk = game_daylight(day + 18 * hour);
     CHECK(dusk > GAME_DAYLIGHT_MIN && dusk < 1.0f);
+    CHECK_NEAR(dawn, dusk, 1e-4); /* Symmetric around noon. */
 
     /* Light increases monotonically through dawn. */
     float previous = 0.0f;
     for (uint64_t t = 4 * hour; t <= 8 * hour; t += hour / 10) {
-        float light = game_daylight(t);
+        float light = game_daylight(day + t);
         CHECK(light >= previous);
         previous = light;
     }
-    /* Next day repeats. */
-    CHECK_NEAR(game_daylight(TICKS_PER_DAY + 12 * hour), 1.0, 1e-6);
+    /* Next day repeats (nearly: the day length moves a little). */
+    CHECK_NEAR(game_daylight(day + TICKS_PER_DAY + 12 * hour), 1.0, 1e-6);
+}
+
+/* The sun by the season: the day's length (8.5 h at midwinter to 15.5 h at
+ * midsummer, 12 at the equinoxes), centered on noon; the noon sun stronger in
+ * summer; nothing at night; the drawn light follows the sunrise. */
+static void test_sun_follows_the_seasons(void)
+{
+    int midsummer = SEASON_DAY(SEASON_SUMMER, 8), midwinter = SEASON_DAY(SEASON_WINTER, 8);
+    int spring = SEASON_DAY(SEASON_SPRING, 8), autumn = SEASON_DAY(SEASON_AUTUMN, 8);
+    CHECK_NEAR(game_day_length(midsummer), GAME_DAY_LENGTH_SUMMER, 1e-4);
+    CHECK_NEAR(game_day_length(midwinter), GAME_DAY_LENGTH_WINTER, 1e-4);
+    CHECK_NEAR(game_day_length(spring), 12.0, 0.1);
+    CHECK_NEAR(game_day_length(autumn), 12.0, 0.1);
+    for (int day = 0; day < DAYS_PER_YEAR; day++) {
+        CHECK(game_day_length(day) >= GAME_DAY_LENGTH_WINTER - 1e-3f &&
+              game_day_length(day) <= GAME_DAY_LENGTH_SUMMER + 1e-3f);
+        CHECK_NEAR(game_sunrise(day) + 0.5f * game_day_length(day), 12.0, 1e-4);
+    }
+    CHECK_NEAR(game_sun_noon(midsummer), 1.0, 1e-4);
+    CHECK_NEAR(game_sun_noon(midwinter), GAME_SUN_NOON_WINTER, 1e-4);
+
+    /* The sun on the ground: none at night, the noon sun at noon, symmetric. */
+    uint64_t summer = (uint64_t)midsummer * TICKS_PER_DAY;
+    uint64_t winter = (uint64_t)midwinter * TICKS_PER_DAY;
+    CHECK_NEAR(game_sunlight(summer + 12 * TICKS_PER_HOUR), 1.0, 1e-3);
+    CHECK_NEAR(game_sunlight(winter + 12 * TICKS_PER_HOUR), GAME_SUN_NOON_WINTER, 1e-3);
+    CHECK_NEAR(game_sunlight(summer + 2 * TICKS_PER_HOUR), 0.0, 1e-6); /* Up at 4:15. */
+    CHECK(game_sunlight(summer + 5 * TICKS_PER_HOUR) > 0.0f);
+    CHECK_NEAR(game_sunlight(winter + 6 * TICKS_PER_HOUR), 0.0, 1e-6); /* Up at 7:45. */
+    CHECK(game_sunlight(winter + 8 * TICKS_PER_HOUR) > 0.0f);
+    CHECK_NEAR(game_sunlight(winter + 17 * TICKS_PER_HOUR), 0.0, 1e-6);
+    CHECK_NEAR(game_sunlight(summer + 9 * TICKS_PER_HOUR),
+               game_sunlight(summer + 15 * TICKS_PER_HOUR), 1e-4);
+    /* Long summer evenings, short winter ones on screen too. */
+    CHECK(game_daylight(summer + 20 * TICKS_PER_HOUR) >
+          game_daylight(winter + 20 * TICKS_PER_HOUR));
+    CHECK(game_daylight(winter + 17 * TICKS_PER_HOUR) < 1.0f);
 }
 
 static void test_season_keys(void)
@@ -226,6 +267,7 @@ int main(void)
     RUN_TEST(test_pause_and_resume);
     RUN_TEST(test_date_rollover);
     RUN_TEST(test_daylight_cycle);
+    RUN_TEST(test_sun_follows_the_seasons);
     RUN_TEST(test_season_keys);
     return test_summary();
 }

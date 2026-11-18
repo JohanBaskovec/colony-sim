@@ -4,8 +4,8 @@ How wild plants grow, rest, suffer and die. They react to the temperature,
 the light and, later, the water of their tile, instead of following a
 calendar.
 
-Status: step **P1** (temperature, health, rest; §2 to §4 and §7, light
-taken as 1) is implemented; P2 to P4 (§9) are design. Before it a plant grew
+Status: steps **P1** (temperature, health, rest; §2 to §4 and §7) and **P2**
+(light; §5) are implemented; P3 and P4 (§9) are design. Before it a plant grew
 on its growth days (spring to autumn) at a rate set by the fertility of the
 ground. Values marked *(tuning)* are first guesses.
 
@@ -236,10 +236,9 @@ dies back loses its stocks, as today; a resting plant grows none back.
   degree above it (`PLANT_REST_HYSTERESIS`). It also sets the hardening
   (`PLANT_HARDEN_PER_HOUR`, `PLANT_SOFTEN_PER_HOUR`).
 - `plant_advance(plant, &PlantConditions, hours)` does it all, with the
-  temperature of the plant's tile (`temperature_at()`), so a plant in a roofed
-  room or under a tree's crown lives in that climate: under foliage a tile
-  holds the temperature of the ground, 10 °C all year, until the light does
-  something about it (P2). Frost and heat take health, an awake plant mends
+  temperature of the plant's tile (`temperature_for_plant()`), so a plant in a
+  roofed room or a cave lives in that climate (a tree, standing on the tile of
+  its trunk, in the outdoor air). Frost and heat take health, an awake plant mends
   (`PLANT_RECOVERY`), a plant at 0 is removed. A tree with a trunk
   (`TREE_CROWN_FROM`) keeps `PLANT_TREE_HEALTH_FLOOR` of its health at least.
 - `plant_growth_rate()`, `plant_status()` and `plant_health()` feed the plant
@@ -247,6 +246,40 @@ dies back loses its stocks, as today; a resting plant grows none back.
   information.
 - Products keep their days of the year (`PlantProduct.days`); a resting plant
   grows no stock back, a plant that died back has none.
+
+## 8c. As built (P2)
+
+- The sun (`core/game_clock.h`): `game_day_length()`, `game_sunrise()`,
+  `game_sun_noon()` and `game_sunlight()` (the noon sun times the sine of the
+  day's progress, 0 at night). The day on screen, `game_daylight()`, has its
+  dawn and dusk (two hours each) around the same sunrise and sunset: winter
+  nights are long and summer ones short.
+- The cover of a tile is worked out when a plant is updated
+  (`map_light_cover()`: nothing is cached, a plant looks up through the levels
+  above it once an hour): open sky 1, foliage by density
+  (`MAP_LIGHT_FOLIAGE_*`, the densest layer counts), a built roof
+  `MAP_LIGHT_ROOF`, rock or the ground of a level above 0. A trunk over its
+  own foot is no roof; a tree, standing on the tile of its trunk, gets the open
+  light.
+- `game_plant_conditions()` gathers what a plant meets (temperature, fertility,
+  `light` now, `light_peak` the noon sun times the sky and the cover); the
+  plant window uses it too.
+- `PlantDef.growth_per_day` is what a plant grows in a day at its best: twelve
+  hours of full light (`PLANT_BEST_DAY_HOURS`), so a long clear summer day
+  gives about that and a short autumn one much less, with the temperature
+  factor on top. `plant_light_response()`: none below `light_min`, full from
+  `light_full`.
+- Darkness is judged on the day's best light (`light_peak`), so nights do not
+  count: an awake plant whose best light stays under `light_min` loses
+  `1 / (dark_days × 24)` of its health an hour. A plant that rests needs no
+  light; a fungus (`dark_days` 0) none at all. On a world's first days the
+  grass under the densest crowns dies (about one in six on seed 42), and a
+  tree without a trunk shaded by others' crowns can go the same way.
+- The plant window says "little light" or "starving in the dark", and the
+  rate it shows is the most it can make in a day ("Grows up to 11% a day").
+- Cost: `bench_simulation` 4 days 35 → 45 µs a tick, almost all of it settlers
+  searching wider for grass to cut (what grass grows in a short autumn day is
+  a fraction of what it did), not the plant update.
 
 ## 9. Steps
 
@@ -259,9 +292,9 @@ dies back loses its stocks, as today; a resting plant grows none back.
    "slowed: too cold", "resting", "died back", "suffering from frost",
    "too dark") and how fast it grows. The tests that rely on the seasons are
    written in terms of temperature.
-2. **P2: light.** The sun's day by season (also on screen), the sky, the
-   cover of each tile (open, foliage, roof, rock), `f_light` and death in the
-   dark; mushrooms need none.
+2. **P2: light** *(done)*. The sun's day by season (also on screen), the sky,
+   the cover of each tile (open, foliage, roof, rock), `f_light` and death in
+   the dark; mushrooms need none.
 3. **P3: ripening by degree-days**, mushrooms by temperature.
 4. **P4: water** (soil moisture), with `docs/GAME_DESIGN.md`'s *Soil*.
 
@@ -269,10 +302,8 @@ Each step changes the state hash of the benchmarks.
 
 ## 10. Open questions
 
-- The cost of the light cover (P2): one more cached layer per ground tile,
-  and the plant update reading the temperature and the light of every plant
-  every hour (`bench_simulation` to watch; P1 cost nothing measurable).
-- The forest floor: under foliage the temperature module gives the ground's
-  10 °C all year, so plants under a crown meet no frost and no summer heat;
-  wild garlic there never dies back. A milder, damped version of the outdoor
-  temperature would be truer; P2's light is the other half of it.
+- Under foliage a plant lives in the outdoor air (foliage is open to the air
+  for the temperature layer); only a tree lived at the ground's temperature,
+  because its foot is the tile of its trunk (solid wood): it now lives in the
+  outdoor air (`temperature_for_plant()`). A milder, damped temperature on
+  the forest floor would be truer; P2's light is the other half of it.

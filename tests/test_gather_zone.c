@@ -1200,6 +1200,8 @@ static void test_grass_is_a_plant_with_a_stock(void)
     for (int day = 0; day < 4; day++) {
         PlantConditions warm = {.temperature = 20.0f,
                                 .fertility = 1.0f,
+                                .light = 1.0f,
+                                .light_peak = 1.0f,
                                 .day_of_year = SEASON_DAY(SEASON_SUMMER, 3 + day)};
         plant_advance(tall, &warm, HOURS_PER_DAY);
     }

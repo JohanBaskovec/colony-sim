@@ -174,6 +174,12 @@ typedef struct PlantDef {
      * winter has passed. */
     PlantRest rest;
     bool rests_in_heat;
+    /* Growth by the light on its tile (0 .. 1, docs/PLANTS.md §5): none below
+     * `light_min`, full from `light_full`, in proportion between. While awake,
+     * a plant whose best light of the day stays below `light_min` takes
+     * damage and dies after `dark_days` days in the dark (0: lives without
+     * light, as fungi do). */
+    float light_min, light_full, dark_days;
     ItemType cut_item; /* Dropped when the plant is cut down (ITEM_NONE: nothing). */
     int cut_yield;     /* Items dropped at full growth, proportionally less when younger. */
     /* What it bears (a slot per product), and what harvesting does to it. A
@@ -226,6 +232,9 @@ typedef enum PlantState {
 #define PLANT_FROST_DAMAGE 0.02f
 #define PLANT_HEAT_DAMAGE 0.02f
 #define PLANT_RECOVERY (0.25f / 24.0f)
+/* PlantDef.growth_per_day is what a plant grows in a day at its best: that of
+ * this many hours of full light (the night makes none). */
+#define PLANT_BEST_DAY_HOURS 12.0f
 /* The health a tree with a trunk keeps at the least (it never dies of the weather). */
 #define PLANT_TREE_HEALTH_FLOOR 0.05f
 
@@ -260,7 +269,12 @@ _Static_assert(sizeof(Plant) == 16, "a plant is four words");
 typedef struct PlantConditions {
     float temperature; /* Of its tile, in degrees Celsius. */
     float fertility;   /* Of its ground (TerrainDef.fertility). */
-    int day_of_year;   /* For what its products' days say (PlantProduct.days). */
+    /* The light on its tile now, 0 .. 1 (the sun, the sky and what covers the
+     * tile), and the best it gets in the day (the noon sun): it is dark when
+     * even that is low. */
+    float light;
+    float light_peak;
+    int day_of_year; /* For what its products' days say (PlantProduct.days). */
 } PlantConditions;
 
 /* What a plant is up to, for the player (the plant window). */
@@ -268,8 +282,10 @@ typedef enum PlantStatus {
     PLANT_STATUS_GROWING,
     PLANT_STATUS_SLOWED_COLD, /* Cooler than it likes, growing slowly. */
     PLANT_STATUS_SLOWED_HOT,
-    PLANT_STATUS_TOO_COLD, /* Too cold to grow, or too hot. */
+    PLANT_STATUS_SLOWED_DARK, /* Little light. */
+    PLANT_STATUS_TOO_COLD,    /* Too cold to grow, or too hot, or too dark. */
     PLANT_STATUS_TOO_HOT,
+    PLANT_STATUS_TOO_DARK,
     PLANT_STATUS_FROST, /* Suffering from frost. */
     PLANT_STATUS_HEAT,  /* Suffering from heat. */
     PLANT_STATUS_RESTING,
@@ -453,6 +469,9 @@ void plant_advance(Plant *plant, const PlantConditions *conditions, int hours);
 
 /* The response of a plant to a temperature, 0 .. 1 (docs/PLANTS.md §2). */
 float plant_temperature_response(PlantType type, float celsius);
+
+/* The response of a plant to the light, 0 .. 1 (docs/PLANTS.md §5). */
+float plant_light_response(PlantType type, float light);
 
 /* Frost limit of a plant now: from its tender to its hardened one by its
  * hardening. */
@@ -680,6 +699,16 @@ bool map_dig_keeps_ceilings(const Map *map, int x, int y, int z, bool opens_abov
  * nothing does (open sky), when the tile is rock or out of bounds. The
  * foliage of trees lets the sky through: it covers nothing. */
 int map_cover_level(const Map *map, int x, int y, int z);
+
+/* How much of the light reaches the tile through what lies over it, 0 .. 1:
+ * all of it in the open, foliage lets through MAP_LIGHT_FOLIAGE_* (the densest
+ * layer counts), a built roof MAP_LIGHT_ROOF, rock or the ground of a level
+ * above nothing. The trunk of a tree over its own foot is not a cover. */
+float map_light_cover(const Map *map, int x, int y, int z);
+#define MAP_LIGHT_FOLIAGE_DENSE 0.2f
+#define MAP_LIGHT_FOLIAGE_MEDIUM 0.4f
+#define MAP_LIGHT_FOLIAGE_SPARSE 0.7f
+#define MAP_LIGHT_ROOF 0.05f
 
 /* Whether something covers the tile (map_cover_level() is not -1). */
 bool map_is_roofed(const Map *map, int x, int y, int z);

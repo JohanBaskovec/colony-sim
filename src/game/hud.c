@@ -382,10 +382,7 @@ static void build_tile_panel(App *app, Panel *panel)
         } else {
             tr_integer(a, sizeof(a), (long long)(plant->growth * 100.0f + 0.5f));
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant"), tr(def->name_key), a);
-            PlantConditions conditions = {
-                .temperature = temperature_at(&app->game.temperatures, foot_x, foot_y, foot_z),
-                .fertility = 1.0f,
-            };
+            PlantConditions conditions = game_plant_conditions(&app->game, foot_x, foot_y, foot_z);
             panel_add_text(panel, tr(plant_status_name_key(plant_status(plant, &conditions))));
         }
         if (game_forbidden(&app->game, x, y, z, FORBID_PLANT)) {

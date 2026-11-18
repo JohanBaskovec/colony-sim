@@ -831,11 +831,7 @@ static void update_plants(Game *game)
             float old_growth = plant->growth;
             int x, y, z;
             map_tile_of(map, i, &x, &y, &z);
-            PlantConditions conditions = {
-                .temperature = temperature_at(&game->temperatures, x, y, z),
-                .fertility = terrain_def((Terrain)map->terrain[i])->fertility,
-                .day_of_year = day,
-            };
+            PlantConditions conditions = game_plant_conditions(game, x, y, z);
             plant_advance(plant, &conditions, GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR);
             if (plant_is_tree(plant->type)) {
                 grow_tree(game, i, old_growth);
@@ -846,6 +842,23 @@ static void update_plants(Game *game)
             }
         }
     }
+}
+
+PlantConditions game_plant_conditions(const Game *game, int x, int y, int z)
+{
+    const Map *map = &game->map;
+    size_t index = map_index(map, x, y, z);
+    uint64_t tick = game->clock.tick;
+    int day = game_day_of_year(tick);
+    float cover = map->rock[index] == ROCK_WOOD ? 1.0f : map_light_cover(map, x, y, z);
+    float sky = weather_light(&game->weather) * cover;
+    return (PlantConditions){
+        .temperature = temperature_for_plant(&game->temperatures, map, x, y, z),
+        .fertility = terrain_def((Terrain)map->terrain[index])->fertility,
+        .light = game_sunlight(tick) * sky,
+        .light_peak = game_sun_noon(day) * sky,
+        .day_of_year = day,
+    };
 }
 
 float game_item_rot_rate(const Game *game, int x, int y, int z)

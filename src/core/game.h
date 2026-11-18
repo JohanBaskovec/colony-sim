@@ -533,6 +533,13 @@ bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target);
  * who found nothing to do look again. Returns whether it changed. */
 bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bool forbidden);
 
+/* What a plant on a tile meets now: the temperature of its tile
+ * (temperature_for_plant()), its ground's fertility, and the light: the sun
+ * (game_sunlight()), the sky (weather_light()) and what covers the tile
+ * (map_light_cover(); a tree, which stands on the tile of its trunk and
+ * above what lies on the ground, gets the open light). */
+PlantConditions game_plant_conditions(const Game *game, int x, int y, int z);
+
 /* The forbid and allow tools: forbids or allows everything on the tiles of a
  * rectangle (corners in any order), plans and plants included (grass too), but
  * not zones, which are forbidden as a whole. Returns how many things changed. */

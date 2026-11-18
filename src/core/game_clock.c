@@ -3,6 +3,10 @@
 #include "core/i18n.h"
 #include "core/util.h"
 
+#include <math.h>
+
+#define PI_F 3.14159265f
+
 void game_clock_init(GameClock *clock)
 {
     clock->tick = GAME_START_TICK;
@@ -106,11 +110,52 @@ int game_day_of_year(uint64_t tick)
     return (int)(tick / TICKS_PER_DAY % DAYS_PER_YEAR);
 }
 
+/* How far the year is from midwinter to midsummer: 1 at midsummer (the 8th day
+ * of summer), -1 at midwinter, 0 at the equinoxes. */
+static float season_phase(int day_of_year)
+{
+    return cosf(2.0f * PI_F * (float)(day_of_year - SEASON_DAY(SEASON_SUMMER, 8)) /
+                (float)DAYS_PER_YEAR);
+}
+
+float game_day_length(int day_of_year)
+{
+    float middle = 0.5f * (GAME_DAY_LENGTH_SUMMER + GAME_DAY_LENGTH_WINTER);
+    float swing = 0.5f * (GAME_DAY_LENGTH_SUMMER - GAME_DAY_LENGTH_WINTER);
+    return middle + swing * season_phase(day_of_year);
+}
+
+float game_sunrise(int day_of_year)
+{
+    return 12.0f - 0.5f * game_day_length(day_of_year);
+}
+
+float game_sun_noon(int day_of_year)
+{
+    float middle = 0.5f * (1.0f + GAME_SUN_NOON_WINTER);
+    float swing = 0.5f * (1.0f - GAME_SUN_NOON_WINTER);
+    return middle + swing * season_phase(day_of_year);
+}
+
+float game_sunlight(uint64_t tick)
+{
+    int day = (int)(tick / TICKS_PER_DAY % DAYS_PER_YEAR);
+    float hour = (float)(tick % TICKS_PER_DAY) / (float)TICKS_PER_HOUR;
+    float length = game_day_length(day);
+    float since = hour - game_sunrise(day);
+    if (since <= 0.0f || since >= length) {
+        return 0.0f;
+    }
+    return game_sun_noon(day) * sinf(PI_F * since / length);
+}
+
 float game_daylight(uint64_t tick)
 {
     float hour = (float)(tick % TICKS_PER_DAY) / (float)TICKS_PER_HOUR;
-    const float dawn_start = 5.0f, dawn_end = 7.0f;
-    const float dusk_start = 18.0f, dusk_end = 20.0f;
+    int day = (int)(tick / TICKS_PER_DAY % DAYS_PER_YEAR);
+    float sunrise = game_sunrise(day), sunset = sunrise + game_day_length(day);
+    const float dawn_start = sunrise - 1.0f, dawn_end = sunrise + 1.0f;
+    const float dusk_start = sunset - 1.0f, dusk_end = sunset + 1.0f;
 
     if (hour < dawn_start || hour >= dusk_end) {
         return GAME_DAYLIGHT_MIN;

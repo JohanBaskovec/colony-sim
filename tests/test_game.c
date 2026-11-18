@@ -284,6 +284,43 @@ static void test_plants_grow_over_time(void)
     game_shutdown(&game);
 }
 
+/* What a plant meets on its tile: the sun by the hour, the sky, what covers the
+ * tile (a tree standing on its trunk is not shaded by its own crown). */
+static void test_plant_conditions(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game, 3));
+    Map *map = &game.map;
+    map_set_terrain(map, 5, 5, 1, TERRAIN_FOLIAGE); /* A crown over (5, 5). */
+    map_set_rock(map, 7, 7, 0, ROCK_WOOD);          /* A tree's foot, its crown over it. */
+    map_set_terrain(map, 7, 7, 1, TERRAIN_FOLIAGE);
+    int midsummer = SEASON_DAY(SEASON_SUMMER, 8);
+    game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
+    game.weather.type = WEATHER_CLEAR;
+    PlantConditions open = game_plant_conditions(&game, 3, 3, 0);
+    CHECK_NEAR(open.light, 1.0, 1e-3);
+    CHECK_NEAR(open.light_peak, 1.0, 1e-3);
+    CHECK_EQ_INT(open.day_of_year, midsummer);
+    CHECK_NEAR(open.fertility,
+               terrain_def((Terrain)map->terrain[map_index(map, 3, 3, 0)])->fertility, 1e-6);
+    PlantConditions shaded = game_plant_conditions(&game, 5, 5, 0);
+    CHECK_NEAR(shaded.light, MAP_LIGHT_FOLIAGE_DENSE, 1e-3);
+    PlantConditions tree = game_plant_conditions(&game, 7, 7, 0);
+    CHECK_NEAR(tree.light, 1.0, 1e-3);
+    /* Night: no light now, the day's best the same. */
+    game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 1 * TICKS_PER_HOUR;
+    PlantConditions night = game_plant_conditions(&game, 3, 3, 0);
+    CHECK_NEAR(night.light, 0.0, 1e-6);
+    CHECK_NEAR(night.light_peak, 1.0, 1e-3);
+    /* Clouds and rain dim it. */
+    game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
+    game.weather.type = WEATHER_STORM;
+    PlantConditions storm = game_plant_conditions(&game, 3, 3, 0);
+    CHECK_NEAR(storm.light, weather_light(&game.weather), 1e-3);
+    CHECK(storm.light < open.light);
+    game_shutdown(&game);
+}
+
 /* Growth is spread over the ticks of an interval: a tick only touches a
  * slice of the map, and after a whole interval every plant grew once. */
 static void test_plant_growth_is_spread_over_ticks(void)
@@ -296,6 +333,8 @@ static void test_plant_growth_is_spread_over_ticks(void)
     params.world.height = 64;
     params.colonist_count = 0; /* Nobody eats the plants meanwhile. */
     REQUIRE(game_init(&game, &params));
+    game.clock.tick =
+        (uint64_t)GAME_START_DAY * TICKS_PER_DAY + 11 * TICKS_PER_HOUR; /* Near noon. */
     Map *map = &game.map;
     size_t count = map_tile_count(map);
     float *before = malloc(count * sizeof(*before));
@@ -307,10 +346,8 @@ static void test_plant_growth_is_spread_over_ticks(void)
         if (plant->type != PLANT_NONE && plant->growth < 1.0f) {
             int x, y, z;
             map_tile_of(map, i, &x, &y, &z);
-            PlantConditions conditions = {
-                .temperature = temperature_at(&game.temperatures, x, y, z),
-                .fertility = terrain_def((Terrain)map->terrain[i])->fertility,
-            };
+            PlantConditions conditions = game_plant_conditions(&game, x, y, z);
+            conditions.light_peak = conditions.light; /* What it makes this hour. */
             growing += plant_growth_rate(plant, &conditions) > 0.0f;
         }
     }
@@ -328,7 +365,8 @@ static void test_plant_growth_is_spread_over_ticks(void)
         most_in_one_tick = now - grown > most_in_one_tick ? now - grown : most_in_one_tick;
         grown = now;
     }
-    CHECK_EQ_UINT(grown, growing);
+    /* Each plant that could grow did (but for a few whose light fell below what they need). */
+    CHECK(grown <= growing && grown + growing / 50 >= growing);
     CHECK(most_in_one_tick <= count / GAME_PLANT_UPDATE_INTERVAL + 1);
 
     /* Not twice: one more interval gives each plant one more step. */
@@ -604,6 +642,7 @@ int main(void)
     RUN_TEST(test_settlers_arrive_near_flint);
     RUN_TEST(test_update_advances_ticks);
     RUN_TEST(test_plants_grow_over_time);
+    RUN_TEST(test_plant_conditions);
     RUN_TEST(test_plant_growth_is_spread_over_ticks);
     RUN_TEST(test_simulation_is_deterministic);
     RUN_TEST(test_hash_changes_as_simulation_runs);

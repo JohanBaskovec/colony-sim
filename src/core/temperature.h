@@ -123,6 +123,12 @@ float temperature_daily_swing(uint64_t tick);
 /* Temperature of a tile; TEMPERATURE_GROUND out of bounds. */
 float temperature_at(const Temperatures *temperatures, int x, int y, int z);
 
+/* The temperature a plant lives in on the tile it grows on: that of the
+ * tile, except for a tree, whose foot is the tile of its trunk (solid wood:
+ * rock, at the ground's temperature) and whose crown is in the open air: the
+ * outdoor air then. */
+float temperature_for_plant(const Temperatures *temperatures, const Map *map, int x, int y, int z);
+
 /* Heats a tile by `degrees` (a burning hearth, every tick). */
 void temperatures_add_heat(Temperatures *temperatures, int x, int y, int z, float degrees);
 

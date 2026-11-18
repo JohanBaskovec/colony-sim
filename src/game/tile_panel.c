@@ -108,13 +108,8 @@ static void plant_rows(UiLayout *layout, const ThingRows *rows)
         TR_FORMAT(text, sizeof(text), tr_plural("hud.tile.tree_levels", levels), a);
         ui_layout_label(layout, text, 0.0f, false);
     }
-    /* What it meets on its tile: the temperature there, the ground. */
-    const Map *map = game_view_map(game);
-    PlantConditions conditions = {
-        .temperature = temperature_at(&game->temperatures, foot.x, foot.y, foot.z),
-        .fertility =
-            terrain_def((Terrain)map->terrain[map_index(map, foot.x, foot.y, foot.z)])->fertility,
-    };
+    /* What it meets on its tile: the temperature, the light, the ground. */
+    PlantConditions conditions = game_plant_conditions(game, foot.x, foot.y, foot.z);
     if (plant_is_dormant(plant)) {
         ui_layout_label(layout, tr("tile_panel.dormant"), 0.0f, false);
     } else {

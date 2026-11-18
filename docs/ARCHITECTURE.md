@@ -83,7 +83,7 @@ simulation:
 | `vision`     | Who sees what: sight in 3D through the map's volume (rock, walls and floors block it, no range limit), fields of view per settler, how many see each tile (see *Vision*) |
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
-| `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
+| `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve and the sun (day length by season)                |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, plants, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
@@ -267,7 +267,11 @@ rhizomes and cut grass all year...), until ripening follows the warmth
 the heat and the cold, nettles in winter) shows nothing above ground until the
 warmth returns. `plant_advance()` does one such step (`update_plants()` calls
 it once an hour per plant, a slice of the map per tick); `plant_settle()` puts a
-new plant in the state of a day (world generation, planted food). What
+new plant in the state of a day (world generation, planted food). The light a
+plant meets is the sun (`game_sunlight()`: the day's length and strength follow the
+season), the sky (`weather_light()`) and what covers its tile
+(`map_light_cover()`: foliage, roof, rock); `game_plant_conditions()` gathers
+all it meets. What
 taking the products does to the plant is data (`PlantDef.harvest`,
 `plant_harvested()`): `PLANT_HARVEST_KEEPS` leaves it as it is and the stock
 grows back (fruit, leaves), `PLANT_HARVEST_RESETS` sends it back to growth 0,
