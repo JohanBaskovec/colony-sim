@@ -243,6 +243,7 @@ weather.snowstorm = Tempête de neige
 hud.date = {1}, jour {0}, an {2} · {3}h{4}
 hud.outdoor_temperature = Dehors : {0}
 hud.weather = Temps : {0}
+hud.outdoor_humidity = Humidité de l’air : {0} %
 hud.snow_cover = Neige au sol : {0} %
 hud.temperature_view = Vue thermique : bleu {0}, rouge {1} · {2} : masquer
 hud.paused = En pause
@@ -1210,6 +1211,11 @@ hud.light_view = Vue de la lumière : bleu sombre, jaune lumineux · {0} : mas
 hud.hover_temperature = Case : {0}
 hud.hover_light = Lumière de la case : {0} % (jusqu’à {1} % aujourd’hui)
 hud.help.light = {0} : vue de la lumière (la lumière de chaque case, du soleil, du ciel et de ce qui la couvre : bleu foncé pour l’obscurité, jaune pour la pleine lumière)
+controls.moisture = Vue de l’humidité du sol
+controls.moisture.description = L’eau dans le sol de chaque case où les plantes peuvent pousser : ocre pour le sec, vert pour le frais, bleu pour l’humide et le détrempé
+hud.moisture_view = Vue de l’humidité du sol : ocre sec, bleu détrempé · {0} : masquer
+hud.hover_soil = Sol de la case : {0}
+hud.help.moisture = {0} : vue de l’humidité du sol (l’eau dans le sol de chaque case : ocre pour le sec, vert pour le frais, bleu pour l’humide et le détrempé)
 
 # Soil moisture (docs/CLIMATE.md)
 soil.dry = sec

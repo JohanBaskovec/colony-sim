@@ -283,7 +283,7 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
   - [x] Wild animals eat the new food plants (deer and boar bilberries, strawberries, hips and sorrel; hares strawberries and sorrel)
   - [ ] Later: poisonous look-alikes of the new food plants; evergreens; death of grown trees (standing deadwood), competition for light
 - [ ] Soil: fertility per tile (moisture: soil water above; light: step P2 above)
-- [ ] Moisture view (C4 in `docs/CLIMATE.md`): the soil's water as an overlay next to the temperature and light views; the air's humidity in the status panel
+- [x] Moisture view (C4 in `docs/CLIMATE.md`): the soil's water as an overlay next to the temperature and light views (key K, a drop button; ochre dry, green moist, blue soaked; the hovered tile in words); the air's humidity in the status panel
 - [ ] Vegetation spreading: seeds by wind and animals, roots and runners; competition for light, water and fertile soil
 - [ ] Wildlife as a living population: eating plants, hunting, fighting, breeding, dying of old age (extends M5 "Wildlife, hunting")
 - [ ] Health by body part: injuries, bleeding, infection, lost limbs, for settlers and animals (planned step by step in M6 "Health")

@@ -31,8 +31,8 @@ static void corner_layout(const App *app, CornerLayout *out)
     ScreenLayout layout;
     layout_screen(ui, &layout);
     float button = layout.button_height, gap = theme->gap;
-    /* Overlays (2), a wider gap, then the speeds (pause and the running ones). */
-    float row_width = (2.0f + GAME_SPEED_COUNT) * button + (float)GAME_SPEED_COUNT * gap +
+    /* Overlays (3), a wider gap, then the speeds (pause and the running ones). */
+    float row_width = (3.0f + GAME_SPEED_COUNT) * button + (float)(GAME_SPEED_COUNT + 1) * gap +
                       4.0f * gap + 2.0f * gap;
     out->button = button;
     out->row = (SDL_FRect){layout.width - theme->margin - row_width,
@@ -141,6 +141,32 @@ static void temperature_icon(Ui *ui, SDL_FRect rect)
             RED);
 }
 
+/* A drop of water: a disc with a point on top. */
+static void moisture_icon(Ui *ui, SDL_FRect rect)
+{
+    static const SDL_Color BLUE = {70, 150, 230, 255};
+    SDL_FColor c = {BLUE.r / 255.0f, BLUE.g / 255.0f, BLUE.b / 255.0f, 1.0f};
+    float cx = rect.x + rect.w * 0.5f;
+    float radius = SDL_max(3.0f, rect.w * 0.22f);
+    float cy = rect.y + rect.h * 0.62f;
+    float tip = rect.y + rect.h * 0.16f;
+    enum { SEGMENTS = 16 };
+    for (int i = 0; i < SEGMENTS; i++) { /* The round bottom, a fan of triangles. */
+        float a0 = (float)i * 6.2831853f / SEGMENTS, a1 = (float)(i + 1) * 6.2831853f / SEGMENTS;
+        SDL_Vertex v[3] = {
+            {{cx, cy}, c, {0.0f, 0.0f}},
+            {{cx + radius * SDL_cosf(a0), cy + radius * SDL_sinf(a0)}, c, {0.0f, 0.0f}},
+            {{cx + radius * SDL_cosf(a1), cy + radius * SDL_sinf(a1)}, c, {0.0f, 0.0f}}};
+        SDL_RenderGeometry(ui->renderer, NULL, v, 3, NULL, 0);
+    }
+    /* The point: from the tip to the disc's sides, where its tangents meet. */
+    float side = radius * 0.94f, rise = radius * 0.34f;
+    SDL_Vertex v[3] = {{{cx, tip}, c, {0.0f, 0.0f}},
+                       {{cx - side, cy - rise}, c, {0.0f, 0.0f}},
+                       {{cx + side, cy - rise}, c, {0.0f, 0.0f}}};
+    SDL_RenderGeometry(ui->renderer, NULL, v, 3, NULL, 0);
+}
+
 /* ---- Widgets -------------------------------------------------------------- */
 
 static void tooltip(App *app, const char *title, const char *detail, SDL_Scancode key)
@@ -183,6 +209,17 @@ static void draw_row(App *app, const CornerLayout *layout)
     light_icon(ui, rect);
     if (ui_hovered(ui, rect)) {
         tooltip(app, tr("controls.light"), tr("controls.light.description"), APP_KEY_LIGHT);
+    }
+    x += button + gap;
+
+    rect = (SDL_FRect){x, y, button, button};
+    if (ui_icon_button(ui, rect, app->show_moisture)) {
+        app_toggle_moisture_view(app);
+    }
+    moisture_icon(ui, rect);
+    if (ui_hovered(ui, rect)) {
+        tooltip(app, tr("controls.moisture"), tr("controls.moisture.description"),
+                APP_KEY_MOISTURE);
     }
     x += button + 4.0f * gap;
 

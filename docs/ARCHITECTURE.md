@@ -1504,7 +1504,12 @@ with `RESERVATION_BED`), and asleep on the ground it checks again every
 `COLONIST_WARM_SPOT_CHECK_TICKS` (`SEARCH_WARM_SPOT`): the night gets colder,
 fires burn low. Nothing of this runs while no fire burns. The frontend shows
 the air and felt temperatures in the inspectors and a felt temperature view
-(`render_temperature()`, key H).
+(`render_temperature()`, key H). Two more views take the same place, one
+at a time (`app_toggle_*_view()`): the light on each tile (`render_light()`,
+key G) and the water in its ground (`render_moisture()`, key K, from
+`soil_moisture()`, rooting ground only); the status panel reads the tile
+under the mouse in the view's terms, and always shows the air's humidity
+(`weather_outdoor_humidity()`).
 
 **Weather** (`core/weather.h`, `Game.weather`, part of `game_hash()`): the
 sky changes every `WEATHER_PERIOD_HOURS` (6): it stays with

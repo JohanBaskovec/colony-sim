@@ -110,20 +110,29 @@ static void cycle_build_tool(App *app)
     app->box_selecting = false;
 }
 
+/* One overlay view at a time: turns `view` on or off, the others off. */
+static void toggle_view(App *app, bool *view)
+{
+    bool on = !*view;
+    app->show_temperature = false;
+    app->show_light = false;
+    app->show_moisture = false;
+    *view = on;
+}
+
 void app_toggle_temperature_view(App *app)
 {
-    app->show_temperature = !app->show_temperature;
-    if (app->show_temperature) {
-        app->show_light = false;
-    }
+    toggle_view(app, &app->show_temperature);
 }
 
 void app_toggle_light_view(App *app)
 {
-    app->show_light = !app->show_light;
-    if (app->show_light) {
-        app->show_temperature = false;
-    }
+    toggle_view(app, &app->show_light);
+}
+
+void app_toggle_moisture_view(App *app)
+{
+    toggle_view(app, &app->show_moisture);
 }
 
 /* Colonists, a station or a zone: one kind of selection at a time. */
@@ -833,6 +842,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_SCENARIOS_MENU: app->show_scenarios_menu = !app->show_scenarios_menu; return;
     case APP_KEY_TEMPERATURE: app_toggle_temperature_view(app); return;
     case APP_KEY_LIGHT: app_toggle_light_view(app); return;
+    case APP_KEY_MOISTURE: app_toggle_moisture_view(app); return;
     case APP_KEY_LEVEL_UP: set_level(app, app->camera.level + 1); return;
     case APP_KEY_LEVEL_DOWN: set_level(app, app->camera.level - 1); return;
     case APP_KEY_MINE: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); return;
@@ -1538,6 +1548,9 @@ static void render_frame(App *app)
     }
     if (app->show_light) {
         render_light(app->renderer, &app->game, &app->camera, &app->ui.theme);
+    }
+    if (app->show_moisture) {
+        render_moisture(app->renderer, &app->game, &app->camera, &app->ui.theme);
     }
     if (app->show_vision && app->game.vision_on) {
         render_vision(app->renderer, &app->game, &app->camera,

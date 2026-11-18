@@ -249,6 +249,7 @@ hud.date = {1} {0}, year {2} · {3}:{4}
 hud.outdoor_temperature = Outdoors: {0}
 # {0} = the sky (e.g. Rain)
 hud.weather = Weather: {0}
+hud.outdoor_humidity = Air humidity: {0}%
 # {0} = how much of the open ground snow covers, in percent
 hud.snow_cover = Snow on the ground: {0}%
 hud.temperature_view = Temperature view: blue {0}, red {1} · {2}: hide
@@ -1310,6 +1311,11 @@ hud.light_view = Light view: blue dark, yellow bright · {0}: hide
 hud.hover_temperature = Tile: {0}
 hud.hover_light = Tile light: {0}% (up to {1}% today)
 hud.help.light = {0}: light view (the light on each tile, from the sun, the sky and what covers it: dark blue for darkness, yellow for full light)
+controls.moisture = Soil moisture view
+controls.moisture.description = The water in the ground of each tile plants can grow on: ochre for dry, green for moist, blue for wet and soaked
+hud.moisture_view = Soil moisture view: ochre dry, blue soaked · {0}: hide
+hud.hover_soil = Tile soil: {0}
+hud.help.moisture = {0}: soil moisture view (the water in the ground of each tile: ochre for dry, green for moist, blue for wet and soaked)
 
 # Soil moisture (docs/CLIMATE.md)
 soil.dry = dry

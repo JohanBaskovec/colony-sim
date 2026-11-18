@@ -215,6 +215,25 @@ static void test_snow_falls_and_melts(void)
     CHECK_NEAR(weather.recent_rain, powf(WEATHER_RAIN_MEMORY, 4.0f), 1e-4f);
 }
 
+/* The outdoor air's humidity (docs/CLIMATE.md §4): saturated in the rain and
+ * the fog, driest on a clear afternoon, damper at dawn. */
+static void test_outdoor_humidity(void)
+{
+    uint64_t day = mid_season(SEASON_SUMMER);
+    uint64_t warmest = day + TEMPERATURE_WARMEST_HOUR * TICKS_PER_HOUR;
+    uint64_t coldest = day + TEMPERATURE_COLDEST_HOUR * TICKS_PER_HOUR;
+    Weather clear = {.type = WEATHER_CLEAR};
+    Weather rain = {.type = WEATHER_RAIN};
+    Weather fog = {.type = WEATHER_FOG};
+    CHECK_NEAR(weather_outdoor_humidity(&rain, warmest), 1.0, 1e-6);
+    CHECK_NEAR(weather_outdoor_humidity(&fog, coldest), 1.0, 1e-6);
+    float afternoon = weather_outdoor_humidity(&clear, warmest);
+    float dawn = weather_outdoor_humidity(&clear, coldest);
+    CHECK(afternoon > 0.3f && afternoon < 0.7f);
+    CHECK(dawn > afternoon + 0.2f);
+    CHECK(dawn <= 1.0f);
+}
+
 static void test_light(void)
 {
     Weather weather = {.type = WEATHER_STORM};
@@ -234,6 +253,7 @@ int main(void)
     RUN_TEST(test_sky_changes_the_temperature);
     RUN_TEST(test_spells_drift_within_bounds);
     RUN_TEST(test_snow_falls_and_melts);
+    RUN_TEST(test_outdoor_humidity);
     RUN_TEST(test_light);
     return test_summary();
 }

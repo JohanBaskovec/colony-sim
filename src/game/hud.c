@@ -252,10 +252,11 @@ static void temperature_text(char *out, size_t size, float celsius, int decimals
 
 /* With the temperature view on, the temperature felt on the tile under the mouse
  * (the warmth of fires included, as drawn); with the light view, its light now
- * and the best it gets today. Nothing for what the colony has not seen. */
+ * and the best it gets today; with the moisture view, how wet its ground is.
+ * Nothing for what the colony has not seen. */
 static void add_hovered_tile_reading(const App *app, Panel *panel)
 {
-    if ((!app->show_temperature && !app->show_light) || !app->hover_valid) {
+    if ((!app->show_temperature && !app->show_light && !app->show_moisture) || !app->hover_valid) {
         return;
     }
     const Game *game = &app->game;
@@ -271,6 +272,11 @@ static void add_hovered_tile_reading(const App *app, Panel *panel)
                      hearths_radiant_warmth(&game->workstations, &game->map, x, y, z);
         temperature_text(text, sizeof(text), felt, 1);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.hover_temperature"), text);
+    } else if (app->show_moisture) {
+        const char *key = soil_moisture_key(&game->soil, &game->map, x, y, z);
+        if (key != NULL) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.hover_soil"), tr(key));
+        }
     } else {
         tr_integer(text, sizeof(text),
                    (long long)SDL_lroundf(game_light_at(game, x, y, z) * 100.0f));
@@ -301,6 +307,11 @@ static void build_status_panel(App *app, Panel *panel)
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.outdoor_temperature"), outdoor);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.weather"),
               tr(weather_name_key(&app->game.weather, clock->tick)));
+    char humidity[16];
+    tr_integer(
+        humidity, sizeof(humidity),
+        (long long)SDL_lroundf(weather_outdoor_humidity(&app->game.weather, clock->tick) * 100.0f));
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.outdoor_humidity"), humidity);
     long long snow = (long long)SDL_lroundf(app->game.weather.snow * 100.0f);
     if (snow > 0) {
         char percent[16];
@@ -317,6 +328,10 @@ static void build_status_panel(App *app, Panel *panel)
     if (app->show_light) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.light_view"),
                   app_key_name(APP_KEY_LIGHT));
+    }
+    if (app->show_moisture) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.moisture_view"),
+                  app_key_name(APP_KEY_MOISTURE));
     }
     add_hovered_tile_reading(app, panel);
 }
@@ -1344,6 +1359,8 @@ static void help_window(App *app)
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.temperature"),
               app_key_name(APP_KEY_TEMPERATURE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.light"), app_key_name(APP_KEY_LIGHT));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.moisture"),
+              app_key_name(APP_KEY_MOISTURE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.roofs"), app_key_name(APP_KEY_LEVEL_UP),
               tr("designation.deconstruct"));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.follow"), app_key_name(APP_KEY_FOLLOW));

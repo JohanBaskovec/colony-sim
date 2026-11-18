@@ -166,6 +166,10 @@ float weather_dew_point(const Weather *weather, uint64_t tick);
  * saturated at `dew_point` (the Magnus formula); 1 at or below the dew point. */
 float air_relative_humidity(float dew_point, float celsius);
 
+/* The outdoor air's relative humidity at `tick`, 0 .. 1: saturated in rain,
+ * storm and fog, driest in the afternoon of a clear day. */
+float weather_outdoor_humidity(const Weather *weather, uint64_t tick);
+
 uint64_t weather_hash(const Weather *weather, uint64_t hash);
 
 #endif /* COLONY_CORE_WEATHER_H */

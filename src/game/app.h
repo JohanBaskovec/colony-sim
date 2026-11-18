@@ -77,6 +77,7 @@ typedef enum AppTool {
 #define APP_KEY_ANIMALS_MENU SDL_SCANCODE_F6   /* Spawning animals (game/animals_panel.h). */
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H     /* Temperature view on or off. */
 #define APP_KEY_LIGHT SDL_SCANCODE_G           /* Light view on or off. */
+#define APP_KEY_MOISTURE SDL_SCANCODE_K        /* Soil moisture view on or off. */
 #define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP   /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
 
@@ -228,6 +229,7 @@ typedef struct App {
                               none). */
     bool show_temperature; /* The temperature of each tile over the map. */
     bool show_light;       /* The light on each tile over the map (not with the temperature). */
+    bool show_moisture;    /* The water in the ground of each tile (one view at a time). */
     bool character_editor; /* Debug: - and + buttons on needs, characters and knowledge. */
     bool show_vision;      /* Debug: what the selected settler sees, the rest veiled. */
     float level_wheel;     /* Wheel steps with Shift held, towards the next level. */
@@ -342,10 +344,11 @@ bool app_thing_at(const App *app, TileThing thing, int x, int y, int z);
  * its tree's (PLANT_NONE: none). */
 PlantType app_plant_type_at(const App *app, int x, int y, int z);
 
-/* Turns the temperature view, or the light view, on or off: the two are drawn
- * over the same tiles, so showing one hides the other. */
+/* Turns the temperature, light or soil moisture view on or off: they are
+ * drawn over the same tiles, so showing one hides the others. */
 void app_toggle_temperature_view(App *app);
 void app_toggle_light_view(App *app);
+void app_toggle_moisture_view(App *app);
 
 /* Starts building another of what is selected (APP_KEY_BUILD_LIKE). */
 void app_build_like_selection(App *app);

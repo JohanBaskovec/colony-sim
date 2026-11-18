@@ -52,6 +52,22 @@ static const SDL_Color LIGHT_COLORS[SETTINGS_PALETTE_COUNT][THEME_LIGHT_STEPS] =
                                      {255, 245, 150, 255}},
 };
 
+/* The soil moisture view, at moisture 0 (wilting), 0.5, 1 (field capacity),
+ * 1.5 and 2 (saturated): ochre through straw and green to deep blue; for the
+ * colorblind palette from orange through grey to blue. */
+static const SDL_Color MOISTURE_COLORS[SETTINGS_PALETTE_COUNT][THEME_MOISTURE_STEPS] = {
+    [SETTINGS_PALETTE_STANDARD] = {{185, 120, 45, 255},
+                                   {220, 200, 105, 255},
+                                   {85, 175, 85, 255},
+                                   {60, 150, 215, 255},
+                                   {30, 55, 185, 255}},
+    [SETTINGS_PALETTE_COLORBLIND] = {{185, 90, 20, 255},
+                                     {240, 170, 70, 255},
+                                     {215, 215, 210, 255},
+                                     {100, 160, 235, 255},
+                                     {30, 50, 170, 255}},
+};
+
 /* A size at the default scale, scaled and rounded to whole pixels (never 0). */
 static float scaled(const Theme *theme, float pixels)
 {
@@ -97,6 +113,7 @@ void theme_init(Theme *theme, float scale, SettingsPalette palette)
     }
     SDL_memcpy(theme->temperature, TEMPERATURE_COLORS[theme->palette], sizeof(theme->temperature));
     SDL_memcpy(theme->light, LIGHT_COLORS[theme->palette], sizeof(theme->light));
+    SDL_memcpy(theme->moisture, MOISTURE_COLORS[theme->palette], sizeof(theme->moisture));
     theme->font_size = 15.0f * theme->scale;
     theme->margin = scaled(theme, 8.0f);
     theme->gap = scaled(theme, 4.0f);

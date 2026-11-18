@@ -920,7 +920,7 @@ static void update_soil(Game *game, size_t begin, size_t end, uint64_t phase)
         .rain = rain,
         .melt = soil->melt,
         .pet = soil_potential_evaporation(sun, weather_light(&game->weather), air,
-                                          air_relative_humidity(dew, air)),
+                                          weather_outdoor_humidity(&game->weather, tick)),
         .dew_point = dew,
         .night = sun <= 0.0f,
         .look_up = (tick / TICKS_PER_HOUR) % SOIL_CANOPY_HOURS == 0,

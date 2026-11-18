@@ -5,10 +5,10 @@ ground, tile by tile: the shade of a wood and the heat of a bare slope, the
 dew of a clear night, the soil soaked after a storm and dried by a week of
 sun, the wet banks of a river, what plants drink.
 
-Status: **C1** soil water, **C2** microclimate and **C3** plants and water
-(`docs/PLANTS.md` P4) are built (`core/soil.h`, `core/temperature.h`,
-`core/weather.h`, `PlantWater` in `core/map.h`); **C4** views is to do (§9). Values marked
-*(tuning)* are first guesses.
+Status: built, steps C1 to C4 (§9): soil water (`core/soil.h`),
+microclimate (`core/temperature.h`), plants and water (`PlantWater` in
+`core/map.h`, `docs/PLANTS.md` P4) and the views. Values marked *(tuning)*
+are first guesses.
 
 ## 1. Principles
 
@@ -337,5 +337,7 @@ first in the sun), frost heave, soil types under the root zone.
    a dry one in the sun, no change at night under clouds.
 3. *(done)* **C3 plants and water:** §6, with the beach question of the
    roadmap.
-4. **C4 views:** a soil moisture view next to the temperature and light ones;
-   the air's humidity in the status panel.
+4. *(done)* **C4 views:** a soil moisture view next to the temperature and
+   light ones (key K, a drop button: ochre dry, green moist, blue soaked; the
+   tile under the mouse in words), the air's humidity in the status panel
+   (`weather_outdoor_humidity()`).

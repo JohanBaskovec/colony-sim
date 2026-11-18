@@ -216,6 +216,11 @@ float weather_dew_point(const Weather *weather, uint64_t tick)
     return dew < air && def != NULL && def->dew_gap > 0.0f ? dew : air;
 }
 
+float weather_outdoor_humidity(const Weather *weather, uint64_t tick)
+{
+    return air_relative_humidity(weather_dew_point(weather, tick), weather_outdoor(weather, tick));
+}
+
 float air_relative_humidity(float dew_point, float celsius)
 {
     if (celsius <= dew_point) {

@@ -76,10 +76,16 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
 
 /* The temperature felt on each visible tile (the warmth of fires
  * included), from blue (cold) to red or orange (hot): the theme's colors. */
-void render_light(SDL_Renderer *renderer, const Game *game, const Camera *camera,
-                  const Theme *theme);
 void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                         const Theme *theme);
+/* The light on each visible tile now, from dark blue to yellow. */
+void render_light(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                  const Theme *theme);
+/* The water in the ground of each visible tile of rooting ground
+ * (core/soil.h), from ochre (dry) to deep blue (soaked); nothing on water,
+ * stone and floors. */
+void render_moisture(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                     const Theme *theme);
 
 /* The fog of war on the level shown: tiles that were seen but are not in view
  * now are veiled (what nobody has seen is not drawn: the known world has

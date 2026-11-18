@@ -47,12 +47,16 @@ typedef enum ThemeColor {
 /* Colors of the light view, from darkness to full light (render_light()). */
 #define THEME_LIGHT_STEPS 3
 
+/* Colors of the soil moisture view, from dry to soaked (render_moisture()). */
+#define THEME_MOISTURE_STEPS 5
+
 typedef struct Theme {
     float scale; /* 1: the default size. */
     SettingsPalette palette;
     SDL_Color colors[THEME_COLOR_COUNT];
     SDL_Color temperature[THEME_TEMPERATURE_STEPS];
     SDL_Color light[THEME_LIGHT_STEPS];
+    SDL_Color moisture[THEME_MOISTURE_STEPS];
     /* Sizes in pixels, the scale applied. */
     float font_size;           /* Points. */
     float margin;              /* Kept free at the screen edges. */

@@ -2470,6 +2470,37 @@ void render_light(SDL_Renderer *renderer, const Game *game, const Camera *camera
     batch_flush(renderer);
 }
 
+/* The soil moisture view: 0 (wilting) to 2 (saturated) over the theme's
+ * steps. */
+static SDL_Color moisture_color(const Theme *theme, float moisture)
+{
+    const int last = THEME_MOISTURE_STEPS - 1;
+    float position = clampf(moisture / SOIL_MOISTURE_SATURATED, 0.0f, 1.0f) * (float)last;
+    int from = SDL_min((int)position, last - 1);
+    return mix(theme->moisture[from], theme->moisture[from + 1], position - (float)from);
+}
+
+void render_moisture(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                     const Theme *theme)
+{
+    const int z = camera->level; /* The level shown. */
+    TileRect visible = camera_visible_tiles(camera, game->map.width, game->map.height);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            if (!game_tile_seen(game, x, y, z) ||
+                soil_moisture_key(&game->soil, &game->map, x, y, z) == NULL) {
+                continue; /* Out of view, or no rooting ground (water, stone, floors). */
+            }
+            SDL_Color color =
+                moisture_color(theme, soil_moisture(&game->soil, &game->map, x, y, z));
+            color.a = 130;
+            SDL_FRect tile = tile_rect(camera, x, y);
+            batch_quad(renderer, color, &tile);
+        }
+    }
+    batch_flush(renderer);
+}
+
 /* Whether the tile drawn at (x, y) on the level shown is in view now. */
 static bool fog_tile_seen(const Game *game, const Camera *camera, int x, int y)
 {
