@@ -8,31 +8,43 @@
 
 /* Body plans (docs/HEALTH.md §2): hit points for a body of size 1. */
 static const BodyPartDef HUMAN_PARTS[] = {
-    {N_("body.head"), 25.0f, 0.08f, true, BODY_ROLE_MIND, 1.0f},
-    {N_("body.torso"), 40.0f, 0.42f, true, BODY_ROLE_NONE, 0.0f},
-    {N_("body.left_arm"), 20.0f, 0.125f, false, BODY_ROLE_HANDS, 0.5f},
-    {N_("body.right_arm"), 20.0f, 0.125f, false, BODY_ROLE_HANDS, 0.5f},
-    {N_("body.left_leg"), 25.0f, 0.125f, false, BODY_ROLE_WALK, 0.5f},
-    {N_("body.right_leg"), 25.0f, 0.125f, false, BODY_ROLE_WALK, 0.5f},
+    {N_("body.head"), 25.0f, 0.08f, true, BODY_ROLE_MIND, 1.0f, BODY_LIMB_NONE},
+    {N_("body.torso"), 40.0f, 0.42f, true, BODY_ROLE_NONE, 0.0f, BODY_LIMB_NONE},
+    {N_("body.left_arm"), 20.0f, 0.125f, false, BODY_ROLE_HANDS, 0.5f, BODY_LIMB_ARMS},
+    {N_("body.right_arm"), 20.0f, 0.125f, false, BODY_ROLE_HANDS, 0.5f, BODY_LIMB_ARMS},
+    {N_("body.left_leg"), 25.0f, 0.125f, false, BODY_ROLE_WALK, 0.5f, BODY_LIMB_NONE},
+    {N_("body.right_leg"), 25.0f, 0.125f, false, BODY_ROLE_WALK, 0.5f, BODY_LIMB_NONE},
 };
 
 static const BodyPartDef QUADRUPED_PARTS[] = {
-    {N_("body.head"), 20.0f, 0.08f, true, BODY_ROLE_MIND, 1.0f},
-    {N_("body.neck"), 20.0f, 0.07f, true, BODY_ROLE_NONE, 0.0f},
-    {N_("body.torso"), 45.0f, 0.45f, true, BODY_ROLE_NONE, 0.0f},
-    {N_("body.front_left_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f},
-    {N_("body.front_right_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f},
-    {N_("body.hind_left_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f},
-    {N_("body.hind_right_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f},
+    {N_("body.head"), 20.0f, 0.08f, true, BODY_ROLE_MIND, 1.0f, BODY_LIMB_HEAD},
+    {N_("body.neck"), 20.0f, 0.07f, true, BODY_ROLE_NONE, 0.0f, BODY_LIMB_NONE},
+    {N_("body.torso"), 45.0f, 0.45f, true, BODY_ROLE_NONE, 0.0f, BODY_LIMB_NONE},
+    {N_("body.front_left_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f, BODY_LIMB_FORELEGS},
+    {N_("body.front_right_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f, BODY_LIMB_FORELEGS},
+    {N_("body.hind_left_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f, BODY_LIMB_HINDLEGS},
+    {N_("body.hind_right_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f, BODY_LIMB_HINDLEGS},
 };
 
 static const BodyPartDef HARE_PARTS[] = {
-    {N_("body.head"), 20.0f, 0.1f, true, BODY_ROLE_MIND, 1.0f},
-    {N_("body.torso"), 35.0f, 0.5f, true, BODY_ROLE_NONE, 0.0f},
-    {N_("body.front_left_leg"), 15.0f, 0.1f, false, BODY_ROLE_WALK, 0.2f},
-    {N_("body.front_right_leg"), 15.0f, 0.1f, false, BODY_ROLE_WALK, 0.2f},
-    {N_("body.hind_left_leg"), 15.0f, 0.1f, false, BODY_ROLE_WALK, 0.3f},
-    {N_("body.hind_right_leg"), 15.0f, 0.1f, false, BODY_ROLE_WALK, 0.3f},
+    {N_("body.head"), 20.0f, 0.1f, true, BODY_ROLE_MIND, 1.0f, BODY_LIMB_NONE},
+    {N_("body.torso"), 35.0f, 0.5f, true, BODY_ROLE_NONE, 0.0f, BODY_LIMB_NONE},
+    {N_("body.front_left_leg"), 15.0f, 0.1f, false, BODY_ROLE_WALK, 0.2f, BODY_LIMB_NONE},
+    {N_("body.front_right_leg"), 15.0f, 0.1f, false, BODY_ROLE_WALK, 0.2f, BODY_LIMB_NONE},
+    {N_("body.hind_left_leg"), 15.0f, 0.1f, false, BODY_ROLE_WALK, 0.3f, BODY_LIMB_NONE},
+    {N_("body.hind_right_leg"), 15.0f, 0.1f, false, BODY_ROLE_WALK, 0.3f, BODY_LIMB_NONE},
+};
+
+/* Wolves and foxes: a longer muzzle (a bigger share of the blows), and the
+ * forepaws that claw. */
+static const BodyPartDef CANINE_PARTS[] = {
+    {N_("body.head"), 20.0f, 0.1f, true, BODY_ROLE_MIND, 1.0f, BODY_LIMB_HEAD},
+    {N_("body.neck"), 20.0f, 0.07f, true, BODY_ROLE_NONE, 0.0f, BODY_LIMB_NONE},
+    {N_("body.torso"), 45.0f, 0.43f, true, BODY_ROLE_NONE, 0.0f, BODY_LIMB_NONE},
+    {N_("body.front_left_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f, BODY_LIMB_FORELEGS},
+    {N_("body.front_right_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f, BODY_LIMB_FORELEGS},
+    {N_("body.hind_left_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f, BODY_LIMB_HINDLEGS},
+    {N_("body.hind_right_leg"), 20.0f, 0.1f, false, BODY_ROLE_WALK, 0.25f, BODY_LIMB_HINDLEGS},
 };
 
 typedef struct BodyPlanDef {
@@ -48,10 +60,12 @@ static const BodyPlanDef BODY_PLANS[BODY_PLAN_COUNT] = {
     [BODY_HUMAN] = PLAN(HUMAN_PARTS),
     [BODY_QUADRUPED] = PLAN(QUADRUPED_PARTS),
     [BODY_HARE] = PLAN(HARE_PARTS),
+    [BODY_CANINE] = PLAN(CANINE_PARTS),
 };
 #undef PLAN
 
-_Static_assert(sizeof(QUADRUPED_PARTS) / sizeof(QUADRUPED_PARTS[0]) <= HEALTH_MAX_PARTS,
+_Static_assert(sizeof(QUADRUPED_PARTS) / sizeof(QUADRUPED_PARTS[0]) <= HEALTH_MAX_PARTS &&
+                   sizeof(CANINE_PARTS) / sizeof(CANINE_PARTS[0]) <= HEALTH_MAX_PARTS,
                "parts fit in HEALTH_MAX_PARTS");
 
 /* Injuries (docs/HEALTH.md §3): bleeding, pain, healing. */
@@ -124,6 +138,30 @@ const BodyPartDef *body_part_def(BodyPlan plan, int part)
         return NULL;
     }
     return &BODY_PLANS[plan].parts[part];
+}
+
+bool body_plan_has_limb(BodyPlan plan, BodyLimb limb)
+{
+    if (limb <= BODY_LIMB_NONE || (unsigned)limb >= BODY_LIMB_COUNT) {
+        return false;
+    }
+    for (int part = 0; part < body_part_count(plan); part++) {
+        if (BODY_PLANS[plan].parts[part].limb == limb) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const char *body_limb_name_key(BodyLimb limb)
+{
+    static const char *const KEYS[BODY_LIMB_COUNT] = {
+        [BODY_LIMB_ARMS] = N_("body.limb.arms"),
+        [BODY_LIMB_HEAD] = N_("body.limb.head"),
+        [BODY_LIMB_FORELEGS] = N_("body.limb.forelegs"),
+        [BODY_LIMB_HINDLEGS] = N_("body.limb.hindlegs"),
+    };
+    return limb > BODY_LIMB_NONE && (unsigned)limb < BODY_LIMB_COUNT ? KEYS[limb] : NULL;
 }
 
 const InjuryDef *injury_def(InjuryType type)
@@ -526,6 +564,31 @@ float health_ability(const Health *health, HealthAbility ability)
     case HEALTH_ABILITY_COUNT: break;
     }
     return 0.0f;
+}
+
+float health_limb_ability(const Health *health, BodyLimb limb)
+{
+    if (health->death != DEATH_NONE || !body_plan_has_limb((BodyPlan)health->plan, limb)) {
+        return 0.0f;
+    }
+    if (!health_is_hurt(health)) {
+        return 1.0f;
+    }
+    float pain = health_pain(health);
+    if (consciousness(health, pain) < HEALTH_CONSCIOUS_MIN) {
+        return 0.0f;
+    }
+    float sum = 0.0f;
+    int count = 0;
+    for (int part = 0; part < body_part_count((BodyPlan)health->plan); part++) {
+        if (BODY_PLANS[health->plan].parts[part].limb == limb) {
+            sum += health_part_efficiency(health, part);
+            count++;
+        }
+    }
+    float slowdown = (1.0f - HEALTH_PAIN_SLOWDOWN * pain) *
+                     (1.0f - HEALTH_WEAKNESS_SLOWDOWN * health_weakness(health));
+    return sum / (float)count * slowdown;
 }
 
 bool health_is_unconscious(const Health *health)

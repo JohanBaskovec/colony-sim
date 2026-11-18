@@ -4607,6 +4607,13 @@ AttackType colonist_attack(const Colonist *colonist, float *skill, float *power)
 {
     AttackType type = ATTACK_FISTS;
     *skill = 1.0f;
+    /* Everything a settler strikes with is held in the hands: without the use
+     * of its arms it cannot strike at all. */
+    float arms = combat_attack_ability(&colonist->health, ATTACK_FISTS);
+    *power = 0.0f;
+    if (arms < COMBAT_LIMB_MIN) {
+        return ATTACK_NONE;
+    }
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
         ItemType tool = (ItemType)colonist->tools[i].type;
         if (tool == ITEM_THRUSTING_SPEAR_HARDENED ||
@@ -4621,8 +4628,7 @@ AttackType colonist_attack(const Colonist *colonist, float *skill, float *power)
         *skill = COLONIST_SPEAR_SKILL_MIN +
                  (COLONIST_SPEAR_SKILL_MAX - COLONIST_SPEAR_SKILL_MIN) * level;
     }
-    *power = (COLONIST_POWER_BASE + COLONIST_POWER_PER_STRENGTH * (float)colonist->strength) *
-             health_ability(&colonist->health, HEALTH_HANDS);
+    *power = (COLONIST_POWER_BASE + COLONIST_POWER_PER_STRENGTH * (float)colonist->strength) * arms;
     return type;
 }
 
@@ -4673,7 +4679,12 @@ static void engage(Colonist *colonist, const ColonistContext *context)
         }
         return;
     }
-    bool afraid = combat_breaks_off(&colonist->health, attribute_nerve(&colonist->attributes));
+    /* Without the use of its arms it cannot strike: it runs, and when cornered
+     * it can only take it. */
+    float skill, power;
+    AttackType attack = colonist_attack(colonist, &skill, &power);
+    bool afraid = attack == ATTACK_NONE ||
+                  combat_breaks_off(&colonist->health, attribute_nerve(&colonist->attributes));
     if (afraid) {
         if (colonist->task == TASK_FLEE && colonist_is_moving(colonist)) {
             return;
@@ -4688,6 +4699,9 @@ static void engage(Colonist *colonist, const ColonistContext *context)
         if (start_flight(colonist, context, there)) {
             return;
         }
+        if (attack == ATTACK_NONE) {
+            return; /* Cornered, and nothing to fight with. */
+        }
         /* Cornered: it fights. */
     }
     if (colonist->task != TASK_FIGHT) {
@@ -4698,8 +4712,6 @@ static void engage(Colonist *colonist, const ColonistContext *context)
         path_clear(&colonist->path);
         colonist->path_index = 0;
         if (colonist->attack_cooldown <= 0 && context->combat != NULL) {
-            float skill, power;
-            AttackType attack = colonist_attack(colonist, &skill, &power);
             combat_queue_push(context->combat, (CombatStrike){{COMBATANT_SETTLER, context->self},
                                                               colonist->enemy,
                                                               (uint8_t)attack,

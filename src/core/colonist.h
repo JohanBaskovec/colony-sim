@@ -556,7 +556,9 @@ bool colonist_provoke(Colonist *colonist, Combatant attacker);
 
 /* The attack a settler fights with: a thrusting spear it carries (the
  * hardened one first), else its fists; `skill` and `power` are the multipliers
- * its blows carry (power follows its strength and the use of its hands). */
+ * its blows carry (power follows its strength and the use of its arms).
+ * ATTACK_NONE when its arms are of no use (both lost or broken, or knocked
+ * out): everything it strikes with is held in the hands. */
 AttackType colonist_attack(const Colonist *colonist, float *skill, float *power);
 
 void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, int z);

@@ -65,9 +65,12 @@ typedef enum AttackType {
     ATTACK_SPEAR_THRUST,
     ATTACK_HARDENED_SPEAR_THRUST,
     ATTACK_KICK,
+    ATTACK_HOOF_STRIKE,
     ATTACK_TUSKS,
     ATTACK_WOLF_BITE,
+    ATTACK_WOLF_CLAWS,
     ATTACK_FOX_BITE,
+    ATTACK_FOX_CLAWS,
     ATTACK_TYPE_COUNT
 } AttackType;
 
@@ -79,10 +82,46 @@ typedef struct AttackDef {
     float accuracy; /* Base chance to hit, 0..1. */
     float interval; /* Seconds between two blows. */
     int reach;      /* Tiles (Chebyshev). */
+    BodyLimb limb;  /* What it is made with: as good as that limb is whole. */
 } AttackDef;
 
 /* NULL for ATTACK_NONE and out of range. */
 const AttackDef *attack_def(AttackType type);
+
+/* Below this ability of its limb (core/health.h), an attack cannot be made. */
+#define COMBAT_LIMB_MIN 0.15f
+/* Attacks a species can choose among. */
+#define COMBAT_ATTACKS_MAX 3
+
+/* One of the attacks a being can make, and how much it favors it when its
+ * limb is whole (a wolf bites more than it claws). A list ends at
+ * COMBAT_ATTACKS_MAX or at the first ATTACK_NONE. */
+typedef struct AttackChoice {
+    uint8_t attack; /* AttackType */
+    float weight;
+} AttackChoice;
+
+/* Ability of the limb an attack is made with (0 for none). */
+float combat_attack_ability(const Health *attacker, AttackType type);
+
+/* How many attacks the list holds, and whether the being can make any of them
+ * now: its limb is whole enough (COMBAT_LIMB_MIN) and it is not knocked out. */
+int combat_choice_count(const AttackChoice choices[COMBAT_ATTACKS_MAX]);
+bool combat_can_attack(const Health *attacker, const AttackChoice choices[COMBAT_ATTACKS_MAX]);
+
+/* The longest reach among the attacks it can make now (0: none). */
+int combat_choice_reach(const Health *attacker, const AttackChoice choices[COMBAT_ATTACKS_MAX]);
+
+/*
+ * The attack for this blow: drawn among those it can make, by weight times the
+ * ability of their limb (a damaged limb is used less); `rng` is not touched
+ * when only one can be made, and NULL picks the favorite. ATTACK_NONE when it
+ * can make none. `ability` (may be NULL) gets the chosen limb's ability: the
+ * blow's power is scaled by it.
+ */
+AttackType combat_choose_attack(const Health *attacker,
+                                const AttackChoice choices[COMBAT_ATTACKS_MAX], Rng *rng,
+                                float *ability);
 
 /* Ticks between two blows of an attack. */
 int attack_interval_ticks(AttackType type);

@@ -60,6 +60,7 @@ typedef enum BodyPlan {
     BODY_HUMAN,
     BODY_QUADRUPED, /* Deer, boar. */
     BODY_HARE,
+    BODY_CANINE, /* Wolf, fox. */
     BODY_PLAN_COUNT
 } BodyPlan;
 
@@ -71,13 +72,26 @@ typedef enum BodyRole {
     BODY_ROLE_HANDS, /* An arm. */
 } BodyRole;
 
+/* What a being strikes with (docs/COMBAT.md §2): every attack is made with
+ * one limb, and is as good as the parts that carry it are whole. A plan
+ * lacking the limb cannot make the attack at all. */
+typedef enum BodyLimb {
+    BODY_LIMB_NONE,
+    BODY_LIMB_ARMS,     /* Fists, a spear. */
+    BODY_LIMB_HEAD,     /* Bites, tusks. */
+    BODY_LIMB_FORELEGS, /* Claws, hooves striking. */
+    BODY_LIMB_HINDLEGS, /* Kicks. */
+    BODY_LIMB_COUNT
+} BodyLimb;
+
 typedef struct BodyPartDef {
     const char *name_key;
     float hit_points; /* For a body of size 1. */
     float coverage;   /* Share of the blows landing on it (a plan's sum to 1). */
     bool vital;       /* Destroyed: death. */
     BodyRole role;
-    float share; /* Its share of its role's ability (walking, the hands). */
+    float share;   /* Its share of its role's ability (walking, the hands). */
+    BodyLimb limb; /* What it strikes with, if anything (a part carries one limb at most). */
 } BodyPartDef;
 
 typedef enum InjuryType {
@@ -158,6 +172,11 @@ void health_set_factors(Health *health, float damage_factor, float pain_factor);
 int body_part_count(BodyPlan plan);
 const BodyPartDef *body_part_def(BodyPlan plan, int part);
 const InjuryDef *injury_def(InjuryType type);
+
+/* Whether a plan has parts that carry the limb, and its translation key
+ * (NULL: out of range). */
+bool body_plan_has_limb(BodyPlan plan, BodyLimb limb);
+const char *body_limb_name_key(BodyLimb limb);
 const char *health_ability_name_key(HealthAbility ability);
 
 /* Hit points of a part of this body (its plan's times the size). */
@@ -232,6 +251,14 @@ float health_pain(const Health *health);
 
 /* 0..1 (0 for a dead body). */
 float health_ability(const Health *health, HealthAbility ability);
+
+/*
+ * How well the being can strike with a limb, 0..1: the mean efficiency of the
+ * parts that carry it (one arm lost of two: half), slowed by pain and by
+ * deprivation like the hands. 0 for a dead or knocked-out body, and for a limb
+ * the plan does not have.
+ */
+float health_limb_ability(const Health *health, BodyLimb limb);
 
 /* Knocked down: unconscious (consciousness below HEALTH_CONSCIOUS_MIN). */
 bool health_is_unconscious(const Health *health);

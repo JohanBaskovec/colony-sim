@@ -13,6 +13,8 @@
 #include <string.h>
 
 enum { HEAD, TORSO, LEFT_ARM, RIGHT_ARM, LEFT_LEG, RIGHT_LEG };
+/* The parts of a canine body (BODY_CANINE) that are not the head or torso. */
+enum { FRONT_LEFT_PAW = 3, FRONT_RIGHT_PAW, HIND_LEFT_LEG, HIND_RIGHT_LEG };
 
 static Health human(void)
 {
@@ -37,11 +39,105 @@ static void test_attack_definitions(void)
         CHECK_EQ_INT(attack_interval_ticks((AttackType)type),
                      (int)(def->interval * TICKS_PER_SECOND + 0.5f));
         CHECK((unsigned)def->injury < INJURY_TYPE_COUNT);
+        CHECK(def->limb > BODY_LIMB_NONE && def->limb < BODY_LIMB_COUNT);
     }
+    /* What each is made with. */
+    CHECK_EQ_INT(attack_def(ATTACK_FISTS)->limb, BODY_LIMB_ARMS);
+    CHECK_EQ_INT(attack_def(ATTACK_SPEAR_THRUST)->limb, BODY_LIMB_ARMS);
+    CHECK_EQ_INT(attack_def(ATTACK_KICK)->limb, BODY_LIMB_HINDLEGS);
+    CHECK_EQ_INT(attack_def(ATTACK_HOOF_STRIKE)->limb, BODY_LIMB_FORELEGS);
+    CHECK_EQ_INT(attack_def(ATTACK_WOLF_BITE)->limb, BODY_LIMB_HEAD);
+    CHECK_EQ_INT(attack_def(ATTACK_WOLF_CLAWS)->limb, BODY_LIMB_FORELEGS);
+    CHECK_EQ_INT(attack_def(ATTACK_TUSKS)->limb, BODY_LIMB_HEAD);
+    /* Every species' attacks are made with limbs its body has. */
+    for (int species = 0; species < ANIMAL_SPECIES_COUNT; species++) {
+        const AnimalDef *animal = animal_def((AnimalSpecies)species);
+        for (int i = 0; i < combat_choice_count(animal->attacks); i++) {
+            const AttackDef *def = attack_def((AttackType)animal->attacks[i].attack);
+            REQUIRE(def != NULL);
+            CHECK(body_plan_has_limb(animal->body, def->limb));
+            CHECK(animal->attacks[i].weight > 0.0f);
+        }
+    }
+    /* The wolf and the deer have two; the boar and the hare one and none. */
+    CHECK_EQ_INT(combat_choice_count(animal_def(ANIMAL_WOLF)->attacks), 2);
+    CHECK_EQ_INT(combat_choice_count(animal_def(ANIMAL_RED_DEER)->attacks), 2);
+    CHECK_EQ_INT(combat_choice_count(animal_def(ANIMAL_BOAR)->attacks), 1);
+    CHECK_EQ_INT(combat_choice_count(animal_def(ANIMAL_HARE)->attacks), 0);
     /* A hardened spear hits harder than a plain one. */
     CHECK_NEAR(attack_def(ATTACK_HARDENED_SPEAR_THRUST)->damage,
                1.2 * attack_def(ATTACK_SPEAR_THRUST)->damage, 0.3);
     CHECK(attack_def(ATTACK_FISTS)->damage < attack_def(ATTACK_SPEAR_THRUST)->damage);
+}
+
+/* A being draws its attack among those whose limb is whole enough. */
+static void test_choosing_an_attack(void)
+{
+    const AttackChoice *wolf_attacks = animal_def(ANIMAL_WOLF)->attacks;
+    Health wolf;
+    health_init(&wolf, BODY_CANINE, 0.7f, 1.0f, 1.0f);
+    CHECK(combat_can_attack(&wolf, wolf_attacks));
+    CHECK_EQ_INT(combat_choice_reach(&wolf, wolf_attacks), 1);
+    /* Without a random stream it uses its favorite. */
+    float ability = 0.0f;
+    CHECK_EQ_INT(combat_choose_attack(&wolf, wolf_attacks, NULL, &ability), ATTACK_WOLF_BITE);
+    CHECK_NEAR(ability, 1.0, 1e-6);
+    /* With one: both, the bite three times as often as the claws. */
+    Rng rng;
+    rng_seed(&rng, 7, 3);
+    int bites = 0, claws = 0;
+    for (int i = 0; i < 4000; i++) {
+        AttackType type = combat_choose_attack(&wolf, wolf_attacks, &rng, NULL);
+        bites += type == ATTACK_WOLF_BITE;
+        claws += type == ATTACK_WOLF_CLAWS;
+    }
+    CHECK_EQ_INT(bites + claws, 4000);
+    CHECK(claws > 800 && claws < 1200);
+
+    /* Ruined forepaws: no more claws. */
+    health_hurt(&wolf, FRONT_LEFT_PAW, INJURY_FRACTURE, 1.0f);
+    health_hurt(&wolf, FRONT_RIGHT_PAW, INJURY_FRACTURE, 1.0f);
+    Rng before = rng;
+    for (int i = 0; i < 200; i++) {
+        float bite_ability = 0.0f;
+        CHECK_EQ_INT(combat_choose_attack(&wolf, wolf_attacks, &rng, &bite_ability),
+                     ATTACK_WOLF_BITE);
+        CHECK(bite_ability > 0.9f);
+    }
+    CHECK_EQ_UINT(rng.state, before.state); /* One left: nothing was drawn. */
+    CHECK(combat_can_attack(&wolf, wolf_attacks));
+
+    /* A bruised head bites with less force, and a little less often. */
+    Health bruised;
+    health_init(&bruised, BODY_CANINE, 0.7f, 1.0f, 1.0f);
+    health_hurt(&bruised, HEAD, INJURY_BRUISE, 8.0f);
+    CHECK_EQ_INT(combat_choose_attack(&bruised, wolf_attacks, NULL, &ability), ATTACK_WOLF_BITE);
+    CHECK(ability < 0.9f && ability > 0.3f);
+
+    /* The deer kicks and strikes with its hooves: a deer that has lost its
+     * hind legs still strikes, one with none of either does not. */
+    const AttackChoice *deer_attacks = animal_def(ANIMAL_RED_DEER)->attacks;
+    Health deer;
+    health_init(&deer, BODY_QUADRUPED, 1.4f, 1.0f, 1.0f);
+    for (int part = 5; part < 7; part++) {
+        health_hurt(&deer, part, INJURY_FRACTURE, 1.0f); /* Hind legs. */
+    }
+    CHECK_EQ_INT(combat_choose_attack(&deer, deer_attacks, &rng, NULL), ATTACK_HOOF_STRIKE);
+    for (int part = 3; part < 5; part++) {
+        health_hurt(&deer, part, INJURY_FRACTURE, 1.0f); /* Front legs. */
+    }
+    CHECK_EQ_INT(combat_choose_attack(&deer, deer_attacks, &rng, NULL), ATTACK_NONE);
+    CHECK(!combat_can_attack(&deer, deer_attacks));
+    CHECK_EQ_INT(combat_choice_reach(&deer, deer_attacks), 0);
+
+    /* A hare has nothing to strike with; nor does a dead or knocked-out wolf. */
+    Health hare;
+    health_init(&hare, BODY_HARE, 0.15f, 1.0f, 1.0f);
+    CHECK(!combat_can_attack(&hare, animal_def(ANIMAL_HARE)->attacks));
+    Health dead;
+    health_init(&dead, BODY_CANINE, 0.7f, 1.0f, 1.0f);
+    health_hurt(&dead, HEAD, INJURY_CUT, 100.0f);
+    CHECK(!combat_can_attack(&dead, wolf_attacks));
 }
 
 static void test_reach(void)
@@ -438,10 +534,101 @@ static void test_settler_attack_by_weapon(void)
     CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_HARDENED_SPEAR_THRUST);
     /* A broken arm: weaker blows. */
     health_hurt(&colonist.health, LEFT_ARM, INJURY_FRACTURE, 2.0f);
-    health_hurt(&colonist.health, RIGHT_ARM, INJURY_FRACTURE, 2.0f);
     colonist_attack(&colonist, &skill, &power);
-    CHECK(power < 0.3f);
+    CHECK(power < 0.7f && power > 0.3f);
+    /* Both: it cannot strike at all, with a spear or without. */
+    health_hurt(&colonist.health, RIGHT_ARM, INJURY_FRACTURE, 2.0f);
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_NONE);
+    CHECK_NEAR(power, 0.0, 1e-9);
+    colonist.tools[0] = item_stack_pristine(ITEM_THRUSTING_SPEAR, 1);
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_NONE);
     colonist_free(&colonist);
+}
+
+/* A settler with no use of its arms cannot fight back: it runs, and does not
+ * strike (the animal wins). */
+static void test_armless_settler_does_not_fight(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    EntityId boar_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 23, 20, &boar_id);
+    REQUIRE(settler != NULL && boar != NULL);
+    health_hurt(&settler->health, LEFT_ARM, INJURY_FRACTURE, 2.0f);
+    health_hurt(&settler->health, RIGHT_ARM, INJURY_FRACTURE, 2.0f);
+    REQUIRE(!health_is_down(&settler->health));
+    EntityId settler_id = game_colonist_id_at(&game, 0);
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, boar_id},
+                              (Combatant){COMBATANT_SETTLER, settler_id}));
+    bool fought = false;
+    for (int tick = 0; tick < 10 * TICKS_PER_SECOND && !health_is_dead(&settler->health); tick++) {
+        game_tick(&game);
+        fought |= settler->task == TASK_FIGHT;
+    }
+    CHECK(!fought);
+    CHECK(!health_is_hurt(&boar->health)); /* It never struck back. */
+    game_shutdown(&game);
+}
+
+/* A wolf bites and claws at a deer that cannot get away: both kinds of wound. */
+static void test_wolf_bites_and_claws(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId wolf_id, deer_id;
+    Animal *wolf = spawn_animal(&game, ANIMAL_WOLF, 20, 20, &wolf_id);
+    Animal *deer = spawn_animal(&game, ANIMAL_RED_DEER, 21, 20, &deer_id);
+    REQUIRE(wolf != NULL && deer != NULL);
+    health_set_factors(&deer->health, 0.25f, 0.25f); /* Tough: it lasts. */
+    for (int part = 3; part < 7; part++) {
+        health_hurt(&deer->health, part, INJURY_FRACTURE, 0.5f); /* It cannot run. */
+    }
+    REQUIRE(health_is_down(&deer->health));
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, wolf_id},
+                              (Combatant){COMBATANT_ANIMAL, deer_id}));
+    bool bitten = false, clawed = false;
+    for (int tick = 0; tick < 120 * TICKS_PER_SECOND && !(bitten && clawed); tick++) {
+        game_tick(&game);
+        for (int i = 0; i < deer->health.injury_count; i++) {
+            bitten |= deer->health.injuries[i].type == INJURY_BITE;
+            clawed |= deer->health.injuries[i].type == INJURY_CUT;
+        }
+    }
+    CHECK(bitten);
+    CHECK(clawed);
+    game_shutdown(&game);
+}
+
+/* A wolf that has lost its forepaws can only bite. */
+static void test_wolf_without_forepaws_only_bites(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId wolf_id, deer_id;
+    Animal *wolf = spawn_animal(&game, ANIMAL_WOLF, 20, 20, &wolf_id);
+    Animal *deer = spawn_animal(&game, ANIMAL_RED_DEER, 21, 20, &deer_id);
+    REQUIRE(wolf != NULL && deer != NULL);
+    health_hurt(&wolf->health, FRONT_LEFT_PAW, INJURY_FRACTURE, 1.0f);
+    health_hurt(&wolf->health, FRONT_RIGHT_PAW, INJURY_FRACTURE, 1.0f);
+    health_set_factors(&deer->health, 0.25f, 0.25f);
+    for (int part = 3; part < 7; part++) {
+        health_hurt(&deer->health, part, INJURY_FRACTURE, 0.5f);
+    }
+    int fractures = deer->health.injury_count;
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, wolf_id},
+                              (Combatant){COMBATANT_ANIMAL, deer_id}));
+    bool bitten = false, clawed = false;
+    for (int tick = 0; tick < 60 * TICKS_PER_SECOND; tick++) {
+        game_tick(&game);
+        for (int i = fractures; i < deer->health.injury_count; i++) {
+            bitten |= deer->health.injuries[i].type == INJURY_BITE;
+            clawed |= deer->health.injuries[i].type == INJURY_CUT;
+        }
+    }
+    CHECK(bitten);
+    CHECK(!clawed);
+    game_shutdown(&game);
 }
 
 /* A fearful settler, once hurt, runs instead; the player's order ends a fight. */
@@ -753,6 +940,7 @@ static void test_fatigue(void)
 int main(void)
 {
     RUN_TEST(test_attack_definitions);
+    RUN_TEST(test_choosing_an_attack);
     RUN_TEST(test_reach);
     RUN_TEST(test_hit_chance);
     RUN_TEST(test_blows);
@@ -764,6 +952,9 @@ int main(void)
     RUN_TEST(test_hurt_animal_breaks_off);
     RUN_TEST(test_settler_fights_back);
     RUN_TEST(test_settler_attack_by_weapon);
+    RUN_TEST(test_armless_settler_does_not_fight);
+    RUN_TEST(test_wolf_bites_and_claws);
+    RUN_TEST(test_wolf_without_forepaws_only_bites);
     RUN_TEST(test_fearful_settler_flees);
     RUN_TEST(test_enemy_forgotten);
     RUN_TEST(test_hash_unchanged_without_fights);

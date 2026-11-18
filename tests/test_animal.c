@@ -131,7 +131,7 @@ static void test_species_definitions(void)
             /* Meat eaters: they hunt, and bite carcasses. */
             CHECK(def->prey != 0 && def->hunt_range > 0 && def->bite_kg > 0.0f &&
                   def->stomach_kg > def->bite_kg);
-            CHECK(def->attack != ATTACK_NONE);
+            CHECK(combat_choice_count(def->attacks) > 0);
             CHECK(def->plants == 0 && !def->eats_nuts && def->graze_value == 0.0f);
             CHECK((def->prey & ANIMAL_SPECIES_BIT(species)) == 0);
         } else {

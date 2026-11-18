@@ -26,20 +26,35 @@ guesses.
 ## 2. Attacks
 
 An attack has a damage in points, an injury kind (`InjuryType`), a base
-accuracy, an interval between blows and a reach in tiles (adjacent for now)
-*(tuning)*:
+accuracy, an interval between blows, a reach in tiles (adjacent for now) and
+the **limb** it is made with (`BodyLimb`, `docs/HEALTH.md` §2) *(tuning)*:
 
-| Attack | Injury | Damage | Accuracy | Every | Used by |
-|--------|--------|--------|----------|-------|---------|
-| Fists | bruise | 3 | 70 % | 1 s | settlers without a weapon |
-| Spear thrust | cut | 9 | 80 % | 1.4 s | settlers carrying a thrusting spear |
-| Hardened spear thrust | cut | 11 | 80 % | 1.4 s | the same, fire-hardened (×1.2) |
-| Kick | bruise | 5 | 50 % | 1.5 s | deer |
-| Tusks | cut | 8 | 65 % | 1.4 s | boars |
-| Wolf bite | bite | 8 | 70 % | 1.4 s | wolves (step 2) |
-| Fox bite | bite | 3 | 70 % | 1 s | foxes (step 2) |
+| Attack | Limb | Injury | Damage | Accuracy | Every | Used by |
+|--------|------|--------|--------|----------|-------|---------|
+| Fists | arms | bruise | 3 | 70 % | 1 s | settlers without a weapon |
+| Spear thrust | arms | cut | 9 | 80 % | 1.4 s | settlers carrying a thrusting spear |
+| Hardened spear thrust | arms | cut | 11 | 80 % | 1.4 s | the same, fire-hardened (×1.2) |
+| Kick | hind legs | bruise | 5 | 50 % | 1.5 s | deer |
+| Hoof strike | front legs | bruise | 4 | 50 % | 1.5 s | deer |
+| Tusks | head | cut | 8 | 65 % | 1.4 s | boars |
+| Wolf bite | head | bite | 8 | 70 % | 1.4 s | wolves |
+| Wolf claws | front legs | cut | 4 | 60 % | 1.2 s | wolves |
+| Fox bite | head | bite | 3 | 70 % | 1 s | foxes |
+| Fox claws | front legs | cut | 1.5 | 60 % | 1 s | foxes |
 
 Hares have no attack.
+
+**Several attacks, and the body.** A species lists its attacks, each with a
+weight (a wolf bites three times for each time it claws: weights 3 and 1).
+For each blow the animal draws among the attacks it can make, by weight times
+the ability of their limb (`health_limb_ability()`): a limb counts when it is
+at least 15 % whole; a damaged limb is used less and strikes with its ability
+as the blow's power. A wolf with ruined forepaws only bites; a deer that lost
+its hind legs still strikes with its hooves; one that lost both cannot
+fight and runs. Nothing is drawn when only one attack can be made. A settler
+holds everything it strikes with in its hands: with both arms lost or broken
+(below 15 %) it cannot strike at all, with a spear or without, and runs (or,
+cornered, takes it).
 
 ## 3. A blow
 
@@ -53,7 +68,7 @@ Hares have no attack.
 3. A settler's **skill** with a spear comes from its spear hunting knowledge
    (×0.8 at level 0 to ×1.3 at 100); fists are ×1. Its **power** follows its
    strength (×0.64 at 1, ×1 at 10, ×1.4 at 20) and the use of its hands.
-   Animals: skill and power ×1.
+   Animals: skill ×1, power the ability of the limb used (×1 when it is whole).
 
 ## 4. Fighting and breaking off
 

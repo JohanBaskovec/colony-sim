@@ -184,6 +184,8 @@ attack.spear_thrust = Coup de sagaie
 attack.kick = Ruade
 attack.tusks = Défenses
 attack.bite = Morsure
+attack.hoof_strike = Coup de sabot
+attack.claws = Griffes
 # Paliers de qualité, du pire au meilleur, après « Qualité : » (accord au féminin)
 
 # Types de travail
@@ -893,6 +895,10 @@ body.front_left_leg = Patte avant gauche
 body.front_right_leg = Patte avant droite
 body.hind_left_leg = Patte arrière gauche
 body.hind_right_leg = Patte arrière droite
+body.limb.arms = Bras
+body.limb.head = Tête
+body.limb.forelegs = Pattes avant
+body.limb.hindlegs = Pattes arrière
 injury.cut = Coupure
 injury.bruise = Contusion
 injury.bite = Morsure
@@ -926,8 +932,23 @@ health.bleeding.value = {0} % du sang par heure
 health.pain = Douleur
 health.pain.description = Ralentit la marche et l’usage des mains ; à partir de 80 %, elle assomme.
 health.abilities = Ce que le corps peut faire
-health.injuries = Blessures
-health.injury.severity = Gravité : {0} de la partie
+health.part = Partie
+health.part.injuries = Blessures
+health.part.state = Efficacité
+health.part.bleeding = Saignement
+# {0} = blood lost an hour, as a percentage
+health.part.bleeding.value = {0} %/h
+health.part.intact = Intacte
+# {0} = the part, {1} = how much of it works
+health.part.efficiency = {0} : {1} fonctionnel
+health.part.vital = Vitale : détruite, elle tue
+health.part.role.mind = Nécessaire à la conscience, à la vue et à l’alimentation
+health.part.role.walk = Nécessaire pour marcher
+health.part.role.hands = Nécessaire à l’usage des mains
+# {0} = the limb (arms, head, front legs, hind legs)
+health.part.limb = Sert à frapper : {0}
+# {0} = the kind of injury, {1} = its severity (a percentage of the part), {2} = how it is going
+health.part.injury = {0} ({1} de la partie) : {2}
 health.injury.serious = Grave : elle ne cesse pas de saigner d’elle-même ({0}).
 health.injury.clotting = Saigne ({0}), de moins en moins : cela s’arrête en quelques heures.
 health.injury.healing = Ne saigne plus : guérit d’elle-même.

@@ -194,8 +194,11 @@ rows):
 - **Health** (`docs/HEALTH.md`): the state in a word (healthy, hurt, unable
   to walk, unconscious, in red once hurt); once hurt, the blood as a bar
   (empty where it kills), the bleeding per hour, the pain, what the body can
-  do (each ability in percent, white at 100, red toward 0), then each injury:
-  the part, the kind and how bad (in percent of the part, white to red). Above
+  do (each ability in percent, white at 100, red toward 0). The body is
+  always listed as a table, even when healthy: a row per part (head, torso,
+  arms, legs...) with its injuries, its efficiency in percent (white to red)
+  and the blood it loses an hour; the tooltip tells what the part is for and
+  each injury on it. Above
   the abilities, each deprivation above 0 (hunger, thirst, hypothermia,
   heatstroke) with its severity and a tooltip; the state reads *Weakened* when
   nothing else is wrong. An

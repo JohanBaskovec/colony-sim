@@ -187,6 +187,8 @@ attack.spear_thrust = Spear thrust
 attack.kick = Kick
 attack.tusks = Tusks
 attack.bite = Bite
+attack.hoof_strike = Hoof strike
+attack.claws = Claws
 # Quality grades, worst to best, shown after "Quality:" (e.g. "Quality: fine")
 
 # Work types
@@ -993,6 +995,10 @@ body.front_left_leg = Front left leg
 body.front_right_leg = Front right leg
 body.hind_left_leg = Hind left leg
 body.hind_right_leg = Hind right leg
+body.limb.arms = Arms
+body.limb.head = Head
+body.limb.forelegs = Front legs
+body.limb.hindlegs = Hind legs
 injury.cut = Cut
 injury.bruise = Bruise
 injury.bite = Bite
@@ -1026,8 +1032,23 @@ health.bleeding.value = {0}% of the blood an hour
 health.pain = Pain
 health.pain.description = Slows walking and the use of the hands; from 80% it knocks out.
 health.abilities = What the body can do
-health.injuries = Injuries
-health.injury.severity = Severity: {0} of the part
+health.part = Part
+health.part.injuries = Injuries
+health.part.state = Efficiency
+health.part.bleeding = Bleeding
+# {0} = blood lost an hour, as a percentage
+health.part.bleeding.value = {0}%/h
+health.part.intact = Intact
+# {0} = the part, {1} = how much of it works
+health.part.efficiency = {0}: {1} working
+health.part.vital = Vital: destroyed, it kills
+health.part.role.mind = Needed for consciousness, sight and eating
+health.part.role.walk = Needed for walking
+health.part.role.hands = Needed for the use of the hands
+# {0} = the limb (arms, head, front legs, hind legs)
+health.part.limb = Strikes with it: {0}
+# {0} = the kind of injury, {1} = its severity (a percentage of the part), {2} = how it is going
+health.part.injury = {0} ({1} of the part): {2}
 health.injury.serious = Serious: it does not stop bleeding by itself ({0}).
 health.injury.clotting = Bleeding ({0}), less and less: it stops within hours.
 health.injury.healing = No longer bleeding: healing by itself.

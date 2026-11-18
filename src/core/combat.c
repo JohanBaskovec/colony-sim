@@ -7,15 +7,26 @@
 #include <stdlib.h>
 
 static const AttackDef ATTACK_DEFS[ATTACK_TYPE_COUNT] = {
-    [ATTACK_FISTS] = {"fists", N_("attack.fists"), INJURY_BRUISE, 3.0f, 0.7f, 1.0f, 1},
+    [ATTACK_FISTS] = {"fists", N_("attack.fists"), INJURY_BRUISE, 3.0f, 0.7f, 1.0f, 1,
+                      BODY_LIMB_ARMS},
     [ATTACK_SPEAR_THRUST] = {"spear_thrust", N_("attack.spear_thrust"), INJURY_CUT, 9.0f, 0.8f,
-                             1.4f, 1},
+                             1.4f, 1, BODY_LIMB_ARMS},
     [ATTACK_HARDENED_SPEAR_THRUST] = {"hardened_spear_thrust", N_("attack.spear_thrust"),
-                                      INJURY_CUT, 11.0f, 0.8f, 1.4f, 1},
-    [ATTACK_KICK] = {"kick", N_("attack.kick"), INJURY_BRUISE, 5.0f, 0.5f, 1.5f, 1},
-    [ATTACK_TUSKS] = {"tusks", N_("attack.tusks"), INJURY_CUT, 8.0f, 0.65f, 1.4f, 1},
-    [ATTACK_WOLF_BITE] = {"wolf_bite", N_("attack.bite"), INJURY_BITE, 8.0f, 0.7f, 1.4f, 1},
-    [ATTACK_FOX_BITE] = {"fox_bite", N_("attack.bite"), INJURY_BITE, 3.0f, 0.7f, 1.0f, 1},
+                                      INJURY_CUT, 11.0f, 0.8f, 1.4f, 1, BODY_LIMB_ARMS},
+    [ATTACK_KICK] = {"kick", N_("attack.kick"), INJURY_BRUISE, 5.0f, 0.5f, 1.5f, 1,
+                     BODY_LIMB_HINDLEGS},
+    [ATTACK_HOOF_STRIKE] = {"hoof_strike", N_("attack.hoof_strike"), INJURY_BRUISE, 4.0f, 0.5f,
+                            1.5f, 1, BODY_LIMB_FORELEGS},
+    [ATTACK_TUSKS] = {"tusks", N_("attack.tusks"), INJURY_CUT, 8.0f, 0.65f, 1.4f, 1,
+                      BODY_LIMB_HEAD},
+    [ATTACK_WOLF_BITE] = {"wolf_bite", N_("attack.bite"), INJURY_BITE, 8.0f, 0.7f, 1.4f, 1,
+                          BODY_LIMB_HEAD},
+    [ATTACK_WOLF_CLAWS] = {"wolf_claws", N_("attack.claws"), INJURY_CUT, 4.0f, 0.6f, 1.2f, 1,
+                           BODY_LIMB_FORELEGS},
+    [ATTACK_FOX_BITE] = {"fox_bite", N_("attack.bite"), INJURY_BITE, 3.0f, 0.7f, 1.0f, 1,
+                         BODY_LIMB_HEAD},
+    [ATTACK_FOX_CLAWS] = {"fox_claws", N_("attack.claws"), INJURY_CUT, 1.5f, 0.6f, 1.0f, 1,
+                          BODY_LIMB_FORELEGS},
 };
 
 const AttackDef *attack_def(AttackType type)
@@ -30,6 +41,79 @@ int attack_interval_ticks(AttackType type)
 {
     const AttackDef *def = attack_def(type);
     return def != NULL ? (int)(def->interval * (float)TICKS_PER_SECOND + 0.5f) : 0;
+}
+
+float combat_attack_ability(const Health *attacker, AttackType type)
+{
+    const AttackDef *def = attack_def(type);
+    return def != NULL ? health_limb_ability(attacker, def->limb) : 0.0f;
+}
+
+int combat_choice_count(const AttackChoice choices[COMBAT_ATTACKS_MAX])
+{
+    int count = 0;
+    while (count < COMBAT_ATTACKS_MAX && choices[count].attack != ATTACK_NONE) {
+        count++;
+    }
+    return count;
+}
+
+bool combat_can_attack(const Health *attacker, const AttackChoice choices[COMBAT_ATTACKS_MAX])
+{
+    return combat_choice_reach(attacker, choices) > 0;
+}
+
+int combat_choice_reach(const Health *attacker, const AttackChoice choices[COMBAT_ATTACKS_MAX])
+{
+    int reach = 0;
+    for (int i = 0; i < combat_choice_count(choices); i++) {
+        const AttackDef *def = attack_def((AttackType)choices[i].attack);
+        if (def != NULL &&
+            combat_attack_ability(attacker, (AttackType)choices[i].attack) >= COMBAT_LIMB_MIN) {
+            reach = def->reach > reach ? def->reach : reach;
+        }
+    }
+    return reach;
+}
+
+AttackType combat_choose_attack(const Health *attacker,
+                                const AttackChoice choices[COMBAT_ATTACKS_MAX], Rng *rng,
+                                float *ability)
+{
+    float weights[COMBAT_ATTACKS_MAX], abilities[COMBAT_ATTACKS_MAX];
+    int count = combat_choice_count(choices), usable = 0, last = -1, favorite = -1;
+    float total = 0.0f;
+    for (int i = 0; i < count; i++) {
+        abilities[i] = combat_attack_ability(attacker, (AttackType)choices[i].attack);
+        weights[i] = abilities[i] >= COMBAT_LIMB_MIN ? choices[i].weight * abilities[i] : 0.0f;
+        if (weights[i] > 0.0f) {
+            usable++;
+            last = i;
+            total += weights[i];
+            favorite = favorite < 0 || weights[i] > weights[favorite] ? i : favorite;
+        }
+    }
+    if (usable == 0) {
+        return ATTACK_NONE;
+    }
+    int picked = last;
+    if (usable > 1) {
+        picked = favorite;
+        if (rng != NULL) {
+            float roll = rng_next_float(rng) * total;
+            for (int i = 0; i < count; i++) {
+                if (weights[i] > 0.0f && roll < weights[i]) {
+                    picked = i;
+                    break;
+                }
+                roll -= weights[i];
+            }
+        }
+    }
+    if (ability != NULL) {
+        *ability = abilities[picked];
+    }
+    return (AttackType)choices[picked].attack;
 }
 
 bool combat_in_reach(TilePos a, TilePos b, int reach)

@@ -154,11 +154,12 @@ typedef struct AnimalDef {
     BodyPlan body;
     float size;
     ItemType carcass;
-    /* How it fights (docs/COMBAT.md): its natural weapon (ATTACK_NONE: none),
-     * how well it dodges (0..1), the hurt fraction at which it breaks off
-     * (combat_breaks_off()), and whether it fights back when struck (else it
-     * runs). */
-    AttackType attack;
+    /* How it fights (docs/COMBAT.md): its natural weapons (an empty list:
+     * none; it draws among those whose limb is whole enough, so a wolf with
+     * a ruined forepaw only bites), how well it dodges (0..1), the hurt
+     * fraction at which it breaks off (combat_breaks_off()), and whether it
+     * fights back when struck (else it runs). */
+    AttackChoice attacks[COMBAT_ATTACKS_MAX];
     float agility;
     float nerve;
     bool fights_back;

@@ -37,6 +37,11 @@ on the part when no part is aimed at.
 | Left arm, right arm | 20 each | 12.5 % each | no | hands, half each |
 | Left leg, right leg | 25 each | 12.5 % each | no | walking, half each |
 
+Each part may also carry a **limb**, what the being strikes with
+(`docs/COMBAT.md` §2): the arms (*arms*), the head (*head*), the front legs
+(*forelegs*), the hind legs (*hindlegs*). A plan lacking a limb cannot make
+the attacks made with it.
+
 ### 2.2 Four-legged animal (deer, boar)
 
 | Part | Hit points | Coverage | Vital | Role |
@@ -45,6 +50,13 @@ on the part when no part is aimed at.
 | Neck | 20 | 7 % | yes | — |
 | Torso | 45 | 45 % | yes | — |
 | Four legs | 20 each | 10 % each | no | walking, a quarter each |
+
+Limbs: the head (tusks), the front legs (hooves striking), the hind legs (kicks).
+
+### 2.2b Canine (wolf, fox)
+
+The same parts, with a longer muzzle (head 10 %, torso 43 %). Limbs: the
+head (bite), the front legs (claws), the hind legs.
 
 ### 2.3 Hare
 
@@ -106,6 +118,7 @@ Each from 0 to 100 %:
 | Consciousness | the blood (100 % down to 70 % blood, then down to 0 at 50 %) times the head (−60 % at a destroyed head); 0 at full pain (80 %) |
 | Walking | the legs, each by its share and efficiency; times the pain slowdown |
 | Hands | the arms, likewise |
+| Limb (arms, head, forelegs, hindlegs) | the mean efficiency of the parts that carry it, times the pain slowdown and the weakness; 0 when unconscious. Below 15 % the attacks made with it cannot be made *(tuning)* |
 | Sight | the head's efficiency |
 | Eating | the head (−50 % at a destroyed head) |
 
@@ -156,8 +169,12 @@ Each from 0 to 100 %:
 
 - The settler window's **Health** tab, and the animal window: the state in a
   word (healthy, hurt, unable to walk, unconscious), the blood as a bar, the
-  bleeding, the pain, what the body can do, and each injury (part, kind, how
-  bad), with the details in tooltips.
+  bleeding, the pain, what the body can do; and, always (healthy or not), a
+  **table of the body**: one row per part with its injuries (the kinds, or
+  *Intact*), its efficiency (how much of it works) and the blood it loses an
+  hour. A tooltip on a row says what the part is for (vital, walking, the
+  hands, the limb it strikes with) and gives each injury on it: kind, how bad
+  (percent of the part) and how it is going (serious, clotting, healing).
 - A cross on the portrait of a hurt settler in the colonist bar, red while it
   bleeds or is down; its state in the tooltip.
 - A settler down lies across its tile, eyes closed when unconscious; an

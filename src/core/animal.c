@@ -59,7 +59,7 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                          .body = BODY_QUADRUPED,
                          .size = 0.7f,
                          .carcass = ITEM_ROE_DEER_CARCASS,
-                         .attack = ATTACK_KICK,
+                         .attacks = {{ATTACK_KICK, 1.0f}, {ATTACK_HOOF_STRIKE, 1.0f}},
                          .agility = 0.45f,
                          .nerve = 0.2f,
                          .sprint_seconds = 18.0f,
@@ -96,7 +96,7 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                          .body = BODY_QUADRUPED,
                          .size = 1.4f,
                          .carcass = ITEM_RED_DEER_CARCASS,
-                         .attack = ATTACK_KICK,
+                         .attacks = {{ATTACK_KICK, 1.0f}, {ATTACK_HOOF_STRIKE, 1.0f}},
                          .agility = 0.35f,
                          .nerve = 0.25f,
                          .sprint_seconds = 22.0f,
@@ -136,7 +136,7 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .body = BODY_QUADRUPED,
          .size = 1.2f,
          .carcass = ITEM_BOAR_CARCASS,
-         .attack = ATTACK_TUSKS,
+         .attacks = {{ATTACK_TUSKS, 1.0f}},
          .agility = 0.3f,
          .nerve = 0.7f,
          .fights_back = true,
@@ -197,10 +197,10 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .male_group_max = 2,
          .male_share = 0.4f,
          .density = 1.5f,
-         .body = BODY_QUADRUPED,
+         .body = BODY_CANINE,
          .size = 0.7f,
          .carcass = ITEM_WOLF_CARCASS,
-         .attack = ATTACK_WOLF_BITE,
+         .attacks = {{ATTACK_WOLF_BITE, 3.0f}, {ATTACK_WOLF_CLAWS, 1.0f}},
          .agility = 0.4f,
          .nerve = 0.55f,
          .fights_back = true,
@@ -234,10 +234,10 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .male_group_max = 1,
          .male_share = 0.5f,
          .density = 3.0f,
-         .body = BODY_QUADRUPED,
+         .body = BODY_CANINE,
          .size = 0.25f,
          .carcass = ITEM_FOX_CARCASS,
-         .attack = ATTACK_FOX_BITE,
+         .attacks = {{ATTACK_FOX_BITE, 3.0f}, {ATTACK_FOX_CLAWS, 1.0f}},
          .agility = 0.5f,
          .nerve = 0.35f,
          .sprint_seconds = 14.0f,
@@ -1412,28 +1412,34 @@ static void fight(Animals *animals, uint32_t slot, const AnimalContext *context)
 {
     Animal *animal = &animals->list[slot];
     const AnimalDef *def = &ANIMAL_DEFS[animal->species];
-    const AttackDef *attack = attack_def(def->attack);
-    if (combatant_is_none(animal->enemy) || attack == NULL) {
+    if (combatant_is_none(animal->enemy) || combat_choice_count(def->attacks) == 0) {
         stand(animal, WATCH_TICKS);
         return;
     }
-    if (combat_breaks_off(&animal->health, animal_nerve(animal))) {
-        animal->alarmed = true; /* Runs from it. */
+    /* Past its nerve, or with nothing left to strike with (every limb that
+     * carries an attack is ruined, or it is knocked out): it runs from it. */
+    if (combat_breaks_off(&animal->health, animal_nerve(animal)) ||
+        !combat_can_attack(&animal->health, def->attacks)) {
+        animal->alarmed = true;
         stand(animal, 0);
         return;
     }
     TilePos here = tile_of(animal);
-    if (combat_in_reach(here, animal->enemy_pos, attack->reach)) {
+    if (combat_in_reach(here, animal->enemy_pos,
+                        combat_choice_reach(&animal->health, def->attacks))) {
         animal->path_index = 0;
         path_clear(&animal->path);
         if (animal->attack_cooldown <= 0 && context->combat != NULL) {
+            float power = 1.0f;
+            AttackType attack =
+                combat_choose_attack(&animal->health, def->attacks, context->rng, &power);
             combat_queue_push(context->combat,
                               (CombatStrike){{COMBATANT_ANIMAL, animals_id_at(animals, slot)},
                                              animal->enemy,
-                                             (uint8_t)def->attack,
+                                             (uint8_t)attack,
                                              1.0f,
-                                             1.0f});
-            animal->attack_cooldown = attack_interval_ticks(def->attack);
+                                             power});
+            animal->attack_cooldown = attack_interval_ticks(attack);
         }
         return;
     }
@@ -1470,7 +1476,7 @@ bool animals_attack(Animals *animals, EntityId id, Combatant enemy)
 {
     Animal *animal = animals_get(animals, id);
     if (animal == NULL || health_is_dead(&animal->health) ||
-        ANIMAL_DEFS[animal->species].attack == ATTACK_NONE) {
+        combat_choice_count(ANIMAL_DEFS[animal->species].attacks) == 0) {
         return false;
     }
     if (enemy.kind == COMBATANT_ANIMAL) {
@@ -1506,7 +1512,7 @@ bool animals_provoke(Animals *animals, EntityId id, Combatant attacker)
     if (health_is_down(&animal->health)) {
         return fresh;
     }
-    if (def->fights_back && def->attack != ATTACK_NONE &&
+    if (def->fights_back && combat_can_attack(&animal->health, def->attacks) &&
         !combat_breaks_off(&animal->health, animal_nerve(animal))) {
         if (animal->task != ANIMAL_TASK_ATTACK) {
             start_attack(animal, animal->enemy);

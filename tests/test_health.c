@@ -39,6 +39,7 @@ static void test_body_plans(void)
     CHECK_EQ_INT(body_part_count(BODY_HUMAN), 6);
     CHECK_EQ_INT(body_part_count(BODY_QUADRUPED), 7);
     CHECK_EQ_INT(body_part_count(BODY_HARE), 6);
+    CHECK_EQ_INT(body_part_count(BODY_CANINE), 7);
     CHECK_EQ_INT(body_part_count(BODY_PLAN_COUNT), 0);
     CHECK(body_part_def(BODY_HUMAN, -1) == NULL);
     CHECK(body_part_def(BODY_HUMAN, 6) == NULL);
@@ -70,6 +71,79 @@ static void test_body_plans(void)
     for (int ability = 0; ability < HEALTH_ABILITY_COUNT; ability++) {
         CHECK(i18n_is_valid_key(health_ability_name_key((HealthAbility)ability)));
     }
+}
+
+/* What a plan strikes with: the limbs its parts carry. */
+static void test_limbs(void)
+{
+    CHECK(body_plan_has_limb(BODY_HUMAN, BODY_LIMB_ARMS));
+    CHECK(!body_plan_has_limb(BODY_HUMAN, BODY_LIMB_HEAD));
+    CHECK(!body_plan_has_limb(BODY_HUMAN, BODY_LIMB_FORELEGS));
+    for (int plan = BODY_QUADRUPED; plan < BODY_PLAN_COUNT; plan++) {
+        bool hare = plan == BODY_HARE;
+        CHECK(!body_plan_has_limb((BodyPlan)plan, BODY_LIMB_ARMS));
+        CHECK_EQ_INT(body_plan_has_limb((BodyPlan)plan, BODY_LIMB_HEAD), !hare);
+        CHECK_EQ_INT(body_plan_has_limb((BodyPlan)plan, BODY_LIMB_FORELEGS), !hare);
+        CHECK_EQ_INT(body_plan_has_limb((BodyPlan)plan, BODY_LIMB_HINDLEGS), !hare);
+    }
+    CHECK(!body_plan_has_limb(BODY_HUMAN, BODY_LIMB_NONE));
+    CHECK(!body_plan_has_limb(BODY_HUMAN, BODY_LIMB_COUNT));
+    CHECK(body_limb_name_key(BODY_LIMB_NONE) == NULL);
+    for (int limb = BODY_LIMB_ARMS; limb < BODY_LIMB_COUNT; limb++) {
+        CHECK(i18n_is_valid_key(body_limb_name_key((BodyLimb)limb)));
+    }
+    /* A part carries one limb, and a limb's parts are at least one. */
+    for (int plan = 0; plan < BODY_PLAN_COUNT; plan++) {
+        for (int part = 0; part < body_part_count((BodyPlan)plan); part++) {
+            CHECK((unsigned)body_part_def((BodyPlan)plan, part)->limb < BODY_LIMB_COUNT);
+        }
+    }
+}
+
+static void test_limb_ability(void)
+{
+    Health health = human();
+    CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_ARMS), 1.0, 1e-6);
+    CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_HEAD), 0.0, 1e-9); /* No such limb. */
+    CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_NONE), 0.0, 1e-9);
+    /* One arm lost of two: half the strength (less, for the pain); the hands
+     * agree. */
+    health_hurt(&health, LEFT_ARM, INJURY_BRUISE, 20.0f);
+    CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_ARMS), 0.45, 0.05);
+    CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_ARMS), health_ability(&health, HEALTH_HANDS),
+               1e-6);
+    /* Both: nothing. */
+    health_hurt(&health, RIGHT_ARM, INJURY_BRUISE, 20.0f);
+    CHECK_NEAR(health_limb_ability(&health, BODY_LIMB_ARMS), 0.0, 1e-6);
+
+    /* A fracture leaves a tenth of it. */
+    Health fractured = human();
+    health_hurt(&fractured, LEFT_ARM, INJURY_FRACTURE, 2.0f);
+    health_hurt(&fractured, RIGHT_ARM, INJURY_FRACTURE, 2.0f);
+    CHECK(health_limb_ability(&fractured, BODY_LIMB_ARMS) < 0.15f);
+
+    /* A wolf: ruined forepaws leave the head and the hind legs whole. */
+    Health wolf;
+    health_init(&wolf, BODY_CANINE, 0.7f, 1.0f, 1.0f);
+    CHECK_NEAR(health_limb_ability(&wolf, BODY_LIMB_FORELEGS), 1.0, 1e-6);
+    health_hurt(&wolf, 3, INJURY_FRACTURE, 1.0f);
+    health_hurt(&wolf, 4, INJURY_FRACTURE, 1.0f);
+    CHECK(health_limb_ability(&wolf, BODY_LIMB_FORELEGS) < 0.15f);
+    CHECK(health_limb_ability(&wolf, BODY_LIMB_HEAD) > 0.9f); /* A little pain only. */
+    CHECK(health_limb_ability(&wolf, BODY_LIMB_HINDLEGS) > 0.9f);
+    CHECK_NEAR(health_limb_ability(&wolf, BODY_LIMB_ARMS), 0.0, 1e-9);
+
+    /* Knocked out: nothing works. */
+    Health out = human();
+    health_hurt(&out, TORSO, INJURY_BRUISE, 38.0f);
+    health_hurt(&out, HEAD, INJURY_BRUISE, 20.0f);
+    REQUIRE(health_is_unconscious(&out));
+    CHECK_NEAR(health_limb_ability(&out, BODY_LIMB_ARMS), 0.0, 1e-9);
+    /* And the dead. */
+    Health dead = human();
+    health_hurt(&dead, HEAD, INJURY_CUT, 100.0f);
+    REQUIRE(health_is_dead(&dead));
+    CHECK_NEAR(health_limb_ability(&dead, BODY_LIMB_ARMS), 0.0, 1e-9);
 }
 
 static void test_healthy_body(void)
@@ -1084,6 +1158,8 @@ static void test_cold_animals_without_shelter_stay_put(void)
 int main(void)
 {
     RUN_TEST(test_body_plans);
+    RUN_TEST(test_limbs);
+    RUN_TEST(test_limb_ability);
     RUN_TEST(test_healthy_body);
     RUN_TEST(test_hurting);
     RUN_TEST(test_vital_part_kills);

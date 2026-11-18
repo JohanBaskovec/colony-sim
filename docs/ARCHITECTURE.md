@@ -66,7 +66,7 @@ simulation:
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
-| `combat`     | Blows between beings, for settlers and animals alike: attacks (damage, injury kind, accuracy, interval, reach), hit chance against dodge, a blow through `health`, the hurt fraction and breaking off, the queue of strikes the game resolves (see `docs/COMBAT.md`) |
+| `combat`     | Blows between beings, for settlers and animals alike: attacks (damage, injury kind, accuracy, interval, reach), hit chance against dodge, the limb an attack is made with and the attacks a species chooses among (`AttackChoice`, `combat_choose_attack()`), a blow through `health`, the hurt fraction and breaking off, the queue of strikes the game resolves (see `docs/COMBAT.md`) |
 | `health`     | Bodies for settlers and animals alike: body plans and parts, injuries that bleed and hurt, abilities (consciousness, walking, the hands, sight, eating), clotting, natural healing, blood coming back, death; falls (see `docs/HEALTH.md`) |
 | `attributes` | Settler attributes: positions in thousandths drawn on a bell curve, their effects (factors, thought weight, outlook points, temperature shifts), the word bands and translation keys |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
@@ -943,7 +943,13 @@ order they were asked, with the game's own `combat_rng`, then tells the target
 (`provoke()`): an animal fights back or runs (`animals_provoke()`), a
 settler fights or flees at its next turn (`colonist_provoke()`) and the
 player is told. Combat is invisible to the hash until a blow is struck.
-The debug tool (F4) names an attacker and a target (`game_debug_attack()`).
+An attack is made with a limb (`BodyLimb`, carried by the parts of a body
+plan: `BodyPartDef.limb`, `health_limb_ability()`); an `AnimalDef` lists up to
+`COMBAT_ATTACKS_MAX` attacks with weights, and `fight()` draws one per blow
+among those whose limb is whole enough (`combat_choose_attack()`, with the
+animals' random stream, none drawn when only one is possible); a settler's
+single attack (`colonist_attack()`) is `ATTACK_NONE` without the use of its
+arms. The debug tool (F4) names an attacker and a target (`game_debug_attack()`).
 
 ### Dirt and cleaning
 
