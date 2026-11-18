@@ -1250,6 +1250,7 @@ void hud_inspect_colonists(App *app)
                     : inspector_box(app, INSPECT_COLONISTS, title, panel_rows, &summary);
     inspector_move_action(app, 0);
     if (one) {
+        inspector_follow_action(app, 1, FOLLOW_COLONIST, app->selected[0]);
         const char *labels[SECTION_COUNT - 1];
         for (int i = 1; i < SECTION_COUNT; i++) {
             labels[i - 1] = tr(SECTION_KEYS[i]);
@@ -1296,6 +1297,7 @@ static void help_window(App *app)
               app_key_name(APP_KEY_TEMPERATURE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.roofs"), app_key_name(APP_KEY_LEVEL_UP),
               tr("designation.deconstruct"));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.follow"), app_key_name(APP_KEY_FOLLOW));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.levels"),
               app_key_name(APP_KEY_LEVEL_UP), app_key_name(APP_KEY_LEVEL_DOWN));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.debug"),

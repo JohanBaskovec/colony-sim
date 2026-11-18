@@ -246,6 +246,7 @@ hud.help.gathering = {0}: gathering zones (wood, wild food, branches, twigs, gra
 hud.help.orders = {0}: mine · {1}: cancel orders
 # {0} = key of the stockpile zone tool, {1} = key of the build tool, {2} = key of the work priorities grid
 hud.help.copy = {0}: build another of what is selected (zone, workstation, bed, wall, door)
+hud.help.follow = {0}: follow the selected settler or animal (the view stays on it and changes level with it)
 hud.help.rotate = {0}: turn the bed being placed (head and foot)
 hud.help.temperature = {0}: temperature view (felt on each tile, the warmth of fires included: blue for cold, red for hot)
 hud.help.roofs = Roofs: built on the level above the walls ({0}), from below; taken down there too ({1})
@@ -258,6 +259,9 @@ tile_panel.move_items = Carry elsewhere
 tile_panel.move_items.description = Settlers who haul carry these items to the tile you click, wherever it is, before any other hauling. They are forbidden meanwhile, and once put down, so that nobody takes them back to storage: allow them when you want them stored
 hud.tool.move_items_help = Click the tile the items must be carried to · Esc: back
 hud.tool.move_help = Click where the selected settlers must go · Esc: back
+inspector.follow = Follow
+inspector.follow.stop = Stop following
+inspector.follow.description = The view stays on it and changes level with it, until you move the view (keys, dragging, another level), it dies or, for an animal, the colony loses sight of it
 inspector.move = Move
 inspector.move.description = Sends the selected settlers to the tile you click: they drop what they are doing, walk there and stay a few seconds before going back to their life
 hud.tool.spawn = Debug: spawn {1} × {0} · Click: on the tile · Esc: back

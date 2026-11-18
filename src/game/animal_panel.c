@@ -106,6 +106,7 @@ void animal_panel_draw(App *app)
     }
     const char *title = tr(animal_name_key((AnimalSpecies)animal->species, (AnimalSex)animal->sex));
     bool open = inspector_box(app, INSPECT_ANIMAL, title, animal_rows, app);
+    inspector_follow_action(app, 0, FOLLOW_ANIMAL, app->selected_animal);
     const char *labels[3] = {tr("inspector.tab.health"), tr("inspector.tab.character"),
                              tr("inspector.tab.journal")};
     int tab = inspector_tabs(app, labels, 3);

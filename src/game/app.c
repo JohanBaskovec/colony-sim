@@ -779,6 +779,7 @@ void app_build_like_selection(App *app)
 /* Shows another level (clamped to the map's). */
 static void set_level(App *app, int level)
 {
+    app_stop_following(app); /* The player takes the view back. */
     app->camera.level = clampi(level, 0, app->game.map.depth - 1);
 }
 
@@ -791,6 +792,13 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     switch (key->scancode) {
     case APP_KEY_PAUSE: game_clock_toggle_pause(&app->game.clock); return;
     case APP_KEY_BUILD_LIKE: app_build_like_selection(app); return;
+    case APP_KEY_FOLLOW:
+        if (!entity_id_is_none(app->selected_animal)) {
+            app_toggle_follow(app, FOLLOW_ANIMAL, app->selected_animal);
+        } else if (app->selected_count == 1) {
+            app_toggle_follow(app, FOLLOW_COLONIST, app->selected[0]);
+        }
+        return;
     case SDL_SCANCODE_1:
     case SDL_SCANCODE_KP_1: game_clock_set_speed(&app->game.clock, GAME_SPEED_NORMAL); return;
     case SDL_SCANCODE_2:
@@ -1033,11 +1041,87 @@ static void load_pending_scenario(App *app)
     camera_init(&app->camera, (float)app->game.map.width * 0.5f, (float)app->game.map.height * 0.5f,
                 app->camera.zoom);
     app->camera.level = 0;
+    app_stop_following(app);
     LOG_INFO("Test scenario %d loaded", (int)scenario);
+}
+
+/* Where the followed being is and on which level; false when there is none
+ * to follow (any more). */
+static bool follow_position(const App *app, float *x, float *y, int *level)
+{
+    switch (app->follow_kind) {
+    case FOLLOW_COLONIST: {
+        const Colonist *colonist = game_colonist_const(&app->game, app->follow_id);
+        if (colonist == NULL) {
+            return false;
+        }
+        colonist_position(colonist, x, y);
+        *level = colonist->z;
+        return true;
+    }
+    case FOLLOW_ANIMAL: {
+        const Animal *animal = game_animal_const(&app->game, app->follow_id);
+        if (animal == NULL || !game_animal_seen(&app->game, app->follow_id)) {
+            return false;
+        }
+        animal_position(animal, x, y);
+        *level = animal->z;
+        return true;
+    }
+    case FOLLOW_NONE: break;
+    }
+    return false;
+}
+
+/* Keeps the camera on the followed being (after the game's update, so that
+ * the view and the sprite agree). */
+static void update_follow(App *app)
+{
+    if (app->follow_kind == FOLLOW_NONE) {
+        return;
+    }
+    float x, y;
+    int level;
+    if (!follow_position(app, &x, &y, &level)) {
+        app_stop_following(app);
+        return;
+    }
+    app->camera.x = x;
+    app->camera.y = y;
+    app->camera.level = clampi(level, 0, app->game.map.depth - 1);
+    camera_clamp(&app->camera, (float)app->game.map.width, (float)app->game.map.height);
+}
+
+void app_follow(App *app, FollowKind kind, EntityId id)
+{
+    app->follow_kind = kind;
+    app->follow_id = id;
+    update_follow(app); /* Centers it at once, or stops when there is no one. */
+}
+
+void app_stop_following(App *app)
+{
+    app->follow_kind = FOLLOW_NONE;
+    app->follow_id = ENTITY_NONE;
+}
+
+bool app_is_following(const App *app, FollowKind kind, EntityId id)
+{
+    return app->follow_kind == kind && kind != FOLLOW_NONE && entity_id_equal(app->follow_id, id);
+}
+
+void app_toggle_follow(App *app, FollowKind kind, EntityId id)
+{
+    if (app_is_following(app, kind, id)) {
+        app_stop_following(app);
+    } else {
+        app_follow(app, kind, id);
+    }
 }
 
 void app_focus_colonist(App *app, EntityId id)
 {
+    app_stop_following(app);
     const Colonist *colonist = game_colonist_const(&app->game, id);
     if (colonist != NULL) {
         colonist_position(colonist, &app->camera.x, &app->camera.y);
@@ -1318,6 +1402,7 @@ static void handle_event(App *app, const SDL_Event *event)
     case SDL_EVENT_MOUSE_MOTION:
         if ((event->motion.state & (SDL_BUTTON_MMASK | SDL_BUTTON_RMASK)) && !app->pan_blocked) {
             camera_pan_pixels(&app->camera, -event->motion.xrel, -event->motion.yrel);
+            app_stop_following(app);
         }
         if (app->left_button_down && !app->box_selecting) {
             float dx = event->motion.x - app->drag_start_x;
@@ -1348,6 +1433,7 @@ static void update_camera(App *app, float dt)
             speed *= APP_PAN_FAST_FACTOR;
         }
         camera_pan_pixels(&app->camera, dx * speed, dy * speed);
+        app_stop_following(app);
     }
     camera_clamp(&app->camera, (float)app->game.map.width, (float)app->game.map.height);
 
@@ -1630,6 +1716,7 @@ void app_run(App *app)
         prune_gather_zone_selection(app);
         prune_tile_selection(app);
         prune_animal_selection(app);
+        update_follow(app);
         update_fps(app, dt);
         app->render_elapsed += draw_frame(app);
     }

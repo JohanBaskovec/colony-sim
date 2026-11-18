@@ -60,6 +60,7 @@ typedef enum AppTool {
 #define APP_KEY_WORK SDL_SCANCODE_T
 #define APP_KEY_LOG SDL_SCANCODE_J    /* The colony log. */
 #define APP_KEY_ROTATE SDL_SCANCODE_F /* Turns the structure being planned (beds). */
+#define APP_KEY_FOLLOW SDL_SCANCODE_C /* The camera follows the selected settler or animal. */
 #define APP_KEY_STOCKPILE SDL_SCANCODE_P
 #define APP_KEY_LANGUAGE SDL_SCANCODE_L
 #define APP_KEY_MINE SDL_SCANCODE_M
@@ -77,6 +78,9 @@ typedef enum AppTool {
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H     /* Temperature view on or off. */
 #define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP   /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
+
+/* Who the camera follows (App.follow_kind). */
+typedef enum FollowKind { FOLLOW_NONE, FOLLOW_COLONIST, FOLLOW_ANIMAL } FollowKind;
 
 /* Types of the debug tool (see app_toggle_tool()). */
 #define APP_DEBUG_SPAWN 0
@@ -200,6 +204,10 @@ typedef struct App {
     /* Selected wild animal (ENTITY_NONE if none), same rules: dropped once
      * the colony no longer sees it (game/animal_panel.h). */
     EntityId selected_animal;
+    /* The being the camera follows (app_follow()): the view stays on it, on its
+     * level too, until the player moves the view or it is gone. */
+    FollowKind follow_kind;
+    EntityId follow_id;
     /* The kinds of entries the Journal tab hides (a bit per JournalKind; 0: all shown). */
     JournalFilter journal_hidden;
     /* A right click on the map (not dragged to pan) steps back like Escape. */
@@ -334,8 +342,20 @@ PlantType app_plant_type_at(const App *app, int x, int y, int z);
 /* Starts building another of what is selected (APP_KEY_BUILD_LIKE). */
 void app_build_like_selection(App *app);
 
-/* Centers the view on a colonist, on its level. */
+/* Centers the view on a colonist, on its level (once: it stops following). */
 void app_focus_colonist(App *app, EntityId id);
+
+/* The camera follows a settler or an animal: it is centered on it at once and
+ * stays on it, level included, as it walks. The player moving the view (keys,
+ * dragging, another level) ends it, as does the being's death or, for an
+ * animal, being out of the colony's sight. Zooming keeps it. */
+void app_follow(App *app, FollowKind kind, EntityId id);
+void app_stop_following(App *app);
+bool app_is_following(const App *app, FollowKind kind, EntityId id);
+
+/* Follows the selected settler or animal, or stops if it is the one followed
+ * (APP_KEY_FOLLOW, the Follow action). */
+void app_toggle_follow(App *app, FollowKind kind, EntityId id);
 
 /* Switches to the next language, and remembers it (settings). */
 void app_cycle_language(App *app);

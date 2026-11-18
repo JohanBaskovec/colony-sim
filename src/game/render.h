@@ -175,7 +175,8 @@ typedef enum RenderIcon {
     RENDER_ICON_UPROOT,
     RENDER_ICON_FORBID, /* The "no entry" sign. */
     RENDER_ICON_ALLOW,
-    RENDER_ICON_MOVE, /* An arrow toward a spot. */
+    RENDER_ICON_MOVE,   /* An arrow toward a spot. */
+    RENDER_ICON_FOLLOW, /* A sight: a ring with ticks, a dot in the middle. */
     RENDER_ICON_CANCEL,
 } RenderIcon;
 

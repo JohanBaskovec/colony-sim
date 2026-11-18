@@ -182,6 +182,20 @@ void inspector_move_action(App *app, int slot)
     render_tool_icon(app->renderer, icon, RENDER_ICON_MOVE);
 }
 
+void inspector_follow_action(App *app, int slot, FollowKind kind, EntityId id)
+{
+    bool lit = app_is_following(app, kind, id);
+    char shortcut[128];
+    TR_FORMAT(shortcut, sizeof(shortcut), tr("menu.shortcut"), app_key_name(APP_KEY_FOLLOW));
+    const char *lines[3] = {tr(lit ? "inspector.follow.stop" : "inspector.follow"),
+                            tr("inspector.follow.description"), shortcut};
+    SDL_FRect icon;
+    if (inspector_action(app, slot, lit, &icon, lines, 3)) {
+        app_toggle_follow(app, kind, id);
+    }
+    render_tool_icon(app->renderer, icon, RENDER_ICON_FOLLOW);
+}
+
 bool inspector_build_like_action(App *app, int slot)
 {
     AppTool tool;

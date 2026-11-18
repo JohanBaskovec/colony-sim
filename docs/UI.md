@@ -124,13 +124,21 @@ become tabs:
 
 | Selection           | Summary                                       | Tabs (now; later)                                 | Actions                       |
 |---------------------|-----------------------------------------------|---------------------------------------------------|-------------------------------|
-| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social, Journal; Log | Move (later: draft, attack)   |
+| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social, Journal; Log | Move, Follow (later: draft, attack) |
 | Several colonists   | How many, their names                         | —                                                 | Move                          |
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size, "left alone" when forbidden | Storage (filters)                             | Forbid, build another, delete |
 | Gathering zone      | Name, priority, size, "left alone" when forbidden | Resources                                     | Forbid, build another, delete |
 | Tile                | What lies there: structure, roof, site, items, plant, each with Forbid/Allow | —                          | Build another; items: Carry elsewhere |
-| Wild animal         | What it is called (a hind, a stag) as the title; species, sex, activity, needs as bars (tooltips), herd | — | (later: hunt)                 |
+| Wild animal         | What it is called (a hind, a stag) as the title; species, sex, activity, needs as bars (tooltips), herd | — | Follow (later: hunt)          |
+
+The **Follow** action (a sight icon, shortcut C; settlers and animals) makes
+the camera follow the selected being: the view is centered on it at once and
+stays on it as it walks, and changes level with it. The button stays lit
+while it lasts; a click or the shortcut again ends it, as does moving the view
+(keys, dragging, another level), the being's death, or, for an animal, the
+colony losing sight of it. Zooming keeps it. Selecting something else does
+not end it.
 
 The animal's window has a Health tab and a Character tab like the settlers',
 and a Journal tab.

@@ -2235,6 +2235,20 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         batch_flush(renderer);
         break;
     }
+    case RENDER_ICON_FOLLOW: { /* A sight on its target. */
+        float cx = rect.x + w * 0.5f, cy = rect.y + h * 0.5f, half = w * 0.04f;
+        SDL_Color color = {236, 230, 210, 255};
+        batch_ring(renderer, color, cx, cy, w * 0.24f, w * 0.31f);
+        for (int i = 0; i < 4; i++) {
+            float dx = i == 0 ? 1.0f : i == 1 ? -1.0f : 0.0f;
+            float dy = i == 2 ? 1.0f : i == 3 ? -1.0f : 0.0f;
+            batch_bar(renderer, color, cx + dx * w * 0.16f, cy + dy * h * 0.16f,
+                      cx + dx * w * 0.42f, cy + dy * h * 0.42f, half);
+        }
+        batch_disc(renderer, ALLOW_COLOR, cx, cy, w * 0.08f);
+        batch_flush(renderer);
+        break;
+    }
     case RENDER_ICON_CANCEL: {
         SDL_FRect area = inset(&rect, 0.5f);
         SDL_Color red = DESIGNATION_COLORS[DESIGNATION_NONE];

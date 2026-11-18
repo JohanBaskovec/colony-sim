@@ -67,6 +67,10 @@ bool inspector_forbid_action(App *app, int slot, bool forbidden, const char *for
  * it (or puts it away); the next click on the map sends them there. */
 void inspector_move_action(App *app, int slot);
 
+/* Follow the selected settler or animal (`kind`, `id`): lit while the camera
+ * follows it, a click starts or stops it (app_toggle_follow()). */
+void inspector_follow_action(App *app, int slot, FollowKind kind, EntityId id);
+
 /* Build another of the selection (app_build_like_selection(), done here);
  * false (nothing drawn, the slot stays free) when there is nothing to build
  * like it. */

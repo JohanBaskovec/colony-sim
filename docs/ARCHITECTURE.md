@@ -2078,6 +2078,12 @@ the font included); widgets never use literal colors or pixel sizes. The
 zones of the screen are worked out in `game/layout.h`; windows stay above
 the bottom bar (`Ui.reserved_bottom`).
 
+The camera can follow a settler or an animal (`App.follow_kind`,
+`App.follow_id`, `app_follow()`): `update_follow()` runs after the game's
+update, so that the view and the sprite agree, and copies the being's
+position and level into the camera; panning, dragging, another level, the
+being's death or (for an animal) losing sight of it end it.
+
 UI state that is not part of the simulation (camera, selection, selected
 stockpile, gathering zone, workstation, tile or wild animal, active tool, drag
 rectangle, debug overlay and menu toggles) lives in `App`. The level shown is
