@@ -236,8 +236,8 @@ expected warmth of the day.
   trees as deciduous).
 - **Death of grown trees:** standing deadwood, a source of dry wood, that
   falls in time.
-- **Spread** (seeds, runners) and competition for light: the shade of a
-  bramble or a tree slowing what is under it.
+- **Competition** for light: the shade of a bramble or a tree slowing what
+  is under it, trees coming up through the grass (§13 only fills bare ground).
 - Crops, greenhouses, frost protection: with farming.
 
 ## 8b. As built (P1)
@@ -449,3 +449,53 @@ on.
 - **Not done.** Evergreens (a per-tree state: the foliage tile would have to
   know its tree); leaf colours in autumn; leaves falling as litter.
 
+## 13. Spread
+
+Plants fill the ground left bare (a felled tree, a patch picked or dug out, a
+cleared tile, what world generation left empty) with runners, rhizomes and
+seeds.
+
+- **Who and when.** Once a day (the first hour, like the mushrooms), each
+  plant that is awake and grown to its `spread_growth` sends out a runner or a
+  seed with its `spread_chance`, to a tile up to `spread_range` tiles away
+  (rolled from the seed, the tile and the day: the game's random stream is
+  left alone). Resting plants and the winter send nothing.
+- **Where it takes root** (`plant_can_take_root()`): a tile with no plant,
+  rock nor built structure; its ground (sand, soil or gravel with at least its
+  `min_fertility`; a plant of the wet at the shore of the shallows or on a bank
+  by the water); enough light (`light_min`) under the crowns in leaf, as in
+  summer, times `PLANT_SPREAD_SUN` (0.85, the sun of a good day), except for
+  wild garlic, a plant of the spring, which judges the light of the season;
+  for a tree, no other tree nor trunk within 2 tiles. Nothing comes up on
+  what the colony uses: items, stockpiles, workstations, building sites,
+  tiles marked with an order (digging...).
+- **The young plant** (`plant_offspring()`) starts at growth 0.05, awake in
+  its parent's climate and hardening, with no stock.
+- **Rates** (a day, growth needed, range):
+
+| Plant | Chance | From growth | Range | How |
+|---|---|---|---|---|
+| Grass | 0.15 | 0.5 | 1 | tillers and seed |
+| Wild strawberry | 0.12 | 0.5 | 1 | runners |
+| Nettle, bracken, cattail, reed | 0.08 | 0.6 | 1 | rhizomes |
+| Bramble | 0.06 | 0.6 | 1 | canes rooting at the tip |
+| Wood sorrel | 0.06 | 0.5 | 1 | creeping stems |
+| Plantain | 0.06 | 0.6 | 2 | seed |
+| Moss | 0.05 | 0.5 | 1 | fragments, spores |
+| Wild garlic | 0.04 | 0.6 | 1 | bulbs |
+| Wild carrot | 0.04 | 0.8 | 2 | seed |
+| Bilberry | 0.03 | 0.7 | 1 | rhizomes, slowly |
+| Heather | 0.03 | 0.7 | 2 | seed |
+| Tree, hazel | 0.03 | 1.0 | 4, 3 | seed (birds, squirrels) |
+| Dog rose | 0.02 | 0.8 | 3 | seed (birds) |
+| Mushrooms | — | — | — | come up on their own (§8d) |
+
+- **On seed 42** (no settlers, a year from the start): the bare ground where
+  grass could live falls from about 2,100 tiles to about 300, most of it in
+  the first season; shore plants and bracken spread the most; the shaded
+  forest floor stays bare litter. No measurable cost (`bench_simulation`).
+- **Not done.** A plant never takes a tile from another, so trees hardly
+  ever seed into a wood or a meadow already full (competition, §8);
+  hazelnuts lying on the ground do not sprout; seeds carried far by animals
+  or the wind; a player's order to keep a place clear (uprooting
+  removes what grows, and it comes back).

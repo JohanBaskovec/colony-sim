@@ -6,6 +6,8 @@
 
 #include "test_framework.h"
 
+#include <stdlib.h>
+
 static void test_init_rejects_invalid_sizes(void)
 {
     Map map;
@@ -796,6 +798,138 @@ static void test_fibre_plants_are_cut_and_grow_back(void)
     map_free(&map);
 }
 
+/* A plant takes root only on a free tile that suits it: its ground, enough
+ * light in summer's shade, the water for a plant of the wet, room for a tree
+ * (docs/PLANTS.md §13). */
+static void test_plants_take_root_where_they_can_live(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 5));
+    CHECK(plant_can_take_root(&map, PLANT_GRASS, 3, 3, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_NONE, 3, 3, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, -1, 3, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 3, 3, 1)); /* Open space. */
+    map.plants[map_index(&map, 3, 3, 0)] = (Plant){.type = PLANT_MOSS, .growth = 1.0f};
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 3, 3, 0)); /* Taken. */
+    map_set_terrain(&map, 5, 3, 0, TERRAIN_ROUGH_STONE);
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 5, 3, 0));
+    map_set_terrain(&map, 6, 3, 0, TERRAIN_SAND); /* Too poor for grass, not for heather. */
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 6, 3, 0));
+    CHECK(plant_can_take_root(&map, PLANT_HEATHER, 6, 3, 0));
+    map_set_rock(&map, 7, 3, 1, ROCK_GRANITE); /* Under rock: dark. */
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 7, 3, 0));
+    map_set_rock(&map, 8, 3, 0, ROCK_GRANITE);
+    CHECK(!plant_can_take_root(&map, PLANT_HEATHER, 8, 3, 0));
+
+    /* Cattails by the water: at the shore of the shallows, or on the bank. */
+    map_set_terrain(&map, 10, 8, 0, TERRAIN_SHALLOW_WATER);
+    map_set_terrain(&map, 11, 8, 0, TERRAIN_SHALLOW_WATER);
+    map_set_terrain(&map, 12, 8, 0, TERRAIN_SHALLOW_WATER);
+    for (int y = 7; y <= 9; y++) {
+        for (int x = 10; x <= 12; x++) {
+            map_set_terrain(&map, x, y, 0, TERRAIN_SHALLOW_WATER);
+        }
+    }
+    map_set_terrain(&map, 11, 8, 0, TERRAIN_DEEP_WATER);
+    CHECK(plant_can_take_root(&map, PLANT_CATTAIL, 10, 8, 0));  /* At the shore. */
+    CHECK(plant_can_take_root(&map, PLANT_CATTAIL, 13, 8, 0));  /* On the bank. */
+    CHECK(!plant_can_take_root(&map, PLANT_CATTAIL, 11, 8, 0)); /* Deep. */
+    CHECK(!plant_can_take_root(&map, PLANT_CATTAIL, 14, 8, 0)); /* Away from the water. */
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 10, 8, 0));
+
+    /* Under two dense layers of a crown in leaf: moss, not grass, even when bare. */
+    map_set_terrain(&map, 2, 12, 1, TERRAIN_FOLIAGE);
+    map_set_terrain(&map, 2, 12, 2, TERRAIN_FOLIAGE);
+    CHECK(plant_can_take_root(&map, PLANT_MOSS, 2, 12, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 2, 12, 0));
+    map_set_bare(&map, MAP_BARE_STEPS);
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 2, 12, 0));
+    /* Under four, wild garlic (on rich soil) lives on the light before the
+     * leaves come. */
+    map_set_terrain(&map, 4, 12, 0, TERRAIN_RICH_SOIL);
+    for (int z = 1; z <= 4; z++) {
+        map_set_terrain(&map, 4, 12, z, TERRAIN_FOLIAGE);
+    }
+    CHECK(plant_can_take_root(&map, PLANT_WILD_GARLIC, 4, 12, 0));
+    map_set_bare(&map, 0);
+    CHECK(!plant_can_take_root(&map, PLANT_WILD_GARLIC, 4, 12, 0));
+
+    /* Trees keep their distance from trees and trunks. */
+    map.plants[map_index(&map, 8, 13, 0)] = (Plant){.type = PLANT_HAZEL, .growth = 0.1f};
+    CHECK(!plant_can_take_root(&map, PLANT_TREE, 10, 13, 0));
+    CHECK(plant_can_take_root(&map, PLANT_TREE, 11, 13, 0));
+    CHECK(plant_can_take_root(&map, PLANT_GRASS, 9, 13, 0));
+    map_set_rock(&map, 14, 15, 0, ROCK_WOOD);
+    CHECK(!plant_can_take_root(&map, PLANT_TREE, 13, 13, 0));
+    map_free(&map);
+}
+
+/* A runner or a seed lands within the plant's range, never on its own tile. */
+static void test_spread_lands_within_range(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    map.plants[map_index(&map, 8, 8, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    int range = plant_def(PLANT_GRASS)->spread_range;
+    REQUIRE(range == 1);
+    bool seen[3][3] = {{false}};
+    for (int i = 0; i <= 1000; i++) {
+        int x = -1, y = -1;
+        REQUIRE(plant_spread_target(&map, 8, 8, 0, (float)i / 1000.0f, &x, &y));
+        CHECK(abs(x - 8) <= range && abs(y - 8) <= range);
+        CHECK(x != 8 || y != 8);
+        seen[y - 7][x - 7] = true;
+    }
+    int count = 0;
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            count += seen[y][x];
+        }
+    }
+    CHECK_EQ_INT(count, 8);
+    /* A tree's seeds go further. */
+    map.plants[map_index(&map, 8, 8, 0)].type = PLANT_TREE;
+    int farthest = 0;
+    for (int i = 0; i <= 1000; i++) {
+        int x, y;
+        REQUIRE(plant_spread_target(&map, 8, 8, 0, (float)i / 1000.0f, &x, &y));
+        int distance = abs(x - 8) > abs(y - 8) ? abs(x - 8) : abs(y - 8);
+        farthest = distance > farthest ? distance : farthest;
+    }
+    CHECK_EQ_INT(farthest, plant_def(PLANT_TREE)->spread_range);
+    int x, y;
+    CHECK(!plant_spread_target(&map, 3, 3, 0, 0.5f, &x, &y)); /* No plant. */
+    map.plants[map_index(&map, 0, 0, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    CHECK(!plant_spread_target(&map, 0, 0, 0, 0.0f, &x, &y)); /* Off the map. */
+    map.plants[map_index(&map, 3, 3, 0)] = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
+    CHECK(!plant_spread_target(&map, 3, 3, 0, 0.5f, &x, &y)); /* They come on their own. */
+    map_free(&map);
+}
+
+/* A young plant lives in the same air as its parent, and starts small. */
+static void test_offspring_takes_after_its_parent(void)
+{
+    Plant parent = {.type = PLANT_BRACKEN,
+                    .stock = {40, 0},
+                    .damage = 900,
+                    .growth = 1.0f,
+                    .warmth = 120.0f,
+                    .climate = (int16_t)(16.0f * PLANT_CLIMATE_SCALE),
+                    .hardening = 12,
+                    .state = PLANT_STATE_AWAKE | PLANT_CLIMATE_KNOWN};
+    Plant child = plant_offspring(&parent);
+    CHECK_EQ_INT(child.type, PLANT_BRACKEN);
+    CHECK_NEAR(child.growth, PLANT_SPREAD_GROWTH, 1e-6);
+    CHECK_EQ_INT(child.stock[0], 0);
+    CHECK_EQ_INT(child.damage, 0);
+    CHECK_NEAR(child.warmth, 120.0, 1e-6);
+    CHECK_EQ_INT(child.climate, parent.climate);
+    CHECK_EQ_INT(child.hardening, 12);
+    CHECK_EQ_INT(child.state, PLANT_STATE_AWAKE | PLANT_CLIMATE_KNOWN);
+    parent.state = PLANT_STATE_AWAKE; /* Made by hand: the child learns its tile too. */
+    CHECK_EQ_INT(plant_offspring(&parent).state, PLANT_STATE_AWAKE);
+}
+
 /* A crown lets more light through the barer it is, and a bare crown changes what the
  * light caches see; the target follows the climate. */
 static void test_bare_crowns_let_light_through(void)
@@ -1415,5 +1549,8 @@ int main(void)
     RUN_TEST(test_shade_plants_live_in_the_dark);
     RUN_TEST(test_fibre_plants_are_cut_and_grow_back);
     RUN_TEST(test_bare_crowns_let_light_through);
+    RUN_TEST(test_plants_take_root_where_they_can_live);
+    RUN_TEST(test_spread_lands_within_range);
+    RUN_TEST(test_offspring_takes_after_its_parent);
     return test_summary();
 }

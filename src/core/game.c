@@ -763,6 +763,37 @@ static void mushrooms_day(Game *game, size_t index, int day)
     plant_settle(plant, day);
 }
 
+/* Once a day per plant (docs/PLANTS.md §13): a grown plant that is awake
+ * sends out a runner or a seed with its `spread_chance` (rolled from the seed,
+ * the tile and the day, leaving the game's random stream alone), and a young
+ * plant takes root where it lands if the tile suits it and nothing of the
+ * colony is on it (an item, a stockpile, a workstation, a building site, an
+ * order). */
+static void spread_day(Game *game, size_t index, int day)
+{
+    Map *map = &game->map;
+    const Plant *plant = &map->plants[index];
+    const PlantDef *def = plant_def((PlantType)plant->type);
+    if (plant->type == PLANT_NONE || def->spread_chance <= 0.0f ||
+        (plant->state & ~PLANT_CLIMATE_KNOWN) != PLANT_STATE_AWAKE ||
+        plant->growth < def->spread_growth ||
+        world_roll(game->seed, index, day, 30) >= def->spread_chance) {
+        return;
+    }
+    int x, y, z, tx, ty;
+    map_tile_of(map, index, &x, &y, &z);
+    if (!plant_spread_target(map, x, y, z, world_roll(game->seed, index, day, 31), &tx, &ty) ||
+        !plant_can_take_root(map, (PlantType)plant->type, tx, ty, z) ||
+        items_get(&game->items, tx, ty, z).count > 0 ||
+        stockpile_at(&game->stockpiles, tx, ty, z) != STOCKPILE_NONE ||
+        workstation_at(&game->workstations, tx, ty, z) >= 0 ||
+        construction_at(&game->constructions, tx, ty, z) != CONSTRUCTION_NONE ||
+        designation_get(&game->designations, tx, ty, z) != DESIGNATION_NONE) {
+        return;
+    }
+    map->plants[map_index(map, tx, ty, z)] = plant_offspring(plant);
+}
+
 /* Whether an item or a settler is on a tile the trunk of a tree of `shape`
  * on (x, y, z) would grow into. */
 static bool tree_in_the_way(const Game *game, int x, int y, int z, const TreeShape *shape)
@@ -880,6 +911,9 @@ static void update_plants(Game *game)
             PlantConditions conditions = game_plant_conditions(game, x, y, z);
             plant_advance(plant, &conditions, GAME_PLANT_UPDATE_INTERVAL / TICKS_PER_HOUR);
             leaf_meet(game, plant);
+            if (first_hour) {
+                spread_day(game, i, day);
+            }
             if (plant_is_tree(plant->type)) {
                 grow_tree(game, i, old_growth);
                 shed_litter(game, i);

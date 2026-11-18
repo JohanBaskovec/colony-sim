@@ -247,7 +247,7 @@ The layers:
   per product, `PLANT_PRODUCTS_MAX` slots). Grass is a plant like the others:
   it takes the tile's one place, so no other plant grows on a tile with grass
   (a tree, a bramble or a patch of mushrooms is not planted over it, and a
-  place left bare stays bare until plants spread, a later feature). A
+  place left bare fills in again as plants spread, see below). A
   product (`PlantProduct`, `PlantDef.products[slot]`) is anything the plant
   gives without being felled that grows back: an item (blackberries, roots,
   an armful of fresh grass), a `capacity` at full growth, `regrow_hours` per
@@ -297,6 +297,14 @@ Mushrooms appear on their own in autumn on bare ground near mature trees: each t
 daily roll from a hash of the seed, the tile and the day (`world_roll()` in
 `game.c`), during the first in-game hour of the day, so that they draw
 nothing from the game's random stream.
+Plants spread the same way (`spread_day()`, docs/PLANTS.md §13): in that
+first hour, each grown plant that is awake rolls its `PlantDef.spread_chance`,
+picks a tile within its `spread_range` (`plant_spread_target()`), and a young
+plant (`plant_offspring()`) takes root there when the tile suits it
+(`plant_can_take_root()`, pure map rules: free, its ground, light in summer's
+shade, water, room for a tree) and the colony uses nothing on it (items,
+stockpiles, workstations, building sites, orders: checked in `game.c`). Only bare
+tiles are taken: nothing pushes another plant out yet.
 
 Terrain and rock decide where one can walk. Once the map is in use they are
 changed through `map_set_terrain()` / `map_set_rock()`, which bump

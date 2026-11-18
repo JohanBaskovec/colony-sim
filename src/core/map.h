@@ -215,6 +215,14 @@ typedef struct PlantDef {
     ItemType fall_item;
     PlantDays fall_days;
     int fall_yield;
+    /* How it spreads (docs/PLANTS.md §13): awake and grown to `spread_growth`,
+     * it sends out a runner or a seed with `spread_chance` a day, to a tile up
+     * to `spread_range` tiles away, where a young plant takes root if the tile
+     * is free and suits it (plant_can_take_root()). 0: it does not spread
+     * (mushrooms come up on their own). */
+    float spread_chance;
+    float spread_growth;
+    int spread_range;
 } PlantDef;
 
 /* Whether a plant type is a tree (takes room once grown, see core/tree.h). */
@@ -519,6 +527,31 @@ float plant_frost_limit(const Plant *plant);
 #define PLANT_LEAF_FULL_ABOVE 12.0f
 float plant_bare_target(float climate);
 
+/*
+ * Spread (docs/PLANTS.md §13). A plant takes root on a tile that is free (no
+ * plant, rock nor built structure) and suits it: its ground (a fertility of
+ * at least its `min_fertility` on sand, soil or gravel; a plant of the wet by
+ * the water or in the shallows at the shore), enough light under the crowns
+ * in leaf (the cover times PLANT_SPREAD_SUN, at least its `light_min`; the
+ * cover of the season for a plant of the spring, which rests in the heat),
+ * and for a tree no other tree nor trunk within TREE_SPREAD_SPACING tiles.
+ */
+#define PLANT_SPREAD_SUN 0.85f
+#define TREE_SPREAD_SPACING 2
+/* A young plant's growth when it takes root. */
+#define PLANT_SPREAD_GROWTH 0.05f
+bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z);
+
+/* The tile a plant on (x, y, z) sends a runner or seed to: one of those within
+ * its `spread_range` (not its own), picked by `roll` (0 .. 1). False when the
+ * plant does not spread or the tile is off the map. */
+bool plant_spread_target(const Map *map, int x, int y, int z, float roll, int *out_x, int *out_y);
+
+/* A young plant from `parent`: of its kind, at PLANT_SPREAD_GROWTH, awake in
+ * the climate and hardening of its parent (the same air), with the warmth its
+ * parent gathered this year, and no stock yet. */
+Plant plant_offspring(const Plant *parent);
+
 /* Growth per day the plant makes in `conditions` (0 when it rests or cannot). */
 float plant_growth_rate(const Plant *plant, const PlantConditions *conditions);
 
@@ -749,6 +782,9 @@ int map_cover_level(const Map *map, int x, int y, int z);
  * ground of a level above nothing. The trunk of a tree over its own foot is
  * not a cover. */
 float map_light_cover(const Map *map, int x, int y, int z);
+/* The same with the crowns in full leaf, whatever the season: the shade of
+ * summer. */
+float map_light_cover_in_leaf(const Map *map, int x, int y, int z);
 /* Steps from full leaf to bare branches, and what a layer of foliage lets
  * through when it is bare (instead of MAP_LIGHT_FOLIAGE_*). */
 #define MAP_BARE_STEPS 16

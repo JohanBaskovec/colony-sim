@@ -58,6 +58,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_NONE] = {.id = "none", .move_cost = 1.0f},
     [PLANT_GRASS] = {.id = "grass",
                      .name_key = N_("plant.grass"),
+                     .spread_chance = 0.15f,
+                     .spread_growth = 0.5f,
+                     .spread_range = 1,
                      .growth_per_day = 0.35f,
                      .min_fertility = 0.3f,
                      .move_cost = 1.0f,
@@ -86,6 +89,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * (core/tree.h): no stock on the plant. */
     [PLANT_TREE] = {.id = "tree",
                     .name_key = N_("plant.tree"),
+                    .spread_chance = 0.03f,
+                    .spread_growth = 1.0f,
+                    .spread_range = 4,
                     .deciduous = true,
                     .growth_per_day = 0.03f,
                     .min_fertility = 0.6f,
@@ -107,6 +113,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * dead branches and twigs like those of the other trees (core/tree.h). */
     [PLANT_HAZEL] = {.id = "hazel",
                      .name_key = N_("plant.hazel"),
+                     .spread_chance = 0.03f,
+                     .spread_growth = 1.0f,
+                     .spread_range = 3,
                      .deciduous = true,
                      .growth_per_day = 0.04f,
                      .min_fertility = 0.6f,
@@ -130,6 +139,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* Thorny canes: slow to walk through. */
     [PLANT_BRAMBLE] = {.id = "bramble",
                        .name_key = N_("plant.bramble"),
+                       .spread_chance = 0.06f,
+                       .spread_growth = 0.6f,
+                       .spread_range = 1,
                        .growth_per_day = 0.12f,
                        .min_fertility = 0.5f,
                        .move_cost = 2.0f,
@@ -153,6 +165,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* Easily mistaken for lily of the valley or autumn crocus. */
     [PLANT_WILD_GARLIC] = {.id = "wild_garlic",
                            .name_key = N_("plant.wild_garlic"),
+                           .spread_chance = 0.04f,
+                           .spread_growth = 0.6f,
+                           .spread_range = 1,
                            .growth_per_day = 0.25f,
                            .min_fertility = 1.2f,
                            .move_cost = 1.0f,
@@ -178,6 +193,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* Young shoots in spring, and again when it grows back in autumn. */
     [PLANT_NETTLE] = {.id = "nettle",
                       .name_key = N_("plant.nettle"),
+                      .spread_chance = 0.08f,
+                      .spread_growth = 0.6f,
+                      .spread_range = 1,
                       .growth_per_day = 0.2f,
                       .min_fertility = 1.2f,
                       .move_cost = 1.2f,
@@ -199,6 +217,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                                     .min_growth = 0.2f}}},
     [PLANT_PLANTAIN] = {.id = "plantain",
                         .name_key = N_("plant.plantain"),
+                        .spread_chance = 0.06f,
+                        .spread_growth = 0.6f,
+                        .spread_range = 2,
                         .growth_per_day = 0.15f,
                         .min_fertility = 0.6f,
                         .move_cost = 1.0f,
@@ -223,6 +244,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * flowers; easily mistaken for hemlock. */
     [PLANT_WILD_CARROT] = {.id = "wild_carrot",
                            .name_key = N_("plant.wild_carrot"),
+                           .spread_chance = 0.04f,
+                           .spread_growth = 0.8f,
+                           .spread_range = 2,
                            .growth_per_day = 0.08f,
                            .min_fertility = 0.6f,
                            .move_cost = 1.0f,
@@ -249,6 +273,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * of it up leaves the rest growing. */
     [PLANT_CATTAIL] = {.id = "cattail",
                        .name_key = N_("plant.cattail"),
+                       .spread_chance = 0.08f,
+                       .spread_growth = 0.6f,
+                       .spread_range = 1,
                        .growth_per_day = 0.1f,
                        .wetland = true,
                        .move_cost = 1.3f,
@@ -293,6 +320,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_MOSS] =
         {.id = "moss",
          .name_key = N_("plant.moss"),
+         .spread_chance = 0.05f,
+         .spread_growth = 0.5f,
+         .spread_range = 1,
          .growth_per_day = 0.04f,
          .min_fertility = 0.1f,
          .poor_soil = true,
@@ -313,6 +343,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* Wood sorrel: clover-like leaves, sour, in the deepest shade. */
     [PLANT_WOOD_SORREL] = {.id = "wood_sorrel",
                            .name_key = N_("plant.wood_sorrel"),
+                           .spread_chance = 0.06f,
+                           .spread_growth = 0.5f,
+                           .spread_range = 1,
                            .growth_per_day = 0.15f,
                            .min_fertility = 0.6f,
                            .move_cost = 1.0f,
@@ -337,6 +370,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * next year. Poisonous to eat. */
     [PLANT_BRACKEN] = {.id = "bracken",
                        .name_key = N_("plant.bracken"),
+                       .spread_chance = 0.08f,
+                       .spread_growth = 0.6f,
+                       .spread_range = 1,
                        .growth_per_day = 0.15f,
                        .min_fertility = 0.1f,
                        .poor_soil = true,
@@ -362,6 +398,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * start of summer. */
     [PLANT_WILD_STRAWBERRY] = {.id = "wild_strawberry",
                                .name_key = N_("plant.wild_strawberry"),
+                               .spread_chance = 0.12f,
+                               .spread_growth = 0.5f,
+                               .spread_range = 1,
                                .growth_per_day = 0.15f,
                                .min_fertility = 0.6f,
                                .move_cost = 1.0f,
@@ -386,6 +425,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * under thin woods; berries in the middle of summer. */
     [PLANT_BILBERRY] = {.id = "bilberry",
                         .name_key = N_("plant.bilberry"),
+                        .spread_chance = 0.03f,
+                        .spread_growth = 0.7f,
+                        .spread_range = 1,
                         .growth_per_day = 0.05f,
                         .min_fertility = 0.1f,
                         .poor_soil = true,
@@ -413,6 +455,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * wakes in spring: food when there is little else. */
     [PLANT_DOG_ROSE] = {.id = "dog_rose",
                         .name_key = N_("plant.dog_rose"),
+                        .spread_chance = 0.02f,
+                        .spread_growth = 0.8f,
+                        .spread_range = 3,
                         .growth_per_day = 0.06f,
                         .min_fertility = 0.5f,
                         .move_cost = 2.0f,
@@ -436,6 +481,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * it is bedding, thatch and fuel, and slow to grow back. */
     [PLANT_HEATHER] = {.id = "heather",
                        .name_key = N_("plant.heather"),
+                       .spread_chance = 0.03f,
+                       .spread_growth = 0.7f,
+                       .spread_range = 2,
                        .growth_per_day = 0.04f,
                        .min_fertility = 0.1f,
                        .poor_soil = true,
@@ -461,6 +509,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * The rootstock grows them again in spring. */
     [PLANT_REED] = {.id = "reed",
                     .name_key = N_("plant.reed"),
+                    .spread_chance = 0.08f,
+                    .spread_growth = 0.6f,
+                    .spread_range = 1,
                     .growth_per_day = 0.12f,
                     .wetland = true,
                     .move_cost = 1.4f,
@@ -1610,13 +1661,13 @@ int map_cover_level(const Map *map, int x, int y, int z)
     return -1;
 }
 
-float map_light_cover(const Map *map, int x, int y, int z)
+/* map_light_cover() with the crowns `bare` (0 in leaf .. 1). */
+static float light_cover(const Map *map, int x, int y, int z, float bare)
 {
     if (!map_in_bounds(map, x, y, z)) {
         return 0.0f;
     }
     float light = 1.0f;
-    const float bare = map_bare_fraction(map);
     for (int above = z + 1; above < map->depth; above++) {
         size_t index = map_index(map, x, y, above);
         if (map->rock[index] == ROCK_WOOD) {
@@ -1646,6 +1697,16 @@ float map_light_cover(const Map *map, int x, int y, int z)
     return light;
 }
 
+float map_light_cover(const Map *map, int x, int y, int z)
+{
+    return light_cover(map, x, y, z, map_bare_fraction(map));
+}
+
+float map_light_cover_in_leaf(const Map *map, int x, int y, int z)
+{
+    return light_cover(map, x, y, z, 0.0f);
+}
+
 void map_set_bare(Map *map, int steps)
 {
     uint8_t bare = (uint8_t)clampi(steps, 0, MAP_BARE_STEPS);
@@ -1665,6 +1726,127 @@ float plant_bare_target(float climate)
     return 1.0f - clampf((climate - PLANT_LEAF_BARE_BELOW) /
                              (PLANT_LEAF_FULL_ABOVE - PLANT_LEAF_BARE_BELOW),
                          0.0f, 1.0f);
+}
+
+/* Whether a terrain is ground plants grow on (not water, stone, open space,
+ * roofs nor foliage). */
+static bool rooting_ground(Terrain terrain)
+{
+    switch (terrain) {
+    case TERRAIN_SAND:
+    case TERRAIN_SOIL:
+    case TERRAIN_RICH_SOIL:
+    case TERRAIN_GRAVEL: return true;
+    default: return false;
+    }
+}
+
+/* Whether a tile is water, or next to it (8 neighbors). */
+static bool water_near(const Map *map, int x, int y, int z)
+{
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (map_is_water(map, x + dx, y + dy, z)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Whether a tile of shallow water is at the shore: next to the land (4 neighbors). */
+static bool at_shore(const Map *map, int x, int y, int z)
+{
+    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+    for (int d = 0; d < 4; d++) {
+        if (map_in_bounds(map, x + DX[d], y + DY[d], z) &&
+            !map_is_water(map, x + DX[d], y + DY[d], z)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Whether a tree or a trunk stands within `range` tiles of (x, y, z). */
+static bool tree_or_trunk_near(const Map *map, int x, int y, int z, int range)
+{
+    for (int ty = y - range; ty <= y + range; ty++) {
+        for (int tx = x - range; tx <= x + range; tx++) {
+            if (map_in_bounds(map, tx, ty, z)) {
+                size_t index = map_index(map, tx, ty, z);
+                if (plant_is_tree(map->plants[index].type) || map->rock[index] == ROCK_WOOD) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z)
+{
+    if ((unsigned)type >= PLANT_COUNT || type == PLANT_NONE || !map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    if (map->plants[index].type != PLANT_NONE || map->rock[index] != ROCK_NONE ||
+        map->structure[index] != STRUCTURE_NONE) {
+        return false;
+    }
+    const PlantDef *def = &PLANT_DEFS[type];
+    Terrain terrain = (Terrain)map->terrain[index];
+    if (def->wetland) {
+        bool shallows = terrain == TERRAIN_SHALLOW_WATER;
+        if (shallows ? !at_shore(map, x, y, z)
+                     : !rooting_ground(terrain) || !water_near(map, x, y, z)) {
+            return false;
+        }
+    } else if (!rooting_ground(terrain) || TERRAIN_DEFS[terrain].fertility < def->min_fertility) {
+        return false;
+    }
+    if (def->dark_days > 0.0f) {
+        float cover = def->rests_in_heat ? map_light_cover(map, x, y, z)
+                                         : map_light_cover_in_leaf(map, x, y, z);
+        if (cover * PLANT_SPREAD_SUN < def->light_min) {
+            return false;
+        }
+    }
+    return !plant_is_tree(type) || !tree_or_trunk_near(map, x, y, z, TREE_SPREAD_SPACING);
+}
+
+bool plant_spread_target(const Map *map, int x, int y, int z, float roll, int *out_x, int *out_y)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    uint8_t type = map->plants[map_index(map, x, y, z)].type;
+    int range = (unsigned)type < PLANT_COUNT ? PLANT_DEFS[type].spread_range : 0;
+    if (range <= 0) {
+        return false;
+    }
+    int side = 2 * range + 1;
+    int others = side * side - 1;
+    int pick = clampi((int)(roll * (float)others), 0, others - 1);
+    if (pick >= others / 2) {
+        pick++; /* Skips the plant's own tile, in the middle. */
+    }
+    int tx = x + pick % side - range, ty = y + pick / side - range;
+    if (!map_in_bounds(map, tx, ty, z)) {
+        return false;
+    }
+    *out_x = tx;
+    *out_y = ty;
+    return true;
+}
+
+Plant plant_offspring(const Plant *parent)
+{
+    return (Plant){.type = parent->type,
+                   .growth = PLANT_SPREAD_GROWTH,
+                   .warmth = parent->warmth,
+                   .climate = parent->climate,
+                   .hardening = parent->hardening,
+                   .state = (uint8_t)(PLANT_STATE_AWAKE | (parent->state & PLANT_CLIMATE_KNOWN))};
 }
 
 bool map_is_roofed(const Map *map, int x, int y, int z)

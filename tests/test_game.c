@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include <stdlib.h>
+#include <string.h>
 
 static bool init_small_game(Game *game, uint64_t seed)
 {
@@ -329,6 +330,49 @@ static void test_plant_conditions(void)
     PlantConditions storm = game_plant_conditions(&game, 3, 3, 0);
     CHECK_NEAR(storm.light, weather_light(&game.weather), 1e-3);
     CHECK(storm.light < open.light);
+    game_shutdown(&game);
+}
+
+/* Bare ground fills in: grass spreads to the free tiles around it, but not
+ * onto what the colony uses (docs/PLANTS.md §13). */
+static void test_grass_spreads_into_bare_ground(void)
+{
+    Game game;
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = 5;
+    params.world.width = 64;
+    params.world.height = 64;
+    params.world.flat = true;
+    params.colonist_count = 0;
+    REQUIRE(game_init(&game, &params));
+    Map *map = &game.map;
+    make_grove(map);
+    memset(map->plants, 0, map_level_tile_count(map) * sizeof(*map->plants));
+    for (int y = 30; y <= 32; y++) {
+        for (int x = 40; x <= 42; x++) {
+            map->plants[map_index(map, x, y, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+        }
+    }
+    items_add(&game.items, 43, 31, 0, item_stack_pristine(ITEM_WOOD, 1));
+    REQUIRE(stockpile_create(&game.stockpiles, map, 39, 30, 39, 32, 0) != STOCKPILE_NONE);
+    for (int day = 0; day < 20; day++) { /* The first hour of each day: the spreading. */
+        game.clock.tick = (uint64_t)(SEASON_DAY(SEASON_SUMMER, 1) + day) * TICKS_PER_DAY;
+        for (int tick = 0; tick < TICKS_PER_HOUR; tick++) {
+            game_tick(&game);
+        }
+    }
+    CHECK(map_count_plants(map, PLANT_GRASS) >= 14);
+    CHECK_EQ_INT(map->plants[map_index(map, 43, 31, 0)].type, PLANT_NONE);
+    for (int y = 30; y <= 32; y++) {
+        CHECK_EQ_INT(map->plants[map_index(map, 39, y, 0)].type, PLANT_NONE);
+    }
+    for (int y = 0; y < map->height; y++) { /* Nothing else came of nothing. */
+        for (int x = 0; x < map->width; x++) {
+            uint8_t type = map->plants[map_index(map, x, y, 0)].type;
+            CHECK(type == PLANT_NONE || type == PLANT_GRASS || type == PLANT_MUSHROOMS);
+        }
+    }
     game_shutdown(&game);
 }
 
@@ -693,6 +737,7 @@ int main(void)
     RUN_TEST(test_plants_grow_over_time);
     RUN_TEST(test_plant_conditions);
     RUN_TEST(test_crowns_lose_their_leaves_in_the_cold);
+    RUN_TEST(test_grass_spreads_into_bare_ground);
     RUN_TEST(test_plant_growth_is_spread_over_ticks);
     RUN_TEST(test_simulation_is_deterministic);
     RUN_TEST(test_hash_changes_as_simulation_runs);
