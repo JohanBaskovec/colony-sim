@@ -124,6 +124,26 @@ static void card_add_text(Card *card, CardStyle style, const char *text)
     SDL_strlcpy(card_add(card, style), text, TEXT_SIZE);
 }
 
+/* The work and the knowledge that doing something takes, under its cost.
+ * `none_key`: the line when it needs no knowledge (an order nobody can carry
+ * out yet says so differently); `from`: the level is only the lowest one (the
+ * plant decides). */
+static void card_add_work(Card *card, WorkType work, KnowledgeType knowledge, float min_level,
+                          const char *none_key, bool from)
+{
+    TR_FORMAT(card_add(card, CARD_DIM), TEXT_SIZE, tr("menu.card.work"),
+              tr(work_type_def(work)->name_key));
+    if (knowledge == KNOWLEDGE_NONE) {
+        card_add_text(card, CARD_DIM, tr(none_key));
+        return;
+    }
+    char level[16];
+    tr_integer(level, sizeof(level), (long long)min_level);
+    TR_FORMAT(card_add(card, CARD_DIM), TEXT_SIZE,
+              tr(from ? "menu.card.knowledge_from" : "menu.card.knowledge"),
+              tr(knowledge_def(knowledge)->name_key), level);
+}
+
 static const MenuTool *find_tool(AppTool tool, int type)
 {
     for (size_t i = 0; i < SDL_arraysize(TOOLS); i++) {
@@ -139,6 +159,10 @@ static void station_card(App *app, WorkstationType type, Card *card)
     const WorkstationDef *def = workstation_def(type);
     card_add_text(card, CARD_TITLE, tr(def->name_key));
     build_menu_materials_cost(card_add(card, CARD_DIM), TEXT_SIZE, def->materials);
+    if (workstation_needs_construction(type)) {
+        card_add_work(card, WORK_CONSTRUCTION, def->knowledge, def->min_level,
+                      "menu.card.knowledge.none", false);
+    }
     card_add_text(card, CARD_TEXT, tr(def->description_key));
     TR_FORMAT(card_add(card, CARD_DIM), TEXT_SIZE, tr("hud.tool.build_help"),
               app_key_name(APP_KEY_BUILD));
@@ -152,6 +176,10 @@ static void structure_card(App *app, StructureType type, Card *card)
     const StructureDef *def = structure_def(type);
     card_add_text(card, CARD_TITLE, tr(def->name_key));
     build_menu_materials_cost(card_add(card, CARD_DIM), TEXT_SIZE, def->materials);
+    if (structure_needs_construction(type)) {
+        card_add_work(card, WORK_CONSTRUCTION, def->knowledge, def->min_level,
+                      "menu.card.knowledge.none", false);
+    }
     card_add_text(card, CARD_TEXT, tr(def->description_key));
     if (structure_is_roof(type)) {
         char range[16];
@@ -207,6 +235,15 @@ static void tool_card(App *app, AppTool tool, int type, Card *card)
         return;
     }
     card_add_text(card, CARD_TITLE, tr(menu->name_key));
+    if (tool == APP_TOOL_DESIGNATE && type != DESIGNATION_NONE) {
+        /* "Mine" is earth work today (designation_set()): rock needs a pick and a
+         * knowledge that do not exist yet. */
+        DesignationType shown = type == DESIGNATION_MINE ? DESIGNATION_DIG : (DesignationType)type;
+        const DesignationDef *order = designation_def(shown);
+        bool plant = shown == DESIGNATION_HARVEST || shown == DESIGNATION_UPROOT;
+        card_add_work(card, order->work_type, order->knowledge, order->min_level,
+                      "menu.card.knowledge.unknown", plant);
+    }
     card_add_text(card, CARD_TEXT, tr(menu->description_key));
     if (tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER) {
         card_add_text(

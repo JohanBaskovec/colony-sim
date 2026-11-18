@@ -82,6 +82,14 @@ menu.shortcut = Raccourci : {0}
 menu.no_cost = Aucune ressource nécessaire
 # {0} : matériaux (« Branches ×5 et Herbe sèche ×24 »), {1} : leur poids total (« 31,5 kg »).
 menu.structure_cost = Nécessite : {0} ({1})
+# {0}: work type ("Construction").
+menu.card.work = Travail : {0}
+# {0}: knowledge, {1}: the level needed.
+menu.card.knowledge = Connaissance : {0} (niveau {1})
+# {0}: knowledge, {1}: the lowest level needed (the plant or the material decides).
+menu.card.knowledge_from = Connaissance : {0} (à partir du niveau {1})
+menu.card.knowledge.none = Connaissance : aucune
+menu.card.knowledge.unknown = Connaissance : pas encore découverte
 menu.work.description = Qui fait quel travail, et dans quel ordre
 menu.build.description = Postes de travail, constructions, zones et ordres
 menu.game = Menu

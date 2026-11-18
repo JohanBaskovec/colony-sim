@@ -21,7 +21,7 @@ static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
                                    N_("workstation.knapping_spot.description"),
                                    {{ITEM_COBBLE, 1}, {ITEM_NONE, 0}},
                                    250.0f,
-                                   KNOWLEDGE_STONE_KNAPPING,
+                                   KNOWLEDGE_BASIC_SHELTERS,
                                    50.0f},
     /* A shallow pit ringed with six stones, dug and built by a settler. */
     [WORKSTATION_OPEN_HEARTH] = {"open_hearth",
@@ -29,7 +29,7 @@ static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
                                  N_("workstation.open_hearth.description"),
                                  {{ITEM_COBBLE, 6}, {ITEM_NONE, 0}},
                                  250.0f,
-                                 KNOWLEDGE_FIRE,
+                                 KNOWLEDGE_BASIC_SHELTERS,
                                  50.0f,
                                  .hearth = true},
 };

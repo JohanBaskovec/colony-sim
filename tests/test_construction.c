@@ -535,7 +535,7 @@ static void test_workstation_site(void)
     CHECK_EQ_INT(construction_workstation(site), WORKSTATION_KNAPPING_SPOT);
     CHECK_EQ_INT(site->type, STRUCTURE_NONE);
     CHECK_EQ_INT(construction_length(site), 1);
-    CHECK_EQ_INT(construction_knowledge(site), KNOWLEDGE_STONE_KNAPPING);
+    CHECK_EQ_INT(construction_knowledge(site), KNOWLEDGE_BASIC_SHELTERS);
     CHECK_STR_EQ(construction_name_key(site), "workstation.knapping_spot");
     CHECK_EQ_INT(construction_material(site, 0), ITEM_COBBLE);
     CHECK_EQ_INT(construction_material_count(site, 0), 1);

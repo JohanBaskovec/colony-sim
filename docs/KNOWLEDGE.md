@@ -544,7 +544,7 @@ food. Fire must be lit, fed and watched.*
 | Roast wild carrots | 4 wild carrots | — | Burning hearth | 250 (0.1 h)  | Fire 50 | 4 roasted carrots, same |
 | Light by friction | 1 twigs, 1 grass | — | Unlit hearth | 750 (0.3 h) per attempt | 50 | a fire, with probability `30% + 1.4% × (L − 50)` (30% to 100%) |
 | Carry fire        | —           | —     | Burning fire → unlit hearth | 50 | 50 | a fire, always |
-| Open hearth       | (construction, §5.3) | | | 250 | 50 | |
+| Open hearth       | (construction, §5.3: built by builders, not fire lighters) | | | 250 | Basic shelters 50 | |
 
 - **Fire hardening** dries and chars a wooden point. Hardenable: digging stick
   (done), throwing spear, thrusting spear. The hardened item is a separate type
@@ -566,7 +566,7 @@ food. Fire must be lit, fed and watched.*
 | id          | `open_hearth` |
 | Footprint   | 1 × 1, not passable |
 | Materials   | 6 cobbles (the ring of stones around a shallow pit) |
-| Work        | 250 ticks (0.1 h), Fire 50 |
+| Work        | 250 ticks (0.1 h), Basic shelters 50 (building is construction) |
 | Hit points  | 50 |
 | Placement   | Soil, sand, gravel, rough stone; indoors allowed (smoke, M4) |
 | Fuel        | Branches (1.5 kg), twigs (0.2 kg), later logs (7 kg). Capacity 20 kg. |
@@ -630,7 +630,7 @@ no spear, no butchering.*
 | id          | `knapping_spot` |
 | Footprint   | 1 × 1, passable (an anvil stone to sit by) |
 | Materials   | 1 cobble (the anvil) |
-| Work        | 250 (0.1 h), Stone knapping 50 |
+| Work        | 250 (0.1 h), Basic shelters 50 (building is construction) |
 | Hit points  | 150, not flammable |
 | Workstation | Knapping recipes |
 | Side effect | Chips: dirt on the tile and its neighbours (§2.4) |

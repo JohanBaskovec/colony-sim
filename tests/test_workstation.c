@@ -56,7 +56,7 @@ static void test_definitions(void)
     CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->materials[0].count, 6);
     CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->materials[1].type, ITEM_NONE);
     CHECK(workstation_def(WORKSTATION_OPEN_HEARTH)->hearth);
-    CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->knowledge, KNOWLEDGE_FIRE);
+    CHECK_EQ_INT(workstation_def(WORKSTATION_OPEN_HEARTH)->knowledge, KNOWLEDGE_BASIC_SHELTERS);
 }
 
 static void test_placing_and_removing(void)

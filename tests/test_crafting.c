@@ -176,12 +176,14 @@ static void test_building_comes_before_gathering_forever(void)
     game_shutdown(&game);
 }
 
-static void test_knapping_spot_needs_the_knowledge(void)
+static void test_knapping_spot_needs_construction_knowledge(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_worker(&game, 10, 10);
-    colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 40.0);
+    /* Building it is construction: knapping does not help. */
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_BASIC_SHELTERS, 40.0);
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_STONE_KNAPPING, 90.0);
     CHECK(!game_workstation_buildable(&game, WORKSTATION_KNAPPING_SPOT));
     CHECK(game_workstation_buildable(&game, WORKSTATION_CRAFTING_SPOT));
     CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
@@ -200,7 +202,7 @@ static void test_haulers_supply_station_sites(void)
     REQUIRE(init_flat_game(&game));
     Colonist *hauler = spawn_worker(&game, 10, 10);
     REQUIRE(hauler != NULL);
-    colonist_set_knowledge_level(hauler, KNOWLEDGE_STONE_KNAPPING, 40.0); /* Cannot build it. */
+    colonist_set_knowledge_level(hauler, KNOWLEDGE_BASIC_SHELTERS, 40.0); /* Cannot build it. */
     REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
     const ConstructionSite *site =
         construction_get(&game.constructions, construction_at(&game.constructions, 14, 10, 0));
@@ -958,7 +960,7 @@ int main(void)
     RUN_TEST(test_crafting_spot_is_ready_at_once);
     RUN_TEST(test_builder_brings_the_materials);
     RUN_TEST(test_building_comes_before_gathering_forever);
-    RUN_TEST(test_knapping_spot_needs_the_knowledge);
+    RUN_TEST(test_knapping_spot_needs_construction_knowledge);
     RUN_TEST(test_haulers_supply_station_sites);
     RUN_TEST(test_placement_rules);
     RUN_TEST(test_no_zone_under_a_station);
