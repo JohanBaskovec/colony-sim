@@ -198,6 +198,8 @@ typedef struct App {
     /* Selected wild animal (ENTITY_NONE if none), same rules: dropped once
      * the colony no longer sees it (game/animal_panel.h). */
     EntityId selected_animal;
+    /* The kinds of entries the Journal tab hides (a bit per JournalKind; 0: all shown). */
+    JournalFilter journal_hidden;
     /* A right click on the map (not dragged to pan) steps back like Escape. */
     bool right_click_pending;
     float right_down_x, right_down_y;

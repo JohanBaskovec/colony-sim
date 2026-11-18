@@ -124,7 +124,7 @@ become tabs:
 
 | Selection           | Summary                                       | Tabs (now; later)                                 | Actions                       |
 |---------------------|-----------------------------------------------|---------------------------------------------------|-------------------------------|
-| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social; Log | Move (later: draft, attack)   |
+| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social, Journal; Log | Move (later: draft, attack)   |
 | Several colonists   | How many, their names                         | —                                                 | Move                          |
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size, "left alone" when forbidden | Storage (filters)                             | Forbid, build another, delete |
@@ -132,7 +132,16 @@ become tabs:
 | Tile                | What lies there: structure, roof, site, items, plant, each with Forbid/Allow | —                          | Build another; items: Carry elsewhere |
 | Wild animal         | What it is called (a hind, a stag) as the title; species, sex, activity, needs as bars (tooltips), herd | — | (later: hunt)                 |
 
-The animal's window has a Health tab and a Character tab like the settlers'.
+The animal's window has a Health tab and a Character tab like the settlers',
+and a Journal tab.
+
+The **Journal** tab (settlers and animals) lists what happened to the being,
+newest first: a date line, then a sentence (a good thought in green with a
+"+", a bad one in red with a "-"; a wound in red: "A wolf bit the left leg of
+Felix, causing bleeding."; "A fall hurt the left leg of Felix, causing a
+fracture." when nobody struck: falls, cave-ins, felled trees; a chat in white). Three check boxes at the top
+(Thoughts, Wounds, Social) hide or show each kind; the choice is kept from one
+being to the next. The last 40 entries are kept.
 
 #### Bills (workstations)
 
@@ -366,7 +375,7 @@ Each step keeps the game playable and is checked on screen (Xvfb).
        temperature and weather
 5. [x] Colonist bar
 6. [x] Inspector box with empty tabs, then its content: colonist (summary, Needs, Mood,
-       Character, Knowledge, Gear, Social), workstation, stockpile, gathering zone, tile;
+       Character, Knowledge, Gear, Social, Journal), workstation, stockpile, gathering zone, tile;
        the floating inspectors go
 7. [x] Work grid as a main window above the bottom bar; messages (the debug readout is
        top right already)

@@ -148,6 +148,9 @@ typedef struct Mood {
     float outlook;      /* Points added to the mood (0: ordinary). */
     float sensitivity;  /* What every thought weighs, as a factor (1: ordinary). */
     ThoughtMask states; /* States on now. */
+    /* Thoughts that came since the journal last took them (a memory renewed, a
+     * state that began): see mood_take_news(). Not part of the hash. */
+    ThoughtMask news;
     float weight[THOUGHT_COUNT]; /* What each thought weighs now (0: none). */
     float peak[THOUGHT_COUNT];   /* The most it weighed since it was last renewed. */
     /* Memories: ticks since renewed; states: ticks on (0 when off). */
@@ -179,6 +182,10 @@ void mood_set_character(Mood *mood, float outlook, float sensitivity);
  * (up to max_stack times the value); its plateau starts over. Ignored for
  * states and invalid types. */
 void mood_remember(Mood *mood, ThoughtType type);
+
+/* The thoughts that came since the last call (memories remembered, states
+ * that began), a bit each: the journal notes them down. */
+ThoughtMask mood_take_news(Mood *mood);
 
 /* Replaces the states on now (memory bits are ignored). */
 void mood_set_states(Mood *mood, ThoughtMask states);

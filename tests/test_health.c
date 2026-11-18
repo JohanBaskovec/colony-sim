@@ -748,6 +748,39 @@ static void test_animal_death(void)
     game_shutdown(&game);
 }
 
+/* Wounds are noted as they are dealt, each with its cause, until taken. */
+static void test_hurt_notes(void)
+{
+    Health health = human();
+    HurtNote notes[HEALTH_NOTES_MAX];
+    CHECK_EQ_INT(health_take_notes(&health, notes), 0);
+    health.hurt_cause = HURT_CAVE_IN;
+    health_hurt(&health, TORSO, INJURY_CRUSH, 4.0f);
+    health_hurt(&health, LEFT_LEG, INJURY_BRUISE, 0.0f); /* No damage: no wound. */
+    CHECK_EQ_INT(health_take_notes(&health, notes), 1);
+    CHECK_EQ_INT(notes[0].part, TORSO);
+    CHECK_EQ_INT(notes[0].type, INJURY_CRUSH);
+    CHECK_EQ_INT(notes[0].cause, HURT_CAVE_IN);
+    CHECK_EQ_INT(health_take_notes(&health, notes), 0); /* Taken. */
+    /* A fall says so, and gives the previous cause back. */
+    Rng rng;
+    rng_seed(&rng, 8, 1);
+    health.hurt_cause = HURT_OTHER;
+    health_fall(&health, &rng, 2);
+    int count = health_take_notes(&health, notes);
+    CHECK(count >= 3); /* A fracture and a bruise for each level. */
+    for (int i = 0; i < count; i++) {
+        CHECK_EQ_INT(notes[i].cause, HURT_FALL);
+    }
+    CHECK_EQ_INT(health.hurt_cause, HURT_OTHER);
+    /* More than the notes can hold are dropped, not overwritten, and the
+     * count never passes the limit. */
+    for (int i = 0; i < 3 * HEALTH_NOTES_MAX; i++) {
+        health_hurt(&health, TORSO, INJURY_BRUISE, 0.01f);
+    }
+    CHECK_EQ_INT(health_take_notes(&health, NULL), HEALTH_NOTES_MAX);
+}
+
 /* A felled tree comes down on those in its way: its trunk crushes, its crown
  * bruises; beside its foot, the woodcutter is spared. */
 static void test_felled_tree_hurts(void)
@@ -770,6 +803,14 @@ static void test_felled_tree_hurts(void)
     CHECK(!health_is_hurt(&aside->health));
     REQUIRE(under->health.injury_count == 1);
     CHECK_EQ_INT(under->health.injuries[0].type, INJURY_CRUSH);
+    /* Its journal says what happened, without an author. */
+    REQUIRE(under->journal.count == 1);
+    const JournalEntry *entry = journal_recent(&under->journal, 0);
+    CHECK_EQ_INT(entry->event, JOURNAL_HURT);
+    CHECK_EQ_INT(entry->what, HURT_TREE_TRUNK);
+    CHECK_EQ_INT(entry->injury, INJURY_CRUSH);
+    CHECK_EQ_INT(entry->part, under->health.injuries[0].part);
+    CHECK_EQ_INT(cutter->journal.count, 0);
     /* The crown's end: bruises, for the hare a heavy blow. */
     const Animal *hare = animals_get_const(&game.animals, hare_id);
     if (hare != NULL) {
@@ -794,6 +835,10 @@ static void test_debug_blow(void)
     CHECK(health_is_hurt(&hit->health));
     CHECK(!health_is_hurt(&missed->health));
     CHECK_EQ_INT(game_debug_hurt(&game, 30, 30, 0), 0);
+    CHECK_EQ_INT(hit->journal.count, hit->health.injury_count);
+    CHECK_EQ_INT(journal_recent(&hit->journal, 0)->event, JOURNAL_HURT);
+    CHECK_EQ_INT(journal_recent(&hit->journal, 0)->what, HURT_OTHER);
+    CHECK_EQ_INT(missed->journal.count, 0);
     game_shutdown(&game);
 }
 
@@ -1173,6 +1218,7 @@ int main(void)
     RUN_TEST(test_full_injury_list);
     RUN_TEST(test_random_part);
     RUN_TEST(test_falls);
+    RUN_TEST(test_hurt_notes);
     RUN_TEST(test_toughness_and_pain_tolerance);
     RUN_TEST(test_hurt_settler_is_slower);
     RUN_TEST(test_settler_knocked_out_lies_and_gets_up);

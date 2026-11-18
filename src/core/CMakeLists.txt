@@ -13,6 +13,7 @@ add_library(colony_core STATIC
     colonist.c
     construction.c
     conversation.c
+    journal.c
     designation.c
     dirt.c
     game.c

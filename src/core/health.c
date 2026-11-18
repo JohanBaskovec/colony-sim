@@ -239,6 +239,8 @@ void health_fall(Health *health, Rng *rng, int levels)
         return;
     }
     float size = health->size;
+    uint8_t cause = health->hurt_cause;
+    health->hurt_cause = HURT_FALL;
     if (levels >= 2) { /* Lands on a leg, and breaks it. */
         int legs[HEALTH_MAX_PARTS], count = 0;
         for (int part = 0; part < body_part_count((BodyPlan)health->plan); part++) {
@@ -258,6 +260,7 @@ void health_fall(Health *health, Rng *rng, int levels)
                     size * (float)levels *
                         roll_between(rng, HEALTH_FALL_BRUISE_MIN, HEALTH_FALL_BRUISE_MAX));
     }
+    health->hurt_cause = cause;
 }
 
 /* Index of the largest injury matching (part, kind; any kind when `type` is
@@ -313,10 +316,24 @@ float health_hurt(Health *health, int part, InjuryType type, float damage)
         injury->hours = 0.0f; /* Opened again: it bleeds anew. */
     }
     injury->damage += taken;
+    if (health->note_count < HEALTH_NOTES_MAX) {
+        health->notes[health->note_count++] =
+            (HurtNote){(uint8_t)part, (uint8_t)type, health->hurt_cause};
+    }
     if (def->vital && health_part_damage(health, part) >= health_part_hit_points(health, part)) {
         die(health, DEATH_VITAL_PART, part);
     }
     return taken;
+}
+
+int health_take_notes(Health *health, HurtNote *out)
+{
+    int count = health->note_count;
+    if (out != NULL) {
+        memcpy(out, health->notes, (size_t)count * sizeof(HurtNote));
+    }
+    health->note_count = 0;
+    return count;
 }
 
 float health_injury_severity(const Health *health, const Injury *injury)

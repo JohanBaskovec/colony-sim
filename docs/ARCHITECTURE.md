@@ -67,6 +67,7 @@ simulation:
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
 | `combat`     | Blows between beings, for settlers and animals alike: attacks (damage, injury kind, accuracy, interval, reach), hit chance against dodge, the limb an attack is made with and the attacks a species chooses among (`AttackChoice`, `combat_choose_attack()`), a blow through `health`, the hurt fraction and breaking off, the queue of strikes the game resolves, the mark each attack leaves on screen and the log of the last blows for the frontend (see `docs/COMBAT.md`) |
+| `journal`    | The journal of a settler or an animal (a ring of the last `JOURNAL_MAX` entries, in `Colonist` and `Animal`): new thoughts, wounds (who struck with what, which part, what it caused), chats; facts only, the frontend writes the sentences; presentation only |
 | `blood`      | Blood on the ground: drops on the steps of those who bleed, more and larger the worse, a pool under one who stays still, stains drying and fading (a ring of the newest; presentation only, see `docs/HEALTH.md` §9.1) |
 | `strike_anim` | How a blow is played on screen, as functions of the ticks since it was resolved: the attacker drawing back and lunging, the one struck flinching and flashing, the mark drawn, held and fading (presentation only, see `docs/COMBAT.md` §5) |
 | `health`     | Bodies for settlers and animals alike: body plans and parts, injuries that bleed and hurt, abilities (consciousness, walking, the hands, sight, eating), clotting, natural healing, blood coming back, death; falls (see `docs/HEALTH.md`) |
@@ -124,6 +125,7 @@ simulation:
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
 | `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills (the active bills, and two windows docked to the right of the tab: the recipes to add, and the details of the one picked) and (hearths) Fire tabs; forbid, build another, delete |
 | `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd, health |
+| `journal_panel` | The Journal tab of a settler or an animal: three filter check boxes (`App.journal_hidden`), the entries newest first with their date, sentences built from the facts of `core/journal.h` (wording per language: verb by the strike mark, part and injury phrases, the owner's and the attacker's phrases by species) |
 | `health_panel` | The health of a settler (its Health tab) or an animal as table rows: the state, blood, bleeding, pain, abilities, injuries with tooltips |
 | `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
@@ -983,6 +985,26 @@ stream of its own (`blood_rng`); no simulation code reads it and
 `game_hash()` leaves it out. `render_blood()` draws the stains after the
 ground (dry and fading by `blood_look()`), where blood can lie now.
 `tools/preview_blood.py` previews it in a GIF.
+
+### Journal
+
+`Colonist.journal` and `Animal.journal` (`core/journal.h`) are rings of
+`JOURNAL_MAX` entries of facts: an event (thought, wound, chat, chat about a
+knowledge), a thought type or an attack, the body plan, part and injury of a
+wound, who dealt it (a settler's name copied, or the animal's species) and
+the tick. No text lives in the core. Thoughts come through `Mood.news`
+(a bit per thought, set by `mood_remember()` and when a state begins, taken by
+`mood_take_news()`): at the end of `game_tick()` each settler's news go to its
+journal. A blow that lands is noted by `resolve_strikes()` in the struck
+one's journal; a chat by `conversation_hold()` in both. Nothing reads a
+journal and `game_hash()` leaves it out. Wounds with no author (a fall, a
+cave-in, a felled tree, the debug blow) go through `Health.notes`:
+`health_hurt()` notes each wound (part, kind, `Health.hurt_cause`, which the
+caller sets: `health_fall()` does for falls, `hurt_beings_at()` for the
+others) until `health_take_notes()`; the game empties them into the journal
+(`journal_note_hurts()`) right after the blow, or once a tick before the
+strikes for what a settler's own turn dealt (`note_pending_hurts()`). The
+notes of a strike are dropped: it is noted with its attacker.
 
 ### Dirt and cleaning
 

@@ -183,6 +183,7 @@ Each from 0 to 100 %:
   blood is bright red and gleams; it dries brown over an hour and a bit and is
   gone after two game hours. None on water, rock or walls. For the eye only
   (nothing reads it yet: tracking, cleaning come later).
+- **Journal** (`core/journal.h`): each blow that lands is noted in the journal of the one struck (who, with what, which part, what it caused: bleeding, a bruise, an open wound, a fracture, a crushing injury), shown in its Journal tab (`docs/UI.md`). Wounds nobody dealt (a fall, a cave-in, a felled tree) are noted too, with what happened instead of an author.
 - A cross on the portrait of a hurt settler in the colonist bar, red while it
   bleeds or is down; its state in the tooltip.
 - A settler down lies across its tile, eyes closed when unconscious; an

@@ -148,6 +148,26 @@ typedef struct Injury {
     float hours;  /* Since it was received (clotting). */
 } Injury;
 
+/* What is hurting a body now, for the journal (core/journal.h): the caller
+ * sets Health.hurt_cause before hurting it (health_fall() does it for falls). */
+typedef enum HurtCause {
+    HURT_OTHER, /* Unknown (the default), a debug blow. */
+    HURT_FALL,
+    HURT_CAVE_IN,
+    HURT_TREE_TRUNK, /* A felled tree's trunk. */
+    HURT_TREE_CROWN, /* Its branches. */
+    HURT_CAUSE_COUNT
+} HurtCause;
+
+/* A wound just dealt, kept until the journal takes it (health_take_notes()). */
+typedef struct HurtNote {
+    uint8_t part;
+    uint8_t type;  /* InjuryType */
+    uint8_t cause; /* HurtCause */
+} HurtNote;
+
+#define HEALTH_NOTES_MAX 8
+
 typedef struct Health {
     uint8_t plan;  /* BodyPlan. */
     uint8_t death; /* DeathCause; DEATH_NONE while alive. */
@@ -159,6 +179,11 @@ typedef struct Health {
     float blood;                          /* 1 full; dead at HEALTH_BLOOD_DEATH. */
     float deprivation[DEPRIVATION_COUNT]; /* Severity of each, 0 (none) to 1 (dead). */
     Injury injuries[HEALTH_MAX_INJURIES];
+    /* For the journal only (not hashed): what hurts it now, and the wounds
+     * dealt since the journal last took them. */
+    uint8_t hurt_cause; /* HurtCause */
+    uint8_t note_count;
+    HurtNote notes[HEALTH_NOTES_MAX];
 } Health;
 
 /* A healthy body. Factors and size are clamped to sensible ranges. */
@@ -199,6 +224,10 @@ int health_random_part(const Health *health, Rng *rng);
  * a dead body, an invalid part or kind, or no damage).
  */
 float health_hurt(Health *health, int part, InjuryType type, float damage);
+
+/* Takes the wounds noted since the last call (at most HEALTH_NOTES_MAX; `out`
+ * may be NULL to just forget them). Returns how many. */
+int health_take_notes(Health *health, HurtNote *out);
 
 /* A blow on a part drawn by coverage (health_random_part()); `damage` is not
  * scaled by the size. Returns the damage taken. */

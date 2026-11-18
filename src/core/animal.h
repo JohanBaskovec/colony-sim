@@ -37,6 +37,7 @@
 #include "core/combat.h"
 #include "core/game_clock.h"
 #include "core/health.h"
+#include "core/journal.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
 #include "core/pool.h"
@@ -198,6 +199,7 @@ typedef struct Animal {
     int timer;
     float needs[ANIMAL_NEED_COUNT];
     Health health;
+    Journal journal; /* What happened to it (for the eye only: not hashed). */
     /* Its character (core/attributes.h, drawn when it is born): each animal
      * is a little quicker, hardier or bolder than its species, the species'
      * values in AnimalDef being the ordinary ones. Set with

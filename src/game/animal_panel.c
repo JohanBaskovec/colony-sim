@@ -4,6 +4,7 @@
 #include "game/attributes_panel.h"
 #include "game/health_panel.h"
 #include "game/inspector.h"
+#include "game/journal_panel.h"
 #include "game/ui_layout.h"
 
 #define TEXT_SIZE 192
@@ -77,6 +78,16 @@ static void health_rows(UiLayout *layout, void *userdata)
 }
 
 /* The Character tab (game/attributes_panel.h). */
+static void journal_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    const Animal *animal = game_animal_const(&app->game, app->selected_animal);
+    if (animal != NULL) {
+        journal_panel_rows(layout, &animal->journal, (JournalOwner){NULL, animal->species},
+                           &app->journal_hidden);
+    }
+}
+
 static void character_rows(UiLayout *layout, void *userdata)
 {
     App *app = userdata;
@@ -94,12 +105,15 @@ void animal_panel_draw(App *app)
     }
     const char *title = tr(animal_name_key((AnimalSpecies)animal->species, (AnimalSex)animal->sex));
     bool open = inspector_box(app, INSPECT_ANIMAL, title, animal_rows, app);
-    const char *labels[2] = {tr("inspector.tab.health"), tr("inspector.tab.character")};
-    int tab = inspector_tabs(app, labels, 2);
+    const char *labels[3] = {tr("inspector.tab.health"), tr("inspector.tab.character"),
+                             tr("inspector.tab.journal")};
+    int tab = inspector_tabs(app, labels, 3);
     if (tab == 0) {
         inspector_tab_panel(app, health_rows, app);
     } else if (tab == 1) {
         inspector_tab_panel(app, character_rows, app);
+    } else if (tab == 2) {
+        inspector_tab_panel(app, journal_rows, app);
     }
     if (!open) {
         app->selected_animal = ENTITY_NONE;

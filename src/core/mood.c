@@ -138,7 +138,15 @@ void mood_remember(Mood *mood, ThoughtType type)
     mood->weight[type] = weight;
     mood->peak[type] = weight;
     mood->age[type] = 0;
+    mood->news |= THOUGHT_BIT(type);
     sum_up(mood);
+}
+
+ThoughtMask mood_take_news(Mood *mood)
+{
+    ThoughtMask news = mood->news;
+    mood->news = 0;
+    return news;
 }
 
 void mood_set_states(Mood *mood, ThoughtMask states)
@@ -152,6 +160,9 @@ void mood_set_states(Mood *mood, ThoughtMask states)
         bool now = (states & THOUGHT_BIT(type)) != 0;
         if (was != now) {
             mood->age[type] = 0; /* On from now, or over. */
+            if (now) {
+                mood->news |= THOUGHT_BIT(type);
+            }
             if (now && mood->weight[type] == 0.0f) {
                 mood->peak[type] = 0.0f;
             }

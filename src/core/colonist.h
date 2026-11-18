@@ -61,6 +61,7 @@
 #include "core/construction.h"
 #include "core/designation.h"
 #include "core/health.h"
+#include "core/journal.h"
 #include "core/dirt.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
@@ -460,6 +461,7 @@ typedef struct Colonist {
     Mood mood;
     Attributes attributes; /* Set with colonist_set_attributes(). */
     Health health;         /* Its factors follow the attributes. */
+    Journal journal;       /* What happened to it (for the eye only: not hashed). */
     /* The animal that struck it and it fights or flees (TASK_FIGHT, TASK_FLEE);
      * NONE when nobody. `attack_cooldown`: ticks before its next blow. */
     Combatant enemy;

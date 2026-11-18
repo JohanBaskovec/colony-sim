@@ -973,6 +973,9 @@ static void update_colonists(Game *game);
 /* What the resolver needs of someone in a fight. */
 typedef struct Fighter {
     Health *health;
+    Journal *journal;
+    const char *name; /* A settler's name, else NULL. */
+    int species;      /* An animal's species + 1, else 0. */
     TilePos pos;
     float agility;
 } Fighter;
@@ -985,6 +988,9 @@ static bool fighter_of(Game *game, Combatant who, Fighter *out)
             return false;
         }
         *out = (Fighter){&colonist->health,
+                         &colonist->journal,
+                         colonist->name,
+                         0,
                          {(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z},
                          COMBAT_SETTLER_AGILITY};
         return true;
@@ -994,6 +1000,9 @@ static bool fighter_of(Game *game, Combatant who, Fighter *out)
         return false;
     }
     *out = (Fighter){&animal->health,
+                     &animal->journal,
+                     NULL,
+                     animal->species + 1,
                      {(int16_t)animal->x, (int16_t)animal->y, (int16_t)animal->z},
                      animal_def((AnimalSpecies)animal->species)->agility};
     return true;
@@ -1061,6 +1070,24 @@ static void bleed_on_ground(Game *game)
 }
 
 /* Resolves the blows asked for during the tick, in the order they were asked. */
+/* The wounds dealt since the last call that no blow dealt (a fall in a
+ * settler's turn...) go in the journals, each with its cause. */
+static void note_pending_hurts(Game *game)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
+            Colonist *colonist = &game->colonists[slot];
+            journal_note_hurts(&colonist->journal, &colonist->health, game->clock.tick);
+        }
+    }
+    for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
+        if (!entity_id_is_none(animals_id_at(&game->animals, slot))) {
+            Animal *animal = &game->animals.list[slot];
+            journal_note_hurts(&animal->journal, &animal->health, game->clock.tick);
+        }
+    }
+}
+
 static void resolve_strikes(Game *game)
 {
     CombatQueue *queue = &game->combat;
@@ -1076,6 +1103,11 @@ static void resolve_strikes(Game *game)
         BlowResult blow = combat_blow((AttackType)strike->attack, strike->skill, strike->power,
                                       target.health, target.agility, &game->combat_rng);
         game->strikes_resolved++;
+        health_take_notes(target.health, NULL); /* Noted below, with the attacker. */
+        if (blow.hit && blow.damage > 0.0f) {
+            journal_note_wound(target.journal, game->clock.tick, strike->attack, target.health,
+                               blow.part, def->injury, attacker.name, attacker.species);
+        }
         combat_log_push(&game->combat_log,
                         (CombatEvent){game->clock.tick, strike->attacker, strike->target,
                                       target.pos, strike->attack, blow.hit});
@@ -1648,9 +1680,9 @@ static float roll_between(Game *game, float min, float max)
 
 /* A blow of `min` to `max` points (times the body's size when `sized`) on
  * every settler and animal on the tile; `type` INJURY_TYPE_COUNT: of a random
- * kind for each. Returns how many were hurt. */
+ * kind for each; `cause` goes in their journals. Returns how many were hurt. */
 static int hurt_beings_at(Game *game, int x, int y, int z, InjuryType type, float min, float max,
-                          bool sized)
+                          bool sized, HurtCause cause)
 {
     int hurt = 0;
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
@@ -1663,7 +1695,10 @@ static int hurt_beings_at(Game *game, int x, int y, int z, InjuryType type, floa
                               ? (InjuryType)rng_range_i32(&game->rng, 0, INJURY_TYPE_COUNT - 1)
                               : type;
         float damage = roll_between(game, min, max) * (sized ? colonist->health.size : 1.0f);
+        colonist->health.hurt_cause = (uint8_t)cause;
         hurt += health_blow(&colonist->health, &game->rng, kind, damage) > 0.0f;
+        colonist->health.hurt_cause = HURT_OTHER;
+        journal_note_hurts(&colonist->journal, &colonist->health, game->clock.tick);
     }
     for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
         Animal *animal = &game->animals.list[slot];
@@ -1675,7 +1710,10 @@ static int hurt_beings_at(Game *game, int x, int y, int z, InjuryType type, floa
                               ? (InjuryType)rng_range_i32(&game->rng, 0, INJURY_TYPE_COUNT - 1)
                               : type;
         float damage = roll_between(game, min, max) * (sized ? animal->health.size : 1.0f);
+        animal->health.hurt_cause = (uint8_t)cause;
         hurt += health_blow(&animal->health, &game->rng, kind, damage) > 0.0f;
+        animal->health.hurt_cause = HURT_OTHER;
+        journal_note_hurts(&animal->journal, &animal->health, game->clock.tick);
     }
     return hurt;
 }
@@ -1683,7 +1721,7 @@ static int hurt_beings_at(Game *game, int x, int y, int z, InjuryType type, floa
 int game_debug_hurt(Game *game, int x, int y, int z)
 {
     return hurt_beings_at(game, x, y, z, INJURY_TYPE_COUNT, GAME_DEBUG_BLOW_MIN,
-                          GAME_DEBUG_BLOW_MAX, true);
+                          GAME_DEBUG_BLOW_MAX, true, HURT_OTHER);
 }
 
 /* Trees felled since the last call came down on whoever stood there: the
@@ -1706,7 +1744,8 @@ static void hurt_under_felled_trees(Game *game)
                                     across, &tx, &ty);
                 hurt_beings_at(game, tx, ty, fall.z, trunk ? INJURY_CRUSH : INJURY_BRUISE,
                                trunk ? GAME_TRUNK_DAMAGE_MIN : GAME_CROWN_DAMAGE_MIN,
-                               trunk ? GAME_TRUNK_DAMAGE_MAX : GAME_CROWN_DAMAGE_MAX, false);
+                               trunk ? GAME_TRUNK_DAMAGE_MAX : GAME_CROWN_DAMAGE_MAX, false,
+                               trunk ? HURT_TREE_TRUNK : HURT_TREE_CROWN);
             }
         }
     }
@@ -1905,6 +1944,7 @@ void game_tick(Game *game)
     update_colonists(game);
     hurt_under_felled_trees(game); /* Felled by the woodcutters: they die on their next turn. */
     update_animals(game);
+    note_pending_hurts(game);
     resolve_strikes(game);
     bleed_on_ground(game);
     if (game->vision_on) {
@@ -1927,7 +1967,8 @@ void game_tick(Game *game)
         clear_caved_in(game, cave_ins.tiles[i]);
         /* Whoever stood there is crushed (and pushed out on its next turn). */
         hurt_beings_at(game, cave_ins.tiles[i].x, cave_ins.tiles[i].y, cave_ins.tiles[i].z,
-                       INJURY_CRUSH, GAME_CAVE_IN_DAMAGE_MIN, GAME_CAVE_IN_DAMAGE_MAX, false);
+                       INJURY_CRUSH, GAME_CAVE_IN_DAMAGE_MIN, GAME_CAVE_IN_DAMAGE_MAX, false,
+                       HURT_CAVE_IN);
     }
     if (cave_ins.count > 0 && collapse_seen(game, cave_ins.tiles, cave_ins.count)) {
         notices_push(&game->notices, NOTICE_CAVE_IN, KNOWLEDGE_NONE, NULL, game->clock.tick);
@@ -1937,6 +1978,13 @@ void game_tick(Game *game)
     }
     if (game->clock.tick % GAME_KNOWLEDGE_CHECK_TICKS == 0) {
         game_count_knowledge(game);
+    }
+    /* The thoughts that came this tick go in the settlers' journals. */
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
+            Colonist *colonist = &game->colonists[slot];
+            journal_note_thoughts(&colonist->journal, &colonist->mood, game->clock.tick);
+        }
     }
 }
 

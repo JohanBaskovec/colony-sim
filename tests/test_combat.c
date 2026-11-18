@@ -783,6 +783,48 @@ static int items_near(const Game *game, int x, int y, int radius, ItemType type)
     return count;
 }
 
+/* Whoever is struck notes it in its journal: by whom, with what, where. */
+static void test_wounds_in_journals(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 10, 10);
+    EntityId boar_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 11, 10, &boar_id);
+    REQUIRE(settler != NULL && boar != NULL);
+    Combatant at_settler = game_combatant_at(&game, 10, 10, 0);
+    Combatant at_boar = {COMBATANT_ANIMAL, boar_id};
+    CHECK(game_debug_attack(&game, at_boar, at_settler));
+    for (int t = 0; t < 60 * TICKS_PER_SECOND && settler->journal.count == 0; t++) {
+        game_tick(&game);
+    }
+    REQUIRE(settler->journal.count > 0);
+    const JournalEntry *wound = NULL;
+    for (int i = 0; i < settler->journal.count && wound == NULL; i++) {
+        const JournalEntry *entry = journal_recent(&settler->journal, i);
+        wound = entry->event == JOURNAL_WOUND ? entry : NULL;
+    }
+    REQUIRE(wound != NULL);
+    CHECK_EQ_INT(wound->species, ANIMAL_BOAR + 1);
+    CHECK_EQ_INT(wound->plan, BODY_HUMAN);
+    CHECK(wound->part < body_part_count(BODY_HUMAN));
+    CHECK_EQ_INT(wound->what, ATTACK_TUSKS);
+    CHECK_EQ_INT(wound->injury, attack_def(ATTACK_TUSKS)->injury);
+    CHECK(wound->tick >= 12 * TICKS_PER_HOUR);
+    /* The settler hits back (of its own accord, or ordered): the boar's journal names who. */
+    CHECK(game_debug_attack(&game, at_settler, at_boar));
+    for (int t = 0; t < 60 * TICKS_PER_SECOND && boar->journal.count == 0; t++) {
+        game_tick(&game);
+    }
+    REQUIRE(boar->journal.count > 0);
+    const JournalEntry *back = journal_recent(&boar->journal, 0);
+    CHECK_EQ_INT(back->event, JOURNAL_WOUND);
+    CHECK_EQ_INT(back->species, 0);
+    CHECK(strcmp(back->other, settler->name) == 0);
+    CHECK_EQ_INT(back->plan, BODY_QUADRUPED);
+    game_shutdown(&game);
+}
+
 /* A hungry wolf with a carcass close by walks to it and eats; the food comes
  * back a bite at a time, and the carcass shrinks. */
 static void test_wolf_eats_a_carcass(void)
@@ -1008,6 +1050,7 @@ int main(void)
     RUN_TEST(test_fearful_settler_flees);
     RUN_TEST(test_enemy_forgotten);
     RUN_TEST(test_hash_unchanged_without_fights);
+    RUN_TEST(test_wounds_in_journals);
     RUN_TEST(test_wolf_eats_a_carcass);
     RUN_TEST(test_small_carcass_and_settler_bodies);
     RUN_TEST(test_fox_catches_a_hare);

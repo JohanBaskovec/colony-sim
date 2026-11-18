@@ -74,6 +74,10 @@ bool conversation_hold(Colonist *a, EntityId a_id, Colonist *b, EntityId b_id, u
         listen(b, a, a_topic, tick);
         listen(a, b, b_topic, tick);
     }
+    /* Both remember what the chat was about: what one of them brought up. */
+    KnowledgeType topic = a_topic != KNOWLEDGE_NONE ? a_topic : b_topic;
+    journal_note_chat(&a->journal, tick, b->name, topic);
+    journal_note_chat(&b->journal, tick, a->name, topic);
     mood_remember(&a->mood, THOUGHT_CHAT);
     mood_remember(&b->mood, THOUGHT_CHAT);
     a->chat_ticks = CONVERSATION_TICKS;

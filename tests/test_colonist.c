@@ -1256,6 +1256,10 @@ static void test_colonist_falls(void)
         CHECK_EQ_INT(colonist->health.injuries[i].type, INJURY_BRUISE);
     }
     CHECK(!health_is_down(&colonist->health));
+    /* Its journal says it fell, once per wound. */
+    CHECK_EQ_INT(colonist->journal.count, colonist->health.injury_count);
+    CHECK_EQ_INT(journal_recent(&colonist->journal, 0)->event, JOURNAL_HURT);
+    CHECK_EQ_INT(journal_recent(&colonist->journal, 0)->what, HURT_FALL);
     game_shutdown(&game);
 }
 
@@ -1280,6 +1284,9 @@ static void test_cave_in_in_game(void)
     REQUIRE(colonist->health.injury_count >= 1);
     CHECK_EQ_INT(colonist->health.injuries[0].type, INJURY_CRUSH);
     CHECK(colonist->health.injuries[0].damage >= GAME_CAVE_IN_DAMAGE_MIN * 0.5f);
+    REQUIRE(colonist->journal.count >= 1);
+    CHECK_EQ_INT(journal_recent(&colonist->journal, 0)->event, JOURNAL_HURT);
+    CHECK_EQ_INT(journal_recent(&colonist->journal, 0)->what, HURT_CAVE_IN);
     game_tick(&game);
     CHECK(map_is_passable(&game.map, colonist->x, colonist->y, colonist->z));
     game_shutdown(&game);

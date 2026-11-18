@@ -12,6 +12,7 @@
 #include "game/log_window.h"
 #include "game/gather_zone_panel.h"
 #include "game/health_panel.h"
+#include "game/journal_panel.h"
 #include "game/alerts_list.h"
 #include "game/bottom_bar.h"
 #include "game/build_menu.h"
@@ -908,6 +909,7 @@ typedef enum ColonistSection {
     SECTION_KNOWLEDGE,
     SECTION_GEAR,
     SECTION_SOCIAL,
+    SECTION_JOURNAL,
     SECTION_COUNT
 } ColonistSection;
 
@@ -920,6 +922,7 @@ static const char *const SECTION_KEYS[SECTION_COUNT] = {
     [SECTION_KNOWLEDGE] = N_("inspector.tab.knowledge"),
     [SECTION_GEAR] = N_("inspector.tab.gear"),
     [SECTION_SOCIAL] = N_("inspector.tab.social"),
+    [SECTION_JOURNAL] = N_("inspector.tab.journal"),
 };
 
 /* Wetness, the warmth of its sleep, its bed. */
@@ -1118,6 +1121,17 @@ static void character_rows(UiLayout *layout, void *userdata)
     }
 }
 
+/* The Journal tab (game/journal_panel.h). */
+static void journal_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
+    if (colonist != NULL) {
+        journal_panel_rows(layout, &colonist->journal, (JournalOwner){colonist->name, 0},
+                           &app->journal_hidden);
+    }
+}
+
 /* The lines of one section of the colonist inspector. */
 static void build_colonist_section(App *app, Panel *panel, EntityId id, ColonistSection section)
 {
@@ -1131,7 +1145,8 @@ static void build_colonist_section(App *app, Panel *panel, EntityId id, Colonist
     case SECTION_HEALTH:
     case SECTION_MOOD:
     case SECTION_CHARACTER:
-    case SECTION_KNOWLEDGE: break; /* Drawn by their own rows (colonist_tab_rows()). */
+    case SECTION_KNOWLEDGE:
+    case SECTION_JOURNAL: break; /* Drawn by their own rows (colonist_tab_rows()). */
     case SECTION_GEAR: add_gear_lines(panel, colonist); break;
     case SECTION_SOCIAL:
         add_social_lines(app, panel, colonist, id);
@@ -1206,6 +1221,7 @@ static UiRowsFn colonist_tab_rows(ColonistSection section)
     case SECTION_MOOD: return mood_rows;
     case SECTION_CHARACTER: return character_rows;
     case SECTION_KNOWLEDGE: return knowledge_rows;
+    case SECTION_JOURNAL: return journal_rows;
     default: return NULL;
     }
 }
