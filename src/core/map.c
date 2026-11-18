@@ -139,9 +139,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                        .t_frost_hardened = -20.0f,
                        .t_lethal_heat = 45.0f,
                        .rest = PLANT_REST_SLEEPS,
-                       .light_min = 0.1f,
-                       .light_full = 0.6f,
-                       .dark_days = 20.0f,
+                       .light_min = 0.05f,
+                       .light_full = 0.5f,
+                       .dark_days = 30.0f,
                        .products = {{.item = ITEM_BLACKBERRIES,
                                      .capacity = 9,
                                      .regrow_hours = 12,
@@ -163,9 +163,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                            .t_lethal_heat = 30.0f,
                            .rest = PLANT_REST_DIES_BACK,
                            .rests_in_heat = true,
-                           .light_min = 0.05f,
-                           .light_full = 0.3f,
-                           .dark_days = 15.0f,
+                           .light_min = 0.02f,
+                           .light_full = 0.2f,
+                           .dark_days = 30.0f,
                            .products = {{.item = ITEM_WILD_GARLIC,
                                          .capacity = 3,
                                          .regrow_hours = 24,
@@ -187,9 +187,9 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                       .t_frost_hardened = -25.0f,
                       .t_lethal_heat = 40.0f,
                       .rest = PLANT_REST_DIES_BACK,
-                      .light_min = 0.1f,
-                      .light_full = 0.5f,
-                      .dark_days = 15.0f,
+                      .light_min = 0.05f,
+                      .light_full = 0.4f,
+                      .dark_days = 25.0f,
                       .products = {{.item = ITEM_NETTLES,
                                     .capacity = 3,
                                     .regrow_hours = 24,
@@ -851,6 +851,7 @@ void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
         return;
     }
     map->terrain[index] = (uint8_t)terrain;
+    map->light_revision++;
     /* Trees: open space, thin foliage (nobody stands on it) and dense foliage
      * (a floor) change into each other all the time as crowns spread. */
     bool tree_terrain = (unstandable_air(old) || old == TERRAIN_FOLIAGE) &&
@@ -879,6 +880,7 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
     bool was_open = map_is_open_at(map, index);
     RockType old_rock = (RockType)map->rock[index];
     map->rock[index] = (uint8_t)rock;
+    map->light_revision += old_rock != rock;
     bool is_passable = map_move_cost_at(map, index) > 0.0f;
     if (was_passable != is_passable) {
         log_topology_change(map, x, y, z, is_passable);
@@ -1414,13 +1416,13 @@ float map_light_cover(const Map *map, int x, int y, int z)
             return 0.0f;
         }
         switch ((Terrain)map->terrain[index]) {
-        case TERRAIN_FOLIAGE: light = fminf(light, MAP_LIGHT_FOLIAGE_DENSE); continue;
-        case TERRAIN_FOLIAGE_MEDIUM: light = fminf(light, MAP_LIGHT_FOLIAGE_MEDIUM); continue;
-        case TERRAIN_FOLIAGE_SPARSE: light = fminf(light, MAP_LIGHT_FOLIAGE_SPARSE); continue;
+        case TERRAIN_FOLIAGE: light *= MAP_LIGHT_FOLIAGE_DENSE; continue;
+        case TERRAIN_FOLIAGE_MEDIUM: light *= MAP_LIGHT_FOLIAGE_MEDIUM; continue;
+        case TERRAIN_FOLIAGE_SPARSE: light *= MAP_LIGHT_FOLIAGE_SPARSE; continue;
         default: break;
         }
         if (map_roof(map, x, y, above) != STRUCTURE_NONE) {
-            light = fminf(light, MAP_LIGHT_ROOF);
+            light *= MAP_LIGHT_ROOF;
         } else if (!map_is_open_at(map, index)) {
             return 0.0f; /* The ground of a level above. */
         }
@@ -1450,6 +1452,7 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     dst->forbidden_count += (src->forbidden[index] != 0) - (dst->forbidden[index] != 0);
     dst->terrain[index] = src->terrain[index];
     dst->rock[index] = src->rock[index];
+    dst->light_revision++;
     dst->slope[index] = src->slope[index];
     dst->plants[index] = src->plants[index];
     dst->cobbles[index] = src->cobbles[index];

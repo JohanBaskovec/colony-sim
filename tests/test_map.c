@@ -788,13 +788,27 @@ static void test_light_cover(void)
     REQUIRE(map_init(&map, 16, 16, 5));
     CHECK_NEAR(map_light_cover(&map, 3, 3, 0), 1.0, 1e-6); /* The open sky. */
     CHECK_NEAR(map_light_cover(&map, -1, 3, 0), 0.0, 1e-6);
-    /* Foliage lets part of it through, by density; the densest layer counts. */
+    /* Foliage lets part of it through, by density, each layer in turn: the more
+     * layers, the darker. */
     map_set_terrain(&map, 4, 3, 2, TERRAIN_FOLIAGE_SPARSE);
     CHECK_NEAR(map_light_cover(&map, 4, 3, 0), MAP_LIGHT_FOLIAGE_SPARSE, 1e-6);
     map_set_terrain(&map, 4, 3, 3, TERRAIN_FOLIAGE_MEDIUM);
-    CHECK_NEAR(map_light_cover(&map, 4, 3, 0), MAP_LIGHT_FOLIAGE_MEDIUM, 1e-6);
+    CHECK_NEAR(map_light_cover(&map, 4, 3, 0), MAP_LIGHT_FOLIAGE_SPARSE * MAP_LIGHT_FOLIAGE_MEDIUM,
+               1e-6);
     map_set_terrain(&map, 4, 3, 1, TERRAIN_FOLIAGE);
-    CHECK_NEAR(map_light_cover(&map, 4, 3, 0), MAP_LIGHT_FOLIAGE_DENSE, 1e-6);
+    CHECK_NEAR(map_light_cover(&map, 4, 3, 0),
+               MAP_LIGHT_FOLIAGE_SPARSE * MAP_LIGHT_FOLIAGE_MEDIUM * MAP_LIGHT_FOLIAGE_DENSE, 1e-6);
+    CHECK(map_light_cover(&map, 4, 3, 1) >
+          map_light_cover(&map, 4, 3, 0)); /* The top is lighter. */
+    /* Every change of what is over a tile is counted for the caches of it. */
+    uint32_t revision = map.light_revision;
+    map_set_terrain(&map, 4, 3, 4, TERRAIN_FOLIAGE_SPARSE);
+    CHECK(map.light_revision != revision);
+    revision = map.light_revision;
+    map_set_terrain(&map, 4, 3, 4, TERRAIN_FOLIAGE_SPARSE); /* Nothing changed. */
+    CHECK_EQ_UINT(map.light_revision, revision);
+    map_set_rock(&map, 9, 9, 4, ROCK_GRANITE);
+    CHECK(map.light_revision != revision);
     /* The trunk of the tree over its own foot is not a roof. */
     map_set_rock(&map, 5, 3, 1, ROCK_WOOD);
     map_set_rock(&map, 5, 3, 2, ROCK_WOOD);

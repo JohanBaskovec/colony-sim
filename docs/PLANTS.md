@@ -150,8 +150,9 @@ light of their own, per tile:
   cover, and updated around what changes (`Map.build_log`, trees growing and
   felled):
   - open sky: 1;
-  - foliage over it (a tree's crown, `core/tree.h`): dense ~0.2, medium
-    ~0.4, sparse ~0.7 *(tuning)*, the densest layer over the tile;
+  - foliage over it (a tree's crown, `core/tree.h`): each layer lets through
+    dense 0.35, medium 0.6, sparse 0.8 *(tuning)*, the layers multiply: a
+    crown of several layers is darker than a thin one;
   - a built roof: ~0.05 (light through the gaps);
   - a natural roof (rock, the ground of a level above): 0. Underground
     and in caves, plants starve.
@@ -271,8 +272,9 @@ expected warmth of the day.
   nights are long and summer ones short.
 - The cover of a tile is worked out when a plant is updated
   (`map_light_cover()`: nothing is cached, a plant looks up through the levels
-  above it once an hour): open sky 1, foliage by density
-  (`MAP_LIGHT_FOLIAGE_*`, the densest layer counts), a built roof
+  above it once an hour; the light view and the shade drawn on screen keep
+  it per tile until `Map.light_revision` changes): open sky 1, foliage by
+  density (`MAP_LIGHT_FOLIAGE_*`, each layer in turn: they multiply), a built roof
   `MAP_LIGHT_ROOF`, rock or the ground of a level above 0. A trunk over its
   own foot is no roof; a tree, standing on the tile of its trunk, gets the open
   light.

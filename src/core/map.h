@@ -423,6 +423,10 @@ typedef struct Map {
      * (plants never block). Data derived from it (core/region.h) compares it
      * to know when it is out of date. Not part of map_hash(). */
     uint32_t topology_revision;
+    /* Incremented whenever the terrain, the rock or a roof of a tile changes:
+     * what lets the light through (map_light_cover()). A cache of it compares
+     * this. Not part of map_hash(). */
+    uint32_t light_revision;
     /* The change that led to revision r is at index r % MAP_TOPOLOGY_LOG_SIZE. */
     MapTopologyChange topology_log[MAP_TOPOLOGY_LOG_SIZE];
     /* Incremented whenever a tree is felled: who stood where it came down is
@@ -711,13 +715,15 @@ bool map_dig_keeps_ceilings(const Map *map, int x, int y, int z, bool opens_abov
 int map_cover_level(const Map *map, int x, int y, int z);
 
 /* How much of the light reaches the tile through what lies over it, 0 .. 1:
- * all of it in the open, foliage lets through MAP_LIGHT_FOLIAGE_* (the densest
- * layer counts), a built roof MAP_LIGHT_ROOF, rock or the ground of a level
- * above nothing. The trunk of a tree over its own foot is not a cover. */
+ * all of it in the open; each layer of foliage over it lets through its share
+ * (MAP_LIGHT_FOLIAGE_*), so that a crown of several layers is darker than a
+ * thin one and the layers multiply; a built roof MAP_LIGHT_ROOF; rock or the
+ * ground of a level above nothing. The trunk of a tree over its own foot is
+ * not a cover. */
 float map_light_cover(const Map *map, int x, int y, int z);
-#define MAP_LIGHT_FOLIAGE_DENSE 0.2f
-#define MAP_LIGHT_FOLIAGE_MEDIUM 0.4f
-#define MAP_LIGHT_FOLIAGE_SPARSE 0.7f
+#define MAP_LIGHT_FOLIAGE_DENSE 0.35f
+#define MAP_LIGHT_FOLIAGE_MEDIUM 0.6f
+#define MAP_LIGHT_FOLIAGE_SPARSE 0.8f
 #define MAP_LIGHT_ROOF 0.05f
 
 /* Whether something covers the tile (map_cover_level() is not -1). */

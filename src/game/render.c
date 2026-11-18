@@ -34,10 +34,6 @@ static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
 /* A trunk's bark, around its cut face, and its growth rings. */
 static const SDL_Color BARK_COLOR = {78, 54, 34, 255};
 static const SDL_Color RING_COLOR = {120, 84, 50, 255};
-/* The shade of the foliage above on the ground under it: darker by this
- * much, or times this for textured ground. */
-#define FOLIAGE_SHADOW (-26)
-#define FOLIAGE_SHADOW_TINT 0.74f
 /* Growth rings are drawn from this zoom on (pixels per tile). */
 #define TREE_DETAIL_MIN_ZOOM 10.0f
 
@@ -199,6 +195,21 @@ static int batch_count; /* Quads waiting to be drawn. */
 static float *light_corners;
 static size_t light_corner_capacity;
 
+/* What lets the light through over each tile (tile_cover()), and the shade
+ * texture and the corner sums behind it (render_daylight()). */
+static float *cover_values;
+static uint32_t *cover_stamps;
+static size_t cover_capacity;
+static uint32_t cover_epoch;
+static const Map *cover_map;
+static uint32_t cover_revision;
+static SDL_Texture *shade_texture;
+static int shade_texture_width, shade_texture_height;
+static Uint32 *shade_pixels;
+static float *shade_sums;
+static int *shade_counts;
+static size_t shade_capacity;
+
 static bool batch_ready(void)
 {
     if (batch_vertices != NULL) {
@@ -299,6 +310,24 @@ void render_shutdown(void)
     SDL_free(light_corners);
     light_corners = NULL;
     light_corner_capacity = 0;
+    if (shade_texture != NULL) {
+        SDL_DestroyTexture(shade_texture);
+        shade_texture = NULL;
+    }
+    shade_texture_width = shade_texture_height = 0;
+    SDL_free(shade_pixels);
+    SDL_free(shade_sums);
+    SDL_free(shade_counts);
+    shade_pixels = NULL;
+    shade_sums = NULL;
+    shade_counts = NULL;
+    shade_capacity = 0;
+    SDL_free(cover_values);
+    SDL_free(cover_stamps);
+    cover_values = NULL;
+    cover_stamps = NULL;
+    cover_capacity = 0;
+    cover_map = NULL;
     SDL_free(batch_vertices);
     SDL_free(batch_indices);
     batch_vertices = NULL;
@@ -322,22 +351,6 @@ static uint32_t tile_hash(int x, int y, int n)
     h *= 0x5bd1e995u;
     h ^= h >> 15;
     return h;
-}
-
-/* Whether the ground of a tile is in the shade of foliage above it (the
- * first floor over it, within a tree's height). */
-static bool under_foliage(const Map *map, int x, int y, int z)
-{
-    for (int above = z + 1; above < map->depth && above < z + TREE_MAX_LEVELS; above++) {
-        size_t index = map_index(map, x, y, above);
-        if (terrain_is_foliage(map->terrain[index]) && map->rock[index] == ROCK_NONE) {
-            return true;
-        }
-        if (!map_is_open_at(map, index)) {
-            return false;
-        }
-    }
-    return false;
 }
 
 /* A tile of trunk, as the cut face of a wall of wood: bark on the sides
@@ -620,9 +633,8 @@ static void ground_flat(const Map *map, int x, int y, int z, size_t index, const
             batch_quad(pass->renderer, shade(ROCK_COLORS[rock], tile_variation(x, y)), tile);
         }
     } else if (sprite_ground((Terrain)map->terrain[index]) < 0) {
-        int shadow = under_foliage(map, x, y, z) ? FOLIAGE_SHADOW : 0;
-        batch_quad(pass->renderer,
-                   shade(TERRAIN_COLORS[map->terrain[index]], tile_variation(x, y) + shadow), tile);
+        batch_quad(pass->renderer, shade(TERRAIN_COLORS[map->terrain[index]], tile_variation(x, y)),
+                   tile);
     }
 }
 
@@ -630,20 +642,19 @@ static void ground_flat(const Map *map, int x, int y, int z, size_t index, const
 static void ground_textures(const Map *map, int x, int y, int z, size_t index,
                             const SDL_FRect *tile, void *userdata)
 {
+    (void)x;
+    (void)y;
+    (void)z;
     const GroundPass *pass = userdata;
     RockType rock = (RockType)map->rock[index];
     if (rock != ROCK_NONE) {
         sprites_draw_tile(pass->sprites, sprite_wall(rock), tile, WHITE);
         return;
     }
-    SDL_FColor color = WHITE;
-    if (under_foliage(map, x, y, z)) {
-        color.r = color.g = color.b = FOLIAGE_SHADOW_TINT;
-    }
-    sprites_draw_tile(pass->sprites, sprite_ground((Terrain)map->terrain[index]), tile, color);
+    sprites_draw_tile(pass->sprites, sprite_ground((Terrain)map->terrain[index]), tile, WHITE);
     const Plant *plant = &map->plants[index];
     if (plant->type == PLANT_GRASS) {
-        sprites_draw_tile(pass->sprites, sprite_grass(plant->growth), tile, color);
+        sprites_draw_tile(pass->sprites, sprite_grass(plant->growth), tile, WHITE);
     }
 }
 
@@ -2292,12 +2303,13 @@ static TileRect lit_tiles(const Workstations *workstations, TileRect visible, in
     return box;
 }
 
-/* One quad per tile of `box`, each corner colored `color` with an alpha from
- * the light there. */
+/* The warm glow of the fires: one additive quad per tile of `box`, each corner
+ * with an alpha from the light of the fires there, as strong as the night is
+ * dark (`darkness`). Not over what is not in view. */
 static bool fog_tile_seen(const Game *game, const Camera *camera, int x, int y);
 
-static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box, SDL_Color color,
-                      float darkness, bool glow, const Game *fog)
+static void glow_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box, float darkness,
+                       const Game *fog)
 {
     int columns = box.x1 - box.x0 + 1;
     float flicker = 0.95f + 0.05f * sinf((float)(SDL_GetTicks() % 100000u) * 0.011f);
@@ -2306,16 +2318,16 @@ static void lit_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box
             int corner = (y - box.y0) * columns + (x - box.x0);
             float light[4] = {light_corners[corner], light_corners[corner + 1],
                               light_corners[corner + columns + 1], light_corners[corner + columns]};
-            if ((glow && light[0] + light[1] + light[2] + light[3] <= 0.0f) ||
+            if (light[0] + light[1] + light[2] + light[3] <= 0.0f ||
                 (fog != NULL && !fog_tile_seen(fog, camera, x, y))) {
                 continue; /* Nothing lights what is not in view: what is known of it is dim. */
             }
             SDL_Color colors[4];
             for (int i = 0; i < 4; i++) {
-                float alpha = glow ? darkness * FIRE_GLOW_STRENGTH * light[i] * flicker
-                                   : darkness * (1.0f - FIRE_LIGHT_STRENGTH * light[i] * flicker);
-                colors[i] = color;
-                colors[i].a = (Uint8)(clampf(alpha, 0.0f, 1.0f) * 255.0f);
+                colors[i] = GLOW_COLOR;
+                colors[i].a =
+                    (Uint8)(clampf(darkness * FIRE_GLOW_STRENGTH * light[i] * flicker, 0.0f, 1.0f) *
+                            255.0f);
             }
             batch_gradient_quad(renderer, colors, tile_rect(camera, x, y));
         }
@@ -2414,25 +2426,6 @@ static bool fog_tile_seen(const Game *game, const Camera *camera, int x, int y)
     return level >= 0 && vision_seen(&game->vision, x, y, level);
 }
 
-/* The night over the tiles in view that lie outside `box`, in plain darkness.
- * What is not in view is dim whatever the time of day: nobody knows whether
- * something lights it. */
-static void fog_night(SDL_Renderer *renderer, const Game *game, const Camera *camera, TileRect box,
-                      SDL_Color color)
-{
-    TileRect visible = camera_visible_tiles(camera, game->map.width, game->map.height);
-    for (int y = visible.y0; y < visible.y1; y++) {
-        for (int x = visible.x0; x < visible.x1; x++) {
-            bool lit_box = x >= box.x0 && x < box.x1 && y >= box.y0 && y < box.y1;
-            if (!lit_box && fog_tile_seen(game, camera, x, y)) {
-                SDL_FRect tile = tile_rect(camera, x, y);
-                batch_quad(renderer, color, &tile);
-            }
-        }
-    }
-    batch_flush(renderer);
-}
-
 void render_fog(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const Map *map = game_view_map(game);
@@ -2475,70 +2468,215 @@ void render_vision(SDL_Renderer *renderer, const Game *game, const Camera *camer
     batch_flush(renderer);
 }
 
+/* ---- Light and shade -------------------------------------------------------- */
+
+/* The darkest a tile gets: how lit it is at the very least (a tile no light
+ * reaches is as dark as the night always was), and how lit an open tile is
+ * under the night sky (stars and moon). */
+#define LIGHT_FLOOR GAME_DAYLIGHT_MIN
+#define NIGHT_SKY_LIT 0.14f
+/* The shade is a veil over the tile: cool and dark by day, the night's blue by
+ * night, a touch of warmth at dawn and dusk. */
+static const SDL_Color SHADE_COLOR = {22, 28, 52, 255};
+static const SDL_Color TWILIGHT_COLOR = {74, 38, 30, 255};
+
+/* What lets the light through over each tile of the level shown, kept until
+ * the map changes (Map.light_revision): scanning the layers over a tile costs
+ * more than a look-up, and a view shows thousands of tiles every frame. */
+
+static void cover_begin(const Map *map)
+{
+    size_t tiles = map_tile_count(map);
+    if (tiles != cover_capacity) {
+        SDL_free(cover_values);
+        SDL_free(cover_stamps);
+        cover_values = SDL_malloc(tiles * sizeof(*cover_values));
+        cover_stamps = SDL_calloc(tiles, sizeof(*cover_stamps));
+        cover_capacity = cover_values != NULL && cover_stamps != NULL ? tiles : 0;
+        cover_epoch = 0;
+    }
+    if (map != cover_map || map->light_revision != cover_revision) {
+        cover_epoch++;
+        cover_map = map;
+        cover_revision = map->light_revision;
+    }
+}
+
+static float tile_cover(const Map *map, int x, int y, int z)
+{
+    size_t index = map_index(map, x, y, z);
+    if (cover_capacity == 0) {
+        return map_light_cover(map, x, y, z);
+    }
+    if (cover_stamps[index] != cover_epoch + 1) {
+        cover_values[index] = map_light_cover(map, x, y, z);
+        cover_stamps[index] = cover_epoch + 1;
+    }
+    return cover_values[index];
+}
+
+/* The shade is drawn into a small texture, a pixel for each corner of the tiles
+ * in view (and a border that repeats the edge), and stretched over them with
+ * smoothing: the light then runs smoothly from one tile to the next. */
+
+static bool shade_prepare(SDL_Renderer *renderer, int width, int height)
+{
+    size_t pixels = (size_t)width * (size_t)height;
+    if (pixels > shade_capacity) {
+        Uint32 *grown_pixels = SDL_realloc(shade_pixels, pixels * sizeof(*grown_pixels));
+        float *grown_sums = SDL_realloc(shade_sums, pixels * sizeof(*grown_sums));
+        int *grown_counts = SDL_realloc(shade_counts, pixels * sizeof(*grown_counts));
+        if (grown_pixels != NULL) {
+            shade_pixels = grown_pixels;
+        }
+        if (grown_sums != NULL) {
+            shade_sums = grown_sums;
+        }
+        if (grown_counts != NULL) {
+            shade_counts = grown_counts;
+        }
+        if (grown_pixels == NULL || grown_sums == NULL || grown_counts == NULL) {
+            return false;
+        }
+        shade_capacity = pixels;
+    }
+    if (shade_texture == NULL || width > shade_texture_width || height > shade_texture_height) {
+        if (shade_texture != NULL) {
+            SDL_DestroyTexture(shade_texture);
+        }
+        shade_texture_width = SDL_max(width, shade_texture_width);
+        shade_texture_height = SDL_max(height, shade_texture_height);
+        shade_texture =
+            SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
+                              shade_texture_width, shade_texture_height);
+        if (shade_texture == NULL) {
+            shade_texture_width = shade_texture_height = 0;
+            return false;
+        }
+        SDL_SetTextureBlendMode(shade_texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(shade_texture, SDL_SCALEMODE_LINEAR);
+    }
+    return true;
+}
+
 void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
-    /* Clouds and rain dim the day (and the night a little more). */
-    float light = game_daylight(game->clock.tick) * weather_light(&game->weather);
-    float darkness = 1.0f - clampf(light, 0.0f, 1.0f);
-    if (darkness <= 0.0f) {
+    const Map *map = game_view_map(game);
+    const int z = camera->level; /* The level shown. */
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    int columns = visible.x1 - visible.x0, rows = visible.y1 - visible.y0;
+    if (columns <= 0 || rows <= 0) {
         return;
     }
-    Uint8 alpha = (Uint8)(darkness * 255.0f);
-    SDL_SetRenderDrawColor(renderer, NIGHT_COLOR.r, NIGHT_COLOR.g, NIGHT_COLOR.b, alpha);
-    float width = camera->viewport_width, height = camera->viewport_height;
+    /* The sky: the sun's day with its dawn and dusk, the night sky, the weather. */
+    float sun =
+        clampf((game_daylight(game->clock.tick) - GAME_DAYLIGHT_MIN) / (1.0f - GAME_DAYLIGHT_MIN),
+               0.0f, 1.0f);
+    float sky = (NIGHT_SKY_LIT + (1.0f - NIGHT_SKY_LIT) * sun) * weather_light(&game->weather);
+    float open_darkness = 1.0f - (LIGHT_FLOOR + (1.0f - LIGHT_FLOOR) * sky);
+    float twilight = 4.0f * sun * (1.0f - sun);
+
+    /* The fires: the light of each corner of the area they light. */
     const Workstations *workstations = &game->workstations;
-    TileRect visible = camera_visible_tiles(camera, workstations->width, workstations->height);
-    TileRect box = lit_tiles(workstations, visible, camera->level);
-    size_t corners = box.x0 < box.x1 && box.y0 < box.y1
-                         ? (size_t)(box.x1 - box.x0 + 1) * (size_t)(box.y1 - box.y0 + 1)
-                         : 0;
-    if (corners > light_corner_capacity) {
-        float *grown = SDL_realloc(light_corners, corners * sizeof(*light_corners));
+    TileRect box = lit_tiles(workstations, visible, z);
+    bool any_fire = box.x0 < box.x1 && box.y0 < box.y1; /* Else the box is empty. */
+    int box_columns = any_fire ? box.x1 - box.x0 + 1 : 0;
+    size_t box_corners = any_fire ? (size_t)box_columns * (size_t)(box.y1 - box.y0 + 1) : 0;
+    if (box_corners > light_corner_capacity) {
+        float *grown = SDL_realloc(light_corners, box_corners * sizeof(*light_corners));
         if (grown != NULL) {
             light_corners = grown;
-            light_corner_capacity = corners;
+            light_corner_capacity = box_corners;
         }
     }
-    if (corners == 0 || corners > light_corner_capacity) {
-        if (game->fog_on) { /* Only over what is in view. */
-            SDL_Color night = {NIGHT_COLOR.r, NIGHT_COLOR.g, NIGHT_COLOR.b, alpha};
-            fog_night(renderer, game, camera, (TileRect){0, 0, 0, 0}, night);
-            return;
-        }
-        SDL_FRect screen = {0.0f, 0.0f, width, height};
-        SDL_RenderFillRect(renderer, &screen);
-        return;
-    }
-    /* Plain darkness around the lit area, a gradient inside it. */
-    SDL_FRect first = tile_rect(camera, box.x0, box.y0);
-    SDL_FRect last = tile_rect(camera, box.x1 - 1, box.y1 - 1);
-    float left = first.x, top = first.y, right = last.x + last.w, bottom = last.y + last.h;
-    SDL_FRect around[4] = {{0.0f, 0.0f, width, top},
-                           {0.0f, bottom, width, height - bottom},
-                           {0.0f, top, left, bottom - top},
-                           {right, top, width - right, bottom - top}};
-    if (game->fog_on) {
-        SDL_Color night = {NIGHT_COLOR.r, NIGHT_COLOR.g, NIGHT_COLOR.b, alpha};
-        fog_night(renderer, game, camera, box, night);
-    } else {
-        for (int i = 0; i < 4; i++) {
-            if (around[i].w > 0.0f && around[i].h > 0.0f) {
-                SDL_RenderFillRect(renderer, &around[i]);
+    bool fires = box_corners > 0 && box_corners <= light_corner_capacity;
+    if (fires) {
+        for (int y = box.y0; y <= box.y1; y++) {
+            for (int x = box.x0; x <= box.x1; x++) {
+                light_corners[(y - box.y0) * box_columns + (x - box.x0)] =
+                    hearths_light_at(workstations, (float)x, (float)y, z);
             }
         }
     }
-    const Game *fog = game->fog_on ? game : NULL;
-    int columns = box.x1 - box.x0 + 1;
-    for (int y = box.y0; y <= box.y1; y++) {
-        for (int x = box.x0; x <= box.x1; x++) {
-            light_corners[(y - box.y0) * columns + (x - box.x0)] =
-                hearths_light_at(workstations, (float)x, (float)y, camera->level);
+    float flicker = 0.95f + 0.05f * sinf((float)(SDL_GetTicks() % 100000u) * 0.011f);
+
+    /* The pixels: one for each corner, inside a border of one pixel. */
+    int width = columns + 3, height = rows + 3;
+    if (!shade_prepare(renderer, width, height)) {
+        return;
+    }
+    cover_begin(map);
+    int corner_columns = columns + 1, corner_rows = rows + 1;
+    SDL_memset(shade_sums, 0, (size_t)corner_columns * (size_t)corner_rows * sizeof(float));
+    SDL_memset(shade_counts, 0, (size_t)corner_columns * (size_t)corner_rows * sizeof(int));
+    /* Each tile lights its four corners: a corner has the mean light of the tiles
+     * around it (of those that are drawn, and in view). */
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            int level = map_view_level(map, x, y, z); /* What is drawn there. */
+            if (level < 0 || (game->fog_on && !vision_seen(&game->vision, x, y, level))) {
+                continue;
+            }
+            float ambient = sky * tile_cover(map, x, y, level);
+            int corner = (y - visible.y0) * corner_columns + (x - visible.x0);
+            int around[4] = {corner, corner + 1, corner + corner_columns + 1,
+                             corner + corner_columns};
+            for (int i = 0; i < 4; i++) {
+                shade_sums[around[i]] += ambient;
+                shade_counts[around[i]]++;
+            }
         }
     }
-    lit_quads(renderer, camera, box, NIGHT_COLOR, darkness, false, fog);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-    lit_quads(renderer, camera, box, GLOW_COLOR, darkness, true, fog);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Color tint =
+        mix(mix(SHADE_COLOR, NIGHT_COLOR, 1.0f - sun), TWILIGHT_COLOR, 0.5f * twilight);
+    for (int j = 0; j < corner_rows; j++) {
+        for (int i = 0; i < corner_columns; i++) {
+            int corner = j * corner_columns + i;
+            Uint8 alpha = 0;
+            if (shade_counts[corner] > 0) {
+                float lit = shade_sums[corner] / (float)shade_counts[corner];
+                if (fires) {
+                    int fx = visible.x0 + i - box.x0, fy = visible.y0 + j - box.y0;
+                    if (fx >= 0 && fy >= 0 && fx < box_columns && fy <= box.y1 - box.y0) {
+                        float fire =
+                            FIRE_LIGHT_STRENGTH * light_corners[fy * box_columns + fx] * flicker;
+                        lit = 1.0f - (1.0f - lit) * (1.0f - fire);
+                    }
+                }
+                float lightness = LIGHT_FLOOR + (1.0f - LIGHT_FLOOR) * clampf(lit, 0.0f, 1.0f);
+                alpha = (Uint8)((1.0f - lightness) * 255.0f + 0.5f);
+            }
+            Uint32 pixel = (Uint32)tint.r | ((Uint32)tint.g << 8) | ((Uint32)tint.b << 16) |
+                           ((Uint32)alpha << 24);
+            shade_pixels[(j + 1) * width + (i + 1)] = pixel;
+        }
+    }
+    for (int j = 1; j < height - 1; j++) { /* The border repeats the edge. */
+        shade_pixels[j * width] = shade_pixels[j * width + 1];
+        shade_pixels[j * width + width - 1] = shade_pixels[j * width + width - 2];
+    }
+    for (int i = 0; i < width; i++) {
+        shade_pixels[i] = shade_pixels[width + i];
+        shade_pixels[(height - 1) * width + i] = shade_pixels[(height - 2) * width + i];
+    }
+    SDL_Rect area = {0, 0, width, height};
+    SDL_UpdateTexture(shade_texture, &area, shade_pixels, width * (int)sizeof(Uint32));
+
+    /* Stretched so that pixel i falls on corner i: half a tile out on each side. */
+    float left, top, next_x, next_y;
+    camera_world_to_screen(camera, (float)visible.x0, (float)visible.y0, &left, &top);
+    camera_world_to_screen(camera, (float)visible.x0 + 1.0f, (float)visible.y0 + 1.0f, &next_x,
+                           &next_y);
+    float tile_w = next_x - left, tile_h = next_y - top;
+    SDL_FRect source = {1.0f, 1.0f, (float)corner_columns, (float)corner_rows};
+    SDL_FRect target = {left - 0.5f * tile_w, top - 0.5f * tile_h, (float)corner_columns * tile_w,
+                        (float)corner_rows * tile_h};
+    SDL_RenderTexture(renderer, shade_texture, &source, &target);
+
+    /* The fires' warm glow, where it is dark. */
+    if (fires && open_darkness > 0.0f) {
+        glow_quads(renderer, camera, box, open_darkness, game->fog_on ? game : NULL);
+    }
 }
 
 void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, int y,

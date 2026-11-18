@@ -1642,10 +1642,25 @@ searches backed off on that revision look again.
 - **Heat**: a burning hearth adds `HEARTH_HEAT_PER_HOUR` degrees to its
   tile every tick (`temperatures_add_heat()`, see below).
 - **Rendering**: a ring of stones, sticks for the fuel, flames moving with
-  real time; at night `render_daylight()` darkens plain rectangles around
-  the area lit by burning hearths and a grid of per-corner alpha quads
-  inside it (`hearths_light_at()`, linear over 6 tiles, fires of the level
-  shown only), plus an additive warm glow.
+  real time; the fire's light (`hearths_light_at()`, linear over 6 tiles,
+  fires of the level shown only) is one of the two lights `render_daylight()`
+  draws, with an additive warm glow where it is dark (see *Light and shade*).
+
+**Light and shade** (`render_daylight()`, presentation only): the light of a
+tile is the sky (the sun's day with its dawn and dusk, `game_daylight()`, a
+night sky `NIGHT_SKY_LIT`, the weather, `weather_light()`) times what lets
+it through (`map_light_cover()`: each layer of foliage over the tile times its
+share, so thick crowns are darker; a roof; rock above: nothing), with the
+light of burning hearths on top; the tile is then as dark as `1 - (LIGHT_FLOOR
++ (1 - LIGHT_FLOOR) × light)`, `LIGHT_FLOOR` being `GAME_DAYLIGHT_MIN`, the
+darkest it ever was. The shade is a veil drawn over the sprites (colonists,
+animals, plants and items are in the shade of their tile too) from a small
+texture with a pixel for each corner of the tiles in view (the mean of the tiles
+around it), stretched over them with smoothing so that the light runs from
+one tile to the next; its color is cool by day, the night's blue by night, a
+touch warm at dawn and dusk. What lets the light through is kept per tile of the
+level shown until `Map.light_revision` changes (any terrain, rock or roof
+change): a view shows thousands of tiles every frame.
 
 Stones are two map layers (`Map.cobbles`, `Map.flint`): how many of each lie
 about a tile, `MAP_STONES_MAX` (20) at most together, taken one by one by
