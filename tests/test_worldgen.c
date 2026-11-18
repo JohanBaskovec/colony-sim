@@ -404,6 +404,40 @@ static void test_poor_ground_plants_stay_on_poor_ground(void)
     CHECK_EQ_INT(on_rich, 0);
 }
 
+/* Heather and bracken hate wet feet (docs/CLIMATE.md §6): none on the
+ * banks, where the water table soaks the ground, while they still grow
+ * inland; cattails and reeds stand by the water. */
+static void test_no_heath_on_the_banks(void)
+{
+    long on_banks = 0, inland = 0, shore = 0;
+    for (uint64_t seed = 1; seed <= 3; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                int z = map_ground_level(&map, x, y);
+                PlantType type = (PlantType)map.plants[map_index(&map, x, y, z)].type;
+                bool bank = false;
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        bank = bank || map_is_water(&map, x + dx, y + dy, z);
+                    }
+                }
+                if (type == PLANT_HEATHER || type == PLANT_BRACKEN) {
+                    on_banks += bank;
+                    inland += !bank;
+                }
+                shore += bank && (type == PLANT_CATTAIL || type == PLANT_REED);
+            }
+        }
+        map_free(&map);
+    }
+    CHECK_EQ_INT(on_banks, 0);
+    CHECK(inland > 100);
+    CHECK(shore > 100);
+}
+
 int main(void)
 {
     RUN_TEST(test_same_seed_gives_identical_map);
@@ -418,5 +452,6 @@ int main(void)
     RUN_TEST(test_trees);
     RUN_TEST(test_the_understory_follows_the_shade);
     RUN_TEST(test_poor_ground_plants_stay_on_poor_ground);
+    RUN_TEST(test_no_heath_on_the_banks);
     return test_summary();
 }

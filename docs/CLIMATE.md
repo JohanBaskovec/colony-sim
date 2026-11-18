@@ -5,9 +5,9 @@ ground, tile by tile: the shade of a wood and the heat of a bare slope, the
 dew of a clear night, the soil soaked after a storm and dried by a week of
 sun, the wet banks of a river, what plants drink.
 
-Status: **C1** soil water and **C2** microclimate are built
-(`core/soil.h`, `core/temperature.h`, `core/weather.h`); **C3** plants and
-water (`docs/PLANTS.md` P4) and **C4** views are to do (§9). Values marked
+Status: **C1** soil water, **C2** microclimate and **C3** plants and water
+(`docs/PLANTS.md` P4) are built (`core/soil.h`, `core/temperature.h`,
+`core/weather.h`, `PlantWater` in `core/map.h`); **C4** views is to do (§9). Values marked
 *(tuning)* are first guesses.
 
 ## 1. Principles
@@ -58,9 +58,12 @@ A bucket per tile, by its terrain *(tuning)*:
 
 Below `WP` plants cannot draw water; between `WP` and `FC` is what they
 live on; above `FC` the soil is wet and drains; at `SAT` it is waterlogged
-and takes no more. The **moisture** shown and used by plants is
-`m = (water - WP) / (FC - WP)`: 0 dry (wilting), 1 at field capacity, above 1
-wet, up to `(SAT - WP) / (FC - WP)` soaked.
+and takes no more. The **moisture** shown and used by plants
+(`soil_moisture_of()`) is one scale for every terrain: `m = (water - WP) /
+(FC - WP)` up to field capacity (0 dry at the wilting point, 1 at field
+capacity, below 0 drier still), then `1 + (water - FC) / (SAT - FC)` above
+it, 2 saturated. Open water counts as 3 (`PLANT_MOISTURE_STANDING`), and a
+tree's trunk has the moisture of the ground beside its foot.
 
 Every hour, for each tile of rooting ground (sand, soil, rich soil, gravel,
 no rock):
@@ -92,7 +95,8 @@ the rest runs off (lost for now: puddles and streams later).
 
 Above `FC`, water drains down out of the root zone:
 `(water - FC) × drains` an hour. Sand is dry a day after rain, rich soil
-stays wet for days.
+stays wet for days. Near open water it drains only down to the water table
+(the bank's target, §3.5), so a bank stays soaked.
 
 ### 3.4 Evaporation and transpiration
 
@@ -150,11 +154,16 @@ and a dune is dry.
 
 ### 3.6 A new world
 
-The water of each tile starts at `WP + 0.8 × (FC - WP)`
-(`GAME_SOIL_START_SHARE`), or the target of §3.5 near water when higher.
-C3: `FC` times 0.6 to 1.1 by the moisture noise of world generation, so that
-plants placed by world generation (`worldgen.c`) see the ground they will
-live on.
+The water of each tile starts at moisture 0.8 (`GAME_SOIL_START_SHARE`), or
+the target of §3.5 near water when higher. Ground opened later (rock dug
+out) starts at field capacity on its first hour, unknown until then.
+
+World generation places plants by the moisture their ground is expected to
+hold (`expected_moisture()` in `worldgen.c`): `0.45 + 0.6 ×` the moisture
+noise of the region, or the bank's target by the distance to open water when
+wetter (a distance transform over the columns), and each plant's chance is
+multiplied by its water response (§6). So no heather nor bracken on the
+banks, fewer trees right at the water's edge.
 
 ## 4. Water in the air
 
@@ -252,14 +261,51 @@ the same pass without soil and microclimate.
 ## 6. What it changes
 
 - **Plants (C3, `docs/PLANTS.md` P4):** each plant has a water range like its
-  temperature range: `PlantDef.water_min .. water_opt_low .. water_opt_high
-  .. water_max` in moisture `m` (§3); `f_water` in the growth; drought
-  (below `water_min` for `drought_days`) and waterlogging (above `water_max`
-  for `flood_days`) wear its health down as frost does; plants of the wet
-  (cattail, reed) want `m` above 1.2, heather and bracken die in soaked
-  ground (so they leave the beaches), bilberries want it moist. Spreading
-  (§13 of PLANTS) takes the water into account. World generation places the
-  understory from the water of §3.6 instead of the noise.
+  temperature range, `PlantDef.water` (`PlantWater`: `min`, `opt_low`,
+  `opt_high`, `max` in moisture, `drought_days`, `flood_days`):
+  - **growth** times `f_water`, a plateau: 0 at `min`, 1 from `opt_low` to
+    `opt_high`, 0 at `max`;
+  - **drought:** below `min` an awake plant loses `1 / (drought_days × 24)`
+    of its health an hour (resting plants wait), and dies after
+    `drought_days`; **drowning roots:** above `max` the same with
+    `flood_days`, resting or awake; they come after frost and heat, before
+    darkness, and health mends as before once the water is right;
+  - the plant window says "growing slowly (dry ground)", "(ground too wet)",
+    "drying out" or "roots drowning";
+  - **spreading** (§13 of PLANTS): no young plant where its water response is
+    0 now;
+  - without a known moisture (a plant made in a test, ground not followed)
+    water plays no part.
+
+  | Plant | min | best | max | Drought / flood days |
+  |---|---|---|---|---|
+  | Grass | 0.05 | 0.5 - 1.4 | 2.2 | 20 / 10 |
+  | Tree | 0 | 0.3 - 1.3 | 1.9 | 60 / 30 |
+  | Hazel | 0.05 | 0.4 - 1.3 | 1.9 | 40 / 20 |
+  | Bramble | 0.05 | 0.4 - 1.4 | 1.9 | 30 / 15 |
+  | Wild garlic | 0.1 | 0.7 - 1.6 | 2.1 | 10 / 20 |
+  | Nettle | 0.1 | 0.7 - 1.6 | 2.1 | 15 / 15 |
+  | Plantain | 0.05 | 0.4 - 1.4 | 2.1 | 25 / 15 |
+  | Wild carrot | 0 | 0.3 - 1.2 | 1.8 | 30 / 8 |
+  | Cattail | 1.3 | 1.8 - 3 | 3.5 | 15 / - |
+  | Reed | 1.2 | 1.7 - 3 | 3.5 | 20 / - |
+  | Moss | 0 | 0.6 - 1.9 | 2.5 | 60 / 20 |
+  | Wood sorrel | 0.1 | 0.6 - 1.5 | 2.0 | 10 / 15 |
+  | Bracken | 0.1 | 0.4 - 1.2 | 1.6 | 25 / 6 |
+  | Wild strawberry | 0.05 | 0.5 - 1.3 | 1.8 | 15 / 10 |
+  | Bilberry | 0.1 | 0.6 - 1.4 | 1.7 | 15 / 8 |
+  | Dog rose | 0 | 0.3 - 1.2 | 1.8 | 40 / 10 |
+  | Heather | 0 | 0.2 - 1.1 | 1.5 | 40 / 6 |
+  | Mushrooms | needs nothing | | | |
+
+  Measured on seed 42 without settlers over two years: the ground averages
+  0.9 in autumn and winter and falls to 0.5 in a dry summer (half the tiles
+  under 0.3); then growth slows and grass stops spreading, but nothing dies
+  of it (a first try with the damage of the moisture lovers from 0.3 halved
+  the nettles, wood sorrel and bilberries in one dry summer: the damage now
+  starts near the wilting point, as for real plants). No heather, bracken or
+  bilberry on the beaches (there were on 10 to 14 % of the beach sand). No
+  measurable cost (`bench_simulation`).
 - **Food and items:** rot by the tile's temperature (cooler in the wood's
   shade) and wetness (later).
 - **Animals:** they already go to a cooler spot in the heat: the woods.
@@ -289,6 +335,7 @@ first in the sun), frost heave, soil types under the root zone.
 2. *(done)* **C2 microclimate:** targets, pulls and stored heat (§5). Tests: a wood
    cooler at 15:00 and milder at 5:00 than the open, a wet tile cooler than
    a dry one in the sun, no change at night under clouds.
-3. **C3 plants and water:** §6, with the beach question of the roadmap.
+3. *(done)* **C3 plants and water:** §6, with the beach question of the
+   roadmap.
 4. **C4 views:** a soil moisture view next to the temperature and light ones;
    the air's humidity in the status panel.

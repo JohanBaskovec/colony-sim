@@ -2,6 +2,7 @@
 #include "core/item.h"
 #include "core/map.h"
 #include "core/pathfinding.h"
+#include "core/soil.h"
 #include "core/temperature.h"
 
 #include "test_framework.h"
@@ -618,6 +619,86 @@ static void test_growth_follows_the_temperature(void)
         plant_advance(&cattail, &water, 1);
     }
     CHECK_NEAR(cattail.growth, 0.5f + plant_def(PLANT_CATTAIL)->growth_per_day, 0.001);
+}
+
+/* Water (docs/CLIMATE.md §6): growth on a plateau of moisture like the
+ * temperature's; below its minimum an awake plant dries out, above its
+ * maximum its roots drown, each killing it in its days; a plant of the wet
+ * lives in standing water; without a known ground water plays no part. */
+static void test_plants_need_water(void)
+{
+    const PlantWater *grass = &plant_def(PLANT_GRASS)->water;
+    CHECK(grass->min < grass->opt_low && grass->opt_low < grass->opt_high &&
+          grass->opt_high < grass->max);
+    CHECK_NEAR(plant_water_response(PLANT_GRASS, 1.0f), 1.0, 1e-6);
+    CHECK_NEAR(plant_water_response(PLANT_GRASS, 0.5f * (grass->min + grass->opt_low)), 0.5, 1e-5);
+    CHECK_NEAR(plant_water_response(PLANT_GRASS, grass->min - 0.01f), 0.0, 1e-6);
+    CHECK_NEAR(plant_water_response(PLANT_MUSHROOMS, -1.0f), 1.0, 1e-6); /* Needs nothing. */
+    CHECK_NEAR(plant_water_response(PLANT_CATTAIL, PLANT_MOISTURE_STANDING), 1.0, 1e-6);
+    CHECK_NEAR(plant_water_response(PLANT_CATTAIL, 1.0f), 0.0, 1e-6);
+    /* Heather and bracken hate wet feet: nothing on soaked ground. */
+    CHECK_NEAR(plant_water_response(PLANT_HEATHER, SOIL_MOISTURE_SATURATED), 0.0, 1e-6);
+    CHECK_NEAR(plant_water_response(PLANT_BRACKEN, SOIL_MOISTURE_SATURATED), 0.0, 1e-6);
+
+    int day = SEASON_DAY(SEASON_SUMMER, 5);
+    const PlantDef *def = plant_def(PLANT_GRASS);
+    PlantConditions good = {.temperature = def->t_opt_low,
+                            .fertility = 1.0f,
+                            .light = 1.0f,
+                            .light_peak = 1.0f,
+                            .moisture = 1.0f,
+                            .moisture_known = true};
+    Plant plant = {.type = PLANT_GRASS, .growth = 0.3f};
+    plant_settle(&plant, day);
+    float rate = plant_growth_rate(&plant, &good);
+    CHECK_EQ_INT(plant_status(&plant, &good), PLANT_STATUS_GROWING);
+    PlantConditions dryish = good;
+    dryish.moisture = 0.5f * (grass->min + grass->opt_low);
+    CHECK_NEAR(plant_growth_rate(&plant, &dryish), 0.5f * rate, 1e-5);
+    CHECK_EQ_INT(plant_status(&plant, &dryish), PLANT_STATUS_SLOWED_DRY);
+    PlantConditions wettish = good;
+    wettish.moisture = 0.5f * (grass->opt_high + grass->max);
+    CHECK_EQ_INT(plant_status(&plant, &wettish), PLANT_STATUS_SLOWED_WET);
+
+    /* Dried out: no growth, and dead within its drought days. */
+    PlantConditions parched = good;
+    parched.moisture = grass->min - 0.1f;
+    CHECK_EQ_INT(plant_status(&plant, &parched), PLANT_STATUS_DROUGHT);
+    float before = plant.growth;
+    int hours = (int)(grass->drought_days * (float)HOURS_PER_DAY);
+    plant_advance(&plant, &parched, hours - 2);
+    CHECK_EQ_INT(plant.type, PLANT_GRASS);
+    CHECK_NEAR(plant.growth, before, 1e-6);
+    CHECK(plant_health(&plant) < 0.05f);
+    plant_advance(&plant, &parched, 4);
+    CHECK_EQ_INT(plant.type, PLANT_NONE);
+
+    /* A heather on soaked ground drowns within its flood days; a cattail in
+     * the water and a plant on ground nobody follows are well. */
+    Plant heather = {.type = PLANT_HEATHER, .growth = 0.5f};
+    plant_settle(&heather, day);
+    PlantConditions soaked = good;
+    soaked.temperature = plant_def(PLANT_HEATHER)->t_opt_low;
+    soaked.moisture = SOIL_MOISTURE_SATURATED;
+    CHECK_EQ_INT(plant_status(&heather, &soaked), PLANT_STATUS_WATERLOGGED);
+    plant_advance(&heather, &soaked,
+                  (int)(plant_def(PLANT_HEATHER)->water.flood_days * (float)HOURS_PER_DAY) + 2);
+    CHECK_EQ_INT(heather.type, PLANT_NONE);
+    Plant cattail = {.type = PLANT_CATTAIL, .growth = 0.5f};
+    plant_settle(&cattail, day);
+    PlantConditions water = good;
+    water.temperature = plant_def(PLANT_CATTAIL)->t_opt_low;
+    water.moisture = PLANT_MOISTURE_STANDING;
+    plant_advance(&cattail, &water, 24 * 30);
+    CHECK_EQ_INT(cattail.type, PLANT_CATTAIL);
+    CHECK(plant_health(&cattail) > 0.99f);
+    Plant unknown = {.type = PLANT_GRASS, .growth = 0.3f};
+    plant_settle(&unknown, day);
+    PlantConditions nobody = parched;
+    nobody.moisture_known = false;
+    CHECK_NEAR(plant_growth_rate(&unknown, &nobody), rate, 1e-6);
+    plant_advance(&unknown, &nobody, 24 * 30);
+    CHECK_EQ_INT(unknown.type, PLANT_GRASS);
 }
 
 /* Winter: a plant that rests grows nothing and keeps what it is; a plant that
@@ -1532,6 +1613,7 @@ int main(void)
     RUN_TEST(test_frost_and_heat_kill);
     RUN_TEST(test_hardening_takes_days);
     RUN_TEST(test_plants_mend);
+    RUN_TEST(test_plants_need_water);
     RUN_TEST(test_trees_with_a_trunk_survive);
     RUN_TEST(test_light_cover);
     RUN_TEST(test_light_response);

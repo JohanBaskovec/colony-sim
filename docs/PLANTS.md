@@ -5,8 +5,9 @@ the light and, later, the water of their tile, instead of following a
 calendar.
 
 Status: steps **P1** (temperature, health, rest; §2 to §4 and §7), **P2**
-(light; §5) and **P3** (ripening by warmth; §7) are implemented; P4 (§9) is
-design. Before it a plant grew
+(light; §5), **P3** (ripening by warmth; §7) and **P4** (water: the soil
+moisture of each tile, `docs/CLIMATE.md` §6) are implemented. Before them a
+plant grew
 on its growth days (spring to autumn) at a rate set by the fertility of the
 ground. Values marked *(tuning)* are first guesses.
 
@@ -34,7 +35,7 @@ ground. Values marked *(tuning)* are first guesses.
 Every hour, when the plant's slice of the map is updated (`update_plants()`):
 
     growth gained = growth_per_day / 24
-                    × f_temperature(T) × f_light(L) × fertility (× f_water, P4)
+                    × f_temperature(T) × f_light(L) × f_water(m) × fertility
 
 - `growth_per_day` keeps its meaning as the rate at its best (today it is
   the rate on fertility 1), so the present values carry over.
@@ -228,10 +229,6 @@ expected warmth of the day.
 
 ## 8. Later
 
-- **Water** (P4): `f_water` in the growth from the soil moisture of each
-  tile (built: `core/soil.h`, `docs/CLIMATE.md` §3), drought that harms and
-  kills, waterlogging for the plants that hate it, cattails in the wet.
-  Design: `docs/CLIMATE.md` §6 (step C3).
 - **Evergreens** (pines): crowns that stay in leaf all winter (§12 treats all
   trees as deciduous).
 - **Death of grown trees:** standing deadwood, a source of dry wood, that
@@ -327,8 +324,9 @@ expected warmth of the day.
    the cover of each tile (open, foliage, roof, rock), `f_light` and death in
    the dark; mushrooms need none.
 3. **P3: ripening by degree-days** *(done)*, mushrooms by temperature.
-4. **P4: water**: the soil moisture is built (`docs/CLIMATE.md` C1); the
-   plants' needs are its step C3 (§6 there).
+4. **P4: water** *(done)*: the soil moisture of each tile
+   (`docs/CLIMATE.md` C1) in the growth, drought and drowning roots, spreading
+   and world generation by the water (`docs/CLIMATE.md` §6, step C3).
 
 Each step changes the state hash of the benchmarks.
 

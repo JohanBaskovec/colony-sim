@@ -8,8 +8,9 @@
  * `water` in mm in its root zone. Its terrain sets the bucket (SoilDef): the
  * wilting point below which plants cannot draw water, the field capacity it
  * holds against gravity, the saturation where it is waterlogged. The
- * moisture plants feel is `(water - wilting) / (capacity - wilting)`: 0 dry,
- * 1 at field capacity, above 1 wet.
+ * moisture plants feel (soil_moisture_of()) is the same for every terrain: 0
+ * at the wilting point, 1 at field capacity, 2 at saturation, in proportion
+ * between; PLANT_MOISTURE_STANDING in open water.
  *
  * Tiles are worked out once an hour, in slices over the ticks like the plants
  * (soil_update()). What the weather brings that hour comes in a SoilHour
@@ -41,6 +42,13 @@ typedef struct SoilDef {
  * foliage). */
 const SoilDef *soil_def(Terrain terrain);
 
+/* The moisture of `water` mm in a bucket (0 wilting, 1 field capacity, 2
+ * saturation; below 0 when drier than the wilting point), and the water
+ * that holds a moisture. */
+#define SOIL_MOISTURE_SATURATED 2.0f
+float soil_moisture_of(const SoilDef *def, float water);
+float soil_water_for(const SoilDef *def, float moisture);
+
 /* Rain reaching the ground under crowns: SOIL_THROUGHFALL_DENSE of it under
  * crowns letting no light through, all of it in the open, in proportion to the
  * light between (the leaves hold the rest, and it evaporates). */
@@ -49,7 +57,7 @@ const SoilDef *soil_def(Terrain terrain);
 #define SOIL_MELT_PER_DEGREE 0.12f
 /* Banks (docs/CLIMATE.md §3.5): the water table draws a tile's water up
  * towards its target by SOIL_BANK_RATE of the gap an hour, up to
- * SOIL_WET_FAR tiles from open water. */
+ * SOIL_WET_FAR tiles from open water; water does not drain below it. */
 #define SOIL_BANK_RATE 0.08f
 #define SOIL_WET_FAR 7
 /* Plants close their pores below this moisture: what they transpire falls
@@ -82,7 +90,10 @@ typedef struct Soil {
     int width;
     int height;
     int depth;
-    float *water;          /* mm per tile; 0 where it is not rooting ground. */
+    /* mm per tile; 0 where it is not rooting ground, or not followed yet
+     * (ground opened since, rock dug out: soil_update() starts it at field
+     * capacity, and it is unknown until then). Never 0 once followed. */
+    float *water;
     uint8_t *evap;         /* Share of the potential that evaporated last hour, 0 .. 255. */
     uint8_t *canopy;       /* Light the crowns let through last hour, 0 .. 255. */
     uint8_t *wet;          /* Tiles to open water (SOIL_WET_FAR: farther). */
@@ -120,19 +131,22 @@ void soil_look_up(Soil *soil, const Map *map, size_t first, size_t last);
 void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const SoilHour *hour,
                  const float *temperature);
 
-/* The moisture of a tile (0 dry .. 1 at field capacity .. wetter above), -1
- * where it is not rooting ground. */
+/* The moisture of a tile (soil_moisture_of()), PLANT_MOISTURE_STANDING on
+ * open water, that of the ground beside its foot on a tree's trunk (where
+ * its roots are), -1 where it is not rooting ground. */
 float soil_moisture(const Soil *soil, const Map *map, int x, int y, int z);
 
 /* How wet a tile's ground is in words, a translation key (dry, fairly dry,
  * moist, wet, soaked), NULL where it is not rooting ground. */
 #define SOIL_DRY_UNDER 0.2f
 #define SOIL_FAIRLY_DRY_UNDER 0.5f
-#define SOIL_MOIST_UP_TO 1.05f
-#define SOIL_SOAKED_FROM 0.9f /* Of the way to saturation. */
+#define SOIL_MOIST_UP_TO 1.1f
+#define SOIL_SOAKED_FROM 1.8f
 const char *soil_moisture_key(const Soil *soil, const Map *map, int x, int y, int z);
 
-/* The water target a tile's bank gives it, in mm (0: no water near). */
+/* The moisture a tile's bank gives it at `distance` tiles from open water
+ * (0: no water near), and that target in mm of a bucket. */
+float soil_bank_moisture(int distance);
 float soil_bank_target(const SoilDef *def, int distance);
 
 uint64_t soil_hash(const Soil *soil, uint64_t hash);

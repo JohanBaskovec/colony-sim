@@ -773,7 +773,8 @@ static void mushrooms_day(Game *game, size_t index, int day)
 /* Once a day per plant (docs/PLANTS.md §13): a grown plant that is awake
  * sends out a runner or a seed with its `spread_chance` (rolled from the seed,
  * the tile and the day, leaving the game's random stream alone), and a young
- * plant takes root where it lands if the tile suits it and nothing of the
+ * plant takes root where it lands if the tile suits it, its ground is neither
+ * too dry nor too wet for it now (docs/CLIMATE.md §6), and nothing of the
  * colony is on it (an item, a stockpile, a workstation, a building site, an
  * order). */
 static void spread_day(Game *game, size_t index, int day)
@@ -796,6 +797,10 @@ static void spread_day(Game *game, size_t index, int day)
         workstation_at(&game->workstations, tx, ty, z) >= 0 ||
         construction_at(&game->constructions, tx, ty, z) != CONSTRUCTION_NONE ||
         designation_get(&game->designations, tx, ty, z) != DESIGNATION_NONE) {
+        return;
+    }
+    float moisture = soil_moisture(&game->soil, map, tx, ty, z);
+    if (moisture >= -0.5f && plant_water_response((PlantType)plant->type, moisture) <= 0.0f) {
         return;
     }
     map->plants[map_index(map, tx, ty, z)] = plant_offspring(plant);
@@ -992,11 +997,14 @@ PlantConditions game_plant_conditions(const Game *game, int x, int y, int z)
 {
     const Map *map = &game->map;
     size_t index = map_index(map, x, y, z);
+    float moisture = soil_moisture(&game->soil, map, x, y, z);
     return (PlantConditions){
         .temperature = temperature_for_plant(&game->temperatures, map, x, y, z),
         .fertility = terrain_def((Terrain)map->terrain[index])->fertility,
         .light = game_light_at(game, x, y, z),
         .light_peak = game_light_peak_at(game, x, y, z),
+        .moisture = moisture,
+        .moisture_known = moisture >= -0.5f,
     };
 }
 

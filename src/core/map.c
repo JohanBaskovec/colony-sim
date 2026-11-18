@@ -59,6 +59,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_GRASS] = {.id = "grass",
                      .name_key = N_("plant.grass"),
                      .transpiration = 1.0f,
+                     .water = {0.05f, 0.5f, 1.4f, 2.2f, 20.0f, 10.0f},
                      .spread_chance = 0.15f,
                      .spread_growth = 0.5f,
                      .spread_range = 1,
@@ -91,6 +92,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_TREE] = {.id = "tree",
                     .name_key = N_("plant.tree"),
                     .transpiration = 1.0f,
+                    .water = {0.0f, 0.3f, 1.3f, 1.9f, 60.0f, 30.0f},
                     .spread_chance = 0.03f,
                     .spread_growth = 1.0f,
                     .spread_range = 4,
@@ -116,6 +118,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_HAZEL] = {.id = "hazel",
                      .name_key = N_("plant.hazel"),
                      .transpiration = 1.0f,
+                     .water = {0.05f, 0.4f, 1.3f, 1.9f, 40.0f, 20.0f},
                      .spread_chance = 0.03f,
                      .spread_growth = 1.0f,
                      .spread_range = 3,
@@ -143,6 +146,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_BRAMBLE] = {.id = "bramble",
                        .name_key = N_("plant.bramble"),
                        .transpiration = 1.0f,
+                       .water = {0.05f, 0.4f, 1.4f, 1.9f, 30.0f, 15.0f},
                        .spread_chance = 0.06f,
                        .spread_growth = 0.6f,
                        .spread_range = 1,
@@ -170,6 +174,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_WILD_GARLIC] = {.id = "wild_garlic",
                            .name_key = N_("plant.wild_garlic"),
                            .transpiration = 0.8f,
+                           .water = {0.1f, 0.7f, 1.6f, 2.1f, 10.0f, 20.0f},
                            .spread_chance = 0.04f,
                            .spread_growth = 0.6f,
                            .spread_range = 1,
@@ -199,6 +204,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_NETTLE] = {.id = "nettle",
                       .name_key = N_("plant.nettle"),
                       .transpiration = 1.0f,
+                      .water = {0.1f, 0.7f, 1.6f, 2.1f, 15.0f, 15.0f},
                       .spread_chance = 0.08f,
                       .spread_growth = 0.6f,
                       .spread_range = 1,
@@ -224,6 +230,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_PLANTAIN] = {.id = "plantain",
                         .name_key = N_("plant.plantain"),
                         .transpiration = 0.8f,
+                        .water = {0.05f, 0.4f, 1.4f, 2.1f, 25.0f, 15.0f},
                         .spread_chance = 0.06f,
                         .spread_growth = 0.6f,
                         .spread_range = 2,
@@ -252,6 +259,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_WILD_CARROT] = {.id = "wild_carrot",
                            .name_key = N_("plant.wild_carrot"),
                            .transpiration = 0.8f,
+                           .water = {0.0f, 0.3f, 1.2f, 1.8f, 30.0f, 8.0f},
                            .spread_chance = 0.04f,
                            .spread_growth = 0.8f,
                            .spread_range = 2,
@@ -282,6 +290,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_CATTAIL] = {.id = "cattail",
                        .name_key = N_("plant.cattail"),
                        .transpiration = 1.2f,
+                       .water = {1.3f, 1.8f, 3.0f, 3.5f, 15.0f, 30.0f},
                        .spread_chance = 0.08f,
                        .spread_growth = 0.6f,
                        .spread_range = 1,
@@ -330,6 +339,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
         {.id = "moss",
          .name_key = N_("plant.moss"),
          .transpiration = 0.4f,
+         .water = {0.0f, 0.6f, 1.9f, 2.5f, 60.0f, 20.0f},
          .spread_chance = 0.05f,
          .spread_growth = 0.5f,
          .spread_range = 1,
@@ -354,6 +364,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_WOOD_SORREL] = {.id = "wood_sorrel",
                            .name_key = N_("plant.wood_sorrel"),
                            .transpiration = 0.6f,
+                           .water = {0.1f, 0.6f, 1.5f, 2.0f, 10.0f, 15.0f},
                            .spread_chance = 0.06f,
                            .spread_growth = 0.5f,
                            .spread_range = 1,
@@ -382,6 +393,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_BRACKEN] = {.id = "bracken",
                        .name_key = N_("plant.bracken"),
                        .transpiration = 1.0f,
+                       .water = {0.1f, 0.4f, 1.2f, 1.6f, 25.0f, 6.0f},
                        .spread_chance = 0.08f,
                        .spread_growth = 0.6f,
                        .spread_range = 1,
@@ -411,6 +423,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_WILD_STRAWBERRY] = {.id = "wild_strawberry",
                                .name_key = N_("plant.wild_strawberry"),
                                .transpiration = 0.7f,
+                               .water = {0.05f, 0.5f, 1.3f, 1.8f, 15.0f, 10.0f},
                                .spread_chance = 0.12f,
                                .spread_growth = 0.5f,
                                .spread_range = 1,
@@ -439,6 +452,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_BILBERRY] = {.id = "bilberry",
                         .name_key = N_("plant.bilberry"),
                         .transpiration = 0.6f,
+                        .water = {0.1f, 0.6f, 1.4f, 1.7f, 15.0f, 8.0f},
                         .spread_chance = 0.03f,
                         .spread_growth = 0.7f,
                         .spread_range = 1,
@@ -470,6 +484,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_DOG_ROSE] = {.id = "dog_rose",
                         .name_key = N_("plant.dog_rose"),
                         .transpiration = 0.9f,
+                        .water = {0.0f, 0.3f, 1.2f, 1.8f, 40.0f, 10.0f},
                         .spread_chance = 0.02f,
                         .spread_growth = 0.8f,
                         .spread_range = 3,
@@ -497,6 +512,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_HEATHER] = {.id = "heather",
                        .name_key = N_("plant.heather"),
                        .transpiration = 0.6f,
+                       .water = {0.0f, 0.2f, 1.1f, 1.5f, 40.0f, 6.0f},
                        .spread_chance = 0.03f,
                        .spread_growth = 0.7f,
                        .spread_range = 2,
@@ -526,6 +542,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_REED] = {.id = "reed",
                     .name_key = N_("plant.reed"),
                     .transpiration = 1.2f,
+                    .water = {1.2f, 1.7f, 3.0f, 3.5f, 20.0f, 30.0f},
                     .spread_chance = 0.08f,
                     .spread_growth = 0.6f,
                     .spread_range = 1,
@@ -697,6 +714,53 @@ float plant_light_response(PlantType type, float light)
     return clampf((light - def->light_min) / (def->light_full - def->light_min), 0.0f, 1.0f);
 }
 
+float plant_water_response(PlantType type, float moisture)
+{
+    if ((unsigned)type >= PLANT_COUNT) {
+        return 0.0f;
+    }
+    const PlantWater *water = &PLANT_DEFS[type].water;
+    if (water->max <= water->min) {
+        return 1.0f; /* Needs nothing. */
+    }
+    if (moisture <= water->min || moisture >= water->max) {
+        return 0.0f;
+    }
+    if (moisture < water->opt_low) {
+        return (moisture - water->min) / (water->opt_low - water->min);
+    }
+    if (moisture > water->opt_high) {
+        return (water->max - moisture) / (water->max - water->opt_high);
+    }
+    return 1.0f;
+}
+
+/* The water a plant meets, 0 .. 1: 1 when its ground is not known. */
+static float water_response(const Plant *plant, const PlantConditions *conditions)
+{
+    return conditions->moisture_known
+               ? plant_water_response((PlantType)plant->type, conditions->moisture)
+               : 1.0f;
+}
+
+/* What drought or drowning roots take of a plant's health in an hour (0:
+ * nothing). Only an awake plant dries out; drowning reaches a resting one. */
+static float water_harm(const PlantDef *def, PlantState state, const PlantConditions *conditions)
+{
+    const PlantWater *water = &def->water;
+    if (!conditions->moisture_known || water->max <= water->min) {
+        return 0.0f;
+    }
+    if (state == PLANT_STATE_AWAKE && conditions->moisture < water->min &&
+        water->drought_days > 0.0f) {
+        return 1.0f / (water->drought_days * (float)HOURS_PER_DAY);
+    }
+    if (conditions->moisture > water->max && water->flood_days > 0.0f) {
+        return 1.0f / (water->flood_days * (float)HOURS_PER_DAY);
+    }
+    return 0.0f;
+}
+
 float plant_frost_limit(const Plant *plant)
 {
     const PlantDef *def = &PLANT_DEFS[plant->type];
@@ -825,6 +889,8 @@ static bool advance_hour(Plant *plant, const PlantDef *def, const PlantCondition
             harm = PLANT_FROST_DAMAGE * (limit - temperature);
         } else if (temperature > def->t_lethal_heat) {
             harm = PLANT_HEAT_DAMAGE * (temperature - def->t_lethal_heat);
+        } else if ((harm = water_harm(def, state, conditions)) > 0.0f) {
+            /* Drying out, or drowning. */
         } else if (state == PLANT_STATE_AWAKE && def->dark_days > 0.0f &&
                    conditions->light_peak < def->light_min) {
             harm = 1.0f / (def->dark_days * (float)HOURS_PER_DAY); /* Starving in the dark. */
@@ -854,7 +920,7 @@ static bool advance_hour(Plant *plant, const PlantDef *def, const PlantCondition
         float rate = def->growth_per_day / PLANT_BEST_DAY_HOURS * fertility *
                      plant_temperature_response((PlantType)plant->type, temperature) *
                      plant_light_response((PlantType)plant->type, conditions->light) *
-                     plant_health(plant);
+                     water_response(plant, conditions) * plant_health(plant);
         plant->growth = fminf(plant->growth + rate, 1.0f);
     }
     return true;
@@ -893,7 +959,7 @@ float plant_growth_rate(const Plant *plant, const PlantConditions *conditions)
     return def->growth_per_day * fertility *
            plant_temperature_response((PlantType)plant->type, conditions->temperature) *
            plant_light_response((PlantType)plant->type, conditions->light_peak) *
-           plant_health(plant);
+           water_response(plant, conditions) * plant_health(plant);
 }
 
 const char *plant_status_name_key(PlantStatus status)
@@ -908,6 +974,10 @@ const char *plant_status_name_key(PlantStatus status)
         [PLANT_STATUS_TOO_HOT] = N_("plant.status.too_hot"),
         [PLANT_STATUS_FROST] = N_("plant.status.frost"),
         [PLANT_STATUS_HEAT] = N_("plant.status.heat"),
+        [PLANT_STATUS_SLOWED_DRY] = N_("plant.status.slowed_dry"),
+        [PLANT_STATUS_SLOWED_WET] = N_("plant.status.slowed_wet"),
+        [PLANT_STATUS_DROUGHT] = N_("plant.status.drought"),
+        [PLANT_STATUS_WATERLOGGED] = N_("plant.status.waterlogged"),
         [PLANT_STATUS_RESTING] = N_("plant.status.resting"),
         [PLANT_STATUS_DIED_BACK] = N_("plant.status.died_back"),
     };
@@ -930,6 +1000,10 @@ PlantStatus plant_status(const Plant *plant, const PlantConditions *conditions)
     if (temperature > def->t_lethal_heat) {
         return PLANT_STATUS_HEAT;
     }
+    if (water_harm(def, PLANT_STATE_AWAKE, conditions) > 0.0f) {
+        return conditions->moisture < def->water.min ? PLANT_STATUS_DROUGHT
+                                                     : PLANT_STATUS_WATERLOGGED;
+    }
     float response = plant_temperature_response((PlantType)plant->type, temperature);
     if (response <= 0.0f) {
         return temperature < def->t_opt_low ? PLANT_STATUS_TOO_COLD : PLANT_STATUS_TOO_HOT;
@@ -940,6 +1014,10 @@ PlantStatus plant_status(const Plant *plant, const PlantConditions *conditions)
     }
     if (response < 1.0f) {
         return temperature < def->t_opt_low ? PLANT_STATUS_SLOWED_COLD : PLANT_STATUS_SLOWED_HOT;
+    }
+    if (water_response(plant, conditions) < 1.0f) {
+        return conditions->moisture < def->water.opt_low ? PLANT_STATUS_SLOWED_DRY
+                                                         : PLANT_STATUS_SLOWED_WET;
     }
     return light < 1.0f ? PLANT_STATUS_SLOWED_DARK : PLANT_STATUS_GROWING;
 }

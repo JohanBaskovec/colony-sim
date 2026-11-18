@@ -1,4 +1,5 @@
 #include "core/game.h"
+#include "core/soil.h"
 
 #include "test_framework.h"
 
@@ -376,6 +377,52 @@ static void test_grass_spreads_into_bare_ground(void)
     game_shutdown(&game);
 }
 
+/* A plant does not take root where its ground is too dry for it
+ * (docs/CLIMATE.md §6): grass fills the moist side, not the parched one. */
+static void test_plants_do_not_spread_onto_parched_ground(void)
+{
+    Game game;
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = 5;
+    params.world.width = 64;
+    params.world.height = 64;
+    params.world.flat = true;
+    params.colonist_count = 0;
+    REQUIRE(game_init(&game, &params));
+    Map *map = &game.map;
+    memset(map->plants, 0, map_level_tile_count(map) * sizeof(*map->plants));
+    for (int y = 20; y <= 40; y++) {
+        for (int x = 15; x <= 30; x++) {
+            map_set_terrain(map, x, y, 0, TERRAIN_SOIL);
+        }
+    }
+    for (int y = 25; y <= 35; y++) {
+        map->plants[map_index(map, 22, y, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    }
+    const SoilDef *loam = soil_def(TERRAIN_SOIL);
+    for (int day = 0; day < 20; day++) {
+        for (int y = 20; y <= 40; y++) {
+            for (int x = 15; x <= 30; x++) { /* West parched, east moist. */
+                game.soil.water[map_index(map, x, y, 0)] =
+                    x < 22 ? 0.9f * loam->wilting : loam->capacity;
+            }
+        }
+        game.clock.tick = (uint64_t)(SEASON_DAY(SEASON_SUMMER, 1) + day) * TICKS_PER_DAY;
+        for (int tick = 0; tick < TICKS_PER_HOUR; tick++) {
+            game_tick(&game);
+        }
+    }
+    int west = 0, east = 0;
+    for (int y = 20; y <= 40; y++) {
+        west += map->plants[map_index(map, 21, y, 0)].type == PLANT_GRASS;
+        east += map->plants[map_index(map, 23, y, 0)].type == PLANT_GRASS;
+    }
+    CHECK_EQ_INT(west, 0);
+    CHECK(east >= 4);
+    game_shutdown(&game);
+}
+
 /* The crowns of deciduous trees follow the climate their trees live in: in
  * full leaf in summer, bare in winter, in between in spring and autumn, and
  * the light under them follows (docs/PLANTS.md §12). */
@@ -738,6 +785,7 @@ int main(void)
     RUN_TEST(test_plant_conditions);
     RUN_TEST(test_crowns_lose_their_leaves_in_the_cold);
     RUN_TEST(test_grass_spreads_into_bare_ground);
+    RUN_TEST(test_plants_do_not_spread_onto_parched_ground);
     RUN_TEST(test_plant_growth_is_spread_over_ticks);
     RUN_TEST(test_simulation_is_deterministic);
     RUN_TEST(test_hash_changes_as_simulation_runs);

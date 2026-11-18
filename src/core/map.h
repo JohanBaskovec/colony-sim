@@ -160,6 +160,21 @@ typedef enum PlantRest {
                              shown) and the roots wait for the warmth. */
 } PlantRest;
 
+/* What a plant needs of the water in its ground (docs/CLIMATE.md §6), in
+ * moisture (core/soil.h: 0 at the wilting point, 1 at field capacity, 2
+ * saturated, PLANT_MOISTURE_STANDING in open water): it grows fully from
+ * `opt_low` to `opt_high`, less towards `min` and `max`, not at all beyond;
+ * below `min` while awake it dries out and dies after `drought_days`, above
+ * `max` its roots drown and it dies after `flood_days`. All 0: it needs
+ * nothing (mushrooms). */
+typedef struct PlantWater {
+    float min, opt_low, opt_high, max;
+    float drought_days, flood_days;
+} PlantWater;
+
+/* The moisture of open water, for the plants that stand in it. */
+#define PLANT_MOISTURE_STANDING 3.0f
+
 typedef struct PlantDef {
     const char *id;
     const char *name_key;
@@ -227,6 +242,7 @@ typedef struct PlantDef {
      * (docs/CLIMATE.md §3.4): 1 for a meadow's grass, less for a sparse or
      * small-leaved plant, 0 for what has no leaves (mushrooms). */
     float transpiration;
+    PlantWater water;
 } PlantDef;
 
 /* Whether a plant type is a tree (takes room once grown, see core/tree.h). */
@@ -308,6 +324,10 @@ typedef struct PlantConditions {
      * even that is low. */
     float light;
     float light_peak;
+    /* The moisture of its ground (PlantWater), when known: without it (a
+     * plant in a test, ground the soil does not follow) water plays no part. */
+    float moisture;
+    bool moisture_known;
 } PlantConditions;
 
 /* What a plant is up to, for the player (the plant window). */
@@ -319,8 +339,12 @@ typedef enum PlantStatus {
     PLANT_STATUS_TOO_COLD,    /* Too cold to grow, or too hot, or too dark. */
     PLANT_STATUS_TOO_HOT,
     PLANT_STATUS_TOO_DARK,
-    PLANT_STATUS_FROST, /* Suffering from frost. */
-    PLANT_STATUS_HEAT,  /* Suffering from heat. */
+    PLANT_STATUS_SLOWED_DRY, /* Its ground is drier than it likes. */
+    PLANT_STATUS_SLOWED_WET,
+    PLANT_STATUS_FROST,       /* Suffering from frost. */
+    PLANT_STATUS_HEAT,        /* Suffering from heat. */
+    PLANT_STATUS_DROUGHT,     /* Drying out. */
+    PLANT_STATUS_WATERLOGGED, /* Its roots drown. */
     PLANT_STATUS_RESTING,
     PLANT_STATUS_DIED_BACK,
     PLANT_STATUS_COUNT
@@ -523,6 +547,10 @@ float plant_temperature_response(PlantType type, float celsius);
 
 /* The response of a plant to the light, 0 .. 1 (docs/PLANTS.md §5). */
 float plant_light_response(PlantType type, float light);
+
+/* The response of a plant to the moisture of its ground, 0 .. 1 (PlantWater;
+ * 1 for a plant that needs nothing). */
+float plant_water_response(PlantType type, float moisture);
 
 /* Frost limit of a plant now: from its tender to its hardened one by its
  * hardening. */

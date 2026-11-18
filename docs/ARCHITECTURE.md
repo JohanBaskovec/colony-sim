@@ -1478,8 +1478,15 @@ water above field capacity drains, the crowns over a tile, the plant on it
 gets, dew condenses on cold clear nights, and the water table keeps the
 ground near open water wet (`Soil.wet`: the distance to water, rebuilt when
 `Map.water_revision` changes). What covers each tile (`canopy`) is looked up
-every `SOIL_CANOPY_HOURS`. The tile inspector shows the moisture in words
-(`soil_moisture_key()`); plants do not use it yet (C3).
+every `SOIL_CANOPY_HOURS`. The moisture (`soil_moisture()`) is one scale for
+every terrain: 0 at the wilting point, 1 at field capacity, 2 saturated, 3 in
+open water; the tile inspector shows it in words (`soil_moisture_key()`).
+Plants feel it (`docs/CLIMATE.md` §6): `game_plant_conditions()` passes it in
+`PlantConditions.moisture`, and each plant's `PlantDef.water` (`PlantWater`)
+gives its growth a plateau of moisture and sets when it dries out or its
+roots drown (`plant_water_response()`, health worn down in
+`plant_advance()`); spreading skips ground too dry or too wet, and world
+generation places plants by the moisture their ground is expected to hold.
 
 What settlers feel is not only the air: a burning fire radiates warmth
 (`hearths_radiant_warmth()`: `HEARTH_RADIANT_WARMTH` one tile away, falling

@@ -37,20 +37,34 @@ static const SoilDef *tile_def(const Map *map, size_t index)
     return soil_def((Terrain)map->terrain[index]);
 }
 
-float soil_bank_target(const SoilDef *def, int distance)
+float soil_moisture_of(const SoilDef *def, float water)
+{
+    if (water <= def->capacity) {
+        return (water - def->wilting) / (def->capacity - def->wilting);
+    }
+    return 1.0f + (water - def->capacity) / (def->saturation - def->capacity);
+}
+
+float soil_water_for(const SoilDef *def, float moisture)
+{
+    if (moisture <= 1.0f) {
+        return def->wilting + moisture * (def->capacity - def->wilting);
+    }
+    return def->capacity + (moisture - 1.0f) * (def->saturation - def->capacity);
+}
+
+float soil_bank_moisture(int distance)
 {
     /* Saturated next to the water, half-way at 2, field capacity at 3 and 4,
-     * fading to nothing at SOIL_WET_FAR - 1. */
-    switch (distance) {
-    case 0:
-    case 1: return def->saturation;
-    case 2: return def->capacity + 0.5f * (def->saturation - def->capacity);
-    case 3:
-    case 4: return def->capacity;
-    case 5: return def->capacity * 0.75f;
-    case 6: return def->capacity * 0.5f;
-    default: return 0.0f;
-    }
+     * fading to nothing at SOIL_WET_FAR. */
+    static const float BY_DISTANCE[SOIL_WET_FAR] = {2.0f, 2.0f, 1.5f, 1.0f, 1.0f, 0.7f, 0.4f};
+    return distance >= 0 && distance < SOIL_WET_FAR ? BY_DISTANCE[distance] : 0.0f;
+}
+
+float soil_bank_target(const SoilDef *def, int distance)
+{
+    float moisture = soil_bank_moisture(distance);
+    return moisture > 0.0f ? soil_water_for(def, moisture) : 0.0f;
 }
 
 /* Whether a tile counts as open water for the banks of level z: water on it,
@@ -210,10 +224,34 @@ void soil_look_up(Soil *soil, const Map *map, size_t first, size_t last)
     }
 }
 
+/* The rooting ground nearest the foot of a trunk (`index`, ROCK_WOOD), where
+ * its roots spread: two tiles at most, a trunk can be two wide. SIZE_MAX if
+ * none. */
+static size_t beside_trunk(const Map *map, size_t index)
+{
+    int x, y, z;
+    map_tile_of(map, index, &x, &y, &z);
+    while (z > 0 && map->rock[map_index(map, x, y, z - 1)] == ROCK_WOOD) {
+        z--; /* Down to its foot. */
+    }
+    for (int ring = 1; ring <= 2; ring++) {
+        for (int dy = -ring; dy <= ring; dy++) {
+            for (int dx = -ring; dx <= ring; dx++) {
+                if ((abs(dx) == ring || abs(dy) == ring) && map_in_bounds(map, x + dx, y + dy, z)) {
+                    size_t side = map_index(map, x + dx, y + dy, z);
+                    if (tile_def(map, side) != NULL) {
+                        return side;
+                    }
+                }
+            }
+        }
+    }
+    return SIZE_MAX;
+}
+
 /* The ground a crown's roots draw from: the first tile under foliage that is
- * neither open space, foliage nor trunk; under the trunk, the nearest rooting
- * ground beside its foot (two tiles at most: a trunk can be two wide).
- * SIZE_MAX if none. */
+ * neither open space, foliage nor trunk; under the trunk, the ground beside
+ * its foot. SIZE_MAX if none. */
 static size_t ground_under(const Map *map, size_t index)
 {
     size_t level = map_level_tile_count(map);
@@ -224,26 +262,7 @@ static size_t ground_under(const Map *map, size_t index)
         if (terrain == TERRAIN_OPEN || (rock == ROCK_NONE && terrain_is_foliage(terrain))) {
             continue; /* Open space, foliage, the trunk over its foot. */
         }
-        if (rock != ROCK_WOOD) {
-            return index;
-        }
-        /* The foot of the trunk: its roots spread around it. */
-        int x, y, z;
-        map_tile_of(map, index, &x, &y, &z);
-        for (int ring = 1; ring <= 2; ring++) {
-            for (int dy = -ring; dy <= ring; dy++) {
-                for (int dx = -ring; dx <= ring; dx++) {
-                    if ((abs(dx) == ring || abs(dy) == ring) &&
-                        map_in_bounds(map, x + dx, y + dy, z)) {
-                        size_t side = map_index(map, x + dx, y + dy, z);
-                        if (tile_def(map, side) != NULL) {
-                            return side;
-                        }
-                    }
-                }
-            }
-        }
-        return SIZE_MAX;
+        return rock == ROCK_WOOD ? beside_trunk(map, index) : index;
     }
     return SIZE_MAX;
 }
@@ -305,6 +324,9 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
             continue;
         }
         float water = soil->water[i];
+        if (water == 0.0f) {
+            water = def->capacity; /* Ground opened since: as damp as fresh earth. */
+        }
 
         /* Rain through the crowns, and snowmelt. */
         if (!covered) {
@@ -314,12 +336,13 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
             input = fminf(input, def->intake);
             water += fminf(input, fmaxf(def->saturation - water, 0.0f));
         }
-        /* Drainage above field capacity. */
-        if (water > def->capacity) {
-            water -= (water - def->capacity) * def->drainage;
-        }
-        /* The water table near open water. */
+        /* Drainage above field capacity, down to the water table near open
+         * water, which draws the ground up towards it. */
         float target = soil_bank_target(def, soil->wet[i]);
+        float drained = fmaxf(def->capacity, target);
+        if (water > drained) {
+            water -= (water - drained) * def->drainage;
+        }
         if (water < target) {
             water += (target - water) * SOIL_BANK_RATE;
         }
@@ -336,7 +359,7 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
             float bare = canopy * (1.0f - leaf) * SOIL_BARE_EVAPORATION * top * top;
             lost = hour->pet * (crowns + plant + bare);
         }
-        lost = fminf(lost, water);
+        lost = fminf(lost, 0.9f * water); /* Never quite dry: 0 means not followed. */
         water -= lost;
         /* Dew on cold open ground at night. */
         if (!covered && hour->night && temperature != NULL && temperature[i] < hour->dew_point) {
@@ -354,21 +377,30 @@ float soil_moisture(const Soil *soil, const Map *map, int x, int y, int z)
         return -1.0f;
     }
     size_t index = map_index(map, x, y, z);
+    if (map->rock[index] == ROCK_WOOD) {
+        index = beside_trunk(map, index);
+        if (index == SIZE_MAX) {
+            return -1.0f;
+        }
+    } else if (map_is_water(map, x, y, z)) {
+        return PLANT_MOISTURE_STANDING;
+    }
     const SoilDef *def = tile_def(map, index);
-    if (def == NULL) {
+    if (def == NULL || soil->water[index] == 0.0f) {
         return -1.0f;
     }
-    return (soil->water[index] - def->wilting) / (def->capacity - def->wilting);
+    return soil_moisture_of(def, soil->water[index]);
 }
 
 const char *soil_moisture_key(const Soil *soil, const Map *map, int x, int y, int z)
 {
+    if (!map_in_bounds(map, x, y, z) || tile_def(map, map_index(map, x, y, z)) == NULL) {
+        return NULL; /* Not rooting ground (water, stone, a trunk...). */
+    }
     float moisture = soil_moisture(soil, map, x, y, z);
     if (moisture < -0.5f) {
         return NULL;
     }
-    const SoilDef *def = tile_def(map, map_index(map, x, y, z));
-    float saturated = (def->saturation - def->wilting) / (def->capacity - def->wilting);
     if (moisture < SOIL_DRY_UNDER) {
         return N_("soil.dry");
     }
@@ -378,7 +410,7 @@ const char *soil_moisture_key(const Soil *soil, const Map *map, int x, int y, in
     if (moisture <= SOIL_MOIST_UP_TO) {
         return N_("soil.moist");
     }
-    return moisture < SOIL_SOAKED_FROM * saturated ? N_("soil.wet") : N_("soil.soaked");
+    return moisture < SOIL_SOAKED_FROM ? N_("soil.wet") : N_("soil.soaked");
 }
 
 uint64_t soil_hash(const Soil *soil, uint64_t hash)

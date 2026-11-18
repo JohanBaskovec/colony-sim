@@ -128,6 +128,44 @@ static void test_crowns_and_roofs_keep_rain_off(void)
     map_free(&map);
 }
 
+/* One moisture scale for every terrain: 0 at the wilting point, 1 at field
+ * capacity, 2 saturated; open water is standing water, a trunk has the
+ * moisture of the ground its roots are in; ground opened since the start is
+ * unknown until its first hour, then as damp as fresh earth. */
+static void test_moisture_scale(void)
+{
+    static const Terrain GROUND[] = {TERRAIN_SAND, TERRAIN_GRAVEL, TERRAIN_SOIL, TERRAIN_RICH_SOIL};
+    for (size_t i = 0; i < sizeof(GROUND) / sizeof(GROUND[0]); i++) {
+        const SoilDef *def = soil_def(GROUND[i]);
+        CHECK_NEAR(soil_moisture_of(def, def->wilting), 0.0, 1e-5);
+        CHECK_NEAR(soil_moisture_of(def, def->capacity), 1.0, 1e-5);
+        CHECK_NEAR(soil_moisture_of(def, def->saturation), SOIL_MOISTURE_SATURATED, 1e-5);
+        for (float m = -0.2f; m <= 2.0f; m += 0.3f) {
+            CHECK_NEAR(soil_moisture_of(def, soil_water_for(def, m)), m, 1e-4);
+        }
+    }
+    Map map;
+    flat_map(&map, 3);
+    map_set_terrain(&map, 0, 0, 0, TERRAIN_SHALLOW_WATER);
+    map.rock[map_index(&map, 8, 8, 0)] = ROCK_WOOD; /* A trunk, two levels high. */
+    map.rock[map_index(&map, 8, 8, 1)] = ROCK_WOOD;
+    map_set_rock(&map, 12, 12, 0, ROCK_GRANITE);
+    Soil soil;
+    REQUIRE(soil_init(&soil, &map, 0.5f));
+    CHECK_NEAR(soil_moisture(&soil, &map, 0, 0, 0), PLANT_MOISTURE_STANDING, 1e-6);
+    CHECK_NEAR(soil_moisture(&soil, &map, 8, 8, 1), 0.5, 1e-4);
+    CHECK(soil_moisture_key(&soil, &map, 8, 8, 0) == NULL);
+    CHECK(soil_moisture_key(&soil, &map, 0, 0, 0) == NULL);
+    /* The rock dug out: unknown, then fresh earth. */
+    map_set_rock(&map, 12, 12, 0, ROCK_NONE);
+    CHECK_NEAR(soil_moisture(&soil, &map, 12, 12, 0), -1.0, 1e-6);
+    SoilHour still = {0};
+    run_hours(&soil, &map, &still, 1);
+    CHECK_NEAR(soil_moisture(&soil, &map, 12, 12, 0), 1.0, 0.01);
+    soil_free(&soil);
+    map_free(&map);
+}
+
 /* Near open water the ground stays wet, whatever the sun does; farther
  * away it dries. */
 static void test_banks_stay_wet(void)
@@ -148,7 +186,11 @@ static void test_banks_stay_wet(void)
     }
     SoilHour sun = {.pet = 0.5f};
     run_hours(&soil, &map, &sun, 24 * 10);
-    CHECK(soil_moisture(&soil, &map, 1, 5, 0) > 1.0f);
+    /* Beside the water the water table holds it near saturation, which
+     * drainage does not go below; a tile farther has a lower table. */
+    CHECK(soil_moisture(&soil, &map, 1, 5, 0) > 1.8f);
+    CHECK(soil_moisture(&soil, &map, 2, 5, 0) > 1.3f);
+    CHECK(soil_moisture(&soil, &map, 2, 5, 0) < 1.6f);
     CHECK(soil_moisture(&soil, &map, 3, 5, 0) > 0.6f);
     CHECK(soil_moisture(&soil, &map, 12, 5, 0) < 0.1f);
     /* Dug away: the bank moves with the water. */
@@ -327,6 +369,7 @@ int main(void)
     RUN_TEST(test_sun_dries_the_ground);
     RUN_TEST(test_crowns_and_roofs_keep_rain_off);
     RUN_TEST(test_crowns_transpire_from_the_ground);
+    RUN_TEST(test_moisture_scale);
     RUN_TEST(test_banks_stay_wet);
     RUN_TEST(test_snow_melts_into_the_ground);
     RUN_TEST(test_dew_at_night);
