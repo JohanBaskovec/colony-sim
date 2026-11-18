@@ -926,8 +926,17 @@ static void settler_died(Game *game, uint32_t slot)
     _Static_assert(NOTICE_NAME_SIZE >= COLONIST_NAME_SIZE, "a settler's name fits in a notice");
     char name[NOTICE_NAME_SIZE] = {0};
     memcpy(name, dead->name, sizeof(dead->name));
-    NoticeType notice =
-        dead->health.death == DEATH_BLOOD_LOSS ? NOTICE_DEATH_BLOOD_LOSS : NOTICE_DEATH_INJURY;
+    static const NoticeType DEATH_NOTICES[DEATH_CAUSE_COUNT] = {
+        [DEATH_BLOOD_LOSS] = NOTICE_DEATH_BLOOD_LOSS,
+        [DEATH_VITAL_PART] = NOTICE_DEATH_INJURY,
+        [DEATH_STARVATION] = NOTICE_DEATH_STARVATION,
+        [DEATH_DEHYDRATION] = NOTICE_DEATH_DEHYDRATION,
+        [DEATH_HYPOTHERMIA] = NOTICE_DEATH_HYPOTHERMIA,
+        [DEATH_HEATSTROKE] = NOTICE_DEATH_HEATSTROKE,
+    };
+    NoticeType notice = (unsigned)dead->health.death < DEATH_CAUSE_COUNT
+                            ? DEATH_NOTICES[dead->health.death]
+                            : NOTICE_DEATH_INJURY;
     for (uint32_t other = 0; other < game_colonist_slot_count(game); other++) {
         Colonist *mourner = &game->colonists[other];
         if (other == slot || entity_id_is_none(game_colonist_id_at(game, other)) ||
@@ -1133,6 +1142,7 @@ static void update_animals(Game *game)
         .settler_count = settler_count,
         .combat = &game->combat,
         .items = &game->items,
+        .temperatures = &game->temperatures,
     };
     animals_tick(&game->animals, &context);
     /* The dead leave their carcass where they fell; their herd follows

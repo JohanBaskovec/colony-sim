@@ -156,7 +156,10 @@ rows):
   to walk, unconscious, in red once hurt); once hurt, the blood as a bar
   (empty where it kills), the bleeding per hour, the pain, what the body can
   do (each ability in percent, white at 100, red toward 0), then each injury:
-  the part, the kind and how bad (in percent of the part, white to red). An
+  the part, the kind and how bad (in percent of the part, white to red). Above
+  the abilities, each deprivation above 0 (hunger, thirst, hypothermia,
+  heatstroke) with its severity and a tooltip; the state reads *Weakened* when
+  nothing else is wrong. An
   injury's tooltip says whether it is serious (it bleeds on), clotting or
   healing. A hurt settler's portrait in the colonist bar bears a cross, red
   while it bleeds or is down.

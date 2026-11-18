@@ -30,6 +30,10 @@ typedef enum NoticeType {
      * vital part. */
     NOTICE_DEATH_BLOOD_LOSS,
     NOTICE_DEATH_INJURY,
+    NOTICE_DEATH_STARVATION, /* Of hunger, thirst, cold or heat. */
+    NOTICE_DEATH_DEHYDRATION,
+    NOTICE_DEATH_HYPOTHERMIA,
+    NOTICE_DEATH_HEATSTROKE,
     NOTICE_COLONY_LOST,      /* The last settler died. */
     NOTICE_SETTLER_ATTACKED, /* An animal went for a settler (docs/COMBAT.md). */
     NOTICE_TYPE_COUNT

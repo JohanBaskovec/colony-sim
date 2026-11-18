@@ -534,6 +534,22 @@ typedef struct ColonistContext {
 #define COLONIST_SPEAR_SKILL_MIN 0.8f
 #define COLONIST_SPEAR_SKILL_MAX 1.3f
 
+/* Deprivation (docs/HEALTH.md §10): every COLONIST_STRAIN_TICKS the settler's
+ * food and water at 0, and the temperature it feels, press on its body. It
+ * freezes below COLONIST_HYPOTHERMIA_CELSIUS (lower with cold tolerance),
+ * full pressure COLONIST_COLD_SPAN degrees below; it overheats above
+ * COLONIST_HEATSTROKE_CELSIUS (higher with heat tolerance), full pressure
+ * COLONIST_HEAT_SPAN degrees above. */
+#define COLONIST_STRAIN_TICKS 25
+#define COLONIST_HYPOTHERMIA_CELSIUS 0.0f
+#define COLONIST_COLD_SPAN 15.0f
+#define COLONIST_HEATSTROKE_CELSIUS 36.0f
+#define COLONIST_HEAT_SPAN 10.0f
+
+/* The pressure (0..1) a felt temperature puts on the settler's body. */
+float colonist_cold_pressure(const Colonist *colonist, float felt_celsius);
+float colonist_heat_pressure(const Colonist *colonist, float felt_celsius);
+
 /* A settler was struck (or attacked) by `attacker`: it will fight or flee at its
  * next turn. Returns true when it had no enemy before. */
 bool colonist_provoke(Colonist *colonist, Combatant attacker);

@@ -38,6 +38,10 @@ const char *notice_text_key(NoticeType type)
         [NOTICE_BREAK_BINGE] = N_("notice.break_binge"),
         [NOTICE_DEATH_BLOOD_LOSS] = N_("notice.death_blood_loss"),
         [NOTICE_DEATH_INJURY] = N_("notice.death_injury"),
+        [NOTICE_DEATH_STARVATION] = N_("notice.death_starvation"),
+        [NOTICE_DEATH_DEHYDRATION] = N_("notice.death_dehydration"),
+        [NOTICE_DEATH_HYPOTHERMIA] = N_("notice.death_hypothermia"),
+        [NOTICE_DEATH_HEATSTROKE] = N_("notice.death_heatstroke"),
         [NOTICE_COLONY_LOST] = N_("notice.colony_lost"),
         [NOTICE_SETTLER_ATTACKED] = N_("notice.settler_attacked"),
     };

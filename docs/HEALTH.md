@@ -3,8 +3,8 @@
 Bodies, injuries, bleeding, pain, death and healing, for settlers and wild
 animals alike: a deer and a settler are hurt the same way (`core/health.h`).
 
-Status: step A is implemented; steps B (needs that harm) and C (care) are
-design. Values marked *(tuning)* are first guesses.
+Status: steps A (injuries) and B (deprivation) are implemented; step C
+(care) is design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -165,9 +165,55 @@ Each from 0 to 100 %:
 - Bodies are items (category *Bodies*, left out of stockpiles unless the
   player allows them): a settler's body, an animal's carcass by species.
 
-## 10. Later
+## 10. Deprivation (step B)
 
-- Step B: hunger, thirst, exhaustion, cold and heat that weaken, then kill.
+Needs and the weather that go unanswered wear a body down. Each of four
+**deprivations** (hunger, thirst, cold, heat) is a severity from 0 to 1 that
+grows while its cause lasts, recovers once it is gone, and kills at 1
+(`health_strain()`). Settlers and animals alike have them.
+
+| Deprivation | Cause | Grows | Recovers | Death |
+|-------------|-------|-------|----------|-------|
+| Hunger | food at 0 | to death in 96 h | in 48 h | starved |
+| Thirst | water at 0 | to death in 40 h | in 10 h | dehydrated |
+| Cold | felt temperature under 0 °C (5 °C lower with cold tolerance at +1) | pressure over 15 °C below it, to death in 14 h at full pressure | in 6 h | froze |
+| Heat | felt temperature over 36 °C (heat tolerance moves it) | pressure over 10 °C above it, to death in 10 h at full pressure | in 6 h | heatstroke |
+
+*(tuning)*. Food empties 36 h after a meal and water 24 h, so a settler
+without food is weak after a day beyond that, down on the third day and dead
+on the fifth; without water, dead on the third. Hunger and thirst count only at
+exactly 0; the weather counts every 25 ticks, with the temperature the settler
+feels (`COLONIST_STRAIN_TICKS`, wet or by a fire as for sleep).
+
+- **Animals** feel the temperature of the tile they stand on, against limits of
+  their species *(tuning)*: they freeze under −10 °C (roe deer, hare), −12 °C
+  (boar), −15 °C (red deer), −22 °C (fox), −25 °C (wolf), and overheat over 33
+  to 36 °C. The pressure grows over 15 °C beyond the cold limit and 10 °C
+  beyond the heat limit, like a settler's. An ordinary winter (−2 °C, −7 °C
+  before dawn) hurts none of them; a deep cold snap (−15 °C) hurts the
+  smaller ones.
+- **Shelter.** An animal within 5 °C of freezing (4 °C of overheating) where it
+  stands looks for a tile at least 4 °C warmer (cooler) within reach (a cave, a
+  tunnel, under a roof, beside a fire, the shade) and goes there; once in a
+  comfortable spot it does not stroll off into the cold. With nowhere better,
+  it waits and looks again later (a growing delay). Cold and heat wake a
+  sleeper, who goes looking.
+- **Weakness** is the worst of the four. It slows walking and the hands by up
+  to 60 %, and takes consciousness from full at 0.6 to nothing at 0.85: the
+  settler collapses (unconscious, `TASK_DOWN`) shortly before it dies.
+- A settler collapsed from hunger or thirst cannot eat or drink: nobody
+  feeds it until care exists (step C). A settler in the open in winter
+  (mean −2 °C, −7 °C before dawn) freezes within a couple of days without a
+  fire or a shelter.
+- Weakness adds to wounds: a wounded, starving settler faints sooner.
+- Exhaustion has no body effect of its own: a settler with no rest left
+  falls asleep (`NEED_REST`), as before.
+- Seen: the Health tab lists each deprivation above 0 with its severity; the
+  state reads *Weakened* when nothing else is wrong; a notice names the cause
+  of a settler's death.
+
+## 11. Later
+
 - Step C: care by a healer (bandages stop bleeding), infection, disease,
   enforced bed rest.
 - Scars (Beauty), lost limbs, prostheses, separate organs, poisoning.

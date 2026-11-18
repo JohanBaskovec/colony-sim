@@ -3,6 +3,7 @@
 #include "core/i18n.h"
 #include "core/util.h"
 
+#include <math.h>
 #include <string.h>
 
 /* Body plans (docs/HEALTH.md §2): hit points for a body of size 1. */
@@ -68,6 +69,29 @@ static const char *const ABILITY_KEYS[HEALTH_ABILITY_COUNT] = {
     [HEALTH_HANDS] = N_("health.ability.hands"),
     [HEALTH_SIGHT] = N_("health.ability.sight"),
     [HEALTH_EATING] = N_("health.ability.eating"),
+};
+
+/* Deprivations (docs/HEALTH.md §10): hours at full pressure to kill, hours to
+ * recover, what they are called, what they do, and the death they bring. */
+typedef struct DeprivationDef {
+    const char *name_key;
+    const char *description_key;
+    float death_hours;
+    float recovery_hours;
+    DeathCause cause;
+} DeprivationDef;
+
+static const DeprivationDef DEPRIVATION_DEFS[DEPRIVATION_COUNT] = {
+    [DEPRIVATION_HUNGER] = {N_("health.deprivation.hunger"),
+                            N_("health.deprivation.hunger.description"), 96.0f, 48.0f,
+                            DEATH_STARVATION},
+    [DEPRIVATION_THIRST] = {N_("health.deprivation.thirst"),
+                            N_("health.deprivation.thirst.description"), 40.0f, 10.0f,
+                            DEATH_DEHYDRATION},
+    [DEPRIVATION_COLD] = {N_("health.deprivation.cold"), N_("health.deprivation.cold.description"),
+                          14.0f, 6.0f, DEATH_HYPOTHERMIA},
+    [DEPRIVATION_HEAT] = {N_("health.deprivation.heat"), N_("health.deprivation.heat.description"),
+                          10.0f, 6.0f, DEATH_HEATSTROKE},
 };
 
 /* Consciousness lost at a destroyed head, and eating. */
@@ -280,7 +304,11 @@ const char *health_status_key(const Health *health)
     if (health_is_down(health)) {
         return N_("health.status.cannot_walk");
     }
-    return health_is_hurt(health) ? N_("health.status.hurt") : N_("health.status.healthy");
+    if (health->injury_count == 0 && health->blood >= 1.0f) {
+        return health_weakness(health) > 0.0f ? N_("health.status.weak")
+                                              : N_("health.status.healthy");
+    }
+    return N_("health.status.hurt");
 }
 
 float health_injury_bleeding(const Health *health, const Injury *injury)
@@ -349,8 +377,70 @@ bool health_is_dead(const Health *health)
     return health->death != DEATH_NONE;
 }
 
+float deprivation_death_hours(Deprivation kind)
+{
+    return (unsigned)kind < DEPRIVATION_COUNT ? DEPRIVATION_DEFS[kind].death_hours : 0.0f;
+}
+
+float deprivation_recovery_hours(Deprivation kind)
+{
+    return (unsigned)kind < DEPRIVATION_COUNT ? DEPRIVATION_DEFS[kind].recovery_hours : 0.0f;
+}
+
+const char *deprivation_name_key(Deprivation kind)
+{
+    return (unsigned)kind < DEPRIVATION_COUNT ? DEPRIVATION_DEFS[kind].name_key : NULL;
+}
+
+const char *deprivation_description_key(Deprivation kind)
+{
+    return (unsigned)kind < DEPRIVATION_COUNT ? DEPRIVATION_DEFS[kind].description_key : NULL;
+}
+
+bool health_strain(Health *health, Deprivation kind, float pressure, float hours)
+{
+    if (health->death != DEATH_NONE || (unsigned)kind >= DEPRIVATION_COUNT || !(hours > 0.0f)) {
+        return false;
+    }
+    const DeprivationDef *def = &DEPRIVATION_DEFS[kind];
+    float *severity = &health->deprivation[kind];
+    if (pressure > 0.0f) {
+        *severity += clampf(pressure, 0.0f, 1.0f) * hours / def->death_hours;
+    } else if (*severity > 0.0f) {
+        *severity = fmaxf(0.0f, *severity - hours / def->recovery_hours);
+    }
+    if (*severity >= 1.0f) {
+        *severity = 1.0f;
+        die(health, def->cause, -1);
+        return true;
+    }
+    return false;
+}
+
+float health_deprivation(const Health *health, Deprivation kind)
+{
+    if (health->death != DEATH_NONE || (unsigned)kind >= DEPRIVATION_COUNT) {
+        return 0.0f;
+    }
+    return health->deprivation[kind];
+}
+
+float health_weakness(const Health *health)
+{
+    float worst = 0.0f;
+    for (int kind = 0; kind < DEPRIVATION_COUNT; kind++) {
+        worst = fmaxf(worst, health_deprivation(health, (Deprivation)kind));
+    }
+    return worst;
+}
+
 bool health_is_hurt(const Health *health)
 {
+    for (int kind = 0; kind < DEPRIVATION_COUNT; kind++) {
+        if (health->deprivation[kind] > 0.0f) {
+            return true;
+        }
+    }
     return health->injury_count > 0 || health->blood < 1.0f;
 }
 
@@ -402,7 +492,10 @@ static float consciousness(const Health *health, float pain)
                0.0f, 1.0f);
     float head =
         1.0f - HEAD_CONSCIOUSNESS_LOSS * (1.0f - role_part_efficiency(health, BODY_ROLE_MIND));
-    return blood * head;
+    float faint = 1.0f - clampf((health_weakness(health) - HEALTH_WEAK_FAINT_FROM) /
+                                    (HEALTH_WEAK_FAINT_TO - HEALTH_WEAK_FAINT_FROM),
+                                0.0f, 1.0f);
+    return blood * head * faint;
 }
 
 float health_ability(const Health *health, HealthAbility ability)
@@ -421,7 +514,8 @@ float health_ability(const Health *health, HealthAbility ability)
     if (awake < HEALTH_CONSCIOUS_MIN) {
         return 0.0f; /* Knocked down: nothing else works. */
     }
-    float slowdown = 1.0f - HEALTH_PAIN_SLOWDOWN * pain;
+    float slowdown = (1.0f - HEALTH_PAIN_SLOWDOWN * pain) *
+                     (1.0f - HEALTH_WEAKNESS_SLOWDOWN * health_weakness(health));
     switch (ability) {
     case HEALTH_WALKING: return role_sum(health, BODY_ROLE_WALK) * slowdown;
     case HEALTH_HANDS: return role_sum(health, BODY_ROLE_HANDS) * slowdown;
@@ -455,6 +549,9 @@ uint64_t health_hash(const Health *health, uint64_t hash)
     uint8_t head[4] = {health->plan, health->death, health->death_part, health->injury_count};
     hash = hash_fnv1a64(hash, head, sizeof(head));
     hash = hash_fnv1a64(hash, &health->blood, sizeof(health->blood));
+    if (health_weakness(health) > 0.0f || health->death != DEATH_NONE) {
+        hash = hash_fnv1a64(hash, health->deprivation, sizeof(health->deprivation)); /* Likewise. */
+    }
     for (int i = 0; i < health->injury_count; i++) {
         const Injury *injury = &health->injuries[i];
         uint8_t kind[2] = {injury->part, injury->type};

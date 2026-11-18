@@ -1065,6 +1065,18 @@ float colonist_heat_limit(const Colonist *colonist)
     return COLONIST_HOT_SLEEP_ABOVE + attribute_heat_shift(&colonist->attributes);
 }
 
+float colonist_cold_pressure(const Colonist *colonist, float felt_celsius)
+{
+    float below = COLONIST_HYPOTHERMIA_CELSIUS - attribute_cold_shift(&colonist->attributes);
+    return clampf((below - felt_celsius) / COLONIST_COLD_SPAN, 0.0f, 1.0f);
+}
+
+float colonist_heat_pressure(const Colonist *colonist, float felt_celsius)
+{
+    float above = COLONIST_HEATSTROKE_CELSIUS + attribute_heat_shift(&colonist->attributes);
+    return clampf((felt_celsius - above) / COLONIST_HEAT_SPAN, 0.0f, 1.0f);
+}
+
 float colonist_sleep_temperature_factor(const Colonist *colonist, float celsius)
 {
     float beyond =
@@ -4705,6 +4717,25 @@ static void engage(Colonist *colonist, const ColonistContext *context)
     }
 }
 
+/* Hunger, thirst and the weather wear the body down (every
+ * COLONIST_STRAIN_TICKS, spread over the settlers). True when it dies of it. */
+static bool strain_body(Colonist *colonist, const ColonistContext *context)
+{
+    if ((context->tick + context->worker_id) % COLONIST_STRAIN_TICKS != 0) {
+        return false;
+    }
+    float hours = (float)COLONIST_STRAIN_TICKS / (float)TICKS_PER_HOUR;
+    float felt = felt_here(colonist, context);
+    Health *health = &colonist->health;
+    bool died = health_strain(health, DEPRIVATION_HUNGER,
+                              colonist->needs[NEED_FOOD] <= 0.0f ? 1.0f : 0.0f, hours);
+    died |= health_strain(health, DEPRIVATION_THIRST,
+                          colonist->needs[NEED_WATER] <= 0.0f ? 1.0f : 0.0f, hours);
+    died |= health_strain(health, DEPRIVATION_COLD, colonist_cold_pressure(colonist, felt), hours);
+    died |= health_strain(health, DEPRIVATION_HEAT, colonist_heat_pressure(colonist, felt), hours);
+    return died;
+}
+
 /* Falls where it is (TASK_DOWN): whatever it did is given up, what it
  * carried put down. */
 static void lie_down(Colonist *colonist, const ColonistContext *context)
@@ -4733,6 +4764,9 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
         return; /* Killed by the fall. */
     }
     update_needs(colonist, context);
+    if (strain_body(colonist, context)) {
+        return; /* Died of hunger, thirst, cold or heat. */
+    }
     if (health_is_down(&colonist->health)) {
         lie_down(colonist, context);
         return;

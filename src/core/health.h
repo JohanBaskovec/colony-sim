@@ -48,6 +48,13 @@
 /* Unconscious below this consciousness; unable to walk below this walking. */
 #define HEALTH_CONSCIOUS_MIN 0.3f
 #define HEALTH_WALKING_MIN 0.15f
+/* Deprivation (docs/HEALTH.md §10): the worst of a being's deprivations (its
+ * weakness) slows walking and the hands by up to this much, and takes the
+ * consciousness from full at HEALTH_WEAK_FAINT_FROM to nothing at
+ * HEALTH_WEAK_FAINT_TO. */
+#define HEALTH_WEAKNESS_SLOWDOWN 0.6f
+#define HEALTH_WEAK_FAINT_FROM 0.6f
+#define HEALTH_WEAK_FAINT_TO 0.85f
 
 typedef enum BodyPlan {
     BODY_HUMAN,
@@ -102,8 +109,23 @@ typedef enum DeathCause {
     DEATH_NONE,
     DEATH_BLOOD_LOSS,
     DEATH_VITAL_PART, /* Health.death_part says which. */
+    DEATH_STARVATION,
+    DEATH_DEHYDRATION,
+    DEATH_HYPOTHERMIA,
+    DEATH_HEATSTROKE,
     DEATH_CAUSE_COUNT
 } DeathCause;
+
+/* What wears a being down when its needs or its surroundings go unanswered:
+ * each is a severity from 0 to 1 that grows while the cause lasts, recovers
+ * after it, and kills at 1. */
+typedef enum Deprivation {
+    DEPRIVATION_HUNGER,
+    DEPRIVATION_THIRST,
+    DEPRIVATION_COLD,
+    DEPRIVATION_HEAT,
+    DEPRIVATION_COUNT
+} Deprivation;
 
 typedef struct Injury {
     uint8_t part; /* Index in the body plan. */
@@ -117,10 +139,11 @@ typedef struct Health {
     uint8_t death; /* DeathCause; DEATH_NONE while alive. */
     uint8_t death_part;
     uint8_t injury_count;
-    float size;          /* Hit points and pain scale: 1 for a human. */
-    float damage_factor; /* Blows × this (toughness). */
-    float pain_factor;   /* Pain × this (pain tolerance). */
-    float blood;         /* 1 full; dead at HEALTH_BLOOD_DEATH. */
+    float size;                           /* Hit points and pain scale: 1 for a human. */
+    float damage_factor;                  /* Blows × this (toughness). */
+    float pain_factor;                    /* Pain × this (pain tolerance). */
+    float blood;                          /* 1 full; dead at HEALTH_BLOOD_DEATH. */
+    float deprivation[DEPRIVATION_COUNT]; /* Severity of each, 0 (none) to 1 (dead). */
     Injury injuries[HEALTH_MAX_INJURIES];
 } Health;
 
@@ -177,7 +200,28 @@ bool health_update(Health *health, float hours);
 
 bool health_is_dead(const Health *health);
 
-/* Whether anything is wrong: an injury, or blood not yet back. */
+/* Hours of full pressure a deprivation takes to kill, and to wear off once
+ * the cause is gone (tuning). NULL key: out of range. */
+float deprivation_death_hours(Deprivation kind);
+float deprivation_recovery_hours(Deprivation kind);
+const char *deprivation_name_key(Deprivation kind);
+const char *deprivation_description_key(Deprivation kind);
+
+/*
+ * `hours` of time under a pressure from 0 (none) to 1 (full): the deprivation
+ * grows by pressure × hours over its death hours, or, with no pressure,
+ * recovers over its recovery hours. Returns true when it kills (it reaches 1).
+ * Separate from health_update(): the caller sees to the needs and the
+ * temperature.
+ */
+bool health_strain(Health *health, Deprivation kind, float pressure, float hours);
+
+/* Severity of a deprivation (0 for a dead body or an invalid kind), and the
+ * worst of them. */
+float health_deprivation(const Health *health, Deprivation kind);
+float health_weakness(const Health *health);
+
+/* Whether anything is wrong: an injury, blood not yet back, or a deprivation. */
 bool health_is_hurt(const Health *health);
 
 /* Blood lost per hour now (0 when nothing bleeds). */
@@ -201,8 +245,8 @@ float health_injury_severity(const Health *health, const Injury *injury);
 /* Whether the injury is serious (it does not clot). */
 bool health_injury_serious(const Health *health, const Injury *injury);
 
-/* Translation key of the body's state in a word: healthy, hurt, unable to
- * walk, unconscious, dead. */
+/* Translation key of the body's state in a word: healthy, hurt, weakened (by
+ * a deprivation only), unable to walk, unconscious, dead. */
 const char *health_status_key(const Health *health);
 
 /* Blood the injury loses per hour now. */

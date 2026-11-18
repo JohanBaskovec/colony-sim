@@ -94,6 +94,19 @@ void health_panel_rows(UiLayout *layout, const Health *health)
         tooltip_lines(layout, tr("health.pain.description"), NULL);
     }
 
+    for (int kind = 0; kind < DEPRIVATION_COUNT; kind++) {
+        float severity = health_deprivation(health, (Deprivation)kind);
+        if (severity <= 0.0f) {
+            continue;
+        }
+        percent_text(value, sizeof(value), severity);
+        row = ui_layout_pair(layout, tr(deprivation_name_key((Deprivation)kind)), value,
+                             bad_color(layout, severity), true);
+        if (layout->draw && ui_hovered(layout->ui, row)) {
+            tooltip_lines(layout, tr(deprivation_description_key((Deprivation)kind)), NULL);
+        }
+    }
+
     ui_layout_label(layout, tr("health.abilities"), 0.0f, true);
     for (int ability = 0; ability < HEALTH_ABILITY_COUNT; ability++) {
         if (ability == HEALTH_HANDS && (BodyPlan)health->plan != BODY_HUMAN) {

@@ -79,8 +79,8 @@ Powers are taken with `exp2f()`, like the other continuous effects of the core
 | Learning | slow / quick learner | learning rate from every source, on top of age (`KNOWLEDGE.md` §1.8) | ×0.5 to ×2 |
 | Sleep | light sleeper needing long nights / sound sleeper | rest regained per hour asleep | ×0.5 to ×2 |
 | Appetite | small eater / big eater | how fast the food need falls | ×0.5 to ×2 |
-| Cold tolerance | feels the cold / hardy | the coldest felt temperature that is still comfortable (sleep, the cold state, later hypothermia) | ±5 °C |
-| Heat tolerance | feels the heat / at ease in the heat | the warmest comfortable felt temperature (sleep, the hot state, later heatstroke) | ±5 °C |
+| Cold tolerance | feels the cold / hardy | the coldest felt temperature that is still comfortable (sleep, the cold state) and the one under which the body freezes (hypothermia, `docs/HEALTH.md` §10) | ±5 °C |
+| Heat tolerance | feels the heat / at ease in the heat | the warmest comfortable felt temperature (sleep, the hot state) and the one over which the body overheats (heatstroke, `docs/HEALTH.md` §10) | ±5 °C |
 | Toughness | fragile / tough | damage taken (with health) | ×2 to ×0.5 |
 | Pain tolerance | sensitive / hard to pain | pain felt from injuries, which slows and then knocks down (with health) | ×2 to ×0.5 |
 

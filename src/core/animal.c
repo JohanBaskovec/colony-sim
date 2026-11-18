@@ -62,7 +62,9 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                          .attack = ATTACK_KICK,
                          .agility = 0.45f,
                          .nerve = 0.2f,
-                         .sprint_seconds = 18.0f},
+                         .sprint_seconds = 18.0f,
+                         .cold_below = -10.0f,
+                         .heat_above = 34.0f},
     /* A grazer of the open ground. Hinds live in herds, stags in small
      * groups of their own. */
     [ANIMAL_RED_DEER] = {.id = "red_deer",
@@ -97,7 +99,9 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                          .attack = ATTACK_KICK,
                          .agility = 0.35f,
                          .nerve = 0.25f,
-                         .sprint_seconds = 22.0f},
+                         .sprint_seconds = 22.0f,
+                         .cold_below = -15.0f,
+                         .heat_above = 34.0f},
     /* Roots about by night for what is in the ground and under the trees:
      * roots, bulbs, nuts, mushrooms. Sows live in sounders, boars alone. */
     [ANIMAL_BOAR] =
@@ -136,7 +140,9 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .agility = 0.3f,
          .nerve = 0.7f,
          .fights_back = true,
-         .sprint_seconds = 12.0f},
+         .sprint_seconds = 12.0f,
+         .cold_below = -12.0f,
+         .heat_above = 35.0f},
     /* Nibbles grass and herbs at dusk and at night, alone. */
     [ANIMAL_HARE] =
         {.id = "hare",
@@ -167,7 +173,9 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .size = 0.15f,
          .carcass = ITEM_HARE_CARCASS,
          .agility = 0.6f,
-         .sprint_seconds = 8.0f},
+         .sprint_seconds = 8.0f,
+         .cold_below = -10.0f,
+         .heat_above = 33.0f},
     /* Hunts the deer at dusk and at night in a pack, and the hare when it can;
      * a hungry pack goes for a settler too. Eats carcasses only. */
     [ANIMAL_WOLF] =
@@ -197,6 +205,8 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .nerve = 0.55f,
          .fights_back = true,
          .sprint_seconds = 30.0f,
+         .cold_below = -25.0f,
+         .heat_above = 36.0f,
          .carnivore = true,
          .prey = ANIMAL_SPECIES_BIT(ANIMAL_ROE_DEER) | ANIMAL_SPECIES_BIT(ANIMAL_RED_DEER) |
                  ANIMAL_SPECIES_BIT(ANIMAL_HARE),
@@ -231,6 +241,8 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .agility = 0.5f,
          .nerve = 0.35f,
          .sprint_seconds = 14.0f,
+         .cold_below = -22.0f,
+         .heat_above = 36.0f,
          .carnivore = true,
          .prey = ANIMAL_SPECIES_BIT(ANIMAL_HARE),
          .hunt_range = 20,
@@ -832,6 +844,79 @@ static bool try_eat(Animals *animals, uint32_t slot, const AnimalContext *contex
     return def->carnivore ? try_hunt(animals, slot, context) : try_forage(animal, def, context);
 }
 
+/* ---- Cold and heat -------------------------------------------------------- */
+
+float animal_cold_pressure(AnimalSpecies species, float celsius)
+{
+    const AnimalDef *def = animal_def(species);
+    return def != NULL ? clampf((def->cold_below - celsius) / ANIMAL_COLD_SPAN, 0.0f, 1.0f) : 0.0f;
+}
+
+float animal_heat_pressure(AnimalSpecies species, float celsius)
+{
+    const AnimalDef *def = animal_def(species);
+    return def != NULL ? clampf((celsius - def->heat_above) / ANIMAL_HEAT_SPAN, 0.0f, 1.0f) : 0.0f;
+}
+
+static float tile_celsius(const AnimalContext *context, int x, int y, int z)
+{
+    return context->temperatures != NULL ? temperature_at(context->temperatures, x, y, z)
+                                         : ANIMAL_MILD_CELSIUS;
+}
+
+/* Whether a tile is a comfortable one for a species: not near freezing, nor
+ * near overheating. */
+static bool is_comfortable(const AnimalDef *def, float celsius)
+{
+    return celsius >= def->cold_below + ANIMAL_SHELTER_COLD_MARGIN &&
+           celsius <= def->heat_above - ANIMAL_SHELTER_HEAT_MARGIN;
+}
+
+/* A search for a tile within a range of temperatures. */
+typedef struct ShelterSeeker {
+    Seeker seeker;
+    const AnimalContext *context;
+    float min, max;
+} ShelterSeeker;
+
+static bool is_shelter(const Map *map, int x, int y, int z, void *userdata)
+{
+    (void)map;
+    const ShelterSeeker *shelter = userdata;
+    float celsius = tile_celsius(shelter->context, x, y, z);
+    return celsius >= shelter->min && celsius <= shelter->max &&
+           !near_seeker(&shelter->seeker, x, y, z);
+}
+
+/* Close to freezing or overheating where it stands, it goes to a tile that is
+ * warmer (cooler) by a few degrees, if there is one within reach. */
+static bool try_shelter(Animal *animal, const AnimalDef *def, const AnimalContext *context)
+{
+    if (context->temperatures == NULL || animal->search_cooldown[ANIMAL_SEARCH_SHELTER] > 0) {
+        return false;
+    }
+    float here = tile_celsius(context, animal->x, animal->y, animal->z);
+    if (is_comfortable(def, here)) {
+        return false;
+    }
+    bool cold = here < def->cold_below + ANIMAL_SHELTER_COLD_MARGIN;
+    ShelterSeeker shelter = {
+        {context, (AnimalSpecies)animal->species, false, def->flight_distance, false, {0}},
+        context,
+        cold ? here + ANIMAL_SHELTER_GAIN : -1000.0f,
+        cold ? 1000.0f : here - ANIMAL_SHELTER_GAIN};
+    TilePos found;
+    if (!find_nearest(context, tile_of(animal), is_shelter, &shelter, ANIMAL_SHELTER_MAX_COST,
+                      &animal->path, &found)) {
+        path_clear(&animal->path);
+        search_failed(animal, ANIMAL_SEARCH_SHELTER);
+        return false;
+    }
+    animal->search_failures[ANIMAL_SEARCH_SHELTER] = 0;
+    begin(animal, ANIMAL_TASK_WANDER, found);
+    return true;
+}
+
 static bool try_drink(Animal *animal, const AnimalDef *def, const AnimalContext *context)
 {
     if (animal->search_cooldown[ANIMAL_SEARCH_WATER] > 0) {
@@ -903,6 +988,9 @@ static bool try_wander(Animal *animal, const AnimalDef *def, TilePos center,
     if ((x == animal->x && y == animal->y && z == animal->z) ||
         !path_walker_can_stand(PATH_WALKER_ANIMAL, map, x, y, z) ||
         near_threat(context, x, y, z, def->flight_distance) ||
+        /* In a warm spot, it does not stroll off into the cold (nor the heat). */
+        (is_comfortable(def, tile_celsius(context, animal->x, animal->y, animal->z)) &&
+         !is_comfortable(def, tile_celsius(context, x, y, z))) ||
         !find_path(context, tile_of(animal), goal, ANIMAL_WANDER_MAX_COST, &animal->path)) {
         path_clear(&animal->path);
         return false;
@@ -938,6 +1026,9 @@ static void decide(Animals *animals, uint32_t slot, const AnimalContext *context
     Animal *animal = &animals->list[slot];
     const AnimalDef *def = &ANIMAL_DEFS[animal->species];
     if (try_needs(animals, slot, context, ANIMAL_URGENT_NEED, ANIMAL_URGENT_NEED)) {
+        return;
+    }
+    if (try_shelter(animal, def, context)) {
         return;
     }
     const Animal *leader = leader_of(animals, animal, slot);
@@ -1088,6 +1179,10 @@ static void sleep_on(Animal *animal, const AnimalContext *context)
                     animal->search_cooldown[ANIMAL_SEARCH_FOOD] == 0) ||
                    (animal->needs[ANIMAL_NEED_WATER] < ANIMAL_URGENT_NEED &&
                     animal->search_cooldown[ANIMAL_SEARCH_WATER] == 0);
+    /* Cold or heat wake it too: it looks for a better spot. */
+    pressed |= (animal->health.deprivation[DEPRIVATION_COLD] > 0.05f ||
+                animal->health.deprivation[DEPRIVATION_HEAT] > 0.05f) &&
+               animal->search_cooldown[ANIMAL_SEARCH_SHELTER] == 0;
     if (rest >= 1.0f || (!resting_hours && rest >= ANIMAL_RESTED) || pressed) {
         stand(animal, 0);
     }
@@ -1405,6 +1500,24 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
         return; /* Died. */
     }
     update_needs(animal, def);
+    if ((context->tick + (uint64_t)slot) % ANIMAL_STRAIN_TICKS == 0) {
+        /* Nothing to eat or drink for long, or the cold or the heat: it wastes away. */
+        float hours = (float)ANIMAL_STRAIN_TICKS / (float)TICKS_PER_HOUR;
+        bool starved = health_strain(&animal->health, DEPRIVATION_HUNGER,
+                                     animal->needs[ANIMAL_NEED_FOOD] <= 0.0f ? 1.0f : 0.0f, hours);
+        starved |= health_strain(&animal->health, DEPRIVATION_THIRST,
+                                 animal->needs[ANIMAL_NEED_WATER] <= 0.0f ? 1.0f : 0.0f, hours);
+        float celsius = tile_celsius(context, animal->x, animal->y, animal->z);
+        starved |=
+            health_strain(&animal->health, DEPRIVATION_COLD,
+                          animal_cold_pressure((AnimalSpecies)animal->species, celsius), hours);
+        starved |=
+            health_strain(&animal->health, DEPRIVATION_HEAT,
+                          animal_heat_pressure((AnimalSpecies)animal->species, celsius), hours);
+        if (starved) {
+            return;
+        }
+    }
     if (health_is_down(&animal->health)) {
         if (animal->task != ANIMAL_TASK_DOWN) {
             animal->task = ANIMAL_TASK_DOWN; /* Falls where it is. */

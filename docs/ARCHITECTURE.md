@@ -901,6 +901,19 @@ while nobody is hurt (`health_hash()` adds nothing then).
   An unconscious settler is no viewer (`update_vision()`) and frightens no
   animal.
 - Animals: `AnimalDef.body`, `.size` and `.carcass`; `ANIMAL_TASK_DOWN`.
+- Animals and the weather: `AnimalDef.cold_below` / `heat_above`;
+  `animal_cold_pressure()` / `animal_heat_pressure()` from the tile's
+  temperature (`AnimalContext.temperatures`); `try_shelter()` in `decide()`
+  looks for a tile warmer or cooler by `ANIMAL_SHELTER_GAIN`
+  (`ANIMAL_SEARCH_SHELTER` delays failures), and `try_wander()` keeps a
+  comfortable animal from strolling out of its spot.
+- Deprivation (`health_strain()`): every `COLONIST_STRAIN_TICKS` (settlers)
+  or `ANIMAL_STRAIN_TICKS` (animals), spread over the beings, food or water at
+  0 and the felt temperature (`colonist_cold_pressure()`,
+  `colonist_heat_pressure()`) press on the severities in `Health.deprivation`;
+  the worst, `health_weakness()`, slows walking and the hands and ends in a
+  collapse before death. `health_is_hurt()` is true while any is above 0, so
+  hashes of games where nobody suffers are unchanged.
 - Death: the game deals with it after each turn (`settler_died()` in
   `update_colonists()`, the carcasses in `update_animals()`): the body is an
   item (`ITEM_CATEGORY_BODIES`, rotting like food, left out of new

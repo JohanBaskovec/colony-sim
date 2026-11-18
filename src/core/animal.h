@@ -40,6 +40,7 @@
 #include "core/pathfinding.h"
 #include "core/pool.h"
 #include "core/region.h"
+#include "core/temperature.h"
 #include "core/rng.h"
 
 #include <stdbool.h>
@@ -84,6 +85,7 @@ typedef enum AnimalTask {
 typedef enum AnimalSearch {
     ANIMAL_SEARCH_FOOD,
     ANIMAL_SEARCH_WATER,
+    ANIMAL_SEARCH_SHELTER,
     ANIMAL_SEARCH_COUNT
 } AnimalSearch;
 
@@ -166,6 +168,10 @@ typedef struct AnimalDef {
      * animals only, and hunt `prey` (and settlers, if `hunts_settlers`, when
      * desperate) within `hunt_range` tiles; a bite takes `bite_kg` of the
      * carcass and fills `bite_kg` / `stomach_kg` of its hunger. */
+    /* The temperature (the tile's, in degrees) under which it freezes and over
+     * which it overheats (docs/HEALTH.md §10), with its fur and its build. */
+    float cold_below;
+    float heat_above;
     bool carnivore;
     AnimalSpeciesMask prey;
     bool hunts_settlers;
@@ -244,6 +250,8 @@ typedef struct AnimalContext {
     int settler_count;
     /* Where blows are queued (core/combat.h); NULL: nobody strikes. */
     CombatQueue *combat;
+    /* The temperature of the tiles (NULL: always ANIMAL_MILD_CELSIUS). */
+    const Temperatures *temperatures;
     /* The items on the ground, where the carnivores find carcasses and eat
      * them; NULL: no carcass. */
     Items *items;
@@ -290,6 +298,28 @@ typedef struct AnimalContext {
  * that found nowhere to run waits before it tries again. */
 #define ANIMAL_ALERT_TICKS 20
 #define ANIMAL_CORNERED_TICKS 600
+/* Every this many ticks the hunger, thirst, cold and heat of an animal press
+ * on its body (core/health.h, deprivations). */
+#define ANIMAL_STRAIN_TICKS 25
+
+/* Cold and heat (docs/HEALTH.md §10): the pressure on a body grows over
+ * ANIMAL_COLD_SPAN degrees under AnimalDef.cold_below and over
+ * ANIMAL_HEAT_SPAN degrees over AnimalDef.heat_above. An animal within
+ * ANIMAL_SHELTER_COLD_MARGIN of freezing, or ANIMAL_SHELTER_HEAT_MARGIN of
+ * overheating, looks for a tile ANIMAL_SHELTER_GAIN degrees warmer (cooler)
+ * within ANIMAL_SHELTER_MAX_COST (a cave, a tunnel, a roof, the shade). */
+#define ANIMAL_MILD_CELSIUS 15.0f
+#define ANIMAL_COLD_SPAN 15.0f
+#define ANIMAL_HEAT_SPAN 10.0f
+#define ANIMAL_SHELTER_COLD_MARGIN 5.0f
+#define ANIMAL_SHELTER_HEAT_MARGIN 4.0f
+#define ANIMAL_SHELTER_GAIN 4.0f
+#define ANIMAL_SHELTER_MAX_COST 50.0f
+
+/* The pressure (0..1) the temperature of a tile puts on an animal of a species. */
+float animal_cold_pressure(AnimalSpecies species, float celsius);
+float animal_heat_pressure(AnimalSpecies species, float celsius);
+
 /* Hunting: a carnivore goes for a carcass or a prey when its food falls
  * below ANIMAL_HUNGRY; one hungrier than ANIMAL_DESPERATE also goes for settlers
  * (those of its species that do). A bite of a carcass takes this long. A

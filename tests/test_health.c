@@ -539,6 +539,13 @@ static void test_hurt_animal(void)
     game_shutdown(&game);
 }
 
+static void run_ticks_flat(Game *game, int ticks)
+{
+    for (int i = 0; i < ticks; i++) {
+        game_tick(game);
+    }
+}
+
 /* The latest notice raised, NULL if none. */
 static const Notice *last_notice(const Game *game)
 {
@@ -715,6 +722,355 @@ static void test_debug_blow(void)
     game_shutdown(&game);
 }
 
+/* ---- Deprivation ---------------------------------------------------------- */
+
+static void test_deprivation_tables(void)
+{
+    for (int kind = 0; kind < DEPRIVATION_COUNT; kind++) {
+        CHECK(i18n_is_valid_key(deprivation_name_key((Deprivation)kind)));
+        CHECK(i18n_is_valid_key(deprivation_description_key((Deprivation)kind)));
+        CHECK(deprivation_death_hours((Deprivation)kind) > 0.0f);
+        CHECK(deprivation_recovery_hours((Deprivation)kind) > 0.0f);
+    }
+    CHECK(deprivation_name_key(DEPRIVATION_COUNT) == NULL);
+    CHECK(deprivation_death_hours(DEPRIVATION_COUNT) == 0.0f);
+    /* Thirst kills faster than hunger. */
+    CHECK(deprivation_death_hours(DEPRIVATION_THIRST) <
+          deprivation_death_hours(DEPRIVATION_HUNGER));
+}
+
+/* Starving for four days: weaker and weaker, down on the third day, dead on the fourth. */
+static void test_hunger_weakens_then_kills(void)
+{
+    Health health = human();
+    CHECK(!health_is_hurt(&health));
+    CHECK_STR_EQ(health_status_key(&health), "health.status.healthy");
+    uint64_t healthy = health_hash(&health, 1);
+    float walk = 1.0f;
+    float hours_down = -1.0f;
+    bool died = false;
+    for (int hour = 1; hour <= 100 && !died; hour++) {
+        died = health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 1.0f);
+        float now = health_ability(&health, HEALTH_WALKING);
+        CHECK(now <= walk + 1e-6f); /* Steadily weaker. */
+        walk = now;
+        if (hours_down < 0.0f && health_is_unconscious(&health)) {
+            hours_down = (float)hour;
+        }
+        if (hour == 24) {
+            CHECK_NEAR(health_deprivation(&health, DEPRIVATION_HUNGER), 0.25, 1e-4);
+            CHECK(walk < 0.9f && walk > 0.8f);
+            CHECK(health_is_hurt(&health));
+            CHECK_STR_EQ(health_status_key(&health), "health.status.weak");
+            CHECK(health_hash(&health, 1) != healthy);
+            CHECK(!health_is_down(&health));
+        }
+    }
+    CHECK(died);
+    CHECK(health_is_dead(&health));
+    CHECK_EQ_INT(health.death, DEATH_STARVATION);
+    CHECK(hours_down > 70.0f && hours_down < 85.0f); /* Out cold before the end. */
+    CHECK_NEAR(health_deprivation(&health, DEPRIVATION_HUNGER), 0.0, 1e-9); /* Dead: none. */
+    CHECK(!health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 10.0f));
+}
+
+static void test_thirst_and_the_weather_kill_too(void)
+{
+    static const struct {
+        Deprivation kind;
+        DeathCause cause;
+    } CASES[] = {{DEPRIVATION_THIRST, DEATH_DEHYDRATION},
+                 {DEPRIVATION_COLD, DEATH_HYPOTHERMIA},
+                 {DEPRIVATION_HEAT, DEATH_HEATSTROKE}};
+    for (int i = 0; i < 3; i++) {
+        Health health = human();
+        float hours = deprivation_death_hours(CASES[i].kind);
+        CHECK(!health_strain(&health, CASES[i].kind, 1.0f, hours * 0.99f));
+        CHECK(health_strain(&health, CASES[i].kind, 1.0f, hours * 0.02f));
+        CHECK_EQ_INT(health.death, CASES[i].cause);
+    }
+    /* Half the pressure, twice the time. */
+    Health half = human();
+    CHECK(!health_strain(&half, DEPRIVATION_COLD, 0.5f, 14.0f));
+    CHECK_NEAR(health_deprivation(&half, DEPRIVATION_COLD), 0.5, 1e-5);
+    CHECK(health_strain(&half, DEPRIVATION_COLD, 0.5f, 14.0f));
+}
+
+static void test_deprivation_wears_off(void)
+{
+    Health health = human();
+    health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 48.0f); /* Halfway to dead. */
+    health_strain(&health, DEPRIVATION_THIRST, 1.0f, 8.0f);
+    CHECK(health_is_unconscious(&health) == false);
+    CHECK_NEAR(health_weakness(&health), 0.5, 1e-5); /* The worst of them. */
+    /* Eaten and drunk: thirst goes in hours, hunger in days. */
+    health_strain(&health, DEPRIVATION_THIRST, 0.0f, 10.0f);
+    CHECK_NEAR(health_deprivation(&health, DEPRIVATION_THIRST), 0.0, 1e-6);
+    health_strain(&health, DEPRIVATION_HUNGER, 0.0f, 24.0f);
+    CHECK_NEAR(health_deprivation(&health, DEPRIVATION_HUNGER), 0.0, 1e-5);
+    health_strain(&health, DEPRIVATION_HUNGER, 0.0f, 100.0f);
+    CHECK_NEAR(health_deprivation(&health, DEPRIVATION_HUNGER), 0.0, 1e-9);
+    CHECK(!health_is_hurt(&health));
+    CHECK(health_hash(&health, 1) == health_hash(&(Health){0}, 1) || !health_is_hurt(&health));
+    /* Bad inputs change nothing. */
+    CHECK(!health_strain(&health, DEPRIVATION_COUNT, 1.0f, 1.0f));
+    CHECK(!health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 0.0f));
+    CHECK_NEAR(health_deprivation(&health, DEPRIVATION_COUNT), 0.0, 1e-9);
+}
+
+/* Deprivation and wounds add up: a wounded settler faints sooner. */
+static void test_deprivation_with_wounds(void)
+{
+    Health health = human();
+    health_hurt(&health, LEFT_LEG, INJURY_BRUISE, 12.5f);
+    float wounded = health_ability(&health, HEALTH_WALKING);
+    health_strain(&health, DEPRIVATION_HUNGER, 1.0f, 48.0f);
+    CHECK(health_ability(&health, HEALTH_WALKING) < wounded * 0.75f);
+    CHECK(health_ability(&health, HEALTH_HANDS) < 0.75f);
+    CHECK_STR_EQ(health_status_key(&health), "health.status.hurt");
+}
+
+/* The cold presses below freezing, the heat above 36 degrees; cold tolerance
+ * and heat tolerance move the limits. */
+static void test_weather_pressure(void)
+{
+    Colonist colonist;
+    colonist_init(&colonist, "Ada", 30, 0, 0, 0);
+    CHECK_NEAR(colonist_cold_pressure(&colonist, 10.0f), 0.0, 1e-6);
+    CHECK_NEAR(colonist_cold_pressure(&colonist, 0.0f), 0.0, 1e-6);
+    CHECK_NEAR(colonist_cold_pressure(&colonist, -7.5f), 0.5, 1e-5);
+    CHECK_NEAR(colonist_cold_pressure(&colonist, -30.0f), 1.0, 1e-6);
+    CHECK_NEAR(colonist_heat_pressure(&colonist, 30.0f), 0.0, 1e-6);
+    CHECK_NEAR(colonist_heat_pressure(&colonist, 41.0f), 0.5, 1e-5);
+    Attributes hardy;
+    attributes_init(&hardy);
+    REQUIRE(attributes_set(&hardy, ATTRIBUTE_COLD_TOLERANCE, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&hardy, ATTRIBUTE_HEAT_TOLERANCE, -ATTRIBUTE_POSITION_MAX));
+    colonist_set_attributes(&colonist, &hardy);
+    CHECK_NEAR(colonist_cold_pressure(&colonist, -7.5f), 0.167, 1e-3); /* 5 degrees more bearable */
+    CHECK_NEAR(colonist_heat_pressure(&colonist, 36.0f), 0.5, 1e-5);   /* 5 degrees less */
+    colonist_free(&colonist);
+}
+
+/* A settler with nothing to drink weakens, collapses and dies in under two
+ * days; every need being met, nothing of the sort. */
+static void test_settler_dies_of_thirst(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *thirsty = spawn_settler(&game, 20, 20);
+    Colonist *fine = spawn_settler(&game, 30, 30);
+    REQUIRE(thirsty != NULL && fine != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    thirsty->needs[NEED_WATER] = 0.0f;
+    int tick = 0;
+    float weakest_walk = 1.0f;
+    bool collapsed = false;
+    for (; tick < 3 * TICKS_PER_DAY && game_colonist(&game, id) != NULL; tick++) {
+        thirsty->needs[NEED_WATER] = 0.0f;
+        thirsty->needs[NEED_FOOD] = 1.0f;
+        thirsty->needs[NEED_REST] = 1.0f;
+        fine->needs[NEED_WATER] = 1.0f;
+        fine->needs[NEED_FOOD] = 1.0f;
+        fine->needs[NEED_REST] = 1.0f;
+        game_tick(&game);
+        if (game_colonist(&game, id) != NULL) {
+            weakest_walk = fminf(weakest_walk, colonist_walk_factor(thirsty));
+            collapsed |= thirsty->task == TASK_DOWN;
+        }
+    }
+    CHECK(game_colonist(&game, id) == NULL);                         /* Dead... */
+    CHECK(tick > 30 * TICKS_PER_HOUR && tick < 42 * TICKS_PER_HOUR); /* ...after 40 hours. */
+    CHECK(weakest_walk < 0.5f);
+    CHECK(collapsed);
+    const Notice *notice = last_notice(&game);
+    REQUIRE(notice != NULL);
+    CHECK_EQ_INT(notice->type, NOTICE_DEATH_DEHYDRATION);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_SETTLER_BODY], 1);
+    CHECK(!health_is_hurt(&fine->health)); /* Unaffected. */
+    game_shutdown(&game);
+}
+
+/* Eating and drinking again undoes the weakness. */
+static void test_settler_recovers_when_fed(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    REQUIRE(settler != NULL);
+    health_strain(&settler->health, DEPRIVATION_THIRST, 1.0f, 20.0f); /* Half way. */
+    health_strain(&settler->health, DEPRIVATION_HUNGER, 1.0f, 30.0f);
+    float weak = colonist_walk_factor(settler);
+    CHECK(weak < 0.75f);
+    for (int tick = 0; tick < 8 * TICKS_PER_HOUR; tick++) {
+        settler->needs[NEED_WATER] = 1.0f;
+        settler->needs[NEED_FOOD] = 1.0f;
+        settler->needs[NEED_REST] = 1.0f;
+        game_tick(&game);
+    }
+    CHECK_NEAR(health_deprivation(&settler->health, DEPRIVATION_THIRST), 0.0, 1e-5);
+    CHECK(health_deprivation(&settler->health, DEPRIVATION_HUNGER) < 0.27f);
+    CHECK(colonist_walk_factor(settler) > weak);
+    game_shutdown(&game);
+}
+
+/* A settler freezes in the cold of a winter night with nothing over it. */
+static void test_settler_freezes_in_winter(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    REQUIRE(settler != NULL);
+    /* Mid-winter, before dawn: about -7 degrees. */
+    game.clock.tick = (uint64_t)SEASON_DAY(SEASON_WINTER, 8) * TICKS_PER_DAY + 4 * TICKS_PER_HOUR;
+    run_ticks_flat(&game, TICKS_PER_HOUR);
+    float cold = health_deprivation(&settler->health, DEPRIVATION_COLD);
+    float felt =
+        hearths_felt_temperature(&game.workstations, &game.map, &game.temperatures, 20, 20, 0);
+    CHECK(felt < -3.0f);
+    CHECK(cold > 0.0f);
+    run_ticks_flat(&game, 2 * TICKS_PER_HOUR); /* Still before dawn's end. */
+    CHECK(health_deprivation(&settler->health, DEPRIVATION_COLD) > cold);
+    CHECK(health_is_hurt(&settler->health));
+    /* It warms up in the day, and recovers. */
+    run_ticks_flat(&game, 10 * TICKS_PER_HOUR);
+    CHECK(health_deprivation(&settler->health, DEPRIVATION_COLD) < 0.01f);
+    game_shutdown(&game);
+}
+
+/* Wild animals waste away without food or water. */
+static void test_animals_starve(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId id = game_spawn_animal(&game, ANIMAL_FOX, ANIMAL_MALE, 20, 20, 0);
+    Animal *fox = animals_get(&game.animals, id);
+    REQUIRE(fox != NULL);
+    int tick = 0;
+    for (; tick < 200 * TICKS_PER_HOUR && animals_get(&game.animals, id) != NULL; tick++) {
+        fox->needs[ANIMAL_NEED_FOOD] = 0.0f;
+        fox->needs[ANIMAL_NEED_WATER] = 1.0f;
+        fox->needs[ANIMAL_NEED_REST] = 1.0f;
+        game_tick(&game);
+    }
+    CHECK(animals_get(&game.animals, id) == NULL);
+    CHECK(tick > 90 * TICKS_PER_HOUR && tick < 100 * TICKS_PER_HOUR);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FOX_CARCASS], 1);
+    game_shutdown(&game);
+}
+
+/* ---- Animals and the weather --------------------------------------------- */
+
+static void test_animal_weather_tolerance(void)
+{
+    for (int species = 0; species < ANIMAL_SPECIES_COUNT; species++) {
+        const AnimalDef *def = animal_def((AnimalSpecies)species);
+        CHECK(def->cold_below < 0.0f && def->heat_above > 30.0f &&
+              def->cold_below < def->heat_above);
+        CHECK_NEAR(animal_cold_pressure((AnimalSpecies)species, 0.0f), 0.0, 1e-6);
+        CHECK_NEAR(animal_heat_pressure((AnimalSpecies)species, 20.0f), 0.0, 1e-6);
+        CHECK_NEAR(animal_cold_pressure((AnimalSpecies)species, def->cold_below - 7.5f), 0.5, 1e-5);
+        CHECK_NEAR(animal_cold_pressure((AnimalSpecies)species, -200.0f), 1.0, 1e-6);
+        CHECK_NEAR(animal_heat_pressure((AnimalSpecies)species, def->heat_above + 5.0f), 0.5, 1e-5);
+    }
+    /* Wolves and foxes feel the cold later than a hare. */
+    CHECK(animal_def(ANIMAL_WOLF)->cold_below < animal_def(ANIMAL_HARE)->cold_below);
+    CHECK(animal_def(ANIMAL_FOX)->cold_below < animal_def(ANIMAL_ROE_DEER)->cold_below);
+    CHECK_NEAR(animal_cold_pressure(ANIMAL_SPECIES_COUNT, -50.0f), 0.0, 1e-9);
+}
+
+/* A game set in the cold of a winter night, in a cold snap, with the soil
+ * grown as cold as the air. */
+static void make_it_freezing(Game *game)
+{
+    game->clock.tick = (uint64_t)SEASON_DAY(SEASON_WINTER, 8) * TICKS_PER_DAY + 3 * TICKS_PER_HOUR;
+    game_tick(game); /* The weather of the new day, then the spell. */
+    game_debug_cold_snap(game);
+    for (int tick = 0; tick < 2 * TICKS_PER_HOUR; tick++) {
+        game_debug_cold_snap(game);
+        game_tick(game);
+    }
+}
+
+/* A deer freezes in the cold of a snap that a wolf, with its fur, does not feel. */
+static void test_cold_hurts_animals_by_species(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    make_it_freezing(&game);
+    EntityId deer_id = game_spawn_animal(&game, ANIMAL_ROE_DEER, ANIMAL_MALE, 10, 10, 0);
+    EntityId wolf_id = game_spawn_animal(&game, ANIMAL_WOLF, ANIMAL_MALE, 30, 30, 0);
+    Animal *deer = animals_get(&game.animals, deer_id);
+    Animal *wolf = animals_get(&game.animals, wolf_id);
+    REQUIRE(deer != NULL && wolf != NULL);
+    float celsius = temperature_at(&game.temperatures, 10, 10, 0);
+    CHECK(celsius < animal_def(ANIMAL_ROE_DEER)->cold_below);
+    CHECK(celsius > animal_def(ANIMAL_WOLF)->cold_below);
+    for (int tick = 0; tick < TICKS_PER_HOUR; tick++) {
+        game_debug_cold_snap(&game);
+        deer->needs[ANIMAL_NEED_FOOD] = deer->needs[ANIMAL_NEED_WATER] = 1.0f;
+        wolf->needs[ANIMAL_NEED_FOOD] = wolf->needs[ANIMAL_NEED_WATER] = 1.0f;
+        game_tick(&game);
+    }
+    CHECK(health_deprivation(&deer->health, DEPRIVATION_COLD) > 0.01f);
+    CHECK(health_is_hurt(&deer->health));
+    CHECK_NEAR(health_deprivation(&wolf->health, DEPRIVATION_COLD), 0.0, 1e-9);
+    CHECK(!health_is_hurt(&wolf->health));
+    game_shutdown(&game);
+}
+
+/* An animal that is cold goes to a warmer spot close by, if there is one. */
+static void test_cold_animals_seek_a_warm_spot(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    make_it_freezing(&game);
+    EntityId deer_id = game_spawn_animal(&game, ANIMAL_ROE_DEER, ANIMAL_MALE, 20, 22, 0);
+    Animal *deer = animals_get(&game.animals, deer_id);
+    REQUIRE(deer != NULL);
+    deer->timer = 1;
+    deer->needs[ANIMAL_NEED_REST] = 1.0f;
+    float here = temperature_at(&game.temperatures, 20, 22, 0);
+    CHECK(here < animal_def(ANIMAL_ROE_DEER)->cold_below + ANIMAL_SHELTER_COLD_MARGIN);
+    /* A warm patch 12 tiles off (a fire's reach, a cave), kept warm. */
+    for (int y = 20; y <= 24; y++) {
+        for (int x = 31; x <= 35; x++) {
+            temperatures_add_heat(&game.temperatures, x, y, 0, 40.0f);
+        }
+    }
+    for (int tick = 0; tick < 25 * TICKS_PER_SECOND; tick++) {
+        for (int y = 20; y <= 24; y++) {
+            for (int x = 31; x <= 35; x++) {
+                temperatures_add_heat(&game.temperatures, x, y, 0, 0.3f);
+            }
+        }
+        deer->needs[ANIMAL_NEED_FOOD] = deer->needs[ANIMAL_NEED_WATER] = 1.0f;
+        game_tick(&game);
+    }
+    CHECK(deer->x >= 29);
+    CHECK(temperature_at(&game.temperatures, deer->x, deer->y, 0) > here + 1.0f);
+    game_shutdown(&game);
+}
+
+/* Nowhere warmer: it waits, and tries again later rather than every tick. */
+static void test_cold_animals_without_shelter_stay_put(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    make_it_freezing(&game);
+    EntityId deer_id = game_spawn_animal(&game, ANIMAL_ROE_DEER, ANIMAL_MALE, 20, 22, 0);
+    Animal *deer = animals_get(&game.animals, deer_id);
+    REQUIRE(deer != NULL);
+    deer->timer = 1;
+    deer->needs[ANIMAL_NEED_REST] = 1.0f;
+    for (int tick = 0; tick < 2 * TICKS_PER_SECOND; tick++) {
+        game_tick(&game);
+    }
+    CHECK(deer->search_cooldown[ANIMAL_SEARCH_SHELTER] > 0);
+    CHECK(deer->search_failures[ANIMAL_SEARCH_SHELTER] >= 1);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_body_plans);
@@ -742,5 +1098,19 @@ int main(void)
     RUN_TEST(test_animal_death);
     RUN_TEST(test_felled_tree_hurts);
     RUN_TEST(test_debug_blow);
+    RUN_TEST(test_deprivation_tables);
+    RUN_TEST(test_hunger_weakens_then_kills);
+    RUN_TEST(test_thirst_and_the_weather_kill_too);
+    RUN_TEST(test_deprivation_wears_off);
+    RUN_TEST(test_deprivation_with_wounds);
+    RUN_TEST(test_weather_pressure);
+    RUN_TEST(test_settler_dies_of_thirst);
+    RUN_TEST(test_settler_recovers_when_fed);
+    RUN_TEST(test_settler_freezes_in_winter);
+    RUN_TEST(test_animals_starve);
+    RUN_TEST(test_animal_weather_tolerance);
+    RUN_TEST(test_cold_hurts_animals_by_species);
+    RUN_TEST(test_cold_animals_seek_a_warm_spot);
+    RUN_TEST(test_cold_animals_without_shelter_stay_put);
     return test_summary();
 }
