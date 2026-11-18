@@ -270,6 +270,30 @@ void game_set_free_crafts(Game *game, bool on);
 void game_set_no_tools(Game *game, bool on);
 void game_set_instant_deconstruct(Game *game, bool on);
 void game_set_instant_fell_and_mine(Game *game, bool on);
+/* Debug: the character editor's steps (a click of its - or + button): a need
+ * moves by a tenth, an attribute by 5 percent of the way to either end, a
+ * knowledge by 5 levels; the air by 5 degrees. */
+#define GAME_DEBUG_NEED_STEP 0.1f
+#define GAME_DEBUG_ATTRIBUTE_STEP 50
+#define GAME_DEBUG_KNOWLEDGE_STEP 5.0
+#define GAME_DEBUG_TEMPERATURE_STEP 5.0f
+#define GAME_DEBUG_TEMPERATURE_LIMIT 60.0f /* The offset stays within -/+ this. */
+
+/* Debug (the character editor): moves a need of a colonist or an animal up
+ * (`direction` > 0) or down by a step, within 0..1; an attribute of a
+ * colonist, within the whole range, by a step (the character that follows
+ * from it is worked out again); a colonist's knowledge, within 0 to
+ * KNOWLEDGE_LEVEL_MAX (its peak follows it down: nothing is forgotten, so
+ * nothing is relearnt). False for a stale handle or an invalid type. */
+bool game_debug_colonist_need(Game *game, EntityId id, NeedType need, int direction);
+bool game_debug_animal_need(Game *game, EntityId id, AnimalNeed need, int direction);
+bool game_debug_colonist_attribute(Game *game, EntityId id, AttributeType type, int direction);
+bool game_debug_colonist_knowledge(Game *game, EntityId id, KnowledgeType knowledge, int direction);
+
+/* Debug: raises (`direction` > 0) or lowers the air's temperature by a step,
+ * all along (Weather.debug_offset), within GAME_DEBUG_TEMPERATURE_LIMIT. */
+void game_debug_temperature(Game *game, int direction);
+
 /* Debug: the next sky at once (clear → cloudy → fog → rain → storm), and a
  * cold snap (the coldest spell, until the next day's draw). */
 void game_debug_next_weather(Game *game);

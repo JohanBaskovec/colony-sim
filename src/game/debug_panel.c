@@ -8,6 +8,12 @@ typedef struct DebugRows {
     const GameDebug *debug;
     bool vision_shown;
     bool fog_on;
+    bool character_editor;
+    bool god_mode; /* The first six cheats and the character editor are all on. */
+    float temperature_offset;
+    bool toggle_god_mode;
+    bool toggle_character_editor;
+    int temperature_step; /* -1, 0, 1: the buttons of the temperature row. */
     bool toggle_instant_build;
     bool toggle_free_crafts;
     bool toggle_no_tools;
@@ -55,6 +61,7 @@ static bool checkbox_row(UiLayout *layout, const char *label, bool checked)
 static void debug_rows(UiLayout *layout, void *userdata)
 {
     DebugRows *rows = userdata;
+    rows->toggle_god_mode |= checkbox_row(layout, tr("debug.god_mode"), rows->god_mode);
     rows->toggle_instant_build |=
         checkbox_row(layout, tr("debug.instant_build"), rows->debug->instant_build);
     rows->toggle_free_crafts |=
@@ -67,10 +74,28 @@ static void debug_rows(UiLayout *layout, void *userdata)
     rows->toggle_fog |= checkbox_row(layout, tr("debug.see_everything"), !rows->fog_on);
     rows->reveal_map |= button_row(layout, tr("debug.reveal_map"));
     rows->toggle_vision |= checkbox_row(layout, tr("debug.vision"), rows->vision_shown);
+    rows->toggle_character_editor |=
+        checkbox_row(layout, tr("debug.character_editor"), rows->character_editor);
     char label[128];
     TR_FORMAT(label, sizeof(label), tr("debug.next_weather"), rows->weather);
     rows->next_weather |= button_row(layout, label);
     rows->cold_snap |= button_row(layout, tr("debug.cold_snap"));
+    /* The air's temperature compared with the weather's, with its - and + buttons. */
+    char degrees[16], offset[32];
+    tr_integer(degrees, sizeof(degrees), SDL_lroundf(rows->temperature_offset));
+    TR_FORMAT(offset, sizeof(offset), tr("unit.celsius"), degrees);
+    if (rows->temperature_offset > 0.0f) {
+        SDL_snprintf(degrees, sizeof(degrees), "+%s", offset);
+        SDL_strlcpy(offset, degrees, sizeof(offset));
+    }
+    TR_FORMAT(label, sizeof(label), tr("debug.temperature"), offset);
+    ui_layout_set_stepper(layout, true);
+    SDL_FRect row = ui_layout_pair(layout, label, "", layout->ui->theme.colors[THEME_TEXT], false);
+    int step = ui_layout_stepper(layout, row);
+    ui_layout_set_stepper(layout, false);
+    if (step != 0) {
+        rows->temperature_step = step;
+    }
     rows->sadden |= button_row(layout, tr("debug.sadden"));
     rows->learn_all |= button_row(layout, tr("debug.learn_all"));
     rows->skip_hour |= button_row(layout, tr("debug.skip_hour"));
@@ -91,9 +116,16 @@ void debug_panel_draw(App *app)
         return;
     }
     Game *game = &app->game;
-    DebugRows rows = {.debug = &game->debug,
+    const GameDebug *debug = &game->debug;
+    bool god_mode = debug->instant_build && debug->free_crafts && debug->no_tools &&
+                    debug->instant_deconstruct && debug->instant_fell_and_mine && !game->fog_on &&
+                    app->character_editor;
+    DebugRows rows = {.debug = debug,
                       .vision_shown = app->show_vision,
                       .fog_on = game->fog_on,
+                      .character_editor = app->character_editor,
+                      .god_mode = god_mode,
+                      .temperature_offset = game->weather.debug_offset,
                       .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
                       .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
                       .plant_tree_active =
@@ -104,6 +136,22 @@ void debug_panel_draw(App *app)
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER, debug_rows,
                      &rows, &open);
+    if (rows.toggle_god_mode) { /* All of them on, or (when all were) all off. */
+        bool on = !god_mode;
+        game_set_instant_build(game, on);
+        game_set_free_crafts(game, on);
+        game_set_no_tools(game, on);
+        game_set_instant_deconstruct(game, on);
+        game_set_instant_fell_and_mine(game, on);
+        game_set_fog(game, !on);
+        app->character_editor = on;
+    }
+    if (rows.toggle_character_editor) {
+        app->character_editor = !app->character_editor;
+    }
+    if (rows.temperature_step != 0) {
+        game_debug_temperature(game, rows.temperature_step);
+    }
     if (rows.toggle_instant_build) {
         game_set_instant_build(game, !game->debug.instant_build);
     }

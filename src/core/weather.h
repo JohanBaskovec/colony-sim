@@ -106,6 +106,9 @@ typedef struct Weather {
     float spell;       /* Degrees added to the season's temperature today. */
     float snow;        /* Snow cover on open ground, 0..1. */
     float recent_rain; /* Hours of rain lately (see WEATHER_RAIN_MEMORY). */
+    /* Debug: degrees added to the air all along (the debug menu's + and -);
+     * 0 in a game as played. */
+    float debug_offset;
 } Weather;
 
 /* NULL when out of range. */

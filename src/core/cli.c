@@ -39,7 +39,11 @@ const char *cli_usage(void)
                              "learn_all,\n"
                              "                  instant_fell_and_mine, vision (overlay of what "
                              "a settler sees),\n"
-                             "                  see_everything (no fog of war), or all.\n"
+                             "                  see_everything (no fog of war), character_editor "
+                             "(- and + "
+                             "buttons),\n"
+                             "                  god_mode (the six first cheats of the menu and the "
+                             "editor), or all.\n"
                              "  --ui-scale <n>  Interface scale in percent (75-200). Default: "
                              "the saved setting, else 100.\n"
                              "  --no-vsync      Draw frames as fast as possible.\n"
@@ -53,9 +57,9 @@ const char *cli_usage(void)
 
 /* Names of the CLI_DEBUG_* bits, in bit order. */
 static const char *const DEBUG_NAMES[] = {
-    "instant_build", "free_crafts",           "no_tools", "instant_deconstruct",
-    "learn_all",     "instant_fell_and_mine", "vision",   "see_everything"};
-_Static_assert(sizeof(DEBUG_NAMES) / sizeof(DEBUG_NAMES[0]) == 8, "one name per debug bit");
+    "instant_build",         "free_crafts", "no_tools",       "instant_deconstruct", "learn_all",
+    "instant_fell_and_mine", "vision",      "see_everything", "character_editor"};
+_Static_assert(sizeof(DEBUG_NAMES) / sizeof(DEBUG_NAMES[0]) == 9, "one name per debug bit");
 
 /* Parses a comma-separated list of DEBUG_NAMES (or "all"), adding its bits
  * to `out` (left unchanged on failure). */
@@ -69,6 +73,10 @@ static bool parse_debug(const char *text, unsigned *out)
         bool known = false;
         if (length == 3 && strncmp(p, "all", 3) == 0) {
             bits |= CLI_DEBUG_ALL;
+            known = true;
+        }
+        if (length == 8 && strncmp(p, "god_mode", 8) == 0) {
+            bits |= CLI_DEBUG_GOD_MODE;
             known = true;
         }
         for (size_t i = 0; !known && i < sizeof(DEBUG_NAMES) / sizeof(DEBUG_NAMES[0]); i++) {

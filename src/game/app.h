@@ -201,6 +201,7 @@ typedef struct App {
     bool show_items_menu;   /* Items menu (game/items_panel.h). */
     bool show_animals_menu; /* Animals menu (game/animals_panel.h). */
     bool show_temperature;  /* The temperature of each tile over the map. */
+    bool character_editor;  /* Debug: - and + buttons on needs, characters and knowledge. */
     bool show_vision;       /* Debug: what the selected settler sees, the rest veiled. */
     float level_wheel;      /* Wheel steps with Shift held, towards the next level. */
     /* Build menu (game/build_menu.h): open, which category is shown, and the

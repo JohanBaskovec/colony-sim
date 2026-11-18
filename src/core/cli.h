@@ -24,9 +24,16 @@
 #define CLI_DEBUG_INSTANT_DECONSTRUCT (1u << 3)
 #define CLI_DEBUG_LEARN_ALL (1u << 4) /* game_debug_learn_all() once, at the start. */
 #define CLI_DEBUG_INSTANT_FELL_AND_MINE (1u << 5)
-#define CLI_DEBUG_VISION (1u << 6)         /* The overlay of what the selected settler sees. */
-#define CLI_DEBUG_SEE_EVERYTHING (1u << 7) /* No fog of war. */
-#define CLI_DEBUG_ALL ((1u << 8) - 1)
+#define CLI_DEBUG_VISION (1u << 6)           /* The overlay of what the selected settler sees. */
+#define CLI_DEBUG_SEE_EVERYTHING (1u << 7)   /* No fog of war. */
+#define CLI_DEBUG_CHARACTER_EDITOR (1u << 8) /* The - and + buttons (game/debug_panel.h). */
+#define CLI_DEBUG_ALL ((1u << 9) - 1)
+/* "god_mode": the first six cheats of the debug menu (building, crafting, tools,
+ * taking apart, felling and mining, seeing everything) and the character editor. */
+#define CLI_DEBUG_GOD_MODE                                                                         \
+    (CLI_DEBUG_INSTANT_BUILD | CLI_DEBUG_FREE_CRAFTS | CLI_DEBUG_NO_TOOLS |                        \
+     CLI_DEBUG_INSTANT_DECONSTRUCT | CLI_DEBUG_INSTANT_FELL_AND_MINE | CLI_DEBUG_SEE_EVERYTHING |  \
+     CLI_DEBUG_CHARACTER_EDITOR)
 
 typedef struct CliOptions {
     char language[CLI_LANGUAGE_CODE_SIZE]; /* Empty: use the system locale. */

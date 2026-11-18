@@ -148,7 +148,7 @@ float weather_outdoor(const Weather *weather, uint64_t tick)
     const WeatherDef *def = weather_def((WeatherType)weather->type);
     float swing = def != NULL ? def->swing_factor : 1.0f;
     float offset = def != NULL ? def->offset : 0.0f;
-    return temperature_season_mean(tick) + weather->spell + offset +
+    return temperature_season_mean(tick) + weather->spell + weather->debug_offset + offset +
            TEMPERATURE_DAILY_SWING * swing * temperature_daily_swing(tick);
 }
 
@@ -196,5 +196,9 @@ uint64_t weather_hash(const Weather *weather, uint64_t hash)
     hash = hash_fnv1a64(hash, &weather->period, sizeof(weather->period));
     hash = hash_fnv1a64(hash, &weather->day, sizeof(weather->day));
     float values[3] = {weather->spell, weather->snow, weather->recent_rain};
-    return hash_fnv1a64(hash, values, sizeof(values));
+    hash = hash_fnv1a64(hash, values, sizeof(values));
+    if (weather->debug_offset != 0.0f) { /* Apart: earlier hashes stay as they were. */
+        hash = hash_fnv1a64(hash, &weather->debug_offset, sizeof(weather->debug_offset));
+    }
+    return hash;
 }

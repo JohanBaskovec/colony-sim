@@ -18,6 +18,10 @@ typedef struct UiLayout {
     float x, y;
     float width; /* Measuring: widest row so far. Drawing: content width. */
     float row, text_offset, button_height;
+    /* Width kept free at the right end of table rows (ui_layout_bar_row(),
+     * ui_layout_pair()) for a stepper (ui_layout_stepper()); 0: none. Set it
+     * the same way in both passes. */
+    float reserve;
 } UiLayout;
 
 /* Measuring pass: the content is at least this wide. */
@@ -49,6 +53,18 @@ SDL_FRect ui_layout_pair(UiLayout *layout, const char *left, const char *right, 
  * columns line up from row to row. */
 SDL_FRect ui_layout_triple(UiLayout *layout, const char *left, const char *middle,
                            const char *right, const char *slot, SDL_Color color, bool hoverable);
+
+/* The width ui_layout_stepper() needs: set UiLayout.reserve to it. */
+float ui_layout_stepper_width(Ui *ui);
+
+/* Keeps room for the steppers at the right of the rows that follow (or no
+ * more: `on` false). */
+void ui_layout_set_stepper(UiLayout *layout, bool on);
+
+/* A "-" and a "+" button at the right end of a table row just returned by
+ * ui_layout_bar_row() or ui_layout_pair() (in the room UiLayout.reserve left
+ * there). Returns -1 when "-" was clicked, 1 for "+", else 0. */
+int ui_layout_stepper(UiLayout *layout, SDL_FRect row);
 
 /* A button at `x` on the current row (the row does not advance). */
 bool ui_layout_button(UiLayout *layout, float x, const char *label);

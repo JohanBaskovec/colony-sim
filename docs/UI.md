@@ -276,6 +276,14 @@ folder: `~/.local/share/colony-sim/` on Linux). The command line
 
 ### Debug
 
+F4 also has a God mode check box (the first six cheats, up to See everything, and the
+character editor, all on, or all off when they were all on), a Character editor
+check box (a - and a + button at the right of every need bar of settlers and animals and
+of every character and knowledge line of settlers: a tenth of a need, 5 percent of an
+attribute, 5 knowledge levels per click; knowledge at level 0 is listed too) and a
+Temperature row (- and +: 5 degrees off or on the air's, all along). On the command
+line: `--debug character_editor` and `--debug god_mode`.
+
 The debug windows (F4 cheats, F5 items, F6 animals) and the debug readout (F3) have no
 buttons: keyboard only. The readout goes to the top right corner. With
 vision, F4 gets Reveal map and See everything. Both there, with the option

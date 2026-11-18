@@ -967,6 +967,10 @@ static void need_row(UiLayout *layout, App *app, const Colonist *colonist, NeedT
     if (layout->draw && ui_hovered(layout->ui, row)) {
         need_tooltip(app, colonist, need);
     }
+    int step = app->character_editor ? ui_layout_stepper(layout, row) : 0;
+    if (step != 0) {
+        game_debug_colonist_need(&app->game, app->selected[0], need, step);
+    }
 }
 
 /* The summary of the selected colonist, as a table: age and activity as text,
@@ -984,9 +988,11 @@ static void summary_rows(UiLayout *layout, void *userdata)
     ui_layout_pair(layout, tr("hud.summary.age"), age, text, false);
     ui_layout_pair(layout, tr("hud.summary.activity"), tr(colonist_activity_key(colonist)), text,
                    false);
+    ui_layout_set_stepper(layout, app->character_editor);
     for (int need = 0; need < NEED_COUNT; need++) {
         need_row(layout, app, colonist, (NeedType)need);
     }
+    ui_layout_set_stepper(layout, false);
     SDL_FRect row =
         ui_layout_bar_row(layout, tr("hud.summary.mood"),
                           (colonist->mood.value - MOOD_MIN) / (MOOD_MAX - MOOD_MIN), true);
@@ -1004,9 +1010,11 @@ static void needs_rows(UiLayout *layout, void *userdata)
     if (colonist == NULL) {
         return;
     }
+    ui_layout_set_stepper(layout, app->character_editor);
     for (int need = 0; need < NEED_COUNT; need++) {
         need_row(layout, app, colonist, (NeedType)need);
     }
+    ui_layout_set_stepper(layout, false);
     Panel extra = {0};
     add_needs_extra_lines(app, &extra, colonist, id);
     panel_rows(layout, &extra);
@@ -1069,9 +1077,12 @@ static void knowledge_rows(UiLayout *layout, void *userdata)
         return;
     }
     ui_layout_label(layout, tr("hud.colonist.knowledge"), 0.0f, true);
+    /* The editor also lists the knowledges at level 0, to raise them. */
+    ui_layout_set_stepper(layout, app->character_editor);
     for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
         double value = colonist_knowledge_level(colonist, (KnowledgeType)knowledge);
-        if (!(value > 0.0) || !game_knowledge_discovered(&app->game, (KnowledgeType)knowledge)) {
+        if ((!(value > 0.0) && !app->character_editor) ||
+            !game_knowledge_discovered(&app->game, (KnowledgeType)knowledge)) {
             continue;
         }
         char level[16];
@@ -1082,7 +1093,13 @@ static void knowledge_rows(UiLayout *layout, void *userdata)
         if (layout->draw && ui_hovered(layout->ui, row)) {
             knowledge_tooltip(app, colonist, (KnowledgeType)knowledge);
         }
+        int step = app->character_editor ? ui_layout_stepper(layout, row) : 0;
+        if (step != 0) {
+            game_debug_colonist_knowledge(&app->game, app->selected[0], (KnowledgeType)knowledge,
+                                          step);
+        }
     }
+    ui_layout_set_stepper(layout, false);
 }
 
 /* The Character tab (game/attributes_panel.h). */
@@ -1091,7 +1108,13 @@ static void character_rows(UiLayout *layout, void *userdata)
     App *app = userdata;
     const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
     if (colonist != NULL) {
-        attributes_panel_rows(layout, &colonist->attributes);
+        AttributeType edited = ATTRIBUTE_COUNT;
+        int step =
+            attributes_panel_rows(layout, &colonist->attributes, app->character_editor, &edited);
+        ui_layout_set_stepper(layout, false);
+        if (step != 0) {
+            game_debug_colonist_attribute(&app->game, app->selected[0], edited, step);
+        }
     }
 }
 

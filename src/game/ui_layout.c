@@ -47,7 +47,8 @@ SDL_FRect ui_layout_bar_row(UiLayout *layout, const char *label, float fraction,
 {
     const Theme *theme = &layout->ui->theme;
     float bar_width = SDL_roundf(theme->inspector_width * 0.5f);
-    ui_layout_measure(layout, ui_text_width(layout->ui, label) + UI_LAYOUT_GAP * 2.0f + bar_width);
+    ui_layout_measure(layout, ui_text_width(layout->ui, label) + UI_LAYOUT_GAP * 2.0f + bar_width +
+                                  layout->reserve);
     SDL_FRect rect = {layout->x, layout->y, layout->width, layout->row};
     if (layout->draw) {
         if (hoverable && ui_hovered(layout->ui, rect)) {
@@ -55,7 +56,7 @@ SDL_FRect ui_layout_bar_row(UiLayout *layout, const char *label, float fraction,
         }
         ui_label(layout->ui, label, layout->x, layout->y + layout->text_offset);
         float height = SDL_max(4.0f, SDL_roundf(layout->row * 0.4f));
-        SDL_FRect track = {layout->x + layout->width - bar_width,
+        SDL_FRect track = {layout->x + layout->width - layout->reserve - bar_width,
                            SDL_roundf(layout->y + (layout->row - height) * 0.5f), bar_width,
                            height};
         ui_fill(layout->ui, track, theme->colors[THEME_TRACK]);
@@ -71,7 +72,8 @@ SDL_FRect ui_layout_pair(UiLayout *layout, const char *left, const char *right, 
                          bool hoverable)
 {
     float right_width = ui_text_width(layout->ui, right);
-    ui_layout_measure(layout, ui_text_width(layout->ui, left) + UI_LAYOUT_GAP * 2.0f + right_width);
+    ui_layout_measure(layout, ui_text_width(layout->ui, left) + UI_LAYOUT_GAP * 2.0f + right_width +
+                                  layout->reserve);
     SDL_FRect rect = {layout->x, layout->y, layout->width, layout->row};
     if (layout->draw) {
         if (hoverable && ui_hovered(layout->ui, rect)) {
@@ -79,7 +81,8 @@ SDL_FRect ui_layout_pair(UiLayout *layout, const char *left, const char *right, 
         }
         float y = layout->y + layout->text_offset;
         ui_label(layout->ui, left, layout->x, y);
-        ui_label_rgba(layout->ui, right, layout->x + layout->width - right_width, y, color);
+        ui_label_rgba(layout->ui, right, layout->x + layout->width - layout->reserve - right_width,
+                      y, color);
     }
     layout->y += layout->row;
     return rect;
@@ -105,6 +108,35 @@ SDL_FRect ui_layout_triple(UiLayout *layout, const char *left, const char *middl
     }
     layout->y += layout->row;
     return rect;
+}
+
+float ui_layout_stepper_width(Ui *ui)
+{
+    /* Two buttons, the width of "+" (it is wider than "-"), and a gap before them. */
+    return 2.0f * ui_button_width(ui, "+") + UI_LAYOUT_GAP;
+}
+
+void ui_layout_set_stepper(UiLayout *layout, bool on)
+{
+    layout->reserve = on ? ui_layout_stepper_width(layout->ui) : 0.0f;
+}
+
+int ui_layout_stepper(UiLayout *layout, SDL_FRect row)
+{
+    float width = ui_button_width(layout->ui, "+");
+    float x = row.x + row.w - layout->reserve + UI_LAYOUT_GAP;
+    int step = 0;
+    if (layout->draw) {
+        SDL_FRect minus = {x, row.y, width, layout->button_height};
+        SDL_FRect plus = {x + width, row.y, width, layout->button_height};
+        if (ui_button(layout->ui, minus, "-")) {
+            step = -1;
+        }
+        if (ui_button(layout->ui, plus, "+")) {
+            step = 1;
+        }
+    }
+    return step;
 }
 
 bool ui_layout_button_sized(UiLayout *layout, float x, float width, const char *label)
@@ -144,8 +176,8 @@ static void layout_window(Ui *ui, int id, const char *title, UiPlacement placeme
 {
     float row = ui_row_height(ui);
     float line = (float)text_line_height(ui->text);
-    UiLayout layout = {ui,        false, 0.0f, 0.0f, 0.0f, row, SDL_floorf((row - line) * 0.5f),
-                       row - 2.0f};
+    UiLayout layout = {ui,         false, 0.0f, 0.0f, 0.0f, row, SDL_floorf((row - line) * 0.5f),
+                       row - 2.0f, 0.0f};
     rows(&layout, userdata);
     float width = SDL_ceilf(layout.width);
     SDL_FPoint origin = dock != NULL

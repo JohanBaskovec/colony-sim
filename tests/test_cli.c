@@ -138,7 +138,15 @@ static void test_test_options(void)
     CHECK_EQ_UINT(options.debug, CLI_DEBUG_INSTANT_BUILD | CLI_DEBUG_FREE_CRAFTS |
                                      CLI_DEBUG_NO_TOOLS | CLI_DEBUG_INSTANT_DECONSTRUCT |
                                      CLI_DEBUG_LEARN_ALL | CLI_DEBUG_INSTANT_FELL_AND_MINE |
-                                     CLI_DEBUG_VISION | CLI_DEBUG_SEE_EVERYTHING);
+                                     CLI_DEBUG_VISION | CLI_DEBUG_SEE_EVERYTHING |
+                                     CLI_DEBUG_CHARACTER_EDITOR);
+
+    char *god[] = {"colony_sim", "--debug", "god_mode"};
+    CHECK(cli_parse(&options, ARGC(god), god, error, sizeof(error)));
+    CHECK_EQ_UINT(options.debug, CLI_DEBUG_GOD_MODE);
+    CHECK((options.debug & CLI_DEBUG_CHARACTER_EDITOR) != 0);
+    CHECK((options.debug & CLI_DEBUG_SEE_EVERYTHING) != 0);
+    CHECK((options.debug & (CLI_DEBUG_LEARN_ALL | CLI_DEBUG_VISION)) == 0);
 
     char *fell[] = {"colony_sim", "--debug=instant_fell_and_mine"};
     CHECK(cli_parse(&options, ARGC(fell), fell, error, sizeof(error)));

@@ -1397,6 +1397,72 @@ void game_set_instant_fell_and_mine(Game *game, bool on)
     game->debug.instant_fell_and_mine = on;
 }
 
+bool game_debug_colonist_need(Game *game, EntityId id, NeedType need, int direction)
+{
+    Colonist *colonist = game_colonist(game, id);
+    if (colonist == NULL || (unsigned)need >= NEED_COUNT) {
+        return false;
+    }
+    float step = direction > 0 ? GAME_DEBUG_NEED_STEP : -GAME_DEBUG_NEED_STEP;
+    colonist->needs[need] = clampf(colonist->needs[need] + step, 0.0f, 1.0f);
+    return true;
+}
+
+bool game_debug_animal_need(Game *game, EntityId id, AnimalNeed need, int direction)
+{
+    Animal *animal = animals_get(&game->animals, id);
+    if (animal == NULL || (unsigned)need >= ANIMAL_NEED_COUNT) {
+        return false;
+    }
+    float step = direction > 0 ? GAME_DEBUG_NEED_STEP : -GAME_DEBUG_NEED_STEP;
+    animal->needs[need] = clampf(animal->needs[need] + step, 0.0f, 1.0f);
+    return true;
+}
+
+bool game_debug_colonist_attribute(Game *game, EntityId id, AttributeType type, int direction)
+{
+    Colonist *colonist = game_colonist(game, id);
+    if (colonist == NULL || (unsigned)type >= ATTRIBUTE_COUNT) {
+        return false;
+    }
+    Attributes attributes = colonist->attributes;
+    int position = attributes.position[type] +
+                   (direction > 0 ? GAME_DEBUG_ATTRIBUTE_STEP : -GAME_DEBUG_ATTRIBUTE_STEP);
+    position = position > ATTRIBUTE_POSITION_MAX    ? ATTRIBUTE_POSITION_MAX
+               : position < -ATTRIBUTE_POSITION_MAX ? -ATTRIBUTE_POSITION_MAX
+                                                    : position;
+    if (!attributes_set(&attributes, type, position)) {
+        return false;
+    }
+    colonist_set_attributes(colonist, &attributes);
+    return true;
+}
+
+bool game_debug_colonist_knowledge(Game *game, EntityId id, KnowledgeType knowledge, int direction)
+{
+    Colonist *colonist = game_colonist(game, id);
+    if (colonist == NULL || (unsigned)knowledge >= KNOWLEDGE_COUNT) {
+        return false;
+    }
+    double level = colonist->knowledge[knowledge] +
+                   (direction > 0 ? GAME_DEBUG_KNOWLEDGE_STEP : -GAME_DEBUG_KNOWLEDGE_STEP);
+    level = level < KNOWLEDGE_LEVEL_MIN   ? KNOWLEDGE_LEVEL_MIN
+            : level > KNOWLEDGE_LEVEL_MAX ? KNOWLEDGE_LEVEL_MAX
+                                          : level;
+    colonist->knowledge[knowledge] = level;
+    colonist->knowledge_peak[knowledge] = level;
+    colonist->knowledge_practice[knowledge] = game->clock.tick;
+    return true;
+}
+
+void game_debug_temperature(Game *game, int direction)
+{
+    float offset = game->weather.debug_offset +
+                   (direction > 0 ? GAME_DEBUG_TEMPERATURE_STEP : -GAME_DEBUG_TEMPERATURE_STEP);
+    game->weather.debug_offset =
+        clampf(offset, -GAME_DEBUG_TEMPERATURE_LIMIT, GAME_DEBUG_TEMPERATURE_LIMIT);
+}
+
 void game_debug_next_weather(Game *game)
 {
     game->weather.type = (uint8_t)((game->weather.type + 1u) % WEATHER_TYPE_COUNT);

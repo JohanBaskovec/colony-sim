@@ -10,7 +10,7 @@
 
 /* A need as a table row: its name and a bar; the tooltip has its exact
  * value and what it does. */
-static void need_row(UiLayout *layout, const Animal *animal, AnimalNeed need)
+static void need_row(UiLayout *layout, App *app, const Animal *animal, AnimalNeed need)
 {
     static const char *const DESCRIPTION_KEYS[ANIMAL_NEED_COUNT] = {
         [ANIMAL_NEED_FOOD] = N_("animal_panel.need.food"),
@@ -25,6 +25,10 @@ static void need_row(UiLayout *layout, const Animal *animal, AnimalNeed need)
         TR_FORMAT(value, sizeof(value), tr("hud.colonist.need"), name, percent);
         const char *lines[2] = {value, tr(DESCRIPTION_KEYS[need])};
         ui_tooltip(layout->ui, lines, 2);
+    }
+    int step = app->character_editor ? ui_layout_stepper(layout, row) : 0;
+    if (step != 0) {
+        game_debug_animal_need(&app->game, app->selected_animal, need, step);
     }
 }
 
@@ -45,9 +49,11 @@ static void animal_rows(UiLayout *layout, void *userdata)
     ui_layout_pair(layout, tr("animal_panel.sex"), tr(SEX_KEYS[animal->sex]), text, false);
     ui_layout_pair(layout, tr("hud.summary.activity"), tr(animal_activity_key(animal)), text,
                    false);
+    ui_layout_set_stepper(layout, app->character_editor);
     for (int need = 0; need < ANIMAL_NEED_COUNT; need++) {
-        need_row(layout, animal, (AnimalNeed)need);
+        need_row(layout, app, animal, (AnimalNeed)need);
     }
+    ui_layout_set_stepper(layout, false);
     int herd = animals_herd_size(&app->game.animals, app->selected_animal);
     char size[TEXT_SIZE];
     if (herd > 1) {
@@ -67,7 +73,7 @@ static void character_rows(UiLayout *layout, void *userdata)
     App *app = userdata;
     const Animal *animal = game_animal_const(&app->game, app->selected_animal);
     if (animal != NULL) {
-        attributes_panel_rows(layout, &animal->attributes);
+        attributes_panel_rows(layout, &animal->attributes, false, NULL);
     }
 }
 

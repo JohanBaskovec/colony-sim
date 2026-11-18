@@ -10,8 +10,11 @@ static void signed_text(char *out, size_t size, long long value)
     SDL_snprintf(out, size, "%s%s", value > 0 ? "+" : "", number);
 }
 
-void attributes_panel_rows(UiLayout *layout, const Attributes *attributes)
+int attributes_panel_rows(UiLayout *layout, const Attributes *attributes, bool editable,
+                          AttributeType *edited)
 {
+    int step = 0;
+    ui_layout_set_stepper(layout, editable);
     static const char *const GROUP_KEYS[ATTRIBUTE_GROUP_COUNT] = {
         [ATTRIBUTE_GROUP_BODY] = N_("attribute.group.body"),
         [ATTRIBUTE_GROUP_MIND] = N_("attribute.group.mind"),
@@ -37,6 +40,12 @@ void attributes_panel_rows(UiLayout *layout, const Attributes *attributes)
                 const char *lines[1] = {tr(attribute_description_key((AttributeType)type))};
                 ui_tooltip(layout->ui, lines, 1);
             }
+            int clicked = editable ? ui_layout_stepper(layout, row) : 0;
+            if (clicked != 0) {
+                step = clicked;
+                *edited = (AttributeType)type;
+            }
         }
     }
+    return step;
 }

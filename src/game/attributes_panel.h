@@ -12,6 +12,10 @@
 #include "core/attributes.h"
 #include "game/ui_layout.h"
 
-void attributes_panel_rows(UiLayout *layout, const Attributes *attributes);
+/* With `editable`, each row ends with the - and + buttons of the character
+ * editor (game/debug_panel.h): returns -1 or 1 for the one that was clicked
+ * and sets `*edited` to its attribute, else 0. */
+int attributes_panel_rows(UiLayout *layout, const Attributes *attributes, bool editable,
+                          AttributeType *edited);
 
 #endif /* COLONY_GAME_ATTRIBUTES_PANEL_H */

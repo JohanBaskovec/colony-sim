@@ -598,6 +598,7 @@ bool app_init(App *app, const CliOptions *options)
     app->game_ready = true;
     apply_test_options(&app->game, options);
     app->show_vision = (options->debug & CLI_DEBUG_VISION) != 0;
+    app->character_editor = (options->debug & CLI_DEBUG_CHARACTER_EDITOR) != 0;
     LOG_INFO("World generated: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists, %u animals",
              params.world.seed, params.world.width, params.world.height,
              app->game.colonist_pool.count, app->game.animals.pool.count);

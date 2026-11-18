@@ -419,6 +419,113 @@ static void test_hash(void)
     game_shutdown(&b);
 }
 
+/* The character editor's steps: needs, attributes, knowledge; limits hold. */
+static void test_character_editor(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId id = game_spawn_colonist(&game, 10, 10, 0);
+    Colonist *colonist = game_colonist(&game, id);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_FOOD] = 0.5f;
+    CHECK(game_debug_colonist_need(&game, id, NEED_FOOD, 1));
+    CHECK_NEAR(colonist->needs[NEED_FOOD], 0.6, 1e-5);
+    CHECK(game_debug_colonist_need(&game, id, NEED_FOOD, -1));
+    CHECK(game_debug_colonist_need(&game, id, NEED_FOOD, -1));
+    CHECK_NEAR(colonist->needs[NEED_FOOD], 0.4, 1e-5);
+    for (int i = 0; i < 12; i++) {
+        game_debug_colonist_need(&game, id, NEED_FOOD, 1);
+    }
+    CHECK_NEAR(colonist->needs[NEED_FOOD], 1.0, 1e-6);
+    for (int i = 0; i < 12; i++) {
+        game_debug_colonist_need(&game, id, NEED_FOOD, -1);
+    }
+    CHECK_NEAR(colonist->needs[NEED_FOOD], 0.0, 1e-6);
+    CHECK(!game_debug_colonist_need(&game, id, NEED_COUNT, 1));
+    CHECK(!game_debug_colonist_need(&game, ENTITY_NONE, NEED_FOOD, 1));
+
+    /* An attribute moves by 5 percent, up to either end; the mood character follows. */
+    attributes_set(&colonist->attributes, ATTRIBUTE_PAIN_TOLERANCE, 0);
+    CHECK(game_debug_colonist_attribute(&game, id, ATTRIBUTE_PAIN_TOLERANCE, 1));
+    CHECK_EQ_INT(colonist->attributes.position[ATTRIBUTE_PAIN_TOLERANCE],
+                 GAME_DEBUG_ATTRIBUTE_STEP);
+    CHECK(game_debug_colonist_attribute(&game, id, ATTRIBUTE_PAIN_TOLERANCE, -1));
+    CHECK(game_debug_colonist_attribute(&game, id, ATTRIBUTE_PAIN_TOLERANCE, -1));
+    CHECK_EQ_INT(colonist->attributes.position[ATTRIBUTE_PAIN_TOLERANCE],
+                 -GAME_DEBUG_ATTRIBUTE_STEP);
+    for (int i = 0; i < 30; i++) {
+        game_debug_colonist_attribute(&game, id, ATTRIBUTE_PAIN_TOLERANCE, 1);
+    }
+    CHECK_EQ_INT(colonist->attributes.position[ATTRIBUTE_PAIN_TOLERANCE], ATTRIBUTE_POSITION_MAX);
+    float tolerant = colonist->health.pain_factor;
+    for (int i = 0; i < 50; i++) {
+        game_debug_colonist_attribute(&game, id, ATTRIBUTE_PAIN_TOLERANCE, -1);
+    }
+    CHECK_EQ_INT(colonist->attributes.position[ATTRIBUTE_PAIN_TOLERANCE], -ATTRIBUTE_POSITION_MAX);
+    CHECK(colonist->health.pain_factor > tolerant); /* The factors follow. */
+    CHECK(!game_debug_colonist_attribute(&game, id, ATTRIBUTE_COUNT, 1));
+
+    /* A knowledge moves by 5 levels, its peak with it (nothing to relearn). */
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_FIRE, 50.0);
+    colonist->knowledge_peak[KNOWLEDGE_FIRE] = 80.0;
+    CHECK(game_debug_colonist_knowledge(&game, id, KNOWLEDGE_FIRE, 1));
+    CHECK_NEAR(colonist->knowledge[KNOWLEDGE_FIRE], 55.0, 1e-9);
+    CHECK_NEAR(colonist->knowledge_peak[KNOWLEDGE_FIRE], 55.0, 1e-9);
+    for (int i = 0; i < 30; i++) {
+        game_debug_colonist_knowledge(&game, id, KNOWLEDGE_FIRE, 1);
+    }
+    CHECK_NEAR(colonist->knowledge[KNOWLEDGE_FIRE], KNOWLEDGE_LEVEL_MAX, 1e-9);
+    for (int i = 0; i < 30; i++) {
+        game_debug_colonist_knowledge(&game, id, KNOWLEDGE_FIRE, -1);
+    }
+    CHECK_NEAR(colonist->knowledge[KNOWLEDGE_FIRE], KNOWLEDGE_LEVEL_MIN, 1e-9);
+    CHECK(!game_debug_colonist_knowledge(&game, id, KNOWLEDGE_NONE, 1));
+
+    /* An animal's needs. */
+    EntityId deer = game_debug_spawn_animal(&game, ANIMAL_ROE_DEER, ANIMAL_FEMALE, 20, 20, 0);
+    REQUIRE(!entity_id_is_none(deer));
+    Animal *animal = animals_get(&game.animals, deer);
+    animal->needs[ANIMAL_NEED_WATER] = 0.5f;
+    CHECK(game_debug_animal_need(&game, deer, ANIMAL_NEED_WATER, -1));
+    CHECK_NEAR(animal->needs[ANIMAL_NEED_WATER], 0.4, 1e-5);
+    CHECK(!game_debug_animal_need(&game, deer, ANIMAL_NEED_COUNT, 1));
+    CHECK(!game_debug_animal_need(&game, ENTITY_NONE, ANIMAL_NEED_WATER, 1));
+    game_shutdown(&game);
+}
+
+/* The air's temperature goes up and down by steps, within limits, and the
+ * tiles under the sky follow; the hash tells it apart, and only when it is set. */
+static void test_temperature_steps(void)
+{
+    Game a, b;
+    REQUIRE(init_flat_game(&a));
+    REQUIRE(init_flat_game(&b));
+    float normal = game_outdoor_temperature(&a);
+    game_debug_temperature(&b, 1);
+    CHECK_NEAR(game_outdoor_temperature(&b), normal + GAME_DEBUG_TEMPERATURE_STEP, 1e-4);
+    CHECK(game_hash(&a) != game_hash(&b));
+    game_debug_temperature(&b, -1);
+    CHECK_NEAR(game_outdoor_temperature(&b), normal, 1e-4);
+    CHECK(game_hash(&a) == game_hash(&b));
+    game_debug_temperature(&b, -1);
+    CHECK_NEAR(game_outdoor_temperature(&b), normal - GAME_DEBUG_TEMPERATURE_STEP, 1e-4);
+    for (int i = 0; i < 40; i++) {
+        game_debug_temperature(&b, -1);
+    }
+    CHECK_NEAR(game_outdoor_temperature(&b), normal - GAME_DEBUG_TEMPERATURE_LIMIT, 1e-4);
+    for (int i = 0; i < 40; i++) {
+        game_debug_temperature(&b, 1);
+    }
+    CHECK_NEAR(game_outdoor_temperature(&b), normal + GAME_DEBUG_TEMPERATURE_LIMIT, 1e-4);
+    /* The ground level, open to the sky, follows the air. */
+    for (int i = 0; i < 10 * TICKS_PER_HOUR; i++) {
+        game_tick(&b);
+    }
+    CHECK(temperature_at(&b.temperatures, 5, 5, 0) > normal + 20.0f);
+    game_shutdown(&a);
+    game_shutdown(&b);
+}
+
 static void test_learn_all(void)
 {
     Game game;
@@ -543,6 +650,8 @@ int main(void)
     RUN_TEST(test_instant_fell_and_mine);
     RUN_TEST(test_weather_cheats);
     RUN_TEST(test_hash);
+    RUN_TEST(test_character_editor);
+    RUN_TEST(test_temperature_steps);
     RUN_TEST(test_learn_all);
     RUN_TEST(test_skip_and_next_season);
     RUN_TEST(test_spawn_items);
