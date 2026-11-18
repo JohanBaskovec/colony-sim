@@ -5,7 +5,7 @@ innate **attributes** of the body, the mind and the social self. There are no
 all-or-nothing traits: every attribute is a value on a continuous scale, and
 most settlers are ordinary in most of them.
 
-Status: step A is implemented (walking, work pace, learning, sleep, appetite, cold and heat tolerance, outlook, temperament), and toughness and pain tolerance with health (`docs/HEALTH.md`); the rest is design. Values marked *(tuning)* are first guesses.
+Status: step A is implemented (walking, work pace, learning, sleep, appetite, cold and heat tolerance, outlook, temperament), toughness and pain tolerance with health (`docs/HEALTH.md`) and courage with combat (`docs/COMBAT.md`); the rest is design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -95,11 +95,13 @@ less), on top of the innate value.
 | Temperament | stoic / sensitive | weight of every thought, good and bad | ×0.6 to ×1.5 |
 | Sociability | solitary / gregarious | how much company the settler needs (with the social need) | ×0.5 to ×2 |
 | Demands | easily pleased / demanding | expectations of comfort and of the colony's wealth (with expectations) | ×0.5 to ×2 |
-| Courage | fearful / brave | how hurt a settler must be to flee a fight (with danger and combat) | see below |
+| Courage | fearful / brave | how hurt a settler must be to flee a fight (`docs/COMBAT.md`) | see below |
 
 **Courage.** In a fight, settlers flee once they are hurt badly enough. A
 fearful settler flees at the first wounds, a brave one much later, and the
-very bravest (a position near +1) never flee *(tuning, with combat)*.
+very bravest never flee *(tuning)*: the settler breaks off once its hurt
+fraction (pain, or blood lost; `docs/COMBAT.md` §4) reaches 0.4 when ordinary,
+0.08 at −1, 0.75 at +0.5 and 1.1 (never) at +1.
 
 Outlook sets where the mood sits, temperament how far it swings. A cheerful
 stoic stays steady and content; a gloomy and sensitive settler breaks down

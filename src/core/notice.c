@@ -39,6 +39,7 @@ const char *notice_text_key(NoticeType type)
         [NOTICE_DEATH_BLOOD_LOSS] = N_("notice.death_blood_loss"),
         [NOTICE_DEATH_INJURY] = N_("notice.death_injury"),
         [NOTICE_COLONY_LOST] = N_("notice.colony_lost"),
+        [NOTICE_SETTLER_ATTACKED] = N_("notice.settler_attacked"),
     };
     return (unsigned)type < NOTICE_TYPE_COUNT ? KEYS[type] : KEYS[NOTICE_KNOWLEDGE_LOST];
 }

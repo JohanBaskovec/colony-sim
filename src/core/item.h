@@ -61,6 +61,8 @@ typedef enum ItemType {
     ITEM_RED_DEER_CARCASS,
     ITEM_BOAR_CARCASS,
     ITEM_HARE_CARCASS,
+    ITEM_WOLF_CARCASS,
+    ITEM_FOX_CARCASS,
     ITEM_TYPE_COUNT
 } ItemType;
 

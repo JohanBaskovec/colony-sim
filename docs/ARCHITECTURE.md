@@ -66,6 +66,7 @@ simulation:
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
+| `combat`     | Blows between beings, for settlers and animals alike: attacks (damage, injury kind, accuracy, interval, reach), hit chance against dodge, a blow through `health`, the hurt fraction and breaking off, the queue of strikes the game resolves (see `docs/COMBAT.md`) |
 | `health`     | Bodies for settlers and animals alike: body plans and parts, injuries that bleed and hurt, abilities (consciousness, walking, the hands, sight, eating), clotting, natural healing, blood coming back, death; falls (see `docs/HEALTH.md`) |
 | `attributes` | Settler attributes: positions in thousandths drawn on a bell curve, their effects (factors, thought weight, outlook points, temperature shifts), the word bands and translation keys |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
@@ -798,8 +799,8 @@ changes its mind.
 
 ### Wild animals
 
-`core/animal.h`: plant eaters that live their own life (step 1 of wildlife;
-carnivores, death and births come later). `Game.animals` is ticked after the
+`core/animal.h`: plant eaters and carnivores that live their own life
+(wildlife steps 1 and 2; births come later). `Game.animals` is ticked after the
 settlers (`animals_tick()`, slot order) with its own `Rng`
 (`Game.wildlife_rng`): what animals do never shifts the settlers' draws. A
 game has animals only when asked (`NewGameParams.wildlife`, a multiple of
@@ -808,7 +809,8 @@ each species' density; the game as played asks for `GAME_WILDLIFE_DENSITY`,
 them have none, and `game_hash()` only includes animals once one exists, so
 their hashes are what they were.
 
-- **Species** (`AnimalDef`): roe deer, red deer, wild boar, hare; walking and
+- **Species** (`AnimalDef`): roe deer, red deer, wild boar, hare; the wolf and
+  the fox (carnivores, below); walking and
   fleeing speeds, hours for each need to run out, the hours of the day the
   species rests in (deer at night, boars and hares by day), flight distance,
   herd sizes by sex, density, and diet: how it grazes (growth needed, growth
@@ -841,6 +843,21 @@ their hashes are what they were.
   Cornered, it stays and waits `ANIMAL_CORNERED_TICKS` before it looks for a
   way out again. Searches for food, water and strolls leave out tiles within
   the flight distance of a settler. Settlers ignore animals.
+- **Carnivores** (`AnimalDef.carnivore`; design in `docs/COMBAT.md` §6): the
+  wolf (packs of three to five, hunts deer, roe deer and hares, settlers
+  when desperate) and the fox (alone, hunts hares). They eat carcasses only.
+  Hungry (below `ANIMAL_HUNGRY`), a carnivore first looks for a carcass
+  (`is_carcass()`: an animal's, never a settler's body), then a prey in sight
+  within its `hunt_range` (`pick_prey()`; a settler counts twice as far and
+  only below `ANIMAL_DESPERATE`) and attacks it, its herd mates with it
+  (`start_hunt()`). A carnivore eats a carcass a bite at a time
+  (`eat_carcass()`, `ANIMAL_CARCASS_BITE_TICKS`): a bite takes `bite_kg` of the
+  carcass, as a share of its hit points by its weight, and fills `bite_kg` /
+  `stomach_kg` of its hunger. Prey see them (`Animals.predator_slots`,
+  recomputed every tick) and run like from a settler, the herd with them; a
+  carnivore fears settlers unless desperate, never other carnivores.
+  Running tires (`Animal.fatigue`, `AnimalDef.sprint_seconds`): a spent animal
+  runs at a third of its speed, so a hare outruns a fox only for a while.
 - **Herds**: each animal has a `leader` (itself for a leader and a loner);
   followers stay within `ANIMAL_HERD_RADIUS` of it, so the herd roams as its
   leader does. `animals_set_leader()` keeps herds one deep (the leader
@@ -854,6 +871,8 @@ their hashes are what they were.
   density × land tiles / 10,000 animals, in herds of the species' sizes,
   on land that leads to water when there is some, `ANIMAL_SPAWN_CLEARANCE`
   tiles at least from where the settlers arrive.
+- **Fights**: see *Combat* below: an animal struck (or sent by the debug tool)
+  fights back or runs; hunting is how carnivores come to attack.
 - **Seen or not**: `game_animal_seen()` is true where a settler sees the
   animal's tile now (always without the fog); the frontend draws and picks
   only those (`game_animal_at()`), and drops a selected animal that goes out
@@ -894,6 +913,22 @@ while nobody is hurt (`health_hash()` adds nothing then).
   caving in (`roofs_collapse()`'s tiles) and felled trees, which the map logs
   (`Map.tree_fall_log`, read by `hurt_under_felled_trees()`), hurt whoever
   stands there; `game_debug_hurt()` for the debug tool.
+
+### Combat
+
+`core/combat.h` (design in `docs/COMBAT.md`) only resolves blows. Who fights
+whom is decided by the behaviors: a struck or ordered animal gets an
+`Animal.enemy` and the task `ANIMAL_TASK_ATTACK` (`fight()` chases it, plans
+the path again at every tile center and queues a strike when adjacent and
+ready); a struck settler gets `Colonist.enemy`, and `engage()` in
+`colonist_tick()` makes it `TASK_FIGHT` or, hurt past its nerve (the Courage
+attribute), `TASK_FLEE`. Both only push `CombatStrike`s into
+`Game.combat`; `resolve_strikes()` runs them at the end of the tick, in the
+order they were asked, with the game's own `combat_rng`, then tells the target
+(`provoke()`): an animal fights back or runs (`animals_provoke()`), a
+settler fights or flees at its next turn (`colonist_provoke()`) and the
+player is told. Combat is invisible to the hash until a blow is struck.
+The debug tool (F4) names an attacker and a target (`game_debug_attack()`).
 
 ### Dirt and cleaning
 

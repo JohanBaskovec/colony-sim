@@ -81,6 +81,7 @@ typedef enum AppTool {
 #define APP_DEBUG_GROW_TREE 3
 #define APP_DEBUG_SPAWN_ANIMAL 4 /* App.debug_animal. */
 #define APP_DEBUG_HURT 5         /* A blow on whoever is on the tile. */
+#define APP_DEBUG_FIGHT 6        /* Click an attacker, then its target (App.debug_attacker). */
 
 /* Types of the forbid tool (see app_toggle_tool()). */
 #define APP_FORBID 0
@@ -236,6 +237,7 @@ typedef struct App {
     TilePos move_item_source;      /* For APP_TOOL_MOVE_ITEM: the stack to carry. */
     int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
     AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */
+    Combatant debug_attacker;      /* For APP_DEBUG_FIGHT: who was clicked first (or none). */
     AnimalSex debug_animal_sex;    /* ... and its sex. */
     bool forbid_allows;            /* For APP_TOOL_FORBID: allows instead. */
 

@@ -586,6 +586,8 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
     case TASK_HAUL:
     case TASK_SUPPLY:
     case TASK_SLEEP:
+    case TASK_FIGHT:
+    case TASK_FLEE:
     case TASK_DOWN:
     case TASK_COUNT: break;
     }
@@ -624,6 +626,8 @@ const char *colonist_task_name_key(ColonistTask task)
         [TASK_STORY] = N_("colonist.task.story"),
         [TASK_LISTEN] = N_("colonist.task.listen"),
         [TASK_MOVE] = N_("colonist.task.move"),
+        [TASK_FIGHT] = N_("colonist.task.fight"),
+        [TASK_FLEE] = N_("colonist.task.flee"),
         [TASK_DOWN] = N_("colonist.task.down"),
     };
     return (unsigned)task < TASK_COUNT ? KEYS[task] : KEYS[TASK_IDLE];
@@ -775,6 +779,7 @@ bool colonist_order_move(Colonist *colonist, const ColonistContext *context, Til
         !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
         return false;
     }
+    colonist->enemy = combatant_none(); /* The player's order ends the fight. */
     if (colonist->move_progress > 0.0f) {
         /* Between two tiles: on the next one (the search is made then). */
         colonist->move_pending = true;
@@ -3221,6 +3226,8 @@ bool colonist_can_chat(const Colonist *colonist)
     case TASK_SLEEP:
     case TASK_HAUL:
     case TASK_SUPPLY:
+    case TASK_FIGHT:
+    case TASK_FLEE:
     case TASK_DOWN:
     case TASK_COUNT: break;
     }
@@ -4569,6 +4576,135 @@ static void step_out_of_blocked_tile(Colonist *colonist, const ColonistContext *
     }
 }
 
+/* ---- Fights --------------------------------------------------------------- */
+
+bool colonist_provoke(Colonist *colonist, Combatant attacker)
+{
+    if (health_is_dead(&colonist->health) || combatant_is_none(attacker)) {
+        return false;
+    }
+    bool fresh = combatant_is_none(colonist->enemy);
+    if (fresh) {
+        colonist->enemy = attacker;
+    }
+    return fresh;
+}
+
+AttackType colonist_attack(const Colonist *colonist, float *skill, float *power)
+{
+    AttackType type = ATTACK_FISTS;
+    *skill = 1.0f;
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        ItemType tool = (ItemType)colonist->tools[i].type;
+        if (tool == ITEM_THRUSTING_SPEAR_HARDENED ||
+            (tool == ITEM_THRUSTING_SPEAR && type == ATTACK_FISTS)) {
+            type =
+                tool == ITEM_THRUSTING_SPEAR ? ATTACK_SPEAR_THRUST : ATTACK_HARDENED_SPEAR_THRUST;
+        }
+    }
+    if (type != ATTACK_FISTS) {
+        float level = (float)colonist_knowledge_level(colonist, KNOWLEDGE_SPEAR_HUNTING) /
+                      (float)KNOWLEDGE_LEVEL_MAX;
+        *skill = COLONIST_SPEAR_SKILL_MIN +
+                 (COLONIST_SPEAR_SKILL_MAX - COLONIST_SPEAR_SKILL_MIN) * level;
+    }
+    *power = (COLONIST_POWER_BASE + COLONIST_POWER_PER_STRENGTH * (float)colonist->strength) *
+             health_ability(&colonist->health, HEALTH_HANDS);
+    return type;
+}
+
+/* Whether a tile is far enough from an enemy (the flight's goal). */
+static bool far_from_enemy(const Map *map, int x, int y, int z, void *userdata)
+{
+    (void)map;
+    const TilePos *enemy = userdata;
+    int dx = x - enemy->x, dy = y - enemy->y;
+    return z == enemy->z && dx * dx + dy * dy >= COLONIST_FLEE_DISTANCE * COLONIST_FLEE_DISTANCE;
+}
+
+/* Runs to a tile far from the enemy. False when there is none within reach. */
+static bool start_flight(Colonist *colonist, const ColonistContext *context, TilePos enemy)
+{
+    Path path = {0};
+    TilePos found;
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
+                                 far_from_enemy, &enemy, COLONIST_FLEE_MAX_COST, &path, &found)) {
+        path_free(&path);
+        return false;
+    }
+    begin_task(colonist, context, TASK_FLEE);
+    path_free(&colonist->path);
+    colonist->path = path;
+    colonist->target = found;
+    return true;
+}
+
+/* On a tile center with an enemy: gives up the fight when it is gone, flees
+ * when hurt past its nerve (cornered, it fights), else fights: walks up to the
+ * enemy, and strikes when it is in reach and ready. */
+static void engage(Colonist *colonist, const ColonistContext *context)
+{
+    const Animal *enemy = colonist->enemy.kind == COMBATANT_ANIMAL && context->animals != NULL
+                              ? animals_get_const(context->animals, colonist->enemy.id)
+                              : NULL;
+    TilePos here = current_tile(colonist), there = {0, 0, 0};
+    if (enemy != NULL) {
+        there = (TilePos){(int16_t)enemy->x, (int16_t)enemy->y, (int16_t)enemy->z};
+    }
+    if (enemy == NULL || health_is_dead(&enemy->health) ||
+        abs(there.x - here.x) > COLONIST_ENEMY_FORGET_DISTANCE ||
+        abs(there.y - here.y) > COLONIST_ENEMY_FORGET_DISTANCE || abs(there.z - here.z) > 2) {
+        colonist->enemy = combatant_none();
+        if (colonist->task == TASK_FIGHT || colonist->task == TASK_FLEE) {
+            set_idle(colonist, context, 0);
+        }
+        return;
+    }
+    bool afraid = combat_breaks_off(&colonist->health, attribute_nerve(&colonist->attributes));
+    if (afraid) {
+        if (colonist->task == TASK_FLEE && colonist_is_moving(colonist)) {
+            return;
+        }
+        bool far = !(abs(there.x - here.x) < COLONIST_FLEE_DISTANCE &&
+                     abs(there.y - here.y) < COLONIST_FLEE_DISTANCE && there.z == here.z);
+        if (far && colonist->task == TASK_FLEE) {
+            colonist->enemy = combatant_none(); /* Got away. */
+            set_idle(colonist, context, 0);
+            return;
+        }
+        if (start_flight(colonist, context, there)) {
+            return;
+        }
+        /* Cornered: it fights. */
+    }
+    if (colonist->task != TASK_FIGHT) {
+        begin_task(colonist, context, TASK_FIGHT);
+        path_clear(&colonist->path);
+    }
+    if (combat_in_reach(here, there, COMBAT_REACH_ADJACENT)) {
+        path_clear(&colonist->path);
+        colonist->path_index = 0;
+        if (colonist->attack_cooldown <= 0 && context->combat != NULL) {
+            float skill, power;
+            AttackType attack = colonist_attack(colonist, &skill, &power);
+            combat_queue_push(context->combat, (CombatStrike){{COMBATANT_SETTLER, context->self},
+                                                              colonist->enemy,
+                                                              (uint8_t)attack,
+                                                              skill,
+                                                              power});
+            colonist->attack_cooldown = attack_interval_ticks(attack);
+        }
+        return;
+    }
+    path_free(&colonist->path);
+    colonist->path_index = 0;
+    if (!pathfinder_find(context->pathfinder, context->plan_map, here, there,
+                         COLONIST_CHASE_MAX_COST, &colonist->path)) {
+        colonist->enemy = combatant_none(); /* No way to it. */
+        set_idle(colonist, context, 0);
+    }
+}
+
 /* Falls where it is (TASK_DOWN): whatever it did is given up, what it
  * carried put down. */
 static void lie_down(Colonist *colonist, const ColonistContext *context)
@@ -4604,12 +4740,20 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     if (colonist->task == TASK_DOWN) {
         set_idle(colonist, context, 0); /* Gets up. */
     }
+    if (colonist->attack_cooldown > 0) {
+        colonist->attack_cooldown--;
+    }
     if (colonist->move_progress == 0.0f) {
         if (colonist->move_pending) {
             colonist->move_pending = false;
             start_move(colonist, context, colonist->move_goal);
         }
-        decide(colonist, context);
+        if (!combatant_is_none(colonist->enemy)) {
+            engage(colonist, context);
+        }
+        if (colonist->task != TASK_FIGHT && colonist->task != TASK_FLEE) {
+            decide(colonist, context);
+        }
     }
 
     if (colonist_is_moving(colonist)) {
@@ -4645,6 +4789,8 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
         }
         break;
     case TASK_SLEEP:
+    case TASK_FIGHT:
+    case TASK_FLEE:
     case TASK_DOWN:
     case TASK_COUNT: break;
     }

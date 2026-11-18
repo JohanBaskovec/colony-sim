@@ -124,9 +124,21 @@ static void test_species_definitions(void)
         CHECK(def->herd_min >= 1 && def->herd_max >= def->herd_min && def->male_group_max >= 1);
         CHECK(def->male_share > 0.0f && def->male_share < 1.0f);
         CHECK(def->density > 0.0f);
-        /* Plant eaters all: they graze. */
-        CHECK(def->graze_value > 0.0f && def->graze_bite > 0.0f && def->food_value > 0.0f);
-        CHECK(def->bite_items >= 1);
+        if (def->carnivore) {
+            /* Meat eaters: they hunt, and bite carcasses. */
+            CHECK(def->prey != 0 && def->hunt_range > 0 && def->bite_kg > 0.0f &&
+                  def->stomach_kg > def->bite_kg);
+            CHECK(def->attack != ATTACK_NONE);
+            CHECK(def->plants == 0 && !def->eats_nuts && def->graze_value == 0.0f);
+            CHECK((def->prey & ANIMAL_SPECIES_BIT(species)) == 0);
+        } else {
+            /* Plant eaters: they graze. */
+            CHECK(def->graze_value > 0.0f && def->graze_bite > 0.0f && def->food_value > 0.0f);
+            CHECK(def->bite_items >= 1);
+        }
+        CHECK(def->sprint_seconds > 0.0f && def->agility > 0.0f && def->nerve >= 0.0f);
+        CHECK(item_def(def->carcass) != NULL &&
+              item_def(def->carcass)->category == ITEM_CATEGORY_BODIES);
         int rest_hours = 0;
         for (int hour = 0; hour < HOURS_PER_DAY; hour++) {
             rest_hours += animal_rest_hour((AnimalSpecies)species, hour) ? 1 : 0;
@@ -791,8 +803,11 @@ static void test_populated_world(void)
         CHECK(abs(leader->x - animal->x) <= 12 && abs(leader->y - animal->y) <= 12);
     }
     for (int species = 0; species < ANIMAL_SPECIES_COUNT; species++) {
-        CHECK(counts[species] >= 2);
-        CHECK(males[species] < counts[species]);
+        /* (A small map may hold none of the carnivores, which are few.) */
+        if (!animal_def((AnimalSpecies)species)->carnivore) {
+            CHECK(counts[species] >= 2);
+            CHECK(males[species] < counts[species]);
+        }
     }
     /* Each animal on a tile of its own. */
     for (uint32_t a = 0; a < animals_slot_count(animals); a++) {
@@ -803,6 +818,29 @@ static void test_populated_world(void)
         }
     }
     uint32_t base = animals->pool.count;
+    game_shutdown(&game);
+
+    /* A big world holds the carnivores too: packs of wolves, foxes alone. */
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = 42;
+    params.world.width = 256;
+    params.world.height = 256;
+    params.colonist_count = 3;
+    params.wildlife = GAME_WILDLIFE_DENSITY;
+    REQUIRE(game_init(&game, &params));
+    int wolves = 0, foxes = 0, pack = 0;
+    for (uint32_t slot = 0; slot < animals_slot_count(&game.animals); slot++) {
+        const Animal *animal = &game.animals.list[slot];
+        wolves += animal->species == ANIMAL_WOLF;
+        foxes += animal->species == ANIMAL_FOX;
+        if (animal->species == ANIMAL_WOLF && animal->sex == ANIMAL_FEMALE) {
+            int size = animals_herd_size(&game.animals, animals_id_at(&game.animals, slot));
+            pack = size > pack ? size : pack;
+        }
+    }
+    CHECK(wolves >= 3 && foxes >= 3);
+    CHECK(pack >= animal_def(ANIMAL_WOLF)->herd_min);
     game_shutdown(&game);
 
     /* Twice the density, about twice the animals. */

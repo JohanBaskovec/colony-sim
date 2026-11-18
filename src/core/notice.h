@@ -30,7 +30,8 @@ typedef enum NoticeType {
      * vital part. */
     NOTICE_DEATH_BLOOD_LOSS,
     NOTICE_DEATH_INJURY,
-    NOTICE_COLONY_LOST, /* The last settler died. */
+    NOTICE_COLONY_LOST,      /* The last settler died. */
+    NOTICE_SETTLER_ATTACKED, /* An animal went for a settler (docs/COMBAT.md). */
     NOTICE_TYPE_COUNT
 } NoticeType;
 

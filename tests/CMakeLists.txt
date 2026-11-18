@@ -13,6 +13,7 @@ set(COLONY_UNIT_TESTS
     test_debug
     test_entry_strip
     test_colonist
+    test_combat
     test_construction
     test_designation
     test_dirt

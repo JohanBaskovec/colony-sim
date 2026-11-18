@@ -188,6 +188,9 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .wetting = weather_wetting(&game->weather, game->clock.tick),
         .free_crafts = game->debug.free_crafts,
         .no_tools = game->debug.no_tools,
+        .animals = &game->animals,
+        .combat = &game->combat,
+        .self = game_colonist_id_at(game, slot),
     };
     return context;
 }
@@ -555,6 +558,7 @@ bool game_init(Game *game, const NewGameParams *params)
     game_clock_init(&game->clock);
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
     rng_seed(&game->wildlife_rng, params->world.seed, 0x77696c64ULL /* "wild" */);
+    rng_seed(&game->combat_rng, params->world.seed, 0x666967687455ULL /* "fight" */);
     roof_watch_init(&game->roof_watch, &game->map);
     game->tree_falls_seen = game->map.tree_fall_revision;
     weather_init(&game->weather, game->seed, game->clock.tick);
@@ -953,6 +957,114 @@ static void settler_died(Game *game, uint32_t slot)
     }
 }
 
+static void update_colonists(Game *game);
+/* ---- Fights --------------------------------------------------------------- */
+
+/* What the resolver needs of someone in a fight. */
+typedef struct Fighter {
+    Health *health;
+    TilePos pos;
+    float agility;
+} Fighter;
+
+static bool fighter_of(Game *game, Combatant who, Fighter *out)
+{
+    if (who.kind == COMBATANT_SETTLER) {
+        Colonist *colonist = game_colonist(game, who.id);
+        if (colonist == NULL || health_is_dead(&colonist->health)) {
+            return false;
+        }
+        *out = (Fighter){&colonist->health,
+                         {(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z},
+                         COMBAT_SETTLER_AGILITY};
+        return true;
+    }
+    Animal *animal = who.kind == COMBATANT_ANIMAL ? animals_get(&game->animals, who.id) : NULL;
+    if (animal == NULL || health_is_dead(&animal->health)) {
+        return false;
+    }
+    *out = (Fighter){&animal->health,
+                     {(int16_t)animal->x, (int16_t)animal->y, (int16_t)animal->z},
+                     animal_def((AnimalSpecies)animal->species)->agility};
+    return true;
+}
+
+/* The target of a blow reacts: a settler will fight or flee at its next turn
+ * (the player is told when it is the first blow), an animal fights back or
+ * runs. */
+static void provoke(Game *game, Combatant target, Combatant attacker)
+{
+    if (target.kind == COMBATANT_SETTLER) {
+        Colonist *colonist = game_colonist(game, target.id);
+        if (colonist != NULL && colonist_provoke(colonist, attacker)) {
+            notices_push(&game->notices, NOTICE_SETTLER_ATTACKED, KNOWLEDGE_NONE, colonist->name,
+                         game->clock.tick);
+        }
+    } else if (target.kind == COMBATANT_ANIMAL) {
+        animals_provoke(&game->animals, target.id, attacker);
+    }
+}
+
+/* Resolves the blows asked for during the tick, in the order they were asked. */
+static void resolve_strikes(Game *game)
+{
+    CombatQueue *queue = &game->combat;
+    for (int i = 0; i < queue->count; i++) {
+        const CombatStrike *strike = &queue->list[i];
+        Fighter attacker, target;
+        const AttackDef *def = attack_def((AttackType)strike->attack);
+        if (def == NULL || !fighter_of(game, strike->attacker, &attacker) ||
+            !fighter_of(game, strike->target, &target) || health_is_unconscious(attacker.health) ||
+            !combat_in_reach(attacker.pos, target.pos, def->reach)) {
+            continue; /* Gone, dead, knocked out or out of reach by now. */
+        }
+        combat_blow((AttackType)strike->attack, strike->skill, strike->power, target.health,
+                    target.agility, &game->combat_rng);
+        game->strikes_resolved++;
+        provoke(game, strike->target, strike->attacker);
+    }
+    queue->count = 0;
+}
+
+Combatant game_combatant_at(const Game *game, int x, int y, int z)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = &game->colonists[slot];
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            !health_is_dead(&colonist->health) && colonist->x == x && colonist->y == y &&
+            colonist->z == z) {
+            return (Combatant){COMBATANT_SETTLER, game_colonist_id_at(game, slot)};
+        }
+    }
+    for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
+        const Animal *animal = &game->animals.list[slot];
+        if (!entity_id_is_none(animals_id_at(&game->animals, slot)) &&
+            !health_is_dead(&animal->health) && animal->x == x && animal->y == y &&
+            animal->z == z) {
+            return (Combatant){COMBATANT_ANIMAL, animals_id_at(&game->animals, slot)};
+        }
+    }
+    return combatant_none();
+}
+
+bool game_debug_attack(Game *game, Combatant attacker, Combatant target)
+{
+    Fighter ignored;
+    if (!fighter_of(game, attacker, &ignored) || !fighter_of(game, target, &ignored) ||
+        combatant_equal(attacker, target)) {
+        return false;
+    }
+    if (attacker.kind == COMBATANT_ANIMAL) {
+        return animals_attack(&game->animals, attacker.id, target);
+    }
+    Colonist *colonist = game_colonist(game, attacker.id);
+    if (target.kind != COMBATANT_ANIMAL || colonist == NULL) {
+        return false;
+    }
+    colonist->enemy = target;
+    return true;
+}
+
 static void update_colonists(Game *game)
 {
     /* Fixed slot order keeps the simulation deterministic. */
@@ -960,6 +1072,7 @@ static void update_colonists(Game *game)
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
             context.worker_id = (uint8_t)(slot + 1); /* ...but for who is acting. */
+            context.self = game_colonist_id_at(game, slot);
             /* Someone before may have changed the map (a felled tree, a new wall): stale
              * regions would make every search pre-check answer "maybe". */
             regions_update(&game->regions, &game->map);
@@ -990,9 +1103,16 @@ static void update_animals(Game *game)
         return;
     }
     TilePos threats[COLONIST_MAX];
-    int threat_count = 0;
+    AnimalSettler settlers[COLONIST_MAX];
+    int threat_count = 0, settler_count = 0;
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         const Colonist *colonist = &game->colonists[slot];
+        if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
+            !health_is_dead(&colonist->health)) {
+            settlers[settler_count++] =
+                (AnimalSettler){game_colonist_id_at(game, slot),
+                                {(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z}};
+        }
         /* (Someone lying unconscious frightens nobody.) */
         if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
             !health_is_unconscious(&colonist->health) && !health_is_dead(&colonist->health)) {
@@ -1009,6 +1129,10 @@ static void update_animals(Game *game)
         .tick = game->clock.tick,
         .threats = threats,
         .threat_count = threat_count,
+        .settlers = settlers,
+        .settler_count = settler_count,
+        .combat = &game->combat,
+        .items = &game->items,
     };
     animals_tick(&game->animals, &context);
     /* The dead leave their carcass where they fell; their herd follows
@@ -1656,6 +1780,7 @@ void game_tick(Game *game)
     update_colonists(game);
     hurt_under_felled_trees(game); /* Felled by the woodcutters: they die on their next turn. */
     update_animals(game);
+    resolve_strikes(game);
     if (game->vision_on) {
         update_vision(game);
     }
@@ -1735,6 +1860,10 @@ uint64_t game_hash(const Game *game)
         uint64_t explored = vision_explored_hash(&game->vision);
         hash = hash_fnv1a64(hash, &explored, sizeof(explored));
     }
+    if (game->strikes_resolved > 0) { /* Likewise. */
+        hash = hash_fnv1a64(hash, &game->strikes_resolved, sizeof(game->strikes_resolved));
+        hash = hash_fnv1a64(hash, &game->combat_rng.state, sizeof(game->combat_rng.state));
+    }
     if (game->colony_lost) { /* Only then: hashes stay as they were. */
         hash = hash_fnv1a64(hash, &game->colony_lost, sizeof(game->colony_lost));
     }
@@ -1799,6 +1928,12 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
         hash = health_hash(&c->health, hash);
+        if (!combatant_is_none(c->enemy) || c->attack_cooldown > 0) {
+            /* Only then: hashes of games without fights stay as they were. */
+            int32_t fight[4] = {c->enemy.kind, (int32_t)c->enemy.id.index,
+                                (int32_t)c->enemy.id.generation, c->attack_cooldown};
+            hash = hash_fnv1a64(hash, fight, sizeof(fight));
+        }
         hash = hash_fnv1a64(hash, c->name, strlen(c->name));
         int32_t job[14] = {c->station,       c->station_number, c->bill,    c->recipe,
                            c->station_phase, c->fetch.x,        c->fetch.y, c->fetch_tool,

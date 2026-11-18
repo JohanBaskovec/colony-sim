@@ -1106,6 +1106,8 @@ static void render_body(SDL_Renderer *renderer, const SDL_FRect *tile, ItemType 
     case ITEM_ROE_DEER_CARCASS: coat = (SDL_Color){158, 104, 62, 255}, scale = 0.75f; break;
     case ITEM_RED_DEER_CARCASS: coat = (SDL_Color){128, 82, 52, 255}, scale = 1.0f; break;
     case ITEM_BOAR_CARCASS: coat = (SDL_Color){78, 66, 56, 255}, scale = 0.9f; break;
+    case ITEM_WOLF_CARCASS: coat = (SDL_Color){118, 114, 106, 255}, scale = 0.8f; break;
+    case ITEM_FOX_CARCASS: coat = (SDL_Color){196, 100, 44, 255}, scale = 0.5f; break;
     default: coat = (SDL_Color){150, 130, 104, 255}, scale = 0.45f; break;
     }
     float cx = tile->x + w * 0.5f;
@@ -1130,6 +1132,8 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
     case ITEM_ROE_DEER_CARCASS:
     case ITEM_RED_DEER_CARCASS:
     case ITEM_BOAR_CARCASS:
+    case ITEM_WOLF_CARCASS:
+    case ITEM_FOX_CARCASS:
     case ITEM_HARE_CARCASS: render_body(renderer, tile, type); break;
     case ITEM_WOOD: {
         /* Three logs. */

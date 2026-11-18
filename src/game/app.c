@@ -1073,6 +1073,17 @@ static void apply_debug_tool(App *app, float screen_x, float screen_y)
                                 level >= 0 ? level : z);
         break;
     }
+    case APP_DEBUG_FIGHT: { /* First the attacker, then its target. */
+        int level = map_view_level(&app->game.map, x, y, z);
+        Combatant who = game_combatant_at(&app->game, x, y, level >= 0 ? level : z);
+        if (combatant_is_none(app->debug_attacker) || combatant_is_none(who)) {
+            app->debug_attacker = who;
+        } else {
+            game_debug_attack(&app->game, app->debug_attacker, who);
+            app->debug_attacker = combatant_none();
+        }
+        break;
+    }
     case APP_DEBUG_HURT: { /* Whoever stands on the ground seen there. */
         int level = map_view_level(&app->game.map, x, y, z);
         game_debug_hurt(&app->game, x, y, level >= 0 ? level : z);

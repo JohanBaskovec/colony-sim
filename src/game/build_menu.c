@@ -180,6 +180,10 @@ static void debug_card(App *app, int mode, Card *card)
         card_add_text(card, CARD_TITLE, tr("hud.tool.grow_tree"));
     } else if (mode == APP_DEBUG_HURT) {
         card_add_text(card, CARD_TITLE, tr("hud.tool.hurt"));
+    } else if (mode == APP_DEBUG_FIGHT) {
+        card_add_text(card, CARD_TITLE,
+                      tr(combatant_is_none(app->debug_attacker) ? "hud.tool.fight_attacker"
+                                                                : "hud.tool.fight_target"));
     } else if (mode == APP_DEBUG_SPAWN_ANIMAL) {
         TR_FORMAT(card_add(card, CARD_TITLE), TEXT_SIZE, tr("hud.tool.spawn_animal"),
                   tr(animal_name_key(app->debug_animal, app->debug_animal_sex)));

@@ -53,9 +53,11 @@
 #ifndef COLONY_CORE_COLONIST_H
 #define COLONY_CORE_COLONIST_H
 
+#include "core/animal.h"
 #include "core/appearance.h"
 #include "core/attributes.h"
 #include "core/bed.h"
+#include "core/combat.h"
 #include "core/construction.h"
 #include "core/designation.h"
 #include "core/health.h"
@@ -246,6 +248,10 @@ typedef enum ColonistTask {
     /* Walking where the player ordered (`target`), then standing there a while
      * (COLONIST_MOVE_HOLD_TICKS). Only critical needs and breaks cut it short. */
     TASK_MOVE,
+    /* Struck by an animal (Colonist.enemy, docs/COMBAT.md): fighting it (walks
+     * up to it and strikes), or running from it when hurt past its nerve. */
+    TASK_FIGHT,
+    TASK_FLEE,
     /* Lying where it fell: unconscious, or unable to walk (core/health.h).
      * Gets up by itself once able to. */
     TASK_DOWN,
@@ -452,8 +458,12 @@ typedef struct Colonist {
     float needs[NEED_COUNT];
     float wetness; /* 0 (dry) .. 1 (wet through). */
     Mood mood;
-    Attributes attributes;         /* Set with colonist_set_attributes(). */
-    Health health;                 /* Its factors follow the attributes. */
+    Attributes attributes; /* Set with colonist_set_attributes(). */
+    Health health;         /* Its factors follow the attributes. */
+    /* The animal that struck it and it fights or flees (TASK_FIGHT, TASK_FLEE);
+     * NONE when nobody. `attack_cooldown`: ticks before its next blow. */
+    Combatant enemy;
+    int attack_cooldown;
     ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
 
@@ -487,6 +497,7 @@ typedef struct ColonistContext {
     uint64_t tick;
     bool night;        /* colonist_is_night_for(tick, worker_id). */
     uint8_t worker_id; /* Reservation owner for this colonist (slot + 1), never 0. */
+    EntityId self;     /* Its own handle (for the blows it deals). */
     /* Every colonist (Game.colonists) and who is alive, to find a master to
      * assist; NULL: nobody assists anyone. */
     Colonist *colonists;
@@ -502,7 +513,35 @@ typedef struct ColonistContext {
     /* Debug cheats (GameDebug): crafts need no input, no tool is needed. */
     bool free_crafts;
     bool no_tools;
+    /* The animals, to fight them, and where blows are queued (core/combat.h);
+     * NULL: no fights. */
+    const Animals *animals;
+    CombatQueue *combat;
 } ColonistContext;
+
+/* Fighting (docs/COMBAT.md): an enemy further than this many tiles is forgotten,
+ * a settler that flees runs to a tile this far from it, within this travel
+ * cost, and one that fights walks up to it within this travel cost. */
+#define COLONIST_ENEMY_FORGET_DISTANCE 24
+#define COLONIST_FLEE_DISTANCE 18
+#define COLONIST_FLEE_MAX_COST 70.0f
+#define COLONIST_CHASE_MAX_COST 50.0f
+/* Power of a blow by strength: ×(COLONIST_POWER_BASE + COLONIST_POWER_PER_STRENGTH
+ * × strength), and the skill with a spear: ×COLONIST_SPEAR_SKILL_MIN at level 0
+ * to ×COLONIST_SPEAR_SKILL_MAX at 100. */
+#define COLONIST_POWER_BASE 0.6f
+#define COLONIST_POWER_PER_STRENGTH 0.04f
+#define COLONIST_SPEAR_SKILL_MIN 0.8f
+#define COLONIST_SPEAR_SKILL_MAX 1.3f
+
+/* A settler was struck (or attacked) by `attacker`: it will fight or flee at its
+ * next turn. Returns true when it had no enemy before. */
+bool colonist_provoke(Colonist *colonist, Combatant attacker);
+
+/* The attack a settler fights with: a thrusting spear it carries (the
+ * hardened one first), else its fists; `skill` and `power` are the multipliers
+ * its blows carry (power follows its strength and the use of its hands). */
+AttackType colonist_attack(const Colonist *colonist, float *skill, float *power);
 
 void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, int z);
 void colonist_free(Colonist *colonist);

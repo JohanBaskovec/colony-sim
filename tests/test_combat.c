@@ -1,0 +1,778 @@
+/* Combat: attacks, blows, breaking off, and fights in a game (core/combat.h,
+ * docs/COMBAT.md). */
+#include "core/animal.h"
+#include "core/attributes.h"
+#include "core/combat.h"
+#include "core/game.h"
+#include "core/i18n.h"
+
+#include "test_framework.h"
+#include "test_settlers.h"
+
+#include <math.h>
+#include <string.h>
+
+enum { HEAD, TORSO, LEFT_ARM, RIGHT_ARM, LEFT_LEG, RIGHT_LEG };
+
+static Health human(void)
+{
+    Health health;
+    health_init(&health, BODY_HUMAN, 1.0f, 1.0f, 1.0f);
+    return health;
+}
+
+static void test_attack_definitions(void)
+{
+    CHECK(attack_def(ATTACK_NONE) == NULL);
+    CHECK(attack_def(ATTACK_TYPE_COUNT) == NULL);
+    CHECK_EQ_INT(attack_interval_ticks(ATTACK_NONE), 0);
+    for (int type = ATTACK_NONE + 1; type < ATTACK_TYPE_COUNT; type++) {
+        const AttackDef *def = attack_def((AttackType)type);
+        REQUIRE(def != NULL);
+        CHECK(i18n_is_valid_key(def->name_key));
+        CHECK(def->damage > 0.0f);
+        CHECK(def->accuracy > 0.0f && def->accuracy <= 1.0f);
+        CHECK(def->interval > 0.0f);
+        CHECK(def->reach >= 1);
+        CHECK_EQ_INT(attack_interval_ticks((AttackType)type),
+                     (int)(def->interval * TICKS_PER_SECOND + 0.5f));
+        CHECK((unsigned)def->injury < INJURY_TYPE_COUNT);
+    }
+    /* A hardened spear hits harder than a plain one. */
+    CHECK_NEAR(attack_def(ATTACK_HARDENED_SPEAR_THRUST)->damage,
+               1.2 * attack_def(ATTACK_SPEAR_THRUST)->damage, 0.3);
+    CHECK(attack_def(ATTACK_FISTS)->damage < attack_def(ATTACK_SPEAR_THRUST)->damage);
+}
+
+static void test_reach(void)
+{
+    TilePos a = {10, 10, 0};
+    CHECK(combat_in_reach(a, (TilePos){10, 10, 0}, 1));
+    CHECK(combat_in_reach(a, (TilePos){11, 11, 0}, 1));
+    CHECK(combat_in_reach(a, (TilePos){9, 10, 0}, 1));
+    CHECK(!combat_in_reach(a, (TilePos){12, 10, 0}, 1));
+    CHECK(combat_in_reach(a, (TilePos){12, 10, 0}, 2));
+    CHECK(!combat_in_reach(a, (TilePos){10, 11, 1}, 1)); /* Another level. */
+}
+
+static void test_hit_chance(void)
+{
+    Health body = human();
+    float base = combat_hit_chance(ATTACK_SPEAR_THRUST, 1.0f, &body, 0.25f);
+    CHECK_NEAR(base, 0.8 * (1.0 - 0.5 * 0.25), 1e-5);
+    /* Nimbler targets are harder to hit; skill helps. */
+    CHECK(combat_hit_chance(ATTACK_SPEAR_THRUST, 1.0f, &body, 0.6f) < base);
+    CHECK(combat_hit_chance(ATTACK_SPEAR_THRUST, 1.3f, &body, 0.25f) > base);
+    /* Always a chance, never a sure thing. */
+    CHECK_NEAR(combat_hit_chance(ATTACK_FISTS, 0.01f, &body, 1.0f), COMBAT_HIT_MIN, 1e-6);
+    CHECK_NEAR(combat_hit_chance(ATTACK_SPEAR_THRUST, 5.0f, &body, 0.0f), COMBAT_HIT_MAX, 1e-6);
+    /* Someone who cannot walk does not dodge. */
+    Health lame = human();
+    health_hurt(&lame, LEFT_LEG, INJURY_FRACTURE, 3.0f);
+    health_hurt(&lame, RIGHT_LEG, INJURY_FRACTURE, 3.0f);
+    CHECK_NEAR(combat_dodge(&lame, 0.5f), 0.0, 1e-6);
+    CHECK_NEAR(combat_hit_chance(ATTACK_SPEAR_THRUST, 1.0f, &lame, 0.5f), 0.8, 1e-5);
+    CHECK_NEAR(combat_dodge(&body, 0.5f), 0.5, 1e-6);
+    /* Nothing hits the dead, nor with no attack. */
+    Health dead = human();
+    health_hurt(&dead, HEAD, INJURY_CRUSH, 100.0f);
+    REQUIRE(health_is_dead(&dead));
+    CHECK_NEAR(combat_hit_chance(ATTACK_FISTS, 1.0f, &dead, 0.0f), 0.0, 1e-9);
+    CHECK_NEAR(combat_hit_chance(ATTACK_NONE, 1.0f, &body, 0.0f), 0.0, 1e-9);
+}
+
+static void test_blows(void)
+{
+    Rng rng;
+    rng_seed(&rng, 9, 4);
+    int hits = 0, trials = 4000;
+    float damage_min = 1000.0f, damage_max = 0.0f;
+    int parts[6] = {0};
+    for (int i = 0; i < trials; i++) {
+        Health body = human();
+        BlowResult blow = combat_blow(ATTACK_SPEAR_THRUST, 1.0f, 1.0f, &body, 0.25f, &rng);
+        if (!blow.hit) {
+            CHECK_EQ_INT(blow.part, -1);
+            CHECK(!health_is_hurt(&body));
+            continue;
+        }
+        hits++;
+        CHECK(health_is_hurt(&body));
+        REQUIRE(blow.part >= 0 && blow.part < 6);
+        parts[blow.part]++;
+        CHECK_EQ_INT(body.injuries[0].type, INJURY_CUT);
+        damage_min = fminf(damage_min, blow.damage);
+        damage_max = fmaxf(damage_max, blow.damage);
+    }
+    CHECK(hits > 0.65 * trials && hits < 0.80 * trials); /* 70 % */
+    float nominal = attack_def(ATTACK_SPEAR_THRUST)->damage;
+    CHECK(damage_min >= nominal * (1.0f - COMBAT_DAMAGE_SPREAD) - 1e-3f);
+    CHECK(damage_max <= nominal * (1.0f + COMBAT_DAMAGE_SPREAD) + 1e-3f);
+    CHECK(damage_max - damage_min > 0.3f * nominal); /* It varies. */
+    CHECK(parts[TORSO] > parts[HEAD] && parts[TORSO] > parts[LEFT_ARM]);
+
+    /* Power and the defender's toughness scale the damage. */
+    float strong = 0.0f, soft = 0.0f;
+    for (int i = 0; i < 200; i++) {
+        Health a = human(), b;
+        health_init(&b, BODY_HUMAN, 1.0f, 0.5f, 1.0f);
+        strong += combat_blow(ATTACK_TUSKS, 3.0f, 2.0f, &a, 0.0f, &rng).damage;
+        soft += combat_blow(ATTACK_TUSKS, 3.0f, 1.0f, &b, 0.0f, &rng).damage;
+    }
+    CHECK(strong > 3.0f * soft); /* ×2 power against ×0.5 toughness. */
+
+    /* Blows keep landing until it is dead; the dead are not hit. */
+    Health victim = human();
+    int blows = 0;
+    while (!health_is_dead(&victim) && blows < 500) {
+        combat_blow(ATTACK_WOLF_BITE, 2.0f, 2.0f, &victim, 0.0f, &rng);
+        blows++;
+    }
+    CHECK(health_is_dead(&victim));
+    BlowResult after = combat_blow(ATTACK_WOLF_BITE, 2.0f, 2.0f, &victim, 0.0f, &rng);
+    CHECK(!after.hit);
+}
+
+static void test_breaking_off(void)
+{
+    Health body = human();
+    CHECK_NEAR(combat_hurt_fraction(&body), 0.0, 1e-6);
+    CHECK(!combat_breaks_off(&body, 0.4f));
+    /* Pain: 25 points of bruises × 0.8 over 50 = 40 %. */
+    health_hurt(&body, LEFT_ARM, INJURY_BRUISE, 12.5f);
+    health_hurt(&body, RIGHT_ARM, INJURY_BRUISE, 12.5f);
+    CHECK_NEAR(combat_hurt_fraction(&body), 0.4, 1e-3);
+    CHECK(combat_breaks_off(&body, 0.4f));
+    CHECK(!combat_breaks_off(&body, 0.5f));
+    CHECK(!combat_breaks_off(&body, 1.1f)); /* The bravest never. */
+    /* Blood lost counts: half way to death. */
+    Health bled = human();
+    bled.blood = 0.75f;
+    CHECK_NEAR(combat_hurt_fraction(&bled), 0.5, 1e-5);
+    CHECK_NEAR(combat_hurt_fraction(&(Health){.blood = 0.0f}), 1.0, 1e-6);
+
+    /* Courage sets the nerve: 0.4 when ordinary, 0.08 at the most fearful,
+     * 1.1 at the bravest, steadily in between. */
+    Attributes attributes;
+    attributes_init(&attributes);
+    CHECK_NEAR(attribute_nerve(&attributes), 0.4, 1e-6);
+    REQUIRE(attributes_set(&attributes, ATTRIBUTE_COURAGE, -ATTRIBUTE_POSITION_MAX));
+    CHECK_NEAR(attribute_nerve(&attributes), 0.08, 1e-5);
+    REQUIRE(attributes_set(&attributes, ATTRIBUTE_COURAGE, ATTRIBUTE_POSITION_MAX));
+    CHECK_NEAR(attribute_nerve(&attributes), 1.1, 1e-5);
+    float last = -1.0f;
+    for (int position = -ATTRIBUTE_POSITION_MAX; position <= ATTRIBUTE_POSITION_MAX;
+         position += 100) {
+        REQUIRE(attributes_set(&attributes, ATTRIBUTE_COURAGE, position));
+        CHECK(attribute_nerve(&attributes) > last);
+        last = attribute_nerve(&attributes);
+    }
+    CHECK_EQ_INT(attribute_group(ATTRIBUTE_COURAGE), ATTRIBUTE_GROUP_MIND);
+}
+
+static void test_queue(void)
+{
+    CombatQueue queue = {0};
+    CombatStrike strike = {
+        {COMBATANT_ANIMAL, {1, 1}}, {COMBATANT_SETTLER, {2, 1}}, ATTACK_FISTS, 1.0f, 1.0f};
+    for (int i = 0; i < COMBAT_QUEUE_MAX; i++) {
+        CHECK(combat_queue_push(&queue, strike));
+    }
+    CHECK(!combat_queue_push(&queue, strike));
+    CHECK_EQ_INT(queue.count, COMBAT_QUEUE_MAX);
+    CHECK(combatant_is_none(combatant_none()));
+    CHECK(!combatant_is_none(strike.attacker));
+    CHECK(combatant_equal(strike.attacker, strike.attacker));
+    CHECK(!combatant_equal(strike.attacker, strike.target));
+    CHECK(combatant_equal(combatant_none(), combatant_none()));
+}
+
+/* ---- In the game ---------------------------------------------------------- */
+
+static bool init_flat_game(Game *game)
+{
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.flat = true;
+    params.world.seed = 5;
+    params.world.width = 48;
+    params.world.height = 48;
+    params.colonist_count = 0;
+    if (!game_init(game, &params)) {
+        return false;
+    }
+    Map *map = &game->map;
+    for (size_t i = map_level_tile_count(map); i < map_tile_count(map); i++) {
+        map->terrain[i] = TERRAIN_OPEN;
+        map->rock[i] = ROCK_NONE;
+    }
+    for (size_t i = 0; i < map_level_tile_count(map); i++) {
+        map->terrain[i] = TERRAIN_SOIL;
+        map->rock[i] = ROCK_NONE;
+        memset(&map->plants[i], 0, sizeof(map->plants[i]));
+    }
+    map_topology_changed(map);
+    game->clock.tick = 12 * TICKS_PER_HOUR;
+    return true;
+}
+
+static Colonist *spawn_settler(Game *game, int x, int y)
+{
+    Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
+    if (colonist == NULL) {
+        return NULL;
+    }
+    make_ordinary(colonist);
+    for (int work = 0; work < WORK_TYPE_COUNT; work++) {
+        colonist_set_work_priority(colonist, (WorkType)work, WORK_PRIORITY_DISABLED);
+    }
+    for (int need = 0; need < NEED_COUNT; need++) {
+        colonist->needs[need] = 1.0f;
+    }
+    return colonist;
+}
+
+static Animal *spawn_animal(Game *game, AnimalSpecies species, int x, int y, EntityId *id)
+{
+    EntityId made = game_spawn_animal(game, species, ANIMAL_MALE, x, y, 0);
+    if (id != NULL) {
+        *id = made;
+    }
+    Animal *animal = animals_get(&game->animals, made);
+    if (animal != NULL) {
+        for (int need = 0; need < ANIMAL_NEED_COUNT; need++) {
+            animal->needs[need] = 1.0f;
+        }
+        animal->timer = 100000; /* Stands there. */
+    }
+    return animal;
+}
+
+static void run_ticks(Game *game, int ticks)
+{
+    for (int i = 0; i < ticks; i++) {
+        game_tick(game);
+    }
+}
+
+static void test_combatants_at(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 10, 10);
+    EntityId boar_id;
+    REQUIRE(spawn_animal(&game, ANIMAL_BOAR, 12, 10, &boar_id) != NULL);
+    REQUIRE(settler != NULL);
+    Combatant at_settler = game_combatant_at(&game, 10, 10, 0);
+    CHECK_EQ_INT(at_settler.kind, COMBATANT_SETTLER);
+    Combatant at_boar = game_combatant_at(&game, 12, 10, 0);
+    CHECK_EQ_INT(at_boar.kind, COMBATANT_ANIMAL);
+    CHECK(entity_id_equal(at_boar.id, boar_id));
+    CHECK(combatant_is_none(game_combatant_at(&game, 20, 20, 0)));
+    CHECK(combatant_is_none(game_combatant_at(&game, 12, 10, 1)));
+
+    /* The debug attack asks for living, different, armed fighters. */
+    CHECK(!game_debug_attack(&game, at_boar, at_boar));
+    CHECK(!game_debug_attack(&game, combatant_none(), at_boar));
+    CHECK(!game_debug_attack(&game, at_settler, at_settler));
+    CHECK(game_debug_attack(&game, at_boar, at_settler));
+    CHECK(game_debug_attack(&game, at_settler, at_boar));
+    EntityId hare_id;
+    REQUIRE(spawn_animal(&game, ANIMAL_HARE, 14, 10, &hare_id) != NULL);
+    Combatant hare = {COMBATANT_ANIMAL, hare_id};
+    CHECK(!game_debug_attack(&game, hare, at_boar)); /* A hare has no weapon. */
+    CHECK(game_debug_attack(&game, at_boar, hare));
+    game_shutdown(&game);
+}
+
+/* A boar goes for a hare that cannot run: it catches it, kills it, and the
+ * carcass lies there. */
+static void test_animal_hunts_a_hare_that_cannot_run(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId boar_id, hare_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 20, 20, &boar_id);
+    Animal *hare = spawn_animal(&game, ANIMAL_HARE, 26, 20, &hare_id);
+    REQUIRE(boar != NULL && hare != NULL);
+    for (int part = 0; part < body_part_count(BODY_HARE); part++) {
+        if (body_part_def(BODY_HARE, part)->role == BODY_ROLE_WALK) {
+            health_hurt(&hare->health, part, INJURY_FRACTURE, 0.5f);
+        }
+    }
+    REQUIRE(health_is_down(&hare->health));
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, boar_id},
+                              (Combatant){COMBATANT_ANIMAL, hare_id}));
+    CHECK_EQ_INT(boar->task, ANIMAL_TASK_ATTACK);
+    CHECK_STR_EQ(animal_activity_key(boar), "animal.activity.attack");
+    run_ticks(&game, 3 * TICKS_PER_SECOND);
+    /* The boar has run to it (6 tiles in a second or two) and bitten. */
+    CHECK(abs(boar->x - 26) <= 1);
+    CHECK(game.strikes_resolved > 0);
+    run_ticks(&game, 20 * TICKS_PER_SECOND);
+    CHECK(animals_get(&game.animals, hare_id) == NULL);
+    bool carcass = false;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            carcass |= items_get(&game.items, 26 + dx, 20 + dy, 0).type == ITEM_HARE_CARCASS;
+        }
+    }
+    CHECK(carcass);
+    /* Nobody left to fight: the boar lets go. */
+    CHECK(combatant_is_none(boar->enemy));
+    CHECK(boar->task != ANIMAL_TASK_ATTACK);
+    game_shutdown(&game);
+}
+
+/* A struck animal that does not fight back runs; one that does, fights. */
+static void test_struck_animals_flee_or_fight_back(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId deer_id, boar_id, hare_id;
+    Animal *deer = spawn_animal(&game, ANIMAL_RED_DEER, 10, 10, &deer_id);
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 11, 10, &boar_id);
+    Animal *hare = spawn_animal(&game, ANIMAL_HARE, 30, 30, &hare_id);
+    REQUIRE(deer != NULL && boar != NULL && hare != NULL);
+    Combatant by_deer = {COMBATANT_ANIMAL, deer_id};
+    CHECK(animals_provoke(&game.animals, boar_id, by_deer));
+    CHECK_EQ_INT(boar->task, ANIMAL_TASK_ATTACK); /* A boar fights back. */
+    CHECK(combatant_equal(boar->enemy, by_deer));
+    CHECK(!animals_provoke(&game.animals, boar_id, by_deer)); /* Not the first time. */
+    Combatant by_boar = {COMBATANT_ANIMAL, boar_id};
+    CHECK(animals_provoke(&game.animals, deer_id, by_boar));
+    CHECK(deer->alarmed); /* A deer runs. */
+    CHECK(deer->task != ANIMAL_TASK_ATTACK);
+    CHECK(animals_provoke(&game.animals, hare_id, by_boar));
+    CHECK(hare->alarmed);
+    run_ticks(&game, 2 * TICKS_PER_SECOND);
+    CHECK_EQ_INT(deer->task, ANIMAL_TASK_FLEE);
+    /* Far from the boar now. */
+    run_ticks(&game, 6 * TICKS_PER_SECOND);
+    CHECK(abs(deer->x - 11) + abs(deer->y - 10) > 8);
+    game_shutdown(&game);
+}
+
+/* A hurt animal breaks off: it runs from whom it fought. */
+static void test_hurt_animal_breaks_off(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId boar_id, deer_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 20, 20, &boar_id);
+    Animal *deer = spawn_animal(&game, ANIMAL_RED_DEER, 21, 20, &deer_id);
+    REQUIRE(boar != NULL && deer != NULL);
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, boar_id},
+                              (Combatant){COMBATANT_ANIMAL, deer_id}));
+    /* Bruised all over: past the boar's nerve (0.7). */
+    health_hurt(&boar->health, LEFT_LEG, INJURY_BRUISE, 20.0f);
+    health_hurt(&boar->health, RIGHT_ARM, INJURY_BRUISE, 15.0f);
+    health_hurt(&boar->health, HEAD, INJURY_BRUISE, 8.0f);
+    health_hurt(&boar->health, TORSO, INJURY_BRUISE, 15.0f);
+    REQUIRE(!health_is_down(&boar->health));
+    REQUIRE(combat_breaks_off(&boar->health, animal_def(ANIMAL_BOAR)->nerve));
+    run_ticks(&game, 2 * TICKS_PER_SECOND);
+    CHECK(boar->task != ANIMAL_TASK_ATTACK);
+    game_shutdown(&game);
+}
+
+/* A settler attacked by an animal is told so, fights back with its fists, and
+ * the fight is resolved blow by blow. */
+static void test_settler_fights_back(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    EntityId boar_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 24, 20, &boar_id);
+    REQUIRE(settler != NULL && boar != NULL);
+    EntityId settler_id = game_colonist_id_at(&game, 0);
+    uint64_t before = game_hash(&game);
+    uint32_t notices = game.notices.count;
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, boar_id},
+                              (Combatant){COMBATANT_SETTLER, settler_id}));
+    bool raised = false, fought = false, struck_back = false;
+    for (int tick = 0; tick < 40 * TICKS_PER_SECOND && !health_is_dead(&settler->health) &&
+                       !health_is_dead(&boar->health);
+         tick++) {
+        game_tick(&game);
+        if (game.notices.count > notices) {
+            const Notice *notice = notices_get(&game.notices, notices);
+            raised |= notice != NULL && notice->type == NOTICE_SETTLER_ATTACKED &&
+                      strcmp(notice->name, settler->name) == 0;
+        }
+        fought |= settler->task == TASK_FIGHT;
+        struck_back |= health_is_hurt(&boar->health);
+    }
+    CHECK(raised);
+    CHECK(fought);
+    CHECK(struck_back);
+    CHECK(health_is_hurt(&settler->health));
+    CHECK(game.strikes_resolved > 3);
+    CHECK(game_hash(&game) != before);
+    CHECK_STR_EQ(colonist_task_name_key(TASK_FIGHT), "colonist.task.fight");
+    game_shutdown(&game);
+}
+
+/* A settler with a thrusting spear fights with it, better with the knowledge. */
+static void test_settler_attack_by_weapon(void)
+{
+    Colonist colonist;
+    colonist_init(&colonist, "Ada", 30, 0, 0, 0);
+    REQUIRE(colonist_set_strength(&colonist, COLONIST_STRENGTH_STANDARD));
+    float skill, power;
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_FISTS);
+    CHECK_NEAR(skill, 1.0, 1e-6);
+    CHECK_NEAR(power, 1.0, 1e-5); /* 0.6 + 0.04 × 10 */
+    REQUIRE(colonist_set_strength(&colonist, COLONIST_STRENGTH_MAX));
+    colonist_attack(&colonist, &skill, &power);
+    CHECK_NEAR(power, 1.4, 1e-5);
+    REQUIRE(colonist_set_strength(&colonist, COLONIST_STRENGTH_STANDARD));
+    colonist.tools[0] = item_stack_pristine(ITEM_THRUSTING_SPEAR, 1);
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_SPEAR_THRUST);
+    CHECK_NEAR(skill, COLONIST_SPEAR_SKILL_MIN, 1e-5);
+    REQUIRE(colonist_set_knowledge_level(&colonist, KNOWLEDGE_SPEAR_HUNTING, 100.0));
+    colonist_attack(&colonist, &skill, &power);
+    CHECK_NEAR(skill, COLONIST_SPEAR_SKILL_MAX, 1e-5);
+    colonist.tools[1] = item_stack_pristine(ITEM_THRUSTING_SPEAR_HARDENED, 1);
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_HARDENED_SPEAR_THRUST);
+    /* A broken arm: weaker blows. */
+    health_hurt(&colonist.health, LEFT_ARM, INJURY_FRACTURE, 2.0f);
+    health_hurt(&colonist.health, RIGHT_ARM, INJURY_FRACTURE, 2.0f);
+    colonist_attack(&colonist, &skill, &power);
+    CHECK(power < 0.3f);
+    colonist_free(&colonist);
+}
+
+/* A fearful settler, once hurt, runs instead; the player's order ends a fight. */
+static void test_fearful_settler_flees(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    Colonist *brave = spawn_settler(&game, 20, 30);
+    EntityId boar_id, other_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 23, 20, &boar_id);
+    Animal *other = spawn_animal(&game, ANIMAL_BOAR, 23, 30, &other_id);
+    REQUIRE(settler != NULL && brave != NULL && boar != NULL && other != NULL);
+    Attributes timid = settler->attributes;
+    REQUIRE(attributes_set(&timid, ATTRIBUTE_COURAGE, -ATTRIBUTE_POSITION_MAX));
+    colonist_set_attributes(settler, &timid);
+    Attributes bold = brave->attributes;
+    REQUIRE(attributes_set(&bold, ATTRIBUTE_COURAGE, ATTRIBUTE_POSITION_MAX));
+    colonist_set_attributes(brave, &bold);
+    /* Both a little hurt already (pain 20 %): over the timid one's nerve. */
+    for (int i = 0; i < 2; i++) {
+        Colonist *who = i == 0 ? settler : brave;
+        health_hurt(&who->health, LEFT_ARM, INJURY_BRUISE, 6.0f);
+        health_hurt(&who->health, RIGHT_ARM, INJURY_BRUISE, 6.0f);
+    }
+    REQUIRE(combat_breaks_off(&settler->health, attribute_nerve(&settler->attributes)));
+    REQUIRE(!combat_breaks_off(&brave->health, attribute_nerve(&brave->attributes)));
+    /* Struck: the timid one runs. */
+    REQUIRE(colonist_provoke(settler, (Combatant){COMBATANT_ANIMAL, boar_id}));
+    REQUIRE(colonist_provoke(brave, (Combatant){COMBATANT_ANIMAL, other_id}));
+    run_ticks(&game, 10);
+    CHECK_EQ_INT(settler->task, TASK_FLEE);
+    CHECK_STR_EQ(colonist_activity_key(settler), "colonist.task.flee");
+    CHECK_EQ_INT(brave->task, TASK_FIGHT);
+    int x = settler->x;
+    run_ticks(&game, 2 * TICKS_PER_SECOND);
+    CHECK(x - settler->x >= 3 || settler->x - x >= 3 || settler->task != TASK_FLEE);
+    /* An order ends the fight. */
+    EntityId brave_id = game_colonist_id_at(&game, 1);
+    CHECK_EQ_INT(game_order_move(&game, &brave_id, 1, 10, 40, 0), 1);
+    CHECK(combatant_is_none(brave->enemy));
+    game_shutdown(&game);
+}
+
+/* An animal that loses its enemy (dead, or far away) is left in peace. */
+static void test_enemy_forgotten(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 10, 10);
+    EntityId boar_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 42, 42, &boar_id);
+    REQUIRE(settler != NULL && boar != NULL);
+    EntityId settler_id = game_colonist_id_at(&game, 0);
+    REQUIRE(colonist_provoke(settler, (Combatant){COMBATANT_ANIMAL, boar_id}));
+    run_ticks(&game, 5); /* 32 tiles away: forgotten. */
+    CHECK(combatant_is_none(settler->enemy));
+    CHECK(settler->task != TASK_FIGHT && settler->task != TASK_FLEE);
+    /* The same for the animal against a far settler. */
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, boar_id},
+                              (Combatant){COMBATANT_SETTLER, settler_id}));
+    run_ticks(&game, 5);
+    CHECK(combatant_is_none(boar->enemy));
+    CHECK(boar->task != ANIMAL_TASK_ATTACK);
+    game_shutdown(&game);
+}
+
+/* A game where nobody fights hashes as before. */
+static void test_hash_unchanged_without_fights(void)
+{
+    Game a, b;
+    REQUIRE(init_flat_game(&a));
+    REQUIRE(init_flat_game(&b));
+    REQUIRE(spawn_settler(&a, 10, 10) != NULL);
+    REQUIRE(spawn_settler(&b, 10, 10) != NULL);
+    REQUIRE(spawn_animal(&a, ANIMAL_BOAR, 30, 30, NULL) != NULL);
+    REQUIRE(spawn_animal(&b, ANIMAL_BOAR, 30, 30, NULL) != NULL);
+    run_ticks(&a, 100);
+    run_ticks(&b, 100);
+    CHECK(game_hash(&a) == game_hash(&b));
+    CHECK_EQ_UINT(a.strikes_resolved, 0);
+    game_shutdown(&a);
+    game_shutdown(&b);
+}
+
+/* ---- Carnivores ----------------------------------------------------------- */
+
+/* A hungry animal about to decide what to do. */
+static Animal *spawn_hungry(Game *game, AnimalSpecies species, int x, int y, EntityId *id,
+                            float food)
+{
+    Animal *animal = spawn_animal(game, species, x, y, id);
+    if (animal != NULL) {
+        animal->needs[ANIMAL_NEED_FOOD] = food;
+        animal->timer = 1;
+    }
+    return animal;
+}
+
+/* Items of a type lying within `radius` of a tile. */
+static int items_near(const Game *game, int x, int y, int radius, ItemType type)
+{
+    int count = 0;
+    for (int dy = -radius; dy <= radius; dy++) {
+        for (int dx = -radius; dx <= radius; dx++) {
+            ItemStack stack = items_get(&game->items, x + dx, y + dy, 0);
+            count += stack.type == type ? stack.count : 0;
+        }
+    }
+    return count;
+}
+
+/* A hungry wolf with a carcass close by walks to it and eats; the food comes
+ * back a bite at a time, and the carcass shrinks. */
+static void test_wolf_eats_a_carcass(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Animal *wolf = spawn_hungry(&game, ANIMAL_WOLF, 20, 20, NULL, 0.3f);
+    REQUIRE(wolf != NULL);
+    items_add(&game.items, 30, 20, 0, item_stack_pristine(ITEM_ROE_DEER_CARCASS, 1));
+    run_ticks(&game, 6 * TICKS_PER_SECOND);
+    CHECK_EQ_INT(wolf->task, ANIMAL_TASK_EAT);
+    CHECK_EQ_INT(wolf->x, 30);
+    float food = wolf->needs[ANIMAL_NEED_FOOD];
+    run_ticks(&game, 30 * TICKS_PER_SECOND);
+    CHECK(wolf->needs[ANIMAL_NEED_FOOD] > food + 0.3f);
+    ItemStack left = items_get(&game.items, 30, 20, 0);
+    CHECK_EQ_INT(left.type, ITEM_ROE_DEER_CARCASS);
+    CHECK(left.hit_points < 100 && left.hit_points > 40); /* A few bites of 22 kg. */
+    /* Full, it leaves it be. */
+    run_ticks(&game, 30 * TICKS_PER_SECOND);
+    CHECK(wolf->needs[ANIMAL_NEED_FOOD] >= ANIMAL_SATED - 0.15f);
+    CHECK(wolf->task != ANIMAL_TASK_EAT);
+    CHECK_EQ_INT(items_get(&game.items, 30, 20, 0).type, ITEM_ROE_DEER_CARCASS);
+    game_shutdown(&game);
+}
+
+/* A hare is a few bites. Settlers' bodies are not on the menu. */
+static void test_small_carcass_and_settler_bodies(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Animal *fox = spawn_hungry(&game, ANIMAL_FOX, 20, 20, NULL, 0.2f);
+    REQUIRE(fox != NULL);
+    items_add(&game.items, 24, 20, 0, item_stack_pristine(ITEM_SETTLER_BODY, 1));
+    run_ticks(&game, 20 * TICKS_PER_SECOND);
+    CHECK(fox->task != ANIMAL_TASK_EAT && fox->x != 24);
+    items_add(&game.items, 26, 22, 0, item_stack_pristine(ITEM_HARE_CARCASS, 1));
+    fox->search_cooldown[ANIMAL_SEARCH_FOOD] = 0;
+    fox->timer = 1;
+    fox->task = ANIMAL_TASK_IDLE;
+    run_ticks(&game, 3 * 60 * TICKS_PER_SECOND);
+    CHECK(fox->needs[ANIMAL_NEED_FOOD] > 0.8f);
+    CHECK_EQ_INT(items_get(&game.items, 24, 20, 0).type, ITEM_SETTLER_BODY);
+    game_shutdown(&game);
+}
+
+/* A hungry fox in sight of a hare goes for it, and catches it: the hare outruns
+ * it at first, but tires sooner. */
+static void test_fox_catches_a_hare(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId fox_id, hare_id;
+    Animal *fox = spawn_hungry(&game, ANIMAL_FOX, 20, 20, &fox_id, 0.2f);
+    Animal *hare = spawn_animal(&game, ANIMAL_HARE, 30, 20, &hare_id);
+    REQUIRE(fox != NULL && hare != NULL);
+    run_ticks(&game, 2 * TICKS_PER_SECOND);
+    CHECK_EQ_INT(fox->task, ANIMAL_TASK_ATTACK);
+    CHECK(combatant_equal(fox->enemy, (Combatant){COMBATANT_ANIMAL, hare_id}));
+    bool fled = false, tired = false;
+    for (int tick = 0; tick < 120 * TICKS_PER_SECOND && animals_get(&game.animals, hare_id) != NULL;
+         tick++) {
+        game_tick(&game);
+        fled |= hare->task == ANIMAL_TASK_FLEE;
+        tired |= hare->fatigue > 0.9f;
+    }
+    CHECK(fled);
+    CHECK(tired);
+    CHECK(animals_get(&game.animals, hare_id) == NULL);
+    CHECK_EQ_INT(game_combatant_at(&game, 0, 0, 0).kind, COMBATANT_NONE);
+    game_shutdown(&game);
+}
+
+/* A pack hunts together: when one goes for a deer, the others join. */
+static void test_wolf_pack_hunts_together(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId lead_id, second_id, third_id, deer_id;
+    Animal *lead = spawn_hungry(&game, ANIMAL_WOLF, 20, 20, &lead_id, 0.3f);
+    Animal *second = spawn_animal(&game, ANIMAL_WOLF, 22, 21, &second_id);
+    Animal *third = spawn_animal(&game, ANIMAL_WOLF, 21, 23, &third_id);
+    Animal *deer = spawn_animal(&game, ANIMAL_ROE_DEER, 40, 20, &deer_id);
+    REQUIRE(lead != NULL && second != NULL && third != NULL && deer != NULL);
+    REQUIRE(animals_set_leader(&game.animals, second_id, lead_id));
+    REQUIRE(animals_set_leader(&game.animals, third_id, lead_id));
+    run_ticks(&game, 3);
+    Combatant target = {COMBATANT_ANIMAL, deer_id};
+    CHECK(combatant_equal(lead->enemy, target));
+    CHECK(combatant_equal(second->enemy, target));
+    CHECK(combatant_equal(third->enemy, target));
+    CHECK_EQ_INT(second->task, ANIMAL_TASK_ATTACK);
+    /* The deer is brought down, and eaten. */
+    run_ticks(&game, 90 * TICKS_PER_SECOND);
+    CHECK(animals_get(&game.animals, deer_id) == NULL);
+    CHECK(!health_is_dead(&lead->health));
+    CHECK_EQ_INT(items_near(&game, 30, 20, 30, ITEM_ROE_DEER_CARCASS), 1);
+    run_ticks(&game, 120 * TICKS_PER_SECOND);
+    CHECK(lead->needs[ANIMAL_NEED_FOOD] > 0.5f);
+    game_shutdown(&game);
+}
+
+/* Prey that see a carnivore run, and their herd with them. */
+static void test_prey_flee_carnivores(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId wolf_id, deer_id, mate_id;
+    Animal *wolf = spawn_animal(&game, ANIMAL_WOLF, 20, 20, &wolf_id); /* Not hungry. */
+    Animal *deer = spawn_animal(&game, ANIMAL_RED_DEER, 28, 20, &deer_id);
+    Animal *mate = spawn_animal(&game, ANIMAL_RED_DEER, 31, 22, &mate_id);
+    REQUIRE(wolf != NULL && deer != NULL && mate != NULL);
+    REQUIRE(animals_set_leader(&game.animals, mate_id, deer_id));
+    bool fled = false;
+    for (int tick = 0; tick < 3 * TICKS_PER_SECOND; tick++) {
+        game_tick(&game);
+        fled |= deer->task == ANIMAL_TASK_FLEE;
+    }
+    CHECK(fled);
+    CHECK(combatant_equal(deer->enemy, (Combatant){COMBATANT_ANIMAL, wolf_id}));
+    CHECK(mate->alarmed || mate->task == ANIMAL_TASK_FLEE || mate->x > 36);
+    CHECK(deer->fatigue > 0.0f);
+    run_ticks(&game, 10 * TICKS_PER_SECOND);
+    CHECK(deer->x > 36); /* Away from the wolf. */
+    /* A carnivore fears no other carnivore. */
+    EntityId fox_id;
+    Animal *fox = spawn_animal(&game, ANIMAL_FOX, 20, 30, &fox_id);
+    REQUIRE(fox != NULL);
+    run_ticks(&game, 3 * TICKS_PER_SECOND);
+    CHECK(fox->task != ANIMAL_TASK_FLEE);
+    CHECK(wolf->task != ANIMAL_TASK_ATTACK); /* Not hungry: no hunt. */
+    game_shutdown(&game);
+}
+
+/* A wolf past hunger goes for a settler it sees, a well fed one runs from them. */
+static void test_hungry_wolves_attack_settlers(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    REQUIRE(settler != NULL);
+    EntityId settler_id = game_colonist_id_at(&game, 0);
+    EntityId fed_id, starving_id;
+    Animal *fed = spawn_hungry(&game, ANIMAL_WOLF, 30, 20, &fed_id, 0.9f);
+    Animal *starving = spawn_hungry(&game, ANIMAL_WOLF, 20, 36, &starving_id, 0.1f);
+    REQUIRE(fed != NULL && starving != NULL);
+    uint32_t notices = game.notices.count;
+    bool fed_fled = false, fed_hunted = false;
+    for (int tick = 0; tick < 3 * TICKS_PER_SECOND; tick++) {
+        game_tick(&game);
+        fed_fled |= fed->task == ANIMAL_TASK_FLEE;
+        fed_hunted |= fed->task == ANIMAL_TASK_ATTACK;
+    }
+    CHECK(combatant_equal(starving->enemy, (Combatant){COMBATANT_SETTLER, settler_id}));
+    CHECK_EQ_INT(starving->task, ANIMAL_TASK_ATTACK);
+    CHECK(fed_fled && !fed_hunted); /* The fed one is afraid. */
+    bool settler_fought = false;
+    for (int tick = 0; tick < 20 * TICKS_PER_SECOND && game_colonist(&game, settler_id) != NULL;
+         tick++) {
+        game_tick(&game);
+        settler_fought |= settler->task == TASK_FIGHT || settler->task == TASK_FLEE;
+    }
+    CHECK(settler_fought);
+    CHECK(game.notices.count > notices);
+    CHECK(game.strikes_resolved > 0);
+    game_shutdown(&game);
+}
+
+/* An animal that runs gets tired and slower, and recovers resting. */
+static void test_fatigue(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId hare_id;
+    Animal *hare = spawn_animal(&game, ANIMAL_HARE, 20, 20, &hare_id);
+    REQUIRE(hare != NULL);
+    CHECK_NEAR(hare->fatigue, 0.0, 1e-9);
+    uint64_t before = game_hash(&game);
+    Colonist *settler = spawn_settler(&game, 23, 20);
+    REQUIRE(settler != NULL);
+    float tired = 0.0f;
+    for (int tick = 0; tick < 10 * TICKS_PER_SECOND; tick++) {
+        game_tick(&game);
+        tired = fmaxf(tired, hare->fatigue);
+    }
+    CHECK(tired > 0.1f); /* It ran (8 seconds flat out spend a hare). */
+    CHECK(game_hash(&game) != before);
+    /* The settler leaves: the hare stands, and recovers. */
+    REQUIRE(game_remove_colonist(&game, game_colonist_id_at(&game, 0)));
+    run_ticks(&game, 20 * TICKS_PER_SECOND);
+    CHECK(hare->fatigue < tired);
+    run_ticks(&game, 70 * TICKS_PER_SECOND);
+    CHECK_NEAR(hare->fatigue, 0.0, 1e-6);
+    game_shutdown(&game);
+}
+
+int main(void)
+{
+    RUN_TEST(test_attack_definitions);
+    RUN_TEST(test_reach);
+    RUN_TEST(test_hit_chance);
+    RUN_TEST(test_blows);
+    RUN_TEST(test_breaking_off);
+    RUN_TEST(test_queue);
+    RUN_TEST(test_combatants_at);
+    RUN_TEST(test_animal_hunts_a_hare_that_cannot_run);
+    RUN_TEST(test_struck_animals_flee_or_fight_back);
+    RUN_TEST(test_hurt_animal_breaks_off);
+    RUN_TEST(test_settler_fights_back);
+    RUN_TEST(test_settler_attack_by_weapon);
+    RUN_TEST(test_fearful_settler_flees);
+    RUN_TEST(test_enemy_forgotten);
+    RUN_TEST(test_hash_unchanged_without_fights);
+    RUN_TEST(test_wolf_eats_a_carcass);
+    RUN_TEST(test_small_carcass_and_settler_bodies);
+    RUN_TEST(test_fox_catches_a_hare);
+    RUN_TEST(test_wolf_pack_hunts_together);
+    RUN_TEST(test_prey_flee_carnivores);
+    RUN_TEST(test_hungry_wolves_attack_settlers);
+    RUN_TEST(test_fatigue);
+    return test_summary();
+}

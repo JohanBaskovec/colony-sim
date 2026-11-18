@@ -4,7 +4,9 @@
 #include "core/item.h"
 #include "core/util.h"
 
+#include <limits.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define SQRT2 1.41421356f
@@ -56,7 +58,11 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                          .food_value = 1.5f,
                          .body = BODY_QUADRUPED,
                          .size = 0.7f,
-                         .carcass = ITEM_ROE_DEER_CARCASS},
+                         .carcass = ITEM_ROE_DEER_CARCASS,
+                         .attack = ATTACK_KICK,
+                         .agility = 0.45f,
+                         .nerve = 0.2f,
+                         .sprint_seconds = 18.0f},
     /* A grazer of the open ground. Hinds live in herds, stags in small
      * groups of their own. */
     [ANIMAL_RED_DEER] = {.id = "red_deer",
@@ -87,7 +93,11 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                          .food_value = 0.5f,
                          .body = BODY_QUADRUPED,
                          .size = 1.4f,
-                         .carcass = ITEM_RED_DEER_CARCASS},
+                         .carcass = ITEM_RED_DEER_CARCASS,
+                         .attack = ATTACK_KICK,
+                         .agility = 0.35f,
+                         .nerve = 0.25f,
+                         .sprint_seconds = 22.0f},
     /* Roots about by night for what is in the ground and under the trees:
      * roots, bulbs, nuts, mushrooms. Sows live in sounders, boars alone. */
     [ANIMAL_BOAR] =
@@ -121,7 +131,12 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .food_value = 0.8f,
          .body = BODY_QUADRUPED,
          .size = 1.2f,
-         .carcass = ITEM_BOAR_CARCASS},
+         .carcass = ITEM_BOAR_CARCASS,
+         .attack = ATTACK_TUSKS,
+         .agility = 0.3f,
+         .nerve = 0.7f,
+         .fights_back = true,
+         .sprint_seconds = 12.0f},
     /* Nibbles grass and herbs at dusk and at night, alone. */
     [ANIMAL_HARE] =
         {.id = "hare",
@@ -150,7 +165,77 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .food_value = 6.0f,
          .body = BODY_HARE,
          .size = 0.15f,
-         .carcass = ITEM_HARE_CARCASS},
+         .carcass = ITEM_HARE_CARCASS,
+         .agility = 0.6f,
+         .sprint_seconds = 8.0f},
+    /* Hunts the deer at dusk and at night in a pack, and the hare when it can;
+     * a hungry pack goes for a settler too. Eats carcasses only. */
+    [ANIMAL_WOLF] =
+        {.id = "wolf",
+         .name_key = N_("animal.wolf"),
+         .sex_name_keys =
+             {[ANIMAL_FEMALE] = N_("animal.wolf.female"), [ANIMAL_MALE] = N_("animal.wolf.male")},
+         .walk_speed = 2.2f,
+         .flee_speed = 8.5f,
+         .hunger_hours = 60.0f,
+         .thirst_hours = 30.0f,
+         .awake_hours = 22.0f,
+         .sleep_hours = 8.0f,
+         .rest_from = 9,
+         .rest_until = 16,
+         .flight_distance = 12,
+         .herd_min = 3,
+         .herd_max = 5,
+         .male_group_max = 2,
+         .male_share = 0.4f,
+         .density = 1.5f,
+         .body = BODY_QUADRUPED,
+         .size = 0.7f,
+         .carcass = ITEM_WOLF_CARCASS,
+         .attack = ATTACK_WOLF_BITE,
+         .agility = 0.4f,
+         .nerve = 0.55f,
+         .fights_back = true,
+         .sprint_seconds = 30.0f,
+         .carnivore = true,
+         .prey = ANIMAL_SPECIES_BIT(ANIMAL_ROE_DEER) | ANIMAL_SPECIES_BIT(ANIMAL_RED_DEER) |
+                 ANIMAL_SPECIES_BIT(ANIMAL_HARE),
+         .hunts_settlers = true,
+         .hunt_range = 30,
+         .bite_kg = 0.6f,
+         .stomach_kg = 5.0f},
+    /* Stalks hares, alone. Eats carcasses only. */
+    [ANIMAL_FOX] =
+        {.id = "fox",
+         .name_key = N_("animal.fox"),
+         .sex_name_keys =
+             {[ANIMAL_FEMALE] = N_("animal.fox.female"), [ANIMAL_MALE] = N_("animal.fox.male")},
+         .walk_speed = 1.8f,
+         .flee_speed = 7.5f,
+         .hunger_hours = 36.0f,
+         .thirst_hours = 36.0f,
+         .awake_hours = 22.0f,
+         .sleep_hours = 8.0f,
+         .rest_from = 10,
+         .rest_until = 17,
+         .flight_distance = 9,
+         .herd_min = 1,
+         .herd_max = 1,
+         .male_group_max = 1,
+         .male_share = 0.5f,
+         .density = 3.0f,
+         .body = BODY_QUADRUPED,
+         .size = 0.25f,
+         .carcass = ITEM_FOX_CARCASS,
+         .attack = ATTACK_FOX_BITE,
+         .agility = 0.5f,
+         .nerve = 0.35f,
+         .sprint_seconds = 14.0f,
+         .carnivore = true,
+         .prey = ANIMAL_SPECIES_BIT(ANIMAL_HARE),
+         .hunt_range = 20,
+         .bite_kg = 0.15f,
+         .stomach_kg = 1.0f},
 };
 
 const AnimalDef *animal_def(AnimalSpecies species)
@@ -177,6 +262,7 @@ const char *animal_activity_key(const Animal *animal)
         return moving ? N_("animal.activity.to_water") : N_("animal.activity.drink");
     case ANIMAL_TASK_SLEEP: return N_("animal.activity.sleep");
     case ANIMAL_TASK_FLEE: return N_("animal.activity.flee");
+    case ANIMAL_TASK_ATTACK: return N_("animal.activity.attack");
     case ANIMAL_TASK_DOWN:
         return health_is_unconscious(&animal->health) ? N_("animal.activity.unconscious")
                                                       : N_("animal.activity.cannot_walk");
@@ -541,28 +627,40 @@ typedef struct Seeker {
     AnimalSpecies species;
     bool treats_only; /* Food: nothing less than fruit, roots or nuts. */
     int clearance;    /* Tiles to keep from every settler. */
+    bool has_enemy;   /* ...and from where its enemy was last seen. */
+    TilePos enemy;
 } Seeker;
+
+/* Whether a settler, or the seeker's enemy, is within the seeker's clearance of a tile. */
+static bool near_seeker(const Seeker *seeker, int x, int y, int z)
+{
+    if (near_threat(seeker->context, x, y, z, seeker->clearance)) {
+        return true;
+    }
+    int dx = seeker->enemy.x - x, dy = seeker->enemy.y - y, dz = seeker->enemy.z - z;
+    return seeker->has_enemy && dz >= -ANIMAL_ALERT_LEVELS && dz <= ANIMAL_ALERT_LEVELS &&
+           dx * dx + dy * dy <= seeker->clearance * seeker->clearance;
+}
 
 static bool is_food(const Map *map, int x, int y, int z, void *userdata)
 {
     const Seeker *seeker = userdata;
     AnimalFood food = animal_food_at(seeker->species, map, x, y, z);
     return (seeker->treats_only ? food > ANIMAL_FOOD_GRASS : food != ANIMAL_FOOD_NONE) &&
-           !near_threat(seeker->context, x, y, z, seeker->clearance);
+           !near_seeker(seeker, x, y, z);
 }
 
 static bool is_water(const Map *map, int x, int y, int z, void *userdata)
 {
     const Seeker *seeker = userdata;
-    return map_is_drinking_spot(map, x, y, z) &&
-           !near_threat(seeker->context, x, y, z, seeker->clearance);
+    return map_is_drinking_spot(map, x, y, z) && !near_seeker(seeker, x, y, z);
 }
 
 static bool is_refuge(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
     const Seeker *seeker = userdata;
-    return !near_threat(seeker->context, x, y, z, seeker->clearance);
+    return !near_seeker(seeker, x, y, z);
 }
 
 static void search_failed(Animal *animal, AnimalSearch search)
@@ -592,12 +690,14 @@ static void begin(Animal *animal, AnimalTask task, TilePos target)
     animal->path_index = 0;
 }
 
-static bool try_eat(Animal *animal, const AnimalDef *def, const AnimalContext *context)
+/* Goes for plants, nuts or grass (the herbivores' food). */
+static bool try_forage(Animal *animal, const AnimalDef *def, const AnimalContext *context)
 {
     if (animal->search_cooldown[ANIMAL_SEARCH_FOOD] > 0) {
         return false;
     }
-    Seeker seeker = {context, (AnimalSpecies)animal->species, true, def->flight_distance};
+    Seeker seeker = {context, (AnimalSpecies)animal->species, true, def->flight_distance, false,
+                     {0}};
     TilePos found;
     bool ok = (def->plants != 0 || def->eats_nuts) &&
               find_nearest(context, tile_of(animal), is_food, &seeker, ANIMAL_TREAT_SEARCH_MAX_COST,
@@ -617,12 +717,128 @@ static bool try_eat(Animal *animal, const AnimalDef *def, const AnimalContext *c
     return true;
 }
 
+/* ---- Hunting -------------------------------------------------------------- */
+
+/* A carcass an animal can eat: any animal's, not a settler's. */
+static bool carcass_edible(ItemType type)
+{
+    const ItemDef *def = item_def(type);
+    return type != ITEM_NONE && def != NULL && def->category == ITEM_CATEGORY_BODIES &&
+           type != ITEM_SETTLER_BODY;
+}
+
+static bool is_carcass(const Map *map, int x, int y, int z, void *userdata)
+{
+    (void)map;
+    const Seeker *seeker = userdata;
+    return carcass_edible((ItemType)items_get(seeker->context->items, x, y, z).type) &&
+           !near_seeker(seeker, x, y, z);
+}
+
+static void start_attack(Animal *animal, Combatant enemy);
+
+/* The nearest prey in sight (the species it hunts, or a settler when it is
+ * desperate: counted twice as far). False when there is none. */
+static bool pick_prey(const Animals *animals, uint32_t slot, const AnimalContext *context,
+                      Combatant *target)
+{
+    const Animal *animal = &animals->list[slot];
+    const AnimalDef *def = &ANIMAL_DEFS[animal->species];
+    int range = def->hunt_range;
+    long best = LONG_MAX; /* Squared distance, a settler's counted twice as far. */
+    bool found = false;
+    for (uint32_t other = 0; other < animals_slot_count(animals); other++) {
+        EntityId id = animals_id_at(animals, other);
+        const Animal *prey = &animals->list[other];
+        if (other == slot || entity_id_is_none(id) || health_is_dead(&prey->health) ||
+            (def->prey & ANIMAL_SPECIES_BIT(prey->species)) == 0) {
+            continue;
+        }
+        long dx = prey->x - animal->x, dy = prey->y - animal->y;
+        if (dx * dx + dy * dy <= (long)range * range && dx * dx + dy * dy < best &&
+            animal_sees(context->map, animal->x, animal->y, animal->z, tile_of(prey), range)) {
+            best = dx * dx + dy * dy;
+            *target = (Combatant){COMBATANT_ANIMAL, id};
+            found = true;
+        }
+    }
+    if (def->hunts_settlers && animal->needs[ANIMAL_NEED_FOOD] < ANIMAL_DESPERATE) {
+        for (int i = 0; i < context->settler_count; i++) {
+            TilePos at = context->settlers[i].pos;
+            long dx = at.x - animal->x, dy = at.y - animal->y;
+            if (dx * dx + dy * dy <= (long)range * range && 4 * (dx * dx + dy * dy) < best &&
+                animal_sees(context->map, animal->x, animal->y, animal->z, at, range)) {
+                best = 4 * (dx * dx + dy * dy);
+                *target = (Combatant){COMBATANT_SETTLER, context->settlers[i].id};
+                found = true;
+            }
+        }
+    }
+    return found;
+}
+
+/* The animal and its herd mates close by go for `target`. */
+static void start_hunt(Animals *animals, uint32_t slot, Combatant target)
+{
+    start_attack(&animals->list[slot], target);
+    EntityId head = animals_leader(animals, animals_id_at(animals, slot));
+    for (uint32_t other = 0; other < animals_slot_count(animals); other++) {
+        EntityId id = animals_id_at(animals, other);
+        Animal *mate = &animals->list[other];
+        int dx = mate->x - animals->list[slot].x, dy = mate->y - animals->list[slot].y;
+        if (other == slot || entity_id_is_none(id) || health_is_dead(&mate->health) ||
+            health_is_down(&mate->health) || !entity_id_equal(animals_leader(animals, id), head) ||
+            dx * dx + dy * dy > 4 * ALARM_RADIUS * ALARM_RADIUS) {
+            continue;
+        }
+        start_attack(mate, target);
+    }
+}
+
+/* A carnivore's way of eating: a carcass to go to, else a prey to hunt. */
+static bool try_hunt(Animals *animals, uint32_t slot, const AnimalContext *context)
+{
+    Animal *animal = &animals->list[slot];
+    const AnimalDef *def = &ANIMAL_DEFS[animal->species];
+    if (animal->search_cooldown[ANIMAL_SEARCH_FOOD] > 0) {
+        return false;
+    }
+    Seeker seeker = {context, (AnimalSpecies)animal->species, false, def->flight_distance, false,
+                     {0}};
+    TilePos found;
+    Combatant prey;
+    if (context->items != NULL &&
+        find_nearest(context, tile_of(animal), is_carcass, &seeker, ANIMAL_FOOD_SEARCH_MAX_COST,
+                     &animal->path, &found)) {
+        animal->search_failures[ANIMAL_SEARCH_FOOD] = 0;
+        begin(animal, ANIMAL_TASK_EAT, found);
+        return true;
+    }
+    if (pick_prey(animals, slot, context, &prey)) {
+        path_clear(&animal->path);
+        animal->search_failures[ANIMAL_SEARCH_FOOD] = 0;
+        start_hunt(animals, slot, prey);
+        return true;
+    }
+    path_clear(&animal->path);
+    search_failed(animal, ANIMAL_SEARCH_FOOD);
+    return false;
+}
+
+static bool try_eat(Animals *animals, uint32_t slot, const AnimalContext *context)
+{
+    Animal *animal = &animals->list[slot];
+    const AnimalDef *def = &ANIMAL_DEFS[animal->species];
+    return def->carnivore ? try_hunt(animals, slot, context) : try_forage(animal, def, context);
+}
+
 static bool try_drink(Animal *animal, const AnimalDef *def, const AnimalContext *context)
 {
     if (animal->search_cooldown[ANIMAL_SEARCH_WATER] > 0) {
         return false;
     }
-    Seeker seeker = {context, (AnimalSpecies)animal->species, false, def->flight_distance};
+    Seeker seeker = {context, (AnimalSpecies)animal->species, false, def->flight_distance, false,
+                     {0}};
     TilePos found;
     /* No water anywhere it could walk to: the search would cover everything
      * within its cost limit for nothing. */
@@ -697,17 +913,19 @@ static bool try_wander(Animal *animal, const AnimalDef *def, TilePos center,
 
 /* Goes for water or food when it has less than these, the most pressing
  * first. */
-static bool try_needs(Animal *animal, const AnimalDef *def, const AnimalContext *context,
+static bool try_needs(Animals *animals, uint32_t slot, const AnimalContext *context,
                       float food_below, float water_below)
 {
+    Animal *animal = &animals->list[slot];
+    const AnimalDef *def = &ANIMAL_DEFS[animal->species];
     float food = animal->needs[ANIMAL_NEED_FOOD];
     float water = animal->needs[ANIMAL_NEED_WATER];
     bool hungry = food < food_below, thirsty = water < water_below;
     if (thirsty && (!hungry || water <= food)) {
-        return try_drink(animal, def, context) || (hungry && try_eat(animal, def, context));
+        return try_drink(animal, def, context) || (hungry && try_eat(animals, slot, context));
     }
     if (hungry) {
-        return try_eat(animal, def, context) || (thirsty && try_drink(animal, def, context));
+        return try_eat(animals, slot, context) || (thirsty && try_drink(animal, def, context));
     }
     return false;
 }
@@ -719,7 +937,7 @@ static void decide(Animals *animals, uint32_t slot, const AnimalContext *context
 {
     Animal *animal = &animals->list[slot];
     const AnimalDef *def = &ANIMAL_DEFS[animal->species];
-    if (try_needs(animal, def, context, ANIMAL_URGENT_NEED, ANIMAL_URGENT_NEED)) {
+    if (try_needs(animals, slot, context, ANIMAL_URGENT_NEED, ANIMAL_URGENT_NEED)) {
         return;
     }
     const Animal *leader = leader_of(animals, animal, slot);
@@ -734,7 +952,7 @@ static void decide(Animals *animals, uint32_t slot, const AnimalContext *context
         path_clear(&animal->path);
         return;
     }
-    if (try_needs(animal, def, context, ANIMAL_HUNGRY, ANIMAL_THIRSTY)) {
+    if (try_needs(animals, slot, context, ANIMAL_HUNGRY, ANIMAL_THIRSTY)) {
         return;
     }
     if (rng_chance(context->rng, 0.5f) &&
@@ -782,7 +1000,7 @@ static void bite(Animal *animal, const AnimalDef *def, Map *map, AnimalFood food
     animal->needs[ANIMAL_NEED_FOOD] = clampf(animal->needs[ANIMAL_NEED_FOOD] + gain, 0.0f, 1.0f);
 }
 
-static void eat(Animal *animal, const AnimalDef *def, const AnimalContext *context)
+static void eat_plants(Animal *animal, const AnimalDef *def, const AnimalContext *context)
 {
     Map *map = context->map;
     bool there = animal->x == animal->target.x && animal->y == animal->target.y &&
@@ -791,7 +1009,7 @@ static void eat(Animal *animal, const AnimalDef *def, const AnimalContext *conte
                                 animal->z) != ANIMAL_FOOD_NONE;
     if (!there) {
         /* The way was cut, or the food is gone (eaten, picked): elsewhere. */
-        if (!try_eat(animal, def, context)) {
+        if (!try_forage(animal, def, context)) {
             stand(animal, random_idle_ticks(context->rng));
         }
         return;
@@ -802,6 +1020,44 @@ static void eat(Animal *animal, const AnimalDef *def, const AnimalContext *conte
     animal->timer = 0;
     bite(animal, def, map,
          animal_food_at((AnimalSpecies)animal->species, map, animal->x, animal->y, animal->z));
+    if (animal->needs[ANIMAL_NEED_FOOD] >= ANIMAL_SATED) {
+        stand(animal, random_idle_ticks(context->rng));
+    }
+}
+
+/* A carnivore at a carcass: a bite now and then, until it is full or the
+ * carcass is gone. */
+static void eat_carcass(Animals *animals, uint32_t slot, const AnimalContext *context)
+{
+    Animal *animal = &animals->list[slot];
+    const AnimalDef *def = &ANIMAL_DEFS[animal->species];
+    Items *items = context->items;
+    ItemStack stack = items != NULL ? items_get(items, animal->x, animal->y, animal->z)
+                                    : (ItemStack){.type = ITEM_NONE};
+    bool there = animal->x == animal->target.x && animal->y == animal->target.y &&
+                 animal->z == animal->target.z && carcass_edible((ItemType)stack.type);
+    if (!there) {
+        /* The way was cut, or the carcass is gone (eaten, rotted): elsewhere. */
+        if (!try_hunt(animals, slot, context)) {
+            stand(animal, random_idle_ticks(context->rng));
+        }
+        return;
+    }
+    if (++animal->timer < ANIMAL_CARCASS_BITE_TICKS) {
+        return;
+    }
+    animal->timer = 0;
+    /* The bite takes a share of the carcass's hit points: its weight. */
+    float weight = item_def((ItemType)stack.type)->weight;
+    int bite = (int)(100.0f * def->bite_kg / weight + 0.5f);
+    bite = bite > 1 ? bite : 1;
+    stack.hit_points = (uint16_t)(stack.hit_points > bite ? stack.hit_points - bite : 0);
+    items_remove(items, animal->x, animal->y, animal->z, 1);
+    if (stack.hit_points > 0) {
+        items_add(items, animal->x, animal->y, animal->z, stack);
+    }
+    animal->needs[ANIMAL_NEED_FOOD] =
+        clampf(animal->needs[ANIMAL_NEED_FOOD] + def->bite_kg / def->stomach_kg, 0.0f, 1.0f);
     if (animal->needs[ANIMAL_NEED_FOOD] >= ANIMAL_SATED) {
         stand(animal, random_idle_ticks(context->rng));
     }
@@ -859,7 +1115,9 @@ static void walk(Animal *animal, const AnimalDef *def, const AnimalContext *cont
     if (next.x != animal->x) {
         animal->facing_left = next.x < animal->x;
     }
-    float speed = (animal->task == ANIMAL_TASK_FLEE ? def->flee_speed : def->walk_speed) *
+    bool running = animal->task == ANIMAL_TASK_FLEE || animal->task == ANIMAL_TASK_ATTACK;
+    float speed = (running ? def->flee_speed * (1.0f - ANIMAL_FATIGUE_SLOWDOWN * animal->fatigue)
+                           : def->walk_speed) *
                   health_ability(&animal->health, HEALTH_WALKING);
     animal->move_progress += speed / (float)TICKS_PER_SECOND / cost;
     if (animal->move_progress >= 1.0f) {
@@ -881,8 +1139,12 @@ static void walk(Animal *animal, const AnimalDef *def, const AnimalContext *cont
  * stays where it is: far enough already, or cornered. */
 static bool flee(Animal *animal, const AnimalDef *def, const AnimalContext *context)
 {
-    Seeker seeker = {context, (AnimalSpecies)animal->species, false,
-                     def->flight_distance + ANIMAL_FLEE_MARGIN};
+    Seeker seeker = {context,
+                     (AnimalSpecies)animal->species,
+                     false,
+                     def->flight_distance + ANIMAL_FLEE_MARGIN,
+                     !combatant_is_none(animal->enemy),
+                     animal->enemy_pos};
     TilePos found;
     if (animal->flee_cooldown > 0) {
         return false;
@@ -912,10 +1174,29 @@ static void look_out(Animals *animals, uint32_t slot, const AnimalContext *conte
         flee(animal, def, context);
         return;
     }
+    /* Whoever struck it is still about: it keeps running. */
     bool seen = false;
-    for (int i = 0; i < context->threat_count && !seen; i++) {
+    bool fearless = def->hunts_settlers && animal->needs[ANIMAL_NEED_FOOD] < ANIMAL_DESPERATE;
+    if (!combatant_is_none(animal->enemy)) {
+        int dx = animal->enemy_pos.x - animal->x, dy = animal->enemy_pos.y - animal->y;
+        seen = dx * dx + dy * dy <= def->flight_distance * def->flight_distance;
+    }
+    for (int i = 0; i < context->threat_count && !seen && !fearless; i++) {
         seen = animal_notices((AnimalSpecies)animal->species, context->map, animal->x, animal->y,
                               animal->z, context->threats[i], animal->task == ANIMAL_TASK_SLEEP);
+    }
+    /* Prey fear the carnivores about. */
+    if (!seen && !def->carnivore && combatant_is_none(animal->enemy)) {
+        for (int i = 0; i < animals->predator_count && !seen; i++) {
+            const Animal *predator = &animals->list[animals->predator_slots[i]];
+            if (animal_notices((AnimalSpecies)animal->species, context->map, animal->x, animal->y,
+                               animal->z, tile_of(predator), animal->task == ANIMAL_TASK_SLEEP)) {
+                animal->enemy = (Combatant){COMBATANT_ANIMAL,
+                                            animals_id_at(animals, animals->predator_slots[i])};
+                animal->enemy_pos = tile_of(predator);
+                seen = true;
+            }
+        }
     }
     if (!seen || !flee(animal, def, context)) {
         return;
@@ -932,8 +1213,169 @@ static void look_out(Animals *animals, uint32_t slot, const AnimalContext *conte
         int dx = mate->x - animal->x, dy = mate->y - animal->y;
         if (dx * dx + dy * dy <= ALARM_RADIUS * ALARM_RADIUS) {
             mate->alarmed = true;
+            if (combatant_is_none(mate->enemy) && !combatant_is_none(animal->enemy)) {
+                mate->enemy = animal->enemy; /* From the same predator. */
+                mate->enemy_pos = animal->enemy_pos;
+            }
         }
     }
+}
+
+/* ---- Combat --------------------------------------------------------------- */
+
+/* Where a combatant is now; false when it is gone: dead, not there any more. */
+static bool enemy_tile(const Animals *animals, const AnimalContext *context, Combatant who,
+                       TilePos *out)
+{
+    if (who.kind == COMBATANT_ANIMAL) {
+        const Animal *other = animals_get_const(animals, who.id);
+        if (other == NULL || health_is_dead(&other->health)) {
+            return false;
+        }
+        *out = tile_of(other);
+        return true;
+    }
+    for (int i = 0; who.kind == COMBATANT_SETTLER && i < context->settler_count; i++) {
+        if (entity_id_equal(context->settlers[i].id, who.id)) {
+            *out = context->settlers[i].pos;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Keeps track of its enemy: where it is now, or forgets it when it is gone or
+ * too far. */
+static void track_enemy(const Animals *animals, Animal *animal, const AnimalContext *context)
+{
+    if (combatant_is_none(animal->enemy)) {
+        return;
+    }
+    TilePos at;
+    if (!enemy_tile(animals, context, animal->enemy, &at) ||
+        abs(at.x - animal->x) > ANIMAL_ENEMY_FORGET_DISTANCE ||
+        abs(at.y - animal->y) > ANIMAL_ENEMY_FORGET_DISTANCE ||
+        abs(at.z - animal->z) > ANIMAL_ALERT_LEVELS) {
+        animal->enemy = combatant_none();
+        if (animal->task == ANIMAL_TASK_ATTACK) {
+            stand(animal, WATCH_TICKS);
+        }
+        return;
+    }
+    animal->enemy_pos = at;
+}
+
+/* On a tile center, attacking: breaks off when hurt past its nerve, strikes
+ * when its enemy is in reach and it is ready, else walks toward it. */
+static void fight(Animals *animals, uint32_t slot, const AnimalContext *context)
+{
+    Animal *animal = &animals->list[slot];
+    const AnimalDef *def = &ANIMAL_DEFS[animal->species];
+    const AttackDef *attack = attack_def(def->attack);
+    if (combatant_is_none(animal->enemy) || attack == NULL) {
+        stand(animal, WATCH_TICKS);
+        return;
+    }
+    if (combat_breaks_off(&animal->health, def->nerve)) {
+        animal->alarmed = true; /* Runs from it. */
+        stand(animal, 0);
+        return;
+    }
+    TilePos here = tile_of(animal);
+    if (combat_in_reach(here, animal->enemy_pos, attack->reach)) {
+        animal->path_index = 0;
+        path_clear(&animal->path);
+        if (animal->attack_cooldown <= 0 && context->combat != NULL) {
+            combat_queue_push(context->combat,
+                              (CombatStrike){{COMBATANT_ANIMAL, animals_id_at(animals, slot)},
+                                             animal->enemy,
+                                             (uint8_t)def->attack,
+                                             1.0f,
+                                             1.0f});
+            animal->attack_cooldown = attack_interval_ticks(def->attack);
+        }
+        return;
+    }
+    animal->path_index = 0;
+    if (!find_path(context, here, animal->enemy_pos, ANIMAL_CHASE_MAX_COST, &animal->path)) {
+        animal->enemy = combatant_none(); /* No way to it: it lets go. */
+        animal->search_cooldown[ANIMAL_SEARCH_FOOD] = ANIMAL_SEARCH_RETRY_TICKS;
+        stand(animal, WATCH_TICKS);
+    }
+}
+
+/* Whatever it was doing is given up (without a jolt while it is between two
+ * tiles: it finishes the step). */
+static void interrupt(Animal *animal)
+{
+    if (animal->move_progress > 0.0f) {
+        animal->task = ANIMAL_TASK_IDLE;
+        animal->timer = 0;
+    } else {
+        stand(animal, 0);
+    }
+}
+
+static void start_attack(Animal *animal, Combatant enemy)
+{
+    animal->enemy = enemy;
+    animal->attack_cooldown = 0;
+    animal->alarmed = false;
+    interrupt(animal);
+    animal->task = ANIMAL_TASK_ATTACK;
+}
+
+bool animals_attack(Animals *animals, EntityId id, Combatant enemy)
+{
+    Animal *animal = animals_get(animals, id);
+    if (animal == NULL || health_is_dead(&animal->health) ||
+        ANIMAL_DEFS[animal->species].attack == ATTACK_NONE) {
+        return false;
+    }
+    if (enemy.kind == COMBATANT_ANIMAL) {
+        const Animal *other = animals_get_const(animals, enemy.id);
+        if (other == NULL || health_is_dead(&other->health) || entity_id_equal(enemy.id, id)) {
+            return false;
+        }
+        animal->enemy_pos = tile_of(other);
+    } else if (enemy.kind != COMBATANT_SETTLER) {
+        return false;
+    }
+    start_attack(animal, enemy);
+    return true;
+}
+
+bool animals_provoke(Animals *animals, EntityId id, Combatant attacker)
+{
+    Animal *animal = animals_get(animals, id);
+    if (animal == NULL || health_is_dead(&animal->health) || combatant_is_none(attacker)) {
+        return false;
+    }
+    const AnimalDef *def = &ANIMAL_DEFS[animal->species];
+    bool fresh = combatant_is_none(animal->enemy);
+    if (fresh) {
+        animal->enemy = attacker;
+        if (attacker.kind == COMBATANT_ANIMAL) {
+            const Animal *other = animals_get_const(animals, attacker.id);
+            if (other != NULL) {
+                animal->enemy_pos = tile_of(other);
+            }
+        }
+    }
+    if (health_is_down(&animal->health)) {
+        return fresh;
+    }
+    if (def->fights_back && def->attack != ATTACK_NONE &&
+        !combat_breaks_off(&animal->health, def->nerve)) {
+        if (animal->task != ANIMAL_TASK_ATTACK) {
+            start_attack(animal, animal->enemy);
+        }
+    } else if (animal->task != ANIMAL_TASK_FLEE) {
+        animal->alarmed = true;
+        animal->alert_wait = 0;
+        interrupt(animal);
+    }
+    return fresh;
 }
 
 /* ---- Tick ----------------------------------------------------------------- */
@@ -987,11 +1429,26 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
     if (animal->alert_wait > 0) {
         animal->alert_wait--;
     }
-    /* On a tile center, and not running already: a look around now and then. */
+    if (animal->attack_cooldown > 0) {
+        animal->attack_cooldown--;
+    }
+    track_enemy(animals, animal, context);
+    /* Running wears it out; resting restores it. */
+    bool sprinting = (animal->task == ANIMAL_TASK_FLEE || animal->task == ANIMAL_TASK_ATTACK) &&
+                     animal_is_moving(animal);
+    float tire = sprinting ? 1.0f / (def->sprint_seconds * (float)TICKS_PER_SECOND)
+                           : -1.0f / (ANIMAL_RECOVER_SECONDS * (float)TICKS_PER_SECOND);
+    animal->fatigue = clampf(animal->fatigue + tire, 0.0f, 1.0f);
+    /* On a tile center, and not running or fighting already: a look around now
+     * and then. */
     bool running = animal->task == ANIMAL_TASK_FLEE && animal_is_moving(animal);
-    if (animal->move_progress <= 0.0f && !running && (animal->alarmed || animal->alert_wait == 0)) {
+    if (animal->move_progress <= 0.0f && !running && animal->task != ANIMAL_TASK_ATTACK &&
+        (animal->alarmed || animal->alert_wait == 0)) {
         animal->alert_wait = ANIMAL_ALERT_TICKS;
         look_out(animals, slot, context);
+    }
+    if (animal->task == ANIMAL_TASK_ATTACK && animal->move_progress <= 0.0f) {
+        fight(animals, slot, context);
     }
     if (animal_is_moving(animal)) {
         walk(animal, def, context);
@@ -1005,9 +1462,16 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
         break;
     case ANIMAL_TASK_WANDER: stand(animal, random_idle_ticks(context->rng)); break;
     case ANIMAL_TASK_FLEE: stand(animal, WATCH_TICKS); break; /* Out of breath, on the watch. */
-    case ANIMAL_TASK_EAT: eat(animal, def, context); break;
+    case ANIMAL_TASK_EAT:
+        if (def->carnivore) {
+            eat_carcass(animals, slot, context);
+        } else {
+            eat_plants(animal, def, context);
+        }
+        break;
     case ANIMAL_TASK_DRINK: drink(animal, context); break;
     case ANIMAL_TASK_SLEEP: sleep_on(animal, context); break;
+    case ANIMAL_TASK_ATTACK:
     case ANIMAL_TASK_DOWN:
     case ANIMAL_TASK_COUNT: break;
     }
@@ -1015,6 +1479,15 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
 
 void animals_tick(Animals *animals, const AnimalContext *context)
 {
+    animals->predator_count = 0;
+    for (uint32_t slot = 0; slot < animals_slot_count(animals); slot++) {
+        const Animal *animal = &animals->list[slot];
+        if (!entity_id_is_none(animals_id_at(animals, slot)) &&
+            ANIMAL_DEFS[animal->species].carnivore && !health_is_dead(&animal->health) &&
+            !health_is_down(&animal->health)) {
+            animals->predator_slots[animals->predator_count++] = slot;
+        }
+    }
     /* Fixed slot order keeps the simulation deterministic. */
     for (uint32_t slot = 0; slot < animals_slot_count(animals); slot++) {
         if (!entity_id_is_none(animals_id_at(animals, slot))) {
@@ -1142,6 +1615,21 @@ uint64_t animals_hash(const Animals *animals, uint64_t hash)
         hash = hash_fnv1a64(hash, &animal->move_progress, sizeof(animal->move_progress));
         hash = hash_fnv1a64(hash, animal->needs, sizeof(animal->needs));
         hash = health_hash(&animal->health, hash);
+        if (animal->fatigue > 0.0f) { /* Likewise. */
+            hash = hash_fnv1a64(hash, &animal->fatigue, sizeof(animal->fatigue));
+        }
+        if (!combatant_is_none(animal->enemy) || animal->attack_cooldown > 0) {
+            /* Only then: hashes of games without fights stay as they were. */
+            int32_t fight[8] = {animal->enemy.kind,
+                                (int32_t)animal->enemy.id.index,
+                                (int32_t)animal->enemy.id.generation,
+                                animal->enemy_pos.x,
+                                animal->enemy_pos.y,
+                                animal->enemy_pos.z,
+                                animal->attack_cooldown,
+                                0};
+            hash = hash_fnv1a64(hash, fight, sizeof(fight));
+        }
     }
     return hash;
 }

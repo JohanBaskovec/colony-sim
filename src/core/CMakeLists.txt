@@ -5,6 +5,7 @@ add_library(colony_core STATIC
     attributes.c
     bed.c
     camera.c
+    combat.c
     cli.c
     entry_strip.c
     exploration.c

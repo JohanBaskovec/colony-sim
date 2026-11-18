@@ -57,6 +57,8 @@ typedef enum AttributeType {
      * still rolled the same. */
     ATTRIBUTE_TOUGHNESS,      /* Damage taken from blows. */
     ATTRIBUTE_PAIN_TOLERANCE, /* Pain felt from injuries. */
+    /* Mind again, added later too. */
+    ATTRIBUTE_COURAGE, /* How hurt the settler must be to break off a fight. */
     ATTRIBUTE_COUNT
 } AttributeType;
 
@@ -94,6 +96,12 @@ float attribute_factor(const Attributes *attributes, AttributeType type);
  * at +1. */
 float attribute_damage_factor(const Attributes *attributes);
 float attribute_pain_factor(const Attributes *attributes);
+
+/* How hurt a fight must have left the settler (combat_hurt_fraction(), 0..1)
+ * before it breaks off, from its courage: 0.4 when ordinary, down to 0.08 at
+ * the most fearful, up to 1.1 (never) at the very bravest (docs/COMBAT.md). */
+#define ATTRIBUTE_NERVE_ORDINARY 0.4f
+float attribute_nerve(const Attributes *attributes);
 
 /* Weight of every thought, ATTRIBUTE_STOIC_MIN to ATTRIBUTE_SENSITIVE_MAX. */
 float attribute_thought_weight(const Attributes *attributes);

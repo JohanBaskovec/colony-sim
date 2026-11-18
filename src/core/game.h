@@ -168,6 +168,12 @@ typedef struct Game {
     /* The last settler died (docs/HEALTH.md §8): the game paused itself
      * then. Part of game_hash() once set. */
     bool colony_lost;
+    /* Blows asked for by settlers and animals during a tick, resolved at its
+     * end (core/combat.h), with a random stream of their own, and how many
+     * were resolved so far (part of game_hash() once there was one). */
+    CombatQueue combat;
+    Rng combat_rng;
+    uint32_t strikes_resolved;
     /* Felled trees dealt with (Map.tree_fall_revision): those under them
      * were hurt. */
     uint32_t tree_falls_seen;
@@ -305,6 +311,16 @@ bool game_debug_plant_tree(Game *game, int x, int y, int z);
  * tree, for one fully grown already, or one that waits for room (something
  * where its trunk would rise stops it, as in play). */
 bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully);
+
+/* Who stands on the tile: a settler first, else an animal (COMBATANT_NONE
+ * when nobody; the dead are not counted). */
+Combatant game_combatant_at(const Game *game, int x, int y, int z);
+
+/* Debug: makes `attacker` (a settler or an animal) attack `target` (an
+ * animal, or a settler when the attacker is an animal), whatever it was doing.
+ * Fails on stale handles, a dead being, an animal without a weapon, or a
+ * settler against a settler. */
+bool game_debug_attack(Game *game, Combatant attacker, Combatant target);
 
 /* Debug: a blow of a random kind (GAME_DEBUG_BLOW_*, times the body's size)
  * on every settler and animal on the tile. Returns how many were hurt. */

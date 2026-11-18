@@ -83,6 +83,12 @@ static const AttributeDef ATTRIBUTE_DEFS[ATTRIBUTE_COUNT] = {
           N_("attribute.pain_tolerance.low.3"), N_("attribute.pain_tolerance.low.4")},
          {N_("attribute.pain_tolerance.high.1"), N_("attribute.pain_tolerance.high.2"),
           N_("attribute.pain_tolerance.high.3"), N_("attribute.pain_tolerance.high.4")}},
+    [ATTRIBUTE_COURAGE] = {N_("attribute.courage"),
+                           N_("attribute.courage.description"),
+                           {N_("attribute.courage.low.1"), N_("attribute.courage.low.2"),
+                            N_("attribute.courage.low.3"), N_("attribute.courage.low.4")},
+                           {N_("attribute.courage.high.1"), N_("attribute.courage.high.2"),
+                            N_("attribute.courage.high.3"), N_("attribute.courage.high.4")}},
 };
 
 static const int BAND_STARTS[ATTRIBUTE_BANDS] = ATTRIBUTE_BAND_STARTS;
@@ -156,6 +162,13 @@ float attribute_pain_factor(const Attributes *attributes)
                  log2f(ATTRIBUTE_FACTOR_MAX));
 }
 
+float attribute_nerve(const Attributes *attributes)
+{
+    float p = attribute_position(attributes, ATTRIBUTE_COURAGE);
+    return p < 0.0f ? ATTRIBUTE_NERVE_ORDINARY * (1.0f + 0.8f * p)
+                    : ATTRIBUTE_NERVE_ORDINARY + 0.7f * p;
+}
+
 float attribute_thought_weight(const Attributes *attributes)
 {
     float p = attribute_position(attributes, ATTRIBUTE_TEMPERAMENT);
@@ -192,8 +205,9 @@ int attribute_band(int position)
 
 AttributeGroup attribute_group(AttributeType type)
 {
-    return type == ATTRIBUTE_OUTLOOK || type == ATTRIBUTE_TEMPERAMENT ? ATTRIBUTE_GROUP_MIND
-                                                                      : ATTRIBUTE_GROUP_BODY;
+    return type == ATTRIBUTE_OUTLOOK || type == ATTRIBUTE_TEMPERAMENT || type == ATTRIBUTE_COURAGE
+               ? ATTRIBUTE_GROUP_MIND
+               : ATTRIBUTE_GROUP_BODY;
 }
 
 const char *attribute_name_key(AttributeType type)

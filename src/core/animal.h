@@ -33,6 +33,7 @@
 #ifndef COLONY_CORE_ANIMAL_H
 #define COLONY_CORE_ANIMAL_H
 
+#include "core/combat.h"
 #include "core/game_clock.h"
 #include "core/health.h"
 #include "core/map.h"
@@ -51,6 +52,8 @@ typedef enum AnimalSpecies {
     ANIMAL_RED_DEER,
     ANIMAL_BOAR,
     ANIMAL_HARE,
+    ANIMAL_WOLF,
+    ANIMAL_FOX,
     ANIMAL_SPECIES_COUNT
 } AnimalSpecies;
 
@@ -69,7 +72,9 @@ typedef enum AnimalTask {
     ANIMAL_TASK_EAT,    /* Walking to food, then eating. */
     ANIMAL_TASK_DRINK,  /* Walking to water, then drinking. */
     ANIMAL_TASK_SLEEP,
-    ANIMAL_TASK_FLEE, /* Running away from a settler. */
+    ANIMAL_TASK_FLEE, /* Running away from a settler, or from whoever struck it. */
+    /* Chasing Animal.enemy, and striking it when adjacent (core/combat.h). */
+    ANIMAL_TASK_ATTACK,
     /* Lying where it fell: unconscious, or unable to walk (core/health.h). */
     ANIMAL_TASK_DOWN,
     ANIMAL_TASK_COUNT
@@ -89,6 +94,11 @@ typedef enum AnimalFood {
     ANIMAL_FOOD_NUTS,  /* Nuts lying on the ground. */
     ANIMAL_FOOD_PLANT, /* The food a plant bears (fruit, leaves, roots). */
 } AnimalFood;
+
+/* A set of species (bit s: AnimalSpecies s). */
+typedef uint32_t AnimalSpeciesMask;
+#define ANIMAL_SPECIES_BIT(species) ((AnimalSpeciesMask)1 << (species))
+_Static_assert(ANIMAL_SPECIES_COUNT <= 32, "species must fit in AnimalSpeciesMask");
 
 /* A set of plant types (bit t: PlantType t). */
 typedef uint32_t AnimalPlantMask;
@@ -141,6 +151,27 @@ typedef struct AnimalDef {
     BodyPlan body;
     float size;
     ItemType carcass;
+    /* How it fights (docs/COMBAT.md): its natural weapon (ATTACK_NONE: none),
+     * how well it dodges (0..1), the hurt fraction at which it breaks off
+     * (combat_breaks_off()), and whether it fights back when struck (else it
+     * runs). */
+    AttackType attack;
+    float agility;
+    float nerve;
+    bool fights_back;
+    /* How long it can run flat out (seconds) before it is spent: it then runs
+     * at a third of the speed (Animal.fatigue). */
+    float sprint_seconds;
+    /* Carnivores (docs/COMBAT.md §6): they eat the carcasses of
+     * animals only, and hunt `prey` (and settlers, if `hunts_settlers`, when
+     * desperate) within `hunt_range` tiles; a bite takes `bite_kg` of the
+     * carcass and fills `bite_kg` / `stomach_kg` of its hunger. */
+    bool carnivore;
+    AnimalSpeciesMask prey;
+    bool hunts_settlers;
+    int hunt_range;
+    float bite_kg;
+    float stomach_kg;
 } AnimalDef;
 
 typedef struct Animal {
@@ -159,6 +190,15 @@ typedef struct Animal {
     int timer;
     float needs[ANIMAL_NEED_COUNT];
     Health health;
+    /* Who it fights, or runs from after being struck (core/combat.h): NONE
+     * when nobody. While it is set, `enemy_pos` is where it was last seen
+     * (valid while `enemy` is). `attack_cooldown`: ticks before its next blow. */
+    Combatant enemy;
+    TilePos enemy_pos;
+    int attack_cooldown;
+    /* 0 (fresh) to 1 (spent): grows while it runs, then it is slower; it
+     * recovers while it does not. Part of the hash once above 0. */
+    float fatigue;
     /* The animal its herd follows: itself for a leader and for a loner. */
     EntityId leader;
     /* A herd mate ran off from a settler: so will it, the next time it looks
@@ -175,7 +215,18 @@ typedef struct Animal {
 typedef struct Animals {
     Pool pool;
     Animal list[ANIMAL_MAX]; /* Indexed by EntityId.index. */
+    /* The carnivores able to hunt (alive, on their feet), whom the other
+     * animals fear: recomputed at the start of every tick, not part of the
+     * hash. */
+    uint32_t predator_slots[ANIMAL_MAX];
+    int predator_count;
 } Animals;
+
+/* A settler the animals can fight. */
+typedef struct AnimalSettler {
+    EntityId id;
+    TilePos pos;
+} AnimalSettler;
 
 /* What animals need of the world to live a tick. */
 typedef struct AnimalContext {
@@ -188,6 +239,14 @@ typedef struct AnimalContext {
     /* Where the settlers stand: who the animals fear. */
     const TilePos *threats;
     int threat_count;
+    /* Every settler alive, those knocked out too: who an animal can fight. */
+    const AnimalSettler *settlers;
+    int settler_count;
+    /* Where blows are queued (core/combat.h); NULL: nobody strikes. */
+    CombatQueue *combat;
+    /* The items on the ground, where the carnivores find carcasses and eat
+     * them; NULL: no carcass. */
+    Items *items;
 } AnimalContext;
 
 /* Needs below which an animal goes to drink or eat, the food at which it
@@ -231,6 +290,20 @@ typedef struct AnimalContext {
  * that found nowhere to run waits before it tries again. */
 #define ANIMAL_ALERT_TICKS 20
 #define ANIMAL_CORNERED_TICKS 600
+/* Hunting: a carnivore goes for a carcass or a prey when its food falls
+ * below ANIMAL_HUNGRY; one hungrier than ANIMAL_DESPERATE also goes for settlers
+ * (those of its species that do). A bite of a carcass takes this long. A
+ * running animal slows down to 1 - ANIMAL_FATIGUE_SLOWDOWN of its speed when
+ * spent, and recovers over ANIMAL_RECOVER_SECONDS. */
+#define ANIMAL_DESPERATE 0.3f
+#define ANIMAL_CARCASS_BITE_TICKS 150
+#define ANIMAL_FATIGUE_SLOWDOWN 0.65f
+#define ANIMAL_RECOVER_SECONDS 60.0f
+/* Fighting (docs/COMBAT.md): an enemy further than this many tiles is
+ * forgotten, and the path to it is planned again every tile within this
+ * travel cost. */
+#define ANIMAL_ENEMY_FORGET_DISTANCE 30
+#define ANIMAL_CHASE_MAX_COST 80.0f
 /* Fleeing: it runs until every settler is this many tiles further than its
  * flight distance, within this travel cost; cornered, it stands still. */
 #define ANIMAL_FLEE_MARGIN 8
@@ -294,6 +367,16 @@ bool animals_on_tile(const Animals *animals, int x, int y, int z);
  */
 int animals_populate(Animals *animals, const Map *map, Pathfinder *pathfinder,
                      const Regions *regions, Rng *rng, float density, const TilePos *avoid);
+
+/* Makes an animal attack `enemy` (a settler or another animal), whatever it
+ * was doing. Fails on a stale handle, an animal without a weapon, a dead or
+ * invalid target, or itself. */
+bool animals_attack(Animals *animals, EntityId id, Combatant enemy);
+
+/* An animal was struck by `attacker`: it wakes, and fights back when its
+ * species does and it is not hurt past its nerve, else runs (and its herd
+ * with it). Returns true when it had no enemy before. */
+bool animals_provoke(Animals *animals, EntityId id, Combatant attacker);
 
 /* One tick of every animal, in slot order. */
 void animals_tick(Animals *animals, const AnimalContext *context);
