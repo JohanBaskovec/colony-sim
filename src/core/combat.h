@@ -169,6 +169,7 @@ float combat_hit_chance(AttackType type, float skill, const Health *defender, fl
 
 typedef struct BlowResult {
     bool hit;
+    bool dodged;  /* A miss the defender's dodge made (it would have hit otherwise). */
     int part;     /* Part hit, -1 on a miss. */
     float damage; /* Damage taken, after the defender's factor. */
     bool killed;

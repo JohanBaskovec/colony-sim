@@ -171,12 +171,15 @@ float combat_hit_chance(AttackType type, float skill, const Health *defender, fl
 BlowResult combat_blow(AttackType type, float skill, float power, Health *defender, float agility,
                        Rng *rng)
 {
-    BlowResult result = {false, -1, 0.0f, false};
+    BlowResult result = {false, false, -1, 0.0f, false};
     const AttackDef *def = attack_def(type);
     if (def == NULL || health_is_dead(defender)) {
         return result;
     }
-    if (rng_next_float(rng) >= combat_hit_chance(type, skill, defender, agility)) {
+    float roll = rng_next_float(rng);
+    if (roll >= combat_hit_chance(type, skill, defender, agility)) {
+        /* The same roll against the chance without the dodge: a hit then. */
+        result.dodged = roll < clampf(def->accuracy * skill, COMBAT_HIT_MIN, COMBAT_HIT_MAX);
         return result;
     }
     float spread = 1.0f + COMBAT_DAMAGE_SPREAD * (2.0f * rng_next_float(rng) - 1.0f);

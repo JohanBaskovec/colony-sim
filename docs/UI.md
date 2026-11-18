@@ -139,9 +139,17 @@ The **Journal** tab (settlers and animals) lists what happened to the being,
 newest first: a date line, then a sentence (a good thought in green with a
 "+", a bad one in red with a "-"; a wound in red: "A wolf bit the left leg of
 Felix, causing bleeding."; "A fall hurt the left leg of Felix, causing a
-fracture." when nobody struck: falls, cave-ins, felled trees; a chat in white). Three check boxes at the top
-(Thoughts, Wounds, Social) hide or show each kind; the choice is kept from one
-being to the next. The last 40 entries are kept.
+fracture." when nobody struck: falls, cave-ins, felled trees; a chat in white).
+Blows given and taken are listed too: a blow it gave that wounded in green
+("Felix gashed the she-wolf's torso, causing bleeding."; "...: the blow was
+fatal." when it killed), the others in white: missed ("A she-wolf tried to
+bite Felix, and missed."), dodged ("..., who dodged.") or harmless ("A wolf
+bit Felix's left arm, doing no harm."). The same miss again within ten seconds
+is counted in the line before ("(×3)"). Animals are named by their species and
+sex ("The she-wolf", "A stag"). Four check boxes at the top (Thoughts, Wounds,
+Attacks, Social) hide or show each kind; a wound from a blow is both a wound
+and an attack, shown when either box is ticked. The choice is kept from one
+being to the next. The last 64 entries are kept.
 
 #### Bills (workstations)
 

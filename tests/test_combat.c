@@ -221,6 +221,7 @@ static void test_blows(void)
     for (int i = 0; i < trials; i++) {
         Health body = human();
         BlowResult blow = combat_blow(ATTACK_SPEAR_THRUST, 1.0f, 1.0f, &body, 0.25f, &rng);
+        CHECK(!(blow.hit && blow.dodged));
         if (!blow.hit) {
             CHECK_EQ_INT(blow.part, -1);
             CHECK(!health_is_hurt(&body));
@@ -797,14 +798,13 @@ static void test_wounds_in_journals(void)
     Combatant at_settler = game_combatant_at(&game, 10, 10, 0);
     Combatant at_boar = {COMBATANT_ANIMAL, boar_id};
     CHECK(game_debug_attack(&game, at_boar, at_settler));
-    for (int t = 0; t < 60 * TICKS_PER_SECOND && settler->journal.count == 0; t++) {
-        game_tick(&game);
-    }
-    REQUIRE(settler->journal.count > 0);
     const JournalEntry *wound = NULL;
-    for (int i = 0; i < settler->journal.count && wound == NULL; i++) {
-        const JournalEntry *entry = journal_recent(&settler->journal, i);
-        wound = entry->event == JOURNAL_WOUND ? entry : NULL;
+    for (int t = 0; t < 60 * TICKS_PER_SECOND && wound == NULL; t++) {
+        game_tick(&game);
+        for (int i = 0; i < settler->journal.count && wound == NULL; i++) {
+            const JournalEntry *entry = journal_recent(&settler->journal, i);
+            wound = entry->event == JOURNAL_WOUND ? entry : NULL;
+        }
     }
     REQUIRE(wound != NULL);
     CHECK_EQ_INT(wound->species, ANIMAL_BOAR + 1);
@@ -818,12 +818,52 @@ static void test_wounds_in_journals(void)
     for (int t = 0; t < 60 * TICKS_PER_SECOND && boar->journal.count == 0; t++) {
         game_tick(&game);
     }
-    REQUIRE(boar->journal.count > 0);
-    const JournalEntry *back = journal_recent(&boar->journal, 0);
-    CHECK_EQ_INT(back->event, JOURNAL_WOUND);
+    const JournalEntry *back = NULL;
+    for (int t = 0; t < 60 * TICKS_PER_SECOND && back == NULL; t++) {
+        game_tick(&game);
+        for (int i = 0; i < boar->journal.count && back == NULL; i++) {
+            const JournalEntry *entry = journal_recent(&boar->journal, i);
+            back = entry->event == JOURNAL_WOUND ? entry : NULL;
+        }
+    }
+    REQUIRE(back != NULL);
     CHECK_EQ_INT(back->species, 0);
     CHECK(strcmp(back->other, settler->name) == 0);
     CHECK_EQ_INT(back->plan, BODY_QUADRUPED);
+    /* Every blow is in both journals: given by one, taken by the other. */
+    int boar_gave = 0, boar_took = 0, settler_gave = 0, settler_took = 0;
+    for (int i = 0; i < boar->journal.count; i++) {
+        const JournalEntry *entry = journal_recent(&boar->journal, i);
+        int times = 1 + entry->repeats;
+        if (entry->event == JOURNAL_STRIKE) {
+            boar_gave += times;
+            CHECK(strcmp(entry->other, settler->name) == 0);
+            CHECK_EQ_INT(entry->species, 0);
+            CHECK((unsigned)entry->outcome < JOURNAL_BLOW_COUNT);
+            if (entry->outcome == JOURNAL_BLOW_WOUNDED) {
+                CHECK_EQ_INT(entry->plan, BODY_HUMAN);
+                CHECK_EQ_INT(entry->injury, attack_def((AttackType)entry->what)->injury);
+            }
+        }
+        boar_took += (entry->event == JOURNAL_STRUCK || entry->event == JOURNAL_WOUND) ? times : 0;
+    }
+    for (int i = 0; i < settler->journal.count; i++) {
+        const JournalEntry *entry = journal_recent(&settler->journal, i);
+        int times = 1 + entry->repeats;
+        if (entry->event == JOURNAL_STRIKE) {
+            settler_gave += times;
+            CHECK_EQ_INT(entry->species, ANIMAL_BOAR + 1);
+        }
+        if (entry->event == JOURNAL_STRUCK || entry->event == JOURNAL_WOUND) {
+            settler_took += times;
+            CHECK_EQ_INT(entry->species, ANIMAL_BOAR + 1);
+        }
+    }
+    CHECK(boar_gave > 0 && settler_gave > 0);
+    if (settler->journal.count < JOURNAL_MAX && boar->journal.count < JOURNAL_MAX) {
+        CHECK_EQ_INT(boar_gave, settler_took);
+        CHECK_EQ_INT(settler_gave, boar_took);
+    }
     game_shutdown(&game);
 }
 
@@ -1028,6 +1068,30 @@ static void test_fatigue(void)
     run_ticks(&game, 70 * TICKS_PER_SECOND);
     CHECK_NEAR(hare->fatigue, 0.0, 1e-6);
     game_shutdown(&game);
+}
+
+/* A miss is a dodge when the same roll would have hit a defender that did not
+ * dodge: never against one that cannot, about as often as the dodge takes off. */
+static void test_dodges(void)
+{
+    Rng rng;
+    rng_seed(&rng, 3, 8);
+    int trials = 20000, dodged = 0, missed = 0, hits = 0;
+    for (int i = 0; i < trials; i++) {
+        Health body = human();
+        BlowResult still = combat_blow(ATTACK_FISTS, 1.0f, 1.0f, &body, 0.0f, &rng);
+        CHECK(!still.dodged);
+        Health other = human();
+        BlowResult blow = combat_blow(ATTACK_FISTS, 1.0f, 1.0f, &other, 0.8f, &rng);
+        hits += blow.hit;
+        dodged += blow.dodged;
+        missed += !blow.hit && !blow.dodged;
+    }
+    /* Fists: 70 % without the dodge, 70 % × (1 - 0.4) = 42 % with it. */
+    float accuracy = attack_def(ATTACK_FISTS)->accuracy;
+    CHECK_NEAR((double)hits / trials, accuracy * 0.6, 0.02);
+    CHECK_NEAR((double)dodged / trials, accuracy * 0.4, 0.02);
+    CHECK_NEAR((double)missed / trials, 1.0 - accuracy, 0.02);
 }
 
 /* A blow reaches a diagonal tile only if a step could: not across a wall's corner. */
@@ -1268,6 +1332,7 @@ int main(void)
     RUN_TEST(test_reach);
     RUN_TEST(test_hit_chance);
     RUN_TEST(test_blows);
+    RUN_TEST(test_dodges);
     RUN_TEST(test_breaking_off);
     RUN_TEST(test_queue);
     RUN_TEST(test_combatants_at);

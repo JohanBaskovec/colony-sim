@@ -26,14 +26,18 @@ static void test_ring(void)
 
 static void test_kinds(void)
 {
-    CHECK_EQ_INT(journal_event_kind(JOURNAL_THOUGHT), JOURNAL_THOUGHTS);
-    CHECK_EQ_INT(journal_event_kind(JOURNAL_WOUND), JOURNAL_WOUNDS);
-    CHECK_EQ_INT(journal_event_kind(JOURNAL_HURT), JOURNAL_WOUNDS);
-    CHECK_EQ_INT(journal_event_kind(JOURNAL_CHAT), JOURNAL_SOCIAL);
-    CHECK_EQ_INT(journal_event_kind(JOURNAL_CHAT_ABOUT), JOURNAL_SOCIAL);
-    CHECK_EQ_INT(journal_event_kind(JOURNAL_EVENT_COUNT), JOURNAL_KIND_COUNT);
+    CHECK_EQ_INT(journal_event_kinds(JOURNAL_THOUGHT), JOURNAL_BIT(JOURNAL_THOUGHTS));
+    /* A wound from a blow is a wound and an attack; one from a fall a wound only. */
+    CHECK_EQ_INT(journal_event_kinds(JOURNAL_WOUND),
+                 JOURNAL_BIT(JOURNAL_WOUNDS) | JOURNAL_BIT(JOURNAL_ATTACKS));
+    CHECK_EQ_INT(journal_event_kinds(JOURNAL_HURT), JOURNAL_BIT(JOURNAL_WOUNDS));
+    CHECK_EQ_INT(journal_event_kinds(JOURNAL_CHAT), JOURNAL_BIT(JOURNAL_SOCIAL));
+    CHECK_EQ_INT(journal_event_kinds(JOURNAL_CHAT_ABOUT), JOURNAL_BIT(JOURNAL_SOCIAL));
+    CHECK_EQ_INT(journal_event_kinds(JOURNAL_STRIKE), JOURNAL_BIT(JOURNAL_ATTACKS));
+    CHECK_EQ_INT(journal_event_kinds(JOURNAL_STRUCK), JOURNAL_BIT(JOURNAL_ATTACKS));
+    CHECK_EQ_INT(journal_event_kinds(JOURNAL_EVENT_COUNT), 0);
     CHECK(JOURNAL_ALL == (JOURNAL_BIT(JOURNAL_THOUGHTS) | JOURNAL_BIT(JOURNAL_WOUNDS) |
-                          JOURNAL_BIT(JOURNAL_SOCIAL)));
+                          JOURNAL_BIT(JOURNAL_SOCIAL) | JOURNAL_BIT(JOURNAL_ATTACKS)));
     CHECK(journal_thought_is_good(THOUGHT_SLEPT_WELL));
     CHECK(!journal_thought_is_good(THOUGHT_SLEPT_ON_GROUND));
     CHECK(!journal_thought_is_good(THOUGHT_STARVING));
@@ -86,9 +90,10 @@ static void test_wound_entry(void)
     memset(&journal, 0, sizeof(journal));
     Health health;
     health_init(&health, BODY_HUMAN, 1.0f, 1.0f, 1.0f);
-    journal_note_wound(&journal, 7, ATTACK_WOLF_BITE, &health, 4, INJURY_BITE, NULL, 5);
+    journal_note_wound(&journal, 7, ATTACK_WOLF_BITE, &health, 4, INJURY_BITE,
+                       (JournalParty){NULL, 5, ANIMAL_MALE});
     journal_note_wound(&journal, 8, ATTACK_FISTS, &health, 2, INJURY_BRUISE,
-                       "A very long name that does not fit in the entry", 0);
+                       (JournalParty){"A very long name that does not fit in the entry", 0, 0});
     const JournalEntry *fists = journal_recent(&journal, 0);
     const JournalEntry *bite = journal_recent(&journal, 1);
     CHECK_EQ_INT(bite->event, JOURNAL_WOUND);
@@ -97,8 +102,62 @@ static void test_wound_entry(void)
     CHECK_EQ_INT(bite->part, 4);
     CHECK_EQ_INT(bite->injury, INJURY_BITE);
     CHECK_EQ_INT(bite->species, 5);
+    CHECK_EQ_INT(bite->sex, ANIMAL_MALE);
     CHECK_EQ_INT(fists->species, 0);
     CHECK_EQ_INT((int)strlen(fists->other), JOURNAL_NAME_SIZE - 1); /* Cut, still a string. */
+}
+
+/* Blows given and taken; the same miss again soon is counted, not repeated. */
+static void test_blow_entries(void)
+{
+    static Journal journal;
+    memset(&journal, 0, sizeof(journal));
+    Health wolf;
+    health_init(&wolf, BODY_CANINE, 0.7f, 1.0f, 1.0f);
+    journal_note_strike(&journal, 10, ATTACK_SPEAR_THRUST, JOURNAL_BLOW_WOUNDED, &wolf, 1,
+                        INJURY_CUT, (JournalParty){NULL, ANIMAL_WOLF + 1, ANIMAL_FEMALE});
+    const JournalEntry *strike = journal_recent(&journal, 0);
+    CHECK_EQ_INT(strike->event, JOURNAL_STRIKE);
+    CHECK_EQ_INT(strike->outcome, JOURNAL_BLOW_WOUNDED);
+    CHECK_EQ_INT(strike->what, ATTACK_SPEAR_THRUST);
+    CHECK_EQ_INT(strike->plan, BODY_CANINE);
+    CHECK_EQ_INT(strike->part, 1);
+    CHECK_EQ_INT(strike->injury, INJURY_CUT);
+    CHECK_EQ_INT(strike->species, ANIMAL_WOLF + 1);
+    CHECK_EQ_INT(strike->sex, ANIMAL_FEMALE);
+    CHECK_EQ_INT(strike->repeats, 0);
+    /* A miss on no part. */
+    journal_note_struck(&journal, 20, ATTACK_WOLF_BITE, JOURNAL_BLOW_DODGED, &wolf, -1,
+                        (JournalParty){NULL, ANIMAL_WOLF + 1, ANIMAL_FEMALE});
+    CHECK_EQ_INT(journal.count, 2);
+    CHECK_EQ_INT(journal_recent(&journal, 0)->event, JOURNAL_STRUCK);
+    CHECK_EQ_INT(journal_recent(&journal, 0)->part, 0);
+    /* Dodged again soon: counted in the same entry, which moves to the time. */
+    journal_note_struck(&journal, 80, ATTACK_WOLF_BITE, JOURNAL_BLOW_DODGED, &wolf, -1,
+                        (JournalParty){NULL, ANIMAL_WOLF + 1, ANIMAL_FEMALE});
+    journal_note_struck(&journal, 140, ATTACK_WOLF_BITE, JOURNAL_BLOW_DODGED, &wolf, -1,
+                        (JournalParty){NULL, ANIMAL_WOLF + 1, ANIMAL_FEMALE});
+    CHECK_EQ_INT(journal.count, 2);
+    CHECK_EQ_INT(journal_recent(&journal, 0)->repeats, 2);
+    CHECK_EQ_UINT(journal_recent(&journal, 0)->tick, 140);
+    /* Another outcome, another attack, another attacker, or long after: new entries. */
+    journal_note_struck(&journal, 150, ATTACK_WOLF_BITE, JOURNAL_BLOW_MISSED, &wolf, -1,
+                        (JournalParty){NULL, ANIMAL_WOLF + 1, ANIMAL_FEMALE});
+    journal_note_struck(&journal, 160, ATTACK_WOLF_CLAWS, JOURNAL_BLOW_MISSED, &wolf, -1,
+                        (JournalParty){NULL, ANIMAL_WOLF + 1, ANIMAL_FEMALE});
+    journal_note_struck(&journal, 165, ATTACK_WOLF_CLAWS, JOURNAL_BLOW_MISSED, &wolf, -1,
+                        (JournalParty){NULL, ANIMAL_WOLF + 1, ANIMAL_MALE}); /* Another wolf. */
+    journal_note_struck(&journal, 170, ATTACK_WOLF_CLAWS, JOURNAL_BLOW_MISSED, &wolf, -1,
+                        (JournalParty){"Anna", 0, 0});
+    journal_note_struck(&journal, 170 + JOURNAL_REPEAT_TICKS + 1, ATTACK_WOLF_CLAWS,
+                        JOURNAL_BLOW_MISSED, &wolf, -1, (JournalParty){"Anna", 0, 0});
+    CHECK_EQ_INT(journal.count, 7);
+    /* Hits are never merged: each says where it landed. */
+    journal_note_struck(&journal, 1000, ATTACK_FISTS, JOURNAL_BLOW_HARMLESS, &wolf, 2,
+                        (JournalParty){"Anna", 0, 0});
+    journal_note_struck(&journal, 1001, ATTACK_FISTS, JOURNAL_BLOW_HARMLESS, &wolf, 2,
+                        (JournalParty){"Anna", 0, 0});
+    CHECK_EQ_INT(journal.count, 9);
 }
 
 /* A chat goes in both journals, with the other's name and what it was about. */
@@ -154,6 +213,7 @@ int main(void)
     RUN_TEST(test_kinds);
     RUN_TEST(test_thoughts);
     RUN_TEST(test_wound_entry);
+    RUN_TEST(test_blow_entries);
     RUN_TEST(test_chat_in_a_game);
     return test_summary();
 }

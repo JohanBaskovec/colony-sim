@@ -64,6 +64,8 @@ cornered, takes it).
    dodge), between 5 % and 95 %. The dodge is the defender's agility (a human
    0.25, a deer 0.35 to 0.45, a boar 0.3, a hare 0.6) times its walking
    ability: someone who cannot walk, or lies knocked out, does not dodge.
+   A miss is a **dodge** when the same roll would have hit without the dodge
+   (`BlowResult.dodged`, for the journals: no draw of its own).
 2. **Damage** = the attack's damage × the attacker's power × a random 75 % to
    125 %. The part hit is drawn by coverage (`health_blow()`); damage goes
    through the defender's damage factor and size like any injury.

@@ -10,17 +10,43 @@
 
 #define TEXT_SIZE 256
 
-/* Who struck ("A wolf") and whose body it was ("the wolf's"), by species. */
-static const char *const ATTACKER_KEYS[ANIMAL_SPECIES_COUNT] = {
-    [ANIMAL_ROE_DEER] = N_("journal.by.roe_deer"), [ANIMAL_RED_DEER] = N_("journal.by.red_deer"),
-    [ANIMAL_BOAR] = N_("journal.by.boar"),         [ANIMAL_HARE] = N_("journal.by.hare"),
-    [ANIMAL_WOLF] = N_("journal.by.wolf"),         [ANIMAL_FOX] = N_("journal.by.fox"),
+/* An animal of a species and sex as a sentence names it: who struck ("A
+ * she-wolf"), whose body it was ("the she-wolf's"), itself in its own journal
+ * ("The she-wolf"), and the one a blow was aimed at ("the she-wolf"). */
+static const char *const ATTACKER_KEYS[ANIMAL_SPECIES_COUNT][ANIMAL_SEX_COUNT] = {
+    [ANIMAL_ROE_DEER] = {N_("journal.by.roe_deer.female"), N_("journal.by.roe_deer.male")},
+    [ANIMAL_RED_DEER] = {N_("journal.by.red_deer.female"), N_("journal.by.red_deer.male")},
+    [ANIMAL_BOAR] = {N_("journal.by.boar.female"), N_("journal.by.boar.male")},
+    [ANIMAL_HARE] = {N_("journal.by.hare.female"), N_("journal.by.hare.male")},
+    [ANIMAL_WOLF] = {N_("journal.by.wolf.female"), N_("journal.by.wolf.male")},
+    [ANIMAL_FOX] = {N_("journal.by.fox.female"), N_("journal.by.fox.male")},
 };
 
-static const char *const OWNER_KEYS[ANIMAL_SPECIES_COUNT] = {
-    [ANIMAL_ROE_DEER] = N_("journal.of.roe_deer"), [ANIMAL_RED_DEER] = N_("journal.of.red_deer"),
-    [ANIMAL_BOAR] = N_("journal.of.boar"),         [ANIMAL_HARE] = N_("journal.of.hare"),
-    [ANIMAL_WOLF] = N_("journal.of.wolf"),         [ANIMAL_FOX] = N_("journal.of.fox"),
+static const char *const OWNER_KEYS[ANIMAL_SPECIES_COUNT][ANIMAL_SEX_COUNT] = {
+    [ANIMAL_ROE_DEER] = {N_("journal.of.roe_deer.female"), N_("journal.of.roe_deer.male")},
+    [ANIMAL_RED_DEER] = {N_("journal.of.red_deer.female"), N_("journal.of.red_deer.male")},
+    [ANIMAL_BOAR] = {N_("journal.of.boar.female"), N_("journal.of.boar.male")},
+    [ANIMAL_HARE] = {N_("journal.of.hare.female"), N_("journal.of.hare.male")},
+    [ANIMAL_WOLF] = {N_("journal.of.wolf.female"), N_("journal.of.wolf.male")},
+    [ANIMAL_FOX] = {N_("journal.of.fox.female"), N_("journal.of.fox.male")},
+};
+
+static const char *const SELF_KEYS[ANIMAL_SPECIES_COUNT][ANIMAL_SEX_COUNT] = {
+    [ANIMAL_ROE_DEER] = {N_("journal.self.roe_deer.female"), N_("journal.self.roe_deer.male")},
+    [ANIMAL_RED_DEER] = {N_("journal.self.red_deer.female"), N_("journal.self.red_deer.male")},
+    [ANIMAL_BOAR] = {N_("journal.self.boar.female"), N_("journal.self.boar.male")},
+    [ANIMAL_HARE] = {N_("journal.self.hare.female"), N_("journal.self.hare.male")},
+    [ANIMAL_WOLF] = {N_("journal.self.wolf.female"), N_("journal.self.wolf.male")},
+    [ANIMAL_FOX] = {N_("journal.self.fox.female"), N_("journal.self.fox.male")},
+};
+
+static const char *const AIMED_KEYS[ANIMAL_SPECIES_COUNT][ANIMAL_SEX_COUNT] = {
+    [ANIMAL_ROE_DEER] = {N_("journal.the.roe_deer.female"), N_("journal.the.roe_deer.male")},
+    [ANIMAL_RED_DEER] = {N_("journal.the.red_deer.female"), N_("journal.the.red_deer.male")},
+    [ANIMAL_BOAR] = {N_("journal.the.boar.female"), N_("journal.the.boar.male")},
+    [ANIMAL_HARE] = {N_("journal.the.hare.female"), N_("journal.the.hare.male")},
+    [ANIMAL_WOLF] = {N_("journal.the.wolf.female"), N_("journal.the.wolf.male")},
+    [ANIMAL_FOX] = {N_("journal.the.fox.female"), N_("journal.the.fox.male")},
 };
 
 /* How a blow struck, by the mark it leaves (core/combat.h). */
@@ -29,6 +55,14 @@ static const char *const VERB_KEYS[] = {
     [STRIKE_MARK_CLAWS] = N_("journal.verb.claws"),
     [STRIKE_MARK_BITE] = N_("journal.verb.bite"),
     [STRIKE_MARK_CUT] = N_("journal.verb.cut"),
+};
+
+/* The same, after "tried" ("to bite"). */
+static const char *const TRY_KEYS[] = {
+    [STRIKE_MARK_BLOW] = N_("journal.try.blow"),
+    [STRIKE_MARK_CLAWS] = N_("journal.try.claws"),
+    [STRIKE_MARK_BITE] = N_("journal.try.bite"),
+    [STRIKE_MARK_CUT] = N_("journal.try.cut"),
 };
 
 static const char *const INJURY_KEYS[INJURY_TYPE_COUNT] = {
@@ -86,7 +120,7 @@ static void owner_text(JournalOwner owner, char *out, size_t size)
             tr(begins_with_vowel(owner.name) ? "journal.of.settler_vowel" : "journal.of.settler"),
             owner.name);
     } else if ((unsigned)owner.species < ANIMAL_SPECIES_COUNT) {
-        SDL_strlcpy(out, tr(OWNER_KEYS[owner.species]), size);
+        SDL_strlcpy(out, tr(OWNER_KEYS[owner.species][owner.sex % ANIMAL_SEX_COUNT]), size);
     } else {
         out[0] = '\0';
     }
@@ -112,24 +146,69 @@ static void hurt_text(const JournalEntry *entry, JournalOwner owner, char *out, 
     TR_FORMAT(out, size, pattern, whose, part_phrase(entry->plan, entry->part), injury);
 }
 
-static void wound_text(const JournalEntry *entry, JournalOwner owner, char *out, size_t size)
+/* Who a sentence is about: a settler (named), or an animal of a species. */
+static JournalOwner entry_party(const JournalEntry *entry)
 {
-    char attacker[TEXT_SIZE], whose[TEXT_SIZE];
     if (entry->species > 0 && entry->species <= ANIMAL_SPECIES_COUNT) {
-        SDL_strlcpy(attacker, tr(ATTACKER_KEYS[entry->species - 1]), sizeof(attacker));
-    } else {
-        SDL_strlcpy(attacker, entry->other, sizeof(attacker));
+        return (JournalOwner){NULL, entry->species - 1, entry->sex};
     }
-    const AttackDef *attack = attack_def((AttackType)entry->what);
-    const char *verb =
-        attack != NULL && (unsigned)attack->mark < sizeof(VERB_KEYS) / sizeof(*VERB_KEYS)
-            ? tr(VERB_KEYS[attack->mark])
-            : "";
+    return (JournalOwner){entry->other, 0, 0};
+}
+
+/* A party by its name, else by its species' phrase from `keys`. */
+/* One of the tables above (indexed by species, then sex). */
+typedef const char *const (*SpeciesKeys)[ANIMAL_SEX_COUNT];
+
+static const char *party_text(JournalOwner party, SpeciesKeys keys)
+{
+    if (party.name != NULL) {
+        return party.name;
+    }
+    return (unsigned)party.species < ANIMAL_SPECIES_COUNT
+               ? tr(keys[party.species][party.sex % ANIMAL_SEX_COUNT])
+               : "";
+}
+
+static const char *mark_text(int attack, const char *const *keys)
+{
+    const AttackDef *def = attack_def((AttackType)attack);
+    return def != NULL && (unsigned)def->mark < sizeof(VERB_KEYS) / sizeof(*VERB_KEYS)
+               ? tr(keys[def->mark])
+               : "";
+}
+
+/* A blow: `striker` (as the subject: `striker_keys` for an animal) struck
+ * `struck` (the owner of the body hit), and how it went. */
+static void blow_text(const JournalEntry *entry, JournalBlow outcome, JournalOwner striker,
+                      SpeciesKeys striker_keys, JournalOwner struck, char *out, size_t size)
+{
+    const char *who = party_text(striker, striker_keys);
+    char whose[TEXT_SIZE];
+    owner_text(struck, whose, sizeof(whose));
+    const char *part = part_phrase(entry->plan, entry->part);
     const char *injury =
         (unsigned)entry->injury < INJURY_TYPE_COUNT ? tr(INJURY_KEYS[entry->injury]) : "";
-    owner_text(owner, whose, sizeof(whose));
-    TR_FORMAT(out, size, tr("journal.wound"), attacker, verb, whose,
-              part_phrase(entry->plan, entry->part), injury);
+    switch (outcome) {
+    case JOURNAL_BLOW_MISSED:
+    case JOURNAL_BLOW_DODGED:
+        TR_FORMAT(
+            out, size,
+            tr(outcome == JOURNAL_BLOW_MISSED ? "journal.blow.missed" : "journal.blow.dodged"), who,
+            mark_text(entry->what, TRY_KEYS), party_text(struck, AIMED_KEYS));
+        break;
+    case JOURNAL_BLOW_HARMLESS:
+        TR_FORMAT(out, size, tr("journal.blow.harmless"), who, mark_text(entry->what, VERB_KEYS),
+                  whose, part);
+        break;
+    case JOURNAL_BLOW_KILLED:
+        TR_FORMAT(out, size, tr("journal.blow.fatal"), who, mark_text(entry->what, VERB_KEYS),
+                  whose, part, injury);
+        break;
+    default:
+        TR_FORMAT(out, size, tr("journal.wound"), who, mark_text(entry->what, VERB_KEYS), whose,
+                  part, injury);
+        break;
+    }
 }
 
 void journal_entry_text(const JournalEntry *entry, JournalOwner owner, char *out, size_t size)
@@ -145,7 +224,18 @@ void journal_entry_text(const JournalEntry *entry, JournalOwner owner, char *out
         }
         break;
     }
-    case JOURNAL_WOUND: wound_text(entry, owner, out, size); break;
+    case JOURNAL_WOUND:
+        blow_text(entry, JOURNAL_BLOW_WOUNDED, entry_party(entry), ATTACKER_KEYS, owner, out, size);
+        break;
+    case JOURNAL_STRIKE:
+        /* Given: the owner struck the one the entry names. */
+        blow_text(entry, (JournalBlow)entry->outcome, owner, SELF_KEYS, entry_party(entry), out,
+                  size);
+        break;
+    case JOURNAL_STRUCK:
+        blow_text(entry, (JournalBlow)entry->outcome, entry_party(entry), ATTACKER_KEYS, owner, out,
+                  size);
+        break;
     case JOURNAL_HURT: hurt_text(entry, owner, out, size); break;
     case JOURNAL_CHAT: TR_FORMAT(out, size, tr("journal.chat"), entry->other); break;
     case JOURNAL_CHAT_ABOUT: {
@@ -155,6 +245,12 @@ void journal_entry_text(const JournalEntry *entry, JournalOwner owner, char *out
         break;
     }
     case JOURNAL_EVENT_COUNT: break;
+    }
+    if (entry->repeats > 0 && out[0] != '\0') {
+        char once[TEXT_SIZE], times[16];
+        SDL_strlcpy(once, out, sizeof(once));
+        tr_integer(times, sizeof(times), entry->repeats + 1);
+        TR_FORMAT(out, size, tr("journal.repeat"), once, times);
     }
 }
 
@@ -178,17 +274,23 @@ static SDL_Color entry_color(const Ui *ui, const JournalEntry *entry)
                                                                       : THEME_VALUE_LOW];
     case JOURNAL_WOUND:
     case JOURNAL_HURT: return ui->theme.colors[THEME_VALUE_LOW];
+    case JOURNAL_STRIKE: /* A blow that landed. */
+        return ui->theme
+            .colors[entry->outcome == JOURNAL_BLOW_WOUNDED || entry->outcome == JOURNAL_BLOW_KILLED
+                        ? THEME_VALUE_HIGH
+                        : THEME_TEXT];
     default: return ui->theme.colors[THEME_TEXT];
     }
 }
 
-/* The three check boxes on one row; a click flips the kind. */
+/* The check boxes on one row; a click flips the kind. */
 static void filter_row(UiLayout *layout, JournalFilter *hidden)
 {
     static const char *const LABELS[JOURNAL_KIND_COUNT] = {
         [JOURNAL_THOUGHTS] = N_("journal.filter.thoughts"),
         [JOURNAL_WOUNDS] = N_("journal.filter.wounds"),
         [JOURNAL_SOCIAL] = N_("journal.filter.social"),
+        [JOURNAL_ATTACKS] = N_("journal.filter.attacks"),
     };
     Ui *ui = layout->ui;
     float total = 0.0f;
@@ -218,9 +320,9 @@ void journal_panel_rows(UiLayout *layout, const Journal *journal, JournalOwner o
     int shown = 0;
     for (int i = 0; i < journal->count; i++) {
         const JournalEntry *entry = journal_recent(journal, i);
-        JournalKind kind = journal_event_kind((JournalEvent)entry->event);
-        if (kind == JOURNAL_KIND_COUNT || (*hidden & JOURNAL_BIT(kind)) != 0) {
-            continue;
+        JournalFilter kinds = journal_event_kinds((JournalEvent)entry->event);
+        if ((kinds & ~*hidden) == 0) {
+            continue; /* None of its kinds is shown. */
         }
         char when[TEXT_SIZE], text[TEXT_SIZE];
         when_text(entry->tick, when, sizeof(when));

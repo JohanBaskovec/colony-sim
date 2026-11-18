@@ -83,7 +83,8 @@ static void journal_rows(UiLayout *layout, void *userdata)
     App *app = userdata;
     const Animal *animal = game_animal_const(&app->game, app->selected_animal);
     if (animal != NULL) {
-        journal_panel_rows(layout, &animal->journal, (JournalOwner){NULL, animal->species},
+        journal_panel_rows(layout, &animal->journal,
+                           (JournalOwner){NULL, animal->species, animal->sex},
                            &app->journal_hidden);
     }
 }

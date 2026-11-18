@@ -1127,7 +1127,7 @@ static void journal_rows(UiLayout *layout, void *userdata)
     App *app = userdata;
     const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
     if (colonist != NULL) {
-        journal_panel_rows(layout, &colonist->journal, (JournalOwner){colonist->name, 0},
+        journal_panel_rows(layout, &colonist->journal, (JournalOwner){colonist->name, 0, 0},
                            &app->journal_hidden);
     }
 }

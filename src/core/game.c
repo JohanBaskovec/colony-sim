@@ -983,8 +983,7 @@ static void update_colonists(Game *game);
 typedef struct Fighter {
     Health *health;
     Journal *journal;
-    const char *name; /* A settler's name, else NULL. */
-    int species;      /* An animal's species + 1, else 0. */
+    JournalParty party; /* Who it is, for the journals. */
     TilePos pos;
     float agility;
 } Fighter;
@@ -998,8 +997,7 @@ static bool fighter_of(Game *game, Combatant who, Fighter *out)
         }
         *out = (Fighter){&colonist->health,
                          &colonist->journal,
-                         colonist->name,
-                         0,
+                         {colonist->name, 0, 0},
                          {(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z},
                          COMBAT_SETTLER_AGILITY};
         return true;
@@ -1010,8 +1008,7 @@ static bool fighter_of(Game *game, Combatant who, Fighter *out)
     }
     *out = (Fighter){&animal->health,
                      &animal->journal,
-                     NULL,
-                     animal->species + 1,
+                     {NULL, animal->species + 1, animal->sex},
                      {(int16_t)animal->x, (int16_t)animal->y, (int16_t)animal->z},
                      animal_def((AnimalSpecies)animal->species)->agility};
     return true;
@@ -1113,10 +1110,20 @@ static void resolve_strikes(Game *game)
                                       target.health, target.agility, &game->combat_rng);
         game->strikes_resolved++;
         health_take_notes(target.health, NULL); /* Noted below, with the attacker. */
-        if (blow.hit && blow.damage > 0.0f) {
-            journal_note_wound(target.journal, game->clock.tick, strike->attack, target.health,
-                               blow.part, def->injury, attacker.name, attacker.species);
+        JournalBlow outcome = !blow.hit ? (blow.dodged ? JOURNAL_BLOW_DODGED : JOURNAL_BLOW_MISSED)
+                              : blow.killed        ? JOURNAL_BLOW_KILLED
+                              : blow.damage > 0.0f ? JOURNAL_BLOW_WOUNDED
+                                                   : JOURNAL_BLOW_HARMLESS;
+        uint64_t tick = game->clock.tick;
+        if (outcome == JOURNAL_BLOW_WOUNDED || outcome == JOURNAL_BLOW_KILLED) {
+            journal_note_wound(target.journal, tick, strike->attack, target.health, blow.part,
+                               def->injury, attacker.party);
+        } else {
+            journal_note_struck(target.journal, tick, strike->attack, outcome, target.health,
+                                blow.part, attacker.party);
         }
+        journal_note_strike(attacker.journal, tick, strike->attack, outcome, target.health,
+                            blow.part, def->injury, target.party);
         combat_log_push(&game->combat_log,
                         (CombatEvent){game->clock.tick, strike->attacker, strike->target,
                                       target.pos, strike->attack, blow.hit});
