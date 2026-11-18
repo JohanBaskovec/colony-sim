@@ -332,7 +332,84 @@ expected warmth of the day.
 
 Each step changes the state hash of the benchmarks.
 
-## 10. Open questions
+## 10. A forest floor with its plants
+
+Grass does not grow in the shade, and a wood is not a lawn with trees in it.
+World generation now places the woods first and what lives under them after,
+from the light each tile gets (`map_light_cover()`, §5) and from the ground:
+
+1. **Trees and hazels** (`place_woody()`): scattered, dense where the forest
+   noise is high, and with **glades** where a second noise opens the woods.
+   Most start grown (15 % young): the shade they cast, which decides what
+   lives under them, would change within days otherwise.
+2. **The crowns** are built (`core/tree.h`) and the litter spread.
+3. **The understory** (`place_understory()`): for each free tile of ground a
+   chance per plant, from the light (a window: not below what the plant
+   needs, not above what it bears), the fertility and terrain, the moisture
+   of the region, how forested the place is and a noise of its own per
+   plant, so that bracken, nettles or heather stand in **patches**. Grass,
+   last, fills what is left. Where nothing fits the ground stays bare, under
+   its litter.
+4. **The shores** (`place_shore_plants()`): cattails, and reeds in beds of
+   their own.
+
+Nothing is generated where it would starve (a test checks it); the few
+deaths left in the first weeks are saplings whose crowns thicken.
+
+### The plants
+
+*Light* is the best a tile gets in a year (cover × 0.85).
+
+| Plant | Where | Season | Gives | Use |
+|---|---|---|---|---|
+| Moss | any ground, damp, deepest shade up to half light | grows from the first mild days to the frosts; slow | moss (cut, comes back slowly) | bedding (beds), tinder |
+| Wood sorrel | fertile ground, damp, deep shade | leaves from spring | sour leaves | food |
+| Wild garlic *(existing)* | rich soil, woods, shade | spring, dies back in summer | leaves | food |
+| Bracken | poor to plain ground, half shade to light, in patches | fronds die down in winter; brown and dry from the start of autumn | bracken (taken whole, cut brown) | bedding, thatch, tinder, fuel |
+| Nettle, plantain, wild carrot *(existing)* | as before, now in patches and by light | | | food |
+| Wild strawberry | fertile ground, glades and edges, half shade to light | fruit in the first half of summer | strawberries | food |
+| Bilberry | poor ground (sand, gravel), thin woods | berries in the middle of summer | bilberries | food |
+| Dog rose | fertile ground, edges and open, thorny | hips from the start of autumn, **on the bush all winter** | rose hips | food when there is little else |
+| Heather | sand and gravel, full sun, in patches | evergreen; cut, it takes weeks to grow back | heather | bedding, thatch, fuel |
+| Reed | in the shallows and along the shore, in beds | stems dry from autumn, standing all winter | reeds | the best thatch |
+| Bramble, hazel, cattail, mushrooms *(existing)* | | | | food |
+
+Plants of poor ground (`PlantDef.poor_soil`: moss, bracken, bilberry,
+heather) grow as well on any ground from their `min_fertility` up: poor
+ground is where they are not outcompeted, not where they thrive.
+
+### What the fibres are for
+
+Every plant has a use. The fibres cut from plants (`GATHER_GROUP_FIBRES`,
+with grass: one job, cutting) are:
+
+- **building**: a slot that takes dry grass (a bed, a wall, a roof, a
+  ladder) takes bracken, heather or reeds too (and a bed moss), the nearest
+  first (`structure_material_types()`); once one kind is in a slot it takes
+  only that kind, so that a structure is never half one thing and half
+  another;
+- **fire**: dry bracken and heather are fuel (`HEARTH_FUEL_TYPES`, not
+  brought by default: the player allows them in the hearth's window), and
+  dry grass, bracken and moss are tinder (`ITEM_TINDER_TYPES`);
+- **food**: the berries, hips and leaves, with the food zones.
+
+### Who eats them
+
+Wild animals eat the new food plants where they bear (core/animal.c):
+roe deer bilberries, strawberries, rose hips and wood sorrel; red deer
+bilberries and hips; boar the same as roe deer; hares strawberries and wood
+sorrel. Fibres are not eaten.
+
+### Not done
+
+- Poisonous look-alikes of the new food plants (lily of the valley already
+  stands for wild garlic's); bracken as poison to eat, moss as dressing
+  (with health, D2 to D4).
+- Spread (§8): a patch cut bare stays bare, and a glade does not close.
+- A site that has taken some reeds and then runs out of reeds waits for more
+  rather than switching to grass.
+
+## 11. Open questions
 
 - Under foliage a plant lives in the outdoor air (foliage is open to the air
   for the temperature layer); only a tree lived at the ground's temperature,

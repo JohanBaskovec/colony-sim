@@ -784,9 +784,53 @@ static void test_ladders_need_a_cliff(void)
     map_free(&map);
 }
 
+/* Dry grass can be replaced by the other fibres cut from plants: bracken, heather,
+ * reeds, and moss in a bed; once a fibre is in, the slot takes only that one. */
+static void test_fibres_stand_in_for_grass(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    int wall = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2, 0, DIRECTION_SOUTH);
+    int bed =
+        constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 4, 4, 0, DIRECTION_SOUTH);
+    REQUIRE(wall != CONSTRUCTION_NONE && bed != CONSTRUCTION_NONE);
+    const ConstructionSite *wall_site = construction_get(&constructions, wall);
+    const ConstructionSite *bed_site = construction_get(&constructions, bed);
+    ItemTypeMask wall_grass = construction_material_types(wall_site, 1);
+    ItemTypeMask bed_grass = construction_material_types(bed_site, 0);
+    CHECK(wall_grass & ITEM_TYPE_BIT(ITEM_GRASS));
+    CHECK(wall_grass & ITEM_TYPE_BIT(ITEM_REEDS));
+    CHECK(wall_grass & ITEM_TYPE_BIT(ITEM_HEATHER));
+    CHECK(wall_grass & ITEM_TYPE_BIT(ITEM_BRACKEN));
+    CHECK(!(wall_grass & ITEM_TYPE_BIT(ITEM_MOSS))); /* No wall of moss. */
+    CHECK(bed_grass & ITEM_TYPE_BIT(ITEM_MOSS));
+    CHECK(!(wall_grass & ITEM_TYPE_BIT(ITEM_WOOD)));
+    CHECK_EQ_UINT(construction_material_types(wall_site, 0), ITEM_TYPE_BIT(ITEM_BRANCHES));
+
+    CHECK_EQ_INT(construction_deliver(&constructions, wall, item_stack_pristine(ITEM_REEDS, 10)),
+                 10);
+    CHECK_EQ_UINT(construction_material_types(wall_site, 1), ITEM_TYPE_BIT(ITEM_REEDS));
+    CHECK_EQ_INT(construction_deliver(&constructions, wall, item_stack_pristine(ITEM_GRASS, 4)),
+                 0); /* Not mixed with the reeds in. */
+    CHECK_EQ_INT(construction_deliver(&constructions, wall, item_stack_pristine(ITEM_REEDS, 20)),
+                 14);
+    CHECK_EQ_INT(construction_missing(wall_site, 1), 0);
+    CHECK_EQ_INT(construction_deliver(&constructions, bed, item_stack_pristine(ITEM_MOSS, 12)), 12);
+    CHECK(construction_materials_complete(bed_site));
+    /* Taken apart or cancelled, the reeds come back as reeds. */
+    ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
+    CHECK_EQ_INT(constructions_remove(&constructions, wall, returned), 1);
+    CHECK_EQ_INT(returned[0].type, ITEM_REEDS);
+    CHECK_EQ_INT(returned[0].count, 24);
+    free_world(&map, &constructions, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
+    RUN_TEST(test_fibres_stand_in_for_grass);
     RUN_TEST(test_map_layer);
     RUN_TEST(test_placing_and_removing);
     RUN_TEST(test_delivering);
@@ -800,6 +844,7 @@ int main(void)
     RUN_TEST(test_bed_sites);
     RUN_TEST(test_promises);
     RUN_TEST(test_workstation_site);
+    RUN_TEST(test_fibres_stand_in_for_grass);
     RUN_TEST(test_roof_layer);
     RUN_TEST(test_roof_sites);
     RUN_TEST(test_ladders_need_a_cliff);

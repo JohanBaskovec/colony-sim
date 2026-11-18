@@ -611,10 +611,229 @@ def draw_mushrooms():
     return compose(shadow, canvas, shadow_opacity=0.2)
 
 
+def draw_moss(size):
+    """A low carpet of soft green cushions, dense and uneven."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(4600 + size)
+    shadow.ellipse(cx, base_y + 2, 44 * scale + 4, 8 * scale + 2, (0, 0, 0))
+    greens = [(70, 118, 54), (88, 142, 62), (56, 100, 48), (112, 160, 72)]
+    for _ in range(int(14 + 22 * scale)):
+        x = cx + rng.uniform(-46, 46) * scale
+        y = base_y - 2 + rng.uniform(-9, 5) * scale
+        r = rng.uniform(7, 13) * scale
+        canvas.ellipse(x, y, r, r * 0.55, rng.choice(greens), light=0.5)
+    canvas.outline(1.0, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.15)
+
+
+def draw_wood_sorrel(size):
+    """Clover-like leaves of three heart-shaped leaflets on thin stalks; a
+    few white flowers once grown."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(4700 + size)
+    shadow.ellipse(cx, base_y + 2, 36 * scale + 4, 8 * scale + 2, (0, 0, 0))
+    green, light = (92, 158, 70), (132, 190, 96)
+    for i in range(6):
+        sx = cx + (i - 2.5) * 12 * scale
+        top = base_y - rng.uniform(34, 52) * scale
+        canvas.line([(sx, base_y), (sx + rng.uniform(-4, 4), top)], 1.4, (100, 140, 70))
+        tx = sx
+        for k in (-1, 0, 1):
+            ox = tx + k * 9 * scale
+            canvas.ellipse(ox, top - abs(k) * -2 * scale, 7.5 * scale, 6.5 * scale,
+                           light if k == 0 else green, light=0.3)
+    if size == 2:
+        for k in range(2):
+            fx = cx + (k * 2 - 1) * 20
+            fy = base_y - rng.uniform(40, 52)
+            canvas.line([(fx, base_y), (fx, fy)], 1.2, (130, 160, 90))
+            canvas.ellipse(fx, fy, 4.2, 3.6, (0.98, 0.97, 0.98))
+            canvas.ellipse(fx, fy, 1.2, 1.2, (0.9, 0.8, 0.3))
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.18)
+
+
+def draw_bracken(size):
+    """Tall fronds of many leaflets, arching out and up from the ground."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(4800 + size)
+    shadow.ellipse(cx, base_y + 2, 48 * scale + 4, 10 * scale + 2, (0, 0, 0))
+    green, dark = (104, 150, 62), (66, 108, 46)
+    for i in range(6):
+        side = -1 if i % 2 == 0 else 1
+        lean = (0.25 + 0.2 * (i // 2)) * side
+        height = rng.uniform(70, 104) * scale
+        stem = []
+        for j in range(9):
+            t = j / 8.0
+            stem.append((cx + lean * height * (t ** 1.4) * 1.2 + (i - 2.5) * 5 * scale,
+                         base_y - height * t))
+        canvas.line(stem, max(1.2, 2.4 * scale), (96, 112, 60))
+        for j in range(2, 9):
+            px, py = stem[j]
+            t = j / 8.0
+            width = (1.0 - t) * 26 * scale + 4
+            for sign in (-1, 1):
+                leaf(canvas, (px, py), (px + sign * width, py - width * 0.25 + 4 * scale),
+                     7 * scale + 1, dark if (i + j) % 3 == 0 else green, (150, 180, 110))
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
+def draw_wild_strawberry(size, fruit):
+    """Rosettes of toothed trefoil leaves with runners; white flowers, and red
+    berries when it bears fruit."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(4900 + size)
+    shadow.ellipse(cx, base_y + 2, 42 * scale + 4, 9 * scale + 2, (0, 0, 0))
+    green, dark = (82, 140, 62), (50, 98, 46)
+    for i in range(7):
+        angle = math.radians(-165 + i * 25 + rng.uniform(-6, 6))
+        length = rng.uniform(28, 40) * scale
+        x1 = cx + math.cos(angle) * length
+        y1 = base_y - 6 * scale + math.sin(angle) * length * 0.9
+        canvas.line([(cx, base_y), (x1, y1)], 1.2, (96, 120, 64))
+        for k in (-1, 0, 1):
+            canvas.ellipse(x1 + k * 8 * scale, y1 - abs(k) * -1.5 * scale, 8 * scale, 6.5 * scale,
+                           dark if (i + k) % 2 else green, light=0.3)
+    if size == 2:
+        for k in range(3):
+            fx = cx + (k - 1) * 22 + rng.uniform(-4, 4)
+            fy = base_y - rng.uniform(26, 38)
+            canvas.line([(cx, base_y), (fx, fy)], 1.0, (110, 140, 76))
+            if fruit:
+                canvas.ellipse(fx, fy + 2, 4.0, 4.6, (200, 36, 48), light=0.5)
+                for _ in range(3):
+                    canvas.ellipse(fx + rng.uniform(-1.6, 1.6), fy + 2 + rng.uniform(-2, 2), 0.5,
+                                   0.5, (0.96, 0.9, 0.5))
+            else:
+                canvas.ellipse(fx, fy, 3.8, 3.4, (0.98, 0.97, 0.98))
+                canvas.ellipse(fx, fy, 1.2, 1.2, (0.95, 0.8, 0.2))
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.18)
+
+
+def draw_bilberry(size, fruit):
+    """A low tuft of thin green stems with small oval leaves; blue-black
+    berries when it bears fruit."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(5000 + size)
+    shadow.ellipse(cx, base_y + 2, 40 * scale + 4, 9 * scale + 2, (0, 0, 0))
+    green, dark = (96, 148, 72), (58, 104, 52)
+    points = []
+    for i in range(9):
+        sx = cx + (i - 4) * 8 * scale
+        top = base_y - rng.uniform(30, 52) * scale
+        canvas.line([(sx, base_y), (sx + rng.uniform(-5, 5), top)], 1.4, (88, 120, 60))
+        for j in range(5):
+            t = 0.3 + j * 0.17
+            y = base_y + (top - base_y) * t
+            for side in (-1, 1):
+                canvas.ellipse(sx + side * 5 * scale, y, 5.2 * scale, 3.0 * scale,
+                               dark if (i + j) % 2 else green, light=0.3)
+                points.append((sx + side * 5 * scale, y))
+    if fruit and size >= 1:
+        for x, y in rng.sample(points, min(len(points), 5 + 4 * size)):
+            canvas.ellipse(x, y + 3, 3.4, 3.4, (46, 52, 96), light=0.5)
+            canvas.ellipse(x - 0.8, y + 2.2, 0.8, 0.8, (0.7, 0.75, 0.9), opacity=0.7)
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
+def draw_dog_rose(size, fruit):
+    """A thorny shrub of arching green canes with compound leaves; red hips
+    when it bears fruit."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(5100 + size)
+    shadow.ellipse(cx, base_y + 2, 52 * scale + 4, 11 * scale + 2, (0, 0, 0))
+    green, dark = (74, 124, 58), (46, 86, 42)
+    tips = []
+    for side, reach, rise in ((-1, 52, 70), (1, 58, 74), (-1, 30, 88), (1, 28, 92), (0, 0, 98)):
+        points = []
+        for i in range(8):
+            t = i / 7.0
+            x = cx + side * reach * t * scale
+            y = base_y - rise * scale * math.sin(math.pi * (0.2 + 0.5 * t))
+            points.append((x, y))
+        canvas.line(points, max(1.2, 2.8 * scale), (112, 74, 58))
+        for x, y in points[2:]:
+            for k in (-1, 0, 1):
+                canvas.ellipse(x + k * 7 * scale, y - abs(k) * -1.0 * scale - 2, 6.5 * scale,
+                               4.5 * scale, dark if k else green, light=0.3)
+        tips.extend(points[3:])
+    if fruit and size >= 1:
+        for x, y in rng.sample(tips, min(len(tips), 4 + 4 * size)):
+            canvas.ellipse(x, y + 3, 3.6, 4.6, (204, 44, 40), light=0.5)
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.22)
+
+
+def draw_heather(size):
+    """A low mound of fine woody sprigs, dotted with small purple bells."""
+    scale = HERB_SCALES[size]
+    canvas, shadow, cx, base_y = herb_canvas()
+    rng = random.Random(5200 + size)
+    shadow.ellipse(cx, base_y + 2, 44 * scale + 4, 9 * scale + 2, (0, 0, 0))
+    green, dark = (86, 112, 66), (58, 80, 52)
+    for i in range(11):
+        sx = cx + (i - 5) * 7 * scale
+        top = base_y - rng.uniform(22, 40) * scale * (1.0 - abs(i - 5) / 9.0)
+        canvas.line([(sx, base_y), (sx + (i - 5) * 1.6 * scale, top)], 1.4, (104, 84, 66))
+        for j in range(4):
+            y = base_y + (top - base_y) * (0.35 + 0.2 * j)
+            canvas.ellipse(sx + (i - 5) * 0.8 * scale, y, 3.6 * scale, 5.0 * scale,
+                           dark if (i + j) % 2 else green, light=0.25)
+    if size >= 1:
+        for _ in range(int(16 * scale + 8)):
+            x = cx + rng.uniform(-38, 38) * scale
+            y = base_y - rng.uniform(14, 40) * scale
+            canvas.ellipse(x, y, 2.2, 2.6, (158, 76, 142), light=0.4)
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
+def draw_reed(size):
+    """Tall stiff stems with long blades, topped with feathery brown plumes
+    once grown."""
+    scale = HERB_SCALES[size]
+    canvas = Canvas(CATTAIL_W, CATTAIL_H)
+    shadow = Canvas(CATTAIL_W, CATTAIL_H)
+    rng = random.Random(5300 + size)
+    cx, base_y = CATTAIL_W / 2.0, CATTAIL_H - 12.0
+    shadow.ellipse(cx, base_y + 2, 36 * scale + 4, 8 * scale + 2, (0, 0, 0))
+    green, dark = (128, 150, 84), (86, 112, 62)
+    for i in range(9):
+        x0 = cx + (i - 4) * 5 * scale
+        height = rng.uniform(120, 170) * scale
+        lean = (i - 4) * rng.uniform(3, 6) * scale
+        canvas.line([(x0, base_y), (x0 + lean, base_y - height)], max(1.2, 2.4 * scale),
+                    (150, 150, 92))
+        for j in range(3):
+            t = 0.35 + j * 0.22
+            leaf(canvas, (x0 + lean * t, base_y - height * t),
+                 (x0 + lean * t + (22 + 6 * j) * scale * (1 if i % 2 else -1),
+                  base_y - height * t - 30 * scale), 6 * scale,
+                 dark if (i + j) % 3 == 0 else green)
+        if size == 2 and i % 2 == 0:
+            canvas.ellipse(x0 + lean, base_y - height - 6, 4.0, 12.0, (150, 112, 96), light=0.4)
+    canvas.outline(1.2, PLANT_OUTLINE)
+    return compose(shadow, canvas, shadow_opacity=0.2)
+
+
 # Low plants: file name and drawing function (three sizes, except mushrooms).
 HERBS = [("wild_garlic", draw_wild_garlic), ("nettle", draw_nettle),
          ("plantain", draw_plantain), ("wild_carrot", draw_wild_carrot),
-         ("cattail", draw_cattail)]
+         ("cattail", draw_cattail), ("moss", draw_moss), ("wood_sorrel", draw_wood_sorrel),
+         ("bracken", draw_bracken), ("heather", draw_heather), ("reed", draw_reed)]
+# The same, with a variant that bears fruit (named `_fruit_`, like the bramble's).
+FRUIT_HERBS = [("wild_strawberry", draw_wild_strawberry), ("bilberry", draw_bilberry),
+               ("dog_rose", draw_dog_rose)]
 
 
 def compose(shadow, canvas, shadow_opacity):
@@ -2424,6 +2643,10 @@ def generate(output):
     for name, draw in HERBS:
         for size in range(len(HERB_SCALES)):
             sprites[f"{name}_{size}.png"] = draw(size)
+    for name, draw in FRUIT_HERBS:
+        for size in range(len(HERB_SCALES)):
+            sprites[f"{name}_{size}.png"] = draw(size, False)
+            sprites[f"{name}_fruit_{size}.png"] = draw(size, True)
     sprites["mushrooms_0.png"] = draw_mushrooms()
     # The front view keeps the bare name; the others end with their view.
     for view in CHAR_VIEWS:
@@ -2489,7 +2712,7 @@ def preview(images, path):
             sheet.alpha_composite(image, (x, 600 - image.height))
             x += image.width
     x = 10 + 128 * 5 + 300
-    for name, _ in HERBS:
+    for name, _ in HERBS + FRUIT_HERBS:
         image = images[f"{name}_2.png"]
         sheet.alpha_composite(image, (x, 400 - image.height))
         x += 100

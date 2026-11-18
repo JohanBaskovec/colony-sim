@@ -192,6 +192,11 @@ int constructions_remove(Constructions *constructions, int index,
 ItemType construction_material(const ConstructionSite *site, int slot);
 int construction_material_count(const ConstructionSite *site, int slot);
 
+/* The item types a slot takes: the material and its substitutes (see
+ * structure_material_types()), and only the type already delivered once some
+ * is in. 0 for an unused slot. */
+ItemTypeMask construction_material_types(const ConstructionSite *site, int slot);
+
 /* Work the site needs in all (building or refreshing). */
 float construction_work_needed(const ConstructionSite *site);
 

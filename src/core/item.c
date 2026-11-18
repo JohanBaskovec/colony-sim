@@ -24,6 +24,11 @@
  * - cattail rhizomes: about 250 g of starchy rootstock (~250 kcal, half of it
  *   digested raw); roasted in the embers, most of it (~350 kcal);
  * - roasted carrots: a bunch of wild carrots roasted, softer (~130 kcal);
+ * - wood sorrel, wild strawberries, bilberries, rose hips: a bunch of leaves (~40 kcal), a handful
+ *   of small fruit (~65 kcal), of bilberries (~170 kcal), of dried hips (~240 kcal: they keep
+ *   for two months);
+ * - moss (an armful, 0.4 kg), bracken, heather and reeds (bundles of 1 to 1.5 kg, dry): bedding,
+ *   thatch and fuel;
  * - cobble: a rounded stone that fits the hand, about 1 kg, picked up from
  *   the ground; tough, the knapper's hammer (its quality is its toughness);
  * - flint: a nodule of about 1 kg, the stone that is knapped (its quality is how
@@ -123,6 +128,27 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_ROASTED_CARROTS] = {DEF("roasted_carrots", N_("item.roasted_carrots"), ITEM_CATEGORY_FOOD,
                                   0.25f, 1.0f, 0.035f, 15, true, true),
                               .rot_days = 4.0f},
+    [ITEM_WOOD_SORREL] = {DEF("wood_sorrel", N_("item.wood_sorrel"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f,
+                              0.01f, 5, true, true),
+                          .rot_days = 2.0f},
+    [ITEM_WILD_STRAWBERRIES] = {DEF("wild_strawberries", N_("item.wild_strawberries"),
+                                    ITEM_CATEGORY_FOOD, 0.2f, 0.4f, 0.017f, 5, true, true),
+                                .rot_days = 2.0f},
+    [ITEM_BILBERRIES] = {DEF("bilberries", N_("item.bilberries"), ITEM_CATEGORY_FOOD, 0.3f, 0.5f,
+                             0.045f, 10, true, true),
+                         .rot_days = 4.0f},
+    /* Dry, with seeds in them: they keep for months. */
+    [ITEM_ROSE_HIPS] = {DEF("rose_hips", N_("item.rose_hips"), ITEM_CATEGORY_FOOD, 0.15f, 0.4f,
+                            0.06f, 50, true, true),
+                        .rot_days = 60.0f},
+    [ITEM_MOSS] = {DEF("moss", N_("item.moss"), ITEM_CATEGORY_RESOURCES, 0.4f, 20.0f, 0.0f, 10,
+                       false, true)},
+    [ITEM_BRACKEN] = {DEF("bracken", N_("item.bracken"), ITEM_CATEGORY_RESOURCES, 1.0f, 25.0f, 0.0f,
+                          15, false, true)},
+    [ITEM_HEATHER] = {DEF("heather", N_("item.heather"), ITEM_CATEGORY_RESOURCES, 1.5f, 15.0f, 0.0f,
+                          20, false, true)},
+    [ITEM_REEDS] = {DEF("reeds", N_("item.reeds"), ITEM_CATEGORY_RESOURCES, 1.2f, 20.0f, 0.0f, 20,
+                        false, true)},
     [ITEM_SETTLER_BODY] = {DEF("settler_body", N_("item.settler_body"), ITEM_CATEGORY_BODIES, 65.0f,
                                1000.0f, 0.0f, 100, false, true),
                            .rot_days = 10.0f},

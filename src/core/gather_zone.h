@@ -74,9 +74,17 @@ typedef enum GatherResource {
     GATHER_PLANTAIN,
     GATHER_WILD_CARROTS,
     GATHER_CATTAIL_RHIZOMES,
+    GATHER_WOOD_SORREL,
+    GATHER_WILD_STRAWBERRIES,
+    GATHER_BILBERRIES,
+    GATHER_ROSE_HIPS,
     GATHER_BRANCHES,
     GATHER_TWIGS,
     GATHER_GRASS,
+    GATHER_MOSS,
+    GATHER_BRACKEN,
+    GATHER_HEATHER,
+    GATHER_REEDS,
     GATHER_FLINT,
     GATHER_COBBLES,
     GATHER_RESOURCE_COUNT
@@ -96,7 +104,7 @@ typedef enum GatherJob {
     GATHER_JOB_HARVEST_CAREFULLY,
     GATHER_JOB_DIG,           /* Dig roots up (a digging stick helps). */
     GATHER_JOB_DIG_CAREFULLY, /* The same, easily mistaken for a poisonous plant. */
-    GATHER_JOB_CUT_GRASS,     /* Cut grass, which grows back. */
+    GATHER_JOB_CUT_GRASS,     /* Cut grass or another fibre plant, which grows back. */
     GATHER_JOB_CHOP,          /* Fell a tree. */
     GATHER_JOB_STONES,        /* Search the ground for a stone. */
     GATHER_JOB_COUNT
@@ -113,8 +121,9 @@ typedef uint32_t GatherJobMask;
 
 /* Groups of resources, each with an order limiting all of them. */
 typedef enum GatherGroup {
-    GATHER_GROUP_WOOD, /* Wood, branches, twigs. */
-    GATHER_GROUP_FOOD, /* Wild food. */
+    GATHER_GROUP_WOOD,   /* Wood, branches, twigs. */
+    GATHER_GROUP_FOOD,   /* Wild food. */
+    GATHER_GROUP_FIBRES, /* Grass, moss, bracken, heather, reeds: bedding, thatch, fuel. */
     GATHER_GROUP_STONES,
     GATHER_GROUP_COUNT
 } GatherGroup;

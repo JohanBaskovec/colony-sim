@@ -52,7 +52,9 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                          .graze_value = 1.0f,
                          .plants = PLANT_BIT(PLANT_BRAMBLE) | PLANT_BIT(PLANT_PLANTAIN) |
                                    PLANT_BIT(PLANT_WILD_GARLIC) | PLANT_BIT(PLANT_NETTLE) |
-                                   PLANT_BIT(PLANT_MUSHROOMS),
+                                   PLANT_BIT(PLANT_MUSHROOMS) | PLANT_BIT(PLANT_BILBERRY) |
+                                   PLANT_BIT(PLANT_WILD_STRAWBERRY) | PLANT_BIT(PLANT_DOG_ROSE) |
+                                   PLANT_BIT(PLANT_WOOD_SORREL),
                          .eats_nuts = true,
                          .bite_items = 2,
                          .food_value = 1.5f,
@@ -89,7 +91,8 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                          .graze_bite = 0.06f,
                          .graze_value = 0.5f,
                          .plants = PLANT_BIT(PLANT_BRAMBLE) | PLANT_BIT(PLANT_PLANTAIN) |
-                                   PLANT_BIT(PLANT_NETTLE) | PLANT_BIT(PLANT_MUSHROOMS),
+                                   PLANT_BIT(PLANT_NETTLE) | PLANT_BIT(PLANT_MUSHROOMS) |
+                                   PLANT_BIT(PLANT_BILBERRY) | PLANT_BIT(PLANT_DOG_ROSE),
                          .eats_nuts = true,
                          .bite_items = 3,
                          .food_value = 0.5f,
@@ -128,7 +131,9 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .graze_value = 0.6f,
          .plants = PLANT_BIT(PLANT_WILD_CARROT) | PLANT_BIT(PLANT_CATTAIL) |
                    PLANT_BIT(PLANT_WILD_GARLIC) | PLANT_BIT(PLANT_MUSHROOMS) |
-                   PLANT_BIT(PLANT_BRAMBLE),
+                   PLANT_BIT(PLANT_BRAMBLE) | PLANT_BIT(PLANT_BILBERRY) |
+                   PLANT_BIT(PLANT_WILD_STRAWBERRY) | PLANT_BIT(PLANT_DOG_ROSE) |
+                   PLANT_BIT(PLANT_WOOD_SORREL),
          .digs = true,
          .eats_nuts = true,
          .bite_items = 3,
@@ -166,7 +171,8 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
          .graze_min_growth = 0.15f,
          .graze_bite = 0.01f,
          .graze_value = 4.0f,
-         .plants = PLANT_BIT(PLANT_PLANTAIN) | PLANT_BIT(PLANT_NETTLE),
+         .plants = PLANT_BIT(PLANT_PLANTAIN) | PLANT_BIT(PLANT_NETTLE) |
+                   PLANT_BIT(PLANT_WILD_STRAWBERRY) | PLANT_BIT(PLANT_WOOD_SORREL),
          .bite_items = 1,
          .food_value = 6.0f,
          .body = BODY_HARE,

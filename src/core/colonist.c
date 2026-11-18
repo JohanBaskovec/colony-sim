@@ -2857,7 +2857,7 @@ static bool site_wants_material(const ColonistContext *context, const Constructi
     }
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         if (construction_unpromised(site, slot) > 0 &&
-            items_exist(context->plan_items, ITEM_TYPE_BIT(construction_material(site, slot)), 1)) {
+            items_exist(context->plan_items, construction_material_types(site, slot), 1)) {
             return true;
         }
     }
@@ -2982,7 +2982,7 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
             continue;
         }
         ItemType type = construction_material(site, slot);
-        FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(type));
+        FetchSearch search = fetch_search(context, construction_material_types(site, slot));
         if (start_fetch(colonist, context, &search, current_tile(colonist),
                         COLONIST_WORK_SEARCH_MAX_COST, false)) {
             int load = colonist_carry_capacity(colonist, type);
@@ -3108,7 +3108,7 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
 {
     ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
     if (colonist->supply_promised <= 0 ||
-        construction_material(site, colonist->supply_slot) != stack.type ||
+        !(construction_material_types(site, colonist->supply_slot) & ITEM_TYPE_BIT(stack.type)) ||
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
         return false;
     }
@@ -3672,7 +3672,8 @@ static bool is_fire_source(const Map *map, int x, int y, int z, void *userdata)
 
 static bool carries_tinder(const Colonist *colonist)
 {
-    return colonist->carried.type == ITEM_GRASS && colonist->carried.count > 0;
+    return (ITEM_TINDER_TYPES & ITEM_TYPE_BIT(colonist->carried.type)) &&
+           colonist->carried.count > 0;
 }
 
 /* Whether the colonist holds fuel the hearth takes. */
@@ -3717,7 +3718,7 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
         colonist->light_step = LIGHT_TO_SOURCE;
         return go_next_to(colonist, context, source);
     }
-    FetchSearch tinder = fetch_search(context, ITEM_TYPE_BIT(ITEM_GRASS));
+    FetchSearch tinder = fetch_search(context, ITEM_TINDER_TYPES);
     colonist->light_step = LIGHT_FETCH_TINDER;
     return start_fetch(colonist, context, &tinder, hearth, COLONIST_WORK_SEARCH_MAX_COST, false);
 }
@@ -3818,7 +3819,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
     case LIGHT_FETCH_TINDER: {
         ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
-            stack.type != ITEM_GRASS) {
+            !(ITEM_TINDER_TYPES & ITEM_TYPE_BIT(stack.type))) {
             set_idle(colonist, context, 0);
             return;
         }

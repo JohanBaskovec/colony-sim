@@ -119,6 +119,16 @@ static void test_fuel(void)
     CHECK_NEAR(hearth_fuel_value(ITEM_WOOD), item_def(ITEM_WOOD)->weight, 1e-6);
     CHECK(hearth_fuel_value(ITEM_TWIGS) > 0.0f);
     CHECK_NEAR(hearth_fuel_value(ITEM_GRASS), 0.0, 1e-9);
+    /* Dry bracken and heather burn, but are not brought by default (they are what
+     * beds and roofs are made of); reeds and moss do not. */
+    CHECK(hearth_fuel_value(ITEM_BRACKEN) > 0.0f);
+    CHECK(hearth_fuel_value(ITEM_HEATHER) > 0.0f);
+    CHECK_NEAR(hearth_fuel_value(ITEM_REEDS), 0.0, 1e-9);
+    CHECK_NEAR(hearth_fuel_value(ITEM_MOSS), 0.0, 1e-9);
+    CHECK(!(HEARTH_DEFAULT_FUEL_TYPES & ITEM_TYPE_BIT(ITEM_BRACKEN)));
+    CHECK(!(HEARTH_DEFAULT_FUEL_TYPES & ITEM_TYPE_BIT(ITEM_HEATHER)));
+    CHECK((ITEM_TINDER_TYPES & ITEM_TYPE_BIT(ITEM_GRASS)) &&
+          (ITEM_TINDER_TYPES & ITEM_TYPE_BIT(ITEM_MOSS)));
     CHECK_NEAR(hearth_fuel_value(ITEM_COBBLE), 0.0, 1e-9);
     CHECK_NEAR(hearth_fuel_value(ITEM_NONE), 0.0, 1e-9);
 
@@ -131,7 +141,7 @@ static void test_fuel(void)
     CHECK(hearth_is(station));
     CHECK(!station->burning);
     CHECK(station->keep_burning);
-    CHECK_EQ_UINT(station->fuel_types, HEARTH_FUEL_TYPES);
+    CHECK_EQ_UINT(station->fuel_types, HEARTH_DEFAULT_FUEL_TYPES);
     CHECK_NEAR(hearth_fuel_wanted(station), HEARTH_FUEL_CAPACITY, 1e-6);
     CHECK(!hearth_needs_lighting(station)); /* Nothing to burn. */
     CHECK(!hearth_light(workstations, index));
@@ -321,7 +331,7 @@ static void test_hearth_is_built_from_six_stones(void)
     const Workstation *station = hearth(&game, index);
     CHECK(hearth_is(station));
     CHECK(station->keep_burning);
-    CHECK_EQ_UINT(station->fuel_types, HEARTH_FUEL_TYPES);
+    CHECK_EQ_UINT(station->fuel_types, HEARTH_DEFAULT_FUEL_TYPES);
     CHECK_NEAR(station->fuel, 0.0, 1e-9);
     game_shutdown(&game);
 }

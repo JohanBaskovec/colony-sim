@@ -278,6 +278,22 @@ float structure_deconstruct_work(StructureType type)
     return def != NULL ? def->build_work * DECONSTRUCT_WORK_SHARE : 0.0f;
 }
 
+ItemTypeMask structure_material_types(StructureType type, ItemType material)
+{
+    if (material == ITEM_NONE) {
+        return 0;
+    }
+    ItemTypeMask types = ITEM_TYPE_BIT(material);
+    if (material == ITEM_GRASS) {
+        types |=
+            ITEM_TYPE_BIT(ITEM_BRACKEN) | ITEM_TYPE_BIT(ITEM_HEATHER) | ITEM_TYPE_BIT(ITEM_REEDS);
+        if (type == STRUCTURE_GRASS_BED) {
+            types |= ITEM_TYPE_BIT(ITEM_MOSS);
+        }
+    }
+    return types;
+}
+
 int structure_salvage_count(StructureType type, int slot)
 {
     const StructureDef *def = structure_def(type);

@@ -286,6 +286,199 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                                        .lost_below = 3.0f, /* Gone at the first frosts. */
                                        .confusable = true}},
                          .harvest = PLANT_HARVEST_REMOVES},
+    /* The carpet of the dark forest floor, on any ground, slow to come back
+     * once peeled off (docs/PLANTS.md §10): bedding and tinder. */
+    [PLANT_MOSS] =
+        {.id = "moss",
+         .name_key = N_("plant.moss"),
+         .growth_per_day = 0.04f,
+         .min_fertility = 0.1f,
+         .poor_soil = true,
+         .move_cost = 1.0f,
+         .t_min = 1.0f,
+         .t_opt_low = 8.0f,
+         .t_opt_high = 18.0f,
+         .t_max = 28.0f,
+         .t_frost_active = -10.0f,
+         .t_frost_hardened = -35.0f,
+         .t_lethal_heat = 38.0f,
+         .rest = PLANT_REST_SLEEPS,
+         .light_min = 0.01f,
+         .light_full = 0.15f,
+         .dark_days = 60.0f,
+         .products = {{.item = ITEM_MOSS, .capacity = 2, .regrow_hours = 1, .min_growth = 0.5f}},
+         .harvest = PLANT_HARVEST_RESETS},
+    /* Wood sorrel: clover-like leaves, sour, in the deepest shade. */
+    [PLANT_WOOD_SORREL] = {.id = "wood_sorrel",
+                           .name_key = N_("plant.wood_sorrel"),
+                           .growth_per_day = 0.15f,
+                           .min_fertility = 0.6f,
+                           .move_cost = 1.0f,
+                           .t_min = 3.0f,
+                           .t_opt_low = 8.0f,
+                           .t_opt_high = 18.0f,
+                           .t_max = 26.0f,
+                           .t_frost_active = -5.0f,
+                           .t_frost_hardened = -25.0f,
+                           .t_lethal_heat = 35.0f,
+                           .rest = PLANT_REST_SLEEPS,
+                           .light_min = 0.02f,
+                           .light_full = 0.15f,
+                           .dark_days = 40.0f,
+                           .products = {{.item = ITEM_WOOD_SORREL,
+                                         .capacity = 2,
+                                         .regrow_hours = 24,
+                                         .warmth_from = 15.0f, /* Leaves from spring on. */
+                                         .min_growth = 0.3f}}},
+    /* Bracken: fronds that die down in winter. Cut once brown, in autumn,
+     * they are dry bedding, thatch and tinder; cut, they only come back the
+     * next year. Poisonous to eat. */
+    [PLANT_BRACKEN] = {.id = "bracken",
+                       .name_key = N_("plant.bracken"),
+                       .growth_per_day = 0.15f,
+                       .min_fertility = 0.1f,
+                       .poor_soil = true,
+                       .move_cost = 1.3f,
+                       .t_min = 6.0f,
+                       .t_opt_low = 15.0f,
+                       .t_opt_high = 25.0f,
+                       .t_max = 33.0f,
+                       .t_frost_active = -2.0f, /* Young fronds are tender. */
+                       .t_frost_hardened = -20.0f,
+                       .t_lethal_heat = 42.0f,
+                       .rest = PLANT_REST_DIES_BACK,
+                       .light_min = 0.1f,
+                       .light_full = 0.6f,
+                       .dark_days = 20.0f,
+                       .products = {{.item = ITEM_BRACKEN,
+                                     .capacity = 3,
+                                     .regrow_hours = 24,
+                                     .warmth_from = 270.0f, /* Brown at the start of autumn. */
+                                     .min_growth = 0.6f}},
+                       .harvest = PLANT_HARVEST_RESETS},
+    /* Runners in clearings and along the woods: small sweet fruit at the
+     * start of summer. */
+    [PLANT_WILD_STRAWBERRY] = {.id = "wild_strawberry",
+                               .name_key = N_("plant.wild_strawberry"),
+                               .growth_per_day = 0.15f,
+                               .min_fertility = 0.6f,
+                               .move_cost = 1.0f,
+                               .t_min = 5.0f,
+                               .t_opt_low = 15.0f,
+                               .t_opt_high = 24.0f,
+                               .t_max = 32.0f,
+                               .t_frost_active = -5.0f,
+                               .t_frost_hardened = -20.0f,
+                               .t_lethal_heat = 42.0f,
+                               .rest = PLANT_REST_SLEEPS,
+                               .light_min = 0.08f,
+                               .light_full = 0.5f,
+                               .dark_days = 20.0f,
+                               .products = {{.item = ITEM_WILD_STRAWBERRIES,
+                                             .capacity = 3,
+                                             .regrow_hours = 24,
+                                             .warmth_from = 105.0f,  /* The start of summer, */
+                                             .warmth_until = 215.0f, /* for a few weeks. */
+                                             .min_growth = 0.5f}}},
+    /* Bilberry: a low shrub of poor, sandy or stony ground, in the open or
+     * under thin woods; berries in the middle of summer. */
+    [PLANT_BILBERRY] = {.id = "bilberry",
+                        .name_key = N_("plant.bilberry"),
+                        .growth_per_day = 0.05f,
+                        .min_fertility = 0.1f,
+                        .poor_soil = true,
+                        .move_cost = 1.1f,
+                        .t_min = 5.0f,
+                        .t_opt_low = 12.0f,
+                        .t_opt_high = 20.0f,
+                        .t_max = 28.0f,
+                        .t_frost_active = -5.0f,
+                        .t_frost_hardened = -30.0f,
+                        .t_lethal_heat = 38.0f,
+                        .rest = PLANT_REST_SLEEPS,
+                        .light_min = 0.06f,
+                        .light_full = 0.4f,
+                        .dark_days = 30.0f,
+                        .products = {{.item = ITEM_BILBERRIES,
+                                      .capacity = 5,
+                                      .regrow_hours = 24,
+                                      .warmth_from = 160.0f,
+                                      .warmth_until = 290.0f,
+                                      .lost_below = 10.0f,
+                                      .min_growth = 0.5f}}},
+    /* Dog rose: a thorny shrub of the open and of the edges of woods. Its
+     * hips ripen in autumn and stay on through the winter, until the bush
+     * wakes in spring: food when there is little else. */
+    [PLANT_DOG_ROSE] = {.id = "dog_rose",
+                        .name_key = N_("plant.dog_rose"),
+                        .growth_per_day = 0.06f,
+                        .min_fertility = 0.5f,
+                        .move_cost = 2.0f,
+                        .t_min = 5.0f,
+                        .t_opt_low = 15.0f,
+                        .t_opt_high = 25.0f,
+                        .t_max = 35.0f,
+                        .t_frost_active = -3.0f,
+                        .t_frost_hardened = -30.0f,
+                        .t_lethal_heat = 45.0f,
+                        .rest = PLANT_REST_SLEEPS,
+                        .light_min = 0.15f,
+                        .light_full = 0.7f,
+                        .dark_days = 25.0f,
+                        .products = {{.item = ITEM_ROSE_HIPS,
+                                      .capacity = 6,
+                                      .regrow_hours = 24,
+                                      .warmth_from = 330.0f, /* Red at the start of autumn. */
+                                      .min_growth = 0.5f}}},
+    /* Heather: an evergreen low shrub of sand and gravel, in the sun. Cut,
+     * it is bedding, thatch and fuel, and slow to grow back. */
+    [PLANT_HEATHER] = {.id = "heather",
+                       .name_key = N_("plant.heather"),
+                       .growth_per_day = 0.04f,
+                       .min_fertility = 0.1f,
+                       .poor_soil = true,
+                       .move_cost = 1.2f,
+                       .t_min = 5.0f,
+                       .t_opt_low = 12.0f,
+                       .t_opt_high = 22.0f,
+                       .t_max = 32.0f,
+                       .t_frost_active = -5.0f,
+                       .t_frost_hardened = -30.0f,
+                       .t_lethal_heat = 42.0f,
+                       .rest = PLANT_REST_SLEEPS,
+                       .light_min = 0.25f,
+                       .light_full = 0.8f,
+                       .dark_days = 15.0f,
+                       .products = {{.item = ITEM_HEATHER,
+                                     .capacity = 2,
+                                     .regrow_hours = 1,
+                                     .min_growth = 0.6f}},
+                       .harvest = PLANT_HARVEST_RESETS},
+    /* Common reed: in the shallows, taller than a man. Its stems stand dry
+     * from autumn through the winter, when they are cut: the best thatch.
+     * The rootstock grows them again in spring. */
+    [PLANT_REED] = {.id = "reed",
+                    .name_key = N_("plant.reed"),
+                    .growth_per_day = 0.12f,
+                    .wetland = true,
+                    .move_cost = 1.4f,
+                    .t_min = 7.0f,
+                    .t_opt_low = 18.0f,
+                    .t_opt_high = 30.0f,
+                    .t_max = 38.0f,
+                    .t_frost_active = -5.0f,
+                    .t_frost_hardened = -30.0f,
+                    .t_lethal_heat = 45.0f,
+                    .rest = PLANT_REST_SLEEPS,
+                    .light_min = 0.25f,
+                    .light_full = 0.8f,
+                    .dark_days = 15.0f,
+                    .products = {{.item = ITEM_REEDS,
+                                  .capacity = 3,
+                                  .regrow_hours = 24,
+                                  .warmth_from = 260.0f, /* Ripe and drying from autumn. */
+                                  .min_growth = 0.6f}},
+                    .harvest = PLANT_HARVEST_RESETS},
 };
 
 #undef SPRING
@@ -488,6 +681,20 @@ static void die_back(Plant *plant)
     memset(plant->stock, 0, sizeof(plant->stock));
 }
 
+/* The fertility a plant grows by on ground of `fertility`: 1.0 for the
+ * plants of the shallows, and for those of poor ground wherever they live
+ * (0 below their minimum, where they do not grow). */
+static float growing_fertility(const PlantDef *def, float fertility)
+{
+    if (def->wetland) {
+        return 1.0f;
+    }
+    if (def->poor_soil) {
+        return fertility >= def->min_fertility ? 1.0f : 0.0f;
+    }
+    return fertility;
+}
+
 /* One hour of a plant's life. Returns false when it died. */
 static bool advance_hour(Plant *plant, const PlantDef *def, const PlantConditions *conditions)
 {
@@ -572,7 +779,7 @@ static bool advance_hour(Plant *plant, const PlantDef *def, const PlantCondition
     }
 
     /* Growth. */
-    float fertility = def->wetland ? 1.0f : conditions->fertility;
+    float fertility = growing_fertility(def, conditions->fertility);
     if (state == PLANT_STATE_AWAKE && plant->growth < 1.0f && fertility >= def->min_fertility) {
         float rate = def->growth_per_day / PLANT_BEST_DAY_HOURS * fertility *
                      plant_temperature_response((PlantType)plant->type, temperature) *
@@ -609,7 +816,7 @@ void plant_advance(Plant *plant, const PlantConditions *conditions, int hours)
 float plant_growth_rate(const Plant *plant, const PlantConditions *conditions)
 {
     const PlantDef *def = &PLANT_DEFS[plant->type];
-    float fertility = def->wetland ? 1.0f : conditions->fertility;
+    float fertility = growing_fertility(def, conditions->fertility);
     if (plant_state_of(plant) != PLANT_STATE_AWAKE || fertility < def->min_fertility) {
         return 0.0f;
     }

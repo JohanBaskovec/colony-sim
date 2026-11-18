@@ -138,7 +138,7 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
         station->work_recipe = RECIPE_COUNT;
         if (WORKSTATION_DEFS[type].hearth) {
             station->keep_burning = true;
-            station->fuel_types = HEARTH_FUEL_TYPES;
+            station->fuel_types = HEARTH_DEFAULT_FUEL_TYPES;
         }
         workstations->at[index_of(workstations, x, y, z)] = (uint8_t)(index + 1);
         workstations->used_count++;

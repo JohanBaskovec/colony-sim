@@ -85,7 +85,7 @@ simulation:
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve and the sun (day length by season)                |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
-| `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, plants, stones |
+| `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, trees, then the understory by the light under their crowns, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
 | `i18n`       | Translation catalogs, `tr()`, plurals, placeholders, number formatting       |
@@ -202,6 +202,15 @@ A floor or rock **anywhere above** a tile covers it: `map_is_roofed()`
 (caves and galleries dug into hills, and built roofs, which are floors too:
 see *Roofs*); `map_natural_roof()` when that cover is not a built roof. It
 replaced the earlier one-level rule (rock all around a tile).
+
+**Plants** (`core/worldgen.c`, docs/PLANTS.md §10): generation goes in
+passes, each with its own random stream so that the others do not depend on
+it. The first places trees and hazels (forest noise, glades, mostly grown
+ones); then the slopes, the tree volumes (crowns) and the litter; only then
+`place_understory()`, which asks `map_light_cover()` for every free tile of
+ground and rolls its plants from the light, the ground, the moisture and a
+noise per plant (patches); last, cattails and reeds on the shores. What lives
+under a crown is therefore what the crown's shade allows.
 
 Hashes only mix in a level when it is not 0 (or when the map has more than
 one level), the slope layer once a slope exists.

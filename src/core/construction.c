@@ -388,6 +388,21 @@ int construction_material_count(const ConstructionSite *site, int slot)
     return material.type != ITEM_NONE ? material.count : 0;
 }
 
+ItemTypeMask construction_material_types(const ConstructionSite *site, int slot)
+{
+    ItemType material = construction_material(site, slot);
+    if (material == ITEM_NONE) {
+        return 0;
+    }
+    if (site->delivered[slot].count > 0) {
+        return ITEM_TYPE_BIT(site->delivered[slot].type);
+    }
+    if (site->workstation != 0) {
+        return ITEM_TYPE_BIT(material);
+    }
+    return structure_material_types((StructureType)site->type, material);
+}
+
 float construction_work_needed(const ConstructionSite *site)
 {
     if (site->workstation != 0) {
@@ -496,7 +511,8 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
     }
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         int missing = construction_missing(site, slot);
-        if (construction_material(site, slot) != stack.type || missing <= 0) {
+        if (!(construction_material_types(site, slot) & ITEM_TYPE_BIT(stack.type)) ||
+            missing <= 0) {
             continue;
         }
         ItemStack taken = stack;
@@ -627,8 +643,10 @@ bool construction_finish_now(Constructions *constructions, Map *map, Items *item
         int missing = construction_missing(site, slot);
         if (missing > 0) {
             construction_deliver(constructions, index,
-                                 item_stack_make(construction_material(site, slot), missing,
-                                                 ITEM_QUALITY_STANDARD, UINT16_MAX));
+                                 item_stack_make(site->delivered[slot].count > 0
+                                                     ? (ItemType)site->delivered[slot].type
+                                                     : construction_material(site, slot),
+                                                 missing, ITEM_QUALITY_STANDARD, UINT16_MAX));
         }
     }
     return construction_add_work(constructions, map, items, workstations, index,

@@ -108,6 +108,14 @@ static const SDL_Color MUSHROOM_STEM_COLOR = {226, 214, 190, 255};
 static const SDL_Color WILD_GARLIC_COLOR = {84, 170, 70, 255};
 static const SDL_Color NETTLE_COLOR = {56, 112, 52, 255};
 static const SDL_Color PLANTAIN_COLOR = {106, 146, 68, 255};
+static const SDL_Color WOOD_SORREL_COLOR = {110, 176, 84, 255};
+static const SDL_Color BILBERRY_COLOR = {52, 58, 108, 255};
+static const SDL_Color STRAWBERRY_COLOR = {200, 40, 52, 255};
+static const SDL_Color ROSE_HIP_COLOR = {208, 72, 36, 255};
+static const SDL_Color MOSS_COLOR = {84, 130, 58, 255};
+static const SDL_Color BRACKEN_COLOR = {150, 108, 62, 255};
+static const SDL_Color HEATHER_COLOR = {128, 92, 112, 255};
+static const SDL_Color REED_COLOR = {200, 176, 108, 255};
 static const SDL_Color WILD_CARROT_COLOR = {222, 206, 168, 255};
 static const SDL_Color RHIZOME_COLOR = {176, 140, 100, 255};
 static const SDL_Color BRANCH_COLOR = {122, 86, 50, 255};
@@ -1258,9 +1266,18 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         break;
     }
     case ITEM_FRESH_GRASS:
-    case ITEM_GRASS: {
-        /* A sheaf of upright blades. */
-        SDL_Color color = type == ITEM_GRASS ? DRY_GRASS_COLOR : FRESH_GRASS_COLOR;
+    case ITEM_GRASS:
+    case ITEM_MOSS:
+    case ITEM_BRACKEN:
+    case ITEM_HEATHER:
+    case ITEM_REEDS: {
+        /* A sheaf of upright blades (stems, sprigs). */
+        SDL_Color color = type == ITEM_GRASS     ? DRY_GRASS_COLOR
+                          : type == ITEM_MOSS    ? MOSS_COLOR
+                          : type == ITEM_BRACKEN ? BRACKEN_COLOR
+                          : type == ITEM_HEATHER ? HEATHER_COLOR
+                          : type == ITEM_REEDS   ? REED_COLOR
+                                                 : FRESH_GRASS_COLOR;
         float blade_w = SDL_max(1.0f, floorf(w * 0.1f));
         for (int i = 0; i < 5; i++) {
             float top = (i % 2 == 0) ? 0.26f : 0.34f;
@@ -1271,6 +1288,9 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         break;
     }
     case ITEM_BLACKBERRIES:
+    case ITEM_BILBERRIES:
+    case ITEM_WILD_STRAWBERRIES:
+    case ITEM_ROSE_HIPS:
     case ITEM_HAZELNUTS: {
         /* A handful of berries, or a few nuts. */
         static const float SPOTS[5][2] = {
@@ -1280,7 +1300,12 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         for (int i = 0; i < 5; i++) {
             SDL_FRect spot = {tile->x + floorf(w * SPOTS[i][0]), tile->y + floorf(h * SPOTS[i][1]),
                               size, size};
-            fill_outlined(renderer, spot, shade(nuts ? HAZELNUT_COLOR : BERRY_COLOR, i * 8));
+            SDL_Color color = type == ITEM_HAZELNUTS           ? HAZELNUT_COLOR
+                              : type == ITEM_BILBERRIES        ? BILBERRY_COLOR
+                              : type == ITEM_WILD_STRAWBERRIES ? STRAWBERRY_COLOR
+                              : type == ITEM_ROSE_HIPS         ? ROSE_HIP_COLOR
+                                                               : BERRY_COLOR;
+            fill_outlined(renderer, spot, shade(color, i * 8));
         }
         break;
     }
@@ -1301,11 +1326,13 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
     }
     case ITEM_WILD_GARLIC:
     case ITEM_NETTLES:
+    case ITEM_WOOD_SORREL:
     case ITEM_PLANTAIN: {
         /* A bunch of leaves: broad for wild garlic, narrow for plantain. */
-        SDL_Color color = type == ITEM_WILD_GARLIC ? WILD_GARLIC_COLOR
-                          : type == ITEM_NETTLES   ? NETTLE_COLOR
-                                                   : PLANTAIN_COLOR;
+        SDL_Color color = type == ITEM_WILD_GARLIC   ? WILD_GARLIC_COLOR
+                          : type == ITEM_NETTLES     ? NETTLE_COLOR
+                          : type == ITEM_WOOD_SORREL ? WOOD_SORREL_COLOR
+                                                     : PLANTAIN_COLOR;
         float leaf_w = SDL_max(1.0f, floorf(w * (type == ITEM_PLANTAIN ? 0.09f : 0.14f)));
         for (int i = 0; i < 4; i++) {
             float top = (i % 2 == 0) ? 0.3f : 0.38f;

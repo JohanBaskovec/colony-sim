@@ -62,14 +62,22 @@ typedef enum PlantType {
     PLANT_NONE = 0,
     PLANT_GRASS,
     PLANT_TREE,
-    PLANT_HAZEL,       /* A small tree (a shrub as a seedling): hazelnuts fall in autumn. */
-    PLANT_BRAMBLE,     /* Thorny: blackberries at the end of summer. */
-    PLANT_WILD_GARLIC, /* Leaves in spring, then withers under the trees. */
-    PLANT_NETTLE,      /* Young shoots in spring and autumn. */
-    PLANT_PLANTAIN,    /* Ribwort plantain: leaves from spring to autumn. */
-    PLANT_WILD_CARROT, /* Its root is dug up from autumn to early spring. */
-    PLANT_CATTAIL,     /* By the water: starchy rhizomes dug up all year. */
-    PLANT_MUSHROOMS,   /* A patch under trees in autumn, gone in days. */
+    PLANT_HAZEL,           /* A small tree (a shrub as a seedling): hazelnuts fall in autumn. */
+    PLANT_BRAMBLE,         /* Thorny: blackberries at the end of summer. */
+    PLANT_WILD_GARLIC,     /* Leaves in spring, then withers under the trees. */
+    PLANT_NETTLE,          /* Young shoots in spring and autumn. */
+    PLANT_PLANTAIN,        /* Ribwort plantain: leaves from spring to autumn. */
+    PLANT_WILD_CARROT,     /* Its root is dug up from autumn to early spring. */
+    PLANT_CATTAIL,         /* By the water: starchy rhizomes dug up all year. */
+    PLANT_MUSHROOMS,       /* A patch under trees in autumn, gone in days. */
+    PLANT_MOSS,            /* A carpet on the shaded forest floor: bedding. */
+    PLANT_WOOD_SORREL,     /* Sour clover-like leaves in deep shade. */
+    PLANT_BRACKEN,         /* Tall fronds on poor ground, cut brown in autumn: bedding, thatch. */
+    PLANT_WILD_STRAWBERRY, /* Small fruit at the start of summer, in clearings. */
+    PLANT_BILBERRY,        /* A low shrub of poor ground: berries in summer. */
+    PLANT_DOG_ROSE,        /* Thorny: its hips ripen in autumn and stay through winter. */
+    PLANT_HEATHER,         /* Low and woody on sand and gravel: bedding, thatch, fuel. */
+    PLANT_REED,            /* In the shallows: tall stems cut dry in winter, the best thatch. */
     PLANT_COUNT
 } PlantType;
 
@@ -162,6 +170,10 @@ typedef struct PlantDef {
     /* Grows in shallow water and along the shore whatever the ground: the
      * fertility counts as 1.0 (see plant_advance()). */
     bool wetland;
+    /* A plant of poor ground (heather, bracken): it grows as well on any
+     * ground it lives on, from `min_fertility` up (the fertility counts as
+     * 1.0, see plant_advance()). */
+    bool poor_soil;
     float move_cost; /* Movement cost multiplier while walking through. */
     /* Growth by the temperature of its tile (degrees Celsius): none below
      * `t_min` nor above `t_max`, full from `t_opt_low` to `t_opt_high`, in

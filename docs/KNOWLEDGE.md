@@ -663,6 +663,11 @@ winter food, as food rots (§7.4).
 | `plantain`      | Plantain leaves | Food   | 0.2  | 1.5  | 666   | 5   | yes     | yes        | 0.013 (≈ 50 kcal) |
 | `wild_carrots`  | Wild carrots (a bunch of roots) | Food | 0.25 | 1 | 1,000 | 30 | yes | yes   | 0.027 (≈ 100 kcal) |
 | `cattail_rhizomes` | Cattail rhizomes | Food | 0.25 | 1    | 1,000 | 30  | yes     | yes        | 0.05 raw (≈ 250 kcal, half digested); roasted: §5 |
+| `wood_sorrel`   | Wood sorrel leaves | Food | 0.2 | 1.5 | 666 | 5 | yes | yes | 0.01 (≈ 40 kcal) |
+| `wild_strawberries` | Wild strawberries (a handful) | Food | 0.2 | 0.4 | 2,500 | 5 | yes | yes | 0.017 (≈ 65 kcal) |
+| `bilberries`    | Bilberries (a handful) | Food | 0.3 | 0.5 | 1,000 | 10 | yes | yes | 0.045 (≈ 170 kcal) |
+| `rose_hips`     | Rose hips (dried on the bush) | Food | 0.15 | 0.4 | 2,500 | 50 | yes | yes | 0.06 (≈ 240 kcal), keep 60 days |
+| `moss`, `bracken`, `heather`, `reeds` | Fibres cut from plants | Resources | 0.4 / 1.0 / 1.5 / 1.2 | 20 / 25 / 15 / 20 | — | 10 – 20 | no | yes | bedding and thatch (as dry grass), tinder (moss, bracken), fuel (bracken, heather): docs/PLANTS.md §10 |
 
 - Hit points stand for shelf life (rot, §7.4): mushrooms, greens and
   blackberries spoil in days, roots in weeks, nuts keep for months.
@@ -712,6 +717,14 @@ nothing shows above ground, they grow again the next season.
 | `plantain`    | Fertility ≥ 0.6, open meadows | 0.15 | 1.0 | 2 bunches, 24 h | spring – autumn | |
 | `wild_carrot` | Soil, open meadows | 0.08 | 1.0 | 3 bunches of roots, 24 h | autumn – spring 6 | from growth 0.6; dug up whole |
 | `cattail`     | Shallow water by the shore, and the shore | 0.1 (any ground) | 1.3 | 4 rhizomes, 48 h | all year | from growth 0.5 |
+| `moss`        | Any ground, damp, deep shade | 0.04 | 1.0 | 2 armfuls of moss, 1 h | all year | from growth 0.5; peeled off whole, slow to return |
+| `wood_sorrel` | Fertile ground, damp, deep shade | 0.15 | 1.0 | 2 bunches, 24 h | from spring | |
+| `bracken`     | Poor to plain ground, patches, half shade to light | 0.15 | 1.3 | 3 armfuls, 24 h | autumn (brown, dry) | dies back in winter; cut whole |
+| `wild_strawberry` | Fertile ground, glades and edges | 0.15 | 1.0 | 3 handfuls, 24 h | first half of summer | |
+| `bilberry`    | Sand, gravel, thin woods | 0.05 | 1.1 | 5 handfuls, 24 h | mid summer | |
+| `dog_rose`    | Fertile ground, edges and open | 0.06 | 2.0 (thorns) | 6 hips, 24 h | autumn, and all winter | |
+| `heather`     | Sand and gravel, full sun, patches | 0.04 | 1.2 | 2 bundles, 1 h | all year | cut whole, back in weeks |
+| `reed`        | Shallows and shore, in beds | 0.12 (any ground) | 1.4 | 3 bundles, 24 h | autumn – spring | cut whole |
 | `mushrooms`   | Open soil within 2 tiles of a mature tree | — | 1.0 | 3 mushrooms | autumn | each autumn day a patch appears with 0.4% on each such tile and an existing one goes with 20% (5 days on average); gone when picked, and at the first frost |
 
 Mushrooms appear from a hash of the seed, the tile and the day, so that they

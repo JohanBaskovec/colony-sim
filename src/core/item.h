@@ -56,6 +56,15 @@ typedef enum ItemType {
     ITEM_DIGGING_STICK_HARDENED,
     ITEM_ROASTED_RHIZOMES,
     ITEM_ROASTED_CARROTS,
+    ITEM_WOOD_SORREL,
+    ITEM_WILD_STRAWBERRIES,
+    ITEM_BILBERRIES,
+    ITEM_ROSE_HIPS,
+    /* Fibres cut from low plants: bedding, thatch and fuel (docs/PLANTS.md §10). */
+    ITEM_MOSS,
+    ITEM_BRACKEN,
+    ITEM_HEATHER,
+    ITEM_REEDS,
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,
@@ -82,6 +91,10 @@ typedef uint64_t ItemTypeMask;
 _Static_assert(ITEM_TYPE_COUNT <= 64, "item types must fit in an ItemTypeMask");
 
 #define ITEM_TYPE_BIT(type) ((ItemTypeMask)1u << (unsigned)(type))
+
+/* What takes a spark: dry grass, bracken and moss. */
+#define ITEM_TINDER_TYPES                                                                          \
+    (ITEM_TYPE_BIT(ITEM_GRASS) | ITEM_TYPE_BIT(ITEM_BRACKEN) | ITEM_TYPE_BIT(ITEM_MOSS))
 
 /*
  * Bulk is how much room an item takes, packing gaps included, in units of

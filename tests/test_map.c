@@ -632,6 +632,170 @@ static void test_nothing_grows_in_winter(void)
     CHECK_NEAR(nettle.growth, 0.0f, 1e-6);
 }
 
+/* Whether a plant, settled in spring, bears something to take on a day of the
+ * year (advanced hour by hour from the day before). */
+static bool bears_on(Plant *plant, int day)
+{
+    advance_days(plant, day, day);
+    return plant_has_food(plant) || plant_stock_available(plant, 0) > 0;
+}
+
+/* Each new plant keeps its own calendar (docs/PLANTS.md §10): strawberries in
+ * the first half of summer, bracken cut in autumn, rose hips from autumn
+ * through the winter, reeds dry from autumn until the spring. */
+static void test_new_plants_follow_their_calendar(void)
+{
+    Plant strawberry = {.type = PLANT_WILD_STRAWBERRY, .growth = 1.0f};
+    Plant bracken = {.type = PLANT_BRACKEN, .growth = 1.0f};
+    Plant hips = {.type = PLANT_DOG_ROSE, .growth = 1.0f};
+    Plant reed = {.type = PLANT_REED, .growth = 1.0f};
+    Plant bilberry = {.type = PLANT_BILBERRY, .growth = 1.0f};
+    Plant *all[] = {&strawberry, &bracken, &hips, &reed, &bilberry};
+    for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) {
+        plant_settle(all[i], SEASON_DAY(SEASON_SPRING, 1));
+    }
+    bool strawberries_in_spring = false, strawberries_in_summer = false;
+    bool bracken_before_autumn = false, bracken_in_autumn = false;
+    bool hips_before_autumn = false, hips_in_autumn = false, hips_in_winter = false;
+    bool reeds_in_summer = false, reeds_in_winter = false;
+    bool bilberries_in_summer = false, bilberries_in_winter = false;
+    for (int day = SEASON_DAY(SEASON_SPRING, 1); day < DAYS_PER_YEAR; day++) {
+        bool strawberries = bears_on(&strawberry, day);
+        bool bracken_stock = bears_on(&bracken, day);
+        bool rose = bears_on(&hips, day);
+        bool reeds = bears_on(&reed, day);
+        bool blueberries = bears_on(&bilberry, day);
+        int season = day / DAYS_PER_SEASON;
+        strawberries_in_spring =
+            strawberries_in_spring || (strawberries && season == SEASON_SPRING);
+        strawberries_in_summer =
+            strawberries_in_summer || (strawberries && season == SEASON_SUMMER);
+        bracken_before_autumn = bracken_before_autumn || (bracken_stock && season < SEASON_AUTUMN &&
+                                                          day < SEASON_DAY(SEASON_SUMMER, 12));
+        bracken_in_autumn = bracken_in_autumn || (bracken_stock && season == SEASON_AUTUMN);
+        hips_before_autumn = hips_before_autumn || (rose && season < SEASON_AUTUMN);
+        hips_in_autumn = hips_in_autumn || (rose && season == SEASON_AUTUMN);
+        hips_in_winter = hips_in_winter || (rose && season == SEASON_WINTER);
+        reeds_in_summer = reeds_in_summer || (reeds && season == SEASON_SUMMER);
+        reeds_in_winter = reeds_in_winter || (reeds && season == SEASON_WINTER);
+        bilberries_in_summer = bilberries_in_summer || (blueberries && season == SEASON_SUMMER);
+        bilberries_in_winter = bilberries_in_winter || (blueberries && season == SEASON_WINTER);
+    }
+    CHECK(!strawberries_in_spring);
+    CHECK(strawberries_in_summer);
+    CHECK(!bracken_before_autumn);
+    CHECK(bracken_in_autumn);
+    CHECK(!hips_before_autumn);
+    CHECK(hips_in_autumn);
+    CHECK(hips_in_winter); /* They stay on the bush through the cold. */
+    CHECK(!reeds_in_summer);
+    CHECK(reeds_in_winter); /* Dry stems, standing. */
+    CHECK(bilberries_in_summer);
+    CHECK(!bilberries_in_winter);
+}
+
+/* Plants of poor ground grow as well on sand or gravel as on rich soil, but not
+ * on bare rock; the others slow down with the fertility. */
+static void test_poor_ground_plants_grow_on_any_ground(void)
+{
+    const PlantConditions sand = {.temperature = 12.0f,
+                                  .fertility = terrain_def(TERRAIN_SAND)->fertility,
+                                  .light = 0.5f,
+                                  .light_peak = 0.5f};
+    PlantConditions rich = sand;
+    rich.fertility = terrain_def(TERRAIN_RICH_SOIL)->fertility;
+    PlantConditions rock = sand;
+    rock.fertility = terrain_def(TERRAIN_ROUGH_STONE)->fertility;
+    const PlantType poor[] = {PLANT_MOSS, PLANT_BRACKEN, PLANT_BILBERRY, PLANT_HEATHER};
+    for (size_t i = 0; i < sizeof(poor) / sizeof(poor[0]); i++) {
+        CHECK(plant_def(poor[i])->poor_soil);
+        Plant on_sand = {.type = poor[i], .growth = 0.2f};
+        Plant on_rich = on_sand;
+        Plant on_rock = on_sand;
+        plant_settle(&on_sand, SEASON_DAY(SEASON_SUMMER, 1));
+        on_rich = on_sand;
+        on_rock = on_sand;
+        plant_advance(&on_sand, &sand, 48);
+        plant_advance(&on_rich, &rich, 48);
+        plant_advance(&on_rock, &rock, 48);
+        CHECK(on_sand.growth > 0.2f);
+        CHECK_NEAR(on_sand.growth, on_rich.growth, 1e-6);
+        CHECK_NEAR(on_rock.growth, 0.2f, 1e-6);
+    }
+    CHECK(!plant_def(PLANT_GRASS)->poor_soil);
+    Plant grass = {.type = PLANT_GRASS, .growth = 0.2f};
+    plant_settle(&grass, SEASON_DAY(SEASON_SUMMER, 1));
+    plant_advance(&grass, &sand, 48);
+    CHECK_NEAR(grass.growth, 0.2f, 1e-6); /* Too poor for grass. */
+}
+
+/* The shade-lovers live where the others are too dark: moss and wood sorrel
+ * live on a forest floor that kills grass. */
+static void test_shade_plants_live_in_the_dark(void)
+{
+    const PlantConditions floor = {.temperature = 12.0f,
+                                   .fertility = terrain_def(TERRAIN_RICH_SOIL)->fertility,
+                                   .light = 0.1f,
+                                   .light_peak = 0.1f};
+    const PlantType shade[] = {PLANT_MOSS, PLANT_WOOD_SORREL, PLANT_WILD_GARLIC};
+    for (size_t i = 0; i < sizeof(shade) / sizeof(shade[0]); i++) {
+        Plant plant = {.type = shade[i], .growth = 0.5f};
+        plant_settle(&plant, SEASON_DAY(SEASON_SPRING, 8));
+        plant_advance(&plant, &floor, 24 * 20);
+        CHECK(plant.type == shade[i]); /* Not dead. */
+        CHECK(plant_health(&plant) > 0.99f);
+    }
+    Plant grass = {.type = PLANT_GRASS, .growth = 0.5f};
+    plant_settle(&grass, SEASON_DAY(SEASON_SUMMER, 1));
+    plant_advance(&grass, &floor, 24 * 20);
+    CHECK_EQ_INT(grass.type, PLANT_NONE); /* Starved in the dark. */
+    /* And the sun-lovers die in the deep shade too: heather, plantain. */
+    Plant heather = {.type = PLANT_HEATHER, .growth = 0.5f};
+    plant_settle(&heather, SEASON_DAY(SEASON_SUMMER, 1));
+    plant_advance(&heather, &floor, 24 * 20);
+    CHECK_EQ_INT(heather.type, PLANT_NONE);
+}
+
+/* What the cut plants give: moss and heather come back slowly, and cutting reeds
+ * or bracken (taken whole) sets them back to the ground. */
+static void test_fibre_plants_are_cut_and_grow_back(void)
+{
+    const PlantType fibres[] = {PLANT_MOSS, PLANT_BRACKEN, PLANT_HEATHER, PLANT_REED};
+    const ItemType items[] = {ITEM_MOSS, ITEM_BRACKEN, ITEM_HEATHER, ITEM_REEDS};
+    for (size_t i = 0; i < sizeof(fibres) / sizeof(fibres[0]); i++) {
+        const PlantDef *def = plant_def(fibres[i]);
+        CHECK_EQ_INT(def->products[0].item, items[i]);
+        CHECK_EQ_INT(def->harvest, PLANT_HARVEST_RESETS);
+        CHECK(!item_is_food(items[i]));
+    }
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    map.plants[map_index(&map, 1, 1, 0)] = (Plant){.type = PLANT_HEATHER, .growth = 1.0f};
+    Plant *heather = &map.plants[map_index(&map, 1, 1, 0)];
+    plant_settle(heather, SEASON_DAY(SEASON_SUMMER, 3));
+    plant_advance(heather,
+                  &(PlantConditions){
+                      .temperature = 15.0f, .fertility = 1.0f, .light = 1.0f, .light_peak = 1.0f},
+                  2);
+    int armfuls = plant_stock_available(heather, 0);
+    CHECK_EQ_INT(armfuls, plant_def(PLANT_HEATHER)->products[0].capacity);
+    CHECK_EQ_INT(plant_take_stock(heather, 0, 100), armfuls);
+    plant_harvested(&map, 1, 1, 0);
+    CHECK_NEAR(heather->growth, 0.0f, 1e-6);
+    CHECK_EQ_INT(plant_stock_available(heather, 0), 0);
+    plant_advance(heather,
+                  &(PlantConditions){
+                      .temperature = 15.0f, .fertility = 1.0f, .light = 1.0f, .light_peak = 1.0f},
+                  24 * 5);
+    CHECK_EQ_INT(plant_stock_available(heather, 0), 0); /* Slow: not tall enough yet. */
+    plant_advance(heather,
+                  &(PlantConditions){
+                      .temperature = 15.0f, .fertility = 1.0f, .light = 1.0f, .light_peak = 1.0f},
+                  24 * 30);
+    CHECK(plant_stock_available(heather, 0) > 0);
+    map_free(&map);
+}
+
 /* Conditions at a temperature, on rich soil, in summer (what stocks ask of the day). */
 static PlantConditions at_temperature(float celsius)
 {
@@ -1202,5 +1366,9 @@ int main(void)
     RUN_TEST(test_ceilings_need_support);
     RUN_TEST(test_change_logs);
     RUN_TEST(test_litter);
+    RUN_TEST(test_new_plants_follow_their_calendar);
+    RUN_TEST(test_poor_ground_plants_grow_on_any_ground);
+    RUN_TEST(test_shade_plants_live_in_the_dark);
+    RUN_TEST(test_fibre_plants_are_cut_and_grow_back);
     return test_summary();
 }

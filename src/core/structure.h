@@ -109,6 +109,12 @@ typedef struct StructureDef {
 /* NULL when out of range (STRUCTURE_NONE has a definition). */
 const StructureDef *structure_def(StructureType type);
 
+/* The item types that can serve as `material` (one of the structure's
+ * materials): the type itself, and for dry grass the other fibres cut from
+ * plants (bracken, heather, reeds; moss too for a bed), which thatch and bed
+ * as well (docs/PLANTS.md §10). */
+ItemTypeMask structure_material_types(StructureType type, ItemType material);
+
 /* Whether a structure of this type blocks movement. */
 bool structure_blocks(StructureType type);
 

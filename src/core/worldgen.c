@@ -40,6 +40,13 @@ static float stretch(float value)
     return clampf((value - 0.5f) * 1.9f + 0.5f, 0.0f, 1.0f);
 }
 
+/* Glades: the noise above which the woods open (glade_share()), and the share of
+ * trees lost in the middle of one. */
+#define GLADE_NOISE_FROM 0.62f
+#define GLADE_TREE_LOSS 0.92f
+/* Share of the trees and hazels that start young (the rest start grown). */
+#define WOODY_YOUNG_SHARE 0.15f
+
 /*
  * Stones: every stony tile (see TerrainDef.stony) gets 0 to MAP_STONES_MAX
  * stones. On flint patches, some of them are flint: where the flint noise is
@@ -119,30 +126,38 @@ typedef struct PlantChance {
     float chance;
 } PlantChance;
 
-static void place_plant(Map *map, size_t index, Rng *rng, const WorldGenParams *params,
-                        float moisture, float forest)
+/* How forested a place is: 0 in the open, 1 in the heart of a wood (the
+ * forest noise above 0.5 builds up to it). */
+static float forest_share(float forest)
+{
+    return clampf((forest - 0.5f) * 3.0f, 0.0f, 1.0f);
+}
+
+/* Glades: small clearings in the woods, where the noise is high. */
+static float glade_share(float glade)
+{
+    return clampf((glade - GLADE_NOISE_FROM) * 5.0f, 0.0f, 1.0f);
+}
+
+/* The first pass: trees (mostly scattered, with dense forests where the
+ * forest noise is high and glades where it is not) and hazels (at the edges of
+ * the woods). Everything that grows under them is placed afterwards, once
+ * their crowns are there to cast their shade (place_understory()). */
+static void place_woody(Map *map, size_t index, Rng *rng, const WorldGenParams *params,
+                        float moisture, float forest, float glade)
 {
     Terrain terrain = (Terrain)map->terrain[index];
     float fertility = terrain_def(terrain)->fertility;
     float roll = rng_next_float(rng);
     float growth_roll = rng_next_float(rng);
 
-    /* Mostly scattered trees, with dense forests where the forest noise is
-     * high; shrubs like their edges, low plants the open meadows or the damp
-     * woods. */
-    float forest_factor = clampf((forest - 0.5f) * 3.0f, 0.0f, 1.0f);
+    float forest_factor = forest_share(forest);
     float edge = forest_factor > 0.0f ? 1.0f - fabsf(2.0f * forest_factor - 1.0f) : 0.0f;
-    float open = 1.0f - forest_factor;
+    float clearing = glade_share(glade) * forest_factor;
     const PlantChance chances[] = {
-        {PLANT_TREE,
-         params->tree_density * (0.04f + 0.9f * forest_factor) * (0.5f + 0.5f * moisture)},
-        {PLANT_HAZEL, 0.006f + 0.05f * edge},
-        {PLANT_BRAMBLE, 0.015f + 0.025f * edge},
-        {PLANT_WILD_GARLIC, 0.12f * forest_factor},
-        {PLANT_NETTLE, 0.04f * moisture},
-        {PLANT_PLANTAIN, 0.04f * open},
-        {PLANT_WILD_CARROT, terrain == TERRAIN_SOIL ? 0.015f * open : 0.0f},
-        {PLANT_GRASS, 0.35f + 0.6f * moisture},
+        {PLANT_TREE, params->tree_density * (0.04f + 0.9f * forest_factor) *
+                         (0.5f + 0.5f * moisture) * (1.0f - GLADE_TREE_LOSS * clearing)},
+        {PLANT_HAZEL, 0.006f + 0.05f * edge + 0.03f * clearing},
     };
     Plant *plant = &map->plants[index];
     float sum = 0.0f;
@@ -154,9 +169,12 @@ static void place_plant(Map *map, size_t index, Rng *rng, const WorldGenParams *
         sum += chances[i].chance;
         if (roll < sum) {
             plant->type = (uint8_t)chances[i].type;
-            /* Trees are older; grass and low plants anything. */
-            plant->growth = chances[i].type == PLANT_TREE ? 0.4f + 0.6f * growth_roll
-                                                          : 0.2f + 0.8f * growth_roll;
+            /* A wood is mostly grown: the shade it casts, which decides what grows under
+             * it, would change within days otherwise. A few trees are young. */
+            plant->growth =
+                growth_roll < WOODY_YOUNG_SHARE
+                    ? 0.2f + 0.7f * growth_roll / WOODY_YOUNG_SHARE
+                    : 0.9f + 0.1f * (growth_roll - WOODY_YOUNG_SHARE) / (1.0f - WOODY_YOUNG_SHARE);
             break;
         }
     }
@@ -176,9 +194,11 @@ static bool by_water(const Map *map, int x, int y, int z)
     return false;
 }
 
-/* Cattails along the shores: in the shallows next to the land, and on the
- * land next to the water, in place of the low plants (trees stay). */
-static void place_cattails(Map *map, Rng *rng)
+/* Cattails and reeds along the shores: in the shallows next to the land, and on
+ * the land next to the water, in place of the low plants (trees stay). Reeds
+ * make beds of their own where the `reed_seed` noise is high, cattails stand
+ * in the rest. */
+static void place_shore_plants(Map *map, Rng *rng, uint32_t reed_seed, float frequency)
 {
     for (int y = 0; y < map->height; y++) {
         for (int x = 0; x < map->width; x++) {
@@ -205,7 +225,11 @@ static void place_cattails(Map *map, Rng *rng)
             float roll = rng_next_float(rng);
             float growth_roll = rng_next_float(rng);
             if (roll < (shallows ? 0.3f : 0.15f)) {
-                *plant = (Plant){.type = PLANT_CATTAIL, .growth = 0.4f + 0.6f * growth_roll};
+                bool reeds =
+                    stretch(noise_fbm2d(reed_seed, (float)x * frequency * 3.0f,
+                                        (float)y * frequency * 3.0f, 2, 2.0f, 0.5f)) > 0.55f;
+                *plant = (Plant){.type = reeds ? PLANT_REED : PLANT_CATTAIL,
+                                 .growth = 0.4f + 0.6f * growth_roll};
                 plant_settle(plant, GAME_START_DAY);
             }
         }
@@ -279,8 +303,7 @@ static void place_tree_volumes(Map *map, Rng *rng)
                 if (tree_on(map, x - 1, y - 1, z) || tree_on(map, x, y - 1, z) ||
                     tree_on(map, x + 1, y - 1, z) || tree_on(map, x - 1, y, z) ||
                     map_is_slope(map, x, y, z) || slope_leads_to(map, x, y, z)) {
-                    *plant = (Plant){.type = PLANT_GRASS, .growth = plant->growth};
-                    plant_settle(plant, GAME_START_DAY);
+                    memset(plant, 0, sizeof(*plant)); /* The understory takes its place. */
                     continue;
                 }
                 float roll = rng_next_float(rng);
@@ -405,6 +428,179 @@ static void place_slopes(Map *map, const uint8_t *heights, const uint8_t *surfac
     }
 }
 
+/*
+ * The understory: what grows on the ground once the trees stand, from the
+ * light that reaches each tile (map_light_cover(): a dense crown lets little
+ * through, a glade or a meadow all of it), the ground (its fertility, the
+ * moisture of the region) and how forested the place is, in patches (a noise
+ * of its own for each, so that bracken, nettles or heather stand together
+ * as they do in the wild). Under the deepest shade only moss, wood sorrel and
+ * wild garlic live, and a lot of ground stays bare, under its litter; the
+ * meadows hold grass, plantain and carrots, the edges brambles, roses and
+ * strawberries, the poor sandy and stony ground heather, bilberries and
+ * bracken (docs/PLANTS.md §10).
+ */
+typedef enum Patch {
+    PATCH_MOSS,
+    PATCH_SORREL,
+    PATCH_BRACKEN,
+    PATCH_NETTLE,
+    PATCH_PLANTAIN,
+    PATCH_STRAWBERRY,
+    PATCH_BILBERRY,
+    PATCH_HEATHER,
+    PATCH_COUNT
+} Patch;
+
+/* The light a tile gets in a good day of the year, from its cover: the sun
+ * stands lower than at midsummer's noon most of the year. */
+#define UNDERSTORY_SUN 0.85f
+#define UNDERSTORY_MAX 16
+
+typedef struct Site {
+    Terrain terrain;
+    float fertility;
+    float moisture;
+    float forest; /* 0 in the open .. 1 in a wood. */
+    float edge;   /* 1 at the edge of a wood. */
+    float open;
+    float light;
+    float patch[PATCH_COUNT]; /* 0 .. 1: how thick the plant stands here. */
+} Site;
+
+/* 1 where the light is between `from` and `to` (its limits ramp a little). */
+static float light_window(float light, float from, float to)
+{
+    return clampf((light - from) / 0.08f, 0.0f, 1.0f) *
+           clampf((to + 0.12f - light) / 0.12f, 0.0f, 1.0f);
+}
+
+/* How well a ground suits plants of poor soil, by its terrain. */
+static float poor_ground(Terrain terrain, float sand, float gravel, float soil)
+{
+    switch (terrain) {
+    case TERRAIN_SAND: return sand;
+    case TERRAIN_GRAVEL: return gravel;
+    case TERRAIN_SOIL: return soil;
+    default: return 0.0f;
+    }
+}
+
+/* The chances of each plant on a site, in order of precedence (grass last:
+ * it fills what the others leave). Returns how many. */
+static int understory_chances(const Site *site, PlantChance out[UNDERSTORY_MAX])
+{
+    int n = 0;
+    const float light = site->light, fertility = site->fertility, moisture = site->moisture;
+#define ADD(plant, chance)                                                                         \
+    do {                                                                                           \
+        float c_ = (chance);                                                                       \
+        if (c_ > 0.0f && fertility >= plant_def(plant)->min_fertility) {                           \
+            out[n++] = (PlantChance){(plant), c_};                                                 \
+        }                                                                                          \
+    } while (0)
+    float shade = clampf(1.0f - light / 0.5f, 0.0f, 1.0f);
+    if (moisture >= 0.3f) {
+        ADD(PLANT_MOSS,
+            light_window(light, 0.03f, 9.0f) * (0.03f + 0.4f * shade * (0.4f + 0.6f * moisture) *
+                                                            (0.5f + site->patch[PATCH_MOSS])));
+    }
+    if (moisture >= 0.35f) {
+        ADD(PLANT_WOOD_SORREL, 0.2f * light_window(light, 0.05f, 0.35f) * (0.4f + 0.6f * moisture) *
+                                   (0.4f + site->patch[PATCH_SORREL]));
+    }
+    ADD(PLANT_WILD_GARLIC, 0.12f * site->forest * light_window(light, 0.05f, 0.5f));
+    ADD(PLANT_BRACKEN, 0.26f * site->patch[PATCH_BRACKEN] * light_window(light, 0.2f, 0.85f) *
+                           (moisture < 0.75f ? 1.0f : 0.4f) *
+                           (site->terrain == TERRAIN_RICH_SOIL ? 0.3f
+                            : site->terrain == TERRAIN_SOIL    ? 0.7f
+                                                               : 1.0f));
+    ADD(PLANT_NETTLE,
+        0.3f * moisture * site->patch[PATCH_NETTLE] * light_window(light, 0.15f, 0.9f));
+    ADD(PLANT_PLANTAIN, 0.08f * site->open * (0.4f + site->patch[PATCH_PLANTAIN]) *
+                            light_window(light, 0.4f, 9.0f));
+    ADD(PLANT_WILD_CARROT, site->terrain == TERRAIN_SOIL
+                               ? 0.03f * site->open * light_window(light, 0.4f, 9.0f)
+                               : 0.0f);
+    ADD(PLANT_WILD_STRAWBERRY, 0.5f * site->patch[PATCH_STRAWBERRY] * (0.3f + site->edge) *
+                                   light_window(light, 0.25f, 0.8f));
+    ADD(PLANT_BILBERRY, moisture < 0.7f
+                            ? 0.5f * site->patch[PATCH_BILBERRY] *
+                                  poor_ground(site->terrain, 0.6f, 0.8f, 0.12f) *
+                                  (0.4f + site->forest) * light_window(light, 0.15f, 0.6f)
+                            : 0.0f);
+    ADD(PLANT_HEATHER, moisture < 0.55f ? 0.45f * site->patch[PATCH_HEATHER] *
+                                              poor_ground(site->terrain, 0.9f, 0.7f, 0.1f) *
+                                              light_window(light, 0.6f, 9.0f)
+                                        : 0.0f);
+    ADD(PLANT_DOG_ROSE, (0.008f + 0.02f * site->edge) * light_window(light, 0.5f, 9.0f));
+    ADD(PLANT_BRAMBLE, (0.015f + 0.025f * site->edge) * light_window(light, 0.15f, 9.0f));
+    ADD(PLANT_GRASS, (0.35f + 0.6f * moisture) * light_window(light, 0.3f, 9.0f));
+#undef ADD
+    return n;
+}
+
+/* Whether a tile of the ground can bear understory plants: bare of plants
+ * and rock, not water. */
+static bool understory_ground(const Map *map, size_t index)
+{
+    switch ((Terrain)map->terrain[index]) {
+    case TERRAIN_SAND:
+    case TERRAIN_SOIL:
+    case TERRAIN_RICH_SOIL:
+    case TERRAIN_GRAVEL: break;
+    default: return false;
+    }
+    return map->rock[index] == ROCK_NONE && map->plants[index].type == PLANT_NONE;
+}
+
+static void place_understory(Map *map, const WorldGenParams *params, const float *moistures,
+                             const float *forests, float frequency, Rng *rng)
+{
+    uint32_t seeds[PATCH_COUNT];
+    for (int i = 0; i < PATCH_COUNT; i++) {
+        seeds[i] = derive_seed(params->seed, 20u + (uint32_t)i);
+    }
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            int z = map_ground_level(map, x, y);
+            size_t index = map_index(map, x, y, z);
+            size_t column = (size_t)y * (size_t)map->width + (size_t)x;
+            float roll = rng_next_float(rng);
+            float growth_roll = rng_next_float(rng);
+            if (!understory_ground(map, index)) {
+                continue;
+            }
+            Terrain terrain = (Terrain)map->terrain[index];
+            Site site = {.terrain = terrain,
+                         .fertility = terrain_def(terrain)->fertility,
+                         .moisture = moistures[column],
+                         .forest = forest_share(forests[column]),
+                         .light = map_light_cover(map, x, y, z) * UNDERSTORY_SUN};
+            site.edge = site.forest > 0.0f ? 1.0f - fabsf(2.0f * site.forest - 1.0f) : 0.0f;
+            site.open = 1.0f - site.forest;
+            for (int i = 0; i < PATCH_COUNT; i++) {
+                float n = stretch(noise_fbm2d(seeds[i], (float)x * frequency * 4.0f,
+                                              (float)y * frequency * 4.0f, 2, 2.0f, 0.5f));
+                site.patch[i] = clampf((n - 0.5f) * 3.0f, 0.0f, 1.0f);
+            }
+            PlantChance chances[UNDERSTORY_MAX];
+            int count = understory_chances(&site, chances);
+            float sum = 0.0f;
+            for (int i = 0; i < count; i++) {
+                sum += chances[i].chance;
+                if (roll < sum) {
+                    Plant *plant = &map->plants[index];
+                    plant->type = (uint8_t)chances[i].type;
+                    plant->growth = 0.2f + 0.8f * growth_roll;
+                    plant_settle(plant, GAME_START_DAY);
+                    break;
+                }
+            }
+        }
+    }
+}
+
 bool worldgen_generate(Map *map, const WorldGenParams *params)
 {
     memset(map, 0, sizeof(*map));
@@ -417,6 +613,8 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
     const uint32_t rock_seed = derive_seed(params->seed, 3);
     const uint32_t forest_seed = derive_seed(params->seed, 4);
     const uint32_t flint_seed = derive_seed(params->seed, 5);
+    const uint32_t reed_seed = derive_seed(params->seed, 6);
+    const uint32_t glade_seed = derive_seed(params->seed, 7);
     const float frequency = 1.0f / (params->feature_scale > 1.0f ? params->feature_scale : 1.0f);
 
     /* First the relief, which decides how many levels the map needs. */
@@ -424,10 +622,12 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
     uint8_t *heights = malloc(columns);
     uint8_t *surfaces = malloc(columns);
     float *moistures = malloc(columns * sizeof(*moistures));
-    if (heights == NULL || surfaces == NULL || moistures == NULL) {
+    float *forests = malloc(columns * sizeof(*forests));
+    if (heights == NULL || surfaces == NULL || moistures == NULL || forests == NULL) {
         free(heights);
         free(surfaces);
         free(moistures);
+        free(forests);
         return false;
     }
     /* The plains' level: the levels below are underground. */
@@ -458,6 +658,7 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
         free(heights);
         free(surfaces);
         free(moistures);
+        free(forests);
         return false;
     }
     map->surface_level = surface_level;
@@ -503,7 +704,9 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
                 continue; /* Bare rock on the top of outcrops. */
             }
             float forest = stretch(noise_fbm2d(forest_seed, nx * 2.0f, ny * 2.0f, 3, 2.0f, 0.5f));
-            place_plant(map, index, &rng, params, moistures[column], forest);
+            float glade = stretch(noise_fbm2d(glade_seed, nx * 6.0f, ny * 6.0f, 2, 2.0f, 0.5f));
+            forests[column] = forest;
+            place_woody(map, index, &rng, params, moistures[column], forest, glade);
         }
     }
     if (!params->flat) {
@@ -511,16 +714,20 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
     }
     free(heights);
     free(surfaces);
-    free(moistures);
-
-    Rng shore_rng; /* A stream of its own: the inland plants do not depend on the shores. */
-    rng_seed(&shore_rng, params->seed, 0x73686f7265ULL /* "shore" */);
-    place_cattails(map, &shore_rng);
     Rng tree_rng; /* A stream of its own: the other plants do not depend on the trees. */
     rng_seed(&tree_rng, params->seed, 0x7472656573ULL /* "trees" */);
     place_tree_volumes(map, &tree_rng);
     Rng litter_rng; /* A stream of its own: nothing else depends on the litter. */
     rng_seed(&litter_rng, params->seed, 0x6c697474657200ULL /* "litter" */);
     place_litter(map, &litter_rng);
+    /* The crowns are up: what grows under them follows their shade. */
+    Rng understory_rng;
+    rng_seed(&understory_rng, params->seed, 0x756e6465727374ULL /* "underst" */);
+    place_understory(map, params, moistures, forests, frequency, &understory_rng);
+    free(moistures);
+    free(forests);
+    Rng shore_rng; /* A stream of its own: the inland plants do not depend on the shores. */
+    rng_seed(&shore_rng, params->seed, 0x73686f7265ULL /* "shore" */);
+    place_shore_plants(map, &shore_rng, reed_seed, frequency);
     return true;
 }

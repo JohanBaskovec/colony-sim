@@ -325,6 +325,85 @@ static void test_trees(void)
     CHECK(wide < trees / 20);
 }
 
+/* The understory follows the light under the crowns (docs/PLANTS.md §10): nothing is
+ * generated where it is too dark for it to live, moss and wood sorrel stand
+ * in deeper shade than grass, every new plant shows up, and reeds stand in
+ * the water or along it. */
+static void test_the_understory_follows_the_shade(void)
+{
+    long counts[PLANT_COUNT] = {0};
+    double cover[PLANT_COUNT] = {0};
+    long reeds_away_from_water = 0;
+    for (uint64_t seed = 1; seed <= 3; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                int z = map_ground_level(&map, x, y);
+                const Plant *plant = &map.plants[map_index(&map, x, y, z)];
+                if (plant->type == PLANT_NONE || plant_is_tree(plant->type) ||
+                    map.rock[map_index(&map, x, y, z)] != ROCK_NONE) {
+                    continue;
+                }
+                const PlantDef *def = plant_def((PlantType)plant->type);
+                float light = map_light_cover(&map, x, y, z);
+                counts[plant->type]++;
+                cover[plant->type] += light;
+                if (!def->wetland) {
+                    CHECK(light >= def->light_min); /* Not born to starve. */
+                }
+                if (plant->type == PLANT_REED) {
+                    bool by_water = false;
+                    for (int d = 0; d < 9; d++) {
+                        by_water = by_water || map_is_water(&map, x + d % 3 - 1, y + d / 3 - 1, z);
+                    }
+                    reeds_away_from_water += !by_water;
+                }
+            }
+        }
+        map_free(&map);
+    }
+    for (int type = PLANT_MOSS; type < PLANT_COUNT; type++) {
+        CHECK(counts[type] > 0);
+    }
+    CHECK(counts[PLANT_GRASS] > 0 && counts[PLANT_CATTAIL] > 0);
+    CHECK_EQ_INT(reeds_away_from_water, 0);
+    double grass = cover[PLANT_GRASS] / (double)counts[PLANT_GRASS];
+    CHECK(cover[PLANT_MOSS] / (double)counts[PLANT_MOSS] < grass);
+    CHECK(cover[PLANT_WOOD_SORREL] / (double)counts[PLANT_WOOD_SORREL] < grass);
+    CHECK(cover[PLANT_WILD_GARLIC] / (double)counts[PLANT_WILD_GARLIC] < grass);
+    CHECK(cover[PLANT_HEATHER] / (double)counts[PLANT_HEATHER] > grass); /* In the full sun. */
+    CHECK(cover[PLANT_DOG_ROSE] / (double)counts[PLANT_DOG_ROSE] > grass);
+}
+
+/* Plants of poor ground (heather, bilberries) live on sand, gravel and plain
+ * soil, never on rich soil. */
+static void test_poor_ground_plants_stay_on_poor_ground(void)
+{
+    long on_poor = 0, on_rich = 0;
+    for (uint64_t seed = 1; seed <= 3; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                size_t i = map_index(&map, x, y, map_ground_level(&map, x, y));
+                PlantType type = (PlantType)map.plants[i].type;
+                if (type != PLANT_HEATHER && type != PLANT_BILBERRY) {
+                    continue;
+                }
+                Terrain terrain = (Terrain)map.terrain[i];
+                on_poor += terrain == TERRAIN_SAND || terrain == TERRAIN_GRAVEL;
+                on_rich += terrain == TERRAIN_RICH_SOIL;
+            }
+        }
+        map_free(&map);
+    }
+    CHECK(on_poor > 0);
+    CHECK_EQ_INT(on_rich, 0);
+}
+
 int main(void)
 {
     RUN_TEST(test_same_seed_gives_identical_map);
@@ -337,5 +416,7 @@ int main(void)
     RUN_TEST(test_slopes);
     RUN_TEST(test_flat);
     RUN_TEST(test_trees);
+    RUN_TEST(test_the_understory_follows_the_shade);
+    RUN_TEST(test_poor_ground_plants_stay_on_poor_ground);
     return test_summary();
 }

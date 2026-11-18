@@ -47,7 +47,7 @@ typedef struct Entry {
 static const Entry ENTRIES[] = {
     {true, GATHER_GROUP_WOOD},
     {true, GATHER_GROUP_FOOD},
-    {false, GATHER_GRASS},
+    {true, GATHER_GROUP_FIBRES},
     {true, GATHER_GROUP_STONES},
 };
 

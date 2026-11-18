@@ -110,7 +110,7 @@ static void test_definitions(void)
         }
     }
     CHECK(gather_group_def(GATHER_GROUP_NONE) == NULL);
-    CHECK_EQ_INT(gather_resource_group(GATHER_GRASS), GATHER_GROUP_NONE);
+    CHECK_EQ_INT(gather_resource_group(GATHER_GRASS), GATHER_GROUP_FIBRES);
     CHECK_EQ_INT(gather_resource_group(GATHER_TWIGS), GATHER_GROUP_WOOD);
     CHECK_EQ_INT(gather_resource_group(GATHER_FLINT), GATHER_GROUP_STONES);
     CHECK(gather_resource_is_food(GATHER_MUSHROOMS));
@@ -140,6 +140,24 @@ static void test_definitions(void)
                       : (food->confusable ? GATHER_JOB_HARVEST_CAREFULLY : GATHER_JOB_HARVEST);
         CHECK_EQ_INT(job, expected);
     }
+    /* Every product of every plant (fibres too) is the resource of a job that
+     * takes it from the plant, in a group of its own: nothing grows for nothing. */
+    for (int p = PLANT_NONE + 1; p < PLANT_COUNT; p++) {
+        for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
+            ItemType item = plant_stock_item((PlantType)p, slot);
+            if (item == ITEM_NONE) {
+                continue;
+            }
+            bool found = false;
+            for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+                found = found || gather_resource_def((GatherResource)r)->item == item;
+            }
+            CHECK(found);
+        }
+    }
+    CHECK(gather_job_def(GATHER_JOB_CUT_GRASS)->resources & GATHER_RESOURCE_BIT(GATHER_REEDS));
+    CHECK_EQ_INT(gather_resource_group(GATHER_BRACKEN), GATHER_GROUP_FIBRES);
+    CHECK(!gather_group_def(GATHER_GROUP_FIBRES)->food);
     /* Gathering from 50 on, food that looks like poison from higher up;
      * nobody can fell trees yet. */
     CHECK(gather_job_doable_at(GATHER_JOB_HARVEST, KNOWLEDGE_MASTERY_LEVEL));

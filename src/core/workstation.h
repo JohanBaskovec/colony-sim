@@ -41,9 +41,13 @@ typedef enum WorkstationType {
 
 #define WORKSTATION_BIT(type) (1u << (unsigned)(type))
 
-/* What a hearth burns (core/hearth.h): branches, twigs and logs. */
-#define HEARTH_FUEL_TYPES                                                                          \
+/* What a hearth burns (core/hearth.h): branches, twigs and logs, and dry
+ * bracken and heather; only the first three are brought by default (the
+ * others are what thatch and bedding are made of). */
+#define HEARTH_DEFAULT_FUEL_TYPES                                                                  \
     (ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS) | ITEM_TYPE_BIT(ITEM_WOOD))
+#define HEARTH_FUEL_TYPES                                                                          \
+    (HEARTH_DEFAULT_FUEL_TYPES | ITEM_TYPE_BIT(ITEM_BRACKEN) | ITEM_TYPE_BIT(ITEM_HEATHER))
 
 typedef struct WorkstationDef {
     const char *id; /* Stable identifier (saves), never shown. */

@@ -25,6 +25,7 @@
 #define WOOD GATHER_GROUP_WOOD
 #define FOOD GATHER_GROUP_FOOD
 #define STONES GATHER_GROUP_STONES
+#define FIBRES GATHER_GROUP_FIBRES
 
 static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
     [GATHER_WOOD] = {"wood", N_("gather_zone.resource.wood"), ITEM_WOOD, ONE(ITEM_WOOD),
@@ -48,13 +49,29 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
     [GATHER_CATTAIL_RHIZOMES] = {"cattail_rhizomes", N_("gather_zone.resource.cattail_rhizomes"),
                                  ITEM_CATTAIL_RHIZOMES, ONE(ITEM_CATTAIL_RHIZOMES), GATHER_JOB_DIG,
                                  true, FOOD},
+    [GATHER_WOOD_SORREL] = {"wood_sorrel", N_("gather_zone.resource.wood_sorrel"), ITEM_WOOD_SORREL,
+                            ONE(ITEM_WOOD_SORREL), GATHER_JOB_HARVEST, true, FOOD},
+    [GATHER_WILD_STRAWBERRIES] = {"wild_strawberries", N_("gather_zone.resource.wild_strawberries"),
+                                  ITEM_WILD_STRAWBERRIES, ONE(ITEM_WILD_STRAWBERRIES),
+                                  GATHER_JOB_HARVEST, true, FOOD},
+    [GATHER_BILBERRIES] = {"bilberries", N_("gather_zone.resource.bilberries"), ITEM_BILBERRIES,
+                           ONE(ITEM_BILBERRIES), GATHER_JOB_HARVEST, true, FOOD},
+    [GATHER_ROSE_HIPS] = {"rose_hips", N_("gather_zone.resource.rose_hips"), ITEM_ROSE_HIPS,
+                          ONE(ITEM_ROSE_HIPS), GATHER_JOB_HARVEST, true, FOOD},
     [GATHER_BRANCHES] = {"branches", N_("gather_zone.resource.branches"), ITEM_BRANCHES,
                          ONE(ITEM_BRANCHES), GATHER_JOB_BRANCHES, true, WOOD},
     [GATHER_TWIGS] = {"twigs", N_("gather_zone.resource.twigs"), ITEM_TWIGS, ONE(ITEM_TWIGS),
                       GATHER_JOB_TWIGS, true, WOOD},
     [GATHER_GRASS] = {"grass", N_("gather_zone.resource.grass"), ITEM_FRESH_GRASS,
-                      ONE(ITEM_FRESH_GRASS) | ONE(ITEM_GRASS), GATHER_JOB_CUT_GRASS, true,
-                      GATHER_GROUP_NONE},
+                      ONE(ITEM_FRESH_GRASS) | ONE(ITEM_GRASS), GATHER_JOB_CUT_GRASS, true, FIBRES},
+    [GATHER_MOSS] = {"moss", N_("gather_zone.resource.moss"), ITEM_MOSS, ONE(ITEM_MOSS),
+                     GATHER_JOB_CUT_GRASS, true, FIBRES},
+    [GATHER_BRACKEN] = {"bracken", N_("gather_zone.resource.bracken"), ITEM_BRACKEN,
+                        ONE(ITEM_BRACKEN), GATHER_JOB_CUT_GRASS, true, FIBRES},
+    [GATHER_HEATHER] = {"heather", N_("gather_zone.resource.heather"), ITEM_HEATHER,
+                        ONE(ITEM_HEATHER), GATHER_JOB_CUT_GRASS, true, FIBRES},
+    [GATHER_REEDS] = {"reeds", N_("gather_zone.resource.reeds"), ITEM_REEDS, ONE(ITEM_REEDS),
+                      GATHER_JOB_CUT_GRASS, true, FIBRES},
     [GATHER_FLINT] = {"flint", N_("gather_zone.resource.flint"), ITEM_FLINT, ONE(ITEM_FLINT),
                       GATHER_JOB_STONES, false, STONES},
     [GATHER_COBBLES] = {"cobbles", N_("gather_zone.resource.cobbles"), ITEM_COBBLE,
@@ -64,6 +81,7 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
 #undef WOOD
 #undef FOOD
 #undef STONES
+#undef FIBRES
 
 #define MEMBER(r) GATHER_RESOURCE_BIT(r)
 
@@ -75,8 +93,14 @@ static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
                            MEMBER(GATHER_BLACKBERRIES) | MEMBER(GATHER_HAZELNUTS) |
                                MEMBER(GATHER_MUSHROOMS) | MEMBER(GATHER_WILD_GARLIC) |
                                MEMBER(GATHER_NETTLES) | MEMBER(GATHER_PLANTAIN) |
-                               MEMBER(GATHER_WILD_CARROTS) | MEMBER(GATHER_CATTAIL_RHIZOMES),
+                               MEMBER(GATHER_WILD_CARROTS) | MEMBER(GATHER_CATTAIL_RHIZOMES) |
+                               MEMBER(GATHER_WOOD_SORREL) | MEMBER(GATHER_WILD_STRAWBERRIES) |
+                               MEMBER(GATHER_BILBERRIES) | MEMBER(GATHER_ROSE_HIPS),
                            true},
+    [GATHER_GROUP_FIBRES] = {"fibres", N_("gather_zone.group.fibres"),
+                             MEMBER(GATHER_GRASS) | MEMBER(GATHER_MOSS) | MEMBER(GATHER_BRACKEN) |
+                                 MEMBER(GATHER_HEATHER) | MEMBER(GATHER_REEDS),
+                             false},
     [GATHER_GROUP_STONES] = {"stones", N_("gather_zone.group.stones"),
                              MEMBER(GATHER_FLINT) | MEMBER(GATHER_COBBLES), false},
 };
@@ -92,7 +116,9 @@ static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
 static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
     [GATHER_JOB_HARVEST] = {"harvest", N_("colonist.task.harvest"), GATHERING,
                             RESOURCE(GATHER_BLACKBERRIES) | RESOURCE(GATHER_NETTLES) |
-                                RESOURCE(GATHER_PLANTAIN),
+                                RESOURCE(GATHER_PLANTAIN) | RESOURCE(GATHER_WOOD_SORREL) |
+                                RESOURCE(GATHER_WILD_STRAWBERRIES) | RESOURCE(GATHER_BILBERRIES) |
+                                RESOURCE(GATHER_ROSE_HIPS),
                             TOOL_USE_NONE, false},
     [GATHER_JOB_HARVEST_CAREFULLY] = {"harvest_carefully", N_("colonist.task.harvest_carefully"),
                                       CAREFUL,
@@ -109,7 +135,10 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
     [GATHER_JOB_NUTS] = {"nuts", N_("colonist.task.gather_nuts"), GATHERING,
                          RESOURCE(GATHER_HAZELNUTS), TOOL_USE_NONE, false},
     [GATHER_JOB_CUT_GRASS] = {"cut_grass", N_("colonist.task.cut_grass"), GATHERING,
-                              RESOURCE(GATHER_GRASS), TOOL_USE_CUT_GRASS, false},
+                              RESOURCE(GATHER_GRASS) | RESOURCE(GATHER_MOSS) |
+                                  RESOURCE(GATHER_BRACKEN) | RESOURCE(GATHER_HEATHER) |
+                                  RESOURCE(GATHER_REEDS),
+                              TOOL_USE_CUT_GRASS, false},
     [GATHER_JOB_CHOP] = {"chop", N_("colonist.task.chop"), WORK_WOODCUTTING, KNOWLEDGE_NONE,
                          KNOWLEDGE_MASTERY_LEVEL, RESOURCE(GATHER_WOOD), TOOL_USE_NONE, false},
     [GATHER_JOB_STONES] = {"stones", N_("colonist.task.gather_stones"), GATHERING,
@@ -1331,8 +1360,16 @@ float gather_clear_work(const Map *map, int x, int y, int z)
     case PLANT_TREE:
     case PLANT_HAZEL:
     case PLANT_COUNT: return 0.0f;
-    case PLANT_BRAMBLE: return CLEAR_SHRUB_WORK;
+    case PLANT_BRAMBLE:
+    case PLANT_DOG_ROSE:
+    case PLANT_BILBERRY: return CLEAR_SHRUB_WORK;
     case PLANT_GRASS:
+    case PLANT_MOSS:
+    case PLANT_WOOD_SORREL:
+    case PLANT_BRACKEN:
+    case PLANT_WILD_STRAWBERRY:
+    case PLANT_HEATHER:
+    case PLANT_REED:
     case PLANT_WILD_GARLIC:
     case PLANT_NETTLE:
     case PLANT_PLANTAIN:

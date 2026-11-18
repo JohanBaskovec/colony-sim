@@ -339,6 +339,36 @@ static void test_grazing(void)
     game_shutdown(&game);
 }
 
+/* The wild berries, hips and leaves feed the animals of the woods: each is
+ * eaten where it bears by some species, and not by one that does not eat it. */
+static void test_animals_eat_the_wild_fruit(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    const struct {
+        PlantType type;
+        int day;
+    } fruits[] = {{PLANT_BILBERRY, SEASON_DAY(SEASON_SUMMER, 9)},
+                  {PLANT_WILD_STRAWBERRY, SEASON_DAY(SEASON_SUMMER, 3)},
+                  {PLANT_DOG_ROSE, SEASON_DAY(SEASON_AUTUMN, 10)},
+                  {PLANT_WOOD_SORREL, SEASON_DAY(SEASON_SUMMER, 3)}};
+    for (size_t i = 0; i < sizeof(fruits) / sizeof(fruits[0]); i++) {
+        Plant *plant = &game.map.plants[map_index(&game.map, 26, 20, 0)];
+        *plant = (Plant){.type = (uint8_t)fruits[i].type, .growth = 1.0f};
+        plant_settle(plant, fruits[i].day);
+        REQUIRE(plant_has_food(plant));
+        bool eaten = false;
+        for (int species = 0; species < ANIMAL_SPECIES_COUNT; species++) {
+            bool eats = (animal_def((AnimalSpecies)species)->plants & (1u << fruits[i].type)) != 0;
+            CHECK((animal_food_at((AnimalSpecies)species, &game.map, 26, 20, 0) ==
+                   ANIMAL_FOOD_PLANT) == eats);
+            eaten = eaten || eats;
+        }
+        CHECK(eaten);
+    }
+    game_shutdown(&game);
+}
+
 static void test_treats_before_grass(void)
 {
     Game game;
@@ -1222,6 +1252,7 @@ int main(void)
     RUN_TEST(test_heading);
     RUN_TEST(test_animals_have_characters);
     RUN_TEST(test_dazed_animal);
+    RUN_TEST(test_animals_eat_the_wild_fruit);
     RUN_TEST(test_attributes_change_the_species_values);
     RUN_TEST(test_appetite_and_sleep_of_animals);
     RUN_TEST(test_quick_animals_catch_up_sooner);
