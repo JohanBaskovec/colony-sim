@@ -70,6 +70,7 @@
 #include "core/knowledge.h"
 #include "core/map.h"
 #include "core/mood.h"
+#include "core/occupancy.h"
 #include "core/pathfinding.h"
 #include "core/pool.h"
 #include "core/region.h"
@@ -329,6 +330,8 @@ typedef struct Colonist {
     Path path;
     int path_index;      /* Next step of `path` to walk to. */
     float move_progress; /* 0..1 from the current tile to the next step. */
+    /* Ticks waited one step short of a tile someone else holds (core/occupancy.h). */
+    uint8_t stop_wait;
     ColonistTask task;
     /* Food tile (TASK_EAT), drinking spot (TASK_DRINK), designated tile
      * (TASK_WORK) or dirty tile (TASK_CLEAN). */
@@ -519,6 +522,9 @@ typedef struct ColonistContext {
      * NULL: no fights. */
     const Animals *animals;
     CombatQueue *combat;
+    /* Who stops where (core/occupancy.h): a settler never stops on a tile
+     * someone else holds. NULL: anyone stops anywhere. */
+    Occupancy *occupancy;
 } ColonistContext;
 
 /* Fighting (docs/COMBAT.md): an enemy further than this many tiles is forgotten,
@@ -528,6 +534,8 @@ typedef struct ColonistContext {
 #define COLONIST_FLEE_DISTANCE 18
 #define COLONIST_FLEE_MAX_COST 70.0f
 #define COLONIST_CHASE_MAX_COST 50.0f
+/* Making way (core/occupancy.h): the nearest free tile within this travel cost. */
+#define COLONIST_MAKE_WAY_MAX_COST 12.0f
 /* Power of a blow by strength: ×(COLONIST_POWER_BASE + COLONIST_POWER_PER_STRENGTH
  * × strength), and the skill with a spear: ×COLONIST_SPEAR_SKILL_MIN at level 0
  * to ×COLONIST_SPEAR_SKILL_MAX at 100. */

@@ -35,6 +35,7 @@ set(COLONY_UNIT_TESTS
     test_map
     test_mood
     test_noise
+    test_occupancy
     test_pathfinding
     test_pool
     test_recipe

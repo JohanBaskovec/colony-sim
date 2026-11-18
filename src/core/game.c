@@ -154,6 +154,9 @@ EntityId game_spawn_colonist(Game *game, int x, int y, int z)
     return id;
 }
 
+_Static_assert(COLONIST_MAX == OCCUPANCY_SETTLER_SLOTS, "settlers are numbered by slot");
+_Static_assert(ANIMAL_MAX == OCCUPANCY_ANIMAL_SLOTS, "animals are numbered by slot");
+
 /* Reservation owners are colonist slots + 1 and must fit in a byte. */
 _Static_assert(COLONIST_MAX < 255, "colonist slots must fit in reservation owners");
 
@@ -190,6 +193,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .no_tools = game->debug.no_tools,
         .animals = &game->animals,
         .combat = &game->combat,
+        .occupancy = &game->occupancy,
         .self = game_colonist_id_at(game, slot),
     };
     return context;
@@ -207,6 +211,7 @@ bool game_remove_colonist(Game *game, EntityId id)
     colonist_drop_tools(colonist, &game->items, &game->map);
     colonist_free(colonist);
     memset(colonist, 0, sizeof(*colonist));
+    occupancy_remove(&game->occupancy, occupancy_settler(id.index));
     return pool_release(&game->colonist_pool, id);
 }
 
@@ -255,7 +260,9 @@ int game_order_move(Game *game, const EntityId *ids, int count, int x, int y, in
             for (int t = 0; t < taken_count && free; t++) {
                 free = taken[t].x != goal.x || taken[t].y != goal.y;
             }
+            OccupancyStopper stopper = {&game->occupancy, occupancy_settler(ids[i].index)};
             if (!free || !game_tile_explored(game, goal.x, goal.y, goal.z) ||
+                !occupancy_stop_filter(&game->map, goal.x, goal.y, goal.z, &stopper) ||
                 !colonist_order_move(colonist, &context, goal)) {
                 continue;
             }
@@ -548,7 +555,8 @@ bool game_init(Game *game, const NewGameParams *params)
         !beds_init(&game->beds, game->map.width, game->map.height, game->map.depth) ||
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height, game->map.depth) ||
         !regions_init(&game->regions, game->map.width, game->map.height, game->map.depth) ||
-        !pool_init(&game->colonist_pool, COLONIST_MAX) || !animals_init(&game->animals)) {
+        !pool_init(&game->colonist_pool, COLONIST_MAX) || !animals_init(&game->animals) ||
+        !occupancy_init(&game->occupancy, game->map.width, game->map.height, game->map.depth)) {
         game_shutdown(game);
         return false;
     }
@@ -634,6 +642,7 @@ void game_shutdown(Game *game)
     }
     pool_free(&game->colonist_pool);
     animals_free(&game->animals);
+    occupancy_free(&game->occupancy);
     pathfinder_free(&game->pathfinder);
     regions_free(&game->regions);
     game->items.mirror = NULL;
@@ -1097,7 +1106,7 @@ static void resolve_strikes(Game *game)
         const AttackDef *def = attack_def((AttackType)strike->attack);
         if (def == NULL || !fighter_of(game, strike->attacker, &attacker) ||
             !fighter_of(game, strike->target, &target) || health_is_unconscious(attacker.health) ||
-            !combat_in_reach(attacker.pos, target.pos, def->reach)) {
+            !combat_can_strike(&game->map, attacker.pos, target.pos, def->reach)) {
             continue; /* Gone, dead, knocked out or out of reach by now. */
         }
         BlowResult blow = combat_blow((AttackType)strike->attack, strike->skill, strike->power,
@@ -1153,6 +1162,39 @@ bool game_debug_attack(Game *game, Combatant attacker, Combatant target)
     }
     colonist->enemy = target;
     return true;
+}
+
+/* Before the turns: those gone (removed, dead) hold no tile, and newcomers
+ * are counted where they stand, so that the first to act already sees them
+ * (afterwards, each keeps its own state up to date on its turn). */
+static void sweep_one(Occupancy *occupancy, BeingId being, bool here, TilePos at)
+{
+    const OccupancyBeing *state = &occupancy->beings[being];
+    if (!here) {
+        if (state->placed || state->claiming) {
+            occupancy_remove(occupancy, being);
+        }
+    } else if (!state->placed) {
+        occupancy_place(occupancy, being, at);
+    }
+}
+
+static void sweep_occupancy(Game *game)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = &game->colonists[slot];
+        sweep_one(&game->occupancy, occupancy_settler(slot),
+                  !entity_id_is_none(game_colonist_id_at(game, slot)) &&
+                      !health_is_dead(&colonist->health),
+                  (TilePos){(int16_t)colonist->x, (int16_t)colonist->y, (int16_t)colonist->z});
+    }
+    for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
+        const Animal *animal = &game->animals.list[slot];
+        sweep_one(&game->occupancy, occupancy_animal(slot),
+                  !entity_id_is_none(animals_id_at(&game->animals, slot)) &&
+                      !health_is_dead(&animal->health),
+                  (TilePos){(int16_t)animal->x, (int16_t)animal->y, (int16_t)animal->z});
+    }
 }
 
 static void update_colonists(Game *game)
@@ -1224,6 +1266,7 @@ static void update_animals(Game *game)
         .combat = &game->combat,
         .items = &game->items,
         .temperatures = &game->temperatures,
+        .occupancy = &game->occupancy,
     };
     animals_tick(&game->animals, &context);
     /* The dead leave their carcass where they fell; their herd follows
@@ -1237,6 +1280,7 @@ static void update_animals(Game *game)
         int x = animal->x, y = animal->y, z = animal->z;
         ItemType carcass = animal_def((AnimalSpecies)animal->species)->carcass;
         animals_remove(&game->animals, id);
+        occupancy_remove(&game->occupancy, occupancy_animal(slot)); /* A carcass: walked over. */
         items_drop(&game->items, &game->map, x, y, z, item_stack_pristine(carcass, 1));
     }
 }
@@ -1941,6 +1985,7 @@ void game_tick(Game *game)
     gather_zones_update(&game->gather_zones, game_view_items(game)->totals, game_daily_food(game));
     item_moves_prune(&game->item_moves, &game->items, item_move_busy, game); /* Emptied sources. */
     hurt_under_felled_trees(game); /* (Felled by the debug tools.) */
+    sweep_occupancy(game);
     update_colonists(game);
     hurt_under_felled_trees(game); /* Felled by the woodcutters: they die on their next turn. */
     update_animals(game);

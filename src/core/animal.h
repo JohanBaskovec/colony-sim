@@ -39,6 +39,7 @@
 #include "core/health.h"
 #include "core/journal.h"
 #include "core/map.h"
+#include "core/occupancy.h"
 #include "core/pathfinding.h"
 #include "core/pool.h"
 #include "core/region.h"
@@ -49,6 +50,8 @@
 #include <stdint.h>
 
 #define ANIMAL_MAX 256
+/* Making way (core/occupancy.h): the nearest free tile within this travel cost. */
+#define ANIMAL_MAKE_WAY_MAX_COST 12.0f
 
 typedef enum AnimalSpecies {
     ANIMAL_ROE_DEER,
@@ -192,7 +195,11 @@ typedef struct Animal {
     Path path;
     int path_index;      /* Next step of `path` to walk to. */
     float move_progress; /* 0..1 from the current tile to the next step. */
-    uint8_t task;        /* AnimalTask */
+    /* Ticks waited one step short of a tile someone else holds (core/occupancy.h). */
+    uint8_t stop_wait;
+    /* Times it found no free tile around its enemy in a row (fight()). */
+    uint8_t surround_waits;
+    uint8_t task; /* AnimalTask */
     /* Where the food or the water is (ANIMAL_TASK_EAT, ANIMAL_TASK_DRINK). */
     TilePos target;
     /* Idle countdown (ANIMAL_TASK_IDLE), progress of a bite or of a drink. */
@@ -264,6 +271,11 @@ typedef struct AnimalContext {
     /* The items on the ground, where the carnivores find carcasses and eat
      * them; NULL: no carcass. */
     Items *items;
+    /* Who stops where (core/occupancy.h): an animal never stops on a tile
+     * someone else holds. NULL: anyone stops anywhere. */
+    Occupancy *occupancy;
+    /* Who is acting (set by animals_tick()). */
+    BeingId self;
 } AnimalContext;
 
 /* Needs below which an animal goes to drink or eat, the food at which it
@@ -365,6 +377,8 @@ void animal_set_attributes(Animal *animal, const Attributes *attributes);
  * travel cost. */
 #define ANIMAL_ENEMY_FORGET_DISTANCE 30
 #define ANIMAL_CHASE_MAX_COST 80.0f
+/* Looks this many times for room around its enemy before letting it go. */
+#define ANIMAL_SURROUND_PATIENCE 4
 /* Fleeing: it runs until every settler is this many tiles further than its
  * flight distance, within this travel cost; cornered, it stands still. */
 #define ANIMAL_FLEE_MARGIN 8

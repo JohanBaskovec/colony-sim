@@ -639,6 +639,13 @@ static bool find_path(const AnimalContext *context, TilePos start, TilePos goal,
     return ok;
 }
 
+/* Whether it may stop on the tile (nobody else holds it, core/occupancy.h). */
+static bool may_stop_at(const AnimalContext *context, TilePos tile)
+{
+    return context->occupancy == NULL ||
+           occupancy_can_stop(context->occupancy, context->self, tile);
+}
+
 /* What a search looks for, and for whom. */
 typedef struct Seeker {
     const AnimalContext *context;
@@ -660,12 +667,71 @@ static bool near_seeker(const Seeker *seeker, int x, int y, int z)
            dx * dx + dy * dy <= seeker->clearance * seeker->clearance;
 }
 
-static bool is_food(const Map *map, int x, int y, int z, void *userdata)
+/* Whether food lying on a tile is within reach of one standing on another:
+ * the same tile, or one beside it with a direct step between them (not
+ * diagonally across a wall's corner, not from another level). */
+static bool within_bite(const Map *map, TilePos from, TilePos food)
 {
-    const Seeker *seeker = userdata;
+    if (from.x == food.x && from.y == food.y && from.z == food.z) {
+        return true;
+    }
+    return from.z == food.z && path_walker_can_step(PATH_WALKER_ANIMAL, map, from, food);
+}
+
+typedef bool (*FoodCheck)(const Seeker *seeker, const Map *map, int x, int y, int z);
+
+/* Food beside a tile, on a tile someone else stops on (busy there: eating
+ * it, say), within bite of the tile: where one eats from around it. */
+static bool food_beside(const Seeker *seeker, const Map *map, TilePos at, FoodCheck check,
+                        TilePos *food)
+{
+    const Occupancy *occupancy = seeker->context->occupancy;
+    if (occupancy == NULL) {
+        return false;
+    }
+    OccupancyStopper stopper = {occupancy, seeker->context->self};
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            TilePos next = {(int16_t)(at.x + dx), (int16_t)(at.y + dy), at.z};
+            if ((dx == 0 && dy == 0) || !map_in_bounds(map, next.x, next.y, next.z) ||
+                occupancy_stop_filter(map, next.x, next.y, next.z, &stopper) ||
+                !check(seeker, map, next.x, next.y, next.z) || !within_bite(map, at, next)) {
+                continue;
+            }
+            *food = next;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Where the food is for one that stops on `at` (found by a search with a
+ * predicate below): there, or beside it. */
+static TilePos food_for(const Seeker *seeker, const Map *map, TilePos at, FoodCheck check)
+{
+    TilePos food = at;
+    if (!check(seeker, map, at.x, at.y, at.z)) {
+        food_beside(seeker, map, at, check, &food);
+    }
+    return food;
+}
+
+static bool food_on(const Seeker *seeker, const Map *map, int x, int y, int z)
+{
     AnimalFood food = animal_food_at(seeker->species, map, x, y, z);
     return (seeker->treats_only ? food > ANIMAL_FOOD_GRASS : food != ANIMAL_FOOD_NONE) &&
            !near_seeker(seeker, x, y, z);
+}
+
+/* A tile with food, or (the food's own tile taken) one to eat it from. */
+static bool is_food(const Map *map, int x, int y, int z, void *userdata)
+{
+    const Seeker *seeker = userdata;
+    TilePos food;
+    return food_on(seeker, map, x, y, z) ||
+           (path_walker_can_stand(PATH_WALKER_ANIMAL, map, x, y, z) &&
+            food_beside(seeker, map, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z}, food_on,
+                        &food));
 }
 
 static bool is_water(const Map *map, int x, int y, int z, void *userdata)
@@ -731,7 +797,7 @@ static bool try_forage(Animal *animal, const AnimalDef *def, const AnimalContext
         return false;
     }
     animal->search_failures[ANIMAL_SEARCH_FOOD] = 0;
-    begin(animal, ANIMAL_TASK_EAT, found);
+    begin(animal, ANIMAL_TASK_EAT, food_for(&seeker, context->map, found, food_on));
     return true;
 }
 
@@ -745,12 +811,22 @@ static bool carcass_edible(ItemType type)
            type != ITEM_SETTLER_BODY;
 }
 
-static bool is_carcass(const Map *map, int x, int y, int z, void *userdata)
+static bool carcass_on(const Seeker *seeker, const Map *map, int x, int y, int z)
 {
     (void)map;
-    const Seeker *seeker = userdata;
     return carcass_edible((ItemType)items_get(seeker->context->items, x, y, z).type) &&
            !near_seeker(seeker, x, y, z);
+}
+
+/* A tile with a carcass, or (the carcass's own tile taken) one to eat it from. */
+static bool is_carcass(const Map *map, int x, int y, int z, void *userdata)
+{
+    const Seeker *seeker = userdata;
+    TilePos food;
+    return carcass_on(seeker, map, x, y, z) ||
+           (path_walker_can_stand(PATH_WALKER_ANIMAL, map, x, y, z) &&
+            food_beside(seeker, map, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z}, carcass_on,
+                        &food));
 }
 
 static void start_attack(Animal *animal, Combatant enemy);
@@ -829,7 +905,7 @@ static bool try_hunt(Animals *animals, uint32_t slot, const AnimalContext *conte
         find_nearest(context, tile_of(animal), is_carcass, &seeker, ANIMAL_FOOD_SEARCH_MAX_COST,
                      &animal->path, &found)) {
         animal->search_failures[ANIMAL_SEARCH_FOOD] = 0;
-        begin(animal, ANIMAL_TASK_EAT, found);
+        begin(animal, ANIMAL_TASK_EAT, food_for(&seeker, context->map, found, carcass_on));
         return true;
     }
     if (pick_prey(animals, slot, context, &prey)) {
@@ -1014,6 +1090,14 @@ static bool try_join(Animal *animal, const Animal *leader, const AnimalContext *
         return false;
     }
     animal->path.count -= HERD_STOP_SHORT;
+    while (animal->path.count > 0 &&
+           !may_stop_at(context, animal->path.steps[animal->path.count - 1])) {
+        animal->path.count--; /* Short of the others. */
+    }
+    if (animal->path.count == 0) {
+        path_clear(&animal->path);
+        return false;
+    }
     begin(animal, ANIMAL_TASK_WANDER, animal->path.steps[animal->path.count - 1]);
     return true;
 }
@@ -1031,7 +1115,7 @@ static bool try_wander(Animal *animal, const AnimalDef *def, TilePos center,
     }
     TilePos goal = {(int16_t)x, (int16_t)y, (int16_t)z};
     if ((x == animal->x && y == animal->y && z == animal->z) ||
-        !path_walker_can_stand(PATH_WALKER_ANIMAL, map, x, y, z) ||
+        !path_walker_can_stand(PATH_WALKER_ANIMAL, map, x, y, z) || !may_stop_at(context, goal) ||
         near_threat(context, x, y, z, def->flight_distance) ||
         /* In a warm spot, it does not stroll off into the cold (nor the heat). */
         (is_comfortable(animal, tile_celsius(context, animal->x, animal->y, animal->z)) &&
@@ -1099,9 +1183,9 @@ static void decide(Animals *animals, uint32_t slot, const AnimalContext *context
 }
 
 /* Eats what the tile offers: a bite. */
-static void bite(Animal *animal, const AnimalDef *def, Map *map, AnimalFood food)
+static void bite(Animal *animal, const AnimalDef *def, Map *map, TilePos at, AnimalFood food)
 {
-    size_t index = map_index(map, animal->x, animal->y, animal->z);
+    size_t index = map_index(map, at.x, at.y, at.z);
     Plant *plant = &map->plants[index];
     float gain = 0.0f;
     switch (food) {
@@ -1112,7 +1196,7 @@ static void bite(Animal *animal, const AnimalDef *def, Map *map, AnimalFood food
                                      plant_type->dug_whole ? INT16_MAX : def->bite_items);
         gain = (float)taken * item_def(plant_type->food_item)->nutrition * def->food_value;
         if (plant_type->vanishes && !plant_has_food(plant)) {
-            map_remove_plant(map, animal->x, animal->y, animal->z); /* The patch is gone. */
+            map_remove_plant(map, at.x, at.y, at.z); /* The patch is gone. */
         } else if (plant_type->dug_whole) {
             plant->growth = 0.0f; /* Grows again from what is left in the ground. */
             memset(plant->stock, 0, sizeof(plant->stock));
@@ -1120,8 +1204,7 @@ static void bite(Animal *animal, const AnimalDef *def, Map *map, AnimalFood food
         break;
     }
     case ANIMAL_FOOD_NUTS: {
-        int taken = map_take_litter_count(map, animal->x, animal->y, animal->z, ITEM_HAZELNUTS,
-                                          def->bite_items);
+        int taken = map_take_litter_count(map, at.x, at.y, at.z, ITEM_HAZELNUTS, def->bite_items);
         gain = (float)taken * item_def(ITEM_HAZELNUTS)->nutrition * def->food_value;
         break;
     }
@@ -1139,10 +1222,10 @@ static void bite(Animal *animal, const AnimalDef *def, Map *map, AnimalFood food
 static void eat_plants(Animal *animal, const AnimalDef *def, const AnimalContext *context)
 {
     Map *map = context->map;
-    bool there = animal->x == animal->target.x && animal->y == animal->target.y &&
-                 animal->z == animal->target.z &&
-                 animal_food_at((AnimalSpecies)animal->species, map, animal->x, animal->y,
-                                animal->z) != ANIMAL_FOOD_NONE;
+    TilePos food = animal->target;
+    bool there = within_bite(map, tile_of(animal), food) &&
+                 animal_food_at((AnimalSpecies)animal->species, map, food.x, food.y, food.z) !=
+                     ANIMAL_FOOD_NONE;
     if (!there) {
         /* The way was cut, or the food is gone (eaten, picked): elsewhere. */
         if (!try_forage(animal, def, context)) {
@@ -1154,8 +1237,8 @@ static void eat_plants(Animal *animal, const AnimalDef *def, const AnimalContext
         return;
     }
     animal->timer = 0;
-    bite(animal, def, map,
-         animal_food_at((AnimalSpecies)animal->species, map, animal->x, animal->y, animal->z));
+    bite(animal, def, map, food,
+         animal_food_at((AnimalSpecies)animal->species, map, food.x, food.y, food.z));
     if (animal->needs[ANIMAL_NEED_FOOD] >= ANIMAL_SATED) {
         stand(animal, random_idle_ticks(context->rng));
     }
@@ -1168,10 +1251,11 @@ static void eat_carcass(Animals *animals, uint32_t slot, const AnimalContext *co
     Animal *animal = &animals->list[slot];
     const AnimalDef *def = &ANIMAL_DEFS[animal->species];
     Items *items = context->items;
-    ItemStack stack = items != NULL ? items_get(items, animal->x, animal->y, animal->z)
-                                    : (ItemStack){.type = ITEM_NONE};
-    bool there = animal->x == animal->target.x && animal->y == animal->target.y &&
-                 animal->z == animal->target.z && carcass_edible((ItemType)stack.type);
+    TilePos food = animal->target;
+    ItemStack stack =
+        items != NULL ? items_get(items, food.x, food.y, food.z) : (ItemStack){.type = ITEM_NONE};
+    bool there =
+        within_bite(context->map, tile_of(animal), food) && carcass_edible((ItemType)stack.type);
     if (!there) {
         /* The way was cut, or the carcass is gone (eaten, rotted): elsewhere. */
         if (!try_hunt(animals, slot, context)) {
@@ -1188,9 +1272,9 @@ static void eat_carcass(Animals *animals, uint32_t slot, const AnimalContext *co
     ItemStack one = stack;
     one.count = 1;
     float eaten_kg = item_stack_eat(&one, def->bite_kg);
-    items_remove(items, animal->x, animal->y, animal->z, 1);
+    items_remove(items, food.x, food.y, food.z, 1);
     if (one.type != ITEM_NONE) {
-        items_add(items, animal->x, animal->y, animal->z, one);
+        items_add(items, food.x, food.y, food.z, one);
     }
     animal->needs[ANIMAL_NEED_FOOD] =
         clampf(animal->needs[ANIMAL_NEED_FOOD] + eaten_kg / def->stomach_kg, 0.0f, 1.0f);
@@ -1246,6 +1330,12 @@ static void walk(Animal *animal, const AnimalContext *context)
         stand(animal, random_idle_ticks(context->rng)); /* The way was cut. */
         return;
     }
+    Occupancy *occupancy = context->occupancy;
+    if (occupancy != NULL && animal->move_progress == 0.0f &&
+        animal->path_index == animal->path.count - 1 &&
+        !occupancy_holds(occupancy, context->self, next)) {
+        return; /* Stops only where it may: settle() sorts it out. */
+    }
     float cost = map_move_cost(map, next.x, next.y, next.z);
     if (next.z != animal->z) {
         cost *= MAP_CLIMB_COST;
@@ -1260,6 +1350,9 @@ static void walk(Animal *animal, const AnimalContext *context)
         (running ? animal_run_speed(animal) * (1.0f - ANIMAL_FATIGUE_SLOWDOWN * animal->fatigue)
                  : animal_walk_speed(animal)) *
         health_ability(&animal->health, HEALTH_WALKING);
+    if (occupancy != NULL && occupancy_others_on(occupancy, context->self, next) > 0) {
+        speed *= OCCUPANCY_CROSSING_SPEED; /* Squeezes past someone. */
+    }
     animal->move_progress += speed / (float)TICKS_PER_SECOND / cost;
     if (animal->move_progress >= 1.0f) {
         animal->x = next.x;
@@ -1425,10 +1518,8 @@ static void fight(Animals *animals, uint32_t slot, const AnimalContext *context)
         return;
     }
     TilePos here = tile_of(animal);
-    if (combat_in_reach(here, animal->enemy_pos,
-                        combat_choice_reach(&animal->health, def->attacks))) {
-        animal->path_index = 0;
-        path_clear(&animal->path);
+    int reach = combat_choice_reach(&animal->health, def->attacks);
+    if (combat_can_strike(context->map, here, animal->enemy_pos, reach)) {
         if (animal->attack_cooldown <= 0 && context->combat != NULL) {
             float power = 1.0f;
             AttackType attack =
@@ -1441,14 +1532,45 @@ static void fight(Animals *animals, uint32_t slot, const AnimalContext *context)
                                              power});
             animal->attack_cooldown = attack_interval_ticks(attack);
         }
+        if (may_stop_at(context, here)) {
+            animal->path_index = 0;
+            path_clear(&animal->path);
+            animal->timer = 0;
+            animal->surround_waits = 0;
+            return;
+        }
+        /* In reach on its way, but someone else stops here: it strikes in
+         * passing and goes on to a free tile around its enemy. */
+    } else if (!animal_is_moving(animal) && animal->timer > 0) {
+        animal->timer--; /* Waits for room around it. */
         return;
     }
     animal->path_index = 0;
-    if (!find_path(context, here, animal->enemy_pos, ANIMAL_CHASE_MAX_COST, &animal->path)) {
-        animal->enemy = combatant_none(); /* No way to it: it lets go. */
-        animal->search_cooldown[ANIMAL_SEARCH_FOOD] = ANIMAL_SEARCH_RETRY_TICKS;
-        stand(animal, WATCH_TICKS);
+    /* A tile beside it, free (others already around it keep theirs). */
+    CombatSpot spot = {animal->enemy_pos, reach};
+    TileBox box = combat_spot_box(&spot);
+    TilePos found;
+    context->pathfinder->walker = PATH_WALKER_ANIMAL;
+    bool chase = pathfinder_find_nearest_in_box(context->pathfinder, context->map, here, &box,
+                                                combat_is_strike_spot, &spot, ANIMAL_CHASE_MAX_COST,
+                                                &animal->path, &found);
+    context->pathfinder->walker = PATH_WALKER_SETTLER;
+    if (chase) {
+        animal->surround_waits = 0;
+        return;
     }
+    if (find_path(context, here, animal->enemy_pos, ANIMAL_CHASE_MAX_COST, &animal->path) &&
+        animal->surround_waits < ANIMAL_SURROUND_PATIENCE) {
+        path_clear(&animal->path); /* No room around it: it waits a little. */
+        animal->surround_waits++;
+        animal->timer = COMBAT_SURROUND_RETRY_TICKS;
+        return;
+    }
+    /* No way to it, or no room for long: it lets go (and may hunt another). */
+    animal->enemy = combatant_none();
+    animal->surround_waits = 0;
+    animal->search_cooldown[ANIMAL_SEARCH_FOOD] = ANIMAL_SEARCH_RETRY_TICKS;
+    stand(animal, WATCH_TICKS);
 }
 
 /* Whatever it was doing is given up (without a jolt while it is between two
@@ -1645,6 +1767,95 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
     }
 }
 
+/* ---- Where it stops (core/occupancy.h) ------------------------------------- */
+
+static bool is_free_spot(const Map *map, int x, int y, int z, void *userdata)
+{
+    const AnimalContext *context = userdata;
+    return path_walker_can_stand(PATH_WALKER_ANIMAL, map, x, y, z) &&
+           may_stop_at(context, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z});
+}
+
+/* Somewhere else to stand: the nearest free tile (a fight or a flight goes
+ * on from there, anything else is given up). */
+static void step_aside(Animal *animal, const AnimalContext *context)
+{
+    TilePos spot;
+    if (!find_nearest(context, tile_of(animal), is_free_spot, (void *)context,
+                      ANIMAL_MAKE_WAY_MAX_COST, &animal->path, &spot) ||
+        animal->path.count == 0) {
+        path_clear(&animal->path);
+        return; /* Nowhere: it tries again on its next turn. */
+    }
+    animal->path_index = 0;
+    if (animal->task == ANIMAL_TASK_ATTACK || animal->task == ANIMAL_TASK_FLEE) {
+        occupancy_claim(context->occupancy, context->self, spot); /* Still at it. */
+        return;
+    }
+    begin(animal, ANIMAL_TASK_WANDER, spot);
+    occupancy_set_yielding(context->occupancy, context->self, true);
+    occupancy_claim(context->occupancy, context->self, spot);
+}
+
+/* The tile it was to stop on is someone else's, and it waited for it long
+ * enough: a fight or a flight goes on from where it stands, anything else is
+ * given up. Standing on someone else's tile, it steps aside. */
+static void make_way(Animal *animal, const AnimalContext *context)
+{
+    animal->stop_wait = 0;
+    if (animal_is_moving(animal)) {
+        if (animal->task == ANIMAL_TASK_ATTACK || animal->task == ANIMAL_TASK_FLEE) {
+            animal->path_index = 0;
+            path_clear(&animal->path);
+        } else {
+            stand(animal, 0);
+            occupancy_set_yielding(context->occupancy, context->self, true);
+        }
+    }
+    if (!occupancy_claim(context->occupancy, context->self, tile_of(animal))) {
+        step_aside(animal, context);
+    }
+}
+
+/* After its turn, as for the settlers (see settle() in core/colonist.c). */
+static void settle(Animal *animal, const AnimalContext *context)
+{
+    Occupancy *occupancy = context->occupancy;
+    BeingId self = context->self;
+    if (health_is_dead(&animal->health)) {
+        occupancy_remove(occupancy, self);
+        return;
+    }
+    TilePos here = tile_of(animal);
+    occupancy_place(occupancy, self, here);
+    if (health_is_down(&animal->health)) {
+        occupancy_set_yielding(occupancy, self, false);
+        occupancy_force(occupancy, self, here); /* It cannot move: others make way. */
+        return;
+    }
+    occupancy_set_yielding(occupancy, self,
+                           animal->task == ANIMAL_TASK_IDLE || animal->task == ANIMAL_TASK_WANDER);
+    bool moving = animal_is_moving(animal);
+    TilePos stop = moving ? animal->path.steps[animal->path.count - 1] : here;
+    if (occupancy_holds(occupancy, self, stop) || occupancy_claim(occupancy, self, stop)) {
+        animal->stop_wait = 0;
+        return;
+    }
+    occupancy_release(occupancy, self); /* Not where it was any more. */
+    if (animal->move_progress > 0.0f) {
+        return; /* Between two tiles: it sees on the next one. */
+    }
+    bool last_step = moving && animal->path_index >= animal->path.count - 1;
+    if (moving && !last_step) {
+        return; /* Still on its way: the tile may be free when it gets there. */
+    }
+    if (last_step && animal->task != ANIMAL_TASK_WANDER &&
+        ++animal->stop_wait < OCCUPANCY_PATIENCE_TICKS) {
+        return; /* Waits for it a little. */
+    }
+    make_way(animal, context);
+}
+
 void animals_tick(Animals *animals, const AnimalContext *context)
 {
     animals->predator_count = 0;
@@ -1658,9 +1869,23 @@ void animals_tick(Animals *animals, const AnimalContext *context)
     }
     /* Fixed slot order keeps the simulation deterministic. */
     for (uint32_t slot = 0; slot < animals_slot_count(animals); slot++) {
-        if (!entity_id_is_none(animals_id_at(animals, slot))) {
-            tick_one(animals, slot, context);
+        if (entity_id_is_none(animals_id_at(animals, slot))) {
+            continue;
         }
+        if (context->occupancy == NULL) {
+            tick_one(animals, slot, context);
+            continue;
+        }
+        /* Its searches skip the tiles others hold. */
+        AnimalContext turn = *context;
+        turn.self = occupancy_animal(slot);
+        OccupancyStopper stopper = {context->occupancy, turn.self};
+        context->pathfinder->stop_filter = occupancy_stop_filter;
+        context->pathfinder->stop_userdata = &stopper;
+        tick_one(animals, slot, &turn);
+        settle(&animals->list[slot], &turn);
+        context->pathfinder->stop_filter = NULL;
+        context->pathfinder->stop_userdata = NULL;
     }
 }
 

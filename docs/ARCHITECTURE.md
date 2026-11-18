@@ -73,6 +73,7 @@ simulation:
 | `health`     | Bodies for settlers and animals alike: body plans and parts, injuries that bleed and hurt, abilities (consciousness, walking, the hands, sight, eating), clotting, natural healing, blood coming back, death; falls (see `docs/HEALTH.md`) |
 | `attributes` | Settler attributes: positions in thousandths drawn on a bell curve, their effects (factors, thought weight, outlook points, temperature shifts), the word bands and translation keys |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
+| `occupancy`  | Who stops on which tile, settlers and animals alike: one claim per tile (where a being stands, or where its path ends), yielding claims (idle, strolling), forced ones (knocked down), how many beings are on each tile now (crossing slows down), the pathfinder's stop filter |
 | `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level; for a kind of walker (`PathWalker`: settlers, or animals who open no door and climb neither ladders nor trees) |
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
 | `tile_box`   | Box of tiles holding every tile of a sparse layer (designations, gathering zones, a region), so that scans skip the rest of the map |
@@ -986,6 +987,56 @@ stream of its own (`blood_rng`); no simulation code reads it and
 ground (dry and fading by `blood_look()`), where blood can lie now.
 `tools/preview_blood.py` previews it in a GIF.
 
+### Occupancy
+
+Settlers and animals walk through one another but never stop on the same
+tile (`core/occupancy.h`, `Game.occupancy`, out of `game_hash()` but part of
+the simulation). Beings are numbered by slot (`BeingId`: settlers 1 to 64,
+animals after them). Each holds a claim on the one tile it stops on: where it
+stands, or where the path it walks ends.
+
+- **Searches skip the tiles others hold.** During a being's turn,
+  `Pathfinder.stop_filter` is `occupancy_stop_filter()`: every nearest search
+  (`pathfinder_find_nearest*()`, `goal == NULL`) only stops on tiles nobody
+  else holds, or held by someone yielding. A* to a known tile is not filtered
+  (a stockpile cell, a bed, a stack): a conflict there is met on arrival.
+- **Settling, after each turn** (`settle()` in `core/colonist.c` and
+  `core/animal.c`): the being is counted on its tile (`occupancy_place()`),
+  yields when idle or strolling, and claims its stop tile. A dead being holds
+  nothing; one knocked down forces its tile (`occupancy_force()`: whoever
+  held it makes way). A refused claim is tried again at every tile on the
+  way; one step short of it (`walk()` never starts the last step onto a tile
+  it does not hold), a being waits up to `OCCUPANCY_PATIENCE_TICKS`, then
+  makes way: a player's move goes to the nearest free tile, a fight or a
+  flight goes on from where it stands, anything else is given up (the being
+  decides again, its searches skipping the taken tile). Standing on a tile
+  someone else took (a busy being took it from a yielding one), it steps
+  aside to the nearest free tile (`TASK_WANDER`; a fighter or one fleeing
+  keeps at it and only walks there).
+- **Yielding.** An idle or strolling being's tile goes to whoever needs it to
+  do something; idle ones never take each other's tiles. Strolls and herd
+  walks pick free goals.
+- **Crossing.** `Occupancy.present` counts the beings on each tile now; a
+  step onto a tile someone else is on goes at `OCCUPANCY_CROSSING_SPEED`.
+  Nobody ever blocks a path: a corridor one tile wide stays open.
+- **Fighting** (`docs/COMBAT.md` §4): an attacker heads for a free tile from
+  which its blow reaches its enemy (`combat_is_strike_spot()`, searched in the
+  box around it), never the enemy's own tile; in reach on its way but on a
+  tile someone else holds, it strikes in passing and goes on to a free one
+  (it stops only where it may); with no room it waits and looks
+  again every `COMBAT_SURROUND_RETRY_TICKS` (an animal gives up after
+  `ANIMAL_SURROUND_PATIENCE` tries). `combat_can_strike()` is the reach test
+  for strikes and their resolution: same level, in reach, and not diagonally
+  across a wall's corner.
+- **Eating, for animals**: one eats on the food's tile; when someone busy
+  holds it, the others eat from a tile beside it (`is_food()`, `is_carcass()`
+  accept a free tile with a direct step to such food; `Animal.target` is the
+  food's tile, the path ends beside it). Settlers keep eating on the tile of
+  the stack they reserved.
+- `game_tick()` sweeps the occupancy before the turns (`sweep_occupancy()`):
+  beings removed or dead hold nothing, newcomers are counted where they
+  stand. A dead animal becomes a carcass anyone walks over.
+
 ### Journal
 
 `Colonist.journal` and `Animal.journal` (`core/journal.h`) are rings of
@@ -1794,6 +1845,9 @@ positions, so it is not part of `game_hash()`:
   may differ.
 - A walk to a known tile (a settler's own bed) is a plain A*, not a search
   for a predicate true on that tile only.
+- `Pathfinder.stop_filter`: when set, nearest searches only stop on tiles it
+  accepts besides their predicate (the occupancy sets it around each being's
+  turn: tiles others hold are skipped, see *Occupancy*).
 - A `Pathfinder` owns per-tile scratch nodes reused across searches (stamps
   instead of clearing), so searches do not allocate. The fields of a tile
   (`PathNode`: stamps, cost, parent) sit side by side: one cache miss per

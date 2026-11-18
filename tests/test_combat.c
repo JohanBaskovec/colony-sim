@@ -181,6 +181,8 @@ static void test_reach(void)
     CHECK(!combat_in_reach(a, (TilePos){12, 10, 0}, 1));
     CHECK(combat_in_reach(a, (TilePos){12, 10, 0}, 2));
     CHECK(!combat_in_reach(a, (TilePos){10, 11, 1}, 1)); /* Another level. */
+    CHECK(combat_can_strike(NULL, a, (TilePos){11, 11, 0}, 1));
+    CHECK(!combat_can_strike(NULL, a, (TilePos){12, 11, 0}, 1));
 }
 
 static void test_hit_chance(void)
@@ -1028,6 +1030,236 @@ static void test_fatigue(void)
     game_shutdown(&game);
 }
 
+/* A blow reaches a diagonal tile only if a step could: not across a wall's corner. */
+static void test_no_strike_across_a_corner(void)
+{
+    static Game game;
+    REQUIRE(init_flat_game(&game));
+    Map *map = &game.map;
+    TilePos from = {10, 10, 0};
+    CHECK(combat_can_strike(map, from, (TilePos){11, 11, 0}, 1));
+    CHECK(combat_can_strike(map, from, (TilePos){11, 10, 0}, 1));
+    map_set_rock(map, 11, 10, 0, ROCK_GRANITE);
+    CHECK(!combat_can_strike(map, from, (TilePos){11, 11, 0}, 1));
+    CHECK(!combat_can_strike(map, (TilePos){11, 11, 0}, from, 1));
+    CHECK(!combat_can_strike(map, from, (TilePos){11, 9, 0}, 1));  /* Past the rock too... */
+    CHECK(combat_can_strike(map, from, (TilePos){9, 11, 0}, 1));   /* ...not this way. */
+    CHECK(!combat_can_strike(map, from, (TilePos){12, 10, 0}, 1)); /* Too far anyway. */
+    /* Where to stand to strike: around the enemy, not on its tile nor in rock. */
+    CombatSpot spot = {{12, 12, 0}, 1};
+    CHECK(combat_is_strike_spot(map, 11, 12, 0, &spot));
+    CHECK(!combat_is_strike_spot(map, 12, 12, 0, &spot));
+    CHECK(!combat_is_strike_spot(map, 10, 12, 0, &spot));
+    map_set_rock(map, 13, 12, 0, ROCK_GRANITE);
+    CHECK(!combat_is_strike_spot(map, 13, 12, 0, &spot));
+    CHECK(!combat_is_strike_spot(map, 13, 13, 0, &spot)); /* Past the rock's corner. */
+    TileBox box = combat_spot_box(&spot);
+    CHECK(box.x0 == 11 && box.x1 == 13 && box.y0 == 11 && box.y1 == 13 && box.z0 == 0 &&
+          box.z1 == 0);
+    game_shutdown(&game);
+}
+
+/* Down for good: it cannot walk. */
+static void knock_down(Animal *animal)
+{
+    BodyPlan body = (BodyPlan)animal->health.plan;
+    for (int part = 0; part < body_part_count(body); part++) {
+        if (body_part_def(body, part)->role == BODY_ROLE_WALK) {
+            health_hurt(&animal->health, part, INJURY_FRACTURE, 0.5f);
+        }
+    }
+}
+
+static TilePos tile_of_animal(const Animal *animal)
+{
+    return (TilePos){(int16_t)animal->x, (int16_t)animal->y, (int16_t)animal->z};
+}
+
+/* Whether two of the wolves stand still on one tile, or one on its prey's. */
+static bool wolves_overlap(Animal *const *wolves, int count, TilePos prey)
+{
+    for (int i = 0; i < count; i++) {
+        const Animal *a = wolves[i];
+        if (animal_is_moving(a) || a->move_progress > 0.0f) {
+            continue;
+        }
+        if (a->x == prey.x && a->y == prey.y && a->z == prey.z) {
+            return true;
+        }
+        for (int j = 0; j < i; j++) {
+            const Animal *b = wolves[j];
+            if (!animal_is_moving(b) && b->move_progress == 0.0f && a->x == b->x && a->y == b->y &&
+                a->z == b->z) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static int wolves_beside(Animal *const *wolves, int count, TilePos prey)
+{
+    int beside = 0;
+    for (int i = 0; i < count; i++) {
+        const Animal *wolf = wolves[i];
+        beside += !animal_is_moving(wolf) && wolf->move_progress == 0.0f &&
+                  combat_in_reach((TilePos){(int16_t)wolf->x, (int16_t)wolf->y, (int16_t)wolf->z},
+                                  prey, 1) &&
+                  !(wolf->x == prey.x && wolf->y == prey.y);
+    }
+    return beside;
+}
+
+/* Attackers stand around their enemy, each on a tile of its own. */
+static void test_attackers_surround_their_enemy(void)
+{
+    static Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId boar_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 24, 24, &boar_id);
+    REQUIRE(boar != NULL);
+    knock_down(boar);
+    Animal *wolves[4];
+    for (int i = 0; i < 4; i++) {
+        EntityId id;
+        wolves[i] = spawn_animal(&game, ANIMAL_WOLF, 16, 20 + 2 * i, &id);
+        REQUIRE(wolves[i] != NULL);
+        REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, id},
+                                  (Combatant){COMBATANT_ANIMAL, boar_id}));
+    }
+    bool overlap = false;
+    int most_beside = 0;
+    for (int tick = 0; tick < 8 * TICKS_PER_SECOND && animals_get(&game.animals, boar_id) != NULL;
+         tick++) {
+        game_tick(&game);
+        TilePos prey = {(int16_t)boar->x, (int16_t)boar->y, (int16_t)boar->z};
+        overlap |= wolves_overlap(wolves, 4, prey);
+        int beside = wolves_beside(wolves, 4, prey);
+        most_beside = beside > most_beside ? beside : most_beside;
+    }
+    CHECK(!overlap);
+    CHECK(most_beside >= 3); /* Around it together. */
+    game_shutdown(&game);
+}
+
+/* At the end of a dead end, there is room for one attacker only: the others
+ * wait behind, then give up. */
+static void test_no_room_around_the_enemy(void)
+{
+    static Game game;
+    REQUIRE(init_flat_game(&game));
+    Map *map = &game.map;
+    for (int x = 10; x <= 30; x++) {
+        for (int y = 19; y <= 21; y++) {
+            if (y != 20 || x == 10) {
+                map_set_rock(map, x, y, 0, ROCK_GRANITE);
+            }
+        }
+    }
+    /* The corridor y = 20 runs from x = 11 to 30, and opens at x = 31. */
+    EntityId boar_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 11, 20, &boar_id);
+    REQUIRE(boar != NULL);
+    knock_down(boar);
+    Animal *wolves[3];
+    for (int i = 0; i < 3; i++) {
+        EntityId id;
+        wolves[i] = spawn_animal(&game, ANIMAL_WOLF, 34, 18 + 2 * i, &id);
+        REQUIRE(wolves[i] != NULL);
+        REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, id},
+                                  (Combatant){COMBATANT_ANIMAL, boar_id}));
+    }
+    bool overlap = false, waited = false;
+    int most_beside = 0;
+    for (int tick = 0; tick < 20 * TICKS_PER_SECOND && animals_get(&game.animals, boar_id) != NULL;
+         tick++) {
+        game_tick(&game);
+        TilePos prey = {(int16_t)boar->x, (int16_t)boar->y, (int16_t)boar->z};
+        overlap |= wolves_overlap(wolves, 3, prey);
+        int beside = wolves_beside(wolves, 3, prey);
+        most_beside = beside > most_beside ? beside : most_beside;
+        for (int i = 0; i < 3; i++) {
+            waited |= wolves[i]->task == ANIMAL_TASK_ATTACK && wolves[i]->surround_waits > 0;
+        }
+    }
+    CHECK(!overlap);
+    CHECK_EQ_INT(most_beside, 1);
+    CHECK(waited);
+    game_shutdown(&game);
+}
+
+/* Wolves share a carcass: one on it, the others around it, each on a tile of
+ * its own, and all of them eat. */
+static void test_wolves_share_a_carcass(void)
+{
+    static Game game;
+    REQUIRE(init_flat_game(&game));
+    Animal *wolves[3];
+    for (int i = 0; i < 3; i++) {
+        wolves[i] = spawn_hungry(&game, ANIMAL_WOLF, 20, 18 + 2 * i, NULL, 0.3f);
+        REQUIRE(wolves[i] != NULL);
+    }
+    items_add(&game.items, 30, 20, 0, item_stack_pristine(ITEM_RED_DEER_CARCASS, 1));
+    TilePos carcass = {30, 20, 0};
+    bool overlap = false;
+    for (int tick = 0; tick < 8 * TICKS_PER_SECOND; tick++) {
+        game_tick(&game);
+        overlap |= wolves_overlap(wolves, 3, (TilePos){0, 0, 0});
+    }
+    CHECK(!overlap);
+    int on_it = 0, beside = 0;
+    for (int i = 0; i < 3; i++) {
+        const Animal *wolf = wolves[i];
+        CHECK_EQ_INT(wolf->task, ANIMAL_TASK_EAT);
+        CHECK(!animal_is_moving(wolf));
+        CHECK(wolf->target.x == carcass.x && wolf->target.y == carcass.y);
+        on_it += wolf->x == carcass.x && wolf->y == carcass.y;
+        beside += combat_in_reach(tile_of_animal(wolf), carcass, 1) &&
+                  !(wolf->x == carcass.x && wolf->y == carcass.y);
+    }
+    CHECK_EQ_INT(on_it, 1);
+    CHECK_EQ_INT(beside, 2);
+    run_ticks(&game, 20 * TICKS_PER_SECOND);
+    for (int i = 0; i < 3; i++) {
+        CHECK(wolves[i]->needs[ANIMAL_NEED_FOOD] > 0.45f); /* Each had its share. */
+    }
+    game_shutdown(&game);
+}
+
+/* Food beside a busy eater is eaten from beside it, not across a wall's corner. */
+static void test_eating_from_beside(void)
+{
+    static Game game;
+    REQUIRE(init_flat_game(&game));
+    Map *map = &game.map;
+    /* Rock around the carcass but on one side and one corner. */
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if ((dx != 0 || dy != 0) && !(dx == -1 && dy == 0) && !(dx == 1 && dy == 1)) {
+                map_set_rock(map, 30 + dx, 20 + dy, 0, ROCK_GRANITE);
+            }
+        }
+    }
+    Animal *first = spawn_hungry(&game, ANIMAL_WOLF, 20, 20, NULL, 0.3f);
+    Animal *second = spawn_hungry(&game, ANIMAL_WOLF, 20, 22, NULL, 0.3f);
+    REQUIRE(first != NULL && second != NULL);
+    items_add(&game.items, 30, 20, 0, item_stack_pristine(ITEM_RED_DEER_CARCASS, 1));
+    run_ticks(&game, 8 * TICKS_PER_SECOND);
+    Animal *wolves[2] = {first, second};
+    CHECK(!wolves_overlap(wolves, 2, (TilePos){0, 0, 0}));
+    /* One eats on the carcass, the other from the open side (29, 20): the
+     * tile (31, 21) only touches it across two corners of rock. */
+    int on_it = 0, west = 0;
+    for (int i = 0; i < 2; i++) {
+        on_it += wolves[i]->x == 30 && wolves[i]->y == 20;
+        west += wolves[i]->x == 29 && wolves[i]->y == 20 && wolves[i]->task == ANIMAL_TASK_EAT;
+        CHECK(!(wolves[i]->x == 31 && wolves[i]->y == 21 && wolves[i]->task == ANIMAL_TASK_EAT));
+    }
+    CHECK_EQ_INT(on_it, 1);
+    CHECK_EQ_INT(west, 1);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_attack_definitions);
@@ -1058,5 +1290,10 @@ int main(void)
     RUN_TEST(test_prey_flee_carnivores);
     RUN_TEST(test_hungry_wolves_attack_settlers);
     RUN_TEST(test_fatigue);
+    RUN_TEST(test_no_strike_across_a_corner);
+    RUN_TEST(test_attackers_surround_their_enemy);
+    RUN_TEST(test_no_room_around_the_enemy);
+    RUN_TEST(test_wolves_share_a_carcass);
+    RUN_TEST(test_eating_from_beside);
     return test_summary();
 }

@@ -15,6 +15,7 @@
 #include "core/map.h"
 #include "core/pool.h"
 #include "core/rng.h"
+#include "core/tile_box.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -31,6 +32,8 @@
 /* A blow reaches this many tiles unless the attack says otherwise (adjacent,
  * diagonals included). */
 #define COMBAT_REACH_ADJACENT 1
+/* With no free tile around its enemy, a fighter looks again this often. */
+#define COMBAT_SURROUND_RETRY_TICKS 30
 
 typedef enum CombatantKind {
     COMBATANT_NONE,
@@ -140,6 +143,22 @@ int attack_interval_ticks(AttackType type);
 /* Whether two tiles are within `reach` of each other: the same level and no
  * further than `reach` in each direction. */
 bool combat_in_reach(TilePos a, TilePos b, int reach);
+
+/* Whether a blow from one tile reaches another: in reach, and not diagonally
+ * across the corner of a wall (both tiles beside the diagonal must be
+ * passable), as a step would. A NULL map: in reach is enough. */
+bool combat_can_strike(const Map *map, TilePos from, TilePos to, int reach);
+
+/* Where to stand to strike an enemy: a passable tile other than the enemy's
+ * own, from which the blow reaches it (a TilePredicate, `userdata` a
+ * CombatSpot). Every such tile lies in combat_spot_box(). */
+typedef struct CombatSpot {
+    TilePos enemy;
+    int reach;
+} CombatSpot;
+
+bool combat_is_strike_spot(const Map *map, int x, int y, int z, void *userdata);
+TileBox combat_spot_box(const CombatSpot *spot);
 
 /* The defender's chance to avoid a blow: its agility times its walking
  * ability (0 for someone down: knocked out or unable to walk). */

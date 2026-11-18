@@ -135,6 +135,18 @@ static void test_wolves_and_settlers(void)
         game_tick(game);
     }
     CHECK(game->strikes_resolved > 0);
+    /* The pack fights on around them: no wolf unhurt runs off (one with no
+     * room beside the settlers waits, or goes round to a free tile). */
+    bool unhurt_fled = false;
+    for (int t = 0; t < 20 * TICKS_PER_SECOND; t++) {
+        game_tick(game);
+        for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
+            const Animal *wolf = &game->animals.list[slot];
+            unhurt_fled |= !entity_id_is_none(animals_id_at(&game->animals, slot)) &&
+                           wolf->task == ANIMAL_TASK_FLEE && !health_is_hurt(&wolf->health);
+        }
+    }
+    CHECK(!unhurt_fled);
     game_shutdown(game);
 }
 

@@ -122,6 +122,34 @@ bool combat_in_reach(TilePos a, TilePos b, int reach)
     return a.z == b.z && abs(a.x - b.x) <= reach && abs(a.y - b.y) <= reach;
 }
 
+bool combat_can_strike(const Map *map, TilePos from, TilePos to, int reach)
+{
+    if (!combat_in_reach(from, to, reach)) {
+        return false;
+    }
+    int dx = to.x - from.x, dy = to.y - from.y;
+    if (map == NULL || abs(dx) != 1 || abs(dy) != 1) {
+        return true;
+    }
+    return map_is_passable(map, from.x + dx, from.y, from.z) &&
+           map_is_passable(map, from.x, from.y + dy, from.z);
+}
+
+bool combat_is_strike_spot(const Map *map, int x, int y, int z, void *userdata)
+{
+    const CombatSpot *spot = userdata;
+    TilePos tile = {(int16_t)x, (int16_t)y, (int16_t)z};
+    return !(x == spot->enemy.x && y == spot->enemy.y && z == spot->enemy.z) &&
+           map_is_passable(map, x, y, z) && combat_can_strike(map, tile, spot->enemy, spot->reach);
+}
+
+TileBox combat_spot_box(const CombatSpot *spot)
+{
+    TilePos at = spot->enemy;
+    return (TileBox){at.x - spot->reach, at.y - spot->reach, at.z,
+                     at.x + spot->reach, at.y + spot->reach, at.z};
+}
+
 float combat_dodge(const Health *defender, float agility)
 {
     if (health_is_down(defender)) {

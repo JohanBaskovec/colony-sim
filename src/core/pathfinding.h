@@ -66,6 +66,8 @@ typedef enum PathWalker {
     PATH_WALKER_ANIMAL,  /* On four legs: slopes only, and no door. */
 } PathWalker;
 
+typedef bool (*TilePredicate)(const Map *map, int x, int y, int z, void *userdata);
+
 typedef struct Pathfinder {
     int width;
     int height;
@@ -74,6 +76,11 @@ typedef struct Pathfinder {
      * pathfinder_init()): set it before a search for someone else, and back
      * afterwards. */
     PathWalker walker;
+    /* Searches for the nearest tile (not those toward a goal) accept only the
+     * tiles this also accepts, when set: where the one searching may stop
+     * (core/occupancy.h). Set it around a being's turn, and clear it after. */
+    TilePredicate stop_filter;
+    void *stop_userdata;
     PathNode *nodes; /* One per tile. */
     uint32_t stamp;  /* Incremented per search instead of clearing the nodes. */
     PathHeapItem *heap;
@@ -83,8 +90,6 @@ typedef struct Pathfinder {
     size_t last_expanded;
     float last_cost;
 } Pathfinder;
-
-typedef bool (*TilePredicate)(const Map *map, int x, int y, int z, void *userdata);
 
 bool pathfinder_init(Pathfinder *finder, int width, int height, int depth);
 void pathfinder_free(Pathfinder *finder);

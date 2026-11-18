@@ -16,7 +16,7 @@ guesses.
 - **One module, two layers.** The module resolves blows (`combat_blow()`);
   the behaviors above it (animals, settlers) decide who attacks, chases,
   flees or breaks off.
-- **Blows are queued, then resolved.** Each tick, attackers adjacent to their
+- **Blows are queued, then resolved.** Each tick, attackers in reach of their
   target push a strike into a `CombatQueue`; the game resolves them after
   everyone has moved (so that nobody's turn depends on who is earlier in the
   slot order), with a random stream of its own.
@@ -26,7 +26,9 @@ guesses.
 ## 2. Attacks
 
 An attack has a damage in points, an injury kind (`InjuryType`), a base
-accuracy, an interval between blows, a reach in tiles (adjacent for now) and
+accuracy, an interval between blows, a reach in tiles (adjacent for now: one
+of the eight tiles around, on the same level, and not diagonally across a
+wall's corner, as for a step: `combat_can_strike()`) and
 the **limb** it is made with (`BodyLimb`, `docs/HEALTH.md` §2) *(tuning)*:
 
 | Attack | Limb | Injury | Damage | Accuracy | Every | Used by |
@@ -83,6 +85,12 @@ cornered, takes it).
   An attacker chases its target (at its running speed) and strikes when
   adjacent, until the target is dead, gone far away or the attacker breaks
   off; it ignores settlers' presence meanwhile.
+- **Around the target.** Nobody stops on another's tile
+  (`docs/ARCHITECTURE.md`, *Occupancy*): attackers head for free tiles around
+  their target, each its own, never the target's. When there is no room left
+  (a dead end, a pack around a deer), the others wait and look again every
+  half second; an animal gives up after a few tries (and may go for another
+  prey), a settler waits. Those knocked down keep their tile.
 - **Settlers.** A settler struck by an animal drops what it was doing
   (waking if it slept): it fights back, or flees to a tile far from it when
   past its nerve (cornered: it fights). With a thrusting spear in its
@@ -120,6 +128,9 @@ cornered, takes it).
   wolf, a deer many. A bite takes weight off the carcass, not hit points (those
   are what rot takes): it stays as sound as it was, only lighter, and is gone
   with the last bite.
+- **Sharing.** One eats on the carcass's tile, the others around it (a tile
+  beside it with a direct step to it: not across a wall's corner), each on a
+  tile of its own; plant eaters do the same with a patch of food.
 - **The hunt.** The hungry predator picks the nearest prey it sees within its
   range (30 tiles, 20 for a fox) and runs at it; its pack joins. A prey that
   sees a predator runs, its herd with it. Running tires: a spent animal runs

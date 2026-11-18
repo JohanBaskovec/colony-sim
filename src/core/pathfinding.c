@@ -321,7 +321,9 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
         bool reached =
             target->goal != NULL
                 ? (x == target->goal->x && y == target->goal->y && z == target->goal->z)
-                : (target->predicate != NULL && target->predicate(map, x, y, z, target->userdata));
+                : (target->predicate != NULL && target->predicate(map, x, y, z, target->userdata) &&
+                   (finder->stop_filter == NULL ||
+                    finder->stop_filter(map, x, y, z, finder->stop_userdata)));
         if (reached) {
             finder->last_cost = node->cost_so_far;
             return current;

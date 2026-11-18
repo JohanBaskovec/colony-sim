@@ -20,6 +20,7 @@
 #include "core/known.h"
 #include "core/map.h"
 #include "core/notice.h"
+#include "core/occupancy.h"
 #include "core/pathfinding.h"
 #include "core/pool.h"
 #include "core/reservation.h"
@@ -190,6 +191,9 @@ typedef struct Game {
      * Part of game_hash() once an animal has lived in the game. */
     Animals animals;
     Rng wildlife_rng;
+    /* Who stops on which tile, settlers and animals alike (core/occupancy.h):
+     * refreshed by each being on its turn, not part of game_hash(). */
+    Occupancy occupancy;
     /* Items in stock per type, what "until N in stock" bills count: lying in a
      * stockpile that accepts them, or on their way there (lying on a
      * workstation, where crafts drop their products, or carried by a hauler),

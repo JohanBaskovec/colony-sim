@@ -789,6 +789,13 @@ bool colonist_order_move(Colonist *colonist, const ColonistContext *context, Til
     return start_move(colonist, context, goal);
 }
 
+/* Whether it may stop on the tile (nobody else holds it, core/occupancy.h). */
+static bool may_stop_at(const ColonistContext *context, TilePos tile)
+{
+    return context->occupancy == NULL ||
+           occupancy_can_stop(context->occupancy, (BeingId)context->worker_id, tile);
+}
+
 static bool search_allowed(const Colonist *colonist, SearchKind kind)
 {
     return colonist->search_cooldown[kind] <= 0;
@@ -4108,6 +4115,7 @@ static void start_wandering(Colonist *colonist, const ColonistContext *context)
         TilePos goal = {(int16_t)(colonist->x + dx), (int16_t)(colonist->y + dy),
                         (int16_t)colonist->z};
         if ((dx == 0 && dy == 0) || !map_is_passable(context->map, goal.x, goal.y, goal.z) ||
+            !may_stop_at(context, goal) ||
             !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
             continue; /* Blocked, or on the other side of a wall or of water. */
         }
@@ -4261,7 +4269,7 @@ static bool go_off_alone(Colonist *colonist, const ColonistContext *context)
         }
         TilePos goal = {(int16_t)(colonist->x + dx), (int16_t)(colonist->y + dy),
                         (int16_t)colonist->z};
-        if (!map_is_passable(context->map, goal.x, goal.y, goal.z) ||
+        if (!map_is_passable(context->map, goal.x, goal.y, goal.z) || !may_stop_at(context, goal) ||
             !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
             continue;
         }
@@ -4463,8 +4471,20 @@ static void walk(Colonist *colonist, const ColonistContext *context)
     if (next.x != colonist->x && next.y != colonist->y) {
         cost *= SQRT2;
     }
-    colonist->move_progress += COLONIST_WALK_SPEED * colonist_load_speed_factor(colonist) *
-                               colonist_walk_factor(colonist) / (float)TICKS_PER_SECOND / cost;
+    float speed =
+        COLONIST_WALK_SPEED * colonist_load_speed_factor(colonist) * colonist_walk_factor(colonist);
+    Occupancy *occupancy = context->occupancy;
+    if (occupancy != NULL) {
+        BeingId self = (BeingId)context->worker_id;
+        if (colonist->move_progress == 0.0f && colonist->path_index == colonist->path.count - 1 &&
+            !occupancy_holds(occupancy, self, next)) {
+            return; /* Stops only where it may: settle() sorts it out. */
+        }
+        if (occupancy_others_on(occupancy, self, next) > 0) {
+            speed *= OCCUPANCY_CROSSING_SPEED; /* Squeezes past someone. */
+        }
+    }
+    colonist->move_progress += speed / (float)TICKS_PER_SECOND / cost;
     if (colonist->move_progress >= 1.0f) {
         colonist->x = next.x;
         colonist->y = next.y;
@@ -4707,9 +4727,7 @@ static void engage(Colonist *colonist, const ColonistContext *context)
         begin_task(colonist, context, TASK_FIGHT);
         path_clear(&colonist->path);
     }
-    if (combat_in_reach(here, there, COMBAT_REACH_ADJACENT)) {
-        path_clear(&colonist->path);
-        colonist->path_index = 0;
+    if (combat_can_strike(context->map, here, there, COMBAT_REACH_ADJACENT)) {
         if (colonist->attack_cooldown <= 0 && context->combat != NULL) {
             combat_queue_push(context->combat, (CombatStrike){{COMBATANT_SETTLER, context->self},
                                                               colonist->enemy,
@@ -4718,15 +4736,37 @@ static void engage(Colonist *colonist, const ColonistContext *context)
                                                               power});
             colonist->attack_cooldown = attack_interval_ticks(attack);
         }
+        if (may_stop_at(context, here)) {
+            path_clear(&colonist->path);
+            colonist->path_index = 0;
+            colonist->timer = 0;
+            return;
+        }
+        /* In reach on its way, but someone else stops here: it strikes in
+         * passing and goes on to a free tile beside its enemy. */
+    } else if (!colonist_is_moving(colonist) && colonist->timer > 0) {
+        colonist->timer--; /* Waits for room around it. */
         return;
     }
     path_free(&colonist->path);
     colonist->path_index = 0;
-    if (!pathfinder_find(context->pathfinder, context->plan_map, here, there,
-                         COLONIST_CHASE_MAX_COST, &colonist->path)) {
-        colonist->enemy = combatant_none(); /* No way to it. */
-        set_idle(colonist, context, 0);
+    /* A tile beside it, free (others already around it keep theirs). */
+    CombatSpot spot = {there, COMBAT_REACH_ADJACENT};
+    TileBox box = combat_spot_box(&spot);
+    TilePos found;
+    if (pathfinder_find_nearest_in_box(context->pathfinder, context->plan_map, here, &box,
+                                       combat_is_strike_spot, &spot, COLONIST_CHASE_MAX_COST,
+                                       &colonist->path, &found)) {
+        return;
     }
+    if (pathfinder_find(context->pathfinder, context->plan_map, here, there,
+                        COLONIST_CHASE_MAX_COST, &colonist->path)) {
+        path_clear(&colonist->path); /* No room around it: it waits. */
+        colonist->timer = COMBAT_SURROUND_RETRY_TICKS;
+        return;
+    }
+    colonist->enemy = combatant_none(); /* No way to it. */
+    set_idle(colonist, context, 0);
 }
 
 /* Hunger, thirst and the weather wear the body down (every
@@ -4762,7 +4802,7 @@ static void lie_down(Colonist *colonist, const ColonistContext *context)
     colonist->chat_ticks = 0;
 }
 
-void colonist_tick(Colonist *colonist, const ColonistContext *context)
+static void tick_turn(Colonist *colonist, const ColonistContext *context)
 {
     if (health_is_dead(&colonist->health)) {
         return; /* The game leaves its body (core/game.h). */
@@ -4840,4 +4880,137 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     case TASK_DOWN:
     case TASK_COUNT: break;
     }
+}
+
+/* ---- Where it stops (core/occupancy.h) ------------------------------------- */
+
+static bool is_free_spot(const Map *map, int x, int y, int z, void *userdata)
+{
+    const OccupancyStopper *stopper = userdata;
+    return map_is_passable(map, x, y, z) &&
+           occupancy_can_stop(stopper->occupancy, stopper->being,
+                              (TilePos){(int16_t)x, (int16_t)y, (int16_t)z});
+}
+
+/* The nearest tile around `from` it may stop on (from included). */
+static bool free_spot_near(const ColonistContext *context, TilePos from, TilePos *out)
+{
+    OccupancyStopper stopper = {context->occupancy, (BeingId)context->worker_id};
+    return pathfinder_find_nearest(context->pathfinder, context->plan_map, from, is_free_spot,
+                                   &stopper, COLONIST_MAKE_WAY_MAX_COST, NULL, out);
+}
+
+/* Somewhere else to stand: the nearest free tile. */
+static void step_aside(Colonist *colonist, const ColonistContext *context)
+{
+    TilePos here = current_tile(colonist), spot;
+    Path path = {0};
+    if (!free_spot_near(context, here, &spot) ||
+        !pathfinder_find(context->pathfinder, context->plan_map, here, spot,
+                         COLONIST_MAKE_WAY_MAX_COST * 2.0f, &path)) {
+        path_free(&path);
+        return; /* Nowhere: it tries again on its next turn. */
+    }
+    bool fighting = colonist->task == TASK_FIGHT || colonist->task == TASK_FLEE;
+    if (!fighting) {
+        begin_task(colonist, context, TASK_WANDER); /* A fight or a flight goes on. */
+    }
+    path_free(&colonist->path);
+    colonist->path = path;
+    colonist->path_index = 0;
+    if (fighting) {
+        occupancy_claim(context->occupancy, (BeingId)context->worker_id, spot);
+        return;
+    }
+    colonist->target = spot;
+    occupancy_set_yielding(context->occupancy, (BeingId)context->worker_id, true);
+    occupancy_claim(context->occupancy, (BeingId)context->worker_id, spot);
+}
+
+/* The tile it was to stop on is someone else's, and it waited for it long
+ * enough: a fight goes on from where it stands, a player's order goes to the
+ * nearest free tile, anything else is given up (it decides again, and its
+ * searches skip the tiles others hold). Standing on someone else's tile, it
+ * steps aside. */
+static void make_way(Colonist *colonist, const ColonistContext *context)
+{
+    Occupancy *occupancy = context->occupancy;
+    BeingId self = (BeingId)context->worker_id;
+    TilePos here = current_tile(colonist);
+    colonist->stop_wait = 0;
+    if (colonist_is_moving(colonist)) {
+        TilePos spot;
+        if (colonist->task == TASK_MOVE && free_spot_near(context, colonist->target, &spot) &&
+            start_move(colonist, context, spot) && occupancy_claim(occupancy, self, spot)) {
+            return;
+        }
+        if (colonist->task == TASK_FIGHT || colonist->task == TASK_FLEE) {
+            path_clear(&colonist->path);
+            colonist->path_index = 0;
+        } else {
+            set_idle(colonist, context, 0);
+            occupancy_set_yielding(occupancy, self, true);
+        }
+    }
+    if (!occupancy_claim(occupancy, self, here)) {
+        step_aside(colonist, context);
+    }
+}
+
+/* After its turn: counted where it is now, and holding the tile it stops on
+ * (where it stands, or where its path ends). A tile someone else holds is
+ * tried again as it walks; one step short of it, it waits a little, then
+ * makes way. */
+static void settle(Colonist *colonist, const ColonistContext *context)
+{
+    Occupancy *occupancy = context->occupancy;
+    BeingId self = (BeingId)context->worker_id;
+    if (health_is_dead(&colonist->health)) {
+        occupancy_remove(occupancy, self);
+        return;
+    }
+    TilePos here = current_tile(colonist);
+    occupancy_place(occupancy, self, here);
+    if (colonist_is_down(colonist)) {
+        occupancy_set_yielding(occupancy, self, false);
+        occupancy_force(occupancy, self, here); /* It cannot move: others make way. */
+        return;
+    }
+    occupancy_set_yielding(occupancy, self,
+                           colonist->task == TASK_IDLE || colonist->task == TASK_WANDER);
+    bool moving = colonist_is_moving(colonist);
+    TilePos stop = moving ? colonist->path.steps[colonist->path.count - 1] : here;
+    if (occupancy_holds(occupancy, self, stop) || occupancy_claim(occupancy, self, stop)) {
+        colonist->stop_wait = 0;
+        return;
+    }
+    occupancy_release(occupancy, self); /* Not where it was any more. */
+    if (colonist->move_progress > 0.0f) {
+        return; /* Between two tiles: it sees on the next one. */
+    }
+    bool last_step = moving && colonist->path_index >= colonist->path.count - 1;
+    if (moving && !last_step) {
+        return; /* Still on its way: the tile may be free when it gets there. */
+    }
+    if (last_step && colonist->task != TASK_MOVE && colonist->task != TASK_WANDER &&
+        ++colonist->stop_wait < OCCUPANCY_PATIENCE_TICKS) {
+        return; /* Waits for it a little. */
+    }
+    make_way(colonist, context);
+}
+
+void colonist_tick(Colonist *colonist, const ColonistContext *context)
+{
+    if (context->occupancy == NULL) {
+        tick_turn(colonist, context);
+        return;
+    }
+    /* Its searches skip the tiles others hold. */
+    OccupancyStopper stopper = {context->occupancy, (BeingId)context->worker_id};
+    context->pathfinder->stop_filter = occupancy_stop_filter;
+    context->pathfinder->stop_userdata = &stopper;
+    tick_turn(colonist, context);
+    settle(colonist, context);
+    context->pathfinder->stop_filter = NULL;
+    context->pathfinder->stop_userdata = NULL;
 }

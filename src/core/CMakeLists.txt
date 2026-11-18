@@ -32,6 +32,7 @@ add_library(colony_core STATIC
     mood.c
     noise.c
     notice.c
+    occupancy.c
     pathfinding.c
     pool.c
     recipe.c
