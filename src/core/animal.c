@@ -365,6 +365,12 @@ EntityId animals_spawn(Animals *animals, const Map *map, AnimalSpecies species, 
     animal->leader = id;
     animal->alert_wait = (int)(id.index % ANIMAL_ALERT_TICKS); /* Not all on the same tick. */
     animal->facing_left = rng_chance(rng, 0.5f);
+    /* Its character comes from a copy of the stream, so that drawing it does
+     * not shift what the others do (and the species keeps its own draws). */
+    Rng character = *rng;
+    Attributes attributes;
+    attributes_roll_animal(&attributes, &character);
+    animal_set_attributes(animal, &attributes);
     return id;
 }
 
@@ -846,16 +852,55 @@ static bool try_eat(Animals *animals, uint32_t slot, const AnimalContext *contex
 
 /* ---- Cold and heat -------------------------------------------------------- */
 
-float animal_cold_pressure(AnimalSpecies species, float celsius)
+float animal_cold_limit(const Animal *animal)
 {
-    const AnimalDef *def = animal_def(species);
-    return def != NULL ? clampf((def->cold_below - celsius) / ANIMAL_COLD_SPAN, 0.0f, 1.0f) : 0.0f;
+    return ANIMAL_DEFS[animal->species].cold_below - attribute_cold_shift(&animal->attributes);
 }
 
-float animal_heat_pressure(AnimalSpecies species, float celsius)
+float animal_heat_limit(const Animal *animal)
 {
-    const AnimalDef *def = animal_def(species);
-    return def != NULL ? clampf((celsius - def->heat_above) / ANIMAL_HEAT_SPAN, 0.0f, 1.0f) : 0.0f;
+    return ANIMAL_DEFS[animal->species].heat_above + attribute_heat_shift(&animal->attributes);
+}
+
+float animal_cold_pressure(const Animal *animal, float celsius)
+{
+    return clampf((animal_cold_limit(animal) - celsius) / ANIMAL_COLD_SPAN, 0.0f, 1.0f);
+}
+
+float animal_heat_pressure(const Animal *animal, float celsius)
+{
+    return clampf((celsius - animal_heat_limit(animal)) / ANIMAL_HEAT_SPAN, 0.0f, 1.0f);
+}
+
+float animal_walk_speed(const Animal *animal)
+{
+    return ANIMAL_DEFS[animal->species].walk_speed *
+           attribute_factor(&animal->attributes, ATTRIBUTE_WALKING);
+}
+
+float animal_run_speed(const Animal *animal)
+{
+    return ANIMAL_DEFS[animal->species].flee_speed *
+           attribute_factor(&animal->attributes, ATTRIBUTE_RUNNING);
+}
+
+float animal_sprint_seconds(const Animal *animal)
+{
+    return ANIMAL_DEFS[animal->species].sprint_seconds *
+           attribute_factor(&animal->attributes, ATTRIBUTE_ENDURANCE);
+}
+
+float animal_nerve(const Animal *animal)
+{
+    return ANIMAL_DEFS[animal->species].nerve * attribute_nerve(&animal->attributes) /
+           ATTRIBUTE_NERVE_ORDINARY;
+}
+
+void animal_set_attributes(Animal *animal, const Attributes *attributes)
+{
+    animal->attributes = *attributes;
+    health_set_factors(&animal->health, attribute_damage_factor(attributes),
+                       attribute_pain_factor(attributes));
 }
 
 static float tile_celsius(const AnimalContext *context, int x, int y, int z)
@@ -866,10 +911,10 @@ static float tile_celsius(const AnimalContext *context, int x, int y, int z)
 
 /* Whether a tile is a comfortable one for a species: not near freezing, nor
  * near overheating. */
-static bool is_comfortable(const AnimalDef *def, float celsius)
+static bool is_comfortable(const Animal *animal, float celsius)
 {
-    return celsius >= def->cold_below + ANIMAL_SHELTER_COLD_MARGIN &&
-           celsius <= def->heat_above - ANIMAL_SHELTER_HEAT_MARGIN;
+    return celsius >= animal_cold_limit(animal) + ANIMAL_SHELTER_COLD_MARGIN &&
+           celsius <= animal_heat_limit(animal) - ANIMAL_SHELTER_HEAT_MARGIN;
 }
 
 /* A search for a tile within a range of temperatures. */
@@ -896,10 +941,10 @@ static bool try_shelter(Animal *animal, const AnimalDef *def, const AnimalContex
         return false;
     }
     float here = tile_celsius(context, animal->x, animal->y, animal->z);
-    if (is_comfortable(def, here)) {
+    if (is_comfortable(animal, here)) {
         return false;
     }
-    bool cold = here < def->cold_below + ANIMAL_SHELTER_COLD_MARGIN;
+    bool cold = here < animal_cold_limit(animal) + ANIMAL_SHELTER_COLD_MARGIN;
     ShelterSeeker shelter = {
         {context, (AnimalSpecies)animal->species, false, def->flight_distance, false, {0}},
         context,
@@ -989,8 +1034,8 @@ static bool try_wander(Animal *animal, const AnimalDef *def, TilePos center,
         !path_walker_can_stand(PATH_WALKER_ANIMAL, map, x, y, z) ||
         near_threat(context, x, y, z, def->flight_distance) ||
         /* In a warm spot, it does not stroll off into the cold (nor the heat). */
-        (is_comfortable(def, tile_celsius(context, animal->x, animal->y, animal->z)) &&
-         !is_comfortable(def, tile_celsius(context, x, y, z))) ||
+        (is_comfortable(animal, tile_celsius(context, animal->x, animal->y, animal->z)) &&
+         !is_comfortable(animal, tile_celsius(context, x, y, z))) ||
         !find_path(context, tile_of(animal), goal, ANIMAL_WANDER_MAX_COST, &animal->path)) {
         path_clear(&animal->path);
         return false;
@@ -1189,7 +1234,7 @@ static void sleep_on(Animal *animal, const AnimalContext *context)
 }
 
 /* Moves one tick along the path. */
-static void walk(Animal *animal, const AnimalDef *def, const AnimalContext *context)
+static void walk(Animal *animal, const AnimalContext *context)
 {
     const Map *map = context->map;
     TilePos next = animal->path.steps[animal->path_index];
@@ -1211,9 +1256,10 @@ static void walk(Animal *animal, const AnimalDef *def, const AnimalContext *cont
         animal->facing_left = next.x < animal->x;
     }
     bool running = animal->task == ANIMAL_TASK_FLEE || animal->task == ANIMAL_TASK_ATTACK;
-    float speed = (running ? def->flee_speed * (1.0f - ANIMAL_FATIGUE_SLOWDOWN * animal->fatigue)
-                           : def->walk_speed) *
-                  health_ability(&animal->health, HEALTH_WALKING);
+    float speed =
+        (running ? animal_run_speed(animal) * (1.0f - ANIMAL_FATIGUE_SLOWDOWN * animal->fatigue)
+                 : animal_walk_speed(animal)) *
+        health_ability(&animal->health, HEALTH_WALKING);
     animal->move_progress += speed / (float)TICKS_PER_SECOND / cost;
     if (animal->move_progress >= 1.0f) {
         animal->x = next.x;
@@ -1371,7 +1417,7 @@ static void fight(Animals *animals, uint32_t slot, const AnimalContext *context)
         stand(animal, WATCH_TICKS);
         return;
     }
-    if (combat_breaks_off(&animal->health, def->nerve)) {
+    if (combat_breaks_off(&animal->health, animal_nerve(animal))) {
         animal->alarmed = true; /* Runs from it. */
         stand(animal, 0);
         return;
@@ -1461,7 +1507,7 @@ bool animals_provoke(Animals *animals, EntityId id, Combatant attacker)
         return fresh;
     }
     if (def->fights_back && def->attack != ATTACK_NONE &&
-        !combat_breaks_off(&animal->health, def->nerve)) {
+        !combat_breaks_off(&animal->health, animal_nerve(animal))) {
         if (animal->task != ANIMAL_TASK_ATTACK) {
             start_attack(animal, animal->enemy);
         }
@@ -1480,11 +1526,15 @@ static void update_needs(Animal *animal, const AnimalDef *def)
     const float hour = (float)TICKS_PER_HOUR;
     float *needs = animal->needs;
     needs[ANIMAL_NEED_FOOD] =
-        clampf(needs[ANIMAL_NEED_FOOD] - 1.0f / (def->hunger_hours * hour), 0.0f, 1.0f);
+        clampf(needs[ANIMAL_NEED_FOOD] - attribute_factor(&animal->attributes, ATTRIBUTE_APPETITE) /
+                                             (def->hunger_hours * hour),
+               0.0f, 1.0f);
     needs[ANIMAL_NEED_WATER] =
         clampf(needs[ANIMAL_NEED_WATER] - 1.0f / (def->thirst_hours * hour), 0.0f, 1.0f);
-    float rest = animal->task == ANIMAL_TASK_SLEEP ? 1.0f / (def->sleep_hours * hour)
-                                                   : -1.0f / (def->awake_hours * hour);
+    float rest =
+        animal->task == ANIMAL_TASK_SLEEP
+            ? attribute_factor(&animal->attributes, ATTRIBUTE_SLEEP) / (def->sleep_hours * hour)
+            : -1.0f / (def->awake_hours * hour);
     needs[ANIMAL_NEED_REST] = clampf(needs[ANIMAL_NEED_REST] + rest, 0.0f, 1.0f);
 }
 
@@ -1508,12 +1558,10 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
         starved |= health_strain(&animal->health, DEPRIVATION_THIRST,
                                  animal->needs[ANIMAL_NEED_WATER] <= 0.0f ? 1.0f : 0.0f, hours);
         float celsius = tile_celsius(context, animal->x, animal->y, animal->z);
-        starved |=
-            health_strain(&animal->health, DEPRIVATION_COLD,
-                          animal_cold_pressure((AnimalSpecies)animal->species, celsius), hours);
-        starved |=
-            health_strain(&animal->health, DEPRIVATION_HEAT,
-                          animal_heat_pressure((AnimalSpecies)animal->species, celsius), hours);
+        starved |= health_strain(&animal->health, DEPRIVATION_COLD,
+                                 animal_cold_pressure(animal, celsius), hours);
+        starved |= health_strain(&animal->health, DEPRIVATION_HEAT,
+                                 animal_heat_pressure(animal, celsius), hours);
         if (starved) {
             return;
         }
@@ -1549,8 +1597,9 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
     /* Running wears it out; resting restores it. */
     bool sprinting = (animal->task == ANIMAL_TASK_FLEE || animal->task == ANIMAL_TASK_ATTACK) &&
                      animal_is_moving(animal);
-    float tire = sprinting ? 1.0f / (def->sprint_seconds * (float)TICKS_PER_SECOND)
-                           : -1.0f / (ANIMAL_RECOVER_SECONDS * (float)TICKS_PER_SECOND);
+    float endurance = attribute_factor(&animal->attributes, ATTRIBUTE_ENDURANCE);
+    float tire = sprinting ? 1.0f / (animal_sprint_seconds(animal) * (float)TICKS_PER_SECOND)
+                           : -endurance / (ANIMAL_RECOVER_SECONDS * (float)TICKS_PER_SECOND);
     animal->fatigue = clampf(animal->fatigue + tire, 0.0f, 1.0f);
     /* On a tile center, and not running or fighting already: a look around now
      * and then. */
@@ -1564,7 +1613,7 @@ static void tick_one(Animals *animals, uint32_t slot, const AnimalContext *conte
         fight(animals, slot, context);
     }
     if (animal_is_moving(animal)) {
-        walk(animal, def, context);
+        walk(animal, context);
         return;
     }
     switch ((AnimalTask)animal->task) {
@@ -1728,6 +1777,7 @@ uint64_t animals_hash(const Animals *animals, uint64_t hash)
         hash = hash_fnv1a64(hash, &animal->move_progress, sizeof(animal->move_progress));
         hash = hash_fnv1a64(hash, animal->needs, sizeof(animal->needs));
         hash = health_hash(&animal->health, hash);
+        hash = attributes_hash(&animal->attributes, hash);
         if (animal->fatigue > 0.0f) { /* Likewise. */
             hash = hash_fnv1a64(hash, &animal->fatigue, sizeof(animal->fatigue));
         }

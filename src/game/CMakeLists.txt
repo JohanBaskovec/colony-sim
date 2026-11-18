@@ -2,6 +2,7 @@ add_executable(colony_sim
     app.c
     alerts_list.c
     animal_panel.c
+    attributes_panel.c
     animals_panel.c
     bottom_bar.c
     build_menu.c

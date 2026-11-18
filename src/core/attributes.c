@@ -89,6 +89,18 @@ static const AttributeDef ATTRIBUTE_DEFS[ATTRIBUTE_COUNT] = {
                             N_("attribute.courage.low.3"), N_("attribute.courage.low.4")},
                            {N_("attribute.courage.high.1"), N_("attribute.courage.high.2"),
                             N_("attribute.courage.high.3"), N_("attribute.courage.high.4")}},
+    [ATTRIBUTE_RUNNING] = {N_("attribute.running"),
+                           N_("attribute.running.description"),
+                           {N_("attribute.running.low.1"), N_("attribute.running.low.2"),
+                            N_("attribute.running.low.3"), N_("attribute.running.low.4")},
+                           {N_("attribute.running.high.1"), N_("attribute.running.high.2"),
+                            N_("attribute.running.high.3"), N_("attribute.running.high.4")}},
+    [ATTRIBUTE_ENDURANCE] = {N_("attribute.endurance"),
+                             N_("attribute.endurance.description"),
+                             {N_("attribute.endurance.low.1"), N_("attribute.endurance.low.2"),
+                              N_("attribute.endurance.low.3"), N_("attribute.endurance.low.4")},
+                             {N_("attribute.endurance.high.1"), N_("attribute.endurance.high.2"),
+                              N_("attribute.endurance.high.3"), N_("attribute.endurance.high.4")}},
 };
 
 static const int BAND_STARTS[ATTRIBUTE_BANDS] = ATTRIBUTE_BAND_STARTS;
@@ -97,7 +109,8 @@ static const int BAND_STARTS[ATTRIBUTE_BANDS] = ATTRIBUTE_BAND_STARTS;
 static bool is_factor(AttributeType type)
 {
     return type == ATTRIBUTE_WALKING || type == ATTRIBUTE_WORK_PACE || type == ATTRIBUTE_LEARNING ||
-           type == ATTRIBUTE_SLEEP || type == ATTRIBUTE_APPETITE;
+           type == ATTRIBUTE_SLEEP || type == ATTRIBUTE_APPETITE || type == ATTRIBUTE_RUNNING ||
+           type == ATTRIBUTE_ENDURANCE;
 }
 
 void attributes_init(Attributes *attributes)
@@ -121,6 +134,13 @@ void attributes_roll(Attributes *attributes, Rng *rng)
         attributes->position[type] =
             (int16_t)clampi(position, -ATTRIBUTE_POSITION_MAX, ATTRIBUTE_POSITION_MAX);
     }
+}
+
+void attributes_roll_animal(Attributes *attributes, Rng *rng)
+{
+    attributes_roll(attributes, rng);
+    attributes->position[ATTRIBUTE_LEARNING] = -ATTRIBUTE_POSITION_MAX;
+    attributes->position[ATTRIBUTE_TEMPERAMENT] = -ATTRIBUTE_POSITION_MAX;
 }
 
 bool attributes_set(Attributes *attributes, AttributeType type, int position)

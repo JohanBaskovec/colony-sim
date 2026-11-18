@@ -234,7 +234,7 @@ static Colonist *spawn_settler(Game *game, int x, int y)
 
 static Animal *spawn_animal(Game *game, AnimalSpecies species, int x, int y, EntityId *id)
 {
-    EntityId made = game_spawn_animal(game, species, ANIMAL_MALE, x, y, 0);
+    EntityId made = spawn_ordinary_animal(game, species, ANIMAL_MALE, x, y, 0);
     if (id != NULL) {
         *id = made;
     }

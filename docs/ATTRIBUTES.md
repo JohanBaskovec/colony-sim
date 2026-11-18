@@ -5,7 +5,7 @@ innate **attributes** of the body, the mind and the social self. There are no
 all-or-nothing traits: every attribute is a value on a continuous scale, and
 most settlers are ordinary in most of them.
 
-Status: step A is implemented (walking, work pace, learning, sleep, appetite, cold and heat tolerance, outlook, temperament), toughness and pain tolerance with health (`docs/HEALTH.md`) and courage with combat (`docs/COMBAT.md`); the rest is design. Values marked *(tuning)* are first guesses.
+Status: step A is implemented (walking, work pace, learning, sleep, appetite, cold and heat tolerance, outlook, temperament), toughness and pain tolerance with health (`docs/HEALTH.md`), courage with combat (`docs/COMBAT.md`), running speed and endurance (the animals', and the settlers' once they can run), and the same attributes for wild animals (§9); the rest is design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -83,6 +83,8 @@ Powers are taken with `exp2f()`, like the other continuous effects of the core
 | Heat tolerance | feels the heat / at ease in the heat | the warmest comfortable felt temperature (sleep, the hot state) and the one over which the body overheats (heatstroke, `docs/HEALTH.md` §10) | ±5 °C |
 | Toughness | fragile / tough | damage taken (with health) | ×2 to ×0.5 |
 | Pain tolerance | sensitive / hard to pain | pain felt from injuries, which slows and then knocks down (with health) | ×2 to ×0.5 |
+| Running speed | slow / fast | speed when running: an animal's flight and pursuit; a settler's, when settlers can be told to run (later) | ×0.5 to ×2 |
+| Endurance | short-winded / enduring | seconds it can run flat out before it is spent, and how fast it recovers (`Animal.fatigue`); a settler's, with the run order (later) | ×0.5 to ×2 |
 
 Age changes some of them later (elders walk and work slower, children eat
 less), on top of the innate value.
@@ -175,3 +177,28 @@ None at the moment.
 Settled so far: attributes are known at once; asexuality is a second axis of
 sexuality (drive); courage sets how hurt a settler must be to flee a fight;
 cold and heat tolerance shift the comfortable temperatures by up to 5 °C.
+
+## 9. Animals
+
+Wild animals have the same attributes, drawn the same way (`Animal.attributes`,
+rolled when the animal is born from a copy of the wildlife stream, so that
+drawing them shifts nothing else). A settler is, in the end, one species among
+others: the **species** gives the ordinary values (`AnimalDef`: speeds, hours,
+limits of temperature, nerve; for settlers, the `COLONIST_*` constants), and
+the attributes move them for the individual, with the same factors (×0.5 to ×2,
+±5 °C, and so on):
+
+| Attribute | What it changes in an animal |
+|-----------|------------------------------|
+| Walking | walking speed (`animal_walk_speed()`) |
+| Running speed | running speed: flight and pursuit (`animal_run_speed()`); replaces the old "flight speed" |
+| Endurance | seconds of sprint (`animal_sprint_seconds()`), and how fast it recovers |
+| Toughness, pain tolerance | damage taken and pain, as for settlers (`animal_set_attributes()`) |
+| Courage | the hurt fraction at which it breaks off a fight: the species' nerve times the ratio of the settlers' (`animal_nerve()`) |
+| Cold, heat tolerance | the temperatures it freezes and overheats at, ±5 °C |
+| Appetite, sleep | how fast hunger comes back, how fast rest is regained |
+
+Learning and temperament are fixed at **−100 %** for every animal (it learns
+nothing and thoughts do not weigh on it: `attributes_roll_animal()`); work
+pace and outlook are drawn like the rest but have no effect on an animal. A
+Character tab in the animal's window shows them all, as for settlers.

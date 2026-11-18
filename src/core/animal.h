@@ -33,6 +33,7 @@
 #ifndef COLONY_CORE_ANIMAL_H
 #define COLONY_CORE_ANIMAL_H
 
+#include "core/attributes.h"
 #include "core/combat.h"
 #include "core/game_clock.h"
 #include "core/health.h"
@@ -196,6 +197,11 @@ typedef struct Animal {
     int timer;
     float needs[ANIMAL_NEED_COUNT];
     Health health;
+    /* Its character (core/attributes.h, drawn when it is born): each animal
+     * is a little quicker, hardier or bolder than its species, the species'
+     * values in AnimalDef being the ordinary ones. Set with
+     * animal_set_attributes(). */
+    Attributes attributes;
     /* Who it fights, or runs from after being struck (core/combat.h): NONE
      * when nobody. While it is set, `enemy_pos` is where it was last seen
      * (valid while `enemy` is). `attack_cooldown`: ticks before its next blow. */
@@ -316,9 +322,31 @@ typedef struct AnimalContext {
 #define ANIMAL_SHELTER_GAIN 4.0f
 #define ANIMAL_SHELTER_MAX_COST 50.0f
 
-/* The pressure (0..1) the temperature of a tile puts on an animal of a species. */
-float animal_cold_pressure(AnimalSpecies species, float celsius);
-float animal_heat_pressure(AnimalSpecies species, float celsius);
+/* The pressure (0..1) the temperature of a tile puts on an animal, by its
+ * limits (animal_cold_limit(), animal_heat_limit()). */
+float animal_cold_pressure(const Animal *animal, float celsius);
+float animal_heat_pressure(const Animal *animal, float celsius);
+
+/*
+ * What an animal's attributes make of its species' values (docs/ATTRIBUTES.md
+ * section 6): speeds in tiles per second (walking, running: the flight and
+ * the pursuit), seconds it can sprint (endurance), the hurt fraction at which
+ * it breaks off a fight (courage, the species' nerve times the settlers' ratio
+ * of attribute_nerve() to an ordinary settler's), the temperatures it freezes
+ * and overheats at (cold and heat tolerance move them by up to ±5 degrees).
+ * Appetite and sleep scale how fast its hunger comes back and its rest is
+ * regained.
+ */
+float animal_walk_speed(const Animal *animal);
+float animal_run_speed(const Animal *animal);
+float animal_sprint_seconds(const Animal *animal);
+float animal_nerve(const Animal *animal);
+float animal_cold_limit(const Animal *animal);
+float animal_heat_limit(const Animal *animal);
+
+/* Sets the attributes, and the damage and pain factors of its body that follow
+ * from them (toughness, pain tolerance). */
+void animal_set_attributes(Animal *animal, const Attributes *attributes);
 
 /* Hunting: a carnivore goes for a carcass or a prey when its food falls
  * below ANIMAL_HUNGRY; one hungrier than ANIMAL_DESPERATE also goes for settlers

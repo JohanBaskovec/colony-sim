@@ -60,7 +60,7 @@ Hares have no attack.
 - A being hurt enough breaks off: its **hurt fraction** (the larger of its
   pain and of the share of its blood it can still lose before it dies) reaches
   its *nerve*. An animal's nerve is its species' (boar 0.7, deer 0.2, hare
-  never fights); a settler's comes from the **Courage** attribute: 0.4 for an
+  never fights) times its courage's ratio to an ordinary settler's; a settler's comes from the **Courage** attribute: 0.4 for an
   ordinary settler, 0.08 for the most fearful, 1.1 (never) for the very
   bravest (position +0.86 and more).
 - **Animals.** A struck animal fights back if its species does (the boar) and

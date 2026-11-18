@@ -900,7 +900,9 @@ while nobody is hurt (`health_hash()` adds nothing then).
   is `TASK_DOWN`: `colonist_tick()` only runs its needs; it gets up by itself.
   An unconscious settler is no viewer (`update_vision()`) and frightens no
   animal.
-- Animals: `AnimalDef.body`, `.size` and `.carcass`; `ANIMAL_TASK_DOWN`.
+- Animals: `AnimalDef.body`, `.size` and `.carcass`; `ANIMAL_TASK_DOWN`; a
+  character of their own (`Animal.attributes`, `attributes_roll_animal()`, the
+  effective values in `animal_walk_speed()`, `animal_run_speed()`...).
 - Animals and the weather: `AnimalDef.cold_below` / `heat_above`;
   `animal_cold_pressure()` / `animal_heat_pressure()` from the tile's
   temperature (`AnimalContext.temperatures`); `try_shelter()` in `decide()`

@@ -508,7 +508,7 @@ static void test_hurt_animal(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    EntityId id = game_spawn_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 20, 20, 0);
+    EntityId id = spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 20, 20, 0);
     Animal *hare = animals_get(&game.animals, id);
     REQUIRE(hare != NULL);
     CHECK_EQ_INT(hare->health.plan, BODY_HARE);
@@ -653,9 +653,9 @@ static void test_animal_death(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    EntityId leader_id = game_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 20, 20, 0);
-    EntityId first_id = game_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 22, 20, 0);
-    EntityId second_id = game_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 22, 22, 0);
+    EntityId leader_id = spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 20, 20, 0);
+    EntityId first_id = spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 22, 20, 0);
+    EntityId second_id = spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 22, 22, 0);
     REQUIRE(animals_set_leader(&game.animals, first_id, leader_id));
     REQUIRE(animals_set_leader(&game.animals, second_id, leader_id));
     Animal *leader = animals_get(&game.animals, leader_id);
@@ -687,7 +687,8 @@ static void test_felled_tree_hurts(void)
     Colonist *cutter = spawn_settler(&game, 20, 11);
     Colonist *under = spawn_settler(&game, 20, 13);
     Colonist *aside = spawn_settler(&game, 22, 13);
-    EntityId hare_id = game_spawn_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 20, 10 + aim.length, 0);
+    EntityId hare_id =
+        spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 20, 10 + aim.length, 0);
     REQUIRE(cutter != NULL && under != NULL && aside != NULL);
     tree_fell(&game.map, &game.items, 20, 10, 0, (ItemStack){0});
     game_tick(&game);
@@ -714,7 +715,7 @@ static void test_debug_blow(void)
     Colonist *hit = spawn_settler(&game, 20, 20);
     Colonist *missed = spawn_settler(&game, 21, 20);
     REQUIRE(hit != NULL && missed != NULL);
-    REQUIRE(!entity_id_is_none(game_spawn_animal(&game, ANIMAL_BOAR, ANIMAL_MALE, 20, 20, 0)));
+    REQUIRE(!entity_id_is_none(spawn_ordinary_animal(&game, ANIMAL_BOAR, ANIMAL_MALE, 20, 20, 0)));
     CHECK_EQ_INT(game_debug_hurt(&game, 20, 20, 0), 2);
     CHECK(health_is_hurt(&hit->health));
     CHECK(!health_is_hurt(&missed->health));
@@ -943,7 +944,7 @@ static void test_animals_starve(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    EntityId id = game_spawn_animal(&game, ANIMAL_FOX, ANIMAL_MALE, 20, 20, 0);
+    EntityId id = spawn_ordinary_animal(&game, ANIMAL_FOX, ANIMAL_MALE, 20, 20, 0);
     Animal *fox = animals_get(&game.animals, id);
     REQUIRE(fox != NULL);
     int tick = 0;
@@ -965,18 +966,27 @@ static void test_animal_weather_tolerance(void)
 {
     for (int species = 0; species < ANIMAL_SPECIES_COUNT; species++) {
         const AnimalDef *def = animal_def((AnimalSpecies)species);
+        Animal animal;
+        memset(&animal, 0, sizeof(animal));
+        animal.species = (uint8_t)species;
+        attributes_init(&animal.attributes);
         CHECK(def->cold_below < 0.0f && def->heat_above > 30.0f &&
               def->cold_below < def->heat_above);
-        CHECK_NEAR(animal_cold_pressure((AnimalSpecies)species, 0.0f), 0.0, 1e-6);
-        CHECK_NEAR(animal_heat_pressure((AnimalSpecies)species, 20.0f), 0.0, 1e-6);
-        CHECK_NEAR(animal_cold_pressure((AnimalSpecies)species, def->cold_below - 7.5f), 0.5, 1e-5);
-        CHECK_NEAR(animal_cold_pressure((AnimalSpecies)species, -200.0f), 1.0, 1e-6);
-        CHECK_NEAR(animal_heat_pressure((AnimalSpecies)species, def->heat_above + 5.0f), 0.5, 1e-5);
+        CHECK_NEAR(animal_cold_limit(&animal), def->cold_below, 1e-6);
+        CHECK_NEAR(animal_cold_pressure(&animal, 0.0f), 0.0, 1e-6);
+        CHECK_NEAR(animal_heat_pressure(&animal, 20.0f), 0.0, 1e-6);
+        CHECK_NEAR(animal_cold_pressure(&animal, def->cold_below - 7.5f), 0.5, 1e-5);
+        CHECK_NEAR(animal_cold_pressure(&animal, -200.0f), 1.0, 1e-6);
+        CHECK_NEAR(animal_heat_pressure(&animal, def->heat_above + 5.0f), 0.5, 1e-5);
+        /* Hardy to the cold: five degrees later. */
+        REQUIRE(
+            attributes_set(&animal.attributes, ATTRIBUTE_COLD_TOLERANCE, ATTRIBUTE_POSITION_MAX));
+        CHECK_NEAR(animal_cold_limit(&animal), def->cold_below - 5.0, 1e-5);
+        CHECK_NEAR(animal_cold_pressure(&animal, def->cold_below - 7.5f), 1.0 / 6.0, 1e-4);
     }
     /* Wolves and foxes feel the cold later than a hare. */
     CHECK(animal_def(ANIMAL_WOLF)->cold_below < animal_def(ANIMAL_HARE)->cold_below);
     CHECK(animal_def(ANIMAL_FOX)->cold_below < animal_def(ANIMAL_ROE_DEER)->cold_below);
-    CHECK_NEAR(animal_cold_pressure(ANIMAL_SPECIES_COUNT, -50.0f), 0.0, 1e-9);
 }
 
 /* A game set in the cold of a winter night, in a cold snap, with the soil
@@ -998,8 +1008,8 @@ static void test_cold_hurts_animals_by_species(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     make_it_freezing(&game);
-    EntityId deer_id = game_spawn_animal(&game, ANIMAL_ROE_DEER, ANIMAL_MALE, 10, 10, 0);
-    EntityId wolf_id = game_spawn_animal(&game, ANIMAL_WOLF, ANIMAL_MALE, 30, 30, 0);
+    EntityId deer_id = spawn_ordinary_animal(&game, ANIMAL_ROE_DEER, ANIMAL_MALE, 10, 10, 0);
+    EntityId wolf_id = spawn_ordinary_animal(&game, ANIMAL_WOLF, ANIMAL_MALE, 30, 30, 0);
     Animal *deer = animals_get(&game.animals, deer_id);
     Animal *wolf = animals_get(&game.animals, wolf_id);
     REQUIRE(deer != NULL && wolf != NULL);
@@ -1025,7 +1035,7 @@ static void test_cold_animals_seek_a_warm_spot(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     make_it_freezing(&game);
-    EntityId deer_id = game_spawn_animal(&game, ANIMAL_ROE_DEER, ANIMAL_MALE, 20, 22, 0);
+    EntityId deer_id = spawn_ordinary_animal(&game, ANIMAL_ROE_DEER, ANIMAL_MALE, 20, 22, 0);
     Animal *deer = animals_get(&game.animals, deer_id);
     REQUIRE(deer != NULL);
     deer->timer = 1;
@@ -1058,7 +1068,7 @@ static void test_cold_animals_without_shelter_stay_put(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     make_it_freezing(&game);
-    EntityId deer_id = game_spawn_animal(&game, ANIMAL_ROE_DEER, ANIMAL_MALE, 20, 22, 0);
+    EntityId deer_id = spawn_ordinary_animal(&game, ANIMAL_ROE_DEER, ANIMAL_MALE, 20, 22, 0);
     Animal *deer = animals_get(&game.animals, deer_id);
     REQUIRE(deer != NULL);
     deer->timer = 1;

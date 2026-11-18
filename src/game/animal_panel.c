@@ -1,6 +1,7 @@
 #include "game/animal_panel.h"
 
 #include "core/i18n.h"
+#include "game/attributes_panel.h"
 #include "game/health_panel.h"
 #include "game/inspector.h"
 #include "game/ui_layout.h"
@@ -60,6 +61,16 @@ static void animal_rows(UiLayout *layout, void *userdata)
     health_panel_rows(layout, &animal->health);
 }
 
+/* The Character tab (game/attributes_panel.h). */
+static void character_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    const Animal *animal = game_animal_const(&app->game, app->selected_animal);
+    if (animal != NULL) {
+        attributes_panel_rows(layout, &animal->attributes);
+    }
+}
+
 void animal_panel_draw(App *app)
 {
     const Animal *animal = game_animal_const(&app->game, app->selected_animal);
@@ -68,7 +79,10 @@ void animal_panel_draw(App *app)
     }
     const char *title = tr(animal_name_key((AnimalSpecies)animal->species, (AnimalSex)animal->sex));
     bool open = inspector_box(app, INSPECT_ANIMAL, title, animal_rows, app);
-    inspector_tabs(app, NULL, 0);
+    const char *labels[1] = {tr("inspector.tab.character")};
+    if (inspector_tabs(app, labels, 1) == 0) {
+        inspector_tab_panel(app, character_rows, app);
+    }
     if (!open) {
         app->selected_animal = ENTITY_NONE;
     }

@@ -129,6 +129,8 @@ become tabs:
 | Tile                | What lies there: structure, roof, site, items, plant, each with Forbid/Allow | —                          | Build another; items: Carry elsewhere |
 | Wild animal         | What it is called (a hind, a stag) as the title; species, sex, activity, needs as bars (tooltips), herd, health (as the Health tab) | — | (later: hunt)                 |
 
+The animal's window has a Character tab like the settlers'.
+
 Activities: *Fighting* and *Fleeing* for settlers struck by an animal (a notice
 tells the player a settler is under attack), *Attacking* for animals.
 

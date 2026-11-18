@@ -59,6 +59,9 @@ typedef enum AttributeType {
     ATTRIBUTE_PAIN_TOLERANCE, /* Pain felt from injuries. */
     /* Mind again, added later too. */
     ATTRIBUTE_COURAGE, /* How hurt the settler must be to break off a fight. */
+    /* Body again, for the settlers' running (later) and the animals' flight. */
+    ATTRIBUTE_RUNNING,   /* Running speed (the animals' flight and chase). */
+    ATTRIBUTE_ENDURANCE, /* How long it can run flat out, and how fast it recovers. */
     ATTRIBUTE_COUNT
 } AttributeType;
 
@@ -80,6 +83,12 @@ void attributes_init(Attributes *attributes);
  * uniform draws, scaled to ATTRIBUTE_ROLL_DEVIATION and clamped. Only
  * integer arithmetic, so the result is the same everywhere. */
 void attributes_roll(Attributes *attributes, Rng *rng);
+
+/* The attributes of an animal: drawn like a settler's, but it neither learns
+ * nor feels the weight of its thoughts: its learning and its temperament sit
+ * at the very bottom of their range (-100 %). Its other attributes change
+ * its species' values (docs/ATTRIBUTES.md section 6). */
+void attributes_roll_animal(Attributes *attributes, Rng *rng);
 
 /* Fails on an invalid type or a position out of range. */
 bool attributes_set(Attributes *attributes, AttributeType type, int position);

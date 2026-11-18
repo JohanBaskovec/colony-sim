@@ -1,7 +1,9 @@
 #include "core/animal.h"
+#include "core/attributes.h"
 #include "core/game.h"
 
 #include "test_framework.h"
+#include "test_settlers.h"
 
 #include <math.h>
 #include <string.h>
@@ -42,7 +44,8 @@ static bool init_flat_game(Game *game)
 /* An animal with every need satisfied, about to decide what to do. */
 static Animal *spawn(Game *game, AnimalSpecies species, AnimalSex sex, int x, int y)
 {
-    Animal *animal = animals_get(&game->animals, game_spawn_animal(game, species, sex, x, y, 0));
+    Animal *animal =
+        animals_get(&game->animals, spawn_ordinary_animal(game, species, sex, x, y, 0));
     if (animal != NULL) {
         for (int need = 0; need < ANIMAL_NEED_COUNT; need++) {
             animal->needs[need] = 1.0f;
@@ -166,14 +169,15 @@ static void test_spawn_and_remove(void)
     CHECK_EQ_INT(animals->pool.count, 0);
     map_set_rock(&game.map, 5, 5, 0, ROCK_GRANITE);
     map_set_structure(&game.map, 6, 5, 0, STRUCTURE_DOOR);
-    CHECK(entity_id_is_none(game_spawn_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 5, 5, 0)));
-    CHECK(entity_id_is_none(game_spawn_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 6, 5, 0)));
-    CHECK(entity_id_is_none(game_spawn_animal(&game, ANIMAL_HARE, ANIMAL_MALE, -1, 5, 0)));
-    CHECK(entity_id_is_none(game_spawn_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 7, 5, 1)));
-    CHECK(entity_id_is_none(game_spawn_animal(&game, ANIMAL_SPECIES_COUNT, ANIMAL_MALE, 7, 5, 0)));
-    CHECK(entity_id_is_none(game_spawn_animal(&game, ANIMAL_HARE, ANIMAL_SEX_COUNT, 7, 5, 0)));
+    CHECK(entity_id_is_none(spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 5, 5, 0)));
+    CHECK(entity_id_is_none(spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 6, 5, 0)));
+    CHECK(entity_id_is_none(spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_MALE, -1, 5, 0)));
+    CHECK(entity_id_is_none(spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 7, 5, 1)));
+    CHECK(entity_id_is_none(
+        spawn_ordinary_animal(&game, ANIMAL_SPECIES_COUNT, ANIMAL_MALE, 7, 5, 0)));
+    CHECK(entity_id_is_none(spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_SEX_COUNT, 7, 5, 0)));
 
-    EntityId id = game_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 7, 5, 0);
+    EntityId id = spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 7, 5, 0);
     REQUIRE(!entity_id_is_none(id));
     const Animal *animal = game_animal_const(&game, id);
     REQUIRE(animal != NULL);
@@ -204,7 +208,7 @@ static void test_spawn_and_remove(void)
     int made = 0;
     for (int i = 0; i < ANIMAL_MAX + 5; i++) {
         made += entity_id_is_none(
-                    game_spawn_animal(&game, ANIMAL_HARE, ANIMAL_FEMALE, 10 + i % 40, 10, 0))
+                    spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_FEMALE, 10 + i % 40, 10, 0))
                     ? 0
                     : 1;
     }
@@ -217,11 +221,11 @@ static void test_herds(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     Animals *animals = &game.animals;
-    EntityId a = game_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 10, 10, 0);
-    EntityId b = game_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 11, 10, 0);
-    EntityId c = game_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 12, 10, 0);
-    EntityId d = game_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 13, 10, 0);
-    EntityId boar = game_spawn_animal(&game, ANIMAL_BOAR, ANIMAL_MALE, 14, 10, 0);
+    EntityId a = spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 10, 10, 0);
+    EntityId b = spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 11, 10, 0);
+    EntityId c = spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 12, 10, 0);
+    EntityId d = spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 13, 10, 0);
+    EntityId boar = spawn_ordinary_animal(&game, ANIMAL_BOAR, ANIMAL_MALE, 14, 10, 0);
     CHECK(animals_set_leader(animals, b, a));
     CHECK(animals_set_leader(animals, c, b)); /* Follows b's leader. */
     CHECK(entity_id_equal(animals_leader(animals, c), a));
@@ -938,24 +942,25 @@ static void test_debug_spawn_joins_a_herd(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     const Animals *animals = &game.animals;
-    EntityId hind = game_debug_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 20, 20, 0);
+    EntityId hind = debug_spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 20, 20, 0);
     REQUIRE(!entity_id_is_none(hind));
     CHECK_EQ_INT(animals_herd_size(animals, hind), 1);
     /* Close by, of its species and sex: its herd. */
-    EntityId second = game_debug_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 23, 21, 0);
+    EntityId second = debug_spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 23, 21, 0);
     CHECK(entity_id_equal(animals_leader(animals, second), hind));
-    EntityId third = game_debug_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 26, 22, 0);
+    EntityId third = debug_spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 26, 22, 0);
     CHECK(entity_id_equal(animals_leader(animals, third), hind)); /* Through the second. */
     CHECK_EQ_INT(animals_herd_size(animals, hind), 3);
     /* A stag, a boar, a hind far away: on their own. */
-    EntityId stag = game_debug_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_MALE, 21, 20, 0);
-    EntityId boar = game_debug_spawn_animal(&game, ANIMAL_BOAR, ANIMAL_FEMALE, 20, 21, 0);
-    EntityId far = game_debug_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 50, 50, 0);
+    EntityId stag = debug_spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_MALE, 21, 20, 0);
+    EntityId boar = debug_spawn_ordinary_animal(&game, ANIMAL_BOAR, ANIMAL_FEMALE, 20, 21, 0);
+    EntityId far = debug_spawn_ordinary_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 50, 50, 0);
     CHECK_EQ_INT(animals_herd_size(animals, stag), 1);
     CHECK_EQ_INT(animals_herd_size(animals, boar), 1);
     CHECK_EQ_INT(animals_herd_size(animals, far), 1);
     CHECK_EQ_INT(animals_herd_size(animals, hind), 3);
-    CHECK(entity_id_is_none(game_debug_spawn_animal(&game, ANIMAL_BOAR, ANIMAL_MALE, -3, 0, 0)));
+    CHECK(
+        entity_id_is_none(debug_spawn_ordinary_animal(&game, ANIMAL_BOAR, ANIMAL_MALE, -3, 0, 0)));
     game_shutdown(&game);
 }
 
@@ -987,6 +992,178 @@ static void test_heading(void)
     game_shutdown(&game);
 }
 
+/* ---- Characters ----------------------------------------------------------- */
+
+/* Animals have attributes like settlers: they neither learn nor feel the
+ * weight of their thoughts (learning and temperament at the very bottom), and
+ * differ from one another in the rest. */
+static void test_animals_have_characters(void)
+{
+    Rng rng;
+    rng_seed(&rng, 7, 3);
+    Attributes first, second;
+    attributes_roll_animal(&first, &rng);
+    attributes_roll_animal(&second, &rng);
+    for (int i = 0; i < 2; i++) {
+        const Attributes *attributes = i == 0 ? &first : &second;
+        CHECK_EQ_INT(attributes->position[ATTRIBUTE_LEARNING], -ATTRIBUTE_POSITION_MAX);
+        CHECK_EQ_INT(attributes->position[ATTRIBUTE_TEMPERAMENT], -ATTRIBUTE_POSITION_MAX);
+        CHECK_NEAR(attribute_factor(attributes, ATTRIBUTE_LEARNING), 0.5, 1e-5); /* -100 % */
+    }
+    CHECK(memcmp(&first, &second, sizeof(first)) != 0);
+    /* The same draws give the same character. */
+    Rng again;
+    rng_seed(&again, 7, 3);
+    Attributes repeat;
+    attributes_roll_animal(&repeat, &again);
+    CHECK(memcmp(&first, &repeat, sizeof(first)) == 0);
+
+    /* In a game: each animal is born with one, and no two are alike. */
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Animal *deer[6];
+    for (int i = 0; i < 6; i++) {
+        EntityId id = game_spawn_animal(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 10 + 2 * i, 10, 0);
+        deer[i] = animals_get(&game.animals, id);
+        REQUIRE(deer[i] != NULL);
+        CHECK_EQ_INT(deer[i]->attributes.position[ATTRIBUTE_LEARNING], -ATTRIBUTE_POSITION_MAX);
+        CHECK_NEAR(deer[i]->health.damage_factor, attribute_damage_factor(&deer[i]->attributes),
+                   1e-6);
+        CHECK_NEAR(deer[i]->health.pain_factor, attribute_pain_factor(&deer[i]->attributes), 1e-6);
+    }
+    int different = 0;
+    for (int i = 1; i < 6; i++) {
+        different += memcmp(&deer[0]->attributes, &deer[i]->attributes, sizeof(Attributes)) != 0;
+    }
+    CHECK_EQ_INT(different, 5);
+    CHECK(deer[0]->attributes.position[ATTRIBUTE_WALKING] !=
+              deer[1]->attributes.position[ATTRIBUTE_WALKING] ||
+          deer[0]->attributes.position[ATTRIBUTE_RUNNING] !=
+              deer[1]->attributes.position[ATTRIBUTE_RUNNING]);
+    game_shutdown(&game);
+}
+
+/* The species' values are the ordinary ones: the attributes move them. */
+static void test_attributes_change_the_species_values(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Animal *wolf = spawn(&game, ANIMAL_WOLF, ANIMAL_MALE, 10, 10);
+    REQUIRE(wolf != NULL);
+    const AnimalDef *def = animal_def(ANIMAL_WOLF);
+    CHECK_NEAR(animal_walk_speed(wolf), def->walk_speed, 1e-6);
+    CHECK_NEAR(animal_run_speed(wolf), def->flee_speed, 1e-6);
+    CHECK_NEAR(animal_sprint_seconds(wolf), def->sprint_seconds, 1e-6);
+    CHECK_NEAR(animal_nerve(wolf), def->nerve, 1e-6);
+    CHECK_NEAR(animal_cold_limit(wolf), def->cold_below, 1e-6);
+    CHECK_NEAR(animal_heat_limit(wolf), def->heat_above, 1e-6);
+
+    Attributes extremes;
+    attributes_init(&extremes);
+    REQUIRE(attributes_set(&extremes, ATTRIBUTE_WALKING, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&extremes, ATTRIBUTE_RUNNING, -ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&extremes, ATTRIBUTE_ENDURANCE, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&extremes, ATTRIBUTE_COURAGE, -ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&extremes, ATTRIBUTE_COLD_TOLERANCE, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&extremes, ATTRIBUTE_HEAT_TOLERANCE, -ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&extremes, ATTRIBUTE_TOUGHNESS, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&extremes, ATTRIBUTE_PAIN_TOLERANCE, -ATTRIBUTE_POSITION_MAX));
+    animal_set_attributes(wolf, &extremes);
+    CHECK_NEAR(animal_walk_speed(wolf), 2.0 * def->walk_speed, 1e-5);
+    CHECK_NEAR(animal_run_speed(wolf), 0.5 * def->flee_speed, 1e-5);
+    CHECK_NEAR(animal_sprint_seconds(wolf), 2.0 * def->sprint_seconds, 1e-4);
+    CHECK_NEAR(animal_nerve(wolf), def->nerve * 0.08 / 0.4, 1e-5); /* The most fearful. */
+    CHECK_NEAR(animal_cold_limit(wolf), def->cold_below - 5.0, 1e-5);
+    CHECK_NEAR(animal_heat_limit(wolf), def->heat_above - 5.0, 1e-5);
+    CHECK_NEAR(wolf->health.damage_factor, 0.5, 1e-5);
+    CHECK_NEAR(wolf->health.pain_factor, 2.0, 1e-5);
+    /* The very bravest never break off. */
+    REQUIRE(attributes_set(&extremes, ATTRIBUTE_COURAGE, ATTRIBUTE_POSITION_MAX));
+    animal_set_attributes(wolf, &extremes);
+    CHECK(animal_nerve(wolf) > 1.0f);
+    game_shutdown(&game);
+}
+
+/* A big eater gets hungry sooner, a sound sleeper rests faster. */
+static void test_appetite_and_sleep_of_animals(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Animal *glutton = spawn(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 10, 10);
+    Animal *picker = spawn(&game, ANIMAL_RED_DEER, ANIMAL_FEMALE, 40, 40);
+    REQUIRE(glutton != NULL && picker != NULL);
+    Attributes big, small;
+    attributes_init(&big);
+    attributes_init(&small);
+    REQUIRE(attributes_set(&big, ATTRIBUTE_APPETITE, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&small, ATTRIBUTE_APPETITE, -ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&big, ATTRIBUTE_SLEEP, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&small, ATTRIBUTE_SLEEP, -ATTRIBUTE_POSITION_MAX));
+    animal_set_attributes(glutton, &big);
+    animal_set_attributes(picker, &small);
+    for (int tick = 0; tick < TICKS_PER_HOUR; tick++) {
+        glutton->needs[ANIMAL_NEED_WATER] = picker->needs[ANIMAL_NEED_WATER] = 1.0f;
+        glutton->needs[ANIMAL_NEED_REST] = picker->needs[ANIMAL_NEED_REST] = 1.0f;
+        glutton->timer = picker->timer = 100000;
+        game_tick(&game);
+    }
+    float lost_big = 1.0f - glutton->needs[ANIMAL_NEED_FOOD];
+    float lost_small = 1.0f - picker->needs[ANIMAL_NEED_FOOD];
+    CHECK(lost_big > 3.5f * lost_small); /* x2 against x0.5. */
+    game_shutdown(&game);
+}
+
+/* A quick runner reaches its prey first; one with more endurance tires later. */
+static void test_quick_animals_catch_up_sooner(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    EntityId quick_id, slow_id, hare_a, hare_b;
+    Animal *quick =
+        animals_get(&game.animals,
+                    (quick_id = spawn_ordinary_animal(&game, ANIMAL_BOAR, ANIMAL_MALE, 10, 10, 0)));
+    Animal *slow =
+        animals_get(&game.animals,
+                    (slow_id = spawn_ordinary_animal(&game, ANIMAL_BOAR, ANIMAL_MALE, 10, 30, 0)));
+    Animal *prey_a =
+        animals_get(&game.animals,
+                    (hare_a = spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 30, 10, 0)));
+    Animal *prey_b =
+        animals_get(&game.animals,
+                    (hare_b = spawn_ordinary_animal(&game, ANIMAL_HARE, ANIMAL_MALE, 30, 30, 0)));
+    REQUIRE(quick && slow && prey_a && prey_b);
+    for (int part = 0; part < body_part_count(BODY_HARE); part++) {
+        if (body_part_def(BODY_HARE, part)->role == BODY_ROLE_WALK) {
+            health_hurt(&prey_a->health, part, INJURY_FRACTURE, 0.5f);
+            health_hurt(&prey_b->health, part, INJURY_FRACTURE, 0.5f);
+        }
+    }
+    Attributes fast, sluggish;
+    attributes_init(&fast);
+    attributes_init(&sluggish);
+    REQUIRE(attributes_set(&fast, ATTRIBUTE_RUNNING, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&sluggish, ATTRIBUTE_RUNNING, -ATTRIBUTE_POSITION_MAX));
+    animal_set_attributes(quick, &fast);
+    animal_set_attributes(slow, &sluggish);
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, quick_id},
+                              (Combatant){COMBATANT_ANIMAL, hare_a}));
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, slow_id},
+                              (Combatant){COMBATANT_ANIMAL, hare_b}));
+    int quick_at = -1, slow_at = -1;
+    for (int tick = 0; tick < 12 * TICKS_PER_SECOND && (quick_at < 0 || slow_at < 0); tick++) {
+        game_tick(&game);
+        if (quick_at < 0 && abs(quick->x - 30) <= 1) {
+            quick_at = tick;
+        }
+        if (slow_at < 0 && abs(slow->x - 30) <= 1) {
+            slow_at = tick;
+        }
+    }
+    REQUIRE(quick_at > 0 && slow_at > 0);
+    CHECK(slow_at > 3 * quick_at / 2); /* x2 against x0.5: about four times the time. */
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_species_definitions);
@@ -1010,5 +1187,9 @@ int main(void)
     RUN_TEST(test_seen_and_picked);
     RUN_TEST(test_debug_spawn_joins_a_herd);
     RUN_TEST(test_heading);
+    RUN_TEST(test_animals_have_characters);
+    RUN_TEST(test_attributes_change_the_species_values);
+    RUN_TEST(test_appetite_and_sleep_of_animals);
+    RUN_TEST(test_quick_animals_catch_up_sooner);
     return test_summary();
 }

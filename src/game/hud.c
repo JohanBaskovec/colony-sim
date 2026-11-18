@@ -3,6 +3,7 @@
 #include "core/i18n.h"
 #include "core/tree.h"
 #include "game/animals_panel.h"
+#include "game/attributes_panel.h"
 #include "game/debug_panel.h"
 #include "game/inspector.h"
 #include "game/items_panel.h"
@@ -1072,50 +1073,13 @@ static void knowledge_rows(UiLayout *layout, void *userdata)
     }
 }
 
-/* What an attribute does, in words. */
-static void attribute_tooltip(App *app, AttributeType type)
-{
-    const char *lines[1] = {tr(attribute_description_key(type))};
-    ui_tooltip(&app->ui, lines, 1);
-}
-
-/* Every attribute as a table by group, body then mind: the name, the word for
- * its position and its exact position in percent, all colored by that position (red at the
- * lowest, white at the ordinary, green at the highest). */
+/* The Character tab (game/attributes_panel.h). */
 static void character_rows(UiLayout *layout, void *userdata)
 {
-    static const char *const GROUP_KEYS[ATTRIBUTE_GROUP_COUNT] = {
-        [ATTRIBUTE_GROUP_BODY] = N_("attribute.group.body"),
-        [ATTRIBUTE_GROUP_MIND] = N_("attribute.group.mind"),
-    };
     App *app = userdata;
     const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
-    if (colonist == NULL) {
-        return;
-    }
-    for (int group = 0; group < ATTRIBUTE_GROUP_COUNT; group++) {
-        ui_layout_label(layout, tr(GROUP_KEYS[group]), 0.0f, true);
-        for (int type = 0; type < ATTRIBUTE_COUNT; type++) {
-            if (attribute_group((AttributeType)type) != (AttributeGroup)group) {
-                continue;
-            }
-            int position = colonist->attributes.position[type];
-            const char *word = attribute_word_key((AttributeType)type, position);
-            /* Red at the lowest position, white at the ordinary, green at the highest. */
-            SDL_Color color =
-                theme_scale_color(&layout->ui->theme,
-                                  0.5f + (float)position / (2.0f * (float)ATTRIBUTE_POSITION_MAX));
-            /* The exact position, as a percentage of the way to either end. */
-            char number[16], percent[32];
-            format_signed(number, sizeof(number), SDL_lround((double)position / 10.0));
-            TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
-            SDL_FRect row = ui_layout_triple(layout, tr(attribute_name_key((AttributeType)type)),
-                                             tr(word != NULL ? word : "attribute.ordinary"),
-                                             percent, "-100 %", color, true);
-            if (layout->draw && ui_hovered(layout->ui, row)) {
-                attribute_tooltip(app, (AttributeType)type);
-            }
-        }
+    if (colonist != NULL) {
+        attributes_panel_rows(layout, &colonist->attributes);
     }
 }
 
