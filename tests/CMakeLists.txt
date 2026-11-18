@@ -40,6 +40,7 @@ set(COLONY_UNIT_TESTS
     test_region
     test_roof
     test_strike_anim
+    test_test_scenario
     test_vision
     test_fog
     test_scenario

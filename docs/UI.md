@@ -324,13 +324,19 @@ attribute, 5 knowledge levels per click; knowledge at level 0 is listed too) and
 Temperature row (- and +: 5 degrees off or on the air's, all along). On the command
 line: `--debug character_editor` and `--debug god_mode`.
 
-The debug windows (F4 cheats, F5 items, F6 animals) and the debug readout (F3) have no
+The debug windows (F2 test scenarios, F4 cheats, F5 items, F6 animals) and the debug readout (F3) have no
 buttons: keyboard only. The readout goes to the top right corner. With
 vision, F4 gets Reveal map and See everything. Both there, with the option
 that veils what the selected settler does not see (what no settler sees when
 nobody is selected), on the level shown. F6 has a Female and a
 Male button per species of wild animal: each arms a tool that puts one more
-of them on every clicked tile.
+of them on every clicked tile. F2 lists test scenarios, one button each: a click
+replaces the game being played at once, without asking and without saving, by a
+flat bare world of 96×96 tiles (same seed, debug flags and clock speed kept, no
+fog of war, the view at its middle): *Hungry wolves and roe deer* (a pack of four
+wolves ten tiles from a herd of three does, no settlers) and *Hungry wolves and
+two settlers* (settlers with random characters, one bare-handed and one with a
+thrusting spear, no other animals).
 
 ## Theme, scale and accessibility
 

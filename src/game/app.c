@@ -22,6 +22,8 @@
 #define APP_SETTINGS_FOLDER "colony-sim" /* In the user's data folder. */
 #define APP_SETTINGS_FILE "settings.cfg"
 #define APP_INITIAL_ZOOM 48.0f
+/* Zoom (pixels per tile) a test scenario starts at: wide enough for a chase. */
+#define APP_SCENARIO_ZOOM 32.0f
 #define APP_PAN_SPEED 900.0f /* Pixels per second. */
 #define APP_PAN_FAST_FACTOR 2.5f
 #define APP_ZOOM_STEP 1.15f
@@ -667,6 +669,7 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
     case APP_WINDOW_ITEMS: app->show_items_menu = false; break;
     case APP_WINDOW_ANIMALS: app->show_animals_menu = false; break;
+    case APP_WINDOW_SCENARIOS: app->show_scenarios_menu = false; break;
     case APP_WINDOW_GAME_MENU: app->show_game_menu = false; break;
     case APP_WINDOW_SETTINGS:
         app->show_settings = false;
@@ -799,6 +802,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_DEBUG_MENU: app->show_debug_menu = !app->show_debug_menu; return;
     case APP_KEY_ITEMS_MENU: app->show_items_menu = !app->show_items_menu; return;
     case APP_KEY_ANIMALS_MENU: app->show_animals_menu = !app->show_animals_menu; return;
+    case APP_KEY_SCENARIOS_MENU: app->show_scenarios_menu = !app->show_scenarios_menu; return;
     case APP_KEY_TEMPERATURE: app->show_temperature = !app->show_temperature; return;
     case APP_KEY_LEVEL_UP: set_level(app, app->camera.level + 1); return;
     case APP_KEY_LEVEL_DOWN: set_level(app, app->camera.level - 1); return;
@@ -993,6 +997,39 @@ void app_select_colonist(App *app, EntityId id, bool additive)
         select_add(app, id);
     }
     app->build_menu_open = false;
+}
+
+void app_request_test_scenario(App *app, TestScenario scenario)
+{
+    app->pending_scenario = (int)scenario + 1;
+}
+
+/* Replaces the game by the test scenario asked for (core/test_scenario.h) and
+ * forgets what pointed into the old one: selection, tools, notices. The view
+ * goes to the middle of the world, on its only level. */
+static void load_pending_scenario(App *app)
+{
+    TestScenario scenario = (TestScenario)(app->pending_scenario - 1);
+    app->pending_scenario = 0;
+    if (!test_scenario_load(&app->game, scenario)) {
+        LOG_ERROR("Cannot load the test scenario: leaving");
+        app->game_ready = false; /* Shut down by the failed load. */
+        app->running = false;
+        return;
+    }
+    clear_selection(app);
+    app->tool = APP_TOOL_NONE;
+    app->build_category = BUILD_CATEGORY_NONE;
+    app->left_button_down = false;
+    app->box_selecting = false;
+    app->debug_attacker = combatant_none();
+    app->inspector_tab = -1;
+    app->next_notice = 0;
+    app->notices_shown_count = 0;
+    camera_init(&app->camera, (float)app->game.map.width * 0.5f, (float)app->game.map.height * 0.5f,
+                app->camera.zoom);
+    app->camera.level = 0;
+    LOG_INFO("Test scenario %d loaded", (int)scenario);
 }
 
 void app_focus_colonist(App *app, EntityId id)
@@ -1571,6 +1608,12 @@ void app_run(App *app)
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             handle_event(app, &event);
+        }
+        if (app->pending_scenario > 0) {
+            load_pending_scenario(app);
+            if (!app->running) {
+                break;
+            }
         }
         update_camera(app, (float)dt);
         if (!app->show_game_menu && !app->show_settings) {

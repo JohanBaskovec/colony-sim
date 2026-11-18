@@ -40,6 +40,7 @@ add_library(colony_core STATIC
     settings.c
     strike_anim.c
     temperature.c
+    test_scenario.c
     tree.c
     reservation.c
     rng.c

@@ -20,6 +20,7 @@ add_executable(colony_sim
     main.c
     render.c
     resources_list.c
+    scenarios_panel.c
     settings_window.c
     sprites.c
     station_panel.c

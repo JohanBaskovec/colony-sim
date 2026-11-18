@@ -91,6 +91,7 @@ simulation:
 | `cli`        | Command-line parsing (language, seed, size, colonists, test scenario, cheats) |
 | `entry_strip` | Fits same-sized entries (the colonist bar) into a width: shrunk, then wrapped onto rows |
 | `scenario`   | Ready-made test situations on a new game (`bench_simulation`, `--scenario`) |
+| `test_scenario` | The F2 debug menu's scenarios: `test_scenario_load()` replaces the world of a running `Game` (shut down, then built again from the same seed, debug flags and clock speed kept) with a flat bare 96×96 world and places hungry wolves and a herd of roe deer, or two settlers (one with a thrusting spear), by hand |
 | `settings`   | Player settings kept between sessions (interface size, palette, language) as a forgiving `key = value` text; the frontend loads and saves the file |
 | `log`        | Logging with a pluggable sink                                                |
 | `util`       | Small helpers (clamp, lerp, FNV hashes)                                      |
@@ -127,6 +128,7 @@ simulation:
 | `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
+| `scenarios_panel` | Test scenarios menu (F2): a button per scenario; a click asks `App` to load it, which `app_run()` does at the start of the next frame (never while windows are being drawn), forgetting selection, tools and notices |
 | `animals_panel` | Animals menu (F6): a Female and a Male button per species, which arm the debug tool to put one on every clicked tile |
 | `items_panel`  | Items menu (F5): every item with a 1× and a Max button, which arm the debug tool to drop it on the next clicked tile |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |

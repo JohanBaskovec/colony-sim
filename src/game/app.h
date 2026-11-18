@@ -9,6 +9,7 @@
 #include "core/cli.h"
 #include "core/game.h"
 #include "core/settings.h"
+#include "core/test_scenario.h"
 #include "game/localization.h"
 #include "game/sprites.h"
 #include "game/text.h"
@@ -66,12 +67,13 @@ typedef enum AppTool {
 #define APP_KEY_PAUSE SDL_SCANCODE_SPACE
 #define APP_KEY_BACK SDL_SCANCODE_ESCAPE
 #define APP_KEY_HELP SDL_SCANCODE_F1
-#define APP_KEY_DEBUG SDL_SCANCODE_F3        /* Debug information. */
-#define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4   /* Cheats (game/debug_panel.h). */
-#define APP_KEY_ITEMS_MENU SDL_SCANCODE_F5   /* Spawning items (game/items_panel.h). */
-#define APP_KEY_ANIMALS_MENU SDL_SCANCODE_F6 /* Spawning animals (game/animals_panel.h). */
-#define APP_KEY_TEMPERATURE SDL_SCANCODE_H   /* Temperature view on or off. */
-#define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP /* The level above (also Shift + wheel). */
+#define APP_KEY_SCENARIOS_MENU SDL_SCANCODE_F2 /* Test scenarios (game/scenarios_panel.h). */
+#define APP_KEY_DEBUG SDL_SCANCODE_F3          /* Debug information. */
+#define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4     /* Cheats (game/debug_panel.h). */
+#define APP_KEY_ITEMS_MENU SDL_SCANCODE_F5     /* Spawning items (game/items_panel.h). */
+#define APP_KEY_ANIMALS_MENU SDL_SCANCODE_F6   /* Spawning animals (game/animals_panel.h). */
+#define APP_KEY_TEMPERATURE SDL_SCANCODE_H     /* Temperature view on or off. */
+#define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP   /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
 
 /* Types of the debug tool (see app_toggle_tool()). */
@@ -108,6 +110,7 @@ typedef enum AppWindow {
     APP_WINDOW_DEBUG,          /* Debug menu (cheats). */
     APP_WINDOW_ITEMS,          /* Items menu (debug). */
     APP_WINDOW_ANIMALS,        /* Animals menu (debug). */
+    APP_WINDOW_SCENARIOS,      /* Test scenarios menu (debug). */
     APP_WINDOW_GAME_MENU,
     APP_WINDOW_SETTINGS, /* Settings (game/settings_window.h), from the game menu. */
     APP_WINDOW_COUNT
@@ -203,13 +206,16 @@ typedef struct App {
     bool show_work_panel;
     bool show_log; /* Colony log (game/log_window.h): a main window like the work grid. */
     bool show_help;
-    bool show_debug_menu;   /* Debug menu (game/debug_panel.h). */
-    bool show_items_menu;   /* Items menu (game/items_panel.h). */
-    bool show_animals_menu; /* Animals menu (game/animals_panel.h). */
-    bool show_temperature;  /* The temperature of each tile over the map. */
-    bool character_editor;  /* Debug: - and + buttons on needs, characters and knowledge. */
-    bool show_vision;       /* Debug: what the selected settler sees, the rest veiled. */
-    float level_wheel;      /* Wheel steps with Shift held, towards the next level. */
+    bool show_debug_menu;     /* Debug menu (game/debug_panel.h). */
+    bool show_items_menu;     /* Items menu (game/items_panel.h). */
+    bool show_animals_menu;   /* Animals menu (game/animals_panel.h). */
+    bool show_scenarios_menu; /* Test scenarios menu (game/scenarios_panel.h). */
+    int pending_scenario;  /* A test scenario to load before the next update (TestScenario + 1, 0:
+                              none). */
+    bool show_temperature; /* The temperature of each tile over the map. */
+    bool character_editor; /* Debug: - and + buttons on needs, characters and knowledge. */
+    bool show_vision;      /* Debug: what the selected settler sees, the rest veiled. */
+    float level_wheel;     /* Wheel steps with Shift held, towards the next level. */
     /* Build menu (game/build_menu.h): open, which category is shown, and the
      * icon under the mouse (APP_TOOL_NONE: none) whose card is shown. */
     bool build_menu_open;
@@ -291,6 +297,10 @@ bool app_init(App *app, const CliOptions *options);
 /* The game loop, or the render benchmark with --bench-render. */
 void app_run(App *app);
 void app_shutdown(App *app);
+
+/* Asks for a test scenario (core/test_scenario.h) to replace the game at the
+ * start of the next frame: never in the middle of drawing windows. */
+void app_request_test_scenario(App *app, TestScenario scenario);
 
 /* Selects a tool (`type`: DesignationType for APP_TOOL_DESIGNATE,
  * WorkstationType for APP_TOOL_BUILD, StructureType for APP_TOOL_STRUCTURE,
