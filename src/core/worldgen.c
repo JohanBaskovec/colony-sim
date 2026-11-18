@@ -177,7 +177,7 @@ static bool by_water(const Map *map, int x, int y, int z)
 }
 
 /* Cattails along the shores: in the shallows next to the land, and on the
- * land next to the water, in place of grass. */
+ * land next to the water, in place of the low plants (trees stay). */
 static void place_cattails(Map *map, Rng *rng)
 {
     for (int y = 0; y < map->height; y++) {
@@ -187,8 +187,7 @@ static void place_cattails(Map *map, Rng *rng)
             Terrain terrain = (Terrain)map->terrain[index];
             Plant *plant = &map->plants[index];
             if (terrain == TERRAIN_DEEP_WATER || map->rock[index] != ROCK_NONE ||
-                (plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
-                !by_water(map, x, y, z)) {
+                plant_is_tree(plant->type) || !by_water(map, x, y, z)) {
                 continue;
             }
             bool shallows = terrain == TERRAIN_SHALLOW_WATER;

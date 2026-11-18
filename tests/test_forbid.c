@@ -512,18 +512,16 @@ static void test_forbid_rect(void)
             WORKSTATION_NONE);
     map->plants[map_index(map, 3, 4, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
     items_add(&game.items, 9, 9, 0, item_stack_pristine(ITEM_BRANCHES, 2)); /* Outside. */
-    CHECK_EQ_INT(game_set_forbidden_rect(&game, 6, 4, 2, 2, 0, true), 4);
+    CHECK_EQ_INT(game_set_forbidden_rect(&game, 6, 4, 2, 2, 0, true), 5);
     CHECK_EQ_INT(game_set_forbidden_rect(&game, 2, 2, 6, 4, 0, true), 0); /* Already. */
     CHECK(game_forbidden(&game, 3, 3, 0, FORBID_ITEMS));
     CHECK(game_forbidden(&game, 4, 3, 0, FORBID_PLANT));
     CHECK(game_forbidden(&game, 5, 3, 0, FORBID_STRUCTURE));
     CHECK(game_forbidden(&game, 6, 3, 0, FORBID_STATION));
     CHECK(!game_forbidden(&game, 9, 9, 0, FORBID_ITEMS));
-    CHECK(!game_forbidden(&game, 3, 4, 0, FORBID_PLANT));          /* Grass is left out. */
-    CHECK(game_set_forbidden(&game, 3, 4, 0, FORBID_PLANT, true)); /* One tile at a time. */
-    CHECK_EQ_INT(game_set_forbidden_rect(&game, 0, 0, 47, 47, 0, false), 4);
-    CHECK(game_forbidden(&game, 3, 4, 0, FORBID_PLANT));
-    CHECK(game_set_forbidden(&game, 3, 4, 0, FORBID_PLANT, false));
+    CHECK(game_forbidden(&game, 3, 4, 0, FORBID_PLANT)); /* Grass is a plant like the others. */
+    CHECK_EQ_INT(game_set_forbidden_rect(&game, 0, 0, 47, 47, 0, false), 5);
+    CHECK(!game_forbidden(&game, 3, 4, 0, FORBID_PLANT));
     CHECK_EQ_INT(map->forbidden_count, 0);
     CHECK_EQ_INT(game.items.forbidden_count, 0);
     game_shutdown(&game);

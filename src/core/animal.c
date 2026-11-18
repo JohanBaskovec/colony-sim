@@ -515,14 +515,16 @@ AnimalFood animal_food_at(AnimalSpecies species, const Map *map, int x, int y, i
     }
     size_t index = map_index(map, x, y, z);
     const Plant *plant = &map->plants[index];
-    if (plant->type != PLANT_NONE && (def->plants & PLANT_BIT(plant->type)) != 0 &&
-        (def->digs || !plant_def((PlantType)plant->type)->food_dug) && plant_has_food(plant)) {
+    const PlantProduct *food =
+        plant_product((PlantType)plant->type, plant_food_slot((PlantType)plant->type));
+    if (plant->type != PLANT_NONE && (def->plants & PLANT_BIT(plant->type)) != 0 && food != NULL &&
+        (def->digs || !food->dug) && plant_has_food(plant)) {
         return ANIMAL_FOOD_PLANT;
     }
     if (def->eats_nuts && map->nuts[index] > 0) {
         return ANIMAL_FOOD_NUTS;
     }
-    if (plant->type == PLANT_GRASS && def->graze_value > 0.0f &&
+    if (plant_def((PlantType)plant->type)->grazed && def->graze_value > 0.0f &&
         plant->growth >= def->graze_min_growth) {
         return ANIMAL_FOOD_GRASS;
     }
@@ -1202,15 +1204,14 @@ static void bite(Animal *animal, const AnimalDef *def, Map *map, TilePos at, Ani
     switch (food) {
     case ANIMAL_FOOD_PLANT: {
         const PlantDef *plant_type = plant_def((PlantType)plant->type);
+        int slot = plant_food_slot((PlantType)plant->type);
         /* A root dug up whole is eaten whole. */
-        int taken = plant_take_stock(plant, PLANT_STOCK_FOOD,
-                                     plant_type->dug_whole ? INT16_MAX : def->bite_items);
-        gain = (float)taken * item_def(plant_type->food_item)->nutrition * def->food_value;
-        if (plant_type->vanishes && !plant_has_food(plant)) {
-            map_remove_plant(map, at.x, at.y, at.z); /* The patch is gone. */
-        } else if (plant_type->dug_whole) {
-            plant->growth = 0.0f; /* Grows again from what is left in the ground. */
-            memset(plant->stock, 0, sizeof(plant->stock));
+        int taken = plant_take_stock(
+            plant, slot, plant_type->harvest == PLANT_HARVEST_RESETS ? INT16_MAX : def->bite_items);
+        gain = (float)taken * item_def(plant_stock_item((PlantType)plant->type, slot))->nutrition *
+               def->food_value;
+        if (plant_type->harvest != PLANT_HARVEST_REMOVES || !plant_has_food(plant)) {
+            plant_harvested(map, at.x, at.y, at.z); /* The patch is gone, the root dug up. */
         }
         break;
     }

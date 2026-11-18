@@ -365,8 +365,8 @@ static bool count_food_plant(const Map *map, int x, int y, int z, void *userdata
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
     /* A tree counts once it is grown (though only the young ones, with no
      * trunk yet, can be reached by the search). */
-    float grown =
-        plant_is_tree(count->type) ? TREE_CROWN_FROM : plant_def(count->type)->min_food_growth;
+    float grown = plant_is_tree(count->type) ? TREE_CROWN_FROM
+                                             : plant_def(count->type)->products[0].min_growth;
     if (plant->type == count->type && plant->growth >= grown) {
         count->count++;
     }
@@ -389,8 +389,7 @@ static bool is_plant_spot(const Map *map, int x, int y, int z, void *userdata)
     PlantSpotSearch *search = userdata;
     size_t index = map_index(map, x, y, z);
     const Plant *plant = &map->plants[index];
-    if (map->rock[index] != ROCK_NONE || map_is_water(map, x, y, z) ||
-        (plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
+    if (map->rock[index] != ROCK_NONE || map_is_water(map, x, y, z) || plant->type != PLANT_NONE ||
         terrain_def((Terrain)map->terrain[index])->fertility <
             plant_def(search->type)->min_fertility ||
         abs(x - search->center.x) + abs(y - search->center.y) < SPAWN_PLANT_MIN_DISTANCE) {
@@ -699,8 +698,8 @@ static void mushrooms_day(Game *game, size_t index, int day)
         }
         return;
     }
-    if ((plant->type != PLANT_NONE && plant->type != PLANT_GRASS) ||
-        !plant_days_contain(plant_def(PLANT_MUSHROOMS)->food_days, day) ||
+    if (plant->type != PLANT_NONE ||
+        !plant_days_contain(plant_def(PLANT_MUSHROOMS)->products[0].days, day) ||
         world_roll(game->seed, index, day, 0) >= mushroom_chance(&game->weather)) {
         return;
     }
@@ -2541,10 +2540,6 @@ int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, b
     for (int y = (y0 < y1 ? y0 : y1); y <= (y0 < y1 ? y1 : y0); y++) {
         for (int x = (x0 < x1 ? x0 : x1); x <= (x0 < x1 ? x1 : x0); x++) {
             for (int target = 0; target <= FORBID_SITE; target++) { /* Whole zones are left out. */
-                if (target == FORBID_PLANT && map_in_bounds(&game->map, x, y, z) &&
-                    game->map.plants[map_index(&game->map, x, y, z)].type == PLANT_GRASS) {
-                    continue; /* Ground cover: one tile at a time (game_set_forbidden()). */
-                }
                 changed += game_set_forbidden(game, x, y, z, (ForbidTarget)target, forbidden);
             }
         }

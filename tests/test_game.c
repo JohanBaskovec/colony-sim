@@ -51,7 +51,8 @@ static bool count_food_plant(const Map *map, int x, int y, int z, void *userdata
 {
     FoodPlantCount *count = userdata;
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
-    if (plant->type == count->type && plant->growth >= plant_def(count->type)->min_food_growth) {
+    if (plant->type == count->type &&
+        plant->growth >= plant_def(count->type)->products[0].min_growth) {
         count->count++;
     }
     return false;
@@ -102,10 +103,10 @@ static void make_grove(Map *map)
         map->terrain[i] = TERRAIN_SOIL;
         map->rock[i] = ROCK_NONE;
         map->structure[i] = STRUCTURE_NONE;
-        /* A grove on the west half, meadow on the east. */
+        /* A grove on the west half, meadow on the east; bare ground between. */
         bool grove = (int)(i % (size_t)map->width) < map->width / 2;
-        map->plants[i] = grove && i % 7 == 0 ? (Plant){.type = PLANT_TREE, .growth = 1.0f}
-                                             : (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+        map->plants[i] =
+            grove && i % 7 == 0 ? (Plant){.type = PLANT_TREE, .growth = 1.0f} : (Plant){0};
     }
     map_topology_changed(map);
 }
@@ -135,6 +136,27 @@ static void test_mushrooms_come_after_rain(void)
     unsigned wet = mushrooms_after(20.0);
     CHECK(wet > 2 * dry);
     CHECK(wet > 0);
+}
+
+/* A tile with grass on it holds a plant: no mushrooms come up there. */
+static void test_mushrooms_need_bare_ground(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game, 3));
+    Map *map = &game.map;
+    make_grove(map);
+    for (size_t i = 0; i < map_level_tile_count(map); i++) {
+        if (map->plants[i].type == PLANT_NONE) {
+            map->plants[i] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+        }
+    }
+    game.clock.tick = (uint64_t)SEASON_DAY(SEASON_AUTUMN, 4) * TICKS_PER_DAY;
+    for (int i = 0; i < TICKS_PER_HOUR; i++) {
+        game.weather.recent_rain = 20.0f;
+        game_tick(&game);
+    }
+    CHECK_EQ_UINT(map_count_plants(map, PLANT_MUSHROOMS), 0);
+    game_shutdown(&game);
 }
 
 static void test_mushrooms_come_and_go(void)
@@ -512,15 +534,15 @@ static void test_plant_stocks_grow_back(void)
     *plant = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
     /* Generated plants start with full stocks. */
     plant_settle(plant, GAME_START_DAY);
-    int capacity = plant_stock_capacity(plant, PLANT_STOCK_FOOD);
+    int capacity = plant_stock_capacity(plant, 0);
     REQUIRE(capacity > 0);
-    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_FOOD), capacity);
-    plant_take_stock(plant, PLANT_STOCK_FOOD, capacity);
-    int regrow = plant_def(PLANT_BRAMBLE)->stock_regrow_hours[PLANT_STOCK_FOOD];
+    CHECK_EQ_INT(plant_stock_available(plant, 0), capacity);
+    plant_take_stock(plant, 0, capacity);
+    int regrow = plant_def(PLANT_BRAMBLE)->products[0].regrow_hours;
     for (int i = 0; i < (regrow + 1) * TICKS_PER_HOUR; i++) {
         game_tick(&game);
     }
-    CHECK_EQ_INT(plant_stock_available(plant, PLANT_STOCK_FOOD), 1);
+    CHECK_EQ_INT(plant_stock_available(plant, 0), 1);
     game_shutdown(&game);
 }
 
@@ -570,6 +592,7 @@ int main(void)
     RUN_TEST(test_init_and_shutdown);
     RUN_TEST(test_init_failure_leaves_game_safe_to_shut_down);
     RUN_TEST(test_settlers_arrive_near_food);
+    RUN_TEST(test_mushrooms_need_bare_ground);
     RUN_TEST(test_mushrooms_come_and_go);
     RUN_TEST(test_settlers_arrive_near_flint);
     RUN_TEST(test_update_advances_ticks);

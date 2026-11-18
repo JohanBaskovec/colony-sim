@@ -123,22 +123,21 @@ static void test_definitions(void)
     /* Every wild food is a resource, gathered by the job that suits the
      * plant: dug or picked, carefully when easily mistaken for poison. */
     for (int p = PLANT_NONE + 1; p < PLANT_COUNT; p++) {
-        const PlantDef *plant = plant_def((PlantType)p);
-        if (plant->food_item == ITEM_NONE) {
+        const PlantProduct *food = plant_product((PlantType)p, plant_food_slot((PlantType)p));
+        if (food == NULL) {
             continue;
         }
         GatherResource resource = GATHER_RESOURCE_COUNT;
         for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
-            if (gather_resource_def((GatherResource)r)->item == plant->food_item) {
+            if (gather_resource_def((GatherResource)r)->item == food->item) {
                 resource = (GatherResource)r;
             }
         }
         REQUIRE(resource != GATHER_RESOURCE_COUNT);
         GatherJob job = gather_resource_def(resource)->job;
         GatherJob expected =
-            plant->food_dug
-                ? (plant->food_confusable ? GATHER_JOB_DIG_CAREFULLY : GATHER_JOB_DIG)
-                : (plant->food_confusable ? GATHER_JOB_HARVEST_CAREFULLY : GATHER_JOB_HARVEST);
+            food->dug ? (food->confusable ? GATHER_JOB_DIG_CAREFULLY : GATHER_JOB_DIG)
+                      : (food->confusable ? GATHER_JOB_HARVEST_CAREFULLY : GATHER_JOB_HARVEST);
         CHECK_EQ_INT(job, expected);
     }
     /* Gathering from 50 on, food that looks like poison from higher up;
@@ -418,8 +417,8 @@ static void test_fully_grown_plants_only(void)
     REQUIRE(init_world(&map, &zones, &items));
     put_plant(&map, 1, 1, PLANT_TREE, 0.4f);
     const PlantDef *def = plant_def(PLANT_BRAMBLE);
-    Plant *young = put_plant(&map, 2, 1, PLANT_BRAMBLE, def->min_food_growth - 0.01f);
-    put_plant(&map, 3, 1, PLANT_BRAMBLE, def->min_food_growth);
+    Plant *young = put_plant(&map, 2, 1, PLANT_BRAMBLE, def->products[0].min_growth - 0.01f);
+    put_plant(&map, 3, 1, PLANT_BRAMBLE, def->products[0].min_growth);
     int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
     order(&zones, &items, index, GATHER_WOOD, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
@@ -429,7 +428,7 @@ static void test_fully_grown_plants_only(void)
     CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_CHOP));
     /* A bramble too young bears no fruit; an older one does. */
     CHECK(!gather_job_available(&zones, &map, 2, 1, 0, GATHER_JOB_HARVEST));
-    CHECK(plant_stock_available(young, PLANT_STOCK_FOOD) == 0);
+    CHECK(plant_stock_available(young, 0) == 0);
     CHECK(gather_job_available(&zones, &map, 3, 1, 0, GATHER_JOB_HARVEST));
     free_world(&map, &zones, &items);
 }
@@ -443,7 +442,7 @@ static void test_food_in_season(void)
     REQUIRE(init_world(&map, &zones, &items));
     int autumn = SEASON_DAY(SEASON_AUTUMN, 4);
     Plant *bramble = put_plant(&map, 1, 1, PLANT_BRAMBLE, 1.0f);
-    plant_take_stock(bramble, PLANT_STOCK_FOOD, 1000); /* Not in fruit yet. */
+    plant_take_stock(bramble, 0, 1000); /* Not in fruit yet. */
     Plant *cattail = put_plant(&map, 2, 1, PLANT_CATTAIL, 1.0f);
     Plant *carrot = put_plant(&map, 3, 1, PLANT_WILD_CARROT, 1.0f);
     Plant *mushrooms = put_plant(&map, 1, 3, PLANT_MUSHROOMS, 1.0f);
@@ -471,8 +470,8 @@ static void test_food_in_season(void)
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 3, 0, novice), GATHER_JOB_NONE);
 
     /* Berries: the work grows with their number; the bramble stays. */
-    int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
-    REQUIRE(berries == plant_def(PLANT_BRAMBLE)->stock_capacity[PLANT_STOCK_FOOD]);
+    int berries = plant_stock_available(bramble, 0);
+    REQUIRE(berries == plant_def(PLANT_BRAMBLE)->products[0].capacity);
     CHECK(gather_job_work_needed(&map, 1, 1, 0, GATHER_JOB_HARVEST) >
           gather_job_work_needed(&map, 1, 3, 0, GATHER_JOB_HARVEST_CAREFULLY));
     CHECK(
@@ -481,12 +480,12 @@ static void test_food_in_season(void)
     CHECK_EQ_INT(bramble->type, PLANT_BRAMBLE);
     CHECK_NEAR(bramble->growth, 1.0f, 1e-6);
     /* Rhizomes: part of the rootstock, the cattail grows on. */
-    int rhizomes = plant_stock_available(cattail, PLANT_STOCK_FOOD);
+    int rhizomes = plant_stock_available(cattail, 0);
     CHECK(gather_zone_add_work(&zones, &map, &items, 2, 1, 0, GATHER_JOB_DIG, 1e6f, 60.0, NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_CATTAIL_RHIZOMES], rhizomes);
     CHECK_NEAR(cattail->growth, 1.0f, 1e-6);
     /* A wild carrot dug up is gone, but grows again from what is left. */
-    int roots = plant_stock_available(carrot, PLANT_STOCK_FOOD);
+    int roots = plant_stock_available(carrot, 0);
     CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_DIG_CAREFULLY, 1e6f, 60.0,
                                NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_WILD_CARROTS], roots);
@@ -496,7 +495,7 @@ static void test_food_in_season(void)
     CHECK(gather_zone_add_work(&zones, &map, &items, 1, 3, 0, GATHER_JOB_HARVEST_CAREFULLY, 1e6f,
                                60.0, NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_MUSHROOMS],
-                 plant_def(PLANT_MUSHROOMS)->stock_capacity[PLANT_STOCK_FOOD]);
+                 plant_def(PLANT_MUSHROOMS)->products[0].capacity);
     CHECK_EQ_INT(mushrooms->type, PLANT_NONE);
     free_world(&map, &zones, &items);
 }
@@ -510,7 +509,7 @@ static void test_full_harvest(void)
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
     const PlantDef *bramble_def = plant_def(PLANT_BRAMBLE);
-    Plant *young = put_plant(&map, 3, 1, PLANT_BRAMBLE, bramble_def->min_food_growth);
+    Plant *young = put_plant(&map, 3, 1, PLANT_BRAMBLE, bramble_def->products[0].min_growth);
     Plant *bramble = put_plant(&map, 5, 1, PLANT_BRAMBLE, 1.0f);
     put_plant(&map, 1, 3, PLANT_GRASS, 0.8f);
     put_plant(&map, 3, 3, PLANT_GRASS, 1.0f);
@@ -522,16 +521,15 @@ static void test_full_harvest(void)
     const GatherZone *zone = gather_zone_get(&zones, index);
     CHECK_EQ_INT(gather_zone_ripe_mask(zone), gather_ripe_options());
     /* Full stocks: the young bramble's few berries are all ripe. */
-    REQUIRE(plant_stock_available(young, PLANT_STOCK_FOOD) > 0);
+    REQUIRE(plant_stock_available(young, 0) > 0);
     CHECK(gather_job_available(&zones, &map, 3, 1, 0, GATHER_JOB_HARVEST));
     CHECK(gather_job_available(&zones, &map, 5, 1, 0, GATHER_JOB_HARVEST));
     /* Some taken: what is left waits until the stock is full again. */
-    CHECK_EQ_INT(plant_take_stock(bramble, PLANT_STOCK_FOOD, 1), 1);
+    CHECK_EQ_INT(plant_take_stock(bramble, 0, 1), 1);
     CHECK(!gather_job_available(&zones, &map, 5, 1, 0, GATHER_JOB_HARVEST));
     long available[GATHER_RESOURCE_COUNT];
     gather_zone_available(&zones, &map, index, available);
-    CHECK_EQ_INT((int)available[GATHER_BLACKBERRIES],
-                 plant_stock_available(young, PLANT_STOCK_FOOD));
+    CHECK_EQ_INT((int)available[GATHER_BLACKBERRIES], plant_stock_available(young, 0));
     CHECK_EQ_INT((int)available[GATHER_BRANCHES], 0);
     /* Grass fully grown only. */
     CHECK(!gather_job_available(&zones, &map, 1, 3, 0, GATHER_JOB_CUT_GRASS));
@@ -1132,7 +1130,7 @@ static void test_clearing_plants(void)
     CHECK(map_plant_blocks_building(&map, 1, 1, 0));
 
     /* Grass is cut: fresh grass. */
-    map.plants[map_index(&map, 3, 3, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    put_plant(&map, 3, 3, PLANT_GRASS, 1.0f);
     CHECK(!map_plant_blocks_building(&map, 3, 3, 0));
     CHECK(gather_clear_work(&map, 3, 3, 0) > 0.0f);
     gather_clear_plant(&map, &items, 3, 3, 0, 60.0, NULL);
@@ -1144,7 +1142,7 @@ static void test_clearing_plants(void)
     Plant *bramble = &map.plants[map_index(&map, 8, 3, 0)];
     *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
     plant_settle(bramble, SEASON_DAY(SEASON_AUTUMN, 2));
-    int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
+    int berries = plant_stock_available(bramble, 0);
     REQUIRE(berries > 0);
     CHECK(gather_clear_work(&map, 8, 3, 0) > gather_clear_work(&map, 3, 3, 0));
     gather_clear_plant(&map, &items, 8, 3, 0, 60.0, NULL);
@@ -1161,6 +1159,83 @@ static void test_clearing_plants(void)
     plant_settle(garlic, GAME_START_DAY);
     REQUIRE(plant_is_dormant(garlic));
     CHECK_NEAR(gather_clear_work(&map, 9, 3, 0), 0.0, 1e-6);
+    free_world(&map, &zones, &items);
+}
+
+/* Grass is a plant like the others: a stock of armfuls that grows with it, taken
+ * whole (back to growth 0), gathered by a zone when it is fully grown. */
+static void test_grass_is_a_plant_with_a_stock(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    const PlantProduct *armfuls = plant_product(PLANT_GRASS, 0);
+    REQUIRE(armfuls != NULL);
+    CHECK_EQ_INT(armfuls->item, ITEM_FRESH_GRASS);
+    CHECK_EQ_INT(plant_food_slot(PLANT_GRASS), -1); /* Nobody eats it in place. */
+    Plant *tall = put_plant(&map, 1, 1, PLANT_GRASS, 1.0f);
+    Plant *short_grass = put_plant(&map, 3, 1, PLANT_GRASS, 0.4f);
+    Plant *medium = put_plant(&map, 5, 1, PLANT_GRASS, 0.8f);
+    CHECK(!plant_has_food(tall));
+    CHECK_EQ_INT(plant_stock_available(tall, 0), armfuls->capacity);
+    CHECK_EQ_INT(plant_stock_available(short_grass, 0), 0); /* Too short to cut. */
+    CHECK(plant_stock_available(medium, 0) > 0);
+    CHECK(plant_stock_available(medium, 0) < armfuls->capacity);
+    CHECK(gather_plant_harvestable(&map, 1, 1, 0));
+    CHECK(!gather_plant_harvestable(&map, 3, 1, 0));
+
+    /* Taken whole: the stock, then it grows again from nothing. */
+    int zone = gather_zone_create(&zones, &map, 0, 0, 6, 2, 0);
+    order(&zones, &items, zone, GATHER_GRASS, GATHER_FOREVER);
+    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_CUT_GRASS));
+    CHECK(gather_zone_add_work(&zones, &map, &items, 1, 1, 0, GATHER_JOB_CUT_GRASS, 1e6f, 60.0,
+                               NULL));
+    CHECK_EQ_INT((int)items.totals[ITEM_FRESH_GRASS], armfuls->capacity);
+    CHECK_EQ_INT(tall->type, PLANT_GRASS);
+    CHECK_NEAR(tall->growth, 0.0f, 1e-6);
+    CHECK_EQ_INT(plant_stock_available(tall, 0), 0);
+    CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_CUT_GRASS));
+    /* A few days on, it has grown and bears armfuls again. */
+    for (int day = 0; day < 4; day++) {
+        plant_advance(tall, 1.0f, HOURS_PER_DAY, SEASON_DAY(SEASON_SUMMER, 3 + day));
+    }
+    CHECK_NEAR(tall->growth, 1.0f, 1e-6);
+    CHECK_EQ_INT(plant_stock_available(tall, 0), armfuls->capacity);
+    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_CUT_GRASS));
+
+    /* Waiting for the full harvest: fully grown only. */
+    gather_zone_set_all_ripe_only(&zones, zone, true);
+    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_CUT_GRASS));
+    REQUIRE(medium->growth < 1.0f);
+    CHECK(!gather_job_available(&zones, &map, 5, 1, 0, GATHER_JOB_CUT_GRASS));
+    gather_zone_set_all_ripe_only(&zones, zone, false);
+    CHECK(gather_job_available(&zones, &map, 5, 1, 0, GATHER_JOB_CUT_GRASS));
+    free_world(&map, &zones, &items);
+}
+
+/* A plant taken whole waits until it is fully grown for the full harvest: a young
+ * wild carrot, however full its stock, is left to grow. */
+static void test_taken_whole_waits_until_grown(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    int autumn = SEASON_DAY(SEASON_AUTUMN, 4);
+    Plant *young = put_plant(&map, 1, 1, PLANT_WILD_CARROT,
+                             plant_def(PLANT_WILD_CARROT)->products[0].min_growth);
+    Plant *grown = put_plant(&map, 3, 1, PLANT_WILD_CARROT, 1.0f);
+    plant_settle(young, autumn);
+    plant_settle(grown, autumn);
+    REQUIRE(plant_stock_available(young, 0) > 0);
+    int zone = gather_zone_create(&zones, &map, 0, 0, 4, 2, 0);
+    order(&zones, &items, zone, GATHER_WILD_CARROTS, GATHER_FOREVER);
+    gather_zone_set_all_ripe_only(&zones, zone, true);
+    CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_DIG_CAREFULLY));
+    CHECK(gather_job_available(&zones, &map, 3, 1, 0, GATHER_JOB_DIG_CAREFULLY));
+    gather_zone_set_all_ripe_only(&zones, zone, false);
+    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_DIG_CAREFULLY));
     free_world(&map, &zones, &items);
 }
 
@@ -1217,7 +1292,7 @@ static void test_single_plant_harvest_and_uproot(void)
     CHECK(!gather_plant_uprootable(&map, 6, 6, 0));
     CHECK(!gather_plant_uprootable(&map, 8, 8, 0));
     /* A harvest takes the food, the bramble stays and has nothing left. */
-    int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
+    int berries = plant_stock_available(bramble, 0);
     REQUIRE(berries > 0);
     CHECK(gather_plant_harvestable(&map, 1, 1, 0));
     CHECK(gather_harvest_plant(&map, &items, 1, 1, 0, 60.0, NULL));
@@ -1231,7 +1306,7 @@ static void test_single_plant_harvest_and_uproot(void)
     CHECK_EQ_INT(grass->type, PLANT_GRASS);
     CHECK(!gather_plant_harvestable(&map, 4, 1, 0));
     /* Uprooting the cattail: its rhizomes first, then it is gone. */
-    int rhizomes = plant_stock_available(cattail, PLANT_STOCK_FOOD);
+    int rhizomes = plant_stock_available(cattail, 0);
     REQUIRE(rhizomes > 0);
     CHECK(gather_uproot_work(&map, 2, 1, 0) > gather_clear_work(&map, 2, 1, 0));
     gather_clear_plant(&map, &items, 2, 1, 0, 60.0, NULL);
@@ -1273,6 +1348,8 @@ int main(void)
     RUN_TEST(test_overlapping_rectangle_merges_zones);
     RUN_TEST(test_blocked_tiles_are_left_out);
     RUN_TEST(test_clearing_plants);
+    RUN_TEST(test_grass_is_a_plant_with_a_stock);
+    RUN_TEST(test_taken_whole_waits_until_grown);
     RUN_TEST(test_zone_tiles_box);
     return test_summary();
 }

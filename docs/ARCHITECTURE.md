@@ -84,7 +84,7 @@ simulation:
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve                   |
-| `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with their branch, twig and food stocks, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
+| `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, plants, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
@@ -234,27 +234,42 @@ The layers:
 - `terrain[]`: `Terrain` (water, sand, soil...), each with a `TerrainDef`
   (movement cost, fertility, buildable);
 - `rock[]`: natural rock walls (`RockType`, 0 = none), impassable;
-- `plants[]`: at most one plant per tile (`Plant`: type, growth, and stocks
-  of what can be gathered from it without felling it: branches, twigs and
-  food; a tree has none, see below). Stocks are counted in hours of
-  regrowth (`PlantDef.stock_regrow_hours` per item), capped by
-  `stock_capacity` scaled by growth, and grow back with the plant's hourly
-  update, even on mature plants;
+- `plants[]`: at most one plant per tile (`Plant`: type, growth, and a stock
+  per product, `PLANT_PRODUCTS_MAX` slots). Grass is a plant like the others:
+  it takes the tile's one place, so no other plant grows on a tile with grass
+  (a tree, a bramble or a patch of mushrooms is not planted over it, and a
+  place left bare stays bare until plants spread, a later feature). A
+  product (`PlantProduct`, `PlantDef.products[slot]`) is anything the plant
+  gives without being felled that grows back: an item (blackberries, roots,
+  an armful of fresh grass), a `capacity` at full growth, `regrow_hours` per
+  item, the `days` of the year it is there, the `min_growth` the plant needs
+  to bear any, and whether it is `dug` up or `confusable` with a poisonous
+  plant. Stocks are counted in hours of regrowth, capped by the capacity
+  scaled by growth, and grow back with the plant's hourly update, even on
+  mature plants. A tree bears none (what it sheds lies under it, see below);
 - `branches[]`, `twigs[]`: the dead branches and twigs lying on each tile (at
   most `MAP_BRANCHES_MAX` and `MAP_TWIGS_MAX`), on the ground under the
   trees (`map_litter()`, `map_add_litter()`, `map_take_litter()`).
 
 **Seasons** are days of the year: a `PlantDays` bit set (60 days fit in 64
 bits) says when a plant grows (`growth_days`: spring to autumn for all of
-them) and when its food ripens (`food_days`: blackberries at the end of
-summer, rhizomes all year...). Out of its food days the
-food stock is gone; plants that die back (wild garlic after spring, nettles
+them) and when each of its products is there (`PlantProduct.days`:
+blackberries at the end of summer, rhizomes and cut grass all year...). Out of
+its days a stock is gone; plants that die back (wild garlic after spring, nettles
 in winter) wither to growth 0 and show nothing until their growing days come
 back. `plant_advance()` does one step of all this; `plant_settle()` puts a
-new plant in the state of a day (world generation, planted food). Eating or
-picking takes from the food stock, so the plant itself is untouched (a wild
-carrot dug up goes back to growth 0, a mushroom patch picked is gone).
-Mushrooms appear on their own in autumn near mature trees: each tile gets a
+new plant in the state of a day (world generation, planted food). What
+taking the products does to the plant is data (`PlantDef.harvest`,
+`plant_harvested()`): `PLANT_HARVEST_KEEPS` leaves it as it is and the stock
+grows back (fruit, leaves), `PLANT_HARVEST_RESETS` sends it back to growth 0,
+growing again from what is left in the ground (a wild carrot dug up, grass
+cut), `PLANT_HARVEST_REMOVES` takes the plant with its product (a mushroom
+patch picked, which also goes by itself once its stock is gone). Grass is cut
+as any plant is harvested: a stock of armfuls that follows its growth (one
+armful grows back within the hour once the grass is tall enough), and it is
+not food. What a settler or an animal eats from a plant is its one food
+product (`plant_food_slot()`).
+Mushrooms appear on their own in autumn on bare ground near mature trees: each tile gets a
 daily roll from a hash of the seed, the tile and the day (`world_roll()` in
 `game.c`), during the first in-game hour of the day, so that they draw
 nothing from the game's random stream.
@@ -352,9 +367,8 @@ it (no rock, water, wall nor trunk) and is not full. A new world lays
 a random stream of its own). What a tree sheds falls through its crown, of
 any density, and lands on the ground under it (`litter_landing_level()`): it
 never stays in the foliage, so nobody climbs for it. What lay on foliage that
-goes with a felled tree (items) falls to the ground below (`tree_clear()`; what does not fit lies as items). No shrub
-bears branches or twigs of its own any more (the plant stocks for them stay
-for one that will).
+goes with a felled tree (items) falls to the ground below (`tree_clear()`; what does not fit lies as items). No plant
+bears branches or twigs of its own any more.
 
 **Hazels** are trees too (`plant_is_tree()`: `PLANT_TREE` and `PLANT_HAZEL`;
 a seedling below growth 0.4 is a shrub sprite, as for the other trees). A
@@ -431,9 +445,9 @@ falls as `tree_fell()` aims it, and a fall onto a structure is counted in
 
 **Harvest and Uproot** (`DESIGNATION_HARVEST`, `DESIGNATION_UPROOT`,
 "Gathering" work): orders on a single plant, outside any zone. Harvest takes
-what the plant gives without felling it, with the zones' job for it
-(`gather_plant_harvest_job()`: picking its food, digging roots up, which grow
-again or are gone as in a zone, cutting grass); it is refused while the plant
+what the plant bears without felling it, with the zones' job for it
+(`gather_plant_harvest_job()`: picking its food, digging roots up, cutting
+grass: what happens to the plant is `PlantDef.harvest`, as in a zone); it is refused while the plant
 has nothing to take (`gather_plant_harvestable()`), and dropped when what it
 bore is gone before the work is done. Uproot pulls any plant but a tree up:
 what it bears is harvested first, then the plant goes (`gather_clear_plant()`,
@@ -478,7 +492,7 @@ unit: a 7 kg log, a 20 kg stone block, a 1 kg cobble, a 300 g handful of blackbe
 stone blocks, 666 cobbles). `items_drop()` fills the target tile, then
 spreads the rest breadth-first over nearby passable tiles (never behind a
 wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
-`RockDef.mined_item/mined_yield`, `PlantDef.food_item` (the food stock);
+`RockDef.mined_item/mined_yield`, `PlantProduct.item` (the plant's stocks);
 gathering takes items from the plant's stocks (`plant_take_stock()`).
 
 Some items change while they lie on the ground: `ItemDef.transforms_into`
@@ -828,7 +842,8 @@ their hashes are what they were.
   herd sizes by sex, density, and diet: how it grazes (growth needed, growth
   a bite takes, what a tile of grass is worth), the plants whose food it
   eats, whether it digs roots up and eats fallen nuts, and what a unit of
-  nutrition is worth to it.
+  nutrition is worth to it. What it grazes is data too (`PlantDef.grazed`:
+  grass).
 - **Needs**: food, water, rest, from 1 down to 0 like the settlers'. Nothing
   happens at 0 yet (no health).
 - **Decisions** on tile centers with nothing under way (`decide()`): hunger or
@@ -839,11 +854,13 @@ their hashes are what they were.
   and water searches wait longer each time, like the settlers'.
 - **Eating** (`animal_food_at()`, `bite()`): a treat within
   `ANIMAL_TREAT_SEARCH_MAX_COST` first (the food a plant of its diet bears,
-  nuts on the ground), else the nearest food, grass included. A bite takes
-  `ANIMAL_BITE_TICKS`: items off the plant's stock (the very stock gatherers
-  pick: animals compete with them), nuts off the tile, or some of the grass's
-  growth (cutting grass needs more growth than grazing leaves). A root dug
-  up whole goes back to growth 0, an eaten mushroom patch is gone. It eats
+  nuts on the ground), else the nearest food, grazing included. A bite takes
+  `ANIMAL_BITE_TICKS`: items off the plant's food stock (the very stock
+  gatherers pick: animals compete with them), nuts off the tile, or some of the
+  growth of a plant it grazes (grass: cutting it needs more growth than
+  grazing leaves, and its stock of armfuls follows the growth). What a
+  harvest does to a plant (`plant_harvested()`) applies to a bite too: a root
+  dug up whole goes back to growth 0, an eaten mushroom patch is gone. It eats
   until `ANIMAL_SATED`.
 - **Fear**: every `ANIMAL_ALERT_TICKS` an animal on a tile center looks out
   (`animal_notices()`): a settler seen within its flight distance (a straight
@@ -1147,10 +1164,10 @@ none), each with an order of its own (`GatherGroupOrder`, always on: food
 until 5 days of food by default, the others forever): a resource is wanted
 only when its own order and its group's both want it, and a group's
 `done` counts what its resources gave. An order may wait for the full harvest
-(`ripe_only`): food, branches and twigs from plants whose stock is full
-(every fruit ripe, not a grown plant), trees and grass fully grown (on by
-default for wood only), so that settlers do not walk to plants that give
-little. `gather_zones_update()` recomputes each tick which resources every zone wants
+(`ripe_only`): what plants bear (food, grass) only from plants whose stock is
+full (every fruit ripe, not a grown plant), and trees, grass and roots (what
+is taken whole, `PLANT_HARVEST_RESETS`) fully grown (on by default for wood
+only), so that settlers do not walk to plants that give little. `gather_zones_update()` recomputes each tick which resources every zone wants
 and bumps the zones revision when it changes; it is also bumped once per
 in-game hour, after every plant has grown, so that idle settlers look again.
 
@@ -1635,8 +1652,8 @@ head tile, a roof; cleared by `set_tile_structure()`, `map_set_roof()` and
 `Items.forbidden` (per tile, cleared when the stack is gone) and
 `Workstation.forbidden`. `game_set_forbidden()` (`ForbidTarget`) resolves a
 tile of a tree's trunk or foliage to its foot; `game_set_forbidden_rect()`
-(the Forbid and Allow tools) takes everything on a rectangle but grass, the
-ground cover nearly everywhere.
+(the Forbid and Allow tools) takes everything on a rectangle, grass included
+(it is a plant like the others), but not zones, which go as a whole.
 
 Settlers see forbidden things as absent rather than through checks
 scattered over every job: they read stacks through `items_get_allowed()`

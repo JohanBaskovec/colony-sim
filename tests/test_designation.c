@@ -504,7 +504,7 @@ static void test_harvest_and_uproot_orders(void)
     CHECK_NEAR(designation_min_level_at(&map, 5, 5, 0, DESIGNATION_MINE),
                designation_def(DESIGNATION_MINE)->min_level, 1e-6);
     /* Harvest: the berries, the bramble stays. */
-    int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
+    int berries = plant_stock_available(bramble, 0);
     REQUIRE(designation_set(&d, &map, 8, 8, 0, DESIGNATION_HARVEST));
     CHECK(designation_work_needed(&d, &map, 8, 8, 0) > 0.0f);
     CHECK(designation_add_work(&d, &map, &items, 8, 8, 0, 1e6f, 60.0, NULL));

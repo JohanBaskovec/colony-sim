@@ -270,28 +270,99 @@ static void test_definitions_are_complete(void)
         const PlantDef *def = plant_def((PlantType)p);
         CHECK(i18n_is_valid_key(def->name_key));
         /* Grows, or appears fully grown and goes (mushrooms). */
-        CHECK(def->vanishes || (def->growth_per_day > 0.0f && def->growth_days != 0));
+        CHECK(def->harvest == PLANT_HARVEST_REMOVES ||
+              (def->growth_per_day > 0.0f && def->growth_days != 0));
         CHECK(def->move_cost >= 1.0f);
         CHECK((def->growth_days & ~PLANT_ALL_YEAR) == 0);
         /* Either drops something when cut, or nothing at all. */
         CHECK((def->cut_item == ITEM_NONE) == (def->cut_yield == 0));
-        for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {
-            /* A stock grows back, or there is none. */
-            CHECK((def->stock_capacity[stock] > 0) == (def->stock_regrow_hours[stock] > 0));
+        /* A product: an item, a stock that grows back, a season; a slot
+         * without an item is empty. */
+        int products = 0, foods = 0;
+        for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
+            const PlantProduct *product = &def->products[slot];
+            bool used = product->item != ITEM_NONE;
+            CHECK(used == (product->capacity > 0));
+            CHECK(used == (product->regrow_hours > 0));
+            CHECK(used == (product->days != 0));
+            CHECK((product->days & ~PLANT_ALL_YEAR) == 0);
+            CHECK(used || (!product->dug && !product->confusable && product->min_growth == 0.0f));
+            CHECK(!product->dug || item_is_food(product->item)); /* Roots to eat. */
+            CHECK(plant_product((PlantType)p, slot) == (used ? product : NULL));
+            products += used;
+            foods += used && item_is_food(product->item);
         }
-        /* Food: an edible item, a season, a stock. */
-        bool food = def->food_item != ITEM_NONE;
-        CHECK(!food || item_is_food(def->food_item));
-        CHECK(food == (def->food_days != 0));
-        CHECK(food == (def->stock_capacity[PLANT_STOCK_FOOD] > 0));
-        CHECK((def->food_days & ~PLANT_ALL_YEAR) == 0);
-        CHECK(food || (!def->food_dug && !def->food_confusable && !def->dug_whole));
-        CHECK(!def->dug_whole || def->food_dug);
-        CHECK(!def->vanishes || food);
+        CHECK(foods <= 1); /* One food: plant_food_slot(). */
+        CHECK((plant_food_slot((PlantType)p) >= 0) == (foods == 1));
+        CHECK(!plant_is_tree((uint8_t)p) || products == 0); /* Trees shed, they do not bear. */
+        /* A plant that is taken whole is gone, or grows again from nothing. */
+        CHECK(def->harvest == PLANT_HARVEST_KEEPS || products > 0);
+        CHECK(!def->grazed || def->growth_per_day > 0.0f);
     }
     CHECK(terrain_def(TERRAIN_COUNT) == NULL);
     CHECK(rock_def(ROCK_COUNT) == NULL);
     CHECK(plant_def(PLANT_COUNT) == NULL);
+}
+
+/* Harvesting: what it does to the plant, by the data (PlantDef.harvest). */
+static void test_harvest_effects(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    int autumn = SEASON_DAY(SEASON_AUTUMN, 5);
+    Plant *bramble = &map.plants[map_index(&map, 1, 1, 0)];
+    Plant *carrot = &map.plants[map_index(&map, 2, 1, 0)];
+    Plant *mushrooms = &map.plants[map_index(&map, 3, 1, 0)];
+    Plant *grass = &map.plants[map_index(&map, 4, 1, 0)];
+    *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
+    *carrot = (Plant){.type = PLANT_WILD_CARROT, .growth = 1.0f};
+    *mushrooms = (Plant){.type = PLANT_MUSHROOMS, .growth = 1.0f};
+    *grass = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    plant_settle(bramble, SEASON_DAY(SEASON_SUMMER, 10));
+    plant_settle(carrot, autumn);
+    plant_settle(mushrooms, autumn);
+    plant_settle(grass, autumn);
+    for (int x = 1; x <= 4; x++) {
+        Plant *plant = &map.plants[map_index(&map, x, 1, 0)];
+        REQUIRE(plant_stock_available(plant, 0) > 0);
+        plant_take_stock(plant, 0, 1000);
+        plant_harvested(&map, x, 1, 0);
+    }
+    CHECK_EQ_INT(bramble->type, PLANT_BRAMBLE); /* Keeps: the stock grows back. */
+    CHECK_NEAR(bramble->growth, 1.0f, 1e-6);
+    CHECK_EQ_INT(carrot->type, PLANT_WILD_CARROT); /* Resets: grows again. */
+    CHECK_NEAR(carrot->growth, 0.0f, 1e-6);
+    CHECK_EQ_INT(grass->type, PLANT_GRASS);
+    CHECK_NEAR(grass->growth, 0.0f, 1e-6);
+    CHECK_EQ_INT(mushrooms->type, PLANT_NONE); /* Removes: the tile is bare. */
+    plant_harvested(&map, -1, 1, 0);           /* Outside the map: nothing. */
+    map_free(&map);
+}
+
+/* Grass grows like any plant and its stock of armfuls with it, whatever the
+ * season (what grows back is capped by its growth). */
+static void test_grass_stock_follows_growth(void)
+{
+    Plant grass = {.type = PLANT_GRASS, .growth = 0.0f};
+    const PlantProduct *armfuls = plant_product(PLANT_GRASS, 0);
+    REQUIRE(armfuls != NULL);
+    CHECK_EQ_INT(plant_stock_capacity(&grass, 0), 0);
+    int day = SEASON_DAY(SEASON_SPRING, 5);
+    int previous = 0;
+    for (int hours = 0; hours < 10 * HOURS_PER_DAY && grass.growth < 1.0f; hours += 6) {
+        plant_advance(&grass, 1.0f, 6, day);
+        int available = plant_stock_available(&grass, 0);
+        CHECK(available >= previous); /* Never less as it grows. */
+        CHECK(available <= plant_stock_capacity(&grass, 0));
+        previous = available;
+    }
+    CHECK_NEAR(grass.growth, 1.0f, 1e-6);
+    plant_advance(&grass, 1.0f, HOURS_PER_DAY, day);
+    CHECK_EQ_INT(plant_stock_available(&grass, 0), armfuls->capacity);
+    /* Eaten down by a grazer: the stock follows the growth. */
+    grass.growth = 0.2f;
+    plant_advance(&grass, 1.0f, 1, SEASON_DAY(SEASON_WINTER, 3));
+    CHECK_EQ_INT(plant_stock_available(&grass, 0), 0);
 }
 
 static void test_edible_plants(void)
@@ -304,7 +375,7 @@ static void test_edible_plants(void)
     plant_settle(bramble, SEASON_DAY(SEASON_SUMMER, 10));
     CHECK(map_has_edible_plant(&map, 3, 3, 0));
     CHECK(plant_has_food(bramble));
-    plant_take_stock(bramble, PLANT_STOCK_FOOD, 1000); /* Picked clean. */
+    plant_take_stock(bramble, 0, 1000); /* Picked clean. */
     CHECK(!map_has_edible_plant(&map, 3, 3, 0));
 
     /* Roots and what could be mistaken for a poisonous plant are not eaten
@@ -374,10 +445,10 @@ static void test_plant_growth_stages_and_fruit(void)
     CHECK(!plant_has_food(&plant)); /* Trees bear no food. */
 
     const PlantDef *bramble = plant_def(PLANT_BRAMBLE);
-    plant = (Plant){.type = PLANT_BRAMBLE, .growth = bramble->min_food_growth};
+    plant = (Plant){.type = PLANT_BRAMBLE, .growth = bramble->products[0].min_growth};
     plant_settle(&plant, SEASON_DAY(SEASON_SUMMER, 12));
     CHECK(plant_has_food(&plant));
-    plant = (Plant){.type = PLANT_BRAMBLE, .growth = bramble->min_food_growth - 0.01f};
+    plant = (Plant){.type = PLANT_BRAMBLE, .growth = bramble->products[0].min_growth - 0.01f};
     plant_settle(&plant, SEASON_DAY(SEASON_SUMMER, 12));
     CHECK(!plant_has_food(&plant)); /* Too young to bear fruit. */
     plant = (Plant){.type = PLANT_COUNT, .growth = 1.0f};
@@ -417,16 +488,13 @@ static void test_fruit_follows_the_season(void)
     int ripening = SEASON_DAY(SEASON_SUMMER, 8);
     Plant plant = {.type = PLANT_BRAMBLE, .growth = 1.0f};
     advance_days(&plant, SEASON_DAY(SEASON_SPRING, 1), ripening - 1);
-    CHECK_EQ_INT(plant_stock_available(&plant, PLANT_STOCK_FOOD), 0); /* Flowers only. */
+    CHECK_EQ_INT(plant_stock_available(&plant, 0), 0); /* Flowers only. */
     advance_days(&plant, ripening, ripening);
-    CHECK_EQ_INT(plant_stock_available(&plant, PLANT_STOCK_FOOD),
-                 HOURS_PER_DAY / def->stock_regrow_hours[PLANT_STOCK_FOOD]);
+    CHECK_EQ_INT(plant_stock_available(&plant, 0), HOURS_PER_DAY / def->products[0].regrow_hours);
     advance_days(&plant, ripening + 1, ripening + 10);
-    CHECK_EQ_INT(plant_stock_available(&plant, PLANT_STOCK_FOOD),
-                 def->stock_capacity[PLANT_STOCK_FOOD]);
+    CHECK_EQ_INT(plant_stock_available(&plant, 0), def->products[0].capacity);
     /* Picked, it ripens more while the season lasts. */
-    CHECK_EQ_INT(plant_take_stock(&plant, PLANT_STOCK_FOOD, 1000),
-                 def->stock_capacity[PLANT_STOCK_FOOD]);
+    CHECK_EQ_INT(plant_take_stock(&plant, 0, 1000), def->products[0].capacity);
     CHECK_NEAR(plant.growth, 1.0f, 1e-6); /* The bramble itself is untouched. */
     advance_days(&plant, ripening + 11, ripening + 11);
     CHECK(plant_has_food(&plant));
@@ -689,6 +757,8 @@ int main(void)
     RUN_TEST(test_hash_detects_changes);
     RUN_TEST(test_count_plants);
     RUN_TEST(test_definitions_are_complete);
+    RUN_TEST(test_harvest_effects);
+    RUN_TEST(test_grass_stock_follows_growth);
     RUN_TEST(test_edible_plants);
     RUN_TEST(test_water_and_drinking_spots);
     RUN_TEST(test_plant_growth_stages_and_fruit);

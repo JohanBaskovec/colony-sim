@@ -4,11 +4,11 @@
  * decides what to do: drink at the nearest water, eat, sleep when tired or
  * during the hours its species rests, go back to its herd, or wander.
  *
- * Only plant eaters for now. What a species eats is in its AnimalDef: grass,
- * grazed down bite by bite (Plant.growth), the food wild plants bear (the same
- * stock the settlers pick: animals compete with gathering), roots dug up by
- * those that dig, and the nuts lying under the trees. An animal goes for a
- * treat close by before it grazes.
+ * Only plant eaters for now. What a species eats is in its AnimalDef: the
+ * plants it grazes (PlantDef.grazed, eaten down bite by bite: Plant.growth), the food wild plants
+ * bear (the same stock the settlers pick: animals compete with gathering), roots dug up by those
+ * that dig, and the nuts lying under the trees. An animal goes for a treat close by before it
+ * grazes.
  *
  * Animals fear the settlers: one that sees a settler within its species'
  * flight distance, or hears one much closer without seeing it, runs off, and
@@ -144,7 +144,7 @@ typedef struct AnimalDef {
     float graze_min_growth;
     float graze_bite;
     float graze_value;
-    /* Plants whose food it eats, whether it digs roots up (PlantDef.food_dug:
+    /* Plants whose food it eats, whether it digs roots up (PlantProduct.dug:
      * left alone otherwise), whether it eats the nuts lying about, items a
      * bite takes, and the food a unit of nutrition (ItemDef.nutrition, what
      * a settler gets of it) is worth to it: small animals get more of it. */

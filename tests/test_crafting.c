@@ -874,7 +874,7 @@ static void test_plants_are_cleared_before_building(void)
     Plant *bramble = &game.map.plants[map_index(&game.map, 14, 10, 0)];
     *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
     plant_settle(bramble, GAME_START_DAY); /* In fruit. */
-    int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
+    int berries = plant_stock_available(bramble, 0);
     REQUIRE(berries > 0);
     /* A spot with nothing to bring is there at once; the bramble is not
      * destroyed, a settler is ordered to uproot it. */

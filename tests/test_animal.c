@@ -346,7 +346,7 @@ static void test_treats_before_grass(void)
     grow_grass(&game, 18, 18, 22, 22, 1.0f);
     Plant *bramble = put_plant(&game, 26, 20, PLANT_BRAMBLE);
     REQUIRE(plant_has_food(bramble));
-    int berries = plant_stock_available(bramble, PLANT_STOCK_FOOD);
+    int berries = plant_stock_available(bramble, 0);
     CHECK(animal_food_at(ANIMAL_ROE_DEER, &game.map, 26, 20, 0) == ANIMAL_FOOD_PLANT);
     CHECK(animal_food_at(ANIMAL_HARE, &game.map, 26, 20, 0) ==
           ANIMAL_FOOD_NONE); /* Not its food. */
@@ -358,11 +358,11 @@ static void test_treats_before_grass(void)
     /* Grass under its feet, but the blackberries close by first. */
     CHECK_EQ_INT(deer->task, ANIMAL_TASK_EAT);
     CHECK(deer->target.x == 26 && deer->target.y == 20);
-    for (int i = 0; i < 6000 && plant_stock_available(bramble, PLANT_STOCK_FOOD) == berries; i++) {
+    for (int i = 0; i < 6000 && plant_stock_available(bramble, 0) == berries; i++) {
         game_tick(&game);
     }
     /* A bite: the settlers will find fewer. */
-    CHECK_EQ_INT(plant_stock_available(bramble, PLANT_STOCK_FOOD),
+    CHECK_EQ_INT(plant_stock_available(bramble, 0),
                  berries - animal_def(ANIMAL_ROE_DEER)->bite_items);
     CHECK(deer->needs[ANIMAL_NEED_FOOD] > 0.3f);
 
@@ -371,7 +371,7 @@ static void test_treats_before_grass(void)
     REQUIRE(hind != NULL);
     put_plant(&game, 60, 60, PLANT_BRAMBLE);
     hind->needs[ANIMAL_NEED_FOOD] = 0.3f;
-    plant_take_stock(bramble, PLANT_STOCK_FOOD, 100); /* The near one is empty now. */
+    plant_take_stock(bramble, 0, 100); /* The near one is empty now. */
     run(&game, 3);
     CHECK_EQ_INT(hind->task, ANIMAL_TASK_EAT);
     CHECK(hind->target.x >= 18 && hind->target.x <= 22);

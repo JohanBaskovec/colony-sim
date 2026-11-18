@@ -292,7 +292,7 @@ hud.tile.tree_levels.other = Tree {0} levels high
 # A plant withered out of its season (wild garlic in summer, nettles in winter)
 hud.tile.plant_dormant = Plant: {0} (withered, grows back in spring)
 # {0} = the food a plant bears in another season (hazelnuts in summer...)
-hud.tile.plant_food_out_of_season = {0}: out of season
+hud.tile.plant_out_of_season = {0}: out of season
 # {0} = item name (branches, twigs), {1} = how many can be gathered now, {2} = most the plant can hold
 hud.tile.plant_stock = {0} to gather: {1}/{2}
 hud.tile.move_cost = Movement cost: ×{0}

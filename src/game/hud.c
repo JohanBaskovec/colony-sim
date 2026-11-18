@@ -382,19 +382,19 @@ static void build_tile_panel(App *app, Panel *panel)
             panel_add_text(panel, tr("tile_panel.left_alone"));
         }
         int today = game_day_of_year(app->game.clock.tick);
-        for (int stock = 0; stock < PLANT_STOCK_COUNT; stock++) {
-            if (plant_stock_capacity(plant, (PlantStock)stock) <= 0) {
+        for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
+            const PlantProduct *product = plant_product((PlantType)plant->type, slot);
+            if (product == NULL || plant_stock_capacity(plant, slot) <= 0) {
                 continue;
             }
-            const char *item =
-                tr(item_def(plant_stock_item((PlantType)plant->type, (PlantStock)stock))->name_key);
-            if (stock == PLANT_STOCK_FOOD && !plant_days_contain(def->food_days, today)) {
-                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant_food_out_of_season"),
+            const char *item = tr(item_def(product->item)->name_key);
+            if (!plant_days_contain(product->days, today)) {
+                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant_out_of_season"),
                           item);
                 continue;
             }
-            tr_integer(a, sizeof(a), plant_stock_available(plant, (PlantStock)stock));
-            tr_integer(b, sizeof(b), plant_stock_capacity(plant, (PlantStock)stock));
+            tr_integer(a, sizeof(a), plant_stock_available(plant, slot));
+            tr_integer(b, sizeof(b), plant_stock_capacity(plant, slot));
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.plant_stock"), item, a, b);
         }
     }

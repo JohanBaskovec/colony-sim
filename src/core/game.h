@@ -534,9 +534,8 @@ bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target);
 bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bool forbidden);
 
 /* The forbid and allow tools: forbids or allows everything on the tiles of a
- * rectangle (corners in any order), plans included, but grass, the ground cover
- * nearly everywhere (game_set_forbidden() takes it one tile at a time), and
- * zones, which are forbidden as a whole. Returns how many things changed. */
+ * rectangle (corners in any order), plans and plants included (grass too), but
+ * not zones, which are forbidden as a whole. Returns how many things changed. */
 int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool forbidden);
 
 /*

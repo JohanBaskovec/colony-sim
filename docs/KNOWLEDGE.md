@@ -485,9 +485,9 @@ settlers eat in a day, whole days; rot is ignored). Resources come in groups
 limits each of its resources: a resource is gathered only while its own order
 and its group's both want it (food: until 5 days of food by default, every
 food counted, roasted roots too; the other groups forever). An order may wait
-for the full harvest: food, branches and twigs only from plants whose stock
-is full (every fruit ripe, not only a grown plant), trees and grass fully
-grown only (on by default for trees), so that settlers do not walk to plants
+for the full harvest: what plants bear (food, grass) only from plants whose stock
+is full (every fruit ripe, not only a grown plant), trees, grass and roots (taken
+whole) fully grown only (on by default for trees), so that settlers do not walk to plants
 that give little. Wild food is there in its season only. On a tile that offers several jobs,
 the plant's branches and twigs come first, then its food, felling it, and
 stones last. All jobs but felling belong to Gathering (minimum 50; 60 for
@@ -690,11 +690,11 @@ jobs use whatever tool the settler carries.
 
 ### 7.3 Plants and seasons
 
-Every plant grows from spring to autumn and rests in winter. Its food is a
-stock (like branches and twigs) that ripens only on its days of the year,
-one item per regrowth period, up to a capacity scaled by growth (none below
-a minimum growth); out of its days the stock is gone (fallen, rotten,
-woody). Plants that die back wither to growth 0 out of their growing days:
+Every plant grows from spring to autumn and rests in winter. What it bears
+(its food, or the armfuls of grass: grass is a plant like the others) is a stock
+that is there only on its days of the year, one item per regrowth period,
+up to a capacity scaled by growth (none below a minimum growth); out of its
+days the stock is gone (fallen, rotten, woody). Plants that die back wither to growth 0 out of their growing days:
 nothing shows above ground, they grow again the next season.
 
 | id            | Where | Growth / day | Move cost | Food (capacity, regrowth) | Food season | Notes |

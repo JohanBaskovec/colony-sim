@@ -12,15 +12,13 @@
  * hazel's twelve nuts; 500 to dig four cattail rhizomes up. */
 #define HARVEST_WORK 40.0f
 #define DIG_WORK 125.0f
-#define BRANCH_WORK 300.0f /* Per branch. */
-#define TWIGS_WORK 150.0f  /* Per handful. */
-#define NUTS_WORK 60.0f    /* Per nut. */
-#define CUT_GRASS_WORK 150.0f
-#define STONE_WORK 200.0f /* Per stone. */
-/* Armfuls of grass cut from a fully grown tile, proportionally fewer when shorter. */
-#define CUT_GRASS_YIELD 3.0f
+#define BRANCH_WORK 300.0f    /* Per branch. */
+#define TWIGS_WORK 150.0f     /* Per handful. */
+#define NUTS_WORK 60.0f       /* Per nut. */
+#define CUT_GRASS_WORK 150.0f /* Clearing a tile of low plants. */
+#define CUT_GRASS_ARMFUL_WORK 50.0f
+#define STONE_WORK 200.0f       /* Per stone. */
 #define CLEAR_SHRUB_WORK 500.0f /* Pulling up a shrub by hand. */
-#define CUT_GRASS_MIN_GROWTH 0.5f
 
 #define ONE(type) ITEM_TYPE_BIT(type)
 
@@ -878,50 +876,114 @@ void gather_zones_plants_changed(GatherZones *zones)
 
 /* ---- Jobs ------------------------------------------------------------------- */
 
-/* Whether a stock of a plant is full (every fruit ripe, every twig grown back). */
-static bool stock_full(const Plant *plant, PlantStock stock)
+/* Whether a stock of a plant is full (every fruit ripe, every armful grown). */
+static bool stock_full(const Plant *plant, int slot)
 {
-    int capacity = plant_stock_capacity(plant, stock);
-    return capacity > 0 && plant_stock_available(plant, stock) >= capacity;
+    int capacity = plant_stock_capacity(plant, slot);
+    return capacity > 0 && plant_stock_available(plant, slot) >= capacity;
+}
+
+/* The resource an item is gathered as (GATHER_RESOURCE_COUNT: none). Asked for
+ * every tile of a zone, so answered from a table built from RESOURCE_DEFS once. */
+static GatherResource resource_of_item(ItemType item)
+{
+    static GatherResource table[ITEM_TYPE_COUNT];
+    static bool ready;
+    if (!ready) {
+        for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
+            table[type] = GATHER_RESOURCE_COUNT;
+        }
+        for (int r = GATHER_RESOURCE_COUNT - 1; r >= 0; r--) { /* The first resource wins. */
+            table[RESOURCE_DEFS[r].item] = (GatherResource)r;
+        }
+        ready = true;
+    }
+    return (unsigned)item < ITEM_TYPE_COUNT ? table[item] : GATHER_RESOURCE_COUNT;
+}
+
+/* Whether a job takes what a plant bears (its products: fruit, roots, grass)
+ * rather than what lies on the ground or the plant itself. */
+static bool takes_product(GatherJob job)
+{
+    return job == GATHER_JOB_HARVEST || job == GATHER_JOB_HARVEST_CAREFULLY ||
+           job == GATHER_JOB_DIG || job == GATHER_JOB_DIG_CAREFULLY || job == GATHER_JOB_CUT_GRASS;
+}
+
+/* The slot of the product of a plant that a job takes (-1: none). */
+static int product_slot_for(const Plant *plant, GatherJob job)
+{
+    for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
+        GatherResource resource = resource_of_item(plant_stock_item((PlantType)plant->type, slot));
+        if (resource != GATHER_RESOURCE_COUNT && RESOURCE_DEFS[resource].job == job) {
+            return slot;
+        }
+    }
+    return -1;
 }
 
 /* Whether a plant is ready for a resource's order: always, unless it waits for
- * the full harvest (a full stock; trees and grass fully grown). */
+ * the full harvest (a full stock; a plant that is taken whole, grass cut or
+ * roots dug up, and trees, fully grown). */
 static bool ripe_enough(const GatherZone *zone, GatherResource resource, const Plant *plant)
 {
     if (!zone->orders[resource].ripe_only || !RESOURCE_DEFS[resource].ripe_option) {
         return true;
     }
-    switch (RESOURCE_DEFS[resource].job) {
-    case GATHER_JOB_NUTS: return true; /* What lies on the ground is always ready. */
-    case GATHER_JOB_BRANCHES: return stock_full(plant, PLANT_STOCK_BRANCHES);
-    case GATHER_JOB_TWIGS: return stock_full(plant, PLANT_STOCK_TWIGS);
-    case GATHER_JOB_HARVEST:
-    case GATHER_JOB_HARVEST_CAREFULLY:
-    case GATHER_JOB_DIG:
-    case GATHER_JOB_DIG_CAREFULLY: return stock_full(plant, PLANT_STOCK_FOOD);
-    default: return plant->growth >= 1.0f;
+    GatherJob job = RESOURCE_DEFS[resource].job;
+    if (job == GATHER_JOB_NUTS) {
+        return true; /* What lies on the ground is always ready. */
     }
+    if (takes_product(job)) {
+        int slot = product_slot_for(plant, job);
+        return slot >= 0 && stock_full(plant, slot) &&
+               (plant_def((PlantType)plant->type)->harvest != PLANT_HARVEST_RESETS ||
+                plant->growth >= 1.0f);
+    }
+    return plant->growth >= 1.0f;
 }
 
-/* The resource an item is gathered as (GATHER_RESOURCE_COUNT: none). */
-static GatherResource resource_of_item(ItemType item)
+/* The resources the products of a plant type are (a mask), from a table built
+ * once: asked for every tile a settler's search visits. */
+static GatherResourceMask plant_resources(PlantType type)
 {
-    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
-        if (RESOURCE_DEFS[r].item == item) {
-            return (GatherResource)r;
+    static GatherResourceMask table[PLANT_COUNT];
+    static bool ready;
+    if (!ready) {
+        for (int p = 0; p < PLANT_COUNT; p++) {
+            for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
+                GatherResource resource = resource_of_item(plant_stock_item((PlantType)p, slot));
+                if (resource != GATHER_RESOURCE_COUNT) {
+                    table[p] |= GATHER_RESOURCE_BIT(resource);
+                }
+            }
+        }
+        ready = true;
+    }
+    return (unsigned)type < PLANT_COUNT ? table[type] : 0;
+}
+
+/* Whether a plant bears something now, of one of `resources`, ready for the
+ * zone's order. */
+static bool product_among(const GatherZone *zone, const Plant *plant, GatherResourceMask resources)
+{
+    if ((plant_resources((PlantType)plant->type) & resources) == 0) {
+        return false;
+    }
+    const PlantDef *def = plant_def((PlantType)plant->type);
+    for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
+        const PlantProduct *product = &def->products[slot];
+        /* Not even one item in the stock: refused without the rest (most tiles of
+         * a zone have nothing to take, and are asked for again and again). */
+        if (product->item == ITEM_NONE || plant->stock[slot] < product->regrow_hours) {
+            continue;
+        }
+        GatherResource resource = resource_of_item(product->item);
+        if (resource != GATHER_RESOURCE_COUNT && (resources & GATHER_RESOURCE_BIT(resource)) &&
+            plant_stock_available(plant, slot) > 0 && ripe_enough(zone, resource, plant)) {
+            return true;
         }
     }
-    return GATHER_RESOURCE_COUNT;
-}
-
-/* Whether a plant bears food now, of one of `resources`, ready for the zone's order. */
-static bool food_among(const GatherZone *zone, const Plant *plant, GatherResourceMask resources)
-{
-    GatherResource resource =
-        resource_of_item(plant_stock_item((PlantType)plant->type, PLANT_STOCK_FOOD));
-    return resource != GATHER_RESOURCE_COUNT && (resources & GATHER_RESOURCE_BIT(resource)) &&
-           plant_has_food(plant) && ripe_enough(zone, resource, plant);
+    return false;
 }
 
 /* Stones of a resource's type on a tile (0 for the other resources). */
@@ -932,34 +994,18 @@ static int stones_of(const Map *map, int x, int y, int z, GatherResource resourc
 }
 
 /* Whether the job takes what lies on the tile (branches, twigs and nuts shed
- * by the trees, on the ground or on their foliage; and what a shrub on it
- * bears, branches and twigs). */
-static bool takes_stock(GatherJob job)
+ * by the trees, on the ground or on their foliage). */
+static bool takes_litter(GatherJob job)
 {
     return job == GATHER_JOB_BRANCHES || job == GATHER_JOB_TWIGS || job == GATHER_JOB_NUTS;
 }
 
 /* The item such a job takes. */
-static ItemType stock_item(GatherJob job)
+static ItemType litter_item(GatherJob job)
 {
     return job == GATHER_JOB_BRANCHES ? ITEM_BRANCHES
            : job == GATHER_JOB_NUTS   ? ITEM_HAZELNUTS
                                       : ITEM_TWIGS;
-}
-
-/* What a plant on the tile bears for such a job (nothing for nuts). */
-static int plant_stock_for(const Plant *plant, GatherJob job)
-{
-    return job == GATHER_JOB_BRANCHES ? plant_stock_available(plant, PLANT_STOCK_BRANCHES)
-           : job == GATHER_JOB_TWIGS  ? plant_stock_available(plant, PLANT_STOCK_TWIGS)
-                                      : 0;
-}
-
-static int take_plant_stock(Plant *plant, GatherJob job)
-{
-    return job == GATHER_JOB_BRANCHES ? plant_take_stock(plant, PLANT_STOCK_BRANCHES, INT16_MAX)
-           : job == GATHER_JOB_TWIGS  ? plant_take_stock(plant, PLANT_STOCK_TWIGS, INT16_MAX)
-                                      : 0;
 }
 
 /* tile_holds() on a tile a zone can cover (checked by the caller). */
@@ -972,26 +1018,16 @@ static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, in
     size_t index = map_index(map, x, y, z);
     const Plant *plant = &map->plants[index];
     bool plant_forbidden = map->forbidden_count > 0 && (map->forbidden[index] & MAP_FORBID_PLANT);
-    if (plant_forbidden && job != GATHER_JOB_STONES && !takes_stock(job)) {
+    if (plant_forbidden && job != GATHER_JOB_STONES && !takes_litter(job)) {
         return false;
     }
-    switch (job) {
-    case GATHER_JOB_HARVEST:
-    case GATHER_JOB_HARVEST_CAREFULLY:
-    case GATHER_JOB_DIG:
-    case GATHER_JOB_DIG_CAREFULLY: return food_among(zone, plant, resources);
-    case GATHER_JOB_NUTS: return map_litter(map, x, y, z, ITEM_HAZELNUTS) > 0;
-    case GATHER_JOB_BRANCHES:
-    case GATHER_JOB_TWIGS: {
-        /* What lies there is always ready; a shrub's stock waits for the order. */
-        GatherResource resource = job == GATHER_JOB_BRANCHES ? GATHER_BRANCHES : GATHER_TWIGS;
-        return map_litter(map, x, y, z, stock_item(job)) > 0 ||
-               (!plant_forbidden && plant_stock_for(plant, job) > 0 &&
-                ripe_enough(zone, resource, plant));
+    if (takes_product(job)) {
+        return product_among(zone, plant, resources);
     }
-    case GATHER_JOB_CUT_GRASS:
-        return plant->type == PLANT_GRASS && plant->growth >= CUT_GRASS_MIN_GROWTH &&
-               ripe_enough(zone, GATHER_GRASS, plant);
+    switch (job) {
+    case GATHER_JOB_NUTS:
+    case GATHER_JOB_BRANCHES:
+    case GATHER_JOB_TWIGS: return map_litter(map, x, y, z, litter_item(job)) > 0;
     case GATHER_JOB_CHOP:
         return plant_is_tree(plant->type) && ripe_enough(zone, GATHER_WOOD, plant);
     case GATHER_JOB_STONES:
@@ -1025,19 +1061,14 @@ static bool job_open(const GatherZone *zone, const Map *map, int x, int y, int z
 static int plant_yield(const Map *map, int x, int y, int z, GatherJob job)
 {
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    if (takes_product(job)) {
+        int slot = product_slot_for(plant, job);
+        return slot >= 0 ? plant_stock_available(plant, slot) : 0;
+    }
     switch (job) {
-    case GATHER_JOB_HARVEST:
-    case GATHER_JOB_HARVEST_CAREFULLY:
-    case GATHER_JOB_DIG:
-    case GATHER_JOB_DIG_CAREFULLY: return plant_stock_available(plant, PLANT_STOCK_FOOD);
     case GATHER_JOB_NUTS:
     case GATHER_JOB_BRANCHES:
-    case GATHER_JOB_TWIGS:
-        return map_litter(map, x, y, z, stock_item(job)) + plant_stock_for(plant, job);
-    case GATHER_JOB_CUT_GRASS: {
-        int armfuls = (int)(CUT_GRASS_YIELD * plant->growth + 0.5f);
-        return armfuls > 1 ? armfuls : 1;
-    }
+    case GATHER_JOB_TWIGS: return map_litter(map, x, y, z, litter_item(job));
     case GATHER_JOB_CHOP: return tree_wood_yield(plant);
     default: return 0;
     }
@@ -1123,12 +1154,13 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
         return 0.0f;
     }
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
-    int food = plant_stock_available(plant, PLANT_STOCK_FOOD);
+    int items = takes_product(job) ? plant_yield(map, x, y, z, job) : 0;
     switch (job) {
     case GATHER_JOB_HARVEST:
-    case GATHER_JOB_HARVEST_CAREFULLY: return HARVEST_WORK * (float)(food > 1 ? food : 1);
+    case GATHER_JOB_HARVEST_CAREFULLY: return HARVEST_WORK * (float)(items > 1 ? items : 1);
     case GATHER_JOB_DIG:
-    case GATHER_JOB_DIG_CAREFULLY: return DIG_WORK * (float)(food > 1 ? food : 1);
+    case GATHER_JOB_DIG_CAREFULLY: return DIG_WORK * (float)(items > 1 ? items : 1);
+    case GATHER_JOB_CUT_GRASS: return CUT_GRASS_ARMFUL_WORK * (float)(items > 1 ? items : 1);
     case GATHER_JOB_BRANCHES: {
         int available = plant_yield(map, x, y, z, job);
         return BRANCH_WORK * (float)(available > 1 ? available : 1);
@@ -1141,7 +1173,6 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
         int available = plant_yield(map, x, y, z, job);
         return NUTS_WORK * (float)(available > 1 ? available : 1);
     }
-    case GATHER_JOB_CUT_GRASS: return CUT_GRASS_WORK;
     case GATHER_JOB_CHOP: return tree_fell_work(plant);
     case GATHER_JOB_STONES: return STONE_WORK;
     default: return 0.0f;
@@ -1173,33 +1204,24 @@ static ItemType complete(Map *map, int x, int y, int z, GatherJob job, GatherRes
                          Rng *rng, int *count)
 {
     Plant *plant = &map->plants[map_index(map, x, y, z)];
-    const PlantDef *def = plant_def((PlantType)plant->type);
     ItemType item = ITEM_NONE;
     *count = plant_yield(map, x, y, z, job);
-    switch (job) {
-    case GATHER_JOB_HARVEST:
-    case GATHER_JOB_HARVEST_CAREFULLY:
-    case GATHER_JOB_DIG:
-    case GATHER_JOB_DIG_CAREFULLY:
-        item = def->food_item;
-        *count = plant_take_stock(plant, PLANT_STOCK_FOOD, INT16_MAX);
-        if (def->vanishes) {
-            map_remove_plant(map, x, y, z); /* The patch is gone. */
-        } else if (def->dug_whole) {
-            plant->growth = 0.0f; /* Grows again from what is left in the ground. */
-            memset(plant->stock, 0, sizeof(plant->stock));
+    if (takes_product(job)) {
+        int slot = product_slot_for(plant, job);
+        if (slot >= 0) {
+            item = plant_stock_item((PlantType)plant->type, slot);
+            *count = plant_take_stock(plant, slot, INT16_MAX);
+            plant_harvested(map, x, y, z);
         }
-        break;
+        return item;
+    }
+    switch (job) {
     case GATHER_JOB_NUTS:
     case GATHER_JOB_BRANCHES:
     case GATHER_JOB_TWIGS:
-        /* All that lies on the tile, and a shrub's stock. */
-        item = stock_item(job);
-        *count = map_take_litter(map, x, y, z, item) + take_plant_stock(plant, job);
-        break;
-    case GATHER_JOB_CUT_GRASS:
-        item = ITEM_FRESH_GRASS;
-        plant->growth = 0.0f;
+        /* All that lies on the tile. */
+        item = litter_item(job);
+        *count = map_take_litter(map, x, y, z, item);
         break;
     case GATHER_JOB_STONES:
         item = find_stone(map, x, y, z, wanted, rng);
@@ -1323,9 +1345,8 @@ float gather_clear_work(const Map *map, int x, int y, int z)
 
 ToolUse gather_clear_tool_use(const Map *map, int x, int y, int z)
 {
-    return map_in_bounds(map, x, y, z) && map->plants[map_index(map, x, y, z)].type == PLANT_GRASS
-               ? TOOL_USE_CUT_GRASS
-               : TOOL_USE_NONE;
+    const GatherJobDef *job = gather_job_def(gather_plant_harvest_job(map, x, y, z));
+    return job != NULL ? job->tool_use : TOOL_USE_NONE;
 }
 
 void gather_clear_plant(Map *map, Items *items, int x, int y, int z, double level, Rng *rng)
@@ -1334,20 +1355,18 @@ void gather_clear_plant(Map *map, Items *items, int x, int y, int z, double leve
         return;
     }
     Plant *plant = &map->plants[map_index(map, x, y, z)];
-    GatherJob jobs[4];
-    int job_count = 0;
-    if (plant->type == PLANT_GRASS && plant->growth > 0.0f) {
-        jobs[job_count++] = GATHER_JOB_CUT_GRASS;
-    } else if (plant->type != PLANT_GRASS) {
-        jobs[job_count++] = GATHER_JOB_BRANCHES;
-        jobs[job_count++] = GATHER_JOB_TWIGS;
-        if (plant_has_food(plant)) {
-            jobs[job_count++] = GATHER_JOB_HARVEST; /* Food of any kind, dug or picked. */
+    /* What lies on the tile, then everything the plant bears. */
+    static const GatherJob LITTER_JOBS[] = {GATHER_JOB_BRANCHES, GATHER_JOB_TWIGS};
+    for (size_t i = 0; i < sizeof(LITTER_JOBS) / sizeof(LITTER_JOBS[0]); i++) {
+        int count;
+        ItemType item = complete(map, x, y, z, LITTER_JOBS[i], 0, rng, &count);
+        if (item != ITEM_NONE && count > 0 && items != NULL) {
+            items_drop(items, map, x, y, z, knowledge_product(item, count, level, rng));
         }
     }
-    for (int i = 0; i < job_count; i++) {
-        int count;
-        ItemType item = complete(map, x, y, z, jobs[i], 0, rng, &count);
+    for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
+        ItemType item = plant_stock_item((PlantType)plant->type, slot);
+        int count = plant_take_stock(plant, slot, INT16_MAX);
         if (item != ITEM_NONE && count > 0 && items != NULL) {
             items_drop(items, map, x, y, z, knowledge_product(item, count, level, rng));
         }
@@ -1364,30 +1383,19 @@ GatherJob gather_plant_harvest_job(const Map *map, int x, int y, int z)
     if (plant->type == PLANT_NONE || plant_is_tree(plant->type)) {
         return GATHER_JOB_NONE;
     }
-    if (plant->type == PLANT_GRASS) {
-        return GATHER_JOB_CUT_GRASS;
+    for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
+        GatherResource resource = resource_of_item(plant_stock_item((PlantType)plant->type, slot));
+        if (resource != GATHER_RESOURCE_COUNT && takes_product(RESOURCE_DEFS[resource].job)) {
+            return RESOURCE_DEFS[resource].job;
+        }
     }
-    GatherResource resource =
-        resource_of_item(plant_stock_item((PlantType)plant->type, PLANT_STOCK_FOOD));
-    if (resource == GATHER_RESOURCE_COUNT) {
-        return GATHER_JOB_NONE;
-    }
-    GatherJob job = RESOURCE_DEFS[resource].job;
-    return job == GATHER_JOB_HARVEST || job == GATHER_JOB_HARVEST_CAREFULLY ||
-                   job == GATHER_JOB_DIG || job == GATHER_JOB_DIG_CAREFULLY
-               ? job
-               : GATHER_JOB_NONE;
+    return GATHER_JOB_NONE;
 }
 
 bool gather_plant_harvestable(const Map *map, int x, int y, int z)
 {
     GatherJob job = gather_plant_harvest_job(map, x, y, z);
-    if (job == GATHER_JOB_NONE) {
-        return false;
-    }
-    const Plant *plant = &map->plants[map_index(map, x, y, z)];
-    return job == GATHER_JOB_CUT_GRASS ? plant->growth >= CUT_GRASS_MIN_GROWTH
-                                       : plant_has_food(plant);
+    return job != GATHER_JOB_NONE && plant_yield(map, x, y, z, job) > 0;
 }
 
 bool gather_harvest_plant(Map *map, Items *items, int x, int y, int z, double level, Rng *rng)
@@ -1420,7 +1428,7 @@ float gather_uproot_work(const Map *map, int x, int y, int z)
     float work = gather_clear_work(map, x, y, z);
     const Plant *plant = &map->plants[map_index(map, x, y, z)];
     GatherJob job = gather_plant_harvest_job(map, x, y, z);
-    if (job != GATHER_JOB_CUT_GRASS && plant_has_food(plant)) {
+    if (plant_has_food(plant)) {
         work += gather_job_work_needed(map, x, y, z, job); /* Its food first. */
     }
     return work > HARVEST_WORK ? work : HARVEST_WORK; /* Even what is left in the ground. */

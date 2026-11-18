@@ -18,11 +18,11 @@
  * gathered only while its own order and its group's order both want it (the
  * group's order is never turned off; food: until 5 days of food by default).
  *
- * An order may wait for the full harvest (GatherOrder.ripe_only): wild food,
- * branches and twigs are taken only from plants whose stock is full (every
- * fruit ripe, not only a grown plant), trees felled and grass cut fully grown
- * only, so that settlers do not walk to plants that give little. Wild food is
- * there in its season only (see PlantDef.food_days); what is easily mistaken
+ * An order may wait for the full harvest (GatherOrder.ripe_only): what a
+ * plant bears (wild food, grass) is taken only from plants whose stock is full
+ * (every fruit ripe, every armful grown, not only a grown plant), trees felled
+ * fully grown only, so that settlers do not walk to plants that give little.
+ * Wild food is there in its season only (see PlantProduct.days); what is easily mistaken
  * for a poisonous plant is only taken by skilled gatherers
  * (GATHER_CAREFUL_MIN_LEVEL).
  *
@@ -438,26 +438,26 @@ float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, in
  * cleared: see map_plant_blocks_building()). */
 float gather_clear_work(const Map *map, int x, int y, int z);
 
-/* What a tool speeds up while clearing a tile: cutting grass, nothing for a
- * shrub or a low plant pulled up by hand. */
+/* What a tool speeds up while clearing a tile: what takes the plant's product
+ * (cutting grass, digging roots), nothing for a shrub pulled up by hand. */
 ToolUse gather_clear_tool_use(const Map *map, int x, int y, int z);
 
 /* Removes the plant of a tile (cut grass, a pulled up shrub) and drops what it
- * gives (cut grass, its twigs and branches, its food) with quality from the
- * worker's `level`; `rng` may be NULL. */
+ * gives (everything it bears, the twigs and branches lying there) with quality
+ * from the worker's `level`; `rng` may be NULL. */
 void gather_clear_plant(Map *map, Items *items, int x, int y, int z, double level, Rng *rng);
 
 /*
  * Single plants, for the Harvest and Uproot orders (core/designation.h).
- * The job that takes what the plant on a tile gives without uprooting it:
- * picking its food (digging it up for roots, which grow again or are gone
- * as for a zone), cutting grass. GATHER_JOB_NONE without a plant, for a tree
- * (felled instead), or a plant that gives nothing.
+ * The job that takes what the plant on a tile bears without uprooting it:
+ * picking its food, digging it up for roots, cutting grass (what happens to
+ * the plant: PlantDef.harvest). GATHER_JOB_NONE without a plant, for a tree
+ * (felled instead), or a plant that bears nothing.
  */
 GatherJob gather_plant_harvest_job(const Map *map, int x, int y, int z);
 
 /* Whether the plant on a tile has something to harvest now (ripe food, grass
- * grown enough to cut). */
+ * grown enough to cut: a stock to take). */
 bool gather_plant_harvestable(const Map *map, int x, int y, int z);
 
 /* Takes what the plant gives (gather_plant_harvest_job()) and drops it on

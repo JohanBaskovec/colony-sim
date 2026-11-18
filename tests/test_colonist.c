@@ -116,7 +116,7 @@ static Plant *add_bramble(Map *map, int x, int y)
 /* Handfuls of blackberries a grown bramble bears at most. */
 static int bramble_fruit(void)
 {
-    return plant_def(PLANT_BRAMBLE)->stock_capacity[PLANT_STOCK_FOOD];
+    return plant_def(PLANT_BRAMBLE)->products[0].capacity;
 }
 
 static void test_spawn_requires_passable_tile(void)
@@ -255,7 +255,7 @@ static void test_hungry_colonist_walks_to_food_and_eats(void)
     CHECK_EQ_INT(colonist->y, 20);
     CHECK(colonist->needs[NEED_FOOD] > 0.55f);
     /* Ate some of the fruit; the bramble stays. */
-    CHECK(plant_stock_available(bramble, PLANT_STOCK_FOOD) < bramble_fruit());
+    CHECK(plant_stock_available(bramble, 0) < bramble_fruit());
     CHECK_NEAR(bramble->growth, 1.0f, 1e-6);
     CHECK(colonist->task != TASK_EAT); /* No other food around: gives up and idles. */
     game_shutdown(&game);
@@ -616,6 +616,7 @@ static float grass_progress(ItemStack tool, int ticks)
     }
     Plant *grass = &game.map.plants[map_index(&game.map, 23, 20, 0)];
     *grass = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    plant_settle(grass, GAME_START_DAY);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     if (tool.count > 0) {
         colonist_add_tool(colonist, tool);
@@ -1058,7 +1059,7 @@ static void test_hungry_colonist_eats_fruit_from_the_ground(void)
     CHECK(colonist->needs[NEED_FOOD] >= COLONIST_SATED_FOOD - 0.01f);
     CHECK(eaten >= expected && eaten <= expected + 1);
     /* The bramble was not touched. */
-    CHECK_EQ_INT(plant_stock_available(bramble, PLANT_STOCK_FOOD), bramble_fruit());
+    CHECK_EQ_INT(plant_stock_available(bramble, 0), bramble_fruit());
     game_shutdown(&game);
 }
 
@@ -1390,7 +1391,7 @@ static void test_colonist_harvests_blackberries(void)
                          (int)gather_job_work_needed(&game.map, 24, 20, 0, GATHER_JOB_HARVEST));
     CHECK_EQ_INT(items_get(&game.items, 24, 20, 0).type, ITEM_BLACKBERRIES);
     CHECK_EQ_INT(items_get(&game.items, 24, 20, 0).count, bramble_fruit());
-    CHECK_EQ_INT(plant_stock_available(bramble, PLANT_STOCK_FOOD), 0);
+    CHECK_EQ_INT(plant_stock_available(bramble, 0), 0);
     CHECK_NEAR(bramble->growth, 1.0f, 1e-6);
     game_shutdown(&game);
 }
@@ -1997,7 +1998,7 @@ static void test_gatherer_waits_for_the_fruit_to_ripen(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     Plant *bramble = add_bramble(&game.map, 24, 20);
-    plant_take_stock(bramble, PLANT_STOCK_FOOD, 1000); /* Picked clean. */
+    plant_take_stock(bramble, 0, 1000); /* Picked clean. */
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
@@ -2007,12 +2008,12 @@ static void test_gatherer_waits_for_the_fruit_to_ripen(void)
     CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], 0);
 
     /* Once a handful has ripened, the idle colonist notices and picks it. */
-    int regrow = plant_def(PLANT_BRAMBLE)->stock_regrow_hours[PLANT_STOCK_FOOD];
+    int regrow = plant_def(PLANT_BRAMBLE)->products[0].regrow_hours;
     plant_regrow_stocks(bramble, regrow, GAME_START_DAY);
-    REQUIRE(plant_stock_available(bramble, PLANT_STOCK_FOOD) == 1);
+    REQUIRE(plant_stock_available(bramble, 0) == 1);
     run_ticks(&game, TICKS_PER_HOUR * 2);
     CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], 1);
-    CHECK_EQ_INT(plant_stock_available(bramble, PLANT_STOCK_FOOD), 0);
+    CHECK_EQ_INT(plant_stock_available(bramble, 0), 0);
     game_shutdown(&game);
 }
 
@@ -2027,7 +2028,7 @@ static void test_gatherer_fetches_a_digging_stick(void)
         Plant *cattail = &game.map.plants[map_index(&game.map, 26, 20, 0)];
         *cattail = (Plant){.type = PLANT_CATTAIL, .growth = 1.0f};
         plant_settle(cattail, GAME_START_DAY);
-        int rhizomes = plant_stock_available(cattail, PLANT_STOCK_FOOD);
+        int rhizomes = plant_stock_available(cattail, 0);
         REQUIRE(rhizomes > 0);
         if (stick) {
             items_add(&game.items, 20, 23, 0, item_stack_pristine(ITEM_DIGGING_STICK, 1));

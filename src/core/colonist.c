@@ -4542,9 +4542,10 @@ static void eat(Colonist *colonist, const ColonistContext *context)
     } else {
         /* Then the plant's fruit or leaves, fresh. */
         Plant *plant = &map->plants[map_index(map, colonist->x, colonist->y, colonist->z)];
-        type = plant_stock_item((PlantType)plant->type, PLANT_STOCK_FOOD);
+        int slot = plant_food_slot((PlantType)plant->type);
+        type = plant_stock_item((PlantType)plant->type, slot);
         int wanted = (int)ceilf(appetite / item_def(type)->nutrition);
-        eaten = plant_take_stock(plant, PLANT_STOCK_FOOD, wanted > 1 ? wanted : 1);
+        eaten = plant_take_stock(plant, slot, wanted > 1 ? wanted : 1);
         mood_meal(mood, type, 100);
     }
     float nutrition = item_def(type)->nutrition * (float)eaten;
