@@ -2379,6 +2379,34 @@ void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *
     batch_flush(renderer);
 }
 
+/* The light view: a tile's light now, from darkness to full light. */
+static SDL_Color light_color(const Theme *theme, float light)
+{
+    const int last = THEME_LIGHT_STEPS - 1;
+    float position = clampf(light, 0.0f, 1.0f) * (float)last;
+    int from = SDL_min((int)position, last - 1);
+    return mix(theme->light[from], theme->light[from + 1], position - (float)from);
+}
+
+void render_light(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                  const Theme *theme)
+{
+    const int z = camera->level; /* The level shown. */
+    TileRect visible = camera_visible_tiles(camera, game->map.width, game->map.height);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            if (map_is_open(&game->map, x, y, z) || !game_tile_seen(game, x, y, z)) {
+                continue; /* Nothing here (the levels below show), or out of view. */
+            }
+            SDL_Color color = light_color(theme, game_light_at(game, x, y, z));
+            color.a = 130;
+            SDL_FRect tile = tile_rect(camera, x, y);
+            batch_quad(renderer, color, &tile);
+        }
+    }
+    batch_flush(renderer);
+}
+
 /* Whether the tile drawn at (x, y) on the level shown is in view now. */
 static bool fog_tile_seen(const Game *game, const Camera *camera, int x, int y)
 {

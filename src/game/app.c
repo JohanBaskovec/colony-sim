@@ -110,6 +110,22 @@ static void cycle_build_tool(App *app)
     app->box_selecting = false;
 }
 
+void app_toggle_temperature_view(App *app)
+{
+    app->show_temperature = !app->show_temperature;
+    if (app->show_temperature) {
+        app->show_light = false;
+    }
+}
+
+void app_toggle_light_view(App *app)
+{
+    app->show_light = !app->show_light;
+    if (app->show_light) {
+        app->show_temperature = false;
+    }
+}
+
 /* Colonists, a station or a zone: one kind of selection at a time. */
 static bool has_selection(const App *app)
 {
@@ -815,7 +831,8 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_ITEMS_MENU: app->show_items_menu = !app->show_items_menu; return;
     case APP_KEY_ANIMALS_MENU: app->show_animals_menu = !app->show_animals_menu; return;
     case APP_KEY_SCENARIOS_MENU: app->show_scenarios_menu = !app->show_scenarios_menu; return;
-    case APP_KEY_TEMPERATURE: app->show_temperature = !app->show_temperature; return;
+    case APP_KEY_TEMPERATURE: app_toggle_temperature_view(app); return;
+    case APP_KEY_LIGHT: app_toggle_light_view(app); return;
     case APP_KEY_LEVEL_UP: set_level(app, app->camera.level + 1); return;
     case APP_KEY_LEVEL_DOWN: set_level(app, app->camera.level - 1); return;
     case APP_KEY_MINE: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); return;
@@ -1518,6 +1535,9 @@ static void render_frame(App *app)
     render_weather(app->renderer, &app->game, &app->camera, SDL_GetTicks());
     if (app->show_temperature) {
         render_temperature(app->renderer, &app->game, &app->camera, &app->ui.theme);
+    }
+    if (app->show_light) {
+        render_light(app->renderer, &app->game, &app->camera, &app->ui.theme);
     }
     if (app->show_vision && app->game.vision_on) {
         render_vision(app->renderer, &app->game, &app->camera,

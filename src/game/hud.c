@@ -250,6 +250,36 @@ static void temperature_text(char *out, size_t size, float celsius, int decimals
     TR_FORMAT(out, size, tr("unit.celsius"), number);
 }
 
+/* With the temperature view on, the temperature felt on the tile under the mouse
+ * (the warmth of fires included, as drawn); with the light view, its light now
+ * and the best it gets today. Nothing for what the colony has not seen. */
+static void add_hovered_tile_reading(const App *app, Panel *panel)
+{
+    if ((!app->show_temperature && !app->show_light) || !app->hover_valid) {
+        return;
+    }
+    const Game *game = &app->game;
+    int x = app->hover_x, y = app->hover_y, z = app->camera.level;
+    const Map *map = game_view_map(game);
+    if (!map_in_bounds(map, x, y, z) || map_is_open(&game->map, x, y, z) ||
+        !game_tile_seen(game, x, y, z)) {
+        return;
+    }
+    char text[32], more[32];
+    if (app->show_temperature) {
+        float felt = temperature_at(&game->temperatures, x, y, z) +
+                     hearths_radiant_warmth(&game->workstations, &game->map, x, y, z);
+        temperature_text(text, sizeof(text), felt, 1);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.hover_temperature"), text);
+    } else {
+        tr_integer(text, sizeof(text),
+                   (long long)SDL_lroundf(game_light_at(game, x, y, z) * 100.0f));
+        tr_integer(more, sizeof(more),
+                   (long long)SDL_lroundf(game_light_peak_at(game, x, y, z) * 100.0f));
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.hover_light"), text, more);
+    }
+}
+
 static void build_status_panel(App *app, Panel *panel)
 {
     const GameClock *clock = &app->game.clock;
@@ -284,6 +314,11 @@ static void build_status_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.temperature_view"), cold, hot,
                   app_key_name(APP_KEY_TEMPERATURE));
     }
+    if (app->show_light) {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.light_view"),
+                  app_key_name(APP_KEY_LIGHT));
+    }
+    add_hovered_tile_reading(app, panel);
 }
 
 bool hud_site_line(const ConstructionSite *site, int line, char *out, size_t size)
@@ -1304,6 +1339,7 @@ static void help_window(App *app)
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.rotate"), app_key_name(APP_KEY_ROTATE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.temperature"),
               app_key_name(APP_KEY_TEMPERATURE));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.light"), app_key_name(APP_KEY_LIGHT));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.roofs"), app_key_name(APP_KEY_LEVEL_UP),
               tr("designation.deconstruct"));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.follow"), app_key_name(APP_KEY_FOLLOW));

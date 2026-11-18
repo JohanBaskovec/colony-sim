@@ -76,6 +76,8 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
 
 /* The temperature felt on each visible tile (the warmth of fires
  * included), from blue (cold) to red or orange (hot): the theme's colors. */
+void render_light(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                  const Theme *theme);
 void render_temperature(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                         const Theme *theme);
 

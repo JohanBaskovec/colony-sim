@@ -44,11 +44,15 @@ typedef enum ThemeColor {
 /* Colors of the temperature view, coldest to hottest (render_temperature()). */
 #define THEME_TEMPERATURE_STEPS 5
 
+/* Colors of the light view, from darkness to full light (render_light()). */
+#define THEME_LIGHT_STEPS 3
+
 typedef struct Theme {
     float scale; /* 1: the default size. */
     SettingsPalette palette;
     SDL_Color colors[THEME_COLOR_COUNT];
     SDL_Color temperature[THEME_TEMPERATURE_STEPS];
+    SDL_Color light[THEME_LIGHT_STEPS];
     /* Sizes in pixels, the scale applied. */
     float font_size;           /* Points. */
     float margin;              /* Kept free at the screen edges. */

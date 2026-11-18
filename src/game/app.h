@@ -76,6 +76,7 @@ typedef enum AppTool {
 #define APP_KEY_ITEMS_MENU SDL_SCANCODE_F5     /* Spawning items (game/items_panel.h). */
 #define APP_KEY_ANIMALS_MENU SDL_SCANCODE_F6   /* Spawning animals (game/animals_panel.h). */
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H     /* Temperature view on or off. */
+#define APP_KEY_LIGHT SDL_SCANCODE_G           /* Light view on or off. */
 #define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP   /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
 
@@ -226,6 +227,7 @@ typedef struct App {
     int pending_scenario;  /* A test scenario to load before the next update (TestScenario + 1, 0:
                               none). */
     bool show_temperature; /* The temperature of each tile over the map. */
+    bool show_light;       /* The light on each tile over the map (not with the temperature). */
     bool character_editor; /* Debug: - and + buttons on needs, characters and knowledge. */
     bool show_vision;      /* Debug: what the selected settler sees, the rest veiled. */
     float level_wheel;     /* Wheel steps with Shift held, towards the next level. */
@@ -339,6 +341,11 @@ bool app_thing_at(const App *app, TileThing thing, int x, int y, int z);
 /* The plant on a tile as the colony knows it; on a tile of trunk or foliage,
  * its tree's (PLANT_NONE: none). */
 PlantType app_plant_type_at(const App *app, int x, int y, int z);
+
+/* Turns the temperature view, or the light view, on or off: the two are drawn
+ * over the same tiles, so showing one hides the other. */
+void app_toggle_temperature_view(App *app);
+void app_toggle_light_view(App *app);
 
 /* Starts building another of what is selected (APP_KEY_BUILD_LIKE). */
 void app_build_like_selection(App *app);

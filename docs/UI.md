@@ -255,7 +255,14 @@ Row widgets of windows: `ui_layout_meter()` (label, bar under it),
 
 From the bottom up, above the bottom bar:
 
-- **Overlay toggles** (icon buttons with a tooltip): temperature for now.
+- **Overlay toggles** (icon buttons with a tooltip): the **temperature view**
+  (a thermometer, key H: blue for cold, red for hot, the warmth of fires
+  included) and the **light view** (a sun, key G: the light each tile gets
+  now from the sun, the sky and what covers it, dark blue for darkness to
+  yellow for full light). One at a time: showing one hides the other. With
+  either on, the status panel (bottom right) also tells what is on the tile
+  under the mouse: its temperature as drawn, or its light now and the best it
+  gets today.
 - **Speed buttons**: pause, ×0.3, ×0.5, ×1, ×3, ×6 (Space pauses; 1, 2, 3 pick
   ×1, ×3, ×6; the keys at the physical positions of "-" and "=" step one speed
   down or up, from the slow ones too). The two slow speeds are a small and a
@@ -313,7 +320,7 @@ What the colony knows (`docs/VISION.md`), on every level and in the view of
 the levels below: unexplored tiles are black, tiles seen before but out of
 view now are drawn as last seen under a grey veil, tiles in view as they are.
 The tile readout says "Unexplored" or that a tile is out of sight and shown as last seen; the
-temperature view only covers tiles in view. Tools refuse unexplored tiles
+temperature and light views only cover tiles in view. Tools refuse unexplored tiles
 (the card says why): the colony explores by sending settlers. Wild animals
 are only drawn, and can only be selected, where a settler sees them now:
 nothing of them is remembered.
@@ -376,7 +383,8 @@ thrusting spear, no other animals).
   never use literal colors. The colorblind-friendly palette is another set
   of the same roles: what is lit or checked turns blue instead of green
   (against the oranges of warnings), and the temperature view goes from
-  blue to orange through grey instead of through green and yellow.
+  blue to orange through grey instead of through green and yellow; the light
+  view goes from blue through grey to pale yellow instead of through orange.
 - **Information never relies on color alone**: a mark, an icon, a text or a
   pattern goes with it (a lit button also has a bright border).
 - **Every size comes from the theme**, multiplied by the UI scale: margins,

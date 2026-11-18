@@ -43,6 +43,15 @@ static const SDL_Color TEMPERATURE_COLORS[SETTINGS_PALETTE_COUNT][THEME_TEMPERAT
                                      {185, 70, 20, 255}},
 };
 
+/* The light view goes from deep blue through a warm orange to bright yellow;
+ * for the colorblind palette from blue through grey to pale yellow. */
+static const SDL_Color LIGHT_COLORS[SETTINGS_PALETTE_COUNT][THEME_LIGHT_STEPS] = {
+    [SETTINGS_PALETTE_STANDARD] = {{10, 14, 70, 255}, {225, 130, 50, 255}, {255, 240, 110, 255}},
+    [SETTINGS_PALETTE_COLORBLIND] = {{20, 30, 110, 255},
+                                     {150, 150, 150, 255},
+                                     {255, 245, 150, 255}},
+};
+
 /* A size at the default scale, scaled and rounded to whole pixels (never 0). */
 static float scaled(const Theme *theme, float pixels)
 {
@@ -87,6 +96,7 @@ void theme_init(Theme *theme, float scale, SettingsPalette palette)
         }
     }
     SDL_memcpy(theme->temperature, TEMPERATURE_COLORS[theme->palette], sizeof(theme->temperature));
+    SDL_memcpy(theme->light, LIGHT_COLORS[theme->palette], sizeof(theme->light));
     theme->font_size = 15.0f * theme->scale;
     theme->margin = scaled(theme, 8.0f);
     theme->gap = scaled(theme, 4.0f);

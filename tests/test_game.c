@@ -312,6 +312,12 @@ static void test_plant_conditions(void)
     CHECK_NEAR(shaded.light, MAP_LIGHT_FOLIAGE_DENSE, 1e-3);
     PlantConditions tree = game_plant_conditions(&game, 7, 7, 0);
     CHECK_NEAR(tree.light, 1.0, 1e-3);
+    /* The light of a tile, for the light view. */
+    CHECK_NEAR(game_light_at(&game, 3, 3, 0), open.light, 1e-6);
+    CHECK_NEAR(game_light_at(&game, 5, 5, 0), shaded.light, 1e-6);
+    CHECK_NEAR(game_light_peak_at(&game, 5, 5, 0), shaded.light_peak, 1e-6);
+    CHECK_NEAR(game_light_at(&game, -1, 3, 0), 0.0, 1e-9); /* Out of the map. */
+    CHECK_NEAR(game_light_peak_at(&game, 3, 3, 99), 0.0, 1e-9);
     /* Night: no light now, the day's best the same. */
     game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 1 * TICKS_PER_HOUR;
     PlantConditions night = game_plant_conditions(&game, 3, 3, 0);

@@ -31,9 +31,9 @@ static void corner_layout(const App *app, CornerLayout *out)
     ScreenLayout layout;
     layout_screen(ui, &layout);
     float button = layout.button_height, gap = theme->gap;
-    /* Overlays (1), a wider gap, then the speeds (pause and the running ones). */
-    float row_width = (1.0f + GAME_SPEED_COUNT) * button + (float)GAME_SPEED_COUNT * gap +
-                      3.0f * gap + 2.0f * gap;
+    /* Overlays (2), a wider gap, then the speeds (pause and the running ones). */
+    float row_width = (2.0f + GAME_SPEED_COUNT) * button + (float)GAME_SPEED_COUNT * gap +
+                      4.0f * gap + 2.0f * gap;
     out->button = button;
     out->row = (SDL_FRect){layout.width - theme->margin - row_width,
                            layout.bar_top - theme->margin - button - 2.0f * gap, row_width,
@@ -92,6 +92,38 @@ static void speed_icon(Ui *ui, SDL_FRect rect, GameSpeed speed)
     }
 }
 
+/* A sun: a disc and eight rays. */
+static void light_icon(Ui *ui, SDL_FRect rect)
+{
+    static const SDL_Color YELLOW = {245, 205, 60, 255};
+    float cx = rect.x + rect.w * 0.5f, cy = rect.y + rect.h * 0.5f;
+    float radius = SDL_max(3.0f, rect.w * 0.17f);
+    float inner = radius * 1.6f, outer = radius * 2.5f;
+    SDL_FColor c = {YELLOW.r / 255.0f, YELLOW.g / 255.0f, YELLOW.b / 255.0f, 1.0f};
+    enum { SEGMENTS = 16 };
+    for (int i = 0; i < SEGMENTS; i++) { /* The disc, a fan of triangles. */
+        float a0 = (float)i * 6.2831853f / SEGMENTS, a1 = (float)(i + 1) * 6.2831853f / SEGMENTS;
+        SDL_Vertex v[3] = {
+            {{cx, cy}, c, {0.0f, 0.0f}},
+            {{cx + radius * SDL_cosf(a0), cy + radius * SDL_sinf(a0)}, c, {0.0f, 0.0f}},
+            {{cx + radius * SDL_cosf(a1), cy + radius * SDL_sinf(a1)}, c, {0.0f, 0.0f}}};
+        SDL_RenderGeometry(ui->renderer, NULL, v, 3, NULL, 0);
+    }
+    float width = SDL_max(1.5f, rect.w * 0.05f);
+    for (int i = 0; i < 8; i++) { /* The rays. */
+        float angle = (float)i * 0.7853982f;
+        float dx = SDL_cosf(angle), dy = SDL_sinf(angle);
+        float nx = -dy * width * 0.5f, ny = dx * width * 0.5f;
+        SDL_Vertex v[6] = {{{cx + dx * inner + nx, cy + dy * inner + ny}, c, {0.0f, 0.0f}},
+                           {{cx + dx * outer + nx, cy + dy * outer + ny}, c, {0.0f, 0.0f}},
+                           {{cx + dx * outer - nx, cy + dy * outer - ny}, c, {0.0f, 0.0f}},
+                           {{cx + dx * inner + nx, cy + dy * inner + ny}, c, {0.0f, 0.0f}},
+                           {{cx + dx * outer - nx, cy + dy * outer - ny}, c, {0.0f, 0.0f}},
+                           {{cx + dx * inner - nx, cy + dy * inner - ny}, c, {0.0f, 0.0f}}};
+        SDL_RenderGeometry(ui->renderer, NULL, v, 6, NULL, 0);
+    }
+}
+
 /* A thermometer: a stem and a bulb, half red. */
 static void temperature_icon(Ui *ui, SDL_FRect rect)
 {
@@ -135,12 +167,22 @@ static void draw_row(App *app, const CornerLayout *layout)
 
     SDL_FRect rect = {x, y, button, button};
     if (ui_icon_button(ui, rect, app->show_temperature)) {
-        app->show_temperature = !app->show_temperature;
+        app_toggle_temperature_view(app);
     }
     temperature_icon(ui, rect);
     if (ui_hovered(ui, rect)) {
         tooltip(app, tr("controls.temperature"), tr("controls.temperature.description"),
                 APP_KEY_TEMPERATURE);
+    }
+    x += button + gap;
+
+    rect = (SDL_FRect){x, y, button, button};
+    if (ui_icon_button(ui, rect, app->show_light)) {
+        app_toggle_light_view(app);
+    }
+    light_icon(ui, rect);
+    if (ui_hovered(ui, rect)) {
+        tooltip(app, tr("controls.light"), tr("controls.light.description"), APP_KEY_LIGHT);
     }
     x += button + 4.0f * gap;
 

@@ -533,6 +533,13 @@ bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target);
  * who found nothing to do look again. Returns whether it changed. */
 bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bool forbidden);
 
+/* The light on a tile now (0 .. 1): the sun (game_sunlight()), the sky
+ * (weather_light()) and what covers the tile (map_light_cover(); a tile of a
+ * tree's trunk gets the open light). `game_light_peak_at()` is the best it
+ * gets in the day (the noon sun). */
+float game_light_at(const Game *game, int x, int y, int z);
+float game_light_peak_at(const Game *game, int x, int y, int z);
+
 /* What a plant on a tile meets now: the temperature of its tile
  * (temperature_for_plant()), its ground's fertility, and the light: the sun
  * (game_sunlight()), the sky (weather_light()) and what covers the tile

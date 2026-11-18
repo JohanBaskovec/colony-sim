@@ -852,19 +852,40 @@ static void update_plants(Game *game)
     }
 }
 
+/* What lets the light through over a tile: the sky and what covers it. */
+static float light_through(const Game *game, int x, int y, int z)
+{
+    const Map *map = &game->map;
+    float cover =
+        map->rock[map_index(map, x, y, z)] == ROCK_WOOD ? 1.0f : map_light_cover(map, x, y, z);
+    return weather_light(&game->weather) * cover;
+}
+
+float game_light_at(const Game *game, int x, int y, int z)
+{
+    if (!map_in_bounds(&game->map, x, y, z)) {
+        return 0.0f;
+    }
+    return game_sunlight(game->clock.tick) * light_through(game, x, y, z);
+}
+
+float game_light_peak_at(const Game *game, int x, int y, int z)
+{
+    if (!map_in_bounds(&game->map, x, y, z)) {
+        return 0.0f;
+    }
+    return game_sun_noon(game_day_of_year(game->clock.tick)) * light_through(game, x, y, z);
+}
+
 PlantConditions game_plant_conditions(const Game *game, int x, int y, int z)
 {
     const Map *map = &game->map;
     size_t index = map_index(map, x, y, z);
-    uint64_t tick = game->clock.tick;
-    int day = game_day_of_year(tick);
-    float cover = map->rock[index] == ROCK_WOOD ? 1.0f : map_light_cover(map, x, y, z);
-    float sky = weather_light(&game->weather) * cover;
     return (PlantConditions){
         .temperature = temperature_for_plant(&game->temperatures, map, x, y, z),
         .fertility = terrain_def((Terrain)map->terrain[index])->fertility,
-        .light = game_sunlight(tick) * sky,
-        .light_peak = game_sun_noon(day) * sky,
+        .light = game_light_at(game, x, y, z),
+        .light_peak = game_light_peak_at(game, x, y, z),
     };
 }
 
