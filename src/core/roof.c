@@ -73,7 +73,7 @@ static void cave_in(Map *map, Items *items, Designations *designations, int x, i
 static void roof_falls(Map *map, Items *items, Designations *designations, int x, int y, int z)
 {
     StructureType roof = map_roof(map, x, y, z + 1);
-    map_set_roof(map, x, y, z + 1, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
+    map_set_roof(map, x, y, z + 1, STRUCTURE_NONE, ITEM_QUALITY_WORST);
     drop_salvage(map, items, roof, x, y, z, false);
     if (designations != NULL) {
         designation_set(designations, map, x, y, z + 1, DESIGNATION_NONE);

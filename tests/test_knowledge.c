@@ -161,24 +161,23 @@ static void test_products_improve_with_level(void)
     }
 }
 
-static void test_grades_of_scores(void)
+static void test_quality_is_the_score(void)
 {
-    CHECK_EQ_INT(knowledge_quality_of_score(0), ITEM_QUALITY_CRUDE);
-    CHECK_EQ_INT(knowledge_quality_of_score(19), ITEM_QUALITY_CRUDE);
-    CHECK_EQ_INT(knowledge_quality_of_score(20), ITEM_QUALITY_ROUGH);
-    CHECK_EQ_INT(knowledge_quality_of_score(60), ITEM_QUALITY_FINE);
-    CHECK_EQ_INT(knowledge_quality_of_score(80), ITEM_QUALITY_SUPERB);
-    CHECK_EQ_INT(knowledge_quality_of_score(100), ITEM_QUALITY_SUPERB);
-    CHECK_EQ_INT(knowledge_quality_of_score(-3), ITEM_QUALITY_CRUDE);
+    /* The quality of a product is its score, 0..100: 25 at mastery, 95 at
+     * the top (before the spread). */
+    CHECK_EQ_INT(knowledge_product_score(50.0, NULL), 25);
+    CHECK_EQ_INT(knowledge_product_score(100.0, NULL), 95);
+    CHECK_EQ_INT(knowledge_product_score(75.0, NULL), 60);
 
-    /* Beginners never make superb items, masters never crude ones. */
+    /* Beginners never make the best items, masters never the worst ones. */
     Rng rng;
     rng_seed(&rng, 5, 5);
     for (int i = 0; i < 200; i++) {
-        CHECK(knowledge_quality_of_score(knowledge_product_score(50.0, &rng)) <=
-              ITEM_QUALITY_ROUGH);
-        CHECK(knowledge_quality_of_score(knowledge_product_score(100.0, &rng)) >=
-              ITEM_QUALITY_FINE);
+        int beginner = knowledge_product_score(50.0, &rng);
+        int master = knowledge_product_score(100.0, &rng);
+        CHECK(beginner >= 15 && beginner <= 35);
+        CHECK(master >= 85 && master <= 100);
+        CHECK(beginner < master);
     }
 }
 
@@ -189,16 +188,16 @@ static void test_product_stacks(void)
     ItemStack master = knowledge_product(ITEM_BRANCHES, 4, 100.0, NULL);
     CHECK_EQ_INT(beginner.type, ITEM_BRANCHES);
     CHECK_EQ_INT(beginner.count, 4);
-    CHECK_EQ_INT(beginner.quality, ITEM_QUALITY_ROUGH); /* Score 25. */
+    CHECK_EQ_INT(beginner.quality, 25); /* Score 25. */
     CHECK_EQ_INT(item_stack_hit_points_percent(beginner), 50);
-    CHECK_EQ_INT(master.quality, ITEM_QUALITY_SUPERB);
+    CHECK_EQ_INT(master.quality, 95);
     CHECK_EQ_INT(master.hit_points, item_def(ITEM_BRANCHES)->max_hit_points);
 
-    /* Stones: a grade (how well they knap), never damaged. */
+    /* Stones: a quality (how well they knap), never damaged. */
     ItemStack stones = knowledge_product(ITEM_COBBLE, 1, 100.0, NULL);
-    CHECK_EQ_INT(stones.quality, ITEM_QUALITY_SUPERB);
+    CHECK_EQ_INT(stones.quality, 95);
     CHECK_EQ_INT(stones.hit_points, item_def(ITEM_COBBLE)->max_hit_points);
-    CHECK_EQ_INT(knowledge_product(ITEM_COBBLE, 1, 50.0, NULL).quality, ITEM_QUALITY_ROUGH);
+    CHECK_EQ_INT(knowledge_product(ITEM_COBBLE, 1, 50.0, NULL).quality, 25);
 
     /* Stone blocks are always perfect and draw no randomness. */
     Rng rng, untouched;
@@ -228,7 +227,7 @@ int main(void)
     RUN_TEST(test_learning);
     RUN_TEST(test_starting_levels);
     RUN_TEST(test_products_improve_with_level);
-    RUN_TEST(test_grades_of_scores);
+    RUN_TEST(test_quality_is_the_score);
     RUN_TEST(test_product_stacks);
     return test_summary();
 }

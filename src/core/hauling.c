@@ -9,16 +9,12 @@ typedef struct StorageLevels {
      * the type and has a free (not reserved) tile with room for it. Conditions
      * are not taken into account: a quick upper bound. */
     uint32_t levels[ITEM_TYPE_COUNT];
-    /* Stockpiles with room for something, and for what: bit g of
-     * grades[i][type] when stockpile zones[i] has room for items of that type
-     * and grade (an empty tile has room for every grade). */
+    /* Stockpiles with room for something, and for what: room[i][type] is
+     * set when stockpile zones[i] has room for items of that type. */
     int zones[STOCKPILE_MAX];
-    uint8_t grades[STOCKPILE_MAX][ITEM_TYPE_COUNT];
+    bool room[STOCKPILE_MAX][ITEM_TYPE_COUNT];
     int zone_count;
 } StorageLevels;
-
-#define ALL_GRADES ((uint8_t)((1u << ITEM_QUALITY_COUNT) - 1u))
-_Static_assert(ITEM_QUALITY_COUNT <= 8, "grade masks are bytes");
 
 int haul_storage_room(const Items *items, int x, int y, int z, ItemStack stack)
 {
@@ -60,9 +56,9 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
         if (stockpile == NULL || stockpile->allowed == 0 || stockpile->forbidden) {
             continue; /* Forbidden: nothing is brought there. */
         }
-        uint8_t *grades = out->grades[out->zone_count];
+        bool *room = out->room[out->zone_count];
         for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
-            grades[type] = 0;
+            room[type] = false;
         }
         bool any_room = false, empty_tile = false;
         for (int z = stockpile->min_z; z <= stockpile->max_z && !empty_tile; z++) {
@@ -85,7 +81,7 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
                     }
                     if (stockpile_accepts(stockpile, stack) &&
                         (int)stack.count < item_stack_limit((ItemType)stack.type)) {
-                        grades[stack.type] |= (uint8_t)(1u << stack.quality);
+                        room[stack.type] = true;
                         any_room = true;
                     }
                 }
@@ -94,7 +90,7 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
         if (empty_tile) {
             for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
                 if (stockpile->allowed & ITEM_TYPE_BIT(type)) {
-                    grades[type] = ALL_GRADES;
+                    room[type] = true;
                     any_room = true;
                 }
             }
@@ -104,7 +100,7 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
         }
         out->zones[out->zone_count++] = index;
         for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-            if (grades[type] != 0) {
+            if (room[type]) {
                 out->levels[type] |= 1u << stockpile->priority;
             }
         }
@@ -121,8 +117,7 @@ static uint32_t levels_for(const HaulWorld *world, const StorageLevels *storage,
     uint32_t levels = 0;
     for (int i = 0; i < storage->zone_count; i++) {
         const Stockpile *stockpile = stockpile_get(world->stockpiles, storage->zones[i]);
-        if ((storage->grades[i][stack.type] & (1u << stack.quality)) &&
-            stockpile_accepts(stockpile, stack)) {
+        if (storage->room[i][stack.type] && stockpile_accepts(stockpile, stack)) {
             levels |= 1u << stockpile->priority;
         }
     }

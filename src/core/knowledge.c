@@ -118,11 +118,6 @@ int knowledge_product_score(double level, Rng *rng)
     return clampi((int)floorf(mean) + spread(rng), 0, 100);
 }
 
-ItemQuality knowledge_quality_of_score(int score)
-{
-    return (ItemQuality)clampi(score / KNOWLEDGE_QUALITY_GRADE_WIDTH, 0, ITEM_QUALITY_BEST);
-}
-
 int knowledge_product_condition(double level, Rng *rng)
 {
     float mean =
@@ -136,9 +131,7 @@ ItemStack knowledge_product(ItemType type, int count, double level, Rng *rng)
     if (def == NULL || type == ITEM_NONE) {
         return item_stack_make(ITEM_NONE, 0, 0, 0);
     }
-    int quality = def->has_quality
-                      ? (int)knowledge_quality_of_score(knowledge_product_score(level, rng))
-                      : ITEM_QUALITY_BEST;
+    int quality = def->has_quality ? knowledge_product_score(level, rng) : ITEM_QUALITY_BEST;
     int condition = def->damageable ? knowledge_product_condition(level, rng) : 100;
     return item_stack_make(type, count, quality, item_hit_points_at_percent(type, condition));
 }

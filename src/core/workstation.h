@@ -234,7 +234,7 @@ bool workstation_start_craft(Workstations *workstations, int index, RecipeType r
 
 /* The input a free craft of a bill gets (the debug cheat
  * GameDebug.free_crafts): the recipe's count of the first input type the
- * bill allows, of standard grade (or the least the recipe takes), in perfect
+ * bill allows, of standard quality (or the least the recipe takes), in perfect
  * condition. Empty when the bill allows none. */
 ItemStack bill_free_input(const Bill *bill);
 

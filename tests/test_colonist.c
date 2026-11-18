@@ -655,13 +655,14 @@ static void test_tools_speed_up_work(void)
     CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_NONE, any), 1.0, 1e-6);
     colonist_add_tool(colonist, cobble);
     CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, any), 0.9, 1e-6);
-    colonist_add_tool(colonist, item_stack_make(ITEM_HAND_AXE, 1, ITEM_QUALITY_FINE, 0));
-    CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, any), 1.1, 1e-5);
+    colonist_add_tool(colonist, item_stack_make(ITEM_HAND_AXE, 1, TEST_QUALITY_FINE, 0));
+    CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, any), 1.08,
+               1e-5); /* Quality 70. */
     CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, ITEM_TYPE_BIT(ITEM_COBBLE)), 0.9,
                1e-6);
     /* Swapping for another of the same type gives the old one back. */
     ItemStack replaced;
-    CHECK(colonist_swap_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_SUPERB, 0),
+    CHECK(colonist_swap_tool(colonist, item_stack_make(ITEM_COBBLE, 1, TEST_QUALITY_SUPERB, 0),
                              &replaced));
     CHECK_EQ_INT(replaced.type, ITEM_COBBLE);
     CHECK_EQ_INT(replaced.quality, ITEM_QUALITY_STANDARD);
@@ -1924,8 +1925,8 @@ static void test_gatherer_level_sets_branch_condition(void)
         REQUIRE(results[run].type == ITEM_BRANCHES);
         game_shutdown(&game);
     }
-    CHECK(results[0].quality <= ITEM_QUALITY_ROUGH);
-    CHECK(results[1].quality >= ITEM_QUALITY_FINE);
+    CHECK(results[0].quality <= 35); /* About 25, give or take 10. */
+    CHECK(results[1].quality >= TEST_QUALITY_FINE);
     CHECK(results[0].hit_points < results[1].hit_points);
     CHECK_EQ_INT(results[1].hit_points, item_def(ITEM_BRANCHES)->max_hit_points);
     /* The master is also much faster (×1.5 against ×0.5). */

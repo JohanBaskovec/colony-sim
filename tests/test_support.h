@@ -7,6 +7,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Qualities are 0..100. The five grades the game once had, at their centers:
+ * tests that need an item clearly worse or better than the standard (50). */
+#define TEST_QUALITY_CRUDE 10
+#define TEST_QUALITY_ROUGH 30
+#define TEST_QUALITY_FINE 70
+#define TEST_QUALITY_SUPERB 90
+
 /* Reads a whole file into a NUL-terminated malloc'ed buffer. Returns NULL on error. */
 static inline char *test_read_file(const char *path, size_t *length)
 {

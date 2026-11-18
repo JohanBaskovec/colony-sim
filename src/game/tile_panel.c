@@ -176,12 +176,14 @@ static void thing_rows(UiLayout *layout, void *userdata)
         order_row(layout, game, x, y, z);
         break;
     }
-    case THING_ROOF:
-        TR_FORMAT(text, sizeof(text), tr("hud.item_quality"),
-                  tr(item_quality_name_key(map_roof_quality(map, x, y, z))));
+    case THING_ROOF: {
+        char quality[16];
+        hud_quality_text(quality, sizeof(quality), map_roof_quality(map, x, y, z));
+        TR_FORMAT(text, sizeof(text), tr("hud.item_quality"), quality);
         ui_layout_label(layout, text, 0.0f, false);
         order_row(layout, game, x, y, z);
         break;
+    }
     case THING_SITE: {
         const ConstructionSite *site =
             construction_get(&game->constructions, construction_at(&game->constructions, x, y, z));

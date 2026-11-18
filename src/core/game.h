@@ -77,9 +77,9 @@
 /* Radius (in tiles) around a world point within which a colonist can be picked. */
 #define GAME_PICK_RADIUS 0.6f
 
-/* Level of the builder behind debug instant construction (a standard grade,
+/* Level of the builder behind debug instant construction (a standard quality,
  * on average). */
-#define GAME_DEBUG_BUILD_LEVEL 65.0
+#define GAME_DEBUG_BUILD_LEVEL 68.0
 /* Level of every knowledge after game_debug_learn_all(): work at a standard
  * speed (×1). */
 #define GAME_DEBUG_KNOWLEDGE_LEVEL 75.0
@@ -291,7 +291,7 @@ void game_debug_skip(Game *game, uint64_t ticks);
  * grow, nobody gets hungry). */
 void game_debug_next_season(Game *game);
 
-/* Debug: `count` new items of a type (standard grade, undamaged) dropped on
+/* Debug: `count` new items of a type (standard quality, undamaged) dropped on
  * a tile as items_drop() would. Returns how many found room (0 for an
  * invalid type or tile). */
 int game_debug_spawn_items(Game *game, int x, int y, int z, ItemType type, int count);

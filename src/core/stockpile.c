@@ -160,7 +160,7 @@ static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1
         (Stockpile){.used = true,
                     .number = stockpiles->next_number,
                     .allowed = item_types_all() & ~item_types_in_category(ITEM_CATEGORY_BODIES),
-                    .quality = {0, ITEM_QUALITY_BEST},
+                    .quality = {ITEM_QUALITY_WORST, ITEM_QUALITY_BEST},
                     .hit_points = {0, 100},
                     .priority = STOCKPILE_PRIORITY_DEFAULT};
     clear_bounds(stockpile);

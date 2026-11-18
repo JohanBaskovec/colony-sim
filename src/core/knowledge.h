@@ -46,16 +46,14 @@ typedef enum KnowledgeType {
 #define KNOWLEDGE_SPEED_AT_MAX 1.5f
 
 /*
- * Products of work. A quality score (0..100) around KNOWLEDGE_QUALITY_BASE +
- * KNOWLEDGE_QUALITY_PER_LEVEL × (level − mastery) gives the grade, one grade
- * per KNOWLEDGE_QUALITY_GRADE_WIDTH points. The condition (percent of the
+ * Products of work. The quality (0..100) is around KNOWLEDGE_QUALITY_BASE +
+ * KNOWLEDGE_QUALITY_PER_LEVEL × (level − mastery). The condition (percent of the
  * item's hit points) is around KNOWLEDGE_CONDITION_BASE +
  * KNOWLEDGE_CONDITION_PER_LEVEL × (level − mastery), capped at 100. Both vary
  * by up to ±KNOWLEDGE_PRODUCT_SPREAD.
  */
 #define KNOWLEDGE_QUALITY_BASE 25.0f
 #define KNOWLEDGE_QUALITY_PER_LEVEL 1.4f
-#define KNOWLEDGE_QUALITY_GRADE_WIDTH 20
 #define KNOWLEDGE_CONDITION_BASE 50.0f
 #define KNOWLEDGE_CONDITION_PER_LEVEL 1.6f
 #define KNOWLEDGE_PRODUCT_SPREAD 10
@@ -165,12 +163,9 @@ double knowledge_fade_day(double level, double peak, int idle_days);
 /* Random starting level in a starting knowledge. */
 float knowledge_random_starting_level(Rng *rng);
 
-/* Quality score (0..100) of something produced at this level; `rng` may be
- * NULL for the average result. */
+/* Quality (0..100) of something produced at this level; `rng` may be NULL
+ * for the average result. */
 int knowledge_product_score(double level, Rng *rng);
-
-/* Grade of a quality score. */
-ItemQuality knowledge_quality_of_score(int score);
 
 /* Condition (1..100, percent of the hit points) of something produced at
  * this level; `rng` may be NULL for the average result. */

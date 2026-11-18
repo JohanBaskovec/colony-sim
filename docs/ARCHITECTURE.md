@@ -49,18 +49,18 @@ simulation:
 | `designation`| Player work orders per tile (mine, which digs earth or rock, cut a ramp, dig down, take a structure apart), the knowledge, level and tool each needs, work progress |
 | `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
-| `item`       | Items on the ground: definitions, categories, quality grades and hit points, one stack per tile, dropping, transformations (drying), rot |
+| `item`       | Items on the ground: definitions, categories, quality (0 to 100) and hit points, one stack per tile, dropping, transformations (drying), rot |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
-| `tool`       | Tool speed factors by kind of work (bare hands included) and grade, best carried tool, wear and breaking |
+| `tool`       | Tool speed factors by kind of work (bare hands included) and quality, best carried tool, wear and breaking |
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, branches, twigs, grass, flint, cobbles: gather N, until N in the colony or N days of food, forever; full harvest only) and per group of resources (wood, food, stones: limits each of its resources), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
 | `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
 | `item_move`  | Item moves ordered by the player: stack → chosen tile (`ItemMoves`, 64 orders), room at a destination, pruning |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
 | `hearth`     | The fire of an open hearth: fuel values, fuel wanted, burning, lighting rules, light around burning hearths, the hours of fireside stories |
-| `structure`  | Structure definitions (grass bed, ground bedding, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, length in tiles and `Direction`, hit points, wear and refresh; hit points by grade, grade cap from the materials |
+| `structure`  | Structure definitions (grass bed, ground bedding, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, length in tiles and `Direction`, hit points, wear and refresh; hit points by quality, quality cap from the materials |
 | `bed`        | Bed ownership: one bed per settler, one settler per bed, kept on the bed's head; beds gone from the map are forgotten |
-| `construction`| Construction sites: blueprints of structures and of workstations, refresh sites on worn structures, materials delivered per slot, work, built grade; daily wear; built structures go to the map's structure layers, finished workstations to `Workstations` |
+| `construction`| Construction sites: blueprints of structures and of workstations, refresh sites on worn structures, materials delivered per slot, work, built quality; daily wear; built structures go to the map's structure layers, finished workstations to `Workstations` |
 | `work`       | Work types (mining, fire, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning (rates, caps, fading), quality and condition of what a worker produces |
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
@@ -495,18 +495,18 @@ on the weather; the game passes `tile_conditions()`, and the tile
 inspector uses `game_item_rot_rate()` for its estimate. Items in hands or
 in a workstation's input do not rot.
 
-Every item has a **quality grade** (`ItemQuality`: crude, rough, standard,
-fine, superb) and **hit points** (`hit_points`, up to `ItemDef.max_hit_points`).
-Some types are always perfect (`has_quality` / `damageable` false: stone
-blocks are always superb and at full hit points); `item_stack_make()`
-enforces it, so no code path can create a damaged stone block. Only items of the same type **and
-grade** share a tile (`item_stacks_match()`); a stack keeps the count-weighted
-average hit points of its items. Grades are few on purpose: they keep stacks
-large. Averaging grades instead would have broken storage filters, because
-two stacks a zone rejects for different reasons (a crude one and a broken one)
-could merge into one it accepts. Hit points averaging can only do that with a
-two-sided hit point range, which is rare and harmless. Quality is meant to
-carry over to what is made from the items (M3).
+Every item has a **quality**, a value from 0 to 100 (`ItemQuality` is an
+`int`: `ITEM_QUALITY_WORST` 0, `ITEM_QUALITY_STANDARD` 50, `ITEM_QUALITY_BEST`
+100), and **hit points** (`hit_points`, up to `ItemDef.max_hit_points`). Some
+types are always perfect (`has_quality` / `damageable` false: stone blocks are
+always of quality 100 and at full hit points); `item_stack_make()` enforces
+it, so no code path can create a damaged stone block. Items of the same type
+share a tile whatever their quality (`item_stacks_match()` compares the type
+only); a stack keeps the count-weighted average quality and hit points of its
+items. A storage filter judges a stack by that average, so a stockpile range
+of qualities is a rule on the average of what lies there. Quality carries over
+to what is made from the items (M3): its effects are continuous (tool speed,
+a structure's hit points, §Tools and §Structures).
 
 Settlers have a **level in each knowledge** (`Colonist.knowledge`, a `double`
 from 0 to 100, `core/knowledge.h`, design in `docs/KNOWLEDGE.md`). There is no
@@ -521,7 +521,7 @@ resource nobody can gather (`game_gather_job_known()`). The first settlers get
 50 to 80 in each starting knowledge.
 
 Completed orders produce items through `knowledge_product()`: the worker's
-level sets a quality score (25 + 1.4 × (level − 50), grade = score / 20) and a
+level sets a quality (25 + 1.4 × (level − 50), the score is the quality) and a
 condition in percent of the hit points (50 + 1.6 × (level − 50)), both with a
 random spread of ±10 drawn from the game RNG. Randomness is only drawn for
 item types that have a quality or can be damaged. The level also sets the work
@@ -641,7 +641,7 @@ from five bands (ordinary shows nothing). Tests make settlers ordinary with
 `Stockpiles` (`core/stockpile.h`, owned by `Game`) is another dense layer: the
 zone index of each tile (0 = none) plus a fixed table of zones (number shown to
 the player, priority from 1 = highest to 10 = lowest, default 5, and a bit mask
-of allowed item types, a range of accepted grades and a range of accepted hit
+of allowed item types, a range of accepted qualities and a range of accepted hit
 points in percent of the maximum). `stockpile_accepts()` checks all three;
 items that are always perfect count as superb and 100 %. Zones only cover
 passable, buildable tiles. Every change bumps a `revision` counter.
@@ -697,7 +697,7 @@ such stack, then one search per priority level (best first) for the nearest
 storage tile from the stack. Once per search, the tiles of the zones are
 visited (each zone keeps its bounding box: the map is never scanned, and a
 zone with an empty tile is not scanned further) to record which zones have
-room for which type and grade, plus a per-type bit set of "priority levels
+room for which type, plus a per-type bit set of "priority levels
 with room". The latter is a quick upper bound that lets idle colonists skip
 the search entirely when nothing can be stored; the per-zone data, checked
 against the zone filters, decides for a given stack.
@@ -707,7 +707,7 @@ destination tile (`RESERVATION_STORAGE`), walks to the stack and picks up what
 the destination can take and it can carry. With room left in hand, it then
 collects more on the way (`haul_find_extra_source()`): the nearest stack
 within `COLONIST_HAUL_COLLECT_MAX_COST` that matches the load (same type and
-grade), that the destination's zone accepts and that no better zone with room
+quality), that the destination's zone accepts and that no better zone with room
 wants (otherwise good wood heading for an ordinary zone would drag along wood
 that belongs in a better one). Only one stack is reserved at a time; if it
 vanishes, the hauler delivers what it holds (`Colonist.haul_delivering`
@@ -1137,7 +1137,7 @@ Material counts come from real structures, for a tile of about 1 m²: see
 its head and its foot in one of four `Direction`s. Every tile holds the
 type (movement cost, blocking and the inspector work per tile as before);
 `Map.structure_part` holds the direction and the tile's place in the
-structure, so `map_structure_origin()` finds the head from any tile. Grade
+structure, so `map_structure_origin()` finds the head from any tile. Quality
 and hit points live on the head. `map_place_structure()` writes every tile
 (removing whole any structure in the way), `map_remove_structure()` (and
 `map_set_structure(..., STRUCTURE_NONE)`) removes every tile, from any of
@@ -1149,16 +1149,16 @@ side in rows of their length, the rectangle stretched to hold one, the
 clicked tile always a head); placing and the preview both use it. The
 player turns beds with `APP_KEY_ROTATE` (`App.structure_direction`).
 
-**Grade, hit points, wear**: two more map layers hold each built
-structure's grade (`Map.structure_quality`) and hit points
-(`Map.structure_hit_points`). `map_set_structure()` gives a standard grade
+**Quality, hit points, wear**: two more map layers hold each built
+structure's quality (`Map.structure_quality`) and hit points
+(`Map.structure_hit_points`). `map_set_structure()` gives a standard quality
 and full hit points (worldgen, tests); a finished site uses
-`map_build_structure()` with the builder's grade
+`map_build_structure()` with the builder's quality
 (`knowledge_quality_of_score()` of a roll at their level, through the
-game's `Rng`), capped by `structure_quality_cap()`: the average grade of the
-graded materials delivered (branches; grass and twigs do not cap) + 1, as
+game's `Rng`), capped by `structure_quality_cap()`: the average quality of the
+rated materials delivered (branches; grass and twigs do not cap) + 20, as
 for crafts. `structure_max_hit_points()` scales the definition's hit points
-by the grade (×0.6 crude to ×1.5 superb). Once a day (`game_tick()` on the
+by the quality (×0.6 at 0, ×1 at 50, ×1.5 at 100). Once a day (`game_tick()` on the
 day boundary) `constructions_wear_day()` takes `wear_per_day` hit points from
 structures that wear by themselves (a grass bed: 1); one at 0 falls apart
 (with a refresh site on it, whose materials are dropped), one below
@@ -1167,7 +1167,7 @@ with `refresh` set, on the built structure, wanting `refresh_material` and
 `refresh_work` instead of the building ones (`construction_material()`,
 `construction_material_count()`, `construction_work_needed()`). Builders
 handle it like any site; finishing it brings the hit points back to full and
-keeps the grade. Taking the structure apart removes its refresh site.
+keeps the quality. Taking the structure apart removes its refresh site.
 
 **Clearing plants**: blueprints (construction sites, of structures and workstations) may
 be placed on grass, shrubs and low plants, not on trees
@@ -1183,7 +1183,7 @@ the builder's gathering level). Only then does the construction work start.
 **Roofs** work like floors: a built roof is the floor of the open tile over
 a hut, on the level above its walls, a terrain of its own
 (`TERRAIN_GRASS_ROOF`, whose `TerrainDef.built` is the `STRUCTURE_ROOF` it
-was built as; `map_roof()`, `map_set_roof()`), with its grade in
+was built as; `map_roof()`, `map_set_roof()`), with its quality in
 `Map.roof_quality`. Being a floor, it covers what is under it (a bed, a
 wall, a stockpile, a workstation: `map_is_roofed()`, `map_roof_over()`), and
 nobody stands on it: a thatch of grass on branch rafters is too frail
@@ -1218,7 +1218,7 @@ tiles within `ROOF_SUPPORT_RANGE` of what the map logged as changed
 (`Map.build_log`, `Map.topology_log`), or every tile of every level when the
 logs overflowed; the `RoofWatch` it keeps is derived, not hashed. A light
 grass roof hurts nobody. The roof itself is out in the open air, for heat
-(`TEMPERATURE_MATERIAL_OPEN`). `map_hash()` only hashes the grade layer once
+(`TEMPERATURE_MATERIAL_OPEN`). `map_hash()` only hashes the quality layer once
 a roof exists, so older hashes stay valid.
 
 **Temperature** (`core/temperature.h`, `Game.temperatures`, part of
@@ -1375,7 +1375,7 @@ taken, paused or not (a paused bill would otherwise block the station). A
 crafter already working finishes the craft even if the bill no longer accepts
 its level (it learned, or the range changed) or was paused. Products are
 dropped on the station's tile. Quality comes from the
-worker's level, capped by the material (`recipe_quality_cap()`: grade + 1,
+worker's level, capped by the material (`recipe_quality_cap()`: the material's quality + 20,
 a cobble knaps like crude flint); shaping a hand axe can fail
 (`recipe_failure_chance()`), leaving a few flakes.
 
@@ -1392,7 +1392,7 @@ colonist drops them.
 (cutting grass, knapping, woodworking, building; `TOOL_USE_NONE` for work no
 tool helps) with a speed factor per item type and one for bare hands (0:
 impossible), from the table of `docs/KNOWLEDGE.md` §2.3, times the tool's
-grade factor (×0.8 crude to ×1.2 superb). Every tick of work multiplies the
+quality factor (×0.8 at 0 to ×1.2 at 100). Every tick of work multiplies the
 colonist's knowledge speed by the factor of its best carried tool for the
 work (`colonist_tool_factor()`; bare hands when no tool does better):
 gathering jobs (`GatherJobDef.tool_use`), clearing a blueprint's tile
@@ -1451,7 +1451,7 @@ searches backed off on that revision look again.
 - **Recipes that need fire** (`recipe_needs_fire()`: made at a hearth) are
   skipped by `choose_bill()` while the hearth is out, and a craft stops when
   it goes out (the input and progress stay on the station). Hardening keeps
-  the spear's grade and hit point percentage (`recipe_craft()`).
+  the spear's quality and hit point percentage (`recipe_craft()`).
 - **Fireside stories**: in the evening (`hearth_story_time()`, 19:00 to
   22:00), an idle or wandering settler tries `try_fireside()` before looking
   for work: one who masters a knowledge the player marked to teach
@@ -1549,8 +1549,8 @@ them (`bench_simulation` hashes are unchanged).
 - **Instant build**: at the start of each tick, `game_tick()` finishes every
   site it can: plants on its tiles are cleared (`gather_clear_plant()`), then
   `construction_finish_now()` delivers the missing materials (standard
-  grade) and does all the work at `GAME_DEBUG_BUILD_LEVEL` without drawing
-  from the RNG (average grade). Zones leave the tiles it built on, as after a
+  quality) and does all the work at `GAME_DEBUG_BUILD_LEVEL` without drawing
+  from the RNG (average quality). Zones leave the tiles it built on, as after a
   builder's work. A roof without support and a station that cannot be placed
   wait; sites are finished in list order, so walls placed with their roof
   hold it up in the same tick when they come first.
@@ -1558,7 +1558,7 @@ them (`bench_simulation` hashes are unchanged).
   the input check (`bill_free_input()`: the bill must allow some input type)
   and `plan_station_job()` skip fetching it; at the station,
   `workstation_start_free_craft()` starts the craft with the recipe's count of
-  the first allowed input type, standard grade at least. `Workstation.free_input`
+  the first allowed input type, standard quality at least. `Workstation.free_input`
   marks it so that removing the station or the bill drops nothing. Tools, the
   recipe's knowledge and a burning fire are still needed.
 - **No tools**: `ColonistContext.no_tools` lets crafts go without their tools

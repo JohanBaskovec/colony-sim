@@ -582,7 +582,7 @@ void map_remove_structure(Map *map, int x, int y, int z)
         int px = origin_x + part * direction_dx(direction);
         int py = origin_y + part * direction_dy(direction);
         if (map_structure(map, px, py, z) == type) {
-            set_tile_structure(map, px, py, z, STRUCTURE_NONE, 0, ITEM_QUALITY_CRUDE, 0);
+            set_tile_structure(map, px, py, z, STRUCTURE_NONE, 0, ITEM_QUALITY_WORST, 0);
         }
     }
 }
@@ -602,7 +602,7 @@ bool map_place_structure(Map *map, int x, int y, int z, StructureType type, Dire
             return false;
         }
     }
-    quality = (ItemQuality)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
+    quality = (ItemQuality)clampi((int)quality, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
     bool same = true; /* The same structure already there: only its condition changes. */
     for (int part = 0; part < length; part++) {
         size_t index = map_index(map, x + part * dx, y + part * dy, z);
@@ -623,7 +623,7 @@ bool map_place_structure(Map *map, int x, int y, int z, StructureType type, Dire
         bool head = part == 0;
         set_tile_structure(map, x + part * dx, y + part * dy, z, type,
                            (uint8_t)((unsigned)direction | ((unsigned)part << PART_INDEX_SHIFT)),
-                           head ? quality : ITEM_QUALITY_CRUDE,
+                           head ? quality : ITEM_QUALITY_WORST,
                            head ? structure_max_hit_points(type, quality) : 0);
     }
     return true;
@@ -642,7 +642,7 @@ ItemQuality map_structure_quality(const Map *map, int x, int y, int z)
 {
     int origin_x, origin_y;
     if (!map_structure_origin(map, x, y, z, &origin_x, &origin_y)) {
-        return ITEM_QUALITY_CRUDE;
+        return ITEM_QUALITY_WORST;
     }
     return (ItemQuality)map->structure_quality[map_index(map, origin_x, origin_y, z)];
 }
@@ -862,7 +862,7 @@ static Terrain roof_terrain(StructureType roof)
 ItemQuality map_roof_quality(const Map *map, int x, int y, int z)
 {
     return map_in_bounds(map, x, y, z) ? (ItemQuality)map->roof_quality[map_index(map, x, y, z)]
-                                       : ITEM_QUALITY_CRUDE;
+                                       : ITEM_QUALITY_WORST;
 }
 
 void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality)
@@ -882,7 +882,7 @@ void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality
     }
     map->roof_quality[index] =
         roof != STRUCTURE_NONE
-            ? (uint8_t)clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST)
+            ? (uint8_t)clampi((int)quality, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST)
             : 0;
     map_set_terrain(map, x, y, z, roof != STRUCTURE_NONE ? terrain : TERRAIN_OPEN);
     log_build_change(map, x, y, z); /* Roofs, warmth. */

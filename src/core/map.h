@@ -272,14 +272,14 @@ typedef struct Map {
     /* Built structures (StructureType on every tile they take): beds,
      * walls, doors. `structure_part` holds the structure's Direction (bits
      * 0-1) and which of its tiles this is (bits 2-3, 0 for the head); the
-     * grade (ItemQuality) and hit points are kept on the head (see
+     * quality (ItemQuality) and hit points are kept on the head (see
      * core/structure.h). */
     uint8_t *structure;
     uint8_t *structure_part;
     uint8_t *structure_quality;
     uint16_t *structure_hit_points;
     int structure_counts[STRUCTURE_TYPE_COUNT]; /* Tiles holding each type. */
-    /* The grade of each built roof (a terrain, see map_roof()), 0 elsewhere. */
+    /* The quality of each built roof (a terrain, see map_roof()), 0 elsewhere. */
     uint8_t *roof_quality;
     int roof_count; /* Built roof tiles. */
     /* What the player forbade the settlers on each tile (MapForbid bits, see
@@ -461,14 +461,14 @@ void map_topology_changed(Map *map);
 /* Same rule for structures (a wall blocks movement, a door slows it). The
  * plants of its tiles are cleared when a structure is built.
  *
- * Builds a structure of a grade, in perfect condition, with its head at
+ * Builds a structure of a quality, in perfect condition, with its head at
  * (x, y) and its other tiles in `direction` (see structure_length()). Any
  * structure already on those tiles is removed whole. Fails (nothing changes)
  * when a tile is out of bounds. */
 bool map_place_structure(Map *map, int x, int y, int z, StructureType type, Direction direction,
                          ItemQuality quality);
 
-/* map_place_structure() of standard grade, facing south; STRUCTURE_NONE
+/* map_place_structure() of standard quality, facing south; STRUCTURE_NONE
  * removes the structure covering the tile (map_remove_structure()). */
 void map_set_structure(Map *map, int x, int y, int z, StructureType type);
 
@@ -485,7 +485,7 @@ bool map_structure_is_origin(const Map *map, int x, int y, int z);
 /* Direction of the structure covering a tile (DIRECTION_SOUTH without one). */
 Direction map_structure_direction(const Map *map, int x, int y, int z);
 
-/* Grade and hit points of the structure covering a tile (0 hit points
+/* Quality and hit points of the structure covering a tile (0 hit points
  * without one or out of bounds). */
 ItemQuality map_structure_quality(const Map *map, int x, int y, int z);
 int map_structure_hit_points(const Map *map, int x, int y, int z);
@@ -498,12 +498,12 @@ void map_set_structure_hit_points(Map *map, int x, int y, int z, int hit_points)
 StructureType map_structure(const Map *map, int x, int y, int z);
 
 /* The roof built as the floor of a tile (its terrain; STRUCTURE_NONE
- * without one or out of bounds) and its grade. The roof of a hut is on the
+ * without one or out of bounds) and its quality. The roof of a hut is on the
  * level above its walls: it covers the tiles under it (map_roof_over()). */
 StructureType map_roof(const Map *map, int x, int y, int z);
 ItemQuality map_roof_quality(const Map *map, int x, int y, int z);
 
-/* Builds a roof (a type for which structure_is_roof()) of a grade as the
+/* Builds a roof (a type for which structure_is_roof()) of a quality as the
  * floor of an open tile, or removes the roof of a tile (STRUCTURE_NONE: the
  * tile is open again). Other types, tiles with something else on them and
  * out-of-bounds tiles are ignored. */

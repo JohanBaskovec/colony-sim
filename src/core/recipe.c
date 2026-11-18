@@ -35,7 +35,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                         KNAPPING_SPOT,
                         {ITEM_COBBLE, ITEM_FLINT},
                         1,
-                        ITEM_QUALITY_CRUDE,
+                        ITEM_QUALITY_WORST,
                         {HAMMER, 0},
                         250.0f,
                         KNOWLEDGE_STONE_KNAPPING,
@@ -48,7 +48,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                        KNAPPING_SPOT,
                        {ITEM_FLINT, ITEM_COBBLE},
                        1,
-                       ITEM_QUALITY_CRUDE,
+                       ITEM_QUALITY_WORST,
                        {HAMMER, 0},
                        375.0f,
                        KNOWLEDGE_STONE_KNAPPING,
@@ -61,7 +61,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                          KNAPPING_SPOT,
                          {ITEM_FLINT, ITEM_COBBLE},
                          1,
-                         ITEM_QUALITY_CRUDE,
+                         ITEM_QUALITY_WORST,
                          {HAMMER, 0},
                          2500.0f,
                          KNOWLEDGE_STONE_KNAPPING,
@@ -69,7 +69,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                          ITEM_HAND_AXE,
                          12,
                          TOOL_USE_KNAPPING},
-    /* Spears want straight branches: standard grade or better. */
+    /* Spears want straight branches: standard quality or better. */
     [RECIPE_THROWING_SPEAR] = {"throwing_spear",
                                N_("recipe.throwing_spear"),
                                CRAFTING_SPOT,
@@ -102,7 +102,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                       OPEN_HEARTH,
                                       {ITEM_THROWING_SPEAR, ITEM_NONE},
                                       1,
-                                      ITEM_QUALITY_CRUDE,
+                                      ITEM_QUALITY_WORST,
                                       {0, 0},
                                       750.0f,
                                       KNOWLEDGE_FIRE,
@@ -115,7 +115,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                        OPEN_HEARTH,
                                        {ITEM_THRUSTING_SPEAR, ITEM_NONE},
                                        1,
-                                       ITEM_QUALITY_CRUDE,
+                                       ITEM_QUALITY_WORST,
                                        {0, 0},
                                        750.0f,
                                        KNOWLEDGE_FIRE,
@@ -129,7 +129,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                               CRAFTING_SPOT,
                               {ITEM_BRANCHES, ITEM_NONE},
                               1,
-                              ITEM_QUALITY_CRUDE,
+                              ITEM_QUALITY_WORST,
                               {CUTTING_TOOL, 0},
                               375.0f,
                               KNOWLEDGE_GATHERING,
@@ -142,7 +142,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                      OPEN_HEARTH,
                                      {ITEM_DIGGING_STICK, ITEM_NONE},
                                      1,
-                                     ITEM_QUALITY_CRUDE,
+                                     ITEM_QUALITY_WORST,
                                      {0, 0},
                                      750.0f,
                                      KNOWLEDGE_FIRE,
@@ -156,7 +156,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                OPEN_HEARTH,
                                {ITEM_CATTAIL_RHIZOMES, ITEM_NONE},
                                4,
-                               ITEM_QUALITY_CRUDE,
+                               ITEM_QUALITY_WORST,
                                {0, 0},
                                250.0f,
                                KNOWLEDGE_FIRE,
@@ -169,7 +169,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                               OPEN_HEARTH,
                               {ITEM_WILD_CARROTS, ITEM_NONE},
                               4,
-                              ITEM_QUALITY_CRUDE,
+                              ITEM_QUALITY_WORST,
                               {0, 0},
                               250.0f,
                               KNOWLEDGE_FIRE,
@@ -216,7 +216,10 @@ bool recipe_doable_at(RecipeType recipe, double level)
     return def != NULL && (def->knowledge == KNOWLEDGE_NONE || level >= def->min_level);
 }
 
-/* Knapping a cobble rather than flint: it counts as crude whatever its grade. */
+/* Knapping a cobble rather than flint: it counts as a crude stone (this
+ * quality) whatever its own. */
+#define COBBLE_KNAPPING_QUALITY 10
+
 static bool knaps_a_cobble(const RecipeDef *def, ItemStack input)
 {
     return def->knowledge == KNOWLEDGE_STONE_KNAPPING && input.type == ITEM_COBBLE;
@@ -229,8 +232,8 @@ ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input)
     if (def == NULL || material == NULL || !material->has_quality) {
         return ITEM_QUALITY_BEST;
     }
-    int grade = knaps_a_cobble(def, input) ? ITEM_QUALITY_CRUDE : input.quality;
-    return (ItemQuality)clampi(grade + 1, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
+    int base = knaps_a_cobble(def, input) ? COBBLE_KNAPPING_QUALITY : input.quality;
+    return clampi(base + ITEM_QUALITY_CAP_BONUS, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
 }
 
 bool recipe_needs_fire(RecipeType recipe)
@@ -292,7 +295,7 @@ int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
     case RECIPE_HARDEN_THROWING_SPEAR:
     case RECIPE_HARDEN_THRUSTING_SPEAR:
     case RECIPE_HARDEN_DIGGING_STICK:
-        /* The same spear or stick, its grade and wear kept, lasting longer. */
+        /* The same spear or stick, its quality and wear kept, lasting longer. */
         out[0] = item_stack_make(
             def->product, 1, input.quality,
             item_hit_points_at_percent(def->product, item_stack_hit_points_percent(input)));

@@ -1,6 +1,7 @@
 #include "game/stockpile_panel.h"
 
 #include "core/i18n.h"
+#include "game/hud.h"
 #include "game/inspector.h"
 
 #define GAP UI_LAYOUT_GAP
@@ -9,6 +10,7 @@
 #define TEXT_SIZE 128
 #define SLIDER_MIN_WIDTH 200.0f
 #define HIT_POINTS_STEP 5 /* Percent per slider step. */
+#define QUALITY_STEP 5    /* Quality points per slider step. */
 #define QUALITY_SLIDER_ID 1
 #define HIT_POINTS_SLIDER_ID 2
 
@@ -59,24 +61,27 @@ static void summary_rows(UiLayout *layout, void *userdata)
     }
 }
 
-/* Accepted quality grades and hit points (steps of HIT_POINTS_STEP %). */
+/* Accepted qualities (steps of QUALITY_STEP) and hit points (steps of
+ * HIT_POINTS_STEP %). */
 static void condition_rows(UiLayout *layout, StockpileRows *rows)
 {
     const Stockpile *stockpile = rows->stockpile;
     Ui *ui = layout->ui;
     char text[TEXT_SIZE], number[16], low[32], high[32];
-    TR_FORMAT(text, sizeof(text), tr("stockpile.quality"),
-              tr(item_quality_name_key((ItemQuality)stockpile->quality.min)),
-              tr(item_quality_name_key((ItemQuality)stockpile->quality.max)));
+    hud_quality_text(low, sizeof(low), stockpile->quality.min);
+    hud_quality_text(high, sizeof(high), stockpile->quality.max);
+    TR_FORMAT(text, sizeof(text), tr("stockpile.quality"), low, high);
     ui_layout_label(layout, text, 0.0f, false);
     ui_layout_measure(layout, SLIDER_MIN_WIDTH);
-    int quality_low = stockpile->quality.min, quality_high = stockpile->quality.max;
+    int quality_low = stockpile->quality.min / QUALITY_STEP;
+    int quality_high = (stockpile->quality.max + QUALITY_STEP - 1) / QUALITY_STEP;
     if (layout->draw &&
         ui_range_slider(ui, QUALITY_SLIDER_ID,
                         (SDL_FRect){layout->x, layout->y, layout->width, layout->row},
-                        ITEM_QUALITY_COUNT, &quality_low, &quality_high)) {
-        stockpile_set_quality_range(rows->stockpiles, rows->index,
-                                    (IntRange){quality_low, quality_high});
+                        ITEM_QUALITY_BEST / QUALITY_STEP + 1, &quality_low, &quality_high)) {
+        stockpile_set_quality_range(
+            rows->stockpiles, rows->index,
+            (IntRange){quality_low * QUALITY_STEP, quality_high * QUALITY_STEP});
     }
     layout->y += layout->row;
 

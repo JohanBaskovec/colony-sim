@@ -11,7 +11,7 @@
  *
  * Most structures take one tile; a grass bed takes two (2 m × 0.8 m), its
  * head and its foot, turned in one of four directions. The head is the
- * structure's origin: where its grade and hit points are kept, where a
+ * structure's origin: where its quality and hit points are kept, where a
  * settler lies down.
  *
  * A roof is built as the floor of the open tile over a hut (the level above
@@ -19,8 +19,8 @@
  * wall, a stockpile), nobody stands on it, and it must rest on a wall or
  * rock nearby on the level below (ROOF_SUPPORT_RANGE).
  *
- * A built structure has a grade (the builder's level, capped by the grade of
- * its materials) and hit points (more for a better grade). Some wear by
+ * A built structure has a quality (the builder's level, capped by the quality of
+ * its materials) and hit points (more for a better quality). Some wear by
  * themselves (a grass bed loses a hit point a day) and are refreshed with a
  * little material before they fall apart.
  */
@@ -88,7 +88,7 @@ typedef struct StructureDef {
     /* Placed along the edges of a dragged rectangle (walls), not one by one. */
     bool drawn_as_outline;
     int length;         /* Tiles, from the head along its direction (a bed: 2). */
-    int max_hit_points; /* At standard grade (see structure_max_hit_points()). */
+    int max_hit_points; /* At standard quality (see structure_max_hit_points()). */
     int wear_per_day;   /* Hit points lost each day by itself (bedding packs down). */
     /* Refreshing (a new layer of bedding): material and work; no refresh
      * when the work is 0. Asked for below STRUCTURE_REFRESH_BELOW. */
@@ -130,14 +130,14 @@ bool structure_is_ladder(StructureType type);
  * y + i × direction_dy()). */
 int structure_length(StructureType type);
 
-/* Hit points of a structure of a grade: the standard ones × the grade
+/* Hit points of a structure of a quality: the standard ones × the quality
  * factor (×0.6 crude to ×1.5 superb, docs/KNOWLEDGE.md §2.2); at least 1.
  * 0 for STRUCTURE_NONE. */
 int structure_max_hit_points(StructureType type, ItemQuality quality);
 
-/* Best grade a structure can have with materials of these grades: their
- * average + 1, among the materials that have a grade (grass and twigs do not
- * cap). `delivered` holds one stack per material slot. */
+/* Best quality a structure can have with materials of these qualities: their
+ * average + ITEM_QUALITY_CAP_BONUS points, among the materials that have a quality (grass and twigs
+ * do not cap). `delivered` holds one stack per material slot. */
 ItemQuality structure_quality_cap(StructureType type,
                                   const ItemStack delivered[STRUCTURE_MATERIAL_SLOTS]);
 

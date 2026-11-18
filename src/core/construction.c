@@ -503,7 +503,7 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
         taken.count = (uint16_t)(stack.count < missing ? stack.count : missing);
         ItemStack *into = &site->delivered[slot];
         if (into->count > 0) {
-            /* Materials of any grade go into the same structure. */
+            /* Materials of any quality go into the same structure. */
             uint8_t lowest = into->quality < taken.quality ? into->quality : taken.quality;
             into->quality = lowest;
             taken.quality = lowest;
@@ -588,7 +588,7 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
         map_set_structure_hit_points(map, x, y, z, INT16_MAX);
         return true;
     }
-    ItemQuality quality = knowledge_quality_of_score(knowledge_product_score(level, rng));
+    ItemQuality quality = knowledge_product_score(level, rng);
     if (structure_is_roof(type)) {
         map_set_roof(map, x, y, z, type, quality < cap ? quality : cap);
         return true;

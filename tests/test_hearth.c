@@ -498,7 +498,7 @@ static void test_fire_hardening(void)
     REQUIRE(crafter != NULL);
     int index = built_hearth(&game, 14, 10, HEARTH_FUEL_CAPACITY);
     items_add(&game.items, 16, 12, 0,
-              item_stack_make(ITEM_THROWING_SPEAR, 1, ITEM_QUALITY_FINE,
+              item_stack_make(ITEM_THROWING_SPEAR, 1, TEST_QUALITY_FINE,
                               item_hit_points_at_percent(ITEM_THROWING_SPEAR, 60)));
     REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_HARDEN_THROWING_SPEAR) >= 0);
     CHECK(recipe_needs_fire(RECIPE_HARDEN_THROWING_SPEAR));
@@ -510,7 +510,7 @@ static void test_fire_hardening(void)
     CHECK_EQ_INT((int)game.items.totals[ITEM_THROWING_SPEAR], 1);
     CHECK_EQ_INT(hearth(&game, index)->work_input.count, 0);
 
-    /* Lit: the spear is hardened, its grade and condition kept. */
+    /* Lit: the spear is hardened, its quality and condition kept. */
     REQUIRE(hearth_light(&game.workstations, index));
     run_ticks(&game, 300, true);
     CHECK_EQ_INT(crafter->task, TASK_CRAFT);
@@ -537,7 +537,7 @@ static void test_fire_hardening(void)
         spear = crafter->carried;
     }
     CHECK_EQ_INT(spear.type, ITEM_THROWING_SPEAR_HARDENED);
-    CHECK_EQ_INT(spear.quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(spear.quality, TEST_QUALITY_FINE);
     CHECK_EQ_INT(spear.hit_points, item_hit_points_at_percent(ITEM_THROWING_SPEAR_HARDENED, 60));
     /* Half as strong again. */
     CHECK_EQ_INT(item_def(ITEM_THROWING_SPEAR_HARDENED)->max_hit_points * 2,

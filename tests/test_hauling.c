@@ -517,8 +517,8 @@ static void test_destination_room_follows_the_filter(void)
     int pile = stockpile_create(&game.stockpiles, &game.map, 3, 3, 5, 3, 0);
     stockpile_set_quality_range(&game.stockpiles, pile,
                                 (IntRange){ITEM_QUALITY_STANDARD, ITEM_QUALITY_BEST});
-    ItemStack good = item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_FINE, 60);
-    ItemStack poor = item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_CRUDE, 60);
+    ItemStack good = item_stack_make(ITEM_WOOD, 5, TEST_QUALITY_FINE, 60);
+    ItemStack poor = item_stack_make(ITEM_WOOD, 5, TEST_QUALITY_CRUDE, 60);
     int limit = item_stack_limit(ITEM_WOOD);
     CHECK_EQ_INT(haul_destination_room(&game.stockpiles, &game.items, 3, 3, 0, good), limit);
     CHECK_EQ_INT(haul_destination_room(&game.stockpiles, &game.items, 3, 3, 0, poor), 0);
@@ -529,10 +529,14 @@ static void test_destination_room_follows_the_filter(void)
     CHECK_EQ_INT(haul_destination_room(&game.stockpiles, &game.items, 4, 3, 0, good), 0);
     items_add(&game.items, 5, 3, 0, good);
     CHECK_EQ_INT(haul_destination_room(&game.stockpiles, &game.items, 5, 3, 0, good), limit - 5);
-    /* Accepted, but another grade lies there. */
+    /* Accepted, and wood of another quality lies there: it joins it. */
     ItemStack standard = item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_STANDARD, 60);
-    CHECK_EQ_INT(haul_destination_room(&game.stockpiles, &game.items, 5, 3, 0, standard), 0);
-    CHECK_EQ_INT(haul_storage_room(&game.items, 5, 3, 0, standard), 0);
+    CHECK_EQ_INT(haul_destination_room(&game.stockpiles, &game.items, 5, 3, 0, standard),
+                 limit - 5);
+    CHECK_EQ_INT(haul_storage_room(&game.items, 5, 3, 0, standard), limit - 5);
+    /* Another type does not. */
+    ItemStack stones = item_stack_pristine(ITEM_COBBLE, 5);
+    CHECK_EQ_INT(haul_storage_room(&game.items, 5, 3, 0, stones), 0);
     CHECK_EQ_INT(haul_storage_room(&game.items, 5, 3, 0, good), limit - 5);
     game_shutdown(&game);
 }
@@ -544,22 +548,22 @@ static void test_find_job_respects_condition_filters(void)
     int pile = stockpile_create(&game.stockpiles, &game.map, 20, 5, 20, 5, 0);
     stockpile_set_quality_range(&game.stockpiles, pile,
                                 (IntRange){ITEM_QUALITY_STANDARD, ITEM_QUALITY_BEST});
-    items_add(&game.items, 5, 5, 0, item_stack_make(ITEM_WOOD, 10, ITEM_QUALITY_ROUGH, 60));
+    items_add(&game.items, 5, 5, 0, item_stack_make(ITEM_WOOD, 10, TEST_QUALITY_ROUGH, 60));
     HaulWorld world = world_of(&game);
     HaulJob job;
     CHECK(!haul_find_job(&world, (TilePos){4, 5, 0}, 100.0f, &job));
 
-    items_add(&game.items, 8, 5, 0, item_stack_make(ITEM_WOOD, 10, ITEM_QUALITY_FINE, 60));
+    items_add(&game.items, 8, 5, 0, item_stack_make(ITEM_WOOD, 10, TEST_QUALITY_FINE, 60));
     REQUIRE(haul_find_job(&world, (TilePos){4, 5, 0}, 100.0f, &job));
     CHECK_EQ_INT(job.source.x, 8); /* The nearer stack is skipped. */
     CHECK_EQ_INT(job.destination.x, 20);
 
     /* Hit points too: only damaged items wanted here. */
     stockpile_set_quality_range(&game.stockpiles, pile,
-                                (IntRange){ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST});
+                                (IntRange){TEST_QUALITY_CRUDE, ITEM_QUALITY_BEST});
     stockpile_set_hit_points_range(&game.stockpiles, pile, (IntRange){0, 80});
     CHECK(!haul_find_job(&world, (TilePos){4, 5, 0}, 100.0f, &job));
-    items_add(&game.items, 10, 5, 0, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 12));
+    items_add(&game.items, 10, 5, 0, item_stack_make(ITEM_WOOD, 3, TEST_QUALITY_FINE, 12));
     REQUIRE(haul_find_job(&world, (TilePos){4, 5, 0}, 100.0f, &job));
     CHECK_EQ_INT(job.source.x, 10);
     game_shutdown(&game);
@@ -570,7 +574,7 @@ static void test_items_rejected_by_a_new_filter_move_out(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     int pile = stockpile_create(&game.stockpiles, &game.map, 10, 10, 10, 10, 0);
-    items_add(&game.items, 10, 10, 0, item_stack_make(ITEM_WOOD, 10, ITEM_QUALITY_ROUGH, 60));
+    items_add(&game.items, 10, 10, 0, item_stack_make(ITEM_WOOD, 10, TEST_QUALITY_ROUGH, 60));
     HaulWorld world = world_of(&game);
     HaulJob job;
     CHECK(!haul_find_job(&world, (TilePos){10, 10, 0}, 100.0f, &job)); /* Stored. */
@@ -591,7 +595,7 @@ static void test_items_rejected_by_a_new_filter_move_out(void)
     run_ticks(&game, 1500);
     CHECK_EQ_INT(count_at(&game, 10, 10, ITEM_WOOD), 0);
     CHECK_EQ_INT(count_at(&game, 15, 10, ITEM_WOOD), 10);
-    CHECK_EQ_INT(items_get(&game.items, 15, 10, 0).quality, ITEM_QUALITY_ROUGH);
+    CHECK_EQ_INT(items_get(&game.items, 15, 10, 0).quality, TEST_QUALITY_ROUGH);
     game_shutdown(&game);
 }
 
@@ -603,13 +607,13 @@ static void test_haulers_sort_items_by_condition(void)
     int good = stockpile_create(&game.stockpiles, &game.map, 20, 10, 21, 10, 0);
     stockpile_set_priority(&game.stockpiles, good, 2);
     stockpile_set_quality_range(&game.stockpiles, good,
-                                (IntRange){ITEM_QUALITY_FINE, ITEM_QUALITY_BEST});
+                                (IntRange){TEST_QUALITY_FINE, ITEM_QUALITY_BEST});
     stockpile_set_hit_points_range(&game.stockpiles, good, (IntRange){50, 100});
     stockpile_create(&game.stockpiles, &game.map, 20, 14, 21, 14, 0);
-    items_add(&game.items, 10, 10, 0, item_stack_make(ITEM_WOOD, 8, ITEM_QUALITY_FINE, 60));
-    items_add(&game.items, 10, 12, 0, item_stack_make(ITEM_WOOD, 8, ITEM_QUALITY_CRUDE, 60));
-    items_add(&game.items, 10, 14, 0, item_stack_make(ITEM_WOOD, 8, ITEM_QUALITY_FINE, 10));
-    items_add(&game.items, 10, 16, 0, item_stack_make(ITEM_WOOD, 8, ITEM_QUALITY_FINE, 40));
+    items_add(&game.items, 10, 10, 0, item_stack_make(ITEM_WOOD, 8, TEST_QUALITY_FINE, 60));
+    items_add(&game.items, 10, 12, 0, item_stack_make(ITEM_WOOD, 8, TEST_QUALITY_CRUDE, 60));
+    items_add(&game.items, 10, 14, 0, item_stack_make(ITEM_WOOD, 8, TEST_QUALITY_FINE, 10));
+    items_add(&game.items, 10, 16, 0, item_stack_make(ITEM_WOOD, 8, TEST_QUALITY_FINE, 40));
     spawn_hauler(&game, 12, 12);
     run_ticks(&game, 6000);
 
@@ -626,7 +630,7 @@ static void test_haulers_sort_items_by_condition(void)
     ItemStack a = items_get(&game.items, 20, 10, 0), b = items_get(&game.items, 21, 10, 0);
     ItemStack merged = a.count == 16 ? a : b;
     CHECK_EQ_INT(merged.count, 16);
-    CHECK_EQ_INT(merged.quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(merged.quality, TEST_QUALITY_FINE);
     /* Loads merged in hand, then on the tile: rounding may differ by one. */
     CHECK(merged.hit_points >= 49 && merged.hit_points <= 51);
     game_shutdown(&game);
@@ -637,7 +641,7 @@ static void test_carried_items_keep_their_condition(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     items_add(&game.items, 10, 10, 0,
-              item_stack_make(ITEM_BLACKBERRIES, 30, ITEM_QUALITY_ROUGH, 7));
+              item_stack_make(ITEM_BLACKBERRIES, 30, TEST_QUALITY_ROUGH, 7));
     stockpile_create(&game.stockpiles, &game.map, 20, 10, 20, 10, 0);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
@@ -645,12 +649,12 @@ static void test_carried_items_keep_their_condition(void)
         game_tick(&game);
     }
     REQUIRE(colonist->carried.count == 30);
-    CHECK_EQ_INT(colonist->carried.quality, ITEM_QUALITY_ROUGH);
+    CHECK_EQ_INT(colonist->carried.quality, TEST_QUALITY_ROUGH);
     CHECK_EQ_INT(colonist->carried.hit_points, 7);
     run_ticks(&game, 1000);
     ItemStack stored = items_get(&game.items, 20, 10, 0);
     CHECK_EQ_INT(stored.count, 30);
-    CHECK_EQ_INT(stored.quality, ITEM_QUALITY_ROUGH);
+    CHECK_EQ_INT(stored.quality, TEST_QUALITY_ROUGH);
     CHECK_EQ_INT(stored.hit_points, 7);
     game_shutdown(&game);
 }
@@ -662,16 +666,16 @@ static void test_find_extra_source(void)
     int pile = stockpile_create(&game.stockpiles, &game.map, 20, 10, 20, 10, 0);
     stockpile_set_hit_points_range(&game.stockpiles, pile, (IntRange){50, 100});
     TilePos dest = {20, 10, 0};
-    ItemStack load = item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60);
-    items_add(&game.items, 11, 10, 0, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_ROUGH, 60));
+    ItemStack load = item_stack_make(ITEM_WOOD, 2, TEST_QUALITY_FINE, 60);
+    items_add(&game.items, 11, 10, 0, item_stack_make(ITEM_BRANCHES, 3, TEST_QUALITY_ROUGH, 60));
     items_add(&game.items, 10, 12, 0, item_stack_pristine(ITEM_STONE_BLOCK, 3));
-    items_add(&game.items, 9, 10, 0, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 10));
+    items_add(&game.items, 9, 10, 0, item_stack_make(ITEM_WOOD, 3, TEST_QUALITY_FINE, 10));
     HaulWorld world = world_of(&game);
     TilePos out;
-    /* Other grade, other type, too damaged for the destination: none fits. */
+    /* Other types, too damaged for the destination: none fits. */
     CHECK(!haul_find_extra_source(&world, (TilePos){10, 10, 0}, load, dest, 12.0f, &out, NULL));
 
-    items_add(&game.items, 10, 14, 0, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 40));
+    items_add(&game.items, 10, 14, 0, item_stack_make(ITEM_WOOD, 3, TEST_QUALITY_FINE, 40));
     REQUIRE(haul_find_extra_source(&world, (TilePos){10, 10, 0}, load, dest, 12.0f, &out, NULL));
     CHECK_EQ_INT(out.x, 10);
     CHECK_EQ_INT(out.y, 14);
@@ -716,15 +720,15 @@ static void test_hauler_collects_several_stacks_per_trip(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     items_add(&game.items, 10, 10, 0,
-              item_stack_make(ITEM_BLACKBERRIES, 10, ITEM_QUALITY_FINE, 10));
-    items_add(&game.items, 12, 11, 0, item_stack_make(ITEM_BLACKBERRIES, 10, ITEM_QUALITY_FINE, 6));
-    items_add(&game.items, 11, 13, 0, item_stack_make(ITEM_BLACKBERRIES, 10, ITEM_QUALITY_FINE, 8));
+              item_stack_make(ITEM_BLACKBERRIES, 10, TEST_QUALITY_FINE, 10));
+    items_add(&game.items, 12, 11, 0, item_stack_make(ITEM_BLACKBERRIES, 10, TEST_QUALITY_FINE, 6));
+    items_add(&game.items, 11, 13, 0, item_stack_make(ITEM_BLACKBERRIES, 10, TEST_QUALITY_FINE, 8));
     stockpile_create(&game.stockpiles, &game.map, 25, 10, 25, 10, 0);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
     CHECK_EQ_INT(first_delivery(&game, 25, 10, 4000), 30); /* All three in one trip. */
     ItemStack stored = items_get(&game.items, 25, 10, 0);
-    CHECK_EQ_INT(stored.quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(stored.quality, TEST_QUALITY_FINE);
     CHECK_EQ_INT(stored.hit_points, 8); /* (10 × 10 + 10 × 6 + 10 × 8) / 30 */
     CHECK_EQ_INT(count_in(&game, 0, 0, 20, 20, ITEM_BLACKBERRIES), 0);
     CHECK_EQ_INT(game.reservations.count, 0);
@@ -784,15 +788,16 @@ static void test_any_job_possible_is_exact(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    stockpile_create(&game.stockpiles, &game.map, 20, 5, 20, 5, 0);
-    /* A stored stack of fine wood with room left: rough wood lies about. */
-    items_add(&game.items, 20, 5, 0, item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_FINE, 100));
-    items_add(&game.items, 5, 5, 0, item_stack_make(ITEM_WOOD, 10, ITEM_QUALITY_ROUGH, 100));
+    int pile = stockpile_create(&game.stockpiles, &game.map, 20, 5, 20, 5, 0);
+    stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_WOOD));
+    /* A stored stack of wood with room left: berries lie about. */
+    items_add(&game.items, 20, 5, 0, item_stack_make(ITEM_WOOD, 5, TEST_QUALITY_FINE, 100));
+    items_add(&game.items, 5, 5, 0, item_stack_make(ITEM_BLACKBERRIES, 10, TEST_QUALITY_ROUGH, 10));
     HaulWorld world = world_of(&game);
-    CHECK(!haul_any_job_possible(&world)); /* Wood is allowed, but not that grade. */
+    CHECK(!haul_any_job_possible(&world)); /* Wood only, and no wood to bring. */
 
-    /* Fine wood, taken by another hauler. */
-    items_add(&game.items, 30, 30, 0, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 100));
+    /* Wood of another quality: it joins the stack. Taken by another hauler. */
+    items_add(&game.items, 30, 30, 0, item_stack_make(ITEM_WOOD, 3, TEST_QUALITY_FINE, 100));
     CHECK(haul_any_job_possible(&world));
     reservations_add(&game.reservations, RESERVATION_HAUL_SOURCE, (TilePos){30, 30, 0}, 2);
     CHECK(!haul_any_job_possible(&world));

@@ -34,12 +34,12 @@ static void test_definitions(void)
 
 static void test_inputs_and_levels(void)
 {
-    CHECK(recipe_accepts_input(RECIPE_FLAKES, stone(ITEM_FLINT, ITEM_QUALITY_CRUDE)));
-    CHECK(recipe_accepts_input(RECIPE_FLAKES, stone(ITEM_COBBLE, ITEM_QUALITY_CRUDE)));
+    CHECK(recipe_accepts_input(RECIPE_FLAKES, stone(ITEM_FLINT, TEST_QUALITY_CRUDE)));
+    CHECK(recipe_accepts_input(RECIPE_FLAKES, stone(ITEM_COBBLE, TEST_QUALITY_CRUDE)));
     CHECK(!recipe_accepts_input(RECIPE_FLAKES, item_stack_pristine(ITEM_WOOD, 1)));
-    CHECK(!recipe_accepts_input(RECIPE_THROWING_SPEAR, stone(ITEM_FLINT, ITEM_QUALITY_FINE)));
+    CHECK(!recipe_accepts_input(RECIPE_THROWING_SPEAR, stone(ITEM_FLINT, TEST_QUALITY_FINE)));
     /* Spears want straight branches. */
-    ItemStack crooked = item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_ROUGH, 20);
+    ItemStack crooked = item_stack_make(ITEM_BRANCHES, 1, TEST_QUALITY_ROUGH, 20);
     ItemStack straight = item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_STANDARD, 20);
     CHECK(!recipe_accepts_input(RECIPE_THROWING_SPEAR, crooked));
     CHECK(recipe_accepts_input(RECIPE_THROWING_SPEAR, straight));
@@ -55,44 +55,52 @@ static void test_inputs_and_levels(void)
 
 static void test_quality_cap_from_materials(void)
 {
-    /* Grade of the material + 1. */
-    CHECK_EQ_INT(recipe_quality_cap(RECIPE_FLAKES, stone(ITEM_FLINT, ITEM_QUALITY_CRUDE)),
-                 ITEM_QUALITY_ROUGH);
-    CHECK_EQ_INT(recipe_quality_cap(RECIPE_FLAKES, stone(ITEM_FLINT, ITEM_QUALITY_FINE)),
-                 ITEM_QUALITY_SUPERB);
-    /* A cobble knaps like crude flint, whatever its grade. */
-    CHECK_EQ_INT(recipe_quality_cap(RECIPE_HAND_AXE, stone(ITEM_COBBLE, ITEM_QUALITY_SUPERB)),
-                 ITEM_QUALITY_ROUGH);
+    /* The material's quality + 20, whatever the value. */
+    CHECK_EQ_INT(recipe_quality_cap(RECIPE_FLAKES, stone(ITEM_FLINT, 47)), 67);
+    CHECK_EQ_INT(recipe_quality_cap(RECIPE_FLAKES, stone(ITEM_FLINT, 95)), ITEM_QUALITY_BEST);
+    CHECK_EQ_INT(recipe_quality_cap(RECIPE_FLAKES, stone(ITEM_FLINT, 0)), ITEM_QUALITY_CAP_BONUS);
+    ItemStack capped[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, 47), 100.0, NULL, capped) == 1);
+    CHECK_EQ_INT(capped[0].quality, 67); /* A master's 95, held at the cap. */
+    REQUIRE(recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, 95), 50.0, NULL, capped) == 1);
+    CHECK_EQ_INT(capped[0].quality, 25); /* A beginner's, far under it. */
+    CHECK_EQ_INT(recipe_quality_cap(RECIPE_FLAKES, stone(ITEM_FLINT, TEST_QUALITY_CRUDE)),
+                 TEST_QUALITY_ROUGH);
+    CHECK_EQ_INT(recipe_quality_cap(RECIPE_FLAKES, stone(ITEM_FLINT, TEST_QUALITY_FINE)),
+                 TEST_QUALITY_SUPERB);
+    /* A cobble knaps like crude flint, whatever its quality. */
+    CHECK_EQ_INT(recipe_quality_cap(RECIPE_HAND_AXE, stone(ITEM_COBBLE, TEST_QUALITY_SUPERB)),
+                 TEST_QUALITY_ROUGH);
 
     /* A master knapper with crude flint makes at best rough flakes. */
     ItemStack out[RECIPE_PRODUCT_MAX];
-    REQUIRE(recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, ITEM_QUALITY_CRUDE), 100.0, NULL, out) ==
+    REQUIRE(recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, TEST_QUALITY_CRUDE), 100.0, NULL, out) ==
             1);
     CHECK_EQ_INT(out[0].type, ITEM_FLAKE);
-    CHECK_EQ_INT(out[0].quality, ITEM_QUALITY_ROUGH);
-    REQUIRE(recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, ITEM_QUALITY_FINE), 100.0, NULL, out) ==
+    CHECK_EQ_INT(out[0].quality, TEST_QUALITY_ROUGH);
+    REQUIRE(recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, TEST_QUALITY_FINE), 100.0, NULL, out) ==
             1);
-    CHECK_EQ_INT(out[0].quality, ITEM_QUALITY_SUPERB);
+    CHECK_EQ_INT(out[0].quality, TEST_QUALITY_SUPERB);
 }
 
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
-    REQUIRE(recipe_craft(RECIPE_CHOPPER, stone(ITEM_COBBLE, ITEM_QUALITY_FINE), 50.0, NULL, out) ==
+    REQUIRE(recipe_craft(RECIPE_CHOPPER, stone(ITEM_COBBLE, TEST_QUALITY_FINE), 50.0, NULL, out) ==
             1);
     CHECK_EQ_INT(out[0].type, ITEM_CHOPPER);
     CHECK_EQ_INT(out[0].count, 1);
 
     /* Flakes: 3 at mastery, one more per 10 points, 8 at 100. */
-    recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, ITEM_QUALITY_SUPERB), 55.0, NULL, out);
+    recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, TEST_QUALITY_SUPERB), 55.0, NULL, out);
     CHECK_EQ_INT(out[0].count, 3);
-    recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, ITEM_QUALITY_SUPERB), 79.0, NULL, out);
+    recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, TEST_QUALITY_SUPERB), 79.0, NULL, out);
     CHECK_EQ_INT(out[0].count, 5);
-    recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, ITEM_QUALITY_SUPERB), 100.0, NULL, out);
+    recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, TEST_QUALITY_SUPERB), 100.0, NULL, out);
     CHECK_EQ_INT(out[0].count, 8);
 
     /* A hand axe comes with two flakes (no failure without randomness). */
-    REQUIRE(recipe_craft(RECIPE_HAND_AXE, stone(ITEM_FLINT, ITEM_QUALITY_FINE), 70.0, NULL, out) ==
+    REQUIRE(recipe_craft(RECIPE_HAND_AXE, stone(ITEM_FLINT, TEST_QUALITY_FINE), 70.0, NULL, out) ==
             2);
     CHECK_EQ_INT(out[0].type, ITEM_HAND_AXE);
     CHECK_EQ_INT(out[0].count, 1);
@@ -103,7 +111,7 @@ static void test_products(void)
     REQUIRE(recipe_craft(RECIPE_THRUSTING_SPEAR, branches, 60.0, NULL, out) == 1);
     CHECK_EQ_INT(out[0].type, ITEM_THRUSTING_SPEAR);
     CHECK_EQ_INT(out[0].count, 1);
-    CHECK(out[0].quality <= ITEM_QUALITY_FINE); /* Standard branches + 1. */
+    CHECK(out[0].quality <= TEST_QUALITY_FINE); /* Standard branches + 1. */
     CHECK_EQ_INT(recipe_craft(RECIPE_COUNT, branches, 60.0, NULL, out), 0);
 }
 
@@ -120,7 +128,7 @@ static void test_hand_axe_failures(void)
     ItemStack out[RECIPE_PRODUCT_MAX];
     for (int i = 0; i < 1000; i++) {
         int count =
-            recipe_craft(RECIPE_HAND_AXE, stone(ITEM_FLINT, ITEM_QUALITY_FINE), 70.0, &rng, out);
+            recipe_craft(RECIPE_HAND_AXE, stone(ITEM_FLINT, TEST_QUALITY_FINE), 70.0, &rng, out);
         if (count == 1) {
             failures++;
             /* The stone is lost, a few flakes are left: 1 + 2 at level 70. */
@@ -131,7 +139,7 @@ static void test_hand_axe_failures(void)
     CHECK(failures > 340 && failures < 460);
     for (int i = 0; i < 100; i++) {
         CHECK_EQ_INT(
-            recipe_craft(RECIPE_HAND_AXE, stone(ITEM_FLINT, ITEM_QUALITY_FINE), 95.0, &rng, out),
+            recipe_craft(RECIPE_HAND_AXE, stone(ITEM_FLINT, TEST_QUALITY_FINE), 95.0, &rng, out),
             2);
     }
 }

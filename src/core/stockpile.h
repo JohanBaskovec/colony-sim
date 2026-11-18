@@ -24,7 +24,7 @@
 #define STOCKPILE_PRIORITY_LOWEST 10
 #define STOCKPILE_PRIORITY_DEFAULT 5
 
-/* Inclusive range of values (quality grades, hit point percentages). */
+/* Inclusive range of values (quality qualities, hit point percentages). */
 typedef struct IntRange {
     int min;
     int max;
@@ -34,7 +34,7 @@ typedef struct Stockpile {
     bool used;
     int number; /* Shown to the player ("Stockpile 3"); unique, never reused. */
     ItemTypeMask allowed;
-    IntRange quality;    /* Accepted grades (ItemQuality). */
+    IntRange quality;    /* Accepted qualities (ItemQuality). */
     IntRange hit_points; /* Accepted hit points, in percent of the maximum (0..100). */
     int priority;
     /* Forbidden by the player: nothing is hauled onto its tiles nor off them
@@ -118,13 +118,13 @@ int stockpile_at(const Stockpiles *stockpiles, int x, int y, int z);
 
 void stockpile_set_allowed(Stockpiles *stockpiles, int index, ItemTypeMask allowed);
 
-/* Bounds are clamped (to the grades, to 0..100) and swapped if min > max. */
+/* Bounds are clamped (to the qualities, to 0..100) and swapped if min > max. */
 void stockpile_set_quality_range(Stockpiles *stockpiles, int index, IntRange range);
 void stockpile_set_hit_points_range(Stockpiles *stockpiles, int index, IntRange range);
 
-/* Whether the filter of a stockpile accepts these items: allowed type, grade
+/* Whether the filter of a stockpile accepts these items: allowed type, quality
  * and hit points (item_stack_hit_points_percent()) within the ranges. Items
- * that are always perfect (stone) are of the best grade and at 100 %. */
+ * that are always perfect (stone) are of the best quality and at 100 %. */
 bool stockpile_accepts(const Stockpile *stockpile, ItemStack stack);
 
 /* Clamped to STOCKPILE_PRIORITY_HIGHEST..STOCKPILE_PRIORITY_LOWEST. */

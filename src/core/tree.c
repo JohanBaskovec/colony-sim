@@ -638,7 +638,7 @@ TreeFall tree_fall_aim(const Map *map, int x, int y, int z)
     return best;
 }
 
-/* Drops `count` items like `like` (same type, grade and condition) on a
+/* Drops `count` items like `like` (same type, quality and condition) on a
  * tile, or on the ground below it over a drop. */
 static void drop_share(Map *map, Items *items, int x, int y, int z, ItemStack like, int count)
 {

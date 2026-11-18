@@ -174,11 +174,6 @@ attack.kick = Ruade
 attack.tusks = Défenses
 attack.bite = Morsure
 # Paliers de qualité, du pire au meilleur, après « Qualité : » (accord au féminin)
-item.quality.crude = grossière
-item.quality.rough = médiocre
-item.quality.standard = correcte
-item.quality.fine = bonne
-item.quality.superb = superbe
 
 # Types de travail
 work.mining = Terrassement
@@ -286,7 +281,7 @@ hud.tile.gather_left_off = Interrompu : {0} ({1} % effectué)
 hud.tile.station = Poste de travail : {0}
 hud.tile.blueprint = Plan : {0} (construit à {1} %)
 hud.tile.structure = Construction : {0}
-hud.tile.roof = Toit : {0} ({1})
+hud.tile.roof = Toit : {0} (qualité {1})
 hud.tile.under_roof = Sous un toit : {0}
 hud.tile.natural_roof = Toit : roche ou sol au-dessus
 hud.tile.needs_support = En attente de soutien : creusé maintenant, un plafond s’effondrerait (un étai ou un mur à 2 cases au plus)
@@ -414,10 +409,10 @@ hud.colonist.break.other = En crise : {0} (encore {1} heures)
 # {0} : pourcentage de vitesse de travail perdu, {1} : heures restantes.
 hud.colonist.wet = Mouillé ({0} %) : ressent {1} de froid en plus
 hud.colonist.carrying = Porte : {0} ×{1} ({2})
-hud.colonist.tool = Outil : {0} ({1}, {2})
+hud.colonist.tool = Outil : {0} (qualité {1}, {2})
 hud.colonist.tools_broken.one = {0} outil usé jusqu’à la casse
 hud.colonist.tools_broken.other = {0} outils usés jusqu’à la casse
-hud.colonist.bed = Lit attitré : {0} ({1})
+hud.colonist.bed = Lit attitré : {0} (qualité {1})
 hud.colonist.no_bed = Pas de lit attitré
 hud.colonist.cold_sleep = Dort au froid ({0}) : repos ×{1}
 hud.colonist.hot_sleep = Dort trop au chaud ({0}) : repos ×{1}

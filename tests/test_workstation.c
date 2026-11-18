@@ -204,7 +204,7 @@ static void test_crafting(void)
     REQUIRE(init_world(&map, &stations, &items));
     int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
     int bill = workstation_add_bill(&stations, index, RECIPE_FLAKES);
-    ItemStack flint = item_stack_make(ITEM_FLINT, 1, ITEM_QUALITY_FINE, 0);
+    ItemStack flint = item_stack_make(ITEM_FLINT, 1, TEST_QUALITY_FINE, 0);
 
     CHECK(!workstation_start_craft(&stations, index, RECIPE_FLAKES,
                                    item_stack_pristine(ITEM_WOOD, 1)));

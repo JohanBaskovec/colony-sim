@@ -104,7 +104,7 @@ level (0 to 20), with the same curves:
 | Effect | Formula | L = 50 | L = 75 | L = 100 |
 |--------|---------|--------|--------|---------|
 | Work speed | `0.5 + (L − 50) / 50` | ×0.5 | ×1.0 | ×1.5 |
-| Quality score (0 to 100, one grade per 20 points) | `25 + 1.4 × (L − 50) ± 10` | crude to rough | standard | superb |
+| Quality (0 to 100) | `25 + 1.4 × (L − 50) ± 10` | about 25 | about 60 | about 95 |
 | Condition of products (% of hit points, max 100) | `50 + 1.6 × (L − 50) ± 10` | about 50% | about 90% | 100% |
 | Failure chance (risky recipes only) | per recipe | high | lower | none |
 
@@ -263,7 +263,7 @@ their family by conversation, stories and apprenticeship.
 | Quantity    | Rule |
 |-------------|------|
 | Time        | 2,500 ticks = 1 in-game hour. Work amounts are in ticks at speed ×1. |
-| Work speed  | Knowledge level (§1.4) × tool (§2.3) × tool grade (§2.3) × mood × the settler's work pace (`docs/ATTRIBUTES.md`). |
+| Work speed  | Knowledge level (§1.4) × tool (§2.3) × tool quality (§2.3) × mood × the settler's work pace (`docs/ATTRIBUTES.md`). |
 | Weight      | Kilograms per item, realistic. |
 | Bulk        | Room per item, about half liters with packing gaps; a tile holds 1,000. Stack limit = 1,000 / bulk. |
 | Nutrition   | Food need restored per item. 1.0 lasts 36 h, so 1.0 ≈ 3,750 kcal (2,500 kcal a day). Blackberries: 0.3 kg ≈ 190 kcal = 0.05. |
@@ -271,16 +271,24 @@ their family by conversation, stories and apprenticeship.
 
 ### 2.2 Quality of made things
 
-1. The level of the job's knowledge gives a quality score (§1.4).
-2. The grade is capped at **the average grade of the materials + 1**: a master
-   knapper with a coarse flint makes at best a rough hand axe. Materials
-   without quality never cap.
+Quality is a value from 0 to 100 on every item that has one (stone blocks and
+other perfect things are always 100).
+
+1. The level of the job's knowledge gives the quality (§1.4).
+2. It is capped at **the average quality of the materials + 20**: a master
+   knapper with a coarse flint (quality 10) makes at best a hand axe of 30.
+   Materials without quality never cap. A cobble knapped instead of flint
+   counts as 10.
 3. Made things come out at 100% hit points, except for failures.
 
-Effects of grades: **tools** work faster (§2.3) and last longer; **weapons** hit
-harder; **furniture and buildings** give more comfort and beauty and have more
-hit points. Factors from crude to superb: ×0.6, ×0.8, ×1, ×1.2, ×1.5
-(durability, damage, hit points), *tuning*.
+Items of the same type stack whatever their quality: the stack keeps the
+average (weighted by count) of quality and of hit points.
+
+Effects of quality, continuous between the ends: **tools** work faster (§2.3)
+and last longer; **weapons** hit harder; **furniture and buildings** give more
+comfort and beauty and have more hit points. Factors from quality 0 to 100:
+×0.6, ×1, ×1.5 at 0, 50 and 100 (durability, damage, hit points), linear in
+between, *tuning*.
 
 ### 2.3 Tools
 
@@ -307,7 +315,7 @@ hit points. Factors from crude to superb: ×0.6, ×0.8, ×1, ×1.2, ×1.5
   faster one lying within a short detour (about 30 tiles), leaving the old
   one there. Optional tools (cutting grass, building) are used when carried,
   not fetched.
-- Tool grade factor on speed: ×0.8, ×0.9, ×1.0, ×1.1, ×1.2, crude to superb.
+- Tool quality factor on speed: ×0.8 at quality 0, ×1 at 50, ×1.2 at 100, linear in between.
 - Using a tool needs no knowledge of how to make it: anyone can cut with a
   flake. The knowledge that counts is the one of the job.
 - **Any item can be a tool** when a recipe or job asks for it: a plain
@@ -364,7 +372,7 @@ on the side that does the least harm (see `core/tree.h`).
 
 - A **bill** = a recipe + a repeat mode (*do N times*, *until N in the colony*,
   *forever*) + filters: ingredient search radius (default 30 tiles), minimum
-  ingredient grade, allowed workers (level range in the recipe's knowledge).
+  ingredient quality, allowed workers (level range in the recipe's knowledge).
 - A crafter fetches all the ingredients, works at the station for the recipe's
   work amount, and drops the products on the station's output tile; haulers
   take them to storage.
@@ -433,12 +441,12 @@ with its own use.
   granite). The hammer of the knapper, the anvil of the knapping spot,
   a building material. It can be knapped, as the first tools in history
   were, but coarsely: as a knapping material **a cobble counts as crude**
-  whatever its grade, so what is knapped from it is at best rough (§2.2). Its
-  grade is its toughness, which matters when it is used as a hammer.
-- **Flint nodule**: the knapping stone. Its grade is how fine and even its
-  grain is, and caps the grade of what is knapped from it (§2.2): a good
+  whatever its quality, so what is knapped from it is at best rough (§2.2). Its
+  quality is its toughness, which matters when it is used as a hammer.
+- **Flint nodule**: the knapping stone. Its quality is how fine and even its
+  grain is, and caps the quality of what is knapped from it (§2.2): a good
   flint source matters.
-- The gatherer's Gathering level sets the grade of both: a good eye picks
+- The gatherer's Gathering level sets the quality of both: a good eye picks
   good stones.
 - **Stones are limited**: each tile of stony ground (not sand) holds 0 to 20
   stones *(tuning)*, cobbles and flint nodules, that gathering takes one by
@@ -483,7 +491,7 @@ that give little. Wild food is there in its season only. On a tile that offers s
 the plant's branches and twigs come first, then its food, felling it, and
 stones last. All jobs but felling belong to Gathering (minimum 50; 60 for
 food easily mistaken for a poisonous plant, §7) and produce items whose
-grade and condition come from the gatherer's level. Zones cover shallow
+quality and condition come from the gatherer's level. Zones cover shallow
 water too (cattails grow there).
 
 | Order            | Target | Work per item | Tool | Yield |
@@ -516,7 +524,7 @@ food. Fire must be lit, fed and watched.*
 
 - **Torch**: stored unlit; lit at a burning fire and carried,
   it **burns 1 hour** with a light radius of 3 tiles (×0.8 to ×1.2 as long by
-  grade). Lights a hearth at once. Later: night work, keeping animals away.
+  quality). Lights a hearth at once. Later: night work, keeping animals away.
 - **Ember bundle**: embers wrapped in dry grass, to carry fire. Never stored:
   made at a burning fire by a fire lighter and carried straight to the hearth
   to light. Goes out after **4 hours**.
@@ -539,7 +547,7 @@ food. Fire must be lit, fed and watched.*
 
 - **Fire hardening** dries and chars a wooden point. Hardenable: digging stick
   (done), throwing spear, thrusting spear. The hardened item is a separate type
-  (`<id>_hardened`): max hit points ×1.5, damage ×1.2 for spears; grade and
+  (`<id>_hardened`): max hit points ×1.5, damage ×1.2 for spears; quality and
   condition carry over; only once.
 - **Lighting** is a job created when a hearth with fuel is set to burn and is
   unlit. The fire lighter carries fire (ember bundle or lit torch) from a
@@ -548,7 +556,7 @@ food. Fire must be lit, fed and watched.*
   rain or snow falls on a hearth under the open sky, which two hours of rain
   put out (one in a storm), its fuel kept *(done)*. A hearth with no fire in reach and no
   tinder cannot be lit: the job says why.
-- Grilled food: grade from the cook's level, capped by the ingredients + 1.
+- Grilled food: quality from the cook's level, capped by the ingredients + 1.
 
 ### 5.3 Construction: open hearth
 
@@ -755,14 +763,14 @@ In French: *lance de jet* (throwing spear) and *épieu* (thrusting spear).
 Both are all wood, hardened in the fire; stone-tipped spears need the
 Hafting knowledge (§13).
 
-Damage values are relative, for the M6 health system; grade multiplies damage
+Damage values are relative, for the M6 health system; quality multiplies damage
 (§2.2), hardening adds ×1.2.
 
 ### 8.2 Spear making recipes
 
 | Recipe               | Ingredients | Tools | Station | Work | Min level | Products |
 |----------------------|-------------|-------|---------|------|-----------|----------|
-| Make throwing spear  | 1 branches (grade standard or better: straight) | flake or hand axe | Crafting spot | 3,750 (1.5 h) | 50 | 1 throwing spear |
+| Make throwing spear  | 1 branches (quality standard or better: straight) | flake or hand axe | Crafting spot | 3,750 (1.5 h) | 50 | 1 throwing spear |
 | Make thrusting spear | 2 branches (standard or better) | hand axe, flake | Crafting spot | 6,250 (2.5 h) | 60 | 1 thrusting spear |
 
 Construction **crafting spot**: 1 × 1, passable, no materials, so no
@@ -819,7 +827,7 @@ working, sewing).*
 ### 9.3 Yields
 
 Shares of the carcass weight, times the butcher's efficiency
-`0.7 + 0.006 × (L − 50)` (70% at 50, 100% at 100). Grades come from the
+`0.7 + 0.006 × (L − 50)` (70% at 50, 100% at 100). Qualities come from the
 butcher's level; the carcass's condition scales the products' hit points.
 
 | Product | Share | Red deer (110 kg) at 100% |
@@ -900,17 +908,17 @@ by one settler, 1 × 2 tiles (head and foot, turned four ways). *(Ownership
 and size implemented: a settler takes the nearest free bed the first night
 and keeps it.)*
 - Bare ground: rest gain ×0.8, mood "slept on the ground". Grass bed: ×1.0, no
-  penalty; comfort by grade.
+  penalty; comfort by quality.
 - **Ground bedding**: the same two tiles, with no material: a place where
   settlers lie down when they have nothing better, so that they do not
   wander off to sleep; it rests as the bare ground (×0.8) and the night still
   counts as "slept on the ground".
 - Loses 1 hit point a day; below 50%, "slept on old bedding"; at 0, gone.
   Refreshing replaces the grass (4 grass, 125 ticks).
-- Hit points: bed 20, wall 60, screen 40 at standard grade, ×0.6 (crude) to
-  ×1.5 (superb), like items. The grade comes from the builder's level, at
-  most one above the average grade of the graded materials (branches; dry
-  grass and twigs have no grade). *(Implemented; comfort and the old bedding
+- Hit points: bed 20, wall 60, screen 40 at standard quality (50), ×0.6 at
+  quality 0 to ×1.5 at 100, like items. The quality comes from the builder's
+  level, at most 20 above the average quality of the rated materials (branches; dry
+  grass and twigs have no quality). *(Implemented; comfort and the old bedding
   mood wait for moods.)*
 
 **Grass and branch wall**: posts and rails of branches thatched with dry
@@ -992,7 +1000,7 @@ Suggested order, each step with its tests:
    cleaning is a work type; sharp debris was dropped), and bills got a worker level filter, an input search radius
    and a pause, and *until N* counts the stock: stored items and those on
    their way to storage (lying on a workstation, carried by a hauler).
-4. Tools: speed factors on orders and recipes, grade factor, wear and
+4. Tools: speed factors on orders and recipes, quality factor, wear and
    breaking, swapping for a better tool, the detour in job search.
 5. Blueprints and construction: *(done)* construction sites with several
    materials, grass bed, grass and branch wall, branch screen, taking apart,
@@ -1081,7 +1089,7 @@ knapping leads to it (§1.5).
 
 **Soft hammer**. An antler or bone hammer (from hunting, M5), an optional tool
 for shaping hand axes: thinner flakes and more regular edges, so fewer
-failures and a better grade.
+failures and a better quality.
 
 **Other stone types**, each with a use of its own (a stone type only exists
 if it changes a decision):

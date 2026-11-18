@@ -366,11 +366,11 @@ static void test_hash_covers_knowledge_and_carried_condition(void)
     colonist_set_strength(colonist, colonist->strength == 5 ? 6 : 5);
     CHECK(game_hash(&game) != learned);
 
-    colonist->carried = item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60);
+    colonist->carried = item_stack_make(ITEM_WOOD, 2, TEST_QUALITY_FINE, 60);
     uint64_t carrying = game_hash(&game);
-    colonist->carried.quality = ITEM_QUALITY_ROUGH;
+    colonist->carried.quality = TEST_QUALITY_ROUGH;
     CHECK(game_hash(&game) != carrying);
-    colonist->carried.quality = ITEM_QUALITY_FINE;
+    colonist->carried.quality = TEST_QUALITY_FINE;
     colonist->carried.hit_points = 30;
     CHECK(game_hash(&game) != carrying);
     colonist->carried = item_stack_make(ITEM_FRESH_GRASS, 2, 0, 10);

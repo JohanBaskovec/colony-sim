@@ -165,8 +165,18 @@ static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
                                   false},
 };
 
-/* Hit points by grade, crude to superb. */
-static const float GRADE_HIT_POINTS[ITEM_QUALITY_COUNT] = {0.6f, 0.8f, 1.0f, 1.2f, 1.5f};
+/* Hit points by quality: ×0.6 at 0, ×1 at ITEM_QUALITY_STANDARD, ×1.5 at 100,
+ * linear in between. */
+static float quality_hit_points_factor(ItemQuality quality)
+{
+    quality = clampi(quality, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
+    if (quality <= ITEM_QUALITY_STANDARD) {
+        return lerpf(0.6f, 1.0f, (float)quality / (float)ITEM_QUALITY_STANDARD);
+    }
+    return lerpf(1.0f, 1.5f,
+                 (float)(quality - ITEM_QUALITY_STANDARD) /
+                     (float)(ITEM_QUALITY_BEST - ITEM_QUALITY_STANDARD));
+}
 
 int structure_max_hit_points(StructureType type, ItemQuality quality)
 {
@@ -174,8 +184,7 @@ int structure_max_hit_points(StructureType type, ItemQuality quality)
     if (def == NULL || type == STRUCTURE_NONE) {
         return 0;
     }
-    int grade = clampi((int)quality, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
-    int hit_points = (int)((float)def->max_hit_points * GRADE_HIT_POINTS[grade] + 0.5f);
+    int hit_points = (int)((float)def->max_hit_points * quality_hit_points_factor(quality) + 0.5f);
     return hit_points > 1 ? hit_points : 1;
 }
 
@@ -183,7 +192,7 @@ ItemQuality structure_quality_cap(StructureType type,
                                   const ItemStack delivered[STRUCTURE_MATERIAL_SLOTS])
 {
     const StructureDef *def = structure_def(type);
-    int sum = 0, graded = 0;
+    int sum = 0, rated = 0;
     for (int slot = 0; def != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         const ItemDef *material = item_def(def->materials[slot].type);
         if (def->materials[slot].type == ITEM_NONE || material == NULL || !material->has_quality ||
@@ -191,13 +200,13 @@ ItemQuality structure_quality_cap(StructureType type,
             continue;
         }
         sum += delivered[slot].quality;
-        graded++;
+        rated++;
     }
-    if (graded == 0) {
+    if (rated == 0) {
         return ITEM_QUALITY_BEST;
     }
-    /* The average rounded down, + 1. */
-    return (ItemQuality)clampi(sum / graded + 1, ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST);
+    /* The average, plus what a good hand adds. */
+    return clampi(sum / rated + ITEM_QUALITY_CAP_BONUS, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
 }
 
 int direction_dx(Direction direction)

@@ -13,8 +13,8 @@
  * A blocking structure (wall) pushes the items lying on its tile to a
  * neighboring open tile.
  *
- * The structure built has a grade from the builder's level, capped by the
- * grade of the materials (structure_quality_cap()).
+ * The structure built has a quality from the builder's level, capped by the
+ * quality of the materials (structure_quality_cap()).
  *
  * A refresh site sits on a built structure that wears by itself (a grass bed
  * packing down): the game places one once the structure falls below
@@ -58,7 +58,7 @@ typedef struct ConstructionSite {
     uint8_t direction; /* Direction: where its other tiles lie (core/structure.h). */
     int number;        /* Unique, never reused: tells a site from a later one in the same slot. */
     /* Materials brought so far, per slot of the structure's definition (a
-     * slot keeps the lowest grade delivered). */
+     * slot keeps the lowest quality delivered). */
     ItemStack delivered[STRUCTURE_MATERIAL_SLOTS];
     /* Items of each slot on their way: promised by settlers fetching them. */
     uint16_t promised[STRUCTURE_MATERIAL_SLOTS];
@@ -233,8 +233,8 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
 
 /*
  * Adds work to a site whose materials are all in. When the work is done, the
- * structure is built on the map with a grade from the builder's `level`
- * (core/knowledge.h; `rng` may be NULL for the average grade), capped by the
+ * structure is built on the map with a quality from the builder's `level`
+ * (core/knowledge.h; `rng` may be NULL for the average quality), capped by the
  * materials (items lying on a blocking structure's tile are dropped next to
  * it), or refreshed to full hit points, or the workstation is placed in
  * `workstations`; the site is removed and true is returned. A workstation
@@ -247,7 +247,7 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
 
 /*
  * Finishes a site at once (the debug cheat GameDebug.instant_build): the
- * missing materials appear, of standard grade, and all the work is done at
+ * missing materials appear, of standard quality, and all the work is done at
  * `level` (see construction_add_work()). Returns false, changing nothing,
  * when it cannot be finished now: a roof without support, a workstation that
  * cannot be placed (a plant on its tile: clear it first), a refresh site

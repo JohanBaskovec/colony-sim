@@ -19,6 +19,9 @@ void hud_inspect_colonists(App *app);
  * (game/tile_panel.h); false when there is nothing to say. The grade and
  * hit points of a stack, or of the structure on a tile: */
 bool hud_item_condition_text(char *out, size_t size, ItemStack stack);
+
+/* A quality (0..100) as text, in the player's number format. */
+void hud_quality_text(char *out, size_t size, ItemQuality quality);
 bool hud_structure_condition_text(char *out, size_t size, const Map *map, int x, int y, int z);
 /* "21 kg", "0.3 kg" (see the tile readout). */
 void hud_weight_text(char *out, size_t size, float kilograms);

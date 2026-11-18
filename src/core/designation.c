@@ -458,7 +458,7 @@ static void complete(Map *map, Items *items, int x, int y, int z, DesignationTyp
             map_set_structure(map, x, y, z, STRUCTURE_NONE);
             drop_salvage(structure, map, items, x, y, z);
         } else if (roof != STRUCTURE_NONE) { /* Taken down onto the floor below. */
-            map_set_roof(map, x, y, z, STRUCTURE_NONE, ITEM_QUALITY_CRUDE);
+            map_set_roof(map, x, y, z, STRUCTURE_NONE, ITEM_QUALITY_WORST);
             drop_salvage(roof, map, items, x, y, z - 1);
         }
         break;

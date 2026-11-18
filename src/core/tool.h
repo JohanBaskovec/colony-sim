@@ -5,7 +5,7 @@
  * Settlers carry their tools (no equipment slots, one tool per item type: see
  * core/colonist.h) and work with the best one they carry for the task. Each
  * kind of work (ToolUse) gives a speed factor per item type (bare hands
- * included; 0: impossible with it), multiplied by the tool's grade factor.
+ * included; 0: impossible with it), multiplied by the tool's quality factor.
  * A tool loses one hit point per TOOL_WEAR_TICKS of work and breaks at 0.
  * Any item can be a tool (a plain cobble is the knapper's hammer).
  * Design: docs/KNOWLEDGE.md §2.3.
@@ -46,11 +46,11 @@ const ToolUseDef *tool_use_def(ToolUse use);
  * TOOL_USE_NONE whatever the item, 0 when the type cannot do it. */
 float tool_type_factor(ToolUse use, ItemType type);
 
-/* Grade factor on speed, from ×0.8 (crude) to ×1.2 (superb); 1 for items
- * without quality. */
-float tool_grade_factor(ItemStack tool);
+/* Quality factor on speed, from ×0.8 (quality 0) to ×1.2 (quality 100), ×1 at
+ * the standard 50; 1 for items without quality. */
+float tool_quality_factor(ItemStack tool);
 
-/* Speed factor of a tool for a use: type factor × grade factor (bare hands
+/* Speed factor of a tool for a use: type factor × quality factor (bare hands
  * for an empty stack). */
 float tool_speed_factor(ToolUse use, ItemStack tool);
 
@@ -63,7 +63,7 @@ float tool_speed_factor(ToolUse use, ItemStack tool);
 int tool_best(const ItemStack *tools, int count, ToolUse use, ItemTypeMask allowed,
               bool must_beat_hands);
 
-/* The best speed factor any tool can give for a use (best type, best grade). */
+/* The best speed factor any tool can give for a use (best type, best quality). */
 float tool_best_possible_factor(ToolUse use);
 
 /* Takes one hit point from a tool; returns true when it breaks (the stack is

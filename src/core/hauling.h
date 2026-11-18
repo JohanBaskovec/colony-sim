@@ -45,7 +45,7 @@ typedef struct HaulJob {
 } HaulJob;
 
 /* Items of `stack` a tile can still take: empty, or holding a matching stack
- * (same type and grade) below the stack limit. */
+ * (same type) below the stack limit. */
 int haul_storage_room(const Items *items, int x, int y, int z, ItemStack stack);
 
 /*
@@ -84,7 +84,7 @@ bool haul_find_destination(const HaulWorld *world, TilePos from, ItemStack stack
 /*
  * Nearest stack (within `max_cost` of `from`) that can join a load already in
  * hand on its way to `destination`: it matches the load (same type and
- * grade), the destination's stockpile accepts it and is better than where it
+ * quality), the destination's stockpile accepts it and is better than where it
  * lies, no stockpile with room is better still, and nobody else reserved it.
  * Writes the path to it into `path` (may be NULL).
  */

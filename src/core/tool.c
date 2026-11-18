@@ -24,8 +24,10 @@ static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
                            [ITEM_DIGGING_STICK_HARDENED] = 1.0f}},
 };
 
-/* Crude to superb. */
-static const float GRADE_FACTORS[ITEM_QUALITY_COUNT] = {0.8f, 0.9f, 1.0f, 1.1f, 1.2f};
+/* Speed factor of a tool of the worst and of the best quality, linear in
+ * between (×1 at ITEM_QUALITY_STANDARD). */
+#define TOOL_QUALITY_FACTOR_MIN 0.8f
+#define TOOL_QUALITY_FACTOR_MAX 1.2f
 
 const ToolUseDef *tool_use_def(ToolUse use)
 {
@@ -44,13 +46,15 @@ float tool_type_factor(ToolUse use, ItemType type)
     return (unsigned)type < ITEM_TYPE_COUNT ? def->factor[type] : 0.0f;
 }
 
-float tool_grade_factor(ItemStack tool)
+float tool_quality_factor(ItemStack tool)
 {
     const ItemDef *def = item_def((ItemType)tool.type);
-    if (def == NULL || !def->has_quality || tool.quality >= ITEM_QUALITY_COUNT) {
+    if (def == NULL || !def->has_quality) {
         return 1.0f;
     }
-    return GRADE_FACTORS[tool.quality];
+    return lerpf(TOOL_QUALITY_FACTOR_MIN, TOOL_QUALITY_FACTOR_MAX,
+                 (float)clampi(tool.quality, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST) /
+                     (float)ITEM_QUALITY_BEST);
 }
 
 float tool_speed_factor(ToolUse use, ItemStack tool)
@@ -58,7 +62,7 @@ float tool_speed_factor(ToolUse use, ItemStack tool)
     if (tool.count == 0 || tool.type == ITEM_NONE) {
         return tool_type_factor(use, ITEM_NONE);
     }
-    return tool_type_factor(use, (ItemType)tool.type) * tool_grade_factor(tool);
+    return tool_type_factor(use, (ItemType)tool.type) * tool_quality_factor(tool);
 }
 
 int tool_best(const ItemStack *tools, int count, ToolUse use, ItemTypeMask allowed,

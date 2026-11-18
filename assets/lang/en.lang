@@ -176,11 +176,6 @@ attack.kick = Kick
 attack.tusks = Tusks
 attack.bite = Bite
 # Quality grades, worst to best, shown after "Quality:" (e.g. "Quality: fine")
-item.quality.crude = crude
-item.quality.rough = rough
-item.quality.standard = standard
-item.quality.fine = fine
-item.quality.superb = superb
 
 # Work types
 work.mining = Digging
@@ -317,7 +312,7 @@ hud.tile.station = Workstation: {0}
 hud.tile.blueprint = Blueprint: {0} ({1}% built)
 hud.tile.structure = Construction: {0}
 # {0} = roof, {1} = grade
-hud.tile.roof = Roof: {0} ({1})
+hud.tile.roof = Roof: {0} (quality {1})
 hud.tile.under_roof = Under a roof: {0}
 hud.tile.natural_roof = Roof: rock or ground overhead
 hud.tile.needs_support = Waiting for support: dug now, a ceiling would cave in (a prop or a wall within 2 tiles)
@@ -460,11 +455,11 @@ hud.colonist.wet = Wet ({0}%): feels {1} colder
 # {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
 hud.colonist.carrying = Carrying: {0} ×{1} ({2})
 # {0} = tool name, {1} = quality grade, {2} = hit points (e.g. 80%)
-hud.colonist.tool = Tool: {0} ({1}, {2})
+hud.colonist.tool = Tool: {0} (quality {1}, {2})
 # {0} = number of tools the settler wore out (they break at 0% hit points)
 hud.colonist.tools_broken.one = {0} tool worn out
 hud.colonist.tools_broken.other = {0} tools worn out
-hud.colonist.bed = Own bed: {0} ({1})
+hud.colonist.bed = Own bed: {0} (quality {1})
 hud.colonist.no_bed = No bed of their own
 hud.colonist.cold_sleep = Sleeping in the cold ({0}): rests ×{1} as fast
 hud.colonist.hot_sleep = Sleeping too hot ({0}): rests ×{1} as fast
@@ -622,7 +617,7 @@ recipe.needs_no_tool = Needs {0} · No tool
 # {0} = ingredient name(s), {1} = how many
 recipe.ingredient = {0} ×{1}
 # {0} = ingredient with its count, {1} = lowest quality grade accepted
-recipe.ingredient_quality = {0} ({1} or better)
+recipe.ingredient_quality = {0} (quality {1} or better)
 # {0}, {1} = alternatives (either will do)
 recipe.either = {0} or {1}
 # {0}, {1} = both needed

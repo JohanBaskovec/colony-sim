@@ -7,13 +7,12 @@
  * (one of each listed set; any item can serve, e.g. a cobble as a hammer), a
  * workstation, an amount of work, and a minimum level in a knowledge. What
  * comes out, and how good it is, depends on the worker's level and on the
- * input: the grade of a product is capped at the grade of its material + 1,
- * and a cobble knapped instead of flint counts as crude. Some recipes can
- * fail (shaping a hand axe). Recipes made at a hearth need it burning
- * (recipe_needs_fire()); fire hardening keeps the grade and condition of the
- * spear or digging stick hardened; roasting gives as many roasted roots as
- * it takes raw ones, no fresher than they were.
- * Design: docs/KNOWLEDGE.md §2.2, §2.5, §5.2, §6.2, §7.2, §8.2.
+ * input: the quality of a product is capped at the quality of its material + ITEM_QUALITY_CAP_BONUS
+ * points, and a cobble knapped instead of flint counts as crude. Some recipes can fail (shaping a
+ * hand axe). Recipes made at a hearth need it burning (recipe_needs_fire()); fire hardening keeps
+ * the quality and condition of the spear or digging stick hardened; roasting gives as many roasted
+ * roots as it takes raw ones, no fresher than they were. Design: docs/KNOWLEDGE.md §2.2, §2.5,
+ * §5.2, §6.2, §7.2, §8.2.
  */
 #ifndef COLONY_CORE_RECIPE_H
 #define COLONY_CORE_RECIPE_H
@@ -74,13 +73,13 @@ const RecipeDef *recipe_def(RecipeType recipe);
 /* Every input type a recipe accepts. */
 ItemTypeMask recipe_inputs(RecipeType recipe);
 
-/* Whether a stack can be the input of a recipe (type and grade; not the count). */
+/* Whether a stack can be the input of a recipe (type and quality; not the count). */
 bool recipe_accepts_input(RecipeType recipe, ItemStack stack);
 
 /* Whether a settler at `level` in the recipe's knowledge can make it. */
 bool recipe_doable_at(RecipeType recipe, double level);
 
-/* Best grade the products can have with this input. */
+/* Best quality the products can have with this input. */
 ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input);
 
 /* Whether the recipe is made at a fire (a burning hearth). */

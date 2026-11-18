@@ -172,29 +172,35 @@ static void test_condition_definitions(void)
     CHECK(item_def(ITEM_BLACKBERRIES)->damageable);
 }
 
-static void test_quality_grades(void)
+static void test_quality_is_a_value_from_0_to_100(void)
 {
-    for (int quality = 0; quality < ITEM_QUALITY_COUNT; quality++) {
-        CHECK(i18n_is_valid_key(item_quality_name_key((ItemQuality)quality)));
+    CHECK_EQ_INT(ITEM_QUALITY_WORST, 0);
+    CHECK_EQ_INT(ITEM_QUALITY_BEST, 100);
+    CHECK(ITEM_QUALITY_WORST < ITEM_QUALITY_STANDARD && ITEM_QUALITY_STANDARD < ITEM_QUALITY_BEST);
+    /* Any value in between is kept, with the clamping at both ends. */
+    for (int quality = 0; quality <= 100; quality++) {
+        CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, quality, 10).quality, quality);
     }
-    CHECK(item_quality_name_key(ITEM_QUALITY_COUNT) == NULL);
+    CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, 101, 10).quality, 100);
+    CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, 5000, 10).quality, 100);
+    CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, -1, 10).quality, 0);
 }
 
 static void test_stack_make_keeps_condition_valid(void)
 {
     int wood_hp = item_def(ITEM_WOOD)->max_hit_points;
-    ItemStack wood = item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_ROUGH, 20);
+    ItemStack wood = item_stack_make(ITEM_WOOD, 5, TEST_QUALITY_ROUGH, 20);
     CHECK_EQ_INT(wood.type, ITEM_WOOD);
     CHECK_EQ_INT(wood.count, 5);
-    CHECK_EQ_INT(wood.quality, ITEM_QUALITY_ROUGH);
+    CHECK_EQ_INT(wood.quality, TEST_QUALITY_ROUGH);
     CHECK_EQ_INT(wood.hit_points, 20);
-    CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, 99, 999).quality, ITEM_QUALITY_BEST);
-    CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, -4, 999).quality, ITEM_QUALITY_CRUDE);
+    CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, 199, 999).quality, ITEM_QUALITY_BEST);
+    CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, -4, 999).quality, ITEM_QUALITY_WORST);
     CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, 2, 999).hit_points, wood_hp);
     CHECK_EQ_INT(item_stack_make(ITEM_WOOD, 1, 2, 0).hit_points, 1); /* Never destroyed here. */
 
     /* Stone ignores what it is given. */
-    ItemStack stone = item_stack_make(ITEM_STONE_BLOCK, 2, ITEM_QUALITY_CRUDE, 3);
+    ItemStack stone = item_stack_make(ITEM_STONE_BLOCK, 2, TEST_QUALITY_CRUDE, 3);
     CHECK_EQ_INT(stone.quality, ITEM_QUALITY_BEST);
     CHECK_EQ_INT(stone.hit_points, item_def(ITEM_STONE_BLOCK)->max_hit_points);
 
@@ -208,9 +214,10 @@ static void test_stack_make_keeps_condition_valid(void)
     CHECK_EQ_INT(pristine.hit_points, item_def(ITEM_BLACKBERRIES)->max_hit_points);
     CHECK_EQ_INT(item_stack_hit_points_percent(pristine), 100);
 
-    CHECK(item_stacks_match(wood, item_stack_make(ITEM_WOOD, 9, ITEM_QUALITY_ROUGH, 60)));
-    CHECK(!item_stacks_match(wood, item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_FINE, 20)));
-    CHECK(!item_stacks_match(wood, item_stack_make(ITEM_BLACKBERRIES, 5, ITEM_QUALITY_ROUGH, 5)));
+    CHECK(item_stacks_match(wood, item_stack_make(ITEM_WOOD, 9, TEST_QUALITY_ROUGH, 60)));
+    CHECK(item_stacks_match(
+        wood, item_stack_make(ITEM_WOOD, 5, TEST_QUALITY_FINE, 20))); /* Any quality. */
+    CHECK(!item_stacks_match(wood, item_stack_make(ITEM_BLACKBERRIES, 5, TEST_QUALITY_ROUGH, 5)));
 }
 
 static void test_hit_points_percent(void)
@@ -227,28 +234,25 @@ static void test_hit_points_percent(void)
     CHECK_EQ_INT(item_stack_hit_points_percent((ItemStack){.type = ITEM_NONE}), 0);
 }
 
-static void test_only_same_grade_stacks(void)
+static void test_same_type_stacks_whatever_the_quality(void)
 {
     Items items;
     REQUIRE(items_init(&items, 4, 4, 1));
-    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 30, ITEM_QUALITY_FINE, 30)),
-                 30);
-    /* Another grade does not fit on the tile. */
-    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 5, ITEM_QUALITY_ROUGH, 30)),
-                 0);
-    /* The same grade merges; hit points are averaged by count. */
-    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 10, ITEM_QUALITY_FINE, 60)),
-                 10);
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 30, 70, 30)), 30);
+    /* Another quality merges too: quality and hit points are averaged by count. */
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 10, 30, 60)), 10);
     ItemStack stack = items_get(&items, 1, 1, 0);
     CHECK_EQ_INT(stack.count, 40);
-    CHECK_EQ_INT(stack.quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(stack.quality, 60);    /* (30 × 70 + 10 × 30) / 40 */
     CHECK_EQ_INT(stack.hit_points, 38); /* (30 × 30 + 10 × 60) / 40 = 37.5, rounded */
+    /* Another type does not fit on the tile. */
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_BLACKBERRIES, 5, 70, 5)), 0);
 
     /* Only what fits is merged, and only that counts in the average. */
     int room = item_stack_limit(ITEM_WOOD) - 40;
-    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 100, ITEM_QUALITY_FINE, 1)),
-                 room);
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 100, 10, 1)), room);
     CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, (40 * 38 + room * 1 + 25) / 50);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).quality, (40 * 60 + room * 10 + 25) / 50);
 
     /* Removed items leave the rest unchanged; an emptied tile forgets it all. */
     ItemStack before = items_get(&items, 1, 1, 0);
@@ -259,9 +263,9 @@ static void test_only_same_grade_stacks(void)
     ItemStack empty = items_get(&items, 1, 1, 0);
     CHECK_EQ_INT(empty.quality, 0);
     CHECK_EQ_INT(empty.hit_points, 0);
-    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_CRUDE, 9)),
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_CRUDE, 9)),
                  1);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).quality, ITEM_QUALITY_CRUDE);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).quality, TEST_QUALITY_CRUDE);
     CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, 9);
 
     /* A hand-built stack is made valid when added. */
@@ -275,23 +279,26 @@ static void test_only_same_grade_stacks(void)
 static void test_stack_merge(void)
 {
     ItemStack hand = {.type = ITEM_NONE};
-    CHECK(item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 3, ITEM_QUALITY_FINE, 60)));
+    CHECK(item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 3, TEST_QUALITY_FINE, 60)));
     CHECK_EQ_INT(hand.count, 3);
     CHECK_EQ_INT(hand.hit_points, 60);
-    CHECK(item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_FINE, 20)));
+    CHECK(item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_FINE, 20)));
     CHECK_EQ_INT(hand.count, 4);
     CHECK_EQ_INT(hand.hit_points, 50); /* (3 × 60 + 20) / 4 */
-    CHECK_EQ_INT(hand.quality, ITEM_QUALITY_FINE);
-    /* Another grade or type: refused, nothing changes. */
-    CHECK(!item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_ROUGH, 60)));
+    CHECK_EQ_INT(hand.quality, TEST_QUALITY_FINE);
+    /* Another type: refused, nothing changes. Another quality: averaged. */
     CHECK(!item_stack_merge(&hand, item_stack_pristine(ITEM_STONE_BLOCK, 2)));
     CHECK_EQ_INT(hand.count, 4);
+    CHECK(item_stack_merge(&hand, item_stack_make(ITEM_WOOD, 4, TEST_QUALITY_CRUDE, 50)));
+    CHECK_EQ_INT(hand.count, 8);
+    CHECK_EQ_INT(hand.quality, (TEST_QUALITY_FINE + TEST_QUALITY_CRUDE) / 2);
+    hand = item_stack_make(ITEM_WOOD, 4, TEST_QUALITY_FINE, 50);
     /* Merging nothing is fine. */
     CHECK(item_stack_merge(&hand, (ItemStack){.type = ITEM_NONE}));
     CHECK_EQ_INT(hand.count, 4);
     /* Counts are capped. */
-    ItemStack big = item_stack_make(ITEM_BLACKBERRIES, UINT16_MAX - 1, ITEM_QUALITY_FINE, 10);
-    CHECK(item_stack_merge(&big, item_stack_make(ITEM_BLACKBERRIES, 5, ITEM_QUALITY_FINE, 10)));
+    ItemStack big = item_stack_make(ITEM_BLACKBERRIES, UINT16_MAX - 1, TEST_QUALITY_FINE, 10);
+    CHECK(item_stack_merge(&big, item_stack_make(ITEM_BLACKBERRIES, 5, TEST_QUALITY_FINE, 10)));
     CHECK_EQ_INT(big.count, UINT16_MAX);
 }
 
@@ -317,18 +324,22 @@ static void test_merged_hit_points_stay_between(void)
     items_free(&items);
 }
 
-static void test_drop_skips_other_grades(void)
+static void test_drop_skips_other_types(void)
 {
     Map map;
     Items items;
     REQUIRE(map_init(&map, 16, 16, 1));
     REQUIRE(items_init(&items, 16, 16, 1));
-    items_add(&items, 8, 8, 0, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_SUPERB, 60));
-    ItemStack crude = item_stack_make(ITEM_WOOD, 4, ITEM_QUALITY_CRUDE, 60);
-    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, crude), 4);
+    items_add(&items, 8, 8, 0, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_SUPERB, 60));
+    ItemStack branches = item_stack_make(ITEM_BRANCHES, 4, TEST_QUALITY_CRUDE, 10);
+    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, branches), 4);
     CHECK_EQ_INT(items_get(&items, 8, 8, 0).count, 1);
     CHECK_EQ_INT(items_get(&items, 8, 7, 0).count, 4); /* Next tile. */
-    CHECK_EQ_INT(items_get(&items, 8, 7, 0).quality, ITEM_QUALITY_CRUDE);
+    CHECK_EQ_INT(items_get(&items, 8, 7, 0).quality, TEST_QUALITY_CRUDE);
+    /* The same type, of another quality, joins the stack. */
+    ItemStack more = item_stack_make(ITEM_WOOD, 3, TEST_QUALITY_CRUDE, 60);
+    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, more), 3);
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).count, 4);
     items_free(&items);
     map_free(&map);
 }
@@ -340,12 +351,12 @@ static void test_drop_keeps_condition(void)
     REQUIRE(map_init(&map, 16, 16, 1));
     REQUIRE(items_init(&items, 16, 16, 1));
     int limit = item_stack_limit(ITEM_WOOD);
-    ItemStack fine = item_stack_make(ITEM_WOOD, limit + 5, ITEM_QUALITY_FINE, 21);
+    ItemStack fine = item_stack_make(ITEM_WOOD, limit + 5, TEST_QUALITY_FINE, 21);
     CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, fine), limit + 5);
-    CHECK_EQ_INT(items_get(&items, 8, 8, 0).quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).quality, TEST_QUALITY_FINE);
     CHECK_EQ_INT(items_get(&items, 8, 8, 0).hit_points, 21);
     CHECK_EQ_INT(items_get(&items, 8, 7, 0).count, 5); /* The rest, same condition. */
-    CHECK_EQ_INT(items_get(&items, 8, 7, 0).quality, ITEM_QUALITY_FINE);
+    CHECK_EQ_INT(items_get(&items, 8, 7, 0).quality, TEST_QUALITY_FINE);
     CHECK_EQ_INT(items_get(&items, 8, 7, 0).hit_points, 21);
     items_free(&items);
     map_free(&map);
@@ -552,7 +563,7 @@ static void test_hash(void)
     items_remove(&b, 1, 1, 0, 1);
     CHECK_EQ_UINT(items_hash(&a, HASH_FNV1A64_INIT), items_hash(&b, HASH_FNV1A64_INIT));
     items_remove(&b, 1, 1, 0, 2);
-    items_add(&b, 1, 1, 0, item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_FINE, 60));
+    items_add(&b, 1, 1, 0, item_stack_make(ITEM_WOOD, 2, TEST_QUALITY_FINE, 60));
     CHECK(items_hash(&a, HASH_FNV1A64_INIT) != items_hash(&b, HASH_FNV1A64_INIT));
     items_remove(&b, 1, 1, 0, 2);
     items_add(&b, 1, 1, 0, item_stack_make(ITEM_WOOD, 2, ITEM_QUALITY_BEST, 59));
@@ -570,14 +581,14 @@ int main(void)
     RUN_TEST(test_add_and_remove);
     RUN_TEST(test_stacks_per_level);
     RUN_TEST(test_condition_definitions);
-    RUN_TEST(test_quality_grades);
+    RUN_TEST(test_quality_is_a_value_from_0_to_100);
     RUN_TEST(test_stack_make_keeps_condition_valid);
     RUN_TEST(test_hit_points_percent);
-    RUN_TEST(test_only_same_grade_stacks);
+    RUN_TEST(test_same_type_stacks_whatever_the_quality);
     RUN_TEST(test_stack_merge);
     RUN_TEST(test_merged_hit_points_stay_between);
     RUN_TEST(test_drop_keeps_condition);
-    RUN_TEST(test_drop_skips_other_grades);
+    RUN_TEST(test_drop_skips_other_types);
     RUN_TEST(test_drop_spreads_to_reachable_tiles);
     RUN_TEST(test_drop_without_room_loses_the_rest);
     RUN_TEST(test_rot_definitions);

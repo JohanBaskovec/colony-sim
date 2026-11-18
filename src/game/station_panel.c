@@ -2,6 +2,7 @@
 
 #include "core/hearth.h"
 #include "core/i18n.h"
+#include "game/hud.h"
 #include "game/inspector.h"
 
 #define GAP UI_LAYOUT_GAP
@@ -77,10 +78,11 @@ static void recipe_needs(char *out, size_t size, RecipeType recipe)
     join_names(names, sizeof(names), "recipe.either", inputs, input_count);
     tr_integer(count, sizeof(count), def->input_count);
     TR_FORMAT(ingredient, sizeof(ingredient), tr("recipe.ingredient"), names, count);
-    if (def->input_min_quality > ITEM_QUALITY_CRUDE) {
+    if (def->input_min_quality > ITEM_QUALITY_WORST) {
+        char quality[16];
+        hud_quality_text(quality, sizeof(quality), def->input_min_quality);
         SDL_strlcpy(text, ingredient, sizeof(text));
-        TR_FORMAT(ingredient, sizeof(ingredient), tr("recipe.ingredient_quality"), text,
-                  tr(item_quality_name_key(def->input_min_quality)));
+        TR_FORMAT(ingredient, sizeof(ingredient), tr("recipe.ingredient_quality"), text, quality);
     }
     char tools[RECIPE_TOOL_MAX][TEXT_SIZE];
     const char *slots[RECIPE_TOOL_MAX] = {NULL, NULL};

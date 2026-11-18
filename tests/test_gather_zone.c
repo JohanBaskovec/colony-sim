@@ -720,14 +720,13 @@ static void test_products_depend_on_level(void)
                          NULL);
     ItemStack beginner = items_get(&items, 3, 3, 0);
     CHECK_EQ_INT(beginner.type, ITEM_WOOD);
-    CHECK_EQ_INT(beginner.quality,
-                 knowledge_quality_of_score(knowledge_product_score(beginner_level, NULL)));
+    CHECK_EQ_INT(beginner.quality, knowledge_product_score(beginner_level, NULL));
     CHECK(beginner.hit_points < wood_hp);
     /* ...a master superb, intact ones. */
     gather_zone_add_work(&zones, &map, &items, 12, 12, 0, GATHER_JOB_CHOP, 1e6f,
                          KNOWLEDGE_LEVEL_MAX, NULL);
     ItemStack master = items_get(&items, 12, 12, 0);
-    CHECK_EQ_INT(master.quality, ITEM_QUALITY_SUPERB);
+    CHECK_EQ_INT(master.quality, knowledge_product_score(KNOWLEDGE_LEVEL_MAX, NULL));
     CHECK_EQ_INT(master.hit_points, wood_hp);
     free_world(&map, &zones, &items);
 }
@@ -881,7 +880,8 @@ static void test_stones_run_out(void)
     /* A good eye picks good stones. */
     gather_zone_add_work(&zones, &map, &items, 9, 8, 0, GATHER_JOB_STONES, needed,
                          KNOWLEDGE_LEVEL_MAX, NULL);
-    CHECK_EQ_INT(items_get(&items, 9, 8, 0).quality, ITEM_QUALITY_SUPERB);
+    CHECK_EQ_INT(items_get(&items, 9, 8, 0).quality,
+                 knowledge_product_score(KNOWLEDGE_LEVEL_MAX, NULL));
     CHECK(items_get(&items, 8, 8, 0).quality <= ITEM_QUALITY_STANDARD);
     CHECK_EQ_INT(map_stones(&map, 9, 8, 0, ITEM_COBBLE), MAP_STONES_MAX - 1);
     free_world(&map, &zones, &items);

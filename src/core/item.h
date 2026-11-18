@@ -5,11 +5,12 @@
  * Stacks hold a single item type, up to the type's stack limit. Dropping more
  * items than a tile can take spreads them over nearby reachable tiles.
  *
- * Every item has a quality grade (how good the material is, which carries
- * over to what is made from it) and hit points (its condition). Some types
- * are always perfect: stone blocks are always of the best grade and cannot be
- * damaged. Only items of the same type and grade stack together; a stack
- * keeps the count-weighted average hit points of its items.
+ * Every item has a quality, a value from 0 to 100 (how good the material is,
+ * which carries over to what is made from it), and hit points (its
+ * condition). Some types are always perfect: stone blocks are always of the
+ * best quality and cannot be damaged. Items of the same type stack together,
+ * whatever their quality; a stack keeps the count-weighted average quality
+ * and hit points of its items.
  *
  * Food rots while it lies on a tile: it loses hit points, faster when warm,
  * not at all when frozen, a little slower under a roof, faster in the rain,
@@ -89,18 +90,16 @@ _Static_assert(ITEM_TYPE_COUNT <= 64, "item types must fit in an ItemTypeMask");
  */
 #define ITEM_TILE_BULK 1000.0f
 
-/* Quality grades, worst to best. Grades are few on purpose: items of
- * different grades never share a tile. */
-typedef enum ItemQuality {
-    ITEM_QUALITY_CRUDE,
-    ITEM_QUALITY_ROUGH,
-    ITEM_QUALITY_STANDARD,
-    ITEM_QUALITY_FINE,
-    ITEM_QUALITY_SUPERB,
-    ITEM_QUALITY_COUNT
-} ItemQuality;
-
-#define ITEM_QUALITY_BEST (ITEM_QUALITY_COUNT - 1)
+/* Quality: a value from ITEM_QUALITY_WORST to ITEM_QUALITY_BEST. The
+ * ordinary item (a tool that works at ×1, a structure of the usual hit points)
+ * is ITEM_QUALITY_STANDARD. */
+typedef int ItemQuality;
+#define ITEM_QUALITY_WORST 0
+#define ITEM_QUALITY_STANDARD 50
+#define ITEM_QUALITY_BEST 100
+/* What is made from materials is at best this many points above their average
+ * quality (a master with a coarse flint makes at best a rough hand axe). */
+#define ITEM_QUALITY_CAP_BONUS 20
 
 typedef struct ItemDef {
     const char *id; /* Stable identifier (saves), never shown. */
@@ -140,7 +139,7 @@ typedef struct ItemDef {
 /* Items of one type: on a tile, in a settler's hands, or about to be added. */
 typedef struct ItemStack {
     uint8_t type;    /* ItemType, ITEM_NONE when empty. */
-    uint8_t quality; /* ItemQuality, the same for every item of the stack. */
+    uint8_t quality; /* ItemQuality, average of the items. */
     uint16_t count;
     uint16_t hit_points; /* Per item, 1..max_hit_points, average of the items. */
     /* Types that transform: hours spent lying on a tile toward the
@@ -175,9 +174,6 @@ typedef struct Items {
 
 const ItemDef *item_def(ItemType type);
 
-/* Translation key of a quality grade, NULL if out of range. */
-const char *item_quality_name_key(ItemQuality quality);
-
 /* Translation key of a category name, NULL if out of range. */
 const char *item_category_name_key(ItemCategory category);
 
@@ -208,17 +204,18 @@ float item_stack_weight(ItemType type, int count);
 
 /*
  * A stack with the given condition, made valid for its type: quality clamped
- * to the grades (always the best for types without quality), hit points
+ * to 0..100 (always the best for types without quality), hit points
  * clamped to 1..max_hit_points (always the maximum for types that cannot be
  * damaged). An invalid type or a count <= 0 gives an empty stack.
  */
 ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points);
 
-/* Whether two stacks may share a tile: same type and same grade. */
+/* Whether two stacks may share a tile: same type. */
 bool item_stacks_match(ItemStack a, ItemStack b);
 
 /* Adds `from` to `into` (empty, or matching): counts add up (capped at
- * UINT16_MAX), hit points and transformation progress are averaged by count.
+ * UINT16_MAX), quality, hit points and transformation progress are averaged by
+ * count.
  * Fails, changing nothing, when the stacks do not match. */
 bool item_stack_merge(ItemStack *into, ItemStack from);
 
@@ -255,18 +252,18 @@ bool items_forbidden(const Items *items, int x, int y, int z);
  * whether it changed. */
 bool items_set_forbidden(Items *items, int x, int y, int z, bool forbidden);
 
-/* Adds items to a tile that is empty or holds a matching stack (same type and
- * grade), up to the stack limit; the tile's stack takes the average hit
+/* Adds items to a tile that is empty or holds a matching stack (same type), up
+ * to the stack limit; the tile's stack takes the average quality and hit
  * points. Returns the number actually added. */
 int items_add(Items *items, int x, int y, int z, ItemStack batch);
 
-/* Removes up to `count` items from a tile (they have the grade and hit points
+/* Removes up to `count` items from a tile (they have the quality and hit points
  * of the stack). Returns the number removed. */
 int items_remove(Items *items, int x, int y, int z, int count);
 
 /*
  * Puts items on (x, y) and, when it is full, forbidden or holds something
- * else (another type or grade), on the
+ * else (another type), on the
  * nearest passable tiles reachable from it (breadth-first, fixed order,
  * within ITEM_DROP_RADIUS). Returns the number placed: items that find no
  * room are lost.

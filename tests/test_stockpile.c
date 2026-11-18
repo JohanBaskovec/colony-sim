@@ -211,35 +211,35 @@ static void test_condition_ranges(void)
     int a = stockpile_create(&s, &map, 1, 1, 4, 4, 0);
     const Stockpile *pile = stockpile_get(&s, a);
     /* New stockpiles accept any condition. */
-    CHECK_EQ_INT(pile->quality.min, ITEM_QUALITY_CRUDE);
+    CHECK_EQ_INT(pile->quality.min, ITEM_QUALITY_WORST);
     CHECK_EQ_INT(pile->quality.max, ITEM_QUALITY_BEST);
     CHECK_EQ_INT(pile->hit_points.min, 0);
     CHECK_EQ_INT(pile->hit_points.max, 100);
-    CHECK(stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_CRUDE, 1)));
+    CHECK(stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_WORST, 1)));
 
     uint32_t revision = s.revision;
-    stockpile_set_quality_range(&s, a, (IntRange){ITEM_QUALITY_STANDARD, ITEM_QUALITY_FINE});
+    stockpile_set_quality_range(&s, a, (IntRange){ITEM_QUALITY_STANDARD, TEST_QUALITY_FINE});
     CHECK(s.revision != revision);
     revision = s.revision;
-    stockpile_set_quality_range(&s, a, (IntRange){ITEM_QUALITY_STANDARD, ITEM_QUALITY_FINE});
+    stockpile_set_quality_range(&s, a, (IntRange){ITEM_QUALITY_STANDARD, TEST_QUALITY_FINE});
     CHECK_EQ_UINT(s.revision, revision); /* No change, no new revision. */
 
     int wood_hp = item_def(ITEM_WOOD)->max_hit_points;
     CHECK(stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_STANDARD, wood_hp)));
-    CHECK(stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_FINE, wood_hp)));
-    CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_ROUGH, wood_hp)));
-    CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_SUPERB, wood_hp)));
+    CHECK(stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_FINE, wood_hp)));
+    CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_ROUGH, wood_hp)));
+    CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_SUPERB, wood_hp)));
     /* Stone is flawless: above this range. */
     CHECK(!stockpile_accepts(pile, item_stack_pristine(ITEM_STONE_BLOCK, 1)));
     CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, 0,
-                                            item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_FINE, 9)),
+                                            item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_FINE, 9)),
                  STOCKPILE_PRIORITY_DEFAULT);
     CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, 0,
-                                            item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_CRUDE, 9)),
+                                            item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_WORST, 9)),
                  0);
 
     /* Hit points in percent of the maximum, rounded down. */
-    stockpile_set_quality_range(&s, a, (IntRange){ITEM_QUALITY_CRUDE, ITEM_QUALITY_BEST});
+    stockpile_set_quality_range(&s, a, (IntRange){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST});
     stockpile_set_hit_points_range(&s, a, (IntRange){50, 100});
     CHECK(stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, 0, wood_hp / 2)));
     CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, 0, wood_hp / 2 - 1)));
@@ -252,19 +252,19 @@ static void test_condition_ranges(void)
     stockpile_set_hit_points_range(&s, a, (IntRange){120, -5});
     CHECK_EQ_INT(pile->hit_points.min, 0);
     CHECK_EQ_INT(pile->hit_points.max, 100);
-    stockpile_set_quality_range(&s, a, (IntRange){9, -1});
-    CHECK_EQ_INT(pile->quality.min, ITEM_QUALITY_CRUDE);
+    stockpile_set_quality_range(&s, a, (IntRange){1000, -1});
+    CHECK_EQ_INT(pile->quality.min, ITEM_QUALITY_WORST);
     CHECK_EQ_INT(pile->quality.max, ITEM_QUALITY_BEST);
-    stockpile_set_quality_range(&s, a, (IntRange){ITEM_QUALITY_FINE, ITEM_QUALITY_ROUGH});
-    CHECK_EQ_INT(pile->quality.min, ITEM_QUALITY_ROUGH);
-    CHECK_EQ_INT(pile->quality.max, ITEM_QUALITY_FINE);
+    stockpile_set_quality_range(&s, a, (IntRange){TEST_QUALITY_FINE, TEST_QUALITY_ROUGH});
+    CHECK_EQ_INT(pile->quality.min, TEST_QUALITY_ROUGH);
+    CHECK_EQ_INT(pile->quality.max, TEST_QUALITY_FINE);
 
     /* The type filter still applies; empty stacks are never accepted. */
     stockpile_set_allowed(&s, a, ITEM_TYPE_BIT(ITEM_BLACKBERRIES));
-    CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, ITEM_QUALITY_FINE, wood_hp)));
-    CHECK(stockpile_accepts(pile, item_stack_make(ITEM_BLACKBERRIES, 1, ITEM_QUALITY_FINE, 10)));
+    CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_FINE, wood_hp)));
+    CHECK(stockpile_accepts(pile, item_stack_make(ITEM_BLACKBERRIES, 1, TEST_QUALITY_FINE, 10)));
     CHECK(!stockpile_accepts(pile, (ItemStack){.type = ITEM_NONE}));
-    CHECK(!stockpile_accepts(NULL, item_stack_make(ITEM_BLACKBERRIES, 1, ITEM_QUALITY_FINE, 10)));
+    CHECK(!stockpile_accepts(NULL, item_stack_make(ITEM_BLACKBERRIES, 1, TEST_QUALITY_FINE, 10)));
 
     /* Invalid stockpiles are ignored. */
     stockpile_set_quality_range(&s, 40, (IntRange){1, 2});
@@ -297,7 +297,7 @@ static void test_hash(void)
     stockpile_set_priority(&s, a, 1);
     uint64_t prioritized = stockpiles_hash(&s, HASH_FNV1A64_INIT);
     CHECK(prioritized != created);
-    stockpile_set_quality_range(&s, a, (IntRange){ITEM_QUALITY_ROUGH, ITEM_QUALITY_BEST});
+    stockpile_set_quality_range(&s, a, (IntRange){TEST_QUALITY_ROUGH, ITEM_QUALITY_BEST});
     uint64_t quality = stockpiles_hash(&s, HASH_FNV1A64_INIT);
     CHECK(quality != prioritized);
     stockpile_set_hit_points_range(&s, a, (IntRange){0, 90});

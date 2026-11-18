@@ -276,8 +276,8 @@ static int knapping_workshop(Game *game)
 {
     int station =
         workstations_place(&game->workstations, &game->map, WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
-    items_add(&game->items, 18, 12, 0, item_stack_make(ITEM_FLINT, 20, ITEM_QUALITY_FINE, 0));
-    items_add(&game->items, 18, 10, 0, item_stack_make(ITEM_COBBLE, 6, ITEM_QUALITY_FINE, 0));
+    items_add(&game->items, 18, 12, 0, item_stack_make(ITEM_FLINT, 20, TEST_QUALITY_FINE, 0));
+    items_add(&game->items, 18, 10, 0, item_stack_make(ITEM_COBBLE, 6, TEST_QUALITY_FINE, 0));
     int bill = workstation_add_bill(&game->workstations, station, RECIPE_HAND_AXE);
     workstation_set_bill_mode(&game->workstations, station, bill, BILL_FOREVER);
     return station;

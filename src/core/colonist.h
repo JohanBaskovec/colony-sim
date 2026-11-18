@@ -677,7 +677,7 @@ bool colonist_can_gather(const Colonist *colonist, GatherJob job);
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge);
 
 /* The level what the colonist makes comes from (quality and condition of
- * products, grade of constructions): its level in the knowledge, more or
+ * products, quality of constructions): its level in the knowledge, more or
  * less with its mood (mood_level_offset()), within the valid levels. */
 double colonist_work_level(const Colonist *colonist, KnowledgeType knowledge);
 
@@ -720,7 +720,7 @@ bool colonist_can_craft(const Colonist *colonist, RecipeType recipe);
  * worker level range (see bill_accepts_level()). */
 bool colonist_level_fits_bill(const Colonist *colonist, const Bill *bill);
 
-/* Index in `tools` of the best carried tool among `types` (grade, then hit
+/* Index in `tools` of the best carried tool among `types` (quality, then hit
  * points), or -1 when it carries none of them. */
 int colonist_tool_index(const Colonist *colonist, ItemTypeMask types);
 

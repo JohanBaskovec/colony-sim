@@ -137,7 +137,13 @@ void hud_weight_text(char *out, size_t size, float kilograms)
     TR_FORMAT(out, size, tr("unit.kg"), number);
 }
 
-/* "Quality: fine · Hit points: 45/60 (75%)" line of an item stack, with only
+/* A quality as text ("47"). */
+void hud_quality_text(char *out, size_t size, ItemQuality quality)
+{
+    tr_integer(out, size, quality);
+}
+
+/* "Quality: 47 · Hit points: 45/60 (75%)" line of an item stack, with only
  * the parts its type has (none for stone blocks, no quality for grass). */
 bool hud_item_condition_text(char *out, size_t size, ItemStack stack)
 {
@@ -145,7 +151,8 @@ bool hud_item_condition_text(char *out, size_t size, ItemStack stack)
     if (def == NULL || stack.type == ITEM_NONE || (!def->has_quality && !def->damageable)) {
         return false;
     }
-    const char *quality = tr(item_quality_name_key((ItemQuality)stack.quality));
+    char quality[16];
+    hud_quality_text(quality, sizeof(quality), stack.quality);
     if (!def->damageable) {
         TR_FORMAT(out, size, tr("hud.item_quality"), quality);
         return true;
@@ -174,8 +181,8 @@ static void add_item_condition_line(Panel *panel, ItemStack stack)
 bool hud_structure_condition_text(char *out, size_t size, const Map *map, int x, int y, int z)
 {
     StructureType type = map_structure(map, x, y, z);
-    ItemQuality grade = map_structure_quality(map, x, y, z);
-    int max = structure_max_hit_points(type, grade);
+    ItemQuality quality = map_structure_quality(map, x, y, z);
+    int max = structure_max_hit_points(type, quality);
     if (max <= 0) {
         return false;
     }
@@ -185,8 +192,10 @@ bool hud_structure_condition_text(char *out, size_t size, const Map *map, int x,
     tr_integer(max_hit_points, sizeof(max_hit_points), max);
     tr_integer(number, sizeof(number), (long long)current * 100 / max);
     TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
-    TR_FORMAT(out, size, tr("hud.item_condition"), tr(item_quality_name_key(grade)), hit_points,
-              max_hit_points, percent);
+    char quality_text[16];
+    hud_quality_text(quality_text, sizeof(quality_text), quality);
+    TR_FORMAT(out, size, tr("hud.item_condition"), quality_text, hit_points, max_hit_points,
+              percent);
     return true;
 }
 
@@ -448,9 +457,10 @@ static void build_tile_panel(App *app, Panel *panel)
     StructureType roof = map_roof(map, x, y, z); /* The tile is a roof. */
     StructureType over = map_roof_over(map, x, y, z);
     if (roof != STRUCTURE_NONE) {
+        char quality[16];
+        hud_quality_text(quality, sizeof(quality), map_roof_quality(map, x, y, z));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.roof"),
-                  tr(structure_def(roof)->name_key),
-                  tr(item_quality_name_key(map_roof_quality(map, x, y, z))));
+                  tr(structure_def(roof)->name_key), quality);
         if (map_forbidden(map, x, y, z, MAP_FORBID_ROOF)) {
             panel_add_text(panel, tr("tile_panel.left_alone"));
         }
@@ -940,10 +950,11 @@ static void add_needs_extra_lines(App *app, Panel *panel, const Colonist *coloni
     TilePos bed;
     if (beds_owned(&app->game.beds, (uint8_t)(id.index + 1), &bed)) {
         StructureType type = map_structure(&app->game.map, bed.x, bed.y, bed.z);
-        TR_FORMAT(
-            panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.bed"),
-            tr(structure_def(type)->name_key),
-            tr(item_quality_name_key(map_structure_quality(&app->game.map, bed.x, bed.y, bed.z))));
+        char quality[16];
+        hud_quality_text(quality, sizeof(quality),
+                         map_structure_quality(&app->game.map, bed.x, bed.y, bed.z));
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.bed"),
+                  tr(structure_def(type)->name_key), quality);
     } else {
         panel_add_text(panel, tr("hud.colonist.no_bed"));
     }
@@ -1034,9 +1045,10 @@ static void add_gear_lines(Panel *panel, const Colonist *colonist)
         char hit_points[16], percent[32];
         tr_integer(hit_points, sizeof(hit_points), item_stack_hit_points_percent(tool));
         TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), hit_points);
+        char quality[16];
+        hud_quality_text(quality, sizeof(quality), tool.quality);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.tool"),
-                  tr(item_def((ItemType)tool.type)->name_key),
-                  tr(item_quality_name_key((ItemQuality)tool.quality)), percent);
+                  tr(item_def((ItemType)tool.type)->name_key), quality, percent);
     }
     if (colonist->tools_broken > 0) {
         char count[16];

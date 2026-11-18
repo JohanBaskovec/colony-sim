@@ -1,4 +1,4 @@
-/* Tools: speed factors by use and grade, choosing the best carried tool,
+/* Tools: speed factors by use and quality, choosing the best carried tool,
  * wear and breaking. */
 #include "core/tool.h"
 
@@ -39,15 +39,24 @@ static void test_type_factors(void)
     CHECK_NEAR(tool_type_factor(TOOL_USE_BUILDING, ITEM_TYPE_COUNT), 0.0, 1e-6);
 }
 
-static void test_grade_factors(void)
+static void test_quality_factors(void)
 {
-    CHECK_NEAR(tool_grade_factor(tool(ITEM_FLAKE, ITEM_QUALITY_CRUDE, 15)), 0.8, 1e-6);
-    CHECK_NEAR(tool_grade_factor(tool(ITEM_FLAKE, ITEM_QUALITY_STANDARD, 15)), 1.0, 1e-6);
-    CHECK_NEAR(tool_grade_factor(tool(ITEM_FLAKE, ITEM_QUALITY_SUPERB, 15)), 1.2, 1e-6);
+    /* ×0.8 at quality 0, ×1 at the standard 50, ×1.2 at 100, linear between. */
+    CHECK_NEAR(tool_quality_factor(tool(ITEM_FLAKE, ITEM_QUALITY_WORST, 15)), 0.8, 1e-6);
+    CHECK_NEAR(tool_quality_factor(tool(ITEM_FLAKE, ITEM_QUALITY_STANDARD, 15)), 1.0, 1e-6);
+    CHECK_NEAR(tool_quality_factor(tool(ITEM_FLAKE, ITEM_QUALITY_BEST, 15)), 1.2, 1e-6);
+    CHECK_NEAR(tool_quality_factor(tool(ITEM_FLAKE, 25, 15)), 0.9, 1e-6);
+    CHECK_NEAR(tool_quality_factor(tool(ITEM_FLAKE, 75, 15)), 1.1, 1e-6);
+    float last = 0.0f;
+    for (int quality = 0; quality <= 100; quality++) {
+        float factor = tool_quality_factor(tool(ITEM_FLAKE, quality, 15));
+        CHECK(factor > last);
+        last = factor;
+    }
     /* Items without quality: ×1. */
-    CHECK_NEAR(tool_grade_factor(tool(ITEM_TWIGS, ITEM_QUALITY_CRUDE, 10)), 1.0, 1e-6);
-    CHECK_NEAR(tool_speed_factor(TOOL_USE_CUT_GRASS, tool(ITEM_HAND_AXE, ITEM_QUALITY_FINE, 9)),
-               0.9 * 1.1, 1e-5);
+    CHECK_NEAR(tool_quality_factor(tool(ITEM_TWIGS, TEST_QUALITY_CRUDE, 10)), 1.0, 1e-6);
+    CHECK_NEAR(tool_speed_factor(TOOL_USE_CUT_GRASS, tool(ITEM_HAND_AXE, TEST_QUALITY_FINE, 9)),
+               0.9 * 1.08, 1e-5);
     CHECK_NEAR(tool_speed_factor(TOOL_USE_CUT_GRASS, (ItemStack){.type = ITEM_NONE}), 0.6, 1e-6);
     CHECK_NEAR(tool_best_possible_factor(TOOL_USE_CUT_GRASS), 1.2, 1e-5);
     CHECK_NEAR(tool_best_possible_factor(TOOL_USE_NONE), 1.0, 1e-6);
@@ -56,8 +65,8 @@ static void test_grade_factors(void)
 static void test_best_tool(void)
 {
     ItemStack tools[4] = {
-        tool(ITEM_COBBLE, ITEM_QUALITY_SUPERB, 200),
-        tool(ITEM_FLAKE, ITEM_QUALITY_CRUDE, 15),
+        tool(ITEM_COBBLE, TEST_QUALITY_SUPERB, 200),
+        tool(ITEM_FLAKE, TEST_QUALITY_CRUDE, 15),
         {.type = ITEM_NONE},
         tool(ITEM_HAND_AXE, ITEM_QUALITY_STANDARD, 100),
     };
@@ -71,7 +80,7 @@ static void test_best_tool(void)
     /* Knapping: only the cobble. */
     CHECK_EQ_INT(tool_best(tools, 4, TOOL_USE_KNAPPING, any, true), 0);
     /* A crude flake (×0.8 × 0.8) is no better than bare hands for building. */
-    ItemStack flake_only[1] = {tool(ITEM_FLAKE, ITEM_QUALITY_CRUDE, 15)};
+    ItemStack flake_only[1] = {tool(ITEM_FLAKE, TEST_QUALITY_CRUDE, 15)};
     CHECK_EQ_INT(tool_best(flake_only, 1, TOOL_USE_BUILDING, any, true), -1);
     CHECK_EQ_INT(tool_best(flake_only, 1, TOOL_USE_BUILDING, any, false), 0);
     CHECK_EQ_INT(tool_best(flake_only, 1, TOOL_USE_KNAPPING, any, false), -1);
@@ -106,7 +115,7 @@ int main(void)
 {
     RUN_TEST(test_definitions);
     RUN_TEST(test_type_factors);
-    RUN_TEST(test_grade_factors);
+    RUN_TEST(test_quality_factors);
     RUN_TEST(test_best_tool);
     RUN_TEST(test_wear);
     return test_summary();

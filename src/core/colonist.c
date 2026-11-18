@@ -2318,7 +2318,7 @@ static bool station_jobs_exist(const ColonistContext *context)
     return false;
 }
 
-/* Search filter for something to pick up: types, grade, count, matching the
+/* Search filter for something to pick up: types, quality, count, matching the
  * load already in hand, and not about to be taken by someone else. */
 typedef struct FetchSearch {
     const Items *items;
@@ -2376,7 +2376,7 @@ static FetchSearch fetch_search(const ColonistContext *context, ItemTypeMask typ
                           context->reservations,
                           context->worker_id,
                           types,
-                          ITEM_QUALITY_CRUDE,
+                          ITEM_QUALITY_WORST,
                           1,
                           {.type = ITEM_NONE},
                           TOOL_USE_NONE,
@@ -3202,7 +3202,7 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
     float speed = colonist_work_speed(colonist, knowledge) *
                   work_with_tool(colonist, context, TOOL_USE_BUILDING) *
                   assistance(colonist, context);
-    /* The grade depends on the level before this tick's learning. */
+    /* The quality depends on the level before this tick's learning. */
     bool built = construction_add_work(context->constructions, context->map, context->items,
                                        context->workstations, colonist->site, speed,
                                        colonist_work_level(colonist, knowledge), context->rng);

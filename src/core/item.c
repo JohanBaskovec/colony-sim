@@ -25,8 +25,8 @@
  *   digested raw); roasted in the embers, most of it (~350 kcal);
  * - roasted carrots: a bunch of wild carrots roasted, softer (~130 kcal);
  * - cobble: a rounded stone that fits the hand, about 1 kg, picked up from
- *   the ground; tough, the knapper's hammer (its grade is its toughness);
- * - flint: a nodule of about 1 kg, the stone that is knapped (its grade is how
+ *   the ground; tough, the knapper's hammer (its quality is its toughness);
+ * - flint: a nodule of about 1 kg, the stone that is knapped (its quality is how
  *   fine and even its grain is);
  * - branches: a dead or cut branch of about 1.5 kg, poorly packed;
  * - twigs: a handful (about 200 g) of kindling;
@@ -148,19 +148,6 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
 
 #undef DEF
 
-static const char *const QUALITY_KEYS[ITEM_QUALITY_COUNT] = {
-    [ITEM_QUALITY_CRUDE] = N_("item.quality.crude"),
-    [ITEM_QUALITY_ROUGH] = N_("item.quality.rough"),
-    [ITEM_QUALITY_STANDARD] = N_("item.quality.standard"),
-    [ITEM_QUALITY_FINE] = N_("item.quality.fine"),
-    [ITEM_QUALITY_SUPERB] = N_("item.quality.superb"),
-};
-
-const char *item_quality_name_key(ItemQuality quality)
-{
-    return (unsigned)quality < ITEM_QUALITY_COUNT ? QUALITY_KEYS[quality] : NULL;
-}
-
 static const char *const CATEGORY_KEYS[ITEM_CATEGORY_COUNT] = {
     [ITEM_CATEGORY_FOOD] = N_("item.category.food"),
     [ITEM_CATEGORY_RESOURCES] = N_("item.category.resources"),
@@ -268,7 +255,8 @@ ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points)
     return (ItemStack){
         .type = (uint8_t)type,
         .quality =
-            (uint8_t)(def->has_quality ? clampi(quality, 0, ITEM_QUALITY_BEST) : ITEM_QUALITY_BEST),
+            (uint8_t)(def->has_quality ? clampi(quality, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST)
+                                       : ITEM_QUALITY_BEST),
         .count = (uint16_t)count,
         .hit_points = (uint16_t)(def->damageable ? clampi(hit_points, 1, def->max_hit_points)
                                                  : def->max_hit_points),
@@ -297,7 +285,7 @@ ItemStack item_stack_pristine(ItemType type, int count)
 
 bool item_stacks_match(ItemStack a, ItemStack b)
 {
-    return a.type == b.type && a.quality == b.quality;
+    return a.type == b.type;
 }
 
 int item_hit_points_at_percent(ItemType type, int percent)
@@ -342,6 +330,7 @@ bool item_stack_merge(ItemStack *into, ItemStack from)
     if (count > UINT16_MAX) {
         count = UINT16_MAX;
     }
+    into->quality = (uint8_t)weighted_average(into->quality, into->count, from.quality, from.count);
     into->hit_points =
         (uint16_t)weighted_average(into->hit_points, into->count, from.hit_points, from.count);
     into->progress =
@@ -495,6 +484,8 @@ int items_add(Items *items, int x, int y, int z, ItemStack batch)
         stack->count = 0;
         items->level_stacks[z]++;
     } else {
+        stack->quality =
+            (uint8_t)weighted_average(stack->quality, stack->count, batch.quality, added);
         stack->hit_points =
             (uint16_t)weighted_average(stack->hit_points, stack->count, batch.hit_points, added);
         stack->progress =
