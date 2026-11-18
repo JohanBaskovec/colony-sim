@@ -237,7 +237,10 @@ Row widgets of windows: `ui_layout_meter()` (label, bar under it),
 From the bottom up, above the bottom bar:
 
 - **Overlay toggles** (icon buttons with a tooltip): temperature for now.
-- **Speed buttons**: pause, ×1, ×2, ×3 (Space pauses).
+- **Speed buttons**: pause, ×0.3, ×0.5, ×1, ×3, ×6 (Space pauses; 1, 2, 3 pick
+  ×1, ×3, ×6; the keys at the physical positions of "-" and "=" step one speed
+  down or up, from the slow ones too). The two slow speeds are a small and a
+  larger single triangle.
 - **Level slider**, vertical, at the right edge: the current level as a
   handle that can be dragged, small + and − buttons (half the size of the others) at its ends, the number below
   it as "level / levels" (counted from 1, the deepest level), a mark at the

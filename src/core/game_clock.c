@@ -11,16 +11,27 @@ void game_clock_init(GameClock *clock)
     clock->pending_ticks = 0.0;
 }
 
-int game_speed_multiplier(GameSpeed speed)
+float game_speed_multiplier(GameSpeed speed)
 {
     switch (speed) {
-    case GAME_SPEED_PAUSED: return 0;
-    case GAME_SPEED_NORMAL: return 1;
-    case GAME_SPEED_FAST: return 3;
-    case GAME_SPEED_FASTEST: return 6;
+    case GAME_SPEED_PAUSED: return 0.0f;
+    case GAME_SPEED_SLOWEST: return 0.3f;
+    case GAME_SPEED_SLOW: return 0.5f;
+    case GAME_SPEED_NORMAL: return 1.0f;
+    case GAME_SPEED_FAST: return 3.0f;
+    case GAME_SPEED_FASTEST: return 6.0f;
     case GAME_SPEED_COUNT: break;
     }
-    return 0;
+    return 0.0f;
+}
+
+GameSpeed game_speed_step(GameSpeed speed, int direction)
+{
+    if ((unsigned)speed >= GAME_SPEED_COUNT || speed == GAME_SPEED_PAUSED) {
+        return GAME_SPEED_NORMAL;
+    }
+    int next = (int)speed + (direction > 0) - (direction < 0);
+    return (GameSpeed)clampi(next, GAME_SPEED_SLOWEST, GAME_SPEED_FASTEST);
 }
 
 void game_clock_set_speed(GameClock *clock, GameSpeed speed)
@@ -43,11 +54,17 @@ void game_clock_toggle_pause(GameClock *clock)
     }
 }
 
+void game_clock_step_speed(GameClock *clock, int direction)
+{
+    GameSpeed from = clock->speed == GAME_SPEED_PAUSED ? clock->resume_speed : clock->speed;
+    game_clock_set_speed(clock, game_speed_step(from, direction));
+}
+
 int game_clock_consume(GameClock *clock, double real_seconds)
 {
-    int multiplier = game_speed_multiplier(clock->speed);
-    if (multiplier == 0 || real_seconds <= 0.0) {
-        if (multiplier == 0) {
+    double multiplier = game_speed_multiplier(clock->speed);
+    if (multiplier == 0.0 || real_seconds <= 0.0) {
+        if (multiplier == 0.0) {
             clock->pending_ticks = 0.0;
         }
         return 0;

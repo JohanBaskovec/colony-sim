@@ -65,6 +65,8 @@ typedef enum AppTool {
 #define APP_KEY_MINE SDL_SCANCODE_M
 #define APP_KEY_CANCEL SDL_SCANCODE_X
 #define APP_KEY_PAUSE SDL_SCANCODE_SPACE
+#define APP_KEY_SLOWER SDL_SCANCODE_MINUS  /* One speed down (keys 1-3 pick ×1, ×3, ×6). */
+#define APP_KEY_FASTER SDL_SCANCODE_EQUALS /* One speed up. */
 #define APP_KEY_BACK SDL_SCANCODE_ESCAPE
 #define APP_KEY_HELP SDL_SCANCODE_F1
 #define APP_KEY_SCENARIOS_MENU SDL_SCANCODE_F2 /* Test scenarios (game/scenarios_panel.h). */

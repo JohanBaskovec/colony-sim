@@ -1280,7 +1280,8 @@ static void help_window(App *app)
     char keys[32];
     movement_keys_label(keys, sizeof(keys));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.camera"), keys);
-    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.game"), app_key_name(APP_KEY_LANGUAGE));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.game"), app_key_name(APP_KEY_LANGUAGE),
+              app_key_name(APP_KEY_SLOWER), app_key_name(APP_KEY_FASTER));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.gathering"),
               app_key_name(APP_KEY_GATHER));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), app_key_name(APP_KEY_MINE),

@@ -797,6 +797,10 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case SDL_SCANCODE_KP_2: game_clock_set_speed(&app->game.clock, GAME_SPEED_FAST); return;
     case SDL_SCANCODE_3:
     case SDL_SCANCODE_KP_3: game_clock_set_speed(&app->game.clock, GAME_SPEED_FASTEST); return;
+    case APP_KEY_SLOWER:
+    case SDL_SCANCODE_KP_MINUS: game_clock_step_speed(&app->game.clock, -1); return;
+    case APP_KEY_FASTER:
+    case SDL_SCANCODE_KP_PLUS: game_clock_step_speed(&app->game.clock, 1); return;
     case APP_KEY_BACK: step_back(app, true); return;
     case APP_KEY_HELP: app->show_help = !app->show_help; return;
     case APP_KEY_DEBUG_MENU: app->show_debug_menu = !app->show_debug_menu; return;

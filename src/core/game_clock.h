@@ -38,6 +38,8 @@
 
 typedef enum GameSpeed {
     GAME_SPEED_PAUSED,
+    GAME_SPEED_SLOWEST, /* ×0.3 */
+    GAME_SPEED_SLOW,    /* ×0.5 */
     GAME_SPEED_NORMAL,
     GAME_SPEED_FAST,
     GAME_SPEED_FASTEST,
@@ -69,11 +71,18 @@ typedef struct GameDate {
 
 void game_clock_init(GameClock *clock);
 
-/* Simulation speed multiplier: 0 when paused. */
-int game_speed_multiplier(GameSpeed speed);
+/* Simulation speed multiplier: 0 when paused, from 0.3 to 6. */
+float game_speed_multiplier(GameSpeed speed);
+
+/* The next speed up (`direction` > 0) or down (< 0) from a running speed,
+ * the same at either end; normal speed from a paused or invalid one. */
+GameSpeed game_speed_step(GameSpeed speed, int direction);
 
 void game_clock_set_speed(GameClock *clock, GameSpeed speed);
 void game_clock_toggle_pause(GameClock *clock);
+
+/* Steps to the next speed up or down (unpausing a paused clock). */
+void game_clock_step_speed(GameClock *clock, int direction);
 
 /*
  * Accumulates `real_seconds` of elapsed real time and returns how many ticks

@@ -32,10 +32,41 @@ static void test_day_of_year(void)
 
 static void test_speed_multipliers(void)
 {
-    CHECK_EQ_INT(game_speed_multiplier(GAME_SPEED_PAUSED), 0);
-    CHECK_EQ_INT(game_speed_multiplier(GAME_SPEED_NORMAL), 1);
-    CHECK(game_speed_multiplier(GAME_SPEED_FAST) > 1);
+    CHECK_NEAR(game_speed_multiplier(GAME_SPEED_PAUSED), 0.0f, 1e-6f);
+    CHECK_NEAR(game_speed_multiplier(GAME_SPEED_SLOWEST), 0.3f, 1e-6f);
+    CHECK_NEAR(game_speed_multiplier(GAME_SPEED_SLOW), 0.5f, 1e-6f);
+    CHECK_NEAR(game_speed_multiplier(GAME_SPEED_NORMAL), 1.0f, 1e-6f);
+    CHECK(game_speed_multiplier(GAME_SPEED_FAST) > 1.0f);
     CHECK(game_speed_multiplier(GAME_SPEED_FASTEST) > game_speed_multiplier(GAME_SPEED_FAST));
+    /* Each speed is faster than the one before it. */
+    for (int speed = 1; speed < GAME_SPEED_COUNT; speed++) {
+        CHECK(game_speed_multiplier((GameSpeed)speed) >
+              game_speed_multiplier((GameSpeed)(speed - 1)));
+    }
+    CHECK_NEAR(game_speed_multiplier(GAME_SPEED_COUNT), 0.0f, 1e-6f);
+}
+
+/* Stepping goes one speed at a time and stops at the ends. */
+static void test_speed_steps(void)
+{
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_NORMAL, -1), GAME_SPEED_SLOW);
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_SLOW, -1), GAME_SPEED_SLOWEST);
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_SLOWEST, -1), GAME_SPEED_SLOWEST);
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_NORMAL, 1), GAME_SPEED_FAST);
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_FASTEST, 1), GAME_SPEED_FASTEST);
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_PAUSED, 1), GAME_SPEED_NORMAL);
+    GameClock clock;
+    game_clock_init(&clock);
+    game_clock_step_speed(&clock, -1);
+    CHECK_EQ_INT(clock.speed, GAME_SPEED_SLOW);
+    /* A paused clock goes on from the speed it will resume at, running. */
+    game_clock_toggle_pause(&clock);
+    game_clock_step_speed(&clock, -1);
+    CHECK_EQ_INT(clock.speed, GAME_SPEED_SLOWEST);
+    game_clock_toggle_pause(&clock);
+    CHECK_EQ_INT(clock.speed, GAME_SPEED_PAUSED);
+    game_clock_toggle_pause(&clock);
+    CHECK_EQ_INT(clock.speed, GAME_SPEED_SLOWEST);
 }
 
 static void test_consume_produces_ticks_at_fixed_rate(void)
@@ -61,7 +92,27 @@ static void test_consume_scales_with_speed(void)
     game_clock_init(&clock);
     game_clock_set_speed(&clock, GAME_SPEED_FAST);
     int due = game_clock_consume(&clock, 0.1);
-    CHECK_EQ_INT(due, TICKS_PER_SECOND / 10 * game_speed_multiplier(GAME_SPEED_FAST));
+    CHECK_EQ_INT(due, TICKS_PER_SECOND / 10 * 3);
+}
+
+/* Slower than normal: ticks come less often, none lost (ten seconds at ×0.3
+ * are 180 ticks, at ×0.5 are 300). */
+static void test_consume_slow_speeds(void)
+{
+    GameClock clock;
+    game_clock_init(&clock);
+    game_clock_set_speed(&clock, GAME_SPEED_SLOWEST);
+    int total = 0;
+    for (int i = 0; i < 600; i++) {
+        total += game_clock_consume(&clock, 1.0 / 60.0);
+    }
+    CHECK(total >= 10 * 18 - 1 && total <= 10 * 18);
+    game_clock_set_speed(&clock, GAME_SPEED_SLOW);
+    total = 0;
+    for (int i = 0; i < 600; i++) {
+        total += game_clock_consume(&clock, 1.0 / 60.0);
+    }
+    CHECK(total >= 10 * 30 - 1 && total <= 10 * 30);
 }
 
 static void test_consume_is_capped(void)
@@ -167,8 +218,10 @@ int main(void)
     RUN_TEST(test_init_starts_in_the_morning_at_normal_speed);
     RUN_TEST(test_day_of_year);
     RUN_TEST(test_speed_multipliers);
+    RUN_TEST(test_speed_steps);
     RUN_TEST(test_consume_produces_ticks_at_fixed_rate);
     RUN_TEST(test_consume_scales_with_speed);
+    RUN_TEST(test_consume_slow_speeds);
     RUN_TEST(test_consume_is_capped);
     RUN_TEST(test_pause_and_resume);
     RUN_TEST(test_date_rollover);

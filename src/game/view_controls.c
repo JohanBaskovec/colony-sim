@@ -31,8 +31,9 @@ static void corner_layout(const App *app, CornerLayout *out)
     ScreenLayout layout;
     layout_screen(ui, &layout);
     float button = layout.button_height, gap = theme->gap;
-    /* Overlays (1), a wider gap, then the speeds (4). */
-    float row_width = 5.0f * button + 4.0f * gap + 3.0f * gap + 2.0f * gap;
+    /* Overlays (1), a wider gap, then the speeds (pause and the running ones). */
+    float row_width = (1.0f + GAME_SPEED_COUNT) * button + (float)GAME_SPEED_COUNT * gap +
+                      3.0f * gap + 2.0f * gap;
     out->button = button;
     out->row = (SDL_FRect){layout.width - theme->margin - row_width,
                            layout.bar_top - theme->margin - button - 2.0f * gap, row_width,
@@ -68,13 +69,16 @@ static void triangle(SDL_Renderer *renderer, float x, float y, float w, float h,
     SDL_RenderGeometry(renderer, NULL, vertices, 3, NULL, 0);
 }
 
-/* Two bars (count 0), or `count` triangles side by side (speeds). */
-static void speed_icon(Ui *ui, SDL_FRect rect, int count)
+/* Two bars (pause), a small triangle (×0.3), a larger one (×0.5), a full one
+ * (×1), or two or three side by side (the fast speeds). */
+static void speed_icon(Ui *ui, SDL_FRect rect, GameSpeed speed)
 {
     SDL_Color color = ui->theme.colors[THEME_TEXT];
-    float h = SDL_floorf(rect.h * 0.45f);
+    int count = speed == GAME_SPEED_FAST ? 2 : (speed == GAME_SPEED_FASTEST ? 3 : 1);
+    float scale = speed == GAME_SPEED_SLOWEST ? 0.55f : (speed == GAME_SPEED_SLOW ? 0.78f : 1.0f);
+    float h = SDL_floorf(rect.h * 0.45f * scale);
     float y = SDL_floorf(rect.y + (rect.h - h) * 0.5f);
-    if (count == 0) {
+    if (speed == GAME_SPEED_PAUSED) {
         float bar = SDL_max(2.0f, SDL_floorf(rect.w * 0.12f));
         float cx = rect.x + rect.w * 0.5f;
         ui_fill(ui, (SDL_FRect){SDL_floorf(cx - bar * 1.5f), y, bar, h}, color);
@@ -140,8 +144,10 @@ static void draw_row(App *app, const CornerLayout *layout)
     }
     x += button + 4.0f * gap;
 
-    static const SDL_Scancode SPEED_KEYS[GAME_SPEED_COUNT] = {APP_KEY_PAUSE, SDL_SCANCODE_1,
-                                                              SDL_SCANCODE_2, SDL_SCANCODE_3};
+    static const SDL_Scancode SPEED_KEYS[GAME_SPEED_COUNT] = {
+        [GAME_SPEED_PAUSED] = APP_KEY_PAUSE,      [GAME_SPEED_SLOWEST] = SDL_SCANCODE_UNKNOWN,
+        [GAME_SPEED_SLOW] = SDL_SCANCODE_UNKNOWN, [GAME_SPEED_NORMAL] = SDL_SCANCODE_1,
+        [GAME_SPEED_FAST] = SDL_SCANCODE_2,       [GAME_SPEED_FASTEST] = SDL_SCANCODE_3};
     GameClock *clock = &app->game.clock;
     for (int speed = 0; speed < GAME_SPEED_COUNT; speed++) {
         rect = (SDL_FRect){x, y, button, button};
@@ -152,14 +158,19 @@ static void draw_row(App *app, const CornerLayout *layout)
                 game_clock_set_speed(clock, (GameSpeed)speed);
             }
         }
-        speed_icon(ui, rect, speed);
+        speed_icon(ui, rect, (GameSpeed)speed);
         if (ui_hovered(ui, rect)) {
             char title[TEXT_SIZE];
             if (speed == GAME_SPEED_PAUSED) {
                 SDL_strlcpy(title, tr("controls.pause"), sizeof(title));
             } else {
                 char multiplier[16];
-                tr_integer(multiplier, sizeof(multiplier), game_speed_multiplier((GameSpeed)speed));
+                float factor = game_speed_multiplier((GameSpeed)speed);
+                if (factor == SDL_floorf(factor)) {
+                    tr_integer(multiplier, sizeof(multiplier), (long long)factor);
+                } else {
+                    tr_decimal(multiplier, sizeof(multiplier), factor, 1);
+                }
                 TR_FORMAT(title, sizeof(title), tr("controls.speed"), multiplier);
             }
             tooltip(app, title, NULL, SPEED_KEYS[speed]);
