@@ -2613,7 +2613,7 @@ bool game_bill_has_worker(const Game *game, const Bill *bill)
         const Colonist *colonist = &game->colonists[slot];
         if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
             colonist_can_craft(colonist, (RecipeType)bill->recipe) &&
-            colonist_level_fits_bill(colonist, bill)) {
+            colonist_fits_bill(colonist, game_colonist_id_at(game, slot), bill)) {
             return true;
         }
     }

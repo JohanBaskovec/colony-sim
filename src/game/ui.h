@@ -20,8 +20,9 @@
  * A dropdown opens a list of options over everything else, drawn at the end
  * of the frame (ui_draw_popup()); the list belongs to an owner of its own,
  * so that it captures the clicks on it. An option picked is returned by the
- * dropdown at the next frame. A click anywhere else closes the list (a click
- * on the world does nothing else then).
+ * dropdown at the next frame; a list too long for the screen scrolls with the
+ * mouse wheel. A click anywhere else closes the list (a click on the world
+ * does nothing else then).
  */
 #ifndef COLONY_GAME_UI_H
 #define COLONY_GAME_UI_H
@@ -41,7 +42,7 @@
 /* Window ids are 1 .. UI_POPUP_OWNER - 1. */
 #define UI_ANONYMOUS_OWNER 1000
 #define UI_POPUP_OWNER (UI_ANONYMOUS_OWNER - 1) /* The open dropdown list. */
-#define UI_POPUP_OPTIONS 8
+#define UI_POPUP_OPTIONS 80 /* A longer list scrolls (wheel) when it does not fit the screen. */
 #define UI_POPUP_OPTION_SIZE 96
 
 typedef enum UiCheck { UI_UNCHECKED, UI_PARTIAL, UI_CHECKED } UiCheck;
@@ -53,10 +54,12 @@ typedef enum UiPlacement {
 } UiPlacement;
 
 /* Where a docked window goes: its bottom left corner at (x, bottom), as tall
- * as its content up to `top` (it scrolls beyond), at least `width` wide. It
- * cannot be dragged. */
+ * as its content up to `top` (it scrolls beyond), at least `width` wide and
+ * `height` tall (0: no minimum; the room is left empty, so a `height` of
+ * `bottom - top` makes the window as tall as it can be). It cannot be
+ * dragged. */
 typedef struct UiDock {
-    float x, bottom, top, width;
+    float x, bottom, top, width, height;
 } UiDock;
 
 typedef struct UiArea {
@@ -119,6 +122,8 @@ typedef struct Ui {
     char popup_options[UI_POPUP_OPTIONS][UI_POPUP_OPTION_SIZE];
     int popup_count;
     int popup_selected;
+    int popup_scroll;    /* First option shown (-1: keep the selected one in view). */
+    int popup_visible;   /* Options shown at the last frame. */
     bool popup_seen;     /* Its dropdown was drawn this frame (else it closes). */
     int popup_closed_id; /* Closed by this frame's click: that click does not open it again. */
     int picked_id;       /* Dropdown an option was picked from, returned the next frame. */

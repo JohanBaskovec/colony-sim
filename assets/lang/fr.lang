@@ -537,8 +537,6 @@ recipe.digging_stick = Bâton à fouir
 recipe.harden_digging_stick = Durcir un bâton à fouir au feu
 recipe.roast_rhizomes = Rôtir des rhizomes de massette
 recipe.roast_carrots = Rôtir des carottes sauvages
-recipe.needs = Nécessite {0} · Outils : {1}
-recipe.needs_no_tool = Nécessite {0} · Sans outil
 recipe.ingredient = {0} ×{1}
 recipe.ingredient_quality = {0} (qualité {1} ou mieux)
 recipe.either = {0} ou {1}
@@ -565,15 +563,46 @@ tile_panel.nothing_to_harvest = Rien à récolter dessus pour l’instant
 tile_panel.cancel_site.description = Retire le plan : les matériaux déjà apportés sont posés là
 blueprint.clear_first = À défricher d’abord : {0}
 station.in_progress = En cours : {0} ({1})
-station.bills = Commandes (traitées de haut en bas)
-station.no_bills = Aucune commande : ajoutez-en une ci-dessous
-station.bill = {0}. {1}
 station.bill.remove = Retirer
-station.add_bill = Ajouter une commande :
+station.add_bill = Ajouter une commande
+station.add_bill.description = Les commandes sont traitées en partant du haut
+station.add_bill.full = Trop de commandes : en retirer une d’abord
+station.recipe.work = Travail
+station.recipe.knowledge = Connaissance
+station.recipe.ingredients = Ingrédients
+station.recipe.time = Durée
+station.recipe.result = Produit
+station.recipe.weight = Poids
+station.recipe.bulk = Encombrement
+station.recipe.none = Aucune
+# {0} = knowledge, {1} = the level needed
+recipe.knowledge_level = {0} (niveau {1})
+# Tooltip of the knowledge a recipe needs. {0} = level needed, {1} = level from which a knowledge unlocks anything
+recipe.tip.unlock = Nécessaire pour la fabriquer : niveau {0} (une connaissance ne débloque rien en dessous du niveau {1})
+# {0} = speed at the first level, {1} = that level, {2} = speed at the last level, {3} = that level
+recipe.tip.speed = Vitesse de travail : ×{0} au niveau {1}, ×{2} au niveau {3}
+# {0} = number at the first level, {1} = that level, {2} = number at the last level, {3} = that level
+recipe.tip.count = Quantité produite à chaque fois : {0} au niveau {1}, {2} au niveau {3}
+# {4} = how many points above the quality of the material it can never go
+recipe.tip.quality = Qualité du produit : environ {0} au niveau {1}, environ {2} au niveau {3}, jamais plus de {4} points au-dessus de la qualité du matériau
+recipe.tip.condition = État du produit : environ {0} au niveau {1}, environ {2} au niveau {3}
+# {0} = chance of failure at the first level, {1} = that level, {2} = level from which it never fails
+recipe.tip.failure = Risque d’échec : {0} au niveau {1}, nul à partir du niveau {2}
+bill.pause = Mettre cette commande en pause
+bill.resume = Reprendre cette commande
+bill.heading.tools = Outils
+bill.heading.worker = Colon attribué
+bill.heading.choice = Choix de l’ingrédient
+bill.no_tool = Aucun outil nécessaire
+bill.worker.anyone = N’importe qui
+# {0} = knowledge
+bill.worker.level = Colon de niveau en {0}
+bill.worker.specific = Un colon spécifique
+bill.worker.nobody = Personne
 station.warning.unknown_recipe = Personne ne connaît assez bien cette recette
 station.warning.tool = Outil manquant : {0}
 station.warning.no_input = Aucun matériau adapté dans la colonie
-station.warning.no_worker_level = Personne ne connaît cette recette à un niveau compris dans cet intervalle
+station.warning.no_worker = Aucun colon connaissant cette recette ne correspond au choix de l’exécutant
 station.warning.fire_out = Le feu est éteint : ces commandes attendent qu’il brûle
 station.hearth.fuel = Combustible : {0} sur {1}
 station.hearth.burning = Allumé, combustible pour {0} h
@@ -592,11 +621,14 @@ bill.mode.forever = Sans fin
 bill.progress.done = Réalisations : {0}
 bill.progress.in_colony = {0} dans la colonie
 bill.progress.in_stock = {0} en stock
-bill.paused = En pause
 bill.input_radius = Ingrédients à {0} cases au plus
 bill.levels = Artisans de niveau {0} à {1}
 
 # Unités
+unit.hours = {0} h
+unit.minutes = {0} min
+# {0} = hours, {1} = minutes
+unit.hours_minutes = {0} h {1} min
 unit.kg = {0} kg
 unit.percent = {0} %
 unit.celsius = {0} °C

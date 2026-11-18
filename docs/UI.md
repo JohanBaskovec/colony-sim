@@ -131,6 +131,40 @@ become tabs:
 
 The animal's window has a Character tab like the settlers'.
 
+#### Bills (workstations)
+
+The Bills tab holds an **Add a bill** button (lit while its window is open) and
+the active bills. The tab's panel and the windows opening at its right are
+always as tall as the screen allows (up to the colonist bar), with the same
+top and bottom; each is docked at the right of the one before:
+
+1. **Recipes to add** (the button): one row per recipe of the station: the
+   picture of what it makes, its name, and its price as a picture per
+   ingredient with the count under it (alternatives, such as flint or cobble,
+   separated by "/"; the tooltip of a picture names the item). A click picks
+   the recipe, a double click adds it as a bill.
+2. **Details of the picked recipe**: a table (work, knowledge and level,
+   ingredients as text, time in game time) then the thing made (name, weight,
+   bulk) The tooltip of the knowledge says what it does
+   for this recipe: the level needed, the work speed, and, when they depend on
+   the level, the quantity, quality and condition of what is made and the
+   chance of failure, at the lowest level that can make it and at 100 (figures
+   from the core: `knowledge_work_speed()`, `recipe_craft()` without luck).
+
+An active bill in the list has two rows: its name with the **pause** and
+**remove** buttons at the right (the name is red, with the problem in a
+tooltip, when nobody can work on it), and how often it is done (mode, −/+ for
+the target). A click on it opens its **details** at the right, in place of the
+list of recipes, with the same details of the recipe (2) at the right of it:
+the ingredients and the tools (red, with a tooltip, when
+nothing suitable lies in the colony or a tool cannot be had); the assigned
+colonist, a drop-down list (*Anyone*; *Colonist skilled in [knowledge]*, which
+adds a slider with two handles, 0 to 100 by default; *A specific colonist*,
+which adds a list of all the colonists); how far ingredients are looked for
+(−/+); a check box per ingredient when the recipe has a choice; warnings
+(nobody knows the recipe, the fire is out, nobody fits the workers chosen).
+Drop-down lists too long for the screen scroll with the wheel.
+
 Activities: *Fighting* and *Fleeing* for settlers struck by an animal (a notice
 tells the player a settler is under attack), *Attacking* for animals.
 

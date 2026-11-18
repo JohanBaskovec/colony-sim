@@ -11,7 +11,6 @@
 #define MIN_SCALE 0.45f
 #define NAME_MIN_SCALE 0.6f    /* Smaller entries show the portrait alone. */
 #define ACTION_MIN_SCALE 0.85f /* Smaller entries leave the action to the tooltip. */
-#define DOUBLE_CLICK_MS 400
 
 typedef struct BarLayout {
     EntryStrip strip;
@@ -116,8 +115,8 @@ static void click(App *app, EntityId id)
 {
     bool shift = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
     Uint64 now = SDL_GetTicks();
-    bool twice =
-        entity_id_equal(app->bar_last_click, id) && now - app->bar_last_click_ms <= DOUBLE_CLICK_MS;
+    bool twice = entity_id_equal(app->bar_last_click, id) &&
+                 now - app->bar_last_click_ms <= APP_DOUBLE_CLICK_MS;
     if (twice) {
         app_select_colonist(app, id, false);
         app_focus_colonist(app, id);

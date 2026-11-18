@@ -44,6 +44,14 @@ int inspector_tabs(App *app, const char *const *labels, int count);
  * only a × to close it. */
 void inspector_tab_panel(App *app, UiRowsFn rows, void *userdata);
 
+/* A window docked to the right of the window `after` (the open tab's panel,
+ * APP_WINDOW_INSPECTOR_TAB, or another such window drawn just before it),
+ * with the same bottom and the same top: as tall as the screen allows, like the
+ * panel (the room the content leaves is empty), as wide as its content. `title` has a × that sets
+ * *open to false. Draw it after `after` in the same frame. */
+void inspector_side_window(App *app, int id, int after, const char *title, UiRowsFn rows,
+                           void *userdata, bool *open);
+
 /* Action button `slot` (0, 1...) right of the box, lit while `lit`: true
  * when it was clicked. *icon is where to draw its icon; the tooltip shows
  * `lines` (the first one is its name). */

@@ -276,6 +276,26 @@ bool workstation_set_bill_input(Workstations *workstations, int index, int bill,
     return true;
 }
 
+bool workstation_set_bill_worker(Workstations *workstations, int index, int bill, BillWorker worker,
+                                 EntityId colonist)
+{
+    Bill *entry = get_bill(workstations, index, bill);
+    if (entry == NULL || (unsigned)worker >= BILL_WORKER_COUNT) {
+        return false;
+    }
+    if (worker == BILL_WORKER_LEVEL &&
+        recipe_def((RecipeType)entry->recipe)->knowledge == KNOWLEDGE_NONE) {
+        return false;
+    }
+    if (worker == BILL_WORKER_SPECIFIC && entity_id_is_none(colonist)) {
+        return false;
+    }
+    entry->worker = (uint8_t)worker;
+    entry->colonist = worker == BILL_WORKER_SPECIFIC ? colonist : ENTITY_NONE;
+    workstations->revision++;
+    return true;
+}
+
 bool workstation_set_bill_min_level(Workstations *workstations, int index, int bill, int level)
 {
     Bill *entry = get_bill(workstations, index, bill);
@@ -320,13 +340,19 @@ bool workstation_set_bill_input_radius(Workstations *workstations, int index, in
     return true;
 }
 
-bool bill_accepts_level(const Bill *bill, double level)
+bool bill_accepts_worker(const Bill *bill, double level, EntityId who)
 {
-    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
-    if (def == NULL || def->knowledge == KNOWLEDGE_NONE) {
-        return true;
+    switch ((BillWorker)bill->worker) {
+    case BILL_WORKER_SPECIFIC: return entity_id_equal(bill->colonist, who);
+    case BILL_WORKER_LEVEL: {
+        const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+        if (def == NULL || def->knowledge == KNOWLEDGE_NONE) {
+            return true;
+        }
+        return level >= bill->min_level && level <= bill->max_level;
     }
-    return level >= bill->min_level && level <= bill->max_level;
+    default: return true;
+    }
 }
 
 bool bill_wants_more(const Bill *bill, int stored)
@@ -486,6 +512,11 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
                 (uint32_t)bill->inputs, bill->min_level, bill->max_level, bill->paused,
                 bill->input_radius};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
+            if (bill->worker != BILL_WORKER_ANYONE) {
+                uint32_t worker[3] = {bill->worker, bill->colonist.index,
+                                      bill->colonist.generation};
+                hash = hash_fnv1a64(hash, worker, sizeof(worker));
+            }
         }
     }
     return hash;

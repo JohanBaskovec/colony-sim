@@ -614,10 +614,6 @@ recipe.digging_stick = Digging stick
 recipe.harden_digging_stick = Harden a digging stick in the fire
 recipe.roast_rhizomes = Roast cattail rhizomes
 recipe.roast_carrots = Roast wild carrots
-# What a recipe needs. {0} = ingredient, {1} = tools
-recipe.needs = Needs {0} · Tools: {1}
-# {0} = ingredient
-recipe.needs_no_tool = Needs {0} · No tool
 # {0} = ingredient name(s), {1} = how many
 recipe.ingredient = {0} ×{1}
 # {0} = ingredient with its count, {1} = lowest quality grade accepted
@@ -651,17 +647,47 @@ tile_panel.cancel_site.description = Removes the blueprint: the materials alread
 blueprint.clear_first = To clear first: {0}
 # {0} = recipe, {1} = percentage (e.g. 40%)
 station.in_progress = In progress: {0} ({1} done)
-station.bills = Bills (worked through from the top)
-station.no_bills = No bills yet: add one below
-# {0} = position in the list, {1} = recipe
-station.bill = {0}. {1}
 station.bill.remove = Remove
-station.add_bill = Add a bill:
+station.add_bill = Add a bill
+station.add_bill.description = Bills are worked through from the top
+station.add_bill.full = Too many bills: remove one first
+station.recipe.work = Work
+station.recipe.knowledge = Knowledge
+station.recipe.ingredients = Ingredients
+station.recipe.time = Time
+station.recipe.result = Makes
+station.recipe.weight = Weight
+station.recipe.bulk = Bulk
+station.recipe.none = None
+# {0} = knowledge, {1} = the level needed
+recipe.knowledge_level = {0} (level {1})
+# Tooltip of the knowledge a recipe needs. {0} = level needed, {1} = level from which a knowledge unlocks anything
+recipe.tip.unlock = Needed to make this: level {0} (a knowledge unlocks nothing below level {1})
+# {0} = speed at the first level, {1} = that level, {2} = speed at the last level, {3} = that level
+recipe.tip.speed = Work speed: ×{0} at level {1}, ×{2} at level {3}
+# {0} = number at the first level, {1} = that level, {2} = number at the last level, {3} = that level
+recipe.tip.count = Made each time: {0} at level {1}, {2} at level {3}
+# {4} = how many points above the quality of the material it can never go
+recipe.tip.quality = Quality of what is made: about {0} at level {1}, about {2} at level {3}, never more than {4} above the quality of the material
+recipe.tip.condition = Condition of what is made: about {0} at level {1}, about {2} at level {3}
+# {0} = chance of failure at the first level, {1} = that level, {2} = level from which it never fails
+recipe.tip.failure = Chance of failure: {0} at level {1}, none from level {2}
+bill.pause = Pause this bill
+bill.resume = Resume this bill
+bill.heading.tools = Tools
+bill.heading.worker = Assigned colonist
+bill.heading.choice = Ingredient choice
+bill.no_tool = No tool needed
+bill.worker.anyone = Anyone
+# {0} = knowledge
+bill.worker.level = Colonist skilled in {0}
+bill.worker.specific = A specific colonist
+bill.worker.nobody = Nobody
 station.warning.unknown_recipe = Nobody knows this recipe well enough
 # {0} = tool (or "tool or tool", see recipe.either)
 station.warning.tool = Missing tool: {0}
 station.warning.no_input = No suitable material lying in the colony
-station.warning.no_worker_level = Nobody who knows this recipe has a level in this range
+station.warning.no_worker = Nobody who knows this recipe fits the workers chosen
 station.warning.fire_out = The fire is out: these bills wait for it to burn
 station.hearth.fuel = Fuel: {0} of {1}
 station.hearth.burning = Burning, fuel for {0} h
@@ -685,7 +711,6 @@ bill.progress.done = Completed: {0}
 bill.progress.in_colony = {0} in the colony
 # {0} = products in stock (stored, or on their way to storage)
 bill.progress.in_stock = {0} in stock
-bill.paused = Paused
 # How far from the station inputs are looked for, between -/+ buttons.
 # {0} = distance in tiles
 bill.input_radius = Ingredients within {0} tiles
@@ -695,6 +720,10 @@ bill.input_radius = Ingredients within {0} tiles
 bill.levels = Worker level {0} to {1}
 
 # Units. {0} = number
+unit.hours = {0} h
+unit.minutes = {0} min
+# {0} = hours, {1} = minutes
+unit.hours_minutes = {0} h {1} min
 unit.kg = {0} kg
 unit.percent = {0}%
 unit.celsius = {0} °C

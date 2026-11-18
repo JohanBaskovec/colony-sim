@@ -372,7 +372,8 @@ on the side that does the least harm (see `core/tree.h`).
 
 - A **bill** = a recipe + a repeat mode (*do N times*, *until N in the colony*,
   *forever*) + filters: ingredient search radius (default 30 tiles), minimum
-  ingredient quality, allowed workers (level range in the recipe's knowledge).
+  ingredient quality, allowed workers (anyone, a level range in the recipe's
+  knowledge, or one given settler).
 - A crafter fetches all the ingredients, works at the station for the recipe's
   work amount, and drops the products on the station's output tile; haulers
   take them to storage.

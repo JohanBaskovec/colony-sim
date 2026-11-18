@@ -252,11 +252,11 @@ bool colonist_can_craft(const Colonist *colonist, RecipeType recipe)
            recipe_doable_at(recipe, colonist_knowledge_level(colonist, def->knowledge));
 }
 
-bool colonist_level_fits_bill(const Colonist *colonist, const Bill *bill)
+bool colonist_fits_bill(const Colonist *colonist, EntityId id, const Bill *bill)
 {
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
     return def != NULL &&
-           bill_accepts_level(bill, colonist_knowledge_level(colonist, def->knowledge));
+           bill_accepts_worker(bill, colonist_knowledge_level(colonist, def->knowledge), id);
 }
 
 int colonist_tool_index(const Colonist *colonist, ItemTypeMask types)
@@ -2262,7 +2262,8 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
         const RecipeDef *def = recipe_def(recipe);
         if ((in_progress && station->work_recipe != recipe) || (!in_progress && bill->paused) ||
             (recipe_needs_fire(recipe) && !station->burning) ||
-            !colonist_can_craft(colonist, recipe) || !colonist_level_fits_bill(colonist, bill) ||
+            !colonist_can_craft(colonist, recipe) ||
+            !colonist_fits_bill(colonist, context->self, bill) ||
             !bill_wants_more(bill, stored_count(context, bill)) ||
             (!context->no_tools && !tools_obtainable(colonist, context, def))) {
             continue;
@@ -2599,7 +2600,7 @@ static bool station_job_still_valid(const Colonist *colonist, const ColonistCont
     /* A craft under way is finished, even if the bill changed meanwhile. */
     return colonist->station_phase == STATION_JOB_WORK ||
            (bill_wants_more(bill, stored_count(context, bill)) &&
-            colonist_level_fits_bill(colonist, bill) &&
+            colonist_fits_bill(colonist, context->self, bill) &&
             (!bill->paused || station->work_input.count > 0));
 }
 

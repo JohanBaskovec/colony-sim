@@ -623,6 +623,43 @@ static void test_missing_tools_and_inputs_are_reported(void)
     game_shutdown(&game);
 }
 
+static void test_bill_specific_worker(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *first = spawn_worker(&game, 10, 10);
+    Colonist *second = spawn_worker(&game, 10, 14);
+    REQUIRE(first != NULL && second != NULL);
+    colonist_set_knowledge_level(first, KNOWLEDGE_STONE_KNAPPING, 70.0);
+    colonist_set_knowledge_level(second, KNOWLEDGE_STONE_KNAPPING, 70.0);
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 12);
+    items_add(&game.items, 18, 12, 0, stones(ITEM_FLINT, 4, TEST_QUALITY_FINE));
+    items_add(&game.items, 18, 13, 0, stones(ITEM_COBBLE, 2, TEST_QUALITY_FINE));
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
+    REQUIRE(bill >= 0);
+    workstation_set_bill_mode(&game.workstations, index, bill, BILL_FOREVER);
+    const Bill *flakes = &workstation_get(&game.workstations, index)->bills[bill];
+
+    /* Only the second one: the first leaves it alone though it knows the recipe. */
+    EntityId first_id = game_colonist_id_at(&game, (uint32_t)(first - game.colonists));
+    EntityId second_id = game_colonist_id_at(&game, (uint32_t)(second - game.colonists));
+    CHECK(workstation_set_bill_worker(&game.workstations, index, bill, BILL_WORKER_SPECIFIC,
+                                      second_id));
+    CHECK(colonist_fits_bill(second, second_id, flakes) &&
+          !colonist_fits_bill(first, first_id, flakes));
+    CHECK(game_bill_has_worker(&game, flakes));
+    run_ticks(&game, 3000);
+    CHECK(game.items.totals[ITEM_FLAKE] > 0);
+    CHECK(colonist_knowledge_level(second, KNOWLEDGE_STONE_KNAPPING) > 70.0);
+    CHECK(colonist_knowledge_level(first, KNOWLEDGE_STONE_KNAPPING) == 70.0);
+
+    /* A settler nobody knows: the bill waits. */
+    CHECK(workstation_set_bill_worker(&game.workstations, index, bill, BILL_WORKER_SPECIFIC,
+                                      (EntityId){COLONIST_MAX - 1, 1}));
+    CHECK(!game_bill_has_worker(&game, flakes));
+    game_shutdown(&game);
+}
+
 static void test_bill_worker_levels(void)
 {
     Game game;
@@ -641,6 +678,7 @@ static void test_bill_worker_levels(void)
     const Bill *flakes = &workstation_get(&game.workstations, index)->bills[bill];
 
     /* Nobody in the range: the bill waits. */
+    workstation_set_bill_worker(&game.workstations, index, bill, BILL_WORKER_LEVEL, ENTITY_NONE);
     workstation_set_bill_min_level(&game.workstations, index, bill, 95);
     CHECK(game_recipe_known(&game, RECIPE_FLAKES));
     CHECK(!game_bill_has_worker(&game, flakes));
@@ -937,6 +975,7 @@ int main(void)
     RUN_TEST(test_removing_a_colonist_drops_its_tools);
     RUN_TEST(test_missing_tools_and_inputs_are_reported);
     RUN_TEST(test_bill_worker_levels);
+    RUN_TEST(test_bill_specific_worker);
     RUN_TEST(test_paused_bill);
     RUN_TEST(test_bill_input_radius);
     RUN_TEST(test_stock_counts_stored_and_waiting_items);

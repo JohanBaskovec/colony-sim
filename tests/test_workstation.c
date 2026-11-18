@@ -133,17 +133,24 @@ static void test_bills(void)
     CHECK(workstation_set_bill_mode(&stations, knapping, bill, BILL_UNTIL_STOCK));
     CHECK(!workstation_set_bill_mode(&stations, knapping, bill, BILL_MODE_COUNT));
 
-    /* Worker levels: everyone by default; each bound stays within the other. */
+    /* Workers: anyone by default; the level range only counts in its mode, each bound stays
+     * within the other. */
+    const EntityId ann = {3, 1}, bob = {4, 1};
+    CHECK_EQ_INT(flakes->worker, BILL_WORKER_ANYONE);
     CHECK_EQ_INT(flakes->min_level, BILL_LEVEL_MIN);
     CHECK_EQ_INT(flakes->max_level, BILL_LEVEL_MAX);
-    CHECK(bill_accepts_level(flakes, 50.0) && bill_accepts_level(flakes, 100.0));
+    CHECK(entity_id_is_none(flakes->colonist));
+    CHECK(bill_accepts_worker(flakes, 50.0, ann) && bill_accepts_worker(flakes, 100.0, bob));
     uint64_t before = workstations_hash(&stations, HASH_FNV1A64_INIT);
     CHECK(workstation_set_bill_min_level(&stations, knapping, bill, 60));
     CHECK(workstations_hash(&stations, HASH_FNV1A64_INIT) != before);
     CHECK(workstation_set_bill_max_level(&stations, knapping, bill, 80));
-    CHECK(!bill_accepts_level(flakes, 59.9));
-    CHECK(bill_accepts_level(flakes, 60.0) && bill_accepts_level(flakes, 80.0));
-    CHECK(!bill_accepts_level(flakes, 80.5));
+    CHECK(bill_accepts_worker(flakes, 59.9, ann)); /* Not in level mode yet. */
+    CHECK(workstation_set_bill_worker(&stations, knapping, bill, BILL_WORKER_LEVEL, ENTITY_NONE));
+    CHECK_EQ_INT(flakes->worker, BILL_WORKER_LEVEL);
+    CHECK(!bill_accepts_worker(flakes, 59.9, ann));
+    CHECK(bill_accepts_worker(flakes, 60.0, ann) && bill_accepts_worker(flakes, 80.0, bob));
+    CHECK(!bill_accepts_worker(flakes, 80.5, ann));
     CHECK(workstation_set_bill_min_level(&stations, knapping, bill, 90));
     CHECK_EQ_INT(flakes->min_level, 80);
     CHECK(workstation_set_bill_max_level(&stations, knapping, bill, 10));
@@ -153,6 +160,26 @@ static void test_bills(void)
     CHECK(workstation_set_bill_min_level(&stations, knapping, bill, -5));
     CHECK_EQ_INT(flakes->min_level, BILL_LEVEL_MIN);
     CHECK(!workstation_set_bill_min_level(&stations, knapping, 7, 10));
+
+    /* One settler: nobody else, and the choice needs a settler. */
+    CHECK(
+        !workstation_set_bill_worker(&stations, knapping, bill, BILL_WORKER_SPECIFIC, ENTITY_NONE));
+    CHECK_EQ_INT(flakes->worker, BILL_WORKER_LEVEL);
+    CHECK(workstation_set_bill_worker(&stations, knapping, bill, BILL_WORKER_ANYONE, ENTITY_NONE));
+    before = workstations_hash(&stations, HASH_FNV1A64_INIT);
+    CHECK(workstation_set_bill_worker(&stations, knapping, bill, BILL_WORKER_SPECIFIC, ann));
+    CHECK(bill_accepts_worker(flakes, 0.0, ann));
+    CHECK(!bill_accepts_worker(flakes, 100.0, bob));
+    CHECK(workstations_hash(&stations, HASH_FNV1A64_INIT) != before);
+    CHECK(workstation_set_bill_worker(&stations, knapping, bill, BILL_WORKER_SPECIFIC, bob));
+    CHECK(!bill_accepts_worker(flakes, 100.0, ann) && bill_accepts_worker(flakes, 0.0, bob));
+    /* Back to anyone: the settler is forgotten, and the hash is the one of a fresh bill. */
+    CHECK(workstation_set_bill_worker(&stations, knapping, bill, BILL_WORKER_ANYONE, bob));
+    CHECK(entity_id_is_none(flakes->colonist));
+    CHECK(bill_accepts_worker(flakes, 0.0, ann));
+    CHECK(!workstation_set_bill_worker(&stations, knapping, bill, BILL_WORKER_COUNT, ann));
+    CHECK(!workstation_set_bill_worker(&stations, knapping, 7, BILL_WORKER_ANYONE, ann));
+    CHECK_EQ_UINT(workstations_hash(&stations, HASH_FNV1A64_INIT), before);
 
     /* Pause and input radius. */
     CHECK(!flakes->paused);

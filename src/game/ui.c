@@ -162,6 +162,13 @@ bool ui_capture_click(Ui *ui, float x, float y, int button)
 bool ui_scroll(Ui *ui, float x, float y, float steps)
 {
     int owner = owner_at(ui, x, y);
+    if (owner == UI_POPUP_OWNER && ui->popup_id != 0) {
+        int most = SDL_max(0, ui->popup_count - ui->popup_visible);
+        int rows = (int)SDL_lroundf(steps * 2.0f);
+        ui->popup_scroll =
+            SDL_clamp(ui->popup_scroll - (rows != 0 ? rows : (steps > 0 ? 1 : -1)), 0, most);
+        return true;
+    }
     UiWindow *window = find_window(ui, owner);
     if (window != NULL && window->max_scroll > 0.0f) {
         window->scroll -= steps * UI_SCROLL_STEP_ROWS * ui_row_height(ui);
@@ -305,7 +312,11 @@ static SDL_FPoint window_begin(Ui *ui, int id, const char *title, float content_
     if (dock != NULL) {
         max_visible = dock->bottom - dock->top - title_h - 2.0f * ui->theme.window_padding;
     }
-    window->visible_height = SDL_max(ui_row_height(ui), SDL_min(content_height, max_visible));
+    float wanted = content_height;
+    if (dock != NULL) {
+        wanted = SDL_max(wanted, dock->height - title_h - 2.0f * ui->theme.window_padding);
+    }
+    window->visible_height = SDL_max(ui_row_height(ui), SDL_min(wanted, max_visible));
     window->max_scroll = SDL_max(0.0f, content_height - window->visible_height);
     float scrollbar =
         window->max_scroll > 0.0f ? ui->theme.scrollbar_width + ui->theme.window_padding : 0.0f;
@@ -531,6 +542,7 @@ int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int 
         ui->popup_id = id;
         ui->popup_count = count;
         ui->popup_selected = selected;
+        ui->popup_scroll = -1;
         for (int i = 0; i < count; i++) {
             SDL_strlcpy(ui->popup_options[i], options[i], UI_POPUP_OPTION_SIZE);
         }
@@ -558,7 +570,17 @@ void ui_draw_popup(Ui *ui)
                         ui_text_width(ui, ui->popup_options[i]) + 2.0f * ui->theme.button_padding);
     }
     width = SDL_ceilf(width);
-    float height = row * (float)ui->popup_count;
+    /* As many options as fit on the roomier side of the button. */
+    float below = ui->screen_height - (ui->popup_anchor.y + ui->popup_anchor.h);
+    float above = ui->popup_anchor.y;
+    int visible = SDL_clamp((int)(SDL_max(below, above) / row), 1, ui->popup_count);
+    int most = ui->popup_count - visible;
+    if (ui->popup_scroll < 0) {
+        ui->popup_scroll = SDL_clamp(ui->popup_selected - visible / 2, 0, most);
+    }
+    ui->popup_scroll = SDL_clamp(ui->popup_scroll, 0, most);
+    ui->popup_visible = visible;
+    float height = row * (float)visible;
     float x = SDL_min(ui->popup_anchor.x, ui->screen_width - width);
     float y = ui->popup_anchor.y + ui->popup_anchor.h;
     if (y + height > ui->screen_height) {
@@ -570,8 +592,9 @@ void ui_draw_popup(Ui *ui)
     fill(ui, box, COLOR(THEME_WINDOW));
     float line = (float)text_line_height(ui->text);
     int picked = -1;
-    for (int i = 0; i < ui->popup_count; i++) {
-        SDL_FRect item = {box.x, box.y + row * (float)i, box.w, row};
+    for (int shown = 0; shown < visible; shown++) {
+        int i = ui->popup_scroll + shown;
+        SDL_FRect item = {box.x, box.y + row * (float)shown, box.w, row};
         if (ui_hovered(ui, item)) {
             fill(ui, item, COLOR(THEME_BUTTON_HOVER));
         } else if (i == ui->popup_selected) {

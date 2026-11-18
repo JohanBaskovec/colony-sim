@@ -88,7 +88,7 @@ void work_panel_draw(App *app)
     /* A main window: docked on the bottom bar at the left edge. */
     ScreenLayout layout;
     layout_screen(ui, &layout);
-    UiDock dock = {0.0f, layout.bar_top, colonist_bar_bottom(app) + ui->theme.margin, 0.0f};
+    UiDock dock = {0.0f, layout.bar_top, colonist_bar_bottom(app) + ui->theme.margin, 0.0f, 0.0f};
     bool open = true;
     SDL_FPoint origin = ui_window_begin_docked(ui, APP_WINDOW_WORK, title, width,
                                                (float)(shown + 1 + note_count) * row, &dock, &open);

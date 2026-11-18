@@ -79,7 +79,7 @@ bool inspector_box(App *app, InspectorKind kind, const char *title, UiRowsFn row
     ScreenLayout layout;
     layout_screen(&app->ui, &layout);
     UiDock dock = {0.0f, layout.bar_top, dock_top(app) + tab_row_height(app),
-                   SDL_max(app->ui.theme.inspector_width, tabs_width)};
+                   SDL_max(app->ui.theme.inspector_width, tabs_width), 0.0f};
     BoxRows box = {rows, userdata};
     bool open = true;
     ui_layout_docked(&app->ui, APP_WINDOW_INSPECTOR, title, &dock, box_rows, &box, &open);
@@ -120,12 +120,24 @@ int inspector_tabs(App *app, const char *const *labels, int count)
 void inspector_tab_panel(App *app, UiRowsFn rows, void *userdata)
 {
     SDL_FRect box = ui_window_rect(&app->ui, APP_WINDOW_INSPECTOR);
-    UiDock dock = {box.x, box.y - tab_row_height(app), dock_top(app), box.w};
+    float bottom = box.y - tab_row_height(app);
+    /* As tall as the screen allows: the windows docked at its right are too. */
+    UiDock dock = {box.x, bottom, dock_top(app), box.w, bottom - dock_top(app)};
     bool open = true;
     ui_layout_docked(&app->ui, APP_WINDOW_INSPECTOR_TAB, NULL, &dock, rows, userdata, &open);
     if (!open) {
         app->inspector_tab = -1;
     }
+}
+
+void inspector_side_window(App *app, int id, int after, const char *title, UiRowsFn rows,
+                           void *userdata, bool *open)
+{
+    SDL_FRect previous = ui_window_rect(&app->ui, after);
+    float bottom = previous.y + previous.h;
+    UiDock dock = {previous.x + previous.w + app->ui.theme.gap, bottom, dock_top(app), 0.0f,
+                   bottom - dock_top(app)};
+    ui_layout_docked(&app->ui, id, title, &dock, rows, userdata, open);
 }
 
 bool inspector_action(App *app, int slot, bool lit, SDL_FRect *icon, const char *const *lines,

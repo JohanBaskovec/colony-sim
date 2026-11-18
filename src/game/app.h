@@ -92,16 +92,22 @@ typedef enum AppTool {
 #define APP_ZONE_REMOVE 1
 
 /* Windows (game/ui.h ids). */
+/* Two left clicks this close (milliseconds) on the same thing make a double click. */
+#define APP_DOUBLE_CLICK_MS 400
+
 typedef enum AppWindow {
     APP_WINDOW_NONE,
-    APP_WINDOW_INSPECTOR,     /* Summary of the selection (game/inspector.h). */
-    APP_WINDOW_INSPECTOR_TAB, /* The inspector's open tab. */
-    APP_WINDOW_WORK,          /* Work priorities grid. */
-    APP_WINDOW_LOG,           /* Colony log (game/log_window.h). */
-    APP_WINDOW_HELP,          /* Controls. */
-    APP_WINDOW_DEBUG,         /* Debug menu (cheats). */
-    APP_WINDOW_ITEMS,         /* Items menu (debug). */
-    APP_WINDOW_ANIMALS,       /* Animals menu (debug). */
+    APP_WINDOW_INSPECTOR,      /* Summary of the selection (game/inspector.h). */
+    APP_WINDOW_INSPECTOR_TAB,  /* The inspector's open tab. */
+    APP_WINDOW_STATION_ADD,    /* Recipes to add to a workstation's bills (game/station_panel.h). */
+    APP_WINDOW_STATION_RECIPE, /* What the recipe picked in that list needs and makes. */
+    APP_WINDOW_STATION_BILL,   /* The details of the bill picked in the Bills tab. */
+    APP_WINDOW_WORK,           /* Work priorities grid. */
+    APP_WINDOW_LOG,            /* Colony log (game/log_window.h). */
+    APP_WINDOW_HELP,           /* Controls. */
+    APP_WINDOW_DEBUG,          /* Debug menu (cheats). */
+    APP_WINDOW_ITEMS,          /* Items menu (debug). */
+    APP_WINDOW_ANIMALS,        /* Animals menu (debug). */
     APP_WINDOW_GAME_MENU,
     APP_WINDOW_SETTINGS, /* Settings (game/settings_window.h), from the game menu. */
     APP_WINDOW_COUNT
@@ -218,6 +224,21 @@ typedef struct App {
     int inspector_tab;
     int inspector_tab_count;
     float inspector_tabs_width; /* What the tab buttons need, drawn last frame (0: none). */
+    /* Workstation panel (game/station_panel.h): the list of recipes to add as
+     * a bill is open, the recipe picked in it (station_recipe, when
+     * station_recipe_picked) and the last click on a recipe, to tell a double
+     * click (adds it). */
+    bool station_add_open;
+    /* The bill picked in the Bills tab (station_bill, when station_bill_picked):
+     * its details open instead of that list. The number of the station all
+     * this is about: the state is forgotten for another. */
+    bool station_bill_picked;
+    int station_bill;
+    int station_panel_number;
+    bool station_recipe_picked;
+    int station_recipe;
+    int station_click_recipe;
+    Uint64 station_click_ms;
     /* Colonist bar (game/colonist_bar.h): the last click on an entry, to
      * tell a double click (centers the view on the colonist). */
     EntityId bar_last_click;

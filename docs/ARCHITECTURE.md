@@ -118,7 +118,7 @@ simulation:
 | `inspector`    | Bottom left: summary box of the selection, tabs opening a panel above it, action buttons beside it; dispatches to the panels below (colonists: `hud`) |
 | `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (condition sliders, filters); build another, delete |
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
-| `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills and (hearths) Fire tabs; forbid, build another, delete |
+| `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills (the active bills, and two windows docked to the right of the tab: the recipes to add, and the details of the one picked) and (hearths) Fire tabs; forbid, build another, delete |
 | `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd, health |
 | `health_panel` | The health of a settler (its Health tab) or an animal as table rows: the state, blood, bleeding, pain, abilities, injuries with tooltips |
 | `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
@@ -1343,9 +1343,12 @@ craft in progress.
 A built station carries up to `WORKSTATION_BILL_MAX` **bills**: a recipe
 (`core/recipe.h`), a mode (do N times, until N in stock, forever), the input
 types allowed, how far inputs are searched for (`input_radius`, a travel cost
-from the station, 80 by default), a range of worker levels in the recipe's
-knowledge (`min_level`..`max_level`, inclusive, 0..100 by default: beginners
-for cheap things, masters for the best ones) and a pause flag.
+from the station, 80 by default), who may work on it (`BillWorker`: anyone,
+settlers whose level in the recipe's knowledge lies in `min_level`..`max_level`
+(inclusive, 0..100 by default: beginners for cheap things, masters for the
+best ones), or one settler, `Bill.colonist`, a generational handle that no
+longer matches anyone once the settler is gone) and a pause flag. The worker
+fields are hashed only when the bill is not for anyone.
 
 "Until N" counts `Game.stock`: items lying in a stockpile that accepts them,
 plus those on their way there, lying on a workstation tile (where products
@@ -1361,7 +1364,7 @@ refreshes it every frame.
 
 Bills are worked through from the top: a crafter takes the first one that
 is not paused, wants more, whose recipe it knows at a level the bill accepts
-(`colonist_level_fits_bill()`), whose tools can be had (carried, or lying
+(`colonist_fits_bill()`), whose tools can be had (carried, or lying
 somewhere) and with an allowed input lying in the colony. Inputs are searched
 within the bill's radius of the station, in the recipe's
 preference order (flint first for flakes, a cobble first for a chopper).

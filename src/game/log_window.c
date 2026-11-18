@@ -64,7 +64,7 @@ void log_window_draw(App *app)
     ScreenLayout screen;
     layout_screen(&app->ui, &screen);
     UiDock dock = {0.0f, screen.bar_top, colonist_bar_bottom(app) + app->ui.theme.margin,
-                   app->ui.theme.inspector_width};
+                   app->ui.theme.inspector_width, 0.0f};
     LogRows rows = {&app->game};
     bool open = true;
     ui_layout_docked(&app->ui, APP_WINDOW_LOG, tr("log.title"), &dock, log_rows, &rows, &open);
