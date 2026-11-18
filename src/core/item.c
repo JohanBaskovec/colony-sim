@@ -72,7 +72,14 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_BRANCHES] = {DEF("branches", N_("item.branches"), ITEM_CATEGORY_RESOURCES, 1.5f, 10.0f,
                            0.0f, 20, true, true)},
     [ITEM_TWIGS] = {DEF("twigs", N_("item.twigs"), ITEM_CATEGORY_RESOURCES, 0.2f, 2.0f, 0.0f, 10,
-                        false, true)},
+                        false, true),
+                    .wets_into = ITEM_WET_TWIGS},
+    /* Twigs from wet ground, out in the rain or green from a felled crown:
+     * heavier with their water, they burn on a fire but do not catch a
+     * flame (core/hearth.h), and dry in a day out of the rain. */
+    [ITEM_WET_TWIGS] = {DEF("wet_twigs", N_("item.wet_twigs"), ITEM_CATEGORY_RESOURCES, 0.3f, 2.0f,
+                            0.0f, 10, false, true),
+                        .transforms_into = ITEM_TWIGS, .transform_hours = 24},
     [ITEM_FRESH_GRASS] = {DEF("fresh_grass", N_("item.fresh_grass"), ITEM_CATEGORY_RESOURCES, 2.5f,
                               25.0f, 0.0f, 10, false, true),
                           .transforms_into = ITEM_GRASS, .transform_hours = 72},
@@ -625,10 +632,9 @@ int items_drop(Items *items, const Map *map, int x, int y, int z, ItemStack batc
 }
 
 /* Turns a stack that has reached its transformation into the new type. */
-static void transform(Items *items, ItemStack *stack)
+static void transform(Items *items, ItemStack *stack, ItemType to)
 {
     ItemType from = (ItemType)stack->type;
-    ItemType to = ITEM_DEFS[from].transforms_into;
     int percent = item_stack_hit_points_percent(*stack);
     int quality = ITEM_DEFS[from].has_quality ? stack->quality : ITEM_QUALITY_BEST;
     int count = stack->count;
@@ -684,7 +690,8 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
             continue;
         }
         const ItemDef *def = &ITEM_DEFS[stack->type];
-        if (def->rot_days <= 0.0f && def->transforms_into == ITEM_NONE) {
+        if (def->rot_days <= 0.0f && def->transforms_into == ITEM_NONE &&
+            def->wets_into == ITEM_NONE) {
             continue;
         }
         ItemConditions here =
@@ -693,12 +700,19 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
             transformed += rot(items, stack, hours, here.rot_rate);
             continue;
         }
-        if (!here.dries) {
+        if (!here.dries) { /* Out in the rain: what gets wet does. */
+            if (def->wets_into != ITEM_NONE) {
+                transform(items, stack, def->wets_into);
+                transformed++;
+            }
+            continue;
+        }
+        if (def->transforms_into == ITEM_NONE) {
             continue;
         }
         int progress = (int)stack->progress + hours;
         if (progress >= ITEM_DEFS[stack->type].transform_hours) {
-            transform(items, stack);
+            transform(items, stack, def->transforms_into);
             transformed++;
         } else {
             stack->progress = (uint16_t)progress;

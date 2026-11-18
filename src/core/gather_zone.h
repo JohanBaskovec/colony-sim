@@ -438,6 +438,10 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
  */
 bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
                           GatherJob job, float work, double level, Rng *rng);
+/* The same, with twigs picked up wet (ITEM_WET_TWIGS) when `wet_litter`
+ * (soil_litter_wet()). */
+bool gather_zone_add_work_wet(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
+                              GatherJob job, float work, double level, Rng *rng, bool wet_litter);
 
 /* Work done on the tile's current job, 0..1. */
 float gather_zone_progress_fraction(const GatherZones *zones, const Map *map, int x, int y, int z);

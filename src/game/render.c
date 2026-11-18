@@ -1274,9 +1274,13 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         break;
     }
     case ITEM_BRANCHES:
-    case ITEM_TWIGS: {
-        /* Long thin branches, or a pile of short twigs. */
-        bool twigs = type == ITEM_TWIGS;
+    case ITEM_TWIGS:
+    case ITEM_WET_TWIGS: {
+        /* Long thin branches, or a pile of short twigs (darker when wet). */
+        bool twigs = type != ITEM_BRANCHES;
+        SDL_Color color = type == ITEM_WET_TWIGS ? shade(TWIG_COLOR, -45)
+                          : twigs                ? TWIG_COLOR
+                                                 : BRANCH_COLOR;
         int count = twigs ? 4 : 3;
         float length = twigs ? 0.36f : 0.68f;
         float thickness = SDL_max(1.0f, floorf(h * (twigs ? 0.08f : 0.11f)));
@@ -1285,7 +1289,7 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
             SDL_FRect stick = {tile->x + floorf(w * x),
                                tile->y + floorf(h * (0.3f + 0.15f * (float)i)), floorf(w * length),
                                thickness};
-            fill_outlined(renderer, stick, shade(twigs ? TWIG_COLOR : BRANCH_COLOR, i * 10));
+            fill_outlined(renderer, stick, shade(color, i * 10));
         }
         break;
     }

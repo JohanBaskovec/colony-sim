@@ -76,6 +76,7 @@
 #include "core/region.h"
 #include "core/reservation.h"
 #include "core/rng.h"
+#include "core/soil.h"
 #include "core/stockpile.h"
 #include "core/temperature.h"
 #include "core/tool.h"
@@ -293,6 +294,8 @@ typedef enum StationJobPhase {
 typedef enum LightStep {
     LIGHT_FETCH_FUEL,   /* Walking to fuel (`fetch`) for a hearth with none in it. */
     LIGHT_BRING_FUEL,   /* Walking to the hearth with the fuel to put in it. */
+    LIGHT_FETCH_LAY,    /* Walking to dry twigs or a branch (`fetch`) to lay in the hearth. */
+    LIGHT_BRING_LAY,    /* Walking to the hearth with it to lay it. */
     LIGHT_FETCH_TINDER, /* Walking to dry grass (`fetch`) for lighting by friction. */
     LIGHT_TO_SOURCE,    /* Walking to a burning hearth (`fire_source`) for embers. */
     LIGHT_EMBERS,       /* Wrapping embers in grass beside it. */
@@ -516,6 +519,9 @@ typedef struct ColonistContext {
     /* How fast settlers out under the open sky get wet now, per hour
      * (weather_wetting(), 0 when nothing falls). */
     float wetting;
+    /* The water in the ground (Game.soil): twigs picked from wet ground come
+     * wet. NULL: only the rain wets them. */
+    const Soil *soil;
     /* Debug cheats (GameDebug): crafts need no input, no tool is needed. */
     bool free_crafts;
     bool no_tools;

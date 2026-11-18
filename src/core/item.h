@@ -35,6 +35,7 @@ typedef enum ItemType {
     ITEM_COBBLE,
     ITEM_BRANCHES,
     ITEM_TWIGS,
+    ITEM_WET_TWIGS, /* Picked up from wet ground, or rained on: they dry into twigs. */
     ITEM_FRESH_GRASS,
     ITEM_GRASS,
     ITEM_FLINT,
@@ -125,9 +126,13 @@ typedef struct ItemDef {
     bool has_quality;   /* false: always ITEM_QUALITY_BEST. */
     bool damageable;    /* false: always at max_hit_points. */
     /* Items lying on a tile turn into `transforms_into` after
-     * `transform_hours` (fresh grass dries); ITEM_NONE: never. */
+     * `transform_hours` out of the rain (fresh grass and wet twigs dry);
+     * ITEM_NONE: never. */
     ItemType transforms_into;
     int transform_hours;
+    /* Items lying out in the rain turn into `wets_into` (dry twigs get wet);
+     * ITEM_NONE: never. */
+    ItemType wets_into;
     /* Days a pristine item lasts lying in the open at
      * ITEM_ROT_REFERENCE_CELSIUS before it has rotted away; 0: never rots.
      * A type never both rots and transforms. */
@@ -313,7 +318,9 @@ typedef ItemConditions (*ItemConditionsFn)(const void *context, size_t tile);
  * the conditions `conditions` gives for each tile (NULL: rot at ×1, drying):
  * stacks of types that transform progress where they dry, and those that
  * reach their type's transform_hours turn into the new type (same count,
- * same hit points in percent, quality kept when both types have one); stacks
+ * same hit points in percent, quality kept when both types have one); where
+ * nothing dries (out in the rain), types that get wet turn into their
+ * `wets_into` type at once (dry twigs into wet ones); stacks
  * of types that rot lose hit points and are gone when none are left. Returns
  * the number of stacks that transformed or rotted away.
  */

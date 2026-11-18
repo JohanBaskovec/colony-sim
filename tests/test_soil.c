@@ -362,6 +362,32 @@ static void test_moisture_in_words(void)
     map_free(&map);
 }
 
+/* Twigs come wet from wet ground, or from under the open sky in the rain. */
+static void test_wet_litter(void)
+{
+    Map map;
+    flat_map(&map, 2);
+    map_set_structure(&map, 7, 6, 0, STRUCTURE_WALL); /* Holds the roof up. */
+    map_set_roof(&map, 6, 6, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    Soil soil;
+    REQUIRE(soil_init(&soil, &map, 0.8f));
+    const SoilDef *def = soil_def(TERRAIN_SOIL);
+    CHECK(!soil_litter_wet(&soil, &map, 5, 5, 0, false));
+    CHECK(soil_litter_wet(&soil, &map, 5, 5, 0, true));   /* Rained on. */
+    CHECK(!soil_litter_wet(&soil, &map, 6, 6, 0, true));  /* Under the roof. */
+    CHECK(!soil_litter_wet(NULL, &map, 5, 5, 0, false));  /* No soil: the rain only. */
+    CHECK(!soil_litter_wet(&soil, &map, -1, 5, 0, true)); /* Off the map. */
+    /* Wet ground, even under a roof and with no rain. */
+    soil.water[map_index(&map, 5, 5, 0)] = soil_water_for(def, SOIL_MOIST_UP_TO + 0.2f);
+    soil.water[map_index(&map, 6, 6, 0)] = soil_water_for(def, SOIL_MOISTURE_SATURATED);
+    CHECK(soil_litter_wet(&soil, &map, 5, 5, 0, false));
+    CHECK(soil_litter_wet(&soil, &map, 6, 6, 0, false));
+    soil.water[map_index(&map, 5, 5, 0)] = soil_water_for(def, SOIL_MOIST_UP_TO - 0.2f);
+    CHECK(!soil_litter_wet(&soil, &map, 5, 5, 0, false));
+    soil_free(&soil);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_buckets_by_terrain);
@@ -375,6 +401,7 @@ int main(void)
     RUN_TEST(test_dew_at_night);
     RUN_TEST(test_air_humidity);
     RUN_TEST(test_moisture_in_words);
+    RUN_TEST(test_wet_litter);
     RUN_TEST(test_hash_follows_the_water);
     return test_summary();
 }

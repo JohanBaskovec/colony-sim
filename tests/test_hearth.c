@@ -99,6 +99,14 @@ static const Workstation *hearth(const Game *game, int index)
     return workstation_get_const(&game->workstations, index);
 }
 
+/* What a fire is laid with (dry twigs, branches), lying at (x, y) and the
+ * tile east of it. */
+static void kindling_at(Game *game, int x, int y, int count)
+{
+    items_add(&game->items, x, y, 0, item_stack_make(ITEM_TWIGS, count, 0, 0));
+    items_add(&game->items, x + 1, y, 0, item_stack_make(ITEM_BRANCHES, count, 0, 0));
+}
+
 /* The first stack of a type on the map (count 0 when none). */
 static ItemStack find_item(const Game *game, ItemType type)
 {
@@ -131,6 +139,11 @@ static void test_fuel(void)
           (ITEM_TINDER_TYPES & ITEM_TYPE_BIT(ITEM_MOSS)));
     CHECK_NEAR(hearth_fuel_value(ITEM_COBBLE), 0.0, 1e-9);
     CHECK_NEAR(hearth_fuel_value(ITEM_NONE), 0.0, 1e-9);
+    /* Wet twigs burn as much as dry ones (the water gives no heat), but are
+     * left to dry by default. */
+    CHECK_NEAR(hearth_fuel_value(ITEM_WET_TWIGS), hearth_fuel_value(ITEM_TWIGS), 1e-6);
+    CHECK(HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(ITEM_WET_TWIGS));
+    CHECK(!(HEARTH_DEFAULT_FUEL_TYPES & ITEM_TYPE_BIT(ITEM_WET_TWIGS)));
 
     Game game;
     REQUIRE(init_flat_game(&game));
@@ -388,6 +401,7 @@ static void test_lighting_by_friction(void)
     REQUIRE(novice != NULL);
     int index = built_hearth(&game, 14, 10, 5.0f);
     items_add(&game.items, 18, 13, 0, item_stack_make(ITEM_GRASS, 3, 0, 0));
+    kindling_at(&game, 6, 14, 3);
     CHECK(!colonist_can_light(novice));
     run_ticks(&game, 1500, true);
     CHECK(!hearth(&game, index)->burning);
@@ -400,6 +414,10 @@ static void test_lighting_by_friction(void)
     run_ticks(&game, 2500, true);
     CHECK(hearth(&game, index)->burning);
     CHECK_EQ_INT((int)game.items.totals[ITEM_GRASS], 2);
+    /* Laid with one handful of twigs and one branch, gone in the flame. */
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 2);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], 2);
+    CHECK_EQ_UINT(hearth(&game, index)->laid, 0);
     CHECK(master->task != TASK_LIGHT);
     CHECK_EQ_INT(master->carried.count, 0);
     CHECK(colonist_knowledge_gain_today(master, KNOWLEDGE_FIRE, KNOWLEDGE_SOURCE_DOING,
@@ -417,26 +435,28 @@ static void test_lighter_brings_fuel_to_an_empty_hearth(void)
     items_add(&game.items, 18, 13, 0, item_stack_make(ITEM_GRASS, 3, 0, 0));
     CHECK(hearth_needs_kindling(hearth(&game, index)));
 
-    /* No fuel anywhere: nothing to do. */
+    /* Nothing to lay in it: nothing to do. */
     run_ticks(&game, 600, true);
     CHECK(!hearth(&game, index)->burning);
     CHECK(lighter->task != TASK_LIGHT);
 
-    /* Fuel lying somewhere: it is fetched, put in, and the fire lit, by the
-     * one who lights fires (no hauler here). */
+    /* Twigs and branches lying somewhere: the fire laid, the other branches
+     * put in, and the fire lit, by the one who lights fires (no hauler here). */
     items_add(&game.items, 6, 16, 0, item_stack_make(ITEM_BRANCHES, 4, 0, 0));
+    items_add(&game.items, 8, 18, 0, item_stack_make(ITEM_TWIGS, 1, 0, 0));
     run_ticks(&game, 4000, true);
     const Workstation *station = hearth(&game, index);
     CHECK(station->burning);
-    CHECK(station->fuel > 0.0f);
+    CHECK(station->fuel > HEARTH_LIGHT_FUEL_MIN);
     CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_GRASS], 2);
     CHECK_EQ_INT(lighter->carried.count, 0);
     CHECK(lighter->task != TASK_LIGHT);
 
-    /* Fuel of a type the hearth does not take is left where it lies. */
+    /* No branch left to lay in another: it stays cold, the twigs lying
+     * where they are. */
     int other = built_hearth(&game, 30, 30, 0.0f);
-    REQUIRE(hearth_set_fuel_type(&game.workstations, other, ITEM_TWIGS, false));
     items_add(&game.items, 26, 30, 0, item_stack_make(ITEM_TWIGS, 5, 0, 0));
     items_add(&game.items, 31, 33, 0, item_stack_make(ITEM_GRASS, 3, 0, 0));
     run_ticks(&game, 2500, true);
@@ -455,6 +475,7 @@ static void test_failed_friction_burns_the_tinder(void)
     REQUIRE(lighter != NULL);
     int index = built_hearth(&game, 14, 10, 20.0f);
     items_add(&game.items, 18, 13, 0, item_stack_make(ITEM_GRASS, 6, 0, 0));
+    kindling_at(&game, 6, 14, 1);
     int attempts = 0;
     for (int i = 0; i < 40 && !hearth(&game, index)->burning; i++) {
         run_ticks(&game, 500, true);
@@ -463,6 +484,93 @@ static void test_failed_friction_burns_the_tinder(void)
     }
     CHECK(attempts >= 1);
     CHECK(hearth(&game, index)->burning || game.items.totals[ITEM_GRASS] == 0);
+    game_shutdown(&game);
+}
+
+static void test_laying_the_fire(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Workstations *stations = &game.workstations;
+    int index = built_hearth(&game, 14, 10, 1.0f);
+    REQUIRE(index >= 0);
+    Workstation *station = workstation_get(stations, index);
+    CHECK_EQ_INT(hearth_next_to_lay(station), HEARTH_KINDLING);
+    CHECK(!hearth_laid(station, HEARTH_KINDLING) && !hearth_laid(station, HEARTH_BRANCH));
+    CHECK(hearth_wants_fuel_to_light(station));
+    /* Dry twigs first: not a branch, not wet twigs. */
+    CHECK(!hearth_lay(stations, index, ITEM_BRANCHES));
+    CHECK(!hearth_lay(stations, index, ITEM_WET_TWIGS));
+    CHECK(hearth_lay(stations, index, ITEM_TWIGS));
+    CHECK(hearth_laid(station, HEARTH_KINDLING));
+    CHECK_NEAR(station->fuel, 1.0f + hearth_fuel_value(ITEM_TWIGS), 1e-5);
+    CHECK_EQ_INT(hearth_next_to_lay(station), HEARTH_BRANCH);
+    CHECK(!hearth_lay(stations, index, ITEM_TWIGS));
+    CHECK(hearth_lay(stations, index, ITEM_BRANCHES));
+    CHECK_EQ_INT(hearth_next_to_lay(station), HEARTH_INGREDIENT_COUNT);
+    CHECK(!hearth_lay(stations, index, ITEM_BRANCHES));
+    CHECK(hearth_ingredient_types(HEARTH_TINDER) & ITEM_TYPE_BIT(ITEM_GRASS));
+    CHECK(!(hearth_ingredient_types(HEARTH_KINDLING) & ITEM_TYPE_BIT(ITEM_WET_TWIGS)));
+    /* It catches: laid again next time. */
+    CHECK(hearth_light(stations, index));
+    CHECK_EQ_UINT(station->laid, 0);
+    CHECK_EQ_INT(hearth_next_to_lay(station), HEARTH_KINDLING);
+    CHECK(!hearth_wants_fuel_to_light(station));
+    game_shutdown(&game);
+}
+
+static void test_no_lighting_without_kindling(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *lighter = spawn_settler(&game, 10, 10, 100.0, WORK_FIRE);
+    REQUIRE(lighter != NULL);
+    int index = built_hearth(&game, 14, 10, 5.0f);
+    items_add(&game.items, 18, 13, 0, item_stack_make(ITEM_GRASS, 3, 0, 0));
+    /* Branches but only wet twigs: nothing catches. */
+    items_add(&game.items, 6, 14, 0, item_stack_make(ITEM_BRANCHES, 2, 0, 0));
+    items_add(&game.items, 6, 16, 0, item_stack_make(ITEM_WET_TWIGS, 2, 0, 0));
+    run_ticks(&game, 2000, true);
+    CHECK(!hearth(&game, index)->burning);
+    CHECK(lighter->task != TASK_LIGHT);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_GRASS], 3);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_WET_TWIGS], 2);
+    /* Dry twigs come: laid, then lit. */
+    items_add(&game.items, 8, 16, 0, item_stack_make(ITEM_TWIGS, 2, 0, 0));
+    run_ticks(&game, 3000, true);
+    CHECK(hearth(&game, index)->burning);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 1);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], 1);
+    game_shutdown(&game);
+}
+
+static void test_what_lighting_lacks(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int index = built_hearth(&game, 14, 10, 5.0f);
+    const Workstation *station = hearth(&game, index);
+    for (HearthIngredient i = 0; i < HEARTH_INGREDIENT_COUNT; i++) {
+        CHECK(game_hearth_lacks(&game, station, i));
+    }
+    /* Wet twigs are no kindling. */
+    items_add(&game.items, 4, 4, 0, item_stack_make(ITEM_WET_TWIGS, 2, 0, 0));
+    CHECK(game_hearth_lacks(&game, station, HEARTH_KINDLING));
+    items_add(&game.items, 5, 4, 0, item_stack_make(ITEM_TWIGS, 1, 0, 0));
+    items_add(&game.items, 6, 4, 0, item_stack_make(ITEM_MOSS, 1, 0, 0));
+    CHECK(!game_hearth_lacks(&game, station, HEARTH_KINDLING));
+    CHECK(!game_hearth_lacks(&game, station, HEARTH_TINDER));
+    CHECK(game_hearth_lacks(&game, station, HEARTH_BRANCH));
+    /* Laid: no longer lacking, though none lies anywhere. */
+    REQUIRE(hearth_lay(&game.workstations, index, ITEM_TWIGS));
+    REQUIRE(hearth_lay(&game.workstations, index, ITEM_BRANCHES));
+    CHECK(!game_hearth_lacks(&game, station, HEARTH_BRANCH));
+    /* Embers from another fire stand for tinder. */
+    items_remove(&game.items, 6, 4, 0, 1);
+    CHECK(game_hearth_lacks(&game, station, HEARTH_TINDER));
+    int other = built_hearth(&game, 30, 30, 5.0f);
+    REQUIRE(hearth_light(&game.workstations, other));
+    CHECK(!game_hearth_lacks(&game, station, HEARTH_TINDER));
     game_shutdown(&game);
 }
 
@@ -475,6 +583,7 @@ static void test_lighting_with_embers(void)
     int source = built_hearth(&game, 10, 10, HEARTH_FUEL_CAPACITY);
     REQUIRE(hearth_light(&game.workstations, source));
     int index = built_hearth(&game, 18, 10, 5.0f);
+    kindling_at(&game, 20, 14, 1);
     /* No grass anywhere: embers from the burning fire. */
     run_ticks(&game, 800, true);
     CHECK(hearth(&game, index)->burning);
@@ -592,9 +701,14 @@ static void test_rain_puts_out_fires_in_the_open(void)
     CHECK(hearth(&game, roofed)->burning);
     CHECK_NEAR(hearth(&game, roofed)->soaked, 0.0f, 1e-6);
 
-    /* Nobody lights it in the rain; it is lit once the rain stops. */
+    /* Nobody lights it in the rain; it is lit once the rain stops (laid
+     * again with twigs and a branch kept dry under a roof). */
     Colonist *lighter = spawn_settler(&game, 12, 12, 75.0, WORK_FIRE);
     REQUIRE(lighter != NULL);
+    map_set_structure(&game.map, 24, 12, 0, STRUCTURE_WALL);
+    map_set_roof(&game.map, 22, 12, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    map_set_roof(&game.map, 23, 12, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    kindling_at(&game, 22, 12, 1);
     run_rainy_ticks(&game, 600, WEATHER_STORM);
     CHECK(!hearth(&game, open)->burning);
     CHECK(lighter->task != TASK_LIGHT);
@@ -736,6 +850,9 @@ int main(void)
     RUN_TEST(test_lighting_by_friction);
     RUN_TEST(test_lighter_brings_fuel_to_an_empty_hearth);
     RUN_TEST(test_failed_friction_burns_the_tinder);
+    RUN_TEST(test_laying_the_fire);
+    RUN_TEST(test_no_lighting_without_kindling);
+    RUN_TEST(test_what_lighting_lacks);
     RUN_TEST(test_lighting_with_embers);
     RUN_TEST(test_embers_do_not_go_far);
     RUN_TEST(test_fire_hardening);

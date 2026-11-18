@@ -2156,9 +2156,12 @@ static void work(Colonist *colonist, const ColonistContext *context)
                       work_with_tool(colonist, context, gather_job_def(job)->tool_use) *
                       assistance(colonist, context);
         /* Products depend on the level before this tick's learning. */
-        bool done = gather_zone_add_work(context->gather_zones, context->map, context->items,
-                                         target.x, target.y, target.z, job, speed,
-                                         colonist_work_level(colonist, knowledge), context->rng);
+        bool wet =
+            job == GATHER_JOB_TWIGS && soil_litter_wet(context->soil, context->map, target.x,
+                                                       target.y, target.z, context->wetting > 0.0f);
+        bool done = gather_zone_add_work_wet(
+            context->gather_zones, context->map, context->items, target.x, target.y, target.z, job,
+            speed, colonist_work_level(colonist, knowledge), context->rng, wet);
         colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
         /* After each job, choose again: a zone may keep a settler busy
          * forever, and a more important job may be waiting. */
@@ -3630,9 +3633,15 @@ bool colonist_can_light(const Colonist *colonist)
  * some lying somewhere to bring it first. */
 static bool light_wanted(const ColonistContext *context, const Workstation *station)
 {
-    return hearth_needs_lighting(station) ||
-           (hearth_needs_kindling(station) &&
-            items_exist(context->plan_items, fuel_wanted_types(station), 1));
+    /* What is to be laid in it must lie somewhere. */
+    for (HearthIngredient lay = HEARTH_KINDLING; lay <= HEARTH_BRANCH; lay++) {
+        if (!hearth_laid(station, lay) &&
+            !items_exist(context->plan_items, hearth_ingredient_types(lay), 1)) {
+            return false;
+        }
+    }
+    /* An empty hearth too: what is laid in it burns. */
+    return hearth_needs_lighting(station) || hearth_needs_kindling(station);
 }
 
 static bool hearth_to_light(const ColonistContext *context, const Workstation *station)
@@ -3684,9 +3693,17 @@ static bool carries_fuel(const Colonist *colonist, const Workstation *station)
            (station->fuel_types & ITEM_TYPE_BIT(colonist->carried.type)) != 0;
 }
 
-/* Next step of lighting: fuel for a hearth with none, then to the hearth with embers or tinder in
- * hand, else embers from a burning fire close to it, else dry grass for friction. False when none
- * can be had. */
+/* Whether the colonist holds what the hearth still needs laid in it. */
+static bool carries_to_lay(const Colonist *colonist, const Workstation *station)
+{
+    HearthIngredient next = hearth_next_to_lay(station);
+    return colonist->carried.count > 0 && next != HEARTH_INGREDIENT_COUNT &&
+           (hearth_ingredient_types(next) & ITEM_TYPE_BIT(colonist->carried.type)) != 0;
+}
+
+/* Next step of lighting: the fire laid (dry twigs, a branch), fuel for a hearth with little, then
+ * to the hearth with embers or tinder in hand, else embers from a burning fire close to it, else
+ * dry grass for friction. False when none can be had. */
 static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
 {
     const Workstation *station = job_station(colonist, context);
@@ -3695,11 +3712,24 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
     }
     TilePos hearth = station_tile(station);
     colonist->light_progress = 0.0f;
-    if (station->fuel <= 0.0f) { /* Nothing to burn: fuel first. */
-        if (carries_fuel(colonist, station)) {
-            colonist->light_step = LIGHT_BRING_FUEL;
+    HearthIngredient lay = hearth_next_to_lay(station);
+    if (lay != HEARTH_INGREDIENT_COUNT) { /* The fire laid first (it is fuel too). */
+        if (carries_to_lay(colonist, station)) {
+            colonist->light_step = LIGHT_BRING_LAY;
             return go_next_to(colonist, context, hearth);
         }
+        FetchSearch wanted = fetch_search(context, hearth_ingredient_types(lay));
+        colonist->light_step = LIGHT_FETCH_LAY;
+        return start_fetch(colonist, context, &wanted, hearth, COLONIST_WORK_SEARCH_MAX_COST,
+                           false);
+    }
+    if (hearth_wants_fuel_to_light(station) && carries_fuel(colonist, station)) {
+        colonist->light_step = LIGHT_BRING_FUEL;
+        return go_next_to(colonist, context, hearth);
+    }
+    if (hearth_wants_fuel_to_light(station) &&
+        items_exist(context->plan_items, fuel_wanted_types(station), 1)) {
+        /* Little to burn: more fuel. */
         FetchSearch fuel = fetch_search(context, fuel_wanted_types(station));
         colonist->light_step = LIGHT_FETCH_FUEL;
         return start_fetch(colonist, context, &fuel, hearth, COLONIST_WORK_SEARCH_MAX_COST, false);
@@ -3816,6 +3846,35 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
         colonist->carried = (ItemStack){.type = ITEM_NONE};
         break; /* Fuel in: on to the fire. */
     }
+    case LIGHT_FETCH_LAY: {
+        ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
+        HearthIngredient next = hearth_next_to_lay(station);
+        if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
+            next == HEARTH_INGREDIENT_COUNT ||
+            !(hearth_ingredient_types(next) & ITEM_TYPE_BIT(stack.type))) {
+            set_idle(colonist, context, 0);
+            return;
+        }
+        items_remove(context->items, colonist->x, colonist->y, colonist->z, 1);
+        colonist->carried = stack;
+        colonist->carried.count = 1;
+        reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
+                                  context->worker_id);
+        break; /* Then to the hearth. */
+    }
+    case LIGHT_BRING_LAY:
+        if (!carries_to_lay(colonist, station) ||
+            !next_to(colonist->x, colonist->y, colonist->z, hearth)) {
+            break; /* Plan again. */
+        }
+        if (hearth_lay(context->workstations, colonist->station,
+                       (ItemType)colonist->carried.type)) {
+            colonist->carried.count--;
+            if (colonist->carried.count == 0) {
+                colonist->carried = (ItemStack){.type = ITEM_NONE};
+            }
+        }
+        break; /* Laid: the next one, or the flame. */
     case LIGHT_FETCH_TINDER: {
         ItemStack stack = items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||

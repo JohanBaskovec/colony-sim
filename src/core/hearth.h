@@ -6,12 +6,16 @@
  * burns HEARTH_BURN_PER_HOUR and goes out once its fuel is gone. While the
  * player keeps it burning (the default), haulers bring the fuel types the
  * player allows once it falls below HEARTH_REFUEL_BELOW of the capacity, and
- * a settler who knows fire lights it when it has fuel and no fire (bringing
- * it fuel first when it has none and nobody is on the way with any): with
- * embers wrapped in grass at a burning fire within HEARTH_FIRE_CARRY_MAX_COST
- * of it (they go out after HEARTH_EMBER_TICKS), else by friction, an attempt
- * taking HEARTH_FRICTION_WORK and a handful of dry grass as tinder, which
- * succeeds more often the better the settler knows fire. A burning hearth
+ * a settler who knows fire lights it when it has no fire. A fire is laid
+ * before it is lit: a handful of dry twigs as kindling (wet ones do not
+ * catch) and a branch for the flame to take to (HearthIngredient), which go
+ * to its fuel; the lighter brings more fuel first when it holds less than
+ * HEARTH_LIGHT_FUEL_MIN and some lies in the colony. Then
+ * the flame: with embers wrapped in grass at a burning fire within
+ * HEARTH_FIRE_CARRY_MAX_COST of it (they go out after HEARTH_EMBER_TICKS),
+ * else by friction, an attempt taking HEARTH_FRICTION_WORK and a handful of
+ * tinder (dry grass, moss or bracken), which succeeds more often the better
+ * the settler knows fire. A burning hearth
  * lights the tiles around it at night, and is where spears are hardened,
  * roots roasted and fireside stories told (core/colonist.h). Rain and snow
  * soak a fire under the open sky until it goes out (its fuel kept), and
@@ -32,6 +36,7 @@
 #define HEARTH_FUEL_CAPACITY 20.0f
 #define HEARTH_BURN_PER_HOUR 2.5f
 #define HEARTH_REFUEL_BELOW 0.5f
+#define HEARTH_LIGHT_FUEL_MIN 3.0f
 #define HEARTH_FIRE_CARRY_MAX_COST 60.0f
 #define HEARTH_EMBER_WORK 50.0f
 #define HEARTH_EMBER_TICKS (4 * TICKS_PER_HOUR)
@@ -101,11 +106,46 @@ void hearth_release_fuel(Workstations *workstations, int index, int number, floa
 /* Whether a settler should light it: kept burning, fuel in it, no fire. */
 bool hearth_needs_lighting(const Workstation *station);
 
-/* Whether a settler who lights fires should first bring it fuel: kept
- * burning, no fire, no fuel in it and none on its way. */
+/* Whether a hearth kept burning has no fire, no fuel in it and none on its
+ * way (a settler who lights fires lays the fire in it, then brings fuel). */
 bool hearth_needs_kindling(const Workstation *station);
 
-/* Lights the hearth at `index` if it has fuel. Returns whether it burns. */
+/* Whether a settler about to light it should bring fuel first: no fire, less
+ * than HEARTH_LIGHT_FUEL_MIN in it and on its way. */
+bool hearth_wants_fuel_to_light(const Workstation *station);
+
+/* What lighting a hearth takes: tinder for the spark (unless embers are
+ * brought from a burning fire), kindling and a branch laid in it first. */
+typedef enum HearthIngredient {
+    HEARTH_TINDER,
+    HEARTH_KINDLING,
+    HEARTH_BRANCH,
+    HEARTH_INGREDIENT_COUNT
+} HearthIngredient;
+
+#define HEARTH_KINDLING_TYPES ITEM_TYPE_BIT(ITEM_TWIGS)
+#define HEARTH_BRANCH_TYPES ITEM_TYPE_BIT(ITEM_BRANCHES)
+/* Workstation.laid bits. */
+#define HEARTH_LAID_KINDLING 1u
+#define HEARTH_LAID_BRANCH 2u
+
+/* The item types an ingredient can be. */
+ItemTypeMask hearth_ingredient_types(HearthIngredient ingredient);
+
+/* Whether the ingredient is laid in the hearth (tinder never is: it is used
+ * up at the attempt). */
+bool hearth_laid(const Workstation *station, HearthIngredient ingredient);
+
+/* The first of kindling and branch still to lay, HEARTH_INGREDIENT_COUNT when
+ * both are in. */
+HearthIngredient hearth_next_to_lay(const Workstation *station);
+
+/* Lays one item of `type` in the hearth at `index` as the ingredient it is
+ * still missing (its weight goes to the fuel). False when it is not one. */
+bool hearth_lay(Workstations *workstations, int index, ItemType type);
+
+/* Lights the hearth at `index` if it has fuel (what was laid in it burns).
+ * Returns whether it burns. */
 bool hearth_light(Workstations *workstations, int index);
 
 /* Changing what the player wants of a hearth. */

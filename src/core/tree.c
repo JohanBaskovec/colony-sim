@@ -697,7 +697,8 @@ TreeFall tree_fell(Map *map, Items *items, int x, int y, int z, ItemStack wood)
         }
     }
     ItemStack branches = item_stack_pristine(ITEM_BRANCHES, tree_crown_yield(plant, ITEM_BRANCHES));
-    ItemStack twigs = item_stack_pristine(ITEM_TWIGS, tree_crown_yield(plant, ITEM_TWIGS));
+    /* Green twigs, wet with sap: they dry like those picked from wet ground. */
+    ItemStack twigs = item_stack_pristine(ITEM_WET_TWIGS, tree_crown_yield(plant, ITEM_TWIGS));
     branches.quality = twigs.quality = ITEM_QUALITY_STANDARD;
     tree_clear(map, items, x, y, z);
     map_remove_plant(map, x, y, z);

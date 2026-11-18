@@ -425,7 +425,8 @@ near the hearth; go hunting.
 | `cobble`      | Cobble        | Resources | 1.0  | 1.5  | 666   | 200 | yes     | no         | Gather stones (§4.2). Today's `stone` item, renamed. |
 | `flint`       | Flint nodule  | Resources | 1.0  | 1.5  | 666   | 150 | yes     | no         | Gather stones on a flint patch (§4.2). |
 | `branches`    | Branches      | Resources | 1.5  | 10   | 100   | 20  | yes     | yes        | Gather branches. |
-| `twigs`       | Twigs (handful) | Resources | 0.2 | 2   | 500   | 10  | no      | yes        | Gather twigs. |
+| `twigs`       | Dry twigs (handful) | Resources | 0.2 | 2   | 500   | 10  | no      | yes        | Gather twigs. Kindling: a fire is laid with a handful before it is lit. In the rain, they get wet. |
+| `wet_twigs`   | Wet twigs (handful) | Resources | 0.3 | 2   | 500   | 10  | no      | yes        | Twigs picked up from wet ground or in the rain, green from a felled tree: dry into twigs in 24 hours; burn, but catch no flame (no kindling). |
 | `fresh_grass` | Fresh grass (armful) | Resources | 2.5 | 25 | 40  | 10  | no      | yes        | Cut grass. Dries into dry grass. |
 | `grass`       | Dry grass (armful) | Resources | 1.0 | 25 | 40   | 15  | no      | yes        | Fresh grass left to dry. |
 | `wood`        | Wood (log)    | Resources | 7.0  | 20   | 50    | 60  | yes     | yes        | Felling trees (needs an axe: not at the start). |
@@ -1046,8 +1047,10 @@ Suggested order, each step with its tests:
      needs a passable side to work from, and room for listeners);
    - embers are a flag on the settler (`ember_ticks`), not an
      `ember_bundle` item, and are dropped with the lighting job; friction
-     takes a handful of dry grass as tinder (no twigs), burnt whether the
-     fire takes or not;
+     takes a handful of dry grass as tinder, burnt whether the fire takes or
+     not; before the flame the fire is laid with a handful of dry twigs
+     (kindling) and a branch, fetched by the lighter and kept in the hearth
+     until it catches (*done*, docs/ARCHITECTURE.md "Hearths and fire");
    - no torch yet: it has no use before night work, and embers already
      carry fire; no "burn now" setting (unticking "keep it burning" lets
      the fire burn out);

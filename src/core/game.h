@@ -16,6 +16,7 @@
 #include "core/dirt.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
+#include "core/hearth.h"
 #include "core/item_move.h"
 #include "core/known.h"
 #include "core/map.h"
@@ -626,6 +627,11 @@ ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe);
  * With GameDebug.free_crafts: whether the bill allows some input; with
  * GameDebug.no_tools, no tool is taken from it. */
 bool game_bill_has_input(const Game *game, const Bill *bill);
+
+/* Whether what lighting a hearth takes is lacking: a kindling or branch not
+ * laid in it of which none lies in the colony, tinder of which none lies in
+ * the colony while no other fire burns to take embers from. */
+bool game_hearth_lacks(const Game *game, const Workstation *station, HearthIngredient ingredient);
 
 /* Whether a workstation may be placed on a tile: not on a structure, where
  * construction_can_replace() and workstation_can_place() say yes (a site

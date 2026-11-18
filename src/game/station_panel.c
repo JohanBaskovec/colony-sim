@@ -50,22 +50,25 @@ typedef struct Action {
     EntityId colonist; /* ACTION_SET_COLONIST. */
 } Action;
 
-/* "Flint or cobble", "Hand axe and sharp flake": one or two names joined. */
-static void join_names(char *out, size_t size, const char *key, const char *names[2], int count)
+/* "Flint or cobble", "Hand axe and sharp flake": one or two names joined
+ * (three: "Dry grass, moss or bracken", recipe.either_three). */
+static void join_names(char *out, size_t size, const char *key, const char *names[3], int count)
 {
-    if (count >= 2) {
+    if (count >= 3) {
+        TR_FORMAT(out, size, tr("recipe.either_three"), names[0], names[1], names[2]);
+    } else if (count == 2) {
         TR_FORMAT(out, size, tr(key), names[0], names[1]);
     } else {
         SDL_strlcpy(out, count == 1 ? names[0] : "", size);
     }
 }
 
-/* Names of the item types of a mask, joined with "or". */
+/* Names of the item types of a mask (three at most), joined with "or". */
 static void either_names(char *out, size_t size, ItemTypeMask types)
 {
-    const char *names[2] = {NULL, NULL};
+    const char *names[3] = {NULL, NULL, NULL};
     int count = 0;
-    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && count < 2; type++) {
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && count < 3; type++) {
         if (types & ITEM_TYPE_BIT(type)) {
             names[count++] = tr(item_def((ItemType)type)->name_key);
         }
@@ -79,7 +82,7 @@ static void ingredient_text(char *out, size_t size, RecipeType recipe, ItemTypeM
 {
     const RecipeDef *def = recipe_def(recipe);
     char names[TEXT_SIZE], count[16], text[TEXT_SIZE];
-    const char *inputs[2] = {NULL, NULL};
+    const char *inputs[3] = {NULL, NULL, NULL};
     int input_count = 0;
     for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
         if (def->inputs[i] != ITEM_NONE && (allowed & ITEM_TYPE_BIT(def->inputs[i]))) {
@@ -114,7 +117,7 @@ static int tool_texts(RecipeType recipe, char texts[RECIPE_TOOL_MAX][TEXT_SIZE])
 /* All the tools, joined: "Cobble and hand axe". */
 static void tools_text(char *out, size_t size, char texts[RECIPE_TOOL_MAX][TEXT_SIZE], int count)
 {
-    const char *slots[RECIPE_TOOL_MAX] = {texts[0], texts[1]};
+    const char *slots[3] = {texts[0], texts[1], NULL};
     join_names(out, size, "recipe.both", slots, count);
 }
 
@@ -250,14 +253,15 @@ static void bill_inputs_row(UiLayout *layout, const Bill *bill, int index, Actio
     layout->y += layout->row;
 }
 
-/* A row of text, in the color of a problem when `bad`; the tooltip then tells
- * what it is. */
-static void problem_row(UiLayout *layout, const char *text, bool bad, bool dim, const char *tooltip)
+/* A row of text, `indent` from the left, in the color of a problem when
+ * `bad`; the tooltip then tells what it is. */
+static void problem_row_at(UiLayout *layout, float indent, const char *text, bool bad, bool dim,
+                           const char *tooltip)
 {
     Ui *ui = layout->ui;
-    ui_layout_measure(layout, ui_text_width(ui, text));
+    ui_layout_measure(layout, indent + ui_text_width(ui, text));
     if (layout->draw) {
-        float x = layout->x, y = layout->y + layout->text_offset;
+        float x = layout->x + indent, y = layout->y + layout->text_offset;
         if (bad) {
             ui_label_colored(ui, text, x, y, THEME_VALUE_LOW);
         } else if (dim) {
@@ -271,6 +275,11 @@ static void problem_row(UiLayout *layout, const char *text, bool bad, bool dim, 
         }
     }
     layout->y += layout->row;
+}
+
+static void problem_row(UiLayout *layout, const char *text, bool bad, bool dim, const char *tooltip)
+{
+    problem_row_at(layout, 0.0f, text, bad, dim, tooltip);
 }
 
 /* Two bars: the pause button's icon. */
@@ -641,10 +650,44 @@ static void hearth_status_rows(UiLayout *layout, const Game *game, const Worksta
     }
 }
 
-/* The hearth's settings: keep it burning, its fuels, what is taught by it. */
+/* What lighting a hearth takes, one row per ingredient ("Kindling: dry
+ * twigs ×1"): "in place" once laid, red with a tooltip when none lies in the
+ * colony (as a bill's ingredients). */
+static void hearth_lighting_rows(UiLayout *layout, const Game *game, const Workstation *station)
+{
+    static const char *const LABELS[HEARTH_INGREDIENT_COUNT] = {
+        [HEARTH_TINDER] = N_("station.hearth.tinder"),
+        [HEARTH_KINDLING] = N_("station.hearth.kindling"),
+        [HEARTH_BRANCH] = N_("station.hearth.branch"),
+    };
+    ui_layout_label(layout, tr("station.hearth.to_light"), 0.0f, false);
+    for (int i = 0; i < HEARTH_INGREDIENT_COUNT; i++) {
+        HearthIngredient ingredient = (HearthIngredient)i;
+        char names[TEXT_SIZE], count[16], items[TEXT_SIZE], text[TEXT_SIZE];
+        either_names(names, sizeof(names), hearth_ingredient_types(ingredient));
+        tr_integer(count, sizeof(count), 1);
+        TR_FORMAT(items, sizeof(items), tr("recipe.ingredient"), names, count);
+        TR_FORMAT(text, sizeof(text), tr(LABELS[i]), items);
+        bool laid = hearth_laid(station, ingredient);
+        if (laid) {
+            SDL_strlcpy(items, text, sizeof(items));
+            TR_FORMAT(text, sizeof(text), tr("station.hearth.in_place"), items);
+        }
+        problem_row_at(layout, INDENT, text, game_hearth_lacks(game, station, ingredient), laid,
+                       tr("station.warning.no_input"));
+    }
+    ui_layout_label(layout, tr("station.hearth.embers_hint"), INDENT, true);
+    layout->y += GAP;
+}
+
+/* The hearth's settings: what lighting it takes while it is out, keep it
+ * burning, its fuels, what is taught by it. */
 static void hearth_settings_rows(UiLayout *layout, const Game *game, const Workstation *station,
                                  Action *action)
 {
+    if (!station->burning) {
+        hearth_lighting_rows(layout, game, station);
+    }
     if (checkbox_row(layout, 0.0f, tr("station.hearth.keep_burning"), station->keep_burning)) {
         *action = (Action){.type = ACTION_TOGGLE_KEEP_BURNING};
     }

@@ -144,6 +144,11 @@ float soil_moisture(const Soil *soil, const Map *map, int x, int y, int z);
 #define SOIL_SOAKED_FROM 1.8f
 const char *soil_moisture_key(const Soil *soil, const Map *map, int x, int y, int z);
 
+/* Twigs picked up from a tile come wet (ITEM_WET_TWIGS) when its ground is
+ * wet (above SOIL_MOIST_UP_TO: after rain, by the water), or when rain or
+ * snow (`raining`) falls on it under the open sky. */
+bool soil_litter_wet(const Soil *soil, const Map *map, int x, int y, int z, bool raining);
+
 /* The moisture a tile's bank gives it at `distance` tiles from open water
  * (0: no water near), and that target in mm of a bucket. */
 float soil_bank_moisture(int distance);

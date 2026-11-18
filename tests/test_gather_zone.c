@@ -776,6 +776,12 @@ static void test_branches_twigs_grass_and_nuts(void)
     CHECK_EQ_INT(map_litter(&map, 1, 1, 0, ITEM_BRANCHES), 0);
     CHECK_EQ_INT((int)items.totals[ITEM_BRANCHES], branches);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, 0, ALL_JOBS), GATHER_JOB_TWIGS);
+    /* Twigs picked from wet ground come wet, and count as twigs. */
+    CHECK(gather_zone_add_work_wet(&zones, &map, &items, 1, 1, 0, GATHER_JOB_TWIGS, 1e6f, 60.0,
+                                   NULL, true));
+    CHECK_EQ_INT((int)items.totals[ITEM_WET_TWIGS], 1);
+    CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], 0);
+    CHECK_EQ_INT((int)gather_resource_count(GATHER_TWIGS, items.totals), 1);
 
     /* Branches and twigs come before the nuts lying on the same tile; the nuts
      * are taken all at once too, the work growing with their number. */

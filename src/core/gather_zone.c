@@ -60,8 +60,8 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
                           ONE(ITEM_ROSE_HIPS), GATHER_JOB_HARVEST, true, FOOD},
     [GATHER_BRANCHES] = {"branches", N_("gather_zone.resource.branches"), ITEM_BRANCHES,
                          ONE(ITEM_BRANCHES), GATHER_JOB_BRANCHES, true, WOOD},
-    [GATHER_TWIGS] = {"twigs", N_("gather_zone.resource.twigs"), ITEM_TWIGS, ONE(ITEM_TWIGS),
-                      GATHER_JOB_TWIGS, true, WOOD},
+    [GATHER_TWIGS] = {"twigs", N_("gather_zone.resource.twigs"), ITEM_TWIGS,
+                      ONE(ITEM_TWIGS) | ONE(ITEM_WET_TWIGS), GATHER_JOB_TWIGS, true, WOOD},
     [GATHER_GRASS] = {"grass", N_("gather_zone.resource.grass"), ITEM_FRESH_GRASS,
                       ONE(ITEM_FRESH_GRASS) | ONE(ITEM_GRASS), GATHER_JOB_CUT_GRASS, true, FIBRES},
     [GATHER_MOSS] = {"moss", N_("gather_zone.resource.moss"), ITEM_MOSS, ONE(ITEM_MOSS),
@@ -1261,11 +1261,14 @@ static ItemType complete(Map *map, int x, int y, int z, GatherJob job, GatherRes
     return item;
 }
 
-/* The resource an item counts as for its job's orders (GATHER_RESOURCE_COUNT: none). */
+/* The resource an item counts as for its job's orders (GATHER_RESOURCE_COUNT: none):
+ * wet twigs count as twigs. */
 static GatherResource resource_of(GatherJob job, ItemType item)
 {
     for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
-        if (RESOURCE_DEFS[r].job == job && RESOURCE_DEFS[r].item == item) {
+        if (RESOURCE_DEFS[r].job == job &&
+            (RESOURCE_DEFS[r].item == item ||
+             (item == ITEM_WET_TWIGS && RESOURCE_DEFS[r].item == ITEM_TWIGS))) {
             return (GatherResource)r;
         }
     }
@@ -1274,6 +1277,12 @@ static GatherResource resource_of(GatherJob job, ItemType item)
 
 bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
                           GatherJob job, float work, double level, Rng *rng)
+{
+    return gather_zone_add_work_wet(zones, map, items, x, y, z, job, work, level, rng, false);
+}
+
+bool gather_zone_add_work_wet(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
+                              GatherJob job, float work, double level, Rng *rng, bool wet_litter)
 {
     int zone_index = gather_zone_at(zones, x, y, z);
     if (!gather_job_available(zones, map, x, y, z, job)) {
@@ -1297,6 +1306,9 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
         count = plant_yield(map, x, y, z, job);
     } else {
         item = complete(map, x, y, z, job, zone->wanted, rng, &count);
+        if (item == ITEM_TWIGS && wet_litter) {
+            item = ITEM_WET_TWIGS;
+        }
     }
     GatherResource resource = resource_of(job, item);
     bool wanted = resource != GATHER_RESOURCE_COUNT && count > 0 &&

@@ -1683,15 +1683,30 @@ searches backed off on that revision look again.
   ends in any way (`release_fuel()` in `begin_task()`; ignored if the
   station was replaced, its `number` changed).
 - **Lighting** (`TASK_LIGHT`, the `WORK_FIRE` work type, Fire 50 or more)
-  reserves the hearth (`RESERVATION_FIRE`) and goes through `LightStep`s:
-  first, for a hearth with no fuel and none on its way
-  (`hearth_needs_kindling()`, and some fuel the hearth takes lying
-  somewhere), fuel fetched and put in (`LIGHT_FETCH_FUEL`,
-  `LIGHT_BRING_FUEL`: no hauler needed); then embers from another burning hearth within `HEARTH_FIRE_CARRY_MAX_COST`
+  reserves the hearth (`RESERVATION_FIRE`) and goes through `LightStep`s.
+  It is only taken up while what is to be laid lies somewhere. First the
+  fire is laid (`HearthIngredient`, `Workstation.laid` bits): a handful of
+  dry twigs as kindling, then a branch, each fetched and laid on its own
+  (`LIGHT_FETCH_LAY`, `LIGHT_BRING_LAY`, `hearth_lay()`: its weight goes to
+  the fuel). Wet twigs (`ITEM_WET_TWIGS`) do not count as kindling: twigs
+  are picked up wet from ground wetter than `SOIL_MOIST_UP_TO` or in the
+  rain (`soil_litter_wet()`, `gather_zone_add_work_wet()`), a felled tree's
+  are green, dry twigs lying in the rain get wet (`ItemDef.wets_into`), and
+  wet ones dry in a day like fresh grass. `hearth_light()` clears `laid`:
+  every lighting lays the fire again. Then, below `HEARTH_LIGHT_FUEL_MIN`
+  in it and on its way (`hearth_wants_fuel_to_light()`) with some fuel the
+  hearth takes lying somewhere, fuel fetched and put in
+  (`LIGHT_FETCH_FUEL`, `LIGHT_BRING_FUEL`: no hauler needed). Then embers
+  from another burning hearth within `HEARTH_FIRE_CARRY_MAX_COST`
   of it (`Colonist.ember_ticks`, a flag rather than an item: they last
   4 hours and are dropped with the task), else a handful of grass fetched as
   tinder and an attempt by friction, which burns the tinder and succeeds by
   `hearth_friction_chance()` of the level before the attempt (an RNG draw).
+- **The Fire tab** lists what lighting takes while the hearth is out:
+  tinder, kindling and wood for the flame, "in place" once laid, red with
+  the bill panels' "no suitable material" tooltip when
+  `game_hearth_lacks()` (none lying in the colony; embers from another
+  burning fire stand for tinder).
 - **Recipes that need fire** (`recipe_needs_fire()`: made at a hearth) are
   skipped by `choose_bill()` while the hearth is out, and a craft stops when
   it goes out (the input and progress stay on the station). Hardening keeps

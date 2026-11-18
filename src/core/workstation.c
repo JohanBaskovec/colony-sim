@@ -505,6 +505,7 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         uint32_t fire_state[3] = {station->burning, station->keep_burning,
                                   (uint32_t)station->fuel_types};
         hash = hash_fnv1a64(hash, fire_state, sizeof(fire_state));
+        hash = hash_fnv1a64(hash, &station->laid, sizeof(station->laid));
         for (int b = 0; b < station->bill_count; b++) {
             const Bill *bill = &station->bills[b];
             uint32_t fields[9] = {

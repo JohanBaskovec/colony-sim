@@ -194,6 +194,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .teach = game->teach,
         .temperatures = &game->temperatures,
         .wetting = weather_wetting(&game->weather, game->clock.tick),
+        .soil = &game->soil,
         .free_crafts = game->debug.free_crafts,
         .no_tools = game->debug.no_tools,
         .animals = &game->animals,
@@ -3019,6 +3020,33 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
         }
     }
     return bill_has_input(bill, game_view_items(game)->totals, tools);
+}
+
+bool game_hearth_lacks(const Game *game, const Workstation *station, HearthIngredient ingredient)
+{
+    if (!hearth_is(station) || (unsigned)ingredient >= HEARTH_INGREDIENT_COUNT ||
+        hearth_laid(station, ingredient)) {
+        return false;
+    }
+    if (ingredient == HEARTH_TINDER) {
+        const Workstations *stations = &game->workstations;
+        int seen = 0;
+        for (int i = 0; i < WORKSTATION_MAX && seen < stations->used_count; i++) {
+            const Workstation *other = &stations->list[i];
+            seen += other->used ? 1 : 0;
+            if (other->used && other != station && other->burning && !other->forbidden) {
+                return false; /* Embers. */
+            }
+        }
+    }
+    const long *totals = game_view_items(game)->totals;
+    ItemTypeMask types = hearth_ingredient_types(ingredient);
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        if ((types & ITEM_TYPE_BIT(type)) && totals[type] > 0) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /* What is built at once leaves the plants under it alone: they are ordered

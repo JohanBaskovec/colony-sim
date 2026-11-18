@@ -452,6 +452,39 @@ static void test_grass_does_not_dry_in_the_rain(void)
     items_free(&items);
 }
 
+static void test_twigs_get_wet_in_the_rain_and_dry_again(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_TWIGS, 3)) == 3);
+    CHECK_EQ_INT(item_def(ITEM_TWIGS)->wets_into, ITEM_WET_TWIGS);
+    CHECK_EQ_INT(item_def(ITEM_WET_TWIGS)->transforms_into, ITEM_TWIGS);
+    /* Dry weather: they stay dry. */
+    CHECK_EQ_INT(items_advance(&items, 0, 16, 48, NULL, NULL), 0);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_TWIGS);
+    /* An hour in the rain: wet, and they do not dry while it lasts. */
+    CHECK_EQ_INT(items_advance(&items, 0, 16, 1, rained_on, NULL), 1);
+    ItemStack wet = items_get(&items, 1, 1, 0);
+    CHECK_EQ_INT(wet.type, ITEM_WET_TWIGS);
+    CHECK_EQ_INT(wet.count, 3);
+    CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], 0);
+    CHECK_EQ_INT((int)items.totals[ITEM_WET_TWIGS], 3);
+    CHECK_EQ_INT(items_advance(&items, 0, 16, 48, rained_on, NULL), 0);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).progress, 0);
+    /* Dry again in a day out of the rain. */
+    int hours = item_def(ITEM_WET_TWIGS)->transform_hours;
+    CHECK_EQ_INT(items_advance(&items, 0, 16, hours - 1, NULL, NULL), 0);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_WET_TWIGS);
+    CHECK_EQ_INT(items_advance(&items, 0, 16, 1, NULL, NULL), 1);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_TWIGS);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).count, 3);
+    /* Branches and logs do not soak through in a shower. */
+    REQUIRE(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_BRANCHES, 2)) == 2);
+    items_advance(&items, 0, 16, 1, rained_on, NULL);
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).type, ITEM_BRANCHES);
+    items_free(&items);
+}
+
 /* Stacks are counted per level, for searches to skip the empty ones. */
 static void test_stacks_per_level(void)
 {
@@ -639,6 +672,7 @@ int main(void)
     RUN_TEST(test_food_rots_away);
     RUN_TEST(test_rot_progress_merges);
     RUN_TEST(test_grass_does_not_dry_in_the_rain);
+    RUN_TEST(test_twigs_get_wet_in_the_rain_and_dry_again);
     RUN_TEST(test_eating_takes_weight_not_hit_points);
     RUN_TEST(test_hash);
     return test_summary();

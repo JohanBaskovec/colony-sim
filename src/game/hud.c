@@ -573,14 +573,21 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
-    /* Branches, twigs and nuts the trees shed, on the ground or on their foliage. */
+    /* Branches, twigs and nuts the trees shed, on the ground or on their
+     * foliage; twigs as they would be picked up (wet on wet ground, in the
+     * rain). */
     static const ItemType LITTER[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS};
+    bool raining = weather_wetting(&app->game.weather, app->game.clock.tick) > 0.0f;
     for (size_t i = 0; i < SDL_arraysize(LITTER); i++) {
         int count = map_litter(map, x, y, z, LITTER[i]);
         if (count > 0) {
+            ItemType shown =
+                LITTER[i] == ITEM_TWIGS && soil_litter_wet(&app->game.soil, map, x, y, z, raining)
+                    ? ITEM_WET_TWIGS
+                    : LITTER[i];
             tr_integer(a, sizeof(a), count);
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.litter"),
-                      tr(item_def(LITTER[i])->name_key), a);
+                      tr(item_def(shown)->name_key), a);
         }
     }
 

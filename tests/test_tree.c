@@ -983,7 +983,7 @@ static void test_fell(void)
     for (int y = 8; y <= 12; y++) {
         for (int x = 9; x <= 11; x++) {
             ItemStack stack = items_get(&items, x, y, 0);
-            near_crown += stack.type == ITEM_TWIGS ? stack.count : 0;
+            near_crown += stack.type == ITEM_WET_TWIGS ? stack.count : 0;
         }
     }
     CHECK_EQ_INT(near_crown, twigs);
@@ -1375,8 +1375,10 @@ static void test_gathering_on_trees(void)
     CHECK_EQ_INT(map.plants[map_index(&map, 10, 10, 0)].type, PLANT_NONE);
     CHECK(!is_trunk(&map, 10, 10, 0));
     CHECK_EQ_INT(items_get(&items, 10, 12, 0).type, ITEM_WOOD); /* Along the trunk. */
-    /* The crown came down with its twigs (what was gathered is gone). */
-    CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], 3 + TREE_CROWN_TWIGS);
+    /* The crown came down with its twigs, green and so wet (what was
+     * gathered is gone). */
+    CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], 3);
+    CHECK_EQ_INT((int)items.totals[ITEM_WET_TWIGS], TREE_CROWN_TWIGS);
     CHECK_EQ_UINT(zones.harmful_tree_falls, 0);
     CHECK(gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CHOP, 1e6f, 60.0, NULL));
     CHECK_EQ_UINT(zones.harmful_tree_falls, 1);

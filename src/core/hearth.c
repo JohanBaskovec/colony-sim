@@ -17,9 +17,11 @@ bool hearth_is(const Workstation *station)
 float hearth_fuel_value(ItemType type)
 {
     const ItemDef *def = item_def(type);
-    return def != NULL && type != ITEM_NONE && (HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(type))
-               ? def->weight
-               : 0.0f;
+    if (def == NULL || type == ITEM_NONE || !(HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(type))) {
+        return 0.0f;
+    }
+    /* What dries burns as it would dry: the water in it gives no heat. */
+    return def->transforms_into != ITEM_NONE ? item_def(def->transforms_into)->weight : def->weight;
 }
 
 float hearth_fuel_wanted(const Workstation *station)
@@ -89,6 +91,57 @@ bool hearth_needs_kindling(const Workstation *station)
            station->fuel <= 0.0f && station->fuel_promised <= 0.0f;
 }
 
+bool hearth_wants_fuel_to_light(const Workstation *station)
+{
+    return hearth_is(station) && !station->burning &&
+           station->fuel + station->fuel_promised < HEARTH_LIGHT_FUEL_MIN;
+}
+
+ItemTypeMask hearth_ingredient_types(HearthIngredient ingredient)
+{
+    switch (ingredient) {
+    case HEARTH_TINDER: return ITEM_TINDER_TYPES;
+    case HEARTH_KINDLING: return HEARTH_KINDLING_TYPES;
+    case HEARTH_BRANCH: return HEARTH_BRANCH_TYPES;
+    default: return 0;
+    }
+}
+
+static unsigned laid_bit(HearthIngredient ingredient)
+{
+    return ingredient == HEARTH_KINDLING ? HEARTH_LAID_KINDLING
+           : ingredient == HEARTH_BRANCH ? HEARTH_LAID_BRANCH
+                                         : 0u;
+}
+
+bool hearth_laid(const Workstation *station, HearthIngredient ingredient)
+{
+    unsigned bit = laid_bit(ingredient);
+    return station != NULL && bit != 0u && (station->laid & bit) != 0u;
+}
+
+HearthIngredient hearth_next_to_lay(const Workstation *station)
+{
+    if (!hearth_laid(station, HEARTH_KINDLING)) {
+        return HEARTH_KINDLING;
+    }
+    return hearth_laid(station, HEARTH_BRANCH) ? HEARTH_INGREDIENT_COUNT : HEARTH_BRANCH;
+}
+
+bool hearth_lay(Workstations *workstations, int index, ItemType type)
+{
+    Workstation *station = workstation_get(workstations, index);
+    HearthIngredient next =
+        hearth_is(station) ? hearth_next_to_lay(station) : HEARTH_INGREDIENT_COUNT;
+    if (next == HEARTH_INGREDIENT_COUNT || !(hearth_ingredient_types(next) & ITEM_TYPE_BIT(type))) {
+        return false;
+    }
+    station->laid = (uint8_t)(station->laid | laid_bit(next));
+    station->fuel = fminf(HEARTH_FUEL_CAPACITY, station->fuel + hearth_fuel_value(type));
+    workstations->revision++;
+    return true;
+}
+
 bool hearth_light(Workstations *workstations, int index)
 {
     Workstation *station = workstation_get(workstations, index);
@@ -97,6 +150,7 @@ bool hearth_light(Workstations *workstations, int index)
     }
     if (!station->burning) {
         station->burning = true;
+        station->laid = 0;        /* The kindling and the branch catch. */
         workstations->revision++; /* Crafts that need fire may start. */
     }
     return true;
