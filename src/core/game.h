@@ -27,6 +27,7 @@
 #include "core/region.h"
 #include "core/rng.h"
 #include "core/roof.h"
+#include "core/soil.h"
 #include "core/stockpile.h"
 #include "core/temperature.h"
 #include "core/vision.h"
@@ -40,6 +41,9 @@
 /* Each plant grows once per interval; the map is covered slice by slice, a
  * little every tick. */
 #define GAME_PLANT_UPDATE_INTERVAL TICKS_PER_HOUR
+/* The water a new world's ground starts with: this share of its useful water
+ * (0 wilting .. 1 field capacity), the banks wetter (docs/CLIMATE.md §3.6). */
+#define GAME_SOIL_START_SHARE 0.8f
 /* Same for items lying on the ground (transformations such as drying). */
 #define GAME_ITEM_UPDATE_INTERVAL TICKS_PER_HOUR
 
@@ -149,6 +153,7 @@ typedef struct Game {
      * each tick, not part of game_hash(). */
     Regions regions;
     Temperatures temperatures; /* Per tile, warmed by burning hearths. */
+    Soil soil;                 /* Water in the ground of each tile (docs/CLIMATE.md). */
     /* Who sees what (core/vision.h): derived from the map and where the
      * settlers stand, not part of game_hash(). Only kept up to date while
      * `vision_on` (see game_set_vision()). */
@@ -329,6 +334,10 @@ void game_debug_skip(Game *game, uint64_t ticks);
 /* Debug: jumps the calendar to the first day of the next season, at the
  * same time of day, without simulating the days between (plants do not
  * grow, nobody gets hungry). */
+/* The air of every tile at the outdoor air's and the ground under it at the
+ * day's mean temperature: what the weather of the day would have left them,
+ * after the clock jumped (game_debug_next_season(), tests). */
+void game_settle_climate(Game *game);
 void game_debug_next_season(Game *game);
 
 /* Debug: `count` new items of a type (standard quality, undamaged) dropped on

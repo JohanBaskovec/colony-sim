@@ -15,13 +15,16 @@ enum {
 
 static const WeatherDef WEATHER_DEFS[WEATHER_TYPE_COUNT] = {
     /* A clear sky lets the day heat up and the night cool down. */
-    [WEATHER_CLEAR] = {"clear", N_("weather.clear"), NULL, 1.3f, 0.0f, 1.0f, 0, false},
-    [WEATHER_CLOUDY] = {"cloudy", N_("weather.cloudy"), NULL, 0.6f, 0.0f, 0.85f, 1, false},
-    [WEATHER_FOG] = {"fog", N_("weather.fog"), NULL, 0.4f, -1.0f, 0.8f, 1, false},
-    [WEATHER_RAIN] = {"rain", N_("weather.rain"), N_("weather.snow"), 0.4f, -2.0f, 0.7f, 2, true},
+    [WEATHER_CLEAR] = {"clear", N_("weather.clear"), NULL, 1.3f, 0.0f, 1.0f, 0, false, 0.0f, 4.0f,
+                       1.0f},
+    [WEATHER_CLOUDY] = {"cloudy", N_("weather.cloudy"), NULL, 0.6f, 0.0f, 0.85f, 1, false, 0.0f,
+                        2.0f, 0.3f},
+    [WEATHER_FOG] = {"fog", N_("weather.fog"), NULL, 0.4f, -1.0f, 0.8f, 1, false, 0.0f, 0.0f, 0.0f},
+    [WEATHER_RAIN] = {"rain", N_("weather.rain"), N_("weather.snow"), 0.4f, -2.0f, 0.7f, 2, true,
+                      0.25f, 0.0f, 0.0f},
     /* Wind and heavy rain chill the air. */
     [WEATHER_STORM] = {"storm", N_("weather.storm"), N_("weather.snowstorm"), 0.3f, -4.0f, 0.55f, 3,
-                       true},
+                       true, 1.2f, 0.0f, 0.0f},
 };
 
 /* The sky at each step of cloudiness (fog is drawn, never stepped to). */
@@ -188,6 +191,37 @@ float weather_light(const Weather *weather)
 {
     const WeatherDef *def = weather_def((WeatherType)weather->type);
     return def != NULL ? def->light : 1.0f;
+}
+
+float weather_rainfall(const Weather *weather, uint64_t tick)
+{
+    const WeatherDef *def = weather_def((WeatherType)weather->type);
+    return def != NULL && weather_precipitation(weather, tick) == PRECIPITATION_RAIN ? def->rain_mm
+                                                                                     : 0.0f;
+}
+
+float weather_snowfall(const Weather *weather, uint64_t tick)
+{
+    const WeatherDef *def = weather_def((WeatherType)weather->type);
+    return def != NULL && weather_precipitation(weather, tick) == PRECIPITATION_SNOW ? def->rain_mm
+                                                                                     : 0.0f;
+}
+
+float weather_dew_point(const Weather *weather, uint64_t tick)
+{
+    const WeatherDef *def = weather_def((WeatherType)weather->type);
+    float air = weather_outdoor(weather, tick);
+    float mean = temperature_season_mean(tick) + weather->spell + weather->debug_offset;
+    float dew = mean - (def != NULL ? def->dew_gap : 0.0f);
+    return dew < air && def != NULL && def->dew_gap > 0.0f ? dew : air;
+}
+
+float air_relative_humidity(float dew_point, float celsius)
+{
+    if (celsius <= dew_point) {
+        return 1.0f;
+    }
+    return expf(17.27f * dew_point / (dew_point + 237.3f) - 17.27f * celsius / (celsius + 237.3f));
 }
 
 uint64_t weather_hash(const Weather *weather, uint64_t hash)

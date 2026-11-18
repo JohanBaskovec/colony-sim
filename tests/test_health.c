@@ -1292,8 +1292,11 @@ static void test_settler_freezes_in_winter(void)
     REQUIRE(init_flat_game(&game));
     Colonist *settler = spawn_settler(&game, 20, 20);
     REQUIRE(settler != NULL);
-    /* Mid-winter, before dawn: about -7 degrees. */
+    /* Mid-winter, before dawn, in a cold spell. */
     game.clock.tick = (uint64_t)SEASON_DAY(SEASON_WINTER, 8) * TICKS_PER_DAY + 4 * TICKS_PER_HOUR;
+    game_tick(&game); /* The weather of the new day, then a cold one. */
+    game_debug_cold_snap(&game);
+    game_settle_climate(&game);
     run_ticks_flat(&game, TICKS_PER_HOUR);
     float cold = health_deprivation(&settler->health, DEPRIVATION_COLD);
     float felt =
@@ -1303,7 +1306,8 @@ static void test_settler_freezes_in_winter(void)
     run_ticks_flat(&game, 2 * TICKS_PER_HOUR); /* Still before dawn's end. */
     CHECK(health_deprivation(&settler->health, DEPRIVATION_COLD) > cold);
     CHECK(health_is_hurt(&settler->health));
-    /* It warms up in the day, and recovers. */
+    /* The cold spell passes, it warms up in the day, and recovers. */
+    game.weather.spell = 0.0f;
     run_ticks_flat(&game, 10 * TICKS_PER_HOUR);
     CHECK(health_deprivation(&settler->health, DEPRIVATION_COLD) < 0.01f);
     game_shutdown(&game);
@@ -1366,6 +1370,7 @@ static void make_it_freezing(Game *game)
     game->clock.tick = (uint64_t)SEASON_DAY(SEASON_WINTER, 8) * TICKS_PER_DAY + 3 * TICKS_PER_HOUR;
     game_tick(game); /* The weather of the new day, then the spell. */
     game_debug_cold_snap(game);
+    game_settle_climate(game);
     for (int tick = 0; tick < 2 * TICKS_PER_HOUR; tick++) {
         game_debug_cold_snap(game);
         game_tick(game);

@@ -79,9 +79,10 @@ simulation:
 | `tile_box`   | Box of tiles holding every tile of a sparse layer (designations, gathering zones, a region), so that scans skip the rest of the map |
 | `tree`       | Trees in the volume: a trunk of solid wood and floors of foliage built into the map as the tree grows, finding the tree of a tile, where a felled tree falls (aimed away from structures) and what it leaves along its length |
 | `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
-| `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths |
+| `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths, the microclimate under the sky (sun, shade, evaporation, heat stored in the ground) |
+| `soil`       | The water in the ground of each tile (a bucket by terrain: rain and snowmelt, interception by crowns, drainage, evaporation and transpiration, banks near water), and what the microclimate needs from it (see `docs/CLIMATE.md`) |
 | `vision`     | Who sees what: sight in 3D through the map's volume (rock, walls and floors block it, no range limit), fields of view per settler, how many see each tile (see *Vision*) |
-| `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain |
+| `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain, rainfall in mm, the air's dew point and relative humidity |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve and the sun (day length by season)                |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
@@ -1408,29 +1409,77 @@ plus a daily swing coldest at 5:00 and warmest at 15:00,
 `temperature_daily_swing()`); the weather changes it (`weather_outdoor()`,
 below), and `temperatures_tick()` takes the result. Each tile holds a
 temperature; every tick `temperatures_tick()` updates one band of rows in
-place, a whole pass every `TEMPERATURE_SWEEP_TICKS` (100), explicitly: a
-tile moves toward its four neighbors at the lower conductance of the two
-(air 4/h, door 1.5, wall and rock 0.5), toward the outdoor air at a rate
-set by its cover (open sky 6/h, built roof 0.3, natural roof none; the
-first floor above a tile decides) and,
-under a natural roof, toward the ground (10 °C, 0.3/h). Rock stays at the
-ground's temperature; open space under the sky is the outdoor air
-(`TEMPERATURE_MATERIAL_OPEN`): a tile with a side open to it exchanges heat
-with the outdoor air through that side instead (`Temperatures.exposure`:
-the cover's rate plus the air's conductance for each open side). The step
-is stable while a tile's rates add up to less than 25/h. The bands of rows
+place, a whole pass every `TEMPERATURE_SWEEP_TICKS` (200, 4.8 in-game
+minutes). Heat flows between a tile and its four neighbors at the lower
+conductance of the two (air 4/h, door 1.5, wall 0.5), toward the outdoor air
+at a rate set by its cover (open sky 6/h, built roof 0.3, natural roof none;
+the first floor above a tile decides) and, under a natural roof, toward the
+ground (10 °C, 0.3/h). Rock stays at the ground's temperature and open space
+under the sky is the outdoor air (`TEMPERATURE_MATERIAL_OPEN`): a side against
+rock pulls a tile toward the ground, a side open to open space toward the air
+(at the lower conductance), so only tiles the sweep works out share edges.
+A pass works each tile out edge by edge with its east and south neighbors
+(the west and north edges were those of the tiles before it): the edge's rate
+times the pass is the share of their gap it closes, what one tile gains the
+other loses (the heat is kept), and the step stays stable while that share is
+at most one half (air: 0.32); then the tile closes `Temperatures.pull` of its
+gap to the outdoor air and the ground (`ground_share` says how much of that is
+the ground), at most all of it. The steady states are those of the heat
+equation. The previous explicit step (rates times the time, every 100 ticks)
+needed a tile's rates to add up to less than 25/h, and was some 2 °C off in a
+heated hut and much more beside a fire; this one is about as close (closer
+outdoors, about as far in a hut, on the warm side) with half the passes.
+Burning hearths put their heat in through `temperatures_heat_source()`: it
+waits for the pass over the tile, half of it added before the tile is worked
+out and half after (it came in all along the pass), so the tile neither piles
+up a pass's worth of heat in a saw-tooth nor sheds it unseen. The bands of rows
 run through all the levels one after the other (`height × depth` rows),
 and only the tiles of a bitset (`Temperatures.active`) are worked out: rock
 and open space, most of a hilly map, are skipped 64 at a time. For now a
 tile only exchanges heat with the tiles of its own level (the edges between
 levels have a rate of 0). What each tile is made of and covered by, the
-exposures and the rate on each edge are caches: updated for the tiles of
+pulls and the rate on each edge are caches: updated for the tiles of
 the map's change logs and the tiles below them, whose cover they may change
 (`Map.topology_log`, and `Map.build_log` for structures, roofs and rock
 where one could not walk anyway), rebuilt whole when the logs overflowed or
 the layers were written directly (`MapTopologyChange.anywhere`). Edge rates
 of 0 and a padded layer let tiles on the edges of the map go through the
 same loop.
+
+**Microclimate** (`docs/CLIMATE.md` §5): a tile under the sky is not pulled
+toward the outdoor air itself (the air of a weather station's meadow) but
+toward what its surface makes of it: warmer on bare dry ground in the sun,
+cooler in the shade of crowns and where the sun goes into evaporation,
+milder at night under crowns that hide the sky
+(`TEMPERATURE_SUN_HEAT`, `TEMPERATURE_EVAP_COOLING`,
+`TEMPERATURE_NIGHT_COOLING`), and more slowly under crowns (the air is still
+there: `TEMPERATURE_CANOPY_STILL`). It then trades heat with the ground under
+it (`Temperatures.soil`, faster and slower to follow under open water), which
+stores the day's heat and gives it back at night. The game hands the pass a
+`TemperatureSurface` every tick (`temperatures_set_surface()`): the light
+let through and the share of the sun gone into evaporation of each tile, from
+`Game.soil`, and the sun and night factors; the pass works the factors out
+once (`SurfacePass`). Without a surface (tests, a map with no soil) the open
+sky pulls toward the outdoor air as before. `game_settle_climate()` sets the
+air and ground to the outdoor and season's temperatures after the clock
+jumps.
+
+**Soil water** (`core/soil.h`, `Game.soil`, part of `game_hash()`;
+`docs/CLIMATE.md` §3): each tile of rooting ground holds water in mm in a
+bucket set by its terrain (`SoilDef`: wilting point, field capacity,
+saturation, drainage, intake). It is worked out once an hour in slices over
+the ticks like the plants (`soil_update()`, from `update_plants()`), with
+what the hour brings worked out once for the map (`SoilHour`: rain from the
+weather's `rain_mm`, the snowpack's melt, the potential evapotranspiration
+from the sun, the sky, the temperature and the air's humidity, the dew
+point): rain lands less under crowns and not at all under roofs or rock,
+water above field capacity drains, the crowns over a tile, the plant on it
+(`PlantDef.transpiration`) and its bare soil take water by what light each
+gets, dew condenses on cold clear nights, and the water table keeps the
+ground near open water wet (`Soil.wet`: the distance to water, rebuilt when
+`Map.water_revision` changes). What covers each tile (`canopy`) is looked up
+every `SOIL_CANOPY_HOURS`. The tile inspector shows the moisture in words
+(`soil_moisture_key()`); plants do not use it yet (C3).
 
 What settlers feel is not only the air: a burning fire radiates warmth
 (`hearths_radiant_warmth()`: `HEARTH_RADIANT_WARMTH` one tile away, falling

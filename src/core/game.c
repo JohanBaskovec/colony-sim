@@ -617,6 +617,12 @@ bool game_init(Game *game, const NewGameParams *params)
         game_shutdown(game);
         return false;
     }
+    temperatures_settle_ground(&game->temperatures,
+                               temperature_season_mean(game->clock.tick) + game->weather.spell);
+    if (!soil_init(&game->soil, &game->map, GAME_SOIL_START_SHARE)) {
+        game_shutdown(game);
+        return false;
+    }
     leaf_settle(game);
     spawn_starting_colonists(game, params->colonist_count);
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
@@ -694,6 +700,7 @@ void game_shutdown(Game *game)
     game->known_ready = false;
     game->fog_on = false;
     temperatures_free(&game->temperatures);
+    soil_free(&game->soil);
     designations_free(&game->designations);
     dirt_free(&game->dirt);
     gather_zones_free(&game->gather_zones);
@@ -889,6 +896,33 @@ static uint64_t ground_tile_count(const Map *map)
     return (uint64_t)map_level_tile_count(map) * (uint64_t)(map->top_ground_level + 1);
 }
 
+/* The water in the ground (docs/CLIMATE.md §3): the same slice of tiles as
+ * the plants, once an hour each; the snowpack and the banks once an hour for
+ * the map. */
+static void update_soil(Game *game, size_t begin, size_t end, uint64_t phase)
+{
+    Soil *soil = &game->soil;
+    uint64_t tick = game->clock.tick;
+    float air = weather_outdoor(&game->weather, tick);
+    float rain = weather_rainfall(&game->weather, tick);
+    if (phase == 0) {
+        soil_refresh_banks(soil, &game->map);
+        soil->melt = soil_snow_hour(soil, weather_snowfall(&game->weather, tick), air, rain > 0.0f);
+    }
+    float dew = weather_dew_point(&game->weather, tick);
+    float sun = game_sunlight(tick);
+    SoilHour hour = {
+        .rain = rain,
+        .melt = soil->melt,
+        .pet = soil_potential_evaporation(sun, weather_light(&game->weather), air,
+                                          air_relative_humidity(dew, air)),
+        .dew_point = dew,
+        .night = sun <= 0.0f,
+        .look_up = (tick / TICKS_PER_HOUR) % SOIL_CANOPY_HOURS == 0,
+    };
+    soil_update(soil, &game->map, begin, end, &hour, game->temperatures.celsius);
+}
+
 static void update_plants(Game *game)
 {
     Map *map = &game->map;
@@ -923,6 +957,7 @@ static void update_plants(Game *game)
             }
         }
     }
+    update_soil(game, begin, end, phase);
     if (phase == GAME_PLANT_UPDATE_INTERVAL - 1) {
         leaf_conclude(game); /* The whole pass is done. */
     }
@@ -1437,8 +1472,8 @@ static void heat_from_hearths(Game *game)
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = &game->workstations.list[index];
         if (station->used && station->burning) {
-            temperatures_add_heat(&game->temperatures, station->x, station->y, station->z,
-                                  HEARTH_HEAT_PER_HOUR / (float)TICKS_PER_HOUR);
+            temperatures_heat_source(&game->temperatures, station->x, station->y, station->z,
+                                     HEARTH_HEAT_PER_HOUR / (float)TICKS_PER_HOUR);
         }
     }
 }
@@ -1777,6 +1812,22 @@ void game_debug_next_season(Game *game)
     uint64_t season_ticks = (uint64_t)DAYS_PER_SEASON * TICKS_PER_DAY;
     uint64_t time_of_day = tick % TICKS_PER_DAY;
     game->clock.tick = (tick / season_ticks + 1) * season_ticks + time_of_day;
+    game_settle_climate(game);
+}
+
+void game_settle_climate(Game *game)
+{
+    uint64_t tick = game->clock.tick;
+    float outdoor = weather_outdoor(&game->weather, tick);
+    Temperatures *temperatures = &game->temperatures;
+    size_t count = map_tile_count(&game->map);
+    for (size_t i = 0; temperatures->celsius != NULL && i < count; i++) {
+        if (temperatures->kind[i] / TEMPERATURE_COVER_COUNT != TEMPERATURE_MATERIAL_ROCK) {
+            temperatures->celsius[i] = outdoor;
+        }
+    }
+    temperatures->outdoor = outdoor;
+    temperatures_settle_ground(temperatures, temperature_season_mean(tick) + game->weather.spell);
 }
 
 int game_debug_spawn_items(Game *game, int x, int y, int z, ItemType type, int count)
@@ -2111,6 +2162,16 @@ void game_tick(Game *game)
     hearths_burn(&game->workstations, &game->map,
                  weather_wetting(&game->weather, game->clock.tick));
     heat_from_hearths(game);
+    float sun = game_sunlight(game->clock.tick);
+    const WeatherDef *sky = weather_def((WeatherType)game->weather.type);
+    TemperatureSurface surface = {
+        .canopy = game->soil.canopy,
+        .evap = game->soil.evap,
+        .sun_heat = TEMPERATURE_SUN_HEAT * sun * weather_light(&game->weather),
+        .night_cooling =
+            sun <= 0.0f && sky != NULL ? TEMPERATURE_NIGHT_COOLING * sky->clearness : 0.0f,
+    };
+    temperatures_set_surface(&game->temperatures, &surface);
     temperatures_tick(&game->temperatures, &game->map, game->clock.tick,
                       weather_outdoor(&game->weather, game->clock.tick));
     if (game->clock.tick % TICKS_PER_DAY == 0) {
@@ -2202,6 +2263,7 @@ uint64_t game_hash(const Game *game)
     hash = hash_fnv1a64(hash, &game->rng.state, sizeof(game->rng.state));
     hash = hash_fnv1a64(hash, game->teach, sizeof(game->teach));
     hash = temperatures_hash(&game->temperatures, hash);
+    hash = soil_hash(&game->soil, hash);
     hash = weather_hash(&game->weather, hash);
     if (game->debug.instant_build || game->debug.free_crafts || game->debug.no_tools ||
         game->debug.instant_deconstruct) {

@@ -49,6 +49,7 @@ set(COLONY_UNIT_TESTS
     test_settings
     test_reservation
     test_rng
+    test_soil
     test_stockpile
     test_temperature
     test_tool

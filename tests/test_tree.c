@@ -645,10 +645,11 @@ static void test_nuts_rot_on_average(void)
     CHECK(rate > 0.0f);
     game_debug_skip(&game, 24 * TICKS_PER_HOUR); /* A day. */
     int lost = before - nuts_total(map);
-    /* rate / (90 days) of them, give or take the dice. */
+    /* rate / (90 days) of them, give or take the dice and the warmth of the
+     * day (the rate is the morning's: the afternoon rots faster). */
     float expected = (float)before * rate / item_def(ITEM_HAZELNUTS)->rot_days;
     CHECK(lost > 0);
-    CHECK(lost > (int)(expected * 0.6f) && lost < (int)(expected * 1.4f) + 2);
+    CHECK(lost > (int)(expected * 0.6f) && lost < (int)(expected * 1.6f) + 2);
     /* They are never made up. */
     CHECK(nuts_total(map) < before);
     game_shutdown(&game);

@@ -10,6 +10,9 @@
 
 #define PI_F 3.14159265f
 
+/* In-game hours between two passes over a tile. */
+#define SWEEP_HOURS ((float)TEMPERATURE_SWEEP_TICKS / (float)TICKS_PER_HOUR)
+
 static const float CONDUCTANCES[TEMPERATURE_MATERIAL_COUNT] = {
     [TEMPERATURE_MATERIAL_AIR] = TEMPERATURE_CONDUCTANCE_AIR,
     [TEMPERATURE_MATERIAL_WALL] = TEMPERATURE_CONDUCTANCE_WALL,
@@ -71,6 +74,7 @@ static void refresh_area(Temperatures *temperatures, const Map *map, int x0, int
         for (int x = x0; x <= x1; x++) {
             size_t i = map_index(map, x, y, z);
             kind[i] = tile_kind(map, x, y, z);
+            temperatures->water[i] = map_is_water(map, x, y, z);
             if (kind_material(kind[i]) == TEMPERATURE_MATERIAL_ROCK) {
                 temperatures->celsius[i] = TEMPERATURE_GROUND;
             }
@@ -83,46 +87,53 @@ static void refresh_area(Temperatures *temperatures, const Map *map, int x0, int
         }
     }
     /* The edges of those tiles, those with their west and north neighbors
-     * included. Open space is not a neighbor: it is the outdoor air (see
-     * the exposures below). */
+     * included: the rate between two tiles times the pass. Only between
+     * tiles the sweep works out: open space is the outdoor air and rock the
+     * ground's (see the pulls below). */
     for (int y = y0 > 0 ? y0 - 1 : 0; y <= y1; y++) {
         for (int x = x0 > 0 ? x0 - 1 : 0; x <= x1; x++) {
             size_t i = map_index(map, x, y, z);
-            bool open = kind_material(kind[i]) == TEMPERATURE_MATERIAL_OPEN;
+            bool active = kind_active(kind[i]);
             float here = kind_conductance(kind[i]);
-            float east =
-                x + 1 < width && !open && kind_material(kind[i + 1]) != TEMPERATURE_MATERIAL_OPEN
-                    ? kind_conductance(kind[i + 1])
-                    : 0.0f;
+            float east = x + 1 < width && active && kind_active(kind[i + 1])
+                             ? kind_conductance(kind[i + 1])
+                             : 0.0f;
             size_t below = i + (size_t)width;
-            float south =
-                y + 1 < height && !open && kind_material(kind[below]) != TEMPERATURE_MATERIAL_OPEN
-                    ? kind_conductance(kind[below])
-                    : 0.0f;
-            temperatures->edge_east[i] = fminf(here, east);
-            temperatures->edge_south[i] = fminf(here, south);
+            float south = y + 1 < height && active && kind_active(kind[below])
+                              ? kind_conductance(kind[below])
+                              : 0.0f;
+            temperatures->edge_east[i] = fminf(here, east) * SWEEP_HOURS;
+            temperatures->edge_south[i] = fminf(here, south) * SWEEP_HOURS;
         }
     }
-    /* Exposures to the outdoor air: what covers the tile, and its sides open
-     * to open space; those of the tiles around too. */
+    /* The pulls of the outdoor air (what covers the tile, and its sides open
+     * to open space) and of the ground (under a natural roof, and its sides
+     * against rock); those of the tiles around too. */
     static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
     for (int y = y0 > 0 ? y0 - 1 : 0; y <= y1 + 1 && y < height; y++) {
         for (int x = x0 > 0 ? x0 - 1 : 0; x <= x1 + 1 && x < width; x++) {
             size_t i = map_index(map, x, y, z);
-            float exposure = 0.0f;
+            float exposure = 0.0f, ground = 0.0f;
             if (kind_active(kind[i])) {
                 float here = kind_conductance(kind[i]);
                 exposure = EXPOSURES[kind[i] % TEMPERATURE_COVER_COUNT];
+                ground = GROUND_RATES[kind[i] % TEMPERATURE_COVER_COUNT];
                 for (int d = 0; d < 4; d++) {
                     int nx = x + DX[d], ny = y + DY[d];
-                    if (nx >= 0 && ny >= 0 && nx < width && ny < height &&
-                        kind_material(kind[map_index(map, nx, ny, z)]) ==
-                            TEMPERATURE_MATERIAL_OPEN) {
+                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+                        continue;
+                    }
+                    uint8_t next = kind[map_index(map, nx, ny, z)];
+                    if (kind_material(next) == TEMPERATURE_MATERIAL_OPEN) {
                         exposure += fminf(here, TEMPERATURE_CONDUCTANCE_AIR);
+                    } else if (kind_material(next) == TEMPERATURE_MATERIAL_ROCK) {
+                        ground += fminf(here, kind_conductance(next));
                     }
                 }
             }
-            temperatures->exposure[i] = exposure;
+            float rate = exposure + ground;
+            temperatures->pull[i] = fminf(rate * SWEEP_HOURS, 1.0f); /* Never past it. */
+            temperatures->ground_share[i] = rate > 0.0f ? ground / rate : 0.0f;
         }
     }
 }
@@ -160,11 +171,15 @@ bool temperatures_init(Temperatures *temperatures, const Map *map, float outdoor
     temperatures->buffers[1] = calloc(count + 1, sizeof(float));
     temperatures->buffers[2] = calloc(count + width, sizeof(float));
     temperatures->kind = calloc(count, sizeof(*temperatures->kind));
-    temperatures->exposure = calloc(count, sizeof(*temperatures->exposure));
+    temperatures->pull = calloc(count, sizeof(*temperatures->pull));
+    temperatures->ground_share = calloc(count, sizeof(*temperatures->ground_share));
+    temperatures->soil = calloc(count, sizeof(*temperatures->soil));
+    temperatures->water = calloc(count, sizeof(*temperatures->water));
     temperatures->active = calloc((count + 63) / 64, sizeof(*temperatures->active));
     if (temperatures->buffers[0] == NULL || temperatures->buffers[1] == NULL ||
         temperatures->buffers[2] == NULL || temperatures->kind == NULL ||
-        temperatures->exposure == NULL || temperatures->active == NULL) {
+        temperatures->pull == NULL || temperatures->ground_share == NULL ||
+        temperatures->soil == NULL || temperatures->water == NULL || temperatures->active == NULL) {
         temperatures_free(temperatures);
         return false;
     }
@@ -177,6 +192,7 @@ bool temperatures_init(Temperatures *temperatures, const Map *map, float outdoor
     temperatures->outdoor = outdoor;
     for (size_t i = 0; i < count; i++) {
         temperatures->celsius[i] = outdoor;
+        temperatures->soil[i] = outdoor;
     }
     refresh_all(temperatures, map);
     temperatures->topology_revision = map->topology_revision;
@@ -190,7 +206,10 @@ void temperatures_free(Temperatures *temperatures)
         free(temperatures->buffers[i]);
     }
     free(temperatures->kind);
-    free(temperatures->exposure);
+    free(temperatures->pull);
+    free(temperatures->ground_share);
+    free(temperatures->soil);
+    free(temperatures->water);
     free(temperatures->active);
     memset(temperatures, 0, sizeof(*temperatures));
 }
@@ -258,6 +277,46 @@ void temperatures_add_heat(Temperatures *temperatures, int x, int y, int z, floa
     if (in_bounds(temperatures, x, y, z)) {
         temperatures->celsius[index_of(temperatures, x, y, z)] += degrees;
     }
+}
+
+void temperatures_heat_source(Temperatures *temperatures, int x, int y, int z, float degrees)
+{
+    if (!in_bounds(temperatures, x, y, z)) {
+        return;
+    }
+    uint32_t index = (uint32_t)index_of(temperatures, x, y, z);
+    for (int s = 0; s < temperatures->source_count; s++) {
+        if (temperatures->sources[s].index == index) {
+            temperatures->sources[s].degrees += degrees;
+            return;
+        }
+    }
+    if (temperatures->source_count < TEMPERATURE_SOURCES_MAX) {
+        temperatures->sources[temperatures->source_count++] = (TemperatureSource){index, degrees};
+    } else {
+        temperatures->celsius[index] += degrees;
+    }
+}
+
+/* The heat that came into tiles first .. last - 1 since their last pass (a
+ * band): it came in all along, so half of it is added before the pass (and
+ * takes part in it) and the rest after (`after`), then forgotten. */
+static void release_sources(Temperatures *temperatures, size_t first, size_t last, bool after)
+{
+    int kept = 0;
+    for (int s = 0; s < temperatures->source_count; s++) {
+        TemperatureSource source = temperatures->sources[s];
+        if (source.index >= first && source.index < last) {
+            float share = after ? source.degrees : 0.5f * source.degrees;
+            temperatures->celsius[source.index] += share;
+            source.degrees -= share;
+            if (after) {
+                continue;
+            }
+        }
+        temperatures->sources[kept++] = source;
+    }
+    temperatures->source_count = kept;
 }
 
 TemperatureMaterial temperature_material(const Map *map, int x, int y, int z)
@@ -339,6 +398,79 @@ static void update_caches(Temperatures *temperatures, const Map *map)
     temperatures->build_revision = map->build_revision;
 }
 
+void temperatures_settle_ground(Temperatures *temperatures, float celsius)
+{
+    size_t count =
+        (size_t)temperatures->width * (size_t)temperatures->height * (size_t)temperatures->depth;
+    for (size_t i = 0; temperatures->soil != NULL && i < count; i++) {
+        temperatures->soil[i] = celsius;
+    }
+}
+
+void temperatures_set_surface(Temperatures *temperatures, const TemperatureSurface *surface)
+{
+    temperatures->surface = surface != NULL ? *surface : (TemperatureSurface){0};
+}
+
+/* What the surface does this tick, worked out once for the pass
+ * (docs/CLIMATE.md §5): a tile under the sky with crowns letting `c` of the
+ * light through (0 .. 255) and `e` of its sun gone into evaporation is pulled
+ * towards `base + sun_canopy × c - sun_evap × c × e`, at `still_base +
+ * still_canopy × c` of its pull, and exchanges heat with the ground under it
+ * at `store[water]`, the ground following at `follow[water]`. */
+typedef struct SurfacePass {
+    const uint8_t *canopy;
+    const uint8_t *evap;
+    float base;
+    float sun_canopy;
+    float sun_evap;
+    float still_base;
+    float still_canopy;
+    float store[2];
+    float follow[2];
+} SurfacePass;
+
+static SurfacePass surface_pass(const TemperatureSurface *surface, float outdoor)
+{
+    const float meadow = 1.0f - TEMPERATURE_EVAP_COOLING; /* Its sun mostly evaporates. */
+    const float scale = 1.0f / 255.0f;
+    return (SurfacePass){
+        .canopy = surface->canopy,
+        .evap = surface->evap,
+        .base = outdoor - surface->sun_heat * meadow + surface->night_cooling,
+        .sun_canopy = (surface->sun_heat - surface->night_cooling) * scale,
+        .sun_evap = surface->sun_heat * TEMPERATURE_EVAP_COOLING * scale * scale,
+        .still_base = TEMPERATURE_CANOPY_STILL,
+        .still_canopy = (1.0f - TEMPERATURE_CANOPY_STILL) * scale,
+        .store = {TEMPERATURE_SOIL_RATE * SWEEP_HOURS, TEMPERATURE_WATER_RATE * SWEEP_HOURS},
+        .follow = {TEMPERATURE_SOIL_FOLLOW * SWEEP_HOURS, TEMPERATURE_WATER_FOLLOW * SWEEP_HOURS},
+    };
+}
+
+/* Pulls a tile under the sky towards what its surface makes of the outdoor
+ * air, more slowly under crowns (the air's share of the pull; that of rock
+ * beside it is not slowed), then exchanges heat with the ground under it.
+ * `here` is the tile after its edges; returns its new temperature. */
+static float surface_pull(const SurfacePass *pass, Temperatures *temperatures, size_t i, float here,
+                          float pull, float ground)
+{
+    float canopy = (float)pass->canopy[i];
+    float air = pass->base + canopy * (pass->sun_canopy - pass->sun_evap * (float)pass->evap[i]);
+    float still = pass->still_base + pass->still_canopy * canopy;
+    if (ground == 0.0f) {
+        here += pull * still * (air - here);
+    } else {
+        float air_share = (1.0f - ground) * still;
+        float reservoir = (air_share * air + ground * TEMPERATURE_GROUND) / (air_share + ground);
+        here += pull * (air_share + ground) * (reservoir - here);
+    }
+    int water = temperatures->water[i];
+    float *soil = &temperatures->soil[i];
+    here += pass->store[water] * (*soil - here);
+    *soil += pass->follow[water] * (here - *soil);
+    return here;
+}
+
 void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick, float outdoor)
 {
     if (temperatures->celsius == NULL || temperatures->width != map->width ||
@@ -352,15 +484,22 @@ void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick
     int width = temperatures->width, rows = temperatures->height * temperatures->depth;
     int y0 = rows * band / TEMPERATURE_SWEEP_TICKS;
     int y1 = rows * (band + 1) / TEMPERATURE_SWEEP_TICKS;
-    const float hours = (float)TEMPERATURE_SWEEP_TICKS / (float)TICKS_PER_HOUR;
     float *celsius = temperatures->celsius;
     const float *east = temperatures->edge_east, *south = temperatures->edge_south;
-    const float *exposure = temperatures->exposure;
+    const float *pull = temperatures->pull, *ground_share = temperatures->ground_share;
     const uint8_t *kind = temperatures->kind;
+    const uint8_t *open_sky =
+        temperatures->surface.canopy != NULL && temperatures->surface.evap != NULL
+            ? temperatures->surface.canopy
+            : NULL;
+    SurfacePass pass = surface_pass(&temperatures->surface, outdoor);
     const uint64_t *active = temperatures->active;
     size_t row = (size_t)width;
     /* The active tiles of the band, in order, 64 at a time. */
     size_t first = (size_t)y0 * row, last = (size_t)y1 * row;
+    if (temperatures->source_count > 0) {
+        release_sources(temperatures, first, last, false);
+    }
     for (size_t word = first / 64; word * 64 < last; word++) {
         uint64_t bits = active[word];
         if (word * 64 < first) {
@@ -372,18 +511,29 @@ void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick
         while (bits != 0) {
             size_t i = word * 64 + (size_t)lowest_bit64(bits);
             bits &= bits - 1;
-            int cover = kind[i] % TEMPERATURE_COVER_COUNT;
+            /* Its edges with its east and south neighbors (0 past the map,
+             * reading the padding; the west and north edges were those of the
+             * tiles before it): what one gains the other loses, so the heat is
+             * kept, and a pass never closes more than half their gap, so
+             * nothing overshoots. Then the pull of the outdoor air and the
+             * ground. */
             float here = celsius[i];
-            /* Edges past the map have a rate of 0 (and read the padding). The
-             * west neighbor was updated just before: kept for last, so that
-             * tiles wait for each other as little as possible. */
-            float west = east[i - 1];
-            float flow = exposure[i] * (outdoor - here) +
-                         GROUND_RATES[cover] * (TEMPERATURE_GROUND - here) +
-                         east[i] * (celsius[i + 1] - here) + south[i] * (celsius[i + row] - here) +
-                         south[i - row] * (celsius[i - row] - here) - west * here;
-            celsius[i] = here + flow * hours + (west * hours) * celsius[i - 1];
+            float flow = east[i] * (celsius[i + 1] - here);
+            here += flow;
+            celsius[i + 1] -= flow;
+            flow = south[i] * (celsius[i + row] - here);
+            here += flow;
+            celsius[i + row] -= flow;
+            if (open_sky != NULL && kind[i] % TEMPERATURE_COVER_COUNT == TEMPERATURE_COVER_OPEN) {
+                celsius[i] = surface_pull(&pass, temperatures, i, here, pull[i], ground_share[i]);
+                continue;
+            }
+            float reservoir = outdoor + ground_share[i] * (TEMPERATURE_GROUND - outdoor);
+            celsius[i] = here + pull[i] * (reservoir - here);
         }
+    }
+    if (temperatures->source_count > 0) {
+        release_sources(temperatures, first, last, true);
     }
 }
 
@@ -393,6 +543,11 @@ uint64_t temperatures_hash(const Temperatures *temperatures, uint64_t hash)
         hash = hash_fnv1a64(hash, temperatures->celsius,
                             (size_t)temperatures->width * (size_t)temperatures->height *
                                 (size_t)temperatures->depth * sizeof(*temperatures->celsius));
+        hash = hash_fnv1a64(hash, temperatures->soil,
+                            (size_t)temperatures->width * (size_t)temperatures->height *
+                                (size_t)temperatures->depth * sizeof(*temperatures->soil));
+        hash = hash_fnv1a64(hash, temperatures->sources,
+                            (size_t)temperatures->source_count * sizeof(*temperatures->sources));
     }
     return hash;
 }

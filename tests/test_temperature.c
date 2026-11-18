@@ -44,6 +44,7 @@ static bool init_flat_game(Game *game, uint64_t tick)
     }
     map_topology_changed(map);
     game->clock.tick = tick;
+    game_settle_climate(game);
     return true;
 }
 
@@ -140,13 +141,15 @@ static void test_open_ground_follows_the_air(void)
         game.temperatures.celsius[i] = 30.0f;
     }
     run_hours(&game, 1.5f);
+    /* Bare soil in the sun is a little warmer than the meadow's air the
+     * weather is measured in (docs/CLIMATE.md §5.1). */
     float outdoor = game_outdoor_temperature(&game);
-    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20, 0), outdoor, 1.0);
-    CHECK_NEAR(temperature_at(&game.temperatures, 0, 0, 0), outdoor, 1.0);
+    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20, 0), outdoor, 2.0);
+    CHECK_NEAR(temperature_at(&game.temperatures, 0, 0, 0), outdoor, 2.0);
     CHECK_NEAR(temperature_at(&game.temperatures, -1, 5, 0), TEMPERATURE_GROUND, 1e-6);
     /* Following the day. */
     run_hours(&game, 10.0f);
-    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20, 0), game_outdoor_temperature(&game), 1.0);
+    CHECK_NEAR(temperature_at(&game.temperatures, 20, 20, 0), game_outdoor_temperature(&game), 2.0);
     game_shutdown(&game);
 }
 
@@ -249,6 +252,214 @@ static void test_levels_keep_their_heat(void)
     map_free(&map);
 }
 
+/* Long passes stay stable: a pass closes at most half the gap between two
+ * tiles, a checkerboard of frost and heat never overshoots, the heat between
+ * tiles is kept, and it all settles to the air. */
+static void test_long_passes_never_overshoot(void)
+{
+    CHECK(TEMPERATURE_CONDUCTANCE_AIR * (float)TEMPERATURE_SWEEP_TICKS <=
+          0.5f * (float)TICKS_PER_HOUR);
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    Temperatures temperatures;
+    const float outdoor = 10.0f;
+    REQUIRE(temperatures_init(&temperatures, &map, outdoor));
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            temperatures.celsius[map_index(&map, x, y, 0)] = (x + y) % 2 == 0 ? -20.0f : 40.0f;
+        }
+    }
+    /* Without the pull of the air, the heat is only moved around. */
+    for (size_t i = 0; i < map_tile_count(&map); i++) {
+        temperatures.pull[i] = 0.0f;
+    }
+    double before = 0.0;
+    for (size_t i = 0; i < map_tile_count(&map); i++) {
+        before += temperatures.celsius[i];
+    }
+    for (uint64_t tick = 0; tick < (uint64_t)TEMPERATURE_SWEEP_TICKS; tick++) {
+        temperatures_tick(&temperatures, &map, tick, outdoor);
+    }
+    double after = 0.0;
+    for (size_t i = 0; i < map_tile_count(&map); i++) {
+        CHECK(temperatures.celsius[i] >= -20.0f && temperatures.celsius[i] <= 40.0f);
+        after += temperatures.celsius[i];
+    }
+    CHECK_NEAR(after, before, 1e-2);
+    temperatures_free(&temperatures);
+
+    /* With it, everything goes to the air. */
+    REQUIRE(temperatures_init(&temperatures, &map, outdoor));
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            temperatures.celsius[map_index(&map, x, y, 0)] = (x + y) % 2 == 0 ? -20.0f : 40.0f;
+        }
+    }
+    for (uint64_t tick = 0; tick < 4 * (uint64_t)TICKS_PER_HOUR; tick++) {
+        temperatures_tick(&temperatures, &map, tick, outdoor);
+        if (tick % TEMPERATURE_SWEEP_TICKS == TEMPERATURE_SWEEP_TICKS - 1) {
+            for (int y = 0; y < 16; y++) {
+                for (int x = 0; x < 16; x++) {
+                    float t = temperature_at(&temperatures, x, y, 0);
+                    CHECK(t >= -20.0f && t <= 40.0f);
+                }
+            }
+        }
+    }
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            CHECK_NEAR(temperature_at(&temperatures, x, y, 0), outdoor, 1e-2);
+        }
+    }
+    temperatures_free(&temperatures);
+    map_free(&map);
+}
+
+/* A hearth's heat waits for the pass over its tile, then spreads: the tile
+ * does not pile it up between passes. */
+static void test_heat_source_waits_for_the_pass(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    Temperatures temperatures;
+    const float outdoor = 10.0f;
+    REQUIRE(temperatures_init(&temperatures, &map, outdoor));
+    float highest = outdoor, lowest = 1e9f;
+    for (uint64_t tick = 0; tick < 4 * (uint64_t)TICKS_PER_HOUR; tick++) {
+        temperatures_heat_source(&temperatures, 8, 8, 0, 200.0f / (float)TICKS_PER_HOUR);
+        temperatures_tick(&temperatures, &map, tick, outdoor);
+        if (tick >= 3 * (uint64_t)TICKS_PER_HOUR) { /* Settled: steady between passes. */
+            float here = temperature_at(&temperatures, 8, 8, 0);
+            highest = here > highest ? here : highest;
+            lowest = here < lowest ? here : lowest;
+        }
+    }
+    /* About what a steady fire gives (200 degrees an hour against the pull of
+     * the air and the tiles around: some 11 degrees over the air), and no
+     * saw-tooth of a pass's worth of heat (16 degrees). */
+    CHECK(lowest > outdoor + 6.0f && highest < outdoor + 13.0f);
+    CHECK(highest - lowest < 4.0f);
+    CHECK(temperatures.source_count <= 1);
+    CHECK(temperature_at(&temperatures, 9, 8, 0) > outdoor + 0.5f);
+    temperatures_free(&temperatures);
+    map_free(&map);
+}
+
+/* A strip of meadow, a strip of dry bare ground and a strip of wood (crowns
+ * letting a tenth of the light through) side by side on a 96 x 16 map, under
+ * a clear summer sky; the temperatures of their middles at `hour` of the
+ * second day. */
+static void microclimate_at(int hour, float out[3], float *outdoor_out)
+{
+    Map map;
+    REQUIRE(map_init(&map, 96, 16, 1));
+    Temperatures temperatures;
+    uint64_t start = (uint64_t)SEASON_DAY(SEASON_SUMMER, 8) * TICKS_PER_DAY;
+    REQUIRE(temperatures_init(&temperatures, &map, temperature_outdoor(start)));
+    temperatures_settle_ground(&temperatures, temperature_season_mean(start));
+    size_t count = map_tile_count(&map);
+    uint8_t *canopy = malloc(count), *evap = malloc(count);
+    REQUIRE(canopy != NULL && evap != NULL);
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 96; x++) {
+            size_t i = map_index(&map, x, y, 0);
+            int strip = x / 32; /* Meadow, bare ground, wood. */
+            canopy[i] = strip == 2 ? 25 : 255;
+            evap[i] = strip == 0 ? 240 : strip == 1 ? 20 : 30;
+        }
+    }
+    uint64_t end = start + TICKS_PER_DAY + (uint64_t)hour * TICKS_PER_HOUR;
+    for (uint64_t tick = start; tick < end; tick++) {
+        float sun = game_sunlight(tick);
+        TemperatureSurface surface = {
+            .canopy = canopy,
+            .evap = evap,
+            .sun_heat = TEMPERATURE_SUN_HEAT * sun,
+            .night_cooling = sun <= 0.0f ? TEMPERATURE_NIGHT_COOLING : 0.0f,
+        };
+        temperatures_set_surface(&temperatures, &surface);
+        temperatures_tick(&temperatures, &map, tick, temperature_outdoor(tick));
+    }
+    for (int strip = 0; strip < 3; strip++) {
+        out[strip] = temperature_at(&temperatures, strip * 32 + 16, 8, 0);
+    }
+    *outdoor_out = temperature_outdoor(end);
+    free(canopy);
+    free(evap);
+    temperatures_free(&temperatures);
+    map_free(&map);
+}
+
+/* The meadow follows the air the weather is measured in; dry bare ground is
+ * warmer in the afternoon sun; a wood is cooler in the afternoon and milder
+ * before dawn (docs/CLIMATE.md §5). */
+static void test_microclimate(void)
+{
+    float afternoon[3], dawn[3], air_afternoon, air_dawn;
+    microclimate_at(15, afternoon, &air_afternoon);
+    microclimate_at(5, dawn, &air_dawn);
+    CHECK_NEAR(afternoon[0], air_afternoon, 1.5);
+    CHECK_NEAR(dawn[0], air_dawn, 1.0);
+    CHECK(afternoon[1] > afternoon[0] + 1.5f);
+    CHECK(afternoon[2] < afternoon[0] - 1.0f);
+    CHECK(afternoon[2] < air_afternoon - 1.5f);
+    CHECK(dawn[2] > dawn[0] + 0.7f);
+    /* Without a surface, every tile is the open air, as before. */
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    Temperatures temperatures;
+    REQUIRE(temperatures_init(&temperatures, &map, 10.0f));
+    temperatures_settle_ground(&temperatures, 30.0f);
+    for (uint64_t tick = 0; tick < (uint64_t)TICKS_PER_HOUR; tick++) {
+        temperatures_tick(&temperatures, &map, tick, 10.0f);
+    }
+    CHECK_NEAR(temperature_at(&temperatures, 8, 8, 0), 10.0, 1e-4);
+    temperatures_free(&temperatures);
+    map_free(&map);
+}
+
+/* A surface in full sun letting all the light through, every tile turning
+ * `evap` (0 .. 255) of it into vapour, at a steady 20 °C outdoors: the
+ * temperature it settles at, in `celsius`. */
+static void sunlit_surface(uint8_t evap, float *celsius)
+{
+    *celsius = NAN;
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    Temperatures temperatures;
+    REQUIRE(temperatures_init(&temperatures, &map, 20.0f));
+    temperatures_settle_ground(&temperatures, 20.0f);
+    size_t count = map_tile_count(&map);
+    uint8_t *canopy = malloc(count), *share = malloc(count);
+    REQUIRE(canopy != NULL && share != NULL);
+    memset(canopy, 255, count);
+    memset(share, evap, count);
+    TemperatureSurface surface = {
+        .canopy = canopy, .evap = share, .sun_heat = TEMPERATURE_SUN_HEAT, .night_cooling = 0.0f};
+    temperatures_set_surface(&temperatures, &surface);
+    for (uint64_t tick = 0; tick < 6 * (uint64_t)TICKS_PER_HOUR; tick++) {
+        temperatures_tick(&temperatures, &map, tick, 20.0f);
+    }
+    *celsius = temperature_at(&temperatures, 8, 8, 0);
+    temperatures_free(&temperatures);
+    free(canopy);
+    free(share);
+    map_free(&map);
+}
+
+/* The top of a crown in the sun (docs/CLIMATE.md §5.1): near the air while
+ * its roots find water and it transpires, warmer once the ground is dry and
+ * it closes its pores, as hot as bare dry ground. */
+static void test_crown_top_in_the_sun(void)
+{
+    float transpiring, parched;
+    sunlit_surface(255, &transpiring);
+    sunlit_surface(0, &parched);
+    CHECK_NEAR(transpiring, 20.0, 0.3);
+    CHECK(parched > 20.0f + 2.5f);
+    CHECK(parched < 20.0f + TEMPERATURE_SUN_HEAT);
+}
+
 /* The cached kind of a tile. */
 static int cached_kind(const Game *game, int x, int y)
 {
@@ -312,11 +523,12 @@ static void test_hearth_warms_around_it(void)
         run_hours(&game, 0.5f);
         refill(&game, hearth);
     }
-    float outdoor = game_outdoor_temperature(&game);
-    float at = temperature_at(&game.temperatures, 20, 20, 0) - outdoor;
-    float next = temperature_at(&game.temperatures, 21, 20, 0) - outdoor;
-    float near = temperature_at(&game.temperatures, 22, 20, 0) - outdoor;
-    float far = temperature_at(&game.temperatures, 26, 20, 0) - outdoor;
+    /* Against open ground far from the fire, in the same sun. */
+    float open = temperature_at(&game.temperatures, 5, 35, 0);
+    float at = temperature_at(&game.temperatures, 20, 20, 0) - open;
+    float next = temperature_at(&game.temperatures, 21, 20, 0) - open;
+    float near = temperature_at(&game.temperatures, 22, 20, 0) - open;
+    float far = temperature_at(&game.temperatures, 26, 20, 0) - open;
     CHECK(at > 3.0f);
     CHECK(at > next && next > near && near > far);
     CHECK(far < 0.5f);
@@ -338,8 +550,9 @@ static void test_hut_keeps_the_warmth(void)
         }
         float outdoor = game_outdoor_temperature(&game);
         inside[variant] = temperature_at(&game.temperatures, 19, 21, 0) - outdoor;
-        /* The walls keep it in. */
-        CHECK(fabsf(temperature_at(&game.temperatures, 17, 20, 0) - outdoor) < 1.0f);
+        /* The walls keep it in: outside them, the open ground far away. */
+        float open = temperature_at(&game.temperatures, 5, 35, 0);
+        CHECK(fabsf(temperature_at(&game.temperatures, 17, 20, 0) - open) < 1.0f);
         game_shutdown(&game);
     }
     CHECK(inside[0] > inside[1] + 5.0f);
@@ -517,17 +730,22 @@ static void test_cold_sleep_is_longer(void)
     int cold = ticks_to_rest(&game, 10, 10);
     game_shutdown(&game);
 
+    /* A hut of 5 x 5 inside, warmed for half a day: a settler sleeping on the
+     * tile beside the fire is warm, not too hot (in a smaller hut the fire's
+     * glow is too much). */
     REQUIRE(init_flat_game(&game, evening));
-    build_hut(&game, 18, 18, 22, 22, true);
+    build_hut(&game, 17, 17, 23, 23, true);
     int hearth = burning_hearth(&game, 20, 20);
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; i < 24; i++) {
         run_hours(&game, 0.5f);
         refill(&game, hearth);
     }
     game.clock.tick = evening;
     Workstation *station = workstation_get(&game.workstations, hearth);
     station->fuel = HEARTH_FUEL_CAPACITY;
-    CHECK(temperature_at(&game.temperatures, 19, 19, 0) > COLONIST_COLD_SLEEP_BELOW);
+    float felt =
+        hearths_felt_temperature(&game.workstations, &game.map, &game.temperatures, 19, 19, 0);
+    CHECK(felt > COLONIST_COLD_SLEEP_BELOW && felt < COLONIST_HOT_SLEEP_ABOVE);
     int warm = ticks_to_rest(&game, 19, 19);
     game_shutdown(&game);
 
@@ -683,6 +901,10 @@ int main(void)
 {
     RUN_TEST(test_outdoor);
     RUN_TEST(test_open_ground_follows_the_air);
+    RUN_TEST(test_long_passes_never_overshoot);
+    RUN_TEST(test_heat_source_waits_for_the_pass);
+    RUN_TEST(test_microclimate);
+    RUN_TEST(test_crown_top_in_the_sun);
     RUN_TEST(test_materials_and_covers);
     RUN_TEST(test_rot_rate_on_a_tile);
     RUN_TEST(test_cache_follows_the_map);

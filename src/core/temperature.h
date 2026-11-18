@@ -44,10 +44,14 @@
 /* Rock, and what is deep under a natural roof. */
 #define TEMPERATURE_GROUND 10.0f
 
-/* Ticks for a full pass over the layer (2.4 in-game minutes). Stable as long
- * as a tile's rates add up to less than TICKS_PER_HOUR / this (25 an hour):
- * open air has 4 × TEMPERATURE_CONDUCTANCE_AIR + TEMPERATURE_EXPOSURE_OPEN. */
-#define TEMPERATURE_SWEEP_TICKS 100
+/* Ticks for a full pass over the layer (4.8 in-game minutes). A pass works a
+ * tile out edge by edge with its neighbors (what one gains the other loses:
+ * the heat is kept), then pulls it towards the outdoor air and the ground. It
+ * stays stable while one pass closes at most half the gap between two tiles
+ * (TEMPERATURE_CONDUCTANCE_AIR times the pass: 0.32 an edge) and the pull is
+ * capped at the gap (a tile at a cliff's edge, open on several sides); the
+ * steady states are those of the heat equation. */
+#define TEMPERATURE_SWEEP_TICKS 200
 
 /* Heat exchange rates, per hour (tuning): between neighbors (the lower of
  * the two conductances), with the outdoor air, with the ground. */
@@ -58,6 +62,41 @@
 #define TEMPERATURE_EXPOSURE_OPEN 6.0f
 #define TEMPERATURE_EXPOSURE_ROOFED 0.3f
 #define TEMPERATURE_GROUND_RATE_NATURAL_ROOF 0.3f
+
+/* Near the ground (docs/CLIMATE.md §5). The outdoor air is that of a
+ * well-watered meadow (where the weather is measured); other surfaces differ
+ * from it. In the sun a tile warms the air over it by TEMPERATURE_SUN_HEAT
+ * (full sun) times the sun it gets (the light its crowns let through) less
+ * what goes into evaporation (TEMPERATURE_EVAP_COOLING of it), counted from
+ * what a meadow gets: dry bare ground is warmer, the shade of a wood cooler.
+ * On a clear night the open ground cools by TEMPERATURE_NIGHT_COOLING (already
+ * in the outdoor air) where crowns hide the sky, a wood is milder by that
+ * much. Under crowns the air mixes more slowly with the open air
+ * (TEMPERATURE_CANOPY_STILL of the pull under crowns letting no light through).
+ * Each tile under the sky exchanges heat with the ground under it at
+ * TEMPERATURE_SOIL_RATE an hour, the ground following it at
+ * TEMPERATURE_SOIL_FOLLOW an hour (a day or so behind); water stores far more
+ * heat (TEMPERATURE_WATER_RATE, TEMPERATURE_WATER_FOLLOW). */
+#define TEMPERATURE_SUN_HEAT 5.0f
+#define TEMPERATURE_EVAP_COOLING 0.7f
+#define TEMPERATURE_NIGHT_COOLING 3.0f
+#define TEMPERATURE_CANOPY_STILL 0.25f
+#define TEMPERATURE_SOIL_RATE 0.7f
+#define TEMPERATURE_SOIL_FOLLOW 0.03f
+#define TEMPERATURE_WATER_RATE 3.0f
+#define TEMPERATURE_WATER_FOLLOW 0.01f
+
+/* What the surface of each tile does this tick (docs/CLIMATE.md §5), from
+ * the soil's hourly pass (core/soil.h): the light the crowns let through and
+ * the share of the sun gone into evaporation, per tile (0 .. 255); the sun's
+ * warming now (TEMPERATURE_SUN_HEAT × the sun's height × the sky) and the
+ * night's cooling now (TEMPERATURE_NIGHT_COOLING × night × clear sky). */
+typedef struct TemperatureSurface {
+    const uint8_t *canopy;
+    const uint8_t *evap;
+    float sun_heat;
+    float night_cooling;
+} TemperatureSurface;
 
 /* What a tile is made of, for heat. */
 typedef enum TemperatureMaterial {
@@ -79,6 +118,14 @@ typedef enum TemperatureCover {
     TEMPERATURE_COVER_COUNT
 } TemperatureCover;
 
+/* Heat put in by burning hearths, waiting for the next pass over its tile
+ * (temperatures_heat_source()): the tile's index and the degrees. */
+#define TEMPERATURE_SOURCES_MAX 64
+typedef struct TemperatureSource {
+    uint32_t index;
+    float degrees;
+} TemperatureSource;
+
 typedef struct Temperatures {
     int width;
     int height;
@@ -89,18 +136,34 @@ typedef struct Temperatures {
      * rate of 0. */
     float *celsius;
     /* Caches of the map: per tile, material × TEMPERATURE_COVER_COUNT +
-     * cover; the rate between a tile and its east and south neighbors (0 at
-     * the edges of the map, and padded so that tiles on the edges need no
-     * test). */
+     * cover; the rate between a tile and its east and south neighbors times
+     * the pass (0 at the edges of the map and next to rock or open space, and
+     * padded so that tiles on the edges need no test). */
     uint8_t *kind;
     float *edge_east;
     float *edge_south;
-    /* Per tile, the rate of exchange with the outdoor air: by its cover,
-     * plus each side open to open space (0 for rock and open space). */
-    float *exposure;
+    /* Per tile, from its rates of exchange with the outdoor air (by its
+     * cover, plus each side open to open space) and with the ground (under
+     * a natural roof, plus each side against rock): the share of its gap to
+     * them a pass closes (the rates times the pass, at most 1; 0 when it
+     * exchanges with neither, rock and open space), and the ground's share
+     * of what pulls it (0 out in the air, 1 deep in a cave). */
+    float *pull;
+    float *ground_share;
     /* One bit per tile: whether the sweep works it out (all but rock and
      * open space). */
     uint64_t *active;
+    /* Per tile, the heat stored in the ground (or the water) under it (°C),
+     * for the tiles under the sky, and whether it is water (a cache of the
+     * map, as `kind`). */
+    float *soil;
+    uint8_t *water;
+    /* The surface this tick (temperatures_set_surface(); none: the open air
+     * only, no ground under the tiles). */
+    TemperatureSurface surface;
+    /* Heat waiting for the pass over its tile, at most one entry per tile. */
+    TemperatureSource sources[TEMPERATURE_SOURCES_MAX];
+    int source_count;
     float outdoor;              /* The outdoor air at the last tick: open space's. */
     float *buffers[3];          /* Allocations behind celsius, edge_east, edge_south. */
     uint32_t topology_revision; /* The map revisions the caches were built for. */
@@ -129,8 +192,14 @@ float temperature_at(const Temperatures *temperatures, int x, int y, int z);
  * outdoor air then. */
 float temperature_for_plant(const Temperatures *temperatures, const Map *map, int x, int y, int z);
 
-/* Heats a tile by `degrees` (a burning hearth, every tick). */
+/* Heats a tile by `degrees` at once. */
 void temperatures_add_heat(Temperatures *temperatures, int x, int y, int z, float degrees);
+/* Heat put into a tile little by little (a burning hearth, every tick): it
+ * waits for the next pass over the tile, which adds half of it before working
+ * the tile out (it came in all along the pass) and the rest after, so that the
+ * tile does not pile it up in a saw-tooth between passes. Added at once when
+ * too many tiles wait (TEMPERATURE_SOURCES_MAX). */
+void temperatures_heat_source(Temperatures *temperatures, int x, int y, int z, float degrees);
 
 /* What a tile is made of and covered by, as the layer sees the map now. */
 TemperatureMaterial temperature_material(const Map *map, int x, int y, int z);
@@ -142,6 +211,14 @@ TemperatureCover temperature_cover(const Map *map, int x, int y, int z);
  * `rains`; 0 out of bounds. */
 float temperature_rot_rate(const Temperatures *temperatures, const Map *map, int x, int y, int z,
                            bool rains);
+
+/* The heat stored in the ground and water under every tile set to
+ * `celsius` (a new world: the day's mean temperature). */
+void temperatures_settle_ground(Temperatures *temperatures, float celsius);
+
+/* What the surface does from now on (copied; the arrays must outlive the
+ * ticks), or nothing (NULL). */
+void temperatures_set_surface(Temperatures *temperatures, const TemperatureSurface *surface);
 
 /* One tick: the band of rows due at `tick` exchanges heat, with the
  * outdoor air at `outdoor` (core/weather.h). */

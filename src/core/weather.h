@@ -96,6 +96,13 @@ typedef struct WeatherDef {
     /* Step along clear (0) → cloudy, fog (1) → rain (2) → storm (3). */
     int cloudiness;
     bool falls; /* Rain or snow falls. */
+    /* Water that falls, in mm an hour (docs/CLIMATE.md §3.1); how far the
+     * dew point stays below the day's mean temperature (0: the air is
+     * saturated, §4); how much of the sky is clear for the ground to cool
+     * at night (§5.1). */
+    float rain_mm;
+    float dew_gap;
+    float clearness;
 } WeatherDef;
 
 typedef struct Weather {
@@ -144,6 +151,20 @@ const char *weather_name_key(const Weather *weather, uint64_t tick);
 
 /* Daylight let through by the sky (1: all of it). */
 float weather_light(const Weather *weather);
+
+/* Water falling at `tick` as rain and as snow, in mm (of water) an hour
+ * (docs/CLIMATE.md §3.1). */
+float weather_rainfall(const Weather *weather, uint64_t tick);
+float weather_snowfall(const Weather *weather, uint64_t tick);
+
+/* The air's dew point at `tick` (docs/CLIMATE.md §4): the outdoor air's
+ * temperature when it is saturated (rain, storm, fog), else the day's mean
+ * temperature less the sky's `dew_gap`, never above the air's. */
+float weather_dew_point(const Weather *weather, uint64_t tick);
+
+/* Relative humidity (0 .. 1) of air at `celsius` holding the vapour of air
+ * saturated at `dew_point` (the Magnus formula); 1 at or below the dew point. */
+float air_relative_humidity(float dew_point, float celsius);
 
 uint64_t weather_hash(const Weather *weather, uint64_t hash);
 

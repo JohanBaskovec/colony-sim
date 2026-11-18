@@ -228,10 +228,10 @@ expected warmth of the day.
 
 ## 8. Later
 
-- **Water** (P4): soil moisture per tile (rain, shade, nearby water,
-  drying in the heat and the wind), `f_water` in the growth, drought that
-  harms and kills, waterlogging for the plants that hate it, cattails in
-  the wet. `docs/GAME_DESIGN.md`, *Soil*.
+- **Water** (P4): `f_water` in the growth from the soil moisture of each
+  tile (built: `core/soil.h`, `docs/CLIMATE.md` §3), drought that harms and
+  kills, waterlogging for the plants that hate it, cattails in the wet.
+  Design: `docs/CLIMATE.md` §6 (step C3).
 - **Evergreens** (pines): crowns that stay in leaf all winter (§12 treats all
   trees as deciduous).
 - **Death of grown trees:** standing deadwood, a source of dry wood, that
@@ -327,7 +327,8 @@ expected warmth of the day.
    the cover of each tile (open, foliage, roof, rock), `f_light` and death in
    the dark; mushrooms need none.
 3. **P3: ripening by degree-days** *(done)*, mushrooms by temperature.
-4. **P4: water** (soil moisture), with `docs/GAME_DESIGN.md`'s *Soil*.
+4. **P4: water**: the soil moisture is built (`docs/CLIMATE.md` C1); the
+   plants' needs are its step C3 (§6 there).
 
 Each step changes the state hash of the benchmarks.
 

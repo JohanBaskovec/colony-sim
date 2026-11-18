@@ -41,6 +41,7 @@ add_library(colony_core STATIC
     scenario.c
     settings.c
     strike_anim.c
+    soil.c
     temperature.c
     test_scenario.c
     tree.c

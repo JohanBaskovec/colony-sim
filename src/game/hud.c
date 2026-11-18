@@ -526,6 +526,10 @@ static void build_tile_panel(App *app, Panel *panel)
         } else {
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.temperature"), celsius);
         }
+        const char *soil = soil_moisture_key(&app->game.soil, map, x, y, z);
+        if (soil != NULL) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.soil"), tr(soil));
+        }
     }
     const ConstructionSite *site = construction_get(
         &app->game.constructions, construction_at(&app->game.constructions, x, y, z));

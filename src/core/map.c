@@ -58,6 +58,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_NONE] = {.id = "none", .move_cost = 1.0f},
     [PLANT_GRASS] = {.id = "grass",
                      .name_key = N_("plant.grass"),
+                     .transpiration = 1.0f,
                      .spread_chance = 0.15f,
                      .spread_growth = 0.5f,
                      .spread_range = 1,
@@ -89,6 +90,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * (core/tree.h): no stock on the plant. */
     [PLANT_TREE] = {.id = "tree",
                     .name_key = N_("plant.tree"),
+                    .transpiration = 1.0f,
                     .spread_chance = 0.03f,
                     .spread_growth = 1.0f,
                     .spread_range = 4,
@@ -113,6 +115,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * dead branches and twigs like those of the other trees (core/tree.h). */
     [PLANT_HAZEL] = {.id = "hazel",
                      .name_key = N_("plant.hazel"),
+                     .transpiration = 1.0f,
                      .spread_chance = 0.03f,
                      .spread_growth = 1.0f,
                      .spread_range = 3,
@@ -139,6 +142,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* Thorny canes: slow to walk through. */
     [PLANT_BRAMBLE] = {.id = "bramble",
                        .name_key = N_("plant.bramble"),
+                       .transpiration = 1.0f,
                        .spread_chance = 0.06f,
                        .spread_growth = 0.6f,
                        .spread_range = 1,
@@ -165,6 +169,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* Easily mistaken for lily of the valley or autumn crocus. */
     [PLANT_WILD_GARLIC] = {.id = "wild_garlic",
                            .name_key = N_("plant.wild_garlic"),
+                           .transpiration = 0.8f,
                            .spread_chance = 0.04f,
                            .spread_growth = 0.6f,
                            .spread_range = 1,
@@ -193,6 +198,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* Young shoots in spring, and again when it grows back in autumn. */
     [PLANT_NETTLE] = {.id = "nettle",
                       .name_key = N_("plant.nettle"),
+                      .transpiration = 1.0f,
                       .spread_chance = 0.08f,
                       .spread_growth = 0.6f,
                       .spread_range = 1,
@@ -217,6 +223,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                                     .min_growth = 0.2f}}},
     [PLANT_PLANTAIN] = {.id = "plantain",
                         .name_key = N_("plant.plantain"),
+                        .transpiration = 0.8f,
                         .spread_chance = 0.06f,
                         .spread_growth = 0.6f,
                         .spread_range = 2,
@@ -244,6 +251,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * flowers; easily mistaken for hemlock. */
     [PLANT_WILD_CARROT] = {.id = "wild_carrot",
                            .name_key = N_("plant.wild_carrot"),
+                           .transpiration = 0.8f,
                            .spread_chance = 0.04f,
                            .spread_growth = 0.8f,
                            .spread_range = 2,
@@ -273,6 +281,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * of it up leaves the rest growing. */
     [PLANT_CATTAIL] = {.id = "cattail",
                        .name_key = N_("plant.cattail"),
+                       .transpiration = 1.2f,
                        .spread_chance = 0.08f,
                        .spread_growth = 0.6f,
                        .spread_range = 1,
@@ -320,6 +329,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_MOSS] =
         {.id = "moss",
          .name_key = N_("plant.moss"),
+         .transpiration = 0.4f,
          .spread_chance = 0.05f,
          .spread_growth = 0.5f,
          .spread_range = 1,
@@ -343,6 +353,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     /* Wood sorrel: clover-like leaves, sour, in the deepest shade. */
     [PLANT_WOOD_SORREL] = {.id = "wood_sorrel",
                            .name_key = N_("plant.wood_sorrel"),
+                           .transpiration = 0.6f,
                            .spread_chance = 0.06f,
                            .spread_growth = 0.5f,
                            .spread_range = 1,
@@ -370,6 +381,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * next year. Poisonous to eat. */
     [PLANT_BRACKEN] = {.id = "bracken",
                        .name_key = N_("plant.bracken"),
+                       .transpiration = 1.0f,
                        .spread_chance = 0.08f,
                        .spread_growth = 0.6f,
                        .spread_range = 1,
@@ -398,6 +410,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * start of summer. */
     [PLANT_WILD_STRAWBERRY] = {.id = "wild_strawberry",
                                .name_key = N_("plant.wild_strawberry"),
+                               .transpiration = 0.7f,
                                .spread_chance = 0.12f,
                                .spread_growth = 0.5f,
                                .spread_range = 1,
@@ -425,6 +438,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * under thin woods; berries in the middle of summer. */
     [PLANT_BILBERRY] = {.id = "bilberry",
                         .name_key = N_("plant.bilberry"),
+                        .transpiration = 0.6f,
                         .spread_chance = 0.03f,
                         .spread_growth = 0.7f,
                         .spread_range = 1,
@@ -455,6 +469,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * wakes in spring: food when there is little else. */
     [PLANT_DOG_ROSE] = {.id = "dog_rose",
                         .name_key = N_("plant.dog_rose"),
+                        .transpiration = 0.9f,
                         .spread_chance = 0.02f,
                         .spread_growth = 0.8f,
                         .spread_range = 3,
@@ -481,6 +496,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * it is bedding, thatch and fuel, and slow to grow back. */
     [PLANT_HEATHER] = {.id = "heather",
                        .name_key = N_("plant.heather"),
+                       .transpiration = 0.6f,
                        .spread_chance = 0.03f,
                        .spread_growth = 0.7f,
                        .spread_range = 2,
@@ -509,6 +525,7 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
      * The rootstock grows them again in spring. */
     [PLANT_REED] = {.id = "reed",
                     .name_key = N_("plant.reed"),
+                    .transpiration = 1.2f,
                     .spread_chance = 0.08f,
                     .spread_growth = 0.6f,
                     .spread_range = 1,
@@ -1112,6 +1129,10 @@ void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
     }
     map->terrain[index] = (uint8_t)terrain;
     map->light_revision++;
+    if (old == TERRAIN_SHALLOW_WATER || old == TERRAIN_DEEP_WATER ||
+        terrain == TERRAIN_SHALLOW_WATER || terrain == TERRAIN_DEEP_WATER) {
+        map->water_revision++;
+    }
     /* Trees: open space, thin foliage (nobody stands on it) and dense foliage
      * (a floor) change into each other all the time as crowns spread. */
     bool tree_terrain = (unstandable_air(old) || old == TERRAIN_FOLIAGE) &&
@@ -1349,6 +1370,7 @@ void map_topology_changed(Map *map)
 {
     log_topology_change(map, 0, 0, 0, false);
     map->topology_log[map->topology_revision % MAP_TOPOLOGY_LOG_SIZE].anywhere = true;
+    map->water_revision++;
 }
 
 float map_move_cost_at(const Map *map, size_t index)

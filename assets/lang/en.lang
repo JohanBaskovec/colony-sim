@@ -345,6 +345,7 @@ hud.tile.under_roof = Under a roof: {0}
 hud.tile.natural_roof = Roof: rock or ground overhead
 hud.tile.needs_support = Waiting for support: dug now, a ceiling would cave in (a prop or a wall within 2 tiles)
 hud.tile.temperature = Temperature: {0}
+hud.tile.soil = Soil: {0}
 hud.tile.temperature_felt = Temperature: {0} (felt: {1}, by the fire)
 hud.tile.refresh = Refreshing: {0} ({1}% done)
 hud.tile.bed_owner = Owner: {0}
@@ -1305,3 +1306,10 @@ hud.light_view = Light view: blue dark, yellow bright · {0}: hide
 hud.hover_temperature = Tile: {0}
 hud.hover_light = Tile light: {0}% (up to {1}% today)
 hud.help.light = {0}: light view (the light on each tile, from the sun, the sky and what covers it: dark blue for darkness, yellow for full light)
+
+# Soil moisture (docs/CLIMATE.md)
+soil.dry = dry
+soil.fairly_dry = fairly dry
+soil.moist = moist
+soil.wet = wet
+soil.soaked = soaked

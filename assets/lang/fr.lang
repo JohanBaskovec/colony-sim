@@ -314,6 +314,7 @@ hud.tile.under_roof = Sous un toit : {0}
 hud.tile.natural_roof = Toit : roche ou sol au-dessus
 hud.tile.needs_support = En attente de soutien : creusé maintenant, un plafond s’effondrerait (un étai ou un mur à 2 cases au plus)
 hud.tile.temperature = Température : {0}
+hud.tile.soil = Sol : {0}
 hud.tile.temperature_felt = Température : {0} (ressentie : {1}, près du feu)
 hud.tile.refresh = Réfection : {0} (faite à {1} %)
 hud.tile.bed_owner = Propriétaire : {0}
@@ -1205,3 +1206,10 @@ hud.light_view = Vue de la lumière : bleu sombre, jaune lumineux · {0} : mas
 hud.hover_temperature = Case : {0}
 hud.hover_light = Lumière de la case : {0} % (jusqu’à {1} % aujourd’hui)
 hud.help.light = {0} : vue de la lumière (la lumière de chaque case, du soleil, du ciel et de ce qui la couvre : bleu foncé pour l’obscurité, jaune pour la pleine lumière)
+
+# Soil moisture (docs/CLIMATE.md)
+soil.dry = sec
+soil.fairly_dry = plutôt sec
+soil.moist = frais
+soil.wet = humide
+soil.soaked = détrempé

@@ -223,6 +223,10 @@ typedef struct PlantDef {
     float spread_chance;
     float spread_growth;
     int spread_range;
+    /* Its leaf cover for what it transpires, fully grown and awake
+     * (docs/CLIMATE.md §3.4): 1 for a meadow's grass, less for a sparse or
+     * small-leaved plant, 0 for what has no leaves (mushrooms). */
+    float transpiration;
 } PlantDef;
 
 /* Whether a plant type is a tree (takes room once grown, see core/tree.h). */
@@ -450,6 +454,11 @@ typedef struct Map {
      * what lets the light through (map_light_cover()). A cache of it compares
      * this. Not part of map_hash(). */
     uint32_t light_revision;
+    /* Bumped whenever a tile turns into water or out of it (map_set_terrain()),
+     * or the layers were written directly (map_topology_changed()): the
+     * distance to open water (core/soil.h) compares this. Not part of
+     * map_hash(). */
+    uint32_t water_revision;
     /* How bare the crowns of the deciduous trees are, 0 (in full leaf) to
      * MAP_BARE_STEPS (bare branches), set by the game from the climate (see
      * plant_leaf_target()); a layer of foliage lets more light through the
