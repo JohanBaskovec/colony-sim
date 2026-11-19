@@ -260,8 +260,9 @@ bool gather_stone_ground(const Map *map, int x, int y, int z);
  * Creates a zone from the tiles of a rectangle (corners in any order) that
  * gather_zone_can_cover() accepts and that are in no other zone. Every order
  * is off (until GATHER_TARGET_DEFAULT items, wood waiting for full-grown
- * trees); the food group gathers until GATHER_FOOD_DAYS_DEFAULT days of food,
- * the other groups forever. Returns its index, or GATHER_ZONE_NONE when no tile qualifies or
+ * trees, the food resources forever: their group's days of food limit them);
+ * the food group gathers until GATHER_FOOD_DAYS_DEFAULT days of food, the
+ * other groups forever. Returns its index, or GATHER_ZONE_NONE when no tile qualifies or
  * the list is full.
  */
 int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z);

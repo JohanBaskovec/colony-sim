@@ -333,11 +333,13 @@ static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, in
     *zone = (GatherZone){
         .used = true, .number = zones->next_number, .priority = GATHER_ZONE_PRIORITY_DEFAULT};
     for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
-        /* Wood: young trees give little. */
-        zone->orders[r] = (GatherOrder){.ripe_only = r == GATHER_WOOD,
-                                        .mode = GATHER_UNTIL,
-                                        .unit = GATHER_UNIT_ITEMS,
-                                        .target = GATHER_TARGET_DEFAULT};
+        /* Wood: young trees give little. The food resources go on forever: the
+         * group's days of food are what stops them. */
+        zone->orders[r] = (GatherOrder){
+            .ripe_only = r == GATHER_WOOD,
+            .mode = RESOURCE_DEFS[r].group == GATHER_GROUP_FOOD ? GATHER_FOREVER : GATHER_UNTIL,
+            .unit = GATHER_UNIT_ITEMS,
+            .target = GATHER_TARGET_DEFAULT};
     }
     for (int g = 0; g < GATHER_GROUP_COUNT; g++) {
         zone->groups[g] = (GatherGroupOrder){

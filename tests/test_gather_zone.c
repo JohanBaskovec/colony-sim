@@ -215,7 +215,10 @@ static void test_zone_tiles(void)
     /* Every order is off at first. */
     for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
         CHECK(!zone->orders[r].enabled);
-        CHECK_EQ_INT(zone->orders[r].mode, GATHER_UNTIL);
+        /* The food resources go on forever: the group's days of food limit them. */
+        CHECK_EQ_INT(zone->orders[r].mode,
+                     gather_resource_group((GatherResource)r) == GATHER_GROUP_FOOD ? GATHER_FOREVER
+                                                                                   : GATHER_UNTIL);
         CHECK_EQ_INT(zone->orders[r].target, GATHER_TARGET_DEFAULT);
         CHECK_EQ_INT(zone->orders[r].unit, GATHER_UNIT_ITEMS);
         /* Only wood waits for the full harvest: young trees give little. */

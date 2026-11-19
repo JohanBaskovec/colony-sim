@@ -1307,7 +1307,8 @@ gathers forever. Food may count days of food instead of items
 in the colony by what the settlers eat in a day (`gather_daily_food()`, from
 `NEED_FOOD_DECAY_PER_TICK`; the game passes it to `gather_zones_update()`).
 Resources belong to groups (`GatherGroup`: wood, food, fibres), each with an order of its own (`GatherGroupOrder`, always on: food
-until 5 days of food by default, the others forever): a resource is wanted
+until 5 days of food by default, the others forever; the food resources start
+on forever too, so that only their group's days of food stop them): a resource is wanted
 only when its own order and its group's both want it, and a group's
 `done` counts what its resources gave. An order may wait for the full harvest
 (`ripe_only`): what plants bear (food, grass) only from plants whose stock is

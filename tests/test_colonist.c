@@ -2026,6 +2026,7 @@ static void test_gathering_zone_stops_at_its_targets(void)
     int zone = gather_zone_create(&game.gather_zones, &game.map, 23, 20, 25, 20, 0);
     REQUIRE(zone != GATHER_ZONE_NONE);
     gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_UNTIL);
     gather_zone_set_target(&game.gather_zones, zone, GATHER_HAZELNUTS, MAP_NUTS_MAX + 2);
     gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
     float tile_work = gather_job_work_needed(&game.map, 23, 20, 0, GATHER_JOB_NUTS);
