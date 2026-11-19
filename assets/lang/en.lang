@@ -302,7 +302,6 @@ tile_panel.move_items.description = Settlers who haul carry these items to the t
 hud.tool.move_items_help = Click the tile the items must be carried to · Esc: back
 tile_panel.move_item.description = Settlers who haul carry this item to the tile you click, wherever it is, before any other hauling. It is forbidden meanwhile, and once put down, so that nobody takes it back to storage: allow it when you want it stored
 hud.tool.move_item_help = Click the tile the item must be carried to · Esc: back
-hud.tool.move_pick_help = Click the next item (or pile) to carry · Esc: stop
 hud.tool.move_help = Click where the selected settlers must go · Esc: back
 inspector.follow = Follow
 inspector.follow.stop = Stop following

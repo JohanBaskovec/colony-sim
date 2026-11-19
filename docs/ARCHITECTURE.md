@@ -879,13 +879,6 @@ tile carried to any tile a settler can stand on (`game_order_item_move()`,
 from the *Carry elsewhere* action of the tile's items window), or a single
 item (`game_order_single_item_move()`, from the window of that item:
 `ItemMove.item` names it, an `ItemId`, which an item keeps while carried).
-The tool (`APP_TOOL_MOVE_ITEM`, `apply_move_item_tool()`) stays on until the
-player turns it off (Esc, a right click): a click gives the order at the tile
-clicked, on the ground seen there (`game_build_level()`: the level shown may be
-open air over it), then the tool goes back to *picking* (`App.move_item_picking`),
-where a click selects the next item under the cursor, or else the pile of the
-tile, to carry. Like the other tools it acts where the button is released: no
-selection rectangle is drawn nor made while it is on.
 The order forbids what it is about, so nobody else takes it; an order on a
 tile replaces the orders on single items lying there. Haulers try these
 orders before the ordinary hauls (`try_forced_haul_job()`, which needs no
