@@ -90,6 +90,7 @@ void shadow_field_clear(ShadowField *field)
     for (size_t i = 0; field->chunks != NULL && i < count; i++) {
         field->chunks[i].slots[0].step = SHADOW_NO_STEP;
         field->chunks[i].slots[1].step = SHADOW_NO_STEP;
+        field->chunks[i].wanted_level = -1;
     }
     field->job.active = false;
 }
@@ -113,6 +114,7 @@ static bool reset_for_map(ShadowField *field, const Map *map)
             field->chunks[i].slots[0].step = SHADOW_NO_STEP;
             field->chunks[i].slots[1].step = SHADOW_NO_STEP;
             field->chunks[i].seen_frame = field->frame;
+            field->chunks[i].wanted_level = -1;
         }
     }
     shadow_field_clear(field);
@@ -173,15 +175,53 @@ void shadow_field_view(ShadowField *field, int level, int samples, int x0, int y
     }
 }
 
-/* The slot of a piece for a half hour and the level shown, NULL if none. */
-static const ShadowSlot *find_slot(const ShadowChunk *chunk, uint64_t step, int level)
+/* Whether a slot was worked out for the surfaces the level shown draws on
+ * the piece (as last looked up). */
+static bool slot_fits(const ShadowField *field, const ShadowChunk *chunk, const ShadowSlot *slot)
+{
+    return chunk->wanted_level == field->level &&
+           memcmp(slot->surfaces, chunk->wanted, sizeof(chunk->wanted)) == 0;
+}
+
+/* The slot of a piece for a half hour and the surfaces shown, NULL if none. */
+static const ShadowSlot *find_slot(const ShadowField *field, const ShadowChunk *chunk,
+                                   uint64_t step)
 {
     for (int k = 0; k < 2; k++) {
-        if (chunk->slots[k].step == step && chunk->slots[k].level == level) {
+        if (chunk->slots[k].step == step && slot_fits(field, chunk, &chunk->slots[k])) {
             return &chunk->slots[k];
         }
     }
     return NULL;
+}
+
+/* Looks up the surfaces the level shown draws on the pieces in view, where
+ * the level or the map changed since. */
+static void look_up_surfaces(ShadowField *field, const Map *map)
+{
+    int cx0, cy0, cx1, cy1;
+    if (!view_chunks(field, &cx0, &cy0, &cx1, &cy1)) {
+        return;
+    }
+    for (int cy = cy0; cy <= cy1; cy++) {
+        for (int cx = cx0; cx <= cx1; cx++) {
+            ShadowChunk *chunk = &field->chunks[cy * field->columns + cx];
+            int x0 = cx * SHADOW_CHUNK, y0 = cy * SHADOW_CHUNK;
+            if (chunk->wanted_level == field->level &&
+                map_light_stamp(map, x0, y0, x0 + SHADOW_CHUNK - 1, y0 + SHADOW_CHUNK - 1) <=
+                    chunk->wanted_revision) {
+                continue;
+            }
+            for (int j = 0; j < SHADOW_CHUNK; j++) {
+                for (int i = 0; i < SHADOW_CHUNK; i++) {
+                    chunk->wanted[j * SHADOW_CHUNK + i] =
+                        shadow_surface_code(map, x0 + i, y0 + j, field->level);
+                }
+            }
+            chunk->wanted_level = field->level;
+            chunk->wanted_revision = map->light_revision;
+        }
+    }
 }
 
 /* Whether a slot is as wanted now: the points asked for, nothing changed
@@ -198,8 +238,8 @@ static bool slot_current(const ShadowField *field, const ShadowSlot *slot)
 static int chunk_need(const ShadowField *field, int index, uint64_t step, uint64_t *wanted)
 {
     const ShadowChunk *chunk = &field->chunks[index];
-    const ShadowSlot *now = find_slot(chunk, step, field->level);
-    const ShadowSlot *next = find_slot(chunk, step + 1, field->level);
+    const ShadowSlot *now = find_slot(field, chunk, step);
+    const ShadowSlot *next = find_slot(field, chunk, step + 1);
     *wanted = step;
     if (now == NULL) {
         return 0;
@@ -277,11 +317,29 @@ static bool start_job(ShadowField *field, const Map *map, int index, uint64_t st
 {
     ShadowJob *job = &field->job;
     ShadowSlot *work = &job->work;
-    if (!slot_reserve(work, chunk_points(field->samples))) {
+    const ShadowChunk *chunk = &field->chunks[index];
+    size_t points = chunk_points(field->samples);
+    if (!slot_reserve(work, points)) {
         return false;
     }
+    /* What a slot of the same half hour has for the columns whose surface
+     * is the same is kept: only the others are worked out. */
+    const ShadowSlot *older = NULL;
+    for (int k = 0; k < 2 && older == NULL; k++) {
+        const ShadowSlot *slot = &chunk->slots[k];
+        if (slot->step == step && slot_current(field, slot)) {
+            older = slot;
+        }
+    }
+    for (int c = 0; c < SHADOW_CHUNK_COLUMNS; c++) {
+        job->todo[c] = older == NULL || older->surfaces[c] != chunk->wanted[c];
+    }
+    if (older != NULL) {
+        memcpy(work->lit, older->lit, points * 3);
+        memcpy(work->moments, older->moments, points * 2);
+    }
+    memcpy(work->surfaces, chunk->wanted, sizeof(work->surfaces));
     work->step = step;
-    work->level = field->level;
     work->samples = field->samples;
     work->revision = map->light_revision;
     for (int k = 0; k <= 2 * SHADOW_STEP_PARTS; k++) {
@@ -344,11 +402,17 @@ static uint64_t work_row(ShadowField *field, const Map *map)
     uint8_t *lit = work->lit + (size_t)job->row * (size_t)side * 3;
     uint8_t *moments = work->moments + (size_t)job->row * (size_t)side * 2;
     uint64_t rays = 0;
+    const int column_row = job->row / samples * SHADOW_CHUNK;
     for (int tile = 0; tile < SHADOW_CHUNK; tile++) {
+        if (!job->todo[column_row + tile]) {
+            lit += 3 * samples; /* Kept from an older slot. */
+            moments += 2 * samples;
+            continue;
+        }
         int tx = x0 + tile;
-        float height = 0.0f;
-        bool drawn = tx < map->width && ty < map->height &&
-                     shadow_surface_height(map, tx, ty, work->level, &height);
+        uint8_t code = work->surfaces[column_row + tile];
+        bool drawn = code != 0;
+        float height = (float)(code - 1) * LEVEL_HEIGHT + SUN_RAY_LIFT;
         for (int s = 0; s < samples; s++, lit += 3, moments += 2) {
             if (!drawn) {
                 lit[0] = lit[1] = lit[2] = 255;
@@ -415,12 +479,12 @@ static bool job_wanted(const ShadowField *field)
 {
     const ShadowJob *job = &field->job;
     int cx0, cy0, cx1, cy1;
-    if (!view_chunks(field, &cx0, &cy0, &cx1, &cy1) || job->work.level != field->level ||
-        job->work.samples != field->samples) {
+    if (!view_chunks(field, &cx0, &cy0, &cx1, &cy1) || job->work.samples != field->samples) {
         return false;
     }
     int cx = job->chunk % field->columns, cy = job->chunk / field->columns;
-    return cx >= cx0 && cx <= cx1 && cy >= cy0 && cy <= cy1;
+    return cx >= cx0 && cx <= cx1 && cy >= cy0 && cy <= cy1 &&
+           slot_fits(field, &field->chunks[job->chunk], &job->work);
 }
 
 bool shadow_field_work(ShadowField *field, const Map *map, uint64_t tick, uint64_t ray_budget)
@@ -430,12 +494,13 @@ bool shadow_field_work(ShadowField *field, const Map *map, uint64_t tick, uint64
         return false;
     }
     uint64_t step = tick / SHADOW_STEP_TICKS;
+    look_up_surfaces(field, map);
     if (field->job.active) {
         /* A piece for later gives way to one with nothing to show. */
         int index, need;
         uint64_t wanted;
         bool urgent = pick_chunk(field, step, &index, &wanted, &need) && need == 0 &&
-                      find_slot(&field->chunks[field->job.chunk], step, field->level) != NULL;
+                      find_slot(field, &field->chunks[field->job.chunk], step) != NULL;
         if (urgent || !job_wanted(field)) {
             field->job.active = false;
         }
@@ -472,7 +537,7 @@ bool shadow_field_ready(const ShadowField *field, uint64_t tick)
     for (int cy = cy0; cy <= cy1; cy++) {
         for (int cx = cx0; cx <= cx1; cx++) {
             const ShadowSlot *slot =
-                find_slot(&field->chunks[cy * field->columns + cx], step, field->level);
+                find_slot(field, &field->chunks[cy * field->columns + cx], step);
             if (slot == NULL || !slot_current(field, slot)) {
                 return false;
             }
@@ -482,28 +547,31 @@ bool shadow_field_ready(const ShadowField *field, uint64_t tick)
 }
 
 /* The slot a piece shows at a half hour, and how far into it (its end for
- * an older one, its start for a newer one when that half hour is missing);
- * NULL when it has none for the level shown. */
-static const ShadowSlot *shown_slot(const ShadowChunk *chunk, int level, uint64_t step,
-                                    float *phase)
+ * an older one, its start for a newer one when that half hour is missing):
+ * one worked out for the surfaces shown first, else another (another level
+ * was shown: right for the columns whose surface is the same, until the
+ * others are worked out); NULL when it has none. */
+static const ShadowSlot *shown_slot(const ShadowField *field, const ShadowChunk *chunk,
+                                    uint64_t step, float *phase)
 {
     const ShadowSlot *best = NULL;
     uint64_t best_distance = UINT64_MAX;
+    bool best_fits = false;
     for (int k = 0; k < 2; k++) {
         const ShadowSlot *slot = &chunk->slots[k];
-        if (slot->step == SHADOW_NO_STEP || slot->level != level) {
+        if (slot->step == SHADOW_NO_STEP) {
             continue;
         }
-        if (slot->step == step) {
-            return slot;
-        }
+        bool fits = slot_fits(field, chunk, slot);
         uint64_t distance = slot->step > step ? slot->step - step : step - slot->step;
-        if (distance < best_distance) {
-            best_distance = distance;
+        if (best == NULL || (fits && !best_fits) ||
+            (fits == best_fits && distance < best_distance)) {
             best = slot;
+            best_distance = distance;
+            best_fits = fits;
         }
     }
-    if (best != NULL) {
+    if (best != NULL && best->step != step) {
         *phase = best->step < step ? 1.0f : 0.0f;
     }
     return best;
@@ -550,7 +618,7 @@ float shadow_field_lit(const ShadowField *field, uint64_t tick, float tick_fract
     }
     int cx = (int)x / SHADOW_CHUNK, cy = (int)y / SHADOW_CHUNK;
     float phase = step_phase(tick, tick_fraction);
-    const ShadowSlot *slot = shown_slot(&field->chunks[cy * field->columns + cx], field->level,
+    const ShadowSlot *slot = shown_slot(field, &field->chunks[cy * field->columns + cx],
                                         tick / SHADOW_STEP_TICKS, &phase);
     if (slot == NULL) {
         return 1.0f;
@@ -576,8 +644,7 @@ void shadow_field_fill(const ShadowField *field, uint64_t tick, float tick_fract
             if (field->chunks != NULL && tx >= 0 && ty >= 0 && tx < field->width &&
                 ty < field->height) {
                 int cx = tx / SHADOW_CHUNK, cy = ty / SHADOW_CHUNK;
-                slot = shown_slot(&field->chunks[cy * field->columns + cx], field->level, step,
-                                  &phase);
+                slot = shown_slot(field, &field->chunks[cy * field->columns + cx], step, &phase);
             }
             for (int s = 0; s < samples; s++) {
                 if (slot == NULL) {
@@ -593,15 +660,28 @@ void shadow_field_fill(const ShadowField *field, uint64_t tick, float tick_fract
     }
 }
 
-bool shadow_surface_height(const Map *map, int x, int y, int z, float *height)
+uint8_t shadow_surface_code(const Map *map, int x, int y, int z)
 {
-    int level = map_view_level(map, x, y, z);
+    return shadow_surface_code_of(map, x, y, map_view_level(map, x, y, z));
+}
+
+uint8_t shadow_surface_code_of(const Map *map, int x, int y, int level)
+{
     if (level < 0) {
-        return false;
+        return 0;
     }
     size_t index = map_index(map, x, y, level);
     bool block = map_stops_light_at(map, index) || map->terrain[index] == TERRAIN_FOLIAGE;
-    *height = (float)(block ? level + 1 : level) * LEVEL_HEIGHT + SUN_RAY_LIFT;
+    return (uint8_t)((block ? level + 1 : level) + 1);
+}
+
+bool shadow_surface_height(const Map *map, int x, int y, int z, float *height)
+{
+    uint8_t code = shadow_surface_code(map, x, y, z);
+    if (code == 0) {
+        return false;
+    }
+    *height = (float)(code - 1) * LEVEL_HEIGHT + SUN_RAY_LIFT;
     return true;
 }
 

@@ -18,6 +18,13 @@
  * keeps the half hour it shows and the next one; pieces long out of view
  * are forgotten.
  *
+ * What a point gets depends on the level shown only through the surface
+ * drawn on its column (its height, shadow_surface_code()): a piece keeps the
+ * surfaces it was worked out for, and when another level is shown only the
+ * columns whose surface differs are worked out again (most of the ground
+ * shows through the open space of the levels above it), the old values
+ * shown meanwhile.
+ *
  * Only derived from a map (the known world on screen) and the time: nothing
  * here is part of the game hash.
  */
@@ -53,11 +60,15 @@
 
 #define SHADOW_NO_STEP UINT64_MAX
 
+#define SHADOW_CHUNK_COLUMNS (SHADOW_CHUNK * SHADOW_CHUNK)
+
 /* What a piece holds for one half hour. */
 typedef struct ShadowSlot {
     uint64_t step; /* tick / SHADOW_STEP_TICKS; SHADOW_NO_STEP when empty. */
-    int level;     /* The level shown it was worked out for. */
     int samples;   /* Points a side of a tile. */
+    /* The surface of each column it was worked out for (rows first,
+     * shadow_surface_code()). */
+    uint8_t surfaces[SHADOW_CHUNK_COLUMNS];
     /* The light revision it was worked out at, and the tiles whose changes
      * reach it (the piece, and towards the sun as far as the rays go). */
     uint32_t revision;
@@ -70,13 +81,20 @@ typedef struct ShadowSlot {
 typedef struct ShadowChunk {
     ShadowSlot slots[2];
     uint32_t seen_frame; /* Last frame it was in view. */
+    /* The surface of each column with the level shown (`wanted_level`),
+     * looked up at the map's light revision `wanted_revision`. */
+    uint8_t wanted[SHADOW_CHUNK_COLUMNS];
+    int wanted_level; /* -1: not looked up. */
+    uint32_t wanted_revision;
 } ShadowChunk;
 
-/* The piece being worked out, a row of points at a time. */
+/* The piece being worked out, a row of points at a time: the columns marked
+ * in `todo` (the others hold what an older slot had for the same surface). */
 typedef struct ShadowJob {
     bool active;
     int chunk;
     int row;
+    uint8_t todo[SHADOW_CHUNK_COLUMNS];
     ShadowSlot work;
     SunPosition suns[2 * SHADOW_STEP_PARTS + 1];
 } ShadowJob;
@@ -132,6 +150,14 @@ void shadow_field_fill(const ShadowField *field, uint64_t tick, float tick_fract
  * there, or the top of a block (rock, a wall, dense foliage). False when
  * nothing is drawn there. */
 bool shadow_surface_height(const Map *map, int x, int y, int z, float *height);
+
+/* The same as a byte: 0 when nothing is drawn (or out of the map), else 1 +
+ * the level whose bottom the surface is (a block's top is the bottom of the
+ * level above it). Two columns with the same code start their rays at the
+ * same height. */
+uint8_t shadow_surface_code(const Map *map, int x, int y, int z);
+/* The same from the level drawn there (map_view_level(), -1: nothing). */
+uint8_t shadow_surface_code_of(const Map *map, int x, int y, int level);
 
 /* The share of the daylight that comes straight from the sun (§2.4): none
  * under an overcast sky (`clear` 0) and fading out under SUN_LOW_ELEVATION,

@@ -10,9 +10,11 @@
  * of a cliff sees half the sky.
  *
  * It does not depend on the sun: it changes when the map does. A field of
- * it (SkyField) keeps the value of the surface drawn on each column for the
- * level shown, worked out again within a budget once the map changed within
- * SKY_REACH (Map.light_stamps), for the screen.
+ * it (SkyField) keeps the value of the surface drawn on each column, worked
+ * out again within a budget once the map changed within SKY_REACH
+ * (Map.light_stamps), for the screen. It keeps the surface it was worked out
+ * for (shadow_surface_code()), not the level shown: showing another level
+ * only works out again the columns whose surface differs.
  *
  * Only derived from a map: nothing here is part of the game hash.
  */
@@ -42,7 +44,7 @@ typedef struct SkyField {
     const Map *map; /* What it was worked out from (not owned). */
     int width, height;
     uint8_t *values;     /* Per column: how much of the sky, 0 .. 255. */
-    uint8_t *levels;     /* Per column: the level shown it was worked out for. */
+    uint8_t *surfaces;   /* Per column: the surface it was worked out for. */
     uint32_t *revisions; /* Per column: the light revision then, + 1 (0: never). */
     /* Per block of MAP_LIGHT_BLOCK columns in view: the latest light change
      * within SKY_REACH of it (sky_field_begin()). */
@@ -60,11 +62,12 @@ void sky_field_free(SkyField *field);
  * memory ran out. */
 bool sky_field_begin(SkyField *field, const Map *map, int x0, int y0, int x1, int y1);
 
-/* How much of the sky the surface drawn at the column (x, y) sees with level
- * z shown: as remembered when up to date, else worked out while `budget`
+/* How much of the sky the surface drawn at the column (x, y) sees, `level`
+ * being the level drawn there (map_view_level() of the level shown, not
+ * -1): as remembered when up to date, else worked out while `budget`
  * (columns) lasts, else as remembered even out of date, else what lies
  * straight above (map_light_cover()). The column must be in the view given
  * to sky_field_begin(). */
-float sky_field_open(SkyField *field, int x, int y, int z, int *budget);
+float sky_field_open(SkyField *field, int x, int y, int level, int *budget);
 
 #endif /* COLONY_CORE_SKY_H */

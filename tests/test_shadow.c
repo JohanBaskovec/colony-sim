@@ -306,6 +306,60 @@ static void test_view_changes(void)
     map_free(&map);
 }
 
+/* Another level shown keeps what it can: the shadow of a point depends only
+ * on the surface drawn there, so the columns whose surface stays the same
+ * keep their values (no ray cast for them) and are shown at once; only the
+ * others are worked out again. */
+static void test_level_change_keeps_the_same_surfaces(void)
+{
+    Map map;
+    REQUIRE(scene_init(&map));
+    ShadowField field;
+    shadow_field_init(&field, SUN_LATITUDE_DEFAULT);
+    uint64_t tick = tick_at(EQUINOX, 15.0f);
+    shadow_field_view(&field, 0, 2, 0, 0, SIZE, SIZE);
+    work_until_ready(&field, &map, tick);
+    float shaded = shadow_field_lit(&field, tick, 0.0f, 35.5f, (float)WALL_Y - 0.5f);
+    CHECK(shaded < 0.01f);
+
+    /* Level 1 over flat ground and a wall of level 0: the same surfaces. */
+    uint64_t rays = field.rays;
+    shadow_field_view(&field, 1, 2, 0, 0, SIZE, SIZE);
+    shadow_field_work(&field, &map, tick, 0);
+    CHECK(shadow_field_ready(&field, tick));
+    CHECK_NEAR(shadow_field_lit(&field, tick, 0.0f, 35.5f, (float)WALL_Y - 0.5f), shaded, 1e-6);
+    work_until_ready(&field, &map, tick);
+    CHECK_EQ_UINT(field.rays, rays);
+
+    /* A roof on level 1 over a few tiles: shown from level 1, only its
+     * columns are worked out again, and the old shadows stay in view
+     * meanwhile. */
+    for (int x = 4; x < 7; x++) {
+        map_set_roof(&map, x, 4, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    }
+    shadow_field_view(&field, 0, 2, 0, 0, SIZE, SIZE);
+    work_until_ready(&field, &map, tick);
+    rays = field.rays;
+    shadow_field_view(&field, 1, 2, 0, 0, SIZE, SIZE);
+    shadow_field_work(&field, &map, tick, 0);
+    CHECK(!shadow_field_ready(&field, tick));
+    CHECK_NEAR(shadow_field_lit(&field, tick, 0.0f, 35.5f, (float)WALL_Y - 0.5f), shaded, 1e-6);
+    work_until_ready(&field, &map, tick);
+    CHECK(field.rays - rays <= 3u * 4u * 3u * 2u); /* 3 columns, 4 points, a few rays each. */
+    CHECK(field.rays > rays);
+    SunPosition sun = sun_at_tick(tick, SUN_LATITUDE_DEFAULT); /* At the half hour's start. */
+    CHECK_NEAR(shadow_field_lit(&field, tick, 0.0f, 5.25f, 4.25f),
+               sun_lit_floor(&map, sun, 5.25f, 4.25f, 1), 1.0 / 255.0); /* The roof's top. */
+    CHECK_NEAR(shadow_field_lit(&field, tick, 0.0f, 35.5f, (float)WALL_Y - 0.5f), shaded, 1e-6);
+    /* Back on level 0, the ground under the roof as the rays say. */
+    shadow_field_view(&field, 0, 2, 0, 0, SIZE, SIZE);
+    work_until_ready(&field, &map, tick);
+    CHECK_NEAR(shadow_field_lit(&field, tick, 0.0f, 5.25f, 4.25f),
+               sun_lit_floor(&map, sun, 5.25f, 4.25f, 0), 1.0 / 255.0);
+    shadow_field_free(&field);
+    map_free(&map);
+}
+
 /* shadow_field_fill() gives shadow_field_lit() at the middle of the points. */
 static void test_fill_matches_lit(void)
 {
@@ -343,6 +397,7 @@ int main(void)
     RUN_TEST(test_budget_and_the_half_hour_ahead);
     RUN_TEST(test_map_changes);
     RUN_TEST(test_view_changes);
+    RUN_TEST(test_level_change_keeps_the_same_surfaces);
     RUN_TEST(test_fill_matches_lit);
     return test_summary();
 }

@@ -2969,7 +2969,7 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
             if (level < 0 || (game->fog_on && !vision_seen(&game->vision, x, y, level))) {
                 continue;
             }
-            float open = sky_ready ? sky_field_open(&sky_field, x, y, z, &sky_budget)
+            float open = sky_ready ? sky_field_open(&sky_field, x, y, level, &sky_budget)
                                    : map_light_cover(map, x, y, level);
             if (sky_budget == 0 && sky_time_left) {
                 sky_time_left = SDL_GetTicksNS() - sky_begin < SKY_WORK_NS;

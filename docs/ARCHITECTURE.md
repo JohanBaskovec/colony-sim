@@ -1920,7 +1920,11 @@ worked out ahead. A piece is out of date when the map changed within the
 reach of its rays: `Map.light_stamps` holds, per block of 16 × 16 columns,
 the light revision of its last change (terrain, rock, a wall or a door, a
 tile copied into the known world, the crowns going bare everywhere), and a
-piece compares the blocks towards the sun as far as its rays go.
+piece compares the blocks towards the sun as far as its rays go. A piece keeps the surface each column was worked out for
+(`shadow_surface_code()`, its height), not the level shown: showing another
+level works out again only the columns whose surface differs (most of the
+ground shows through the open space above it), the old values shown
+meanwhile; the light of the sky (`SkyField`) does the same per column.
 
 Stones, branches and twigs lying about are laid by world generation in map
 layers (`Map.cobbles`, `Map.flint`, `Map.branches`, `Map.twigs`); `game_init()`

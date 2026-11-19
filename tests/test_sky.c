@@ -170,8 +170,9 @@ static void test_field_follows_the_map(void)
 
     REQUIRE(sky_field_begin(&field, &map, 0, 0, SCENE_SIZE, SCENE_SIZE));
     int none = 0;
-    CHECK_NEAR(sky_field_open(&field, 24, 24, 0, &none), map_light_cover(&map, 24, 24, 0), 1e-6);
-    CHECK_NEAR(sky_field_open(&field, 5, 5, 0, &none), 1.0, 1e-6);
+    CHECK_NEAR(sky_field_open(&field, 24, 24, map_view_level(&map, 24, 24, 0), &none),
+               map_light_cover(&map, 24, 24, 0), 1e-6);
+    CHECK_NEAR(sky_field_open(&field, 5, 5, map_view_level(&map, 5, 5, 0), &none), 1.0, 1e-6);
 
     int budget = 1000;
     for (int y = 18; y < 31; y++) {
@@ -185,28 +186,32 @@ static void test_field_follows_the_map(void)
 
     /* Nothing changed: no work. */
     REQUIRE(sky_field_begin(&field, &map, 0, 0, SCENE_SIZE, SCENE_SIZE));
-    CHECK_NEAR(sky_field_open(&field, 24, 27, 0, &budget), 0.0, 1e-6);
+    CHECK_NEAR(sky_field_open(&field, 24, 27, map_view_level(&map, 24, 27, 0), &budget), 0.0, 1e-6);
     CHECK_EQ_UINT(field.rays, rays);
 
     /* The door kept open: the old value without budget, the new one with. */
     REQUIRE(map_set_door_kept_open(&map, 24, 28, 0, true));
     REQUIRE(sky_field_begin(&field, &map, 0, 0, SCENE_SIZE, SCENE_SIZE));
-    CHECK_NEAR(sky_field_open(&field, 24, 27, 0, &none), 0.0, 1e-6);
-    float lit = sky_field_open(&field, 24, 27, 0, &budget);
+    CHECK_NEAR(sky_field_open(&field, 24, 27, map_view_level(&map, 24, 27, 0), &none), 0.0, 1e-6);
+    float lit = sky_field_open(&field, 24, 27, map_view_level(&map, 24, 27, 0), &budget);
     CHECK(lit > 0.05f);
     CHECK_NEAR(lit, ground(&map, 24, 27), 1e-6);
 
     /* A change further than SKY_REACH (to the block) leaves a column alone:
      * the corner block (48 .. 63) is out of reach of the first (0 .. 15). */
-    CHECK_NEAR(sky_field_open(&field, 5, 5, 0, &budget), 1.0, 1e-4);
+    CHECK_NEAR(sky_field_open(&field, 5, 5, map_view_level(&map, 5, 5, 0), &budget), 1.0, 1e-4);
     map_set_structure(&map, 62, 62, 0, STRUCTURE_WALL);
     REQUIRE(sky_field_begin(&field, &map, 0, 0, SCENE_SIZE, SCENE_SIZE));
     rays = field.rays;
-    CHECK_NEAR(sky_field_open(&field, 5, 5, 0, &budget), 1.0, 1e-4);
+    CHECK_NEAR(sky_field_open(&field, 5, 5, map_view_level(&map, 5, 5, 0), &budget), 1.0, 1e-4);
     CHECK_EQ_UINT(field.rays, rays);
 
-    /* Another level shown is another value: the top of the roof. */
-    CHECK_NEAR(sky_field_open(&field, 24, 24, 1, &budget), 1.0, 1e-4);
+    /* Another level shown: the same value where the same surface is drawn
+     * (open ground seen through open space), worked out again where
+     * another is (the top of the roof). */
+    CHECK_NEAR(sky_field_open(&field, 5, 5, map_view_level(&map, 5, 5, 1), &budget), 1.0, 1e-4);
+    CHECK_EQ_UINT(field.rays, rays);
+    CHECK_NEAR(sky_field_open(&field, 24, 24, map_view_level(&map, 24, 24, 1), &budget), 1.0, 1e-4);
     CHECK_EQ_UINT(field.rays, rays + SKY_RAYS);
 
     sky_field_free(&field);

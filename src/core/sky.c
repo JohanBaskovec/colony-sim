@@ -10,6 +10,7 @@
 
 #define PI_F 3.14159265f
 #define FAR 1.0e30f
+#define LEVEL_HEIGHT 2.0f
 
 typedef struct SkyRay {
     float east, south, up; /* Unit direction. */
@@ -74,13 +75,19 @@ float sky_open(const Map *map, float x, float y, float height)
     return clampf(open, 0.0f, 1.0f);
 }
 
-float sky_open_drawn(const Map *map, int x, int y, int z)
+/* sky_open() of the middle of a column's surface (shadow_surface_code()). */
+static float open_of_surface(const Map *map, int x, int y, uint8_t surface)
 {
-    float height;
-    if (!shadow_surface_height(map, x, y, z, &height)) {
+    if (surface == 0) {
         return 1.0f;
     }
+    float height = (float)(surface - 1) * LEVEL_HEIGHT + SUN_RAY_LIFT;
     return sky_open(map, (float)x + 0.5f, (float)y + 0.5f, height);
+}
+
+float sky_open_drawn(const Map *map, int x, int y, int z)
+{
+    return open_of_surface(map, x, y, shadow_surface_code(map, x, y, z));
 }
 
 /* ------------------------------------------------------------------------ */
@@ -95,7 +102,7 @@ void sky_field_init(SkyField *field)
 void sky_field_free(SkyField *field)
 {
     free(field->values);
-    free(field->levels);
+    free(field->surfaces);
     free(field->revisions);
     free(field->reach_stamps);
     sky_field_init(field);
@@ -107,13 +114,13 @@ static bool reset_for_map(SkyField *field, const Map *map)
     if (map->width != field->width || map->height != field->height || field->values == NULL) {
         sky_field_free(field);
         field->values = malloc(columns);
-        field->levels = malloc(columns);
+        field->surfaces = malloc(columns);
         field->revisions = malloc(columns * sizeof(*field->revisions));
         field->blocks_x = (map->width + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK;
         field->blocks_y = (map->height + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK;
         field->reach_stamps =
             malloc((size_t)field->blocks_x * (size_t)field->blocks_y * sizeof(uint32_t));
-        if (field->values == NULL || field->levels == NULL || field->revisions == NULL ||
+        if (field->values == NULL || field->surfaces == NULL || field->revisions == NULL ||
             field->reach_stamps == NULL) {
             sky_field_free(field);
             return false;
@@ -147,28 +154,28 @@ bool sky_field_begin(SkyField *field, const Map *map, int x0, int y0, int x1, in
     return true;
 }
 
-float sky_field_open(SkyField *field, int x, int y, int z, int *budget)
+float sky_field_open(SkyField *field, int x, int y, int level, int *budget)
 {
     const Map *map = field->map;
     size_t column = (size_t)y * (size_t)field->width + (size_t)x;
     uint32_t stamp =
         field->reach_stamps[(y / MAP_LIGHT_BLOCK) * field->blocks_x + x / MAP_LIGHT_BLOCK];
-    bool known = field->revisions[column] != 0 && field->levels[column] == (uint8_t)z;
+    uint8_t surface = shadow_surface_code_of(map, x, y, level);
+    bool known = field->revisions[column] != 0 && field->surfaces[column] == surface;
     if (known && field->revisions[column] - 1 >= stamp) {
         return (float)field->values[column] / 255.0f;
     }
     if (*budget > 0) {
         --*budget;
-        float open = sky_open_drawn(map, x, y, z);
+        float open = open_of_surface(map, x, y, surface);
         field->rays += SKY_RAYS;
         field->values[column] = (uint8_t)lroundf(open * 255.0f);
-        field->levels[column] = (uint8_t)z;
+        field->surfaces[column] = surface;
         field->revisions[column] = map->light_revision + 1;
         return open;
     }
     if (known) {
         return (float)field->values[column] / 255.0f;
     }
-    int level = map_view_level(map, x, y, z);
     return level < 0 ? 1.0f : map_light_cover(map, x, y, level);
 }
