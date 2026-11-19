@@ -440,12 +440,17 @@ static void test_sulking_settler_does_no_work(void)
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
-    for (size_t i = 0; i < map_tile_count(&game.map); i++) {
-        game.map.cobbles[i] = MAP_STONES_MAX;
+    for (int y = 18; y <= 22; y++) {
+        for (int x = 18; x <= 22; x++) {
+            for (int i = 0; i < MAP_NUTS_MAX; i++) {
+                map_add_litter(&game.map, x, y, 0, ITEM_HAZELNUTS);
+            }
+        }
     }
     int zone = gather_zone_create(&game.gather_zones, &game.map, 18, 18, 22, 22, 0);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_COBBLES, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_COBBLES, GATHER_FOREVER);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
+    gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
     mood_start_break(&colonist->mood, MOOD_BREAK_SULK, 2 * TICKS_PER_HOUR);
     bool worked = false;
     for (int i = 0; i < TICKS_PER_HOUR; i++) {

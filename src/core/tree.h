@@ -20,8 +20,8 @@
  *
  * Trees shed dead twigs, and branches once grown, at random: they fall
  * through the crown, whatever its density, and land on the ground under it,
- * never staying in the foliage (tree_shed(), map_add_litter(): wild items in a running game);
- * gathering zones take them there like anything lying on the ground.
+ * never staying in the foliage (tree_shed(), map_add_litter(): ordinary items in a running
+ * game, haulable like any).
  *
  * A felled tree falls full length to one side, where the woodcutter aims it:
  * away from buildings, else where it does the least harm. Its wood lies

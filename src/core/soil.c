@@ -413,17 +413,6 @@ const char *soil_moisture_key(const Soil *soil, const Map *map, int x, int y, in
     return moisture < SOIL_SOAKED_FROM ? N_("soil.wet") : N_("soil.soaked");
 }
 
-bool soil_litter_wet(const Soil *soil, const Map *map, int x, int y, int z, bool raining)
-{
-    if (!map_in_bounds(map, x, y, z)) {
-        return false;
-    }
-    if (raining && map_cover_level(map, x, y, z) < 0) {
-        return true;
-    }
-    return soil != NULL && soil_moisture(soil, map, x, y, z) > SOIL_MOIST_UP_TO;
-}
-
 uint64_t soil_hash(const Soil *soil, uint64_t hash)
 {
     if (soil->water != NULL) {

@@ -13,18 +13,17 @@
 typedef enum Scenario {
     /* Nothing: colonists left alone (needs and wandering only). */
     SCENARIO_NONE,
-    /* A gathering zone over the whole map (grass cut, twigs, branches and
-     * wild food gathered, forever), a zone gathering stones forever next to
-     * the colony, two stockpiles: work, hauling, and many jobs that cannot be
-     * reached. */
+    /* A gathering zone over the whole map (grass cut and wild food
+     * gathered, forever), two stockpiles: work, hauling (the branches, twigs
+     * and stones lying about too), and many jobs that cannot be reached. */
     SCENARIO_GATHERING,
-    /* Only jobs that nobody can reach: a zone gathering the branches of the
-     * trees growing where the colonists cannot walk to (other islands). */
+    /* Only jobs that nobody can reach: a zone felling the trees growing
+     * where the colonists cannot walk to (other islands). */
     SCENARIO_UNREACHABLE,
     /* Construction: an enclosure of grass walls with a branch screen and beds
      * inside, planned next to the colony, with a gathering zone around it
-     * (grass, branches, twigs) and a stockpile: gathering, drying, hauling to
-     * the sites, building, sleeping in the beds and refreshing them. */
+     * (grass) and a stockpile: gathering, drying, hauling to the sites (the
+     * branches lying about too), building, sleeping in the beds and refreshing them. */
     SCENARIO_CONSTRUCTION,
     /* Feuds: the gathering scenario, with the settlers split in two clans
      * who loathe each other, half of them abrasive (game_debug_feud()):
@@ -34,8 +33,9 @@ typedef enum Scenario {
      * and one cattail rhizomes (only of quality 40 or better), again and
      * again (BILL_DO_TIMES, BILL_TARGET_MAX: Bill.done counts the crafts);
      * heaps of both, fresh and half rotten, some under cobbles or on
-     * branches (tiles of several kinds), a stockpile, a zone gathering wild
-     * food and fuel around; every settler knows fire well enough to roast. */
+     * branches (tiles of several kinds), a stockpile for food, a zone
+     * gathering wild food around (the fuel lies about); every settler knows fire well enough to
+     * roast. */
     SCENARIO_COOKING,
     SCENARIO_COUNT
 } Scenario;

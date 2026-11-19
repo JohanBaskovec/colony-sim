@@ -328,7 +328,7 @@ Speed factor by job and tool (— = impossible with it; "none" = bare hands):
 |----------------------------------|------|-------------|---------|-------|----------|---------------|
 | Felling a tree                   | —    | —           | —       | —     | —        | —             |
 | Mining rock                      | —    | —           | —       | —     | —        | —             |
-| Gathering stones, branches, twigs| ×1.0 |             |         |       |          |               |
+| Picking up fallen nuts           | ×1.0 |             |         |       |          |               |
 | Picking fruit, nuts, leaves, mushrooms | ×1.0 |       |         |       |          |               |
 | Cutting grass                    | ×0.6 | —           | ×0.8    | ×1.0  | ×0.9     | —             |
 | Digging up roots (rhizomes, wild carrots) | ×0.3 | — | —       | —     | ×0.5     | ×1.0          |
@@ -409,8 +409,8 @@ on the side that does the least harm (see `core/tree.h`).
   water near the start, since the group arrives hungry, and a **flint patch**
   within reach (§4.1): without flint the colony could only knap rough tools.
 
-A typical first day: pick blackberries; gather stones (cobbles and flint),
-branches, twigs and grass; knap flakes and a
+A typical first day: pick blackberries; bring in the stones (cobbles and
+flint), branches and twigs lying about; cut grass; knap flakes and a
 hand axe from flint; make spears and digging
 sticks; light the first fire by friction; build grass beds and grass and branch walls
 near the hearth; go hunting.
@@ -423,10 +423,10 @@ near the hearth; go hunting.
 
 | id            | Name          | Category  | kg   | Bulk | Stack | HP  | Quality | Damageable | Source |
 |---------------|---------------|-----------|------|------|-------|-----|---------|------------|--------|
-| `cobble`      | Cobble        | Resources | 1.0  | 1.5  | 666   | 200 | yes     | no         | Gather stones (§4.2). Today's `stone` item, renamed. |
-| `flint`       | Flint nodule  | Resources | 1.0  | 1.5  | 666   | 150 | yes     | no         | Gather stones on a flint patch (§4.2). |
-| `branches`    | Branches      | Resources | 1.5  | 10   | 100   | 20  | yes     | yes        | Gather branches. |
-| `twigs`       | Dry twigs (handful) | Resources | 0.2 | 2   | 500   | 10  | no      | yes        | Gather twigs. Kindling: a fire is laid with a handful before it is lit. In the rain, they get wet. |
+| `cobble`      | Cobble        | Resources | 1.0  | 1.5  | 666   | 200 | yes     | no         | Lies about stony ground (§4.2). Today's `stone` item, renamed. |
+| `flint`       | Flint nodule  | Resources | 1.0  | 1.5  | 666   | 150 | yes     | no         | Lies about a flint patch (§4.2). |
+| `branches`    | Branches      | Resources | 1.5  | 10   | 100   | 20  | yes     | yes        | Shed by the trees, from a felled crown. |
+| `twigs`       | Dry twigs (handful) | Resources | 0.2 | 2   | 500   | 10  | no      | yes        | Shed by the trees, from a felled crown. Kindling: a fire is laid with a handful before it is lit. In the rain, they get wet. |
 | `wet_twigs`   | Wet twigs (handful) | Resources | 0.3 | 2   | 500   | 10  | no      | yes        | Twigs picked up from wet ground or in the rain, green from a felled tree: dry into twigs in 24 hours; burn, but catch no flame (no kindling). |
 | `fresh_grass` | Fresh grass (armful) | Resources | 2.5 | 25 | 40  | 10  | no      | yes        | Cut grass. Dries into dry grass. |
 | `grass`       | Dry grass (armful) | Resources | 1.0 | 25 | 40   | 15  | no      | yes        | Fresh grass left to dry. |
@@ -449,13 +449,11 @@ with its own use.
 - **Flint nodule**: the knapping stone. Its quality is how fine and even its
   grain is, and caps the quality of what is knapped from it (§2.2): a good
   flint source matters.
-- The gatherer's Gathering level sets the quality of both: a good eye picks
-  good stones.
+- Each stone lying about has a quality of its own (most of them middling).
 - **Stones are limited**: each tile of stony ground (not sand) holds 0 to 20
-  stones *(tuning)*, cobbles and flint nodules, that gathering takes one by
-  one and that never come back: a gathering zone runs out of stones. The
-  tile inspector shows what is left in the ground, the zone inspector what
-  the zone holds.
+  stones *(tuning)*, cobbles and flint nodules, lying as items from the
+  start, that never come back. They are hauled and used like any item: no
+  gathering order is needed.
 - **Flint patches**: flint is only found on some tiles. World generation
   marks them (a noise field, more on gravel and rough stone, rare on rich
   soil): on a flint patch, each stone of a tile is flint with the patch's
@@ -478,12 +476,12 @@ with its own use.
 
 Everything the land offers is gathered in **gathering zones**: the player
 draws a zone, then ticks the resources to take there (wood, each wild food
-of §7, branches, twigs, grass, flint, cobbles). Each ticked resource is
+of §7, grass and the other fibres). Each ticked resource is
 gathered N times, until N lie in the colony (items lying anywhere count, as
 for bills), or forever; food may also be gathered until the colony has N days
 of food (the nutrition of the food lying in the colony over what all the
 settlers eat in a day, whole days; rot is ignored). Resources come in groups
-(wood: logs, branches, twigs; food; stones; grass alone), and a group's order
+(wood; food; fibres), and a group's order
 limits each of its resources: a resource is gathered only while its own order
 and its group's both want it (food: until 5 days of food by default, every
 food counted, roasted roots too; the other groups forever). An order may wait
@@ -491,8 +489,9 @@ for the full harvest: what plants bear (food, grass) only from plants whose stoc
 is full (every fruit ripe, not only a grown plant), trees, grass and roots (taken
 whole) fully grown only (on by default for trees), so that settlers do not walk to plants
 that give little. Wild food is there in its season only. On a tile that offers several jobs,
-the plant's branches and twigs come first, then its food, felling it, and
-stones last. All jobs but felling belong to Gathering (minimum 50; 60 for
+the nuts lying there come first, then the plant's food, and felling it last.
+What lies on the ground (stones, branches, twigs) is no gathering: those are
+items like any other, hauled where they are needed. All jobs but felling belong to Gathering (minimum 50; 60 for
 food easily mistaken for a poisonous plant, §7) and produce items whose
 quality and condition come from the gatherer's level. Zones cover shallow
 water too (cattails grow there).
@@ -1169,8 +1168,8 @@ weight to carry and the drying time.
 
 None at the moment.
 
-Settled so far: stones are gathered in zones with a target per stone type
-(or forever); grass drying is
+Settled so far: stones, branches and twigs lie as items from the start and
+are hauled like any (no gathering order); grass drying is
 simulated; dirt and work accidents exist (no sharp knapping debris); the interface
 shows only discovered knowledges; innate aptitudes are continuous attributes
 (`docs/ATTRIBUTES.md`), not all-or-nothing traits; felling and mining are

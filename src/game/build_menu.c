@@ -242,7 +242,9 @@ static void card_for(App *app, AppTool tool, int type, Card *card)
         break;
     case APP_TOOL_MOVE_ITEM:
         card_add_text(card, CARD_TITLE, tr("tile_panel.move_items"));
-        card_add_text(card, CARD_DIM, tr("hud.tool.move_items_help"));
+        card_add_text(card, CARD_DIM,
+                      tr(app->move_item_id.slot != UINT32_MAX ? "hud.tool.move_item_help"
+                                                              : "hud.tool.move_items_help"));
         break;
     case APP_TOOL_NONE: break;
     default: tool_card(app, tool, type, card); break;

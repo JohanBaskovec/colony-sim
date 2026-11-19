@@ -335,8 +335,9 @@ static void test_plant_conditions(void)
     game_shutdown(&game);
 }
 
-/* Bare ground fills in: grass spreads to the free tiles around it, but not
- * onto what the colony uses (docs/PLANTS.md §13). */
+/* Bare ground fills in: grass spreads to the free tiles around it (items
+ * lying there do not stop it), but not onto what the colony uses
+ * (docs/PLANTS.md §13). */
 static void test_grass_spreads_into_bare_ground(void)
 {
     Game game;
@@ -356,7 +357,7 @@ static void test_grass_spreads_into_bare_ground(void)
             map->plants[map_index(map, x, y, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
         }
     }
-    items_add(&game.items, 43, 31, 0, item_stack_pristine(ITEM_WOOD, 1));
+    items_add(&game.items, 42, 33, 0, item_stack_pristine(ITEM_WOOD, 1)); /* No hindrance. */
     REQUIRE(stockpile_create(&game.stockpiles, map, 39, 30, 39, 32, 0) != STOCKPILE_NONE);
     for (int day = 0; day < 20; day++) { /* The first hour of each day: the spreading. */
         game.clock.tick = (uint64_t)(SEASON_DAY(SEASON_SUMMER, 1) + day) * TICKS_PER_DAY;
@@ -365,7 +366,6 @@ static void test_grass_spreads_into_bare_ground(void)
         }
     }
     CHECK(map_count_plants(map, PLANT_GRASS) >= 14);
-    CHECK_EQ_INT(map->plants[map_index(map, 43, 31, 0)].type, PLANT_NONE);
     for (int y = 30; y <= 32; y++) {
         CHECK_EQ_INT(map->plants[map_index(map, 39, y, 0)].type, PLANT_NONE);
     }
@@ -822,12 +822,12 @@ static void test_items_in_hand_are_kept(void)
     }
     REQUIRE(game_add_stockpile_rect(&game, cx - 1, cy - 1, cx + 1, cy + 1, z, STOCKPILE_NONE) !=
             STOCKPILE_NONE);
-    /* Branches of two qualities, a little way off. */
+    /* Logs of two qualities, a little way off. */
     int dropped = 0;
     for (int i = 0; i < 6; i++) {
         int quality = i % 2 == 0 ? 20 : 90;
-        ItemStack branches = item_stack_make(ITEM_BRANCHES, 5, quality, 10 + i);
-        dropped += items_drop(&game.items, &game.map, cx - 6 + i * 2, cy + 6, z, branches);
+        ItemStack logs = item_stack_make(ITEM_WOOD, 5, quality, 40 + i);
+        dropped += items_drop(&game.items, &game.map, cx - 6 + i * 2, cy + 6, z, logs);
     }
     REQUIRE(dropped == 30);
     long most_held = 0;
@@ -840,15 +840,15 @@ static void test_items_in_hand_are_kept(void)
     }
     check_item_books(&game);
     CHECK(most_held > 0); /* They did carry them. */
-    /* Stored, each branch is still the one it was: no average of the two. */
+    /* Stored, each log is still the one it was: no average of the two. */
     int stored = 0;
     for (int y = cy - 1; y <= cy + 1; y++) {
         for (int x = cx - 1; x <= cx + 1; x++) {
             for (const Item *item = items_first(&game.items, map_index(&game.map, x, y, z));
                  item != NULL; item = items_next(&game.items, item)) {
-                if (item->type == ITEM_BRANCHES) {
+                if (item->type == ITEM_WOOD) {
                     CHECK(item->quality == 20 || item->quality == 90);
-                    CHECK(item->hit_points >= 10 && item->hit_points <= 15);
+                    CHECK(item->hit_points >= 40 && item->hit_points <= 45);
                     stored++;
                 }
             }

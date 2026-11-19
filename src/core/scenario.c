@@ -27,11 +27,6 @@ static void setup_gathering(Game *game, const Colonist *first)
 {
     if (first != NULL) {
         int x = first->x, y = first->y, z = first->z;
-        /* Stones forever: keeps some colonists busy to the end. */
-        int stones =
-            gather_zone_create(&game->gather_zones, &game->map, x - 14, y + 8, x - 10, y + 12, z);
-        gather_forever(game, stones, GATHER_COBBLES);
-        gather_forever(game, stones, GATHER_FLINT);
         stockpile_create(&game->stockpiles, &game->map, x - 6, y - 6, x + 6, y + 6, z);
         int better =
             stockpile_create(&game->stockpiles, &game->map, x + 10, y - 4, x + 16, y + 4, z);
@@ -40,8 +35,6 @@ static void setup_gathering(Game *game, const Colonist *first)
     /* Everything else the land offers, on the whole map. */
     int land = whole_map_zone(game);
     gather_forever(game, land, GATHER_GRASS);
-    gather_forever(game, land, GATHER_TWIGS);
-    gather_forever(game, land, GATHER_BRANCHES);
     for (int r = GATHER_BLACKBERRIES; r <= GATHER_CATTAIL_RHIZOMES; r++) { /* Wild food. */
         gather_forever(game, land, (GatherResource)r);
     }
@@ -53,7 +46,7 @@ static void setup_unreachable(Game *game, const Colonist *first)
     const Map *map = &game->map;
     regions_update(&game->regions, map);
     int land = whole_map_zone(game);
-    gather_forever(game, land, GATHER_BRANCHES);
+    gather_forever(game, land, GATHER_WOOD);
     uint32_t home =
         first != NULL ? regions_at(&game->regions, map, first->x, first->y, first->z) : REGION_NONE;
     for (int z = 0; z < map->depth; z++) {
@@ -77,8 +70,6 @@ static void setup_construction(Game *game, const Colonist *first)
     int land =
         gather_zone_create(&game->gather_zones, &game->map, x - 30, y - 30, x + 30, y + 30, z);
     gather_forever(game, land, GATHER_GRASS);
-    gather_forever(game, land, GATHER_BRANCHES);
-    gather_forever(game, land, GATHER_TWIGS);
     /* The screen first, then the walls around it (7 × 6 tiles), then two
      * rows of beds inside. */
     game_place_structure(game, STRUCTURE_DOOR, x + 7, y + 3, z, DIRECTION_SOUTH);
@@ -179,12 +170,13 @@ static void setup_cooking(Game *game, const Colonist *first)
     }
     int sx, sy;
     if (free_tile(game, x, y + 12, z, 10, false, &sx, &sy)) {
-        stockpile_create(&game->stockpiles, &game->map, sx - 3, sy - 2, sx + 3, sy + 2, z);
+        /* For food only: the stones and wood lying about stay where they are. */
+        int pile =
+            stockpile_create(&game->stockpiles, &game->map, sx - 3, sy - 2, sx + 3, sy + 2, z);
+        stockpile_set_allowed(&game->stockpiles, pile, item_types_food());
     }
     int land =
         gather_zone_create(&game->gather_zones, &game->map, x - 30, y - 30, x + 30, y + 30, z);
-    gather_forever(game, land, GATHER_BRANCHES);
-    gather_forever(game, land, GATHER_TWIGS);
     gather_forever(game, land, GATHER_WILD_CARROTS);
     gather_forever(game, land, GATHER_CATTAIL_RHIZOMES);
 }

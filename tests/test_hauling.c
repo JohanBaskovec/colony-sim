@@ -23,7 +23,7 @@ static bool init_flat_game(Game *game)
     }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
-        map_set_stones_at(map, i, MAP_STONES_MAX, 0); /* Cobbles everywhere, no flint. */
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
@@ -529,10 +529,10 @@ static void test_gathering_comes_before_hauling_at_same_priority(void)
     REQUIRE(init_flat_game(&game));
     items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_WOOD, 10));
     stockpile_create(&game.stockpiles, &game.map, 12, 10, 12, 10, 0);
-    map_add_litter(&game.map, 30, 30, 0, ITEM_BRANCHES);
+    map_add_litter(&game.map, 30, 30, 0, ITEM_HAZELNUTS);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 30, 30, 30, 30, 0);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BRANCHES, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BRANCHES, GATHER_FOREVER);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DEFAULT;

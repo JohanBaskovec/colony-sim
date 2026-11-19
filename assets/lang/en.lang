@@ -300,6 +300,8 @@ hud.help.manage = {0}: stockpile zones · click a zone or station: its settings 
 tile_panel.move_items = Carry elsewhere
 tile_panel.move_items.description = Settlers who haul carry these items to the tile you click, wherever it is, before any other hauling. They are forbidden meanwhile, and once put down, so that nobody takes them back to storage: allow them when you want them stored
 hud.tool.move_items_help = Click the tile the items must be carried to · Esc: back
+tile_panel.move_item.description = Settlers who haul carry this item to the tile you click, wherever it is, before any other hauling. It is forbidden meanwhile, and once put down, so that nobody takes it back to storage: allow it when you want it stored
+hud.tool.move_item_help = Click the tile the item must be carried to · Esc: back
 hud.tool.move_help = Click where the selected settlers must go · Esc: back
 inspector.follow = Follow
 inspector.follow.stop = Stop following
@@ -386,8 +388,6 @@ hud.tile.bed_free = Free bed: the next settler to sleep here takes it
 # {0}: material, {1}: brought so far, {2}: needed.
 hud.tile.material = {0}: {1}/{2}
 # Stones lying about a tile, that gathering may still find: {0} = item name, {1} = count
-hud.tile.ground_stones = In the ground: {0} ×{1}
-hud.tile.no_stones = No stones left in the ground
 hud.tile.litter = Lying on the tile: {0} ×{1}
 # Items on a tile or carried. {0} = quality grade, {1} = hit points,
 # {2} = maximum hit points, {3} = hit points in percent (e.g. 75%)
@@ -424,9 +424,6 @@ colonist.task.harvest_carefully = Picking with care
 colonist.task.dig = Digging up roots
 # Digging up roots easily mistaken for a poisonous plant (wild carrots)
 colonist.task.dig_carefully = Digging up roots with care
-colonist.task.gather_stones = Gathering stones
-colonist.task.gather_branches = Gathering branches
-colonist.task.gather_twigs = Gathering twigs
 colonist.task.gather_nuts = Picking up hazelnuts
 colonist.task.cut_grass = Cutting grass and other fibres
 colonist.task.craft = Crafting
@@ -608,20 +605,15 @@ gather_zone.resource.wood_sorrel = Wood sorrel leaves
 gather_zone.resource.wild_strawberries = Wild strawberries
 gather_zone.resource.bilberries = Bilberries
 gather_zone.resource.rose_hips = Rose hips
-gather_zone.resource.branches = Branches
-gather_zone.resource.twigs = Twigs
 gather_zone.resource.grass = Grass
 gather_zone.resource.moss = Moss
 gather_zone.resource.bracken = Bracken
 gather_zone.resource.heather = Heather
 gather_zone.resource.reeds = Reeds
-gather_zone.resource.flint = Flint
-gather_zone.resource.cobbles = Cobbles
 # Groups of resources (foldable rows; their setting limits each of their resources)
 gather_zone.group.wood = Wood
 gather_zone.group.food = Food
 gather_zone.group.fibres = Fibres
-gather_zone.group.stones = Stones
 # Repeat modes of an order (dropdown); the target follows
 gather_zone.mode.do_count = Gather
 gather_zone.mode.until = Until
@@ -717,6 +709,9 @@ tile_panel.item_line = {0}: {1}
 tile_panel.item_line_rot = {0}: {1} · {2}
 tile_panel.more_items.one = …and {0} more item
 tile_panel.more_items.other = …and {0} more items
+tile_panel.item_weight = Weight: {0}
+tile_panel.item_others.one = {0} other item lies on this tile
+tile_panel.item_others.other = {0} other items lie on this tile
 tile_panel.deconstruct = Take apart
 tile_panel.deconstruct.description = Orders it taken apart: the settlers get its materials back
 tile_panel.deconstruct_roof.description = Orders the roof taken down onto the floor below (what stands on it goes first)

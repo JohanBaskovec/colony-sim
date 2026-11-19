@@ -219,6 +219,65 @@ static void test_remembers_what_was_last_seen(void)
     game_shutdown(&game);
 }
 
+/* An item selected follows its tile in and out of view: the picture of it
+ * out of view (as last seen, even once taken), the real one in view. */
+static void test_picked_item_follows_the_view(void)
+{
+    Game game;
+    REQUIRE(walled_plain(&game));
+    int z = game.map.surface_level;
+    int tx = 24, ty = 30;
+    EntityId id = game_spawn_colonist(&game, 20, 30, z);
+    REQUIRE(game_colonist(&game, id) != NULL);
+    REQUIRE(game_debug_spawn_items(&game, tx, ty, z, ITEM_FLINT, 1) == 1);
+    REQUIRE(game_set_fog(&game, true));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    REQUIRE(game_tile_seen(&game, tx, ty, z));
+    const Item *flint = items_first(&game.items, map_index(&game.map, tx, ty, z));
+    REQUIRE(flint != NULL);
+    float px = (float)tx + ((float)flint->spot_x + 0.5f) / 256.0f;
+    float py = (float)ty + ((float)flint->spot_y + 0.5f) / 256.0f;
+    ItemPick pick;
+    REQUIRE(game_items_under_point(&game, px, py, z, &pick, 1) == 1);
+    CHECK(game_pick_item(&game, &pick) == flint);
+
+    /* Out of view: its picture, still there once the real one is taken. */
+    REQUIRE(game_debug_teleport(&game, id, 45, 30, z));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    REQUIRE(!game_tile_seen(&game, tx, ty, z));
+    const Item *seen = game_pick_item(&game, &pick);
+    REQUIRE(seen != NULL);
+    CHECK(items_by_id(&game.known.items, pick.id) == seen);
+    CHECK_EQ_INT(seen->type, ITEM_FLINT);
+    CHECK(game_items_under_point(&game, px, py, z, &pick, 1) == 1); /* Picked out of view too. */
+    CHECK(game_pick_item(&game, &pick) == seen);
+    /* Back in view: the real one. */
+    REQUIRE(game_debug_teleport(&game, id, 20, 30, z));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    REQUIRE(game_tile_seen(&game, tx, ty, z));
+    CHECK(game_pick_item(&game, &pick) == flint);
+    /* Taken out of view: seen as it was until the tile is seen again. */
+    REQUIRE(game_debug_teleport(&game, id, 45, 30, z));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    CHECK(game_pick_item(&game, &pick) != NULL);
+    CHECK_EQ_INT(items_remove(&game.items, tx, ty, z, 1), 1);
+    CHECK(game_pick_item(&game, &pick) != NULL);
+    REQUIRE(game_debug_teleport(&game, id, 20, 30, z));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    CHECK(game_pick_item(&game, &pick) == NULL);
+    game_shutdown(&game);
+}
+
 /* Puts an animal standing on a tile (for the tests of the ghosts, which call
  * known_update_animals() themselves while the game is not ticking). */
 static void place_animal(Animal *animal, int x, int y)
@@ -613,6 +672,7 @@ int main(void)
     RUN_TEST(test_fog_explores_the_start);
     RUN_TEST(test_fog_is_deterministic);
     RUN_TEST(test_remembers_what_was_last_seen);
+    RUN_TEST(test_picked_item_follows_the_view);
     RUN_TEST(test_remembers_animals);
     RUN_TEST(test_tools_refuse_unexplored_tiles);
     RUN_TEST(test_stock_is_what_is_known);

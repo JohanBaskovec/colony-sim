@@ -209,6 +209,11 @@ bool app_thing_at(const App *app, TileThing thing, int x, int y, int z)
     case THING_ITEMS: /* A stack, or items lying where they fell. */
         return items_first(game_view_items(&app->game), map_index(map, x, y, z)) != NULL;
     case THING_PLANT: return app_plant_type_at(app, x, y, z) != PLANT_NONE;
+    case THING_ITEM: { /* The item selected, if it lies there still. */
+        ItemPick pick = app->selected_item;
+        return game_pick_item(&app->game, &pick) != NULL && pick.x == x && pick.y == y &&
+               pick.z == z;
+    }
     case THING_COUNT: break;
     }
     return false;
@@ -266,6 +271,7 @@ static ClickTarget click_target_selected(const App *app, int x, int y, int z)
         case THING_ITEMS: return CLICK_ITEMS;
         case THING_PLANT:
             return app_plant_type_at(app, x, y, z) == PLANT_GRASS ? CLICK_GRASS : CLICK_PLANT;
+        case THING_ITEM: /* Not a thing of the tile's: see select_at_point(). */
         case THING_COUNT: break;
         }
     }
@@ -301,10 +307,30 @@ static void select_thing(App *app, TileThing thing, int x, int y, int z)
     app->selected_tile_z = z;
 }
 
+/* Selects one item lying on the ground. */
+static void select_item(App *app, ItemPick pick)
+{
+    clear_selection(app);
+    app->tile_selected = true;
+    app->selected_thing = THING_ITEM;
+    app->selected_item = pick;
+    app->selected_tile_x = pick.x;
+    app->selected_tile_y = pick.y;
+    app->selected_tile_z = pick.z;
+}
+
 /* Forgets the selected thing once it is gone (taken apart, picked up,
- * felled). */
+ * felled); an item selected is followed where it lies. */
 static void prune_tile_selection(App *app)
 {
+    if (app->tile_selected && app->selected_thing == THING_ITEM) {
+        ItemPick *pick = &app->selected_item;
+        app->tile_selected = game_pick_item(&app->game, pick) != NULL;
+        app->selected_tile_x = pick->x;
+        app->selected_tile_y = pick->y;
+        app->selected_tile_z = pick->z;
+        return;
+    }
     if (app->tile_selected && !app_thing_at(app, app->selected_thing, app->selected_tile_x,
                                             app->selected_tile_y, app->selected_tile_z)) {
         app->tile_selected = false;
@@ -960,11 +986,29 @@ static int click_picks(const App *app, int x, int y, ClickPick *out, int max)
     return count;
 }
 
-/* Click: select the colonist or the animal under the cursor, or else what is
- * seen on the tile: the workstation, a structure, an item, a plant, a
- * stockpile zone or a gathering zone, on the level shown or on the ground seen
- * below it; a click on what is selected goes to the next one of these on the
- * tile. Shift adds colonists to / removes them from the selection. */
+/* Items a click may pick under the cursor at most. */
+#define CLICK_ITEMS_MAX 32
+
+/* The items drawn under the cursor, the topmost first: on the level shown,
+ * or else on the ground seen below it. */
+static int click_items(const App *app, float world_x, float world_y, int x, int y, ItemPick *out)
+{
+    const int shown = app->camera.level;
+    int count = game_items_under_point(&app->game, world_x, world_y, shown, out, CLICK_ITEMS_MAX);
+    int seen = map_view_level(game_view_map(&app->game), x, y, shown);
+    if (count == 0 && seen >= 0 && seen < shown) {
+        count = game_items_under_point(&app->game, world_x, world_y, seen, out, CLICK_ITEMS_MAX);
+    }
+    return count;
+}
+
+/* Click: select the colonist or the animal under the cursor, or else an
+ * item drawn under it (the topmost), or else what is seen on the tile: the
+ * workstation, a structure, the items, a plant, a stockpile zone or a
+ * gathering zone, on the level shown or on the ground seen below it; a click
+ * on what is selected goes to the next one of these (the items under the
+ * cursor one by one, then the things of the tile). Shift adds colonists to /
+ * removes them from the selection. */
 static void select_at_point(App *app, float screen_x, float screen_y, bool additive)
 {
     const int z = app->camera.level; /* The level shown. */
@@ -977,13 +1021,22 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
         id = game_colonist_at(&app->game, world_x, world_y + APP_PICK_BODY_OFFSET, z);
     }
     int x = (int)floorf(world_x), y = (int)floorf(world_y);
+    ItemPick items[CLICK_ITEMS_MAX];
+    int item_count = click_items(app, world_x, world_y, x, y, items);
     ClickPick picks[CLICK_PICK_MAX];
     int pick_count = click_picks(app, x, y, picks, CLICK_PICK_MAX);
-    /* Where the selection stands among them (-1: not on this tile). */
+    /* Where the selection stands among them, the items first (-1: not here). */
     int current = -1;
+    for (int i = 0; i < item_count && current < 0; i++) {
+        if (app->tile_selected && app->selected_thing == THING_ITEM &&
+            app->selected_item.id.slot == items[i].id.slot &&
+            app->selected_item.id.generation == items[i].id.generation) {
+            current = i;
+        }
+    }
     for (int i = 0; i < pick_count && current < 0; i++) {
         if (click_target_selected(app, x, y, picks[i].z) == picks[i].target) {
-            current = i;
+            current = item_count + i;
         }
     }
     /* A click on the selected animal goes on to what is under it. */
@@ -1009,10 +1062,15 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
             app->selected_animal = animal;
             return;
         }
-        if (pick_count == 0) {
+        if (item_count + pick_count == 0) {
             return;
         }
-        ClickPick pick = picks[(current + 1) % pick_count];
+        int next = (current + 1) % (item_count + pick_count);
+        if (next < item_count) {
+            select_item(app, items[next]);
+            return;
+        }
+        ClickPick pick = picks[next - item_count];
         switch (pick.target) {
         case CLICK_STATION:
             select_station(app, workstation_at(&app->game.workstations, x, y, pick.z));
@@ -1424,8 +1482,11 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         int x, y;
         screen_to_tile(app, button->x, button->y, &x, &y);
         TilePos from = app->move_item_source;
-        if (game_order_item_move(&app->game, from.x, from.y, from.z, x, y, z)) {
-            app->tool = APP_TOOL_NONE; /* Done: the stack is on its way. */
+        bool ordered = app->move_item_id.slot != UINT32_MAX
+                           ? game_order_single_item_move(&app->game, app->move_item_id, x, y, z)
+                           : game_order_item_move(&app->game, from.x, from.y, from.z, x, y, z);
+        if (ordered) {
+            app->tool = APP_TOOL_NONE; /* Done: the items are on their way. */
         } /* Else the tool stays for another try (the card says what to do). */
     } else if (app->tool == APP_TOOL_DEBUG) {
         apply_debug_tool(app, button->x, button->y);
@@ -1638,7 +1699,6 @@ static void render_frame(App *app)
     render_forbidden_markers(app->renderer, &app->game, &app->camera);
     render_item_moves(app->renderer, &app->game, &app->camera);
     render_designations(app->renderer, &app->game, &app->camera);
-    hud_draw_item_counts(app);
     render_daylight(app->renderer, &app->game, &app->camera);
     render_weather(app->renderer, &app->game, &app->camera, SDL_GetTicks());
     if (app->show_temperature) {
@@ -1657,7 +1717,13 @@ static void render_frame(App *app)
     if (app->hover_valid) {
         render_tile_outline(app->renderer, &app->camera, app->hover_x, app->hover_y, HOVER_COLOR);
     }
-    if (app->tile_selected) {
+    if (app->tile_selected && app->selected_thing == THING_ITEM) {
+        ItemPick pick = app->selected_item;
+        const Item *item = game_pick_item(&app->game, &pick);
+        if (item != NULL && pick.z == app->camera.level) {
+            render_item_selection(app->renderer, &app->camera, pick.x, pick.y, item);
+        }
+    } else if (app->tile_selected) {
         render_tile_selection(app->renderer, &app->camera, app->selected_tile_x,
                               app->selected_tile_y);
     }

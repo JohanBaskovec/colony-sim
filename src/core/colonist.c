@@ -44,6 +44,7 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, 
     colonist->y = y;
     colonist->z = z;
     colonist->task = TASK_IDLE;
+    colonist->haul_item = ITEM_ID_NONE;
     for (int need = 0; need < NEED_COUNT; need++) {
         colonist->needs[need] = 1.0f;
     }
@@ -747,6 +748,7 @@ static void begin_task(Colonist *colonist, const ColonistContext *context, Colon
     colonist->light_progress = 0.0f;
     colonist->haul_delivering = false;
     colonist->haul_forced = false;
+    colonist->haul_item = ITEM_ID_NONE;
     colonist->haul_type = ITEM_NONE;
     colonist->task = task;
     colonist->timer = 0;
@@ -847,7 +849,7 @@ static bool tile_has_food(const Map *map, const Items *items, int x, int y, int 
     ItemStack stack = items_get_allowed(items, x, y, z);
     return item_is_food((ItemType)stack.type) ||
            (stack.type != ITEM_NONE && items_mixed(items, x, y, z) &&
-            items_get_of(items, x, y, z, item_types_food()).type != ITEM_NONE) ||
+            items_get_allowed_of(items, x, y, z, item_types_food()).type != ITEM_NONE) ||
            map_litter(map, x, y, z, ITEM_HAZELNUTS) > 0 || map_has_edible_plant(map, x, y, z);
 }
 
@@ -1671,6 +1673,21 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
 
 static const Items *items_checked(const ColonistContext *context, int x, int y, int z);
 
+/* The one item an item move is about, as a stack, while it lies on its
+ * source tile (the player ordered it: the settler knows of it); an empty
+ * stack otherwise. */
+static ItemStack ordered_item_stack(const Items *items, TilePos source, ItemId id)
+{
+    const Item *item = items_by_id(items, id);
+    if (item == NULL ||
+        item->tile !=
+            ((size_t)source.z * (size_t)items->height + (size_t)source.y) * (size_t)items->width +
+                (size_t)source.x) {
+        return (ItemStack){.type = ITEM_NONE};
+    }
+    return item_as_stack(item);
+}
+
 /* An item move the player ordered (core/item_move.h): the nearest stack
  * ordered somewhere that nobody has taken, whose destination can take (some
  * of) it and which the colonist can walk to. */
@@ -1695,8 +1712,11 @@ static bool try_forced_haul_job(Colonist *colonist, const ColonistContext *conte
         }
         tried[best] = true;
         TilePos source = moves->orders[best].source, destination = moves->orders[best].destination;
-        ItemStack stack = items_get(items_checked(context, source.x, source.y, source.z), source.x,
-                                    source.y, source.z);
+        ItemId item = moves->orders[best].item;
+        ItemStack stack = item.slot == UINT32_MAX
+                              ? items_get(items_checked(context, source.x, source.y, source.z),
+                                          source.x, source.y, source.z)
+                              : ordered_item_stack(context->items, source, item);
         if (stack.type == ITEM_NONE ||
             reservations_owner(context->reservations, RESERVATION_HAUL_SOURCE, source) != 0 ||
             item_move_room(context->items, destination, stack) == 0 ||
@@ -1706,6 +1726,7 @@ static bool try_forced_haul_job(Colonist *colonist, const ColonistContext *conte
         }
         begin_task(colonist, context, TASK_HAUL);
         colonist->haul_forced = true;
+        colonist->haul_item = item;
         colonist->haul_type = stack.type;
         colonist->target = source;
         colonist->haul_destination = destination;
@@ -2010,19 +2031,22 @@ static bool collect_more(Colonist *colonist, const ColonistContext *context)
     return true;
 }
 
-/* The items to haul on the source tile (`target`): those matching the load
- * in hand, else those of the haul's type (only allowed ones when
- * `allowed`). */
-static ItemStack haul_source_stack(const Colonist *colonist, const Items *items, bool allowed)
+/* The items to haul on the source tile (`target`): the one item of a forced
+ * haul ordered for it alone, else those matching the load in hand, else those
+ * of the haul's type (only allowed ones for an ordinary haul). */
+static ItemStack haul_source_stack(const Colonist *colonist, const ColonistContext *context,
+                                   const Items *items)
 {
     TilePos source = colonist->target;
-    if (allowed && items_forbidden(items, source.x, source.y, source.z)) {
-        return (ItemStack){.type = ITEM_NONE};
+    if (colonist->haul_forced && colonist->haul_item.slot != UINT32_MAX) {
+        return ordered_item_stack(context->items, source, colonist->haul_item);
     }
     if (colonist->carried.count > 0) {
         return items_get_group(items, source.x, source.y, source.z, colonist->carried);
     }
-    return items_get_of(items, source.x, source.y, source.z, ITEM_TYPE_BIT(colonist->haul_type));
+    ItemTypeMask type = ITEM_TYPE_BIT(colonist->haul_type);
+    return colonist->haul_forced ? items_get_of(items, source.x, source.y, source.z, type)
+                                 : items_get_allowed_of(items, source.x, source.y, source.z, type);
 }
 
 /*
@@ -2053,14 +2077,14 @@ static bool haul_still_valid(Colonist *colonist, const ColonistContext *context)
     if (colonist->haul_forced) {
         /* The order must stand (taken back, the settler drops what it holds).
          * Its stack may be forbidden: that is how the order keeps it. */
-        int order = item_moves_find(context->item_moves, colonist->target);
+        int order = item_moves_find(context->item_moves, colonist->target, colonist->haul_item);
         bool holding = colonist->carried.count > 0;
         if (colonist->haul_delivering) {
             return order >= 0 && haul_destination_valid(colonist, context, colonist->carried);
         }
         TilePos source = colonist->target;
-        ItemStack stack = haul_source_stack(
-            colonist, items_checked(context, source.x, source.y, source.z), false);
+        ItemStack stack = haul_source_stack(colonist, context,
+                                            items_checked(context, source.x, source.y, source.z));
         if (order >= 0 && colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED &&
             stack.type != ITEM_NONE && (!holding || item_stacks_match(stack, colonist->carried)) &&
             haul_destination_valid(colonist, context, stack)) {
@@ -2070,9 +2094,8 @@ static bool haul_still_valid(Colonist *colonist, const ColonistContext *context)
     }
     if (!colonist->haul_delivering) {
         ItemStack stack = haul_source_stack(
-            colonist,
-            items_checked(context, colonist->target.x, colonist->target.y, colonist->target.z),
-            true);
+            colonist, context,
+            items_checked(context, colonist->target.x, colonist->target.y, colonist->target.z));
         bool holding = colonist->carried.count > 0;
         if (colonist->work_priorities[WORK_HAULING] != WORK_PRIORITY_DISABLED &&
             stack.type != ITEM_NONE && (!holding || item_stacks_match(stack, colonist->carried)) &&
@@ -2114,11 +2137,16 @@ static void haul(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
             return;
         }
-        ItemStack stack = haul_source_stack(colonist, context->items, !colonist->haul_forced);
+        ItemStack stack = haul_source_stack(colonist, context, context->items);
         int wanted = haul_room_left(colonist, context, stack);
-        items_pick_up_of(context->items, colonist->x, colonist->y, colonist->z,
-                         ITEM_TYPE_BIT(stack.type), stack.count < wanted ? stack.count : wanted,
-                         &colonist->carried);
+        if (colonist->haul_forced && colonist->haul_item.slot != UINT32_MAX) {
+            if (stack.type != ITEM_NONE && wanted > 0) {
+                items_pick_up_item(context->items, colonist->haul_item, &colonist->carried);
+            }
+        } else {
+            items_pick_up_group(context->items, colonist->x, colonist->y, colonist->z, stack,
+                                stack.count < wanted ? stack.count : wanted, &colonist->carried);
+        }
         if (colonist->carried.count == 0 ||
             (!collect_more(colonist, context) && !start_delivery(colonist, context))) {
             set_idle(colonist, context, 0);
@@ -2131,9 +2159,9 @@ static void haul(Colonist *colonist, const ColonistContext *context)
         return;
     }
     if (colonist->haul_forced) { /* What the player chose: put down, and left alone after. */
+        items_load_set_forbidden(context->items, &colonist->carried, true);
         items_put(context->items, dest.x, dest.y, dest.z, &colonist->carried);
-        items_set_forbidden(context->items, dest.x, dest.y, dest.z, true);
-    } else if (!items_forbidden(context->items, dest.x, dest.y, dest.z)) { /* Left alone. */
+    } else if (!items_any_forbidden(context->items, dest.x, dest.y, dest.z)) { /* Left alone. */
         items_put(context->items, dest.x, dest.y, dest.z, &colonist->carried);
     }
     set_idle(colonist, context, 0); /* Drops any leftover nearby, then looks for more work. */
@@ -2197,12 +2225,9 @@ static void work(Colonist *colonist, const ColonistContext *context)
                       work_with_tool(colonist, context, gather_job_def(job)->tool_use) *
                       assistance(colonist, context);
         /* Products depend on the level before this tick's learning. */
-        bool wet =
-            job == GATHER_JOB_TWIGS && soil_litter_wet(context->soil, context->map, target.x,
-                                                       target.y, target.z, context->wetting > 0.0f);
-        bool done = gather_zone_add_work_wet(
-            context->gather_zones, context->map, context->items, target.x, target.y, target.z, job,
-            speed, colonist_work_level(colonist, knowledge), context->rng, wet);
+        bool done = gather_zone_add_work(context->gather_zones, context->map, context->items,
+                                         target.x, target.y, target.z, job, speed,
+                                         colonist_work_level(colonist, knowledge), context->rng);
         colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
         /* After each job, choose again: a zone may keep a settler busy
          * forever, and a more important job may be waiting. */
@@ -2412,8 +2437,9 @@ static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
     const FetchSearch *search = userdata;
     ItemStack stack = items_get_allowed(search->items, x, y, z);
     if (stack.type != ITEM_NONE && items_mixed(search->items, x, y, z)) {
-        stack = search->match.count > 0 ? items_get_group(search->items, x, y, z, search->match)
-                                        : items_get_of(search->items, x, y, z, search->types);
+        stack = search->match.count > 0
+                    ? items_get_group(search->items, x, y, z, search->match)
+                    : items_get_allowed_of(search->items, x, y, z, search->types);
     }
     if (stack.type != ITEM_NONE && search->by_item && (search->types & ITEM_TYPE_BIT(stack.type))) {
         ItemType type = (ItemType)stack.type;
@@ -2683,7 +2709,7 @@ static ItemStack best_tool_at(const Items *items, int x, int y, int z, ToolUse u
     ItemStack best = {.type = ITEM_NONE};
     float best_factor = 0.0f;
     for (int i = 0; i < count; i++) {
-        float factor = tool_speed_factor(use, groups[i]);
+        float factor = groups[i].forbidden ? 0.0f : tool_speed_factor(use, groups[i]);
         if (factor > best_factor) {
             best = groups[i];
             best_factor = factor;
@@ -2704,8 +2730,7 @@ static void take_job_tool(Colonist *colonist, const ColonistContext *context)
         colonist->z == colonist->fetch.z && stack.type != ITEM_NONE &&
         tool_speed_factor(use, stack) > colonist_tool_factor(colonist, use, ~(ItemTypeMask)0) &&
         colonist_swap_tool(colonist, stack, &replaced)) {
-        items_remove_of(context->items, colonist->x, colonist->y, colonist->z,
-                        ITEM_TYPE_BIT(stack.type), 1);
+        items_take_group(context->items, colonist->x, colonist->y, colonist->z, stack, 1);
         if (replaced.count > 0) {
             items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z,
                        replaced);
@@ -2856,8 +2881,7 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
             !colonist_swap_tool(colonist, stack, &replaced)) {
             return false;
         }
-        items_remove_of(context->items, colonist->x, colonist->y, colonist->z,
-                        ITEM_TYPE_BIT(stack.type), 1);
+        items_take_group(context->items, colonist->x, colonist->y, colonist->z, stack, 1);
         if (replaced.count > 0) {
             items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z,
                        replaced);

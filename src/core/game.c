@@ -455,7 +455,7 @@ static void ensure_food_plants_near(Game *game, TilePos center, PlantType type, 
     }
 }
 
-/* A tile of a rich enough flint patch where stones can be gathered. */
+/* A tile of a rich enough flint patch, on stony ground. */
 static bool is_flint_spot(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)userdata;
@@ -469,7 +469,7 @@ typedef struct PatchSpotSearch {
     float chance; /* Of taking a suitable spot. */
 } PatchSpotSearch;
 
-/* Where a flint patch can be laid: ground where stones can be gathered, not
+/* Where a flint patch can be laid: stony ground (gather_stone_ground()), not
  * next to the arrival point; scattered like food plants (see is_plant_spot()). */
 static bool is_patch_spot(const Map *map, int x, int y, int z, void *userdata)
 {
@@ -612,7 +612,7 @@ bool game_init(Game *game, const NewGameParams *params)
     game->seed = params->world.seed;
     /* Items dropped keep off storage they would mix up. */
     items_set_drop_filter(&game->items, haul_drop_filter, &game->stockpiles);
-    /* Stones, branches and twigs lie as wild items from now on. */
+    /* Stones, branches and twigs lie as ordinary items from now on. */
     map_litter_to_items(&game->map, &game->items);
     corpses_init(&game->corpses);
     reservations_init(&game->reservations);
@@ -793,8 +793,8 @@ static void mushrooms_day(Game *game, size_t index, int day)
  * the tile and the day, leaving the game's random stream alone), and a young
  * plant takes root where it lands if the tile suits it, its ground is neither
  * too dry nor too wet for it now (docs/CLIMATE.md §6), and nothing of the
- * colony is on it (an item, a stockpile, a workstation, a building site, an
- * order). */
+ * colony is on it (a stockpile, a workstation, a building site, an order;
+ * items lying about do not stop it). */
 static void spread_day(Game *game, size_t index, int day)
 {
     Map *map = &game->map;
@@ -810,7 +810,6 @@ static void spread_day(Game *game, size_t index, int day)
     map_tile_of(map, index, &x, &y, &z);
     if (!plant_spread_target(map, x, y, z, world_roll(game->seed, index, day, 31), &tx, &ty) ||
         !plant_can_take_root(map, (PlantType)plant->type, tx, ty, z) ||
-        items_get(&game->items, tx, ty, z).count > 0 ||
         stockpile_at(&game->stockpiles, tx, ty, z) != STOCKPILE_NONE ||
         workstation_at(&game->workstations, tx, ty, z) >= 0 ||
         construction_at(&game->constructions, tx, ty, z) != CONSTRUCTION_NONE ||
@@ -824,8 +823,8 @@ static void spread_day(Game *game, size_t index, int day)
     map->plants[map_index(map, tx, ty, z)] = plant_offspring(plant);
 }
 
-/* Whether an item or a settler is on a tile the trunk of a tree of `shape`
- * on (x, y, z) would grow into. */
+/* Whether a settler is on a tile the trunk of a tree of `shape` on (x, y, z)
+ * would grow into. */
 static bool tree_in_the_way(const Game *game, int x, int y, int z, const TreeShape *shape)
 {
     const Map *map = &game->map;
@@ -835,14 +834,41 @@ static bool tree_in_the_way(const Game *game, int x, int y, int z, const TreeSha
                 int tx = x + dx, ty = y + dy, tz = z + dz;
                 if (map_in_bounds(map, tx, ty, tz) &&
                     map->rock[map_index(map, tx, ty, tz)] != ROCK_WOOD &&
-                    (items_get(&game->items, tx, ty, tz).count > 0 ||
-                     game_tile_has_colonist(game, tx, ty, tz))) {
+                    game_tile_has_colonist(game, tx, ty, tz)) {
                     return true;
                 }
             }
         }
     }
     return false;
+}
+
+/* What lies on the tiles a trunk of `shape` on (x, y, z) has just grown into
+ * is pushed next door (the first open tile beside it, as a wall built there
+ * does); with no room around, it stays. */
+static void push_items_off_trunk(Game *game, int x, int y, int z, const TreeShape *shape)
+{
+    static const int DX[4] = {0, 1, 0, -1};
+    static const int DY[4] = {-1, 0, 1, 0};
+    Map *map = &game->map;
+    for (int dz = 0; dz < shape->trunk; dz++) {
+        for (int dy = 0; dy < shape->size; dy++) {
+            for (int dx = 0; dx < shape->size; dx++) {
+                int tx = x + dx, ty = y + dy, tz = z + dz;
+                if (!map_in_bounds(map, tx, ty, tz) ||
+                    items_get(&game->items, tx, ty, tz).count == 0) {
+                    continue;
+                }
+                for (int i = 0; i < 4; i++) {
+                    if (map_is_passable(map, tx + DX[i], ty + DY[i], tz)) {
+                        items_move_all(&game->items, map, tx, ty, tz, tx + DX[i], ty + DY[i], tz,
+                                       true);
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }
 
 /* A tree whose shape changed as it grew (or that takes room and is not in
@@ -874,6 +900,7 @@ static void grow_tree(Game *game, size_t index, float old_growth)
         return;
     }
     tree_build(map, x, y, z);
+    push_items_off_trunk(game, x, y, z, &shape);
     /* No stockpile on a trunk. */
     stockpiles_remove_rect(&game->stockpiles, x, y, x + shape.size - 1, y + shape.size - 1, z);
 }
@@ -1100,7 +1127,8 @@ static bool item_move_busy(const void *context, const ItemMove *order)
         if (!entity_id_is_none(game_colonist_id_at(game, slot)) && colonist->task == TASK_HAUL &&
             colonist->haul_forced && colonist->carried.count > 0 &&
             colonist->target.x == order->source.x && colonist->target.y == order->source.y &&
-            colonist->target.z == order->source.z) {
+            colonist->target.z == order->source.z && colonist->haul_item.slot == order->item.slot &&
+            colonist->haul_item.generation == order->item.generation) {
             return true;
         }
     }
@@ -2083,6 +2111,78 @@ ItemId game_item_at_point(const Game *game, float x, float y, int z)
     return items_at_point(&game->items, x, y, z);
 }
 
+int game_items_under_point(const Game *game, float x, float y, int z, ItemPick *out, int capacity)
+{
+    int tx = (int)floorf(x), ty = (int)floorf(y), count = 0;
+    /* The tiles drawn last first: the row below, then this one, then the
+     * row above, each from the right. */
+    for (int dy = 1; dy >= -1; dy--) {
+        for (int dx = 1; dx >= -1; dx--) {
+            int cx = tx + dx, cy = ty + dy;
+            if (!map_in_bounds(&game->map, cx, cy, z)) {
+                continue;
+            }
+            const Items *items = game_items_at(game, cx, cy, z);
+            int drawn = 0;
+            for (const Item *item = items_first(items, map_index(&game->map, cx, cy, z));
+                 item != NULL && drawn < ITEM_DRAWN_PER_TILE && count < capacity;
+                 item = items_next(items, item), drawn++) {
+                float ix = (float)cx + ((float)item->spot_x + 0.5f) / 256.0f;
+                float iy = (float)cy + ((float)item->spot_y + 0.5f) / 256.0f;
+                float radius = item_drawn_size((ItemType)item->type) * 0.5f;
+                if ((ix - x) * (ix - x) + (iy - y) * (iy - y) <= radius * radius) {
+                    out[count++] =
+                        (ItemPick){items_id(items, item), (int16_t)cx, (int16_t)cy, (int16_t)z};
+                }
+            }
+        }
+    }
+    return count;
+}
+
+/* The pick's item among `items`, NULL when not there; follows it onto
+ * another tile. */
+static const Item *pick_in(const Game *game, const Items *items, ItemPick *pick)
+{
+    const Item *item = items_by_id(items, pick->id);
+    if (item == NULL) {
+        return NULL;
+    }
+    size_t index = map_index(&game->map, pick->x, pick->y, pick->z);
+    if (item->tile != index) { /* Moved (the debug tool). */
+        size_t level = map_level_tile_count(&game->map);
+        pick->z = (int16_t)(item->tile / level);
+        pick->y = (int16_t)(item->tile % level / (size_t)game->map.width);
+        pick->x = (int16_t)(item->tile % (size_t)game->map.width);
+    }
+    return item;
+}
+
+const Item *game_pick_item(const Game *game, ItemPick *pick)
+{
+    if (pick->id.slot == UINT32_MAX || !map_in_bounds(&game->map, pick->x, pick->y, pick->z)) {
+        return NULL;
+    }
+    const Items *items = game_items_at(game, pick->x, pick->y, pick->z);
+    const Item *item = pick_in(game, items, pick);
+    if (item != NULL || !game->fog_on || !game->known_ready) {
+        return item;
+    }
+    /* Its tile came into view or left it: the same item among the others. */
+    const Items *other = items == &game->items ? &game->known.items : &game->items;
+    const Item *before = pick_in(game, other, pick);
+    if (before == NULL) {
+        return NULL;
+    }
+    items = game_items_at(game, pick->x, pick->y, pick->z);
+    ItemId id = items_find_like(items, pick->x, pick->y, pick->z, before);
+    if (id.slot == UINT32_MAX) {
+        return NULL;
+    }
+    pick->id = id;
+    return items_by_id(items, id);
+}
+
 bool game_debug_move_item(Game *game, ItemId id, float x, float y, int z)
 {
     int tx = (int)floorf(x), ty = (int)floorf(y);
@@ -2698,6 +2798,10 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, &c->fuel_promised, sizeof(c->fuel_promised));
         hash = hash_fnv1a64(hash, &c->haul_delivering, sizeof(c->haul_delivering));
         hash = hash_fnv1a64(hash, &c->haul_type, sizeof(c->haul_type));
+        if (c->haul_item.slot != UINT32_MAX) { /* Hashes without item moves stay as they were. */
+            hash = hash_fnv1a64(hash, &c->haul_item.slot, sizeof(c->haul_item.slot));
+            hash = hash_fnv1a64(hash, &c->haul_item.generation, sizeof(c->haul_item.generation));
+        }
         hash = hash_fnv1a64(hash, &c->strength, sizeof(c->strength));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
@@ -3097,21 +3201,98 @@ bool game_order_item_move(Game *game, int x, int y, int z, int dx, int dy, int d
         item_move_room(&game->items, destination, stack) == 0) {
         return false;
     }
-    if (!item_moves_add(&game->item_moves, source, destination)) {
+    if (!item_moves_add(&game->item_moves, source, destination, ITEM_ID_NONE)) {
         return false;
     }
+    item_moves_remove_items_on(&game->item_moves, source); /* The tile's order takes them. */
     items_set_forbidden(&game->items, x, y, z, true);
     return true;
 }
 
 bool game_cancel_item_move(Game *game, int x, int y, int z)
 {
-    return item_moves_remove(&game->item_moves, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z});
+    return item_moves_remove(&game->item_moves, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                             ITEM_ID_NONE);
 }
 
 bool game_item_move_at(const Game *game, int x, int y, int z, TilePos *destination)
 {
-    int index = item_moves_find(&game->item_moves, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z});
+    int index = item_moves_find(&game->item_moves, (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                ITEM_ID_NONE);
+    if (index < 0) {
+        return false;
+    }
+    *destination = game->item_moves.orders[index].destination;
+    return true;
+}
+
+/* The tile an item lies on; false when it is not on the ground. */
+static bool item_tile(const Game *game, ItemId id, TilePos *tile)
+{
+    const Item *item = items_by_id(&game->items, id);
+    if (item == NULL) {
+        return false;
+    }
+    size_t level = map_level_tile_count(&game->map);
+    *tile = (TilePos){(int16_t)(item->tile % (size_t)game->map.width),
+                      (int16_t)(item->tile % level / (size_t)game->map.width),
+                      (int16_t)(item->tile / level)};
+    return true;
+}
+
+ItemId game_pick_real_item(const Game *game, ItemPick *pick)
+{
+    const Item *item = game_pick_item(game, pick);
+    if (item == NULL) {
+        return ITEM_ID_NONE;
+    }
+    const Items *items = game_items_at(game, pick->x, pick->y, pick->z);
+    if (items == &game->items) {
+        return pick->id;
+    }
+    return items_find_like(&game->items, pick->x, pick->y, pick->z, item);
+}
+
+bool game_item_forbidden(const Game *game, ItemId id)
+{
+    const Item *item = items_by_id(&game->items, id);
+    return item != NULL && item->forbidden;
+}
+
+bool game_set_item_forbidden(Game *game, ItemId id, bool forbidden)
+{
+    TilePos tile;
+    if (!item_tile(game, id, &tile) || !game_tile_explored(game, tile.x, tile.y, tile.z)) {
+        return false;
+    }
+    return items_set_item_forbidden(&game->items, id, forbidden); /* Counts as an addition. */
+}
+
+bool game_order_single_item_move(Game *game, ItemId id, int dx, int dy, int dz)
+{
+    TilePos source, destination = {(int16_t)dx, (int16_t)dy, (int16_t)dz};
+    if (!item_tile(game, id, &source) || !game_tile_explored(game, source.x, source.y, source.z) ||
+        !game_tile_explored(game, dx, dy, dz) ||
+        !path_walker_can_stand(PATH_WALKER_SETTLER, game_view_map(game), dx, dy, dz) ||
+        item_move_room(&game->items, destination, item_as_stack(items_by_id(&game->items, id))) ==
+            0 ||
+        !item_moves_add(&game->item_moves, source, destination, id)) {
+        return false;
+    }
+    items_set_item_forbidden(&game->items, id, true);
+    return true;
+}
+
+bool game_cancel_single_item_move(Game *game, ItemId id)
+{
+    TilePos source;
+    return item_tile(game, id, &source) && item_moves_remove(&game->item_moves, source, id);
+}
+
+bool game_single_item_move_at(const Game *game, ItemId id, TilePos *destination)
+{
+    TilePos source;
+    int index = item_tile(game, id, &source) ? item_moves_find(&game->item_moves, source, id) : -1;
     if (index < 0) {
         return false;
     }

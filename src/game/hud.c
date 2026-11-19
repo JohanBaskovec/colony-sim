@@ -40,8 +40,6 @@
 
 /* Colonist names are drawn under them from this zoom level (pixels per tile). */
 #define HUD_LABEL_MIN_ZOOM 10.0f
-/* Item stack sizes are drawn from this zoom level. */
-#define HUD_ITEM_COUNT_MIN_ZOOM 28.0f
 
 typedef struct Panel {
     char lines[HUD_MAX_LINES][HUD_LINE_SIZE];
@@ -616,40 +614,13 @@ static void build_tile_panel(App *app, Panel *panel)
                   tr(plant_def((PlantType)map->plants[index].type)->name_key));
     }
 
-    /* Stones in the ground: what gathering stones may still find. */
-    if (gather_stone_ground(map, x, y, z)) {
-        static const ItemType STONES[] = {ITEM_COBBLE, ITEM_FLINT};
-        bool any = false;
-        for (size_t i = 0; i < SDL_arraysize(STONES); i++) {
-            int count = map_stones(map, x, y, z, STONES[i]);
-            if (count > 0) {
-                tr_integer(a, sizeof(a), count);
-                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.ground_stones"),
-                          tr(item_def(STONES[i])->name_key), a);
-                any = true;
-            }
-        }
-        if (!any) {
-            panel_add_text(panel, tr("hud.tile.no_stones"));
-        }
-    }
-
-    /* Branches, twigs and nuts the trees shed, on the ground or on their
-     * foliage; twigs as they would be picked up (wet on wet ground, in the
-     * rain). */
-    static const ItemType LITTER[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS};
-    bool raining = weather_wetting(&app->game.weather, app->game.clock.tick) > 0.0f;
-    for (size_t i = 0; i < SDL_arraysize(LITTER); i++) {
-        int count = map_litter(map, x, y, z, LITTER[i]);
-        if (count > 0) {
-            ItemType shown =
-                LITTER[i] == ITEM_TWIGS && soil_litter_wet(&app->game.soil, map, x, y, z, raining)
-                    ? ITEM_WET_TWIGS
-                    : LITTER[i];
-            tr_integer(a, sizeof(a), count);
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.litter"),
-                      tr(item_def(shown)->name_key), a);
-        }
+    /* The nuts the trees shed, on the ground or on their foliage (a layer of
+     * the map, not items). */
+    int nuts = map_litter(map, x, y, z, ITEM_HAZELNUTS);
+    if (nuts > 0) {
+        tr_integer(a, sizeof(a), nuts);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.litter"),
+                  tr(item_def(ITEM_HAZELNUTS)->name_key), a);
     }
 
     const Stockpile *stockpile =
@@ -1285,34 +1256,6 @@ static void build_colonist_section(App *app, Panel *panel, EntityId id, Colonist
     case SECTION_GEAR: add_gear_lines(panel, colonist); break;
     case SECTION_SOCIAL: break; /* social_rows() */
     case SECTION_COUNT: break;
-    }
-}
-
-void hud_draw_item_counts(App *app)
-{
-    const int z = app->camera.level; /* The level shown. */
-    if (app->camera.zoom < HUD_ITEM_COUNT_MIN_ZOOM) {
-        return;
-    }
-    const Items *items = game_view_items(&app->game);
-    TileRect visible = camera_visible_tiles(&app->camera, items->width, items->height);
-    char count[16];
-    for (int y = visible.y0; y < visible.y1; y++) {
-        for (int x = visible.x0; x < visible.x1; x++) {
-            ItemStack stack = items_get(game_items_at(&app->game, x, y, z), x, y, z);
-            if (stack.type == ITEM_NONE) {
-                continue;
-            }
-            float sx, sy;
-            camera_world_to_screen(&app->camera, (float)(x + 1), (float)(y + 1), &sx, &sy);
-            tr_integer(count, sizeof(count), stack.count);
-            int width, height;
-            text_measure(app->text, count, &width, &height);
-            float tx = SDL_floorf(sx - (float)width - 2.0f);
-            float ty = SDL_floorf(sy - (float)height);
-            text_draw(app->text, count, tx + 1.0f, ty + 1.0f, THEME_COLOR(app, THEME_TEXT_SHADOW));
-            text_draw(app->text, count, tx, ty, THEME_COLOR(app, THEME_TEXT));
-        }
     }
 }
 

@@ -48,7 +48,6 @@ static const Entry ENTRIES[] = {
     {true, GATHER_GROUP_WOOD},
     {true, GATHER_GROUP_FOOD},
     {true, GATHER_GROUP_FIBRES},
-    {true, GATHER_GROUP_STONES},
 };
 
 /* Dropdown options, in GatherMode and GatherUnit order. */

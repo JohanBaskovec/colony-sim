@@ -18,8 +18,8 @@ typedef struct StorageLevels {
 
 int haul_storage_room(const Items *items, int x, int y, int z, ItemStack stack)
 {
-    if (item_stack_limit((ItemType)stack.type) == 0 || items_forbidden(items, x, y, z)) {
-        return 0; /* A forbidden stack is left alone: nothing is added to it. */
+    if (item_stack_limit((ItemType)stack.type) == 0 || items_any_forbidden(items, x, y, z)) {
+        return 0; /* Forbidden items are left alone: nothing is added to them. */
     }
     /* Storage keeps one group per tile. */
     ItemStack there = items_get(items, x, y, z);
@@ -80,7 +80,7 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
                                                      world->self))) {
                         continue; /* Other zone, or someone is already bringing items there. */
                     }
-                    if (items_forbidden(world->items, x, y, z)) {
+                    if (items_any_forbidden(world->items, x, y, z)) {
                         continue; /* Left alone: no room there. */
                     }
                     ItemStack stack = items_get(world->items, x, y, z);
@@ -208,8 +208,8 @@ bool haul_any_job_possible(const HaulWorld *world)
 /* Groups of a tile looked at for hauling (the newest first). */
 #define HAUL_GROUPS_SEEN 8
 
-/* The newest group lying on a tile that some better storage wants: an
- * empty stack for none (or when the tile is forbidden). */
+/* The newest group of allowed items lying on a tile that some better
+ * storage wants: an empty stack for none. */
 static ItemStack haulable_group(const HaulWorld *world, const StorageLevels *storage, int x, int y,
                                 int z)
 {
@@ -217,7 +217,7 @@ static ItemStack haulable_group(const HaulWorld *world, const StorageLevels *sto
     int count = 0;
     if (!items_forbidden(world->items, x, y, z)) {
         /* The newest group first, on its own: most tiles hold only it. */
-        groups[0] = items_get(world->items, x, y, z);
+        groups[0] = items_get_allowed(world->items, x, y, z);
         count = groups[0].type != ITEM_NONE;
         if (count > 0 && items_mixed(world->items, x, y, z)) {
             int current = stockpile_storage_priority(world->stockpiles, x, y, z, groups[0]);
@@ -229,7 +229,7 @@ static ItemStack haulable_group(const HaulWorld *world, const StorageLevels *sto
         }
     }
     for (int i = 0; i < count; i++) {
-        if (storage->levels[groups[i].type] == 0) {
+        if (storage->levels[groups[i].type] == 0 || groups[i].forbidden) {
             continue;
         }
         int current = stockpile_storage_priority(world->stockpiles, x, y, z, groups[i]);
@@ -338,9 +338,8 @@ static bool is_extra_source(const Map *map, int x, int y, int z, void *userdata)
     (void)map;
     const ExtraSearch *search = userdata;
     const HaulWorld *world = search->world;
-    ItemStack stack = items_forbidden(world->items, x, y, z)
-                          ? (ItemStack){.type = ITEM_NONE}
-                          : items_get_group(world->items, x, y, z, search->load);
+    /* The load's group: allowed items, as the load is. */
+    ItemStack stack = items_get_group(world->items, x, y, z, search->load);
     if (stack.type == ITEM_NONE || !stockpile_accepts(search->zone, stack)) {
         return false;
     }

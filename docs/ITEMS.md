@@ -12,7 +12,8 @@ the spear in a hand. Values marked *tuning* are first guesses.
 - **Every item is itself.** It keeps its own quality, hit points, rot,
   drying, what was eaten of it. Items are never merged into averages again.
 - **Twigs, branches, cobbles and flint are items** like the others, lying
-  here and there from the start. Gathering them is picking them up.
+  here and there from the start: hauled, forbidden and moved like any, used
+  where they lie (step 9).
   Cobbles become about 50 times fewer than the stones counted today (about
   5 000 on a 200 × 200 map instead of 235 000), twigs and branches somewhat
   fewer *(tuning)*; flint nodules as today.
@@ -31,6 +32,8 @@ the spear in a hand. Values marked *tuning* are first guesses.
 - **The known world keeps a copy of every item seen** (`core/known.h`): what
   the colony remembers of a tile out of view is the very items it saw there,
   with their quality, condition, spot and angle at the time.
+- **Each item is forbidden and carried elsewhere on its own**, from its
+  window, or every item of a tile at once, from the tile's (step 10).
 - **Debug: moving items by hand.** A debug tool picks an item under the
   mouse, drags it anywhere on the level shown and drops it, at the very spot
   of the mouse; while held or hovered, it can be turned.
@@ -129,7 +132,8 @@ playable.
    branches and twigs in map layers (50 times fewer cobbles, two days of
    shedding instead of three); `game_init()` turns them into **wild items**
    (`ITEM_FLAG_WILD`) and the map's litter functions work on those items from
-   then on (`Map.litter`), so trees shed items. Wild items stay out of the
+   then on (`Map.litter`), so trees shed items. (Step 9 made them ordinary
+   items.) Wild items stayed out of the
    tile's stack: haulers and searches leave them alone, as they left the
    litter, and only gathering picks them up, the very items (the best stone
    of the tile first); then they are items like the others. The gatherer's
@@ -223,3 +227,43 @@ playable.
      (`items_load_lowest_quality()`). A hearth's fuel stays kilograms: it
      burns as it goes and is never given back. `game_check_items()` counts
      these items too. The cooking scenario's state hash is unchanged.
+9. **No wild items** (done). The player saw two kinds of items on the
+   ground: wild ones (no move, no forbid, dimmed in the pile window, only
+   gathering picked them up) and the others. Now there is one kind:
+   `ITEM_FLAG_WILD`, its counts and `ItemDef.litter_days` are gone, and
+   `items_add_natural()` lays what world generation and the trees put down
+   as ordinary items (each of its own quality, condition 60 to 100 %, as
+   much as the tile takes). Gathering zones lost branches, twigs, flint,
+   cobbles and the stones group: what lies on the ground is hauled like
+   anything else (stockpile filters decide) and bills and builders take it
+   where it lies. Nothing crumbles away any more; the trees' shedding stops
+   at the ceiling of a tile (`MAP_BRANCHES_MAX`, `MAP_TWIGS_MAX`, wet twigs
+   counted, since twigs left in the rain now get wet like any). A growing
+   trunk pushes what lies in its way onto the tile beside it, and plants
+   spread under loose items: litter stopped neither before. Hazelnuts stay a
+   map layer. Each item of a heap can also be clicked and selected on its
+   own (`game_items_under_point()`, `game_pick_item()`: the topmost first,
+   followed when it moves and across the edge of the fog of war), ringed on
+   the map, with a window of its own.
+   Measured (`bench_simulation`, against the commit before): 12 settlers
+   gathering, 4 days, the same time (5.0 s); 64 settlers, 4 days, about
+   25 % slower (16.3 s to 20.8 s): the gatherers of the scenario, with no
+   twigs left to gather everywhere, search farther for grass and food
+   (`covered_tile_holds()`, the path search), while haulers carry about
+   1 000 more items. The cooking scenario's stockpile takes food only, or
+   haulers fill it with stones first and the roasts rot by the hearth.
+10. **One item forbidden or moved** (done). The window of one item has the
+   Forbid and Carry elsewhere actions of the tile's items window, for it
+   alone. Forbidding is a flag of each item (`Item.forbidden`), which it keeps
+   wherever it is carried; forbidden items form groups of their own beside
+   the allowed ones (`ItemStack.forbidden`), which the settlers' functions
+   skip (`items_get_allowed_of()`, `items_pick_up_of()`, the chosen items),
+   and `Items.forbidden` sums them up per tile (some, all). Forbidding a
+   tile's items forbids each of them. An item move names its item
+   (`ItemMove.item`, an `ItemId`: an item keeps it in a load), and the hauler
+   picks up that very item (`items_pick_up_item()`). What a forced haul puts
+   down is forbidden, not the whole destination tile. A forbidden item among
+   allowed ones carries a small sign of its own. The count drawn in the
+   corner of tiles holding several items is gone: every item is drawn, and
+   the window lists them. Games with nothing forbidden keep the same state
+   hash.

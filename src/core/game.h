@@ -414,6 +414,27 @@ int game_debug_spawn_items(Game *game, int x, int y, int z, ItemType type, int c
  * the items really there (the debug tools see everything). */
 ItemId game_item_at_point(const Game *game, float x, float y, int z);
 
+/* An item lying on the ground as the player sees it (a selection): its
+ * tile, and its id among the items drawn there (game_items_at(): the real
+ * ones in view, the picture of them out of view). */
+typedef struct ItemPick {
+    ItemId id;
+    int16_t x, y, z;
+} ItemPick;
+
+/* The items drawn under the point (x, y) of level z, in tiles, the topmost
+ * first: a tile's newest ITEM_DRAWN_PER_TILE, the newest on top, the tiles
+ * drawn row by row over those before them; an item is hit within its
+ * picture (item_drawn_size(), turned any way: a circle). Up to `capacity`
+ * into `out`; returns how many. */
+int game_items_under_point(const Game *game, float x, float y, int z, ItemPick *out, int capacity);
+
+/* The item a pick names now, NULL when it is gone (picked up, eaten, rotted
+ * away). The pick follows it: onto its
+ * new tile when moved, into the picture when its tile leaves the view and
+ * back into the real items when it comes into view. */
+const Item *game_pick_item(const Game *game, ItemPick *pick);
+
 /* Debug: moves an item lying on the ground to the point (x, y) of level z,
  * in tiles: onto that tile, at that very spot, whatever lies there, if
  * someone could stand there. Returns whether it moved. */
@@ -643,14 +664,15 @@ PlantConditions game_plant_conditions(const Game *game, int x, int y, int z);
 int game_set_forbidden_rect(Game *game, int x0, int y0, int x1, int y1, int z, bool forbidden);
 
 /*
- * Orders the stack of items on (x, y, z) carried to the tile (dx, dy, dz),
+ * Orders the items on (x, y, z) carried to the tile (dx, dy, dz),
  * which may be anywhere a settler can stand and has room (a stockpile or
  * not): hauling settlers do it before their ordinary hauls (core/item_move.h).
- * The stack is forbidden at once so that nobody else takes it, and so is
- * what lands on the destination, until the player allows it. An order on a
- * stack that already has one replaces it. Refused (false) when the source
- * holds nothing or has not been seen, when the destination is unexplored, not
- * standable, the same tile or has no room, or when there are too many orders.
+ * They are forbidden at once so that nobody else takes them, and stay so
+ * where they land, until the player allows them. An order on a tile that
+ * already has one replaces it, and so it does the orders on single items
+ * lying there. Refused (false) when the source holds nothing or has not been
+ * seen, when the destination is unexplored, not standable, the same tile or
+ * has no room, or when there are too many orders.
  */
 bool game_order_item_move(Game *game, int x, int y, int z, int dx, int dy, int dz);
 
@@ -658,8 +680,31 @@ bool game_order_item_move(Game *game, int x, int y, int z, int dx, int dy, int d
  * Returns whether there was one. */
 bool game_cancel_item_move(Game *game, int x, int y, int z);
 
-/* Where the stack at (x, y, z) is ordered to go; false when it is not. */
+/* Where the items at (x, y, z) are ordered to go; false when they are not. */
 bool game_item_move_at(const Game *game, int x, int y, int z, TilePos *destination);
+
+/* The item a pick names in the real items (game->items), even when the pick
+ * shows the picture of a tile out of view (see game_pick_item()):
+ * ITEM_ID_NONE when it is gone. */
+ItemId game_pick_real_item(const Game *game, ItemPick *pick);
+
+/* Whether the player forbade an item lying on the ground. */
+bool game_item_forbidden(const Game *game, ItemId id);
+
+/* Forbids or allows one item lying on the ground (on an explored tile).
+ * Returns whether it changed. */
+bool game_set_item_forbidden(Game *game, ItemId id, bool forbidden);
+
+/* game_order_item_move() for one item lying on the ground: only it is
+ * carried, and forbidden. */
+bool game_order_single_item_move(Game *game, ItemId id, int dx, int dy, int dz);
+
+/* Takes the order on one item back (it stays forbidden). Returns whether
+ * there was one. */
+bool game_cancel_single_item_move(Game *game, ItemId id);
+
+/* Where one item is ordered to go; false when it is not. */
+bool game_single_item_move_at(const Game *game, ItemId id, TilePos *destination);
 
 /* ---- Zones --------------------------------------------------------------- */
 

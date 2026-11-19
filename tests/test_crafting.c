@@ -26,7 +26,7 @@ static bool init_flat_game(Game *game)
     }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
-        map_set_stones_at(map, i, MAP_STONES_MAX, 0); /* Cobbles everywhere, no flint. */
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
@@ -164,14 +164,23 @@ static void test_building_comes_before_gathering_forever(void)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
     /* Same priority for gathering and construction; the zone is closer. */
+    for (int y = 12; y <= 13; y++) {
+        for (int x = 9; x <= 11; x++) {
+            for (int i = 0; i < MAP_NUTS_MAX; i++) {
+                map_add_litter(&game.map, x, y, 0, ITEM_HAZELNUTS);
+            }
+        }
+    }
     int zone = gather_zone_create(&game.gather_zones, &game.map, 9, 12, 11, 13, 0);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_COBBLES, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_COBBLES, GATHER_FOREVER);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
+    gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
+    items_add(&game.items, 12, 10, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
     run_ticks(&game, 300);
     REQUIRE(colonist->task == TASK_WORK && colonist->gathering);
     REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 16, 10, 0));
     run_ticks(&game, 1500);
-    /* The gatherer stopped at the next decision to build with a cobble just found. */
+    /* The gatherer stopped at the next decision to build with the cobble lying there. */
     CHECK(workstation_at(&game.workstations, 16, 10, 0) != WORKSTATION_NONE);
     game_shutdown(&game);
 }
@@ -931,10 +940,10 @@ static ColonistTask first_task(int crafting, int gathering)
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
     items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 1, TEST_QUALITY_FINE));
     workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
-    map_add_litter(&game.map, 11, 11, 0, ITEM_BRANCHES);
+    map_add_litter(&game.map, 11, 11, 0, ITEM_HAZELNUTS);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 11, 11, 12, 12, 0);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BRANCHES, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BRANCHES, GATHER_FOREVER);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
     EntityId id = game_colonist_id_at(&game, 0);
     game_set_work_priority(&game, id, WORK_CRAFTING, crafting);
     game_set_work_priority(&game, id, WORK_GATHERING, gathering);

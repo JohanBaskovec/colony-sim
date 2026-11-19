@@ -29,7 +29,7 @@ static bool init_flat_game(Game *game)
     }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
-        map_set_stones_at(map, i, MAP_STONES_MAX, 0);
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
@@ -628,6 +628,67 @@ static void test_move_items_by_hand(void)
     game_shutdown(&game);
 }
 
+/* Items picked one by one under a click: the topmost first, followed as
+ * they move, gone once taken. */
+static void test_items_under_a_point(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    for (int y = 9; y <= 13; y++) { /* Nothing lying about there. */
+        for (int x = 9; x <= 14; x++) {
+            items_clear(&game.items, x, y, 0);
+        }
+    }
+    REQUIRE(game_debug_spawn_items(&game, 10, 10, 0, ITEM_FLINT, 1) == 1);
+    REQUIRE(game_debug_spawn_items(&game, 10, 10, 0, ITEM_COBBLE, 1) == 1);
+    REQUIRE(game_debug_spawn_items(&game, 11, 10, 0, ITEM_BRANCHES, 1) == 1);
+    size_t index = map_index(&game.map, 10, 10, 0);
+    ItemId flint = items_id(&game.items, items_first(&game.items, index));
+    ItemId cobble = ITEM_ID_NONE;
+    for (const Item *item = items_first(&game.items, index); item != NULL;
+         item = items_next(&game.items, item)) {
+        if (item->type == ITEM_COBBLE) {
+            cobble = items_id(&game.items, item);
+        } else {
+            flint = items_id(&game.items, item);
+        }
+    }
+    ItemId branch =
+        items_id(&game.items, items_first(&game.items, map_index(&game.map, 11, 10, 0)));
+    /* All three at the same point (the branch on the next tile, at its edge):
+     * the branch's tile is drawn after, then the newest of the tile. */
+    REQUIRE(game_debug_move_item(&game, flint, 10.9f, 10.5f, 0));
+    REQUIRE(game_debug_move_item(&game, cobble, 10.9f, 10.5f, 0));
+    REQUIRE(game_debug_move_item(&game, branch, 11.05f, 10.5f, 0));
+    ItemPick picks[8];
+    int count = game_items_under_point(&game, 10.92f, 10.5f, 0, picks, 8);
+    REQUIRE(count == 3);
+    CHECK_EQ_UINT(picks[0].id.slot, branch.slot);
+    CHECK_EQ_INT(picks[0].x, 11);
+    CHECK_EQ_UINT(picks[1].id.slot, cobble.slot); /* Moved last: the newest. */
+    CHECK_EQ_UINT(picks[2].id.slot, flint.slot);
+    CHECK_EQ_INT(picks[2].x, 10);
+    CHECK_EQ_INT(game_items_under_point(&game, 10.92f, 10.5f, 0, picks, 1), 1);
+    CHECK_EQ_INT(game_items_under_point(&game, 12.5f, 11.5f, 0, picks, 8), 0);
+    CHECK_EQ_INT(game_items_under_point(&game, 10.92f, 10.5f, 1, picks, 8), 0);
+
+    /* Followed onto another tile, gone once picked up. */
+    ItemPick pick = {flint, 10, 10, 0};
+    REQUIRE(game_debug_move_item(&game, flint, 13.5f, 12.5f, 0));
+    const Item *item = game_pick_item(&game, &pick);
+    REQUIRE(item != NULL);
+    CHECK_EQ_INT(item->type, ITEM_FLINT);
+    CHECK_EQ_INT(pick.x, 13);
+    CHECK_EQ_INT(pick.y, 12);
+    ItemStack load = {.type = ITEM_NONE};
+    REQUIRE(items_pick_up(&game.items, 13, 12, 0, 1, &load) == 1);
+    CHECK(game_pick_item(&game, &pick) == NULL);
+    items_use_up(&game.items, &load, 1);
+    ItemPick none = {ITEM_ID_NONE, 0, 0, 0};
+    CHECK(game_pick_item(&game, &none) == NULL);
+    game_shutdown(&game);
+}
+
 static void test_teleport(void)
 {
     Game game;
@@ -678,6 +739,7 @@ int main(void)
     RUN_TEST(test_skip_and_next_season);
     RUN_TEST(test_spawn_items);
     RUN_TEST(test_move_items_by_hand);
+    RUN_TEST(test_items_under_a_point);
     RUN_TEST(test_teleport);
     return test_summary();
 }

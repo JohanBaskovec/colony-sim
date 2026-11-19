@@ -438,7 +438,7 @@ typedef struct Map {
      * and flint nodules (on flint patches), MAP_STONES_MAX at most together.
      * World generation puts none on sand (see gather_stone_ground()). These
      * four layers hold what world generation lays; a running game keeps it
-     * as wild items instead (Map.litter). */
+     * as ordinary items instead (Map.litter). */
     uint8_t *cobbles;
     uint8_t *flint;
     /* Dead branches and twigs lying on each tile that gathering takes: shed
@@ -450,7 +450,7 @@ typedef struct Map {
      * (up to MAP_NUTS_MAX). They rot away on average (see core/game.c). */
     uint8_t *nuts;
     /* Once set (a running game, see map_litter_to_items()): where the stones,
-     * branches and twigs lie, as wild items (ITEM_FLAG_WILD) of these items;
+     * branches and twigs lie, as ordinary items of these items (haulable like any);
      * the four layers above are then empty, and the functions below read and
      * change the items. NULL: the layers (world generation, bare maps). */
     struct Items *litter;
@@ -977,8 +977,9 @@ void map_set_stones(Map *map, int x, int y, int z, int cobbles, int flint);
 /* Takes one stone of a type from a tile; false when there is none. */
 bool map_take_stone(Map *map, int x, int y, int z, ItemType type);
 
-/* Branches (ITEM_BRANCHES), twigs (ITEM_TWIGS) or hazelnuts (ITEM_HAZELNUTS)
- * lying on a tile; 0 for other types and out of bounds. */
+/* Branches (ITEM_BRANCHES), twigs (ITEM_TWIGS, wet ones too once they are
+ * items) or hazelnuts (ITEM_HAZELNUTS) lying on a tile; 0 for other types
+ * and out of bounds. */
 int map_litter(const Map *map, int x, int y, int z, ItemType type);
 
 /* Lays one branch, twig or nut on a tile; false when the tile is full, out of
@@ -992,7 +993,7 @@ int map_take_litter(Map *map, int x, int y, int z, ItemType type);
 /* Takes up to `count` of them; returns how many were taken. */
 int map_take_litter_count(Map *map, int x, int y, int z, ItemType type, int count);
 
-/* Turns the stones, branches and twigs of the layers into wild items of
+/* Turns the stones, branches and twigs of the layers into items of
  * `items` (same size), empties the layers and sets Map.litter. */
 void map_litter_to_items(Map *map, Items *items);
 

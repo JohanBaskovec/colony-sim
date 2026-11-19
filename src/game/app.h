@@ -41,8 +41,10 @@ typedef enum AppTool {
     /* Move: a click sends the selected settlers there (game_order_move()); armed
      * by the Move action of the settlers' window. */
     APP_TOOL_MOVE,
-    /* Move items: a click sends the stack at `move_item_source` there
-     * (game_order_item_move()); armed by the Move action of its tile. */
+    /* Move items: a click sends the items at `move_item_source` there
+     * (game_order_item_move()), or the one item `move_item_id` when it is set
+     * (game_order_single_item_move()); armed by the Move action of a tile's
+     * items or of one item. */
     APP_TOOL_MOVE_ITEM,
 } AppTool;
 
@@ -151,6 +153,7 @@ typedef enum TileThing {
     THING_SITE,      /* A construction site (a structure's or a workstation's). */
     THING_ITEMS,     /* The stack lying there. */
     THING_PLANT,     /* The plant (grass too), or the tree whose trunk or foliage it is. */
+    THING_ITEM,      /* One item lying there (App.selected_item; the tile follows it). */
     THING_COUNT
 } TileThing;
 
@@ -208,6 +211,7 @@ typedef struct App {
     bool tile_selected;
     int selected_tile_x, selected_tile_y, selected_tile_z;
     TileThing selected_thing;
+    ItemPick selected_item; /* THING_ITEM: the item, picked under the cursor. */
     /* Selected wild animal (ENTITY_NONE if none), same rules: dropped once
      * the colony no longer sees it (game/animal_panel.h). */
     EntityId selected_animal;
@@ -283,7 +287,8 @@ typedef struct App {
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
     bool debug_item_max;           /* ... a full stack of it, else one item. */
-    TilePos move_item_source;      /* For APP_TOOL_MOVE_ITEM: the stack to carry. */
+    TilePos move_item_source;      /* For APP_TOOL_MOVE_ITEM: the items to carry... */
+    ItemId move_item_id;           /* ...or this one alone (ITEM_ID_NONE: all of them). */
     int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
     AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */
     Combatant debug_attacker;      /* For APP_DEBUG_FIGHT: who was clicked first (or none). */

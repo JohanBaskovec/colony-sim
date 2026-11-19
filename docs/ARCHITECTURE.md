@@ -49,12 +49,12 @@ simulation:
 | `designation`| Player work orders per tile (mine, which digs earth or rock, cut a ramp, dig down, take a structure apart), the knowledge, level and tool each needs, work progress |
 | `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
-| `item`       | Items on the ground: definitions, categories, quality (0 to 100) and hit points; every item a record of its own (a pool with generational slots, a list per tile, its spot and angle in the tile), a stack summary per tile for callers that count, dropping, transformations (drying) and rot item by item, change stamps per tile so that the known world copies only what changed, loads in hand that are the very items picked up, wild items (stones, branches and twigs lying where nature put them, outside the stacks) (docs/ITEMS.md) |
+| `item`       | Items on the ground: definitions, categories, quality (0 to 100) and hit points; every item a record of its own (a pool with generational slots, a list per tile, its spot and angle in the tile), a stack summary per tile for callers that count, dropping, transformations (drying) and rot item by item, change stamps per tile so that the known world copies only what changed, loads in hand that are the very items picked up, natural items (stones, branches and twigs laid by world generation and the trees: ordinary items) (docs/ITEMS.md) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `tool`       | Tool speed factors by kind of work (bare hands included) and quality, best carried tool, wear and breaking |
-| `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, branches, twigs, grass, flint, cobbles: gather N, until N in the colony or N days of food, forever; full harvest only) and per group of resources (wood, food, stones: limits each of its resources), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
+| `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, grass and fibres: gather N, until N in the colony or N days of food, forever; full harvest only) and per group of resources (wood, food, fibres: limits each of its resources), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
 | `hauling`    | Queries: which stack needs hauling (any group of a tile), best storage tile for it (one group per storage tile) |
-| `item_move`  | Item moves ordered by the player: stack → chosen tile (`ItemMoves`, 64 orders), room at a destination, pruning |
+| `item_move`  | Item moves ordered by the player: the items of a tile, or one item, → chosen tile (`ItemMoves`, 64 orders), room at a destination, pruning |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
 | `hearth`     | The fire of an open hearth: fuel values, fuel wanted, burning, lighting rules, light around burning hearths, the hours of fireside stories |
@@ -307,9 +307,10 @@ first hour, each grown plant that is awake rolls its `PlantDef.spread_chance`,
 picks a tile within its `spread_range` (`plant_spread_target()`), and a young
 plant (`plant_offspring()`) takes root there when the tile suits it
 (`plant_can_take_root()`, pure map rules: free, its ground, light in summer's
-shade, water, room for a tree) and the colony uses nothing on it (items,
-stockpiles, workstations, building sites, orders: checked in `game.c`). Only bare
-tiles are taken: nothing pushes another plant out yet.
+shade, water, room for a tree) and the colony uses nothing on it
+(stockpiles, workstations, building sites, orders: checked in `game.c`; items
+lying there do not stop it). Only bare tiles are taken: nothing pushes another
+plant out yet.
 
 Terrain and rock decide where one can walk. Once the map is in use they are
 changed through `map_set_terrain()` / `map_set_rock()`, which bump
@@ -382,8 +383,10 @@ their stocks scale with the trunk's area, as does the wood they give.
 `map_set_terrain()`: foliage only fills open space, not over a slope or a
 ladder (whose way up it would close). When a growth stage changes the
 shape, the game checks that the trunk has room (`tree_room_to_grow()`: no
-rock, structure, item nor settler where it would go) and builds it, or
-waits for the next growth step; stockpile cells under the new trunk go.
+rock, structure nor settler where it would go) and builds it, or waits for
+the next growth step; what lies where the trunk rises is pushed onto the
+first open tile beside it (`push_items_off_trunk()`, as a wall built there
+does), and stockpile cells under the new trunk go.
 `tree_at()` finds the tree of any trunk or foliage tile (foliage two trees
 share: the first found). Foliage is held by its tree, not by the ceiling
 rule, is no ceiling for digging and closes no room (no shelter from rain
@@ -422,8 +425,8 @@ crown. Nuts lie in a map layer of their own,
 loses as many as `item_rot_rate()` of its conditions says over
 `ItemDef.rot_days` (90 days at 15 °C), the fraction rolled from the seed, the
 tile and the hour. Gathering zones pick them up on `GATHER_JOB_NUTS` (all the
-nuts of the tile at once, like twigs), and a hungry settler eats the nuts
-lying where it stands.
+nuts of the tile at once), and a hungry settler eats the nuts lying where it
+stands.
 A felled tree falls full length
 (`TREE_FALL_TILES_PER_LEVEL` = 2 tiles per level, stopping before rock and
 the edge of the map) where the woodcutter aims it (`tree_fall_aim()`): the
@@ -858,20 +861,24 @@ with huge ones and equipment. If the destination stops
 accepting the items on the way (filter changed, zone removed), it looks for
 another storage tile, else drops its load.
 
-**Item moves** (`core/item_move.h`): the player can order a stack carried to
-any tile a settler can stand on (`game_order_item_move()`, from the *Carry
-elsewhere* action of the stack's tile window). The order forbids the stack,
-so nobody else takes it. Haulers try these orders before the ordinary hauls
-(`try_forced_haul_job()`, which needs no stockpile; `Colonist.haul_forced`
-marks the job): the nearest unreserved source they can walk to, picked up
-whatever its forbidden flag, carried as much as the settler can at a time
-(several trips for a big stack, no gathering on the way), put down on the
-destination if it is empty or holds a matching stack with room (items_add()
-ignoring the destination's forbidden flag), which is forbidden at once so
-that no hauler takes it to storage; the player allows it when they want. An
-order that is taken back drops what the settler holds; one whose source is
-empty goes (`item_moves_prune()`, not while a settler is still delivering
-the last load). `ItemMoves.revision` is part of the haul search stamp. The
+**Item moves** (`core/item_move.h`): the player can order the items of a
+tile carried to any tile a settler can stand on (`game_order_item_move()`,
+from the *Carry elsewhere* action of the tile's items window), or a single
+item (`game_order_single_item_move()`, from the window of that item:
+`ItemMove.item` names it, an `ItemId`, which an item keeps while carried).
+The order forbids what it is about, so nobody else takes it; an order on a
+tile replaces the orders on single items lying there. Haulers try these
+orders before the ordinary hauls (`try_forced_haul_job()`, which needs no
+stockpile; `Colonist.haul_forced` marks the job, `Colonist.haul_item` the
+item): the nearest unreserved source they can walk to, picked up whatever its
+forbidden flag (`items_pick_up_group()`, `items_pick_up_item()` for one
+item), carried as much as the settler can at a time (several trips for a big
+stack, no gathering on the way), put down on the destination if it has room
+(`items_put()`), forbidden (`items_load_set_forbidden()`) so that no hauler
+takes it to storage; the player allows it when they want. An order that is
+taken back drops what the settler holds; one whose source is empty, or whose
+item left its tile, goes (`item_moves_prune()`, not while a settler is still
+delivering the last load). `ItemMoves.revision` is part of the haul search stamp. The
 orders are in `game_hash()` only when there are some. Any interruption (eating,
 sleeping...) goes through `begin_task()`, which drops carried items where the
 colonist stands, so items are never lost. Before searching, a scan of the
@@ -1286,8 +1293,7 @@ gathers forever. Food may count days of food instead of items
 (`GatherUnit`): `gather_food_days()` divides the nutrition of the food lying
 in the colony by what the settlers eat in a day (`gather_daily_food()`, from
 `NEED_FOOD_DECAY_PER_TICK`; the game passes it to `gather_zones_update()`).
-Resources belong to groups (`GatherGroup`: wood, food, stones; grass has
-none), each with an order of its own (`GatherGroupOrder`, always on: food
+Resources belong to groups (`GatherGroup`: wood, food, fibres), each with an order of its own (`GatherGroupOrder`, always on: food
 until 5 days of food by default, the others forever): a resource is wanted
 only when its own order and its group's both want it, and a group's
 `done` counts what its resources gave. An order may wait for the full harvest
@@ -1298,11 +1304,12 @@ only), so that settlers do not walk to plants that give little. `gather_zones_up
 and bumps the zones revision when it changes; it is also bumped once per
 in-game hour, after every plant has grown, so that idle settlers look again.
 
-A zone tile offers a **job** (`GatherJob`: branches, twigs, harvest, harvest
-carefully, dig, dig carefully, cut grass, chop, stones, in that order of
-preference on one tile: branches and twigs first, since felling would take
-them away, stones last) when it holds something a wanted resource comes
-from. Each wild food is a resource of the job that suits its plant: picked or
+A zone tile offers a **job** (`GatherJob`: nuts, harvest, harvest carefully,
+dig, dig carefully, cut grass, chop, in that order of preference on one tile:
+the nuts lying there first, felling last) when it holds something a wanted
+resource comes from. What lies on the ground (stones, branches, twigs) is no
+gathering: those are ordinary items, hauled like any (stockpile filters
+decide). Each wild food is a resource of the job that suits its plant: picked or
 dug up, and "carefully" (Gathering 60, `GATHER_CAREFUL_MIN_LEVEL`) when easily
 mistaken for a poisonous plant, so that the existing job masks decide who may
 take it. Digging jobs (`GatherJobDef.fetches_tool`) send the gatherer to a
@@ -1311,15 +1318,10 @@ better digging tool lying within `COLONIST_TOOL_SWAP_MAX_COST` first
 same); it keeps it. Each job has its
 work type (felling is woodcutting, the rest gathering) and knowledge; the
 settler takes the first job of the tile among those it may do
-(`Colonist.work_type` holds the job while `gathering`). Stones are limited:
-each tile holds a number of cobbles and flint nodules (`map_stones()`: wild
-items in a running game), and a stone search takes one of the wanted types the
-tile holds, at random in proportion to their numbers, and of that type the
-best stone lying there (only flint wanted: tiles
-without flint offer nothing, and their cobbles stay). A zone runs out of
-stones once its tiles are emptied. The zone inspector shows how many items of
-each resource the zone holds now (`gather_zone_available()`: wood of the
-trees the orders allow, ripe fruit, stocks, grass, stones), and warns about an
+(`Colonist.work_type` holds the job while `gathering`). The zone inspector
+shows how many items of each resource the zone holds now
+(`gather_zone_available()`: wood of the trees the orders allow, ripe fruit,
+stocks, fallen nuts, grass), and warns about an
 enabled resource with none. The job search reuses the designation search
 (`WorkSearch.zones`), the work progress of the tile's current job lives in
 the zone layer (work on another job there starts over), and a gatherer
@@ -1805,11 +1807,10 @@ searches backed off on that revision look again.
   fire is laid (`HearthIngredient`, `Workstation.laid` bits): a handful of
   dry twigs as kindling, then a branch, each fetched and laid on its own
   (`LIGHT_FETCH_LAY`, `LIGHT_BRING_LAY`, `hearth_lay()`: its weight goes to
-  the fuel). Wet twigs (`ITEM_WET_TWIGS`) do not count as kindling: twigs
-  are picked up wet from ground wetter than `SOIL_MOIST_UP_TO` or in the
-  rain (`soil_litter_wet()`, `gather_zone_add_work_wet()`), a felled tree's
-  are green, dry twigs lying in the rain get wet (`ItemDef.wets_into`), and
-  wet ones dry in a day like fresh grass. `hearth_light()` clears `laid`:
+  the fuel). Wet twigs (`ITEM_WET_TWIGS`) do not count as kindling: a
+  felled tree's are green, dry twigs lying in the rain get wet
+  (`ItemDef.wets_into`, the twigs the trees shed too), and wet ones dry in
+  a day like fresh grass. `hearth_light()` clears `laid`:
   every lighting lays the fire again. Then, below `HEARTH_LIGHT_FUEL_MIN`
   in it and on its way (`hearth_wants_fuel_to_light()`) with some fuel the
   hearth takes lying somewhere, fuel fetched and put in
@@ -1881,22 +1882,24 @@ change): a view shows thousands of tiles every frame.
 
 Stones, branches and twigs lying about are laid by world generation in map
 layers (`Map.cobbles`, `Map.flint`, `Map.branches`, `Map.twigs`); `game_init()`
-turns them into wild items (`map_litter_to_items()`, `ITEM_FLAG_WILD`,
-docs/ITEMS.md), each with its own quality, spot and angle, and sets
-`Map.litter`: from then on `map_stones()`, `map_litter()`, `map_add_litter()`
-and the others read and change those items, so trees shed items and gathering
-picks them up. Wild items are not part of a tile's stack (haulers and
-searches leave them alone, they are not in `Items.totals`); wild branches and
-twigs crumble away in `ItemDef.litter_days` (60 and 20 days), stones stay.
-At most `MAP_STONES_MAX` (20) stones lie on a tile, taken one by one by
-gathering and never growing back. World generation draws 0 to 20 stones for
+turns them into ordinary items (`map_litter_to_items()`,
+`items_add_natural()`, docs/ITEMS.md), each with its own quality, condition,
+spot and angle, and sets `Map.litter`: from then on `map_stones()`,
+`map_litter()`, `map_add_litter()` and the others read and change those
+items (twigs counting wet ones), so trees shed items. They are items like
+any other: in the stacks and `Items.totals`, hauled, forbidden, moved by
+hand, used by bills and builders where they lie; nothing is gathered from
+the ground, and nothing crumbles away (the trees' shedding stops at
+`MAP_BRANCHES_MAX` and `MAP_TWIGS_MAX` a tile, wet twigs counted). At most
+`MAP_STONES_MAX` (20) stones lie on a tile, never growing back. World
+generation draws 0 to 20 stones for
 every stony tile (`TerrainDef.stony`: soil, rich soil, gravel, rough stone; not
 sand), from a random stream of their own so that the plants do not depend on
 them; on flint patches (noise, denser on gravel and rough stone) each stone is
 flint with the patch's share, up to 60 %, and of the others only one in 50 is
 kept as a cobble (about 4 800 on a 200 × 200 map). The spawn makes sure a tile with at
 least `GAME_SPAWN_FLINT_STONES` flint lies near the settlers, laying a small
-patch otherwise. The tile inspector shows the stones left in the ground.
+patch otherwise.
 
 ### Forbidding
 
@@ -1905,17 +1908,24 @@ with the owner of the thing, so that it goes when the thing goes:
 `Map.forbidden` (`MapForbid` bits: the plant of a tile, a structure on its
 head tile, a roof; cleared by `set_tile_structure()`, `map_set_roof()` and
 `map_remove_plant()`, the only way plants are taken away once a game runs),
-`Items.forbidden` (per tile, cleared when the stack is gone) and
+`Item.forbidden` (per item, so it goes with the item wherever it is carried;
+`Items.forbidden` sums it up per tile: some or all of its items forbidden) and
 `Workstation.forbidden`. `game_set_forbidden()` (`ForbidTarget`) resolves a
 tile of a tree's trunk or foliage to its foot; `game_set_forbidden_rect()`
 (the Forbid and Allow tools) takes everything on a rectangle, grass included
 (it is a plant like the others), but not zones, which go as a whole.
 
 Settlers see forbidden things as absent rather than through checks
-scattered over every job: they read stacks through `items_get_allowed()`
-(an empty stack where it is forbidden), so pickups, hauls, deliveries, meals
-and fuel skip them; `items_drop()` and haul destinations never add to a
-forbidden stack; `map_has_edible_plant()`, `covered_tile_holds()` (gathering),
+scattered over every job. Forbidden items never share a group with allowed
+ones (`ItemStack.forbidden` is part of the group, as the dead one of a body
+is): settlers read the items through `items_get_allowed()` and
+`items_get_allowed_of()` (the newest group of allowed items) and pick them up
+with `items_pick_up_of()` and `items_pick_up_chosen()` (allowed items only),
+so pickups, hauls, deliveries, meals and fuel skip them, beside allowed items
+of the same tile; `items_drop()` and haul destinations never add to a tile
+holding forbidden items (`items_any_forbidden()`). The player forbids one
+item (`game_set_item_forbidden()`, from its window) or every item of a tile
+(`FORBID_ITEMS`, the tile's items window and the Forbid tool); `map_has_edible_plant()`, `covered_tile_holds()` (gathering),
 `designation_forbidden()` (orders on a forbidden structure, roof or tree) and
 `construction_forbidden()` (a refresh site on a forbidden structure, a plant
 to clear) close the jobs on plants, orders and sites; `job_station()`,
@@ -2386,10 +2396,19 @@ rectangle, debug overlay and menu toggles) lives in `App`. The level shown is
 level of the first settler; the HUD numbers it from `Map.surface_level`): the map, the entities and the overlays are
 drawn for that level, and clicks and tools act on it (a selected structure
 keeps its level in `App.selected_tile_z`). A click on the map selects a
-colonist, else the first of what lies on the tile (`ClickTarget`): the
-station, the structure, the roof, the construction site, the items, the
-plant (a tree from any tile of its trunk or foliage), the stockpile, the
-gathering zone, the grass; a click on what is selected goes to the next one.
+colonist, else the item drawn under the cursor, else the first of what lies
+on the tile (`ClickTarget`): the station, the structure, the roof, the
+construction site, the items, the plant (a tree from any tile of its trunk or
+foliage), the stockpile, the gathering zone, the grass; a click on what is
+selected goes to the next one. Items are picked one by one
+(`game_items_under_point()`: the drawn ones whose disc holds the point, the
+topmost first, so repeated clicks go down a heap before the tile's things):
+the item selected (`THING_ITEM`, `App.selected_item`, an `ItemPick`) is
+followed when it moves (`game_pick_item()`: its tile, then around it) and
+across the edge of the fog of war (`items_find_like()`: its copy in the
+known world, or the real one of a copy), ringed on the map
+(`render_item_selection()`) and has a window of its own (weight, condition,
+rot, the other items of its tile).
 A body has a window of its own kind (`hud_corpse_rows()`,
 `hud_corpse_tabs()`). A settler's is titled with the dead's name, with their
 age, cause of death and how long ago, and has the tabs of a settler's window,
@@ -2405,7 +2424,8 @@ right of it (`inspector_forbid_action()`, `inspector_order_action()` for
 orders that toggle: lit while given, veiled while nobody knows how; a click
 again takes the order back). Selection reads what the colony knows
 (`game_view_map()`, `app_thing_at()`). What is
-forbidden carries a "no entry" sign (`render_forbidden_markers()`). Where the level shown is
+forbidden carries a "no entry" sign (`render_forbidden_markers()`); a
+forbidden item among allowed ones on its tile, a small one of its own. Where the level shown is
 open space, the levels below show through (`render_below_begin()`), however
 deep. The level seen on each visible tile (`map_view_level()`) is worked out
 once a frame; only the levels seen somewhere are drawn, deepest first, each

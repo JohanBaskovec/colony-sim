@@ -2041,6 +2041,37 @@ uint64_t map_hash(const Map *map)
     return hash;
 }
 
+/* The items a type of litter lying on the ground counts (twigs, dry or wet:
+ * twigs left in the rain get wet like any). */
+static ItemTypeMask litter_mask(ItemType type)
+{
+    return type == ITEM_TWIGS ? ITEM_TYPE_BIT(ITEM_TWIGS) | ITEM_TYPE_BIT(ITEM_WET_TWIGS)
+                              : ITEM_TYPE_BIT(type);
+}
+
+/* Items of a type of litter on a tile of Map.litter. */
+static int litter_items(const Map *map, int x, int y, int z, ItemType type)
+{
+    int count = items_count_type(map->litter, x, y, z, type);
+    return type == ITEM_TWIGS ? count + items_count_type(map->litter, x, y, z, ITEM_WET_TWIGS)
+                              : count;
+}
+
+/* Takes up to `count` items of a type of litter off a tile of Map.litter:
+ * gone. Returns how many. */
+static int remove_litter_items(Map *map, int x, int y, int z, ItemType type, int count)
+{
+    int removed = 0;
+    while (removed < count) {
+        int now = items_remove_of(map->litter, x, y, z, litter_mask(type), count - removed);
+        if (now <= 0) {
+            break;
+        }
+        removed += now;
+    }
+    return removed;
+}
+
 /* The layer holding stones of a type, or NULL. */
 static uint8_t *stone_layer(const Map *map, ItemType type)
 {
@@ -2054,7 +2085,7 @@ static uint8_t *stone_layer(const Map *map, ItemType type)
 int map_stones(const Map *map, int x, int y, int z, ItemType type)
 {
     if (map->litter != NULL) {
-        return stone_layer(map, type) != NULL ? items_wild_count(map->litter, x, y, z, type) : 0;
+        return stone_layer(map, type) != NULL ? litter_items(map, x, y, z, type) : 0;
     }
     const uint8_t *layer = stone_layer(map, type);
     return layer != NULL && map_in_bounds(map, x, y, z) ? layer[map_index(map, x, y, z)] : 0;
@@ -2071,11 +2102,11 @@ void map_set_stones(Map *map, int x, int y, int z, int cobbles, int flint)
         static const ItemType TYPES[2] = {ITEM_COBBLE, ITEM_FLINT};
         int wanted[2] = {cobbles, flint};
         for (int i = 0; i < 2; i++) {
-            int now = items_wild_count(map->litter, x, y, z, TYPES[i]);
+            int now = litter_items(map, x, y, z, TYPES[i]);
             if (now > wanted[i]) {
-                items_remove_wild(map->litter, x, y, z, TYPES[i], now - wanted[i]);
+                remove_litter_items(map, x, y, z, TYPES[i], now - wanted[i]);
             } else if (now < wanted[i]) {
-                items_add_wild(map->litter, x, y, z, TYPES[i], wanted[i] - now);
+                items_add_natural(map->litter, x, y, z, TYPES[i], wanted[i] - now);
             }
         }
         return;
@@ -2089,7 +2120,7 @@ bool map_take_stone(Map *map, int x, int y, int z, ItemType type)
 {
     uint8_t *layer = stone_layer(map, type);
     if (layer != NULL && map->litter != NULL) {
-        return items_remove_wild(map->litter, x, y, z, type, 1) == 1;
+        return remove_litter_items(map, x, y, z, type, 1) == 1;
     }
     if (layer == NULL || !map_in_bounds(map, x, y, z) || layer[map_index(map, x, y, z)] == 0) {
         return false;
@@ -2110,7 +2141,7 @@ static uint8_t *litter_layer(const Map *map, ItemType type, int *max)
     }
 }
 
-/* Whether the type lies as wild items (Map.litter) rather than in a layer. */
+/* Whether the type lies as items (Map.litter) rather than in a layer. */
 static bool litter_is_items(const Map *map, ItemType type)
 {
     return map->litter != NULL && (type == ITEM_BRANCHES || type == ITEM_TWIGS);
@@ -2119,7 +2150,7 @@ static bool litter_is_items(const Map *map, ItemType type)
 int map_litter(const Map *map, int x, int y, int z, ItemType type)
 {
     if (litter_is_items(map, type)) {
-        return items_wild_count(map->litter, x, y, z, type);
+        return litter_items(map, x, y, z, type);
     }
     int max;
     const uint8_t *layer = litter_layer(map, type, &max);
@@ -2131,8 +2162,8 @@ bool map_add_litter(Map *map, int x, int y, int z, ItemType type)
     int max;
     uint8_t *layer = litter_layer(map, type, &max);
     if (litter_is_items(map, type)) {
-        return map_in_bounds(map, x, y, z) && items_wild_count(map->litter, x, y, z, type) < max &&
-               items_add_wild(map->litter, x, y, z, type, 1) == 1;
+        return map_in_bounds(map, x, y, z) && litter_items(map, x, y, z, type) < max &&
+               items_add_natural(map->litter, x, y, z, type, 1) == 1;
     }
     if (layer == NULL || !map_in_bounds(map, x, y, z) || layer[map_index(map, x, y, z)] >= max) {
         return false;
@@ -2144,7 +2175,7 @@ bool map_add_litter(Map *map, int x, int y, int z, ItemType type)
 int map_take_litter(Map *map, int x, int y, int z, ItemType type)
 {
     if (litter_is_items(map, type)) {
-        return items_remove_wild(map->litter, x, y, z, type, INT_MAX);
+        return remove_litter_items(map, x, y, z, type, INT_MAX);
     }
     int max;
     uint8_t *layer = litter_layer(map, type, &max);
@@ -2171,7 +2202,7 @@ size_t map_count_plants(const Map *map, PlantType type)
 int map_take_litter_count(Map *map, int x, int y, int z, ItemType type, int count)
 {
     if (litter_is_items(map, type)) {
-        return items_remove_wild(map->litter, x, y, z, type, count);
+        return remove_litter_items(map, x, y, z, type, count);
     }
     int max;
     uint8_t *layer = litter_layer(map, type, &max);
@@ -2351,7 +2382,7 @@ void map_litter_to_items(Map *map, Items *items)
                 size_t index = map_index(map, x, y, z);
                 for (size_t k = 0; k < sizeof(kinds) / sizeof(kinds[0]); k++) {
                     if (kinds[k].layer[index] != 0) {
-                        items_add_wild(items, x, y, z, kinds[k].type, kinds[k].layer[index]);
+                        items_add_natural(items, x, y, z, kinds[k].type, kinds[k].layer[index]);
                         kinds[k].layer[index] = 0;
                     }
                 }

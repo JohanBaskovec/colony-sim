@@ -311,6 +311,12 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 - [x] Step 4, spots, angles and drawing: each item drawn at its spot, turned freely (a texture of item icons, textured quads in batches; the newest ten per tile, one when zoomed far out; `--bench-render` unchanged); debug tool to drag items anywhere with the mouse and turn them with the wheel
 - [x] Step 5, the pile window (every item of a tile in the inspector, sortable by newest, quality, condition and rot, wild items dimmed) and the bills: a quality range slider for the ingredients of each bill (item by item), cooking takes what rots first (within six hours of the soonest in range, the nearest of those)
 - [x] The known world keeps a copy of every item seen on the ground (step 1)
+- [x] Each item of a heap selectable on its own: a click picks the topmost item under the cursor (repeated clicks go down the heap, then to the tile's other things), ringed on the map, with a window of its own (weight, condition, rot, the other items of the tile); followed when it moves and across the edge of the fog of war
+- [x] No wild items: branches, twigs, cobbles and flint lying about are ordinary items (moved, forbidden, hauled, used where they lie, each of its own quality); gathering zones no longer gather them (no branches, twigs, flint, cobbles nor stones group); nothing crumbles away (the trees' shedding stops at a ceiling per tile, wet twigs counted); a growing trunk pushes items aside and plants spread under loose items
+- [x] One item forbidden or carried elsewhere on its own, from its window (a flag per item, kept wherever it is carried; forbidden items are groups of their own the settlers skip, beside the allowed ones; item moves on a single item, which the hauler picks up by its id); a small "no entry" sign on a forbidden item among allowed ones; no more item counts drawn in the corner of tiles
+- [ ] Haulers carry perishable food before stones and wood (with every stone lying about haulable, a stockpile taking everything fills with stones while the food waits)
+- [ ] Gathering search cheaper when a zone's jobs are sparse (64 settlers gathering: about 25 % slower since litter is no longer gathered, the search going farther for grass and food)
+- [ ] Hazelnuts lying on the ground as items too (still a map layer: gathered by zones, eaten where they lie, rotting on average)
 
 ## Later
 

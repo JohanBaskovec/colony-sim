@@ -167,6 +167,11 @@ void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, in
 /* Thick outline of a selected tile (a structure). */
 void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, int y);
 
+/* A selected item lying on the ground: drawn again over whatever covers it,
+ * with a ring around it (where a click picks it). */
+void render_item_selection(SDL_Renderer *renderer, const Camera *camera, int x, int y,
+                           const Item *item);
+
 /* Releases the buffers the renderer allocated on first use. */
 /* Icons of the build menu, drawn inside `rect`. */
 typedef enum RenderIcon {

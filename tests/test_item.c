@@ -551,7 +551,7 @@ static void test_check_finds_inconsistencies(void)
     items_add(&items, 3, 3, 0, item_stack_make(ITEM_WOOD, 4, 70, 30));
     items_add(&items, 3, 3, 0, item_stack_make(ITEM_FLINT, 2, 20, 1));
     items_add(&items, 5, 5, 1, item_stack_pristine(ITEM_BLACKBERRIES, 9));
-    REQUIRE(items_add_wild(&items, 3, 3, 0, ITEM_TWIGS, 3) == 3);
+    REQUIRE(items_add_natural(&items, 3, 3, 0, ITEM_TWIGS, 3) == 3);
     items_set_forbidden(&items, 5, 5, 1, true);
     ItemStack load = {.type = ITEM_NONE};
     REQUIRE(items_pick_up_of(&items, 3, 3, 0, ITEM_TYPE_BIT(ITEM_WOOD), 3, &load) == 3);
@@ -566,8 +566,8 @@ static void test_check_finds_inconsistencies(void)
     ItemHeaps heaps = items_heaps(&items);
     CHECK_EQ_INT((int)heaps.tiles, 2);
     CHECK_EQ_INT((int)heaps.mixed, 1);
-    CHECK_EQ_INT((int)heaps.mixed_groups, 2);
-    CHECK_EQ_INT(heaps.most_groups, 2);
+    CHECK_EQ_INT((int)heaps.mixed_groups, 3);
+    CHECK_EQ_INT(heaps.most_groups, 3);
 
     /* Each kind of damage is found. */
     items.totals[ITEM_FLINT]++;
@@ -586,9 +586,9 @@ static void test_check_finds_inconsistencies(void)
     items.held_count++;
     CHECK(items_check(&items).problems > 0);
     items.held_count--;
-    items.level_wild[0]++;
-    CHECK_STR_EQ(items_check(&items).first, "a level's count of wild items is wrong");
-    items.level_wild[0]--;
+    items.level_stacks[0]++;
+    CHECK_STR_EQ(items_check(&items).first, "a level's count of tiles with items is wrong");
+    items.level_stacks[0]--;
     CHECK_EQ_INT(items_check(&items).problems, 0);
 
     /* What rots away is counted. */
@@ -611,9 +611,10 @@ static void test_tile_moved_and_cleared(void)
     REQUIRE(items_init(&items, 16, 16, 1));
     items_add(&items, 4, 4, 0, item_stack_make(ITEM_WOOD, 3, 80, 40));
     items_add(&items, 4, 4, 0, item_stack_make(ITEM_FLINT, 5, 20, 1));
-    REQUIRE(items_add_wild(&items, 4, 4, 0, ITEM_TWIGS, 2) == 2);
-    CHECK_EQ_INT(items_move_all(&items, &map, 4, 4, 0, 10, 10, 0, false), 8);
-    CHECK_EQ_INT(items_count_at(&items, 4, 4, 0, ITEM_NONE), 2); /* The wild twigs stay. */
+    REQUIRE(items_add_natural(&items, 4, 4, 0, ITEM_TWIGS, 2) == 2);
+    CHECK_EQ_INT(items_move_all(&items, &map, 4, 4, 0, 10, 10, 0, false), 10);
+    CHECK_EQ_INT(items_count_at(&items, 4, 4, 0, ITEM_NONE), 0);
+    CHECK_EQ_INT(items_count_type(&items, 10, 10, 0, ITEM_TWIGS), 2);
     CHECK_EQ_INT(items_get_of(&items, 10, 10, 0, ITEM_TYPE_BIT(ITEM_WOOD)).quality, 80);
     CHECK_EQ_INT(items_get_of(&items, 10, 10, 0, ITEM_TYPE_BIT(ITEM_FLINT)).count, 5);
     /* No room around: what does not fit stays when kept. */
@@ -629,7 +630,7 @@ static void test_tile_moved_and_cleared(void)
     CHECK_EQ_INT(items_get_of(&items, 4, 4, 0, ITEM_TYPE_BIT(ITEM_WOOD)).count, 2);
     items_clear(&items, 4, 4, 0);
     CHECK_EQ_INT(items_get(&items, 4, 4, 0).type, ITEM_NONE);
-    CHECK_EQ_INT(items_count_at(&items, 4, 4, 0, ITEM_NONE), 2);
+    CHECK_EQ_INT(items_count_at(&items, 4, 4, 0, ITEM_NONE), 0);
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD], 3);
     items_free(&items);
     map_free(&map);
@@ -1076,101 +1077,180 @@ static void test_item_slots_are_reused(void)
     items_free(&items);
 }
 
-/* Wild items lie beside a stack without being part of it. */
-static void test_wild_items_stay_apart(void)
+/* What nature lays (a twig shed by a tree, a stone in the grass) is items
+ * like any other: grouped, counted, forbidden, as much as the tile takes,
+ * each of its own quality and condition; they never crumble away. */
+static void test_natural_items(void)
 {
     Items items;
     REQUIRE(items_init(&items, 4, 4, 1));
-    CHECK_EQ_INT(items_add_wild(&items, 1, 1, 0, ITEM_TWIGS, 3), 3);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_NONE);
-    CHECK_EQ_INT(items.totals[ITEM_TWIGS], 0);
-    CHECK_EQ_INT(items.wild_totals[ITEM_TWIGS], 3);
-    CHECK_EQ_INT((int)items.level_stacks[0], 0);
-    CHECK_EQ_INT((int)items.level_wild[0], 3);
-    /* A stack of another type takes the tile all the same, its whole room. */
-    int limit = item_stack_limit(ITEM_WOOD);
-    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_WOOD, limit)), limit);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_WOOD);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).count, limit);
-    CHECK_EQ_INT(items_wild_count(&items, 1, 1, 0, ITEM_TWIGS), 3);
-    /* Twigs added as a stack do not take the wild ones in. */
-    CHECK_EQ_INT(items_add(&items, 2, 1, 0, item_stack_pristine(ITEM_TWIGS, 2)), 2);
-    CHECK_EQ_INT(items_add_wild(&items, 2, 1, 0, ITEM_TWIGS, 1), 1);
-    CHECK_EQ_INT(items_get(&items, 2, 1, 0).count, 2);
-    CHECK_EQ_INT(items_remove(&items, 2, 1, 0, 10), 2);
-    CHECK_EQ_INT(items_wild_count(&items, 2, 1, 0, ITEM_TWIGS), 1);
-    /* Forbidding is for stacks. */
-    CHECK(!items_set_forbidden(&items, 2, 1, 0, true));
-    CHECK_EQ_INT(items_remove_wild(&items, 1, 1, 0, ITEM_TWIGS, 2), 2);
-    CHECK_EQ_INT(items.wild_totals[ITEM_TWIGS], 2);
-    CHECK_EQ_INT(items.item_count, limit + 2);
-    items_free(&items);
-}
-
-/* Picked up, wild items are wild no more, and go where they are put as they
- * were. */
-static void test_wild_items_picked_up(void)
-{
-    Items items;
-    REQUIRE(items_init(&items, 4, 4, 1));
-    CHECK_EQ_INT(items_add_wild(&items, 0, 0, 0, ITEM_FLINT, 6), 6);
-    int best = 0;
+    CHECK_EQ_INT(items_add_natural(&items, 1, 1, 0, ITEM_FLINT, 6), 6);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_FLINT);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).count, 6);
+    CHECK_EQ_INT(items.totals[ITEM_FLINT], 6);
+    CHECK_EQ_INT((int)items.level_stacks[0], 1);
+    CHECK_EQ_INT(items_count_type(&items, 1, 1, 0, ITEM_FLINT), 6);
+    CHECK_EQ_INT(items_count_type(&items, 1, 1, 0, ITEM_COBBLE), 0);
+    CHECK_EQ_INT(items_count_type(&items, 9, 1, 0, ITEM_FLINT), 0);
     bool varied = false;
-    for (const Item *item = items_first(&items, 0); item != NULL; item = items_next(&items, item)) {
-        varied |= item->quality != items_first(&items, 0)->quality;
-        best = item->quality > best ? item->quality : best;
+    for (const Item *item = items_first(&items, 5); item != NULL; item = items_next(&items, item)) {
+        varied |= item->quality != items_first(&items, 5)->quality;
+        int percent = item_stack_hit_points_percent(item_as_stack(item));
+        CHECK(percent >= 59 && percent <= 100);
     }
     CHECK(varied); /* Each its own quality. */
-    ItemStack load = {.type = ITEM_NONE};
-    CHECK_EQ_INT(items_pick_up_wild(&items, 0, 0, 0, ITEM_FLINT, 1, true, ITEM_NONE, &load), 1);
-    CHECK_EQ_INT(load.type, ITEM_FLINT);
-    CHECK_EQ_INT(load.quality, best);
-    CHECK_EQ_INT(items.held_count, 1);
-    CHECK_EQ_INT(items.wild_totals[ITEM_FLINT], 5);
-    const Item *held = items_load_first(&items, load);
-    REQUIRE(held != NULL);
-    CHECK_EQ_INT(held->flags & ITEM_FLAG_WILD, 0);
-    CHECK_EQ_INT(items_put(&items, 3, 3, 0, &load), 1);
-    CHECK_EQ_INT(load.count, 0);
-    CHECK_EQ_INT(items_get(&items, 3, 3, 0).quality, best);
-    CHECK_EQ_INT(items.totals[ITEM_FLINT], 1);
-    /* Twigs picked up from wet ground are wet twigs. */
-    CHECK_EQ_INT(items_add_wild(&items, 1, 0, 0, ITEM_TWIGS, 2), 2);
-    CHECK_EQ_INT(items_pick_up_wild(&items, 1, 0, 0, ITEM_TWIGS, 5, false, ITEM_WET_TWIGS, &load),
-                 2);
-    CHECK_EQ_INT(load.type, ITEM_WET_TWIGS);
-    CHECK_EQ_INT(load.count, 2);
-    /* Not into a load of something else. */
-    CHECK_EQ_INT(items_pick_up_wild(&items, 0, 0, 0, ITEM_FLINT, 1, true, ITEM_NONE, &load), 0);
-    items_use_up(&items, &load, 2);
-    CHECK_EQ_INT(items.held_count, 0);
+    CHECK(items_set_forbidden(&items, 1, 1, 0, true));
+    /* Beside another group, as much as the tile has room for. */
+    int limit = item_stack_limit(ITEM_WOOD);
+    CHECK_EQ_INT(items_add(&items, 2, 1, 0, item_stack_pristine(ITEM_WOOD, limit)), limit);
+    CHECK_EQ_INT(items_add_natural(&items, 2, 1, 0, ITEM_TWIGS, 3), 0);
+    CHECK_EQ_INT(items_add_natural(&items, 3, 1, 0, ITEM_TWIGS, 3), 3);
+    CHECK_EQ_INT(items_add(&items, 3, 1, 0, item_stack_pristine(ITEM_TWIGS, 2)), 2);
+    CHECK_EQ_INT(items_get(&items, 3, 1, 0).count, 5); /* One group. */
+    CHECK_EQ_INT(items_add_natural(&items, 3, 1, 0, ITEM_NONE, 1), 0);
+    CHECK_EQ_INT(items_add_natural(&items, 3, 9, 0, ITEM_TWIGS, 1), 0);
+    /* A year later, all still there (dry twigs stay dry). */
+    items_advance(&items, 0, 16, 365 * 24, NULL, NULL);
+    CHECK_EQ_INT(items_count_type(&items, 3, 1, 0, ITEM_TWIGS), 5);
+    CHECK_EQ_INT(items_count_type(&items, 1, 1, 0, ITEM_FLINT), 6);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
     items_free(&items);
 }
 
-/* Wild branches and twigs crumble away in time; stones stay. */
-static void test_wild_litter_crumbles(void)
+/* Items are forbidden one by one: they leave the allowed ones' group, the
+ * settlers' functions skip them, and the tile is forbidden once all are. */
+static void test_items_forbidden_one_by_one(void)
 {
     Items items;
-    REQUIRE(items_init(&items, 4, 4, 1));
-    REQUIRE(items_add_wild(&items, 0, 0, 0, ITEM_TWIGS, 2) == 2);
-    REQUIRE(items_add_wild(&items, 1, 0, 0, ITEM_BRANCHES, 1) == 1);
-    REQUIRE(items_add_wild(&items, 2, 0, 0, ITEM_COBBLE, 1) == 1);
-    int twig_hours = (int)(item_def(ITEM_TWIGS)->litter_days * 24.0f);
-    int branch_hours = (int)(item_def(ITEM_BRANCHES)->litter_days * 24.0f);
-    REQUIRE(twig_hours > 0 && branch_hours > twig_hours);
-    for (int hour = 0; hour < twig_hours - 1; hour++) {
-        items_advance(&items, 0, 16, 1, NULL, NULL);
-    }
-    CHECK_EQ_INT(items_wild_count(&items, 0, 0, 0, ITEM_TWIGS),
-                 2); /* Not wet: wild twigs only crumble. */
-    items_advance(&items, 0, 16, 1, NULL, NULL);
-    CHECK_EQ_INT(items_wild_count(&items, 0, 0, 0, ITEM_TWIGS), 0);
-    CHECK_EQ_INT(items_wild_count(&items, 1, 0, 0, ITEM_BRANCHES), 1);
-    items_advance(&items, 0, 16, branch_hours - twig_hours, NULL, NULL);
-    CHECK_EQ_INT(items_wild_count(&items, 1, 0, 0, ITEM_BRANCHES), 0);
-    CHECK_EQ_INT(items_wild_count(&items, 2, 0, 0, ITEM_COBBLE), 1);
-    CHECK_EQ_INT((int)items.level_wild[0], 1);
+    REQUIRE(items_init(&items, 8, 8, 1));
+    REQUIRE(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_COBBLE, 4)) == 4);
+    size_t index = 2 * 8 + 2;
+    ItemId first = items_id(&items, items_first(&items, index));
+    uint32_t additions = items.additions;
+    CHECK(items_set_item_forbidden(&items, first, true));
+    CHECK(!items_set_item_forbidden(&items, first, true)); /* Already. */
+    CHECK(items_by_id(&items, first)->forbidden);
+    CHECK(items_any_forbidden(&items, 2, 2, 0));
+    CHECK(!items_forbidden(&items, 2, 2, 0)); /* Not all of them. */
+    CHECK_EQ_INT(items.forbidden_count, 1);
+    CHECK(items_mixed(&items, 2, 2, 0)); /* Two groups: allowed and forbidden. */
+    ItemStack groups[4];
+    CHECK_EQ_INT(items_groups(&items, 2, 2, 0, groups, 4), 2);
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).count, 1); /* The newest item's group. */
+    CHECK(items_get(&items, 2, 2, 0).forbidden);
+    ItemStack allowed = items_get_allowed(&items, 2, 2, 0);
+    CHECK_EQ_INT(allowed.count, 3);
+    CHECK(!allowed.forbidden);
+    CHECK_EQ_INT(items_get_allowed_of(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_COBBLE)).count, 3);
+    CHECK_EQ_INT(items_count_chosen(&items, 2, 2, 0, ITEM_COBBLE, ITEM_CHOICE_ANY), 3);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    /* Settlers take only the allowed ones. */
+    ItemStack load = {.type = ITEM_NONE};
+    CHECK_EQ_INT(items_pick_up_of(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_COBBLE), 10, &load), 3);
+    CHECK(!load.forbidden);
+    CHECK_EQ_INT(items_pick_up_of(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_COBBLE), 10, &load), 0);
+    CHECK(items_forbidden(&items, 2, 2, 0)); /* Only the forbidden one is left. */
+    CHECK_EQ_INT(items_get_allowed(&items, 2, 2, 0).type, ITEM_NONE);
+    /* Nothing is added beside forbidden items when spread; put down, the
+     * load is a group of its own. */
+    CHECK_EQ_INT(items_put(&items, 2, 2, 0, &load), 3);
+    CHECK_EQ_INT(items_get_allowed(&items, 2, 2, 0).count, 3);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    /* Allowed again: one group, and haulers look again. */
+    CHECK(items_set_item_forbidden(&items, first, false));
+    CHECK(items.additions != additions);
+    CHECK(!items_any_forbidden(&items, 2, 2, 0));
+    CHECK(!items_mixed(&items, 2, 2, 0));
+    CHECK_EQ_INT(items.forbidden_count, 0);
+    /* The whole tile at once, then one allowed of it. */
+    CHECK(items_set_forbidden(&items, 2, 2, 0, true));
+    CHECK(!items_set_forbidden(&items, 2, 2, 0, true));
+    CHECK(items_forbidden(&items, 2, 2, 0));
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).count, 4);
+    CHECK(items_set_item_forbidden(&items, first, false));
+    CHECK(!items_forbidden(&items, 2, 2, 0));
+    CHECK_EQ_INT(items_get_allowed(&items, 2, 2, 0).count, 1);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    CHECK(!items_set_item_forbidden(&items, ITEM_ID_NONE, true));
     items_free(&items);
+}
+
+/* One item is picked up by its id, keeps it, and carries its forbidden flag;
+ * a load is forbidden as a whole; a group is taken by its key. */
+static void test_item_picked_up_by_id(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 8, 8, 1));
+    REQUIRE(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_COBBLE, 3)) == 3);
+    size_t index = 2 * 8 + 2;
+    const Item *second = items_next(&items, items_first(&items, index));
+    ItemId id = items_id(&items, second);
+    CHECK(items_set_item_forbidden(&items, id, true));
+    uint64_t forbidden_hash = items_hash(&items, 0);
+    ItemStack load = {.type = ITEM_NONE};
+    CHECK_EQ_INT(items_pick_up_item(&items, id, &load), 1);
+    CHECK_EQ_INT(load.count, 1);
+    CHECK(load.forbidden);
+    CHECK(items_by_id(&items, id) == NULL); /* Held. */
+    CHECK_EQ_INT(items_pick_up_item(&items, id, &load), 0);
+    CHECK(!items_any_forbidden(&items, 2, 2, 0));
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).count, 2);
+    CHECK_EQ_INT(items_put(&items, 5, 5, 0, &load), 1);
+    const Item *put = items_by_id(&items, id);
+    REQUIRE(put != NULL);
+    CHECK_EQ_INT((int)put->tile, 5 * 8 + 5);
+    CHECK(put->forbidden);
+    CHECK(items_forbidden(&items, 5, 5, 0));
+    /* An allowed item does not join a forbidden load. */
+    load = (ItemStack){.type = ITEM_NONE};
+    CHECK_EQ_INT(items_pick_up_item(&items, id, &load), 1);
+    ItemId other = items_id(&items, items_first(&items, index));
+    CHECK_EQ_INT(items_pick_up_item(&items, other, &load), 0);
+    items_load_set_forbidden(&items, &load, false);
+    CHECK(!load.forbidden);
+    CHECK_EQ_INT(items_pick_up_item(&items, other, &load), 1);
+    CHECK_EQ_INT(load.count, 2);
+    CHECK(items_check_load(&items, load));
+    items_load_set_forbidden(&items, &load, true);
+    CHECK_EQ_INT(items_put(&items, 2, 2, 0, &load), 2);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    /* A group is taken by its key, forbidden or not. */
+    ItemStack key = items_get(&items, 2, 2, 0);
+    CHECK(key.forbidden);
+    CHECK_EQ_INT(items_take_group(&items, 2, 2, 0, key, 10).count, 2);
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).count, 1);
+    CHECK(!items_get(&items, 2, 2, 0).forbidden);
+    load = (ItemStack){.type = ITEM_NONE};
+    key.forbidden = 1;
+    CHECK_EQ_INT(items_pick_up_group(&items, 2, 2, 0, key, 10, &load), 0); /* None left. */
+    key.forbidden = 0;
+    CHECK_EQ_INT(items_pick_up_group(&items, 2, 2, 0, key, 10, &load), 1);
+    CHECK(forbidden_hash != items_hash(&items, 0));
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    items_use_up(&items, &load, load.count);
+    items_free(&items);
+}
+
+/* A picture copies which items are forbidden. */
+static void test_picture_copies_forbidden_items(void)
+{
+    Items real, picture;
+    REQUIRE(items_init(&real, 8, 8, 1));
+    REQUIRE(items_init(&picture, 8, 8, 1));
+    REQUIRE(items_add(&real, 2, 2, 0, item_stack_pristine(ITEM_COBBLE, 3)) == 3);
+    size_t index = 2 * 8 + 2;
+    CHECK(items_set_item_forbidden(&real, items_id(&real, items_first(&real, index)), true));
+    items_copy_tile(&picture, &real, index);
+    CHECK(items_any_forbidden(&picture, 2, 2, 0));
+    CHECK(!items_forbidden(&picture, 2, 2, 0));
+    CHECK_EQ_INT(picture.forbidden_count, 1);
+    CHECK(items_first(&picture, index)->forbidden);
+    CHECK_EQ_INT(items_check(&picture).problems, 0);
+    CHECK(items_set_forbidden(&real, 2, 2, 0, false));
+    items_copy_tile(&picture, &real, index);
+    CHECK_EQ_INT(picture.forbidden_count, 0);
+    items_free(&picture);
+    items_free(&real);
 }
 
 /* An item is found where it is drawn, and moved and turned by hand. */
@@ -1247,7 +1327,7 @@ static void test_items_listed_in_order(void)
     CHECK_EQ_INT(items_list(&items, index, ITEM_ORDER_QUALITY, best, 1), 3);
     CHECK_EQ_INT(best[0]->quality, 80);
     /* What never rots comes last. */
-    REQUIRE(items_add_wild(&items, 1, 1, 0, ITEM_COBBLE, 1) == 1);
+    REQUIRE(items_add_natural(&items, 1, 1, 0, ITEM_COBBLE, 1) == 1);
     const Item *all[4];
     CHECK_EQ_INT(items_list(&items, index, ITEM_ORDER_ROT, all, 4), 4);
     CHECK_EQ_INT(all[3]->type, ITEM_COBBLE);
@@ -1295,10 +1375,11 @@ int main(void)
     RUN_TEST(test_items_lie_apart);
     RUN_TEST(test_picture_copies_items);
     RUN_TEST(test_item_slots_are_reused);
-    RUN_TEST(test_wild_items_stay_apart);
-    RUN_TEST(test_wild_items_picked_up);
-    RUN_TEST(test_wild_litter_crumbles);
+    RUN_TEST(test_natural_items);
     RUN_TEST(test_item_picked_by_point_moved_and_turned);
     RUN_TEST(test_items_listed_in_order);
+    RUN_TEST(test_items_forbidden_one_by_one);
+    RUN_TEST(test_item_picked_up_by_id);
+    RUN_TEST(test_picture_copies_forbidden_items);
     return test_summary();
 }

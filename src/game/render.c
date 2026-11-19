@@ -874,8 +874,8 @@ static void render_forbid_sign(SDL_Renderer *renderer, float cx, float cy, float
     batch_bar(renderer, FORBID_COLOR, cx - d, cy - d, cx + d, cy + d, radius * 0.15f);
 }
 
-/* Whether the tile shows something forbidden: a stack, a plant (a tree on
- * its foot and its trunk), a structure (on its head), a roof. */
+/* Whether the tile shows something forbidden: all its items, a plant (a tree
+ * on its foot and its trunk), a structure (on its head), a roof. */
 static bool forbidden_marked(const Game *game, int x, int y, int z)
 {
     const Map *map = game_view_map(game);
@@ -949,17 +949,41 @@ static void forbid_marker(SDL_Renderer *renderer, const SDL_FRect *tile)
                        radius);
 }
 
+/* The forbidden items drawn on a tile where others are allowed: a small
+ * sign on each. */
+static void forbidden_item_markers(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                                   int x, int y, int z)
+{
+    const Items *items = game_items_at(game, x, y, z);
+    if (!items_any_forbidden(items, x, y, z) || items_forbidden(items, x, y, z)) {
+        return; /* None, or the tile's sign tells it. */
+    }
+    SDL_FRect tile = tile_rect(camera, x, y);
+    float radius = SDL_max(FORBID_MARKER_MIN_RADIUS * 0.75f, tile.w * FORBID_MARKER_RADIUS * 0.6f);
+    int drawn = 0;
+    for (const Item *item = items_first(items, map_index(game_view_map(game), x, y, z));
+         item != NULL && drawn < ITEM_DRAWN_PER_TILE; item = items_next(items, item), drawn++) {
+        if (item->forbidden) {
+            render_forbid_sign(renderer, tile.x + tile.w * ((float)item->spot_x + 0.5f) / 256.0f,
+                               tile.y + tile.h * ((float)item->spot_y + 0.5f) / 256.0f, radius);
+        }
+    }
+}
+
 void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
     const Map *map = game_view_map(game);
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
-    if (map->forbidden_count > 0 || game_view_items(game)->forbidden_count > 0) {
+    if (map->forbidden_count > 0 || game_view_items(game)->forbidden_count > 0 ||
+        game->items.forbidden_count > 0) {
         for (int y = visible.y0; y < visible.y1; y++) {
             for (int x = visible.x0; x < visible.x1; x++) {
                 if (forbidden_marked(game, x, y, z)) {
                     SDL_FRect tile = tile_rect(camera, x, y);
                     forbid_marker(renderer, &tile);
+                } else {
+                    forbidden_item_markers(renderer, game, camera, x, y, z);
                 }
             }
         }
@@ -2934,6 +2958,42 @@ void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, in
 void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, int y)
 {
     outline(renderer, tile_rect(camera, x, y), 2.0f, SELECTION_COLOR);
+}
+
+/* Segments of the ring around a selected item. */
+#define ITEM_RING_SEGMENTS 40
+
+/* A circle of `radius` pixels around (cx, cy). */
+static void ring(SDL_Renderer *renderer, float cx, float cy, float radius, SDL_Color color)
+{
+    SDL_FPoint points[ITEM_RING_SEGMENTS + 1];
+    for (int i = 0; i <= ITEM_RING_SEGMENTS; i++) {
+        float angle = (float)i * 2.0f * SDL_PI_F / (float)ITEM_RING_SEGMENTS;
+        points[i] = (SDL_FPoint){cx + cosf(angle) * radius, cy + sinf(angle) * radius};
+    }
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderLines(renderer, points, ITEM_RING_SEGMENTS + 1);
+}
+
+void render_item_selection(SDL_Renderer *renderer, const Camera *camera, int x, int y,
+                           const Item *item)
+{
+    if (item == NULL) {
+        return;
+    }
+    SDL_FRect tile = tile_rect(camera, x, y);
+    float cx = tile.x + tile.w * ((float)item->spot_x + 0.5f) / 256.0f;
+    float cy = tile.y + tile.h * ((float)item->spot_y + 0.5f) / 256.0f;
+    float size = tile.w * item_drawn_size((ItemType)item->type);
+    if (item_icons_ready(renderer)) { /* On top of what lies over it. */
+        icon_quad(renderer, (ItemType)item->type, cx, cy, size, (float)item->angle / 256.0f);
+        icon_flush(renderer);
+    }
+    float radius = SDL_max(size * 0.5f + 2.0f, 4.0f);
+    ring(renderer, cx, cy, radius + 2.0f, (SDL_Color){0, 0, 0, 160}); /* Seen on light ground. */
+    for (float r = radius; r < radius + 2.0f; r += 1.0f) {
+        ring(renderer, cx, cy, r, SELECTION_COLOR);
+    }
 }
 
 /* ---- Plants and colonists ------------------------------------------------ */

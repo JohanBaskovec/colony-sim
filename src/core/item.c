@@ -38,8 +38,7 @@
  * - branches: a dead or cut branch of about 1.5 kg, poorly packed;
  * - twigs: a handful (about 200 g) of kindling;
  * - grass: an armful, 2.5 kg cut fresh, 1 kg once dry (about 12 l either way).
- * Branches and twigs lying where they fell crumble into the ground in 60
- * and 20 days (ItemDef.litter_days). Stone blocks never wear out; logs vary with the woodcutter
+ * Stone blocks never wear out; logs vary with the woodcutter
  * (knots, cracks) and wild food with the gatherer (ripeness, bruises). Fresh grass left on the
  * ground dries in three days. Food lying in the open at 15 °C keeps (rot_days):
  * greens and mushrooms 2 days, blackberries 3, roasted roots 4 (moist and
@@ -73,11 +72,10 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_COBBLE] = {DEF("cobble", N_("item.cobble"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f,
                          200, true, true)},
     [ITEM_BRANCHES] = {DEF("branches", N_("item.branches"), ITEM_CATEGORY_RESOURCES, 1.5f, 10.0f,
-                           0.0f, 20, true, true),
-                       .litter_days = 60.0f},
+                           0.0f, 20, true, true)},
     [ITEM_TWIGS] = {DEF("twigs", N_("item.twigs"), ITEM_CATEGORY_RESOURCES, 0.2f, 2.0f, 0.0f, 10,
                         false, true),
-                    .wets_into = ITEM_WET_TWIGS, .litter_days = 20.0f},
+                    .wets_into = ITEM_WET_TWIGS},
     /* Twigs from wet ground, out in the rain or green from a felled crown:
      * heavier with their water, they burn on a fire but do not catch a
      * flame (core/hearth.h), and dry in a day out of the rain. */
@@ -366,7 +364,7 @@ float item_stack_eat(ItemStack *stack, float kg)
 
 bool item_stacks_match(ItemStack a, ItemStack b)
 {
-    return a.type == b.type && a.corpse == b.corpse;
+    return a.type == b.type && a.corpse == b.corpse && (a.forbidden != 0) == (b.forbidden != 0);
 }
 
 int item_hit_points_at_percent(ItemType type, int percent)
@@ -549,33 +547,23 @@ static size_t level_of(const Items *items, size_t index)
 }
 
 /* Whether an item belongs to the same stack as the summary: same type, same
- * dead one. */
+ * dead one, forbidden or not alike. */
 static bool item_matches(const Item *item, const ItemStack *stack)
 {
     return item->type == stack->type && item->corpse == stack->corpse &&
-           (item->flags & ITEM_FLAG_WILD) == 0;
-}
-
-static bool item_wild(const Item *item)
-{
-    return (item->flags & ITEM_FLAG_WILD) != 0;
+           (item->forbidden != 0) == (stack->forbidden != 0);
 }
 
 /* Counts an item lying on its tile in (sign 1) or out (sign -1) of the
  * totals. */
 static void count_item(Items *items, const Item *item, int sign)
 {
-    if (item_wild(item)) {
-        items->wild_totals[item->type] += sign;
-        items->level_wild[level_of(items, item->tile)] += (uint32_t)sign;
-    } else {
-        items->totals[item->type] += sign;
-    }
+    items->totals[item->type] += sign;
     items->item_count += sign;
 }
 
 /* The items of the tile at `index` that belong with `key` (same type, same
- * dead one, not wild) as a stack: their count and average condition. An
+ * dead one, forbidden or not alike) as a stack: their count and average condition. An
  * empty stack when there are none. */
 static ItemStack group_of(const Items *items, size_t index, ItemStack key)
 {
@@ -595,6 +583,7 @@ static ItemStack group_of(const Items *items, size_t index, ItemStack key)
     }
     return (ItemStack){.type = key.type,
                        .corpse = key.corpse,
+                       .forbidden = key.forbidden != 0,
                        .count = (uint16_t)(count < UINT16_MAX ? count : UINT16_MAX),
                        .quality = (uint8_t)((quality + count / 2) / count),
                        .hit_points = (uint16_t)((hit_points + count / 2) / count),
@@ -605,26 +594,37 @@ static ItemStack group_of(const Items *items, size_t index, ItemStack key)
 /* An item as the key of its group. */
 static ItemStack key_of(const Item *item)
 {
-    return (ItemStack){.type = item->type, .corpse = item->corpse, .count = 1};
+    return (ItemStack){
+        .type = item->type, .corpse = item->corpse, .forbidden = item->forbidden != 0, .count = 1};
+}
+
+/* What the items of the tile at `index` are forbidden as (Items.forbidden). */
+static uint8_t tile_forbidden(const Items *items, size_t index)
+{
+    bool some = false, all = true;
+    for (const Item *item = slot_item(items, items->heads[index]); item != NULL;
+         item = slot_item(items, item->next)) {
+        some |= item->forbidden != 0;
+        all &= item->forbidden != 0;
+    }
+    return !some ? 0 : all ? ITEM_TILE_ALL_FORBIDDEN : ITEM_TILE_SOME_FORBIDDEN;
 }
 
 /* Rebuilds the summary of a tile from its items, whether it holds other
- * groups, and the count of tiles with items on its level. */
+ * groups, whether they are forbidden, and the count of tiles with items on
+ * its level. */
 static void refresh_tile(Items *items, size_t index)
 {
     ItemStack *stack = &items->stacks[index];
     bool had = stack->type != ITEM_NONE;
     const Item *head = slot_item(items, items->heads[index]);
-    while (head != NULL && item_wild(head)) {
-        head = slot_item(items, head->next);
-    }
     bool mixed = false;
     if (head == NULL) {
         *stack = (ItemStack){.type = ITEM_NONE};
     } else {
         *stack = group_of(items, index, key_of(head));
         for (const Item *item = head; item != NULL && !mixed; item = slot_item(items, item->next)) {
-            mixed = !item_wild(item) && !item_matches(item, stack);
+            mixed = !item_matches(item, stack);
         }
     }
     items->mixed[index] = mixed;
@@ -632,22 +632,31 @@ static void refresh_tile(Items *items, size_t index)
     if (had != has) {
         items->level_stacks[level_of(items, index)] += has ? 1u : (uint32_t)-1;
     }
+    /* Forbidden items share no group with allowed ones: an unmixed tile is
+     * forbidden as its summary is. */
+    uint8_t forbidden =
+        !mixed ? (stack->forbidden ? ITEM_TILE_ALL_FORBIDDEN : 0) : tile_forbidden(items, index);
+    items->forbidden_count += (forbidden != 0) - (items->forbidden[index] != 0);
+    items->forbidden[index] = forbidden;
 }
 
-/* The newest group of the tile at `index` among `types` (an empty stack for
- * none). */
-static ItemStack newest_of(const Items *items, size_t index, ItemTypeMask types)
+/* The newest group of the tile at `index` among `types`, only of allowed
+ * items when `allowed` (an empty stack for none). */
+static ItemStack newest_of(const Items *items, size_t index, ItemTypeMask types, bool allowed)
 {
     const ItemStack *stack = &items->stacks[index];
-    if (stack->type == ITEM_NONE || (types & ITEM_TYPE_BIT(stack->type))) {
-        return stack->type == ITEM_NONE ? (ItemStack){.type = ITEM_NONE} : *stack;
+    if (stack->type == ITEM_NONE) {
+        return (ItemStack){.type = ITEM_NONE};
+    }
+    if ((types & ITEM_TYPE_BIT(stack->type)) && !(allowed && stack->forbidden)) {
+        return *stack;
     }
     if (!items->mixed[index]) {
         return (ItemStack){.type = ITEM_NONE};
     }
     for (const Item *item = slot_item(items, items->heads[index]); item != NULL;
          item = slot_item(items, item->next)) {
-        if (!item_wild(item) && (types & ITEM_TYPE_BIT(item->type))) {
+        if ((types & ITEM_TYPE_BIT(item->type)) && !(allowed && item->forbidden)) {
             return group_of(items, index, key_of(item));
         }
     }
@@ -714,8 +723,6 @@ void items_copy_tile(Items *dst, const Items *src, size_t index)
         count_item(dst, copy, 1);
     }
     refresh_tile(dst, index);
-    dst->forbidden_count += (src->forbidden[index] != 0) - (dst->forbidden[index] != 0);
-    dst->forbidden[index] = src->forbidden[index];
     dst->stamps[index] = src->stamps[index];
 }
 
@@ -731,11 +738,9 @@ bool items_init(Items *items, int width, int height, int depth)
     items->forbidden = calloc(tiles, 1);
     items->heads = calloc(tiles, sizeof(*items->heads));
     items->stamps = calloc(tiles, sizeof(*items->stamps));
-    items->level_wild = calloc((size_t)depth, sizeof(*items->level_wild));
     items->mixed = calloc(tiles, 1);
     if (items->stacks == NULL || items->level_stacks == NULL || items->forbidden == NULL ||
-        items->heads == NULL || items->stamps == NULL || items->level_wild == NULL ||
-        items->mixed == NULL) {
+        items->heads == NULL || items->stamps == NULL || items->mixed == NULL) {
         items_free(items);
         return false;
     }
@@ -753,7 +758,6 @@ void items_free(Items *items)
     free(items->pool);
     free(items->heads);
     free(items->stamps);
-    free(items->level_wild);
     free(items->mixed);
     memset(items, 0, sizeof(*items));
 }
@@ -768,11 +772,14 @@ ItemStack items_get(const Items *items, int x, int y, int z)
 
 ItemStack items_get_allowed(const Items *items, int x, int y, int z)
 {
-    if (!in_bounds(items, x, y, z) ||
-        (items->forbidden_count > 0 && items->forbidden[index_of(items, x, y, z)])) {
+    if (!in_bounds(items, x, y, z)) {
         return (ItemStack){.type = ITEM_NONE};
     }
-    return items->stacks[index_of(items, x, y, z)];
+    size_t index = index_of(items, x, y, z);
+    if (items->forbidden_count == 0 || items->forbidden[index] == 0) {
+        return items->stacks[index];
+    }
+    return newest_of(items, index, item_types_all(), true);
 }
 
 ItemStack items_get_of(const Items *items, int x, int y, int z, ItemTypeMask types)
@@ -780,16 +787,15 @@ ItemStack items_get_of(const Items *items, int x, int y, int z, ItemTypeMask typ
     if (!in_bounds(items, x, y, z)) {
         return (ItemStack){.type = ITEM_NONE};
     }
-    return newest_of(items, index_of(items, x, y, z), types);
+    return newest_of(items, index_of(items, x, y, z), types, false);
 }
 
 ItemStack items_get_allowed_of(const Items *items, int x, int y, int z, ItemTypeMask types)
 {
-    if (!in_bounds(items, x, y, z) ||
-        (items->forbidden_count > 0 && items->forbidden[index_of(items, x, y, z)])) {
+    if (!in_bounds(items, x, y, z)) {
         return (ItemStack){.type = ITEM_NONE};
     }
-    return newest_of(items, index_of(items, x, y, z), types);
+    return newest_of(items, index_of(items, x, y, z), types, true);
 }
 
 ItemStack items_get_group(const Items *items, int x, int y, int z, ItemStack group)
@@ -828,9 +834,6 @@ int items_groups(const Items *items, int x, int y, int z, ItemStack *out, int ca
     int count = 0;
     for (const Item *item = items_first(items, index); item != NULL;
          item = items_next(items, item)) {
-        if (item_wild(item)) {
-            continue;
-        }
         int group = 0;
         while (group < count && !item_matches(item, &out[group])) {
             group++;
@@ -886,19 +889,21 @@ int items_count_at(const Items *items, int x, int y, int z, ItemType type)
 bool items_forbidden(const Items *items, int x, int y, int z)
 {
     return items->forbidden_count > 0 && in_bounds(items, x, y, z) &&
+           items->forbidden[index_of(items, x, y, z)] == ITEM_TILE_ALL_FORBIDDEN;
+}
+
+bool items_any_forbidden(const Items *items, int x, int y, int z)
+{
+    return items->forbidden_count > 0 && in_bounds(items, x, y, z) &&
            items->forbidden[index_of(items, x, y, z)] != 0;
 }
 
 /* Notes that the items of a tile (an index) changed: a new stamp, a summary
- * rebuilt, no longer forbidden once empty, and copied into the picture at
+ * rebuilt (and whether they are forbidden), and copied into the picture at
  * once where it is in view. */
 static void note_change(Items *items, size_t index)
 {
     refresh_tile(items, index);
-    if (items->stacks[index].type == ITEM_NONE && items->forbidden[index]) {
-        items->forbidden[index] = 0;
-        items->forbidden_count--;
-    }
     items->stamp_clock++; /* Also salts the spots of the next items. */
     items->stamps[index] = items->picture ? UINT32_MAX : items->stamp_clock;
     if (items->mirror != NULL && (items->mirror_when[index >> 6] >> (index & 63) & 1u) != 0) {
@@ -912,12 +917,30 @@ bool items_set_forbidden(Items *items, int x, int y, int z, bool forbidden)
         return false;
     }
     size_t index = index_of(items, x, y, z);
-    if (items->stacks[index].type == ITEM_NONE || (items->forbidden[index] != 0) == forbidden) {
+    bool changed = false;
+    for (uint32_t slot = items->heads[index]; slot != 0; slot = items->pool[slot - 1].next) {
+        Item *item = &items->pool[slot - 1];
+        changed |= (item->forbidden != 0) != forbidden;
+        item->forbidden = forbidden;
+    }
+    if (!changed) {
         return false;
     }
-    items->forbidden[index] = forbidden;
-    items->forbidden_count += forbidden ? 1 : -1;
     note_change(items, index);
+    if (!forbidden) {
+        items->additions++; /* Something to store again. */
+    }
+    return true;
+}
+
+bool items_set_item_forbidden(Items *items, ItemId id, bool forbidden)
+{
+    const Item *found = items_by_id(items, id);
+    if (found == NULL || (found->forbidden != 0) == forbidden) {
+        return false;
+    }
+    items->pool[id.slot].forbidden = forbidden;
+    note_change(items, found->tile);
     if (!forbidden) {
         items->additions++; /* Something to store again. */
     }
@@ -940,12 +963,13 @@ static ItemStack valid_batch(ItemStack batch)
     valid.progress = progress;
     valid.eaten = (uint16_t)clampi(eaten, 0, ITEM_EATEN_FULL - 1);
     valid.corpse = corpse;
+    valid.forbidden = batch.forbidden != 0;
     return valid;
 }
 
 /* How many items of a stack the tile at `index` takes: the type's stack
  * limit, less what lies there already (items of other types too, by their
- * bulk; wild items take no room). May be negative. */
+ * bulk). May be negative. */
 static int tile_room(const Items *items, size_t index, const ItemStack *batch)
 {
     float other_bulk = 0.0f;
@@ -954,7 +978,7 @@ static int tile_room(const Items *items, size_t index, const ItemStack *batch)
          item = items_next(items, item)) {
         if (item_matches(item, batch)) {
             own++;
-        } else if (!item_wild(item)) {
+        } else {
             other_bulk += ITEM_DEFS[item->type].bulk;
         }
     }
@@ -984,6 +1008,7 @@ static uint32_t new_item(Items *items, const ItemStack *batch, uint32_t tile)
                        .progress = batch->progress,
                        .eaten = batch->eaten,
                        .corpse = batch->corpse,
+                       .forbidden = batch->forbidden,
                        .generation = item->generation,
                        .tile = tile};
     }
@@ -1050,6 +1075,7 @@ static void refresh_load(const Items *items, ItemStack *load)
     }
     *load = (ItemStack){.type = head->type,
                         .corpse = head->corpse,
+                        .forbidden = head->forbidden != 0,
                         .count = (uint16_t)(count < UINT16_MAX ? count : UINT16_MAX),
                         .quality = (uint8_t)((quality + count / 2) / count),
                         .hit_points = (uint16_t)((hit_points + count / 2) / count),
@@ -1139,10 +1165,60 @@ int items_pick_up_of(Items *items, int x, int y, int z, ItemTypeMask types, int 
         return 0;
     }
     size_t index = index_of(items, x, y, z);
-    ItemStack stack = !load_held(load)                      ? newest_of(items, index, types)
+    ItemStack stack = !load_held(load)                      ? newest_of(items, index, types, true)
                       : (types & ITEM_TYPE_BIT(load->type)) ? matching_group(items, index, *load)
                                                             : (ItemStack){.type = ITEM_NONE};
     return pick_up_group(items, index, stack, count, load);
+}
+
+int items_pick_up_group(Items *items, int x, int y, int z, ItemStack group, int count,
+                        ItemStack *load)
+{
+    if (!in_bounds(items, x, y, z) || group.type == ITEM_NONE) {
+        return 0;
+    }
+    size_t index = index_of(items, x, y, z);
+    return pick_up_group(items, index, matching_group(items, index, group), count, load);
+}
+
+int items_pick_up_item(Items *items, ItemId id, ItemStack *load)
+{
+    const Item *found = items_by_id(items, id);
+    if (found == NULL || (load_held(load) && !item_stacks_match(*load, item_as_stack(found)))) {
+        return 0;
+    }
+    materialize(items, load);
+    size_t index = found->tile;
+    uint32_t slot = id.slot + 1, previous = 0;
+    for (uint32_t at = items->heads[index]; at != slot; at = items->pool[at - 1].next) {
+        previous = at;
+    }
+    Item *item = &items->pool[id.slot];
+    if (previous == 0) {
+        items->heads[index] = item->next;
+    } else {
+        items->pool[previous - 1].next = item->next;
+    }
+    count_item(items, item, -1);
+    item->tile = ITEM_TILE_HELD;
+    item->next = load->held;
+    load->held = slot;
+    items->held_count++;
+    note_change(items, index);
+    refresh_load(items, load);
+    return 1;
+}
+
+void items_load_set_forbidden(Items *items, ItemStack *load, bool forbidden)
+{
+    if (!load_held(load)) {
+        return;
+    }
+    materialize(items, load);
+    for (uint32_t slot = load->held; slot != 0; slot = items->pool[slot - 1].next) {
+        items->pool[slot - 1].forbidden = forbidden;
+    }
+    refresh_load(items, load);
 }
 
 static bool chosen(const Item *item, const ItemStack *stack, ItemChoice choice)
@@ -1157,7 +1233,7 @@ int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, I
         return 0;
     }
     size_t index = index_of(items, x, y, z);
-    ItemStack stack = newest_of(items, index, ITEM_TYPE_BIT(type));
+    ItemStack stack = newest_of(items, index, ITEM_TYPE_BIT(type), true);
     if (stack.type == ITEM_NONE) {
         return 0;
     }
@@ -1176,7 +1252,7 @@ float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemType 
         return -1.0f;
     }
     size_t index = index_of(items, x, y, z);
-    ItemStack stack = newest_of(items, index, ITEM_TYPE_BIT(type));
+    ItemStack stack = newest_of(items, index, ITEM_TYPE_BIT(type), true);
     if (stack.type == ITEM_NONE) {
         return -1.0f;
     }
@@ -1200,7 +1276,7 @@ ItemType items_soonest_rotting(const Items *items, int x, int y, int z, ItemType
         size_t index = index_of(items, x, y, z);
         for (const Item *item = items_first(items, index); item != NULL;
              item = items_next(items, item)) {
-            if (item_wild(item) || item->corpse != 0 || !(types & ITEM_TYPE_BIT(item->type)) ||
+            if (item->corpse != 0 || item->forbidden || !(types & ITEM_TYPE_BIT(item->type)) ||
                 !item_rots((ItemType)item->type)) {
                 continue;
             }
@@ -1229,7 +1305,7 @@ int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int c
     }
     size_t index = index_of(items, x, y, z);
     const ItemStack stack = load_held(load) ? matching_group(items, index, *load)
-                                            : newest_of(items, index, ITEM_TYPE_BIT(type));
+                                            : newest_of(items, index, ITEM_TYPE_BIT(type), true);
     if (stack.type != type || (load_held(load) && !item_stacks_match(*load, stack))) {
         return 0;
     }
@@ -1418,7 +1494,16 @@ ItemStack items_take_of(Items *items, int x, int y, int z, ItemTypeMask types, i
         return (ItemStack){.type = ITEM_NONE};
     }
     size_t index = index_of(items, x, y, z);
-    return take_group(items, index, newest_of(items, index, types), count);
+    return take_group(items, index, newest_of(items, index, types, false), count);
+}
+
+ItemStack items_take_group(Items *items, int x, int y, int z, ItemStack group, int count)
+{
+    if (!in_bounds(items, x, y, z) || group.type == ITEM_NONE) {
+        return (ItemStack){.type = ITEM_NONE};
+    }
+    size_t index = index_of(items, x, y, z);
+    return take_group(items, index, matching_group(items, index, group), count);
 }
 
 int items_remove_of(Items *items, int x, int y, int z, ItemTypeMask types, int count)
@@ -1495,6 +1580,21 @@ ItemId items_at_point(const Items *items, float x, float y, int z)
     return found;
 }
 
+ItemId items_find_like(const Items *items, int x, int y, int z, const Item *like)
+{
+    if (like == NULL || !in_bounds(items, x, y, z)) {
+        return ITEM_ID_NONE;
+    }
+    for (const Item *item = items_first(items, index_of(items, x, y, z)); item != NULL;
+         item = items_next(items, item)) {
+        if (item->type == like->type && item->spot_x == like->spot_x &&
+            item->spot_y == like->spot_y && item->angle == like->angle) {
+            return items_id(items, item);
+        }
+    }
+    return ITEM_ID_NONE;
+}
+
 bool items_move(Items *items, ItemId id, int x, int y, int z, int spot_x, int spot_y)
 {
     const Item *found = items_by_id(items, id);
@@ -1544,9 +1644,10 @@ ItemStack item_as_stack(const Item *item)
                        .quality = item->quality,
                        .count = 1,
                        .hit_points = item->hit_points,
-                       .progress = (item->flags & ITEM_FLAG_WILD) ? 0 : item->progress,
+                       .progress = item->progress,
                        .eaten = item->eaten,
-                       .corpse = item->corpse};
+                       .corpse = item->corpse,
+                       .forbidden = item->forbidden != 0};
 }
 
 long item_rot_left(const Item *item)
@@ -1600,14 +1701,17 @@ int items_list(const Items *items, size_t index, ItemOrder order, const Item **o
     return count;
 }
 
-/* ---- Wild items ---- */
+/* ---- Natural items ---- */
 
-int items_add_wild(Items *items, int x, int y, int z, ItemType type, int count)
+int items_add_natural(Items *items, int x, int y, int z, ItemType type, int count)
 {
     if (!in_bounds(items, x, y, z) || !is_item_type(type) || count <= 0) {
         return 0;
     }
     size_t index = index_of(items, x, y, z);
+    ItemStack key = {.type = type, .count = 1};
+    int room = tile_room(items, index, &key);
+    count = count < room ? count : room;
     int added = 0;
     for (; added < count; added++) {
         /* Quality: the mean of two draws, most items middling; condition 60 to 100 %. */
@@ -1620,16 +1724,16 @@ int items_add_wild(Items *items, int x, int y, int z, ItemType type, int count)
         if (slot == 0) {
             break;
         }
-        items->pool[slot - 1].flags = ITEM_FLAG_WILD;
         lay_item(items, index, slot, (uint32_t)added);
     }
     if (added > 0) {
+        items->additions++;
         note_change(items, index);
     }
     return added;
 }
 
-int items_wild_count(const Items *items, int x, int y, int z, ItemType type)
+int items_count_type(const Items *items, int x, int y, int z, ItemType type)
 {
     if (!in_bounds(items, x, y, z)) {
         return 0;
@@ -1637,97 +1741,9 @@ int items_wild_count(const Items *items, int x, int y, int z, ItemType type)
     int count = 0;
     for (const Item *item = items_first(items, index_of(items, x, y, z)); item != NULL;
          item = items_next(items, item)) {
-        count += item_wild(item) && item->type == type;
+        count += item->type == type && item->corpse == 0;
     }
     return count;
-}
-
-int items_remove_wild(Items *items, int x, int y, int z, ItemType type, int count)
-{
-    if (!in_bounds(items, x, y, z) || count <= 0) {
-        return 0;
-    }
-    size_t index = index_of(items, x, y, z);
-    int removed = 0;
-    uint32_t previous = 0;
-    uint32_t slot = items->heads[index];
-    while (slot != 0 && removed < count) {
-        const Item *item = &items->pool[slot - 1];
-        uint32_t next = item->next;
-        if (item_wild(item) && item->type == type) {
-            unlink_item(items, index, previous, slot);
-            removed++;
-        } else {
-            previous = slot;
-        }
-        slot = next;
-    }
-    if (removed > 0) {
-        note_change(items, index);
-    }
-    return removed;
-}
-
-int items_pick_up_wild(Items *items, int x, int y, int z, ItemType type, int count, bool best,
-                       ItemType becomes, ItemStack *load)
-{
-    ItemType made = becomes != ITEM_NONE ? becomes : type;
-    if (!in_bounds(items, x, y, z) || count <= 0 || !is_item_type(made) ||
-        (load->type != ITEM_NONE && load->count > 0 && (load->type != made || load->corpse != 0))) {
-        return 0;
-    }
-    materialize(items, load);
-    size_t index = index_of(items, x, y, z);
-    int taken = 0;
-    while (taken < count) {
-        /* The wanted item: the first (newest), or the best. */
-        uint32_t chosen = 0, chosen_previous = 0, previous = 0;
-        for (uint32_t slot = items->heads[index]; slot != 0;
-             previous = slot, slot = items->pool[slot - 1].next) {
-            const Item *item = &items->pool[slot - 1];
-            if (!item_wild(item) || item->type != type) {
-                continue;
-            }
-            if (chosen == 0 || (best && item->quality > items->pool[chosen - 1].quality)) {
-                chosen = slot;
-                chosen_previous = previous;
-            }
-            if (!best) {
-                break;
-            }
-        }
-        if (chosen == 0) {
-            break;
-        }
-        Item *item = &items->pool[chosen - 1];
-        if (chosen_previous == 0) {
-            items->heads[index] = item->next;
-        } else {
-            items->pool[chosen_previous - 1].next = item->next;
-        }
-        count_item(items, item, -1);
-        item->flags &= (uint8_t)~ITEM_FLAG_WILD;
-        item->progress = 0;
-        if (made != type) {
-            ItemStack old = {.type = item->type, .count = 1, .hit_points = item->hit_points};
-            int percent = item_stack_hit_points_percent(old);
-            ItemStack now =
-                item_stack_make(made, 1, item->quality, item_hit_points_at_percent(made, percent));
-            item->type = now.type;
-            item->quality = now.quality;
-            item->hit_points = now.hit_points;
-        }
-        item->tile = ITEM_TILE_HELD;
-        item->next = load->held;
-        load->held = chosen;
-        items->held_count++;
-        taken++;
-    }
-    if (taken > 0) {
-        note_change(items, index);
-        refresh_load(items, load);
-    }
-    return taken;
 }
 
 /* Puts the items of a load down around (x, y) as items_drop_load() does, on
@@ -1752,7 +1768,7 @@ static int spread_load_where(Items *items, const Map *map, int x, int y, int z, 
             int cell = queue[head++];
             int cx = x + cell % SIDE - ITEM_DROP_RADIUS;
             int cy = y + cell / SIDE - ITEM_DROP_RADIUS;
-            if (!items_forbidden(items, cx, cy, z) && /* Left alone. */
+            if (!items_any_forbidden(items, cx, cy, z) && /* Left alone. */
                 (filter == NULL || filter(items->drop_data, items, cx, cy, z, load))) {
                 placed += items_put(items, cx, cy, z, load);
             }
@@ -1920,7 +1936,7 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
     int transformed = 0;
     const size_t level_size = (size_t)items->width * (size_t)items->height;
     for (size_t i = begin; i < end; i++) {
-        if (items->level_stacks[i / level_size] == 0 && items->level_wild[i / level_size] == 0) {
+        if (items->level_stacks[i / level_size] == 0) {
             i = (i / level_size + 1) * level_size - 1; /* Nothing on this level. */
             continue;
         }
@@ -1934,23 +1950,6 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
         while (slot != 0) {
             Item *item = &items->pool[slot - 1];
             uint32_t next = item->next;
-            if (item_wild(item)) { /* Only crumbles away, slowly. */
-                float days = ITEM_DEFS[item->type].litter_days;
-                if (days > 0.0f) {
-                    int lain = (int)item->progress + hours;
-                    if ((float)lain >= days * (float)HOURS_PER_DAY) {
-                        unlink_item(items, i, previous, slot);
-                        slot = next;
-                        changed = true;
-                        continue;
-                    }
-                    item->progress = (uint16_t)(lain < UINT16_MAX ? lain : UINT16_MAX);
-                    changed = true;
-                }
-                previous = slot;
-                slot = next;
-                continue;
-            }
             if (!type_changes((ItemType)item->type)) {
                 previous = slot;
                 slot = next;
@@ -2000,11 +1999,11 @@ ItemsCheck items_check(const Items *items)
 {
     ItemsCheck check = {0, NULL, -1};
     size_t level_size = (size_t)items->width * (size_t)items->height;
-    long totals[ITEM_TYPE_COUNT] = {0}, wild_totals[ITEM_TYPE_COUNT] = {0};
+    long totals[ITEM_TYPE_COUNT] = {0};
     long listed = 0;
     int forbidden = 0;
     for (int z = 0; z < items->depth; z++) {
-        uint32_t stacks = 0, wild = 0;
+        uint32_t stacks = 0;
         for (size_t i = (size_t)z * level_size; i < (size_t)(z + 1) * level_size; i++) {
             long steps = 0;
             for (const Item *item = items_first(items, i); item != NULL;
@@ -2020,52 +2019,40 @@ ItemsCheck items_check(const Items *items)
                 if (item->tile != (uint32_t)i) {
                     found(&check, "an item lies on another tile than its own", (long)i);
                 }
-                if (item_wild(item)) {
-                    wild_totals[item->type]++;
-                    wild++;
-                } else {
-                    totals[item->type]++;
-                }
+                totals[item->type]++;
                 listed++;
             }
             /* The summary and the mixed mark, as refresh_tile() makes them. */
             const Item *head = items_first(items, i);
-            while (head != NULL && item_wild(head)) {
-                head = items_next(items, head);
-            }
             ItemStack expected =
                 head != NULL ? group_of(items, i, key_of(head)) : (ItemStack){.type = ITEM_NONE};
             const ItemStack *stack = &items->stacks[i];
             if (stack->type != expected.type || stack->count != expected.count ||
-                stack->corpse != expected.corpse || stack->quality != expected.quality ||
-                stack->hit_points != expected.hit_points || stack->progress != expected.progress ||
-                stack->eaten != expected.eaten || stack->held != 0) {
+                stack->corpse != expected.corpse || stack->forbidden != expected.forbidden ||
+                stack->quality != expected.quality || stack->hit_points != expected.hit_points ||
+                stack->progress != expected.progress || stack->eaten != expected.eaten ||
+                stack->held != 0) {
                 found(&check, "a tile's summary is not its newest group", (long)i);
             }
             bool mixed = false;
             for (const Item *item = head; item != NULL && !mixed; item = items_next(items, item)) {
-                mixed = !item_wild(item) && !item_matches(item, &expected);
+                mixed = !item_matches(item, &expected);
             }
             if (mixed != (items->mixed[i] != 0)) {
                 found(&check, "a tile's mixed mark is wrong", (long)i);
             }
             stacks += expected.type != ITEM_NONE;
-            if (items->forbidden[i]) {
-                forbidden++;
-                if (expected.type == ITEM_NONE) {
-                    found(&check, "a tile without items is forbidden", (long)i);
-                }
+            if (items->forbidden[i] != tile_forbidden(items, i)) {
+                found(&check, "a tile's forbidden mark is wrong", (long)i);
             }
+            forbidden += items->forbidden[i] != 0;
         }
         if (items->level_stacks[z] != stacks) {
             found(&check, "a level's count of tiles with items is wrong", -1);
         }
-        if (items->level_wild[z] != wild) {
-            found(&check, "a level's count of wild items is wrong", -1);
-        }
     }
     for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
-        if (totals[type] != items->totals[type] || wild_totals[type] != items->wild_totals[type]) {
+        if (totals[type] != items->totals[type]) {
             found(&check, "the totals of a type are wrong", -1);
             break;
         }
@@ -2109,7 +2096,8 @@ bool items_check_load(const Items *items, ItemStack load)
     for (const Item *item = slot_item(items, load.held); item != NULL;
          item = slot_item(items, item->next)) {
         if (++count > (long)items->pool_used || item->tile != ITEM_TILE_HELD ||
-            item->type != load.type || item->corpse != load.corpse) {
+            item->type != load.type || item->corpse != load.corpse ||
+            (item->forbidden != 0) != (load.forbidden != 0)) {
             return false;
         }
     }
@@ -2161,7 +2149,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
             hash = hash_fnv1a64(hash, &item->spot_x, sizeof(item->spot_x));
             hash = hash_fnv1a64(hash, &item->spot_y, sizeof(item->spot_y));
             hash = hash_fnv1a64(hash, &item->angle, sizeof(item->angle));
-            hash = hash_fnv1a64(hash, &item->flags, sizeof(item->flags));
+            if (item->forbidden) { /* Hashes without anything forbidden stay as they were. */
+                hash = hash_fnv1a64(hash, &item->forbidden, sizeof(item->forbidden));
+            }
         }
     }
     /* Items in loads, by slot. */
@@ -2177,9 +2167,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
         hash = hash_fnv1a64(hash, &item->progress, sizeof(item->progress));
         hash = hash_fnv1a64(hash, &item->eaten, sizeof(item->eaten));
         hash = hash_fnv1a64(hash, &item->corpse, sizeof(item->corpse));
-    }
-    if (items->forbidden_count > 0) { /* Hashes without anything forbidden stay as they were. */
-        hash = hash_fnv1a64(hash, items->forbidden, count);
+        if (item->forbidden) {
+            hash = hash_fnv1a64(hash, &item->forbidden, sizeof(item->forbidden));
+        }
     }
     return hash;
 }

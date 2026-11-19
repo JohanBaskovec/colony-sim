@@ -1587,8 +1587,8 @@ static void test_litter(void)
     map_free(&map);
 }
 
-/* Once the game runs, stones, branches and twigs are wild items: the map's
- * functions read and change them. */
+/* Once the game runs, stones, branches and twigs are ordinary items: the
+ * map's functions read and change them. */
 static void test_litter_as_items(void)
 {
     Map map;
@@ -1604,8 +1604,10 @@ static void test_litter_as_items(void)
     CHECK_EQ_INT(map.cobbles[map_index(&map, 1, 1, 0)], 0);
     CHECK_EQ_INT(map.twigs[map_index(&map, 2, 2, 0)], 0);
     CHECK_EQ_INT(map.nuts[map_index(&map, 2, 2, 0)], 1); /* Nuts stay in their layer. */
-    CHECK_EQ_INT(items.wild_totals[ITEM_COBBLE], 2);
-    CHECK_EQ_INT(items.wild_totals[ITEM_FLINT], 3);
+    CHECK_EQ_INT(items.totals[ITEM_COBBLE], 2);
+    CHECK_EQ_INT(items.totals[ITEM_FLINT], 3);
+    CHECK(items_get(&items, 1, 1, 0).type == ITEM_FLINT); /* A heap like any. */
+    CHECK(items_mixed(&items, 1, 1, 0));
     CHECK_EQ_INT(map_stones(&map, 1, 1, 0, ITEM_COBBLE), 2);
     CHECK_EQ_INT(map_stones(&map, 1, 1, 0, ITEM_FLINT), 3);
     CHECK_EQ_INT(map_litter(&map, 2, 2, 0, ITEM_TWIGS), 1);

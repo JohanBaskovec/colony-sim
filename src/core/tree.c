@@ -447,12 +447,16 @@ static bool holds_litter(const Map *map, int x, int y, int z)
            !structure_blocks((StructureType)map->structure[index]);
 }
 
-/* The branches and twigs on (x, y, z), its floor gone, fall to the ground
- * below (what does not fit there lies as items). */
+/* The nuts on (x, y, z), its floor gone, fall to the ground below (what does
+ * not fit there lies as items); branches and twigs too while they lie in the
+ * map's layers (a running game keeps them as items: drop_items_from()). */
 static void drop_litter_from(Map *map, Items *items, int x, int y, int z)
 {
     static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS};
     for (size_t i = 0; i < sizeof(KINDS) / sizeof(KINDS[0]); i++) {
+        if (KINDS[i] != ITEM_HAZELNUTS && map->litter != NULL) {
+            continue;
+        }
         int count = map_take_litter(map, x, y, z, KINDS[i]);
         int level = count > 0 ? litter_landing_level(map, x, y, z) : -1;
         int left = 0;

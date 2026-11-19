@@ -412,6 +412,9 @@ typedef struct Colonist {
      * rather than hauling to a stockpile: `target` is the source,
      * `haul_destination` the tile chosen. */
     bool haul_forced;
+    /* TASK_HAUL, forced: the one item ordered moved, ITEM_ID_NONE when the
+     * order is about every item of `target`. */
+    ItemId haul_item;
     /* TASK_HAUL: the type of the items collected (ItemType; a tile may hold
      * several). */
     uint8_t haul_type;
