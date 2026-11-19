@@ -2,6 +2,7 @@
 #include "core/exploration.h"
 
 #include "core/conversation.h"
+#include "core/hauling.h"
 #include "core/log.h"
 #include "core/tree.h"
 #include "core/util.h"
@@ -609,6 +610,8 @@ bool game_init(Game *game, const NewGameParams *params)
         return false;
     }
     game->seed = params->world.seed;
+    /* Items dropped keep off storage they would mix up. */
+    items_set_drop_filter(&game->items, haul_drop_filter, &game->stockpiles);
     /* Stones, branches and twigs lie as wild items from now on. */
     map_litter_to_items(&game->map, &game->items);
     corpses_init(&game->corpses);
@@ -2343,17 +2346,19 @@ static void fell_and_mine_now(Game *game)
     }
 }
 
-/* Drops a stack on the first passable tile beside (x, y, z), if any. */
-static void drop_beside(Game *game, int x, int y, int z, ItemStack stack)
+/* Drops a load on the first passable tile beside (x, y, z), if any: lost
+ * otherwise. */
+static void drop_beside(Game *game, int x, int y, int z, ItemStack load)
 {
     static const int DX[4] = {0, 1, 0, -1};
     static const int DY[4] = {-1, 0, 1, 0};
-    for (int i = 0; stack.count > 0 && i < 4; i++) {
+    for (int i = 0; load.count > 0 && i < 4; i++) {
         if (map_is_passable(&game->map, x + DX[i], y + DY[i], z)) {
-            items_drop(&game->items, &game->map, x + DX[i], y + DY[i], z, stack);
+            items_drop_load(&game->items, &game->map, x + DX[i], y + DY[i], z, &load);
             return;
         }
     }
+    items_use_up(&game->items, &load, load.count);
 }
 
 /* A gallery filled up again: the sites, stations and zones on it go (and
@@ -2552,6 +2557,31 @@ ItemsCheck game_check_items(const Game *game)
             check.first = check.first != NULL ? check.first : "a settler's load is not its items";
         }
         held += load->held != 0 ? load->count : 0;
+    }
+    /* The inputs of crafts in progress and the materials delivered to sites. */
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = &game->workstations.list[index];
+        if (station->used && station->work_input.held != 0) {
+            if (!items_check_load(&game->items, station->work_input)) {
+                check.problems++;
+                check.first =
+                    check.first != NULL ? check.first : "a craft's input is not its items";
+            }
+            held += station->work_input.count;
+        }
+    }
+    for (int index = 0; index < CONSTRUCTION_MAX; index++) {
+        const ConstructionSite *site = construction_get(&game->constructions, index);
+        for (int slot = 0; site != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+            if (site->delivered[slot].held != 0) {
+                if (!items_check_load(&game->items, site->delivered[slot])) {
+                    check.problems++;
+                    check.first =
+                        check.first != NULL ? check.first : "a site's materials are not its items";
+                }
+                held += site->delivered[slot].count;
+            }
+        }
     }
     if (held != game->items.held_count) {
         check.problems++;
@@ -3446,7 +3476,7 @@ bool game_remove_workstation(Game *game, int index)
     ItemStack returned[1];
     int count = workstations_remove(&game->workstations, index, returned);
     for (int i = 0; i < count; i++) {
-        items_drop(&game->items, &game->map, x, y, z, returned[i]);
+        items_drop_load(&game->items, &game->map, x, y, z, &returned[i]);
     }
     return true;
 }
@@ -3474,7 +3504,7 @@ bool game_remove_bill(Game *game, int station_index, int bill)
     int x = station->x, y = station->y, z = station->z;
     ItemStack returned;
     if (workstation_remove_bill(&game->workstations, station_index, bill, &returned)) {
-        items_drop(&game->items, &game->map, x, y, z, returned);
+        items_drop_load(&game->items, &game->map, x, y, z, &returned);
     }
     return true;
 }
@@ -3636,7 +3666,7 @@ bool game_remove_construction(Game *game, int index)
     ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
     int count = constructions_remove(&game->constructions, index, returned);
     for (int i = 0; i < count; i++) {
-        items_drop(&game->items, &game->map, x, y, z, returned[i]);
+        items_drop_load(&game->items, &game->map, x, y, z, &returned[i]);
     }
     return true;
 }

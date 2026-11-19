@@ -302,11 +302,16 @@ int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
         return 1;
     case RECIPE_ROAST_RHIZOMES:
     case RECIPE_ROAST_CARROTS: {
-        /* One roasted root per raw one, no fresher than they were. */
+        /* One roasted root per raw one, keeping no longer than the raw ones
+         * would have (as long, though: a root about to rot does not rot
+         * sooner for being roasted). */
         out[0] = product(def->product, def->input_count, level, rng, cap);
-        int percent = item_stack_hit_points_percent(input);
-        if (out[0].count > 0 && item_stack_hit_points_percent(out[0]) > percent) {
-            out[0].hit_points = (uint16_t)item_hit_points_at_percent(def->product, percent);
+        float hours = item_stack_rot_hours(input, 1.0f);
+        if (out[0].count > 0 && hours >= 0.0f) {
+            int most = item_hit_points_lasting(def->product, hours);
+            if (out[0].hit_points > most) {
+                out[0].hit_points = (uint16_t)most;
+            }
         }
         return 1;
     }

@@ -57,8 +57,9 @@ typedef struct ConstructionSite {
     int16_t x, y, z;   /* The structure's head. */
     uint8_t direction; /* Direction: where its other tiles lie (core/structure.h). */
     int number;        /* Unique, never reused: tells a site from a later one in the same slot. */
-    /* Materials brought so far, per slot of the structure's definition (a
-     * slot keeps the lowest quality delivered). */
+    /* Materials brought so far, per slot of the structure's definition: the
+     * items of the loads delivered (the lowest quality among them caps the
+     * structure's), or numbers (keeping the lowest quality delivered). */
     ItemStack delivered[STRUCTURE_MATERIAL_SLOTS];
     /* Items of each slot on their way: promised by settlers fetching them. */
     uint16_t promised[STRUCTURE_MATERIAL_SLOTS];
@@ -187,7 +188,8 @@ const char *construction_name_key(const ConstructionSite *site);
 int constructions_place_refresh(Constructions *constructions, const Map *map, int x, int y, int z);
 
 /* Removes a site; its delivered materials are given back in `returned`.
- * Returns the number of stacks (the caller drops them). */
+ * Returns the number of stacks (the caller drops them with items_drop_load():
+ * loads, their items as they were). */
 int constructions_remove(Constructions *constructions, int index,
                          ItemStack returned[STRUCTURE_MATERIAL_SLOTS]);
 
@@ -240,8 +242,16 @@ bool construction_forbidden(const ConstructionSite *site, const Map *map);
  * (map_roof_supported(); its walls may still be sites). */
 bool construction_can_work(const ConstructionSite *site, const Map *map);
 
-/* Delivers items to the slot of their type; returns how many were taken. */
+/* Delivers items given as numbers to the slot of their type (a slot that
+ * holds items takes loads only); returns how many were taken. */
 int construction_deliver(Constructions *constructions, int index, ItemStack stack);
+
+/* Delivers the items of a settler's load (or of numbers) to the slot of
+ * their type: they move from `load` into the site, each as it was (given
+ * back as they were if the site is removed, used up when it is built).
+ * Returns how many moved. */
+int construction_deliver_load(Constructions *constructions, Items *items, int index,
+                              ItemStack *load);
 
 /*
  * Adds work to a site whose materials are all in. When the work is done, the

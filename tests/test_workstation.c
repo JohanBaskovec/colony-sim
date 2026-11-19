@@ -261,6 +261,45 @@ static void test_crafting(void)
     free_world(&map, &stations, &items);
 }
 
+static void test_crafting_with_a_load(void)
+{
+    Map map;
+    Workstations stations;
+    Items items;
+    REQUIRE(init_world(&map, &stations, &items));
+    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
+    int bill = workstation_add_bill(&stations, index, RECIPE_FLAKES);
+
+    /* A settler's load put down: the station holds its item until used up. */
+    ItemStack load = {.type = ITEM_NONE};
+    items_add(&items, 8, 8, 0, item_stack_make(ITEM_FLINT, 1, TEST_QUALITY_FINE, 0));
+    REQUIRE(items_pick_up(&items, 8, 8, 0, 1, &load) == 1);
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES, load));
+    const Workstation *station = workstation_get_const(&stations, index);
+    CHECK(station->work_input.held == load.held);
+    CHECK_EQ_INT(items.held_count, 1);
+    CHECK(workstation_add_craft_work(&stations, index, bill, &items, &map,
+                                     recipe_def(RECIPE_FLAKES)->work, 55.0, NULL));
+    CHECK_EQ_INT(items.held_count, 0);
+    CHECK_EQ_INT(items.totals[ITEM_FLINT], 0);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+
+    /* Called off: the input comes back as it was. */
+    load = (ItemStack){.type = ITEM_NONE};
+    items_add(&items, 8, 8, 0, item_stack_make(ITEM_FLINT, 1, TEST_QUALITY_SUPERB, 0));
+    REQUIRE(items_pick_up(&items, 8, 8, 0, 1, &load) == 1);
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES, load));
+    ItemStack returned = {0};
+    REQUIRE(workstation_remove_bill(&stations, index, bill, &returned));
+    CHECK(returned.held == load.held);
+    items_drop_load(&items, &map, 3, 5, 0, &returned);
+    CHECK_EQ_INT(items_get_of(&items, 3, 5, 0, ITEM_TYPE_BIT(ITEM_FLINT)).quality,
+                 TEST_QUALITY_SUPERB);
+    CHECK_EQ_INT(items.held_count, 0);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    free_world(&map, &stations, &items);
+}
+
 static void test_hash(void)
 {
     Map map;
@@ -304,6 +343,7 @@ int main(void)
     RUN_TEST(test_placing_and_removing);
     RUN_TEST(test_bills);
     RUN_TEST(test_crafting);
+    RUN_TEST(test_crafting_with_a_load);
     RUN_TEST(test_bill_inputs_after_tools);
     RUN_TEST(test_hash);
     return test_summary();

@@ -531,11 +531,21 @@ built), each item as it was. Searches ask for the types they want, pickups
 take those types; a hauler remembers the type it collects
 (`Colonist.haul_type`). Storage keeps one group per tile
 (`haul_storage_room()`): haulers bring items only to an empty tile or one
-holding the same group alone (a load dropped by a settler who gave up may
-still mix a storage tile). `items_check()` and `game_check_items()` check
+holding the same group alone, and items dropped keep off the storage tiles
+they would mix (`items_set_drop_filter()`, set by the game to
+`haul_drop_filter()`: a load put down, berries picked from a bramble on a
+stored heap, a craft's products). The holders of items keep the very items
+too: a settler's load, the input of a craft in progress
+(`Workstation.work_input`) and the materials delivered to a site
+(`ConstructionSite.delivered`, `construction_deliver_load()`), given back as
+they were when the craft or the site is called off and used up when it is
+done (`items_load_move()`); a hearth's fuel is kilograms, burnt as it goes.
+Settlers eat the items of a heap that rot away first
+(`items_soonest_rotting()`), and look for food that is about to rot by its
+worst item, not the heap's average. `items_check()` and `game_check_items()` check
 that all this stays consistent (lists, summaries, mixed marks, counts per
 level and type, forbidden tiles, every slot of the pool lying, held or free
-exactly once, loads matching their items): the long runs of
+exactly once, loads, craft inputs and site materials matching their items): the long runs of
 `test_item_simulation` call them every in-game hour, `bench_simulation` at
 the end (every hour with `BENCH_CHECK_ITEMS`). `Items.rotted` counts what
 rotted away, by type. There are also
@@ -549,7 +559,7 @@ unit: a 7 kg log, a 20 kg stone block, a 1 kg cobble, a 300 g handful of blackbe
 stone blocks, 666 cobbles); items of several types share it by bulk
 (`items_room()`). `items_drop()` fills the target tile, then
 spreads the rest breadth-first over nearby passable tiles (never behind a
-wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
+wall), on the tiles the drop filter accepts first. Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
 `RockDef.mined_item/mined_yield`, `PlantProduct.item` (the plant's stocks);
 gathering takes items from the plant's stocks (`plant_take_stock()`).
 

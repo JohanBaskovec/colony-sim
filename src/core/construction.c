@@ -514,6 +514,36 @@ bool construction_can_work(const ConstructionSite *site, const Map *map)
             map_roof_supported(map, site->x, site->y, site->z));
 }
 
+/* The slot of a site that takes items of `type` and still misses some (-1
+ * for none), and how many it misses. */
+static int delivery_slot(const ConstructionSite *site, ItemType type, int *missing)
+{
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        *missing = construction_missing(site, slot);
+        if ((construction_material_types(site, slot) & ITEM_TYPE_BIT(type)) && *missing > 0) {
+            return slot;
+        }
+    }
+    return -1;
+}
+
+int construction_deliver_load(Constructions *constructions, Items *items, int index,
+                              ItemStack *load)
+{
+    ConstructionSite *site = site_get(constructions, index);
+    int missing = 0;
+    int slot =
+        site != NULL && load->count > 0 ? delivery_slot(site, (ItemType)load->type, &missing) : -1;
+    if (slot < 0) {
+        return 0;
+    }
+    int moved = items_load_move(items, load, &site->delivered[slot], missing);
+    if (moved > 0) {
+        constructions->revision++;
+    }
+    return moved;
+}
+
 int construction_deliver(Constructions *constructions, int index, ItemStack stack)
 {
     ConstructionSite *site = site_get(constructions, index);
@@ -525,6 +555,9 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
         if (!(construction_material_types(site, slot) & ITEM_TYPE_BIT(stack.type)) ||
             missing <= 0) {
             continue;
+        }
+        if (site->delivered[slot].held != 0) {
+            return 0; /* Items: construction_deliver_load(). */
         }
         ItemStack taken = stack;
         taken.count = (uint16_t)(stack.count < missing ? stack.count : missing);
@@ -560,7 +593,19 @@ static void clear_items(Map *map, Items *items, int x, int y, int z)
 }
 
 /* A workstation site whose work is done becomes the station. */
-static bool finish_workstation(Constructions *constructions, const Map *map,
+/* Removes a site built: its materials are used up. */
+static void use_up_materials(Constructions *constructions, Items *items, int index)
+{
+    ItemStack used[STRUCTURE_MATERIAL_SLOTS];
+    int count = constructions_remove(constructions, index, used);
+    for (int i = 0; items != NULL && i < count; i++) {
+        if (used[i].held != 0) {
+            items_use_up(items, &used[i], used[i].count);
+        }
+    }
+}
+
+static bool finish_workstation(Constructions *constructions, const Map *map, Items *items,
                                Workstations *workstations, int index)
 {
     ConstructionSite *site = site_get(constructions, index);
@@ -573,8 +618,7 @@ static bool finish_workstation(Constructions *constructions, const Map *map,
         return false;
     }
     int priority = site->priority;
-    ItemStack unused[STRUCTURE_MATERIAL_SLOTS];
-    constructions_remove(constructions, index, unused); /* Used up. */
+    use_up_materials(constructions, items, index);
     int station = workstations_place(workstations, map, type, x, y, z);
     workstation_set_priority(workstations, station, priority);
     return true;
@@ -600,14 +644,22 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
         return false;
     }
     if (site->workstation != 0) {
-        return finish_workstation(constructions, map, workstations, index);
+        return finish_workstation(constructions, map, items, workstations, index);
     }
     int x = site->x, y = site->y, z = site->z;
     Direction direction = (Direction)site->direction;
     bool refresh = site->refresh;
-    ItemQuality cap = structure_quality_cap(type, site->delivered);
-    ItemStack unused[STRUCTURE_MATERIAL_SLOTS];
-    constructions_remove(constructions, index, unused); /* Used up. */
+    /* The worst material caps the structure. */
+    ItemStack materials[STRUCTURE_MATERIAL_SLOTS];
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        materials[slot] = site->delivered[slot];
+        if (items != NULL && materials[slot].held != 0) {
+            materials[slot].quality =
+                (uint8_t)items_load_lowest_quality(items, site->delivered[slot]);
+        }
+    }
+    ItemQuality cap = structure_quality_cap(type, materials);
+    use_up_materials(constructions, items, index);
     if (refresh) {
         map_set_structure_hit_points(map, x, y, z, INT16_MAX);
         return true;
@@ -650,11 +702,16 @@ bool construction_finish_now(Constructions *constructions, Map *map, Items *item
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         int missing = construction_missing(site, slot);
         if (missing > 0) {
-            construction_deliver(constructions, index,
-                                 item_stack_make(site->delivered[slot].count > 0
-                                                     ? (ItemType)site->delivered[slot].type
-                                                     : construction_material(site, slot),
-                                                 missing, ITEM_QUALITY_STANDARD, UINT16_MAX));
+            ItemStack made = item_stack_make(site->delivered[slot].count > 0
+                                                 ? (ItemType)site->delivered[slot].type
+                                                 : construction_material(site, slot),
+                                             missing, ITEM_QUALITY_STANDARD, UINT16_MAX);
+            if (items != NULL) {
+                construction_deliver_load(constructions, items, index, &made);
+                items_use_up(items, &made, made.count); /* (Nothing left: no more missing.) */
+            } else {
+                construction_deliver(constructions, index, made);
+            }
         }
     }
     return construction_add_work(constructions, map, items, workstations, index,
@@ -683,7 +740,7 @@ int constructions_wear_day(Constructions *constructions, Map *map, Items *items)
                     ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
                     int count = constructions_remove(constructions, site, returned);
                     for (int i = 0; items != NULL && i < count; i++) {
-                        items_drop(items, map, x, y, z, returned[i]);
+                        items_drop_load(items, map, x, y, z, &returned[i]);
                     }
                     map_set_structure(map, x, y, z, STRUCTURE_NONE);
                     gone++;

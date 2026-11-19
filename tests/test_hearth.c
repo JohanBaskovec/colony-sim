@@ -723,14 +723,29 @@ static void test_rain_puts_out_fires_in_the_open(void)
 
 static void test_roasting(void)
 {
-    /* One roasted root per raw one, no fresher than they were. */
+    /* One roasted root per raw one, keeping no longer than the raw ones
+     * would have: bruised rhizomes with six days left (of 15) make roasted
+     * ones as fresh as any (they keep 4 days)... */
     ItemStack raw = item_stack_make(ITEM_CATTAIL_RHIZOMES, 4, ITEM_QUALITY_STANDARD,
                                     item_hit_points_at_percent(ITEM_CATTAIL_RHIZOMES, 40));
     ItemStack out[RECIPE_PRODUCT_MAX];
     REQUIRE(recipe_craft(RECIPE_ROAST_RHIZOMES, raw, 90.0, NULL, out) == 1);
     CHECK_EQ_INT(out[0].type, ITEM_ROASTED_RHIZOMES);
     CHECK_EQ_INT(out[0].count, 4);
-    CHECK(item_stack_hit_points_percent(out[0]) <= 40);
+    CHECK_EQ_INT(item_stack_hit_points_percent(out[0]), 100);
+    /* ...and ones a day and a half from rotting away make roasted ones that
+     * last as long (not 10 % of 4 days: roasting does not hasten the rot). */
+    float raw_hours =
+        item_stack_rot_hours(item_stack_make(ITEM_CATTAIL_RHIZOMES, 4, ITEM_QUALITY_STANDARD,
+                                             item_hit_points_at_percent(ITEM_CATTAIL_RHIZOMES, 10)),
+                             1.0f);
+    raw.hit_points = (uint16_t)item_hit_points_at_percent(ITEM_CATTAIL_RHIZOMES, 10);
+    REQUIRE(recipe_craft(RECIPE_ROAST_RHIZOMES, raw, 90.0, NULL, out) == 1);
+    float roasted_hours = item_stack_rot_hours(out[0], 1.0f);
+    float per_hit_point = item_def(ITEM_ROASTED_RHIZOMES)->rot_days * 24.0f /
+                          (float)item_def(ITEM_ROASTED_RHIZOMES)->max_hit_points;
+    CHECK(roasted_hours >= raw_hours && roasted_hours < raw_hours + per_hit_point);
+    CHECK(item_stack_hit_points_percent(out[0]) < 100);
     CHECK(recipe_needs_fire(RECIPE_ROAST_RHIZOMES) && recipe_needs_fire(RECIPE_ROAST_CARROTS));
     CHECK_EQ_INT(recipe_def(RECIPE_ROAST_CARROTS)->product, ITEM_ROASTED_CARROTS);
 

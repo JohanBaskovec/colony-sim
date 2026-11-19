@@ -1375,6 +1375,38 @@ static void test_hungry_colonist_eats_spoiling_food_first(void)
     game_shutdown(&game);
 }
 
+static void test_hungry_colonist_eats_the_rotting_bottom_of_a_heap(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 23, 20, 0, item_stack_pristine(ITEM_HAZELNUTS, 20)); /* Keeps. */
+    /* A heap of fresh carrots, with three bruised ones at the bottom, hours
+     * from rotting away: the heap as a whole keeps (its average), they do not. */
+    items_add(&game.items, 32, 20, 0,
+              item_stack_make(ITEM_WILD_CARROTS, 3, ITEM_QUALITY_STANDARD, 1));
+    items_add(&game.items, 32, 20, 0, item_stack_pristine(ITEM_WILD_CARROTS, 40));
+    float hours = 0.0f;
+    REQUIRE(items_soonest_rotting(&game.items, 32, 20, 0, item_types_food(), &hours) ==
+            ITEM_WILD_CARROTS);
+    REQUIRE(hours < COLONIST_SPOILING_FOOD_HOURS);
+    Colonist *colonist = spawn_rested(&game, 20, 20);
+    REQUIRE(colonist != NULL);
+    colonist->needs[NEED_FOOD] = 0.2f;
+    game_tick(&game);
+    CHECK_EQ_INT(colonist->task, TASK_EAT);
+    CHECK_EQ_INT(colonist->target.x, 32);
+
+    /* The bruised ones are eaten first. */
+    for (int i = 0; i < 3000 && colonist->needs[NEED_FOOD] < 0.5f; i++) {
+        game_tick(&game);
+    }
+    int left = items_get_of(&game.items, 32, 20, 0, ITEM_TYPE_BIT(ITEM_WILD_CARROTS)).count;
+    CHECK(left > 0 && left < 40);
+    items_soonest_rotting(&game.items, 32, 20, 0, item_types_food(), &hours);
+    CHECK(hours > 20.0f * 24.0f * 0.9f); /* Only fresh ones left. */
+    game_shutdown(&game);
+}
+
 static void test_colonist_harvests_blackberries(void)
 {
     Game game;
@@ -2658,6 +2690,7 @@ int main(void)
     RUN_TEST(test_colonist_digs_down);
     RUN_TEST(test_colonist_climbs_a_ladder);
     RUN_TEST(test_hungry_colonist_eats_spoiling_food_first);
+    RUN_TEST(test_hungry_colonist_eats_the_rotting_bottom_of_a_heap);
     RUN_TEST(test_colonist_harvests_blackberries);
     RUN_TEST(test_starting_knowledge_is_random_and_valid);
     RUN_TEST(test_knowledge_levels_validate);

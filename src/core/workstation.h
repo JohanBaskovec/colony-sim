@@ -138,7 +138,8 @@ typedef struct Workstation {
     Bill bills[WORKSTATION_BILL_MAX];
     int bill_count;
     /* Craft in progress: its recipe (RECIPE_COUNT: none), the input put down
-     * on the station and the work done. */
+     * on the station (a settler's load: its items, each as it was, used up
+     * when the craft is done) and the work done. */
     uint8_t work_recipe;
     ItemStack work_input;
     float work_progress;
@@ -209,7 +210,8 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
 
 /*
  * Removes a station. The input of a craft in progress (unless free) is given back in
- * `returned`; returns the number of stacks (0 or 1). The caller drops them.
+ * `returned`; returns the number of stacks (0 or 1). The caller drops them
+ * (items_drop_load(): a load, its items as they were).
  */
 int workstations_remove(Workstations *workstations, int index, ItemStack returned[1]);
 
@@ -276,7 +278,9 @@ bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
 
 /*
  * Starts a craft of `recipe` with `input` (the station must hold no other
- * input). Returns false, changing nothing, if one is already in progress.
+ * input): a load, whose items the station holds from then on (the caller
+ * empties its own copy), or numbers. Returns false, changing nothing, if one
+ * is already in progress.
  */
 bool workstation_start_craft(Workstations *workstations, int index, RecipeType recipe,
                              ItemStack input);

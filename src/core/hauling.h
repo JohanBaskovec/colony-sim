@@ -49,6 +49,12 @@ typedef struct HaulJob {
  * per tile). */
 int haul_storage_room(const Items *items, int x, int y, int z, ItemStack stack);
 
+/* ItemDropFilter (items_set_drop_filter(), `data`: the Stockpiles): items
+ * dropped keep off the stockpile tiles that would not take them as they are
+ * (refused there, or another group lying there: a mixed heap). */
+bool haul_drop_filter(const void *data, const Items *items, int x, int y, int z,
+                      const ItemStack *load);
+
 /*
  * Items of `stack` a storage tile can take: none unless the tile is in a
  * stockpile accepting them and is empty or holds a matching stack the

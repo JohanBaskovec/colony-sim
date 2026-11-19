@@ -366,6 +366,53 @@ static void test_interrupted_hauler_drops_its_load(void)
     game_shutdown(&game);
 }
 
+static void test_dropped_load_keeps_off_storage(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    /* A food stockpile full of carrots but for its middle tile. */
+    int pile = stockpile_create(&game.stockpiles, &game.map, 20, 10, 22, 12, 0);
+    stockpile_set_allowed(&game.stockpiles, pile, item_types_food());
+    for (int y = 10; y <= 12; y++) {
+        for (int x = 20; x <= 22; x++) {
+            if (x != 21 || y != 11) {
+                items_add(&game.items, x, y, 0, item_stack_pristine(ITEM_WILD_CARROTS, 5));
+            }
+        }
+    }
+    items_add(&game.items, 5, 5, 0, item_stack_pristine(ITEM_STONE_BLOCK, 10));
+    items_add(&game.items, 5, 6, 0, item_stack_pristine(ITEM_WILD_CARROTS, 4));
+
+    /* Leaving with a load of blocks in hand, in the stockpile's middle: they
+     * land beside it, not in a mixed heap on the carrots. */
+    Colonist *colonist = spawn_hauler(&game, 21, 11);
+    REQUIRE(colonist != NULL);
+    REQUIRE(items_pick_up(&game.items, 5, 5, 0, 10, &colonist->carried) == 10);
+    REQUIRE(game_remove_colonist(&game, game_colonist_id_at(&game, 0)));
+    CHECK_EQ_INT(count_in(&game, 20, 10, 22, 12, ITEM_STONE_BLOCK), 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_STONE_BLOCK], 10);
+
+    /* Carrots are welcome there: on the free tile, or with the others. */
+    colonist = spawn_hauler(&game, 21, 11);
+    REQUIRE(colonist != NULL);
+    REQUIRE(items_pick_up(&game.items, 5, 6, 0, 4, &colonist->carried) == 4);
+    REQUIRE(game_remove_colonist(&game, game_colonist_id_at(&game, 0)));
+    CHECK_EQ_INT(count_in(&game, 20, 10, 22, 12, ITEM_WILD_CARROTS), 8 * 5 + 4);
+    /* Whatever drops items keeps off it too (berries picked from a bramble
+     * growing on a stored heap): every tile holds some other food now. */
+    CHECK_EQ_INT(
+        items_drop(&game.items, &game.map, 20, 10, 0, item_stack_pristine(ITEM_BLACKBERRIES, 5)),
+        5);
+    CHECK_EQ_INT(count_in(&game, 20, 10, 22, 12, ITEM_BLACKBERRIES), 0);
+    for (int y = 10; y <= 12; y++) {
+        for (int x = 20; x <= 22; x++) {
+            CHECK(!items_mixed(&game.items, x, y, 0));
+        }
+    }
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
 static void test_removed_destination_reroutes_the_hauler(void)
 {
     Game game;
@@ -869,6 +916,7 @@ int main(void)
     RUN_TEST(test_hauler_carries_what_it_can_and_comes_back);
     RUN_TEST(test_overloaded_hauler_drags_slowly);
     RUN_TEST(test_interrupted_hauler_drops_its_load);
+    RUN_TEST(test_dropped_load_keeps_off_storage);
     RUN_TEST(test_removed_destination_reroutes_the_hauler);
     RUN_TEST(test_destination_gone_without_alternative_drops_items);
     RUN_TEST(test_two_haulers_take_different_stacks);

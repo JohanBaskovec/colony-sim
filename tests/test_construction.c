@@ -189,6 +189,80 @@ static void test_delivering(void)
     free_world(&map, &constructions, &items);
 }
 
+/* A load of `count` items picked up from a heap added at (x, y). */
+static ItemStack load_of(Items *items, int x, int y, ItemStack stack)
+{
+    ItemStack load = {.type = ITEM_NONE};
+    items_add(items, x, y, 1, stack);
+    items_pick_up(items, x, y, 1, stack.count, &load);
+    return load;
+}
+
+static void test_delivering_loads(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    int index = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2, 0, DIRECTION_SOUTH);
+    const ConstructionSite *site = construction_get(&constructions, index);
+    /* The items of the loads move into the site, each as it was. */
+    ItemStack fine =
+        load_of(&items, 1, 1, item_stack_make(ITEM_BRANCHES, 3, TEST_QUALITY_FINE, 20));
+    ItemStack crude =
+        load_of(&items, 1, 2, item_stack_make(ITEM_BRANCHES, 4, TEST_QUALITY_CRUDE, 10));
+    REQUIRE(fine.held != 0 && crude.held != 0);
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, index, &fine), 3);
+    CHECK_EQ_INT(fine.count, 0);
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, index, &crude), 2);
+    CHECK_EQ_INT(crude.count, 2); /* Only what is missing. */
+    CHECK_EQ_INT(site->delivered[0].count, 5);
+    CHECK(site->delivered[0].held != 0);
+    CHECK(items_check_load(&items, site->delivered[0]));
+    CHECK_EQ_INT(items_load_lowest_quality(&items, site->delivered[0]), TEST_QUALITY_CRUDE);
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, index, &crude), 0); /* Full. */
+    CHECK_EQ_INT(construction_deliver(&constructions, index, item_stack_pristine(ITEM_BRANCHES, 1)),
+                 0);
+    CHECK_EQ_INT(items.held_count, 7);
+
+    /* Removed: given back as they were (not all at the lowest quality). */
+    ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
+    REQUIRE(constructions_remove(&constructions, index, returned) == 1);
+    items_drop_load(&items, &map, 3, 3, 0, &returned[0]);
+    ItemChoice fine_only = {TEST_QUALITY_FINE, TEST_QUALITY_FINE, false};
+    ItemChoice crude_only = {TEST_QUALITY_CRUDE, TEST_QUALITY_CRUDE, false};
+    CHECK_EQ_INT(items_count_chosen(&items, 3, 3, 0, ITEM_BRANCHES, fine_only), 3);
+    CHECK_EQ_INT(items_count_chosen(&items, 3, 3, 0, ITEM_BRANCHES, crude_only), 2);
+    CHECK_EQ_INT(items.held_count, 2);
+
+    /* Built: the lowest quality caps the wall, the items are used up. */
+    int wall = constructions_place(&constructions, &map, STRUCTURE_WALL, 6, 2, 0, DIRECTION_SOUTH);
+    items_pick_up(&items, 3, 3, 0, 2, &crude); /* The 2 crude left in hand + 2 more. */
+    ItemStack rest = {.type = ITEM_NONE};
+    items_pick_up(&items, 3, 3, 0, 1, &rest);
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, wall, &crude), 4);
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, wall, &rest), 1);
+    ItemStack grass = load_of(&items, 1, 3, item_stack_pristine(ITEM_GRASS, 24));
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, wall, &grass), 24);
+    CHECK(construction_add_work(&constructions, &map, &items, NULL, wall, 1.0e6f,
+                                KNOWLEDGE_LEVEL_MAX, NULL));
+    CHECK_EQ_INT(map_structure_quality(&map, 6, 2, 0), TEST_QUALITY_ROUGH);
+    CHECK_EQ_INT(items.held_count, 0);
+    CHECK_EQ_INT(items.totals[ITEM_BRANCHES], 2); /* Left lying. */
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+
+    /* Finished at once (debug): the missing materials are made, then used up. */
+    int bed =
+        constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 9, 9, 0, DIRECTION_SOUTH);
+    ItemStack some = load_of(&items, 1, 4, item_stack_pristine(ITEM_GRASS, 5));
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, bed, &some), 5);
+    CHECK(construction_finish_now(&constructions, &map, &items, NULL, bed, KNOWLEDGE_LEVEL_MAX,
+                                  NULL));
+    CHECK_EQ_INT(items.held_count, 0);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    free_world(&map, &constructions, &items);
+}
+
 static void test_building(void)
 {
     Map map;
@@ -834,6 +908,7 @@ int main(void)
     RUN_TEST(test_map_layer);
     RUN_TEST(test_placing_and_removing);
     RUN_TEST(test_delivering);
+    RUN_TEST(test_delivering_loads);
     RUN_TEST(test_building);
     RUN_TEST(test_hash);
     RUN_TEST(test_quality_and_hit_points);

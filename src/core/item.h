@@ -217,6 +217,12 @@ typedef struct Item {
  * wild, progress counts the hours it has lain (see ItemDef.litter_days). */
 #define ITEM_FLAG_WILD 0x01u
 
+struct Items;
+
+/* Whether items dropped may land on a tile (items_set_drop_filter()). */
+typedef bool (*ItemDropFilter)(const void *data, const struct Items *items, int x, int y, int z,
+                               const ItemStack *load);
+
 typedef struct Items {
     int width;
     int height;
@@ -261,6 +267,10 @@ typedef struct Items {
     /* Items of each type that rotted away on the ground (statistics: not in
      * the state hash). */
     long rotted[ITEM_TYPE_COUNT];
+    /* Tiles that dropped items keep off when they can (items_set_drop_filter()),
+     * and the data passed to it. */
+    ItemDropFilter drop_filter;
+    const void *drop_data;
 } Items;
 
 /* Items dropped by a single action spread at most this far (in steps). */
@@ -331,6 +341,10 @@ ItemStack item_stack_pristine(ItemType type, int count);
 
 /* Hit points of an item of `type` at `percent` of its maximum (at least 1). */
 int item_hit_points_at_percent(ItemType type, int percent);
+
+/* The fewest hit points an item of `type` keeps `hours` with at rot ×1 (at
+ * least 1, at most its maximum: the maximum for a type that never rots). */
+int item_hit_points_lasting(ItemType type, float hours);
 
 /* Hit points of the stack's items in percent of the maximum, rounded down
  * (100 only when undamaged); 0 for an empty stack. */
@@ -450,8 +464,24 @@ int items_put(Items *items, int x, int y, int z, ItemStack *load);
  * room is lost. The load is empty afterwards. Returns how many found room. */
 int items_drop_load(Items *items, const struct Map *map, int x, int y, int z, ItemStack *load);
 
+/* Items dropped (items_drop(), items_drop_load(), items_move_all()) land on
+ * the tiles `filter` accepts when there is room on some within reach, on
+ * any tile otherwise: storage that would get mixed is kept clear (the game
+ * sets haul_drop_filter()). NULL: any tile. */
+void items_set_drop_filter(Items *items, ItemDropFilter filter, const void *data);
+
 /* `count` items of a load are used up (eaten, burnt, built in): gone. */
 void items_use_up(Items *items, ItemStack *load, int count);
+
+/* Moves up to `count` items from the load `from` to the load `to` (empty, or
+ * of the same group), each as it is: a settler's load handed over to a site
+ * or a workstation. Loads that are only numbers become items first.
+ * Returns how many moved. */
+int items_load_move(Items *items, ItemStack *from, ItemStack *to, int count);
+
+/* The lowest quality among the items of a load (its own quality when it is
+ * only numbers); ITEM_QUALITY_WORST for an empty one. */
+int items_load_lowest_quality(const Items *items, ItemStack load);
 
 /* The items of a load, newest first: as items_first() and items_next(). */
 const Item *items_load_first(const Items *items, ItemStack load);
@@ -530,6 +560,13 @@ int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, I
  * when none rots. */
 float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemType type,
                               ItemChoice choice);
+
+/* The item of a tile among `types` (not wild, not a body) that rots away
+ * soonest: its type, and in `hours` (when not NULL) the hours it has left at
+ * rot ×1 (item_stack_rot_hours()). ITEM_NONE (hours negative) when none of
+ * them rots. */
+ItemType items_soonest_rotting(const Items *items, int x, int y, int z, ItemTypeMask types,
+                               float *hours);
 
 /* items_pick_up_of() for one type, only items in the choice's range, those
  * that rot away soonest first when it says so. */

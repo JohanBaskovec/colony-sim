@@ -542,7 +542,7 @@ food. Fire must be lit, fed and watched.*
 | Make torch        | 1 branches  | —     | Crafting spot | 125 (0.05 h) | 50 | 1 torch |
 | Fire-harden       | 1 hardenable item | — | Burning hearth | 750 (0.3 h) | 55 | 1 hardened item |
 | Grill meat        | 4 raw meat  | —     | Burning hearth | 375 (0.15 h) | 50 | 4 grilled meat |
-| Roast rhizomes    | 4 cattail rhizomes | — | Burning hearth | 250 (0.1 h)  | Fire 50 | 4 roasted rhizomes, no fresher than the raw ones |
+| Roast rhizomes    | 4 cattail rhizomes | — | Burning hearth | 250 (0.1 h)  | Fire 50 | 4 roasted rhizomes, keeping no longer than the raw ones would have (as long at most: a root about to rot roasted rots no sooner) |
 | Roast wild carrots | 4 wild carrots | — | Burning hearth | 250 (0.1 h)  | Fire 50 | 4 roasted carrots, same |
 | Light by friction | 1 twigs, 1 grass | — | Unlit hearth | 750 (0.3 h) per attempt | 50 | a fire, with probability `30% + 1.4% × (L − 50)` (30% to 100%) |
 | Carry fire        | —           | —     | Burning fire → unlit hearth | 50 | 50 | a fire, always |

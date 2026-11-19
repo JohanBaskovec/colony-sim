@@ -489,6 +489,9 @@ bool workstation_add_craft_work(Workstations *workstations, int index, int bill,
     for (int i = 0; i < count; i++) {
         items_drop(items, map, station->x, station->y, station->z, products[i]);
     }
+    if (station->work_input.held != 0) { /* Its items are used up. */
+        items_use_up(items, &station->work_input, station->work_input.count);
+    }
     station->work_input = (ItemStack){.type = ITEM_NONE};
     station->work_recipe = RECIPE_COUNT;
     station->work_progress = 0.0f;

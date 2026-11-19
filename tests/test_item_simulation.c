@@ -93,9 +93,11 @@ static void test_cooking(void)
     REQUIRE(init_colony(&game, 96, 8, SCENARIO_COOKING, 0.0f));
     CHECK_EQ_INT(run_checked(&game, 2 * HOURS_PER_DAY), 2 * HOURS_PER_DAY);
     CHECK(crafts_done(&game) > 0);
-    CHECK(game.items.totals[ITEM_ROASTED_CARROTS] + game.items.totals[ITEM_ROASTED_RHIZOMES] +
-              game.items.rotted[ITEM_ROASTED_CARROTS] + game.items.rotted[ITEM_ROASTED_RHIZOMES] >
-          0);
+    /* Eaten before they rot: roasting what rots first makes no roast that
+     * rots sooner, and settlers eat the items of a heap that rot first. */
+    CHECK_EQ_INT(
+        (int)(game.items.rotted[ITEM_ROASTED_CARROTS] + game.items.rotted[ITEM_ROASTED_RHIZOMES]),
+        0);
     game_shutdown(&game);
 }
 

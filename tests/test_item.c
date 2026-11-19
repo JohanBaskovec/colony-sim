@@ -143,6 +143,139 @@ static void test_drop_spreads_to_reachable_tiles(void)
     map_free(&map);
 }
 
+/* ItemDropFilter: tiles left of the column `*data` only. */
+static bool left_of(const void *data, const Items *items, int x, int y, int z,
+                    const ItemStack *load)
+{
+    (void)items;
+    (void)y;
+    (void)z;
+    (void)load;
+    return x < *(const int *)data;
+}
+
+static void test_drop_where_the_filter_allows(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    REQUIRE(items_init(&items, 16, 16, 1));
+    int limit = item_stack_limit(ITEM_STONE_BLOCK);
+
+    /* Only left of x = 7: the drop at (8, 8) lands on the nearest of those. */
+    int column = 7;
+    items_set_drop_filter(&items, left_of, &column);
+    ItemStack load = {.type = ITEM_NONE};
+    items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_STONE_BLOCK, limit));
+    REQUIRE(items_pick_up(&items, 1, 1, 0, limit, &load) == limit);
+    CHECK_EQ_INT(items_drop_load(&items, &map, 8, 8, 0, &load), limit);
+    CHECK_EQ_INT(load.count, 0);
+    CHECK_EQ_INT(items_get(&items, 6, 8, 0).count, limit);
+    for (int y = 0; y < 16; y++) {
+        for (int x = column; x < 16; x++) {
+            CHECK_EQ_INT(items_get(&items, x, y, 0).count, 0);
+        }
+    }
+    /* Moved off a tile the same way. */
+    CHECK_EQ_INT(items_move_all(&items, &map, 6, 8, 0, 8, 8, 0, true), limit);
+    CHECK_EQ_INT(items_get(&items, 6, 8, 0).count, limit);
+
+    /* No allowed tile within reach: put down anywhere, as without a filter. */
+    column = -1;
+    CHECK_EQ_INT(items_drop(&items, &map, 12, 12, 0, item_stack_pristine(ITEM_STONE_BLOCK, 3)), 3);
+    CHECK_EQ_INT(items_get(&items, 12, 12, 0).count, 3);
+    CHECK_EQ_INT((int)items.totals[ITEM_STONE_BLOCK], limit + 3);
+    items_set_drop_filter(&items, NULL, NULL);
+    CHECK_EQ_INT(items_drop(&items, &map, 12, 12, 0, item_stack_pristine(ITEM_STONE_BLOCK, 3)), 3);
+    CHECK_EQ_INT(items_get(&items, 12, 12, 0).count, 6);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    items_free(&items);
+    map_free(&map);
+}
+
+static void test_load_move(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 8, 8, 1));
+    ItemStack from = {.type = ITEM_NONE}, to = {.type = ITEM_NONE};
+    items_add(&items, 1, 1, 0, item_stack_make(ITEM_BRANCHES, 2, TEST_QUALITY_CRUDE, 10));
+    items_add(&items, 1, 1, 0, item_stack_make(ITEM_BRANCHES, 3, TEST_QUALITY_FINE, 20));
+    REQUIRE(items_pick_up(&items, 1, 1, 0, 5, &from) == 5);
+    CHECK_EQ_INT(items_load_lowest_quality(&items, from), TEST_QUALITY_CRUDE);
+    /* Each item keeps its own quality: no averages. */
+    CHECK_EQ_INT(items_load_move(&items, &from, &to, 3), 3);
+    CHECK_EQ_INT(to.count, 3);
+    CHECK_EQ_INT(from.count, 2);
+    CHECK_EQ_INT(to.quality * 3 + from.quality * 2, TEST_QUALITY_CRUDE * 2 + TEST_QUALITY_FINE * 3);
+    CHECK(items_check_load(&items, from) && items_check_load(&items, to));
+    CHECK_EQ_INT(items.held_count, 5); /* Still held: only moved. */
+    CHECK_EQ_INT(items_load_move(&items, &from, &to, 10), 2);
+    CHECK_EQ_INT(from.count, 0);
+    CHECK_EQ_INT(to.count, 5);
+    CHECK_EQ_INT(items_load_lowest_quality(&items, to), TEST_QUALITY_CRUDE);
+    CHECK_EQ_INT(items_load_move(&items, &from, &to, 1), 0); /* Nothing left. */
+    /* Another group is refused; numbers become items. */
+    ItemStack grass = item_stack_pristine(ITEM_GRASS, 2);
+    CHECK_EQ_INT(items_load_move(&items, &grass, &to, 2), 0);
+    ItemStack more = item_stack_make(ITEM_BRANCHES, 2, TEST_QUALITY_SUPERB, 20);
+    CHECK_EQ_INT(items_load_move(&items, &more, &to, 2), 2);
+    CHECK_EQ_INT(to.count, 7);
+    CHECK_EQ_INT(items.held_count, 7);
+    CHECK_EQ_INT(items_load_lowest_quality(&items, item_stack_make(ITEM_FLINT, 1, 42, 0)), 42);
+    CHECK_EQ_INT(items_load_lowest_quality(&items, (ItemStack){.type = ITEM_NONE}),
+                 ITEM_QUALITY_WORST);
+    items_use_up(&items, &to, to.count);
+    CHECK_EQ_INT(items.held_count, 0);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    items_free(&items);
+}
+
+static void test_hit_points_lasting(void)
+{
+    /* Roasted carrots keep 4 days with 15 hit points: 6.4 hours each. */
+    CHECK_EQ_INT(item_hit_points_lasting(ITEM_ROASTED_CARROTS, 96.0f), 15);
+    CHECK_EQ_INT(item_hit_points_lasting(ITEM_ROASTED_CARROTS, 500.0f), 15);
+    CHECK_EQ_INT(item_hit_points_lasting(ITEM_ROASTED_CARROTS, 6.4f), 1);
+    CHECK_EQ_INT(item_hit_points_lasting(ITEM_ROASTED_CARROTS, 7.0f), 2);
+    CHECK_EQ_INT(item_hit_points_lasting(ITEM_ROASTED_CARROTS, 0.0f), 1);
+    for (float hours = 1.0f; hours < 96.0f; hours += 5.0f) {
+        ItemStack stack = item_stack_make(ITEM_ROASTED_CARROTS, 1, ITEM_QUALITY_STANDARD,
+                                          item_hit_points_lasting(ITEM_ROASTED_CARROTS, hours));
+        CHECK(item_stack_rot_hours(stack, 1.0f) >= hours);
+    }
+    CHECK_EQ_INT(item_hit_points_lasting(ITEM_STONE_BLOCK, 1.0f),
+                 item_def(ITEM_STONE_BLOCK)->max_hit_points); /* Never rots. */
+    CHECK_EQ_INT(item_hit_points_lasting(ITEM_NONE, 1.0f), 0);
+}
+
+static void test_soonest_rotting(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 8, 8, 1));
+    float hours = 0.0f;
+    CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, item_types_food(), &hours), ITEM_NONE);
+    CHECK(hours < 0.0f);
+    items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_HAZELNUTS, 5));
+    items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_STONE_BLOCK, 5));
+    items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WILD_CARROTS, 5));
+    CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, item_types_food(), &hours),
+                 ITEM_WILD_CARROTS);
+    CHECK_NEAR(hours, 20.0f * 24.0f, 0.5f);
+    /* A bruised mushroom, the oldest item of the tile, under the rest. */
+    items_free(&items);
+    REQUIRE(items_init(&items, 8, 8, 1));
+    items_add(&items, 2, 2, 0, item_stack_make(ITEM_MUSHROOMS, 1, ITEM_QUALITY_STANDARD, 1));
+    items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_MUSHROOMS, 9));
+    items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WILD_CARROTS, 5));
+    CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, item_types_food(), NULL), ITEM_MUSHROOMS);
+    CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_WILD_CARROTS), &hours),
+                 ITEM_WILD_CARROTS);
+    CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_HAZELNUTS), &hours),
+                 ITEM_NONE); /* None there. */
+    CHECK_EQ_INT(items_soonest_rotting(&items, -1, 2, 0, item_types_food(), &hours), ITEM_NONE);
+    items_free(&items);
+}
+
 static void test_drop_without_room_loses_the_rest(void)
 {
     Map map;
@@ -1144,6 +1277,10 @@ int main(void)
     RUN_TEST(test_check_finds_inconsistencies);
     RUN_TEST(test_drop_spreads_to_reachable_tiles);
     RUN_TEST(test_drop_without_room_loses_the_rest);
+    RUN_TEST(test_drop_where_the_filter_allows);
+    RUN_TEST(test_soonest_rotting);
+    RUN_TEST(test_hit_points_lasting);
+    RUN_TEST(test_load_move);
     RUN_TEST(test_rot_definitions);
     RUN_TEST(test_rot_rate);
     RUN_TEST(test_rot_hours);

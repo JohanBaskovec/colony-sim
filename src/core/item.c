@@ -379,6 +379,19 @@ int item_hit_points_at_percent(ItemType type, int percent)
     return clampi(hit_points, 1, max);
 }
 
+int item_hit_points_lasting(ItemType type, float hours)
+{
+    if (!is_item_type(type)) {
+        return 0;
+    }
+    int max = ITEM_DEFS[type].max_hit_points;
+    if (!item_rots(type)) {
+        return max;
+    }
+    float hit_points = ceilf(hours * (float)max / (ITEM_DEFS[type].rot_days * 24.0f));
+    return hit_points < 1.0f ? 1 : (hit_points > (float)max ? max : (int)hit_points);
+}
+
 int item_stack_hit_points_percent(ItemStack stack)
 {
     if (!is_item_type((ItemType)stack.type) || stack.count == 0) {
@@ -1178,6 +1191,32 @@ float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemType 
     return soonest;
 }
 
+ItemType items_soonest_rotting(const Items *items, int x, int y, int z, ItemTypeMask types,
+                               float *hours)
+{
+    ItemType type = ITEM_NONE;
+    float soonest = -1.0f;
+    if (in_bounds(items, x, y, z)) {
+        size_t index = index_of(items, x, y, z);
+        for (const Item *item = items_first(items, index); item != NULL;
+             item = items_next(items, item)) {
+            if (item_wild(item) || item->corpse != 0 || !(types & ITEM_TYPE_BIT(item->type)) ||
+                !item_rots((ItemType)item->type)) {
+                continue;
+            }
+            float left = item_stack_rot_hours(item_as_stack(item), 1.0f);
+            if (type == ITEM_NONE || left < soonest) { /* Ties: the newest. */
+                type = (ItemType)item->type;
+                soonest = left;
+            }
+        }
+    }
+    if (hours != NULL) {
+        *hours = soonest;
+    }
+    return type;
+}
+
 int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int count,
                          ItemChoice choice, ItemStack *load)
 {
@@ -1276,6 +1315,44 @@ void items_use_up(Items *items, ItemStack *load, int count)
         free_slot(items, slot);
     }
     refresh_load(items, load);
+}
+
+int items_load_move(Items *items, ItemStack *from, ItemStack *to, int count)
+{
+    if (count <= 0 || !load_held(from) || (load_held(to) && !item_stacks_match(*to, *from))) {
+        return 0;
+    }
+    materialize(items, from);
+    if (load_held(to)) {
+        materialize(items, to);
+    }
+    int moved = 0;
+    while (moved < count && from->held != 0) {
+        uint32_t slot = from->held;
+        from->held = items->pool[slot - 1].next;
+        items->pool[slot - 1].next = to->held;
+        to->held = slot;
+        moved++;
+    }
+    refresh_load(items, from);
+    refresh_load(items, to);
+    return moved;
+}
+
+int items_load_lowest_quality(const Items *items, ItemStack load)
+{
+    if (!load_held(&load)) {
+        return ITEM_QUALITY_WORST;
+    }
+    if (load.held == 0) {
+        return load.quality;
+    }
+    int lowest = ITEM_QUALITY_BEST;
+    for (const Item *item = slot_item(items, load.held); item != NULL;
+         item = slot_item(items, item->next)) {
+        lowest = item->quality < lowest ? item->quality : lowest;
+    }
+    return lowest;
 }
 
 const Item *items_load_first(const Items *items, ItemStack load)
@@ -1653,9 +1730,11 @@ int items_pick_up_wild(Items *items, int x, int y, int z, ItemType type, int cou
     return taken;
 }
 
-/* Puts the items of a load down around (x, y) as items_drop_load() does;
- * what finds no room stays in the load. Returns how many found room. */
-static int spread_load(Items *items, const Map *map, int x, int y, int z, ItemStack *load)
+/* Puts the items of a load down around (x, y) as items_drop_load() does, on
+ * the tiles `filter` accepts (all when NULL); what finds no room stays in the
+ * load. Returns how many found room. */
+static int spread_load_where(Items *items, const Map *map, int x, int y, int z, ItemStack *load,
+                             ItemDropFilter filter)
 {
     enum { SIDE = 2 * ITEM_DROP_RADIUS + 1 };
     static const int DX[4] = {0, 1, 0, -1};
@@ -1673,7 +1752,8 @@ static int spread_load(Items *items, const Map *map, int x, int y, int z, ItemSt
             int cell = queue[head++];
             int cx = x + cell % SIDE - ITEM_DROP_RADIUS;
             int cy = y + cell / SIDE - ITEM_DROP_RADIUS;
-            if (!items_forbidden(items, cx, cy, z)) { /* Left alone. */
+            if (!items_forbidden(items, cx, cy, z) && /* Left alone. */
+                (filter == NULL || filter(items->drop_data, items, cx, cy, z, load))) {
                 placed += items_put(items, cx, cy, z, load);
             }
             for (int i = 0; i < 4; i++) {
@@ -1690,6 +1770,23 @@ static int spread_load(Items *items, const Map *map, int x, int y, int z, ItemSt
         }
     }
     return placed;
+}
+
+/* spread_load_where() with the drop filter first, then (what found no room
+ * on the tiles it accepts) anywhere. */
+static int spread_load(Items *items, const Map *map, int x, int y, int z, ItemStack *load)
+{
+    int placed = spread_load_where(items, map, x, y, z, load, items->drop_filter);
+    if (items->drop_filter != NULL && load->count > 0) {
+        placed += spread_load_where(items, map, x, y, z, load, NULL);
+    }
+    return placed;
+}
+
+void items_set_drop_filter(Items *items, ItemDropFilter filter, const void *data)
+{
+    items->drop_filter = filter;
+    items->drop_data = data;
 }
 
 int items_drop_load(Items *items, const Map *map, int x, int y, int z, ItemStack *load)

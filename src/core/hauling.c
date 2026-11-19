@@ -44,6 +44,14 @@ int haul_destination_room(const Stockpiles *stockpiles, const Items *items, int 
     return haul_storage_room(items, x, y, z, stack);
 }
 
+bool haul_drop_filter(const void *data, const Items *items, int x, int y, int z,
+                      const ItemStack *load)
+{
+    const Stockpiles *stockpiles = data;
+    return stockpile_at(stockpiles, x, y, z) == STOCKPILE_NONE ||
+           haul_destination_room(stockpiles, items, x, y, z, *load) > 0;
+}
+
 static void storage_levels(const HaulWorld *world, StorageLevels *out)
 {
     const Stockpiles *stockpiles = world->stockpiles;

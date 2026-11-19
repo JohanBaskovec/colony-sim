@@ -874,15 +874,17 @@ static bool is_free_spoiling_food(const Map *map, int x, int y, int z, void *use
 {
     const FoodSearch *search = userdata;
     ItemStack stack = items_get_allowed(search->items, x, y, z);
-    if (stack.type != ITEM_NONE && items_mixed(search->items, x, y, z)) {
-        stack = items_get_of(search->items, x, y, z, item_types_food()); /* The newest food. */
-    }
-    if (!item_is_food((ItemType)stack.type) || !item_rots((ItemType)stack.type)) {
+    if (stack.type == ITEM_NONE ||
+        (!item_is_food((ItemType)stack.type) && !items_mixed(search->items, x, y, z))) {
         return false;
     }
-    float hours = item_stack_rot_hours(
-        stack, temperature_rot_rate(search->temperatures, map, x, y, z, search->rains));
-    return hours >= 0.0f && hours < COLONIST_SPOILING_FOOD_HOURS &&
+    /* Its item that rots away first, however fresh the rest of the heap. */
+    float hours = -1.0f;
+    if (items_soonest_rotting(search->items, x, y, z, item_types_food(), &hours) == ITEM_NONE) {
+        return false;
+    }
+    float rate = temperature_rot_rate(search->temperatures, map, x, y, z, search->rains);
+    return rate > 0.0f && hours < COLONIST_SPOILING_FOOD_HOURS * rate &&
            !reservations_taken_by_other(search->reservations, RESERVATION_FOOD,
                                         (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
                                         search->self);
@@ -2239,7 +2241,8 @@ static void work(Colonist *colonist, const ColonistContext *context)
         ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
         int count = constructions_remove(context->constructions, site, returned);
         for (int i = 0; i < count; i++) {
-            items_drop(context->items, context->map, target.x, target.y, target.z, returned[i]);
+            items_drop_load(context->items, context->map, target.x, target.y, target.z,
+                            &returned[i]);
         }
     }
     if (done) {
@@ -2893,7 +2896,7 @@ static bool arrive_at_station(Colonist *colonist, const ColonistContext *context
                                             (RecipeType)colonist->recipe, colonist->carried)) {
             return false;
         } else {
-            items_use_up(context->items, &colonist->carried, colonist->carried.count);
+            colonist->carried = (ItemStack){.type = ITEM_NONE}; /* Its items: the station's. */
         }
     }
     colonist->station_phase = STATION_JOB_WORK;
@@ -3387,9 +3390,8 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
             return;
         }
         if (colonist->carried.count > 0) {
-            int taken =
-                construction_deliver(context->constructions, colonist->site, colonist->carried);
-            items_use_up(context->items, &colonist->carried, taken);
+            construction_deliver_load(context->constructions, context->items, colonist->site,
+                                      &colonist->carried);
             release_promise(colonist, context);
             if (colonist->carried.count > 0) {
                 set_idle(colonist, context, 0); /* No longer wanted: put down here. */
@@ -4931,12 +4933,18 @@ static void eat(Colonist *colonist, const ColonistContext *context)
     ItemType type;
     int eaten;
     if (item_is_food((ItemType)stack.type)) {
-        /* Items on the ground first. */
-        type = (ItemType)stack.type;
+        /* Items on the ground first: what rots away soonest. */
+        ItemType rotting = items_soonest_rotting(context->items, colonist->x, colonist->y,
+                                                 colonist->z, item_types_food(), NULL);
+        type = rotting != ITEM_NONE ? rotting : (ItemType)stack.type;
         int wanted = (int)ceilf(appetite / item_def(type)->nutrition);
-        eaten = items_remove_of(context->items, colonist->x, colonist->y, colonist->z,
-                                ITEM_TYPE_BIT(type), wanted > 1 ? wanted : 1);
-        mood_meal(mood, type, item_stack_hit_points_percent(stack));
+        ItemChoice choice = ITEM_CHOICE_ANY;
+        choice.soonest_rot = true;
+        ItemStack meal = {.type = ITEM_NONE};
+        eaten = items_pick_up_chosen(context->items, colonist->x, colonist->y, colonist->z, type,
+                                     wanted > 1 ? wanted : 1, choice, &meal);
+        mood_meal(mood, type, item_stack_hit_points_percent(meal));
+        items_use_up(context->items, &meal, meal.count);
     } else if (map_litter(map, colonist->x, colonist->y, colonist->z, ITEM_HAZELNUTS) > 0) {
         /* Then the nuts lying there. */
         type = ITEM_HAZELNUTS;

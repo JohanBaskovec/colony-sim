@@ -76,7 +76,9 @@ lets items overlap (a heap).
 - **Holders keep item lists**, not stacks: a settler's load, its tools, a
   site's delivered materials, a workstation's input, a hearth's fuel. Moving
   an item from one place to another changes its place and links; it is never
-  copied into an average.
+  copied into an average. (Done for loads, craft inputs and site materials;
+  a hearth's fuel stays kilograms, burnt as it goes, and tools are single
+  items kept as stacks of one: step 8.)
 
 ## 4. Performance
 
@@ -171,9 +173,7 @@ playable.
    no cost of its own in the profile (the group lookups are well under 1 %
    of the time); the runs differ from before because items now land where
    they are dropped (12 settlers gathering: within 3 %; 64 settlers
-   building: 18 % faster). Not yet: holders' item lists (delivered
-   materials, station inputs, fuel stay counts since they are used up) and
-   the region masks (not needed so far).
+   building: 18 % faster). Not yet: the region masks (not needed so far).
 7. **Checks** (done). `items_check()` (every item listed once on its own
    tile, summaries, mixed marks, counts per level and type, forbidden tiles,
    every slot of the pool lying, held or free exactly once) and
@@ -194,3 +194,32 @@ playable.
    (two kinds each, three at most); while building, 378 of 609 after eight
    days (grass, twigs and branches dropped together); 2 of 100 while
    cooking; 7 to 16 storage tiles mixed by dropped loads; no inconsistency.
+8. **Follow-ups found by the checked runs** (done).
+   - *Storage kept tidy.* Storage tiles got mixed by whatever dropped items
+     on them: loads put down by settlers who gave up, harvests from a plant
+     growing on a stored heap (the gathering zone covers the stockpile),
+     products. Items dropped now land first on the tiles a filter accepts
+     (`items_set_drop_filter()`; the game sets `haul_drop_filter()`: off the
+     stockpile tiles that would not take them as they are), anywhere when
+     none within reach has room. 0 storage tiles mixed in every scenario
+     (6 to 11 before).
+   - *Food eaten before it rots.* A heap is one group whatever the age of
+     its items: settlers ate its newest items and left the oldest at the
+     bottom to rot, and the search for food about to rot read the heap's
+     average. They now eat the items that rot away first
+     (`items_soonest_rotting()`, `ItemChoice.soonest_rot`) and see a heap by
+     its worst item. And roasting kept the share of life left: a carrot a
+     day from rotting (5 % of its 20 days) made a roast with 5 % of 4 days,
+     five hours, and the bills take what rots first. A roast now keeps as
+     long as the raw root would have, at most its own full life
+     (`item_hit_points_lasting()`). Cooking scenario, 4 days: 12 roasted
+     carrots of 16 crafts rotted, none now.
+   - *Holders keep the items.* The input of a craft in progress and the
+     materials delivered to a site are the settler's load handed over
+     (`items_load_move()`, `construction_deliver_load()`): given back as
+     they were when the craft or the site is called off (before: all at the
+     lowest quality delivered, at the average condition), used up when done;
+     the lowest quality among a site's materials still caps the structure
+     (`items_load_lowest_quality()`). A hearth's fuel stays kilograms: it
+     burns as it goes and is never given back. `game_check_items()` counts
+     these items too. The cooking scenario's state hash is unchanged.
