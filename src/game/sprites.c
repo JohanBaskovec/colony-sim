@@ -264,6 +264,11 @@ SpriteId sprite_item(ItemType type, unsigned variant)
     }
 }
 
+float sprite_item_scale(ItemType type)
+{
+    return type == ITEM_FLINT ? 0.5f : 1.0f; /* Nodules were too big at the artist's size. */
+}
+
 SpriteId sprite_animal(AnimalSpecies species, AnimalSex sex, AnimalPose pose)
 {
     return ANIMAL_FIRST +
@@ -378,6 +383,8 @@ struct Sprites {
     SDL_Texture *levels[SPRITE_LEVELS];
     int atlas_width, atlas_height; /* Of level 0. */
     SDL_Rect rects[SPRITE_COUNT];  /* Places in level 0. */
+    /* Where the picture is in each sprite (what is not transparent), in sprite pixels. */
+    SDL_Rect content[SPRITE_COUNT];
     /* Batch. */
     int level;
     float pixels_per_tile;
@@ -486,6 +493,27 @@ static void pack(Sprites *sprites, SDL_Surface *const surfaces[SPRITE_COUNT])
     sprites->atlas_height = shelf_y + shelf_height;
 }
 
+/* The smallest rectangle holding the pixels that are not (nearly) transparent. */
+static SDL_Rect content_bounds(const SDL_Surface *surface)
+{
+    int x0 = surface->w, y0 = surface->h, x1 = -1, y1 = -1;
+    for (int y = 0; y < surface->h; y++) {
+        const uint8_t *row = (const uint8_t *)surface->pixels + (size_t)y * (size_t)surface->pitch;
+        for (int x = 0; x < surface->w; x++) {
+            if (row[x * 4 + 3] > 24) {
+                x0 = SDL_min(x0, x);
+                x1 = SDL_max(x1, x);
+                y0 = SDL_min(y0, y);
+                y1 = SDL_max(y1, y);
+            }
+        }
+    }
+    if (x1 < 0) {
+        return (SDL_Rect){0, 0, surface->w, surface->h};
+    }
+    return (SDL_Rect){x0, y0, x1 - x0 + 1, y1 - y0 + 1};
+}
+
 static SDL_Texture *create_level_texture(SDL_Renderer *renderer, const Pixels *pixels)
 {
     SDL_Texture *texture = SDL_CreateTexture(
@@ -568,6 +596,9 @@ Sprites *sprites_create(SDL_Renderer *renderer, const char *assets_dir)
     for (int i = 0; i < SPRITE_COUNT && ok; i++) {
         surfaces[i] = load_sprite(assets_dir, i);
         ok = surfaces[i] != NULL;
+    }
+    for (int i = 0; i < SPRITE_COUNT && ok; i++) {
+        sprites->content[i] = content_bounds(surfaces[i]);
     }
     if (ok) {
         ok = build_atlas(sprites, surfaces);
@@ -683,11 +714,19 @@ void sprites_draw(Sprites *sprites, SpriteId id, float anchor_x, float anchor_y,
 void sprites_draw_rotated(Sprites *sprites, SpriteId id, float center_x, float center_y,
                           float degrees, SDL_FColor color, bool flip)
 {
+    sprites_draw_rotated_scaled(sprites, id, center_x, center_y, degrees, 1.0f, color, flip);
+}
+
+void sprites_draw_rotated_scaled(Sprites *sprites, SpriteId id, float center_x, float center_y,
+                                 float degrees, float scale, SDL_FColor color, bool flip)
+{
     if (id < 0 || id >= SPRITE_COUNT) {
         return;
     }
     float width, height;
     sprites_size(sprites, id, &width, &height);
+    width *= scale;
+    height *= scale;
     float radians = degrees * (SDL_PI_F / 180.0f);
     float c = SDL_cosf(radians), s = SDL_sinf(radians);
     static const float SIGNS[4][2] = {{-1.0f, -1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f}, {-1.0f, 1.0f}};
@@ -699,6 +738,25 @@ void sprites_draw_rotated(Sprites *sprites, SpriteId id, float center_x, float c
         corners[i] = (SDL_FPoint){center_x + x * c - y * s, center_y + x * s + y * c};
     }
     queue_quad(sprites, id, corners, color, flip);
+}
+
+void sprites_draw_fitted(Sprites *sprites, SpriteId id, SDL_FRect rect, SDL_FColor color)
+{
+    if (id < 0 || id >= SPRITE_COUNT) {
+        return;
+    }
+    const SDL_Rect *content = &sprites->content[id];
+    float fit = SDL_min(rect.w / (float)content->w, rect.h / (float)content->h);
+    sprites_begin(sprites, fit * (float)SPRITE_PIXELS_PER_TILE); /* Flushes what was queued. */
+    /* The picture's middle on the rectangle's. */
+    float center_x =
+        rect.x + rect.w * 0.5f -
+        ((float)content->x + (float)content->w * 0.5f - (float)sprites->rects[id].w * 0.5f) * fit;
+    float center_y =
+        rect.y + rect.h * 0.5f -
+        ((float)content->y + (float)content->h * 0.5f - (float)sprites->rects[id].h * 0.5f) * fit;
+    sprites_draw_scaled(sprites, id, center_x, center_y, 1.0f, color);
+    sprites_flush(sprites);
 }
 
 void sprites_draw_scaled(Sprites *sprites, SpriteId id, float center_x, float center_y, float scale,

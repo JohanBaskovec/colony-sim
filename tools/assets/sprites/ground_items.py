@@ -14,6 +14,7 @@ CENTER = (64.0, 66.0)        # where the middle of the item lands in the tile
 OUT_W = 1.7                  # outline thickness (total extra stroke width)
 SUN = (-0.45, -0.9)          # light comes from the upper left
 SHADOW = (1.2, 2.6)          # offset of the shadow on the ground
+SHADOW_OPACITY = 0.0         # 0: no shadow in the sprite (the item is turned in the game)
 
 # twig (same bark palette as branch.py)
 BARK_OUTLINE = "#2a1d14"
@@ -83,7 +84,9 @@ def rim_masks(prefix, d, dx, dy):
 
 
 def shadow(d):
-    return (f'<g opacity="0.22" transform="translate({SHADOW[0]},{SHADOW[1]})">'
+    if SHADOW_OPACITY <= 0.0:
+        return ""
+    return (f'<g opacity="{SHADOW_OPACITY}" transform="translate({SHADOW[0]},{SHADOW[1]})">'
             f'<path d="{d}" fill="#000" stroke="#000" stroke-width="{OUT_W}" stroke-linejoin="round"/></g>')
 
 

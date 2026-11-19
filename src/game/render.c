@@ -1584,6 +1584,21 @@ static void icon_quad(SDL_Renderer *renderer, ItemType type, float cx, float cy,
 #define ITEMS_DRAWN_PER_TILE 10
 #define ITEMS_FAR_TILE_PIXELS 10.0f
 
+/* Queues the sprite of an item lying at (cx, cy), turned its way. */
+static void draw_item_sprite(Sprites *sprites, SpriteId sprite, const Item *item, float cx,
+                             float cy)
+{
+    SDL_FColor tint = item->type == ITEM_WET_TWIGS ? WET_TWIG_TINT : WHITE;
+    sprites_draw_rotated_scaled(sprites, sprite, cx, cy, (float)item->angle * 360.0f / 256.0f,
+                                sprite_item_scale((ItemType)item->type), tint, false);
+}
+
+/* The sprite an item lying about is drawn with (-1: its icon). */
+static SpriteId item_sprite(const Item *item)
+{
+    return sprite_item((ItemType)item->type, (unsigned)item->spot_x * 7u + item->spot_y);
+}
+
 void render_items(SDL_Renderer *renderer, Sprites *sprites, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
@@ -1620,17 +1635,14 @@ void render_items(SDL_Renderer *renderer, Sprites *sprites, const Game *game, co
                 float cx = tile.x + tile.w * ((float)item->spot_x + 0.5f) / 256.0f;
                 float cy = tile.y + tile.h * ((float)item->spot_y + 0.5f) / 256.0f;
                 /* Items with a sprite of their own: its shape follows the spot. */
-                SpriteId sprite =
-                    sprite_item((ItemType)item->type, (unsigned)item->spot_x * 7u + item->spot_y);
+                SpriteId sprite = item_sprite(item);
                 if (sprite >= 0) {
                     if (!in_sprites) { /* Whatever came before is drawn first. */
                         batch_flush(renderer);
                         icon_flush(renderer);
                         in_sprites = true;
                     }
-                    SDL_FColor tint = item->type == ITEM_WET_TWIGS ? WET_TWIG_TINT : WHITE;
-                    sprites_draw_rotated(sprites, sprite, cx, cy,
-                                         (float)item->angle * 360.0f / 256.0f, tint, false);
+                    draw_item_sprite(sprites, sprite, item, cx, cy);
                     continue;
                 }
                 if (in_sprites) {
@@ -2358,8 +2370,17 @@ static void zone_remove_icon(SDL_Renderer *renderer, SDL_FRect rect, SDL_Color c
     batch_flush(renderer);
 }
 
-void render_item_icon(SDL_Renderer *renderer, SDL_FRect rect, ItemType type)
+void render_item_icon(SDL_Renderer *renderer, Sprites *sprites, SDL_FRect rect, ItemType type)
 {
+    SpriteId sprite = sprite_item(type, 0);
+    if (sprite >= 0) { /* Its sprite, the picture filling most of the rectangle. */
+        float margin = SDL_floorf(SDL_min(rect.w, rect.h) * 0.1f);
+        sprites_draw_fitted(sprites, sprite,
+                            (SDL_FRect){rect.x + margin, rect.y + margin, rect.w - 2.0f * margin,
+                                        rect.h - 2.0f * margin},
+                            type == ITEM_WET_TWIGS ? WET_TWIG_TINT : WHITE);
+        return;
+    }
     render_item_stack(renderer, &rect, type);
     batch_flush(renderer);
 }
@@ -3139,8 +3160,8 @@ static void ring(SDL_Renderer *renderer, float cx, float cy, float radius, SDL_C
     SDL_RenderLines(renderer, points, ITEM_RING_SEGMENTS + 1);
 }
 
-void render_item_selection(SDL_Renderer *renderer, const Camera *camera, int x, int y,
-                           const Item *item)
+void render_item_selection(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera, int x,
+                           int y, const Item *item)
 {
     if (item == NULL) {
         return;
@@ -3149,7 +3170,12 @@ void render_item_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
     float cx = tile.x + tile.w * ((float)item->spot_x + 0.5f) / 256.0f;
     float cy = tile.y + tile.h * ((float)item->spot_y + 0.5f) / 256.0f;
     float size = tile.w * item_drawn_size((ItemType)item->type);
-    if (item_icons_ready(renderer)) { /* On top of what lies over it. */
+    SpriteId sprite = item_sprite(item);
+    if (sprite >= 0) { /* On top of what lies over it. */
+        sprites_begin(sprites, camera->zoom);
+        draw_item_sprite(sprites, sprite, item, cx, cy);
+        sprites_flush(sprites);
+    } else if (item_icons_ready(renderer)) {
         icon_quad(renderer, (ItemType)item->type, cx, cy, size, (float)item->angle / 256.0f);
         icon_flush(renderer);
     }

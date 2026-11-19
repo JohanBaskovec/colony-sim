@@ -169,8 +169,8 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
 
 /* A selected item lying on the ground: drawn again over whatever covers it,
  * with a ring around it (where a click picks it). */
-void render_item_selection(SDL_Renderer *renderer, const Camera *camera, int x, int y,
-                           const Item *item);
+void render_item_selection(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera, int x,
+                           int y, const Item *item);
 
 /* Releases the buffers the renderer allocated on first use. */
 /* Icons of the build menu, drawn inside `rect`. */
@@ -199,7 +199,7 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon);
 void render_structure_icon(SDL_Renderer *renderer, SDL_FRect rect, StructureType type);
 
 /* A stack of items as it lies on the ground, filling `rect` (the resources list). */
-void render_item_icon(SDL_Renderer *renderer, SDL_FRect rect, ItemType type);
+void render_item_icon(SDL_Renderer *renderer, Sprites *sprites, SDL_FRect rect, ItemType type);
 
 /* A colonist's head and shoulders filling `rect` (the colonist bar). */
 void render_colonist_portrait(SDL_Renderer *renderer, Sprites *sprites, const Colonist *colonist,

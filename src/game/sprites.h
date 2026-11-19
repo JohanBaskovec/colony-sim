@@ -56,6 +56,9 @@ SpriteId sprite_tool(ItemType type);
  * a type has: the same item always gets the same one. Drawn centered, with
  * sprites_draw_rotated(). */
 SpriteId sprite_item(ItemType type, unsigned variant);
+/* How much bigger than the sprite's own size an item of this type is drawn
+ * (flint nodules are drawn smaller than they were painted). */
+float sprite_item_scale(ItemType type);
 /* An animal seen from the side, facing right (mirror it when it faces left):
  * standing, eating (head down) or asleep (lying); and standing seen from the
  * front and from behind, for one that walks down or up the screen. */
@@ -99,6 +102,15 @@ void sprites_draw(Sprites *sprites, SpriteId id, float anchor_x, float anchor_y,
  * around its center (after mirroring when `flip`). */
 void sprites_draw_rotated(Sprites *sprites, SpriteId id, float center_x, float center_y,
                           float degrees, SDL_FColor color, bool flip);
+
+/* sprites_draw_rotated() `scale` times the size of the sprite. */
+void sprites_draw_rotated_scaled(Sprites *sprites, SpriteId id, float center_x, float center_y,
+                                 float degrees, float scale, SDL_FColor color, bool flip);
+
+/* Draws a sprite at once (flushing what was queued) as big as can be while
+ * its picture, the part that is not transparent, stays within `rect`
+ * (centered on it): the icon of an item in a list. */
+void sprites_draw_fitted(Sprites *sprites, SpriteId id, SDL_FRect rect, SDL_FColor color);
 
 /* Queues a sprite centered on a screen position, `scale` times its size. */
 void sprites_draw_scaled(Sprites *sprites, SpriteId id, float center_x, float center_y, float scale,

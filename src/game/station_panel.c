@@ -932,10 +932,10 @@ static void item_picture_tooltip(Ui *ui, ItemType type)
 }
 
 /* An item picture on its well, `size` wide. */
-static void item_picture(Ui *ui, SDL_FRect rect, ItemType type)
+static void item_picture(App *app, SDL_FRect rect, ItemType type)
 {
-    ui_fill(ui, rect, ui->theme.colors[THEME_ICON_WELL]);
-    render_item_icon(ui->renderer, rect, type);
+    ui_fill(&app->ui, rect, app->ui.theme.colors[THEME_ICON_WELL]);
+    render_item_icon(app->renderer, app->sprites, rect, type);
 }
 
 /* The window of recipes to add, one per row: the picture of what it makes,
@@ -984,7 +984,7 @@ static void add_rows(UiLayout *layout, void *userdata)
                 ui_fill(ui, row, ui->theme.colors[THEME_SCROLL_TRACK]);
             }
             float middle = row.y + row_height * 0.5f;
-            item_picture(ui,
+            item_picture(app,
                          (SDL_FRect){row.x, SDL_roundf(middle - product_size * 0.5f), product_size,
                                      product_size},
                          def->product);
@@ -1007,7 +1007,7 @@ static void add_rows(UiLayout *layout, void *userdata)
                 float top = SDL_roundf(middle - (cost_size + line) * 0.5f);
                 SDL_FRect picture = {SDL_roundf(x + (cell - cost_size) * 0.5f), top, cost_size,
                                      cost_size};
-                item_picture(ui, picture, type);
+                item_picture(app, picture, type);
                 ui_label(ui, number, x + (cell - ui_text_width(ui, number)) * 0.5f,
                          top + cost_size);
                 if (ui_hovered(ui, (SDL_FRect){x, top, cell, cost_size + line})) {

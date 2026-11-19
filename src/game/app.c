@@ -1958,14 +1958,15 @@ static void render_frame(App *app)
         ItemPick pick = app->selected_item;
         const Item *item = game_pick_item(&app->game, &pick);
         if (item != NULL && pick.z == app->camera.level) {
-            render_item_selection(app->renderer, &app->camera, pick.x, pick.y, item);
+            render_item_selection(app->renderer, app->sprites, &app->camera, pick.x, pick.y, item);
         }
     } else if (app->tile_selected && app->selected_thing == THING_ITEM_BOX) {
         for (int i = 0; i < app->selected_box_item_count; i++) {
             ItemPick pick = app->selected_box_items[i];
             const Item *item = game_pick_item(&app->game, &pick);
             if (item != NULL && pick.z == app->camera.level) {
-                render_item_selection(app->renderer, &app->camera, pick.x, pick.y, item);
+                render_item_selection(app->renderer, app->sprites, &app->camera, pick.x, pick.y,
+                                      item);
             }
         }
     } else if (app->tile_selected && app->selected_thing == THING_PLANT_BOX) {

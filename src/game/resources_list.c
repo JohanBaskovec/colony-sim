@@ -166,7 +166,7 @@ static int draw_row(App *app, const ListLayout *list, const Row *row, float y)
     float left = list->x + list->padding + list->indent;
     SDL_FRect well = {left, y + 1.0f, icon - 2.0f, icon - 2.0f};
     ui_fill(ui, well, ui->theme.colors[THEME_ICON_WELL]);
-    render_item_icon(app->renderer, well, row->type);
+    render_item_icon(app->renderer, app->sprites, well, row->type);
     row_text(ui, list, left + icon + ui->theme.gap, y, tr(item_def(row->type)->name_key),
              app->game.stock[row->type], true);
     if (hovered) {

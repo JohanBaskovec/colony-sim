@@ -23,6 +23,7 @@ CENTER = (64.0, 66.0)        # where the middle of the branch lands in the tile
 OUT_W = 1.7                  # outline thickness (total extra stroke width)
 SUN = (-0.45, -0.9)          # light comes from the upper left
 SHADOW = (1.2, 2.8)          # offset of the shadow on the ground
+SHADOW_OPACITY = 0.0         # 0: no shadow in the sprite (the item is turned in the game)
 
 
 def lerp(a, b, t):
@@ -146,8 +147,10 @@ def branch(angle, spec, seed):
     order = sorted(limbs, key=lambda l: -l.depth)                  # twigs first, main limb on top
 
     shapes = " ".join(poly(l.ribbon(), True) for l in limbs) + " " + " ".join(poly(c, True) for c in cuts)
-    s = f'<g opacity="0.22" transform="translate({SHADOW[0]},{SHADOW[1]})">'
-    s += f'<path d="{shapes}" fill="#000" stroke="#000" stroke-width="{OUT_W}" stroke-linejoin="round"/></g>'
+    s = ""
+    if SHADOW_OPACITY > 0.0:
+        s += f'<g opacity="{SHADOW_OPACITY}" transform="translate({SHADOW[0]},{SHADOW[1]})">'
+        s += f'<path d="{shapes}" fill="#000" stroke="#000" stroke-width="{OUT_W}" stroke-linejoin="round"/></g>'
     s += '<g stroke-linejoin="round" stroke-linecap="round">'
     s += f'<path d="{shapes}" fill="{OUTLINE}" stroke="{OUTLINE}" stroke-width="{OUT_W}"/>'
     for c in cuts:
