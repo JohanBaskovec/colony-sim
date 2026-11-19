@@ -10,9 +10,11 @@ This document is the design of a sun that stands somewhere in the sky and of
 the shadows the solid blocks of the world cast, first on screen, then in the
 simulation (plants, soil, temperature).
 
-Status: steps 1 to 3 are implemented (`core/sun.h`: the sun's direction
+Status: steps 1 to 4 are implemented (`core/sun.h`: the sun's direction
 and its rays; `core/shadow.h` and `render_daylight()`: the shadows on
-screen); the rest is design. Values marked *(tuning)* are first guesses.
+screen; `core/sky.h`, `core/fire_light.h` and the doors of `core/map.h`:
+the light of the sky and of fires, on screen); the rest is design. Values
+marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -433,8 +435,8 @@ Each step is tested and leaves the game playable.
    still shows the simulation's light (what the plants get): it shows the
    new light with step 5, when the simulation takes it. Measured with
    `--bench-render` (§4.2).
-4. **The light of the sky and doors** (core, then on screen): `open` per
-   tile from the rays of §3.2, kept and worked out again around what
+4. **The light of the sky and doors** (core, then on screen, done): `open`
+   per tile from the rays of §3.2, kept and worked out again around what
    changes; `MAP_LIGHT_ROOF` goes; doors open and close (while somebody
    passes, or kept open) and let the light and the sight through when open;
    the light of fires stops at walls (§3.3). On screen only at first: closed
@@ -444,6 +446,28 @@ Each step is tested and leaves the game playable.
    posts, a cave three tiles in, open ground at 1, the foot of a cliff near
    a half; sight through an open door and not through a closed one; no light
    from a fire behind a wall, some through the open door.
+   As built: `sky_open()` casts its 16 rays (straight up, then rings of
+   five at 67.5°, 45° and 25°, each weighted by its band of the dome) with
+   `light_ray()` (about 3 µs a column on a generated map); a `SkyField`
+   keeps the value of the surface drawn on each column for the level shown
+   and works out again, 1 ms a frame, the columns whose blocks of
+   `Map.light_stamps` changed within `SKY_REACH`. A corner of the shade takes the mean of the floors around
+   it, the blocks' only when no floor touches it: the top of a wall in the
+   open does not light the edge of a dark room. Fires: `fire_light_seen()`
+   casts a ray from each point of the fine texture to the flame (0.5 m over
+   its floor, 3D distance, up and down), a wall taking the light of its best
+   lit face; a `FireLight` keeps it per fire and points until the fire, the
+   level shown or the map within its reach changes (`FIRE_WORK_RAYS` a
+   frame, a fire begun is finished); the warm glow is a texture of the same
+   points. Doors: `Map.doors` (kept open by the player, from the tile
+   panel, or passing: somebody stands in the doorway, updated every tick).
+   A door kept open lets the light, the sight, the warmth (air for
+   `temperature_material()`) and the animals through. A door opened in
+   passing lets only the sight through: a settler passing does not chill a
+   room nor lets a wolf in, and the light, worked out again within budgets
+   on screen, would come late and linger after they passed. Only kept-open
+   doors are in the game hash. `MAP_LIGHT_ROOF` stays in
+   `map_light_cover()`, what the simulation reads, until step 5.
 5. **Light in the simulation**: `open`, `direct` (the share of the tile in
    the sun) and `sun_hours`, read by plants, soil and temperature; the
    inspector's line; the retuning of §5.3. Tests: a tile a fifth in the sun

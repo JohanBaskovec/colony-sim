@@ -1,7 +1,9 @@
 #include "game/render.h"
 
+#include "core/fire_light.h"
 #include "core/hearth.h"
 #include "core/shadow.h"
+#include "core/sky.h"
 #include "core/strike_anim.h"
 #include "core/tree.h"
 #include "core/util.h"
@@ -200,19 +202,11 @@ static SDL_Vertex *batch_vertices;
 static int *batch_indices;
 static int batch_count; /* Quads waiting to be drawn. */
 
-/* Night: light at the tile corners of the area lit by fires (render_daylight()). */
-static float *light_corners;
-static size_t light_corner_capacity;
-
-/* What lets the light through over each tile (tile_cover()), and the shade
- * texture and the corner sums behind it (render_daylight()). */
-static float *cover_values;
-static uint32_t *cover_stamps;
-static size_t cover_capacity;
-static uint32_t cover_epoch;
-static const Map *cover_map;
-static uint32_t cover_revision;
+/* The shade texture and the corner sums behind it, and the fires' glow
+ * (render_daylight()). */
 static SDL_Texture *shade_texture;
+static SDL_Texture *glow_texture;
+static Uint32 *glow_pixels;
 static int shade_texture_width, shade_texture_height;
 static Uint32 *shade_pixels;
 static float *shade_sums;
@@ -224,6 +218,13 @@ static ShadowField shadow_field;
 static bool shadow_field_started;
 static float *shadow_points;
 static size_t shadow_point_capacity;
+/* How much of the sky the surfaces in view see (core/sky.h), and the light of
+ * the fires, kept per fire (core/fire_light.h), at the points of the shade
+ * texture. */
+static SkyField sky_field;
+static FireLight fire_light;
+static float *fire_points;
+static size_t fire_point_capacity;
 
 /* Item icons: every item type drawn once into a texture (render_item_stack()),
  * so that items lying about are drawn turned any way, as textured quads in
@@ -332,18 +333,21 @@ void render_shutdown(void)
     SDL_free(below_view);
     below_view = NULL;
     below_view_capacity = 0;
-    SDL_free(light_corners);
-    light_corners = NULL;
-    light_corner_capacity = 0;
     if (shade_texture != NULL) {
         SDL_DestroyTexture(shade_texture);
         shade_texture = NULL;
     }
+    if (glow_texture != NULL) {
+        SDL_DestroyTexture(glow_texture);
+        glow_texture = NULL;
+    }
     shade_texture_width = shade_texture_height = 0;
     SDL_free(shade_pixels);
+    SDL_free(glow_pixels);
     SDL_free(shade_sums);
     SDL_free(shade_counts);
     shade_pixels = NULL;
+    glow_pixels = NULL;
     shade_sums = NULL;
     shade_counts = NULL;
     shade_capacity = 0;
@@ -354,12 +358,11 @@ void render_shutdown(void)
     SDL_free(shadow_points);
     shadow_points = NULL;
     shadow_point_capacity = 0;
-    SDL_free(cover_values);
-    SDL_free(cover_stamps);
-    cover_values = NULL;
-    cover_stamps = NULL;
-    cover_capacity = 0;
-    cover_map = NULL;
+    sky_field_free(&sky_field);
+    fire_light_free(&fire_light);
+    SDL_free(fire_points);
+    fire_points = NULL;
+    fire_point_capacity = 0;
     SDL_free(batch_vertices);
     SDL_free(batch_indices);
     batch_vertices = NULL;
@@ -2168,6 +2171,20 @@ static SDL_FRect footprint_rect(const Camera *camera, int x, int y, StructureTyp
     return (SDL_FRect){first.x, first.y, last.x + last.w - first.x, last.y + last.h - first.y};
 }
 
+/* An open door seen from above: its frame, the passage empty, the leaf swung
+ * back against one post. */
+static void render_open_door(SDL_Renderer *renderer, const SDL_FRect *tile)
+{
+    SDL_Color wood = BRANCH_COLOR, edge = ITEM_OUTLINE;
+    SDL_FRect frame = inset(tile, 0.9f);
+    outline(renderer, frame, SDL_max(1.0f, floorf(tile->w * 0.06f)), wood);
+    float thick = SDL_max(2.0f, floorf(frame.w * 0.16f));
+    SDL_FRect leaf = {frame.x, frame.y, thick, frame.h};
+    fill(renderer, edge, &leaf);
+    SDL_FRect board = {leaf.x + 1.0f, leaf.y + 1.0f, leaf.w - 2.0f, leaf.h - 2.0f};
+    fill(renderer, shade(wood, 15), &board);
+}
+
 /* Visible tiles, widened so that a long structure with its head just out of
  * sight is still drawn. */
 static TileRect visible_heads(const Camera *camera, int width, int height)
@@ -2193,7 +2210,11 @@ void render_structures(SDL_Renderer *renderer, const Game *game, const Camera *c
                     StructureType type = map_structure(map, x, y, z);
                     Direction direction = map_structure_direction(map, x, y, z);
                     SDL_FRect rect = footprint_rect(camera, x, y, type, direction);
-                    render_structure_shape(renderer, &rect, type, direction, 255);
+                    if (type == STRUCTURE_DOOR && map_door_open_at(map, map_index(map, x, y, z))) {
+                        render_open_door(renderer, &rect);
+                    } else {
+                        render_structure_shape(renderer, &rect, type, direction, 255);
+                    }
                 }
             }
         }
@@ -2517,6 +2538,11 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         }
         break;
     }
+    case RENDER_ICON_KEEP_OPEN: {
+        SDL_FRect area = inset(&rect, 0.7f);
+        render_open_door(renderer, &area);
+        break;
+    }
     }
 }
 
@@ -2526,61 +2552,6 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
  * strong its warm glow is. */
 #define FIRE_LIGHT_STRENGTH 0.85f
 #define FIRE_GLOW_STRENGTH 0.3f
-
-/* Tiles that burning hearths of level z light, within `visible` (empty: x0 >=
- * x1). */
-static TileRect lit_tiles(const Workstations *workstations, TileRect visible, int z)
-{
-    TileRect box = {INT_MAX, INT_MAX, INT_MIN, INT_MIN};
-    int reach = (int)ceilf(HEARTH_LIGHT_RADIUS);
-    for (int i = 0; i < WORKSTATION_MAX; i++) {
-        const Workstation *station = workstation_get_const(workstations, i);
-        if (station == NULL || !station->burning || station->z != z) {
-            continue;
-        }
-        box.x0 = SDL_min(box.x0, station->x - reach);
-        box.y0 = SDL_min(box.y0, station->y - reach);
-        box.x1 = SDL_max(box.x1, station->x + reach + 1);
-        box.y1 = SDL_max(box.y1, station->y + reach + 1);
-    }
-    box.x0 = SDL_max(box.x0, visible.x0);
-    box.y0 = SDL_max(box.y0, visible.y0);
-    box.x1 = SDL_min(box.x1, visible.x1);
-    box.y1 = SDL_min(box.y1, visible.y1);
-    return box;
-}
-
-/* The warm glow of the fires: one additive quad per tile of `box`, each corner
- * with an alpha from the light of the fires there, as strong as the night is
- * dark (`darkness`). Not over what is not in view. */
-static bool fog_tile_seen(const Game *game, const Camera *camera, int x, int y);
-
-static void glow_quads(SDL_Renderer *renderer, const Camera *camera, TileRect box, float darkness,
-                       const Game *fog)
-{
-    int columns = box.x1 - box.x0 + 1;
-    float flicker = 0.95f + 0.05f * sinf((float)(SDL_GetTicks() % 100000u) * 0.011f);
-    for (int y = box.y0; y < box.y1; y++) {
-        for (int x = box.x0; x < box.x1; x++) {
-            int corner = (y - box.y0) * columns + (x - box.x0);
-            float light[4] = {light_corners[corner], light_corners[corner + 1],
-                              light_corners[corner + columns + 1], light_corners[corner + columns]};
-            if (light[0] + light[1] + light[2] + light[3] <= 0.0f ||
-                (fog != NULL && !fog_tile_seen(fog, camera, x, y))) {
-                continue; /* Nothing lights what is not in view: what is known of it is dim. */
-            }
-            SDL_Color colors[4];
-            for (int i = 0; i < 4; i++) {
-                colors[i] = GLOW_COLOR;
-                colors[i].a =
-                    (Uint8)(clampf(darkness * FIRE_GLOW_STRENGTH * light[i] * flicker, 0.0f, 1.0f) *
-                            255.0f);
-            }
-            batch_gradient_quad(renderer, colors, tile_rect(camera, x, y));
-        }
-    }
-    batch_flush(renderer);
-}
 
 /* Colors of the temperature view, every 10 degrees from -10 to 30 °C. */
 #define TEMPERATURE_VIEW_COLDEST (-10.0f)
@@ -2758,41 +2729,6 @@ void render_vision(SDL_Renderer *renderer, const Game *game, const Camera *camer
 static const SDL_Color SHADE_COLOR = {22, 28, 52, 255};
 static const SDL_Color TWILIGHT_COLOR = {74, 38, 30, 255};
 
-/* What lets the light through over each tile of the level shown, kept until
- * the map changes (Map.light_revision): scanning the layers over a tile costs
- * more than a look-up, and a view shows thousands of tiles every frame. */
-
-static void cover_begin(const Map *map)
-{
-    size_t tiles = map_tile_count(map);
-    if (tiles != cover_capacity) {
-        SDL_free(cover_values);
-        SDL_free(cover_stamps);
-        cover_values = SDL_malloc(tiles * sizeof(*cover_values));
-        cover_stamps = SDL_calloc(tiles, sizeof(*cover_stamps));
-        cover_capacity = cover_values != NULL && cover_stamps != NULL ? tiles : 0;
-        cover_epoch = 0;
-    }
-    if (map != cover_map || map->light_revision != cover_revision) {
-        cover_epoch++;
-        cover_map = map;
-        cover_revision = map->light_revision;
-    }
-}
-
-static float tile_cover(const Map *map, int x, int y, int z)
-{
-    size_t index = map_index(map, x, y, z);
-    if (cover_capacity == 0) {
-        return map_light_cover(map, x, y, z);
-    }
-    if (cover_stamps[index] != cover_epoch + 1) {
-        cover_values[index] = map_light_cover(map, x, y, z);
-        cover_stamps[index] = cover_epoch + 1;
-    }
-    return cover_values[index];
-}
-
 /* The shade is drawn into a small texture, a pixel for each corner of the tiles
  * in view (and a border that repeats the edge), and stretched over them with
  * smoothing: the light then runs smoothly from one tile to the next. */
@@ -2800,13 +2736,17 @@ static float tile_cover(const Map *map, int x, int y, int z)
 static bool shade_prepare(SDL_Renderer *renderer, int width, int height, size_t corners)
 {
     size_t pixels = (size_t)width * (size_t)height;
-    pixels = pixels > corners ? pixels : corners;
+    pixels = pixels > 2 * corners ? pixels : 2 * corners; /* Floors' sums, then blocks'. */
     if (pixels > shade_capacity) {
         Uint32 *grown_pixels = SDL_realloc(shade_pixels, pixels * sizeof(*grown_pixels));
+        Uint32 *grown_glow = SDL_realloc(glow_pixels, pixels * sizeof(*grown_glow));
         float *grown_sums = SDL_realloc(shade_sums, pixels * sizeof(*grown_sums));
         int *grown_counts = SDL_realloc(shade_counts, pixels * sizeof(*grown_counts));
         if (grown_pixels != NULL) {
             shade_pixels = grown_pixels;
+        }
+        if (grown_glow != NULL) {
+            glow_pixels = grown_glow;
         }
         if (grown_sums != NULL) {
             shade_sums = grown_sums;
@@ -2814,26 +2754,36 @@ static bool shade_prepare(SDL_Renderer *renderer, int width, int height, size_t 
         if (grown_counts != NULL) {
             shade_counts = grown_counts;
         }
-        if (grown_pixels == NULL || grown_sums == NULL || grown_counts == NULL) {
+        if (grown_pixels == NULL || grown_glow == NULL || grown_sums == NULL ||
+            grown_counts == NULL) {
             return false;
         }
         shade_capacity = pixels;
     }
-    if (shade_texture == NULL || width > shade_texture_width || height > shade_texture_height) {
+    if (shade_texture == NULL || glow_texture == NULL || width > shade_texture_width ||
+        height > shade_texture_height) {
         if (shade_texture != NULL) {
             SDL_DestroyTexture(shade_texture);
+        }
+        if (glow_texture != NULL) {
+            SDL_DestroyTexture(glow_texture);
         }
         shade_texture_width = SDL_max(width, shade_texture_width);
         shade_texture_height = SDL_max(height, shade_texture_height);
         shade_texture =
             SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
                               shade_texture_width, shade_texture_height);
-        if (shade_texture == NULL) {
+        glow_texture =
+            SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
+                              shade_texture_width, shade_texture_height);
+        if (shade_texture == NULL || glow_texture == NULL) {
             shade_texture_width = shade_texture_height = 0;
             return false;
         }
         SDL_SetTextureBlendMode(shade_texture, SDL_BLENDMODE_BLEND);
         SDL_SetTextureScaleMode(shade_texture, SDL_SCALEMODE_LINEAR);
+        SDL_SetTextureBlendMode(glow_texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(glow_texture, SDL_SCALEMODE_LINEAR);
     }
     return true;
 }
@@ -2892,6 +2842,53 @@ static bool sun_shadows(const Game *game, const Map *map, TileRect visible, int 
     return true;
 }
 
+/* Rays a frame may cast for the light of fires (core/fire_light.h; a fire
+ * once begun is finished). */
+#define FIRE_WORK_RAYS 20000
+/* Time a frame spends working out the light of the sky (core/sky.h), in
+ * nanoseconds, looking at the clock every SKY_WORK_COLUMNS columns. */
+#define SKY_WORK_NS 1000000u
+#define SKY_WORK_COLUMNS 32
+
+/* The light of the fires for the tiles in view into `fire_points` (`samples`
+ * a side of a tile), worked out again within a budget. False when no fire
+ * lights any of them. */
+static bool fires_in_view(const Game *game, const Map *map, TileRect visible, int level,
+                          int samples)
+{
+    int columns = visible.x1 - visible.x0, rows = visible.y1 - visible.y0;
+    size_t points = (size_t)columns * (size_t)rows * (size_t)samples * (size_t)samples;
+    if (points > fire_point_capacity) {
+        float *grown = SDL_realloc(fire_points, points * sizeof(*grown));
+        if (grown == NULL) {
+            return false;
+        }
+        fire_points = grown;
+        fire_point_capacity = points;
+    }
+    int64_t budget = FIRE_WORK_RAYS;
+    if (!fire_light_update(&fire_light, &game->workstations, map, level, samples, visible.x0,
+                           visible.y0, visible.x1, visible.y1, &budget)) {
+        return false;
+    }
+    return fire_light_fill(&fire_light, &game->workstations, level, visible.x0, visible.y0, columns,
+                           rows, samples, fire_points);
+}
+
+/* Gives the border of one pixel around the pixels of a texture the color of
+ * the edge next to it. */
+static void repeat_border(Uint32 *pixels, int width, int height)
+{
+    for (int j = 1; j < height - 1; j++) {
+        pixels[j * width] = pixels[j * width + 1];
+        pixels[j * width + width - 1] = pixels[j * width + width - 2];
+    }
+    for (int i = 0; i < width; i++) {
+        pixels[i] = pixels[width + i];
+        pixels[(height - 1) * width + i] = pixels[(height - 2) * width + i];
+    }
+}
+
 /* A value at (u, v) inside a tile (0 .. 1) from its four corners, of those
  * that have one (`valid`); false when none does. */
 static bool corner_blend(const float values[4], const bool valid[4], float u, float v, float *out)
@@ -2934,29 +2931,6 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
     SunPosition sun_now = sun_at_tick(game->clock.tick, SUN_LATITUDE_DEFAULT);
     float direct =
         shadow_direct_share(sun_now.elevation, game->weather.type == WEATHER_CLEAR ? 1.0f : 0.0f);
-
-    /* The fires: the light of each corner of the area they light. */
-    const Workstations *workstations = &game->workstations;
-    TileRect box = lit_tiles(workstations, visible, z);
-    bool any_fire = box.x0 < box.x1 && box.y0 < box.y1; /* Else the box is empty. */
-    int box_columns = any_fire ? box.x1 - box.x0 + 1 : 0;
-    size_t box_corners = any_fire ? (size_t)box_columns * (size_t)(box.y1 - box.y0 + 1) : 0;
-    if (box_corners > light_corner_capacity) {
-        float *grown = SDL_realloc(light_corners, box_corners * sizeof(*light_corners));
-        if (grown != NULL) {
-            light_corners = grown;
-            light_corner_capacity = box_corners;
-        }
-    }
-    bool fires = box_corners > 0 && box_corners <= light_corner_capacity;
-    if (fires) {
-        for (int y = box.y0; y <= box.y1; y++) {
-            for (int x = box.x0; x <= box.x1; x++) {
-                light_corners[(y - box.y0) * box_columns + (x - box.x0)] =
-                    hearths_light_at(workstations, (float)x, (float)y, z);
-            }
-        }
-    }
     float flicker = 0.95f + 0.05f * sinf((float)(SDL_GetTicks() % 100000u) * 0.011f);
 
     /* The size of a tile on screen, and the points a side of a tile. */
@@ -2967,6 +2941,8 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
     float tile_w = next_x - left, tile_h = next_y - top;
     int samples = shadow_samples(tile_w);
     bool shadows = direct > 0.0f && sun_shadows(game, map, visible, z, samples);
+    bool fires = fires_in_view(game, map, visible, z, samples);
+    bool glow = fires && open_darkness > 0.0f;
 
     /* The pixels: `samples` a side of each tile, inside a border of one pixel. */
     int width = columns * samples + 2, height = rows * samples + 2;
@@ -2975,29 +2951,46 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
     if (!shade_prepare(renderer, width, height, corners)) {
         return;
     }
-    cover_begin(map);
-    SDL_memset(shade_sums, 0, corners * sizeof(float));
-    SDL_memset(shade_counts, 0, corners * sizeof(int));
-    /* Each tile gives its four corners what lets the sky's light through over
-     * it: a corner has the mean of the tiles around it (of those that are
-     * drawn, and in view). */
+    SDL_memset(shade_sums, 0, 2 * corners * sizeof(float));
+    SDL_memset(shade_counts, 0, 2 * corners * sizeof(int));
+    /* Each tile gives its four corners how much of the sky its surface sees
+     * (core/sky.h): a corner has the mean of the tiles around it (of those
+     * that are drawn, and in view), of the floors when there are some, else
+     * of the blocks (walls, rock): the top of a wall in the open does not
+     * light the edge of a dark room, nor a dark wall the ground outside. */
+    int sky_budget = SKY_WORK_COLUMNS;
+    bool sky_time_left = true;
+    uint64_t sky_begin = SDL_GetTicksNS();
+    bool sky_ready =
+        sky_field_begin(&sky_field, map, visible.x0, visible.y0, visible.x1, visible.y1);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
             int level = map_view_level(map, x, y, z); /* What is drawn there. */
             if (level < 0 || (game->fog_on && !vision_seen(&game->vision, x, y, level))) {
                 continue;
             }
-            float cover = tile_cover(map, x, y, level);
-            int corner = (y - visible.y0) * corner_columns + (x - visible.x0);
+            float open = sky_ready ? sky_field_open(&sky_field, x, y, z, &sky_budget)
+                                   : map_light_cover(map, x, y, level);
+            if (sky_budget == 0 && sky_time_left) {
+                sky_time_left = SDL_GetTicksNS() - sky_begin < SKY_WORK_NS;
+                sky_budget = sky_time_left ? SKY_WORK_COLUMNS : 0;
+            }
+            bool block = level == z && map_stops_light_at(map, map_index(map, x, y, level));
+            int corner =
+                (y - visible.y0) * corner_columns + (x - visible.x0) + (block ? (int)corners : 0);
             int around[4] = {corner, corner + 1, corner + corner_columns + 1,
                              corner + corner_columns};
             for (int i = 0; i < 4; i++) {
-                shade_sums[around[i]] += cover;
+                shade_sums[around[i]] += open;
                 shade_counts[around[i]]++;
             }
         }
     }
     for (size_t i = 0; i < corners; i++) {
+        if (shade_counts[i] == 0) {
+            shade_sums[i] = shade_sums[corners + i];
+            shade_counts[i] = shade_counts[corners + i];
+        }
         if (shade_counts[i] > 0) {
             shade_sums[i] /= (float)shade_counts[i];
         }
@@ -3005,93 +2998,87 @@ void render_daylight(SDL_Renderer *renderer, const Game *game, const Camera *cam
     SDL_Color tint =
         mix(mix(SHADE_COLOR, NIGHT_COLOR, 1.0f - sun), TWILIGHT_COLOR, 0.5f * twilight);
     const Uint32 color = (Uint32)tint.r | ((Uint32)tint.g << 8) | ((Uint32)tint.b << 16);
+    const Uint32 glow_color =
+        (Uint32)GLOW_COLOR.r | ((Uint32)GLOW_COLOR.g << 8) | ((Uint32)GLOW_COLOR.b << 16);
+    const float glow_strength = open_darkness * FIRE_GLOW_STRENGTH * flicker;
     const float inverse = 1.0f / (float)samples;
+    const size_t point_row = (size_t)columns * (size_t)samples;
     for (int ty = 0; ty < rows; ty++) {
         for (int tx = 0; tx < columns; tx++) {
             int corner = ty * corner_columns + tx;
             const int around[4] = {corner, corner + 1, corner + corner_columns + 1,
                                    corner + corner_columns};
-            float covers[4], fire_light[4];
-            bool valid[4], fire_valid[4];
-            bool all_valid = true, any_valid = false, any_fire_here = false;
+            float covers[4];
+            bool valid[4];
+            bool all_valid = true, any_valid = false;
             for (int i = 0; i < 4; i++) {
                 valid[i] = shade_counts[around[i]] > 0;
                 all_valid &= valid[i];
                 any_valid |= valid[i];
                 covers[i] = shade_sums[around[i]];
-                int cx = visible.x0 + tx + (i == 1 || i == 2), cy = visible.y0 + ty + (i >= 2);
-                int fx = cx - box.x0, fy = cy - box.y0;
-                fire_valid[i] =
-                    fires && fx >= 0 && fy >= 0 && fx < box_columns && fy <= box.y1 - box.y0;
-                fire_light[i] = fire_valid[i] ? light_corners[fy * box_columns + fx] : 0.0f;
-                any_fire_here |= fire_valid[i];
             }
-            if (!any_valid) { /* Nothing drawn in view around: no veil. */
-                for (int sj = 0; sj < samples; sj++) {
-                    Uint32 *pixel = shade_pixels + (size_t)(ty * samples + sj + 1) * (size_t)width +
-                                    (size_t)(tx * samples + 1);
-                    for (int si = 0; si < samples; si++) {
-                        pixel[si] = color;
-                    }
-                }
-                continue;
-            }
+            /* Nothing lights what is not in view: what is known of it is dim. */
+            bool glowing = glow && (!game->fog_on ||
+                                    fog_tile_seen(game, camera, visible.x0 + tx, visible.y0 + ty));
             for (int sj = 0; sj < samples; sj++) {
                 float v = ((float)sj + 0.5f) * inverse;
-                Uint32 *pixel = shade_pixels + (size_t)(ty * samples + sj + 1) * (size_t)width +
-                                (size_t)(tx * samples + 1);
-                const float *lit_row =
-                    shadow_points +
-                    ((size_t)(ty * samples + sj) * (size_t)columns + (size_t)tx) * (size_t)samples;
+                size_t offset =
+                    (size_t)(ty * samples + sj + 1) * (size_t)width + (size_t)(tx * samples + 1);
+                Uint32 *pixel = shade_pixels + offset;
+                Uint32 *glow_pixel = glow_pixels + offset;
+                size_t point = (size_t)(ty * samples + sj) * point_row + (size_t)(tx * samples);
+                const float *lit_row = shadow_points + point;
+                const float *fire_row = fire_points + point;
                 for (int si = 0; si < samples; si++) {
                     float u = ((float)si + 0.5f) * inverse;
-                    float cover;
-                    Uint8 alpha = 0;
-                    bool drawn = true;
+                    float cover = 0.0f;
+                    Uint8 alpha = 0, glow_alpha = 0;
+                    bool drawn = any_valid;
                     if (all_valid) {
                         float top_edge = covers[0] + (covers[1] - covers[0]) * u;
                         float bottom_edge = covers[3] + (covers[2] - covers[3]) * u;
                         cover = top_edge + (bottom_edge - top_edge) * v;
-                    } else {
+                    } else if (drawn) {
                         drawn = corner_blend(covers, valid, u, v, &cover);
                     }
                     if (drawn) {
                         float lit = shadows ? lit_row[si] : 1.0f;
                         float light = shadow_light(sky_night, sky_day, direct, cover, lit);
-                        float fire;
-                        if (any_fire_here && corner_blend(fire_light, fire_valid, u, v, &fire)) {
-                            fire *= FIRE_LIGHT_STRENGTH * flicker;
-                            light = 1.0f - (1.0f - light) * (1.0f - fire);
+                        float fire = fires ? fire_row[si] : 0.0f;
+                        if (fire > 0.0f) {
+                            float strength = fire * FIRE_LIGHT_STRENGTH * flicker;
+                            light = 1.0f - (1.0f - light) * (1.0f - strength);
+                            if (glowing) {
+                                glow_alpha =
+                                    (Uint8)(clampf(glow_strength * fire, 0.0f, 1.0f) * 255.0f);
+                            }
                         }
                         float lightness =
                             LIGHT_FLOOR + (1.0f - LIGHT_FLOOR) * clampf(light, 0.0f, 1.0f);
                         alpha = (Uint8)((1.0f - lightness) * 255.0f + 0.5f);
                     }
                     pixel[si] = color | ((Uint32)alpha << 24);
+                    if (glow) {
+                        glow_pixel[si] = glow_color | ((Uint32)glow_alpha << 24);
+                    }
                 }
             }
         }
     }
-    for (int j = 1; j < height - 1; j++) { /* The border repeats the edge. */
-        shade_pixels[j * width] = shade_pixels[j * width + 1];
-        shade_pixels[j * width + width - 1] = shade_pixels[j * width + width - 2];
-    }
-    for (int i = 0; i < width; i++) {
-        shade_pixels[i] = shade_pixels[width + i];
-        shade_pixels[(height - 1) * width + i] = shade_pixels[(height - 2) * width + i];
-    }
-    SDL_Rect area = {0, 0, width, height};
-    SDL_UpdateTexture(shade_texture, &area, shade_pixels, width * (int)sizeof(Uint32));
-
     /* Stretched over the tiles: the middle of each pixel on the middle of its
      * point. */
+    SDL_Rect area = {0, 0, width, height};
     SDL_FRect source = {1.0f, 1.0f, (float)(columns * samples), (float)(rows * samples)};
     SDL_FRect target = {left, top, (float)columns * tile_w, (float)rows * tile_h};
+    repeat_border(shade_pixels, width, height);
+    SDL_UpdateTexture(shade_texture, &area, shade_pixels, width * (int)sizeof(Uint32));
     SDL_RenderTexture(renderer, shade_texture, &source, &target);
 
     /* The fires' warm glow, where it is dark. */
-    if (fires && open_darkness > 0.0f) {
-        glow_quads(renderer, camera, box, open_darkness, game->fog_on ? game : NULL);
+    if (glow) {
+        repeat_border(glow_pixels, width, height);
+        SDL_UpdateTexture(glow_texture, &area, glow_pixels, width * (int)sizeof(Uint32));
+        SDL_RenderTexture(renderer, glow_texture, &source, &target);
     }
 }
 

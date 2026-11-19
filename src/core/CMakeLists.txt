@@ -11,6 +11,7 @@ add_library(colony_core STATIC
     entry_strip.c
     experience.c
     exploration.c
+    fire_light.c
     colonist.c
     construction.c
     conversation.c
@@ -43,6 +44,7 @@ add_library(colony_core STATIC
     scenario.c
     settings.c
     shadow.c
+    sky.c
     social.c
     strike_anim.c
     soil.c

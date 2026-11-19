@@ -78,31 +78,27 @@ static void axis_start(float position, float direction, float size, int cell, fl
     }
 }
 
-float sun_lit(const Map *map, SunPosition sun, float x, float y, float height)
+float light_ray(const Map *map, float dx, float dy, float dz, float x, float y, float height,
+                float distance)
 {
-    if (sun.up <= 0.0f) {
-        return 0.0f;
-    }
     int cx = (int)floorf(x), cy = (int)floorf(y), cz = (int)floorf(height / LEVEL_HEIGHT);
     if (cx < 0 || cy < 0 || cx >= map->width || cy >= map->height || cz < 0) {
         return 0.0f;
     }
     if (cz >= map->depth) {
-        return 1.0f;
+        return dz >= 0.0f ? 1.0f : 0.0f;
     }
     size_t index = map_index(map, cx, cy, cz);
     if (map_stops_light_at(map, index)) {
         return 0.0f;
     }
     const ptrdiff_t level = (ptrdiff_t)map_level_tile_count(map);
-    const ptrdiff_t step_x = sun.east > 0.0f ? 1 : -1;
-    const ptrdiff_t step_y = sun.south > 0.0f ? map->width : -map->width;
+    const ptrdiff_t step_x = dx > 0.0f ? 1 : -1;
+    const ptrdiff_t step_y = dy > 0.0f ? map->width : -map->width;
     float next_x, next_y, next_z, delta_x, delta_y, delta_z;
-    axis_start(x, sun.east, 1.0f, cx, &next_x, &delta_x);
-    axis_start(y, sun.south, 1.0f, cy, &next_y, &delta_y);
-    axis_start(height, sun.up, LEVEL_HEIGHT, cz, &next_z, &delta_z);
-    float flat = sqrtf(sun.east * sun.east + sun.south * sun.south);
-    float reach = flat > 0.0f ? (float)SUN_SHADOW_REACH / flat : FAR;
+    axis_start(x, dx, 1.0f, cx, &next_x, &delta_x);
+    axis_start(y, dy, 1.0f, cy, &next_y, &delta_y);
+    axis_start(height, dz, LEVEL_HEIGHT, cz, &next_z, &delta_z);
     float bare = map_bare_fraction(map);
 
     float light = 1.0f, from = 0.0f;
@@ -111,24 +107,30 @@ float sun_lit(const Map *map, SunPosition sun, float x, float y, float height)
         uint8_t terrain = map->terrain[index];
         if (terrain_is_foliage(terrain)) {
             float share = map_foliage_light((Terrain)terrain, bare);
-            light *= powf(share, (fminf(to, reach) - from) / LEVEL_HEIGHT);
+            light *= powf(share, (fminf(to, distance) - from) / LEVEL_HEIGHT);
             if (light < LIT_EPSILON) {
                 return 0.0f;
             }
         }
-        if (to >= reach) {
+        if (to >= distance) {
             return light;
         }
         from = to;
         if (to == next_z) {
-            /* Up into the cell above, through its floor. */
-            if (++cz >= map->depth) {
-                return light;
-            }
-            index += (size_t)level;
             next_z += delta_z;
-            if (floor_blocks_light(map->terrain[index])) {
-                return 0.0f;
+            if (dz > 0.0f) { /* Up into the cell above, through its floor. */
+                if (++cz >= map->depth) {
+                    return light;
+                }
+                index += (size_t)level;
+                if (floor_blocks_light(map->terrain[index])) {
+                    return 0.0f;
+                }
+            } else { /* Down through the floor of this cell. */
+                if (floor_blocks_light(map->terrain[index]) || --cz < 0) {
+                    return 0.0f;
+                }
+                index -= (size_t)level;
             }
         } else if (to == next_x) {
             cx += (int)step_x;
@@ -149,6 +151,16 @@ float sun_lit(const Map *map, SunPosition sun, float x, float y, float height)
             return 0.0f;
         }
     }
+}
+
+float sun_lit(const Map *map, SunPosition sun, float x, float y, float height)
+{
+    if (sun.up <= 0.0f) {
+        return 0.0f;
+    }
+    float flat = sqrtf(sun.east * sun.east + sun.south * sun.south);
+    float reach = flat > 0.0f ? (float)SUN_SHADOW_REACH / flat : FAR;
+    return light_ray(map, sun.east, sun.south, sun.up, x, y, height, reach);
 }
 
 float sun_lit_floor(const Map *map, SunPosition sun, float x, float y, int z)

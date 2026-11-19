@@ -89,6 +89,8 @@ simulation:
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve and the sun (day length by season)                |
 | `sun`        | Where the sun stands: elevation, azimuth and direction (map axes, metres) from the day, the hour and the latitude; its declination gives the clock's day lengths at the default latitude; its rays (`sun_lit()`): how much direct sun reaches a point of the volume, through rock, walls, doors, floors and roofs (nothing) and foliage (its share by the length crossed) (see `docs/SHADOWS.md`) |
+| `sky`        | The light of the sky: how much of the sky a surface sees (`sky_open()`, 16 rays over the dome through blocks, floors and foliage), and a field of it per column for the screen, worked out again where the map changed (see *Light and shade*) |
+| `fire_light` | The light of fires on screen: from each point of the fine texture a ray to the flame (3D, stopped by walls, floors and rock), kept per fire until the fire or the map near it changes (see *Light and shade*) |
 | `shadow`     | Shadows on screen: the sun's rays from the surfaces drawn, worked out ahead of time by pieces and half hours, each point keeping the moment an edge passes, so frames read them for the time now and the shadows glide; out of date by the map's light stamps; the light put together (sky, direct sun) (see *Shadows on screen*) |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, trees, then the understory by the light under their crowns, stones |
@@ -1012,7 +1014,7 @@ their hashes are what they were.
   followed is always the head); a leader removed is replaced by its first
   follower.
 - **Moving**: paths from the game's `Pathfinder` as `PATH_WALKER_ANIMAL`
-  (slopes, but no door, ladder nor tree), on the real map (animals know
+  (slopes, but no door unless kept open, ladder nor tree), on the real map (animals know
   their world; the fog is the colony's). Each step is checked as it is taken
   (`path_walker_can_step()`).
 - **Populating** (`animals_populate()`, from `game_init()`): per species,
@@ -1379,7 +1381,14 @@ Built **structures** (`core/structure.h`) are a layer of the map
 (`Map.structure`, one `StructureType` per tile, with counts per type), like
 rock: `map_set_structure()` keeps `topology_revision` right (a wall blocks
 movement, a door multiplies the movement cost, a bed too) and clears the
-tile's plant. Blueprints are **construction sites** (`core/construction.h`,
+tile's plant. **Doors** open and close (`Map.doors`, cleared when a
+structure changes): kept open by the player (`game_set_door_kept_open()`,
+the tile panel; in the game hash, logged as a build change so rooms and
+sight follow), or open while somebody stands in the doorway (`update_doors()`
+every tick, from the beings' positions; only for the sight). An open door
+lets the sight through (vision, animals' sight); a door kept open also lets
+the light (`map_stops_light_at()`), the warmth (air for
+`temperature_material()`) and the animals (`PATH_WALKER_ANIMAL`) through. Blueprints are **construction sites** (`core/construction.h`,
 owned by `Game`, at most `CONSTRUCTION_MAX`, a dense index layer): the
 player places them (`game_place_structure_rect()`: along the edges of the
 rectangle for walls, filling it otherwise; refused on stockpiles,
@@ -1855,9 +1864,10 @@ searches backed off on that revision look again.
 - **Heat**: a burning hearth adds `HEARTH_HEAT_PER_HOUR` degrees to its
   tile every tick (`temperatures_add_heat()`, see below).
 - **Rendering**: a ring of stones, sticks for the fuel, flames moving with
-  real time; the fire's light (`hearths_light_at()`, linear over 6 tiles,
-  fires of the level shown only) is one of the two lights `render_daylight()`
-  draws, with an additive warm glow where it is dark (see *Light and shade*).
+  real time; the fire's light (`core/fire_light.h`: linear over 6 tiles of
+  3D distance, along a ray from the flame that walls, floors and rock stop)
+  is one of the two lights `render_daylight()` draws, with a warm glow where
+  it is dark (see *Light and shade*).
 
 **Leaves** (`Map.bare`, docs/PLANTS.md §12): the crowns of deciduous trees
 go bare in winter. The game derives one number from the climates of the
@@ -1871,22 +1881,29 @@ point is the sky (the sun's day with its dawn and dusk, `game_daylight()`, a
 night sky `NIGHT_SKY_LIT`, the weather, `weather_light()`), split into the
 light of the whole sky and the direct sun (`shadow_direct_share()`: none
 under clouds, fog or rain, fading out with a low sun), put together by
-`shadow_light()`: the night sky and the sky's diffuse light times what lets
-it through over the tile (`map_light_cover()`: each layer of foliage over
-the tile times its share, so thick crowns are darker; a roof; rock above:
-nothing), the direct sun times how much of it reaches the point (the
-shadows, below); the light of burning hearths on top. The point is then as
+`shadow_light()`: the night sky and the sky's diffuse light times how much
+of the sky the surface sees (`core/sky.h`: rays over the dome through
+blocks, floors and foliage, so a closed hut is dark at noon, a roof on posts
+bright under it, a cave darkens from its mouth, the foot of a cliff sees
+half the sky), the direct sun times how much of it reaches the point (the
+shadows, below); the light of burning hearths on top (`core/fire_light.h`:
+per point, along a ray from the flame, so a fire lights its room and falls
+out of an open door). The point is then as
 dark as `1 - (LIGHT_FLOOR + (1 - LIGHT_FLOOR) × light)`, `LIGHT_FLOOR` being
 `GAME_DAYLIGHT_MIN`, the darkest it ever was. The shade is a veil drawn over
 the sprites (colonists, animals, plants and items are in the shade of their
 spot) from a texture with several points per tile (8, 4, 2 or 1 a side as
 the view zooms out), stretched over the tiles with smoothing; the light of
-the sky is a value per tile corner (the mean of the tiles around it),
-blended across the tile, the shadows are per point. Its color is cool by
-day, the night's blue by night, a touch warm at dawn and dusk. What lets the
-light through is kept per tile of the level shown until `Map.light_revision`
-changes (any terrain, rock, roof, wall or door change): a view shows
-thousands of tiles every frame.
+the sky is a value per tile corner (the mean of the floors around it, of
+the blocks where no floor touches it), blended across the tile, the shadows
+and the fires are per point. Its color is cool by day, the night's blue by
+night, a touch warm at dawn and dusk. The light of the sky is kept per
+column of the level shown (`SkyField`) and worked out again, within a time
+budget per frame, where `Map.light_stamps` changed within `SKY_REACH`;
+the light of each fire is kept for its points until the fire, the level
+shown or the map within its reach changes (`FireLight`, a budget of rays per
+frame). The simulation still reads `map_light_cover()` (docs/SHADOWS.md
+step 5).
 
 **Shadows on screen** (`core/shadow.h`, docs/SHADOWS.md §4): the sun's rays
 (`sun_lit()`) from the surface drawn on each point (the floor seen, or the

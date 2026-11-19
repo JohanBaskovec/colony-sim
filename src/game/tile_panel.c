@@ -430,6 +430,9 @@ static void thing_rows(UiLayout *layout, void *userdata)
             hud_bed_owner_text(rows->app, text, sizeof(text), x, y, z);
             ui_layout_label(layout, text, 0.0f, false);
         }
+        if (game_door_kept_open(game, x, y, z)) {
+            ui_layout_label(layout, tr("tile_panel.kept_open"), 0.0f, false);
+        }
         order_row(layout, game, x, y, z);
         break;
     }
@@ -542,6 +545,18 @@ static void thing_actions(App *app, const ThingRows *rows)
             game_set_forbidden(game, x, y, z, target, !forbidden);
         }
         slot++;
+    }
+    if (rows->thing == THING_STRUCTURE &&
+        map_structure(game_view_map(game), x, y, z) == STRUCTURE_DOOR) {
+        bool open = game_door_kept_open(game, x, y, z);
+        const char *lines[2] = {
+            tr(open ? "tile_panel.let_close" : "tile_panel.keep_open"),
+            tr(open ? "tile_panel.let_close.description" : "tile_panel.keep_open.description")};
+        SDL_FRect icon;
+        if (inspector_action(app, slot++, open, &icon, lines, 2)) {
+            game_set_door_kept_open(game, x, y, z, !open);
+        }
+        render_tool_icon(app->renderer, icon, RENDER_ICON_KEEP_OPEN);
     }
     switch (rows->thing) {
     case THING_STRUCTURE:

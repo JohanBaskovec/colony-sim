@@ -20,6 +20,7 @@ set(COLONY_UNIT_TESTS
     test_corpse
     test_designation
     test_dirt
+    test_fire_light
     test_forbid
     test_game
     test_game_clock
@@ -52,6 +53,7 @@ set(COLONY_UNIT_TESTS
     test_scenario
     test_settings
     test_shadow
+    test_sky
     test_reservation
     test_rng
     test_soil

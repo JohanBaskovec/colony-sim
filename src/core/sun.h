@@ -79,6 +79,14 @@ SunPosition sun_at_tick(uint64_t tick, float latitude);
  * the map. The crowns are as bare as the map says (map_bare_fraction()). */
 float sun_lit(const Map *map, SunPosition sun, float x, float y, float height);
 
+/* What is left of a ray of light from the point (x, y, height) along the
+ * unit direction (dx east, dy south, dz up; metres) over `distance` metres,
+ * 0 .. 1, through the blocks, floors and foliage as for the sun: 0 from
+ * inside a block, out of the map's sides or under it; a ray that leaves the
+ * map through its sides or its top before `distance` keeps what is left. */
+float light_ray(const Map *map, float dx, float dy, float dz, float x, float y, float height,
+                float distance);
+
 /* sun_lit() of a point SUN_RAY_LIFT over the floor of level `z`: the ground
  * of a tile, or the top of a block of level z - 1 (a wall, a rock). */
 float sun_lit_floor(const Map *map, SunPosition sun, float x, float y, int z);

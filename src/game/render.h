@@ -191,6 +191,7 @@ typedef enum RenderIcon {
     RENDER_ICON_MOVE,   /* An arrow toward a spot. */
     RENDER_ICON_FOLLOW, /* A sight: a ring with ticks, a dot in the middle. */
     RENDER_ICON_CANCEL,
+    RENDER_ICON_KEEP_OPEN, /* An open door. */
 } RenderIcon;
 
 void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, WorkstationType type);
