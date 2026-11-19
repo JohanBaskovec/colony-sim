@@ -15,8 +15,12 @@
  * Profiling a slow tick: BENCH_TIMESTAMPS=1 perf record -g -k CLOCK_MONOTONIC
  * bench_simulation ..., then perf report --time with the times printed.
  *
+ * The items are checked at the end (game_check_items()); BENCH_CHECK_ITEMS=1
+ * checks them every in-game hour too (outside the times measured) and stops
+ * at the first problem, with its tick.
+ *
  * Scenarios: see core/scenario.h (0 = none, 1 = gathering, 2 = unreachable
- * jobs, 3 = construction, 4 = feuds).
+ * jobs, 3 = construction, 4 = feuds, 5 = cooking).
  */
 #define _POSIX_C_SOURCE 199309L /* clock_gettime(). */
 
@@ -76,6 +80,51 @@ static void print_animals(const Game *game)
            sum[ANIMAL_NEED_FOOD] / count, lowest[ANIMAL_NEED_FOOD], starving,
            sum[ANIMAL_NEED_WATER] / count, lowest[ANIMAL_NEED_WATER], parched,
            sum[ANIMAL_NEED_REST] / count, lowest[ANIMAL_NEED_REST]);
+}
+
+/* Heaps of several kinds, storage tiles among them, food that rotted away,
+ * crafts done by bills, and whether the items are consistent. */
+static void print_items(const Game *game)
+{
+    ItemHeaps heaps = items_heaps(&game->items);
+    long storage_mixed = 0;
+    const Map *map = &game->map;
+    for (int z = 0; z < map->depth; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                storage_mixed += items_mixed(&game->items, x, y, z) &&
+                                 stockpile_at(&game->stockpiles, x, y, z) != STOCKPILE_NONE;
+            }
+        }
+    }
+    printf("  heaps: %ld tiles with items, %ld of several kinds (%.1f kinds each, at most %d), "
+           "%ld in storage\n",
+           heaps.tiles, heaps.mixed,
+           heaps.mixed > 0 ? (double)heaps.mixed_groups / (double)heaps.mixed : 0.0,
+           heaps.most_groups, storage_mixed);
+    printf("  rotted away:");
+    long rotted = 0;
+    for (int type = 1; type < ITEM_TYPE_COUNT; type++) {
+        if (game->items.rotted[type] > 0) {
+            printf(" %ld %s", game->items.rotted[type], item_def((ItemType)type)->id);
+            rotted += game->items.rotted[type];
+        }
+    }
+    printf("%s\n", rotted == 0 ? " nothing" : "");
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = workstation_get_const(&game->workstations, index);
+        for (int bill = 0; station != NULL && bill < station->bill_count; bill++) {
+            const Bill *entry = &station->bills[bill];
+            printf("  bill %s: %u done\n", recipe_def((RecipeType)entry->recipe)->id, entry->done);
+        }
+    }
+    ItemsCheck check = game_check_items(game);
+    if (check.problems == 0) {
+        printf("  items consistent\n");
+    } else {
+        printf("  ITEMS INCONSISTENT: %d problems, first: %s (tile %ld)\n", check.problems,
+               check.first, check.first_tile);
+    }
 }
 
 /* The slowest ticks listed. */
@@ -206,6 +255,7 @@ int main(int argc, char **argv)
      * and ended, so that a perf record taken with -k CLOCK_MONOTONIC can be
      * cut to them (perf report --time begin,end). */
     bool timestamps = getenv("BENCH_TIMESTAMPS") != NULL;
+    bool check_items = getenv("BENCH_CHECK_ITEMS") != NULL;
     long slow_ticks = 0; /* Ticks over one millisecond. */
     double begin = now_seconds();
     double cpu_begin = cpu_seconds();
@@ -218,6 +268,16 @@ int main(int argc, char **argv)
         times[i] = (TickTime){(long)game.clock.tick, elapsed, start, end};
         if (elapsed > 1e-3) {
             slow_ticks++;
+        }
+        if (check_items && game.clock.tick % TICKS_PER_HOUR == 0) {
+            ItemsCheck check = game_check_items(&game);
+            if (check.problems > 0) {
+                fprintf(stderr, "tick %ld: items inconsistent, %d problems, first: %s (tile %ld)\n",
+                        (long)game.clock.tick, check.problems, check.first, check.first_tile);
+                free(times);
+                game_shutdown(&game);
+                return EXIT_FAILURE;
+            }
         }
     }
     double wall = now_seconds() - begin;
@@ -262,6 +322,7 @@ int main(int argc, char **argv)
     if (animals_slot_count(&game.animals) > 0) {
         print_animals(&game);
     }
+    print_items(&game);
     printf("  state hash %016llx\n", (unsigned long long)game_hash(&game));
 
     game_shutdown(&game);

@@ -2535,6 +2535,32 @@ int game_update(Game *game, double real_seconds)
     return due;
 }
 
+ItemsCheck game_check_items(const Game *game)
+{
+    ItemsCheck check = items_check(&game->items);
+    if (check.problems == 0 && game->known_ready) {
+        check = items_check(&game->known.items);
+    }
+    long held = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (entity_id_is_none(game_colonist_id_at(game, slot))) {
+            continue;
+        }
+        const ItemStack *load = &game->colonists[slot].carried;
+        if (!items_check_load(&game->items, *load)) {
+            check.problems++;
+            check.first = check.first != NULL ? check.first : "a settler's load is not its items";
+        }
+        held += load->held != 0 ? load->count : 0;
+    }
+    if (held != game->items.held_count) {
+        check.problems++;
+        check.first =
+            check.first != NULL ? check.first : "items in loads are lost or counted twice";
+    }
+    return check;
+}
+
 uint64_t game_hash(const Game *game)
 {
     uint64_t hash = map_hash(&game->map);

@@ -78,6 +78,37 @@ static void test_scenarios(void)
     CHECK_EQ_INT(stockpile_count(&game), 1);
     CHECK(zone_tiles(&game) > 0);
     game_shutdown(&game);
+
+    /* Cooking: two lit hearths with a bill each, heaps of food, some of
+     * several kinds, settlers who can roast. */
+    REQUIRE(init_game(&game, 42, 200, 3));
+    CHECK(scenario_apply(&game, SCENARIO_COOKING));
+    int hearths = 0;
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = workstation_get_const(&game.workstations, index);
+        if (station == NULL) {
+            continue;
+        }
+        hearths++;
+        CHECK_EQ_INT(station->type, WORKSTATION_OPEN_HEARTH);
+        CHECK(station->burning);
+        REQUIRE(station->bill_count == 1);
+        const Bill *bill = &station->bills[0];
+        CHECK_EQ_INT(bill->mode, BILL_DO_TIMES);
+        CHECK_EQ_INT(bill->min_quality, bill->recipe == RECIPE_ROAST_RHIZOMES ? 40 : 0);
+    }
+    CHECK_EQ_INT(hearths, 2);
+    CHECK(game.items.totals[ITEM_WILD_CARROTS] > 0);
+    CHECK(game.items.totals[ITEM_CATTAIL_RHIZOMES] > 0);
+    CHECK(items_heaps(&game.items).mixed > 0);
+    CHECK_EQ_INT(stockpile_count(&game), 1);
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(&game); slot++) {
+        const Colonist *colonist = game_colonist_const(&game, game_colonist_id_at(&game, slot));
+        REQUIRE(colonist != NULL);
+        CHECK(colonist_can_craft(colonist, RECIPE_ROAST_CARROTS));
+    }
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
 }
 
 /* The same seed and scenario give the same game, ticks later. */
@@ -104,6 +135,9 @@ static void test_no_colonists(void)
     REQUIRE(init_game(&game, 42, 200, 0));
     CHECK(scenario_apply(&game, SCENARIO_CONSTRUCTION));
     CHECK_EQ_INT(game.constructions.used_count, 0);
+    CHECK_EQ_INT(stockpile_count(&game), 0);
+    CHECK(scenario_apply(&game, SCENARIO_COOKING));
+    CHECK_EQ_INT(game.workstations.used_count, 0);
     CHECK_EQ_INT(stockpile_count(&game), 0);
     game_shutdown(&game);
 }

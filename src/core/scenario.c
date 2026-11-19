@@ -88,6 +88,107 @@ static void setup_construction(Game *game, const Colonist *first)
                               z);
 }
 
+/* The nearest free tile (passable, without tree, structure, station or
+ * items; where a workstation may stand when `station`) to (x, y, z) within
+ * `radius`, ring by ring in a fixed order. */
+static bool free_tile(const Game *game, int x, int y, int z, int radius, bool station, int *out_x,
+                      int *out_y)
+{
+    const Map *map = &game->map;
+    for (int ring = 0; ring <= radius; ring++) {
+        for (int dy = -ring; dy <= ring; dy++) {
+            for (int dx = -ring; dx <= ring; dx++) {
+                int tx = x + dx, ty = y + dy;
+                if ((dx != -ring && dx != ring && dy != -ring && dy != ring) ||
+                    !map_is_passable(map, tx, ty, z) ||
+                    map->plants[map_index(map, tx, ty, z)].type == PLANT_TREE ||
+                    map_structure(map, tx, ty, z) != STRUCTURE_NONE ||
+                    workstation_at(&game->workstations, tx, ty, z) >= 0 ||
+                    items_get(&game->items, tx, ty, z).type != ITEM_NONE ||
+                    (station && !workstation_can_place(&game->workstations, map, tx, ty, z))) {
+                    continue;
+                }
+                *out_x = tx;
+                *out_y = ty;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* A lit hearth on a free tile near (x, y, z) with a bill for `recipe`. */
+static int cooking_hearth(Game *game, int x, int y, int z, RecipeType recipe)
+{
+    int hx, hy;
+    if (!free_tile(game, x, y, z, 16, true, &hx, &hy)) {
+        return -1;
+    }
+    Workstations *stations = &game->workstations;
+    map_remove_plant(&game->map, hx, hy, z); /* Grass or a bush cleared. */
+    int index = workstations_place(stations, &game->map, WORKSTATION_OPEN_HEARTH, hx, hy, z);
+    Workstation *station = workstation_get(stations, index);
+    if (station == NULL) {
+        return -1;
+    }
+    station->fuel = HEARTH_FUEL_CAPACITY;
+    hearth_light(stations, index);
+    hearth_set_keep_burning(stations, index, true);
+    int bill = workstation_add_bill(stations, index, recipe);
+    workstation_set_bill_mode(stations, index, bill, BILL_DO_TIMES);
+    workstation_set_bill_target(stations, index, bill, BILL_TARGET_MAX);
+    return index;
+}
+
+static void setup_cooking(Game *game, const Colonist *first)
+{
+    if (first == NULL) {
+        return;
+    }
+    int x = first->x, y = first->y, z = first->z;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        Colonist *colonist = game_colonist(game, game_colonist_id_at(game, slot));
+        if (colonist != NULL && colonist_knowledge_level(colonist, KNOWLEDGE_FIRE) < 60.0) {
+            colonist_set_knowledge_level(colonist, KNOWLEDGE_FIRE, 60.0);
+        }
+    }
+    cooking_hearth(game, x + 4, y, z, RECIPE_ROAST_CARROTS);
+    int rhizomes = cooking_hearth(game, x - 4, y, z, RECIPE_ROAST_RHIZOMES);
+    if (rhizomes >= 0) {
+        workstation_set_bill_quality_range(&game->workstations, rhizomes, 0, 40, ITEM_QUALITY_BEST);
+    }
+    /* Heaps: fresh and half rotten, good and poor, alone or with others. */
+    static const int PERCENT[] = {100, 30, 70, 15, 50, 90, 25, 60};
+    static const int QUALITY[] = {70, 20, 45, 90, 30, 60, 80, 50};
+    for (int i = 0; i < 16; i++) {
+        int hx, hy;
+        if (!free_tile(game, x + (i % 4) * 5 - 8, y + (i / 4) * 5 - 8, z, 6, false, &hx, &hy)) {
+            continue;
+        }
+        if (i % 4 == 1) {
+            items_add(&game->items, hx, hy, z, item_stack_pristine(ITEM_BRANCHES, 3)); /* Under. */
+        }
+        ItemType food = i % 2 == 0 ? ITEM_WILD_CARROTS : ITEM_CATTAIL_RHIZOMES;
+        int percent = PERCENT[i % 8], quality = QUALITY[(i * 3) % 8];
+        items_add(
+            &game->items, hx, hy, z,
+            item_stack_make(food, 6 + i % 5, quality, item_hit_points_at_percent(food, percent)));
+        if (i % 3 == 0) {
+            items_add(&game->items, hx, hy, z, item_stack_pristine(ITEM_COBBLE, 2)); /* Over. */
+        }
+    }
+    int sx, sy;
+    if (free_tile(game, x, y + 12, z, 10, false, &sx, &sy)) {
+        stockpile_create(&game->stockpiles, &game->map, sx - 3, sy - 2, sx + 3, sy + 2, z);
+    }
+    int land =
+        gather_zone_create(&game->gather_zones, &game->map, x - 30, y - 30, x + 30, y + 30, z);
+    gather_forever(game, land, GATHER_BRANCHES);
+    gather_forever(game, land, GATHER_TWIGS);
+    gather_forever(game, land, GATHER_WILD_CARROTS);
+    gather_forever(game, land, GATHER_CATTAIL_RHIZOMES);
+}
+
 bool scenario_apply(Game *game, Scenario scenario)
 {
     if ((unsigned)scenario >= SCENARIO_COUNT) {
@@ -102,6 +203,7 @@ bool scenario_apply(Game *game, Scenario scenario)
         setup_gathering(game, first);
         game_debug_feud(game);
         break;
+    case SCENARIO_COOKING: setup_cooking(game, first); break;
     default: break;
     }
     return true;

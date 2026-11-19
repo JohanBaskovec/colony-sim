@@ -2345,6 +2345,16 @@ typedef struct StationSearch {
     int priority; /* Only stations of this priority. */
 } StationSearch;
 
+/* Whether the worker could take a bill of the station (distance aside). */
+static bool station_has_job(const ColonistContext *context, const Colonist *worker,
+                            const Workstation *station)
+{
+    return !station->forbidden &&
+           !reservations_taken_by_other(context->reservations, RESERVATION_STATION,
+                                        station_tile(station), context->worker_id) &&
+           choose_bill(worker, context, station) >= 0;
+}
+
 static bool is_station_job(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)map;
@@ -2352,22 +2362,20 @@ static bool is_station_job(const Map *map, int x, int y, int z, void *userdata)
     const ColonistContext *context = search->context;
     const Workstation *station = workstation_get_const(
         context->workstations, workstation_at(context->workstations, x, y, z));
-    if (station == NULL || station->forbidden || station->priority != search->priority ||
-        reservations_taken_by_other(context->reservations, RESERVATION_STATION,
-                                    station_tile(station), context->worker_id)) {
-        return false;
-    }
-    return choose_bill(search->worker, context, station) >= 0;
+    return station != NULL && station->priority == search->priority &&
+           station_has_job(context, search->worker, station);
 }
 
-/* Cheap check before a search: the priorities of the stations with bills,
- * a bit per level (0: none). */
-static uint32_t station_job_priorities(const ColonistContext *context)
+/* Cheap check before a search (a few stations, no paths): the priorities of
+ * the stations with a bill the worker could take, a bit per level (0: none,
+ * and no search over the map for nothing). */
+static uint32_t station_job_priorities(const ColonistContext *context, const Colonist *worker)
 {
     uint32_t priorities = 0;
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = &context->workstations->list[index];
-        if (station->used && station->bill_count > 0) {
+        if (station->used && station->bill_count > 0 && !(priorities & (1u << station->priority)) &&
+            station_has_job(context, worker, station)) {
             priorities |= 1u << station->priority;
         }
     }
@@ -2770,7 +2778,7 @@ static bool station_job_still_valid(const Colonist *colonist, const ColonistCont
 
 static bool try_station_job(Colonist *colonist, const ColonistContext *context)
 {
-    uint32_t priorities = station_job_priorities(context);
+    uint32_t priorities = station_job_priorities(context, colonist);
     StationSearch search = {context, colonist, 0};
     TilePos tile;
     bool found = false;
@@ -3856,6 +3864,20 @@ static bool is_hearth_to_light(const Map *map, int x, int y, int z, void *userda
     return hearth_to_light(context, station_on(context, x, y, z));
 }
 
+/* Cheap check before a search (a few stations, no paths): whether some
+ * hearth may be lit now (none out in the rain, none taken). */
+static bool any_hearth_to_light(const ColonistContext *context)
+{
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = &context->workstations->list[index];
+        if (station->used && !station->forbidden && needs_lighting(station) &&
+            hearth_to_light(context, station)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 typedef struct FireSourceSearch {
     const ColonistContext *context;
     TilePos hearth; /* The one to light: not a source. */
@@ -3912,6 +3934,9 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
         }
         FetchSearch wanted = fetch_search(context, hearth_ingredient_types(lay));
         colonist->light_step = LIGHT_FETCH_LAY;
+        if (!items_exist(context->plan_items, wanted.types, 1)) {
+            return false; /* None anywhere: no search over the map for nothing. */
+        }
         return start_fetch(colonist, context, &wanted, hearth, COLONIST_WORK_SEARCH_MAX_COST,
                            false);
     }
@@ -3942,12 +3967,15 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
     }
     FetchSearch tinder = fetch_search(context, ITEM_TINDER_TYPES);
     colonist->light_step = LIGHT_FETCH_TINDER;
+    if (!items_exist(context->plan_items, ITEM_TINDER_TYPES, 1)) {
+        return false; /* None anywhere. */
+    }
     return start_fetch(colonist, context, &tinder, hearth, COLONIST_WORK_SEARCH_MAX_COST, false);
 }
 
 static bool try_light_job(Colonist *colonist, const ColonistContext *context)
 {
-    if (!colonist_can_light(colonist) || !any_station(context, needs_lighting)) {
+    if (!colonist_can_light(colonist) || !any_hearth_to_light(context)) {
         return false;
     }
     TilePos tile;

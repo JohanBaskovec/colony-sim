@@ -30,6 +30,13 @@ typedef enum Scenario {
      * who loathe each other, half of them abrasive (game_debug_feud()):
      * arguments, brawls, gossip passed on, apologies (docs/SOCIAL.md). */
     SCENARIO_FEUDS,
+    /* Cooking: two lit hearths next to the colony, one roasting wild carrots
+     * and one cattail rhizomes (only of quality 40 or better), again and
+     * again (BILL_DO_TIMES, BILL_TARGET_MAX: Bill.done counts the crafts);
+     * heaps of both, fresh and half rotten, some under cobbles or on
+     * branches (tiles of several kinds), a stockpile, a zone gathering wild
+     * food and fuel around; every settler knows fire well enough to roast. */
+    SCENARIO_COOKING,
     SCENARIO_COUNT
 } Scenario;
 

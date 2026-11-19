@@ -96,7 +96,7 @@ simulation:
 | `camera`     | World ↔ screen transforms, zoom, visible tile range, the level shown         |
 | `cli`        | Command-line parsing (language, seed, size, colonists, test scenario, cheats) |
 | `entry_strip` | Fits same-sized entries (the colonist bar) into a width: shrunk, then wrapped onto rows |
-| `scenario`   | Ready-made test situations on a new game (`bench_simulation`, `bench_social`, `--scenario`): gathering, unreachable jobs, construction, feuds (two clans who loathe each other) |
+| `scenario`   | Ready-made test situations on a new game (`bench_simulation`, `bench_social`, `--scenario`): gathering, unreachable jobs, construction, feuds (two clans who loathe each other), cooking (two lit hearths, heaps of food fresh and half rotten, some of several kinds) |
 | `test_scenario` | The F2 debug menu's scenarios: `test_scenario_load()` replaces the world of a running `Game` (shut down, then built again from the same seed, debug flags and clock speed kept) with a flat bare 96×96 world and places hungry wolves and a herd of roe deer, or two settlers (one with a thrusting spear), or eight settlers in two feuding clans, by hand |
 | `settings`   | Player settings kept between sessions (interface size, palette, language) as a forgiving `key = value` text; the frontend loads and saves the file |
 | `log`        | Logging with a pluggable sink                                                |
@@ -531,7 +531,14 @@ built), each item as it was. Searches ask for the types they want, pickups
 take those types; a hauler remembers the type it collects
 (`Colonist.haul_type`). Storage keeps one group per tile
 (`haul_storage_room()`): haulers bring items only to an empty tile or one
-holding the same group alone. There are also
+holding the same group alone (a load dropped by a settler who gave up may
+still mix a storage tile). `items_check()` and `game_check_items()` check
+that all this stays consistent (lists, summaries, mixed marks, counts per
+level and type, forbidden tiles, every slot of the pool lying, held or free
+exactly once, loads matching their items): the long runs of
+`test_item_simulation` call them every in-game hour, `bench_simulation` at
+the end (every hour with `BENCH_CHECK_ITEMS`). `Items.rotted` counts what
+rotted away, by type. There are also
 map-wide totals per type and a count of tiles with items per level
 (`level_stacks`: haulers' searches skip the empty levels, underground ones
 first). Each `ItemDef` has a realistic `weight` (kg per

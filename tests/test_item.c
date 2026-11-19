@@ -406,6 +406,69 @@ static void test_types_share_a_tile(void)
     map_free(&map);
 }
 
+/* The consistency check passes on items handled every way, and finds what
+ * is broken. */
+static void test_check_finds_inconsistencies(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(map_init(&map, 16, 16, 2));
+    REQUIRE(items_init(&items, 16, 16, 2));
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    items_add(&items, 3, 3, 0, item_stack_make(ITEM_WOOD, 4, 70, 30));
+    items_add(&items, 3, 3, 0, item_stack_make(ITEM_FLINT, 2, 20, 1));
+    items_add(&items, 5, 5, 1, item_stack_pristine(ITEM_BLACKBERRIES, 9));
+    REQUIRE(items_add_wild(&items, 3, 3, 0, ITEM_TWIGS, 3) == 3);
+    items_set_forbidden(&items, 5, 5, 1, true);
+    ItemStack load = {.type = ITEM_NONE};
+    REQUIRE(items_pick_up_of(&items, 3, 3, 0, ITEM_TYPE_BIT(ITEM_WOOD), 3, &load) == 3);
+    ItemsCheck check = items_check(&items);
+    CHECK_EQ_INT(check.problems, 0);
+    CHECK(check.first == NULL);
+    CHECK(items_check_load(&items, load));
+    CHECK(items_check_load(&items, item_stack_pristine(ITEM_WOOD, 5))); /* Only numbers. */
+    ItemStack wrong = load;
+    wrong.count = 2;
+    CHECK(!items_check_load(&items, wrong));
+    ItemHeaps heaps = items_heaps(&items);
+    CHECK_EQ_INT((int)heaps.tiles, 2);
+    CHECK_EQ_INT((int)heaps.mixed, 1);
+    CHECK_EQ_INT((int)heaps.mixed_groups, 2);
+    CHECK_EQ_INT(heaps.most_groups, 2);
+
+    /* Each kind of damage is found. */
+    items.totals[ITEM_FLINT]++;
+    check = items_check(&items);
+    CHECK(check.problems > 0);
+    CHECK_STR_EQ(check.first, "the totals of a type are wrong");
+    items.totals[ITEM_FLINT]--;
+    items.mixed[3 * 16 + 3] = 0;
+    check = items_check(&items);
+    CHECK_STR_EQ(check.first, "a tile's mixed mark is wrong");
+    CHECK_EQ_INT((int)check.first_tile, 3 * 16 + 3);
+    items.mixed[3 * 16 + 3] = 1;
+    items.stacks[3 * 16 + 3].count++;
+    CHECK_STR_EQ(items_check(&items).first, "a tile's summary is not its newest group");
+    items.stacks[3 * 16 + 3].count--;
+    items.held_count++;
+    CHECK(items_check(&items).problems > 0);
+    items.held_count--;
+    items.level_wild[0]++;
+    CHECK_STR_EQ(items_check(&items).first, "a level's count of wild items is wrong");
+    items.level_wild[0]--;
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+
+    /* What rots away is counted. */
+    items_add(&items, 8, 8, 0, item_stack_make(ITEM_BLACKBERRIES, 4, 50, 1));
+    items_advance(&items, 0, 16 * 16 * 2, 24 * 30, NULL, NULL);
+    CHECK(items.rotted[ITEM_BLACKBERRIES] >= 4);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    items_use_up(&items, &load, load.count);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    items_free(&items);
+    map_free(&map);
+}
+
 /* Everything lying on a tile moves elsewhere as it was, or is cleared. */
 static void test_tile_moved_and_cleared(void)
 {
@@ -1078,6 +1141,7 @@ int main(void)
     RUN_TEST(test_drop_keeps_condition);
     RUN_TEST(test_types_share_a_tile);
     RUN_TEST(test_tile_moved_and_cleared);
+    RUN_TEST(test_check_finds_inconsistencies);
     RUN_TEST(test_drop_spreads_to_reachable_tiles);
     RUN_TEST(test_drop_without_room_loses_the_rest);
     RUN_TEST(test_rot_definitions);

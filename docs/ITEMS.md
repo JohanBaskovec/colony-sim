@@ -174,3 +174,23 @@ playable.
    building: 18 % faster). Not yet: holders' item lists (delivered
    materials, station inputs, fuel stay counts since they are used up) and
    the region masks (not needed so far).
+7. **Checks** (done). `items_check()` (every item listed once on its own
+   tile, summaries, mixed marks, counts per level and type, forbidden tiles,
+   every slot of the pool lying, held or free exactly once) and
+   `game_check_items()` (the known world's picture too, and every load
+   matching its items). `test_item_simulation` runs whole colonies (gathering,
+   building, cooking, under the fog of war, among wild animals) and checks
+   the items every in-game hour; `bench_simulation` checks them at the end
+   (every hour with `BENCH_CHECK_ITEMS=1`) and reports the heaps, what rotted
+   and the crafts of the bills. The cooking scenario (`--scenario 5`) runs
+   two lit hearths on heaps of food of all ages, some of several kinds.
+   Found on the way: settlers searched the whole map again and again for a
+   station when none had a bill they could take, and for tinder that lay
+   nowhere; a cheap check first made the cooking scenario four times faster
+   (244 µs a tick down to 60 µs on 12 settlers over two days, the same
+   state hash).
+   Measured on 200 × 200, 12 settlers, 4 days, checked every hour: about
+   400 heaps of several kinds out of 4 000 tiles with items while gathering
+   (two kinds each, three at most); while building, 378 of 609 after eight
+   days (grass, twigs and branches dropped together); 2 of 100 while
+   cooking; 7 to 16 storage tiles mixed by dropped loads; no inconsistency.

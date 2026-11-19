@@ -255,6 +255,14 @@ void game_tick(Game *game);
 /* Content hash of the whole simulation state (determinism checks). */
 uint64_t game_hash(const Game *game);
 
+/*
+ * Checks that the items are consistent (tests and benchmarks): items_check()
+ * on the world and on the known world's picture, every settler's load
+ * matching its items (items_check_load()), and the items in loads adding up
+ * to what the item pool counts as held. Visits every tile.
+ */
+ItemsCheck game_check_items(const Game *game);
+
 /* Turns the tracking of what the settlers see on or off (it costs time, and
  * nothing depends on it yet: for the debug overlay). Off frees it. Returns
  * false when it cannot be allocated. */

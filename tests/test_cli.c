@@ -153,7 +153,7 @@ static void test_test_options(void)
     CHECK_EQ_UINT(options.debug, CLI_DEBUG_INSTANT_FELL_AND_MINE);
 
     char *bad[][3] = {{"colony_sim", "--colonists", "0"},     {"colony_sim", "--colonists", "65"},
-                      {"colony_sim", "--scenario", "5"},      {"colony_sim", "--debug", "fly"},
+                      {"colony_sim", "--scenario", "6"},      {"colony_sim", "--debug", "fly"},
                       {"colony_sim", "--debug", "no_tools,"}, {"colony_sim", "--debug", ""},
                       {"colony_sim", "--debug", "no_tool"}};
     for (int i = 0; i < ARGC(bad); i++) {

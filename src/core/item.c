@@ -1865,6 +1865,7 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
             }
             ItemFate fate = advance_item(items, item, hours, here);
             if (fate == ITEM_FATE_GONE) {
+                items->rotted[item->type]++;
                 unlink_item(items, i, previous, slot);
             } else {
                 previous = slot;
@@ -1887,6 +1888,159 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
         }
     }
     return transformed;
+}
+
+/* Notes a problem found by items_check() (the first one is described). */
+static void found(ItemsCheck *check, const char *what, long tile)
+{
+    if (check->problems++ == 0) {
+        check->first = what;
+        check->first_tile = tile;
+    }
+}
+
+ItemsCheck items_check(const Items *items)
+{
+    ItemsCheck check = {0, NULL, -1};
+    size_t level_size = (size_t)items->width * (size_t)items->height;
+    long totals[ITEM_TYPE_COUNT] = {0}, wild_totals[ITEM_TYPE_COUNT] = {0};
+    long listed = 0;
+    int forbidden = 0;
+    for (int z = 0; z < items->depth; z++) {
+        uint32_t stacks = 0, wild = 0;
+        for (size_t i = (size_t)z * level_size; i < (size_t)(z + 1) * level_size; i++) {
+            long steps = 0;
+            for (const Item *item = items_first(items, i); item != NULL;
+                 item = items_next(items, item)) {
+                if (++steps > (long)items->pool_used) {
+                    found(&check, "a tile's list loops", (long)i);
+                    break;
+                }
+                if (item->type == ITEM_NONE || (unsigned)item->type >= ITEM_TYPE_COUNT) {
+                    found(&check, "a free or invalid item lies on a tile", (long)i);
+                    continue;
+                }
+                if (item->tile != (uint32_t)i) {
+                    found(&check, "an item lies on another tile than its own", (long)i);
+                }
+                if (item_wild(item)) {
+                    wild_totals[item->type]++;
+                    wild++;
+                } else {
+                    totals[item->type]++;
+                }
+                listed++;
+            }
+            /* The summary and the mixed mark, as refresh_tile() makes them. */
+            const Item *head = items_first(items, i);
+            while (head != NULL && item_wild(head)) {
+                head = items_next(items, head);
+            }
+            ItemStack expected =
+                head != NULL ? group_of(items, i, key_of(head)) : (ItemStack){.type = ITEM_NONE};
+            const ItemStack *stack = &items->stacks[i];
+            if (stack->type != expected.type || stack->count != expected.count ||
+                stack->corpse != expected.corpse || stack->quality != expected.quality ||
+                stack->hit_points != expected.hit_points || stack->progress != expected.progress ||
+                stack->eaten != expected.eaten || stack->held != 0) {
+                found(&check, "a tile's summary is not its newest group", (long)i);
+            }
+            bool mixed = false;
+            for (const Item *item = head; item != NULL && !mixed; item = items_next(items, item)) {
+                mixed = !item_wild(item) && !item_matches(item, &expected);
+            }
+            if (mixed != (items->mixed[i] != 0)) {
+                found(&check, "a tile's mixed mark is wrong", (long)i);
+            }
+            stacks += expected.type != ITEM_NONE;
+            if (items->forbidden[i]) {
+                forbidden++;
+                if (expected.type == ITEM_NONE) {
+                    found(&check, "a tile without items is forbidden", (long)i);
+                }
+            }
+        }
+        if (items->level_stacks[z] != stacks) {
+            found(&check, "a level's count of tiles with items is wrong", -1);
+        }
+        if (items->level_wild[z] != wild) {
+            found(&check, "a level's count of wild items is wrong", -1);
+        }
+    }
+    for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
+        if (totals[type] != items->totals[type] || wild_totals[type] != items->wild_totals[type]) {
+            found(&check, "the totals of a type are wrong", -1);
+            break;
+        }
+    }
+    if (listed != items->item_count) {
+        found(&check, "the count of items lying about is wrong", -1);
+    }
+    if (forbidden != items->forbidden_count) {
+        found(&check, "the count of forbidden tiles is wrong", -1);
+    }
+    /* Every slot used is lying on a tile, in a load, or free: no more, no
+     * less (an item in two lists would be counted twice). */
+    long held = 0, free_count = 0;
+    for (uint32_t slot = 0; slot < items->pool_used; slot++) {
+        const Item *item = &items->pool[slot];
+        held += item->type != ITEM_NONE && item->tile == ITEM_TILE_HELD;
+    }
+    for (uint32_t slot = items->free_slots; slot != 0 && free_count <= (long)items->pool_used;
+         slot = items->pool[slot - 1].next) {
+        if (items->pool[slot - 1].type != ITEM_NONE) {
+            found(&check, "an item in use is on the free list", -1);
+            break;
+        }
+        free_count++;
+    }
+    if (held != items->held_count) {
+        found(&check, "the count of items in loads is wrong", -1);
+    }
+    if (listed + held + free_count != (long)items->pool_used) {
+        found(&check, "some slots are neither lying, held nor free", -1);
+    }
+    return check;
+}
+
+bool items_check_load(const Items *items, ItemStack load)
+{
+    if (load.held == 0) {
+        return true; /* Only numbers. */
+    }
+    long count = 0;
+    for (const Item *item = slot_item(items, load.held); item != NULL;
+         item = slot_item(items, item->next)) {
+        if (++count > (long)items->pool_used || item->tile != ITEM_TILE_HELD ||
+            item->type != load.type || item->corpse != load.corpse) {
+            return false;
+        }
+    }
+    return count == load.count;
+}
+
+ItemHeaps items_heaps(const Items *items)
+{
+    ItemHeaps heaps = {0, 0, 0, 0};
+    size_t count = (size_t)items->width * (size_t)items->height * (size_t)items->depth;
+    for (size_t i = 0; i < count; i++) {
+        if (items->stacks[i].type == ITEM_NONE) {
+            continue;
+        }
+        heaps.tiles++;
+        if (!items->mixed[i]) {
+            continue;
+        }
+        ItemStack groups[16];
+        int x = (int)(i % (size_t)items->width);
+        int y = (int)(i / (size_t)items->width % (size_t)items->height);
+        int z = (int)(i / ((size_t)items->width * (size_t)items->height));
+        int kinds = items_groups(items, x, y, z, groups, 16);
+        heaps.mixed++;
+        heaps.mixed_groups += kinds;
+        heaps.most_groups = kinds > heaps.most_groups ? kinds : heaps.most_groups;
+    }
+    return heaps;
 }
 
 uint64_t items_hash(const Items *items, uint64_t hash)

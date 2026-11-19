@@ -28,6 +28,7 @@ set(COLONY_UNIT_TESTS
     test_i18n
     test_item
     test_item_move
+    test_item_simulation
     test_knowledge
     test_learning
     test_levels
@@ -75,6 +76,7 @@ set(COLONY_SPLIT_TESTS
     test_crafting
     test_game
     test_health
+    test_item_simulation
     test_tree
     test_vision
     test_worldgen)

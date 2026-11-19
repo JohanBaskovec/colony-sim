@@ -258,6 +258,9 @@ typedef struct Items {
     /* A picture of other items (core/known.h): a tile changed here rather
      * than copied gets a stamp no copy has, so that it is copied again. */
     bool picture;
+    /* Items of each type that rotted away on the ground (statistics: not in
+     * the state hash). */
+    long rotted[ITEM_TYPE_COUNT];
 } Items;
 
 /* Items dropped by a single action spread at most this far (in steps). */
@@ -587,5 +590,35 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
                   const void *context);
 
 uint64_t items_hash(const Items *items, uint64_t hash);
+
+/* What items_check() found: 0 problems when everything is consistent. */
+typedef struct ItemsCheck {
+    int problems;
+    const char *first; /* What the first problem was (English, for developers), NULL for none. */
+    long first_tile;   /* Its tile index, -1 when it is not about one tile. */
+} ItemsCheck;
+
+/*
+ * Checks that the items are consistent (tests and benchmarks): every item
+ * listed lies on its own tile, the summaries, mixed marks, counts per level,
+ * totals and forbidden tiles match the items, and every slot of the pool is
+ * lying on a tile, in a load or free, exactly once. Visits every tile.
+ */
+ItemsCheck items_check(const Items *items);
+
+/* Whether a load's list of items matches it: its count, type and dead one,
+ * every item held (a load that is only numbers passes). */
+bool items_check_load(const Items *items, ItemStack load);
+
+/* Heaps on the map (statistics): tiles with items (but wild ones), those
+ * with several groups, their groups in all, the most groups on one tile. */
+typedef struct ItemHeaps {
+    long tiles;
+    long mixed;
+    long mixed_groups;
+    int most_groups;
+} ItemHeaps;
+
+ItemHeaps items_heaps(const Items *items);
 
 #endif /* COLONY_CORE_ITEM_H */
