@@ -12,11 +12,18 @@
  *     }
  *
  * CHECK* macros record a failure and continue; REQUIRE aborts the current test.
+ *
+ * With COLONY_TEST_ONLY=name in the environment, only that test function
+ * runs (the other RUN_TEST lines are skipped): tests/CMakeLists.txt registers
+ * each test of the slowest files as a CTest entry of its own that way, so
+ * that they run in parallel. Running nothing is then a failure (a renamed
+ * test, a stale configuration).
  */
 #ifndef COLONY_TEST_FRAMEWORK_H
 #define COLONY_TEST_FRAMEWORK_H
 
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +34,13 @@ static int test_failure_count = 0;
 static int test_check_count = 0;
 static int test_run_count = 0;
 static const char *test_current_name = "";
+
+/* Whether a test function should run (COLONY_TEST_ONLY, see above). */
+static inline bool test_selected(const char *name)
+{
+    const char *only = getenv("COLONY_TEST_ONLY");
+    return only == NULL || only[0] == '\0' || strcmp(only, name) == 0;
+}
 
 #define TEST_FAIL_(...)                                                                            \
     do {                                                                                           \
@@ -99,6 +113,9 @@ static const char *test_current_name = "";
 
 #define RUN_TEST(function)                                                                         \
     do {                                                                                           \
+        if (!test_selected(#function)) {                                                           \
+            break;                                                                                 \
+        }                                                                                          \
         int failures_before_ = test_failure_count;                                                 \
         test_current_name = #function;                                                             \
         test_run_count++;                                                                          \
@@ -112,6 +129,10 @@ static inline int test_summary(void)
 {
     printf("\n%d test(s), %d check(s), %d failure(s)\n", test_run_count, test_check_count,
            test_failure_count);
+    if (test_run_count == 0) {
+        fprintf(stderr, "no test ran (COLONY_TEST_ONLY=%s)\n", getenv("COLONY_TEST_ONLY"));
+        return EXIT_FAILURE;
+    }
     return test_failure_count == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

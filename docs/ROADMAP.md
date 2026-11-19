@@ -315,6 +315,8 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 - [x] Failed food searches no longer explore everything within their cost limit: a scan of the colonist's region, limited to the square the search could reach, proves first that some food is there
 - [ ] World generation: guarantee drinkable water near the start (small maps can have none; the spawn point only prefers water)
 - [x] Simulation benchmark (`bench/bench_simulation`: many colonists, long runs, state hash)
+- [x] Faster builds: Ninja, ccache when installed, 6 jobs, tests in parallel
+- [x] The slowest test files split into one CTest entry per test function (`COLONY_SPLIT_TESTS`): a full headless `ctest` went from 40 s to 26 s on 6 cores
 - [ ] Windows and macOS CI builds
 - [ ] Choose a license
 - [x] Debug menu (F4): instant free construction, free crafts, work without tools, instant taking apart (`GameDebug`); items menu (F5): every item of the game, one or a full stack, dropped on the clicked tile

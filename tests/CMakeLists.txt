@@ -62,14 +62,46 @@ set(COLONY_UNIT_TESTS
     test_workstation
     test_worldgen)
 
+# The slowest files (several seconds under the sanitizers): each of their
+# test functions is a CTest entry of its own (`test_game.test_plants_grow`),
+# run with COLONY_TEST_ONLY so that they spread over the cores. Their names
+# are read from the RUN_TEST lines; the file is a configure dependency, so a
+# new test is picked up at the next build.
+set(COLONY_SPLIT_TESTS
+    test_animal
+    test_colonist
+    test_crafting
+    test_game
+    test_health
+    test_tree
+    test_vision
+    test_worldgen)
+
 foreach(test_name IN LISTS COLONY_UNIT_TESTS)
     add_executable(${test_name} ${test_name}.c)
     target_link_libraries(${test_name} PRIVATE colony_core)
     target_compile_definitions(${test_name} PRIVATE
         COLONY_SOURCE_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets")
     colony_configure_target(${test_name})
-    add_test(NAME ${test_name} COMMAND ${test_name})
-    set_tests_properties(${test_name} PROPERTIES LABELS "unit")
+    if(test_name IN_LIST COLONY_SPLIT_TESTS)
+        set(source "${CMAKE_CURRENT_SOURCE_DIR}/${test_name}.c")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
+        file(STRINGS "${source}" run_lines REGEX "^[ \t]*RUN_TEST\\([A-Za-z0-9_]+\\);")
+        set(case_count 0)
+        foreach(line IN LISTS run_lines)
+            string(REGEX REPLACE "^[ \t]*RUN_TEST\\(([A-Za-z0-9_]+)\\);.*$" "\\1" case "${line}")
+            add_test(NAME ${test_name}.${case} COMMAND ${test_name})
+            set_tests_properties(${test_name}.${case} PROPERTIES
+                LABELS "unit" ENVIRONMENT "COLONY_TEST_ONLY=${case}")
+            math(EXPR case_count "${case_count} + 1")
+        endforeach()
+        if(case_count EQUAL 0)
+            message(FATAL_ERROR "${test_name}.c: no RUN_TEST line found")
+        endif()
+    else()
+        add_test(NAME ${test_name} COMMAND ${test_name})
+        set_tests_properties(${test_name} PROPERTIES LABELS "unit")
+    endif()
 endforeach()
 
 # --- Translations --------------------------------------------------------------

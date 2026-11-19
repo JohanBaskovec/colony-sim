@@ -22,6 +22,14 @@ option(COLONY_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSa
 
 include(cmake/ProjectOptions.cmake)
 
+# Compiler cache, when installed: rebuilds of unchanged sources (SDL after a
+# fresh configure, going back on a change) come from the cache.
+find_program(COLONY_CCACHE ccache)
+if(COLONY_CCACHE AND NOT CMAKE_C_COMPILER_LAUNCHER)
+    set(CMAKE_C_COMPILER_LAUNCHER "${COLONY_CCACHE}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${COLONY_CCACHE}")
+endif()
+
 # Simulation core: pure C, no SDL dependency, fully unit-testable.
 add_subdirectory(src/core)
 

@@ -2394,7 +2394,13 @@ the source tree (`COLONY_SOURCE_ASSETS_DIR`, development builds).
 
 ## Build
 
-- CMake ≥ 3.25, presets in `CMakePresets.json`.
+- CMake ≥ 3.25, presets in `CMakePresets.json`: Ninja, 6 jobs (4 for the
+  sanitized game build, which needs much memory), tests run 6 at a time.
+- ccache is used when installed (`find_program()` in `CMakeLists.txt`).
+- Unit tests: one executable per file of `tests/`. The test functions of the
+  slowest files (`COLONY_SPLIT_TESTS`) are CTest entries of their own
+  (`test_game.test_plants_grow_over_time`), run with `COLONY_TEST_ONLY`, so
+  that a full `ctest` spreads over the cores instead of waiting for one file.
 - SDL3 / SDL3_ttf: system packages if found, else `FetchContent` from the
   official Git repositories (pinned release tags, static libraries).
 - Our targets get strict warnings via `colony_configure_target()`

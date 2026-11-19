@@ -44,6 +44,8 @@ cmake --preset debug && cmake --build --preset debug && ctest --preset debug    
 ./build/debug/bin/colony_sim --seed 42 --debug see_everything --animals 300            # three times the wild animals (0: none; 256 at most live at once)
 ./build/debug/bin/colony_sim --ui-scale 150         # larger interface (75 to 200 percent)
 ctest --preset debug -R i18n          # only one test (regex on the test name)
+ctest --preset headless -R test_game.test_plant_conditions  # one function of a split file (COLONY_SPLIT_TESTS)
+COLONY_TEST_ONLY=test_plant_conditions ./build/headless/tests/test_game  # the same, by hand
 ctest --preset debug -L i18n          # translation checks only (label)
 ./build/headless/bench/bench_pathfinding 200 2000   # benchmark (use an optimized build for real numbers)
 ./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times (processor time: steady on a busy machine), percentiles, slowest ticks, state hash (3: construction)
@@ -111,7 +113,9 @@ Prefer the `headless` preset while working on the simulation core.
 
 - Every change to `src/core/` comes with unit tests in `tests/test_<module>.c`
   (framework: `tests/test_framework.h`, `CHECK*` / `REQUIRE` / `RUN_TEST`).
-  New test file → add it to `COLONY_UNIT_TESTS` in `tests/CMakeLists.txt`.
+  New test file → add it to `COLONY_UNIT_TESTS` in `tests/CMakeLists.txt`
+  (and to `COLONY_SPLIT_TESTS` if it takes seconds: each `RUN_TEST(name);`
+  line then becomes a CTest entry of its own, run in parallel).
 - Write tests alongside the code, not afterwards; when fixing a bug, first add a test that reproduces it.
 - Translation tests run automatically: each `.lang` file is checked against
   `en.lang` (missing/extra keys, placeholder mismatch) and every literal key
