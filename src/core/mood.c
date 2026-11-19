@@ -21,11 +21,11 @@
 
 static const ThoughtDef THOUGHT_DEFS[THOUGHT_COUNT] = {
     [THOUGHT_HUNGRY] = STATE("hungry", N_("thought.hungry"), N_("thought.hungry.description"),
-                             -6.0f, 1.0f, 24.0f, 2.0f),
+                             -6.0f, 1.0f, 4.0f, 2.0f),
     [THOUGHT_STARVING] = STATE("starving", N_("thought.starving"),
                                N_("thought.starving.description"), -15.0f, 2.0f, 48.0f, 2.0f),
     [THOUGHT_THIRSTY] = STATE("thirsty", N_("thought.thirsty"), N_("thought.thirsty.description"),
-                              -6.0f, 1.0f, 12.0f, 2.0f),
+                              -6.0f, 1.0f, 3.0f, 2.0f),
     [THOUGHT_PARCHED] = STATE("parched", N_("thought.parched"), N_("thought.parched.description"),
                               -15.0f, 2.0f, 24.0f, 2.0f),
     [THOUGHT_TIRED] = STATE("tired", N_("thought.tired"), N_("thought.tired.description"), -5.0f,

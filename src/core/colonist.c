@@ -4556,22 +4556,40 @@ bool colonist_is_night_for(uint64_t tick, uint8_t worker_id)
     return colonist_is_night(tick >= delay ? tick - delay : tick + TICKS_PER_DAY - delay);
 }
 
+ThoughtType need_thought(NeedType need, float value)
+{
+    switch (need) {
+    case NEED_FOOD:
+        if (value < NEED_EMPTY_THRESHOLD) {
+            return THOUGHT_STARVING;
+        }
+        return value < NEED_CRITICAL_THRESHOLD ? THOUGHT_HUNGRY : THOUGHT_COUNT;
+    case NEED_WATER:
+        if (value < NEED_EMPTY_THRESHOLD) {
+            return THOUGHT_PARCHED;
+        }
+        return value < NEED_CRITICAL_THRESHOLD ? THOUGHT_THIRSTY : THOUGHT_COUNT;
+    case NEED_REST:
+        switch (need_level(value)) {
+        case NEED_LEVEL_CRITICAL: return THOUGHT_EXHAUSTED;
+        case NEED_LEVEL_LOW: return THOUGHT_TIRED;
+        default: return THOUGHT_COUNT;
+        }
+    default: return THOUGHT_COUNT;
+    }
+}
+
 /* States thought now (hungry, cold, out in the rain...). */
 static ThoughtMask mood_states(Colonist *colonist, const ColonistContext *context, bool asleep)
 {
-    static const ThoughtType LOW[NEED_COUNT] = {THOUGHT_HUNGRY, THOUGHT_THIRSTY, THOUGHT_TIRED};
-    static const ThoughtType CRITICAL[NEED_COUNT] = {THOUGHT_STARVING, THOUGHT_PARCHED,
-                                                     THOUGHT_EXHAUSTED};
     ThoughtMask states = 0;
     for (int need = 0; need < NEED_COUNT; need++) {
         if (need == NEED_REST && asleep) {
             continue; /* Resting already. */
         }
-        NeedLevel level = need_level(colonist->needs[need]);
-        if (level == NEED_LEVEL_CRITICAL) {
-            states |= THOUGHT_BIT(CRITICAL[need]);
-        } else if (level == NEED_LEVEL_LOW) {
-            states |= THOUGHT_BIT(LOW[need]);
+        ThoughtType state = need_thought((NeedType)need, colonist->needs[need]);
+        if (state != THOUGHT_COUNT) {
+            states |= THOUGHT_BIT(state);
         }
     }
     if (context->temperatures != NULL) {

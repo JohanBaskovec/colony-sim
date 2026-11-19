@@ -2265,6 +2265,23 @@ static void test_translation_keys(void)
     CHECK(colonist_name_count() >= 32);
 }
 
+/* Hunger and thirst weigh on the mood only below 10 %, the worse state when
+ * nearly empty; tiredness keeps its earlier thresholds. */
+static void test_hunger_and_thirst_come_late(void)
+{
+    CHECK_EQ_INT(need_thought(NEED_FOOD, 0.5f), THOUGHT_COUNT);
+    CHECK_EQ_INT(need_thought(NEED_FOOD, 0.2f),
+                 THOUGHT_COUNT); /* Looking for food, not suffering. */
+    CHECK_EQ_INT(need_thought(NEED_FOOD, 0.09f), THOUGHT_HUNGRY);
+    CHECK_EQ_INT(need_thought(NEED_FOOD, 0.01f), THOUGHT_STARVING);
+    CHECK_EQ_INT(need_thought(NEED_WATER, 0.2f), THOUGHT_COUNT);
+    CHECK_EQ_INT(need_thought(NEED_WATER, 0.09f), THOUGHT_THIRSTY);
+    CHECK_EQ_INT(need_thought(NEED_WATER, 0.01f), THOUGHT_PARCHED);
+    CHECK_EQ_INT(need_thought(NEED_REST, 0.5f), THOUGHT_COUNT);
+    CHECK_EQ_INT(need_thought(NEED_REST, 0.2f), THOUGHT_TIRED);
+    CHECK_EQ_INT(need_thought(NEED_REST, 0.05f), THOUGHT_EXHAUSTED);
+}
+
 /* ---- Harvest and Uproot orders ------------------------------------------- */
 
 /* A settler harvests a plant on order (the bramble stays), and uproots one
@@ -2795,6 +2812,7 @@ int main(void)
     RUN_TEST(test_knowledge_levels_validate);
     RUN_TEST(test_gatherer_level_speeds_up_gathering);
     RUN_TEST(test_gathering_zone_keeps_the_worker_busy);
+    RUN_TEST(test_hunger_and_thirst_come_late);
     RUN_TEST(test_gathering_zone_stops_at_its_targets);
     RUN_TEST(test_gatherer_waits_for_the_fruit_to_ripen);
     RUN_TEST(test_gatherer_fetches_a_digging_stick);

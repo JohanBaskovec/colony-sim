@@ -222,7 +222,9 @@ static void test_hunger_grows_worse(void)
     mood_init(&mood);
     mood_set_states(&mood, THOUGHT_BIT(THOUGHT_HUNGRY));
     float before = 0.0f;
-    for (int hour = 1; hour <= 24; hour++) {
+    int hours = (int)hungry->grow_hours; /* Worse every hour until it stops growing. */
+    REQUIRE(hours >= 2);
+    for (int hour = 1; hour <= hours; hour++) {
         for (int step = 0; step < TICKS_PER_HOUR / MOOD_UPDATE_TICKS; step++) {
             mood_advance(&mood, MOOD_UPDATE_TICKS);
         }
@@ -230,7 +232,7 @@ static void test_hunger_grows_worse(void)
         CHECK(now < before);
         before = now;
     }
-    CHECK_NEAR(before, mood_state_value(THOUGHT_HUNGRY, 24 * TICKS_PER_HOUR), 1e-3);
+    CHECK_NEAR(before, mood_state_value(THOUGHT_HUNGRY, hours * TICKS_PER_HOUR), 1e-3);
     CHECK_NEAR(mood.peak[THOUGHT_HUNGRY], before, 1e-6);
     /* Fed: it fades from the worst it got to. */
     mood_set_states(&mood, 0);
@@ -415,8 +417,8 @@ static void test_misery_leads_to_breaks(void)
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
-    colonist->needs[NEED_FOOD] = 0.05f; /* Nothing to eat or drink here. */
-    colonist->needs[NEED_WATER] = 0.05f;
+    colonist->needs[NEED_FOOD] = 0.01f; /* Nothing to eat or drink here. */
+    colonist->needs[NEED_WATER] = 0.01f;
     run_ticks(&game, MOOD_UPDATE_TICKS);
     CHECK(mood_has(&colonist->mood, THOUGHT_STARVING));
     CHECK(mood_has(&colonist->mood, THOUGHT_PARCHED));

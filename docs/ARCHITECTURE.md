@@ -734,7 +734,10 @@ or too hot while awake; soaked; out in the rain) are set by `update_mood()`
 every `MOOD_UPDATE_TICKS`, the colonists spread over those ticks by their
 slot, then `mood_advance()` moves every thought on. A state sets in over an
 hour (`MOOD_STATE_RISE_HOURS`); hunger, thirst and exhaustion grow worse the
-longer they last (`ThoughtDef.grow_hours`, `grow_max`: up to twice as bad);
+longer they last (`ThoughtDef.grow_hours`, `grow_max`: up to twice as bad;
+hunger within 4 hours, thirst within 3); hunger and thirst only set in below
+10 % (`need_thought()`: a settler looks for food from 30 % and has the time to
+eat before it feels it), starving and parched below 3 %;
 once over, a state fades. A memory weighs its full value for
 `ThoughtDef.plateau_hours`, then fades. Fading halves a thought every
 `half_life_hours` until it weighs less than `MOOD_FORGET_BELOW`; `Mood.peak`

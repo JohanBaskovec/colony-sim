@@ -164,6 +164,12 @@
 #define COLONIST_BED_SEARCH_MAX_COST 150.0f
 #define NEED_LOW_THRESHOLD 0.3f
 #define NEED_CRITICAL_THRESHOLD 0.1f
+/* Hunger and thirst only weigh on the mood below NEED_CRITICAL_THRESHOLD
+ * (a settler has the time to go and eat before it feels it: it looks for
+ * food from NEED_LOW_THRESHOLD), and for the worse below
+ * NEED_EMPTY_THRESHOLD (starving, parched). Tiredness weighs from
+ * NEED_LOW_THRESHOLD, and for the worse below NEED_CRITICAL_THRESHOLD. */
+#define NEED_EMPTY_THRESHOLD 0.03f
 /* Company (docs/SOCIAL.md §4), from 1 (plenty) to 0: awake, a settler misses
  * it at this rate times its sociability factor; listening to a story,
  * telling one or working beside a master or an apprentice fills it at
@@ -348,6 +354,10 @@ typedef enum ColonistAction {
 } ColonistAction;
 
 typedef enum NeedLevel { NEED_LEVEL_OK, NEED_LEVEL_LOW, NEED_LEVEL_CRITICAL } NeedLevel;
+
+/* The state a need at this value puts a settler in (hungry, starving,
+ * thirsty, parched, tired, exhausted), or THOUGHT_COUNT for none. */
+ThoughtType need_thought(NeedType need, float value);
 
 typedef struct Colonist {
     char name[COLONIST_NAME_SIZE]; /* Proper noun: never translated. */
