@@ -1218,8 +1218,8 @@ static void character_rows(UiLayout *layout, void *userdata)
     const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
     if (colonist != NULL) {
         AttributeType edited = ATTRIBUTE_COUNT;
-        int step =
-            attributes_panel_rows(layout, &colonist->attributes, app->character_editor, &edited);
+        int step = attributes_panel_rows(layout, &colonist->attributes, false,
+                                         app->character_editor, &edited);
         ui_layout_set_stepper(layout, false);
         if (step != 0) {
             game_debug_colonist_attribute(&app->game, app->selected[0], edited, step);

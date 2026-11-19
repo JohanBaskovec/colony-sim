@@ -10,8 +10,8 @@ static void signed_text(char *out, size_t size, long long value)
     SDL_snprintf(out, size, "%s%s", value > 0 ? "+" : "", number);
 }
 
-int attributes_panel_rows(UiLayout *layout, const Attributes *attributes, bool editable,
-                          AttributeType *edited)
+int attributes_panel_rows(UiLayout *layout, const Attributes *attributes, bool animal,
+                          bool editable, AttributeType *edited)
 {
     int step = 0;
     ui_layout_set_stepper(layout, editable);
@@ -22,7 +22,8 @@ int attributes_panel_rows(UiLayout *layout, const Attributes *attributes, bool e
     for (int group = 0; group < ATTRIBUTE_GROUP_COUNT; group++) {
         ui_layout_label(layout, tr(GROUP_KEYS[group]), 0.0f, true);
         for (int type = 0; type < ATTRIBUTE_COUNT; type++) {
-            if (attribute_group((AttributeType)type) != (AttributeGroup)group) {
+            if (attribute_group((AttributeType)type) != (AttributeGroup)group ||
+                (animal && !attribute_affects_animals((AttributeType)type))) {
                 continue;
             }
             int position = attributes->position[type];

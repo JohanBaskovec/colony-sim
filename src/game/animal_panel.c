@@ -97,7 +97,7 @@ static void character_rows(UiLayout *layout, void *userdata)
     App *app = userdata;
     const Animal *animal = game_animal_const(&app->game, app->selected_animal);
     if (animal != NULL) {
-        attributes_panel_rows(layout, &animal->attributes, false, NULL);
+        attributes_panel_rows(layout, &animal->attributes, true, false, NULL);
     }
 }
 

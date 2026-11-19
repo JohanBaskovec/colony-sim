@@ -466,6 +466,27 @@ static void test_hash_sees_attributes(void)
     game_shutdown(&game);
 }
 
+/* What an animal's Character tab shows: what changes anything for it. */
+static void test_attributes_affecting_animals(void)
+{
+    CHECK(!attribute_affects_animals(ATTRIBUTE_WORK_PACE));
+    CHECK(!attribute_affects_animals(ATTRIBUTE_LEARNING));
+    CHECK(!attribute_affects_animals(ATTRIBUTE_OUTLOOK));
+    CHECK(!attribute_affects_animals(ATTRIBUTE_TEMPERAMENT));
+    CHECK(!attribute_affects_animals(ATTRIBUTE_COUNT));
+    int shown = 0;
+    for (int type = 0; type < ATTRIBUTE_COUNT; type++) {
+        shown += attribute_affects_animals((AttributeType)type);
+    }
+    CHECK_EQ_INT(shown, ATTRIBUTE_COUNT - 4);
+    /* Walking, running, toughness, the temperatures and courage do. */
+    CHECK(attribute_affects_animals(ATTRIBUTE_WALKING));
+    CHECK(attribute_affects_animals(ATTRIBUTE_ENDURANCE));
+    CHECK(attribute_affects_animals(ATTRIBUTE_COLD_TOLERANCE));
+    CHECK(attribute_affects_animals(ATTRIBUTE_PAIN_TOLERANCE));
+    CHECK(attribute_affects_animals(ATTRIBUTE_COURAGE));
+}
+
 int main(void)
 {
     RUN_TEST(test_ordinary_changes_nothing);
@@ -481,5 +502,6 @@ int main(void)
     RUN_TEST(test_sleep_sets_the_rest_regained);
     RUN_TEST(test_new_settlers_differ_and_follow_the_seed);
     RUN_TEST(test_hash_sees_attributes);
+    RUN_TEST(test_attributes_affecting_animals);
     return test_summary();
 }

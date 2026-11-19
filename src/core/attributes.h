@@ -129,6 +129,10 @@ int attribute_band(int position);
 
 AttributeGroup attribute_group(AttributeType type);
 
+/* Whether the attribute changes anything for an animal: work, learning and
+ * the mood are a settler's alone (an animal's are still rolled, for the seed). */
+bool attribute_affects_animals(AttributeType type);
+
 /* Translation keys: the attribute, what it does, and the word for a position
  * (NULL for an ordinary one: nothing to say). */
 const char *attribute_name_key(AttributeType type);

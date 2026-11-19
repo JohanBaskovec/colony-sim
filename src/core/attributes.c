@@ -230,6 +230,18 @@ AttributeGroup attribute_group(AttributeType type)
                : ATTRIBUTE_GROUP_BODY;
 }
 
+bool attribute_affects_animals(AttributeType type)
+{
+    switch (type) {
+    case ATTRIBUTE_WORK_PACE:
+    case ATTRIBUTE_LEARNING:
+    case ATTRIBUTE_OUTLOOK:
+    case ATTRIBUTE_TEMPERAMENT:
+    case ATTRIBUTE_COUNT: return false;
+    default: return true;
+    }
+}
+
 const char *attribute_name_key(AttributeType type)
 {
     return (unsigned)type < ATTRIBUTE_COUNT ? ATTRIBUTE_DEFS[type].name_key : NULL;

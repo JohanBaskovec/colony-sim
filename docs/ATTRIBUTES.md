@@ -203,5 +203,6 @@ the attributes move them for the individual, with the same factors (×0.5 to ×2
 
 Learning and temperament are fixed at **−100 %** for every animal (it learns
 nothing and thoughts do not weigh on it: `attributes_roll_animal()`); work
-pace and outlook are drawn like the rest but have no effect on an animal. A
-Character tab in the animal's window shows them all, as for settlers.
+pace and outlook are drawn like the rest but have no effect on an animal. The
+Character tab in the animal's window shows only the others, those that change
+something for it (`attribute_affects_animals()`).
