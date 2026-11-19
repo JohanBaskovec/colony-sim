@@ -58,6 +58,7 @@ cmake --preset profile && cmake --build --preset profile  # optimized + debug sy
 perf record -g ./build/profile/bench/bench_simulation 64 4 3 && perf report  # where the time goes
 BENCH_TIMESTAMPS=1 perf record -g -k CLOCK_MONOTONIC ./build/profile/bench/bench_simulation 64 10 3  # then perf report --time <printed range>: one slow tick
 python3 tools/generate_sprites.py --preview /tmp/sheet.png  # redraw assets/sprites/*.png (Pillow + numpy)
+python3 tools/sprite_workbench.py    # window to tune the sprite and ground scripts of tools/assets/sprites/ (knobs, preview, save PNG)
 python3 tools/preview_attacks.py --lang fr --output /tmp/attacks.gif  # GIF of the attack animations and marks (mirrors core/strike_anim.c, game/strike_marks.c)
 python3 tools/preview_blood.py --output /tmp/blood.gif  # GIF of blood trails and pools (mirrors core/blood.c, render_blood())
 clang-format -i src/core/foo.c                 # format what you changed (config: .clang-format)

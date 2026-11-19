@@ -2199,7 +2199,15 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 - Sprites (`game/sprites.h`): 128 sprite pixels per tile (the largest zoom
   shows them 1:1). `tools/generate_sprites.py` draws them procedurally
   (Pillow, 4× supersampling) into `assets/sprites/`; run it again after
-  changing it and commit the PNG files. At startup they are packed into one
+  changing it and commit the PNG files. Some sprites and ground textures are
+  drawn instead by a script of their own in `tools/assets/sprites/` (SVG
+  rasterised by librsvg, or numpy and Pillow), tuned in
+  `tools/sprite_workbench.py`: a window that runs a script with its top-level
+  constants (its knobs) changed, catching the pictures it would write, shows
+  a sprite on a ground of the game as the game anchors it (a ground texture
+  repeated over the tiles), and saves the PNG (a ground texture with its
+  wrapped border) or writes the knobs back into the script. At startup they
+  are packed into one
   atlas (shelf packing, sizes and places multiples of 32 with 32-pixel gutters),
   and five halved copies are computed (opacity-weighted averages; SDL has no
   mipmaps). A batch uses the smallest copy at least as detailed as the
