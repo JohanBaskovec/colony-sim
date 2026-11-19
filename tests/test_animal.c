@@ -32,8 +32,10 @@ static bool init_flat_game(Game *game)
     for (size_t i = 0; i < map_level_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_SOIL;
         map->rock[i] = ROCK_NONE;
-        map->cobbles[i] = map->flint[i] = 0;
-        map->branches[i] = map->twigs[i] = map->nuts[i] = 0;
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE) | ITEM_TYPE_BIT(ITEM_FLINT));
+        map_clear_litter_at(map, i,
+                            ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS) |
+                                ITEM_TYPE_BIT(ITEM_HAZELNUTS));
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
     map_topology_changed(map);

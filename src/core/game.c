@@ -609,6 +609,8 @@ bool game_init(Game *game, const NewGameParams *params)
         return false;
     }
     game->seed = params->world.seed;
+    /* Stones, branches and twigs lie as wild items from now on. */
+    map_litter_to_items(&game->map, &game->items);
     corpses_init(&game->corpses);
     reservations_init(&game->reservations);
     item_moves_init(&game->item_moves);

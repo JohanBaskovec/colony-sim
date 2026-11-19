@@ -30,9 +30,9 @@ static bool init_flat_game(Game *game)
     }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
-        map->cobbles[i] = MAP_STONES_MAX; /* Cobbles everywhere, no flint. */
-        map->flint[i] = 0;
-        map->branches[i] = map->twigs[i] = 0;
+        map_set_stones_at(map, i, MAP_STONES_MAX, 0); /* Cobbles everywhere, no flint. */
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
@@ -1093,9 +1093,9 @@ static bool init_hill_game(Game *game)
         map->terrain[i] = (uint8_t)(z == 0 || (z == 1 && hill) ? TERRAIN_SOIL : TERRAIN_OPEN);
         map->rock[i] = (uint8_t)(z == 0 && hill ? ROCK_EARTH : ROCK_NONE);
         map->slope[i] = 0;
-        map->cobbles[i] = 0;
-        map->flint[i] = 0;
-        map->branches[i] = map->twigs[i] = 0;
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
     map->slope[map_index(map, 25, 20, 0)] = 1;
@@ -1914,30 +1914,40 @@ static void test_working_teaches_the_order_knowledge(void)
     game_shutdown(&game);
 }
 
+/* Branches lying about are items of their own: gathered, each keeps the
+ * quality and condition it had; a master only gathers faster. */
 static void test_gatherer_level_sets_branch_condition(void)
 {
-    /* The same hazel, gathered from by a beginner and by a master. */
-    ItemStack results[2];
     int working[2];
     double levels[2] = {KNOWLEDGE_MASTERY_LEVEL, KNOWLEDGE_LEVEL_MAX};
     for (int run = 0; run < 2; run++) {
         Game game;
         REQUIRE(init_flat_game(&game));
         add_hazel(&game.map, 26, 20);
+        size_t index = map_index(&game.map, 26, 20, 0);
+        int lying = 0, quality = 0;
+        for (const Item *item = items_first(&game.items, index); item != NULL;
+             item = items_next(&game.items, item)) {
+            if (item->type == ITEM_BRANCHES) {
+                CHECK(item->flags & ITEM_FLAG_WILD);
+                quality += item->quality;
+                lying++;
+            }
+        }
+        REQUIRE(lying > 0);
         Colonist *colonist = spawn_rested(&game, 20, 20);
         REQUIRE(colonist != NULL);
         REQUIRE(colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, levels[run]));
         order_zone(&game, 26, 20, 26, 20, GATHER_BRANCHES);
         working[run] = run_until_done(&game, 26, 20, 20000);
-        results[run] = items_get(&game.items, 26, 20, 0);
-        REQUIRE(results[run].type == ITEM_BRANCHES);
+        ItemStack result = items_get(&game.items, 26, 20, 0);
+        REQUIRE(result.type == ITEM_BRANCHES);
+        CHECK_EQ_INT(result.count, lying);
+        CHECK_EQ_INT(result.quality, (quality + lying / 2) / lying);
+        CHECK_EQ_INT(map_litter(&game.map, 26, 20, 0, ITEM_BRANCHES), 0);
         game_shutdown(&game);
     }
-    CHECK(results[0].quality <= 35); /* About 25, give or take 10. */
-    CHECK(results[1].quality >= TEST_QUALITY_FINE);
-    CHECK(results[0].hit_points < results[1].hit_points);
-    CHECK_EQ_INT(results[1].hit_points, item_def(ITEM_BRANCHES)->max_hit_points);
-    /* The master is also much faster (×1.5 against ×0.5). */
+    /* The master is much faster (×1.5 against ×0.5). */
     CHECK(working[1] * 2 < working[0]);
 }
 

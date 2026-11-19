@@ -49,7 +49,7 @@ simulation:
 | `designation`| Player work orders per tile (mine, which digs earth or rock, cut a ramp, dig down, take a structure apart), the knowledge, level and tool each needs, work progress |
 | `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
-| `item`       | Items on the ground: definitions, categories, quality (0 to 100) and hit points; every item a record of its own (a pool with generational slots, a list per tile, its spot and angle in the tile), a stack summary per tile for callers that count, dropping, transformations (drying) and rot item by item, change stamps per tile so that the known world copies only what changed (docs/ITEMS.md) |
+| `item`       | Items on the ground: definitions, categories, quality (0 to 100) and hit points; every item a record of its own (a pool with generational slots, a list per tile, its spot and angle in the tile), a stack summary per tile for callers that count, dropping, transformations (drying) and rot item by item, change stamps per tile so that the known world copies only what changed, loads in hand that are the very items picked up, wild items (stones, branches and twigs lying where nature put them, outside the stacks) (docs/ITEMS.md) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `tool`       | Tool speed factors by kind of work (bare hands included) and quality, best carried tool, wear and breaking |
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, branches, twigs, grass, flint, cobbles: gather N, until N in the colony or N days of food, forever; full harvest only) and per group of resources (wood, food, stones: limits each of its resources), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
@@ -1281,9 +1281,10 @@ same); it keeps it. Each job has its
 work type (felling is woodcutting, the rest gathering) and knowledge; the
 settler takes the first job of the tile among those it may do
 (`Colonist.work_type` holds the job while `gathering`). Stones are limited:
-each tile holds a number of cobbles and flint nodules (`Map.cobbles`,
-`Map.flint`), and a stone search takes one of the wanted types the tile
-holds, at random in proportion to their numbers (only flint wanted: tiles
+each tile holds a number of cobbles and flint nodules (`map_stones()`: wild
+items in a running game), and a stone search takes one of the wanted types the
+tile holds, at random in proportion to their numbers, and of that type the
+best stone lying there (only flint wanted: tiles
 without flint offer nothing, and their cobbles stay). A zone runs out of
 stones once its tiles are emptied. The zone inspector shows how many items of
 each resource the zone holds now (`gather_zone_available()`: wood of the
@@ -1836,13 +1837,22 @@ touch warm at dawn and dusk. What lets the light through is kept per tile of the
 level shown until `Map.light_revision` changes (any terrain, rock or roof
 change): a view shows thousands of tiles every frame.
 
-Stones are two map layers (`Map.cobbles`, `Map.flint`): how many of each lie
-about a tile, `MAP_STONES_MAX` (20) at most together, taken one by one by
-gathering and never growing back. World generation gives every stony tile
-(`TerrainDef.stony`: soil, rich soil, gravel, rough stone; not sand) 0 to 20
-stones, from a random stream of their own so that the plants do not depend on
+Stones, branches and twigs lying about are laid by world generation in map
+layers (`Map.cobbles`, `Map.flint`, `Map.branches`, `Map.twigs`); `game_init()`
+turns them into wild items (`map_litter_to_items()`, `ITEM_FLAG_WILD`,
+docs/ITEMS.md), each with its own quality, spot and angle, and sets
+`Map.litter`: from then on `map_stones()`, `map_litter()`, `map_add_litter()`
+and the others read and change those items, so trees shed items and gathering
+picks them up. Wild items are not part of a tile's stack (haulers and
+searches leave them alone, they are not in `Items.totals`); wild branches and
+twigs crumble away in `ItemDef.litter_days` (60 and 20 days), stones stay.
+At most `MAP_STONES_MAX` (20) stones lie on a tile, taken one by one by
+gathering and never growing back. World generation draws 0 to 20 stones for
+every stony tile (`TerrainDef.stony`: soil, rich soil, gravel, rough stone; not
+sand), from a random stream of their own so that the plants do not depend on
 them; on flint patches (noise, denser on gravel and rough stone) each stone is
-flint with the patch's share, up to 60 %. The spawn makes sure a tile with at
+flint with the patch's share, up to 60 %, and of the others only one in 50 is
+kept as a cobble (about 4 800 on a 200 × 200 map). The spawn makes sure a tile with at
 least `GAME_SPAWN_FLINT_STONES` flint lies near the settlers, laying a small
 patch otherwise. The tile inspector shows the stones left in the ground.
 

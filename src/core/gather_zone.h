@@ -31,8 +31,11 @@
  * the plant's branches and twigs come first (felling it would take them
  * away), then its food, felling it, and stones last.
  * Stones are limited: each tile holds a number of cobbles and flint nodules
- * (Map.cobbles, Map.flint), and gathering takes them one by one, only of the
- * types wanted.
+ * (map_stones()), and gathering takes them one by one, only of the types
+ * wanted. Once the game runs they are wild items (core/item.h), like the
+ * branches and twigs: gathering picks up the very items (the best stone of
+ * the tile first), each with the quality it had lying there, and puts them
+ * down for the haulers.
  *
  * Every tile keeps the work done on its current job, so that interrupted work
  * resumes. Gathering is a background job: at the same work priority, settlers

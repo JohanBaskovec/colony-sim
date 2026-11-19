@@ -5,6 +5,7 @@
 #include "core/tree.h"
 #include "core/util.h"
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1316,9 +1317,24 @@ bool gather_zone_add_work_wet(GatherZones *zones, Map *map, Items *items, int x,
     clear_progress(zones, index);
     int count;
     ItemType item;
+    /* Stones, branches and twigs lying as wild items: the very items are
+     * picked up, each as it is (the best stone of the tile first). */
+    bool wild = items != NULL && map->litter == items &&
+                (job == GATHER_JOB_STONES || job == GATHER_JOB_BRANCHES || job == GATHER_JOB_TWIGS);
+    ItemStack load = {.type = ITEM_NONE};
     if (job == GATHER_JOB_CHOP) { /* The tree stays until it falls, below. */
         item = plant_def((PlantType)map->plants[map_index(map, x, y, z)].type)->cut_item;
         count = plant_yield(map, x, y, z, job);
+    } else if (wild && job == GATHER_JOB_STONES) {
+        item = find_stone(map, x, y, z, zone->wanted, rng);
+        count = item != ITEM_NONE
+                    ? items_pick_up_wild(items, x, y, z, item, 1, true, ITEM_NONE, &load)
+                    : 0;
+    } else if (wild) {
+        item = litter_item(job);
+        ItemType becomes = item == ITEM_TWIGS && wet_litter ? ITEM_WET_TWIGS : ITEM_NONE;
+        count = items_pick_up_wild(items, x, y, z, item, INT_MAX, false, becomes, &load);
+        item = becomes != ITEM_NONE ? becomes : item;
     } else {
         item = complete(map, x, y, z, job, zone->wanted, rng, &count);
         if (item == ITEM_TWIGS && wet_litter) {
@@ -1329,10 +1345,12 @@ bool gather_zone_add_work_wet(GatherZones *zones, Map *map, Items *items, int x,
     bool wanted = resource != GATHER_RESOURCE_COUNT && count > 0 &&
                   (zone->wanted & GATHER_RESOURCE_BIT(resource));
     ItemStack stack = {0};
-    if (wanted && items != NULL) {
+    if (wanted && items != NULL && !wild) {
         stack = knowledge_product(item, count, level, rng);
     }
-    if (job == GATHER_JOB_CHOP) {
+    if (wild) {
+        items_drop_load(items, map, x, y, z, &load); /* Where it lay, to be hauled. */
+    } else if (job == GATHER_JOB_CHOP) {
         if (tree_fell(map, items, x, y, z, stack).harmed > 0) {
             zones->harmful_tree_falls++;
         }

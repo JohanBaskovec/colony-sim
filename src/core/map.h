@@ -436,7 +436,9 @@ typedef struct Map {
     Plant *plants;
     /* Stones lying about each tile, that gathering takes one by one: cobbles
      * and flint nodules (on flint patches), MAP_STONES_MAX at most together.
-     * World generation puts none on sand (see gather_stone_ground()). */
+     * World generation puts none on sand (see gather_stone_ground()). These
+     * four layers hold what world generation lays; a running game keeps it
+     * as wild items instead (Map.litter). */
     uint8_t *cobbles;
     uint8_t *flint;
     /* Dead branches and twigs lying on each tile that gathering takes: shed
@@ -447,6 +449,11 @@ typedef struct Map {
     /* Hazelnuts lying on each tile, fallen from the trees in autumn like twigs
      * (up to MAP_NUTS_MAX). They rot away on average (see core/game.c). */
     uint8_t *nuts;
+    /* Once set (a running game, see map_litter_to_items()): where the stones,
+     * branches and twigs lie, as wild items (ITEM_FLAG_WILD) of these items;
+     * the four layers above are then empty, and the functions below read and
+     * change the items. NULL: the layers (world generation, bare maps). */
+    struct Items *litter;
     /* Built structures (StructureType on every tile they take): beds,
      * walls, doors. `structure_part` holds the structure's Direction (bits
      * 0-1) and which of its tiles this is (bits 2-3, 0 for the head); the
@@ -984,6 +991,20 @@ int map_take_litter(Map *map, int x, int y, int z, ItemType type);
 
 /* Takes up to `count` of them; returns how many were taken. */
 int map_take_litter_count(Map *map, int x, int y, int z, ItemType type, int count);
+
+/* Turns the stones, branches and twigs of the layers into wild items of
+ * `items` (same size), empties the layers and sets Map.litter. */
+void map_litter_to_items(Map *map, Items *items);
+
+/* Removes every stone, branch and twig lying on the map (not the nuts). */
+void map_clear_litter(Map *map);
+
+/* Removes what lies on the tile at `index` among `types` (cobbles, flint,
+ * branches, twigs, hazelnuts). */
+void map_clear_litter_at(Map *map, size_t index, ItemTypeMask types);
+
+/* map_set_stones() for the tile at `index`. */
+void map_set_stones_at(Map *map, size_t index, int cobbles, int flint);
 
 /* The level of the ground at (x, y): the highest tile of the column one
  * could stand on (the top of the highest rock or floor), trees left out

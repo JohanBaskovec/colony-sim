@@ -20,7 +20,7 @@
  *
  * Trees shed dead twigs, and branches once grown, at random: they fall
  * through the crown, whatever its density, and land on the ground under it,
- * never staying in the foliage (tree_shed(), Map.twigs and Map.branches);
+ * never staying in the foliage (tree_shed(), map_add_litter(): wild items in a running game);
  * gathering zones take them there like anything lying on the ground.
  *
  * A felled tree falls full length to one side, where the woodcutter aims it:
@@ -63,7 +63,7 @@
 #define TREE_SHED_TWIG_CHANCE 0.12f
 #define TREE_SHED_BRANCH_CHANCE 0.03f
 /* Days of shedding lying under the trees of a new world. */
-#define TREE_SCATTER_DAYS 3
+#define TREE_SCATTER_DAYS 2
 /* What the crown of a fully grown tree with a 1 x 1 trunk gives when it is
  * felled (less when younger, more by the area of a wider trunk). */
 #define TREE_CROWN_BRANCHES 6

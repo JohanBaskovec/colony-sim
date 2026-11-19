@@ -162,7 +162,10 @@ static bool walled_plain(Game *game)
         map->rock[i] = (uint8_t)(z < ground ? ROCK_EARTH : ROCK_NONE);
         map->slope[i] = 0;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
-        map->branches[i] = map->twigs[i] = map->cobbles[i] = map->flint[i] = map->nuts[i] = 0;
+        map_clear_litter_at(map, i,
+                            ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS) |
+                                ITEM_TYPE_BIT(ITEM_COBBLE) | ITEM_TYPE_BIT(ITEM_FLINT) |
+                                ITEM_TYPE_BIT(ITEM_HAZELNUTS));
     }
     map->slope_count = 0;
     map->top_ground_level = ground + 1;

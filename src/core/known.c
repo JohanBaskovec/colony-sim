@@ -15,6 +15,7 @@ bool known_init(KnownWorld *known, const Map *map)
         return false;
     }
     known->items.picture = true;
+    known->map.litter = &known->items; /* Its stones, branches and twigs are its items'. */
     /* Nothing is known: open space everywhere (map_init() lays a floor on level 0). */
     memset(known->map.terrain, TERRAIN_OPEN, map_tile_count(&known->map));
     known->map.surface_level = map->surface_level;

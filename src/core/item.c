@@ -1,5 +1,6 @@
 #include "core/item.h"
 
+#include "core/game_clock.h"
 #include "core/i18n.h"
 #include "core/map.h"
 #include "core/util.h"
@@ -37,8 +38,9 @@
  * - branches: a dead or cut branch of about 1.5 kg, poorly packed;
  * - twigs: a handful (about 200 g) of kindling;
  * - grass: an armful, 2.5 kg cut fresh, 1 kg once dry (about 12 l either way).
- * Stone blocks never wear out; logs vary with the woodcutter (knots, cracks)
- * and wild food with the gatherer (ripeness, bruises). Fresh grass left on the
+ * Branches and twigs lying where they fell crumble into the ground in 60
+ * and 20 days (ItemDef.litter_days). Stone blocks never wear out; logs vary with the woodcutter
+ * (knots, cracks) and wild food with the gatherer (ripeness, bruises). Fresh grass left on the
  * ground dries in three days. Food lying in the open at 15 °C keeps (rot_days):
  * greens and mushrooms 2 days, blackberries 3, roasted roots 4 (moist and
  * soft), cattail rhizomes 15, wild carrots 20, hazelnuts in their shells 90.
@@ -71,10 +73,11 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_COBBLE] = {DEF("cobble", N_("item.cobble"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f,
                          200, true, true)},
     [ITEM_BRANCHES] = {DEF("branches", N_("item.branches"), ITEM_CATEGORY_RESOURCES, 1.5f, 10.0f,
-                           0.0f, 20, true, true)},
+                           0.0f, 20, true, true),
+                       .litter_days = 60.0f},
     [ITEM_TWIGS] = {DEF("twigs", N_("item.twigs"), ITEM_CATEGORY_RESOURCES, 0.2f, 2.0f, 0.0f, 10,
                         false, true),
-                    .wets_into = ITEM_WET_TWIGS},
+                    .wets_into = ITEM_WET_TWIGS, .litter_days = 20.0f},
     /* Twigs from wet ground, out in the rain or green from a felled crown:
      * heavier with their water, they burn on a fire but do not catch a
      * flame (core/hearth.h), and dry in a day out of the rain. */
@@ -525,7 +528,26 @@ static size_t level_of(const Items *items, size_t index)
  * dead one. */
 static bool item_matches(const Item *item, const ItemStack *stack)
 {
-    return item->type == stack->type && item->corpse == stack->corpse;
+    return item->type == stack->type && item->corpse == stack->corpse &&
+           (item->flags & ITEM_FLAG_WILD) == 0;
+}
+
+static bool item_wild(const Item *item)
+{
+    return (item->flags & ITEM_FLAG_WILD) != 0;
+}
+
+/* Counts an item lying on its tile in (sign 1) or out (sign -1) of the
+ * totals. */
+static void count_item(Items *items, const Item *item, int sign)
+{
+    if (item_wild(item)) {
+        items->wild_totals[item->type] += sign;
+        items->level_wild[level_of(items, item->tile)] += (uint32_t)sign;
+    } else {
+        items->totals[item->type] += sign;
+    }
+    items->item_count += sign;
 }
 
 /* Rebuilds the summary of a tile from its items, and the count of tiles with
@@ -535,6 +557,9 @@ static void refresh_tile(Items *items, size_t index)
     ItemStack *stack = &items->stacks[index];
     bool had = stack->type != ITEM_NONE;
     const Item *head = slot_item(items, items->heads[index]);
+    while (head != NULL && item_wild(head)) {
+        head = slot_item(items, head->next);
+    }
     if (head == NULL) {
         *stack = (ItemStack){.type = ITEM_NONE};
     } else {
@@ -571,8 +596,7 @@ static void unlink_item(Items *items, size_t index, uint32_t previous, uint32_t 
     } else {
         items->pool[previous - 1].next = item->next;
     }
-    items->totals[item->type]--;
-    items->item_count--;
+    count_item(items, item, -1);
     free_slot(items, slot);
 }
 
@@ -608,8 +632,7 @@ void items_copy_tile(Items *dst, const Items *src, size_t index)
             dst->pool[last - 1].next = slot;
         }
         last = slot;
-        dst->totals[copy->type]++;
-        dst->item_count++;
+        count_item(dst, copy, 1);
     }
     refresh_tile(dst, index);
     dst->forbidden_count += (src->forbidden[index] != 0) - (dst->forbidden[index] != 0);
@@ -629,8 +652,9 @@ bool items_init(Items *items, int width, int height, int depth)
     items->forbidden = calloc(tiles, 1);
     items->heads = calloc(tiles, sizeof(*items->heads));
     items->stamps = calloc(tiles, sizeof(*items->stamps));
+    items->level_wild = calloc((size_t)depth, sizeof(*items->level_wild));
     if (items->stacks == NULL || items->level_stacks == NULL || items->forbidden == NULL ||
-        items->heads == NULL || items->stamps == NULL) {
+        items->heads == NULL || items->stamps == NULL || items->level_wild == NULL) {
         items_free(items);
         return false;
     }
@@ -648,6 +672,7 @@ void items_free(Items *items)
     free(items->pool);
     free(items->heads);
     free(items->stamps);
+    free(items->level_wild);
     memset(items, 0, sizeof(*items));
 }
 
@@ -703,7 +728,7 @@ bool items_forbidden(const Items *items, int x, int y, int z)
 static void note_change(Items *items, size_t index)
 {
     refresh_tile(items, index);
-    if (items->heads[index] == 0 && items->forbidden[index]) {
+    if (items->stacks[index].type == ITEM_NONE && items->forbidden[index]) {
         items->forbidden[index] = 0;
         items->forbidden_count--;
     }
@@ -720,7 +745,7 @@ bool items_set_forbidden(Items *items, int x, int y, int z, bool forbidden)
         return false;
     }
     size_t index = index_of(items, x, y, z);
-    if (items->heads[index] == 0 || (items->forbidden[index] != 0) == forbidden) {
+    if (items->stacks[index].type == ITEM_NONE || (items->forbidden[index] != 0) == forbidden) {
         return false;
     }
     items->forbidden[index] = forbidden;
@@ -764,7 +789,7 @@ static int tile_room(const Items *items, size_t index, const ItemStack *batch)
     float other_bulk = 0.0f;
     for (const Item *item = items_first(items, index); item != NULL;
          item = items_next(items, item)) {
-        if (!item_matches(item, batch)) {
+        if (!item_matches(item, batch) && !item_wild(item)) {
             other_bulk += ITEM_DEFS[item->type].bulk;
         }
     }
@@ -800,8 +825,7 @@ static void lay_item(Items *items, size_t index, uint32_t slot, uint32_t salt)
     place_item(items, item, index, salt);
     item->next = items->heads[index];
     items->heads[index] = slot;
-    items->totals[item->type]++;
-    items->item_count++;
+    count_item(items, item, 1);
 }
 
 int items_add(Items *items, int x, int y, int z, ItemStack batch)
@@ -904,8 +928,7 @@ int items_pick_up(Items *items, int x, int y, int z, int count, ItemStack *load)
             } else {
                 items->pool[previous - 1].next = next;
             }
-            items->totals[item->type]--;
-            items->item_count--;
+            count_item(items, item, -1);
             item->tile = ITEM_TILE_HELD;
             item->next = load->held;
             load->held = slot;
@@ -1012,6 +1035,136 @@ ItemStack items_take(Items *items, int x, int y, int z, int count)
 int items_remove(Items *items, int x, int y, int z, int count)
 {
     return items_take(items, x, y, z, count).count;
+}
+
+/* ---- Wild items ---- */
+
+int items_add_wild(Items *items, int x, int y, int z, ItemType type, int count)
+{
+    if (!in_bounds(items, x, y, z) || !is_item_type(type) || count <= 0) {
+        return 0;
+    }
+    size_t index = index_of(items, x, y, z);
+    int added = 0;
+    for (; added < count; added++) {
+        /* Quality: the mean of two draws, most items middling; condition 60 to 100 %. */
+        uint32_t h = mix(index, ((uint64_t)items->stamp_clock << 20) ^ (uint64_t)added ^ 0xA5A5u);
+        int quality = (int)((h & 0xFFu) % 101u + ((h >> 8) & 0xFFu) % 101u) / 2;
+        int percent = 60 + (int)((h >> 16) % 41u);
+        ItemStack batch =
+            item_stack_make(type, 1, quality, item_hit_points_at_percent(type, percent));
+        uint32_t slot = new_item(items, &batch, (uint32_t)index);
+        if (slot == 0) {
+            break;
+        }
+        items->pool[slot - 1].flags = ITEM_FLAG_WILD;
+        lay_item(items, index, slot, (uint32_t)added);
+    }
+    if (added > 0) {
+        note_change(items, index);
+    }
+    return added;
+}
+
+int items_wild_count(const Items *items, int x, int y, int z, ItemType type)
+{
+    if (!in_bounds(items, x, y, z)) {
+        return 0;
+    }
+    int count = 0;
+    for (const Item *item = items_first(items, index_of(items, x, y, z)); item != NULL;
+         item = items_next(items, item)) {
+        count += item_wild(item) && item->type == type;
+    }
+    return count;
+}
+
+int items_remove_wild(Items *items, int x, int y, int z, ItemType type, int count)
+{
+    if (!in_bounds(items, x, y, z) || count <= 0) {
+        return 0;
+    }
+    size_t index = index_of(items, x, y, z);
+    int removed = 0;
+    uint32_t previous = 0;
+    uint32_t slot = items->heads[index];
+    while (slot != 0 && removed < count) {
+        const Item *item = &items->pool[slot - 1];
+        uint32_t next = item->next;
+        if (item_wild(item) && item->type == type) {
+            unlink_item(items, index, previous, slot);
+            removed++;
+        } else {
+            previous = slot;
+        }
+        slot = next;
+    }
+    if (removed > 0) {
+        note_change(items, index);
+    }
+    return removed;
+}
+
+int items_pick_up_wild(Items *items, int x, int y, int z, ItemType type, int count, bool best,
+                       ItemType becomes, ItemStack *load)
+{
+    ItemType made = becomes != ITEM_NONE ? becomes : type;
+    if (!in_bounds(items, x, y, z) || count <= 0 || !is_item_type(made) ||
+        (load->type != ITEM_NONE && load->count > 0 && (load->type != made || load->corpse != 0))) {
+        return 0;
+    }
+    materialize(items, load);
+    size_t index = index_of(items, x, y, z);
+    int taken = 0;
+    while (taken < count) {
+        /* The wanted item: the first (newest), or the best. */
+        uint32_t chosen = 0, chosen_previous = 0, previous = 0;
+        for (uint32_t slot = items->heads[index]; slot != 0;
+             previous = slot, slot = items->pool[slot - 1].next) {
+            const Item *item = &items->pool[slot - 1];
+            if (!item_wild(item) || item->type != type) {
+                continue;
+            }
+            if (chosen == 0 || (best && item->quality > items->pool[chosen - 1].quality)) {
+                chosen = slot;
+                chosen_previous = previous;
+            }
+            if (!best) {
+                break;
+            }
+        }
+        if (chosen == 0) {
+            break;
+        }
+        Item *item = &items->pool[chosen - 1];
+        if (chosen_previous == 0) {
+            items->heads[index] = item->next;
+        } else {
+            items->pool[chosen_previous - 1].next = item->next;
+        }
+        count_item(items, item, -1);
+        item->flags &= (uint8_t)~ITEM_FLAG_WILD;
+        item->progress = 0;
+        if (made != type) {
+            ItemStack old = {.type = item->type, .count = 1, .hit_points = item->hit_points};
+            int percent = item_stack_hit_points_percent(old);
+            ItemStack now =
+                item_stack_make(made, 1, item->quality, item_hit_points_at_percent(made, percent));
+            item->type = now.type;
+            item->quality = now.quality;
+            item->hit_points = now.hit_points;
+        }
+        item->tile = ITEM_TILE_HELD;
+        item->next = load->held;
+        load->held = chosen;
+        items->held_count++;
+        taken++;
+    }
+    if (taken > 0) {
+        note_change(items, index);
+        refresh_load(items, load);
+    }
+    return taken;
 }
 
 int items_drop_load(Items *items, const Map *map, int x, int y, int z, ItemStack *load)
@@ -1140,7 +1293,7 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
     int transformed = 0;
     const size_t level_size = (size_t)items->width * (size_t)items->height;
     for (size_t i = begin; i < end; i++) {
-        if (items->level_stacks[i / level_size] == 0) {
+        if (items->level_stacks[i / level_size] == 0 && items->level_wild[i / level_size] == 0) {
             i = (i / level_size + 1) * level_size - 1; /* Nothing on this level. */
             continue;
         }
@@ -1154,6 +1307,23 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
         while (slot != 0) {
             Item *item = &items->pool[slot - 1];
             uint32_t next = item->next;
+            if (item_wild(item)) { /* Only crumbles away, slowly. */
+                float days = ITEM_DEFS[item->type].litter_days;
+                if (days > 0.0f) {
+                    int lain = (int)item->progress + hours;
+                    if ((float)lain >= days * (float)HOURS_PER_DAY) {
+                        unlink_item(items, i, previous, slot);
+                        slot = next;
+                        changed = true;
+                        continue;
+                    }
+                    item->progress = (uint16_t)(lain < UINT16_MAX ? lain : UINT16_MAX);
+                    changed = true;
+                }
+                previous = slot;
+                slot = next;
+                continue;
+            }
             if (!type_changes((ItemType)item->type)) {
                 previous = slot;
                 slot = next;
@@ -1210,6 +1380,7 @@ uint64_t items_hash(const Items *items, uint64_t hash)
             hash = hash_fnv1a64(hash, &item->spot_x, sizeof(item->spot_x));
             hash = hash_fnv1a64(hash, &item->spot_y, sizeof(item->spot_y));
             hash = hash_fnv1a64(hash, &item->angle, sizeof(item->angle));
+            hash = hash_fnv1a64(hash, &item->flags, sizeof(item->flags));
         }
     }
     /* Items in loads, by slot. */

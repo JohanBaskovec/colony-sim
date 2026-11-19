@@ -143,6 +143,9 @@ typedef struct ItemDef {
      * ITEM_ROT_REFERENCE_CELSIUS before it has rotted away; 0: never rots.
      * A type never both rots and transforms. */
     float rot_days;
+    /* Days a wild item of the type (see ITEM_FLAG_WILD) lies before it has
+     * crumbled into the ground; 0: it stays (stones). */
+    float litter_days;
 } ItemDef;
 
 /* Rot runs at ×1 at this temperature in the open, twice as fast every
@@ -199,12 +202,19 @@ typedef struct Item {
     uint16_t corpse;     /* As ItemStack.corpse. */
     uint16_t generation; /* Bumped whenever the slot is freed. */
     uint8_t angle;       /* How it is turned, in 1/256 of a turn. */
-    uint8_t flags;       /* Reserved. */
+    uint8_t flags;       /* ITEM_FLAG_*. */
     uint32_t next;       /* Next item of the same tile: slot + 1, 0 for none. */
     uint32_t tile;       /* Tile index, ITEM_TILE_HELD for an item in a load. */
 } Item;
 
 #define ITEM_TILE_HELD UINT32_MAX
+
+/* A wild item: lying where nature put it (a twig shed by a tree, a stone in
+ * the grass), never handled. Wild items are not part of a tile's stack:
+ * haulers and searches leave them alone, only gathering picks them up
+ * (items_pick_up_wild()), and they do not count in Items.totals. While
+ * wild, progress counts the hours it has lain (see ItemDef.litter_days). */
+#define ITEM_FLAG_WILD 0x01u
 
 typedef struct Items {
     int width;
@@ -231,11 +241,13 @@ typedef struct Items {
     /* The items: a pool of slots, free ones chained through Item.next. */
     Item *pool;
     uint32_t pool_capacity;
-    uint32_t pool_used;  /* Slots ever used: the others were never touched. */
-    uint32_t free_slots; /* First free slot + 1, 0 for none. */
-    long item_count;     /* Items lying on the whole map. */
-    long held_count;     /* Items in loads (ItemStack.held), not on the map. */
-    uint32_t *heads;     /* Per tile: its newest item, slot + 1, 0 for none. */
+    uint32_t pool_used;                /* Slots ever used: the others were never touched. */
+    uint32_t free_slots;               /* First free slot + 1, 0 for none. */
+    long item_count;                   /* Items lying on the whole map. */
+    long held_count;                   /* Items in loads (ItemStack.held), not on the map. */
+    long wild_totals[ITEM_TYPE_COUNT]; /* Wild items of each type on the whole map. */
+    uint32_t *level_wild;              /* Wild items on each level. */
+    uint32_t *heads;                   /* Per tile: its newest item, slot + 1, 0 for none. */
     /* Per tile: when its items last changed (a picture copied from it keeps
      * the same stamp: equal stamps, same items). */
     uint32_t *stamps;
@@ -386,6 +398,27 @@ void items_use_up(Items *items, ItemStack *load, int count);
 
 /* The items of a load, newest first: as items_first() and items_next(). */
 const Item *items_load_first(const Items *items, ItemStack load);
+
+/* Wild items (ITEM_FLAG_WILD) */
+
+/* Lays `count` wild items of a type on a tile, whatever lies there, each of
+ * its own quality (from a hash of the tile, not a random stream). Returns
+ * how many (all but when out of memory). */
+int items_add_wild(Items *items, int x, int y, int z, ItemType type, int count);
+
+/* Wild items of a type on a tile. */
+int items_wild_count(const Items *items, int x, int y, int z, ItemType type);
+
+/* Takes up to `count` wild items of a type off a tile: they are gone.
+ * Returns how many. */
+int items_remove_wild(Items *items, int x, int y, int z, ItemType type, int count);
+
+/* Picks up to `count` wild items of a type into `load` (empty or of the
+ * type they become): the best ones first when `best`, else the newest. They
+ * are wild no more, and turn into `becomes` unless it is ITEM_NONE (twigs
+ * picked up from wet ground are wet). Returns how many. */
+int items_pick_up_wild(Items *items, int x, int y, int z, ItemType type, int count, bool best,
+                       ItemType becomes, ItemStack *load);
 
 /*
  * Puts items on (x, y) and, when it is full, forbidden or holds something

@@ -1587,6 +1587,47 @@ static void test_litter(void)
     map_free(&map);
 }
 
+/* Once the game runs, stones, branches and twigs are wild items: the map's
+ * functions read and change them. */
+static void test_litter_as_items(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(map_init(&map, 16, 16, 2));
+    REQUIRE(items_init(&items, 16, 16, 2));
+    map_set_stones(&map, 1, 1, 0, 2, 3);
+    REQUIRE(map_add_litter(&map, 2, 2, 0, ITEM_TWIGS));
+    REQUIRE(map_add_litter(&map, 2, 2, 0, ITEM_BRANCHES));
+    REQUIRE(map_add_litter(&map, 2, 2, 0, ITEM_HAZELNUTS));
+    map_litter_to_items(&map, &items);
+    CHECK(map.litter == &items);
+    CHECK_EQ_INT(map.cobbles[map_index(&map, 1, 1, 0)], 0);
+    CHECK_EQ_INT(map.twigs[map_index(&map, 2, 2, 0)], 0);
+    CHECK_EQ_INT(map.nuts[map_index(&map, 2, 2, 0)], 1); /* Nuts stay in their layer. */
+    CHECK_EQ_INT(items.wild_totals[ITEM_COBBLE], 2);
+    CHECK_EQ_INT(items.wild_totals[ITEM_FLINT], 3);
+    CHECK_EQ_INT(map_stones(&map, 1, 1, 0, ITEM_COBBLE), 2);
+    CHECK_EQ_INT(map_stones(&map, 1, 1, 0, ITEM_FLINT), 3);
+    CHECK_EQ_INT(map_litter(&map, 2, 2, 0, ITEM_TWIGS), 1);
+    CHECK_EQ_INT(map_litter(&map, 2, 2, 0, ITEM_BRANCHES), 1);
+    /* Ceilings per tile hold. */
+    for (int i = 1; i < MAP_TWIGS_MAX; i++) {
+        CHECK(map_add_litter(&map, 2, 2, 0, ITEM_TWIGS));
+    }
+    CHECK(!map_add_litter(&map, 2, 2, 0, ITEM_TWIGS));
+    CHECK_EQ_INT(map_take_litter_count(&map, 2, 2, 0, ITEM_TWIGS, 1), 1);
+    CHECK_EQ_INT(map_take_litter(&map, 2, 2, 0, ITEM_TWIGS), MAP_TWIGS_MAX - 1);
+    CHECK(map_take_stone(&map, 1, 1, 0, ITEM_FLINT));
+    map_set_stones(&map, 1, 1, 0, 0, 4);
+    CHECK_EQ_INT(map_stones(&map, 1, 1, 0, ITEM_COBBLE), 0);
+    CHECK_EQ_INT(map_stones(&map, 1, 1, 0, ITEM_FLINT), 4);
+    map_clear_litter(&map);
+    CHECK_EQ_INT(items.item_count, 0);
+    CHECK_EQ_INT(map_litter(&map, 2, 2, 0, ITEM_HAZELNUTS), 1);
+    items_free(&items);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -1634,5 +1675,6 @@ int main(void)
     RUN_TEST(test_plants_take_root_where_they_can_live);
     RUN_TEST(test_spread_lands_within_range);
     RUN_TEST(test_offspring_takes_after_its_parent);
+    RUN_TEST(test_litter_as_items);
     return test_summary();
 }

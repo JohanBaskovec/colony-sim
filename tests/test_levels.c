@@ -38,9 +38,9 @@ static bool init_raised_game(Game *game)
         map->terrain[i] = (uint8_t)(z <= ground ? TERRAIN_SOIL : TERRAIN_OPEN);
         map->rock[i] = (uint8_t)(z < ground ? ROCK_EARTH : ROCK_NONE);
         map->slope[i] = 0;
-        map->cobbles[i] = 0;
-        map->flint[i] = 0;
-        map->branches[i] = map->twigs[i] = 0;
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
     map->slope[map_index(map, PLATEAU_X - 1, 20, LOW)] = 1;

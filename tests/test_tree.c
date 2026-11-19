@@ -849,7 +849,7 @@ static bool init_flat_game(Game *game)
         map->terrain[i] = ground ? TERRAIN_SOIL : TERRAIN_OPEN;
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
-        map->branches[i] = map->twigs[i] = 0;
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
     }
     map_topology_changed(map);
     return true;

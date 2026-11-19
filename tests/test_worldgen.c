@@ -81,7 +81,7 @@ static void test_tiles_are_valid_and_consistent(void)
  * every count from 0 to the most turning up, and flint on some tiles only. */
 static void test_stones(void)
 {
-    long tiles = 0, flint_tiles = 0;
+    long tiles = 0, flint_tiles = 0, cobble_total = 0;
     long seen[MAP_STONES_MAX + 1] = {0};
     for (uint64_t seed = 1; seed <= 4; seed++) {
         WorldGenParams params = params_for_seed(seed);
@@ -102,13 +102,17 @@ static void test_stones(void)
                 seen[cobbles + flint]++;
                 tiles++;
                 flint_tiles += flint > 0;
+                cobble_total += cobbles;
             }
         }
         map_free(&map);
     }
-    for (int count = 0; count <= MAP_STONES_MAX; count++) {
+    for (int count = 0; count <= 2; count++) {
         CHECK(seen[count] > 0);
     }
+    /* Few cobbles: about one stony tile in five has one (every one is an item). */
+    CHECK(cobble_total * 10 > tiles);
+    CHECK(cobble_total * 3 < tiles);
     CHECK(flint_tiles > 0);
     CHECK(flint_tiles < tiles / 4);
     CHECK(!terrain_def(TERRAIN_SAND)->stony);

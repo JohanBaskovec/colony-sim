@@ -83,7 +83,12 @@ static int flint_chance(Terrain terrain, float noise)
     return chance >= FLINT_MIN_CHANCE ? chance : 0;
 }
 
-/* Stones of a stony tile, each one flint with `chance` percent. */
+/* Of the stones a stony tile would hold, one in COBBLE_RARITY is a cobble
+ * that lies there (every one is an item of its own: docs/ITEMS.md). */
+#define COBBLE_RARITY 50
+
+/* Stones of a stony tile, each one flint with `chance` percent; of the
+ * others, few cobbles. */
 static void place_stones(Map *map, int x, int y, int z, Rng *rng, int chance)
 {
     int stones = rng_range_i32(rng, 0, MAP_STONES_MAX);
@@ -91,7 +96,11 @@ static void place_stones(Map *map, int x, int y, int z, Rng *rng, int chance)
     for (int i = 0; i < stones && chance > 0; i++) {
         flint += rng_range_i32(rng, 0, 99) < chance;
     }
-    map_set_stones(map, x, y, z, stones - flint, flint);
+    int cobbles = 0;
+    for (int i = flint; i < stones; i++) {
+        cobbles += rng_range_i32(rng, 1, COBBLE_RARITY) == 1;
+    }
+    map_set_stones(map, x, y, z, cobbles, flint);
 }
 
 /* The sand along the water, up to this elevation above the water level, lies

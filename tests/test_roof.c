@@ -232,9 +232,9 @@ static bool init_flat_game(Game *game)
     }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
-        map->cobbles[i] = 0;
-        map->flint[i] = 0;
-        map->branches[i] = map->twigs[i] = 0;
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }

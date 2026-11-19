@@ -805,6 +805,103 @@ static void test_item_slots_are_reused(void)
     items_free(&items);
 }
 
+/* Wild items lie beside a stack without being part of it. */
+static void test_wild_items_stay_apart(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    CHECK_EQ_INT(items_add_wild(&items, 1, 1, 0, ITEM_TWIGS, 3), 3);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_NONE);
+    CHECK_EQ_INT(items.totals[ITEM_TWIGS], 0);
+    CHECK_EQ_INT(items.wild_totals[ITEM_TWIGS], 3);
+    CHECK_EQ_INT((int)items.level_stacks[0], 0);
+    CHECK_EQ_INT((int)items.level_wild[0], 3);
+    /* A stack of another type takes the tile all the same, its whole room. */
+    int limit = item_stack_limit(ITEM_WOOD);
+    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_WOOD, limit)), limit);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_WOOD);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).count, limit);
+    CHECK_EQ_INT(items_wild_count(&items, 1, 1, 0, ITEM_TWIGS), 3);
+    /* Twigs added as a stack do not take the wild ones in. */
+    CHECK_EQ_INT(items_add(&items, 2, 1, 0, item_stack_pristine(ITEM_TWIGS, 2)), 2);
+    CHECK_EQ_INT(items_add_wild(&items, 2, 1, 0, ITEM_TWIGS, 1), 1);
+    CHECK_EQ_INT(items_get(&items, 2, 1, 0).count, 2);
+    CHECK_EQ_INT(items_remove(&items, 2, 1, 0, 10), 2);
+    CHECK_EQ_INT(items_wild_count(&items, 2, 1, 0, ITEM_TWIGS), 1);
+    /* Forbidding is for stacks. */
+    CHECK(!items_set_forbidden(&items, 2, 1, 0, true));
+    CHECK_EQ_INT(items_remove_wild(&items, 1, 1, 0, ITEM_TWIGS, 2), 2);
+    CHECK_EQ_INT(items.wild_totals[ITEM_TWIGS], 2);
+    CHECK_EQ_INT(items.item_count, limit + 2);
+    items_free(&items);
+}
+
+/* Picked up, wild items are wild no more, and go where they are put as they
+ * were. */
+static void test_wild_items_picked_up(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    CHECK_EQ_INT(items_add_wild(&items, 0, 0, 0, ITEM_FLINT, 6), 6);
+    int best = 0;
+    bool varied = false;
+    for (const Item *item = items_first(&items, 0); item != NULL; item = items_next(&items, item)) {
+        varied |= item->quality != items_first(&items, 0)->quality;
+        best = item->quality > best ? item->quality : best;
+    }
+    CHECK(varied); /* Each its own quality. */
+    ItemStack load = {.type = ITEM_NONE};
+    CHECK_EQ_INT(items_pick_up_wild(&items, 0, 0, 0, ITEM_FLINT, 1, true, ITEM_NONE, &load), 1);
+    CHECK_EQ_INT(load.type, ITEM_FLINT);
+    CHECK_EQ_INT(load.quality, best);
+    CHECK_EQ_INT(items.held_count, 1);
+    CHECK_EQ_INT(items.wild_totals[ITEM_FLINT], 5);
+    const Item *held = items_load_first(&items, load);
+    REQUIRE(held != NULL);
+    CHECK_EQ_INT(held->flags & ITEM_FLAG_WILD, 0);
+    CHECK_EQ_INT(items_put(&items, 3, 3, 0, &load), 1);
+    CHECK_EQ_INT(load.count, 0);
+    CHECK_EQ_INT(items_get(&items, 3, 3, 0).quality, best);
+    CHECK_EQ_INT(items.totals[ITEM_FLINT], 1);
+    /* Twigs picked up from wet ground are wet twigs. */
+    CHECK_EQ_INT(items_add_wild(&items, 1, 0, 0, ITEM_TWIGS, 2), 2);
+    CHECK_EQ_INT(items_pick_up_wild(&items, 1, 0, 0, ITEM_TWIGS, 5, false, ITEM_WET_TWIGS, &load),
+                 2);
+    CHECK_EQ_INT(load.type, ITEM_WET_TWIGS);
+    CHECK_EQ_INT(load.count, 2);
+    /* Not into a load of something else. */
+    CHECK_EQ_INT(items_pick_up_wild(&items, 0, 0, 0, ITEM_FLINT, 1, true, ITEM_NONE, &load), 0);
+    items_use_up(&items, &load, 2);
+    CHECK_EQ_INT(items.held_count, 0);
+    items_free(&items);
+}
+
+/* Wild branches and twigs crumble away in time; stones stay. */
+static void test_wild_litter_crumbles(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    REQUIRE(items_add_wild(&items, 0, 0, 0, ITEM_TWIGS, 2) == 2);
+    REQUIRE(items_add_wild(&items, 1, 0, 0, ITEM_BRANCHES, 1) == 1);
+    REQUIRE(items_add_wild(&items, 2, 0, 0, ITEM_COBBLE, 1) == 1);
+    int twig_hours = (int)(item_def(ITEM_TWIGS)->litter_days * 24.0f);
+    int branch_hours = (int)(item_def(ITEM_BRANCHES)->litter_days * 24.0f);
+    REQUIRE(twig_hours > 0 && branch_hours > twig_hours);
+    for (int hour = 0; hour < twig_hours - 1; hour++) {
+        items_advance(&items, 0, 16, 1, NULL, NULL);
+    }
+    CHECK_EQ_INT(items_wild_count(&items, 0, 0, 0, ITEM_TWIGS),
+                 2); /* Not wet: wild twigs only crumble. */
+    items_advance(&items, 0, 16, 1, NULL, NULL);
+    CHECK_EQ_INT(items_wild_count(&items, 0, 0, 0, ITEM_TWIGS), 0);
+    CHECK_EQ_INT(items_wild_count(&items, 1, 0, 0, ITEM_BRANCHES), 1);
+    items_advance(&items, 0, 16, branch_hours - twig_hours, NULL, NULL);
+    CHECK_EQ_INT(items_wild_count(&items, 1, 0, 0, ITEM_BRANCHES), 0);
+    CHECK_EQ_INT(items_wild_count(&items, 2, 0, 0, ITEM_COBBLE), 1);
+    CHECK_EQ_INT((int)items.level_wild[0], 1);
+    items_free(&items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -838,5 +935,8 @@ int main(void)
     RUN_TEST(test_items_lie_apart);
     RUN_TEST(test_picture_copies_items);
     RUN_TEST(test_item_slots_are_reused);
+    RUN_TEST(test_wild_items_stay_apart);
+    RUN_TEST(test_wild_items_picked_up);
+    RUN_TEST(test_wild_litter_crumbles);
     return test_summary();
 }

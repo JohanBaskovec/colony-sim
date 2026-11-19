@@ -84,10 +84,10 @@ Measured on the same machine, one build after the other
 (`bench_simulation`, `headless-release`; the processor time of a run varies by
 a few percent with the load of the machine, so compare runs made together):
 
-| Run | Before | Step 1 | Step 2 |
-|---|---|---|---|
-| 12 settlers, 4 days, gathering (`12 4 1`) | 3.29 – 3.38 s | 3.31 – 3.36 s | 3.40 – 3.42 s (before: 3.30 – 3.34) |
-| the same with the fog of war (`12 4 1 200 42 - fog-revealed`) | 35.5 – 36.9 s | 34.7 – 37.4 s | |
+| Run | Before | Step 1 | Step 2 | Step 3 |
+|---|---|---|---|---|
+| 12 settlers, 4 days, gathering (`12 4 1`) | 3.29 – 3.38 s | 3.31 – 3.36 s | 3.40 – 3.42 s (before: 3.30 – 3.34) | 3.05 – 3.12 s (before: 3.01 – 3.04) |
+| the same with the fog of war (`12 4 1 200 42 - fog-revealed`) | 35.5 – 36.9 s | 34.7 – 37.4 s | | 32.5 s (before: 34.1) |
 
 Targets:
 
@@ -123,10 +123,19 @@ playable.
    are used up there; they stay counts (returned with their average if the
    site or bill is cancelled). Several types on a tile come with the drawing
    of items one by one (step 4).
-3. **Litter as items.** Twigs, branches, cobbles and flint are generated as
-   items (fewer cobbles, fewer twigs and branches), trees shed items, and
-   gathering picks them up; the map's counts go. Litter rots slowly and each
-   tile keeps a ceiling, so that the number of items stays bounded.
+3. **Litter as items** (done). World generation still lays stones,
+   branches and twigs in map layers (50 times fewer cobbles, two days of
+   shedding instead of three); `game_init()` turns them into **wild items**
+   (`ITEM_FLAG_WILD`) and the map's litter functions work on those items from
+   then on (`Map.litter`), so trees shed items. Wild items stay out of the
+   tile's stack: haulers and searches leave them alone, as they left the
+   litter, and only gathering picks them up, the very items (the best stone
+   of the tile first); then they are items like the others. The gatherer's
+   skill now only sets the speed: what is picked up is as good as it lay.
+   Wild branches and twigs crumble away (60 and 20 days), each tile keeps
+   its ceiling, so the count stays bounded: on a 200 × 200 map, 15 600 items
+   at the start (4 800 cobbles, 8 400 flint, 500 branches, 2 000 twigs),
+   33 000 after a month, 37 000 after two. Hazelnuts stay a map layer.
 4. **Spots, angles and drawing.** Items drawn one by one at their spot and
    angle; the far zoom mark if needed; `--bench-render` measured. The debug
    tool to drag, drop and turn items.
