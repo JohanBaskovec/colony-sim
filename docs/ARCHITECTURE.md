@@ -53,7 +53,7 @@ simulation:
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
 | `tool`       | Tool speed factors by kind of work (bare hands included) and quality, best carried tool, wear and breaking |
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, branches, twigs, grass, flint, cobbles: gather N, until N in the colony or N days of food, forever; full harvest only) and per group of resources (wood, food, stones: limits each of its resources), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
-| `hauling`    | Queries: which stack needs hauling, best storage tile for it                 |
+| `hauling`    | Queries: which stack needs hauling (any group of a tile), best storage tile for it (one group per storage tile) |
 | `item_move`  | Item moves ordered by the player: stack → chosen tile (`ItemMoves`, 64 orders), room at a destination, pruning |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
 | `workstation`| Workstations (crafting spot, knapping spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
@@ -518,15 +518,29 @@ feet (a ramp cut) falls to the ground below. Falls do no harm until there is
 health (M6).
 
 Items on the ground are a dense layer too (`Items`, `core/item.h`, owned by
-`Game`): at most one stack per tile (one item type, up to its stack limit),
-plus map-wide totals per type and a count of stacks per level
+`Game`): every item a record of its own in a list per tile, items of any
+types side by side as long as there is room (see below). The items of a type
+(and, for bodies, of the same dead one) form a group seen as a stack; the
+tile's summary (`Items.stacks`) is the group of its newest item and
+`Items.mixed` marks the tiles holding other groups too, so that most lookups
+stay one read: the `*_of()` functions (`items_get_of()`,
+`items_pick_up_of()`, `items_take_of()`) find the newest group among some
+types, `items_groups()` lists them all, `items_lift_all()` and
+`items_move_all()` take every group off a tile (a floor dug away, a wall
+built), each item as it was. Searches ask for the types they want, pickups
+take those types; a hauler remembers the type it collects
+(`Colonist.haul_type`). Storage keeps one group per tile
+(`haul_storage_room()`): haulers bring items only to an empty tile or one
+holding the same group alone. There are also
+map-wide totals per type and a count of tiles with items per level
 (`level_stacks`: haulers' searches skip the empty levels, underground ones
 first). Each `ItemDef` has a realistic `weight` (kg per
 unit: a 7 kg log, a 20 kg stone block, a 1 kg cobble, a 300 g handful of blackberries) and a `bulk`
 (room taken, about half a liter per unit, gaps included). A tile holds
 `ITEM_TILE_BULK` (1000) of bulk, so the stack limit is derived:
 `item_stack_limit() = ITEM_TILE_BULK / bulk` (1,000 handfuls of blackberries, 50 logs, 50
-stone blocks, 666 cobbles). `items_drop()` fills the target tile, then
+stone blocks, 666 cobbles); items of several types share it by bulk
+(`items_room()`). `items_drop()` fills the target tile, then
 spreads the rest breadth-first over nearby passable tiles (never behind a
 wall). Products are data: `PlantDef.cut_item/cut_yield` (scaled by growth) and
 `RockDef.mined_item/mined_yield`, `PlantProduct.item` (the plant's stocks);

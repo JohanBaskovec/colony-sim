@@ -545,20 +545,15 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
 /* A blocking structure leaves no room for items: they go next door. */
 static void clear_items(Map *map, Items *items, int x, int y, int z)
 {
-    ItemStack stack = items_get(items, x, y, z);
-    if (stack.count == 0) {
+    if (items_get(items, x, y, z).count == 0) {
         return;
     }
     static const int DX[4] = {0, 1, 0, -1};
     static const int DY[4] = {-1, 0, 1, 0};
     for (int i = 0; i < 4; i++) {
         if (map_is_passable(map, x + DX[i], y + DY[i], z)) {
-            items_remove(items, x, y, z, stack.count);
-            int placed = items_drop(items, map, x + DX[i], y + DY[i], z, stack);
-            if (placed < stack.count) {
-                stack.count = (uint16_t)(stack.count - placed);
-                items_add(items, x, y, z, stack); /* No room: what is left stays. */
-            }
+            /* No room: what is left stays. */
+            items_move_all(items, map, x, y, z, x + DX[i], y + DY[i], z, true);
             return;
         }
     }

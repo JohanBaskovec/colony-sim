@@ -704,6 +704,10 @@ tile_panel.refresh = Refresh: {0}
 tile_panel.growth = {0}% grown
 tile_panel.dormant = Withered, grows back with the warmth
 tile_panel.count = Count: {0} ({1})
+# Items of several kinds on one tile: the title, then a line per kind.
+tile_panel.heap = Heap
+# {0} = item name, {1} = count, {2} = weight (e.g. "Wood ×4 (28 kg)")
+tile_panel.group = {0} ×{1} ({2})
 tile_panel.items_here = Every item here, in order of:
 tile_panel.order_newest = Arrival
 tile_panel.order_quality = Quality

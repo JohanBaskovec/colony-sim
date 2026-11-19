@@ -77,8 +77,7 @@ static HaulWorld world_of(Game *game)
 
 static int count_at(const Game *game, int x, int y, ItemType type)
 {
-    ItemStack stack = items_get(&game->items, x, y, 0);
-    return stack.type == type ? stack.count : 0;
+    return items_get_of(&game->items, x, y, 0, ITEM_TYPE_BIT(type)).count;
 }
 
 /* Items of `type` inside a rectangle. */
@@ -105,6 +104,39 @@ static void test_storage_room(void)
     ItemStack stone = item_stack_pristine(ITEM_STONE_BLOCK, 1);
     CHECK_EQ_INT(haul_storage_room(&game.items, 3, 3, 0, stone), 0); /* Other type. */
     CHECK_EQ_INT(haul_storage_room(&game.items, 4, 4, 0, item_stack_pristine(ITEM_NONE, 1)), 0);
+    game_shutdown(&game);
+}
+
+/* A heap of several kinds: the kind a stockpile wants is taken from under
+ * the others, and storage keeps one kind per tile. */
+static void test_hauled_out_of_a_heap(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 10, 10, 0, item_stack_make(ITEM_WOOD, 6, 80, 50));
+    items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_BLACKBERRIES, 20)); /* On top. */
+    REQUIRE(items_mixed(&game.items, 10, 10, 0));
+    int pile = stockpile_create(&game.stockpiles, &game.map, 20, 10, 20, 10, 0);
+    REQUIRE(pile != STOCKPILE_NONE);
+    stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_WOOD));
+    HaulWorld world = world_of(&game);
+    HaulJob job;
+    CHECK(haul_any_job_possible(&world));
+    REQUIRE(haul_find_job(&world, (TilePos){8, 10, 0}, PATH_NO_COST_LIMIT, &job));
+    CHECK_EQ_INT(job.type, ITEM_WOOD);
+    CHECK_EQ_INT(job.count, 6);
+
+    Colonist *colonist = spawn_hauler(&game, 8, 10);
+    REQUIRE(colonist != NULL);
+    run_ticks(&game, 800);
+    CHECK_EQ_INT(count_at(&game, 20, 10, ITEM_WOOD), 6);
+    CHECK_EQ_INT(items_get_of(&game.items, 20, 10, 0, ITEM_TYPE_BIT(ITEM_WOOD)).quality, 80);
+    CHECK_EQ_INT(count_at(&game, 10, 10, ITEM_BLACKBERRIES), 20); /* Left: nowhere to go. */
+    CHECK_EQ_INT(count_at(&game, 10, 10, ITEM_WOOD), 0);
+
+    /* A storage tile holding something else takes nothing more. */
+    items_add(&game.items, 20, 10, 0, item_stack_pristine(ITEM_BLACKBERRIES, 1));
+    CHECK_EQ_INT(haul_storage_room(&game.items, 20, 10, 0, item_stack_pristine(ITEM_WOOD, 1)), 0);
     game_shutdown(&game);
 }
 
@@ -827,6 +859,7 @@ int main(void)
 {
     RUN_TEST(test_storage_room);
     RUN_TEST(test_no_job_without_stockpile);
+    RUN_TEST(test_hauled_out_of_a_heap);
     RUN_TEST(test_find_job_picks_nearest_stack_and_storage);
     RUN_TEST(test_count_is_limited_by_room);
     RUN_TEST(test_stored_items_move_only_to_better_storage);

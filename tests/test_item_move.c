@@ -1,6 +1,7 @@
 #include "core/item_move.h"
 
 #include "test_framework.h"
+#include <math.h>
 
 static TilePos tile(int x, int y)
 {
@@ -87,7 +88,11 @@ static void test_room_of_a_destination(void)
     items_add(&items, 4, 4, 0, item_stack_pristine(ITEM_COBBLE, 5));
     CHECK_EQ_INT(item_move_room(&items, tile(4, 4), cobbles), limit - 5); /* Matching. */
     items_add(&items, 5, 5, 0, item_stack_pristine(ITEM_BRANCHES, 2));
-    CHECK_EQ_INT(item_move_room(&items, tile(5, 5), cobbles), 0); /* Something else. */
+    /* Something else: the room it leaves. */
+    int taken = (int)ceilf(2.0f * item_def(ITEM_BRANCHES)->bulk / item_def(ITEM_COBBLE)->bulk);
+    CHECK_EQ_INT(item_move_room(&items, tile(5, 5), cobbles), limit - taken);
+    items_add(&items, 7, 7, 0, item_stack_pristine(ITEM_BRANCHES, 1000));
+    CHECK_EQ_INT(item_move_room(&items, tile(7, 7), cobbles), 0); /* Full of something else. */
     items_add(&items, 6, 6, 0, item_stack_pristine(ITEM_COBBLE, limit));
     CHECK_EQ_INT(item_move_room(&items, tile(6, 6), cobbles), 0); /* Full. */
     CHECK_EQ_INT(item_move_room(&items, tile(4, 4), (ItemStack){.type = ITEM_NONE}), 0);

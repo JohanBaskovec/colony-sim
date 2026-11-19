@@ -838,10 +838,23 @@ static bool carcass_edible(ItemType type)
            type != ITEM_SETTLER_BODY;
 }
 
+/* Every type carcass_edible() accepts. */
+static ItemTypeMask carcass_types(void)
+{
+    return item_types_in_category(ITEM_CATEGORY_BODIES) & ~ITEM_TYPE_BIT(ITEM_SETTLER_BODY);
+}
+
 static bool carcass_on(const Seeker *seeker, const Map *map, int x, int y, int z)
 {
     (void)map;
-    return carcass_edible((ItemType)items_get(seeker->context->items, x, y, z).type) &&
+    const Items *items = seeker->context->items;
+    ItemStack stack = items_get(items, x, y, z);
+    if (stack.type == ITEM_NONE) {
+        return false;
+    }
+    return (carcass_edible((ItemType)stack.type) ||
+            (items_mixed(items, x, y, z) &&
+             items_get_of(items, x, y, z, carcass_types()).type != ITEM_NONE)) &&
            !near_seeker(seeker, x, y, z);
 }
 
@@ -1286,8 +1299,8 @@ static void eat_carcass(Animals *animals, uint32_t slot, const AnimalContext *co
     const AnimalDef *def = &ANIMAL_DEFS[animal->species];
     Items *items = context->items;
     TilePos food = animal->target;
-    ItemStack stack =
-        items != NULL ? items_get(items, food.x, food.y, food.z) : (ItemStack){.type = ITEM_NONE};
+    ItemStack stack = items != NULL ? items_get_of(items, food.x, food.y, food.z, carcass_types())
+                                    : (ItemStack){.type = ITEM_NONE};
     bool there =
         within_bite(context->map, tile_of(animal), food) && carcass_edible((ItemType)stack.type);
     if (!there) {
@@ -1306,7 +1319,7 @@ static void eat_carcass(Animals *animals, uint32_t slot, const AnimalContext *co
     ItemStack one = stack;
     one.count = 1;
     float eaten_kg = item_stack_eat(&one, def->bite_kg);
-    items_remove(items, food.x, food.y, food.z, 1);
+    items_remove_of(items, food.x, food.y, food.z, ITEM_TYPE_BIT(stack.type), 1);
     if (one.type != ITEM_NONE) {
         items_add(items, food.x, food.y, food.z, one);
     }

@@ -121,7 +121,8 @@ static void test_drop_spreads_to_reachable_tiles(void)
     for (int y = 0; y < 16; y++) {
         map.rock[map_index(&map, 9, y, 0)] = ROCK_GRANITE;
     }
-    items_add(&items, 8, 8, 0, item_stack_pristine(ITEM_WOOD, 1)); /* Occupied by another type. */
+    items_add(&items, 8, 8, 0, item_stack_pristine(ITEM_WOOD, 1));
+    items_set_forbidden(&items, 8, 8, 0, true); /* Left alone: nothing is dropped there. */
     CHECK_EQ_INT(
         items_drop(&items, &map, 8, 8, 0, item_stack_pristine(ITEM_STONE_BLOCK, limit * 3)),
         limit * 3);
@@ -247,8 +248,6 @@ static void test_same_type_stacks_whatever_the_quality(void)
     CHECK_EQ_INT(stack.count, 40);
     CHECK_EQ_INT(stack.quality, 60);    /* (30 × 70 + 10 × 30) / 40 */
     CHECK_EQ_INT(stack.hit_points, 38); /* (30 × 30 + 10 × 60) / 40 = 37.5, rounded */
-    /* Another type does not fit on the tile. */
-    CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_BLACKBERRIES, 5, 70, 5)), 0);
 
     /* Only what fits is added; the summary is the average of every item there. */
     int room = item_stack_limit(ITEM_WOOD) - 40;
@@ -344,22 +343,98 @@ static void test_merged_hit_points_stay_between(void)
     items_free(&items);
 }
 
-static void test_drop_skips_other_types(void)
+/* Items of several types share a tile, up to its room. */
+static void test_types_share_a_tile(void)
 {
     Map map;
     Items items;
     REQUIRE(map_init(&map, 16, 16, 1));
     REQUIRE(items_init(&items, 16, 16, 1));
+    ItemTypeMask wood = ITEM_TYPE_BIT(ITEM_WOOD), branches = ITEM_TYPE_BIT(ITEM_BRANCHES);
     items_add(&items, 8, 8, 0, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_SUPERB, 60));
-    ItemStack branches = item_stack_make(ITEM_BRANCHES, 4, TEST_QUALITY_CRUDE, 10);
-    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, branches), 4);
-    CHECK_EQ_INT(items_get(&items, 8, 8, 0).count, 1);
-    CHECK_EQ_INT(items_get(&items, 8, 7, 0).count, 4); /* Next tile. */
-    CHECK_EQ_INT(items_get(&items, 8, 7, 0).quality, TEST_QUALITY_CRUDE);
-    /* The same type, of another quality, joins the stack. */
+    CHECK(!items_mixed(&items, 8, 8, 0));
+    ItemStack crude = item_stack_make(ITEM_BRANCHES, 4, TEST_QUALITY_CRUDE, 10);
+    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, crude), 4);
+    CHECK(items_mixed(&items, 8, 8, 0));
+    CHECK_EQ_INT(items_get(&items, 8, 7, 0).count, 0); /* All on the tile. */
+    /* The summary is the newest group; each group is seen on its own. */
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).type, ITEM_BRANCHES);
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).count, 4);
+    ItemStack stack = items_get_of(&items, 8, 8, 0, wood);
+    CHECK_EQ_INT(stack.type, ITEM_WOOD);
+    CHECK_EQ_INT(stack.count, 1);
+    CHECK_EQ_INT(stack.quality, TEST_QUALITY_SUPERB);
+    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, wood | branches).type, ITEM_BRANCHES);
+    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, ITEM_TYPE_BIT(ITEM_FLINT)).type, ITEM_NONE);
+    CHECK_EQ_INT(items_get_group(&items, 8, 8, 0, item_stack_pristine(ITEM_WOOD, 1)).count, 1);
+    ItemStack groups[4];
+    REQUIRE(items_groups(&items, 8, 8, 0, groups, 4) == 2);
+    CHECK_EQ_INT(groups[0].type, ITEM_BRANCHES);
+    CHECK_EQ_INT(groups[1].type, ITEM_WOOD);
+    CHECK_EQ_INT(items_groups(&items, 8, 8, 0, groups, 1), 1);
+    /* The same type, of another quality, joins its group. */
     ItemStack more = item_stack_make(ITEM_WOOD, 3, TEST_QUALITY_CRUDE, 60);
     CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, more), 3);
-    CHECK_EQ_INT(items_get(&items, 8, 8, 0).count, 4);
+    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, wood).count, 4);
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).type, ITEM_WOOD);
+
+    /* Room is shared by bulk: 4 wood (bulk 20) and 4 branches (10) leave
+     * 1000 - 120 = 880, 44 wood or 88 branches. */
+    CHECK_EQ_INT(items_room(&items, 8, 8, 0, item_stack_pristine(ITEM_WOOD, 1)), 44);
+    CHECK_EQ_INT(items_room(&items, 8, 8, 0, item_stack_pristine(ITEM_BRANCHES, 1)), 88);
+    CHECK_EQ_INT(items_add(&items, 8, 8, 0, item_stack_pristine(ITEM_STONE_BLOCK, 100)), 44);
+    CHECK_EQ_INT(items_room(&items, 8, 8, 0, item_stack_pristine(ITEM_BLACKBERRIES, 1)), 0);
+    CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, item_stack_pristine(ITEM_BLACKBERRIES, 2)), 2);
+    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, ITEM_TYPE_BIT(ITEM_BLACKBERRIES)).count, 0);
+
+    /* Taking and picking up by type. */
+    CHECK_EQ_INT(items_remove_of(&items, 8, 8, 0, wood, 1), 1);
+    ItemStack taken = items_take_of(&items, 8, 8, 0, branches, 10);
+    CHECK_EQ_INT(taken.count, 4);
+    CHECK_EQ_INT(taken.quality, TEST_QUALITY_CRUDE);
+    ItemStack load = {.type = ITEM_NONE};
+    CHECK_EQ_INT(items_pick_up_of(&items, 8, 8, 0, wood, 2, &load), 2);
+    CHECK_EQ_INT(load.type, ITEM_WOOD);
+    /* A load takes from its own group, whatever the summary. */
+    CHECK_EQ_INT(items_get(&items, 8, 8, 0).type, ITEM_STONE_BLOCK);
+    CHECK_EQ_INT(items_pick_up(&items, 8, 8, 0, 5, &load), 1);
+    CHECK_EQ_INT(load.count, 3);
+    CHECK_EQ_INT(items_pick_up_of(&items, 8, 8, 0, branches, 5, &load), 0);
+    items_use_up(&items, &load, load.count);
+    CHECK(!items_mixed(&items, 8, 8, 0));
+    items_free(&items);
+    map_free(&map);
+}
+
+/* Everything lying on a tile moves elsewhere as it was, or is cleared. */
+static void test_tile_moved_and_cleared(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(map_init(&map, 16, 16, 1));
+    REQUIRE(items_init(&items, 16, 16, 1));
+    items_add(&items, 4, 4, 0, item_stack_make(ITEM_WOOD, 3, 80, 40));
+    items_add(&items, 4, 4, 0, item_stack_make(ITEM_FLINT, 5, 20, 1));
+    REQUIRE(items_add_wild(&items, 4, 4, 0, ITEM_TWIGS, 2) == 2);
+    CHECK_EQ_INT(items_move_all(&items, &map, 4, 4, 0, 10, 10, 0, false), 8);
+    CHECK_EQ_INT(items_count_at(&items, 4, 4, 0, ITEM_NONE), 2); /* The wild twigs stay. */
+    CHECK_EQ_INT(items_get_of(&items, 10, 10, 0, ITEM_TYPE_BIT(ITEM_WOOD)).quality, 80);
+    CHECK_EQ_INT(items_get_of(&items, 10, 10, 0, ITEM_TYPE_BIT(ITEM_FLINT)).count, 5);
+    /* No room around: what does not fit stays when kept. */
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            if (x != 4 || y != 4) {
+                map.rock[map_index(&map, x, y, 0)] = ROCK_GRANITE;
+            }
+        }
+    }
+    items_add(&items, 4, 4, 0, item_stack_pristine(ITEM_WOOD, 2));
+    CHECK_EQ_INT(items_move_all(&items, &map, 4, 4, 0, 5, 4, 0, true), 0);
+    CHECK_EQ_INT(items_get_of(&items, 4, 4, 0, ITEM_TYPE_BIT(ITEM_WOOD)).count, 2);
+    items_clear(&items, 4, 4, 0);
+    CHECK_EQ_INT(items_get(&items, 4, 4, 0).type, ITEM_NONE);
+    CHECK_EQ_INT(items_count_at(&items, 4, 4, 0, ITEM_NONE), 2);
+    CHECK_EQ_INT((int)items.totals[ITEM_WOOD], 3);
     items_free(&items);
     map_free(&map);
 }
@@ -1001,7 +1076,8 @@ int main(void)
     RUN_TEST(test_stack_merge);
     RUN_TEST(test_merged_hit_points_stay_between);
     RUN_TEST(test_drop_keeps_condition);
-    RUN_TEST(test_drop_skips_other_types);
+    RUN_TEST(test_types_share_a_tile);
+    RUN_TEST(test_tile_moved_and_cleared);
     RUN_TEST(test_drop_spreads_to_reachable_tiles);
     RUN_TEST(test_drop_without_room_loses_the_rest);
     RUN_TEST(test_rot_definitions);

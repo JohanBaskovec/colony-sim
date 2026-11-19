@@ -9,6 +9,21 @@ void roof_watch_init(RoofWatch *watch, const Map *map)
     watch->build_revision = map->build_revision;
 }
 
+/* Drops a load (items_lift_all()) on the first passable tile beside
+ * (x, y, z), if any: what finds no room is lost. */
+static void drop_load_beside(Map *map, Items *items, int x, int y, int z, ItemStack *load)
+{
+    static const int DX[4] = {0, 1, 0, -1};
+    static const int DY[4] = {-1, 0, 1, 0};
+    for (int i = 0; i < 4; i++) {
+        if (map_is_passable(map, x + DX[i], y + DY[i], z)) {
+            items_drop_load(items, map, x + DX[i], y + DY[i], z, load);
+            return;
+        }
+    }
+    items_use_up(items, load, load->count);
+}
+
 /* Drops a stack on the first passable tile beside (x, y, z), if any. */
 static void drop_beside(Map *map, Items *items, int x, int y, int z, ItemStack stack)
 {
@@ -46,10 +61,8 @@ static void cave_in(Map *map, Items *items, Designations *designations, int x, i
                     CaveIns *cave_ins)
 {
     RockType above = (RockType)map->rock[map_index(map, x, y, z + 1)];
-    ItemStack lying = items != NULL ? items_get(items, x, y, z) : (ItemStack){0};
-    if (lying.type != ITEM_NONE) {
-        items_remove(items, x, y, z, lying.count);
-    }
+    ItemStack lying[ITEM_LIFT_MAX];
+    int lying_count = items != NULL ? items_lift_all(items, x, y, z, lying, ITEM_LIFT_MAX) : 0;
     StructureType structure = map_structure(map, x, y, z);
     map_set_structure(map, x, y, z, STRUCTURE_NONE);
     map_set_slope(map, x, y, z, false);
@@ -58,7 +71,9 @@ static void cave_in(Map *map, Items *items, Designations *designations, int x, i
         designation_set(designations, map, x, y, z, DESIGNATION_NONE);
     }
     map_set_rock(map, x, y, z, above != ROCK_NONE && above != ROCK_WOOD ? above : ROCK_EARTH);
-    drop_beside(map, items, x, y, z, lying);
+    for (int i = 0; i < lying_count; i++) {
+        drop_load_beside(map, items, x, y, z, &lying[i]);
+    }
     drop_salvage(map, items, structure, x, y, z, true);
     if (cave_ins != NULL) {
         if (cave_ins->count < ROOF_CAVE_IN_MAX) {

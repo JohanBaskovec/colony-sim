@@ -44,8 +44,9 @@ typedef struct HaulJob {
     int count; /* Items to carry: what the destination can take, at most the whole stack. */
 } HaulJob;
 
-/* Items of `stack` a tile can still take: empty, or holding a matching stack
- * (same type) below the stack limit. */
+/* Items of `stack` a storage tile can still take: empty, or holding only a
+ * matching stack (same type) below the stack limit (storage keeps one group
+ * per tile). */
 int haul_storage_room(const Items *items, int x, int y, int z, ItemStack stack);
 
 /*

@@ -7,6 +7,7 @@
 #include "game/inspector.h"
 
 #define TEXT_SIZE 256
+#define TILE_PANEL_GROUPS 8 /* Kinds of items listed on a heap's tile. */
 
 typedef struct ThingRows {
     App *app;
@@ -87,7 +88,9 @@ static void thing_title(const ThingRows *rows, char *out, size_t size)
     case THING_ITEMS: {
         ItemStack stack = items_get(game_view_items(game), x, y, z);
         const Corpse *corpse = thing_corpse(rows);
-        if (corpse != NULL && corpse->kind == CORPSE_SETTLER) {
+        if (items_mixed(game_view_items(game), x, y, z)) {
+            SDL_strlcpy(out, tr("tile_panel.heap"), size);
+        } else if (corpse != NULL && corpse->kind == CORPSE_SETTLER) {
             TR_FORMAT(out, size, tr("tile_panel.body"), corpse->colonist.name);
         } else if (stack.type != ITEM_NONE) {
             SDL_strlcpy(out, tr(item_def((ItemType)stack.type)->name_key), size);
@@ -309,7 +312,17 @@ static void thing_rows(UiLayout *layout, void *userdata)
             hud_corpse_rows(layout, game, corpse);
         }
         char count[32], weight[32];
-        if (stack.type != ITEM_NONE) {
+        ItemStack groups[TILE_PANEL_GROUPS];
+        int group_count = items_groups(game_view_items(game), x, y, z, groups, TILE_PANEL_GROUPS);
+        if (group_count > 1) { /* A heap: a line per kind. */
+            for (int i = 0; i < group_count; i++) {
+                tr_integer(count, sizeof(count), groups[i].count);
+                hud_weight_text(weight, sizeof(weight), item_stack_mass(groups[i]));
+                TR_FORMAT(text, sizeof(text), tr("tile_panel.group"),
+                          tr(item_def((ItemType)groups[i].type)->name_key), count, weight);
+                ui_layout_label(layout, text, 0.0f, false);
+            }
+        } else if (stack.type != ITEM_NONE) {
             tr_integer(count, sizeof(count), stack.count);
             hud_weight_text(weight, sizeof(weight), item_stack_mass(stack));
             TR_FORMAT(text, sizeof(text), tr("tile_panel.count"), count, weight);

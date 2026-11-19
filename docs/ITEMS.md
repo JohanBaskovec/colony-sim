@@ -1,11 +1,11 @@
 # Items, one by one
 
-Design of the move from stacks to individual items (under way). Today a tile
-holds one stack of one type whose quality, hit points and rot are the average
-of its items, and twigs, branches, cobbles and flint lying about are counts in
-the map (`Map.twigs`...), not items. After the move, every item is a thing of
-its own, from the stone on the ground to the spear in a hand. Values marked
-*tuning* are first guesses.
+Design of the move from stacks to individual items (done but for the last
+points of §3). Before it, a tile held one stack of one type whose quality,
+hit points and rot were the average of its items, and twigs, branches,
+cobbles and flint lying about were counts in the map (`Map.twigs`...), not
+items. Now every item is a thing of its own, from the stone on the ground to
+the spear in a hand. Values marked *tuning* are first guesses.
 
 ## 1. What changes for the player
 
@@ -158,3 +158,19 @@ playable.
    soonest to rot first: the settler looks around the station for the one
    that rots away soonest and fetches from the nearest heap holding one
    within six hours of it *(tuning)*, falling back on any heap in range.
+6. **Several types on a tile** (done). Items of any types share a tile, as
+   long as their bulk fits (`items_room()`). The items of a type form a
+   group; the tile's summary is the newest group, `Items.mixed` marks the
+   tiles with others, and the `*_of()` functions find a group among some
+   types. Searches for food, ingredients, tools, fuel and materials see
+   every group of a tile and pickups take the type looked for; a hauler
+   remembers the type it collects; storage keeps one group per tile (a
+   stockpile stays tidy). A floor dug away or a wall built moves every
+   group, each item as it was (`items_lift_all()`, `items_move_all()`).
+   The inspector names such a tile a heap, with a line per kind. Measured:
+   no cost of its own in the profile (the group lookups are well under 1 %
+   of the time); the runs differ from before because items now land where
+   they are dropped (12 settlers gathering: within 3 %; 64 settlers
+   building: 18 % faster). Not yet: holders' item lists (delivered
+   materials, station inputs, fuel stay counts since they are used up) and
+   the region masks (not needed so far).

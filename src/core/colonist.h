@@ -412,6 +412,9 @@ typedef struct Colonist {
      * rather than hauling to a stockpile: `target` is the source,
      * `haul_destination` the tile chosen. */
     bool haul_forced;
+    /* TASK_HAUL: the type of the items collected (ItemType; a tile may hold
+     * several). */
+    uint8_t haul_type;
     /* TASK_CRAFT: the station (index, and number to notice a
      * replacement in the same slot), the bill being worked through and its
      * recipe, the current step, and the stack being fetched (a tool when

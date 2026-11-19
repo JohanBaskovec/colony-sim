@@ -763,8 +763,7 @@ static void add_carrots(Game *game, int x, int y, int count, int quality, int pe
 /* Carrots of the quality left on a tile (raw ones). */
 static int carrots_left(const Game *game, int x, int y)
 {
-    ItemStack stack = items_get(&game->items, x, y, 0);
-    return stack.type == ITEM_WILD_CARROTS ? stack.count : 0;
+    return items_get_of(&game->items, x, y, 0, ITEM_TYPE_BIT(ITEM_WILD_CARROTS)).count;
 }
 
 /* A bill only takes ingredients within its quality range, item by item. */
@@ -803,7 +802,9 @@ static void test_bill_ingredient_quality(void)
                  4);
     CHECK_EQ_INT(carrots_left(&game, 20, 12), 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_WILD_CARROTS], 8);
-    CHECK_EQ_INT(items_count_chosen(&game.items, 16, 12, 0, (ItemChoice){80, 100, false}), 4);
+    CHECK_EQ_INT(
+        items_count_chosen(&game.items, 16, 12, 0, ITEM_WILD_CARROTS, (ItemChoice){80, 100, false}),
+        4);
     game_shutdown(&game);
 }
 
@@ -819,7 +820,8 @@ static void test_cooking_takes_what_rots_first(void)
     add_carrots(&game, 16, 12, 4, 50, 100); /* Fresh, nearest. */
     add_carrots(&game, 24, 12, 2, 50, 30);  /* Soon gone, farther. */
     add_carrots(&game, 24, 12, 2, 50, 100);
-    add_carrots(&game, 30, 12, 4, 50, 25); /* Sooner still, farther still. */
+    add_carrots(&game, 30, 12, 4, 50, 25); /* Sooner still, farther still... */
+    items_add(&game.items, 30, 12, 0, item_stack_pristine(ITEM_COBBLE, 3)); /* ...under cobbles. */
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_ROAST_CARROTS);
     REQUIRE(bill >= 0);
     workstation_get(&game.workstations, index)->bills[bill].target = 1;
@@ -828,6 +830,7 @@ static void test_cooking_takes_what_rots_first(void)
                      (cook->carried.type == ITEM_ROASTED_CARROTS ? cook->carried.count : 0),
                  4);
     CHECK_EQ_INT(carrots_left(&game, 30, 12), 0);
+    CHECK_EQ_INT(items_get_of(&game.items, 30, 12, 0, ITEM_TYPE_BIT(ITEM_COBBLE)).count, 3);
     CHECK_EQ_INT(carrots_left(&game, 16, 12), 4);
     CHECK_EQ_INT(carrots_left(&game, 24, 12), 4);
     game_shutdown(&game);

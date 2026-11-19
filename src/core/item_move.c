@@ -80,15 +80,7 @@ int item_move_room(const Items *items, TilePos destination, ItemStack stack)
     if (stack.type == ITEM_NONE) {
         return 0;
     }
-    ItemStack there = items_get(items, destination.x, destination.y, destination.z);
-    int limit = item_stack_limit((ItemType)stack.type);
-    if (there.type == ITEM_NONE) {
-        return limit;
-    }
-    if (!item_stacks_match(there, stack)) {
-        return 0;
-    }
-    return limit > (int)there.count ? limit - (int)there.count : 0;
+    return items_room(items, destination.x, destination.y, destination.z, stack);
 }
 
 uint64_t item_moves_hash(const ItemMoves *moves, uint64_t hash)

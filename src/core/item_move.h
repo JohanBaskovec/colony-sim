@@ -57,8 +57,8 @@ typedef bool (*ItemMoveBusyFn)(const void *context, const ItemMove *order);
 int item_moves_prune(ItemMoves *moves, const Items *items, ItemMoveBusyFn busy,
                      const void *context);
 
-/* Items of `stack` a destination tile can still take: it is empty, or holds
- * a matching stack, up to the stack limit. */
+/* Items of `stack` a destination tile can still take (items_room()): any
+ * tile with room, whatever else lies there. */
 int item_move_room(const Items *items, TilePos destination, ItemStack stack);
 
 uint64_t item_moves_hash(const ItemMoves *moves, uint64_t hash);

@@ -407,10 +407,8 @@ static void cut_ramp(Map *map, Items *items, int x, int y, int z)
     map_remove_plant(map, x, y, z + 1);
     map_set_terrain(map, x, y, z + 1, TERRAIN_OPEN);
     map_set_slope(map, x, y, z, true);
-    ItemStack lying = items != NULL ? items_get(items, x, y, z + 1) : (ItemStack){0};
-    if (lying.type != ITEM_NONE) {
-        items_remove(items, x, y, z + 1, lying.count);
-        items_drop(items, map, x, y, z, lying);
+    if (items != NULL) {
+        items_move_all(items, map, x, y, z + 1, x, y, z, false);
     }
 }
 
@@ -419,10 +417,8 @@ static void cut_ramp(Map *map, Items *items, int x, int y, int z)
  * and what lay on the ground falls into it. */
 static void dig_down(Map *map, Items *items, int x, int y, int z)
 {
-    ItemStack lying = items != NULL ? items_get(items, x, y, z) : (ItemStack){0};
-    if (lying.type != ITEM_NONE) {
-        items_remove(items, x, y, z, lying.count);
-    }
+    ItemStack lying[ITEM_LIFT_MAX];
+    int lying_count = items != NULL ? items_lift_all(items, x, y, z, lying, ITEM_LIFT_MAX) : 0;
     map_remove_plant(map, x, y, z);
     map_set_terrain(map, x, y, z, TERRAIN_OPEN);
     map_set_rock(map, x, y, z - 1, ROCK_NONE);
@@ -435,8 +431,8 @@ static void dig_down(Map *map, Items *items, int x, int y, int z)
     if (!leads_up) {
         map_set_slope(map, x, y, z - 1, false); /* A pit: a ladder gets out of it. */
     }
-    if (lying.type != ITEM_NONE) {
-        items_drop(items, map, x, y, z - 1, lying);
+    for (int i = 0; i < lying_count; i++) {
+        items_drop_load(items, map, x, y, z - 1, &lying[i]);
     }
 }
 

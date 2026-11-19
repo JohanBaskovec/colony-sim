@@ -56,8 +56,7 @@ static int count_on_line(const Items *items, int x, int y, int z, int dx, int dy
 {
     int count = 0;
     for (int i = from; i <= to; i++) {
-        ItemStack stack = items_get(items, x + dx * i, y + dy * i, z);
-        count += stack.type == type ? stack.count : 0;
+        count += items_get_of(items, x + dx * i, y + dy * i, z, ITEM_TYPE_BIT(type)).count;
     }
     return count;
 }
@@ -976,14 +975,13 @@ static void test_fell(void)
     CHECK(map_is_open(&map, 11, 2, 1));
     /* The trunk on its foot and the first tiles, the crown at the far end. */
     CHECK_EQ_INT(count_on_line(&items, 10, 2, 0, 0, 1, 0, 6, ITEM_WOOD), 24);
-    CHECK_EQ_INT(items_get(&items, 10, 2, 0).count, 4);
+    CHECK_EQ_INT(items_get_of(&items, 10, 2, 0, ITEM_TYPE_BIT(ITEM_WOOD)).count, 4);
     CHECK_EQ_INT(count_on_line(&items, 10, 2, 0, 0, 1, 7, 8, ITEM_BRANCHES), branches);
-    /* One kind of item per tile: the twigs beside the branches. */
+    /* The twigs with the branches, or beside them when the tiles are full. */
     int near_crown = 0;
     for (int y = 8; y <= 12; y++) {
         for (int x = 9; x <= 11; x++) {
-            ItemStack stack = items_get(&items, x, y, 0);
-            near_crown += stack.type == ITEM_WET_TWIGS ? stack.count : 0;
+            near_crown += items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_WET_TWIGS)).count;
         }
     }
     CHECK_EQ_INT(near_crown, twigs);
@@ -997,7 +995,7 @@ static void test_fell(void)
     fall = tree_fell(&map, &items, 3, 3, 0, item_stack_pristine(ITEM_WOOD, 2));
     CHECK_EQ_INT(fall.length, 0);
     CHECK_EQ_INT(map.plants[map_index(&map, 3, 3, 0)].type, PLANT_NONE);
-    CHECK_EQ_INT(items_get(&items, 3, 3, 0).count, 2);
+    CHECK_EQ_INT(items_get_of(&items, 3, 3, 0, ITEM_TYPE_BIT(ITEM_WOOD)).count, 2);
     items_free(&items);
     map_free(&map);
 }

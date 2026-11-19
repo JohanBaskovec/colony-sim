@@ -2378,11 +2378,11 @@ static void test_item_move_refuses_bad_orders(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_COBBLE, 3));
-    items_add(&game.items, 20, 20, 0, item_stack_pristine(ITEM_BRANCHES, 3));
+    items_add(&game.items, 20, 20, 0, item_stack_pristine(ITEM_BRANCHES, 1000));
     map_set_terrain(&game.map, 25, 25, 0, TERRAIN_DEEP_WATER);
     CHECK(!game_order_item_move(&game, 11, 10, 0, 30, 20, 0)); /* Nothing there. */
     CHECK(!game_order_item_move(&game, 10, 10, 0, 10, 10, 0)); /* The same tile. */
-    CHECK(!game_order_item_move(&game, 10, 10, 0, 20, 20, 0)); /* Another kind lies there. */
+    CHECK(!game_order_item_move(&game, 10, 10, 0, 20, 20, 0)); /* Full of another kind. */
     CHECK(!game_order_item_move(&game, 10, 10, 0, 25, 25, 0)); /* Deep water. */
     CHECK(!game_order_item_move(&game, 10, 10, 0, 99, 99, 0)); /* Off the map. */
     CHECK(!items_forbidden(&game.items, 10, 10, 0));           /* Refused: nothing forbidden. */

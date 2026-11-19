@@ -4,11 +4,12 @@
  * Every item lying on a tile is a record of its own (Item, in a pool), with
  * its own quality, hit points, rot and spot: items are never merged into
  * averages (docs/ITEMS.md). The items of a tile form a list, newest first.
- * For the callers that think in stacks, each tile also has a summary
- * (Items.stacks): the type of its newest item, how many items of that type
- * lie there and their average condition. A tile still takes one type at a
- * time through items_add(); items that dry or get wet change type one by one,
- * so a tile may hold two types for a while.
+ * A tile holds items of any types, as long as there is room (ITEM_TILE_BULK
+ * in all). The items of a type (and, for bodies, of the same dead one) form
+ * a group, seen as a stack: its count and average condition. For the
+ * callers that think in one stack per tile, each tile has a summary
+ * (Items.stacks): the group of its newest item; the *_of() functions look
+ * for the newest group among some types, items_groups() lists them all.
  *
  * Dropping more items than a tile can take spreads them over nearby reachable
  * tiles.
@@ -220,10 +221,12 @@ typedef struct Items {
     int width;
     int height;
     int depth;
-    /* Summary of each tile (see the top of this file): the type of its
-     * newest item, the count and average condition of its items of that
-     * type. Derived from the items: never written but by this module. */
+    /* Summary of each tile (see the top of this file): the group of its
+     * newest item (not wild), its count and average condition. Derived from
+     * the items: never written but by this module. */
     ItemStack *stacks;
+    /* Per tile: non-zero when it holds other groups than its summary. */
+    uint8_t *mixed;
     long totals[ITEM_TYPE_COUNT]; /* Items of each type on the whole map. */
     uint32_t *level_stacks;       /* Tiles with items on each level (searches skip empty levels). */
     uint32_t additions;           /* Incremented whenever items are added (haulers look again). */
@@ -272,6 +275,9 @@ ItemTypeMask item_types_all(void);
 ItemTypeMask item_types_in_category(ItemCategory category);
 
 bool item_is_food(ItemType type);
+
+/* Every type that is food (item_is_food()). */
+ItemTypeMask item_types_food(void);
 
 /* Whether items of a type rot (ItemDef.rot_days > 0). */
 bool item_rots(ItemType type);
@@ -330,8 +336,30 @@ int item_stack_hit_points_percent(ItemStack stack);
 bool items_init(Items *items, int width, int height, int depth);
 void items_free(Items *items);
 
-/* Empty stack when out of bounds. */
+/* The summary of a tile: the group of its newest item. Empty stack when out
+ * of bounds. */
 ItemStack items_get(const Items *items, int x, int y, int z);
+
+/* The newest group of a tile among `types` (an empty stack for none). */
+ItemStack items_get_of(const Items *items, int x, int y, int z, ItemTypeMask types);
+
+/* items_get_of(), but an empty stack where the tile is forbidden. */
+ItemStack items_get_allowed_of(const Items *items, int x, int y, int z, ItemTypeMask types);
+
+/* The group of a tile that `group` would belong with (same type, same dead
+ * one), an empty stack for none. */
+ItemStack items_get_group(const Items *items, int x, int y, int z, ItemStack group);
+
+/* Whether a tile holds more than one group. */
+bool items_mixed(const Items *items, int x, int y, int z);
+
+/* The groups of a tile, the newest first: up to `capacity` into `out`.
+ * Returns how many were written. */
+int items_groups(const Items *items, int x, int y, int z, ItemStack *out, int capacity);
+
+/* How many items of `batch` a tile still has room for (items_add() would
+ * take): its type's stack limit less the room taken by what lies there. */
+int items_room(const Items *items, int x, int y, int z, ItemStack batch);
 
 /* Copies the items lying on the tile at `index` (and whether they are
  * forbidden) from `src` to `dst` (same size), keeping dst's totals and
@@ -343,7 +371,8 @@ void items_copy_tile(Items *dst, const Items *src, size_t index);
  * forbidden. */
 ItemStack items_get_allowed(const Items *items, int x, int y, int z);
 
-/* Whether the stack on a tile is forbidden (false without a stack). */
+/* Whether the items on a tile are forbidden (false without any). A tile is
+ * forbidden as a whole, every group on it. */
 bool items_forbidden(const Items *items, int x, int y, int z);
 
 /* Forbids or allows the stack on a tile (nothing without one). Allowing
@@ -351,19 +380,39 @@ bool items_forbidden(const Items *items, int x, int y, int z);
  * whether it changed. */
 bool items_set_forbidden(Items *items, int x, int y, int z, bool forbidden);
 
-/* Adds items to a tile that is empty or holds a matching stack (same type), up
- * to the stack limit; the tile's stack takes the average quality and hit
- * points. Returns the number actually added. */
+/* Adds items to a tile, as many as it has room for (items_room()), each
+ * with the batch's condition. Returns the number actually added. */
 int items_add(Items *items, int x, int y, int z, ItemStack batch);
 
-/* Removes up to `count` items from a tile (they have the quality and hit points
- * of the stack). Returns the number removed. */
+/* Removes up to `count` items of the tile's summary group (the newest
+ * first). Returns the number removed. */
 int items_remove(Items *items, int x, int y, int z, int count);
 
 /* items_remove(), but returns what was taken: the count, and the average
- * condition of the very items removed (the newest of the tile's type).
+ * condition of the very items removed (the newest of the group).
  * An empty stack when nothing was taken. */
 ItemStack items_take(Items *items, int x, int y, int z, int count);
+
+/* items_take() and items_remove() from the newest group among `types`. */
+ItemStack items_take_of(Items *items, int x, int y, int z, ItemTypeMask types, int count);
+int items_remove_of(Items *items, int x, int y, int z, ItemTypeMask types, int count);
+
+/* Removes every item lying on a tile, but wild ones: gone. */
+void items_clear(Items *items, int x, int y, int z);
+
+/* Groups items_lift_all() takes at most at once (more stay on the tile). */
+#define ITEM_LIFT_MAX 64
+
+/* Picks up every item lying on a tile, but wild ones: each group into a
+ * load of `loads` (up to `capacity`), the newest first, to be put down
+ * elsewhere (items_drop_load()) or used up. Returns how many loads. */
+int items_lift_all(Items *items, int x, int y, int z, ItemStack *loads, int capacity);
+
+/* Moves every item lying on a tile, but wild ones, around another (as
+ * items_drop_load() does), each as it was. What finds no room stays where
+ * it lay when `keep`, else is lost. Returns how many were moved. */
+int items_move_all(Items *items, const struct Map *map, int x, int y, int z, int to_x, int to_y,
+                   int to_z, bool keep);
 
 /* The newest item lying on the tile at `index`, NULL for none; then the next
  * one (older), NULL after the last. Valid until the items change. */
@@ -381,9 +430,14 @@ int items_count_at(const Items *items, int x, int y, int z, ItemType type);
  * holds one type.
  */
 
-/* Picks up to `count` items of the tile's stack (newest first) into `load`,
- * which is empty or matches (item_stacks_match()). Returns how many. */
+/* Picks up to `count` items (newest first) into `load`: of its group when
+ * it holds some, else of the tile's summary group. Returns how many. */
 int items_pick_up(Items *items, int x, int y, int z, int count, ItemStack *load);
+
+/* items_pick_up() from the newest group among `types` (of the load's group
+ * when it holds some, if its type is among them). */
+int items_pick_up_of(Items *items, int x, int y, int z, ItemTypeMask types, int count,
+                     ItemStack *load);
 
 /* Puts the items of `load` on a tile, as items_add() would (what fits),
  * each at a spot of its own; the load keeps the rest. Returns how many. */
@@ -453,8 +507,8 @@ long item_rot_left(const Item *item);
  * of them into `out` (ties: the newest first). Returns how many lie there. */
 int items_list(const Items *items, size_t index, ItemOrder order, const Item **out, int capacity);
 
-/* What of a tile's stack is wanted (a bill's ingredients): a quality range,
- * and the items that rot away soonest first. */
+/* What of a tile's group of a type is wanted (a bill's ingredients): a
+ * quality range, and the items that rot away soonest first. */
 typedef struct ItemChoice {
     int min_quality;
     int max_quality;
@@ -464,17 +518,20 @@ typedef struct ItemChoice {
 /* Any item of the stack, the newest first. */
 #define ITEM_CHOICE_ANY ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false})
 
-/* Items of the tile's stack whose quality lies in the choice's range. */
-int items_count_chosen(const Items *items, int x, int y, int z, ItemChoice choice);
+/* Items of the tile's newest group of `type` whose quality lies in the
+ * choice's range. */
+int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, ItemChoice choice);
 
-/* Hours until the first item of the tile's stack in the choice's range rots
- * away, at rot ×1 (item_stack_rot_hours()); negative when none rots. */
-float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemChoice choice);
+/* Hours until the first item of the tile's newest group of `type` in the
+ * choice's range rots away, at rot ×1 (item_stack_rot_hours()); negative
+ * when none rots. */
+float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemType type,
+                              ItemChoice choice);
 
-/* items_pick_up(), only items in the choice's range, those that rot away
- * soonest first when it says so. */
-int items_pick_up_chosen(Items *items, int x, int y, int z, int count, ItemChoice choice,
-                         ItemStack *load);
+/* items_pick_up_of() for one type, only items in the choice's range, those
+ * that rot away soonest first when it says so. */
+int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int count,
+                         ItemChoice choice, ItemStack *load);
 
 /* Wild items (ITEM_FLAG_WILD) */
 
@@ -498,8 +555,7 @@ int items_pick_up_wild(Items *items, int x, int y, int z, ItemType type, int cou
                        ItemType becomes, ItemStack *load);
 
 /*
- * Puts items on (x, y) and, when it is full, forbidden or holds something
- * else (another type), on the
+ * Puts items on (x, y) and, when it is full or forbidden, on the
  * nearest passable tiles reachable from it (breadth-first, fixed order,
  * within ITEM_DROP_RADIUS). Returns the number placed: items that find no
  * room are lost.

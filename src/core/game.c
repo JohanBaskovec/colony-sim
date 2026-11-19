@@ -675,10 +675,13 @@ void game_update_stock(Game *game)
         if (station == NULL) {
             continue;
         }
-        ItemStack stack = items_get(items, station->x, station->y, station->z);
-        if (stack.count > 0 && stockpile_storage_priority(&game->stockpiles, station->x, station->y,
-                                                          station->z, stack) == 0) {
-            game->stock_on_stations[stack.type] += stack.count; /* Not counted as stored. */
+        ItemStack groups[8];
+        int count = items_groups(items, station->x, station->y, station->z, groups, 8);
+        for (int i = 0; i < count; i++) {
+            if (stockpile_storage_priority(&game->stockpiles, station->x, station->y, station->z,
+                                           groups[i]) == 0) {
+                game->stock_on_stations[groups[i].type] += groups[i].count; /* Not stored. */
+            }
         }
     }
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
@@ -2638,6 +2641,7 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, &c->light_progress, sizeof(c->light_progress));
         hash = hash_fnv1a64(hash, &c->fuel_promised, sizeof(c->fuel_promised));
         hash = hash_fnv1a64(hash, &c->haul_delivering, sizeof(c->haul_delivering));
+        hash = hash_fnv1a64(hash, &c->haul_type, sizeof(c->haul_type));
         hash = hash_fnv1a64(hash, &c->strength, sizeof(c->strength));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));

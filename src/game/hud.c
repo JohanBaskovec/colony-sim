@@ -506,6 +506,21 @@ static void build_tile_panel(App *app, Panel *panel)
         }
     }
 
+    ItemStack groups[4];
+    int group_count = items_groups(game_items_at(&app->game, x, y, z), x, y, z, groups, 4);
+    if (group_count > 1) { /* A heap: a line per kind. */
+        for (int i = 0; i < group_count; i++) {
+            char weight[32];
+            tr_integer(a, sizeof(a), groups[i].count);
+            hud_weight_text(weight, sizeof(weight), item_stack_mass(groups[i]));
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("tile_panel.group"),
+                      tr(item_def((ItemType)groups[i].type)->name_key), a, weight);
+        }
+        if (items_forbidden(game_view_items(&app->game), x, y, z)) {
+            panel_add_text(panel, tr("tile_panel.left_alone"));
+        }
+        return;
+    }
     ItemStack stack = items_get(game_items_at(&app->game, x, y, z), x, y, z);
     if (stack.type != ITEM_NONE) {
         char weight[32];

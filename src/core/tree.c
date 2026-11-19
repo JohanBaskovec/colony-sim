@@ -421,14 +421,14 @@ static void drop_items_from(Map *map, Items *items, int x, int y, int z)
     if (items == NULL) {
         return;
     }
-    ItemStack stack = items_get(items, x, y, z);
-    if (stack.count == 0) {
+    if (items_get(items, x, y, z).count == 0) {
         return;
     }
-    items_remove(items, x, y, z, stack.count);
     int level = landing_level(map, x, y, z);
     if (level >= 0) {
-        items_drop(items, map, x, y, level, stack);
+        items_move_all(items, map, x, y, z, x, y, level, false);
+    } else {
+        items_clear(items, x, y, z);
     }
 }
 
