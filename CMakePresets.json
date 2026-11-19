@@ -55,6 +55,16 @@
         "COLONY_ENABLE_SANITIZERS": "ON",
         "COLONY_WARNINGS_AS_ERRORS": "ON"
       }
+    },
+    {
+      "name": "headless-release",
+      "displayName": "Optimized core + benchmarks (no SDL)",
+      "description": "For simulations that run for in-game days (bench_social, bench_simulation) without downloading SDL",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "COLONY_BUILD_GAME": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -62,7 +72,8 @@
     { "name": "release", "configurePreset": "release", "jobs": 6 },
     { "name": "asan", "configurePreset": "asan", "jobs": 4 },
     { "name": "profile", "configurePreset": "profile", "jobs": 6 },
-    { "name": "headless", "configurePreset": "headless", "jobs": 6 }
+    { "name": "headless", "configurePreset": "headless", "jobs": 6 },
+    { "name": "headless-release", "configurePreset": "headless-release", "jobs": 6 }
   ],
   "testPresets": [
     { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } },
