@@ -66,7 +66,8 @@ first guesses.
   sun that does not set for weeks in summer (circling the sky, the shadows
   turning all the way round) and does not rise in winter, which sunrise,
   sunset, the day on screen and the plants' light must allow for (a day of
-  0 or 24 hours). The climate of the place
+  0 or 24 hours). The settlers keep to their schedule and their needs
+  whatever the light. The climate of the place
   (temperatures, rain, the plants that live there) goes with that choice and
   is a design of its own.
 
@@ -117,8 +118,8 @@ At sunrise and sunset shadows are endless, and the direct sun is weak
 - `open` is how much of the sky the tile sees (§3.2), 0 .. 1.
 
 At night there is no direct light: the night sky (`NIGHT_SKY_LIT`) times
-`open`, and the fires. Moonlight and shadows cast by fires are not planned
-(§7).
+`open`, and the fires, whose light stops at walls too (§3.3). Moonlight as a
+second sun is not planned (§7).
 
 ## 3. What stops the light
 
@@ -207,6 +208,32 @@ It is kept per tile and worked out again around what changed, within
 spread over a day *(tuning)*. One value per tile is enough, also on screen:
 the light of the sky is soft, it has no edges.
 
+### 3.3 The light of fires
+
+Today the light of a burning hearth only depends on the distance
+(`hearths_light_at()`, fading over `HEARTH_LIGHT_RADIUS`, 6 tiles): it goes
+through walls. A fire inside a closed hut glows on the ground outside, and a
+fire outside lights the inside of the hut. With huts that are dark by day
+this would show at once.
+
+The light of a fire follows the same rule as the sun's: a point is lit by a
+fire when a straight line from the point to the fire meets nothing that
+stops the light (the table above). What follows by itself:
+
+- a fire lights its room and nothing behind the walls;
+- through an open door or a window, its light falls outside as a wedge;
+- a wall, a trunk or a rock near a fire outdoors has a shadow behind it,
+  pointing away from the fire;
+- the light goes up and down where nothing is in the way (a fire at the foot
+  of a drop lights the edge above), instead of staying on its level.
+
+It is worked out at the points of the fine texture (§4), since these
+shadows have sharp edges, for the points within the fire's radius only, and
+kept until the fire is lit or goes out or the map changes within its radius
+(a door opening): fires do not move. Rays of 6 tiles at most.
+
+The warmth a fire radiates already stops at walls (`hearths_radiant_warmth()`).
+
 ## 4. On screen
 
 The veil of `render_daylight()` stays (its colors by day, dusk and night,
@@ -289,8 +316,9 @@ tile sees, and how much of the tile is in the sun during this hour.
   now, the mean of `lit` (§3.1) over points spread across the tile's floor,
   `SUN_TILE_SAMPLES` a side *(tuning: 4, sixteen points)*: a tile whose
   fifth is in the sun gets 51, not 0. Worked out from the real map once an
-  hour of game time, in slices over the ticks like the soil's pass
-  (`core/soil.h`). A tile whose `open` is 0 is not worked out: no sky, no
+  hour of game time (decided; three times a day, morning, midday and
+  afternoon, if the hourly pass turns out to cost too much), in slices over
+  the ticks like the soil's pass (`core/soil.h`). A tile whose `open` is 0 is not worked out: no sky, no
   sun.
 - `sun_hours`, a byte per tile: the hours of direct sun of the day so far
   (an hour half in the sun counts half), kept for the day before too: what
@@ -311,8 +339,8 @@ shadow's edge crosses need all their points:
 As an order of magnitude: 40 000 tiles under the sky on a 200 × 200 map, a
 few short rays each, once every 2 500 ticks: one to a few microseconds per
 tick, against about 20 for the whole simulation today. To be measured with
-`bench_simulation`; if it is too much, fewer points, or a pass every two
-hours.
+`bench_simulation`; if it is too much, fewer points first, then three
+passes a day instead of one an hour.
 
 ### 5.2 Who reads it
 
@@ -373,17 +401,20 @@ Each step is tested and leaves the game playable.
    by an item or a settler.
 3. **Shadows on screen**: the fine texture, shadows that glide (§4.1), the
    sky's share, the low sun, overcast days, the pieces and their budget; the
-   light view (key G) shows the new light. The light of the sky is still what lies straight above
-   (`map_light_cover()`). Measured with `--bench-render`.
+   light view (key G) shows the new light. The light of the sky is still
+   what lies straight above (`map_light_cover()`). Measured with
+   `--bench-render`.
 4. **The light of the sky and doors** (core, then on screen): `open` per
    tile from the rays of §3.2, kept and worked out again around what
    changes; `MAP_LIGHT_ROOF` goes; doors open and close (while somebody
-   passes, or kept open) and let the light and the sight through when open.
-   On screen only at first: closed huts dark, the sun and the day coming in
-   by the open door, caves darkening from their mouth. Tests: a closed hut
-   at 0, the same with its door open, with a side open, a roof on posts, a
-   cave three tiles in, open ground at 1, the foot of a cliff near a half;
-   sight through an open door and not through a closed one.
+   passes, or kept open) and let the light and the sight through when open;
+   the light of fires stops at walls (§3.3). On screen only at first: closed
+   huts dark, the sun and the day coming in by the open door, caves
+   darkening from their mouth, a fire lighting its room only. Tests: a
+   closed hut at 0, the same with its door open, with a side open, a roof on
+   posts, a cave three tiles in, open ground at 1, the foot of a cliff near
+   a half; sight through an open door and not through a closed one; no light
+   from a fire behind a wall, some through the open door.
 5. **Light in the simulation**: `open`, `direct` (the share of the tile in
    the sun) and `sun_hours`, read by plants, soil and temperature; the
    inspector's line; the retuning of §5.3. Tests: a tile a fifth in the sun
@@ -401,13 +432,7 @@ Each step is tested and leaves the game playable.
 ## 7. Not planned
 
 - Shadows cast by settlers, animals, items and low plants.
-- Shadows cast by the light of fires, moonlight.
+- Moonlight as a second sun, with shadows at night: the night sky lights
+  evenly what sees it (`open`).
 - Light bouncing off walls, floors and water: a place is lit by the sky it
   sees, so the far corner of a room with one door is dark.
-
-## 8. Open questions
-
-- How the settlers live through a polar day and a polar night (their hours
-  of sleep and work follow the clock today, not the light).
-- One value an hour for the simulation, or three per day (morning, midday,
-  afternoon) if the hourly pass costs too much?
