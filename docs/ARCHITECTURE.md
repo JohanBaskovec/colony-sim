@@ -2393,13 +2393,13 @@ so the same seed gives the same game whatever the player looks at.
 
 ## Assets
 
-`assets/` is copied next to the executable after each build (`bin/assets/`).
+`assets/` is copied next to the executable at each build (`bin/assets/`, the `colony_assets` target: only changed files, even when nothing is compiled).
 At startup the game looks for `<executable dir>/assets/`, then falls back to
 the source tree (`COLONY_SOURCE_ASSETS_DIR`, development builds).
 
 ## Build
 
-- CMake ≥ 3.25, presets in `CMakePresets.json`: Ninja, 6 jobs (4 for the
+- CMake ≥ 3.26, presets in `CMakePresets.json`: Ninja, 6 jobs (4 for the
   sanitized game build, which needs much memory), tests run 6 at a time.
 - ccache is used when installed (`find_program()` in `CMakeLists.txt`).
 - Unit tests: one executable per file of `tests/`. The test functions of the

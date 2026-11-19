@@ -35,7 +35,7 @@ survive whatever the world throws at them.
 ### Requirements
 
 - A C17 compiler (GCC, Clang or MSVC)
-- CMake ≥ 3.25
+- CMake ≥ 3.26
 - Git (dependencies are fetched automatically)
 - Linux: FreeType and the usual SDL3 build dependencies (X11/Wayland, ALSA/PulseAudio, EGL/GL headers).
   On Debian/Ubuntu:

@@ -47,8 +47,11 @@ set_target_properties(colony_sim PROPERTIES
 
 colony_configure_target(colony_sim)
 
-# Ship the assets next to the executable (bin/assets).
-add_custom_command(TARGET colony_sim POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
+# Ship the assets next to the executable (bin/assets). A target of its own,
+# run at every build, so that a changed sprite or translation is copied even
+# when the executable is not linked again; only changed files are copied.
+add_custom_target(colony_assets ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
         "${PROJECT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:colony_sim>/assets"
-    COMMENT "Copying assets")
+    COMMENT "Copying changed assets")
+add_dependencies(colony_sim colony_assets)
