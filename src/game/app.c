@@ -595,6 +595,10 @@ bool app_init(App *app, const CliOptions *options)
 {
     SDL_zerop(app);
     app->structure_direction = DIRECTION_SOUTH; /* Beds' heads at the top. */
+    /* Zeroed is a valid item id (slot 0): these name no item. */
+    app->debug_held = ITEM_ID_NONE;
+    app->move_item_id = ITEM_ID_NONE;
+    app->selected_item.id = ITEM_ID_NONE;
     log_set_sink(sdl_log_sink, NULL);
     SDL_SetAppMetadata("Colony Sim", COLONY_VERSION, "io.github.colony-sim");
 
@@ -1586,7 +1590,8 @@ static void handle_event(App *app, const SDL_Event *event)
             camera_pan_pixels(&app->camera, -event->motion.xrel, -event->motion.yrel);
             app_stop_following(app);
         }
-        if (app->left_button_down && app->debug_held.slot != UINT32_MAX) {
+        if (app->left_button_down && app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM) &&
+            app->debug_held.slot != UINT32_MAX) {
             drag_held_item(app, event->motion.x, event->motion.y);
             break;
         }
