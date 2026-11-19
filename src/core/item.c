@@ -732,67 +732,240 @@ bool items_set_forbidden(Items *items, int x, int y, int z, bool forbidden)
     return true;
 }
 
-int items_add(Items *items, int x, int y, int z, ItemStack batch)
+/* A stack made valid for its type, as items_add() keeps it: condition
+ * clamped, progress, eaten and corpse only where the type has them; never a
+ * load. */
+static ItemStack valid_batch(ItemStack batch)
 {
     ItemType type = (ItemType)batch.type;
-    if (!in_bounds(items, x, y, z) || !is_item_type(type) || batch.count == 0) {
-        return 0;
+    if (!is_item_type(type) || batch.count == 0) {
+        return (ItemStack){.type = ITEM_NONE};
     }
-    /* Callers may build stacks by hand: keep the condition valid for the type. */
     uint16_t progress = valid_progress(type, batch.progress);
     int eaten = ITEM_DEFS[type].category == ITEM_CATEGORY_BODIES ? batch.eaten : 0;
     uint16_t corpse = ITEM_DEFS[type].category == ITEM_CATEGORY_BODIES ? batch.corpse : 0;
-    batch = item_stack_make(type, batch.count, batch.quality, batch.hit_points);
-    batch.progress = progress;
-    batch.eaten = (uint16_t)clampi(eaten, 0, ITEM_EATEN_FULL - 1);
-    batch.corpse = corpse;
-    size_t index = index_of(items, x, y, z);
+    ItemStack valid = item_stack_make(type, batch.count, batch.quality, batch.hit_points);
+    valid.progress = progress;
+    valid.eaten = (uint16_t)clampi(eaten, 0, ITEM_EATEN_FULL - 1);
+    valid.corpse = corpse;
+    return valid;
+}
+
+/* How many items of a stack the tile at `index` takes: none when it holds
+ * another stack; else the type's stack limit, less what lies there already
+ * (items of other types too: a tile where some items dried into another
+ * type). */
+static int tile_room(const Items *items, size_t index, const ItemStack *batch)
+{
     const ItemStack *stack = &items->stacks[index];
-    if (stack->type != ITEM_NONE && !item_stacks_match(*stack, batch)) {
+    if (stack->type != ITEM_NONE && !item_stacks_match(*stack, *batch)) {
         return 0;
     }
-    /* Room: the type's stack limit, less what the items of other types take
-     * (a tile where some items dried into another type). */
     float other_bulk = 0.0f;
     for (const Item *item = items_first(items, index); item != NULL;
          item = items_next(items, item)) {
-        if (!item_matches(item, &batch)) {
+        if (!item_matches(item, batch)) {
             other_bulk += ITEM_DEFS[item->type].bulk;
         }
     }
-    int room =
-        item_stack_limit(type) - (int)stack->count - (int)ceilf(other_bulk / ITEM_DEFS[type].bulk);
-    int added = (int)batch.count < room ? (int)batch.count : room;
-    if (added <= 0) {
+    ItemType type = (ItemType)batch->type;
+    return item_stack_limit(type) - (int)stack->count -
+           (int)ceilf(other_bulk / ITEM_DEFS[type].bulk);
+}
+
+/* A new item of a valid stack's condition, not linked anywhere yet: its
+ * slot + 1, 0 when out of memory. */
+static uint32_t new_item(Items *items, const ItemStack *batch, uint32_t tile)
+{
+    uint32_t slot = alloc_slot(items);
+    if (slot != 0) {
+        Item *item = &items->pool[slot - 1];
+        *item = (Item){.type = batch->type,
+                       .quality = batch->quality,
+                       .hit_points = batch->hit_points,
+                       .progress = batch->progress,
+                       .eaten = batch->eaten,
+                       .corpse = batch->corpse,
+                       .generation = item->generation,
+                       .tile = tile};
+    }
+    return slot;
+}
+
+/* Links an item at the head of a tile's list, at a spot of its own. */
+static void lay_item(Items *items, size_t index, uint32_t slot, uint32_t salt)
+{
+    Item *item = &items->pool[slot - 1];
+    item->tile = (uint32_t)index;
+    place_item(items, item, index, salt);
+    item->next = items->heads[index];
+    items->heads[index] = slot;
+    items->totals[item->type]++;
+    items->item_count++;
+}
+
+int items_add(Items *items, int x, int y, int z, ItemStack batch)
+{
+    if (!in_bounds(items, x, y, z)) {
         return 0;
     }
+    /* Callers may build stacks by hand: keep the condition valid for the type. */
+    batch = valid_batch(batch);
+    if (batch.type == ITEM_NONE) {
+        return 0;
+    }
+    size_t index = index_of(items, x, y, z);
+    int room = tile_room(items, index, &batch);
+    int added = (int)batch.count < room ? (int)batch.count : room;
     for (int i = 0; i < added; i++) {
-        uint32_t slot = alloc_slot(items);
+        uint32_t slot = new_item(items, &batch, (uint32_t)index);
         if (slot == 0) {
             added = i; /* Out of memory: the rest is not added. */
             break;
         }
-        Item *item = &items->pool[slot - 1];
-        *item = (Item){.type = batch.type,
-                       .quality = batch.quality,
-                       .hit_points = batch.hit_points,
-                       .progress = batch.progress,
-                       .eaten = batch.eaten,
-                       .corpse = batch.corpse,
-                       .generation = item->generation,
-                       .tile = (uint32_t)index};
-        place_item(items, item, index, (uint32_t)i);
-        item->next = items->heads[index];
-        items->heads[index] = slot;
+        lay_item(items, index, slot, (uint32_t)i);
     }
-    if (added == 0) {
+    if (added <= 0) {
         return 0;
     }
-    items->totals[type] += added;
-    items->item_count += added;
     items->additions++;
     note_change(items, index);
     return added;
+}
+
+/* ---- Loads ---- */
+
+/* Rebuilds the summary of a load from its items. */
+static void refresh_load(const Items *items, ItemStack *load)
+{
+    const Item *head = slot_item(items, load->held);
+    if (head == NULL) {
+        *load = (ItemStack){.type = ITEM_NONE};
+        return;
+    }
+    long count = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0;
+    for (const Item *item = head; item != NULL; item = slot_item(items, item->next)) {
+        count++;
+        quality += item->quality;
+        hit_points += item->hit_points;
+        progress += item->progress;
+        eaten += item->eaten;
+    }
+    *load = (ItemStack){.type = head->type,
+                        .corpse = head->corpse,
+                        .count = (uint16_t)(count < UINT16_MAX ? count : UINT16_MAX),
+                        .quality = (uint8_t)((quality + count / 2) / count),
+                        .hit_points = (uint16_t)((hit_points + count / 2) / count),
+                        .progress = (uint16_t)((progress + count / 2) / count),
+                        .eaten = (uint16_t)((eaten + count / 2) / count),
+                        .held = load->held};
+}
+
+/* Turns a load that is only numbers into items of its condition. */
+static void materialize(Items *items, ItemStack *load)
+{
+    if (load->held != 0 || load->count == 0 || load->type == ITEM_NONE) {
+        return;
+    }
+    ItemStack batch = valid_batch(*load);
+    for (int i = 0; batch.type != ITEM_NONE && i < (int)batch.count; i++) {
+        uint32_t slot = new_item(items, &batch, ITEM_TILE_HELD);
+        if (slot == 0) {
+            break; /* Out of memory: a smaller load. */
+        }
+        items->pool[slot - 1].next = load->held;
+        load->held = slot;
+        items->held_count++;
+    }
+    refresh_load(items, load);
+}
+
+int items_pick_up(Items *items, int x, int y, int z, int count, ItemStack *load)
+{
+    if (!in_bounds(items, x, y, z) || count <= 0) {
+        return 0;
+    }
+    size_t index = index_of(items, x, y, z);
+    const ItemStack stack = items->stacks[index];
+    if (stack.type == ITEM_NONE ||
+        (load->type != ITEM_NONE && load->count > 0 && !item_stacks_match(*load, stack))) {
+        return 0;
+    }
+    materialize(items, load);
+    int taken = 0;
+    uint32_t previous = 0;
+    uint32_t slot = items->heads[index];
+    while (slot != 0 && taken < count) {
+        Item *item = &items->pool[slot - 1];
+        uint32_t next = item->next;
+        if (item_matches(item, &stack)) {
+            if (previous == 0) {
+                items->heads[index] = next;
+            } else {
+                items->pool[previous - 1].next = next;
+            }
+            items->totals[item->type]--;
+            items->item_count--;
+            item->tile = ITEM_TILE_HELD;
+            item->next = load->held;
+            load->held = slot;
+            items->held_count++;
+            taken++;
+        } else {
+            previous = slot;
+        }
+        slot = next;
+    }
+    if (taken > 0) {
+        note_change(items, index);
+        refresh_load(items, load);
+    }
+    return taken;
+}
+
+int items_put(Items *items, int x, int y, int z, ItemStack *load)
+{
+    if (!in_bounds(items, x, y, z) || load->type == ITEM_NONE || load->count == 0) {
+        return 0;
+    }
+    materialize(items, load);
+    if (load->held == 0) {
+        return 0;
+    }
+    size_t index = index_of(items, x, y, z);
+    int room = tile_room(items, index, load);
+    int put = 0;
+    while (put < room && load->held != 0) {
+        uint32_t slot = load->held;
+        load->held = items->pool[slot - 1].next;
+        items->held_count--;
+        lay_item(items, index, slot, (uint32_t)put);
+        put++;
+    }
+    if (put == 0) {
+        return 0;
+    }
+    refresh_load(items, load);
+    items->additions++;
+    note_change(items, index);
+    return put;
+}
+
+void items_use_up(Items *items, ItemStack *load, int count)
+{
+    materialize(items, load);
+    for (int i = 0; i < count && load->held != 0; i++) {
+        uint32_t slot = load->held;
+        load->held = items->pool[slot - 1].next;
+        items->held_count--;
+        free_slot(items, slot);
+    }
+    refresh_load(items, load);
+}
+
+const Item *items_load_first(const Items *items, ItemStack load)
+{
+    return slot_item(items, load.held);
 }
 
 ItemStack items_take(Items *items, int x, int y, int z, int count)
@@ -841,46 +1014,48 @@ int items_remove(Items *items, int x, int y, int z, int count)
     return items_take(items, x, y, z, count).count;
 }
 
-int items_drop(Items *items, const Map *map, int x, int y, int z, ItemStack batch)
+int items_drop_load(Items *items, const Map *map, int x, int y, int z, ItemStack *load)
 {
-    int count = batch.count;
     enum { SIDE = 2 * ITEM_DROP_RADIUS + 1 };
     static const int DX[4] = {0, 1, 0, -1};
     static const int DY[4] = {-1, 0, 1, 0};
-    if (!map_is_passable(map, x, y, z)) {
-        return 0;
-    }
-    /* Breadth-first search over passable tiles, so that items never land
-     * behind a wall; cells are indexed relative to (x, y). */
-    bool visited[SIDE * SIDE] = {false};
-    int queue[SIDE * SIDE];
-    int head = 0, tail = 0;
-    queue[tail++] = ITEM_DROP_RADIUS * SIDE + ITEM_DROP_RADIUS;
-    visited[queue[0]] = true;
-
     int placed = 0;
-    while (head < tail && placed < count) {
-        int cell = queue[head++];
-        int cx = x + cell % SIDE - ITEM_DROP_RADIUS;
-        int cy = y + cell / SIDE - ITEM_DROP_RADIUS;
-        ItemStack rest = batch;
-        rest.count = (uint16_t)(count - placed);
-        if (!items_forbidden(items, cx, cy, z)) { /* Left alone. */
-            placed += items_add(items, cx, cy, z, rest);
-        }
-        for (int i = 0; i < 4; i++) {
-            int rx = cell % SIDE + DX[i];
-            int ry = cell / SIDE + DY[i];
-            if (rx < 0 || ry < 0 || rx >= SIDE || ry >= SIDE || visited[ry * SIDE + rx]) {
-                continue;
+    if (map_is_passable(map, x, y, z)) {
+        /* Breadth-first search over passable tiles, so that items never land
+         * behind a wall; cells are indexed relative to (x, y). */
+        bool visited[SIDE * SIDE] = {false};
+        int queue[SIDE * SIDE];
+        int head = 0, tail = 0;
+        queue[tail++] = ITEM_DROP_RADIUS * SIDE + ITEM_DROP_RADIUS;
+        visited[queue[0]] = true;
+        while (head < tail && load->count > 0) {
+            int cell = queue[head++];
+            int cx = x + cell % SIDE - ITEM_DROP_RADIUS;
+            int cy = y + cell / SIDE - ITEM_DROP_RADIUS;
+            if (!items_forbidden(items, cx, cy, z)) { /* Left alone. */
+                placed += items_put(items, cx, cy, z, load);
             }
-            visited[ry * SIDE + rx] = true;
-            if (map_is_passable(map, x + rx - ITEM_DROP_RADIUS, y + ry - ITEM_DROP_RADIUS, z)) {
-                queue[tail++] = ry * SIDE + rx;
+            for (int i = 0; i < 4; i++) {
+                int rx = cell % SIDE + DX[i];
+                int ry = cell / SIDE + DY[i];
+                if (rx < 0 || ry < 0 || rx >= SIDE || ry >= SIDE || visited[ry * SIDE + rx]) {
+                    continue;
+                }
+                visited[ry * SIDE + rx] = true;
+                if (map_is_passable(map, x + rx - ITEM_DROP_RADIUS, y + ry - ITEM_DROP_RADIUS, z)) {
+                    queue[tail++] = ry * SIDE + rx;
+                }
             }
         }
     }
+    items_use_up(items, load, load->count); /* No room: lost. */
     return placed;
+}
+
+int items_drop(Items *items, const Map *map, int x, int y, int z, ItemStack batch)
+{
+    batch.held = 0; /* Only numbers. */
+    return items_drop_load(items, map, x, y, z, &batch);
 }
 
 /* Turns an item that has reached its transformation into the new type (same
@@ -1036,6 +1211,20 @@ uint64_t items_hash(const Items *items, uint64_t hash)
             hash = hash_fnv1a64(hash, &item->spot_y, sizeof(item->spot_y));
             hash = hash_fnv1a64(hash, &item->angle, sizeof(item->angle));
         }
+    }
+    /* Items in loads, by slot. */
+    for (uint32_t slot = 0; slot < items->pool_used; slot++) {
+        const Item *item = &items->pool[slot];
+        if (item->type == ITEM_NONE || item->tile != ITEM_TILE_HELD) {
+            continue;
+        }
+        hash = hash_fnv1a64(hash, &slot, sizeof(slot));
+        hash = hash_fnv1a64(hash, &item->type, sizeof(item->type));
+        hash = hash_fnv1a64(hash, &item->quality, sizeof(item->quality));
+        hash = hash_fnv1a64(hash, &item->hit_points, sizeof(item->hit_points));
+        hash = hash_fnv1a64(hash, &item->progress, sizeof(item->progress));
+        hash = hash_fnv1a64(hash, &item->eaten, sizeof(item->eaten));
+        hash = hash_fnv1a64(hash, &item->corpse, sizeof(item->corpse));
     }
     if (items->forbidden_count > 0) { /* Hashes without anything forbidden stay as they were. */
         hash = hash_fnv1a64(hash, items->forbidden, count);

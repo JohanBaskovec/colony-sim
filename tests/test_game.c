@@ -1,4 +1,5 @@
 #include "core/game.h"
+#include "core/scenario.h"
 #include "core/soil.h"
 
 #include "test_framework.h"
@@ -772,6 +773,91 @@ static void test_zones_of_different_kinds_never_overlap(void)
     game_shutdown(&game);
 }
 
+/* Items in hand stay themselves: as many held as settlers carry, and as
+ * many on the map as its tiles hold, through a day of gathering, hauling and
+ * building. */
+static void check_item_books(const Game *game)
+{
+    long carried = 0;
+    for (uint32_t slot = 0; slot < COLONIST_MAX; slot++) {
+        const Colonist *colonist =
+            game_colonist_const(game, pool_id_at(&game->colonist_pool, slot));
+        if (colonist != NULL && colonist->carried.count > 0) {
+            carried += colonist->carried.count;
+            int listed = 0;
+            for (const Item *item = items_load_first(&game->items, colonist->carried); item != NULL;
+                 item = items_next(&game->items, item)) {
+                CHECK_EQ_INT(item->type, colonist->carried.type);
+                CHECK_EQ_UINT(item->tile, ITEM_TILE_HELD);
+                listed++;
+            }
+            CHECK_EQ_INT(listed, colonist->carried.count);
+        }
+    }
+    CHECK_EQ_INT(game->items.held_count, carried);
+    long lying = 0;
+    size_t tiles = map_tile_count(&game->map);
+    for (size_t i = 0; i < tiles; i++) {
+        for (const Item *item = items_first(&game->items, i); item != NULL;
+             item = items_next(&game->items, item)) {
+            lying++;
+        }
+    }
+    CHECK_EQ_INT(game->items.item_count, lying);
+}
+
+static void test_items_in_hand_are_kept(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game, 21));
+    const Colonist *first = game_colonist_const(&game, pool_id_at(&game.colonist_pool, 0));
+    REQUIRE(first != NULL);
+    int cx = first->x, cy = first->y, z = first->z;
+    for (int y = cy - 2; y <= cy + 7; y++) {
+        for (int x = cx - 7; x <= cx + 7; x++) {
+            map_remove_plant(&game.map, x, y, z);
+            map_set_rock(&game.map, x, y, z, ROCK_NONE);
+            map_set_terrain(&game.map, x, y, z, TERRAIN_SOIL);
+        }
+    }
+    REQUIRE(game_add_stockpile_rect(&game, cx - 1, cy - 1, cx + 1, cy + 1, z, STOCKPILE_NONE) !=
+            STOCKPILE_NONE);
+    /* Branches of two qualities, a little way off. */
+    int dropped = 0;
+    for (int i = 0; i < 6; i++) {
+        int quality = i % 2 == 0 ? 20 : 90;
+        ItemStack branches = item_stack_make(ITEM_BRANCHES, 5, quality, 10 + i);
+        dropped += items_drop(&game.items, &game.map, cx - 6 + i * 2, cy + 6, z, branches);
+    }
+    REQUIRE(dropped == 30);
+    long most_held = 0;
+    for (int tick = 0; tick < TICKS_PER_HOUR * 12; tick++) {
+        game_tick(&game);
+        most_held = game.items.held_count > most_held ? game.items.held_count : most_held;
+        if (tick % 500 == 0) {
+            check_item_books(&game);
+        }
+    }
+    check_item_books(&game);
+    CHECK(most_held > 0); /* They did carry them. */
+    /* Stored, each branch is still the one it was: no average of the two. */
+    int stored = 0;
+    for (int y = cy - 1; y <= cy + 1; y++) {
+        for (int x = cx - 1; x <= cx + 1; x++) {
+            for (const Item *item = items_first(&game.items, map_index(&game.map, x, y, z));
+                 item != NULL; item = items_next(&game.items, item)) {
+                if (item->type == ITEM_BRANCHES) {
+                    CHECK(item->quality == 20 || item->quality == 90);
+                    CHECK(item->hit_points >= 10 && item->hit_points <= 15);
+                    stored++;
+                }
+            }
+        }
+    }
+    CHECK(stored > 10);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_and_shutdown);
@@ -796,5 +882,6 @@ int main(void)
     RUN_TEST(test_grass_does_not_dry_in_a_storm);
     RUN_TEST(test_plant_stocks_grow_back);
     RUN_TEST(test_zones_of_different_kinds_never_overlap);
+    RUN_TEST(test_items_in_hand_are_kept);
     return test_summary();
 }

@@ -301,11 +301,12 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 ## Items one by one (under way, docs/ITEMS.md)
 
 - [x] Step 1, the item store: every item on the ground a record of its own (pool, list per tile, spot and angle), the stack per tile a summary for the callers, items taken newest first, rot and drying item by item, change stamps so that the known world copies only changed tiles, every item in the state hash (same speed as before, a little faster with the fog)
-- [ ] Step 2, holders and the end of averages: loads, tools, deliveries, workstation inputs and fuel as item lists; hauling, building, crafting and eating move items; several types on a tile
+- [x] Step 2, loads: what a settler carries is the very items it picked up, put down as they were (hauling keeps every item's condition); delivered materials, station inputs and fuel stay counts since they are used up
+- [ ] Several types of items on a tile (with step 4)
 - [ ] Step 3, litter as items: twigs, branches, cobbles (about 50 times fewer than today's stones) and flint generated as items, shed by trees (a ceiling per tile, slow rot), gathering picks them up; region type masks and a list of changing items for the searches and updates
 - [ ] Step 4, spots, angles and drawing: each item drawn at its spot, turned freely; a far zoom mark if `--bench-render` asks for it; debug tool to drag, drop and turn items with the mouse
 - [ ] Step 5, the pile window (every item of a tile, sortable by quality, hit points, rot) and the bills: a quality range for the ingredients of each bill, cooking takes what rots first
-- [ ] The known world keeps a copy of every item seen (done for items on the ground in step 1; holders in step 2)
+- [x] The known world keeps a copy of every item seen on the ground (step 1)
 
 ## Later
 

@@ -84,10 +84,10 @@ Measured on the same machine, one build after the other
 (`bench_simulation`, `headless-release`; the processor time of a run varies by
 a few percent with the load of the machine, so compare runs made together):
 
-| Run | Before | Step 1 |
-|---|---|---|
-| 12 settlers, 4 days, gathering (`12 4 1`) | 3.29 – 3.38 s | 3.31 – 3.36 s |
-| the same with the fog of war (`12 4 1 200 42 - fog-revealed`) | 35.5 – 36.9 s | 34.7 – 37.4 s |
+| Run | Before | Step 1 | Step 2 |
+|---|---|---|---|
+| 12 settlers, 4 days, gathering (`12 4 1`) | 3.29 – 3.38 s | 3.31 – 3.36 s | 3.40 – 3.42 s (before: 3.30 – 3.34) |
+| the same with the fog of war (`12 4 1 200 42 - fog-revealed`) | 35.5 – 36.9 s | 34.7 – 37.4 s | |
 
 Targets:
 
@@ -115,9 +115,14 @@ playable.
    tells the known world which tiles changed (it used to copy every tile in
    view). The state hash covers every item. Not yet: the region masks and
    the list of changing items (wanted once litter is made of items, step 3).
-2. **Holders and the end of averages.** Loads, tools, deliveries,
-   workstation inputs and fuel become item lists; hauling, building, crafting
-   and eating move items rather than counts. Tiles may hold several types.
+2. **Loads** (done). What a settler carries is the very items it picked up
+   (`ItemStack.held` names their list in the pool; `items_pick_up()`,
+   `items_put()`, `items_drop_load()`, `items_use_up()`): hauled to a
+   stockpile, each keeps its condition. Tools are single items already.
+   Materials delivered to a site, a workstation's input and a hearth's fuel
+   are used up there; they stay counts (returned with their average if the
+   site or bill is cancelled). Several types on a tile come with the drawing
+   of items one by one (step 4).
 3. **Litter as items.** Twigs, branches, cobbles and flint are generated as
    items (fewer cobbles, fewer twigs and branches), trees shed items, and
    gathering picks them up; the map's counts go. Litter rots slowly and each

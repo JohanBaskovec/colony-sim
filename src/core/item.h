@@ -177,6 +177,11 @@ typedef struct ItemStack {
     /* A body: whose it was (Corpses, core/corpse.h), 0 for one nobody kept the
      * record of. Bodies of different beings never share a stack. */
     uint16_t corpse;
+    /* A load in hand (see items_pick_up()): the very items, a list in the
+     * item pool (slot + 1 of the first), the fields above their summary. 0
+     * for a stack that is only numbers (what to add, what a tile holds):
+     * functions taking a stack by value never use this field. */
+    uint32_t held;
 } ItemStack;
 
 #define ITEM_EATEN_FULL 10000
@@ -196,8 +201,10 @@ typedef struct Item {
     uint8_t angle;       /* How it is turned, in 1/256 of a turn. */
     uint8_t flags;       /* Reserved. */
     uint32_t next;       /* Next item of the same tile: slot + 1, 0 for none. */
-    uint32_t tile;       /* Tile index. */
+    uint32_t tile;       /* Tile index, ITEM_TILE_HELD for an item in a load. */
 } Item;
+
+#define ITEM_TILE_HELD UINT32_MAX
 
 typedef struct Items {
     int width;
@@ -227,6 +234,7 @@ typedef struct Items {
     uint32_t pool_used;  /* Slots ever used: the others were never touched. */
     uint32_t free_slots; /* First free slot + 1, 0 for none. */
     long item_count;     /* Items lying on the whole map. */
+    long held_count;     /* Items in loads (ItemStack.held), not on the map. */
     uint32_t *heads;     /* Per tile: its newest item, slot + 1, 0 for none. */
     /* Per tile: when its items last changed (a picture copied from it keeps
      * the same stamp: equal stamps, same items). */
@@ -352,6 +360,32 @@ const Item *items_next(const Items *items, const Item *item);
 
 /* Items of a type lying on a tile (any type: ITEM_NONE). */
 int items_count_at(const Items *items, int x, int y, int z, ItemType type);
+
+/*
+ * Loads: items taken off the ground stay themselves while held (in a
+ * settler's hands), as a list in the pool that ItemStack.held names, and go
+ * back to the ground as they were. A load that is only numbers (held 0, a
+ * stack made by hand) is turned into items of its condition first. A load
+ * holds one type.
+ */
+
+/* Picks up to `count` items of the tile's stack (newest first) into `load`,
+ * which is empty or matches (item_stacks_match()). Returns how many. */
+int items_pick_up(Items *items, int x, int y, int z, int count, ItemStack *load);
+
+/* Puts the items of `load` on a tile, as items_add() would (what fits),
+ * each at a spot of its own; the load keeps the rest. Returns how many. */
+int items_put(Items *items, int x, int y, int z, ItemStack *load);
+
+/* items_drop() for a load: puts all of it down around (x, y); what finds no
+ * room is lost. The load is empty afterwards. Returns how many found room. */
+int items_drop_load(Items *items, const struct Map *map, int x, int y, int z, ItemStack *load);
+
+/* `count` items of a load are used up (eaten, burnt, built in): gone. */
+void items_use_up(Items *items, ItemStack *load, int count);
+
+/* The items of a load, newest first: as items_first() and items_next(). */
+const Item *items_load_first(const Items *items, ItemStack load);
 
 /*
  * Puts items on (x, y) and, when it is full, forbidden or holds something

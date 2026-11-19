@@ -737,9 +737,8 @@ static void begin_task(Colonist *colonist, const ColonistContext *context, Colon
     }
     if (colonist->carried.count > 0) {
         /* Whatever is in hand is put down where the colonist stands. */
-        items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z,
-                   colonist->carried);
-        colonist->carried = (ItemStack){.type = ITEM_NONE};
+        items_drop_load(context->items, context->map, colonist->x, colonist->y, colonist->z,
+                        &colonist->carried);
     }
     reservations_release_all(context->reservations, context->worker_id);
     release_promise(colonist, context);
@@ -2093,11 +2092,8 @@ static void haul(Colonist *colonist, const ColonistContext *context)
                 ? items_get(context->items, colonist->x, colonist->y, colonist->z)
                 : items_get_allowed(context->items, colonist->x, colonist->y, colonist->z);
         int wanted = haul_room_left(colonist, context, stack);
-        int taken = items_remove(context->items, colonist->x, colonist->y, colonist->z,
-                                 stack.count < wanted ? stack.count : wanted);
-        ItemStack picked = stack; /* Same condition as the stack it comes from. */
-        picked.count = (uint16_t)taken;
-        item_stack_merge(&colonist->carried, picked);
+        items_pick_up(context->items, colonist->x, colonist->y, colonist->z,
+                      stack.count < wanted ? stack.count : wanted, &colonist->carried);
         if (colonist->carried.count == 0 ||
             (!collect_more(colonist, context) && !start_delivery(colonist, context))) {
             set_idle(colonist, context, 0);
@@ -2109,16 +2105,11 @@ static void haul(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0);
         return;
     }
-    int added = 0;
     if (colonist->haul_forced) { /* What the player chose: put down, and left alone after. */
-        added = items_add(context->items, dest.x, dest.y, dest.z, colonist->carried);
+        items_put(context->items, dest.x, dest.y, dest.z, &colonist->carried);
         items_set_forbidden(context->items, dest.x, dest.y, dest.z, true);
     } else if (!items_forbidden(context->items, dest.x, dest.y, dest.z)) { /* Left alone. */
-        added = items_add(context->items, dest.x, dest.y, dest.z, colonist->carried);
-    }
-    colonist->carried.count = (uint16_t)(colonist->carried.count - added);
-    if (colonist->carried.count == 0) {
-        colonist->carried = (ItemStack){.type = ITEM_NONE};
+        items_put(context->items, dest.x, dest.y, dest.z, &colonist->carried);
     }
     set_idle(colonist, context, 0); /* Drops any leftover nearby, then looks for more work. */
 }
@@ -2719,12 +2710,8 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
         return false;
     }
-    int taken = items_remove(context->items, colonist->x, colonist->y, colonist->z,
-                             stack.count < wanted ? stack.count : wanted);
-    ItemStack picked = stack;
-    picked.count = (uint16_t)taken;
-    item_stack_merge(&colonist->carried, picked);
-    return taken > 0;
+    return items_pick_up(context->items, colonist->x, colonist->y, colonist->z,
+                         stack.count < wanted ? stack.count : wanted, &colonist->carried) > 0;
 }
 
 /* Arrived at the station: puts the input down, then starts working. */
@@ -2743,7 +2730,7 @@ static bool arrive_at_station(Colonist *colonist, const ColonistContext *context
                                             (RecipeType)colonist->recipe, colonist->carried)) {
             return false;
         } else {
-            colonist->carried = (ItemStack){.type = ITEM_NONE};
+            items_use_up(context->items, &colonist->carried, colonist->carried.count);
         }
     }
     colonist->station_phase = STATION_JOB_WORK;
@@ -3174,12 +3161,8 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
     if (wanted <= 0) {
         return false;
     }
-    int taken = items_remove(context->items, colonist->x, colonist->y, colonist->z,
-                             stack.count < wanted ? stack.count : wanted);
-    ItemStack picked = stack;
-    picked.count = (uint16_t)taken;
-    item_stack_merge(&colonist->carried, picked);
-    return taken > 0;
+    return items_pick_up(context->items, colonist->x, colonist->y, colonist->z,
+                         stack.count < wanted ? stack.count : wanted, &colonist->carried) > 0;
 }
 
 /* A blocking structure or a workstation was built: zones lose its tiles
@@ -3238,13 +3221,12 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
         if (colonist->carried.count > 0) {
             int taken =
                 construction_deliver(context->constructions, colonist->site, colonist->carried);
-            colonist->carried.count = (uint16_t)(colonist->carried.count - taken);
+            items_use_up(context->items, &colonist->carried, taken);
             release_promise(colonist, context);
             if (colonist->carried.count > 0) {
                 set_idle(colonist, context, 0); /* No longer wanted: put down here. */
                 return;
             }
-            colonist->carried = (ItemStack){.type = ITEM_NONE};
         }
         if (supplying || !construction_can_work(site, context->map)) {
             if (!plan_construction(colonist, context)) { /* More to bring. */
@@ -3650,9 +3632,8 @@ static void refuel(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
             return;
         }
-        items_remove(context->items, colonist->x, colonist->y, colonist->z, count);
-        colonist->carried = stack;
-        colonist->carried.count = (uint16_t)count;
+        items_pick_up(context->items, colonist->x, colonist->y, colonist->z, count,
+                      &colonist->carried);
         /* What is promised now is what is in hand. */
         release_fuel(colonist, context);
         colonist->fuel_promised = value * (float)count;
@@ -3670,10 +3651,7 @@ static void refuel(Colonist *colonist, const ColonistContext *context)
         return;
     }
     int taken = hearth_add_fuel(context->workstations, colonist->station, colonist->carried);
-    colonist->carried.count = (uint16_t)(colonist->carried.count - taken);
-    if (colonist->carried.count == 0) {
-        colonist->carried = (ItemStack){.type = ITEM_NONE};
-    }
+    items_use_up(context->items, &colonist->carried, taken);
     set_idle(colonist, context, 0); /* Puts down what did not fit. */
 }
 
@@ -3878,9 +3856,8 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
             return;
         }
-        items_remove(context->items, colonist->x, colonist->y, colonist->z, count);
-        colonist->carried = stack;
-        colonist->carried.count = (uint16_t)count;
+        items_pick_up(context->items, colonist->x, colonist->y, colonist->z, count,
+                      &colonist->carried);
         reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
                                   context->worker_id);
         break; /* Then to the hearth. */
@@ -3891,12 +3868,11 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
             break; /* Plan again. */
         }
         int taken = hearth_add_fuel(context->workstations, colonist->station, colonist->carried);
-        colonist->carried.count = (uint16_t)(colonist->carried.count - taken);
+        items_use_up(context->items, &colonist->carried, taken);
         if (colonist->carried.count > 0) {
             set_idle(colonist, context, 0); /* Puts down what did not fit. */
             return;
         }
-        colonist->carried = (ItemStack){.type = ITEM_NONE};
         break; /* Fuel in: on to the fire. */
     }
     case LIGHT_FETCH_LAY: {
@@ -3908,9 +3884,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
             return;
         }
-        items_remove(context->items, colonist->x, colonist->y, colonist->z, 1);
-        colonist->carried = stack;
-        colonist->carried.count = 1;
+        items_pick_up(context->items, colonist->x, colonist->y, colonist->z, 1, &colonist->carried);
         reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
                                   context->worker_id);
         break; /* Then to the hearth. */
@@ -3922,10 +3896,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
         }
         if (hearth_lay(context->workstations, colonist->station,
                        (ItemType)colonist->carried.type)) {
-            colonist->carried.count--;
-            if (colonist->carried.count == 0) {
-                colonist->carried = (ItemStack){.type = ITEM_NONE};
-            }
+            items_use_up(context->items, &colonist->carried, 1);
         }
         break; /* Laid: the next one, or the flame. */
     case LIGHT_FETCH_TINDER: {
@@ -3935,9 +3906,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
             return;
         }
-        items_remove(context->items, colonist->x, colonist->y, colonist->z, 1);
-        colonist->carried = stack;
-        colonist->carried.count = 1;
+        items_pick_up(context->items, colonist->x, colonist->y, colonist->z, 1, &colonist->carried);
         reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
                                   context->worker_id);
         break; /* Then to the hearth. */
@@ -3991,10 +3960,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
             return;
         }
         /* The tinder burns, whether the fire takes or not. */
-        colonist->carried.count--;
-        if (colonist->carried.count == 0) {
-            colonist->carried = (ItemStack){.type = ITEM_NONE};
-        }
+        items_use_up(context->items, &colonist->carried, 1);
         if (rng_next_float(context->rng) < hearth_friction_chance(level)) {
             hearth_light(context->workstations, colonist->station);
             set_idle(colonist, context, 0);
