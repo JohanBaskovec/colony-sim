@@ -9,10 +9,19 @@
 #define TEXT_SIZE 256
 #define TILE_PANEL_GROUPS 8 /* Kinds of items listed on a heap's tile. */
 
+/* What the player clicked in the rows, applied once the window is drawn
+ * (the selection changes under the rows otherwise). */
+typedef struct ThingClick {
+    bool tile; /* The tile's items together. */
+    bool item; /* One item of the tile's list: `pick`. */
+    ItemPick pick;
+} ThingClick;
+
 typedef struct ThingRows {
     App *app;
     TileThing thing;
     int x, y, z;
+    ThingClick *click;
 } ThingRows;
 
 /* The plant of the thing, as the colony knows it: on a tile of trunk or
@@ -88,6 +97,7 @@ static ForbidTarget thing_forbid_target(TileThing thing)
     case THING_SITE: return FORBID_SITE;
     case THING_ITEM: /* (Items one by one: see thing_actions().) */
     case THING_ITEM_BOX:
+    case THING_PLANT_BOX: /* (Plants together: see thing_actions().) */
     case THING_COUNT: break;
     }
     return FORBID_TARGET_COUNT;
@@ -159,6 +169,9 @@ static void thing_title(const ThingRows *rows, char *out, size_t size)
         TR_FORMAT(out, size, tr_plural("tile_panel.box_items", items), count);
         break;
     }
+    case THING_PLANT_BOX:
+        SDL_strlcpy(out, tr(plant_def((PlantType)rows->app->selected_plant_type)->name_key), size);
+        break;
     case THING_COUNT: break;
     }
 }
@@ -254,7 +267,9 @@ static void single_item_rows(UiLayout *layout, const ThingRows *rows)
         char count[32];
         tr_integer(count, sizeof(count), others);
         TR_FORMAT(text, sizeof(text), tr_plural("tile_panel.item_others", others), count);
-        ui_layout_label(layout, text, 0.0f, true);
+        if (ui_layout_link(layout, text, 0.0f, true)) {
+            rows->click->tile = true; /* A click selects the tile's items. */
+        }
     }
     if (item->forbidden) {
         ui_layout_label(layout, tr("tile_panel.left_alone"), 0.0f, true);
@@ -323,7 +338,12 @@ static void item_list_rows(UiLayout *layout, const ThingRows *rows, bool alone)
         } else {
             SDL_strlcpy(line, name, sizeof(line));
         }
-        ui_layout_label(layout, line, 0.0f, list[i]->forbidden); /* Forbidden: dimmed. */
+        /* Forbidden: dimmed. A click selects the item. */
+        if (ui_layout_link(layout, line, 0.0f, list[i]->forbidden)) {
+            rows->click->item = true;
+            rows->click->pick = (ItemPick){items_id(items, list[i]), (int16_t)rows->x,
+                                           (int16_t)rows->y, (int16_t)rows->z};
+        }
     }
     if (count > shown) {
         char more[32], line[TEXT_SIZE];
@@ -417,7 +437,8 @@ static void thing_rows(UiLayout *layout, void *userdata)
     const Map *map = game_view_map(game);
     int x = rows->x, y = rows->y, z = rows->z;
     char text[TEXT_SIZE];
-    if (game->fog_on && rows->thing != THING_ITEM_BOX && !game_tile_seen(game, x, y, z)) {
+    if (game->fog_on && rows->thing != THING_ITEM_BOX && rows->thing != THING_PLANT_BOX &&
+        !game_tile_seen(game, x, y, z)) {
         ui_layout_label(layout, tr("hud.tile.remembered"), 0.0f, true);
     }
     switch (rows->thing) {
@@ -494,6 +515,14 @@ static void thing_rows(UiLayout *layout, void *userdata)
     }
     case THING_ITEM: single_item_rows(layout, rows); break;
     case THING_ITEM_BOX: box_item_rows(layout, rows); break;
+    case THING_PLANT_BOX: {
+        char count[32];
+        int plants = rows->app->selected_plant_count;
+        tr_integer(count, sizeof(count), plants);
+        TR_FORMAT(text, sizeof(text), tr_plural("tile_panel.box_plants", plants), count);
+        ui_layout_label(layout, text, 0.0f, false);
+        break;
+    }
     case THING_PLANT: {
         plant_rows(layout, rows);
         TilePos foot;
@@ -529,6 +558,69 @@ static void toggle_order(App *app, DesignationType type, TilePos tile)
 static const char *unavailable(const Game *game, DesignationType type, int x, int y, int z)
 {
     return game_designation_available_at(game, type, x, y, z) ? NULL : tr("hud.tool.unavailable");
+}
+
+/* An order given to all the plants selected, lit while some have it (a click
+ * then takes it back from all of them). */
+static void plant_box_order(App *app, int *slot, DesignationType type, RenderIcon icon,
+                            const char *name, const char *description)
+{
+    Game *game = &app->game;
+    bool ordered = false, available = false;
+    for (int i = 0; i < app->selected_plant_count; i++) {
+        TilePos at = app->selected_plants[i];
+        ordered |= designation_get(&game->designations, at.x, at.y, at.z) == type;
+        available |= game_designation_available_at(game, type, at.x, at.y, at.z);
+    }
+    if (inspector_order_action(app, (*slot)++, icon, name, description, ordered,
+                               available ? NULL : tr("hud.tool.unavailable"), false)) {
+        for (int i = 0; i < app->selected_plant_count; i++) {
+            TilePos at = app->selected_plants[i];
+            game_designate_rect(game, at.x, at.y, at.x, at.y, at.z,
+                                ordered ? DESIGNATION_NONE : type);
+        }
+    }
+}
+
+/* The actions on plants selected together: forbid, and the orders their kind
+ * takes (a tree is felled, a bush harvested or uprooted). */
+static void plant_box_actions(App *app, int *slot)
+{
+    Game *game = &app->game;
+    const Map *map = game_view_map(game);
+    bool any = false, all_forbidden = true;
+    for (int i = 0; i < app->selected_plant_count; i++) {
+        TilePos at = app->selected_plants[i];
+        if (game_can_forbid(game, at.x, at.y, at.z, FORBID_PLANT)) {
+            any = true;
+            all_forbidden &= game_forbidden(game, at.x, at.y, at.z, FORBID_PLANT);
+        }
+    }
+    if (any && inspector_forbid_action(app, (*slot)++, all_forbidden, NULL)) {
+        for (int i = 0; i < app->selected_plant_count; i++) {
+            TilePos at = app->selected_plants[i];
+            if (game_can_forbid(game, at.x, at.y, at.z, FORBID_PLANT)) {
+                game_set_forbidden(game, at.x, at.y, at.z, FORBID_PLANT, !all_forbidden);
+            }
+        }
+    }
+    if (app->selected_plant_count == 0) {
+        return;
+    }
+    if (plant_is_tree((uint8_t)app->selected_plant_type)) {
+        plant_box_order(app, slot, DESIGNATION_CHOP, RENDER_ICON_CHOP, tr("tile_panel.chop"),
+                        tr("tile_panel.chop.description"));
+        return;
+    }
+    TilePos first = app->selected_plants[0];
+    if (gather_plant_harvest_job(map, first.x, first.y, first.z) != GATHER_JOB_NONE) {
+        plant_box_order(app, slot, DESIGNATION_HARVEST, RENDER_ICON_HARVEST,
+                        tr("designation.harvest"), tr("tile_panel.harvest.description"));
+    }
+    if (gather_plant_uprootable(map, first.x, first.y, first.z)) {
+        plant_box_order(app, slot, DESIGNATION_UPROOT, RENDER_ICON_UPROOT, tr("designation.uproot"),
+                        tr("tile_panel.uproot.description"));
+    }
 }
 
 /* The action menu, right of the box: forbid, the orders the thing takes,
@@ -695,6 +787,7 @@ static void thing_actions(App *app, const ThingRows *rows)
         }
         break;
     }
+    case THING_PLANT_BOX: plant_box_actions(app, &slot); break;
     case THING_COUNT: break;
     }
     if ((rows->thing == THING_STRUCTURE || rows->thing == THING_ROOF ||
@@ -761,6 +854,19 @@ bool tile_panel_cancel(App *app)
         return game_single_item_move_at(game, id, &destination) &&
                game_cancel_single_item_move(game, id);
     }
+    case THING_PLANT_BOX: {
+        int cancelled = 0;
+        for (int i = 0; i < app->selected_plant_count; i++) {
+            TilePos at = app->selected_plants[i];
+            DesignationType order = designation_get(&game->designations, at.x, at.y, at.z);
+            if (order == DESIGNATION_CHOP || order == DESIGNATION_HARVEST ||
+                order == DESIGNATION_UPROOT) {
+                cancelled +=
+                    game_designate_rect(game, at.x, at.y, at.x, at.y, at.z, DESIGNATION_NONE);
+            }
+        }
+        return cancelled > 0;
+    }
     case THING_ITEM_BOX: {
         ItemId ids[APP_BOX_ITEMS_MAX];
         int count = box_real_items(app, ids), cancelled = 0;
@@ -779,8 +885,13 @@ void tile_panel_draw(App *app)
     if (!app->tile_selected) {
         return;
     }
-    ThingRows rows = {app, app->selected_thing, app->selected_tile_x, app->selected_tile_y,
-                      app->selected_tile_z};
+    ThingClick click = {0};
+    ThingRows rows = {app,
+                      app->selected_thing,
+                      app->selected_tile_x,
+                      app->selected_tile_y,
+                      app->selected_tile_z,
+                      &click};
     char title[TEXT_SIZE];
     thing_title(&rows, title, sizeof(title));
     bool open = inspector_box(app, INSPECT_TILE, title, thing_rows, &rows);
@@ -793,5 +904,9 @@ void tile_panel_draw(App *app)
     thing_actions(app, &rows);
     if (!open) {
         app->tile_selected = false;
+    } else if (click.item) {
+        app_select_item(app, click.pick);
+    } else if (click.tile) {
+        app_select_tile_items(app, rows.x, rows.y, rows.z);
     }
 }

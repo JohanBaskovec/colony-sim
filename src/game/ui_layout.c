@@ -21,6 +21,27 @@ void ui_layout_label(UiLayout *layout, const char *text, float indent, bool dim)
     layout->y += layout->row;
 }
 
+bool ui_layout_link(UiLayout *layout, const char *text, float indent, bool dim)
+{
+    ui_layout_measure(layout, indent + ui_text_width(layout->ui, text));
+    SDL_FRect rect = {layout->x, layout->y, layout->width, layout->row};
+    bool clicked = false;
+    if (layout->draw) {
+        if (ui_hovered(layout->ui, rect)) {
+            ui_fill(layout->ui, rect, layout->ui->theme.colors[THEME_SCROLL_TRACK]);
+        }
+        clicked = ui_take_click(layout->ui, rect) == SDL_BUTTON_LEFT;
+        float y = layout->y + layout->text_offset;
+        if (dim) {
+            ui_label_dim(layout->ui, text, layout->x + indent, y);
+        } else {
+            ui_label(layout->ui, text, layout->x + indent, y);
+        }
+    }
+    layout->y += layout->row;
+    return clicked;
+}
+
 SDL_FRect ui_layout_meter(UiLayout *layout, const char *label, float fraction)
 {
     const Theme *theme = &layout->ui->theme;

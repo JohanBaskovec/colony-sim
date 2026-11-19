@@ -441,6 +441,11 @@ int game_items_under_point(const Game *game, float x, float y, int z, ItemPick *
 int game_items_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
                        ItemPick *out, int capacity);
 
+/* game_items_in_rect() of the items of one type alone (the capacity counts
+ * those only: a crowd of other things does not hide them). */
+int game_items_of_type_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
+                               ItemType type, ItemPick *out, int capacity);
+
 /* The item a pick names now, NULL when it is gone (picked up, eaten, rotted
  * away). The pick follows it: onto its
  * new tile when moved, into the picture when its tile leaves the view and

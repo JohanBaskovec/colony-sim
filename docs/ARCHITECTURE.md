@@ -2470,6 +2470,19 @@ together (`THING_ITEM_BOX`, `App.selected_box_items`, each followed as above,
 those gone dropped), all ringed, in a window that totals their weight and
 lists them by kind, with Forbid and Carry elsewhere for all of them (an
 order per item).
+A double click (two clicks within `APP_DOUBLE_CLICK_MS` and
+`APP_DOUBLE_CLICK_SLOP` pixels, the first having selected an item, the
+tile's items or a plant: `select_same_on_screen()`) selects all of the same
+kind on the screen instead of going to the next thing under the cursor: the
+items of that type in the visible tiles on the item's level
+(`game_items_of_type_in_rect()`, so other items do not use up the
+capacity), as a box would; the plants of that kind whose tile is seen at that
+level (`THING_PLANT_BOX`, `App.selected_plants`: the foot tiles, dropped when
+the plant is gone), ringed, with Forbid and the orders the kind takes (fell,
+harvest, uproot) for all of them. In the window of a tile's items, each line
+of the list is a link that selects that item, and the "other items on this
+tile" line of an item selects the tile's items (`ui_layout_link()`; the click
+is applied after the window is drawn, `ThingClick`).
 A body has a window of its own kind (`hud_corpse_rows()`,
 `hud_corpse_tabs()`). A settler's is titled with the dead's name, with their
 age, cause of death and how long ago, and has the tabs of a settler's window,

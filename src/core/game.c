@@ -2194,8 +2194,9 @@ int game_items_under_point(const Game *game, float x, float y, int z, ItemPick *
     return count;
 }
 
-int game_items_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
-                       ItemPick *out, int capacity)
+/* game_items_in_rect() of the items of one type (ITEM_NONE: any). */
+static int items_in_rect_of(const Game *game, float x0, float y0, float x1, float y1, int z,
+                            int type, ItemPick *out, int capacity)
 {
     float min_x = fminf(x0, x1), max_x = fmaxf(x0, x1);
     float min_y = fminf(y0, y1), max_y = fmaxf(y0, y1);
@@ -2218,7 +2219,8 @@ int game_items_in_rect(const Game *game, float x0, float y0, float x1, float y1,
                  item = items_next(items, item), drawn++) {
                 float ix = (float)x + ((float)item->spot_x + 0.5f) / 256.0f;
                 float iy = (float)y + ((float)item->spot_y + 0.5f) / 256.0f;
-                if (ix >= min_x && ix <= max_x && iy >= min_y && iy <= max_y) {
+                if (ix >= min_x && ix <= max_x && iy >= min_y && iy <= max_y &&
+                    (type == ITEM_NONE || item->type == type)) {
                     out[count++] =
                         (ItemPick){items_id(items, item), (int16_t)x, (int16_t)y, (int16_t)z};
                 }
@@ -2226,6 +2228,21 @@ int game_items_in_rect(const Game *game, float x0, float y0, float x1, float y1,
         }
     }
     return count;
+}
+
+int game_items_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
+                       ItemPick *out, int capacity)
+{
+    return items_in_rect_of(game, x0, y0, x1, y1, z, ITEM_NONE, out, capacity);
+}
+
+int game_items_of_type_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
+                               ItemType type, ItemPick *out, int capacity)
+{
+    if (type == ITEM_NONE) {
+        return 0;
+    }
+    return items_in_rect_of(game, x0, y0, x1, y1, z, type, out, capacity);
 }
 
 /* The pick's item among `items`, NULL when not there; follows it onto

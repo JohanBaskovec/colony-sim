@@ -30,6 +30,11 @@ void ui_layout_measure(UiLayout *layout, float width);
 /* A row of text (dimmer when `dim`), indented. */
 void ui_layout_label(UiLayout *layout, const char *text, float indent, bool dim);
 
+/* A row of text that can be clicked: it lights up under the mouse (dimmer
+ * text when `dim`, still). True when it was left-clicked this frame; apply the
+ * click after the rows, as for any widget (advances). */
+bool ui_layout_link(UiLayout *layout, const char *text, float indent, bool dim);
+
 /* A meter: the label (when not NULL), then a bar under it, as wide as the
  * content, filled up to `fraction` (0..1) in the color of that point of the
  * scale (red at 0, white in the middle, green at 1) (advances). Returns the

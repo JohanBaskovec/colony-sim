@@ -725,6 +725,17 @@ static void test_items_in_rect(void)
     CHECK_EQ_INT(game_items_in_rect(&game, 10.0f, 10.0f, 15.0f, 13.0f, 1, picks, 8), 0);
     /* Beyond the map: clipped, nothing breaks. */
     CHECK_EQ_INT(game_items_in_rect(&game, -50.0f, -50.0f, 500.0f, 500.0f, 0, picks, 8), 3);
+    /* One type: the others do not use up the capacity. */
+    CHECK_EQ_INT(
+        game_items_of_type_in_rect(&game, 0.0f, 0.0f, 30.0f, 30.0f, 0, ITEM_BRANCHES, picks, 1), 1);
+    CHECK_EQ_UINT(picks[0].id.slot, branch.slot);
+    CHECK_EQ_INT(
+        game_items_of_type_in_rect(&game, 0.0f, 0.0f, 30.0f, 30.0f, 0, ITEM_FLINT, picks, 8), 1);
+    CHECK_EQ_INT(
+        game_items_of_type_in_rect(&game, 12.0f, 0.0f, 30.0f, 30.0f, 0, ITEM_FLINT, picks, 8),
+        0); /* Out of the rectangle. */
+    CHECK_EQ_INT(
+        game_items_of_type_in_rect(&game, 0.0f, 0.0f, 30.0f, 30.0f, 0, ITEM_NONE, picks, 8), 0);
     game_shutdown(&game);
 }
 

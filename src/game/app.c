@@ -17,6 +17,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define APP_WINDOW_WIDTH 1280
 #define APP_WINDOW_HEIGHT 720
@@ -216,6 +217,7 @@ bool app_thing_at(const App *app, TileThing thing, int x, int y, int z)
     }
     case THING_ITEM_BOX:
         return app->selected_box_item_count > 0; /* (See prune_tile_selection().) */
+    case THING_PLANT_BOX: return app->selected_plant_count > 0;
     case THING_COUNT: break;
     }
     return false;
@@ -275,6 +277,7 @@ static ClickTarget click_target_selected(const App *app, int x, int y, int z)
             return app_plant_type_at(app, x, y, z) == PLANT_GRASS ? CLICK_GRASS : CLICK_PLANT;
         case THING_ITEM: /* Not things of the tile's: see select_at_point(). */
         case THING_ITEM_BOX:
+        case THING_PLANT_BOX:
         case THING_COUNT: break;
         }
     }
@@ -337,6 +340,117 @@ static void select_box_items(App *app, const ItemPick *picks, int count)
     app->selected_tile_z = picks[0].z;
 }
 
+void app_select_item(App *app, ItemPick pick)
+{
+    select_item(app, pick);
+}
+
+void app_select_tile_items(App *app, int x, int y, int z)
+{
+    select_thing(app, THING_ITEMS, x, y, z);
+}
+
+/* The plant on a tile as the colony knows it, and the tile it grows on (a
+ * tree's trunk and foliage tiles stand for its foot). */
+static bool plant_foot(const App *app, int x, int y, int z, TilePos *foot, PlantType *type)
+{
+    const Map *map = game_view_map(&app->game);
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    TreeRef tree;
+    if (tree_at(map, x, y, z, &tree)) {
+        *foot = (TilePos){(int16_t)tree.x, (int16_t)tree.y, (int16_t)tree.z};
+        *type = (PlantType)tree_plant(map, &tree)->type;
+        return *type != PLANT_NONE;
+    }
+    *foot = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
+    *type = (PlantType)map->plants[map_index(map, x, y, z)].type;
+    return *type != PLANT_NONE;
+}
+
+/* Selects the plants of one kind seen on the screen, on the level z seen. */
+static bool select_plants_on_screen(App *app, PlantType type, int z)
+{
+    const Map *map = game_view_map(&app->game);
+    TileRect view = camera_visible_tiles(&app->camera, map->width, map->height);
+    static TilePos found[APP_BOX_PLANTS_MAX];
+    int count = 0;
+    for (int y = view.y0; y < view.y1; y++) {
+        for (int x = view.x0; x < view.x1 && count < APP_BOX_PLANTS_MAX; x++) {
+            if (map->plants[map_index(map, x, y, z)].type == type &&
+                map_view_level(map, x, y, app->camera.level) == z) {
+                found[count++] = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
+            }
+        }
+    }
+    if (count == 0) {
+        return false;
+    }
+    clear_selection(app);
+    memcpy(app->selected_plants, found, (size_t)count * sizeof(found[0]));
+    app->selected_plant_count = count;
+    app->selected_plant_type = (int)type;
+    app->tile_selected = true;
+    app->selected_thing = THING_PLANT_BOX;
+    app->selected_tile_x = found[0].x;
+    app->selected_tile_y = found[0].y;
+    app->selected_tile_z = found[0].z;
+    return true;
+}
+
+/* A double click on an item or a plant: all those of the same kind on the
+ * screen (as a box would select them). False when there is nothing selected
+ * that has a kind. */
+static bool select_same_on_screen(App *app)
+{
+    if (!app->tile_selected) {
+        return false;
+    }
+    int x = app->selected_tile_x, y = app->selected_tile_y, z = app->selected_tile_z;
+    const Map *map = game_view_map(&app->game);
+    switch (app->selected_thing) {
+    case THING_ITEM:
+    case THING_ITEMS: {
+        int type = ITEM_NONE;
+        if (app->selected_thing == THING_ITEM) {
+            ItemPick pick = app->selected_item;
+            const Item *item = game_pick_item(&app->game, &pick);
+            type = item != NULL ? item->type : ITEM_NONE;
+            z = pick.z;
+        } else {
+            const Items *items = game_view_items(&app->game);
+            type = items_get(items, x, y, z).type;
+            const Item *first = items_first(items, map_index(map, x, y, z));
+            if (type == ITEM_NONE && first != NULL) {
+                type = first->type;
+            }
+        }
+        TileRect view = camera_visible_tiles(&app->camera, map->width, map->height);
+        ItemPick picks[APP_BOX_ITEMS_MAX];
+        int count =
+            game_items_of_type_in_rect(&app->game, (float)view.x0, (float)view.y0, (float)view.x1,
+                                       (float)view.y1, z, (ItemType)type, picks, APP_BOX_ITEMS_MAX);
+        if (count == 0) {
+            return false;
+        }
+        if (count == 1) {
+            select_item(app, picks[0]);
+        } else {
+            select_box_items(app, picks, count);
+        }
+        return true;
+    }
+    case THING_PLANT: {
+        TilePos foot;
+        PlantType type;
+        return plant_foot(app, x, y, z, &foot, &type) && select_plants_on_screen(app, type, foot.z);
+    }
+    default: break;
+    }
+    return false;
+}
+
 /* Forgets the selected thing once it is gone (taken apart, picked up,
  * felled); the items selected are followed where they lie. */
 static void prune_tile_selection(App *app)
@@ -355,6 +469,25 @@ static void prune_tile_selection(App *app)
             app->selected_tile_x = app->selected_box_items[0].x;
             app->selected_tile_y = app->selected_box_items[0].y;
             app->selected_tile_z = app->selected_box_items[0].z;
+        }
+        return;
+    }
+    if (app->tile_selected && app->selected_thing == THING_PLANT_BOX) {
+        const Map *map = game_view_map(&app->game);
+        int kept = 0;
+        for (int i = 0; i < app->selected_plant_count; i++) {
+            TilePos at = app->selected_plants[i];
+            if (map_in_bounds(map, at.x, at.y, at.z) &&
+                map->plants[map_index(map, at.x, at.y, at.z)].type == app->selected_plant_type) {
+                app->selected_plants[kept++] = at;
+            }
+        }
+        app->selected_plant_count = kept;
+        app->tile_selected = kept > 0;
+        if (kept > 0) {
+            app->selected_tile_x = app->selected_plants[0].x;
+            app->selected_tile_y = app->selected_plants[0].y;
+            app->selected_tile_z = app->selected_plants[0].z;
         }
         return;
     }
@@ -1058,6 +1191,20 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
         /* Colonist sprites stand above their position: a click on the head
          * or the body counts too. */
         id = game_colonist_at(&app->game, world_x, world_y + APP_PICK_BODY_OFFSET, z);
+    }
+    /* A second click close to the first on an item or a plant: all of its
+     * kind on the screen, rather than the next thing under the cursor. */
+    Uint64 now = SDL_GetTicks();
+    bool twice = !additive && app->tile_selected && entity_id_is_none(id) &&
+                 now - app->map_click_ms <= APP_DOUBLE_CLICK_MS &&
+                 SDL_fabsf(screen_x - app->map_click_x) <= APP_DOUBLE_CLICK_SLOP &&
+                 SDL_fabsf(screen_y - app->map_click_y) <= APP_DOUBLE_CLICK_SLOP;
+    app->map_click_ms = now;
+    app->map_click_x = screen_x;
+    app->map_click_y = screen_y;
+    if (twice && select_same_on_screen(app)) {
+        app->map_click_ms = 0; /* A third click starts over. */
+        return;
     }
     int x = (int)floorf(world_x), y = (int)floorf(world_y);
     ItemPick items[CLICK_ITEMS_MAX];
@@ -1791,6 +1938,14 @@ static void render_frame(App *app)
             const Item *item = game_pick_item(&app->game, &pick);
             if (item != NULL && pick.z == app->camera.level) {
                 render_item_selection(app->renderer, &app->camera, pick.x, pick.y, item);
+            }
+        }
+    } else if (app->tile_selected && app->selected_thing == THING_PLANT_BOX) {
+        for (int i = 0; i < app->selected_plant_count; i++) {
+            TilePos at = app->selected_plants[i];
+            if (at.z == app->camera.level ||
+                map_view_level(game_view_map(&app->game), at.x, at.y, app->camera.level) == at.z) {
+                render_tile_selection(app->renderer, &app->camera, at.x, at.y);
             }
         }
     } else if (app->tile_selected) {

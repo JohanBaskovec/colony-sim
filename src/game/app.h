@@ -149,6 +149,10 @@ typedef enum BuildCategory {
  * has a window of its own (game/tile_panel.h). */
 /* Items a box selects at most. */
 #define APP_BOX_ITEMS_MAX 256
+/* Plants a double click selects at most (all of one kind on the screen). */
+#define APP_BOX_PLANTS_MAX 2048
+/* Pixels the cursor may move between the two clicks of a double click. */
+#define APP_DOUBLE_CLICK_SLOP 6.0f
 
 typedef enum TileThing {
     THING_STRUCTURE, /* A wall, a door, a bed... */
@@ -158,6 +162,7 @@ typedef enum TileThing {
     THING_PLANT,     /* The plant (grass too), or the tree whose trunk or foliage it is. */
     THING_ITEM,      /* One item lying there (App.selected_item; the tile follows it). */
     THING_ITEM_BOX,  /* Several items lying about, picked by a box (App.selected_box_items). */
+    THING_PLANT_BOX, /* Plants of one kind, picked by a double click (App.selected_plants). */
     THING_COUNT
 } TileThing;
 
@@ -220,6 +225,15 @@ typedef struct App {
      * lies; those gone are dropped. */
     ItemPick selected_box_items[APP_BOX_ITEMS_MAX];
     int selected_box_item_count;
+    /* THING_PLANT_BOX: the tiles the plants grow on (a tree's: its foot),
+     * all of kind selected_plant_type; those gone are dropped. */
+    TilePos selected_plants[APP_BOX_PLANTS_MAX];
+    int selected_plant_count;
+    int selected_plant_type;
+    /* The last click on the map (SDL ticks, screen position): a second one
+     * close in time and space is a double click. */
+    Uint64 map_click_ms;
+    float map_click_x, map_click_y;
     /* Selected wild animal (ENTITY_NONE if none), same rules: dropped once
      * the colony no longer sees it (game/animal_panel.h). */
     EntityId selected_animal;
@@ -366,6 +380,11 @@ void app_select_colonist(App *app, EntityId id, bool additive);
  * its site, a structure): the tool and its type (see app_toggle_tool());
  * false when there is nothing to build like it. */
 bool app_build_like_target(const App *app, AppTool *tool, int *type);
+
+/* Selects the items lying on a tile together (the tile's window with the
+ * list of them), or one of them by its pick (the window of that item). */
+void app_select_tile_items(App *app, int x, int y, int z);
+void app_select_item(App *app, ItemPick pick);
 
 /* Whether the thing is on the tile, as the colony knows it (game_view_map()). */
 bool app_thing_at(const App *app, TileThing thing, int x, int y, int z);
