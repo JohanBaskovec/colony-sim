@@ -885,7 +885,7 @@ static void test_populated_world(void)
 
 static void test_wild_games_are_deterministic(void)
 {
-    Game a, b, none;
+    static Game a, b, none;
     REQUIRE(init_wild_game(&a, 7, GAME_WILDLIFE_DENSITY, 3));
     REQUIRE(init_wild_game(&b, 7, GAME_WILDLIFE_DENSITY, 3));
     REQUIRE(init_wild_game(&none, 7, 0.0f, 3));

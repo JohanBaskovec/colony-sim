@@ -154,9 +154,11 @@ fatal." when it killed), the others in white: missed ("A she-wolf tried to
 bite Felix, and missed."), dodged ("..., who dodged.") or harmless ("A wolf
 bit Felix's left arm, doing no harm."). The same miss again within ten seconds
 is counted in the line before ("(×3)"). Animals are named by their species and
-sex ("The she-wolf", "A stag"). Four check boxes at the top (Thoughts, Wounds,
-Attacks, Social) hide or show each kind; a wound from a blow is both a wound
-and an attack, shown when either box is ticked. The choice is kept from one
+sex ("The she-wolf", "A stag"). Five check boxes at the top (Thoughts, Wounds,
+Attacks, Social, Routine) hide or show each kind; a wound from a blow is both a
+wound and an attack, shown when either box is ticked (so is a brawl, both
+social and an attack). Thoughts that come back day after day (hunger, the
+nights, the meals, company...) are Routine only, and take 16 entries at most. The choice is kept from one
 being to the next. The last 64 entries are kept.
 
 #### Bills (workstations)

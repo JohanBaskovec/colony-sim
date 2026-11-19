@@ -757,7 +757,7 @@ static void test_enemy_forgotten(void)
 /* A game where nobody fights hashes as before. */
 static void test_hash_unchanged_without_fights(void)
 {
-    Game a, b;
+    static Game a, b;
     REQUIRE(init_flat_game(&a));
     REQUIRE(init_flat_game(&b));
     REQUIRE(spawn_settler(&a, 10, 10) != NULL);

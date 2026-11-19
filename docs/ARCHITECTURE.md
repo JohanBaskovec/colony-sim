@@ -64,11 +64,13 @@ simulation:
 | `work`       | Work types (mining, fire, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning (rates, caps, fading), quality and condition of what a worker produces |
 | `corpse`     | The record kept of each settler or wild animal that died (`Corpses`, a growing list: a copy of the `Colonist` or `Animal` as it was, and the tick), which the body's item stack points at; for the eye only, not hashed |
-| `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
+| `conversation`| Settlers nearby chatting now and then (`docs/SOCIAL.md` §6): knowledge talk and explanations, true stories and lies, compliments, insults, gossip and gossip passed on, arguments and brawls, apologies, small talk; how each chat went, the memories, company and journal entries it leaves; the phrases chats are told with |
+| `social`     | What settlers think of each other (`Game.social`, by colonist slot): opinions from family ties, looks and memories that fade over hours to decades, families of the starting settlers, relationships with slack, grief, memories of violence; tales heard to pass on, wrongs and apologies, the company of friends and rivals; a random stream of its own |
+| `experience` | What a settler lived through that makes a story (`Colonist.experiences`, a ring of 8): kills, attacks, deaths seen, losses, hardships; fresh ones told more |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
 | `combat`     | Blows between beings, for settlers and animals alike: attacks (damage, injury kind, accuracy, interval, reach), hit chance against dodge, the limb an attack is made with and the attacks a species chooses among (`AttackChoice`, `combat_choose_attack()`), a blow through `health`, the hurt fraction and breaking off, the queue of strikes the game resolves, the mark each attack leaves on screen and the log of the last blows for the frontend (see `docs/COMBAT.md`) |
-| `journal`    | The journal of a settler or an animal (a ring of the last `JOURNAL_MAX` entries, in `Colonist` and `Animal`): new thoughts, wounds (who struck with what, which part, what it caused), blows given and taken (missed, dodged, harmless, wounding, fatal; the same miss again soon counted in one entry), chats; facts only, the frontend writes the sentences; presentation only |
+| `journal`    | The journal of a settler or an animal (a ring of the last `JOURNAL_MAX` entries, in `Colonist` and `Animal`): new thoughts, wounds (who struck with what, which part, what it caused), blows given and taken (missed, dodged, harmless, wounding, fatal; the same miss again soon counted in one entry), social life (chats and their topics, stories, lies, compliments, insults, gossip, relationships); facts only, the frontend writes the sentences; presentation only |
 | `blood`      | Blood on the ground: drops on the steps of those who bleed, more and larger the worse, a pool under one who stays still, stains drying and fading (a ring of the newest; presentation only, see `docs/HEALTH.md` §9.1) |
 | `strike_anim` | How a blow is played on screen, as functions of the ticks since it was resolved: the attacker drawing back and lunging, the one struck flinching and flashing, the mark drawn, held and fading (presentation only, see `docs/COMBAT.md` §5) |
 | `health`     | Bodies for settlers and animals alike: body plans and parts, injuries that bleed and hurt, consciousness (the sum of what takes it off, the posture: up, collapsed, unconscious) and abilities (walking, the hands, sight, eating), clotting, natural healing, blood coming back, death; falls (see `docs/HEALTH.md`) |
@@ -94,8 +96,8 @@ simulation:
 | `camera`     | World ↔ screen transforms, zoom, visible tile range, the level shown         |
 | `cli`        | Command-line parsing (language, seed, size, colonists, test scenario, cheats) |
 | `entry_strip` | Fits same-sized entries (the colonist bar) into a width: shrunk, then wrapped onto rows |
-| `scenario`   | Ready-made test situations on a new game (`bench_simulation`, `--scenario`) |
-| `test_scenario` | The F2 debug menu's scenarios: `test_scenario_load()` replaces the world of a running `Game` (shut down, then built again from the same seed, debug flags and clock speed kept) with a flat bare 96×96 world and places hungry wolves and a herd of roe deer, or two settlers (one with a thrusting spear), by hand |
+| `scenario`   | Ready-made test situations on a new game (`bench_simulation`, `bench_social`, `--scenario`): gathering, unreachable jobs, construction, feuds (two clans who loathe each other) |
+| `test_scenario` | The F2 debug menu's scenarios: `test_scenario_load()` replaces the world of a running `Game` (shut down, then built again from the same seed, debug flags and clock speed kept) with a flat bare 96×96 world and places hungry wolves and a herd of roe deer, or two settlers (one with a thrusting spear), or eight settlers in two feuding clans, by hand |
 | `settings`   | Player settings kept between sessions (interface size, palette, language) as a forgiving `key = value` text; the frontend loads and saves the file |
 | `log`        | Logging with a pluggable sink                                                |
 | `util`       | Small helpers (clamp, lerp, FNV hashes)                                      |
@@ -128,11 +130,12 @@ simulation:
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
 | `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills (the active bills, and two windows docked to the right of the tab: the recipes to add, and the details of the one picked) and (hearths) Fire tabs; forbid, build another, delete |
 | `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd, health |
-| `journal_panel` | The Journal tab of a settler or an animal: three filter check boxes (`App.journal_hidden`), the entries newest first with their date, sentences built from the facts of `core/journal.h` (wording per language: verb by the strike mark, part and injury phrases, the owner's and the attacker's phrases by species) |
+| `journal_panel` | The Journal tab of a settler or an animal: five filter check boxes (`App.journal_hidden`; routine thoughts under Routine only), the entries newest first with their date, sentences built from the facts of `core/journal.h` (wording per language: verb by the strike mark, part and injury phrases, the owner's and the attacker's phrases by species; social sentences from topic, story and know-how phrases, with French elision before a vowel; a thought as a full sentence, its tooltip on hover) |
+| `thought_tooltip` | The tooltip of a thought (what it is about, its first value, how it fades or grows, how it adds up), shared by the Mood tab and the journal |
 | `health_panel` | The health of a settler (its Health tab) or an animal as table rows: the state, consciousness and what takes it off, blood, bleeding, pain, afflictions, abilities, injuries with tooltips |
 | `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
-| `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time), the debug tool (move settlers) |
+| `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time, discord among the settlers, forgetting the debug opinions), the chats counted so far, the debug tool (move settlers) |
 | `scenarios_panel` | Test scenarios menu (F2): a button per scenario; a click asks `App` to load it, which `app_run()` does at the start of the next frame (never while windows are being drawn), forgetting selection, tools and notices |
 | `animals_panel` | Animals menu (F6): a Female and a Male button per species, which arm the debug tool to put one on every clicked tile |
 | `items_panel`  | Items menu (F5): every item with a 1× and a Max button, which arm the debug tool to drop it on the next clicked tile |
@@ -619,12 +622,46 @@ tooltip); it raises `knowledge_peak`.
   for the master.
 - *Conversation* (`core/conversation.h`): every `CONVERSATION_CHECK_TICKS`
   after the colonists act, `game_tick()` gives each pair within 3 tiles that
-  is free to chat (`colonist_can_chat()`) a chance of one chat per hour
-  together, drawn from `Game.rng` in slot order. A chat lasts 6 minutes
-  (`chat_ticks`, a bubble over their heads); 40% are about a knowledge, each
-  speaker picking one weighted by level (×2 if practised in the last day), and
-  the listener gets the whole chat's gain at once (cap 30 and the speaker's
-  level).
+  is free to chat (`colonist_can_chat()`) a chance of two chats per hour
+  together (`conversation_chance()`: sociability, confidence, opinions,
+  loneliness), drawn from the social stream (`Social.rng`) in slot order. A
+  chat lasts 6 minutes (`chat_ticks`, a bubble over their heads); 20% are
+  about a knowledge, each speaker picking one weighted by level (×2 if
+  practised in the last day), and the listener gets the whole chat's gain at
+  once (cap 30 and the speaker's level). The others are stories, lies,
+  compliments, insults, gossip or small talk (`docs/SOCIAL.md` §6).
+- *Social life* (`core/social.h`, `docs/SOCIAL.md`): `Game.social` holds a
+  `SocialBond` per ordered pair of colonist slots (what `who` thinks of
+  `whom`): the family tie and up to 8 memories, each a value and the game hour
+  it was last renewed, so that its fading (plateau, then a half-life) is
+  computed when the opinion is asked for, never stepped; nothing ticks per
+  pair. The opinion adds the tie, the other's beauty and confidence and the
+  memories, clamped to ±100. `social_update()` runs once an hour
+  (`GAME_SOCIAL_UPDATE_PHASE`): it drops forgotten memories and moves
+  relationships with slack, noting changes in the journal. A slot is cleared
+  when a settler is removed or spawned in it. Families and the journey are
+  drawn by `social_start_together()` after the starting settlers are placed.
+  Hooks in `game.c`: `settler_died()` (grief by family or friendship,
+  experiences of the mourners and witnesses), `note_fight_lived()` after a
+  wounding blow (experiences, memories of violence between settlers), the
+  hardships noted from the mood's news before the journal takes it. Each
+  listener keeps a few `SocialTale`s (gossip heard, to pass on). After the
+  chats, every `CONVERSATION_CHECK_TICKS`, `social_company_update()` sets
+  `Colonist.social_states` (a friend or a rival close by) from the
+  relationships last noted, and `Colonist.friend_slots`, `close_friend_slots`
+  and `rival_slots` (bit masks by slot), which `seek_company()` reads to pick
+  whom an idle settler walks over to; the colonist ORs the states into its
+  mood states, so that neither the mood nor the colonist module knows
+  anything of opinions. Brawls hurt through
+  `health_hurt()` with `HURT_BRAWL`, like falls, and are noted by
+  `note_pending_hurts()`. Part of `game_hash()` (bonds, tales, the social
+  stream, company, social states and experiences); `Game.chat_counts`
+  (`ConversationCounts`, what the chats turned into) is not. The debug tools
+  (`game_debug_chat()`, `game_debug_relation()`...) change opinions through
+  a memory of their own (`SOCIAL_MEMORY_DEBUG`, set rather than stacked,
+  fading over decades), so that the tooltip shows what they did and
+  `game_debug_forget_social()` undoes it; `bench/bench_social` prints a
+  colony's social life day by day.
 - *Fading*: once a day, `colonist_fade_knowledge()` takes a fifteenth of a
   point off each knowledge not practised (`knowledge_practice`, a tick: doing
   the work, having an apprentice) for 15 days, down to 80% of the peak.

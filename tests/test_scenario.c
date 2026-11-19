@@ -63,6 +63,15 @@ static void test_scenarios(void)
     CHECK_EQ_INT(stockpile_count(&game), 0);
     game_shutdown(&game);
 
+    /* Feuds: gathering, and two clans (friends within, enemies across). */
+    REQUIRE(init_game(&game, 42, 200, 3));
+    CHECK(scenario_apply(&game, SCENARIO_FEUDS));
+    CHECK(zone_tiles(&game) > 200 * 200 / 2);
+    CHECK_EQ_INT(game.social.bonds[0][2].level, RELATION_FRIEND);
+    CHECK_EQ_INT(game.social.bonds[0][1].level, RELATION_ENEMY);
+    CHECK_EQ_INT(game.social.bonds[1][2].level, RELATION_ENEMY);
+    game_shutdown(&game);
+
     REQUIRE(init_game(&game, 42, 200, 3));
     CHECK(scenario_apply(&game, SCENARIO_CONSTRUCTION));
     CHECK(game.constructions.used_count > 0); /* Walls, a screen and beds. */
@@ -74,7 +83,7 @@ static void test_scenarios(void)
 /* The same seed and scenario give the same game, ticks later. */
 static void test_deterministic(void)
 {
-    Game a, b;
+    static Game a, b;
     REQUIRE(init_game(&a, 9, 64, 4));
     REQUIRE(init_game(&b, 9, 64, 4));
     CHECK(scenario_apply(&a, SCENARIO_CONSTRUCTION));

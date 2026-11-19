@@ -26,6 +26,9 @@ typedef struct DebugRows {
     bool next_weather;
     bool cold_snap;
     bool sadden;
+    bool discord;
+    bool forget_social;
+    const ConversationCounts *chats;
     bool learn_all;
     bool skip_hour;
     bool skip_day;
@@ -97,6 +100,24 @@ static void debug_rows(UiLayout *layout, void *userdata)
         rows->temperature_step = step;
     }
     rows->sadden |= button_row(layout, tr("debug.sadden"));
+    rows->discord |= button_row(layout, tr("debug.discord"));
+    rows->forget_social |= button_row(layout, tr("debug.forget_social"));
+    /* What the chats turned into so far. */
+    const ConversationCounts *chats = rows->chats;
+    uint32_t total = 0;
+    for (int kind = 0; kind < CHAT_KIND_COUNT; kind++) {
+        total += chats->kinds[kind];
+    }
+    char numbers[5][16];
+    tr_integer(numbers[0], sizeof(numbers[0]), (int)total);
+    tr_integer(numbers[1], sizeof(numbers[1]),
+               (int)(chats->kinds[CHAT_ARGUMENT] + chats->answered_back));
+    tr_integer(numbers[2], sizeof(numbers[2]), (int)chats->brawls);
+    tr_integer(numbers[3], sizeof(numbers[3]), (int)chats->kinds[CHAT_APOLOGY]);
+    tr_integer(numbers[4], sizeof(numbers[4]), (int)chats->kinds[CHAT_REPORT]);
+    TR_FORMAT(label, sizeof(label), tr("debug.chat_counts"), numbers[0], numbers[1], numbers[2],
+              numbers[3], numbers[4]);
+    ui_layout_label(layout, label, 0.0f, true);
     rows->learn_all |= button_row(layout, tr("debug.learn_all"));
     rows->skip_hour |= button_row(layout, tr("debug.skip_hour"));
     rows->skip_day |= button_row(layout, tr("debug.skip_day"));
@@ -127,6 +148,7 @@ void debug_panel_draw(App *app)
                       .god_mode = god_mode,
                       .temperature_offset = game->weather.debug_offset,
                       .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
+                      .chats = &game->chat_counts,
                       .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
                       .plant_tree_active =
                           app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE),
@@ -185,6 +207,12 @@ void debug_panel_draw(App *app)
     }
     if (rows.sadden) {
         game_debug_sadden(game);
+    }
+    if (rows.discord) {
+        game_debug_discord(game);
+    }
+    if (rows.forget_social) {
+        game_debug_forget_social(game);
     }
     if (rows.cold_snap) {
         game_debug_cold_snap(game);

@@ -117,7 +117,7 @@ static bool init_game(Game *game, uint64_t seed)
 
 static void test_colonists_get_deterministic_looks(void)
 {
-    Game a, b;
+    static Game a, b;
     REQUIRE(init_game(&a, 21));
     REQUIRE(init_game(&b, 21));
     REQUIRE(game_colonist_slot_count(&a) == game_colonist_slot_count(&b));

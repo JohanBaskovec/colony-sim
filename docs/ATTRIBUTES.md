@@ -114,12 +114,18 @@ easily, and is also the happiest of all on a very good day.
 
 ## 5. Social
 
+Kindness, social ease, self-confidence, beauty and sociability are in the
+game (`SOCIAL.md`: the numbers there); sexuality and drive come with romance.
+They come last in the attribute order, so that the earlier ones are still
+rolled the same, and do nothing for animals.
+
 | Attribute | Low side / high side | Effect |
 |-----------|----------------------|--------|
 | Kindness | abrasive / kind | in chats, kind settlers often pay compliments, abrasive ones insult |
 | Social ease | awkward / at ease | how well chats go: how much they raise the other's opinion |
 | Self-confidence | insecure / self-assured | how the settler takes others' judgment, and how bold they are |
 | Beauty | plain / striking | the first impression and a lasting share of others' opinion |
+| Sociability | solitary / sociable | how fast company is missed, how often the settler chats |
 | Sexuality | see below | who the settler is attracted to, and how strongly |
 
 - **Kindness.** The further from ordinary, the more often a chat turns into a
@@ -140,6 +146,9 @@ easily, and is also the happiest of all on a very good day.
 - Kindness, social ease, self-confidence and beauty add up: a striking,
   confident settler who is at ease is liked by everyone, while a plain,
   awkward, insecure one has to win people over slowly.
+- **Sociability** sets how fast a settler misses company (×0.5 to ×2) and
+  how often it chats: solitary settlers are content alone, sociable ones
+  soon feel lonely.
 - **Sexuality** is fluid: one position from "attracted only to the other sex"
   to "attracted only to the same sex", with every shade between. It does not
   follow the bell curve of the other attributes: most settlers lie near the

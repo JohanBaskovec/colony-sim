@@ -26,6 +26,10 @@ typedef enum Scenario {
      * (grass, branches, twigs) and a stockpile: gathering, drying, hauling to
      * the sites, building, sleeping in the beds and refreshing them. */
     SCENARIO_CONSTRUCTION,
+    /* Feuds: the gathering scenario, with the settlers split in two clans
+     * who loathe each other, half of them abrasive (game_debug_feud()):
+     * arguments, brawls, gossip passed on, apologies (docs/SOCIAL.md). */
+    SCENARIO_FEUDS,
     SCENARIO_COUNT
 } Scenario;
 

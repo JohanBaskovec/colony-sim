@@ -19,6 +19,9 @@ typedef enum TestScenario {
     /* A pack of hungry wolves ten tiles from two settlers, one bare-handed and
      * one with a thrusting spear; no other animals. */
     TEST_SCENARIO_WOLVES_AND_SETTLERS,
+    /* Eight settlers side by side in two clans who loathe each other
+     * (game_debug_feud()), with food on the ground; no animals. */
+    TEST_SCENARIO_FEUD,
     TEST_SCENARIO_COUNT
 } TestScenario;
 
@@ -32,6 +35,9 @@ typedef enum TestScenario {
 #define TEST_SCENARIO_WOLF_COUNT 4
 /* Tiles between the wolves and what they hunt. */
 #define TEST_SCENARIO_DISTANCE 10
+/* The feud: settlers, and the wild carrots left beside them. */
+#define TEST_SCENARIO_FEUD_SETTLERS 8
+#define TEST_SCENARIO_FEUD_FOOD 60
 
 /* Translation key of the scenario's name; NULL out of range. */
 const char *test_scenario_name_key(TestScenario scenario);

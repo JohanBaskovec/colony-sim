@@ -48,9 +48,9 @@ SDL_FRect ui_layout_bar_row(UiLayout *layout, const char *label, float fraction,
 SDL_FRect ui_layout_pair(UiLayout *layout, const char *left, const char *right, SDL_Color color,
                          bool hoverable);
 
-/* ui_layout_pair() with a narrow column of text on the far right, in the same
- * color, `slot` wide (the width of the widest text it may hold) so that the
- * columns line up from row to row. */
+/* ui_layout_pair() with a narrow column of text on the far right (left of
+ * the stepper's room, if any), in the same color, `slot` wide (the width of
+ * the widest text it may hold) so that the columns line up from row to row. */
 SDL_FRect ui_layout_triple(UiLayout *layout, const char *left, const char *middle,
                            const char *right, const char *slot, SDL_Color color, bool hoverable);
 
@@ -62,7 +62,7 @@ float ui_layout_stepper_width(Ui *ui);
 void ui_layout_set_stepper(UiLayout *layout, bool on);
 
 /* A "-" and a "+" button at the right end of a table row just returned by
- * ui_layout_bar_row() or ui_layout_pair() (in the room UiLayout.reserve left
+ * ui_layout_bar_row(), ui_layout_pair() or ui_layout_triple() (in the room UiLayout.reserve left
  * there). Returns -1 when "-" was clicked, 1 for "+", else 0. */
 int ui_layout_stepper(UiLayout *layout, SDL_FRect row);
 

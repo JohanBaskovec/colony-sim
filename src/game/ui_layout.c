@@ -93,14 +93,14 @@ SDL_FRect ui_layout_triple(UiLayout *layout, const char *left, const char *middl
 {
     float slot_width = ui_text_width(layout->ui, slot);
     ui_layout_measure(layout, ui_text_width(layout->ui, left) + ui_text_width(layout->ui, middle) +
-                                  slot_width + UI_LAYOUT_GAP * 3.0f);
+                                  slot_width + UI_LAYOUT_GAP * 3.0f + layout->reserve);
     SDL_FRect rect = {layout->x, layout->y, layout->width, layout->row};
     if (layout->draw) {
         if (hoverable && ui_hovered(layout->ui, rect)) {
             ui_fill(layout->ui, rect, layout->ui->theme.colors[THEME_SCROLL_TRACK]);
         }
         float y = layout->y + layout->text_offset;
-        float right_edge = layout->x + layout->width;
+        float right_edge = layout->x + layout->width - layout->reserve;
         ui_label(layout->ui, left, layout->x, y);
         ui_label_rgba(layout->ui, right, right_edge - ui_text_width(layout->ui, right), y, color);
         right_edge -= slot_width + UI_LAYOUT_GAP;

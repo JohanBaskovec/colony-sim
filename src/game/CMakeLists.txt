@@ -16,6 +16,7 @@ add_executable(colony_sim
     items_panel.c
     layout.c
     journal_panel.c
+    thought_tooltip.c
     log_window.c
     localization.c
     main.c

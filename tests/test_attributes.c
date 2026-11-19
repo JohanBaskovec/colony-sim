@@ -423,7 +423,7 @@ static void test_sleep_sets_the_rest_regained(void)
 
 static void test_new_settlers_differ_and_follow_the_seed(void)
 {
-    Game first, second, other;
+    static Game first, second, other;
     REQUIRE(init_flat_game(&first, 11));
     REQUIRE(init_flat_game(&second, 11));
     REQUIRE(init_flat_game(&other, 12));
@@ -478,7 +478,12 @@ static void test_attributes_affecting_animals(void)
     for (int type = 0; type < ATTRIBUTE_COUNT; type++) {
         shown += attribute_affects_animals((AttributeType)type);
     }
-    CHECK_EQ_INT(shown, ATTRIBUTE_COUNT - 4);
+    CHECK_EQ_INT(shown, ATTRIBUTE_COUNT - 9);
+    /* Nor the social ones. */
+    for (int type = ATTRIBUTE_KINDNESS; type <= ATTRIBUTE_SOCIABILITY; type++) {
+        CHECK(!attribute_affects_animals((AttributeType)type));
+        CHECK_EQ_INT(attribute_group((AttributeType)type), ATTRIBUTE_GROUP_SOCIAL);
+    }
     /* Walking, running, toughness, the temperatures and courage do. */
     CHECK(attribute_affects_animals(ATTRIBUTE_WALKING));
     CHECK(attribute_affects_animals(ATTRIBUTE_ENDURANCE));

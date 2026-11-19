@@ -40,6 +40,13 @@ static const ThoughtDef THOUGHT_DEFS[THOUGHT_COUNT] = {
                              -6.0f, 1.0f, 0.0f, 1.0f),
     [THOUGHT_IN_THE_RAIN] = STATE("in_the_rain", N_("thought.in_the_rain"),
                                   N_("thought.in_the_rain.description"), -4.0f, 1.0f, 0.0f, 1.0f),
+    [THOUGHT_GOOD_COMPANY] = STATE("good_company", N_("thought.good_company"),
+                                   N_("thought.good_company.description"), 3.0f, 1.0f, 0.0f, 1.0f),
+    [THOUGHT_UNWELCOME_COMPANY] =
+        STATE("unwelcome_company", N_("thought.unwelcome_company"),
+              N_("thought.unwelcome_company.description"), -4.0f, 1.0f, 0.0f, 1.0f),
+    [THOUGHT_LONELY] = STATE("lonely", N_("thought.lonely"), N_("thought.lonely.description"),
+                             -5.0f, 2.0f, 48.0f, 2.0f),
     [THOUGHT_SLEPT_WELL] = MEMORY("slept_well", N_("thought.slept_well"),
                                   N_("thought.slept_well.description"), 6.0f, 4.0f, 6.0f, 1),
     [THOUGHT_SLEPT_ON_GROUND] =
@@ -73,14 +80,98 @@ static const ThoughtDef THOUGHT_DEFS[THOUGHT_COUNT] = {
                              48.0f, 48.0f, 3),
     [THOUGHT_SAW_DEATH] = MEMORY("saw_death", N_("thought.saw_death"),
                                  N_("thought.saw_death.description"), -10.0f, 24.0f, 24.0f, 2),
+    [THOUGHT_COMPLIMENTED] = MEMORY("complimented", N_("thought.complimented"),
+                                    N_("thought.complimented.description"), 5.0f, 6.0f, 12.0f, 2),
+    [THOUGHT_INSULTED] = MEMORY("insulted", N_("thought.insulted"),
+                                N_("thought.insulted.description"), -6.0f, 6.0f, 12.0f, 3),
+    [THOUGHT_FAMILY_DIED] =
+        MEMORY("family_died", N_("thought.family_died"), N_("thought.family_died.description"),
+               -20.0f, 360.0f, 360.0f, 3),
+    [THOUGHT_FRIEND_DIED] =
+        MEMORY("friend_died", N_("thought.friend_died"), N_("thought.friend_died.description"),
+               -12.0f, 120.0f, 240.0f, 3),
+    [THOUGHT_ARGUMENT] = MEMORY("argument", N_("thought.argument"),
+                                N_("thought.argument.description"), -5.0f, 6.0f, 12.0f, 3),
+    [THOUGHT_FOUGHT] = MEMORY("fought", N_("thought.fought"), N_("thought.fought.description"),
+                              -8.0f, 12.0f, 24.0f, 2),
+    [THOUGHT_APOLOGIZED_TO] = MEMORY("apologized_to", N_("thought.apologized_to"),
+                                     N_("thought.apologized_to.description"), 3.0f, 6.0f, 12.0f, 1),
     [THOUGHT_DEBUG_GLOOM] = MEMORY("debug_gloom", N_("thought.debug_gloom"),
                                    N_("thought.debug_gloom.description"), -45.0f, 2.0f, 2.0f, 1),
+};
+
+/* What the journal says when a thought comes, as a sentence about the
+ * settler ("Feels hungry."). */
+static const char *const JOURNAL_KEYS[THOUGHT_COUNT] = {
+    [THOUGHT_HUNGRY] = N_("thought.hungry.journal"),
+    [THOUGHT_STARVING] = N_("thought.starving.journal"),
+    [THOUGHT_THIRSTY] = N_("thought.thirsty.journal"),
+    [THOUGHT_PARCHED] = N_("thought.parched.journal"),
+    [THOUGHT_TIRED] = N_("thought.tired.journal"),
+    [THOUGHT_EXHAUSTED] = N_("thought.exhausted.journal"),
+    [THOUGHT_COLD] = N_("thought.cold.journal"),
+    [THOUGHT_HOT] = N_("thought.hot.journal"),
+    [THOUGHT_SOAKED] = N_("thought.soaked.journal"),
+    [THOUGHT_IN_THE_RAIN] = N_("thought.in_the_rain.journal"),
+    [THOUGHT_LONELY] = N_("thought.lonely.journal"),
+    [THOUGHT_SLEPT_WELL] = N_("thought.slept_well.journal"),
+    [THOUGHT_SLEPT_ON_GROUND] = N_("thought.slept_on_ground.journal"),
+    [THOUGHT_SLEPT_WET] = N_("thought.slept_wet.journal"),
+    [THOUGHT_SLEPT_COLD] = N_("thought.slept_cold.journal"),
+    [THOUGHT_SLEPT_HOT] = N_("thought.slept_hot.journal"),
+    [THOUGHT_VARIED_MEALS] = N_("thought.varied_meals.journal"),
+    [THOUGHT_SAME_FOOD] = N_("thought.same_food.journal"),
+    [THOUGHT_COOKED_MEAL] = N_("thought.cooked_meal.journal"),
+    [THOUGHT_SPOILED_FOOD] = N_("thought.spoiled_food.journal"),
+    [THOUGHT_WARMED_BY_FIRE] = N_("thought.warmed_by_fire.journal"),
+    [THOUGHT_FIRESIDE_STORY] = N_("thought.fireside_story.journal"),
+    [THOUGHT_CHAT] = N_("thought.chat.journal"),
+    [THOUGHT_RELIEF] = N_("thought.relief.journal"),
+    [THOUGHT_DEATH] = N_("thought.death.journal"),
+    [THOUGHT_SAW_DEATH] = N_("thought.saw_death.journal"),
+    [THOUGHT_COMPLIMENTED] = N_("thought.complimented.journal"),
+    [THOUGHT_INSULTED] = N_("thought.insulted.journal"),
+    [THOUGHT_FAMILY_DIED] = N_("thought.family_died.journal"),
+    [THOUGHT_FRIEND_DIED] = N_("thought.friend_died.journal"),
+    [THOUGHT_GOOD_COMPANY] = N_("thought.good_company.journal"),
+    [THOUGHT_UNWELCOME_COMPANY] = N_("thought.unwelcome_company.journal"),
+    [THOUGHT_ARGUMENT] = N_("thought.argument.journal"),
+    [THOUGHT_FOUGHT] = N_("thought.fought.journal"),
+    [THOUGHT_APOLOGIZED_TO] = N_("thought.apologized_to.journal"),
+    [THOUGHT_DEBUG_GLOOM] = N_("thought.debug_gloom.journal"),
 };
 
 #undef STATE
 #undef MEMORY
 
-_Static_assert(THOUGHT_COUNT <= 32, "thought masks");
+_Static_assert(THOUGHT_COUNT <= 64, "thought masks");
+
+const char *thought_journal_key(ThoughtType type)
+{
+    return (unsigned)type < THOUGHT_COUNT ? JOURNAL_KEYS[type] : NULL;
+}
+
+bool thought_is_routine(ThoughtType type)
+{
+    switch (type) {
+    case THOUGHT_HUNGRY:
+    case THOUGHT_THIRSTY:
+    case THOUGHT_TIRED:
+    case THOUGHT_SLEPT_WELL:
+    case THOUGHT_SLEPT_ON_GROUND:
+    case THOUGHT_SLEPT_WET:
+    case THOUGHT_SLEPT_COLD:
+    case THOUGHT_SLEPT_HOT:
+    case THOUGHT_VARIED_MEALS:
+    case THOUGHT_SAME_FOOD:
+    case THOUGHT_COOKED_MEAL:
+    case THOUGHT_WARMED_BY_FIRE:
+    case THOUGHT_CHAT:
+    case THOUGHT_GOOD_COMPANY:
+    case THOUGHT_UNWELCOME_COMPANY: return true;
+    default: return false;
+    }
+}
 
 const ThoughtDef *thought_def(ThoughtType type)
 {

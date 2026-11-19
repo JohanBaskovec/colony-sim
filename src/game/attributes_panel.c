@@ -18,6 +18,7 @@ int attributes_panel_rows(UiLayout *layout, const Attributes *attributes, bool a
     static const char *const GROUP_KEYS[ATTRIBUTE_GROUP_COUNT] = {
         [ATTRIBUTE_GROUP_BODY] = N_("attribute.group.body"),
         [ATTRIBUTE_GROUP_MIND] = N_("attribute.group.mind"),
+        [ATTRIBUTE_GROUP_SOCIAL] = N_("attribute.group.social"),
     };
     for (int group = 0; group < ATTRIBUTE_GROUP_COUNT; group++) {
         ui_layout_label(layout, tr(GROUP_KEYS[group]), 0.0f, true);

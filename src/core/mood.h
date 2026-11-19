@@ -96,6 +96,9 @@ typedef enum ThoughtType {
     THOUGHT_HOT,
     THOUGHT_SOAKED,
     THOUGHT_IN_THE_RAIN,
+    THOUGHT_LONELY,            /* Missing company (docs/SOCIAL.md). */
+    THOUGHT_GOOD_COMPANY,      /* A friend close by. */
+    THOUGHT_UNWELCOME_COMPANY, /* A rival or an enemy close by. */
     /* Memories. */
     THOUGHT_SLEPT_WELL,
     THOUGHT_SLEPT_ON_GROUND,
@@ -109,14 +112,23 @@ typedef enum ThoughtType {
     THOUGHT_WARMED_BY_FIRE,
     THOUGHT_FIRESIDE_STORY,
     THOUGHT_CHAT,
-    THOUGHT_RELIEF,      /* After a break. */
-    THOUGHT_DEATH,       /* A settler of the colony died. */
-    THOUGHT_SAW_DEATH,   /* ...before its eyes. */
+    THOUGHT_RELIEF,    /* After a break. */
+    THOUGHT_DEATH,     /* A settler of the colony died. */
+    THOUGHT_SAW_DEATH, /* ...before its eyes. */
+    /* Social life (docs/SOCIAL.md). */
+    THOUGHT_COMPLIMENTED,
+    THOUGHT_INSULTED,
+    THOUGHT_FAMILY_DIED, /* Someone of its family died (instead of THOUGHT_DEATH). */
+    THOUGHT_FRIEND_DIED, /* A friend died (instead of THOUGHT_DEATH). */
+    THOUGHT_ARGUMENT,
+    THOUGHT_FOUGHT,
+    THOUGHT_APOLOGIZED_TO,
     THOUGHT_DEBUG_GLOOM, /* The debug cheat (game_debug_sadden()). */
     THOUGHT_COUNT
 } ThoughtType;
 
-typedef uint32_t ThoughtMask;
+typedef uint64_t ThoughtMask;
+_Static_assert(THOUGHT_COUNT <= 64, "every thought has a bit in a ThoughtMask");
 #define THOUGHT_BIT(type) ((ThoughtMask)1u << (unsigned)(type))
 
 typedef struct ThoughtDef {
@@ -170,6 +182,14 @@ typedef struct Mood {
 
 /* NULL when out of range. */
 const ThoughtDef *thought_def(ThoughtType type);
+
+/* Translation key of the journal's sentence when the thought comes ("Feels
+ * hungry."); NULL when out of range. */
+const char *thought_journal_key(ThoughtType type);
+
+/* Whether a thought comes back day after day (meals, nights, mild hunger,
+ * company...): the journal files it under JOURNAL_ROUTINE. */
+bool thought_is_routine(ThoughtType type);
 
 /* Neutral, no thought, an ordinary character. */
 void mood_init(Mood *mood);

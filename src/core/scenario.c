@@ -98,6 +98,10 @@ bool scenario_apply(Game *game, Scenario scenario)
     case SCENARIO_GATHERING: setup_gathering(game, first); break;
     case SCENARIO_UNREACHABLE: setup_unreachable(game, first); break;
     case SCENARIO_CONSTRUCTION: setup_construction(game, first); break;
+    case SCENARIO_FEUDS:
+        setup_gathering(game, first);
+        game_debug_feud(game);
+        break;
     default: break;
     }
     return true;

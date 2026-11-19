@@ -62,12 +62,19 @@ typedef enum AttributeType {
     /* Body again, for the settlers' running (later) and the animals' flight. */
     ATTRIBUTE_RUNNING,   /* Running speed (the animals' flight and chase). */
     ATTRIBUTE_ENDURANCE, /* How long it can run flat out, and how fast it recovers. */
+    /* Social (docs/SOCIAL.md), added later too. */
+    ATTRIBUTE_KINDNESS,    /* Compliments (kind) or insults (abrasive) in chats. */
+    ATTRIBUTE_SOCIAL_EASE, /* How well its chats go, how well its lies pass. */
+    ATTRIBUTE_CONFIDENCE,  /* How little insults hurt, how often it starts a chat. */
+    ATTRIBUTE_BEAUTY,      /* The opinion others form at first sight, and keep a share of. */
+    ATTRIBUTE_SOCIABILITY, /* How fast it misses company (a factor), how often it chats. */
     ATTRIBUTE_COUNT
 } AttributeType;
 
 typedef enum AttributeGroup {
     ATTRIBUTE_GROUP_BODY,
     ATTRIBUTE_GROUP_MIND,
+    ATTRIBUTE_GROUP_SOCIAL,
     ATTRIBUTE_GROUP_COUNT
 } AttributeGroup;
 
@@ -97,7 +104,8 @@ bool attributes_set(Attributes *attributes, AttributeType type, int position);
 float attribute_position(const Attributes *attributes, AttributeType type);
 
 /* Effects. The factor goes from 1/ATTRIBUTE_FACTOR_MAX to ATTRIBUTE_FACTOR_MAX
- * (walking, work pace, learning, sleep, appetite; 1 for the others). */
+ * (walking, work pace, learning, sleep, appetite, running, endurance,
+ * sociability; 1 for the others). */
 float attribute_factor(const Attributes *attributes, AttributeType type);
 
 /* Factors of the health (docs/HEALTH.md): damage taken (toughness) and pain
@@ -129,8 +137,8 @@ int attribute_band(int position);
 
 AttributeGroup attribute_group(AttributeType type);
 
-/* Whether the attribute changes anything for an animal: work, learning and
- * the mood are a settler's alone (an animal's are still rolled, for the seed). */
+/* Whether the attribute changes anything for an animal: work, learning, the
+ * mood and social life are a settler's alone (an animal's are still rolled, for the seed). */
 bool attribute_affects_animals(AttributeType type);
 
 /* Translation keys: the attribute, what it does, and the word for a position

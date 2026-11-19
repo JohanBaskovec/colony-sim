@@ -49,6 +49,10 @@ COLONY_TEST_ONLY=test_plant_conditions ./build/headless/tests/test_game  # the s
 ctest --preset debug -L i18n          # translation checks only (label)
 ./build/headless/bench/bench_pathfinding 200 2000   # benchmark (use an optimized build for real numbers)
 ./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times (processor time: steady on a busy machine), percentiles, slowest ticks, state hash (3: construction)
+cmake --preset headless-release && cmake --build --preset headless-release  # optimized core + benchmarks, no SDL (for simulations)
+./build/headless-release/bench/bench_social 8 10 4  # social life of 8 settlers for 10 days, scenario 4 (two feuding clans): chats, arguments, brawls, apologies, company per day, opinions (setup after the seed: discord, feud, abrasive, kind, loners, sociable)
+./build/headless-release/bench/bench_social suite 5 42  # a line per social case (ordinary, idle, feuds, discord, loners, a crowd...): compare before and after a change
+./build/debug/bin/colony_sim --seed 42 --scenario 4 --debug character_editor  # feuding clans; the Social tab gets the social debug tools
 ./build/release/bench/bench_simulation 12 4 1 200 42 - fog-revealed  # the fog's own cost (`fog`: settlers also search in vain for what they have not found)
 ./build/release/bench/bench_simulation 12 4 1 200 42 - - wildlife   # with wild animals (none otherwise): their cost, and how they fare
 ./build/release/bench/bench_vision 200 100 1      # field of view: cost of a whole cast and of a near cast, tiles seen, ray steps

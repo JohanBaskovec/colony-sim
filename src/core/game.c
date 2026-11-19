@@ -18,6 +18,8 @@
 /* Mixed into the game seed for the stream colonist looks are rolled from. */
 #define GAME_APPEARANCE_SEED 0x5eed1ce5a77ea12aULL
 #define GAME_ATTRIBUTES_SEED 0xa77a1b07e5c0de5bULL
+/* Relationships are brought up to date once an hour, at this tick of it. */
+#define GAME_SOCIAL_UPDATE_PHASE 7
 /* Preferred: drinkable water within this travel cost of the spawn point. */
 #define SPAWN_WATER_MAX_COST 60.0f
 /* Food plants for the first settlers are counted and planted within this
@@ -129,6 +131,7 @@ EntityId game_spawn_colonist(Game *game, int x, int y, int z)
         return ENTITY_NONE;
     }
     Colonist *colonist = &game->colonists[id.index];
+    social_clear_slot(&game->social, (int)id.index); /* Nobody knows the newcomer. */
     colonist_init(colonist, name, rng_range_i32(&game->rng, 18, 60), x, y, z);
     colonist->needs[NEED_FOOD] = 0.55f + 0.35f * rng_next_float(&game->rng);
     colonist->needs[NEED_WATER] = 0.6f + 0.4f * rng_next_float(&game->rng);
@@ -218,6 +221,7 @@ bool game_remove_colonist(Game *game, EntityId id)
     colonist_free(colonist);
     memset(colonist, 0, sizeof(*colonist));
     occupancy_remove(&game->occupancy, occupancy_settler(id.index));
+    social_clear_slot(&game->social, (int)id.index);
     return pool_release(&game->colonist_pool, id);
 }
 
@@ -534,10 +538,12 @@ static void spawn_starting_colonists(Game *game, int count)
         if (!pathfinder_find_nearest(&game->pathfinder, &game->map, center, is_free_tile, game,
                                      SPAWN_PLACEMENT_MAX_COST, NULL, &tile)) {
             LOG_WARN("Not enough room to place every starting colonist");
-            return;
+            break;
         }
         game_spawn_colonist(game, tile.x, tile.y, tile.z);
     }
+    /* They came together: families among them, and the journey. */
+    social_start_together(&game->social, game->colonists, &game->colonist_pool, game->clock.tick);
 }
 
 /* ---- Lifecycle ----------------------------------------------------------- */
@@ -611,6 +617,7 @@ bool game_init(Game *game, const NewGameParams *params)
     rng_seed(&game->wildlife_rng, params->world.seed, 0x77696c64ULL /* "wild" */);
     rng_seed(&game->combat_rng, params->world.seed, 0x666967687455ULL /* "fight" */);
     rng_seed(&game->blood_rng, params->world.seed, 0x626c6f6f64ULL /* "blood" */);
+    social_init(&game->social, params->world.seed);
     roof_watch_init(&game->roof_watch, &game->map);
     game->tree_falls_seen = game->map.tree_fall_revision;
     weather_init(&game->weather, game->seed, game->clock.tick);
@@ -1120,7 +1127,15 @@ static void settler_died(Game *game, uint32_t slot)
             health_is_dead(&mourner->health)) {
             continue;
         }
-        mood_remember(&mourner->mood, THOUGHT_DEATH);
+        /* Family and friends grieve more, and remember it. */
+        ThoughtType grief =
+            social_grief(&game->social, game->colonists, (int)other, (int)slot, game->clock.tick);
+        mood_remember(&mourner->mood, grief);
+        uint32_t hour = (uint32_t)(game->clock.tick / TICKS_PER_HOUR);
+        if (grief != THOUGHT_DEATH) {
+            experiences_add(&mourner->experiences, EXPERIENCE_LOST_CLOSE_ONE, 0, 0, dead->name,
+                            hour);
+        }
         /* Without vision (core/vision.h), whoever stands near on the level. */
         int dx = mourner->x - x, dy = mourner->y - y;
         bool saw =
@@ -1129,6 +1144,7 @@ static void settler_died(Game *game, uint32_t slot)
                 : mourner->z == z && dx * dx + dy * dy <= GAME_WITNESS_RADIUS * GAME_WITNESS_RADIUS;
         if (saw) {
             mood_remember(&mourner->mood, THOUGHT_SAW_DEATH);
+            experiences_add(&mourner->experiences, EXPERIENCE_SAW_DEATH, 0, 0, dead->name, hour);
         }
     }
     /* The body first, where it fell; what it carried around it. */
@@ -1263,6 +1279,31 @@ static void note_pending_hurts(Game *game)
     }
 }
 
+/* A blow that wounded or killed: a story to tell for a settler (an animal
+ * it killed, one that wounded it), a memory between two settlers. */
+static void note_fight_lived(Game *game, Combatant attacker, Combatant target, bool killed)
+{
+    uint32_t hour = (uint32_t)(game->clock.tick / TICKS_PER_HOUR);
+    Colonist *hunter = attacker.kind == COMBATANT_SETTLER ? game_colonist(game, attacker.id) : NULL;
+    Colonist *victim = target.kind == COMBATANT_SETTLER ? game_colonist(game, target.id) : NULL;
+    const Animal *beast = target.kind == COMBATANT_ANIMAL ? animals_get(&game->animals, target.id)
+                          : attacker.kind == COMBATANT_ANIMAL
+                              ? animals_get(&game->animals, attacker.id)
+                              : NULL;
+    if (hunter != NULL && beast != NULL && killed) {
+        experiences_add(&hunter->experiences, EXPERIENCE_KILLED_ANIMAL, beast->species, beast->sex,
+                        NULL, hour);
+    }
+    if (victim != NULL && beast != NULL && attacker.kind == COMBATANT_ANIMAL) {
+        experiences_add(&victim->experiences, EXPERIENCE_ATTACKED_BY_ANIMAL, beast->species,
+                        beast->sex, NULL, hour);
+    }
+    if (hunter != NULL && victim != NULL) {
+        social_note_attack(&game->social, game->colonists, &game->colonist_pool,
+                           (int)attacker.id.index, (int)target.id.index, killed, game->clock.tick);
+    }
+}
+
 static void resolve_strikes(Game *game)
 {
     CombatQueue *queue = &game->combat;
@@ -1294,6 +1335,10 @@ static void resolve_strikes(Game *game)
         }
         journal_note_strike(attacker.journal, tick, strike->attack, outcome, target.health,
                             blow.part, def->injury, target.party);
+        if (outcome == JOURNAL_BLOW_WOUNDED || outcome == JOURNAL_BLOW_KILLED) {
+            note_fight_lived(game, strike->attacker, strike->target,
+                             outcome == JOURNAL_BLOW_KILLED);
+        }
         combat_log_push(&game->combat_log,
                         (CombatEvent){game->clock.tick, strike->attacker, strike->target,
                                       target.pos, strike->attack, blow.hit});
@@ -1787,6 +1832,185 @@ void game_debug_cold_snap(Game *game)
     game->weather.spell = -WEATHER_SPELL_MAX;
 }
 
+/* ---- Debug: social life --------------------------------------------------------- */
+
+static ConversationWorld conversation_world(Game *game)
+{
+    return (ConversationWorld){
+        .colonists = game->colonists,
+        .pool = &game->colonist_pool,
+        .social = &game->social,
+        .tick = game->clock.tick,
+        .weather = weather_precipitation(&game->weather, game->clock.tick) == PRECIPITATION_SNOW
+                       ? JOURNAL_WEATHER_SNOW
+                       : game->weather.type,
+        .counts = &game->chat_counts,
+    };
+}
+
+/* The slot of a living settler, -1 otherwise. */
+static int living_slot(const Game *game, EntityId id)
+{
+    const Colonist *colonist = game_colonist_const(game, id);
+    return colonist != NULL && !health_is_dead(&colonist->health) ? (int)id.index : -1;
+}
+
+/* A living settler other than `a` and `b`, -1 when none. */
+static int third_settler(const Game *game, int a, int b)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        int c = (int)slot;
+        if (c != a && c != b && living_slot(game, game_colonist_id_at(game, slot)) == c) {
+            return c;
+        }
+    }
+    return -1;
+}
+
+static void update_relationships(Game *game, bool notes)
+{
+    social_update(&game->social, game->colonists, &game->colonist_pool, game->clock.tick, notes);
+}
+
+bool game_debug_chat(Game *game, EntityId a_id, EntityId b_id, int kind, ChatResult *out)
+{
+    int a = living_slot(game, a_id), b = living_slot(game, b_id);
+    if (a < 0 || b < 0 || a == b || kind < GAME_DEBUG_CHAT_ANY || kind > GAME_DEBUG_CHAT_BRAWL) {
+        return false;
+    }
+    ConversationWorld world = conversation_world(game);
+    uint64_t tick = game->clock.tick;
+    int c = third_settler(game, a, b);
+    if (kind == CHAT_GOSSIP && conversation_gossip_subject(&world, a, b) < 0 && c >= 0) {
+        social_debug_set_opinion(&game->social, game->colonists, a, c,
+                                 -CONVERSATION_GOSSIP_OPINION - 20.0f, tick);
+    }
+    if (kind == CHAT_REPORT && social_tale_about(&game->social, a, b, tick) == NULL && c >= 0) {
+        social_hear_tale(&game->social, a, c, b, false, tick);
+    }
+    if (kind == CHAT_STORY && game->colonists[a].experiences.count == 0) {
+        experiences_add(&game->colonists[a].experiences, EXPERIENCE_KILLED_ANIMAL, ANIMAL_WOLF,
+                        ANIMAL_MALE, NULL, (uint32_t)(tick / TICKS_PER_HOUR));
+    }
+    ChatResult result = kind == GAME_DEBUG_CHAT_ANY ? conversation_hold(&world, a, b)
+                        : kind == GAME_DEBUG_CHAT_BRAWL
+                            ? conversation_brawl(&world, a, b)
+                            : conversation_hold_as(&world, a, b, (ChatKind)kind);
+    if (out != NULL) {
+        *out = result;
+    }
+    return true;
+}
+
+bool game_debug_opinion(Game *game, EntityId who_id, EntityId whom_id, int direction)
+{
+    int who = living_slot(game, who_id), whom = living_slot(game, whom_id);
+    if (who < 0 || whom < 0 || who == whom) {
+        return false;
+    }
+    social_debug_nudge(&game->social, who, whom,
+                       direction > 0 ? GAME_DEBUG_OPINION_STEP : -GAME_DEBUG_OPINION_STEP,
+                       game->clock.tick);
+    update_relationships(game, true);
+    return true;
+}
+
+static float level_opinion(RelationLevel level)
+{
+    switch (level) {
+    case RELATION_ENEMY: return GAME_DEBUG_ENEMY_OPINION;
+    case RELATION_RIVAL: return GAME_DEBUG_RIVAL_OPINION;
+    case RELATION_FRIEND: return GAME_DEBUG_FRIEND_OPINION;
+    case RELATION_CLOSE_FRIEND: return GAME_DEBUG_CLOSE_FRIEND_OPINION;
+    default: return 0.0f;
+    }
+}
+
+bool game_debug_relation(Game *game, EntityId a_id, EntityId b_id, RelationLevel level)
+{
+    int a = living_slot(game, a_id), b = living_slot(game, b_id);
+    if (a < 0 || b < 0 || a == b || (unsigned)level >= RELATION_LEVEL_COUNT) {
+        return false;
+    }
+    float target = level_opinion(level);
+    social_debug_set_opinion(&game->social, game->colonists, a, b, target, game->clock.tick);
+    social_debug_set_opinion(&game->social, game->colonists, b, a, target, game->clock.tick);
+    update_relationships(game, true);
+    return true;
+}
+
+bool game_debug_family(Game *game, EntityId a_id, EntityId b_id)
+{
+    int a = living_slot(game, a_id), b = living_slot(game, b_id);
+    if (a < 0 || b < 0 || a == b) {
+        return false;
+    }
+    FamilyTie tie = (FamilyTie)social_bond(&game->social, a, b)->family;
+    social_set_family(&game->social, a, b, (FamilyTie)((tie + 1) % FAMILY_TIE_COUNT));
+    update_relationships(game, true);
+    return true;
+}
+
+void game_debug_discord(Game *game)
+{
+    uint32_t slots = game_colonist_slot_count(game);
+    for (uint32_t who = 0; who < slots; who++) {
+        for (uint32_t whom = 0; whom < slots; whom++) {
+            if (who == whom || living_slot(game, game_colonist_id_at(game, who)) < 0 ||
+                living_slot(game, game_colonist_id_at(game, whom)) < 0) {
+                continue;
+            }
+            bool enemy = rng_chance(&game->social.rng, 1.0f / GAME_DEBUG_DISCORD_ENEMIES);
+            social_debug_set_opinion(&game->social, game->colonists, (int)who, (int)whom,
+                                     enemy ? GAME_DEBUG_ENEMY_OPINION : GAME_DEBUG_RIVAL_OPINION,
+                                     game->clock.tick);
+        }
+    }
+    update_relationships(game, true);
+}
+
+/* Sets an attribute of a settler to a fraction of its range (-1..1). */
+static void set_attribute(Colonist *colonist, AttributeType type, float fraction)
+{
+    Attributes attributes = colonist->attributes;
+    attributes_set(&attributes, type, (int)(fraction * (float)ATTRIBUTE_POSITION_MAX));
+    colonist_set_attributes(colonist, &attributes);
+}
+
+void game_debug_feud(Game *game)
+{
+    int living[COLONIST_MAX];
+    int count = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (living_slot(game, game_colonist_id_at(game, slot)) >= 0) {
+            living[count++] = (int)slot;
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        Colonist *colonist = &game->colonists[living[i]];
+        bool abrasive = (i / 2) % 2 == 0; /* Every other settler of its clan. */
+        set_attribute(colonist, ATTRIBUTE_KINDNESS, abrasive ? -0.8f : 0.6f);
+        set_attribute(colonist, ATTRIBUTE_CONFIDENCE, abrasive ? 0.6f : 0.0f);
+    }
+    for (int i = 0; i < count; i++) {
+        for (int j = 0; j < count; j++) {
+            if (i != j) {
+                float target =
+                    i % 2 == j % 2 ? GAME_DEBUG_FRIEND_OPINION : GAME_DEBUG_ENEMY_OPINION;
+                social_debug_set_opinion(&game->social, game->colonists, living[i], living[j],
+                                         target, game->clock.tick);
+            }
+        }
+    }
+    update_relationships(game, false);
+}
+
+void game_debug_forget_social(Game *game)
+{
+    social_debug_clear(&game->social, (int)game_colonist_slot_count(game));
+    update_relationships(game, true);
+}
+
 void game_debug_sadden(Game *game)
 {
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
@@ -2150,6 +2374,25 @@ static bool collapse_seen(const Game *game, const TilePos *tiles, int count)
     return false;
 }
 
+/* Hardships that just began make stories to tell (core/experience.h). */
+static void note_hardships(Colonist *colonist, uint64_t tick)
+{
+    static const struct {
+        ThoughtType thought;
+        ExperienceType experience;
+    } HARDSHIPS[] = {
+        {THOUGHT_STARVING, EXPERIENCE_STARVED},
+        {THOUGHT_PARCHED, EXPERIENCE_PARCHED},
+        {THOUGHT_SLEPT_COLD, EXPERIENCE_COLD_NIGHT},
+    };
+    for (size_t i = 0; i < COLONY_ARRAY_COUNT(HARDSHIPS); i++) {
+        if ((colonist->mood.news & THOUGHT_BIT(HARDSHIPS[i].thought)) != 0) {
+            experiences_add(&colonist->experiences, HARDSHIPS[i].experience, 0, 0, NULL,
+                            (uint32_t)(tick / TICKS_PER_HOUR));
+        }
+    }
+}
+
 void game_tick(Game *game)
 {
     game->clock.tick++;
@@ -2234,7 +2477,12 @@ void game_tick(Game *game)
         notices_push(&game->notices, NOTICE_CAVE_IN, KNOWLEDGE_NONE, NULL, game->clock.tick);
     }
     if (game->clock.tick % CONVERSATION_CHECK_TICKS == 0) {
-        conversations_update(game->colonists, &game->colonist_pool, game->clock.tick, &game->rng);
+        ConversationWorld world = conversation_world(game);
+        conversations_update(&world);
+        social_company_update(&game->social, game->colonists, &game->colonist_pool);
+    }
+    if (game->clock.tick % TICKS_PER_HOUR == GAME_SOCIAL_UPDATE_PHASE) {
+        social_update(&game->social, game->colonists, &game->colonist_pool, game->clock.tick, true);
     }
     if (game->clock.tick % GAME_KNOWLEDGE_CHECK_TICKS == 0) {
         game_count_knowledge(game);
@@ -2243,6 +2491,7 @@ void game_tick(Game *game)
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
             Colonist *colonist = &game->colonists[slot];
+            note_hardships(colonist, game->clock.tick);
             journal_note_thoughts(&colonist->journal, &colonist->mood, game->clock.tick);
         }
     }
@@ -2306,6 +2555,7 @@ uint64_t game_hash(const Game *game)
         hash = animals_hash(&game->animals, hash);
         hash = hash_fnv1a64(hash, &game->wildlife_rng.state, sizeof(game->wildlife_rng.state));
     }
+    hash = social_hash(&game->social, &game->colonist_pool, hash);
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
         if (entity_id_is_none(id)) {
@@ -2334,6 +2584,12 @@ uint64_t game_hash(const Game *game)
         }
         hash = hash_fnv1a64(hash, &c->move_progress, sizeof(c->move_progress));
         hash = hash_fnv1a64(hash, c->needs, sizeof(c->needs));
+        hash = hash_fnv1a64(hash, &c->company, sizeof(c->company));
+        hash = hash_fnv1a64(hash, &c->social_states, sizeof(c->social_states));
+        hash = hash_fnv1a64(hash, &c->friend_slots, sizeof(c->friend_slots));
+        hash = hash_fnv1a64(hash, &c->close_friend_slots, sizeof(c->close_friend_slots));
+        hash = hash_fnv1a64(hash, &c->rival_slots, sizeof(c->rival_slots));
+        hash = experiences_hash(&c->experiences, hash);
         hash = hash_fnv1a64(hash, &c->wetness, sizeof(c->wetness));
         hash = mood_hash(&c->mood, hash);
         hash = attributes_hash(&c->attributes, hash);

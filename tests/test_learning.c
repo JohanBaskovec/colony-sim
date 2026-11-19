@@ -5,6 +5,7 @@
 #include "core/notice.h"
 
 #include "test_framework.h"
+#include "test_settlers.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -206,34 +207,50 @@ static void test_conversation_topics(void)
 
 static void test_chats_teach_a_little(void)
 {
-    Rng rng;
-    rng_seed(&rng, 11, 2);
-    Colonist a, b;
-    colonist_init(&a, "A", 30, 0, 0, 0);
-    colonist_init(&b, "B", 30, 1, 0, 0);
-    EntityId a_id = {0, 1}, b_id = {1, 1};
-    a.knowledge[KNOWLEDGE_FIRE] = 80.0;
-    b.knowledge[KNOWLEDGE_GATHERING] = 12.0;
+    static Colonist colonists[2];
+    static Social social;
+    Pool pool;
+    REQUIRE(pool_init(&pool, 2));
+    EntityId a_id = pool_alloc(&pool), b_id = pool_alloc(&pool);
+    social_init(&social, 11);
+    ConversationWorld world = {colonists, &pool, &social, 0, -1, NULL};
+    Colonist *a = &colonists[0], *b = &colonists[1];
+    colonist_init(a, "A", 30, 0, 0, 0);
+    colonist_init(b, "B", 30, 1, 0, 0);
+    a->knowledge[KNOWLEDGE_FIRE] = 80.0;
+    b->knowledge[KNOWLEDGE_GATHERING] = 12.0;
+    /* Kind friends: no brawl leaves them too sore to learn (bruises do not
+     * heal outside a game). */
+    for (int i = 0; i < 2; i++) {
+        Attributes kind = colonists[i].attributes;
+        attributes_set(&kind, ATTRIBUTE_KINDNESS, ATTRIBUTE_POSITION_MAX);
+        colonist_set_attributes(&colonists[i], &kind);
+        social_remember(&social, i, 1 - i, SOCIAL_MEMORY_JOURNEY, 3.0f, 0);
+    }
     int about_knowledge = 0;
     for (int i = 0; i < 4000; i++) {
-        about_knowledge += conversation_hold(&a, a_id, &b, b_id, (uint64_t)i * 250, &rng);
+        world.tick = (uint64_t)i * 250;
+        ChatKind kind = conversation_hold(&world, 0, 1).kind;
+        about_knowledge += kind == CHAT_KNOWLEDGE || kind == CHAT_EXPLAIN;
     }
-    CHECK(about_knowledge > 1400 && about_knowledge < 1800); /* 40% of 4000. */
-    CHECK_EQ_INT(a.chat_ticks, CONVERSATION_TICKS);
-    CHECK(entity_id_equal(a.chat_partner, b_id));
-    CHECK(entity_id_equal(b.chat_partner, a_id));
+    CHECK(about_knowledge > 650 && about_knowledge < 950); /* 20% of 4000. */
+    CHECK_EQ_INT(a->chat_ticks, CONVERSATION_TICKS);
+    CHECK(entity_id_equal(a->chat_partner, b_id));
+    CHECK(entity_id_equal(b->chat_partner, a_id));
     /* B heard about fire up to the cap of conversation; A learns gathering
      * slowly (B knows little of it), never past B's level. */
-    CHECK_NEAR(b.knowledge[KNOWLEDGE_FIRE], KNOWLEDGE_CONVERSATION_CAP, 1e-9);
-    CHECK(a.knowledge[KNOWLEDGE_GATHERING] > 1.0 && a.knowledge[KNOWLEDGE_GATHERING] < 12.0);
-    a.knowledge[KNOWLEDGE_GATHERING] = 11.99;
+    CHECK_NEAR(b->knowledge[KNOWLEDGE_FIRE], KNOWLEDGE_CONVERSATION_CAP, 1e-9);
+    CHECK(a->knowledge[KNOWLEDGE_GATHERING] > 1.0 && a->knowledge[KNOWLEDGE_GATHERING] < 12.0);
+    a->knowledge[KNOWLEDGE_GATHERING] = 11.99;
     for (int i = 0; i < 400; i++) {
-        conversation_hold(&a, a_id, &b, b_id, (uint64_t)i * 250, &rng);
+        world.tick = (uint64_t)i * 250;
+        conversation_hold(&world, 0, 1);
     }
-    CHECK_NEAR(a.knowledge[KNOWLEDGE_GATHERING], 12.0, 1e-9);
-    CHECK_NEAR(b.knowledge[KNOWLEDGE_GATHERING], 12.0, 1e-9);
-    colonist_free(&a);
-    colonist_free(&b);
+    CHECK_NEAR(a->knowledge[KNOWLEDGE_GATHERING], 12.0, 1e-9);
+    CHECK_NEAR(b->knowledge[KNOWLEDGE_GATHERING], 12.0, 1e-9);
+    colonist_free(a);
+    colonist_free(b);
+    pool_free(&pool);
 }
 
 static void test_conversations_need_nearby_free_settlers(void)
@@ -246,17 +263,22 @@ static void test_conversations_need_nearby_free_settlers(void)
     Colonist *ca = game_colonist(&game, a), *cb = game_colonist(&game, b);
     Colonist *cfar = game_colonist(&game, far);
     REQUIRE(ca != NULL && cb != NULL && cfar != NULL);
+    make_ordinary(ca); /* Sociability and confidence change how often they chat. */
+    make_ordinary(cb);
     CHECK(colonist_can_chat(ca));
     CHECK(conversation_in_range(ca, cb));
     CHECK(!conversation_in_range(ca, cfar));
+    ConversationWorld world = {
+        game.colonists, &game.colonist_pool, &game.social, game.clock.tick, -1, NULL};
     int chats = 0, far_chats = 0;
     for (int i = 0; i < 1000; i++) {
         ca->chat_ticks = cb->chat_ticks = cfar->chat_ticks = 0;
-        chats +=
-            conversations_update(game.colonists, &game.colonist_pool, game.clock.tick, &game.rng);
+        chats += conversations_update(&world);
         far_chats += cfar->chat_ticks > 0;
     }
-    CHECK(chats > 60 && chats < 140); /* Once an hour: a tenth of the checks. */
+    /* Twice an hour, a fifth of the checks, a little more as they grow fond
+     * of each other. */
+    CHECK(chats > 150 && chats < 330);
     CHECK_EQ_INT(far_chats, 0);
     /* Asleep: no chat. */
     ca->task = TASK_SLEEP;
@@ -264,8 +286,7 @@ static void test_conversations_need_nearby_free_settlers(void)
     ca->chat_ticks = cb->chat_ticks = 0;
     int asleep = 0;
     for (int i = 0; i < 200; i++) {
-        asleep +=
-            conversations_update(game.colonists, &game.colonist_pool, game.clock.tick, &game.rng);
+        asleep += conversations_update(&world);
     }
     CHECK_EQ_INT(asleep, 0);
     game_shutdown(&game);

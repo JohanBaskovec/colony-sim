@@ -9,6 +9,7 @@
 static const char *const NAME_KEYS[TEST_SCENARIO_COUNT] = {
     [TEST_SCENARIO_WOLVES_AND_DEER] = N_("debug.scenario.wolves_deer"),
     [TEST_SCENARIO_WOLVES_AND_SETTLERS] = N_("debug.scenario.wolves_settlers"),
+    [TEST_SCENARIO_FEUD] = N_("debug.scenario.feud"),
 };
 
 const char *test_scenario_name_key(TestScenario scenario)
@@ -95,14 +96,25 @@ bool test_scenario_load(Game *game, TestScenario scenario)
     game->arrival = (TilePos){(int16_t)middle, (int16_t)middle, 0};
     game->has_arrival = true;
     switch (scenario) {
-    case TEST_SCENARIO_WOLVES_AND_DEER: place_deer(game, prey_x, middle); break;
+    case TEST_SCENARIO_WOLVES_AND_DEER:
+        place_deer(game, prey_x, middle);
+        place_wolves(game, wolves_x, middle);
+        break;
     case TEST_SCENARIO_WOLVES_AND_SETTLERS:
         place_settler(game, prey_x, middle - 1, false);
         place_settler(game, prey_x, middle + 1, true);
+        place_wolves(game, wolves_x, middle);
+        break;
+    case TEST_SCENARIO_FEUD:
+        for (int i = 0; i < TEST_SCENARIO_FEUD_SETTLERS; i++) {
+            place_settler(game, middle - 2 + i % 4, middle - 1 + i / 4, false);
+        }
+        game_debug_spawn_items(game, middle, middle + 2, 0, ITEM_WILD_CARROTS,
+                               TEST_SCENARIO_FEUD_FOOD);
+        game_debug_feud(game);
         break;
     default: break;
     }
-    place_wolves(game, wolves_x, middle);
     game_update_stock(game);
     /* Who knows what now is the baseline: no notice for what the settlers
      * already knew when the scenario was built. */

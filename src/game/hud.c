@@ -20,6 +20,7 @@
 #include "game/colonist_bar.h"
 #include "game/game_menu.h"
 #include "game/station_panel.h"
+#include "game/thought_tooltip.h"
 #include "game/ui_layout.h"
 #include "game/resources_list.h"
 #include "game/settings_window.h"
@@ -813,40 +814,6 @@ static void mood_tooltip(App *app, const Mood *mood)
     tooltip_show(app, &text);
 }
 
-/* A thought: what it is about, its original value, and how it fades. */
-static void thought_tooltip(App *app, const Mood *mood, ThoughtType type)
-{
-    TooltipText text = {0};
-    const ThoughtDef *def = thought_def(type);
-    char a[16], b[16];
-    SDL_strlcpy(tooltip_add(&text), tr(def->name_key), HUD_LINE_SIZE);
-    SDL_strlcpy(tooltip_add(&text), tr(def->description_key), HUD_LINE_SIZE);
-    format_signed(a, sizeof(a), SDL_lroundf(mood_thought_peak(mood, type)));
-    TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.original"), a);
-    if (def->state) {
-        tr_integer(a, sizeof(a), SDL_lroundf(def->half_life_hours));
-        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.state"), a);
-        if (def->grow_max > 1.0f) {
-            format_signed(a, sizeof(a),
-                          SDL_lroundf(def->value * mood->sensitivity * def->grow_max));
-            tr_integer(b, sizeof(b), SDL_lroundf(def->grow_hours));
-            TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.grows"), a, b);
-        }
-    } else {
-        tr_integer(a, sizeof(a), SDL_lroundf(def->plateau_hours));
-        tr_integer(b, sizeof(b), SDL_lroundf(def->half_life_hours));
-        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.memory"), a, b);
-    }
-    if (def->max_stack > 1) {
-        tr_integer(a, sizeof(a), def->max_stack);
-        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.thought.stacks"), a);
-    }
-    if (mood_fading(mood, type)) {
-        SDL_strlcpy(tooltip_add(&text), tr("hud.thought.fading"), HUD_LINE_SIZE);
-    }
-    tooltip_show(app, &text);
-}
-
 /* The mood meter, a break under way and a table of the thoughts: what each
  * weighs now. */
 static void mood_rows(UiLayout *layout, void *userdata)
@@ -885,7 +852,7 @@ static void mood_rows(UiLayout *layout, void *userdata)
         SDL_FRect row = ui_layout_pair(layout, tr(thought_def(thought)->name_key), amount,
                                        theme_sign_color(&layout->ui->theme, value), true);
         if (layout->draw && ui_hovered(layout->ui, row)) {
-            thought_tooltip(app, mood, thought);
+            thought_tooltip(&app->ui, mood, thought);
         }
     }
     if (!any) {
@@ -1114,6 +1081,33 @@ static void summary_rows(UiLayout *layout, void *userdata)
     }
 }
 
+/* Company (docs/SOCIAL.md §4) as a table row; the tooltip has the details. */
+static void company_row(UiLayout *layout, App *app, const Colonist *colonist)
+{
+    SDL_FRect row = ui_layout_bar_row(layout, tr("need.company"), colonist->company, true);
+    if (!layout->draw || !ui_hovered(layout->ui, row)) {
+        return;
+    }
+    TooltipText text = {0};
+    char percent[16];
+    tr_integer(percent, sizeof(percent), (long long)(colonist->company * 100.0f + 0.5f));
+    if (colonist->company < COLONIST_LONELY_BELOW) {
+        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.colonist.need_state"),
+                  tr("need.company"), percent, tr("need.company.lonely"));
+    } else {
+        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.colonist.need"), tr("need.company"),
+                  percent);
+    }
+    SDL_strlcpy(tooltip_add(&text), tr("need.company.description"), HUD_LINE_SIZE);
+    if (mood_has(&colonist->mood, THOUGHT_LONELY)) {
+        char amount[16];
+        format_signed(amount, sizeof(amount),
+                      SDL_lroundf(mood_thought_value(&colonist->mood, THOUGHT_LONELY)));
+        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("need.mood"), amount);
+    }
+    tooltip_show(app, &text);
+}
+
 /* Every need as a table row, then wetness, the warmth of its sleep and its bed. */
 static void needs_rows(UiLayout *layout, void *userdata)
 {
@@ -1128,6 +1122,7 @@ static void needs_rows(UiLayout *layout, void *userdata)
         need_row(layout, app, colonist, (NeedType)need);
     }
     ui_layout_set_stepper(layout, false);
+    company_row(layout, app, colonist);
     Panel extra = {0};
     add_needs_extra_lines(app, &extra, colonist, id);
     panel_rows(layout, &extra);
@@ -1248,7 +1243,7 @@ static void journal_rows(UiLayout *layout, void *userdata)
     const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
     if (colonist != NULL) {
         journal_panel_rows(layout, &colonist->journal, (JournalOwner){colonist->name, 0, 0},
-                           &app->journal_hidden);
+                           &colonist->mood, &app->journal_hidden);
     }
 }
 
@@ -1268,12 +1263,7 @@ static void build_colonist_section(App *app, Panel *panel, EntityId id, Colonist
     case SECTION_KNOWLEDGE:
     case SECTION_JOURNAL: break; /* Drawn by their own rows (colonist_tab_rows()). */
     case SECTION_GEAR: add_gear_lines(panel, colonist); break;
-    case SECTION_SOCIAL:
-        add_social_lines(app, panel, colonist, id);
-        if (panel->count == 0) {
-            panel_add_text(panel, tr("inspector.social.none"));
-        }
-        break;
+    case SECTION_SOCIAL: break; /* social_rows() */
     case SECTION_COUNT: break;
     }
 }
@@ -1333,6 +1323,222 @@ void hud_draw_world_labels(App *app)
 }
 
 /* The rows of the tabs that are more than lines of text; NULL for the others. */
+/* Why `who` thinks what it does of `whom`: the opinion, the relationship and
+ * family tie, then each share of it. */
+static void opinion_tooltip(App *app, int who, int whom, float opinion)
+{
+    const Game *game = &app->game;
+    TooltipText text = {0};
+    char amount[16];
+    format_signed(amount, sizeof(amount), SDL_lroundf(opinion));
+    const SocialBond *bond = social_bond_const(&game->social, who, whom);
+    TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.social.opinion"),
+              game->colonists[whom].name, amount,
+              tr(relation_level_key((RelationLevel)bond->level)));
+    SocialReason reasons[SOCIAL_REASON_MAX];
+    int count = social_reasons(&game->social, game->colonists, who, whom, game->clock.tick, reasons,
+                               SOCIAL_REASON_MAX);
+    for (int i = 0; i < count; i++) {
+        format_signed(amount, sizeof(amount), SDL_lroundf(reasons[i].value));
+        TR_FORMAT(tooltip_add(&text), HUD_LINE_SIZE, tr("hud.social.reason"), tr(reasons[i].key),
+                  amount);
+    }
+    tooltip_show(app, &text);
+}
+
+typedef struct OpinionRow {
+    int slot;
+    float opinion;
+} OpinionRow;
+
+static int compare_opinions(const void *a, const void *b)
+{
+    const OpinionRow *ra = a, *rb = b;
+    if (ra->opinion != rb->opinion) {
+        return ra->opinion < rb->opinion ? 1 : -1;
+    }
+    return ra->slot - rb->slot;
+}
+
+/* The Social tab: what the colonist is doing with others, then what it
+ * thinks of each settler, best liked first (docs/SOCIAL.md §8). */
+/* The debug actions of the Social tab (character editor on), in a grid. */
+typedef enum SocialDebugAction {
+    SOCIAL_DEBUG_CHAT,     /* `value`: a ChatKind, GAME_DEBUG_CHAT_ANY or _BRAWL. */
+    SOCIAL_DEBUG_RELATION, /* `value`: a RelationLevel. */
+    SOCIAL_DEBUG_FAMILY,
+} SocialDebugAction;
+
+typedef struct SocialDebugButton {
+    const char *key;
+    SocialDebugAction action;
+    int value;
+} SocialDebugButton;
+
+static const SocialDebugButton SOCIAL_DEBUG_BUTTONS[] = {
+    {N_("debug.social.chat"), SOCIAL_DEBUG_CHAT, GAME_DEBUG_CHAT_ANY},
+    {N_("debug.social.small_talk"), SOCIAL_DEBUG_CHAT, CHAT_SMALL_TALK},
+    {N_("debug.social.knowledge"), SOCIAL_DEBUG_CHAT, CHAT_KNOWLEDGE},
+    {N_("debug.social.story"), SOCIAL_DEBUG_CHAT, CHAT_STORY},
+    {N_("debug.social.lie"), SOCIAL_DEBUG_CHAT, CHAT_LIE},
+    {N_("debug.social.compliment"), SOCIAL_DEBUG_CHAT, CHAT_COMPLIMENT},
+    {N_("debug.social.insult"), SOCIAL_DEBUG_CHAT, CHAT_INSULT},
+    {N_("debug.social.gossip"), SOCIAL_DEBUG_CHAT, CHAT_GOSSIP},
+    {N_("debug.social.report"), SOCIAL_DEBUG_CHAT, CHAT_REPORT},
+    {N_("debug.social.argument"), SOCIAL_DEBUG_CHAT, CHAT_ARGUMENT},
+    {N_("debug.social.brawl"), SOCIAL_DEBUG_CHAT, GAME_DEBUG_CHAT_BRAWL},
+    {N_("debug.social.apology"), SOCIAL_DEBUG_CHAT, CHAT_APOLOGY},
+    {N_("debug.social.enemies"), SOCIAL_DEBUG_RELATION, RELATION_ENEMY},
+    {N_("debug.social.rivals"), SOCIAL_DEBUG_RELATION, RELATION_RIVAL},
+    {N_("debug.social.acquaintances"), SOCIAL_DEBUG_RELATION, RELATION_ACQUAINTANCE},
+    {N_("debug.social.friends"), SOCIAL_DEBUG_RELATION, RELATION_FRIEND},
+    {N_("debug.social.close_friends"), SOCIAL_DEBUG_RELATION, RELATION_CLOSE_FRIEND},
+    {N_("debug.social.family"), SOCIAL_DEBUG_FAMILY, 0},
+};
+#define SOCIAL_DEBUG_BUTTON_COUNT ((int)SDL_arraysize(SOCIAL_DEBUG_BUTTONS))
+#define SOCIAL_DEBUG_COLUMNS 2
+
+/* The grid of debug buttons for the selected settler and its partner:
+ * returns the index of the one clicked, or -1. */
+static int social_debug_grid(UiLayout *layout, const char *partner_name)
+{
+    Ui *ui = layout->ui;
+    char label[HUD_LINE_SIZE];
+    TR_FORMAT(label, sizeof(label), tr("debug.social.with"), partner_name);
+    ui_layout_label(layout, label, 0.0f, true);
+    float width = 0.0f;
+    for (int i = 0; i < SOCIAL_DEBUG_BUTTON_COUNT; i++) {
+        width = SDL_max(width, ui_button_width(ui, tr(SOCIAL_DEBUG_BUTTONS[i].key)));
+    }
+    ui_layout_measure(layout, width * SOCIAL_DEBUG_COLUMNS + UI_LAYOUT_GAP);
+    int clicked = -1;
+    for (int i = 0; i < SOCIAL_DEBUG_BUTTON_COUNT; i += SOCIAL_DEBUG_COLUMNS) {
+        for (int column = 0;
+             column < SOCIAL_DEBUG_COLUMNS && i + column < SOCIAL_DEBUG_BUTTON_COUNT; column++) {
+            float x = layout->x + (float)column * (width + UI_LAYOUT_GAP);
+            if (ui_layout_button_sized(layout, x, width,
+                                       tr(SOCIAL_DEBUG_BUTTONS[i + column].key))) {
+                clicked = i + column;
+            }
+        }
+        layout->y += layout->row;
+    }
+    return clicked;
+}
+
+static void social_debug_apply(Game *game, EntityId id, EntityId partner, int button)
+{
+    const SocialDebugButton *what = &SOCIAL_DEBUG_BUTTONS[button];
+    switch (what->action) {
+    case SOCIAL_DEBUG_CHAT: game_debug_chat(game, id, partner, what->value, NULL); break;
+    case SOCIAL_DEBUG_RELATION:
+        game_debug_relation(game, id, partner, (RelationLevel)what->value);
+        break;
+    case SOCIAL_DEBUG_FAMILY: game_debug_family(game, id, partner); break;
+    }
+}
+
+static void social_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    EntityId id = app->selected[0];
+    const Game *game = &app->game;
+    const Colonist *colonist = game_colonist_const(game, id);
+    if (colonist == NULL) {
+        return;
+    }
+    Panel lines = {0};
+    add_social_lines(app, &lines, colonist, id);
+    panel_rows(layout, &lines);
+    OpinionRow rows[COLONIST_MAX];
+    int count = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        if (slot != id.index && !entity_id_is_none(game_colonist_id_at(game, slot))) {
+            rows[count].slot = (int)slot;
+            rows[count].opinion = social_opinion(&game->social, game->colonists, (int)id.index,
+                                                 (int)slot, game->clock.tick);
+            count++;
+        }
+    }
+    if (count == 0) {
+        ui_layout_label(layout, tr("inspector.social.none"), 0.0f, true);
+        return;
+    }
+    SDL_qsort(rows, (size_t)count, sizeof(rows[0]), compare_opinions);
+    ui_layout_label(layout, tr("hud.social.opinions"), 0.0f, true);
+    /* The character editor: - and + on each row (the selected settler's
+     * opinion of that one), a click on a row picks the partner of the
+     * debug buttons under the list. */
+    bool editor = app->character_editor && !health_is_dead(&colonist->health);
+    int partner = rows[0].slot;
+    for (int i = 0; i < count; i++) {
+        if (entity_id_equal(game_colonist_id_at(game, (uint32_t)rows[i].slot),
+                            app->debug_social_partner)) {
+            partner = rows[i].slot;
+        }
+    }
+    EntityId clicked_partner = ENTITY_NONE;
+    int opinion_slot = -1, opinion_step = 0;
+    ui_layout_set_stepper(layout, editor);
+    for (int i = 0; i < count; i++) {
+        const Colonist *other = &game->colonists[rows[i].slot];
+        const SocialBond *bond = social_bond_const(&game->social, (int)id.index, rows[i].slot);
+        char name[HUD_LINE_SIZE], amount[16];
+        const char *tie = family_tie_key((FamilyTie)bond->family);
+        if (tie != NULL) {
+            TR_FORMAT(name, sizeof(name), tr("hud.social.family"), other->name, tr(tie));
+        } else {
+            SDL_strlcpy(name, other->name, sizeof(name));
+        }
+        format_signed(amount, sizeof(amount), SDL_lroundf(rows[i].opinion));
+        int color = bond->level >= RELATION_FRIEND  ? THEME_VALUE_HIGH
+                    : bond->level <= RELATION_RIVAL ? THEME_VALUE_LOW
+                                                    : THEME_TEXT;
+        if (editor && layout->draw && rows[i].slot == partner) {
+            ui_fill(layout->ui, (SDL_FRect){layout->x, layout->y, layout->width, layout->row},
+                    layout->ui->theme.colors[THEME_SCROLL_TRACK]);
+        }
+        SDL_FRect row =
+            ui_layout_triple(layout, name, tr(relation_level_key((RelationLevel)bond->level)),
+                             amount, "-100", layout->ui->theme.colors[color], true);
+        if (layout->draw && ui_hovered(layout->ui, row)) {
+            opinion_tooltip(app, (int)id.index, rows[i].slot, rows[i].opinion);
+        }
+        if (editor) {
+            int step = ui_layout_stepper(layout, row);
+            if (step != 0) {
+                opinion_slot = rows[i].slot;
+                opinion_step = step;
+            } else if (layout->draw && ui_take_click(layout->ui, row) == SDL_BUTTON_LEFT) {
+                clicked_partner = game_colonist_id_at(game, (uint32_t)rows[i].slot);
+            }
+        }
+    }
+    ui_layout_set_stepper(layout, false);
+    if (!editor) {
+        return;
+    }
+    layout->y += UI_LAYOUT_GAP;
+    int button = social_debug_grid(layout, game->colonists[partner].name);
+    if (!layout->draw) {
+        return;
+    }
+    /* Applied once everything is drawn. */
+    Game *play = &app->game;
+    EntityId partner_id = game_colonist_id_at(game, (uint32_t)partner);
+    if (!entity_id_is_none(clicked_partner)) {
+        app->debug_social_partner = clicked_partner;
+    }
+    if (opinion_slot >= 0) {
+        game_debug_opinion(play, id, game_colonist_id_at(game, (uint32_t)opinion_slot),
+                           opinion_step);
+    }
+    if (button >= 0) {
+        app->debug_social_partner = partner_id;
+        social_debug_apply(play, id, partner_id, button);
+    }
+}
+
 static UiRowsFn colonist_tab_rows(ColonistSection section)
 {
     switch (section) {
@@ -1342,6 +1548,7 @@ static UiRowsFn colonist_tab_rows(ColonistSection section)
     case SECTION_CHARACTER: return character_rows;
     case SECTION_KNOWLEDGE: return knowledge_rows;
     case SECTION_JOURNAL: return journal_rows;
+    case SECTION_SOCIAL: return social_rows;
     default: return NULL;
     }
 }
@@ -1426,12 +1633,12 @@ static void corpse_journal_rows(UiLayout *layout, void *userdata)
     if (tab->corpse->kind == CORPSE_ANIMAL) {
         const Animal *animal = &tab->corpse->animal;
         journal_panel_rows(layout, &animal->journal,
-                           (JournalOwner){NULL, animal->species, animal->sex},
+                           (JournalOwner){NULL, animal->species, animal->sex}, NULL,
                            &tab->app->journal_hidden);
     } else {
         const Colonist *colonist = &tab->corpse->colonist;
         journal_panel_rows(layout, &colonist->journal, (JournalOwner){colonist->name, 0, 0},
-                           &tab->app->journal_hidden);
+                           &colonist->mood, &tab->app->journal_hidden);
     }
 }
 

@@ -150,6 +150,31 @@ static void test_wolves_and_settlers(void)
     game_shutdown(game);
 }
 
+/* The feud: eight settlers in two clans, food beside them, no animals. */
+static void test_feud(void)
+{
+    Game *game = new_game();
+    REQUIRE(game != NULL);
+    REQUIRE(test_scenario_load(game, TEST_SCENARIO_FEUD));
+    check_bare_world(game);
+    CHECK_EQ_INT((int)game->animals.pool.count, 0);
+    REQUIRE(game->colonist_pool.count == TEST_SCENARIO_FEUD_SETTLERS);
+    int enemies = 0, friends = 0;
+    for (int a = 0; a < TEST_SCENARIO_FEUD_SETTLERS; a++) {
+        for (int b = 0; b < TEST_SCENARIO_FEUD_SETTLERS; b++) {
+            if (a != b) {
+                int level = game->social.bonds[a][b].level;
+                enemies += level == RELATION_ENEMY;
+                friends += level == RELATION_FRIEND;
+                CHECK(level == (a % 2 == b % 2 ? RELATION_FRIEND : RELATION_ENEMY));
+            }
+        }
+    }
+    CHECK_EQ_INT(enemies, 32);
+    CHECK_EQ_INT(friends, 24);
+    game_shutdown(game);
+}
+
 /* Loading again replaces the last scenario instead of adding to it. */
 static void test_reload(void)
 {
@@ -176,6 +201,7 @@ int main(void)
     RUN_TEST(test_names);
     RUN_TEST(test_wolves_and_deer);
     RUN_TEST(test_wolves_and_settlers);
+    RUN_TEST(test_feud);
     RUN_TEST(test_reload);
     return test_summary();
 }

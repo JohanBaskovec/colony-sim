@@ -2,9 +2,12 @@
 
 #include "core/animal.h"
 #include "core/combat.h"
+#include "core/conversation.h"
 #include "core/game_clock.h"
 #include "core/i18n.h"
 #include "core/mood.h"
+#include "core/social.h"
+#include "game/thought_tooltip.h"
 
 #include <string.h>
 
@@ -133,6 +136,7 @@ static const char *const HURT_KEYS[HURT_CAUSE_COUNT] = {
     [HURT_CAVE_IN] = N_("journal.hurt.cave_in"),
     [HURT_TREE_TRUNK] = N_("journal.hurt.tree_trunk"),
     [HURT_TREE_CROWN] = N_("journal.hurt.tree_crown"),
+    [HURT_BRAWL] = N_("journal.hurt.brawl"),
 };
 
 static void hurt_text(const JournalEntry *entry, JournalOwner owner, char *out, size_t size)
@@ -211,16 +215,206 @@ static void blow_text(const JournalEntry *entry, JournalBlow outcome, JournalOwn
     }
 }
 
+/* ---- Social life (docs/SOCIAL.md §7) ---------------------------------------- */
+
+static const char *const CHAT_KEYS[CHAT_QUALITY_COUNT] = {
+    [CHAT_NEUTRAL] = N_("journal.chat.neutral"),
+    [CHAT_PLEASANT] = N_("journal.chat.pleasant"),
+    [CHAT_AWKWARD] = N_("journal.chat.awkward"),
+};
+
+static const char *const CHAT_TOPIC_KEYS[CHAT_QUALITY_COUNT] = {
+    [CHAT_NEUTRAL] = N_("journal.chat_topic.neutral"),
+    [CHAT_PLEASANT] = N_("journal.chat_topic.pleasant"),
+    [CHAT_AWKWARD] = N_("journal.chat_topic.awkward"),
+};
+
+static const char *const COMPLAINT_KEYS[CHAT_QUALITY_COUNT] = {
+    [CHAT_NEUTRAL] = N_("journal.complaint.neutral"),
+    [CHAT_PLEASANT] = N_("journal.complaint.pleasant"),
+    [CHAT_AWKWARD] = N_("journal.complaint.awkward"),
+};
+
+static const char *const COMPLAINT_HEARD_KEYS[CHAT_QUALITY_COUNT] = {
+    [CHAT_NEUTRAL] = N_("journal.complaint_heard.neutral"),
+    [CHAT_PLEASANT] = N_("journal.complaint_heard.pleasant"),
+    [CHAT_AWKWARD] = N_("journal.complaint_heard.awkward"),
+};
+
+static const char *const COMPLIMENT_KEYS[COMPLIMENT_TYPE_COUNT] = {
+    [COMPLIMENT_GENERIC] = N_("journal.compliment.generic"),
+    [COMPLIMENT_LOOKS] = N_("journal.compliment.looks"),
+    [COMPLIMENT_SKILL] = N_("journal.compliment.skill"),
+};
+
+static const char *const COMPLIMENTED_KEYS[COMPLIMENT_TYPE_COUNT] = {
+    [COMPLIMENT_GENERIC] = N_("journal.complimented.generic"),
+    [COMPLIMENT_LOOKS] = N_("journal.complimented.looks"),
+    [COMPLIMENT_SKILL] = N_("journal.complimented.skill"),
+};
+
+static const char *const INSULT_KEYS[INSULT_TYPE_COUNT] = {
+    [INSULT_GENERIC] = N_("journal.insult.generic"),
+    [INSULT_LOOKS] = N_("journal.insult.looks"),
+    [INSULT_LAZY] = N_("journal.insult.lazy"),
+    [INSULT_SMELL] = N_("journal.insult.smell"),
+};
+
+static const char *const INSULTED_KEYS[INSULT_TYPE_COUNT] = {
+    [INSULT_GENERIC] = N_("journal.insulted.generic"),
+    [INSULT_LOOKS] = N_("journal.insulted.looks"),
+    [INSULT_LAZY] = N_("journal.insulted.lazy"),
+    [INSULT_SMELL] = N_("journal.insulted.smell"),
+};
+
+/* A key of a table, "" when out of range or missing. */
+static const char *keyed(const char *const *keys, int count, int index)
+{
+    return index >= 0 && index < count && keys[index] != NULL ? tr(keys[index]) : "";
+}
+
+static const char *knowhow_text(int knowledge)
+{
+    const char *key = conversation_knowhow_key((KnowledgeType)knowledge);
+    return key != NULL ? tr(key) : "";
+}
+
+/* A story as the sentence has it: "killing a wolf", "seeing Anna die". */
+static void story_text(const JournalEntry *entry, char *out, size_t size)
+{
+    const char *key = conversation_story_key((StoryKind)entry->topic, entry->what);
+    if (key == NULL) {
+        out[0] = '\0';
+        return;
+    }
+    const char *animal_key =
+        entry->animal > 0 ? conversation_animal_key(entry->animal - 1, entry->animal_sex) : NULL;
+    TR_FORMAT(out, size, tr(key), animal_key != NULL ? tr(animal_key) : entry->subject);
+}
+
+static void chat_text(const JournalEntry *entry, char *out, size_t size)
+{
+    int quality = entry->outcome < CHAT_QUALITY_COUNT ? entry->outcome : CHAT_NEUTRAL;
+    const char *topic_key = conversation_topic_key((ChatTopic)entry->topic, entry->what);
+    if (topic_key == NULL) {
+        TR_FORMAT(out, size, tr(CHAT_KEYS[quality]), entry->other);
+    } else if (entry->topic == CHAT_TOPIC_COMPLAINT) {
+        TR_FORMAT(out, size, tr((entry->heard ? COMPLAINT_HEARD_KEYS : COMPLAINT_KEYS)[quality]),
+                  entry->other, tr(topic_key));
+    } else {
+        TR_FORMAT(out, size, tr(CHAT_TOPIC_KEYS[quality]), entry->other, tr(topic_key));
+    }
+}
+
+/* A relationship that changed, by where it went and where it came from. */
+static const char *relation_key(int level, int previous)
+{
+    switch (level) {
+    case RELATION_CLOSE_FRIEND: return "journal.relation.close_friend";
+    case RELATION_FRIEND:
+        return previous > level ? "journal.relation.friend_down" : "journal.relation.friend";
+    case RELATION_ACQUAINTANCE:
+        return previous > level ? "journal.relation.acquaintance_down"
+                                : "journal.relation.acquaintance_up";
+    case RELATION_RIVAL:
+        return previous < level ? "journal.relation.rival_up" : "journal.relation.rival";
+    default: return "journal.relation.enemy";
+    }
+}
+
+/* A third settler named after "of" in some languages (French elides "de"
+ * before a vowel): the key, or its "_vowel" variant. */
+static void gossip_text(const JournalEntry *entry, bool heard, char *out, size_t size)
+{
+    static const char *const KEYS[2][2][2] = {
+        /* [heard][well][vowel] */
+        {{N_("journal.gossip.ill"), N_("journal.gossip.ill_vowel")},
+         {N_("journal.gossip.well"), N_("journal.gossip.well_vowel")}},
+        {{N_("journal.heard_gossip.ill"), N_("journal.heard_gossip.ill_vowel")},
+         {N_("journal.heard_gossip.well"), N_("journal.heard_gossip.well_vowel")}},
+    };
+    const char *key = KEYS[heard][entry->outcome != 0][begins_with_vowel(entry->subject)];
+    TR_FORMAT(out, size, tr(key), entry->other, entry->subject);
+}
+
+static void social_text(const JournalEntry *entry, char *out, size_t size)
+{
+    char story[TEXT_SIZE];
+    switch ((JournalEvent)entry->event) {
+    case JOURNAL_CHAT: chat_text(entry, out, size); break;
+    case JOURNAL_EXPLAINED:
+        TR_FORMAT(out, size, tr("journal.explained"), entry->other, knowhow_text(entry->what));
+        break;
+    case JOURNAL_LEARNED:
+        TR_FORMAT(out, size, tr("journal.learned"), entry->other, knowhow_text(entry->what));
+        break;
+    case JOURNAL_TOLD_STORY:
+    case JOURNAL_HEARD_STORY:
+    case JOURNAL_LIED:
+    case JOURNAL_CAUGHT_LIE: {
+        story_text(entry, story, sizeof(story));
+        const char *key = entry->event == JOURNAL_TOLD_STORY    ? "journal.told_story"
+                          : entry->event == JOURNAL_HEARD_STORY ? "journal.heard_story"
+                          : entry->event == JOURNAL_CAUGHT_LIE  ? "journal.caught_lie"
+                          : entry->outcome != 0                 ? "journal.lied_found_out"
+                                                                : "journal.lied";
+        TR_FORMAT(out, size, tr(key), entry->other, story);
+        break;
+    }
+    case JOURNAL_COMPLIMENT:
+    case JOURNAL_COMPLIMENTED:
+        TR_FORMAT(out, size,
+                  keyed(entry->event == JOURNAL_COMPLIMENT ? COMPLIMENT_KEYS : COMPLIMENTED_KEYS,
+                        COMPLIMENT_TYPE_COUNT, entry->what),
+                  entry->other, knowhow_text(entry->topic));
+        break;
+    case JOURNAL_INSULT:
+    case JOURNAL_INSULTED:
+        TR_FORMAT(out, size,
+                  keyed(entry->event == JOURNAL_INSULT ? INSULT_KEYS : INSULTED_KEYS,
+                        INSULT_TYPE_COUNT, entry->what),
+                  entry->other);
+        break;
+    case JOURNAL_GOSSIP: gossip_text(entry, false, out, size); break;
+    case JOURNAL_HEARD_GOSSIP: gossip_text(entry, true, out, size); break;
+    case JOURNAL_REPORTED:
+    case JOURNAL_HEARD_REPORT: {
+        static const char *const KEYS[2][2] = {
+            /* [heard][well] */
+            {N_("journal.reported.ill"), N_("journal.reported.well")},
+            {N_("journal.heard_report.ill"), N_("journal.heard_report.well")},
+        };
+        TR_FORMAT(out, size, tr(KEYS[entry->event == JOURNAL_HEARD_REPORT][entry->outcome != 0]),
+                  entry->other, entry->subject);
+        break;
+    }
+    case JOURNAL_ARGUED: TR_FORMAT(out, size, tr("journal.argued"), entry->other); break;
+    case JOURNAL_BRAWL: TR_FORMAT(out, size, tr("journal.brawl"), entry->other); break;
+    case JOURNAL_APOLOGIZED:
+        TR_FORMAT(out, size,
+                  tr(entry->outcome != 0 ? "journal.apologized" : "journal.apology_refused"),
+                  entry->other);
+        break;
+    case JOURNAL_FORGAVE:
+        TR_FORMAT(out, size,
+                  tr(entry->outcome != 0 ? "journal.forgave" : "journal.refused_to_forgive"),
+                  entry->other);
+        break;
+    case JOURNAL_RELATION:
+        TR_FORMAT(out, size, tr(relation_key(entry->what, entry->outcome)), entry->other);
+        break;
+    default: break;
+    }
+}
+
 void journal_entry_text(const JournalEntry *entry, JournalOwner owner, char *out, size_t size)
 {
     out[0] = '\0';
     switch ((JournalEvent)entry->event) {
     case JOURNAL_THOUGHT: {
-        const ThoughtDef *def = thought_def((ThoughtType)entry->what);
-        if (def != NULL) {
-            TR_FORMAT(out, size,
-                      tr(def->value > 0.0f ? "journal.thought.good" : "journal.thought.bad"),
-                      tr(def->name_key));
+        const char *key = thought_journal_key((ThoughtType)entry->what);
+        if (key != NULL) {
+            SDL_strlcpy(out, tr(key), size);
         }
         break;
     }
@@ -237,14 +431,8 @@ void journal_entry_text(const JournalEntry *entry, JournalOwner owner, char *out
                   size);
         break;
     case JOURNAL_HURT: hurt_text(entry, owner, out, size); break;
-    case JOURNAL_CHAT: TR_FORMAT(out, size, tr("journal.chat"), entry->other); break;
-    case JOURNAL_CHAT_ABOUT: {
-        const KnowledgeDef *def = knowledge_def((KnowledgeType)entry->what);
-        TR_FORMAT(out, size, tr("journal.chat_about"), entry->other,
-                  def != NULL ? tr(def->name_key) : "");
-        break;
-    }
     case JOURNAL_EVENT_COUNT: break;
+    default: social_text(entry, out, size); break;
     }
     if (entry->repeats > 0 && out[0] != '\0') {
         char once[TEXT_SIZE], times[16];
@@ -279,6 +467,18 @@ static SDL_Color entry_color(const Ui *ui, const JournalEntry *entry)
             .colors[entry->outcome == JOURNAL_BLOW_WOUNDED || entry->outcome == JOURNAL_BLOW_KILLED
                         ? THEME_VALUE_HIGH
                         : THEME_TEXT];
+    case JOURNAL_COMPLIMENTED: return ui->theme.colors[THEME_VALUE_HIGH];
+    case JOURNAL_INSULTED:
+    case JOURNAL_CAUGHT_LIE:
+    case JOURNAL_ARGUED:
+    case JOURNAL_BRAWL: return ui->theme.colors[THEME_VALUE_LOW];
+    case JOURNAL_HEARD_REPORT:
+    case JOURNAL_APOLOGIZED:
+        return ui->theme.colors[entry->outcome != 0 ? THEME_VALUE_HIGH : THEME_VALUE_LOW];
+    case JOURNAL_FORGAVE:
+        return ui->theme.colors[entry->outcome != 0 ? THEME_VALUE_HIGH : THEME_TEXT];
+    case JOURNAL_RELATION:
+        return ui->theme.colors[entry->what > entry->outcome ? THEME_VALUE_HIGH : THEME_VALUE_LOW];
     default: return ui->theme.colors[THEME_TEXT];
     }
 }
@@ -291,6 +491,7 @@ static void filter_row(UiLayout *layout, JournalFilter *hidden)
         [JOURNAL_WOUNDS] = N_("journal.filter.wounds"),
         [JOURNAL_SOCIAL] = N_("journal.filter.social"),
         [JOURNAL_ATTACKS] = N_("journal.filter.attacks"),
+        [JOURNAL_ROUTINE] = N_("journal.filter.routine"),
     };
     Ui *ui = layout->ui;
     float total = 0.0f;
@@ -313,14 +514,14 @@ static void filter_row(UiLayout *layout, JournalFilter *hidden)
 }
 
 void journal_panel_rows(UiLayout *layout, const Journal *journal, JournalOwner owner,
-                        JournalFilter *hidden)
+                        const Mood *mood, JournalFilter *hidden)
 {
     Ui *ui = layout->ui;
     filter_row(layout, hidden);
     int shown = 0;
     for (int i = 0; i < journal->count; i++) {
         const JournalEntry *entry = journal_recent(journal, i);
-        JournalFilter kinds = journal_event_kinds((JournalEvent)entry->event);
+        JournalFilter kinds = journal_entry_kinds(entry);
         if ((kinds & ~*hidden) == 0) {
             continue; /* None of its kinds is shown. */
         }
@@ -330,8 +531,16 @@ void journal_panel_rows(UiLayout *layout, const Journal *journal, JournalOwner o
         ui_layout_label(layout, when, 0.0f, true);
         ui_layout_measure(layout, ui_text_width(ui, text) + ui->theme.window_padding);
         if (layout->draw) {
+            SDL_FRect row = {layout->x, layout->y, layout->width, layout->row};
+            bool tip = mood != NULL && entry->event == JOURNAL_THOUGHT && ui_hovered(ui, row);
+            if (tip) {
+                ui_fill(ui, row, ui->theme.colors[THEME_SCROLL_TRACK]);
+            }
             ui_label_rgba(ui, text, layout->x + ui->theme.window_padding,
                           layout->y + layout->text_offset, entry_color(ui, entry));
+            if (tip) {
+                thought_tooltip(ui, mood, (ThoughtType)entry->what);
+            }
         }
         layout->y += layout->row;
         shown++;

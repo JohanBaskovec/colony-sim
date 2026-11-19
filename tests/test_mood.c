@@ -536,8 +536,20 @@ static void test_debug_sadden(void)
     game_shutdown(&game);
 }
 
+/* Every thought has its sentence for the journal. */
+static void test_journal_sentences(void)
+{
+    for (int type = 0; type < THOUGHT_COUNT; type++) {
+        const char *key = thought_journal_key((ThoughtType)type);
+        REQUIRE(key != NULL);
+        CHECK(strncmp(key, "thought.", 8) == 0);
+    }
+    CHECK(thought_journal_key(THOUGHT_COUNT) == NULL);
+}
+
 int main(void)
 {
+    RUN_TEST(test_journal_sentences);
     RUN_TEST(test_definitions);
     RUN_TEST(test_memories);
     RUN_TEST(test_memories_add_up);

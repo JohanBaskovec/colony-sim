@@ -393,7 +393,7 @@ static void test_weather_cheats(void)
  * touched hashes as before. */
 static void test_hash(void)
 {
-    Game a, b;
+    static Game a, b;
     REQUIRE(init_flat_game(&a));
     REQUIRE(init_flat_game(&b));
     CHECK(game_hash(&a) == game_hash(&b));
@@ -497,7 +497,7 @@ static void test_character_editor(void)
  * tiles under the sky follow; the hash tells it apart, and only when it is set. */
 static void test_temperature_steps(void)
 {
-    Game a, b;
+    static Game a, b;
     REQUIRE(init_flat_game(&a));
     REQUIRE(init_flat_game(&b));
     float normal = game_outdoor_temperature(&a);

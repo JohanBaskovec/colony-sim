@@ -1,10 +1,11 @@
 /*
  * The Journal tab of a settler or an animal (core/journal.h): the entries
  * newest first, each with its date and a sentence in the player's language,
- * under four check boxes (thoughts, wounds, attacks, social) that filter them
+ * under five check boxes (thoughts, wounds, attacks, social, routine) that filter them
  * (an entry shows when one of its kinds does: a wound from a blow is both a
  * wound and an attack). The sentences are built here, from the facts the
- * journal keeps.
+ * journal keeps. Hovering a thought shows the same tooltip as in the Mood
+ * tab.
  */
 #ifndef COLONY_GAME_JOURNAL_PANEL_H
 #define COLONY_GAME_JOURNAL_PANEL_H
@@ -20,9 +21,11 @@ typedef struct JournalOwner {
 } JournalOwner;
 
 /* The rows (a UiRowsFn's body). `hidden` is the kinds the player switched off
- * (a bit per JournalKind; 0: all shown): the check boxes change it. */
+ * (a bit per JournalKind; 0: all shown): the check boxes change it. A
+ * thought shows its tooltip (game/thought_tooltip.h) as it stands in `mood`
+ * (NULL: none, for animals). */
 void journal_panel_rows(UiLayout *layout, const Journal *journal, JournalOwner owner,
-                        JournalFilter *hidden);
+                        const Mood *mood, JournalFilter *hidden);
 
 /* The sentence of an entry, in the player's language. */
 void journal_entry_text(const JournalEntry *entry, JournalOwner owner, char *out, size_t size);

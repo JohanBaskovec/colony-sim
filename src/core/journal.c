@@ -1,5 +1,6 @@
 #include "core/journal.h"
 
+#include <stdio.h>
 #include <string.h>
 
 JournalFilter journal_event_kinds(JournalEvent event)
@@ -9,12 +10,38 @@ JournalFilter journal_event_kinds(JournalEvent event)
     case JOURNAL_WOUND: return JOURNAL_BIT(JOURNAL_WOUNDS) | JOURNAL_BIT(JOURNAL_ATTACKS);
     case JOURNAL_HURT: return JOURNAL_BIT(JOURNAL_WOUNDS);
     case JOURNAL_CHAT:
-    case JOURNAL_CHAT_ABOUT: return JOURNAL_BIT(JOURNAL_SOCIAL);
+    case JOURNAL_EXPLAINED:
+    case JOURNAL_LEARNED:
+    case JOURNAL_TOLD_STORY:
+    case JOURNAL_HEARD_STORY:
+    case JOURNAL_LIED:
+    case JOURNAL_CAUGHT_LIE:
+    case JOURNAL_COMPLIMENT:
+    case JOURNAL_COMPLIMENTED:
+    case JOURNAL_INSULT:
+    case JOURNAL_INSULTED:
+    case JOURNAL_GOSSIP:
+    case JOURNAL_HEARD_GOSSIP:
+    case JOURNAL_REPORTED:
+    case JOURNAL_HEARD_REPORT:
+    case JOURNAL_ARGUED:
+    case JOURNAL_APOLOGIZED:
+    case JOURNAL_FORGAVE:
+    case JOURNAL_RELATION: return JOURNAL_BIT(JOURNAL_SOCIAL);
+    case JOURNAL_BRAWL: return JOURNAL_BIT(JOURNAL_SOCIAL) | JOURNAL_BIT(JOURNAL_ATTACKS);
     case JOURNAL_STRIKE:
     case JOURNAL_STRUCK: return JOURNAL_BIT(JOURNAL_ATTACKS);
     case JOURNAL_EVENT_COUNT: break;
     }
     return 0;
+}
+
+JournalFilter journal_entry_kinds(const JournalEntry *entry)
+{
+    if (entry->event == JOURNAL_THOUGHT && thought_is_routine((ThoughtType)entry->what)) {
+        return JOURNAL_BIT(JOURNAL_ROUTINE);
+    }
+    return journal_event_kinds((JournalEvent)entry->event);
 }
 
 bool journal_thought_is_good(ThoughtType type)
@@ -23,8 +50,44 @@ bool journal_thought_is_good(ThoughtType type)
     return def != NULL && def->value > 0.0f;
 }
 
+/* Where the entry `age` places from the oldest is kept. */
+static int physical_index(const Journal *journal, int age)
+{
+    return (journal->next - journal->count + age + 2 * JOURNAL_MAX) % JOURNAL_MAX;
+}
+
+static bool is_routine(const JournalEntry *entry)
+{
+    return journal_entry_kinds(entry) == JOURNAL_BIT(JOURNAL_ROUTINE);
+}
+
+/* Takes out the oldest routine entry once there are JOURNAL_ROUTINE_MAX of
+ * them, the newer ones moving down. */
+static void make_room_for_routine(Journal *journal)
+{
+    int routine = 0, oldest = -1;
+    for (int age = 0; age < journal->count; age++) {
+        if (is_routine(&journal->list[physical_index(journal, age)])) {
+            oldest = routine == 0 ? age : oldest;
+            routine++;
+        }
+    }
+    if (routine < JOURNAL_ROUTINE_MAX) {
+        return;
+    }
+    for (int age = oldest; age < journal->count - 1; age++) {
+        journal->list[physical_index(journal, age)] =
+            journal->list[physical_index(journal, age + 1)];
+    }
+    journal->next = (journal->next + JOURNAL_MAX - 1) % JOURNAL_MAX;
+    journal->count--;
+}
+
 void journal_push(Journal *journal, JournalEntry entry)
 {
+    if (is_routine(&entry)) {
+        make_room_for_routine(journal);
+    }
     journal->list[journal->next] = entry;
     journal->next = (journal->next + 1) % JOURNAL_MAX;
     if (journal->count < JOURNAL_MAX) {
@@ -126,12 +189,33 @@ void journal_note_struck(Journal *journal, uint64_t tick, int attack, JournalBlo
     push_blow(journal, entry);
 }
 
-void journal_note_chat(Journal *journal, uint64_t tick, const char *with, KnowledgeType topic)
+void journal_note_chat(Journal *journal, uint64_t tick, const char *with, ChatTopic topic, int what,
+                       bool heard, ChatQuality quality)
 {
     JournalEntry entry = {.tick = tick,
-                          .event = topic == KNOWLEDGE_NONE ? JOURNAL_CHAT : JOURNAL_CHAT_ABOUT,
-                          .what = (uint16_t)topic};
+                          .event = JOURNAL_CHAT,
+                          .topic = (uint8_t)topic,
+                          .what = (uint16_t)what,
+                          .heard = heard,
+                          .outcome = (uint8_t)quality};
     set_other(&entry, with);
+    journal_push(journal, entry);
+}
+
+void journal_note_social(Journal *journal, uint64_t tick, JournalEvent event, const char *with,
+                         JournalSocial details)
+{
+    JournalEntry entry = {.tick = tick,
+                          .event = (uint8_t)event,
+                          .topic = details.topic,
+                          .what = details.what,
+                          .outcome = details.outcome,
+                          .animal = details.animal,
+                          .animal_sex = details.animal_sex};
+    set_other(&entry, with);
+    if (details.subject != NULL) {
+        snprintf(entry.subject, sizeof(entry.subject), "%s", details.subject);
+    }
     journal_push(journal, entry);
 }
 

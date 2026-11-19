@@ -6,7 +6,10 @@
  * editor (App.character_editor) puts - and + buttons at the right of the needs
  * of settlers and animals and of the characters and knowledge of settlers
  * (game/hud.c, game/animal_panel.c); the temperature row raises and lowers the
- * air's by steps (Weather.debug_offset).
+ * air's by steps (Weather.debug_offset). The character editor also puts the
+ * social debug tools in a settler's Social tab (game/hud.c); the menu turns
+ * every settler against the others, forgets what the tools did to opinions,
+ * and counts the chats held.
  */
 #ifndef COLONY_GAME_DEBUG_PANEL_H
 #define COLONY_GAME_DEBUG_PANEL_H

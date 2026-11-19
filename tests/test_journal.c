@@ -15,7 +15,7 @@ static void test_ring(void)
     memset(&journal, 0, sizeof(journal));
     CHECK(journal_recent(&journal, 0) == NULL);
     for (int i = 0; i < JOURNAL_MAX + 5; i++) {
-        journal_note_chat(&journal, (uint64_t)i, "Anna", KNOWLEDGE_NONE);
+        journal_note_chat(&journal, (uint64_t)i, "Anna", CHAT_TOPIC_NONE, 0, false, CHAT_NEUTRAL);
     }
     CHECK_EQ_INT(journal.count, JOURNAL_MAX);
     CHECK_EQ_UINT(journal_recent(&journal, 0)->tick, JOURNAL_MAX + 4);
@@ -32,16 +32,79 @@ static void test_kinds(void)
                  JOURNAL_BIT(JOURNAL_WOUNDS) | JOURNAL_BIT(JOURNAL_ATTACKS));
     CHECK_EQ_INT(journal_event_kinds(JOURNAL_HURT), JOURNAL_BIT(JOURNAL_WOUNDS));
     CHECK_EQ_INT(journal_event_kinds(JOURNAL_CHAT), JOURNAL_BIT(JOURNAL_SOCIAL));
-    CHECK_EQ_INT(journal_event_kinds(JOURNAL_CHAT_ABOUT), JOURNAL_BIT(JOURNAL_SOCIAL));
+    for (int event = JOURNAL_EXPLAINED; event <= JOURNAL_RELATION; event++) {
+        JournalFilter social = JOURNAL_BIT(JOURNAL_SOCIAL);
+        /* A brawl is also an attack. */
+        CHECK_EQ_INT(journal_event_kinds((JournalEvent)event),
+                     event == JOURNAL_BRAWL ? social | JOURNAL_BIT(JOURNAL_ATTACKS) : social);
+    }
     CHECK_EQ_INT(journal_event_kinds(JOURNAL_STRIKE), JOURNAL_BIT(JOURNAL_ATTACKS));
     CHECK_EQ_INT(journal_event_kinds(JOURNAL_STRUCK), JOURNAL_BIT(JOURNAL_ATTACKS));
     CHECK_EQ_INT(journal_event_kinds(JOURNAL_EVENT_COUNT), 0);
     CHECK(JOURNAL_ALL == (JOURNAL_BIT(JOURNAL_THOUGHTS) | JOURNAL_BIT(JOURNAL_WOUNDS) |
-                          JOURNAL_BIT(JOURNAL_SOCIAL) | JOURNAL_BIT(JOURNAL_ATTACKS)));
+                          JOURNAL_BIT(JOURNAL_SOCIAL) | JOURNAL_BIT(JOURNAL_ATTACKS) |
+                          JOURNAL_BIT(JOURNAL_ROUTINE)));
+    /* Thoughts that come back day after day are routine only. */
+    JournalEntry entry = {.event = JOURNAL_THOUGHT, .what = THOUGHT_HUNGRY};
+    CHECK_EQ_INT(journal_entry_kinds(&entry), JOURNAL_BIT(JOURNAL_ROUTINE));
+    entry.what = THOUGHT_SLEPT_WELL;
+    CHECK_EQ_INT(journal_entry_kinds(&entry), JOURNAL_BIT(JOURNAL_ROUTINE));
+    entry.what = THOUGHT_GOOD_COMPANY;
+    CHECK_EQ_INT(journal_entry_kinds(&entry), JOURNAL_BIT(JOURNAL_ROUTINE));
+    entry.what = THOUGHT_STARVING;
+    CHECK_EQ_INT(journal_entry_kinds(&entry), JOURNAL_BIT(JOURNAL_THOUGHTS));
+    entry.what = THOUGHT_FOUGHT;
+    CHECK_EQ_INT(journal_entry_kinds(&entry), JOURNAL_BIT(JOURNAL_THOUGHTS));
+    entry = (JournalEntry){.event = JOURNAL_BRAWL};
+    CHECK_EQ_INT(journal_entry_kinds(&entry),
+                 JOURNAL_BIT(JOURNAL_SOCIAL) | JOURNAL_BIT(JOURNAL_ATTACKS));
     CHECK(journal_thought_is_good(THOUGHT_SLEPT_WELL));
     CHECK(!journal_thought_is_good(THOUGHT_SLEPT_ON_GROUND));
     CHECK(!journal_thought_is_good(THOUGHT_STARVING));
     CHECK(!journal_thought_is_good(THOUGHT_COUNT));
+}
+
+/* Routine thoughts take JOURNAL_ROUTINE_MAX entries at most: they push out
+ * the oldest of them, never what stands out; the order is kept. */
+static void test_routine_is_capped(void)
+{
+    static Journal journal;
+    memset(&journal, 0, sizeof(journal));
+    uint64_t tick = 0;
+    for (int i = 0; i < 40; i++) {
+        tick += 1000;
+        journal_push(&journal, (JournalEntry){.tick = tick,
+                                              .event = JOURNAL_THOUGHT,
+                                              .what = i % 2 ? THOUGHT_HUNGRY : THOUGHT_TIRED});
+    }
+    CHECK_EQ_INT(journal.count, JOURNAL_ROUTINE_MAX);
+    tick += 1000;
+    uint64_t insult_tick = tick;
+    journal_push(&journal, (JournalEntry){.tick = tick, .event = JOURNAL_INSULTED});
+    for (int i = 0; i < 100; i++) {
+        tick += 1000;
+        JournalEntry entry = {.tick = tick, .event = JOURNAL_THOUGHT, .what = THOUGHT_HUNGRY};
+        if (i % 10 == 0) {
+            entry.what = THOUGHT_STARVING; /* Stands out. */
+        }
+        journal_push(&journal, entry);
+    }
+    int routine = 0, starving = 0;
+    bool insult = false;
+    for (int i = 0; i < journal.count; i++) {
+        const JournalEntry *entry = journal_recent(&journal, i);
+        routine += journal_entry_kinds(entry) == JOURNAL_BIT(JOURNAL_ROUTINE);
+        starving += entry->event == JOURNAL_THOUGHT && entry->what == THOUGHT_STARVING;
+        insult |= entry->event == JOURNAL_INSULTED && entry->tick == insult_tick;
+        if (i > 0) {
+            CHECK(entry->tick < journal_recent(&journal, i - 1)->tick); /* Newest first. */
+        }
+    }
+    CHECK_EQ_INT(routine, JOURNAL_ROUTINE_MAX);
+    CHECK_EQ_INT(starving, 10);
+    CHECK(insult);
+    CHECK_EQ_INT(journal.count, JOURNAL_ROUTINE_MAX + 11);
+    CHECK_EQ_INT(journal_recent(&journal, 0)->tick, tick);
 }
 
 /* A memory remembered, a state that begins: noted once; a state that goes on
@@ -182,17 +245,22 @@ static void test_chat_in_a_game(void)
     EntityId b_id = game_spawn_colonist(&game, 5, 4, 0);
     Colonist *a = game_colonist(&game, a_id), *b = game_colonist(&game, b_id);
     REQUIRE(a != NULL && b != NULL);
+    ConversationWorld world = {
+        game.colonists, &game.colonist_pool, &game.social, 500, WEATHER_RAIN, NULL};
     int chats = 0;
-    for (int i = 0; i < 50 && chats < 3; i++) {
-        Rng rng;
-        rng_seed(&rng, 100 + (uint64_t)i, 1);
-        conversation_hold(a, a_id, b, b_id, 500 + (uint64_t)i, &rng);
+    for (int i = 0; i < 50; i++) {
+        ChatResult result =
+            conversation_hold_as(&world, (int)a_id.index, (int)b_id.index, CHAT_SMALL_TALK);
         chats++;
+        if (chats >= 3 && result.quality != CHAT_AWKWARD) {
+            break;
+        }
     }
     CHECK_EQ_INT(a->journal.count, chats);
     CHECK_EQ_INT(b->journal.count, chats);
     const JournalEntry *entry = journal_recent(&a->journal, 0);
-    CHECK(entry->event == JOURNAL_CHAT || entry->event == JOURNAL_CHAT_ABOUT);
+    CHECK_EQ_INT(entry->event, JOURNAL_CHAT);
+    CHECK_EQ_INT(journal_recent(&b->journal, 0)->topic, entry->topic);
     CHECK(strcmp(entry->other, b->name) == 0);
     CHECK(strcmp(journal_recent(&b->journal, 0)->other, a->name) == 0);
     CHECK_EQ_INT(journal_recent(&b->journal, 0)->what, entry->what);
@@ -211,6 +279,7 @@ int main(void)
 {
     RUN_TEST(test_ring);
     RUN_TEST(test_kinds);
+    RUN_TEST(test_routine_is_capped);
     RUN_TEST(test_thoughts);
     RUN_TEST(test_wound_entry);
     RUN_TEST(test_blow_entries);

@@ -56,6 +56,7 @@
 #include "core/animal.h"
 #include "core/appearance.h"
 #include "core/attributes.h"
+#include "core/experience.h"
 #include "core/bed.h"
 #include "core/combat.h"
 #include "core/construction.h"
@@ -163,6 +164,30 @@
 #define COLONIST_BED_SEARCH_MAX_COST 150.0f
 #define NEED_LOW_THRESHOLD 0.3f
 #define NEED_CRITICAL_THRESHOLD 0.1f
+/* Company (docs/SOCIAL.md §4), from 1 (plenty) to 0: awake, a settler misses
+ * it at this rate times its sociability factor; listening to a story,
+ * telling one or working beside a master or an apprentice fills it at
+ * COLONIST_COMPANY_GAIN_PER_TICK, chats at once (core/conversation.h).
+ * Below COLONIST_LONELY_BELOW it feels lonely. An idle settler about to
+ * wander goes over to someone instead (or stays, when someone is already
+ * within COLONIST_COMPANY_NEAR tiles) with a chance growing as company runs
+ * low: none from COLONIST_SEEK_COMPANY_FROM up, certain once lonely. It
+ * picks whom by liking (COLONIST_SEEK_*_WEIGHT, rivals and enemies never)
+ * and nearness. */
+#define COLONIST_COMPANY_DECAY_PER_TICK (1.0f / (30.0f * TICKS_PER_HOUR))
+#define COLONIST_COMPANY_GAIN_PER_TICK (1.0f / (3.0f * TICKS_PER_HOUR))
+#define COLONIST_LONELY_BELOW 0.25f
+#define COLONIST_SEEK_COMPANY_FROM 0.9f
+#define COLONIST_COMPANY_NEAR 3 /* CONVERSATION_RANGE: close enough to chat. */
+#define COLONIST_SEEK_ACQUAINTANCE_WEIGHT 1.0f
+#define COLONIST_SEEK_FRIEND_WEIGHT 2.5f
+#define COLONIST_SEEK_CLOSE_FRIEND_WEIGHT 4.0f
+/* Nearness: a settler this many tiles away counts half as much. */
+#define COLONIST_SEEK_HALF_DISTANCE 10.0f
+/* A settler looks for company this far around (tiles, straight line), and
+ * walks at most this travel cost to it. */
+#define COLONIST_COMPANY_SEARCH_RADIUS 40
+#define COLONIST_COMPANY_MAX_COST 80.0f
 /* Faces by mood (see colonist_expression()). */
 #define COLONIST_ANGRY_BELOW 20.0f
 #define COLONIST_SAD_BELOW 35.0f
@@ -463,6 +488,18 @@ typedef struct Colonist {
     /* TASK_STORY: the knowledge told at the hearth `station` (`target`). */
     uint8_t story_topic;
     float needs[NEED_COUNT];
+    float company; /* 1 (plenty) .. 0 (lonely): see COLONIST_COMPANY_DECAY_PER_TICK. */
+    /* The company it feels around it (a friend, a rival: mood states), set
+     * by social_company_update() (core/social.h). */
+    ThoughtMask social_states;
+    /* The others by slot (bit `slot`), from the relationships last noted
+     * (social_company_update()): friends, close friends, rivals or enemies.
+     * Whom it seeks out or keeps away from. */
+    uint64_t friend_slots;
+    uint64_t close_friend_slots;
+    uint64_t rival_slots;
+    /* What it lived through that makes a story to tell (core/experience.h). */
+    Experiences experiences;
     float wetness; /* 0 (dry) .. 1 (wet through). */
     Mood mood;
     Attributes attributes; /* Set with colonist_set_attributes(). */
@@ -787,6 +824,13 @@ void colonist_abandon_task(Colonist *colonist, const ColonistContext *context);
 bool colonist_order_move(Colonist *colonist, const ColonistContext *context, TilePos goal);
 
 bool colonist_is_moving(const Colonist *colonist);
+
+/* The chance that an idle settler about to wander seeks company instead,
+ * at this level of company (see COLONIST_SEEK_COMPANY_FROM). */
+float colonist_seek_company_chance(float company);
+
+/* Asleep in place, or unconscious. */
+bool colonist_is_asleep(const Colonist *colonist);
 
 /* The way the colonist faces: where its step leads while it walks, south
  * (toward the viewer) when it stands, works or sleeps. */

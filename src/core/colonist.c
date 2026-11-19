@@ -47,6 +47,8 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, 
     for (int need = 0; need < NEED_COUNT; need++) {
         colonist->needs[need] = 1.0f;
     }
+    colonist->company = 1.0f;
+    experiences_init(&colonist->experiences);
     for (int work = 0; work < WORK_TYPE_COUNT; work++) {
         colonist->work_priorities[work] = WORK_PRIORITY_DEFAULT;
     }
@@ -496,6 +498,12 @@ void colonist_free(Colonist *colonist)
 bool colonist_is_moving(const Colonist *colonist)
 {
     return colonist->path_index < colonist->path.count;
+}
+
+bool colonist_is_asleep(const Colonist *colonist)
+{
+    return (colonist->task == TASK_SLEEP && !colonist_is_moving(colonist)) ||
+           health_is_unconscious(&colonist->health);
 }
 
 Heading colonist_heading(const Colonist *colonist)
@@ -4215,8 +4223,117 @@ static void listen_to_story(Colonist *colonist, const ColonistContext *context)
                    level < KNOWLEDGE_STORY_CAP ? level : KNOWLEDGE_STORY_CAP, context->tick);
 }
 
+/* What seeking company came to. */
+typedef enum CompanySeek {
+    SEEK_NONE,    /* Nobody to go to (or no need): wander as usual. */
+    SEEK_WALKING, /* On the way to someone. */
+    SEEK_STAYING, /* Someone it likes enough is close already: stays. */
+} CompanySeek;
+
+float colonist_seek_company_chance(float company)
+{
+    if (company < COLONIST_LONELY_BELOW) {
+        return 1.0f;
+    }
+    float chance = (COLONIST_SEEK_COMPANY_FROM - company) /
+                   (COLONIST_SEEK_COMPANY_FROM - COLONIST_LONELY_BELOW);
+    return chance < 0.0f ? 0.0f : chance > 1.0f ? 1.0f : chance;
+}
+
+/* How much `colonist` wants the company of the settler in `slot` (0: not at
+ * all, a rival or an enemy). */
+static float company_weight(const Colonist *colonist, uint32_t slot)
+{
+    uint64_t bit = (uint64_t)1 << slot;
+    if (colonist->rival_slots & bit) {
+        return 0.0f;
+    }
+    if (colonist->close_friend_slots & bit) {
+        return COLONIST_SEEK_CLOSE_FRIEND_WEIGHT;
+    }
+    return (colonist->friend_slots & bit) ? COLONIST_SEEK_FRIEND_WEIGHT
+                                          : COLONIST_SEEK_ACQUAINTANCE_WEIGHT;
+}
+
+/* With a chance growing as company runs low, an idle settler about to
+ * wander goes over to someone awake on its level (a tile near it), picked by
+ * liking and nearness, or stays when someone it does not dislike is close
+ * enough to chat already. */
+static CompanySeek seek_company(Colonist *colonist, const ColonistContext *context)
+{
+    if (context->colonists == NULL || context->colonist_pool == NULL) {
+        return SEEK_NONE;
+    }
+    float chance = colonist_seek_company_chance(colonist->company);
+    if (chance <= 0.0f || (chance < 1.0f && !rng_chance(context->rng, chance))) {
+        return SEEK_NONE;
+    }
+    const Colonist *candidates[COLONIST_MAX];
+    float weights[COLONIST_MAX];
+    int count = 0;
+    float total = 0.0f;
+    for (uint32_t slot = 0; slot < context->colonist_pool->high_water && slot < COLONIST_MAX;
+         slot++) {
+        const Colonist *other = &context->colonists[slot];
+        if (other == colonist || entity_id_is_none(pool_id_at(context->colonist_pool, slot)) ||
+            other->z != colonist->z || colonist_is_asleep(other) ||
+            health_is_dead(&other->health)) {
+            continue;
+        }
+        float weight = company_weight(colonist, slot);
+        int dx = other->x - colonist->x, dy = other->y - colonist->y;
+        int distance = dx * dx + dy * dy;
+        if (weight <= 0.0f ||
+            distance > COLONIST_COMPANY_SEARCH_RADIUS * COLONIST_COMPANY_SEARCH_RADIUS) {
+            continue;
+        }
+        if (distance <= COLONIST_COMPANY_NEAR * COLONIST_COMPANY_NEAR) {
+            return SEEK_STAYING; /* In company already. */
+        }
+        weight /= 1.0f + sqrtf((float)distance) / COLONIST_SEEK_HALF_DISTANCE;
+        candidates[count] = other;
+        weights[count] = weight;
+        total += weight;
+        count++;
+    }
+    if (count == 0) {
+        return SEEK_NONE;
+    }
+    float roll = rng_next_float(context->rng) * total;
+    int pick = count - 1;
+    for (int i = 0; i < count; i++) {
+        if (roll < weights[i]) {
+            pick = i;
+            break;
+        }
+        roll -= weights[i];
+    }
+    const Colonist *target = candidates[pick];
+    for (int attempt = 0; attempt < 6; attempt++) {
+        TilePos goal = {(int16_t)(target->x + rng_range_i32(context->rng, -2, 2)),
+                        (int16_t)(target->y + rng_range_i32(context->rng, -2, 2)),
+                        (int16_t)target->z};
+        if ((goal.x == target->x && goal.y == target->y) ||
+            !map_is_passable(context->map, goal.x, goal.y, goal.z) || !may_stop_at(context, goal) ||
+            !regions_connected(context->regions, context->map, current_tile(colonist), goal)) {
+            continue;
+        }
+        if (pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist), goal,
+                            COLONIST_COMPANY_MAX_COST, &colonist->path)) {
+            begin_task(colonist, context, TASK_WANDER);
+            return SEEK_WALKING;
+        }
+    }
+    return SEEK_NONE;
+}
+
 static void start_wandering(Colonist *colonist, const ColonistContext *context)
 {
+    switch (seek_company(colonist, context)) {
+    case SEEK_WALKING: return;
+    case SEEK_STAYING: set_idle(colonist, context, random_idle_ticks(context->rng)); return;
+    case SEEK_NONE: break;
+    }
     const int radius = COLONIST_WANDER_RADIUS;
     for (int attempt = 0; attempt < 8; attempt++) {
         int dx = rng_range_i32(context->rng, -radius, radius);
@@ -4291,6 +4408,12 @@ static ThoughtMask mood_states(Colonist *colonist, const ColonistContext *contex
                                                      colonist->z) == TEMPERATURE_COVER_OPEN) {
         states |= THOUGHT_BIT(THOUGHT_IN_THE_RAIN);
     }
+    if (!asleep && colonist->company < COLONIST_LONELY_BELOW) {
+        states |= THOUGHT_BIT(THOUGHT_LONELY);
+    }
+    if (!asleep) {
+        states |= colonist->social_states;
+    }
     return states;
 }
 
@@ -4313,6 +4436,19 @@ static void update_mood(Colonist *colonist, const ColonistContext *context)
     int hours = kind == MOOD_BREAK_SULK ? rng_range_i32(context->rng, 2, 4)
                                         : rng_range_i32(context->rng, 4, 8);
     mood_start_break(mood, kind, hours * TICKS_PER_HOUR);
+}
+
+/* Awake: company is missed, or found beside a storyteller, a listener, a
+ * master or an apprentice. */
+static void update_company(Colonist *colonist, const ColonistContext *context)
+{
+    bool together = colonist->task == TASK_LISTEN || colonist->task == TASK_STORY ||
+                    colonist->task == TASK_ASSIST ||
+                    (colonist->assisted_until > 0 && colonist->assisted_until >= context->tick);
+    float change = together ? COLONIST_COMPANY_GAIN_PER_TICK
+                            : -COLONIST_COMPANY_DECAY_PER_TICK *
+                                  attribute_factor(&colonist->attributes, ATTRIBUTE_SOCIABILITY);
+    colonist->company = clampf(colonist->company + change, 0.0f, 1.0f);
 }
 
 static void update_needs(Colonist *colonist, const ColonistContext *context)
@@ -4349,6 +4485,7 @@ static void update_needs(Colonist *colonist, const ColonistContext *context)
         }
     } else {
         *rest = clampf(*rest - NEED_REST_DECAY_PER_TICK, 0.0f, 1.0f);
+        update_company(colonist, context);
     }
     colonist->search_phase++;
     for (int kind = 0; kind < SEARCH_COUNT; kind++) {

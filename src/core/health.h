@@ -192,6 +192,7 @@ typedef enum HurtCause {
     HURT_CAVE_IN,
     HURT_TREE_TRUNK, /* A felled tree's trunk. */
     HURT_TREE_CROWN, /* Its branches. */
+    HURT_BRAWL,      /* A brawl with another settler (core/conversation.h). */
     HURT_CAUSE_COUNT
 } HurtCause;
 

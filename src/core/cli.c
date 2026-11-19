@@ -32,7 +32,7 @@ const char *cli_usage(void)
                              "  --scenario <n>  Test situation set up at the start, as in "
                              "bench_simulation:\n"
                              "                  0 none, 1 gathering, 2 unreachable jobs, 3 "
-                             "construction.\n"
+                             "construction, 4 feuds.\n"
                              "  --debug <list>  Cheats on from the start, separated by commas: "
                              "instant_build,\n"
                              "                  free_crafts, no_tools, instant_deconstruct, "

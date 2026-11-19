@@ -531,7 +531,7 @@ static void test_plant_growth_is_spread_over_ticks(void)
 
 static void test_simulation_is_deterministic(void)
 {
-    Game a, b;
+    static Game a, b;
     REQUIRE(init_small_game(&a, 42));
     REQUIRE(init_small_game(&b, 42));
     for (int i = 0; i < TICKS_PER_DAY; i++) {

@@ -101,6 +101,39 @@ static const AttributeDef ATTRIBUTE_DEFS[ATTRIBUTE_COUNT] = {
                               N_("attribute.endurance.low.3"), N_("attribute.endurance.low.4")},
                              {N_("attribute.endurance.high.1"), N_("attribute.endurance.high.2"),
                               N_("attribute.endurance.high.3"), N_("attribute.endurance.high.4")}},
+    [ATTRIBUTE_KINDNESS] = {N_("attribute.kindness"),
+                            N_("attribute.kindness.description"),
+                            {N_("attribute.kindness.low.1"), N_("attribute.kindness.low.2"),
+                             N_("attribute.kindness.low.3"), N_("attribute.kindness.low.4")},
+                            {N_("attribute.kindness.high.1"), N_("attribute.kindness.high.2"),
+                             N_("attribute.kindness.high.3"), N_("attribute.kindness.high.4")}},
+    [ATTRIBUTE_SOCIAL_EASE] =
+        {N_("attribute.social_ease"),
+         N_("attribute.social_ease.description"),
+         {N_("attribute.social_ease.low.1"), N_("attribute.social_ease.low.2"),
+          N_("attribute.social_ease.low.3"), N_("attribute.social_ease.low.4")},
+         {N_("attribute.social_ease.high.1"), N_("attribute.social_ease.high.2"),
+          N_("attribute.social_ease.high.3"), N_("attribute.social_ease.high.4")}},
+    [ATTRIBUTE_CONFIDENCE] = {N_("attribute.confidence"),
+                              N_("attribute.confidence.description"),
+                              {N_("attribute.confidence.low.1"), N_("attribute.confidence.low.2"),
+                               N_("attribute.confidence.low.3"), N_("attribute.confidence.low.4")},
+                              {N_("attribute.confidence.high.1"), N_("attribute.confidence.high.2"),
+                               N_("attribute.confidence.high.3"),
+                               N_("attribute.confidence.high.4")}},
+    [ATTRIBUTE_BEAUTY] = {N_("attribute.beauty"),
+                          N_("attribute.beauty.description"),
+                          {N_("attribute.beauty.low.1"), N_("attribute.beauty.low.2"),
+                           N_("attribute.beauty.low.3"), N_("attribute.beauty.low.4")},
+                          {N_("attribute.beauty.high.1"), N_("attribute.beauty.high.2"),
+                           N_("attribute.beauty.high.3"), N_("attribute.beauty.high.4")}},
+    [ATTRIBUTE_SOCIABILITY] =
+        {N_("attribute.sociability"),
+         N_("attribute.sociability.description"),
+         {N_("attribute.sociability.low.1"), N_("attribute.sociability.low.2"),
+          N_("attribute.sociability.low.3"), N_("attribute.sociability.low.4")},
+         {N_("attribute.sociability.high.1"), N_("attribute.sociability.high.2"),
+          N_("attribute.sociability.high.3"), N_("attribute.sociability.high.4")}},
 };
 
 static const int BAND_STARTS[ATTRIBUTE_BANDS] = ATTRIBUTE_BAND_STARTS;
@@ -110,7 +143,7 @@ static bool is_factor(AttributeType type)
 {
     return type == ATTRIBUTE_WALKING || type == ATTRIBUTE_WORK_PACE || type == ATTRIBUTE_LEARNING ||
            type == ATTRIBUTE_SLEEP || type == ATTRIBUTE_APPETITE || type == ATTRIBUTE_RUNNING ||
-           type == ATTRIBUTE_ENDURANCE;
+           type == ATTRIBUTE_ENDURANCE || type == ATTRIBUTE_SOCIABILITY;
 }
 
 void attributes_init(Attributes *attributes)
@@ -225,6 +258,9 @@ int attribute_band(int position)
 
 AttributeGroup attribute_group(AttributeType type)
 {
+    if (type >= ATTRIBUTE_KINDNESS && type <= ATTRIBUTE_SOCIABILITY) {
+        return ATTRIBUTE_GROUP_SOCIAL;
+    }
     return type == ATTRIBUTE_OUTLOOK || type == ATTRIBUTE_TEMPERAMENT || type == ATTRIBUTE_COURAGE
                ? ATTRIBUTE_GROUP_MIND
                : ATTRIBUTE_GROUP_BODY;
@@ -237,6 +273,11 @@ bool attribute_affects_animals(AttributeType type)
     case ATTRIBUTE_LEARNING:
     case ATTRIBUTE_OUTLOOK:
     case ATTRIBUTE_TEMPERAMENT:
+    case ATTRIBUTE_KINDNESS:
+    case ATTRIBUTE_SOCIAL_EASE:
+    case ATTRIBUTE_CONFIDENCE:
+    case ATTRIBUTE_BEAUTY:
+    case ATTRIBUTE_SOCIABILITY:
     case ATTRIBUTE_COUNT: return false;
     default: return true;
     }

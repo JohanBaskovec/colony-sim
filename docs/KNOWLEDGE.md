@@ -188,15 +188,16 @@ crosses 50 through practice, and has invented it (a notification says so:
 
 **Conversation.**
 - Two settlers within 3 tiles of each other, both idle, at rest, eating, or
-  working side by side, sometimes chat: on average once per in-game hour
+  working side by side, sometimes chat: on average twice per in-game hour
   together, for about 6 minutes *(tuning)*.
-- Some chats are about a knowledge (40% *tuning*). The speaker picks one of
+- Some chats are about a knowledge (20% *tuning*; chats are twice an hour). The speaker picks one of
   their own, weighted by level and by recent practice: settlers talk about
   what they do. Even 1 point is enough to talk about something, but the gain
   is proportional to the speaker's level, so it is tiny.
 - Both settlers can learn from each other in the same chat (each on the topic
   the other brings up).
-- Chats also feed relationships later (social system).
+- Chats also feed relationships (`SOCIAL.md` §6): they are stories, lies,
+  compliments, insults, gossip and small talk too.
 
 **Readability.** The settler inspector lists knowledges above 0 by group,
 with a bar per knowledge, a mark at 50 and at the minimum levels of its

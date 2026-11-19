@@ -16,7 +16,7 @@
  * bench_simulation ..., then perf report --time with the times printed.
  *
  * Scenarios: see core/scenario.h (0 = none, 1 = gathering, 2 = unreachable
- * jobs, 3 = construction).
+ * jobs, 3 = construction, 4 = feuds).
  */
 #define _POSIX_C_SOURCE 199309L /* clock_gettime(). */
 

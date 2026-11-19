@@ -9,6 +9,7 @@ add_library(colony_core STATIC
     combat.c
     cli.c
     entry_strip.c
+    experience.c
     exploration.c
     colonist.c
     construction.c
@@ -41,6 +42,7 @@ add_library(colony_core STATIC
     roof.c
     scenario.c
     settings.c
+    social.c
     strike_anim.c
     soil.c
     temperature.c

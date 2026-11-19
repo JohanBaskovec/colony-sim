@@ -286,8 +286,11 @@ typedef struct App {
     int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
     AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */
     Combatant debug_attacker;      /* For APP_DEBUG_FIGHT: who was clicked first (or none). */
-    AnimalSex debug_animal_sex;    /* ... and its sex. */
-    bool forbid_allows;            /* For APP_TOOL_FORBID: allows instead. */
+    /* The character editor's Social tab: the settler the selected one acts
+     * with (a click on its row; the best liked one when none). */
+    EntityId debug_social_partner;
+    AnimalSex debug_animal_sex; /* ... and its sex. */
+    bool forbid_allows;         /* For APP_TOOL_FORBID: allows instead. */
 
     bool hover_valid; /* Whether the mouse is over a map tile. */
     int hover_x;

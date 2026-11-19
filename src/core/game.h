@@ -13,6 +13,7 @@
 #include "core/colonist.h"
 #include "core/corpse.h"
 #include "core/construction.h"
+#include "core/conversation.h"
 #include "core/designation.h"
 #include "core/dirt.h"
 #include "core/game_clock.h"
@@ -29,6 +30,7 @@
 #include "core/region.h"
 #include "core/rng.h"
 #include "core/roof.h"
+#include "core/social.h"
 #include "core/soil.h"
 #include "core/stockpile.h"
 #include "core/temperature.h"
@@ -179,6 +181,10 @@ typedef struct Game {
     RoofWatch roof_watch;
     Pool colonist_pool;
     Colonist colonists[COLONIST_MAX]; /* Indexed by EntityId.index. */
+    /* What the settlers think of each other (core/social.h), with a random
+     * stream of its own: chats, families. */
+    Social social;
+    ConversationCounts chat_counts; /* For the curious: not part of game_hash(). */
     /* The last settler died (docs/HEALTH.md §8): the game paused itself
      * then. Part of game_hash() once set. */
     bool colony_lost;
@@ -330,6 +336,54 @@ void game_debug_sadden(Game *game);
 /* Debug: every living colonist knows everything at least at
  * GAME_DEBUG_KNOWLEDGE_LEVEL (practised now: nothing fades yet). */
 void game_debug_learn_all(Game *game);
+
+/* Debug tools of social life (docs/SOCIAL.md §10): the Social tab with the
+ * character editor on, and the debug menu. Opinions are changed through the
+ * bond's debug memory (social_debug_nudge()), and relationships brought up
+ * to date at once, noted in the journals. */
+#define GAME_DEBUG_OPINION_STEP 10.0f
+/* game_debug_chat(): a chat drawn as usual, and an argument that comes to
+ * blows, next to the ChatKind values. */
+#define GAME_DEBUG_CHAT_ANY (-1)
+#define GAME_DEBUG_CHAT_BRAWL CHAT_KIND_COUNT
+/* The opinion game_debug_relation() sets for each relationship. */
+#define GAME_DEBUG_ENEMY_OPINION -80.0f
+#define GAME_DEBUG_RIVAL_OPINION -42.0f
+#define GAME_DEBUG_FRIEND_OPINION 42.0f
+#define GAME_DEBUG_CLOSE_FRIEND_OPINION 80.0f
+
+/* Debug: `a` leads a chat with `b` now, wherever they are, turned into
+ * `kind` (a ChatKind, GAME_DEBUG_CHAT_ANY or GAME_DEBUG_CHAT_BRAWL). What it
+ * needs is made up when missing: someone to gossip about (`a` then loathes a
+ * third settler), a tale to pass on (a third settler spoke ill of `b`), a
+ * story to tell (`a` killed a wolf). `out` (may be NULL) gets how it went.
+ * False when either is not a living settler, or they are the same. */
+bool game_debug_chat(Game *game, EntityId a, EntityId b, int kind, ChatResult *out);
+
+/* Debug: what `who` thinks of `whom`, GAME_DEBUG_OPINION_STEP points up
+ * (`direction` > 0) or down. */
+bool game_debug_opinion(Game *game, EntityId who, EntityId whom, int direction);
+
+/* Debug: `a` and `b` think of each other what makes `level` (both ways). */
+bool game_debug_relation(Game *game, EntityId a, EntityId b, RelationLevel level);
+
+/* Debug: the next family tie of `b` to `a` (none, parent, child, sibling,
+ * grandparent, grandchild, none...), and the reverse. */
+bool game_debug_family(Game *game, EntityId a, EntityId b);
+
+/* Debug: every settler takes against every other: a rival, one time in
+ * GAME_DEBUG_DISCORD_ENEMIES an enemy (one way each, from the social stream). */
+#define GAME_DEBUG_DISCORD_ENEMIES 3
+void game_debug_discord(Game *game);
+
+/* Debug: the living settlers split in two clans, taken in turn by slot:
+ * friends within (GAME_DEBUG_FRIEND_OPINION), enemies across; in each clan,
+ * every other settler abrasive and bold, the rest kind (who apologize).
+ * Without journal notes: a situation to start from (--scenario 4). */
+void game_debug_feud(Game *game);
+
+/* Debug: what the debug tools did to opinions is forgotten. */
+void game_debug_forget_social(Game *game);
 
 /* Debug: runs `ticks` simulation ticks at once (time goes by as usual). */
 void game_debug_skip(Game *game, uint64_t ticks);
