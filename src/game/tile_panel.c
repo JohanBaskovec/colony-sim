@@ -89,8 +89,12 @@ static void thing_title(const ThingRows *rows, char *out, size_t size)
         const Corpse *corpse = thing_corpse(rows);
         if (corpse != NULL && corpse->kind == CORPSE_SETTLER) {
             TR_FORMAT(out, size, tr("tile_panel.body"), corpse->colonist.name);
-        } else {
+        } else if (stack.type != ITEM_NONE) {
             SDL_strlcpy(out, tr(item_def((ItemType)stack.type)->name_key), size);
+        } else { /* Only items lying where they fell: the newest one's name. */
+            const Item *item = items_first(game_view_items(game), map_index(map, x, y, z));
+            SDL_strlcpy(out, item != NULL ? tr(item_def((ItemType)item->type)->name_key) : "",
+                        size);
         }
         break;
     }
@@ -105,6 +109,69 @@ static void thing_title(const ThingRows *rows, char *out, size_t size)
         break;
     }
     case THING_COUNT: break;
+    }
+}
+
+/* Items of a tile listed in the inspector at most. */
+#define ITEM_LIST_LINES 40
+
+/* The items lying on the tile one by one, in the order chosen with the
+ * buttons above them (quality, condition, rot). */
+static void item_list_rows(UiLayout *layout, const ThingRows *rows)
+{
+    App *app = rows->app;
+    const Game *game = &app->game;
+    const Items *items = game_items_at(game, rows->x, rows->y, rows->z);
+    size_t index = map_index(game_view_map(game), rows->x, rows->y, rows->z);
+    const Item *list[ITEM_LIST_LINES];
+    int count = items_list(items, index, app->items_order, list, ITEM_LIST_LINES);
+    if (count < 2) {
+        return;
+    }
+    static const char *const ORDER_KEYS[ITEM_ORDER_COUNT] = {
+        N_("tile_panel.order_newest"), N_("tile_panel.order_quality"),
+        N_("tile_panel.order_condition"), N_("tile_panel.order_rot")};
+    ui_layout_label(layout, tr("tile_panel.items_here"), 0.0f, true);
+    float x = layout->x, width = 0.0f;
+    for (int order = 0; order < ITEM_ORDER_COUNT; order++) {
+        const char *label = tr(ORDER_KEYS[order]);
+        float button = ui_button_width(layout->ui, label);
+        if (layout->draw &&
+            ui_toggle_button(layout->ui, (SDL_FRect){x, layout->y, button, layout->button_height},
+                             label, app->items_order == (ItemOrder)order)) {
+            app->items_order = (ItemOrder)order;
+        }
+        x += button + UI_LAYOUT_GAP;
+        width += button + UI_LAYOUT_GAP;
+    }
+    ui_layout_measure(layout, width);
+    layout->y += layout->row + layout->ui->theme.gap;
+    float rate = game_item_rot_rate(game, rows->x, rows->y, rows->z);
+    int shown = count < ITEM_LIST_LINES ? count : ITEM_LIST_LINES;
+    for (int i = 0; i < shown; i++) {
+        ItemStack one = item_as_stack(list[i]);
+        char condition[TEXT_SIZE], line[TEXT_SIZE];
+        const char *name = tr(item_def((ItemType)one.type)->name_key);
+        if (!hud_item_condition_text(condition, sizeof(condition), one)) {
+            SDL_strlcpy(condition, "", sizeof(condition));
+        }
+        if (item_rots((ItemType)one.type)) {
+            char rot[TEXT_SIZE];
+            hud_rot_text(rot, sizeof(rot), item_stack_rot_hours(one, rate));
+            TR_FORMAT(line, sizeof(line), tr("tile_panel.item_line_rot"), name, condition, rot);
+        } else if (condition[0] != '\0') {
+            TR_FORMAT(line, sizeof(line), tr("tile_panel.item_line"), name, condition);
+        } else {
+            SDL_strlcpy(line, name, sizeof(line));
+        }
+        /* Dim: lying where it fell (a wild item, left to gathering). */
+        ui_layout_label(layout, line, 0.0f, (list[i]->flags & ITEM_FLAG_WILD) != 0);
+    }
+    if (count > shown) {
+        char more[32], line[TEXT_SIZE];
+        tr_integer(more, sizeof(more), count - shown);
+        TR_FORMAT(line, sizeof(line), tr_plural("tile_panel.more_items", count - shown), more);
+        ui_layout_label(layout, line, 0.0f, true);
     }
 }
 
@@ -242,13 +309,16 @@ static void thing_rows(UiLayout *layout, void *userdata)
             hud_corpse_rows(layout, game, corpse);
         }
         char count[32], weight[32];
-        tr_integer(count, sizeof(count), stack.count);
-        hud_weight_text(weight, sizeof(weight), item_stack_mass(stack));
-        TR_FORMAT(text, sizeof(text), tr("tile_panel.count"), count, weight);
-        ui_layout_label(layout, text, 0.0f, false);
-        if (hud_item_condition_text(text, sizeof(text), stack)) {
+        if (stack.type != ITEM_NONE) {
+            tr_integer(count, sizeof(count), stack.count);
+            hud_weight_text(weight, sizeof(weight), item_stack_mass(stack));
+            TR_FORMAT(text, sizeof(text), tr("tile_panel.count"), count, weight);
             ui_layout_label(layout, text, 0.0f, false);
+            if (hud_item_condition_text(text, sizeof(text), stack)) {
+                ui_layout_label(layout, text, 0.0f, false);
+            }
         }
+        item_list_rows(layout, rows);
         break;
     }
     case THING_PLANT: {
@@ -363,6 +433,9 @@ static void thing_actions(App *app, const ThingRows *rows)
         }
         break;
     case THING_ITEMS: {
+        if (items_get(&game->items, x, y, z).type == ITEM_NONE) {
+            break; /* Only items lying where they fell: gathering takes them. */
+        }
         TilePos destination;
         bool ordered = game_item_move_at(game, x, y, z, &destination);
         if (inspector_order_action(app, slot++, RENDER_ICON_MOVE, tr("tile_panel.move_items"),

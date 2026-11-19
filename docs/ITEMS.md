@@ -148,5 +148,13 @@ playable.
    someone could stand on (`game_debug_move_item()`), the wheel over an item
    turns it (`game_debug_turn_item()`); items are named across ticks by
    `ItemId` (slot and generation).
-5. **The pile window and the bills.** The list of a tile's items, sortable;
-   the ingredient quality range of each bill; cooking by rot.
+5. **The pile window and the bills** (done). The inspector of a tile with
+   items lists them all (up to 40 lines, then how many more), sorted by
+   newest, quality, condition or rot (`items_list()`, `ItemOrder`), wild
+   items dimmed. Each bill has a quality range for its ingredients (a slider
+   with a minimum and a maximum, `workstation_set_bill_quality_range()`):
+   heaps count for their items in range only and only those are picked up
+   (`ItemChoice`, `items_pick_up_chosen()`). Ingredients that rot are taken
+   soonest to rot first: the settler looks around the station for the one
+   that rots away soonest and fetches from the nearest heap holding one
+   within six hours of it *(tuning)*, falling back on any heap in range.

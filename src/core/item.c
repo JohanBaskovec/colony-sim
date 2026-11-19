@@ -946,6 +946,108 @@ int items_pick_up(Items *items, int x, int y, int z, int count, ItemStack *load)
     return taken;
 }
 
+static bool chosen(const Item *item, const ItemStack *stack, ItemChoice choice)
+{
+    return item_matches(item, stack) && item->quality >= choice.min_quality &&
+           item->quality <= choice.max_quality;
+}
+
+int items_count_chosen(const Items *items, int x, int y, int z, ItemChoice choice)
+{
+    if (!in_bounds(items, x, y, z)) {
+        return 0;
+    }
+    size_t index = index_of(items, x, y, z);
+    const ItemStack *stack = &items->stacks[index];
+    int count = 0;
+    for (const Item *item = items_first(items, index); item != NULL;
+         item = items_next(items, item)) {
+        count += chosen(item, stack, choice);
+    }
+    return count;
+}
+
+float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemChoice choice)
+{
+    if (!in_bounds(items, x, y, z)) {
+        return -1.0f;
+    }
+    size_t index = index_of(items, x, y, z);
+    const ItemStack *stack = &items->stacks[index];
+    if (stack->type == ITEM_NONE || !item_rots((ItemType)stack->type)) {
+        return -1.0f;
+    }
+    float soonest = -1.0f;
+    for (const Item *item = items_first(items, index); item != NULL;
+         item = items_next(items, item)) {
+        if (chosen(item, stack, choice)) {
+            float hours = item_stack_rot_hours(item_as_stack(item), 1.0f);
+            soonest = soonest < 0.0f || hours < soonest ? hours : soonest;
+        }
+    }
+    return soonest;
+}
+
+int items_pick_up_chosen(Items *items, int x, int y, int z, int count, ItemChoice choice,
+                         ItemStack *load)
+{
+    if (choice.min_quality <= ITEM_QUALITY_WORST && choice.max_quality >= ITEM_QUALITY_BEST &&
+        !choice.soonest_rot) {
+        return items_pick_up(items, x, y, z, count, load);
+    }
+    if (!in_bounds(items, x, y, z) || count <= 0) {
+        return 0;
+    }
+    size_t index = index_of(items, x, y, z);
+    const ItemStack stack = items->stacks[index];
+    if (stack.type == ITEM_NONE ||
+        (load->type != ITEM_NONE && load->count > 0 && !item_stacks_match(*load, stack))) {
+        return 0;
+    }
+    materialize(items, load);
+    int taken = 0;
+    while (taken < count) {
+        uint32_t best = 0, best_previous = 0, previous = 0;
+        long best_left = 0;
+        for (uint32_t slot = items->heads[index]; slot != 0;
+             previous = slot, slot = items->pool[slot - 1].next) {
+            const Item *item = &items->pool[slot - 1];
+            if (!chosen(item, &stack, choice)) {
+                continue;
+            }
+            long left = item_rot_left(item);
+            if (best == 0 || (choice.soonest_rot && left < best_left)) {
+                best = slot;
+                best_previous = previous;
+                best_left = left;
+            }
+            if (!choice.soonest_rot) {
+                break;
+            }
+        }
+        if (best == 0) {
+            break;
+        }
+        Item *item = &items->pool[best - 1];
+        if (best_previous == 0) {
+            items->heads[index] = item->next;
+        } else {
+            items->pool[best_previous - 1].next = item->next;
+        }
+        count_item(items, item, -1);
+        item->tile = ITEM_TILE_HELD;
+        item->next = load->held;
+        load->held = best;
+        items->held_count++;
+        taken++;
+    }
+    if (taken > 0) {
+        note_change(items, index);
+        refresh_load(items, load);
+    }
+    return taken;
+}
+
 int items_put(Items *items, int x, int y, int z, ItemStack *load)
 {
     if (!in_bounds(items, x, y, z) || load->type == ITEM_NONE || load->count == 0) {
@@ -1136,6 +1238,68 @@ bool items_turn(Items *items, ItemId id, int steps)
     item->angle = (uint8_t)((int)item->angle + steps);
     note_change(items, item->tile);
     return true;
+}
+
+ItemStack item_as_stack(const Item *item)
+{
+    return (ItemStack){.type = item->type,
+                       .quality = item->quality,
+                       .count = 1,
+                       .hit_points = item->hit_points,
+                       .progress = (item->flags & ITEM_FLAG_WILD) ? 0 : item->progress,
+                       .eaten = item->eaten,
+                       .corpse = item->corpse};
+}
+
+long item_rot_left(const Item *item)
+{
+    if (!item_rots((ItemType)item->type)) {
+        return -1;
+    }
+    return (long)item->hit_points * ITEM_ROT_STEP - (long)item->progress;
+}
+
+/* Whether `a` comes before `b` in an order (not for ties). */
+static bool comes_before(const Item *a, const Item *b, ItemOrder order)
+{
+    switch (order) {
+    case ITEM_ORDER_QUALITY: return a->quality > b->quality;
+    case ITEM_ORDER_CONDITION:
+        return item_stack_hit_points_percent(item_as_stack(a)) >
+               item_stack_hit_points_percent(item_as_stack(b));
+    case ITEM_ORDER_ROT: {
+        long left_a = item_rot_left(a), left_b = item_rot_left(b);
+        return left_a >= 0 && (left_b < 0 || left_a < left_b);
+    }
+    case ITEM_ORDER_NEWEST:
+    case ITEM_ORDER_COUNT: break;
+    }
+    return false;
+}
+
+int items_list(const Items *items, size_t index, ItemOrder order, const Item **out, int capacity)
+{
+    int count = 0, kept = 0;
+    for (const Item *item = items_first(items, index); item != NULL;
+         item = items_next(items, item)) {
+        count++;
+        /* Insertion into the kept ones, after those it does not come before
+         * (the list is newest first: ties keep that order). */
+        int at = kept;
+        while (at > 0 && comes_before(item, out[at - 1], order)) {
+            at--;
+        }
+        if (at >= capacity) {
+            continue;
+        }
+        int last = kept < capacity ? kept : capacity - 1;
+        for (int i = last; i > at; i--) {
+            out[i] = out[i - 1];
+        }
+        out[at] = item;
+        kept += kept < capacity;
+    }
+    return count;
 }
 
 /* ---- Wild items ---- */

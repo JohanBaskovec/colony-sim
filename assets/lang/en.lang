@@ -704,6 +704,15 @@ tile_panel.refresh = Refresh: {0}
 tile_panel.growth = {0}% grown
 tile_panel.dormant = Withered, grows back with the warmth
 tile_panel.count = Count: {0} ({1})
+tile_panel.items_here = Every item here, in order of:
+tile_panel.order_newest = Arrival
+tile_panel.order_quality = Quality
+tile_panel.order_condition = Condition
+tile_panel.order_rot = Rot
+tile_panel.item_line = {0}: {1}
+tile_panel.item_line_rot = {0}: {1} · {2}
+tile_panel.more_items.one = …and {0} more item
+tile_panel.more_items.other = …and {0} more items
 tile_panel.deconstruct = Take apart
 tile_panel.deconstruct.description = Orders it taken apart: the settlers get its materials back
 tile_panel.deconstruct_roof.description = Orders the roof taken down onto the floor below (what stands on it goes first)
@@ -797,6 +806,8 @@ bill.input_radius = Ingredients within {0} tiles
 # change the lowest level (before) and the highest one (after).
 # {0} = lowest level, {1} = highest level
 bill.levels = Worker level {0} to {1}
+# {0} = lowest quality grade of the ingredients taken, {1} = highest
+bill.quality = Ingredients of quality {0} to {1}
 
 # Units. {0} = number
 unit.hours = {0} h

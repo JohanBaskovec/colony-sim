@@ -206,7 +206,8 @@ bool app_thing_at(const App *app, TileThing thing, int x, int y, int z)
     case THING_STRUCTURE: return map_structure(map, x, y, z) != STRUCTURE_NONE;
     case THING_ROOF: return map_roof(map, x, y, z) != STRUCTURE_NONE;
     case THING_SITE: return site_at(app, x, y, z) != NULL;
-    case THING_ITEMS: return items_get(game_view_items(&app->game), x, y, z).type != ITEM_NONE;
+    case THING_ITEMS: /* A stack, or items lying where they fell. */
+        return items_first(game_view_items(&app->game), map_index(map, x, y, z)) != NULL;
     case THING_PLANT: return app_plant_type_at(app, x, y, z) != PLANT_NONE;
     case THING_COUNT: break;
     }

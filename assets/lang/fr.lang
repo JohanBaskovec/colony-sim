@@ -623,6 +623,15 @@ tile_panel.refresh = Réfection : {0}
 tile_panel.growth = Croissance : {0} %
 tile_panel.dormant = Flétrie, repousse avec la chaleur
 tile_panel.count = Nombre : {0} ({1})
+tile_panel.items_here = Tous les objets ici, par :
+tile_panel.order_newest = Arrivée
+tile_panel.order_quality = Qualité
+tile_panel.order_condition = État
+tile_panel.order_rot = Pourriture
+tile_panel.item_line = {0} : {1}
+tile_panel.item_line_rot = {0} : {1} · {2}
+tile_panel.more_items.one = …et {0} autre objet
+tile_panel.more_items.other = …et {0} autres objets
 tile_panel.deconstruct = Démonter
 tile_panel.deconstruct.description = Ordonne de le démonter : les colons en récupèrent les matériaux
 tile_panel.deconstruct_roof.description = Ordonne de descendre le toit sur le sol en dessous (ce qui est posé dessus d’abord)
@@ -700,6 +709,7 @@ bill.progress.in_colony = {0} dans la colonie
 bill.progress.in_stock = {0} en stock
 bill.input_radius = Ingrédients à {0} cases au plus
 bill.levels = Artisans de niveau {0} à {1}
+bill.quality = Ingrédients de qualité {0} à {1}
 
 # Unités
 unit.hours = {0} h

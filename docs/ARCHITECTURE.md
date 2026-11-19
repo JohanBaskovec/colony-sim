@@ -133,7 +133,7 @@ simulation:
 | `journal_panel` | The Journal tab of a settler or an animal: five filter check boxes (`App.journal_hidden`; routine thoughts under Routine only), the entries newest first with their date, sentences built from the facts of `core/journal.h` (wording per language: verb by the strike mark, part and injury phrases, the owner's and the attacker's phrases by species; social sentences from topic, story and know-how phrases, with French elision before a vowel; a thought as a full sentence, its tooltip on hover) |
 | `thought_tooltip` | The tooltip of a thought (what it is about, its first value, how it fades or grows, how it adds up), shared by the Mood tab and the journal |
 | `health_panel` | The health of a settler (its Health tab) or an animal as table rows: the state, consciousness and what takes it off, blood, bleeding, pain, afflictions, abilities, injuries with tooltips |
-| `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it, and the action menu (forbid, fell, take apart, cancel a site, build another) |
+| `tile_panel`   | The selected thing on a tile in the inspector (a structure, a roof, a site, the items, a plant: `App.selected_thing`): its name as title, what to know of it (for items, the list of every item lying there, sorted by newest, quality, condition or rot), and the action menu (forbid, fell, take apart, cancel a site, build another) |
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time, discord among the settlers, forgetting the debug opinions), the chats counted so far, the debug tool (move settlers) |
 | `scenarios_panel` | Test scenarios menu (F2): a button per scenario; a click asks `App` to load it, which `app_run()` does at the start of the next frame (never while windows are being drawn), forgetting selection, tools and notices |
@@ -1652,8 +1652,19 @@ from the station, 80 by default), who may work on it (`BillWorker`: anyone,
 settlers whose level in the recipe's knowledge lies in `min_level`..`max_level`
 (inclusive, 0..100 by default: beginners for cheap things, masters for the
 best ones), or one settler, `Bill.colonist`, a generational handle that no
-longer matches anyone once the settler is gone) and a pause flag. The worker
-fields are hashed only when the bill is not for anyone.
+longer matches anyone once the settler is gone), the quality range of its
+ingredients (`min_quality`..`max_quality`, every quality by default) and a
+pause flag. The worker fields are hashed only when the bill is not for
+anyone, the quality range only when it is not the whole range.
+
+Ingredients are chosen item by item (`ItemChoice`, `core/item.h`): a heap
+counts only for its items within the bill's range (and the recipe's least
+quality), and only those are picked up (`items_pick_up_chosen()`). For food
+and other things that rot, the settler first looks around the station (the
+bill's radius, the station's level and the next ones) for the ingredient that
+rots away soonest (`items_soonest_rot_hours()`), then fetches from the nearest
+heap holding one that rots within six hours of it, and picks up the soonest
+to rot first; when none of those can be reached, any heap in range will do.
 
 "Until N" counts `Game.stock`: items lying in a stockpile that accepts them,
 plus those on their way there, lying on a workstation tile (where products

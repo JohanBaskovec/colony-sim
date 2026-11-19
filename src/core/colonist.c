@@ -2364,6 +2364,12 @@ typedef struct FetchSearch {
     /* Tools only better than this speed factor for `use` (0: any). */
     ToolUse use;
     float min_factor;
+    /* A bill's ingredients: min_count of the items of the stack must lie in
+     * the choice's quality range (each item's own), and when max_rot_hours
+     * is not negative, one of them must rot away within that many hours. */
+    bool by_item;
+    ItemChoice choice;
+    float max_rot_hours;
 } FetchSearch;
 
 static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
@@ -2371,6 +2377,18 @@ static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
     (void)map;
     const FetchSearch *search = userdata;
     ItemStack stack = items_get_allowed(search->items, x, y, z);
+    if (stack.type != ITEM_NONE && search->by_item && (search->types & ITEM_TYPE_BIT(stack.type))) {
+        if (items_count_chosen(search->items, x, y, z, search->choice) < search->min_count) {
+            return false;
+        }
+        if (search->max_rot_hours >= 0.0f &&
+            items_soonest_rot_hours(search->items, x, y, z, search->choice) >
+                search->max_rot_hours) {
+            return false;
+        }
+        stack.quality = ITEM_QUALITY_BEST; /* Checked item by item. */
+        stack.count = UINT16_MAX;
+    }
     return stack.type != ITEM_NONE && (search->types & ITEM_TYPE_BIT(stack.type)) &&
            stack.quality >= search->min_quality && stack.count >= search->min_count &&
            (search->match.count == 0 || item_stacks_match(stack, search->match)) &&
@@ -2413,9 +2431,63 @@ static FetchSearch fetch_search(const ColonistContext *context, ItemTypeMask typ
                           1,
                           {.type = ITEM_NONE},
                           TOOL_USE_NONE,
-                          0.0f};
+                          0.0f,
+                          false,
+                          ITEM_CHOICE_ANY,
+                          -1.0f};
     return search;
 }
+
+/* What of the stacks a bill's ingredients may be: its quality range (and the
+ * recipe's least quality), the soonest to rot first for what rots. */
+static ItemChoice bill_choice(const Bill *bill, ItemType type)
+{
+    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    int low = def != NULL && def->input_min_quality > bill->min_quality ? def->input_min_quality
+                                                                        : bill->min_quality;
+    return (ItemChoice){low, bill->max_quality, item_rots(type)};
+}
+
+/* Hours of rot (x1) the ingredient that rots away soonest has left, among
+ * those of a type a bill may take lying around the station (within its
+ * radius, on its level and the next ones); negative when there is none. */
+static float soonest_ingredient(const ColonistContext *context, const Workstation *station,
+                                const Bill *bill, ItemType type)
+{
+    const Items *items = context->plan_items;
+    ItemChoice choice = bill_choice(bill, type);
+    int radius = bill->input_radius;
+    float soonest = -1.0f;
+    for (int z = station->z - 1; z <= station->z + 1; z++) {
+        if (z < 0 || z >= items->depth || items->level_stacks[z] == 0) {
+            continue;
+        }
+        int y0 = station->y - radius > 0 ? station->y - radius : 0;
+        int y1 = station->y + radius < items->height - 1 ? station->y + radius : items->height - 1;
+        int x0 = station->x - radius > 0 ? station->x - radius : 0;
+        int x1 = station->x + radius < items->width - 1 ? station->x + radius : items->width - 1;
+        for (int y = y0; y <= y1; y++) {
+            for (int x = x0; x <= x1; x++) {
+                ItemStack stack = items_get_allowed(items, x, y, z);
+                if (stack.type != type ||
+                    reservations_taken_by_other(context->reservations, RESERVATION_HAUL_SOURCE,
+                                                (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                                context->worker_id)) {
+                    continue;
+                }
+                float hours = items_soonest_rot_hours(items, x, y, z, choice);
+                if (hours >= 0.0f && (soonest < 0.0f || hours < soonest)) {
+                    soonest = hours;
+                }
+            }
+        }
+    }
+    return soonest;
+}
+
+/* Ingredients that rot within this many hours more than the soonest one
+ * count as soon enough (the nearest of them is fetched). */
+#define COLONIST_ROT_MARGIN_HOURS 6.0f
 
 /* Input of a craft: the recipe's input types in order of preference, among
  * those the bill allows, near the station. */
@@ -2429,9 +2501,22 @@ static bool fetch_input(Colonist *colonist, const ColonistContext *context,
             continue;
         }
         FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(type));
-        search.min_quality = def->input_min_quality;
         search.min_count = def->input_count - colonist->carried.count;
         search.match = colonist->carried;
+        search.by_item = true;
+        search.choice = bill_choice(bill, type);
+        if (search.choice.soonest_rot && context->plan_items->totals[type] > 0) {
+            /* What rots first is used first. */
+            float soonest = soonest_ingredient(context, station, bill, type);
+            if (soonest >= 0.0f) {
+                search.max_rot_hours = soonest + COLONIST_ROT_MARGIN_HOURS;
+                if (start_fetch(colonist, context, &search, station_tile(station),
+                                (float)bill->input_radius, false)) {
+                    return true;
+                }
+                search.max_rot_hours = -1.0f; /* Out of reach: any. */
+            }
+        }
         if (start_fetch(colonist, context, &search, station_tile(station),
                         (float)bill->input_radius, false)) {
             return true;
@@ -2710,8 +2795,13 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
         return false;
     }
-    return items_pick_up(context->items, colonist->x, colonist->y, colonist->z,
-                         stack.count < wanted ? stack.count : wanted, &colonist->carried) > 0;
+    const Workstation *station = job_station(colonist, context);
+    ItemChoice choice = station != NULL && colonist->bill < station->bill_count
+                            ? bill_choice(&station->bills[colonist->bill], (ItemType)stack.type)
+                            : ITEM_CHOICE_ANY;
+    return items_pick_up_chosen(context->items, colonist->x, colonist->y, colonist->z,
+                                stack.count < wanted ? stack.count : wanted, choice,
+                                &colonist->carried) > 0;
 }
 
 /* Arrived at the station: puts the input down, then starts working. */

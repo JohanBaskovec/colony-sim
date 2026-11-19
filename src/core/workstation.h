@@ -120,6 +120,10 @@ typedef struct Bill {
      * finished, so that the station is not blocked). */
     bool paused;
     uint16_t input_radius; /* BILL_INPUT_RADIUS_MIN..BILL_INPUT_RADIUS_MAX. */
+    /* Only ingredients whose quality lies in this inclusive range are used
+     * (each item's own: docs/ITEMS.md); ITEM_QUALITY_WORST..BEST: any. */
+    uint8_t min_quality;
+    uint8_t max_quality;
 } Bill;
 
 #define WORKSTATION_MAX 64
@@ -246,6 +250,10 @@ bool workstation_set_bill_max_level(Workstations *workstations, int index, int b
 bool workstation_set_bill_paused(Workstations *workstations, int index, int bill, bool paused);
 /* Clamped to BILL_INPUT_RADIUS_MIN..BILL_INPUT_RADIUS_MAX. */
 bool workstation_set_bill_input_radius(Workstations *workstations, int index, int bill, int radius);
+/* Quality range of the ingredients: both bounds clamped to
+ * ITEM_QUALITY_WORST..ITEM_QUALITY_BEST, swapped when crossed. */
+bool workstation_set_bill_quality_range(Workstations *workstations, int index, int bill, int low,
+                                        int high);
 
 /* Whether the settler `who`, at `level` in the recipe's knowledge, may take
  * the bill as far as the player's choice of workers goes (the level only

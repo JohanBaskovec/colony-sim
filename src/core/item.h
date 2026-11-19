@@ -433,6 +433,49 @@ bool items_move(Items *items, ItemId id, int x, int y, int z, int spot_x, int sp
 /* Turns an item lying on the ground by `steps` of 1/256 of a turn. */
 bool items_turn(Items *items, ItemId id, int steps);
 
+/* Orders of the items of a tile (the list of a heap). */
+typedef enum ItemOrder {
+    ITEM_ORDER_NEWEST,    /* As they lie: the newest first. */
+    ITEM_ORDER_QUALITY,   /* The best first. */
+    ITEM_ORDER_CONDITION, /* The least damaged first (hit points in percent). */
+    ITEM_ORDER_ROT,       /* What rots away soonest first; what never rots last. */
+    ITEM_ORDER_COUNT
+} ItemOrder;
+
+/* An item as a stack of one (its type, quality, hit points...). */
+ItemStack item_as_stack(const Item *item);
+
+/* Rot an item has left before it is gone, in 1/ITEM_ROT_STEP of a hit point
+ * (item_stack_rot_hours() turns it into hours); -1 for one that never rots. */
+long item_rot_left(const Item *item);
+
+/* The items lying on the tile at `index` in an order: the first `capacity`
+ * of them into `out` (ties: the newest first). Returns how many lie there. */
+int items_list(const Items *items, size_t index, ItemOrder order, const Item **out, int capacity);
+
+/* What of a tile's stack is wanted (a bill's ingredients): a quality range,
+ * and the items that rot away soonest first. */
+typedef struct ItemChoice {
+    int min_quality;
+    int max_quality;
+    bool soonest_rot;
+} ItemChoice;
+
+/* Any item of the stack, the newest first. */
+#define ITEM_CHOICE_ANY ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false})
+
+/* Items of the tile's stack whose quality lies in the choice's range. */
+int items_count_chosen(const Items *items, int x, int y, int z, ItemChoice choice);
+
+/* Hours until the first item of the tile's stack in the choice's range rots
+ * away, at rot ×1 (item_stack_rot_hours()); negative when none rots. */
+float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemChoice choice);
+
+/* items_pick_up(), only items in the choice's range, those that rot away
+ * soonest first when it says so. */
+int items_pick_up_chosen(Items *items, int x, int y, int z, int count, ItemChoice choice,
+                         ItemStack *load);
+
 /* Wild items (ITEM_FLAG_WILD) */
 
 /* Lays `count` wild items of a type on a tile, whatever lies there, each of

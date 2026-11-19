@@ -288,6 +288,7 @@ typedef struct App {
     AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */
     Combatant debug_attacker;      /* For APP_DEBUG_FIGHT: who was clicked first (or none). */
     ItemId debug_held;             /* For APP_DEBUG_MOVE_ITEM: the item dragged (or none). */
+    ItemOrder items_order;         /* How the inspector lists the items of a tile. */
     /* The character editor's Social tab: the settler the selected one acts
      * with (a click on its row; the best liked one when none). */
     EntityId debug_social_partner;

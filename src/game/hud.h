@@ -33,6 +33,10 @@ void hud_quality_text(char *out, size_t size, ItemQuality quality);
 bool hud_structure_condition_text(char *out, size_t size, const Map *map, int x, int y, int z);
 /* "21 kg", "0.3 kg" (see the tile readout). */
 void hud_weight_text(char *out, size_t size, float kilograms);
+
+/* "Rots away in about ..." for `hours` left (item_stack_rot_hours()), or
+ * that it keeps while frozen (negative hours). */
+void hud_rot_text(char *out, size_t size, float hours);
 /* Who owns the bed on a tile (or that it is free). */
 void hud_bed_owner_text(const App *app, char *out, size_t size, int x, int y, int z);
 /* A construction site's line `line`: 0 its progress, then one per material

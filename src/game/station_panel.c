@@ -15,7 +15,9 @@
 #define LEVEL_STEPS (BILL_LEVEL_MAX - BILL_LEVEL_MIN + 1) /* Notches of the level slider. */
 #define LEVEL_SLIDER_ID 5000                              /* + the bill. */
 #define LEVEL_SLIDER_WIDTH 200.0f
-#define DROPDOWN_ID 100 /* + 2 per bill, + 1 for the settler's. */
+#define QUALITY_SLIDER_ID 6000 /* + the bill. */
+#define QUALITY_STEP 5         /* Quality points per notch of the ingredient slider. */
+#define DROPDOWN_ID 100        /* + 2 per bill, + 1 for the settler's. */
 #define RADIUS_STEP 10
 #define RADIUS_BIG_STEP 50
 
@@ -30,6 +32,7 @@ typedef enum ActionType {
     ACTION_SET_WORKER,
     ACTION_SET_COLONIST,
     ACTION_SET_LEVELS,
+    ACTION_SET_QUALITY,
     ACTION_TOGGLE_PAUSE,
     ACTION_ADD_RADIUS,
     ACTION_ADD_BILL,
@@ -46,7 +49,7 @@ typedef struct Action {
     ActionType type;
     int bill;
     int value;  /* Target, level or radius change, item type, recipe, knowledge, worker mode. */
-    int value2; /* ACTION_SET_LEVELS: the highest level (value is the lowest). */
+    int value2; /* ACTION_SET_LEVELS/QUALITY: the highest (value is the lowest). */
     EntityId colonist; /* ACTION_SET_COLONIST. */
 } Action;
 
@@ -526,6 +529,30 @@ static void bill_worker_rows(UiLayout *layout, const Game *game, const Bill *bil
     }
 }
 
+/* The quality range of the ingredients a bill takes (steps of QUALITY_STEP). */
+static void bill_quality_row(UiLayout *layout, const Bill *bill, int index, Action *action)
+{
+    Ui *ui = layout->ui;
+    char text[TEXT_SIZE], low[32], high[32];
+    hud_quality_text(low, sizeof(low), (ItemQuality)bill->min_quality);
+    hud_quality_text(high, sizeof(high), (ItemQuality)bill->max_quality);
+    TR_FORMAT(text, sizeof(text), tr("bill.quality"), low, high);
+    ui_layout_label(layout, text, 0.0f, true);
+    ui_layout_measure(layout, LEVEL_SLIDER_WIDTH);
+    int slider_low = bill->min_quality / QUALITY_STEP;
+    int slider_high = (bill->max_quality + QUALITY_STEP - 1) / QUALITY_STEP;
+    if (layout->draw &&
+        ui_range_slider(ui, QUALITY_SLIDER_ID + index,
+                        (SDL_FRect){layout->x, layout->y, layout->width, layout->row},
+                        ITEM_QUALITY_BEST / QUALITY_STEP + 1, &slider_low, &slider_high)) {
+        *action = (Action){.type = ACTION_SET_QUALITY,
+                           .bill = index,
+                           .value = slider_low * QUALITY_STEP,
+                           .value2 = slider_high * QUALITY_STEP};
+    }
+    layout->y += layout->row;
+}
+
 /* -/+ for how far inputs are looked for. */
 static void bill_radius_row(UiLayout *layout, const Bill *bill, int index, Action *action)
 {
@@ -822,6 +849,9 @@ static void bill_rows(UiLayout *layout, void *userdata)
     bill_worker_rows(layout, rows->game, bill, index, &rows->action);
     layout->y += GAP;
     bill_radius_row(layout, bill, index, &rows->action);
+    if (def->inputs[0] != ITEM_NONE) {
+        bill_quality_row(layout, bill, index, &rows->action);
+    }
     if (def->inputs[1] != ITEM_NONE) {
         layout->y += GAP;
         heading_row(layout, "bill.heading.choice");
@@ -1253,6 +1283,12 @@ static void apply(App *app, int index, const Action *action)
                 workstation_set_bill_min_level(workstations, index, action->bill, action->value);
                 workstation_set_bill_max_level(workstations, index, action->bill, action->value2);
             }
+        }
+        break;
+    case ACTION_SET_QUALITY:
+        if (bill != NULL) {
+            workstation_set_bill_quality_range(workstations, index, action->bill, action->value,
+                                               action->value2);
         }
         break;
     case ACTION_TOGGLE_PAUSE:

@@ -215,6 +215,8 @@ int workstation_add_bill(Workstations *workstations, int index, RecipeType recip
     bill->min_level = (uint8_t)BILL_LEVEL_MIN;
     bill->max_level = (uint8_t)BILL_LEVEL_MAX;
     bill->input_radius = BILL_INPUT_RADIUS_DEFAULT;
+    bill->min_quality = ITEM_QUALITY_WORST;
+    bill->max_quality = ITEM_QUALITY_BEST;
     workstations->revision++;
     return station->bill_count++;
 }
@@ -327,6 +329,21 @@ bool workstation_set_bill_max_level(Workstations *workstations, int index, int b
         return false;
     }
     entry->max_level = (uint8_t)clampi(level, entry->min_level, BILL_LEVEL_MAX);
+    workstations->revision++;
+    return true;
+}
+
+bool workstation_set_bill_quality_range(Workstations *workstations, int index, int bill, int low,
+                                        int high)
+{
+    Bill *entry = get_bill(workstations, index, bill);
+    if (entry == NULL) {
+        return false;
+    }
+    low = clampi(low, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
+    high = clampi(high, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
+    entry->min_quality = (uint8_t)(low < high ? low : high);
+    entry->max_quality = (uint8_t)(low < high ? high : low);
     workstations->revision++;
     return true;
 }
@@ -529,6 +546,10 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
                 (uint32_t)bill->inputs, bill->min_level, bill->max_level, bill->paused,
                 bill->input_radius};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
+            if (bill->min_quality != ITEM_QUALITY_WORST || bill->max_quality != ITEM_QUALITY_BEST) {
+                uint8_t range[2] = {bill->min_quality, bill->max_quality};
+                hash = hash_fnv1a64(hash, range, sizeof(range));
+            }
             if (bill->worker != BILL_WORKER_ANYONE) {
                 uint32_t worker[3] = {bill->worker, bill->colonist.index,
                                       bill->colonist.generation};

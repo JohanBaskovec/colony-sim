@@ -947,6 +947,44 @@ static void test_item_picked_by_point_moved_and_turned(void)
     items_free(&items);
 }
 
+/* The items of a heap listed by quality, condition or rot. */
+static void test_items_listed_in_order(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_make(ITEM_BLACKBERRIES, 1, 30, 9)) == 1);
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_make(ITEM_BLACKBERRIES, 1, 80, 4)) == 1);
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_make(ITEM_BLACKBERRIES, 1, 55, 6)) == 1);
+    size_t index = 1 * 4 + 1;
+    const Item *out[3];
+    CHECK_EQ_INT(items_list(&items, index, ITEM_ORDER_NEWEST, out, 3), 3);
+    CHECK_EQ_INT(out[0]->quality, 55);
+    CHECK_EQ_INT(out[2]->quality, 30);
+    items_list(&items, index, ITEM_ORDER_QUALITY, out, 3);
+    CHECK_EQ_INT(out[0]->quality, 80);
+    CHECK_EQ_INT(out[1]->quality, 55);
+    CHECK_EQ_INT(out[2]->quality, 30);
+    items_list(&items, index, ITEM_ORDER_CONDITION, out, 3);
+    CHECK_EQ_INT(out[0]->hit_points, 9);
+    CHECK_EQ_INT(out[2]->hit_points, 4);
+    items_list(&items, index, ITEM_ORDER_ROT, out, 3); /* The most rotten first. */
+    CHECK_EQ_INT(out[0]->hit_points, 4);
+    CHECK_EQ_INT(out[1]->hit_points, 6);
+    CHECK_EQ_INT(item_rot_left(out[0]), 4 * ITEM_ROT_STEP);
+    /* Fewer kept than lie there: the first ones of the order. */
+    const Item *best[1];
+    CHECK_EQ_INT(items_list(&items, index, ITEM_ORDER_QUALITY, best, 1), 3);
+    CHECK_EQ_INT(best[0]->quality, 80);
+    /* What never rots comes last. */
+    REQUIRE(items_add_wild(&items, 1, 1, 0, ITEM_COBBLE, 1) == 1);
+    const Item *all[4];
+    CHECK_EQ_INT(items_list(&items, index, ITEM_ORDER_ROT, all, 4), 4);
+    CHECK_EQ_INT(all[3]->type, ITEM_COBBLE);
+    CHECK_EQ_INT(item_rot_left(all[3]), -1);
+    CHECK_EQ_INT(item_as_stack(all[0]).count, 1);
+    items_free(&items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -984,5 +1022,6 @@ int main(void)
     RUN_TEST(test_wild_items_picked_up);
     RUN_TEST(test_wild_litter_crumbles);
     RUN_TEST(test_item_picked_by_point_moved_and_turned);
+    RUN_TEST(test_items_listed_in_order);
     return test_summary();
 }

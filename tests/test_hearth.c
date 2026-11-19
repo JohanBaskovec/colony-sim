@@ -2,6 +2,7 @@
  * embers, fire hardening, roasting and fireside stories. */
 #include "core/game.h"
 #include "core/hearth.h"
+#include "core/util.h"
 
 #include "test_framework.h"
 #include "test_settlers.h"
@@ -751,6 +752,87 @@ static void test_roasting(void)
     game_shutdown(&game);
 }
 
+/* Raw carrots lying in a heap: `count` of a quality, `percent` of their hit points. */
+static void add_carrots(Game *game, int x, int y, int count, int quality, int percent)
+{
+    items_add(&game->items, x, y, 0,
+              item_stack_make(ITEM_WILD_CARROTS, count, quality,
+                              item_hit_points_at_percent(ITEM_WILD_CARROTS, percent)));
+}
+
+/* Carrots of the quality left on a tile (raw ones). */
+static int carrots_left(const Game *game, int x, int y)
+{
+    ItemStack stack = items_get(&game->items, x, y, 0);
+    return stack.type == ITEM_WILD_CARROTS ? stack.count : 0;
+}
+
+/* A bill only takes ingredients within its quality range, item by item. */
+static void test_bill_ingredient_quality(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *cook = spawn_settler(&game, 12, 12, 75.0, WORK_CRAFTING);
+    REQUIRE(cook != NULL);
+    int index = built_hearth(&game, 14, 10, HEARTH_FUEL_CAPACITY);
+    REQUIRE(hearth_light(&game.workstations, index));
+    add_carrots(&game, 16, 12, 4, 20, 100); /* Poor, nearest. */
+    add_carrots(&game, 16, 12, 4, 90, 100); /* Fine, on top of them. */
+    add_carrots(&game, 20, 12, 4, 50, 100); /* Middling, farther. */
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_ROAST_CARROTS);
+    REQUIRE(bill >= 0);
+    Bill *entry = &workstation_get(&game.workstations, index)->bills[bill];
+    CHECK_EQ_INT(entry->min_quality, ITEM_QUALITY_WORST);
+    CHECK_EQ_INT(entry->max_quality, ITEM_QUALITY_BEST);
+    uint64_t before = workstations_hash(&game.workstations, HASH_FNV1A64_INIT);
+    CHECK(workstation_set_bill_quality_range(&game.workstations, index, bill, 70, 40));
+    CHECK_EQ_INT(entry->min_quality, 40); /* Crossed bounds are swapped. */
+    CHECK_EQ_INT(entry->max_quality, 70);
+    CHECK(workstations_hash(&game.workstations, HASH_FNV1A64_INIT) != before);
+    CHECK(workstation_set_bill_quality_range(&game.workstations, index, bill, -5, 500));
+    CHECK_EQ_INT(entry->min_quality, ITEM_QUALITY_WORST); /* Clamped. */
+    CHECK_EQ_INT(entry->max_quality, ITEM_QUALITY_BEST);
+    CHECK(!workstation_set_bill_quality_range(&game.workstations, index, 9, 0, 10));
+
+    /* Only the middling ones fit 40..70: the nearer heap is left alone. */
+    CHECK(workstation_set_bill_quality_range(&game.workstations, index, bill, 40, 70));
+    entry->target = 1;
+    run_ticks(&game, 2500, true);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_ROASTED_CARROTS] +
+                     (cook->carried.type == ITEM_ROASTED_CARROTS ? cook->carried.count : 0),
+                 4);
+    CHECK_EQ_INT(carrots_left(&game, 20, 12), 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_WILD_CARROTS], 8);
+    CHECK_EQ_INT(items_count_chosen(&game.items, 16, 12, 0, (ItemChoice){80, 100, false}), 4);
+    game_shutdown(&game);
+}
+
+/* Cooking takes the ingredients that would rot first, even farther away. */
+static void test_cooking_takes_what_rots_first(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *cook = spawn_settler(&game, 12, 12, 75.0, WORK_CRAFTING);
+    REQUIRE(cook != NULL);
+    int index = built_hearth(&game, 14, 10, HEARTH_FUEL_CAPACITY);
+    REQUIRE(hearth_light(&game.workstations, index));
+    add_carrots(&game, 16, 12, 4, 50, 100); /* Fresh, nearest. */
+    add_carrots(&game, 24, 12, 2, 50, 30);  /* Soon gone, farther. */
+    add_carrots(&game, 24, 12, 2, 50, 100);
+    add_carrots(&game, 30, 12, 4, 50, 25); /* Sooner still, farther still. */
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_ROAST_CARROTS);
+    REQUIRE(bill >= 0);
+    workstation_get(&game.workstations, index)->bills[bill].target = 1;
+    run_ticks(&game, 3000, true);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_ROASTED_CARROTS] +
+                     (cook->carried.type == ITEM_ROASTED_CARROTS ? cook->carried.count : 0),
+                 4);
+    CHECK_EQ_INT(carrots_left(&game, 30, 12), 0);
+    CHECK_EQ_INT(carrots_left(&game, 16, 12), 4);
+    CHECK_EQ_INT(carrots_left(&game, 24, 12), 4);
+    game_shutdown(&game);
+}
+
 /* Counts colonists doing `task`. */
 static int count_task(const Game *game, ColonistTask task)
 {
@@ -857,6 +939,8 @@ int main(void)
     RUN_TEST(test_embers_do_not_go_far);
     RUN_TEST(test_fire_hardening);
     RUN_TEST(test_roasting);
+    RUN_TEST(test_bill_ingredient_quality);
+    RUN_TEST(test_cooking_takes_what_rots_first);
     RUN_TEST(test_rain_puts_out_fires_in_the_open);
     RUN_TEST(test_fireside_stories);
     RUN_TEST(test_at_most_eight_listeners);

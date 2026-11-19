@@ -174,6 +174,21 @@ bool hud_item_condition_text(char *out, size_t size, ItemStack stack)
     return true;
 }
 
+void hud_rot_text(char *out, size_t size, float hours)
+{
+    char a[32];
+    if (hours < 0.0f) {
+        SDL_strlcpy(out, tr("hud.tile.item_frozen"), size);
+    } else if (hours < 48.0f) {
+        tr_integer(a, sizeof(a), (long long)hours + 1);
+        TR_FORMAT(out, size, tr("hud.tile.item_rot_hours"), a);
+    } else {
+        long long days = (long long)(hours / 24.0f + 0.5f);
+        tr_integer(a, sizeof(a), days);
+        TR_FORMAT(out, size, tr_plural("hud.tile.item_rot_days", days), a);
+    }
+}
+
 static void add_item_condition_line(Panel *panel, ItemStack stack)
 {
     char line[HUD_LINE_SIZE];
@@ -516,17 +531,7 @@ static void build_tile_panel(App *app, Panel *panel)
         if (item_rots((ItemType)stack.type)) {
             /* At the tile's temperature now: an estimate. */
             float hours = item_stack_rot_hours(stack, game_item_rot_rate(&app->game, x, y, z));
-            if (hours < 0.0f) {
-                panel_add_text(panel, tr("hud.tile.item_frozen"));
-            } else if (hours < 48.0f) {
-                tr_integer(a, sizeof(a), (long long)hours + 1);
-                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.item_rot_hours"), a);
-            } else {
-                long long days = (long long)(hours / 24.0f + 0.5f);
-                tr_integer(a, sizeof(a), days);
-                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
-                          tr_plural("hud.tile.item_rot_days", days), a);
-            }
+            hud_rot_text(panel_add(panel), HUD_LINE_SIZE, hours);
         }
     }
 
