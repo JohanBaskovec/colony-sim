@@ -289,8 +289,8 @@ static void look_at_tile(Cast *cast, OpenSet *set, size_t column, int z, float i
         return; /* Open space. */
     }
     bool own = column == cast->eye_column && z == cast->eye_level;
-    bool solid =
-        rock != 0 || (!own && (structure == STRUCTURE_WALL || structure == STRUCTURE_DOOR));
+    bool solid = rock != 0 || (!own && (structure == STRUCTURE_WALL ||
+                                        (structure == STRUCTURE_DOOR && map->doors[index] == 0)));
     bool plane = rock == 0;
     bool plane_blocks = plane && floor_blocks(terrain);
     float bottom = (float)z * LEVEL_HEIGHT - cast->eye_height; /* Relative to the eye. */
@@ -473,7 +473,7 @@ static bool blocks_sideways(const Map *map, int x, int y, int z)
     }
     size_t index = map_index(map, x, y, z);
     return map->rock[index] != 0 || map->structure[index] == STRUCTURE_WALL ||
-           map->structure[index] == STRUCTURE_DOOR;
+           (map->structure[index] == STRUCTURE_DOOR && !map_door_open_at(map, index));
 }
 
 /* The tiles of a sleeper's field: its own, the ones around it on its level,

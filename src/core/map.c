@@ -1136,14 +1136,16 @@ bool map_init(Map *map, int width, int height, int depth)
     map->structure_hit_points = calloc(count, sizeof(*map->structure_hit_points));
     map->roof_quality = calloc(count, 1);
     map->forbidden = calloc(count, 1);
+    map->doors = calloc(count, 1);
     size_t blocks = (size_t)((width + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK) *
                     (size_t)((height + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK);
     map->light_stamps = calloc(blocks, sizeof(*map->light_stamps));
-    if (map->light_stamps == NULL || map->forbidden == NULL || map->terrain == NULL ||
-        map->rock == NULL || map->slope == NULL || map->plants == NULL || map->cobbles == NULL ||
-        map->flint == NULL || map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
-        map->structure == NULL || map->structure_part == NULL || map->structure_quality == NULL ||
-        map->structure_hit_points == NULL || map->roof_quality == NULL) {
+    if (map->light_stamps == NULL || map->doors == NULL || map->forbidden == NULL ||
+        map->terrain == NULL || map->rock == NULL || map->slope == NULL || map->plants == NULL ||
+        map->cobbles == NULL || map->flint == NULL || map->branches == NULL || map->twigs == NULL ||
+        map->nuts == NULL || map->structure == NULL || map->structure_part == NULL ||
+        map->structure_quality == NULL || map->structure_hit_points == NULL ||
+        map->roof_quality == NULL) {
         map_free(map);
         return false;
     }
@@ -1176,6 +1178,7 @@ void map_free(Map *map)
     free(map->roof_quality);
     free(map->forbidden);
     free(map->light_stamps);
+    free(map->doors);
     memset(map, 0, sizeof(*map));
 }
 
@@ -1240,6 +1243,37 @@ uint32_t map_light_stamp(const Map *map, int x0, int y0, int x1, int y1)
         }
     }
     return latest;
+}
+
+bool map_set_door_kept_open(Map *map, int x, int y, int z, bool open)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    if (map->structure[index] != STRUCTURE_DOOR) {
+        return false;
+    }
+    uint8_t before = map->doors[index];
+    uint8_t after = (uint8_t)(open ? before | MAP_DOOR_KEPT_OPEN : before & ~MAP_DOOR_KEPT_OPEN);
+    if (after != before) {
+        map->doors[index] = after;
+        map->doors_kept_open += open ? 1 : -1;
+        map_light_changed(map, x, y);
+        log_build_change(map, x, y, z);
+    }
+    return true;
+}
+
+void map_set_door_passing(Map *map, size_t index, bool passing)
+{
+    uint8_t before = map->doors[index];
+    uint8_t after =
+        (uint8_t)(passing ? before | MAP_DOOR_PASSING : before & ~(unsigned)MAP_DOOR_PASSING);
+    if (after == before) {
+        return;
+    }
+    map->doors[index] = after; /* Only the sight: the light is not stamped. */
 }
 
 void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
@@ -1347,6 +1381,8 @@ static void set_tile_structure(Map *map, int x, int y, int z, StructureType type
     if (structure_stops_light(old) || structure_stops_light(type)) {
         map_light_changed(map, x, y);
     }
+    map->doors_kept_open -= (map->doors[index] & MAP_DOOR_KEPT_OPEN) != 0;
+    map->doors[index] = 0; /* A new door is closed. */
     map->structure_part[index] = part;
     map->structure_quality[index] = (uint8_t)quality;
     map->structure_hit_points[index] = (uint16_t)hit_points;
@@ -2026,9 +2062,12 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     bool has_roof = terrain_def((Terrain)src->terrain[index])->built != STRUCTURE_NONE;
     dst->roof_count += has_roof - had_roof;
     dst->forbidden_count += (src->forbidden[index] != 0) - (dst->forbidden[index] != 0);
+    dst->doors_kept_open += ((src->doors[index] & MAP_DOOR_KEPT_OPEN) != 0) -
+                            ((dst->doors[index] & MAP_DOOR_KEPT_OPEN) != 0);
     if (dst->terrain[index] != src->terrain[index] || dst->rock[index] != src->rock[index] ||
         structure_stops_light(dst->structure[index]) !=
-            structure_stops_light(src->structure[index])) {
+            structure_stops_light(src->structure[index]) ||
+        ((dst->doors[index] ^ src->doors[index]) & MAP_DOOR_KEPT_OPEN) != 0) {
         size_t column = index % map_level_tile_count(dst);
         map_light_changed(dst, (int)(column % (size_t)dst->width),
                           (int)(column / (size_t)dst->width));
@@ -2048,6 +2087,7 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     dst->structure_hit_points[index] = src->structure_hit_points[index];
     dst->roof_quality[index] = src->roof_quality[index];
     dst->forbidden[index] = src->forbidden[index];
+    dst->doors[index] = src->doors[index];
 }
 
 uint64_t map_hash(const Map *map)
@@ -2089,6 +2129,14 @@ uint64_t map_hash(const Map *map)
     }
     if (map->forbidden_count > 0) { /* Likewise without anything forbidden. */
         hash = hash_fnv1a64(hash, map->forbidden, count);
+    }
+    if (map->doors_kept_open > 0) { /* Likewise without doors kept open. */
+        for (size_t i = 0; i < count; i++) {
+            if ((map->doors[i] & MAP_DOOR_KEPT_OPEN) != 0) {
+                uint64_t at = i;
+                hash = hash_fnv1a64(hash, &at, sizeof(at));
+            }
+        }
     }
     /* Hash plant fields one by one: struct padding bytes are unspecified. */
     for (size_t i = 0; i < count; i++) {

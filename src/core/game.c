@@ -1678,6 +1678,57 @@ static void sync_known(Game *game)
 
 /* Puts every settler where it stands in the vision (fields are recast when it
  * moved or fell asleep), and takes away those who are gone or unconscious. */
+/* Doors somebody stands in are open for the light and the sight, the others
+ * close behind them (Map.doors); the settlers who see through are told. */
+static void update_doors(Game *game)
+{
+    Map *map = &game->map;
+    if (map->structure_counts[STRUCTURE_DOOR] == 0 && game->passing_door_count == 0) {
+        return;
+    }
+    uint32_t now[OCCUPANCY_BEINGS];
+    int count = 0;
+    for (int being = 1; being <= OCCUPANCY_BEINGS; being++) {
+        const OccupancyBeing *state = &game->occupancy.beings[being];
+        TilePos at = state->at;
+        if (!state->placed || !map_in_bounds(map, at.x, at.y, at.z)) {
+            continue;
+        }
+        uint32_t index = (uint32_t)map_index(map, at.x, at.y, at.z);
+        bool known = map->structure[index] != STRUCTURE_DOOR;
+        for (int i = 0; i < count && !known; i++) {
+            known = now[i] == index;
+        }
+        if (!known) {
+            now[count++] = index;
+        }
+    }
+    size_t level = map_level_tile_count(map);
+    for (int pass = 0; pass < 2; pass++) { /* Those left behind, then those entered. */
+        const uint32_t *from = pass == 0 ? game->passing_doors : now;
+        const uint32_t *to = pass == 0 ? now : game->passing_doors;
+        int from_count = pass == 0 ? game->passing_door_count : count;
+        int to_count = pass == 0 ? count : game->passing_door_count;
+        for (int i = 0; i < from_count; i++) {
+            bool kept = false;
+            for (int j = 0; j < to_count && !kept; j++) {
+                kept = to[j] == from[i];
+            }
+            if (kept || (pass == 0 && map->structure[from[i]] != STRUCTURE_DOOR)) {
+                continue;
+            }
+            map_set_door_passing(map, from[i], pass == 1);
+            if (game->vision_on) {
+                size_t column = from[i] % level;
+                vision_tile_changed(&game->vision, (int)(column % (size_t)map->width),
+                                    (int)(column / (size_t)map->width), (int)(from[i] / level));
+            }
+        }
+    }
+    memcpy(game->passing_doors, now, (size_t)count * sizeof(now[0]));
+    game->passing_door_count = count;
+}
+
 static void update_vision(Game *game)
 {
     vision_update_map(&game->vision, &game->map);
@@ -2615,6 +2666,7 @@ void game_tick(Game *game)
     update_colonists(game);
     hurt_under_felled_trees(game); /* Felled by the woodcutters: they die on their next turn. */
     update_animals(game);
+    update_doors(game);
     note_pending_hurts(game);
     resolve_strikes(game);
     bleed_on_ground(game);
@@ -3157,6 +3209,20 @@ bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target)
     case FORBID_TARGET_COUNT: break;
     }
     return false;
+}
+
+bool game_door_kept_open(const Game *game, int x, int y, int z)
+{
+    const Map *map = game_view_map(game);
+    return map_in_bounds(map, x, y, z) && map_door_kept_open_at(map, map_index(map, x, y, z));
+}
+
+bool game_set_door_kept_open(Game *game, int x, int y, int z, bool open)
+{
+    if (!game_tile_explored(game, x, y, z)) {
+        return false; /* Nobody has seen it. */
+    }
+    return map_set_door_kept_open(&game->map, x, y, z, open);
 }
 
 bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bool forbidden)

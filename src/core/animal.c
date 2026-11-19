@@ -566,7 +566,7 @@ static bool blocks_sight(const Map *map, int x, int y, int z)
     }
     size_t index = map_index(map, x, y, z);
     return map->rock[index] != ROCK_NONE || map->structure[index] == STRUCTURE_WALL ||
-           map->structure[index] == STRUCTURE_DOOR;
+           (map->structure[index] == STRUCTURE_DOOR && !map_door_open_at(map, index));
 }
 
 bool animal_sees(const Map *map, int x, int y, int z, TilePos threat, int distance)

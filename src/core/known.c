@@ -65,8 +65,11 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
         dst->roof_count += (terrain_def((Terrain)map->terrain[i])->built != STRUCTURE_NONE) -
                            (terrain_def((Terrain)dst->terrain[i])->built != STRUCTURE_NONE);
         dst->forbidden_count += (map->forbidden[i] != 0) - (dst->forbidden[i] != 0);
+        dst->doors_kept_open += ((map->doors[i] & MAP_DOOR_KEPT_OPEN) != 0) -
+                                ((dst->doors[i] & MAP_DOOR_KEPT_OPEN) != 0);
         if (map->terrain[i] != dst->terrain[i] || map->rock[i] != dst->rock[i] ||
-            map->structure[i] != dst->structure[i]) {
+            map->structure[i] != dst->structure[i] ||
+            ((map->doors[i] ^ dst->doors[i]) & MAP_DOOR_KEPT_OPEN) != 0) {
             size_t column = i % map_level_tile_count(dst);
             map_light_changed(dst, (int)(column % (size_t)dst->width),
                               (int)(column / (size_t)dst->width));
@@ -89,6 +92,7 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
     memcpy(dst->structure_hit_points + first, map->structure_hit_points + first,
            count * sizeof(*map->structure_hit_points));
     memcpy(dst->roof_quality + first, map->roof_quality + first, count);
+    memcpy(dst->doors + first, map->doors + first, count);
     memcpy(dst->forbidden + first, map->forbidden + first, count);
     memcpy(known->dirt.level + first, dirt->level + first, count);
     for (size_t i = first; i < first + count; i++) {

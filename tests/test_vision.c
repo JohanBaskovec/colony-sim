@@ -137,6 +137,15 @@ static void test_structures(void)
     CHECK(bit_at(&scene, 25, 20, 0));
     CHECK(!bit_at(&scene, 30, 20, 0)); /* A screen of branches hides too. */
     scene_clear(&scene);
+    /* Open (somebody in the doorway, or kept open), it is seen through. */
+    const uint8_t OPEN[] = {MAP_DOOR_PASSING, MAP_DOOR_KEPT_OPEN};
+    for (int i = 0; i < 2; i++) {
+        scene.map.doors[map_index(&scene.map, 25, 20, 0)] = OPEN[i];
+        vision_cast_eye(&scene.vision, &scene.map, 20, 20, 0, 20.5f, 20.5f, 0, scene.bits);
+        CHECK(bit_at(&scene, 30, 20, 0));
+        scene_clear(&scene);
+    }
+    scene.map.doors[map_index(&scene.map, 25, 20, 0)] = 0;
     vision_cast_eye(&scene.vision, &scene.map, 20, 30, 0, 20.5f, 30.5f, 0, scene.bits);
     CHECK(bit_at(&scene, 30, 30, 0)); /* A post is seen through. */
     scene_clear(&scene);

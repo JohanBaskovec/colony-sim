@@ -212,6 +212,10 @@ typedef struct Game {
     /* Who stops on which tile, settlers and animals alike (core/occupancy.h):
      * refreshed by each being on its turn, not part of game_hash(). */
     Occupancy occupancy;
+    /* The doors somebody stands in (map indices), open for the light and the
+     * sight while they do (MAP_DOOR_PASSING), not part of game_hash(). */
+    uint32_t passing_doors[OCCUPANCY_BEINGS];
+    int passing_door_count;
     /* Items in stock per type, what "until N in stock" bills count: lying in a
      * stockpile that accepts them, or on their way there (lying on a
      * workstation, where crafts drop their products, or carried by a hauler),
@@ -651,6 +655,14 @@ bool game_forbidden(const Game *game, int x, int y, int z, ForbidTarget target);
 /* Forbids or allows the thing on the tile. Allowing it makes the settlers
  * who found nothing to do look again. Returns whether it changed. */
 bool game_set_forbidden(Game *game, int x, int y, int z, ForbidTarget target, bool forbidden);
+
+/* Whether a door stands on the tile and is kept open (Map.doors). */
+bool game_door_kept_open(const Game *game, int x, int y, int z);
+
+/* Keeps the door on the tile open (the light, the sight, the warmth of its
+ * room and the animals go through) or lets it close behind whoever passes.
+ * False when no door the colony knows of stands there. */
+bool game_set_door_kept_open(Game *game, int x, int y, int z, bool open);
 
 /* The light on a tile now (0 .. 1): the sun (game_sunlight()), the sky
  * (weather_light()) and what covers the tile (map_light_cover(); a tile of a

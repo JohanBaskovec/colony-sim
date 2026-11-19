@@ -442,6 +442,51 @@ static void test_doors_let_settlers_through_slowly(void)
     game_shutdown(&game);
 }
 
+/* A door opens while somebody stands in its doorway and closes behind
+ * them, for the sight only (the light is not stamped); the player may keep
+ * it open (and close it again), only a door, and the light goes through
+ * it then. */
+static void test_doors_open_and_close(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    map_set_structure(&game.map, 10, 10, 0, STRUCTURE_DOOR);
+    map_set_structure(&game.map, 20, 10, 0, STRUCTURE_DOOR);
+    size_t door = map_index(&game.map, 10, 10, 0), other = map_index(&game.map, 20, 10, 0);
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    uint32_t light = game.map.light_revision;
+    game_tick(&game);
+    CHECK(map_door_open_at(&game.map, door));
+    CHECK(!map_door_open_at(&game.map, other));
+    CHECK(map_stops_light_at(&game.map, door));
+    CHECK_EQ_UINT(game.map.light_revision, light);
+    CHECK(!game_door_kept_open(&game, 10, 10, 0)); /* Open, not kept open. */
+    REQUIRE(game_debug_teleport(&game, game_colonist_id_at(&game, 0), 15, 15, 0));
+    game_tick(&game);
+    CHECK(!map_door_open_at(&game.map, door));
+    CHECK_EQ_INT(game.passing_door_count, 0);
+
+    uint64_t closed = map_hash(&game.map);
+    CHECK(game_set_door_kept_open(&game, 20, 10, 0, true));
+    CHECK(game_door_kept_open(&game, 20, 10, 0));
+    CHECK(map_door_open_at(&game.map, other));
+    CHECK(!map_stops_light_at(&game.map, other));
+    CHECK(game.map.light_revision != light);
+    CHECK(map_hash(&game.map) != closed);
+    CHECK(game_set_door_kept_open(&game, 20, 10, 0, false));
+    CHECK(!map_door_open_at(&game.map, other));
+    CHECK_EQ_UINT(map_hash(&game.map), closed);
+    CHECK(!game_set_door_kept_open(&game, 21, 10, 0, true)); /* No door there. */
+    /* A door kept open and taken apart: the next one there is closed. */
+    CHECK(game_set_door_kept_open(&game, 20, 10, 0, true));
+    map_set_structure(&game.map, 20, 10, 0, STRUCTURE_NONE);
+    CHECK_EQ_INT(game.map.doors_kept_open, 0);
+    map_set_structure(&game.map, 20, 10, 0, STRUCTURE_DOOR);
+    CHECK(!map_door_open_at(&game.map, other));
+    game_shutdown(&game);
+}
+
 static void test_settlers_sleep_in_beds(void)
 {
     Game game;
@@ -781,6 +826,7 @@ int main(void)
     RUN_TEST(test_no_building_without_materials_or_knowledge);
     RUN_TEST(test_colonist_steps_out_of_a_new_wall);
     RUN_TEST(test_doors_let_settlers_through_slowly);
+    RUN_TEST(test_doors_open_and_close);
     RUN_TEST(test_settlers_sleep_in_beds);
     RUN_TEST(test_settlers_own_their_beds);
     RUN_TEST(test_planning_beds);

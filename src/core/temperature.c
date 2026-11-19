@@ -358,8 +358,9 @@ TemperatureMaterial temperature_material(const Map *map, int x, int y, int z)
         return TEMPERATURE_MATERIAL_OPEN;
     }
     StructureType structure = map_structure(map, x, y, z);
-    if (structure == STRUCTURE_DOOR) {
-        return TEMPERATURE_MATERIAL_DOOR;
+    if (structure == STRUCTURE_DOOR) { /* Kept open, it is an opening. */
+        return map_door_kept_open_at(map, map_index(map, x, y, z)) ? TEMPERATURE_MATERIAL_AIR
+                                                                   : TEMPERATURE_MATERIAL_DOOR;
     }
     return structure_blocks(structure) ? TEMPERATURE_MATERIAL_WALL : TEMPERATURE_MATERIAL_AIR;
 }

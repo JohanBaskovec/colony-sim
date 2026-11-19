@@ -167,6 +167,13 @@ static void test_materials_and_covers(void)
     CHECK_EQ_INT(temperature_material(map, -1, 1, 0), TEMPERATURE_MATERIAL_ROCK);
     CHECK_EQ_INT(temperature_material(map, 5, 5, 0), TEMPERATURE_MATERIAL_WALL);
     CHECK_EQ_INT(temperature_material(map, 6, 5, 0), TEMPERATURE_MATERIAL_DOOR);
+    /* Kept open, a door is an opening; somebody passing does not count. */
+    map_set_door_passing(map, map_index(map, 6, 5, 0), true);
+    CHECK_EQ_INT(temperature_material(map, 6, 5, 0), TEMPERATURE_MATERIAL_DOOR);
+    REQUIRE(map_set_door_kept_open(map, 6, 5, 0, true));
+    CHECK_EQ_INT(temperature_material(map, 6, 5, 0), TEMPERATURE_MATERIAL_AIR);
+    REQUIRE(map_set_door_kept_open(map, 6, 5, 0, false));
+    map_set_door_passing(map, map_index(map, 6, 5, 0), false);
     CHECK_EQ_INT(temperature_material(map, 8, 8, 0), TEMPERATURE_MATERIAL_AIR);
     CHECK_EQ_INT(temperature_cover(map, 6, 6, 0), TEMPERATURE_COVER_ROOFED);
     CHECK_EQ_INT(temperature_cover(map, 8, 8, 0), TEMPERATURE_COVER_OPEN);

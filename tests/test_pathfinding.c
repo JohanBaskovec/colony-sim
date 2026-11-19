@@ -315,6 +315,14 @@ static void test_animals_open_no_door_and_climb_no_ladder(void)
     CHECK(!path_walker_can_stand(PATH_WALKER_ANIMAL, &map, -1, 6, 0));
     CHECK(path_walker_can_step(PATH_WALKER_SETTLER, &map, (TilePos){3, 5, 0}, (TilePos){4, 5, 0}));
     CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){3, 5, 0}, (TilePos){4, 5, 0}));
+    /* Kept open, the door lets animals through; somebody passing does not. */
+    map_set_door_passing(&map, map_index(&map, 4, 5, 0), true);
+    CHECK(!pathfinder_find(&finder, &map, start, beyond, PATH_NO_COST_LIMIT, &path));
+    REQUIRE(map_set_door_kept_open(&map, 4, 5, 0, true));
+    CHECK(pathfinder_find(&finder, &map, start, beyond, PATH_NO_COST_LIMIT, &path));
+    REQUIRE(map_set_door_kept_open(&map, 4, 5, 0, false));
+    map_set_door_passing(&map, map_index(&map, 4, 5, 0), false);
+    CHECK(!pathfinder_find(&finder, &map, start, beyond, PATH_NO_COST_LIMIT, &path));
     /* Steps: a neighbor, never round the corner of a wall, never far. */
     CHECK(path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){2, 5, 0}, (TilePos){3, 6, 0}));
     CHECK(!path_walker_can_step(PATH_WALKER_ANIMAL, &map, (TilePos){2, 5, 0}, (TilePos){2, 5, 0}));

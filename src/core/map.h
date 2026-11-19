@@ -470,6 +470,10 @@ typedef struct Map {
     /* The quality of each built roof (a terrain, see map_roof()), 0 elsewhere. */
     uint8_t *roof_quality;
     int roof_count; /* Built roof tiles. */
+    /* What each door does (MAP_DOOR_* bits, 0 elsewhere): kept open by the
+     * player, somebody in the doorway. See map_door_open_at(). */
+    uint8_t *doors;
+    int doors_kept_open; /* Doors kept open (MAP_DOOR_KEPT_OPEN). */
     /* What the player forbade the settlers on each tile (MapForbid bits, see
      * map_forbidden()): the plant, the structure (on its head tile), the
      * roof. */
@@ -666,18 +670,40 @@ static inline bool terrain_is_foliage(uint8_t terrain)
     return terrain >= TERRAIN_FOLIAGE && terrain <= TERRAIN_FOLIAGE_SPARSE;
 }
 
+/* What a door does (Map.doors): the player keeps it open (an opening for the
+ * light, the sight, the warmth of a room and the animals), somebody stands in
+ * the doorway (it lets the sight through while they do; too short a while for
+ * the light, which would come and go late as the shade on screen is worked
+ * out again, or for the warmth, and no animal slips in behind them). Closed
+ * otherwise. Only the first is part of map_hash(). */
+#define MAP_DOOR_KEPT_OPEN 1u
+#define MAP_DOOR_PASSING 2u
+
+/* Whether a door stands on the tile (an index in bounds) and is open. */
+static inline bool map_door_open_at(const Map *map, size_t index)
+{
+    return map->structure[index] == STRUCTURE_DOOR && map->doors[index] != 0;
+}
+
+/* Whether a door stands on the tile (an index in bounds) and is kept open. */
+static inline bool map_door_kept_open_at(const Map *map, size_t index)
+{
+    return map->structure[index] == STRUCTURE_DOOR && (map->doors[index] & MAP_DOOR_KEPT_OPEN) != 0;
+}
+
 /* Whether a structure stops the light (the sun's rays, core/sun.h): a wall,
- * a door. */
+ * a door (unless it is kept open, see map_stops_light_at()). */
 static inline bool structure_stops_light(uint8_t type)
 {
     return type == STRUCTURE_WALL || type == STRUCTURE_DOOR;
 }
 
 /* Whether a tile index (in bounds) is a block the light does not cross:
- * rock (a trunk too), a wall, a door. */
+ * rock (a trunk too), a wall, a door not kept open. */
 static inline bool map_stops_light_at(const Map *map, size_t index)
 {
-    return map->rock[index] != ROCK_NONE || structure_stops_light(map->structure[index]);
+    return map->rock[index] != ROCK_NONE ||
+           (structure_stops_light(map->structure[index]) && !map_door_kept_open_at(map, index));
 }
 
 /* Whether a tile index (in bounds) is open space: no rock and no floor. */
@@ -881,6 +907,15 @@ uint32_t map_light_stamp(const Map *map, int x0, int y0, int x1, int y1);
 /* Notes a change to what lets the light through in the column (x, y), for
  * those who write the layers themselves (the known world). */
 void map_light_changed(Map *map, int x, int y);
+
+/* Keeps the door on the tile open, or lets it close (false when there is no
+ * door there): a change to the light, and to what is built (the warmth of a
+ * room goes out through an open door). */
+bool map_set_door_kept_open(Map *map, int x, int y, int z, bool open);
+/* Whether somebody stands in the doorway of the door on the tile (an index in
+ * bounds holding a door): a change to the sight only (the caller tells the
+ * vision), not to the light. */
+void map_set_door_passing(Map *map, size_t index, bool passing);
 
 /* Whether something covers the tile (map_cover_level() is not -1). */
 bool map_is_roofed(const Map *map, int x, int y, int z);

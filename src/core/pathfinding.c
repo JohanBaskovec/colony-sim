@@ -194,10 +194,12 @@ static bool build_path(const Pathfinder *finder, uint32_t start, uint32_t end, P
 }
 
 /* What entering a tile (an index in bounds) costs a walker, 0 when it cannot:
- * animals open no door. */
+ * animals open no door, but walk through one kept open. */
 static inline float walk_cost(const Map *map, bool animal, size_t index)
 {
-    return animal && map->structure[index] == STRUCTURE_DOOR ? 0.0f : map_move_cost_at(map, index);
+    return animal && map->structure[index] == STRUCTURE_DOOR && !map_door_kept_open_at(map, index)
+               ? 0.0f
+               : map_move_cost_at(map, index);
 }
 
 /* What a step up from a tile, or down onto it, costs a walker (see
