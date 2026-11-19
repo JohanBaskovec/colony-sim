@@ -472,7 +472,44 @@ Each step is tested and leaves the game playable.
    the sun) and `sun_hours`, read by plants, soil and temperature; the
    inspector's line; the retuning of §5.3. Tests: a tile a fifth in the sun
    gets a fifth of the direct sun; a plant that needs light lives on it and
-   dies in a closed hut. Measured with `bench_simulation`.
+   dies in a closed hut. Measured with `bench_simulation`. In two parts:
+   - **5a, the values stored, read by nobody** (the state hash unchanged):
+     `open`, `direct`, `sun_hours` (today and yesterday) per tile of the
+     real map (a byte each, per tile index), for the tiles with a surface
+     (no rock, a floor: ground, roofs, foliage, cave floors), worked out in
+     slices over the ticks on a schedule that depends on the tick only.
+     `open` is kept per tile and worked out again only where
+     `Map.light_stamps` changed within `SKY_REACH` (the crowns going bare
+     stamp the whole map: spread over a day); `direct` is worked out every
+     hour for the sun at the middle of that hour, for the tiles whose `open`
+     is not 0, five points first and the sixteen only when they disagree;
+     `sun_hours` adds each hour's `direct` (tenths of an hour fit a byte)
+     and rolls over at midnight. Measured with `bench_simulation` before it
+     is read by anything.
+   - **The cost to beat.** Measured after step 4: `sky_open()` costs about
+     3 µs a column on a generated map (seed 42, 18 levels), 12 µs on a flat
+     map 16 levels deep (rays climbing through empty air); a fire's points
+     at 4 a side, 0.4 ms. A whole hourly pass without shortcuts would cost
+     100 to 160 µs a tick, against about 20 for the whole simulation. So
+     rays must stop early: a map of the highest light-stopping cell (rock,
+     wall, door, floor, foliage) per block of 16 × 16 columns, and per block
+     the highest within the rays' reach, lets a rising ray end as soon as it
+     is above that height (most rays over open ground end within a few
+     cells). If it is still too much: fewer points, then three passes a day
+     (morning, midday, afternoon) instead of one an hour.
+   - **5b, the readers and the retuning** (the state hash changes):
+     `game_light_at()` becomes `sun × sky × (diffuse × open + direct share ×
+     direct)`; the noon light (`game_light_peak_at()`, what plants need to
+     survive) needs the share in the sun around noon (keep the noon pass's
+     `direct`, or the day's best hour); `MAP_LIGHT_ROOF` goes; the soil's
+     evaporation and the microclimate's sun take the tile's own sun
+     (`soil_look_up()` stores `map_light_cover()` today); taking root reads
+     the summer `sun_hours` and `open`; world generation rolls the
+     understory from `sky_open()` (about 0.1 s for a 200 × 200 map); the
+     tile inspector and the light view (key G) show the new light. Then the
+     retuning, measured on seed 42 before and after: plants of each kind
+     after a year, the temperatures of §5.4 of `docs/CLIMATE.md`, the
+     microclimate's tests.
 6. **What follows** (roadmap items of their own): the sun felt on a body,
    snow and drying; windows.
 7. **A latitude per game** (later): the latitude a value of the world, the
