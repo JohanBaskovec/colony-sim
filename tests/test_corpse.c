@@ -159,20 +159,21 @@ static void test_bodies_of_two_never_share_a_stack(void)
     game_shutdown(&game);
 }
 
-/* Whose a body is counts in the hash, but only once there is one. */
+/* Whose a body is counts in the hash. */
 static void test_hash_sees_the_owner(void)
 {
-    Game game;
-    REQUIRE(init_flat_game(&game));
-    REQUIRE(items_add(&game.items, 10, 10, 0, body_of(0)) == 1);
-    uint64_t nobody = items_hash(&game.items, 0);
-    REQUIRE(items_remove(&game.items, 10, 10, 0, 1) == 1);
-    REQUIRE(items_add(&game.items, 10, 10, 0, body_of(3)) == 1);
-    CHECK(items_hash(&game.items, 0) != nobody);
-    REQUIRE(items_remove(&game.items, 10, 10, 0, 1) == 1);
-    REQUIRE(items_add(&game.items, 10, 10, 0, body_of(0)) == 1);
-    CHECK(items_hash(&game.items, 0) == nobody);
-    game_shutdown(&game);
+    Game a, b, c;
+    REQUIRE(init_flat_game(&a));
+    REQUIRE(init_flat_game(&b));
+    REQUIRE(init_flat_game(&c));
+    REQUIRE(items_add(&a.items, 10, 10, 0, body_of(0)) == 1);
+    REQUIRE(items_add(&b.items, 10, 10, 0, body_of(3)) == 1);
+    REQUIRE(items_add(&c.items, 10, 10, 0, body_of(0)) == 1);
+    CHECK(items_hash(&a.items, 0) != items_hash(&b.items, 0));
+    CHECK(items_hash(&a.items, 0) == items_hash(&c.items, 0));
+    game_shutdown(&a);
+    game_shutdown(&b);
+    game_shutdown(&c);
 }
 
 /* A settler that dies leaves a body that says whose it was, with all it knew. */

@@ -298,6 +298,15 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 - [ ] Genetics: inherited traits with random mutations for plants (varieties), animals and settlers; selection by the player (crops, breeding)
 - [ ] Performance: spread long work over ticks (budget per tick for path and job searches) so that no single tick drops a frame
 
+## Items one by one (under way, docs/ITEMS.md)
+
+- [x] Step 1, the item store: every item on the ground a record of its own (pool, list per tile, spot and angle), the stack per tile a summary for the callers, items taken newest first, rot and drying item by item, change stamps so that the known world copies only changed tiles, every item in the state hash (same speed as before, a little faster with the fog)
+- [ ] Step 2, holders and the end of averages: loads, tools, deliveries, workstation inputs and fuel as item lists; hauling, building, crafting and eating move items; several types on a tile
+- [ ] Step 3, litter as items: twigs, branches, cobbles (about 50 times fewer than today's stones) and flint generated as items, shed by trees (a ceiling per tile, slow rot), gathering picks them up; region type masks and a list of changing items for the searches and updates
+- [ ] Step 4, spots, angles and drawing: each item drawn at its spot, turned freely; a far zoom mark if `--bench-render` asks for it; debug tool to drag, drop and turn items with the mouse
+- [ ] Step 5, the pile window (every item of a tile, sortable by quality, hit points, rot) and the bills: a quality range for the ingredients of each bill, cooking takes what rots first
+- [ ] The known world keeps a copy of every item seen (done for items on the ground in step 1; holders in step 2)
+
 ## Later
 
 - [x] Social life, step A (`docs/SOCIAL.md`): opinions from -100 to +100 shown as numbers, one way each, from family ties, looks and confidence and memories of each other that fade at their own pace (an awkward chat in days, a relative killed in decades); families among the starting settlers by age (parent, child, sibling, grandparent, grandchild) and the journey together, so that all start on good terms; relationships (enemy, rival, acquaintance, friend, close friend) noted in the journal when they change; social attributes (kindness, social ease, self-confidence, beauty, sociability); the company need and loneliness (lonely settlers seek others out); experiences to tell (kills, attacks, deaths seen, hardships); chats that are knowledge, explanations, true stories, lies (found out or not), compliments, insults, gossip or small talk about meals, the weather and complaints, pleasant, neutral or awkward; lively journal sentences on both sides; grief by family and friendship; the Social tab with opinions, relationships and a tooltip of reasons

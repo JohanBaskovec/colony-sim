@@ -1,16 +1,22 @@
 /*
- * Items lying on the ground (wood, stone...): one stack per tile, stored as a
- * dense layer the size of the map and owned by the Game.
+ * Items lying on the ground (wood, stone...), owned by the Game.
  *
- * Stacks hold a single item type, up to the type's stack limit. Dropping more
- * items than a tile can take spreads them over nearby reachable tiles.
+ * Every item lying on a tile is a record of its own (Item, in a pool), with
+ * its own quality, hit points, rot and spot: items are never merged into
+ * averages (docs/ITEMS.md). The items of a tile form a list, newest first.
+ * For the callers that think in stacks, each tile also has a summary
+ * (Items.stacks): the type of its newest item, how many items of that type
+ * lie there and their average condition. A tile still takes one type at a
+ * time through items_add(); items that dry or get wet change type one by one,
+ * so a tile may hold two types for a while.
+ *
+ * Dropping more items than a tile can take spreads them over nearby reachable
+ * tiles.
  *
  * Every item has a quality, a value from 0 to 100 (how good the material is,
  * which carries over to what is made from it), and hit points (its
  * condition). Some types are always perfect: stone blocks are always of the
- * best quality and cannot be damaged. Items of the same type stack together,
- * whatever their quality; a stack keeps the count-weighted average quality
- * and hit points of its items.
+ * best quality and cannot be damaged.
  *
  * Food rots while it lies on a tile: it loses hit points, faster when warm,
  * not at all when frozen, a little slower under a roof, faster in the rain,
@@ -175,13 +181,34 @@ typedef struct ItemStack {
 
 #define ITEM_EATEN_FULL 10000
 
+/* One item lying on a tile. Its spot in the tile and its angle are for the
+ * eye only: no rule reads them. */
+typedef struct Item {
+    uint8_t type;    /* ItemType, ITEM_NONE for a free slot. */
+    uint8_t quality; /* ItemQuality. */
+    uint8_t spot_x;  /* Where it lies in its tile, in 1/256 of a tile from the left... */
+    uint8_t spot_y;  /* ...and from the top. */
+    uint16_t hit_points;
+    uint16_t progress;   /* As ItemStack.progress, for this item. */
+    uint16_t eaten;      /* As ItemStack.eaten, for this item. */
+    uint16_t corpse;     /* As ItemStack.corpse. */
+    uint16_t generation; /* Bumped whenever the slot is freed. */
+    uint8_t angle;       /* How it is turned, in 1/256 of a turn. */
+    uint8_t flags;       /* Reserved. */
+    uint32_t next;       /* Next item of the same tile: slot + 1, 0 for none. */
+    uint32_t tile;       /* Tile index. */
+} Item;
+
 typedef struct Items {
     int width;
     int height;
     int depth;
+    /* Summary of each tile (see the top of this file): the type of its
+     * newest item, the count and average condition of its items of that
+     * type. Derived from the items: never written but by this module. */
     ItemStack *stacks;
     long totals[ITEM_TYPE_COUNT]; /* Items of each type on the whole map. */
-    uint32_t *level_stacks;       /* Stacks lying on each level (searches skip empty levels). */
+    uint32_t *level_stacks;       /* Tiles with items on each level (searches skip empty levels). */
     uint32_t additions;           /* Incremented whenever items are added (haulers look again). */
     /* Stacks the player forbade the settlers (non-zero per tile): neither
      * picked up, eaten, used nor added to. Cleared when the stack is gone. */
@@ -194,6 +221,20 @@ typedef struct Items {
      * NULL: none. */
     struct Items *mirror;
     const uint64_t *mirror_when;
+    /* The items: a pool of slots, free ones chained through Item.next. */
+    Item *pool;
+    uint32_t pool_capacity;
+    uint32_t pool_used;  /* Slots ever used: the others were never touched. */
+    uint32_t free_slots; /* First free slot + 1, 0 for none. */
+    long item_count;     /* Items lying on the whole map. */
+    uint32_t *heads;     /* Per tile: its newest item, slot + 1, 0 for none. */
+    /* Per tile: when its items last changed (a picture copied from it keeps
+     * the same stamp: equal stamps, same items). */
+    uint32_t *stamps;
+    uint32_t stamp_clock;
+    /* A picture of other items (core/known.h): a tile changed here rather
+     * than copied gets a stamp no copy has, so that it is copied again. */
+    bool picture;
 } Items;
 
 /* Items dropped by a single action spread at most this far (in steps). */
@@ -272,9 +313,10 @@ void items_free(Items *items);
 /* Empty stack when out of bounds. */
 ItemStack items_get(const Items *items, int x, int y, int z);
 
-/* Copies the stack lying on the tile at `index` (and whether it is forbidden)
- * from `src` to `dst` (same size), keeping dst's totals and counters right: dst
- * is a picture of src (see core/known.h). */
+/* Copies the items lying on the tile at `index` (and whether they are
+ * forbidden) from `src` to `dst` (same size), keeping dst's totals and
+ * counters right: dst is a picture of src (see core/known.h). Nothing to do
+ * when the tile's stamps are equal (the picture is up to date). */
 void items_copy_tile(Items *dst, const Items *src, size_t index);
 
 /* What settlers see of a tile: items_get(), but an empty stack where it is
@@ -297,6 +339,19 @@ int items_add(Items *items, int x, int y, int z, ItemStack batch);
 /* Removes up to `count` items from a tile (they have the quality and hit points
  * of the stack). Returns the number removed. */
 int items_remove(Items *items, int x, int y, int z, int count);
+
+/* items_remove(), but returns what was taken: the count, and the average
+ * condition of the very items removed (the newest of the tile's type).
+ * An empty stack when nothing was taken. */
+ItemStack items_take(Items *items, int x, int y, int z, int count);
+
+/* The newest item lying on the tile at `index`, NULL for none; then the next
+ * one (older), NULL after the last. Valid until the items change. */
+const Item *items_first(const Items *items, size_t index);
+const Item *items_next(const Items *items, const Item *item);
+
+/* Items of a type lying on a tile (any type: ITEM_NONE). */
+int items_count_at(const Items *items, int x, int y, int z, ItemType type);
 
 /*
  * Puts items on (x, y) and, when it is full, forbidden or holds something

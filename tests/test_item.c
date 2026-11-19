@@ -6,6 +6,8 @@
 
 #include "test_framework.h"
 
+#include <math.h>
+
 static void test_definitions(void)
 {
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
@@ -248,17 +250,35 @@ static void test_same_type_stacks_whatever_the_quality(void)
     /* Another type does not fit on the tile. */
     CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_BLACKBERRIES, 5, 70, 5)), 0);
 
-    /* Only what fits is merged, and only that counts in the average. */
+    /* Only what fits is added; the summary is the average of every item there. */
     int room = item_stack_limit(ITEM_WOOD) - 40;
+    REQUIRE(room == 10);
     CHECK_EQ_INT(items_add(&items, 1, 1, 0, item_stack_make(ITEM_WOOD, 100, 10, 1)), room);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, (40 * 38 + room * 1 + 25) / 50);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).quality, (40 * 60 + room * 10 + 25) / 50);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, (30 * 30 + 10 * 60 + 10 * 1 + 25) / 50);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).quality, (30 * 70 + 10 * 30 + 10 * 10 + 25) / 50);
 
-    /* Removed items leave the rest unchanged; an emptied tile forgets it all. */
-    ItemStack before = items_get(&items, 1, 1, 0);
-    items_remove(&items, 1, 1, 0, 5);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).quality, before.quality);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, before.hit_points);
+    /* Every item keeps its own condition: the newest are taken first, and the
+     * rest keep theirs. */
+    ItemStack taken = items_take(&items, 1, 1, 0, 5);
+    CHECK_EQ_INT(taken.count, 5);
+    CHECK_EQ_INT(taken.quality, 10);
+    CHECK_EQ_INT(taken.hit_points, 1);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).quality, (30 * 70 + 10 * 30 + 5 * 10 + 22) / 45);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).hit_points, (30 * 30 + 10 * 60 + 5 * 1 + 22) / 45);
+    taken = items_take(&items, 1, 1, 0, 15);
+    CHECK_EQ_INT(taken.count, 15);
+    CHECK_EQ_INT(taken.quality, (5 * 10 + 10 * 30 + 7) / 15);
+    int seen = 0;
+    for (const Item *item = items_first(&items, 1 * 4 + 1); item != NULL;
+         item = items_next(&items, item)) {
+        CHECK_EQ_INT(item->quality, 70);
+        CHECK_EQ_INT(item->hit_points, 30);
+        seen++;
+    }
+    CHECK_EQ_INT(seen, 30);
+    CHECK_EQ_INT(items_count_at(&items, 1, 1, 0, ITEM_WOOD), 30);
+    CHECK_EQ_INT(items_count_at(&items, 1, 1, 0, ITEM_NONE), 30);
+    CHECK_EQ_INT(items_count_at(&items, 1, 1, 0, ITEM_BLACKBERRIES), 0);
     items_remove(&items, 1, 1, 0, 1000);
     ItemStack empty = items_get(&items, 1, 1, 0);
     CHECK_EQ_INT(empty.quality, 0);
@@ -647,6 +667,144 @@ static void test_hash(void)
     items_free(&b);
 }
 
+/* Each item rots on its own clock: the older one goes first. */
+static void test_items_keep_their_own_rot(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_BLACKBERRIES, 1)) == 1);
+    float hours = item_stack_rot_hours(item_stack_pristine(ITEM_BLACKBERRIES, 1), 1.0f);
+    REQUIRE(hours > 24.0f);
+    items_advance(&items, 0, 16, 24, NULL, NULL);
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_BLACKBERRIES, 1)) == 1);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).count, 2);
+    int left = (int)ceilf(hours) - 24;
+    for (int hour = 0; hour < left; hour++) {
+        items_advance(&items, 0, 16, 1, NULL, NULL);
+    }
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).count, 1);
+    const Item *fresh = items_first(&items, 1 * 4 + 1);
+    REQUIRE(fresh != NULL);
+    CHECK(items_next(&items, fresh) == NULL);
+    CHECK(fresh->hit_points > 1);
+    CHECK_EQ_INT(items.totals[ITEM_BLACKBERRIES], 1);
+    CHECK_EQ_INT(items.item_count, 1);
+    items_free(&items);
+}
+
+/* Items dry one by one: a tile holds dry and wet twigs for a while, and room
+ * counts both. */
+static void test_items_dry_one_by_one(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    int dry_hours = item_def(ITEM_WET_TWIGS)->transform_hours;
+    REQUIRE(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WET_TWIGS, 10)) == 10);
+    items_advance(&items, 0, 16, dry_hours / 2, NULL, NULL);
+    REQUIRE(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WET_TWIGS, 5)) == 5);
+    CHECK_EQ_INT(items_advance(&items, 0, 16, dry_hours - dry_hours / 2, NULL, NULL), 1);
+    CHECK_EQ_INT(items_count_at(&items, 2, 2, 0, ITEM_TWIGS), 10);
+    CHECK_EQ_INT(items_count_at(&items, 2, 2, 0, ITEM_WET_TWIGS), 5);
+    CHECK_EQ_INT(items.totals[ITEM_TWIGS], 10);
+    CHECK_EQ_INT(items.totals[ITEM_WET_TWIGS], 5);
+    /* The summary is the newest item's type. */
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).type, ITEM_WET_TWIGS);
+    CHECK_EQ_INT(items_get(&items, 2, 2, 0).count, 5);
+    int room = item_stack_limit(ITEM_WET_TWIGS) - 15;
+    CHECK_EQ_INT(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WET_TWIGS, 1000)), room);
+    items_free(&items);
+}
+
+/* Dropped items lie apart on their tile, each turned its own way. */
+static void test_items_lie_apart(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    REQUIRE(items_add(&items, 1, 2, 0, item_stack_pristine(ITEM_COBBLE, 1)) == 1);
+    REQUIRE(items_add(&items, 1, 2, 0, item_stack_pristine(ITEM_COBBLE, 3)) == 3);
+    const Item *list[4];
+    int n = 0;
+    for (const Item *item = items_first(&items, 2 * 4 + 1); item != NULL;
+         item = items_next(&items, item)) {
+        REQUIRE(n < 4);
+        list[n++] = item;
+    }
+    CHECK_EQ_INT(n, 4);
+    bool turned = false;
+    for (int i = 0; i < n; i++) {
+        CHECK(list[i]->spot_x >= 32 && list[i]->spot_x <= 224);
+        CHECK(list[i]->spot_y >= 32 && list[i]->spot_y <= 224);
+        CHECK_EQ_INT((int)list[i]->tile, 2 * 4 + 1);
+        for (int j = 0; j < i; j++) {
+            CHECK(list[i]->spot_x != list[j]->spot_x || list[i]->spot_y != list[j]->spot_y);
+            turned |= list[i]->angle != list[j]->angle;
+        }
+    }
+    CHECK(turned);
+    items_free(&items);
+}
+
+/* A picture copies the very items, in order, and only what changed. */
+static void test_picture_copies_items(void)
+{
+    Items real, picture;
+    REQUIRE(items_init(&real, 4, 4, 1));
+    REQUIRE(items_init(&picture, 4, 4, 1));
+    picture.picture = true;
+    REQUIRE(items_add(&real, 3, 1, 0, item_stack_make(ITEM_WOOD, 2, 20, 10)) == 2);
+    REQUIRE(items_add(&real, 3, 1, 0, item_stack_make(ITEM_WOOD, 1, 80, 30)) == 1);
+    size_t index = 1 * 4 + 3;
+    items_copy_tile(&picture, &real, index);
+    const Item *a = items_first(&real, index);
+    const Item *b = items_first(&picture, index);
+    int n = 0;
+    while (a != NULL && b != NULL) {
+        CHECK_EQ_INT(a->quality, b->quality);
+        CHECK_EQ_INT(a->hit_points, b->hit_points);
+        CHECK_EQ_INT(a->spot_x, b->spot_x);
+        CHECK_EQ_INT(a->angle, b->angle);
+        a = items_next(&real, a);
+        b = items_next(&picture, b);
+        n++;
+    }
+    CHECK(a == NULL && b == NULL);
+    CHECK_EQ_INT(n, 3);
+    CHECK_EQ_INT(picture.totals[ITEM_WOOD], 3);
+    CHECK_EQ_INT((int)picture.level_stacks[0], 1);
+    CHECK_EQ_INT(items_get(&picture, 3, 1, 0).quality, items_get(&real, 3, 1, 0).quality);
+    /* Up to date: copying again changes nothing. */
+    uint32_t used = picture.pool_used;
+    items_copy_tile(&picture, &real, index);
+    CHECK_EQ_INT((int)picture.pool_used, (int)used);
+    /* Changed in the picture itself: copied again. */
+    items_remove(&picture, 3, 1, 0, 3);
+    items_copy_tile(&picture, &real, index);
+    CHECK_EQ_INT(items_get(&picture, 3, 1, 0).count, 3);
+    /* Gone from the real tile: gone from the picture. */
+    items_remove(&real, 3, 1, 0, 3);
+    items_copy_tile(&picture, &real, index);
+    CHECK_EQ_INT(items_get(&picture, 3, 1, 0).type, ITEM_NONE);
+    CHECK_EQ_INT((int)picture.level_stacks[0], 0);
+    CHECK_EQ_INT(picture.item_count, 0);
+    items_free(&real);
+    items_free(&picture);
+}
+
+/* Slots of items gone are used again, with a new generation. */
+static void test_item_slots_are_reused(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    REQUIRE(items_add(&items, 0, 0, 0, item_stack_pristine(ITEM_FLINT, 1)) == 1);
+    CHECK_EQ_INT(items_first(&items, 0)->generation, 0);
+    REQUIRE(items_remove(&items, 0, 0, 0, 1) == 1);
+    REQUIRE(items_add(&items, 0, 3, 0, item_stack_pristine(ITEM_FLINT, 1)) == 1);
+    CHECK_EQ_INT((int)items.pool_used, 1);
+    CHECK_EQ_INT(items_first(&items, 3 * 4)->generation, 1);
+    CHECK(items_first(&items, 0) == NULL);
+    items_free(&items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -675,5 +833,10 @@ int main(void)
     RUN_TEST(test_twigs_get_wet_in_the_rain_and_dry_again);
     RUN_TEST(test_eating_takes_weight_not_hit_points);
     RUN_TEST(test_hash);
+    RUN_TEST(test_items_keep_their_own_rot);
+    RUN_TEST(test_items_dry_one_by_one);
+    RUN_TEST(test_items_lie_apart);
+    RUN_TEST(test_picture_copies_items);
+    RUN_TEST(test_item_slots_are_reused);
     return test_summary();
 }

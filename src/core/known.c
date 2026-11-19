@@ -14,6 +14,7 @@ bool known_init(KnownWorld *known, const Map *map)
         known_free(known);
         return false;
     }
+    known->items.picture = true;
     /* Nothing is known: open space everywhere (map_init() lays a floor on level 0). */
     memset(known->map.terrain, TERRAIN_OPEN, map_tile_count(&known->map));
     known->map.surface_level = map->surface_level;
@@ -54,7 +55,6 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
                     const Workstations *workstations, size_t first, size_t count)
 {
     Map *dst = &known->map;
-    size_t level = (size_t)dst->width * (size_t)dst->height;
     /* Counters first, from what is there and what comes. */
     for (size_t i = first; i < first + count; i++) {
         dst->slope_count += (map->slope[i] != 0) - (dst->slope[i] != 0);
@@ -63,17 +63,7 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
         dst->roof_count += (terrain_def((Terrain)map->terrain[i])->built != STRUCTURE_NONE) -
                            (terrain_def((Terrain)dst->terrain[i])->built != STRUCTURE_NONE);
         dst->forbidden_count += (map->forbidden[i] != 0) - (dst->forbidden[i] != 0);
-        ItemStack *held = &known->items.stacks[i];
-        if (held->type != ITEM_NONE) {
-            known->items.totals[held->type] -= held->count;
-            known->items.level_stacks[i / level]--;
-        }
-        if (items->stacks[i].type != ITEM_NONE) {
-            known->items.totals[items->stacks[i].type] += items->stacks[i].count;
-            known->items.level_stacks[i / level]++;
-        }
-        known->items.forbidden_count +=
-            (items->forbidden[i] != 0) - (known->items.forbidden[i] != 0);
+        items_copy_tile(&known->items, items, i); /* Only where they changed. */
         known->dirt.dirty_count += (dirt->level[i] != 0) - (known->dirt.level[i] != 0);
     }
     memcpy(dst->terrain + first, map->terrain + first, count);
@@ -92,8 +82,6 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
            count * sizeof(*map->structure_hit_points));
     memcpy(dst->roof_quality + first, map->roof_quality + first, count);
     memcpy(dst->forbidden + first, map->forbidden + first, count);
-    memcpy(known->items.stacks + first, items->stacks + first, count * sizeof(*items->stacks));
-    memcpy(known->items.forbidden + first, items->forbidden + first, count);
     memcpy(known->dirt.level + first, dirt->level + first, count);
     for (size_t i = first; i < first + count; i++) {
         KnownStation *picture = &known->stations[i];

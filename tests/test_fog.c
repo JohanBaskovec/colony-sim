@@ -434,7 +434,7 @@ static void test_settlers_plan_on_the_known_world(void)
             game.known.map.terrain[index] = TERRAIN_OPEN;
             game.known.map.rock[index] = 0;
             memset(&game.known.map.plants[index], 0, sizeof(game.known.map.plants[index]));
-            game.known.items.stacks[index] = (ItemStack){0};
+            items_remove(&game.known.items, x, y, z, UINT16_MAX);
         }
     }
     REQUIRE(!game_tile_explored(&game, fx, fy, z)); /* Hidden behind the wall. */
