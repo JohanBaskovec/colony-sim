@@ -320,6 +320,14 @@ rising and falling, irrigation and digging ditches, wind (drying, wind
 chill), clouds of fog on cold wet mornings, snow per tile (drifts, melting
 first in the sun), frost heave, soil types under the root zone.
 
+The sun reaching each tile by its own (the shadow of a cliff, of a wall, of
+a wood beside it, instead of what lies straight above only) is designed in
+`docs/SHADOWS.md` (§5: the `sun` of §3.4 and the `S` of §5.1 become the
+tile's own, by the share of the tile in the sun). The temperature model is
+to be reworked as a whole after that, around the sun's rays and the shadows:
+heat where the rays land (the ground, a wall, a roof), rooms warmed through
+their openings, the warmth leaving by an open door.
+
 ## 8. Open questions
 
 - Should the moisture noise of world generation become a soil depth (a

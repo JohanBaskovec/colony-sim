@@ -1878,7 +1878,10 @@ around it), stretched over them with smoothing so that the light runs from
 one tile to the next; its color is cool by day, the night's blue by night, a
 touch warm at dawn and dusk. What lets the light through is kept per tile of the
 level shown until `Map.light_revision` changes (any terrain, rock or roof
-change): a view shows thousands of tiles every frame.
+change): a view shows thousands of tiles every frame. Planned
+(`docs/SHADOWS.md`): a sun with a direction and shadows cast by the solid
+blocks, finer than a tile on screen, then read by plants, soil and
+temperature.
 
 Stones, branches and twigs lying about are laid by world generation in map
 layers (`Map.cobbles`, `Map.flint`, `Map.branches`, `Map.twigs`); `game_init()`
