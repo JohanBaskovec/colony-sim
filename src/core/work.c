@@ -47,6 +47,13 @@ int work_priority_lowered(int priority)
     return priority == WORK_PRIORITY_LOWEST ? WORK_PRIORITY_DISABLED : priority + 1;
 }
 
+int job_priority_clamped(int priority)
+{
+    return priority < JOB_PRIORITY_HIGHEST  ? JOB_PRIORITY_HIGHEST
+           : priority > JOB_PRIORITY_LOWEST ? JOB_PRIORITY_LOWEST
+                                            : priority;
+}
+
 WorkTypeMask work_types_at_priority(const uint8_t priorities[WORK_TYPE_COUNT], int priority)
 {
     WorkTypeMask mask = 0;

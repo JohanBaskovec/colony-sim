@@ -1344,6 +1344,30 @@ static void test_single_plant_harvest_and_uproot(void)
     free_world(&map, &zones, &items);
 }
 
+/* Extending or shrinking one zone leaves the others alone. */
+static void test_extend_and_shrink_one(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    int a = gather_zone_create(&zones, &map, 1, 1, 2, 2, 0);
+    int b = gather_zone_create(&zones, &map, 4, 1, 4, 2, 0);
+    REQUIRE(a != GATHER_ZONE_NONE && b != GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_extend_view(&zones, &map, a, 3, 1, 6, 2, 0, NULL), 6);
+    CHECK_EQ_INT(gather_zone_get(&zones, a)->cell_count, 10);
+    CHECK_EQ_INT(gather_zone_get(&zones, b)->cell_count, 2);
+    CHECK_EQ_INT(gather_zone_at(&zones, 4, 1, 0), b);
+    CHECK_EQ_INT(gather_zone_shrink_view(&zones, &map, a, 3, 1, 4, 2, 0), 2);
+    CHECK_EQ_INT(gather_zone_get(&zones, b)->cell_count, 2);
+    CHECK_EQ_INT(gather_zone_at(&zones, 3, 1, 0), GATHER_ZONE_NONE);
+    CHECK(gather_zone_shrink_view(&zones, &map, a, 0, 0, 15, 15, 0) > 0);
+    CHECK(gather_zone_get(&zones, a) == NULL);
+    CHECK_EQ_INT(gather_zone_get(&zones, b)->cell_count, 2);
+    CHECK_EQ_INT(gather_zone_shrink_view(&zones, &map, a, 0, 0, 15, 15, 0), 0);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_single_plant_harvest_and_uproot);
@@ -1377,5 +1401,6 @@ int main(void)
     RUN_TEST(test_grass_is_a_plant_with_a_stock);
     RUN_TEST(test_taken_whole_waits_until_grown);
     RUN_TEST(test_zone_tiles_box);
+    RUN_TEST(test_extend_and_shrink_one);
     return test_summary();
 }

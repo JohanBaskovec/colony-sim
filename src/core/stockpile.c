@@ -251,8 +251,10 @@ int stockpiles_add_view_rect(Stockpiles *stockpiles, const Map *map, int x0, int
     return add_rect(stockpiles, map, x0, y0, x1, y1, z, preferred, blocked, true);
 }
 
+/* Takes the tiles of a rectangle out of their stockpile, or out of stockpile
+ * `only` alone (STOCKPILE_NONE: any). */
 static int remove_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1,
-                       int z)
+                       int z, int only)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(stockpiles, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
@@ -265,7 +267,7 @@ static int remove_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, i
                 continue;
             }
             uint8_t *zone = &stockpiles->zone[index_of(stockpiles, x, y, level)];
-            if (*zone != 0) {
+            if (*zone != 0 && (only == STOCKPILE_NONE || *zone == only + 1)) {
                 Stockpile *stockpile = &stockpiles->list[*zone - 1];
                 touched[*zone - 1] = true;
                 if (--stockpile->cell_count == 0) {
@@ -290,13 +292,25 @@ static int remove_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, i
 
 int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1, int z)
 {
-    return remove_rect(stockpiles, NULL, x0, y0, x1, y1, z);
+    return remove_rect(stockpiles, NULL, x0, y0, x1, y1, z, STOCKPILE_NONE);
 }
 
 int stockpiles_remove_view_rect(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1,
                                 int y1, int z)
 {
-    return remove_rect(stockpiles, map, x0, y0, x1, y1, z);
+    return remove_rect(stockpiles, map, x0, y0, x1, y1, z, STOCKPILE_NONE);
+}
+
+int stockpile_extend_view(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
+                          int y1, int z, const uint8_t *const *blocked)
+{
+    return extend(stockpiles, map, index, x0, y0, x1, y1, z, blocked, true);
+}
+
+int stockpile_shrink_view(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
+                          int y1, int z)
+{
+    return is_valid(stockpiles, index) ? remove_rect(stockpiles, map, x0, y0, x1, y1, z, index) : 0;
 }
 
 void stockpile_delete(Stockpiles *stockpiles, int index)

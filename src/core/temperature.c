@@ -1,5 +1,7 @@
 #include "core/temperature.h"
 
+#include "core/i18n.h"
+
 #include "core/game_clock.h"
 #include "core/structure.h"
 #include "core/util.h"
@@ -259,6 +261,32 @@ static size_t index_of(const Temperatures *temperatures, int x, int y, int z)
 {
     return ((size_t)z * (size_t)temperatures->height + (size_t)y) * (size_t)temperatures->width +
            (size_t)x;
+}
+
+TemperatureFeel temperature_feel(const TemperatureRanges *ranges, float celsius)
+{
+    if (celsius < ranges->bearable_low) {
+        return TEMPERATURE_FREEZING;
+    }
+    if (celsius > ranges->bearable_high) {
+        return TEMPERATURE_SCORCHING;
+    }
+    if (celsius < ranges->pleasant_low) {
+        return TEMPERATURE_COLD;
+    }
+    return celsius > ranges->pleasant_high ? TEMPERATURE_HOT : TEMPERATURE_PLEASANT;
+}
+
+const char *temperature_feel_key(TemperatureFeel feel)
+{
+    static const char *const KEYS[TEMPERATURE_FEEL_COUNT] = {
+        [TEMPERATURE_FREEZING] = N_("temperature.feel.freezing"),
+        [TEMPERATURE_COLD] = N_("temperature.feel.cold"),
+        [TEMPERATURE_PLEASANT] = N_("temperature.feel.pleasant"),
+        [TEMPERATURE_HOT] = N_("temperature.feel.hot"),
+        [TEMPERATURE_SCORCHING] = N_("temperature.feel.scorching"),
+    };
+    return (unsigned)feel < TEMPERATURE_FEEL_COUNT ? KEYS[feel] : KEYS[TEMPERATURE_PLEASANT];
 }
 
 float temperature_at(const Temperatures *temperatures, int x, int y, int z)

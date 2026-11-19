@@ -2802,6 +2802,32 @@ int game_remove_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int
     return gather_zones_remove_view_rect(&game->gather_zones, &game->map, x0, y0, x1, y1, z);
 }
 
+int game_extend_stockpile_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z)
+{
+    const uint8_t *blocked[] = {game->gather_zones.zone, game->workstations.at,
+                                game->constructions.workstation_tiles, NULL};
+    return stockpile_extend_view(&game->stockpiles, game_view_map(game), index, x0, y0, x1, y1, z,
+                                 blocked);
+}
+
+int game_shrink_stockpile_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z)
+{
+    return stockpile_shrink_view(&game->stockpiles, &game->map, index, x0, y0, x1, y1, z);
+}
+
+int game_extend_gather_zone_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z)
+{
+    const uint8_t *blocked[] = {game->stockpiles.zone, game->workstations.at,
+                                game->constructions.workstation_tiles, NULL};
+    return gather_zone_extend_view(&game->gather_zones, game_view_map(game), index, x0, y0, x1, y1,
+                                   z, blocked);
+}
+
+int game_shrink_gather_zone_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z)
+{
+    return gather_zone_shrink_view(&game->gather_zones, &game->map, index, x0, y0, x1, y1, z);
+}
+
 /* ---- Picking ------------------------------------------------------------- */
 
 /* Whether the level shown, z, lets one see a colonist: it is on that level, or

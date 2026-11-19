@@ -66,6 +66,10 @@ typedef struct ConstructionSite {
     float clear_progress; /* Work done clearing the plant of a tile, before building. */
     bool refresh;         /* Refreshing the built structure of the tile, not building one. */
     bool forbidden;       /* Forbidden by the player: no material brought, no work done. */
+    /* Builders and haulers go to the sites of the highest priority first
+     * (JOB_PRIORITY_HIGHEST..JOB_PRIORITY_LOWEST, core/work.h); a
+     * workstation's site passes it on to the station. */
+    uint8_t priority;
 } ConstructionSite;
 
 typedef struct Constructions {
@@ -222,6 +226,9 @@ bool construction_materials_complete(const ConstructionSite *site);
 /* Forbids or allows a site: nobody brings it materials nor works on it
  * meanwhile (jobs under way are dropped). */
 void construction_set_forbidden(Constructions *constructions, int index, bool forbidden);
+
+/* Sets a site's priority (clamped, see ConstructionSite.priority). */
+void construction_set_priority(Constructions *constructions, int index, int priority);
 
 /* Whether the site is forbidden itself or touches something the player forbade
  * (see map_forbidden()): the structure a refresh site is on, a plant to clear

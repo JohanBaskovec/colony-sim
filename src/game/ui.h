@@ -232,6 +232,13 @@ bool ui_toggle_button(Ui *ui, SDL_FRect rect, const char *label, bool active);
  * `active`. True when it was left-clicked this frame. */
 bool ui_icon_button(Ui *ui, SDL_FRect rect, bool active);
 
+/* The same, telling the button it was clicked with this frame
+ * (SDL_BUTTON_LEFT or SDL_BUTTON_RIGHT), or 0. */
+int ui_icon_button_click(Ui *ui, SDL_FRect rect, bool active);
+
+/* A label centered in a rectangle (a value drawn on a button). */
+void ui_centered_label(Ui *ui, SDL_FRect rect, const char *text);
+
 /* A small triangle button, pointing down when `open` (a section shown), right
  * otherwise; true when it was left-clicked this frame. */
 bool ui_disclosure(Ui *ui, SDL_FRect rect, bool open);

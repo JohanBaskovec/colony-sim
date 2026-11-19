@@ -23,7 +23,9 @@ typedef enum AppTool {
     APP_TOOL_NONE,      /* Select colonists, a workstation or a stockpile. */
     APP_TOOL_DESIGNATE, /* Place orders of `tool_type` (DESIGNATION_NONE: remove orders). */
     /* Zone tools: create, extend or merge zones; remove zone tiles with Shift
-     * or in the removal mode (`zone_remove`, tool type APP_ZONE_REMOVE). */
+     * or in the removal mode (`zone_mode`, tool type APP_ZONE_REMOVE); extend
+     * or shrink the selected zone alone (APP_ZONE_EXTEND, APP_ZONE_SHRINK,
+     * Shift shrinking too). */
     APP_TOOL_STOCKPILE,
     APP_TOOL_BUILD, /* Place a blueprint of `build_type` on the clicked tile. */
     APP_TOOL_GATHER,
@@ -55,7 +57,6 @@ typedef enum AppTool {
 #define APP_KEY_DOWN SDL_SCANCODE_S
 #define APP_KEY_RIGHT SDL_SCANCODE_D
 #define APP_KEY_BUILD_LIKE SDL_SCANCODE_Q /* Build another of what is selected. */
-#define APP_KEY_BUILD SDL_SCANCODE_E      /* Workstation blueprints, one kind after the other. */
 #define APP_KEY_GATHER SDL_SCANCODE_R
 #define APP_KEY_WORK SDL_SCANCODE_T
 #define APP_KEY_LOG SDL_SCANCODE_J    /* The colony log. */
@@ -100,6 +101,8 @@ typedef enum FollowKind { FOLLOW_NONE, FOLLOW_COLONIST, FOLLOW_ANIMAL } FollowKi
 /* Types of the zone tools (see app_toggle_tool()). */
 #define APP_ZONE_ADD 0
 #define APP_ZONE_REMOVE 1
+#define APP_ZONE_EXTEND 2 /* The selected zone alone. */
+#define APP_ZONE_SHRINK 3
 
 /* Windows (game/ui.h ids). */
 /* Two left clicks this close (milliseconds) on the same thing make a double click. */
@@ -273,7 +276,7 @@ typedef struct App {
 
     AppTool tool;
     DesignationType tool_type;     /* For APP_TOOL_DESIGNATE. */
-    bool zone_remove;              /* For the zone tools: drags remove tiles from zones. */
+    int zone_mode;                 /* For the zone tools: APP_ZONE_ADD... */
     WorkstationType build_type;    /* For APP_TOOL_BUILD. */
     StructureType structure_type;  /* For APP_TOOL_STRUCTURE. */
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
@@ -324,6 +327,13 @@ void app_request_test_scenario(App *app, TestScenario scenario);
  * APP_FORBID or APP_ALLOW for APP_TOOL_FORBID),
  * or goes back to selection if it is already active. */
 void app_toggle_tool(App *app, AppTool tool, int type);
+
+/* APP_KEY_CANCEL with no tool in use: deletes the selected zone, cancels the
+ * selected site, orders the selected structure or roof taken apart (or takes
+ * the order back), takes back the order on the selected plant or items
+ * (tile_panel_cancel()). False when the selection takes none of these: the
+ * key then arms the tool that cancels orders. */
+bool app_cancel_selection(App *app);
 
 /* Whether this tool (same `type` rules) is the one in use. */
 bool app_tool_active(const App *app, AppTool tool, int type);

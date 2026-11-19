@@ -291,7 +291,7 @@ static void thing_actions(App *app, const ThingRows *rows)
                 app, slot++, RENDER_ICON_DECONSTRUCT, tr("tile_panel.deconstruct"),
                 tr(rows->thing == THING_ROOF ? "tile_panel.deconstruct_roof.description"
                                              : "tile_panel.deconstruct.description"),
-                ordered, unavailable(game, DESIGNATION_DECONSTRUCT, x, y, z))) {
+                ordered, unavailable(game, DESIGNATION_DECONSTRUCT, x, y, z), true)) {
             toggle_order(app, DESIGNATION_DECONSTRUCT, tile);
         }
         break;
@@ -308,7 +308,8 @@ static void thing_actions(App *app, const ThingRows *rows)
         if (plant_is_tree(plant->type)) {
             if (inspector_order_action(app, slot++, RENDER_ICON_CHOP, tr("tile_panel.chop"),
                                        tr("tile_panel.chop.description"), order == DESIGNATION_CHOP,
-                                       unavailable(game, DESIGNATION_CHOP, x, y, z))) {
+                                       unavailable(game, DESIGNATION_CHOP, x, y, z),
+                                       order == DESIGNATION_CHOP)) {
                 toggle_order(app, DESIGNATION_CHOP, foot);
             }
             break;
@@ -321,20 +322,22 @@ static void thing_actions(App *app, const ThingRows *rows)
             }
             if (inspector_order_action(app, slot++, RENDER_ICON_HARVEST, tr("designation.harvest"),
                                        tr("tile_panel.harvest.description"),
-                                       order == DESIGNATION_HARVEST, reason)) {
+                                       order == DESIGNATION_HARVEST, reason,
+                                       order == DESIGNATION_HARVEST)) {
                 toggle_order(app, DESIGNATION_HARVEST, foot);
             }
         }
         if (gather_plant_uprootable(map, x, y, z) &&
             inspector_order_action(app, slot++, RENDER_ICON_UPROOT, tr("designation.uproot"),
                                    tr("tile_panel.uproot.description"), order == DESIGNATION_UPROOT,
-                                   unavailable(game, DESIGNATION_UPROOT, x, y, z))) {
+                                   unavailable(game, DESIGNATION_UPROOT, x, y, z),
+                                   order == DESIGNATION_UPROOT)) {
             toggle_order(app, DESIGNATION_UPROOT, foot);
         }
         break;
     }
     case THING_SITE:
-        if (inspector_delete_action(app, slot++, tr("tile_panel.cancel_site.description"))) {
+        if (inspector_delete_action(app, slot++, tr("tile_panel.cancel_site.description"), true)) {
             game_remove_blueprints_rect(game, x, y, x, y, z);
         }
         break;
@@ -342,7 +345,8 @@ static void thing_actions(App *app, const ThingRows *rows)
         TilePos destination;
         bool ordered = game_item_move_at(game, x, y, z, &destination);
         if (inspector_order_action(app, slot++, RENDER_ICON_MOVE, tr("tile_panel.move_items"),
-                                   tr("tile_panel.move_items.description"), ordered, NULL)) {
+                                   tr("tile_panel.move_items.description"), ordered, NULL,
+                                   ordered)) {
             if (ordered) {
                 game_cancel_item_move(game, x, y, z);
             } else {
@@ -354,9 +358,66 @@ static void thing_actions(App *app, const ThingRows *rows)
     }
     case THING_COUNT: break;
     }
-    if (rows->thing == THING_STRUCTURE || rows->thing == THING_ROOF || rows->thing == THING_SITE) {
-        inspector_build_like_action(app, slot);
+    if ((rows->thing == THING_STRUCTURE || rows->thing == THING_ROOF ||
+         rows->thing == THING_SITE) &&
+        inspector_build_like_action(app, slot)) {
+        slot++;
     }
+    /* Looked up again: the site may have just been cancelled. */
+    int site = rows->thing == THING_SITE ? construction_at(&game->constructions, x, y, z)
+                                         : CONSTRUCTION_NONE;
+    const ConstructionSite *found = construction_get(&game->constructions, site);
+    int priority;
+    if (found != NULL && inspector_priority_action(app, slot, found->priority, &priority)) {
+        construction_set_priority(&game->constructions, site, priority);
+    }
+}
+
+bool tile_panel_cancel(App *app)
+{
+    if (!app->tile_selected) {
+        return false;
+    }
+    Game *game = &app->game;
+    int x = app->selected_tile_x, y = app->selected_tile_y, z = app->selected_tile_z;
+    TilePos tile = {(int16_t)x, (int16_t)y, (int16_t)z};
+    switch (app->selected_thing) {
+    case THING_SITE:
+        game_remove_blueprints_rect(game, x, y, x, y, z);
+        app->tile_selected = false;
+        return true;
+    case THING_STRUCTURE:
+    case THING_ROOF: {
+        bool ordered = designation_get(&game->designations, x, y, z) == DESIGNATION_DECONSTRUCT;
+        if (!ordered && unavailable(game, DESIGNATION_DECONSTRUCT, x, y, z) != NULL) {
+            return false;
+        }
+        toggle_order(app, DESIGNATION_DECONSTRUCT, tile);
+        return true;
+    }
+    case THING_PLANT: {
+        TilePos foot;
+        TreeRef tree;
+        bool is_tree;
+        if (thing_plant(app, x, y, z, &foot, &tree, &is_tree) == NULL) {
+            return false;
+        }
+        DesignationType order = designation_get(&game->designations, foot.x, foot.y, foot.z);
+        if (order != DESIGNATION_CHOP && order != DESIGNATION_HARVEST &&
+            order != DESIGNATION_UPROOT) {
+            return false;
+        }
+        toggle_order(app, order, foot);
+        return true;
+    }
+    case THING_ITEMS: {
+        TilePos destination;
+        return game_item_move_at(game, x, y, z, &destination) &&
+               game_cancel_item_move(game, x, y, z);
+    }
+    case THING_COUNT: break;
+    }
+    return false;
 }
 
 void tile_panel_draw(App *app)

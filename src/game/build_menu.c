@@ -255,7 +255,7 @@ static int active_type(const App *app)
     case APP_TOOL_BUILD: return (int)app->build_type;
     case APP_TOOL_STRUCTURE: return (int)app->structure_type;
     case APP_TOOL_STOCKPILE:
-    case APP_TOOL_GATHER: return app->zone_remove ? APP_ZONE_REMOVE : APP_ZONE_ADD;
+    case APP_TOOL_GATHER: return app->zone_mode;
     case APP_TOOL_DEBUG: return app->debug_mode;
     case APP_TOOL_FORBID: return app->forbid_allows ? APP_ALLOW : APP_FORBID;
     default: return 0;

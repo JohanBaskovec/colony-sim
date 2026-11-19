@@ -637,9 +637,11 @@ void gather_zone_panel_draw(App *app)
         rows.action = (Action){ACTION_TOGGLE_FORBIDDEN, WHOLE_ZONE, 0};
     }
     inspector_build_like_action(app, 1);
-    if (inspector_delete_action(app, 2, tr("gather_zone.delete.description"))) {
+    if (inspector_delete_action(app, 2, tr("gather_zone.delete.description"), true)) {
         rows.action = (Action){ACTION_DELETE, WHOLE_ZONE, 0};
     }
+    inspector_zone_edit_actions(app, 3, APP_TOOL_GATHER, RENDER_ICON_GATHER_ZONE,
+                                RENDER_ICON_GATHER_ZONE_REMOVE);
     if (app->selected_gather_zone != index) {
         return; /* Building another: the zone is no longer selected. */
     }

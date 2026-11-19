@@ -7,8 +7,10 @@
 #include "core/util.h"
 #include "game/bottom_bar.h"
 #include "game/hud.h"
+#include "game/inspector.h"
 #include "game/render.h"
 #include "game/stockpile_panel.h"
+#include "game/tile_panel.h"
 #include "game/work_panel.h"
 
 #include <SDL3_ttf/SDL_ttf.h>
@@ -59,7 +61,7 @@ bool app_tool_active(const App *app, AppTool tool, int type)
     case APP_TOOL_BUILD: return (int)app->build_type == type;
     case APP_TOOL_STRUCTURE: return (int)app->structure_type == type;
     case APP_TOOL_STOCKPILE:
-    case APP_TOOL_GATHER: return app->zone_remove == (type == APP_ZONE_REMOVE);
+    case APP_TOOL_GATHER: return app->zone_mode == type;
     case APP_TOOL_DEBUG: return app->debug_mode == type;
     case APP_TOOL_FORBID: return app->forbid_allows == (type == APP_ALLOW);
     default: return true;
@@ -79,7 +81,7 @@ void app_toggle_tool(App *app, AppTool tool, int type)
         } else if (tool == APP_TOOL_STRUCTURE) {
             app->structure_type = (StructureType)type;
         } else if (tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER) {
-            app->zone_remove = type == APP_ZONE_REMOVE;
+            app->zone_mode = type;
         } else if (tool == APP_TOOL_DEBUG) {
             app->debug_mode = type;
         } else if (tool == APP_TOOL_FORBID) {
@@ -95,19 +97,23 @@ static void toggle_tool(App *app, AppTool tool, DesignationType type)
     app_toggle_tool(app, tool, (int)type);
 }
 
-/* Build tool: crafting spot, then the next kinds of station, then off. */
-static void cycle_build_tool(App *app)
+bool app_cancel_selection(App *app)
 {
-    if (app->tool != APP_TOOL_BUILD) {
-        app->tool = APP_TOOL_BUILD;
-        app->build_type = (WorkstationType)0;
-    } else if (app->build_type + 1 < WORKSTATION_TYPE_COUNT) {
-        app->build_type = (WorkstationType)(app->build_type + 1);
-    } else {
-        app->tool = APP_TOOL_NONE;
+    if (app->tool != APP_TOOL_NONE) {
+        return false; /* The key turns the tool off. */
     }
-    app->left_button_down = false;
-    app->box_selecting = false;
+    switch (inspector_kind(app)) {
+    case INSPECT_GATHER_ZONE:
+        gather_zone_delete(&app->game.gather_zones, app->selected_gather_zone);
+        app->selected_gather_zone = GATHER_ZONE_NONE;
+        return true;
+    case INSPECT_STOCKPILE:
+        stockpile_delete(&app->game.stockpiles, app->selected_stockpile);
+        app->selected_stockpile = STOCKPILE_NONE;
+        return true;
+    case INSPECT_TILE: return tile_panel_cancel(app);
+    default: return false;
+    }
 }
 
 /* One overlay view at a time: turns `view` on or off, the others off. */
@@ -359,6 +365,18 @@ static void prune_station_selection(App *app)
         workstation_get_const(&app->game.workstations, app->selected_station);
     if (station == NULL || station->number != app->selected_station_number) {
         app->selected_station = WORKSTATION_NONE;
+    }
+}
+
+/* Extending or shrinking a zone ends with its selection (deleted, emptied,
+ * something else selected). */
+static void prune_zone_edit(App *app)
+{
+    bool edits = app->zone_mode == APP_ZONE_EXTEND || app->zone_mode == APP_ZONE_SHRINK;
+    if (edits &&
+        ((app->tool == APP_TOOL_STOCKPILE && app->selected_stockpile == STOCKPILE_NONE) ||
+         (app->tool == APP_TOOL_GATHER && app->selected_gather_zone == GATHER_ZONE_NONE))) {
+        app->tool = APP_TOOL_NONE;
     }
 }
 
@@ -847,11 +865,14 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_LEVEL_DOWN: set_level(app, app->camera.level - 1); return;
     case APP_KEY_MINE: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_MINE); return;
     case APP_KEY_GATHER: app_toggle_tool(app, APP_TOOL_GATHER, APP_ZONE_ADD); return;
-    case APP_KEY_CANCEL: toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE); return;
+    case APP_KEY_CANCEL:
+        if (!app_cancel_selection(app)) {
+            toggle_tool(app, APP_TOOL_DESIGNATE, DESIGNATION_NONE);
+        }
+        return;
     case APP_KEY_STOCKPILE: app_toggle_tool(app, APP_TOOL_STOCKPILE, APP_ZONE_ADD); return;
     case APP_KEY_WORK: bottom_bar_press_work(app); return;
     case APP_KEY_LOG: bottom_bar_press_log(app); return;
-    case APP_KEY_BUILD: cycle_build_tool(app); return;
     case APP_KEY_ROTATE:
         app->structure_direction = direction_turn(app->structure_direction);
         return;
@@ -1196,10 +1217,18 @@ static void tool_rect(const App *app, float screen_x, float screen_y, int *x0, i
     screen_to_tile(app, screen_x, screen_y, x1, y1);
 }
 
-/* Whether a zone tool drag removes tiles: in the removal mode, or with Shift. */
+/* Whether a zone tool drag removes tiles: in the removal or shrinking mode,
+ * or with Shift. */
 static bool zone_tool_removes(const App *app)
 {
-    return app->zone_remove || (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+    return app->zone_mode == APP_ZONE_REMOVE || app->zone_mode == APP_ZONE_SHRINK ||
+           (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+}
+
+/* Whether the zone tool works on the selected zone alone. */
+static bool zone_tool_edits(const App *app)
+{
+    return app->zone_mode == APP_ZONE_EXTEND || app->zone_mode == APP_ZONE_SHRINK;
 }
 
 /* Stockpile tool release: adds the rectangle to the selected stockpile and
@@ -1257,7 +1286,15 @@ static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
     const int z = app->camera.level; /* The level shown. */
     int x0, y0, x1, y1;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
-    if (zone_tool_removes(app)) {
+    if (zone_tool_edits(app)) {
+        int index = app->selected_stockpile;
+        if (zone_tool_removes(app)) {
+            game_shrink_stockpile_rect(&app->game, index, x0, y0, x1, y1, z);
+            prune_stockpile_selection(app);
+        } else {
+            game_extend_stockpile_rect(&app->game, index, x0, y0, x1, y1, z);
+        }
+    } else if (zone_tool_removes(app)) {
         game_remove_stockpile_rect(&app->game, x0, y0, x1, y1, z);
         prune_stockpile_selection(app);
     } else {
@@ -1272,7 +1309,15 @@ static void apply_gather_tool(App *app, float screen_x, float screen_y)
     const int z = app->camera.level; /* The level shown. */
     int x0, y0, x1, y1;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
-    if (zone_tool_removes(app)) {
+    if (zone_tool_edits(app)) {
+        int index = app->selected_gather_zone;
+        if (zone_tool_removes(app)) {
+            game_shrink_gather_zone_rect(&app->game, index, x0, y0, x1, y1, z);
+            prune_gather_zone_selection(app);
+        } else {
+            game_extend_gather_zone_rect(&app->game, index, x0, y0, x1, y1, z);
+        }
+    } else if (zone_tool_removes(app)) {
         game_remove_gather_zone_rect(&app->game, x0, y0, x1, y1, z);
         prune_gather_zone_selection(app);
     } else {
@@ -1749,6 +1794,7 @@ void app_run(App *app)
         prune_gather_zone_selection(app);
         prune_tile_selection(app);
         prune_animal_selection(app);
+        prune_zone_edit(app);
         update_follow(app);
         update_fps(app, dt);
         app->render_elapsed += draw_frame(app);

@@ -16,4 +16,9 @@
  * deselects it. */
 void tile_panel_draw(App *app);
 
+/* APP_KEY_CANCEL on the selected thing: cancels a site, orders a structure
+ * or roof taken apart (or takes the order back), takes back an order on a
+ * plant or a move of the items. False when there is nothing to do. */
+bool tile_panel_cancel(App *app);
+
 #endif /* COLONY_GAME_TILE_PANEL_H */

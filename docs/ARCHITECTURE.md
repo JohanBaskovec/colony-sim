@@ -980,6 +980,15 @@ while nobody is hurt (`health_hash()` adds nothing then).
   `colonist_heat_pressure()`) press on the severities in `Health.deprivation`.
   `health_is_hurt()` is true while any is above 0, so hashes of games where
   nobody suffers are unchanged.
+- Temperature ranges (`TemperatureRanges`, `core/temperature.h`): what a
+  being finds pleasant (no mood penalty for a settler, no urge to shelter for
+  an animal) and what it bears without suffering;
+  `colonist_temperature_ranges()` (mood thresholds and hypothermia /
+  heatstroke, shifted by the settler's tolerances, the same ranges as the
+  pressures) and `animal_temperature_ranges()` (its cold and heat limits,
+  narrowed by the shelter margins). `temperature_feel()` names a felt
+  temperature (freezing, cold, pleasant, hot, scorching); the Health tab
+  shows it with `colonist_felt_temperature()` (hearths, wetness).
 - Consciousness (`docs/HEALTH.md` §11): `health_consciousness_loss()` per
   `ConsciousnessSource` (the deprivations, blood, the head, pain), summed;
   the only stored part is `Health.posture` (up, collapsed, unconscious),
@@ -1664,6 +1673,17 @@ hauling. Failed station searches back off with a stamp made of the
 workstations revision, item additions and reservation releases; gathering
 searches with the zones revision and work reservation releases.
 
+Workstations and construction sites have a **priority** of their own
+(`Workstation.priority`, `ConstructionSite.priority`: `JOB_PRIORITY_HIGHEST`
+1 to `JOB_PRIORITY_LOWEST` 10, default 5, like stockpiles and gathering
+zones). Within one work type, crafting, building and supplying take the
+nearest job among the stations or sites of the best priority that has one:
+a bit mask of the priorities present (`station_job_priorities()`,
+`site_job_priorities()`), then one search per level present, best first, so
+that with every priority at its default there is a single search as before.
+A site's priority goes to the station built from it. Both are hashed only
+when not the default, so hashes of games that never set one are unchanged.
+
 ### Hearths and fire
 
 An open hearth (`WORKSTATION_OPEN_HEARTH`, `WorkstationDef.hearth`) is a
@@ -2298,7 +2318,20 @@ scancodes in `game/app.h`): the controls are laid out the same on any
 keyboard (WASD on QWERTY is ZQSD on AZERTY), and the help and tooltips show
 the labels of the active layout (`app_key_name()`). The key at the physical position of A on AZERTY (Q on QWERTY,
 `APP_KEY_BUILD_LIKE`) turns on the tool that builds another of what is
-selected (`build_like_selection()`).
+selected (`build_like_selection()`). X (`APP_KEY_CANCEL`) with no tool in use
+acts on the selection (`app_cancel_selection()`): it deletes a stockpile or
+gathering zone, cancels a construction site or the order given on a plant or
+items, and toggles the order to take apart a structure or roof
+(`tile_panel_cancel()`); built workstations are left alone (their delete
+button removes them at once). Otherwise it turns on the cancel tool.
+The zone tools have a mode (`App.zone_mode`): add, remove, and extend or
+shrink only the selected zone (the two buttons of a zone's action menu,
+`inspector_zone_edit_actions()`; `game_extend_stockpile_rect()`,
+`game_shrink_gather_zone_rect()`...). The tool turns off when that zone goes.
+The selected zone is drawn brighter, with a thick border.
+The priority button of a workstation or site (`inspector_priority_action()`)
+shows its number; a left click raises the priority (a smaller number), a
+right click lowers it (`ui_icon_button_click()` tells the mouse button).
 The structure tool (`APP_TOOL_STRUCTURE`) previews the sites a drag would
 place (`render_structure_preview()`); structures and sites are drawn by
 `render_structures()`.

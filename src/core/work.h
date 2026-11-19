@@ -59,6 +59,17 @@ bool work_priority_is_valid(int priority);
 int work_priority_raised(int priority);
 int work_priority_lowered(int priority);
 
+/* Priority of a workstation or a construction site (core/workstation.h,
+ * core/construction.h): settlers take the jobs at those of the highest
+ * priority (JOB_PRIORITY_HIGHEST) first, whatever the distance, then the
+ * nearest one among equals. */
+#define JOB_PRIORITY_HIGHEST 1
+#define JOB_PRIORITY_LOWEST 10
+#define JOB_PRIORITY_DEFAULT 5
+
+/* A priority within JOB_PRIORITY_HIGHEST..JOB_PRIORITY_LOWEST. */
+int job_priority_clamped(int priority);
+
 /* Bit mask with one bit per WorkType. */
 typedef uint32_t WorkTypeMask;
 

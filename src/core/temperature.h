@@ -226,4 +226,31 @@ void temperatures_tick(Temperatures *temperatures, const Map *map, uint64_t tick
 
 uint64_t temperatures_hash(const Temperatures *temperatures, uint64_t hash);
 
+/* The temperatures a being is at ease in and those its body bears
+ * (colonist_temperature_ranges(), animal_temperature_ranges()): pleasant
+ * from `pleasant_low` to `pleasant_high`; below `bearable_low` it freezes,
+ * above `bearable_high` it overheats (docs/HEALTH.md §10). */
+typedef struct TemperatureRanges {
+    float pleasant_low;
+    float pleasant_high;
+    float bearable_low;
+    float bearable_high;
+} TemperatureRanges;
+
+/* How a temperature feels to it: freezing (below what it bears), cold
+ * (below what is pleasant), pleasant, hot, scorching. */
+typedef enum TemperatureFeel {
+    TEMPERATURE_FREEZING,
+    TEMPERATURE_COLD,
+    TEMPERATURE_PLEASANT,
+    TEMPERATURE_HOT,
+    TEMPERATURE_SCORCHING,
+    TEMPERATURE_FEEL_COUNT
+} TemperatureFeel;
+
+TemperatureFeel temperature_feel(const TemperatureRanges *ranges, float celsius);
+
+/* Its translation key ("Pleasant"...). */
+const char *temperature_feel_key(TemperatureFeel feel);
+
 #endif /* COLONY_CORE_TEMPERATURE_H */

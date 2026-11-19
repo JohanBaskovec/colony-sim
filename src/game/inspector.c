@@ -1,6 +1,7 @@
 #include "game/inspector.h"
 
 #include "core/i18n.h"
+#include "core/work.h"
 #include "game/animal_panel.h"
 #include "game/colonist_bar.h"
 #include "game/layout.h"
@@ -140,8 +141,9 @@ void inspector_side_window(App *app, int id, int after, const char *title, UiRow
     ui_layout_docked(&app->ui, id, title, &dock, rows, userdata, open);
 }
 
-bool inspector_action(App *app, int slot, bool lit, SDL_FRect *icon, const char *const *lines,
-                      int count)
+/* An action button of the menu right of the box: its button clicked, or 0. */
+static int action_click(App *app, int slot, bool lit, SDL_FRect *button, SDL_FRect *icon,
+                        const char *const *lines, int count)
 {
     Ui *ui = &app->ui;
     SDL_FRect box = ui_window_rect(ui, APP_WINDOW_INSPECTOR);
@@ -149,14 +151,43 @@ bool inspector_action(App *app, int slot, bool lit, SDL_FRect *icon, const char 
     SDL_FRect rect = {box.x + box.w + gap + (float)slot * (size + 2.0f * gap) + gap,
                       box.y + box.h - size - gap, size, size};
     ui_panel(ui, (SDL_FRect){rect.x - gap, rect.y - gap, size + 2.0f * gap, size + 2.0f * gap});
-    bool clicked = ui_icon_button(ui, rect, lit);
+    int clicked = ui_icon_button_click(ui, rect, lit);
     float inset = SDL_roundf(size * 0.12f);
+    *button = rect;
     *icon =
         (SDL_FRect){rect.x + inset, rect.y + inset, rect.w - 2.0f * inset, rect.h - 2.0f * inset};
     if (ui_hovered(ui, rect)) {
         ui_tooltip(ui, lines, count);
     }
     return clicked;
+}
+
+bool inspector_action(App *app, int slot, bool lit, SDL_FRect *icon, const char *const *lines,
+                      int count)
+{
+    SDL_FRect button;
+    return action_click(app, slot, lit, &button, icon, lines, count) == SDL_BUTTON_LEFT;
+}
+
+bool inspector_priority_action(App *app, int slot, int priority, int *changed)
+{
+    char title[128], number[16];
+    tr_integer(number, sizeof(number), priority);
+    TR_FORMAT(title, sizeof(title), tr("inspector.priority"), number);
+    const char *lines[3] = {title, tr("inspector.priority.description"),
+                            tr("inspector.priority.controls")};
+    SDL_FRect button, icon;
+    int clicked = action_click(app, slot, false, &button, &icon, lines, 3);
+    ui_centered_label(&app->ui, button, number);
+    /* Left: higher, so done sooner (a smaller number); right: lower. */
+    int wanted = priority;
+    if (clicked == SDL_BUTTON_LEFT) {
+        wanted = job_priority_clamped(priority - 1);
+    } else if (clicked == SDL_BUTTON_RIGHT) {
+        wanted = job_priority_clamped(priority + 1);
+    }
+    *changed = wanted;
+    return wanted != priority;
 }
 
 bool inspector_forbid_action(App *app, int slot, bool forbidden, const char *forbid_hint)
@@ -220,14 +251,28 @@ bool inspector_build_like_action(App *app, int slot)
     return true;
 }
 
+/* "Shortcut: X" for what APP_KEY_CANCEL does on the selection. */
+static void cancel_shortcut(char *out, size_t size)
+{
+    TR_FORMAT(out, size, tr("menu.shortcut"), app_key_name(APP_KEY_CANCEL));
+}
+
 bool inspector_order_action(App *app, int slot, RenderIcon icon, const char *name,
-                            const char *description, bool ordered, const char *unavailable)
+                            const char *description, bool ordered, const char *unavailable,
+                            bool shortcut)
 {
     bool veiled = unavailable != NULL && !ordered;
-    const char *lines[3] = {ordered ? tr("inspector.order.cancel") : name, description,
-                            unavailable};
+    char key[128];
+    cancel_shortcut(key, sizeof(key));
+    const char *lines[3] = {ordered ? tr("inspector.order.cancel") : name, description, NULL};
+    int count = 2;
+    if (veiled) {
+        lines[count++] = unavailable;
+    } else if (shortcut) {
+        lines[count++] = key;
+    }
     SDL_FRect rect;
-    bool clicked = inspector_action(app, slot, ordered, &rect, lines, veiled ? 3 : 2);
+    bool clicked = inspector_action(app, slot, ordered, &rect, lines, count);
     render_tool_icon(app->renderer, rect, icon);
     if (veiled) {
         ui_fill(&app->ui, rect, app->ui.theme.colors[THEME_DISABLED_VEIL]);
@@ -235,11 +280,32 @@ bool inspector_order_action(App *app, int slot, RenderIcon icon, const char *nam
     return clicked && !veiled;
 }
 
-bool inspector_delete_action(App *app, int slot, const char *description)
+void inspector_zone_edit_actions(App *app, int slot, AppTool tool, RenderIcon extend_icon,
+                                 RenderIcon shrink_icon)
 {
-    const char *lines[2] = {tr("inspector.delete"), description};
+    static const int MODES[2] = {APP_ZONE_EXTEND, APP_ZONE_SHRINK};
+    static const char *const NAMES[2] = {N_("inspector.zone.extend"), N_("inspector.zone.shrink")};
+    static const char *const DESCRIPTIONS[2] = {N_("inspector.zone.extend.description"),
+                                                N_("inspector.zone.shrink.description")};
+    RenderIcon icons[2] = {extend_icon, shrink_icon};
+    for (int i = 0; i < 2; i++) {
+        bool lit = app_tool_active(app, tool, MODES[i]);
+        const char *lines[2] = {tr(NAMES[i]), tr(DESCRIPTIONS[i])};
+        SDL_FRect icon;
+        if (inspector_action(app, slot + i, lit, &icon, lines, 2)) {
+            app_toggle_tool(app, tool, MODES[i]);
+        }
+        render_tool_icon(app->renderer, icon, icons[i]);
+    }
+}
+
+bool inspector_delete_action(App *app, int slot, const char *description, bool shortcut)
+{
+    char key[128];
+    cancel_shortcut(key, sizeof(key));
+    const char *lines[3] = {tr("inspector.delete"), description, key};
     SDL_FRect icon;
-    bool clicked = inspector_action(app, slot, false, &icon, lines, 2);
+    bool clicked = inspector_action(app, slot, false, &icon, lines, shortcut ? 3 : 2);
     render_tool_icon(app->renderer, icon, RENDER_ICON_CANCEL);
     return clicked;
 }

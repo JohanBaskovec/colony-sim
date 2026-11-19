@@ -398,6 +398,41 @@ static void test_count_stored(void)
     free_world(&map, &s);
 }
 
+/* Extending or shrinking one stockpile leaves the others alone. */
+static void test_extend_and_shrink_one(void)
+{
+    Map map;
+    Stockpiles s;
+    REQUIRE(init_world(&map, &s));
+    int a = stockpile_create(&s, &map, 1, 1, 2, 2, 0);
+    int b = stockpile_create(&s, &map, 4, 1, 4, 2, 0);
+    REQUIRE(a != STOCKPILE_NONE && b != STOCKPILE_NONE);
+    /* Over b and free tiles: only the free ones join a, b is not merged. */
+    CHECK_EQ_INT(stockpile_extend_view(&s, &map, a, 3, 1, 6, 2, 0, NULL), 6);
+    CHECK_EQ_INT(stockpile_get(&s, a)->cell_count, 10);
+    CHECK_EQ_INT(stockpile_get(&s, b)->cell_count, 2);
+    CHECK_EQ_INT(stockpile_at(&s, 4, 1, 0), b);
+    CHECK_EQ_INT(stockpile_at(&s, 6, 2, 0), a);
+    /* Blocked tiles are left out. */
+    uint8_t *blocked = calloc(16 * 16, 1);
+    REQUIRE(blocked != NULL);
+    blocked[map_index(&map, 7, 1, 0)] = 1;
+    const uint8_t *layers[] = {blocked, NULL};
+    CHECK_EQ_INT(stockpile_extend_view(&s, &map, a, 7, 1, 7, 2, 0, layers), 1);
+    free(blocked);
+    /* Shrinking a over b's tiles takes none of them. */
+    CHECK_EQ_INT(stockpile_shrink_view(&s, &map, a, 3, 1, 4, 2, 0), 2);
+    CHECK_EQ_INT(stockpile_get(&s, b)->cell_count, 2);
+    CHECK_EQ_INT(stockpile_at(&s, 3, 1, 0), STOCKPILE_NONE);
+    /* Emptied: deleted. */
+    CHECK(stockpile_shrink_view(&s, &map, a, 0, 0, 15, 15, 0) > 0);
+    CHECK(stockpile_get(&s, a) == NULL);
+    CHECK_EQ_INT(stockpile_get(&s, b)->cell_count, 2);
+    CHECK_EQ_INT(stockpile_shrink_view(&s, &map, a, 0, 0, 15, 15, 0), 0);
+    CHECK_EQ_INT(stockpile_extend_view(&s, &map, a, 0, 0, 15, 15, 0, NULL), 0);
+    free_world(&map, &s);
+}
+
 int main(void)
 {
     RUN_TEST(test_create_covers_valid_tiles_only);
@@ -411,5 +446,6 @@ int main(void)
     RUN_TEST(test_overlapping_rectangle_merges_stockpiles);
     RUN_TEST(test_blocked_tiles_are_left_out);
     RUN_TEST(test_count_stored);
+    RUN_TEST(test_extend_and_shrink_one);
     return test_summary();
 }

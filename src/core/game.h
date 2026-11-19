@@ -604,6 +604,15 @@ int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z,
 int game_remove_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z);
 int game_remove_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z);
 
+/* What is seen in a rectangle (level z shown) added to one stockpile or
+ * gathering zone alone (`index`: no merging; the same tiles left out as by
+ * game_add_stockpile_rect()), or taken out of it alone. Return the number of
+ * tiles added or removed. */
+int game_extend_stockpile_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z);
+int game_shrink_stockpile_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z);
+int game_extend_gather_zone_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z);
+int game_shrink_gather_zone_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z);
+
 /* ---- Workstations -------------------------------------------------------- */
 
 /* Whether some living colonist knows enough to build this kind of station

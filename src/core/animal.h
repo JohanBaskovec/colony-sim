@@ -359,6 +359,11 @@ float animal_nerve(const Animal *animal);
 float animal_cold_limit(const Animal *animal);
 float animal_heat_limit(const Animal *animal);
 
+/* The temperatures an animal bears (its cold and heat limits) and is at ease
+ * in: ANIMAL_SHELTER_COLD_MARGIN and ANIMAL_SHELTER_HEAT_MARGIN within them
+ * (it looks for shelter beyond). */
+TemperatureRanges animal_temperature_ranges(const Animal *animal);
+
 /* Sets the attributes, and the damage and pain factors of its body that follow
  * from them (toughness, pain tolerance). */
 void animal_set_attributes(Animal *animal, const Attributes *attributes);

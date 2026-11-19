@@ -281,7 +281,8 @@ static int add_site(Constructions *constructions, StructureType type, int workst
                                    .z = (int16_t)z,
                                    .direction = (uint8_t)direction,
                                    .number = constructions->next_number++,
-                                   .refresh = refresh};
+                                   .refresh = refresh,
+                                   .priority = JOB_PRIORITY_DEFAULT};
         for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
             site->delivered[slot] = (ItemStack){.type = ITEM_NONE};
         }
@@ -475,6 +476,16 @@ void construction_set_forbidden(Constructions *constructions, int index, bool fo
     }
 }
 
+void construction_set_priority(Constructions *constructions, int index, int priority)
+{
+    ConstructionSite *site = site_get(constructions, index);
+    priority = job_priority_clamped(priority);
+    if (site != NULL && site->priority != priority) {
+        site->priority = (uint8_t)priority;
+        constructions->revision++; /* Settlers who found nothing to do look again. */
+    }
+}
+
 bool construction_forbidden(const ConstructionSite *site, const Map *map)
 {
     if (site->forbidden) {
@@ -566,9 +577,11 @@ static bool finish_workstation(Constructions *constructions, const Map *map,
         !workstation_can_place(workstations, map, x, y, z)) {
         return false;
     }
+    int priority = site->priority;
     ItemStack unused[STRUCTURE_MATERIAL_SLOTS];
     constructions_remove(constructions, index, unused); /* Used up. */
-    workstations_place(workstations, map, type, x, y, z);
+    int station = workstations_place(workstations, map, type, x, y, z);
+    workstation_set_priority(workstations, station, priority);
     return true;
 }
 
@@ -723,6 +736,9 @@ uint64_t constructions_hash(const Constructions *constructions, uint64_t hash)
         hash = hash_fnv1a64(hash, &site->clear_progress, sizeof(site->clear_progress));
         if (site->forbidden) { /* Hashes of games that forbid nothing stay as they were. */
             hash = hash_fnv1a64(hash, &site->forbidden, sizeof(site->forbidden));
+        }
+        if (site->priority != JOB_PRIORITY_DEFAULT) { /* Likewise. */
+            hash = hash_fnv1a64(hash, &site->priority, sizeof(site->priority));
         }
     }
     return hash;

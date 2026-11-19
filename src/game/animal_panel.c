@@ -74,6 +74,9 @@ static void health_rows(UiLayout *layout, void *userdata)
     const Animal *animal = game_animal_const(&app->game, app->selected_animal);
     if (animal != NULL) {
         health_panel_rows(layout, &animal->health);
+        TemperatureRanges ranges = animal_temperature_ranges(animal);
+        float felt = temperature_at(&app->game.temperatures, animal->x, animal->y, animal->z);
+        health_panel_temperature_rows(layout, felt, &ranges, false);
     }
 }
 

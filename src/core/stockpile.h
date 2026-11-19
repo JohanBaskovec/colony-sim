@@ -108,6 +108,16 @@ int stockpiles_remove_view_rect(Stockpiles *stockpiles, const Map *map, int x0, 
  * stockpiles left without tiles are deleted. Returns the number of tiles removed. */
 int stockpiles_remove_rect(Stockpiles *stockpiles, int x0, int y0, int x1, int y1, int z);
 
+/* What is seen in a rectangle (level z shown, map_view_level()) added to
+ * stockpile `index` alone: the free coverable tiles (no merging with the
+ * stockpiles it touches; `blocked` as in stockpiles_add_rect()), or taken out
+ * of it alone (the others keep theirs; it is deleted once empty). Return the
+ * number of tiles added or removed. */
+int stockpile_extend_view(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
+                          int y1, int z, const uint8_t *const *blocked);
+int stockpile_shrink_view(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
+                          int y1, int z);
+
 void stockpile_delete(Stockpiles *stockpiles, int index);
 
 /* NULL when the index is out of range or the slot is unused. */

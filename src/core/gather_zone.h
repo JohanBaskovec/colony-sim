@@ -312,6 +312,16 @@ int gather_zones_remove_view_rect(GatherZones *zones, const Map *map, int x0, in
  * are deleted. Returns the number of tiles removed. */
 int gather_zones_remove_rect(GatherZones *zones, int x0, int y0, int x1, int y1, int z);
 
+/* What is seen in a rectangle (level z shown, map_view_level()) added to
+ * zone `index` alone: the free tiles it may cover (no merging with the zones
+ * it touches; `blocked` as in gather_zones_add_rect()), or taken out of it
+ * alone (the other zones keep theirs; the zone is deleted once empty).
+ * Return the number of tiles added or removed. */
+int gather_zone_extend_view(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
+                            int y1, int z, const uint8_t *const *blocked);
+int gather_zone_shrink_view(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
+                            int y1, int z);
+
 void gather_zone_delete(GatherZones *zones, int index);
 
 /* NULL when the index is out of range or the slot is unused. */

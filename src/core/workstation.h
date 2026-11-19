@@ -28,6 +28,7 @@
 #include "core/recipe.h"
 #include "core/rng.h"
 #include "core/structure.h"
+#include "core/work.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -156,6 +157,9 @@ typedef struct Workstation {
     /* The player forbade it: nobody crafts at it, refuels, lights it nor
      * tells stories there. */
     bool forbidden;
+    /* Crafters take the bills of the stations of the highest priority first
+     * (JOB_PRIORITY_HIGHEST..JOB_PRIORITY_LOWEST, core/work.h). */
+    uint8_t priority;
 } Workstation;
 
 typedef struct Workstations {
@@ -208,6 +212,10 @@ int workstations_remove(Workstations *workstations, int index, ItemStack returne
 /* Forbids or allows a station (see Workstation.forbidden); a change counts
  * in Workstations.revision. Returns whether it changed. */
 bool workstation_set_forbidden(Workstations *workstations, int index, bool forbidden);
+
+/* Sets a station's priority (clamped, see Workstation.priority); a change
+ * counts in Workstations.revision. Returns whether it changed. */
+bool workstation_set_priority(Workstations *workstations, int index, int priority);
 
 /* Adds a bill for a recipe made at this kind of station (do once, every
  * input allowed). Returns its index, or -1. */

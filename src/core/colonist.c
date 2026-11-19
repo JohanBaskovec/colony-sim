@@ -1075,16 +1075,33 @@ float colonist_heat_limit(const Colonist *colonist)
     return COLONIST_HOT_SLEEP_ABOVE + attribute_heat_shift(&colonist->attributes);
 }
 
+TemperatureRanges colonist_temperature_ranges(const Colonist *colonist)
+{
+    float cold = attribute_cold_shift(&colonist->attributes);
+    float heat = attribute_heat_shift(&colonist->attributes);
+    return (TemperatureRanges){MOOD_COLD_CELSIUS - cold, MOOD_HOT_CELSIUS + heat,
+                               COLONIST_HYPOTHERMIA_CELSIUS - cold,
+                               COLONIST_HEATSTROKE_CELSIUS + heat};
+}
+
 float colonist_cold_pressure(const Colonist *colonist, float felt_celsius)
 {
-    float below = COLONIST_HYPOTHERMIA_CELSIUS - attribute_cold_shift(&colonist->attributes);
+    float below = colonist_temperature_ranges(colonist).bearable_low;
     return clampf((below - felt_celsius) / COLONIST_COLD_SPAN, 0.0f, 1.0f);
 }
 
 float colonist_heat_pressure(const Colonist *colonist, float felt_celsius)
 {
-    float above = COLONIST_HEATSTROKE_CELSIUS + attribute_heat_shift(&colonist->attributes);
+    float above = colonist_temperature_ranges(colonist).bearable_high;
     return clampf((felt_celsius - above) / COLONIST_HEAT_SPAN, 0.0f, 1.0f);
+}
+
+float colonist_felt_temperature(const Colonist *colonist, const Workstations *workstations,
+                                const Map *map, const Temperatures *temperatures)
+{
+    return hearths_felt_temperature(workstations, map, temperatures, colonist->x, colonist->y,
+                                    colonist->z) -
+           COLONIST_WET_CHILL * colonist->wetness;
 }
 
 float colonist_sleep_temperature_factor(const Colonist *colonist, float celsius)
@@ -2303,6 +2320,7 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
 typedef struct StationSearch {
     const ColonistContext *context;
     const Colonist *worker;
+    int priority; /* Only stations of this priority. */
 } StationSearch;
 
 static bool is_station_job(const Map *map, int x, int y, int z, void *userdata)
@@ -2312,7 +2330,7 @@ static bool is_station_job(const Map *map, int x, int y, int z, void *userdata)
     const ColonistContext *context = search->context;
     const Workstation *station = workstation_get_const(
         context->workstations, workstation_at(context->workstations, x, y, z));
-    if (station == NULL || station->forbidden ||
+    if (station == NULL || station->forbidden || station->priority != search->priority ||
         reservations_taken_by_other(context->reservations, RESERVATION_STATION,
                                     station_tile(station), context->worker_id)) {
         return false;
@@ -2320,16 +2338,18 @@ static bool is_station_job(const Map *map, int x, int y, int z, void *userdata)
     return choose_bill(search->worker, context, station) >= 0;
 }
 
-/* Cheap check before a search: is there any station with bills? */
-static bool station_jobs_exist(const ColonistContext *context)
+/* Cheap check before a search: the priorities of the stations with bills,
+ * a bit per level (0: none). */
+static uint32_t station_job_priorities(const ColonistContext *context)
 {
+    uint32_t priorities = 0;
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = &context->workstations->list[index];
         if (station->used && station->bill_count > 0) {
-            return true;
+            priorities |= 1u << station->priority;
         }
     }
-    return false;
+    return priorities;
 }
 
 /* Search filter for something to pick up: types, quality, count, matching the
@@ -2619,14 +2639,20 @@ static bool station_job_still_valid(const Colonist *colonist, const ColonistCont
 
 static bool try_station_job(Colonist *colonist, const ColonistContext *context)
 {
-    if (!station_jobs_exist(context)) {
-        return false;
-    }
-    StationSearch search = {context, colonist};
+    uint32_t priorities = station_job_priorities(context);
+    StationSearch search = {context, colonist, 0};
     TilePos tile;
-    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
-                                 is_station_job, &search, COLONIST_WORK_SEARCH_MAX_COST, NULL,
-                                 &tile)) {
+    bool found = false;
+    /* Stations of the highest priority first, whatever the distance. */
+    for (int priority = JOB_PRIORITY_HIGHEST; priority <= JOB_PRIORITY_LOWEST && !found;
+         priority++) {
+        search.priority = priority;
+        found = (priorities & (1u << priority)) &&
+                pathfinder_find_nearest(context->pathfinder, context->plan_map,
+                                        current_tile(colonist), is_station_job, &search,
+                                        COLONIST_WORK_SEARCH_MAX_COST, NULL, &tile);
+    }
+    if (!found) {
         return false;
     }
     int index = workstation_at(context->workstations, tile.x, tile.y, tile.z);
@@ -2880,30 +2906,31 @@ static bool site_has_job(const ColonistContext *context, const Colonist *worker,
     return construction_can_work(site, context->plan_map) || site_wants_material(context, site);
 }
 
-/* Cheap check before searching the map: whether some site offers a job,
- * to a builder (`worker`: ready for work and free, or missing a material it
- * can go for) or to a hauler (NULL: missing a material). */
-static bool any_site_job(const ColonistContext *context, const Colonist *worker)
+/* Cheap check before searching the map: the priorities of the sites that
+ * offer a job (a bit per level, 0: none), to a builder (`worker`: ready for
+ * work and free, or missing a material it can go for) or to a hauler (NULL:
+ * missing a material). */
+static uint32_t site_job_priorities(const ColonistContext *context, const Colonist *worker)
 {
+    uint32_t priorities = 0;
     for (int index = 0; index < CONSTRUCTION_MAX; index++) {
         const ConstructionSite *site = construction_get(context->constructions, index);
-        if (site == NULL || !site_still_wanted(context, site)) {
+        if (site == NULL || (priorities & (1u << site->priority)) ||
+            !site_still_wanted(context, site)) {
             continue;
         }
-        if (worker == NULL) {
-            if (site_wants_material(context, site)) {
-                return true;
-            }
-        } else if (site_has_job(context, worker, index)) {
-            return true;
+        if (worker == NULL ? site_wants_material(context, site)
+                           : site_has_job(context, worker, index)) {
+            priorities |= 1u << site->priority;
         }
     }
-    return false;
+    return priorities;
 }
 
 typedef struct SiteSearch {
     const ColonistContext *context;
-    const Colonist *worker;
+    const Colonist *worker; /* NULL: a hauler bringing materials. */
+    int priority;           /* Only sites of this priority. */
 } SiteSearch;
 
 /* First site with a job next to (x, y), in a fixed order (on each tile, the
@@ -2916,7 +2943,9 @@ static bool find_adjacent_site(const SiteSearch *search, int x, int y, int z, Ti
         int nx = x + NEIGHBOR_DX[i], ny = y + NEIGHBOR_DY[i];
         for (int roof = 0; roof < 2; roof++) {
             int site = construction_worked_from(search->context->constructions, nx, ny, z, roof);
-            if (site_has_job(search->context, search->worker, site)) {
+            const ConstructionSite *found = construction_get(search->context->constructions, site);
+            if (found != NULL && found->priority == search->priority &&
+                site_has_job(search->context, search->worker, site)) {
                 *out = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)z};
                 *index = site;
                 return true;
@@ -3024,14 +3053,21 @@ static uint32_t construction_stamp(const ColonistContext *context)
 
 static bool try_construction_job(Colonist *colonist, const ColonistContext *context)
 {
-    if (context->constructions->used_count == 0 || !any_site_job(context, colonist)) {
-        return false;
-    }
-    SiteSearch search = {context, colonist};
+    uint32_t priorities =
+        context->constructions->used_count > 0 ? site_job_priorities(context, colonist) : 0;
+    SiteSearch search = {context, colonist, 0};
     TilePos spot, target;
-    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
-                                 is_site_spot, &search, COLONIST_WORK_SEARCH_MAX_COST, NULL,
-                                 &spot)) {
+    bool found = false;
+    /* Sites of the highest priority first, whatever the distance. */
+    for (int priority = JOB_PRIORITY_HIGHEST; priority <= JOB_PRIORITY_LOWEST && !found;
+         priority++) {
+        search.priority = priority;
+        found = (priorities & (1u << priority)) &&
+                pathfinder_find_nearest(context->pathfinder, context->plan_map,
+                                        current_tile(colonist), is_site_spot, &search,
+                                        COLONIST_WORK_SEARCH_MAX_COST, NULL, &spot);
+    }
+    if (!found) {
         return false;
     }
     int index = CONSTRUCTION_NONE;
@@ -3051,18 +3087,20 @@ static bool try_construction_job(Colonist *colonist, const ColonistContext *cont
     return true;
 }
 
-/* First site next to (x, y), in a fixed order (as find_adjacent_site()),
- * missing a material nobody brings yet that lies about. */
-static bool find_supply_site(const ColonistContext *context, int x, int y, int z, TilePos *out,
+/* First site of the search's priority next to (x, y), in a fixed order (as
+ * find_adjacent_site()), missing a material nobody brings yet that lies
+ * about. */
+static bool find_supply_site(const SiteSearch *search, int x, int y, int z, TilePos *out,
                              int *index)
 {
+    const ColonistContext *context = search->context;
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i], ny = y + NEIGHBOR_DY[i];
         for (int roof = 0; roof < 2; roof++) {
             int found = construction_worked_from(context->constructions, nx, ny, z, roof);
             const ConstructionSite *site = construction_get(context->constructions, found);
-            if (site != NULL && site_still_wanted(context, site) &&
-                site_wants_material(context, site)) {
+            if (site != NULL && site->priority == search->priority &&
+                site_still_wanted(context, site) && site_wants_material(context, site)) {
                 *out = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)z};
                 *index = found;
                 return true;
@@ -3082,17 +3120,24 @@ static bool is_supply_spot(const Map *map, int x, int y, int z, void *userdata)
 /* A hauler brings materials to the nearest site that waits for some. */
 static bool try_supply_job(Colonist *colonist, const ColonistContext *context)
 {
-    if (context->constructions->used_count == 0 || !any_site_job(context, NULL)) {
-        return false;
-    }
+    uint32_t priorities =
+        context->constructions->used_count > 0 ? site_job_priorities(context, NULL) : 0;
+    SiteSearch search = {context, NULL, 0};
     TilePos spot, target;
-    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, current_tile(colonist),
-                                 is_supply_spot, (void *)context, COLONIST_WORK_SEARCH_MAX_COST,
-                                 NULL, &spot)) {
+    bool found = false;
+    for (int priority = JOB_PRIORITY_HIGHEST; priority <= JOB_PRIORITY_LOWEST && !found;
+         priority++) {
+        search.priority = priority;
+        found = (priorities & (1u << priority)) &&
+                pathfinder_find_nearest(context->pathfinder, context->plan_map,
+                                        current_tile(colonist), is_supply_spot, &search,
+                                        COLONIST_WORK_SEARCH_MAX_COST, NULL, &spot);
+    }
+    if (!found) {
         return false;
     }
     int index = CONSTRUCTION_NONE;
-    find_supply_site(context, spot.x, spot.y, spot.z, &target, &index);
+    find_supply_site(&search, spot.x, spot.y, spot.z, &target, &index);
     begin_task(colonist, context, TASK_SUPPLY);
     colonist->site = index;
     colonist->site_number = construction_get(context->constructions, index)->number;

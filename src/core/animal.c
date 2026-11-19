@@ -956,6 +956,13 @@ float animal_heat_limit(const Animal *animal)
     return ANIMAL_DEFS[animal->species].heat_above + attribute_heat_shift(&animal->attributes);
 }
 
+TemperatureRanges animal_temperature_ranges(const Animal *animal)
+{
+    float cold = animal_cold_limit(animal), heat = animal_heat_limit(animal);
+    return (TemperatureRanges){cold + ANIMAL_SHELTER_COLD_MARGIN, heat - ANIMAL_SHELTER_HEAT_MARGIN,
+                               cold, heat};
+}
+
 float animal_cold_pressure(const Animal *animal, float celsius)
 {
     return clampf((animal_cold_limit(animal) - celsius) / ANIMAL_COLD_SPAN, 0.0f, 1.0f);
@@ -1008,8 +1015,8 @@ static float tile_celsius(const AnimalContext *context, int x, int y, int z)
  * near overheating. */
 static bool is_comfortable(const Animal *animal, float celsius)
 {
-    return celsius >= animal_cold_limit(animal) + ANIMAL_SHELTER_COLD_MARGIN &&
-           celsius <= animal_heat_limit(animal) - ANIMAL_SHELTER_HEAT_MARGIN;
+    TemperatureRanges ranges = animal_temperature_ranges(animal);
+    return celsius >= ranges.pleasant_low && celsius <= ranges.pleasant_high;
 }
 
 /* A search for a tile within a range of temperatures. */

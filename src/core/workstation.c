@@ -136,6 +136,7 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
         station->z = (int16_t)z;
         station->number = workstations->next_number++;
         station->work_recipe = RECIPE_COUNT;
+        station->priority = JOB_PRIORITY_DEFAULT;
         if (WORKSTATION_DEFS[type].hearth) {
             station->keep_burning = true;
             station->fuel_types = HEARTH_DEFAULT_FUEL_TYPES;
@@ -172,6 +173,18 @@ bool workstation_set_forbidden(Workstations *workstations, int index, bool forbi
         return false;
     }
     station->forbidden = forbidden;
+    workstations->revision++;
+    return true;
+}
+
+bool workstation_set_priority(Workstations *workstations, int index, int priority)
+{
+    Workstation *station = workstation_get(workstations, index);
+    priority = job_priority_clamped(priority);
+    if (station == NULL || station->priority == priority) {
+        return false;
+    }
+    station->priority = (uint8_t)priority;
     workstations->revision++;
     return true;
 }
@@ -499,6 +512,9 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         }
         if (station->forbidden) { /* Likewise. */
             hash = hash_fnv1a64(hash, &station->forbidden, sizeof(station->forbidden));
+        }
+        if (station->priority != JOB_PRIORITY_DEFAULT) { /* Likewise. */
+            hash = hash_fnv1a64(hash, &station->priority, sizeof(station->priority));
         }
         float fire[3] = {station->fuel, station->fuel_promised, station->soaked};
         hash = hash_fnv1a64(hash, fire, sizeof(fire));

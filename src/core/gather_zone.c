@@ -443,7 +443,10 @@ int gather_zones_add_view_rect(GatherZones *zones, const Map *map, int x0, int y
     return add_rect(zones, map, x0, y0, x1, y1, z, preferred, blocked, true);
 }
 
-static int remove_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z)
+/* Takes the tiles of a rectangle out of their zone, or out of zone `only`
+ * alone (GATHER_ZONE_NONE: any). */
+static int remove_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z,
+                       int only)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(zones, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
@@ -455,7 +458,7 @@ static int remove_rect(GatherZones *zones, const Map *map, int x0, int y0, int x
                 continue;
             }
             size_t i = index_of(zones, x, y, level);
-            if (zones->zone[i] != 0) {
+            if (zones->zone[i] != 0 && (only == GATHER_ZONE_NONE || zones->zone[i] == only + 1)) {
                 GatherZone *zone = &zones->list[zones->zone[i] - 1];
                 if (--zone->cell_count == 0) {
                     zone->used = false;
@@ -477,13 +480,25 @@ static int remove_rect(GatherZones *zones, const Map *map, int x0, int y0, int x
 
 int gather_zones_remove_rect(GatherZones *zones, int x0, int y0, int x1, int y1, int z)
 {
-    return remove_rect(zones, NULL, x0, y0, x1, y1, z);
+    return remove_rect(zones, NULL, x0, y0, x1, y1, z, GATHER_ZONE_NONE);
 }
 
 int gather_zones_remove_view_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1,
                                   int y1, int z)
 {
-    return remove_rect(zones, map, x0, y0, x1, y1, z);
+    return remove_rect(zones, map, x0, y0, x1, y1, z, GATHER_ZONE_NONE);
+}
+
+int gather_zone_extend_view(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
+                            int y1, int z, const uint8_t *const *blocked)
+{
+    return extend(zones, map, index, x0, y0, x1, y1, z, blocked, true);
+}
+
+int gather_zone_shrink_view(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
+                            int y1, int z)
+{
+    return is_valid(zones, index) ? remove_rect(zones, map, x0, y0, x1, y1, z, index) : 0;
 }
 
 void gather_zone_delete(GatherZones *zones, int index)

@@ -471,14 +471,20 @@ float ui_button_width(Ui *ui, const char *label)
     return ui_text_width(ui, label) + 2.0f * ui->theme.button_padding;
 }
 
-/* Button background and border; true when it was left-clicked this frame. */
-static bool button_frame(Ui *ui, SDL_FRect rect, bool active)
+/* Button background and border; the button it was clicked with this frame, or 0. */
+static int button_frame_click(Ui *ui, SDL_FRect rect, bool active)
 {
     bool hover = ui_hovered(ui, rect);
     SDL_Color color = active ? COLOR(THEME_BUTTON_LIT) : COLOR(THEME_BUTTON);
     fill(ui, rect, hover ? brighter(color, 26) : color);
     border(ui, rect, active ? COLOR(THEME_BORDER_LIT) : COLOR(THEME_BORDER));
-    return ui_take_click(ui, rect) == SDL_BUTTON_LEFT;
+    return ui_take_click(ui, rect);
+}
+
+/* Button background and border; true when it was left-clicked this frame. */
+static bool button_frame(Ui *ui, SDL_FRect rect, bool active)
+{
+    return button_frame_click(ui, rect, active) == SDL_BUTTON_LEFT;
 }
 
 bool ui_button(Ui *ui, SDL_FRect rect, const char *label)
@@ -496,6 +502,16 @@ bool ui_toggle_button(Ui *ui, SDL_FRect rect, const char *label, bool active)
 bool ui_icon_button(Ui *ui, SDL_FRect rect, bool active)
 {
     return button_frame(ui, rect, active);
+}
+
+int ui_icon_button_click(Ui *ui, SDL_FRect rect, bool active)
+{
+    return button_frame_click(ui, rect, active);
+}
+
+void ui_centered_label(Ui *ui, SDL_FRect rect, const char *text)
+{
+    centered_label(ui, rect, text);
 }
 
 bool ui_disclosure(Ui *ui, SDL_FRect rect, bool open)

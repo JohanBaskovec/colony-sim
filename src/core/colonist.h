@@ -565,6 +565,18 @@ typedef struct ColonistContext {
 
 /* The pressure (0..1) a felt temperature puts on the settler's body. */
 float colonist_cold_pressure(const Colonist *colonist, float felt_celsius);
+
+/* The felt temperatures a settler finds pleasant (MOOD_COLD_CELSIUS to
+ * MOOD_HOT_CELSIUS: no thought of cold or heat) and bears (above
+ * COLONIST_HYPOTHERMIA_CELSIUS, below COLONIST_HEATSTROKE_CELSIUS), moved by
+ * its cold and heat tolerance. */
+TemperatureRanges colonist_temperature_ranges(const Colonist *colonist);
+
+/* The temperature a settler feels where it stands: the air with the warmth
+ * of fires (hearths_felt_temperature()), COLONIST_WET_CHILL colder soaked
+ * through. */
+float colonist_felt_temperature(const Colonist *colonist, const Workstations *workstations,
+                                const Map *map, const Temperatures *temperatures);
 float colonist_heat_pressure(const Colonist *colonist, float felt_celsius);
 
 /* A settler was struck (or attacked) by `attacker`: it will fight or flee at its

@@ -108,7 +108,7 @@ Tick items as they land and add newly discovered tasks.
 - [ ] Item moves, later: several stacks at once (a rectangle), a whole stockpile, moving to a workstation or a bed; restoring the forbidden flag when an order is taken back; a cue when the destination is refused
 - [x] Forbid plans and zones: a Forbid/Allow button in the window of a blueprint, a stockpile and a gathering zone (first in the action menu); a forbidden plan gets no material and no work, a forbidden stockpile nothing hauled onto it nor off it (what lies there still counts as stored), a forbidden gathering zone nothing gathered (its orders stay); "left alone" line in the window, "no entry" signs on the map (`FORBID_SITE`, `FORBID_STOCKPILE`, `FORBID_GATHER_ZONE`)
 - [ ] Forbid, later: new items forbidden by default where the player chooses (dropped by raiders, outside the colony), forbidding the stacks of a whole stockpile at once
-- [ ] UI: horizontal scrolling (the work grid is wider than small screens), windows remembering their position between sessions, a shortcut shown for the workstation buttons (E cycles them)
+- [ ] UI: horizontal scrolling (the work grid is wider than small screens), windows remembering their position between sessions, shortcut letters for the workstation buttons
 
 ## M4: Survival
 
@@ -158,6 +158,9 @@ theme and migration plan).
 - [x] Settings window from the game menu (instead of its Language button): interface size 75 to 200 % applied at once (the font opened again at its size, windows placed again), colorblind-friendly palette (blues for lit and checked, a blue to orange temperature view), language; saved in `settings.cfg` in the user's data folder (`core/settings`: a forgiving `key = value` text), the command line winning for the session
 - [ ] Colorblind palette, later: the work grid's priority shades and the map's markers (forbidden, zones) checked with a simulator once they settle
 - [x] Colony log: a main window (Log button, J) with the last 200 notices and their dates
+- [x] Selection shortcuts and zone editing: X deletes the selected zone or site, cancels the order on it or toggles taking a structure apart (E no longer steps through the build tools); the selected zone stands out (brighter, thick border); Extend and Shrink buttons edit that zone alone with the mouse
+- [x] Health tab: felt temperature (pleasant, cold, hot...), the pleasant and bearable ranges of a settler or animal
+- [x] Priority of workstations and construction sites (1 to 10, a button with its number: left click raises it, right click lowers it); settlers take the jobs of the best priority first, the nearest among them
 - [ ] Alerts, later: idle colonists, and the alerts of future systems (enemies, fire, unmet orders); a colonist's own Log tab in the inspector
 
 ## M5: Vision and exploration

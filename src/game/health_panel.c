@@ -302,6 +302,57 @@ void health_panel_rows(UiLayout *layout, const Health *health)
     }
 }
 
+/* "12.5 °C", with `decimals` decimals. */
+static void celsius_text(char *out, size_t size, float celsius, int decimals)
+{
+    char number[16];
+    tr_decimal(number, sizeof(number), celsius, decimals);
+    TR_FORMAT(out, size, tr("unit.celsius"), number);
+}
+
+/* "5 °C to 32 °C". */
+static void range_text(char *out, size_t size, float low, float high)
+{
+    char from[32], to[32];
+    celsius_text(from, sizeof(from), low, 0);
+    celsius_text(to, sizeof(to), high, 0);
+    TR_FORMAT(out, size, tr("health.temperature.range"), from, to);
+}
+
+void health_panel_temperature_rows(UiLayout *layout, float felt, const TemperatureRanges *ranges,
+                                   bool settler)
+{
+    static const float BADNESS[TEMPERATURE_FEEL_COUNT] = {1.0f, 0.5f, 0.0f, 0.5f, 1.0f};
+    ui_layout_label(layout, tr("health.temperature"), 0.0f, true);
+    TemperatureFeel feel = temperature_feel(ranges, felt);
+    char degrees[32], value[TEXT_SIZE];
+    celsius_text(degrees, sizeof(degrees), felt, 1);
+    TR_FORMAT(value, sizeof(value), tr("health.temperature.felt.value"), degrees,
+              tr(temperature_feel_key(feel)));
+    SDL_FRect row = ui_layout_pair(layout, tr("health.temperature.felt"), value,
+                                   bad_color(layout, BADNESS[feel]), true);
+    if (layout->draw && ui_hovered(layout->ui, row)) {
+        tooltip_lines(layout,
+                      tr(settler ? "health.temperature.felt.description"
+                                 : "health.temperature.felt.description_animal"),
+                      NULL);
+    }
+    SDL_Color text = layout->ui->theme.colors[THEME_TEXT];
+    range_text(value, sizeof(value), ranges->pleasant_low, ranges->pleasant_high);
+    row = ui_layout_pair(layout, tr("health.temperature.pleasant"), value, text, true);
+    if (layout->draw && ui_hovered(layout->ui, row)) {
+        tooltip_lines(layout,
+                      tr(settler ? "health.temperature.pleasant.description"
+                                 : "health.temperature.pleasant.description_animal"),
+                      NULL);
+    }
+    range_text(value, sizeof(value), ranges->bearable_low, ranges->bearable_high);
+    row = ui_layout_pair(layout, tr("health.temperature.bearable"), value, text, true);
+    if (layout->draw && ui_hovered(layout->ui, row)) {
+        tooltip_lines(layout, tr("health.temperature.bearable.description"), NULL);
+    }
+}
+
 /* The rows of the body window. */
 static void body_rows(UiLayout *layout, void *userdata)
 {

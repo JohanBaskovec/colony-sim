@@ -1540,15 +1540,17 @@ static int gather_zone_zone_at(const void *zones, int x, int y, int z)
 }
 
 /* The zones of the level shown as a translucent overlay with their borders;
- * the selected one (index, or -1) is brighter. */
+ * the selected one (index, or -1) stands out: filled brighter, with a thick
+ * light border. */
 static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, const void *zones,
                               ZoneAt zone_at, int width, int height, int selected, SDL_Color color)
 {
     const int z = camera->level; /* The level shown. */
     TileRect visible = camera_visible_tiles(camera, width, height);
-    SDL_Color normal = color, highlight = color;
+    SDL_Color normal = color, highlight = shade(color, 40), border = shade(color, 110);
     normal.a = 45;
-    highlight.a = 90;
+    highlight.a = 115;
+    border.a = 255;
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
             int index = zone_at(zones, x, y, z);
@@ -1556,22 +1558,41 @@ static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, cons
                 continue;
             }
             SDL_FRect tile = tile_rect(camera, x, y);
-            fill(renderer, index == selected ? highlight : normal, &tile);
+            bool chosen = index == selected;
+            fill(renderer, chosen ? highlight : normal, &tile);
             /* Zone border: edges of the tile that face another zone or none. */
+            bool left = zone_at(zones, x - 1, y, z) != index;
+            bool right = zone_at(zones, x + 1, y, z) != index;
+            bool top = zone_at(zones, x, y - 1, z) != index;
+            bool bottom = zone_at(zones, x, y + 1, z) != index;
+            if (chosen) {
+                float t = SDL_max(2.0f, floorf(tile.w * 0.1f));
+                SDL_FRect edges[4] = {{tile.x, tile.y, t, tile.h},
+                                      {tile.x + tile.w - t, tile.y, t, tile.h},
+                                      {tile.x, tile.y, tile.w, t},
+                                      {tile.x, tile.y + tile.h - t, tile.w, t}};
+                bool shown[4] = {left, right, top, bottom};
+                for (int i = 0; i < 4; i++) {
+                    if (shown[i]) {
+                        fill(renderer, border, &edges[i]);
+                    }
+                }
+                continue;
+            }
             SDL_Color edge = color;
-            edge.a = index == selected ? 255 : 140;
+            edge.a = 140;
             SDL_SetRenderDrawColor(renderer, edge.r, edge.g, edge.b, edge.a);
             float l = tile.x, t = tile.y, r = tile.x + tile.w - 1.0f, b = tile.y + tile.h - 1.0f;
-            if (zone_at(zones, x - 1, y, z) != index) {
+            if (left) {
                 SDL_RenderLine(renderer, l, t, l, b);
             }
-            if (zone_at(zones, x + 1, y, z) != index) {
+            if (right) {
                 SDL_RenderLine(renderer, r, t, r, b);
             }
-            if (zone_at(zones, x, y - 1, z) != index) {
+            if (top) {
                 SDL_RenderLine(renderer, l, t, r, t);
             }
-            if (zone_at(zones, x, y + 1, z) != index) {
+            if (bottom) {
                 SDL_RenderLine(renderer, l, b, r, b);
             }
         }

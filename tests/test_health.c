@@ -1223,6 +1223,61 @@ static void test_weather_pressure(void)
     colonist_free(&colonist);
 }
 
+/* The temperatures a settler finds pleasant and bears, moved by its
+ * tolerances; how a temperature feels; the temperature it feels, colder wet;
+ * an animal's ranges. */
+static void test_temperature_ranges(void)
+{
+    Colonist colonist;
+    colonist_init(&colonist, "Ada", 30, 0, 0, 0);
+    TemperatureRanges ranges = colonist_temperature_ranges(&colonist);
+    CHECK_NEAR(ranges.pleasant_low, MOOD_COLD_CELSIUS, 1e-6);
+    CHECK_NEAR(ranges.pleasant_high, MOOD_HOT_CELSIUS, 1e-6);
+    CHECK_NEAR(ranges.bearable_low, COLONIST_HYPOTHERMIA_CELSIUS, 1e-6);
+    CHECK_NEAR(ranges.bearable_high, COLONIST_HEATSTROKE_CELSIUS, 1e-6);
+    CHECK_EQ_INT(temperature_feel(&ranges, 20.0f), TEMPERATURE_PLEASANT);
+    CHECK_EQ_INT(temperature_feel(&ranges, 3.0f), TEMPERATURE_COLD);
+    CHECK_EQ_INT(temperature_feel(&ranges, -1.0f), TEMPERATURE_FREEZING);
+    CHECK_EQ_INT(temperature_feel(&ranges, 33.0f), TEMPERATURE_HOT);
+    CHECK_EQ_INT(temperature_feel(&ranges, 37.0f), TEMPERATURE_SCORCHING);
+    CHECK_STR_EQ(temperature_feel_key(TEMPERATURE_COLD), "temperature.feel.cold");
+    Attributes hardy;
+    attributes_init(&hardy);
+    REQUIRE(attributes_set(&hardy, ATTRIBUTE_COLD_TOLERANCE, ATTRIBUTE_POSITION_MAX));
+    REQUIRE(attributes_set(&hardy, ATTRIBUTE_HEAT_TOLERANCE, -ATTRIBUTE_POSITION_MAX));
+    colonist_set_attributes(&colonist, &hardy);
+    ranges = colonist_temperature_ranges(&colonist);
+    CHECK_NEAR(ranges.pleasant_low, MOOD_COLD_CELSIUS - 5.0f, 1e-5);
+    CHECK_NEAR(ranges.bearable_low, COLONIST_HYPOTHERMIA_CELSIUS - 5.0f, 1e-5);
+    CHECK_NEAR(ranges.pleasant_high, MOOD_HOT_CELSIUS - 5.0f, 1e-5);
+    CHECK_NEAR(ranges.bearable_high, COLONIST_HEATSTROKE_CELSIUS - 5.0f, 1e-5);
+    CHECK_EQ_INT(temperature_feel(&ranges, 3.0f), TEMPERATURE_PLEASANT);
+    colonist_free(&colonist);
+
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    REQUIRE(settler != NULL);
+    float air = temperature_at(&game.temperatures, 20, 20, 0);
+    CHECK_NEAR(
+        colonist_felt_temperature(settler, &game.workstations, &game.map, &game.temperatures), air,
+        1e-4);
+    settler->wetness = 0.5f;
+    CHECK_NEAR(
+        colonist_felt_temperature(settler, &game.workstations, &game.map, &game.temperatures),
+        air - 0.5f * COLONIST_WET_CHILL, 1e-4);
+    game_shutdown(&game);
+
+    Animal wolf = {.species = ANIMAL_WOLF};
+    attributes_init(&wolf.attributes);
+    ranges = animal_temperature_ranges(&wolf);
+    const AnimalDef *def = animal_def(ANIMAL_WOLF);
+    CHECK_NEAR(ranges.bearable_low, def->cold_below, 1e-5);
+    CHECK_NEAR(ranges.bearable_high, def->heat_above, 1e-5);
+    CHECK_NEAR(ranges.pleasant_low, def->cold_below + ANIMAL_SHELTER_COLD_MARGIN, 1e-5);
+    CHECK_NEAR(ranges.pleasant_high, def->heat_above - ANIMAL_SHELTER_HEAT_MARGIN, 1e-5);
+}
+
 /* A settler with nothing to drink weakens, collapses and dies in under two
  * days; every need being met, nothing of the sort. */
 static void test_settler_dies_of_thirst(void)
@@ -1498,6 +1553,7 @@ int main(void)
     RUN_TEST(test_deprivations_kill_together);
     RUN_TEST(test_deprivation_with_wounds);
     RUN_TEST(test_weather_pressure);
+    RUN_TEST(test_temperature_ranges);
     RUN_TEST(test_settler_dies_of_thirst);
     RUN_TEST(test_settler_recovers_when_fed);
     RUN_TEST(test_settler_freezes_in_winter);

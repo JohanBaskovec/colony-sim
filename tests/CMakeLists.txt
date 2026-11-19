@@ -38,6 +38,7 @@ set(COLONY_UNIT_TESTS
     test_occupancy
     test_pathfinding
     test_pool
+    test_priority
     test_recipe
     test_region
     test_roof

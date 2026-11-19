@@ -79,11 +79,25 @@ bool inspector_build_like_action(App *app, int slot);
 /* An order on what is selected (fell it, take it apart...), shown with
  * `icon`, lit while it is `ordered` (a click then cancels it). Veiled while
  * it cannot be given, `unavailable` saying why in the tooltip (NULL: it can).
+ * `shortcut`: the tooltip tells that APP_KEY_CANCEL does the same.
  * True when clicked and it may be given or cancelled. */
 bool inspector_order_action(App *app, int slot, RenderIcon icon, const char *name,
-                            const char *description, bool ordered, const char *unavailable);
+                            const char *description, bool ordered, const char *unavailable,
+                            bool shortcut);
 
-/* Delete what is selected: true when clicked. */
-bool inspector_delete_action(App *app, int slot, const char *description);
+/* Extend and shrink the selected zone alone (slots `slot` and `slot` + 1):
+ * each arms `tool` (APP_TOOL_STOCKPILE or APP_TOOL_GATHER) in that mode, lit
+ * while it is, or turns it off. `extend_icon` and `shrink_icon` draw them. */
+void inspector_zone_edit_actions(App *app, int slot, AppTool tool, RenderIcon extend_icon,
+                                 RenderIcon shrink_icon);
+
+/* The priority of a station or site (JOB_PRIORITY_HIGHEST to _LOWEST), its
+ * number on the button: a left click raises it, a right click lowers it.
+ * True when it changes, with the new one in *changed. */
+bool inspector_priority_action(App *app, int slot, int priority, int *changed);
+
+/* Delete what is selected: true when clicked. `shortcut`: the tooltip tells
+ * that APP_KEY_CANCEL does the same (app_cancel_selection()). */
+bool inspector_delete_action(App *app, int slot, const char *description, bool shortcut);
 
 #endif /* COLONY_GAME_INSPECTOR_H */

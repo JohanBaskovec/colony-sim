@@ -1333,8 +1333,12 @@ void station_panel_draw(App *app)
         rows.action = (Action){.type = ACTION_TOGGLE_FORBIDDEN};
     }
     inspector_build_like_action(app, 1);
-    if (inspector_delete_action(app, 2, tr("station.delete.description"))) {
+    if (inspector_delete_action(app, 2, tr("station.delete.description"), false)) {
         rows.action = (Action){.type = ACTION_DELETE_STATION};
+    }
+    int priority;
+    if (inspector_priority_action(app, 3, station->priority, &priority)) {
+        workstation_set_priority(&app->game.workstations, index, priority);
     }
     if (rows.action.type != ACTION_NONE && app->selected_station == index) {
         apply(app, index, &rows.action);

@@ -1097,6 +1097,10 @@ static void health_rows(UiLayout *layout, void *userdata)
     const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
     if (colonist != NULL) {
         health_panel_rows(layout, &colonist->health);
+        TemperatureRanges ranges = colonist_temperature_ranges(colonist);
+        float felt = colonist_felt_temperature(colonist, &app->game.workstations, &app->game.map,
+                                               &app->game.temperatures);
+        health_panel_temperature_rows(layout, felt, &ranges, true);
     }
 }
 
@@ -1358,8 +1362,8 @@ static void help_window(App *app)
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.orders"), app_key_name(APP_KEY_MINE),
               app_key_name(APP_KEY_CANCEL));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.manage"),
-              app_key_name(APP_KEY_STOCKPILE), app_key_name(APP_KEY_BUILD),
-              app_key_name(APP_KEY_WORK), app_key_name(APP_KEY_LOG));
+              app_key_name(APP_KEY_STOCKPILE), app_key_name(APP_KEY_WORK),
+              app_key_name(APP_KEY_LOG));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.copy"),
               app_key_name(APP_KEY_BUILD_LIKE));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.rotate"), app_key_name(APP_KEY_ROTATE));

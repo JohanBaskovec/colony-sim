@@ -191,7 +191,9 @@ void stockpile_panel_draw(App *app)
     bool toggle_forbidden =
         inspector_forbid_action(app, 0, stockpile->forbidden, tr("stockpile.forbid.description"));
     inspector_build_like_action(app, 1);
-    bool deleted = inspector_delete_action(app, 2, tr("stockpile.delete.description"));
+    bool deleted = inspector_delete_action(app, 2, tr("stockpile.delete.description"), true);
+    inspector_zone_edit_actions(app, 3, APP_TOOL_STOCKPILE, RENDER_ICON_STOCKPILE,
+                                RENDER_ICON_STOCKPILE_REMOVE);
     if (app->selected_stockpile != index) {
         return; /* Building another: the zone is no longer selected. */
     }
