@@ -216,6 +216,105 @@ static void test_remembers_what_was_last_seen(void)
     game_shutdown(&game);
 }
 
+/* Puts an animal standing on a tile (for the tests of the ghosts, which call
+ * known_update_animals() themselves while the game is not ticking). */
+static void place_animal(Animal *animal, int x, int y)
+{
+    animal->x = x;
+    animal->y = y;
+    animal->path_index = animal->path.count; /* Not moving. */
+}
+
+/* Wild animals out of view: a ghost where the colony last saw one, as for
+ * everything else, but none for one seen walking away. */
+static void test_remembers_animals(void)
+{
+    Game game;
+    REQUIRE(walled_plain(&game));
+    int z = game.map.surface_level;
+    EntityId settler = game_spawn_colonist(&game, 20, 30, z);
+    REQUIRE(game_colonist(&game, settler) != NULL);
+    REQUIRE(game_set_fog(&game, true));
+    EntityId id = game_debug_spawn_animal(&game, ANIMAL_ROE_DEER, ANIMAL_FEMALE, 24, 30, z);
+    REQUIRE(!entity_id_is_none(id));
+    game_tick(&game);
+    /* The game follows the animals it sees. */
+    CHECK_EQ_INT(game.known.animals[id.index].state, KNOWN_ANIMAL_SEEN);
+    CHECK(entity_id_equal(game.known.animals[id.index].id, id));
+
+    /* The settler goes behind the wall: the game leaves a ghost where the deer was. */
+    REQUIRE(game_debug_teleport(&game, settler, 45, 30, z));
+    for (int i = 0; i < 5; i++) {
+        game_tick(&game);
+    }
+    CHECK(!game_animal_seen(&game, id));
+    CHECK(known_animal_ghost(&game.known, id.index) != NULL);
+    REQUIRE(game_debug_teleport(&game, settler, 20, 30, z));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+
+    /* A memory of its own, updated only here (the game's moves the animal). */
+    KnownWorld known;
+    REQUIRE(known_init(&known, &game.map));
+    Animal *animal = animals_get(&game.animals, id);
+    REQUIRE(animal != NULL);
+    place_animal(animal, 24, 30);
+    known_update_animals(&known, &game.animals, &game.vision, 100);
+    CHECK(known_animal_ghost(&known, id.index) == NULL); /* Seen: no ghost. */
+    CHECK_EQ_INT(known.animals[id.index].state, KNOWN_ANIMAL_SEEN);
+
+    /* The settler goes behind the wall: the deer stays there as a ghost. */
+    REQUIRE(game_debug_teleport(&game, settler, 45, 30, z));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    REQUIRE(!game_tile_seen(&game, 24, 30, z));
+    place_animal(animal, 10, 30); /* Gone elsewhere, out of view. */
+    known_update_animals(&known, &game.animals, &game.vision, 200);
+    const KnownAnimal *ghost = known_animal_ghost(&known, id.index);
+    REQUIRE(ghost != NULL);
+    CHECK_NEAR(ghost->x, 24.5f, 0.001f);
+    CHECK_NEAR(ghost->y, 30.5f, 0.001f);
+    CHECK_EQ_INT(ghost->z, z);
+    CHECK_EQ_INT(ghost->species, ANIMAL_ROE_DEER);
+    CHECK_EQ_INT(ghost->tick, 100); /* When it was last seen. */
+    CHECK(known_animal_ghost_at(&known, &game.map, 24.6f, 30.4f, z, 0.5f) == ghost);
+    CHECK(known_animal_ghost_at(&known, &game.map, 27.0f, 30.4f, z, 0.5f) == NULL);
+    CHECK(known_animal_ghost_at(&known, &game.map, 24.6f, 30.4f, z - 1, 0.5f) == NULL);
+
+    /* Seen elsewhere: the ghost goes, the animal is followed. */
+    place_animal(animal, 40, 30);
+    known_update_animals(&known, &game.animals, &game.vision, 300);
+    CHECK(known_animal_ghost(&known, id.index) == NULL);
+    CHECK_EQ_INT(known.animals[id.index].state, KNOWN_ANIMAL_SEEN);
+
+    /* Seen walking out of view (its last spot is in view): no ghost. */
+    place_animal(animal, 10, 30);
+    known_update_animals(&known, &game.animals, &game.vision, 301);
+    CHECK_EQ_INT(known.animals[id.index].state, KNOWN_ANIMAL_NONE);
+
+    /* Left behind at 40, then that tile seen again without it: forgotten. */
+    place_animal(animal, 40, 30);
+    known_update_animals(&known, &game.animals, &game.vision, 400);
+    REQUIRE(game_debug_teleport(&game, settler, 20, 30, z));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    REQUIRE(!game_tile_seen(&game, 40, 30, z));
+    known_update_animals(&known, &game.animals, &game.vision, 500);
+    REQUIRE(known_animal_ghost(&known, id.index) != NULL);
+    REQUIRE(game_debug_teleport(&game, settler, 45, 30, z));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    place_animal(animal, 10, 30);
+    known_update_animals(&known, &game.animals, &game.vision, 600);
+    CHECK(known_animal_ghost(&known, id.index) == NULL);
+    known_free(&known);
+    game_shutdown(&game);
+}
+
 /* Orders, zones and buildings are refused on tiles nobody has seen. */
 static void test_tools_refuse_unexplored_tiles(void)
 {
@@ -511,6 +610,7 @@ int main(void)
     RUN_TEST(test_fog_explores_the_start);
     RUN_TEST(test_fog_is_deterministic);
     RUN_TEST(test_remembers_what_was_last_seen);
+    RUN_TEST(test_remembers_animals);
     RUN_TEST(test_tools_refuse_unexplored_tiles);
     RUN_TEST(test_stock_is_what_is_known);
     RUN_TEST(test_settlers_plan_on_the_known_world);

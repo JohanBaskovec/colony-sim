@@ -940,7 +940,12 @@ their hashes are what they were.
 - **Seen or not**: `game_animal_seen()` is true where a settler sees the
   animal's tile now (always without the fog); the frontend draws and picks
   only those (`game_animal_at()`), and drops a selected animal that goes out
-  of sight. Nothing of animals is remembered.
+  of sight. Under the fog, an animal standing on a tile when the tile goes out
+  of view stays there as a ghost (`KnownAnimal` in `KnownWorld.animals`, by
+  slot: `known_update_animals()` after `sync_known()` each tick), drawn still,
+  under the veil, with "seen here ... ago" on the tile; it goes when the tile
+  is seen again or the animal is seen elsewhere. One seen walking out of view
+  leaves none (its last spot is still in view). Ghosts are never picked.
 
 Cost: about 3 µs a tick for 70 animals (200 × 200 map, Release);
 `bench_simulation ... wildlife` prints how they fare (what they do, their

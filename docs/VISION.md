@@ -118,8 +118,13 @@ themselves still know everything (step 3); the rest is design. Values marked
 Everything a tile shows: terrain, rock, slope, the plant with its growth,
 stocks and food, litter (branches, twigs, nuts), items, a structure or a
 construction site, dirt. Creatures (wild animals, `core/animal.h`; settlers
-of other groups later) are only shown where they are seen, since they move:
-`game_animal_seen()`.
+of other groups later) are part of that picture too: one standing on a tile
+when the tile goes out of view stays there as a **ghost**, drawn still under
+the veil, the tile telling how long ago it was seen there. It goes when
+someone sees the tile again (it may be gone) or sees the animal elsewhere.
+One seen walking out of view leaves no ghost: the colony saw it leave, and
+knows no more. The animals seen now are shown as they are:
+`game_animal_seen()`; ghosts are `KnownAnimal` (`core/known.h`).
 
 The colony's own settlers are always known (where they are, what they do):
 they belong to it. So are its **plans**, which are the player's intent and

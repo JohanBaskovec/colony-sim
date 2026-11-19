@@ -371,6 +371,40 @@ static void add_site_lines(Panel *panel, const ConstructionSite *site)
     }
 }
 
+/* "2 hours ago": how long since the colony saw something, at `tick`. */
+static void seen_ago(char *out, size_t size, uint64_t now, uint64_t tick)
+{
+    uint64_t hours = now > tick ? (now - tick) / TICKS_PER_HOUR : 0;
+    char number[32];
+    if (hours < 1) {
+        SDL_strlcpy(out, tr("hud.seen.recently"), size);
+    } else if (hours < 2 * HOURS_PER_DAY) {
+        tr_integer(number, sizeof(number), (long long)hours);
+        TR_FORMAT(out, size, tr_plural("hud.seen.hours", (long long)hours), number);
+    } else {
+        long long days = (long long)(hours / HOURS_PER_DAY);
+        tr_integer(number, sizeof(number), days);
+        TR_FORMAT(out, size, tr_plural("hud.seen.days", days), number);
+    }
+}
+
+/* The animals last seen on a tile out of view (their ghosts, core/known.h). */
+static void add_animal_ghosts(App *app, Panel *panel, int x, int y, int z)
+{
+    const Game *game = &app->game;
+    for (uint32_t slot = 0; slot < ANIMAL_MAX; slot++) {
+        const KnownAnimal *ghost = known_animal_ghost(&game->known, slot);
+        if (ghost == NULL || ghost->z != z || (int)SDL_floorf(ghost->x) != x ||
+            (int)SDL_floorf(ghost->y) != y) {
+            continue;
+        }
+        char ago[64];
+        seen_ago(ago, sizeof(ago), game->clock.tick, ghost->tick);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.animal_seen"), ago,
+                  tr(animal_name_key((AnimalSpecies)ghost->species, (AnimalSex)ghost->sex)));
+    }
+}
+
 static void build_tile_panel(App *app, Panel *panel)
 {
     const int z = app->camera.level; /* The level shown. */
@@ -392,6 +426,7 @@ static void build_tile_panel(App *app, Panel *panel)
         }
         if (!game_tile_seen(&app->game, x, y, seen_level)) {
             panel_add_text(panel, tr("hud.tile.remembered"));
+            add_animal_ghosts(app, panel, x, y, seen_level);
         }
     }
 

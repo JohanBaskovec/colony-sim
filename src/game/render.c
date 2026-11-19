@@ -3479,6 +3479,36 @@ static void render_colonist(SDL_Renderer *renderer, Sprites *sprites, const Came
 /* An animal seen from the side: standing, head down while it eats or drinks,
  * lying asleep; mirrored when it faces left, hopping and rocking as it walks.
  * Seen from the front or from behind while it walks down or up the screen. */
+/* How an animal stands, from what it does and where it heads. */
+static AnimalPose animal_pose(AnimalTask task, bool moving, Heading heading)
+{
+    if (task == ANIMAL_TASK_SLEEP || task == ANIMAL_TASK_DOWN) {
+        return ANIMAL_POSE_SLEEP;
+    }
+    if (!moving && (task == ANIMAL_TASK_EAT || task == ANIMAL_TASK_DRINK)) {
+        return ANIMAL_POSE_EAT;
+    }
+    if (heading == HEADING_SOUTH) {
+        return ANIMAL_POSE_FRONT;
+    }
+    return heading == HEADING_NORTH ? ANIMAL_POSE_BACK : ANIMAL_POSE_STAND;
+}
+
+/* An animal out of view where the colony last saw it, still, as it was then
+ * (the fog's veil drawn afterwards dims it like the rest of its tile). */
+static void render_animal_ghost(Sprites *sprites, const Camera *camera, const KnownAnimal *ghost)
+{
+    float feet_x, feet_y, anchor_x, anchor_y;
+    camera_world_to_screen(camera, ghost->x, ghost->y + COLONIST_FEET, &feet_x, &feet_y);
+    camera_world_to_screen(camera, ghost->x, ghost->y + COLONIST_FEET + ANIMAL_SPRITE_MARGIN,
+                           &anchor_x, &anchor_y);
+    Heading heading = (Heading)ghost->heading;
+    AnimalPose pose = animal_pose((AnimalTask)ghost->task, false, heading);
+    SpriteId id = sprite_animal((AnimalSpecies)ghost->species, (AnimalSex)ghost->sex, pose);
+    Gait still = gait_at(false, GAIT_WALK_STEP_TICKS, 0, 0, camera->zoom);
+    draw_walker(sprites, id, anchor_x, anchor_y, feet_y, still, WHITE, heading == HEADING_WEST);
+}
+
 static void render_animal(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera,
                           const Animal *animal, uint32_t slot, uint64_t tick, bool selected,
                           StrikeLook look)
@@ -3495,16 +3525,7 @@ static void render_animal(SDL_Renderer *renderer, Sprites *sprites, const Camera
     if (look.face != 0) { /* Fighting: from the side, toward its enemy. */
         heading = look.face < 0 ? HEADING_WEST : HEADING_EAST;
     }
-    AnimalPose pose = ANIMAL_POSE_STAND;
-    if (animal->task == ANIMAL_TASK_SLEEP || animal->task == ANIMAL_TASK_DOWN) {
-        pose = ANIMAL_POSE_SLEEP;
-    } else if (!moving && (animal->task == ANIMAL_TASK_EAT || animal->task == ANIMAL_TASK_DRINK)) {
-        pose = ANIMAL_POSE_EAT;
-    } else if (heading == HEADING_SOUTH) {
-        pose = ANIMAL_POSE_FRONT;
-    } else if (heading == HEADING_NORTH) {
-        pose = ANIMAL_POSE_BACK;
-    }
+    AnimalPose pose = animal_pose((AnimalTask)animal->task, moving, heading);
     SpriteId id = sprite_animal((AnimalSpecies)animal->species, (AnimalSex)animal->sex, pose);
     if (selected) {
         sprites_flush(sprites);
@@ -3534,6 +3555,7 @@ typedef struct DepthEntry {
     uint32_t slot;
     SDL_FRect area; /* On screen. */
     bool animal;    /* An animal's slot, else a colonist's. */
+    bool ghost;     /* With `animal`: its ghost (known_animal_ghost()). */
 } DepthEntry;
 
 static int compare_depth(const void *a, const void *b)
@@ -3544,6 +3566,9 @@ static int compare_depth(const void *a, const void *b)
     }
     if (x->animal != y->animal) {
         return x->animal ? -1 : 1;
+    }
+    if (x->ghost != y->ghost) {
+        return x->ghost ? -1 : 1;
     }
     return x->slot < y->slot ? -1 : (x->slot > y->slot);
 }
@@ -3661,7 +3686,9 @@ static void render_entry(SDL_Renderer *renderer, Sprites *sprites, const Game *g
 {
     uint64_t tick = game->clock.tick;
     float x, y;
-    if (entry->animal) {
+    if (entry->ghost) {
+        render_animal_ghost(sprites, camera, known_animal_ghost(&game->known, entry->slot));
+    } else if (entry->animal) {
         EntityId id = animals_id_at(&game->animals, entry->slot);
         const Animal *animal = &game->animals.list[entry->slot];
         StrikeLook look = strike_look(game, (Combatant){COMBATANT_ANIMAL, id});
@@ -3724,7 +3751,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
         float half_width = COLONIST_HALF_WIDTH * camera->zoom;
         float height = COLONIST_HEIGHT * camera->zoom;
         SDL_FRect area = {sx - half_width, sy - height, 2.0f * half_width, height};
-        order[count++] = (DepthEntry){wy + COLONIST_FEET, slot, area, false};
+        order[count++] = (DepthEntry){wy + COLONIST_FEET, slot, area, false, false};
     }
     /* Animals: only those the colony sees now (nobody knows where the others are). */
     for (uint32_t slot = 0; slot < animals_slot_count(&game->animals); slot++) {
@@ -3745,7 +3772,26 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
         float half_width = ANIMAL_HALF_WIDTH * camera->zoom;
         float height = ANIMAL_HEIGHT * camera->zoom;
         SDL_FRect area = {sx - half_width, sy - height, 2.0f * half_width, height};
-        order[count++] = (DepthEntry){wy + COLONIST_FEET, slot, area, true};
+        order[count++] = (DepthEntry){wy + COLONIST_FEET, slot, area, true, false};
+    }
+    /* Under the fog, the ghosts of those last seen out of view (core/known.h). */
+    for (uint32_t slot = 0; game->fog_on && slot < ANIMAL_MAX && count < COLONIST_MAX + ANIMAL_MAX;
+         slot++) {
+        const KnownAnimal *ghost = known_animal_ghost(&game->known, slot);
+        if (ghost == NULL || ghost->z != z) {
+            continue;
+        }
+        float wx = ghost->x, wy = ghost->y;
+        if (wx < (float)x0 - 2.0f || wx > (float)x1 + 2.0f || wy < (float)visible.y0 - 1.0f ||
+            wy > (float)y1 + 2.0f || !tile_seen((int)floorf(wx), (int)floorf(wy), z)) {
+            continue;
+        }
+        float sx, sy;
+        camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &sx, &sy);
+        float half_width = ANIMAL_HALF_WIDTH * camera->zoom;
+        float height = ANIMAL_HEIGHT * camera->zoom;
+        SDL_FRect area = {sx - half_width, sy - height, 2.0f * half_width, height};
+        order[count++] = (DepthEntry){wy + COLONIST_FEET, slot, area, true, true};
     }
     qsort(order, (size_t)count, sizeof(order[0]), compare_depth);
 

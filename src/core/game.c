@@ -1612,6 +1612,7 @@ static void update_vision(Game *game)
     }
     if (game->fog_on) {
         sync_known(game);
+        known_update_animals(&game->known, &game->animals, &game->vision, game->clock.tick);
     }
 }
 

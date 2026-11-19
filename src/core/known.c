@@ -1,5 +1,6 @@
 #include "core/known.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -108,4 +109,74 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
         picture->fuel = (uint8_t)(tenths < 0.0f ? 0.0f : tenths > 255.0f ? 255.0f : tenths);
         picture->input = station->work_input.type;
     }
+}
+
+static bool spot_seen(const Vision *vision, float x, float y, int z)
+{
+    return vision_seen(vision, (int)floorf(x), (int)floorf(y), z);
+}
+
+void known_update_animals(KnownWorld *known, const Animals *animals, const Vision *vision,
+                          uint64_t tick)
+{
+    uint32_t slots = animals_slot_count(animals);
+    for (uint32_t slot = 0; slot < ANIMAL_MAX; slot++) {
+        KnownAnimal *memory = &known->animals[slot];
+        EntityId id = slot < slots ? animals_id_at(animals, slot) : ENTITY_NONE;
+        const Animal *animal = entity_id_is_none(id) ? NULL : &animals->list[slot];
+        float x = 0.0f, y = 0.0f;
+        if (animal != NULL) {
+            animal_position(animal, &x, &y);
+        }
+        if (animal != NULL && spot_seen(vision, x, y, animal->z)) {
+            *memory = (KnownAnimal){.id = id,
+                                    .x = x,
+                                    .y = y,
+                                    .z = (int16_t)animal->z,
+                                    .state = KNOWN_ANIMAL_SEEN,
+                                    .species = animal->species,
+                                    .sex = animal->sex,
+                                    .task = animal->task,
+                                    .heading = (uint8_t)animal_heading(animal),
+                                    .tick = tick};
+            continue;
+        }
+        if (memory->state == KNOWN_ANIMAL_NONE) {
+            continue;
+        }
+        /* Not seen now: its last spot in view means it was seen leaving it, or
+         * is seen gone; out of view, it is believed to be there still. */
+        memory->state = spot_seen(vision, memory->x, memory->y, memory->z) ? KNOWN_ANIMAL_NONE
+                                                                           : KNOWN_ANIMAL_GHOST;
+    }
+}
+
+const KnownAnimal *known_animal_ghost(const KnownWorld *known, uint32_t slot)
+{
+    if (slot >= ANIMAL_MAX || known->animals[slot].state != KNOWN_ANIMAL_GHOST) {
+        return NULL;
+    }
+    return &known->animals[slot];
+}
+
+const KnownAnimal *known_animal_ghost_at(const KnownWorld *known, const Map *map, float world_x,
+                                         float world_y, int z, float radius)
+{
+    const KnownAnimal *best = NULL;
+    float best_distance = radius * radius;
+    for (uint32_t slot = 0; slot < ANIMAL_MAX; slot++) {
+        const KnownAnimal *ghost = known_animal_ghost(known, slot);
+        if (ghost == NULL || ghost->z > z ||
+            (ghost->z < z &&
+             map_view_level(map, (int)floorf(ghost->x), (int)floorf(ghost->y), z) != ghost->z)) {
+            continue;
+        }
+        float distance = (ghost->x - world_x) * (ghost->x - world_x) +
+                         (ghost->y - world_y) * (ghost->y - world_y);
+        if (distance <= best_distance) {
+            best_distance = distance;
+            best = ghost;
+        }
+    }
+    return best;
 }
