@@ -24,6 +24,14 @@
 #define STOCKPILE_PRIORITY_LOWEST 10
 #define STOCKPILE_PRIORITY_DEFAULT 5
 
+/* How far a stockpile takes items from (Stockpile.radius): tiles in a
+ * straight line from the item to the zone's bounding box, a level counting
+ * as a tile. STOCKPILE_RADIUS_UNLIMITED: from anywhere. */
+#define STOCKPILE_RADIUS_UNLIMITED 0
+#define STOCKPILE_RADIUS_MIN 2
+#define STOCKPILE_RADIUS_MAX 160
+#define STOCKPILE_RADIUS_DEFAULT 32
+
 /* Inclusive range of values (quality qualities, hit point percentages). */
 typedef struct IntRange {
     int min;
@@ -37,6 +45,7 @@ typedef struct Stockpile {
     IntRange quality;    /* Accepted qualities (ItemQuality). */
     IntRange hit_points; /* Accepted hit points, in percent of the maximum (0..100). */
     int priority;
+    int radius; /* Items further away are left alone (STOCKPILE_RADIUS_*). */
     /* Forbidden by the player: nothing is hauled onto its tiles nor off them
      * (what lies there still counts as stored). */
     bool forbidden;
@@ -55,7 +64,7 @@ typedef struct Stockpiles {
     int used_count; /* Stockpiles in use. */
     int next_number;
     /* Incremented whenever zones or their rules change (tiles added or
-     * removed, filter, priority): haulers look again. */
+     * removed, filter, priority, radius): haulers look again. */
     uint32_t revision;
 } Stockpiles;
 
@@ -68,8 +77,8 @@ bool stockpile_can_cover(const Map *map, int x, int y, int z);
 /*
  * Creates a stockpile from the tiles of a rectangle (corners in any order)
  * that can be covered and are not in another stockpile. Accepts every item
- * type in any condition, default priority. Returns its index, or STOCKPILE_NONE when no tile
- * qualifies or the stockpile list is full.
+ * type in any condition, default priority and radius. Returns its index, or STOCKPILE_NONE when no
+ * tile qualifies or the stockpile list is full.
  */
 int stockpile_create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1, int y1, int z);
 
@@ -139,6 +148,20 @@ bool stockpile_accepts(const Stockpile *stockpile, ItemStack stack);
 
 /* Clamped to STOCKPILE_PRIORITY_HIGHEST..STOCKPILE_PRIORITY_LOWEST. */
 void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority);
+
+/* Clamped to STOCKPILE_RADIUS_MIN..STOCKPILE_RADIUS_MAX; 0 (or less), or
+ * more than the maximum: STOCKPILE_RADIUS_UNLIMITED. */
+void stockpile_set_radius(Stockpiles *stockpiles, int index, int radius);
+
+/* Whether items on this tile are within the stockpile's radius. */
+bool stockpile_in_radius(const Stockpile *stockpile, int x, int y, int z);
+
+/* The radii a slider offers, finer near the zone: steps 0 ..
+ * stockpile_radius_steps() - 1, the last one unlimited. The step of a radius
+ * is the nearest one offered. */
+int stockpile_radius_steps(void);
+int stockpile_radius_of_step(int step);
+int stockpile_radius_step(int radius);
 
 /* Forbids or allows the whole zone (the settlers neither bring items to it nor
  * take any away). */

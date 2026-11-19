@@ -117,8 +117,10 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
 }
 
 /* Priority levels (bit p for priority p) of the stockpiles with room that
- * accept this very stack, condition included. */
-static uint32_t levels_for(const HaulWorld *world, const StorageLevels *storage, ItemStack stack)
+ * accept this very stack, condition included, lying on (x, y, z): those
+ * whose radius reaches it. */
+static uint32_t levels_for(const HaulWorld *world, const StorageLevels *storage, ItemStack stack,
+                           int x, int y, int z)
 {
     if (storage->levels[stack.type] == 0) {
         return 0;
@@ -126,7 +128,8 @@ static uint32_t levels_for(const HaulWorld *world, const StorageLevels *storage,
     uint32_t levels = 0;
     for (int i = 0; i < storage->zone_count; i++) {
         const Stockpile *stockpile = stockpile_get(world->stockpiles, storage->zones[i]);
-        if (storage->room[i][stack.type] && stockpile_accepts(stockpile, stack)) {
+        if (storage->room[i][stack.type] && stockpile_accepts(stockpile, stack) &&
+            stockpile_in_radius(stockpile, x, y, z)) {
             levels |= 1u << stockpile->priority;
         }
     }
@@ -222,7 +225,7 @@ static ItemStack haulable_group(const HaulWorld *world, const StorageLevels *sto
         if (count > 0 && items_mixed(world->items, x, y, z)) {
             int current = stockpile_storage_priority(world->stockpiles, x, y, z, groups[0]);
             if (storage->levels[groups[0].type] != 0 &&
-                has_better_level(levels_for(world, storage, groups[0]), current)) {
+                has_better_level(levels_for(world, storage, groups[0], x, y, z), current)) {
                 return groups[0];
             }
             count = items_groups(world->items, x, y, z, groups, HAUL_GROUPS_SEEN);
@@ -233,7 +236,7 @@ static ItemStack haulable_group(const HaulWorld *world, const StorageLevels *sto
             continue;
         }
         int current = stockpile_storage_priority(world->stockpiles, x, y, z, groups[i]);
-        if (has_better_level(levels_for(world, storage, groups[i]), current)) {
+        if (has_better_level(levels_for(world, storage, groups[i], x, y, z), current)) {
             return groups[i];
         }
     }
@@ -261,6 +264,7 @@ static bool is_haul_source(const Map *map, int x, int y, int z, void *userdata)
 typedef struct DestinationSearch {
     const HaulWorld *world;
     ItemStack stack;
+    TilePos from; /* Where the items are: the stockpile's radius must reach it. */
     int priority;
 } DestinationSearch;
 
@@ -269,8 +273,11 @@ static bool is_destination(const Map *map, int x, int y, int z, void *userdata)
     (void)map;
     const DestinationSearch *search = userdata;
     const HaulWorld *world = search->world;
-    return stockpile_storage_priority(world->stockpiles, x, y, z, search->stack) ==
-               search->priority &&
+    const Stockpile *stockpile =
+        stockpile_get(world->stockpiles, stockpile_at(world->stockpiles, x, y, z));
+    return stockpile != NULL && stockpile_accepts(stockpile, search->stack) &&
+           stockpile->priority == search->priority &&
+           stockpile_in_radius(stockpile, search->from.x, search->from.y, search->from.z) &&
            haul_destination_room(world->stockpiles, world->items, x, y, z, search->stack) > 0 &&
            !reservations_taken_by_other(world->reservations, RESERVATION_STORAGE,
                                         (TilePos){(int16_t)x, (int16_t)y, (int16_t)z}, world->self);
@@ -284,9 +291,9 @@ bool haul_find_destination(const HaulWorld *world, TilePos from, ItemStack stack
     }
     StorageLevels storage;
     storage_levels(world, &storage);
-    uint32_t levels = levels_for(world, &storage, stack);
+    uint32_t levels = levels_for(world, &storage, stack, from.x, from.y, from.z);
     int worst = current_priority == 0 ? STOCKPILE_PRIORITY_LOWEST : current_priority - 1;
-    DestinationSearch search = {world, stack, 0};
+    DestinationSearch search = {world, stack, from, 0};
     for (int priority = STOCKPILE_PRIORITY_HIGHEST; priority <= worst; priority++) {
         if (!(levels & (1u << priority))) {
             continue;
@@ -340,7 +347,8 @@ static bool is_extra_source(const Map *map, int x, int y, int z, void *userdata)
     const HaulWorld *world = search->world;
     /* The load's group: allowed items, as the load is. */
     ItemStack stack = items_get_group(world->items, x, y, z, search->load);
-    if (stack.type == ITEM_NONE || !stockpile_accepts(search->zone, stack)) {
+    if (stack.type == ITEM_NONE || !stockpile_accepts(search->zone, stack) ||
+        !stockpile_in_radius(search->zone, x, y, z)) {
         return false;
     }
     if (stockpile_forbidden_at(world->stockpiles, x, y, z)) {
@@ -350,7 +358,8 @@ static bool is_extra_source(const Map *map, int x, int y, int z, void *userdata)
     if (current != 0 && current <= search->zone->priority) {
         return false; /* Already stored as well (the destination itself included). */
     }
-    if (has_better_level(levels_for(world, search->storage, stack), search->zone->priority)) {
+    if (has_better_level(levels_for(world, search->storage, stack, x, y, z),
+                         search->zone->priority)) {
         return false; /* A better stockpile wants it: it goes there, on its own trip. */
     }
     return !reservations_taken_by_other(world->reservations, RESERVATION_HAUL_SOURCE,

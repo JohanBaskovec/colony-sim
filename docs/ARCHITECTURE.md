@@ -50,7 +50,7 @@ simulation:
 | `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
 | `item`       | Items on the ground: definitions, categories, quality (0 to 100) and hit points; every item a record of its own (a pool with generational slots, a list per tile, its spot and angle in the tile), a stack summary per tile for callers that count, dropping, transformations (drying) and rot item by item, change stamps per tile so that the known world copies only what changed, loads in hand that are the very items picked up, natural items (stones, branches and twigs laid by world generation and the trees: ordinary items) (docs/ITEMS.md) |
-| `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges |
+| `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges, radius |
 | `tool`       | Tool speed factors by kind of work (bare hands included) and quality, best carried tool, wear and breaking |
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, grass and fibres: gather N, until N in the colony or N days of food, forever; full harvest only) and per group of resources (wood, food, fibres: limits each of its resources), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
 | `hauling`    | Queries: which stack needs hauling (any group of a tile), best storage tile for it (one group per storage tile) |
@@ -130,7 +130,7 @@ simulation:
 | `game_menu`    | Game menu (Menu button or Escape): resume, controls, settings, quit; pauses the game |
 | `settings_window` | Settings (from the game menu): interface size, colors, language, applied at once and saved |
 | `inspector`    | Bottom left: summary box of the selection, tabs opening a panel above it, action buttons beside it; dispatches to the panels below (colonists: `hud`) |
-| `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (condition sliders, filters); build another, delete |
+| `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (radius slider, condition sliders, filters); build another, delete |
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
 | `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills (the active bills, and two windows docked to the right of the tab: the recipes to add, and the details of the one picked) and (hearths) Fire tabs; forbid, build another, delete |
 | `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd, health |
@@ -784,8 +784,16 @@ zone index of each tile (0 = none) plus a fixed table of zones (number shown to
 the player, priority from 1 = highest to 10 = lowest, default 5, and a bit mask
 of allowed item types, a range of accepted qualities and a range of accepted hit
 points in percent of the maximum). `stockpile_accepts()` checks all three;
-items that are always perfect count as superb and 100 %. Zones only cover
-passable, buildable tiles. Every change bumps a `revision` counter.
+items that are always perfect count as superb and 100 %. A zone also has a
+radius (32 tiles by default, `STOCKPILE_RADIUS_UNLIMITED` for none): it only
+takes items within it, measured in a straight line from the item to the zone's
+bounding box, a level counting as a tile (`stockpile_in_radius()`: a few
+integer operations, cheap enough for every tile a hauling search looks at; a
+path cost from each zone would not be, and an L-shaped zone reaches a little
+further than its tiles). The slider of the inspector offers the radii of
+`stockpile_radius_of_step()`, every tile near the zone, coarser further away,
+unlimited last. Zones only cover passable, buildable tiles. Every change
+bumps a `revision` counter.
 
 Drag tools (zones, orders, structures, the selection box) keep the corner
 where the button was pressed as a point of the world (`App.drag_world_x/y`), not
@@ -829,7 +837,8 @@ a zone that keeps some tiles stays, even in several pieces.
 
 A stack **needs hauling** when no zone on its tile accepts it (narrowing a
 filter makes stored items move out), or when a zone of strictly better
-priority accepts it and has a free tile with room. A storage tile has room for
+priority accepts it, reaches it (its radius) and has a free tile with room. A
+storage tile has room for
 a stack when it is empty or holds a matching stack that the zone still
 accepts (`haul_destination_room()`). Hauling
 is the `WORK_HAULING` work type: at each priority level, designations come

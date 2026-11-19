@@ -166,7 +166,8 @@ static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1
                     .allowed = item_types_all() & ~item_types_in_category(ITEM_CATEGORY_BODIES),
                     .quality = {ITEM_QUALITY_WORST, ITEM_QUALITY_BEST},
                     .hit_points = {0, 100},
-                    .priority = STOCKPILE_PRIORITY_DEFAULT};
+                    .priority = STOCKPILE_PRIORITY_DEFAULT,
+                    .radius = STOCKPILE_RADIUS_DEFAULT};
     clear_bounds(stockpile);
     if (extend(stockpiles, map, index, x0, y0, x1, y1, z, blocked, view) == 0) {
         stockpile->used = false;
@@ -417,6 +418,72 @@ void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority)
     }
 }
 
+void stockpile_set_radius(Stockpiles *stockpiles, int index, int radius)
+{
+    if (!is_valid(stockpiles, index)) {
+        return;
+    }
+    radius = radius <= 0 || radius > STOCKPILE_RADIUS_MAX
+                 ? STOCKPILE_RADIUS_UNLIMITED
+                 : clampi(radius, STOCKPILE_RADIUS_MIN, STOCKPILE_RADIUS_MAX);
+    if (stockpiles->list[index].radius != radius) {
+        stockpiles->list[index].radius = radius;
+        stockpiles->revision++;
+    }
+}
+
+/* Tiles from v to the range lo..hi (0 inside). */
+static int outside(int v, int lo, int hi)
+{
+    return v < lo ? lo - v : (v > hi ? v - hi : 0);
+}
+
+bool stockpile_in_radius(const Stockpile *stockpile, int x, int y, int z)
+{
+    if (stockpile->radius == STOCKPILE_RADIUS_UNLIMITED) {
+        return true;
+    }
+    int dx = outside(x, stockpile->min_x, stockpile->max_x);
+    int dy = outside(y, stockpile->min_y, stockpile->max_y);
+    int dz = outside(z, stockpile->min_z, stockpile->max_z);
+    return dx * dx + dy * dy + dz * dz <= stockpile->radius * stockpile->radius;
+}
+
+/* Every tile up to 20, then by 2, 4 and 8, unlimited last. */
+static const int RADIUS_STEPS[] = {
+    2,  3,   4,   5,   6,   7,   8,   9,   10,  11,
+    12, 13,  14,  15,  16,  17,  18,  19,  20,  22,
+    24, 26,  28,  30,  32,  34,  36,  38,  40,  44,
+    48, 52,  56,  60,  64,  68,  72,  76,  80,  88,
+    96, 104, 112, 120, 128, 136, 144, 152, 160, STOCKPILE_RADIUS_UNLIMITED};
+#define RADIUS_STEP_COUNT ((int)(sizeof(RADIUS_STEPS) / sizeof(RADIUS_STEPS[0])))
+_Static_assert(STOCKPILE_RADIUS_MIN == 2 && STOCKPILE_RADIUS_MAX == 160,
+               "RADIUS_STEPS goes from the minimum to the maximum");
+
+int stockpile_radius_steps(void)
+{
+    return RADIUS_STEP_COUNT;
+}
+
+int stockpile_radius_of_step(int step)
+{
+    return RADIUS_STEPS[clampi(step, 0, RADIUS_STEP_COUNT - 1)];
+}
+
+int stockpile_radius_step(int radius)
+{
+    if (radius == STOCKPILE_RADIUS_UNLIMITED || radius > STOCKPILE_RADIUS_MAX) {
+        return RADIUS_STEP_COUNT - 1;
+    }
+    int best = 0;
+    for (int step = 1; step < RADIUS_STEP_COUNT - 1; step++) {
+        if (abs(RADIUS_STEPS[step] - radius) < abs(RADIUS_STEPS[best] - radius)) {
+            best = step;
+        }
+    }
+    return best;
+}
+
 void stockpile_set_forbidden(Stockpiles *stockpiles, int index, bool forbidden)
 {
     if (is_valid(stockpiles, index) && stockpiles->list[index].forbidden != forbidden) {
@@ -489,6 +556,8 @@ uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
             if (s->forbidden) { /* Hashes of games that forbid nothing stay as they were. */
                 hash = hash_fnv1a64(hash, &s->forbidden, sizeof(s->forbidden));
             }
+            int32_t radius = s->radius;
+            hash = hash_fnv1a64(hash, &radius, sizeof(radius));
         }
     }
     return hash;

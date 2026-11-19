@@ -576,6 +576,10 @@ stockpile.priority_hint = (1 = highest)
 stockpile.allowed = Allowed items
 stockpile.allow_all = All
 stockpile.allow_none = None
+# {0} = how far from the zone (tiles) it takes items from
+stockpile.radius.one = Takes items within {0} tile
+stockpile.radius.other = Takes items within {0} tiles
+stockpile.radius_unlimited = Takes items from any distance
 # {0} = lowest accepted quality grade, {1} = highest
 stockpile.quality = Quality: {0} to {1}
 # {0} = lowest accepted hit points (e.g. 50%), {1} = highest

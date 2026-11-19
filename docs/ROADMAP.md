@@ -41,6 +41,7 @@ Tick items as they land and add newly discovered tasks.
 - [x] Item quality and hit points: five quality grades (crude to superb) and hit points per item; only items of the same grade stack, a stack keeps the average hit points; raw stone is always superb and cannot be damaged
 - [x] Skills (mining, woodcutting, gathering, levels 0 to 20, rolled at creation): the worker's skill sets the grade and condition of what it produces (novices bring back rough, damaged logs)
 - [x] Stockpile filters on item condition: quality and hit point range sliders; items a narrowed filter no longer accepts are moved out
+- [x] Stockpile radius: a zone takes items within 32 tiles by default (straight line to its bounding box, a level counting as a tile), set with a slider in its Storage tab from 2 to 160 tiles, unlimited at the right end; items out of reach stay where they lie or go to a worse zone that reaches them, and are not collected on the way (`stockpile_in_radius()`)
 - [x] Skill learning: work on an order gives experience in its skill, each level takes longer (one in-game hour of work for level 1, twenty for level 20); progress shown in the colonist inspector, levels in the work priorities grid
 - [x] Skills also change work speed: ×0.5 at level 0, ×1 at level 10, ×1.5 at level 20 (shown in the colonist inspector)
 - [x] Haul more than one stack per trip: after a pickup, a hauler with room left collects nearby matching stacks bound for the same storage tile (one type and grade per load)

@@ -276,6 +276,14 @@ float ui_checkbox_width(Ui *ui, const char *label);
 bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *high);
 
 /*
+ * Slider choosing a step 0..steps-1 along a horizontal track, 0 on the
+ * left. A click moves the handle there, and it follows the mouse while the
+ * left button is held. `id` (non-zero) identifies the slider from one frame
+ * to the next. Returns true when *value changed.
+ */
+bool ui_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *value);
+
+/*
  * Slider choosing a step 0..steps-1 along a vertical track, 0 at the bottom.
  * A click moves the handle there, and it follows the mouse while the left
  * button is held. A tick marks step `mark` (-1: none). `id` (non-zero)

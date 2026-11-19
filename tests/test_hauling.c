@@ -902,6 +902,60 @@ static void test_any_job_possible_is_exact(void)
     game_shutdown(&game);
 }
 
+/* A stockpile takes items within its radius only: one further away is left
+ * where it lies, or goes to a worse stockpile that reaches it, and is not
+ * taken along on the way. */
+static void test_stockpiles_take_items_within_their_radius(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    int pile = stockpile_create(&game.stockpiles, &game.map, 40, 5, 40, 5, 0);
+    REQUIRE(pile != STOCKPILE_NONE);
+    items_add(&game.items, 5, 5, 0, item_stack_pristine(ITEM_WOOD, 10)); /* 35 tiles away. */
+    HaulWorld world = world_of(&game);
+    HaulJob job;
+    TilePos out;
+    CHECK(!haul_any_job_possible(&world));
+    CHECK(!haul_find_job(&world, (TilePos){5, 6, 0}, PATH_NO_COST_LIMIT, &job));
+    CHECK(!haul_find_destination(&world, (TilePos){5, 5, 0}, item_stack_pristine(ITEM_WOOD, 1), 0,
+                                 PATH_NO_COST_LIMIT, &out, NULL));
+    CHECK(haul_find_destination(&world, (TilePos){10, 5, 0}, item_stack_pristine(ITEM_WOOD, 1), 0,
+                                PATH_NO_COST_LIMIT, &out, NULL)); /* 30 tiles. */
+
+    stockpile_set_radius(&game.stockpiles, pile, 35);
+    CHECK(haul_any_job_possible(&world));
+    REQUIRE(haul_find_job(&world, (TilePos){5, 6, 0}, PATH_NO_COST_LIMIT, &job));
+    CHECK_EQ_INT(job.destination.x, 40);
+    stockpile_set_radius(&game.stockpiles, pile, STOCKPILE_RADIUS_UNLIMITED);
+    CHECK(haul_find_job(&world, (TilePos){5, 6, 0}, PATH_NO_COST_LIMIT, &job));
+
+    /* A better stockpile out of reach: the worse one that reaches it. */
+    stockpile_set_priority(&game.stockpiles, pile, 2);
+    stockpile_set_radius(&game.stockpiles, pile, 20);
+    int near = stockpile_create(&game.stockpiles, &game.map, 8, 8, 8, 8, 0);
+    REQUIRE(near != STOCKPILE_NONE);
+    REQUIRE(haul_find_job(&world, (TilePos){5, 6, 0}, PATH_NO_COST_LIMIT, &job));
+    CHECK_EQ_INT(job.destination.x, 8);
+    /* Stored there, it stays: the better one does not reach it. */
+    items_remove(&game.items, 5, 5, 0, 10);
+    items_add(&game.items, 8, 8, 0, item_stack_pristine(ITEM_WOOD, 10));
+    CHECK(!haul_any_job_possible(&world));
+    stockpile_set_radius(&game.stockpiles, pile, 40);
+    REQUIRE(haul_find_job(&world, (TilePos){5, 6, 0}, PATH_NO_COST_LIMIT, &job));
+    CHECK_EQ_INT(job.destination.x, 40);
+
+    /* Taken along on the way only within the destination's radius. */
+    stockpile_set_radius(&game.stockpiles, pile, 20);
+    items_add(&game.items, 18, 5, 0, item_stack_pristine(ITEM_STONE_BLOCK, 3)); /* 22 tiles. */
+    ItemStack load = item_stack_pristine(ITEM_STONE_BLOCK, 2);
+    CHECK(!haul_find_extra_source(&world, (TilePos){20, 5, 0}, load, (TilePos){40, 5, 0},
+                                  PATH_NO_COST_LIMIT, &out, NULL));
+    stockpile_set_radius(&game.stockpiles, pile, 22);
+    CHECK(haul_find_extra_source(&world, (TilePos){20, 5, 0}, load, (TilePos){40, 5, 0},
+                                 PATH_NO_COST_LIMIT, &out, NULL));
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_storage_room);
@@ -934,6 +988,7 @@ int main(void)
     RUN_TEST(test_hauler_collects_several_stacks_per_trip);
     RUN_TEST(test_collecting_stops_at_carrying_capacity);
     RUN_TEST(test_far_or_vanished_stacks_are_not_waited_for);
+    RUN_TEST(test_stockpiles_take_items_within_their_radius);
     RUN_TEST(test_hauling_is_deterministic);
     return test_summary();
 }

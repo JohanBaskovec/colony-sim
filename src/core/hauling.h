@@ -3,7 +3,8 @@
  *
  * An item stack needs hauling when it lies outside any stockpile accepting it
  * (type and condition: see stockpile_accepts()), or in a stockpile while a
- * better one (higher priority) accepts it and has room. Destinations are
+ * better one (higher priority) accepts it and has room; a stockpile only
+ * takes items within its radius (stockpile_in_radius()). Destinations are
  * chosen by stockpile priority first, then distance. These are pure queries:
  * carrying items out is the colonist's job (core/colonist.c).
  */
@@ -74,7 +75,8 @@ bool haul_any_job_possible(const HaulWorld *world);
 
 /*
  * Finds the nearest stack (from `from`, within `max_cost`) that needs hauling
- * and that nobody reserved, and a destination for it. Returns false when there
+ * (a better stockpile with room reaches it) and that nobody reserved, and a
+ * destination for it. Returns false when there
  * is nothing to haul.
  */
 bool haul_find_job(const HaulWorld *world, TilePos from, float max_cost, HaulJob *job);
@@ -82,7 +84,8 @@ bool haul_find_job(const HaulWorld *world, TilePos from, float max_cost, HaulJob
 /*
  * Best free storage tile for `stack` currently stored at priority
  * `current_priority` (0 = not stored): the highest priority stockpile better
- * than the current one and accepting the items, nearest to `from` among them.
+ * than the current one, accepting the items and whose radius reaches `from`
+ * (where the items are), nearest to `from` among them.
  * Writes the path from `from` to it into `path` (may be NULL).
  */
 bool haul_find_destination(const HaulWorld *world, TilePos from, ItemStack stack,
@@ -91,8 +94,9 @@ bool haul_find_destination(const HaulWorld *world, TilePos from, ItemStack stack
 /*
  * Nearest stack (within `max_cost` of `from`) that can join a load already in
  * hand on its way to `destination`: it matches the load (same type and
- * quality), the destination's stockpile accepts it and is better than where it
- * lies, no stockpile with room is better still, and nobody else reserved it.
+ * quality), the destination's stockpile accepts it, reaches it (its radius)
+ * and is better than where it lies, no stockpile with room reaching it is
+ * better still, and nobody else reserved it.
  * Writes the path to it into `path` (may be NULL).
  */
 bool haul_find_extra_source(const HaulWorld *world, TilePos from, ItemStack load,

@@ -301,7 +301,10 @@ static void test_hash(void)
     uint64_t quality = stockpiles_hash(&s, HASH_FNV1A64_INIT);
     CHECK(quality != prioritized);
     stockpile_set_hit_points_range(&s, a, (IntRange){0, 90});
-    CHECK(stockpiles_hash(&s, HASH_FNV1A64_INIT) != quality);
+    uint64_t hit_points = stockpiles_hash(&s, HASH_FNV1A64_INIT);
+    CHECK(hit_points != quality);
+    stockpile_set_radius(&s, a, STOCKPILE_RADIUS_UNLIMITED);
+    CHECK(stockpiles_hash(&s, HASH_FNV1A64_INIT) != hit_points);
     free_world(&map, &s);
 }
 
@@ -433,6 +436,69 @@ static void test_extend_and_shrink_one(void)
     free_world(&map, &s);
 }
 
+/* The radius reaches out from the zone's box in a straight line, levels
+ * counting as tiles; changing it makes the haulers look again. */
+static void test_radius(void)
+{
+    Map map;
+    Stockpiles s;
+    REQUIRE(init_world(&map, &s));
+    int a = stockpile_create(&s, &map, 2, 2, 4, 3, 0);
+    REQUIRE(a != STOCKPILE_NONE);
+    const Stockpile *pile = stockpile_get(&s, a);
+    CHECK_EQ_INT(pile->radius, STOCKPILE_RADIUS_DEFAULT);
+
+    uint32_t revision = s.revision;
+    stockpile_set_radius(&s, a, 5);
+    CHECK_EQ_INT(pile->radius, 5);
+    CHECK(s.revision != revision);
+    revision = s.revision;
+    stockpile_set_radius(&s, a, 5); /* No change: the haulers need not look again. */
+    CHECK_EQ_UINT(s.revision, revision);
+
+    CHECK(stockpile_in_radius(pile, 3, 3, 0));   /* In the zone. */
+    CHECK(stockpile_in_radius(pile, 9, 2, 0));   /* 5 tiles east of its edge. */
+    CHECK(!stockpile_in_radius(pile, 10, 2, 0)); /* 6. */
+    CHECK(stockpile_in_radius(pile, 3, 8, 0));   /* 5 south. */
+    CHECK(stockpile_in_radius(pile, 7, 7, 0));   /* 3 and 4: 5 in a straight line. */
+    CHECK(!stockpile_in_radius(pile, 8, 7, 0));  /* 4 and 4: 5.66. */
+    CHECK(stockpile_in_radius(pile, 6, 2, 4));   /* 2 tiles and 4 levels: 4.47. */
+    CHECK(!stockpile_in_radius(pile, 6, 2, 5));  /* 2 tiles and 5 levels: 5.39. */
+
+    stockpile_set_radius(&s, a, 1);
+    CHECK_EQ_INT(pile->radius, STOCKPILE_RADIUS_MIN);
+    stockpile_set_radius(&s, a, STOCKPILE_RADIUS_MAX + 1);
+    CHECK_EQ_INT(pile->radius, STOCKPILE_RADIUS_UNLIMITED);
+    CHECK(stockpile_in_radius(pile, 1000, -1000, 50));
+    stockpile_set_radius(&s, a, -4);
+    CHECK_EQ_INT(pile->radius, STOCKPILE_RADIUS_UNLIMITED);
+    stockpile_set_radius(&s, STOCKPILE_NONE, 8); /* Ignored. */
+    free_world(&map, &s);
+}
+
+/* The slider's radii go up from the minimum to the maximum, the default
+ * among them, unlimited last; each radius finds its nearest step. */
+static void test_radius_steps(void)
+{
+    int steps = stockpile_radius_steps();
+    REQUIRE(steps > 2);
+    CHECK_EQ_INT(stockpile_radius_of_step(0), STOCKPILE_RADIUS_MIN);
+    CHECK_EQ_INT(stockpile_radius_of_step(steps - 2), STOCKPILE_RADIUS_MAX);
+    CHECK_EQ_INT(stockpile_radius_of_step(steps - 1), STOCKPILE_RADIUS_UNLIMITED);
+    CHECK_EQ_INT(stockpile_radius_of_step(steps + 3), STOCKPILE_RADIUS_UNLIMITED);
+    CHECK_EQ_INT(stockpile_radius_of_step(-1), STOCKPILE_RADIUS_MIN);
+    for (int step = 1; step < steps - 1; step++) {
+        CHECK(stockpile_radius_of_step(step) > stockpile_radius_of_step(step - 1));
+    }
+    for (int step = 0; step < steps; step++) {
+        CHECK_EQ_INT(stockpile_radius_step(stockpile_radius_of_step(step)), step);
+    }
+    CHECK_EQ_INT(stockpile_radius_of_step(stockpile_radius_step(STOCKPILE_RADIUS_DEFAULT)),
+                 STOCKPILE_RADIUS_DEFAULT);
+    CHECK_EQ_INT(stockpile_radius_of_step(stockpile_radius_step(33)), 32); /* The nearest. */
+    CHECK_EQ_INT(stockpile_radius_step(STOCKPILE_RADIUS_MAX + 50), steps - 1);
+}
+
 int main(void)
 {
     RUN_TEST(test_create_covers_valid_tiles_only);
@@ -447,5 +513,7 @@ int main(void)
     RUN_TEST(test_blocked_tiles_are_left_out);
     RUN_TEST(test_count_stored);
     RUN_TEST(test_extend_and_shrink_one);
+    RUN_TEST(test_radius);
+    RUN_TEST(test_radius_steps);
     return test_summary();
 }

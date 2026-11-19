@@ -725,6 +725,33 @@ bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *h
     return *low != old_low || *high != old_high;
 }
 
+bool ui_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *value)
+{
+    int old = *value;
+    float handle = ui->theme.slider_handle_width;
+    if (ui_take_click(ui, rect) == SDL_BUTTON_LEFT) {
+        ui->active_slider = id;
+        *value = slider_step_at(rect, handle, steps, ui->click_x);
+    }
+    if (ui->active_slider == id && ui->mouse_down) {
+        *value = slider_step_at(rect, handle, steps, ui->mouse_x);
+    }
+    float center = SDL_floorf(rect.y + rect.h * 0.5f);
+    float track = ui->theme.slider_track_height;
+    fill(ui, (SDL_FRect){rect.x, center - track * 0.5f, rect.w, track}, COLOR(THEME_TRACK));
+    float value_x = slider_x_of(rect, handle, steps, *value);
+    float left = rect.x + handle * 0.5f;
+    fill(ui, (SDL_FRect){left, center - track * 0.5f, value_x - left, track}, COLOR(THEME_CHECK));
+    bool hover = ui_hovered(ui, rect) || ui->active_slider == id;
+    SDL_Color color = hover ? brighter(COLOR(THEME_HANDLE), 40) : COLOR(THEME_HANDLE);
+    float handle_height = SDL_floorf(rect.h * 0.8f);
+    SDL_FRect knob = {value_x - handle * 0.5f, center - handle_height * 0.5f, handle,
+                      handle_height};
+    fill(ui, knob, color);
+    border(ui, knob, COLOR(THEME_BORDER));
+    return *value != old;
+}
+
 /* Step under a vertical position, 0 at the bottom of the track (inset by
  * half a handle). */
 static int vertical_step_at(SDL_FRect rect, float handle, int steps, float y)

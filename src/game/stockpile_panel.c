@@ -13,6 +13,7 @@
 #define QUALITY_STEP 5    /* Quality points per slider step. */
 #define QUALITY_SLIDER_ID 1
 #define HIT_POINTS_SLIDER_ID 2
+#define RADIUS_SLIDER_ID 3
 
 typedef struct StockpileRows {
     Stockpiles *stockpiles;
@@ -59,6 +60,29 @@ static void summary_rows(UiLayout *layout, void *userdata)
     if (stockpile->forbidden) {
         ui_layout_label(layout, tr("stockpile.left_alone"), 0.0f, true);
     }
+}
+
+/* How far the zone takes items from: a slider over the radii offered,
+ * unlimited at the right end. */
+static void radius_rows(UiLayout *layout, StockpileRows *rows)
+{
+    const Stockpile *stockpile = rows->stockpile;
+    char text[TEXT_SIZE], number[16];
+    if (stockpile->radius == STOCKPILE_RADIUS_UNLIMITED) {
+        SDL_strlcpy(text, tr("stockpile.radius_unlimited"), sizeof(text));
+    } else {
+        tr_integer(number, sizeof(number), stockpile->radius);
+        TR_FORMAT(text, sizeof(text), tr_plural("stockpile.radius", stockpile->radius), number);
+    }
+    ui_layout_label(layout, text, 0.0f, false);
+    ui_layout_measure(layout, SLIDER_MIN_WIDTH);
+    int step = stockpile_radius_step(stockpile->radius);
+    if (layout->draw && ui_slider(layout->ui, RADIUS_SLIDER_ID,
+                                  (SDL_FRect){layout->x, layout->y, layout->width, layout->row},
+                                  stockpile_radius_steps(), &step)) {
+        stockpile_set_radius(rows->stockpiles, rows->index, stockpile_radius_of_step(step));
+    }
+    layout->y += layout->row;
 }
 
 /* Accepted qualities (steps of QUALITY_STEP) and hit points (steps of
@@ -167,6 +191,7 @@ static void filter_rows(UiLayout *layout, StockpileRows *rows)
 static void storage_rows(UiLayout *layout, void *userdata)
 {
     StockpileRows *rows = userdata;
+    radius_rows(layout, rows);
     condition_rows(layout, rows);
     filter_rows(layout, rows);
 }

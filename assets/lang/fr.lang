@@ -513,6 +513,9 @@ stockpile.priority_hint = (1 = la plus haute)
 stockpile.allowed = Objets autorisés
 stockpile.allow_all = Tout
 stockpile.allow_none = Rien
+stockpile.radius.one = Prend les objets à {0} case au plus
+stockpile.radius.other = Prend les objets à {0} cases au plus
+stockpile.radius_unlimited = Prend les objets à toute distance
 stockpile.quality = Qualité : de {0} à {1}
 stockpile.hit_points = Points de vie : de {0} à {1}
 
