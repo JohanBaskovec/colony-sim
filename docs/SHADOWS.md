@@ -10,8 +10,8 @@ This document is the design of a sun that stands somewhere in the sky and of
 the shadows the solid blocks of the world cast, first on screen, then in the
 simulation (plants, soil, temperature).
 
-Status: design only, nothing is implemented. Values marked *(tuning)* are
-first guesses.
+Status: step 1 is implemented (`core/sun.h`: the sun's direction); the
+rest is design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -73,14 +73,20 @@ first guesses.
 
 ### 2.2 Its course
 
-The sun's declination goes from -23.44° at midwinter to +23.44° at midsummer
-over the year (60 days), 0 at the equinoxes, on the same curve as the day's
-length, so that sunrise and sunset stay where `game_sunrise()` puts them.
-With the hour angle `h = 15° × (hour - 12)`, the latitude `φ` and the
-declination `δ`:
+The sun's declination goes from about -23.4° at midwinter to +23.4° at
+midsummer over the year (60 days), 0 at the equinoxes. It is the one that
+gives the day lengths of `core/game_clock.h` at the default latitude
+(`cos h0 = -tan φ tan δ`, the sun up for `2 h0 / 15°` hours), so that
+sunrise and sunset stay exactly where `game_sunrise()` puts them. With the
+hour angle `h = 15° × (hour - 12)`, the latitude `φ` and the declination
+`δ`, the direction towards the sun in the local frame is
 
-    sin(elevation) = sin φ sin δ + cos φ cos δ cos h
-    azimuth from the usual formula (0 north, 90 east, 180 south)
+    east  = -cos δ sin h
+    north =  cos φ sin δ - sin φ cos δ cos h
+    up    =  sin φ sin δ + cos φ cos δ cos h
+
+with `sin(elevation) = up` and the azimuth `atan2(east, north)` (0 north, 90
+east, 180 south): as vectors, nothing breaks at the poles or at the zenith.
 
 What it gives at noon, for a wall 2 m high (one level):
 
@@ -390,10 +396,11 @@ and after: how many plants of each kind after a year, the temperatures of
 
 Each step is tested and leaves the game playable.
 
-1. **The sun's direction** (core, `core/game_clock.h` or a module of its
-   own): latitude, declination, elevation and azimuth from the tick. Tests:
-   the noon elevations of §2.2, south at noon, east in the morning, sunrise
-   and sunset where `game_sunrise()` puts them.
+1. **The sun's direction** (core, `core/sun.h`, done): latitude,
+   declination, elevation and azimuth from the tick, and the direction
+   towards the sun along the map's axes. Tests: the noon elevations of
+   §2.2, south at noon, east in the morning, sunrise and sunset where
+   `game_sunrise()` puts them, the south and the polar circles.
 2. **Rays to the sun** (core): `lit` at a point of the volume, through
    rock, walls, roofs and foliage. Tests: the length of a wall's shadow at
    noon by season, a cliff shading the level below, the sun under the edge

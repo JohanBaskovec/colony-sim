@@ -88,6 +88,7 @@ simulation:
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain, rainfall in mm, the air's dew point and relative humidity |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve and the sun (day length by season)                |
+| `sun`        | Where the sun stands: elevation, azimuth and direction (map axes, metres) from the day, the hour and the latitude; its declination gives the clock's day lengths at the default latitude (see `docs/SHADOWS.md`) |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, trees, then the understory by the light under their crowns, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
