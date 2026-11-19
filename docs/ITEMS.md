@@ -153,7 +153,12 @@ playable.
    (`items_at_point()`) follows the cursor onto the very spot of any tile
    someone could stand on (`game_debug_move_item()`), the wheel over an item
    turns it (`game_debug_turn_item()`); items are named across ticks by
-   `ItemId` (slot and generation).
+   `ItemId` (slot and generation). The tool stays on until it is turned off
+   (one item after the other), grabs what is seen under the cursor (on the
+   level shown, or on the ground seen below it when that level is open air)
+   and drops it on the ground seen there (`game_build_level()`); no selection
+   rectangle is drawn or made while a tool that does not drag out an area is
+   on (`tool_drags_area()`).
 5. **The pile window and the bills** (done). The inspector of a tile with
    items lists them all (up to 40 lines, then how many more), sorted by
    newest, quality, condition or rot (`items_list()`, `ItemOrder`), wild

@@ -1475,6 +1475,14 @@ static void tool_rect(const App *app, float screen_x, float screen_y, int *x0, i
     screen_to_tile(app, screen_x, screen_y, x1, y1);
 }
 
+/* Whether the tool is used by dragging out an area of tiles (the others act
+ * where the button is pressed or released). */
+static bool tool_drags_area(AppTool tool)
+{
+    return tool == APP_TOOL_DESIGNATE || tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER ||
+           tool == APP_TOOL_FORBID;
+}
+
 /* Whether a zone tool drag removes tiles: in the removal or shrinking mode,
  * or with Shift. */
 static bool zone_tool_removes(const App *app)
@@ -1586,6 +1594,25 @@ static void apply_gather_tool(App *app, float screen_x, float screen_y)
 
 static void drag_held_item(App *app, float screen_x, float screen_y);
 
+/* The item under a point of the screen for the debug item tool: on the level
+ * shown, or else on the ground seen below it (the level shown may be open
+ * air). ITEM_ID_NONE when there is none. */
+static ItemId debug_item_at(const App *app, float screen_x, float screen_y)
+{
+    float world_x, world_y;
+    camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
+    int shown = app->camera.level;
+    ItemId id = game_item_at_point(&app->game, world_x, world_y, shown);
+    if (id.slot == UINT32_MAX) {
+        int seen =
+            game_build_level(&app->game, (int)floorf(world_x), (int)floorf(world_y), shown, false);
+        if (seen != shown) {
+            id = game_item_at_point(&app->game, world_x, world_y, seen);
+        }
+    }
+    return id;
+}
+
 static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
 {
     if (button->button != SDL_BUTTON_LEFT) {
@@ -1622,8 +1649,7 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         camera_screen_to_world(&app->camera, button->x, button->y, &app->drag_world_x,
                                &app->drag_world_y);
         if (app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM)) {
-            app->debug_held = game_item_at_point(&app->game, app->drag_world_x, app->drag_world_y,
-                                                 app->camera.level);
+            app->debug_held = debug_item_at(app, button->x, button->y);
         }
         return;
     }
@@ -1730,7 +1756,10 @@ static void drag_held_item(App *app, float screen_x, float screen_y)
     }
     float world_x, world_y;
     camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
-    game_debug_move_item(&app->game, app->debug_held, world_x, world_y, app->camera.level);
+    /* Onto the ground seen under the cursor, as the other tools build on it. */
+    int z = game_build_level(&app->game, (int)floorf(world_x), (int)floorf(world_y),
+                             app->camera.level, false);
+    game_debug_move_item(&app->game, app->debug_held, world_x, world_y, z);
 }
 
 /* Turns of an item per step of the wheel, in 1/256 of a turn. */
@@ -1745,9 +1774,7 @@ static bool turn_item_under(App *app, float screen_x, float screen_y, float step
     }
     ItemId id = app->debug_held;
     if (id.slot == UINT32_MAX) {
-        float world_x, world_y;
-        camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
-        id = game_item_at_point(&app->game, world_x, world_y, app->camera.level);
+        id = debug_item_at(app, screen_x, screen_y);
     }
     return game_debug_turn_item(&app->game, id, (int)lroundf(steps * APP_ITEM_TURN_STEP));
 }
@@ -1799,7 +1826,8 @@ static void handle_event(App *app, const SDL_Event *event)
             drag_held_item(app, event->motion.x, event->motion.y);
             break;
         }
-        if (app->left_button_down && !app->box_selecting) {
+        /* Only with no tool: a tool uses where the button is released. */
+        if (app->left_button_down && !app->box_selecting && app->tool == APP_TOOL_NONE) {
             float dx = event->motion.x - app->drag_start_x;
             float dy = event->motion.y - app->drag_start_y;
             app->box_selecting = dx * dx + dy * dy > APP_DRAG_THRESHOLD * APP_DRAG_THRESHOLD;
@@ -1974,7 +2002,7 @@ static void render_frame(App *app)
                                      app->structure_direction, app->hover_x, app->hover_y,
                                      app->hover_x, app->hover_y);
         }
-    } else if (app->tool != APP_TOOL_NONE && app->left_button_down) {
+    } else if (tool_drags_area(app->tool) && app->left_button_down) {
         float mouse_x, mouse_y;
         SDL_GetMouseState(&mouse_x, &mouse_y);
         int x0, y0, x1, y1;
