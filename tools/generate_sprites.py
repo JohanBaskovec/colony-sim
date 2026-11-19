@@ -29,6 +29,14 @@ from PIL import Image, ImageDraw
 SUPERSAMPLING = 4
 TILE = 128
 
+# Sprites redrawn since by a script of their own in tools/assets/sprites/ (tuned in
+# tools/sprite_workbench.py): their files are not written here, so that running this
+# generator again does not bring the older drawings back.
+SCRIPTED = {
+    "bracken_0.png", "bracken_1.png", "bracken_2.png",
+    "wild_carrot_0.png", "wild_carrot_1.png", "wild_carrot_2.png",
+}
+
 # ---------------------------------------------------------------------------
 # Drawing helpers. Coordinates are in final pixels (floats); canvases store
 # premultiplied colors at SUPERSAMPLING times the final size.
@@ -2703,7 +2711,8 @@ def generate(output):
         images[f"grass_{stage}.png"] = tile_image(draw_grass(stage))
     for filename, image in images.items():
         assert image.width % 32 == 0 and image.height % 32 == 0, filename
-        image.save(os.path.join(output, filename), optimize=True)
+        if filename not in SCRIPTED:
+            image.save(os.path.join(output, filename), optimize=True)
     return images
 
 
