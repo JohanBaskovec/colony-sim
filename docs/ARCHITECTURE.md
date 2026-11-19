@@ -89,6 +89,7 @@ simulation:
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve and the sun (day length by season)                |
 | `sun`        | Where the sun stands: elevation, azimuth and direction (map axes, metres) from the day, the hour and the latitude; its declination gives the clock's day lengths at the default latitude; its rays (`sun_lit()`): how much direct sun reaches a point of the volume, through rock, walls, doors, floors and roofs (nothing) and foliage (its share by the length crossed) (see `docs/SHADOWS.md`) |
+| `shadow`     | Shadows on screen: the sun's rays from the surfaces drawn, worked out ahead of time by pieces and half hours, each point keeping the moment an edge passes, so frames read them for the time now and the shadows glide; out of date by the map's light stamps; the light put together (sky, direct sun) (see *Shadows on screen*) |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, trees, then the understory by the light under their crowns, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
@@ -1866,23 +1867,43 @@ follows `Map.light_revision`), and the drawing shows bare-branch textures with
 the leaves fading over them.
 
 **Light and shade** (`render_daylight()`, presentation only): the light of a
-tile is the sky (the sun's day with its dawn and dusk, `game_daylight()`, a
-night sky `NIGHT_SKY_LIT`, the weather, `weather_light()`) times what lets
-it through (`map_light_cover()`: each layer of foliage over the tile times its
-share, so thick crowns are darker; a roof; rock above: nothing), with the
-light of burning hearths on top; the tile is then as dark as `1 - (LIGHT_FLOOR
-+ (1 - LIGHT_FLOOR) × light)`, `LIGHT_FLOOR` being `GAME_DAYLIGHT_MIN`, the
-darkest it ever was. The shade is a veil drawn over the sprites (colonists,
-animals, plants and items are in the shade of their tile too) from a small
-texture with a pixel for each corner of the tiles in view (the mean of the tiles
-around it), stretched over them with smoothing so that the light runs from
-one tile to the next; its color is cool by day, the night's blue by night, a
-touch warm at dawn and dusk. What lets the light through is kept per tile of the
-level shown until `Map.light_revision` changes (any terrain, rock or roof
-change): a view shows thousands of tiles every frame. Planned
-(`docs/SHADOWS.md`): a sun with a direction and shadows cast by the solid
-blocks, finer than a tile on screen, then read by plants, soil and
-temperature.
+point is the sky (the sun's day with its dawn and dusk, `game_daylight()`, a
+night sky `NIGHT_SKY_LIT`, the weather, `weather_light()`), split into the
+light of the whole sky and the direct sun (`shadow_direct_share()`: none
+under clouds, fog or rain, fading out with a low sun), put together by
+`shadow_light()`: the night sky and the sky's diffuse light times what lets
+it through over the tile (`map_light_cover()`: each layer of foliage over
+the tile times its share, so thick crowns are darker; a roof; rock above:
+nothing), the direct sun times how much of it reaches the point (the
+shadows, below); the light of burning hearths on top. The point is then as
+dark as `1 - (LIGHT_FLOOR + (1 - LIGHT_FLOOR) × light)`, `LIGHT_FLOOR` being
+`GAME_DAYLIGHT_MIN`, the darkest it ever was. The shade is a veil drawn over
+the sprites (colonists, animals, plants and items are in the shade of their
+spot) from a texture with several points per tile (8, 4, 2 or 1 a side as
+the view zooms out), stretched over the tiles with smoothing; the light of
+the sky is a value per tile corner (the mean of the tiles around it),
+blended across the tile, the shadows are per point. Its color is cool by
+day, the night's blue by night, a touch warm at dawn and dusk. What lets the
+light through is kept per tile of the level shown until `Map.light_revision`
+changes (any terrain, rock, roof, wall or door change): a view shows
+thousands of tiles every frame.
+
+**Shadows on screen** (`core/shadow.h`, docs/SHADOWS.md §4): the sun's rays
+(`sun_lit()`) from the surface drawn on each point (the floor seen, or the
+top of a block: `shadow_surface_height()`), worked out from the map on
+screen (the known world under the fog) ahead of time, by pieces of 16 × 16
+tiles and half hours of game time: for each point how lit it is at the
+start, middle and end of the half hour, and the moment the edge of a shadow
+passes between two that differ (found by halving). Frames cast no ray: they
+read the value before or after each point's moment for the time now,
+blended a little around it, so the shadows glide at any speed and stand
+still when paused. The frontend gives the work a time budget per frame
+(more while pieces in view have nothing to show); the next half hour is
+worked out ahead. A piece is out of date when the map changed within the
+reach of its rays: `Map.light_stamps` holds, per block of 16 × 16 columns,
+the light revision of its last change (terrain, rock, a wall or a door, a
+tile copied into the known world, the crowns going bare everywhere), and a
+piece compares the blocks towards the sun as far as its rays go.
 
 Stones, branches and twigs lying about are laid by world generation in map
 layers (`Map.cobbles`, `Map.flint`, `Map.branches`, `Map.twigs`); `game_init()`

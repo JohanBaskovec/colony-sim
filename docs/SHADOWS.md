@@ -10,8 +10,9 @@ This document is the design of a sun that stands somewhere in the sky and of
 the shadows the solid blocks of the world cast, first on screen, then in the
 simulation (plants, soil, temperature).
 
-Status: steps 1 and 2 are implemented (`core/sun.h`: the sun's direction
-and its rays); the rest is design. Values marked *(tuning)* are first guesses.
+Status: steps 1 to 3 are implemented (`core/sun.h`: the sun's direction
+and its rays; `core/shadow.h` and `render_daylight()`: the shadows on
+screen); the rest is design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -255,9 +256,9 @@ places readable): what changes is what it is made from. The light of the sky
 shadows are finer.
 
 - **A shadow texture finer than the tiles.** For the tiles in view, `lit` is
-  worked out at several points per tile, `SHADOW_SAMPLES` a side *(tuning: 8
-  when zoomed in, 4, 2 then 1 as the view zooms out and a tile becomes a few
-  pixels)*, and drawn smoothed: the edge of a wall's shadow is a straight
+  worked out at several points per tile, 8 a side when a tile is 64 pixels
+  or more on screen, 4 from 28, 2 from 12, else 1 *(tuning:
+  `shadow_samples()`)*, and drawn smoothed: the edge of a wall's shadow is a straight
   line across the tiles, softened over a fraction of a tile, like a real
   penumbra.
 - **Each surface seen at its own height.** On the level shown: the floor of
@@ -317,8 +318,14 @@ The texture is kept per piece of the world (`SHADOW_CHUNK` tiles a side
 - Frames: a comparison and a blend per point in view.
 - At the fastest speeds the half hours follow one another quickly: the
   budget per frame holds, and the step is worked out further ahead.
-- To be measured with `--bench-render` before and after; the frame time of
-  the fixed views must not suffer.
+- The frontend gives the rays a time budget per frame rather than a count:
+  1 ms, 3 ms while pieces in view have nothing to show (`SHADOW_WORK_NS`).
+- Measured on step 3 with `--bench-render 300` (seed 42, a virtual display
+  with a software renderer, the sun low at 6:00): the drawing time of the
+  near views goes from 2.4 to 2.6 ms on average (p99 4.7 to 5.5 ms), the far
+  ones from 5.0 to 5.4 ms; the frame time follows. The texture at 8 points a
+  side is what costs (1.3 ms more than at 1 point on the near views), hence
+  4 points a side at the usual zoom.
 
 ## 5. In the simulation
 
@@ -419,11 +426,13 @@ Each step is tested and leaves the game playable.
    beside its tree, nothing cast by furniture or plants (items and beings
    are not in the map's grid), a comparison with a slow walk along the ray
    on a cluttered scene.
-3. **Shadows on screen**: the fine texture, shadows that glide (§4.1), the
-   sky's share, the low sun, overcast days, the pieces and their budget; the
-   light view (key G) shows the new light. The light of the sky is still
-   what lies straight above (`map_light_cover()`). Measured with
-   `--bench-render`.
+3. **Shadows on screen** (`core/shadow.h`, `render_daylight()`, done): the
+   fine texture, shadows that glide (§4.1), the sky's share, the low sun,
+   overcast days, the pieces and their budget. The light of the sky is still
+   what lies straight above (`map_light_cover()`). The light view (key G)
+   still shows the simulation's light (what the plants get): it shows the
+   new light with step 5, when the simulation takes it. Measured with
+   `--bench-render` (§4.2).
 4. **The light of the sky and doors** (core, then on screen): `open` per
    tile from the rays of §3.2, kept and worked out again around what
    changes; `MAP_LIGHT_ROOF` goes; doors open and close (while somebody

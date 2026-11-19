@@ -1136,9 +1136,12 @@ bool map_init(Map *map, int width, int height, int depth)
     map->structure_hit_points = calloc(count, sizeof(*map->structure_hit_points));
     map->roof_quality = calloc(count, 1);
     map->forbidden = calloc(count, 1);
-    if (map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL ||
-        map->plants == NULL || map->cobbles == NULL || map->flint == NULL ||
-        map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
+    size_t blocks = (size_t)((width + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK) *
+                    (size_t)((height + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK);
+    map->light_stamps = calloc(blocks, sizeof(*map->light_stamps));
+    if (map->light_stamps == NULL || map->forbidden == NULL || map->terrain == NULL ||
+        map->rock == NULL || map->slope == NULL || map->plants == NULL || map->cobbles == NULL ||
+        map->flint == NULL || map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
         map->structure == NULL || map->structure_part == NULL || map->structure_quality == NULL ||
         map->structure_hit_points == NULL || map->roof_quality == NULL) {
         map_free(map);
@@ -1172,6 +1175,7 @@ void map_free(Map *map)
     free(map->structure_hit_points);
     free(map->roof_quality);
     free(map->forbidden);
+    free(map->light_stamps);
     memset(map, 0, sizeof(*map));
 }
 
@@ -1196,6 +1200,48 @@ static bool unstandable_air(uint8_t terrain)
            terrain == TERRAIN_FOLIAGE_SPARSE;
 }
 
+static int light_block_columns(const Map *map)
+{
+    return (map->width + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK;
+}
+
+void map_light_changed(Map *map, int x, int y)
+{
+    map->light_revision++;
+    if (x >= 0 && y >= 0 && x < map->width && y < map->height) {
+        map->light_stamps[(y / MAP_LIGHT_BLOCK) * light_block_columns(map) + x / MAP_LIGHT_BLOCK] =
+            map->light_revision;
+    }
+}
+
+/* A change to the light of the whole map. */
+static void light_changed_everywhere(Map *map)
+{
+    map->light_revision++;
+    size_t blocks = (size_t)light_block_columns(map) *
+                    (size_t)((map->height + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK);
+    for (size_t i = 0; i < blocks; i++) {
+        map->light_stamps[i] = map->light_revision;
+    }
+}
+
+uint32_t map_light_stamp(const Map *map, int x0, int y0, int x1, int y1)
+{
+    x0 = clampi(x0, 0, map->width - 1) / MAP_LIGHT_BLOCK;
+    y0 = clampi(y0, 0, map->height - 1) / MAP_LIGHT_BLOCK;
+    x1 = clampi(x1, 0, map->width - 1) / MAP_LIGHT_BLOCK;
+    y1 = clampi(y1, 0, map->height - 1) / MAP_LIGHT_BLOCK;
+    int columns = light_block_columns(map);
+    uint32_t latest = 0;
+    for (int by = y0; by <= y1; by++) {
+        for (int bx = x0; bx <= x1; bx++) {
+            uint32_t stamp = map->light_stamps[by * columns + bx];
+            latest = stamp > latest ? stamp : latest;
+        }
+    }
+    return latest;
+}
+
 void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
 {
     if (!map_in_bounds(map, x, y, z) || (unsigned)terrain >= TERRAIN_COUNT) {
@@ -1207,7 +1253,7 @@ void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
         return;
     }
     map->terrain[index] = (uint8_t)terrain;
-    map->light_revision++;
+    map_light_changed(map, x, y);
     if (old == TERRAIN_SHALLOW_WATER || old == TERRAIN_DEEP_WATER ||
         terrain == TERRAIN_SHALLOW_WATER || terrain == TERRAIN_DEEP_WATER) {
         map->water_revision++;
@@ -1240,7 +1286,9 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
     bool was_open = map_is_open_at(map, index);
     RockType old_rock = (RockType)map->rock[index];
     map->rock[index] = (uint8_t)rock;
-    map->light_revision += old_rock != rock;
+    if (old_rock != rock) {
+        map_light_changed(map, x, y);
+    }
     bool is_passable = map_move_cost_at(map, index) > 0.0f;
     if (was_passable != is_passable) {
         log_topology_change(map, x, y, z, is_passable);
@@ -1296,6 +1344,9 @@ static void set_tile_structure(Map *map, int x, int y, int z, StructureType type
     map->structure_counts[old]--;
     map->structure_counts[type]++;
     map->structure[index] = (uint8_t)type;
+    if (structure_stops_light(old) || structure_stops_light(type)) {
+        map_light_changed(map, x, y);
+    }
     map->structure_part[index] = part;
     map->structure_quality[index] = (uint8_t)quality;
     map->structure_hit_points[index] = (uint16_t)hit_points;
@@ -1450,6 +1501,7 @@ void map_topology_changed(Map *map)
     log_topology_change(map, 0, 0, 0, false);
     map->topology_log[map->topology_revision % MAP_TOPOLOGY_LOG_SIZE].anywhere = true;
     map->water_revision++;
+    light_changed_everywhere(map);
 }
 
 float map_move_cost_at(const Map *map, size_t index)
@@ -1817,7 +1869,7 @@ void map_set_bare(Map *map, int steps)
     uint8_t bare = (uint8_t)clampi(steps, 0, MAP_BARE_STEPS);
     if (bare != map->bare) {
         map->bare = bare;
-        map->light_revision++;
+        light_changed_everywhere(map);
     }
 }
 
@@ -1974,9 +2026,15 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     bool has_roof = terrain_def((Terrain)src->terrain[index])->built != STRUCTURE_NONE;
     dst->roof_count += has_roof - had_roof;
     dst->forbidden_count += (src->forbidden[index] != 0) - (dst->forbidden[index] != 0);
+    if (dst->terrain[index] != src->terrain[index] || dst->rock[index] != src->rock[index] ||
+        structure_stops_light(dst->structure[index]) !=
+            structure_stops_light(src->structure[index])) {
+        size_t column = index % map_level_tile_count(dst);
+        map_light_changed(dst, (int)(column % (size_t)dst->width),
+                          (int)(column / (size_t)dst->width));
+    }
     dst->terrain[index] = src->terrain[index];
     dst->rock[index] = src->rock[index];
-    dst->light_revision++;
     dst->slope[index] = src->slope[index];
     dst->plants[index] = src->plants[index];
     dst->cobbles[index] = src->cobbles[index];

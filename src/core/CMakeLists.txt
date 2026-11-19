@@ -42,6 +42,7 @@ add_library(colony_core STATIC
     roof.c
     scenario.c
     settings.c
+    shadow.c
     social.c
     strike_anim.c
     soil.c

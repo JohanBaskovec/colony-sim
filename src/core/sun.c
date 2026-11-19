@@ -1,7 +1,6 @@
 #include "core/sun.h"
 
 #include "core/game_clock.h"
-#include "core/structure.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -56,14 +55,6 @@ SunPosition sun_at_tick(uint64_t tick, float latitude)
 #define LIT_EPSILON 1.0e-3f
 #define FAR 1.0e30f
 
-/* Whether the cell is a block the light does not cross. */
-static bool blocks_light(const Map *map, size_t index)
-{
-    uint8_t structure = map->structure[index];
-    return map->rock[index] != ROCK_NONE || structure == STRUCTURE_WALL ||
-           structure == STRUCTURE_DOOR;
-}
-
 /* Whether the floor of a cell (the plane at its bottom) stops the light. */
 static bool floor_blocks_light(uint8_t terrain)
 {
@@ -100,7 +91,7 @@ float sun_lit(const Map *map, SunPosition sun, float x, float y, float height)
         return 1.0f;
     }
     size_t index = map_index(map, cx, cy, cz);
-    if (blocks_light(map, index)) {
+    if (map_stops_light_at(map, index)) {
         return 0.0f;
     }
     const ptrdiff_t level = (ptrdiff_t)map_level_tile_count(map);
@@ -154,7 +145,7 @@ float sun_lit(const Map *map, SunPosition sun, float x, float y, float height)
             index = (size_t)((ptrdiff_t)index + step_y);
             next_y += delta_y;
         }
-        if (blocks_light(map, index)) {
+        if (map_stops_light_at(map, index)) {
             return 0.0f;
         }
     }

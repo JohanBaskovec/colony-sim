@@ -20,6 +20,7 @@ bool known_init(KnownWorld *known, const Map *map)
     memset(known->map.terrain, TERRAIN_OPEN, map_tile_count(&known->map));
     known->map.surface_level = map->surface_level;
     known->map.top_ground_level = map->top_ground_level;
+    known->map.bare = map->bare;
     return true;
 }
 
@@ -64,6 +65,12 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
         dst->roof_count += (terrain_def((Terrain)map->terrain[i])->built != STRUCTURE_NONE) -
                            (terrain_def((Terrain)dst->terrain[i])->built != STRUCTURE_NONE);
         dst->forbidden_count += (map->forbidden[i] != 0) - (dst->forbidden[i] != 0);
+        if (map->terrain[i] != dst->terrain[i] || map->rock[i] != dst->rock[i] ||
+            map->structure[i] != dst->structure[i]) {
+            size_t column = i % map_level_tile_count(dst);
+            map_light_changed(dst, (int)(column % (size_t)dst->width),
+                              (int)(column / (size_t)dst->width));
+        }
         items_copy_tile(&known->items, items, i); /* Only where they changed. */
         known->dirt.dirty_count += (dirt->level[i] != 0) - (known->dirt.level[i] != 0);
     }

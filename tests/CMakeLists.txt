@@ -51,6 +51,7 @@ set(COLONY_UNIT_TESTS
     test_fog
     test_scenario
     test_settings
+    test_shadow
     test_reservation
     test_rng
     test_soil

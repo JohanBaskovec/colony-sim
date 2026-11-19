@@ -365,6 +365,9 @@ typedef enum PlantStatus {
 
 /* How many recent topology changes the map remembers (see Map.topology_log). */
 #define MAP_TOPOLOGY_LOG_SIZE 16
+/* Columns a side of a block whose changes to the light are stamped together
+ * (Map.light_stamps). */
+#define MAP_LIGHT_BLOCK 16
 
 /* How many recent structure and roof changes the map remembers (see
  * Map.build_log). */
@@ -481,10 +484,17 @@ typedef struct Map {
      * (plants never block). Data derived from it (core/region.h) compares it
      * to know when it is out of date. Not part of map_hash(). */
     uint32_t topology_revision;
-    /* Incremented whenever the terrain, the rock or a roof of a tile changes:
-     * what lets the light through (map_light_cover()). A cache of it compares
-     * this. Not part of map_hash(). */
+    /* Incremented whenever what lets the light through changes: the terrain,
+     * the rock or a roof of a tile (map_light_cover()), a wall or a door (the
+     * sun's rays, core/sun.h), how bare the crowns are. A cache of it
+     * compares this. Not part of map_hash(). */
     uint32_t light_revision;
+    /* For each block of MAP_LIGHT_BLOCK × MAP_LIGHT_BLOCK columns (every
+     * level), the light revision of the last such change in it (all of them
+     * for a change everywhere): what is derived from the light of a part of
+     * the map (the shadows on screen) knows when that part changed. See
+     * map_light_stamp(). Not part of map_hash(). */
+    uint32_t *light_stamps;
     /* Bumped whenever a tile turns into water or out of it (map_set_terrain()),
      * or the layers were written directly (map_topology_changed()): the
      * distance to open water (core/soil.h) compares this. Not part of
@@ -654,6 +664,20 @@ static inline size_t map_index(const Map *map, int x, int y, int z)
 static inline bool terrain_is_foliage(uint8_t terrain)
 {
     return terrain >= TERRAIN_FOLIAGE && terrain <= TERRAIN_FOLIAGE_SPARSE;
+}
+
+/* Whether a structure stops the light (the sun's rays, core/sun.h): a wall,
+ * a door. */
+static inline bool structure_stops_light(uint8_t type)
+{
+    return type == STRUCTURE_WALL || type == STRUCTURE_DOOR;
+}
+
+/* Whether a tile index (in bounds) is a block the light does not cross:
+ * rock (a trunk too), a wall, a door. */
+static inline bool map_stops_light_at(const Map *map, size_t index)
+{
+    return map->rock[index] != ROCK_NONE || structure_stops_light(map->structure[index]);
 }
 
 /* Whether a tile index (in bounds) is open space: no rock and no floor. */
@@ -849,6 +873,14 @@ float map_bare_fraction(const Map *map);
  * MAP_LIGHT_BARE_* for foliage, 1 for any other terrain (whether a floor
  * stops the light is not a question of share). */
 float map_foliage_light(Terrain terrain, float bare);
+
+/* The light revision of the latest change to what lets the light through
+ * among the columns (x0, y0) .. (x1, y1) (inclusive, clipped to the map), to
+ * the block (MAP_LIGHT_BLOCK); 0 when none changed since the map was made. */
+uint32_t map_light_stamp(const Map *map, int x0, int y0, int x1, int y1);
+/* Notes a change to what lets the light through in the column (x, y), for
+ * those who write the layers themselves (the known world). */
+void map_light_changed(Map *map, int x, int y);
 
 /* Whether something covers the tile (map_cover_level() is not -1). */
 bool map_is_roofed(const Map *map, int x, int y, int z);

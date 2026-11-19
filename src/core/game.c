@@ -568,6 +568,9 @@ static void leaf_conclude(Game *game)
     if (game->leaf_tree_count > 0) {
         float mean = (float)(game->leaf_climate_sum / (double)game->leaf_tree_count);
         map_set_bare(&game->map, (int)lroundf(plant_bare_target(mean) * (float)MAP_BARE_STEPS));
+        if (game->known_ready) { /* The season shows on every crown, seen or not. */
+            map_set_bare(&game->known.map, game->map.bare);
+        }
     }
     game->leaf_climate_sum = 0.0;
     game->leaf_tree_count = 0;

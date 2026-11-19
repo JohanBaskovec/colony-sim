@@ -1630,6 +1630,53 @@ static void test_litter_as_items(void)
     map_free(&map);
 }
 
+/* Every change to what lets the light through is stamped on its block of
+ * columns: a terrain, a rock, a wall or a door (not a bed), a tile copied
+ * into a picture of the map; the crowns going bare and direct writes are
+ * stamped everywhere. */
+static void test_light_stamps_by_block(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 40, 40, 4));
+    CHECK_EQ_UINT(map_light_stamp(&map, 0, 0, 39, 39), 0);
+    map_set_terrain(&map, 20, 5, 1, TERRAIN_FOLIAGE);
+    uint32_t stamp = map_light_stamp(&map, 16, 0, 31, 15);
+    CHECK(stamp != 0 && stamp == map.light_revision);
+    CHECK_EQ_UINT(map_light_stamp(&map, 0, 0, 15, 39), 0);         /* Another block. */
+    CHECK_EQ_UINT(map_light_stamp(&map, 0, 0, 16, 0), stamp);      /* Touches the block. */
+    CHECK_EQ_UINT(map_light_stamp(&map, -50, -50, 99, 99), stamp); /* Clipped. */
+
+    map_set_structure(&map, 3, 30, 0, STRUCTURE_GRASS_BED);
+    CHECK_EQ_UINT(map_light_stamp(&map, 0, 16, 15, 39), 0);
+    map_set_structure(&map, 3, 20, 0, STRUCTURE_WALL);
+    CHECK(map_light_stamp(&map, 0, 16, 15, 31) == map.light_revision);
+    uint32_t wall = map.light_revision;
+    map_set_structure(&map, 3, 20, 0, STRUCTURE_NONE);
+    CHECK(map.light_revision != wall);
+    map_set_rock(&map, 35, 35, 2, ROCK_GRANITE);
+    CHECK(map_light_stamp(&map, 32, 32, 39, 39) == map.light_revision);
+
+    /* A picture of the map: a tile copied with a new wall is stamped there,
+     * one copied unchanged is not. */
+    Map picture;
+    REQUIRE(map_init(&picture, 40, 40, 4));
+    map_copy_tile(&picture, &map, map_index(&map, 8, 8, 0));
+    CHECK_EQ_UINT(map_light_stamp(&picture, 0, 0, 39, 39), 0);
+    map_copy_tile(&picture, &map, map_index(&map, 35, 35, 2));
+    CHECK(map_light_stamp(&picture, 32, 32, 39, 39) != 0);
+    CHECK_EQ_UINT(map_light_stamp(&picture, 0, 0, 31, 31), 0);
+    map_free(&picture);
+
+    uint32_t before = map.light_revision;
+    map_set_bare(&map, MAP_BARE_STEPS);
+    CHECK(map_light_stamp(&map, 0, 0, 15, 15) > before);
+    CHECK(map_light_stamp(&map, 32, 32, 39, 39) > before);
+    before = map.light_revision;
+    map_topology_changed(&map);
+    CHECK(map_light_stamp(&map, 0, 16, 15, 31) > before);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -1674,6 +1721,7 @@ int main(void)
     RUN_TEST(test_shade_plants_live_in_the_dark);
     RUN_TEST(test_fibre_plants_are_cut_and_grow_back);
     RUN_TEST(test_bare_crowns_let_light_through);
+    RUN_TEST(test_light_stamps_by_block);
     RUN_TEST(test_plants_take_root_where_they_can_live);
     RUN_TEST(test_spread_lands_within_range);
     RUN_TEST(test_offspring_takes_after_its_parent);
