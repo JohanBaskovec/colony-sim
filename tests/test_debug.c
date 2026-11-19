@@ -606,6 +606,28 @@ static void test_spawn_items(void)
     game_shutdown(&game);
 }
 
+/* Items dragged by hand land at the very spot, not on open air. */
+static void test_move_items_by_hand(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    REQUIRE(game_debug_spawn_items(&game, 10, 10, 0, ITEM_FLINT, 1) == 1);
+    const Item *flint = items_first(&game.items, map_index(&game.map, 10, 10, 0));
+    REQUIRE(flint != NULL);
+    float x = 10.0f + ((float)flint->spot_x + 0.5f) / 256.0f;
+    float y = 10.0f + ((float)flint->spot_y + 0.5f) / 256.0f;
+    ItemId id = game_item_at_point(&game, x, y, 0);
+    REQUIRE(id.slot != UINT32_MAX);
+    CHECK(!game_debug_move_item(&game, id, 12.5f, 12.5f, 1)); /* Open air. */
+    CHECK(game_debug_move_item(&game, id, 12.25f, 13.75f, 0));
+    CHECK_EQ_INT(items_get(&game.items, 12, 13, 0).type, ITEM_FLINT);
+    CHECK_EQ_INT(items_by_id(&game.items, id)->spot_x, 64);
+    CHECK_EQ_INT(items_by_id(&game.items, id)->spot_y, 192);
+    CHECK(game_debug_turn_item(&game, id, -1));
+    CHECK_EQ_UINT(game_item_at_point(&game, 12.25f, 13.75f, 0).slot, id.slot);
+    game_shutdown(&game);
+}
+
 static void test_teleport(void)
 {
     Game game;
@@ -655,6 +677,7 @@ int main(void)
     RUN_TEST(test_learn_all);
     RUN_TEST(test_skip_and_next_season);
     RUN_TEST(test_spawn_items);
+    RUN_TEST(test_move_items_by_hand);
     RUN_TEST(test_teleport);
     return test_summary();
 }

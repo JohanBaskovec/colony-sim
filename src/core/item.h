@@ -399,6 +399,40 @@ void items_use_up(Items *items, ItemStack *load, int count);
 /* The items of a load, newest first: as items_first() and items_next(). */
 const Item *items_load_first(const Items *items, ItemStack load);
 
+/* An item named across ticks: its slot in the pool and the slot's
+ * generation (an item gone is told apart from the one in its slot now). */
+typedef struct ItemId {
+    uint32_t slot; /* UINT32_MAX: none. */
+    uint16_t generation;
+} ItemId;
+
+#define ITEM_ID_NONE ((ItemId){UINT32_MAX, 0})
+
+/* How wide an item is drawn, in tiles: by its bulk, from 0.4 (a flake) to 1
+ * (a body). */
+float item_drawn_size(ItemType type);
+
+/* The id of an item of the pool. */
+ItemId items_id(const Items *items, const Item *item);
+
+/* The item lying on the ground with that id, NULL when gone or in a load. */
+const Item *items_by_id(const Items *items, ItemId id);
+
+/* The item drawn at the point (x, y) of level z, in tiles (the top left of
+ * tile 0 at 0): the newest one whose picture (item_drawn_size(), turned
+ * any way: a circle) holds the point, on its tile or a neighbor; the
+ * nearest center among those of the same tile. ITEM_ID_NONE when none. */
+ItemId items_at_point(const Items *items, float x, float y, int z);
+
+/* Moves an item lying on the ground to a tile (it becomes its newest item),
+ * at the spot given in 1/256 of a tile, whatever lies there: what it was
+ * (wild or not) and its condition stay. Returns false when it is not on the
+ * ground or the tile is out of bounds. */
+bool items_move(Items *items, ItemId id, int x, int y, int z, int spot_x, int spot_y);
+
+/* Turns an item lying on the ground by `steps` of 1/256 of a turn. */
+bool items_turn(Items *items, ItemId id, int steps);
+
 /* Wild items (ITEM_FLAG_WILD) */
 
 /* Lays `count` wild items of a type on a tile, whatever lies there, each of

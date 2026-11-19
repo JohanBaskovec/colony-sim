@@ -402,6 +402,18 @@ void game_debug_next_season(Game *game);
  * invalid type or tile). */
 int game_debug_spawn_items(Game *game, int x, int y, int z, ItemType type, int count);
 
+/* The item drawn at a point of level z, in tiles (items_at_point()), among
+ * the items really there (the debug tools see everything). */
+ItemId game_item_at_point(const Game *game, float x, float y, int z);
+
+/* Debug: moves an item lying on the ground to the point (x, y) of level z,
+ * in tiles: onto that tile, at that very spot, whatever lies there, if
+ * someone could stand there. Returns whether it moved. */
+bool game_debug_move_item(Game *game, ItemId id, float x, float y, int z);
+
+/* Debug: turns an item lying on the ground by `steps` of 1/256 of a turn. */
+bool game_debug_turn_item(Game *game, ItemId id, int steps);
+
 /* Growth a click of the debug "grow a tree" tool adds (a tenth: the trunk
  * rises at 0.4, 0.6 and 0.8, then the crown spreads until 1). */
 #define GAME_DEBUG_TREE_GROWTH_STEP 0.1f

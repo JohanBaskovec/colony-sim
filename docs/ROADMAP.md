@@ -305,7 +305,7 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 - [ ] Several types of items on a tile (with step 4)
 - [x] Step 3, litter as items: twigs, branches, cobbles (50 times fewer than the stones before) and flint are wild items, each with its own quality, spot and angle (about 15 600 at the start of a 200 × 200 map, 37 000 after two months as trees shed); trees shed items (a ceiling per tile), wild branches and twigs crumble away (60 and 20 days), gathering picks up the very items (the best stone first); haulers leave wild items alone; same speed as before
 - [ ] Region type masks and a list of changing items, if searches or the hourly update grow costly with more items
-- [ ] Step 4, spots, angles and drawing: each item drawn at its spot, turned freely; a far zoom mark if `--bench-render` asks for it; debug tool to drag, drop and turn items with the mouse
+- [x] Step 4, spots, angles and drawing: each item drawn at its spot, turned freely (a texture of item icons, textured quads in batches; the newest ten per tile, one when zoomed far out; `--bench-render` unchanged); debug tool to drag items anywhere with the mouse and turn them with the wheel
 - [ ] Step 5, the pile window (every item of a tile, sortable by quality, hit points, rot) and the bills: a quality range for the ingredients of each bill, cooking takes what rots first
 - [x] The known world keeps a copy of every item seen on the ground (step 1)
 

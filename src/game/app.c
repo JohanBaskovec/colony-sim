@@ -1083,6 +1083,7 @@ static void load_pending_scenario(App *app)
     app->left_button_down = false;
     app->box_selecting = false;
     app->debug_attacker = combatant_none();
+    app->debug_held = ITEM_ID_NONE;
     app->inspector_tab = -1;
     app->next_notice = 0;
     app->notices_shown_count = 0;
@@ -1326,6 +1327,8 @@ static void apply_gather_tool(App *app, float screen_x, float screen_y)
     }
 }
 
+static void drag_held_item(App *app, float screen_x, float screen_y);
+
 static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
 {
     if (button->button != SDL_BUTTON_LEFT) {
@@ -1361,9 +1364,20 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         app->drag_start_y = button->y;
         camera_screen_to_world(&app->camera, button->x, button->y, &app->drag_world_x,
                                &app->drag_world_y);
+        if (app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM)) {
+            app->debug_held = game_item_at_point(&app->game, app->drag_world_x, app->drag_world_y,
+                                                 app->camera.level);
+        }
         return;
     }
     if (!app->left_button_down) {
+        return;
+    }
+    if (app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM)) {
+        drag_held_item(app, button->x, button->y); /* Dropped there. */
+        app->debug_held = ITEM_ID_NONE;
+        app->left_button_down = false;
+        app->box_selecting = false;
         return;
     }
     bool additive = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
@@ -1437,6 +1451,37 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
 
 /* ---- Events ---------------------------------------------------------------- */
 
+/* The debug item tool: the item held follows the cursor, onto the very spot
+ * (it stays where it was over a place nobody could stand). */
+static void drag_held_item(App *app, float screen_x, float screen_y)
+{
+    if (app->debug_held.slot == UINT32_MAX) {
+        return;
+    }
+    float world_x, world_y;
+    camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
+    game_debug_move_item(&app->game, app->debug_held, world_x, world_y, app->camera.level);
+}
+
+/* Turns of an item per step of the wheel, in 1/256 of a turn. */
+#define APP_ITEM_TURN_STEP 16
+
+/* The debug item tool: the wheel turns the item held, or else the one under
+ * the cursor. Returns whether it turned one (the wheel then does not zoom). */
+static bool turn_item_under(App *app, float screen_x, float screen_y, float steps)
+{
+    if (!app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM) || steps == 0.0f) {
+        return false;
+    }
+    ItemId id = app->debug_held;
+    if (id.slot == UINT32_MAX) {
+        float world_x, world_y;
+        camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
+        id = game_item_at_point(&app->game, world_x, world_y, app->camera.level);
+    }
+    return game_debug_turn_item(&app->game, id, (int)lroundf(steps * APP_ITEM_TURN_STEP));
+}
+
 static void handle_event(App *app, const SDL_Event *event)
 {
     switch (event->type) {
@@ -1449,6 +1494,9 @@ static void handle_event(App *app, const SDL_Event *event)
         }
         if (ui_scroll(&app->ui, event->wheel.mouse_x, event->wheel.mouse_y, steps)) {
             break; /* The wheel does not zoom the map through a panel. */
+        }
+        if (turn_item_under(app, event->wheel.mouse_x, event->wheel.mouse_y, steps)) {
+            break;
         }
         if (SDL_GetModState() & SDL_KMOD_SHIFT) {
             /* Up and down the levels: the wheel down goes up (as it zooms out). */
@@ -1475,6 +1523,10 @@ static void handle_event(App *app, const SDL_Event *event)
         if ((event->motion.state & (SDL_BUTTON_MMASK | SDL_BUTTON_RMASK)) && !app->pan_blocked) {
             camera_pan_pixels(&app->camera, -event->motion.xrel, -event->motion.yrel);
             app_stop_following(app);
+        }
+        if (app->left_button_down && app->debug_held.slot != UINT32_MAX) {
+            drag_held_item(app, event->motion.x, event->motion.y);
+            break;
         }
         if (app->left_button_down && !app->box_selecting) {
             float dx = event->motion.x - app->drag_start_x;

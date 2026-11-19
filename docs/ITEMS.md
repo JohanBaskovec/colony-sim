@@ -136,8 +136,17 @@ playable.
    its ceiling, so the count stays bounded: on a 200 × 200 map, 15 600 items
    at the start (4 800 cobbles, 8 400 flint, 500 branches, 2 000 twigs),
    33 000 after a month, 37 000 after two. Hazelnuts stay a map layer.
-4. **Spots, angles and drawing.** Items drawn one by one at their spot and
-   angle; the far zoom mark if needed; `--bench-render` measured. The debug
-   tool to drag, drop and turn items.
+4. **Spots, angles and drawing** (done). Items are drawn in vector shapes;
+   every type is drawn once into a texture of icons (64 pixels each), and
+   each item is a textured quad at its spot, turned by its angle, its size
+   by its bulk (`item_drawn_size()`), in batches of their own. A tile shows
+   its newest ten items, one when tiles are under 10 pixels wide.
+   `--bench-render` shows no difference (frame and drawing times within a
+   few percent either way, on the virtual display). The debug panel's
+   "Move items by hand" tool (`APP_DEBUG_MOVE_ITEM`): an item pressed on
+   (`items_at_point()`) follows the cursor onto the very spot of any tile
+   someone could stand on (`game_debug_move_item()`), the wheel over an item
+   turns it (`game_debug_turn_item()`); items are named across ticks by
+   `ItemId` (slot and generation).
 5. **The pile window and the bills.** The list of a tile's items, sortable;
    the ingredient quality range of each bill; cooking by rot.

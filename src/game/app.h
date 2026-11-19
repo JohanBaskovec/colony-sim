@@ -93,6 +93,7 @@ typedef enum FollowKind { FOLLOW_NONE, FOLLOW_COLONIST, FOLLOW_ANIMAL } FollowKi
 #define APP_DEBUG_SPAWN_ANIMAL 4 /* App.debug_animal. */
 #define APP_DEBUG_HURT 5         /* A blow on whoever is on the tile. */
 #define APP_DEBUG_FIGHT 6        /* Click an attacker, then its target (App.debug_attacker). */
+#define APP_DEBUG_MOVE_ITEM 7    /* Drag an item anywhere, the wheel turns it (App.debug_held). */
 
 /* Types of the forbid tool (see app_toggle_tool()). */
 #define APP_FORBID 0
@@ -286,6 +287,7 @@ typedef struct App {
     int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
     AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */
     Combatant debug_attacker;      /* For APP_DEBUG_FIGHT: who was clicked first (or none). */
+    ItemId debug_held;             /* For APP_DEBUG_MOVE_ITEM: the item dragged (or none). */
     /* The character editor's Social tab: the settler the selected one acts
      * with (a click on its row; the best liked one when none). */
     EntityId debug_social_partner;

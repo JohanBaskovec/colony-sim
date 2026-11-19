@@ -2072,6 +2072,27 @@ void game_settle_climate(Game *game)
     temperatures_settle_ground(temperatures, temperature_season_mean(tick) + game->weather.spell);
 }
 
+ItemId game_item_at_point(const Game *game, float x, float y, int z)
+{
+    return items_at_point(&game->items, x, y, z);
+}
+
+bool game_debug_move_item(Game *game, ItemId id, float x, float y, int z)
+{
+    int tx = (int)floorf(x), ty = (int)floorf(y);
+    if (!map_is_passable(&game->map, tx, ty, z)) {
+        return false;
+    }
+    int spot_x = (int)floorf((x - (float)tx) * 256.0f);
+    int spot_y = (int)floorf((y - (float)ty) * 256.0f);
+    return items_move(&game->items, id, tx, ty, z, spot_x, spot_y);
+}
+
+bool game_debug_turn_item(Game *game, ItemId id, int steps)
+{
+    return items_turn(&game->items, id, steps);
+}
+
 int game_debug_spawn_items(Game *game, int x, int y, int z, ItemType type, int count)
 {
     if (type == ITEM_NONE || (unsigned)type >= ITEM_TYPE_COUNT || count <= 0 ||

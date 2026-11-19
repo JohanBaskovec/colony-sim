@@ -902,6 +902,51 @@ static void test_wild_litter_crumbles(void)
     items_free(&items);
 }
 
+/* An item is found where it is drawn, and moved and turned by hand. */
+static void test_item_picked_by_point_moved_and_turned(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 8, 8, 2));
+    REQUIRE(items_add(&items, 3, 3, 0, item_stack_pristine(ITEM_WOOD, 1)) == 1);
+    const Item *log = items_first(&items, 3 * 8 + 3);
+    REQUIRE(log != NULL);
+    float cx = 3.0f + ((float)log->spot_x + 0.5f) / 256.0f;
+    float cy = 3.0f + ((float)log->spot_y + 0.5f) / 256.0f;
+    ItemId id = items_at_point(&items, cx, cy, 0);
+    CHECK_EQ_UINT(id.slot, items_id(&items, log).slot);
+    CHECK(items_by_id(&items, id) == log);
+    CHECK_EQ_UINT(items_at_point(&items, cx, cy, 1).slot, UINT32_MAX); /* Another level. */
+    CHECK_EQ_UINT(items_at_point(&items, 6.5f, 6.5f, 0).slot, UINT32_MAX);
+    /* Moved onto a tile holding something else, at the very spot. */
+    REQUIRE(items_add(&items, 5, 4, 0, item_stack_pristine(ITEM_FLINT, 2)) == 2);
+    REQUIRE(items_move(&items, id, 5, 4, 0, 200, 30));
+    CHECK_EQ_INT(items_count_at(&items, 3, 3, 0, ITEM_NONE), 0);
+    CHECK_EQ_INT((int)items.level_stacks[0], 1);
+    log = items_by_id(&items, id);
+    REQUIRE(log != NULL);
+    CHECK_EQ_INT((int)log->tile, 4 * 8 + 5);
+    CHECK_EQ_INT(log->spot_x, 200);
+    CHECK_EQ_INT(log->spot_y, 30);
+    CHECK_EQ_INT(items_count_at(&items, 5, 4, 0, ITEM_FLINT), 2);
+    CHECK_EQ_INT(items.totals[ITEM_WOOD], 1);
+    CHECK_EQ_UINT(items_at_point(&items, 5.0f + 200.5f / 256.0f, 4.0f + 30.5f / 256.0f, 0).slot,
+                  id.slot);
+    /* Turned. */
+    int angle = log->angle;
+    REQUIRE(items_turn(&items, id, 10));
+    CHECK_EQ_INT(items_by_id(&items, id)->angle, (angle + 10) & 255);
+    /* Gone: the id names nothing any more, even once the slot is used again. */
+    ItemStack load = {.type = ITEM_NONE};
+    REQUIRE(items_pick_up(&items, 5, 4, 0, 1, &load) == 1); /* The newest: the log. */
+    CHECK(items_by_id(&items, id) == NULL);                 /* In hand. */
+    items_use_up(&items, &load, 1);
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_WOOD, 1)) == 1);
+    CHECK(items_by_id(&items, id) == NULL);
+    CHECK(!items_move(&items, id, 2, 2, 0, 0, 0));
+    CHECK(!items_turn(&items, id, 1));
+    items_free(&items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -938,5 +983,6 @@ int main(void)
     RUN_TEST(test_wild_items_stay_apart);
     RUN_TEST(test_wild_items_picked_up);
     RUN_TEST(test_wild_litter_crumbles);
+    RUN_TEST(test_item_picked_by_point_moved_and_turned);
     return test_summary();
 }

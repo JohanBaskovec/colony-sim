@@ -184,6 +184,8 @@ static void debug_card(App *app, int mode, Card *card)
         card_add_text(card, CARD_TITLE, tr("hud.tool.grow_tree"));
     } else if (mode == APP_DEBUG_HURT) {
         card_add_text(card, CARD_TITLE, tr("hud.tool.hurt"));
+    } else if (mode == APP_DEBUG_MOVE_ITEM) {
+        card_add_text(card, CARD_TITLE, tr("hud.tool.move_item"));
     } else if (mode == APP_DEBUG_FIGHT) {
         card_add_text(card, CARD_TITLE,
                       tr(combatant_is_none(app->debug_attacker) ? "hud.tool.fight_attacker"

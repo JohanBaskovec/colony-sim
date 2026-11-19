@@ -1037,6 +1037,107 @@ int items_remove(Items *items, int x, int y, int z, int count)
     return items_take(items, x, y, z, count).count;
 }
 
+/* ---- Items one by one ---- */
+
+float item_drawn_size(ItemType type)
+{
+    float bulk = is_item_type(type) ? ITEM_DEFS[type].bulk : 1.0f;
+    float size = 0.4f + 0.1f * log2f(1.0f + bulk);
+    return size < 0.4f ? 0.4f : size > 1.0f ? 1.0f : size;
+}
+
+ItemId items_id(const Items *items, const Item *item)
+{
+    if (item == NULL || item < items->pool || item >= items->pool + items->pool_used) {
+        return ITEM_ID_NONE;
+    }
+    return (ItemId){(uint32_t)(item - items->pool), item->generation};
+}
+
+const Item *items_by_id(const Items *items, ItemId id)
+{
+    if (id.slot >= items->pool_used) {
+        return NULL;
+    }
+    const Item *item = &items->pool[id.slot];
+    return item->type != ITEM_NONE && item->generation == id.generation &&
+                   item->tile != ITEM_TILE_HELD
+               ? item
+               : NULL;
+}
+
+ItemId items_at_point(const Items *items, float x, float y, int z)
+{
+    int tx = (int)floorf(x), ty = (int)floorf(y);
+    ItemId found = ITEM_ID_NONE;
+    float nearest = 0.0f;
+    /* The tile under the point first (its items are drawn over those of
+     * the tiles before it), then its neighbors. */
+    static const int DX[9] = {0, -1, 0, 1, -1, 1, -1, 0, 1};
+    static const int DY[9] = {0, -1, -1, -1, 0, 0, 1, 1, 1};
+    for (int n = 0; n < 9 && found.slot == UINT32_MAX; n++) {
+        int cx = tx + DX[n], cy = ty + DY[n];
+        if (!in_bounds(items, cx, cy, z)) {
+            continue;
+        }
+        for (const Item *item = items_first(items, index_of(items, cx, cy, z)); item != NULL;
+             item = items_next(items, item)) {
+            float ix = (float)cx + ((float)item->spot_x + 0.5f) / 256.0f;
+            float iy = (float)cy + ((float)item->spot_y + 0.5f) / 256.0f;
+            float radius = item_drawn_size((ItemType)item->type) * 0.5f;
+            float d = (ix - x) * (ix - x) + (iy - y) * (iy - y);
+            if (d <= radius * radius && (found.slot == UINT32_MAX || d < nearest)) {
+                found = items_id(items, item);
+                nearest = d;
+            }
+        }
+    }
+    return found;
+}
+
+bool items_move(Items *items, ItemId id, int x, int y, int z, int spot_x, int spot_y)
+{
+    const Item *found = items_by_id(items, id);
+    if (found == NULL || !in_bounds(items, x, y, z)) {
+        return false;
+    }
+    uint32_t slot = id.slot + 1;
+    size_t from = found->tile;
+    uint32_t previous = 0;
+    for (uint32_t at = items->heads[from]; at != slot; at = items->pool[at - 1].next) {
+        previous = at;
+    }
+    Item *item = &items->pool[slot - 1];
+    count_item(items, item, -1);
+    if (previous == 0) {
+        items->heads[from] = item->next;
+    } else {
+        items->pool[previous - 1].next = item->next;
+    }
+    note_change(items, from);
+    size_t to = index_of(items, x, y, z);
+    item->tile = (uint32_t)to;
+    item->spot_x = (uint8_t)clampi(spot_x, 0, 255);
+    item->spot_y = (uint8_t)clampi(spot_y, 0, 255);
+    item->next = items->heads[to];
+    items->heads[to] = slot;
+    count_item(items, item, 1);
+    items->additions++;
+    note_change(items, to);
+    return true;
+}
+
+bool items_turn(Items *items, ItemId id, int steps)
+{
+    if (items_by_id(items, id) == NULL) {
+        return false;
+    }
+    Item *item = &items->pool[id.slot];
+    item->angle = (uint8_t)((int)item->angle + steps);
+    note_change(items, item->tile);
+    return true;
+}
+
 /* ---- Wild items ---- */
 
 int items_add_wild(Items *items, int x, int y, int z, ItemType type, int count)

@@ -37,8 +37,9 @@ typedef struct DebugRows {
     bool toggle_teleport;
     bool plant_tree_active, grow_tree_active; /* ... in the tree modes. */
     bool toggle_plant_tree, toggle_grow_tree;
-    bool hurt_active, toggle_hurt;   /* ... in the blow mode. */
-    bool fight_active, toggle_fight; /* ... in the fight mode. */
+    bool hurt_active, toggle_hurt;           /* ... in the blow mode. */
+    bool move_item_active, toggle_move_item; /* ... in the item dragging mode. */
+    bool fight_active, toggle_fight;         /* ... in the fight mode. */
 } DebugRows;
 
 /* A button on its own row. Returns whether it was clicked. */
@@ -129,6 +130,8 @@ static void debug_rows(UiLayout *layout, void *userdata)
         checkbox_row(layout, tr("debug.grow_tree_tool"), rows->grow_tree_active);
     rows->toggle_hurt |= checkbox_row(layout, tr("debug.hurt_tool"), rows->hurt_active);
     rows->toggle_fight |= checkbox_row(layout, tr("debug.fight_tool"), rows->fight_active);
+    rows->toggle_move_item |=
+        checkbox_row(layout, tr("debug.move_item_tool"), rows->move_item_active);
 }
 
 void debug_panel_draw(App *app)
@@ -141,20 +144,21 @@ void debug_panel_draw(App *app)
     bool god_mode = debug->instant_build && debug->free_crafts && debug->no_tools &&
                     debug->instant_deconstruct && debug->instant_fell_and_mine && !game->fog_on &&
                     app->character_editor;
-    DebugRows rows = {.debug = debug,
-                      .vision_shown = app->show_vision,
-                      .fog_on = game->fog_on,
-                      .character_editor = app->character_editor,
-                      .god_mode = god_mode,
-                      .temperature_offset = game->weather.debug_offset,
-                      .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
-                      .chats = &game->chat_counts,
-                      .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
-                      .plant_tree_active =
-                          app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE),
-                      .grow_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE),
-                      .hurt_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_HURT),
-                      .fight_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_FIGHT)};
+    DebugRows rows = {
+        .debug = debug,
+        .vision_shown = app->show_vision,
+        .fog_on = game->fog_on,
+        .character_editor = app->character_editor,
+        .god_mode = god_mode,
+        .temperature_offset = game->weather.debug_offset,
+        .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
+        .chats = &game->chat_counts,
+        .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
+        .plant_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_PLANT_TREE),
+        .grow_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE),
+        .hurt_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_HURT),
+        .fight_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_FIGHT),
+        .move_item_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM)};
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER, debug_rows,
                      &rows, &open);
@@ -237,6 +241,10 @@ void debug_panel_draw(App *app)
     }
     if (rows.toggle_hurt) {
         app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_HURT);
+    }
+    if (rows.toggle_move_item) {
+        app->debug_held = ITEM_ID_NONE;
+        app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM);
     }
     if (rows.toggle_fight) {
         app->debug_attacker = combatant_none();

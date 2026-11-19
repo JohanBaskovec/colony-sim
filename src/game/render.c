@@ -218,6 +218,16 @@ static float *shade_sums;
 static int *shade_counts;
 static size_t shade_capacity;
 
+/* Item icons: every item type drawn once into a texture (render_item_stack()),
+ * so that items lying about are drawn turned any way, as textured quads in
+ * batches of their own (render_items()). */
+#define ITEM_ICON_PIXELS 64
+#define ITEM_ICON_COLUMNS 8
+#define ITEM_ICON_ROWS ((ITEM_TYPE_COUNT + ITEM_ICON_COLUMNS - 1) / ITEM_ICON_COLUMNS)
+static SDL_Texture *item_icons;
+static SDL_Vertex *icon_vertices;
+static int icon_count; /* Quads waiting to be drawn with item_icons. */
+
 static bool batch_ready(void)
 {
     if (batch_vertices != NULL) {
@@ -341,6 +351,13 @@ void render_shutdown(void)
     batch_vertices = NULL;
     batch_indices = NULL;
     batch_count = 0;
+    if (item_icons != NULL) {
+        SDL_DestroyTexture(item_icons);
+        item_icons = NULL;
+    }
+    SDL_free(icon_vertices);
+    icon_vertices = NULL;
+    icon_count = 0;
 }
 
 static SDL_FRect inset(const SDL_FRect *tile, float fraction)
@@ -1413,15 +1430,16 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
 
 /* Branches, twigs and nuts lying on a tile (shed by the trees): the item's icon
  * small, branches in the upper left corner, twigs in the lower right one and
- * nuts in the lower left one, under the items. */
+ * nuts in the lower left one, under the items. In a running game branches and
+ * twigs are items, drawn as such (Map.litter). */
 static void render_litter(SDL_Renderer *renderer, const Map *map, int x, int y, int z,
                           const SDL_FRect *tile)
 {
-    if (map_litter(map, x, y, z, ITEM_BRANCHES) > 0) {
+    if (map->litter == NULL && map_litter(map, x, y, z, ITEM_BRANCHES) > 0) {
         SDL_FRect corner = {tile->x, tile->y, tile->w * 0.6f, tile->h * 0.6f};
         render_item_stack(renderer, &corner, ITEM_BRANCHES);
     }
-    if (map_litter(map, x, y, z, ITEM_TWIGS) > 0) {
+    if (map->litter == NULL && map_litter(map, x, y, z, ITEM_TWIGS) > 0) {
         SDL_FRect corner = {tile->x + tile->w * 0.4f, tile->y + tile->h * 0.4f, tile->w * 0.6f,
                             tile->h * 0.6f};
         render_item_stack(renderer, &corner, ITEM_TWIGS);
@@ -1432,11 +1450,103 @@ static void render_litter(SDL_Renderer *renderer, const Map *map, int x, int y, 
     }
 }
 
+/* Draws every item type into item_icons, once; false when the renderer has
+ * no texture to draw into. */
+static bool item_icons_ready(SDL_Renderer *renderer)
+{
+    if (item_icons != NULL) {
+        return true;
+    }
+    if (!batch_ready()) {
+        return false;
+    }
+    if (icon_vertices == NULL) {
+        icon_vertices = SDL_malloc(sizeof(*icon_vertices) * 4 * BATCH_MAX_QUADS);
+        if (icon_vertices == NULL) {
+            return false;
+        }
+    }
+    item_icons =
+        SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+                          ITEM_ICON_COLUMNS * ITEM_ICON_PIXELS, ITEM_ICON_ROWS * ITEM_ICON_PIXELS);
+    if (item_icons == NULL) {
+        return false;
+    }
+    SDL_SetTextureBlendMode(item_icons, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureScaleMode(item_icons, SDL_SCALEMODE_LINEAR);
+    batch_flush(renderer);
+    SDL_Texture *target = SDL_GetRenderTarget(renderer);
+    if (!SDL_SetRenderTarget(renderer, item_icons)) {
+        SDL_DestroyTexture(item_icons);
+        item_icons = NULL;
+        return false;
+    }
+    SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        SDL_FRect cell = {(float)(type % ITEM_ICON_COLUMNS * ITEM_ICON_PIXELS),
+                          (float)(type / ITEM_ICON_COLUMNS * ITEM_ICON_PIXELS),
+                          (float)ITEM_ICON_PIXELS, (float)ITEM_ICON_PIXELS};
+        render_item_stack(renderer, &cell, (ItemType)type);
+    }
+    batch_flush(renderer);
+    SDL_SetRenderTarget(renderer, target);
+    return true;
+}
+
+static void icon_flush(SDL_Renderer *renderer)
+{
+    if (icon_count > 0) {
+        SDL_RenderGeometry(renderer, item_icons, icon_vertices, icon_count * 4, batch_indices,
+                           icon_count * 6);
+        icon_count = 0;
+    }
+}
+
+/* An item's icon centered on (cx, cy), `size` pixels wide, turned by `turns`
+ * of a full turn (clockwise). */
+static void icon_quad(SDL_Renderer *renderer, ItemType type, float cx, float cy, float size,
+                      float turns)
+{
+    if (icon_count == BATCH_MAX_QUADS) {
+        icon_flush(renderer);
+    }
+    const float width = (float)(ITEM_ICON_COLUMNS * ITEM_ICON_PIXELS);
+    const float height = (float)(ITEM_ICON_ROWS * ITEM_ICON_PIXELS);
+    float u0 = ((float)(type % ITEM_ICON_COLUMNS * ITEM_ICON_PIXELS) + 0.5f) / width;
+    float v0 = ((float)(type / ITEM_ICON_COLUMNS * ITEM_ICON_PIXELS) + 0.5f) / height;
+    float u1 = u0 + ((float)ITEM_ICON_PIXELS - 1.0f) / width;
+    float v1 = v0 + ((float)ITEM_ICON_PIXELS - 1.0f) / height;
+    float angle = turns * 2.0f * SDL_PI_F;
+    float c = cosf(angle) * size * 0.5f, s = sinf(angle) * size * 0.5f;
+    /* Corners clockwise from the top left, each (-1, -1)... turned. */
+    static const float DX[4] = {-1.0f, 1.0f, 1.0f, -1.0f};
+    static const float DY[4] = {-1.0f, -1.0f, 1.0f, 1.0f};
+    const float U[4] = {u0, u1, u1, u0};
+    const float V[4] = {v0, v0, v1, v1};
+    SDL_Vertex *vertex = &icon_vertices[icon_count * 4];
+    for (int i = 0; i < 4; i++) {
+        vertex[i] = (SDL_Vertex){{cx + DX[i] * c - DY[i] * s, cy + DX[i] * s + DY[i] * c},
+                                 {1.0f, 1.0f, 1.0f, 1.0f},
+                                 {U[i], V[i]}};
+    }
+    icon_count++;
+}
+
+/* Items drawn on a tile at most (the newest), and when tiles are this small
+ * (pixels), only one. */
+#define ITEMS_DRAWN_PER_TILE 10
+#define ITEMS_FAR_TILE_PIXELS 10.0f
+
 void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
-    const Items *items = game_view_items(game);
-    TileRect visible = camera_visible_tiles(camera, items->width, items->height);
+    const Items *view = game_view_items(game);
+    TileRect visible = camera_visible_tiles(camera, view->width, view->height);
+    bool icons = item_icons_ready(renderer);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
             if (!tile_seen(x, y, z)) {
@@ -1444,13 +1554,36 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
             }
             SDL_FRect tile = tile_rect(camera, x, y);
             render_litter(renderer, game_view_map(game), x, y, z, &tile);
-            ItemStack stack = items_get(game_items_at(game, x, y, z), x, y, z);
-            if (stack.type != ITEM_NONE) {
-                render_item_stack(renderer, &tile, (ItemType)stack.type);
+            const Items *items = game_items_at(game, x, y, z);
+            if (!icons) { /* No texture to draw into: the stack's picture. */
+                ItemStack stack = items_get(items, x, y, z);
+                if (stack.type != ITEM_NONE) {
+                    render_item_stack(renderer, &tile, (ItemType)stack.type);
+                }
+                continue;
+            }
+            /* Each item at its spot, turned its own way, the newest on top. */
+            const Item *drawn[ITEMS_DRAWN_PER_TILE];
+            int most = tile.w < ITEMS_FAR_TILE_PIXELS ? 1 : ITEMS_DRAWN_PER_TILE;
+            int count = 0;
+            for (const Item *item = items_first(items, map_index(&game->map, x, y, z));
+                 item != NULL && count < most; item = items_next(items, item)) {
+                drawn[count++] = item;
+            }
+            for (int i = count - 1; i >= 0; i--) {
+                const Item *item = drawn[i];
+                icon_quad(renderer, (ItemType)item->type,
+                          tile.x + tile.w * ((float)item->spot_x + 0.5f) / 256.0f,
+                          tile.y + tile.h * ((float)item->spot_y + 0.5f) / 256.0f,
+                          tile.w * item_drawn_size((ItemType)item->type),
+                          (float)item->angle / 256.0f);
             }
         }
+        batch_flush(renderer); /* Nuts first, under the items. */
+        icon_flush(renderer);
     }
     batch_flush(renderer);
+    icon_flush(renderer);
 }
 
 void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera)

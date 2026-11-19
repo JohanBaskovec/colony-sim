@@ -108,7 +108,7 @@ simulation:
 |----------------|-------------------------------------------------------------------------|
 | `main`         | Parses the command line, runs the app                                   |
 | `app`          | SDL init/shutdown, main loop, input → camera/clock, frame orchestration |
-| `render`       | Draws the map (ground and wall textures, colored tiles for the other terrains), zones, items, plants and colonists (sprites, depth sorted), blood on the ground, blows (lunges, flashes, marks), daylight overlay, highlights |
+| `render`       | Draws the map (ground and wall textures, colored tiles for the other terrains), zones, items (each at its spot, turned its own way: every item type drawn once into a texture of icons, then textured quads in batches; the newest ten of a tile, one when zoomed far out), plants and colonists (sprites, depth sorted), blood on the ground, blows (lunges, flashes, marks), daylight overlay, highlights |
 | `sprites`      | Loads `assets/sprites/*.png` into a texture atlas with halved copies, batches sprite quads (additive for a flash) |
 | `strike_marks` | Draws the marks of blows as shapes (claw scratches, jaws, a slash, a burst); `tools/preview_attacks.py` draws the same into a GIF |
 | `hud`          | Builds and draws the HUD panels and the windows in stacking order; all text goes through `tr()` |
