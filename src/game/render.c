@@ -82,6 +82,8 @@ static float below_saved_scale_x = 1.0f, below_saved_scale_y = 1.0f;
 
 static const SDL_Color TREE_COLOR = {34, 88, 40, 255};
 static const SDL_FColor WHITE = {1.0f, 1.0f, 1.0f, 1.0f};
+/* What wet twigs are drawn with: the dry twig's sprite, darker. */
+static const SDL_FColor WET_TWIG_TINT = {0.68f, 0.68f, 0.7f, 1.0f};
 
 /* Tints of the (light gray) hair and beard sprites. */
 static const SDL_Color HAIR_COLORS[HAIR_COLOR_COUNT] = {
@@ -1582,13 +1584,15 @@ static void icon_quad(SDL_Renderer *renderer, ItemType type, float cx, float cy,
 #define ITEMS_DRAWN_PER_TILE 10
 #define ITEMS_FAR_TILE_PIXELS 10.0f
 
-void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+void render_items(SDL_Renderer *renderer, Sprites *sprites, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
     const Items *view = game_view_items(game);
     TileRect visible = camera_visible_tiles(camera, view->width, view->height);
     bool icons = item_icons_ready(renderer);
+    sprites_begin(sprites, camera->zoom);
     for (int y = visible.y0; y < visible.y1; y++) {
+        bool in_sprites = false; /* The batch the row's items are going into. */
         for (int x = visible.x0; x < visible.x1; x++) {
             if (!tile_seen(x, y, z)) {
                 continue;
@@ -1613,15 +1617,36 @@ void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera
             }
             for (int i = count - 1; i >= 0; i--) {
                 const Item *item = drawn[i];
-                icon_quad(renderer, (ItemType)item->type,
-                          tile.x + tile.w * ((float)item->spot_x + 0.5f) / 256.0f,
-                          tile.y + tile.h * ((float)item->spot_y + 0.5f) / 256.0f,
+                float cx = tile.x + tile.w * ((float)item->spot_x + 0.5f) / 256.0f;
+                float cy = tile.y + tile.h * ((float)item->spot_y + 0.5f) / 256.0f;
+                /* Items with a sprite of their own: its shape follows the spot. */
+                SpriteId sprite =
+                    sprite_item((ItemType)item->type, (unsigned)item->spot_x * 7u + item->spot_y);
+                if (sprite >= 0) {
+                    if (!in_sprites) { /* Whatever came before is drawn first. */
+                        batch_flush(renderer);
+                        icon_flush(renderer);
+                        in_sprites = true;
+                    }
+                    SDL_FColor tint = item->type == ITEM_WET_TWIGS ? WET_TWIG_TINT : WHITE;
+                    sprites_draw_rotated(sprites, sprite, cx, cy,
+                                         (float)item->angle * 360.0f / 256.0f, tint, false);
+                    continue;
+                }
+                if (in_sprites) {
+                    sprites_flush(sprites);
+                    in_sprites = false;
+                }
+                icon_quad(renderer, (ItemType)item->type, cx, cy,
                           tile.w * item_drawn_size((ItemType)item->type),
                           (float)item->angle / 256.0f);
             }
         }
         batch_flush(renderer); /* Nuts first, under the items. */
         icon_flush(renderer);
+        if (in_sprites) {
+            sprites_flush(sprites);
+        }
     }
     batch_flush(renderer);
     icon_flush(renderer);

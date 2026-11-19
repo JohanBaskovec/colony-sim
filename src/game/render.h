@@ -98,7 +98,7 @@ void render_fog(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 void render_vision(SDL_Renderer *renderer, const Game *game, const Camera *camera, int slot);
 
 /* Items lying on the ground (placeholder shapes per item type). */
-void render_items(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+void render_items(SDL_Renderer *renderer, Sprites *sprites, const Game *game, const Camera *camera);
 
 /* Marks designated tiles (chop, mine...) and shows work progress. */
 void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera);

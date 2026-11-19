@@ -2354,7 +2354,11 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   shows them 1:1). `tools/generate_sprites.py` draws them procedurally
   (Pillow, 4× supersampling) into `assets/sprites/`; run it again after
   changing it and commit the PNG files. Some sprites and ground textures are
-  drawn instead by a script of their own in `tools/assets/sprites/` (SVG
+  drawn instead by a script of their own in `tools/assets/sprites/` (listed in
+  `SCRIPTED` of the generator, which does not write their files: bracken, wild
+  carrot, cattail with its five stages, nettle, and the common reed, which
+  replaced `reed_N.png`; the items on the ground, branches in four shapes,
+  twig, pebble and flint, have no entry in the generator at all) (SVG
   rasterised by librsvg, or numpy and Pillow), tuned in
   `tools/sprite_workbench.py`: a window that runs a script with its top-level
   constants (its knobs) changed, catching the pictures it would write, shows

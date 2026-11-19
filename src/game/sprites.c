@@ -58,7 +58,7 @@ static const PlantSprites PLANT_SPRITES[] = {
     {PLANT_NETTLE, "nettle", 3, PLANT_GROWTH_STAGES, false},
     {PLANT_PLANTAIN, "plantain", 3, PLANT_GROWTH_STAGES, false},
     {PLANT_WILD_CARROT, "wild_carrot", 3, PLANT_GROWTH_STAGES, false},
-    {PLANT_CATTAIL, "cattail", 3, PLANT_GROWTH_STAGES, false},
+    {PLANT_CATTAIL, "cattail", 5, PLANT_GROWTH_STAGES, false},
     {PLANT_MUSHROOMS, "mushrooms", 1, PLANT_GROWTH_STAGES, false},
     {PLANT_MOSS, "moss", 3, PLANT_GROWTH_STAGES, false},
     {PLANT_WOOD_SORREL, "wood_sorrel", 3, PLANT_GROWTH_STAGES, false},
@@ -67,16 +67,28 @@ static const PlantSprites PLANT_SPRITES[] = {
     {PLANT_BILBERRY, "bilberry", 3, PLANT_GROWTH_STAGES, true},
     {PLANT_DOG_ROSE, "dog_rose", 3, PLANT_GROWTH_STAGES, true},
     {PLANT_HEATHER, "heather", 3, PLANT_GROWTH_STAGES, false},
-    {PLANT_REED, "reed", 3, PLANT_GROWTH_STAGES, false},
+    {PLANT_REED, "common_reed", 3, PLANT_GROWTH_STAGES, false},
 };
 /* Sum of the sizes (twice for plants with a food variant), checked when the
  * sprites are loaded. */
-#define PLANT_SPRITE_COUNT 63
+#define PLANT_SPRITE_COUNT 65
 
 /* Tools with a sprite, and their file names. */
 static const ItemType TOOL_TYPES[] = {ITEM_COBBLE, ITEM_CHOPPER, ITEM_FLAKE, ITEM_HAND_AXE};
 static const char *const TOOL_NAMES[] = {"cobble", "chopper", "flake", "hand_axe"};
 #define TOOL_SPRITE_COUNT ((int)SDL_arraysize(TOOL_TYPES))
+
+/* Items lying on the ground that have a sprite of their own (the others are
+ * drawn from item icons, see render_items()): branches in several shapes
+ * (a branch picks one by its spot), one twig sprite for dry and wet twigs, a
+ * pebble and a flint nodule. */
+#define BRANCH_VARIANTS 4
+static const char *const ITEM_SPRITE_NAMES[] = {"branch_0", "branch_1", "branch_2", "branch_3",
+                                                "twig",     "pebble",   "flint"};
+#define ITEM_SPRITE_COUNT ((int)SDL_arraysize(ITEM_SPRITE_NAMES))
+#define ITEM_SPRITE_TWIG BRANCH_VARIANTS
+#define ITEM_SPRITE_PEBBLE (BRANCH_VARIANTS + 1)
+#define ITEM_SPRITE_FLINT (BRANCH_VARIANTS + 2)
 
 /* Animals: a sprite per species (AnimalDef.id in the file name), sex and pose. */
 static const char *const ANIMAL_SEX_NAMES[ANIMAL_SEX_COUNT] = {
@@ -132,7 +144,8 @@ enum {
     TOOL_FIRST = FIST_FIRST + APPEARANCE_SKIN_COUNT,
     EYES_FIRST = TOOL_FIRST + 4,
     SLEEP_Z_FIRST = EYES_FIRST + APPEARANCE_SKIN_COUNT,
-    ANIMAL_FIRST = SLEEP_Z_FIRST + 1,
+    ITEM_FIRST = SLEEP_Z_FIRST + 1,
+    ANIMAL_FIRST = ITEM_FIRST + ITEM_SPRITE_COUNT,
     GROUND_FIRST = ANIMAL_FIRST + ANIMAL_SPRITE_COUNT,
     WALL_FIRST = GROUND_FIRST + GROUND_SPRITE_COUNT,
     GRASS_FIRST = WALL_FIRST + WALL_SPRITE_COUNT,
@@ -239,6 +252,18 @@ SpriteId sprite_sleep_z(void)
     return SLEEP_Z_FIRST;
 }
 
+SpriteId sprite_item(ItemType type, unsigned variant)
+{
+    switch (type) {
+    case ITEM_BRANCHES: return ITEM_FIRST + (int)(variant % BRANCH_VARIANTS);
+    case ITEM_TWIGS:
+    case ITEM_WET_TWIGS: return ITEM_FIRST + ITEM_SPRITE_TWIG;
+    case ITEM_COBBLE: return ITEM_FIRST + ITEM_SPRITE_PEBBLE;
+    case ITEM_FLINT: return ITEM_FIRST + ITEM_SPRITE_FLINT;
+    default: return -1;
+    }
+}
+
 SpriteId sprite_animal(AnimalSpecies species, AnimalSex sex, AnimalPose pose)
 {
     return ANIMAL_FIRST +
@@ -328,8 +353,10 @@ static void sprite_file_name(SpriteId id, char *out, size_t size)
         SDL_snprintf(out, size, "tool_%s", TOOL_NAMES[id - TOOL_FIRST]);
     } else if (id < SLEEP_Z_FIRST) {
         SDL_snprintf(out, size, "eyes_closed_%d", id - EYES_FIRST);
-    } else if (id < ANIMAL_FIRST) {
+    } else if (id < ITEM_FIRST) {
         SDL_snprintf(out, size, "sleep_z");
+    } else if (id < ANIMAL_FIRST) {
+        SDL_snprintf(out, size, "%s", ITEM_SPRITE_NAMES[id - ITEM_FIRST]);
     } else if (id < GROUND_FIRST) {
         int index = id - ANIMAL_FIRST;
         SDL_snprintf(

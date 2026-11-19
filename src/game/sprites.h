@@ -51,6 +51,11 @@ SpriteId sprite_fist(int skin);
 SpriteId sprite_closed_eyes(int skin);
 SpriteId sprite_sleep_z(void);
 SpriteId sprite_tool(ItemType type);
+/* An item lying on the ground, seen from above (-1 for items drawn from icons
+ * instead). `variant` (any number, say from its spot) picks among the shapes
+ * a type has: the same item always gets the same one. Drawn centered, with
+ * sprites_draw_rotated(). */
+SpriteId sprite_item(ItemType type, unsigned variant);
 /* An animal seen from the side, facing right (mirror it when it faces left):
  * standing, eating (head down) or asleep (lying); and standing seen from the
  * front and from behind, for one that walks down or up the screen. */

@@ -1907,7 +1907,7 @@ static void render_frame(App *app)
             render_stockpiles(app->renderer, &app->game, &below, STOCKPILE_NONE);
             render_structures(app->renderer, &app->game, &below);
             render_workstations(app->renderer, &app->game, &below, WORKSTATION_NONE);
-            render_items(app->renderer, &app->game, &below);
+            render_items(app->renderer, app->sprites, &app->game, &below);
             render_world_sprites(app->renderer, app->sprites, &app->game, &below, NULL, 0,
                                  app->selected_animal);
             int next = z + 1;
@@ -1926,7 +1926,7 @@ static void render_frame(App *app)
     render_stockpiles(app->renderer, &app->game, &app->camera, app->selected_stockpile);
     render_structures(app->renderer, &app->game, &app->camera);
     render_workstations(app->renderer, &app->game, &app->camera, app->selected_station);
-    render_items(app->renderer, &app->game, &app->camera);
+    render_items(app->renderer, app->sprites, &app->game, &app->camera);
     render_world_sprites(app->renderer, app->sprites, &app->game, &app->camera, app->selected,
                          app->selected_count, app->selected_animal);
     if (app->game.fog_on) {
