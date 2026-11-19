@@ -844,6 +844,11 @@ float map_bare_fraction(const Map *map);
 #define MAP_LIGHT_FOLIAGE_MEDIUM 0.6f
 #define MAP_LIGHT_FOLIAGE_SPARSE 0.8f
 #define MAP_LIGHT_ROOF 0.05f
+/* What one layer of a terrain lets through, crossed from top to bottom, with
+ * the crowns `bare` (0 in leaf .. 1): MAP_LIGHT_FOLIAGE_* towards
+ * MAP_LIGHT_BARE_* for foliage, 1 for any other terrain (whether a floor
+ * stops the light is not a question of share). */
+float map_foliage_light(Terrain terrain, float bare);
 
 /* Whether something covers the tile (map_cover_level() is not -1). */
 bool map_is_roofed(const Map *map, int x, int y, int z);

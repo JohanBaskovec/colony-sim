@@ -17,10 +17,22 @@
  * and night included); the day lengths still come from game_clock.h until
  * they are worked out from the latitude (docs/SHADOWS.md §6, step 7).
  *
+ * The sun's rays (§3.1): how much of the direct sun reaches a point of the
+ * map's volume is what is left of a straight line from it towards the sun,
+ * walked cell by cell through the grid as the lines of sight of
+ * core/vision.h. Only the blocks of the map stop it: rock (trunks included),
+ * walls and doors fill their cell; a floor (the ground of a level, a built
+ * roof) is a plane at the bottom of its cell; foliage fills its cell and lets
+ * through its share (map_foliage_light()) for a ray that crosses one level
+ * straight down, more or less by the length of the ray in it. Settlers,
+ * animals, items, plants and furniture are not blocks: they cast nothing.
+ *
  * Pure functions of their arguments: nothing here is part of the game hash.
  */
 #ifndef COLONY_CORE_SUN_H
 #define COLONY_CORE_SUN_H
+
+#include "core/map.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -48,6 +60,28 @@ SunPosition sun_position(float latitude, int day_of_year, float hour);
 
 /* The sun at a tick of the game clock, seen from a latitude. */
 SunPosition sun_at_tick(uint64_t tick, float latitude);
+
+/* How far a ray towards the sun is followed (tiles, along the ground): past
+ * it, nothing more is in the way. A ray also stops when it leaves the map,
+ * through its top or its sides. */
+#define SUN_SHADOW_REACH 40
+/* Under this elevation (degrees) the cast shadows fade out with the direct
+ * light: at dawn and dusk the sky alone lights the world (applied by who
+ * puts the light together, §2.3). */
+#define SUN_LOW_ELEVATION 8.0f
+/* How far over the surface it lights a ray starts (metres). */
+#define SUN_RAY_LIFT 0.01f
+
+/* How much of the direct sun reaches the point (x, y, height) of the map's
+ * volume, 0 .. 1: x and y in tiles (the tile (x, y) spans x .. x + 1),
+ * `height` in metres over the bottom of level 0 (a level is 2 m high). 0
+ * when the sun is down, inside a block or out of the map's sides; 1 above
+ * the map. The crowns are as bare as the map says (map_bare_fraction()). */
+float sun_lit(const Map *map, SunPosition sun, float x, float y, float height);
+
+/* sun_lit() of a point SUN_RAY_LIFT over the floor of level `z`: the ground
+ * of a tile, or the top of a block of level z - 1 (a wall, a rock). */
+float sun_lit_floor(const Map *map, SunPosition sun, float x, float y, int z);
 
 /* Whether the sun is over the horizon. */
 static inline bool sun_is_up(SunPosition sun)

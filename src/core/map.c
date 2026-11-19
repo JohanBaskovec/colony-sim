@@ -1762,6 +1762,18 @@ int map_cover_level(const Map *map, int x, int y, int z)
     return -1;
 }
 
+float map_foliage_light(Terrain terrain, float bare)
+{
+    switch (terrain) {
+    case TERRAIN_FOLIAGE: return lerpf(MAP_LIGHT_FOLIAGE_DENSE, MAP_LIGHT_BARE_DENSE, bare);
+    case TERRAIN_FOLIAGE_MEDIUM:
+        return lerpf(MAP_LIGHT_FOLIAGE_MEDIUM, MAP_LIGHT_BARE_MEDIUM, bare);
+    case TERRAIN_FOLIAGE_SPARSE:
+        return lerpf(MAP_LIGHT_FOLIAGE_SPARSE, MAP_LIGHT_BARE_SPARSE, bare);
+    default: return 1.0f;
+    }
+}
+
 /* map_light_cover() with the crowns `bare` (0 in leaf .. 1). */
 static float light_cover(const Map *map, int x, int y, int z, float bare)
 {
@@ -1777,17 +1789,9 @@ static float light_cover(const Map *map, int x, int y, int z, float bare)
         if (map->rock[index] != ROCK_NONE) {
             return 0.0f;
         }
-        switch ((Terrain)map->terrain[index]) {
-        case TERRAIN_FOLIAGE:
-            light *= lerpf(MAP_LIGHT_FOLIAGE_DENSE, MAP_LIGHT_BARE_DENSE, bare);
+        if (terrain_is_foliage(map->terrain[index])) {
+            light *= map_foliage_light((Terrain)map->terrain[index], bare);
             continue;
-        case TERRAIN_FOLIAGE_MEDIUM:
-            light *= lerpf(MAP_LIGHT_FOLIAGE_MEDIUM, MAP_LIGHT_BARE_MEDIUM, bare);
-            continue;
-        case TERRAIN_FOLIAGE_SPARSE:
-            light *= lerpf(MAP_LIGHT_FOLIAGE_SPARSE, MAP_LIGHT_BARE_SPARSE, bare);
-            continue;
-        default: break;
         }
         if (map_roof(map, x, y, above) != STRUCTURE_NONE) {
             light *= MAP_LIGHT_ROOF;

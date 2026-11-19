@@ -10,8 +10,8 @@ This document is the design of a sun that stands somewhere in the sky and of
 the shadows the solid blocks of the world cast, first on screen, then in the
 simulation (plants, soil, temperature).
 
-Status: step 1 is implemented (`core/sun.h`: the sun's direction); the
-rest is design. Values marked *(tuning)* are first guesses.
+Status: steps 1 and 2 are implemented (`core/sun.h`: the sun's direction
+and its rays); the rest is design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -143,7 +143,13 @@ through the volume). Each tile a ray crosses takes its share:
 | Open space, low plants, items, furniture, beings   | everything             |
 
 The shares multiply along the ray, as the layers of a crown do today; the
-ray stops once nothing is left.
+ray stops once nothing is left. Rock, walls and doors fill their cell; a
+floor (the ground of a level, a built roof) is a plane at the bottom of its
+cell, which a ray going up crosses when it enters the cell; foliage fills
+its cell, and its share is for a ray crossing one level straight down: a
+ray that goes a length `L` (metres) through it keeps `share^(L / 2)`, so the
+sun overhead gives what `map_light_cover()` gives, and a low sun through a
+crown three tiles wide is shaded more than through one.
 
 What a block lets through is a property of the block: foliage is the only
 one that lets some light through today. A thatched roof lets none through: a
@@ -299,6 +305,11 @@ The texture is kept per piece of the world (`SHADOW_CHUNK` tiles a side
 
 ### 4.2 Cost
 
+- One ray costs about 250 ns (measured on step 2, a generated world of
+  200 × 200 tiles, optimized build, 16 points a tile: 180 ns at a summer
+  noon, 290 ns with a low sun, which crosses more cells before it leaves
+  the map or its reach). The whole map at 16 points a tile is then about
+  160 ms.
 - Rays: a view of 30 × 20 tiles at 8 points a side is about 40 000 points;
   each takes three rays per half hour of game time (21 seconds at ×1), a few
   more for those an edge crosses. Spread over the frames, the ones in view
@@ -401,11 +412,13 @@ Each step is tested and leaves the game playable.
    towards the sun along the map's axes. Tests: the noon elevations of
    §2.2, south at noon, east in the morning, sunrise and sunset where
    `game_sunrise()` puts them, the south and the polar circles.
-2. **Rays to the sun** (core): `lit` at a point of the volume, through
-   rock, walls, roofs and foliage. Tests: the length of a wall's shadow at
-   noon by season, a cliff shading the level below, the sun under the edge
-   of a roof, nothing through thatch, a crown beside its tree, nothing cast
-   by an item or a settler.
+2. **Rays to the sun** (core, `sun_lit()` in `core/sun.h`, done): `lit` at
+   a point of the volume, through rock, walls, roofs and foliage. Tests: the
+   length of a wall's shadow at noon by season, a cliff shading the level
+   below, the sun under the edge of a roof, nothing through thatch, a crown
+   beside its tree, nothing cast by furniture or plants (items and beings
+   are not in the map's grid), a comparison with a slow walk along the ray
+   on a cluttered scene.
 3. **Shadows on screen**: the fine texture, shadows that glide (§4.1), the
    sky's share, the low sun, overcast days, the pieces and their budget; the
    light view (key G) shows the new light. The light of the sky is still
