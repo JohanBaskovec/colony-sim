@@ -87,6 +87,8 @@ void app_toggle_tool(App *app, AppTool tool, int type)
             app->debug_mode = type;
         } else if (tool == APP_TOOL_FORBID) {
             app->forbid_allows = type == APP_ALLOW;
+        } else if (tool == APP_TOOL_MOVE_ITEM) {
+            app->move_item_picking = false; /* What to carry is known: where to is asked. */
         }
     }
     app->left_button_down = false;
@@ -1475,6 +1477,14 @@ static void tool_rect(const App *app, float screen_x, float screen_y, int *x0, i
     screen_to_tile(app, screen_x, screen_y, x1, y1);
 }
 
+/* Whether the tool is used by dragging out an area of tiles (the others act
+ * where the button is released). */
+static bool tool_drags_area(AppTool tool)
+{
+    return tool == APP_TOOL_DESIGNATE || tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER ||
+           tool == APP_TOOL_FORBID;
+}
+
 /* Whether a zone tool drag removes tiles: in the removal or shrinking mode,
  * or with Shift. */
 static bool zone_tool_removes(const App *app)
@@ -1586,6 +1596,58 @@ static void apply_gather_tool(App *app, float screen_x, float screen_y)
 
 static void drag_held_item(App *app, float screen_x, float screen_y);
 
+/* A click with the carry tool: while picking, the item under the cursor (the
+ * topmost) or else the pile lying on the tile is what will be carried; then
+ * the tile clicked is where. Once an order is given the tool stays on and
+ * goes back to picking, until the player turns it off. */
+static void apply_move_item_tool(App *app, float screen_x, float screen_y)
+{
+    float world_x, world_y;
+    camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
+    int x = (int)floorf(world_x), y = (int)floorf(world_y);
+    /* On the ground seen there, as the other tools do (the level shown may be open air). */
+    int z = game_build_level(&app->game, x, y, app->camera.level, false);
+    if (app->move_item_picking) {
+        ItemPick picks[CLICK_ITEMS_MAX];
+        if (click_items(app, world_x, world_y, x, y, picks) > 0) {
+            ItemId id = game_pick_real_item(&app->game, &picks[0]);
+            if (id.slot != UINT32_MAX) {
+                select_item(app, picks[0]);
+                app->move_item_id = id;
+                app->move_item_source = (TilePos){picks[0].x, picks[0].y, picks[0].z};
+                app->move_item_box = false;
+                app->move_item_picking = false;
+            }
+        } else if (app_thing_at(app, THING_ITEMS, x, y, z)) {
+            select_thing(app, THING_ITEMS, x, y, z);
+            app->move_item_id = ITEM_ID_NONE;
+            app->move_item_source = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
+            app->move_item_box = false;
+            app->move_item_picking = false;
+        }
+        return;
+    }
+    TilePos from = app->move_item_source;
+    bool ordered;
+    if (app->move_item_box) { /* Each item of the box, as far as the orders and room go. */
+        ordered = false;
+        for (int i = 0; i < app->selected_box_item_count; i++) {
+            ItemPick pick = app->selected_box_items[i];
+            ItemId id = game_pick_real_item(&app->game, &pick);
+            ordered |= game_order_single_item_move(&app->game, id, x, y, z);
+        }
+    } else if (app->move_item_id.slot != UINT32_MAX) {
+        ordered = game_order_single_item_move(&app->game, app->move_item_id, x, y, z);
+    } else {
+        ordered = game_order_item_move(&app->game, from.x, from.y, from.z, x, y, z);
+    }
+    if (ordered) { /* Done: on to the next one. */
+        app->move_item_picking = true;
+        app->move_item_box = false;
+        app->move_item_id = ITEM_ID_NONE;
+    } /* Else the tool stays for another try (the card says what to do). */
+}
+
 static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
 {
     if (button->button != SDL_BUTTON_LEFT) {
@@ -1677,25 +1739,7 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
             app->tool = APP_TOOL_NONE; /* Nobody left to send. */
         }
     } else if (app->tool == APP_TOOL_MOVE_ITEM) {
-        int x, y;
-        screen_to_tile(app, button->x, button->y, &x, &y);
-        TilePos from = app->move_item_source;
-        bool ordered;
-        if (app->move_item_box) { /* Each item of the box, as far as the orders and room go. */
-            ordered = false;
-            for (int i = 0; i < app->selected_box_item_count; i++) {
-                ItemPick pick = app->selected_box_items[i];
-                ItemId id = game_pick_real_item(&app->game, &pick);
-                ordered |= game_order_single_item_move(&app->game, id, x, y, z);
-            }
-        } else if (app->move_item_id.slot != UINT32_MAX) {
-            ordered = game_order_single_item_move(&app->game, app->move_item_id, x, y, z);
-        } else {
-            ordered = game_order_item_move(&app->game, from.x, from.y, from.z, x, y, z);
-        }
-        if (ordered) {
-            app->tool = APP_TOOL_NONE; /* Done: the items are on their way. */
-        } /* Else the tool stays for another try (the card says what to do). */
+        apply_move_item_tool(app, button->x, button->y);
     } else if (app->tool == APP_TOOL_DEBUG) {
         apply_debug_tool(app, button->x, button->y);
     } else if (app->tool == APP_TOOL_STOCKPILE) {
@@ -1799,7 +1843,8 @@ static void handle_event(App *app, const SDL_Event *event)
             drag_held_item(app, event->motion.x, event->motion.y);
             break;
         }
-        if (app->left_button_down && !app->box_selecting) {
+        /* Only with no tool: a tool uses where the button is released. */
+        if (app->left_button_down && !app->box_selecting && app->tool == APP_TOOL_NONE) {
             float dx = event->motion.x - app->drag_start_x;
             float dy = event->motion.y - app->drag_start_y;
             app->box_selecting = dx * dx + dy * dy > APP_DRAG_THRESHOLD * APP_DRAG_THRESHOLD;
@@ -1974,7 +2019,7 @@ static void render_frame(App *app)
                                      app->structure_direction, app->hover_x, app->hover_y,
                                      app->hover_x, app->hover_y);
         }
-    } else if (app->tool != APP_TOOL_NONE && app->left_button_down) {
+    } else if (tool_drags_area(app->tool) && app->left_button_down) {
         float mouse_x, mouse_y;
         SDL_GetMouseState(&mouse_x, &mouse_y);
         int x0, y0, x1, y1;

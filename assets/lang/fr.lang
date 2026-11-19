@@ -289,6 +289,7 @@ tile_panel.move_items.description = Les colons qui transportent portent ces obje
 hud.tool.move_items_help = Cliquez la case où les objets doivent être transportés · Échap : retour
 tile_panel.move_item.description = Les colons qui transportent portent cet objet sur la case cliquée, où qu’elle soit, avant tout autre transport. Il est interdit en attendant, et une fois posé, pour que personne ne le remette en stock : autorisez-le quand vous voulez le ranger
 hud.tool.move_item_help = Cliquez la case où l’objet doit être transporté · Échap : retour
+hud.tool.move_pick_help = Cliquez l’objet (ou le tas) à transporter ensuite · Échap : arrêter
 hud.tool.move_help = Cliquez là où les colons sélectionnés doivent aller · Échap : retour
 inspector.follow = Suivre
 inspector.follow.stop = Ne plus suivre

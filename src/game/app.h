@@ -312,11 +312,14 @@ typedef struct App {
     bool move_item_box;            /* For APP_TOOL_MOVE_ITEM: the items of the box selected... */
     TilePos move_item_source;      /* ...or the items to carry... */
     ItemId move_item_id;           /* ...or this one alone (ITEM_ID_NONE: all of them). */
-    int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
-    AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */
-    Combatant debug_attacker;      /* For APP_DEBUG_FIGHT: who was clicked first (or none). */
-    ItemId debug_held;             /* For APP_DEBUG_MOVE_ITEM: the item dragged (or none). */
-    ItemOrder items_order;         /* How the inspector lists the items of a tile. */
+    /* The tool stays on until the player turns it off: once an order is given
+     * the next click picks the next item (or pile) to carry. */
+    bool move_item_picking;
+    int debug_mode;             /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
+    AnimalSpecies debug_animal; /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */
+    Combatant debug_attacker;   /* For APP_DEBUG_FIGHT: who was clicked first (or none). */
+    ItemId debug_held;          /* For APP_DEBUG_MOVE_ITEM: the item dragged (or none). */
+    ItemOrder items_order;      /* How the inspector lists the items of a tile. */
     /* The character editor's Social tab: the settler the selected one acts
      * with (a click on its row; the best liked one when none). */
     EntityId debug_social_partner;
