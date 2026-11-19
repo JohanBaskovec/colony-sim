@@ -9,11 +9,19 @@
 #define COLONY_GAME_HUD_H
 
 #include "game/app.h"
+#include "game/ui_layout.h"
 
 void hud_draw(App *app);
 
 /* The inspector of the selected colonist(s) (game/inspector.h). */
 void hud_inspect_colonists(App *app);
+
+/* The body of a settler (core/corpse.h), in the window of the items it lies
+ * among (game/tile_panel.h): its summary rows (age, cause of death, how long
+ * ago), and its tabs, like a settler's: the Character, Knowledge and Journal
+ * of the dead, the others only saying it is dead. */
+void hud_corpse_rows(UiLayout *layout, const Game *game, const Corpse *corpse);
+void hud_corpse_tabs(App *app, const Corpse *corpse);
 
 /* Lines shared by the tile readout and the windows of the things on a tile
  * (game/tile_panel.h); false when there is nothing to say. The grade and

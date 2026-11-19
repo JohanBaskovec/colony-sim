@@ -63,6 +63,7 @@ simulation:
 | `construction`| Construction sites: blueprints of structures and of workstations, refresh sites on worn structures, materials delivered per slot, work, built quality; daily wear; built structures go to the map's structure layers, finished workstations to `Workstations` |
 | `work`       | Work types (mining, fire, woodcutting, gathering, construction, crafting, hauling, cleaning), the knowledge shown for each, priority helpers |
 | `knowledge`  | Knowledges (fire, stone knapping...), levels 0-100, mastery at 50, work speed, learning (rates, caps, fading), quality and condition of what a worker produces |
+| `corpse`     | The record kept of each settler or wild animal that died (`Corpses`, a growing list: a copy of the `Colonist` or `Animal` as it was, and the tick), which the body's item stack points at; for the eye only, not hashed |
 | `conversation`| Settlers nearby chatting now and then, the knowledge each brings up, what the other learns from it |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
@@ -538,6 +539,12 @@ percentage, and its quality when the new type has one.
 when not 0) is the share of a body's weight eaten away: `item_stack_mass()`
 is what the stack weighs now, and what hauling and the panels use.
 
+`ItemStack.corpse` (bodies only, 0 otherwise; hashed only when not 0) is the
+id of the record of the settler or animal whose body it is (`core/corpse.h`,
+`Game.corpses`). It is part of what makes stacks match
+(`item_stacks_match()`): the bodies of two beings never share a tile, and the
+id travels with the stack when it is carried, put down or bitten into.
+
 Food **rots** while it lies on a tile (`ItemDef.rot_days`: how long a
 pristine item lasts in the open at 15 °C; a type never both rots and
 transforms). For those types `ItemStack.progress` holds the rot toward the
@@ -1008,7 +1015,12 @@ while nobody is hurt (`health_hash()` adds nothing then).
 - Death: the game deals with it after each turn (`settler_died()` in
   `update_colonists()`, the carcasses in `update_animals()`): the body is an
   item (`ITEM_CATEGORY_BODIES`, rotting like food, left out of new
-  stockpiles), the colonist goes through `game_remove_colonist()` (bed,
+  stockpiles) that points at the settler's record (`corpses_add_settler()` in
+  `settler_died()`: name, age, character, knowledge, health and journal, kept
+  after the colonist's slot is freed; an animal's carcass likewise,
+  `corpses_add_animal()` in `update_animals()`: species, sex, character,
+  health and journal), the colonist goes through
+  `game_remove_colonist()` (bed,
   reservations, tools), a notice, memories (`THOUGHT_DEATH`,
   `THOUGHT_SAW_DEATH`); the last one dead sets `Game.colony_lost` and pauses
   the clock (`game_update()` stops there). A dead animal's herd follows
@@ -2281,6 +2293,15 @@ colonist, else the first of what lies on the tile (`ClickTarget`): the
 station, the structure, the roof, the construction site, the items, the
 plant (a tree from any tile of its trunk or foliage), the stockpile, the
 gathering zone, the grass; a click on what is selected goes to the next one.
+A body has a window of its own kind (`hud_corpse_rows()`,
+`hud_corpse_tabs()`). A settler's is titled with the dead's name, with their
+age, cause of death and how long ago, and has the tabs of a settler's window,
+of which the Character, Knowledge and Journal show the record kept
+(`Corpse.colonist`: read-only, the knowledge tooltips as of the death) and the
+others only say the settler is dead; the tile readout names the owner. An
+animal's carcass keeps its name as the title, tells the species, the sex, the
+cause of death and how long ago, and has the animal's three tabs: Character
+and Journal from the record (`Corpse.animal`), Health only saying it is dead.
 Each thing on a tile (`TileThing`, `App.selected_thing`) has a window like a
 workstation's (`game/tile_panel.h`): its name as the title and the action menu
 right of it (`inspector_forbid_action()`, `inspector_order_action()` for

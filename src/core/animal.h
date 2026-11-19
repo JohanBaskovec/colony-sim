@@ -401,6 +401,7 @@ const AnimalDef *animal_def(AnimalSpecies species);
 
 /* Translation keys: the animal by its sex ("Hind"), what it is doing, a need. */
 const char *animal_name_key(AnimalSpecies species, AnimalSex sex);
+const char *animal_sex_key(AnimalSex sex); /* "Female", "Male". */
 const char *animal_activity_key(const Animal *animal);
 const char *animal_need_name_key(AnimalNeed need);
 

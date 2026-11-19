@@ -168,6 +168,9 @@ typedef struct ItemStack {
      * of the items; 0 for a whole one and for other types. Eating takes
      * weight, never hit points (those are what rot takes). */
     uint16_t eaten;
+    /* A body: whose it was (Corpses, core/corpse.h), 0 for one nobody kept the
+     * record of. Bodies of different beings never share a stack. */
+    uint16_t corpse;
 } ItemStack;
 
 #define ITEM_EATEN_FULL 10000
@@ -243,7 +246,8 @@ float item_stack_eat(ItemStack *stack, float kg);
  */
 ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points);
 
-/* Whether two stacks may share a tile: same type. */
+/* Whether two stacks may share a tile: same type (and, for bodies, the same
+ * dead one). */
 bool item_stacks_match(ItemStack a, ItemStack b);
 
 /* Adds `from` to `into` (empty, or matching): counts add up (capped at

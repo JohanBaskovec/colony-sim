@@ -603,6 +603,7 @@ bool game_init(Game *game, const NewGameParams *params)
         return false;
     }
     game->seed = params->world.seed;
+    corpses_init(&game->corpses);
     reservations_init(&game->reservations);
     item_moves_init(&game->item_moves);
     game_clock_init(&game->clock);
@@ -706,6 +707,7 @@ void game_shutdown(Game *game)
     dirt_free(&game->dirt);
     gather_zones_free(&game->gather_zones);
     items_free(&game->items);
+    corpses_free(&game->corpses);
     stockpiles_free(&game->stockpiles);
     workstations_free(&game->workstations);
     constructions_free(&game->constructions);
@@ -1130,7 +1132,9 @@ static void settler_died(Game *game, uint32_t slot)
         }
     }
     /* The body first, where it fell; what it carried around it. */
-    items_drop(&game->items, &game->map, x, y, z, item_stack_pristine(ITEM_SETTLER_BODY, 1));
+    ItemStack body = item_stack_pristine(ITEM_SETTLER_BODY, 1);
+    body.corpse = corpses_add_settler(&game->corpses, dead, game->clock.tick);
+    items_drop(&game->items, &game->map, x, y, z, body);
     game_remove_colonist(game, id);
     vision_viewer_remove(&game->vision, (int)slot);
     notices_push(&game->notices, notice, KNOWLEDGE_NONE, name, game->clock.tick);
@@ -1459,10 +1463,12 @@ static void update_animals(Game *game)
             continue;
         }
         int x = animal->x, y = animal->y, z = animal->z;
-        ItemType carcass = animal_def((AnimalSpecies)animal->species)->carcass;
+        ItemStack carcass =
+            item_stack_pristine(animal_def((AnimalSpecies)animal->species)->carcass, 1);
+        carcass.corpse = corpses_add_animal(&game->corpses, animal, game->clock.tick);
         animals_remove(&game->animals, id);
         occupancy_remove(&game->occupancy, occupancy_animal(slot)); /* A carcass: walked over. */
-        items_drop(&game->items, &game->map, x, y, z, item_stack_pristine(carcass, 1));
+        items_drop(&game->items, &game->map, x, y, z, carcass);
     }
 }
 

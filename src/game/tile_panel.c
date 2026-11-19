@@ -35,6 +35,18 @@ static const Plant *thing_plant(const App *app, int x, int y, int z, TilePos *fo
     return plant->type != PLANT_NONE ? plant : NULL;
 }
 
+/* The record of the settler whose body the window of some items is about
+ * (core/corpse.h), NULL for anything else. */
+static const Corpse *thing_corpse(const ThingRows *rows)
+{
+    if (rows->thing != THING_ITEMS) {
+        return NULL;
+    }
+    const Game *game = &rows->app->game;
+    ItemStack stack = items_get(game_view_items(game), rows->x, rows->y, rows->z);
+    return corpses_get(&game->corpses, stack.corpse);
+}
+
 /* What the player may forbid of the thing (FORBID_TARGET_COUNT: nothing). */
 static ForbidTarget thing_forbid_target(TileThing thing)
 {
@@ -74,7 +86,12 @@ static void thing_title(const ThingRows *rows, char *out, size_t size)
     }
     case THING_ITEMS: {
         ItemStack stack = items_get(game_view_items(game), x, y, z);
-        SDL_strlcpy(out, tr(item_def((ItemType)stack.type)->name_key), size);
+        const Corpse *corpse = thing_corpse(rows);
+        if (corpse != NULL && corpse->kind == CORPSE_SETTLER) {
+            TR_FORMAT(out, size, tr("tile_panel.body"), corpse->colonist.name);
+        } else {
+            SDL_strlcpy(out, tr(item_def((ItemType)stack.type)->name_key), size);
+        }
         break;
     }
     case THING_PLANT: {
@@ -220,6 +237,10 @@ static void thing_rows(UiLayout *layout, void *userdata)
     }
     case THING_ITEMS: {
         ItemStack stack = items_get(game_view_items(game), x, y, z);
+        const Corpse *corpse = thing_corpse(rows);
+        if (corpse != NULL) {
+            hud_corpse_rows(layout, game, corpse);
+        }
         char count[32], weight[32];
         tr_integer(count, sizeof(count), stack.count);
         hud_weight_text(weight, sizeof(weight), item_stack_mass(stack));
@@ -430,7 +451,12 @@ void tile_panel_draw(App *app)
     char title[TEXT_SIZE];
     thing_title(&rows, title, sizeof(title));
     bool open = inspector_box(app, INSPECT_TILE, title, thing_rows, &rows);
-    inspector_tabs(app, NULL, 0);
+    const Corpse *corpse = thing_corpse(&rows);
+    if (corpse != NULL) {
+        hud_corpse_tabs(app, corpse);
+    } else {
+        inspector_tabs(app, NULL, 0);
+    }
     thing_actions(app, &rows);
     if (!open) {
         app->tile_selected = false;

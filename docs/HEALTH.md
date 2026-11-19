@@ -142,7 +142,13 @@ Each from 0 to 100 %:
 ## 8. Death
 
 - A body is left on its tile as an item: a settler's body, an animal's
-  carcass (one per species). It rots like food (rot takes hit points); it is
+  carcass (one per species). A body is linked to the one it was: a record of
+  them (a settler's name, age, character, knowledge, health and journal as
+  they were; an animal's species, sex, character, health and journal) is
+  kept, and the body's window shows whose it is, how they died and how long
+  ago, with the Character and Journal tabs of the dead, and the Knowledge tab
+  of a settler (the other tabs only say they are dead). The record outlives
+  the body. It rots like food (rot takes hit points); it is
   not food for settlers. Animals that eat it take weight off it, not hit points. Later it is
   buried, or butchered for meat, hide and bones.
 - A settler's death frees the bed, the orders and the selection, raises a

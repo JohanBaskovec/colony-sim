@@ -497,6 +497,11 @@ static void build_tile_panel(App *app, Panel *panel)
         hud_weight_text(weight, sizeof(weight), item_stack_mass(stack));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
                   tr(item_def((ItemType)stack.type)->name_key), a, weight);
+        const Corpse *corpse = corpses_get(&app->game.corpses, stack.corpse);
+        if (corpse != NULL && corpse->kind == CORPSE_SETTLER) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("tile_panel.body"),
+                      corpse->colonist.name);
+        }
         add_item_condition_line(panel, stack);
         if (items_forbidden(game_view_items(&app->game), x, y, z)) {
             panel_add_text(panel, tr("tile_panel.left_alone"));
@@ -935,8 +940,10 @@ static void add_social_lines(App *app, Panel *panel, const Colonist *colonist, E
 }
 
 /* Tooltip of a knowledge line of the colonist inspector: best level, what
- * was learned today and how, practice and fading, masters in the colony. */
-static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType knowledge)
+ * was learned today and how, practice and fading, masters in the colony. For
+ * the dead (`dead`), as it stood at their death (`tick`), and no masters. */
+static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType knowledge,
+                              uint64_t tick, bool dead)
 {
     static const char *const GAIN_KEYS[KNOWLEDGE_SOURCE_COUNT] = {
         [KNOWLEDGE_SOURCE_DOING] = N_("hud.knowledge.gain.doing"),
@@ -947,7 +954,6 @@ static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType 
     char lines[UI_TOOLTIP_LINES][HUD_LINE_SIZE];
     const char *pointers[UI_TOOLTIP_LINES];
     int count = 0;
-    uint64_t tick = app->game.clock.tick;
     char a[32], b[32];
     double peak = colonist->knowledge_peak[knowledge];
     SDL_strlcpy(lines[count++], tr(knowledge_def(knowledge)->name_key), HUD_LINE_SIZE);
@@ -988,8 +994,10 @@ static void knowledge_tooltip(App *app, const Colonist *colonist, KnowledgeType 
     } else {
         SDL_strlcpy(lines[count++], tr("hud.knowledge.practised"), HUD_LINE_SIZE);
     }
-    int masters = game_knowledge_masters(&app->game, knowledge);
-    if (masters == 0) {
+    int masters = dead ? -1 : game_knowledge_masters(&app->game, knowledge);
+    if (masters < 0) {
+        /* The dead teach no one. */
+    } else if (masters == 0) {
         SDL_strlcpy(lines[count++], tr("hud.knowledge.no_master"), HUD_LINE_SIZE);
     } else {
         tr_integer(a, sizeof(a), masters);
@@ -1178,19 +1186,16 @@ static void add_gear_lines(Panel *panel, const Colonist *colonist)
 /* Discovered knowledges the settler has started to learn, as a table: the
  * level with one decimal, from red (0) through white (the mastery, 50) to
  * green (100). The work speed is in the tooltip. */
-static void knowledge_rows(UiLayout *layout, void *userdata)
+static void knowledge_table(UiLayout *layout, App *app, const Colonist *colonist, bool dead,
+                            uint64_t tick)
 {
-    App *app = userdata;
-    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
-    if (colonist == NULL) {
-        return;
-    }
     ui_layout_label(layout, tr("hud.colonist.knowledge"), 0.0f, true);
     /* The editor also lists the knowledges at level 0, to raise them. */
-    ui_layout_set_stepper(layout, app->character_editor);
+    bool editor = app->character_editor && !dead;
+    ui_layout_set_stepper(layout, editor);
     for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
         double value = colonist_knowledge_level(colonist, (KnowledgeType)knowledge);
-        if ((!(value > 0.0) && !app->character_editor) ||
+        if ((!(value > 0.0) && !editor) ||
             !game_knowledge_discovered(&app->game, (KnowledgeType)knowledge)) {
             continue;
         }
@@ -1200,15 +1205,24 @@ static void knowledge_rows(UiLayout *layout, void *userdata)
             layout, tr(knowledge_def((KnowledgeType)knowledge)->name_key), level,
             theme_scale_color(&layout->ui->theme, (float)(value / KNOWLEDGE_LEVEL_MAX)), true);
         if (layout->draw && ui_hovered(layout->ui, row)) {
-            knowledge_tooltip(app, colonist, (KnowledgeType)knowledge);
+            knowledge_tooltip(app, colonist, (KnowledgeType)knowledge, tick, dead);
         }
-        int step = app->character_editor ? ui_layout_stepper(layout, row) : 0;
+        int step = editor ? ui_layout_stepper(layout, row) : 0;
         if (step != 0) {
             game_debug_colonist_knowledge(&app->game, app->selected[0], (KnowledgeType)knowledge,
                                           step);
         }
     }
     ui_layout_set_stepper(layout, false);
+}
+
+static void knowledge_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    const Colonist *colonist = game_colonist_const(&app->game, app->selected[0]);
+    if (colonist != NULL) {
+        knowledge_table(layout, app, colonist, false, app->game.clock.tick);
+    }
 }
 
 /* The Character tab (game/attributes_panel.h). */
@@ -1382,6 +1396,122 @@ void hud_inspect_colonists(App *app)
     if (!open) {
         app->selected_count = 0;
     }
+}
+
+/* What the tabs of a settler's body draw. */
+typedef struct CorpseTab {
+    App *app;
+    const Corpse *corpse;
+} CorpseTab;
+
+static void corpse_knowledge_rows(UiLayout *layout, void *userdata)
+{
+    const CorpseTab *tab = userdata;
+    knowledge_table(layout, tab->app, &tab->corpse->colonist, true, tab->corpse->died);
+}
+
+static void corpse_character_rows(UiLayout *layout, void *userdata)
+{
+    const CorpseTab *tab = userdata;
+    if (tab->corpse->kind == CORPSE_ANIMAL) {
+        attributes_panel_rows(layout, &tab->corpse->animal.attributes, true, false, NULL);
+    } else {
+        attributes_panel_rows(layout, &tab->corpse->colonist.attributes, false, false, NULL);
+    }
+}
+
+static void corpse_journal_rows(UiLayout *layout, void *userdata)
+{
+    const CorpseTab *tab = userdata;
+    if (tab->corpse->kind == CORPSE_ANIMAL) {
+        const Animal *animal = &tab->corpse->animal;
+        journal_panel_rows(layout, &animal->journal,
+                           (JournalOwner){NULL, animal->species, animal->sex},
+                           &tab->app->journal_hidden);
+    } else {
+        const Colonist *colonist = &tab->corpse->colonist;
+        journal_panel_rows(layout, &colonist->journal, (JournalOwner){colonist->name, 0, 0},
+                           &tab->app->journal_hidden);
+    }
+}
+
+/* The other tabs have nothing to tell of the dead. */
+static void corpse_dead_rows(UiLayout *layout, void *userdata)
+{
+    (void)userdata;
+    ui_layout_label(layout, tr("corpse.dead"), 0.0f, false);
+}
+
+void hud_corpse_rows(UiLayout *layout, const Game *game, const Corpse *corpse)
+{
+    static const char *const CAUSE_KEYS[DEATH_CAUSE_COUNT] = {
+        [DEATH_BLOOD_LOSS] = N_("corpse.cause.blood_loss"),
+        [DEATH_VITAL_PART] = N_("corpse.cause.injury"),
+        [DEATH_STARVATION] = N_("corpse.cause.starvation"),
+        [DEATH_DEHYDRATION] = N_("corpse.cause.dehydration"),
+        [DEATH_HYPOTHERMIA] = N_("corpse.cause.hypothermia"),
+        [DEATH_HEATSTROKE] = N_("corpse.cause.heatstroke"),
+    };
+    const SDL_Color text = layout->ui->theme.colors[THEME_TEXT];
+    char age[16], ago[64];
+    DeathCause cause;
+    if (corpse->kind == CORPSE_ANIMAL) {
+        const Animal *animal = &corpse->animal;
+        ui_layout_pair(layout, tr("animal_panel.species"),
+                       tr(animal_def((AnimalSpecies)animal->species)->name_key), text, false);
+        ui_layout_pair(layout, tr("animal_panel.sex"), tr(animal_sex_key((AnimalSex)animal->sex)),
+                       text, false);
+        cause = animal->health.death;
+    } else {
+        tr_integer(age, sizeof(age), corpse->colonist.age);
+        ui_layout_pair(layout, tr("hud.summary.age"), age, text, false);
+        cause = corpse->colonist.health.death;
+    }
+    if ((unsigned)cause < DEATH_CAUSE_COUNT && CAUSE_KEYS[cause] != NULL) {
+        ui_layout_pair(layout, tr("corpse.cause"), tr(CAUSE_KEYS[cause]), text, false);
+    }
+    seen_ago(ago, sizeof(ago), game->clock.tick, corpse->died);
+    ui_layout_pair(layout, tr("corpse.died"), ago, text, false);
+}
+
+/* The tabs of an animal's carcass: Health, Character and Journal, as the
+ * animal's window has them. */
+static void animal_corpse_tabs(App *app, const Corpse *corpse)
+{
+    const char *labels[3] = {tr("inspector.tab.health"), tr("inspector.tab.character"),
+                             tr("inspector.tab.journal")};
+    int tab = inspector_tabs(app, labels, 3);
+    if (tab < 0) {
+        return;
+    }
+    static const UiRowsFn ROWS[3] = {corpse_dead_rows, corpse_character_rows, corpse_journal_rows};
+    CorpseTab data = {app, corpse};
+    inspector_tab_panel(app, ROWS[tab], &data);
+}
+
+void hud_corpse_tabs(App *app, const Corpse *corpse)
+{
+    if (corpse->kind == CORPSE_ANIMAL) {
+        animal_corpse_tabs(app, corpse);
+        return;
+    }
+    const char *labels[SECTION_COUNT - 1];
+    for (int i = 1; i < SECTION_COUNT; i++) {
+        labels[i - 1] = tr(SECTION_KEYS[i]);
+    }
+    int tab = inspector_tabs(app, labels, SECTION_COUNT - 1);
+    if (tab < 0) {
+        return;
+    }
+    UiRowsFn rows = corpse_dead_rows;
+    switch ((ColonistSection)(tab + 1)) {
+    case SECTION_CHARACTER: rows = corpse_character_rows; break;
+    case SECTION_KNOWLEDGE: rows = corpse_knowledge_rows; break;
+    case SECTION_JOURNAL: rows = corpse_journal_rows; break;
+    default: break;
+    }
+    CorpseTab data = {app, corpse};
+    inspector_tab_panel(app, rows, &data);
 }
 
 static void help_window(App *app)

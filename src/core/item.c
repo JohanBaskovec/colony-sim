@@ -351,7 +351,7 @@ float item_stack_eat(ItemStack *stack, float kg)
 
 bool item_stacks_match(ItemStack a, ItemStack b)
 {
-    return a.type == b.type;
+    return a.type == b.type && a.corpse == b.corpse;
 }
 
 int item_hit_points_at_percent(ItemType type, int percent)
@@ -536,9 +536,11 @@ int items_add(Items *items, int x, int y, int z, ItemStack batch)
     /* Callers may build stacks by hand: keep the condition valid for the type. */
     uint16_t progress = valid_progress(type, batch.progress);
     int eaten = ITEM_DEFS[type].category == ITEM_CATEGORY_BODIES ? batch.eaten : 0;
+    uint16_t corpse = ITEM_DEFS[type].category == ITEM_CATEGORY_BODIES ? batch.corpse : 0;
     batch = item_stack_make(type, batch.count, batch.quality, batch.hit_points);
     batch.progress = progress;
     batch.eaten = (uint16_t)clampi(eaten, 0, ITEM_EATEN_FULL - 1);
+    batch.corpse = corpse;
     ItemStack *stack = stack_at(items, x, y, z);
     if (stack->type != ITEM_NONE && !item_stacks_match(*stack, batch)) {
         return 0;
@@ -734,6 +736,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
         hash = hash_fnv1a64(hash, &stack->progress, sizeof(stack->progress));
         if (stack->eaten != 0) { /* Hashes without anything eaten stay as they were. */
             hash = hash_fnv1a64(hash, &stack->eaten, sizeof(stack->eaten));
+        }
+        if (stack->corpse != 0) { /* Likewise for bodies without a record. */
+            hash = hash_fnv1a64(hash, &stack->corpse, sizeof(stack->corpse));
         }
     }
     if (items->forbidden_count > 0) { /* Hashes without anything forbidden stay as they were. */

@@ -11,6 +11,7 @@
 #include "core/bed.h"
 #include "core/blood.h"
 #include "core/colonist.h"
+#include "core/corpse.h"
 #include "core/construction.h"
 #include "core/designation.h"
 #include "core/dirt.h"
@@ -137,6 +138,7 @@ typedef struct Game {
     Dirt dirt;                   /* How dirty each tile is. */
     GatherZones gather_zones;    /* Where wood, wild food, grass, stones... are gathered. */
     Items items;                 /* Items lying on the ground, same size as the map. */
+    Corpses corpses;             /* Records of the settlers who died (bodies point at them). */
     Stockpiles stockpiles;       /* Storage zones drawn by the player. */
     Workstations workstations;   /* Crafting spots, knapping spots... and their bills. */
     Constructions constructions; /* Blueprints of beds, walls, doors... being built. */

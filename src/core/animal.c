@@ -269,6 +269,15 @@ const char *animal_name_key(AnimalSpecies species, AnimalSex sex)
     return ANIMAL_DEFS[species].sex_name_keys[sex];
 }
 
+const char *animal_sex_key(AnimalSex sex)
+{
+    static const char *const KEYS[ANIMAL_SEX_COUNT] = {
+        [ANIMAL_FEMALE] = N_("animal.sex.female"),
+        [ANIMAL_MALE] = N_("animal.sex.male"),
+    };
+    return (unsigned)sex < ANIMAL_SEX_COUNT ? KEYS[sex] : NULL;
+}
+
 const char *animal_activity_key(const Animal *animal)
 {
     bool moving = animal_is_moving(animal);

@@ -17,6 +17,7 @@ set(COLONY_UNIT_TESTS
     test_colonist
     test_combat
     test_construction
+    test_corpse
     test_designation
     test_dirt
     test_forbid

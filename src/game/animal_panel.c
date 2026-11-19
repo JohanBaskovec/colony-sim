@@ -40,14 +40,11 @@ static void animal_rows(UiLayout *layout, void *userdata)
     if (animal == NULL) {
         return;
     }
-    static const char *const SEX_KEYS[ANIMAL_SEX_COUNT] = {
-        [ANIMAL_FEMALE] = N_("animal.sex.female"),
-        [ANIMAL_MALE] = N_("animal.sex.male"),
-    };
     const SDL_Color text = layout->ui->theme.colors[THEME_TEXT];
     ui_layout_pair(layout, tr("animal_panel.species"),
                    tr(animal_def((AnimalSpecies)animal->species)->name_key), text, false);
-    ui_layout_pair(layout, tr("animal_panel.sex"), tr(SEX_KEYS[animal->sex]), text, false);
+    ui_layout_pair(layout, tr("animal_panel.sex"), tr(animal_sex_key((AnimalSex)animal->sex)), text,
+                   false);
     ui_layout_pair(layout, tr("hud.summary.activity"), tr(animal_activity_key(animal)), text,
                    false);
     ui_layout_set_stepper(layout, app->character_editor);
