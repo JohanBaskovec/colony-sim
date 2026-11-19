@@ -147,6 +147,9 @@ typedef enum BuildCategory {
 
 /* What can be selected on a tile besides a workstation and the zones: each
  * has a window of its own (game/tile_panel.h). */
+/* Items a box selects at most. */
+#define APP_BOX_ITEMS_MAX 256
+
 typedef enum TileThing {
     THING_STRUCTURE, /* A wall, a door, a bed... */
     THING_ROOF,      /* The roof the tile is. */
@@ -154,6 +157,7 @@ typedef enum TileThing {
     THING_ITEMS,     /* The stack lying there. */
     THING_PLANT,     /* The plant (grass too), or the tree whose trunk or foliage it is. */
     THING_ITEM,      /* One item lying there (App.selected_item; the tile follows it). */
+    THING_ITEM_BOX,  /* Several items lying about, picked by a box (App.selected_box_items). */
     THING_COUNT
 } TileThing;
 
@@ -212,6 +216,10 @@ typedef struct App {
     int selected_tile_x, selected_tile_y, selected_tile_z;
     TileThing selected_thing;
     ItemPick selected_item; /* THING_ITEM: the item, picked under the cursor. */
+    /* THING_ITEM_BOX: the items inside the box drawn, each followed where it
+     * lies; those gone are dropped. */
+    ItemPick selected_box_items[APP_BOX_ITEMS_MAX];
+    int selected_box_item_count;
     /* Selected wild animal (ENTITY_NONE if none), same rules: dropped once
      * the colony no longer sees it (game/animal_panel.h). */
     EntityId selected_animal;
@@ -287,7 +295,8 @@ typedef struct App {
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
     bool debug_item_max;           /* ... a full stack of it, else one item. */
-    TilePos move_item_source;      /* For APP_TOOL_MOVE_ITEM: the items to carry... */
+    bool move_item_box;            /* For APP_TOOL_MOVE_ITEM: the items of the box selected... */
+    TilePos move_item_source;      /* ...or the items to carry... */
     ItemId move_item_id;           /* ...or this one alone (ITEM_ID_NONE: all of them). */
     int debug_mode;                /* For APP_TOOL_DEBUG: APP_DEBUG_SPAWN... */
     AnimalSpecies debug_animal;    /* For APP_DEBUG_SPAWN_ANIMAL: what is spawned... */

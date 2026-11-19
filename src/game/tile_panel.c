@@ -62,6 +62,21 @@ static const Corpse *thing_corpse(const ThingRows *rows)
     return corpses_get(&game->corpses, stack.corpse);
 }
 
+/* The items of the box selected, as the real items name them (those gone
+ * left out). Returns how many. */
+static int box_real_items(const App *app, ItemId *out)
+{
+    int count = 0;
+    for (int i = 0; i < app->selected_box_item_count; i++) {
+        ItemPick pick = app->selected_box_items[i];
+        ItemId id = game_pick_real_item(&app->game, &pick);
+        if (id.slot != UINT32_MAX) {
+            out[count++] = id;
+        }
+    }
+    return count;
+}
+
 /* What the player may forbid of the thing (FORBID_TARGET_COUNT: nothing). */
 static ForbidTarget thing_forbid_target(TileThing thing)
 {
@@ -71,7 +86,8 @@ static ForbidTarget thing_forbid_target(TileThing thing)
     case THING_ITEMS: return FORBID_ITEMS;
     case THING_PLANT: return FORBID_PLANT;
     case THING_SITE: return FORBID_SITE;
-    case THING_ITEM: /* (One item: see thing_actions().) */
+    case THING_ITEM: /* (Items one by one: see thing_actions().) */
+    case THING_ITEM_BOX:
     case THING_COUNT: break;
     }
     return FORBID_TARGET_COUNT;
@@ -136,7 +152,67 @@ static void thing_title(const ThingRows *rows, char *out, size_t size)
         }
         break;
     }
+    case THING_ITEM_BOX: {
+        char count[32];
+        int items = rows->app->selected_box_item_count;
+        tr_integer(count, sizeof(count), items);
+        TR_FORMAT(out, size, tr_plural("tile_panel.box_items", items), count);
+        break;
+    }
     case THING_COUNT: break;
+    }
+}
+
+/* Kinds of items the window of a box lists. */
+#define BOX_KINDS_LISTED 10
+
+/* What the items of a box are: their total weight, and a line per kind. */
+static void box_item_rows(UiLayout *layout, const ThingRows *rows)
+{
+    const App *app = rows->app;
+    long counts[ITEM_TYPE_COUNT] = {0};
+    float masses[ITEM_TYPE_COUNT] = {0};
+    float total = 0.0f;
+    int forbidden = 0, items = 0;
+    for (int i = 0; i < app->selected_box_item_count; i++) {
+        ItemPick pick = app->selected_box_items[i];
+        const Item *item = game_pick_item(&app->game, &pick);
+        if (item == NULL) {
+            continue;
+        }
+        float mass = item_stack_mass(item_as_stack(item));
+        counts[item->type]++;
+        masses[item->type] += mass;
+        total += mass;
+        forbidden += item->forbidden != 0;
+        items++;
+    }
+    char text[TEXT_SIZE], weight[32], count[32];
+    hud_weight_text(weight, sizeof(weight), total);
+    TR_FORMAT(text, sizeof(text), tr("tile_panel.item_weight"), weight);
+    ui_layout_label(layout, text, 0.0f, false);
+    int listed = 0, left = items;
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && listed < BOX_KINDS_LISTED; type++) {
+        if (counts[type] == 0) {
+            continue;
+        }
+        tr_integer(count, sizeof(count), counts[type]);
+        hud_weight_text(weight, sizeof(weight), masses[type]);
+        TR_FORMAT(text, sizeof(text), tr("tile_panel.group"),
+                  tr(item_def((ItemType)type)->name_key), count, weight);
+        ui_layout_label(layout, text, 0.0f, false);
+        left -= (int)counts[type];
+        listed++;
+    }
+    if (left > 0) {
+        tr_integer(count, sizeof(count), left);
+        TR_FORMAT(text, sizeof(text), tr_plural("tile_panel.more_items", left), count);
+        ui_layout_label(layout, text, 0.0f, true);
+    }
+    if (forbidden > 0) {
+        tr_integer(count, sizeof(count), forbidden);
+        TR_FORMAT(text, sizeof(text), tr_plural("tile_panel.box_forbidden", forbidden), count);
+        ui_layout_label(layout, text, 0.0f, true);
     }
 }
 
@@ -341,7 +417,7 @@ static void thing_rows(UiLayout *layout, void *userdata)
     const Map *map = game_view_map(game);
     int x = rows->x, y = rows->y, z = rows->z;
     char text[TEXT_SIZE];
-    if (game->fog_on && !game_tile_seen(game, x, y, z)) {
+    if (game->fog_on && rows->thing != THING_ITEM_BOX && !game_tile_seen(game, x, y, z)) {
         ui_layout_label(layout, tr("hud.tile.remembered"), 0.0f, true);
     }
     switch (rows->thing) {
@@ -414,6 +490,7 @@ static void thing_rows(UiLayout *layout, void *userdata)
         break;
     }
     case THING_ITEM: single_item_rows(layout, rows); break;
+    case THING_ITEM_BOX: box_item_rows(layout, rows); break;
     case THING_PLANT: {
         plant_rows(layout, rows);
         TilePos foot;
@@ -539,6 +616,7 @@ static void thing_actions(App *app, const ThingRows *rows)
             } else {
                 app->move_item_source = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
                 app->move_item_id = ITEM_ID_NONE;
+                app->move_item_box = false;
                 app_toggle_tool(app, APP_TOOL_MOVE_ITEM, 0);
             }
         }
@@ -564,6 +642,39 @@ static void thing_actions(App *app, const ThingRows *rows)
             } else {
                 app->move_item_source = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
                 app->move_item_id = id;
+                app->move_item_box = false;
+                app_toggle_tool(app, APP_TOOL_MOVE_ITEM, 0);
+            }
+        }
+        break;
+    }
+    case THING_ITEM_BOX: {
+        ItemId ids[APP_BOX_ITEMS_MAX];
+        int count = box_real_items(app, ids);
+        if (count == 0 || !game_tile_explored(game, x, y, z)) {
+            break;
+        }
+        bool all_forbidden = true, all_ordered = true;
+        for (int i = 0; i < count; i++) {
+            TilePos destination;
+            all_forbidden &= game_item_forbidden(game, ids[i]);
+            all_ordered &= game_single_item_move_at(game, ids[i], &destination);
+        }
+        if (inspector_forbid_action(app, slot++, all_forbidden, NULL)) {
+            for (int i = 0; i < count; i++) {
+                game_set_item_forbidden(game, ids[i], !all_forbidden);
+            }
+        }
+        if (inspector_order_action(app, slot++, RENDER_ICON_MOVE, tr("tile_panel.move_items"),
+                                   tr("tile_panel.move_box.description"), all_ordered, NULL,
+                                   all_ordered)) {
+            if (all_ordered) {
+                for (int i = 0; i < count; i++) {
+                    game_cancel_single_item_move(game, ids[i]);
+                }
+            } else {
+                app->move_item_id = ITEM_ID_NONE;
+                app->move_item_box = true;
                 app_toggle_tool(app, APP_TOOL_MOVE_ITEM, 0);
             }
         }
@@ -634,6 +745,14 @@ bool tile_panel_cancel(App *app)
         TilePos destination;
         return game_single_item_move_at(game, id, &destination) &&
                game_cancel_single_item_move(game, id);
+    }
+    case THING_ITEM_BOX: {
+        ItemId ids[APP_BOX_ITEMS_MAX];
+        int count = box_real_items(app, ids), cancelled = 0;
+        for (int i = 0; i < count; i++) {
+            cancelled += game_cancel_single_item_move(game, ids[i]);
+        }
+        return cancelled > 0;
     }
     case THING_COUNT: break;
     }

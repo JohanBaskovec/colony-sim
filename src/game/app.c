@@ -214,6 +214,8 @@ bool app_thing_at(const App *app, TileThing thing, int x, int y, int z)
         return game_pick_item(&app->game, &pick) != NULL && pick.x == x && pick.y == y &&
                pick.z == z;
     }
+    case THING_ITEM_BOX:
+        return app->selected_box_item_count > 0; /* (See prune_tile_selection().) */
     case THING_COUNT: break;
     }
     return false;
@@ -271,7 +273,8 @@ static ClickTarget click_target_selected(const App *app, int x, int y, int z)
         case THING_ITEMS: return CLICK_ITEMS;
         case THING_PLANT:
             return app_plant_type_at(app, x, y, z) == PLANT_GRASS ? CLICK_GRASS : CLICK_PLANT;
-        case THING_ITEM: /* Not a thing of the tile's: see select_at_point(). */
+        case THING_ITEM: /* Not things of the tile's: see select_at_point(). */
+        case THING_ITEM_BOX:
         case THING_COUNT: break;
         }
     }
@@ -319,10 +322,42 @@ static void select_item(App *app, ItemPick pick)
     app->selected_tile_z = pick.z;
 }
 
+/* Selects the items inside a box. */
+static void select_box_items(App *app, const ItemPick *picks, int count)
+{
+    clear_selection(app);
+    for (int i = 0; i < count && i < APP_BOX_ITEMS_MAX; i++) {
+        app->selected_box_items[i] = picks[i];
+    }
+    app->selected_box_item_count = count < APP_BOX_ITEMS_MAX ? count : APP_BOX_ITEMS_MAX;
+    app->tile_selected = true;
+    app->selected_thing = THING_ITEM_BOX;
+    app->selected_tile_x = picks[0].x;
+    app->selected_tile_y = picks[0].y;
+    app->selected_tile_z = picks[0].z;
+}
+
 /* Forgets the selected thing once it is gone (taken apart, picked up,
- * felled); an item selected is followed where it lies. */
+ * felled); the items selected are followed where they lie. */
 static void prune_tile_selection(App *app)
 {
+    if (app->tile_selected && app->selected_thing == THING_ITEM_BOX) {
+        int kept = 0;
+        for (int i = 0; i < app->selected_box_item_count; i++) {
+            ItemPick pick = app->selected_box_items[i];
+            if (game_pick_item(&app->game, &pick) != NULL) {
+                app->selected_box_items[kept++] = pick;
+            }
+        }
+        app->selected_box_item_count = kept;
+        app->tile_selected = kept > 0;
+        if (kept > 0) {
+            app->selected_tile_x = app->selected_box_items[0].x;
+            app->selected_tile_y = app->selected_box_items[0].y;
+            app->selected_tile_z = app->selected_box_items[0].z;
+        }
+        return;
+    }
     if (app->tile_selected && app->selected_thing == THING_ITEM) {
         ItemPick *pick = &app->selected_item;
         app->tile_selected = game_pick_item(&app->game, pick) != NULL;
@@ -1241,7 +1276,9 @@ void app_focus_colonist(App *app, EntityId id)
     }
 }
 
-/* Selects the colonists in the box from the drag's world corner to the cursor. */
+/* Selects the colonists in the box from the drag's world corner to the
+ * cursor; with none in it, the items lying in it (one: as a click would
+ * select it, several: all of them at once). */
 static void select_in_box(App *app, float screen_x, float screen_y, bool additive)
 {
     const float wx0 = app->drag_world_x, wy0 = app->drag_world_y;
@@ -1260,6 +1297,16 @@ static void select_in_box(App *app, float screen_x, float screen_y, bool additiv
     app->selected_animal = ENTITY_NONE;
     for (int i = 0; i < count; i++) {
         select_add(app, found[i]);
+    }
+    if (count == 0 && app->selected_count == 0) {
+        ItemPick picks[APP_BOX_ITEMS_MAX];
+        int items = game_items_in_rect(&app->game, wx0, wy0, wx1, wy1, app->camera.level, picks,
+                                       APP_BOX_ITEMS_MAX);
+        if (items == 1) {
+            select_item(app, picks[0]);
+        } else if (items > 1) {
+            select_box_items(app, picks, items);
+        }
     }
 }
 
@@ -1486,9 +1533,19 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         int x, y;
         screen_to_tile(app, button->x, button->y, &x, &y);
         TilePos from = app->move_item_source;
-        bool ordered = app->move_item_id.slot != UINT32_MAX
-                           ? game_order_single_item_move(&app->game, app->move_item_id, x, y, z)
-                           : game_order_item_move(&app->game, from.x, from.y, from.z, x, y, z);
+        bool ordered;
+        if (app->move_item_box) { /* Each item of the box, as far as the orders and room go. */
+            ordered = false;
+            for (int i = 0; i < app->selected_box_item_count; i++) {
+                ItemPick pick = app->selected_box_items[i];
+                ItemId id = game_pick_real_item(&app->game, &pick);
+                ordered |= game_order_single_item_move(&app->game, id, x, y, z);
+            }
+        } else if (app->move_item_id.slot != UINT32_MAX) {
+            ordered = game_order_single_item_move(&app->game, app->move_item_id, x, y, z);
+        } else {
+            ordered = game_order_item_move(&app->game, from.x, from.y, from.z, x, y, z);
+        }
         if (ordered) {
             app->tool = APP_TOOL_NONE; /* Done: the items are on their way. */
         } /* Else the tool stays for another try (the card says what to do). */
@@ -1727,6 +1784,14 @@ static void render_frame(App *app)
         const Item *item = game_pick_item(&app->game, &pick);
         if (item != NULL && pick.z == app->camera.level) {
             render_item_selection(app->renderer, &app->camera, pick.x, pick.y, item);
+        }
+    } else if (app->tile_selected && app->selected_thing == THING_ITEM_BOX) {
+        for (int i = 0; i < app->selected_box_item_count; i++) {
+            ItemPick pick = app->selected_box_items[i];
+            const Item *item = game_pick_item(&app->game, &pick);
+            if (item != NULL && pick.z == app->camera.level) {
+                render_item_selection(app->renderer, &app->camera, pick.x, pick.y, item);
+            }
         }
     } else if (app->tile_selected) {
         render_tile_selection(app->renderer, &app->camera, app->selected_tile_x,

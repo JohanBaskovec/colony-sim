@@ -2140,6 +2140,40 @@ int game_items_under_point(const Game *game, float x, float y, int z, ItemPick *
     return count;
 }
 
+int game_items_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
+                       ItemPick *out, int capacity)
+{
+    float min_x = fminf(x0, x1), max_x = fmaxf(x0, x1);
+    float min_y = fminf(y0, y1), max_y = fmaxf(y0, y1);
+    int first_x = (int)floorf(min_x), last_x = (int)floorf(max_x);
+    int first_y = (int)floorf(min_y), last_y = (int)floorf(max_y);
+    first_x = first_x < 0 ? 0 : first_x;
+    first_y = first_y < 0 ? 0 : first_y;
+    last_x = last_x >= game->map.width ? game->map.width - 1 : last_x;
+    last_y = last_y >= game->map.height ? game->map.height - 1 : last_y;
+    int count = 0;
+    for (int y = first_y; y <= last_y; y++) {
+        for (int x = first_x; x <= last_x; x++) {
+            if (!map_in_bounds(&game->map, x, y, z)) {
+                continue;
+            }
+            const Items *items = game_items_at(game, x, y, z);
+            int drawn = 0;
+            for (const Item *item = items_first(items, map_index(&game->map, x, y, z));
+                 item != NULL && drawn < ITEM_DRAWN_PER_TILE && count < capacity;
+                 item = items_next(items, item), drawn++) {
+                float ix = (float)x + ((float)item->spot_x + 0.5f) / 256.0f;
+                float iy = (float)y + ((float)item->spot_y + 0.5f) / 256.0f;
+                if (ix >= min_x && ix <= max_x && iy >= min_y && iy <= max_y) {
+                    out[count++] =
+                        (ItemPick){items_id(items, item), (int16_t)x, (int16_t)y, (int16_t)z};
+                }
+            }
+        }
+    }
+    return count;
+}
+
 /* The pick's item among `items`, NULL when not there; follows it onto
  * another tile. */
 static const Item *pick_in(const Game *game, const Items *items, ItemPick *pick)

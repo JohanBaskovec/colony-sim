@@ -689,6 +689,45 @@ static void test_items_under_a_point(void)
     game_shutdown(&game);
 }
 
+/* A rectangle takes the items whose centers lie inside it, whatever the order
+ * of its corners, on its level only, and as many as asked. */
+static void test_items_in_rect(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    for (int y = 0; y < game.map.height; y++) {
+        for (int x = 0; x < game.map.width; x++) {
+            items_clear(&game.items, x, y, 0);
+        }
+    }
+    REQUIRE(game_debug_spawn_items(&game, 10, 10, 0, ITEM_FLINT, 1) == 1);
+    REQUIRE(game_debug_spawn_items(&game, 11, 10, 0, ITEM_COBBLE, 1) == 1);
+    REQUIRE(game_debug_spawn_items(&game, 14, 12, 0, ITEM_BRANCHES, 1) == 1);
+    ItemId flint = items_id(&game.items, items_first(&game.items, map_index(&game.map, 10, 10, 0)));
+    ItemId cobble =
+        items_id(&game.items, items_first(&game.items, map_index(&game.map, 11, 10, 0)));
+    ItemId branch =
+        items_id(&game.items, items_first(&game.items, map_index(&game.map, 14, 12, 0)));
+    REQUIRE(game_debug_move_item(&game, flint, 10.2f, 10.4f, 0));
+    REQUIRE(game_debug_move_item(&game, cobble, 11.8f, 10.6f, 0));
+    REQUIRE(game_debug_move_item(&game, branch, 14.5f, 12.5f, 0));
+    ItemPick picks[8];
+    /* The two on the top rows, the corners given backwards. */
+    int count = game_items_in_rect(&game, 12.0f, 11.0f, 10.0f, 10.0f, 0, picks, 8);
+    REQUIRE(count == 2);
+    CHECK_EQ_UINT(picks[0].id.slot, flint.slot); /* Row by row, from the left. */
+    CHECK_EQ_UINT(picks[1].id.slot, cobble.slot);
+    CHECK_EQ_INT(picks[1].x, 11);
+    /* A rectangle round the centers only: the edge of a tile is not enough. */
+    CHECK_EQ_INT(game_items_in_rect(&game, 10.3f, 10.0f, 11.7f, 11.0f, 0, picks, 8), 0);
+    CHECK_EQ_INT(game_items_in_rect(&game, 10.0f, 10.0f, 15.0f, 13.0f, 0, picks, 8), 3);
+    CHECK_EQ_INT(game_items_in_rect(&game, 10.0f, 10.0f, 15.0f, 13.0f, 0, picks, 2), 2);
+    CHECK_EQ_INT(game_items_in_rect(&game, 10.0f, 10.0f, 15.0f, 13.0f, 1, picks, 8), 0);
+    /* Beyond the map: clipped, nothing breaks. */
+    CHECK_EQ_INT(game_items_in_rect(&game, -50.0f, -50.0f, 500.0f, 500.0f, 0, picks, 8), 3);
+    game_shutdown(&game);
+}
+
 static void test_teleport(void)
 {
     Game game;
@@ -740,6 +779,7 @@ int main(void)
     RUN_TEST(test_spawn_items);
     RUN_TEST(test_move_items_by_hand);
     RUN_TEST(test_items_under_a_point);
+    RUN_TEST(test_items_in_rect);
     RUN_TEST(test_teleport);
     return test_summary();
 }

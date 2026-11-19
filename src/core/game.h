@@ -429,6 +429,14 @@ typedef struct ItemPick {
  * into `out`; returns how many. */
 int game_items_under_point(const Game *game, float x, float y, int z, ItemPick *out, int capacity);
 
+/* The items drawn within the rectangle (corners in any order, in tiles) of
+ * level z: those whose center lies inside it, a tile's newest
+ * ITEM_DRAWN_PER_TILE, as game_items_under_point() sees them (the real
+ * items where someone sees, the known world's elsewhere), row by row. Up to
+ * `capacity` into `out`; returns how many. */
+int game_items_in_rect(const Game *game, float x0, float y0, float x1, float y1, int z,
+                       ItemPick *out, int capacity);
+
 /* The item a pick names now, NULL when it is gone (picked up, eaten, rotted
  * away). The pick follows it: onto its
  * new tile when moved, into the picture when its tile leaves the view and

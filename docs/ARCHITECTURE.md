@@ -2408,7 +2408,13 @@ followed when it moves (`game_pick_item()`: its tile, then around it) and
 across the edge of the fog of war (`items_find_like()`: its copy in the
 known world, or the real one of a copy), ringed on the map
 (`render_item_selection()`) and has a window of its own (weight, condition,
-rot, the other items of its tile).
+rot, the other items of its tile). A box drawn on the map selects the
+colonists in it, else the items in it (`game_items_in_rect()`: the drawn
+ones whose center lies inside): one is selected as a click would, several
+together (`THING_ITEM_BOX`, `App.selected_box_items`, each followed as above,
+those gone dropped), all ringed, in a window that totals their weight and
+lists them by kind, with Forbid and Carry elsewhere for all of them (an
+order per item).
 A body has a window of its own kind (`hud_corpse_rows()`,
 `hud_corpse_tabs()`). A settler's is titled with the dead's name, with their
 age, cause of death and how long ago, and has the tabs of a settler's window,
