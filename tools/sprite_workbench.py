@@ -19,9 +19,9 @@ The scripts need no change. What the workbench reads in them:
   - knobs: the top-level assignments of an UPPER_CASE name to a literal
     (number, string, tuple, list of tuples...): `DARK = (56, 86, 40)`, and
     those read from the command line with a literal default
-    (`SEED = int(sys.argv[2]) if len(sys.argv) > 2 else 3`). Three numbers of
-    0 to 255 or a "#rrggbb" string are a color, a list of colors a palette,
-    two to four other numbers a vector, a list of tuples a table. The comment
+    (`SEED = int(sys.argv[2]) if len(sys.argv) > 2 else 3`). Three whole
+    numbers of 0 to 255 or a "#rrggbb" string are a color, a list of colors a
+    palette, two to four other numbers a vector, a list of tuples a table. The comment
     at the end of the line is shown under the knob; the comment lines just
     above it head a section (a list of names in parentheses there names the
     columns of a table, as `("F", foot_x, angle, ...)` in a comment or
@@ -305,12 +305,13 @@ def parse_number(text, like):
 
 
 def is_color(value):
+    """A "#rrggbb" string, or three or four whole numbers of 0 to 255."""
     if isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", value):
         return True
     return (
         isinstance(value, (tuple, list))
         and len(value) in (3, 4)
-        and all(is_number(v) and 0 <= v <= 255 for v in value)
+        and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 255 for v in value)
     )
 
 
@@ -550,11 +551,19 @@ class Script:
                         section, argv=argv)
             # An output folder or file name from the command line: nothing to tune here.
             knob.hidden = argv and not is_number(value)
+            rows = isinstance(value, (list, tuple)) and value and all(
+                isinstance(row, (list, tuple)) for row in value
+            )
+            # Columns named in the comment above, other than (R, G, B): a table of numbers,
+            # whatever they look like.
+            named = COLUMN_LIST.search(section)
+            names = [name.strip().lower() for name in named.group(1).split(",")] if named else []
+            named = bool(rows and len(names) == len(value[0]) and names[:3] != ["r", "g", "b"])
             if is_number(value):
                 knob.kind = "number"
             elif is_color(value) and not isinstance(value, list):
                 knob.kind = "color"
-            elif isinstance(value, (list, tuple)) and len(value) >= 2 and all(
+            elif rows and not named and len(value) >= 2 and all(
                 is_color(v) and not isinstance(v, list) for v in value
             ):
                 knob.kind = "palette"
