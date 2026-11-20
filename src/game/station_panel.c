@@ -10,6 +10,7 @@
 #include "core/work.h"
 #include "game/hud.h"
 #include "game/inspector.h"
+#include "game/item_info.h"
 #include "game/render.h"
 
 #define GAP UI_LAYOUT_GAP
@@ -151,26 +152,6 @@ static void duration_text(char *out, size_t size, float work)
         return;
     }
     TR_FORMAT(out, size, tr("unit.hours_minutes"), hours_text, minutes_text);
-}
-
-/* A weight or a bulk with as many decimals as it needs to be told from zero. */
-static void quantity_text(char *out, size_t size, float value, const char *unit_key)
-{
-    int decimals = value < 0.1f ? 2 : (SDL_fabsf(value - SDL_roundf(value)) > 0.05f ? 1 : 0);
-    char number[32];
-    tr_decimal(number, sizeof(number), value, decimals);
-    if (unit_key == NULL) {
-        SDL_strlcpy(out, number, size);
-    } else {
-        TR_FORMAT(out, size, tr(unit_key), number);
-    }
-}
-
-static void percent_text(char *out, size_t size, float fraction)
-{
-    char number[16];
-    tr_integer(number, sizeof(number), (long long)(SDL_clamp(fraction, 0.0f, 1.0f) * 100.0f));
-    TR_FORMAT(out, size, tr("unit.percent"), number);
 }
 
 static const char *mode_label(char *out, size_t size, const Bill *bill)
@@ -804,7 +785,7 @@ static void progress_row(UiLayout *layout, const Workstation *station)
     char text[TEXT_SIZE], percent[32];
     const RecipeDef *current = recipe_def((RecipeType)station->work_recipe);
     if (current != NULL && station->work_input.count > 0) {
-        percent_text(percent, sizeof(percent), station->work_progress / current->work);
+        item_info_percent_text(percent, sizeof(percent), station->work_progress / current->work);
         TR_FORMAT(text, sizeof(text), tr("station.in_progress"), tr(current->name_key), percent);
         ui_layout_label(layout, text, 0.0f, false);
     }
@@ -882,12 +863,6 @@ static void bills_rows_of(UiLayout *layout, StationRows *rows, const Workstation
 
 static Workstation as_known(const Game *game, const Workstation *station);
 
-/* A dim title over a group of rows. */
-static void heading_row(UiLayout *layout, const char *key)
-{
-    ui_layout_label(layout, tr(key), 0.0f, true);
-}
-
 /* The settings of a bill (one of the station's at `index`, or the draft at
  * DRAFT_BILL): what it takes (ingredients and tools, red when they cannot be
  * had), who works on it, how far ingredients are looked for and which of
@@ -896,13 +871,13 @@ static void bill_settings_rows(UiLayout *layout, StationRows *rows, const Workst
                                const Bill *bill, int index)
 {
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
-    heading_row(layout, "station.recipe.ingredients");
+    item_info_heading(layout, "station.recipe.ingredients");
     bill_ingredients_row(layout, rows->game, bill);
     layout->y += GAP;
-    heading_row(layout, "bill.heading.tools");
+    item_info_heading(layout, "bill.heading.tools");
     bill_tool_row(layout, rows->game, bill);
     layout->y += GAP;
-    heading_row(layout, "bill.heading.worker");
+    item_info_heading(layout, "bill.heading.worker");
     bill_worker_rows(layout, rows->game, bill, index, &rows->action);
     layout->y += GAP;
     bill_radius_row(layout, rows->app, rows->station, bill, index, &rows->action);
@@ -915,7 +890,7 @@ static void bill_settings_rows(UiLayout *layout, StationRows *rows, const Workst
     }
     if (def->inputs[1] != ITEM_NONE) {
         layout->y += GAP;
-        heading_row(layout, "bill.heading.choice");
+        item_info_heading(layout, "bill.heading.choice");
         bill_inputs_row(layout, bill, index, &rows->action);
     }
     layout->y += GAP;
@@ -1028,13 +1003,6 @@ static void item_picture_tooltip(Ui *ui, ItemType type)
     ui_tooltip(ui, &name, 1);
 }
 
-/* An item picture on its well, `size` wide. */
-static void item_picture(App *app, SDL_FRect rect, ItemType type)
-{
-    ui_fill(&app->ui, rect, app->ui.theme.colors[THEME_ICON_WELL]);
-    render_item_icon(app->renderer, app->sprites, rect, type);
-}
-
 /* The window of recipes to add, one per row: the picture of what it makes,
  * its name, and its price: a picture per ingredient with the count under
  * it. A click picks the recipe (its details open at the right), a double
@@ -1081,10 +1049,10 @@ static void add_rows(UiLayout *layout, void *userdata)
                 ui_fill(ui, row, ui->theme.colors[THEME_SCROLL_TRACK]);
             }
             float middle = row.y + row_height * 0.5f;
-            item_picture(app,
-                         (SDL_FRect){row.x, SDL_roundf(middle - product_size * 0.5f), product_size,
-                                     product_size},
-                         def->product);
+            item_info_picture(app,
+                              (SDL_FRect){row.x, SDL_roundf(middle - product_size * 0.5f),
+                                          product_size, product_size},
+                              def->product);
             ui_label(ui, tr(def->name_key), row.x + name_x, SDL_floorf(middle - line * 0.5f));
             float x = row.x + cost_x;
             bool first = true;
@@ -1104,7 +1072,7 @@ static void add_rows(UiLayout *layout, void *userdata)
                 float top = SDL_roundf(middle - (cost_size + line) * 0.5f);
                 SDL_FRect picture = {SDL_roundf(x + (cell - cost_size) * 0.5f), top, cost_size,
                                      cost_size};
-                item_picture(app, picture, type);
+                item_info_picture(app, picture, type);
                 ui_label(ui, number, x + (cell - ui_text_width(ui, number)) * 0.5f,
                          top + cost_size);
                 if (ui_hovered(ui, (SDL_FRect){x, top, cell, cost_size + line})) {
@@ -1127,15 +1095,6 @@ static void add_rows(UiLayout *layout, void *userdata)
         }
         layout->y += row_height;
     }
-}
-
-/* A table row of the recipe's details: what it is, then its value. Returns
- * the row's rectangle. */
-static SDL_FRect detail_row(UiLayout *layout, const char *label_key, const char *value,
-                            bool hoverable)
-{
-    return ui_layout_pair(layout, tr(label_key), value, layout->ui->theme.colors[THEME_TEXT],
-                          hoverable);
 }
 
 /* What the recipe's product is, made by a settler at `level` from the best
@@ -1208,23 +1167,13 @@ static int knowledge_tooltip(char lines[UI_TOOLTIP_LINES][TEXT_SIZE], RecipeType
     return count;
 }
 
-/* A row whose tooltip is the given lines (none when `count` is 0). */
-static void detail_row_tip(UiLayout *layout, const char *label_key, const char *value,
-                           const char *const *lines, int count)
-{
-    SDL_FRect row = detail_row(layout, label_key, value, count > 0);
-    if (count > 0 && layout->draw && ui_hovered(layout->ui, row)) {
-        ui_tooltip(layout->ui, lines, count);
-    }
-}
-
 /* What making the recipe takes: the work, the knowledge (its effects in the
  * tooltip), the ingredients and the time. */
 static void making_rows(UiLayout *layout, RecipeType recipe)
 {
     const RecipeDef *def = recipe_def(recipe);
     char text[TEXT_SIZE], number[16];
-    detail_row(layout, "station.recipe.work", tr(work_type_def(WORK_CRAFTING)->name_key), false);
+    item_info_row(layout, "station.recipe.work", tr(work_type_def(WORK_CRAFTING)->name_key), false);
     if (def->knowledge != KNOWLEDGE_NONE) {
         tr_integer(number, sizeof(number), (long long)def->min_level);
         TR_FORMAT(text, sizeof(text), tr("recipe.knowledge_level"),
@@ -1235,144 +1184,26 @@ static void making_rows(UiLayout *layout, RecipeType recipe)
         for (int i = 0; i < count; i++) {
             shown[i] = lines[i];
         }
-        detail_row_tip(layout, "station.recipe.knowledge", text, shown, count);
+        item_info_row_tip(layout, "station.recipe.knowledge", text, shown, count);
     } else {
-        detail_row(layout, "station.recipe.knowledge", tr("station.recipe.none"), false);
+        item_info_row(layout, "station.recipe.knowledge", tr("station.recipe.none"), false);
     }
     ingredient_text(text, sizeof(text), recipe, recipe_inputs(recipe));
-    detail_row(layout, "station.recipe.ingredients", text, false);
+    item_info_row(layout, "station.recipe.ingredients", text, false);
     duration_text(text, sizeof(text), def->work);
-    detail_row(layout, "station.recipe.time", text, false);
+    item_info_row(layout, "station.recipe.time", text, false);
 }
 
-/* The species a wooden product will be of, and what they make of it in the
- * tooltip: weight, how long it lasts, the quality of a shaft. */
-static void wood_detail_row(UiLayout *layout, WoodMask woods)
-{
-    char text[TEXT_SIZE], number[16];
-    if (woods == 0) {
-        SDL_strlcpy(text, tr("station.recipe.wood_any"), sizeof(text));
-        detail_row(layout, "station.recipe.wood", text, false);
-        return;
-    }
-    wood_list_name(woods, text, sizeof(text));
-    char lines[3][TEXT_SIZE];
-    const char *shown[3];
-    tr_decimal(number, sizeof(number), wood_weight(woods), 2);
-    TR_FORMAT(lines[0], TEXT_SIZE, tr("station.recipe.wood.weight"), number);
-    tr_decimal(number, sizeof(number), wood_toughness(woods), 2);
-    TR_FORMAT(lines[1], TEXT_SIZE, tr("station.recipe.wood.toughness"), number);
-    char signed_number[16];
-    tr_integer(number, sizeof(number), wood_shafts(woods));
-    SDL_snprintf(signed_number, sizeof(signed_number), "%s%s", wood_shafts(woods) > 0 ? "+" : "",
-                 number);
-    TR_FORMAT(lines[2], TEXT_SIZE, tr("station.recipe.wood.shafts"), signed_number);
-    for (int i = 0; i < 3; i++) {
-        shown[i] = lines[i];
-    }
-    detail_row_tip(layout, "station.recipe.wood", text, shown, 3);
-}
-
-/* What the product is: its name, weight (of the bill's species), room, size,
- * form, hit points, wood, food and how long it keeps. */
+/* What the product is: its name, then its traits (weight of the bill's
+ * species, room, size, form, hit points, wood, food, how long it keeps). */
 static void item_rows(UiLayout *layout, RecipeType recipe, const Bill *bill)
 {
     const RecipeDef *def = recipe_def(recipe);
     const ItemDef *product = item_def(def->product);
-    char text[TEXT_SIZE], number[16];
-    detail_row(layout, "station.recipe.result", tr(product->name_key), false);
-    WoodMask woods = bill != NULL && product->wooden ? bill->woods : 0;
+    item_info_row(layout, "station.recipe.result", tr(product->name_key), false);
     ItemStack one = item_stack_make(def->product, 1, ITEM_QUALITY_STANDARD, 0);
-    one.woods = woods;
-    quantity_text(text, sizeof(text), item_stack_mass(one), "unit.kg");
-    detail_row(layout, "station.recipe.weight", text, false);
-    quantity_text(text, sizeof(text), product->bulk, NULL);
-    detail_row(layout, "station.recipe.bulk", text, false);
-    if (product->length_cm > 0) {
-        tr_integer(number, sizeof(number), product->length_cm);
-        TR_FORMAT(text, sizeof(text), tr("station.recipe.size_cm"), number);
-    } else {
-        SDL_strlcpy(text, tr("station.recipe.size_loose"), sizeof(text));
-    }
-    detail_row(layout, "station.recipe.size", text, false);
-    const char *form = item_form_name_key(product->form);
-    if (form != NULL) {
-        detail_row(layout, "station.recipe.form", tr(form), false);
-    }
-    if (product->damageable) {
-        tr_integer(number, sizeof(number), product->max_hit_points);
-        detail_row(layout, "station.recipe.hit_points", number, false);
-    }
-    if (product->wooden) {
-        wood_detail_row(layout, woods);
-    }
-    if (product->nutrition > 0.0f) {
-        percent_text(text, sizeof(text), product->nutrition);
-        detail_row(layout, "station.recipe.nutrition", text, false);
-    }
-    if (product->rot_days > 0.0f) {
-        char celsius[32];
-        tr_decimal(number, sizeof(number), product->rot_days, product->rot_days < 10.0f ? 1 : 0);
-        tr_integer(celsius, sizeof(celsius), (long long)ITEM_ROT_REFERENCE_CELSIUS);
-        char temperature[32];
-        TR_FORMAT(temperature, sizeof(temperature), tr("unit.celsius"), celsius);
-        TR_FORMAT(text, sizeof(text), tr("station.recipe.keeps"), number, temperature);
-        detail_row(layout, "station.recipe.rot", text, false);
-    }
-}
-
-/* What the product does as a tool: a row per kind of work it speeds up. */
-static void tool_rows(UiLayout *layout, ItemType type)
-{
-    bool heading = false;
-    for (int use = 0; use < TOOL_USE_COUNT; use++) {
-        float factor = tool_type_factor((ToolUse)use, type);
-        if (factor <= 0.0f) {
-            continue;
-        }
-        if (!heading) {
-            layout->y += GAP;
-            heading_row(layout, "station.recipe.heading.tool");
-            heading = true;
-        }
-        char number[16], text[TEXT_SIZE];
-        tr_decimal(number, sizeof(number), factor, 1);
-        TR_FORMAT(text, sizeof(text), tr("station.recipe.tool_speed"), number);
-        ui_layout_pair(layout, tr(tool_use_def((ToolUse)use)->name_key), text,
-                       layout->ui->theme.colors[THEME_TEXT], false);
-    }
-}
-
-/* What the product does as a weapon: its attack, hands, damage, pace,
- * accuracy and damage per second. */
-static void weapon_rows(UiLayout *layout, ItemType type)
-{
-    const WeaponDef *weapon = weapon_def(type);
-    const AttackDef *attack = weapon != NULL ? attack_def((AttackType)weapon->attack) : NULL;
-    if (attack == NULL) {
-        return;
-    }
-    layout->y += GAP;
-    heading_row(layout, "station.recipe.heading.weapon");
-    char text[TEXT_SIZE], number[16];
-    detail_row(layout, "station.recipe.attack", tr(attack->name_key), false);
-    detail_row(layout, "station.recipe.hands",
-               tr(weapon->hands >= 2 ? "station.recipe.two_hands" : "station.recipe.one_hand"),
-               false);
-    tr_decimal(number, sizeof(number), attack->damage, 1);
-    const char *damage_tip = tr("station.recipe.damage.description");
-    detail_row_tip(layout, "station.recipe.damage", number, &damage_tip, 1);
-    tr_decimal(number, sizeof(number), attack->interval, 1);
-    TR_FORMAT(text, sizeof(text), tr("station.recipe.blow_every"), number);
-    detail_row(layout, "station.recipe.pace", text, false);
-    percent_text(text, sizeof(text), attack->accuracy);
-    detail_row(layout, "station.recipe.accuracy", text, false);
-    tr_decimal(number, sizeof(number), attack->damage / attack->interval, 1);
-    char line[TEXT_SIZE], hits[16];
-    tr_decimal(hits, sizeof(hits), attack_worth((AttackType)weapon->attack), 1);
-    TR_FORMAT(line, sizeof(line), tr("station.recipe.dps.description"), hits);
-    const char *dps_tip = line;
-    detail_row_tip(layout, "station.recipe.dps", number, &dps_tip, 1);
+    one.woods = bill != NULL && product->wooden ? bill->woods : 0;
+    item_info_traits(layout, one, true);
 }
 
 /* "Ada (level 45)", or "3 settlers (levels 40 to 80)". */
@@ -1418,7 +1249,7 @@ static void estimate_rows(UiLayout *layout, const Game *game, const Bill *bill)
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
     const ItemDef *product = item_def(def->product);
     layout->y += GAP;
-    heading_row(layout, "station.recipe.heading.estimate");
+    item_info_heading(layout, "station.recipe.heading.estimate");
     BillEstimate estimate = game_bill_estimate(game, bill);
     if (estimate.crafters == 0) {
         ui_layout_label(layout, tr("station.recipe.estimate.nobody"), 0.0f, true);
@@ -1426,9 +1257,9 @@ static void estimate_rows(UiLayout *layout, const Game *game, const Bill *bill)
     }
     char text[TEXT_SIZE], low[32], high[32];
     crafters_text(text, sizeof(text), game, &estimate, def->knowledge != KNOWLEDGE_NONE);
-    detail_row(layout,
-               estimate.crafters == 1 ? "station.recipe.crafter" : "station.recipe.crafters_label",
-               text, false);
+    item_info_row(
+        layout, estimate.crafters == 1 ? "station.recipe.crafter" : "station.recipe.crafters_label",
+        text, false);
     if (product->has_quality) {
         hud_quality_text(low, sizeof(low), (ItemQuality)estimate.low.quality);
         hud_quality_text(high, sizeof(high), (ItemQuality)estimate.high.quality);
@@ -1438,20 +1269,21 @@ static void estimate_rows(UiLayout *layout, const Game *game, const Bill *bill)
         char line[TEXT_SIZE];
         TR_FORMAT(line, sizeof(line), tr("station.recipe.quality.description"), cap);
         const char *tip = line;
-        detail_row_tip(layout, "station.recipe.quality", text, &tip, 1);
+        item_info_row_tip(layout, "station.recipe.quality", text, &tip, 1);
     }
     if (product->damageable) {
-        percent_text(low, sizeof(low), (float)item_stack_hit_points_percent(estimate.low) / 100.0f);
-        percent_text(high, sizeof(high),
-                     (float)item_stack_hit_points_percent(estimate.high) / 100.0f);
+        item_info_percent_text(low, sizeof(low),
+                               (float)item_stack_hit_points_percent(estimate.low) / 100.0f);
+        item_info_percent_text(high, sizeof(high),
+                               (float)item_stack_hit_points_percent(estimate.high) / 100.0f);
         range_text(text, sizeof(text), low, high);
-        detail_row(layout, "station.recipe.condition", text, false);
+        item_info_row(layout, "station.recipe.condition", text, false);
     }
     if (estimate.low.count != 1 || estimate.high.count != 1) {
         tr_integer(low, sizeof(low), estimate.low.count);
         tr_integer(high, sizeof(high), estimate.high.count);
         range_text(text, sizeof(text), low, high);
-        detail_row(layout, "station.recipe.count", text, false);
+        item_info_row(layout, "station.recipe.count", text, false);
     }
 }
 
@@ -1464,10 +1296,10 @@ static void recipe_rows(UiLayout *layout, void *userdata)
     const RecipeDef *def = recipe_def(recipe);
     making_rows(layout, recipe);
     layout->y += GAP;
-    heading_row(layout, "station.recipe.heading.item");
+    item_info_heading(layout, "station.recipe.heading.item");
     item_rows(layout, recipe, rows->bill);
-    tool_rows(layout, def->product);
-    weapon_rows(layout, def->product);
+    item_info_tool_rows(layout, def->product);
+    item_info_weapon_rows(layout, def->product);
     if (rows->bill != NULL) {
         estimate_rows(layout, rows->game, rows->bill);
     }

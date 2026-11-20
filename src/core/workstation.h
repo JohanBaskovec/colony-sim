@@ -329,10 +329,11 @@ bool workstation_start_free_craft(Workstations *workstations, int index, int bil
  * Adds work to the craft in progress. When it is complete, the products are
  * dropped on the station's tile, the bill `bill` (or the first one of the
  * same recipe if that one changed) counts it, and true is returned. Products
- * come from the worker's `level` (see recipe_craft()).
+ * come from the worker's `level` (see recipe_craft()), and are marked as made
+ * by `maker` (items_maker_register(), 0: by nobody).
  */
 bool workstation_add_craft_work(Workstations *workstations, int index, int bill, Items *items,
-                                const Map *map, float work, double level, Rng *rng);
+                                const Map *map, float work, double level, Rng *rng, uint16_t maker);
 
 uint64_t workstations_hash(const Workstations *workstations, uint64_t hash);
 

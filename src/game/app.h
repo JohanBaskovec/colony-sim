@@ -139,6 +139,7 @@ typedef enum AppWindow {
     APP_WINDOW_STATION_RECIPE, /* What the recipe picked in that list needs and makes. */
     APP_WINDOW_STATION_BILL,   /* The details of the bill picked in the Bills tab. */
     APP_WINDOW_STATION_DRAFT,  /* The settings of the recipe picked, before it is added. */
+    APP_WINDOW_ITEM_INFO,      /* Everything known of the item selected (game/item_info.h). */
     APP_WINDOW_WORK,           /* Work priorities grid. */
     APP_WINDOW_LOG,            /* Colony log (game/log_window.h). */
     APP_WINDOW_HELP,           /* Controls. */
@@ -319,8 +320,9 @@ typedef struct App {
     bool show_work_panel;
     bool show_log; /* Colony log (game/log_window.h): a main window like the work grid. */
     bool show_help;
-    bool show_debug_menu;     /* Debug menu (game/debug_panel.h). */
-    bool show_items_menu;     /* Items menu (game/items_panel.h). */
+    bool show_item_info;  /* The information window of the item selected (APP_WINDOW_ITEM_INFO). */
+    bool show_debug_menu; /* Debug menu (game/debug_panel.h). */
+    bool show_items_menu; /* Items menu (game/items_panel.h). */
     bool show_animals_menu;   /* Animals menu (game/animals_panel.h). */
     bool show_visual_menu;    /* Visual debug menu (game/visual_panel.h). */
     RenderTuning tuning;      /* What it sets: the fog, the levels below. */
@@ -506,6 +508,9 @@ void app_build_like_selection(App *app);
 
 /* Centers the view on a colonist, on its level (once: it stops following). */
 void app_focus_colonist(App *app, EntityId id);
+
+/* Centers the view on a tile and its level (the selection stays). */
+void app_focus_tile(App *app, int x, int y, int z);
 
 /* The camera follows a settler or an animal: it is centered on it at once and
  * stays on it, level included, as it walks. The player moving the view (keys,

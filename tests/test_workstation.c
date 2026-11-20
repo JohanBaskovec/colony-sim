@@ -294,9 +294,9 @@ static void test_crafting(void)
 
     float needed = recipe_def(RECIPE_FLAKES)->work;
     CHECK(!workstation_add_craft_work(&stations, index, bill, &items, &map, needed * 0.5f, 55.0,
-                                      NULL));
+                                      NULL, 0));
     CHECK(workstation_add_craft_work(&stations, index, bill, &items, &map, needed * 0.5f, 55.0,
-                                     NULL));
+                                     NULL, 0));
     ItemStack flakes = items_get(&items, 3, 4, 0);
     CHECK_EQ_INT(flakes.type, ITEM_FLAKE);
     CHECK_EQ_INT(flakes.count, 3);
@@ -304,7 +304,7 @@ static void test_crafting(void)
     CHECK_EQ_INT(station->bills[bill].done, 1);
     CHECK_EQ_INT(station->work_input.count, 0);
     CHECK_EQ_INT(station->work_recipe, RECIPE_COUNT);
-    CHECK(!workstation_add_craft_work(&stations, index, bill, &items, &map, needed, 55.0, NULL));
+    CHECK(!workstation_add_craft_work(&stations, index, bill, &items, &map, needed, 55.0, NULL, 0));
 
     /* The input of an unfinished craft comes back with its bill. */
     REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES, flint));
@@ -333,7 +333,7 @@ static void test_crafting_with_a_load(void)
     CHECK(station->work_input.held == load.held);
     CHECK_EQ_INT(items.held_count, 1);
     CHECK(workstation_add_craft_work(&stations, index, bill, &items, &map,
-                                     recipe_def(RECIPE_FLAKES)->work, 55.0, NULL));
+                                     recipe_def(RECIPE_FLAKES)->work, 55.0, NULL, 0));
     CHECK_EQ_INT(items.held_count, 0);
     CHECK_EQ_INT(items.totals[ITEM_FLINT], 0);
     CHECK_EQ_INT(items_check(&items).problems, 0);

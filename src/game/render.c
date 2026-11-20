@@ -2840,6 +2840,15 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         batch_flush(renderer);
         break;
     }
+    case RENDER_ICON_INFO: { /* A lowercase "i" in a ring. */
+        SDL_Color color = {150, 200, 236, 255};
+        float cx = rect.x + w * 0.5f, cy = rect.y + h * 0.5f, radius = w * 0.4f;
+        batch_ring(renderer, color, cx, cy, radius * 0.86f, radius);
+        batch_disc(renderer, color, cx, cy - radius * 0.46f, radius * 0.13f);
+        batch_bar(renderer, color, cx, cy - radius * 0.14f, cx, cy + radius * 0.5f, radius * 0.12f);
+        batch_flush(renderer);
+        break;
+    }
     case RENDER_ICON_IN_HAND: { /* A fist closed on an upright handle. */
         SDL_Color skin = {222, 184, 150, 255}, crease = {150, 108, 80, 255};
         float cx = rect.x + w * 0.5f;

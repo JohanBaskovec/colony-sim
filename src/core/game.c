@@ -2670,6 +2670,7 @@ static void note_hardships(Colonist *colonist, uint64_t tick)
 void game_tick(Game *game)
 {
     game->clock.tick++;
+    items_set_now(&game->items, game->clock.tick);
     weather_tick(&game->weather, game->clock.tick);
     uint32_t harmful_falls =
         game->gather_zones.harmful_tree_falls + game->designations.harmful_tree_falls;

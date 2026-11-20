@@ -847,6 +847,12 @@ static void thing_actions(App *app, const ThingRows *rows)
                 app_toggle_tool(app, APP_TOOL_MOVE_ITEM, 0);
             }
         }
+        const char *lines[2] = {tr("tile_panel.item_info"), tr("tile_panel.item_info.description")};
+        SDL_FRect icon;
+        if (inspector_action(app, slot++, app->show_item_info, &icon, lines, 2)) {
+            app->show_item_info = !app->show_item_info;
+        }
+        render_tool_icon(app->renderer, icon, RENDER_ICON_INFO);
         break;
     }
     case THING_ITEM_BOX: {

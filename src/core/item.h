@@ -39,6 +39,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "core/pool.h"
+
 struct Map; /* core/map.h includes this header. */
 
 typedef enum ItemType {
@@ -222,6 +224,12 @@ typedef struct ItemStack {
      * they were made from (core/wood.h); 0 for other types, or wood of no
      * known species. Items of different species never share a stack. */
     WoodMask woods;
+    /* When the item came to be, as a tick + 1 (0: unknown: items_add() stamps
+     * the tick it is added at), and who made it (ItemMaker, 1-based index into
+     * Items.makers, 0: nobody: found in the wild). Never part of what makes
+     * stacks match. */
+    uint32_t made;
+    uint16_t maker;
     /* A load in hand (see items_pick_up()): the very items, a list in the
      * item pool (slot + 1 of the first), the fields above their summary. 0
      * for a stack that is only numbers (what to add, what a tile holds):
@@ -246,6 +254,8 @@ typedef struct Item {
     uint8_t angle;       /* How it is turned, in 1/256 of a turn. */
     uint8_t forbidden;   /* Non-zero: the player forbade it (see items_forbidden()). */
     WoodMask woods;      /* As ItemStack.woods. */
+    uint32_t made;       /* As ItemStack.made. */
+    uint16_t maker;      /* As ItemStack.maker. */
     uint32_t next;       /* Next item of the same tile: slot + 1, 0 for none. */
     uint32_t tile;       /* Tile index, ITEM_TILE_HELD for an item in a load. */
 } Item;
@@ -270,6 +280,14 @@ struct Items;
 /* Whether items dropped may land on a tile (items_set_drop_filter()). */
 typedef bool (*ItemDropFilter)(const void *data, const struct Items *items, int x, int y, int z,
                                const ItemStack *load);
+
+/* A settler who made items: kept by name for as long as the items last, however
+ * long the settler does. */
+#define ITEM_MAKERS_MAX 255
+typedef struct ItemMaker {
+    EntityId id;
+    char name[32]; /* Proper noun: never translated. */
+} ItemMaker;
 
 typedef struct Items {
     int width;
@@ -318,6 +336,12 @@ typedef struct Items {
      * and the data passed to it. */
     ItemDropFilter drop_filter;
     const void *drop_data;
+    /* The tick items are stamped with (items_set_now(): the game's clock; not in
+     * the state hash). */
+    uint32_t now;
+    /* Who made items (items_maker_register()), not in the state hash. */
+    int maker_count;
+    ItemMaker makers[ITEM_MAKERS_MAX];
 } Items;
 
 /* Items dropped by a single action spread at most this far (in steps). */
@@ -568,6 +592,20 @@ const Item *items_load_first(const Items *items, ItemStack load);
 /* How wide an item is drawn, in tiles: by its bulk, from 0.4 (a flake) to 1
  * (a body). */
 float item_drawn_size(ItemType type);
+
+/* Tells the items what tick it is: those added from now on are stamped with it
+ * (Item.made). */
+void items_set_now(Items *items, uint64_t tick);
+
+/* The record of a settler who makes items (reusing the one it has), to put
+ * in ItemStack.maker; 0 when there is no room for another one. */
+uint16_t items_maker_register(Items *items, EntityId id, const char *name);
+
+/* The name of a maker (ItemStack.maker), NULL for none. */
+const char *items_maker_name(const Items *items, uint16_t maker);
+
+/* The settler a maker is (ItemStack.maker): ENTITY_NONE for none. */
+EntityId items_maker_id(const Items *items, uint16_t maker);
 
 /* The id of an item of the pool. */
 ItemId items_id(const Items *items, const Item *item);

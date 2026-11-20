@@ -946,6 +946,7 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_WORK: app->show_work_panel = false; break;
     case APP_WINDOW_LOG: app->show_log = false; break;
     case APP_WINDOW_HELP: app->show_help = false; break;
+    case APP_WINDOW_ITEM_INFO: app->show_item_info = false; break;
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
     case APP_WINDOW_ITEMS: app->show_items_menu = false; break;
     case APP_WINDOW_ANIMALS: app->show_animals_menu = false; break;
@@ -1568,6 +1569,14 @@ void app_focus_colonist(App *app, EntityId id)
         colonist_position(colonist, &app->camera.x, &app->camera.y);
         app->camera.level = colonist->z;
     }
+}
+
+void app_focus_tile(App *app, int x, int y, int z)
+{
+    app_stop_following(app);
+    app->camera.x = (float)x + 0.5f;
+    app->camera.y = (float)y + 0.5f;
+    app->camera.level = z;
 }
 
 /* Selects the colonists in the box from the drag's world corner to the

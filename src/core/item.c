@@ -8,6 +8,7 @@
 
 #include <limits.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1031,6 +1032,8 @@ static ItemStack valid_batch(ItemStack batch)
     valid.corpse = corpse;
     valid.woods = ITEM_DEFS[type].wooden ? batch.woods : 0;
     valid.forbidden = batch.forbidden != 0;
+    valid.made = batch.made;
+    valid.maker = batch.maker;
     return valid;
 }
 
@@ -1077,6 +1080,8 @@ static uint32_t new_item(Items *items, const ItemStack *batch, uint32_t tile)
                        .corpse = batch->corpse,
                        .woods = batch->woods,
                        .forbidden = batch->forbidden,
+                       .made = batch->made != 0 ? batch->made : items->now + 1,
+                       .maker = batch->maker,
                        .generation = item->generation,
                        .tile = tile};
     }
@@ -1145,6 +1150,8 @@ static void refresh_load(const Items *items, ItemStack *load)
                         .corpse = head->corpse,
                         .woods = head->woods,
                         .forbidden = head->forbidden != 0,
+                        .made = head->made,
+                        .maker = head->maker,
                         .count = (uint16_t)(count < UINT16_MAX ? count : UINT16_MAX),
                         .quality = (uint8_t)((quality + count / 2) / count),
                         .hit_points = (uint16_t)((hit_points + count / 2) / count),
@@ -1802,7 +1809,41 @@ ItemStack item_as_stack(const Item *item)
                        .eaten = item->eaten,
                        .corpse = item->corpse,
                        .woods = item->woods,
-                       .forbidden = item->forbidden != 0};
+                       .forbidden = item->forbidden != 0,
+                       .made = item->made,
+                       .maker = item->maker};
+}
+
+void items_set_now(Items *items, uint64_t tick)
+{
+    items->now = tick < UINT32_MAX - 1 ? (uint32_t)tick : UINT32_MAX - 1;
+}
+
+uint16_t items_maker_register(Items *items, EntityId id, const char *name)
+{
+    for (int i = 0; i < items->maker_count; i++) {
+        if (items->makers[i].id.index == id.index &&
+            items->makers[i].id.generation == id.generation) {
+            return (uint16_t)(i + 1);
+        }
+    }
+    if (items->maker_count >= ITEM_MAKERS_MAX || name == NULL) {
+        return 0;
+    }
+    ItemMaker *maker = &items->makers[items->maker_count++];
+    maker->id = id;
+    snprintf(maker->name, sizeof(maker->name), "%s", name);
+    return (uint16_t)items->maker_count;
+}
+
+EntityId items_maker_id(const Items *items, uint16_t maker)
+{
+    return maker >= 1 && maker <= items->maker_count ? items->makers[maker - 1].id : ENTITY_NONE;
+}
+
+const char *items_maker_name(const Items *items, uint16_t maker)
+{
+    return maker >= 1 && maker <= items->maker_count ? items->makers[maker - 1].name : NULL;
 }
 
 long item_rot_left(const Item *item)

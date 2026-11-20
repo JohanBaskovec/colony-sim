@@ -11,6 +11,7 @@
 #include "game/attributes_panel.h"
 #include "game/debug_panel.h"
 #include "game/inspector.h"
+#include "game/item_info.h"
 #include "game/items_panel.h"
 #include "game/layout.h"
 #include "game/log_window.h"
@@ -456,7 +457,7 @@ static void add_site_lines(Panel *panel, const ConstructionSite *site)
 }
 
 /* "2 hours ago": how long since the colony saw something, at `tick`. */
-static void seen_ago(char *out, size_t size, uint64_t now, uint64_t tick)
+void hud_ago_text(char *out, size_t size, uint64_t now, uint64_t tick)
 {
     uint64_t hours = now > tick ? (now - tick) / TICKS_PER_HOUR : 0;
     char number[32];
@@ -483,7 +484,7 @@ static void add_animal_ghosts(App *app, Panel *panel, int x, int y, int z)
             continue;
         }
         char ago[64];
-        seen_ago(ago, sizeof(ago), game->clock.tick, ghost->tick);
+        hud_ago_text(ago, sizeof(ago), game->clock.tick, ghost->tick);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.animal_seen"), ago,
                   tr(animal_name_key((AnimalSpecies)ghost->species, (AnimalSex)ghost->sex)));
     }
@@ -2041,7 +2042,7 @@ void hud_corpse_rows(UiLayout *layout, const Game *game, const Corpse *corpse)
     if ((unsigned)cause < DEATH_CAUSE_COUNT && CAUSE_KEYS[cause] != NULL) {
         ui_layout_pair(layout, tr("corpse.cause"), tr(CAUSE_KEYS[cause]), text, false);
     }
-    seen_ago(ago, sizeof(ago), game->clock.tick, corpse->died);
+    hud_ago_text(ago, sizeof(ago), game->clock.tick, corpse->died);
     ui_layout_pair(layout, tr("corpse.died"), ago, text, false);
 }
 
@@ -2133,6 +2134,7 @@ static void draw_window(App *app, AppWindow window)
     case APP_WINDOW_WORK: work_panel_draw(app); break;
     case APP_WINDOW_LOG: log_window_draw(app); break;
     case APP_WINDOW_HELP: help_window(app); break;
+    case APP_WINDOW_ITEM_INFO: item_info_draw(app); break;
     case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
     case APP_WINDOW_ITEMS: items_panel_draw(app); break;
     case APP_WINDOW_ANIMALS: animals_panel_draw(app); break;
@@ -2169,6 +2171,9 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     }
     if (app->show_help) {
         out[count++] = APP_WINDOW_HELP;
+    }
+    if (app->show_item_info) {
+        out[count++] = APP_WINDOW_ITEM_INFO;
     }
     if (app->show_debug_menu) {
         out[count++] = APP_WINDOW_DEBUG;

@@ -790,6 +790,21 @@ static void test_bill_specific_worker(void)
     CHECK(game.items.totals[ITEM_FLAKE] > 0);
     CHECK(colonist_knowledge_level(second, KNOWLEDGE_STONE_KNAPPING) > 70.0);
     CHECK(colonist_knowledge_level(first, KNOWLEDGE_STONE_KNAPPING) == 70.0);
+    /* What they made says so, and when: the flint they used was nobody's work. */
+    int flakes_seen = 0;
+    for (uint32_t slot = 0; slot < game.items.pool_used; slot++) {
+        const Item *item = &game.items.pool[slot];
+        if (item->type == ITEM_FLAKE) {
+            const char *maker = items_maker_name(&game.items, item->maker);
+            REQUIRE(maker != NULL);
+            CHECK_STR_EQ(maker, second->name);
+            CHECK(item->made > 1 && item->made <= (uint32_t)game.clock.tick + 1);
+            flakes_seen++;
+        } else if (item->type == ITEM_FLINT) {
+            CHECK_EQ_INT(item->maker, 0);
+        }
+    }
+    CHECK(flakes_seen > 0);
 
     /* A settler nobody knows: the bill waits. */
     CHECK(workstation_set_bill_worker(&game.workstations, index, bill, BILL_WORKER_SPECIFIC,

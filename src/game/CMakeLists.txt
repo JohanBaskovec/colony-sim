@@ -25,6 +25,7 @@ add_executable(colony_sim
     scenarios_panel.c
     settings_window.c
     sprites.c
+    item_info.c
     station_panel.c
     stockpile_panel.c
     strike_marks.c

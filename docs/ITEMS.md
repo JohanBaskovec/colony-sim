@@ -274,3 +274,18 @@ playable.
    corner of tiles holding several items is gone: every item is drawn, and
    the window lists them. Games with nothing forbidden keep the same state
    hash.
+
+## When and by whom
+
+Every item remembers the tick it came to be (`Item.made`, tick + 1; 0 is
+unknown) and who made it (`Item.maker`, an index into `Items.makers`; 0 is
+nobody: found in the wild). `items_add()` stamps the tick set with
+`items_set_now()` (the game does it every tick) on stacks that say nothing, so a
+fruit that falls from a crown or a stone generated with the map is "made" when
+it appears; a stack that carries a stamp (`ItemStack.made`, `.maker`) keeps it,
+and so do items travelling in loads and items turning into another type
+(drying). Crafting products are marked with the settler who crafted them
+(`workstation_add_craft_work()`); a settler is kept by name as long as items
+they made last, however long they live (`items_maker_register()`, at most
+`ITEM_MAKERS_MAX`; past it items have no maker). Neither field is in the state
+hash. The information window of an item (`game/item_info.c`) shows both, the maker as a link while they live (`items_maker_id()`).

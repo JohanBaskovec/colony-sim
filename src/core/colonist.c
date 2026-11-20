@@ -3901,7 +3901,8 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
     bool done = workstation_add_craft_work(
         context->workstations, colonist->station, colonist->bill, context->items, context->map,
         colonist_work_speed(colonist, knowledge) * tool_factor * assistance(colonist, context),
-        colonist_work_level(colonist, knowledge), context->rng);
+        colonist_work_level(colonist, knowledge), context->rng,
+        items_maker_register(context->items, context->self, colonist->name));
     colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     if (done) {
         dirt_spread(context->dirt, context->map, tile.x, tile.y, tile.z,

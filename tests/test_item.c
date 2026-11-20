@@ -1250,6 +1250,68 @@ static void test_items_forbidden_one_by_one(void)
     items_free(&items);
 }
 
+/* Items are stamped with the tick they are added at, and keep it and their maker
+ * through a load, a transformation and a hand-built stack. */
+static void test_item_made_and_maker(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 8, 8, 1));
+    items_set_now(&items, 500);
+    REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_COBBLE, 2)) == 2);
+    size_t index = 1 * 8 + 1;
+    CHECK_EQ_INT(items_first(&items, index)->made, 501);
+    CHECK_EQ_INT(items_first(&items, index)->maker, 0);
+    /* Who made it. */
+    EntityId ada = {3, 1}, bob = {4, 2};
+    uint16_t ada_maker = items_maker_register(&items, ada, "Ada");
+    uint16_t bob_maker = items_maker_register(&items, bob, "Bob");
+    CHECK(ada_maker != 0 && bob_maker != 0 && ada_maker != bob_maker);
+    CHECK_EQ_INT(items_maker_register(&items, ada, "Ada"), ada_maker);
+    CHECK_STR_EQ(items_maker_name(&items, bob_maker), "Bob");
+    CHECK(items_maker_name(&items, 0) == NULL);
+    CHECK(entity_id_equal(items_maker_id(&items, bob_maker), bob));
+    CHECK(entity_id_is_none(items_maker_id(&items, 0)));
+    CHECK(items_maker_name(&items, (uint16_t)(bob_maker + 1)) == NULL);
+    items_set_now(&items, 900);
+    ItemStack spear = item_stack_pristine(ITEM_THRUSTING_SPEAR, 1);
+    spear.maker = ada_maker;
+    REQUIRE(items_add(&items, 2, 1, 0, spear) == 1);
+    const Item *made = items_first(&items, 1 * 8 + 2);
+    CHECK_EQ_INT(made->made, 901);
+    CHECK_EQ_INT(made->maker, ada_maker);
+    /* A stack that says when keeps it. */
+    ItemStack old = item_stack_pristine(ITEM_FLAKE, 1);
+    old.made = 42;
+    REQUIRE(items_add(&items, 3, 1, 0, old) == 1);
+    CHECK_EQ_INT(items_first(&items, 1 * 8 + 3)->made, 42);
+    /* Through a load, and back to the ground. */
+    ItemId id = items_id(&items, made);
+    ItemStack load = {.type = ITEM_NONE};
+    REQUIRE(items_pick_up_item(&items, id, &load) == 1);
+    CHECK_EQ_INT(load.made, 901);
+    CHECK_EQ_INT(load.maker, ada_maker);
+    items_set_now(&items, 1200);
+    REQUIRE(items_put(&items, 5, 5, 0, &load) == 1);
+    const Item *put = items_by_id(&items, id);
+    REQUIRE(put != NULL);
+    CHECK_EQ_INT(put->made, 901);
+    CHECK_EQ_INT(put->maker, ada_maker);
+    ItemStack copy = item_as_stack(put);
+    CHECK_EQ_INT(copy.made, 901);
+    CHECK_EQ_INT(copy.maker, ada_maker);
+    /* Dropped as a stack again: the stamp stays. */
+    REQUIRE(items_add(&items, 6, 5, 0, copy) == 1);
+    CHECK_EQ_INT(items_first(&items, 5 * 8 + 6)->maker, ada_maker);
+    CHECK_EQ_INT(items_first(&items, 5 * 8 + 6)->made, 901);
+    /* The registry is full at some point, and says so. */
+    for (int i = 0; i < ITEM_MAKERS_MAX; i++) {
+        items_maker_register(&items, (EntityId){(uint32_t)(100 + i), 1}, "Someone");
+    }
+    CHECK_EQ_INT(items_maker_register(&items, (EntityId){999, 1}, "Late"), 0);
+    CHECK_EQ_INT(items_maker_register(&items, ada, "Ada"), ada_maker);
+    items_free(&items);
+}
+
 /* One item is picked up by its id, keeps it, and carries its forbidden flag;
  * a load is forbidden as a whole; a group is taken by its key. */
 static void test_item_picked_up_by_id(void)
@@ -1459,6 +1521,7 @@ int main(void)
     RUN_TEST(test_item_picked_by_point_moved_and_turned);
     RUN_TEST(test_items_listed_in_order);
     RUN_TEST(test_items_forbidden_one_by_one);
+    RUN_TEST(test_item_made_and_maker);
     RUN_TEST(test_item_picked_up_by_id);
     RUN_TEST(test_picture_copies_forbidden_items);
     return test_summary();

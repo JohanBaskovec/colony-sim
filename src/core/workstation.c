@@ -534,7 +534,7 @@ bool workstation_start_free_craft(Workstations *workstations, int index, int bil
 }
 
 bool workstation_add_craft_work(Workstations *workstations, int index, int bill, Items *items,
-                                const Map *map, float work, double level, Rng *rng)
+                                const Map *map, float work, double level, Rng *rng, uint16_t maker)
 {
     Workstation *station = workstation_get(workstations, index);
     if (station == NULL || station->work_input.count == 0) {
@@ -548,6 +548,7 @@ bool workstation_add_craft_work(Workstations *workstations, int index, int bill,
     ItemStack products[RECIPE_PRODUCT_MAX];
     int count = recipe_craft(recipe, station->work_input, level, rng, products);
     for (int i = 0; i < count; i++) {
+        products[i].maker = maker;
         items_drop(items, map, station->x, station->y, station->z, products[i]);
     }
     if (station->work_input.held != 0) { /* Its items are used up. */

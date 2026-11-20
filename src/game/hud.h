@@ -58,6 +58,9 @@ void hud_wood_choices(const Items *items, ItemType type, WoodMask current, HudWo
 #define HUD_WOOD_TEXT_SIZE 256
 void hud_wood_text(char *out, size_t size, WoodMask woods);
 
+/* "2 hours ago": how long it is, at tick `now`, since tick `tick`. */
+void hud_ago_text(char *out, size_t size, uint64_t now, uint64_t tick);
+
 /* "Rots away in about ..." for `hours` left (item_stack_rot_hours()), or
  * that it keeps while frozen (negative hours). */
 void hud_rot_text(char *out, size_t size, float hours);
