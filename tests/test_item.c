@@ -17,12 +17,39 @@ static void test_definitions(void)
         CHECK(i18n_is_valid_key(def->name_key));
         CHECK(def->weight > 0.0f && def->bulk > 0.0f);
         CHECK(item_stack_limit((ItemType)type) > 0);
+        CHECK(def->form > ITEM_FORM_NONE && def->form < ITEM_FORM_COUNT);
+        CHECK(def->length_cm >= 0 && !def->strap);
+        /* A heap of loose pieces has no longest side: every other item has one. */
+        CHECK((def->form == ITEM_FORM_LOOSE) == (def->length_cm == 0));
     }
     CHECK(item_def(ITEM_TYPE_COUNT) == NULL);
     CHECK(item_is_food(ITEM_BLACKBERRIES));
     CHECK(!item_is_food(ITEM_WOOD));
     CHECK(!item_is_food(ITEM_NONE));
     CHECK(!item_is_food(ITEM_TYPE_COUNT));
+}
+
+static void test_shapes(void)
+{
+    CHECK(item_def(ITEM_COBBLE)->form == ITEM_FORM_RIGID);
+    CHECK(item_def(ITEM_TWIGS)->form == ITEM_FORM_BUNDLE);
+    CHECK(item_def(ITEM_BLACKBERRIES)->form == ITEM_FORM_LOOSE);
+    CHECK(item_def(ITEM_BOAR_CARCASS)->form == ITEM_FORM_LIMP);
+    CHECK(item_is_long(ITEM_THRUSTING_SPEAR));
+    CHECK(item_is_long(ITEM_BRANCHES));
+    CHECK(item_is_long(ITEM_WOOD));
+    CHECK(item_is_long(ITEM_REEDS));
+    CHECK(!item_is_long(ITEM_COBBLE));
+    CHECK(!item_is_long(ITEM_HAND_AXE));
+    CHECK(!item_is_long(ITEM_BLACKBERRIES));
+    CHECK(!item_is_long(ITEM_NONE));
+    CHECK(!item_is_long(ITEM_TYPE_COUNT));
+    /* A spear is longer than the settler's arm, a hand axe fits the hand. */
+    CHECK(item_def(ITEM_THRUSTING_SPEAR)->length_cm > item_def(ITEM_THROWING_SPEAR)->length_cm);
+    /* Carcasses are limp, whatever their size. */
+    for (ItemType type = ITEM_SETTLER_BODY; type < ITEM_TYPE_COUNT; type++) {
+        CHECK(item_def(type)->form == ITEM_FORM_LIMP);
+    }
 }
 
 static void test_stack_limits_follow_bulk(void)
@@ -1339,6 +1366,7 @@ static void test_items_listed_in_order(void)
 int main(void)
 {
     RUN_TEST(test_definitions);
+    RUN_TEST(test_shapes);
     RUN_TEST(test_stack_limits_follow_bulk);
     RUN_TEST(test_categories);
     RUN_TEST(test_additions_counter);

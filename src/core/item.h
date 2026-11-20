@@ -129,12 +129,30 @@ typedef int ItemQuality;
  * quality (a master with a coarse flint makes at best a rough hand axe). */
 #define ITEM_QUALITY_CAP_BONUS 20
 
+/* How an item holds together in a grip (docs/CARRYING.md §2): what places it
+ * can be carried in. */
+typedef enum ItemForm {
+    ITEM_FORM_NONE,   /* Not an item. */
+    ITEM_FORM_RIGID,  /* One solid piece: a cobble, a log, a spear. */
+    ITEM_FORM_BUNDLE, /* Many stems or sticks gathered: twigs, grass, reeds. */
+    ITEM_FORM_LOOSE,  /* Small pieces that run between the fingers: berries, nuts. */
+    ITEM_FORM_LIMP,   /* Drapes over what holds it: carcasses, bodies. */
+    ITEM_FORM_COUNT
+} ItemForm;
+
+/* An item this long or longer (centimeters) goes under an arm or on the
+ * shoulders rather than in a fist (docs/CARRYING.md §2). */
+#define ITEM_LONG_CM 60
+
 typedef struct ItemDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
     ItemCategory category;
-    float weight;       /* Kilograms per item. */
-    float bulk;         /* Room taken per item (see ITEM_TILE_BULK). */
+    float weight;  /* Kilograms per item. */
+    float bulk;    /* Room taken per item (see ITEM_TILE_BULK). */
+    int length_cm; /* Its longest side; 0 for loose items (a heap has none). */
+    ItemForm form;
+    bool strap;         /* Has a strap or a cord to sling it (none yet). */
     float nutrition;    /* Food need restored by eating one item; 0 = not food. */
     int max_hit_points; /* Hit points of one item in perfect condition. */
     bool has_quality;   /* false: always ITEM_QUALITY_BEST. */
@@ -289,6 +307,9 @@ typedef struct Items {
 #define ITEM_DROP_RADIUS 4
 
 const ItemDef *item_def(ItemType type);
+
+/* Whether an item of this type is at least ITEM_LONG_CM long. */
+bool item_is_long(ItemType type);
 
 /* Translation key of a category name, NULL if out of range. */
 const char *item_category_name_key(ItemCategory category);
