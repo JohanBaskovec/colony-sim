@@ -22,6 +22,7 @@
 #define COLONY_CORE_SKY_H
 
 #include "core/map.h"
+#include "core/sun.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,6 +36,12 @@
 
 /* How much of the sky the point (x, y, height) sees (as for sun_lit()). */
 float sky_open(const Map *map, float x, float y, float height);
+/* The same cut short by what is ahead of each ray (`aheads`: SKY_RAYS of
+ * them, in the order of sky_ray_direction(), for SKY_REACH; NULL: whole
+ * rays). */
+float sky_open_ahead(const Map *map, const LightAhead *aheads, float x, float y, float height);
+/* The unit direction of a ray (0 .. SKY_RAYS - 1): east, south, up. */
+void sky_ray_direction(int ray, float *east, float *south, float *up);
 
 /* sky_open() of the surface drawn at the column (x, y) when level z is shown
  * (shadow_surface_height()); 1 where nothing is drawn. */

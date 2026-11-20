@@ -63,14 +63,29 @@ static void make_rays(void)
 
 float sky_open(const Map *map, float x, float y, float height)
 {
+    return sky_open_ahead(map, NULL, x, y, height);
+}
+
+void sky_ray_direction(int ray, float *east, float *south, float *up)
+{
+    if (!sky_rays_ready) {
+        make_rays();
+    }
+    *east = sky_rays[ray].east;
+    *south = sky_rays[ray].south;
+    *up = sky_rays[ray].up;
+}
+
+float sky_open_ahead(const Map *map, const LightAhead *aheads, float x, float y, float height)
+{
     if (!sky_rays_ready) {
         make_rays();
     }
     float open = 0.0f;
     for (int i = 0; i < SKY_RAYS; i++) {
         const SkyRay *ray = &sky_rays[i];
-        open += ray->weight *
-                light_ray(map, ray->east, ray->south, ray->up, x, y, height, ray->distance);
+        open += ray->weight * light_ray_ahead(map, aheads != NULL ? &aheads[i] : NULL, ray->east,
+                                              ray->south, ray->up, x, y, height, ray->distance);
     }
     return clampf(open, 0.0f, 1.0f);
 }

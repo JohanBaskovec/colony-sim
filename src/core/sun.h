@@ -87,6 +87,25 @@ float sun_lit(const Map *map, SunPosition sun, float x, float y, float height);
 float light_ray(const Map *map, float dx, float dy, float dz, float x, float y, float height,
                 float distance);
 
+/* What a rising ray along one direction may still meet, per cell of
+ * 1 << `shift` columns a side (`cells_x` a row): the level from which
+ * nothing stops the light ahead of any point of the cell, along that
+ * direction and within the ray's reach (core/tile_light.h works it out). A
+ * ray ends as soon as it rises there, with the same result as the whole
+ * ray. */
+typedef struct LightAhead {
+    const uint8_t *tops;
+    int cells_x;
+    int shift;
+} LightAhead;
+
+/* light_ray() and sun_lit() cut short by what is ahead (NULL: the whole
+ * ray). */
+float light_ray_ahead(const Map *map, const LightAhead *ahead, float dx, float dy, float dz,
+                      float x, float y, float height, float distance);
+float sun_lit_ahead(const Map *map, const LightAhead *ahead, SunPosition sun, float x, float y,
+                    float height);
+
 /* sun_lit() of a point SUN_RAY_LIFT over the floor of level `z`: the ground
  * of a tile, or the top of a block of level z - 1 (a wall, a rock). */
 float sun_lit_floor(const Map *map, SunPosition sun, float x, float y, int z);

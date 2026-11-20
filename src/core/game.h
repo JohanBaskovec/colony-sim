@@ -34,6 +34,7 @@
 #include "core/soil.h"
 #include "core/stockpile.h"
 #include "core/temperature.h"
+#include "core/tile_light.h"
 #include "core/vision.h"
 #include "core/weather.h"
 #include "core/workstation.h"
@@ -159,6 +160,8 @@ typedef struct Game {
     Regions regions;
     Temperatures temperatures; /* Per tile, warmed by burning hearths. */
     Soil soil;                 /* Water in the ground of each tile (docs/CLIMATE.md). */
+    TileLight
+        light; /* Sky, sun and sun hours of each tile (docs/SHADOWS.md §5): read by nobody yet. */
     /* Who sees what (core/vision.h): derived from the map and where the
      * settlers stand, not part of game_hash(). Only kept up to date while
      * `vision_on` (see game_set_vision()). */

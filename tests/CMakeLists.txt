@@ -65,6 +65,7 @@ set(COLONY_UNIT_TESTS
     test_weather
     test_structures
     test_sun
+    test_tile_light
     test_work
     test_workstation
     test_worldgen)

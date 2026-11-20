@@ -81,12 +81,31 @@ static void axis_start(float position, float direction, float size, int cell, fl
 float light_ray(const Map *map, float dx, float dy, float dz, float x, float y, float height,
                 float distance)
 {
+    return light_ray_ahead(map, NULL, dx, dy, dz, x, y, height, distance);
+}
+
+/* The level from which nothing is ahead of the cell (cx, cy). */
+static int top_ahead(const LightAhead *ahead, int cx, int cy)
+{
+    return ahead->tops[(cy >> ahead->shift) * ahead->cells_x + (cx >> ahead->shift)];
+}
+
+float light_ray_ahead(const Map *map, const LightAhead *ahead, float dx, float dy, float dz,
+                      float x, float y, float height, float distance)
+{
     int cx = (int)floorf(x), cy = (int)floorf(y), cz = (int)floorf(height / LEVEL_HEIGHT);
     if (cx < 0 || cy < 0 || cx >= map->width || cy >= map->height || cz < 0) {
         return 0.0f;
     }
     if (cz >= map->depth) {
         return dz >= 0.0f ? 1.0f : 0.0f;
+    }
+    if (dz <= 0.0f) {
+        ahead = NULL; /* Only known for rising rays. */
+    }
+    int top = ahead != NULL ? top_ahead(ahead, cx, cy) : map->depth;
+    if (cz >= top) {
+        return 1.0f; /* Rising over everything ahead. */
     }
     size_t index = map_index(map, cx, cy, cz);
     if (map_stops_light_at(map, index)) {
@@ -103,11 +122,13 @@ float light_ray(const Map *map, float dx, float dy, float dz, float x, float y, 
 
     float light = 1.0f, from = 0.0f;
     for (;;) {
-        float to = fminf(next_x, fminf(next_y, next_z));
+        /* Not fminf(): a call into the maths library where NaNs are kept. */
+        float to = next_x < next_y ? next_x : next_y;
+        to = next_z < to ? next_z : to;
         uint8_t terrain = map->terrain[index];
         if (terrain_is_foliage(terrain)) {
             float share = map_foliage_light((Terrain)terrain, bare);
-            light *= powf(share, (fminf(to, distance) - from) / LEVEL_HEIGHT);
+            light *= powf(share, ((to < distance ? to : distance) - from) / LEVEL_HEIGHT);
             if (light < LIT_EPSILON) {
                 return 0.0f;
             }
@@ -119,7 +140,7 @@ float light_ray(const Map *map, float dx, float dy, float dz, float x, float y, 
         if (to == next_z) {
             next_z += delta_z;
             if (dz > 0.0f) { /* Up into the cell above, through its floor. */
-                if (++cz >= map->depth) {
+                if (++cz >= top || cz >= map->depth) {
                     return light;
                 }
                 index += (size_t)level;
@@ -139,6 +160,9 @@ float light_ray(const Map *map, float dx, float dy, float dz, float x, float y, 
             }
             index = (size_t)((ptrdiff_t)index + step_x);
             next_x += delta_x;
+            if (ahead != NULL && (top = top_ahead(ahead, cx, cy)) <= cz) {
+                return light;
+            }
         } else {
             cy += step_y > 0 ? 1 : -1;
             if (cy < 0 || cy >= map->height) {
@@ -146,6 +170,9 @@ float light_ray(const Map *map, float dx, float dy, float dz, float x, float y, 
             }
             index = (size_t)((ptrdiff_t)index + step_y);
             next_y += delta_y;
+            if (ahead != NULL && (top = top_ahead(ahead, cx, cy)) <= cz) {
+                return light;
+            }
         }
         if (map_stops_light_at(map, index)) {
             return 0.0f;
@@ -155,12 +182,18 @@ float light_ray(const Map *map, float dx, float dy, float dz, float x, float y, 
 
 float sun_lit(const Map *map, SunPosition sun, float x, float y, float height)
 {
+    return sun_lit_ahead(map, NULL, sun, x, y, height);
+}
+
+float sun_lit_ahead(const Map *map, const LightAhead *ahead, SunPosition sun, float x, float y,
+                    float height)
+{
     if (sun.up <= 0.0f) {
         return 0.0f;
     }
     float flat = sqrtf(sun.east * sun.east + sun.south * sun.south);
     float reach = flat > 0.0f ? (float)SUN_SHADOW_REACH / flat : FAR;
-    return light_ray(map, sun.east, sun.south, sun.up, x, y, height, reach);
+    return light_ray_ahead(map, ahead, sun.east, sun.south, sun.up, x, y, height, reach);
 }
 
 float sun_lit_floor(const Map *map, SunPosition sun, float x, float y, int z)

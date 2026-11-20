@@ -497,6 +497,30 @@ Each step is tested and leaves the game playable.
      is above that height (most rays over open ground end within a few
      cells). If it is still too much: fewer points, then three passes a day
      (morning, midday, afternoon) instead of one an hour.
+   - **5a as built** (`core/tile_light.h`, `Game.light`): `open`, `direct`
+     and the sun hours per tile of the plant levels with a surface (a floor,
+     no block in the cell: the top of a wall is not one), worked out at
+     `game_init()` (70 ms on seed 42) and then on the tick's schedule.
+     Measured, the plan above cost too much: rays climb through the open
+     air under the crowns around (16 steps a ray on seed 42, one of them in
+     foliage), and crowns thicken somewhere about 165 times a day, each
+     change putting 64 × 64 columns out of date. What was done: per cell of
+     4 × 4 columns the level from which nothing stops the light, and per
+     direction (the sky's sixteen, the sun of the period) the highest of
+     those ahead (`LightAhead` in `core/sun.h`): rays end once over all that
+     is ahead, a tile over all of it casts none; the map stamps apart what
+     stops the light outright (`Map.light_solid_stamps`): those changes are
+     worked out first, the foliage's in a slow sweep (the whole map in about
+     two days); nine points a tile instead of sixteen (the five first among
+     them); `direct` every two hours instead of every hour, the sun hours
+     counting the part of each period the sun is up (truer at sunrise and
+     sunset than a whole hour). `fminf()` out of `light_ray()` (a call into
+     the maths library). Cost: about 3.5 µs a tick on `bench_simulation 12
+     4 3` (34 → 37.5 µs, the median 10.5 → 13 µs), state hash unchanged.
+     Ways to go further if needed: one byte per cell for what the light
+     meets (a packed copy of the map: one memory read a step instead of
+     three); the columns that changed rather than the block (a log of light
+     changes in the map).
    - **5b, the readers and the retuning** (the state hash changes):
      `game_light_at()` becomes `sun × sky × (diffuse × open + direct share ×
      direct)`; the noon light (`game_light_peak_at()`, what plants need to

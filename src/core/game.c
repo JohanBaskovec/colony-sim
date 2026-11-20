@@ -650,6 +650,11 @@ bool game_init(Game *game, const NewGameParams *params)
     }
     game_update_stock(game);
     game_count_knowledge(game); /* Who knows what at the start: no notice for it. */
+    /* Last: the map as it starts (the crowns' leaves, the arrival's camp). */
+    if (!tile_light_init(&game->light, &game->map, game->clock.tick)) {
+        game_shutdown(game);
+        return false;
+    }
     return true;
 }
 
@@ -721,6 +726,7 @@ void game_shutdown(Game *game)
     game->fog_on = false;
     temperatures_free(&game->temperatures);
     soil_free(&game->soil);
+    tile_light_free(&game->light);
     designations_free(&game->designations);
     dirt_free(&game->dirt);
     gather_zones_free(&game->gather_zones);
@@ -2648,6 +2654,7 @@ void game_tick(Game *game)
     if (stock_counted(game)) {
         game_update_stock(game);
     }
+    tile_light_tick(&game->light, &game->map, game->clock.tick);
     update_plants(game);
     if (game->clock.tick % GAME_PLANT_UPDATE_INTERVAL == 0) {
         /* Every plant grew since the last time: zones may offer new jobs. */

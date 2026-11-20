@@ -50,6 +50,7 @@ add_library(colony_core STATIC
     soil.c
     temperature.c
     test_scenario.c
+    tile_light.c
     tree.c
     reservation.c
     rng.c

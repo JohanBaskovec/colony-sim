@@ -1677,6 +1677,45 @@ static void test_light_stamps_by_block(void)
     map_free(&map);
 }
 
+/* Changes to what stops the light outright (trunks, rock, walls, floors,
+ * roofs) are stamped apart from those to the foliage alone (growing,
+ * thinning, its leaves); two kinds of ground change nothing. */
+static void test_solid_light_stamps(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 40, 40, 4));
+    uint32_t revision = map.light_revision;
+    map_set_terrain(&map, 5, 5, 0, TERRAIN_RICH_SOIL);
+    map_set_terrain(&map, 5, 5, 0, TERRAIN_SAND);
+    CHECK_EQ_UINT(map.light_revision, revision); /* Ground for ground. */
+
+    map_set_terrain(&map, 20, 5, 2, TERRAIN_FOLIAGE_SPARSE);
+    map_set_terrain(&map, 20, 5, 2, TERRAIN_FOLIAGE_MEDIUM);
+    CHECK(map.light_revision > revision);
+    CHECK_EQ_UINT(map_light_stamp(&map, 16, 0, 31, 15), map.light_revision);
+    CHECK_EQ_UINT(map_light_solid_stamp(&map, 0, 0, 39, 39), 0);
+    CHECK_EQ_UINT(map.light_solid_revision, 0);
+    map_set_terrain(&map, 20, 5, 2, TERRAIN_FOLIAGE); /* Dense: still foliage. */
+    map_set_terrain(&map, 20, 5, 2, TERRAIN_OPEN);
+    CHECK_EQ_UINT(map_light_solid_stamp(&map, 0, 0, 39, 39), 0);
+
+    map_set_rock(&map, 20, 5, 1, ROCK_WOOD); /* A trunk. */
+    CHECK_EQ_UINT(map_light_solid_stamp(&map, 16, 0, 31, 15), map.light_revision);
+    CHECK_EQ_UINT(map.light_solid_revision, map.light_revision);
+    map_set_roof(&map, 3, 30, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
+    CHECK_EQ_UINT(map_light_solid_stamp(&map, 0, 16, 15, 31), map.light_revision);
+    map_set_structure(&map, 35, 35, 0, STRUCTURE_WALL);
+    CHECK_EQ_UINT(map_light_solid_stamp(&map, 32, 32, 39, 39), map.light_revision);
+
+    uint32_t solid = map.light_solid_revision;
+    map_set_bare(&map, MAP_BARE_STEPS); /* The leaves: foliage alone. */
+    CHECK_EQ_UINT(map.light_solid_revision, solid);
+    CHECK_EQ_UINT(map_light_stamp(&map, 0, 0, 15, 15), map.light_revision);
+    map_topology_changed(&map); /* Anything may have changed. */
+    CHECK_EQ_UINT(map_light_solid_stamp(&map, 0, 0, 15, 15), map.light_revision);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_init_rejects_invalid_sizes);
@@ -1722,6 +1761,7 @@ int main(void)
     RUN_TEST(test_fibre_plants_are_cut_and_grow_back);
     RUN_TEST(test_bare_crowns_let_light_through);
     RUN_TEST(test_light_stamps_by_block);
+    RUN_TEST(test_solid_light_stamps);
     RUN_TEST(test_plants_take_root_where_they_can_live);
     RUN_TEST(test_spread_lands_within_range);
     RUN_TEST(test_offspring_takes_after_its_parent);

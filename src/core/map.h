@@ -499,6 +499,12 @@ typedef struct Map {
      * the map (the shadows on screen) knows when that part changed. See
      * map_light_stamp(). Not part of map_hash(). */
     uint32_t *light_stamps;
+    /* The same for the changes to what stops the light outright (rock,
+     * trunks, walls, doors, floors and roofs), not to the foliage alone (its
+     * growth, its leaves): map_light_solid_stamp(). The light revision of
+     * the latest such change. Not part of map_hash(). */
+    uint32_t *light_solid_stamps;
+    uint32_t light_solid_revision;
     /* Bumped whenever a tile turns into water or out of it (map_set_terrain()),
      * or the layers were written directly (map_topology_changed()): the
      * distance to open water (core/soil.h) compares this. Not part of
@@ -904,8 +910,10 @@ float map_foliage_light(Terrain terrain, float bare);
  * among the columns (x0, y0) .. (x1, y1) (inclusive, clipped to the map), to
  * the block (MAP_LIGHT_BLOCK); 0 when none changed since the map was made. */
 uint32_t map_light_stamp(const Map *map, int x0, int y0, int x1, int y1);
+/* The same for the changes to what stops the light outright (Map.light_solid_stamps). */
+uint32_t map_light_solid_stamp(const Map *map, int x0, int y0, int x1, int y1);
 /* Notes a change to what lets the light through in the column (x, y), for
- * those who write the layers themselves (the known world). */
+ * those who write the layers themselves (the known world): a solid one. */
 void map_light_changed(Map *map, int x, int y);
 
 /* Keeps the door on the tile open, or lets it close (false when there is no

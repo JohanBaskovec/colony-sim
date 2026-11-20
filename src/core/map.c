@@ -1140,12 +1140,13 @@ bool map_init(Map *map, int width, int height, int depth)
     size_t blocks = (size_t)((width + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK) *
                     (size_t)((height + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK);
     map->light_stamps = calloc(blocks, sizeof(*map->light_stamps));
-    if (map->light_stamps == NULL || map->doors == NULL || map->forbidden == NULL ||
-        map->terrain == NULL || map->rock == NULL || map->slope == NULL || map->plants == NULL ||
-        map->cobbles == NULL || map->flint == NULL || map->branches == NULL || map->twigs == NULL ||
-        map->nuts == NULL || map->structure == NULL || map->structure_part == NULL ||
-        map->structure_quality == NULL || map->structure_hit_points == NULL ||
-        map->roof_quality == NULL) {
+    map->light_solid_stamps = calloc(blocks, sizeof(*map->light_solid_stamps));
+    if (map->light_stamps == NULL || map->light_solid_stamps == NULL || map->doors == NULL ||
+        map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL ||
+        map->plants == NULL || map->cobbles == NULL || map->flint == NULL ||
+        map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
+        map->structure == NULL || map->structure_part == NULL || map->structure_quality == NULL ||
+        map->structure_hit_points == NULL || map->roof_quality == NULL) {
         map_free(map);
         return false;
     }
@@ -1178,6 +1179,7 @@ void map_free(Map *map)
     free(map->roof_quality);
     free(map->forbidden);
     free(map->light_stamps);
+    free(map->light_solid_stamps);
     free(map->doors);
     memset(map, 0, sizeof(*map));
 }
@@ -1208,27 +1210,48 @@ static int light_block_columns(const Map *map)
     return (map->width + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK;
 }
 
-void map_light_changed(Map *map, int x, int y)
+/* A change to the light in the column (x, y); `solid`: to what stops it
+ * outright, not only to the foliage. */
+static void light_changed_at(Map *map, int x, int y, bool solid)
 {
     map->light_revision++;
+    if (solid) {
+        map->light_solid_revision = map->light_revision;
+    }
     if (x >= 0 && y >= 0 && x < map->width && y < map->height) {
-        map->light_stamps[(y / MAP_LIGHT_BLOCK) * light_block_columns(map) + x / MAP_LIGHT_BLOCK] =
-            map->light_revision;
+        size_t block =
+            (size_t)((y / MAP_LIGHT_BLOCK) * light_block_columns(map) + x / MAP_LIGHT_BLOCK);
+        map->light_stamps[block] = map->light_revision;
+        if (solid) {
+            map->light_solid_stamps[block] = map->light_revision;
+        }
     }
 }
 
-/* A change to the light of the whole map. */
-static void light_changed_everywhere(Map *map)
+void map_light_changed(Map *map, int x, int y)
+{
+    light_changed_at(map, x, y, true);
+}
+
+/* A change to the light of the whole map (`solid`: as light_changed_at()). */
+static void light_changed_everywhere(Map *map, bool solid)
 {
     map->light_revision++;
+    if (solid) {
+        map->light_solid_revision = map->light_revision;
+    }
     size_t blocks = (size_t)light_block_columns(map) *
                     (size_t)((map->height + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK);
     for (size_t i = 0; i < blocks; i++) {
         map->light_stamps[i] = map->light_revision;
+        if (solid) {
+            map->light_solid_stamps[i] = map->light_revision;
+        }
     }
 }
 
-uint32_t map_light_stamp(const Map *map, int x0, int y0, int x1, int y1)
+/* The latest of the stamps of the blocks of (x0, y0) .. (x1, y1). */
+static uint32_t latest_stamp(const Map *map, const uint32_t *stamps, int x0, int y0, int x1, int y1)
 {
     x0 = clampi(x0, 0, map->width - 1) / MAP_LIGHT_BLOCK;
     y0 = clampi(y0, 0, map->height - 1) / MAP_LIGHT_BLOCK;
@@ -1238,11 +1261,21 @@ uint32_t map_light_stamp(const Map *map, int x0, int y0, int x1, int y1)
     uint32_t latest = 0;
     for (int by = y0; by <= y1; by++) {
         for (int bx = x0; bx <= x1; bx++) {
-            uint32_t stamp = map->light_stamps[by * columns + bx];
+            uint32_t stamp = stamps[by * columns + bx];
             latest = stamp > latest ? stamp : latest;
         }
     }
     return latest;
+}
+
+uint32_t map_light_solid_stamp(const Map *map, int x0, int y0, int x1, int y1)
+{
+    return latest_stamp(map, map->light_solid_stamps, x0, y0, x1, y1);
+}
+
+uint32_t map_light_stamp(const Map *map, int x0, int y0, int x1, int y1)
+{
+    return latest_stamp(map, map->light_stamps, x0, y0, x1, y1);
 }
 
 bool map_set_door_kept_open(Map *map, int x, int y, int z, bool open)
@@ -1287,7 +1320,15 @@ void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
         return;
     }
     map->terrain[index] = (uint8_t)terrain;
-    map_light_changed(map, x, y);
+    /* Floors stop the light (a built roof another way than the ground);
+     * foliage lets some through; two kinds of ground change nothing. */
+    bool floor_before = old != TERRAIN_OPEN && !terrain_is_foliage(old);
+    bool floor_after = terrain != TERRAIN_OPEN && !terrain_is_foliage(terrain);
+    if (floor_before != floor_after || TERRAIN_DEFS[old].built != TERRAIN_DEFS[terrain].built) {
+        light_changed_at(map, x, y, true);
+    } else if (!floor_before) {
+        light_changed_at(map, x, y, false); /* Foliage grown, thinned or gone. */
+    }
     if (old == TERRAIN_SHALLOW_WATER || old == TERRAIN_DEEP_WATER ||
         terrain == TERRAIN_SHALLOW_WATER || terrain == TERRAIN_DEEP_WATER) {
         map->water_revision++;
@@ -1537,7 +1578,7 @@ void map_topology_changed(Map *map)
     log_topology_change(map, 0, 0, 0, false);
     map->topology_log[map->topology_revision % MAP_TOPOLOGY_LOG_SIZE].anywhere = true;
     map->water_revision++;
-    light_changed_everywhere(map);
+    light_changed_everywhere(map, true);
 }
 
 float map_move_cost_at(const Map *map, size_t index)
@@ -1905,7 +1946,7 @@ void map_set_bare(Map *map, int steps)
     uint8_t bare = (uint8_t)clampi(steps, 0, MAP_BARE_STEPS);
     if (bare != map->bare) {
         map->bare = bare;
-        light_changed_everywhere(map);
+        light_changed_everywhere(map, false);
     }
 }
 

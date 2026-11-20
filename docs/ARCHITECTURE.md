@@ -90,6 +90,7 @@ simulation:
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve and the sun (day length by season)                |
 | `sun`        | Where the sun stands: elevation, azimuth and direction (map axes, metres) from the day, the hour and the latitude; its declination gives the clock's day lengths at the default latitude; its rays (`sun_lit()`): how much direct sun reaches a point of the volume, through rock, walls, doors, floors and roofs (nothing) and foliage (its share by the length crossed) (see `docs/SHADOWS.md`) |
 | `sky`        | The light of the sky: how much of the sky a surface sees (`sky_open()`, 16 rays over the dome through blocks, floors and foliage), and a field of it per column for the screen, worked out again where the map changed (see *Light and shade*) |
+| `tile_light` | The light of each tile for the simulation, from the real map (`Game.light`): how much of the sky it sees, its share in the sun now and its hours of sun today and yesterday, a byte each per tile of the plant levels, worked out in slices on a schedule of the tick; rays cut short over what is ahead of them (`LightAhead`); read by nobody yet (see *Light in the simulation*) |
 | `fire_light` | The light of fires on screen: from each point of the fine texture a ray to the flame (3D, stopped by walls, floors and rock), kept per fire until the fire or the map near it changes (see *Light and shade*) |
 | `shadow`     | Shadows on screen: the sun's rays from the surfaces drawn, worked out ahead of time by pieces and half hours, each point keeping the moment an edge passes, so frames read them for the time now and the shadows glide; out of date by the map's light stamps; the light put together (sky, direct sun) (see *Shadows on screen*) |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
@@ -1916,7 +1917,7 @@ budget per frame, where `Map.light_stamps` changed within `SKY_REACH`;
 the light of each fire is kept for its points until the fire, the level
 shown or the map within its reach changes (`FireLight`, a budget of rays per
 frame). The simulation still reads `map_light_cover()` (docs/SHADOWS.md
-step 5).
+step 5b).
 
 **Shadows on screen** (`core/shadow.h`, docs/SHADOWS.md §4): the sun's rays
 (`sun_lit()`) from the surface drawn on each point (the floor seen, or the
@@ -1938,6 +1939,32 @@ piece compares the blocks towards the sun as far as its rays go. A piece keeps t
 level works out again only the columns whose surface differs (most of the
 ground shows through the open space above it), the old values shown
 meanwhile; the light of the sky (`SkyField`) does the same per column.
+
+**Light in the simulation** (`core/tile_light.h`, docs/SHADOWS.md §5, step
+5a: stored, read by nobody yet, so the state hash is unchanged): per tile of
+the levels that may hold plants with a surface (a floor and no block in the
+cell), `open` (`sky_open()` of the middle of its floor), `direct` (its share
+in the sun: `sun_lit()` at a 3 × 3 grid of points of its floor, the corners
+and the middle first, the other four only when those disagree) and
+`sun_hours` today and yesterday (tenths of an hour). `direct` is worked out
+every `TILE_LIGHT_DIRECT_HOURS` (2) for the sun at the middle of those hours,
+in slices over their ticks; the sun hours add `direct` times the hours of
+the period the sun is up, and roll over at midnight. `open` is kept and
+worked out again by two sweeps over the blocks of 16 × 16 columns: one for
+the changes to what stops the light outright (`Map.light_solid_stamps`:
+rock, trunks, walls, doors, floors, roofs), first, within
+`TILE_LIGHT_OPEN_BUDGET` a tick; one for any change (`Map.light_stamps`:
+the foliage growing, its leaves), within `TILE_LIGHT_FOLIAGE_BUDGET`, the
+whole map in about two days (crowns grow all the time: on seed 42, about 165
+light changes a day, nearly all of them crowns thickening). Rays end early:
+per cell of 4 × 4 columns the lowest level from which nothing stops the
+light, and for each direction rays take (the sky's sixteen, the sun of the
+period) the highest of those of the cells ahead within the ray's reach
+(`LightAhead`); a rising ray ends once over everything ahead, with the same
+result as the whole ray, and a tile over everything ahead casts nothing.
+`map_set_terrain()` no longer stamps a change between two kinds of ground.
+Cost (seed 42, 200 × 200, 12 settlers, `bench_simulation 12 4 3`): about
+3.5 µs a tick (the median tick 10.5 → 13 µs), `game_init()` 70 ms.
 
 Stones, branches and twigs lying about are laid by world generation in map
 layers (`Map.cobbles`, `Map.flint`, `Map.branches`, `Map.twigs`); `game_init()`
