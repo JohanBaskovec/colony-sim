@@ -1712,18 +1712,21 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         int x, y;
         screen_to_tile(app, button->x, button->y, &x, &y);
         TilePos from = app->move_item_source;
+        /* Where they go is what is seen there: the ground under open space. */
+        int seen = map_view_level(game_view_map(&app->game), x, y, z);
+        const int to_z = seen >= 0 && seen <= z ? seen : z;
         bool ordered;
         if (app->move_item_box) { /* Each item of the box, as far as the orders and room go. */
             ordered = false;
             for (int i = 0; i < app->selected_box_item_count; i++) {
                 ItemPick pick = app->selected_box_items[i];
                 ItemId id = game_pick_real_item(&app->game, &pick);
-                ordered |= game_order_single_item_move(&app->game, id, x, y, z);
+                ordered |= game_order_single_item_move(&app->game, id, x, y, to_z);
             }
         } else if (app->move_item_id.slot != UINT32_MAX) {
-            ordered = game_order_single_item_move(&app->game, app->move_item_id, x, y, z);
+            ordered = game_order_single_item_move(&app->game, app->move_item_id, x, y, to_z);
         } else {
-            ordered = game_order_item_move(&app->game, from.x, from.y, from.z, x, y, z);
+            ordered = game_order_item_move(&app->game, from.x, from.y, from.z, x, y, to_z);
         }
         if (ordered) {
             app->tool = APP_TOOL_NONE; /* Done: the items are on their way. */

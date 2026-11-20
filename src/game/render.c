@@ -1057,9 +1057,13 @@ void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Ca
 void render_item_moves(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const ItemMoves *moves = &game->item_moves;
+    const Map *map = game_view_map(game);
     for (int i = 0; i < moves->count; i++) {
         TilePos from = moves->orders[i].source, to = moves->orders[i].destination;
-        if (from.z == camera->level && to.z == camera->level) {
+        /* On the level shown, or on the ground seen there under open space. */
+        bool from_seen = map_view_level(map, from.x, from.y, camera->level) == from.z;
+        bool to_seen = map_view_level(map, to.x, to.y, camera->level) == to.z;
+        if (from_seen && to_seen) {
             float x0, y0, x1, y1;
             camera_world_to_screen(camera, (float)from.x + 0.5f, (float)from.y + 0.5f, &x0, &y0);
             camera_world_to_screen(camera, (float)to.x + 0.5f, (float)to.y + 0.5f, &x1, &y1);
@@ -1067,7 +1071,7 @@ void render_item_moves(SDL_Renderer *renderer, const Game *game, const Camera *c
                                    PATH_COLOR.a);
             SDL_RenderLine(renderer, x0, y0, x1, y1);
         }
-        if (to.z == camera->level) {
+        if (to_seen) {
             render_tile_outline(renderer, camera, to.x, to.y, ALLOW_COLOR);
         }
     }
