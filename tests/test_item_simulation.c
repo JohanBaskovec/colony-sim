@@ -81,8 +81,8 @@ static void test_building(void)
     static Game game;
     REQUIRE(init_colony(&game, 96, 8, SCENARIO_CONSTRUCTION, 0.0f));
     int sites = game.constructions.used_count;
-    /* Six days: the grass of the walls dries for three. */
-    CHECK_EQ_INT(run_checked(&game, 6 * HOURS_PER_DAY), 6 * HOURS_PER_DAY);
+    /* The dry grass is in the stockpile from the start. */
+    CHECK_EQ_INT(run_checked(&game, 2 * HOURS_PER_DAY), 2 * HOURS_PER_DAY);
     CHECK(game.constructions.used_count < sites); /* Built. */
     game_shutdown(&game);
 }

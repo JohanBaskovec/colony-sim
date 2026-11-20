@@ -76,6 +76,19 @@ static void test_scenarios(void)
     CHECK(scenario_apply(&game, SCENARIO_CONSTRUCTION));
     CHECK(game.constructions.used_count > 0); /* Walls, a screen and beds. */
     CHECK_EQ_INT(stockpile_count(&game), 1);
+    /* The dry grass of every site in the stockpile. */
+    int grass = 0;
+    for (int index = 0; index < CONSTRUCTION_MAX; index++) {
+        const ConstructionSite *site = construction_get(&game.constructions, index);
+        for (int slot = 0; site != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+            grass += construction_material(site, slot) == ITEM_GRASS
+                         ? construction_material_count(site, slot)
+                         : 0;
+        }
+    }
+    CHECK(grass > 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_GRASS], grass);
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
     CHECK(zone_tiles(&game) > 0);
     game_shutdown(&game);
 

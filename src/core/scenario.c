@@ -60,6 +60,29 @@ static void setup_unreachable(Game *game, const Colonist *first)
     }
 }
 
+/* Dry grass for every site, in the stockpile (x0, y0)-(x1, y1): grass cut
+ * takes three days to dry, longer in the rain, and the scenario is there to
+ * measure building. The grass gathered meanwhile goes to the refreshing. */
+static void stock_dry_grass(Game *game, int x0, int y0, int x1, int y1, int z)
+{
+    int wanted = 0;
+    for (int index = 0; index < CONSTRUCTION_MAX; index++) {
+        const ConstructionSite *site = construction_get(&game->constructions, index);
+        for (int slot = 0; site != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+            if (construction_material(site, slot) == ITEM_GRASS) {
+                wanted += construction_material_count(site, slot);
+            }
+        }
+    }
+    for (int y = y0; y <= y1 && wanted > 0; y++) {
+        for (int x = x0; x <= x1 && wanted > 0; x++) {
+            if (map_is_passable(&game->map, x, y, z)) {
+                wanted -= items_add(&game->items, x, y, z, item_stack_pristine(ITEM_GRASS, wanted));
+            }
+        }
+    }
+}
+
 static void setup_construction(Game *game, const Colonist *first)
 {
     if (first == NULL) {
@@ -77,6 +100,7 @@ static void setup_construction(Game *game, const Colonist *first)
                               z);
     game_place_structure_rect(game, STRUCTURE_GRASS_BED, DIRECTION_EAST, x + 5, y - 1, x + 8, y + 1,
                               z);
+    stock_dry_grass(game, x - 8, y - 3, x - 3, y + 3, z);
 }
 
 /* The nearest free tile (passable, without tree, structure, station or

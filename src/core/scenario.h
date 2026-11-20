@@ -22,8 +22,10 @@ typedef enum Scenario {
     SCENARIO_UNREACHABLE,
     /* Construction: an enclosure of grass walls with a branch screen and beds
      * inside, planned next to the colony, with a gathering zone around it
-     * (grass) and a stockpile: gathering, drying, hauling to the sites (the
-     * branches lying about too), building, sleeping in the beds and refreshing them. */
+     * (grass) and a stockpile holding the dry grass the sites need (grass
+     * cut takes days to dry): hauling to the sites (the branches lying
+     * about too), building, gathering and drying, sleeping in the beds and
+     * refreshing them. */
     SCENARIO_CONSTRUCTION,
     /* Feuds: the gathering scenario, with the settlers split in two clans
      * who loathe each other, half of them abrasive (game_debug_feud()):
