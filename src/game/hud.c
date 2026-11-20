@@ -192,6 +192,14 @@ void hud_wood_text(char *out, size_t size, WoodMask woods)
     TR_FORMAT(out, size, tr("wood.material"), list);
 }
 
+void hud_level_text(char *out, size_t size, const Map *map, int z)
+{
+    int label = z - map->surface_level;
+    char number[16];
+    tr_integer(number, sizeof(number), label < 0 ? -label : label);
+    SDL_snprintf(out, size, "%s%s", label < 0 ? "\xE2\x88\x92" : "", number);
+}
+
 void hud_weight_text(char *out, size_t size, float kilograms)
 {
     char number[32];

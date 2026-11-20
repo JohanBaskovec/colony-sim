@@ -16,6 +16,7 @@ static void test_defaults(void)
     CHECK_EQ_INT(settings.ui_scale, 100);
     CHECK_EQ_INT(settings.palette, SETTINGS_PALETTE_STANDARD);
     CHECK_STR_EQ(settings.language, ""); /* The system's. */
+    CHECK(!settings.skip_menu);
 }
 
 static void test_parse_reads_every_key(void)
@@ -26,7 +27,9 @@ static void test_parse_reads_every_key(void)
                      "ui_scale = 150\n"
                      "  palette=colorblind  \r\n"
                      "\n"
-                     "language = pt_BR\n");
+                     "language = pt_BR\n"
+                     "SKIP_MENU=1\n");
+    CHECK(settings.skip_menu);
     CHECK_EQ_INT(settings.ui_scale, 150);
     CHECK_EQ_INT(settings.palette, SETTINGS_PALETTE_COLORBLIND);
     CHECK_STR_EQ(settings.language, "pt_BR");
@@ -78,6 +81,7 @@ static void test_format_round_trips(void)
     settings.ui_scale = 175;
     settings.palette = SETTINGS_PALETTE_COLORBLIND;
     snprintf(settings.language, sizeof(settings.language), "fr");
+    settings.skip_menu = true;
     char text[512];
     size_t length = settings_format(&settings, text, sizeof(text));
     REQUIRE(length > 0 && length < sizeof(text));
@@ -89,6 +93,23 @@ static void test_format_round_trips(void)
     CHECK_EQ_INT(read.ui_scale, 175);
     CHECK_EQ_INT(read.palette, SETTINGS_PALETTE_COLORBLIND);
     CHECK_STR_EQ(read.language, "fr");
+    CHECK(read.skip_menu);
+}
+
+static void test_skip_menu_values(void)
+{
+    Settings settings;
+    settings_default(&settings);
+    parse(&settings, "skip_menu = yes\n");
+    CHECK(settings.skip_menu);
+    parse(&settings, "skip_menu = maybe\n"); /* Not a value: unchanged. */
+    CHECK(settings.skip_menu);
+    parse(&settings, "Skip_Menu = FALSE\n");
+    CHECK(!settings.skip_menu);
+    parse(&settings, "skip_menu = on\n");
+    CHECK(settings.skip_menu);
+    parse(&settings, "skip_menu = 0\n");
+    CHECK(!settings.skip_menu);
 }
 
 static void test_format_reports_the_size_needed(void)
@@ -120,6 +141,7 @@ int main(void)
     RUN_TEST(test_empty_language_means_the_system_one);
     RUN_TEST(test_format_round_trips);
     RUN_TEST(test_format_reports_the_size_needed);
+    RUN_TEST(test_skip_menu_values);
     RUN_TEST(test_palette_ids);
     return test_summary();
 }

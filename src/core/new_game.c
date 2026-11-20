@@ -18,13 +18,14 @@ static const NewGameOptionDef OPTION_DEFS[NEW_GAME_OPTION_COUNT] = {
                         NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 0, 60, 1},
     [NEW_GAME_HILLS] = {"hills", N_("new_game.hills"), N_("new_game.hills.note"),
                         NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 30, 100, 1},
-    [NEW_GAME_HILL_STEP] = {"hill_step", N_("new_game.hill_step"), N_("new_game.hill_step.note"),
-                            NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 2, 20, 1},
+    [NEW_GAME_HILL_HEIGHT] = {"hill_height", N_("new_game.hill_height"),
+                              N_("new_game.hill_height.note"), NEW_GAME_SECTION_RELIEF,
+                              NEW_GAME_UNIT_LEVELS, 2, WORLDGEN_MAX_HILL_HEIGHT, 1},
     [NEW_GAME_ROCK] = {"rock", N_("new_game.rock"), N_("new_game.rock.note"),
                        NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 30, 100, 1},
     [NEW_GAME_UNDERGROUND] = {"underground", N_("new_game.underground"),
                               N_("new_game.underground.note"), NEW_GAME_SECTION_RELIEF,
-                              NEW_GAME_UNIT_LEVELS, 2, 16, 1},
+                              NEW_GAME_UNIT_LEVELS, 2, WORLDGEN_MAX_UNDERGROUND, 1},
     [NEW_GAME_TREES] = {"trees", N_("new_game.trees"), N_("new_game.trees.note"),
                         NEW_GAME_SECTION_LIFE, NEW_GAME_UNIT_PERCENT, 0, 100, 5},
     [NEW_GAME_COLONISTS] = {"colonists", N_("new_game.colonists"), N_("new_game.colonists.note"),
@@ -75,7 +76,7 @@ int new_game_option_value(const NewGameParams *params, NewGameOption option)
     case NEW_GAME_FEATURE_SCALE: return (int)lroundf(world->feature_scale);
     case NEW_GAME_WATER: return percent_of(world->water_level);
     case NEW_GAME_HILLS: return percent_of(world->hill_level);
-    case NEW_GAME_HILL_STEP: return percent_of(world->level_step);
+    case NEW_GAME_HILL_HEIGHT: return world->hill_height;
     case NEW_GAME_ROCK: return percent_of(world->mountain_level);
     case NEW_GAME_UNDERGROUND: return world->underground_levels;
     case NEW_GAME_TREES: return percent_of(world->tree_density);
@@ -107,7 +108,7 @@ void new_game_option_set(NewGameParams *params, NewGameOption option, int value)
             world->mountain_level = world->hill_level; /* The rock moves up with them. */
         }
         break;
-    case NEW_GAME_HILL_STEP: world->level_step = share_of(value); break;
+    case NEW_GAME_HILL_HEIGHT: world->hill_height = value; break;
     case NEW_GAME_ROCK:
         world->mountain_level = share_of(value);
         if (percent_of(world->hill_level) > value) {
@@ -126,7 +127,7 @@ bool new_game_option_applies(const NewGameParams *params, NewGameOption option)
 {
     switch (option) {
     case NEW_GAME_HILLS:
-    case NEW_GAME_HILL_STEP:
+    case NEW_GAME_HILL_HEIGHT:
     case NEW_GAME_UNDERGROUND: return !params->world.flat;
     default: return (unsigned)option < NEW_GAME_OPTION_COUNT;
     }

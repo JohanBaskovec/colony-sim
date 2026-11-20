@@ -1,6 +1,7 @@
 #include "game/view_controls.h"
 
 #include "core/i18n.h"
+#include "game/hud.h"
 #include "game/layout.h"
 
 #define TEXT_SIZE 256
@@ -18,7 +19,10 @@ typedef struct CornerLayout {
 static float level_label_width(const Ui *ui)
 {
     char widest[32];
-    TR_FORMAT(widest, sizeof(widest), tr("controls.level_count"), "00", "00");
+    TR_FORMAT(widest, sizeof(widest), tr("controls.level_count"),
+              "\xE2\x88\x92"
+              "00",
+              "00");
     int width = 0, height = 0;
     text_measure(ui->text, widest, &width, &height);
     return (float)width;
@@ -309,8 +313,9 @@ static void draw_level_column(App *app, const CornerLayout *layout)
     }
 
     char current[16], count[16], text[32];
-    tr_integer(current, sizeof(current), app->camera.level + 1);
-    tr_integer(count, sizeof(count), depth);
+    const Map *map = &app->game.map;
+    hud_level_text(current, sizeof(current), map, app->camera.level);
+    hud_level_text(count, sizeof(count), map, depth - 1);
     TR_FORMAT(text, sizeof(text), tr("controls.level_count"), current, count);
     float width = ui_text_width(ui, text);
     SDL_FRect label = {column.x, down.y + button + gap, column.w, line};

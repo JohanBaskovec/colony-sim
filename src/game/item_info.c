@@ -310,7 +310,7 @@ static void origin_rows(UiLayout *layout, InfoRows *rows)
     char text[TEXT_SIZE], a[32], b[32], c[32];
     tr_integer(a, sizeof(a), rows->x);
     tr_integer(b, sizeof(b), rows->y);
-    tr_integer(c, sizeof(c), rows->z);
+    hud_level_text(c, sizeof(c), game_view_map(game), rows->z);
     TR_FORMAT(text, sizeof(text), tr("item.info.tile_value"), a, b, c);
     if (link_row(layout, "item.info.tile", text, "item.info.tile.description")) {
         rows->go_to_tile = true;

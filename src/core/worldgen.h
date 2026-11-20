@@ -6,8 +6,10 @@
  * hills rising level by level with natural slopes, rock outcrops one level
  * higher behind cliffs. The inside of the ground is earth near the surface
  * and rock deeper down (rock all the way under stony ground). Open levels
- * top the highest ground, where trees rise and roofs go (TREE_MAX_LEVELS - 1
- * of them: a flat world has TREE_MAX_LEVELS levels). Trees stand apart (no
+ * top the highest ground, where trees rise and roofs go: WORLDGEN_LEVELS_ABOVE
+ * levels over the plains (a flat world has TREE_MAX_LEVELS levels). The tallest
+ * ground of a map stands `hill_height` levels over the plains, whatever the
+ * relief: the elevation each level up takes is worked out from it. Trees stand apart (no
  * two on touching tiles), a few of the grown ones old or ancient (wider
  * trunks), and are written into the map (core/tree.h).
  *
@@ -31,9 +33,18 @@
 #include <stdint.h>
 
 #define WORLDGEN_DEFAULT_SIZE 200
+/* Levels over the plains (Map.surface_level) in a world with relief, and how
+ * many the tallest hills reach by default (the rest is room for trees and
+ * roofs), at most. */
+#define WORLDGEN_LEVELS_ABOVE 25
+#define WORLDGEN_HILL_HEIGHT 20
+#define WORLDGEN_MAX_HILL_HEIGHT 20
 /* Levels under the plains (Map.surface_level): the hollows of the water,
  * then solid ground. */
 #define WORLDGEN_UNDERGROUND_LEVELS 4
+#define WORLDGEN_MAX_UNDERGROUND 16
+_Static_assert(WORLDGEN_MAX_UNDERGROUND + 1 + WORLDGEN_LEVELS_ABOVE <= MAP_MAX_LEVELS,
+               "the map has room for the deepest world");
 /* Under the ground's surface, earth for this many levels, then rock (under
  * soft ground; stony ground is rock all the way down). */
 #define WORLDGEN_EARTH_LEVELS 2
@@ -45,8 +56,8 @@ typedef struct WorldGenParams {
     float water_level;      /* Elevation (0..1) below which tiles are water. */
     float mountain_level;   /* Elevation (0..1) above which the ground is rock outcrops. */
     float hill_level;       /* Elevation (0..1) above which the ground rises (hills). */
-    float level_step;       /* Elevation for each level the ground rises. */
-    int underground_levels; /* Levels under the plains (2 to 16). */
+    int hill_height;        /* Levels the tallest ground rises over the plains (1 to 20). */
+    int underground_levels; /* Levels under the plains (2 to WORLDGEN_MAX_UNDERGROUND). */
     /* No relief: a single level, rock outcrops as rock walls on it (tests and
      * benchmarks that need flat ground). */
     bool flat;

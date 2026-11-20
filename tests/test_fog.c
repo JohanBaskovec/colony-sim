@@ -46,7 +46,24 @@ static void test_copy_tiles(void)
     Game game;
     REQUIRE(make_game(&game, 6, 0));
     /* Something of everything. */
+    /* A spot with room for it all: level ground for four tiles in a row. */
     int x = 20, y = 20, z = map_ground_level(&game.map, x, y);
+    for (int tries = 0; tries < 2000; tries++) {
+        int tx = 8 + tries % 45, ty = 8 + tries / 45 % 45;
+        int level = map_ground_level(&game.map, tx, ty);
+        bool flat = true;
+        for (int dx = 0; dx < 4; dx++) {
+            flat = flat && map_ground_level(&game.map, tx + dx, ty) == level &&
+                   map_is_passable(&game.map, tx + dx, ty, level) &&
+                   game.map.plants[map_index(&game.map, tx + dx, ty, level)].type == PLANT_NONE;
+        }
+        if (flat) {
+            x = tx;
+            y = ty;
+            z = level;
+            break;
+        }
+    }
     map_set_structure(&game.map, x, y, z, STRUCTURE_WALL);
     REQUIRE(map_set_forbidden(&game.map, x, y, z, MAP_FORBID_STRUCTURE, true));
     REQUIRE(game_debug_spawn_items(&game, x + 2, y, z, ITEM_BRANCHES, 3) > 0);
@@ -114,7 +131,9 @@ static void test_fog_explores_the_start(void)
     for (int dx = -1; dx <= 1; dx++) {
         int x = game.arrival.x + dx, y = game.arrival.y, z = game.arrival.z;
         size_t index = map_index(&game.map, x, y, z);
-        CHECK_EQ_INT(game_view_map(&game)->terrain[index], game.map.terrain[index]);
+        if (game_tile_explored(&game, x, y, z)) { /* (Not a neighbor over a drop.) */
+            CHECK_EQ_INT(game_view_map(&game)->terrain[index], game.map.terrain[index]);
+        }
     }
     /* A tile of the far corner of the map, unexplored, is unknown. */
     int unknown = 0;

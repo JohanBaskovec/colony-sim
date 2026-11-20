@@ -57,8 +57,12 @@ static void test_set_clamps_and_steps(void)
     CHECK_EQ_INT(params.colonist_count, COLONIST_MAX);
     new_game_option_set(&params, NEW_GAME_UNDERGROUND, 1);
     CHECK_EQ_INT(params.world.underground_levels, 2);
-    new_game_option_set(&params, NEW_GAME_HILL_STEP, 9);
-    CHECK_NEAR(params.world.level_step, 0.09, 1e-6);
+    new_game_option_set(&params, NEW_GAME_UNDERGROUND, 16);
+    CHECK_EQ_INT(params.world.underground_levels, WORLDGEN_MAX_UNDERGROUND);
+    new_game_option_set(&params, NEW_GAME_HILL_HEIGHT, 9);
+    CHECK_EQ_INT(params.world.hill_height, 9);
+    new_game_option_set(&params, NEW_GAME_HILL_HEIGHT, 99);
+    CHECK_EQ_INT(params.world.hill_height, WORLDGEN_MAX_HILL_HEIGHT);
     new_game_option_set(&params, NEW_GAME_FEATURE_SCALE, 70);
     CHECK_NEAR(params.world.feature_scale, 72.0, 1e-6);
 }
@@ -91,7 +95,7 @@ static void test_flat_world_options(void)
     }
     params.world.flat = true;
     CHECK(!new_game_option_applies(&params, NEW_GAME_HILLS));
-    CHECK(!new_game_option_applies(&params, NEW_GAME_HILL_STEP));
+    CHECK(!new_game_option_applies(&params, NEW_GAME_HILL_HEIGHT));
     CHECK(!new_game_option_applies(&params, NEW_GAME_UNDERGROUND));
     CHECK(new_game_option_applies(&params, NEW_GAME_WATER));
     CHECK(new_game_option_applies(&params, NEW_GAME_TREES));
@@ -133,7 +137,7 @@ static void test_extreme_worlds_generate(void)
     new_game_option_set(&params, NEW_GAME_WIDTH, 64);
     new_game_option_set(&params, NEW_GAME_HEIGHT, 64);
     new_game_option_set(&params, NEW_GAME_HILLS, 30);
-    new_game_option_set(&params, NEW_GAME_HILL_STEP, 2);
+    new_game_option_set(&params, NEW_GAME_HILL_HEIGHT, 2);
     new_game_option_set(&params, NEW_GAME_UNDERGROUND, 16);
     new_game_option_set(&params, NEW_GAME_WATER, 0);
     Map map;

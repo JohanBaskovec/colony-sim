@@ -22,7 +22,7 @@ void worldgen_default_params(WorldGenParams *params)
     params->water_level = 0.24f;
     params->mountain_level = 0.75f;
     params->hill_level = 0.55f;
-    params->level_step = 0.06f;
+    params->hill_height = WORLDGEN_HILL_HEIGHT;
     params->underground_levels = WORLDGEN_UNDERGROUND_LEVELS;
     params->flat = false;
     params->tree_density = 0.5f;
@@ -741,13 +741,44 @@ static void place_litter(Map *map, Rng *rng)
     }
 }
 
+/* How far up the ground rises at an elevation (the hills' climb, in elevation
+ * units): from `hill_level`, half as fast above `mountain_level` (hills, not
+ * mountains). 0 below the hills. */
+static float hill_rise(const WorldGenParams *params, float elevation)
+{
+    if (elevation <= params->hill_level) {
+        return 0.0f;
+    }
+    float rise = fminf(elevation, params->mountain_level) - params->hill_level;
+    if (elevation > params->mountain_level) {
+        rise += (elevation - params->mountain_level) * 0.5f;
+    }
+    return rise;
+}
+
+/* The elevation each level up takes, so that the highest ground of the map
+ * (at the elevation `top`) stands `params->hill_height` levels over the plains:
+ * the hills are as tall as asked on every map, steeper or gentler as its relief
+ * needs. 0 when the map has no hills. */
+static float level_step(const WorldGenParams *params, float top)
+{
+    float rise = hill_rise(params, top);
+    if (params->flat || rise <= 0.0f) {
+        return 0.0f;
+    }
+    /* The ground there is 1 + floor(rise / step) levels up, one more when it is a
+     * rock outcrop (above `mountain_level`). */
+    int levels = clampi(params->hill_height, 1, WORLDGEN_MAX_HILL_HEIGHT) - 1 -
+                 (top > params->mountain_level ? 1 : 0);
+    return rise / ((float)(levels > 0 ? levels : 0) + 0.5f);
+}
+
 /* Level of the ground of a column, from the plains' (0): lakes and rivers
  * lie in hollows, their shallows and beaches one level down, deep water two;
- * the ground rises one level every `level_step` of elevation above
- * `hill_level`, half as fast above `mountain_level` (hills, not mountains);
- * rock outcrops stand one level above the ground around them, behind
- * cliffs. */
-static int ground_height(const WorldGenParams *params, float elevation, Terrain surface)
+ * the ground rises one level every `step` of elevation above `hill_level`
+ * (see level_step()); rock outcrops stand one level above the ground around
+ * them, behind cliffs. */
+static int ground_height(const WorldGenParams *params, float step, float elevation, Terrain surface)
 {
     if (params->flat) {
         return 0;
@@ -758,14 +789,10 @@ static int ground_height(const WorldGenParams *params, float elevation, Terrain 
     if (elevation < params->water_level + BEACH_ELEVATION) { /* Shallows and beaches. */
         return -1;
     }
-    if (elevation < params->hill_level || params->level_step <= 0.0f) {
+    if (elevation < params->hill_level || step <= 0.0f) {
         return surface == TERRAIN_ROUGH_STONE ? 1 : 0;
     }
-    float rise = fminf(elevation, params->mountain_level) - params->hill_level;
-    if (elevation > params->mountain_level) {
-        rise += (elevation - params->mountain_level) * 0.5f;
-    }
-    int height = 1 + (int)(rise / params->level_step);
+    int height = 1 + (int)(hill_rise(params, elevation) / step);
     if (surface == TERRAIN_ROUGH_STONE) {
         height++;
     }
@@ -1042,7 +1069,18 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
         return false;
     }
     /* The plains' level: the levels below are underground. */
-    const int surface_level = params->flat ? 0 : clampi(params->underground_levels, 2, 16);
+    const int surface_level =
+        params->flat ? 0 : clampi(params->underground_levels, 2, WORLDGEN_MAX_UNDERGROUND);
+    /* The highest elevation of the map decides how steep the hills are. */
+    float top_elevation = 0.0f;
+    for (int y = 0; y < params->height; y++) {
+        for (int x = 0; x < params->width; x++) {
+            float elevation = stretch(noise_fbm2d(elevation_seed, (float)x * frequency,
+                                                  (float)y * frequency, 5, 2.0f, 0.5f));
+            top_elevation = elevation > top_elevation ? elevation : top_elevation;
+        }
+    }
+    const float step = level_step(params, top_elevation);
     int highest = 0;
     for (int y = 0; y < params->height; y++) {
         for (int x = 0; x < params->width; x++) {
@@ -1053,7 +1091,7 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
             float moisture =
                 stretch(noise_fbm2d(moisture_seed, nx * 1.3f, ny * 1.3f, 4, 2.0f, 0.5f));
             Terrain surface = pick_terrain(params, elevation, moisture);
-            int height = clampi(surface_level + ground_height(params, elevation, surface), 0,
+            int height = clampi(surface_level + ground_height(params, step, elevation, surface), 0,
                                 MAP_MAX_LEVELS - 1);
             heights[column] = (uint8_t)height;
             surfaces[column] = (uint8_t)surface;
@@ -1063,9 +1101,11 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
     }
     water_distances(surfaces, params->width, params->height, shores);
     /* Open levels over the highest ground: room for the tallest trees, and
-     * for roofs everywhere. */
+     * for roofs everywhere. A world with relief has WORLDGEN_LEVELS_ABOVE levels
+     * over the plains whatever its hills; a flat one only what it needs. */
     int depth =
-        highest + TREE_MAX_LEVELS < MAP_MAX_LEVELS ? highest + TREE_MAX_LEVELS : MAP_MAX_LEVELS;
+        params->flat ? highest + TREE_MAX_LEVELS : surface_level + 1 + WORLDGEN_LEVELS_ABOVE;
+    depth = depth < MAP_MAX_LEVELS ? depth : MAP_MAX_LEVELS;
     if (!map_init(map, params->width, params->height, depth)) {
         free(heights);
         free(surfaces);

@@ -255,6 +255,10 @@ the plants the summer's light alone would place, the rule leaves out 455 of
 12 647, and the deaths of the first year go from 254 to 35 (194 in two
 years, in dark autumns and under the trees' growing crowns).
 
+The player never sees a level's index: the plains are level 0, the levels
+above count up and those under them are negative (`hud_level_text()`, the
+index minus `Map.surface_level`).
+
 Hashes only mix in a level when it is not 0 (or when the map has more than
 one level), the slope layer once a slope exists.
 
@@ -262,19 +266,23 @@ one level), the slope layer once a slope exists.
 ground level. The plains lie on `Map.surface_level` (`underground_levels`,
 4 by default; the player sees it as level 0, the levels below as negative);
 lakes and rivers lie in hollows below it, shallows and beaches one level
-down, deep water two; the ground rises one level every `level_step` of
-elevation above `hill_level` (half as fast above `mountain_level`: hills,
-not mountains), rock outcrops one level above the ground around them behind
-cliffs. Under the ground's surface lie `WORLDGEN_EARTH_LEVELS` (2) of earth
+down, deep water two; the ground rises one level every so much elevation
+above `hill_level` (half as fast above `mountain_level`: hills, not
+mountains), rock outcrops one level above the ground around them behind
+cliffs. That step is worked out for each map from `hill_height` (20 by default,
+2 to 20 in the New game screen): the highest ground of the map, whatever the
+seed, stands that many levels over the plains (`level_step()`, the highest
+elevation of the map found first). Under the ground's surface lie `WORLDGEN_EARTH_LEVELS` (2) of earth
 (`ROCK_EARTH`: dug out, it gives nothing), then granite or sandstone; stony
 ground is rock all the way down. Where soft ground or shallow water rises
 one level to an orthogonal neighbor, the lower tile is a slope (one wades up
 the bank to the beach, then walks up to the plains); rock outcrops, deep
 water and steeper rises stay cliffs. The levels under the ground are solid
-until dug (see *Digging*). The map has as many levels as the highest ground
-needs, plus `TREE_MAX_LEVELS` (7) open levels over it where the
-tallest trees rise and roofs go (about 18 on default maps, 4 of them
-underground; 32 at most). `Map.top_ground_level` keeps the highest level
+until dug (see *Digging*). A map with relief has `WORLDGEN_LEVELS_ABOVE` (25)
+levels over the plains (the hills reach 20, the rest is open space where the
+tallest trees rise and roofs go): 30 on default maps, 4 of them underground
+(`MAP_MAX_LEVELS`, 48, leaves room for 16); a flat world has the
+highest ground plus `TREE_MAX_LEVELS` (7). `Map.top_ground_level` keeps the highest level
 with ground: no plant grows above it, so the plant update stops there; items
 may lie higher (on foliage), and the item update skips the levels without
 any (`Items.level_stacks`). `WorldGenParams.flat` makes a world of one level of ground (and the
@@ -2707,7 +2715,7 @@ menu or drag sends them there (`can_order_move()`, `game_order_move()`); with no
 which pauses the game while it is open (as does the settings window opened
 from it). The settings (`core/settings.h`) are read at start from
 `settings.cfg` in `SDL_GetPrefPath("", "colony-sim")` and written again at
-each change; `--ui-scale` and `--lang` override them for the session
+each change (`skip_menu = 1`, typed by hand in the file, starts a new game at once instead of showing the title screen, for testing; the save keeps it); `--ui-scale` and `--lang` override them for the session
 without being saved. A new interface size builds a new `Theme`, opens the
 font again at its size (`text_renderer_set_size()`) and places the windows
 again (`ui_set_theme()`); a palette only swaps the theme's colors (the

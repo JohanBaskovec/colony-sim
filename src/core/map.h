@@ -31,7 +31,7 @@
 
 #define MAP_MIN_SIZE 16
 #define MAP_MAX_SIZE 256
-#define MAP_MAX_LEVELS 32
+#define MAP_MAX_LEVELS 48
 
 typedef enum Terrain {
     TERRAIN_DEEP_WATER,

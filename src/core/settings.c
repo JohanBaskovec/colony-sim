@@ -2,6 +2,7 @@
 
 #include "core/i18n.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -86,6 +87,34 @@ static bool is_language_code(const char *text)
     return true;
 }
 
+static bool equal_ignoring_case(const char *a, const char *b)
+{
+    for (; *a != '\0' && *b != '\0'; a++, b++) {
+        if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) {
+            return false;
+        }
+    }
+    return *a == *b;
+}
+
+/* 1/0, true/false, yes/no, on/off; false when it is none of them. */
+static bool parse_bool(const char *text, bool *out)
+{
+    static const char *const YES[] = {"1", "true", "yes", "on"};
+    static const char *const NO[] = {"0", "false", "no", "off"};
+    for (size_t i = 0; i < sizeof(YES) / sizeof(YES[0]); i++) {
+        if (equal_ignoring_case(text, YES[i])) {
+            *out = true;
+            return true;
+        }
+        if (equal_ignoring_case(text, NO[i])) {
+            *out = false;
+            return true;
+        }
+    }
+    return false;
+}
+
 static void parse_line(Settings *settings, char *line)
 {
     line = trim(line);
@@ -99,20 +128,25 @@ static void parse_line(Settings *settings, char *line)
     *equals = '\0';
     const char *key = trim(line);
     const char *value = trim(equals + 1);
-    if (strcmp(key, "ui_scale") == 0) {
+    if (equal_ignoring_case(key, "ui_scale")) {
         int scale;
         if (parse_int(value, &scale) && scale >= CLI_UI_SCALE_MIN && scale <= CLI_UI_SCALE_MAX) {
             settings->ui_scale = scale;
         }
-    } else if (strcmp(key, "palette") == 0) {
+    } else if (equal_ignoring_case(key, "palette")) {
         for (int palette = 0; palette < SETTINGS_PALETTE_COUNT; palette++) {
             if (strcmp(value, PALETTES[palette].id) == 0) {
                 settings->palette = (SettingsPalette)palette;
             }
         }
-    } else if (strcmp(key, "language") == 0) {
+    } else if (equal_ignoring_case(key, "language")) {
         if (is_language_code(value)) {
             snprintf(settings->language, sizeof(settings->language), "%s", value);
+        }
+    } else if (equal_ignoring_case(key, "skip_menu")) {
+        bool skip;
+        if (parse_bool(value, &skip)) {
+            settings->skip_menu = skip;
         }
     }
 }
@@ -143,8 +177,9 @@ size_t settings_format(const Settings *settings, char *out, size_t size)
                           "# Colony Sim settings (written by the game)\n"
                           "ui_scale = %d\n"
                           "palette = %s\n"
-                          "language = %s\n",
+                          "language = %s\n"
+                          "skip_menu = %d\n",
                           settings->ui_scale, palette != NULL ? palette : PALETTES[0].id,
-                          settings->language);
+                          settings->language, settings->skip_menu ? 1 : 0);
     return length > 0 ? (size_t)length : 0;
 }

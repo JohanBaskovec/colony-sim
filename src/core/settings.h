@@ -2,14 +2,15 @@
  * Player settings kept between sessions: the interface size, the colors and
  * the language. They are read from and written to a short "key = value"
  * text; the frontend loads and saves the file (the core does no file I/O).
- * Unknown keys and invalid values are skipped (the value stays as it was), so
- * that an old or hand-edited file never stops the game from starting.
+ * Keys are not case sensitive. Unknown keys and invalid values are skipped (the value stays as it
+ * was), so that an old or hand-edited file never stops the game from starting.
  */
 #ifndef COLONY_CORE_SETTINGS_H
 #define COLONY_CORE_SETTINGS_H
 
 #include "core/cli.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 
 /* Interface size, in percent: CLI_UI_SCALE_MIN..CLI_UI_SCALE_MAX (the same
@@ -30,6 +31,9 @@ typedef struct Settings {
     SettingsPalette palette;
     /* A language code ("fr", "pt_BR"); empty: the system's. */
     char language[SETTINGS_LANGUAGE_SIZE];
+    /* Start a new game at once instead of showing the title screen, as when a
+     * game option is given on the command line (for testing). */
+    bool skip_menu;
 } Settings;
 
 void settings_default(Settings *settings);

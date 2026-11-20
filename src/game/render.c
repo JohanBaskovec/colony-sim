@@ -553,7 +553,7 @@ static bool tile_seen(int x, int y, int z)
 
 /* Fills the table of the levels seen; returns the set of the levels below the
  * one shown that are seen somewhere (bit z for level z), 0 if none. */
-static uint32_t below_fill_view(const Map *map, const Camera *camera)
+static uint64_t below_fill_view(const Map *map, const Camera *camera)
 {
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
     if (visible.x1 <= visible.x0 || visible.y1 <= visible.y0) {
@@ -568,19 +568,19 @@ static uint32_t below_fill_view(const Map *map, const Camera *camera)
         below_view = grown;
         below_view_capacity = count;
     }
-    uint32_t levels = 0;
+    uint64_t levels = 0;
     size_t i = 0;
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
             int level = map_view_level(map, x, y, camera->level);
             below_view[i++] = (int8_t)level;
             if (level >= 0 && level < camera->level) {
-                levels |= 1u << level;
+                levels |= UINT64_C(1) << level;
             }
             /* The thin foliage over what is seen is drawn too. */
             for (int z = camera->level - 1; z > level; z--) {
                 if (is_thin_foliage(map, map_index(map, x, y, z))) {
-                    levels |= 1u << z;
+                    levels |= UINT64_C(1) << z;
                 }
             }
         }
@@ -616,10 +616,10 @@ static float below_scale(const RenderTuning *tuning)
 }
 
 bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera,
-                        const RenderTuning *tuning, uint32_t *levels)
+                        const RenderTuning *tuning, uint64_t *levels)
 {
     const float scale = below_scale(tuning);
-    SDL_COMPILE_TIME_ASSERT(below_levels_fit, MAP_MAX_LEVELS <= 32);
+    SDL_COMPILE_TIME_ASSERT(below_levels_fit, MAP_MAX_LEVELS <= 64);
     *levels = 0;
     if (camera->level <= 0 || camera->level >= map->depth) {
         return false;
@@ -629,7 +629,7 @@ bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *ca
     if (width <= 0 || height <= 0) {
         return false;
     }
-    uint32_t seen = below_fill_view(map, camera);
+    uint64_t seen = below_fill_view(map, camera);
     if (seen == 0) {
         return false;
     }

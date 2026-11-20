@@ -160,9 +160,9 @@ static void test_relief(void)
         REQUIRE(worldgen_generate(&map, &params));
         const int surface = map.surface_level;
         CHECK_EQ_INT(surface, WORLDGEN_UNDERGROUND_LEVELS);
-        CHECK(map.depth > surface + 2);
-        CHECK(map.depth <= surface + 8 + TREE_MAX_LEVELS); /* Hills, not mountains. */
-        CHECK_EQ_INT(map.depth, map.top_ground_level + TREE_MAX_LEVELS);
+        /* Room over the plains for the hills, the trees on them and roofs. */
+        CHECK_EQ_INT(map.depth, surface + 1 + WORLDGEN_LEVELS_ABOVE);
+        CHECK_EQ_INT(map.top_ground_level, surface + WORLDGEN_HILL_HEIGHT);
         size_t levels[MAP_MAX_LEVELS] = {0};
         size_t water = 0;
         for (int y = 0; y < map.height; y++) {
@@ -211,6 +211,31 @@ static void test_relief(void)
         CHECK(levels[surface + 1] > 0 && levels[surface + 2] > 0);
         map_free(&map);
     }
+}
+
+/* The tallest ground of a map stands as many levels over the plains as asked,
+ * whatever the seed, and the map has room over it for the tallest tree. */
+static void test_hill_height(void)
+{
+    for (uint64_t seed = 1; seed <= 6; seed++) {
+        for (int height = 2; height <= WORLDGEN_MAX_HILL_HEIGHT; height += 6) {
+            WorldGenParams params = params_for_seed(seed);
+            params.hill_height = height;
+            Map map;
+            REQUIRE(worldgen_generate(&map, &params));
+            CHECK_EQ_INT(map.top_ground_level, map.surface_level + height);
+            CHECK(map.depth >= map.top_ground_level + TREE_MAX_LEVELS - 2);
+            map_free(&map);
+        }
+    }
+    /* No more underground than the map's levels leave. */
+    WorldGenParams deep = params_for_seed(1);
+    deep.underground_levels = 40;
+    Map map;
+    REQUIRE(worldgen_generate(&map, &deep));
+    CHECK_EQ_INT(map.surface_level, WORLDGEN_MAX_UNDERGROUND);
+    CHECK(map.depth <= MAP_MAX_LEVELS);
+    map_free(&map);
 }
 
 /* Slopes lead up onto soft hills and out of the shallows; rock outcrops and
@@ -590,6 +615,7 @@ int main(void)
     RUN_TEST(test_maps_are_mostly_usable_land);
     RUN_TEST(test_stones);
     RUN_TEST(test_relief);
+    RUN_TEST(test_hill_height);
     RUN_TEST(test_slopes);
     RUN_TEST(test_flat);
     RUN_TEST(test_trees);

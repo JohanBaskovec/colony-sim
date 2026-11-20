@@ -863,8 +863,9 @@ bool app_init(App *app, const CliOptions *options)
     app->selected_station = WORKSTATION_NONE;
     app->selected_gather_zone = GATHER_ZONE_NONE;
     app->inspector_tab = -1;
-    if (!cli_starts_game(options)) {
-        /* No game asked for on the command line: the title screen. */
+    if (!cli_starts_game(options) && !app->settings.skip_menu) {
+        /* No game asked for on the command line (nor skip_menu in the
+         * settings): the title screen. */
         if (!open_title_screen(app)) {
             return false;
         }
@@ -2084,11 +2085,11 @@ static void render_world(App *app, bool markers)
 {
 
     /* The levels below, through open space: those seen somewhere, the deepest first. */
-    uint32_t levels;
+    uint64_t levels;
     if (render_below_begin(app->renderer, game_view_map(&app->game), &app->camera, &app->tuning,
                            &levels)) {
         for (int z = 0; z < app->camera.level; z++) {
-            if ((levels & (1u << z)) == 0) {
+            if ((levels & (UINT64_C(1) << z)) == 0) {
                 continue;
             }
             Camera below = app->camera;
@@ -2103,7 +2104,7 @@ static void render_world(App *app, bool markers)
             render_world_sprites(app->renderer, app->sprites, &app->game, &below, NULL, 0,
                                  app->selected_animal);
             int next = z + 1;
-            while (next < app->camera.level && (levels & (1u << next)) == 0) {
+            while (next < app->camera.level && (levels & (UINT64_C(1) << next)) == 0) {
                 next++;
             }
             render_below_shade(app->renderer, &app->tuning, z, next);

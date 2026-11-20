@@ -92,8 +92,15 @@ static bool count_food_plant(const Map *map, int x, int y, int z, void *userdata
 static void test_settlers_arrive_near_food(void)
 {
     for (uint64_t seed = 1; seed <= 40; seed++) {
+        /* (A map of 64 tiles has hills too steep to leave room around the start
+         * for some seeds: the game then settles for any tile.) */
         Game game;
-        REQUIRE(init_small_game(&game, seed));
+        NewGameParams params;
+        game_default_params(&params);
+        params.world.seed = seed;
+        params.world.width = 96;
+        params.world.height = 96;
+        REQUIRE(game_init(&game, &params));
         const Colonist *first = game_colonist_const(&game, game_colonist_id_at(&game, 0));
         REQUIRE(first != NULL);
         TilePos start = {(int16_t)first->x, (int16_t)first->y, (int16_t)first->z};

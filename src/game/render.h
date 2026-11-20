@@ -54,7 +54,7 @@ RenderTuning render_tuning_default(void);
  * shown after the last): it veils what is already drawn.
  */
 bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera,
-                        const RenderTuning *tuning, uint32_t *levels);
+                        const RenderTuning *tuning, uint64_t *levels);
 void render_below_shade(SDL_Renderer *renderer, const RenderTuning *tuning, int level,
                         int next_level);
 void render_below_end(SDL_Renderer *renderer);

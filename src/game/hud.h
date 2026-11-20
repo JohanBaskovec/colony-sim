@@ -32,6 +32,9 @@ bool hud_item_condition_text(char *out, size_t size, ItemStack stack);
 /* A quality (0..100) as text, in the player's number format. */
 void hud_quality_text(char *out, size_t size, ItemQuality quality);
 bool hud_structure_condition_text(char *out, size_t size, const Map *map, int x, int y, int z);
+/* The number a level goes by for the player: the plains are level 0, the levels
+ * above count up, those under them are negative ("−3", with a real minus). */
+void hud_level_text(char *out, size_t size, const Map *map, int z);
 /* "21 kg", "0.3 kg" (see the tile readout). */
 void hud_weight_text(char *out, size_t size, float kilograms);
 /* The name of the items of a stack, their wood species in it ("Oak

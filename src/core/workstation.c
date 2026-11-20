@@ -231,7 +231,7 @@ int workstation_add_bill_from(Workstations *workstations, int index, const Bill 
         return -1;
     }
     /* Each setting through its setter: what is invalid stays as a new bill's. */
-    Bill bill;
+    Bill bill = {0};
     bill_init(&bill, (RecipeType)draft->recipe);
     bill_set_mode(&bill, (BillMode)draft->mode);
     bill_set_target(&bill, draft->target);
