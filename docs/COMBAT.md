@@ -8,8 +8,9 @@ whether the blow lands.
 
 Status: step A is implemented (the module, animals fighting and fleeing,
 settlers' self-defense, a debug tool), and the carnivores that use it
-(`docs/ROADMAP.md` M5 *Wildlife, step 2*, §6). Values marked *(tuning)* are first
-guesses.
+(`docs/ROADMAP.md` M5 *Wildlife, step 2*, §6). Weapons (§7) and the
+mobilization (§8) are designed, not implemented (steps in §9). Values marked
+*(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -145,14 +146,96 @@ cornered, takes it).
 - Not yet: births (the population only shrinks: *Wildlife, step 3*), tracks,
   hunting orders, young, bears and lynxes.
 
-## 7. Later
+## 7. Weapons (designed)
 
-- Settlers' mobilization (drafting), hunting orders, ranged weapons
-  (throwing spears), line of sight and cover, raids, armor, morale effects of
-  seeing a settler hurt, wounded animals fleeing to heal.
-- Weapons come from what a settler carries (`docs/CARRYING.md`): a drafted
-  settler wields one weapon of its places, drawing it takes a time by place
-  (nothing in hand, half a second from under an arm or the shoulders, two
-  seconds slung), and a settler attacked drops what fills the hands its
-  weapon needs. Today a settler fights with a thrusting spear as soon as it
-  carries one, as a tool.
+Many things a settler carries can strike: a stone in the fist, a sharp flake,
+a hand axe, a branch as a club, and of course spears. What is soft, light or
+growing cannot (twigs, grass, every plant and food, moss, reeds, bodies),
+nor what is too heavy to swing (a stone block). Each weapon item has an
+attack (§2) and the hands it takes *(tuning)*:
+
+| Item | Attack | Injury | Damage | Accuracy | Every | Hands |
+|------|--------|--------|--------|----------|-------|-------|
+| (none) | fists | bruise | 3 | 70 % | 1 s | — |
+| Cobble, flint | stone in the fist | bruise | 5 | 70 % | 1.1 s | 1 |
+| Sharp flake | slash | cut | 4 | 75 % | 1 s | 1 |
+| Chopper | chop | cut | 5 | 70 % | 1.2 s | 1 |
+| Hand axe | chop | cut | 7 | 75 % | 1.2 s | 1 |
+| Branches | club | bruise | 5 | 65 % | 1.3 s | 1 |
+| Wood (a log) | heavy club | bruise | 8 | 55 % | 1.8 s | 2 |
+| Digging stick | staff | bruise | 5 | 75 % | 1.2 s | 2 |
+| Throwing spear | thrust (melee) | cut | 7 | 75 % | 1.3 s | 1 |
+| Thrusting spear | thrust | cut | 9 | 80 % | 1.4 s | 2 |
+
+Fire-hardened versions strike ×1.2. Skill: the spear hunting knowledge for
+spears (§3), ×1 for the rest until a fighting knowledge exists. Throwing
+spears are thrown later (ranged weapons). A weapon's **worth**, to pick the
+best, is its damage × accuracy ÷ interval, times its quality factor and its
+condition; on a tie, the better quality, then the less worn.
+
+- **Primary weapon.** A button with two crossed blades on each weapon's row
+  of the Gear tab (`docs/CARRYING.md` §7.3) makes it the settler's primary
+  weapon: one per settler, that very item. It also locks it *kept on the
+  settler* (else it could be set down); taking the mark away leaves the lock.
+  A primary weapon put down or used up is no longer primary.
+- **Wielded.** A weapon ready to strike is in the hands it takes (two: both
+  hands). Wielding is a state of its own, apart from the player's locks:
+  when it ends, the weapon goes back to where it fits best and its lock is
+  what it was. Wielding drops what fills the hands it needs (the load is put
+  down, not forbidden; free kept items that no longer fit are set down).
+  **Drawing** takes time by where the weapon was: none from a hand, half a
+  second from under an arm or the shoulders, two seconds slung *(tuning)*.
+
+## 8. Mobilization (designed)
+
+The player **mobilizes** (drafts) settlers to fight, and **demobilizes**
+them. A button among the settler's actions (and a key, a physical position
+as every control), for every settler selected: *Mobilize*, or *Demobilize*
+when all are mobilized.
+
+- **Who.** Not a settler in a mental break, fleeing, knocked out or dead.
+  One asleep wakes up and gets up.
+- **Its weapon.** It wields at once: its only weapon if it carries one; with
+  several, its primary weapon, else the best one (§7); with none, its
+  fists.
+- **Change weapon.** While one settler is selected and mobilized, a *Change
+  weapon* button opens a list upward (the button is at the bottom of the
+  screen): its fists, the weapons it carries, and the weapons lying within
+  one tile of it (on its tile or a neighbor). Picking one wields it (drawing
+  time); one from the ground is taken first (it becomes a kept item,
+  locked), and the weapon it held goes back to its place, or is set down
+  when it fits nowhere.
+- **Needs.** A mobilized settler ignores its needs: they keep falling, but
+  it does nothing for them; their effects on health stay (hunger, exhaustion
+  up to collapse). It does not fall asleep while it stands.
+- **Orders.** It stays where it is put and strikes any enemy in reach,
+  without chasing. The orders: *Move* (as today) and *Attack* (an action
+  that arms a tool, then a click on a target: it walks to it and strikes
+  until it is dead, gone or the order changes). It no longer flees from
+  fear; it still flees when it cannot fight any more (no usable arm),
+  which demobilizes it.
+- **The end.** It is demobilized by the player, or when it breaks
+  (mental break), flees, is knocked out or dies (a notice says why). Its
+  weapon is then no longer wielded (§7), and it goes back to its life.
+- **Seen.** A mark on the settler on the map and in the colonist bar; the
+  activity *Mobilized* (with what it does: moving, attacking).
+- **Self-defense** (not mobilized) follows the same choice of weapon: the
+  primary, else the best one carried, with the drawing time.
+
+## 9. Steps of weapons and mobilization
+
+1. The weapons (§7): an attack for each weapon item, the hands it takes,
+  its worth; the primary weapon and its button; self-defense with the best
+  weapon carried.
+2. Mobilization (§8): the state, needs ignored, waking up, the end
+  conditions and their notices, the button and key, the marks on screen.
+3. Wielding: the weapon in hand at mobilization, the drawing time, the
+  *Change weapon* list (with the weapons lying within a tile).
+4. The *Attack* order, and striking enemies in reach while mobilized.
+
+## 10. Later
+
+- Hunting orders, ranged weapons (throwing spears, stones), line of sight
+  and cover, raids, armor, a fighting knowledge, morale effects of seeing a
+  settler hurt or of a long mobilization, mobilized settlers chasing the
+  enemies they see on their own, wounded animals fleeing to heal.
