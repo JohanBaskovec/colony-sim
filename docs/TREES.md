@@ -240,19 +240,33 @@ in the bill's details. Workstation sites do not record their species yet
 
 Every block of foliage, dense, medium or sparse, holds items up to a
 capacity: dense 200, medium 100, sparse 40 of bulk (a tile of ground holds
-`ITEM_TILE_BULK`, 1000) *(tuning)*. What a tree grows there is **attached**
-(a flag on the item): still on the tree, it does not rot, is not hauled, and
-stays in medium and sparse foliage, which anything else falls through as
-today. Items laid on dense foliage by settlers lie there as they do now.
+`ITEM_TILE_BULK`, 1000) *(tuning)*. What a tree grows there is **attached**:
+still on the tree, it does not rot, is not hauled nor eaten, does not count
+in the colony's stocks, and stays in medium and sparse foliage, which
+anything else falls through as today. Items laid on dense foliage by
+settlers lie there as they do now.
+
+What hangs is kept apart from the items of the ground (`core/crown.h`): a
+pool of small records (type, quality, hit points, wood species, the day it
+came to hang) with a list per tile, reached through `Map.crowns` in a
+running game. A flag on the items would have made every user of the items
+(hauling, eating, rot, stocks, animals, the heaps drawn) skip attached ones;
+a store of its own leaves them all as they are, and an attached item becomes
+an ordinary one only when it falls or is picked. The colony's known map
+shares the store: settlers know what hangs in a crown they have seen, and
+also (a limitation) in one they have not.
 
 - **Fruit**: in its season a fruit tree sets its fruit in its crown, a few a
-  day, most in the outer blocks (in the sun), up to its yield. Each fruit
-  falls with a chance per hour that grows with the days since it ripened
-  *(tuning)*, four times as often in a storm; what is left at the end of the
-  season falls. Once fallen it is an ordinary item on the ground (§5).
+  day, most in the outer blocks (the farther of two picked from the trunk),
+  up to its yield. Each fruit falls with a chance per hour, 0.5 % × (1 +
+  the days it has hung / 5) *(tuning)*, four times as often in a storm; what
+  is left at the end of the season falls. Once fallen it is an ordinary item
+  on the ground (§5). A full block lets what comes next fall at once.
 - **Dead wood**: a branch that dies hangs in the crown for days before it
-  falls (twigs too). Shedding (`tree_shed()`) puts it there instead of on
-  the ground; a storm brings much of it down.
+  falls (twigs too): 2 % a hour, ten times as much in a storm *(tuning)*.
+  Shedding (`tree_shed()`) puts it there instead of on the ground. The
+  crowns are gone through once an in-game hour, a slice each tick as the
+  plants are.
 - **Felling**: everything in the crown falls with it, as what lies on dense
   foliage does today.
 
@@ -268,6 +282,13 @@ Gathering zones pick fruit in the crowns, under the orders of each fruit
   gatherer climbs the trunk onto dense foliage and picks from the block it
   stands on, the eight blocks around it on its level and the one above.
   Climbing takes time (the trunk's climbing cost); a fall comes later (§10).
+
+A block follows the orders of the zone covering it, else of the zone
+covering the ground under it (`gather_crown_zone()`): a zone drawn on the
+ground picks in the crowns over it. Picking a block takes what the zone
+wants of it at once (a harvest's work per fruit); the fruit keeps its
+quality and is let fall to the ground below the block, at the picker's feet
+from the ground, tossed down from up the tree.
 
 ### 7.3 Seen by the player
 
@@ -307,9 +328,11 @@ Each step is a commit of its own, with its tests and docs.
    names, effects, inherited by recipes, kept by structures and roofs (with
    their hit points), chosen by right click in the build menu, the
    blueprint's panel and bills.
-4. **Foliage holding items** (§7): attached items, fruit and dead wood in
-   the crowns, their falls, picking from the ground and by climbing, the
-   one-by-one list of a block.
+4. **Foliage holding items** (§7, done): attached items (a store of their
+   own, `core/crown.h`), fruit and dead wood in the crowns, their falls,
+   picking from the ground and by climbing (the zones' *Hazelnuts*,
+   *Chestnuts*, *Wild apples* and *Wild pears* orders, a *Climb trees*
+   box), the one-by-one list of a block, fruit drawn on the foliage.
 
 ## 10. Later
 

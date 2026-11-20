@@ -1,6 +1,7 @@
 /* Gathering zones: tiles, orders, what they want, the jobs tiles offer and
  * what they give. */
 #include "core/colonist.h"
+#include "core/crown.h"
 #include "core/gather_zone.h"
 #include "core/i18n.h"
 #include "core/util.h"
@@ -1267,6 +1268,109 @@ static void test_extend_and_shrink_one(void)
     free_world(&map, &zones, &items);
 }
 
+/* Picking in the crowns (docs/TREES.md §7.2), on a map of four levels: soil
+ * at the bottom, open space over it but for two blocks of foliage at (5, 5)
+ * (medium, sparse over it) and two at (6, 5) (dense, sparse over it). */
+static void test_picking_in_the_crowns(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    Crowns crowns;
+    REQUIRE(map_init(&map, 16, 16, 4));
+    REQUIRE(gather_zones_init(&zones, 16, 16, 4));
+    REQUIRE(items_init(&items, 16, 16, 4));
+    REQUIRE(crowns_init(&crowns, 16, 16, 4));
+    for (size_t i = 0; i < map_tile_count(&map); i++) {
+        map.terrain[i] = i < map_level_tile_count(&map) ? TERRAIN_SOIL : TERRAIN_OPEN;
+        map.rock[i] = ROCK_NONE;
+    }
+    map.terrain[map_index(&map, 5, 5, 1)] = TERRAIN_FOLIAGE_MEDIUM;
+    map.terrain[map_index(&map, 5, 5, 2)] = TERRAIN_FOLIAGE_SPARSE;
+    map.terrain[map_index(&map, 6, 5, 1)] = TERRAIN_FOLIAGE;
+    map.terrain[map_index(&map, 6, 5, 2)] = TERRAIN_FOLIAGE_SPARSE;
+    map_topology_changed(&map);
+    map_litter_to_items(&map, &items);
+    map.crowns = &crowns;
+    CrownItem apple = {.type = ITEM_APPLES, .quality = ITEM_QUALITY_STANDARD, .hit_points = 100};
+    CrownItem branch = {.type = ITEM_BRANCHES, .hit_points = 80};
+    for (int i = 0; i < 3; i++) {
+        REQUIRE(crowns_add(&crowns, &map, 5, 5, 1, apple));
+    }
+    REQUIRE(crowns_add(&crowns, &map, 5, 5, 1, branch));
+    for (int i = 0; i < 2; i++) {
+        REQUIRE(crowns_add(&crowns, &map, 6, 5, 1, apple));
+        REQUIRE(crowns_add(&crowns, &map, 5, 5, 2, apple));
+    }
+
+    /* The zone on the ground below covers the crowns over it. */
+    int index = gather_zone_create(&zones, &map, 0, 0, 9, 9, 0);
+    REQUIRE(index != GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_crown_zone(&zones, &map, 5, 5, 1), index);
+    CHECK_EQ_INT(gather_crown_zone(&zones, &map, 5, 5, 2), index);
+    CHECK_EQ_INT(gather_crown_zone(&zones, &map, 5, 5, 0), GATHER_ZONE_NONE); /* Not foliage. */
+    CHECK_EQ_INT(gather_crown_zone(&zones, &map, 7, 5, 1), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 5, 5, 1, ALL_JOBS), GATHER_JOB_NONE); /* No order. */
+    order(&zones, &items, index, GATHER_APPLES, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 5, 5, 1, ALL_JOBS), GATHER_JOB_PICK);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 5, 5, 2, ALL_JOBS), GATHER_JOB_PICK);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 5, 5, 1, GATHER_JOB_BIT(GATHER_JOB_HARVEST)),
+                 GATHER_JOB_NONE);
+    CHECK(gather_job_available(&zones, &map, 6, 5, 1, GATHER_JOB_PICK));
+    CHECK(!gather_job_available(&zones, &map, 7, 5, 1, GATHER_JOB_PICK));
+
+    /* From the ground: the block right above, of any density. */
+    CHECK(gather_pick_reaches(&zones, &map, 5, 5, 0, 5, 5, 1));
+    CHECK(gather_pick_reaches(&zones, &map, 6, 5, 0, 6, 5, 1));
+    CHECK(!gather_pick_reaches(&zones, &map, 5, 5, 0, 5, 5, 2));
+    CHECK(!gather_pick_reaches(&zones, &map, 4, 5, 0, 5, 5, 1));
+    /* Up on the dense foliage, only when the zone lets them climb. */
+    CHECK(!gather_pick_reaches(&zones, &map, 6, 5, 1, 5, 5, 1));
+    CHECK(!gather_zones_climb(&zones));
+    long available[GATHER_RESOURCE_COUNT];
+    gather_zone_available(&zones, &map, index, available);
+    CHECK_EQ_INT((int)available[GATHER_APPLES], 5); /* Not the two up at (5, 5, 2). */
+    gather_zone_set_climb(&zones, index, true);
+    CHECK(gather_zones_climb(&zones));
+    CHECK(gather_pick_reaches(&zones, &map, 6, 5, 1, 5, 5, 1)); /* Beside it. */
+    CHECK(gather_pick_reaches(&zones, &map, 6, 5, 1, 6, 5, 1)); /* Its own. */
+    CHECK(gather_pick_reaches(&zones, &map, 6, 5, 1, 6, 5, 2)); /* Above it. */
+    CHECK(!gather_pick_reaches(&zones, &map, 6, 5, 1, 5, 5, 2));
+    gather_zone_available(&zones, &map, index, available);
+    CHECK_EQ_INT((int)available[GATHER_APPLES], 7);
+
+    /* Picked: what the zone wants falls to the ground below, as it was. */
+    CHECK_NEAR(gather_job_work_needed(&map, 5, 5, 1, GATHER_JOB_PICK),
+               3.0f * gather_job_work_needed(&map, 6, 5, 1, GATHER_JOB_PICK) / 2.0f, 1e-3);
+    CHECK(gather_zone_add_work(&zones, &map, &items, 5, 5, 1, GATHER_JOB_PICK, 1e6f, 60.0, NULL));
+    CHECK_EQ_INT(crowns_count(&crowns, 5, 5, 1, ITEM_TYPE_BIT(ITEM_APPLES)), 0);
+    CHECK_EQ_INT(crowns_count(&crowns, 5, 5, 1, ITEM_TYPE_BIT(ITEM_BRANCHES)), 1); /* Left. */
+    ItemStack below = items_get(&items, 5, 5, 0);
+    CHECK_EQ_INT(below.type, ITEM_APPLES);
+    CHECK_EQ_INT(below.count, 3);
+    const GatherZone *zone = gather_zone_get(&zones, index);
+    CHECK_EQ_INT(zone->orders[GATHER_APPLES].done, 3);
+    CHECK_EQ_INT(zone->groups[GATHER_GROUP_FOOD].done, 3);
+    CHECK(!gather_job_available(&zones, &map, 5, 5, 1, GATHER_JOB_PICK));
+    CHECK(crowns_check(&crowns));
+
+    /* A zone over the foliage itself takes it over; turned off, nothing. */
+    int upper = gather_zone_create(&zones, &map, 6, 5, 6, 5, 2);
+    REQUIRE(upper != GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_crown_zone(&zones, &map, 6, 5, 2), upper);
+    CHECK_EQ_INT(gather_crown_zone(&zones, &map, 6, 5, 1), index);
+    uint64_t hash = gather_zones_hash(&zones, 0);
+    gather_zone_set_climb(&zones, index, false);
+    CHECK(gather_zones_hash(&zones, 0) != hash);
+    gather_zone_set_enabled(&zones, index, GATHER_APPLES, false);
+    gather_zones_update(&zones, items.totals, 0.0f);
+    CHECK(!gather_job_available(&zones, &map, 6, 5, 1, GATHER_JOB_PICK));
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 6, 5, 1, GATHER_JOB_PICK, 1e6f, 60.0, NULL));
+
+    crowns_free(&crowns);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_single_plant_harvest_and_uproot);
@@ -1300,5 +1404,6 @@ int main(void)
     RUN_TEST(test_taken_whole_waits_until_grown);
     RUN_TEST(test_zone_tiles_box);
     RUN_TEST(test_extend_and_shrink_one);
+    RUN_TEST(test_picking_in_the_crowns);
     return test_summary();
 }

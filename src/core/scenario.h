@@ -14,8 +14,8 @@ typedef enum Scenario {
     /* Nothing: colonists left alone (needs and wandering only). */
     SCENARIO_NONE,
     /* A gathering zone over the whole map (grass cut and wild food
-     * gathered, forever), two stockpiles: work, hauling (the branches, twigs
-     * and stones lying about too), and many jobs that cannot be reached. */
+     * gathered, forever; fruit picked in the crowns, climbing), two stockpiles: work, hauling (the
+     * branches, twigs and stones lying about too), and many jobs that cannot be reached. */
     SCENARIO_GATHERING,
     /* Only jobs that nobody can reach: a zone felling the trees growing
      * where the colonists cannot walk to (other islands). */

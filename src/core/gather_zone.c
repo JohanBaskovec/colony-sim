@@ -1,6 +1,7 @@
 #include "core/gather_zone.h"
 
 #include "core/colonist.h"
+#include "core/crown.h"
 #include "core/i18n.h"
 #include "core/tree.h"
 #include "core/util.h"
@@ -52,6 +53,14 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
                            ONE(ITEM_BILBERRIES), GATHER_JOB_HARVEST, true, FOOD},
     [GATHER_ROSE_HIPS] = {"rose_hips", N_("gather_zone.resource.rose_hips"), ITEM_ROSE_HIPS,
                           ONE(ITEM_ROSE_HIPS), GATHER_JOB_HARVEST, true, FOOD},
+    [GATHER_HAZELNUTS] = {"hazelnuts", N_("gather_zone.resource.hazelnuts"), ITEM_HAZELNUTS,
+                          ONE(ITEM_HAZELNUTS), GATHER_JOB_PICK, false, FOOD},
+    [GATHER_CHESTNUTS] = {"chestnuts", N_("gather_zone.resource.chestnuts"), ITEM_CHESTNUTS,
+                          ONE(ITEM_CHESTNUTS), GATHER_JOB_PICK, false, FOOD},
+    [GATHER_APPLES] = {"apples", N_("gather_zone.resource.apples"), ITEM_APPLES, ONE(ITEM_APPLES),
+                       GATHER_JOB_PICK, false, FOOD},
+    [GATHER_PEARS] = {"pears", N_("gather_zone.resource.pears"), ITEM_PEARS, ONE(ITEM_PEARS),
+                      GATHER_JOB_PICK, false, FOOD},
     [GATHER_GRASS] = {"grass", N_("gather_zone.resource.grass"), ITEM_FRESH_GRASS,
                       ONE(ITEM_FRESH_GRASS) | ONE(ITEM_GRASS), GATHER_JOB_CUT_GRASS, true, FIBRES},
     [GATHER_MOSS] = {"moss", N_("gather_zone.resource.moss"), ITEM_MOSS, ONE(ITEM_MOSS),
@@ -78,7 +87,9 @@ static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
                                MEMBER(GATHER_PLANTAIN) | MEMBER(GATHER_WILD_CARROTS) |
                                MEMBER(GATHER_CATTAIL_RHIZOMES) | MEMBER(GATHER_WOOD_SORREL) |
                                MEMBER(GATHER_WILD_STRAWBERRIES) | MEMBER(GATHER_BILBERRIES) |
-                               MEMBER(GATHER_ROSE_HIPS),
+                               MEMBER(GATHER_ROSE_HIPS) | MEMBER(GATHER_HAZELNUTS) |
+                               MEMBER(GATHER_CHESTNUTS) | MEMBER(GATHER_APPLES) |
+                               MEMBER(GATHER_PEARS),
                            true},
     [GATHER_GROUP_FIBRES] = {"fibres", N_("gather_zone.group.fibres"),
                              MEMBER(GATHER_GRASS) | MEMBER(GATHER_MOSS) | MEMBER(GATHER_BRACKEN) |
@@ -114,6 +125,10 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
                                   RESOURCE(GATHER_BRACKEN) | RESOURCE(GATHER_HEATHER) |
                                   RESOURCE(GATHER_REEDS),
                               TOOL_USE_CUT_GRASS, false},
+    [GATHER_JOB_PICK] = {"pick", N_("colonist.task.pick"), GATHERING,
+                         RESOURCE(GATHER_HAZELNUTS) | RESOURCE(GATHER_CHESTNUTS) |
+                             RESOURCE(GATHER_APPLES) | RESOURCE(GATHER_PEARS),
+                         TOOL_USE_NONE, false},
     [GATHER_JOB_CHOP] = {"chop", N_("colonist.task.chop"), WORK_WOODCUTTING, KNOWLEDGE_NONE,
                          KNOWLEDGE_MASTERY_LEVEL, RESOURCE(GATHER_WOOD), TOOL_USE_NONE, false},
 };
@@ -741,6 +756,34 @@ void gather_zone_set_priority(GatherZones *zones, int index, int priority)
     }
 }
 
+void gather_zone_set_climb(GatherZones *zones, int index, bool climb)
+{
+    if (is_valid(zones, index) && zones->list[index].climb != climb) {
+        zones->list[index].climb = climb;
+        changed(zones);
+    }
+}
+
+bool gather_zones_climb(const GatherZones *zones)
+{
+    for (int i = 0; i < GATHER_ZONE_MAX; i++) {
+        const GatherZone *zone = &zones->list[i];
+        if (zone->used && zone->climb && (zone->wanted & JOB_DEFS[GATHER_JOB_PICK].resources)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+GatherResourceMask gather_zones_wanted(const GatherZones *zones)
+{
+    GatherResourceMask wanted = 0;
+    for (int i = 0; i < GATHER_ZONE_MAX; i++) {
+        wanted |= zones->list[i].used ? zones->list[i].wanted : 0;
+    }
+    return wanted;
+}
+
 void gather_zone_set_forbidden(GatherZones *zones, int index, bool forbidden)
 {
     if (is_valid(zones, index) && zones->list[index].forbidden != forbidden) {
@@ -1077,9 +1120,95 @@ static int plant_yield(const Map *map, int x, int y, int z, GatherJob job)
     }
 }
 
+/* ---- Picking in the crowns -------------------------------------------------- */
+
+static bool is_foliage_tile(const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    return map->rock[index] == ROCK_NONE && terrain_is_foliage((Terrain)map->terrain[index]);
+}
+
+int gather_crown_zone(const GatherZones *zones, const Map *map, int x, int y, int z)
+{
+    if (!in_bounds(zones, x, y, z) || !is_foliage_tile(map, x, y, z)) {
+        return GATHER_ZONE_NONE;
+    }
+    int zone = zones->zone[index_of(zones, x, y, z)] - 1;
+    if (zone != GATHER_ZONE_NONE) {
+        return zone;
+    }
+    int ground = tree_landing_level(map, x, y, z);
+    return ground >= 0 ? zones->zone[index_of(zones, x, y, ground)] - 1 : GATHER_ZONE_NONE;
+}
+
+bool gather_pick_reaches(const GatherZones *zones, const Map *map, int sx, int sy, int sz, int tx,
+                         int ty, int tz)
+{
+    if (!map_in_bounds(map, sx, sy, sz) || !is_foliage_tile(map, tx, ty, tz)) {
+        return false;
+    }
+    if (!terrain_is_foliage((Terrain)map->terrain[map_index(map, sx, sy, sz)])) {
+        return tx == sx && ty == sy && tz == sz + 1; /* From the ground. */
+    }
+    const GatherZone *zone = gather_zone_get(zones, gather_crown_zone(zones, map, tx, ty, tz));
+    if (zone == NULL || !zone->climb) {
+        return false;
+    }
+    int dx = abs(tx - sx), dy = abs(ty - sy);
+    return (dx <= 1 && dy <= 1 && tz == sz) || (dx == 0 && dy == 0 && tz == sz + 1);
+}
+
+/* Whether a block of foliage can be picked from the ground: a floor right
+ * under it that is not foliage. */
+static bool pickable_from_ground(const Map *map, int x, int y, int z)
+{
+    return z > 0 && !is_foliage_tile(map, x, y, z - 1) && map_is_passable(map, x, y, z - 1);
+}
+
+/* The items the picked resources among `resources` are. */
+static ItemTypeMask picked_items(GatherResourceMask resources)
+{
+    ItemTypeMask items = 0;
+    resources &= JOB_DEFS[GATHER_JOB_PICK].resources;
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        if (resources & GATHER_RESOURCE_BIT(r)) {
+            items |= ITEM_TYPE_BIT(RESOURCE_DEFS[r].item);
+        }
+    }
+    return items;
+}
+
+/* Whether the tree whose crown holds (x, y, z) is forbidden: not picked. */
+static bool crown_forbidden(const Map *map, int x, int y, int z)
+{
+    TreeRef tree;
+    return map->forbidden_count > 0 && tree_at(map, x, y, z, &tree) &&
+           map_forbidden(map, tree.x, tree.y, tree.z, MAP_FORBID_PLANT);
+}
+
+/* Fruit of `resources` hanging in a block of foliage. */
+static int crown_fruit(const Map *map, int x, int y, int z, GatherResourceMask resources)
+{
+    ItemTypeMask items = picked_items(resources);
+    return map->crowns != NULL && items != 0 ? crowns_count(map->crowns, x, y, z, items) : 0;
+}
+
+/* Whether a block of foliage holds fruit its crown zone wants picked. */
+static bool pick_open(const GatherZone *zone, const Map *map, int x, int y, int z)
+{
+    return crown_fruit(map, x, y, z, zone->wanted) > 0 && !crown_forbidden(map, x, y, z);
+}
+
 bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y, int z,
                           GatherJob job)
 {
+    if (job == GATHER_JOB_PICK) {
+        const GatherZone *zone = gather_zone_get(zones, gather_crown_zone(zones, map, x, y, z));
+        return zone != NULL && pick_open(zone, map, x, y, z);
+    }
     const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y, z));
     return zone != NULL && (unsigned)job < GATHER_JOB_COUNT && job_open(zone, map, x, y, z, job);
 }
@@ -1107,6 +1236,14 @@ GatherJob gather_tile_job_in(const GatherZones *zones, const Map *map, int x, in
 {
     if (!map_in_bounds(map, x, y, z)) {
         return GATHER_JOB_NONE;
+    }
+    if ((allowed & GATHER_JOB_BIT(GATHER_JOB_PICK)) && map->crowns != NULL &&
+        map->crowns->count > 0 && is_foliage_tile(map, x, y, z)) {
+        const GatherZone *crown = gather_zone_get(zones, gather_crown_zone(zones, map, x, y, z));
+        if (crown != NULL && (priority == 0 || crown->priority == priority) &&
+            pick_open(crown, map, x, y, z)) {
+            return GATHER_JOB_PICK;
+        }
     }
     const GatherZone *zone = gather_zone_get(zones, gather_zone_at(zones, x, y, z));
     if (zone == NULL || !gather_zone_can_cover(map, x, y, z)) {
@@ -1147,6 +1284,22 @@ void gather_zone_available(const GatherZones *zones, const Map *map, int index,
             }
         }
     }
+    /* What hangs in the crowns over the zone, where its gatherers reach it. */
+    const Crowns *crowns = map->crowns;
+    for (uint32_t slot = 0; crowns != NULL && slot < crowns->pool_used; slot++) {
+        const CrownItem *item = &crowns->pool[slot];
+        GatherResource resource = resource_of_item((ItemType)item->type);
+        if (item->type == ITEM_NONE || resource == GATHER_RESOURCE_COUNT ||
+            RESOURCE_DEFS[resource].job != GATHER_JOB_PICK) {
+            continue;
+        }
+        int x, y, z;
+        map_tile_of(map, item->tile, &x, &y, &z);
+        if (gather_crown_zone(zones, map, x, y, z) == index &&
+            (zone->climb || pickable_from_ground(map, x, y, z)) && !crown_forbidden(map, x, y, z)) {
+            available[resource]++;
+        }
+    }
 }
 
 float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
@@ -1162,6 +1315,10 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
     case GATHER_JOB_DIG:
     case GATHER_JOB_DIG_CAREFULLY: return DIG_WORK * (float)(items > 1 ? items : 1);
     case GATHER_JOB_CUT_GRASS: return CUT_GRASS_ARMFUL_WORK * (float)(items > 1 ? items : 1);
+    case GATHER_JOB_PICK: {
+        int fruit = crown_fruit(map, x, y, z, JOB_DEFS[GATHER_JOB_PICK].resources);
+        return HARVEST_WORK * (float)(fruit > 1 ? fruit : 1);
+    }
     case GATHER_JOB_CHOP: return tree_fell_work(plant);
     default: return 0.0f;
     }
@@ -1197,10 +1354,59 @@ static GatherResource resource_of(GatherJob job, ItemType item)
     return GATHER_RESOURCE_COUNT;
 }
 
+/* Counts `count` items of a resource gathered in a zone, for its order and its
+ * group's. */
+static void count_gathered(GatherZones *zones, GatherZone *zone, GatherResource resource, int count)
+{
+    GatherOrder *order = &zone->orders[resource];
+    order->done = (uint16_t)clampi(order->done + count, 0, UINT16_MAX);
+    if (order->mode == GATHER_DO_COUNT && order->done >= order->target) {
+        zone->wanted &= ~GATHER_RESOURCE_BIT(resource);
+        changed(zones);
+    }
+    GatherGroup group = RESOURCE_DEFS[resource].group;
+    if (group != GATHER_GROUP_NONE) {
+        GatherGroupOrder *group_order = &zone->groups[group];
+        group_order->done = (uint16_t)clampi(group_order->done + count, 0, UINT16_MAX);
+        if (group_order->mode == GATHER_DO_COUNT && group_order->done >= group_order->target) {
+            zone->wanted &= ~GROUP_DEFS[group].members;
+            changed(zones);
+        }
+    }
+}
+
+/* Picks what the zone wants in a block of foliage: it falls to the ground
+ * below (tossed down), as it is, and counts for the orders. */
+static void pick_crown(GatherZones *zones, GatherZone *zone, Map *map, Items *items, int x, int y,
+                       int z)
+{
+    ItemTypeMask types = picked_items(zone->wanted);
+    int counts[GATHER_RESOURCE_COUNT] = {0};
+    CrownItem taken[32];
+    int count;
+    while ((count = crowns_take(map->crowns, x, y, z, types, taken, 32)) > 0) {
+        for (int i = 0; i < count; i++) {
+            GatherResource resource = resource_of_item((ItemType)taken[i].type);
+            if (resource != GATHER_RESOURCE_COUNT) {
+                counts[resource]++;
+            }
+            if (items != NULL) {
+                crown_drop(map, items, x, y, z, taken[i]);
+            }
+        }
+    }
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        if (counts[r] > 0) {
+            count_gathered(zones, zone, (GatherResource)r, counts[r]);
+        }
+    }
+}
+
 bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
                           GatherJob job, float work, double level, Rng *rng)
 {
-    int zone_index = gather_zone_at(zones, x, y, z);
+    int zone_index = job == GATHER_JOB_PICK ? gather_crown_zone(zones, map, x, y, z)
+                                            : gather_zone_at(zones, x, y, z);
     if (!gather_job_available(zones, map, x, y, z, job)) {
         return false;
     }
@@ -1215,6 +1421,10 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
         return false;
     }
     clear_progress(zones, index);
+    if (job == GATHER_JOB_PICK) {
+        pick_crown(zones, zone, map, items, x, y, z);
+        return true;
+    }
     int count;
     ItemType item;
     if (job == GATHER_JOB_CHOP) { /* The tree stays until it falls, below. */
@@ -1237,23 +1447,8 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
     } else if (stack.count > 0) {
         items_drop(items, map, x, y, z, stack);
     }
-    if (!wanted) {
-        return true; /* Nothing. */
-    }
-    GatherOrder *order = &zone->orders[resource];
-    order->done = (uint16_t)clampi(order->done + count, 0, UINT16_MAX);
-    if (order->mode == GATHER_DO_COUNT && order->done >= order->target) {
-        zone->wanted &= ~GATHER_RESOURCE_BIT(resource);
-        changed(zones);
-    }
-    GatherGroup group = RESOURCE_DEFS[resource].group;
-    if (group != GATHER_GROUP_NONE) {
-        GatherGroupOrder *group_order = &zone->groups[group];
-        group_order->done = (uint16_t)clampi(group_order->done + count, 0, UINT16_MAX);
-        if (group_order->mode == GATHER_DO_COUNT && group_order->done >= group_order->target) {
-            zone->wanted &= ~GROUP_DEFS[group].members;
-            changed(zones);
-        }
+    if (wanted) {
+        count_gathered(zones, zone, resource, count);
     }
     return true;
 }
@@ -1409,6 +1604,9 @@ uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)
         hash = hash_fnv1a64(hash, fields, sizeof(fields));
         if (zone->forbidden) { /* Hashes of games that forbid nothing stay as they were. */
             hash = hash_fnv1a64(hash, &zone->forbidden, sizeof(zone->forbidden));
+        }
+        if (zone->climb) { /* The same for climbing. */
+            hash = hash_fnv1a64(hash, &zone->climb, sizeof(zone->climb));
         }
         for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
             const GatherOrder *order = &zone->orders[r];

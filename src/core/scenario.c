@@ -38,6 +38,11 @@ static void setup_gathering(Game *game, const Colonist *first)
     for (int r = GATHER_BLACKBERRIES; r <= GATHER_CATTAIL_RHIZOMES; r++) { /* Wild food. */
         gather_forever(game, land, (GatherResource)r);
     }
+    /* The fruit and nuts in the crowns, up the trees too. */
+    for (int r = GATHER_HAZELNUTS; r <= GATHER_PEARS; r++) {
+        gather_forever(game, land, (GatherResource)r);
+    }
+    gather_zone_set_climb(&game->gather_zones, land, true);
     gather_zone_set_group_mode(&game->gather_zones, land, GATHER_GROUP_FOOD, GATHER_FOREVER);
 }
 

@@ -1,5 +1,6 @@
 #include "core/colonist.h"
 
+#include "core/crown.h"
 #include "core/hauling.h"
 #include "core/i18n.h"
 #include "core/tree.h"
@@ -1995,6 +1996,9 @@ typedef struct WorkSearch {
     /* Whether orders on roofs (taken down from below) may be open: the
      * search's hot path skips them otherwise. */
     bool roof_jobs;
+    /* Whether fruit hanging in the crowns may be picked (GATHER_JOB_PICK):
+     * the same. */
+    bool pick_jobs;
     uint8_t self;
 } WorkSearch;
 
@@ -2026,7 +2030,10 @@ static WorkTypeMask enabled_work_types(const Colonist *colonist)
 static bool is_open_job(const WorkSearch *search, int x, int y, int z)
 {
     if (search->zones) {
-        if (gather_tile_job_in(search->gather_zones, search->map, x, y, z, search->jobs,
+        /* Fruit in the crowns is picked from below or around it, not from
+         * beside it: see find_pick_job(). */
+        GatherJobMask jobs = search->jobs & ~GATHER_JOB_BIT(GATHER_JOB_PICK);
+        if (gather_tile_job_in(search->gather_zones, search->map, x, y, z, jobs,
                                search->zone_priority) == GATHER_JOB_NONE) {
             return false;
         }
@@ -2076,8 +2083,43 @@ static bool find_adjacent_roof_job(const WorkSearch *search, int x, int y, int z
     return false;
 }
 
+/* Whether a block of foliage has fruit to pick that nobody else is picking. */
+static bool is_open_pick(const WorkSearch *search, int x, int y, int z)
+{
+    return gather_tile_job_in(search->gather_zones, search->map, x, y, z,
+                              GATHER_JOB_BIT(GATHER_JOB_PICK),
+                              search->zone_priority) == GATHER_JOB_PICK &&
+           !reservations_taken_by_other(search->reservations, RESERVATION_WORK,
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                        search->self);
+}
+
+/* First block of foliage with fruit to pick that a settler on (x, y, z)
+ * reaches (gather_pick_reaches()), in a fixed order: the one above, then,
+ * on dense foliage, its own and the eight around it. */
+static bool find_pick_job(const WorkSearch *search, int x, int y, int z, TilePos *out)
+{
+    static const int8_t OFFSETS[10][3] = {{0, 0, 1},  {0, 0, 0},  {0, -1, 0}, {1, 0, 0},
+                                          {0, 1, 0},  {-1, 0, 0}, {1, -1, 0}, {1, 1, 0},
+                                          {-1, 1, 0}, {-1, -1, 0}};
+    const Map *map = search->map;
+    bool on_foliage = map_in_bounds(map, x, y, z) &&
+                      terrain_is_foliage((Terrain)map->terrain[map_index(map, x, y, z)]);
+    int candidates = on_foliage ? 10 : 1;
+    for (int i = 0; i < candidates; i++) {
+        int tx = x + OFFSETS[i][0], ty = y + OFFSETS[i][1], tz = z + OFFSETS[i][2];
+        if (gather_pick_reaches(search->gather_zones, map, x, y, z, tx, ty, tz) &&
+            is_open_pick(search, tx, ty, tz)) {
+            *out = (TilePos){(int16_t)tx, (int16_t)ty, (int16_t)tz};
+            return true;
+        }
+    }
+    return false;
+}
+
 /* First open job next to (x, y), in a fixed order (deterministic): the
- * orders of the tiles, then the orders on the roofs over them. */
+ * orders of the tiles, then the orders on the roofs over them, then the
+ * fruit in the crowns within reach. */
 static bool find_adjacent_job(const WorkSearch *search, int x, int y, int z, TilePos *out)
 {
     for (int i = 0; i < 4; i++) {
@@ -2088,7 +2130,8 @@ static bool find_adjacent_job(const WorkSearch *search, int x, int y, int z, Til
             return true;
         }
     }
-    return search->roof_jobs && find_adjacent_roof_job(search, x, y, z, out);
+    return (search->roof_jobs && find_adjacent_roof_job(search, x, y, z, out)) ||
+           (search->pick_jobs && find_pick_job(search, x, y, z, out));
 }
 
 /* A tile to stand on while working: passable, next to an open job. */
@@ -2116,6 +2159,37 @@ static __attribute__((noinline)) bool roof_beside_region(const ColonistContext *
     return z > 0 && worked_from_below(map, x, y, z) &&
            beside_region(row_ids - (size_t)map->width * (size_t)map->height, x, y, map->width,
                          map->height, region);
+}
+
+/* Whether a zone tile (x, y, z) has fruit to pick over it, or in it (a zone
+ * covering the foliage), that is picked from `region`: from the ground,
+ * under the block; anywhere when its zone lets the gatherers climb (where
+ * they would climb from is not looked for). Kept out of
+ * open_job_reachable()'s scan, which stays tight. */
+static __attribute__((noinline)) bool pick_beside_region(const WorkSearch *search,
+                                                         const uint32_t *row_ids, int x, int y,
+                                                         int z, uint32_t region)
+{
+    const Map *map = search->map;
+    size_t level = (size_t)map->width * (size_t)map->height;
+    const GatherZone *zone =
+        gather_zone_get(search->gather_zones, gather_zone_at(search->gather_zones, x, y, z));
+    if (zone == NULL) {
+        return false;
+    }
+    if (terrain_is_foliage((Terrain)map->terrain[map_index(map, x, y, z)])) {
+        return (zone->climb || (z > 0 && row_ids[(ptrdiff_t)x - (ptrdiff_t)level] == region)) &&
+               is_open_pick(search, x, y, z);
+    }
+    if (row_ids[x] == region && is_open_pick(search, x, y, z + 1)) {
+        return true;
+    }
+    for (int dz = 2; zone->climb && dz <= TREE_MAX_LEVELS; dz++) {
+        if (is_open_pick(search, x, y, z + dz)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /*
@@ -2164,6 +2238,9 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
                 bool next_to_region = beside_region(ids, x, y, width, height, region) ||
                                       (roofs && roof_beside_region(context, ids, x, y, z, region));
                 if (next_to_region && is_open_job(search, x, y, z)) {
+                    return true;
+                }
+                if (search->pick_jobs && pick_beside_region(search, ids, x, y, z, region)) {
                     return true;
                 }
             }
@@ -2304,6 +2381,10 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
     search.roof_jobs = !zones && context->plan_map->roof_count > 0 &&
                        (mask & WORK_TYPE_BIT(WORK_CONSTRUCTION)) &&
                        designations->count_by_work[WORK_CONSTRUCTION] > 0;
+    search.pick_jobs =
+        zones && (jobs & GATHER_JOB_BIT(GATHER_JOB_PICK)) && context->plan_map->crowns != NULL &&
+        context->plan_map->crowns->count > 0 &&
+        (gather_zones_wanted(context->gather_zones) & gather_job_def(GATHER_JOB_PICK)->resources);
     /* Zones of the highest priority first, whatever the distance. */
     uint32_t priorities = zones ? gather_zones_wanting_priorities(context->gather_zones) : 1u;
     uint32_t region = current_region(colonist, context);
@@ -2315,7 +2396,10 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
         spots.y0--;
         spots.x1++;
         spots.y1++;
-        spots.z0 -= search.roof_jobs ? 1 : 0;
+        spots.z0 -= search.roof_jobs || search.pick_jobs ? 1 : 0;
+        /* Up in the trees, for zones whose gatherers climb. */
+        spots.z1 +=
+            search.pick_jobs && gather_zones_climb(context->gather_zones) ? TREE_MAX_LEVELS : 0;
     }
     TilePos spot, target = {0, 0, 0};
     bool found = false;
@@ -2907,7 +2991,11 @@ static void work(Colonist *colonist, const ColonistContext *context)
         take_job_tool(colonist, context);
         return;
     }
-    if (distance != 1 || colonist->z != work_reach(context->map, target).z) {
+    bool there = colonist->gathering && colonist->work_type == GATHER_JOB_PICK
+                     ? gather_pick_reaches(context->gather_zones, context->map, colonist->x,
+                                           colonist->y, colonist->z, target.x, target.y, target.z)
+                     : distance == 1 && colonist->z == work_reach(context->map, target).z;
+    if (!there) {
         set_idle(colonist, context, 0); /* Not there. */
         return;
     }

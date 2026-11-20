@@ -20,6 +20,7 @@ set(COLONY_UNIT_TESTS
     test_combat
     test_construction
     test_corpse
+    test_crown
     test_designation
     test_dirt
     test_fire_light

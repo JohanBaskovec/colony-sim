@@ -17,6 +17,7 @@ add_library(colony_core STATIC
     construction.c
     conversation.c
     corpse.c
+    crown.c
     journal.c
     designation.c
     dirt.c

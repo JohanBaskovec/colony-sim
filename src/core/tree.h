@@ -232,6 +232,11 @@ void tree_build(Map *map, int x, int y, int z);
  */
 bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick);
 
+/* The level where what falls from (x, y, z) comes to rest: down through
+ * open space, foliage of any density, ladders and slopes to the first floor
+ * (-1 when there is none). */
+int tree_landing_level(const Map *map, int x, int y, int z);
+
 /* A new world: lays about TREE_SCATTER_DAYS days of what the tree on
  * (x, y, z) sheds around it (tree_shed() with rolls drawn from `rng`). */
 void tree_scatter_litter(Map *map, int x, int y, int z, Rng *rng);

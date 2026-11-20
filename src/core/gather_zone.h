@@ -3,7 +3,8 @@
  * land offers: they fell trees, pick wild food (fruit, leaves, mushrooms),
  * dig roots up and cut grass. What lies on the ground (branches, twigs,
  * stones, fallen nuts) is no gathering: those are items like any other, for
- * the haulers.
+ * the haulers. What still hangs in the crowns (core/crown.h) is picked: from
+ * the ground, or climbing where the zone allows it.
  *
  * Each tile belongs to at most one zone (dense layer of zone ids, the size of
  * the map). A zone holds one order per resource, off by default. An enabled
@@ -74,6 +75,10 @@ typedef enum GatherResource {
     GATHER_WILD_STRAWBERRIES,
     GATHER_BILBERRIES,
     GATHER_ROSE_HIPS,
+    GATHER_HAZELNUTS, /* Picked in the crowns (GATHER_JOB_PICK). */
+    GATHER_CHESTNUTS,
+    GATHER_APPLES,
+    GATHER_PEARS,
     GATHER_GRASS,
     GATHER_MOSS,
     GATHER_BRACKEN,
@@ -94,7 +99,11 @@ typedef enum GatherJob {
     GATHER_JOB_DIG,           /* Dig roots up (a digging stick helps). */
     GATHER_JOB_DIG_CAREFULLY, /* The same, easily mistaken for a poisonous plant. */
     GATHER_JOB_CUT_GRASS,     /* Cut grass or another fibre plant, which grows back. */
-    GATHER_JOB_CHOP,          /* Fell a tree. */
+    /* Pick the fruit or nuts hanging in a block of foliage (core/crown.h),
+     * from the ground below it or, climbing, from the dense foliage around
+     * it (gather_pick_reaches()). */
+    GATHER_JOB_PICK,
+    GATHER_JOB_CHOP, /* Fell a tree. */
     GATHER_JOB_COUNT
 } GatherJob;
 
@@ -218,6 +227,9 @@ typedef struct GatherZone {
     /* Resources wanted now (orders enabled and not satisfied, see
      * gather_zones_update()). */
     GatherResourceMask wanted;
+    /* The gatherers may climb the trees to pick in the crowns (off by
+     * default: they pick from the ground only). */
+    bool climb;
 } GatherZone;
 
 typedef struct GatherZones {
@@ -359,6 +371,15 @@ GatherResourceMask gather_zone_ripe_mask(const GatherZone *zone);
  * nobody gathers in it. */
 void gather_zone_set_forbidden(GatherZones *zones, int index, bool forbidden);
 
+/* Whether the zone's gatherers may climb the trees (GatherZone.climb). */
+void gather_zone_set_climb(GatherZones *zones, int index, bool climb);
+
+/* Whether some zone that wants fruit picked lets its gatherers climb. */
+bool gather_zones_climb(const GatherZones *zones);
+
+/* Resources some zone wants now (GatherZone.wanted of them all). */
+GatherResourceMask gather_zones_wanted(const GatherZones *zones);
+
 /* GATHER_ZONE_PRIORITY_HIGHEST..GATHER_ZONE_PRIORITY_LOWEST (clamped). */
 void gather_zone_set_priority(GatherZones *zones, int index, int priority);
 
@@ -404,7 +425,9 @@ void gather_zones_plants_changed(GatherZones *zones);
 
 /* Whether a tile offers a job to anyone: in a zone that wants something the
  * tile holds. Each tile follows the zone covering it: a tree's foliage is
- * gathered from only when a zone covers the foliage itself. */
+ * gathered from only when a zone covers the foliage itself. A block of
+ * foliage with fruit hanging in it (GATHER_JOB_PICK) follows its crown zone
+ * (gather_crown_zone()). */
 bool gather_job_available(const GatherZones *zones, const Map *map, int x, int y, int z,
                           GatherJob job);
 
@@ -415,8 +438,26 @@ GatherJob gather_tile_job(const GatherZones *zones, const Map *map, int x, int y
                           GatherJobMask allowed);
 GatherJob gather_tile_job_in(const GatherZones *zones, const Map *map, int x, int y, int z,
                              GatherJobMask allowed, int priority);
+/*
+ * The zone whose orders a block of foliage at (x, y, z) follows for picking:
+ * the zone covering the block itself, else the one covering the ground it
+ * stands over (tree_landing_level(): through the foliage and open space below
+ * it). GATHER_ZONE_NONE for what is not foliage, or no zone.
+ */
+int gather_crown_zone(const GatherZones *zones, const Map *map, int x, int y, int z);
+
+/*
+ * Whether a settler standing on (sx, sy, sz) picks in the block of foliage
+ * (tx, ty, tz) (docs/TREES.md §7.2): from the ground, the block right above
+ * it; standing on dense foliage, climbing, which the block's crown zone must
+ * allow (GatherZone.climb), the block it stands on, the eight around it on
+ * its level and the one above.
+ */
+bool gather_pick_reaches(const GatherZones *zones, const Map *map, int sx, int sy, int sz, int tx,
+                         int ty, int tz);
+
 /* How many items of each resource a zone's tiles hold now: wood of the trees,
- * ripe fruit, grass to cut.
+ * ripe fruit, grass to cut, the fruit hanging where the zone may pick it.
  * Plants the zone's orders leave alone (not ready, when waiting for the full
  * harvest) do not count. All zeros for an invalid zone. */
 void gather_zone_available(const GatherZones *zones, const Map *map, int index,
@@ -432,8 +473,10 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
  * the tile with quality and condition from the worker's `level`
  * (core/knowledge.h; `rng` may be NULL for average products), the orders
  * count them, and true is returned. A felled tree falls full length (tree_fell():
- * its wood along the trunk, its branches and twigs at the crown). False when
- * the job is not available.
+ * its wood along the trunk, its branches and twigs at the crown). Picked
+ * fruit keeps its quality and is let fall to the ground below its block (at
+ * the feet of a settler picking from the ground). False when the job is not
+ * available.
  */
 bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int y, int z,
                           GatherJob job, float work, double level, Rng *rng);

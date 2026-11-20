@@ -610,6 +610,7 @@ bool game_init(Game *game, const NewGameParams *params)
         !gather_zones_init(&game->gather_zones, game->map.width, game->map.height,
                            game->map.depth) ||
         !items_init(&game->items, game->map.width, game->map.height, game->map.depth) ||
+        !crowns_init(&game->crowns, game->map.width, game->map.height, game->map.depth) ||
         !stockpiles_init(&game->stockpiles, game->map.width, game->map.height, game->map.depth) ||
         !workstations_init(&game->workstations, game->map.width, game->map.height,
                            game->map.depth) ||
@@ -628,6 +629,8 @@ bool game_init(Game *game, const NewGameParams *params)
     items_set_drop_filter(&game->items, haul_drop_filter, &game->stockpiles);
     /* Stones, branches and twigs lie as ordinary items from now on. */
     map_litter_to_items(&game->map, &game->items);
+    /* Fruit and dead wood hang in the crowns from now on. */
+    game->map.crowns = &game->crowns;
     corpses_init(&game->corpses);
     reservations_init(&game->reservations);
     item_moves_init(&game->item_moves);
@@ -718,6 +721,7 @@ void game_shutdown(Game *game)
     dirt_free(&game->dirt);
     gather_zones_free(&game->gather_zones);
     items_free(&game->items);
+    crowns_free(&game->crowns);
     corpses_free(&game->corpses);
     stockpiles_free(&game->stockpiles);
     workstations_free(&game->workstations);
@@ -974,6 +978,27 @@ static void update_soil(Game *game, size_t begin, size_t end, uint64_t phase)
     soil_update(soil, &game->map, begin, end, &hour, game->temperatures.celsius);
 }
 
+/* What hangs in the crowns: a slice of the pool each tick, every item once
+ * an hour (core/crown.h); what falls falls. */
+static void update_crowns(Game *game, uint64_t phase)
+{
+    Crowns *crowns = &game->crowns;
+    uint64_t tick = game->clock.tick;
+    crowns->day = (int)(tick / TICKS_PER_DAY);
+    if (crowns->count == 0) {
+        return;
+    }
+    uint64_t used = crowns->pool_used;
+    uint32_t begin = (uint32_t)(phase * used / GAME_PLANT_UPDATE_INTERVAL);
+    uint32_t end = (uint32_t)((phase + 1) * used / GAME_PLANT_UPDATE_INTERVAL);
+    CrownHour hour = {.seed = game->seed,
+                      .hour = tick / TICKS_PER_HOUR,
+                      .day = crowns->day,
+                      .day_of_year = game_day_of_year(tick),
+                      .storm = game->weather.type == WEATHER_STORM};
+    crowns_hour(crowns, &game->map, &game->items, begin, end, &hour);
+}
+
 static void update_plants(Game *game)
 {
     Map *map = &game->map;
@@ -1009,6 +1034,7 @@ static void update_plants(Game *game)
         }
     }
     update_soil(game, begin, end, phase);
+    update_crowns(game, phase);
     if (phase == GAME_PLANT_UPDATE_INTERVAL - 1) {
         leaf_conclude(game); /* The whole pass is done. */
     }
@@ -1786,6 +1812,9 @@ bool game_set_fog(Game *game, bool on)
         if (!known_init(&game->known, &game->map)) {
             return false;
         }
+        /* The crowns are not part of the picture: the settlers know what
+         * hangs there (docs/TREES.md §7.3). */
+        game->known.map.crowns = &game->crowns;
         game->known_ready = true;
     }
     if (!game->fog_started) {
@@ -2819,6 +2848,7 @@ uint64_t game_hash(const Game *game)
     hash = dirt_hash(&game->dirt, hash);
     hash = gather_zones_hash(&game->gather_zones, hash);
     hash = items_hash(&game->items, hash);
+    hash = crowns_hash(&game->crowns, hash);
     hash = stockpiles_hash(&game->stockpiles, hash);
     hash = workstations_hash(&game->workstations, hash);
     hash = constructions_hash(&game->constructions, hash);

@@ -1,5 +1,6 @@
 #include "core/tree.h"
 
+#include "core/crown.h"
 #include "core/game_clock.h"
 #include "core/wood.h"
 
@@ -522,7 +523,7 @@ static int landing_level(const Map *map, int x, int y, int z)
  * branches and nuts go through every density of foliage (and open space)
  * down to the first floor that is not a tree's: they never stay in a crown
  * (-1 if none). */
-static int litter_landing_level(const Map *map, int x, int y, int z)
+int tree_landing_level(const Map *map, int x, int y, int z)
 {
     while (z >= 0 && (lets_fall(map, x, y, z) ||
                       (map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
@@ -575,7 +576,7 @@ static void drop_litter_from(Map *map, Items *items, int x, int y, int z)
     }
     for (size_t i = 0; i < sizeof(KINDS) / sizeof(KINDS[0]); i++) {
         int count = map_take_litter(map, x, y, z, KINDS[i]);
-        int level = count > 0 ? litter_landing_level(map, x, y, z) : -1;
+        int level = count > 0 ? tree_landing_level(map, x, y, z) : -1;
         int left = 0;
         for (int n = 0; n < count; n++) {
             left += level < 0 || !holds_litter(map, x, y, level) ||
@@ -638,10 +639,62 @@ void tree_clear(Map *map, Items *items, int x, int y, int z)
                 if (tree_foliage_holds(&shape, dx, dy, dz) && map_is_open(map, tx, ty, tz)) {
                     drop_items_from(map, items, tx, ty, tz);
                     drop_litter_from(map, items, tx, ty, tz);
+                    if (map->crowns != NULL) { /* What hung there too. */
+                        crowns_drop_tile(map->crowns, map, items, tx, ty, tz);
+                    }
                 }
             }
         }
     }
+}
+
+/* The `chosen`-th tile of foliage of a tree (in a fixed order), as offsets
+ * from its foot; returns how many it has (the offsets are set only when
+ * `chosen` is below that). */
+static int foliage_tile(const Map *map, int z, const TreeShape *shape, int chosen, int *out_dx,
+                        int *out_dy, int *out_dz)
+{
+    int span = shape->size + 2 * shape->reach;
+    int seen = 0;
+    for (int dz = shape->foliage_from; dz <= shape->trunk && z + dz < map->depth; dz++) {
+        for (int dy = -shape->reach; dy < span - shape->reach; dy++) {
+            for (int dx = -shape->reach; dx < span - shape->reach; dx++) {
+                if (!tree_foliage_holds(shape, dx, dy, dz)) {
+                    continue;
+                }
+                if (seen++ == chosen) {
+                    *out_dx = dx;
+                    *out_dy = dy;
+                    *out_dz = dz;
+                }
+            }
+        }
+    }
+    return seen;
+}
+
+/* How far a tile is from the trunk of a tree of `shape` (0 over it). */
+static int trunk_distance(const TreeShape *shape, int dx, int dy)
+{
+    int ox = dx < 0 ? -dx : (dx >= shape->size ? dx - shape->size + 1 : 0);
+    int oy = dy < 0 ? -dy : (dy >= shape->size ? dy - shape->size + 1 : 0);
+    return ox > oy ? ox : oy;
+}
+
+/* What `pick` makes of an item that comes to hang: its quality (the mean of
+ * two draws, most middling) and condition (fruit ripe and whole, dead wood
+ * 60 to 100 %). */
+static CrownItem hanging_item(ItemType item, WoodMask woods, uint32_t pick, int day)
+{
+    uint32_t h = mix_bits(pick ^ 0x5EEDu);
+    int quality = (int)((h & 0xFFu) % 101u + ((h >> 8) & 0xFFu) % 101u) / 2;
+    bool fruit = item_def(item)->category == ITEM_CATEGORY_FOOD;
+    int percent = fruit ? 100 : 60 + (int)((h >> 16) % 41u);
+    return (CrownItem){.type = (uint8_t)item,
+                       .quality = (uint8_t)quality,
+                       .hit_points = (uint16_t)item_hit_points_at_percent(item, percent),
+                       .woods = woods,
+                       .day = (uint16_t)day};
 }
 
 bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick)
@@ -651,39 +704,37 @@ bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick)
         !tree_shape(&map->plants[map_index(map, x, y, z)], x, y, z, &shape)) {
         return false;
     }
-    int span = shape.size + 2 * shape.reach;
-    int tiles = 0;
-    for (int pass = 0; pass < 2; pass++) { /* Count the foliage, then find the chosen tile. */
-        int chosen = tiles > 0 ? (int)(pick % (uint32_t)tiles) : 0;
-        int seen = 0;
-        for (int dz = shape.foliage_from; dz <= shape.trunk && z + dz < map->depth; dz++) {
-            for (int dy = -shape.reach; dy < span - shape.reach; dy++) {
-                for (int dx = -shape.reach; dx < span - shape.reach; dx++) {
-                    if (!tree_foliage_holds(&shape, dx, dy, dz)) {
-                        continue;
-                    }
-                    if (pass == 0) {
-                        tiles++;
-                        continue;
-                    }
-                    if (seen++ != chosen) {
-                        continue;
-                    }
-                    int tx = x + dx, ty = y + dy, tz = z + dz;
-                    /* Through the crown, down to the first floor below it:
-                     * branches of its species. */
-                    int level = litter_landing_level(map, tx, ty, tz);
-                    WoodMask woods = wood_bit((PlantType)map->plants[map_index(map, x, y, z)].type);
-                    return level >= 0 && holds_litter(map, tx, ty, level) &&
-                           map_add_litter_wood(map, tx, ty, level, item, woods);
-                }
-            }
-        }
-        if (tiles == 0) {
-            return false;
+    int dx = 0, dy = 0, dz = 0;
+    int tiles = foliage_tile(map, z, &shape, -1, &dx, &dy, &dz);
+    if (tiles == 0) {
+        return false;
+    }
+    foliage_tile(map, z, &shape, (int)(pick % (uint32_t)tiles), &dx, &dy, &dz);
+    bool fruit = item_def(item)->category == ITEM_CATEGORY_FOOD;
+    if (fruit && map->crowns != NULL) {
+        /* Fruit ripens mostly in the outer blocks, in the sun: the farther of
+         * two tiles. */
+        int ex = 0, ey = 0, ez = 0;
+        foliage_tile(map, z, &shape, (int)(mix_bits(pick) % (uint32_t)tiles), &ex, &ey, &ez);
+        if (trunk_distance(&shape, ex, ey) > trunk_distance(&shape, dx, dy)) {
+            dx = ex;
+            dy = ey;
+            dz = ez;
         }
     }
-    return false;
+    int tx = x + dx, ty = y + dy, tz = z + dz;
+    WoodMask woods = wood_bit((PlantType)map->plants[map_index(map, x, y, z)].type);
+    /* In a running game it hangs in the crown first: fruit ripe on the tree,
+     * dead wood caught in the branches (core/crown.h). */
+    if (map->crowns != NULL && crowns_add(map->crowns, map, tx, ty, tz,
+                                          hanging_item(item, woods, pick, map->crowns->day))) {
+        return true;
+    }
+    /* Through the crown, down to the first floor below it: branches of its
+     * species. */
+    int level = tree_landing_level(map, tx, ty, tz);
+    return level >= 0 && holds_litter(map, tx, ty, level) &&
+           map_add_litter_wood(map, tx, ty, level, item, woods);
 }
 
 void tree_scatter_litter(Map *map, int x, int y, int z, Rng *rng)

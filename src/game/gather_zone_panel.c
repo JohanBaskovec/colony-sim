@@ -14,6 +14,7 @@ typedef enum ActionType {
     ACTION_NONE,
     ACTION_DELETE,
     ACTION_TOGGLE_FORBIDDEN,
+    ACTION_TOGGLE_CLIMB,
     ACTION_TOGGLE,      /* A resource or a group on or off. */
     ACTION_TOGGLE_RIPE, /* Of a resource, a group, or the whole zone. */
     ACTION_SET_MODE,
@@ -553,7 +554,27 @@ static void measure_columns(Ui *ui, const UiLayout *layout, const long *availabl
     columns->apply = columns->colony + columns->colony_width + GAP;
 }
 
-/* Size and priority. */
+/* Whether the gatherers climb the trees: a check box, explained on hover. */
+static void climb_row(UiLayout *layout, const GatherZone *zone, Action *action)
+{
+    Ui *ui = layout->ui;
+    const char *label = tr("gather_zone.climb");
+    float width = ui_checkbox_width(ui, label);
+    ui_layout_measure(layout, width);
+    if (layout->draw) {
+        if (ui_checkbox(ui, layout->x, layout->y, width, zone->climb ? UI_CHECKED : UI_UNCHECKED,
+                        label)) {
+            *action = (Action){ACTION_TOGGLE_CLIMB, WHOLE_ZONE, 0};
+        }
+        if (ui_hovered(ui, (SDL_FRect){layout->x, layout->y, width, layout->row})) {
+            const char *lines[1] = {tr("gather_zone.climb.description")};
+            ui_tooltip(ui, lines, 1);
+        }
+    }
+    layout->y += layout->row;
+}
+
+/* Size, priority, climbing. */
 static void summary_rows(UiLayout *layout, void *userdata)
 {
     ZoneRows *rows = userdata;
@@ -563,6 +584,7 @@ static void summary_rows(UiLayout *layout, void *userdata)
     TR_FORMAT(tiles, sizeof(tiles), tr_plural("gather_zone.tiles", zone->cell_count), number);
     ui_layout_label(layout, tiles, 0.0f, false);
     priority_row(layout, zone, &rows->action);
+    climb_row(layout, zone, &rows->action);
     if (zone->forbidden) {
         ui_layout_label(layout, tr("gather_zone.left_alone"), 0.0f, true);
     }
@@ -618,6 +640,7 @@ static void apply(App *app, int index, const Action *action)
         app->selected_gather_zone = GATHER_ZONE_NONE;
         break;
     case ACTION_TOGGLE_FORBIDDEN: gather_zone_set_forbidden(zones, index, !zone->forbidden); break;
+    case ACTION_TOGGLE_CLIMB: gather_zone_set_climb(zones, index, !zone->climb); break;
     case ACTION_TOGGLE: {
         /* Partly on: all on. */
         bool on = check_of(gather_zone_enabled_mask(zone), members) != UI_CHECKED;

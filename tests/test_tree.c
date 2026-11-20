@@ -2,6 +2,8 @@
  * they grow, and how felled trees fall (core/tree.h). */
 #include "core/tree.h"
 
+#include "core/crown.h"
+
 #include "core/designation.h"
 #include "core/game.h"
 #include "core/gather_zone.h"
@@ -794,9 +796,19 @@ static void test_fruit_falls_in_the_game(void)
         game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL); /* Takes room. */
         REQUIRE(is_trunk(map, 16, 16, 0));
         game_debug_skip(&game, 150 * TICKS_PER_HOUR);
+        /* It ripens in the crown (docs/TREES.md §7.1), then falls; once its
+         * season is over (the wild apple's, by now), all of it. */
         int fallen = litter_total(map, FRUIT[i].fruit);
-        CHECK(fallen > 5); /* 30 to 40 over 10 to 14 days. */
+        int hanging = (int)game.crowns.totals[FRUIT[i].fruit];
+        CHECK(fallen > 0);
+        if (crown_fruit_in_season(FRUIT[i].fruit, game_day_of_year(game.clock.tick))) {
+            CHECK(hanging > 0);
+        } else {
+            CHECK_EQ_INT(hanging, 0);
+        }
+        CHECK(fallen + hanging > 5); /* 30 to 40 over 10 to 22 days. */
         CHECK_EQ_INT(fallen, (int)game.items.totals[FRUIT[i].fruit]);
+        CHECK(crowns_check(&game.crowns));
         for (int z = 0; z < DEPTH; z++) {
             for (int y = 0; y < SIZE; y++) {
                 for (int x = 0; x < SIZE; x++) {
@@ -1471,6 +1483,72 @@ static void test_litter_in_a_new_world(void)
 /* Logs and branches carry the species of their tree (docs/TREES.md §6):
  * felled, shed in a running game, or lying in a new world's layers when the
  * game starts (the crown over them). */
+/* docs/TREES.md §7.1: in a running game (Map.crowns), what a tree sheds
+ * hangs in its crown first, of its species; fruit mostly in the outer
+ * blocks; a full block lets it fall at once; a felled tree brings it all
+ * down. */
+static void test_shedding_hangs_in_the_crown(void)
+{
+    Map map;
+    Items items;
+    Crowns crowns;
+    REQUIRE(init_world(&map, &items));
+    REQUIRE(crowns_init(&crowns, SIZE, SIZE, DEPTH));
+    map_litter_to_items(&map, &items);
+    map.crowns = &crowns;
+    crowns.day = 9;
+    grow_tree(&map, 8, 8, 0, 1.0f, 1);
+    for (uint32_t pick = 0; pick < 20; pick++) {
+        CHECK(tree_shed(&map, 8, 8, 0, ITEM_BRANCHES, pick * 7919u));
+    }
+    CHECK_EQ_INT(crowns.totals[ITEM_BRANCHES], 20);
+    CHECK_EQ_INT((int)items.totals[ITEM_BRANCHES], 0);
+    CrownItem list[64];
+    int near = 0, far = 0;
+    for (int z = 0; z < DEPTH; z++) {
+        for (int y = 0; y < SIZE; y++) {
+            for (int x = 0; x < SIZE; x++) {
+                int count = crowns_list(&crowns, x, y, z, list, 64);
+                CHECK(count == 0 || is_foliage(&map, x, y, z));
+                for (int i = 0; i < count && i < 64; i++) {
+                    CHECK_EQ_INT(list[i].woods, wood_bit(PLANT_OAK));
+                    CHECK_EQ_INT(list[i].day, 9);
+                }
+            }
+        }
+    }
+    /* Fruit: the farther of two tiles from the trunk, so mostly outside. */
+    map.plants[map_index(&map, 8, 8, 0)].type = PLANT_WILD_APPLE;
+    for (uint32_t pick = 0; pick < 200; pick++) {
+        tree_shed(&map, 8, 8, 0, ITEM_APPLES, pick * 104729u + 13u);
+    }
+    for (int z = 0; z < DEPTH; z++) {
+        for (int y = 0; y < SIZE; y++) {
+            for (int x = 0; x < SIZE; x++) {
+                int apples = crowns_count(&crowns, x, y, z, ITEM_TYPE_BIT(ITEM_APPLES));
+                int dx = x > 8 ? x - 8 : 8 - x, dy = y > 8 ? y - 8 : 8 - y;
+                int distance = dx > dy ? dx : dy;
+                near += distance <= 1 ? apples : 0;
+                far += distance >= 2 ? apples : 0;
+            }
+        }
+    }
+    CHECK(far > near);
+    CHECK(crowns_check(&crowns));
+
+    /* Felled: everything that hung falls to the ground (the oak again: its
+     * shape is the foliage there). */
+    map.plants[map_index(&map, 8, 8, 0)].type = PLANT_OAK;
+    long hanging = crowns.count;
+    REQUIRE(hanging > 0);
+    tree_clear(&map, &items, 8, 8, 0);
+    CHECK_EQ_INT(crowns.count, 0);
+    CHECK_EQ_INT((int)(items.totals[ITEM_BRANCHES] + items.totals[ITEM_APPLES]), (int)hanging);
+    crowns_free(&crowns);
+    items_free(&items);
+    map_free(&map);
+}
+
 static void test_wood_keeps_the_species(void)
 {
     Map map;
@@ -1636,6 +1714,112 @@ static void test_hauler_climbs_for_nuts_on_the_foliage(void)
     }
 }
 
+/* Whether a block of foliage is within reach of the ground: a floor right
+ * under it that is not foliage. */
+static bool over_the_ground(const Map *map, int x, int y, int z)
+{
+    return z > 0 && !is_foliage(map, x, y, z - 1) && map_is_passable(map, x, y, z - 1);
+}
+
+/* Whether a block of foliage is within reach of dense foliage a settler
+ * climbs onto (core/gather_zone.h, gather_pick_reaches()). */
+static bool near_dense_foliage(const Map *map, int x, int y, int z)
+{
+    if (map->terrain[map_index(map, x, y, z - 1)] == TERRAIN_FOLIAGE) {
+        return true;
+    }
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (map->terrain[map_index(map, x + dx, y + dy, z)] == TERRAIN_FOLIAGE &&
+                map->rock[map_index(map, x + dx, y + dy, z)] == ROCK_NONE) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* docs/TREES.md §7.2: a gatherer picks the apples hanging in the crown over
+ * its zone within reach of the ground, and climbs for the others only when
+ * the zone allows it. What is picked falls to the ground. */
+static void test_settlers_pick_in_the_crowns(void)
+{
+    int high_left[2] = {0, 0};
+    for (int climb = 0; climb < 2; climb++) {
+        Game game;
+        REQUIRE(init_flat_game(&game));
+        Map *map = &game.map;
+        game.clock.tick =
+            (uint64_t)SEASON_DAY(SEASON_AUTUMN, 2) * TICKS_PER_DAY + 8 * TICKS_PER_HOUR;
+        map->plants[map_index(map, 16, 16, 0)] = (Plant){.type = PLANT_WILD_APPLE, .growth = 1.0f};
+        game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL); /* Takes room. */
+        REQUIRE(is_trunk(map, 16, 16, 0));
+        /* Two apples in each block of the crown that a gatherer may reach. */
+        CrownItem apple = {.type = ITEM_APPLES,
+                           .quality = ITEM_QUALITY_STANDARD,
+                           .hit_points = 100,
+                           .day = (uint16_t)game.crowns.day};
+        int low = 0, high = 0;
+        for (int z = 1; z < map->depth; z++) {
+            for (int y = 10; y < 23; y++) {
+                for (int x = 10; x < 23; x++) {
+                    bool ground = over_the_ground(map, x, y, z);
+                    if (!is_foliage(map, x, y, z) ||
+                        (!ground && !near_dense_foliage(map, x, y, z)) ||
+                        crowns_room(&game.crowns, map, x, y, z, ITEM_APPLES) < 2) {
+                        continue;
+                    }
+                    crowns_add(&game.crowns, map, x, y, z, apple);
+                    crowns_add(&game.crowns, map, x, y, z, apple);
+                    *(ground ? &low : &high) += 2;
+                }
+            }
+        }
+        REQUIRE(low > 0 && high > 0);
+        int zone = gather_zone_create(&game.gather_zones, map, 8, 8, 24, 24, 0);
+        REQUIRE(zone != GATHER_ZONE_NONE);
+        gather_zone_set_enabled(&game.gather_zones, zone, GATHER_APPLES, true);
+        gather_zone_set_mode(&game.gather_zones, zone, GATHER_APPLES, GATHER_FOREVER);
+        gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
+        gather_zone_set_climb(&game.gather_zones, zone, climb);
+        EntityId id = game_spawn_colonist(&game, 10, 16, 0);
+        Colonist *colonist = game_colonist(&game, id);
+        REQUIRE(colonist != NULL);
+        bool climbed = false;
+        for (int tick = 0; tick < 6 * TICKS_PER_HOUR; tick++) {
+            for (int need = 0; need < NEED_COUNT; need++) {
+                colonist->needs[need] = 1.0f;
+            }
+            game_tick(&game);
+            climbed = climbed || colonist->z > 0;
+        }
+        CHECK_EQ_INT(climbed, climb);
+        int low_left = 0;
+        for (int z = 1; z < map->depth; z++) {
+            for (int y = 10; y < 23; y++) {
+                for (int x = 10; x < 23; x++) {
+                    int apples = crowns_count(&game.crowns, x, y, z, ITEM_TYPE_BIT(ITEM_APPLES));
+                    if (over_the_ground(map, x, y, z)) {
+                        low_left += apples;
+                    } else {
+                        high_left[climb] += apples;
+                    }
+                }
+            }
+        }
+        CHECK(low_left < low / 4);
+        int done = gather_zone_get(&game.gather_zones, zone)->orders[GATHER_APPLES].done;
+        CHECK(done >= low / 2);
+        CHECK(game.items.totals[ITEM_APPLES] >= done); /* Fallen to the ground. */
+        CHECK(crowns_check(&game.crowns));
+        if (!climb) {
+            CHECK(high_left[0] > high / 2);
+        }
+        game_shutdown(&game);
+    }
+    CHECK(high_left[1] < high_left[0] / 2);
+}
+
 /* In the running game, trees shed twigs and branches over the hours. */
 static void test_trees_shed_in_the_game(void)
 {
@@ -1682,6 +1866,7 @@ int main(void)
     RUN_TEST(test_nuts_fall_in_autumn);
     RUN_TEST(test_hazel_drops_nuts_in_the_game);
     RUN_TEST(test_fruit_falls_in_the_game);
+    RUN_TEST(test_shedding_hangs_in_the_crown);
     RUN_TEST(test_nuts_rot_one_by_one);
     RUN_TEST(test_build_and_find);
     RUN_TEST(test_climbing);
@@ -1699,6 +1884,7 @@ int main(void)
     RUN_TEST(test_wood_keeps_the_species);
     RUN_TEST(test_gathering_on_trees);
     RUN_TEST(test_hauler_climbs_for_nuts_on_the_foliage);
+    RUN_TEST(test_settlers_pick_in_the_crowns);
     RUN_TEST(test_trees_shed_in_the_game);
     return test_summary();
 }

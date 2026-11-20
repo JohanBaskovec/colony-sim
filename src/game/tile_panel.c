@@ -1,5 +1,6 @@
 #include "game/tile_panel.h"
 
+#include "core/crown.h"
 #include "core/i18n.h"
 #include "core/temperature.h"
 #include "core/tree.h"
@@ -352,6 +353,37 @@ static void item_list_rows(UiLayout *layout, const ThingRows *rows, bool alone)
     }
 }
 
+/* What hangs in a block of foliage (core/crown.h), one by one: "Wild apple
+ * (on the tree)". */
+static void crown_rows(UiLayout *layout, const ThingRows *rows)
+{
+    const Map *map = game_view_map(&rows->app->game);
+    if (map->crowns == NULL) {
+        return;
+    }
+    CrownItem list[ITEM_LIST_LINES];
+    int count = crowns_list(map->crowns, rows->x, rows->y, rows->z, list, ITEM_LIST_LINES);
+    int shown = count < ITEM_LIST_LINES ? count : ITEM_LIST_LINES;
+    for (int i = 0; i < shown; i++) {
+        ItemStack one = crown_item_stack(list[i]);
+        char condition[TEXT_SIZE], line[TEXT_SIZE], name[TEXT_SIZE];
+        if (hud_item_condition_text(condition, sizeof(condition), one)) {
+            TR_FORMAT(name, sizeof(name), tr("tile_panel.item_line"), hud_item_name(one),
+                      condition);
+        } else {
+            SDL_strlcpy(name, hud_item_name(one), sizeof(name));
+        }
+        TR_FORMAT(line, sizeof(line), tr("crown.on_the_tree"), name);
+        ui_layout_label(layout, line, 0.0f, false);
+    }
+    if (count > shown) {
+        char more[32], line[TEXT_SIZE];
+        tr_integer(more, sizeof(more), count - shown);
+        TR_FORMAT(line, sizeof(line), tr_plural("tile_panel.more_items", count - shown), more);
+        ui_layout_label(layout, line, 0.0f, true);
+    }
+}
+
 static void plant_rows(UiLayout *layout, const ThingRows *rows)
 {
     const Game *game = &rows->app->game;
@@ -406,6 +438,9 @@ static void plant_rows(UiLayout *layout, const ThingRows *rows)
             TR_FORMAT(text, sizeof(text), tr("hud.tile.plant_stock"), item, a, b);
         }
         ui_layout_label(layout, text, 0.0f, false);
+    }
+    if (is_tree) {
+        crown_rows(layout, rows);
     }
 }
 

@@ -473,6 +473,10 @@ typedef struct Map {
      * like any, the nuts rotting one by one); the layers above are then empty, and the functions
      * below read and change the items. NULL: the layers (world generation, bare maps). */
     struct Items *litter;
+    /* Once set (a running game): what hangs in the crowns of the trees,
+     * fruit and dead wood (core/crown.h); NULL: nothing hangs there (world
+     * generation, bare maps), what trees shed falls at once. */
+    struct Crowns *crowns;
     /* Built structures (StructureType on every tile they take): beds,
      * walls, doors. `structure_part` holds the structure's Direction (bits
      * 0-1) and which of its tiles this is (bits 2-3, 0 for the head); the

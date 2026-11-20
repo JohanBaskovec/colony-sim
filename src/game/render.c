@@ -1678,6 +1678,58 @@ static SpriteId item_sprite(const Item *item)
     return sprite_item((ItemType)item->type, (unsigned)item->spot_x * 7u + item->spot_y);
 }
 
+/* Fruit hanging in a crown drawn on a block of foliage at most, the side of
+ * one (of the tile), and how much brighter than its icon's (seen against the
+ * leaves). */
+#define CROWN_ITEMS_DRAWN 6
+#define CROWN_FRUIT_SIZE 0.14f
+#define CROWN_FRUIT_LIGHTER 30
+
+/* The colour a fruit hanging in a crown is drawn with; false for what is not
+ * drawn there (dead wood hides in the leaves). */
+static bool crown_fruit_color(ItemType type, SDL_Color *color)
+{
+    switch (type) {
+    case ITEM_APPLES: *color = APPLE_COLOR; break;
+    case ITEM_PEARS: *color = PEAR_COLOR; break;
+    case ITEM_HAZELNUTS: *color = HAZELNUT_COLOR; break;
+    case ITEM_CHESTNUTS: *color = CHESTNUT_COLOR; break;
+    default: return false;
+    }
+    *color = shade(*color, CROWN_FRUIT_LIGHTER);
+    return true;
+}
+
+/* Queues the fruit hanging in the block of foliage on (x, y, z), one small
+ * fruit each at a spot of its own (from its slot), as the item icons draw
+ * them (docs/TREES.md §7.3). */
+static void draw_crown_items(SDL_Renderer *renderer, const Map *map, int x, int y, int z,
+                             const SDL_FRect *tile)
+{
+    const Crowns *crowns = map->crowns;
+    if (crowns == NULL || crowns->count == 0) {
+        return;
+    }
+    float side = SDL_max(2.0f, floorf(tile->w * CROWN_FRUIT_SIZE));
+    int drawn = 0;
+    for (uint32_t link = crowns->heads[map_index(map, x, y, z)];
+         link != 0 && drawn < CROWN_ITEMS_DRAWN; link = crowns->pool[link - 1].next) {
+        ItemType type = (ItemType)crowns->pool[link - 1].type;
+        SDL_Color color;
+        if (!crown_fruit_color(type, &color)) {
+            continue;
+        }
+        uint32_t hash = (link * 2654435761u) ^ (link >> 3);
+        float fx = 0.15f + 0.7f * (float)((hash >> 8) & 0xFFu) / 255.0f;
+        float fy = 0.15f + 0.7f * (float)((hash >> 16) & 0xFFu) / 255.0f;
+        SDL_FRect spot = {floorf(tile->x + tile->w * fx - side * 0.5f),
+                          floorf(tile->y + tile->h * fy - side * 0.5f), side,
+                          type == ITEM_PEARS ? floorf(side * 1.25f) : side};
+        fill_outlined(renderer, spot, shade(color, (int)(hash >> 29) * 6));
+        drawn++;
+    }
+}
+
 void render_items(SDL_Renderer *renderer, Sprites *sprites, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
@@ -1731,6 +1783,13 @@ void render_items(SDL_Renderer *renderer, Sprites *sprites, const Game *game, co
                 icon_quad(renderer, (ItemType)item->type, cx, cy,
                           tile.w * item_drawn_size((ItemType)item->type),
                           (float)item->angle / 256.0f);
+            }
+            if (tile.w >= ITEMS_FAR_TILE_PIXELS) { /* On the foliage, over what lies there. */
+                if (in_sprites) {
+                    sprites_flush(sprites);
+                    in_sprites = false;
+                }
+                draw_crown_items(renderer, game_view_map(game), x, y, z, &tile);
             }
         }
         batch_flush(renderer); /* Nuts first, under the items. */
