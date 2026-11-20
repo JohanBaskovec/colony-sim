@@ -11,8 +11,9 @@ settlers' self-defense, a debug tool), and the carnivores that use it
 (`docs/ROADMAP.md` M5 *Wildlife, step 2*, §6). Weapons (§7) are implemented
 (step 1 of §9: `core/weapon.h`, the primary weapon), and so is the
 mobilization (step 2: the state, its end, the button, key and marks) and
-wielding (step 3: the weapon in hand, drawing, the *Change weapon* list);
-the *Attack* order (step 4) is designed, not implemented. Values marked
+wielding (step 3: the weapon in hand, drawing, the *Change weapon* list),
+and the *Attack* order with mobilized settlers holding their ground
+(step 4). Values marked
 *(tuning)* are first guesses.
 
 ## 1. Principles
@@ -211,7 +212,7 @@ hand, `COLONIST_DRAW_GROUND_TICKS` (one second) for one taken up from the
 ground. A weapon wielded whose arms fail (an arm broken) leaves the settler
 its fists.
 
-## 8. Mobilization (step 2 implemented)
+## 8. Mobilization (implemented)
 
 The player **mobilizes** (drafts) settlers to fight, and **demobilizes**
 them. A button among the settler's actions (and a key, a physical position
@@ -260,9 +261,19 @@ opens its list upward (`ui_popup_list()`): its fists, the weapons it keeps
 and can wield, and those lying on an explored tile within a tile of it (one
 line for items alike), `game_weapon_choices()`; the one picked is wielded
 (`game_wield()`; one from the ground is taken up, kept and locked:
-`colonist_wield_item()`). Until step 4, a mobilized settler struck by an animal still walks up to it
-and fights as in self-defense (without fleeing from fear), and it does not
-yet strike an enemy that merely comes in reach.
+`colonist_wield_item()`). Step 4: on each turn it stands still, a
+mobilized settler with no enemy takes for one an animal attacking a settler
+(`ANIMAL_TASK_ATTACK` against a settler) that it can strike from its tile
+(`hostile_in_reach()`, the first by slot); `engage()` lets it go after its
+enemy only when it is the player's target (`Colonist.attack_target`), else
+it strikes from where it stands and forgets an enemy out of reach. The
+*Attack* action (a spear thrust at a red mark), for the mobilized settlers
+selected, arms a tool (`APP_TOOL_ATTACK`); a click on an animal the colony
+sees (its tile, or the one below: a sprite stands up from its tile) sends
+them after it (`game_order_attack()`, `colonist_order_attack()`) until it is
+dead or gone (out of reach of its paths), or a Move order. When an action
+row would reach the bottom right controls, the action buttons go on a row
+above.
 
 ## 9. Steps of weapons and mobilization
 
@@ -273,7 +284,7 @@ yet strike an enemy that merely comes in reach.
   conditions and their notices, the button and key, the marks on screen.
 3. *(done)* Wielding: the weapon in hand at mobilization, the drawing time, the
   *Change weapon* list (with the weapons lying within a tile).
-4. The *Attack* order, and striking enemies in reach while mobilized.
+4. *(done)* The *Attack* order, and striking enemies in reach while mobilized.
 
 ## 10. Later
 

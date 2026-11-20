@@ -106,12 +106,13 @@ A fixed-width box above the bottom bar, shown when something is selected:
   of its own at the right of the rows. The box and the
   panel are as wide as the row of tabs when it is wider than the default.
 - **Action menu to the right** of the box: an icon button per action on what
-  is selected (later: attack...; now: mobilize, forbid/allow, fell, harvest,
+  is selected (mobilize, attack, change weapon, forbid/allow, fell, harvest,
   uproot, take apart, cancel a blueprint, build another, delete a zone or a
   workstation...), each with a tooltip and its shortcut. An order button is
   lit while the order is given (a click takes it back) and veiled while it
   cannot be given (nobody knows how, nothing to harvest yet: the tooltip
-  says why).
+  says why). Buttons that would reach the bottom right controls go on a row
+  above.
   Every selectable thing has such a window, titled with its name:
   workstations, zones, and each thing on a tile (structure, roof, blueprint,
   items, plant or tree, grass), one at a time (a click again on the tile
@@ -124,7 +125,7 @@ become tabs:
 
 | Selection           | Summary                                       | Tabs (now; later)                                 | Actions                       |
 |---------------------|-----------------------------------------------|---------------------------------------------------|-------------------------------|
-| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social, Journal; Log | Move, Follow, Carry (a click on an item: `docs/CARRYING.md` §7.2), Mobilize / Demobilize, and for one mobilized settler Change weapon (a list upward: `docs/COMBAT.md` §8; later: attack) |
+| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social, Journal; Log | Move, Follow, Carry (a click on an item: `docs/CARRYING.md` §7.2), Mobilize / Demobilize; for mobilized settlers Attack (a click on an animal), and for one Change weapon (a list upward): `docs/COMBAT.md` §8 |
 | Several colonists   | How many, their names                         | —                                                 | Move                          |
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size, "left alone" when forbidden | Storage (filters)                             | Forbid, build another, delete |

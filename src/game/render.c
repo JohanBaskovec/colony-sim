@@ -2716,6 +2716,22 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         batch_flush(renderer);
         break;
     }
+    case RENDER_ICON_ATTACK: { /* A spear thrust at a red mark. */
+        SDL_Color mark = {210, 70, 60, 255};
+        float tx = rect.x + w * 0.72f, ty = rect.y + h * 0.3f;
+        batch_ring(renderer, mark, tx, ty, w * 0.13f, w * 0.2f);
+        batch_disc(renderer, mark, tx, ty, w * 0.06f);
+        float x0 = rect.x + w * 0.1f, y0 = rect.y + h * 0.9f;
+        float x1 = rect.x + w * 0.5f, y1 = rect.y + h * 0.5f;
+        batch_bar(renderer, WOOD_COLOR, x0, y0, x1, y1, w * 0.045f);
+        float ux = 0.7071f, uy = -0.7071f, side = w * 0.08f;
+        SDL_FPoint point[3] = {{x1 + ux * h * 0.16f, y1 + uy * h * 0.16f},
+                               {x1 - uy * side, y1 + ux * side},
+                               {x1 + uy * side, y1 - ux * side}};
+        batch_shape(renderer, FLINT_COLOR, point, 3);
+        batch_flush(renderer);
+        break;
+    }
     case RENDER_ICON_IN_HAND: { /* A fist closed on an upright handle. */
         SDL_Color skin = {222, 184, 150, 255}, crease = {150, 108, 80, 255};
         float cx = rect.x + w * 0.5f;

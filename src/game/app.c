@@ -1861,6 +1861,20 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         } else {
             app->tool = APP_TOOL_NONE; /* One settler carries. */
         }
+    } else if (app->tool == APP_TOOL_ATTACK) {
+        int x, y;
+        screen_to_tile(app, button->x, button->y, &x, &y);
+        int seen = map_view_level(game_view_map(&app->game), x, y, z);
+        int level = seen >= 0 && seen <= z ? seen : z;
+        /* The tile clicked, else the one below: a sprite stands up from its tile. */
+        Combatant target = game_combatant_at(&app->game, x, y, level);
+        if (target.kind != COMBATANT_ANIMAL) {
+            target = game_combatant_at(&app->game, x, y + 1, level);
+        }
+        if (target.kind == COMBATANT_ANIMAL &&
+            game_order_attack(&app->game, app->selected, app->selected_count, target) > 0) {
+            app->tool = APP_TOOL_NONE; /* Done: they are on their way. */
+        } /* Else the tool stays for another try. */
     } else if (app->tool == APP_TOOL_MOVE_ITEM) {
         int x, y;
         screen_to_tile(app, button->x, button->y, &x, &y);

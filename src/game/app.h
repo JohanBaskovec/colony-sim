@@ -52,6 +52,9 @@ typedef enum AppTool {
      * and keep it, locked (game_order_carry()); armed by the Carry action of
      * the settler's window. */
     APP_TOOL_CARRY,
+    /* Attack: a click on an animal sends the mobilized settlers selected
+     * after it (game_order_attack()); armed by their Attack action. */
+    APP_TOOL_ATTACK,
 } AppTool;
 
 /* The branches of the Gear tab's tree (game/hud.c): a place of the body

@@ -769,6 +769,11 @@ bool game_can_draft(const Game *game, EntityId colonist);
 bool game_is_drafted(const Game *game, EntityId colonist);
 int game_set_drafted(Game *game, const EntityId *ids, int count, bool drafted);
 
+/* The Attack order (colonist_order_attack()): every mobilized colonist of
+ * `ids` goes after the animal, which the colony must see. Returns how many
+ * were sent. */
+int game_order_attack(Game *game, const EntityId *ids, int count, Combatant target);
+
 /* A weapon a mobilized colonist may wield (docs/COMBAT.md §8): its fists
  * (slot -1, no item), one it keeps (its slot in the tools) or one lying
  * within a tile of it (its item). */

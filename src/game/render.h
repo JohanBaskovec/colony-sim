@@ -229,6 +229,7 @@ typedef enum RenderIcon {
     RENDER_ICON_PRIMARY_WEAPON, /* Two crossed blades (docs/COMBAT.md §7). */
     RENDER_ICON_DRAFT,          /* A round shield before a spear: mobilized (§8). */
     RENDER_ICON_CHANGE_WEAPON,  /* A blade between two arrows going round. */
+    RENDER_ICON_ATTACK,         /* A spear point thrust at a red mark. */
 } RenderIcon;
 
 void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, WorkstationType type);

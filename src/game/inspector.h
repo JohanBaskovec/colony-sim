@@ -81,6 +81,9 @@ void inspector_draft_action(App *app, int slot);
  * the one picked is wielded. */
 void inspector_change_weapon_action(App *app, int slot);
 
+/* Attack, for mobilized settlers: arms APP_TOOL_ATTACK (lit while armed). */
+void inspector_attack_action(App *app, int slot);
+
 /* Follow the selected settler or animal (`kind`, `id`): lit while the camera
  * follows it, a click starts or stops it (app_toggle_follow()). */
 void inspector_follow_action(App *app, int slot, FollowKind kind, EntityId id);

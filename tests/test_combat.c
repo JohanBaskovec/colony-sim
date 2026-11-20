@@ -902,7 +902,7 @@ static void test_draft_ends(void)
     Colonist *faller = spawn_settler(&game, 30, 30);
     Colonist *armless = spawn_settler(&game, 30, 10);
     EntityId boar_id, other_id;
-    REQUIRE(spawn_animal(&game, ANIMAL_BOAR, 13, 10, &boar_id) != NULL);
+    REQUIRE(spawn_animal(&game, ANIMAL_BOAR, 11, 10, &boar_id) != NULL); /* In reach. */
     REQUIRE(spawn_animal(&game, ANIMAL_BOAR, 33, 10, &other_id) != NULL);
     REQUIRE(timid != NULL && sulker != NULL && faller != NULL && armless != NULL);
     EntityId ids[4];
@@ -1104,6 +1104,82 @@ static void test_self_defense_draws(void)
     run_ticks(&game, 2 * TICKS_PER_SECOND);
     CHECK(settler->task != TASK_FIGHT);
     CHECK(!settler->wielding);
+    game_shutdown(&game);
+}
+
+/* Mobilized, a settler stands its ground: it strikes an animal attacking
+ * it from where it stands, without going after it, and leaves alone an
+ * animal that does not attack (docs/COMBAT.md §8). */
+static void test_drafted_settler_holds_its_ground(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    Colonist *guard = spawn_settler(&game, 10, 30);
+    EntityId boar_id, deer_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 24, 20, &boar_id);
+    Animal *deer = spawn_animal(&game, ANIMAL_RED_DEER, 11, 30, &deer_id);
+    REQUIRE(settler != NULL && guard != NULL && boar != NULL && deer != NULL);
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
+    EntityId ids[2] = {game_colonist_id_at(&game, 0), game_colonist_id_at(&game, 1)};
+    REQUIRE(game_set_drafted(&game, ids, 2, true) == 2);
+    health_set_factors(&boar->health, 0.25f, 0.25f); /* Tough: it lasts. */
+    REQUIRE(game_debug_attack(&game, (Combatant){COMBATANT_ANIMAL, boar_id},
+                              (Combatant){COMBATANT_SETTLER, ids[0]}));
+    bool struck = false, stayed = true;
+    for (int tick = 0; tick < 20 * TICKS_PER_SECOND && !struck; tick++) {
+        game_tick(&game);
+        struck |= health_is_hurt(&boar->health);
+        stayed &= settler->x == 20 && settler->y == 20;
+    }
+    CHECK(struck);
+    CHECK(stayed);
+    CHECK(settler->drafted || health_is_down(&settler->health));
+    /* The deer beside the guard is left alone. */
+    run_ticks(&game, 5 * TICKS_PER_SECOND);
+    CHECK(!health_is_hurt(&deer->health));
+    CHECK(combatant_is_none(guard->enemy));
+    CHECK_EQ_INT(guard->x, 10);
+    game_shutdown(&game);
+}
+
+/* The Attack order: a mobilized settler goes after the animal and strikes
+ * it; refused to a settler not mobilized; a move order takes it back. */
+static void test_attack_order(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 10, 10);
+    Colonist *idle = spawn_settler(&game, 10, 20);
+    EntityId deer_id;
+    Animal *deer = spawn_animal(&game, ANIMAL_RED_DEER, 16, 10, &deer_id);
+    REQUIRE(settler != NULL && idle != NULL && deer != NULL);
+    for (int part = 3; part < 7; part++) {
+        health_hurt(&deer->health, part, INJURY_FRACTURE, 0.5f); /* It cannot run. */
+    }
+    int injuries = deer->health.injury_count;
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_HAND_AXE, 1)));
+    EntityId id = game_colonist_id_at(&game, 0), idle_id = game_colonist_id_at(&game, 1);
+    Combatant target = {COMBATANT_ANIMAL, deer_id};
+    CHECK_EQ_INT(game_order_attack(&game, &idle_id, 1, target), 0); /* Not mobilized. */
+    REQUIRE(game_set_drafted(&game, &id, 1, true) == 1);
+    CHECK_EQ_INT(game_order_attack(&game, &id, 1, (Combatant){COMBATANT_SETTLER, idle_id}), 0);
+    CHECK_EQ_INT(game_order_attack(&game, &id, 1, target), 1);
+    CHECK(combatant_equal(settler->attack_target, target));
+    bool struck = false;
+    for (int tick = 0; tick < 20 * TICKS_PER_SECOND && !struck; tick++) {
+        game_tick(&game);
+        struck |= deer->health.injury_count > injuries;
+    }
+    CHECK(struck);
+    CHECK(abs(settler->x - deer->x) <= 1 && abs(settler->y - deer->y) <= 1);
+    CHECK_STR_EQ(colonist_activity_key(settler), "colonist.activity.drafted_fighting");
+    /* Sent away: the order is over, it does not come back. */
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 10, 10, 0), 1);
+    CHECK(combatant_is_none(settler->attack_target));
+    run_ticks(&game, 10 * TICKS_PER_SECOND);
+    CHECK(abs(settler->x - 10) <= 1 && abs(settler->y - 10) <= 1);
+    CHECK(settler->drafted);
     game_shutdown(&game);
 }
 
@@ -1758,5 +1834,7 @@ int main(void)
     RUN_TEST(test_change_weapon);
     RUN_TEST(test_wielding_with_locked_hands);
     RUN_TEST(test_self_defense_draws);
+    RUN_TEST(test_drafted_settler_holds_its_ground);
+    RUN_TEST(test_attack_order);
     return test_summary();
 }

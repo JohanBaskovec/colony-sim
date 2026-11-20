@@ -1865,8 +1865,15 @@ void hud_inspect_colonists(App *app)
                     : inspector_box(app, INSPECT_COLONISTS, title, panel_rows, &summary);
     inspector_move_action(app, 0);
     bool draftable = app_selection_draftable(app);
+    bool any_drafted = false;
+    for (int i = 0; i < app->selected_count; i++) {
+        any_drafted |= game_is_drafted(&app->game, app->selected[i]);
+    }
     if (!one && draftable) {
         inspector_draft_action(app, 1);
+        if (any_drafted) {
+            inspector_attack_action(app, 2);
+        }
     }
     if (one) {
         inspector_follow_action(app, 1, FOLLOW_COLONIST, app->selected[0]);
@@ -1878,6 +1885,7 @@ void hud_inspect_colonists(App *app)
             inspector_draft_action(app, slot++);
         }
         if (colonist->drafted) {
+            inspector_attack_action(app, slot++);
             inspector_change_weapon_action(app, slot);
         }
         const char *labels[SECTION_COUNT - 1];

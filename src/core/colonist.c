@@ -1361,6 +1361,7 @@ bool colonist_order_move(Colonist *colonist, const ColonistContext *context, Til
     }
     colonist->take_item = ITEM_ID_NONE;
     colonist->enemy = combatant_none(); /* The player's order ends the fight. */
+    colonist->attack_target = combatant_none();
     if (colonist->move_progress > 0.0f) {
         /* Between two tiles: on the next one (the search is made then). */
         colonist->move_pending = true;
@@ -1388,6 +1389,7 @@ bool colonist_set_drafted(Colonist *colonist, const ColonistContext *context, bo
     }
     colonist->drafted = drafted;
     colonist->draft_end = DRAFT_END_NONE;
+    colonist->attack_target = combatant_none();
     colonist->chat_ticks = 0;
     if (colonist->task != TASK_FIGHT && (drafted || colonist->task != TASK_MOVE)) {
         /* Mobilized, it drops what it did (asleep, it wakes up) and stands
@@ -1410,8 +1412,26 @@ static void end_draft(Colonist *colonist, DraftEnd why)
 {
     if (colonist->drafted) {
         colonist->drafted = false;
+        colonist->attack_target = combatant_none();
         colonist->draft_end = (uint8_t)why;
     }
+}
+
+bool colonist_order_attack(Colonist *colonist, const ColonistContext *context, Combatant target)
+{
+    if (!colonist->drafted || colonist_is_down(colonist) || target.kind != COMBATANT_ANIMAL ||
+        context->animals == NULL) {
+        return false;
+    }
+    const Animal *animal = animals_get_const(context->animals, target.id);
+    if (animal == NULL || health_is_dead(&animal->health)) {
+        return false;
+    }
+    colonist->take_item = ITEM_ID_NONE;
+    colonist->move_pending = false;
+    colonist->enemy = target; /* Its next turn on a tile goes for it (engage()). */
+    colonist->attack_target = target;
+    return true;
 }
 
 bool colonist_order_carry(Colonist *colonist, const ColonistContext *context, ItemId item,
@@ -5853,6 +5873,7 @@ static void engage(Colonist *colonist, const ColonistContext *context)
         abs(there.x - here.x) > COLONIST_ENEMY_FORGET_DISTANCE ||
         abs(there.y - here.y) > COLONIST_ENEMY_FORGET_DISTANCE || abs(there.z - here.z) > 2) {
         colonist->enemy = combatant_none();
+        colonist->attack_target = combatant_none(); /* Dead or gone: the order is done. */
         if (colonist->task == TASK_FIGHT || colonist->task == TASK_FLEE) {
             set_idle(colonist, context, 0);
         }
@@ -5887,6 +5908,17 @@ static void engage(Colonist *colonist, const ColonistContext *context)
         }
         /* Cornered: it fights. */
     }
+    /* Mobilized, it stays where it is put and strikes what comes in reach;
+     * it goes after an enemy only when the player ordered it to. */
+    bool chase = !colonist->drafted || combatant_equal(colonist->enemy, colonist->attack_target);
+    bool reach = combat_can_strike(context->map, here, there, COMBAT_REACH_ADJACENT);
+    if (!chase && !reach) {
+        colonist->enemy = combatant_none();
+        if (colonist->task == TASK_FIGHT) {
+            set_idle(colonist, context, 0);
+        }
+        return;
+    }
     if (colonist->task != TASK_FIGHT) {
         begin_task(colonist, context, TASK_FIGHT);
         path_clear(&colonist->path);
@@ -5896,7 +5928,7 @@ static void engage(Colonist *colonist, const ColonistContext *context)
             attack = colonist_attack(colonist, &skill, &power);
         }
     }
-    if (combat_can_strike(context->map, here, there, COMBAT_REACH_ADJACENT)) {
+    if (reach) {
         if (colonist->attack_cooldown <= 0 && context->combat != NULL) {
             combat_queue_push(context->combat, (CombatStrike){{COMBATANT_SETTLER, context->self},
                                                               colonist->enemy,
@@ -5905,7 +5937,7 @@ static void engage(Colonist *colonist, const ColonistContext *context)
                                                               power});
             colonist->attack_cooldown = attack_interval_ticks(attack);
         }
-        if (may_stop_at(context, here)) {
+        if (!chase || may_stop_at(context, here)) {
             path_clear(&colonist->path);
             colonist->path_index = 0;
             colonist->timer = 0;
@@ -5935,7 +5967,32 @@ static void engage(Colonist *colonist, const ColonistContext *context)
         return;
     }
     colonist->enemy = combatant_none(); /* No way to it. */
+    colonist->attack_target = combatant_none();
     set_idle(colonist, context, 0);
+}
+
+/* An animal attacking a settler that it can strike from where it stands,
+ * none when there is none (the first by slot). */
+static Combatant hostile_in_reach(const Colonist *colonist, const ColonistContext *context)
+{
+    if (context->animals == NULL) {
+        return combatant_none();
+    }
+    TilePos here = current_tile(colonist);
+    for (uint32_t slot = 0; slot < animals_slot_count(context->animals); slot++) {
+        EntityId id = animals_id_at(context->animals, slot);
+        const Animal *animal = animals_get_const(context->animals, id);
+        if (animal == NULL || health_is_dead(&animal->health) ||
+            animal->task != ANIMAL_TASK_ATTACK || animal->enemy.kind != COMBATANT_SETTLER ||
+            animal->z != here.z || abs(animal->x - here.x) > 1 || abs(animal->y - here.y) > 1) {
+            continue;
+        }
+        TilePos there = {(int16_t)animal->x, (int16_t)animal->y, (int16_t)animal->z};
+        if (combat_can_strike(context->map, here, there, COMBAT_REACH_ADJACENT)) {
+            return (Combatant){COMBATANT_ANIMAL, id};
+        }
+    }
+    return combatant_none();
 }
 
 /* Hunger, thirst and the weather wear the body down (every
@@ -6010,6 +6067,10 @@ static void tick_turn(Colonist *colonist, const ColonistContext *context)
         if (colonist->move_pending) {
             colonist->move_pending = false;
             start_move(colonist, context, colonist->move_goal);
+        }
+        if (colonist->drafted && combatant_is_none(colonist->enemy) &&
+            !colonist_is_moving(colonist)) {
+            colonist->enemy = hostile_in_reach(colonist, context); /* On its guard. */
         }
         if (!combatant_is_none(colonist->enemy)) {
             engage(colonist, context);

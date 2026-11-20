@@ -56,6 +56,13 @@ void view_controls_info_corner(const App *app, float *right, float *bottom)
     *bottom = layout.row.y - app->ui.theme.margin;
 }
 
+float view_controls_left(const App *app)
+{
+    CornerLayout layout;
+    corner_layout(app, &layout);
+    return layout.row.x;
+}
+
 /* ---- Icons ------------------------------------------------------------------ */
 
 static void triangle(SDL_Renderer *renderer, float x, float y, float w, float h, SDL_Color color)

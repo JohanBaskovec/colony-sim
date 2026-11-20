@@ -244,6 +244,10 @@ static void card_for(App *app, AppTool tool, int type, Card *card)
         card_add_text(card, CARD_TITLE, tr("inspector.carry"));
         card_add_text(card, CARD_DIM, tr("hud.tool.carry_help"));
         break;
+    case APP_TOOL_ATTACK:
+        card_add_text(card, CARD_TITLE, tr("inspector.attack"));
+        card_add_text(card, CARD_DIM, tr("hud.tool.attack_help"));
+        break;
     case APP_TOOL_MOVE_ITEM:
         card_add_text(card, CARD_TITLE, tr("tile_panel.move_items"));
         card_add_text(card, CARD_DIM,

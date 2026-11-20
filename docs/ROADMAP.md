@@ -227,7 +227,7 @@ theme and migration plan).
 - [x] Weapons and mobilization, step 1: the weapon table (`core/weapon.h`: stones, flakes, choppers, hand axes, branches, logs, digging sticks, spears, each with its attack and hands), a weapon's worth, the primary weapon and its crossed blades button in the Gear tab (on a load's item, it is kept and marked), self-defense with the primary or best weapon kept that the arms can wield
 - [x] Weapons and mobilization, step 2: mobilizing and demobilizing (the state, needs, work and chats ignored, sleepers woken, standing where put; it ends with a break, a flight when it cannot fight or a knock-out, with a notice; the shield button for one or several settlers and its key, the shield over the head and on the portrait, the activity *Mobilized*)
 - [x] Weapons and mobilization, step 3: wielding (the weapon in hand, a two-handed one held with both hands, drawing times by where it was, self-defense drawing too; the *Change weapon* list upward with the fists, the weapons kept and those lying within a tile, taken up and locked)
-- [ ] Weapons and mobilization, step 4: the *Attack* order, striking enemies in reach while mobilized
+- [x] Weapons and mobilization, step 4: the *Attack* order (a tool, a click on an animal: the mobilized settlers go after it until it is dead or gone), mobilized settlers holding their ground and striking the animals attacking settlers within their reach; the action buttons wrap to a row above before the bottom right controls
 - [ ] Combat, later: hunting (M5 *Wildlife, later*); ranged weapons (throwing spears, stones); line of sight and cover; raids; animal attacks on the colony; a fighting knowledge; mobilized settlers chasing on their own
 
 ## M7: Persistence and polish

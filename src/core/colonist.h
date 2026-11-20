@@ -557,6 +557,9 @@ typedef struct Colonist {
      * hashed). */
     bool drafted;
     uint8_t draft_end;
+    /* The animal the player ordered it to attack while mobilized
+     * (colonist_order_attack()): it goes after it; NONE otherwise. */
+    Combatant attack_target;
     ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
 
@@ -956,6 +959,14 @@ typedef enum DraftEnd {
 } DraftEnd;
 bool colonist_can_draft(const Colonist *colonist);
 bool colonist_set_drafted(Colonist *colonist, const ColonistContext *context, bool drafted);
+
+/* The player's Attack order (docs/COMBAT.md §8): a mobilized colonist goes
+ * after the animal and strikes it until it is dead or gone, or another
+ * order comes. False when not mobilized, down, or the target is no living
+ * animal. Without an order, a mobilized colonist stays where it is and
+ * strikes the animals attacking settlers that come in its reach, without
+ * going after them. */
+bool colonist_order_attack(Colonist *colonist, const ColonistContext *context, Combatant target);
 
 /* Drops every carried tool where the colonist stands (e.g. before removal). */
 void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map);

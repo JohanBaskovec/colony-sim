@@ -2955,6 +2955,11 @@ uint64_t game_hash(const Game *game)
             int32_t wield[2] = {c->wielding, c->wielded};
             hash = hash_fnv1a64(hash, wield, sizeof(wield));
         }
+        if (!combatant_is_none(c->attack_target)) {
+            int32_t target[3] = {c->attack_target.kind, (int32_t)c->attack_target.id.index,
+                                 (int32_t)c->attack_target.id.generation};
+            hash = hash_fnv1a64(hash, target, sizeof(target));
+        }
         if (!combatant_is_none(c->enemy) || c->attack_cooldown > 0) {
             /* Only then: hashes of games without fights stay as they were. */
             int32_t fight[4] = {c->enemy.kind, (int32_t)c->enemy.id.index,
@@ -3509,6 +3514,26 @@ int game_set_drafted(Game *game, const EntityId *ids, int count, bool drafted)
         changed += colonist_set_drafted(colonist, &context, drafted) ? 1 : 0;
     }
     return changed;
+}
+
+int game_order_attack(Game *game, const EntityId *ids, int count, Combatant target)
+{
+    if (target.kind != COMBATANT_ANIMAL) {
+        return 0;
+    }
+    const Animal *animal = animals_get_const(&game->animals, target.id);
+    if (animal == NULL || !game_tile_seen(game, animal->x, animal->y, animal->z)) {
+        return 0; /* Only what the colony sees. */
+    }
+    int sent = 0;
+    for (int i = 0; i < count; i++) {
+        Colonist *colonist = game_colonist(game, ids[i]);
+        if (colonist != NULL) {
+            ColonistContext context = colonist_context(game, ids[i].index);
+            sent += colonist_order_attack(colonist, &context, target) ? 1 : 0;
+        }
+    }
+    return sent;
 }
 
 int game_weapon_choices(const Game *game, EntityId colonist_id, WeaponChoice *out, int capacity)

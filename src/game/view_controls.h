@@ -16,4 +16,8 @@ void view_controls_draw(App *app);
 /* Where the date and weather go: their bottom right corner. */
 void view_controls_info_corner(const App *app, float *right, float *bottom);
 
+/* The left edge of the row of buttons at the bottom (what is laid out at its
+ * left stops there). */
+float view_controls_left(const App *app);
+
 #endif /* COLONY_GAME_VIEW_CONTROLS_H */

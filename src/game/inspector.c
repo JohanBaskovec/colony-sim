@@ -8,6 +8,7 @@
 #include "game/render.h"
 #include "game/station_panel.h"
 #include "game/stockpile_panel.h"
+#include "game/view_controls.h"
 #include "game/gather_zone_panel.h"
 #include "game/tile_panel.h"
 #include "game/hud.h"
@@ -148,8 +149,14 @@ static int action_click(App *app, int slot, bool lit, SDL_FRect *button, SDL_FRe
     Ui *ui = &app->ui;
     SDL_FRect box = ui_window_rect(ui, APP_WINDOW_INSPECTOR);
     float size = ui->theme.icon_size, gap = ui->theme.gap;
-    SDL_FRect rect = {box.x + box.w + gap + (float)slot * (size + 2.0f * gap) + gap,
-                      box.y + box.h - size - gap, size, size};
+    /* A row along the box's bottom, as many as fit left of the bottom right
+     * controls; then a row above. */
+    float step = size + 2.0f * gap, left = box.x + box.w + gap;
+    int per_row = (int)((view_controls_left(app) - ui->theme.margin - left) / step);
+    per_row = per_row < 1 ? 1 : per_row;
+    int row = slot / per_row, column = slot % per_row;
+    SDL_FRect rect = {left + (float)column * step + gap,
+                      box.y + box.h - size - gap - (float)row * (step + gap), size, size};
     ui_panel(ui, (SDL_FRect){rect.x - gap, rect.y - gap, size + 2.0f * gap, size + 2.0f * gap});
     int clicked = ui_icon_button_click(ui, rect, lit);
     float inset = SDL_roundf(size * 0.12f);
@@ -222,6 +229,16 @@ void inspector_carry_action(App *app, int slot)
         app_toggle_tool(app, APP_TOOL_CARRY, 0);
     }
     render_tool_icon(app->renderer, icon, RENDER_ICON_CARRY);
+}
+
+void inspector_attack_action(App *app, int slot)
+{
+    const char *lines[2] = {tr("inspector.attack"), tr("inspector.attack.description")};
+    SDL_FRect icon;
+    if (inspector_action(app, slot, app->tool == APP_TOOL_ATTACK, &icon, lines, 2)) {
+        app_toggle_tool(app, APP_TOOL_ATTACK, 0);
+    }
+    render_tool_icon(app->renderer, icon, RENDER_ICON_ATTACK);
 }
 
 void inspector_draft_action(App *app, int slot)
