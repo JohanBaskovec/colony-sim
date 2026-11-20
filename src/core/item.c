@@ -1442,6 +1442,32 @@ int items_load_move(Items *items, ItemStack *from, ItemStack *to, int count)
     return moved;
 }
 
+int items_load_take(Items *items, ItemStack *from, int index, ItemStack *to)
+{
+    if (index < 0 || !load_held(from) || index >= (int)from->count || load_held(to)) {
+        return 0;
+    }
+    materialize(items, from);
+    uint32_t previous = 0, slot = from->held;
+    for (int i = 0; i < index && slot != 0; i++) {
+        previous = slot;
+        slot = items->pool[slot - 1].next;
+    }
+    if (slot == 0) {
+        return 0;
+    }
+    if (previous == 0) {
+        from->held = items->pool[slot - 1].next;
+    } else {
+        items->pool[previous - 1].next = items->pool[slot - 1].next;
+    }
+    items->pool[slot - 1].next = 0;
+    to->held = slot;
+    refresh_load(items, from);
+    refresh_load(items, to);
+    return 1;
+}
+
 int items_load_lowest_quality(const Items *items, ItemStack load)
 {
     if (!load_held(&load)) {

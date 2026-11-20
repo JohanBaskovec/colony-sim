@@ -456,10 +456,19 @@ typedef struct Colonist {
     int sleep_cold_ticks;
     int sleep_hot_ticks;
     int sleep_wet_ticks;
-    /* Tools carried (one per type, count 1; empty slots have type ITEM_NONE). */
+    /* Tools and other kept items (count 1 each; one free item per type, any
+     * number of locked ones; empty slots have type ITEM_NONE). */
     ItemStack tools[COLONIST_TOOL_MAX];
     /* Ticks of work done with each tool since it last lost a hit point. */
     uint16_t tool_wear[COLONIST_TOOL_MAX];
+    /* What the player asked of each tool or other item it keeps (CarryLock,
+     * docs/CARRYING.md §7.1): a locked one is never set down by the
+     * colonist; one kept in hand stays in a hand, and the colonist then only
+     * hauls (the other work needs both hands). */
+    uint8_t tool_locks[COLONIST_TOOL_MAX];
+    /* TASK_MOVE ordered to carry an item (colonist_order_carry()): taken on
+     * arrival and kept, locked; ITEM_ID_NONE otherwise. */
+    ItemId take_item;
     int tools_broken;       /* Tools worn out so far (for the player's information). */
     int strength;           /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
     float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
@@ -812,18 +821,65 @@ bool colonist_fits_bill(const Colonist *colonist, EntityId id, const Bill *bill)
 int colonist_tool_index(const Colonist *colonist, ItemTypeMask types);
 
 /* Takes one item as a tool (any item a recipe uses as one, e.g. a cobble as
- * a hammer). Fails when one of the same type is already carried, or every
- * slot is used. */
+ * a hammer), free. Fails when a free one of the same type is already
+ * carried, or every slot is used. */
 bool colonist_add_tool(Colonist *colonist, ItemStack tool);
 
-/* Takes one item as a tool in place of the carried one of the same type,
- * which is written to `replaced` (an empty stack when there was none: the
- * tool is then simply added). Fails like colonist_add_tool() otherwise. */
+/* Takes one item as a tool in place of the free carried one of the same
+ * type (locked ones stay), which is written to `replaced` (an empty stack
+ * when there was none: the tool is then simply added). Fails like
+ * colonist_add_tool() otherwise. */
 bool colonist_swap_tool(Colonist *colonist, ItemStack tool, ItemStack *replaced);
 
 /* Speed factor the colonist works at for a kind of work: its best carried
  * tool among `allowed` (bare hands when none does better), see core/tool.h. */
 float colonist_tool_factor(const Colonist *colonist, ToolUse use, ItemTypeMask allowed);
+
+/*
+ * Kept items: the tools, and any item the player made it carry or locked
+ * (docs/CARRYING.md §7), in `tools`, one item each: one free item per type
+ * at most, any number of locked ones.
+ *
+ * colonist_set_lock() locks the kept item at `index` (CarryLock). Fails on
+ * an empty slot, a lock out of range, or CARRY_LOCK_IN_HAND when no hand can
+ * hold it beside the others kept in hand.
+ */
+bool colonist_set_lock(Colonist *colonist, int index, CarryLock lock);
+
+/* Hands taken by the items kept in hand (0 to 2): while any, the colonist
+ * only hauls. */
+int colonist_hands_locked(const Colonist *colonist);
+
+/* Whether the colonist can take `count` items of `type` to keep with that
+ * lock (not CARRY_LOCK_NONE): a slot and a place (a hand, kept in hand) for
+ * each beside the items it keeps locked (the free ones would be set down). */
+bool colonist_can_keep(const Colonist *colonist, ItemType type, int count, CarryLock lock);
+
+/* Sets down where it stands the kept item at `index`, its lock cleared, and
+ * forbidden so that nobody picks it up again at once. Fails on an empty
+ * slot. */
+bool colonist_put_down(Colonist *colonist, Items *items, const Map *map, int index);
+
+/* The player locks the item at `index` of the load (newest first,
+ * items_load_first(), docs/CARRYING.md §7.1): it becomes a kept item with
+ * that lock. False when it cannot be kept so (colonist_can_keep()), there is
+ * no such item, or when down. */
+bool colonist_keep_load_item(Colonist *colonist, const ColonistContext *context, int index,
+                             CarryLock lock);
+
+/* The player makes it drop the item at `index` of the load: put down where
+ * it stands, forbidden. False when there is no such item. */
+bool colonist_drop_load_item(Colonist *colonist, const ColonistContext *context, int index);
+
+/* Both: once the load is empty, what it was carried for is given up. */
+
+/* The player's Carry order (docs/CARRYING.md §7.2): walks to the item lying
+ * on `tile` (as colonist_order_move()) and, there or next to it, takes it
+ * and keeps it, locked on the colonist (a free kept item of its type is set
+ * down). Refused (false) like a move, or when it cannot keep it
+ * (colonist_can_keep()). */
+bool colonist_order_carry(Colonist *colonist, const ColonistContext *context, ItemId item,
+                          TilePos tile);
 
 /* Drops every carried tool where the colonist stands (e.g. before removal). */
 void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map);

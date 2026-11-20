@@ -1172,103 +1172,327 @@ static const char *carry_place_name(CarryPlace place, CarryHold hold)
     return tr(CARRY_PLACE_KEYS[place]);
 }
 
-/* What an entry of the arrangement is: a tool and its condition, or the
- * load and its weight. */
-static void carry_entry_text(char *out, size_t size, const Colonist *colonist,
-                             const CarryEntry *entry)
+/* What an item carried is: its name and weight (the kept item at `index` of
+ * the tools, or, index -1, one item of the load). */
+static void carry_item_text(char *out, size_t size, const Colonist *colonist, ItemType type,
+                            int index)
 {
-    const char *name = tr(item_def((ItemType)entry->type)->name_key);
-    int index = entry->kept ? colonist_tool_index(colonist, ITEM_TYPE_BIT(entry->type)) : -1;
-    if (index >= 0) {
-        ItemStack tool = colonist->tools[index];
-        char hit_points[16], percent[32], quality[16];
-        tr_integer(hit_points, sizeof(hit_points), item_stack_hit_points_percent(tool));
-        TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), hit_points);
-        hud_quality_text(quality, sizeof(quality), tool.quality);
-        TR_FORMAT(out, size, tr("hud.gear.tool"), name, quality, percent);
-        return;
-    }
-    char count[16], weight[32];
-    tr_integer(count, sizeof(count), entry->count);
-    hud_weight_text(weight, sizeof(weight), item_stack_weight((ItemType)entry->type, entry->count));
-    TR_FORMAT(out, size, tr("hud.gear.load"), name, count, weight);
+    char weight[32];
+    float kilograms =
+        index >= 0 ? item_stack_mass(colonist->tools[index]) : item_stack_weight(type, 1);
+    hud_weight_text(weight, sizeof(weight), kilograms);
+    TR_FORMAT(out, size, tr("hud.gear.item"), tr(item_def(type)->name_key), weight);
 }
 
-/* Strength, the weight carried, then what is in each place (docs/CARRYING.md
- * §7.3), the tools that found no place, the tools worn out. */
-static void add_gear_lines(Panel *panel, const Colonist *colonist)
+/* What a click on the Gear tab asks of an item, applied after the rows. */
+typedef enum GearClick {
+    GEAR_CLICK_NONE,
+    GEAR_CLICK_KEEP,
+    GEAR_CLICK_HAND,
+    GEAR_CLICK_PUT,
+    GEAR_CLICK_FOLD /* A branch of the tree: GearAction.index. */
+} GearClick;
+
+typedef struct GearAction {
+    GearClick click;
+    bool load; /* An item of the load, else a kept item. */
+    int index; /* Of the item in the load or in the colonist's tools; the branch. */
+} GearAction;
+
+#define GEAR_BUTTONS 3
+
+/* The room the buttons of an item take at the right of its row. */
+static float gear_buttons_width(const UiLayout *layout)
 {
+    return (float)GEAR_BUTTONS * (layout->button_height + UI_LAYOUT_GAP) + UI_LAYOUT_GAP;
+}
+
+/* One button of an item's row: its icon, lit or not, and a tooltip. Returns
+ * whether it was clicked. */
+static bool gear_button(UiLayout *layout, App *app, float x, RenderIcon icon, bool lit,
+                        const char *title, const char *description)
+{
+    Ui *ui = layout->ui;
+    SDL_FRect rect = {x, layout->y, layout->button_height, layout->button_height};
+    bool clicked = ui_icon_button(ui, rect, lit);
+    float inset = SDL_roundf(rect.w * 0.1f);
+    render_tool_icon(
+        app->renderer,
+        (SDL_FRect){rect.x + inset, rect.y + inset, rect.w - 2.0f * inset, rect.h - 2.0f * inset},
+        icon);
+    if (ui_hovered(ui, rect)) {
+        const char *lines[2] = {title, description};
+        ui_tooltip(ui, lines, 2);
+    }
+    return clicked;
+}
+
+/* The slot in the colonist's tools of a kept item's entry: the first of its
+ * type not given a row yet (several locked items may share a type). */
+static int kept_index(const Colonist *colonist, const CarryEntry *entry, uint8_t *rows)
+{
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        if (!rows[i] && colonist->tools[i].count > 0 && colonist->tools[i].type == entry->type) {
+            rows[i] = 1;
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* A row of an item a colonist carries, `indent` in: its text and, when the
+ * colonist can act (`buttons`), its buttons: keep on the settler, keep in
+ * hand, drop (docs/CARRYING.md §7.1). `index`: the item's in the load
+ * (`load`) or in the colonist's tools. */
+static void gear_row(UiLayout *layout, App *app, const Colonist *colonist, const char *text,
+                     float indent, bool load, int index, bool buttons, GearAction *action)
+{
+    if (!buttons) {
+        ui_layout_label(layout, text, indent, false);
+        return;
+    }
+    float room = gear_buttons_width(layout);
+    ui_layout_measure(layout, indent + ui_text_width(layout->ui, text) + room);
+    if (layout->draw) {
+        ui_label(layout->ui, text, layout->x + indent, layout->y + layout->text_offset);
+        CarryLock lock = load ? CARRY_LOCK_NONE : (CarryLock)colonist->tool_locks[index];
+        const char *keep_hint = tr("hud.gear.keep.description");
+        const char *hand_hint = tr("hud.gear.in_hand.description");
+        if (load && !game_can_keep_load_item(&app->game, app->selected[0], CARRY_LOCK_KEPT)) {
+            keep_hint = tr("hud.gear.cannot_keep");
+        }
+        if (load && !game_can_keep_load_item(&app->game, app->selected[0], CARRY_LOCK_IN_HAND)) {
+            hand_hint = tr("hud.gear.cannot_keep");
+        }
+        float x = layout->x + layout->width - room + UI_LAYOUT_GAP;
+        float step = layout->button_height + UI_LAYOUT_GAP;
+        if (gear_button(layout, app, x, RENDER_ICON_LOCK, lock != CARRY_LOCK_NONE,
+                        tr(lock != CARRY_LOCK_NONE ? "hud.gear.kept" : "hud.gear.keep"),
+                        keep_hint)) {
+            *action = (GearAction){GEAR_CLICK_KEEP, load, index};
+        }
+        if (gear_button(layout, app, x + step, RENDER_ICON_IN_HAND, lock == CARRY_LOCK_IN_HAND,
+                        tr(lock == CARRY_LOCK_IN_HAND ? "hud.gear.held" : "hud.gear.in_hand"),
+                        hand_hint)) {
+            *action = (GearAction){GEAR_CLICK_HAND, load, index};
+        }
+        if (gear_button(layout, app, x + 2.0f * step, RENDER_ICON_PUT_DOWN, false,
+                        tr("hud.gear.drop"), tr("hud.gear.drop.description"))) {
+            *action = (GearAction){GEAR_CLICK_PUT, load, index};
+        }
+    }
+    layout->y += layout->row;
+}
+
+/* A branch of the tree: a fold button when it holds items (`open` or not),
+ * its name, and dim after it what it holds or does (`state`). */
+static void gear_branch_row(UiLayout *layout, const char *name, const char *state, bool items,
+                            bool open, int branch, GearAction *action)
+{
+    Ui *ui = layout->ui;
+    float box = layout->button_height;
+    float name_x = box + UI_LAYOUT_GAP;
+    float state_x = name_x + ui_text_width(ui, name) + UI_LAYOUT_GAP;
+    ui_layout_measure(layout, state_x + ui_text_width(ui, state));
+    if (layout->draw) {
+        if (items && ui_disclosure(ui, (SDL_FRect){layout->x, layout->y, box, box}, open)) {
+            *action = (GearAction){GEAR_CLICK_FOLD, false, branch};
+        }
+        float y = layout->y + layout->text_offset;
+        ui_label(ui, name, layout->x + name_x, y);
+        ui_label_dim(ui, state, layout->x + state_x, y);
+    }
+    layout->y += layout->row;
+}
+
+/* What the click asked, once everything is drawn. */
+static void apply_gear_action(App *app, EntityId id, const Colonist *colonist, GearAction action)
+{
+    if (action.click == GEAR_CLICK_FOLD) {
+        if (action.index >= 0 && action.index < GEAR_BRANCH_COUNT) {
+            app->gear_branch_folded[action.index] = !app->gear_branch_folded[action.index];
+        }
+        return;
+    }
+    if (action.load) {
+        if (action.click == GEAR_CLICK_PUT) {
+            game_drop_load_item(&app->game, id, action.index);
+        } else if (action.click != GEAR_CLICK_NONE) {
+            game_keep_load_item(&app->game, id, action.index,
+                                action.click == GEAR_CLICK_HAND ? CARRY_LOCK_IN_HAND
+                                                                : CARRY_LOCK_KEPT);
+        }
+        return;
+    }
+    CarryLock lock =
+        action.index >= 0 ? (CarryLock)colonist->tool_locks[action.index] : CARRY_LOCK_NONE;
+    switch (action.click) {
+    case GEAR_CLICK_KEEP:
+        game_set_carry_lock(&app->game, id, action.index,
+                            lock == CARRY_LOCK_NONE ? CARRY_LOCK_KEPT : CARRY_LOCK_NONE);
+        break;
+    case GEAR_CLICK_HAND:
+        game_set_carry_lock(&app->game, id, action.index,
+                            lock == CARRY_LOCK_IN_HAND ? CARRY_LOCK_KEPT : CARRY_LOCK_IN_HAND);
+        break;
+    case GEAR_CLICK_PUT: game_put_down(&app->game, id, action.index); break;
+    case GEAR_CLICK_NONE:
+    case GEAR_CLICK_FOLD: break;
+    }
+}
+
+/* What a place does when it holds nothing, NULL when it has no line (taken
+ * by what both hands hold, said on their line; nothing slung). */
+static const char *empty_place_state(const CarryArrangement *arrangement, const CarryBody *body,
+                                     CarryPlace place)
+{
+    if (place == CARRY_SLUNG ||
+        (place == CARRY_BOTH_HANDS && arrangement->hold != CARRY_HOLD_SHOULDERS)) {
+        return NULL;
+    }
+    if (!carry_place_usable(body, place)) {
+        return tr("hud.gear.no_arm");
+    }
+    if (place == CARRY_BOTH_HANDS) {
+        return tr("hud.gear.holding");
+    }
+    if ((int)place == arrangement->steadying) {
+        return tr("hud.gear.steadying");
+    }
+    if (((place == CARRY_RIGHT_HAND || place == CARRY_LEFT_HAND) &&
+         arrangement->hold != CARRY_HOLD_NONE) ||
+        ((place == CARRY_UNDER_RIGHT_ARM || place == CARRY_UNDER_LEFT_ARM) &&
+         arrangement->hold == CARRY_HOLD_ARMFUL)) {
+        return NULL;
+    }
+    return tr("hud.gear.empty");
+}
+
+/* The Gear tab: strength, the weight carried, then a tree (docs/CARRYING.md
+ * §7.3): each place of the body, folded or not, with a row per item it
+ * holds, each with its lock and Drop buttons; the items that found no place;
+ * the tools worn out. */
+static void gear_rows(UiLayout *layout, void *userdata)
+{
+    App *app = userdata;
+    EntityId id = app->selected[0];
+    const Colonist *colonist = game_colonist_const(&app->game, id);
+    if (colonist == NULL) {
+        return;
+    }
+    char line[HUD_LINE_SIZE];
     char strength[16], carry[32];
     tr_integer(strength, sizeof(strength), colonist->strength);
     hud_weight_text(carry, sizeof(carry), colonist_max_carry_weight(colonist));
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.strength"), strength, carry);
+    TR_FORMAT(line, sizeof(line), tr("hud.colonist.strength"), strength, carry);
+    ui_layout_label(layout, line, 0.0f, false);
     char carried[32];
     hud_weight_text(carried, sizeof(carried), colonist_carried_weight(colonist));
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.carried"), carried, carry);
+    TR_FORMAT(line, sizeof(line), tr("hud.gear.carried"), carried, carry);
+    ui_layout_label(layout, line, 0.0f, false);
     float speed = colonist_load_speed_factor(colonist);
     if (speed < 1.0f) {
         char number[16], percent[32];
         tr_integer(number, sizeof(number), (long long)lroundf(speed * 100.0f));
         TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.slowed"), percent);
+        TR_FORMAT(line, sizeof(line), tr("hud.gear.slowed"), percent);
+        ui_layout_label(layout, line, 0.0f, false);
+    }
+    if (colonist_hands_locked(colonist) > 0) {
+        ui_layout_label(layout, tr("hud.gear.hands_locked"), 0.0f, true);
     }
 
+    bool buttons = !colonist_is_down(colonist);
+    /* Items under their branch's name, a step in. */
+    float indent = layout->button_height + UI_LAYOUT_GAP + UI_LAYOUT_INDENT;
+    GearAction action = {GEAR_CLICK_NONE, false, -1};
+    uint8_t kept_rows[COLONIST_TOOL_MAX] = {0}; /* Kept items given a row so far. */
+    int load_rows = 0;                          /* Items of the load given a row so far. */
     CarryArrangement arrangement;
     colonist_carry_arrangement(colonist, &arrangement);
     CarryBody body = colonist_carry_body(colonist);
     for (int place = 0; place < CARRY_PLACE_COUNT; place++) {
         const char *name = carry_place_name((CarryPlace)place, arrangement.hold);
-        bool any = false;
+        float weight = 0.0f;
+        bool items = false;
         for (int i = 0; i < arrangement.entry_count; i++) {
+            const CarryEntry *entry = &arrangement.entries[i];
+            if (entry->place == place) {
+                items = true;
+                weight += item_stack_weight((ItemType)entry->type, entry->count);
+            }
+        }
+        char state[HUD_LINE_SIZE];
+        if (items) {
+            hud_weight_text(state, sizeof(state), weight);
+        } else {
+            const char *empty = empty_place_state(&arrangement, &body, (CarryPlace)place);
+            if (empty == NULL) {
+                continue;
+            }
+            SDL_strlcpy(state, empty, sizeof(state));
+        }
+        bool open = !app->gear_branch_folded[place];
+        gear_branch_row(layout, name, state, items, open, place, &action);
+        for (int i = 0; items && i < arrangement.entry_count; i++) {
             const CarryEntry *entry = &arrangement.entries[i];
             if (entry->place != place) {
                 continue;
             }
-            char item[HUD_LINE_SIZE];
-            carry_entry_text(item, sizeof(item), colonist, entry);
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.place"), name, item);
-            any = true;
-        }
-        if (any || place == CARRY_SLUNG ||
-            (place == CARRY_BOTH_HANDS && arrangement.hold != CARRY_HOLD_SHOULDERS)) {
-            continue; /* Nothing slung nor in both hands: no line. */
-        }
-        const char *state = tr("hud.gear.empty");
-        if (!carry_place_usable(&body, (CarryPlace)place)) {
-            state = tr("hud.gear.no_arm");
-        } else if (place == CARRY_BOTH_HANDS) {
-            state = tr("hud.gear.holding");
-        } else if (place == arrangement.steadying) {
-            state = tr("hud.gear.steadying");
-        } else if (((place == CARRY_RIGHT_HAND || place == CARRY_LEFT_HAND) &&
-                    arrangement.hold != CARRY_HOLD_NONE) ||
-                   ((place == CARRY_UNDER_RIGHT_ARM || place == CARRY_UNDER_LEFT_ARM) &&
-                    arrangement.hold == CARRY_HOLD_ARMFUL)) {
-            continue; /* Taken by what both hands hold: said on their line. */
-        }
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.place"), name, state);
-    }
-    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
-        /* Tools that fit in no place (set down at the next load). */
-        if (!(arrangement.left_out & (1u << i))) {
-            continue;
-        }
-        int seen = 0;
-        for (int tool = 0; tool < COLONIST_TOOL_MAX; tool++) {
-            if (colonist->tools[tool].count > 0 && seen++ == i) {
-                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.left_out"),
-                          tr(item_def((ItemType)colonist->tools[tool].type)->name_key));
+            for (int n = 0; n < entry->count; n++) { /* A row per item, each its own buttons. */
+                /* Indexes run on while folded, to stay those of the items. */
+                int index = entry->kept ? kept_index(colonist, entry, kept_rows) : load_rows;
+                if (index < 0 || (!entry->kept && index >= colonist->carried.count)) {
+                    break;
+                }
+                load_rows += entry->kept ? 0 : 1;
+                if (open) {
+                    carry_item_text(line, sizeof(line), colonist, (ItemType)entry->type,
+                                    entry->kept ? index : -1);
+                    gear_row(layout, app, colonist, line, indent, !entry->kept, index, buttons,
+                             &action);
+                }
             }
         }
     }
-    if (colonist->carried.count > 0) {
-        add_item_condition_line(panel, colonist->carried);
+
+    /* The items that found no place: tools set down at the next load, items
+     * of the load over the limits. */
+    int seen = 0, unplaced = 0;
+    for (int tool = 0; tool < COLONIST_TOOL_MAX; tool++) {
+        if (colonist->tools[tool].count > 0 && (arrangement.left_out & (1u << seen++))) {
+            unplaced++;
+        }
+    }
+    unplaced += SDL_max(0, colonist->carried.count - load_rows);
+    if (unplaced > 0) {
+        char count[16];
+        tr_integer(count, sizeof(count), unplaced);
+        bool open = !app->gear_branch_folded[GEAR_BRANCH_NO_PLACE];
+        gear_branch_row(layout, tr("hud.gear.no_place"), count, true, open, GEAR_BRANCH_NO_PLACE,
+                        &action);
+        seen = 0;
+        for (int tool = 0; open && tool < COLONIST_TOOL_MAX; tool++) {
+            if (colonist->tools[tool].count > 0 && (arrangement.left_out & (1u << seen++))) {
+                carry_item_text(line, sizeof(line), colonist, (ItemType)colonist->tools[tool].type,
+                                tool);
+                gear_row(layout, app, colonist, line, indent, false, tool, buttons, &action);
+            }
+        }
+        for (int n = load_rows; open && n < colonist->carried.count; n++) {
+            carry_item_text(line, sizeof(line), colonist, (ItemType)colonist->carried.type, -1);
+            gear_row(layout, app, colonist, line, indent, true, n, buttons, &action);
+        }
     }
     if (colonist->tools_broken > 0) {
         char count[16];
         tr_integer(count, sizeof(count), colonist->tools_broken);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+        TR_FORMAT(line, sizeof(line),
                   tr_plural("hud.colonist.tools_broken", colonist->tools_broken), count);
+        ui_layout_label(layout, line, 0.0f, false);
+    }
+    if (layout->draw) {
+        apply_gear_action(app, id, colonist, action);
     }
 }
 
@@ -1338,27 +1562,6 @@ static void journal_rows(UiLayout *layout, void *userdata)
     if (colonist != NULL) {
         journal_panel_rows(layout, &colonist->journal, (JournalOwner){colonist->name, 0, 0},
                            &colonist->mood, &app->journal_hidden);
-    }
-}
-
-/* The lines of one section of the colonist inspector. */
-static void build_colonist_section(App *app, Panel *panel, EntityId id, ColonistSection section)
-{
-    const Colonist *colonist = game_colonist_const(&app->game, id);
-    if (colonist == NULL) {
-        return;
-    }
-    switch (section) {
-    case SECTION_SUMMARY: break; /* summary_rows() */
-    case SECTION_NEEDS:
-    case SECTION_HEALTH:
-    case SECTION_MOOD:
-    case SECTION_CHARACTER:
-    case SECTION_KNOWLEDGE:
-    case SECTION_JOURNAL: break; /* Drawn by their own rows (colonist_tab_rows()). */
-    case SECTION_GEAR: add_gear_lines(panel, colonist); break;
-    case SECTION_SOCIAL: break; /* social_rows() */
-    case SECTION_COUNT: break;
     }
 }
 
@@ -1615,6 +1818,7 @@ static UiRowsFn colonist_tab_rows(ColonistSection section)
     case SECTION_KNOWLEDGE: return knowledge_rows;
     case SECTION_JOURNAL: return journal_rows;
     case SECTION_SOCIAL: return social_rows;
+    case SECTION_GEAR: return gear_rows;
     default: return NULL;
     }
 }
@@ -1644,6 +1848,9 @@ void hud_inspect_colonists(App *app)
     inspector_move_action(app, 0);
     if (one) {
         inspector_follow_action(app, 1, FOLLOW_COLONIST, app->selected[0]);
+        if (!colonist_is_down(colonist)) {
+            inspector_carry_action(app, 2);
+        }
         const char *labels[SECTION_COUNT - 1];
         for (int i = 1; i < SECTION_COUNT; i++) {
             labels[i - 1] = tr(SECTION_KEYS[i]);
@@ -1651,16 +1858,12 @@ void hud_inspect_colonists(App *app)
         int tab = inspector_tabs(app, labels, SECTION_COUNT - 1);
         if (tab >= 0) {
             ColonistSection section = (ColonistSection)(tab + 1);
-            UiRowsFn special = colonist_tab_rows(section);
-            if (special != NULL) {
-                inspector_tab_panel(app, special, app);
+            UiRowsFn rows = colonist_tab_rows(section);
+            if (rows != NULL) {
+                inspector_tab_panel(app, rows, app);
                 if (section == SECTION_HEALTH) {
                     health_panel_body_window(app, &colonist->health);
                 }
-            } else {
-                Panel lines = {0};
-                build_colonist_section(app, &lines, app->selected[0], section);
-                inspector_tab_panel(app, panel_rows, &lines);
             }
         }
     } else {

@@ -220,6 +220,45 @@ static void test_drop_where_the_filter_allows(void)
     map_free(&map);
 }
 
+static void test_load_take(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 8, 8, 1));
+    ItemStack from = {.type = ITEM_NONE}, one = {.type = ITEM_NONE};
+    items_add(&items, 1, 1, 0, item_stack_make(ITEM_BRANCHES, 2, TEST_QUALITY_CRUDE, 10));
+    items_add(&items, 1, 1, 0, item_stack_make(ITEM_BRANCHES, 1, TEST_QUALITY_FINE, 20));
+    REQUIRE(items_pick_up(&items, 1, 1, 0, 3, &from) == 3);
+    /* The very item asked for, as it is. */
+    const Item *second = items_next(&items, items_load_first(&items, from));
+    REQUIRE(second != NULL);
+    int quality = second->quality;
+    CHECK_EQ_INT(items_load_take(&items, &from, 1, &one), 1);
+    CHECK_EQ_INT(one.count, 1);
+    CHECK_EQ_INT(one.quality, quality);
+    CHECK_EQ_INT(from.count, 2);
+    CHECK(items_check_load(&items, from) && items_check_load(&items, one));
+    /* Refused: out of range, or into a load holding something. */
+    CHECK_EQ_INT(items_load_take(&items, &from, 2, &one), 0);
+    ItemStack other = {.type = ITEM_NONE};
+    CHECK_EQ_INT(items_load_take(&items, &from, -1, &other), 0);
+    CHECK_EQ_INT(items_load_take(&items, &from, 0, &one), 0);
+    CHECK_EQ_INT(items_load_take(&items, &from, 1, &other), 1); /* The last one. */
+    CHECK_EQ_INT(from.count, 1);
+    /* Numbers become items first. */
+    ItemStack numbers = item_stack_pristine(ITEM_COBBLE, 3), cobble = {.type = ITEM_NONE};
+    CHECK_EQ_INT(items_load_take(&items, &numbers, 2, &cobble), 1);
+    CHECK_EQ_INT(numbers.count, 2);
+    CHECK_EQ_INT(cobble.type, ITEM_COBBLE);
+    CHECK_EQ_INT(items.held_count, 6);
+    items_use_up(&items, &from, from.count);
+    items_use_up(&items, &one, one.count);
+    items_use_up(&items, &other, other.count);
+    items_use_up(&items, &numbers, numbers.count);
+    items_use_up(&items, &cobble, cobble.count);
+    CHECK_EQ_INT(items.held_count, 0);
+    items_free(&items);
+}
+
 static void test_load_move(void)
 {
     Items items;
@@ -1389,6 +1428,7 @@ int main(void)
     RUN_TEST(test_soonest_rotting);
     RUN_TEST(test_hit_points_lasting);
     RUN_TEST(test_load_move);
+    RUN_TEST(test_load_take);
     RUN_TEST(test_rot_definitions);
     RUN_TEST(test_rot_rate);
     RUN_TEST(test_rot_hours);

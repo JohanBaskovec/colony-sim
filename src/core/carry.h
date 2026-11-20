@@ -33,6 +33,15 @@ typedef enum CarryPlace {
 
 typedef enum CarrySide { CARRY_RIGHT, CARRY_LEFT, CARRY_SIDE_COUNT } CarrySide;
 
+/* What the player asked of an item a settler carries (docs/CARRYING.md
+ * §7.1). */
+typedef enum CarryLock {
+    CARRY_LOCK_NONE,    /* Free: the settler may set it down, store it, use it up. */
+    CARRY_LOCK_KEPT,    /* Always carried, wherever it fits best. */
+    CARRY_LOCK_IN_HAND, /* Always carried, in a hand, ready. */
+    CARRY_LOCK_COUNT
+} CarryLock;
+
 /* What both hands do. */
 typedef enum CarryHold {
     CARRY_HOLD_NONE,
@@ -124,5 +133,19 @@ int carry_arrange(const CarryBody *body, const ItemType *kept, int kept_count, I
 
 /* How many items of `type` the body carries beside `kept` (carry_arrange()). */
 int carry_capacity(const CarryBody *body, const ItemType *kept, int kept_count, ItemType type);
+
+/* The same, with the kept items of the mask `in_hand` (bit i: kept[i]) kept
+ * in a hand (docs/CARRYING.md §7.1): placed first, in the hand of the better
+ * arm, else the other, else both hands. */
+int carry_arrange_held(const CarryBody *body, const ItemType *kept, int kept_count,
+                       uint32_t in_hand, ItemType load, int load_count, CarryArrangement *out);
+int carry_capacity_held(const CarryBody *body, const ItemType *kept, int kept_count,
+                        uint32_t in_hand, ItemType type);
+
+/* How many hands (0 to 2) the items kept in hand take in an arrangement
+ * (an item in both hands takes two). Items of the same type as one kept in
+ * hand count with it. */
+int carry_hands_taken(const CarryArrangement *arrangement, const ItemType *kept, int kept_count,
+                      uint32_t in_hand);
 
 #endif /* COLONY_CORE_CARRY_H */

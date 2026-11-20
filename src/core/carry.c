@@ -23,6 +23,7 @@ typedef struct Search {
     PlaceState places[CARRY_PLACE_COUNT];
     unsigned load_places; /* Bit per place the load may use (the subset tried). */
     ItemType load;
+    uint32_t in_hand; /* Bit i: kept item i is kept in a hand. */
     int8_t kept_place[CARRY_KEPT_MAX];
 } Search;
 
@@ -245,11 +246,19 @@ static bool rules_hold(const Search *search)
     return true;
 }
 
-/* The places a kept item tries, in order (docs/CARRYING.md §6.2). */
-static int kept_order(ItemType type, CarryPlace *order)
+/* The places a kept item tries, in order (docs/CARRYING.md §6.2): one kept
+ * in hand, the better arm's hand, the other, then both hands. */
+static int kept_order(const CarryBody *body, ItemType type, bool in_hand, CarryPlace *order)
 {
     const ItemDef *def = item_def(type);
     int count = 0;
+    if (in_hand) {
+        bool right_first = body->arm[CARRY_RIGHT] >= body->arm[CARRY_LEFT];
+        order[count++] = right_first ? CARRY_RIGHT_HAND : CARRY_LEFT_HAND;
+        order[count++] = right_first ? CARRY_LEFT_HAND : CARRY_RIGHT_HAND;
+        order[count++] = CARRY_BOTH_HANDS;
+        return count;
+    }
     if (def->strap) {
         order[count++] = CARRY_SLUNG;
     }
@@ -280,7 +289,7 @@ static int kept_order(ItemType type, CarryPlace *order)
 static bool place_kept(Search *search, int index, ItemType type)
 {
     CarryPlace order[CARRY_PLACE_COUNT + 2];
-    int count = kept_order(type, order);
+    int count = kept_order(search->body, type, (search->in_hand & (1u << index)) != 0, order);
     for (int pass = 0; pass < 2; pass++) {
         for (int i = 0; i < count; i++) {
             CarryPlace place = order[i];
@@ -354,9 +363,18 @@ static Candidate try_subset(Search *search, const ItemType *kept, int kept_count
     *left_out = 0;
     for (int i = 0; i < kept_count; i++) {
         search->kept_place[i] = -1;
-        if (!place_kept(search, i, kept[i])) {
-            *left_out |= 1u << i;
-            candidate.left_out++;
+    }
+    /* Those kept in hand first: the others go around them. */
+    for (int round = 0; round < 2; round++) {
+        for (int i = 0; i < kept_count; i++) {
+            bool in_hand = (search->in_hand & (1u << i)) != 0;
+            if (in_hand != (round == 0)) {
+                continue;
+            }
+            if (!place_kept(search, i, kept[i])) {
+                *left_out |= 1u << i;
+                candidate.left_out++;
+            }
         }
     }
     for (int place = 0; place < CARRY_PLACE_COUNT; place++) {
@@ -451,6 +469,12 @@ static void finish(const Search *search, CarryArrangement *out)
 int carry_arrange(const CarryBody *body, const ItemType *kept, int kept_count, ItemType load,
                   int load_count, CarryArrangement *out)
 {
+    return carry_arrange_held(body, kept, kept_count, 0, load, load_count, out);
+}
+
+int carry_arrange_held(const CarryBody *body, const ItemType *kept, int kept_count,
+                       uint32_t in_hand, ItemType load, int load_count, CarryArrangement *out)
+{
     if (kept_count > CARRY_KEPT_MAX) {
         kept_count = CARRY_KEPT_MAX;
     }
@@ -478,7 +502,7 @@ int carry_arrange(const CarryBody *body, const ItemType *kept, int kept_count, I
     /* Every subset of the places the load takes, the empty one first. */
     unsigned subset = 0;
     do {
-        Search search = {.body = body, .load_places = subset, .load = load};
+        Search search = {.body = body, .load_places = subset, .load = load, .in_hand = in_hand};
         if (rules_hold(&search)) {
             uint32_t left_out;
             int per_place[CARRY_PLACE_COUNT];
@@ -531,4 +555,30 @@ int carry_arrange(const CarryBody *body, const ItemType *kept, int kept_count, I
 int carry_capacity(const CarryBody *body, const ItemType *kept, int kept_count, ItemType type)
 {
     return carry_arrange(body, kept, kept_count, type, UINT16_MAX, NULL);
+}
+
+int carry_capacity_held(const CarryBody *body, const ItemType *kept, int kept_count,
+                        uint32_t in_hand, ItemType type)
+{
+    return carry_arrange_held(body, kept, kept_count, in_hand, type, UINT16_MAX, NULL);
+}
+
+int carry_hands_taken(const CarryArrangement *arrangement, const ItemType *kept, int kept_count,
+                      uint32_t in_hand)
+{
+    bool right = false, left = false;
+    for (int i = 0; i < kept_count; i++) {
+        if (!(in_hand & (1u << i)) || (arrangement->left_out & (1u << i))) {
+            continue;
+        }
+        for (int e = 0; e < arrangement->entry_count; e++) {
+            const CarryEntry *entry = &arrangement->entries[e];
+            if (!entry->kept || entry->type != kept[i]) {
+                continue;
+            }
+            right |= entry->place == CARRY_RIGHT_HAND || entry->place == CARRY_BOTH_HANDS;
+            left |= entry->place == CARRY_LEFT_HAND || entry->place == CARRY_BOTH_HANDS;
+        }
+    }
+    return (right ? 1 : 0) + (left ? 1 : 0);
 }

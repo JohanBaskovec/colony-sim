@@ -531,6 +531,12 @@ void items_use_up(Items *items, ItemStack *load, int count);
  * Returns how many moved. */
 int items_load_move(Items *items, ItemStack *from, ItemStack *to, int count);
 
+/* Moves the item at `index` of a load (newest first, as items_load_first())
+ * into the empty load `to`, as it is. A load that is only numbers becomes
+ * items first. Returns 1, or 0 when there is no such item or `to` holds
+ * something. */
+int items_load_take(Items *items, ItemStack *from, int index, ItemStack *to);
+
 /* The lowest quality among the items of a load (its own quality when it is
  * only numbers); ITEM_QUALITY_WORST for an empty one. */
 int items_load_lowest_quality(const Items *items, ItemStack load);

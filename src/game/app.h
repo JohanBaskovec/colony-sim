@@ -48,7 +48,16 @@ typedef enum AppTool {
      * (game_order_single_item_move()); armed by the Move action of a tile's
      * items or of one item. */
     APP_TOOL_MOVE_ITEM,
+    /* Carry: a click on an item sends the one selected settler to fetch it
+     * and keep it, locked (game_order_carry()); armed by the Carry action of
+     * the settler's window. */
+    APP_TOOL_CARRY,
 } AppTool;
+
+/* The branches of the Gear tab's tree (game/hud.c): a place of the body
+ * (CarryPlace), or the items that found no place. Later, containers. */
+#define GEAR_BRANCH_NO_PLACE CARRY_PLACE_COUNT
+#define GEAR_BRANCH_COUNT (CARRY_PLACE_COUNT + 1)
 
 /*
  * Keyboard controls. Every one is a physical position (scancode, named after
@@ -266,6 +275,9 @@ typedef struct App {
     int selected_gather_zone_number;
     /* Groups of resources folded in the gathering zone window (UI state). */
     bool gather_group_folded[GATHER_GROUP_COUNT];
+    /* Branches folded in a settler's Gear tab (UI state): the places of the
+     * body (CarryPlace), then the items with no place. */
+    bool gear_branch_folded[GEAR_BRANCH_COUNT];
     /* Selected thing on a tile (a structure, a roof, a construction site,
      * items or a plant: game/tile_panel.h), same rules. */
     bool tile_selected;

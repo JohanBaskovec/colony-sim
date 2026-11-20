@@ -7,10 +7,11 @@ go; the settler's strength and arms decide how much. Settlers arrange what
 they carry on their own; the player can lock an item on a settler, or in its
 hands, and make a settler go and carry an item.
 
-Status: steps 1 and 2a are implemented (§9): the item data, the places and
-the arrangement (`core/carry.h`), the capacities of §5, the tools set down
-when in the way of a load, the Gear tab by place. Not yet: actions needing
-the hands (§6.3), locks and orders (§7). Values marked *(tuning)* are first
+Status: steps 1, 2a and 3 are implemented (§9): the item data, the places
+and the arrangement (`core/carry.h`), the capacities of §5, the tools set
+down when in the way of a load, the Gear tab by place, the locks and the
+Carry and Drop orders. Not yet: actions needing the hands (§6.3), the
+parts of §7 listed in step 3. Values marked *(tuning)* are first
 guesses. It replaced the old rules (one load within 60 bulk and a weight
 from strength, tools carried apart with no place, counting only in the
 weight).
@@ -227,8 +228,9 @@ the settler lives, so that it takes them back once up.
 
 ### 7.1 Locks
 
-Each item a settler carries has three states, set with two buttons on its row
-in the Gear tab (§7.3); a click on the active one clears it:
+Each item a settler carries, its tools as its load, has three states, set
+with two buttons on its row in the Gear tab (§7.3); a click on the active one
+clears it:
 
 - **Free** (the default): the settler may set it down, store it, hand it in
   as an ingredient.
@@ -243,7 +245,14 @@ in the Gear tab (§7.3); a click on the active one clears it:
   enemy in sight, so that it is ready to strike.
 
 Locks are on an item (this very spear), not on a type; a lock on a type ("a
-spear, the best there is") may come later.
+spear, the best there is") may come later. A settler may keep several locked
+items of one type (two spears), but only one free one.
+
+The items of the load (what the settler hauls, fetches or brings to a site)
+are locked one by one too: the item becomes a kept item, locked, and the
+rest of the load goes on where it was going. It is refused, with the reason
+in the tooltip, when there is no room for it beside what the settler keeps
+locked (eight kept items at most; kept in hand, a free hand).
 
 ### 7.2 Making a settler carry an item
 
@@ -257,26 +266,43 @@ holds it (handing over comes later). It takes the item over from another
 settler's reservation (that job is dropped), and a forbidden item may be
 carried this way.
 
-A **Put down** button on each row of the Gear tab sets the item down where
-the settler stands and clears its lock.
+A **Drop** button on each row of the Gear tab puts the item down where the
+settler stands, clears its lock and **forbids** it, so that the settler does
+not pick it up again at once; the player allows it from its window. Once
+the load is empty, the settler gives up what it carried it for.
+
+For now *(step 3)*: Carry is an action of the selected settler's window that
+arms a tool, and a click on an item gives the order (the right click already
+means "step back"). The settler walks to the item, takes it if it still lies
+there or next to where it stops, keeps it locked on itself and sets down the
+free items that no longer fit; a free kept item of the same type is set
+down (it would be a spare). A refused order leaves the tool armed, without a
+reason shown yet.
 
 ### 7.3 The Gear tab
 
-The Gear tab of a settler lists what it carries place by place, in body order:
-right hand, left hand (or **both hands** when one load takes them),
-under the right arm, under the left arm, shoulders, slung. Each item row: its
-picture, name, quality, condition and weight, the two lock buttons and Put
-down. An empty place is shown faded; a lost or useless arm's places are shown
-as such ("No left arm"), and a hand steadying the shoulders says so. A
-place's tooltip tells what it may take (room, weight). At the top: the
-strength, the weight carried out of W and the walking speed it leaves. The
-tool wear and the tools broken stay.
+The Gear tab of a settler shows what it carries as a **tree**, like the
+gathering zone window. At the top: the strength, the weight carried out of W
+and the walking speed it leaves. Then a branch per place, in body order:
+right hand, left hand (or **both hands** when one load takes them), under
+the right arm, under the left arm, shoulders, slung. A branch holding items
+can be folded and unfolded (unfolded by default; the choice is kept while
+the game runs, for every settler) and shows the weight it holds; under it, a
+row per item, the load's as the kept ones (three branches: three rows): its
+name and weight, the two lock buttons and Drop. Quality and condition are
+not shown there (the item's window has them). An empty place says so,
+dimmed; a lost or useless arm's places are shown as such, and a hand
+steadying the shoulders says so. A last branch, *No place*, lists the items
+that found none. The tools worn out stay. Containers will be branches of
+their own, folded and unfolded the same way (§8).
 
 ## 8. Later
 
-- **Drafting** (`docs/COMBAT.md`): a drafted settler **wields** one weapon it
-  carries; the player picks it among those in its places. Drawing takes the
-  time of §6.4.
+- **Mobilization** (`docs/COMBAT.md` §7, §8): a mobilized settler
+  **wields** one weapon (its only one, its primary weapon, else the best),
+  in the hands it takes; the player can change it, among those it carries or
+  lying within a tile. Drawing takes the time of §6.4. A primary weapon
+  button (two crossed blades) on the weapons' rows of the Gear tab.
 - **Self-defense**: attacked, a settler draws its weapon; what fills the
   hands the weapon needs is dropped at once (not set aside), and picked up
   after the fight.
@@ -310,8 +336,17 @@ tool wear and the tools broken stay.
    - b. actions needing the hands and setting aside (§6.3); a tool kept
      after its work only while a hand is free for it; setting tools down at
      the workstation's tile.
-3. **Locks and Carry** (§7): kept on the settler, kept in hand, the Carry and
-   Put down orders, jobs left when the hands are locked; tests. The Gear tab's
-   buttons, the item window's *Carried by...*, the right click.
+3. *(done)* **Locks and Carry** (§7): kept on the settler, kept in hand
+   (placed first, in the hand of the better arm; while any, the settler only
+   starts hauling jobs), the Carry and Put down orders
+   (`colonist_order_carry()`, `colonist_put_down()`), each item of the load
+   locked or dropped (`colonist_keep_load_item()`,
+   `colonist_drop_load_item()`, `items_load_take()`), dropped items
+   forbidden, locked items never set down (`colonist_make_room()`), several
+   locked items of one type; the Gear tab as a tree of the places, folded
+   or not, with a row per item carried, each with its lock and Drop
+   buttons; the Carry action. Left for later: the item window's
+   *Carried by...*, the reasons of a refused Carry, leaving the current job at
+   once when the hands get locked (only the next jobs are limited).
 4. Later steps: containers, then drafting and self-defense with weapons
    (§8).

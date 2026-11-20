@@ -2619,6 +2619,52 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         render_open_door(renderer, &area);
         break;
     }
+    case RENDER_ICON_CARRY:
+    case RENDER_ICON_PUT_DOWN: { /* A stick, an arrow up from it or down onto the ground. */
+        float cx = rect.x + w * 0.5f, half = w * 0.05f;
+        SDL_Color color = {236, 230, 210, 255};
+        bool up = icon == RENDER_ICON_CARRY;
+        float stick_y = rect.y + h * (up ? 0.32f : 0.72f);
+        batch_bar(renderer, WOOD_COLOR, cx - w * 0.34f, stick_y, cx + w * 0.34f, stick_y,
+                  w * 0.07f);
+        if (!up) {
+            batch_bar(renderer, ALLOW_COLOR, rect.x + w * 0.1f, rect.y + h * 0.84f,
+                      rect.x + w * 0.9f, rect.y + h * 0.84f, half);
+        }
+        float tail = rect.y + h * (up ? 0.86f : 0.12f), tip = rect.y + h * (up ? 0.46f : 0.58f);
+        float back = up ? h * 0.16f : -h * 0.16f;
+        batch_bar(renderer, color, cx, tail, cx, tip, half);
+        batch_bar(renderer, color, cx, tip, cx - w * 0.16f, tip + back, half);
+        batch_bar(renderer, color, cx, tip, cx + w * 0.16f, tip + back, half);
+        batch_flush(renderer);
+        break;
+    }
+    case RENDER_ICON_LOCK: { /* A shackle over a body with a keyhole. */
+        float cx = rect.x + w * 0.5f;
+        SDL_Color color = {236, 230, 210, 255};
+        batch_ring(renderer, color, cx, rect.y + h * 0.4f, w * 0.12f, w * 0.21f);
+        SDL_FRect body = {rect.x + w * 0.22f, rect.y + h * 0.46f, w * 0.56f, h * 0.4f};
+        batch_quad(renderer, color, &body);
+        SDL_Color hole = {70, 58, 46, 255};
+        batch_disc(renderer, hole, cx, rect.y + h * 0.62f, w * 0.07f);
+        batch_bar(renderer, hole, cx, rect.y + h * 0.62f, cx, rect.y + h * 0.76f, w * 0.03f);
+        batch_flush(renderer);
+        break;
+    }
+    case RENDER_ICON_IN_HAND: { /* A fist closed on an upright handle. */
+        SDL_Color skin = {222, 184, 150, 255}, crease = {150, 108, 80, 255};
+        float cx = rect.x + w * 0.5f;
+        batch_bar(renderer, WOOD_COLOR, cx, rect.y + h * 0.06f, cx, rect.y + h * 0.94f, w * 0.08f);
+        SDL_FRect fist = {rect.x + w * 0.24f, rect.y + h * 0.34f, w * 0.52f, h * 0.36f};
+        batch_quad(renderer, skin, &fist);
+        batch_disc(renderer, skin, rect.x + w * 0.24f, rect.y + h * 0.52f, h * 0.18f);
+        for (int i = 1; i < 3; i++) {
+            float y = rect.y + h * (0.34f + 0.12f * (float)i);
+            batch_bar(renderer, crease, cx, y, rect.x + w * 0.76f, y, w * 0.025f);
+        }
+        batch_flush(renderer);
+        break;
+    }
     }
 }
 

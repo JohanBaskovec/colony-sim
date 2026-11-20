@@ -217,6 +217,37 @@ static void test_kept_items(void)
     CHECK_EQ_INT(again.entry_count, arrangement.entry_count);
 }
 
+static void test_items_kept_in_hand(void)
+{
+    CarryBody body = standard_body();
+    CarryArrangement arrangement;
+    /* A spear kept in hand: in the right hand, not under an arm. */
+    ItemType spear = ITEM_THRUSTING_SPEAR;
+    carry_arrange_held(&body, &spear, 1, 1u, ITEM_NONE, 0, &arrangement);
+    CHECK_EQ_INT(kept_in(&arrangement, CARRY_RIGHT_HAND, spear), 1);
+    CHECK_EQ_INT(carry_hands_taken(&arrangement, &spear, 1, 1u), 1);
+    CHECK_EQ_INT(carry_hands_taken(&arrangement, &spear, 1, 0u), 0);
+    /* Beside logs: no armful (it needs both hands), the spear stays in hand. */
+    int logs = carry_arrange_held(&body, &spear, 1, 1u, ITEM_WOOD, 20, &arrangement);
+    CHECK_EQ_INT(kept_in(&arrangement, CARRY_RIGHT_HAND, spear), 1);
+    CHECK_EQ_INT(load_in(&arrangement, CARRY_BOTH_HANDS), 0);
+    CHECK(logs > 0 && logs <= carry_capacity(&body, &spear, 1, ITEM_WOOD));
+    CHECK_EQ_INT(carry_capacity_held(&body, &spear, 1, 1u, ITEM_WOOD), logs);
+    /* The better arm's hand: the left one when the right is weak. */
+    CarryBody hurt = {.weight = 40.0f, .arm = {0.5f, 1.0f}};
+    carry_arrange_held(&hurt, &spear, 1, 1u, ITEM_NONE, 0, &arrangement);
+    CHECK_EQ_INT(kept_in(&arrangement, CARRY_LEFT_HAND, spear), 1);
+    /* Two in hand take both hands; with one arm, the second finds none. */
+    ItemType tools[] = {ITEM_HAND_AXE, ITEM_CHOPPER};
+    carry_arrange_held(&body, tools, 2, 3u, ITEM_NONE, 0, &arrangement);
+    CHECK_EQ_INT(arrangement.left_out, 0);
+    CHECK_EQ_INT(carry_hands_taken(&arrangement, tools, 2, 3u), 2);
+    CarryBody one_arm = {.weight = 40.0f, .arm = {0.0f, 1.0f}};
+    carry_arrange_held(&one_arm, tools, 2, 3u, ITEM_NONE, 0, &arrangement);
+    CHECK(arrangement.left_out != 0);
+    CHECK_EQ_INT(carry_hands_taken(&arrangement, tools, 2, 3u), 1);
+}
+
 static void test_strength(void)
 {
     CarryBody strong = {.weight = 60.0f, .arm = {1.0f, 1.0f}};
@@ -242,6 +273,7 @@ int main(void)
     RUN_TEST(test_places);
     RUN_TEST(test_a_lost_arm);
     RUN_TEST(test_kept_items);
+    RUN_TEST(test_items_kept_in_hand);
     RUN_TEST(test_strength);
     return test_summary();
 }

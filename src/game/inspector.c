@@ -213,6 +213,17 @@ void inspector_move_action(App *app, int slot)
     render_tool_icon(app->renderer, icon, RENDER_ICON_MOVE);
 }
 
+void inspector_carry_action(App *app, int slot)
+{
+    const char *lines[2] = {tr("inspector.carry"), tr("inspector.carry.description")};
+    SDL_FRect icon;
+    bool lit = app->tool == APP_TOOL_CARRY;
+    if (inspector_action(app, slot, lit, &icon, lines, 2)) {
+        app_toggle_tool(app, APP_TOOL_CARRY, 0);
+    }
+    render_tool_icon(app->renderer, icon, RENDER_ICON_CARRY);
+}
+
 void inspector_follow_action(App *app, int slot, FollowKind kind, EntityId id)
 {
     bool lit = app_is_following(app, kind, id);

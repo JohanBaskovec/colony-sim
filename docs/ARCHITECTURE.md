@@ -919,7 +919,15 @@ at least one (a single item over every place is carried on the shoulders or
 dragged); hauling, fetching, building and refuelling go through it. Before
 picking up, `colonist_make_room()` sets down where the colonist stands the
 tools that fit nowhere, then those in the way of the load, never those of
-its job. Above the weight limit, walking speed is multiplied by limit / load
+its job nor those the player locked. Each kept item has a lock
+(`Colonist.tool_locks`, `CarryLock`): kept on the settler, or kept in hand
+(placed first, in a hand: `carry_arrange_held()`); while something is kept
+in hand, only hauling jobs start. The Carry order is a move with an item to
+take on arrival (`Colonist.take_item`, `colonist_order_carry()`), kept
+locked. An item of the load locked becomes a kept item
+(`colonist_keep_load_item()`, taken out with `items_load_take()`); a free
+kept item is one per type, locked ones any number. What the player drops is
+forbidden. Above the weight limit, walking speed is multiplied by limit / load
 (at least `COLONIST_MIN_LOAD_SPEED`). If the destination stops
 accepting the items on the way (filter changed, zone removed), it looks for
 another storage tile, else drops its load. Still to come: actions needing

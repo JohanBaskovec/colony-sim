@@ -743,6 +743,25 @@ bool game_order_single_item_move(Game *game, ItemId id, int dx, int dy, int dz);
  * there was one. */
 bool game_cancel_single_item_move(Game *game, ItemId id);
 
+/* The player's Carry order (docs/CARRYING.md §7.2, colonist_order_carry()):
+ * the colonist fetches the item lying on an explored tile and keeps it,
+ * locked. game_can_carry() tells whether it could keep it (not down, a slot
+ * and a place for it beside its locked items). */
+bool game_order_carry(Game *game, EntityId colonist, ItemId item);
+bool game_can_carry(const Game *game, EntityId colonist, ItemId item);
+
+/* Sets down where the colonist stands the item it keeps at `index` of its
+ * tools, forbidden (colonist_put_down()); locks it (colonist_set_lock()). */
+bool game_put_down(Game *game, EntityId colonist, int index);
+bool game_set_carry_lock(Game *game, EntityId colonist, int index, CarryLock lock);
+
+/* The same for the item at `index` of the colonist's load: kept, locked
+ * (colonist_keep_load_item(); game_can_keep_load_item() tells whether one
+ * could be kept so), or dropped, forbidden (colonist_drop_load_item()). */
+bool game_can_keep_load_item(const Game *game, EntityId colonist, CarryLock lock);
+bool game_keep_load_item(Game *game, EntityId colonist, int index, CarryLock lock);
+bool game_drop_load_item(Game *game, EntityId colonist, int index);
+
 /* Where one item is ordered to go; false when it is not. */
 bool game_single_item_move_at(const Game *game, ItemId id, TilePos *destination);
 

@@ -223,7 +223,12 @@ theme and migration plan).
 - [x] One being per tile: settlers and animals walk through one another (slowed down while crossing; a corridor one tile wide is never blocked) but never stop on the same tile; searches skip the tiles others hold, idle and strolling beings make way; attackers stand around their enemy on tiles of their own (waiting, or for an animal giving up, when there is no room), not diagonally across a wall's corner; animals eat one on the food's tile, the others from beside it (`docs/ARCHITECTURE.md`, *Occupancy*)
 - [ ] One being per tile, found along the way: settlers eat on the tile of the stack they reserved only (a second hungry settler goes for another stack); walks to a known tile (a haul to a stockpile cell, a bed) meet a taken tile on arrival and wait, then give up; one waiting a step short of its tile may stand on someone else's for that time; no pushing nor swapping places between two beings that want each other's tile
 - [ ] Combat, blows on screen: a spear sprite in a fighting settler's hands; marks of their own for kicks, hooves and tusks if the shared ones do not read well
-- [ ] Combat, later: settlers' self-defense when attacked (with the carnivores if they attack settlers, else after them); drafting settlers; hunting (M5 *Wildlife, later*); ranged weapons (throwing spears); line of sight and cover; raids; animal attacks on the colony
+- [x] Weapons and mobilization, designed (`docs/COMBAT.md` §7, §8): many carried items can strike (stones, flakes, hand axes, branches, logs, digging sticks, spears), each with its attack and the hands it takes; a primary weapon per settler (crossed blades in the Gear tab); mobilizing settlers (needs ignored, sleepers woken, not in a break, fleeing or knocked out; ends with a break, flight, knock-out or death), wielding the only, the primary or the best weapon, a *Change weapon* list upward (carried weapons and those lying within a tile), the *Attack* order
+- [ ] Weapons and mobilization, step 1: the weapon table, a weapon's worth, the primary weapon and its button, self-defense with the best weapon carried
+- [ ] Weapons and mobilization, step 2: mobilizing and demobilizing (the state, needs ignored, waking up, the end conditions and their notices, the button and key, the marks on screen)
+- [ ] Weapons and mobilization, step 3: wielding (the weapon in hand, drawing times, the *Change weapon* list with the weapons within a tile)
+- [ ] Weapons and mobilization, step 4: the *Attack* order, striking enemies in reach while mobilized
+- [ ] Combat, later: hunting (M5 *Wildlife, later*); ranged weapons (throwing spears, stones); line of sight and cover; raids; animal attacks on the colony; a fighting knowledge; mobilized settlers chasing on their own
 
 ## M7: Persistence and polish
 
@@ -351,8 +356,9 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 - [x] Step 1: item data (`length_cm`, `form`, `strap` in `ItemDef`, `item_is_long()`; every item has its length and form from `docs/CARRYING.md` §5; no item has a strap yet)
 - [x] Step 2a: places in the core (`core/carry.h`: places, what each takes, the arrangement and capacity as a pure function, tested against `docs/CARRYING.md` §5), each arm's efficiency (`health_arm_efficiency()`), capacities through it for hauling, fetching, building and refuelling, tools set down when they fit nowhere or are in the way of a load (`colonist_make_room()`), the Gear tab by place (read only). Loose food and small stones now come back by the handful (blackberries 60 → 2 a trip, cobbles 40 → 8)
 - [ ] Step 2b: actions needing the hands and setting aside (`docs/CARRYING.md` §6.3), tools kept after work only while a hand is free, set down at the workstation
-- [ ] Step 3: locks and orders: kept on the settler, kept in hand (jobs left when the hands are locked), Carry (from the item's window and a right click with a settler selected) and Put down
-- [ ] Later: drafting and wielding a carried weapon, drawing times by place, self-defense dropping what is in the hands (with M6 *Combat, later*); containers as sub-places; belts and clothes; locks on a type; handing items over; what is carried shown on the sprite
+- [x] Step 3: locks and orders: kept on the settler, kept in hand (only hauling while the hands are locked), Carry (an action of the settler's window, then a click on the item) and Drop (the item forbidden, not picked up again at once), the Gear tab as a tree of the body's places (each folded or unfolded) with a row per item carried (the load's too), each with its lock and Drop buttons, no quality nor condition there, several locked items of one type
+- [ ] Step 3, left for later: Carry from the item's window (*Carried by...*), the reason of a refused Carry, the current job left at once when the hands get locked
+- [ ] Later: wielding a carried weapon, drawing times by place, self-defense dropping what is in the hands (with M6 *Weapons and mobilization*); containers as sub-places; belts and clothes; locks on a type; handing items over; what is carried shown on the sprite
 
 ## Later
 

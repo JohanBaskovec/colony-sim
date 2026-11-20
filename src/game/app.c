@@ -1712,10 +1712,10 @@ static void apply_gather_tool(App *app, float screen_x, float screen_y)
 
 static void drag_held_item(App *app, float screen_x, float screen_y);
 
-/* The item under a point of the screen for the debug item tool: on the level
- * shown, or else on the ground seen below it (the level shown may be open
- * air). ITEM_ID_NONE when there is none. */
-static ItemId debug_item_at(const App *app, float screen_x, float screen_y)
+/* The item under a point of the screen (the debug item tool, Carry): on the
+ * level shown, or else on the ground seen below it (the level shown may be
+ * open air). ITEM_ID_NONE when there is none. */
+static ItemId item_under(const App *app, float screen_x, float screen_y)
 {
     float world_x, world_y;
     camera_screen_to_world(&app->camera, screen_x, screen_y, &world_x, &world_y);
@@ -1767,7 +1767,7 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         camera_screen_to_world(&app->camera, button->x, button->y, &app->drag_world_x,
                                &app->drag_world_y);
         if (app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM)) {
-            app->debug_held = debug_item_at(app, button->x, button->y);
+            app->debug_held = item_under(app, button->x, button->y);
         }
         return;
     }
@@ -1822,6 +1822,15 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
                             seen >= 0 && seen <= z ? seen : z);
         } else {
             app->tool = APP_TOOL_NONE; /* Nobody left to send. */
+        }
+    } else if (app->tool == APP_TOOL_CARRY) {
+        if (app->selected_count == 1) {
+            ItemId id = item_under(app, button->x, button->y);
+            if (id.slot != UINT32_MAX && game_order_carry(&app->game, app->selected[0], id)) {
+                app->tool = APP_TOOL_NONE; /* Done: it is on its way. */
+            } /* Else the tool stays for another try. */
+        } else {
+            app->tool = APP_TOOL_NONE; /* One settler carries. */
         }
     } else if (app->tool == APP_TOOL_MOVE_ITEM) {
         int x, y;
@@ -1898,7 +1907,7 @@ static bool turn_item_under(App *app, float screen_x, float screen_y, float step
     }
     ItemId id = app->debug_held;
     if (id.slot == UINT32_MAX) {
-        id = debug_item_at(app, screen_x, screen_y);
+        id = item_under(app, screen_x, screen_y);
     }
     return game_debug_turn_item(&app->game, id, (int)lroundf(steps * APP_ITEM_TURN_STEP));
 }

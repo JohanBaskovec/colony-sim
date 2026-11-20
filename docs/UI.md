@@ -124,7 +124,7 @@ become tabs:
 
 | Selection           | Summary                                       | Tabs (now; later)                                 | Actions                       |
 |---------------------|-----------------------------------------------|---------------------------------------------------|-------------------------------|
-| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social, Journal; Log | Move, Follow (later: draft, attack) |
+| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social, Journal; Log | Move, Follow, Carry (a click on an item: `docs/CARRYING.md` §7.2; later: draft, attack) |
 | Several colonists   | How many, their names                         | —                                                 | Move                          |
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size, "left alone" when forbidden | Storage (filters)                             | Forbid, build another, delete |
@@ -248,14 +248,20 @@ rows):
   (mastery, 50) to green (100). The tooltip gives the work speed, what was
   learned today, fading and the masters in the colony.
 - **Gear**: the strength and the weight carried without slowing down, the
-  weight carried (and the walking speed left when it is more), then a line
-  per place in body order (right hand, left hand, both hands as the arms,
-  cupped hands or dragging, under each arm, shoulders): the tools with their
-  quality and condition, the load with its count and weight, "empty", "no
-  use of the arm", or the hand steadying the shoulders' load; the tools that
-  found no place; the load's condition and the tools worn out. Later, lock
-  buttons (kept on the settler, kept in hand) and Put down on each item:
-  `docs/CARRYING.md` §7.3.
+  weight carried (and the walking speed left when it is more), then a tree
+  as in the gathering zone window: a branch per place in body order (right
+  hand, left hand, both hands as the arms, cupped hands or dragging, under
+  each arm, shoulders), with a fold button when it holds items (unfolded by
+  default, `App.gear_branch_folded`) and, dimmed, the weight it holds or
+  "empty", "no use of the arm", the hand steadying the shoulders' load; a
+  last branch for the items with no place. Under a branch, a row per item
+  carried, the load's as the kept ones, with its name and weight (no quality
+  nor condition) and three buttons at its right: a padlock (kept on the
+  settler; lit when locked, a click frees it), a hand (kept in hand; a click
+  on the lit one keeps it on the settler only) and Drop (put down,
+  forbidden). Then the tools worn out. A dim line says when something kept
+  in hand limits the settler to hauling (`docs/CARRYING.md` §7.3); later,
+  containers as branches of their own.
 
 Row widgets of windows: `ui_layout_meter()` (label, bar under it),
 `ui_layout_bar_row()` (label left, bar right), `ui_layout_pair()` and
