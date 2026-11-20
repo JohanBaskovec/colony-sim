@@ -46,10 +46,10 @@ Tick items as they land and add newly discovered tasks.
 - [x] Skills also change work speed: ×0.5 at level 0, ×1 at level 10, ×1.5 at level 20 (shown in the colonist inspector)
 - [x] Haul more than one stack per trip: after a pickup, a hauler with room left collects nearby matching stacks bound for the same storage tile (one type and grade per load)
 - [x] Haul towards construction sites (M3)
-- [ ] Loads of mixed items once containers exist
+- [ ] Loads of mixed items once containers exist (with carrying in places, `docs/CARRYING.md`, a load of one type beside kept items first)
 - [x] Strength (1 to 20, rolled at creation, lower past 40): sets the weight a colonist carries without slowing down (22 to 60 kg, 40 kg at 10); shown in the colonist inspector
 - [x] Carrying capacity also from health (M6): the use of the hands sets the weight carried without slowing down
-- [ ] Containers (baskets, sledges) and worn equipment adding bulk and weight, once they can be made
+- [ ] Containers (baskets, sledges) and worn equipment adding bulk and weight, once they can be made (places of their own holding sub-places, `docs/CARRYING.md` §8)
 
 ## M3: Building
 
@@ -343,6 +343,14 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 - [ ] Haulers carry perishable food before stones and wood (with every stone lying about haulable, a stockpile taking everything fills with stones while the food waits)
 - [ ] Gathering search cheaper when a zone's jobs are sparse (64 settlers gathering: about 25 % slower since litter is no longer gathered, the search going farther for grass and food; with the tile light (S5b), grass growing less in the shade, `bench_simulation 64 4 1` went from 75 to 106 µs a tick, nearly all of it more of the same searches: `covered_tile_holds()`, `search`, `gather_tile_job_in()`)
 - [ ] Hazelnuts lying on the ground as items too (still a map layer: gathered by zones, eaten where they lie, rotting on average)
+
+## Carrying by hand (designed, docs/CARRYING.md)
+
+- [x] Design: items carried in places (right and left hand, both hands as an armful, cupped hands or dragging, under each arm, shoulders, slung), what goes where from each item's weight, room, length and form (rigid, bundle, loose, limp), limits from strength and each arm's health, steadying a shoulder load, tools and weapons in places like anything, actions needing the hands and items set aside, the player's locks (kept on the settler, kept in hand), the Carry and Put down orders, the Gear tab by place; capacities of every current item (`docs/CARRYING.md` §5)
+- [ ] Step 1: item data (`length`, `form`, `strap` in `ItemDef`)
+- [ ] Step 2: places in the core (replacing the load and the tools' array), placing as a pure function, hauling, fetching, gathering and building through it, tools set down when the hands are needed, actions needing hands; the Gear tab by place (read only); the hauling throughput and the food stock benchmarked before and after (loose food and stones come back by the handful until containers)
+- [ ] Step 3: locks and orders: kept on the settler, kept in hand (jobs left when the hands are locked), Carry (from the item's window and a right click with a settler selected) and Put down
+- [ ] Later: drafting and wielding a carried weapon, drawing times by place, self-defense dropping what is in the hands (with M6 *Combat, later*); containers as sub-places; belts and clothes; locks on a type; handing items over; what is carried shown on the sprite
 
 ## Later
 

@@ -907,6 +907,12 @@ with huge ones and equipment. If the destination stops
 accepting the items on the way (filter changed, zone removed), it looks for
 another storage tile, else drops its load.
 
+These carrying rules are to be replaced by carrying in places (hands, both
+arms, under an arm, shoulders, slung) chosen from each item's weight, room,
+length and form and from the arms' health, with tools in those places too,
+and the player's locks and Carry order: design in `docs/CARRYING.md`, not
+implemented yet.
+
 **Item moves** (`core/item_move.h`): the player can order the items of a
 tile carried to any tile a settler can stand on (`game_order_item_move()`,
 from the *Carry elsewhere* action of the tile's items window), or a single

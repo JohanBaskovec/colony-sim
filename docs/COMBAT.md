@@ -150,3 +150,9 @@ cornered, takes it).
 - Settlers' mobilization (drafting), hunting orders, ranged weapons
   (throwing spears), line of sight and cover, raids, armor, morale effects of
   seeing a settler hurt, wounded animals fleeing to heal.
+- Weapons come from what a settler carries (`docs/CARRYING.md`): a drafted
+  settler wields one weapon of its places, drawing it takes a time by place
+  (nothing in hand, half a second from under an arm or the shoulders, two
+  seconds slung), and a settler attacked drops what fills the hands its
+  weapon needs. Today a settler fights with a thrusting spear as soon as it
+  carries one, as a tool.
