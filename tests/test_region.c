@@ -139,7 +139,7 @@ static void test_regions_notice_map_changes(void)
 
     /* Plants never block: they do not change the topology. */
     uint32_t revision = map.topology_revision;
-    map.plants[map_index(&map, 3, 3, 0)].type = PLANT_TREE;
+    map.plants[map_index(&map, 3, 3, 0)].type = PLANT_OAK;
     map.plants[map_index(&map, 3, 3, 0)].growth = 1.0f;
     CHECK(map_is_passable(&map, 3, 3, 0));
     CHECK_EQ_UINT(map.topology_revision, revision);

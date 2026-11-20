@@ -331,7 +331,7 @@ static void test_instant_fell_and_mine(void)
     REQUIRE(init_flat_game(&game));
     REQUIRE(spawn_worker(&game, 30, 30) != NULL);
     Map *map = &game.map;
-    map->plants[map_index(map, 10, 10, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    map->plants[map_index(map, 10, 10, 0)] = (Plant){.type = PLANT_OAK, .growth = 1.0f};
     tree_build(map, 10, 10, 0);
     map_set_rock(map, 20, 20, 0, ROCK_GRANITE);
     map_set_rock(map, 22, 20, 0, ROCK_GRANITE);
@@ -358,11 +358,11 @@ static void test_instant_fell_and_mine(void)
     CHECK(map->rock[map_index(map, 10, 10, 1)] == ROCK_NONE);
     CHECK(map->rock[map_index(map, 20, 20, 0)] == ROCK_NONE);
     CHECK(map->rock[map_index(map, 22, 20, 0)] == ROCK_NONE);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
-    CHECK(items_total(&game) > before + plant_def(PLANT_TREE)->cut_yield); /* And stone. */
+    CHECK_EQ_INT((int)game.items.totals[ITEM_WOOD], plant_def(PLANT_OAK)->cut_yield);
+    CHECK(items_total(&game) > before + plant_def(PLANT_OAK)->cut_yield); /* And stone. */
 
     /* An order whose tree is gone goes. */
-    map->plants[map_index(map, 14, 14, 0)] = (Plant){.type = PLANT_TREE, .growth = 0.3f};
+    map->plants[map_index(map, 14, 14, 0)] = (Plant){.type = PLANT_OAK, .growth = 0.3f};
     game_set_instant_fell_and_mine(&game, false);
     REQUIRE(game_designate_rect(&game, 14, 14, 14, 14, 0, DESIGNATION_CHOP) == 1);
     map->plants[map_index(map, 14, 14, 0)] = (Plant){0};

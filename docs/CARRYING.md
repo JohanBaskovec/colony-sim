@@ -126,7 +126,9 @@ rule (60 bulk and 40 kg). Values to check against reality *(tuning)*:
 | Blackberries | 0.3 kg | – | loose | 60 | 2 | cupped hands |
 | Bilberries | 0.3 kg | – | loose | 120 | 4 | cupped hands |
 | Wild strawberries, rose hips, hazelnuts | 0.1–0.2 kg | – | loose | 149 | 5 | cupped hands |
+| Chestnuts | 0.15 kg | – | loose | – | 4 | cupped hands |
 | Mushrooms | 0.1 kg | 8 cm | rigid | 120 | 24 | in the arms |
+| Wild apples, wild pears | 0.2 kg | 6–8 cm | rigid | – | 17 | in the arms |
 | Wild carrots, cattail rhizomes, roasted | 0.25 kg | 20–30 cm | rigid | 60 | 12 | in the arms |
 | Flake | 0.03 kg | 6 cm | rigid | 299 | 60 | in the arms |
 | Chopper | 1 kg | 12 cm | rigid | 30 | 6 | in the arms |

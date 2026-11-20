@@ -69,7 +69,7 @@ static void test_placing_and_removing(void)
     CHECK(!workstation_can_place(&stations, &map, 6, 6, 0)); /* Water. */
     CHECK(!workstation_can_place(&stations, &map, -1, 0, 0));
     /* Not on a tree (grass and shrubs are cleared on the construction site). */
-    map.plants[map_index(&map, 8, 8, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    map.plants[map_index(&map, 8, 8, 0)] = (Plant){.type = PLANT_OAK, .growth = 1.0f};
     map.plants[map_index(&map, 9, 8, 0)] = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
     CHECK(!workstation_can_place(&stations, &map, 8, 8, 0));
     CHECK(workstation_can_place(&stations, &map, 9, 8, 0));

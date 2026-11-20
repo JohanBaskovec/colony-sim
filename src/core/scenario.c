@@ -92,7 +92,7 @@ static bool free_tile(const Game *game, int x, int y, int z, int radius, bool st
                 int tx = x + dx, ty = y + dy;
                 if ((dx != -ring && dx != ring && dy != -ring && dy != ring) ||
                     !map_is_passable(map, tx, ty, z) ||
-                    map->plants[map_index(map, tx, ty, z)].type == PLANT_TREE ||
+                    plant_is_tree(map->plants[map_index(map, tx, ty, z)].type) ||
                     map_structure(map, tx, ty, z) != STRUCTURE_NONE ||
                     workstation_at(&game->workstations, tx, ty, z) >= 0 ||
                     items_get(&game->items, tx, ty, z).type != ITEM_NONE ||

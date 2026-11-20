@@ -458,9 +458,11 @@ on.
   the branches of the leafy one without the leaves, on dark earth for a
   dense crown, on nothing for the thin ones. In winter it is drawn with the
   leaves fading over it as the crown comes into leaf (alpha = leaf share); the
-  young trees' sprites go browner.
-- **Not done.** Evergreens (a per-tree state: the foliage tile would have to
-  know its tree); leaf colours in autumn; leaves falling as litter.
+  young trees' sprites go browner. The leaves are tinted by the species of
+  their tree (`Map.tree_species`, `docs/TREES.md`) and turn to its autumn
+  colour (beech copper, birch yellow, oak brown) as they fall.
+- **Not done.** Evergreens (the foliage tile knows its tree's species now,
+  but every tree meets the same `Map.bare`); leaves falling as litter.
 
 ## 13. Spread
 

@@ -19,6 +19,9 @@
  * - blackberries: a handful of about 300 g (half a liter, ~190 kcal: ripe
  *   wild fruit, generously counted);
  * - hazelnuts: 100 g in their shells (~285 kcal), which keep for months;
+ * - sweet chestnuts: a handful of 150 g in their shells (~250 kcal), a month;
+ * - wild apples and pears: a few small ones, 200 g (~100 and ~110 kcal),
+ *   sour and hard: apples keep a month, pears two weeks;
  * - mushrooms: 100 g of caps (~30 kcal), more taste than food;
  * - wild garlic, nettles, plantain: a bunch of about 200 g of leaves or young
  *   shoots (~60 kcal for garlic and nettles, ~50 for plantain);
@@ -168,6 +171,16 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_ROSE_HIPS] = {DEF("rose_hips", N_("item.rose_hips"), ITEM_CATEGORY_FOOD, 0.15f, 0.4f,
                             0.06f, 50, true, true),
                         .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 60.0f},
+    [ITEM_CHESTNUTS] = {DEF("chestnuts", N_("item.chestnuts"), ITEM_CATEGORY_FOOD, 0.15f, 0.5f,
+                            0.065f, 60, true, true),
+                        .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 30.0f},
+    /* A few small fruit, firm enough to carry in the arms as mushrooms are. */
+    [ITEM_APPLES] = {DEF("apples", N_("item.apples"), ITEM_CATEGORY_FOOD, 0.2f, 0.7f, 0.025f, 40,
+                         true, true),
+                     .length_cm = 6, .form = ITEM_FORM_RIGID, .rot_days = 30.0f},
+    [ITEM_PEARS] = {DEF("pears", N_("item.pears"), ITEM_CATEGORY_FOOD, 0.2f, 0.7f, 0.028f, 30, true,
+                        true),
+                    .length_cm = 8, .form = ITEM_FORM_RIGID, .rot_days = 14.0f},
     [ITEM_MOSS] = {DEF("moss", N_("item.moss"), ITEM_CATEGORY_RESOURCES, 0.4f, 20.0f, 0.0f, 10,
                        false, true),
                    .length_cm = 20, .form = ITEM_FORM_BUNDLE},

@@ -55,7 +55,7 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                                    PLANT_BIT(PLANT_MUSHROOMS) | PLANT_BIT(PLANT_BILBERRY) |
                                    PLANT_BIT(PLANT_WILD_STRAWBERRY) | PLANT_BIT(PLANT_DOG_ROSE) |
                                    PLANT_BIT(PLANT_WOOD_SORREL),
-                         .eats_nuts = true,
+                         .eats_fallen = true,
                          .bite_items = 2,
                          .food_value = 1.5f,
                          .body = BODY_QUADRUPED,
@@ -93,7 +93,7 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                          .plants = PLANT_BIT(PLANT_BRAMBLE) | PLANT_BIT(PLANT_PLANTAIN) |
                                    PLANT_BIT(PLANT_NETTLE) | PLANT_BIT(PLANT_MUSHROOMS) |
                                    PLANT_BIT(PLANT_BILBERRY) | PLANT_BIT(PLANT_DOG_ROSE),
-                         .eats_nuts = true,
+                         .eats_fallen = true,
                          .bite_items = 3,
                          .food_value = 0.5f,
                          .body = BODY_QUADRUPED,
@@ -135,7 +135,7 @@ static const AnimalDef ANIMAL_DEFS[ANIMAL_SPECIES_COUNT] = {
                    PLANT_BIT(PLANT_WILD_STRAWBERRY) | PLANT_BIT(PLANT_DOG_ROSE) |
                    PLANT_BIT(PLANT_WOOD_SORREL),
          .digs = true,
-         .eats_nuts = true,
+         .eats_fallen = true,
          .bite_items = 3,
          .food_value = 0.8f,
          .body = BODY_QUADRUPED,
@@ -522,6 +522,19 @@ void animal_position(const Animal *animal, float *x, float *y)
 
 /* ---- What they eat, what they fear ---------------------------------------- */
 
+/* The nuts or fruit fallen from the trees lying on a tile (the first kind
+ * found), ITEM_NONE when there are none. */
+static ItemType fallen_food_at(const Map *map, int x, int y, int z)
+{
+    static const ItemType FALLEN[] = {ITEM_HAZELNUTS, ITEM_CHESTNUTS, ITEM_APPLES, ITEM_PEARS};
+    for (size_t i = 0; i < sizeof(FALLEN) / sizeof(FALLEN[0]); i++) {
+        if (map_litter(map, x, y, z, FALLEN[i]) > 0) {
+            return FALLEN[i];
+        }
+    }
+    return ITEM_NONE;
+}
+
 AnimalFood animal_food_at(AnimalSpecies species, const Map *map, int x, int y, int z)
 {
     const AnimalDef *def = animal_def(species);
@@ -536,8 +549,8 @@ AnimalFood animal_food_at(AnimalSpecies species, const Map *map, int x, int y, i
         (def->digs || !food->dug) && plant_has_food(plant)) {
         return ANIMAL_FOOD_PLANT;
     }
-    if (def->eats_nuts && map_litter(map, x, y, z, ITEM_HAZELNUTS) > 0) {
-        return ANIMAL_FOOD_NUTS;
+    if (def->eats_fallen && fallen_food_at(map, x, y, z) != ITEM_NONE) {
+        return ANIMAL_FOOD_FALLEN;
     }
     if (plant_def((PlantType)plant->type)->grazed && def->graze_value > 0.0f &&
         plant->growth >= def->graze_min_growth) {
@@ -810,7 +823,7 @@ static bool try_forage(Animal *animal, const AnimalDef *def, const AnimalContext
     Seeker seeker = {context, (AnimalSpecies)animal->species, true, def->flight_distance, false,
                      {0}};
     TilePos found;
-    bool ok = (def->plants != 0 || def->eats_nuts) &&
+    bool ok = (def->plants != 0 || def->eats_fallen) &&
               find_nearest(context, tile_of(animal), is_food, &seeker, ANIMAL_TREAT_SEARCH_MAX_COST,
                            &animal->path, &found);
     if (!ok) {
@@ -1250,9 +1263,12 @@ static void bite(Animal *animal, const AnimalDef *def, Map *map, TilePos at, Ani
         }
         break;
     }
-    case ANIMAL_FOOD_NUTS: {
-        int taken = map_take_litter_count(map, at.x, at.y, at.z, ITEM_HAZELNUTS, def->bite_items);
-        gain = (float)taken * item_def(ITEM_HAZELNUTS)->nutrition * def->food_value;
+    case ANIMAL_FOOD_FALLEN: {
+        ItemType fallen = fallen_food_at(map, at.x, at.y, at.z);
+        int taken = fallen != ITEM_NONE
+                        ? map_take_litter_count(map, at.x, at.y, at.z, fallen, def->bite_items)
+                        : 0;
+        gain = taken > 0 ? (float)taken * item_def(fallen)->nutrition * def->food_value : 0.0f;
         break;
     }
     case ANIMAL_FOOD_GRASS: {

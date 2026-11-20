@@ -1282,7 +1282,13 @@ float gather_clear_work(const Map *map, int x, int y, int z)
     }
     switch ((PlantType)plant->type) {
     case PLANT_NONE:
-    case PLANT_TREE:
+    case PLANT_OAK:
+    case PLANT_BEECH:
+    case PLANT_CHESTNUT:
+    case PLANT_ASH:
+    case PLANT_BIRCH:
+    case PLANT_WILD_APPLE:
+    case PLANT_WILD_PEAR:
     case PLANT_HAZEL:
     case PLANT_COUNT: return 0.0f;
     case PLANT_BRAMBLE:

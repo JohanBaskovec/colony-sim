@@ -63,6 +63,9 @@ static void test_the_table_of_capacities(void)
     CHECK_EQ_INT(capacity(ITEM_HAZELNUTS), 5);
     CHECK_EQ_INT(capacity(ITEM_WILD_STRAWBERRIES), 5);
     CHECK_EQ_INT(capacity(ITEM_ROSE_HIPS), 5);
+    CHECK_EQ_INT(capacity(ITEM_CHESTNUTS), 4);
+    CHECK_EQ_INT(capacity(ITEM_APPLES), 17);
+    CHECK_EQ_INT(capacity(ITEM_PEARS), 17);
     CHECK_EQ_INT(capacity(ITEM_MUSHROOMS), 24);
     CHECK_EQ_INT(capacity(ITEM_WILD_CARROTS), 12);
     CHECK_EQ_INT(capacity(ITEM_FLAKE), 60);

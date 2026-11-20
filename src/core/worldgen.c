@@ -194,10 +194,41 @@ static float expected_moisture(float region, int water_distance)
     return fmaxf(0.45f + 0.6f * region, soil_bank_moisture(water_distance));
 }
 
+/* How much of the trees of a site are of each species (docs/TREES.md §4,
+ * tuning), from the forest share, the edge and clearing shares and the
+ * ground: weights, about oak 30, beech 25, birch 15, ash 12, chestnut 8 and
+ * 5 for each wild fruit tree on soil in an ordinary wood. The species that
+ * the ground cannot hold still count in the sum: poor ground has fewer
+ * trees. */
+static void tree_species_weights(Terrain terrain, float forest, float edge, float clearing,
+                                 float weights[PLANT_TREE_LAST - PLANT_TREE_FIRST])
+{
+    bool poor = terrain == TERRAIN_SAND || terrain == TERRAIN_GRAVEL;
+    bool rich = terrain == TERRAIN_RICH_SOIL;
+    float open = 1.0f - forest;
+    float rim = edge + clearing; /* Edges and clearings. */
+    float *w = weights - PLANT_TREE_FIRST;
+    /* Everywhere, most in open woods and at edges; the lone trees of the
+     * meadows. */
+    w[PLANT_OAK] = 30.0f * (0.7f + 0.6f * open + 0.4f * edge) * (poor ? 0.4f : 1.0f);
+    /* The heart of woods, on soil that is not wet (its water response). */
+    w[PLANT_BEECH] = 25.0f * (0.2f + 1.6f * forest * forest) * (1.0f - 0.7f * clearing);
+    /* Pioneer of poor and open ground. */
+    w[PLANT_BIRCH] = 15.0f * (0.4f + 0.3f * open + 1.0f * rim) * (poor ? 4.0f : 1.0f);
+    /* Rich and moist ground (its water response). */
+    w[PLANT_ASH] = 12.0f * (rich ? 2.0f : 0.8f);
+    /* Drained, lighter ground. */
+    w[PLANT_CHESTNUT] = 8.0f * (poor ? 2.0f : 1.0f) * (0.6f + 0.6f * forest);
+    /* Rare and alone, at edges and in clearings. */
+    w[PLANT_WILD_APPLE] = 5.0f * (0.3f + 0.4f * open + 2.0f * rim) * (poor ? 0.5f : 1.0f);
+    w[PLANT_WILD_PEAR] = 5.0f * (0.3f + 0.4f * open + 2.0f * rim) * (poor ? 0.5f : 1.0f);
+}
+
 /* The first pass: trees (mostly scattered, with dense forests where the
- * forest noise is high and glades where it is not) and hazels (at the edges of
- * the woods). Everything that grows under them is placed afterwards, once
- * their crowns are there to cast their shade (place_understory()). */
+ * forest noise is high and glades where it is not), of a species the site
+ * suits (tree_species_weights()), and hazels (at the edges of the woods).
+ * Everything that grows under them is placed afterwards, once their crowns
+ * are there to cast their shade (place_understory()). */
 static void place_woody(Map *map, size_t index, Rng *rng, const WorldGenParams *params,
                         float moisture, float ground_water, float forest, float glade)
 {
@@ -209,11 +240,20 @@ static void place_woody(Map *map, size_t index, Rng *rng, const WorldGenParams *
     float forest_factor = forest_share(forest);
     float edge = forest_factor > 0.0f ? 1.0f - fabsf(2.0f * forest_factor - 1.0f) : 0.0f;
     float clearing = glade_share(glade) * forest_factor;
-    const PlantChance chances[] = {
-        {PLANT_TREE, params->tree_density * (0.04f + 0.9f * forest_factor) *
-                         (0.5f + 0.5f * moisture) * (1.0f - GLADE_TREE_LOSS * clearing)},
-        {PLANT_HAZEL, 0.006f + 0.05f * edge + 0.03f * clearing},
-    };
+    float trees = params->tree_density * (0.04f + 0.9f * forest_factor) * (0.5f + 0.5f * moisture) *
+                  (1.0f - GLADE_TREE_LOSS * clearing);
+    enum { SPECIES = PLANT_TREE_LAST - PLANT_TREE_FIRST }; /* The hazel apart. */
+    float weights[SPECIES];
+    tree_species_weights(terrain, forest_factor, edge, clearing, weights);
+    float total = 0.0f;
+    for (int i = 0; i < SPECIES; i++) {
+        total += weights[i];
+    }
+    PlantChance chances[SPECIES + 1];
+    for (int i = 0; i < SPECIES; i++) {
+        chances[i] = (PlantChance){(PlantType)(PLANT_TREE_FIRST + i), trees * weights[i] / total};
+    }
+    chances[SPECIES] = (PlantChance){PLANT_HAZEL, 0.006f + 0.05f * edge + 0.03f * clearing};
     Plant *plant = &map->plants[index];
     float sum = 0.0f;
     for (size_t i = 0; i < sizeof(chances) / sizeof(chances[0]); i++) {
@@ -566,21 +606,39 @@ static bool tree_on(const Map *map, int x, int y, int z)
     return map_in_bounds(map, x, y, z) && plant_is_tree(map->plants[map_index(map, x, y, z)].type);
 }
 
+/* Whether (x, y, z) is under the trunk of an old or ancient tree, or its
+ * foot. */
+static bool wide_trunk_on(const Map *map, int x, int y, int z)
+{
+    for (int dy = 0; dy < TREE_MAX_SIZE; dy++) {
+        for (int dx = 0; dx < TREE_MAX_SIZE; dx++) {
+            int size = map_in_bounds(map, x - dx, y - dy, z)
+                           ? tree_size(&map->plants[map_index(map, x - dx, y - dy, z)])
+                           : 0;
+            if (size > 1 && size > dx && size > dy) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /* Whether a trunk of `size` with its foot on (x, y, z) has room: flat,
- * fertile ground under it, no other tree on it nor around it. */
-static bool wide_trunk_fits(const Map *map, int x, int y, int z, int size)
+ * fertile ground under it, no other old or ancient tree on it nor around it
+ * (the younger trees there give way, see place_tree_volumes()). */
+static bool wide_trunk_fits(const Map *map, int x, int y, int z, int size, PlantType type)
 {
     for (int dy = -1; dy <= size; dy++) {
         for (int dx = -1; dx <= size; dx++) {
             int tx = x + dx, ty = y + dy;
-            if ((dx != 0 || dy != 0) && tree_on(map, tx, ty, z)) {
+            if ((dx != 0 || dy != 0) && wide_trunk_on(map, tx, ty, z)) {
                 return false;
             }
             bool under = dx >= 0 && dy >= 0 && dx < size && dy < size;
             if (under && (!map_in_bounds(map, tx, ty, z) || !map_is_buildable(map, tx, ty, z) ||
                           slope_leads_to(map, tx, ty, z) ||
                           terrain_def((Terrain)map->terrain[map_index(map, tx, ty, z)])->fertility <
-                              plant_def(PLANT_TREE)->min_fertility)) {
+                              plant_def(type)->min_fertility)) {
                 return false;
             }
         }
@@ -593,9 +651,11 @@ static bool wide_trunk_fits(const Map *map, int x, int y, int z, int size)
  * one's (the 8 neighbors), so that trunks never touch and woods stay
  * passable: of two, the first in reading order stays, the other gives way
  * to grass; nor on a slope or where a slope leads up. A few grown trees
- * are old or ancient, where they have room (the plants under their trunk
- * go). Then every tree is written into the map;
- * one whose trunk has no room (under an overhang) stays a sapling.
+ * of the species that can be are old or ancient, where they have room: the
+ * plants under their trunk go, and the trees around it give way. Then every
+ * tree is written into the map, the old and ancient ones first (the crowns
+ * of their neighbors do not take their room); one whose trunk has no room
+ * (under an overhang) stays a sapling.
  */
 static void place_tree_volumes(Map *map, Rng *rng)
 {
@@ -617,36 +677,50 @@ static void place_tree_volumes(Map *map, Rng *rng)
                 int size = roll < ANCIENT_TREE_CHANCE                     ? 3
                            : roll < ANCIENT_TREE_CHANCE + OLD_TREE_CHANCE ? 2
                                                                           : 1;
-                if (size == 1 || plant->type != PLANT_TREE ||
-                    plant_growth_stage(plant) < PLANT_GROWTH_STAGES - 1 ||
-                    !wide_trunk_fits(map, x, y, z, size)) {
+                /* Only some species grow old (docs/TREES.md §3). */
+                const TreeDef *def = tree_def((PlantType)plant->type);
+                if (size == 3 && !def->can_be_ancient) {
+                    size = def->can_be_old ? 2 : 1;
+                } else if (size == 2 && !def->can_be_old) {
+                    size = 1;
+                }
+                if (size == 1 || plant_growth_stage(plant) < PLANT_GROWTH_STAGES - 1 ||
+                    !wide_trunk_fits(map, x, y, z, size, (PlantType)plant->type)) {
                     continue;
                 }
-                for (int dy = 0; dy < size; dy++) {
-                    for (int dx = 0; dx < size; dx++) {
-                        memset(&map->plants[map_index(map, x + dx, y + dy, z)], 0, sizeof(Plant));
+                PlantType type = (PlantType)plant->type;
+                for (int dy = -1; dy <= size; dy++) {
+                    for (int dx = -1; dx <= size; dx++) {
+                        bool under = dx >= 0 && dy >= 0 && dx < size && dy < size;
+                        if (under || tree_on(map, x + dx, y + dy, z)) {
+                            memset(&map->plants[map_index(map, x + dx, y + dy, z)], 0,
+                                   sizeof(Plant));
+                        }
                     }
                 }
-                *plant = (Plant){.type = PLANT_TREE, .size = (uint8_t)size, .growth = 1.0f};
+                *plant = (Plant){.type = (uint8_t)type, .size = (uint8_t)size, .growth = 1.0f};
                 plant_settle(plant, GAME_START_DAY);
             }
         }
     }
-    for (int z = 0; z <= map->top_ground_level; z++) {
-        for (int y = 0; y < map->height; y++) {
-            for (int x = 0; x < map->width; x++) {
-                Plant *plant = &map->plants[map_index(map, x, y, z)];
-                TreeShape shape;
-                if (!tree_shape(plant, x, y, z, &shape)) {
-                    continue;
-                }
-                if (tree_room_to_grow(map, x, y, z, &shape)) {
-                    tree_build(map, x, y, z);
-                } else {
-                    plant->size = 0; /* A sapling, the last stage before a trunk. */
-                    plant->growth =
-                        ((float)TREE_VOLUME_MIN_STAGE - 0.5f) / (float)PLANT_GROWTH_STAGES;
-                    plant_settle(plant, GAME_START_DAY);
+    for (int pass = 0; pass < 2; pass++) { /* The old and ancient trees first. */
+        for (int z = 0; z <= map->top_ground_level; z++) {
+            for (int y = 0; y < map->height; y++) {
+                for (int x = 0; x < map->width; x++) {
+                    Plant *plant = &map->plants[map_index(map, x, y, z)];
+                    TreeShape shape;
+                    if ((tree_size(plant) > 1) != (pass == 0) ||
+                        !tree_shape(plant, x, y, z, &shape)) {
+                        continue;
+                    }
+                    if (tree_room_to_grow(map, x, y, z, &shape)) {
+                        tree_build(map, x, y, z);
+                    } else {
+                        plant->size = 0; /* A sapling, the last stage before a trunk. */
+                        plant->growth =
+                            ((float)TREE_VOLUME_MIN_STAGE - 0.5f) / (float)PLANT_GROWTH_STAGES;
+                        plant_settle(plant, GAME_START_DAY);
+                    }
                 }
             }
         }

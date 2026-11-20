@@ -422,7 +422,7 @@ static void test_orders_on_forbidden_things_wait(void)
     CHECK_EQ_INT(map_structure(map, 12, 10, 0), STRUCTURE_NONE);
 
     /* A tree forbidden from a tile of its trunk: the cheat leaves it standing. */
-    map->plants[map_index(map, 30, 30, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    map->plants[map_index(map, 30, 30, 0)] = (Plant){.type = PLANT_OAK, .growth = 1.0f};
     tree_build(map, 30, 30, 0);
     REQUIRE(map->rock[map_index(map, 30, 30, 1)] == ROCK_WOOD);
     CHECK(game_can_forbid(&game, 30, 30, 1, FORBID_PLANT));
@@ -432,7 +432,7 @@ static void test_orders_on_forbidden_things_wait(void)
     REQUIRE(game_designate_rect(&game, 30, 30, 30, 30, 0, DESIGNATION_CHOP) == 1);
     game_set_instant_fell_and_mine(&game, true);
     run_ticks(&game, 2);
-    CHECK_EQ_INT(map->plants[map_index(map, 30, 30, 0)].type, PLANT_TREE);
+    CHECK_EQ_INT(map->plants[map_index(map, 30, 30, 0)].type, PLANT_OAK);
     CHECK_EQ_INT(designation_get(&game.designations, 30, 30, 0), DESIGNATION_CHOP);
     CHECK(game_set_forbidden(&game, 30, 30, 0, FORBID_PLANT, false));
     run_ticks(&game, 1);

@@ -75,6 +75,10 @@ typedef enum ItemType {
     ITEM_WILD_STRAWBERRIES,
     ITEM_BILBERRIES,
     ITEM_ROSE_HIPS,
+    /* Fallen from the trees (docs/TREES.md): sweet chestnuts, wild apples and pears. */
+    ITEM_CHESTNUTS,
+    ITEM_APPLES,
+    ITEM_PEARS,
     /* Fibres cut from low plants: bedding, thatch and fuel (docs/PLANTS.md §10). */
     ITEM_MOSS,
     ITEM_BRACKEN,

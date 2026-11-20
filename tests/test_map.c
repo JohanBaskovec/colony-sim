@@ -208,8 +208,8 @@ static void test_passability_and_move_cost(void)
     map.rock[map_index(&map, 3, 3, 0)] = ROCK_GRANITE;
     CHECK(!map_is_passable(&map, 3, 3, 0));
 
-    map.plants[map_index(&map, 4, 4, 0)].type = PLANT_TREE;
-    CHECK_NEAR(map_move_cost(&map, 4, 4, 0), plant_def(PLANT_TREE)->move_cost, 1e-6);
+    map.plants[map_index(&map, 4, 4, 0)].type = PLANT_OAK;
+    CHECK_NEAR(map_move_cost(&map, 4, 4, 0), plant_def(PLANT_OAK)->move_cost, 1e-6);
 
     map.terrain[map_index(&map, 5, 5, 0)] = TERRAIN_SHALLOW_WATER;
     CHECK(map_move_cost(&map, 5, 5, 0) > 1.0f);
@@ -246,12 +246,15 @@ static void test_count_plants(void)
 {
     Map map;
     REQUIRE(map_init(&map, 16, 16, 1));
-    map.plants[0].type = PLANT_TREE;
-    map.plants[1].type = PLANT_TREE;
+    map.plants[0].type = PLANT_OAK;
+    map.plants[1].type = PLANT_OAK;
     map.plants[2].type = PLANT_BRAMBLE;
-    CHECK_EQ_UINT(map_count_plants(&map, PLANT_TREE), 2);
+    CHECK_EQ_UINT(map_count_plants(&map, PLANT_OAK), 2);
     CHECK_EQ_UINT(map_count_plants(&map, PLANT_BRAMBLE), 1);
     CHECK_EQ_UINT(map_count_plants(&map, PLANT_NONE), 253);
+    map.plants[3].type = PLANT_BIRCH;
+    map.plants[4].type = PLANT_HAZEL;
+    CHECK_EQ_UINT(map_count_trees(&map), 4); /* Every species, hazels too. */
     map_free(&map);
 }
 
@@ -405,7 +408,7 @@ static void test_edible_plants(void)
     CHECK(!map_has_edible_plant(&map, 7, 6, 0));
 
     Plant *tree = &map.plants[map_index(&map, 4, 4, 0)];
-    tree->type = PLANT_TREE;
+    tree->type = PLANT_OAK;
     tree->growth = 1.0f;
     CHECK(!map_has_edible_plant(&map, 4, 4, 0));
     CHECK(!map_has_edible_plant(&map, 5, 5, 0));
@@ -442,7 +445,7 @@ static void test_water_and_drinking_spots(void)
 
 static void test_plant_growth_stages_and_fruit(void)
 {
-    Plant plant = {.type = PLANT_TREE, .growth = 0.0f};
+    Plant plant = {.type = PLANT_OAK, .growth = 0.0f};
     CHECK_EQ_INT(plant_growth_stage(&plant), 0);
     plant.growth = 0.19f;
     CHECK_EQ_INT(plant_growth_stage(&plant), 0);
@@ -568,12 +571,12 @@ static void test_plants_rest_by_the_climate(void)
  * grows in the water, where the fertility counts as 1. */
 static void test_growth_follows_the_temperature(void)
 {
-    const PlantDef *def = plant_def(PLANT_TREE);
+    const PlantDef *def = plant_def(PLANT_OAK);
     float rich = terrain_def(TERRAIN_RICH_SOIL)->fertility;
     int day = SEASON_DAY(SEASON_SUMMER, 5);
     PlantConditions best = {
         .temperature = def->t_opt_low, .fertility = rich, .light = 1.0f, .light_peak = 1.0f};
-    Plant tree = {.type = PLANT_TREE, .growth = 0.5f};
+    Plant tree = {.type = PLANT_OAK, .growth = 0.5f};
     plant_settle(&tree, day);
     for (int hour = 0; hour < (int)PLANT_BEST_DAY_HOURS; hour++) {
         plant_advance(&tree, &best, 1);
@@ -584,12 +587,12 @@ static void test_growth_follows_the_temperature(void)
     /* Half way up the slope to its best temperature: half the rate. */
     PlantConditions cool = best;
     cool.temperature = 0.5f * (def->t_min + def->t_opt_low);
-    CHECK_NEAR(plant_temperature_response(PLANT_TREE, cool.temperature), 0.5, 1e-6);
+    CHECK_NEAR(plant_temperature_response(PLANT_OAK, cool.temperature), 0.5, 1e-6);
     CHECK_NEAR(plant_growth_rate(&tree, &cool), 0.5 * def->growth_per_day * rich, 1e-6);
     CHECK_EQ_INT(plant_status(&tree, &cool), PLANT_STATUS_SLOWED_COLD);
     PlantConditions hot = best;
     hot.temperature = 0.5f * (def->t_opt_high + def->t_max);
-    CHECK_NEAR(plant_temperature_response(PLANT_TREE, hot.temperature), 0.5, 1e-6);
+    CHECK_NEAR(plant_temperature_response(PLANT_OAK, hot.temperature), 0.5, 1e-6);
     CHECK_EQ_INT(plant_status(&tree, &hot), PLANT_STATUS_SLOWED_HOT);
     CHECK_EQ_INT(plant_status(&tree, &best), PLANT_STATUS_GROWING);
 
@@ -706,10 +709,10 @@ static void test_plants_need_water(void)
  * dies back is gone above ground, whatever it was. */
 static void test_nothing_grows_in_winter(void)
 {
-    Plant tree = {.type = PLANT_TREE, .growth = 0.5f};
+    Plant tree = {.type = PLANT_OAK, .growth = 0.5f};
     advance_days(&tree, SEASON_DAY(SEASON_WINTER, 1), SEASON_DAY(SEASON_WINTER, 10));
     CHECK_NEAR(tree.growth, 0.5f, 1e-6);
-    CHECK_EQ_INT(tree.type, PLANT_TREE);
+    CHECK_EQ_INT(tree.type, PLANT_OAK);
     Plant nettle = {.type = PLANT_NETTLE, .growth = 0.8f};
     advance_days(&nettle, SEASON_DAY(SEASON_AUTUMN, 5), SEASON_DAY(SEASON_WINTER, 10));
     CHECK(plant_is_dormant(&nettle));
@@ -964,11 +967,11 @@ static void test_plants_take_root_where_they_can_live(void)
 
     /* Trees keep their distance from trees and trunks. */
     map.plants[map_index(&map, 8, 13, 0)] = (Plant){.type = PLANT_HAZEL, .growth = 0.1f};
-    CHECK(!plant_can_take_root(&map, PLANT_TREE, 10, 13, 0, -1.0f));
-    CHECK(plant_can_take_root(&map, PLANT_TREE, 11, 13, 0, -1.0f));
+    CHECK(!plant_can_take_root(&map, PLANT_OAK, 10, 13, 0, -1.0f));
+    CHECK(plant_can_take_root(&map, PLANT_OAK, 11, 13, 0, -1.0f));
     CHECK(plant_can_take_root(&map, PLANT_GRASS, 9, 13, 0, -1.0f));
     map_set_rock(&map, 14, 15, 0, ROCK_WOOD);
-    CHECK(!plant_can_take_root(&map, PLANT_TREE, 13, 13, 0, -1.0f));
+    CHECK(!plant_can_take_root(&map, PLANT_OAK, 13, 13, 0, -1.0f));
     map_free(&map);
 }
 
@@ -996,7 +999,7 @@ static void test_spread_lands_within_range(void)
     }
     CHECK_EQ_INT(count, 8);
     /* A tree's seeds go further. */
-    map.plants[map_index(&map, 8, 8, 0)].type = PLANT_TREE;
+    map.plants[map_index(&map, 8, 8, 0)].type = PLANT_OAK;
     int farthest = 0;
     for (int i = 0; i <= 1000; i++) {
         int x, y;
@@ -1004,7 +1007,7 @@ static void test_spread_lands_within_range(void)
         int distance = abs(x - 8) > abs(y - 8) ? abs(x - 8) : abs(y - 8);
         farthest = distance > farthest ? distance : farthest;
     }
-    CHECK_EQ_INT(farthest, plant_def(PLANT_TREE)->spread_range);
+    CHECK_EQ_INT(farthest, plant_def(PLANT_OAK)->spread_range);
     int x, y;
     CHECK(!plant_spread_target(&map, 3, 3, 0, 0.5f, &x, &y)); /* No plant. */
     map.plants[map_index(&map, 0, 0, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
@@ -1078,7 +1081,7 @@ static void test_bare_crowns_let_light_through(void)
     CHECK_NEAR(plant_bare_target(PLANT_LEAF_BARE_BELOW), 1.0, 1e-6);
     CHECK_NEAR(plant_bare_target(-5.0f), 1.0, 1e-6);
     CHECK(plant_bare_target(8.0f) > 0.0f && plant_bare_target(8.0f) < 1.0f);
-    CHECK(plant_def(PLANT_TREE)->deciduous && plant_def(PLANT_HAZEL)->deciduous);
+    CHECK(plant_def(PLANT_OAK)->deciduous && plant_def(PLANT_HAZEL)->deciduous);
     CHECK(!plant_def(PLANT_BRAMBLE)->deciduous && !plant_def(PLANT_GRASS)->deciduous);
 }
 
@@ -1218,14 +1221,14 @@ static void test_plants_mend(void)
  * seedling dies like any plant. */
 static void test_trees_with_a_trunk_survive(void)
 {
-    Plant tree = {.type = PLANT_TREE, .growth = 0.8f};
+    Plant tree = {.type = PLANT_OAK, .growth = 0.8f};
     plant_settle(&tree, SEASON_DAY(SEASON_SUMMER, 5));
-    PlantConditions furnace = at_temperature(plant_def(PLANT_TREE)->t_lethal_heat + 10.0f);
+    PlantConditions furnace = at_temperature(plant_def(PLANT_OAK)->t_lethal_heat + 10.0f);
     plant_advance(&tree, &furnace, 10 * HOURS_PER_DAY);
-    CHECK_EQ_INT(tree.type, PLANT_TREE);
+    CHECK_EQ_INT(tree.type, PLANT_OAK);
     CHECK(plant_health(&tree) >= PLANT_TREE_HEALTH_FLOOR - 1e-3f);
     CHECK(plant_health(&tree) < 0.1f);
-    Plant seedling = {.type = PLANT_TREE, .growth = 0.2f};
+    Plant seedling = {.type = PLANT_OAK, .growth = 0.2f};
     plant_settle(&seedling, SEASON_DAY(SEASON_SUMMER, 5));
     plant_advance(&seedling, &furnace, 10 * HOURS_PER_DAY);
     CHECK_EQ_INT(seedling.type, PLANT_NONE);
@@ -1439,7 +1442,7 @@ static void test_tree_near(void)
 {
     Map map;
     REQUIRE(map_init(&map, 16, 16, 1));
-    map.plants[map_index(&map, 5, 5, 0)] = (Plant){.type = PLANT_TREE, .growth = 0.9f};
+    map.plants[map_index(&map, 5, 5, 0)] = (Plant){.type = PLANT_OAK, .growth = 0.9f};
     CHECK(!map_tree_near(&map, 6, 6, 0, 2)); /* Not mature yet. */
     map.plants[map_index(&map, 5, 5, 0)].growth = 1.0f;
     CHECK(map_tree_near(&map, 6, 6, 0, 2));

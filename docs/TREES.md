@@ -4,14 +4,14 @@ Tree species instead of one generic tree, the wood species carried by
 branches, logs and everything made from them, fruit and nuts as ordinary
 items, and blocks of foliage that hold what grows in them.
 
-Status: designed; step 1 (§9: nuts as items) is implemented. Values marked *(tuning)* are
+Status: designed; steps 1 and 2 (§9: nuts as items, the species) are implemented. Values marked *(tuning)* are
 first guesses. The trees in the volume (trunk, foliage, felling, shedding)
 are `core/tree.h`; the plants' life (growth, rest, light, water) is
 `docs/PLANTS.md`; items one by one are `docs/ITEMS.md`.
 
 ## 1. Principles
 
-- **A species is a plant type.** `PLANT_TREE` gives way to seven trees:
+- **A species is a plant type.** The one generic tree gave way to seven:
   oak, beech, sweet chestnut, ash, birch, wild apple and wild pear. The hazel
   stays as it is. Each has its own needs (`PlantDef`) and its own shape and
   wood (a `TreeDef`, §3).
@@ -42,11 +42,11 @@ are `core/tree.h`; the plants' life (growth, rest, light, water) is
 | Ash | tall, open | light: medium by the trunk, sparse further out | 0.040 | 55 | 5 / 8 | none |
 | Birch | tall, narrow (reach 1) | sparse, medium by the trunk | 0.060 (pioneer) | 30 | 3 / 14 | none |
 | Wild apple | low (2 levels), rounded, foliage from the first level | dense and medium | 0.030 | 20 | 4 / 10 | apples |
-| Wild pear | tall, narrow (reach 1), pyramidal | medium | 0.025 | 30 | 3 / 8 | pears |
+| Wild pear | tall, narrow (reach 1), pyramidal | medium (dense over the trunk) | 0.025 | 30 | 3 / 8 | pears |
 | Hazel (unchanged) | low, several stems | as today | 0.040 | 20 | as today | hazelnuts |
 
-Today's tree: growth 0.03 a day, 60 logs, a crown of 6 branches and 10
-twigs. Shedding (dead twigs and branches falling, `TREE_SHED_*_CHANCE`)
+The generic tree before them: growth 0.03 a day, 60 logs, a crown of 6
+branches and 10 twigs. Shedding (dead twigs and branches falling, `TREE_SHED_*_CHANCE`)
 scales by species: oaks drop many dead branches (twigs ×1, branches ×1.5),
 birches many twigs (×1.5, ×1), beeches fine twigs (×1.2, ×0.7), fruit trees
 little (×0.7, ×0.5), the others ×1 *(tuning)*.
@@ -57,22 +57,25 @@ Needs, from what the species are known for *(tuning)*:
 |---------|-------|--------|-------|------|
 | Oak | needs light (`light_min` 0.15) | most, fertility from 0.5 | wide, bears flooding (flood days 40) | hardy |
 | Beech | grows in shade (0.03) | drained soil, fertility from 0.6 | no waterlogging (max 1.5, flood days 10) | its young leaves fear late frost |
-| Sweet chestnut | 0.10 | sand and soil, poorer ground (from 0.4) | drained (max 1.4) | wants warmth (`t_min` 7 °C), less hardy (-20 °C) |
+| Sweet chestnut | 0.10 | gravel and soil, poorer ground (from 0.4; sand is too poor) | drained (max 1.4) | wants warmth (`t_min` 7 °C), less hardy (-20 °C) |
 | Ash | 0.10 | rich soil (from 0.8) | moist, near water (optimum 0.8 to 1.7) | hardy |
-| Birch | full light (0.20) | poor ground (`poor_soil`, from 0.3) | anything | the hardiest (-40 °C) |
+| Birch | full light (0.20) | poor ground (`poor_soil`, from 0.1: sand too) | anything | the hardiest (-40 °C) |
 | Wild apple, wild pear | 0.15 | soil, from 0.5 | medium | hardy |
 
 ## 3. Crowns
 
-A `TreeDef` per species replaces the `TREE_*` constants that are one tree's
-today (`TREE_CROWN_REACH`, `TREE_SECOND_LEVEL_AT`, `TREE_CROWN_BRANCHES`...):
-its levels of trunk and the growth at which each comes, the lowest level of
-foliage, the reach (and an old tree's), a **density shift** (beech and
-chestnut one notch denser than their distance from the trunk says, ash and
-birch one thinner, at least sparse), its raggedness, its yields and
-shedding, and whether it can be old or ancient (oak, beech, chestnut and ash
-old; oak, beech and chestnut ancient). The shape still follows from the
-plant on the foot (`tree_shape()`), never stored.
+A `TreeDef` per species (`tree_def()`) replaced the `TREE_*` constants that
+were the one tree's: the growths at which its trunk rises to two and three
+levels (the wild apple and the hazel stop at two), the reach (an old tree's
+the same, an ancient one's a tile farther), a **density shift** (beech and
+chestnut one notch denser than their distance from the trunk says, ash,
+birch and wild pear one thinner, at least sparse; the tile over the trunk
+too), its raggedness, its yields and shedding, and whether it can be old or
+ancient (oak, beech, chestnut and ash old; oak, beech and chestnut ancient).
+The shape still follows from the plant on the foot (`tree_shape()`), never
+stored. The crown of a young tree starts on its first level, whatever the
+species (a crown that rose as the tree grew would leave foliage behind):
+only the old and ancient trees have a bare trunk under it.
 
 The density matters for play as it does today: one walks on dense foliage
 only, so an oak or a beech can be climbed out along its branches, an ash or a
@@ -86,8 +89,9 @@ looking for its tree.
 ## 4. Where they grow
 
 World generation picks a species for each tree from its site: the forest
-share, the edge and clearing shares (as the hazel's today), the ground and
-the moisture *(tuning)*:
+share, the edge and clearing shares (as the hazel's), the ground and the
+moisture (`tree_species_weights()` in `worldgen.c`, each species then gated
+by its fertility and water response) *(tuning)*:
 
 - **Beech**: the heart of woods, on soil and rich soil that is not wet.
 - **Oak**: everywhere, most in open woods and at edges; the lone old trees
@@ -99,8 +103,12 @@ the moisture *(tuning)*:
 - **Wild apple, wild pear**: rare and alone, at edges and in clearings.
 
 In a temperate world, about oak 30 %, beech 25 %, birch 15 %, ash 12 %,
-chestnut 8 %, apple 5 % and pear 5 % of the trees (hazels apart). Spreading
-(`docs/PLANTS.md` §13) keeps each species where it suits.
+chestnut 8 %, apple 5 % and pear 5 % of the trees (hazels apart); measured
+over eight generated worlds: oak 31 %, birch 20 % (the sand's trees are all
+birches), beech 19 %, ash 13 %, chestnut 6 %, apple 6 %, pear 5 %. Spreading
+(`docs/PLANTS.md` §13) keeps each species where it suits. An old or ancient
+tree pushes the young trees touching its trunk aside, and is written into
+the map before the others, so that their crowns do not take its room.
 
 ## 5. Fruit and nuts as items
 
@@ -122,10 +130,13 @@ New items *(tuning)*:
 
 | Item | Tree | Season | Per grown tree | Weight (kg) | Nutrition | Rots in (days) |
 |------|------|--------|----------------|-------------|-----------|----------------|
-| Hazelnuts (today) | hazel | autumn | 30 | 0.10 | 0.075 | 90 |
-| Chestnuts | sweet chestnut | mid to late autumn | 40 | 0.15 | 0.05 | 30 |
-| Apples | wild apple | end of summer to autumn | 40 | 0.20 | 0.015 | 30 (sour, they keep) |
-| Pears | wild pear | autumn | 30 | 0.20 | 0.015 | 14 |
+| Hazelnuts | hazel | autumn | 30 | 0.10 | 0.075 | 90 |
+| Chestnuts | sweet chestnut | mid to late autumn (days 4 to 13) | 40 | 0.15 | 0.065 | 30 |
+| Apples | wild apple | end of summer (day 12) to mid autumn (day 10) | 40 | 0.20 | 0.025 | 30 (sour, they keep) |
+| Pears | wild pear | autumn (days 1 to 12) | 30 | 0.20 | 0.028 | 14 |
+
+At most `MAP_NUTS_MAX` (8) of each lie on a tile. Only the hazelnuts lie in
+a layer in a new world: the other fruit only falls in a running game.
 
 That makes 48 item types. Acorns and beechnuts (food for boars, and for
 settlers once acorns are leached) come later (§10).
@@ -263,9 +274,12 @@ Each step is a commit of its own, with its tests and docs.
    zones' *Hazelnuts* order is gone until the crowns are picked (step 4).
    Animals eat nut items wherever they lie (a store too); chestnuts and
    fruit join them in step 2.
-2. **The species** (§2 to §4): seven plant types, a `TreeDef` each, crowns,
-   placement, the species layer of the foliage, chestnuts, apples and pears
-   falling to the ground, sprites.
+2. **The species** (§2 to §4, done): seven plant types, a `TreeDef` each,
+   crowns, placement, the species layer of the foliage
+   (`Map.tree_species`), chestnuts, apples and pears falling to the ground
+   (and eaten there by boars and deer), sapling sprites, bark and leaf
+   colours by species, turning as the leaves fall. A hazel is felled like
+   the other trees (it used to stand through the felling).
 3. **The wood species on items** (§6): `woods` on items and stacks, names,
    effects, inherited by recipes, kept by structures, chosen by right click
    in the build menu, the blueprint's panel and bills.

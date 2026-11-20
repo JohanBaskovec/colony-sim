@@ -17,7 +17,7 @@ static bool init_world(Map *map, Constructions *constructions, Items *items)
     }
     map->rock[map_index(map, 5, 5, 0)] = ROCK_GRANITE;
     map->terrain[map_index(map, 6, 6, 0)] = TERRAIN_DEEP_WATER;
-    map->plants[map_index(map, 7, 7, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    map->plants[map_index(map, 7, 7, 0)] = (Plant){.type = PLANT_OAK, .growth = 1.0f};
     map->plants[map_index(map, 8, 8, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
     return true;
 }
@@ -638,7 +638,7 @@ static void test_workstation_site(void)
     CHECK(!construction_add_work(&constructions, &map, &items, &stations, index, work * 0.5f, 60.0,
                                  NULL));
     /* A tree grown on the tile meanwhile: the station waits, the site stays. */
-    map.plants[map_index(&map, 3, 4, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    map.plants[map_index(&map, 3, 4, 0)] = (Plant){.type = PLANT_OAK, .growth = 1.0f};
     CHECK(!construction_add_work(&constructions, &map, &items, &stations, index, work, 60.0, NULL));
     CHECK(construction_get(&constructions, index) != NULL);
     CHECK_NEAR(construction_work_fraction(site), 1.0, 1e-6);

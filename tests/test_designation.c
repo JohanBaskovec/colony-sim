@@ -14,7 +14,7 @@ static bool init_world(Map *map, Designations *designations)
         return false;
     }
     Plant *tree = &map->plants[map_index(map, 3, 3, 0)];
-    tree->type = PLANT_TREE;
+    tree->type = PLANT_OAK;
     tree->growth = 1.0f;
     plant_settle(tree, GAME_START_DAY);
     map->rock[map_index(map, 5, 5, 0)] = ROCK_GRANITE;
@@ -309,7 +309,7 @@ static void test_ramps_need_bare_ground(void)
     Designations d;
     REQUIRE(init_bank(&map, &d));
     Plant *tree = &map.plants[map_index(&map, 4, 1, 1)];
-    tree->type = PLANT_TREE;
+    tree->type = PLANT_OAK;
     tree->growth = 1.0f;
     plant_settle(tree, GAME_START_DAY);
     CHECK(!designation_can_apply(&map, 4, 1, 0, DESIGNATION_DIG_RAMP));

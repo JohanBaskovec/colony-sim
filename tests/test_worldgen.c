@@ -143,7 +143,7 @@ static void test_maps_are_mostly_usable_land(void)
                     ratio * 100.0);
         }
         CHECK(ratio >= 0.5);
-        CHECK(map_count_plants(&map, PLANT_TREE) > 0);
+        CHECK(map_count_plants(&map, PLANT_OAK) > 0);
         map_free(&map);
     }
 }
@@ -293,6 +293,7 @@ static void test_flat(void)
 static void test_trees(void)
 {
     long trees = 0, wide = 0;
+    long species[PLANT_COUNT] = {0}, on_sand[PLANT_COUNT] = {0}, on_gravel[PLANT_COUNT] = {0};
     for (uint64_t seed = 1; seed <= 4; seed++) {
         WorldGenParams params = params_for_seed(seed);
         Map map;
@@ -307,11 +308,17 @@ static void test_trees(void)
                         CHECK(tree_at(&map, x, y, z, &tree));
                     }
                     const Plant *plant = &map.plants[i];
-                    if (plant->type != PLANT_TREE) {
+                    if (!plant_is_tree(plant->type) || plant->type == PLANT_HAZEL) {
                         continue;
                     }
                     trees++;
                     wide += plant->size > 1;
+                    species[plant->type]++;
+                    on_sand[plant->type] += map.terrain[i] == TERRAIN_SAND;
+                    on_gravel[plant->type] += map.terrain[i] == TERRAIN_GRAVEL;
+                    /* Only some species grow old. */
+                    CHECK(plant->size <= 1 || tree_def((PlantType)plant->type)->can_be_old);
+                    CHECK(plant->size <= 2 || tree_def((PlantType)plant->type)->can_be_ancient);
                     TreeShape shape;
                     CHECK_EQ_INT(map.rock[i],
                                  tree_shape(plant, x, y, z, &shape) ? ROCK_WOOD : ROCK_NONE);
@@ -319,7 +326,7 @@ static void test_trees(void)
                         for (int dx = -1; dx <= 1; dx++) {
                             bool other =
                                 (dx != 0 || dy != 0) && map_in_bounds(&map, x + dx, y + dy, z) &&
-                                map.plants[map_index(&map, x + dx, y + dy, z)].type == PLANT_TREE;
+                                plant_is_tree(map.plants[map_index(&map, x + dx, y + dy, z)].type);
                             CHECK(!other);
                         }
                     }
@@ -331,6 +338,17 @@ static void test_trees(void)
     CHECK(trees > 0);
     CHECK(wide > 0);
     CHECK(wide < trees / 20);
+    /* Every species grows somewhere (docs/TREES.md §4), the oak most, the
+     * wild fruit trees least; only the birch grows on sand, neither the
+     * beech nor the ash on gravel. */
+    for (int type = PLANT_TREE_FIRST; type < PLANT_TREE_LAST; type++) {
+        CHECK(species[type] > 0);
+        CHECK(species[type] <= species[PLANT_OAK]);
+        CHECK(species[type] >= species[PLANT_WILD_PEAR] || type == PLANT_WILD_APPLE);
+        CHECK(on_sand[type] == 0 || type == PLANT_BIRCH);
+    }
+    CHECK(on_sand[PLANT_BIRCH] > 0);
+    CHECK_EQ_INT(on_gravel[PLANT_BEECH] + on_gravel[PLANT_ASH], 0);
 }
 
 /* The understory follows the light under the crowns (docs/PLANTS.md §10): nothing is

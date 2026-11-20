@@ -389,7 +389,7 @@ static void test_tile_jobs_in_order(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    put_plant(&map, 2, 2, PLANT_TREE, 1.0f);
+    put_plant(&map, 2, 2, PLANT_OAK, 1.0f);
     map_add_litter(&map, 2, 2, 0, ITEM_HAZELNUTS); /* No gathering: for the haulers. */
     int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ALL_JOBS), GATHER_JOB_NONE);
@@ -411,7 +411,7 @@ static void test_fully_grown_plants_only(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    put_plant(&map, 1, 1, PLANT_TREE, 0.4f);
+    put_plant(&map, 1, 1, PLANT_OAK, 0.4f);
     const PlantDef *def = plant_def(PLANT_BRAMBLE);
     Plant *young = put_plant(&map, 2, 1, PLANT_BRAMBLE, def->products[0].min_growth - 0.01f);
     put_plant(&map, 3, 1, PLANT_BRAMBLE, def->products[0].min_growth);
@@ -706,8 +706,8 @@ static void test_felling_a_tree(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    put_plant(&map, 3, 3, PLANT_TREE, 1.0f);
-    put_plant(&map, 8, 8, PLANT_TREE, 0.5f);
+    put_plant(&map, 3, 3, PLANT_OAK, 1.0f);
+    put_plant(&map, 8, 8, PLANT_OAK, 0.5f);
     int index = gather_zone_create(&zones, &map, 0, 0, 9, 9, 0);
     order(&zones, &items, index, GATHER_WOOD, GATHER_FOREVER);
     gather_zone_set_ripe_only(&zones, index, GATHER_WOOD, false);
@@ -725,12 +725,12 @@ static void test_felling_a_tree(void)
     ItemStack wood = items_get(&items, 3, 3, 0);
     CHECK_EQ_INT(wood.type, ITEM_WOOD);
     CHECK_EQ_INT(items_get(&items, 3, 4, 0).type, ITEM_WOOD);
-    CHECK_EQ_INT((int)items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
+    CHECK_EQ_INT((int)items.totals[ITEM_WOOD], plant_def(PLANT_OAK)->cut_yield);
     CHECK(!gather_job_available(&zones, &map, 3, 3, 0, GATHER_JOB_CHOP));
     /* A half-grown tree gives half the wood. */
     CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, 0, GATHER_JOB_CHOP, 1e6f, 60.0, NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_WOOD],
-                 plant_def(PLANT_TREE)->cut_yield + (plant_def(PLANT_TREE)->cut_yield + 1) / 2);
+                 plant_def(PLANT_OAK)->cut_yield + (plant_def(PLANT_OAK)->cut_yield + 1) / 2);
     CHECK_EQ_INT(gather_zone_get(&zones, index)->orders[GATHER_WOOD].done,
                  (int)items.totals[ITEM_WOOD]);
     free_world(&map, &zones, &items);
@@ -742,8 +742,8 @@ static void test_products_depend_on_level(void)
     GatherZones zones;
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
-    put_plant(&map, 3, 3, PLANT_TREE, 1.0f);
-    put_plant(&map, 12, 12, PLANT_TREE, 1.0f);
+    put_plant(&map, 3, 3, PLANT_OAK, 1.0f);
+    put_plant(&map, 12, 12, PLANT_OAK, 1.0f);
     int index = gather_zone_create(&zones, &map, 0, 0, 15, 15, 0);
     order(&zones, &items, index, GATHER_WOOD, GATHER_FOREVER);
     int wood_hp = item_def(ITEM_WOOD)->max_hit_points;
@@ -909,8 +909,8 @@ static void test_available_resources(void)
     }
     /* A 3 x 1 zone on soil, gravel and sand. */
     int index = gather_zone_create(&zones, &map, 8, 8, 10, 8, 0);
-    put_plant(&map, 8, 8, PLANT_TREE, 1.0f);
-    put_plant(&map, 9, 8, PLANT_TREE, 0.5f);
+    put_plant(&map, 8, 8, PLANT_OAK, 1.0f);
+    put_plant(&map, 9, 8, PLANT_OAK, 0.5f);
     /* Blackberries, and nuts lying about (no gathering). */
     const Plant *bramble = put_plant(&map, 10, 8, PLANT_BRAMBLE, 1.0f);
     put_plant(&map, 11, 8, PLANT_BRAMBLE, 1.0f); /* Out of the zone. */
@@ -920,7 +920,7 @@ static void test_available_resources(void)
     gather_zone_available(&zones, &map, index, available);
     CHECK_EQ_INT((int)available[GATHER_BLACKBERRIES], berries);
     /* Wood: fully grown trees only by default, all of them without the option. */
-    int full_wood = plant_def(PLANT_TREE)->cut_yield;
+    int full_wood = plant_def(PLANT_OAK)->cut_yield;
     int young_wood = (int)((float)full_wood * 0.5f + 0.5f);
     CHECK_EQ_INT((int)available[GATHER_WOOD], full_wood);
     gather_zone_set_ripe_only(&zones, index, GATHER_WOOD, false);
@@ -1048,7 +1048,7 @@ static void test_clearing_plants(void)
     REQUIRE(init_world(&map, &zones, &items));
     CHECK_NEAR(gather_clear_work(&map, 1, 1, 0), 0.0, 1e-6); /* Nothing there. */
     CHECK_NEAR(gather_clear_work(&map, -1, 1, 0), 0.0, 1e-6);
-    map.plants[map_index(&map, 1, 1, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    map.plants[map_index(&map, 1, 1, 0)] = (Plant){.type = PLANT_OAK, .growth = 1.0f};
     CHECK_NEAR(gather_clear_work(&map, 1, 1, 0), 0.0, 1e-6); /* Not by hand. */
     CHECK(map_plant_blocks_building(&map, 1, 1, 0));
 
@@ -1202,7 +1202,7 @@ static void test_single_plant_harvest_and_uproot(void)
     Plant *cattail = put_plant(&map, 2, 1, PLANT_CATTAIL, 1.0f);
     Plant *mushrooms = put_plant(&map, 3, 1, PLANT_MUSHROOMS, 1.0f);
     Plant *grass = put_plant(&map, 4, 1, PLANT_GRASS, 1.0f);
-    put_plant(&map, 6, 6, PLANT_TREE, 1.0f);
+    put_plant(&map, 6, 6, PLANT_OAK, 1.0f);
     plant_settle(bramble, autumn);
     plant_settle(mushrooms, autumn);
     /* Which job, on which plant. */

@@ -1122,7 +1122,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
         return;
     case APP_KEY_DEBUG:
         app->show_debug = !app->show_debug;
-        app->debug_tree_count = map_count_plants(&app->game.map, PLANT_TREE);
+        app->debug_tree_count = map_count_trees(&app->game.map);
         return;
     case APP_KEY_LANGUAGE: app_cycle_language(app); return;
     default: return;
@@ -2057,7 +2057,7 @@ static void update_fps(App *app, double dt)
     if (app->fps_elapsed >= 0.5) {
         if (app->show_debug) {
             /* Counted here rather than every frame: it scans the whole map. */
-            app->debug_tree_count = map_count_plants(&app->game.map, PLANT_TREE);
+            app->debug_tree_count = map_count_trees(&app->game.map);
         }
         app->fps = (float)(app->fps_frames / app->fps_elapsed);
         app->render_ms = (float)(app->render_elapsed * 1000.0 / app->fps_frames);

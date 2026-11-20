@@ -9,24 +9,115 @@
 static const Direction AIM_ORDER[DIRECTION_COUNT] = {DIRECTION_SOUTH, DIRECTION_EAST,
                                                      DIRECTION_NORTH, DIRECTION_WEST};
 
+/* The species (docs/TREES.md §2 and §3). The oak's crown is the broad,
+ * dense one of the default tree; the beech's and the chestnut's are denser,
+ * the ash's, the birch's and the wild pear's thinner (no dense foliage by
+ * the trunk: not climbable); the birch and the wild pear are narrow, the
+ * wild apple and the hazel low. */
+static const TreeDef TREE_DEFS[PLANT_TREE_LAST - PLANT_TREE_FIRST + 1] = {
+    [PLANT_OAK - PLANT_TREE_FIRST] = {.second_level_at = 0.49f,
+                                      .third_level_at = 0.55f,
+                                      .reach = 2,
+                                      .raggedness = 0.9f,
+                                      .crown_branches = 8,
+                                      .crown_twigs = 10,
+                                      .shed_twigs = 1.0f,
+                                      .shed_branches = 1.5f,
+                                      .can_be_old = true,
+                                      .can_be_ancient = true},
+    [PLANT_BEECH - PLANT_TREE_FIRST] = {.second_level_at = 0.49f,
+                                        .third_level_at = 0.55f,
+                                        .reach = 2,
+                                        .density_shift = 1,
+                                        .raggedness = 0.6f,
+                                        .crown_branches = 5,
+                                        .crown_twigs = 14,
+                                        .shed_twigs = 1.2f,
+                                        .shed_branches = 0.7f,
+                                        .can_be_old = true,
+                                        .can_be_ancient = true},
+    [PLANT_CHESTNUT - PLANT_TREE_FIRST] = {.second_level_at = 0.49f,
+                                           .third_level_at = 0.55f,
+                                           .reach = 2,
+                                           .density_shift = 1,
+                                           .raggedness = 0.9f,
+                                           .crown_branches = 6,
+                                           .crown_twigs = 10,
+                                           .shed_twigs = 1.0f,
+                                           .shed_branches = 1.0f,
+                                           .can_be_old = true,
+                                           .can_be_ancient = true},
+    [PLANT_ASH - PLANT_TREE_FIRST] = {.second_level_at = 0.45f,
+                                      .third_level_at = 0.52f,
+                                      .reach = 2,
+                                      .density_shift = -1,
+                                      .raggedness = 0.9f,
+                                      .crown_branches = 5,
+                                      .crown_twigs = 8,
+                                      .shed_twigs = 0.8f,
+                                      .shed_branches = 0.8f,
+                                      .can_be_old = true},
+    [PLANT_BIRCH - PLANT_TREE_FIRST] = {.second_level_at = 0.42f,
+                                        .third_level_at = 0.5f,
+                                        .reach = 1,
+                                        .density_shift = -1,
+                                        .raggedness = 0.5f,
+                                        .crown_branches = 3,
+                                        .crown_twigs = 14,
+                                        .shed_twigs = 1.5f,
+                                        .shed_branches = 1.0f},
+    [PLANT_WILD_APPLE - PLANT_TREE_FIRST] = {.second_level_at = 0.5f,
+                                             .reach = 2,
+                                             .raggedness = 1.0f,
+                                             .crown_branches = 4,
+                                             .crown_twigs = 10,
+                                             .shed_twigs = 0.7f,
+                                             .shed_branches = 0.5f},
+    [PLANT_WILD_PEAR - PLANT_TREE_FIRST] = {.second_level_at = 0.49f,
+                                            .third_level_at = 0.56f,
+                                            .reach = 1,
+                                            .density_shift = -1,
+                                            .raggedness = 0.5f,
+                                            .crown_branches = 3,
+                                            .crown_twigs = 8,
+                                            .shed_twigs = 0.7f,
+                                            .shed_branches = 0.5f},
+    /* A hazel stays small: two levels of trunk at most. */
+    [PLANT_HAZEL - PLANT_TREE_FIRST] = {.second_level_at = 0.52f,
+                                        .reach = 2,
+                                        .raggedness = 0.9f,
+                                        .crown_branches = 6,
+                                        .crown_twigs = 10,
+                                        .shed_twigs = 1.0f,
+                                        .shed_branches = 1.0f},
+};
+_Static_assert(PLANT_TREE_LAST - PLANT_TREE_FIRST + 1 == 8, "a TreeDef per tree species");
+
 /* Shapes of the old and ancient trees, which only world generation makes: a
- * bare trunk under their crown. A tree of the default size grows: its shape
- * follows from its growth (tree_shape()). */
+ * bare trunk under their crown (the reach is the species'). A tree of the
+ * default size grows: its shape follows from its growth (tree_shape()). */
 static const TreeShape OLD_SHAPE = {
-    .size = 2, .trunk = 5, .foliage_from = 3, .reach = 2, .growth = TREE_FULL_GROWTH};
+    .size = 2, .trunk = 5, .foliage_from = 3, .growth = TREE_FULL_GROWTH};
 static const TreeShape ANCIENT_SHAPE = {
-    .size = 3, .trunk = 6, .foliage_from = 3, .reach = 3, .growth = TREE_FULL_GROWTH};
+    .size = 3, .trunk = 6, .foliage_from = 3, .growth = TREE_FULL_GROWTH};
 _Static_assert(6 + 1 == TREE_MAX_LEVELS, "the ancient tree is the tallest");
+
+const TreeDef *tree_def(PlantType type)
+{
+    return plant_is_tree(type) ? &TREE_DEFS[type - PLANT_TREE_FIRST] : NULL;
+}
 
 int tree_size(const Plant *plant)
 {
-    if (!plant_is_tree(plant->type)) {
+    const TreeDef *def = tree_def((PlantType)plant->type);
+    if (def == NULL) {
         return 0;
     }
-    if (plant->type != PLANT_TREE) {
-        return 1; /* Only the great trees have wide trunks. */
+    int size = plant->size < TREE_MAX_SIZE ? plant->size : TREE_MAX_SIZE;
+    if (size >= 3 && def->can_be_ancient) {
+        return 3;
     }
-    return plant->size > 1 ? (plant->size < TREE_MAX_SIZE ? plant->size : TREE_MAX_SIZE) : 1;
+    return size >= 2 && def->can_be_old ? 2 : 1;
 }
 
 float tree_fell_work(const Plant *plant)
@@ -55,10 +146,12 @@ float tree_shed_chance(const Plant *plant, ItemType item)
     /* Old and ancient trees are grown; a younger one sheds twigs only. */
     bool grown = shape.size > 1 || plant_growth_stage(plant) >= PLANT_GROWTH_STAGES - 1;
     float area = (float)(shape.size * shape.size);
+    const TreeDef *def = tree_def((PlantType)plant->type);
     if (item == ITEM_TWIGS) {
-        return TREE_SHED_TWIG_CHANCE * area * (grown ? 1.0f : 0.5f);
+        return TREE_SHED_TWIG_CHANCE * def->shed_twigs * area * (grown ? 1.0f : 0.5f);
     }
-    return item == ITEM_BRANCHES && grown ? TREE_SHED_BRANCH_CHANCE * area : 0.0f;
+    return item == ITEM_BRANCHES && grown ? TREE_SHED_BRANCH_CHANCE * def->shed_branches * area
+                                          : 0.0f;
 }
 
 float tree_fall_chance(const Plant *plant, int day_of_year, ItemType *item)
@@ -78,9 +171,13 @@ float tree_fall_chance(const Plant *plant, int day_of_year, ItemType *item)
 
 int tree_crown_yield(const Plant *plant, ItemType item)
 {
+    const TreeDef *def = tree_def((PlantType)plant->type);
+    if (def == NULL) {
+        return 0;
+    }
     int area = tree_size(plant) * tree_size(plant);
-    int full = item == ITEM_BRANCHES ? TREE_CROWN_BRANCHES
-               : item == ITEM_TWIGS  ? TREE_CROWN_TWIGS
+    int full = item == ITEM_BRANCHES ? def->crown_branches
+               : item == ITEM_TWIGS  ? def->crown_twigs
                                      : 0;
     return (int)((float)(full * area) * plant->growth + 0.5f);
 }
@@ -101,24 +198,26 @@ bool tree_shape(const Plant *plant, int x, int y, int z, TreeShape *out)
     if (!plant_is_tree(plant->type) || plant_is_dormant(plant)) {
         return false;
     }
+    const TreeDef *def = tree_def((PlantType)plant->type);
     int size = tree_size(plant);
     if (size > 1) {
         *out = size == 2 ? OLD_SHAPE : ANCIENT_SHAPE;
+        out->reach = def->reach + (size == 3 ? 1 : 0);
     } else {
         if (plant_growth_stage(plant) < TREE_VOLUME_MIN_STAGE) {
             return false;
         }
         float growth = plant->growth;
+        bool third = def->third_level_at > 0.0f && growth >= def->third_level_at;
+        bool second = def->second_level_at > 0.0f && growth >= def->second_level_at;
         *out = (TreeShape){.size = 1,
-                           .trunk = plant->type == PLANT_HAZEL
-                                        ? (growth >= TREE_HAZEL_SECOND_LEVEL_AT ? 2 : 1)
-                                    : growth >= TREE_THIRD_LEVEL_AT  ? 3
-                                    : growth >= TREE_SECOND_LEVEL_AT ? 2
-                                                                     : 1,
+                           .trunk = third ? 3 : (second ? 2 : 1),
                            .foliage_from = 1,
-                           .reach = TREE_CROWN_REACH,
+                           .reach = def->reach,
                            .growth = growth};
     }
+    out->density_shift = (int8_t)def->density_shift;
+    out->raggedness = def->raggedness;
     out->seed = mix_bits((uint32_t)x * 0x9E3779B1u ^
                          mix_bits((uint32_t)y * 0x85EBCA77u ^ mix_bits((uint32_t)z + 0x27D4EB2Fu)));
     return true;
@@ -157,6 +256,16 @@ static TreeDensity grown_foliage(const TreeShape *shape, float comes, TreeDensit
     return density < (int) final ? (TreeDensity)density : final;
 }
 
+/* A density moved by the tree's species (TreeDef.density_shift), sparse to
+ * dense. */
+static TreeDensity shifted(const TreeShape *shape, TreeDensity density)
+{
+    int shifted = (int)density + shape->density_shift;
+    return (TreeDensity)(shifted < TREE_DENSITY_SPARSE  ? TREE_DENSITY_SPARSE
+                         : shifted > TREE_DENSITY_DENSE ? TREE_DENSITY_DENSE
+                                                        : shifted);
+}
+
 TreeDensity tree_foliage_density(const TreeShape *shape, int dx, int dy, int dz)
 {
     if (dz < shape->foliage_from || dz > shape->trunk) {
@@ -165,8 +274,9 @@ TreeDensity tree_foliage_density(const TreeShape *shape, int dx, int dy, int dz)
     int ex = outside(dx, shape->size), ey = outside(dy, shape->size);
     if (ex == 0 && ey == 0) {
         /* Over the trunk: the first foliage of a tree. */
-        return dz == shape->trunk ? grown_foliage(shape, TREE_CROWN_FROM, TREE_DENSITY_DENSE)
-                                  : TREE_DENSITY_NONE;
+        return dz == shape->trunk
+                   ? grown_foliage(shape, TREE_CROWN_FROM, shifted(shape, TREE_DENSITY_DENSE))
+                   : TREE_DENSITY_NONE;
     }
     /* A rounded crown... */
     int reach = shape->reach;
@@ -181,14 +291,15 @@ TreeDensity tree_foliage_density(const TreeShape *shape, int dx, int dy, int dz)
      * only adds foliage. */
     float outwards = (float)distance / (float)limit;
     if (outwards > 0.5f &&
-        foliage_noise(shape, dx, dy, dz, 1) < (outwards - 0.5f) * TREE_FOLIAGE_RAGGEDNESS) {
+        foliage_noise(shape, dx, dy, dz, 1) < (outwards - 0.5f) * shape->raggedness) {
         return TREE_DENSITY_NONE;
     }
     /* Thickest next to the trunk, thinning out ring by ring; the outer rings
      * are patchy. */
     int ring = ex > ey ? ex : ey;
     TreeDensity density =
-        ring <= 1 ? TREE_DENSITY_DENSE : (ring == 2 ? TREE_DENSITY_MEDIUM : TREE_DENSITY_SPARSE);
+        shifted(shape, ring <= 1 ? TREE_DENSITY_DENSE
+                                 : (ring == 2 ? TREE_DENSITY_MEDIUM : TREE_DENSITY_SPARSE));
     if (ring >= 2 && density > TREE_DENSITY_SPARSE &&
         foliage_noise(shape, dx, dy, dz, 2) < TREE_FOLIAGE_PATCHINESS) {
         density--;
@@ -346,6 +457,7 @@ void tree_build(Map *map, int x, int y, int z)
         return;
     }
     TreeShape shape;
+    uint8_t species = map->plants[map_index(map, x, y, z)].type;
     if (!tree_shape(&map->plants[map_index(map, x, y, z)], x, y, z, &shape)) {
         return;
     }
@@ -356,6 +468,7 @@ void tree_build(Map *map, int x, int y, int z)
                     map_set_terrain(map, x + dx, y + dy, z + dz, TERRAIN_OPEN);
                 }
                 map_set_rock(map, x + dx, y + dy, z + dz, ROCK_WOOD);
+                map->tree_species[map_index(map, x + dx, y + dy, z + dz)] = species;
             }
         }
     }
@@ -372,12 +485,15 @@ void tree_build(Map *map, int x, int y, int z)
                 if (map_is_open_at(map, index)) {
                     if (map_climb_cost(map, tx, ty, tz - 1) == 0.0f) {
                         map_set_terrain(map, tx, ty, tz, tree_density_terrain(density));
+                        map->tree_species[index] = species;
                     }
                 } else if (map->rock[index] == ROCK_NONE &&
                            terrain_is_foliage(map->terrain[index]) &&
                            tree_terrain_density((Terrain)map->terrain[index]) < density) {
-                    /* Foliage that thickens (never the other way). */
+                    /* Foliage that thickens (never the other way): the
+                     * thicker tree's, where two crowns meet. */
                     map_set_terrain(map, tx, ty, tz, tree_density_terrain(density));
+                    map->tree_species[index] = species;
                 }
             }
         }
@@ -491,11 +607,16 @@ void tree_clear(Map *map, Items *items, int x, int y, int z)
                 TreeRef other;
                 if (!tree_foliage_holds(&shape, dx, dy, dz) || !map_in_bounds(map, tx, ty, tz) ||
                     map->rock[map_index(map, tx, ty, tz)] != ROCK_NONE ||
-                    !terrain_is_foliage(map->terrain[map_index(map, tx, ty, tz)]) ||
-                    tree_of_foliage(map, tx, ty, tz, &self, &other)) {
+                    !terrain_is_foliage(map->terrain[map_index(map, tx, ty, tz)])) {
+                    continue;
+                }
+                if (tree_of_foliage(map, tx, ty, tz, &self, &other)) {
+                    map->tree_species[map_index(map, tx, ty, tz)] =
+                        tree_plant(map, &other)->type; /* The other tree's now. */
                     continue;
                 }
                 map_set_terrain(map, tx, ty, tz, TERRAIN_OPEN);
+                map->tree_species[map_index(map, tx, ty, tz)] = PLANT_NONE;
             }
         }
     }
@@ -503,6 +624,7 @@ void tree_clear(Map *map, Items *items, int x, int y, int z)
         for (int dy = 0; dy < shape.size; dy++) {
             for (int dx = 0; dx < shape.size; dx++) {
                 map_set_rock(map, x + dx, y + dy, z + dz, ROCK_NONE);
+                map->tree_species[map_index(map, x + dx, y + dy, z + dz)] = PLANT_NONE;
             }
         }
     }
@@ -682,7 +804,7 @@ TreeFall tree_fell(Map *map, Items *items, int x, int y, int z, ItemStack wood)
         return fall;
     }
     Plant *plant = &map->plants[map_index(map, x, y, z)];
-    if (plant->type != PLANT_TREE) {
+    if (!plant_is_tree(plant->type)) {
         return fall;
     }
     int size = tree_size(plant);

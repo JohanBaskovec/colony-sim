@@ -20,6 +20,8 @@
 #define YOUNG 0.45f      /* Trunk 1 level. */
 #define HALF_GROWN 0.52f /* Trunk 2 levels, a few tiles of foliage. */
 #define GROWN 1.0f       /* Trunk 3 levels, the whole crown. */
+/* The commonest tree, the one most tests grow. */
+#define OAK tree_def(PLANT_OAK)
 
 /* Soil on level 0, open space above. */
 static bool init_world(Map *map, Items *items)
@@ -29,14 +31,14 @@ static bool init_world(Map *map, Items *items)
 
 static void put_tree(Map *map, int x, int y, int z, float growth)
 {
-    map->plants[map_index(map, x, y, z)] = (Plant){.type = PLANT_TREE, .growth = growth};
+    map->plants[map_index(map, x, y, z)] = (Plant){.type = PLANT_OAK, .growth = growth};
 }
 
 /* A tree written into the map. */
 static void grow_tree(Map *map, int x, int y, int z, float growth, int size)
 {
     map->plants[map_index(map, x, y, z)] =
-        (Plant){.type = PLANT_TREE, .size = (uint8_t)size, .growth = growth};
+        (Plant){.type = PLANT_OAK, .size = (uint8_t)size, .growth = growth};
     tree_build(map, x, y, z);
 }
 
@@ -63,7 +65,7 @@ static int count_on_line(const Items *items, int x, int y, int z, int dx, int dy
 
 static void test_shapes(void)
 {
-    Plant plant = {.type = PLANT_TREE, .growth = SAPLING};
+    Plant plant = {.type = PLANT_OAK, .growth = SAPLING};
     TreeShape shape;
     CHECK(!tree_shape(&plant, 0, 0, 0, &shape)); /* Saplings take no room. */
     plant.growth = 0.1f;
@@ -80,16 +82,16 @@ static void test_shapes(void)
     plant.growth = GROWN;
     REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK_EQ_INT(shape.trunk, 3);
-    CHECK_EQ_INT(shape.reach, TREE_CROWN_REACH);
+    CHECK_EQ_INT(shape.reach, OAK->reach);
     CHECK_EQ_INT(tree_size(&plant), 1);
     /* The trunk rises at its growths, and no sooner. */
-    plant.growth = TREE_SECOND_LEVEL_AT - 0.01f;
+    plant.growth = OAK->second_level_at - 0.01f;
     REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK_EQ_INT(shape.trunk, 1);
-    plant.growth = TREE_THIRD_LEVEL_AT - 0.01f;
+    plant.growth = OAK->third_level_at - 0.01f;
     REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK_EQ_INT(shape.trunk, 2);
-    plant.growth = TREE_THIRD_LEVEL_AT;
+    plant.growth = OAK->third_level_at;
     REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK_EQ_INT(shape.trunk, 3);
 
@@ -110,7 +112,7 @@ static void test_shapes(void)
     CHECK_EQ_INT(tree_size(&garlic), 0);
 
     /* Where trunk and foliage are, from the foot (fully grown). */
-    plant = (Plant){.type = PLANT_TREE, .growth = GROWN};
+    plant = (Plant){.type = PLANT_OAK, .growth = GROWN};
     REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
     CHECK(tree_trunk_holds(&shape, 0, 0, 0));
     CHECK(tree_trunk_holds(&shape, 0, 0, 2));
@@ -119,7 +121,7 @@ static void test_shapes(void)
     CHECK(!tree_foliage_holds(&shape, 0, 0, 1)); /* The trunk is there. */
     CHECK(tree_foliage_holds(&shape, 0, 0, 3));  /* Over the top of the trunk. */
     CHECK(tree_foliage_holds(&shape, 1, 0, 1));
-    CHECK(!tree_foliage_holds(&shape, TREE_CROWN_REACH + 1, 0, 1));
+    CHECK(!tree_foliage_holds(&shape, OAK->reach + 1, 0, 1));
     CHECK(!tree_foliage_holds(&shape, 1, 0, 0)); /* Nothing on the ground. */
     CHECK(!tree_foliage_holds(&shape, 1, 0, 4));
     plant.size = 3; /* A wide crown is rounded. */
@@ -141,8 +143,8 @@ static int outside(int d, int size)
  * walked on. */
 static void test_crown_is_ragged_and_thins_out(void)
 {
-    Plant small = {.type = PLANT_TREE, .growth = GROWN};
-    Plant ancient = {.type = PLANT_TREE, .size = 3, .growth = 1.0f};
+    Plant small = {.type = PLANT_OAK, .growth = GROWN};
+    Plant ancient = {.type = PLANT_OAK, .size = 3, .growth = 1.0f};
     int corners = 0, trees = 40;
     int found[TREE_DENSITY_DENSE + 1] = {0};
     for (int i = 0; i < trees; i++) {
@@ -191,7 +193,7 @@ static void test_growing_keeps_the_foliage(void)
 {
     for (int i = 0; i < 30; i++) {
         int x = 3 * i, y = 5 * i + 2;
-        Plant plant = {.type = PLANT_TREE, .growth = 0.5f};
+        Plant plant = {.type = PLANT_OAK, .growth = 0.5f};
         TreeShape before, after;
         REQUIRE(tree_shape(&plant, x, y, 0, &before));
         plant.growth = 1.0f;
@@ -284,7 +286,7 @@ static void test_crown_grows_tile_by_tile(void)
     for (int i = 0; i < 20; i++) {
         int x = 2 * i + 5, y = 3 * i + 4;
         TreeShape shape;
-        Plant plant = {.type = PLANT_TREE, .growth = TREE_CROWN_FROM + 0.01f};
+        Plant plant = {.type = PLANT_OAK, .growth = TREE_CROWN_FROM + 0.01f};
         REQUIRE(tree_shape(&plant, x, y, 0, &shape));
         /* Just up: a single piece of trunk, foliage over it and next to nothing else. */
         CHECK_EQ_INT(shape.trunk, 1);
@@ -301,7 +303,7 @@ static void test_crown_grows_tile_by_tile(void)
         for (int step = 1; step <= 60; step++) {
             plant.growth = TREE_CROWN_FROM + (1.0f - TREE_CROWN_FROM) * (float)step / 60.0f;
             REQUIRE(tree_shape(&plant, x, y, 0, &shape));
-            CHECK_EQ_INT(shape.reach, TREE_CROWN_REACH);
+            CHECK_EQ_INT(shape.reach, OAK->reach);
             int tiles = 0, dense = 0;
             for (int dz = 1; dz <= shape.trunk; dz++) {
                 for (int dy = -2; dy <= 2; dy++) {
@@ -380,12 +382,12 @@ static void test_trees_grow_through_the_stages(void)
     REQUIRE(is_trunk(map, 10, 10, 0));
     CHECK(!is_trunk(map, 10, 10, 1));
     Plant *plant = &map->plants[map_index(map, 10, 10, 0)];
-    plant->growth = TREE_SECOND_LEVEL_AT - 0.0005f; /* Within the hour. */
+    plant->growth = OAK->second_level_at - 0.0005f; /* Within the hour. */
     game_debug_skip(&game, 3 * GAME_PLANT_UPDATE_INTERVAL);
-    CHECK(plant->growth > TREE_SECOND_LEVEL_AT);
+    CHECK(plant->growth > OAK->second_level_at);
     CHECK(is_trunk(map, 10, 10, 1));
     CHECK(!is_trunk(map, 10, 10, 2));
-    plant->growth = TREE_THIRD_LEVEL_AT - 0.0005f;
+    plant->growth = OAK->third_level_at - 0.0005f;
     game_debug_skip(&game, 3 * GAME_PLANT_UPDATE_INTERVAL);
     CHECK(is_trunk(map, 10, 10, 2));
     game_shutdown(&game);
@@ -397,7 +399,7 @@ static void test_debug_plants_and_grows_a_tree(void)
     REQUIRE(init_flat_game(&game));
     Map *map = &game.map;
     CHECK(game_debug_plant_tree(&game, 10, 10, 0));
-    CHECK_EQ_INT(map->plants[map_index(map, 10, 10, 0)].type, PLANT_TREE);
+    CHECK_EQ_INT(map->plants[map_index(map, 10, 10, 0)].type, PLANT_OAK);
     CHECK(map->plants[map_index(map, 10, 10, 0)].growth == 0.0f);
     CHECK(!game_debug_plant_tree(&game, 10, 10, 0)); /* Already one. */
     CHECK(!game_debug_plant_tree(&game, 11, 10, 0)); /* Trunks never touch. */
@@ -510,7 +512,7 @@ static void test_thin_foliage_is_seen_through(void)
  * levels with a crown like the other trees'. */
 static void test_hazel_is_a_small_tree(void)
 {
-    CHECK(plant_is_tree(PLANT_TREE) && plant_is_tree(PLANT_HAZEL));
+    CHECK(plant_is_tree(PLANT_OAK) && plant_is_tree(PLANT_HAZEL));
     CHECK(!plant_is_tree(PLANT_BRAMBLE) && !plant_is_tree(PLANT_GRASS));
     Plant hazel = {.type = PLANT_HAZEL, .growth = SAPLING};
     TreeShape shape;
@@ -523,10 +525,10 @@ static void test_hazel_is_a_small_tree(void)
     REQUIRE(tree_shape(&hazel, 3, 4, 0, &shape));
     CHECK_EQ_INT(shape.trunk, 2); /* Never taller than that. */
     CHECK_EQ_INT(tree_size(&hazel), 1);
-    hazel.size = 3; /* Only the oaks grow wide. */
+    hazel.size = 3; /* Only some species grow wide, not the hazel. */
     CHECK_EQ_INT(tree_size(&hazel), 1);
     /* Less wood than a tree, felled like one. */
-    Plant oak = {.type = PLANT_TREE, .growth = 1.0f};
+    Plant oak = {.type = PLANT_OAK, .growth = 1.0f};
     CHECK(tree_wood_yield(&hazel) > 0 && tree_wood_yield(&hazel) < tree_wood_yield(&oak));
     CHECK(tree_fell_work(&hazel) > 0.0f);
 
@@ -550,6 +552,148 @@ static void test_hazel_is_a_small_tree(void)
     map_free(&map);
 }
 
+/* Tiles of foliage of each density in a crown. */
+static void crown_densities(const TreeShape *shape, int counts[TREE_DENSITY_DENSE + 1])
+{
+    for (int d = 0; d <= TREE_DENSITY_DENSE; d++) {
+        counts[d] = 0;
+    }
+    for (int dz = 0; dz < TREE_MAX_LEVELS; dz++) {
+        for (int dy = -TREE_MAX_REACH; dy <= TREE_MAX_REACH + TREE_MAX_SIZE; dy++) {
+            for (int dx = -TREE_MAX_REACH; dx <= TREE_MAX_REACH + TREE_MAX_SIZE; dx++) {
+                counts[tree_foliage_density(shape, dx, dy, dz)]++;
+            }
+        }
+    }
+}
+
+/* Each species has its own crown (docs/TREES.md §3): the beech's is denser
+ * than the oak's, the ash's and the birch's thin (nothing to walk on, so no
+ * climbing), the birch and the wild pear narrow, the wild apple low; only
+ * some grow old or ancient. */
+static void test_species_crowns(void)
+{
+    for (int type = 0; type < PLANT_COUNT; type++) {
+        CHECK((tree_def((PlantType)type) != NULL) == plant_is_tree((uint8_t)type));
+    }
+    int dense[PLANT_COUNT] = {0}, all[PLANT_COUNT] = {0};
+    for (int type = PLANT_TREE_FIRST; type <= PLANT_TREE_LAST; type++) {
+        Plant plant = {.type = (uint8_t)type, .growth = GROWN};
+        TreeShape shape;
+        REQUIRE(tree_shape(&plant, 7, 9, 0, &shape));
+        CHECK_EQ_INT(shape.reach, tree_def((PlantType)type)->reach);
+        int counts[TREE_DENSITY_DENSE + 1];
+        crown_densities(&shape, counts);
+        dense[type] = counts[TREE_DENSITY_DENSE];
+        all[type] = counts[TREE_DENSITY_SPARSE] + counts[TREE_DENSITY_MEDIUM] + dense[type];
+        CHECK(all[type] > 0);
+    }
+    CHECK(dense[PLANT_BEECH] > dense[PLANT_OAK]);
+    CHECK(dense[PLANT_CHESTNUT] > dense[PLANT_OAK]);
+    CHECK(dense[PLANT_OAK] > 0);
+    CHECK_EQ_INT(dense[PLANT_ASH], 0);
+    CHECK_EQ_INT(dense[PLANT_BIRCH], 0);
+    CHECK(all[PLANT_BIRCH] < all[PLANT_OAK]);
+    CHECK(all[PLANT_WILD_PEAR] < all[PLANT_OAK]);
+    /* Heights: the wild apple and the hazel stay at two levels of trunk. */
+    static const struct {
+        PlantType type;
+        int trunk;
+    } HEIGHTS[] = {{PLANT_OAK, 3},   {PLANT_BEECH, 3},      {PLANT_CHESTNUT, 3},  {PLANT_ASH, 3},
+                   {PLANT_BIRCH, 3}, {PLANT_WILD_APPLE, 2}, {PLANT_WILD_PEAR, 3}, {PLANT_HAZEL, 2}};
+    for (size_t i = 0; i < sizeof(HEIGHTS) / sizeof(HEIGHTS[0]); i++) {
+        Plant plant = {.type = (uint8_t)HEIGHTS[i].type, .growth = GROWN};
+        TreeShape shape;
+        REQUIRE(tree_shape(&plant, 0, 0, 0, &shape));
+        CHECK_EQ_INT(shape.trunk, HEIGHTS[i].trunk);
+    }
+    /* Old and ancient: the oak, beech and chestnut can be both, the ash old
+     * only, the others neither. */
+    static const struct {
+        PlantType type;
+        int widest;
+    } WIDTHS[] = {{PLANT_OAK, 3},   {PLANT_BEECH, 3},      {PLANT_CHESTNUT, 3}, {PLANT_ASH, 2},
+                  {PLANT_BIRCH, 1}, {PLANT_WILD_APPLE, 1}, {PLANT_WILD_PEAR, 1}};
+    for (size_t i = 0; i < sizeof(WIDTHS) / sizeof(WIDTHS[0]); i++) {
+        Plant plant = {.type = (uint8_t)WIDTHS[i].type, .size = 3, .growth = 1.0f};
+        CHECK_EQ_INT(tree_size(&plant), WIDTHS[i].widest);
+    }
+    /* Yields follow the species. */
+    Plant oak = {.type = PLANT_OAK, .growth = 1.0f}, birch = {.type = PLANT_BIRCH, .growth = 1.0f};
+    CHECK(tree_wood_yield(&birch) < tree_wood_yield(&oak));
+    CHECK_EQ_INT(tree_crown_yield(&birch, ITEM_BRANCHES), tree_def(PLANT_BIRCH)->crown_branches);
+    CHECK(tree_shed_chance(&birch, ITEM_TWIGS) > tree_shed_chance(&oak, ITEM_TWIGS));
+
+    /* In the map: an oak's crown can be climbed, a birch's cannot. */
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    grow_tree(&map, 5, 5, 0, GROWN, 1);
+    map.plants[map_index(&map, 14, 14, 0)] = (Plant){.type = PLANT_BIRCH, .growth = GROWN};
+    tree_build(&map, 14, 14, 0);
+    bool oak_climbable = false, birch_climbable = false;
+    for (int d = 0; d < 4; d++) {
+        static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+        oak_climbable |= map_can_climb_tree(&map, 5 + DX[d], 5 + DY[d], 0);
+        birch_climbable |= map_can_climb_tree(&map, 14 + DX[d], 14 + DY[d], 0);
+    }
+    CHECK(oak_climbable);
+    CHECK(!birch_climbable);
+    items_free(&items);
+    map_free(&map);
+}
+
+/* Every tile of a tree's trunk and foliage is marked with its species; a
+ * tile two crowns share goes to the other tree when one is taken out. */
+static void test_foliage_knows_its_species(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    map.plants[map_index(&map, 10, 10, 0)] = (Plant){.type = PLANT_BEECH, .growth = GROWN};
+    tree_build(&map, 10, 10, 0);
+    map.plants[map_index(&map, 13, 10, 0)] = (Plant){.type = PLANT_ASH, .growth = GROWN};
+    tree_build(&map, 13, 10, 0);
+    for (int z = 0; z < 3; z++) {
+        CHECK_EQ_INT(map.tree_species[map_index(&map, 10, 10, z)], PLANT_BEECH);
+        CHECK_EQ_INT(map.tree_species[map_index(&map, 13, 10, z)], PLANT_ASH);
+    }
+    REQUIRE(is_foliage(&map, 9, 10, 1));
+    CHECK_EQ_INT(map.tree_species[map_index(&map, 9, 10, 1)], PLANT_BEECH);
+    REQUIRE(is_foliage(&map, 14, 10, 1));
+    CHECK_EQ_INT(map.tree_species[map_index(&map, 14, 10, 1)], PLANT_ASH);
+    /* The crowns meet between the trunks: the denser beech's foliage. */
+    REQUIRE(is_foliage(&map, 12, 10, 1));
+    CHECK_EQ_INT(map.tree_species[map_index(&map, 12, 10, 1)], PLANT_BEECH);
+    tree_clear(&map, &items, 10, 10, 0);
+    CHECK(is_foliage(&map, 12, 10, 1)); /* The ash's too: it stays, the ash's now. */
+    CHECK_EQ_INT(map.tree_species[map_index(&map, 12, 10, 1)], PLANT_ASH);
+    CHECK(!is_foliage(&map, 9, 10, 1));
+    CHECK_EQ_INT(map.tree_species[map_index(&map, 9, 10, 1)], PLANT_NONE);
+    CHECK_EQ_INT(map.tree_species[map_index(&map, 10, 10, 1)], PLANT_NONE);
+    items_free(&items);
+    map_free(&map);
+}
+
+/* A hazel is felled like any tree (it once stood through the felling). */
+static void test_hazel_is_felled(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    map.plants[map_index(&map, 10, 4, 0)] = (Plant){.type = PLANT_HAZEL, .growth = GROWN};
+    tree_build(&map, 10, 4, 0);
+    REQUIRE(is_trunk(&map, 10, 4, 1));
+    TreeFall fall = tree_fell(&map, &items, 10, 4, 0, item_stack_pristine(ITEM_WOOD, 6));
+    CHECK(fall.length > 0);
+    CHECK_EQ_INT(map.plants[map_index(&map, 10, 4, 0)].type, PLANT_NONE);
+    CHECK(!is_trunk(&map, 10, 4, 0) && !is_trunk(&map, 10, 4, 1));
+    CHECK_EQ_INT((int)items.totals[ITEM_WOOD], 6);
+    CHECK_EQ_INT((int)items.totals[ITEM_BRANCHES], tree_def(PLANT_HAZEL)->crown_branches);
+    items_free(&items);
+    map_free(&map);
+}
+
 /* The nuts fall in autumn only, the more the more grown the tree is, and only
  * from trees that bear any. */
 static void test_nuts_fall_in_autumn(void)
@@ -568,7 +712,7 @@ static void test_nuts_fall_in_autumn(void)
     hazel.growth = 0.5f;
     CHECK(tree_fall_chance(&hazel, autumn, &item) < chance);
     item = ITEM_NONE;
-    Plant oak = {.type = PLANT_TREE, .growth = 1.0f};
+    Plant oak = {.type = PLANT_OAK, .growth = 1.0f};
     CHECK(tree_fall_chance(&oak, autumn, &item) == 0.0f);
     CHECK_EQ_INT(item, ITEM_NONE);
     CHECK(tree_fall_chance(&(Plant){.type = PLANT_BRAMBLE, .growth = 1.0f}, autumn, &item) == 0.0f);
@@ -609,8 +753,7 @@ static void test_hazel_drops_nuts_in_the_game(void)
                         int here = map_litter(map, x, y, z, ITEM_HAZELNUTS);
                         CHECK(here <= MAP_NUTS_MAX);
                         if (here > 0) {
-                            CHECK(abs(x - 16) <= TREE_CROWN_REACH &&
-                                  abs(y - 16) <= TREE_CROWN_REACH);
+                            CHECK(abs(x - 16) <= OAK->reach && abs(y - 16) <= OAK->reach);
                             CHECK(!is_trunk(map, x, y, z));
                             CHECK(z == 0 || map_is_passable(map, x, y, z)); /* Dense foliage. */
                         }
@@ -620,6 +763,55 @@ static void test_hazel_drops_nuts_in_the_game(void)
         }
         game_shutdown(&game);
     }
+}
+
+/* Chestnuts, wild apples and wild pears fall like hazelnuts, each in its
+ * season: items under the tree, never more than MAP_NUTS_MAX on a tile. A
+ * new world (no game) has none of them. */
+static void test_fruit_falls_in_the_game(void)
+{
+    static const struct {
+        PlantType tree;
+        ItemType fruit;
+        int out_of_season; /* A day it bears none. */
+    } FRUIT[] = {{PLANT_CHESTNUT, ITEM_CHESTNUTS, SEASON_DAY(SEASON_SUMMER, 14)},
+                 {PLANT_WILD_APPLE, ITEM_APPLES, SEASON_DAY(SEASON_SPRING, 5)},
+                 {PLANT_WILD_PEAR, ITEM_PEARS, SEASON_DAY(SEASON_SUMMER, 14)}};
+    int autumn = SEASON_DAY(SEASON_AUTUMN, 5);
+    for (size_t i = 0; i < sizeof(FRUIT) / sizeof(FRUIT[0]); i++) {
+        Plant plant = {.type = (uint8_t)FRUIT[i].tree, .growth = 1.0f};
+        ItemType item = ITEM_NONE;
+        CHECK(tree_fall_chance(&plant, FRUIT[i].out_of_season, &item) == 0.0f);
+        CHECK(tree_fall_chance(&plant, autumn, &item) > 0.0f);
+        CHECK_EQ_INT(item, FRUIT[i].fruit);
+
+        Game game;
+        REQUIRE(init_flat_game(&game));
+        Map *map = &game.map;
+        game.clock.tick = (uint64_t)autumn * TICKS_PER_DAY;
+        map->plants[map_index(map, 16, 16, 0)] = plant;
+        game_debug_skip(&game, 2 * GAME_PLANT_UPDATE_INTERVAL); /* Takes room. */
+        REQUIRE(is_trunk(map, 16, 16, 0));
+        game_debug_skip(&game, 150 * TICKS_PER_HOUR);
+        int fallen = litter_total(map, FRUIT[i].fruit);
+        CHECK(fallen > 5); /* 30 to 40 over 10 to 14 days. */
+        CHECK_EQ_INT(fallen, (int)game.items.totals[FRUIT[i].fruit]);
+        for (int z = 0; z < DEPTH; z++) {
+            for (int y = 0; y < SIZE; y++) {
+                for (int x = 0; x < SIZE; x++) {
+                    CHECK(map_litter(map, x, y, z, FRUIT[i].fruit) <= MAP_NUTS_MAX);
+                }
+            }
+        }
+        game_shutdown(&game);
+    }
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    CHECK(!map_add_litter(&map, 3, 3, 0, ITEM_APPLES));
+    CHECK_EQ_INT(map_litter(&map, 3, 3, 0, ITEM_APPLES), 0);
+    items_free(&items);
+    map_free(&map);
 }
 
 /* Fallen nuts are items: each rots on its own, as any food lying out. */
@@ -672,7 +864,7 @@ static void test_build_and_find(void)
     CHECK(is_foliage(&map, 11, 10, 1));
     CHECK(is_foliage(&map, 10, 9, 2));
     CHECK(is_foliage(&map, 10, 10, 3));
-    CHECK(!is_foliage(&map, 10 + TREE_CROWN_REACH + 1, 10, 1));
+    CHECK(!is_foliage(&map, 10 + OAK->reach + 1, 10, 1));
     CHECK(!is_foliage(&map, 11, 10, 0));
     CHECK(!is_foliage(&map, 11, 10, 4));
     CHECK(map_is_passable(&map, 11, 10, 1)); /* Walked on. */
@@ -690,7 +882,7 @@ static void test_build_and_find(void)
     REQUIRE(tree_at(&map, 10, 10, 3, &tree));
     CHECK_EQ_INT(tree.z, 0);
     CHECK(tree_plant(&map, &tree) == &map.plants[map_index(&map, 10, 10, 0)]);
-    CHECK(!tree_at(&map, 10 + TREE_CROWN_REACH + 1, 10, 1, &tree));
+    CHECK(!tree_at(&map, 10 + OAK->reach + 1, 10, 1, &tree));
     CHECK(!tree_at(&map, 11, 10, 0, &tree));
     CHECK(!tree_at(&map, -1, 10, 1, &tree));
 
@@ -796,7 +988,7 @@ static void test_room_to_grow(void)
     Items items;
     REQUIRE(init_world(&map, &items));
     TreeShape grown, half;
-    Plant plant = {.type = PLANT_TREE, .growth = GROWN};
+    Plant plant = {.type = PLANT_OAK, .growth = GROWN};
     REQUIRE(tree_shape(&plant, 0, 0, 0, &grown));
     plant.growth = HALF_GROWN;
     REQUIRE(tree_shape(&plant, 0, 0, 0, &half));
@@ -961,8 +1153,8 @@ static void test_fell(void)
     Plant *plant = &map.plants[map_index(&map, 10, 2, 0)];
     int branches = tree_crown_yield(plant, ITEM_BRANCHES);
     int twigs = tree_crown_yield(plant, ITEM_TWIGS);
-    CHECK_EQ_INT(branches, TREE_CROWN_BRANCHES);
-    CHECK_EQ_INT(twigs, TREE_CROWN_TWIGS);
+    CHECK_EQ_INT(branches, OAK->crown_branches);
+    CHECK_EQ_INT(twigs, OAK->crown_twigs);
     ItemStack wood =
         item_stack_make(ITEM_WOOD, 24, ITEM_QUALITY_STANDARD, item_def(ITEM_WOOD)->max_hit_points);
     TreeFall fall = tree_fell(&map, &items, 10, 2, 0, wood);
@@ -1054,10 +1246,10 @@ static void test_chop_order(void)
     int count;
     CHECK_EQ_INT(designation_yield(&designations, &map, 4, 4, 0, &count), ITEM_WOOD);
     CHECK_EQ_INT(count, tree_wood_yield(small));
-    CHECK_EQ_INT(count, plant_def(PLANT_TREE)->cut_yield);
+    CHECK_EQ_INT(count, plant_def(PLANT_OAK)->cut_yield);
     CHECK_EQ_INT(designation_yield(&designations, &map, 12, 12, 0, &count), ITEM_WOOD);
     CHECK_EQ_INT(count, tree_wood_yield(wide));
-    CHECK_EQ_INT(count, 4 * plant_def(PLANT_TREE)->cut_yield);
+    CHECK_EQ_INT(count, 4 * plant_def(PLANT_OAK)->cut_yield);
 
     /* Felled once the work is done: the tree falls with its wood. */
     CHECK(!designation_add_work(&designations, &map, &items, 4, 4, 0, needed * 0.5f, 75.0, NULL));
@@ -1066,7 +1258,7 @@ static void test_chop_order(void)
     CHECK_EQ_INT(map.plants[map_index(&map, 4, 4, 0)].type, PLANT_NONE);
     CHECK(!is_trunk(&map, 4, 4, 0) && !is_trunk(&map, 4, 4, 2));
     CHECK(!is_foliage(&map, 5, 4, 2));
-    CHECK_EQ_INT((int)items.totals[ITEM_WOOD], plant_def(PLANT_TREE)->cut_yield);
+    CHECK_EQ_INT((int)items.totals[ITEM_WOOD], plant_def(PLANT_OAK)->cut_yield);
     CHECK_EQ_INT(designation_get(&designations, 4, 4, 0), DESIGNATION_NONE);
     CHECK_EQ_INT(designations.harmful_tree_falls, 0u);
 
@@ -1176,8 +1368,8 @@ static void test_shedding(void)
                 CHECK(twigs <= MAP_TWIGS_MAX);
                 if (twigs > 0) {
                     CHECK(!is_trunk(&map, x, y, z));
-                    CHECK(abs(x - 10) <= TREE_CROWN_REACH &&
-                          abs(y - 10) <= TREE_CROWN_REACH); /* Under the crown. */
+                    CHECK(abs(x - 10) <= OAK->reach &&
+                          abs(y - 10) <= OAK->reach); /* Under the crown. */
                     on_foliage += is_foliage(&map, x, y, z);
                     on_ground += z == 0;
                 }
@@ -1208,7 +1400,7 @@ static void test_shedding(void)
 /* Young trees shed twigs only, half as often; grown trees shed both. */
 static void test_shedding_by_age(void)
 {
-    Plant plant = {.type = PLANT_TREE, .growth = SAPLING};
+    Plant plant = {.type = PLANT_OAK, .growth = SAPLING};
     CHECK(tree_shed_chance(&plant, ITEM_TWIGS) == 0.0f);
     CHECK(tree_shed_chance(&plant, ITEM_BRANCHES) == 0.0f);
     plant.growth = YOUNG;
@@ -1337,7 +1529,7 @@ static void test_gathering_on_trees(void)
     CHECK_EQ_INT(items_get(&items, 10, 12, 0).type, ITEM_WOOD); /* Along the trunk. */
     /* The crown came down with its twigs, green and so wet, and what lay on it. */
     CHECK_EQ_INT(map_litter(&map, 11, 10, 0, ITEM_HAZELNUTS), 1);
-    CHECK_EQ_INT((int)items.totals[ITEM_WET_TWIGS], TREE_CROWN_TWIGS);
+    CHECK_EQ_INT((int)items.totals[ITEM_WET_TWIGS], OAK->crown_twigs);
     CHECK_EQ_UINT(zones.harmful_tree_falls, 0);
     CHECK(gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CHOP, 1e6f, 60.0, NULL));
     CHECK_EQ_UINT(zones.harmful_tree_falls, 1);
@@ -1424,8 +1616,12 @@ int main(void)
     RUN_TEST(test_young_tree_growth_leaves_the_topology_alone);
     RUN_TEST(test_thin_foliage_is_seen_through);
     RUN_TEST(test_hazel_is_a_small_tree);
+    RUN_TEST(test_species_crowns);
+    RUN_TEST(test_foliage_knows_its_species);
+    RUN_TEST(test_hazel_is_felled);
     RUN_TEST(test_nuts_fall_in_autumn);
     RUN_TEST(test_hazel_drops_nuts_in_the_game);
+    RUN_TEST(test_fruit_falls_in_the_game);
     RUN_TEST(test_nuts_rot_one_by_one);
     RUN_TEST(test_build_and_find);
     RUN_TEST(test_climbing);

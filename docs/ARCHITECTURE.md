@@ -368,34 +368,52 @@ see `lets_fall()` in `tree.c`). `terrain_is_foliage()` is true for all three. Th
 north-west one of a wider trunk) with the growth, stocks and trunk width
 (`Plant.size`, 0 meaning 1); the shape follows from them (`tree_shape()`):
 
+Each tree species is a plant type (`PLANT_OAK` .. `PLANT_HAZEL`, the range
+`PLANT_TREE_FIRST` .. `PLANT_TREE_LAST` that `plant_is_tree()` tests): oak,
+beech, sweet chestnut, ash, birch, wild apple, wild pear and hazel
+(`docs/TREES.md`). Its `PlantDef` holds what it needs (ground, water,
+light, cold) and what it gives (`cut_yield`, the nuts or fruit it lets
+fall); its `TreeDef` (`tree_def()`, `core/tree.c`) the shape of its crown:
+the growths at which its trunk rises, its reach, a density shift (the
+beech's and the chestnut's crowns a notch denser than their distance from
+the trunk says, the ash's and the birch's a notch thinner: nothing to walk
+on, so they cannot be climbed), its raggedness, what its crown gives when
+felled, how much it sheds, and whether it can be old or ancient.
+
 A tree of the default size grows continuously (`tree_shape()` takes the
 plant's growth, 0..1; the first two growth stages are a sapling). From
-`TREE_CROWN_FROM` (0.4) it takes room, and its trunk rises with its growth:
+`TREE_CROWN_FROM` (0.4) it takes room, and its trunk rises with its growth
+(the oak's, most species alike; the wild apple and the hazel stop at two
+levels):
 
 | Growth | Trunk (levels) | Crown |
 |---|---|---|
 | from 0.4 | 1 | the foliage over the trunk, sparse |
-| from `TREE_SECOND_LEVEL_AT` (0.49) | 2 | tiles come in around the trunk on every level, nearest first |
-| from `TREE_THIRD_LEVEL_AT` (0.55) | 3 | up to `TREE_CROWN_REACH` (2) tiles from the trunk, all in by 0.8 |
+| from `TreeDef.second_level_at` (0.49) | 2 | tiles come in around the trunk on every level, nearest first |
+| from `TreeDef.third_level_at` (0.55) | 3 | up to `TreeDef.reach` (2; the birch's and the wild pear's 1) tiles from the trunk, all in by 0.8 |
 
 Old and ancient trees (only from world generation) have a fixed shape,
 fully grown (`TREE_FULL_GROWTH`):
 
 | Tree | Trunk | Levels of trunk | Foliage from level | Reach | Levels |
 |---|---|---|---|---|---|
-| Old | 2 × 2 | 5 | 3 | 2 | 6 |
-| Ancient | 3 × 3 | 6 | 3 | 3 | 7 (`TREE_MAX_LEVELS`) |
+| Old | 2 × 2 | 5 | 3 | the species' | 6 |
+| Ancient | 3 × 3 | 6 | 3 | the species' + 1 | 7 (`TREE_MAX_LEVELS`) |
+
+Only the oak, the beech and the chestnut can be ancient, and the ash old
+(`TreeDef.can_be_old`, `can_be_ancient`).
 
 The crown is rounded and ragged, and it grows tile by tile
 (`tree_foliage_density()`, a function of the tile's offset from the foot
 and `TreeShape.growth` only). The outline: a rounded disc, the further a
-tile is from the trunk the likelier it never comes (`TREE_FOLIAGE_RAGGEDNESS`).
+tile is from the trunk the likelier it never comes (`TreeDef.raggedness`).
 Each tile that does comes in at a growth that rises with its distance from the
 trunk, blurred by noise (`TREE_CROWN_DISORDER`), within `TREE_CROWN_SPREAD`
 of growth: nearest first, differently on each level. It comes in sparse and
 thickens a notch every `TREE_DENSIFY_GROWTH` (about 3.3 days on plain soil)
-up to the density of its ring around the trunk (1: dense, 2: thin; a tile of
-an outer ring a notch thinner now and then, `TREE_FOLIAGE_PATCHINESS`). The
+up to the density of its ring around the trunk (1: dense, 2: thin, shifted
+by the species' `density_shift`; a tile of an outer ring a notch thinner now
+and then, `TREE_FOLIAGE_PATCHINESS`). The
 noise comes from the tile and `TreeShape.seed`, a hash of the foot's
 position, nothing is stored: two trees differ, a growing tree only adds
 foliage, and what it had never thins. A young tree has no walkable
@@ -403,7 +421,11 @@ foliage yet (only dense foliage is walked on) and cannot be climbed.
 `grow_tree()` (game.c) rewrites the crown whenever the shape or growth
 changed (every update hour of a growing tree), and `tree_build()` raises the
 density of foliage already there (never lowers it: where two trees share a
-tile the thicker wins). Thin foliage is seen through: `map_view_level()` (what the tile selection,
+tile the thicker wins). Every trunk and foliage tile records the species of
+its tree (`Map.tree_species`, a byte per tile written by `tree_build()`; a
+tile two crowns share is the thicker one's, and goes to the other tree when
+`tree_clear()` takes one out): the renderer draws the bark and the leaves of
+the species from it without looking for the tree. Thin foliage is seen through: `map_view_level()` (what the tile selection,
 zones and the drawing call "what is seen") goes through it like through open
 space, and the renderer draws its tiles over the levels below with textures
 of leaves and bare branches on a transparent background
@@ -412,9 +434,14 @@ of leaves and bare branches on a transparent background
 (`core/region.h`) only of a floor appearing (simple to add) or going: thin
 foliage coming and going leaves them alone. Old and ancient
 trees only come from world generation (`OLD_TREE_CHANCE` 4 %,
-`OLD_TREE_CHANCE` 4 %,
-`ANCIENT_TREE_CHANCE` 1 % of the grown trees where the wider trunk fits);
-their stocks scale with the trunk's area, as does the wood they give.
+`ANCIENT_TREE_CHANCE` 1 % of the grown trees of a species that can be, where
+the wider trunk fits: the younger trees touching it give way, and they are
+built first, so that the crowns around do not take their room); their
+stocks scale with the trunk's area, as does the wood they give. World
+generation picks a tree's species from its site (`tree_species_weights()`
+in `worldgen.c`: forest share, edge and clearing, ground), each gated by its
+`min_fertility` and water response: birches on sand, no beech nor ash on
+gravel.
 `tree_build()` writes a tree into the map through `map_set_rock()` /
 `map_set_terrain()`: foliage only fills open space, not over a slope or a
 ladder (whose way up it would close). When a growth stage changes the
@@ -432,7 +459,8 @@ the way). Settlers climb up a trunk to the foliage above a tile beside it
 
 **Branches and twigs** are not stocks of the tree: a tree with a crown
 sheds them at random (`tree_shed()`), once an hour per tree
-(`TREE_SHED_TWIG_CHANCE`, `TREE_SHED_BRANCH_CHANCE` times the trunk's area,
+(`TREE_SHED_TWIG_CHANCE`, `TREE_SHED_BRANCH_CHANCE` times the trunk's area
+and the species' `shed_twigs`, `shed_branches`,
 rolled from the seed, the tile and the hour like the mushrooms, so that the
 game's random stream is left alone). A young tree (not yet grown) sheds twigs
 only, half as often; saplings shed nothing. Each one comes from a random tile
@@ -446,22 +474,22 @@ never stays in the foliage, so nobody climbs for it. What lay on foliage that
 goes with a felled tree (items) falls to the ground below (`tree_clear()`; what does not fit lies as items). No plant
 bears branches or twigs of its own any more.
 
-**Hazels** are trees too (`plant_is_tree()`: `PLANT_TREE` and `PLANT_HAZEL`;
-a seedling below growth 0.4 is a shrub sprite, as for the other trees). A
-hazel has no wide trunk, at most two levels of trunk
-(`TREE_HAZEL_SECOND_LEVEL_AT`), a crown that grows like the others', less
-wood (`PlantDef.cut_yield`) and lets its nuts fall in autumn
-(`PlantDef.fall_item`, `fall_days`, `fall_yield`): once an hour per tree
-(`tree_fall_chance()`: the season's yield spread over its hours, scaled by
-growth) a nut is shed by `tree_shed()` like a twig, onto the ground under the
-crown. Nuts are litter like branches and twigs: a new world lays them in a
-map layer (`Map.nuts`, `MAP_NUTS_MAX` a tile), turned into ordinary items when
-the game starts (`map_litter_to_items()`), and a running game lays them as
-items (`map_litter()` and friends take `ITEM_HAZELNUTS`). Each nut rots on
-its own like any food lying out (90 days at 15 °C), is hauled to a stockpile
-that takes it, eaten by a hungry settler where it lies, and by the animals
-that eat nuts (`AnimalDef.eats_nuts`), wherever it lies. Gathering zones
-leave them alone (`docs/TREES.md`).
+**Hazels** are trees too (a seedling below growth 0.4 is a shrub sprite, as
+for the other trees): no wide trunk, at most two levels of trunk, less wood
+(`PlantDef.cut_yield`). The hazel, the sweet chestnut, the wild apple and the
+wild pear let their nuts or fruit fall in their season (`PlantDef.fall_item`,
+`fall_days`, `fall_yield`): once an hour per tree (`tree_fall_chance()`: the
+season's yield spread over its hours, scaled by growth) one is shed by
+`tree_shed()` like a twig, onto the ground under the crown. They are litter
+like branches and twigs (`MAP_NUTS_MAX` a tile): a new world lays hazelnuts
+in a map layer (`Map.nuts`), turned into ordinary items when the game starts
+(`map_litter_to_items()`); the other fruit only falls in a running game, as
+items (`map_litter()` and friends take `ITEM_HAZELNUTS`, `ITEM_CHESTNUTS`,
+`ITEM_APPLES`, `ITEM_PEARS`). Each rots on its own like any food lying out,
+is hauled to a stockpile that takes it, eaten by a hungry settler where it
+lies, and by the animals that eat what falls from the trees
+(`AnimalDef.eats_fallen`, `ANIMAL_FOOD_FALLEN`), wherever it lies. Gathering
+zones leave them alone (`docs/TREES.md`).
 A felled tree falls full length
 (`TREE_FALL_TILES_PER_LEVEL` = 2 tiles per level, stopping before rock and
 the edge of the map) where the woodcutter aims it (`tree_fall_aim()`): the

@@ -221,11 +221,27 @@ def shade(color, factor):
 # Plants
 # ---------------------------------------------------------------------------
 
-TREE_TRUNK = (112, 78, 50)
-TREE_LEAVES = (64, 120, 52)
-TREE_LEAVES_DARK = (38, 82, 40)
-TREE_LEAVES_LIGHT = (122, 170, 74)
 TREE_OUTLINE = (24, 38, 22)
+
+# The sapling of each tree species (docs/TREES.md), by its plant id: bark,
+# leaves (base, dark, light), and the crown's layout (offset x, offset y,
+# radius of each clump, at stages 0 and 1). Keep the bark in step with
+# TREE_BARK in src/game/render.c.
+BROAD_CROWN = ([(0, -20, 34), (-26, 6, 26), (26, 4, 26)],
+               [(0, -40, 50), (-44, -6, 44), (44, -6, 44), (0, 12, 52), (-18, -70, 36)])
+NARROW_CROWN = ([(0, -26, 28), (-14, 4, 22), (14, 2, 22)],
+                [(0, -60, 36), (-24, -20, 34), (24, -24, 32), (0, 10, 40), (6, -92, 26)])
+LOW_CROWN = ([(0, -14, 32), (-28, 8, 26), (28, 8, 26)],
+             [(0, -26, 48), (-50, 4, 42), (50, 2, 42), (0, 18, 50), (-20, -50, 32)])
+TREE_SPECIES = {
+    "oak": ((112, 78, 50), (64, 120, 52), (38, 82, 40), (122, 170, 74), BROAD_CROWN),
+    "beech": ((136, 128, 116), (74, 134, 54), (42, 92, 40), (138, 184, 82), BROAD_CROWN),
+    "chestnut": ((104, 72, 48), (78, 126, 46), (44, 86, 34), (136, 174, 70), BROAD_CROWN),
+    "ash": ((132, 124, 106), (92, 138, 70), (56, 100, 50), (150, 188, 104), NARROW_CROWN),
+    "birch": ((222, 216, 204), (118, 160, 70), (74, 118, 50), (176, 206, 108), NARROW_CROWN),
+    "wild_apple": ((110, 88, 70), (82, 132, 64), (48, 92, 44), (140, 180, 92), LOW_CROWN),
+    "wild_pear": ((92, 76, 64), (70, 116, 56), (40, 80, 40), (126, 164, 82), NARROW_CROWN),
+}
 GROUND_SHADOW = (0, 0, 0)
 
 # Canvas (width, height) and scale of each growth stage of the saplings: from
@@ -269,11 +285,13 @@ def foliage(canvas, blobs, scale, rng, base, dark, light, clip_extra=None):
                        opacity=0.8)
 
 
-def draw_tree(stage):
-    """A sapling (the grown trees are tiles of trunk and foliage)."""
+def draw_tree(species, stage):
+    """A sapling of a species (the grown trees are tiles of trunk and
+    foliage)."""
+    bark, leaves, leaves_dark, leaves_light, layouts = TREE_SPECIES[species]
     (width, height), scale = TREE_STAGES[stage]
     canvas = Canvas(width, height)
-    rng = random.Random(1000 + stage)
+    rng = random.Random(1000 + stage + 10 * list(TREE_SPECIES).index(species))
     cx = width / 2.0
     base_y = height - 12.0
     trunk_w = max(3.0, 24.0 * scale)
@@ -284,16 +302,16 @@ def draw_tree(stage):
     shadow.ellipse(cx, base_y + 1, 70 * scale + 8, 16 * scale + 3, (0, 0, 0))
     # Trunk, slightly tapering, with a root flare.
     canvas.polygon([(cx - trunk_w * 0.5, base_y), (cx - trunk_w * 0.32, top_y),
-                    (cx + trunk_w * 0.32, top_y), (cx + trunk_w * 0.5, base_y)], TREE_TRUNK)
+                    (cx + trunk_w * 0.32, top_y), (cx + trunk_w * 0.5, base_y)], bark)
+    if species == "birch":  # Dark marks on the white bark.
+        for i in range(3):
+            y = base_y - trunk_h * (0.2 + 0.25 * i)
+            canvas.line([(cx - trunk_w * 0.4, y), (cx + trunk_w * 0.1, y + 1)],
+                        max(1.0, trunk_w * 0.18), (52, 48, 44))
     # Crown: overlapping clumps.
     crown_y = top_y - 20 * scale
-    if stage == 0:
-        layout = [(0, -20, 34), (-26, 6, 26), (26, 4, 26)]
-    else:
-        layout = [(0, -40, 50), (-44, -6, 44), (44, -6, 44), (0, 12, 52), (-18, -70, 36)]
-    blobs = [(cx + dx * scale, crown_y + dy * scale, r * scale) for dx, dy, r in layout]
-    foliage(canvas, blobs, scale, rng, rgb(TREE_LEAVES), rgb(TREE_LEAVES_DARK),
-            rgb(TREE_LEAVES_LIGHT))
+    blobs = [(cx + dx * scale, crown_y + dy * scale, r * scale) for dx, dy, r in layouts[stage]]
+    foliage(canvas, blobs, scale, rng, rgb(leaves), rgb(leaves_dark), rgb(leaves_light))
     canvas.outline(max(1.2, 2.2 * min(1.0, scale + 0.3)), TREE_OUTLINE)
     return compose(shadow, canvas, shadow_opacity=0.28)
 
@@ -2665,8 +2683,9 @@ BEARD_STYLE_NAMES = {1: "stubble", 2: "short", 3: "full", 4: "mustache"}
 def generate(output):
     os.makedirs(output, exist_ok=True)
     sprites = {}
-    for stage in range(TREE_SAPLING_STAGES):
-        sprites[f"tree_{stage}.png"] = draw_tree(stage)
+    for species in TREE_SPECIES:
+        for stage in range(TREE_SAPLING_STAGES):
+            sprites[f"{species}_{stage}.png"] = draw_tree(species, stage)
     for stage in range(HAZEL_SEEDLING_STAGES):  # The grown hazels are tiles, like the trees.
         sprites[f"hazel_{stage}.png"] = draw_hazel(stage, False)
     for stage in range(len(BRAMBLE_STAGES)):
@@ -2733,10 +2752,10 @@ def preview(images, path):
     """Contact sheet on a grass-colored background, for a quick look."""
     sheet = Image.new("RGBA", (1600, 1000), (96, 128, 64, 255))
     x = 10
-    for stage in range(TREE_SAPLING_STAGES):
-        image = images[f"tree_{stage}.png"]
+    for species in TREE_SPECIES:
+        image = images[f"{species}_{TREE_SAPLING_STAGES - 1}.png"]
         sheet.alpha_composite(image, (x, 400 - image.height))
-        x += image.width + 4
+        x += image.width // 2 + 4
     x = 10
     for name, fruit, stages in (("hazel", False, (0, 1)), ("bramble", False, (2, 4)),
                                 ("bramble", True, (2, 4))):

@@ -134,7 +134,7 @@ static void test_species_definitions(void)
             CHECK(def->prey != 0 && def->hunt_range > 0 && def->bite_kg > 0.0f &&
                   def->stomach_kg > def->bite_kg);
             CHECK(combat_choice_count(def->attacks) > 0);
-            CHECK(def->plants == 0 && !def->eats_nuts && def->graze_value == 0.0f);
+            CHECK(def->plants == 0 && !def->eats_fallen && def->graze_value == 0.0f);
             CHECK((def->prey & ANIMAL_SPECIES_BIT(species)) == 0);
         } else {
             /* Plant eaters: they graze. */
@@ -437,8 +437,8 @@ static void test_roots_nuts_and_mushrooms(void)
     for (int i = 0; i < 6; i++) {
         map_add_litter(map, 20, 24, 0, ITEM_HAZELNUTS);
     }
-    CHECK(animal_food_at(ANIMAL_BOAR, map, 20, 24, 0) == ANIMAL_FOOD_NUTS);
-    CHECK(animal_food_at(ANIMAL_RED_DEER, map, 20, 24, 0) == ANIMAL_FOOD_NUTS);
+    CHECK(animal_food_at(ANIMAL_BOAR, map, 20, 24, 0) == ANIMAL_FOOD_FALLEN);
+    CHECK(animal_food_at(ANIMAL_RED_DEER, map, 20, 24, 0) == ANIMAL_FOOD_FALLEN);
     CHECK(animal_food_at(ANIMAL_HARE, map, 20, 24, 0) == ANIMAL_FOOD_NONE);
     boar->needs[ANIMAL_NEED_FOOD] = 0.3f;
     for (int i = 0; i < 6000 && map_litter(map, 20, 24, 0, ITEM_HAZELNUTS) == 6; i++) {
@@ -447,6 +447,19 @@ static void test_roots_nuts_and_mushrooms(void)
     CHECK_EQ_INT(map_litter(map, 20, 24, 0, ITEM_HAZELNUTS),
                  6 - animal_def(ANIMAL_BOAR)->bite_items);
     map_take_litter(map, 20, 24, 0, ITEM_HAZELNUTS);
+    /* Fallen fruit too. */
+    for (int i = 0; i < 6; i++) {
+        map_add_litter(map, 20, 24, 0, ITEM_APPLES);
+    }
+    CHECK(animal_food_at(ANIMAL_BOAR, map, 20, 24, 0) == ANIMAL_FOOD_FALLEN);
+    CHECK(animal_food_at(ANIMAL_HARE, map, 20, 24, 0) == ANIMAL_FOOD_NONE);
+    boar->needs[ANIMAL_NEED_FOOD] = 0.3f;
+    for (int i = 0; i < 6000 && map_litter(map, 20, 24, 0, ITEM_APPLES) == 6; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(map_litter(map, 20, 24, 0, ITEM_APPLES), 6 - animal_def(ANIMAL_BOAR)->bite_items);
+    CHECK(boar->needs[ANIMAL_NEED_FOOD] > 0.3f);
+    map_take_litter(map, 20, 24, 0, ITEM_APPLES);
 
     /* A mushroom patch eaten up is gone. */
     Plant *mushrooms = put_plant(&game, 20, 28, PLANT_MUSHROOMS);

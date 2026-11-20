@@ -36,6 +36,31 @@ static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
 };
 /* A trunk's bark, around its cut face, and its growth rings. */
 static const SDL_Color BARK_COLOR = {78, 54, 34, 255};
+/* The bark of each tree species on the sides of a trunk (Map.tree_species;
+ * BARK_COLOR for the others). Keep it in step with TREE_SPECIES in
+ * tools/generate_sprites.py, a little darker: seen from above. */
+static const SDL_Color TREE_BARK[PLANT_COUNT] = {
+    [PLANT_OAK] = {84, 58, 36, 255},       [PLANT_BEECH] = {118, 112, 102, 255},
+    [PLANT_CHESTNUT] = {80, 54, 36, 255},  [PLANT_ASH] = {112, 106, 90, 255},
+    [PLANT_BIRCH] = {206, 200, 188, 255},  [PLANT_WILD_APPLE] = {92, 72, 56, 255},
+    [PLANT_WILD_PEAR] = {74, 60, 50, 255}, [PLANT_HAZEL] = {106, 86, 68, 255},
+};
+/* How the leaves of each species tint the foliage texture, in leaf and once
+ * turned (they fall as the crowns go bare, Map.bare): the beech copper, the
+ * birch and the ash yellow, the oak brown. */
+typedef struct LeafTint {
+    SDL_FColor green, turned;
+} LeafTint;
+static const LeafTint LEAF_TINTS[PLANT_COUNT] = {
+    [PLANT_OAK] = {{1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.72f, 0.42f, 1.0f}},
+    [PLANT_BEECH] = {{1.0f, 1.0f, 0.82f, 1.0f}, {1.0f, 0.58f, 0.3f, 1.0f}},
+    [PLANT_CHESTNUT] = {{0.96f, 0.96f, 0.76f, 1.0f}, {1.0f, 0.78f, 0.36f, 1.0f}},
+    [PLANT_ASH] = {{0.94f, 0.98f, 0.96f, 1.0f}, {1.0f, 0.96f, 0.5f, 1.0f}},
+    [PLANT_BIRCH] = {{1.0f, 1.0f, 0.78f, 1.0f}, {1.0f, 1.0f, 0.36f, 1.0f}},
+    [PLANT_WILD_APPLE] = {{0.98f, 1.0f, 0.9f, 1.0f}, {1.0f, 0.82f, 0.46f, 1.0f}},
+    [PLANT_WILD_PEAR] = {{0.9f, 0.94f, 0.9f, 1.0f}, {1.0f, 0.6f, 0.4f, 1.0f}},
+    [PLANT_HAZEL] = {{1.0f, 1.0f, 0.88f, 1.0f}, {1.0f, 0.9f, 0.4f, 1.0f}},
+};
 static const SDL_Color RING_COLOR = {120, 84, 50, 255};
 /* Growth rings are drawn from this zoom on (pixels per tile). */
 #define TREE_DETAIL_MIN_ZOOM 10.0f
@@ -114,6 +139,9 @@ static const SDL_Color WOOD_COLOR = {150, 98, 52, 255};
 static const SDL_Color STONE_COLOR = {176, 174, 168, 255};
 static const SDL_Color BERRY_COLOR = {70, 28, 64, 255};
 static const SDL_Color HAZELNUT_COLOR = {150, 104, 56, 255};
+static const SDL_Color CHESTNUT_COLOR = {108, 58, 28, 255};
+static const SDL_Color APPLE_COLOR = {168, 164, 56, 255};
+static const SDL_Color PEAR_COLOR = {184, 172, 92, 255};
 static const SDL_Color MUSHROOM_CAP_COLOR = {178, 132, 84, 255};
 static const SDL_Color MUSHROOM_STEM_COLOR = {226, 214, 190, 255};
 static const SDL_Color WILD_GARLIC_COLOR = {84, 170, 70, 255};
@@ -430,7 +458,9 @@ static void render_trunk(SDL_Renderer *renderer, const Map *map, int x, int y, i
         } else {
             strip.h = bark;
         }
-        batch_quad(renderer, BARK_COLOR, &strip);
+        uint8_t species = map->tree_species[map_index(map, x, y, z)];
+        SDL_Color color = TREE_BARK[species < PLANT_COUNT ? species : PLANT_NONE];
+        batch_quad(renderer, color.a != 0 ? color : BARK_COLOR, &strip);
     }
     if (sides == 4 && zoom >= TREE_DETAIL_MIN_ZOOM) {
         SDL_FRect ring = inset(tile, 0.5f);
@@ -739,16 +769,26 @@ static void ground_textures(const Map *map, int x, int y, int z, size_t index,
         return;
     }
     Terrain terrain = (Terrain)map->terrain[index];
+    SDL_FColor leaf = WHITE;
+    if (terrain_is_foliage(terrain) && map->tree_species[index] < PLANT_COUNT &&
+        LEAF_TINTS[map->tree_species[index]].green.a > 0.0f) {
+        /* The leaves of its species, turning as they fall. */
+        const LeafTint *tint = &LEAF_TINTS[map->tree_species[index]];
+        float turned = map->bare != 0 ? SDL_min(1.0f, 2.0f * map_bare_fraction(map)) : 0.0f;
+        leaf = (SDL_FColor){lerpf(tint->green.r, tint->turned.r, turned),
+                            lerpf(tint->green.g, tint->turned.g, turned),
+                            lerpf(tint->green.b, tint->turned.b, turned), 1.0f};
+    }
     if (map->bare != 0 && sprite_ground_bare(terrain) >= 0) {
         /* A crown in winter: its branches, and the leaves it has left over them. */
         sprites_draw_tile(pass->sprites, sprite_ground_bare(terrain), tile, WHITE);
         float leaves = 1.0f - map_bare_fraction(map);
         if (leaves > 0.0f) {
-            sprites_draw_tile(pass->sprites, sprite_ground(terrain), tile,
-                              (SDL_FColor){1.0f, 1.0f, 1.0f, leaves});
+            leaf.a = leaves;
+            sprites_draw_tile(pass->sprites, sprite_ground(terrain), tile, leaf);
         }
     } else {
-        sprites_draw_tile(pass->sprites, sprite_ground(terrain), tile, WHITE);
+        sprites_draw_tile(pass->sprites, sprite_ground(terrain), tile, leaf);
     }
 }
 
@@ -1409,16 +1449,25 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
     case ITEM_BILBERRIES:
     case ITEM_WILD_STRAWBERRIES:
     case ITEM_ROSE_HIPS:
-    case ITEM_HAZELNUTS: {
-        /* A handful of berries, or a few nuts. */
+    case ITEM_HAZELNUTS:
+    case ITEM_CHESTNUTS:
+    case ITEM_APPLES:
+    case ITEM_PEARS: {
+        /* A handful of berries, a few nuts, or three apples or pears. */
         static const float SPOTS[5][2] = {
             {0.3f, 0.5f}, {0.5f, 0.45f}, {0.42f, 0.62f}, {0.58f, 0.6f}, {0.38f, 0.36f}};
-        bool nuts = type == ITEM_HAZELNUTS;
-        float size = SDL_max(1.0f, floorf(w * (nuts ? 0.18f : 0.16f)));
-        for (int i = 0; i < 5; i++) {
-            SDL_FRect spot = {tile->x + floorf(w * SPOTS[i][0]), tile->y + floorf(h * SPOTS[i][1]),
-                              size, size};
+        static const float FRUIT_SPOTS[3][2] = {{0.24f, 0.46f}, {0.5f, 0.4f}, {0.38f, 0.6f}};
+        bool nuts = type == ITEM_HAZELNUTS || type == ITEM_CHESTNUTS;
+        bool fruit = type == ITEM_APPLES || type == ITEM_PEARS;
+        float size = SDL_max(1.0f, floorf(w * (fruit ? 0.26f : nuts ? 0.18f : 0.16f)));
+        for (int i = 0; i < (fruit ? 3 : 5); i++) {
+            const float *at = fruit ? FRUIT_SPOTS[i] : SPOTS[i];
+            SDL_FRect spot = {tile->x + floorf(w * at[0]), tile->y + floorf(h * at[1]), size,
+                              type == ITEM_PEARS ? floorf(size * 1.25f) : size};
             SDL_Color color = type == ITEM_HAZELNUTS           ? HAZELNUT_COLOR
+                              : type == ITEM_CHESTNUTS         ? CHESTNUT_COLOR
+                              : type == ITEM_APPLES            ? APPLE_COLOR
+                              : type == ITEM_PEARS             ? PEAR_COLOR
                               : type == ITEM_BILBERRIES        ? BILBERRY_COLOR
                               : type == ITEM_WILD_STRAWBERRIES ? STRAWBERRY_COLOR
                               : type == ITEM_ROSE_HIPS         ? ROSE_HIP_COLOR
@@ -4144,8 +4193,7 @@ static bool plant_seen(const Map *map, const Plant *plant, int x, int y, int z)
     if (seen == z) {
         return true;
     }
-    if ((plant->type != PLANT_TREE && plant->type != PLANT_HAZEL) || seen < z ||
-        seen - z >= TREE_MAX_LEVELS) {
+    if (!plant_is_tree(plant->type) || seen < z || seen - z >= TREE_MAX_LEVELS) {
         return false;
     }
     size_t index = map_index(map, x, y, seen);
@@ -4168,7 +4216,7 @@ static void render_plant(Sprites *sprites, const Camera *camera, const Map *map,
     float sx, sy;
     camera_world_to_screen(camera, (float)x + 0.5f, (float)(y + 1), &sx, &sy);
     SDL_FColor color = WHITE;
-    bool tall = plant->type == PLANT_TREE || plant->type == PLANT_HAZEL;
+    bool tall = plant_is_tree(plant->type);
     if (tall && map->bare != 0) {
         color = seedling_color(map_bare_fraction(map)); /* The seedlings lose theirs too. */
     }

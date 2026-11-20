@@ -354,7 +354,7 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 
 - [x] Design: seven species instead of the generic tree (oak, beech, sweet chestnut, ash, birch, wild apple, wild pear; the hazel stays), each with its crown, needs and place in the world; the wood species on logs, branches and what is made from them (every species kept when mixed), with moderate effects; structures keeping theirs, chosen by right click; fruit and nuts as items; foliage blocks holding items (fruit ripening, dead wood hanging), picked from the ground or by climbing (`docs/TREES.md`)
 - [x] Step 1: hazelnuts as items: they fall, rot one by one, are hauled and eaten as items (the map layer only holds a new world's until the game starts); the zones' *Hazelnuts* order is gone until the crowns are picked (step 4); animals eat nut items wherever they lie
-- [ ] Step 2: the seven species, their crowns and placement, chestnuts, apples and pears, sprites
+- [x] Step 2: the seven species (a `TreeDef` each: trunk levels, reach, density, yields, shedding, old and ancient), their placement by site, the species of each trunk and foliage tile (`Map.tree_species`), chestnuts, apples and pears falling as items (eaten there by boars and deer), sapling sprites, bark and leaf colours with autumn tints; old trees push young neighbours aside in world generation (they had become very rare); a felled hazel now falls
 - [ ] Step 3: the wood species on items and structures, names, effects, choice by right click
 - [ ] Step 4: foliage blocks holding items, picking from the ground and by climbing
 

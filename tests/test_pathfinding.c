@@ -174,7 +174,7 @@ static void test_cost_limit(void)
 static bool has_tree(const Map *map, int x, int y, int z, void *userdata)
 {
     (void)userdata;
-    return map->plants[map_index(map, x, y, z)].type == PLANT_TREE;
+    return map->plants[map_index(map, x, y, z)].type == PLANT_OAK;
 }
 
 static void test_find_nearest_matching_tile(void)
@@ -184,8 +184,8 @@ static void test_find_nearest_matching_tile(void)
     Path path = {0};
     TilePos found;
     REQUIRE(make_open_map(&map, &finder, 32));
-    map.plants[map_index(&map, 20, 10, 0)].type = PLANT_TREE;
-    map.plants[map_index(&map, 13, 10, 0)].type = PLANT_TREE;
+    map.plants[map_index(&map, 20, 10, 0)].type = PLANT_OAK;
+    map.plants[map_index(&map, 13, 10, 0)].type = PLANT_OAK;
 
     REQUIRE(pathfinder_find_nearest(&finder, &map, tile(10, 10), has_tree, NULL, PATH_NO_COST_LIMIT,
                                     &path, &found));
@@ -395,7 +395,7 @@ static void test_paths_climb_slopes(void)
     CHECK_NEAR(finder.last_cost, 1.0 + 8.0 * SQRT2 + MAP_CLIMB_COST, 1e-3);
 
     /* The nearest tree, down on the plains. */
-    map.plants[map_index(&map, 3, 9, 0)].type = PLANT_TREE;
+    map.plants[map_index(&map, 3, 9, 0)].type = PLANT_OAK;
     REQUIRE(pathfinder_find_nearest(&finder, &map, goal, has_tree, NULL, PATH_NO_COST_LIMIT, &path,
                                     &found));
     CHECK(found.x == 3 && found.y == 9 && found.z == 0);

@@ -97,9 +97,9 @@ typedef enum AnimalSearch {
 /* What a tile offers a species to eat (the best of it). */
 typedef enum AnimalFood {
     ANIMAL_FOOD_NONE,
-    ANIMAL_FOOD_GRASS, /* Grass tall enough to graze. */
-    ANIMAL_FOOD_NUTS,  /* Nuts lying on the ground. */
-    ANIMAL_FOOD_PLANT, /* The food a plant bears (fruit, leaves, roots). */
+    ANIMAL_FOOD_GRASS,  /* Grass tall enough to graze. */
+    ANIMAL_FOOD_FALLEN, /* Nuts or fruit fallen from the trees, lying on the ground. */
+    ANIMAL_FOOD_PLANT,  /* The food a plant bears (fruit, leaves, roots). */
 } AnimalFood;
 
 /* A set of species (bit s: AnimalSpecies s). */
@@ -145,12 +145,12 @@ typedef struct AnimalDef {
     float graze_bite;
     float graze_value;
     /* Plants whose food it eats, whether it digs roots up (PlantProduct.dug:
-     * left alone otherwise), whether it eats the nuts lying about, items a
+     * left alone otherwise), whether it eats the nuts and fruit lying about, items a
      * bite takes, and the food a unit of nutrition (ItemDef.nutrition, what
      * a settler gets of it) is worth to it: small animals get more of it. */
     AnimalPlantMask plants;
     bool digs;
-    bool eats_nuts;
+    bool eats_fallen;
     int bite_items;
     float food_value;
     /* Its body (core/health.h): the plan, its size next to a human's, and

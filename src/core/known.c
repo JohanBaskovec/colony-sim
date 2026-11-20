@@ -86,6 +86,7 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
     memcpy(dst->branches + first, map->branches + first, count);
     memcpy(dst->twigs + first, map->twigs + first, count);
     memcpy(dst->nuts + first, map->nuts + first, count);
+    memcpy(dst->tree_species + first, map->tree_species + first, count);
     memcpy(dst->structure + first, map->structure + first, count);
     memcpy(dst->structure_part + first, map->structure_part + first, count);
     memcpy(dst->structure_quality + first, map->structure_quality + first, count);

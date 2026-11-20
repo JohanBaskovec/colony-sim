@@ -87,34 +87,197 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                                    .min_growth = 0.5f}},
                      .harvest = PLANT_HARVEST_RESETS,
                      .grazed = true},
-    /* 60 logs of 7 kg: the usable wood of a mature tree (see item.c). Its
-     * dead branches and twigs fall to the ground and lie on its foliage
-     * (core/tree.h): no stock on the plant. */
-    [PLANT_TREE] = {.id = "tree",
-                    .name_key = N_("plant.tree"),
-                    .transpiration = 1.0f,
-                    .water = {0.0f, 0.3f, 1.3f, 1.9f, 60.0f, 30.0f},
-                    .spread_chance = 0.03f,
-                    .spread_growth = 1.0f,
-                    .spread_range = 4,
-                    .deciduous = true,
-                    .growth_per_day = 0.03f,
-                    .min_fertility = 0.6f,
-                    .move_cost = 1.6f,
-                    .t_min = 5.0f,
-                    .t_opt_low = 18.0f,
-                    .t_opt_high = 25.0f,
-                    .t_max = 35.0f,
-                    .t_frost_active = -3.0f,
-                    .t_frost_hardened = -30.0f,
-                    .t_lethal_heat = 45.0f,
-                    .rest = PLANT_REST_SLEEPS,
-                    .light_min = 0.1f,
-                    .light_full = 0.6f,
-                    .dark_days = 30.0f,
-                    .cut_item = ITEM_WOOD,
-                    .cut_yield = 60},
-    /* A small tree: its hazelnuts fall to the ground in autumn (Map.nuts), its
+    /* The trees (docs/TREES.md §2). cut_yield: logs of 7 kg, the usable wood of a
+     * mature tree (see item.c). Their dead branches and twigs fall to the ground and
+     * lie on their foliage (core/tree.h): no stock on the plant. The oak: slow,
+     * wanting light, on most ground; it bears flooding. */
+    [PLANT_OAK] = {.id = "oak",
+                   .name_key = N_("plant.oak"),
+                   .transpiration = 1.0f,
+                   .water = {0.0f, 0.3f, 1.5f, 2.4f, 60.0f, 40.0f},
+                   .spread_chance = 0.03f,
+                   .spread_growth = 1.0f,
+                   .spread_range = 5,
+                   .deciduous = true,
+                   .growth_per_day = 0.020f,
+                   .min_fertility = 0.5f,
+                   .move_cost = 1.6f,
+                   .t_min = 5.0f,
+                   .t_opt_low = 18.0f,
+                   .t_opt_high = 25.0f,
+                   .t_max = 35.0f,
+                   .t_frost_active = -3.0f,
+                   .t_frost_hardened = -30.0f,
+                   .t_lethal_heat = 45.0f,
+                   .rest = PLANT_REST_SLEEPS,
+                   .light_min = 0.15f,
+                   .light_full = 0.7f,
+                   .dark_days = 30.0f,
+                   .cut_item = ITEM_WOOD,
+                   .cut_yield = 70},
+    /* The beech grows in the shade of others, on drained ground; its young leaves
+     * fear late frost. */
+    [PLANT_BEECH] = {.id = "beech",
+                     .name_key = N_("plant.beech"),
+                     .transpiration = 1.0f,
+                     .water = {0.1f, 0.4f, 1.2f, 1.5f, 40.0f, 10.0f},
+                     .spread_chance = 0.03f,
+                     .spread_growth = 1.0f,
+                     .spread_range = 3,
+                     .deciduous = true,
+                     .growth_per_day = 0.022f,
+                     .min_fertility = 0.6f,
+                     .move_cost = 1.6f,
+                     .t_min = 5.0f,
+                     .t_opt_low = 16.0f,
+                     .t_opt_high = 23.0f,
+                     .t_max = 33.0f,
+                     .t_frost_active = -2.0f,
+                     .t_frost_hardened = -30.0f,
+                     .t_lethal_heat = 42.0f,
+                     .rest = PLANT_REST_SLEEPS,
+                     .light_min = 0.03f,
+                     .light_full = 0.4f,
+                     .dark_days = 60.0f,
+                     .cut_item = ITEM_WOOD,
+                     .cut_yield = 65},
+    /* The sweet chestnut wants warmth and drained, poorer ground: chestnuts fall in autumn. */
+    [PLANT_CHESTNUT] = {.id = "chestnut",
+                        .name_key = N_("plant.chestnut"),
+                        .transpiration = 1.0f,
+                        .water = {0.05f, 0.3f, 1.1f, 1.4f, 50.0f, 10.0f},
+                        .spread_chance = 0.03f,
+                        .spread_growth = 1.0f,
+                        .spread_range = 3,
+                        .deciduous = true,
+                        .growth_per_day = 0.030f,
+                        .min_fertility = 0.4f,
+                        .move_cost = 1.6f,
+                        .t_min = 7.0f,
+                        .t_opt_low = 20.0f,
+                        .t_opt_high = 27.0f,
+                        .t_max = 37.0f,
+                        .t_frost_active = -3.0f,
+                        .t_frost_hardened = -20.0f,
+                        .t_lethal_heat = 45.0f,
+                        .rest = PLANT_REST_SLEEPS,
+                        .light_min = 0.1f,
+                        .light_full = 0.6f,
+                        .dark_days = 30.0f,
+                        .cut_item = ITEM_WOOD,
+                        .cut_yield = 60,
+                        .fall_item = ITEM_CHESTNUTS,
+                        .fall_days = PLANT_DAYS(AUTUMN(4), AUTUMN(13)),
+                        .fall_yield = 40},
+    /* The ash: fast, on rich and moist ground, its winged seeds carried far. */
+    [PLANT_ASH] = {.id = "ash",
+                   .name_key = N_("plant.ash"),
+                   .transpiration = 1.0f,
+                   .water = {0.3f, 0.8f, 1.7f, 2.3f, 30.0f, 30.0f},
+                   .spread_chance = 0.04f,
+                   .spread_growth = 1.0f,
+                   .spread_range = 5,
+                   .deciduous = true,
+                   .growth_per_day = 0.040f,
+                   .min_fertility = 0.8f,
+                   .move_cost = 1.6f,
+                   .t_min = 5.0f,
+                   .t_opt_low = 18.0f,
+                   .t_opt_high = 25.0f,
+                   .t_max = 35.0f,
+                   .t_frost_active = -3.0f,
+                   .t_frost_hardened = -30.0f,
+                   .t_lethal_heat = 45.0f,
+                   .rest = PLANT_REST_SLEEPS,
+                   .light_min = 0.1f,
+                   .light_full = 0.6f,
+                   .dark_days = 30.0f,
+                   .cut_item = ITEM_WOOD,
+                   .cut_yield = 55},
+    /* The birch: a pioneer, fast and hardy, on any ground but wanting full light. */
+    [PLANT_BIRCH] = {.id = "birch",
+                     .name_key = N_("plant.birch"),
+                     .transpiration = 0.8f,
+                     .water = {0.0f, 0.2f, 1.6f, 2.2f, 60.0f, 20.0f},
+                     .spread_chance = 0.05f,
+                     .spread_growth = 1.0f,
+                     .spread_range = 6,
+                     .deciduous = true,
+                     .growth_per_day = 0.060f,
+                     .min_fertility = 0.1f,
+                     .poor_soil = true,
+                     .move_cost = 1.6f,
+                     .t_min = 4.0f,
+                     .t_opt_low = 15.0f,
+                     .t_opt_high = 22.0f,
+                     .t_max = 32.0f,
+                     .t_frost_active = -4.0f,
+                     .t_frost_hardened = -40.0f,
+                     .t_lethal_heat = 42.0f,
+                     .rest = PLANT_REST_SLEEPS,
+                     .light_min = 0.2f,
+                     .light_full = 0.7f,
+                     .dark_days = 20.0f,
+                     .cut_item = ITEM_WOOD,
+                     .cut_yield = 30},
+    /* The wild apple tree, small and low, at edges and in clearings: its apples fall from the end
+       of summer. */
+    [PLANT_WILD_APPLE] = {.id = "wild_apple",
+                          .name_key = N_("plant.wild_apple"),
+                          .transpiration = 1.0f,
+                          .water = {0.1f, 0.4f, 1.3f, 1.8f, 40.0f, 20.0f},
+                          .spread_chance = 0.01f,
+                          .spread_growth = 1.0f,
+                          .spread_range = 3,
+                          .deciduous = true,
+                          .growth_per_day = 0.030f,
+                          .min_fertility = 0.5f,
+                          .move_cost = 1.4f,
+                          .t_min = 5.0f,
+                          .t_opt_low = 17.0f,
+                          .t_opt_high = 25.0f,
+                          .t_max = 35.0f,
+                          .t_frost_active = -3.0f,
+                          .t_frost_hardened = -30.0f,
+                          .t_lethal_heat = 45.0f,
+                          .rest = PLANT_REST_SLEEPS,
+                          .light_min = 0.15f,
+                          .light_full = 0.6f,
+                          .dark_days = 30.0f,
+                          .cut_item = ITEM_WOOD,
+                          .cut_yield = 20,
+                          .fall_item = ITEM_APPLES,
+                          .fall_days = PLANT_DAYS(SUMMER(12), AUTUMN(10)),
+                          .fall_yield = 40},
+    /* The wild pear tree, narrow, alone at the edges: its pears fall in autumn. */
+    [PLANT_WILD_PEAR] = {.id = "wild_pear",
+                         .name_key = N_("plant.wild_pear"),
+                         .transpiration = 1.0f,
+                         .water = {0.05f, 0.35f, 1.3f, 1.8f, 50.0f, 20.0f},
+                         .spread_chance = 0.01f,
+                         .spread_growth = 1.0f,
+                         .spread_range = 3,
+                         .deciduous = true,
+                         .growth_per_day = 0.025f,
+                         .min_fertility = 0.5f,
+                         .move_cost = 1.6f,
+                         .t_min = 5.0f,
+                         .t_opt_low = 17.0f,
+                         .t_opt_high = 26.0f,
+                         .t_max = 36.0f,
+                         .t_frost_active = -3.0f,
+                         .t_frost_hardened = -30.0f,
+                         .t_lethal_heat = 45.0f,
+                         .rest = PLANT_REST_SLEEPS,
+                         .light_min = 0.15f,
+                         .light_full = 0.6f,
+                         .dark_days = 30.0f,
+                         .cut_item = ITEM_WOOD,
+                         .cut_yield = 30,
+                         .fall_item = ITEM_PEARS,
+                         .fall_days = PLANT_DAYS(AUTUMN(1), AUTUMN(12)),
+                         .fall_yield = 30},
+    /* A small tree: its hazelnuts fall to the ground in autumn (items), its
      * dead branches and twigs like those of the other trees (core/tree.h). */
     [PLANT_HAZEL] = {.id = "hazel",
                      .name_key = N_("plant.hazel"),
@@ -1130,6 +1293,7 @@ bool map_init(Map *map, int width, int height, int depth)
     map->branches = calloc(count, 1);
     map->twigs = calloc(count, 1);
     map->nuts = calloc(count, 1);
+    map->tree_species = calloc(count, 1);
     map->structure = calloc(count, 1);
     map->structure_part = calloc(count, 1);
     map->structure_quality = calloc(count, 1);
@@ -1145,8 +1309,9 @@ bool map_init(Map *map, int width, int height, int depth)
         map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL ||
         map->plants == NULL || map->cobbles == NULL || map->flint == NULL ||
         map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
-        map->structure == NULL || map->structure_part == NULL || map->structure_quality == NULL ||
-        map->structure_hit_points == NULL || map->roof_quality == NULL) {
+        map->tree_species == NULL || map->structure == NULL || map->structure_part == NULL ||
+        map->structure_quality == NULL || map->structure_hit_points == NULL ||
+        map->roof_quality == NULL) {
         map_free(map);
         return false;
     }
@@ -1172,6 +1337,7 @@ void map_free(Map *map)
     free(map->branches);
     free(map->twigs);
     free(map->nuts);
+    free(map->tree_species);
     free(map->structure);
     free(map->structure_part);
     free(map->structure_quality);
@@ -2149,6 +2315,7 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     dst->branches[index] = src->branches[index];
     dst->twigs[index] = src->twigs[index];
     dst->nuts[index] = src->nuts[index];
+    dst->tree_species[index] = src->tree_species[index];
     dst->structure[index] = src->structure[index];
     dst->structure_part[index] = src->structure_part[index];
     dst->structure_quality[index] = src->structure_quality[index];
@@ -2307,14 +2474,31 @@ bool map_take_stone(Map *map, int x, int y, int z, ItemType type)
     return true;
 }
 
-/* The layer holding branches, twigs or nuts, and the most a tile holds; NULL
- * for other types. */
-static uint8_t *litter_layer(const Map *map, ItemType type, int *max)
+/* The most of a type of litter (what trees let fall) a tile holds; 0 for
+ * other types. */
+static int litter_max(ItemType type)
 {
     switch (type) {
-    case ITEM_BRANCHES: *max = MAP_BRANCHES_MAX; return map->branches;
-    case ITEM_TWIGS: *max = MAP_TWIGS_MAX; return map->twigs;
-    case ITEM_HAZELNUTS: *max = MAP_NUTS_MAX; return map->nuts;
+    case ITEM_BRANCHES: return MAP_BRANCHES_MAX;
+    case ITEM_TWIGS: return MAP_TWIGS_MAX;
+    case ITEM_HAZELNUTS:
+    case ITEM_CHESTNUTS:
+    case ITEM_APPLES:
+    case ITEM_PEARS: return MAP_NUTS_MAX;
+    default: return 0;
+    }
+}
+
+/* The layer holding branches, twigs or nuts in a new world, and the most a
+ * tile holds; NULL for other types (the fruit of the other trees only falls
+ * in a running game, as items). */
+static uint8_t *litter_layer(const Map *map, ItemType type, int *max)
+{
+    *max = litter_max(type);
+    switch (type) {
+    case ITEM_BRANCHES: return map->branches;
+    case ITEM_TWIGS: return map->twigs;
+    case ITEM_HAZELNUTS: return map->nuts;
     default: return NULL;
     }
 }
@@ -2322,8 +2506,7 @@ static uint8_t *litter_layer(const Map *map, ItemType type, int *max)
 /* Whether the type lies as items (Map.litter) rather than in a layer. */
 static bool litter_is_items(const Map *map, ItemType type)
 {
-    return map->litter != NULL &&
-           (type == ITEM_BRANCHES || type == ITEM_TWIGS || type == ITEM_HAZELNUTS);
+    return map->litter != NULL && litter_max(type) > 0;
 }
 
 int map_litter(const Map *map, int x, int y, int z, ItemType type)
@@ -2374,6 +2557,16 @@ size_t map_count_plants(const Map *map, PlantType type)
         if (map->plants[i].type == type) {
             total++;
         }
+    }
+    return total;
+}
+
+size_t map_count_trees(const Map *map)
+{
+    size_t total = 0;
+    size_t count = map_tile_count(map);
+    for (size_t i = 0; i < count; i++) {
+        total += plant_is_tree(map->plants[i].type);
     }
     return total;
 }
@@ -2583,8 +2776,8 @@ static void index_coords(const Map *map, size_t index, int *x, int *y, int *z)
 
 void map_clear_litter_at(Map *map, size_t index, ItemTypeMask types)
 {
-    static const ItemType TYPES[] = {ITEM_COBBLE, ITEM_FLINT, ITEM_BRANCHES, ITEM_TWIGS,
-                                     ITEM_HAZELNUTS};
+    static const ItemType TYPES[] = {ITEM_COBBLE,    ITEM_FLINT,     ITEM_BRANCHES, ITEM_TWIGS,
+                                     ITEM_HAZELNUTS, ITEM_CHESTNUTS, ITEM_APPLES,   ITEM_PEARS};
     int x, y, z;
     index_coords(map, index, &x, &y, &z);
     for (size_t t = 0; t < sizeof(TYPES) / sizeof(TYPES[0]); t++) {

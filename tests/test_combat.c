@@ -343,6 +343,7 @@ static bool init_flat_game(Game *game)
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
+    map_clear_litter(map); /* What the generated trees had let fall. */
     map_topology_changed(map);
     game->clock.tick = 12 * TICKS_PER_HOUR;
     return true;

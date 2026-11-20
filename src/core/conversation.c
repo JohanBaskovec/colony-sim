@@ -25,6 +25,9 @@ static const char *const FOOD_KEYS[ITEM_TYPE_COUNT] = {
     [ITEM_WILD_STRAWBERRIES] = N_("topic.food.wild_strawberries"),
     [ITEM_BILBERRIES] = N_("topic.food.bilberries"),
     [ITEM_ROSE_HIPS] = N_("topic.food.rose_hips"),
+    [ITEM_CHESTNUTS] = N_("topic.food.chestnuts"),
+    [ITEM_APPLES] = N_("topic.food.apples"),
+    [ITEM_PEARS] = N_("topic.food.pears"),
 };
 
 static const char *const WEATHER_KEYS[JOURNAL_WEATHER_SNOW + 1] = {

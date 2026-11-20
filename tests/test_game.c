@@ -135,7 +135,7 @@ static void make_grove(Map *map)
         /* A grove on the west half, meadow on the east; bare ground between. */
         bool grove = (int)(i % (size_t)map->width) < map->width / 2;
         map->plants[i] =
-            grove && i % 7 == 0 ? (Plant){.type = PLANT_TREE, .growth = 1.0f} : (Plant){0};
+            grove && i % 7 == 0 ? (Plant){.type = PLANT_OAK, .growth = 1.0f} : (Plant){0};
     }
     map_topology_changed(map);
 }
@@ -527,7 +527,7 @@ static void test_crowns_lose_their_leaves_in_the_cold(void)
 
     /* A tree with a crown, alone, in the climate of each season. */
     memset(map->plants, 0, map_tile_count(map) * sizeof(*map->plants));
-    map->plants[map_index(map, 9, 9, 0)] = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    map->plants[map_index(map, 9, 9, 0)] = (Plant){.type = PLANT_OAK, .growth = 1.0f};
     const float climates[] = {20.0f, 8.5f, 0.0f, 20.0f};
     const int expected[] = {0, MAP_BARE_STEPS / 2, MAP_BARE_STEPS, 0};
     for (size_t i = 0; i < sizeof(climates) / sizeof(climates[0]); i++) {

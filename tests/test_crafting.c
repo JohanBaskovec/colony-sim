@@ -897,7 +897,7 @@ static void test_plants_are_cleared_before_building(void)
     Colonist *colonist = spawn_worker(&game, 10, 10);
     REQUIRE(colonist != NULL);
     Plant *tree = &game.map.plants[map_index(&game.map, 20, 20, 0)];
-    *tree = (Plant){.type = PLANT_TREE, .growth = 1.0f};
+    *tree = (Plant){.type = PLANT_OAK, .growth = 1.0f};
     CHECK(!game_can_place_workstation(&game, 20, 20, 0));
     Plant *bramble = &game.map.plants[map_index(&game.map, 14, 10, 0)];
     *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};

@@ -61,7 +61,15 @@ typedef enum RockType {
 typedef enum PlantType {
     PLANT_NONE = 0,
     PLANT_GRASS,
-    PLANT_TREE,
+    /* Trees (core/tree.h, docs/TREES.md), from PLANT_TREE_FIRST to
+     * PLANT_TREE_LAST: each species has its shape and wood (TreeDef). */
+    PLANT_OAK,
+    PLANT_BEECH,
+    PLANT_CHESTNUT, /* Sweet chestnut: chestnuts fall in autumn. */
+    PLANT_ASH,
+    PLANT_BIRCH,
+    PLANT_WILD_APPLE,      /* Small and low: apples fall from the end of summer. */
+    PLANT_WILD_PEAR,       /* Narrow: pears fall in autumn. */
     PLANT_HAZEL,           /* A small tree (a shrub as a seedling): hazelnuts fall in autumn. */
     PLANT_BRAMBLE,         /* Thorny: blackberries at the end of summer. */
     PLANT_WILD_GARLIC,     /* Leaves in spring, then withers under the trees. */
@@ -245,10 +253,13 @@ typedef struct PlantDef {
     PlantWater water;
 } PlantDef;
 
+#define PLANT_TREE_FIRST PLANT_OAK
+#define PLANT_TREE_LAST PLANT_HAZEL
+
 /* Whether a plant type is a tree (takes room once grown, see core/tree.h). */
 static inline bool plant_is_tree(uint8_t type)
 {
-    return type == PLANT_TREE || type == PLANT_HAZEL;
+    return type >= PLANT_TREE_FIRST && type <= PLANT_TREE_LAST;
 }
 
 /* What a plant is doing (Plant.state, low bits; the high bit says its
@@ -360,7 +371,8 @@ typedef enum PlantStatus {
 #define MAP_BRANCHES_MAX 2
 #define MAP_TWIGS_MAX 4
 
-/* Most hazelnuts lying on one tile (Map.nuts). */
+/* Most nuts or fruit of a kind fallen from the trees lying on one tile
+ * (hazelnuts in Map.nuts, chestnuts, apples, pears). */
 #define MAP_NUTS_MAX 8
 
 /* How many recent topology changes the map remembers (see Map.topology_log). */
@@ -452,6 +464,10 @@ typedef struct Map {
     /* Hazelnuts lying on each tile, fallen from the trees in autumn like twigs
      * (up to MAP_NUTS_MAX). */
     uint8_t *nuts;
+    /* Per tile: the tree (PlantType) whose trunk or foliage it holds, written
+     * as trees grow (tree_build()), for drawing and naming it; stale
+     * elsewhere (read it only on trunk and foliage). */
+    uint8_t *tree_species;
     /* Once set (a running game, see map_litter_to_items()): where the stones,
      * branches, twigs and nuts lie, as ordinary items of these items (haulable
      * like any, the nuts rotting one by one); the layers above are then empty, and the functions
@@ -1043,6 +1059,9 @@ uint64_t map_hash(const Map *map);
 
 size_t map_count_plants(const Map *map, PlantType type);
 
+/* Number of trees of every species (plant_is_tree(), hazels included). */
+size_t map_count_trees(const Map *map);
+
 /* Whether the plant on a tile keeps anything from being built there: a tree,
  * even a sapling (felling needs an axe). Grass and bushes are cleared by
  * hand first (see gather_clear_plant()). */
@@ -1068,8 +1087,10 @@ void map_set_stones(Map *map, int x, int y, int z, int cobbles, int flint);
 bool map_take_stone(Map *map, int x, int y, int z, ItemType type);
 
 /* Branches (ITEM_BRANCHES), twigs (ITEM_TWIGS, wet ones too once they are
- * items) or hazelnuts (ITEM_HAZELNUTS) lying on a tile; 0 for other types
- * and out of bounds. */
+ * items), hazelnuts (ITEM_HAZELNUTS) or, in a running game only (no layer
+ * holds them), chestnuts, wild apples and wild pears (ITEM_CHESTNUTS,
+ * ITEM_APPLES, ITEM_PEARS, up to MAP_NUTS_MAX a tile) lying on a tile; 0
+ * for other types and out of bounds. */
 int map_litter(const Map *map, int x, int y, int z, ItemType type);
 
 /* Lays one branch, twig or nut on a tile; false when the tile is full, out of
@@ -1091,7 +1112,7 @@ void map_litter_to_items(Map *map, Items *items);
 void map_clear_litter(Map *map);
 
 /* Removes what lies on the tile at `index` among `types` (cobbles, flint,
- * branches, twigs, hazelnuts). */
+ * branches, twigs, fallen nuts and fruit). */
 void map_clear_litter_at(Map *map, size_t index, ItemTypeMask types);
 
 /* map_set_stones() for the tile at `index`. */

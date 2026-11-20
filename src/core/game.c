@@ -904,21 +904,22 @@ static void grow_tree(Game *game, size_t index, float old_growth)
 
 /* Once an hour per tree: twigs, and branches from a grown tree, fall at
  * random (TREE_SHED_*_CHANCE, rolled from the seed, the tile and the hour so
- * that the game's random stream is left alone), and in autumn a hazel's nuts
- * (tree_fall_chance()). */
+ * that the game's random stream is left alone), and in their season its nuts
+ * or fruit (tree_fall_chance()). */
 static void shed_litter(Game *game, size_t index)
 {
-    static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS};
+    /* ITEM_NONE: what the tree bears, if any. */
+    static const ItemType KINDS[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_NONE};
     if (game->map.rock[index] != ROCK_WOOD) {
         return; /* No crown yet: the trunk has no room. */
     }
     int hour = (int)(game->clock.tick / GAME_PLANT_UPDATE_INTERVAL);
     for (uint32_t kind = 0; kind < sizeof(KINDS) / sizeof(KINDS[0]); kind++) {
-        ItemType nut = ITEM_NONE;
-        float chance = KINDS[kind] == ITEM_HAZELNUTS
+        ItemType item = KINDS[kind];
+        float chance = item == ITEM_NONE
                            ? tree_fall_chance(&game->map.plants[index],
-                                              game_day_of_year(game->clock.tick), &nut)
-                           : tree_shed_chance(&game->map.plants[index], KINDS[kind]);
+                                              game_day_of_year(game->clock.tick), &item)
+                           : tree_shed_chance(&game->map.plants[index], item);
         if (chance <= 0.0f || world_roll(game->seed, index, hour, 2 * kind + 10) >= chance) {
             continue;
         }
@@ -926,7 +927,7 @@ static void shed_litter(Game *game, size_t index)
         map_tile_of(&game->map, index, &x, &y, &z);
         float roll = world_roll(game->seed, index, hour, 2 * kind + 11);
         uint32_t pick = (uint32_t)(roll * 16777216.0f);
-        tree_shed(&game->map, x, y, z, KINDS[kind], pick);
+        tree_shed(&game->map, x, y, z, item, pick);
     }
 }
 
@@ -2346,7 +2347,7 @@ bool game_debug_plant_tree(Game *game, int x, int y, int z)
     if (map->rock[index] != ROCK_NONE || map->structure[index] != STRUCTURE_NONE ||
         map_is_slope(map, x, y, z) ||
         terrain_def((Terrain)map->terrain[index])->fertility <
-            plant_def(PLANT_TREE)->min_fertility) {
+            plant_def(PLANT_OAK)->min_fertility) {
         return false;
     }
     for (int dy = -1; dy <= 1; dy++) {
@@ -2360,7 +2361,7 @@ bool game_debug_plant_tree(Game *game, int x, int y, int z)
     if (plant_is_tree(map->plants[index].type)) {
         return false;
     }
-    map->plants[index] = (Plant){.type = PLANT_TREE};
+    map->plants[index] = (Plant){.type = PLANT_OAK}; /* The commonest tree. */
     return true;
 }
 

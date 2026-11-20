@@ -58,42 +58,60 @@
 #define TREE_FALL_DAMAGE_PERCENT 50
 
 /* Chance per in-game hour that a tree sheds a twig, or a branch, for a
- * tree with a 1 x 1 trunk (more by the area of a wider one). A young tree
- * (not yet grown, TREE_VOLUME_MIN_STAGE..) sheds twigs only, half as often. */
+ * tree with a 1 x 1 trunk (more by the area of a wider one, and by its
+ * species: TreeDef.shed_twigs, shed_branches). A young tree (not yet grown,
+ * TREE_VOLUME_MIN_STAGE..) sheds twigs only, half as often. */
 #define TREE_SHED_TWIG_CHANCE 0.12f
 #define TREE_SHED_BRANCH_CHANCE 0.03f
 /* Days of shedding lying under the trees of a new world. */
 #define TREE_SCATTER_DAYS 2
-/* What the crown of a fully grown tree with a 1 x 1 trunk gives when it is
- * felled (less when younger, more by the area of a wider trunk). */
-#define TREE_CROWN_BRANCHES 6
-#define TREE_CROWN_TWIGS 10
 
-/* Shape of the crown (tuning): how likely the outermost tiles of the crown
- * are missing (0..1 at the very edge), and how likely a tile is one density
- * thinner than its distance from the trunk says. */
-#define TREE_FOLIAGE_RAGGEDNESS 0.9f
+/* Shape of the crown (tuning): how likely a tile is one density thinner
+ * than its distance from the trunk says (how likely the outermost tiles are
+ * missing is the species', TreeDef.raggedness). */
 #define TREE_FOLIAGE_PATCHINESS 0.25f
 /* How a tree of the default size grows (growth 0..1, see Plant.growth). From
  * TREE_CROWN_FROM (growth stage TREE_VOLUME_MIN_STAGE) it takes room: one
  * level of trunk with foliage over it. Its crown then grows tile by tile on
  * every level, nearest tiles first, over TREE_CROWN_SPREAD of growth, out to
- * TREE_CROWN_REACH tiles from the trunk; the trunk rises to two levels at
- * TREE_SECOND_LEVEL_AT, three at TREE_THIRD_LEVEL_AT. A tile of foliage comes
- * in thin (sparse) and thickens a notch every TREE_DENSIFY_GROWTH of growth,
- * up to its distance's density (see tree_foliage_density()). */
+ * its species' reach; the trunk rises as its species says
+ * (TreeDef.second_level_at, third_level_at). A tile of foliage comes in thin
+ * (sparse) and thickens a notch every TREE_DENSIFY_GROWTH of growth, up to
+ * its distance's density (see tree_foliage_density()). */
 #define TREE_CROWN_FROM ((float)TREE_VOLUME_MIN_STAGE / (float)PLANT_GROWTH_STAGES)
 #define TREE_CROWN_SPREAD 0.4f
-#define TREE_CROWN_REACH 2
-#define TREE_SECOND_LEVEL_AT 0.49f
-#define TREE_THIRD_LEVEL_AT 0.55f
-/* A hazel stays small: two levels of trunk at most. */
-#define TREE_HAZEL_SECOND_LEVEL_AT 0.52f
 #define TREE_DENSIFY_GROWTH 0.1f
 /* How out of order the tiles of a crown come in (in tiles of distance). */
 #define TREE_CROWN_DISORDER 0.8f
 /* How far an old or ancient tree is grown (past every tile's time). */
 #define TREE_FULL_GROWTH 2.0f
+
+/* What sets the trees of a species apart (docs/TREES.md §3, tuning): one
+ * per tree species (plant_is_tree()). */
+typedef struct TreeDef {
+    /* Growth at which the trunk of a tree of the default size rises to two
+     * levels, and to three (0: never). */
+    float second_level_at, third_level_at;
+    /* Tiles the foliage of a tree of the default size reaches out from the
+     * trunk (an old tree's as far, an ancient one's a tile farther). */
+    int reach;
+    /* Its foliage is this many notches denser (or thinner, < 0) than its
+     * distance from the trunk says, sparse at least. */
+    int density_shift;
+    /* How likely the outermost tiles of the crown are missing (0..1 at the
+     * very edge). */
+    float raggedness;
+    /* What the crown of a fully grown tree with a 1 x 1 trunk gives when it
+     * is felled (less when younger, more by the area of a wider trunk). */
+    int crown_branches, crown_twigs;
+    /* How much more (or less) often than TREE_SHED_*_CHANCE it sheds. */
+    float shed_twigs, shed_branches;
+    /* World generation may make it old (2 x 2 trunk), ancient (3 x 3). */
+    bool can_be_old, can_be_ancient;
+} TreeDef;
+
+/* The TreeDef of a tree species; NULL for the other plants. */
+const TreeDef *tree_def(PlantType type);
 
 /* How thick the branches are on a tile of foliage. */
 typedef enum TreeDensity {
@@ -118,6 +136,9 @@ typedef struct TreeShape {
     /* How grown the crown is: the plant's growth, TREE_FULL_GROWTH for old
      * and ancient trees (its foliage comes in and thickens with it). */
     float growth;
+    /* Its species' crown: TreeDef.density_shift and raggedness. */
+    int8_t density_shift;
+    float raggedness;
 } TreeShape;
 
 /* Levels a tree of this shape takes, its foot's included. */
@@ -126,8 +147,8 @@ static inline int tree_shape_levels(const TreeShape *shape)
     return shape->trunk + 1;
 }
 
-/* Trunk width of a plant (1 for a tree of the default size; 0 for other
- * plants). */
+/* Trunk width of a plant (1 for a tree of the default size, 2 or 3 for an
+ * old or ancient one when its species can be; 0 for other plants). */
 int tree_size(const Plant *plant);
 
 /* Work needed to fell a tree (0 for other plants). */
@@ -141,9 +162,9 @@ int tree_wood_yield(const Plant *plant);
  * 0 for saplings, other plants and other items. */
 float tree_shed_chance(const Plant *plant, ItemType item);
 
-/* Chance per in-game hour that a tree lets one of its nuts fall on a day of
- * the year (PlantDef.fall_item, ITEM_HAZELNUTS for a hazel; `item` receives
- * it): PlantDef.fall_yield over the season for a fully grown tree, less for a
+/* Chance per in-game hour that a tree lets one of its nuts or fruit fall on
+ * a day of the year (PlantDef.fall_item, ITEM_HAZELNUTS for a hazel; `item`
+ * receives it): PlantDef.fall_yield over the season for a fully grown tree, less for a
  * younger one. 0 out of season and for trees that bear none (`item`
  * untouched). */
 float tree_fall_chance(const Plant *plant, int day_of_year, ItemType *item);
@@ -196,13 +217,13 @@ bool tree_grows_into(int x, int y, int z, const TreeShape *shape, int tx, int ty
 /* Writes the trunk and foliage of the tree on (x, y, z) into the map
  * (map_set_rock(), map_set_terrain()): trunk on its tiles, foliage (of the
  * terrain of its density) on those of its tiles that are open space, not
- * over a slope or a ladder. Nothing
- * for a sapling. Check tree_room_to_grow() first. */
+ * over a slope or a ladder, each marked with its species (Map.tree_species).
+ * Nothing for a sapling. Check tree_room_to_grow() first. */
 void tree_build(Map *map, int x, int y, int z);
 
 /*
  * The tree on (x, y, z) sheds a branch or a twig (ITEM_BRANCHES or
- * ITEM_TWIGS, or a hazel's nuts) from one of the tiles of its foliage, chosen
+ * ITEM_TWIGS, or its nuts or fruit) from one of the tiles of its foliage, chosen
  * by `pick` (any number: the caller's roll): it falls through the foliage,
  * of any density, to the first floor below it that is not a tree's. Nothing
  * happens when that floor cannot hold it (rock, water, a wall, a trunk) or is
@@ -216,7 +237,7 @@ bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick);
 void tree_scatter_litter(Map *map, int x, int y, int z, Rng *rng);
 
 /* Takes the trunk and foliage of the tree on (x, y, z) out of the map (the
- * plant stays): foliage another tree shares stays, what lay on the rest
+ * plant stays): foliage another tree shares stays (marked with its species), what lay on the rest
  * (items, branches and twigs) falls to the ground below it (settlers there
  * fall by themselves). */
 void tree_clear(Map *map, Items *items, int x, int y, int z);
