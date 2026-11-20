@@ -31,6 +31,7 @@
 #include "game/work_panel.h"
 
 #include <limits.h>
+#include <math.h>
 
 #define HUD_MARGIN 8.0f
 #define HUD_PADDING 6.0f
@@ -1144,33 +1145,124 @@ static void health_rows(UiLayout *layout, void *userdata)
     }
 }
 
-/* Strength, what it carries, its tools. */
+/* The names of the places (docs/CARRYING.md §3), in body order. */
+static const char *const CARRY_PLACE_KEYS[CARRY_PLACE_COUNT] = {
+    [CARRY_RIGHT_HAND] = N_("carry.place.right_hand"),
+    [CARRY_LEFT_HAND] = N_("carry.place.left_hand"),
+    [CARRY_BOTH_HANDS] = N_("carry.place.both_hands"),
+    [CARRY_UNDER_RIGHT_ARM] = N_("carry.place.under_right_arm"),
+    [CARRY_UNDER_LEFT_ARM] = N_("carry.place.under_left_arm"),
+    [CARRY_SHOULDERS] = N_("carry.place.shoulders"),
+    [CARRY_SLUNG] = N_("carry.place.slung"),
+};
+
+/* The name of a place as the arrangement uses it (both hands: an armful,
+ * cupped, dragging). */
+static const char *carry_place_name(CarryPlace place, CarryHold hold)
+{
+    if (place == CARRY_BOTH_HANDS) {
+        switch (hold) {
+        case CARRY_HOLD_ARMFUL: return tr("carry.hold.armful");
+        case CARRY_HOLD_CUPPED: return tr("carry.hold.cupped");
+        case CARRY_HOLD_DRAGGED: return tr("carry.hold.dragged");
+        case CARRY_HOLD_NONE:
+        case CARRY_HOLD_SHOULDERS: break;
+        }
+    }
+    return tr(CARRY_PLACE_KEYS[place]);
+}
+
+/* What an entry of the arrangement is: a tool and its condition, or the
+ * load and its weight. */
+static void carry_entry_text(char *out, size_t size, const Colonist *colonist,
+                             const CarryEntry *entry)
+{
+    const char *name = tr(item_def((ItemType)entry->type)->name_key);
+    int index = entry->kept ? colonist_tool_index(colonist, ITEM_TYPE_BIT(entry->type)) : -1;
+    if (index >= 0) {
+        ItemStack tool = colonist->tools[index];
+        char hit_points[16], percent[32], quality[16];
+        tr_integer(hit_points, sizeof(hit_points), item_stack_hit_points_percent(tool));
+        TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), hit_points);
+        hud_quality_text(quality, sizeof(quality), tool.quality);
+        TR_FORMAT(out, size, tr("hud.gear.tool"), name, quality, percent);
+        return;
+    }
+    char count[16], weight[32];
+    tr_integer(count, sizeof(count), entry->count);
+    hud_weight_text(weight, sizeof(weight), item_stack_weight((ItemType)entry->type, entry->count));
+    TR_FORMAT(out, size, tr("hud.gear.load"), name, count, weight);
+}
+
+/* Strength, the weight carried, then what is in each place (docs/CARRYING.md
+ * §7.3), the tools that found no place, the tools worn out. */
 static void add_gear_lines(Panel *panel, const Colonist *colonist)
 {
     char strength[16], carry[32];
     tr_integer(strength, sizeof(strength), colonist->strength);
     hud_weight_text(carry, sizeof(carry), colonist_max_carry_weight(colonist));
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.strength"), strength, carry);
-    if (colonist->carried.count > 0) {
-        char count[16], weight[32];
-        tr_integer(count, sizeof(count), colonist->carried.count);
-        hud_weight_text(weight, sizeof(weight), colonist_carried_weight(colonist));
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.carrying"),
-                  tr(item_def((ItemType)colonist->carried.type)->name_key), count, weight);
-        add_item_condition_line(panel, colonist->carried);
+    char carried[32];
+    hud_weight_text(carried, sizeof(carried), colonist_carried_weight(colonist));
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.carried"), carried, carry);
+    float speed = colonist_load_speed_factor(colonist);
+    if (speed < 1.0f) {
+        char number[16], percent[32];
+        tr_integer(number, sizeof(number), (long long)lroundf(speed * 100.0f));
+        TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), number);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.slowed"), percent);
+    }
+
+    CarryArrangement arrangement;
+    colonist_carry_arrangement(colonist, &arrangement);
+    CarryBody body = colonist_carry_body(colonist);
+    for (int place = 0; place < CARRY_PLACE_COUNT; place++) {
+        const char *name = carry_place_name((CarryPlace)place, arrangement.hold);
+        bool any = false;
+        for (int i = 0; i < arrangement.entry_count; i++) {
+            const CarryEntry *entry = &arrangement.entries[i];
+            if (entry->place != place) {
+                continue;
+            }
+            char item[HUD_LINE_SIZE];
+            carry_entry_text(item, sizeof(item), colonist, entry);
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.place"), name, item);
+            any = true;
+        }
+        if (any || place == CARRY_SLUNG ||
+            (place == CARRY_BOTH_HANDS && arrangement.hold != CARRY_HOLD_SHOULDERS)) {
+            continue; /* Nothing slung nor in both hands: no line. */
+        }
+        const char *state = tr("hud.gear.empty");
+        if (!carry_place_usable(&body, (CarryPlace)place)) {
+            state = tr("hud.gear.no_arm");
+        } else if (place == CARRY_BOTH_HANDS) {
+            state = tr("hud.gear.holding");
+        } else if (place == arrangement.steadying) {
+            state = tr("hud.gear.steadying");
+        } else if (((place == CARRY_RIGHT_HAND || place == CARRY_LEFT_HAND) &&
+                    arrangement.hold != CARRY_HOLD_NONE) ||
+                   ((place == CARRY_UNDER_RIGHT_ARM || place == CARRY_UNDER_LEFT_ARM) &&
+                    arrangement.hold == CARRY_HOLD_ARMFUL)) {
+            continue; /* Taken by what both hands hold: said on their line. */
+        }
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.place"), name, state);
     }
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
-        ItemStack tool = colonist->tools[i];
-        if (tool.type == ITEM_NONE) {
+        /* Tools that fit in no place (set down at the next load). */
+        if (!(arrangement.left_out & (1u << i))) {
             continue;
         }
-        char hit_points[16], percent[32];
-        tr_integer(hit_points, sizeof(hit_points), item_stack_hit_points_percent(tool));
-        TR_FORMAT(percent, sizeof(percent), tr("unit.percent"), hit_points);
-        char quality[16];
-        hud_quality_text(quality, sizeof(quality), tool.quality);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.colonist.tool"),
-                  tr(item_def((ItemType)tool.type)->name_key), quality, percent);
+        int seen = 0;
+        for (int tool = 0; tool < COLONIST_TOOL_MAX; tool++) {
+            if (colonist->tools[tool].count > 0 && seen++ == i) {
+                TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.gear.left_out"),
+                          tr(item_def((ItemType)colonist->tools[tool].type)->name_key));
+            }
+        }
+    }
+    if (colonist->carried.count > 0) {
+        add_item_condition_line(panel, colonist->carried);
     }
     if (colonist->tools_broken > 0) {
         char count[16];

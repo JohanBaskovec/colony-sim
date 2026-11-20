@@ -351,6 +351,16 @@ float health_ability(const Health *health, HealthAbility ability);
  */
 float health_limb_ability(const Health *health, BodyLimb limb);
 
+/* Arms (docs/CARRYING.md §4): the plan's first and second parts with the
+ * hands role. */
+#define HEALTH_ARM_LEFT 0
+#define HEALTH_ARM_RIGHT 1
+
+/* How well an arm holds and bears, 0..1: its part's efficiency (vigor not
+ * included); 0 for a dead or collapsed body, and for an arm the plan does
+ * not have. */
+float health_arm_efficiency(const Health *health, int arm);
+
 /* Lying where it fell from lack of consciousness: collapsed or unconscious
  * (below HEALTH_COLLAPSE_BELOW, up again from HEALTH_RISE_FROM). */
 bool health_is_collapsed(const Health *health);

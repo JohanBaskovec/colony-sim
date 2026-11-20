@@ -1665,14 +1665,18 @@ static void test_carry_capacity(void)
     Colonist colonist;
     colonist_init(&colonist, "Test", 30, 5, 5, 0);
     CHECK_NEAR(colonist.max_carry_weight, COLONIST_CARRY_WEIGHT, 1e-6);
-    CHECK_NEAR(colonist.max_carry_bulk, COLONIST_CARRY_BULK, 1e-6);
-    /* Logs: 3 by bulk (60 / 20) before 5 by weight (40 kg / 7 kg). */
-    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_WOOD), 3);
-    /* Stone: 2 by weight (40 kg / 20 kg). */
-    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE_BLOCK), 2);
-    /* Berries: 60 portions by bulk (18 kg). */
-    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BLACKBERRIES), 60);
+    /* By the places (docs/CARRYING.md §5): logs under the arms and on the
+     * shoulders, a stone block on the shoulders, berries in cupped hands. */
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_WOOD), 5);
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE_BLOCK), 1);
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BLACKBERRIES), 2);
     CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_NONE), 0);
+    CarryArrangement arrangement;
+    colonist.carried = item_stack_pristine(ITEM_WOOD, 5);
+    colonist_carry_arrangement(&colonist, &arrangement);
+    CHECK_EQ_INT(arrangement.load, 5);
+    CHECK(arrangement.steadying >= 0);
+    colonist.carried = (ItemStack){.type = ITEM_NONE};
 
     CHECK_NEAR(colonist_carried_weight(&colonist), 0.0, 1e-6);
     CHECK_NEAR(colonist_load_speed_factor(&colonist), 1.0, 1e-6);
@@ -1702,15 +1706,15 @@ static void test_strength_sets_carry_weight(void)
     Colonist colonist;
     colonist_init(&colonist, "Ada", 30, 0, 0, 0);
     CHECK_EQ_INT(colonist.strength, COLONIST_STRENGTH_STANDARD);
-    /* 40 kg: two 20 kg stone blocks. */
-    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE_BLOCK), 2);
+    /* 40 kg: five logs. */
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_WOOD), 5);
     REQUIRE(colonist_set_strength(&colonist, COLONIST_STRENGTH_MAX));
     CHECK_NEAR(colonist.max_carry_weight, 60.0, 1e-4);
-    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE_BLOCK), 3);
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_WOOD), 7);
     REQUIRE(colonist_set_strength(&colonist, COLONIST_STRENGTH_MIN));
-    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_STONE_BLOCK), 1);
-    /* Bulk does not depend on strength: still 60 portions of berries. */
-    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BLACKBERRIES), 60);
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_WOOD), 3);
+    /* What cupped hands hold does not depend on strength. */
+    CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_BLACKBERRIES), 2);
     CHECK(!colonist_set_strength(&colonist, 0));
     CHECK(!colonist_set_strength(&colonist, COLONIST_STRENGTH_MAX + 1));
     CHECK_EQ_INT(colonist.strength, COLONIST_STRENGTH_MIN);

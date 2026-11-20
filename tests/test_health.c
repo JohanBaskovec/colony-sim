@@ -698,10 +698,32 @@ static void test_hurt_settler_is_slower(void)
     float limit = colonist_max_carry_weight(&colonist);
     health_hurt(&colonist.health, RIGHT_ARM, INJURY_FRACTURE, 2.0f);
     CHECK(colonist_work_speed(&colonist, KNOWLEDGE_NONE) < 0.65f * work);
-    /* A broken arm: it carries less, and slows down sooner. */
-    CHECK(colonist_max_carry_weight(&colonist) < 0.65f * limit);
+    /* A broken arm: its places bear less (docs/CARRYING.md §4), the weight
+     * carried without slowing down only follows the pain. */
+    CHECK(colonist_max_carry_weight(&colonist) > 0.9f * limit);
+    CarryBody body = colonist_carry_body(&colonist);
+    CHECK(body.arm[CARRY_RIGHT] <= HEALTH_FRACTURE_EFFICIENCY + 1e-6f);
+    CHECK_NEAR(body.arm[CARRY_LEFT], 1.0, 1e-6);
     CHECK(colonist_carry_capacity(&colonist, ITEM_WOOD) < logs);
     colonist_free(&colonist);
+}
+
+static void test_arm_efficiency(void)
+{
+    Health health;
+    health_init(&health, BODY_HUMAN, 1.0f, 1.0f, 1.0f);
+    CHECK_NEAR(health_arm_efficiency(&health, HEALTH_ARM_LEFT), 1.0, 1e-6);
+    CHECK_NEAR(health_arm_efficiency(&health, HEALTH_ARM_RIGHT), 1.0, 1e-6);
+    CHECK_NEAR(health_arm_efficiency(&health, 2), 0.0, 1e-6); /* Two arms only. */
+    CHECK_NEAR(health_arm_efficiency(&health, -1), 0.0, 1e-6);
+    /* A bruised arm holds less, the other is whole. */
+    health_hurt(&health, LEFT_ARM, INJURY_BRUISE, 5.0f);
+    CHECK_NEAR(health_arm_efficiency(&health, HEALTH_ARM_LEFT), 0.75, 1e-4);
+    CHECK_NEAR(health_arm_efficiency(&health, HEALTH_ARM_RIGHT), 1.0, 1e-6);
+    /* Animals have no arms. */
+    Health deer;
+    health_init(&deer, BODY_QUADRUPED, 1.0f, 1.0f, 1.0f);
+    CHECK_NEAR(health_arm_efficiency(&deer, HEALTH_ARM_LEFT), 0.0, 1e-6);
 }
 
 /* Knocked out: it drops what it carried, lies where it is, cannot be sent
@@ -1534,6 +1556,7 @@ int main(void)
     RUN_TEST(test_hurt_notes);
     RUN_TEST(test_toughness_and_pain_tolerance);
     RUN_TEST(test_hurt_settler_is_slower);
+    RUN_TEST(test_arm_efficiency);
     RUN_TEST(test_settler_knocked_out_lies_and_gets_up);
     RUN_TEST(test_consciousness_slows_the_settler);
     RUN_TEST(test_collapsing_on_someone_who_lies_there);

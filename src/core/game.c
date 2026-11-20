@@ -2934,7 +2934,6 @@ uint64_t game_hash(const Game *game)
         }
         hash = hash_fnv1a64(hash, &c->strength, sizeof(c->strength));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
-        hash = hash_fnv1a64(hash, &c->max_carry_bulk, sizeof(c->max_carry_bulk));
         hash = health_hash(&c->health, hash);
         if (!combatant_is_none(c->enemy) || c->attack_cooldown > 0) {
             /* Only then: hashes of games without fights stay as they were. */

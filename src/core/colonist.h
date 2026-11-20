@@ -58,6 +58,7 @@
 #include "core/attributes.h"
 #include "core/experience.h"
 #include "core/bed.h"
+#include "core/carry.h"
 #include "core/combat.h"
 #include "core/construction.h"
 #include "core/designation.h"
@@ -96,17 +97,18 @@
 #define COLONIST_WALK_SPEED 3.5f
 
 /*
- * Carrying, by hand (no container yet): a colonist picks up at most
- * COLONIST_CARRY_BULK of bulk and a weight set by its strength
- * (COLONIST_CARRY_WEIGHT kilograms at COLONIST_STRENGTH_STANDARD,
- * COLONIST_CARRY_WEIGHT_PER_STRENGTH more or less per point). A single item
- * over either limit is still taken (dragged). Above the weight limit, walking
- * slows down in proportion (limit / load), never below
+ * Carrying, by hand (no container yet, docs/CARRYING.md, core/carry.h): a
+ * colonist carries in its hands, both arms, under its arms, on its shoulders,
+ * what each place takes by the item's form, length, room and weight, up to a
+ * weight set by its strength (COLONIST_CARRY_WEIGHT kilograms at
+ * COLONIST_STRENGTH_STANDARD, COLONIST_CARRY_WEIGHT_PER_STRENGTH more or less
+ * per point) and its arms' health. Its tools take places too. A single item
+ * over every place is still taken (on the shoulders or dragged). Above the
+ * weight limit, walking slows down in proportion (limit / load), never below
  * COLONIST_MIN_LOAD_SPEED.
  */
 #define COLONIST_CARRY_WEIGHT 40.0f
 #define COLONIST_CARRY_WEIGHT_PER_STRENGTH 2.0f
-#define COLONIST_CARRY_BULK 60.0f
 #define COLONIST_MIN_LOAD_SPEED 0.1f
 
 /*
@@ -461,7 +463,6 @@ typedef struct Colonist {
     int tools_broken;       /* Tools worn out so far (for the player's information). */
     int strength;           /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
     float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
-    float max_carry_bulk;   /* Bulk carried at once (see ITEM_TILE_BULK). */
     uint8_t work_priorities[WORK_TYPE_COUNT]; /* 0 = never, else 1 (highest) .. 4. */
     /* Level in each knowledge, KNOWLEDGE_LEVEL_MIN..KNOWLEDGE_LEVEL_MAX. Double
      * precision: a tick of practice adds a tiny fraction of a point. */
@@ -866,17 +867,34 @@ int colonist_random_strength(Rng *rng, int age);
 bool colonist_set_strength(Colonist *colonist, int strength);
 
 /* Kilograms the colonist carries without slowing down: the limit of its
- * strength, times the use of its hands (core/health.h). */
+ * strength, times its vigor (core/health.h). The arms count place by place
+ * (colonist_carry_body()). */
 float colonist_max_carry_weight(const Colonist *colonist);
 
 /* Kilograms the colonist is carrying: the load in hand and the tools. */
 float colonist_carried_weight(const Colonist *colonist);
 
-/* How many items of a type the colonist can pick up at once, in what the
- * weight (colonist_max_carry_weight()) and bulk limits leave once its tools
- * are counted (at least 1: an
- * item too heavy or too bulky is dragged). */
+/* The colonist's body for carrying (core/carry.h): the weight it carries
+ * without slowing down and each arm's efficiency. */
+CarryBody colonist_carry_body(const Colonist *colonist);
+
+/* How many items of a type the colonist can carry in all, in the places its
+ * tools leave (core/carry.h, docs/CARRYING.md): at least 1 (a single item
+ * over every place is carried on the shoulders or dragged), 0 for no type. */
 int colonist_carry_capacity(const Colonist *colonist, ItemType type);
+
+/* Where the colonist carries its tools and its load. */
+void colonist_carry_arrangement(const Colonist *colonist, CarryArrangement *out);
+
+/*
+ * Before picking up a load of `type` (ITEM_NONE: none) of `wanted` items in
+ * all (what it already holds included): sets down where it stands the tools
+ * that fit in no place, then, while the load does not fit, the tool whose
+ * leaving lets the most of it in (docs/CARRYING.md §6.4). Never the tools of
+ * `keep` (those of its job). Returns how many tools were set down.
+ */
+int colonist_make_room(Colonist *colonist, Items *items, const Map *map, ItemType type, int wanted,
+                       ItemTypeMask keep);
 
 /* Walking speed multiplier from the load: 1 up to the weight limit, lower above. */
 float colonist_load_speed_factor(const Colonist *colonist);

@@ -55,7 +55,6 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, 
     }
     colonist->work_priorities[WORK_CLEANING] = WORK_PRIORITY_DEFAULT_CLEANING;
     colonist_set_strength(colonist, COLONIST_STRENGTH_STANDARD);
-    colonist->max_carry_bulk = COLONIST_CARRY_BULK;
     colonist->station = WORKSTATION_NONE;
     colonist->site = CONSTRUCTION_NONE;
     colonist->chat_topic = KNOWLEDGE_NONE;
@@ -372,18 +371,33 @@ static float work_with_tool(Colonist *colonist, const ColonistContext *context, 
                                                                                  : factor;
 }
 
-/* Weight and bulk of the carried tools. */
-static void tools_load(const Colonist *colonist, float *weight, float *bulk)
+/* Weight of the carried tools. */
+static float tools_weight(const Colonist *colonist)
 {
-    *weight = 0.0f;
-    *bulk = 0.0f;
+    float weight = 0.0f;
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
         ItemStack tool = colonist->tools[i];
         if (tool.count > 0) {
-            *weight += item_stack_weight((ItemType)tool.type, tool.count);
-            *bulk += item_def((ItemType)tool.type)->bulk * (float)tool.count;
+            weight += item_stack_weight((ItemType)tool.type, tool.count);
         }
     }
+    return weight;
+}
+
+/* The types of the carried tools (one item each), but the one at `skip`;
+ * their indexes in `tools` in `index` (may be NULL). */
+static int kept_items(const Colonist *colonist, int skip, ItemType *kept, int *index)
+{
+    int count = 0;
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        if (i != skip && colonist->tools[i].count > 0) {
+            if (index != NULL) {
+                index[count] = i;
+            }
+            kept[count++] = (ItemType)colonist->tools[i].type;
+        }
+    }
+    return count;
 }
 
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge)
@@ -453,31 +467,83 @@ bool colonist_set_strength(Colonist *colonist, int strength)
 
 float colonist_max_carry_weight(const Colonist *colonist)
 {
-    return colonist->max_carry_weight * health_ability(&colonist->health, HEALTH_HANDS);
+    return colonist->max_carry_weight * health_vigor(&colonist->health);
 }
 
 float colonist_carried_weight(const Colonist *colonist)
 {
-    float tools_weight, tools_bulk;
-    tools_load(colonist, &tools_weight, &tools_bulk);
-    return item_stack_mass(colonist->carried) + tools_weight;
+    return item_stack_mass(colonist->carried) + tools_weight(colonist);
+}
+
+CarryBody colonist_carry_body(const Colonist *colonist)
+{
+    CarryBody body = {.weight = colonist_max_carry_weight(colonist)};
+    body.arm[CARRY_RIGHT] = health_arm_efficiency(&colonist->health, HEALTH_ARM_RIGHT);
+    body.arm[CARRY_LEFT] = health_arm_efficiency(&colonist->health, HEALTH_ARM_LEFT);
+    return body;
 }
 
 int colonist_carry_capacity(const Colonist *colonist, ItemType type)
 {
-    const ItemDef *def = item_def(type);
-    if (def == NULL || type == ITEM_NONE) {
+    if (type == ITEM_NONE || item_def(type) == NULL) {
         return 0;
     }
-    float tools_weight, tools_bulk;
-    tools_load(colonist, &tools_weight, &tools_bulk);
-    float by_weight = floorf((colonist_max_carry_weight(colonist) - tools_weight) / def->weight);
-    float by_bulk = floorf((colonist->max_carry_bulk - tools_bulk) / def->bulk);
-    float capacity = by_weight < by_bulk ? by_weight : by_bulk;
-    if (capacity < 1.0f) {
-        return 1; /* Dragged. */
+    CarryBody body = colonist_carry_body(colonist);
+    ItemType kept[COLONIST_TOOL_MAX];
+    int count = kept_items(colonist, -1, kept, NULL);
+    int capacity = carry_capacity(&body, kept, count, type);
+    return capacity < 1 ? 1 : capacity > UINT16_MAX ? UINT16_MAX : capacity;
+}
+
+void colonist_carry_arrangement(const Colonist *colonist, CarryArrangement *out)
+{
+    CarryBody body = colonist_carry_body(colonist);
+    ItemType kept[COLONIST_TOOL_MAX];
+    int count = kept_items(colonist, -1, kept, NULL);
+    carry_arrange(&body, kept, count, (ItemType)colonist->carried.type, colonist->carried.count,
+                  out);
+}
+
+int colonist_make_room(Colonist *colonist, Items *items, const Map *map, ItemType type, int wanted,
+                       ItemTypeMask keep)
+{
+    int set_down = 0;
+    CarryBody body = colonist_carry_body(colonist);
+    for (;;) {
+        ItemType kept[COLONIST_TOOL_MAX];
+        int index[COLONIST_TOOL_MAX];
+        int count = kept_items(colonist, -1, kept, index);
+        CarryArrangement arrangement;
+        int fits = carry_arrange(&body, kept, count, type, wanted, &arrangement);
+        int drop = -1;
+        for (int i = 0; i < count && drop < 0; i++) {
+            if ((arrangement.left_out & (1u << i)) && !(keep & ITEM_TYPE_BIT(kept[i]))) {
+                drop = index[i];
+            }
+        }
+        if (drop < 0 && type != ITEM_NONE && fits < wanted) {
+            int best = fits;
+            for (int i = 0; i < count; i++) {
+                if (keep & ITEM_TYPE_BIT(kept[i])) {
+                    continue;
+                }
+                ItemType others[COLONIST_TOOL_MAX];
+                int others_count = kept_items(colonist, index[i], others, NULL);
+                int without = carry_arrange(&body, others, others_count, type, wanted, NULL);
+                if (without > best) {
+                    best = without;
+                    drop = index[i];
+                }
+            }
+        }
+        if (drop < 0) {
+            return set_down;
+        }
+        items_drop(items, map, colonist->x, colonist->y, colonist->z, colonist->tools[drop]);
+        colonist->tools[drop] = (ItemStack){.type = ITEM_NONE};
+        colonist->tool_wear[drop] = 0;
+        set_down++;
     }
-    return capacity > (float)UINT16_MAX ? UINT16_MAX : (int)capacity;
 }
 
 float colonist_load_speed_factor(const Colonist *colonist)
@@ -2138,6 +2204,14 @@ static void haul(Colonist *colonist, const ColonistContext *context)
             return;
         }
         ItemStack stack = haul_source_stack(colonist, context, context->items);
+        if (stack.type != ITEM_NONE) {
+            /* Tools in the way are set down (docs/CARRYING.md §6.4). */
+            int room = destination_room(colonist, context,
+                                        colonist->carried.count > 0 ? colonist->carried : stack);
+            int total = (int)colonist->carried.count + (colonist->haul_forced ? 1 : stack.count);
+            colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
+                               total < room ? total : room, 0);
+        }
         int wanted = haul_room_left(colonist, context, stack);
         if (colonist->haul_forced && colonist->haul_item.slot != UINT32_MAX) {
             if (stack.type != ITEM_NONE && wanted > 0) {
@@ -2738,6 +2812,8 @@ static void take_job_tool(Colonist *colonist, const ColonistContext *context)
             items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z,
                        replaced);
         }
+        colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0,
+                           ITEM_TYPE_BIT(stack.type));
     }
     reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE, context->worker_id);
     colonist->station_phase = STATION_JOB_GO;
@@ -2843,6 +2919,16 @@ static bool try_station_job(Colonist *colonist, const ColonistContext *context)
     return true;
 }
 
+/* Every tool a recipe may use. */
+static ItemTypeMask recipe_tools(const RecipeDef *def)
+{
+    ItemTypeMask tools = 0;
+    for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
+        tools |= def->tools[slot];
+    }
+    return tools;
+}
+
 /* At the stack being fetched: takes a tool, or the input of the craft. */
 static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
 {
@@ -2889,8 +2975,11 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
             items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z,
                        replaced);
         }
+        colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, recipe_tools(def));
         return true;
     }
+    colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
+                       def->input_count, recipe_tools(def));
     int wanted = def->input_count - (int)colonist->carried.count;
     int capacity =
         colonist_carry_capacity(colonist, (ItemType)stack.type) - (int)colonist->carried.count;
@@ -3352,6 +3441,10 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
         return false;
     }
+    int building = working_tool(colonist, TOOL_USE_BUILDING, ~(ItemTypeMask)0, false);
+    colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
+                       colonist->supply_promised,
+                       building >= 0 ? ITEM_TYPE_BIT(colonist->tools[building].type) : 0);
     int wanted = colonist->supply_promised - colonist->carried.count;
     int room = colonist_carry_capacity(colonist, (ItemType)stack.type) - colonist->carried.count;
     wanted = wanted < room ? wanted : room;
@@ -3823,6 +3916,8 @@ static void refuel(Colonist *colonist, const ColonistContext *context)
         }
         float others = station->fuel_promised - colonist->fuel_promised;
         int count = (int)floorf((HEARTH_FUEL_CAPACITY - station->fuel - others) / value);
+        colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
+                           count < stack.count ? count : stack.count, 0);
         int capacity = colonist_carry_capacity(colonist, (ItemType)stack.type);
         count = count < capacity ? count : capacity;
         count = count < stack.count ? count : stack.count;
@@ -4068,6 +4163,8 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
             return;
         }
         int count = (int)floorf((HEARTH_FUEL_CAPACITY - station->fuel) / value);
+        colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
+                           count < stack.count ? count : stack.count, 0);
         int capacity = colonist_carry_capacity(colonist, (ItemType)stack.type);
         count = count < capacity ? count : capacity;
         count = count < stack.count ? count : stack.count;

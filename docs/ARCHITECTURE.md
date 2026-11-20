@@ -69,6 +69,7 @@ simulation:
 | `experience` | What a settler lived through that makes a story (`Colonist.experiences`, a ring of 8): kills, attacks, deaths seen, losses, hardships; fresh ones told more |
 | `notice`     | Messages the simulation raises for the player (a knowledge about to be lost, a settler breaking down...), the last 200 kept in a ring (the colony log) |
 | `alert`      | What is wrong in the colony right now (critical needs, food for under a day, breakdowns, no bed), recomputed from the game state on each call; nothing is stored |
+| `carry`      | Carrying by hand: the places of a body (hands, both hands, under the arms, shoulders, slung), what each takes by an item's form, length, room and weight, what it bears from the weight carried and each arm, and the arrangement of the kept items and a load of one type among them, as a pure function (see `docs/CARRYING.md`) |
 | `combat`     | Blows between beings, for settlers and animals alike: attacks (damage, injury kind, accuracy, interval, reach), hit chance against dodge, the limb an attack is made with and the attacks a species chooses among (`AttackChoice`, `combat_choose_attack()`), a blow through `health`, the hurt fraction and breaking off, the queue of strikes the game resolves, the mark each attack leaves on screen and the log of the last blows for the frontend (see `docs/COMBAT.md`) |
 | `journal`    | The journal of a settler or an animal (a ring of the last `JOURNAL_MAX` entries, in `Colonist` and `Animal`): new thoughts, wounds (who struck with what, which part, what it caused), blows given and taken (missed, dodged, harmless, wounding, fatal; the same miss again soon counted in one entry), social life (chats and their topics, stories, lies, compliments, insults, gossip, relationships); facts only, the frontend writes the sentences; presentation only |
 | `blood`      | Blood on the ground: drops on the steps of those who bleed, more and larger the worse, a pool under one who stays still, stains drying and fading (a ring of the newest; presentation only, see `docs/HEALTH.md` §9.1) |
@@ -894,24 +895,35 @@ quality), that the destination's zone accepts and that no better zone with room
 wants (otherwise good wood heading for an ordinary zone would drag along wood
 that belongs in a better one). Only one stack is reserved at a time; if it
 vanishes, the hauler delivers what it holds (`Colonist.haul_delivering`
-switches from collecting to delivering). Each
-colonist has a `max_carry_bulk` (60, by hand) and a `max_carry_weight` that
-follows from its **strength** (1 to 20, rolled at creation: 10 on average,
-a point less per 6 years past 40; 40 kg at strength 10, 2 kg per point, so
-22 to 60 kg; `colonist_set_strength()` keeps both in sync). Health will later
-lower what can be carried without changing the strength.
-`colonist_carry_capacity()` is the number of units within both limits, at least one (an item too big is dragged). Above the weight
-limit, walking speed is multiplied by limit / load (at least
-`COLONIST_MIN_LOAD_SPEED`); it does not happen with today's items, but will
-with huge ones and equipment. If the destination stops
-accepting the items on the way (filter changed, zone removed), it looks for
-another storage tile, else drops its load.
+switches from collecting to delivering).
 
-These carrying rules are to be replaced by carrying in places (hands, both
-arms, under an arm, shoulders, slung) chosen from each item's weight, room,
-length and form and from the arms' health, with tools in those places too,
-and the player's locks and Carry order: design in `docs/CARRYING.md`, not
-implemented yet.
+**Carrying** (`core/carry.h`, design in `docs/CARRYING.md`): a colonist
+carries in **places** (each hand, both hands as an armful, cupped hands or
+dragging, under each arm, the shoulders, slung). What a place takes follows
+from the item's form (`ItemDef.form`: rigid, bundle, loose, limp), length
+(`ItemDef.length_cm`, long from `ITEM_LONG_CM`), room (`bulk`) and weight;
+what it bears, from the weight the colonist carries without slowing down
+(`colonist_max_carry_weight()`: its **strength**, 1 to 20, rolled at
+creation, 10 on average, a point less per 6 years past 40, 40 kg at
+strength 10 and 2 kg per point, so 22 to 60 kg; times its vigor) and from
+each arm's efficiency (`health_arm_efficiency()`). The arrangement is a pure
+function (`carry_arrange()`) of what is carried, not stored: the load
+(`Colonist.carried`) and the tools (`Colonist.tools`, kept items). It tries
+the subsets of the places the load may take, places the kept items first
+out of the subset, fills the subset, and keeps the arrangement that carries
+the most (fewer places, then a free hand, on a tie), under the rules between
+places (both hands leave the hands empty, an armful the places under the
+arms, a heavy or long load on the shoulders needs a hand to steady it).
+`colonist_carry_capacity()` is the most of a type that fits beside the tools,
+at least one (a single item over every place is carried on the shoulders or
+dragged); hauling, fetching, building and refuelling go through it. Before
+picking up, `colonist_make_room()` sets down where the colonist stands the
+tools that fit nowhere, then those in the way of the load, never those of
+its job. Above the weight limit, walking speed is multiplied by limit / load
+(at least `COLONIST_MIN_LOAD_SPEED`). If the destination stops
+accepting the items on the way (filter changed, zone removed), it looks for
+another storage tile, else drops its load. Still to come: actions needing
+the hands, the player's locks and Carry order (`docs/CARRYING.md` §6.3, §7).
 
 **Item moves** (`core/item_move.h`): the player can order the items of a
 tile carried to any tile a settler can stand on (`game_order_item_move()`,

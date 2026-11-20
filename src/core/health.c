@@ -749,6 +749,20 @@ float health_limb_ability(const Health *health, BodyLimb limb)
     return sum / (float)count * health_vigor(health);
 }
 
+float health_arm_efficiency(const Health *health, int arm)
+{
+    if (health->death != DEATH_NONE || health->posture != POSTURE_UP || arm < 0) {
+        return 0.0f;
+    }
+    int seen = 0;
+    for (int part = 0; part < body_part_count((BodyPlan)health->plan); part++) {
+        if (BODY_PLANS[health->plan].parts[part].role == BODY_ROLE_HANDS && seen++ == arm) {
+            return health_part_efficiency(health, part);
+        }
+    }
+    return 0.0f;
+}
+
 bool health_is_collapsed(const Health *health)
 {
     return health->death == DEATH_NONE && health->posture != POSTURE_UP;

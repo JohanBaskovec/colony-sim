@@ -7,10 +7,13 @@ go; the settler's strength and arms decide how much. Settlers arrange what
 they carry on their own; the player can lock an item on a settler, or in its
 hands, and make a settler go and carry an item.
 
-Status: design, nothing implemented yet. Values marked *(tuning)* are first
-guesses. It replaces today's rules (`core/colonist.h`: one load of one type
-within COLONIST_CARRY_BULK and a weight from strength, tools carried apart
-with no place, counting only in the weight).
+Status: steps 1 and 2a are implemented (§9): the item data, the places and
+the arrangement (`core/carry.h`), the capacities of §5, the tools set down
+when in the way of a load, the Gear tab by place. Not yet: actions needing
+the hands (§6.3), locks and orders (§7). Values marked *(tuning)* are first
+guesses. It replaced the old rules (one load within 60 bulk and a weight
+from strength, tools carried apart with no place, counting only in the
+weight).
 
 ## 1. Principles
 
@@ -93,9 +96,8 @@ Rules between places *(tuning)*:
   **Both hands** need both arms, and bear their weight times the weaker one.
   A settler without a right hand has no right hand nor right armpit to carry
   with, no armful nor cupped hands, steadies a shoulder load with the hand
-  left, and drags with it (at half the weight: a heavier item stays where it
-  lies) *(tuning)*. A limp load needing both hands goes on its shoulders only
-  up to 50 % of W.
+  left, and drags with it. A limp load needing both hands goes on its
+  shoulders only up to 50 % of W.
 - **Total.** A settler picks up a load only up to W in all (kept items
   included), as today; kept items alone may go over it (then walking slows
   down: W / carried, never below COLONIST_MIN_LOAD_SPEED).
@@ -122,10 +124,10 @@ rule (60 bulk and 40 kg). Values to check against reality *(tuning)*:
 | Nettles, wild garlic, plantain, wood sorrel | 0.2 kg | 15–40 cm | bundle | 40 | 40 | in the arms |
 | Blackberries | 0.3 kg | – | loose | 60 | 2 | cupped hands |
 | Bilberries | 0.3 kg | – | loose | 120 | 4 | cupped hands |
-| Wild strawberries, rose hips, hazelnuts | 0.1–0.2 kg | – | loose | 149 | 4 | cupped hands |
+| Wild strawberries, rose hips, hazelnuts | 0.1–0.2 kg | – | loose | 149 | 5 | cupped hands |
 | Mushrooms | 0.1 kg | 8 cm | rigid | 120 | 24 | in the arms |
 | Wild carrots, cattail rhizomes, roasted | 0.25 kg | 20–30 cm | rigid | 60 | 12 | in the arms |
-| Flake | 0.03 kg | 6 cm | rigid | 299 | 59 | in the arms |
+| Flake | 0.03 kg | 6 cm | rigid | 299 | 60 | in the arms |
 | Chopper | 1 kg | 12 cm | rigid | 30 | 6 | in the arms |
 | Hand axe | 0.6 kg | 15 cm | rigid | 40 | 8 | in the arms |
 | Digging stick | 1 kg | 100 cm | rigid | 10 | 9 | as branches |
@@ -173,9 +175,12 @@ A pure function places everything carried (tested on its own, as §5):
    leaves a hand free. Kept items may move to make room (a spear from a hand
    to under the arm, so that both arms can take an armful).
 
-The arrangement is searched over the few places (a handful of counts each),
-deterministic. Moving an item between places takes CARRY_SHIFT_TICKS
-(half a second) *(tuning)*.
+The arrangement is searched over the subsets of places the load may take
+(at most 128), each filled as far as it goes, kept items placed first out of
+the subset, then in it: deterministic. It is not stored: what a settler
+carries is its load and its tools, and their places are worked out from them
+whenever needed (`carry_arrange()`), so moving an item between places takes
+no time.
 
 How much of a type a settler can still pick up (`colonist_carry_capacity()`,
 used by hauling, fetching and gathering) is the same search, with what it
@@ -291,15 +296,20 @@ tool wear and the tools broken stay.
 
 1. **Item data**: `length`, `form` and `strap` in `ItemDef` for every item
    (§2, §5 values); tests that every type has them.
-2. **Places in the core**: the settler's places hold the very items (lists in
-   the item pool, as loads in hand today), replacing the load and the tools'
-   array; placing (§6.2) as a pure function, tested against §5 and with lost
-   and hurt arms; capacity, total weight and walking speed from it. Hauling,
-   fetching, gathering, eating and building use it; tools in places and set
-   down when the hands are needed (§6.4); actions needing hands and setting
-   aside (§6.3); dropping on collapse and death. The Gear tab shows the places
-   (read only). Benchmarks: the hauling throughput and the food stock before
-   and after.
+2. **Places in the core**:
+   - a. *(done)* placing (§6.2) as a pure function (`core/carry.h`), tested
+     against §5 and with lost and hurt arms (`health_arm_efficiency()`);
+     capacity from it (`colonist_carry_capacity()`), so that hauling,
+     fetching, building and refuelling follow it; the weight carried without
+     slowing down from strength and vigor (the arms count place by place);
+     tools set down where the settler stands when they fit nowhere, or when
+     they are in the way of a load and not those of its job
+     (`colonist_make_room()`, §6.4); the Gear tab by place (read only).
+     The load and the tools stay stored as before (`Colonist.carried`,
+     `Colonist.tools`).
+   - b. actions needing the hands and setting aside (§6.3); a tool kept
+     after its work only while a hand is free for it; setting tools down at
+     the workstation's tile.
 3. **Locks and Carry** (§7): kept on the settler, kept in hand, the Carry and
    Put down orders, jobs left when the hands are locked; tests. The Gear tab's
    buttons, the item window's *Carried by...*, the right click.

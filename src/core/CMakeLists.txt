@@ -6,6 +6,7 @@ add_library(colony_core STATIC
     bed.c
     blood.c
     camera.c
+    carry.c
     combat.c
     cli.c
     entry_strip.c

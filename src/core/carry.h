@@ -1,0 +1,128 @@
+/*
+ * Carrying by hand (docs/CARRYING.md): the places of a body where things are
+ * carried (a hand, both hands, under an arm, the shoulders, slung), what each
+ * place takes by an item's form, length, room and weight, and the
+ * arrangement of what a settler carries among them.
+ *
+ * Pure: an arrangement follows from what is carried (the kept items and a
+ * load of one type), the item definitions and the body (the weight carried
+ * without slowing down and each arm's efficiency), with no state of its own.
+ * Kept items go first where they leave the hands free; the load takes the
+ * arrangement of the places left that carries the most of it (kept items
+ * move to make room), at equal count the one with fewer places, then the one
+ * leaving a hand free.
+ */
+#ifndef COLONY_CORE_CARRY_H
+#define COLONY_CORE_CARRY_H
+
+#include "core/item.h"
+
+#include <stdbool.h>
+#include <stdint.h>
+
+typedef enum CarryPlace {
+    CARRY_RIGHT_HAND,
+    CARRY_LEFT_HAND,
+    CARRY_BOTH_HANDS, /* An armful, cupped hands, or one item dragged. */
+    CARRY_UNDER_RIGHT_ARM,
+    CARRY_UNDER_LEFT_ARM,
+    CARRY_SHOULDERS,
+    CARRY_SLUNG, /* Items with a strap. */
+    CARRY_PLACE_COUNT
+} CarryPlace;
+
+typedef enum CarrySide { CARRY_RIGHT, CARRY_LEFT, CARRY_SIDE_COUNT } CarrySide;
+
+/* What both hands do. */
+typedef enum CarryHold {
+    CARRY_HOLD_NONE,
+    CARRY_HOLD_ARMFUL, /* Both arms around a load: the places under the arms are taken too. */
+    CARRY_HOLD_CUPPED, /* Loose items. */
+    CARRY_HOLD_DRAGGED,
+    CARRY_HOLD_SHOULDERS, /* Holding a heavy limp load on the shoulders by its legs. */
+} CarryHold;
+
+/* Places' room and weight (docs/CARRYING.md §3, tuning). Room is a share of
+ * a place: bulk over the place's room, or one over the most long rigid items
+ * it takes. Weights are shares of the weight carried without slowing down. */
+#define CARRY_HAND_ROOM 1.5f
+#define CARRY_HAND_LOOSE_ROOM 0.5f
+#define CARRY_HAND_LONG 2
+#define CARRY_HAND_WEIGHT 0.25f
+#define CARRY_ARMFUL_ROOM 60.0f
+#define CARRY_ARMFUL_PIECES_ROOM 12.0f /* Short rigid pieces roll out. */
+#define CARRY_ARMFUL_LONG 6
+#define CARRY_CUPPED_ROOM 2.0f
+#define CARRY_BOTH_WEIGHT 0.75f
+#define CARRY_UNDER_ROOM 20.0f
+#define CARRY_UNDER_LONG 2
+#define CARRY_UNDER_WEIGHT 0.2f
+#define CARRY_SHOULDERS_ROOM 60.0f
+#define CARRY_SHOULDERS_LONG 3
+#define CARRY_SHOULDERS_WEIGHT 1.0f
+#define CARRY_SHOULDERS_RIGID_KG 10.0f /* A rigid item this heavy goes on the shoulders. */
+#define CARRY_SLUNG_COUNT 2
+#define CARRY_SLUNG_WEIGHT 0.25f
+/* A load on the shoulders over this share, or long rigid items there, need
+ * a hand steadying it; a limp one over CARRY_HELD_WEIGHT, both hands. */
+#define CARRY_STEADY_WEIGHT 0.25f
+#define CARRY_HELD_WEIGHT 0.5f
+/* A single limp item over every place goes on the shoulders, held with both
+ * hands, up to this share; heavier ones (or without both arms) are dragged. */
+#define CARRY_HEAVY_LIMP 2.0f
+/* An arm below this efficiency holds nothing. */
+#define CARRY_ARM_MIN 0.2f
+
+/* Kept items an arrangement takes at most, and its entries. */
+#define CARRY_KEPT_MAX 16
+#define CARRY_ENTRY_MAX 24
+
+typedef struct CarryBody {
+    float weight;                /* Kilograms carried without slowing down. */
+    float arm[CARRY_SIDE_COUNT]; /* Each arm's efficiency, 0..1. */
+} CarryBody;
+
+/* Items of one type in a place: kept ones, or the load. */
+typedef struct CarryEntry {
+    uint8_t place; /* CarryPlace. */
+    uint8_t type;  /* ItemType. */
+    uint16_t count;
+    bool kept;
+} CarryEntry;
+
+typedef struct CarryArrangement {
+    CarryEntry entries[CARRY_ENTRY_MAX];
+    int entry_count;
+    int load;          /* Items of the load placed. */
+    uint32_t left_out; /* Bit i: kept item i fits nowhere. */
+    CarryHold hold;    /* What both hands do. */
+    int steadying;     /* The hand (CarryPlace) steadying the shoulders, or -1. */
+} CarryArrangement;
+
+/* Whether the body can use a place: a hand or under an arm needs that arm
+ * at CARRY_ARM_MIN or more, both hands need both. */
+bool carry_place_usable(const CarryBody *body, CarryPlace place);
+
+/* The most weight a place bears, kilograms (an arm's places times its
+ * efficiency, both hands times the weaker one). */
+float carry_place_weight_limit(const CarryBody *body, CarryPlace place);
+
+/* Whether a place takes items of a type at all (by its form and length). */
+bool carry_place_takes(CarryPlace place, ItemType type);
+
+/*
+ * Arranges `kept` (kept_count items, at most CARRY_KEPT_MAX) and up to
+ * `load_count` items of `load` (ITEM_NONE: none). Returns how many of the
+ * load it places: the most that fit within the places and the weight the
+ * body carries (the kept items' included); one at least when load_count is
+ * positive (a single item over every place: on the shoulders, held, if limp
+ * up to CARRY_HEAVY_LIMP of the weight and with both arms, else dragged).
+ * `out` may be NULL.
+ */
+int carry_arrange(const CarryBody *body, const ItemType *kept, int kept_count, ItemType load,
+                  int load_count, CarryArrangement *out);
+
+/* How many items of `type` the body carries beside `kept` (carry_arrange()). */
+int carry_capacity(const CarryBody *body, const ItemType *kept, int kept_count, ItemType type);
+
+#endif /* COLONY_CORE_CARRY_H */

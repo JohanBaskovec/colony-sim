@@ -247,10 +247,15 @@ rows):
 - **Knowledge**: a table, the level on the right from red (0) through white
   (mastery, 50) to green (100). The tooltip gives the work speed, what was
   learned today, fading and the masters in the colony.
-- **Gear**: for now the strength, the weight carried without slowing down,
-  the load and the tools carried. To become a list by place (hands, under
-  the arms, shoulders, slung) with lock buttons (kept on the settler, kept in
-  hand) and Put down on each item: `docs/CARRYING.md` §7.3.
+- **Gear**: the strength and the weight carried without slowing down, the
+  weight carried (and the walking speed left when it is more), then a line
+  per place in body order (right hand, left hand, both hands as the arms,
+  cupped hands or dragging, under each arm, shoulders): the tools with their
+  quality and condition, the load with its count and weight, "empty", "no
+  use of the arm", or the hand steadying the shoulders' load; the tools that
+  found no place; the load's condition and the tools worn out. Later, lock
+  buttons (kept on the settler, kept in hand) and Put down on each item:
+  `docs/CARRYING.md` §7.3.
 
 Row widgets of windows: `ui_layout_meter()` (label, bar under it),
 `ui_layout_bar_row()` (label left, bar right), `ui_layout_pair()` and

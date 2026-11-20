@@ -553,6 +553,26 @@ animal_panel.need.rest = Falls while awake and is regained asleep; each species 
 # Colonist inspector. {0} = age
 # {0} = strength (1 to 20), {1} = weight carried without slowing down (e.g. 44 kg)
 hud.colonist.strength = Strength: {0} (carries up to {1})
+hud.gear.carried = Carried: {0} of {1}
+hud.gear.slowed = Walks at {0} of its speed under the load
+hud.gear.place = {0}: {1}
+hud.gear.tool = {0} (quality {1}, {2})
+hud.gear.load = {0} ×{1} ({2})
+hud.gear.empty = empty
+hud.gear.no_arm = no use of the arm
+hud.gear.steadying = steadying the load on the shoulders
+hud.gear.holding = holding the load on the shoulders
+hud.gear.left_out = No room for: {0} (set down at the next load)
+carry.place.right_hand = Right hand
+carry.place.left_hand = Left hand
+carry.place.both_hands = Both hands
+carry.place.under_right_arm = Under the right arm
+carry.place.under_left_arm = Under the left arm
+carry.place.shoulders = Shoulders
+carry.place.slung = Slung
+carry.hold.armful = In the arms
+carry.hold.cupped = Cupped hands
+carry.hold.dragged = Dragging
 # Mood: {0} = mood (0 to 100), {1} = how it feels (mood.level.*), {2} = the mood it is heading for
 hud.colonist.mood = Mood: {0} ({1})
 # {0} = work speed factor, {1} = learning speed factor, {2} = levels added to the quality of what is made (e.g. +3, -5)
@@ -565,9 +585,7 @@ hud.colonist.break.other = Breaking down: {0} ({1} hours left)
 hud.colonist.wet = Wet ({0}%): feels {1} colder
 # {0} = activity name
 # {0} = item name, {1} = number of items, {2} = total weight (e.g. 21 kg)
-hud.colonist.carrying = Carrying: {0} ×{1} ({2})
 # {0} = tool name, {1} = quality grade, {2} = hit points (e.g. 80%)
-hud.colonist.tool = Tool: {0} (quality {1}, {2})
 # {0} = number of tools the settler wore out (they break at 0% hit points)
 hud.colonist.tools_broken.one = {0} tool worn out
 hud.colonist.tools_broken.other = {0} tools worn out
