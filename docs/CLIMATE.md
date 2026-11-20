@@ -320,9 +320,11 @@ the same pass without soil and microclimate.
 ## 7. Not done (later)
 
 Water flowing on the ground (runoff into hollows, puddles, streams), rivers
-rising and falling, irrigation and digging ditches, wind (drying, wind
-chill), clouds of fog on cold wet mornings, snow per tile (drifts, melting
-first in the sun), frost heave, soil types under the root zone.
+rising and falling, irrigation and digging ditches, and water in the ground
+under the root zone are designed in `docs/WATER.md` (the banks of §3.5 then
+come from the water table, and runoff of §3.2 is no longer lost). Wind
+(drying, wind chill), clouds of fog on cold wet mornings, snow per tile
+(drifts, melting first in the sun), frost heave.
 
 The sun reaching each tile by its own (the shadow of a cliff, of a wall, of
 a wood beside it, instead of what lies straight above only) is designed in
