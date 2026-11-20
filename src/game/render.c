@@ -1503,8 +1503,8 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
 
 /* Branches, twigs and nuts lying on a tile (shed by the trees): the item's icon
  * small, branches in the upper left corner, twigs in the lower right one and
- * nuts in the lower left one, under the items. In a running game branches and
- * twigs are items, drawn as such (Map.litter). */
+ * nuts in the lower left one, under the items. In a running game they are
+ * items, drawn as such (Map.litter). */
 static void render_litter(SDL_Renderer *renderer, const Map *map, int x, int y, int z,
                           const SDL_FRect *tile)
 {
@@ -1517,7 +1517,7 @@ static void render_litter(SDL_Renderer *renderer, const Map *map, int x, int y, 
                             tile->h * 0.6f};
         render_item_stack(renderer, &corner, ITEM_TWIGS);
     }
-    if (map_litter(map, x, y, z, ITEM_HAZELNUTS) > 0) {
+    if (map->litter == NULL && map_litter(map, x, y, z, ITEM_HAZELNUTS) > 0) {
         SDL_FRect corner = {tile->x, tile->y + tile->h * 0.4f, tile->w * 0.6f, tile->h * 0.6f};
         render_item_stack(renderer, &corner, ITEM_HAZELNUTS);
     }

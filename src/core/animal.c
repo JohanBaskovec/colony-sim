@@ -536,7 +536,7 @@ AnimalFood animal_food_at(AnimalSpecies species, const Map *map, int x, int y, i
         (def->digs || !food->dug) && plant_has_food(plant)) {
         return ANIMAL_FOOD_PLANT;
     }
-    if (def->eats_nuts && map->nuts[index] > 0) {
+    if (def->eats_nuts && map_litter(map, x, y, z, ITEM_HAZELNUTS) > 0) {
         return ANIMAL_FOOD_NUTS;
     }
     if (plant_def((PlantType)plant->type)->grazed && def->graze_value > 0.0f &&

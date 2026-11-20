@@ -1522,15 +1522,15 @@ static int random_idle_ticks(Rng *rng)
     return rng_range_i32(rng, COLONIST_IDLE_MIN_TICKS, COLONIST_IDLE_MAX_TICKS);
 }
 
-/* Food on a tile: edible items on the ground, nuts fallen from a tree, or a
- * ripe plant. */
+/* Food on a tile: edible items on the ground (nuts fallen from a tree too),
+ * or a ripe plant. */
 static bool tile_has_food(const Map *map, const Items *items, int x, int y, int z)
 {
     ItemStack stack = items_get_allowed(items, x, y, z);
     return item_is_food((ItemType)stack.type) ||
            (stack.type != ITEM_NONE && items_mixed(items, x, y, z) &&
             items_get_allowed_of(items, x, y, z, item_types_food()).type != ITEM_NONE) ||
-           map_litter(map, x, y, z, ITEM_HAZELNUTS) > 0 || map_has_edible_plant(map, x, y, z);
+           map_has_edible_plant(map, x, y, z);
 }
 
 /* Search filter: food that nobody else is about to eat. */
@@ -5709,13 +5709,6 @@ static void eat(Colonist *colonist, const ColonistContext *context)
                                      wanted > 1 ? wanted : 1, choice, &meal);
         mood_meal(mood, type, item_stack_hit_points_percent(meal));
         items_use_up(context->items, &meal, meal.count);
-    } else if (map_litter(map, colonist->x, colonist->y, colonist->z, ITEM_HAZELNUTS) > 0) {
-        /* Then the nuts lying there. */
-        type = ITEM_HAZELNUTS;
-        int wanted = (int)ceilf(appetite / item_def(type)->nutrition);
-        eaten = map_take_litter_count(map, colonist->x, colonist->y, colonist->z, type,
-                                      wanted > 1 ? wanted : 1);
-        mood_meal(mood, type, 100);
     } else {
         /* Then the plant's fruit or leaves, fresh. */
         Plant *plant = &map->plants[map_index(map, colonist->x, colonist->y, colonist->z)];

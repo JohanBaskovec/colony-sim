@@ -38,6 +38,14 @@ static bool init_flat_game(Game *game)
 }
 
 /* Rested colonist at level 75 in every knowledge (speed ×1). */
+/* A grown bramble bearing all its blackberries (the game's first day). */
+static void add_ripe_bramble(Map *map, int x, int y)
+{
+    Plant *bramble = &map->plants[map_index(map, x, y, 0)];
+    *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
+    plant_settle(bramble, GAME_START_DAY);
+}
+
 static Colonist *spawn_worker(Game *game, int x, int y)
 {
     Colonist *colonist = game_colonist(game, game_spawn_colonist(game, x, y, 0));
@@ -166,14 +174,12 @@ static void test_building_comes_before_gathering_forever(void)
     /* Same priority for gathering and construction; the zone is closer. */
     for (int y = 12; y <= 13; y++) {
         for (int x = 9; x <= 11; x++) {
-            for (int i = 0; i < MAP_NUTS_MAX; i++) {
-                map_add_litter(&game.map, x, y, 0, ITEM_HAZELNUTS);
-            }
+            add_ripe_bramble(&game.map, x, y);
         }
     }
     int zone = gather_zone_create(&game.gather_zones, &game.map, 9, 12, 11, 13, 0);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BLACKBERRIES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BLACKBERRIES, GATHER_FOREVER);
     gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
     items_add(&game.items, 12, 10, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
     run_ticks(&game, 300);
@@ -953,10 +959,10 @@ static ColonistTask first_task(int crafting, int gathering)
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
     items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 1, TEST_QUALITY_FINE));
     workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
-    map_add_litter(&game.map, 11, 11, 0, ITEM_HAZELNUTS);
+    add_ripe_bramble(&game.map, 11, 11);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 11, 11, 12, 12, 0);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BLACKBERRIES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BLACKBERRIES, GATHER_FOREVER);
     EntityId id = game_colonist_id_at(&game, 0);
     game_set_work_priority(&game, id, WORK_CRAFTING, crafting);
     game_set_work_priority(&game, id, WORK_GATHERING, gathering);

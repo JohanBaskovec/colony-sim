@@ -80,12 +80,11 @@ static void test_definitions(void)
     }
     CHECK(gather_resource_def(GATHER_RESOURCE_COUNT) == NULL);
     CHECK(gather_job_def(GATHER_JOB_NONE) == NULL);
-    /* Plants may wait for the full harvest, what lies on the ground not. */
+    /* Plants may wait for the full harvest. */
     CHECK(gather_resource_def(GATHER_WOOD)->ripe_option);
     CHECK(gather_resource_def(GATHER_BLACKBERRIES)->ripe_option);
     CHECK(gather_resource_def(GATHER_GRASS)->ripe_option);
-    CHECK(!gather_resource_def(GATHER_HAZELNUTS)->ripe_option);
-    CHECK(!(gather_ripe_options() & GATHER_RESOURCE_BIT(GATHER_HAZELNUTS)));
+    CHECK(gather_ripe_options() & GATHER_RESOURCE_BIT(GATHER_GRASS));
     /* Groups: each resource in the group listing it, grass on its own. */
     GatherResourceMask grouped = 0;
     for (int g = 0; g < GATHER_GROUP_COUNT; g++) {
@@ -103,7 +102,7 @@ static void test_definitions(void)
     CHECK(gather_group_def(GATHER_GROUP_NONE) == NULL);
     CHECK_EQ_INT(gather_resource_group(GATHER_GRASS), GATHER_GROUP_FIBRES);
     CHECK_EQ_INT(gather_resource_group(GATHER_WOOD), GATHER_GROUP_WOOD);
-    CHECK_EQ_INT(gather_resource_group(GATHER_HAZELNUTS), GATHER_GROUP_FOOD);
+    CHECK_EQ_INT(gather_resource_group(GATHER_BLACKBERRIES), GATHER_GROUP_FOOD);
     CHECK(gather_resource_is_food(GATHER_MUSHROOMS));
     CHECK(!gather_resource_is_food(GATHER_WOOD) && !gather_resource_is_food(GATHER_GRASS));
     /* Each wild food resource gives food. */
@@ -159,7 +158,7 @@ static void test_definitions(void)
     CHECK(gather_job_def(GATHER_JOB_DIG)->tool_use == TOOL_USE_DIGGING);
     CHECK(gather_job_def(GATHER_JOB_DIG)->fetches_tool);
     CHECK(!gather_job_def(GATHER_JOB_CUT_GRASS)->fetches_tool);
-    CHECK(!gather_job_doable_at(GATHER_JOB_NUTS, KNOWLEDGE_MASTERY_LEVEL - 0.1));
+    CHECK(!gather_job_doable_at(GATHER_JOB_HARVEST, KNOWLEDGE_MASTERY_LEVEL - 0.1));
     CHECK(!gather_job_doable_at(GATHER_JOB_CHOP, KNOWLEDGE_LEVEL_MAX));
     CHECK(gather_job_def(GATHER_JOB_CHOP)->work_type == WORK_WOODCUTTING);
 }
@@ -275,23 +274,20 @@ static void test_order_settings(void)
     CHECK_EQ_INT(grass->target, GATHER_TARGET_MAX);
     gather_zone_set_mode(&zones, index, GATHER_GRASS, GATHER_MODE_COUNT);
     CHECK_EQ_INT(grass->mode, GATHER_UNTIL);
-    /* What lies on the ground never waits for the full harvest. */
     gather_zone_set_ripe_only(&zones, index, GATHER_GRASS, true);
     CHECK(grass->ripe_only);
-    gather_zone_set_ripe_only(&zones, index, GATHER_HAZELNUTS, true);
-    CHECK(!zone->orders[GATHER_HAZELNUTS].ripe_only);
     gather_zone_set_ripe_only(&zones, index, GATHER_WOOD, false);
     CHECK(!zone->orders[GATHER_WOOD].ripe_only);
     /* Days of food for food only; a new unit comes with its default target. */
     gather_zone_set_unit(&zones, index, GATHER_GRASS, GATHER_UNIT_FOOD_DAYS);
     CHECK_EQ_INT(grass->unit, GATHER_UNIT_ITEMS);
-    gather_zone_set_unit(&zones, index, GATHER_HAZELNUTS, GATHER_UNIT_FOOD_DAYS);
-    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].unit, GATHER_UNIT_FOOD_DAYS);
-    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].target, GATHER_FOOD_DAYS_DEFAULT);
-    gather_zone_set_unit(&zones, index, GATHER_HAZELNUTS, GATHER_UNIT_COUNT);
-    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].unit, GATHER_UNIT_FOOD_DAYS);
-    gather_zone_set_unit(&zones, index, GATHER_HAZELNUTS, GATHER_UNIT_ITEMS);
-    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].target, GATHER_TARGET_DEFAULT);
+    gather_zone_set_unit(&zones, index, GATHER_ROSE_HIPS, GATHER_UNIT_FOOD_DAYS);
+    CHECK_EQ_INT(zone->orders[GATHER_ROSE_HIPS].unit, GATHER_UNIT_FOOD_DAYS);
+    CHECK_EQ_INT(zone->orders[GATHER_ROSE_HIPS].target, GATHER_FOOD_DAYS_DEFAULT);
+    gather_zone_set_unit(&zones, index, GATHER_ROSE_HIPS, GATHER_UNIT_COUNT);
+    CHECK_EQ_INT(zone->orders[GATHER_ROSE_HIPS].unit, GATHER_UNIT_FOOD_DAYS);
+    gather_zone_set_unit(&zones, index, GATHER_ROSE_HIPS, GATHER_UNIT_ITEMS);
+    CHECK_EQ_INT(zone->orders[GATHER_ROSE_HIPS].target, GATHER_TARGET_DEFAULT);
     /* Days of food that become items to gather: the items' default. */
     const GatherGroupOrder *food = &zone->groups[GATHER_GROUP_FOOD];
     gather_zone_set_group_target(&zones, index, GATHER_GROUP_FOOD, 8);
@@ -394,15 +390,13 @@ static void test_tile_jobs_in_order(void)
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
     put_plant(&map, 2, 2, PLANT_TREE, 1.0f);
-    map_add_litter(&map, 2, 2, 0, ITEM_HAZELNUTS);
+    map_add_litter(&map, 2, 2, 0, ITEM_HAZELNUTS); /* No gathering: for the haulers. */
     int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ALL_JOBS), GATHER_JOB_NONE);
     order(&zones, &items, index, GATHER_WOOD, GATHER_FOREVER);
-    order(&zones, &items, index, GATHER_HAZELNUTS, GATHER_FOREVER);
-    /* What lies under the tree before felling it. */
-    GatherJobMask no_nuts = ALL_JOBS & ~GATHER_JOB_BIT(GATHER_JOB_NUTS);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ALL_JOBS), GATHER_JOB_NUTS);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, no_nuts), GATHER_JOB_CHOP);
+    GatherJobMask no_chop = ALL_JOBS & ~GATHER_JOB_BIT(GATHER_JOB_CHOP);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ALL_JOBS), GATHER_JOB_CHOP);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, no_chop), GATHER_JOB_NONE);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 1, 1, 0, ALL_JOBS), GATHER_JOB_NONE);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 8, 8, 0, ALL_JOBS), GATHER_JOB_NONE);
     CHECK(gather_job_available(&zones, &map, 2, 2, 0, GATHER_JOB_CHOP));
@@ -516,7 +510,6 @@ static void test_full_harvest(void)
     put_plant(&map, 1, 3, PLANT_GRASS, 0.8f);
     put_plant(&map, 3, 3, PLANT_GRASS, 1.0f);
     int index = gather_zone_create(&zones, &map, 0, 0, 6, 4, 0);
-    order(&zones, &items, index, GATHER_HAZELNUTS, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_GRASS, GATHER_FOREVER);
     gather_zone_set_all_ripe_only(&zones, index, true);
@@ -532,21 +525,14 @@ static void test_full_harvest(void)
     long available[GATHER_RESOURCE_COUNT];
     gather_zone_available(&zones, &map, index, available);
     CHECK_EQ_INT((int)available[GATHER_BLACKBERRIES], plant_stock_available(young, 0));
-    CHECK_EQ_INT((int)available[GATHER_HAZELNUTS], 0);
     /* Grass fully grown only. */
     CHECK(!gather_job_available(&zones, &map, 1, 3, 0, GATHER_JOB_CUT_GRASS));
     CHECK(gather_job_available(&zones, &map, 3, 3, 0, GATHER_JOB_CUT_GRASS));
     /* Without the option, whatever there is. */
     gather_zone_set_group_ripe_only(&zones, index, GATHER_GROUP_FOOD, false);
     CHECK(gather_job_available(&zones, &map, 5, 1, 0, GATHER_JOB_HARVEST));
-    CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_NUTS));
-    CHECK(!(gather_zone_ripe_mask(zone) & GATHER_RESOURCE_BIT(GATHER_HAZELNUTS)));
+    CHECK(!(gather_zone_ripe_mask(zone) & GATHER_RESOURCE_BIT(GATHER_BLACKBERRIES)));
     CHECK(gather_zone_ripe_mask(zone) & GATHER_RESOURCE_BIT(GATHER_GRASS));
-    /* What lies on the ground is always ready: no waiting for a full stock. */
-    map_add_litter(&map, 1, 1, 0, ITEM_HAZELNUTS);
-    CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_NUTS));
-    map_take_litter(&map, 1, 1, 0, ITEM_HAZELNUTS);
-    CHECK(!gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_NUTS));
     gather_zone_set_all_ripe_only(&zones, index, false);
     CHECK_EQ_INT(gather_zone_ripe_mask(zone), 0);
     CHECK(gather_job_available(&zones, &map, 1, 3, 0, GATHER_JOB_CUT_GRASS));
@@ -631,7 +617,7 @@ static void test_apply_the_group_order_to_its_resources(void)
     gather_zone_set_group_enabled(&zones, index, GATHER_GROUP_FOOD, true);
     gather_zone_set_enabled(&zones, index, GATHER_MUSHROOMS, false);
     gather_zone_set_ripe_only(&zones, index, GATHER_BLACKBERRIES, true);
-    gather_zone_set_mode(&zones, index, GATHER_HAZELNUTS, GATHER_FOREVER);
+    gather_zone_set_mode(&zones, index, GATHER_ROSE_HIPS, GATHER_FOREVER);
     gather_zone_set_group_mode(&zones, index, GATHER_GROUP_FOOD, GATHER_UNTIL);
     gather_zone_set_group_unit(&zones, index, GATHER_GROUP_FOOD, GATHER_UNIT_ITEMS);
     gather_zone_set_group_target(&zones, index, GATHER_GROUP_FOOD, 42);
@@ -651,8 +637,8 @@ static void test_apply_the_group_order_to_its_resources(void)
     gather_zone_set_group_unit(&zones, index, GATHER_GROUP_FOOD, GATHER_UNIT_FOOD_DAYS);
     gather_zone_set_group_target(&zones, index, GATHER_GROUP_FOOD, 7);
     gather_zone_apply_group_order(&zones, index, GATHER_GROUP_FOOD);
-    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].unit, GATHER_UNIT_FOOD_DAYS);
-    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].target, 7);
+    CHECK_EQ_INT(zone->orders[GATHER_ROSE_HIPS].unit, GATHER_UNIT_FOOD_DAYS);
+    CHECK_EQ_INT(zone->orders[GATHER_ROSE_HIPS].target, 7);
     /* Resources of the other groups are left alone. */
     CHECK(zone->orders[GATHER_GRASS].mode != GATHER_UNTIL ||
           zone->orders[GATHER_GRASS].target != 7);
@@ -692,9 +678,9 @@ static void test_days_of_food(void)
     const GatherZone *zone = gather_zone_get(&zones, index);
     gather_zone_set_group_enabled(&zones, index, GATHER_GROUP_FOOD, true);
     gather_zone_set_mode(&zones, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
-    gather_zone_set_mode(&zones, index, GATHER_HAZELNUTS, GATHER_UNTIL);
-    gather_zone_set_unit(&zones, index, GATHER_HAZELNUTS, GATHER_UNIT_FOOD_DAYS);
-    gather_zone_set_target(&zones, index, GATHER_HAZELNUTS, 1);
+    gather_zone_set_mode(&zones, index, GATHER_ROSE_HIPS, GATHER_UNTIL);
+    gather_zone_set_unit(&zones, index, GATHER_ROSE_HIPS, GATHER_UNIT_FOOD_DAYS);
+    gather_zone_set_target(&zones, index, GATHER_ROSE_HIPS, 1);
     /* 5 days of food: the group (until 5 days by default) stops. */
     CHECK_EQ_INT(gather_zone_wanted(zone, totals, daily) & GATHER_RESOURCE_BIT(GATHER_BLACKBERRIES),
                  0);
@@ -702,15 +688,15 @@ static void test_days_of_food(void)
     totals[ITEM_ROASTED_CARROTS] = 0;
     GatherResourceMask wanted = gather_zone_wanted(zone, totals, daily);
     CHECK(wanted & GATHER_RESOURCE_BIT(GATHER_BLACKBERRIES));
-    /* No hazelnuts lying: less than a day of them. */
-    CHECK(wanted & GATHER_RESOURCE_BIT(GATHER_HAZELNUTS));
-    totals[ITEM_HAZELNUTS] = (long)(daily / item_def(ITEM_HAZELNUTS)->nutrition) + 1;
+    /* No rose hips stored: less than a day of them. */
+    CHECK(wanted & GATHER_RESOURCE_BIT(GATHER_ROSE_HIPS));
+    totals[ITEM_ROSE_HIPS] = (long)(daily / item_def(ITEM_ROSE_HIPS)->nutrition) + 1;
     wanted = gather_zone_wanted(zone, totals, daily);
-    CHECK(!(wanted & GATHER_RESOURCE_BIT(GATHER_HAZELNUTS)));
+    CHECK(!(wanted & GATHER_RESOURCE_BIT(GATHER_ROSE_HIPS)));
     CHECK(wanted & GATHER_RESOURCE_BIT(GATHER_BLACKBERRIES));
     /* Twice the settlers: half the days. */
     CHECK(gather_zone_wanted(zone, totals, gather_daily_food(4)) &
-          GATHER_RESOURCE_BIT(GATHER_HAZELNUTS));
+          GATHER_RESOURCE_BIT(GATHER_ROSE_HIPS));
     free_world(&map, &zones, &items);
 }
 
@@ -778,7 +764,7 @@ static void test_products_depend_on_level(void)
     free_world(&map, &zones, &items);
 }
 
-static void test_grass_and_nuts(void)
+static void test_grass(void)
 {
     Map map;
     GatherZones zones;
@@ -788,24 +774,8 @@ static void test_grass_and_nuts(void)
     Plant *short_grass = put_plant(&map, 3, 3, PLANT_GRASS, 0.4f);
     int index = gather_zone_create(&zones, &map, 0, 0, 4, 4, 0);
     order(&zones, &items, index, GATHER_GRASS, GATHER_FOREVER);
-    order(&zones, &items, index, GATHER_HAZELNUTS, GATHER_FOREVER);
-
-    /* The nuts lying on a tile are taken all at once, the work growing with
-     * their number. */
-    for (int i = 0; i < MAP_NUTS_MAX; i++) {
-        map_add_litter(&map, 3, 1, 0, ITEM_HAZELNUTS);
-    }
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_NUTS);
-    float all_nuts = gather_job_work_needed(&map, 3, 1, 0, GATHER_JOB_NUTS);
-    map_take_litter_count(&map, 3, 1, 0, ITEM_HAZELNUTS, MAP_NUTS_MAX - 1);
-    CHECK_NEAR(gather_job_work_needed(&map, 3, 1, 0, GATHER_JOB_NUTS) * MAP_NUTS_MAX, all_nuts,
-               1e-3);
-    for (int i = 1; i < MAP_NUTS_MAX; i++) {
-        map_add_litter(&map, 3, 1, 0, ITEM_HAZELNUTS);
-    }
-    CHECK(gather_zone_add_work(&zones, &map, &items, 3, 1, 0, GATHER_JOB_NUTS, 1e6f, 60.0, NULL));
-    CHECK_EQ_INT((int)items.totals[ITEM_HAZELNUTS], MAP_NUTS_MAX);
-    CHECK_EQ_INT(map_litter(&map, 3, 1, 0, ITEM_HAZELNUTS), 0);
+    /* Nuts lying about are no gathering: items for the haulers. */
+    map_add_litter(&map, 3, 1, 0, ITEM_HAZELNUTS);
     CHECK_EQ_INT(gather_tile_job(&zones, &map, 3, 1, 0, ALL_JOBS), GATHER_JOB_NONE);
 
     /* Grass: tall enough only; it grows back from nothing. */
@@ -822,6 +792,16 @@ static void test_grass_and_nuts(void)
     free_world(&map, &zones, &items);
 }
 
+/* A bramble at (x, 0) bearing a single handful of blackberries. */
+static void put_one_handful(Map *map, int x)
+{
+    Plant *bramble = put_plant(map, x, 0, PLANT_BRAMBLE, 1.0f);
+    int available = plant_stock_available(bramble, 0);
+    REQUIRE(available > 1);
+    plant_take_stock(bramble, 0, available - 1);
+    REQUIRE(plant_stock_available(bramble, 0) == 1);
+}
+
 static void test_fixed_count_stops(void)
 {
     Map map;
@@ -829,30 +809,31 @@ static void test_fixed_count_stops(void)
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
     for (int x = 0; x < 4; x++) {
-        map_add_litter(&map, x, 0, 0, ITEM_HAZELNUTS);
+        put_one_handful(&map, x);
     }
     int index = gather_zone_create(&zones, &map, 0, 0, 3, 0, 0);
-    order(&zones, &items, index, GATHER_HAZELNUTS, GATHER_DO_COUNT);
-    gather_zone_set_target(&zones, index, GATHER_HAZELNUTS, 3);
+    order(&zones, &items, index, GATHER_BLACKBERRIES, GATHER_DO_COUNT);
+    gather_zone_set_target(&zones, index, GATHER_BLACKBERRIES, 3);
     const GatherZone *zone = gather_zone_get(&zones, index);
-    float nut = gather_job_work_needed(&map, 0, 0, 0, GATHER_JOB_NUTS);
+    float work = gather_job_work_needed(&map, 0, 0, 0, GATHER_JOB_HARVEST);
     for (int x = 0; x < 3; x++) {
-        CHECK(
-            gather_zone_add_work(&zones, &map, &items, x, 0, 0, GATHER_JOB_NUTS, nut, 60.0, NULL));
+        CHECK(gather_zone_add_work(&zones, &map, &items, x, 0, 0, GATHER_JOB_HARVEST, work, 60.0,
+                                   NULL));
     }
     /* Done at once, whatever lies in the colony. */
-    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].done, 3);
+    CHECK_EQ_INT(zone->orders[GATHER_BLACKBERRIES].done, 3);
     CHECK_EQ_INT(zone->wanted, 0);
     CHECK_EQ_INT(zones.wanting_cells, 0);
-    CHECK(!gather_zone_add_work(&zones, &map, &items, 3, 0, 0, GATHER_JOB_NUTS, nut, 60.0, NULL));
+    CHECK(
+        !gather_zone_add_work(&zones, &map, &items, 3, 0, 0, GATHER_JOB_HARVEST, work, 60.0, NULL));
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, 0);
     /* A higher target: more to do. Another mode starts over. */
-    gather_zone_set_target(&zones, index, GATHER_HAZELNUTS, 4);
+    gather_zone_set_target(&zones, index, GATHER_BLACKBERRIES, 4);
     gather_zones_update(&zones, items.totals, 0.0f);
-    CHECK_EQ_INT(zone->wanted, GATHER_RESOURCE_BIT(GATHER_HAZELNUTS));
-    gather_zone_set_mode(&zones, index, GATHER_HAZELNUTS, GATHER_FOREVER);
-    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].done, 0);
+    CHECK_EQ_INT(zone->wanted, GATHER_RESOURCE_BIT(GATHER_BLACKBERRIES));
+    gather_zone_set_mode(&zones, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
+    CHECK_EQ_INT(zone->orders[GATHER_BLACKBERRIES].done, 0);
     free_world(&map, &zones, &items);
 }
 
@@ -863,21 +844,21 @@ static void test_progress_belongs_to_one_job(void)
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
     put_plant(&map, 2, 2, PLANT_GRASS, 1.0f);
-    map_add_litter(&map, 2, 2, 0, ITEM_HAZELNUTS);
-    map_add_litter(&map, 2, 2, 0, ITEM_HAZELNUTS);
     int index = gather_zone_create(&zones, &map, 0, 0, 3, 3, 0);
-    order(&zones, &items, index, GATHER_HAZELNUTS, GATHER_FOREVER);
+    order(&zones, &items, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
     order(&zones, &items, index, GATHER_GRASS, GATHER_FOREVER);
-    REQUIRE(gather_job_work_needed(&map, 2, 2, 0, GATHER_JOB_NUTS) > 100.0f);
-    CHECK(
-        !gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_NUTS, 100.0f, 60.0, NULL));
-    CHECK(gather_zone_progress_fraction(&zones, &map, 2, 2, 0) > 0.0f);
-    /* Work on another job there starts from scratch. */
     float cut = gather_job_work_needed(&map, 2, 2, 0, GATHER_JOB_CUT_GRASS);
     REQUIRE(cut > 100.0f);
     CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_CUT_GRASS, 100.0f, 60.0,
                                 NULL));
-    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, 2, 2, 0), 100.0f / cut, 1e-4);
+    CHECK(gather_zone_progress_fraction(&zones, &map, 2, 2, 0) > 0.0f);
+    /* Work on another job there starts from scratch (a bramble came up instead). */
+    put_plant(&map, 2, 2, PLANT_BRAMBLE, 1.0f);
+    float harvest = gather_job_work_needed(&map, 2, 2, 0, GATHER_JOB_HARVEST);
+    REQUIRE(harvest > 100.0f);
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_HARVEST, 100.0f, 60.0,
+                                NULL));
+    CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, 2, 2, 0), 100.0f / harvest, 1e-4);
     CHECK_NEAR(zones.progress[map_index(&map, 2, 2, 0)], 100.0, 1e-4);
     CHECK_NEAR(gather_zone_progress_fraction(&zones, &map, -1, 2, 0), 0.0, 1e-6);
     /* Removing the tile forgets the work. */
@@ -930,13 +911,14 @@ static void test_available_resources(void)
     int index = gather_zone_create(&zones, &map, 8, 8, 10, 8, 0);
     put_plant(&map, 8, 8, PLANT_TREE, 1.0f);
     put_plant(&map, 9, 8, PLANT_TREE, 0.5f);
-    /* Nuts lying on the tiles. */
+    /* Blackberries, and nuts lying about (no gathering). */
+    const Plant *bramble = put_plant(&map, 10, 8, PLANT_BRAMBLE, 1.0f);
+    put_plant(&map, 11, 8, PLANT_BRAMBLE, 1.0f); /* Out of the zone. */
     map_add_litter(&map, 8, 8, 0, ITEM_HAZELNUTS);
-    map_add_litter(&map, 8, 8, 0, ITEM_HAZELNUTS);
-    map_add_litter(&map, 10, 8, 0, ITEM_HAZELNUTS);
-    map_add_litter(&map, 11, 8, 0, ITEM_HAZELNUTS); /* Out of the zone. */
+    int berries = plant_stock_available(bramble, 0);
+    REQUIRE(berries > 0);
     gather_zone_available(&zones, &map, index, available);
-    CHECK_EQ_INT((int)available[GATHER_HAZELNUTS], 3);
+    CHECK_EQ_INT((int)available[GATHER_BLACKBERRIES], berries);
     /* Wood: fully grown trees only by default, all of them without the option. */
     int full_wood = plant_def(PLANT_TREE)->cut_yield;
     int young_wood = (int)((float)full_wood * 0.5f + 0.5f);
@@ -944,13 +926,13 @@ static void test_available_resources(void)
     gather_zone_set_ripe_only(&zones, index, GATHER_WOOD, false);
     gather_zone_available(&zones, &map, index, available);
     CHECK_EQ_INT((int)available[GATHER_WOOD], full_wood + young_wood);
-    CHECK_EQ_INT((int)available[GATHER_BLACKBERRIES], 0);
     CHECK_EQ_INT((int)available[GATHER_GRASS], 0);
     /* What is gathered no longer counts. */
-    order(&zones, &items, index, GATHER_HAZELNUTS, GATHER_FOREVER);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 8, 8, 0, GATHER_JOB_NUTS, 1e6f, 60.0, NULL));
+    order(&zones, &items, index, GATHER_BLACKBERRIES, GATHER_FOREVER);
+    CHECK(
+        gather_zone_add_work(&zones, &map, &items, 10, 8, 0, GATHER_JOB_HARVEST, 1e6f, 60.0, NULL));
     gather_zone_available(&zones, &map, index, available);
-    CHECK_EQ_INT((int)available[GATHER_HAZELNUTS], 1);
+    CHECK_EQ_INT((int)available[GATHER_BLACKBERRIES], 0);
     free_world(&map, &zones, &items);
 }
 
@@ -1002,12 +984,11 @@ static void test_overlapping_rectangle_merges_zones(void)
     int b = gather_zones_add_rect(&zones, &map, 6, 0, 8, 2, 0, GATHER_ZONE_NONE, NULL);
     REQUIRE(a != GATHER_ZONE_NONE && b != GATHER_ZONE_NONE && a != b);
     order(&zones, &items, a, GATHER_GRASS, GATHER_FOREVER);
-    order(&zones, &items, b, GATHER_HAZELNUTS, GATHER_FOREVER);
+    order(&zones, &items, b, GATHER_BLACKBERRIES, GATHER_FOREVER);
     /* Work under way in the younger zone. */
-    map_add_litter(&map, 7, 1, 0, ITEM_HAZELNUTS);
-    map_add_litter(&map, 7, 1, 0, ITEM_HAZELNUTS);
-    CHECK(
-        !gather_zone_add_work(&zones, &map, &items, 7, 1, 0, GATHER_JOB_NUTS, 100.0f, 60.0, NULL));
+    put_plant(&map, 7, 1, PLANT_BRAMBLE, 1.0f);
+    CHECK(!gather_zone_add_work(&zones, &map, &items, 7, 1, 0, GATHER_JOB_HARVEST, 100.0f, 60.0,
+                                NULL));
 
     /* Over both: the oldest takes everything, with its orders. */
     CHECK_EQ_INT(gather_zones_add_rect(&zones, &map, 2, 1, 6, 1, 0, GATHER_ZONE_NONE, NULL), a);
@@ -1017,7 +998,7 @@ static void test_overlapping_rectangle_merges_zones(void)
     REQUIRE(merged != NULL);
     CHECK_EQ_INT(merged->cell_count, 9 + 9 + 3);
     CHECK(merged->orders[GATHER_GRASS].enabled);
-    CHECK(!merged->orders[GATHER_HAZELNUTS].enabled);
+    CHECK(!merged->orders[GATHER_BLACKBERRIES].enabled);
     CHECK_EQ_INT(gather_zone_at(&zones, 8, 2, 0), a);
     CHECK_NEAR(zones.progress[map_index(&map, 7, 1, 0)], 100.0, 1e-4); /* Kept. */
 
@@ -1305,7 +1286,7 @@ int main(void)
     RUN_TEST(test_food_in_season);
     RUN_TEST(test_felling_a_tree);
     RUN_TEST(test_products_depend_on_level);
-    RUN_TEST(test_grass_and_nuts);
+    RUN_TEST(test_grass);
     RUN_TEST(test_fixed_count_stops);
     RUN_TEST(test_progress_belongs_to_one_job);
     RUN_TEST(test_map_stones);

@@ -3,6 +3,14 @@
 
 #include "test_framework.h"
 
+/* A grown bramble bearing all its blackberries (the game's first day). */
+static void add_ripe_bramble(Map *map, int x, int y)
+{
+    Plant *bramble = &map->plants[map_index(map, x, y, 0)];
+    *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
+    plant_settle(bramble, GAME_START_DAY);
+}
+
 /* A small game on a flat, empty soil map with no starting colonists. */
 static bool init_flat_game(Game *game)
 {
@@ -417,10 +425,10 @@ static void test_a_settler_with_something_in_hand_only_hauls(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    map_add_litter(&game.map, 30, 30, 0, ITEM_HAZELNUTS);
+    add_ripe_bramble(&game.map, 30, 30);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 30, 30, 30, 30, 0);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BLACKBERRIES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BLACKBERRIES, GATHER_FOREVER);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DEFAULT;
@@ -815,10 +823,10 @@ static void test_gathering_comes_before_hauling_at_same_priority(void)
     REQUIRE(init_flat_game(&game));
     items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_WOOD, 10));
     stockpile_create(&game.stockpiles, &game.map, 12, 10, 12, 10, 0);
-    map_add_litter(&game.map, 30, 30, 0, ITEM_HAZELNUTS);
+    add_ripe_bramble(&game.map, 30, 30);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 30, 30, 30, 30, 0);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BLACKBERRIES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BLACKBERRIES, GATHER_FOREVER);
     Colonist *colonist = spawn_hauler(&game, 9, 10);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DEFAULT;

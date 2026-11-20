@@ -444,14 +444,14 @@ static void test_sulking_settler_does_no_work(void)
     REQUIRE(colonist != NULL);
     for (int y = 18; y <= 22; y++) {
         for (int x = 18; x <= 22; x++) {
-            for (int i = 0; i < MAP_NUTS_MAX; i++) {
-                map_add_litter(&game.map, x, y, 0, ITEM_HAZELNUTS);
-            }
+            Plant *bramble = &game.map.plants[map_index(&game.map, x, y, 0)];
+            *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
+            plant_settle(bramble, GAME_START_DAY); /* In fruit. */
         }
     }
     int zone = gather_zone_create(&game.gather_zones, &game.map, 18, 18, 22, 22, 0);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BLACKBERRIES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BLACKBERRIES, GATHER_FOREVER);
     gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
     mood_start_break(&colonist->mood, MOOD_BREAK_SULK, 2 * TICKS_PER_HOUR);
     bool worked = false;

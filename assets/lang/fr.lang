@@ -428,7 +428,6 @@ hud.tile.bed_owner = Propriétaire : {0}
 hud.tile.bed_free = Lit libre : le prochain colon qui y dort le prend
 # {0} : matériau, {1} : déjà apporté, {2} : nécessaire.
 hud.tile.material = {0} : {1}/{2}
-hud.tile.litter = Sur la case : {0} ×{1}
 hud.item_condition = Qualité : {0} · Points de vie : {1}/{2} ({3})
 hud.item_quality = Qualité : {0}
 hud.item_hit_points = Points de vie : {0}/{1} ({2})
@@ -459,7 +458,6 @@ colonist.task.uproot = Arrachage
 colonist.task.harvest_carefully = Cueillette prudente
 colonist.task.dig = Déterrage de racines
 colonist.task.dig_carefully = Déterrage prudent de racines
-colonist.task.gather_nuts = Ramasse des noisettes
 colonist.task.cut_grass = Coupe de l’herbe et des fibres
 colonist.task.craft = Fabrique
 colonist.task.construct = Construit
@@ -635,7 +633,6 @@ gather_zone.priority = Priorité : {0}
 gather_zone.priority_hint = (1 = récoltée en premier, avant les zones plus proches)
 gather_zone.resource.wood = Arbres à abattre
 gather_zone.resource.blackberries = Mûres
-gather_zone.resource.hazelnuts = Noisettes
 gather_zone.resource.mushrooms = Champignons
 gather_zone.resource.wild_garlic = Ail des ours
 gather_zone.resource.nettles = Orties

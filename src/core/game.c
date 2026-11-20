@@ -1107,28 +1107,6 @@ static ItemConditions tile_conditions(const void *context, size_t tile)
                             !(rains && open)};
 }
 
-/* The nuts lying on a tile (Map.nuts) have no state of their own: they rot
- * on average, as many of them as the rot of one pristine nut would take in
- * that time on that tile (item_rot_rate(), ItemDef.rot_days), a fraction
- * rolled from the seed, the tile and the hour like the other chance events of
- * the world. */
-static void rot_nuts(Game *game, size_t begin, size_t end, int hours)
-{
-    float rot_hours = item_def(ITEM_HAZELNUTS)->rot_days * (float)HOURS_PER_DAY;
-    int hour = (int)(game->clock.tick / TICKS_PER_HOUR);
-    for (size_t tile = begin; tile < end; tile++) {
-        int nuts = game->map.nuts[tile];
-        if (nuts == 0) {
-            continue;
-        }
-        float rate = tile_conditions(game, tile).rot_rate;
-        float expected = (float)nuts * rate * (float)hours / rot_hours;
-        int lost = (int)expected;
-        lost += world_roll(game->seed, tile, hour, 40) < expected - (float)lost ? 1 : 0;
-        game->map.nuts[tile] = (uint8_t)(nuts - (lost < nuts ? lost : nuts));
-    }
-}
-
 /* Items lying on the ground change over time (fresh grass dries, food
  * rots), slice by slice like plants, over every level (foliage holds items
  * too; levels without any are skipped). */
@@ -1140,7 +1118,6 @@ static void update_items(Game *game)
     size_t end = (size_t)((phase + 1) * count / GAME_ITEM_UPDATE_INTERVAL);
     int hours = GAME_ITEM_UPDATE_INTERVAL / TICKS_PER_HOUR;
     items_advance(&game->items, begin, end, hours, tile_conditions, game);
-    rot_nuts(game, begin, end, hours);
 }
 
 /* Whether a settler is carrying out the order and holds what it took. */

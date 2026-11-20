@@ -628,15 +628,6 @@ static void build_tile_panel(App *app, Panel *panel)
                   tr(plant_def((PlantType)map->plants[index].type)->name_key));
     }
 
-    /* The nuts the trees shed, on the ground or on their foliage (a layer of
-     * the map, not items). */
-    int nuts = map_litter(map, x, y, z, ITEM_HAZELNUTS);
-    if (nuts > 0) {
-        tr_integer(a, sizeof(a), nuts);
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.litter"),
-                  tr(item_def(ITEM_HAZELNUTS)->name_key), a);
-    }
-
     const Stockpile *stockpile =
         stockpile_get(&app->game.stockpiles, stockpile_at(&app->game.stockpiles, x, y, z));
     if (stockpile != NULL) {

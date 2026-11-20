@@ -7,8 +7,8 @@
  * Only plant eaters for now. What a species eats is in its AnimalDef: the
  * plants it grazes (PlantDef.grazed, eaten down bite by bite: Plant.growth), the food wild plants
  * bear (the same stock the settlers pick: animals compete with gathering), roots dug up by those
- * that dig, and the nuts lying under the trees. An animal goes for a treat close by before it
- * grazes.
+ * that dig, and the nuts lying about (items: under the trees, or in a store). An animal goes for a
+ * treat close by before it grazes.
  *
  * Animals fear the settlers: one that sees a settler within its species'
  * flight distance, or hears one much closer without seeing it, runs off, and

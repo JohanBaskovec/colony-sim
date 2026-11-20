@@ -454,15 +454,14 @@ wood (`PlantDef.cut_yield`) and lets its nuts fall in autumn
 (`PlantDef.fall_item`, `fall_days`, `fall_yield`): once an hour per tree
 (`tree_fall_chance()`: the season's yield spread over its hours, scaled by
 growth) a nut is shed by `tree_shed()` like a twig, onto the ground under the
-crown. Nuts lie in a map layer of their own,
-`Map.nuts` (`MAP_NUTS_MAX` a tile, `map_litter()` and friends take
-`ITEM_HAZELNUTS`), have no state of their own and **rot on average**
-(`rot_nuts()` in game.c, with the items' sweep): each hour a tile with nuts
-loses as many as `item_rot_rate()` of its conditions says over
-`ItemDef.rot_days` (90 days at 15 °C), the fraction rolled from the seed, the
-tile and the hour. Gathering zones pick them up on `GATHER_JOB_NUTS` (all the
-nuts of the tile at once), and a hungry settler eats the nuts lying where it
-stands.
+crown. Nuts are litter like branches and twigs: a new world lays them in a
+map layer (`Map.nuts`, `MAP_NUTS_MAX` a tile), turned into ordinary items when
+the game starts (`map_litter_to_items()`), and a running game lays them as
+items (`map_litter()` and friends take `ITEM_HAZELNUTS`). Each nut rots on
+its own like any food lying out (90 days at 15 °C), is hauled to a stockpile
+that takes it, eaten by a hungry settler where it lies, and by the animals
+that eat nuts (`AnimalDef.eats_nuts`), wherever it lies. Gathering zones
+leave them alone (`docs/TREES.md`).
 A felled tree falls full length
 (`TREE_FALL_TILES_PER_LEVEL` = 2 tiles per level, stopping before rock and
 the edge of the map) where the woodcutter aims it (`tree_fall_aim()`): the
@@ -1392,10 +1391,10 @@ only), so that settlers do not walk to plants that give little. `gather_zones_up
 and bumps the zones revision when it changes; it is also bumped once per
 in-game hour, after every plant has grown, so that idle settlers look again.
 
-A zone tile offers a **job** (`GatherJob`: nuts, harvest, harvest carefully,
+A zone tile offers a **job** (`GatherJob`: harvest, harvest carefully,
 dig, dig carefully, cut grass, chop, in that order of preference on one tile:
-the nuts lying there first, felling last) when it holds something a wanted
-resource comes from. What lies on the ground (stones, branches, twigs) is no
+felling last) when it holds something a wanted
+resource comes from. What lies on the ground (stones, branches, twigs, nuts) is no
 gathering: those are ordinary items, hauled like any (stockpile filters
 decide). Each wild food is a resource of the job that suits its plant: picked or
 dug up, and "carefully" (Gathering 60, `GATHER_CAREFUL_MIN_LEVEL`) when easily
@@ -1409,7 +1408,7 @@ settler takes the first job of the tile among those it may do
 (`Colonist.work_type` holds the job while `gathering`). The zone inspector
 shows how many items of each resource the zone holds now
 (`gather_zone_available()`: wood of the trees the orders allow, ripe fruit,
-stocks, fallen nuts, grass), and warns about an
+stocks, grass), and warns about an
 enabled resource with none. The job search reuses the designation search
 (`WorkSearch.zones`), the work progress of the tile's current job lives in
 the zone layer (work on another job there starts over), and a gatherer

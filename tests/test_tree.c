@@ -597,6 +597,8 @@ static void test_hazel_drops_nuts_in_the_game(void)
         REQUIRE(is_trunk(map, 16, 16, 0));
         game_debug_skip(&game, 150 * TICKS_PER_HOUR);
         int nuts = nuts_total(map);
+        CHECK_EQ_INT(nuts, (int)game.items.totals[ITEM_HAZELNUTS]); /* Items, all of them. */
+        CHECK_EQ_INT(map->nuts[map_index(map, 17, 16, 0)], 0);
         if (!autumn) {
             CHECK_EQ_INT(nuts, 0);
         } else {
@@ -620,35 +622,34 @@ static void test_hazel_drops_nuts_in_the_game(void)
     }
 }
 
-/* Nuts have no state of their own: a few rot every hour, on average as many
- * as the rot of nuts lying there says, the faster the warmer and wetter. */
-static void test_nuts_rot_on_average(void)
+/* Fallen nuts are items: each rots on its own, as any food lying out. */
+static void test_nuts_rot_one_by_one(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
     Map *map = &game.map;
-    int tiles = 0;
-    for (int y = 0; y < SIZE; y++) {
-        for (int x = 0; x < SIZE; x++) {
-            for (int n = 0; n < MAP_NUTS_MAX; n++) {
-                map_add_litter(map, x, y, 0, ITEM_HAZELNUTS);
-            }
-            tiles++;
-        }
+    for (int n = 0; n < MAP_NUTS_MAX; n++) {
+        REQUIRE(map_add_litter(map, 5, 5, 0, ITEM_HAZELNUTS));
     }
-    int before = nuts_total(map);
-    REQUIRE(before == tiles * MAP_NUTS_MAX);
-    float rate = game_item_rot_rate(&game, 5, 5, 0);
-    CHECK(rate > 0.0f);
-    game_debug_skip(&game, 24 * TICKS_PER_HOUR); /* A day. */
-    int lost = before - nuts_total(map);
-    /* rate / (90 days) of them, give or take the dice and the warmth of the
-     * day (the rate is the morning's: the afternoon rots faster). */
-    float expected = (float)before * rate / item_def(ITEM_HAZELNUTS)->rot_days;
-    CHECK(lost > 0);
-    CHECK(lost > (int)(expected * 0.6f) && lost < (int)(expected * 1.6f) + 2);
-    /* They are never made up. */
-    CHECK(nuts_total(map) < before);
+    size_t tile = map_index(map, 5, 5, 0);
+    int hit_points[MAP_NUTS_MAX];
+    int count = 0;
+    for (const Item *item = items_first(&game.items, tile); item != NULL;
+         item = items_next(&game.items, item)) {
+        REQUIRE(count < MAP_NUTS_MAX);
+        hit_points[count++] = item->hit_points;
+    }
+    REQUIRE(count == MAP_NUTS_MAX);
+    CHECK(game_item_rot_rate(&game, 5, 5, 0) > 0.0f);
+    game_debug_skip(&game, 3 * 24 * TICKS_PER_HOUR); /* Three days. */
+    int rotting = 0, kept = 0;
+    for (const Item *item = items_first(&game.items, tile); item != NULL;
+         item = items_next(&game.items, item)) {
+        rotting += item->hit_points < hit_points[kept] || item->progress > 0;
+        kept++;
+    }
+    CHECK_EQ_INT(kept, MAP_NUTS_MAX); /* They keep for months. */
+    CHECK_EQ_INT(rotting, MAP_NUTS_MAX);
     game_shutdown(&game);
 }
 
@@ -1297,9 +1298,8 @@ static void test_felling_drops_the_litter_of_the_foliage(void)
     map_free(&map);
 }
 
-/* A zone on the ground gathers what lies on the ground, whatever hangs in the
- * foliage above: nobody has to climb. A zone drawn over the foliage gathers
- * what lies there. Felling still works from the foot. */
+/* A zone on the ground covers the ground, not the foliage above it; a zone
+ * may be drawn over the foliage. Felling works from the foot. */
 static void test_gathering_on_trees(void)
 {
     Map map;
@@ -1314,50 +1314,16 @@ static void test_gathering_on_trees(void)
                           3 + direction_dy((Direction)d) * 2, 0, STRUCTURE_WALL);
     }
     map_add_litter(&map, 11, 10, 1, ITEM_HAZELNUTS); /* On the foliage. */
-    map_add_litter(&map, 11, 10, 1, ITEM_HAZELNUTS);
-    map_add_litter(&map, 9, 10, 0, ITEM_HAZELNUTS); /* On the ground. */
-    CHECK(gather_zone_can_cover(&map, 10, 10, 0));  /* The foot of the trunk. */
+    CHECK(gather_zone_can_cover(&map, 10, 10, 0));   /* The foot of the trunk. */
     CHECK(!gather_zone_can_cover(&map, 10, 10, 1));
     CHECK(gather_zone_can_cover(&map, 11, 10, 1)); /* Foliage. */
-    /* A zone on the ground. */
+    /* A zone on the ground: none over the foliage above it. */
     int zone = gather_zone_create(&zones, &map, 0, 0, SIZE - 1, SIZE - 1, 0);
-    gather_zone_set_enabled(&zones, zone, GATHER_HAZELNUTS, true);
-    gather_zone_set_mode(&zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
-    gather_zones_update(&zones, items.totals, 1.0f);
     CHECK_EQ_INT(gather_zone_at(&zones, 11, 10, 1), GATHER_ZONE_NONE);
-    CHECK(gather_job_available(&zones, &map, 9, 10, 0, GATHER_JOB_NUTS));
-    CHECK(!gather_job_available(&zones, &map, 11, 10, 1, GATHER_JOB_NUTS));
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 11, 10, 1, ~0u), GATHER_JOB_NONE);
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 9, 10, 0, ~0u), GATHER_JOB_NUTS);
-    long available[GATHER_RESOURCE_COUNT];
-    gather_zone_available(&zones, &map, zone, available);
-    CHECK_EQ_INT((int)available[GATHER_HAZELNUTS], 1); /* The foliage's are not counted. */
-    CHECK(
-        !gather_zone_add_work(&zones, &map, &items, 11, 10, 1, GATHER_JOB_NUTS, 1e6f, 60.0, NULL));
-    CHECK_EQ_INT(map_litter(&map, 11, 10, 1, ITEM_HAZELNUTS), 2);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 9, 10, 0, GATHER_JOB_NUTS, 1e6f, 60.0, NULL));
-    CHECK_EQ_INT(items_get(&items, 9, 10, 0).type, ITEM_HAZELNUTS);
-    CHECK_EQ_INT(items_get(&items, 9, 10, 0).count, 1);
-    CHECK_EQ_INT(map_litter(&map, 9, 10, 0, ITEM_HAZELNUTS), 0);
-
-    /* A zone over the foliage itself gets what lies there. */
+    /* A zone over the foliage itself. */
     int upper = gather_zone_create(&zones, &map, 0, 0, SIZE - 1, SIZE - 1, 1);
     REQUIRE(upper != GATHER_ZONE_NONE);
-    gather_zone_set_enabled(&zones, upper, GATHER_HAZELNUTS, true);
-    gather_zone_set_mode(&zones, upper, GATHER_HAZELNUTS, GATHER_FOREVER);
-    gather_zones_update(&zones, items.totals, 1.0f);
     CHECK_EQ_INT(gather_zone_at(&zones, 11, 10, 1), upper);
-    CHECK(gather_job_available(&zones, &map, 11, 10, 1, GATHER_JOB_NUTS));
-    CHECK_EQ_INT(gather_tile_job(&zones, &map, 11, 10, 1, ~0u), GATHER_JOB_NUTS);
-    int priority = gather_zone_get(&zones, upper)->priority;
-    CHECK_EQ_INT(gather_tile_job_in(&zones, &map, 11, 10, 1, ~0u, priority + 1), GATHER_JOB_NONE);
-    gather_zone_available(&zones, &map, upper, available);
-    CHECK_EQ_INT((int)available[GATHER_HAZELNUTS], 2);
-    CHECK(gather_zone_add_work(&zones, &map, &items, 11, 10, 1, GATHER_JOB_NUTS, 1e6f, 60.0, NULL));
-    CHECK_EQ_INT(items_get(&items, 11, 10, 1).type, ITEM_HAZELNUTS); /* Up there. */
-    CHECK_EQ_INT(items_get(&items, 11, 10, 1).count, 2);
-    CHECK_EQ_INT(map_litter(&map, 11, 10, 1, ITEM_HAZELNUTS), 0);
-    CHECK(!gather_job_available(&zones, &map, 11, 10, 1, GATHER_JOB_NUTS));
 
     gather_zone_set_enabled(&zones, zone, GATHER_WOOD, true);
     gather_zone_set_mode(&zones, zone, GATHER_WOOD, GATHER_FOREVER);
@@ -1369,8 +1335,8 @@ static void test_gathering_on_trees(void)
     CHECK_EQ_INT(map.plants[map_index(&map, 10, 10, 0)].type, PLANT_NONE);
     CHECK(!is_trunk(&map, 10, 10, 0));
     CHECK_EQ_INT(items_get(&items, 10, 12, 0).type, ITEM_WOOD); /* Along the trunk. */
-    /* The crown came down with its twigs, green and so wet. */
-    CHECK_EQ_INT((int)items.totals[ITEM_HAZELNUTS], 3);
+    /* The crown came down with its twigs, green and so wet, and what lay on it. */
+    CHECK_EQ_INT(map_litter(&map, 11, 10, 0, ITEM_HAZELNUTS), 1);
     CHECK_EQ_INT((int)items.totals[ITEM_WET_TWIGS], TREE_CROWN_TWIGS);
     CHECK_EQ_UINT(zones.harmful_tree_falls, 0);
     CHECK(gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CHOP, 1e6f, 60.0, NULL));
@@ -1380,38 +1346,40 @@ static void test_gathering_on_trees(void)
     map_free(&map);
 }
 
-/* A settler sent for nuts by a zone on the ground never climbs the tree
- * above them; with a zone over the foliage, it climbs and takes them there. */
-static void test_settler_climbs_only_for_a_zone_on_the_foliage(void)
+/* Nuts lying on dense foliage are items like any: a hauler climbs the tree
+ * to bring them to a stockpile that takes them, and leaves them up there
+ * otherwise. */
+static void test_hauler_climbs_for_nuts_on_the_foliage(void)
 {
-    for (int over_foliage = 0; over_foliage < 2; over_foliage++) {
+    for (int wanted = 0; wanted < 2; wanted++) {
         Game game;
         REQUIRE(init_flat_game(&game));
         Map *map = &game.map;
         put_tree(map, 16, 16, 0, GROWN);
         game_debug_skip(&game, GAME_PLANT_UPDATE_INTERVAL); /* Takes room. */
         REQUIRE(is_trunk(map, 16, 16, 0));
-        map_add_litter(map, 17, 16, 1, ITEM_HAZELNUTS); /* On the foliage. */
-        map_add_litter(map, 17, 16, 1, ITEM_HAZELNUTS);
+        REQUIRE(map_is_passable(map, 17, 16, 1)); /* Dense foliage. */
+        REQUIRE(map_add_litter(map, 17, 16, 1, ITEM_HAZELNUTS));
+        REQUIRE(map_add_litter(map, 17, 16, 1, ITEM_HAZELNUTS));
+        map_clear_litter(map); /* No stones in the stockpile. */
+        int pile = stockpile_create(&game.stockpiles, map, 8, 16, 8, 16, 0);
+        REQUIRE(pile != STOCKPILE_NONE);
+        stockpile_set_allowed(&game.stockpiles, pile,
+                              wanted ? ITEM_TYPE_BIT(ITEM_HAZELNUTS) : ITEM_TYPE_BIT(ITEM_WOOD));
         EntityId id = game_spawn_colonist(&game, 10, 16, 0);
         Colonist *colonist = game_colonist(&game, id);
         REQUIRE(colonist != NULL);
         for (int need = 0; need < NEED_COUNT; need++) {
             colonist->needs[need] = 1.0f;
         }
-        int zone =
-            gather_zone_create(&game.gather_zones, map, 14, 14, 18, 18, over_foliage ? 1 : 0);
-        REQUIRE(zone != GATHER_ZONE_NONE);
-        gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
-        gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_FOREVER);
-        gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
         bool climbed = false;
-        for (int tick = 0; tick < 4 * 3600; tick++) {
+        for (int tick = 0; tick < 2 * 3600; tick++) {
             game_tick(&game);
             climbed = climbed || colonist->z > 0;
         }
-        CHECK_EQ_INT(climbed, over_foliage);
-        CHECK_EQ_INT(map_litter(map, 17, 16, 1, ITEM_HAZELNUTS) == 0, over_foliage);
+        CHECK_EQ_INT(climbed, wanted);
+        CHECK_EQ_INT(map_litter(map, 17, 16, 1, ITEM_HAZELNUTS), wanted ? 0 : 2);
+        CHECK_EQ_INT(map_litter(map, 8, 16, 0, ITEM_HAZELNUTS), wanted ? 2 : 0);
         game_shutdown(&game);
     }
 }
@@ -1458,7 +1426,7 @@ int main(void)
     RUN_TEST(test_hazel_is_a_small_tree);
     RUN_TEST(test_nuts_fall_in_autumn);
     RUN_TEST(test_hazel_drops_nuts_in_the_game);
-    RUN_TEST(test_nuts_rot_on_average);
+    RUN_TEST(test_nuts_rot_one_by_one);
     RUN_TEST(test_build_and_find);
     RUN_TEST(test_climbing);
     RUN_TEST(test_room_to_grow);
@@ -1473,7 +1441,7 @@ int main(void)
     RUN_TEST(test_litter_in_a_new_world);
     RUN_TEST(test_felling_drops_the_litter_of_the_foliage);
     RUN_TEST(test_gathering_on_trees);
-    RUN_TEST(test_settler_climbs_only_for_a_zone_on_the_foliage);
+    RUN_TEST(test_hauler_climbs_for_nuts_on_the_foliage);
     RUN_TEST(test_trees_shed_in_the_game);
     return test_summary();
 }

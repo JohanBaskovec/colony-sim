@@ -1614,8 +1614,8 @@ static void test_litter(void)
     map_free(&map);
 }
 
-/* Once the game runs, stones, branches and twigs are ordinary items: the
- * map's functions read and change them. */
+/* Once the game runs, stones, branches, twigs and nuts are ordinary items:
+ * the map's functions read and change them. */
 static void test_litter_as_items(void)
 {
     Map map;
@@ -1630,7 +1630,18 @@ static void test_litter_as_items(void)
     CHECK(map.litter == &items);
     CHECK_EQ_INT(map.cobbles[map_index(&map, 1, 1, 0)], 0);
     CHECK_EQ_INT(map.twigs[map_index(&map, 2, 2, 0)], 0);
-    CHECK_EQ_INT(map.nuts[map_index(&map, 2, 2, 0)], 1); /* Nuts stay in their layer. */
+    CHECK_EQ_INT(map.nuts[map_index(&map, 2, 2, 0)], 0);
+    CHECK_EQ_INT(items.totals[ITEM_HAZELNUTS], 1);
+    CHECK_EQ_INT(map_litter(&map, 2, 2, 0, ITEM_HAZELNUTS), 1);
+    /* Fallen nuts are items too: the tile holds MAP_NUTS_MAX of them at most. */
+    for (int i = 1; i < MAP_NUTS_MAX; i++) {
+        CHECK(map_add_litter(&map, 2, 2, 0, ITEM_HAZELNUTS));
+    }
+    CHECK(!map_add_litter(&map, 2, 2, 0, ITEM_HAZELNUTS));
+    CHECK_EQ_INT(items.totals[ITEM_HAZELNUTS], MAP_NUTS_MAX);
+    CHECK_EQ_INT(map.nuts[map_index(&map, 2, 2, 0)], 0);
+    CHECK_EQ_INT(map_take_litter_count(&map, 2, 2, 0, ITEM_HAZELNUTS, MAP_NUTS_MAX - 1),
+                 MAP_NUTS_MAX - 1);
     CHECK_EQ_INT(items.totals[ITEM_COBBLE], 2);
     CHECK_EQ_INT(items.totals[ITEM_FLINT], 3);
     CHECK(items_get(&items, 1, 1, 0).type == ITEM_FLINT); /* A heap like any. */
@@ -1651,7 +1662,7 @@ static void test_litter_as_items(void)
     CHECK_EQ_INT(map_stones(&map, 1, 1, 0, ITEM_COBBLE), 0);
     CHECK_EQ_INT(map_stones(&map, 1, 1, 0, ITEM_FLINT), 4);
     map_clear_litter(&map);
-    CHECK_EQ_INT(items.item_count, 0);
+    CHECK_EQ_INT(items.item_count, 1); /* The nut stays. */
     CHECK_EQ_INT(map_litter(&map, 2, 2, 0, ITEM_HAZELNUTS), 1);
     items_free(&items);
     map_free(&map);

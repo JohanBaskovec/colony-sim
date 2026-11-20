@@ -226,7 +226,7 @@ typedef struct PlantDef {
     bool grazed;
     /* What a tree lets fall in a season (see core/tree.h): `fall_yield` items of
      * `fall_item` over `fall_days` for a fully grown tree (ITEM_NONE: none). They
-     * lie under it like its twigs (Map.nuts). */
+     * lie under it like its twigs (items in a running game, see Map.litter). */
     ItemType fall_item;
     PlantDays fall_days;
     int fall_yield;
@@ -440,7 +440,7 @@ typedef struct Map {
     /* Stones lying about each tile, that gathering takes one by one: cobbles
      * and flint nodules (on flint patches), MAP_STONES_MAX at most together.
      * World generation puts none on sand (see gather_stone_ground()). These
-     * four layers hold what world generation lays; a running game keeps it
+     * five layers hold what world generation lays; a running game keeps it
      * as ordinary items instead (Map.litter). */
     uint8_t *cobbles;
     uint8_t *flint;
@@ -450,12 +450,12 @@ typedef struct Map {
     uint8_t *branches;
     uint8_t *twigs;
     /* Hazelnuts lying on each tile, fallen from the trees in autumn like twigs
-     * (up to MAP_NUTS_MAX). They rot away on average (see core/game.c). */
+     * (up to MAP_NUTS_MAX). */
     uint8_t *nuts;
     /* Once set (a running game, see map_litter_to_items()): where the stones,
-     * branches and twigs lie, as ordinary items of these items (haulable like any);
-     * the four layers above are then empty, and the functions below read and
-     * change the items. NULL: the layers (world generation, bare maps). */
+     * branches, twigs and nuts lie, as ordinary items of these items (haulable
+     * like any, the nuts rotting one by one); the layers above are then empty, and the functions
+     * below read and change the items. NULL: the layers (world generation, bare maps). */
     struct Items *litter;
     /* Built structures (StructureType on every tile they take): beds,
      * walls, doors. `structure_part` holds the structure's Direction (bits
@@ -1083,7 +1083,7 @@ int map_take_litter(Map *map, int x, int y, int z, ItemType type);
 /* Takes up to `count` of them; returns how many were taken. */
 int map_take_litter_count(Map *map, int x, int y, int z, ItemType type, int count);
 
-/* Turns the stones, branches and twigs of the layers into items of
+/* Turns the stones, branches, twigs and nuts of the layers into items of
  * `items` (same size), empties the layers and sets Map.litter. */
 void map_litter_to_items(Map *map, Items *items);
 

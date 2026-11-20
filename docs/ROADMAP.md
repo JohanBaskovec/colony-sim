@@ -348,7 +348,15 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 - [x] Fix: the box selection did nothing at all until the selection was first cleared (an item id of zero in a zeroed `App` named an item held by the debug tool)
 - [ ] Haulers carry perishable food before stones and wood (with every stone lying about haulable, a stockpile taking everything fills with stones while the food waits)
 - [ ] Gathering search cheaper when a zone's jobs are sparse (64 settlers gathering: about 25 % slower since litter is no longer gathered, the search going farther for grass and food; with the tile light (S5b), grass growing less in the shade, `bench_simulation 64 4 1` went from 75 to 106 µs a tick, nearly all of it more of the same searches: `covered_tile_holds()`, `search`, `gather_tile_job_in()`)
-- [ ] Hazelnuts lying on the ground as items too (still a map layer: gathered by zones, eaten where they lie, rotting on average)
+- [x] Hazelnuts lying on the ground as items too (they were a map layer: gathered by zones, eaten where they lay, rotting on average): step 1 of *Trees, woods and fruit* below
+
+## Trees, woods and fruit (designed, docs/TREES.md)
+
+- [x] Design: seven species instead of the generic tree (oak, beech, sweet chestnut, ash, birch, wild apple, wild pear; the hazel stays), each with its crown, needs and place in the world; the wood species on logs, branches and what is made from them (every species kept when mixed), with moderate effects; structures keeping theirs, chosen by right click; fruit and nuts as items; foliage blocks holding items (fruit ripening, dead wood hanging), picked from the ground or by climbing (`docs/TREES.md`)
+- [x] Step 1: hazelnuts as items: they fall, rot one by one, are hauled and eaten as items (the map layer only holds a new world's until the game starts); the zones' *Hazelnuts* order is gone until the crowns are picked (step 4); animals eat nut items wherever they lie
+- [ ] Step 2: the seven species, their crowns and placement, chestnuts, apples and pears, sprites
+- [ ] Step 3: the wood species on items and structures, names, effects, choice by right click
+- [ ] Step 4: foliage blocks holding items, picking from the ground and by climbing
 
 ## Carrying by hand (designed, docs/CARRYING.md)
 

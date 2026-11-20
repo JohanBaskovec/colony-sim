@@ -43,8 +43,8 @@ static void test_mastery_and_orders(void)
     CHECK(knowledge_is_mastered(100.0));
 
     /* Gathering orders from 50 on; nobody can fell trees or mine yet. */
-    CHECK(!gather_job_doable_at(GATHER_JOB_NUTS, 49.9));
-    CHECK(gather_job_doable_at(GATHER_JOB_NUTS, 50.0));
+    CHECK(!gather_job_doable_at(GATHER_JOB_HARVEST, 49.9));
+    CHECK(gather_job_doable_at(GATHER_JOB_HARVEST, 50.0));
     CHECK(gather_job_doable_at(GATHER_JOB_HARVEST, 80.0));
     CHECK(!gather_job_doable_at(GATHER_JOB_CHOP, 100.0));
     CHECK(!gather_job_doable_at(GATHER_JOB_COUNT, 100.0));

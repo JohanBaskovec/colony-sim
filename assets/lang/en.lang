@@ -460,7 +460,6 @@ hud.tile.bed_free = Free bed: the next settler to sleep here takes it
 # {0}: material, {1}: brought so far, {2}: needed.
 hud.tile.material = {0}: {1}/{2}
 # Stones lying about a tile, that gathering may still find: {0} = item name, {1} = count
-hud.tile.litter = Lying on the tile: {0} ×{1}
 # Items on a tile or carried. {0} = quality grade, {1} = hit points,
 # {2} = maximum hit points, {3} = hit points in percent (e.g. 75%)
 hud.item_condition = Quality: {0} · Hit points: {1}/{2} ({3})
@@ -496,7 +495,6 @@ colonist.task.harvest_carefully = Picking with care
 colonist.task.dig = Digging up roots
 # Digging up roots easily mistaken for a poisonous plant (wild carrots)
 colonist.task.dig_carefully = Digging up roots with care
-colonist.task.gather_nuts = Picking up hazelnuts
 colonist.task.cut_grass = Cutting grass and other fibres
 colonist.task.craft = Crafting
 colonist.task.construct = Building
@@ -704,7 +702,6 @@ gather_zone.priority_hint = (1 = gathered first, before nearer zones)
 # Resources a zone may gather (check boxes)
 gather_zone.resource.wood = Trees to fell
 gather_zone.resource.blackberries = Blackberries
-gather_zone.resource.hazelnuts = Hazelnuts
 gather_zone.resource.mushrooms = Mushrooms
 gather_zone.resource.wild_garlic = Wild garlic
 gather_zone.resource.nettles = Nettles

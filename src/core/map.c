@@ -2322,7 +2322,8 @@ static uint8_t *litter_layer(const Map *map, ItemType type, int *max)
 /* Whether the type lies as items (Map.litter) rather than in a layer. */
 static bool litter_is_items(const Map *map, ItemType type)
 {
-    return map->litter != NULL && (type == ITEM_BRANCHES || type == ITEM_TWIGS);
+    return map->litter != NULL &&
+           (type == ITEM_BRANCHES || type == ITEM_TWIGS || type == ITEM_HAZELNUTS);
 }
 
 int map_litter(const Map *map, int x, int y, int z, ItemType type)
@@ -2553,7 +2554,8 @@ void map_litter_to_items(Map *map, Items *items)
     } kinds[] = {{map->cobbles, ITEM_COBBLE},
                  {map->flint, ITEM_FLINT},
                  {map->branches, ITEM_BRANCHES},
-                 {map->twigs, ITEM_TWIGS}};
+                 {map->twigs, ITEM_TWIGS},
+                 {map->nuts, ITEM_HAZELNUTS}};
     for (int z = 0; z < map->depth; z++) {
         for (int y = 0; y < map->height; y++) {
             for (int x = 0; x < map->width; x++) {

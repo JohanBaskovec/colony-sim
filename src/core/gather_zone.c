@@ -9,11 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Wild food, per item taken: 360 for a bramble's nine handfuls, 480 for a
- * hazel's twelve nuts; 500 to dig four cattail rhizomes up. */
+/* Wild food, per item taken: 360 for a bramble's nine handfuls; 500 to dig
+ * four cattail rhizomes up. */
 #define HARVEST_WORK 40.0f
 #define DIG_WORK 125.0f
-#define NUTS_WORK 60.0f       /* Per nut. */
 #define CUT_GRASS_WORK 150.0f /* Clearing a tile of low plants. */
 #define CUT_GRASS_ARMFUL_WORK 50.0f
 #define CLEAR_SHRUB_WORK 500.0f /* Pulling up a shrub by hand. */
@@ -30,8 +29,6 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
     [GATHER_BLACKBERRIES] = {"blackberries", N_("gather_zone.resource.blackberries"),
                              ITEM_BLACKBERRIES, ONE(ITEM_BLACKBERRIES), GATHER_JOB_HARVEST, true,
                              FOOD},
-    [GATHER_HAZELNUTS] = {"hazelnuts", N_("gather_zone.resource.hazelnuts"), ITEM_HAZELNUTS,
-                          ONE(ITEM_HAZELNUTS), GATHER_JOB_NUTS, false, FOOD},
     [GATHER_MUSHROOMS] = {"mushrooms", N_("gather_zone.resource.mushrooms"), ITEM_MUSHROOMS,
                           ONE(ITEM_MUSHROOMS), GATHER_JOB_HARVEST_CAREFULLY, true, FOOD},
     [GATHER_WILD_GARLIC] = {"wild_garlic", N_("gather_zone.resource.wild_garlic"), ITEM_WILD_GARLIC,
@@ -76,12 +73,12 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
 static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
     [GATHER_GROUP_WOOD] = {"wood", N_("gather_zone.group.wood"), MEMBER(GATHER_WOOD), false},
     [GATHER_GROUP_FOOD] = {"food", N_("gather_zone.group.food"),
-                           MEMBER(GATHER_BLACKBERRIES) | MEMBER(GATHER_HAZELNUTS) |
-                               MEMBER(GATHER_MUSHROOMS) | MEMBER(GATHER_WILD_GARLIC) |
-                               MEMBER(GATHER_NETTLES) | MEMBER(GATHER_PLANTAIN) |
-                               MEMBER(GATHER_WILD_CARROTS) | MEMBER(GATHER_CATTAIL_RHIZOMES) |
-                               MEMBER(GATHER_WOOD_SORREL) | MEMBER(GATHER_WILD_STRAWBERRIES) |
-                               MEMBER(GATHER_BILBERRIES) | MEMBER(GATHER_ROSE_HIPS),
+                           MEMBER(GATHER_BLACKBERRIES) | MEMBER(GATHER_MUSHROOMS) |
+                               MEMBER(GATHER_WILD_GARLIC) | MEMBER(GATHER_NETTLES) |
+                               MEMBER(GATHER_PLANTAIN) | MEMBER(GATHER_WILD_CARROTS) |
+                               MEMBER(GATHER_CATTAIL_RHIZOMES) | MEMBER(GATHER_WOOD_SORREL) |
+                               MEMBER(GATHER_WILD_STRAWBERRIES) | MEMBER(GATHER_BILBERRIES) |
+                               MEMBER(GATHER_ROSE_HIPS),
                            true},
     [GATHER_GROUP_FIBRES] = {"fibres", N_("gather_zone.group.fibres"),
                              MEMBER(GATHER_GRASS) | MEMBER(GATHER_MOSS) | MEMBER(GATHER_BRACKEN) |
@@ -112,8 +109,6 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
                         RESOURCE(GATHER_CATTAIL_RHIZOMES), TOOL_USE_DIGGING, true},
     [GATHER_JOB_DIG_CAREFULLY] = {"dig_carefully", N_("colonist.task.dig_carefully"), CAREFUL,
                                   RESOURCE(GATHER_WILD_CARROTS), TOOL_USE_DIGGING, true},
-    [GATHER_JOB_NUTS] = {"nuts", N_("colonist.task.gather_nuts"), GATHERING,
-                         RESOURCE(GATHER_HAZELNUTS), TOOL_USE_NONE, false},
     [GATHER_JOB_CUT_GRASS] = {"cut_grass", N_("colonist.task.cut_grass"), GATHERING,
                               RESOURCE(GATHER_GRASS) | RESOURCE(GATHER_MOSS) |
                                   RESOURCE(GATHER_BRACKEN) | RESOURCE(GATHER_HEATHER) |
@@ -976,9 +971,6 @@ static bool ripe_enough(const GatherZone *zone, GatherResource resource, const P
         return true;
     }
     GatherJob job = RESOURCE_DEFS[resource].job;
-    if (job == GATHER_JOB_NUTS) {
-        return true; /* What lies on the ground is always ready. */
-    }
     if (takes_product(job)) {
         int slot = product_slot_for(plant, job);
         return slot >= 0 && stock_full(plant, slot) &&
@@ -1042,14 +1034,13 @@ static bool covered_tile_holds(const GatherZone *zone, const Map *map, int x, in
     size_t index = map_index(map, x, y, z);
     const Plant *plant = &map->plants[index];
     bool plant_forbidden = map->forbidden_count > 0 && (map->forbidden[index] & MAP_FORBID_PLANT);
-    if (plant_forbidden && job != GATHER_JOB_NUTS) { /* Nuts lie on the ground. */
+    if (plant_forbidden) {
         return false;
     }
     if (takes_product(job)) {
         return product_among(zone, plant, resources);
     }
     switch (job) {
-    case GATHER_JOB_NUTS: return map_litter(map, x, y, z, ITEM_HAZELNUTS) > 0;
     case GATHER_JOB_CHOP:
         return plant_is_tree(plant->type) && ripe_enough(zone, GATHER_WOOD, plant);
     default: return false;
@@ -1081,7 +1072,6 @@ static int plant_yield(const Map *map, int x, int y, int z, GatherJob job)
         return slot >= 0 ? plant_stock_available(plant, slot) : 0;
     }
     switch (job) {
-    case GATHER_JOB_NUTS: return map_litter(map, x, y, z, ITEM_HAZELNUTS);
     case GATHER_JOB_CHOP: return tree_wood_yield(plant);
     default: return 0;
     }
@@ -1172,10 +1162,6 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
     case GATHER_JOB_DIG:
     case GATHER_JOB_DIG_CAREFULLY: return DIG_WORK * (float)(items > 1 ? items : 1);
     case GATHER_JOB_CUT_GRASS: return CUT_GRASS_ARMFUL_WORK * (float)(items > 1 ? items : 1);
-    case GATHER_JOB_NUTS: {
-        int available = plant_yield(map, x, y, z, job);
-        return NUTS_WORK * (float)(available > 1 ? available : 1);
-    }
     case GATHER_JOB_CHOP: return tree_fell_work(plant);
     default: return 0.0f;
     }
@@ -1196,10 +1182,6 @@ static ItemType complete(Map *map, int x, int y, int z, GatherJob job, int *coun
             plant_harvested(map, x, y, z);
         }
         return item;
-    }
-    if (job == GATHER_JOB_NUTS) { /* All that lies on the tile. */
-        item = ITEM_HAZELNUTS;
-        *count = map_take_litter(map, x, y, z, item);
     }
     return item;
 }

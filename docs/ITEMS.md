@@ -141,7 +141,8 @@ playable.
    Wild branches and twigs crumble away (60 and 20 days), each tile keeps
    its ceiling, so the count stays bounded: on a 200 × 200 map, 15 600 items
    at the start (4 800 cobbles, 8 400 flint, 500 branches, 2 000 twigs),
-   33 000 after a month, 37 000 after two. Hazelnuts stay a map layer.
+   33 000 after a month, 37 000 after two. Hazelnuts stayed a map layer
+   until `docs/TREES.md` step 1: now they are items too.
 4. **Spots, angles and drawing** (done). Items are drawn in vector shapes;
    every type is drawn once into a texture of icons (64 pixels each), and
    each item is a textured quad at its spot, turned by its angle, its size
@@ -245,8 +246,7 @@ playable.
    at the ceiling of a tile (`MAP_BRANCHES_MAX`, `MAP_TWIGS_MAX`, wet twigs
    counted, since twigs left in the rain now get wet like any). A growing
    trunk pushes what lies in its way onto the tile beside it, and plants
-   spread under loose items: litter stopped neither before. Hazelnuts stay a
-   map layer. Each item of a heap can also be clicked and selected on its
+   spread under loose items: litter stopped neither before. Each item of a heap can also be clicked and selected on its
    own (`game_items_under_point()`, `game_pick_item()`: the topmost first,
    followed when it moves and across the edge of the fog of war), ringed on
    the map, with a window of its own.

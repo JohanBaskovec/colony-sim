@@ -328,7 +328,6 @@ Speed factor by job and tool (— = impossible with it; "none" = bare hands):
 |----------------------------------|------|-------------|---------|-------|----------|---------------|
 | Felling a tree                   | —    | —           | —       | —     | —        | —             |
 | Mining rock                      | —    | —           | —       | —     | —        | —             |
-| Picking up fallen nuts           | ×1.0 |             |         |       |          |               |
 | Picking fruit, nuts, leaves, mushrooms | ×1.0 |       |         |       |          |               |
 | Cutting grass                    | ×0.6 | —           | ×0.8    | ×1.0  | ×0.9     | —             |
 | Digging up roots (rhizomes, wild carrots) | ×0.3 | — | —       | —     | ×0.5     | ×1.0          |
@@ -489,8 +488,8 @@ for the full harvest: what plants bear (food, grass) only from plants whose stoc
 is full (every fruit ripe, not only a grown plant), trees, grass and roots (taken
 whole) fully grown only (on by default for trees), so that settlers do not walk to plants
 that give little. Wild food is there in its season only. On a tile that offers several jobs,
-the nuts lying there come first, then the plant's food, and felling it last.
-What lies on the ground (stones, branches, twigs) is no gathering: those are
+the plant's food comes first, and felling it last.
+What lies on the ground (stones, branches, twigs, fallen nuts) is no gathering: those are
 items like any other, hauled where they are needed. All jobs but felling belong to Gathering (minimum 50; 60 for
 food easily mistaken for a poisonous plant, §7) and produce items whose
 quality and condition come from the gatherer's level. Zones cover shallow
@@ -677,15 +676,15 @@ winter food, as food rots (§7.4).
   gatherer at **Gathering 60** or more takes them (`GATHER_CAREFUL_MIN_LEVEL`),
   and nobody eats them where they grow. Once health exists (M6), a mistake
   below 65 poisons: `(65 − L) × 2%` per item *(tuning)*.
-- Settlers eat blackberries, hazelnuts, nettles and plantain where they grow
-  when hungry (as many as it takes); roots are dug up first.
+- Settlers eat blackberries, nettles and plantain where they grow, and
+  hazelnuts where they lie, when hungry (as many as it takes); roots are dug up first.
 
 ### 7.2 Recipes and orders
 
 | Recipe / order     | Ingredients | Tools | Station | Work | Min level | Products |
 |--------------------|-------------|-------|---------|------|-----------|----------|
 | Make digging stick | 1 branches  | flake or hand axe | Crafting spot | 375 (0.15 h) | 50 | 1 digging stick (hardenable at a hearth, Fire 55) |
-| Pick (zone)        | blackberries, hazelnuts, nettles, plantain in season | — | — | 40 per item | 50 | the plant's food stock; the plant stays |
+| Pick (zone)        | blackberries, nettles, plantain in season | — | — | 40 per item | 50 | the plant's food stock; the plant stays |
 | Pick with care (zone) | mushrooms, wild garlic in season | — | — | 40 per item | 60 | the stock; a mushroom patch is gone once picked |
 | Dig up (zone)      | cattail rhizomes | digging stick (×1.0; hand axe ×0.5, bare hands ×0.3) | — | 125 per item | 50 | the stock (4); the cattail grows on |
 | Dig up with care (zone) | wild carrots in season | same | — | 125 per item | 60 | the stock (3); the plant grows again from 0 |

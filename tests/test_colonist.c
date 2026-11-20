@@ -66,13 +66,19 @@ static Colonist *spawn_rested(Game *game, int x, int y)
     return colonist;
 }
 
-/* Runs until the nuts lying on the tile (x, y), in a zone, are taken (at
- * most `max_ticks`); returns the ticks spent working on them. */
+/* Handfuls of blackberries the plant on (x, y) bears now. */
+static int berries_at(const Game *game, int x, int y)
+{
+    return plant_stock_available(&game->map.plants[map_index(&game->map, x, y, 0)], 0);
+}
+
+/* Runs until the blackberries of the bramble on (x, y), in a zone, are taken
+ * (at most `max_ticks`); returns the ticks spent working on them. */
 static int run_until_done(Game *game, int x, int y, int max_ticks)
 {
     int working = 0;
     const float *progress = &game->gather_zones.progress[map_index(&game->map, x, y, 0)];
-    for (int i = 0; i < max_ticks && map_litter(&game->map, x, y, 0, ITEM_HAZELNUTS) > 0; i++) {
+    for (int i = 0; i < max_ticks && berries_at(game, x, y) > 0; i++) {
         float before = *progress;
         game_tick(game);
         if (*progress != before) {
@@ -450,21 +456,6 @@ static void test_colonists_drink_before_sleeping(void)
 
 /* ---- Work on designations ---------------------------------------------- */
 
-/* Hazelnuts lying on a tile, as under a hazel in autumn: picked up from the
- * tile itself. */
-static void add_nuts(Map *map, int x, int y)
-{
-    for (int i = 0; i < MAP_NUTS_MAX; i++) {
-        map_add_litter(map, x, y, 0, ITEM_HAZELNUTS);
-    }
-}
-
-/* Nuts lying on a tile at most. */
-static int fallen_nuts(void)
-{
-    return MAP_NUTS_MAX;
-}
-
 /* Ticks needed to walk `tiles` tiles on cheap terrain, plus some margin. */
 static int walk_ticks(int tiles)
 {
@@ -486,38 +477,44 @@ static int order_zone(Game *game, int x0, int y0, int x1, int y1, GatherResource
     return gather_zone_get(&game->gather_zones, zone)->cell_count;
 }
 
-static bool nuts_open(const Game *game, int x, int y)
+static bool berries_open(const Game *game, int x, int y)
 {
-    return gather_job_available(&game->gather_zones, &game->map, x, y, 0, GATHER_JOB_NUTS);
+    return gather_job_available(&game->gather_zones, &game->map, x, y, 0, GATHER_JOB_HARVEST);
 }
 
-static void test_idle_colonist_gathers_nuts(void)
+static void test_idle_colonist_gathers_berries(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 26, 20);
+    add_bramble(&game.map, 26, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
-    CHECK_EQ_INT(order_zone(&game, 26, 20, 26, 20, GATHER_HAZELNUTS), 1);
+    CHECK_EQ_INT(order_zone(&game, 26, 20, 26, 20, GATHER_BLACKBERRIES), 1);
 
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK_EQ_INT(colonist->target.x, 26);
     CHECK_EQ_INT(work_owner(&game, 26, 20), 1);
-    CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.gather_nuts");
+    CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.harvest");
 
-    float work = gather_job_work_needed(&game.map, 26, 20, 0, GATHER_JOB_NUTS);
-    run_ticks(&game, walk_ticks(6) + (int)(work * 0.5f));
+    float work = gather_job_work_needed(&game.map, 26, 20, 0, GATHER_JOB_HARVEST);
+    for (int i = 0; i < walk_ticks(6) &&
+                    gather_zone_progress_fraction(&game.gather_zones, &game.map, 26, 20, 0) <= 0.0f;
+         i++) {
+        game_tick(&game);
+    }
+    run_ticks(&game, (int)(work * 0.25f));
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK_EQ_INT(colonist->x, 25); /* Works from the neighboring tile. */
     CHECK_EQ_INT(colonist->y, 20);
-    CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 26, 20, 0) > 0.0f);
+    float fraction = gather_zone_progress_fraction(&game.gather_zones, &game.map, 26, 20, 0);
+    CHECK(fraction > 0.0f && fraction < 1.0f);
 
-    run_ticks(&game, (int)(work * 0.5f));
-    CHECK_EQ_INT(map_litter(&game.map, 26, 20, 0, ITEM_HAZELNUTS), 0); /* Taken from the tile. */
-    CHECK_EQ_INT(items_get(&game.items, 26, 20, 0).type, ITEM_HAZELNUTS);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_HAZELNUTS], fallen_nuts());
-    CHECK(!nuts_open(&game, 26, 20));
+    run_ticks(&game, (int)(work * 1.5f));
+    CHECK_EQ_INT(berries_at(&game, 26, 20), 0); /* Taken from the tile. */
+    CHECK_EQ_INT(items_get(&game.items, 26, 20, 0).type, ITEM_BLACKBERRIES);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], bramble_fruit());
+    CHECK(!berries_open(&game, 26, 20));
     CHECK(colonist->task != TASK_WORK);
     game_shutdown(&game);
 }
@@ -526,7 +523,7 @@ static void test_gather_work_under_way(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 26, 20);
+    add_bramble(&game.map, 26, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     EntityId id = game_colonist_id_at(&game, 0);
@@ -534,18 +531,18 @@ static void test_gather_work_under_way(void)
     CHECK(!game_gather_work_at(&game, 26, 20, 0, &info));
     CHECK_EQ_INT(info.job, GATHER_JOB_NONE);
     CHECK(!game_gather_work_at(&game, -1, 20, 0, &info));
-    CHECK_EQ_INT(order_zone(&game, 26, 20, 26, 20, GATHER_HAZELNUTS), 1);
+    CHECK_EQ_INT(order_zone(&game, 26, 20, 26, 20, GATHER_BLACKBERRIES), 1);
     CHECK(!game_gather_work_at(&game, 26, 20, 0, &info)); /* Nobody on it yet. */
 
     /* Taken: walking there. */
     game_tick(&game);
     REQUIRE(game_gather_work_at(&game, 26, 20, 0, &info));
-    CHECK_EQ_INT(info.job, GATHER_JOB_NUTS);
+    CHECK_EQ_INT(info.job, GATHER_JOB_HARVEST);
     CHECK(entity_id_equal(info.worker, id));
     CHECK_NEAR(info.fraction, 0.0, 1e-6);
 
     /* Half done, once there. */
-    float work = gather_job_work_needed(&game.map, 26, 20, 0, GATHER_JOB_NUTS);
+    float work = gather_job_work_needed(&game.map, 26, 20, 0, GATHER_JOB_HARVEST);
     for (int i = 0; i < walk_ticks(6) && colonist->x != 25; i++) {
         game_tick(&game);
     }
@@ -558,17 +555,17 @@ static void test_gather_work_under_way(void)
     game_set_work_priority(&game, id, WORK_GATHERING, WORK_PRIORITY_DISABLED);
     game_tick(&game);
     REQUIRE(game_gather_work_at(&game, 26, 20, 0, &info));
-    CHECK_EQ_INT(info.job, GATHER_JOB_NUTS);
+    CHECK_EQ_INT(info.job, GATHER_JOB_HARVEST);
     CHECK(entity_id_is_none(info.worker));
     CHECK(info.fraction > 0.3f);
     CHECK(!game_gather_work_at(&game, 25, 20, 0, &info)); /* Another tile. */
     game_shutdown(&game);
 }
 
-/* Where a settler at (20, 20) first goes to pick up nuts, with a hazel in a
+/* Where a settler at (20, 20) first goes to pick berries, with a bramble in a
  * zone of its own at x = 23, 32 and 40 (zone priorities in that order); the
  * hazel at x = 40 is bare when `far_bare`. */
-static int first_nuts_target(int near, int middle, int far, bool far_bare)
+static int first_berries_target(int near, int middle, int far, bool far_bare)
 {
     Game game;
     if (!init_flat_game(&game)) {
@@ -577,13 +574,13 @@ static int first_nuts_target(int near, int middle, int far, bool far_bare)
     const int xs[3] = {23, 32, 40};
     const int priorities[3] = {near, middle, far};
     for (int i = 0; i < 3; i++) {
-        add_nuts(&game.map, xs[i], 20);
-        order_zone(&game, xs[i], 20, xs[i], 20, GATHER_HAZELNUTS);
+        add_bramble(&game.map, xs[i], 20);
+        order_zone(&game, xs[i], 20, xs[i], 20, GATHER_BLACKBERRIES);
         gather_zone_set_priority(&game.gather_zones,
                                  gather_zone_at(&game.gather_zones, xs[i], 20, 0), priorities[i]);
     }
     if (far_bare) {
-        map_take_litter(&game.map, 40, 20, 0, ITEM_HAZELNUTS);
+        plant_take_stock(&game.map.plants[map_index(&game.map, 40, 20, 0)], 0, INT16_MAX);
     }
     Colonist *colonist = spawn_rested(&game, 20, 20);
     int target = -1;
@@ -599,12 +596,12 @@ static void test_zone_priority_before_distance(void)
 {
     int normal = GATHER_ZONE_PRIORITY_DEFAULT;
     /* Same priority: the nearest. */
-    CHECK_EQ_INT(first_nuts_target(normal, normal, normal, false), 23);
+    CHECK_EQ_INT(first_berries_target(normal, normal, normal, false), 23);
     /* The zone of the highest priority, however far. */
-    CHECK_EQ_INT(first_nuts_target(normal, 3, 2, false), 40);
-    CHECK_EQ_INT(first_nuts_target(4, 3, normal, false), 32);
+    CHECK_EQ_INT(first_berries_target(normal, 3, 2, false), 40);
+    CHECK_EQ_INT(first_berries_target(4, 3, normal, false), 32);
     /* A zone of a higher priority with nothing to take is passed over. */
-    CHECK_EQ_INT(first_nuts_target(normal, 3, 2, true), 32);
+    CHECK_EQ_INT(first_berries_target(normal, 3, 2, true), 32);
 }
 
 /* Work done cutting a tile of grass 3 tiles away in `ticks` from the first
@@ -679,7 +676,7 @@ static void test_nobody_fells_or_mines_yet(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     map_set_rock(&game.map, 25, 20, 0, ROCK_SANDSTONE);
-    add_nuts(&game.map, 20, 25);
+    add_bramble(&game.map, 20, 25);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
@@ -695,7 +692,7 @@ static void test_nobody_fells_or_mines_yet(void)
 
     run_ticks(&game, walk_ticks(5) + 4000);
     CHECK(!map_is_passable(&game.map, 25, 20, 0));
-    CHECK_EQ_INT(map_litter(&game.map, 20, 25, 0, ITEM_HAZELNUTS), MAP_NUTS_MAX); /* Untouched. */
+    CHECK_EQ_INT(berries_at(&game, 20, 25), bramble_fruit()); /* Untouched. */
     CHECK_EQ_INT(game.designations.count, 1);
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.reservations.count, 0);
@@ -706,19 +703,19 @@ static void test_one_worker_per_designation(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 26, 20);
-    add_nuts(&game.map, 26, 30);
+    add_bramble(&game.map, 26, 20);
+    add_bramble(&game.map, 26, 30);
     Colonist *a = spawn_rested(&game, 20, 20);
     Colonist *b = spawn_rested(&game, 20, 22);
     REQUIRE(a != NULL && b != NULL);
-    order_zone(&game, 26, 20, 26, 20, GATHER_HAZELNUTS);
+    order_zone(&game, 26, 20, 26, 20, GATHER_BLACKBERRIES);
 
     game_tick(&game);
     CHECK_EQ_INT(a->task, TASK_WORK);
     CHECK(b->task != TASK_WORK); /* The only job is taken. */
 
     /* A second job goes to the free colonist, even though it is farther. */
-    order_zone(&game, 26, 30, 26, 30, GATHER_HAZELNUTS);
+    order_zone(&game, 26, 30, 26, 30, GATHER_BLACKBERRIES);
     for (int i = 0; i < walk_ticks(2) && b->task != TASK_WORK; i++) {
         game_tick(&game);
     }
@@ -773,17 +770,17 @@ static void test_cancelled_order_stops_the_worker(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 22, 20);
+    add_bramble(&game.map, 22, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
-    order_zone(&game, 22, 20, 22, 20, GATHER_HAZELNUTS);
+    order_zone(&game, 22, 20, 22, 20, GATHER_BLACKBERRIES);
     run_ticks(&game, walk_ticks(1) + 100);
     REQUIRE(colonist->task == TASK_WORK);
 
     CHECK_EQ_INT(gather_zones_remove_rect(&game.gather_zones, 22, 20, 22, 20, 0), 1);
     game_tick(&game);
     CHECK(colonist->task != TASK_WORK);
-    CHECK_EQ_INT(map_litter(&game.map, 22, 20, 0, ITEM_HAZELNUTS), fallen_nuts());
+    CHECK_EQ_INT(berries_at(&game, 22, 20), bramble_fruit());
     game_shutdown(&game);
 }
 
@@ -791,10 +788,10 @@ static void test_removed_worker_releases_its_job(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 22, 20);
+    add_bramble(&game.map, 22, 20);
     EntityId id = game_spawn_colonist(&game, 20, 20, 0);
     REQUIRE(game_colonist(&game, id) != NULL);
-    order_zone(&game, 22, 20, 22, 20, GATHER_HAZELNUTS);
+    order_zone(&game, 22, 20, 22, 20, GATHER_BLACKBERRIES);
     game_tick(&game);
     REQUIRE(game_colonist(&game, id)->task == TASK_WORK);
     CHECK(work_owner(&game, 22, 20) != RESERVATION_NO_OWNER);
@@ -810,11 +807,11 @@ static void test_new_order_is_noticed_despite_backoff(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     /* A hazel enclosed in rock: designated but unreachable. */
-    add_nuts(&game.map, 10, 10);
+    add_bramble(&game.map, 10, 10);
     set_rock_ring(&game.map, 10, 10, ROCK_GRANITE);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
-    order_zone(&game, 10, 10, 10, 10, GATHER_HAZELNUTS);
+    order_zone(&game, 10, 10, 10, 10, GATHER_BLACKBERRIES);
     game_tick(&game);
     CHECK(colonist->task != TASK_WORK);
     CHECK(colonist->search_cooldown[SEARCH_GATHER] > 0);
@@ -823,8 +820,8 @@ static void test_new_order_is_noticed_despite_backoff(void)
 
     /* A reachable order is picked up without waiting for the whole cooldown, but not
      * before the minimum delay: a busy colony changes orders all the time. */
-    add_nuts(&game.map, 24, 20);
-    order_zone(&game, 24, 20, 24, 20, GATHER_HAZELNUTS);
+    add_bramble(&game.map, 24, 20);
+    order_zone(&game, 24, 20, 24, 20, GATHER_BLACKBERRIES);
     run_ticks(&game, COLONIST_SEARCH_MIN_RETRY_TICKS - 2);
     CHECK(colonist->task != TASK_WORK);
     for (int i = 0; i < walk_ticks(1) && colonist->task != TASK_WORK; i++) {
@@ -841,10 +838,10 @@ static void test_far_job_in_a_wide_zone(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 40, 40);
+    add_bramble(&game.map, 40, 40);
     Colonist *colonist = spawn_rested(&game, 4, 4);
     REQUIRE(colonist != NULL);
-    order_zone(&game, 2, 2, 40, 40, GATHER_HAZELNUTS);
+    order_zone(&game, 2, 2, 40, 40, GATHER_BLACKBERRIES);
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK_EQ_INT(colonist->target.x, 40);
@@ -859,23 +856,23 @@ static void test_retries_after_a_change_are_staggered(void)
     enum { COUNT = COLONIST_SEARCH_STAGGER_TICKS };
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 10, 10);
+    add_bramble(&game.map, 10, 10);
     set_rock_ring(&game.map, 10, 10, ROCK_GRANITE);
     Colonist *colonists[COUNT];
     for (int i = 0; i < COUNT; i++) {
         colonists[i] = spawn_rested(&game, 20, 20 + i);
         REQUIRE(colonists[i] != NULL);
     }
-    order_zone(&game, 10, 10, 10, 10, GATHER_HAZELNUTS);
+    order_zone(&game, 10, 10, 10, 10, GATHER_BLACKBERRIES);
     game_tick(&game);
     for (int i = 0; i < COUNT; i++) {
         CHECK(colonists[i]->task != TASK_WORK);
     }
 
     for (int i = 0; i < COUNT; i++) {
-        add_nuts(&game.map, 30, 16 + 2 * i);
+        add_bramble(&game.map, 30, 16 + 2 * i);
     }
-    order_zone(&game, 30, 16, 30, 16 + 2 * (COUNT - 1), GATHER_HAZELNUTS);
+    order_zone(&game, 30, 16, 30, 16 + 2 * (COUNT - 1), GATHER_BLACKBERRIES);
     uint64_t started[COUNT] = {0};
     for (int t = 0; t < COLONIST_SEARCH_MIN_RETRY_TICKS + 2 * COUNT; t++) {
         game_tick(&game);
@@ -925,11 +922,11 @@ static void test_disabled_work_type_is_never_done(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 23, 20);
+    add_bramble(&game.map, 23, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DISABLED;
-    order_zone(&game, 23, 20, 23, 20, GATHER_HAZELNUTS);
+    order_zone(&game, 23, 20, 23, 20, GATHER_BLACKBERRIES);
     run_ticks(&game, 200);
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.reservations.count, 0);
@@ -981,8 +978,8 @@ static void test_enabling_work_type_is_noticed_right_away(void)
     set_rock_ring(&game.map, 20, 20, ROCK_GRANITE); /* Stays put: decides every tick. */
     map_set_rock(&game.map, 21, 20, 0, ROCK_NONE);
     REQUIRE(game_set_work_priority(&game, id, WORK_GATHERING, WORK_PRIORITY_DISABLED));
-    add_nuts(&game.map, 22, 20);
-    REQUIRE(order_zone(&game, 22, 20, 22, 20, GATHER_HAZELNUTS) == 1);
+    add_bramble(&game.map, 22, 20);
+    REQUIRE(order_zone(&game, 22, 20, 22, 20, GATHER_BLACKBERRIES) == 1);
     run_ticks(&game, 200);
     REQUIRE(colonist->task != TASK_WORK);
 
@@ -999,14 +996,14 @@ static void test_disabling_work_type_stops_the_current_job(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 22, 20);
+    add_bramble(&game.map, 22, 20);
     EntityId id = game_spawn_colonist(&game, 20, 20, 0);
     Colonist *colonist = game_colonist(&game, id);
     REQUIRE(colonist != NULL);
     for (int need = 0; need < NEED_COUNT; need++) {
         colonist->needs[need] = 1.0f;
     }
-    order_zone(&game, 22, 20, 22, 20, GATHER_HAZELNUTS);
+    order_zone(&game, 22, 20, 22, 20, GATHER_BLACKBERRIES);
     run_ticks(&game, walk_ticks(1) + 100);
     REQUIRE(colonist->task == TASK_WORK);
     float progress = gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20, 0);
@@ -1017,7 +1014,7 @@ static void test_disabling_work_type_stops_the_current_job(void)
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(work_owner(&game, 22, 20), RESERVATION_NO_OWNER);
     /* The order and the work done stay for someone else. */
-    CHECK(nuts_open(&game, 22, 20));
+    CHECK(berries_open(&game, 22, 20));
     CHECK(gather_zone_progress_fraction(&game.gather_zones, &game.map, 22, 20, 0) >= progress);
     game_shutdown(&game);
 }
@@ -1026,7 +1023,7 @@ static void test_priority_beats_distance(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 32, 20);
+    add_bramble(&game.map, 32, 20);
     /* Something to haul right next to the colonist. */
     items_add(&game.items, 22, 20, 0, item_stack_pristine(ITEM_COBBLE, 5));
     REQUIRE(stockpile_create(&game.stockpiles, &game.map, 18, 24, 20, 26, 0) != STOCKPILE_NONE);
@@ -1034,7 +1031,7 @@ static void test_priority_beats_distance(void)
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_HIGHEST;
     colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_LOWEST;
-    order_zone(&game, 0, 0, 47, 47, GATHER_HAZELNUTS);
+    order_zone(&game, 0, 0, 47, 47, GATHER_BLACKBERRIES);
 
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_WORK);
@@ -1487,15 +1484,15 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
     REQUIRE(init_flat_game(&game));
     add_water_band(&game.map, 44);
     for (int y = 4; y < 44; y += 3) {
-        add_nuts(&game.map, 10, y);
-        add_nuts(&game.map, 30, y);
+        add_bramble(&game.map, 10, y);
+        add_bramble(&game.map, 30, y);
         map_set_rock(&game.map, 38, y, 0, ROCK_SANDSTONE);
         add_bramble(&game.map, 20, y);
     }
     for (int i = 0; i < 4; i++) {
         REQUIRE(spawn_rested(&game, 18 + i, 20) != NULL);
     }
-    order_zone(&game, 0, 0, 47, 47, GATHER_HAZELNUTS);
+    order_zone(&game, 0, 0, 47, 47, GATHER_BLACKBERRIES);
     game_designate_rect(&game, 0, 0, 47, 47, 0, DESIGNATION_MINE); /* Nobody can, for now. */
     int pile = stockpile_create(&game.stockpiles, &game.map, 14, 10, 16, 30, 0);
     REQUIRE(pile != STOCKPILE_NONE);
@@ -1512,7 +1509,7 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
             stockpiles_remove_rect(&game.stockpiles, 14, 10, 16, 15, 0); /* Shrink the storage. */
         }
         if (i == TICKS_PER_DAY / 2) {
-            stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_HAZELNUTS));
+            stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_BLACKBERRIES));
         }
         if (i % 50 == 0) {
             consistent = reservations_consistent(&game);
@@ -1520,14 +1517,14 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
     }
     CHECK(consistent);
     CHECK_EQ_INT(game.designations.count, mines); /* Nobody can mine. */
-    int stored_nuts = 0;
+    int stored_berries = 0;
     for (int y = 16; y <= 30; y++) {
         for (int x = 14; x <= 16; x++) {
             ItemStack stack = items_get(&game.items, x, y, 0);
-            stored_nuts += stack.type == ITEM_HAZELNUTS ? stack.count : 0;
+            stored_berries += stack.type == ITEM_BLACKBERRIES ? stack.count : 0;
         }
     }
-    CHECK(stored_nuts > 0); /* And hauled. */
+    CHECK(stored_berries > 0); /* And hauled. */
 
     /* The regions, updated in place, still group tiles like regions built
      * from scratch do. */
@@ -1832,11 +1829,11 @@ static void test_no_search_when_orders_are_out_of_reach(void)
     REQUIRE(colonist != NULL);
     set_rock_ring(&game.map, 20, 20, ROCK_GRANITE);
     /* A hazel walled in elsewhere: nothing to stand on next to it. */
-    add_nuts(&game.map, 32, 32);
+    add_bramble(&game.map, 32, 32);
     set_rock_ring(&game.map, 32, 32, ROCK_SANDSTONE);
-    CHECK_EQ_INT(order_zone(&game, 32, 32, 32, 32, GATHER_HAZELNUTS), 1);
-    add_nuts(&game.map, 40, 40); /* Reachable only from outside the ring. */
-    CHECK_EQ_INT(order_zone(&game, 40, 40, 40, 40, GATHER_HAZELNUTS), 1);
+    CHECK_EQ_INT(order_zone(&game, 32, 32, 32, 32, GATHER_BLACKBERRIES), 1);
+    add_bramble(&game.map, 40, 40); /* Reachable only from outside the ring. */
+    CHECK_EQ_INT(order_zone(&game, 40, 40, 40, 40, GATHER_BLACKBERRIES), 1);
 
     uint32_t searches = game.pathfinder.stamp;
     run_ticks(&game, 300);
@@ -1896,11 +1893,11 @@ static void test_knowledge_levels_validate(void)
     CHECK_NEAR(colonist_knowledge_level(&colonist, KNOWLEDGE_NONE), KNOWLEDGE_LEVEL_MIN, 1e-9);
 
     /* Orders need the mastery level of their knowledge. */
-    CHECK(!colonist_can_gather(&colonist, GATHER_JOB_NUTS));
+    CHECK(!colonist_can_gather(&colonist, GATHER_JOB_HARVEST));
     REQUIRE(colonist_set_knowledge_level(&colonist, KNOWLEDGE_GATHERING, 49.9));
-    CHECK(!colonist_can_gather(&colonist, GATHER_JOB_NUTS));
+    CHECK(!colonist_can_gather(&colonist, GATHER_JOB_HARVEST));
     REQUIRE(colonist_set_knowledge_level(&colonist, KNOWLEDGE_GATHERING, 50.0));
-    CHECK(colonist_can_gather(&colonist, GATHER_JOB_NUTS));
+    CHECK(colonist_can_gather(&colonist, GATHER_JOB_HARVEST));
     CHECK(colonist_can_gather(&colonist, GATHER_JOB_HARVEST));
     CHECK(!colonist_can_gather(&colonist, GATHER_JOB_CHOP));
     CHECK(!colonist_can_do(&colonist, DESIGNATION_MINE));
@@ -1940,19 +1937,20 @@ static void test_working_teaches_the_order_knowledge(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 26, 20);
+    add_bramble(&game.map, 26, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
         REQUIRE(colonist_set_knowledge_level(colonist, (KnowledgeType)k, 50.0));
     }
-    order_zone(&game, 26, 20, 26, 20, GATHER_HAZELNUTS);
+    order_zone(&game, 26, 20, 26, 20, GATHER_BLACKBERRIES);
+    float work = gather_job_work_needed(&game.map, 26, 20, 0, GATHER_JOB_HARVEST);
     int working = run_until_done(&game, 26, 20, 20000);
-    REQUIRE(!nuts_open(&game, 26, 20));
+    REQUIRE(!berries_open(&game, 26, 20));
 
-    /* A beginner works at half speed: the nuts (480 work) take about 960
-     * ticks, worth about 0.4 points of gathering at this level. */
-    CHECK(working > 880);
+    /* A beginner works at half speed: the berries (360 work) take about 720
+     * ticks, worth about 0.3 points of gathering at this level. */
+    CHECK(working > (int)(work * 2.0f * 0.9f));
     double gained = colonist_knowledge_level(colonist, KNOWLEDGE_GATHERING) - 50.0;
     double hours = (double)working / TICKS_PER_HOUR;
     CHECK(gained > hours * 0.97 && gained <= hours);
@@ -1972,16 +1970,16 @@ static void test_gatherer_level_speeds_up_gathering(void)
     for (int run = 0; run < 2; run++) {
         Game game;
         REQUIRE(init_flat_game(&game));
-        add_nuts(&game.map, 26, 20);
+        add_bramble(&game.map, 26, 20);
         Colonist *colonist = spawn_rested(&game, 20, 20);
         REQUIRE(colonist != NULL);
         REQUIRE(colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, levels[run]));
-        order_zone(&game, 26, 20, 26, 20, GATHER_HAZELNUTS);
+        order_zone(&game, 26, 20, 26, 20, GATHER_BLACKBERRIES);
         working[run] = run_until_done(&game, 26, 20, 20000);
         ItemStack result = items_get(&game.items, 26, 20, 0);
-        REQUIRE(result.type == ITEM_HAZELNUTS);
-        CHECK_EQ_INT(result.count, fallen_nuts());
-        CHECK_EQ_INT(map_litter(&game.map, 26, 20, 0, ITEM_HAZELNUTS), 0);
+        REQUIRE(result.type == ITEM_BLACKBERRIES);
+        CHECK_EQ_INT(result.count, bramble_fruit());
+        CHECK_EQ_INT(berries_at(&game, 26, 20), 0);
         game_shutdown(&game);
     }
     /* The master is much faster (×1.5 against ×0.5). */
@@ -1993,22 +1991,22 @@ static void test_gathering_zone_keeps_the_worker_busy(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     for (int x = 23; x <= 25; x++) {
-        add_nuts(&game.map, x, 20);
+        add_bramble(&game.map, x, 20);
     }
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
-    REQUIRE(order_zone(&game, 23, 20, 25, 20, GATHER_HAZELNUTS) == 3);
+    REQUIRE(order_zone(&game, 23, 20, 25, 20, GATHER_BLACKBERRIES) == 3);
     int zone = gather_zone_at(&game.gather_zones, 23, 20, 0);
-    float tile_work = gather_job_work_needed(&game.map, 23, 20, 0, GATHER_JOB_NUTS);
+    float tile_work = gather_job_work_needed(&game.map, 23, 20, 0, GATHER_JOB_HARVEST);
 
     run_ticks(&game, walk_ticks(3) + (int)(tile_work * 1.5f));
     /* Tile after tile, without stopping. */
-    CHECK((int)game.items.totals[ITEM_HAZELNUTS] >= fallen_nuts());
+    CHECK((int)game.items.totals[ITEM_BLACKBERRIES] >= bramble_fruit());
     CHECK_EQ_INT(colonist->task, TASK_WORK);
     CHECK(colonist->gathering);
     CHECK(colonist->target.x > 23);
-    CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.gather_nuts");
+    CHECK_STR_EQ(colonist_activity_key(colonist), "colonist.task.harvest");
 
     /* Until the player removes the zone. */
     gather_zone_delete(&game.gather_zones, zone);
@@ -2023,7 +2021,7 @@ static void test_gathering_zone_stops_at_its_targets(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     for (int x = 23; x <= 25; x++) {
-        add_nuts(&game.map, x, 20);
+        add_bramble(&game.map, x, 20);
     }
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
@@ -2031,30 +2029,30 @@ static void test_gathering_zone_stops_at_its_targets(void)
     REQUIRE(pile != STOCKPILE_NONE);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 23, 20, 25, 20, 0);
     REQUIRE(zone != GATHER_ZONE_NONE);
-    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
-    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZELNUTS, GATHER_UNTIL);
-    gather_zone_set_target(&game.gather_zones, zone, GATHER_HAZELNUTS, MAP_NUTS_MAX + 2);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BLACKBERRIES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BLACKBERRIES, GATHER_UNTIL);
+    gather_zone_set_target(&game.gather_zones, zone, GATHER_BLACKBERRIES, bramble_fruit() + 2);
     gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
-    float tile_work = gather_job_work_needed(&game.map, 23, 20, 0, GATHER_JOB_NUTS);
+    float tile_work = gather_job_work_needed(&game.map, 23, 20, 0, GATHER_JOB_HARVEST);
     run_ticks(&game, walk_ticks(5) + (int)(tile_work * 5.0f) + 4 * TICKS_PER_HOUR);
-    /* At least two tiles' nuts in storage (a third may have been gathered before the first
+    /* At least two brambles' berries in storage (a third may have been gathered before the first
      * were hauled): done. */
-    CHECK(game.stock[ITEM_HAZELNUTS] >= 2 * MAP_NUTS_MAX);
-    CHECK(game.stock[ITEM_HAZELNUTS] <= 3 * MAP_NUTS_MAX);
-    CHECK_EQ_INT(game.items.totals[ITEM_HAZELNUTS], game.stock[ITEM_HAZELNUTS]);
+    CHECK(game.stock[ITEM_BLACKBERRIES] >= 2 * bramble_fruit());
+    CHECK(game.stock[ITEM_BLACKBERRIES] <= 3 * bramble_fruit());
+    CHECK_EQ_INT(game.items.totals[ITEM_BLACKBERRIES], game.stock[ITEM_BLACKBERRIES]);
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.gather_zones.wanting_cells, 0);
-    /* What lies on the ground does not count: only the stored nuts do. */
+    /* What lies on the ground does not count: only the stored berries do. */
     for (int y = 22; y <= 23; y++) {
         for (int x = 20; x <= 22; x++) {
-            items_remove(&game.items, x, y, 0, 3 * MAP_NUTS_MAX);
+            items_remove(&game.items, x, y, 0, 3 * bramble_fruit());
         }
     }
-    items_add(&game.items, 30, 30, 0, item_stack_pristine(ITEM_HAZELNUTS, 50));
+    items_add(&game.items, 30, 30, 0, item_stack_pristine(ITEM_BLACKBERRIES, 50));
     run_ticks(&game, GAME_STOCK_INTERVAL + 2);
-    CHECK_EQ_INT(game.stock[ITEM_HAZELNUTS], 0);
+    CHECK_EQ_INT(game.stock[ITEM_BLACKBERRIES], 0);
     CHECK((gather_zone_get(&game.gather_zones, zone)->wanted &
-           GATHER_RESOURCE_BIT(GATHER_HAZELNUTS)) != 0);
+           GATHER_RESOURCE_BIT(GATHER_BLACKBERRIES)) != 0);
     game_shutdown(&game);
 }
 
@@ -2146,19 +2144,19 @@ static void test_orders_need_the_knowledge(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_nuts(&game.map, 24, 20);
+    add_bramble(&game.map, 24, 20);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     REQUIRE(colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, 49.0));
-    CHECK(!game_gather_job_known(&game, GATHER_JOB_NUTS));
-    order_zone(&game, 24, 20, 24, 20, GATHER_HAZELNUTS);
+    CHECK(!game_gather_job_known(&game, GATHER_JOB_HARVEST));
+    order_zone(&game, 24, 20, 24, 20, GATHER_BLACKBERRIES);
     run_ticks(&game, 300);
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.reservations.count, 0);
 
     /* Once at the mastery level, the order is taken (after the search backoff). */
     REQUIRE(colonist_set_knowledge_level(colonist, KNOWLEDGE_GATHERING, 50.0));
-    CHECK(game_gather_job_known(&game, GATHER_JOB_NUTS));
+    CHECK(game_gather_job_known(&game, GATHER_JOB_HARVEST));
     int wait = (COLONIST_SEARCH_RETRY_TICKS << COLONIST_SEARCH_MAX_BACKOFF) + walk_ticks(1);
     for (int i = 0; i < wait && colonist->task != TASK_WORK; i++) {
         game_tick(&game);
@@ -2795,7 +2793,7 @@ int main(void)
     RUN_TEST(test_tired_colonist_sleeps_and_recovers);
     RUN_TEST(test_colonists_sleep_at_night);
     RUN_TEST(test_colonists_drink_before_sleeping);
-    RUN_TEST(test_idle_colonist_gathers_nuts);
+    RUN_TEST(test_idle_colonist_gathers_berries);
     RUN_TEST(test_nobody_fells_or_mines_yet);
     RUN_TEST(test_one_worker_per_designation);
     RUN_TEST(test_hungry_worker_leaves_work_and_resumes_later);
