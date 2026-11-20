@@ -345,3 +345,32 @@ int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
     }
     return count;
 }
+
+ItemStack recipe_average_product(RecipeType recipe, ItemType input, int input_quality,
+                                 WoodMask woods, double level)
+{
+    ItemStack none = {.type = ITEM_NONE};
+    const RecipeDef *def = recipe_def(recipe);
+    if (def == NULL) {
+        return none;
+    }
+    if (input == ITEM_NONE) {
+        input = def->inputs[0];
+    }
+    const ItemDef *material = item_def(input);
+    ItemStack stack = none;
+    if (input != ITEM_NONE && material != NULL) {
+        stack = item_stack_make(input, def->input_count,
+                                clampi(input_quality, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST),
+                                material->max_hit_points);
+        stack.woods = material->wooden ? woods : 0;
+    }
+    ItemStack made[RECIPE_PRODUCT_MAX];
+    int count = recipe_craft(recipe, stack, level, NULL, made);
+    for (int i = 0; i < count; i++) {
+        if (made[i].type == def->product) {
+            return made[i];
+        }
+    }
+    return item_stack_make(def->product, 0, ITEM_QUALITY_STANDARD, 0);
+}

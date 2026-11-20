@@ -223,6 +223,60 @@ static void test_bills(void)
     free_world(&map, &stations, &items);
 }
 
+/* A bill set up before it is added (the bills' window): its settings kept,
+ * those out of range made a new bill's. */
+static void test_bill_drafts(void)
+{
+    Map map;
+    Workstations stations;
+    Items items;
+    REQUIRE(init_world(&map, &stations, &items));
+    int crafting = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 8, 8, 0);
+    Bill draft;
+    CHECK(!bill_init(&draft, RECIPE_COUNT));
+    REQUIRE(bill_init(&draft, RECIPE_THRUSTING_SPEAR));
+    CHECK_EQ_INT(draft.mode, BILL_DO_TIMES);
+    CHECK_EQ_INT(draft.worker, BILL_WORKER_ANYONE);
+    const EntityId ann = {3, 1};
+    CHECK(!bill_set_worker(&draft, BILL_WORKER_SPECIFIC, ENTITY_NONE));
+    CHECK(bill_set_worker(&draft, BILL_WORKER_SPECIFIC, ann));
+    CHECK(bill_set_input_radius(&draft, 100000));
+    CHECK_EQ_INT(draft.input_radius, BILL_INPUT_RADIUS_MAX);
+    CHECK(bill_set_quality_range(&draft, 80, 30));
+    CHECK_EQ_INT(draft.min_quality, 30);
+    CHECK_EQ_INT(draft.max_quality, 80);
+    CHECK(bill_set_woods(&draft, 5));
+    CHECK(!bill_set_input(&draft, ITEM_FLINT, true));
+    CHECK(bill_set_target(&draft, 3));
+    draft.done = 7; /* Never carried over. */
+    int index = workstation_add_bill_from(&stations, crafting, &draft);
+    REQUIRE(index == 0);
+    const Bill *bill = &workstation_get_const(&stations, crafting)->bills[index];
+    CHECK_EQ_INT(bill->recipe, RECIPE_THRUSTING_SPEAR);
+    CHECK_EQ_INT(bill->worker, BILL_WORKER_SPECIFIC);
+    CHECK(entity_id_equal(bill->colonist, ann));
+    CHECK_EQ_INT(bill->input_radius, BILL_INPUT_RADIUS_MAX);
+    CHECK_EQ_INT(bill->min_quality, 30);
+    CHECK_EQ_INT(bill->max_quality, 80);
+    CHECK_EQ_UINT(bill->woods, 5);
+    CHECK_EQ_INT(bill->target, 3);
+    CHECK_EQ_INT(bill->done, 0);
+    /* Out of range in the draft: a new bill's. */
+    draft.input_radius = 60000;
+    draft.inputs = ITEM_TYPE_BIT(ITEM_FLINT) | ITEM_TYPE_BIT(ITEM_BRANCHES);
+    draft.worker = BILL_WORKER_COUNT;
+    index = workstation_add_bill_from(&stations, crafting, &draft);
+    REQUIRE(index == 1);
+    bill = &workstation_get_const(&stations, crafting)->bills[index];
+    CHECK_EQ_INT(bill->input_radius, BILL_INPUT_RADIUS_MAX);
+    CHECK_EQ_UINT(bill->inputs, ITEM_TYPE_BIT(ITEM_BRANCHES));
+    CHECK_EQ_INT(bill->worker, BILL_WORKER_ANYONE);
+    /* Another kind of station's recipe is refused. */
+    REQUIRE(bill_init(&draft, RECIPE_FLAKES));
+    CHECK_EQ_INT(workstation_add_bill_from(&stations, crafting, &draft), -1);
+    free_world(&map, &stations, &items);
+}
+
 static void test_crafting(void)
 {
     Map map;
@@ -342,6 +396,7 @@ int main(void)
     RUN_TEST(test_definitions);
     RUN_TEST(test_placing_and_removing);
     RUN_TEST(test_bills);
+    RUN_TEST(test_bill_drafts);
     RUN_TEST(test_crafting);
     RUN_TEST(test_crafting_with_a_load);
     RUN_TEST(test_bill_inputs_after_tools);

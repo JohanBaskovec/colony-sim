@@ -15,6 +15,7 @@ static void test_definitions(void)
         const ToolUseDef *def = tool_use_def((ToolUse)use);
         REQUIRE(def != NULL);
         CHECK(def->id != NULL);
+        CHECK(def->name_key != NULL);
         CHECK(def->bare_hands >= 0.0f && def->bare_hands <= 1.0f);
         CHECK_NEAR(def->factor[ITEM_NONE], 0.0, 1e-6);
     }

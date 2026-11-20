@@ -8,6 +8,15 @@
 
 #include <math.h>
 
+static void test_form_names(void)
+{
+    CHECK(item_form_name_key(ITEM_FORM_NONE) == NULL);
+    CHECK(item_form_name_key(ITEM_FORM_COUNT) == NULL);
+    for (int form = ITEM_FORM_RIGID; form < ITEM_FORM_COUNT; form++) {
+        CHECK(item_form_name_key((ItemForm)form) != NULL);
+    }
+}
+
 static void test_definitions(void)
 {
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
@@ -1406,6 +1415,7 @@ static void test_items_listed_in_order(void)
 
 int main(void)
 {
+    RUN_TEST(test_form_names);
     RUN_TEST(test_definitions);
     RUN_TEST(test_shapes);
     RUN_TEST(test_stack_limits_follow_bulk);

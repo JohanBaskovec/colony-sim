@@ -198,15 +198,11 @@ static Bill *get_bill(Workstations *workstations, int index, int bill)
     return &station->bills[bill];
 }
 
-int workstation_add_bill(Workstations *workstations, int index, RecipeType recipe)
+bool bill_init(Bill *bill, RecipeType recipe)
 {
-    Workstation *station = workstation_get(workstations, index);
-    const RecipeDef *def = recipe_def(recipe);
-    if (station == NULL || def == NULL || !(def->stations & WORKSTATION_BIT(station->type)) ||
-        station->bill_count >= WORKSTATION_BILL_MAX) {
-        return -1;
+    if (recipe_def(recipe) == NULL) {
+        return false;
     }
-    Bill *bill = &station->bills[station->bill_count];
     memset(bill, 0, sizeof(*bill));
     bill->recipe = (uint8_t)recipe;
     bill->mode = BILL_DO_TIMES;
@@ -217,6 +213,37 @@ int workstation_add_bill(Workstations *workstations, int index, RecipeType recip
     bill->input_radius = BILL_INPUT_RADIUS_DEFAULT;
     bill->min_quality = ITEM_QUALITY_WORST;
     bill->max_quality = ITEM_QUALITY_BEST;
+    return true;
+}
+
+int workstation_add_bill(Workstations *workstations, int index, RecipeType recipe)
+{
+    Bill draft;
+    return bill_init(&draft, recipe) ? workstation_add_bill_from(workstations, index, &draft) : -1;
+}
+
+int workstation_add_bill_from(Workstations *workstations, int index, const Bill *draft)
+{
+    Workstation *station = workstation_get(workstations, index);
+    const RecipeDef *def = recipe_def((RecipeType)draft->recipe);
+    if (station == NULL || def == NULL || !(def->stations & WORKSTATION_BIT(station->type)) ||
+        station->bill_count >= WORKSTATION_BILL_MAX) {
+        return -1;
+    }
+    /* Each setting through its setter: what is invalid stays as a new bill's. */
+    Bill bill;
+    bill_init(&bill, (RecipeType)draft->recipe);
+    bill_set_mode(&bill, (BillMode)draft->mode);
+    bill_set_target(&bill, draft->target);
+    bill.inputs = draft->inputs & recipe_inputs((RecipeType)draft->recipe);
+    bill_set_worker(&bill, (BillWorker)draft->worker, draft->colonist);
+    bill_set_max_level(&bill, draft->max_level);
+    bill_set_min_level(&bill, draft->min_level);
+    bill_set_paused(&bill, draft->paused);
+    bill_set_input_radius(&bill, draft->input_radius);
+    bill_set_quality_range(&bill, draft->min_quality, draft->max_quality);
+    bill_set_woods(&bill, draft->woods);
+    station->bills[station->bill_count] = bill;
     workstations->revision++;
     return station->bill_count++;
 }
@@ -249,137 +276,160 @@ bool workstation_remove_bill(Workstations *workstations, int index, int bill, It
     return given_back;
 }
 
-bool workstation_set_bill_mode(Workstations *workstations, int index, int bill, BillMode mode)
+bool bill_set_mode(Bill *bill, BillMode mode)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL || (unsigned)mode >= BILL_MODE_COUNT) {
+    if ((unsigned)mode >= BILL_MODE_COUNT) {
         return false;
     }
-    if (entry->mode != mode) {
-        entry->mode = (uint8_t)mode;
-        entry->done = 0;
-        workstations->revision++;
+    if (bill->mode != mode) {
+        bill->mode = (uint8_t)mode;
+        bill->done = 0;
     }
     return true;
 }
 
-bool workstation_set_bill_target(Workstations *workstations, int index, int bill, int target)
+bool bill_set_target(Bill *bill, int target)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL) {
-        return false;
-    }
-    entry->target = (uint16_t)clampi(target, BILL_TARGET_MIN, BILL_TARGET_MAX);
-    workstations->revision++;
+    bill->target = (uint16_t)clampi(target, BILL_TARGET_MIN, BILL_TARGET_MAX);
     return true;
 }
 
-bool workstation_set_bill_input(Workstations *workstations, int index, int bill, ItemType type,
-                                bool allowed)
+bool bill_set_input(Bill *bill, ItemType type, bool allowed)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL || (unsigned)type >= ITEM_TYPE_COUNT ||
-        !(recipe_inputs((RecipeType)entry->recipe) & ITEM_TYPE_BIT(type))) {
+    if ((unsigned)type >= ITEM_TYPE_COUNT ||
+        !(recipe_inputs((RecipeType)bill->recipe) & ITEM_TYPE_BIT(type))) {
         return false;
     }
     if (allowed) {
-        entry->inputs |= ITEM_TYPE_BIT(type);
+        bill->inputs |= ITEM_TYPE_BIT(type);
     } else {
-        entry->inputs &= ~ITEM_TYPE_BIT(type);
+        bill->inputs &= ~ITEM_TYPE_BIT(type);
     }
-    workstations->revision++;
     return true;
 }
 
-bool workstation_set_bill_worker(Workstations *workstations, int index, int bill, BillWorker worker,
-                                 EntityId colonist)
+bool bill_set_worker(Bill *bill, BillWorker worker, EntityId colonist)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL || (unsigned)worker >= BILL_WORKER_COUNT) {
+    if ((unsigned)worker >= BILL_WORKER_COUNT) {
         return false;
     }
     if (worker == BILL_WORKER_LEVEL &&
-        recipe_def((RecipeType)entry->recipe)->knowledge == KNOWLEDGE_NONE) {
+        recipe_def((RecipeType)bill->recipe)->knowledge == KNOWLEDGE_NONE) {
         return false;
     }
     if (worker == BILL_WORKER_SPECIFIC && entity_id_is_none(colonist)) {
         return false;
     }
-    entry->worker = (uint8_t)worker;
-    entry->colonist = worker == BILL_WORKER_SPECIFIC ? colonist : ENTITY_NONE;
-    workstations->revision++;
+    bill->worker = (uint8_t)worker;
+    bill->colonist = worker == BILL_WORKER_SPECIFIC ? colonist : ENTITY_NONE;
     return true;
+}
+
+bool bill_set_min_level(Bill *bill, int level)
+{
+    bill->min_level = (uint8_t)clampi(level, BILL_LEVEL_MIN, bill->max_level);
+    return true;
+}
+
+bool bill_set_max_level(Bill *bill, int level)
+{
+    bill->max_level = (uint8_t)clampi(level, bill->min_level, BILL_LEVEL_MAX);
+    return true;
+}
+
+bool bill_set_woods(Bill *bill, WoodMask woods)
+{
+    bill->woods = woods;
+    return true;
+}
+
+bool bill_set_quality_range(Bill *bill, int low, int high)
+{
+    low = clampi(low, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
+    high = clampi(high, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
+    bill->min_quality = (uint8_t)(low < high ? low : high);
+    bill->max_quality = (uint8_t)(low < high ? high : low);
+    return true;
+}
+
+bool bill_set_paused(Bill *bill, bool paused)
+{
+    bill->paused = paused;
+    return true;
+}
+
+bool bill_set_input_radius(Bill *bill, int radius)
+{
+    bill->input_radius = (uint16_t)clampi(radius, BILL_INPUT_RADIUS_MIN, BILL_INPUT_RADIUS_MAX);
+    return true;
+}
+
+/* A setter of a station's bill: through the bill's own, counted in the
+ * revision when it takes. */
+#define SET_BILL(call)                                                                             \
+    do {                                                                                           \
+        Bill *entry = get_bill(workstations, index, bill);                                         \
+        if (entry == NULL || !(call)) {                                                            \
+            return false;                                                                          \
+        }                                                                                          \
+        workstations->revision++;                                                                  \
+        return true;                                                                               \
+    } while (0)
+
+bool workstation_set_bill_mode(Workstations *workstations, int index, int bill, BillMode mode)
+{
+    SET_BILL(bill_set_mode(entry, mode));
+}
+
+bool workstation_set_bill_target(Workstations *workstations, int index, int bill, int target)
+{
+    SET_BILL(bill_set_target(entry, target));
+}
+
+bool workstation_set_bill_input(Workstations *workstations, int index, int bill, ItemType type,
+                                bool allowed)
+{
+    SET_BILL(bill_set_input(entry, type, allowed));
+}
+
+bool workstation_set_bill_worker(Workstations *workstations, int index, int bill, BillWorker worker,
+                                 EntityId colonist)
+{
+    SET_BILL(bill_set_worker(entry, worker, colonist));
 }
 
 bool workstation_set_bill_min_level(Workstations *workstations, int index, int bill, int level)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL) {
-        return false;
-    }
-    entry->min_level = (uint8_t)clampi(level, BILL_LEVEL_MIN, entry->max_level);
-    workstations->revision++;
-    return true;
+    SET_BILL(bill_set_min_level(entry, level));
 }
 
 bool workstation_set_bill_max_level(Workstations *workstations, int index, int bill, int level)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL) {
-        return false;
-    }
-    entry->max_level = (uint8_t)clampi(level, entry->min_level, BILL_LEVEL_MAX);
-    workstations->revision++;
-    return true;
+    SET_BILL(bill_set_max_level(entry, level));
 }
 
 bool workstation_set_bill_woods(Workstations *workstations, int index, int bill, WoodMask woods)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL) {
-        return false;
-    }
-    entry->woods = woods;
-    workstations->revision++;
-    return true;
+    SET_BILL(bill_set_woods(entry, woods));
 }
 
 bool workstation_set_bill_quality_range(Workstations *workstations, int index, int bill, int low,
                                         int high)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL) {
-        return false;
-    }
-    low = clampi(low, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
-    high = clampi(high, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
-    entry->min_quality = (uint8_t)(low < high ? low : high);
-    entry->max_quality = (uint8_t)(low < high ? high : low);
-    workstations->revision++;
-    return true;
+    SET_BILL(bill_set_quality_range(entry, low, high));
 }
 
 bool workstation_set_bill_paused(Workstations *workstations, int index, int bill, bool paused)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL) {
-        return false;
-    }
-    entry->paused = paused;
-    workstations->revision++;
-    return true;
+    SET_BILL(bill_set_paused(entry, paused));
 }
 
 bool workstation_set_bill_input_radius(Workstations *workstations, int index, int bill, int radius)
 {
-    Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL) {
-        return false;
-    }
-    entry->input_radius = (uint16_t)clampi(radius, BILL_INPUT_RADIUS_MIN, BILL_INPUT_RADIUS_MAX);
-    workstations->revision++;
-    return true;
+    SET_BILL(bill_set_input_radius(entry, radius));
 }
+
+#undef SET_BILL
 
 bool bill_accepts_worker(const Bill *bill, double level, EntityId who)
 {

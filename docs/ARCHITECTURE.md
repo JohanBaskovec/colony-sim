@@ -139,7 +139,7 @@ simulation:
 | `inspector`    | Bottom left: summary box of the selection, tabs opening a panel above it, action buttons beside it; dispatches to the panels below (colonists: `hud`) |
 | `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (radius slider, condition sliders, filters); build another, delete |
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, column titles; a goal made of a mode dropdown, target and unit, then what lies in the colony; an apply to all button on a group; warnings); build another, delete |
-| `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills (the active bills, and two windows docked to the right of the tab: the recipes to add, and the details of the one picked) and (hearths) Fire tabs; forbid, build another, delete |
+| `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills (the active bills, and windows docked to the right of the tab: the recipes to add, the settings of the one picked (a draft) and its details: item, tool, weapon, expected result; or the settings and details of an active bill) and (hearths) Fire tabs; forbid, build another, delete |
 | `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd, health |
 | `journal_panel` | The Journal tab of a settler or an animal: five filter check boxes (`App.journal_hidden`; routine thoughts under Routine only), the entries newest first with their date, sentences built from the facts of `core/journal.h` (wording per language: verb by the strike mark, part and injury phrases, the owner's and the attacker's phrases by species; social sentences from topic, story and know-how phrases, with French elision before a vowel; a thought as a full sentence, its tooltip on hover) |
 | `thought_tooltip` | The tooltip of a thought (what it is about, its first value, how it fades or grows, how it adds up), shared by the Mood tab and the journal |
@@ -1832,6 +1832,18 @@ longer matches anyone once the settler is gone), the quality range of its
 ingredients (`min_quality`..`max_quality`, every quality by default) and a
 pause flag. The worker fields are hashed only when the bill is not for
 anyone, the quality range only when it is not the whole range.
+
+Every setting goes through a setter on the `Bill` itself (`bill_set_mode()`,
+`bill_set_worker()`, `bill_set_quality_range()`...), which refuses or clamps what
+is out of range; the `workstation_set_bill_*()` calls wrap them and bump the
+stations' revision. A bill can thus be set up before it exists: the frontend keeps
+a draft (`App.station_draft`, `bill_init()`), and `workstation_add_bill_from()`
+adds it by running each of its settings through the setters (its count of
+crafts done starts at 0). `game_bill_estimate()` tells what a bill would make: the
+lowest and highest level settlers it allows (or the one chosen), and the average
+product each would craft (`recipe_average_product()`: the craft without its
+random spread) from its first allowed ingredient at the best quality it accepts,
+of its woods.
 
 Ingredients are chosen item by item (`ItemChoice`, `core/item.h`): a heap
 counts only for its items within the bill's range (and the recipe's least

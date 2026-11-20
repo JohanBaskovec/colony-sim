@@ -3882,6 +3882,48 @@ bool game_bill_has_worker(const Game *game, const Bill *bill)
     return false;
 }
 
+BillEstimate game_bill_estimate(const Game *game, const Bill *bill)
+{
+    BillEstimate estimate = {0};
+    RecipeType recipe = (RecipeType)bill->recipe;
+    const RecipeDef *def = recipe_def(recipe);
+    if (def == NULL) {
+        return estimate;
+    }
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        EntityId id = game_colonist_id_at(game, slot);
+        const Colonist *colonist = &game->colonists[slot];
+        if (entity_id_is_none(id) || !colonist_can_craft(colonist, recipe) ||
+            !colonist_fits_bill(colonist, id, bill)) {
+            continue;
+        }
+        double level = colonist_work_level(colonist, def->knowledge);
+        if (estimate.crafters == 0 || level < estimate.low_level) {
+            estimate.low_level = level;
+            estimate.low_crafter = id;
+        }
+        if (estimate.crafters == 0 || level > estimate.high_level) {
+            estimate.high_level = level;
+            estimate.high_crafter = id;
+        }
+        estimate.crafters++;
+    }
+    if (estimate.crafters == 0) {
+        return estimate;
+    }
+    ItemType input = ITEM_NONE;
+    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES && input == ITEM_NONE; i++) {
+        if (def->inputs[i] != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(def->inputs[i]))) {
+            input = def->inputs[i];
+        }
+    }
+    estimate.low =
+        recipe_average_product(recipe, input, bill->max_quality, bill->woods, estimate.low_level);
+    estimate.high =
+        recipe_average_product(recipe, input, bill->max_quality, bill->woods, estimate.high_level);
+    return estimate;
+}
+
 static bool colonist_carries_tool(const Game *game, ItemTypeMask types)
 {
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {

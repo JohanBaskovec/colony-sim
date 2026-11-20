@@ -1,24 +1,29 @@
 #include "core/tool.h"
 
+#include "core/i18n.h"
 #include "core/util.h"
 #include "core/wood.h"
 
 /* Speed factors by job and tool (docs/KNOWLEDGE.md §2.3). */
 static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
     [TOOL_USE_CUT_GRASS] = {"cut_grass",
+                            N_("tool_use.cut_grass"),
                             0.6f,
                             {[ITEM_CHOPPER] = 0.8f, [ITEM_FLAKE] = 1.0f, [ITEM_HAND_AXE] = 0.9f}},
-    [TOOL_USE_KNAPPING] = {"knapping", 0.0f, {[ITEM_COBBLE] = 1.0f}},
+    [TOOL_USE_KNAPPING] = {"knapping", N_("tool_use.knapping"), 0.0f, {[ITEM_COBBLE] = 1.0f}},
     [TOOL_USE_WOODWORKING] = {"woodworking",
+                              N_("tool_use.woodworking"),
                               0.0f,
                               {[ITEM_CHOPPER] = 0.6f, [ITEM_FLAKE] = 1.0f, [ITEM_HAND_AXE] = 1.0f}},
     [TOOL_USE_BUILDING] = {"building",
+                           N_("tool_use.building"),
                            0.8f,
                            {[ITEM_COBBLE] = 0.9f,
                             [ITEM_CHOPPER] = 1.0f,
                             [ITEM_FLAKE] = 0.9f,
                             [ITEM_HAND_AXE] = 1.0f}},
     [TOOL_USE_DIGGING] = {"digging",
+                          N_("tool_use.digging"),
                           0.3f,
                           {[ITEM_HAND_AXE] = 0.5f,
                            [ITEM_DIGGING_STICK] = 1.0f,

@@ -96,4 +96,14 @@ float recipe_failure_chance(RecipeType recipe, double level);
 int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
                  ItemStack out[RECIPE_PRODUCT_MAX]);
 
+/*
+ * The recipe's product as one craft makes it on average (recipe_craft()
+ * without luck nor failure) by a worker at `level`, from items of `input`
+ * (ITEM_NONE: the recipe's first input type) of quality `input_quality` in
+ * perfect condition, of the species `woods` when wooden (0: of no known
+ * species). Count 0 when it makes none; empty for no recipe.
+ */
+ItemStack recipe_average_product(RecipeType recipe, ItemType input, int input_quality,
+                                 WoodMask woods, double level);
+
 #endif /* COLONY_CORE_RECIPE_H */

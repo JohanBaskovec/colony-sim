@@ -138,6 +138,7 @@ typedef enum AppWindow {
     APP_WINDOW_STATION_ADD,   /* Recipes to add to a workstation's bills (game/station_panel.h). */
     APP_WINDOW_STATION_RECIPE, /* What the recipe picked in that list needs and makes. */
     APP_WINDOW_STATION_BILL,   /* The details of the bill picked in the Bills tab. */
+    APP_WINDOW_STATION_DRAFT,  /* The settings of the recipe picked, before it is added. */
     APP_WINDOW_WORK,           /* Work priorities grid. */
     APP_WINDOW_LOG,            /* Colony log (game/log_window.h). */
     APP_WINDOW_HELP,           /* Controls. */
@@ -359,6 +360,9 @@ typedef struct App {
     int station_panel_number;
     bool station_recipe_picked;
     int station_recipe;
+    /* The bill of the recipe picked as it will be added (its settings set
+     * beforehand, bill_init()): kept while the same recipe stays picked. */
+    Bill station_draft;
     int station_click_recipe;
     Uint64 station_click_ms;
     /* Colonist bar (game/colonist_bar.h): the last click on an entry, to

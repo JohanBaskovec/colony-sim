@@ -328,6 +328,9 @@ const ItemDef *item_def(ItemType type);
 /* Whether an item of this type is at least ITEM_LONG_CM long. */
 bool item_is_long(ItemType type);
 
+/* The translation key of a form's name ("Rigid"), NULL for none. */
+const char *item_form_name_key(ItemForm form);
+
 /* Translation key of a category name, NULL if out of range. */
 const char *item_category_name_key(ItemCategory category);
 

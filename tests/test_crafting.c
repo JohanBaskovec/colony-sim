@@ -428,6 +428,39 @@ static void test_crafting_sets_tools_down_at_the_station(void)
     game_shutdown(&game);
 }
 
+/* What a bill makes on average, by who may take it (the bills' window). */
+static void test_bill_estimate(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Bill bill;
+    REQUIRE(bill_init(&bill, RECIPE_FLAKES));
+    CHECK_EQ_INT(game_bill_estimate(&game, &bill).crafters, 0); /* Nobody yet. */
+    Colonist *novice = spawn_worker(&game, 10, 10);
+    Colonist *master = spawn_worker(&game, 12, 10);
+    colonist_set_knowledge_level(novice, KNOWLEDGE_STONE_KNAPPING, 55.0);
+    colonist_set_knowledge_level(master, KNOWLEDGE_STONE_KNAPPING, 100.0);
+    BillEstimate estimate = game_bill_estimate(&game, &bill);
+    CHECK_EQ_INT(estimate.crafters, 2);
+    CHECK(estimate.low_level < estimate.high_level);
+    CHECK(entity_id_equal(estimate.high_crafter, game_colonist_id_at(&game, 1)));
+    CHECK_EQ_INT(estimate.low.type, ITEM_FLAKE);
+    CHECK(estimate.low.count < estimate.high.count);
+    CHECK(estimate.low.quality < estimate.high.quality);
+    /* One settler only: theirs. */
+    REQUIRE(bill_set_worker(&bill, BILL_WORKER_SPECIFIC, game_colonist_id_at(&game, 0)));
+    estimate = game_bill_estimate(&game, &bill);
+    CHECK_EQ_INT(estimate.crafters, 1);
+    CHECK_NEAR(estimate.low_level, estimate.high_level, 1e-9);
+    CHECK(entity_id_equal(estimate.low_crafter, game_colonist_id_at(&game, 0)));
+    /* Ingredients no better than 30: flakes no better than 50. */
+    REQUIRE(bill_set_worker(&bill, BILL_WORKER_SPECIFIC, game_colonist_id_at(&game, 1)));
+    REQUIRE(bill_set_quality_range(&bill, 0, 30));
+    estimate = game_bill_estimate(&game, &bill);
+    CHECK_EQ_INT(estimate.high.quality, 30 + ITEM_QUALITY_CAP_BONUS);
+    game_shutdown(&game);
+}
+
 static void test_tools_wear_and_break(void)
 {
     Game game;
@@ -1080,6 +1113,7 @@ int main(void)
     RUN_TEST(test_no_zone_under_a_station);
     RUN_TEST(test_tool_quality_sets_the_pace);
     RUN_TEST(test_tools_wear_and_break);
+    RUN_TEST(test_bill_estimate);
     RUN_TEST(test_crafting_sets_tools_down_at_the_station);
     RUN_TEST(test_better_tool_close_by_is_swapped);
     RUN_TEST(test_knapper_takes_a_cobble_as_hammer_then_strikes_flakes);

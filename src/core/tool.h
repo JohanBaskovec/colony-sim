@@ -35,6 +35,7 @@ typedef enum ToolUse {
 
 typedef struct ToolUseDef {
     const char *id;                /* Stable identifier, never shown. */
+    const char *name_key;          /* What the tool does: "Cutting grass". */
     float bare_hands;              /* Speed factor without a tool; 0: impossible. */
     float factor[ITEM_TYPE_COUNT]; /* Per item type used as the tool; 0: useless. */
 } ToolUseDef;

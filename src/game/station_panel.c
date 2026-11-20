@@ -3,7 +3,10 @@
 #include "core/game_clock.h"
 #include "core/hearth.h"
 #include "core/i18n.h"
+#include "core/combat.h"
 #include "core/stockpile.h"
+#include "core/tool.h"
+#include "core/weapon.h"
 #include "core/work.h"
 #include "game/hud.h"
 #include "game/inspector.h"
@@ -21,6 +24,9 @@
 #define DROPDOWN_ID 100        /* + 2 per bill, + 1 for the settler's. */
 #define RADIUS_SLIDER_ID 7000  /* + the bill. */
 #define WOOD_DROPDOWN_ID 8000  /* + the bill. */
+/* The bill of the recipe picked, set up before it is added (App.station_draft):
+ * its rows use this index (widget ids, actions). */
+#define DRAFT_BILL WORKSTATION_BILL_MAX
 
 /* What the player clicked, applied after the rows (deleting shifts bills). */
 typedef enum ActionType {
@@ -807,6 +813,7 @@ static void progress_row(UiLayout *layout, const Workstation *station)
 typedef struct StationRows {
     App *app;
     RecipeType recipe; /* The recipe the details window (recipe_rows()) is about. */
+    const Bill *bill;  /* ...and the bill its estimates follow (NULL: none). */
     const Game *game;
     const Workstation *station;
     Action action;
@@ -881,18 +888,13 @@ static void heading_row(UiLayout *layout, const char *key)
     ui_layout_label(layout, tr(key), 0.0f, true);
 }
 
-/* The details of the bill picked: what it takes (ingredients and tools,
- * red when they cannot be had), who works on it, how far ingredients are
- * looked for and which of them may be used. */
-static void bill_rows(UiLayout *layout, void *userdata)
+/* The settings of a bill (one of the station's at `index`, or the draft at
+ * DRAFT_BILL): what it takes (ingredients and tools, red when they cannot be
+ * had), who works on it, how far ingredients are looked for and which of
+ * them may be used. */
+static void bill_settings_rows(UiLayout *layout, StationRows *rows, const Workstation *known,
+                               const Bill *bill, int index)
 {
-    StationRows *rows = userdata;
-    Workstation known = as_known(rows->game, rows->station);
-    int index = rows->app->station_bill;
-    if (index < 0 || index >= known.bill_count) {
-        return;
-    }
-    const Bill *bill = &known.bills[index];
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
     heading_row(layout, "station.recipe.ingredients");
     bill_ingredients_row(layout, rows->game, bill);
@@ -917,7 +919,43 @@ static void bill_rows(UiLayout *layout, void *userdata)
         bill_inputs_row(layout, bill, index, &rows->action);
     }
     layout->y += GAP;
-    bill_warning_rows(layout, rows->game, &known, bill);
+    bill_warning_rows(layout, rows->game, known, bill);
+}
+
+/* The details of the bill picked in the list. */
+static void bill_rows(UiLayout *layout, void *userdata)
+{
+    StationRows *rows = userdata;
+    Workstation known = as_known(rows->game, rows->station);
+    int index = rows->app->station_bill;
+    if (index >= 0 && index < known.bill_count) {
+        bill_settings_rows(layout, rows, &known, &known.bills[index], index);
+    }
+}
+
+/* The settings of the recipe picked in the list to add, before it is added,
+ * then the button that adds it so. */
+static void draft_rows(UiLayout *layout, void *userdata)
+{
+    StationRows *rows = userdata;
+    Workstation known = as_known(rows->game, rows->station);
+    const Bill *draft = &rows->app->station_draft;
+    bill_settings_rows(layout, rows, &known, draft, DRAFT_BILL);
+    layout->y += GAP;
+    bool full = rows->station->bill_count >= WORKSTATION_BILL_MAX;
+    const char *label = tr("station.add_this_bill");
+    float y = layout->y;
+    if (ui_layout_wide_button(layout, label) && !full) {
+        rows->action = (Action){.type = ACTION_ADD_BILL, .value = draft->recipe};
+    }
+    if (layout->draw && full) {
+        SDL_FRect rect = {layout->x, y, layout->width, layout->button_height};
+        ui_fill(layout->ui, rect, layout->ui->theme.colors[THEME_DISABLED_VEIL]);
+        if (ui_hovered(layout->ui, rect)) {
+            const char *line = tr("station.add_bill.full");
+            ui_tooltip(layout->ui, &line, 1);
+        }
+    }
 }
 
 /* The summary: whether the settlers leave it alone, its fire, what is being
@@ -1100,22 +1138,11 @@ static SDL_FRect detail_row(UiLayout *layout, const char *label_key, const char 
                           hoverable);
 }
 
-/* What the recipe's product is, made by a settler at `level` (the average
- * result: no luck, no failure). */
+/* What the recipe's product is, made by a settler at `level` from the best
+ * material (the average result: no luck, no failure). */
 static ItemStack average_product(RecipeType recipe, double level)
 {
-    const RecipeDef *def = recipe_def(recipe);
-    const ItemDef *material = item_def(def->inputs[0]);
-    ItemStack input = item_stack_make(def->inputs[0], def->input_count, ITEM_QUALITY_BEST,
-                                      material->max_hit_points);
-    ItemStack made[RECIPE_PRODUCT_MAX];
-    int count = recipe_craft(recipe, input, level, NULL, made);
-    for (int i = 0; i < count; i++) {
-        if (made[i].type == def->product) {
-            return made[i];
-        }
-    }
-    return item_stack_make(ITEM_NONE, 0, 0, 0);
+    return recipe_average_product(recipe, ITEM_NONE, ITEM_QUALITY_BEST, 0, level);
 }
 
 /* The tooltip of a recipe's knowledge: what it does for this recipe, at the
@@ -1181,11 +1208,20 @@ static int knowledge_tooltip(char lines[UI_TOOLTIP_LINES][TEXT_SIZE], RecipeType
     return count;
 }
 
-/* The details of a recipe: what making it takes and gives. */
-static void recipe_rows(UiLayout *layout, void *userdata)
+/* A row whose tooltip is the given lines (none when `count` is 0). */
+static void detail_row_tip(UiLayout *layout, const char *label_key, const char *value,
+                           const char *const *lines, int count)
 {
-    StationRows *rows = userdata;
-    RecipeType recipe = rows->recipe;
+    SDL_FRect row = detail_row(layout, label_key, value, count > 0);
+    if (count > 0 && layout->draw && ui_hovered(layout->ui, row)) {
+        ui_tooltip(layout->ui, lines, count);
+    }
+}
+
+/* What making the recipe takes: the work, the knowledge (its effects in the
+ * tooltip), the ingredients and the time. */
+static void making_rows(UiLayout *layout, RecipeType recipe)
+{
     const RecipeDef *def = recipe_def(recipe);
     char text[TEXT_SIZE], number[16];
     detail_row(layout, "station.recipe.work", tr(work_type_def(WORK_CRAFTING)->name_key), false);
@@ -1193,16 +1229,13 @@ static void recipe_rows(UiLayout *layout, void *userdata)
         tr_integer(number, sizeof(number), (long long)def->min_level);
         TR_FORMAT(text, sizeof(text), tr("recipe.knowledge_level"),
                   tr(knowledge_def(def->knowledge)->name_key), number);
-        SDL_FRect row = detail_row(layout, "station.recipe.knowledge", text, true);
-        if (layout->draw && ui_hovered(layout->ui, row)) {
-            char lines[UI_TOOLTIP_LINES][TEXT_SIZE];
-            const char *shown[UI_TOOLTIP_LINES];
-            int count = knowledge_tooltip(lines, recipe);
-            for (int i = 0; i < count; i++) {
-                shown[i] = lines[i];
-            }
-            ui_tooltip(layout->ui, shown, count);
+        char lines[UI_TOOLTIP_LINES][TEXT_SIZE];
+        const char *shown[UI_TOOLTIP_LINES];
+        int count = knowledge_tooltip(lines, recipe);
+        for (int i = 0; i < count; i++) {
+            shown[i] = lines[i];
         }
+        detail_row_tip(layout, "station.recipe.knowledge", text, shown, count);
     } else {
         detail_row(layout, "station.recipe.knowledge", tr("station.recipe.none"), false);
     }
@@ -1210,14 +1243,234 @@ static void recipe_rows(UiLayout *layout, void *userdata)
     detail_row(layout, "station.recipe.ingredients", text, false);
     duration_text(text, sizeof(text), def->work);
     detail_row(layout, "station.recipe.time", text, false);
-    layout->y += GAP;
-    /* The thing made. */
+}
+
+/* The species a wooden product will be of, and what they make of it in the
+ * tooltip: weight, how long it lasts, the quality of a shaft. */
+static void wood_detail_row(UiLayout *layout, WoodMask woods)
+{
+    char text[TEXT_SIZE], number[16];
+    if (woods == 0) {
+        SDL_strlcpy(text, tr("station.recipe.wood_any"), sizeof(text));
+        detail_row(layout, "station.recipe.wood", text, false);
+        return;
+    }
+    wood_list_name(woods, text, sizeof(text));
+    char lines[3][TEXT_SIZE];
+    const char *shown[3];
+    tr_decimal(number, sizeof(number), wood_weight(woods), 2);
+    TR_FORMAT(lines[0], TEXT_SIZE, tr("station.recipe.wood.weight"), number);
+    tr_decimal(number, sizeof(number), wood_toughness(woods), 2);
+    TR_FORMAT(lines[1], TEXT_SIZE, tr("station.recipe.wood.toughness"), number);
+    char signed_number[16];
+    tr_integer(number, sizeof(number), wood_shafts(woods));
+    SDL_snprintf(signed_number, sizeof(signed_number), "%s%s", wood_shafts(woods) > 0 ? "+" : "",
+                 number);
+    TR_FORMAT(lines[2], TEXT_SIZE, tr("station.recipe.wood.shafts"), signed_number);
+    for (int i = 0; i < 3; i++) {
+        shown[i] = lines[i];
+    }
+    detail_row_tip(layout, "station.recipe.wood", text, shown, 3);
+}
+
+/* What the product is: its name, weight (of the bill's species), room, size,
+ * form, hit points, wood, food and how long it keeps. */
+static void item_rows(UiLayout *layout, RecipeType recipe, const Bill *bill)
+{
+    const RecipeDef *def = recipe_def(recipe);
     const ItemDef *product = item_def(def->product);
+    char text[TEXT_SIZE], number[16];
     detail_row(layout, "station.recipe.result", tr(product->name_key), false);
-    quantity_text(text, sizeof(text), product->weight, "unit.kg");
+    WoodMask woods = bill != NULL && product->wooden ? bill->woods : 0;
+    ItemStack one = item_stack_make(def->product, 1, ITEM_QUALITY_STANDARD, 0);
+    one.woods = woods;
+    quantity_text(text, sizeof(text), item_stack_mass(one), "unit.kg");
     detail_row(layout, "station.recipe.weight", text, false);
     quantity_text(text, sizeof(text), product->bulk, NULL);
     detail_row(layout, "station.recipe.bulk", text, false);
+    if (product->length_cm > 0) {
+        tr_integer(number, sizeof(number), product->length_cm);
+        TR_FORMAT(text, sizeof(text), tr("station.recipe.size_cm"), number);
+    } else {
+        SDL_strlcpy(text, tr("station.recipe.size_loose"), sizeof(text));
+    }
+    detail_row(layout, "station.recipe.size", text, false);
+    const char *form = item_form_name_key(product->form);
+    if (form != NULL) {
+        detail_row(layout, "station.recipe.form", tr(form), false);
+    }
+    if (product->damageable) {
+        tr_integer(number, sizeof(number), product->max_hit_points);
+        detail_row(layout, "station.recipe.hit_points", number, false);
+    }
+    if (product->wooden) {
+        wood_detail_row(layout, woods);
+    }
+    if (product->nutrition > 0.0f) {
+        percent_text(text, sizeof(text), product->nutrition);
+        detail_row(layout, "station.recipe.nutrition", text, false);
+    }
+    if (product->rot_days > 0.0f) {
+        char celsius[32];
+        tr_decimal(number, sizeof(number), product->rot_days, product->rot_days < 10.0f ? 1 : 0);
+        tr_integer(celsius, sizeof(celsius), (long long)ITEM_ROT_REFERENCE_CELSIUS);
+        char temperature[32];
+        TR_FORMAT(temperature, sizeof(temperature), tr("unit.celsius"), celsius);
+        TR_FORMAT(text, sizeof(text), tr("station.recipe.keeps"), number, temperature);
+        detail_row(layout, "station.recipe.rot", text, false);
+    }
+}
+
+/* What the product does as a tool: a row per kind of work it speeds up. */
+static void tool_rows(UiLayout *layout, ItemType type)
+{
+    bool heading = false;
+    for (int use = 0; use < TOOL_USE_COUNT; use++) {
+        float factor = tool_type_factor((ToolUse)use, type);
+        if (factor <= 0.0f) {
+            continue;
+        }
+        if (!heading) {
+            layout->y += GAP;
+            heading_row(layout, "station.recipe.heading.tool");
+            heading = true;
+        }
+        char number[16], text[TEXT_SIZE];
+        tr_decimal(number, sizeof(number), factor, 1);
+        TR_FORMAT(text, sizeof(text), tr("station.recipe.tool_speed"), number);
+        ui_layout_pair(layout, tr(tool_use_def((ToolUse)use)->name_key), text,
+                       layout->ui->theme.colors[THEME_TEXT], false);
+    }
+}
+
+/* What the product does as a weapon: its attack, hands, damage, pace,
+ * accuracy and damage per second. */
+static void weapon_rows(UiLayout *layout, ItemType type)
+{
+    const WeaponDef *weapon = weapon_def(type);
+    const AttackDef *attack = weapon != NULL ? attack_def((AttackType)weapon->attack) : NULL;
+    if (attack == NULL) {
+        return;
+    }
+    layout->y += GAP;
+    heading_row(layout, "station.recipe.heading.weapon");
+    char text[TEXT_SIZE], number[16];
+    detail_row(layout, "station.recipe.attack", tr(attack->name_key), false);
+    detail_row(layout, "station.recipe.hands",
+               tr(weapon->hands >= 2 ? "station.recipe.two_hands" : "station.recipe.one_hand"),
+               false);
+    tr_decimal(number, sizeof(number), attack->damage, 1);
+    const char *damage_tip = tr("station.recipe.damage.description");
+    detail_row_tip(layout, "station.recipe.damage", number, &damage_tip, 1);
+    tr_decimal(number, sizeof(number), attack->interval, 1);
+    TR_FORMAT(text, sizeof(text), tr("station.recipe.blow_every"), number);
+    detail_row(layout, "station.recipe.pace", text, false);
+    percent_text(text, sizeof(text), attack->accuracy);
+    detail_row(layout, "station.recipe.accuracy", text, false);
+    tr_decimal(number, sizeof(number), attack->damage / attack->interval, 1);
+    char line[TEXT_SIZE], hits[16];
+    tr_decimal(hits, sizeof(hits), attack_worth((AttackType)weapon->attack), 1);
+    TR_FORMAT(line, sizeof(line), tr("station.recipe.dps.description"), hits);
+    const char *dps_tip = line;
+    detail_row_tip(layout, "station.recipe.dps", number, &dps_tip, 1);
+}
+
+/* "Ada (level 45)", or "3 settlers (levels 40 to 80)". */
+static void crafters_text(char *out, size_t size, const Game *game, const BillEstimate *estimate,
+                          bool knowledge)
+{
+    char low[16], high[16];
+    tr_integer(low, sizeof(low), (long long)estimate->low_level);
+    tr_integer(high, sizeof(high), (long long)estimate->high_level);
+    if (estimate->crafters == 1) {
+        const Colonist *colonist = game_colonist_const(game, estimate->low_crafter);
+        const char *name = colonist != NULL ? colonist->name : "";
+        if (knowledge) {
+            TR_FORMAT(out, size, tr("station.recipe.crafter_level"), name, low);
+        } else {
+            SDL_strlcpy(out, name, size);
+        }
+        return;
+    }
+    char count[16];
+    tr_integer(count, sizeof(count), estimate->crafters);
+    if (knowledge && SDL_strcmp(low, high) != 0) {
+        TR_FORMAT(out, size, tr("station.recipe.crafters_levels"), count, low, high);
+    } else {
+        TR_FORMAT(out, size, tr_plural("station.recipe.crafters", estimate->crafters), count);
+    }
+}
+
+/* "47", or "30 to 52" when the two differ. */
+static void range_text(char *out, size_t size, const char *low, const char *high)
+{
+    if (SDL_strcmp(low, high) == 0) {
+        SDL_strlcpy(out, low, size);
+    } else {
+        TR_FORMAT(out, size, tr("station.recipe.range"), low, high);
+    }
+}
+
+/* What the bill's craft makes on average, by who may take it
+ * (game_bill_estimate()): quality, condition and count. */
+static void estimate_rows(UiLayout *layout, const Game *game, const Bill *bill)
+{
+    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    const ItemDef *product = item_def(def->product);
+    layout->y += GAP;
+    heading_row(layout, "station.recipe.heading.estimate");
+    BillEstimate estimate = game_bill_estimate(game, bill);
+    if (estimate.crafters == 0) {
+        ui_layout_label(layout, tr("station.recipe.estimate.nobody"), 0.0f, true);
+        return;
+    }
+    char text[TEXT_SIZE], low[32], high[32];
+    crafters_text(text, sizeof(text), game, &estimate, def->knowledge != KNOWLEDGE_NONE);
+    detail_row(layout,
+               estimate.crafters == 1 ? "station.recipe.crafter" : "station.recipe.crafters_label",
+               text, false);
+    if (product->has_quality) {
+        hud_quality_text(low, sizeof(low), (ItemQuality)estimate.low.quality);
+        hud_quality_text(high, sizeof(high), (ItemQuality)estimate.high.quality);
+        range_text(text, sizeof(text), low, high);
+        char cap[16];
+        tr_integer(cap, sizeof(cap), bill->max_quality);
+        char line[TEXT_SIZE];
+        TR_FORMAT(line, sizeof(line), tr("station.recipe.quality.description"), cap);
+        const char *tip = line;
+        detail_row_tip(layout, "station.recipe.quality", text, &tip, 1);
+    }
+    if (product->damageable) {
+        percent_text(low, sizeof(low), (float)item_stack_hit_points_percent(estimate.low) / 100.0f);
+        percent_text(high, sizeof(high),
+                     (float)item_stack_hit_points_percent(estimate.high) / 100.0f);
+        range_text(text, sizeof(text), low, high);
+        detail_row(layout, "station.recipe.condition", text, false);
+    }
+    if (estimate.low.count != 1 || estimate.high.count != 1) {
+        tr_integer(low, sizeof(low), estimate.low.count);
+        tr_integer(high, sizeof(high), estimate.high.count);
+        range_text(text, sizeof(text), low, high);
+        detail_row(layout, "station.recipe.count", text, false);
+    }
+}
+
+/* The details of a recipe: what making it takes, what it makes (as a tool,
+ * as a weapon), and what the bill's craftsmen would make of it. */
+static void recipe_rows(UiLayout *layout, void *userdata)
+{
+    StationRows *rows = userdata;
+    RecipeType recipe = rows->recipe;
+    const RecipeDef *def = recipe_def(recipe);
+    making_rows(layout, recipe);
+    layout->y += GAP;
+    heading_row(layout, "station.recipe.heading.item");
+    item_rows(layout, recipe, rows->bill);
+    tool_rows(layout, def->product);
+    weapon_rows(layout, def->product);
+    if (rows->bill != NULL) {
+        estimate_rows(layout, rows->game, rows->bill);
+    }
 }
 
 /* The details of `recipe` in a window docked after the window `after`;
@@ -1240,10 +1493,12 @@ static void add_windows(App *app, StationRows *rows)
             app->station_bill_picked = false;
             return;
         }
-        RecipeType recipe = (RecipeType)rows->station->bills[app->station_bill].recipe;
+        const Bill *bill = &rows->station->bills[app->station_bill];
+        RecipeType recipe = (RecipeType)bill->recipe;
         bool shown = true;
         inspector_side_window(app, APP_WINDOW_STATION_BILL, APP_WINDOW_INSPECTOR_TAB,
-                              tr(recipe_def(recipe)->name_key), bill_rows, rows, &shown);
+                              tr("station.bill_settings"), bill_rows, rows, &shown);
+        rows->bill = bill;
         /* The same details as when adding a bill, at its right. */
         app->station_bill_picked =
             shown && recipe_window(app, rows, recipe, APP_WINDOW_STATION_BILL);
@@ -1252,28 +1507,104 @@ static void add_windows(App *app, StationRows *rows)
     if (!app->station_add_open) {
         return;
     }
-    bool open = true;
-    inspector_side_window(app, APP_WINDOW_STATION_ADD, APP_WINDOW_INSPECTOR_TAB,
-                          tr("station.add_bill"), add_rows, rows, &open);
-    if (!open) {
-        app->station_add_open = false;
-        app->station_recipe_picked = false;
-        return;
-    }
     RecipeType recipes[RECIPE_COUNT];
     int count = station_recipes(rows->station, recipes);
     bool known = false; /* A recipe of another kind of station is dropped. */
     for (int i = 0; i < count; i++) {
         known = known || (int)recipes[i] == app->station_recipe;
     }
-    if (app->station_recipe_picked && known) {
-        app->station_recipe_picked =
-            recipe_window(app, rows, (RecipeType)app->station_recipe, APP_WINDOW_STATION_ADD);
+    bool picked = app->station_recipe_picked && known;
+    /* The list, the settings and the details side by side, unless they are
+     * wider than the screen (widths of the last frame): the settings then take
+     * the list's place, and closing them brings it back. */
+    bool list = true;
+    if (picked) {
+        const Ui *ui = &app->ui;
+        SDL_FRect tab = ui_window_rect(ui, APP_WINDOW_INSPECTOR_TAB);
+        float width = tab.x + tab.w + 3.0f * ui->theme.gap +
+                      ui_window_rect(ui, APP_WINDOW_STATION_ADD).w +
+                      ui_window_rect(ui, APP_WINDOW_STATION_DRAFT).w +
+                      ui_window_rect(ui, APP_WINDOW_STATION_RECIPE).w;
+        list = width <= ui->screen_width;
+    }
+    if (list) {
+        bool open = true;
+        inspector_side_window(app, APP_WINDOW_STATION_ADD, APP_WINDOW_INSPECTOR_TAB,
+                              tr("station.add_bill"), add_rows, rows, &open);
+        if (!open) {
+            app->station_add_open = false;
+            app->station_recipe_picked = false;
+            return;
+        }
+    }
+    if (!picked) {
+        return;
+    }
+    /* Its settings, then what it makes at their right. */
+    RecipeType recipe = (RecipeType)app->station_recipe;
+    if (app->station_draft.recipe != (uint8_t)recipe) {
+        bill_init(&app->station_draft, recipe);
+    }
+    bool shown = true;
+    inspector_side_window(app, APP_WINDOW_STATION_DRAFT,
+                          list ? APP_WINDOW_STATION_ADD : APP_WINDOW_INSPECTOR_TAB,
+                          tr("station.bill_settings"), draft_rows, rows, &shown);
+    rows->bill = &app->station_draft;
+    app->station_recipe_picked =
+        shown && recipe_window(app, rows, recipe, APP_WINDOW_STATION_DRAFT);
+}
+
+/* The first settler alive (ENTITY_NONE: none): the one a bill for a
+ * specific settler starts with, until the player picks another. */
+static EntityId first_colonist(const Game *game)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        EntityId colonist = game_colonist_id_at(game, slot);
+        if (!entity_id_is_none(colonist)) {
+            return colonist;
+        }
+    }
+    return ENTITY_NONE;
+}
+
+/* A change to the settings of the bill to add (App.station_draft). */
+static void edit_draft(App *app, const Action *action)
+{
+    Bill *draft = &app->station_draft;
+    switch (action->type) {
+    case ACTION_TOGGLE_INPUT:
+        bill_set_input(draft, (ItemType)action->value,
+                       !(draft->inputs & ITEM_TYPE_BIT(action->value)));
+        break;
+    case ACTION_SET_WORKER:
+        bill_set_worker(draft, (BillWorker)action->value,
+                        entity_id_is_none(draft->colonist) ? first_colonist(&app->game)
+                                                           : draft->colonist);
+        break;
+    case ACTION_SET_COLONIST: bill_set_worker(draft, BILL_WORKER_SPECIFIC, action->colonist); break;
+    case ACTION_SET_LEVELS:
+        /* Each bound stays within the other: the one that moves away goes first. */
+        if (action->value > draft->max_level) {
+            bill_set_max_level(draft, action->value2);
+            bill_set_min_level(draft, action->value);
+        } else {
+            bill_set_min_level(draft, action->value);
+            bill_set_max_level(draft, action->value2);
+        }
+        break;
+    case ACTION_SET_QUALITY: bill_set_quality_range(draft, action->value, action->value2); break;
+    case ACTION_SET_WOODS: bill_set_woods(draft, (WoodMask)action->value); break;
+    case ACTION_SET_RADIUS: bill_set_input_radius(draft, action->value); break;
+    default: break;
     }
 }
 
 static void apply(App *app, int index, const Action *action)
 {
+    if (action->bill == DRAFT_BILL) {
+        edit_draft(app, action);
+        return;
+    }
     Workstations *workstations = &app->game.workstations;
     const Workstation *station = workstation_get_const(workstations, index);
     const Bill *bill = action->bill >= 0 && action->bill < station->bill_count
@@ -1314,13 +1645,7 @@ static void apply(App *app, int index, const Action *action)
         if (bill != NULL) {
             EntityId colonist = bill->colonist;
             if (action->value == BILL_WORKER_SPECIFIC && entity_id_is_none(colonist)) {
-                /* The first settler alive, until the player picks another. */
-                for (uint32_t slot = 0; slot < game_colonist_slot_count(&app->game); slot++) {
-                    colonist = game_colonist_id_at(&app->game, slot);
-                    if (!entity_id_is_none(colonist)) {
-                        break;
-                    }
-                }
+                colonist = first_colonist(&app->game);
             }
             workstation_set_bill_worker(workstations, index, action->bill,
                                         (BillWorker)action->value, colonist);
@@ -1366,7 +1691,13 @@ static void apply(App *app, int index, const Action *action)
         }
         break;
     case ACTION_ADD_BILL:
-        workstation_add_bill(workstations, index, (RecipeType)action->value);
+        /* As set up in its settings window, when it is the recipe picked. */
+        if (app->station_recipe_picked && app->station_recipe == action->value &&
+            app->station_draft.recipe == (uint8_t)action->value) {
+            workstation_add_bill_from(workstations, index, &app->station_draft);
+        } else {
+            workstation_add_bill(workstations, index, (RecipeType)action->value);
+        }
         break;
     case ACTION_TOGGLE_ADD_LIST:
         app->station_add_open = !app->station_add_open;
@@ -1374,6 +1705,9 @@ static void apply(App *app, int index, const Action *action)
         app->station_bill_picked = false;
         break;
     case ACTION_PICK_RECIPE:
+        if (!app->station_recipe_picked || app->station_recipe != action->value) {
+            bill_init(&app->station_draft, (RecipeType)action->value); /* Settings anew. */
+        }
         app->station_recipe = action->value;
         app->station_recipe_picked = true;
         break;
@@ -1410,7 +1744,8 @@ void station_panel_draw(App *app)
         return;
     }
     const char *title = tr(workstation_def((WorkstationType)station->type)->name_key);
-    StationRows rows = {app, RECIPE_COUNT, &app->game, station, {.type = ACTION_NONE, .bill = -1}};
+    StationRows rows = {app,        RECIPE_COUNT, NULL,
+                        &app->game, station,      {.type = ACTION_NONE, .bill = -1}};
     bool open = inspector_box(app, INSPECT_STATION, title, summary_rows, &rows);
     const char *tabs[2] = {tr("inspector.tab.bills"), tr("inspector.tab.fire")};
     int tab = inspector_tabs(app, tabs, hearth_is(station) ? 2 : 1);

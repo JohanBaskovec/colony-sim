@@ -849,6 +849,19 @@ bool game_recipe_known(const Game *game, RecipeType recipe);
  * accepts. */
 bool game_bill_has_worker(const Game *game, const Bill *bill);
 
+/* What a bill's craft makes on average (the bills' window): among the
+ * living settlers who may take it (game_bill_has_worker()'s), the product of
+ * the least and of the most skilled at their working level, from the first
+ * input type the bill allows at the best quality it allows, of its species
+ * (recipe_average_product()). */
+typedef struct BillEstimate {
+    int crafters;                 /* Settlers who may take it; 0: the rest is unset. */
+    double low_level, high_level; /* Their working levels (colonist_work_level()). */
+    EntityId low_crafter, high_crafter;
+    ItemStack low, high; /* What each makes on average. */
+} BillEstimate;
+BillEstimate game_bill_estimate(const Game *game, const Bill *bill);
+
 /* Tool kinds a recipe needs that no living colonist carries and that lie
  * nowhere in the colony (0 when every tool can be had, or none is needed:
  * GameDebug.no_tools): one mask per missing slot, joined. */

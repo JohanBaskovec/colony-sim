@@ -264,6 +264,18 @@ const ItemDef *item_def(ItemType type)
     return (unsigned)type < ITEM_TYPE_COUNT ? &ITEM_DEFS[type] : NULL;
 }
 
+const char *item_form_name_key(ItemForm form)
+{
+    static const char *const KEYS[ITEM_FORM_COUNT] = {
+        [ITEM_FORM_NONE] = NULL,
+        [ITEM_FORM_RIGID] = N_("item.form.rigid"),
+        [ITEM_FORM_BUNDLE] = N_("item.form.bundle"),
+        [ITEM_FORM_LOOSE] = N_("item.form.loose"),
+        [ITEM_FORM_LIMP] = N_("item.form.limp"),
+    };
+    return (unsigned)form < ITEM_FORM_COUNT ? KEYS[form] : NULL;
+}
+
 bool item_is_long(ItemType type)
 {
     return (unsigned)type < ITEM_TYPE_COUNT && ITEM_DEFS[type].length_cm >= ITEM_LONG_CM;

@@ -1,4 +1,5 @@
 #include "core/recipe.h"
+#include "core/wood.h"
 #include "core/workstation.h"
 
 #include "test_framework.h"
@@ -115,6 +116,39 @@ static void test_products(void)
     CHECK_EQ_INT(recipe_craft(RECIPE_COUNT, branches, 60.0, NULL, out), 0);
 }
 
+/* What one craft makes on average, as the bills' window shows it. */
+static void test_average_product(void)
+{
+    /* Flakes: 5 at level 79, of the quality a craft makes then. */
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, ITEM_QUALITY_BEST), 79.0, NULL, out);
+    ItemStack flakes = recipe_average_product(RECIPE_FLAKES, ITEM_NONE, ITEM_QUALITY_BEST, 0, 79.0);
+    CHECK_EQ_INT(flakes.type, ITEM_FLAKE);
+    CHECK_EQ_INT(flakes.count, 5);
+    CHECK_EQ_INT(flakes.quality, out[0].quality);
+    /* Held at the material's quality + 20. */
+    flakes = recipe_average_product(RECIPE_FLAKES, ITEM_FLINT, 30, 0, 100.0);
+    CHECK_EQ_INT(flakes.quality, 30 + ITEM_QUALITY_CAP_BONUS);
+    /* A hand axe, not its flakes. */
+    ItemStack axe = recipe_average_product(RECIPE_HAND_AXE, ITEM_NONE, ITEM_QUALITY_BEST, 0, 70.0);
+    CHECK_EQ_INT(axe.type, ITEM_HAND_AXE);
+    CHECK_EQ_INT(axe.count, 1);
+    /* A spear of ash, the wood of shafts, beats one of birch; it keeps its wood. */
+    WoodMask ash = wood_bit(PLANT_ASH), birch = wood_bit(PLANT_BIRCH);
+    ItemStack of_ash =
+        recipe_average_product(RECIPE_THRUSTING_SPEAR, ITEM_NONE, ITEM_QUALITY_STANDARD, ash, 60.0);
+    ItemStack of_birch = recipe_average_product(RECIPE_THRUSTING_SPEAR, ITEM_NONE,
+                                                ITEM_QUALITY_STANDARD, birch, 60.0);
+    CHECK_EQ_INT(of_ash.type, ITEM_THRUSTING_SPEAR);
+    CHECK(of_ash.quality > of_birch.quality);
+    CHECK_EQ_UINT(of_ash.woods, ash);
+    /* Hardening keeps the spear's quality. */
+    ItemStack hardened =
+        recipe_average_product(RECIPE_HARDEN_THRUSTING_SPEAR, ITEM_NONE, 42, ash, 30.0);
+    CHECK_EQ_INT(hardened.quality, 42);
+    CHECK_EQ_INT(recipe_average_product(RECIPE_COUNT, ITEM_NONE, 50, 0, 50.0).type, ITEM_NONE);
+}
+
 static void test_hand_axe_failures(void)
 {
     CHECK_NEAR(recipe_failure_chance(RECIPE_HAND_AXE, 70.0), 0.40, 1e-6);
@@ -151,5 +185,6 @@ int main(void)
     RUN_TEST(test_quality_cap_from_materials);
     RUN_TEST(test_products);
     RUN_TEST(test_hand_axe_failures);
+    RUN_TEST(test_average_product);
     return test_summary();
 }

@@ -226,9 +226,19 @@ bool workstation_set_forbidden(Workstations *workstations, int index, bool forbi
  * counts in Workstations.revision. Returns whether it changed. */
 bool workstation_set_priority(Workstations *workstations, int index, int priority);
 
-/* Adds a bill for a recipe made at this kind of station (do once, every
- * input allowed). Returns its index, or -1. */
+/* A new bill for a recipe (do once, every input allowed, anyone, any
+ * quality and species): what the player sets up before adding it. False
+ * for no recipe. */
+bool bill_init(Bill *bill, RecipeType recipe);
+
+/* Adds a bill for a recipe made at this kind of station (bill_init()).
+ * Returns its index, or -1. */
 int workstation_add_bill(Workstations *workstations, int index, RecipeType recipe);
+
+/* Adds a bill set up beforehand (`draft`, from bill_init() and the bill_set_*
+ * functions); each setting goes through its setter, so that one out of range
+ * is a new bill's, and nothing is done yet. Returns its index, or -1. */
+int workstation_add_bill_from(Workstations *workstations, int index, const Bill *draft);
 
 /* Removes a bill; later bills move up. The input of a craft in progress for
  * this recipe is given back in `returned` when no other bill makes it
@@ -236,8 +246,21 @@ int workstation_add_bill(Workstations *workstations, int index, RecipeType recip
  * just called off). */
 bool workstation_remove_bill(Workstations *workstations, int index, int bill, ItemStack *returned);
 
-/* Changing a bill. Invalid values are refused (targets are clamped to
- * BILL_TARGET_MIN..BILL_TARGET_MAX). */
+/* Changing a bill on its own (a draft, or a station's: see below). Invalid
+ * values are refused (false), the same as for the station's. */
+bool bill_set_mode(Bill *bill, BillMode mode);
+bool bill_set_target(Bill *bill, int target);
+bool bill_set_input(Bill *bill, ItemType type, bool allowed);
+bool bill_set_worker(Bill *bill, BillWorker worker, EntityId colonist);
+bool bill_set_min_level(Bill *bill, int level);
+bool bill_set_max_level(Bill *bill, int level);
+bool bill_set_paused(Bill *bill, bool paused);
+bool bill_set_input_radius(Bill *bill, int radius);
+bool bill_set_quality_range(Bill *bill, int low, int high);
+bool bill_set_woods(Bill *bill, WoodMask woods);
+
+/* Changing a station's bill (each counted in Workstations.revision). Invalid
+ * values are refused (targets are clamped to BILL_TARGET_MIN..BILL_TARGET_MAX). */
 bool workstation_set_bill_mode(Workstations *workstations, int index, int bill, BillMode mode);
 bool workstation_set_bill_target(Workstations *workstations, int index, int bill, int target);
 /* Allows or forbids one of the recipe's input types. */
