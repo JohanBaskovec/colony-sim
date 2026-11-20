@@ -56,10 +56,11 @@ float weather_roll(uint64_t seed, uint64_t number, uint32_t salt)
     return (float)(hash >> 40) / (float)(1u << 24);
 }
 
+static const int ODDS[SEASON_COUNT][WEATHER_TYPE_COUNT] = WEATHER_SEASON_ODDS;
+
 WeatherType weather_next(WeatherType current, Season season, int hour, float keep_roll,
                          float draw_roll)
 {
-    static const int ODDS[SEASON_COUNT][WEATHER_TYPE_COUNT] = WEATHER_SEASON_ODDS;
     if ((unsigned)current >= WEATHER_TYPE_COUNT) {
         current = WEATHER_CLEAR;
     }
@@ -96,6 +97,55 @@ WeatherType weather_next(WeatherType current, Season season, int hour, float kee
         return BY_CLOUDINESS[from - 1];
     }
     return drawn;
+}
+
+void weather_season_shares(Season season, float shares[WEATHER_TYPE_COUNT])
+{
+    if ((unsigned)season >= SEASON_COUNT) {
+        season = SEASON_SPRING;
+    }
+    int total = 0;
+    for (int type = 0; type < WEATHER_TYPE_COUNT; type++) {
+        total += ODDS[season][type];
+        shares[type] = 0.0f;
+    }
+    /* The chances of each sky, period after period from a clear one, through
+     * weather_next() itself (a draw in the middle of each sky's odds); the
+     * first days are left out, the sky forgets where it began. */
+    float chance[WEATHER_TYPE_COUNT] = {[WEATHER_CLEAR] = 1.0f};
+    const int periods = HOURS_PER_DAY / WEATHER_PERIOD_HOURS;
+    float counted = 0.0f;
+    for (int day = 0; day < WEATHER_SHARE_DAYS; day++) {
+        for (int period = 0; period < periods; period++) {
+            int hour = period * WEATHER_PERIOD_HOURS;
+            float next[WEATHER_TYPE_COUNT] = {0};
+            for (int from = 0; from < WEATHER_TYPE_COUNT; from++) {
+                bool keeps = from != WEATHER_FOG || hour < WEATHER_FOG_BEFORE_HOUR;
+                float keep = keeps ? WEATHER_PERSISTENCE : 0.0f;
+                next[from] += chance[from] * keep;
+                int below = 0;
+                for (int drawn = 0; drawn < WEATHER_TYPE_COUNT; drawn++) {
+                    int odds = ODDS[season][drawn];
+                    if (odds > 0) {
+                        float roll = ((float)below + 0.5f * (float)odds) / (float)total;
+                        WeatherType to = weather_next((WeatherType)from, season, hour, 1.0f, roll);
+                        next[to] += chance[from] * (1.0f - keep) * (float)odds / (float)total;
+                    }
+                    below += odds;
+                }
+            }
+            for (int type = 0; type < WEATHER_TYPE_COUNT; type++) {
+                chance[type] = next[type];
+                if (day >= WEATHER_SHARE_DAYS / 2) {
+                    shares[type] += next[type];
+                }
+            }
+            counted += day >= WEATHER_SHARE_DAYS / 2 ? 1.0f : 0.0f;
+        }
+    }
+    for (int type = 0; type < WEATHER_TYPE_COUNT; type++) {
+        shares[type] /= counted;
+    }
 }
 
 /* A roll of about a standard normal distribution (sum of four uniforms). */

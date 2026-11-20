@@ -2034,6 +2034,20 @@ bool plant_light_suits(const Map *map, PlantType type, int x, int y, int z, floa
     return light * PLANT_SPREAD_SUN >= def->light_min;
 }
 
+float plant_dark_share_borne(PlantType type)
+{
+    const PlantDef *def = plant_def(type);
+    if (def == NULL || type == PLANT_NONE) {
+        return 0.0f;
+    }
+    if (def->dark_days <= 0.0f) {
+        return 1.0f;
+    }
+    /* share * harm = (1 - share) * mend, in an hour. */
+    float harm = 1.0f / (def->dark_days * (float)HOURS_PER_DAY);
+    return PLANT_RECOVERY / (PLANT_RECOVERY + harm);
+}
+
 bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z, float light)
 {
     if ((unsigned)type >= PLANT_COUNT || type == PLANT_NONE || !map_in_bounds(map, x, y, z)) {

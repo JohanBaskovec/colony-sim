@@ -288,10 +288,14 @@ expected warmth of the day.
 - Darkness is judged on the day's best light (`light_peak`), so nights do not
   count: an awake plant whose best light stays under `light_min` loses
   `1 / (dark_days × 24)` of its health an hour. A plant that rests needs no
-  light; a fungus (`dark_days` 0) none at all. A new game takes away at the
-  start the generated plants whose tile is too dark for them to take root
-  (`plant_light_suits()`: about one tuft of grass in eight on seed 42); a
-  tree without a trunk shaded by others' crowns can still starve.
+  light; a fungus (`dark_days` 0) none at all. A plant dark for a share of
+  its awake hours lives as long as it mends in the others what the dark
+  takes: grass bears about 71 % of its hours in the dark
+  (`plant_dark_share_borne()`). Under a clear sky the noon light is the sky
+  and the sun; under clouds only the sky, dimmed: a tile in the shade of a
+  crown that sees much of the sky is lit on cloudy days. World generation
+  places the plants where they last all year (§10); a tree without a trunk
+  shaded by others' crowns can still starve.
 - The plant window says "little light" or "starving in the dark", and the
   rate it shows is the most it can make in a day ("Grows up to 11% a day").
 - Cost: `bench_simulation` 4 days 35 → 45 µs a tick, almost all of it settlers
@@ -355,8 +359,14 @@ from the light each tile gets (`map_light_cover()`, §5) and from the ground:
 4. **The shores** (`place_shore_plants()`): cattails, and reeds in beds of
    their own.
 
-Nothing is generated where it would starve (a test checks it); the few
-deaths left in the first weeks are saplings whose crowns thicken.
+Nothing is generated where it would starve in the years to come (a test
+checks it): each plant is judged on its **dark day**, the brightest of its
+last `dark_days` awake days under the leaves before its winter rest (in the
+autumn for grass, at midsummer for moss), with the skies of that season:
+the hours its best light falls short must stay within what it mends from
+(docs/ARCHITECTURE.md, *Plants*). A pit the sun never reaches stays bare;
+on seed 42, about 35 plants of 12 000 starve in the first year (a dark
+autumn, crowns growing), against 254 if only the summer's light counted.
 
 ### The plants
 

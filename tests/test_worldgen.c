@@ -1,5 +1,9 @@
 #include "core/worldgen.h"
 
+#include "core/game_clock.h"
+#include "core/shadow.h"
+#include "core/sun.h"
+#include "core/temperature.h"
 #include "core/tree.h"
 
 #include "test_framework.h"
@@ -338,10 +342,13 @@ static void test_the_understory_follows_the_shade(void)
     long counts[PLANT_COUNT] = {0};
     double cover[PLANT_COUNT] = {0};
     long reeds_away_from_water = 0;
+    float share = shadow_direct_share(
+        sun_position(SUN_LATITUDE_DEFAULT, GAME_START_DAY, 12.0f).elevation, 1.0f);
     for (uint64_t seed = 1; seed <= 3; seed++) {
         WorldGenParams params = params_for_seed(seed);
         Map map;
-        REQUIRE(worldgen_generate(&map, &params));
+        TileLight light;
+        REQUIRE(worldgen_generate_lit(&map, &params, &light));
         for (int y = 0; y < map.height; y++) {
             for (int x = 0; x < map.width; x++) {
                 int z = map_ground_level(&map, x, y);
@@ -350,13 +357,11 @@ static void test_the_understory_follows_the_shade(void)
                     map.rock[map_index(&map, x, y, z)] != ROCK_NONE) {
                     continue;
                 }
-                const PlantDef *def = plant_def((PlantType)plant->type);
-                float light = map_light_cover(&map, x, y, z);
+                /* The light of the tile at noon on the first day (what lasts
+                 * all year: test_generated_plants_live_all_year()). */
                 counts[plant->type]++;
-                cover[plant->type] += light;
-                if (!def->wetland) {
-                    CHECK(light >= def->light_min); /* Not born to starve. */
-                }
+                cover[plant->type] += (1.0f - share) * tile_light_open(&light, x, y, z) +
+                                      share * tile_light_noon(&light, x, y, z);
                 if (plant->type == PLANT_REED) {
                     bool by_water = false;
                     for (int d = 0; d < 9; d++) {
@@ -366,6 +371,7 @@ static void test_the_understory_follows_the_shade(void)
                 }
             }
         }
+        tile_light_free(&light);
         map_free(&map);
     }
     for (int type = PLANT_MOSS; type < PLANT_COUNT; type++) {
@@ -442,6 +448,121 @@ static void test_no_heath_on_the_banks(void)
     CHECK(shore > 100);
 }
 
+static float noon_sun(int day)
+{
+    return sun_position(SUN_LATITUDE_DEFAULT, day, 12.0f).elevation;
+}
+
+static float mean_of_day(int day)
+{
+    return temperature_season_mean((uint64_t)day * TICKS_PER_DAY + TICKS_PER_DAY / 2);
+}
+
+/* A plant is judged by its light on the brightest of its last awake days
+ * under the leaves, as many as it bears in the dark: in the autumn for grass;
+ * at midsummer for moss, which bears two months; in the spring for wild
+ * garlic, which rests from the heat on. Trees, and what needs no light, are
+ * not judged. */
+static void test_plant_dark_days(void)
+{
+    for (int type = PLANT_NONE + 1; type < PLANT_COUNT; type++) {
+        int day = worldgen_plant_dark_day((PlantType)type);
+        const PlantDef *def = plant_def((PlantType)type);
+        if (plant_is_tree((uint8_t)type) || def->dark_days <= 0.0f) {
+            CHECK_EQ_INT(day, -1);
+            continue;
+        }
+        REQUIRE(day >= 0 && day < DAYS_PER_YEAR);
+        CHECK(mean_of_day(day) >= def->t_min); /* Awake. */
+    }
+    /* Grass bears the dark for ten days: judged in the autumn, ten days before
+     * the cold puts it to rest, its sun lower than now. */
+    int grass = worldgen_plant_dark_day(PLANT_GRASS);
+    CHECK(grass >= SEASON_DAY(SEASON_AUTUMN, 0) && grass < SEASON_DAY(SEASON_WINTER, 0));
+    CHECK(mean_of_day(grass + 10) < plant_def(PLANT_GRASS)->t_min + 5.0f);
+    CHECK(noon_sun(grass) < noon_sun(GAME_START_DAY) - 10.0f);
+    /* Moss bears it for two months: judged on its brightest day in leaf. */
+    CHECK(noon_sun(worldgen_plant_dark_day(PLANT_MOSS)) > noon_sun(grass) + 15.0f);
+    /* Wild garlic is gone before the summer's heat. */
+    int garlic = worldgen_plant_dark_day(PLANT_WILD_GARLIC);
+    CHECK(garlic < GAME_START_DAY);
+    CHECK_EQ_INT(worldgen_plant_dark_day(PLANT_NONE), -1);
+    CHECK_EQ_INT(worldgen_plant_dark_day(PLANT_COUNT), -1);
+}
+
+/* Ground three levels up everywhere, a pit one tile wide down to level 0 at
+ * (24, 24): grass at its bottom sees a sliver of sky and never the sun. */
+static void build_pit(Map *map)
+{
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            bool pit = x == 24 && y == 24;
+            for (int z = 0; z < map->depth; z++) {
+                if (z < 3 && !(pit && z > 0)) {
+                    map_set_terrain(map, x, y, z,
+                                    z == 0 && pit ? TERRAIN_SOIL : TERRAIN_ROUGH_STONE);
+                    if (!pit) {
+                        map_set_rock(map, x, y, z, ROCK_GRANITE);
+                    }
+                } else {
+                    map_set_terrain(map, x, y, z, z == 3 && !pit ? TERRAIN_SOIL : TERRAIN_OPEN);
+                }
+            }
+        }
+    }
+    map->surface_level = 3;
+    map->top_ground_level = 3;
+}
+
+/* Grass at the bottom of a deep pit would starve before the year is out;
+ * the same grass in the open, or by the rim, lives, and so would moss at the
+ * bottom (it needs next to no light). */
+static void test_a_deep_pit_starves_its_plants(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 48, 48, 8));
+    build_pit(&map);
+    map.plants[map_index(&map, 24, 24, 0)].type = PLANT_GRASS; /* The bottom. */
+    map.plants[map_index(&map, 10, 10, 3)].type = PLANT_GRASS; /* The open. */
+    map.plants[map_index(&map, 24, 25, 3)].type = PLANT_GRASS; /* The rim, south. */
+    map.plants[map_index(&map, 30, 30, 3)].type = PLANT_HEATHER;
+    TileLight light;
+    REQUIRE(tile_light_init(&light, &map, GAME_START_TICK));
+    CHECK(tile_light_open(&light, 24, 24, 0) < 0.1f);
+    CHECK_EQ_UINT(worldgen_starving_plants(&map, &light), 1);
+    /* Moss lives on the sliver of sky. */
+    map.plants[map_index(&map, 24, 24, 0)].type = PLANT_MOSS;
+    CHECK_EQ_UINT(worldgen_starving_plants(&map, &light), 0);
+    tile_light_free(&light);
+    map_free(&map);
+}
+
+/* Nothing the generator sets would starve in the dark before the year is
+ * out: every plant gets light enough on its dark day; the light it hands
+ * over is the map's, and the map the same as without it. */
+static void test_generated_plants_live_all_year(void)
+{
+    for (uint64_t seed = 1; seed <= 3; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map, plain;
+        TileLight light;
+        REQUIRE(worldgen_generate_lit(&map, &params, &light));
+        REQUIRE(worldgen_generate(&plain, &params));
+        CHECK(map_hash(&map) == map_hash(&plain));
+        CHECK_EQ_INT(light.levels, map.top_ground_level + 1);
+        int plants = 0;
+        for (size_t i = 0; i < (size_t)light.count; i++) {
+            uint8_t type = map.plants[i].type;
+            plants += type != PLANT_NONE && !plant_is_tree(type);
+        }
+        CHECK(plants > 500);
+        CHECK_EQ_UINT(worldgen_starving_plants(&map, &light), 0);
+        tile_light_free(&light);
+        map_free(&map);
+        map_free(&plain);
+    }
+}
+
 int main(void)
 {
     RUN_TEST(test_same_seed_gives_identical_map);
@@ -455,6 +576,9 @@ int main(void)
     RUN_TEST(test_flat);
     RUN_TEST(test_trees);
     RUN_TEST(test_the_understory_follows_the_shade);
+    RUN_TEST(test_plant_dark_days);
+    RUN_TEST(test_a_deep_pit_starves_its_plants);
+    RUN_TEST(test_generated_plants_live_all_year);
     RUN_TEST(test_poor_ground_plants_stay_on_poor_ground);
     RUN_TEST(test_no_heath_on_the_banks);
     return test_summary();

@@ -2,9 +2,13 @@
 
 #include "core/noise.h"
 #include "core/rng.h"
+#include "core/shadow.h"
 #include "core/soil.h"
+#include "core/sun.h"
+#include "core/temperature.h"
 #include "core/tree.h"
 #include "core/util.h"
+#include "core/weather.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -232,6 +236,253 @@ static void place_woody(Map *map, size_t index, Rng *rng, const WorldGenParams *
     plant_settle(plant, GAME_START_DAY);
 }
 
+/* ---- Light over the year ---------------------------------------------------- */
+
+/* The temperature a plant's climate follows (Plant.climate) is that of the
+ * air over its ground, which follows the outdoor air a day or so behind (the
+ * ground's warmth, core/temperature.h). */
+#define WORLDGEN_GROUND_LAG_HOURS 24
+
+static float noon_elevation(int day)
+{
+    return sun_position(SUN_LATITUDE_DEFAULT, day, 12.0f).elevation;
+}
+
+/* A plant's climate at noon on each day of the year, on open ground in an
+ * ordinary year: the running mean of advance_hour() over the seasons' mean
+ * temperature (temperature_season_mean()), the years gone by settling it. */
+static void year_climate(float climate[DAYS_PER_YEAR])
+{
+    const int hours = DAYS_PER_YEAR * HOURS_PER_DAY;
+    uint64_t lag = (uint64_t)WORLDGEN_GROUND_LAG_HOURS * TICKS_PER_HOUR;
+    uint64_t year = (uint64_t)hours * TICKS_PER_HOUR;
+    float mean = temperature_season_mean(year - lag);
+    for (int pass = 0; pass < 2; pass++) {
+        for (int hour = 0; hour < hours; hour++) {
+            uint64_t tick = year + (uint64_t)hour * TICKS_PER_HOUR - lag;
+            mean += (temperature_season_mean(tick) - mean) / PLANT_CLIMATE_HOURS;
+            if (hour % HOURS_PER_DAY == HOURS_PER_DAY / 2) {
+                climate[hour / HOURS_PER_DAY] = mean;
+            }
+        }
+    }
+}
+
+int worldgen_plant_dark_day(PlantType type)
+{
+    if ((unsigned)type >= PLANT_COUNT || type == PLANT_NONE || plant_is_tree(type)) {
+        return -1;
+    }
+    const PlantDef *def = plant_def(type);
+    if (def->dark_days <= 0.0f) {
+        return -1;
+    }
+    float climate[DAYS_PER_YEAR];
+    year_climate(climate);
+    /* The year counted from its coldest day: the awake time is all of a piece. */
+    int coldest = 0;
+    for (int day = 1; day < DAYS_PER_YEAR; day++) {
+        if (climate[day] < climate[coldest]) {
+            coldest = day;
+        }
+    }
+    int warmest = 0;
+    for (int i = 1; i < DAYS_PER_YEAR; i++) {
+        if (climate[(coldest + i) % DAYS_PER_YEAR] > climate[(coldest + warmest) % DAYS_PER_YEAR]) {
+            warmest = i;
+        }
+    }
+    /* Its awake days, as advance_hour() rests and wakes it, and those the
+     * crowns are in leaf (the trees follow the same climate). In the spring
+     * they leaf as the warmth comes; after midsummer they are counted in leaf
+     * until the cold: a warm spell in the autumn (WEATHER_SPELL_MAX) keeps
+     * the leaves on until it ends and the cold comes all at once, and what
+     * starves in such a year is gone after a few of them. */
+    bool awake[DAYS_PER_YEAR], leafy[DAYS_PER_YEAR];
+    bool up = false, resting_from_heat = false; /* Until the next winter. */
+    for (int i = 0; i < DAYS_PER_YEAR; i++) {
+        float c = climate[(coldest + i) % DAYS_PER_YEAR];
+        resting_from_heat |= def->rests_in_heat && c > def->t_max;
+        up = !resting_from_heat && (up ? c >= def->t_min : c >= def->t_min + PLANT_REST_HYSTERESIS);
+        awake[i] = up;
+        leafy[i] = i >= warmest || plant_bare_target(c) <= 0.0f;
+    }
+    /* It starves when its last `dark_days` awake days under the leaves
+     * (counted back from its last one: what it bore then is mended in the
+     * spring, the crowns still bare) are too dark. Whether they are is down
+     * to the brightest of them, the one with the highest noon sun. A plant
+     * whose time under the leaves is shorter is judged on its brightest awake
+     * day under them. */
+    int last = DAYS_PER_YEAR - 1;
+    while (last >= 0 && !(awake[last] && leafy[last])) {
+        last--;
+    }
+    if (last < 0) {
+        return -1; /* Never awake under the leaves. */
+    }
+    int best = -1, days = 0;
+    for (int i = last; i >= 0 && awake[i] && leafy[i] && (float)days < def->dark_days; i--) {
+        int day = (coldest + i) % DAYS_PER_YEAR;
+        if (best < 0 || noon_elevation(day) > noon_elevation(best)) {
+            best = day;
+        }
+        days++;
+    }
+    return best;
+}
+
+/* The light plants live by over the year, for a list of tiles: per dark day
+ * of a plant (worldgen_plant_dark_day()), each tile's floor in the sun around
+ * noon, and the skies of its season. The noon sun stands due south every
+ * day, only higher or lower: days whose noon sun is within
+ * SEASON_LIGHT_MERGE_DEGREES of a darker one take that one's light (a little
+ * stricter, and far fewer suns to work out). */
+#define SEASON_LIGHT_MERGE_DEGREES 3.0f
+
+typedef struct SeasonLight {
+    TileLight *light;
+    const size_t *tiles;
+    size_t count;
+    int day_of[PLANT_COUNT]; /* An index in the days below, -1: the plant needs no light. */
+    int day_count;
+    /* Per day: the share of the light straight from the sun at noon under a
+     * clear sky, the sun's strength at noon (game_sun_noon()), and the share
+     * of the hours of each sky in its season (weather_season_shares()). */
+    float share[PLANT_COUNT];
+    float sun[PLANT_COUNT];
+    float skies[PLANT_COUNT][WEATHER_TYPE_COUNT];
+    float *noon; /* Per day, per tile: its floor's share in the sun around noon. */
+} SeasonLight;
+
+static bool season_light_init(SeasonLight *season, TileLight *light, const Map *map,
+                              const size_t *tiles, size_t count)
+{
+    memset(season, 0, sizeof(*season));
+    season->light = light;
+    season->tiles = tiles;
+    season->count = count;
+    /* The plants' dark days, by their noon sun, lowest first; each takes the
+     * first day it is close enough to. */
+    int days[PLANT_COUNT], types[PLANT_COUNT], typed = 0;
+    for (int type = 0; type < PLANT_COUNT; type++) {
+        season->day_of[type] = -1;
+        int day = worldgen_plant_dark_day((PlantType)type);
+        if (day < 0) {
+            continue;
+        }
+        int at = typed++;
+        while (at > 0 && noon_elevation(days[at - 1]) > noon_elevation(day)) {
+            days[at] = days[at - 1];
+            types[at] = types[at - 1];
+            at--;
+        }
+        days[at] = day;
+        types[at] = type;
+    }
+    for (int i = 0; i < typed; i++) {
+        int k = season->day_count - 1;
+        if (k < 0 ||
+            noon_elevation(days[i]) - noon_elevation(days[k]) >= SEASON_LIGHT_MERGE_DEGREES) {
+            days[++k] = days[i]; /* A day of its own (k <= i: already read). */
+            season->day_count = k + 1;
+        }
+        season->day_of[types[i]] = k;
+    }
+    size_t values = (size_t)season->day_count * count;
+    season->noon = malloc((values > 0 ? values : 1) * sizeof(*season->noon));
+    if (season->noon == NULL) {
+        return false;
+    }
+    for (int k = 0; k < season->day_count; k++) {
+        season->share[k] = shadow_direct_share(noon_elevation(days[k]), 1.0f);
+        season->sun[k] = game_sun_noon(days[k]);
+        weather_season_shares(game_date_from_tick((uint64_t)days[k] * TICKS_PER_DAY).season,
+                              season->skies[k]);
+        tile_light_noon_on(light, map, days[k], tiles, count, season->noon + (size_t)k * count);
+    }
+    return true;
+}
+
+static void season_light_free(SeasonLight *season)
+{
+    free(season->noon);
+    season->noon = NULL;
+}
+
+/* Whether a plant of `type` on tiles[i] gets light enough all year round:
+ * whether the hours its best light of the day is too low for it, on its dark
+ * day, are few enough for it to mend from them (plant_dark_share_borne()).
+ * That best light is game_light_peak_at()'s: under a clear sky, the sky it
+ * sees and the sun on its floor; under clouds, only the sky it sees, dimmed
+ * by them. In the shade of a crown, a plant may starve in the sun and live
+ * under the clouds. */
+static bool season_light_lasts(const SeasonLight *season, const Map *map, size_t i, PlantType type)
+{
+    int k = (unsigned)type < PLANT_COUNT ? season->day_of[type] : -1;
+    if (k < 0) {
+        return true;
+    }
+    int x, y, z;
+    map_tile_of(map, season->tiles[i], &x, &y, &z);
+    float open = tile_light_open(season->light, x, y, z);
+    float noon = season->noon[(size_t)k * season->count + i];
+    float need = plant_def(type)->light_min;
+    float dark = 0.0f;
+    for (int sky = 0; sky < WEATHER_TYPE_COUNT; sky++) {
+        float share = sky == WEATHER_CLEAR ? season->share[k] : 0.0f;
+        float light = season->sun[k] * weather_def((WeatherType)sky)->light *
+                      ((1.0f - share) * open + share * noon);
+        dark += light < need ? season->skies[k][sky] : 0.0f;
+    }
+    return dark <= plant_dark_share_borne(type);
+}
+
+size_t worldgen_starving_plants(const Map *map, TileLight *light)
+{
+    size_t count = 0;
+    for (int pass = 0; pass < 2; pass++) {
+        size_t *tiles = NULL;
+        if (pass == 1) {
+            tiles = malloc((count > 0 ? count : 1) * sizeof(*tiles));
+            if (tiles == NULL) {
+                return SIZE_MAX;
+            }
+        }
+        size_t found = 0;
+        for (int z = 0; z < light->levels; z++) {
+            for (int y = 0; y < map->height; y++) {
+                for (int x = 0; x < map->width; x++) {
+                    size_t index = map_index(map, x, y, z);
+                    PlantType type = (PlantType)map->plants[index].type;
+                    if (type != PLANT_NONE && !plant_is_tree(type)) {
+                        if (tiles != NULL) {
+                            tiles[found] = index;
+                        }
+                        found++;
+                    }
+                }
+            }
+        }
+        if (pass == 0) {
+            count = found;
+            continue;
+        }
+        SeasonLight season;
+        if (!season_light_init(&season, light, map, tiles, count)) {
+            free(tiles);
+            return SIZE_MAX;
+        }
+        size_t starving = 0;
+        for (size_t i = 0; i < count; i++) {
+            starving += !season_light_lasts(&season, map, i, (PlantType)map->plants[tiles[i]].type);
+        }
+        season_light_free(&season);
+        free(tiles);
+        return starving;
+    }
+    return 0;
+}
+
 /* Whether a tile is water, or next to it (8 neighbors). */
 static bool by_water(const Map *map, int x, int y, int z)
 {
@@ -246,10 +497,11 @@ static bool by_water(const Map *map, int x, int y, int z)
 }
 
 /* Cattails and reeds along the shores: in the shallows next to the land, and on
- * the land next to the water, in place of the low plants (trees stay). Reeds
- * make beds of their own where the `reed_seed` noise is high, cattails stand
- * in the rest. */
-static void place_shore_plants(Map *map, Rng *rng, uint32_t reed_seed, float frequency)
+ * the land next to the water, in place of the low plants (trees stay), where
+ * they get light enough all year. Reeds make beds of their own where the
+ * `reed_seed` noise is high, cattails stand in the rest. */
+static void place_shore_plants(Map *map, Rng *rng, uint32_t reed_seed, float frequency,
+                               const SeasonLight *season)
 {
     for (int y = 0; y < map->height; y++) {
         for (int x = 0; x < map->width; x++) {
@@ -279,8 +531,12 @@ static void place_shore_plants(Map *map, Rng *rng, uint32_t reed_seed, float fre
                 bool reeds =
                     stretch(noise_fbm2d(reed_seed, (float)x * frequency * 3.0f,
                                         (float)y * frequency * 3.0f, 2, 2.0f, 0.5f)) > 0.55f;
-                *plant = (Plant){.type = reeds ? PLANT_REED : PLANT_CATTAIL,
-                                 .growth = 0.4f + 0.6f * growth_roll};
+                PlantType type = reeds ? PLANT_REED : PLANT_CATTAIL;
+                size_t column = (size_t)y * (size_t)map->width + (size_t)x;
+                if (!season_light_lasts(season, map, column, type)) {
+                    continue; /* A shore in the shade keeps what grows there. */
+                }
+                *plant = (Plant){.type = (uint8_t)type, .growth = 0.4f + 0.6f * growth_roll};
                 plant_settle(plant, GAME_START_DAY);
             }
         }
@@ -481,15 +737,17 @@ static void place_slopes(Map *map, const uint8_t *heights, const uint8_t *surfac
 
 /*
  * The understory: what grows on the ground once the trees stand, from the
- * light that reaches each tile (map_light_cover(): a dense crown lets little
- * through, a glade or a meadow all of it), the ground (its fertility, the
- * moisture of the region) and how forested the place is, in patches (a noise
- * of its own for each, so that bracken, nettles or heather stand together
- * as they do in the wild). Under the deepest shade only moss, wood sorrel and
- * wild garlic live, and a lot of ground stays bare, under its litter; the
- * meadows hold grass, plantain and carrots, the edges brambles, roses and
- * strawberries, the poor sandy and stony ground heather, bilberries and
- * bracken (docs/PLANTS.md §10).
+ * light that reaches each tile (its tile light on the first day: the sky it
+ * sees and its sun, so that a dense crown lets little through, a glade or a
+ * meadow all of it, and the foot of a cliff facing north stays in the shade;
+ * each plant only where it gets light enough all year, SeasonLight), the
+ * ground (its fertility, the moisture of the region) and how forested the
+ * place is, in patches (a noise of its own for each, so that bracken, nettles
+ * or heather stand together as they do in the wild). Under the deepest shade
+ * only moss, wood sorrel and wild garlic live, and a lot of ground stays
+ * bare, under its litter; the meadows hold grass, plantain and carrots, the
+ * edges brambles, roses and strawberries, the poor sandy and stony ground
+ * heather, bilberries and bracken (docs/PLANTS.md §10).
  */
 typedef enum Patch {
     PATCH_MOSS,
@@ -518,6 +776,10 @@ typedef struct Site {
     float open;
     float light;
     float patch[PATCH_COUNT]; /* 0 .. 1: how thick the plant stands here. */
+    /* Its light over the year: the plants that would starve are left out. */
+    const SeasonLight *season;
+    const Map *map;
+    size_t tile; /* In the season's tiles. */
 } Site;
 
 /* 1 where the light is between `from` and `to` (its limits ramp a little). */
@@ -547,7 +809,8 @@ static int understory_chances(const Site *site, PlantChance out[UNDERSTORY_MAX])
 #define ADD(plant, chance)                                                                         \
     do {                                                                                           \
         float c_ = (chance) * plant_water_response((plant), site->water);                          \
-        if (c_ > 0.0f && fertility >= plant_def(plant)->min_fertility) {                           \
+        if (c_ > 0.0f && fertility >= plant_def(plant)->min_fertility &&                           \
+            season_light_lasts(site->season, site->map, site->tile, (plant))) {                    \
             out[n++] = (PlantChance){(plant), c_};                                                 \
         }                                                                                          \
     } while (0)
@@ -607,8 +870,10 @@ static bool understory_ground(const Map *map, size_t index)
 }
 
 static void place_understory(Map *map, const WorldGenParams *params, const float *moistures,
-                             const uint8_t *shores, const float *forests, float frequency, Rng *rng)
+                             const uint8_t *shores, const float *forests, float frequency,
+                             const SeasonLight *season, Rng *rng)
 {
+    const float share = shadow_direct_share(noon_elevation(GAME_START_DAY), 1.0f);
     uint32_t seeds[PATCH_COUNT];
     for (int i = 0; i < PATCH_COUNT; i++) {
         seeds[i] = derive_seed(params->seed, 20u + (uint32_t)i);
@@ -629,7 +894,12 @@ static void place_understory(Map *map, const WorldGenParams *params, const float
                          .moisture = moistures[column],
                          .water = expected_moisture(moistures[column], shores[column]),
                          .forest = forest_share(forests[column]),
-                         .light = map_light_cover(map, x, y, z) * UNDERSTORY_SUN};
+                         .light = ((1.0f - share) * tile_light_open(season->light, x, y, z) +
+                                   share * tile_light_noon(season->light, x, y, z)) *
+                                  UNDERSTORY_SUN,
+                         .season = season,
+                         .map = map,
+                         .tile = column};
             site.edge = site.forest > 0.0f ? 1.0f - fabsf(2.0f * site.forest - 1.0f) : 0.0f;
             site.open = 1.0f - site.forest;
             for (int i = 0; i < PATCH_COUNT; i++) {
@@ -656,7 +926,18 @@ static void place_understory(Map *map, const WorldGenParams *params, const float
 
 bool worldgen_generate(Map *map, const WorldGenParams *params)
 {
+    TileLight light;
+    if (!worldgen_generate_lit(map, params, &light)) {
+        return false;
+    }
+    tile_light_free(&light);
+    return true;
+}
+
+bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *light)
+{
     memset(map, 0, sizeof(*map));
+    memset(light, 0, sizeof(*light));
     if (params->width < MAP_MIN_SIZE || params->height < MAP_MIN_SIZE ||
         params->width > MAP_MAX_SIZE || params->height > MAP_MAX_SIZE) {
         return false;
@@ -779,15 +1060,39 @@ bool worldgen_generate(Map *map, const WorldGenParams *params)
     Rng litter_rng; /* A stream of its own: nothing else depends on the litter. */
     rng_seed(&litter_rng, params->seed, 0x6c697474657200ULL /* "litter" */);
     place_litter(map, &litter_rng);
-    /* The crowns are up: what grows under them follows their shade. */
+    /* The crowns are up: the light of every tile, and over the year on the
+     * ground (the low plants do not stop it), then what grows there follows it. */
+    size_t *grounds = malloc(columns * sizeof(*grounds));
+    SeasonLight season;
+    bool lit = grounds != NULL && tile_light_init(light, map, GAME_START_TICK);
+    for (int y = 0; lit && y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            grounds[(size_t)y * (size_t)map->width + (size_t)x] =
+                map_index(map, x, y, map_ground_level(map, x, y));
+        }
+    }
+    if (!lit || !season_light_init(&season, light, map, grounds, columns)) {
+        if (lit) {
+            season_light_free(&season);
+        }
+        free(grounds);
+        free(moistures);
+        free(forests);
+        free(shores);
+        tile_light_free(light);
+        map_free(map);
+        return false;
+    }
     Rng understory_rng;
     rng_seed(&understory_rng, params->seed, 0x756e6465727374ULL /* "underst" */);
-    place_understory(map, params, moistures, shores, forests, frequency, &understory_rng);
+    place_understory(map, params, moistures, shores, forests, frequency, &season, &understory_rng);
     free(moistures);
     free(forests);
     free(shores);
     Rng shore_rng; /* A stream of its own: the inland plants do not depend on the shores. */
     rng_seed(&shore_rng, params->seed, 0x73686f7265ULL /* "shore" */);
-    place_shore_plants(map, &shore_rng, reed_seed, frequency);
+    place_shore_plants(map, &shore_rng, reed_seed, frequency, &season);
+    season_light_free(&season);
+    free(grounds);
     return true;
 }

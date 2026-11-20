@@ -277,6 +277,32 @@ static void test_sun_hours(void)
     map_free(&map);
 }
 
+/* The noon of another day, for the map as it is: on the day the light was
+ * worked out, what `noon` holds; north of a wall, in the sun at midsummer's
+ * noon and in its shadow at the spring's, when the sun is lower. */
+static void test_noon_on_another_day(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 64, 64, 6));
+    for (int x = 20; x < 44; x++) {
+        map_set_structure(&map, x, 30, 0, STRUCTURE_WALL);
+    }
+    TileLight light;
+    REQUIRE(tile_light_init(&light, &map, SUMMER_NOON));
+    size_t tiles[3] = {map_index(&map, 32, 31, 0), map_index(&map, 32, 29, 0),
+                       map_index(&map, 32, 30, 0)};
+    float midsummer[3], spring[3];
+    tile_light_noon_on(&light, &map, MIDSUMMER, tiles, 3, midsummer);
+    tile_light_noon_on(&light, &map, SEASON_DAY(SEASON_SPRING, 1), tiles, 3, spring);
+    CHECK_NEAR(midsummer[0], tile_light_noon(&light, 32, 31, 0), 1.0 / 255.0); /* South of it. */
+    CHECK_NEAR(midsummer[1], tile_light_noon(&light, 32, 29, 0), 1.0 / 255.0); /* North. */
+    CHECK_NEAR(midsummer[0], 1.0, 1e-6);
+    CHECK(spring[1] < midsummer[1]);  /* The shadow reaches further north. */
+    CHECK_NEAR(spring[2], 0.0, 1e-6); /* The wall: no surface. */
+    tile_light_free(&light);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_short_rays_change_nothing);
@@ -285,5 +311,6 @@ int main(void)
     RUN_TEST(test_open_follows_the_map);
     RUN_TEST(test_foliage_waits);
     RUN_TEST(test_sun_hours);
+    RUN_TEST(test_noon_on_another_day);
     return test_summary();
 }

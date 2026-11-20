@@ -129,6 +129,13 @@ void weather_init(Weather *weather, uint64_t seed, uint64_t tick);
 WeatherType weather_next(WeatherType current, Season season, int hour, float keep_roll,
                          float draw_roll);
 
+/* The share of the hours each sky holds over a long run of `season`, as
+ * weather_next() goes (its odds, its persistence, fog only in the morning,
+ * one step at most along the clouds): what a plant meets on most days.
+ * Worked out over WEATHER_SHARE_DAYS days, the first half left out. */
+#define WEATHER_SHARE_DAYS 20
+void weather_season_shares(Season season, float shares[WEATHER_TYPE_COUNT]);
+
 /* Roll in [0, 1) from the seed, a number (period, day) and a salt. */
 float weather_roll(uint64_t seed, uint64_t number, uint32_t salt);
 

@@ -110,6 +110,30 @@ static void test_seasons_have_their_weather(void)
     CHECK(counts[SEASON_SUMMER][WEATHER_STORM] > counts[SEASON_WINTER][WEATHER_STORM]);
 }
 
+/* The share of the hours of each sky, worked out, is what the skies drawn
+ * period after period come to over the years. */
+static void test_season_shares_match_the_draws(void)
+{
+    int counts[SEASON_COUNT][WEATHER_TYPE_COUNT] = {{0}};
+    count_skies(7, 20, counts);
+    int periods = 20 * DAYS_PER_SEASON * HOURS_PER_DAY / WEATHER_PERIOD_HOURS;
+    for (int season = 0; season < SEASON_COUNT; season++) {
+        float shares[WEATHER_TYPE_COUNT];
+        weather_season_shares((Season)season, shares);
+        float sum = 0.0f;
+        for (int type = 0; type < WEATHER_TYPE_COUNT; type++) {
+            sum += shares[type];
+            CHECK(fabsf(shares[type] - (float)counts[season][type] / (float)periods) < 0.04f);
+        }
+        CHECK(fabsf(sum - 1.0f) < 0.001f);
+    }
+    float summer[WEATHER_TYPE_COUNT], autumn[WEATHER_TYPE_COUNT];
+    weather_season_shares(SEASON_SUMMER, summer);
+    weather_season_shares(SEASON_AUTUMN, autumn);
+    CHECK(summer[WEATHER_CLEAR] > autumn[WEATHER_CLEAR]);
+    CHECK(summer[WEATHER_FOG] == 0.0f); /* No fog in the summer's odds. */
+}
+
 static void test_same_seed_same_weather(void)
 {
     Weather a, b, c;
@@ -249,6 +273,7 @@ int main(void)
     RUN_TEST(test_next_moves_one_step_at_most);
     RUN_TEST(test_rolls);
     RUN_TEST(test_seasons_have_their_weather);
+    RUN_TEST(test_season_shares_match_the_draws);
     RUN_TEST(test_same_seed_same_weather);
     RUN_TEST(test_sky_changes_the_temperature);
     RUN_TEST(test_spells_drift_within_bounds);

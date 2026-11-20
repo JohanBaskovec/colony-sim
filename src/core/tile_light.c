@@ -411,6 +411,40 @@ static float tile_direct(TileLight *light, const Map *map, SunPosition sun, size
     return sum / (float)(TILE_LIGHT_SAMPLES * TILE_LIGHT_SAMPLES);
 }
 
+/* The suns `noon` is made of on `day`: those at the middle of the periods
+ * from TILE_LIGHT_NOON_FROM to TILE_LIGHT_NOON_TO, as the day goes. */
+#define NOON_SUNS ((TILE_LIGHT_NOON_TO - TILE_LIGHT_NOON_FROM) / TILE_LIGHT_DIRECT_HOURS)
+
+static SunPosition noon_sun(int day, int which)
+{
+    float hour =
+        (float)TILE_LIGHT_NOON_FROM + (float)TILE_LIGHT_DIRECT_HOURS * ((float)which + 0.5f);
+    return sun_position(SUN_LATITUDE_DEFAULT, day, hour);
+}
+
+void tile_light_noon_on(TileLight *light, const Map *map, int day, const size_t *tiles,
+                        size_t count, float *out)
+{
+    refresh_tops(light, map, false);
+    for (size_t i = 0; i < count; i++) {
+        out[i] = 0.0f;
+    }
+    for (int which = 0; which < NOON_SUNS; which++) {
+        SunPosition sun = noon_sun(day, which);
+        if (!sun_is_up(sun)) {
+            continue;
+        }
+        prepare_sun(light, sun);
+        for (size_t i = 0; i < count; i++) {
+            size_t index = tiles[i];
+            if (index < light->count && light->open[index] > 0 &&
+                tile_light_has_surface(map, index)) {
+                out[i] = fmaxf(out[i], tile_direct(light, map, sun, index));
+            }
+        }
+    }
+}
+
 /* What a period does to `noon`: nothing, starts it again, or adds to it. */
 typedef enum NoonPass { NOON_NONE, NOON_FIRST, NOON_MORE } NoonPass;
 
@@ -490,8 +524,10 @@ static void work_everything(TileLight *light, const Map *map, uint64_t tick, boo
                                    .clean = map->light_revision + 1};
     light->first_period = tick / PERIOD_TICKS;
     int day = game_day_of_year(tick);
-    work_direct(light, map, sun_position(SUN_LATITUDE_DEFAULT, day, 12.0f), 0, light->count, false,
-                0.0f, NOON_FIRST);
+    for (int which = 0; which < NOON_SUNS; which++) {
+        work_direct(light, map, noon_sun(day, which), 0, light->count, false, 0.0f,
+                    which == 0 ? NOON_FIRST : NOON_MORE);
+    }
     work_direct(light, map, sun_of_period(light->first_period), 0, light->count, false, 0.0f,
                 NOON_NONE);
 }

@@ -611,6 +611,11 @@ bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z, fl
 /* The light part of plant_can_take_root() (same `light`): whether a plant
  * gets enough of it at a tile to live there, whatever stands on the tile. */
 bool plant_light_suits(const Map *map, PlantType type, int x, int y, int z, float light);
+/* The most of its awake hours a plant can spend in the dark (its best light
+ * of the day under its `light_min`) and still mend in the others what the
+ * dark takes (PLANT_RECOVERY against 1 / dark_days a day): more, and it
+ * starves in the end. 1 for one that needs no light, 0 out of range. */
+float plant_dark_share_borne(PlantType type);
 
 /* The tile a plant on (x, y, z) sends a runner or seed to: one of those within
  * its `spread_range` (not its own), picked by `roll` (0 .. 1). False when the

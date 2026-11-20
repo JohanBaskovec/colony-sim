@@ -7,6 +7,7 @@
 
 #include "test_framework.h"
 
+#include <math.h>
 #include <stdlib.h>
 
 static void test_init_rejects_invalid_sizes(void)
@@ -837,6 +838,32 @@ static void test_shade_plants_live_in_the_dark(void)
     plant_settle(&heather, SEASON_DAY(SEASON_SUMMER, 1));
     plant_advance(&heather, &floor, 24 * 20);
     CHECK_EQ_INT(heather.type, PLANT_NONE);
+}
+
+/* A plant dark for a share of its hours lives as long as it mends in the
+ * others what the dark takes (plant_dark_share_borne()), and starves beyond. */
+static void test_dark_share_borne(void)
+{
+    float grass = plant_dark_share_borne(PLANT_GRASS);
+    CHECK(grass > 0.6f && grass < 0.8f);
+    CHECK(plant_dark_share_borne(PLANT_MOSS) > grass);      /* Bears the dark for longer. */
+    CHECK(plant_dark_share_borne(PLANT_MUSHROOMS) == 1.0f); /* Needs no light. */
+    CHECK(plant_dark_share_borne(PLANT_NONE) == 0.0f);
+    CHECK(plant_dark_share_borne(PLANT_COUNT) == 0.0f);
+    /* Grass, dark for the hours just within its share of each day, and just beyond. */
+    int within = (int)floorf(grass * 24.0f);
+    for (int dark_hours = within; dark_hours <= within + 1; dark_hours++) {
+        PlantConditions conditions = {.temperature = 15.0f,
+                                      .fertility = terrain_def(TERRAIN_RICH_SOIL)->fertility};
+        Plant plant = {.type = PLANT_GRASS, .growth = 0.5f};
+        plant_settle(&plant, SEASON_DAY(SEASON_SUMMER, 1));
+        for (int hour = 0; hour < 24 * 100 && plant.type == PLANT_GRASS; hour++) {
+            float light = hour % 24 < dark_hours ? 0.0f : 1.0f;
+            conditions.light = conditions.light_peak = light;
+            plant_advance(&plant, &conditions, 1);
+        }
+        CHECK_EQ_INT(plant.type, dark_hours == within ? PLANT_GRASS : PLANT_NONE);
+    }
 }
 
 /* What the cut plants give: moss and heather come back slowly, and cutting reeds
@@ -1758,6 +1785,7 @@ int main(void)
     RUN_TEST(test_new_plants_follow_their_calendar);
     RUN_TEST(test_poor_ground_plants_grow_on_any_ground);
     RUN_TEST(test_shade_plants_live_in_the_dark);
+    RUN_TEST(test_dark_share_borne);
     RUN_TEST(test_fibre_plants_are_cut_and_grow_back);
     RUN_TEST(test_bare_crowns_let_light_through);
     RUN_TEST(test_light_stamps_by_block);

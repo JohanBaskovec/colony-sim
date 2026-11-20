@@ -321,12 +321,11 @@ static void test_plants_grow_over_time(void)
 /* What a plant meets on its tile: the sun by the hour, the sky, its own
  * share of them (the sky it sees, its share in the sun, docs/SHADOWS.md §5.2;
  * a tree standing on its trunk is not shaded by its own crown). */
-/* The plants the world generator set where the tile light is too little for
- * them to take root are gone when the game starts; the others are as
- * generated. */
-static void test_generated_plants_get_their_light(void)
+/* The game starts with the generator's plants, all of them (it sets them
+ * where they can live all year, core/worldgen.h): none would starve in the
+ * light the game works out. */
+static void test_generated_plants_are_kept(void)
 {
-    int removed = 0, kept = 0;
     for (uint64_t seed = 1; seed <= 3; seed++) {
         NewGameParams params;
         game_default_params(&params);
@@ -340,32 +339,21 @@ static void test_generated_plants_get_their_light(void)
         REQUIRE(game_init(game, &params));
         REQUIRE(worldgen_generate(&generated, &params.world));
         const Map *map = &game->map;
-        int day = game_day_of_year(game->clock.tick);
-        float share =
-            shadow_direct_share(sun_position(SUN_LATITUDE_DEFAULT, day, 12.0f).elevation, 1.0f);
-        for (int z = 0; z < game->light.levels; z++) {
-            for (int y = 0; y < map->height; y++) {
-                for (int x = 0; x < map->width; x++) {
-                    size_t index = map_index(map, x, y, z);
-                    PlantType was = (PlantType)generated.plants[index].type;
-                    PlantType now = (PlantType)map->plants[index].type;
-                    if (was == PLANT_NONE || plant_is_tree(was)) {
-                        continue;
-                    }
-                    bool suits = plant_light_suits(map, was, x, y, z,
-                                                   game_tile_light(game, x, y, z, share, true));
-                    CHECK(now == (suits ? was : PLANT_NONE));
-                    removed += !suits;
-                    kept += suits;
-                }
+        int differ = 0, plants = 0;
+        for (size_t i = 0; i < map_level_tile_count(map) * (size_t)game->light.levels; i++) {
+            uint8_t was = generated.plants[i].type;
+            if (was != PLANT_NONE && !plant_is_tree(was)) {
+                plants++;
+                differ += map->plants[i].type != was;
             }
         }
+        CHECK(plants > 100);
+        CHECK_EQ_INT(differ, 0);
+        CHECK_EQ_UINT(worldgen_starving_plants(map, &game->light), 0);
         map_free(&generated);
         game_shutdown(game);
         free(game);
     }
-    CHECK(removed > 0);        /* Grass the crowns around starve, under open sky. */
-    CHECK(kept > 5 * removed); /* About one in nine on these maps. */
 }
 
 static void test_plant_conditions(void)
@@ -971,7 +959,7 @@ int main(void)
     RUN_TEST(test_update_advances_ticks);
     RUN_TEST(test_plants_grow_over_time);
     RUN_TEST(test_plant_conditions);
-    RUN_TEST(test_generated_plants_get_their_light);
+    RUN_TEST(test_generated_plants_are_kept);
     RUN_TEST(test_crowns_lose_their_leaves_in_the_cold);
     RUN_TEST(test_grass_spreads_into_bare_ground);
     RUN_TEST(test_plants_do_not_spread_onto_parched_ground);

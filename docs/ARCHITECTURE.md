@@ -95,7 +95,7 @@ simulation:
 | `shadow`     | Shadows on screen: the sun's rays from the surfaces drawn, worked out ahead of time by pieces and half hours, each point keeping the moment an edge passes, so frames read them for the time now and the shadows glide; out of date by the map's light stamps; the light put together (sky, direct sun) (see *Shadows on screen*) |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `new_game`   | The options of a new game as the title screen's New game window shows them: a table (range, step, unit, section, keys) read from and written into `NewGameParams` in whole numbers (tiles, percents, levels), the hills and the rock kept in order, the options a flat world has no use for, and the seed typed as text (digits, or a hash of the words) |
-| `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, trees, then the understory by the light under their crowns, stones |
+| `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, trees, then the understory by the tile light, where each plant gets light enough all year round, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
 | `i18n`       | Translation catalogs, `tr()`, plurals, placeholders, number formatting       |
@@ -220,12 +220,35 @@ replaced the earlier one-level rule (rock all around a tile).
 passes, each with its own random stream so that the others do not depend on
 it. The first places trees and hazels (forest noise, glades, mostly grown
 ones); then the slopes, the tree volumes (crowns) and the litter; only then
-`place_understory()`, which asks `map_light_cover()` for every free tile of
-ground and rolls its plants from the light, the ground, the moisture and a
-noise per plant (patches); last, cattails and reeds on the shores. What lives
-under a crown is therefore what the crown's shade allows. `map_light_cover()`
-knows only what stands over a tile, not the sky around it: `game_init()`
-takes away the generated plants the tile light (below) cannot keep alive.
+the tile light (below) is worked out for the map as it stands
+(`worldgen_generate_lit()`: `game_init()` keeps it), and `place_understory()`
+rolls the plants of every free tile of ground from its light on the first
+day, the ground, the moisture and a noise per plant (patches); last,
+cattails and reeds on the shores. What lives under a crown is therefore what
+the crown's shade, the relief and the sky around allow.
+
+The plants are set as if years had gone by: a plant is only rolled where it
+gets light enough all year round, not only in the summer of the first day.
+Each plant has a **dark day** (`worldgen_plant_dark_day()`): its climate
+over an ordinary year is worked out as the plants follow it (the running
+mean of `advance_hour()` over the seasons' temperatures, a day behind them
+near the ground), hence its awake days; its last `dark_days` awake days
+under the leaves (counted in leaf from midsummer until the cold: a warm
+autumn keeps them on) are its darkest stretch, and the brightest of them
+decides. On that day, the share of the hours its best light
+(`game_light_peak_at()`: the sky and the sun on a clear day, only the sky,
+dimmed, under clouds) falls short of `light_min`, with the skies of the
+season (`weather_season_shares()`, worked out from `weather_next()`), must
+stay within what it mends from (`plant_dark_share_borne()`: the mending
+`PLANT_RECOVERY` against `1 / dark_days` a day). The noon of a day is
+`tile_light_noon_on()` (the suns of 11:00 and 13:00, as in play). Days whose
+noon sun is within 3° share one light (`SEASON_LIGHT_MERGE_DEGREES`). So a
+pit the sun never reaches stays bare, a shaded tile seeing much of the sky
+keeps its grass (it lives on cloudy days), and the deep shade of a wood
+holds only what bears it. Measured on seed 42 over two years of play: of
+the plants the summer's light alone would place, the rule leaves out 455 of
+12 647, and the deaths of the first year go from 254 to 35 (194 in two
+years, in dark autumns and under the trees' growing crowns).
 
 Hashes only mix in a level when it is not 0 (or when the map has more than
 one level), the slope layer once a slope exists.
@@ -1968,7 +1991,8 @@ period) the highest of those of the cells ahead within the ray's reach
 (`LightAhead`); a rising ray ends once over everything ahead, with the same
 result as the whole ray, and a tile over everything ahead casts nothing.
 `map_set_terrain()` no longer stamps a change between two kinds of ground.
-`noon` keeps the most of `direct` over the periods from 10:00 to 14:00.
+`noon` keeps the most of `direct` over the periods from 10:00 to 14:00
+(their suns at 11:00 and 13:00; `tile_light_init()` works out both).
 The readers: `game_tile_light()` is `(1 − share) × open + share × direct`
 (`noon` for the light at noon), `share` the direct sun's part of the light
 on a clear day (`shadow_direct_share()`); the plants' light now and at noon,

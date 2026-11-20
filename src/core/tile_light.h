@@ -124,8 +124,9 @@ typedef struct TileLight {
 } TileLight;
 
 /* Works everything out for the map at `tick`: `open` and the tops, `direct`
- * for the current period, `noon` for the sun at noon; no sun hours yet.
- * False when memory ran out. */
+ * for the current period, `noon` for the day's suns around noon as the day
+ * will make it (TILE_LIGHT_NOON_*); no sun hours yet. False when memory ran
+ * out. */
 bool tile_light_init(TileLight *light, const Map *map, uint64_t tick);
 void tile_light_free(TileLight *light);
 /* Works out now what is out of date (`open` where the map changed, `direct`
@@ -149,6 +150,14 @@ float tile_light_sun_hours(const TileLight *light, int x, int y, int z, bool yes
 /* Whether every tile's sun hours of yesterday are a whole day's at `tick`
  * (the first day after tile_light_init() has none). */
 bool tile_light_knows_yesterday(const TileLight *light, uint64_t tick);
+
+/* What `noon` would hold on `day` of the year for the map as it is (the
+ * most of the floor's share in the sun of the periods around noon, as the
+ * day works it out): out[i] for the tile index tiles[i], 0 for a tile without
+ * a surface or sky, or not stored. Each sun is prepared once for them all:
+ * give it many tiles at once. */
+void tile_light_noon_on(TileLight *light, const Map *map, int day, const size_t *tiles,
+                        size_t count, float *out);
 
 /* sun_lit() of a point of the map, the rays cut short as for `direct` (the
  * tops brought up to date with the map first). */

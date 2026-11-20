@@ -599,31 +599,10 @@ static float noon_light(const Game *game, int x, int y, int z)
     return game_tile_light(game, x, y, z, shadow_direct_share(elevation, 1.0f), true);
 }
 
-/* The understory of the world generator follows map_light_cover(), which
- * knows only what stands over a tile: the plants it set where the tile light
- * (the sky the tile sees, its sun) is too little for them to take root would
- * starve in the first days. They are not there. */
-static void clear_starving_plants(Game *game)
-{
-    Map *map = &game->map;
-    for (int z = 0; z < game->light.levels; z++) {
-        for (int y = 0; y < map->height; y++) {
-            for (int x = 0; x < map->width; x++) {
-                Plant *plant = &map->plants[map_index(map, x, y, z)];
-                if (plant->type != PLANT_NONE && !plant_is_tree((PlantType)plant->type) &&
-                    !plant_light_suits(map, (PlantType)plant->type, x, y, z,
-                                       noon_light(game, x, y, z))) {
-                    memset(plant, 0, sizeof(*plant));
-                }
-            }
-        }
-    }
-}
-
 bool game_init(Game *game, const NewGameParams *params)
 {
     memset(game, 0, sizeof(*game));
-    if (!worldgen_generate(&game->map, &params->world) ||
+    if (!worldgen_generate_lit(&game->map, &params->world, &game->light) ||
         !designations_init(&game->designations, game->map.width, game->map.height,
                            game->map.depth) ||
         !dirt_init(&game->dirt, game->map.width, game->map.height, game->map.depth) ||
@@ -672,12 +651,8 @@ bool game_init(Game *game, const NewGameParams *params)
         return false;
     }
     leaf_settle(game);
-    /* The light of the world as generated, and the plants it cannot keep. */
-    if (!tile_light_init(&game->light, &game->map, game->clock.tick)) {
-        game_shutdown(game);
-        return false;
-    }
-    clear_starving_plants(game);
+    /* The light of the world was worked out with it (the plants are set where
+     * they can live all year); brought up to date at the end. */
     spawn_starting_colonists(game, params->colonist_count);
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
     if (params->wildlife > 0.0f) {
