@@ -886,21 +886,21 @@ static void test_plants_take_root_where_they_can_live(void)
 {
     Map map;
     REQUIRE(map_init(&map, 16, 16, 5));
-    CHECK(plant_can_take_root(&map, PLANT_GRASS, 3, 3, 0));
-    CHECK(!plant_can_take_root(&map, PLANT_NONE, 3, 3, 0));
-    CHECK(!plant_can_take_root(&map, PLANT_GRASS, -1, 3, 0));
-    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 3, 3, 1)); /* Open space. */
+    CHECK(plant_can_take_root(&map, PLANT_GRASS, 3, 3, 0, -1.0f));
+    CHECK(!plant_can_take_root(&map, PLANT_NONE, 3, 3, 0, -1.0f));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, -1, 3, 0, -1.0f));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 3, 3, 1, -1.0f)); /* Open space. */
     map.plants[map_index(&map, 3, 3, 0)] = (Plant){.type = PLANT_MOSS, .growth = 1.0f};
-    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 3, 3, 0)); /* Taken. */
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 3, 3, 0, -1.0f)); /* Taken. */
     map_set_terrain(&map, 5, 3, 0, TERRAIN_ROUGH_STONE);
-    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 5, 3, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 5, 3, 0, -1.0f));
     map_set_terrain(&map, 6, 3, 0, TERRAIN_SAND); /* Too poor for grass, not for heather. */
-    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 6, 3, 0));
-    CHECK(plant_can_take_root(&map, PLANT_HEATHER, 6, 3, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 6, 3, 0, -1.0f));
+    CHECK(plant_can_take_root(&map, PLANT_HEATHER, 6, 3, 0, -1.0f));
     map_set_rock(&map, 7, 3, 1, ROCK_GRANITE); /* Under rock: dark. */
-    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 7, 3, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 7, 3, 0, -1.0f));
     map_set_rock(&map, 8, 3, 0, ROCK_GRANITE);
-    CHECK(!plant_can_take_root(&map, PLANT_HEATHER, 8, 3, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_HEATHER, 8, 3, 0, -1.0f));
 
     /* Cattails by the water: at the shore of the shallows, or on the bank. */
     map_set_terrain(&map, 10, 8, 0, TERRAIN_SHALLOW_WATER);
@@ -912,36 +912,36 @@ static void test_plants_take_root_where_they_can_live(void)
         }
     }
     map_set_terrain(&map, 11, 8, 0, TERRAIN_DEEP_WATER);
-    CHECK(plant_can_take_root(&map, PLANT_CATTAIL, 10, 8, 0));  /* At the shore. */
-    CHECK(plant_can_take_root(&map, PLANT_CATTAIL, 13, 8, 0));  /* On the bank. */
-    CHECK(!plant_can_take_root(&map, PLANT_CATTAIL, 11, 8, 0)); /* Deep. */
-    CHECK(!plant_can_take_root(&map, PLANT_CATTAIL, 14, 8, 0)); /* Away from the water. */
-    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 10, 8, 0));
+    CHECK(plant_can_take_root(&map, PLANT_CATTAIL, 10, 8, 0, -1.0f));  /* At the shore. */
+    CHECK(plant_can_take_root(&map, PLANT_CATTAIL, 13, 8, 0, -1.0f));  /* On the bank. */
+    CHECK(!plant_can_take_root(&map, PLANT_CATTAIL, 11, 8, 0, -1.0f)); /* Deep. */
+    CHECK(!plant_can_take_root(&map, PLANT_CATTAIL, 14, 8, 0, -1.0f)); /* Away from the water. */
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 10, 8, 0, -1.0f));
 
     /* Under two dense layers of a crown in leaf: moss, not grass, even when bare. */
     map_set_terrain(&map, 2, 12, 1, TERRAIN_FOLIAGE);
     map_set_terrain(&map, 2, 12, 2, TERRAIN_FOLIAGE);
-    CHECK(plant_can_take_root(&map, PLANT_MOSS, 2, 12, 0));
-    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 2, 12, 0));
+    CHECK(plant_can_take_root(&map, PLANT_MOSS, 2, 12, 0, -1.0f));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 2, 12, 0, -1.0f));
     map_set_bare(&map, MAP_BARE_STEPS);
-    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 2, 12, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_GRASS, 2, 12, 0, -1.0f));
     /* Under four, wild garlic (on rich soil) lives on the light before the
      * leaves come. */
     map_set_terrain(&map, 4, 12, 0, TERRAIN_RICH_SOIL);
     for (int z = 1; z <= 4; z++) {
         map_set_terrain(&map, 4, 12, z, TERRAIN_FOLIAGE);
     }
-    CHECK(plant_can_take_root(&map, PLANT_WILD_GARLIC, 4, 12, 0));
+    CHECK(plant_can_take_root(&map, PLANT_WILD_GARLIC, 4, 12, 0, -1.0f));
     map_set_bare(&map, 0);
-    CHECK(!plant_can_take_root(&map, PLANT_WILD_GARLIC, 4, 12, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_WILD_GARLIC, 4, 12, 0, -1.0f));
 
     /* Trees keep their distance from trees and trunks. */
     map.plants[map_index(&map, 8, 13, 0)] = (Plant){.type = PLANT_HAZEL, .growth = 0.1f};
-    CHECK(!plant_can_take_root(&map, PLANT_TREE, 10, 13, 0));
-    CHECK(plant_can_take_root(&map, PLANT_TREE, 11, 13, 0));
-    CHECK(plant_can_take_root(&map, PLANT_GRASS, 9, 13, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_TREE, 10, 13, 0, -1.0f));
+    CHECK(plant_can_take_root(&map, PLANT_TREE, 11, 13, 0, -1.0f));
+    CHECK(plant_can_take_root(&map, PLANT_GRASS, 9, 13, 0, -1.0f));
     map_set_rock(&map, 14, 15, 0, ROCK_WOOD);
-    CHECK(!plant_can_take_root(&map, PLANT_TREE, 13, 13, 0));
+    CHECK(!plant_can_take_root(&map, PLANT_TREE, 13, 13, 0, -1.0f));
     map_free(&map);
 }
 
@@ -1238,7 +1238,7 @@ static void test_light_cover(void)
     CHECK_NEAR(map_light_cover(&map, 5, 3, 0), 1.0, 1e-6);
     /* A built roof lets a little through, rock or the ground above nothing. */
     map_set_roof(&map, 6, 3, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
-    CHECK_NEAR(map_light_cover(&map, 6, 3, 0), MAP_LIGHT_ROOF, 1e-6);
+    CHECK_NEAR(map_light_cover(&map, 6, 3, 0), 0.0, 1e-6); /* Thatch lets nothing through. */
     map_set_terrain(&map, 7, 3, 1, TERRAIN_SOIL);
     CHECK_NEAR(map_light_cover(&map, 7, 3, 0), 0.0, 1e-6);
     map_set_rock(&map, 8, 3, 2, ROCK_GRANITE);

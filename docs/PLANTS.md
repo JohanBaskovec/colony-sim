@@ -270,13 +270,16 @@ expected warmth of the day.
   (`map_light_cover()`: nothing is cached, a plant looks up through the levels
   above it once an hour; the light view and the shade drawn on screen keep
   it per tile until `Map.light_revision` changes): open sky 1, foliage by
-  density (`MAP_LIGHT_FOLIAGE_*`, each layer in turn: they multiply), a built roof
-  `MAP_LIGHT_ROOF`, rock or the ground of a level above 0. A trunk over its
+  density (`MAP_LIGHT_FOLIAGE_*`, each layer in turn: they multiply), 0 under
+  a built roof, rock or the ground of a level above 0. A trunk over its
   own foot is no roof; a tree, standing on the tile of its trunk, gets the open
-  light.
+  light. Since the shadows' step 5b (docs/SHADOWS.md) the plants of the
+  ground read the tile light instead (`game_tile_light()`: the sky the tile
+  sees and its share in the sun); the cover remains for the trees, the levels
+  over the stored ones and world generation.
 - `game_plant_conditions()` gathers what a plant meets (temperature, fertility,
-  `light` now, `light_peak` the noon sun times the sky and the cover); the
-  plant window uses it too.
+  `light` now, `light_peak` the noon sun times the sky and the tile's light
+  around noon); the plant window uses it too.
 - `PlantDef.growth_per_day` is what a plant grows in a day at its best: twelve
   hours of full light (`PLANT_BEST_DAY_HOURS`), so a long clear summer day
   gives about that and a short autumn one much less, with the temperature
@@ -285,9 +288,10 @@ expected warmth of the day.
 - Darkness is judged on the day's best light (`light_peak`), so nights do not
   count: an awake plant whose best light stays under `light_min` loses
   `1 / (dark_days × 24)` of its health an hour. A plant that rests needs no
-  light; a fungus (`dark_days` 0) none at all. On a world's first days the
-  grass under the densest crowns dies (about one in six on seed 42), and a
-  tree without a trunk shaded by others' crowns can go the same way.
+  light; a fungus (`dark_days` 0) none at all. A new game takes away at the
+  start the generated plants whose tile is too dark for them to take root
+  (`plant_light_suits()`: about one tuft of grass in eight on seed 42); a
+  tree without a trunk shaded by others' crowns can still starve.
 - The plant window says "little light" or "starving in the dark", and the
   rate it shows is the most it can make in a day ("Grows up to 11% a day").
 - Cost: `bench_simulation` 4 days 35 → 45 µs a tick, almost all of it settlers

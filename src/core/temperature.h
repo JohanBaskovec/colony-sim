@@ -94,6 +94,7 @@
 typedef struct TemperatureSurface {
     const uint8_t *canopy;
     const uint8_t *evap;
+    const uint8_t *sun; /* The tile's own share of the sun (Soil.sun); NULL: `canopy`. */
     float sun_heat;
     float night_cooling;
 } TemperatureSurface;

@@ -443,15 +443,19 @@ void temperatures_set_surface(Temperatures *temperatures, const TemperatureSurfa
 
 /* What the surface does this tick, worked out once for the pass
  * (docs/CLIMATE.md §5): a tile under the sky with crowns letting `c` of the
- * light through (0 .. 255) and `e` of its sun gone into evaporation is pulled
- * towards `base + sun_canopy × c - sun_evap × c × e`, at `still_base +
- * still_canopy × c` of its pull, and exchanges heat with the ground under it
- * at `store[water]`, the ground following at `follow[water]`. */
+ * light through (0 .. 255), `s` of the sun of open ground reaching it (its
+ * own: shade, docs/SHADOWS.md §5.2) and `e` of its sun gone into
+ * evaporation is pulled towards `base + sun_part × s - night_part × c -
+ * sun_evap × s × e`, at `still_base + still_canopy × c` of its pull, and
+ * exchanges heat with the ground under it at `store[water]`, the ground
+ * following at `follow[water]`. */
 typedef struct SurfacePass {
     const uint8_t *canopy;
     const uint8_t *evap;
+    const uint8_t *sun;
     float base;
-    float sun_canopy;
+    float sun_part;
+    float night_part;
     float sun_evap;
     float still_base;
     float still_canopy;
@@ -466,8 +470,10 @@ static SurfacePass surface_pass(const TemperatureSurface *surface, float outdoor
     return (SurfacePass){
         .canopy = surface->canopy,
         .evap = surface->evap,
+        .sun = surface->sun != NULL ? surface->sun : surface->canopy,
         .base = outdoor - surface->sun_heat * meadow + surface->night_cooling,
-        .sun_canopy = (surface->sun_heat - surface->night_cooling) * scale,
+        .sun_part = surface->sun_heat * scale,
+        .night_part = surface->night_cooling * scale,
         .sun_evap = surface->sun_heat * TEMPERATURE_EVAP_COOLING * scale * scale,
         .still_base = TEMPERATURE_CANOPY_STILL,
         .still_canopy = (1.0f - TEMPERATURE_CANOPY_STILL) * scale,
@@ -484,7 +490,9 @@ static float surface_pull(const SurfacePass *pass, Temperatures *temperatures, s
                           float pull, float ground)
 {
     float canopy = (float)pass->canopy[i];
-    float air = pass->base + canopy * (pass->sun_canopy - pass->sun_evap * (float)pass->evap[i]);
+    float sun = (float)pass->sun[i];
+    float air = pass->base + sun * (pass->sun_part - pass->sun_evap * (float)pass->evap[i]) -
+                canopy * pass->night_part;
     float still = pass->still_base + pass->still_canopy * canopy;
     if (ground == 0.0f) {
         here += pull * still * (air - here);

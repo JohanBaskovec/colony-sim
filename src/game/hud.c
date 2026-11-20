@@ -297,6 +297,16 @@ static void add_hovered_tile_reading(const App *app, Panel *panel)
         tr_integer(more, sizeof(more),
                    (long long)SDL_lroundf(game_light_peak_at(game, x, y, z) * 100.0f));
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.hover_light"), text, more);
+        if (z < game->light.levels) { /* The real map's: the light of tiles seen. */
+            /* The first day of a game has no yesterday: today's so far. */
+            bool yesterday = tile_light_knows_yesterday(&game->light, game->clock.tick);
+            tr_decimal(text, sizeof(text), tile_light_sun_hours(&game->light, x, y, z, yesterday),
+                       1);
+            tr_integer(more, sizeof(more),
+                       (long long)SDL_lroundf(tile_light_open(&game->light, x, y, z) * 100.0f));
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE,
+                      tr(yesterday ? "hud.hover_sun" : "hud.hover_sun_today"), text, more);
+        }
     }
 }
 

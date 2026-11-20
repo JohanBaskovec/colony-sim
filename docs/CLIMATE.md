@@ -241,7 +241,11 @@ ground after the clock jumps (debug season change, tests).
 Measured on seed 42 in summer, relative to the outdoor air: at 14:00 the
 heart of a wood -3.6 °C, a meadow about -1 (its stored ground lags the
 afternoon), bare sand +0.4, open water -3.8, the tops of the crowns -0.6; before dawn a
-wood +1.8. The
+wood +1.8. Since the tile light (docs/SHADOWS.md step 5b) the sun a tile gets
+is its own (the sky it sees and its share in the sun): on the first summer
+afternoon of seed 42, the ground under the crowns -2.60 °C and the open
+ground -0.45 (-2.55 and -0.22 before: open ground beside a wood sees less of
+the sky). The
 unit test `test_microclimate` checks the signs on a strip map (a wood cooler
 than the meadow and the air in the afternoon, milder at dawn, the meadow
 near the air). In winter, bare crowns let the sun and the sky through: the

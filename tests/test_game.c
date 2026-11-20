@@ -1,6 +1,9 @@
 #include "core/game.h"
 #include "core/scenario.h"
+#include "core/shadow.h"
 #include "core/soil.h"
+#include "core/sun.h"
+#include "core/worldgen.h"
 
 #include "test_framework.h"
 
@@ -29,6 +32,29 @@ static bool init_flat_game(Game *game, uint64_t seed)
     params.world.height = 64;
     params.world.flat = true;
     return game_init(game, &params);
+}
+
+/* Soil on level 0 and open air over it in (x0, y0) .. (x1, y1) (inclusive):
+ * out in the open, away from the rock walls and trees of a flat world (the
+ * plants of the ground stay, bare ground warms more in the sun). */
+static void clear_area(Map *map, int x0, int y0, int x1, int y1)
+{
+    for (int y = y0; y <= y1; y++) {
+        for (int x = x0; x <= x1; x++) {
+            size_t index = map_index(map, x, y, 0);
+            if (map->rock[index] != ROCK_NONE ||
+                plant_is_tree((PlantType)map->plants[index].type)) {
+                map->plants[index] = (Plant){0};
+            }
+            map_set_rock(map, x, y, 0, ROCK_NONE);
+            map_set_terrain(map, x, y, 0, TERRAIN_SOIL);
+            for (int z = 1; z < map->depth; z++) {
+                map->plants[map_index(map, x, y, z)] = (Plant){0};
+                map_set_rock(map, x, y, z, ROCK_NONE);
+                map_set_terrain(map, x, y, z, TERRAIN_OPEN);
+            }
+        }
+    }
 }
 
 static void test_init_and_shutdown(void)
@@ -261,13 +287,11 @@ static void test_plants_grow_over_time(void)
     REQUIRE(init_flat_game(&game, 3)); /* Open sky: the outdoor temperature. */
     Map *map = &game.map;
 
-    /* Controlled setup on known terrain. */
-    size_t fertile = map_index(map, 1, 1, 0);
-    size_t barren = map_index(map, 2, 1, 0);
-    map_set_rock(map, 1, 1, 0, ROCK_NONE);
-    map_set_rock(map, 2, 1, 0, ROCK_NONE);
-    map_set_terrain(map, 1, 1, 0, TERRAIN_SOIL);
-    map_set_terrain(map, 2, 1, 0, TERRAIN_SAND);
+    /* Controlled setup on known terrain, in the open. */
+    size_t fertile = map_index(map, 25, 39, 0); /* Out in the open. */
+    size_t barren = map_index(map, 26, 39, 0);
+    map_set_terrain(map, 25, 39, 0, TERRAIN_SOIL);
+    map_set_terrain(map, 26, 39, 0, TERRAIN_SAND);
     map->plants[fertile].type = PLANT_GRASS;
     map->plants[fertile].growth = 0.1f;
     map->plants[barren].type = PLANT_GRASS;
@@ -277,11 +301,12 @@ static void test_plants_grow_over_time(void)
         game_tick(&game);
     }
 
-    /* A summer day is mild: most of the best rate a day makes (a little less
-     * when it is hot or cool for the grass). */
+    /* A summer day: more than half the best rate a day makes (less in the
+     * heat of the afternoon out in the open, warm for the grass, and on
+     * ground a little dry). */
     float best = plant_def(PLANT_GRASS)->growth_per_day * terrain_def(TERRAIN_SOIL)->fertility;
     float gained = map->plants[fertile].growth - 0.1f;
-    CHECK(gained > 0.8f * best && gained <= best + 1e-4f);
+    CHECK(gained > 0.55f * best && gained <= best + 1e-4f);
     /* Sand is below the minimum fertility of grass: no growth. */
     CHECK_NEAR(map->plants[barren].growth, 0.1, 1e-6);
 
@@ -293,45 +318,111 @@ static void test_plants_grow_over_time(void)
     game_shutdown(&game);
 }
 
-/* What a plant meets on its tile: the sun by the hour, the sky, what covers the
- * tile (a tree standing on its trunk is not shaded by its own crown). */
+/* What a plant meets on its tile: the sun by the hour, the sky, its own
+ * share of them (the sky it sees, its share in the sun, docs/SHADOWS.md §5.2;
+ * a tree standing on its trunk is not shaded by its own crown). */
+/* The plants the world generator set where the tile light is too little for
+ * them to take root are gone when the game starts; the others are as
+ * generated. */
+static void test_generated_plants_get_their_light(void)
+{
+    int removed = 0, kept = 0;
+    for (uint64_t seed = 1; seed <= 3; seed++) {
+        NewGameParams params;
+        game_default_params(&params);
+        params.world.seed = seed;
+        params.world.width = 64;
+        params.world.height = 64;
+        params.colonist_count = 0; /* No camp: the plants are the generator's. */
+        Game *game = malloc(sizeof(*game));
+        Map generated;
+        REQUIRE(game != NULL);
+        REQUIRE(game_init(game, &params));
+        REQUIRE(worldgen_generate(&generated, &params.world));
+        const Map *map = &game->map;
+        int day = game_day_of_year(game->clock.tick);
+        float share =
+            shadow_direct_share(sun_position(SUN_LATITUDE_DEFAULT, day, 12.0f).elevation, 1.0f);
+        for (int z = 0; z < game->light.levels; z++) {
+            for (int y = 0; y < map->height; y++) {
+                for (int x = 0; x < map->width; x++) {
+                    size_t index = map_index(map, x, y, z);
+                    PlantType was = (PlantType)generated.plants[index].type;
+                    PlantType now = (PlantType)map->plants[index].type;
+                    if (was == PLANT_NONE || plant_is_tree(was)) {
+                        continue;
+                    }
+                    bool suits = plant_light_suits(map, was, x, y, z,
+                                                   game_tile_light(game, x, y, z, share, true));
+                    CHECK(now == (suits ? was : PLANT_NONE));
+                    removed += !suits;
+                    kept += suits;
+                }
+            }
+        }
+        map_free(&generated);
+        game_shutdown(game);
+        free(game);
+    }
+    CHECK(removed > 0);        /* Grass the crowns around starve, under open sky. */
+    CHECK(kept > 5 * removed); /* About one in nine on these maps. */
+}
+
 static void test_plant_conditions(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game, 3));
     Map *map = &game.map;
-    map_set_terrain(map, 5, 5, 1, TERRAIN_FOLIAGE); /* A crown over (5, 5). */
-    map_set_rock(map, 7, 7, 0, ROCK_WOOD);          /* A tree's foot, its crown over it. */
-    map_set_terrain(map, 7, 7, 1, TERRAIN_FOLIAGE);
+    clear_area(map, 0, 0, 40, 40);
+    for (int y = 2; y <= 8; y++) {
+        for (int x = 2; x <= 8; x++) {
+            map_set_terrain(map, x, y, 1, TERRAIN_FOLIAGE); /* A wide crown over (5, 5). */
+        }
+    }
+    map_set_rock(map, 12, 12, 0, ROCK_WOOD); /* A tree's foot, its crown over it. */
+    map_set_terrain(map, 12, 12, 1, TERRAIN_FOLIAGE);
     int midsummer = SEASON_DAY(SEASON_SUMMER, 8);
     game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
     game.weather.type = WEATHER_CLEAR;
-    PlantConditions open = game_plant_conditions(&game, 3, 3, 0);
+    game_refresh_light(&game);
+    PlantConditions open = game_plant_conditions(&game, 20, 20, 0);
     CHECK_NEAR(open.light, 1.0, 1e-3);
     CHECK_NEAR(open.light_peak, 1.0, 1e-3);
     CHECK_NEAR(open.fertility,
-               terrain_def((Terrain)map->terrain[map_index(map, 3, 3, 0)])->fertility, 1e-6);
+               terrain_def((Terrain)map->terrain[map_index(map, 20, 20, 0)])->fertility, 1e-6);
+    /* Under the crown: what it lets through, from above and from the sides. */
     PlantConditions shaded = game_plant_conditions(&game, 5, 5, 0);
-    CHECK_NEAR(shaded.light, MAP_LIGHT_FOLIAGE_DENSE, 1e-3);
-    PlantConditions tree = game_plant_conditions(&game, 7, 7, 0);
+    float share =
+        game_direct_share(&game, sun_at_tick(game.clock.tick, SUN_LATITUDE_DEFAULT).elevation);
+    CHECK(share > 0.5f);
+    float expected = game_sunlight(game.clock.tick) * weather_light(&game.weather) *
+                     ((1.0f - share) * tile_light_open(&game.light, 5, 5, 0) +
+                      share * tile_light_direct(&game.light, 5, 5, 0));
+    CHECK_NEAR(shaded.light, expected, 1e-5);
+    CHECK(shaded.light > 0.15f && shaded.light < 0.5f);
+    PlantConditions edge = game_plant_conditions(&game, 2, 5, 0);
+    CHECK(edge.light > shaded.light); /* Brighter at the edge of the wood. */
+    PlantConditions tree = game_plant_conditions(&game, 12, 12, 0);
     CHECK_NEAR(tree.light, 1.0, 1e-3);
     /* The light of a tile, for the light view. */
-    CHECK_NEAR(game_light_at(&game, 3, 3, 0), open.light, 1e-6);
+    CHECK_NEAR(game_light_at(&game, 20, 20, 0), open.light, 1e-6);
     CHECK_NEAR(game_light_at(&game, 5, 5, 0), shaded.light, 1e-6);
     CHECK_NEAR(game_light_peak_at(&game, 5, 5, 0), shaded.light_peak, 1e-6);
     CHECK_NEAR(game_light_at(&game, -1, 3, 0), 0.0, 1e-9); /* Out of the map. */
     CHECK_NEAR(game_light_peak_at(&game, 3, 3, 99), 0.0, 1e-9);
     /* Night: no light now, the day's best the same. */
     game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 1 * TICKS_PER_HOUR;
-    PlantConditions night = game_plant_conditions(&game, 3, 3, 0);
+    PlantConditions night = game_plant_conditions(&game, 20, 20, 0);
     CHECK_NEAR(night.light, 0.0, 1e-6);
     CHECK_NEAR(night.light_peak, 1.0, 1e-3);
-    /* Clouds and rain dim it. */
+    /* Clouds and rain dim it, and the shade is the sky's alone. */
     game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
     game.weather.type = WEATHER_STORM;
-    PlantConditions storm = game_plant_conditions(&game, 3, 3, 0);
-    CHECK_NEAR(storm.light, weather_light(&game.weather), 1e-3);
+    PlantConditions storm = game_plant_conditions(&game, 20, 20, 0);
+    CHECK_NEAR(storm.light, game_sunlight(game.clock.tick) * weather_light(&game.weather), 1e-3);
     CHECK(storm.light < open.light);
+    PlantConditions storm_shade = game_plant_conditions(&game, 5, 5, 0);
+    CHECK_NEAR(storm_shade.light, storm.light * tile_light_open(&game.light, 5, 5, 0), 1e-5);
     game_shutdown(&game);
 }
 
@@ -432,12 +523,19 @@ static void test_crowns_lose_their_leaves_in_the_cold(void)
     Game game;
     REQUIRE(init_flat_game(&game, 3));
     Map *map = &game.map;
-    map_set_terrain(map, 5, 5, 1, TERRAIN_FOLIAGE);
+    clear_area(map, 0, 0, 40, 40);
+    for (int y = 2; y <= 8; y++) {
+        for (int x = 2; x <= 8; x++) {
+            map_set_terrain(map, x, y, 1, TERRAIN_FOLIAGE);
+        }
+    }
     CHECK_EQ_INT(map->bare, 0); /* A world starts in summer, in leaf. */
     game.weather.type = WEATHER_CLEAR;
     int midsummer = SEASON_DAY(SEASON_SUMMER, 8);
     game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
-    CHECK_NEAR(game_light_at(&game, 5, 5, 0), MAP_LIGHT_FOLIAGE_DENSE, 1e-3);
+    game_refresh_light(&game);
+    float in_leaf = game_light_at(&game, 5, 5, 0);
+    CHECK(in_leaf < 0.5f);
 
     /* A tree with a crown, alone, in the climate of each season. */
     memset(map->plants, 0, map_tile_count(map) * sizeof(*map->plants));
@@ -458,7 +556,9 @@ static void test_crowns_lose_their_leaves_in_the_cold(void)
     map_set_bare(map, MAP_BARE_STEPS);
     game.clock.tick = (uint64_t)midsummer * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
     game.weather.type = WEATHER_CLEAR;
-    CHECK_NEAR(game_light_at(&game, 5, 5, 0), MAP_LIGHT_BARE_DENSE, 1e-3);
+    game_refresh_light(&game);
+    float bare = game_light_at(&game, 5, 5, 0);
+    CHECK(bare > in_leaf + 0.3f && bare <= MAP_LIGHT_BARE_DENSE + 0.1f);
     game_shutdown(&game);
 }
 
@@ -476,6 +576,7 @@ static void test_plant_growth_is_spread_over_ticks(void)
     REQUIRE(game_init(&game, &params));
     game.clock.tick =
         (uint64_t)GAME_START_DAY * TICKS_PER_DAY + 11 * TICKS_PER_HOUR; /* Near noon. */
+    game_refresh_light(&game);
     Map *map = &game.map;
     size_t count = map_tile_count(map);
     float *before = malloc(count * sizeof(*before));
@@ -506,8 +607,9 @@ static void test_plant_growth_is_spread_over_ticks(void)
         most_in_one_tick = now - grown > most_in_one_tick ? now - grown : most_in_one_tick;
         grown = now;
     }
-    /* Each plant that could grow did (but for a few whose light fell below what they need). */
-    CHECK(grown <= growing && grown + growing / 50 >= growing);
+    /* Each plant that could grow did (but for a few whose light crossed what
+     * they need as the sun rose). */
+    CHECK(grown <= growing + growing / 50 && grown + growing / 50 >= growing);
     CHECK(most_in_one_tick <= count / GAME_PLANT_UPDATE_INTERVAL + 1);
 
     /* Not twice: one more interval gives each plant one more step. */
@@ -869,6 +971,7 @@ int main(void)
     RUN_TEST(test_update_advances_ticks);
     RUN_TEST(test_plants_grow_over_time);
     RUN_TEST(test_plant_conditions);
+    RUN_TEST(test_generated_plants_get_their_light);
     RUN_TEST(test_crowns_lose_their_leaves_in_the_cold);
     RUN_TEST(test_grass_spreads_into_bare_ground);
     RUN_TEST(test_plants_do_not_spread_onto_parched_ground);

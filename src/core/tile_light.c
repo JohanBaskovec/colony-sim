@@ -411,12 +411,15 @@ static float tile_direct(TileLight *light, const Map *map, SunPosition sun, size
     return sum / (float)(TILE_LIGHT_SAMPLES * TILE_LIGHT_SAMPLES);
 }
 
+/* What a period does to `noon`: nothing, starts it again, or adds to it. */
+typedef enum NoonPass { NOON_NONE, NOON_FIRST, NOON_MORE } NoonPass;
+
 /* The sun of the tiles [begin, end) for the sun at the middle of a period;
  * `midnight`: the first period of a day (the day's hours roll over first);
  * `hours`: the hours of the period the sun is up, added to the sun hours
  * as far as the tile is in the sun. */
 static void work_direct(TileLight *light, const Map *map, SunPosition sun, size_t begin, size_t end,
-                        bool midnight, float hours)
+                        bool midnight, float hours, NoonPass noon)
 {
     bool up = sun_is_up(sun);
     if (up) {
@@ -433,6 +436,9 @@ static void work_direct(TileLight *light, const Map *map, SunPosition sun, size_
             direct = to_byte(tile_direct(light, map, sun, i));
         }
         light->direct[i] = direct;
+        if (noon == NOON_FIRST || (noon == NOON_MORE && direct > light->noon[i])) {
+            light->noon[i] = direct;
+        }
         if (steps > 0 && direct > 0) {
             int total = light->sun_today[i] + (direct * steps + 127) / 255; /* Rounded. */
             light->sun_today[i] = (uint8_t)mini(total, UINT8_MAX);
@@ -462,6 +468,34 @@ static float sun_up_hours(uint64_t period)
 
 /* ------------------------------------------------------------------------ */
 
+/* Works out now `open` where it is out of date (everywhere when `all`),
+ * `direct` for the period of `tick` and `noon` for the noon sun. */
+static void work_everything(TileLight *light, const Map *map, uint64_t tick, bool all)
+{
+    refresh_tops(light, map, all);
+    for (int block = 0; block < light->blocks_x * light->blocks_y; block++) {
+        if (all || !block_current(light, map, block, false)) {
+            size_t cell = 0;
+            int budget = INT_MAX;
+            work_block(light, map, block, &cell, &budget);
+            light->open_revisions[block] = map->light_revision + 1;
+        }
+    }
+    light->fast = (TileLightSweep){.solid = true,
+                                   .budget = TILE_LIGHT_OPEN_BUDGET,
+                                   .round_started = map->light_solid_revision,
+                                   .clean = map->light_solid_revision + 1};
+    light->slow = (TileLightSweep){.budget = TILE_LIGHT_FOLIAGE_BUDGET,
+                                   .round_started = map->light_revision,
+                                   .clean = map->light_revision + 1};
+    light->first_period = tick / PERIOD_TICKS;
+    int day = game_day_of_year(tick);
+    work_direct(light, map, sun_position(SUN_LATITUDE_DEFAULT, day, 12.0f), 0, light->count, false,
+                0.0f, NOON_FIRST);
+    work_direct(light, map, sun_of_period(light->first_period), 0, light->count, false, 0.0f,
+                NOON_NONE);
+}
+
 bool tile_light_init(TileLight *light, const Map *map, uint64_t tick)
 {
     memset(light, 0, sizeof(*light));
@@ -477,6 +511,7 @@ bool tile_light_init(TileLight *light, const Map *map, uint64_t tick)
     size_t cells = cells_of(light);
     light->open = calloc(light->count, 1);
     light->direct = calloc(light->count, 1);
+    light->noon = calloc(light->count, 1);
     light->sun_today = calloc(light->count, 1);
     light->sun_yesterday = calloc(light->count, 1);
     light->block_top = calloc(blocks, 1);
@@ -484,9 +519,10 @@ bool tile_light_init(TileLight *light, const Map *map, uint64_t tick)
     light->sky_tops = calloc(cells * SKY_RAYS, 1);
     light->sun_tops = calloc(cells, 1);
     light->open_revisions = calloc(blocks, sizeof(*light->open_revisions));
-    if (light->open == NULL || light->direct == NULL || light->sun_today == NULL ||
-        light->sun_yesterday == NULL || light->block_top == NULL || light->cell_top == NULL ||
-        light->sky_tops == NULL || light->sun_tops == NULL || light->open_revisions == NULL) {
+    if (light->open == NULL || light->direct == NULL || light->noon == NULL ||
+        light->sun_today == NULL || light->sun_yesterday == NULL || light->block_top == NULL ||
+        light->cell_top == NULL || light->sky_tops == NULL || light->sun_tops == NULL ||
+        light->open_revisions == NULL) {
         tile_light_free(light);
         return false;
     }
@@ -495,29 +531,23 @@ bool tile_light_init(TileLight *light, const Map *map, uint64_t tick)
         sky_ray_direction(ray, &east, &south, &up);
         light->sky_ahead_count[ray] = cells_ahead(east, south, SKY_REACH, light->sky_ahead[ray]);
     }
-    refresh_tops(light, map, true);
-    for (int block = 0; block < (int)blocks; block++) {
-        size_t cell = 0;
-        int budget = INT_MAX;
-        work_block(light, map, block, &cell, &budget);
-        light->open_revisions[block] = map->light_revision + 1;
-    }
-    light->fast = (TileLightSweep){.solid = true,
-                                   .budget = TILE_LIGHT_OPEN_BUDGET,
-                                   .round_started = map->light_solid_revision,
-                                   .clean = map->light_solid_revision + 1};
-    light->slow = (TileLightSweep){.budget = TILE_LIGHT_FOLIAGE_BUDGET,
-                                   .round_started = map->light_revision,
-                                   .clean = map->light_revision + 1};
-    light->first_period = tick / PERIOD_TICKS;
-    work_direct(light, map, sun_of_period(light->first_period), 0, light->count, false, 0.0f);
+    light->start_tick = tick;
+    work_everything(light, map, tick, true);
     return true;
+}
+
+void tile_light_refresh(TileLight *light, const Map *map, uint64_t tick)
+{
+    if (light->count > 0) {
+        work_everything(light, map, tick, false);
+    }
 }
 
 void tile_light_free(TileLight *light)
 {
     free(light->open);
     free(light->direct);
+    free(light->noon);
     free(light->sun_today);
     free(light->sun_yesterday);
     free(light->block_top);
@@ -546,8 +576,12 @@ void tile_light_tick(TileLight *light, const Map *map, uint64_t tick)
     uint64_t phase = tick % PERIOD_TICKS;
     size_t begin = (size_t)(phase * light->count / PERIOD_TICKS);
     size_t end = (size_t)((phase + 1) * light->count / PERIOD_TICKS);
-    bool midnight = game_hour_from_tick(period * PERIOD_TICKS) == 0;
-    work_direct(light, map, sun_of_period(period), begin, end, midnight, sun_up_hours(period));
+    int hour = game_hour_from_tick(period * PERIOD_TICKS);
+    NoonPass noon = hour == TILE_LIGHT_NOON_FROM                               ? NOON_FIRST
+                    : hour > TILE_LIGHT_NOON_FROM && hour < TILE_LIGHT_NOON_TO ? NOON_MORE
+                                                                               : NOON_NONE;
+    work_direct(light, map, sun_of_period(period), begin, end, hour == 0, sun_up_hours(period),
+                noon);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -573,6 +607,12 @@ float tile_light_direct(const TileLight *light, int x, int y, int z)
     return stored_index(light, x, y, z, &index) ? (float)light->direct[index] / 255.0f : 0.0f;
 }
 
+float tile_light_noon(const TileLight *light, int x, int y, int z)
+{
+    size_t index;
+    return stored_index(light, x, y, z, &index) ? (float)light->noon[index] / 255.0f : 0.0f;
+}
+
 float tile_light_sun_hours(const TileLight *light, int x, int y, int z, bool yesterday)
 {
     size_t index;
@@ -581,4 +621,11 @@ float tile_light_sun_hours(const TileLight *light, int x, int y, int z, bool yes
     }
     uint8_t steps = yesterday ? light->sun_yesterday[index] : light->sun_today[index];
     return (float)steps / (float)TILE_LIGHT_SUN_HOUR_STEPS;
+}
+
+bool tile_light_knows_yesterday(const TileLight *light, uint64_t tick)
+{
+    /* The day after the first one, once each tile rolled over (in the first period). */
+    uint64_t next_day = (light->start_tick / TICKS_PER_DAY + 1) * TICKS_PER_DAY;
+    return tick >= next_day + PERIOD_TICKS;
 }

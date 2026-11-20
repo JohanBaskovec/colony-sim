@@ -16,13 +16,16 @@
  * (soil_update()). What the weather brings that hour comes in a SoilHour
  * worked out once for the map. Besides the water, each update keeps what the
  * microclimate needs (docs/CLIMATE.md §5): the light the crowns let through
- * (`canopy`) and the share of the sun's energy that went into evaporation
+ * (`canopy`, what the rain gets through too), the tile's own share of the
+ * sun (`sun`: the foot of a north wall gets less of it, docs/SHADOWS.md
+ * §5.2) and the share of the sun's energy that went into evaporation
  * (`evap`).
  */
 #ifndef COLONY_CORE_SOIL_H
 #define COLONY_CORE_SOIL_H
 
 #include "core/map.h"
+#include "core/tile_light.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -81,6 +84,11 @@ typedef struct SoilHour {
     /* Look again at what covers each tile (the crowns grow and lose their
      * leaves slowly: every SOIL_CANOPY_HOURS); otherwise `canopy` is kept. */
     bool look_up;
+    /* The light of each tile (docs/SHADOWS.md §5.2), and the share of the
+     * daylight coming straight from the sun this hour: a tile's own sun
+     * (`sun`). NULL: what covers it stands for it (`canopy`). */
+    const TileLight *light;
+    float direct_share;
 } SoilHour;
 
 /* Hours between two looks at what covers each tile. */
@@ -94,8 +102,12 @@ typedef struct Soil {
      * (ground opened since, rock dug out: soil_update() starts it at field
      * capacity, and it is unknown until then). Never 0 once followed. */
     float *water;
-    uint8_t *evap;         /* Share of the potential that evaporated last hour, 0 .. 255. */
-    uint8_t *canopy;       /* Light the crowns let through last hour, 0 .. 255. */
+    uint8_t *evap;   /* Share of the potential that evaporated last hour, 0 .. 255. */
+    uint8_t *canopy; /* Light the crowns let through last hour, 0 .. 255. */
+    /* The tile's share of the sun of open ground last hour (its sky and its
+     * share in the sun, SoilHour.light), 0 .. 255: what dries it and warms
+     * its air. */
+    uint8_t *sun;
     uint8_t *wet;          /* Tiles to open water (SOIL_WET_FAR: farther). */
     float snowpack;        /* Snow lying on open ground, mm of water. */
     float melt;            /* Snowmelt of the hour, mm (soil_snow_hour()). */

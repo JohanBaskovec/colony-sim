@@ -672,12 +672,23 @@ bool game_door_kept_open(const Game *game, int x, int y, int z);
  * False when no door the colony knows of stands there. */
 bool game_set_door_kept_open(Game *game, int x, int y, int z, bool open);
 
-/* The light on a tile now (0 .. 1): the sun (game_sunlight()), the sky
- * (weather_light()) and what covers the tile (map_light_cover(); a tile of a
- * tree's trunk gets the open light). `game_light_peak_at()` is the best it
- * gets in the day (the noon sun). */
+/* The light on a tile now (0 .. 1, docs/SHADOWS.md §5.2): the sun
+ * (game_sunlight()) and the sky (weather_light()) times the tile's own share
+ * of them (game_tile_light()). `game_light_peak_at()` is the best it gets in
+ * the day (the noon sun, the tile's share in the sun around noon). */
 float game_light_at(const Game *game, int x, int y, int z);
 float game_light_peak_at(const Game *game, int x, int y, int z);
+/* Works out now the light of the tiles (Game.light, tile_light_refresh())
+ * after the map or the clock was changed by hand. */
+void game_refresh_light(Game *game);
+/* The share of the daylight coming straight from the sun at an elevation
+ * (degrees) under today's sky (shadow_direct_share(): none unless clear). */
+float game_direct_share(const Game *game, float elevation);
+/* How much of the light of open ground a tile in the map gets, 0 .. 1: the
+ * sky it sees (Game.light) and, for `direct_share` of the light, its share in
+ * the sun now (or around noon); a tile of a tree's trunk gets it all (the
+ * crown is in the light); tiles over the plant levels what covers them. */
+float game_tile_light(const Game *game, int x, int y, int z, float direct_share, bool noon);
 
 /* What a plant on a tile meets now: the temperature of its tile
  * (temperature_for_plant()), its ground's fertility, and the light: the sun

@@ -253,6 +253,7 @@ static void test_sun_hours(void)
     uint64_t tick = (uint64_t)MIDSUMMER * TICKS_PER_DAY;
     REQUIRE(tile_light_init(&light, &map, tick));
     CHECK_NEAR(tile_light_sun_hours(&light, 20, 20, 0, false), 0.0, 1e-6);
+    CHECK(!tile_light_knows_yesterday(&light, tick));
     uint64_t noon = tick + 13 * TICKS_PER_HOUR;
     while (tick < noon) {
         tile_light_tick(&light, &map, ++tick);
@@ -270,6 +271,8 @@ static void test_sun_hours(void)
     CHECK_NEAR(tile_light_sun_hours(&light, 20, 20, 0, false), 0.0, 1e-6); /* Night. */
     CHECK_NEAR(tile_light_sun_hours(&light, 7, 7, 0, true), 0.0, 1e-6);
     CHECK_NEAR(tile_light_direct(&light, 20, 20, 0), 0.0, 1e-6);
+    CHECK(!tile_light_knows_yesterday(&light, tick)); /* Some tiles roll over until 2:00. */
+    CHECK(tile_light_knows_yesterday(&light, tick + TICKS_PER_HOUR));
     tile_light_free(&light);
     map_free(&map);
 }

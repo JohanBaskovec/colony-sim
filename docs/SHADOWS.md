@@ -466,8 +466,9 @@ Each step is tested and leaves the game playable.
    passing lets only the sight through: a settler passing does not chill a
    room nor lets a wolf in, and the light, worked out again within budgets
    on screen, would come late and linger after they passed. Only kept-open
-   doors are in the game hash. `MAP_LIGHT_ROOF` stays in
-   `map_light_cover()`, what the simulation reads, until step 5.
+   doors are in the game hash. `MAP_LIGHT_ROOF` stayed in
+   `map_light_cover()`, what the simulation read, until step 5 (gone with
+   5b).
 5. **Light in the simulation**: `open`, `direct` (the share of the tile in
    the sun) and `sun_hours`, read by plants, soil and temperature; the
    inspector's line; the retuning of §5.3. Tests: a tile a fifth in the sun
@@ -534,6 +535,53 @@ Each step is tested and leaves the game playable.
      retuning, measured on seed 42 before and after: plants of each kind
      after a year, the temperatures of §5.4 of `docs/CLIMATE.md`, the
      microclimate's tests.
+   - **5b as built.** The light of a tile (`game_tile_light()`) is
+     `(1 − share) × open + share × direct`, `share` the direct sun's part
+     of the light for the sun's elevation, on a clear day only
+     (`shadow_direct_share()`, the same as on screen); `game_light_at()`
+     multiplies it by the sun of the hour and the sky's light, as before.
+     For the noon light, `TileLight.noon` keeps the most of `direct` over
+     the periods from 10:00 to 14:00, the last day's until 10:00 comes
+     again. `MAP_LIGHT_ROOF` is gone: a roof covers its tile wholly in
+     `map_light_cover()`, what is left of it (the levels over the stored
+     ones, the trees, the soil's look-up, world generation). The soil keeps
+     the sun of each tile of the hour (`Soil.sun`: the tile light with the
+     share of the middle of the hour) for its evaporation and gives it to
+     the microclimate, whose sun and night cooling it scales (the crowns
+     still stop the night's loss of heat). Taking root reads the clear
+     day's noon light of the tile (not the summer's sun hours: the light
+     of the day, scaled down by what the crowns would stop in leaf, as
+     before). The tile inspector shows yesterday's sun hours (today's so
+     far on a game's first day) and the sky the tile sees; the light view shows the new light (it reads
+     `game_light_at()`). Tests and scenarios that change the map or the
+     clock by hand call `game_refresh_light()` (everything out of date
+     worked out at once).
+     World generation still rolls the understory from `map_light_cover()`
+     (`sky_open()` per tile would double the cost of a new world in the
+     tests). Instead, once the tile light is worked out in `game_init()`,
+     the plants it set where the tile light is too little for them to take
+     root (`plant_light_suits()`, the light part of `plant_can_take_root()`)
+     are taken away before the settlers arrive: on seed 42 about 900 tufts
+     of grass out of 6 900 (forest glades, the shade of the crowns around)
+     and a few dozen heather, plantain, cattail and bracken. Without it
+     they starved in the first days. The light is worked out once more
+     after the arrival's camp (its hazels): `game_init()` takes 30 ms more
+     (about 200 ms on seed 42).
+     Measured on seed 42 without settlers, a year from the start (before →
+     after): grass 8 434 → 8 109, bramble 225 → 266, nettle 459 → 509,
+     plantain 468 → 448, cattail 925 → 812, moss 929 → 994, wood sorrel
+     381 → 398, bracken 1 351 → 1 286, wild strawberry 541 → 648, heather
+     745 → 638, reed 525 → 463, the trees and the rest within a few. At
+     14:00 in summer, under the crowns −2.60 °C from the outdoor air (−2.55
+     before), open ground −0.45 (−0.22: open ground beside a wood gets less
+     of the sky than it used to). Grass in the shade grows more slowly
+     (seeing less than half of the sky, about a third less in the first
+     days), so settlers gathering it near woods find less: on
+     `bench_simulation 64 4 1` about 40 % less fresh grass in four days, and
+     its tick from 75 to 106 µs (the gathering searches going farther, see
+     the roadmap); scenario 3 (12 settlers, building) 37 → 34 µs, scenario 1
+     with 12 settlers 18 → 20 µs. The light's own readers cost little. No
+     `PlantDef` retuned.
 6. **What follows** (roadmap items of their own): the sun felt on a body,
    snow and drying; windows.
 7. **A latitude per game** (later): the latitude a value of the world, the

@@ -595,16 +595,22 @@ float plant_bare_target(float climate);
  * Spread (docs/PLANTS.md §13). A plant takes root on a tile that is free (no
  * plant, rock nor built structure) and suits it: its ground (a fertility of
  * at least its `min_fertility` on sand, soil or gravel; a plant of the wet by
- * the water or in the shallows at the shore), enough light under the crowns
- * in leaf (the cover times PLANT_SPREAD_SUN, at least its `light_min`; the
- * cover of the season for a plant of the spring, which rests in the heat),
- * and for a tree no other tree nor trunk within TREE_SPREAD_SPACING tiles.
+ * the water or in the shallows at the shore), enough light in the summer's
+ * shade (`light`, the tile's share of the light of open ground at noon on a
+ * clear day: its sky and its sun, docs/SHADOWS.md §5.2, scaled down by what
+ * the crowns over it would stop in leaf; or what covers it, negative; times
+ * PLANT_SPREAD_SUN, at least its `light_min`; the light of the season for a
+ * plant of the spring, which rests in the heat), and for a tree no other
+ * tree nor trunk within TREE_SPREAD_SPACING tiles.
  */
 #define PLANT_SPREAD_SUN 0.85f
 #define TREE_SPREAD_SPACING 2
 /* A young plant's growth when it takes root. */
 #define PLANT_SPREAD_GROWTH 0.05f
-bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z);
+bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z, float light);
+/* The light part of plant_can_take_root() (same `light`): whether a plant
+ * gets enough of it at a tile to live there, whatever stands on the tile. */
+bool plant_light_suits(const Map *map, PlantType type, int x, int y, int z, float light);
 
 /* The tile a plant on (x, y, z) sends a runner or seed to: one of those within
  * its `spread_range` (not its own), picked by `roll` (0 .. 1). False when the
@@ -878,7 +884,7 @@ int map_cover_level(const Map *map, int x, int y, int z);
 /* How much of the light reaches the tile through what lies over it, 0 .. 1:
  * all of it in the open; each layer of foliage over it lets through its share
  * (MAP_LIGHT_FOLIAGE_*), so that a crown of several layers is darker than a
- * thin one and the layers multiply; a built roof MAP_LIGHT_ROOF; rock or the
+ * thin one and the layers multiply; a built roof, rock or the
  * ground of a level above nothing. The trunk of a tree over its own foot is
  * not a cover. */
 float map_light_cover(const Map *map, int x, int y, int z);
@@ -899,7 +905,6 @@ float map_bare_fraction(const Map *map);
 #define MAP_LIGHT_FOLIAGE_DENSE 0.35f
 #define MAP_LIGHT_FOLIAGE_MEDIUM 0.6f
 #define MAP_LIGHT_FOLIAGE_SPARSE 0.8f
-#define MAP_LIGHT_ROOF 0.05f
 /* What one layer of a terrain lets through, crossed from top to bottom, with
  * the crowns `bare` (0 in leaf .. 1): MAP_LIGHT_FOLIAGE_* towards
  * MAP_LIGHT_BARE_* for foliage, 1 for any other terrain (whether a floor

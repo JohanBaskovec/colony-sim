@@ -136,8 +136,10 @@ bool soil_init(Soil *soil, const Map *map, float share)
     soil->water = calloc(count, sizeof(*soil->water));
     soil->evap = calloc(count, sizeof(*soil->evap));
     soil->canopy = calloc(count, sizeof(*soil->canopy));
+    soil->sun = calloc(count, sizeof(*soil->sun));
     soil->wet = malloc(count);
-    if (soil->water == NULL || soil->evap == NULL || soil->canopy == NULL || soil->wet == NULL) {
+    if (soil->water == NULL || soil->evap == NULL || soil->canopy == NULL || soil->sun == NULL ||
+        soil->wet == NULL) {
         soil_free(soil);
         return false;
     }
@@ -155,7 +157,20 @@ bool soil_init(Soil *soil, const Map *map, float share)
         }
     }
     soil_look_up(soil, map, 0, count);
+    memcpy(soil->sun, soil->canopy, count); /* Until the first hour. */
     return true;
+}
+
+/* The tile's own share of the sun (Soil.sun). */
+static uint8_t tile_sun(const Soil *soil, const Map *map, size_t index, const SoilHour *hour)
+{
+    const TileLight *light = hour->light;
+    if (light == NULL || index >= light->count || !tile_light_has_surface(map, index)) {
+        return soil->canopy[index];
+    }
+    float share = hour->direct_share;
+    float sun = (1.0f - share) * (float)light->open[index] + share * (float)light->direct[index];
+    return (uint8_t)lroundf(clampf(sun, 0.0f, 255.0f));
 }
 
 void soil_free(Soil *soil)
@@ -163,6 +178,7 @@ void soil_free(Soil *soil)
     free(soil->water);
     free(soil->evap);
     free(soil->canopy);
+    free(soil->sun);
     free(soil->wet);
     memset(soil, 0, sizeof(*soil));
 }
@@ -310,6 +326,8 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
         }
         bool covered = soil->canopy[i] == 0;
         float canopy = (float)soil->canopy[i] * (1.0f / 255.0f);
+        soil->sun[i] = tile_sun(soil, map, i, hour);
+        float sun = (float)soil->sun[i] * (1.0f / 255.0f);
         const SoilDef *def = tile_def(map, i);
         Terrain terrain = (Terrain)map->terrain[i];
         if (def == NULL) {
@@ -354,9 +372,11 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
             lost = hour->pet * SOIL_COVERED_EVAPORATION * top * top;
         } else {
             float leaf = fminf(leaf_cover(&map->plants[i]), 1.0f);
+            /* The crowns over it take what they stop, the ground what
+             * reaches it of the sun. */
             float crowns = (1.0f - canopy) * drawn;
-            float plant = canopy * leaf * drawn;
-            float bare = canopy * (1.0f - leaf) * SOIL_BARE_EVAPORATION * top * top;
+            float plant = sun * leaf * drawn;
+            float bare = sun * (1.0f - leaf) * SOIL_BARE_EVAPORATION * top * top;
             lost = hour->pet * (crowns + plant + bare);
         }
         lost = fminf(lost, 0.9f * water); /* Never quite dry: 0 means not followed. */

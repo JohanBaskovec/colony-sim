@@ -4,6 +4,8 @@
 #include "core/conversation.h"
 #include "core/hauling.h"
 #include "core/log.h"
+#include "core/shadow.h"
+#include "core/sun.h"
 #include "core/tree.h"
 #include "core/util.h"
 
@@ -589,6 +591,35 @@ static void leaf_settle(Game *game)
     leaf_conclude(game);
 }
 
+/* A tile's share of the light of open ground at noon on a clear day. */
+static float noon_light(const Game *game, int x, int y, int z)
+{
+    int day = game_day_of_year(game->clock.tick);
+    float elevation = sun_position(SUN_LATITUDE_DEFAULT, day, 12.0f).elevation;
+    return game_tile_light(game, x, y, z, shadow_direct_share(elevation, 1.0f), true);
+}
+
+/* The understory of the world generator follows map_light_cover(), which
+ * knows only what stands over a tile: the plants it set where the tile light
+ * (the sky the tile sees, its sun) is too little for them to take root would
+ * starve in the first days. They are not there. */
+static void clear_starving_plants(Game *game)
+{
+    Map *map = &game->map;
+    for (int z = 0; z < game->light.levels; z++) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                Plant *plant = &map->plants[map_index(map, x, y, z)];
+                if (plant->type != PLANT_NONE && !plant_is_tree((PlantType)plant->type) &&
+                    !plant_light_suits(map, (PlantType)plant->type, x, y, z,
+                                       noon_light(game, x, y, z))) {
+                    memset(plant, 0, sizeof(*plant));
+                }
+            }
+        }
+    }
+}
+
 bool game_init(Game *game, const NewGameParams *params)
 {
     memset(game, 0, sizeof(*game));
@@ -641,6 +672,12 @@ bool game_init(Game *game, const NewGameParams *params)
         return false;
     }
     leaf_settle(game);
+    /* The light of the world as generated, and the plants it cannot keep. */
+    if (!tile_light_init(&game->light, &game->map, game->clock.tick)) {
+        game_shutdown(game);
+        return false;
+    }
+    clear_starving_plants(game);
     spawn_starting_colonists(game, params->colonist_count);
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
     if (params->wildlife > 0.0f) {
@@ -650,11 +687,8 @@ bool game_init(Game *game, const NewGameParams *params)
     }
     game_update_stock(game);
     game_count_knowledge(game); /* Who knows what at the start: no notice for it. */
-    /* Last: the map as it starts (the crowns' leaves, the arrival's camp). */
-    if (!tile_light_init(&game->light, &game->map, game->clock.tick)) {
-        game_shutdown(game);
-        return false;
-    }
+    /* Last: the light where the arrival's camp changed the map. */
+    tile_light_refresh(&game->light, &game->map, game->clock.tick);
     return true;
 }
 
@@ -804,6 +838,7 @@ static void mushrooms_day(Game *game, size_t index, int day)
  * too dry nor too wet for it now (docs/CLIMATE.md §6), and nothing of the
  * colony is on it (a stockpile, a workstation, a building site, an order;
  * items lying about do not stop it). */
+
 static void spread_day(Game *game, size_t index, int day)
 {
     Map *map = &game->map;
@@ -818,7 +853,7 @@ static void spread_day(Game *game, size_t index, int day)
     int x, y, z, tx, ty;
     map_tile_of(map, index, &x, &y, &z);
     if (!plant_spread_target(map, x, y, z, world_roll(game->seed, index, day, 31), &tx, &ty) ||
-        !plant_can_take_root(map, (PlantType)plant->type, tx, ty, z) ||
+        !plant_can_take_root(map, (PlantType)plant->type, tx, ty, z, noon_light(game, tx, ty, z)) ||
         stockpile_at(&game->stockpiles, tx, ty, z) != STOCKPILE_NONE ||
         workstation_at(&game->workstations, tx, ty, z) >= 0 ||
         construction_at(&game->constructions, tx, ty, z) != CONSTRUCTION_NONE ||
@@ -978,6 +1013,9 @@ static void update_soil(Game *game, size_t begin, size_t end, uint64_t phase)
         .dew_point = dew,
         .night = sun <= 0.0f,
         .look_up = (tick / TICKS_PER_HOUR) % SOIL_CANOPY_HOURS == 0,
+        .light = &game->light,
+        .direct_share = game_direct_share(
+            game, sun_at_tick(tick - phase + TICKS_PER_HOUR / 2, SUN_LATITUDE_DEFAULT).elevation),
     };
     soil_update(soil, &game->map, begin, end, &hour, game->temperatures.celsius);
 }
@@ -1022,13 +1060,29 @@ static void update_plants(Game *game)
     }
 }
 
-/* What lets the light through over a tile: the sky and what covers it. */
-static float light_through(const Game *game, int x, int y, int z)
+void game_refresh_light(Game *game)
+{
+    tile_light_refresh(&game->light, &game->map, game->clock.tick);
+}
+
+float game_direct_share(const Game *game, float elevation)
+{
+    return shadow_direct_share(elevation, game->weather.type == WEATHER_CLEAR ? 1.0f : 0.0f);
+}
+
+float game_tile_light(const Game *game, int x, int y, int z, float direct_share, bool noon)
 {
     const Map *map = &game->map;
-    float cover =
-        map->rock[map_index(map, x, y, z)] == ROCK_WOOD ? 1.0f : map_light_cover(map, x, y, z);
-    return weather_light(&game->weather) * cover;
+    if (map->rock[map_index(map, x, y, z)] == ROCK_WOOD) {
+        return 1.0f; /* A tree takes its light at the top of its crown. */
+    }
+    if (z >= game->light.levels) {
+        return map_light_cover(map, x, y, z);
+    }
+    float open = tile_light_open(&game->light, x, y, z);
+    float lit =
+        noon ? tile_light_noon(&game->light, x, y, z) : tile_light_direct(&game->light, x, y, z);
+    return (1.0f - direct_share) * open + direct_share * lit;
 }
 
 float game_light_at(const Game *game, int x, int y, int z)
@@ -1036,7 +1090,13 @@ float game_light_at(const Game *game, int x, int y, int z)
     if (!map_in_bounds(&game->map, x, y, z)) {
         return 0.0f;
     }
-    return game_sunlight(game->clock.tick) * light_through(game, x, y, z);
+    float sun = game_sunlight(game->clock.tick);
+    if (sun <= 0.0f) {
+        return 0.0f;
+    }
+    float share =
+        game_direct_share(game, sun_at_tick(game->clock.tick, SUN_LATITUDE_DEFAULT).elevation);
+    return sun * weather_light(&game->weather) * game_tile_light(game, x, y, z, share, false);
 }
 
 float game_light_peak_at(const Game *game, int x, int y, int z)
@@ -1044,7 +1104,10 @@ float game_light_peak_at(const Game *game, int x, int y, int z)
     if (!map_in_bounds(&game->map, x, y, z)) {
         return 0.0f;
     }
-    return game_sun_noon(game_day_of_year(game->clock.tick)) * light_through(game, x, y, z);
+    int day = game_day_of_year(game->clock.tick);
+    float share = game_direct_share(game, sun_position(SUN_LATITUDE_DEFAULT, day, 12.0f).elevation);
+    return game_sun_noon(day) * weather_light(&game->weather) *
+           game_tile_light(game, x, y, z, share, true);
 }
 
 PlantConditions game_plant_conditions(const Game *game, int x, int y, int z)
@@ -2669,6 +2732,7 @@ void game_tick(Game *game)
     TemperatureSurface surface = {
         .canopy = game->soil.canopy,
         .evap = game->soil.evap,
+        .sun = game->soil.sun,
         .sun_heat = TEMPERATURE_SUN_HEAT * sun * weather_light(&game->weather),
         .night_cooling =
             sun <= 0.0f && sky != NULL ? TEMPERATURE_NIGHT_COOLING * sky->clearness : 0.0f,

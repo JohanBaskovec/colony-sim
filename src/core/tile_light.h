@@ -66,6 +66,11 @@
 /* `direct` is worked out every TILE_LIGHT_DIRECT_HOURS (a whole part of a
  * day), for the sun at the middle of those hours. */
 #define TILE_LIGHT_DIRECT_HOURS 2
+/* Around noon: the periods from TILE_LIGHT_NOON_FROM to TILE_LIGHT_NOON_TO
+ * (hours); `noon` keeps the most of their `direct`, the last day's until
+ * the first of them comes again (what plants need to live, docs/PLANTS.md). */
+#define TILE_LIGHT_NOON_FROM 10
+#define TILE_LIGHT_NOON_TO 14
 /* sun_hours: tenths of an hour. */
 #define TILE_LIGHT_SUN_HOUR_STEPS 10
 
@@ -90,6 +95,7 @@ typedef struct TileLight {
     size_t count;              /* width × height × levels. */
     uint8_t *open;             /* Per tile: how much of the sky, 0 .. 255. */
     uint8_t *direct;           /* Per tile: its share in the sun now, 0 .. 255. */
+    uint8_t *noon;             /* Per tile: the most of it around noon (TILE_LIGHT_NOON_*). */
     uint8_t *sun_today;        /* Per tile: tenths of an hour of sun today. */
     uint8_t *sun_yesterday;
     int blocks_x, blocks_y;
@@ -113,13 +119,19 @@ typedef struct TileLight {
     TileLightSweep fast;   /* Changes to what stops the light outright. */
     TileLightSweep slow;   /* Any change: the foliage growing, its leaves. */
     uint64_t first_period; /* The period of game_init(): its slices are already done. */
+    uint64_t start_tick;   /* Of tile_light_init(): no sun hours before it. */
     uint64_t rays;         /* Cast so far (for the benchmarks). */
 } TileLight;
 
 /* Works everything out for the map at `tick`: `open` and the tops, `direct`
- * for the current period; no sun hours yet. False when memory ran out. */
+ * for the current period, `noon` for the sun at noon; no sun hours yet.
+ * False when memory ran out. */
 bool tile_light_init(TileLight *light, const Map *map, uint64_t tick);
 void tile_light_free(TileLight *light);
+/* Works out now what is out of date (`open` where the map changed, `direct`
+ * for the period of `tick`, `noon`), keeping the sun hours: after the map was
+ * changed by hand all at once (test scenarios, tests) or the clock set. */
+void tile_light_refresh(TileLight *light, const Map *map, uint64_t tick);
 
 /* The work of the tick (game_tick(), after the tick count moved on). */
 void tile_light_tick(TileLight *light, const Map *map, uint64_t tick);
@@ -131,8 +143,12 @@ bool tile_light_has_surface(const Map *map, size_t index);
  */
 float tile_light_open(const TileLight *light, int x, int y, int z);
 float tile_light_direct(const TileLight *light, int x, int y, int z);
+float tile_light_noon(const TileLight *light, int x, int y, int z);
 /* Hours of sun of the tile today so far, or yesterday. */
 float tile_light_sun_hours(const TileLight *light, int x, int y, int z, bool yesterday);
+/* Whether every tile's sun hours of yesterday are a whole day's at `tick`
+ * (the first day after tile_light_init() has none). */
+bool tile_light_knows_yesterday(const TileLight *light, uint64_t tick);
 
 /* sun_lit() of a point of the map, the rays cut short as for `direct` (the
  * tops brought up to date with the map first). */

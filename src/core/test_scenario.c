@@ -86,6 +86,7 @@ bool test_scenario_load(Game *game, TestScenario scenario)
         return false;
     }
     flatten(game);
+    game_refresh_light(game);
     game->debug = debug;
     game->clock.speed = clock.speed;
     game->clock.resume_speed = clock.resume_speed;

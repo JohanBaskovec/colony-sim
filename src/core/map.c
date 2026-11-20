@@ -1922,10 +1922,8 @@ static float light_cover(const Map *map, int x, int y, int z, float bare)
             light *= map_foliage_light((Terrain)map->terrain[index], bare);
             continue;
         }
-        if (map_roof(map, x, y, above) != STRUCTURE_NONE) {
-            light *= MAP_LIGHT_ROOF;
-        } else if (!map_is_open_at(map, index)) {
-            return 0.0f; /* The ground of a level above. */
+        if (!map_is_open_at(map, index)) {
+            return 0.0f; /* A roof, or the ground of a level above. */
         }
     }
     return light;
@@ -2017,7 +2015,26 @@ static bool tree_or_trunk_near(const Map *map, int x, int y, int z, int range)
     return false;
 }
 
-bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z)
+bool plant_light_suits(const Map *map, PlantType type, int x, int y, int z, float light)
+{
+    if ((unsigned)type >= PLANT_COUNT || !map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    const PlantDef *def = &PLANT_DEFS[type];
+    if (def->dark_days <= 0.0f) {
+        return true;
+    }
+    float now = map_light_cover(map, x, y, z);
+    float in_leaf = def->rests_in_heat ? now : map_light_cover_in_leaf(map, x, y, z);
+    if (light < 0.0f) {
+        light = in_leaf;
+    } else if (now > 0.0f) {
+        light *= in_leaf / now; /* The crowns over it in leaf. */
+    }
+    return light * PLANT_SPREAD_SUN >= def->light_min;
+}
+
+bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z, float light)
 {
     if ((unsigned)type >= PLANT_COUNT || type == PLANT_NONE || !map_in_bounds(map, x, y, z)) {
         return false;
@@ -2038,12 +2055,8 @@ bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z)
     } else if (!rooting_ground(terrain) || TERRAIN_DEFS[terrain].fertility < def->min_fertility) {
         return false;
     }
-    if (def->dark_days > 0.0f) {
-        float cover = def->rests_in_heat ? map_light_cover(map, x, y, z)
-                                         : map_light_cover_in_leaf(map, x, y, z);
-        if (cover * PLANT_SPREAD_SUN < def->light_min) {
-            return false;
-        }
+    if (!plant_light_suits(map, type, x, y, z, light)) {
+        return false;
     }
     return !plant_is_tree(type) || !tree_or_trunk_near(map, x, y, z, TREE_SPREAD_SPACING);
 }
