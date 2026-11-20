@@ -226,7 +226,9 @@ theme and migration plan).
 
 - [ ] Save/load (versioned), autosave
 - [ ] Settings menu (language, resolution, volume, key bindings) persisted in the user preferences folder
-- [ ] Main menu, new game options (seed, map size, difficulty)
+- [x] Title screen (Thawmoor, a world drifting behind it): New game, Settings, Quit; the game menu's Main menu goes back to it (after asking); any game option on the command line skips it
+- [x] New game options: the seed (typed, any word), the size, the landscape scale, water, hills, slope, bare rock, depth, flat world, trees, settlers, wild animals (`core/new_game.h`)
+- [ ] New game, later: difficulty; temperature and the length of the seasons (the latitude, SHADOWS.md step 7); a preview of the map before starting; the options remembered between sessions
 - [ ] Sound and music
 - [x] Sprites (128 × 128 pixels per tile) in a texture atlas with halved copies for zoomed-out views: trees, hazels and brambles (5 growth stages, hazels and brambles with and without fruit), low plants (3 stages), mushrooms, colonists in 4 layers (naked limbless body in 3 shapes, head with 4 expressions, beard, hair) in front view, a moving fist (with the tool of the job) while working
 - [x] Ground textures, the same on every tile of a terrain: soil, rich soil, shallow and deep water seen from above; grass over the ground, taller with its growth; the cut face of granite, sandstone and earth walls, dark and compact so that they never read as ground

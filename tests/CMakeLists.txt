@@ -37,6 +37,7 @@ set(COLONY_UNIT_TESTS
     test_hearth
     test_map
     test_mood
+    test_new_game
     test_noise
     test_occupancy
     test_pathfinding

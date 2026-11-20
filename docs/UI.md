@@ -334,10 +334,45 @@ or J): the last 200 notices, the newest first, each with its date above it.
 One line says so when there is nothing to report yet. A colonist's own log
 (what they did, said, suffered) will be a tab of their inspector, later.
 
+### Title screen
+
+Shown at launch unless the command line asks for a game (a seed, a size,
+settlers, animals, a scenario, cheats, the render benchmark:
+`cli_starts_game()`), and when a game is left from the game menu
+(`game/title_screen.h`):
+
+- Behind it, a world of its own (always the same seed, no settlers) lives on
+  in the morning light; the view drifts slowly along a figure of eight over
+  its plains, without markers, under a cold veil (darker at the top and the
+  bottom, the sides a little darker).
+- The name of the game in large spaced capitals (closer on a narrow window),
+  a tagline between two thin amber strokes, then three large buttons: New
+  game, Settings (the settings window, as from the game menu), Quit; the
+  version in the bottom right corner.
+
+**New game** opens a window in three columns, every option of the world to
+make (`core/new_game.h`), each a label with its value and a slider under it,
+its note as a tooltip:
+
+| World | Relief | Life |
+|---|---|---|
+| Seed (typed: a number or any word; empty: random) and Random | Flat world | Trees (percent) |
+| Width, height (64 to 256 tiles) | Water (the elevation below which it is water) | Settlers (1 to 64) |
+| Landscape scale (the size of lakes, woods, hills) | Hills from, slope (elevation per level), bare rock from | Wild animals (0 to 400 % of the usual number) |
+| | Depth (levels under the plains) | |
+
+A flat world dims the options it has no use for (hills, slope, depth); the
+hills and the rock keep their order (setting one moves the other). Along the
+bottom: Defaults on the left, Back and Start on the right (Enter starts,
+Escape goes back). The options are kept until the game quits. Start shows
+"Generating the world..." for a frame, then the game begins, fog of war on.
+
 ### Game menu
 
-A centered window: Resume, Controls (the old "?" help, F1), Settings, Quit.
-Later: save, load, new game. The game is paused while it is open.
+A centered window: Resume, Controls (the old "?" help, F1), Settings, Main
+menu, Quit. Main menu asks first (the game is not saved: Leave the game, or
+Keep playing), then goes back to the title screen. Later: save, load. The
+game is paused while it is open.
 
 ### Settings
 

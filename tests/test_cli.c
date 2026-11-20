@@ -183,6 +183,37 @@ static void test_ui_scale(void)
     }
 }
 
+/* A game option skips the title screen; interface options do not. */
+static void test_starts_game(void)
+{
+    CliOptions options;
+    char error[128];
+    char *none[] = {"colony_sim", "--lang", "fr", "--ui-scale", "150", "--no-vsync"};
+    CHECK(cli_parse(&options, ARGC(none), none, error, sizeof(error)));
+    CHECK(!cli_starts_game(&options));
+    char *seed[] = {"colony_sim", "--seed", "42"};
+    CHECK(cli_parse(&options, ARGC(seed), seed, error, sizeof(error)));
+    CHECK(cli_starts_game(&options));
+    char *size[] = {"colony_sim", "--size", "64"};
+    CHECK(cli_parse(&options, ARGC(size), size, error, sizeof(error)));
+    CHECK(cli_starts_game(&options));
+    char *animals[] = {"colony_sim", "--animals", "0"};
+    CHECK(cli_parse(&options, ARGC(animals), animals, error, sizeof(error)));
+    CHECK(cli_starts_game(&options));
+    char *debug[] = {"colony_sim", "--debug", "see_everything"};
+    CHECK(cli_parse(&options, ARGC(debug), debug, error, sizeof(error)));
+    CHECK(cli_starts_game(&options));
+    char *scenario[] = {"colony_sim", "--scenario", "3"};
+    CHECK(cli_parse(&options, ARGC(scenario), scenario, error, sizeof(error)));
+    CHECK(cli_starts_game(&options));
+    char *colonists[] = {"colony_sim", "--colonists", "8"};
+    CHECK(cli_parse(&options, ARGC(colonists), colonists, error, sizeof(error)));
+    CHECK(cli_starts_game(&options));
+    char *bench[] = {"colony_sim", "--bench-render", "10"};
+    CHECK(cli_parse(&options, ARGC(bench), bench, error, sizeof(error)));
+    CHECK(cli_starts_game(&options));
+}
+
 int main(void)
 {
     RUN_TEST(test_no_arguments_gives_defaults);
@@ -192,5 +223,6 @@ int main(void)
     RUN_TEST(test_test_options);
     RUN_TEST(test_ui_scale);
     RUN_TEST(test_wildlife_option);
+    RUN_TEST(test_starts_game);
     return test_summary();
 }

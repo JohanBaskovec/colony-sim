@@ -137,6 +137,7 @@ void settings_window_draw(App *app)
     }
     if (!open) {
         app->show_settings = false;
-        app->show_game_menu = true; /* Back where they were opened from. */
+        /* Back where they were opened from (the title screen draws itself). */
+        app->show_game_menu = app->screen == APP_SCREEN_GAME;
     }
 }

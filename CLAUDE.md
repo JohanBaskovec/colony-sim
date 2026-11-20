@@ -38,7 +38,8 @@ current milestone.
 ```sh
 cmake --preset headless && cmake --build --preset headless && ctest --preset headless  # core + tests, fast, no SDL
 cmake --preset debug && cmake --build --preset debug && ctest --preset debug           # everything
-./build/debug/bin/colony_sim --lang fr --seed 42                                        # run the game
+./build/debug/bin/colony_sim --lang fr                                                  # the title screen (Thawmoor): New game, Settings, Quit
+./build/debug/bin/colony_sim --lang fr --seed 42                                        # straight into a game (any game option skips the title screen)
 ./build/debug/bin/colony_sim --seed 42 --colonists 8 --scenario 3 --debug instant_build,learn_all  # test setup
 ./build/debug/bin/colony_sim --seed 42 --debug see_everything                          # no fog of war (docs/VISION.md)
 ./build/debug/bin/colony_sim --seed 42 --debug see_everything --animals 300            # three times the wild animals (0: none; 256 at most live at once)

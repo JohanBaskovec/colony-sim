@@ -62,6 +62,14 @@ void cli_default_options(CliOptions *options);
  */
 bool cli_parse(CliOptions *options, int argc, char **argv, char *error, size_t error_size);
 
+/*
+ * Whether the game starts at once, without the title screen: an option about
+ * the game itself was given (seed, size, settlers, animals, scenario, cheats,
+ * render benchmark). The interface options (language, scale, vsync) leave the
+ * title screen.
+ */
+bool cli_starts_game(const CliOptions *options);
+
 const char *cli_usage(void);
 
 #endif /* COLONY_CORE_CLI_H */

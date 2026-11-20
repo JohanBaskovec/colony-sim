@@ -163,6 +163,10 @@ void ui_panel(Ui *ui, SDL_FRect rect);
 /* ui_panel() in another color of the theme. */
 void ui_panel_colored(Ui *ui, SDL_FRect rect, ThemeColor color);
 
+/* ui_panel() drawing nothing: what is drawn after it (by hand, or widgets)
+ * belongs to it, and it captures the clicks on it. */
+void ui_region(Ui *ui, SDL_FRect rect);
+
 /*
  * (A NULL `title` opens a window without a title bar: its × sits at the top
  * right, with a strip of its own at the right of the content.)

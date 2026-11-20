@@ -31,6 +31,7 @@ add_executable(colony_sim
     text.c
     theme.c
     tile_panel.c
+    title_screen.c
     ui.c
     ui_layout.c
     view_controls.c

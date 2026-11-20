@@ -11,6 +11,7 @@
 #include "game/render.h"
 #include "game/stockpile_panel.h"
 #include "game/tile_panel.h"
+#include "game/title_screen.h"
 #include "game/work_panel.h"
 
 #include <SDL3_ttf/SDL_ttf.h>
@@ -21,7 +22,6 @@
 
 #define APP_WINDOW_WIDTH 1280
 #define APP_WINDOW_HEIGHT 720
-#define APP_FONT_FILE "fonts/DejaVuSans.ttf"
 #define APP_SETTINGS_FOLDER "colony-sim" /* In the user's data folder. */
 #define APP_SETTINGS_FILE "settings.cfg"
 #define APP_INITIAL_ZOOM 48.0f
@@ -626,7 +626,7 @@ static bool resolve_assets_dir(char *out, size_t size)
     return false;
 }
 
-static uint64_t random_seed(void)
+uint64_t app_random_seed(void)
 {
     SDL_Time now = 0;
     SDL_GetCurrentTime(&now);
@@ -759,6 +759,40 @@ static void apply_test_options(Game *game, const CliOptions *options)
     }
 }
 
+/* The view at the start of a game: on the first colonist (or the middle of
+ * the map if there is none), on its level. */
+static void view_start(App *app)
+{
+    const Map *map = &app->game.map;
+    float start_x = (float)map->width * 0.5f;
+    float start_y = (float)map->height * 0.5f;
+    const Colonist *first = game_colonist_const(&app->game, game_colonist_id_at(&app->game, 0));
+    if (first != NULL) {
+        colonist_position(first, &start_x, &start_y);
+    }
+    camera_init(&app->camera, start_x, start_y, APP_INITIAL_ZOOM);
+    app->camera.level =
+        first != NULL ? first->z : map_ground_level(map, (int)start_x, (int)start_y);
+}
+
+/* Replaces the game by the world behind the title screen, and shows it. */
+static bool open_title_screen(App *app)
+{
+    if (app->game_ready) {
+        game_shutdown(&app->game);
+        app->game_ready = false;
+    }
+    NewGameParams params;
+    title_screen_backdrop_params(&params);
+    if (!game_init(&app->game, &params)) {
+        LOG_ERROR("Cannot make the world of the title screen");
+        return false;
+    }
+    app->game_ready = true;
+    title_screen_begin(app);
+    return true;
+}
+
 bool app_init(App *app, const CliOptions *options)
 {
     SDL_zerop(app);
@@ -769,7 +803,7 @@ bool app_init(App *app, const CliOptions *options)
     app->move_item_id = ITEM_ID_NONE;
     app->selected_item.id = ITEM_ID_NONE;
     log_set_sink(sdl_log_sink, NULL);
-    SDL_SetAppMetadata("Colony Sim", COLONY_VERSION, "io.github.colony-sim");
+    SDL_SetAppMetadata("Thawmoor", COLONY_VERSION, "io.github.colony-sim");
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
@@ -823,9 +857,22 @@ bool app_init(App *app, const CliOptions *options)
         return false;
     }
 
+    ui_init(&app->ui, app->renderer, app->text, &theme);
+    app->selected_stockpile = STOCKPILE_NONE;
+    app->selected_station = WORKSTATION_NONE;
+    app->selected_gather_zone = GATHER_ZONE_NONE;
+    app->inspector_tab = -1;
+    if (!cli_starts_game(options)) {
+        /* No game asked for on the command line: the title screen. */
+        if (!open_title_screen(app)) {
+            return false;
+        }
+        app->running = true;
+        return true;
+    }
     NewGameParams params;
     game_default_params(&params);
-    params.world.seed = options->has_seed ? options->seed : random_seed();
+    params.world.seed = options->has_seed ? options->seed : app_random_seed();
     if (options->map_size > 0) {
         params.world.width = options->map_size;
         params.world.height = options->map_size;
@@ -841,28 +888,14 @@ bool app_init(App *app, const CliOptions *options)
         return false;
     }
     app->game_ready = true;
+    app->screen = APP_SCREEN_GAME;
     apply_test_options(&app->game, options);
     app->show_vision = (options->debug & CLI_DEBUG_VISION) != 0;
     app->character_editor = (options->debug & CLI_DEBUG_CHARACTER_EDITOR) != 0;
     LOG_INFO("World generated: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists, %u animals",
              params.world.seed, params.world.width, params.world.height,
              app->game.colonist_pool.count, app->game.animals.pool.count);
-
-    /* Start centered on the first colonist (or the map center if there is none). */
-    float start_x = (float)params.world.width * 0.5f;
-    float start_y = (float)params.world.height * 0.5f;
-    const Colonist *first = game_colonist_const(&app->game, game_colonist_id_at(&app->game, 0));
-    if (first != NULL) {
-        colonist_position(first, &start_x, &start_y);
-    }
-    camera_init(&app->camera, start_x, start_y, APP_INITIAL_ZOOM);
-    app->camera.level =
-        first != NULL ? first->z : map_ground_level(&app->game.map, (int)start_x, (int)start_y);
-    ui_init(&app->ui, app->renderer, app->text, &theme);
-    app->selected_stockpile = STOCKPILE_NONE;
-    app->selected_station = WORKSTATION_NONE;
-    app->selected_gather_zone = GATHER_ZONE_NONE;
-    app->inspector_tab = -1;
+    view_start(app);
     app->running = true;
     return true;
 }
@@ -872,6 +905,8 @@ void app_shutdown(App *app)
     if (app->game_ready) {
         game_shutdown(&app->game);
     }
+    text_renderer_destroy(app->title_text);
+    text_renderer_destroy(app->title_subtext);
     text_renderer_destroy(app->text);
     sprites_destroy(app->sprites);
     render_shutdown();
@@ -914,10 +949,14 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_ANIMALS: app->show_animals_menu = false; break;
     case APP_WINDOW_VISUAL: app->show_visual_menu = false; break;
     case APP_WINDOW_SCENARIOS: app->show_scenarios_menu = false; break;
-    case APP_WINDOW_GAME_MENU: app->show_game_menu = false; break;
+    case APP_WINDOW_GAME_MENU:
+        app->show_game_menu = false;
+        app->leave_confirm = false;
+        break;
     case APP_WINDOW_SETTINGS:
         app->show_settings = false;
-        app->show_game_menu = true; /* Back where they were opened from. */
+        app->show_game_menu =
+            app->screen == APP_SCREEN_GAME; /* Back where they were opened from. */
         break;
     default: break;
     }
@@ -1312,6 +1351,23 @@ void app_request_test_scenario(App *app, TestScenario scenario)
     app->pending_scenario = (int)scenario + 1;
 }
 
+/* Forgets what pointed into a game that was replaced: selection, tools,
+ * notices, the being followed. */
+static void forget_game(App *app)
+{
+    clear_selection(app);
+    app->tool = APP_TOOL_NONE;
+    app->build_category = BUILD_CATEGORY_NONE;
+    app->left_button_down = false;
+    app->box_selecting = false;
+    app->debug_attacker = combatant_none();
+    app->debug_held = ITEM_ID_NONE;
+    app->inspector_tab = -1;
+    app->next_notice = 0;
+    app->notices_shown_count = 0;
+    app_stop_following(app);
+}
+
 /* Replaces the game by the test scenario asked for (core/test_scenario.h) and
  * forgets what pointed into the old one: selection, tools, notices. The view
  * goes to the middle of the world, on its only level. */
@@ -1325,21 +1381,78 @@ static void load_pending_scenario(App *app)
         app->running = false;
         return;
     }
-    clear_selection(app);
-    app->tool = APP_TOOL_NONE;
-    app->build_category = BUILD_CATEGORY_NONE;
-    app->left_button_down = false;
-    app->box_selecting = false;
-    app->debug_attacker = combatant_none();
-    app->debug_held = ITEM_ID_NONE;
-    app->inspector_tab = -1;
-    app->next_notice = 0;
-    app->notices_shown_count = 0;
+    forget_game(app);
     camera_init(&app->camera, (float)app->game.map.width * 0.5f, (float)app->game.map.height * 0.5f,
                 app->camera.zoom);
     app->camera.level = 0;
-    app_stop_following(app);
     LOG_INFO("Test scenario %d loaded", (int)scenario);
+}
+
+/* Closes the windows about a game (the game menu included): a new one starts. */
+static void close_game_windows(App *app)
+{
+    app->show_work_panel = false;
+    app->show_log = false;
+    app->show_help = false;
+    app->show_debug_menu = false;
+    app->show_items_menu = false;
+    app->show_animals_menu = false;
+    app->show_visual_menu = false;
+    app->show_scenarios_menu = false;
+    app->show_game_menu = false;
+    app->show_settings = false;
+    app->build_menu_open = false;
+    app->leave_confirm = false;
+    app->show_temperature = false;
+    app->show_light = false;
+    app->show_moisture = false;
+}
+
+/* The New game window's Start was shown working: makes the world asked for
+ * and begins the game on it, with the fog of war. */
+static void start_new_game(App *app)
+{
+    NewGameParams params = app->new_game;
+    if (!new_game_seed_from_text(app->new_game_seed, &params.world.seed)) {
+        params.world.seed = app_random_seed();
+    }
+    title_screen_end(app);
+    if (app->game_ready) {
+        game_shutdown(&app->game);
+        app->game_ready = false;
+    }
+    if (!game_init(&app->game, &params)) {
+        LOG_ERROR("World generation failed: leaving");
+        app->running = false;
+        return;
+    }
+    app->game_ready = true;
+    if (!game_set_fog(&app->game, true)) {
+        LOG_ERROR("Cannot start the fog of war");
+    }
+    LOG_INFO("New game: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists, %u animals",
+             params.world.seed, params.world.width, params.world.height,
+             app->game.colonist_pool.count, app->game.animals.pool.count);
+    forget_game(app);
+    close_game_windows(app);
+    app->screen = APP_SCREEN_GAME;
+    view_start(app);
+}
+
+void app_request_title(App *app)
+{
+    app->pending_title = true;
+}
+
+/* Leaves the game for the title screen (app_request_title()). */
+static void return_to_title(App *app)
+{
+    app->pending_title = false;
+    forget_game(app);
+    close_game_windows(app);
+    if (!open_title_screen(app)) {
+        app->running = false;
+    }
 }
 
 /* Where the followed being is and on which level; false when there is none
@@ -1790,6 +1903,10 @@ static bool turn_item_under(App *app, float screen_x, float screen_y, float step
 
 static void handle_event(App *app, const SDL_Event *event)
 {
+    if (app->screen == APP_SCREEN_TITLE) {
+        title_screen_handle_event(app, event);
+        return;
+    }
     switch (event->type) {
     case SDL_EVENT_QUIT: app->running = false; break;
     case SDL_EVENT_KEY_DOWN: handle_key_down(app, &event->key); break;
@@ -1896,10 +2013,11 @@ static void update_fps(App *app, double dt)
     }
 }
 
-static void render_frame(App *app)
+/* The world as the colony sees it: the levels below, the level shown and
+ * everything on it, the fog, the markers (ramps, orders) if asked, the light
+ * and the weather. */
+static void render_world(App *app, bool markers)
 {
-    SDL_SetRenderDrawColor(app->renderer, 10, 10, 12, 255);
-    SDL_RenderClear(app->renderer);
 
     /* The levels below, through open space: those seen somewhere, the deepest first. */
     uint32_t levels;
@@ -1942,12 +2060,35 @@ static void render_frame(App *app)
     if (app->game.fog_on) {
         render_fog(app->renderer, &app->game, &app->camera, &app->tuning);
     }
-    render_ramp_markers(app->renderer, game_view_map(&app->game), &app->camera);
-    render_forbidden_markers(app->renderer, &app->game, &app->camera);
-    render_item_moves(app->renderer, &app->game, &app->camera);
-    render_designations(app->renderer, &app->game, &app->camera);
+    if (markers) {
+        render_ramp_markers(app->renderer, game_view_map(&app->game), &app->camera);
+        render_forbidden_markers(app->renderer, &app->game, &app->camera);
+        render_item_moves(app->renderer, &app->game, &app->camera);
+        render_designations(app->renderer, &app->game, &app->camera);
+    }
     render_daylight(app->renderer, &app->game, &app->camera);
     render_weather(app->renderer, &app->game, &app->camera, SDL_GetTicks());
+}
+
+static void render_frame(App *app)
+{
+    SDL_SetRenderDrawColor(app->renderer, 10, 10, 12, 255);
+    SDL_RenderClear(app->renderer);
+    render_world(app, app->screen == APP_SCREEN_GAME); /* No markers behind the title. */
+    float mouse_x, mouse_y;
+    SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
+    if (app->screen == APP_SCREEN_TITLE) {
+        ui_begin_frame(&app->ui, mouse_x, mouse_y, (buttons & SDL_BUTTON_LMASK) != 0,
+                       app->camera.viewport_width, app->camera.viewport_height);
+        title_screen_draw(app);
+        ui_end_frame(&app->ui);
+        text_renderer_end_frame(app->text);
+        if (app->title_text != NULL && app->title_subtext != NULL) {
+            text_renderer_end_frame(app->title_text);
+            text_renderer_end_frame(app->title_subtext);
+        }
+        return;
+    }
     if (app->show_temperature) {
         render_temperature(app->renderer, &app->game, &app->camera, &app->ui.theme);
     }
@@ -2002,8 +2143,6 @@ static void render_frame(App *app)
             render_roof_support(app->renderer, &app->game, &app->camera);
         }
         if (app->left_button_down) {
-            float mouse_x, mouse_y;
-            SDL_GetMouseState(&mouse_x, &mouse_y);
             int x0, y0, x1, y1;
             tool_rect(app, mouse_x, mouse_y, &x0, &y0, &x1, &y1);
             render_structure_preview(app->renderer, &app->game, &app->camera, app->structure_type,
@@ -2014,8 +2153,6 @@ static void render_frame(App *app)
                                      app->hover_x, app->hover_y);
         }
     } else if (tool_drags_area(app->tool) && app->left_button_down) {
-        float mouse_x, mouse_y;
-        SDL_GetMouseState(&mouse_x, &mouse_y);
         int x0, y0, x1, y1;
         tool_rect(app, mouse_x, mouse_y, &x0, &y0, &x1, &y1);
         bool remove = zone_tool_removes(app);
@@ -2029,15 +2166,11 @@ static void render_frame(App *app)
             render_designation_area(app->renderer, &app->camera, x0, y0, x1, y1, app->tool_type);
         }
     } else if (app->box_selecting) {
-        float mouse_x, mouse_y;
-        SDL_GetMouseState(&mouse_x, &mouse_y);
         float start_x, start_y;
         camera_world_to_screen(&app->camera, app->drag_world_x, app->drag_world_y, &start_x,
                                &start_y);
         render_selection_box(app->renderer, start_x, start_y, mouse_x, mouse_y);
     }
-    float mouse_x, mouse_y;
-    SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
     ui_begin_frame(&app->ui, mouse_x, mouse_y, (buttons & SDL_BUTTON_LMASK) != 0,
                    app->camera.viewport_width, app->camera.viewport_height);
     hud_draw(app);
@@ -2159,6 +2292,22 @@ void app_run(App *app)
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             handle_event(app, &event);
+        }
+        if (app->pending_title) {
+            return_to_title(app);
+        }
+        if (app->screen == APP_SCREEN_TITLE && app->new_game_stage == NEW_GAME_STAGE_GENERATE) {
+            start_new_game(app);
+            previous = SDL_GetTicksNS(); /* Making the world is not time played. */
+        }
+        if (!app->running) {
+            break;
+        }
+        if (app->screen == APP_SCREEN_TITLE) {
+            title_screen_update(app, dt);
+            update_fps(app, dt);
+            app->render_elapsed += draw_frame(app);
+            continue;
         }
         if (app->pending_scenario > 0) {
             load_pending_scenario(app);

@@ -225,6 +225,12 @@ void ui_panel_colored(Ui *ui, SDL_FRect rect, ThemeColor color)
     fill(ui, rect, COLOR(color));
 }
 
+void ui_region(Ui *ui, SDL_FRect rect)
+{
+    ui->owner = UI_ANONYMOUS_OWNER + ui->anonymous_count++;
+    add_area(ui, rect, ui->owner);
+}
+
 void ui_panel(Ui *ui, SDL_FRect rect)
 {
     ui_panel_colored(ui, rect, THEME_PANEL);

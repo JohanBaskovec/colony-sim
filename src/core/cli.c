@@ -17,13 +17,22 @@ void cli_default_options(CliOptions *options)
     memset(options, 0, sizeof(*options));
 }
 
+bool cli_starts_game(const CliOptions *options)
+{
+    return options->has_seed || options->map_size > 0 || options->colonist_count > 0 ||
+           options->has_wildlife || options->scenario != SCENARIO_NONE || options->debug != 0 ||
+           options->bench_render_frames > 0;
+}
+
 const char *cli_usage(void)
 {
     return "Usage: colony_sim [options]\n"
+           "  Without a game option (seed, size, colonists, animals, scenario, debug,\n"
+           "  bench-render), the title screen opens; with one, the game starts at once.\n"
            "  --lang <code>   Interface language (e.g. en, fr). Default: the saved setting,\n"
            "                  else the system locale.\n"
            "  --seed <n>      World seed (unsigned integer). Default: random.\n"
-           "  --size <n>      Map width and height in tiles (16-1024). Default: 200.\n"
+           "  --size <n>      Map width and height in tiles (16-256). Default: 200.\n"
            "  --colonists <n> Starting colonists (1-" STRINGIFY(
                COLONIST_MAX) "). Default: 3.\n"
                              "  --animals <n>   Wild animals, in percent of the usual number "

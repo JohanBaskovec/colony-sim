@@ -94,6 +94,7 @@ simulation:
 | `fire_light` | The light of fires on screen: from each point of the fine texture a ray to the flame (3D, stopped by walls, floors and rock), kept per fire until the fire or the map near it changes (see *Light and shade*) |
 | `shadow`     | Shadows on screen: the sun's rays from the surfaces drawn, worked out ahead of time by pieces and half hours, each point keeping the moment an edge passes, so frames read them for the time now and the shadows glide; out of date by the map's light stamps; the light put together (sky, direct sun) (see *Shadows on screen*) |
 | `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
+| `new_game`   | The options of a new game as the title screen's New game window shows them: a table (range, step, unit, section, keys) read from and written into `NewGameParams` in whole numbers (tiles, percents, levels), the hills and the rock kept in order, the options a flat world has no use for, and the seed typed as text (digits, or a hash of the words) |
 | `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, trees, then the understory by the light under their crowns, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
 | `rng`        | PCG32 random number generator                                                |
@@ -128,7 +129,8 @@ simulation:
 | `resources_list` | Top left: the stock by item category (`Game.stock`), groups folded with a click, tooltips with where the items lie and the days of food |
 | `colonist_bar` | Top center: portrait, name and current action per colonist; click selects, double click centers the view |
 | `view_controls` | Bottom right: temperature overlay, speeds, level slider (date and weather beside it) |
-| `game_menu`    | Game menu (Menu button or Escape): resume, controls, settings, quit; pauses the game |
+| `title_screen` | The title screen at launch (unless the command line asks for a game, `cli_starts_game()`) and after leaving a game: a world of its own drifting behind a veil, the name in large letters, New game / Settings / Quit; the New game window (`core/new_game.h`: three columns of sliders, the seed typed, Start), then a frame telling the world is being made before `app.c` makes it |
+| `game_menu`    | Game menu (Menu button or Escape): resume, controls, settings, main menu (asks first, then back to the title screen), quit; pauses the game |
 | `settings_window` | Settings (from the game menu): interface size, colors, language, applied at once and saved |
 | `inspector`    | Bottom left: summary box of the selection, tabs opening a panel above it, action buttons beside it; dispatches to the panels below (colonists: `hud`) |
 | `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (radius slider, condition sliders, filters); build another, delete |

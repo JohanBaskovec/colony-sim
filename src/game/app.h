@@ -8,6 +8,7 @@
 #include "core/camera.h"
 #include "core/cli.h"
 #include "core/game.h"
+#include "core/new_game.h"
 #include "core/settings.h"
 #include "core/test_scenario.h"
 #include "game/localization.h"
@@ -86,6 +87,9 @@ typedef enum AppTool {
 #define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP   /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
 
+/* The font of the interface, in the assets folder. */
+#define APP_FONT_FILE "fonts/DejaVuSans.ttf"
+
 /* Who the camera follows (App.follow_kind). */
 typedef enum FollowKind { FOLLOW_NONE, FOLLOW_COLONIST, FOLLOW_ANIMAL } FollowKind;
 
@@ -131,6 +135,7 @@ typedef enum AppWindow {
     APP_WINDOW_SCENARIOS,      /* Test scenarios menu (debug). */
     APP_WINDOW_GAME_MENU,
     APP_WINDOW_SETTINGS, /* Settings (game/settings_window.h), from the game menu. */
+    APP_WINDOW_NEW_GAME, /* The title screen's New game window (game/title_screen.h). */
     APP_WINDOW_COUNT
 } AppWindow;
 
@@ -169,6 +174,19 @@ typedef enum TileThing {
     THING_COUNT
 } TileThing;
 
+/* What the window shows. */
+typedef enum AppScreen {
+    APP_SCREEN_TITLE, /* The title screen (game/title_screen.h), a world drifting behind it. */
+    APP_SCREEN_GAME,
+} AppScreen;
+
+/* Where starting a new game is (App.new_game_stage). */
+typedef enum NewGameStage {
+    NEW_GAME_STAGE_NONE,
+    NEW_GAME_STAGE_ASKED,    /* Start clicked: the next frame tells the world is being made... */
+    NEW_GAME_STAGE_GENERATE, /* ...it was shown: the world is made before the next frame. */
+} NewGameStage;
+
 typedef struct App {
     SDL_Window *window;
     SDL_Renderer *renderer;
@@ -190,6 +208,22 @@ typedef struct App {
     bool game_ready;
     bool running;
     bool show_debug;
+
+    AppScreen screen;
+    /* The title screen (game/title_screen.h): its fonts (the big title, the
+     * tagline and buttons) and the interface size they were made for; how
+     * long (real seconds) the world behind has drifted; the New game window,
+     * what it sets and the seed typed (empty: a random one). */
+    TextRenderer *title_text;
+    TextRenderer *title_subtext;
+    float title_text_scale;
+    double title_time;
+    bool new_game_open;
+    NewGameParams new_game;
+    char new_game_seed[NEW_GAME_SEED_TEXT_SIZE];
+    NewGameStage new_game_stage;
+    bool pending_title; /* Back to the title screen before the next update (the game ends). */
+    bool leave_confirm; /* The game menu asks before leaving for the title screen. */
 
     /* Selection is UI state: it lives here, not in the simulation. */
     EntityId selected[COLONIST_MAX];
@@ -356,6 +390,13 @@ bool app_init(App *app, const CliOptions *options);
 /* The game loop, or the render benchmark with --bench-render. */
 void app_run(App *app);
 void app_shutdown(App *app);
+
+/* A seed from the clock, for a world nobody chose. */
+uint64_t app_random_seed(void);
+
+/* Ends the game and goes back to the title screen at the start of the next
+ * frame (the game is not kept). */
+void app_request_title(App *app);
 
 /* Asks for a test scenario (core/test_scenario.h) to replace the game at the
  * start of the next frame: never in the middle of drawing windows. */
