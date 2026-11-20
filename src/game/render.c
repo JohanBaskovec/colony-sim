@@ -2651,6 +2651,24 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         batch_flush(renderer);
         break;
     }
+    case RENDER_ICON_PRIMARY_WEAPON: { /* Two blades crossed, hilts down. */
+        SDL_Color blade = {226, 228, 232, 255}, guard = {150, 98, 52, 255};
+        for (int side = 0; side < 2; side++) {
+            float sign = side == 0 ? 1.0f : -1.0f;
+            float cx = rect.x + w * 0.5f;
+            /* From the hilt at a bottom corner to the tip at the opposite top one. */
+            float hilt_x = cx - sign * w * 0.34f, hilt_y = rect.y + h * 0.84f;
+            float tip_x = cx + sign * w * 0.34f, tip_y = rect.y + h * 0.16f;
+            float guard_x = cx - sign * w * 0.2f, guard_y = rect.y + h * 0.68f;
+            batch_bar(renderer, blade, guard_x, guard_y, tip_x, tip_y, w * 0.06f);
+            batch_bar(renderer, guard, hilt_x, hilt_y, guard_x, guard_y, w * 0.05f);
+            /* The cross-guard, across the blade. */
+            batch_bar(renderer, guard, guard_x - w * 0.09f, guard_y - sign * h * 0.09f,
+                      guard_x + w * 0.09f, guard_y + sign * h * 0.09f, w * 0.035f);
+        }
+        batch_flush(renderer);
+        break;
+    }
     case RENDER_ICON_IN_HAND: { /* A fist closed on an upright handle. */
         SDL_Color skin = {222, 184, 150, 255}, crease = {150, 108, 80, 255};
         float cx = rect.x + w * 0.5f;

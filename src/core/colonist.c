@@ -4,6 +4,7 @@
 #include "core/i18n.h"
 #include "core/tree.h"
 #include "core/util.h"
+#include "core/weapon.h"
 
 #include <limits.h>
 #include <math.h>
@@ -45,6 +46,7 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, 
     colonist->z = z;
     colonist->task = TASK_IDLE;
     colonist->take_item = ITEM_ID_NONE;
+    colonist->primary_weapon = -1;
     colonist->haul_item = ITEM_ID_NONE;
     for (int need = 0; need < NEED_COUNT; need++) {
         colonist->needs[need] = 1.0f;
@@ -308,6 +310,9 @@ static bool keep_in_slot(Colonist *colonist, ItemStack tool)
             colonist->tools[i] = tool;
             colonist->tool_wear[i] = 0;
             colonist->tool_locks[i] = CARRY_LOCK_NONE;
+            if (colonist->primary_weapon == i) {
+                colonist->primary_weapon = -1; /* That one broke: a new item. */
+            }
             return true;
         }
     }
@@ -335,6 +340,9 @@ bool colonist_swap_tool(Colonist *colonist, ItemStack tool, ItemStack *replaced)
     tool.count = 1;
     colonist->tools[index] = tool;
     colonist->tool_wear[index] = 0;
+    if (colonist->primary_weapon == index) {
+        colonist->primary_weapon = -1; /* Not expected: a primary weapon is locked. */
+    }
     return true;
 }
 
@@ -348,6 +356,7 @@ void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map)
             colonist->tool_locks[i] = CARRY_LOCK_NONE;
         }
     }
+    colonist->primary_weapon = -1;
 }
 
 /* Index of the tool the colonist works with for a use among `allowed`, or -1
@@ -622,7 +631,65 @@ bool colonist_set_lock(Colonist *colonist, int index, CarryLock lock)
         }
     }
     colonist->tool_locks[index] = (uint8_t)lock;
+    if (lock == CARRY_LOCK_NONE && colonist->primary_weapon == index) {
+        colonist->primary_weapon = -1; /* A primary weapon is kept on the settler. */
+    }
     return true;
+}
+
+int colonist_primary_weapon(const Colonist *colonist)
+{
+    int index = colonist->primary_weapon;
+    return index >= 0 && index < COLONIST_TOOL_MAX && colonist->tools[index].count > 0 &&
+                   item_is_weapon((ItemType)colonist->tools[index].type)
+               ? index
+               : -1;
+}
+
+bool colonist_set_primary_weapon(Colonist *colonist, int index, bool primary)
+{
+    if (index < 0 || index >= COLONIST_TOOL_MAX || colonist->tools[index].count == 0 ||
+        !item_is_weapon((ItemType)colonist->tools[index].type)) {
+        return false;
+    }
+    if (!primary) {
+        if (colonist_primary_weapon(colonist) == index) {
+            colonist->primary_weapon = -1; /* Its lock stays. */
+        }
+        return true;
+    }
+    if (colonist->tool_locks[index] == CARRY_LOCK_NONE) {
+        colonist->tool_locks[index] = CARRY_LOCK_KEPT; /* Else it could be set down. */
+    }
+    colonist->primary_weapon = (int8_t)index;
+    return true;
+}
+
+/* Whether its arms can wield a weapon: one usable arm, or two for a weapon
+ * taking both hands. */
+static bool can_wield(const Colonist *colonist, const WeaponDef *def)
+{
+    CarryBody body = colonist_carry_body(colonist);
+    int arms = (body.arm[CARRY_RIGHT] >= CARRY_ARM_MIN ? 1 : 0) +
+               (body.arm[CARRY_LEFT] >= CARRY_ARM_MIN ? 1 : 0);
+    return arms >= def->hands;
+}
+
+int colonist_weapon(const Colonist *colonist)
+{
+    int primary = colonist_primary_weapon(colonist);
+    if (primary >= 0 && can_wield(colonist, weapon_def((ItemType)colonist->tools[primary].type))) {
+        return primary;
+    }
+    int best = -1;
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        const WeaponDef *def = weapon_def((ItemType)colonist->tools[i].type);
+        if (colonist->tools[i].count > 0 && def != NULL && can_wield(colonist, def) &&
+            (best < 0 || weapon_better(colonist->tools[i], colonist->tools[best]))) {
+            best = i;
+        }
+    }
+    return best;
 }
 
 int colonist_hands_locked(const Colonist *colonist)
@@ -698,6 +765,9 @@ static int keep_locked(Colonist *colonist, Items *items, const Map *map, ItemSta
     colonist->tools[slot] = item;
     colonist->tool_wear[slot] = 0;
     colonist->tool_locks[slot] = (uint8_t)lock;
+    if (colonist->primary_weapon == slot) {
+        colonist->primary_weapon = -1; /* That one broke: a new item. */
+    }
     return slot;
 }
 
@@ -724,24 +794,25 @@ static void load_taken_from(Colonist *colonist, const ColonistContext *context)
     }
 }
 
-bool colonist_keep_load_item(Colonist *colonist, const ColonistContext *context, int index,
-                             CarryLock lock)
+int colonist_keep_load_item(Colonist *colonist, const ColonistContext *context, int index,
+                            CarryLock lock)
 {
     if (colonist_is_down(colonist) || index < 0 || index >= colonist->carried.count ||
         !colonist_can_keep(colonist, (ItemType)colonist->carried.type, 1, lock)) {
-        return false;
+        return -1;
     }
     ItemStack item;
     if (!take_from_load(context->items, &colonist->carried, index, &item)) {
-        return false;
+        return -1;
     }
-    if (keep_locked(colonist, context->items, context->map, item, lock) < 0) {
+    int slot = keep_locked(colonist, context->items, context->map, item, lock);
+    if (slot < 0) {
         /* Not expected: colonist_can_keep() counted the slots. */
         items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z, item);
     }
     load_taken_from(colonist, context);
     colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, 0);
-    return true;
+    return slot;
 }
 
 bool colonist_drop_load_item(Colonist *colonist, const ColonistContext *context, int index)
@@ -767,6 +838,9 @@ bool colonist_put_down(Colonist *colonist, Items *items, const Map *map, int ind
     colonist->tools[index] = (ItemStack){.type = ITEM_NONE};
     colonist->tool_wear[index] = 0;
     colonist->tool_locks[index] = CARRY_LOCK_NONE;
+    if (colonist->primary_weapon == index) {
+        colonist->primary_weapon = -1;
+    }
     return true;
 }
 
@@ -5478,15 +5552,12 @@ AttackType colonist_attack(const Colonist *colonist, float *skill, float *power)
     if (arms < COMBAT_LIMB_MIN) {
         return ATTACK_NONE;
     }
-    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
-        ItemType tool = (ItemType)colonist->tools[i].type;
-        if (tool == ITEM_THRUSTING_SPEAR_HARDENED ||
-            (tool == ITEM_THRUSTING_SPEAR && type == ATTACK_FISTS)) {
-            type =
-                tool == ITEM_THRUSTING_SPEAR ? ATTACK_SPEAR_THRUST : ATTACK_HARDENED_SPEAR_THRUST;
-        }
+    int weapon = colonist_weapon(colonist);
+    const WeaponDef *def = weapon >= 0 ? weapon_def((ItemType)colonist->tools[weapon].type) : NULL;
+    if (def != NULL) {
+        type = (AttackType)def->attack;
     }
-    if (type != ATTACK_FISTS) {
+    if (def != NULL && def->spear) {
         float level = (float)colonist_knowledge_level(colonist, KNOWLEDGE_SPEAR_HUNTING) /
                       (float)KNOWLEDGE_LEVEL_MAX;
         *skill = COLONIST_SPEAR_SKILL_MIN +

@@ -518,9 +518,9 @@ static void test_items_of_the_load_can_be_kept_or_dropped(void)
     REQUIRE(second != NULL);
     int hit_points = second->hit_points;
     CHECK(game_can_keep_load_item(&game, id, CARRY_LOCK_KEPT));
-    CHECK(!game_keep_load_item(&game, id, 3, CARRY_LOCK_KEPT)); /* No such item. */
-    CHECK(!game_keep_load_item(&game, id, 1, CARRY_LOCK_NONE));
-    REQUIRE(game_keep_load_item(&game, id, 1, CARRY_LOCK_KEPT));
+    CHECK(game_keep_load_item(&game, id, 3, CARRY_LOCK_KEPT) < 0); /* No such item. */
+    CHECK(game_keep_load_item(&game, id, 1, CARRY_LOCK_NONE) < 0);
+    REQUIRE(game_keep_load_item(&game, id, 1, CARRY_LOCK_KEPT) >= 0);
     CHECK_EQ_INT(colonist->carried.count, 2);
     CHECK(colonist->task == TASK_HAUL);
     int log = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_WOOD));
@@ -562,11 +562,11 @@ static void test_items_of_the_load_kept_in_hand(void)
     EntityId id = game_colonist_id_at(&game, 0);
     /* Two hand axes: one in each hand, a third finds none. */
     colonist->carried = item_stack_pristine(ITEM_HAND_AXE, 3);
-    REQUIRE(game_keep_load_item(&game, id, 0, CARRY_LOCK_IN_HAND));
-    REQUIRE(game_keep_load_item(&game, id, 0, CARRY_LOCK_IN_HAND));
+    REQUIRE(game_keep_load_item(&game, id, 0, CARRY_LOCK_IN_HAND) >= 0);
+    REQUIRE(game_keep_load_item(&game, id, 0, CARRY_LOCK_IN_HAND) >= 0);
     CHECK_EQ_INT(colonist_hands_locked(colonist), 2);
     CHECK(!game_can_keep_load_item(&game, id, CARRY_LOCK_IN_HAND));
-    CHECK(!game_keep_load_item(&game, id, 0, CARRY_LOCK_IN_HAND));
+    CHECK(game_keep_load_item(&game, id, 0, CARRY_LOCK_IN_HAND) < 0);
     CHECK_EQ_INT(colonist->carried.count, 1);
     /* Nor anywhere else: short tools go in the hands. */
     CHECK(!game_can_keep_load_item(&game, id, CARRY_LOCK_KEPT));

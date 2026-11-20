@@ -221,11 +221,12 @@ typedef enum RenderIcon {
     RENDER_ICON_MOVE,   /* An arrow toward a spot. */
     RENDER_ICON_FOLLOW, /* A sight: a ring with ticks, a dot in the middle. */
     RENDER_ICON_CANCEL,
-    RENDER_ICON_KEEP_OPEN, /* An open door. */
-    RENDER_ICON_CARRY,     /* A stick lifted by an arrow (docs/CARRYING.md §7.2). */
-    RENDER_ICON_PUT_DOWN,  /* A stick lowered to the ground. */
-    RENDER_ICON_LOCK,      /* A padlock: kept on the settler. */
-    RENDER_ICON_IN_HAND,   /* A hand closed on a handle: kept in hand. */
+    RENDER_ICON_KEEP_OPEN,      /* An open door. */
+    RENDER_ICON_CARRY,          /* A stick lifted by an arrow (docs/CARRYING.md §7.2). */
+    RENDER_ICON_PUT_DOWN,       /* A stick lowered to the ground. */
+    RENDER_ICON_LOCK,           /* A padlock: kept on the settler. */
+    RENDER_ICON_IN_HAND,        /* A hand closed on a handle: kept in hand. */
+    RENDER_ICON_PRIMARY_WEAPON, /* Two crossed blades (docs/COMBAT.md §7). */
 } RenderIcon;
 
 void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, WorkstationType type);

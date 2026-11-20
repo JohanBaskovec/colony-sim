@@ -289,7 +289,8 @@ the right arm, under the left arm, shoulders, slung. A branch holding items
 can be folded and unfolded (unfolded by default; the choice is kept while
 the game runs, for every settler) and shows the weight it holds; under it, a
 row per item, the load's as the kept ones (three branches: three rows): its
-name and weight, the two lock buttons and Drop. Quality and condition are
+name and weight, the two lock buttons, Drop and, on a weapon's row, the
+primary weapon button (two crossed blades, `docs/COMBAT.md` §7). Quality and condition are
 not shown there (the item's window has them). An empty place says so,
 dimmed; a lost or useless arm's places are shown as such, and a hand
 steadying the shoulders says so. A last branch, *No place*, lists the items

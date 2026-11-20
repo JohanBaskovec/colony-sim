@@ -9,6 +9,7 @@ set(COLONY_UNIT_TESTS
     test_bed
     test_blood
     test_carry
+    test_weapon
     test_journal
     test_camera
     test_cli

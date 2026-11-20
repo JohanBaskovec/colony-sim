@@ -258,8 +258,9 @@ rows):
   carried, the load's as the kept ones, with its name and weight (no quality
   nor condition) and three buttons at its right: a padlock (kept on the
   settler; lit when locked, a click frees it), a hand (kept in hand; a click
-  on the lit one keeps it on the settler only) and Drop (put down,
-  forbidden). Then the tools worn out. A dim line says when something kept
+  on the lit one keeps it on the settler only), Drop (put down,
+  forbidden) and, on a weapon's row, two crossed blades (its primary weapon,
+  `docs/COMBAT.md` §7). Then the tools worn out. A dim line says when something kept
   in hand limits the settler to hauling (`docs/CARRYING.md` §7.3); later,
   containers as branches of their own.
 

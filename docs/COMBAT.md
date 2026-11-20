@@ -8,8 +8,9 @@ whether the blow lands.
 
 Status: step A is implemented (the module, animals fighting and fleeing,
 settlers' self-defense, a debug tool), and the carnivores that use it
-(`docs/ROADMAP.md` M5 *Wildlife, step 2*, §6). Weapons (§7) and the
-mobilization (§8) are designed, not implemented (steps in §9). Values marked
+(`docs/ROADMAP.md` M5 *Wildlife, step 2*, §6). Weapons (§7) are implemented
+(step 1 of §9: `core/weapon.h`, the primary weapon); the mobilization (§8)
+is designed, not implemented. Values marked
 *(tuning)* are first guesses.
 
 ## 1. Principles
@@ -35,8 +36,9 @@ the **limb** it is made with (`BodyLimb`, `docs/HEALTH.md` §2) *(tuning)*:
 | Attack | Limb | Injury | Damage | Accuracy | Every | Used by |
 |--------|------|--------|--------|----------|-------|---------|
 | Fists | arms | bruise | 3 | 70 % | 1 s | settlers without a weapon |
-| Spear thrust | arms | cut | 9 | 80 % | 1.4 s | settlers carrying a thrusting spear |
+| Spear thrust | arms | cut | 9 | 80 % | 1.4 s | settlers with a thrusting spear |
 | Hardened spear thrust | arms | cut | 11 | 80 % | 1.4 s | the same, fire-hardened (×1.2) |
+| Weapons of §7 | arms | | | | | settlers with that weapon |
 | Kick | hind legs | bruise | 5 | 50 % | 1.5 s | deer |
 | Hoof strike | front legs | bruise | 4 | 50 % | 1.5 s | deer |
 | Tusks | head | cut | 8 | 65 % | 1.4 s | boars |
@@ -97,8 +99,9 @@ cornered, takes it).
   prey), a settler waits. Those down keep their tile.
 - **Settlers.** A settler struck by an animal drops what it was doing
   (waking if it slept): it fights back, or flees to a tile far from it when
-  past its nerve (cornered: it fights). With a thrusting spear in its
-  tools it uses it, else its fists. It stops when the animal is dead or far
+  past its nerve (cornered: it fights). It strikes with its weapon
+  (`colonist_weapon()`: its primary weapon, else the best it keeps, among
+  those its arms can wield), else its fists. It stops when the animal is dead or far
   (20 tiles); the player's move order ends the fight too.
 - A notice tells the player a settler is under attack.
 
@@ -173,6 +176,9 @@ spears are thrown later (ranged weapons). A weapon's **worth**, to pick the
 best, is its damage × accuracy ÷ interval, times its quality factor and its
 condition; on a tie, the better quality, then the less worn.
 
+- **Weapons kept.** For now a settler fights with the weapons it keeps (its
+  tools and the items locked on it), not with those of a load it hauls; the
+  drawing time comes with wielding (step 3).
 - **Primary weapon.** A button with two crossed blades on each weapon's row
   of the Gear tab (`docs/CARRYING.md` §7.3) makes it the settler's primary
   weapon: one per settler, that very item. It also locks it *kept on the
@@ -224,7 +230,7 @@ when all are mobilized.
 
 ## 9. Steps of weapons and mobilization
 
-1. The weapons (§7): an attack for each weapon item, the hands it takes,
+1. *(done)* The weapons (§7): an attack for each weapon item, the hands it takes,
   its worth; the primary weapon and its button; self-defense with the best
   weapon carried.
 2. Mobilization (§8): the state, needs ignored, waking up, the end

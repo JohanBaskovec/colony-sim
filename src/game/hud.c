@@ -1,5 +1,7 @@
 #include "game/hud.h"
 
+#include "core/weapon.h"
+
 #include "core/i18n.h"
 #include "core/temperature.h"
 #include "core/tree.h"
@@ -1190,7 +1192,8 @@ typedef enum GearClick {
     GEAR_CLICK_KEEP,
     GEAR_CLICK_HAND,
     GEAR_CLICK_PUT,
-    GEAR_CLICK_FOLD /* A branch of the tree: GearAction.index. */
+    GEAR_CLICK_PRIMARY, /* Primary weapon, or no longer. */
+    GEAR_CLICK_FOLD     /* A branch of the tree: GearAction.index. */
 } GearClick;
 
 typedef struct GearAction {
@@ -1199,7 +1202,7 @@ typedef struct GearAction {
     int index; /* Of the item in the load or in the colonist's tools; the branch. */
 } GearAction;
 
-#define GEAR_BUTTONS 3
+#define GEAR_BUTTONS 4 /* The last, a weapon's only. */
 
 /* The room the buttons of an item take at the right of its row. */
 static float gear_buttons_width(const UiLayout *layout)
@@ -1280,6 +1283,17 @@ static void gear_row(UiLayout *layout, App *app, const Colonist *colonist, const
                         tr("hud.gear.drop"), tr("hud.gear.drop.description"))) {
             *action = (GearAction){GEAR_CLICK_PUT, load, index};
         }
+        ItemType type = (ItemType)(load ? colonist->carried.type : colonist->tools[index].type);
+        bool primary = !load && colonist_primary_weapon(colonist) == index;
+        if (item_is_weapon(type) &&
+            gear_button(
+                layout, app, x + 3.0f * step, RENDER_ICON_PRIMARY_WEAPON, primary,
+                tr(primary ? "hud.gear.primary_on" : "hud.gear.primary"),
+                load && !game_can_keep_load_item(&app->game, app->selected[0], CARRY_LOCK_KEPT)
+                    ? tr("hud.gear.cannot_keep")
+                    : tr("hud.gear.primary.description"))) {
+            *action = (GearAction){GEAR_CLICK_PRIMARY, load, index};
+        }
     }
     layout->y += layout->row;
 }
@@ -1317,6 +1331,11 @@ static void apply_gear_action(App *app, EntityId id, const Colonist *colonist, G
     if (action.load) {
         if (action.click == GEAR_CLICK_PUT) {
             game_drop_load_item(&app->game, id, action.index);
+        } else if (action.click == GEAR_CLICK_PRIMARY) {
+            int slot = game_keep_load_item(&app->game, id, action.index, CARRY_LOCK_KEPT);
+            if (slot >= 0) {
+                game_set_primary_weapon(&app->game, id, slot, true);
+            }
         } else if (action.click != GEAR_CLICK_NONE) {
             game_keep_load_item(&app->game, id, action.index,
                                 action.click == GEAR_CLICK_HAND ? CARRY_LOCK_IN_HAND
@@ -1336,6 +1355,10 @@ static void apply_gear_action(App *app, EntityId id, const Colonist *colonist, G
                             lock == CARRY_LOCK_IN_HAND ? CARRY_LOCK_KEPT : CARRY_LOCK_IN_HAND);
         break;
     case GEAR_CLICK_PUT: game_put_down(&app->game, id, action.index); break;
+    case GEAR_CLICK_PRIMARY:
+        game_set_primary_weapon(&app->game, id, action.index,
+                                colonist_primary_weapon(colonist) != action.index);
+        break;
     case GEAR_CLICK_NONE:
     case GEAR_CLICK_FOLD: break;
     }

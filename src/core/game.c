@@ -2949,8 +2949,9 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, job, sizeof(job));
         for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
             ItemStack tool = c->tools[i];
-            int32_t fields[6] = {tool.type,       tool.count,      tool.quality,
-                                 tool.hit_points, c->tool_wear[i], c->tool_locks[i]};
+            int32_t fields[7] = {
+                tool.type,       tool.count,       tool.quality,          tool.hit_points,
+                c->tool_wear[i], c->tool_locks[i], c->primary_weapon == i};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
         }
     }
@@ -3458,6 +3459,12 @@ bool game_set_carry_lock(Game *game, EntityId colonist_id, int index, CarryLock 
     return colonist != NULL && colonist_set_lock(colonist, index, lock);
 }
 
+bool game_set_primary_weapon(Game *game, EntityId colonist_id, int index, bool primary)
+{
+    Colonist *colonist = game_colonist(game, colonist_id);
+    return colonist != NULL && colonist_set_primary_weapon(colonist, index, primary);
+}
+
 bool game_can_keep_load_item(const Game *game, EntityId colonist_id, CarryLock lock)
 {
     const Colonist *colonist = game_colonist_const(game, colonist_id);
@@ -3465,11 +3472,11 @@ bool game_can_keep_load_item(const Game *game, EntityId colonist_id, CarryLock l
            colonist_can_keep(colonist, (ItemType)colonist->carried.type, 1, lock);
 }
 
-bool game_keep_load_item(Game *game, EntityId colonist_id, int index, CarryLock lock)
+int game_keep_load_item(Game *game, EntityId colonist_id, int index, CarryLock lock)
 {
     Colonist *colonist = game_colonist(game, colonist_id);
     if (colonist == NULL) {
-        return false;
+        return -1;
     }
     ColonistContext context = colonist_context(game, colonist_id.index);
     return colonist_keep_load_item(colonist, &context, index, lock);

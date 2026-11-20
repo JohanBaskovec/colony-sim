@@ -28,6 +28,27 @@ static const AttackDef ATTACK_DEFS[ATTACK_TYPE_COUNT] = {
                          BODY_LIMB_HEAD, STRIKE_MARK_BITE},
     [ATTACK_FOX_CLAWS] = {"fox_claws", N_("attack.claws"), INJURY_CUT, 1.5f, 0.6f, 1.0f, 1,
                           BODY_LIMB_FORELEGS, STRIKE_MARK_CLAWS},
+    [ATTACK_STONE] = {"stone", N_("attack.stone"), INJURY_BRUISE, 5.0f, 0.7f, 1.1f, 1,
+                      BODY_LIMB_ARMS, STRIKE_MARK_BLOW},
+    [ATTACK_SLASH] = {"slash", N_("attack.slash"), INJURY_CUT, 4.0f, 0.75f, 1.0f, 1, BODY_LIMB_ARMS,
+                      STRIKE_MARK_CUT},
+    [ATTACK_CHOP] = {"chop", N_("attack.chop"), INJURY_CUT, 5.0f, 0.7f, 1.2f, 1, BODY_LIMB_ARMS,
+                     STRIKE_MARK_CUT},
+    [ATTACK_AXE_CHOP] = {"axe_chop", N_("attack.chop"), INJURY_CUT, 7.0f, 0.75f, 1.2f, 1,
+                         BODY_LIMB_ARMS, STRIKE_MARK_CUT},
+    [ATTACK_CLUB] = {"club", N_("attack.club"), INJURY_BRUISE, 5.0f, 0.65f, 1.3f, 1, BODY_LIMB_ARMS,
+                     STRIKE_MARK_BLOW},
+    [ATTACK_HEAVY_CLUB] = {"heavy_club", N_("attack.heavy_club"), INJURY_BRUISE, 8.0f, 0.55f, 1.8f,
+                           1, BODY_LIMB_ARMS, STRIKE_MARK_BLOW},
+    [ATTACK_STAFF] = {"staff", N_("attack.staff"), INJURY_BRUISE, 5.0f, 0.75f, 1.2f, 1,
+                      BODY_LIMB_ARMS, STRIKE_MARK_BLOW},
+    [ATTACK_HARDENED_STAFF] = {"hardened_staff", N_("attack.staff"), INJURY_BRUISE, 6.0f, 0.75f,
+                               1.2f, 1, BODY_LIMB_ARMS, STRIKE_MARK_BLOW},
+    [ATTACK_LIGHT_SPEAR_THRUST] = {"light_spear_thrust", N_("attack.spear_thrust"), INJURY_CUT,
+                                   7.0f, 0.75f, 1.3f, 1, BODY_LIMB_ARMS, STRIKE_MARK_CUT},
+    [ATTACK_HARDENED_LIGHT_SPEAR_THRUST] = {"hardened_light_spear_thrust",
+                                            N_("attack.spear_thrust"), INJURY_CUT, 8.4f, 0.75f,
+                                            1.3f, 1, BODY_LIMB_ARMS, STRIKE_MARK_CUT},
 };
 
 const AttackDef *attack_def(AttackType type)
@@ -36,6 +57,12 @@ const AttackDef *attack_def(AttackType type)
         return NULL;
     }
     return &ATTACK_DEFS[type];
+}
+
+float attack_worth(AttackType type)
+{
+    const AttackDef *def = attack_def(type);
+    return def != NULL ? def->damage * def->accuracy / def->interval : 0.0f;
 }
 
 int attack_interval_ticks(AttackType type)

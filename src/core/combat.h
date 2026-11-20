@@ -74,16 +74,27 @@ typedef enum AttackType {
     ATTACK_WOLF_CLAWS,
     ATTACK_FOX_BITE,
     ATTACK_FOX_CLAWS,
+    /* Settlers' weapons (core/weapon.h). */
+    ATTACK_STONE,                       /* A stone in the fist. */
+    ATTACK_SLASH,                       /* A sharp flake. */
+    ATTACK_CHOP,                        /* A chopper. */
+    ATTACK_AXE_CHOP,                    /* A hand axe. */
+    ATTACK_CLUB,                        /* A branch. */
+    ATTACK_HEAVY_CLUB,                  /* A log, in both hands. */
+    ATTACK_STAFF,                       /* A digging stick, in both hands. */
+    ATTACK_HARDENED_STAFF,              /* The same, fire-hardened. */
+    ATTACK_LIGHT_SPEAR_THRUST,          /* A throwing spear, in melee. */
+    ATTACK_HARDENED_LIGHT_SPEAR_THRUST, /* The same, fire-hardened. */
     ATTACK_TYPE_COUNT
 } AttackType;
 
 /* The mark a blow that lands leaves for a moment on the one struck, for the eye
  * only (drawn by the frontend, core/strike_anim.h). */
 typedef enum StrikeMark {
-    STRIKE_MARK_BLOW,  /* A burst of short rays: blunt blows (fists, kicks, hooves). */
+    STRIKE_MARK_BLOW,  /* A burst of short rays: blunt blows (fists, stones, clubs, kicks). */
     STRIKE_MARK_CLAWS, /* Three parallel scratches. */
     STRIKE_MARK_BITE,  /* Two toothed jaws closing. */
-    STRIKE_MARK_CUT,   /* One slash along the blow (a spear, tusks). */
+    STRIKE_MARK_CUT,   /* One slash along the blow (a spear, a blade, tusks). */
     STRIKE_MARK_COUNT
 } StrikeMark;
 
@@ -101,6 +112,10 @@ typedef struct AttackDef {
 
 /* NULL for ATTACK_NONE and out of range. */
 const AttackDef *attack_def(AttackType type);
+
+/* What an attack is worth, to compare: damage × accuracy ÷ interval (0 for
+ * none). */
+float attack_worth(AttackType type);
 
 /* Below this ability of its limb (core/health.h), an attack cannot be made. */
 #define COMBAT_LIMB_MIN 0.15f

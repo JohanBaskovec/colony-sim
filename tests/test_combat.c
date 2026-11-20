@@ -603,6 +603,67 @@ static void test_settler_attack_by_weapon(void)
     colonist_free(&colonist);
 }
 
+/* Any weapon it carries: the primary one, else the best; one taking both
+ * hands needs both arms (docs/COMBAT.md §7). */
+static void test_settler_weapon_choice(void)
+{
+    Colonist colonist;
+    colonist_init(&colonist, "Ada", 30, 0, 0, 0);
+    REQUIRE(colonist_set_strength(&colonist, COLONIST_STRENGTH_STANDARD));
+    float skill, power;
+    REQUIRE(colonist_add_tool(&colonist, item_stack_pristine(ITEM_COBBLE, 1)));
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_STONE);
+    CHECK_NEAR(skill, 1.0, 1e-6); /* No knowledge for stones. */
+    REQUIRE(colonist_add_tool(&colonist, item_stack_pristine(ITEM_HAND_AXE, 1)));
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_AXE_CHOP);
+    REQUIRE(colonist_add_tool(&colonist, item_stack_pristine(ITEM_TWIGS, 1)));
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_AXE_CHOP);
+    REQUIRE(colonist_add_tool(&colonist, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
+    int spear = colonist_tool_index(&colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
+    int cobble = colonist_tool_index(&colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
+    int twigs = colonist_tool_index(&colonist, ITEM_TYPE_BIT(ITEM_TWIGS));
+    CHECK_EQ_INT(colonist_weapon(&colonist), spear);
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_SPEAR_THRUST);
+    /* The primary weapon, even a worse one; locked on the settler. */
+    CHECK(!colonist_set_primary_weapon(&colonist, twigs, true));                 /* No weapon. */
+    CHECK(!colonist_set_primary_weapon(&colonist, COLONIST_TOOL_MAX - 1, true)); /* Empty. */
+    CHECK_EQ_INT(colonist_primary_weapon(&colonist), -1);
+    REQUIRE(colonist_set_primary_weapon(&colonist, cobble, true));
+    CHECK_EQ_INT(colonist_primary_weapon(&colonist), cobble);
+    CHECK_EQ_INT(colonist.tool_locks[cobble], CARRY_LOCK_KEPT);
+    CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_STONE);
+    /* One primary weapon only. */
+    REQUIRE(colonist_set_primary_weapon(&colonist, spear, true));
+    CHECK_EQ_INT(colonist_primary_weapon(&colonist), spear);
+    /* The mark taken away: the lock stays, the best weapon again. */
+    REQUIRE(colonist_set_primary_weapon(&colonist, spear, false));
+    CHECK_EQ_INT(colonist_primary_weapon(&colonist), -1);
+    CHECK_EQ_INT(colonist.tool_locks[spear], CARRY_LOCK_KEPT);
+    /* Freeing it takes the mark away. */
+    REQUIRE(colonist_set_primary_weapon(&colonist, cobble, true));
+    REQUIRE(colonist_set_lock(&colonist, cobble, CARRY_LOCK_NONE));
+    CHECK_EQ_INT(colonist_primary_weapon(&colonist), -1);
+    /* Gone: no longer primary, and a new item in its slot is not. */
+    REQUIRE(colonist_set_primary_weapon(&colonist, cobble, true));
+    colonist.tools[cobble] = (ItemStack){.type = ITEM_NONE}; /* Worn out. */
+    CHECK_EQ_INT(colonist_primary_weapon(&colonist), -1);
+    REQUIRE(colonist_add_tool(&colonist, item_stack_pristine(ITEM_FLINT, 1)));
+    CHECK_EQ_INT(colonist_tool_index(&colonist, ITEM_TYPE_BIT(ITEM_FLINT)), cobble);
+    CHECK_EQ_INT(colonist_primary_weapon(&colonist), -1);
+    /* One arm of no use: no thrusting spear (both hands), the hand axe. */
+    health_hurt(&colonist.health, LEFT_ARM, INJURY_CUT, 30.0f);
+    if (health_arm_efficiency(&colonist.health, HEALTH_ARM_LEFT) < CARRY_ARM_MIN &&
+        !health_is_dead(&colonist.health)) {
+        CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_AXE_CHOP);
+        /* Even marked primary. */
+        REQUIRE(colonist_set_primary_weapon(&colonist, spear, true));
+        CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_AXE_CHOP);
+    } else {
+        CHECK(false); /* The cut should leave the arm of no use. */
+    }
+    colonist_free(&colonist);
+}
+
 /* A settler with no use of its arms cannot fight back: it runs, and does not
  * strike (the animal wins). */
 static void test_armless_settler_does_not_fight(void)
@@ -1355,6 +1416,7 @@ int main(void)
     RUN_TEST(test_hurt_animal_breaks_off);
     RUN_TEST(test_settler_fights_back);
     RUN_TEST(test_settler_attack_by_weapon);
+    RUN_TEST(test_settler_weapon_choice);
     RUN_TEST(test_armless_settler_does_not_fight);
     RUN_TEST(test_wolf_bites_and_claws);
     RUN_TEST(test_wolf_without_forepaws_only_bites);

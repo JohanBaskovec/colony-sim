@@ -469,6 +469,9 @@ typedef struct Colonist {
     /* TASK_MOVE ordered to carry an item (colonist_order_carry()): taken on
      * arrival and kept, locked; ITEM_ID_NONE otherwise. */
     ItemId take_item;
+    /* The slot in `tools` of its primary weapon (docs/COMBAT.md §7), -1 for
+     * none; see colonist_primary_weapon(). */
+    int8_t primary_weapon;
     int tools_broken;       /* Tools worn out so far (for the player's information). */
     int strength;           /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
     float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
@@ -646,11 +649,11 @@ float colonist_heat_pressure(const Colonist *colonist, float felt_celsius);
  * next turn. Returns true when it had no enemy before. */
 bool colonist_provoke(Colonist *colonist, Combatant attacker);
 
-/* The attack a settler fights with: a thrusting spear it carries (the
- * hardened one first), else its fists; `skill` and `power` are the multipliers
- * its blows carry (power follows its strength and the use of its arms).
- * ATTACK_NONE when its arms are of no use (both lost or broken, or knocked
- * out): everything it strikes with is held in the hands. */
+/* The attack a settler fights with: its weapon's (colonist_weapon()), else
+ * its fists; `skill` and `power` are the multipliers its blows carry (the
+ * spear hunting knowledge for spears; power follows its strength and the use
+ * of its arms). ATTACK_NONE when its arms are of no use (both lost or broken,
+ * or knocked out): everything it strikes with is held in the hands. */
 AttackType colonist_attack(const Colonist *colonist, float *skill, float *power);
 
 void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, int z);
@@ -862,10 +865,10 @@ bool colonist_put_down(Colonist *colonist, Items *items, const Map *map, int ind
 
 /* The player locks the item at `index` of the load (newest first,
  * items_load_first(), docs/CARRYING.md §7.1): it becomes a kept item with
- * that lock. False when it cannot be kept so (colonist_can_keep()), there is
- * no such item, or when down. */
-bool colonist_keep_load_item(Colonist *colonist, const ColonistContext *context, int index,
-                             CarryLock lock);
+ * that lock. Returns its slot in `tools`, -1 when it cannot be kept so
+ * (colonist_can_keep()), there is no such item, or when down. */
+int colonist_keep_load_item(Colonist *colonist, const ColonistContext *context, int index,
+                            CarryLock lock);
 
 /* The player makes it drop the item at `index` of the load: put down where
  * it stands, forbidden. False when there is no such item. */
@@ -880,6 +883,22 @@ bool colonist_drop_load_item(Colonist *colonist, const ColonistContext *context,
  * (colonist_can_keep()). */
 bool colonist_order_carry(Colonist *colonist, const ColonistContext *context, ItemId item,
                           TilePos tile);
+
+/*
+ * Weapons (docs/COMBAT.md §7). colonist_primary_weapon() is the slot in
+ * `tools` of its primary weapon, -1 for none (or when that item is gone).
+ * colonist_set_primary_weapon() marks the weapon at `index` primary (and
+ * locks it kept on the settler) or takes the mark away (the lock stays);
+ * fails on an empty slot or what is no weapon. Freeing its lock takes the
+ * mark away too.
+ */
+int colonist_primary_weapon(const Colonist *colonist);
+bool colonist_set_primary_weapon(Colonist *colonist, int index, bool primary);
+
+/* The weapon it fights with, a slot in `tools`: its primary weapon, else the
+ * best it carries (weapon_better()), among those its arms can wield (both
+ * for one taking two hands); -1 for none: its fists. */
+int colonist_weapon(const Colonist *colonist);
 
 /* Drops every carried tool where the colonist stands (e.g. before removal). */
 void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map);

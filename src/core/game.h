@@ -755,11 +755,16 @@ bool game_can_carry(const Game *game, EntityId colonist, ItemId item);
 bool game_put_down(Game *game, EntityId colonist, int index);
 bool game_set_carry_lock(Game *game, EntityId colonist, int index, CarryLock lock);
 
+/* Marks the weapon the colonist keeps at `index` of its tools primary, or
+ * takes the mark away (colonist_set_primary_weapon()). */
+bool game_set_primary_weapon(Game *game, EntityId colonist, int index, bool primary);
+
 /* The same for the item at `index` of the colonist's load: kept, locked
- * (colonist_keep_load_item(); game_can_keep_load_item() tells whether one
- * could be kept so), or dropped, forbidden (colonist_drop_load_item()). */
+ * (colonist_keep_load_item(): its slot in the tools, -1 when refused;
+ * game_can_keep_load_item() tells whether one could be kept so), or dropped,
+ * forbidden (colonist_drop_load_item()). */
 bool game_can_keep_load_item(const Game *game, EntityId colonist, CarryLock lock);
-bool game_keep_load_item(Game *game, EntityId colonist, int index, CarryLock lock);
+int game_keep_load_item(Game *game, EntityId colonist, int index, CarryLock lock);
 bool game_drop_load_item(Game *game, EntityId colonist, int index);
 
 /* Where one item is ordered to go; false when it is not. */
