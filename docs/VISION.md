@@ -229,7 +229,7 @@ fog is crossed a few tiles at a time, from its edge.
 (`docs/ARCHITECTURE.md`, *Vision*), then:
 
 - **The known world** is not a second simulation: pictures of the map, the
-  items and the dirt (same types, same sizes, so code made for the real ones
+  items, the dirt and what hangs in the crowns (same types, same sizes, so code made for the real ones
   reads them unchanged), written by copying tiles from the real world: when a
   tile comes into view, a slice of the tiles in view every tick (a twelfth of
   them: they change), and a last time when it goes out of view, so that what

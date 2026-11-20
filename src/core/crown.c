@@ -209,6 +209,48 @@ int crowns_take(Crowns *crowns, int x, int y, int z, ItemTypeMask types, CrownIt
     return taken;
 }
 
+static bool same_item(const CrownItem *a, const CrownItem *b)
+{
+    return a->type == b->type && a->quality == b->quality && a->hit_points == b->hit_points &&
+           a->woods == b->woods && a->day == b->day;
+}
+
+bool crowns_copy_tile(Crowns *dst, const Crowns *src, size_t index)
+{
+    uint32_t a = dst->heads[index], b = src->heads[index];
+    while (a != 0 && b != 0 && same_item(&dst->pool[a - 1], &src->pool[b - 1])) {
+        a = dst->pool[a - 1].next;
+        b = src->pool[b - 1].next;
+    }
+    if (a == 0 && b == 0) {
+        return true; /* (Most tiles: nothing hangs there, or nothing changed.) */
+    }
+    while (dst->heads[index] != 0) {
+        remove_slot(dst, index, 0, dst->heads[index]);
+    }
+    uint32_t tail = 0; /* The copy keeps the order: appended at the tail. */
+    for (uint32_t from = src->heads[index]; from != 0; from = src->pool[from - 1].next) {
+        uint32_t slot = alloc_slot(dst);
+        if (slot == 0) {
+            return false;
+        }
+        CrownItem item = src->pool[from - 1];
+        item.next = 0;
+        item.tile = (uint32_t)index;
+        dst->pool[slot - 1] = item;
+        if (tail == 0) {
+            dst->heads[index] = slot;
+        } else {
+            dst->pool[tail - 1].next = slot;
+        }
+        tail = slot;
+        dst->count++;
+        dst->totals[item.type]++;
+    }
+    dst->revision++;
+    return true;
+}
+
 bool crown_drop(const Map *map, Items *items, int x, int y, int z, CrownItem item)
 {
     int level = tree_landing_level(map, x, y, z);

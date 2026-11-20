@@ -208,6 +208,50 @@ static void test_an_hour(void)
     free_world(&map, &items, &crowns);
 }
 
+/* A picture of the crowns (the known world's) copied tile by tile: the same
+ * lists in the same order, other tiles left as they were; copying again
+ * what agrees changes nothing. */
+static void test_copying_a_tile(void)
+{
+    Map map;
+    Items items;
+    Crowns crowns, picture;
+    REQUIRE(init_world(&map, &items, &crowns));
+    REQUIRE(crowns_init(&picture, SIZE, SIZE, DEPTH));
+    REQUIRE(crowns_add(&crowns, &map, 4, 4, 2, hanging(ITEM_APPLES, 40, 1)));
+    REQUIRE(crowns_add(&crowns, &map, 4, 4, 2, hanging(ITEM_BRANCHES, 60, 2)));
+    REQUIRE(crowns_add(&crowns, &map, 4, 4, 2, hanging(ITEM_APPLES, 70, 3)));
+    REQUIRE(crowns_add(&crowns, &map, 5, 4, 2, hanging(ITEM_PEARS, 50, 3)));
+    size_t dense = map_index(&map, 4, 4, 2), medium = map_index(&map, 5, 4, 2);
+    REQUIRE(crowns_copy_tile(&picture, &crowns, dense));
+    CHECK_EQ_INT(picture.count, 3);
+    CHECK_EQ_INT(crowns_count(&picture, 5, 4, 2, ITEM_TYPE_BIT(ITEM_PEARS)), 0); /* Not copied. */
+    CrownItem real[4], copy[4];
+    REQUIRE(crowns_list(&crowns, 4, 4, 2, real, 4) == 3);
+    REQUIRE(crowns_list(&picture, 4, 4, 2, copy, 4) == 3);
+    for (int i = 0; i < 3; i++) {
+        CHECK_EQ_INT(copy[i].type, real[i].type);
+        CHECK_EQ_INT(copy[i].quality, real[i].quality);
+        CHECK_EQ_INT(copy[i].day, real[i].day);
+    }
+    uint32_t revision = picture.revision;
+    REQUIRE(crowns_copy_tile(&picture, &crowns, dense));
+    CHECK_EQ_UINT(picture.revision, revision); /* Nothing changed. */
+    /* Picked in the real crowns: the picture follows when copied again. */
+    CrownItem taken[4];
+    CHECK_EQ_INT(crowns_take(&crowns, 4, 4, 2, ITEM_TYPE_BIT(ITEM_APPLES), taken, 4), 2);
+    CHECK_EQ_INT(crowns_count(&picture, 4, 4, 2, ITEM_TYPE_BIT(ITEM_APPLES)), 2);
+    REQUIRE(crowns_copy_tile(&picture, &crowns, dense));
+    REQUIRE(crowns_copy_tile(&picture, &crowns, medium));
+    CHECK_EQ_INT(crowns_count(&picture, 4, 4, 2, ITEM_TYPE_BIT(ITEM_APPLES)), 0);
+    CHECK_EQ_INT(crowns_count(&picture, 4, 4, 2, ITEM_TYPE_BIT(ITEM_BRANCHES)), 1);
+    CHECK_EQ_INT(picture.totals[ITEM_PEARS], 1);
+    CHECK(crowns_hash(&picture, 0) == crowns_hash(&crowns, 0));
+    CHECK(crowns_check(&picture));
+    crowns_free(&picture);
+    free_world(&map, &items, &crowns);
+}
+
 int main(void)
 {
     RUN_TEST(test_room);
@@ -215,5 +259,6 @@ int main(void)
     RUN_TEST(test_falling);
     RUN_TEST(test_fall_chances);
     RUN_TEST(test_an_hour);
+    RUN_TEST(test_copying_a_tile);
     return test_summary();
 }

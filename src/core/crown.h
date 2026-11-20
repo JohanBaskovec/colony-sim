@@ -10,7 +10,8 @@
  * Each foliage tile has a list of what hangs there, one entry per item, in a
  * pool of slots (like the items' pool). The game hangs fruit in its season
  * and the dead wood its trees shed (tree_shed()); a running game reaches the
- * crowns through Map.crowns.
+ * crowns through Map.crowns. The colony's known world (core/known.h) has a
+ * picture of them of its own: what hung in a crown when it was last seen.
  */
 #ifndef COLONY_CORE_CROWN_H
 #define COLONY_CORE_CROWN_H
@@ -96,6 +97,11 @@ ItemStack crown_item_stack(CrownItem item);
 /* Takes up to `max` items of `types` off a tile (newest first) into `out`
  * (room for `max`). Returns how many were taken. */
 int crowns_take(Crowns *crowns, int x, int y, int z, ItemTypeMask types, CrownItem *out, int max);
+
+/* Makes the list of the tile at `index` of `dst` the same as `src`'s (the
+ * known world's picture of the crowns, core/known.h); nothing changes when
+ * they already agree. False when out of memory. */
+bool crowns_copy_tile(Crowns *dst, const Crowns *src, size_t index);
 
 /* Lets an item that hung on (x, y, z) fall to the ground below
  * (tree_landing_level(), items_drop() there: lost over water or in a

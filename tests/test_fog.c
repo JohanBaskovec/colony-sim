@@ -2,7 +2,9 @@
  * one, what is explored, the start, and revealing the map. */
 #include "core/exploration.h"
 #include "core/game.h"
+#include "core/gather_zone.h"
 #include "core/known.h"
+#include "core/tree.h"
 
 #include "test_framework.h"
 
@@ -664,6 +666,104 @@ static void test_move_order_stays_in_the_explored(void)
     game_shutdown(&game);
 }
 
+/* A grown wild apple tree on (x, y, z), and a block of its foliage with room
+ * for `apples` apples, which hang there (`block` receives it). */
+static bool apple_tree(Game *game, int x, int y, int z, int apples, TilePos *block)
+{
+    Map *map = &game->map;
+    map->plants[map_index(map, x, y, z)] = (Plant){.type = PLANT_WILD_APPLE, .growth = 1.0f};
+    tree_build(map, x, y, z);
+    map_topology_changed(map);
+    CrownItem apple = {.type = ITEM_APPLES, .quality = ITEM_QUALITY_STANDARD, .hit_points = 100};
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            int bx = x + dx, by = y + dy, bz = z + 1;
+            if ((dx != 0 || dy != 0) &&
+                crowns_room(&game->crowns, map, bx, by, bz, ITEM_APPLES) >= apples) {
+                for (int i = 0; i < apples; i++) {
+                    crowns_add(&game->crowns, map, bx, by, bz, apple);
+                }
+                *block = (TilePos){(int16_t)bx, (int16_t)by, (int16_t)bz};
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static int known_apples(const Game *game, TilePos at)
+{
+    return crowns_count(game_view_map(game)->crowns, at.x, at.y, at.z, ITEM_TYPE_BIT(ITEM_APPLES));
+}
+
+/* What hangs in the crowns is known as it was last seen, as the items are
+ * (docs/TREES.md §7.1): not what came to hang out of view; a gatherer picks
+ * what the colony knows of. */
+static void test_remembers_what_hangs_in_the_crowns(void)
+{
+    Game game;
+    REQUIRE(walled_plain(&game));
+    game.clock.tick = (uint64_t)SEASON_DAY(SEASON_SUMMER, 14) * TICKS_PER_DAY + 12 * TICKS_PER_HOUR;
+    int z = game.map.surface_level;
+    for (int y = 0; y < game.map.height; y++) { /* The wall higher than the trees. */
+        for (int level = z + 1; level < game.map.depth; level++) {
+            game.map.rock[map_index(&game.map, 30, y, level)] = ROCK_GRANITE;
+            game.map.terrain[map_index(&game.map, 30, y, level)] = TERRAIN_SOIL;
+        }
+    }
+    map_topology_changed(&game.map);
+    TilePos seen, hidden;
+    REQUIRE(apple_tree(&game, 24, 30, z, 3, &seen));
+    EntityId id = game_spawn_colonist(&game, 20, 30, z);
+    Colonist *colonist = game_colonist(&game, id);
+    REQUIRE(colonist != NULL);
+    REQUIRE(game_set_fog(&game, true));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    CHECK(game_view_map(&game)->crowns == &game.known.crowns);
+    CHECK(game_tile_seen(&game, seen.x, seen.y, seen.z));
+    CHECK_EQ_INT(known_apples(&game, seen), 3);
+    /* Apples come to hang behind the wall, out of view: unknown. */
+    REQUIRE(apple_tree(&game, 45, 30, z, 2, &hidden));
+    for (int i = 0; i < 20; i++) {
+        game_tick(&game);
+    }
+    CHECK(!game_tile_seen(&game, hidden.x, hidden.y, hidden.z));
+    CHECK_EQ_INT(known_apples(&game, hidden), 0);
+    CHECK_EQ_INT(
+        crowns_count(&game.crowns, hidden.x, hidden.y, hidden.z, ITEM_TYPE_BIT(ITEM_APPLES)), 2);
+    CHECK(crowns_check(&game.known.crowns));
+
+    /* A zone over both: the gatherer picks the apples it knows of only. */
+    int zone = gather_zone_create(&game.gather_zones, &game.map, 15, 20, 55, 40, z);
+    REQUIRE(zone != GATHER_ZONE_NONE);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_APPLES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_APPLES, GATHER_FOREVER);
+    gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
+    gather_zones_update(&game.gather_zones, game.items.totals, 0.0f);
+    GatherJobMask pick = GATHER_JOB_BIT(GATHER_JOB_PICK);
+    CHECK_EQ_INT(gather_tile_job(&game.gather_zones, &game.map, hidden.x, hidden.y, hidden.z, pick),
+                 GATHER_JOB_PICK);
+    CHECK_EQ_INT(gather_tile_job(&game.gather_zones, game_view_map(&game), hidden.x, hidden.y,
+                                 hidden.z, pick),
+                 GATHER_JOB_NONE); /* Not for the colony's plans. */
+    CHECK_EQ_INT(
+        gather_tile_job(&game.gather_zones, game_view_map(&game), seen.x, seen.y, seen.z, pick),
+        GATHER_JOB_PICK);
+    for (int i = 0; i < TICKS_PER_HOUR; i++) {
+        for (int need = 0; need < NEED_COUNT; need++) {
+            colonist->needs[need] = 1.0f;
+        }
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(crowns_count(&game.crowns, seen.x, seen.y, seen.z, ITEM_TYPE_BIT(ITEM_APPLES)), 0);
+    CHECK_EQ_INT(known_apples(&game, seen), 0);
+    CHECK_EQ_INT(
+        crowns_count(&game.crowns, hidden.x, hidden.y, hidden.z, ITEM_TYPE_BIT(ITEM_APPLES)), 2);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_move_order_stays_in_the_explored);
@@ -681,5 +781,6 @@ int main(void)
     RUN_TEST(test_remembers_workstations);
     RUN_TEST(test_reveal_map);
     RUN_TEST(test_fog_off_sees_everything);
+    RUN_TEST(test_remembers_what_hangs_in_the_crowns);
     return test_summary();
 }

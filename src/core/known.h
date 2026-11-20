@@ -1,11 +1,11 @@
 /*
  * The known world (docs/VISION.md): what the colony has seen, as pictures of
- * the real map, the items and the dirt of the same sizes, so that code made
- * for the real ones reads them unchanged. A tile nobody has seen is open
- * space with nothing in it; a tile seen is copied from the real world when it
- * comes into view, now and then while it is in view, and a last time when it
- * goes out of view: what the known world holds of a tile out of view is what
- * it was when it was last seen.
+ * the real map, the items, the dirt and what hangs in the crowns, of the same
+ * sizes, so that code made for the real ones reads them unchanged. A tile
+ * nobody has seen is open space with nothing in it; a tile seen is copied
+ * from the real world when it comes into view, now and then while it is in
+ * view, and a last time when it goes out of view: what the known world holds
+ * of a tile out of view is what it was when it was last seen.
  *
  * Wild animals are part of that picture: one standing on a tile when the tile
  * goes out of view stays there as a ghost (KnownAnimal), until someone sees
@@ -16,6 +16,7 @@
 #define COLONY_CORE_KNOWN_H
 
 #include "core/animal.h"
+#include "core/crown.h"
 #include "core/dirt.h"
 #include "core/item.h"
 #include "core/map.h"
@@ -59,6 +60,7 @@ typedef struct KnownWorld {
     Map map;
     Items items;
     Dirt dirt;
+    Crowns crowns;                   /* What hangs in the crowns, reached through map.crowns. */
     KnownStation *stations;          /* Per tile. */
     KnownAnimal animals[ANIMAL_MAX]; /* By slot in Animals. */
 } KnownWorld;

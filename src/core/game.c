@@ -1812,9 +1812,6 @@ bool game_set_fog(Game *game, bool on)
         if (!known_init(&game->known, &game->map)) {
             return false;
         }
-        /* The crowns are not part of the picture: the settlers know what
-         * hangs there (docs/TREES.md §7.3). */
-        game->known.map.crowns = &game->crowns;
         game->known_ready = true;
     }
     if (!game->fog_started) {

@@ -10,12 +10,14 @@ bool known_init(KnownWorld *known, const Map *map)
     known->stations = calloc(map_tile_count(map), sizeof(*known->stations));
     if (known->stations == NULL || !map_init(&known->map, map->width, map->height, map->depth) ||
         !items_init(&known->items, map->width, map->height, map->depth) ||
-        !dirt_init(&known->dirt, map->width, map->height, map->depth)) {
+        !dirt_init(&known->dirt, map->width, map->height, map->depth) ||
+        !crowns_init(&known->crowns, map->width, map->height, map->depth)) {
         known_free(known);
         return false;
     }
     known->items.picture = true;
     known->map.litter = &known->items; /* Its stones, branches and twigs are its items'. */
+    known->map.crowns = &known->crowns;
     /* Nothing is known: open space everywhere (map_init() lays a floor on level 0). */
     memset(known->map.terrain, TERRAIN_OPEN, map_tile_count(&known->map));
     known->map.surface_level = map->surface_level;
@@ -29,6 +31,7 @@ void known_free(KnownWorld *known)
     map_free(&known->map);
     items_free(&known->items);
     dirt_free(&known->dirt);
+    crowns_free(&known->crowns);
     free(known->stations);
     memset(known, 0, sizeof(*known));
 }
@@ -39,6 +42,9 @@ void known_copy_tile(KnownWorld *known, const Map *map, const Items *items, cons
     map_copy_tile(&known->map, map, index);
     items_copy_tile(&known->items, items, index);
     dirt_copy_tile(&known->dirt, dirt, index);
+    if (map->crowns != NULL) {
+        crowns_copy_tile(&known->crowns, map->crowns, index);
+    }
     KnownStation *picture = &known->stations[index];
     const Workstation *station =
         workstations->at[index] != 0 ? &workstations->list[workstations->at[index] - 1] : NULL;
@@ -75,6 +81,9 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
                               (int)(column / (size_t)dst->width));
         }
         items_copy_tile(&known->items, items, i); /* Only where they changed. */
+        if (map->crowns != NULL) {
+            crowns_copy_tile(&known->crowns, map->crowns, i);
+        }
         known->dirt.dirty_count += (dirt->level[i] != 0) - (known->dirt.level[i] != 0);
     }
     memcpy(dst->terrain + first, map->terrain + first, count);

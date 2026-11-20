@@ -252,9 +252,11 @@ came to hang) with a list per tile, reached through `Map.crowns` in a
 running game. A flag on the items would have made every user of the items
 (hauling, eating, rot, stocks, animals, the heaps drawn) skip attached ones;
 a store of its own leaves them all as they are, and an attached item becomes
-an ordinary one only when it falls or is picked. The colony's known map
-shares the store: settlers know what hangs in a crown they have seen, and
-also (a limitation) in one they have not.
+an ordinary one only when it falls or is picked. The colony's known world
+(`core/known.h`) has a picture of the store of its own, copied tile by tile
+with the rest (`crowns_copy_tile()`): settlers know what hung in a crown when
+they last saw it, plan their picking on that, and see what is really there
+once they come to it.
 
 - **Fruit**: in its season a fruit tree sets its fruit in its crown, a few a
   day, most in the outer blocks (the farther of two picked from the trunk),
