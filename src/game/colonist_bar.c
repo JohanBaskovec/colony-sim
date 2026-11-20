@@ -166,6 +166,11 @@ void colonist_bar_draw(App *app)
                                   rect.y + layout.gap, layout.portrait, layout.portrait};
             render_colonist_portrait(app->renderer, app->sprites, colonist, portrait);
             health_mark(app, colonist, portrait);
+            if (colonist->drafted) { /* A shield in the top left corner (docs/COMBAT.md §8). */
+                float size = SDL_max(12.0f, SDL_floorf(portrait.w * 0.5f));
+                render_tool_icon(app->renderer, (SDL_FRect){portrait.x, portrait.y, size, size},
+                                 RENDER_ICON_DRAFT);
+            }
             float text_y = portrait.y + portrait.h + SDL_floorf(layout.gap * 0.5f);
             const char *activity = tr(colonist_activity_key(colonist));
             if (layout.name) {

@@ -1023,6 +1023,11 @@ const char *colonist_activity_key(const Colonist *colonist)
     if (colonist->task == TASK_MOVE && colonist->take_item.slot != UINT32_MAX) {
         return N_("colonist.activity.fetch_to_carry");
     }
+    if (colonist->drafted) {
+        return colonist->task == TASK_MOVE    ? N_("colonist.activity.drafted_moving")
+               : colonist->task == TASK_FIGHT ? N_("colonist.activity.drafted_fighting")
+                                              : N_("colonist.activity.drafted");
+    }
     if (colonist->task == TASK_WORK && colonist->gathering) {
         const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
         if (def != NULL) {
@@ -1172,6 +1177,44 @@ bool colonist_order_move(Colonist *colonist, const ColonistContext *context, Til
     }
     colonist->move_pending = false;
     return start_move(colonist, context, goal);
+}
+
+bool colonist_can_draft(const Colonist *colonist)
+{
+    return !health_is_dead(&colonist->health) && !colonist_is_down(colonist) &&
+           !health_is_down(&colonist->health) && !colonist_in_break(colonist) &&
+           colonist->task != TASK_FLEE;
+}
+
+bool colonist_set_drafted(Colonist *colonist, const ColonistContext *context, bool drafted)
+{
+    if (drafted == colonist->drafted) {
+        return !drafted || colonist_can_draft(colonist);
+    }
+    if (drafted && !colonist_can_draft(colonist)) {
+        return false;
+    }
+    colonist->drafted = drafted;
+    colonist->draft_end = DRAFT_END_NONE;
+    colonist->chat_ticks = 0;
+    if (colonist->task == TASK_FIGHT) {
+        return true; /* Fights on, mobilized or not. */
+    }
+    /* Mobilized, it drops what it did (asleep, it wakes up) and stands there;
+     * demobilized, it takes up its life at once, unless sent somewhere. */
+    if (drafted || colonist->task != TASK_MOVE) {
+        set_idle(colonist, context, 0);
+    }
+    return true;
+}
+
+/* Demobilized by itself (DraftEnd): the player is told why. */
+static void end_draft(Colonist *colonist, DraftEnd why)
+{
+    if (colonist->drafted) {
+        colonist->drafted = false;
+        colonist->draft_end = (uint8_t)why;
+    }
 }
 
 bool colonist_order_carry(Colonist *colonist, const ColonistContext *context, ItemId item,
@@ -3915,8 +3958,8 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
 
 bool colonist_can_chat(const Colonist *colonist)
 {
-    if (colonist_in_break(colonist) || health_is_dead(&colonist->health)) {
-        return false; /* Wants to be left alone; or is gone. */
+    if (colonist_in_break(colonist) || health_is_dead(&colonist->health) || colonist->drafted) {
+        return false; /* Wants to be left alone; or is gone; or on its guard. */
     }
     switch (colonist->task) {
     case TASK_IDLE:
@@ -5236,6 +5279,9 @@ static void act_out_break(Colonist *colonist, const ColonistContext *context)
  * Only called on tile centers. */
 static void decide(Colonist *colonist, const ColonistContext *context)
 {
+    if (colonist->drafted) {
+        return; /* Mobilized: only the player's orders. */
+    }
     float rest = colonist->needs[NEED_REST];
 
     switch (colonist->task) {
@@ -5618,8 +5664,11 @@ static void engage(Colonist *colonist, const ColonistContext *context)
      * it can only take it. */
     float skill, power;
     AttackType attack = colonist_attack(colonist, &skill, &power);
+    /* Mobilized, it no longer gives up from fear: only when it cannot fight
+     * any more, which demobilizes it. */
     bool afraid = attack == ATTACK_NONE ||
-                  combat_breaks_off(&colonist->health, attribute_nerve(&colonist->attributes));
+                  (!colonist->drafted &&
+                   combat_breaks_off(&colonist->health, attribute_nerve(&colonist->attributes)));
     if (afraid) {
         if (colonist->task == TASK_FLEE && colonist_is_moving(colonist)) {
             return;
@@ -5632,6 +5681,7 @@ static void engage(Colonist *colonist, const ColonistContext *context)
             return;
         }
         if (start_flight(colonist, context, there)) {
+            end_draft(colonist, DRAFT_END_FLED);
             return;
         }
         if (attack == ATTACK_NONE) {
@@ -5736,8 +5786,12 @@ static void tick_turn(Colonist *colonist, const ColonistContext *context)
         return; /* Died of hunger, thirst, cold or heat. */
     }
     if (health_is_down(&colonist->health)) {
+        end_draft(colonist, DRAFT_END_DOWN);
         lie_down(colonist, context);
         return;
+    }
+    if (colonist_in_break(colonist)) {
+        end_draft(colonist, DRAFT_END_BREAK); /* Its break comes before any order. */
     }
     if (colonist->task == TASK_DOWN) {
         set_idle(colonist, context, 0); /* Gets up. */
@@ -5767,8 +5821,8 @@ static void tick_turn(Colonist *colonist, const ColonistContext *context)
     case TASK_IDLE:
         if (colonist->timer > 0) {
             colonist->timer--;
-        } else {
-            start_wandering(colonist, context);
+        } else if (!colonist->drafted) {
+            start_wandering(colonist, context); /* Mobilized, it stands its ground. */
         }
         break;
     case TASK_WANDER: set_idle(colonist, context, random_idle_ticks(context->rng)); break;
@@ -5791,8 +5845,8 @@ static void tick_turn(Colonist *colonist, const ColonistContext *context)
             set_idle(colonist, context, 0);
             break;
         }
-        if (++colonist->timer >= COLONIST_MOVE_HOLD_TICKS) {
-            set_idle(colonist, context, 0);
+        if (colonist->drafted || ++colonist->timer >= COLONIST_MOVE_HOLD_TICKS) {
+            set_idle(colonist, context, 0); /* Mobilized, it stays there. */
         }
         break;
     case TASK_SLEEP:

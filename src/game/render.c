@@ -2669,6 +2669,31 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         batch_flush(renderer);
         break;
     }
+    case RENDER_ICON_DRAFT: { /* A round shield before an upright spear. */
+        SDL_Color rim = {92, 60, 34, 255}, hide = {178, 124, 72, 255};
+        float cx = rect.x + w * 0.5f;
+        float shaft_x0 = rect.x + w * 0.22f, shaft_y0 = rect.y + h * 0.94f;
+        float shaft_x1 = rect.x + w * 0.74f, shaft_y1 = rect.y + h * 0.2f;
+        batch_bar(renderer, WOOD_COLOR, shaft_x0, shaft_y0, shaft_x1, shaft_y1, w * 0.045f);
+        /* The stone point, along the shaft. */
+        float dx = shaft_x1 - shaft_x0, dy = shaft_y1 - shaft_y0;
+        float length = SDL_sqrtf(dx * dx + dy * dy);
+        float ux = dx / length, uy = dy / length;
+        float tip_x = shaft_x1 + ux * h * 0.16f, tip_y = shaft_y1 + uy * h * 0.16f;
+        float side = w * 0.08f;
+        SDL_FPoint point[3] = {{tip_x, tip_y},
+                               {shaft_x1 - uy * side, shaft_y1 + ux * side},
+                               {shaft_x1 + uy * side, shaft_y1 - ux * side}};
+        batch_shape(renderer, FLINT_COLOR, point, 3);
+        float cy = rect.y + h * 0.6f, radius = w * 0.3f;
+        /* A dark edge: it stands out over a portrait or the ground. */
+        batch_disc(renderer, (SDL_Color){28, 20, 14, 255}, cx - w * 0.04f, cy, radius + 1.5f);
+        batch_disc(renderer, rim, cx - w * 0.04f, cy, radius);
+        batch_disc(renderer, hide, cx - w * 0.04f, cy, radius * 0.78f);
+        batch_disc(renderer, STONE_COLOR, cx - w * 0.04f, cy, radius * 0.26f);
+        batch_flush(renderer);
+        break;
+    }
     case RENDER_ICON_IN_HAND: { /* A fist closed on an upright handle. */
         SDL_Color skin = {222, 184, 150, 255}, crease = {150, 108, 80, 255};
         float cx = rect.x + w * 0.5f;
@@ -4158,6 +4183,28 @@ static void render_chat_bubbles(SDL_Renderer *renderer, const Game *game, const 
     }
 }
 
+/* A shield over the head of mobilized settlers (docs/COMBAT.md §8). */
+static void render_draft_marks(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = &game->colonists[slot];
+        if (entity_id_is_none(game_colonist_id_at(game, slot)) || !colonist->drafted ||
+            colonist->z != camera->level) {
+            continue;
+        }
+        float wx, wy, sx, sy;
+        colonist_position(colonist, &wx, &wy);
+        if (!tile_seen((int)floorf(wx), (int)floorf(wy), colonist->z)) {
+            continue;
+        }
+        camera_world_to_screen(camera, wx, wy + COLONIST_FEET, &sx, &sy);
+        float size = SDL_max(16.0f, floorf(camera->zoom * 0.5f));
+        SDL_FRect mark = {floorf(sx - size * 0.5f),
+                          floorf(sy - COLONIST_HEIGHT * camera->zoom - size * 1.05f), size, size};
+        render_tool_icon(renderer, mark, RENDER_ICON_DRAFT);
+    }
+}
+
 /* One of the colonists and animals to draw, in depth order. */
 static void render_entry(SDL_Renderer *renderer, Sprites *sprites, const Game *game,
                          const Camera *camera, const DepthEntry *entry, const EntityId *selected,
@@ -4292,6 +4339,7 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
     sprites_flush(sprites);
     render_strike_marks(renderer, sprites, game, camera);
     render_chat_bubbles(renderer, game, camera);
+    render_draft_marks(renderer, game, camera);
 }
 
 void render_area_outline(SDL_Renderer *renderer, const Camera *camera, int width, int height,

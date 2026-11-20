@@ -1510,6 +1510,18 @@ static void update_colonists(Game *game)
                              colonist->name, game->clock.tick);
             }
             colonist->collapse_noticed = collapsed;
+            if (colonist->draft_end != DRAFT_END_NONE) {
+                static const NoticeType UNDRAFTED[DRAFT_END_COUNT] = {
+                    [DRAFT_END_BREAK] = NOTICE_UNDRAFTED_BREAK,
+                    [DRAFT_END_FLED] = NOTICE_UNDRAFTED_FLED,
+                    [DRAFT_END_DOWN] = NOTICE_UNDRAFTED_DOWN,
+                };
+                if (colonist->draft_end < DRAFT_END_COUNT) {
+                    notices_push(&game->notices, UNDRAFTED[colonist->draft_end], KNOWLEDGE_NONE,
+                                 colonist->name, game->clock.tick);
+                }
+                colonist->draft_end = DRAFT_END_NONE;
+            }
             if (health_is_dead(&colonist->health)) {
                 settler_died(game, slot);
             }
@@ -2935,6 +2947,9 @@ uint64_t game_hash(const Game *game)
         hash = hash_fnv1a64(hash, &c->strength, sizeof(c->strength));
         hash = hash_fnv1a64(hash, &c->max_carry_weight, sizeof(c->max_carry_weight));
         hash = health_hash(&c->health, hash);
+        if (c->drafted) { /* Only then: hashes of games without it stay as they were. */
+            hash = hash_fnv1a64(hash, &c->drafted, sizeof(c->drafted));
+        }
         if (!combatant_is_none(c->enemy) || c->attack_cooldown > 0) {
             /* Only then: hashes of games without fights stay as they were. */
             int32_t fight[4] = {c->enemy.kind, (int32_t)c->enemy.id.index,
@@ -3463,6 +3478,32 @@ bool game_set_primary_weapon(Game *game, EntityId colonist_id, int index, bool p
 {
     Colonist *colonist = game_colonist(game, colonist_id);
     return colonist != NULL && colonist_set_primary_weapon(colonist, index, primary);
+}
+
+bool game_can_draft(const Game *game, EntityId colonist_id)
+{
+    const Colonist *colonist = game_colonist_const(game, colonist_id);
+    return colonist != NULL && colonist_can_draft(colonist);
+}
+
+bool game_is_drafted(const Game *game, EntityId colonist_id)
+{
+    const Colonist *colonist = game_colonist_const(game, colonist_id);
+    return colonist != NULL && colonist->drafted;
+}
+
+int game_set_drafted(Game *game, const EntityId *ids, int count, bool drafted)
+{
+    int changed = 0;
+    for (int i = 0; i < count; i++) {
+        Colonist *colonist = game_colonist(game, ids[i]);
+        if (colonist == NULL || colonist->drafted == drafted) {
+            continue;
+        }
+        ColonistContext context = colonist_context(game, ids[i].index);
+        changed += colonist_set_drafted(colonist, &context, drafted) ? 1 : 0;
+    }
+    return changed;
 }
 
 bool game_can_keep_load_item(const Game *game, EntityId colonist_id, CarryLock lock)

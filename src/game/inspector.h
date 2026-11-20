@@ -72,6 +72,10 @@ void inspector_move_action(App *app, int slot);
  * keep it, locked. */
 void inspector_carry_action(App *app, int slot);
 
+/* Mobilize, or Demobilize when every selected settler is mobilized (lit
+ * then): app_toggle_draft(). */
+void inspector_draft_action(App *app, int slot);
+
 /* Follow the selected settler or animal (`kind`, `id`): lit while the camera
  * follows it, a click starts or stops it (app_toggle_follow()). */
 void inspector_follow_action(App *app, int slot, FollowKind kind, EntityId id);

@@ -1199,6 +1199,15 @@ among those whose limb is whole enough (`combat_choose_attack()`, with the
 animals' random stream, none drawn when only one is possible); a settler's
 single attack (`colonist_attack()`) is `ATTACK_NONE` without the use of its
 arms. The debug tool (F4) names an attacker and a target (`game_debug_attack()`).
+A mobilized settler (`Colonist.drafted`, `colonist_set_drafted()`,
+`game_set_drafted()`, `docs/COMBAT.md` §8) skips `decide()` altogether (no
+needs, work, sleep or chats: `colonist_can_chat()` refuses it), does not
+wander off when idle nor walk back to its life after a Move order, and
+`engage()` no longer lets it flee from fear. `tick_turn()` demobilizes it
+when a break starts or it goes down, `engage()` when it runs because it
+cannot strike; `Colonist.draft_end` keeps why until `game_tick()` raises the
+notice (`NOTICE_UNDRAFTED_*`) and clears it. The flag enters the hash only
+while set, so games without it hash as before.
 Each resolved blow is also pushed into `Game.combat_log` (a ring of
 `CombatEvent`s: tick, attacker, target and where it stood, attack, hit), which
 no simulation code reads and `game_hash()` leaves out. The frontend plays it

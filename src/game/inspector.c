@@ -224,6 +224,21 @@ void inspector_carry_action(App *app, int slot)
     render_tool_icon(app->renderer, icon, RENDER_ICON_CARRY);
 }
 
+void inspector_draft_action(App *app, int slot)
+{
+    bool lit = app_selection_drafted(app);
+    char shortcut[128];
+    TR_FORMAT(shortcut, sizeof(shortcut), tr("menu.shortcut"), app_key_name(APP_KEY_DRAFT));
+    const char *lines[3] = {
+        tr(lit ? "inspector.undraft" : "inspector.draft"),
+        tr(lit ? "inspector.undraft.description" : "inspector.draft.description"), shortcut};
+    SDL_FRect icon;
+    if (inspector_action(app, slot, lit, &icon, lines, 3)) {
+        app_toggle_draft(app);
+    }
+    render_tool_icon(app->renderer, icon, RENDER_ICON_DRAFT);
+}
+
 void inspector_follow_action(App *app, int slot, FollowKind kind, EntityId id)
 {
     bool lit = app_is_following(app, kind, id);

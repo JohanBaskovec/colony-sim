@@ -9,8 +9,10 @@ whether the blow lands.
 Status: step A is implemented (the module, animals fighting and fleeing,
 settlers' self-defense, a debug tool), and the carnivores that use it
 (`docs/ROADMAP.md` M5 *Wildlife, step 2*, §6). Weapons (§7) are implemented
-(step 1 of §9: `core/weapon.h`, the primary weapon); the mobilization (§8)
-is designed, not implemented. Values marked
+(step 1 of §9: `core/weapon.h`, the primary weapon), and so is the
+mobilization itself (step 2: the state, its end, the button, key and marks);
+wielding (step 3) and the *Attack* order (step 4) are designed, not
+implemented. Values marked
 *(tuning)* are first guesses.
 
 ## 1. Principles
@@ -192,7 +194,7 @@ condition; on a tie, the better quality, then the less worn.
   **Drawing** takes time by where the weapon was: none from a hand, half a
   second from under an arm or the shoulders, two seconds slung *(tuning)*.
 
-## 8. Mobilization (designed)
+## 8. Mobilization (step 2 implemented)
 
 The player **mobilizes** (drafts) settlers to fight, and **demobilizes**
 them. A button among the settler's actions (and a key, a physical position
@@ -228,12 +230,22 @@ when all are mobilized.
 - **Self-defense** (not mobilized) follows the same choice of weapon: the
   primary, else the best one carried, with the drawing time.
 
+Implemented (step 2): `Colonist.drafted`, `colonist_can_draft()` and
+`colonist_set_drafted()`, `game_set_drafted()` for a selection; the action
+button (a round shield before a spear, lit when all are mobilized) for one
+or several settlers, the key `APP_KEY_DRAFT` (B on QWERTY), the shield over
+the settler's head on the map and on its portrait in the colonist bar, the
+activity *Mobilized* (*moving*, *fighting*) and the notices of its end.
+Until step 4, a mobilized settler struck by an animal still walks up to it
+and fights as in self-defense (without fleeing from fear), and it does not
+yet strike an enemy that merely comes in reach.
+
 ## 9. Steps of weapons and mobilization
 
 1. *(done)* The weapons (§7): an attack for each weapon item, the hands it takes,
   its worth; the primary weapon and its button; self-defense with the best
   weapon carried.
-2. Mobilization (§8): the state, needs ignored, waking up, the end
+2. *(done)* Mobilization (§8): the state, needs ignored, waking up, the end
   conditions and their notices, the button and key, the marks on screen.
 3. Wielding: the weapon in hand at mobilization, the drawing time, the
   *Change weapon* list (with the weapons lying within a tile).

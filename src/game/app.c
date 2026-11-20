@@ -1077,6 +1077,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     switch (key->scancode) {
     case APP_KEY_PAUSE: game_clock_toggle_pause(&app->game.clock); return;
     case APP_KEY_BUILD_LIKE: app_build_like_selection(app); return;
+    case APP_KEY_DRAFT: app_toggle_draft(app); return;
     case APP_KEY_FOLLOW:
         if (!entity_id_is_none(app->selected_animal)) {
             app_toggle_follow(app, FOLLOW_ANIMAL, app->selected_animal);
@@ -1520,6 +1521,34 @@ void app_stop_following(App *app)
 bool app_is_following(const App *app, FollowKind kind, EntityId id)
 {
     return app->follow_kind == kind && kind != FOLLOW_NONE && entity_id_equal(app->follow_id, id);
+}
+
+bool app_selection_drafted(const App *app)
+{
+    int drafted = 0;
+    for (int i = 0; i < app->selected_count; i++) {
+        if (!game_is_drafted(&app->game, app->selected[i])) {
+            return false;
+        }
+        drafted++;
+    }
+    return drafted > 0;
+}
+
+bool app_selection_draftable(const App *app)
+{
+    for (int i = 0; i < app->selected_count; i++) {
+        if (game_is_drafted(&app->game, app->selected[i]) ||
+            game_can_draft(&app->game, app->selected[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void app_toggle_draft(App *app)
+{
+    game_set_drafted(&app->game, app->selected, app->selected_count, !app_selection_drafted(app));
 }
 
 void app_toggle_follow(App *app, FollowKind kind, EntityId id)

@@ -759,6 +759,16 @@ bool game_set_carry_lock(Game *game, EntityId colonist, int index, CarryLock loc
  * takes the mark away (colonist_set_primary_weapon()). */
 bool game_set_primary_weapon(Game *game, EntityId colonist, int index, bool primary);
 
+/* Mobilization (docs/COMBAT.md §8, colonist_set_drafted()):
+ * game_can_draft() tells whether the colonist could be mobilized (not down,
+ * in a mental break or fleeing), game_is_drafted() whether it is.
+ * game_set_drafted() mobilizes (or demobilizes) every colonist of `ids`
+ * that can be; returns how many changed. A colonist demobilized by itself
+ * raises a notice (NOTICE_UNDRAFTED_*). */
+bool game_can_draft(const Game *game, EntityId colonist);
+bool game_is_drafted(const Game *game, EntityId colonist);
+int game_set_drafted(Game *game, const EntityId *ids, int count, bool drafted);
+
 /* The same for the item at `index` of the colonist's load: kept, locked
  * (colonist_keep_load_item(): its slot in the tools, -1 when refused;
  * game_can_keep_load_item() tells whether one could be kept so), or dropped,

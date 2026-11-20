@@ -792,6 +792,163 @@ static void test_fearful_settler_flees(void)
     game_shutdown(&game);
 }
 
+/* Whether a notice of `type` was raised since notice number `from`. */
+static bool notice_raised(const Game *game, uint32_t from, NoticeType type)
+{
+    for (uint32_t number = from; number < game->notices.count; number++) {
+        const Notice *notice = notices_get(&game->notices, number);
+        if (notice != NULL && notice->type == type) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* A mobilized settler ignores its needs and its work: it stands where it is
+ * (asleep, it wakes up), its needs still falling; demobilized, it takes up
+ * its life again (docs/COMBAT.md §8). */
+static void test_drafted_settler_ignores_its_needs(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    REQUIRE(settler != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    settler->needs[NEED_REST] = 0.05f;
+    for (int tick = 0; tick < 10 * TICKS_PER_SECOND && settler->task != TASK_SLEEP; tick++) {
+        game_tick(&game);
+    }
+    REQUIRE(settler->task == TASK_SLEEP);
+    CHECK(game_can_draft(&game, id));
+    CHECK(!game_is_drafted(&game, id));
+    CHECK_EQ_INT(game_set_drafted(&game, &id, 1, true), 1);
+    CHECK(game_is_drafted(&game, id));
+    CHECK_EQ_INT(settler->task, TASK_IDLE);                 /* Woke up. */
+    CHECK_EQ_INT(game_set_drafted(&game, &id, 1, true), 0); /* Already. */
+    settler->needs[NEED_FOOD] = 0.1f;
+    settler->needs[NEED_WATER] = 0.1f;
+    TilePos here = {(int16_t)settler->x, (int16_t)settler->y, (int16_t)settler->z};
+    float rest = settler->needs[NEED_REST];
+    bool stayed = true;
+    for (int tick = 0; tick < 60 * TICKS_PER_SECOND; tick++) {
+        game_tick(&game);
+        stayed &= settler->task == TASK_IDLE && settler->x == here.x && settler->y == here.y;
+    }
+    CHECK(stayed);
+    CHECK(settler->needs[NEED_REST] < rest);
+    CHECK_STR_EQ(colonist_activity_key(settler), "colonist.activity.drafted");
+    /* Sent somewhere, it stays there. */
+    CHECK_EQ_INT(game_order_move(&game, &id, 1, 26, 20, 0), 1);
+    CHECK_STR_EQ(colonist_activity_key(settler), "colonist.activity.drafted_moving");
+    run_ticks(&game, 10 * TICKS_PER_SECOND + 2 * COLONIST_MOVE_HOLD_TICKS);
+    CHECK_EQ_INT(settler->x, 26);
+    CHECK_EQ_INT(settler->y, 20);
+    CHECK_EQ_INT(settler->task, TASK_IDLE);
+    /* Demobilized: back to its needs (sleep, first of all). */
+    CHECK_EQ_INT(game_set_drafted(&game, &id, 1, false), 1);
+    CHECK(!game_is_drafted(&game, id));
+    run_ticks(&game, 10 * TICKS_PER_SECOND);
+    CHECK(settler->task != TASK_IDLE);
+    game_shutdown(&game);
+}
+
+/* Not a settler in a mental break, fleeing or down. */
+static void test_who_can_be_drafted(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *sulking = spawn_settler(&game, 10, 10);
+    Colonist *down = spawn_settler(&game, 14, 10);
+    Colonist *running = spawn_settler(&game, 18, 10);
+    Colonist *fine = spawn_settler(&game, 22, 10);
+    EntityId boar_id;
+    REQUIRE(spawn_animal(&game, ANIMAL_BOAR, 18, 13, &boar_id) != NULL);
+    REQUIRE(sulking != NULL && down != NULL && running != NULL && fine != NULL);
+    mood_start_break(&sulking->mood, MOOD_BREAK_SULK, 2 * TICKS_PER_HOUR);
+    health_hurt(&down->health, LEFT_LEG, INJURY_FRACTURE, 2.0f);
+    health_hurt(&down->health, RIGHT_LEG, INJURY_FRACTURE, 2.0f);
+    health_hurt(&running->health, LEFT_ARM, INJURY_FRACTURE, 2.0f);
+    health_hurt(&running->health, RIGHT_ARM, INJURY_FRACTURE, 2.0f);
+    REQUIRE(colonist_provoke(running, (Combatant){COMBATANT_ANIMAL, boar_id}));
+    run_ticks(&game, 10);
+    REQUIRE(colonist_is_down(down));
+    REQUIRE(running->task == TASK_FLEE);
+    EntityId ids[4];
+    for (int i = 0; i < 4; i++) {
+        ids[i] = game_colonist_id_at(&game, (uint32_t)i);
+    }
+    CHECK(!game_can_draft(&game, ids[0]));
+    CHECK(!game_can_draft(&game, ids[1]));
+    CHECK(!game_can_draft(&game, ids[2]));
+    CHECK(game_can_draft(&game, ids[3]));
+    CHECK_EQ_INT(game_set_drafted(&game, ids, 4, true), 1);
+    CHECK(!sulking->drafted && !down->drafted && !running->drafted);
+    CHECK(fine->drafted);
+    CHECK(!game_can_draft(&game, ENTITY_NONE));
+    CHECK_EQ_INT(game_set_drafted(&game, ids, 4, false), 1);
+    CHECK(!fine->drafted);
+    game_shutdown(&game);
+}
+
+/* A mobilized settler no longer flees from fear; it is demobilized (with a
+ * notice) when it breaks down, is knocked out, or flees because it cannot
+ * fight any more. */
+static void test_draft_ends(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *timid = spawn_settler(&game, 10, 10);
+    Colonist *sulker = spawn_settler(&game, 10, 30);
+    Colonist *faller = spawn_settler(&game, 30, 30);
+    Colonist *armless = spawn_settler(&game, 30, 10);
+    EntityId boar_id, other_id;
+    REQUIRE(spawn_animal(&game, ANIMAL_BOAR, 13, 10, &boar_id) != NULL);
+    REQUIRE(spawn_animal(&game, ANIMAL_BOAR, 33, 10, &other_id) != NULL);
+    REQUIRE(timid != NULL && sulker != NULL && faller != NULL && armless != NULL);
+    EntityId ids[4];
+    for (int i = 0; i < 4; i++) {
+        ids[i] = game_colonist_id_at(&game, (uint32_t)i);
+    }
+    REQUIRE(game_set_drafted(&game, ids, 4, true) == 4);
+    /* Hurt past its nerve, mobilized: it fights. */
+    Attributes attributes = timid->attributes;
+    REQUIRE(attributes_set(&attributes, ATTRIBUTE_COURAGE, -ATTRIBUTE_POSITION_MAX));
+    colonist_set_attributes(timid, &attributes);
+    health_hurt(&timid->health, LEFT_ARM, INJURY_BRUISE, 6.0f);
+    health_hurt(&timid->health, RIGHT_ARM, INJURY_BRUISE, 6.0f);
+    REQUIRE(combat_breaks_off(&timid->health, attribute_nerve(&timid->attributes)));
+    REQUIRE(colonist_provoke(timid, (Combatant){COMBATANT_ANIMAL, boar_id}));
+    uint32_t from = game.notices.count;
+    run_ticks(&game, 10);
+    CHECK_EQ_INT(timid->task, TASK_FIGHT);
+    CHECK(timid->drafted);
+    CHECK_STR_EQ(colonist_activity_key(timid), "colonist.activity.drafted_fighting");
+    /* A break. */
+    mood_start_break(&sulker->mood, MOOD_BREAK_SULK, 2 * TICKS_PER_HOUR);
+    run_ticks(&game, 2);
+    CHECK(!sulker->drafted);
+    CHECK(notice_raised(&game, from, NOTICE_UNDRAFTED_BREAK));
+    /* Knocked out. */
+    health_hurt(&faller->health, LEFT_LEG, INJURY_FRACTURE, 2.0f);
+    health_hurt(&faller->health, RIGHT_LEG, INJURY_FRACTURE, 2.0f);
+    run_ticks(&game, 2);
+    CHECK(!faller->drafted);
+    CHECK(colonist_is_down(faller));
+    CHECK(notice_raised(&game, from, NOTICE_UNDRAFTED_DOWN));
+    /* No use of its arms: it runs. */
+    CHECK(!notice_raised(&game, from, NOTICE_UNDRAFTED_FLED));
+    health_hurt(&armless->health, LEFT_ARM, INJURY_FRACTURE, 2.0f);
+    health_hurt(&armless->health, RIGHT_ARM, INJURY_FRACTURE, 2.0f);
+    REQUIRE(!health_is_down(&armless->health));
+    REQUIRE(colonist_provoke(armless, (Combatant){COMBATANT_ANIMAL, other_id}));
+    run_ticks(&game, 10);
+    CHECK_EQ_INT(armless->task, TASK_FLEE);
+    CHECK(!armless->drafted);
+    CHECK(notice_raised(&game, from, NOTICE_UNDRAFTED_FLED));
+    CHECK_EQ_INT(armless->draft_end, DRAFT_END_NONE); /* Told, once. */
+    game_shutdown(&game);
+}
+
 /* An animal that loses its enemy (dead, or far away) is left in peace. */
 static void test_enemy_forgotten(void)
 {
@@ -1436,5 +1593,8 @@ int main(void)
     RUN_TEST(test_no_room_around_the_enemy);
     RUN_TEST(test_wolves_share_a_carcass);
     RUN_TEST(test_eating_from_beside);
+    RUN_TEST(test_drafted_settler_ignores_its_needs);
+    RUN_TEST(test_who_can_be_drafted);
+    RUN_TEST(test_draft_ends);
     return test_summary();
 }

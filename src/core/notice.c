@@ -45,6 +45,9 @@ const char *notice_text_key(NoticeType type)
         [NOTICE_COLONY_LOST] = N_("notice.colony_lost"),
         [NOTICE_SETTLER_ATTACKED] = N_("notice.settler_attacked"),
         [NOTICE_SETTLER_COLLAPSED] = N_("notice.settler_collapsed"),
+        [NOTICE_UNDRAFTED_BREAK] = N_("notice.undrafted_break"),
+        [NOTICE_UNDRAFTED_FLED] = N_("notice.undrafted_fled"),
+        [NOTICE_UNDRAFTED_DOWN] = N_("notice.undrafted_down"),
     };
     return (unsigned)type < NOTICE_TYPE_COUNT ? KEYS[type] : KEYS[NOTICE_KNOWLEDGE_LOST];
 }

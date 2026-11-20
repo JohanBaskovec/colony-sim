@@ -37,6 +37,11 @@ typedef enum NoticeType {
     NOTICE_COLONY_LOST,       /* The last settler died. */
     NOTICE_SETTLER_ATTACKED,  /* An animal went for a settler (docs/COMBAT.md). */
     NOTICE_SETTLER_COLLAPSED, /* Its consciousness fell below half (docs/HEALTH.md §11). */
+    /* A mobilized settler was demobilized by itself (docs/COMBAT.md §8): it
+     * broke down, fled, or was knocked out. */
+    NOTICE_UNDRAFTED_BREAK,
+    NOTICE_UNDRAFTED_FLED,
+    NOTICE_UNDRAFTED_DOWN,
     NOTICE_TYPE_COUNT
 } NoticeType;
 

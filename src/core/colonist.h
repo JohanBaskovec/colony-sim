@@ -539,6 +539,13 @@ typedef struct Colonist {
      * NONE when nobody. `attack_cooldown`: ticks before its next blow. */
     Combatant enemy;
     int attack_cooldown;
+    /* Mobilized by the player (docs/COMBAT.md §8, colonist_set_drafted()):
+     * it ignores its needs and its work, and only follows orders.
+     * `draft_end`: why it was last demobilized by itself (DraftEnd), for the
+     * player's notice; the game reads it and sets it back to NONE (not
+     * hashed). */
+    bool drafted;
+    uint8_t draft_end;
     ColonistAppearance appearance; /* Cosmetic only: never affects the simulation. */
 } Colonist;
 
@@ -899,6 +906,24 @@ bool colonist_set_primary_weapon(Colonist *colonist, int index, bool primary);
  * best it carries (weapon_better()), among those its arms can wield (both
  * for one taking two hands); -1 for none: its fists. */
 int colonist_weapon(const Colonist *colonist);
+
+/*
+ * Mobilization (docs/COMBAT.md §8). colonist_can_draft(): not dead, down, in
+ * a mental break or fleeing. colonist_set_drafted() mobilizes it (what it
+ * did is given up: asleep, it wakes up) or demobilizes it (it takes up its
+ * life again); false when it cannot be mobilized. A mobilized settler is
+ * demobilized by itself when it breaks, flees (it cannot fight any more) or
+ * is knocked out: `draft_end` says why.
+ */
+typedef enum DraftEnd {
+    DRAFT_END_NONE,
+    DRAFT_END_BREAK,
+    DRAFT_END_FLED,
+    DRAFT_END_DOWN,
+    DRAFT_END_COUNT
+} DraftEnd;
+bool colonist_can_draft(const Colonist *colonist);
+bool colonist_set_drafted(Colonist *colonist, const ColonistContext *context, bool drafted);
 
 /* Drops every carried tool where the colonist stands (e.g. before removal). */
 void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map);

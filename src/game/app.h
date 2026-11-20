@@ -75,6 +75,7 @@ typedef enum AppTool {
 #define APP_KEY_LOG SDL_SCANCODE_J    /* The colony log. */
 #define APP_KEY_ROTATE SDL_SCANCODE_F /* Turns the structure being planned (beds). */
 #define APP_KEY_FOLLOW SDL_SCANCODE_C /* The camera follows the selected settler or animal. */
+#define APP_KEY_DRAFT SDL_SCANCODE_B  /* Mobilizes or demobilizes the selected settlers. */
 #define APP_KEY_STOCKPILE SDL_SCANCODE_P
 #define APP_KEY_LANGUAGE SDL_SCANCODE_L
 #define APP_KEY_MINE SDL_SCANCODE_M
@@ -503,6 +504,15 @@ bool app_is_following(const App *app, FollowKind kind, EntityId id);
 /* Follows the selected settler or animal, or stops if it is the one followed
  * (APP_KEY_FOLLOW, the Follow action). */
 void app_toggle_follow(App *app, FollowKind kind, EntityId id);
+
+/* Mobilization of the selected settlers (docs/COMBAT.md §8):
+ * app_selection_drafted() tells whether all of them are mobilized,
+ * app_selection_draftable() whether any could be mobilized or demobilized.
+ * app_toggle_draft() demobilizes them when all are mobilized, else mobilizes
+ * those who can be (APP_KEY_DRAFT, the Mobilize action). */
+bool app_selection_drafted(const App *app);
+bool app_selection_draftable(const App *app);
+void app_toggle_draft(App *app);
 
 /* Switches to the next language, and remembers it (settings). */
 void app_cycle_language(App *app);
