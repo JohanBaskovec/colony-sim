@@ -1701,7 +1701,10 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         if (app->selected_count > 0) {
             int x, y;
             screen_to_tile(app, button->x, button->y, &x, &y);
-            game_order_move(&app->game, app->selected, app->selected_count, x, y, z);
+            /* Where they go is what is seen there: the ground under open space. */
+            int seen = map_view_level(game_view_map(&app->game), x, y, z);
+            game_order_move(&app->game, app->selected, app->selected_count, x, y,
+                            seen >= 0 && seen <= z ? seen : z);
         } else {
             app->tool = APP_TOOL_NONE; /* Nobody left to send. */
         }
