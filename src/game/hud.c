@@ -1422,6 +1422,9 @@ static const char *empty_place_state(const CarryArrangement *arrangement, const 
     if (!carry_place_usable(body, place)) {
         return tr("hud.gear.no_arm");
     }
+    if (arrangement->working & (1u << place)) {
+        return tr("hud.gear.working");
+    }
     if (place == CARRY_BOTH_HANDS) {
         return tr("hud.gear.holding");
     }
@@ -1529,7 +1532,7 @@ static void gear_rows(UiLayout *layout, void *userdata)
     }
 
     /* The items that found no place: tools set down at the next load, items
-     * of the load over the limits. */
+     * of the load over the limits; at work, what is set aside (the load). */
     int unplaced = 0;
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
         if (slots[i] >= 0 && (arrangement.left_out & (1u << i))) {
@@ -1541,8 +1544,9 @@ static void gear_rows(UiLayout *layout, void *userdata)
         char count[16];
         tr_integer(count, sizeof(count), unplaced);
         bool open = !app->gear_branch_folded[GEAR_BRANCH_NO_PLACE];
-        gear_branch_row(layout, tr("hud.gear.no_place"), count, true, open, GEAR_BRANCH_NO_PLACE,
-                        &action);
+        const char *branch =
+            tr(colonist->work_hands > 0 ? "hud.gear.set_aside" : "hud.gear.no_place");
+        gear_branch_row(layout, branch, count, true, open, GEAR_BRANCH_NO_PLACE, &action);
         for (int i = 0; open && i < COLONIST_TOOL_MAX; i++) {
             int tool = slots[i];
             if (tool >= 0 && (arrangement.left_out & (1u << i))) {

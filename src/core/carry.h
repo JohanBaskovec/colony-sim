@@ -108,6 +108,7 @@ typedef struct CarryArrangement {
     int8_t kept_place[CARRY_KEPT_MAX]; /* Kept item i's CarryPlace, -1 when left out. */
     CarryHold hold;                    /* What both hands do. */
     int steadying;                     /* The hand (CarryPlace) steadying the shoulders, or -1. */
+    unsigned working;                  /* Bit per hand (CarryPlace) kept empty for the work. */
 } CarryArrangement;
 
 /* Whether the body can use a place: a hand or under an arm needs that arm
@@ -153,6 +154,17 @@ int carry_arrange_gripped(const CarryBody *body, const ItemType *kept, int kept_
                           CarryArrangement *out);
 int carry_capacity_gripped(const CarryBody *body, const ItemType *kept, int kept_count,
                            uint32_t in_hand, uint32_t grip, ItemType type);
+
+/* The arrangement while an action needs `hands` hands (0 to 2,
+ * docs/CARRYING.md §6.3), without a load (it is set aside): the items held
+ * with both hands and those kept in hand first, then the tools in use (the
+ * mask `work`) in a hand, then as many hands as the action needs beside
+ * theirs kept empty (`working`, the better arm's first), then the others
+ * around them. The kept items left out are set aside: the action may still
+ * lack hands when items kept in hand take them. */
+void carry_arrange_working(const CarryBody *body, const ItemType *kept, int kept_count,
+                           uint32_t in_hand, uint32_t grip, uint32_t work, int hands,
+                           CarryArrangement *out);
 
 /* How many hands (0 to 2) the items kept in hand take in an arrangement
  * (an item in both hands takes two). Items of the same type as one kept in

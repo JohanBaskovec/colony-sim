@@ -197,21 +197,36 @@ grass, cleaning, lighting a fire, later butchering), **one** (eating) or
 working hand.
 
 Before acting, what fills the hands needed moves to another place if it fits
-(the spear under the arm), else is **set aside**: put down on the tile or a
-neighbour, reserved by the settler, picked up again when the action is over
-(the load, to deliver it; a kept item, always before the settler leaves the
-spot). Drawing or setting aside never drops what is locked in hand: a settler
-whose hands are locked takes only the jobs the hands left allow (§7.1).
+(the spear under the arm), else is **set aside**: put down at the settler's
+feet, picked up again when the action is over (the load, to deliver it; a
+kept item, always before the settler leaves the spot). Drawing or setting
+aside never drops what is locked in hand: a settler whose hands are locked
+takes only the jobs the hands left allow (§7.1), and an action may then lack
+a hand.
+
+In the core *(step 2b)*: on each of its ticks, before walking or acting, the
+settler works out the arrangement of its action (`carry_arrange_working()`):
+no load, what is held with both hands and kept in hand first, then the tools
+in use in hand (the better arm's first), then as many empty hands as the
+action needs beside theirs (`CarryArrangement.working`), then the other kept
+items around them. What finds no place is set aside. Set aside is a **state
+of the settler** (`Colonist.aside`, the load with it), not items put on the
+ground: an action lasts seconds at one spot, the items stay the settler's
+(nobody else can take them, nothing to reserve), and the state is over on
+the first tick no action needs the hands, before the settler walks off. The
+Gear tab shows the hands busy with the work and a *Set aside* branch.
 
 ### 6.4 Tools and weapons
 
 Tools follow the same rules as anything carried: a hand axe kept takes a
 hand. A settler keeps the tool of its work after it (as today) while it has a
-free hand for it; when it needs that hand (hauling, another job) and the tool
-fits nowhere else, it sets the tool down: at a workstation, on the station's
-tile, where the next craft finds it (haulers store it otherwise), elsewhere
-where it stands. The player locks a tool on the settler to make it keep it
-anyway.
+free hand for it; when it needs that hand (hauling, another job's tools) and
+the tool fits nowhere else, it sets the tool down: at a workstation, on the
+station's tile, where the next craft finds it (haulers store it otherwise),
+elsewhere where it stands. The hands a job's action keeps empty only set a
+tool aside (§6.3): a gatherer does not leave its axe in the bushes. Eating
+never sets a tool down for good. The player locks a tool on the settler to
+make it keep it anyway.
 
 Weapons are tools for fighting: a spear kept goes under an arm (or on the
 shoulders); later a bow slung. Drawing a weapon into the hands takes *(tuning)*:
@@ -273,13 +288,19 @@ settler stands, clears its lock and **forbids** it, so that the settler does
 not pick it up again at once; the player allows it from its window. Once
 the load is empty, the settler gives up what it carried it for.
 
-For now *(step 3)*: Carry is an action of the selected settler's window that
+Done *(step 3)*: Carry is an action of the selected settler's window that
 arms a tool, and a click on an item gives the order (the right click already
-means "step back"). The settler walks to the item, takes it if it still lies
-there or next to where it stops, keeps it locked on itself and sets down the
-free items that no longer fit; a free kept item of the same type is set
-down (it would be a spare). A refused order leaves the tool armed, without a
-reason shown yet.
+means "step back"); the tool's card says why over an item it would refuse.
+The item's window lists the living settlers under *Carried by...*: a click
+on one gives it the order; those who cannot are dimmed, the reason in their
+tooltip (`colonist_carry_refusal()`: down, the item gone, held by another
+settler, no room beside what it keeps locked, out of reach or unexplored).
+The settler walks to the item, takes it if it still lies there or next to
+where it stops, keeps it locked on itself and sets down the free items that
+no longer fit; a free kept item of the same type is set down (it would be a
+spare). A refused order leaves the tool armed. Taking an item over from
+another settler's reservation is not done yet: the item is taken if it still
+lies there.
 
 ### 7.3 The Gear tab
 
@@ -332,9 +353,10 @@ their own, folded and unfolded the same way (§8).
      (`colonist_make_room()`, §6.4); the Gear tab by place (read only).
      The load and the tools stay stored as before (`Colonist.carried`,
      `Colonist.tools`).
-   - b. actions needing the hands and setting aside (§6.3); a tool kept
-     after its work only while a hand is free for it; setting tools down at
-     the workstation's tile.
+   - b. *(done)* actions needing the hands and setting aside (§6.3:
+     `colonist_action_hands()`, `carry_arrange_working()`, `Colonist.aside`);
+     a tool kept after its work only while a hand is free for it; setting
+     tools down at the workstation's tile (§6.4).
 3. *(done)* **Locks and Carry** (§7): kept on the settler, kept in hand
    (placed first, in the hand of the better arm; while any, the settler only
    starts hauling jobs), the Carry and Put down orders
@@ -344,9 +366,9 @@ their own, folded and unfolded the same way (§8).
    forbidden, locked items never set down (`colonist_make_room()`), several
    locked items of one type; the Gear tab as a tree of the places, folded
    or not, with a row per item carried, each with its lock and Drop
-   buttons; the Carry action. Left for later: the item window's
-   *Carried by...*, the reasons of a refused Carry, leaving the current job at
-   once when the hands get locked (only the next jobs are limited).
+   buttons; the Carry action; the item window's *Carried by...*, the
+   reasons of a refused Carry (`colonist_carry_refusal()`), leaving the
+   current job at once when the hands get locked.
 4. Drafting and wielding weapons are done (`docs/COMBAT.md` §7, §8: a
    weapon wielded is placed first, a two-handed one held with both hands,
    `carry_arrange_gripped()`). Later: containers.

@@ -466,6 +466,10 @@ bool app_cancel_selection(App *app);
 /* Whether this tool (same `type` rules) is the one in use. */
 bool app_tool_active(const App *app, AppTool tool, int type);
 
+/* The item drawn under a point of the screen (the level shown, else the one
+ * seen there), ITEM_ID_NONE when none. */
+ItemId app_item_under(const App *app, float screen_x, float screen_y);
+
 /* Selects a colonist (the other selections are dropped); `additive` adds it
  * to the colonists selected, or takes it out when it already is. */
 void app_select_colonist(App *app, EntityId id, bool additive);

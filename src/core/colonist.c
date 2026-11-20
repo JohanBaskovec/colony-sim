@@ -507,6 +507,21 @@ static int arrange_kept(const Colonist *colonist, const KeptSet *set, ItemType l
                                  load_count, out);
 }
 
+/* The arrangement of the kept items while an action takes `hands` hands
+ * (carry_arrange_working()), with the tools of the slot mask `tools` in use. */
+static void arrange_working(const Colonist *colonist, const KeptSet *set, unsigned tools, int hands,
+                            CarryArrangement *out)
+{
+    uint32_t work = 0;
+    for (int i = 0; i < set->count; i++) {
+        if (set->slots[i] >= 0 && (tools & (1u << set->slots[i]))) {
+            work |= 1u << i;
+        }
+    }
+    CarryBody body = colonist_carry_body(colonist);
+    carry_arrange_working(&body, set->types, set->count, set->in_hand, set->grip, work, hands, out);
+}
+
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge)
 {
     float speed = COLONIST_WORK_SPEED;
@@ -605,7 +620,12 @@ void colonist_carry_arrangement(const Colonist *colonist, CarryArrangement *out,
 {
     KeptSet set;
     kept_set(colonist, -1, &set);
-    arrange_kept(colonist, &set, (ItemType)colonist->carried.type, colonist->carried.count, out);
+    if (colonist->work_hands > 0) {
+        arrange_working(colonist, &set, colonist->work_tools, colonist->work_hands, out);
+    } else {
+        arrange_kept(colonist, &set, (ItemType)colonist->carried.type, colonist->carried.count,
+                     out);
+    }
     if (slots != NULL) {
         for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
             slots[i] = i < set.count ? set.slots[i] : -1;
@@ -784,6 +804,9 @@ static int draw_ticks(const Colonist *colonist, int slot)
 {
     if (slot < 0 || slot == colonist_wielded(colonist)) {
         return 0;
+    }
+    if (colonist->work_hands > 0 && (colonist->aside & (1u << slot))) {
+        return COLONIST_DRAW_TICKS; /* Set aside: picked up. */
     }
     KeptSet set;
     kept_set(colonist, -1, &set);
@@ -1162,6 +1185,24 @@ ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
     return COLONIST_ACTION_NONE;
 }
 
+int colonist_action_hands(ColonistAction action)
+{
+    switch (action) {
+    case COLONIST_ACTION_STRIKE:
+    case COLONIST_ACTION_CUT:
+    case COLONIST_ACTION_GATHER: return 2;
+    case COLONIST_ACTION_EAT: return 1;
+    case COLONIST_ACTION_NONE:
+    case COLONIST_ACTION_COUNT: break;
+    }
+    return 0;
+}
+
+int colonist_hands_needed(const Colonist *colonist)
+{
+    return colonist_action_hands(colonist_action(colonist, NULL));
+}
+
 ColonistExpression colonist_expression(const Colonist *colonist)
 {
     float mood = colonist->mood.value;
@@ -1435,11 +1476,45 @@ bool colonist_order_attack(Colonist *colonist, const ColonistContext *context, C
     return true;
 }
 
+CarryRefusal colonist_carry_refusal(const Colonist *colonist, const Items *items, const Map *map,
+                                    const Map *plan_map, const Regions *regions, ItemId item,
+                                    TilePos tile)
+{
+    if (colonist_is_down(colonist) || health_is_dead(&colonist->health)) {
+        return CARRY_REFUSAL_DOWN;
+    }
+    const Item *lying = items_by_id(items, item);
+    if (lying == NULL) {
+        return items_id_held(items, item) ? CARRY_REFUSAL_HELD : CARRY_REFUSAL_GONE;
+    }
+    if (!colonist_can_keep(colonist, (ItemType)lying->type, 1, CARRY_LOCK_KEPT)) {
+        return CARRY_REFUSAL_NO_ROOM;
+    }
+    if (!map_is_passable(plan_map, tile.x, tile.y, tile.z) ||
+        !regions_connected(regions, map, current_tile(colonist), tile)) {
+        return CARRY_REFUSAL_UNREACHABLE;
+    }
+    return CARRY_REFUSAL_NONE;
+}
+
+const char *carry_refusal_key(CarryRefusal refusal)
+{
+    static const char *const KEYS[CARRY_REFUSAL_COUNT] = {
+        [CARRY_REFUSAL_NONE] = NULL,
+        [CARRY_REFUSAL_DOWN] = N_("carry.refusal.down"),
+        [CARRY_REFUSAL_GONE] = N_("carry.refusal.gone"),
+        [CARRY_REFUSAL_HELD] = N_("carry.refusal.held"),
+        [CARRY_REFUSAL_NO_ROOM] = N_("carry.refusal.no_room"),
+        [CARRY_REFUSAL_UNREACHABLE] = N_("carry.refusal.unreachable"),
+    };
+    return (unsigned)refusal < CARRY_REFUSAL_COUNT ? KEYS[refusal] : NULL;
+}
+
 bool colonist_order_carry(Colonist *colonist, const ColonistContext *context, ItemId item,
                           TilePos tile)
 {
-    const Item *lying = items_by_id(context->items, item);
-    if (lying == NULL || !colonist_can_keep(colonist, (ItemType)lying->type, 1, CARRY_LOCK_KEPT) ||
+    if (colonist_carry_refusal(colonist, context->items, context->map, context->plan_map,
+                               context->regions, item, tile) != CARRY_REFUSAL_NONE ||
         !colonist_order_move(colonist, context, tile)) {
         return false;
     }
@@ -6117,6 +6192,120 @@ static void lie_down(Colonist *colonist, const ColonistContext *context)
     colonist->chat_ticks = 0;
 }
 
+/* The tools its action under way uses, a bit per slot of `tools`: the best
+ * one for its work, the tools of the recipe it crafts. */
+static unsigned action_tools(const Colonist *colonist, const ColonistContext *context)
+{
+    unsigned tools = 0;
+    int slot = -1;
+    switch (colonist->task) {
+    case TASK_WORK:
+        if (colonist->gathering) {
+            const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
+            slot =
+                def != NULL ? working_tool(colonist, def->tool_use, ~(ItemTypeMask)0, false) : -1;
+        } else {
+            TilePos target = colonist->target;
+            ToolUse use = designation_tool_use_at(context->map, target.x, target.y, target.z,
+                                                  (DesignationType)colonist->work_type);
+            slot = working_tool(colonist, use, ~(ItemTypeMask)0, false);
+        }
+        break;
+    case TASK_CONSTRUCT:
+        slot = working_tool(colonist, TOOL_USE_BUILDING, ~(ItemTypeMask)0, false);
+        break;
+    case TASK_CRAFT: {
+        const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
+        for (int i = 0; def != NULL && i < RECIPE_TOOL_MAX; i++) {
+            int used = def->tools[i] == 0 ? -1
+                       : i == 0 ? working_tool(colonist, def->tool_use, def->tools[i], true)
+                                : colonist_tool_index(colonist, def->tools[i]);
+            tools |= used >= 0 ? 1u << used : 0u;
+        }
+        break;
+    }
+    default: break;
+    }
+    return slot >= 0 ? tools | 1u << slot : tools;
+}
+
+/* At a job, the free kept items of no use to it that find no place beside
+ * its tools in hand are set down for good (docs/CARRYING.md §6.4): on the
+ * workstation's tile when crafting, where the next craft finds them, else
+ * where it stands. */
+static void set_down_crowded(Colonist *colonist, const ColonistContext *context, unsigned tools)
+{
+    int wielded = colonist_wielded(colonist);
+    for (;;) {
+        KeptSet set;
+        kept_set(colonist, -1, &set);
+        CarryArrangement arrangement;
+        arrange_working(colonist, &set, tools, 0, &arrangement);
+        int drop = -1;
+        for (int i = 0; i < set.count && drop < 0; i++) {
+            int slot = set.slots[i];
+            if ((arrangement.left_out & (1u << i)) &&
+                colonist->tool_locks[slot] == CARRY_LOCK_NONE && slot != wielded &&
+                !(tools & (1u << slot))) {
+                drop = slot;
+            }
+        }
+        if (drop < 0) {
+            return;
+        }
+        TilePos at = colonist->task == TASK_CRAFT ? colonist->target : current_tile(colonist);
+        items_drop(context->items, context->map, at.x, at.y, at.z, colonist->tools[drop]);
+        colonist->tools[drop] = (ItemStack){.type = ITEM_NONE};
+        colonist->tool_wear[drop] = 0;
+        colonist->tool_locks[drop] = CARRY_LOCK_NONE;
+    }
+}
+
+/*
+ * Before acting (docs/CARRYING.md §6.3): the hands its action takes are
+ * freed, the tools in use in hand (set_down_crowded() first); what filled
+ * the hands moves to another place, else is set aside at its feet (`aside`,
+ * the load too), and picked up again on its first tick without an action
+ * needing the hands, before it walks off.
+ */
+static void ready_hands(Colonist *colonist, const ColonistContext *context)
+{
+    ColonistAction action = colonist_action(colonist, NULL);
+    int hands = colonist_action_hands(action);
+    colonist->work_hands = (uint8_t)hands;
+    colonist->work_tools = 0;
+    colonist->aside = 0;
+    if (hands == 0) {
+        return; /* Anything set aside is picked up again. */
+    }
+    unsigned tools = action_tools(colonist, context);
+    colonist->work_tools = (uint8_t)tools;
+    if (tools != 0 && action != COLONIST_ACTION_EAT) {
+        set_down_crowded(colonist, context, tools);
+    }
+    KeptSet set;
+    kept_set(colonist, -1, &set);
+    if (set.count == 0) {
+        return;
+    }
+    CarryArrangement arrangement;
+    arrange_working(colonist, &set, tools, hands, &arrangement);
+    unsigned aside = 0;
+    for (int i = 0; i < set.count; i++) {
+        if (arrangement.left_out & (1u << i)) {
+            aside |= 1u << set.slots[i];
+        }
+    }
+    colonist->aside = (uint8_t)aside;
+}
+
+/* Jobs whose work takes both hands (docs/CARRYING.md §7.1). */
+static bool task_takes_both_hands(ColonistTask task)
+{
+    return task == TASK_WORK || task == TASK_CRAFT || task == TASK_CONSTRUCT ||
+           task == TASK_CLEAN || task == TASK_LIGHT;
+}
+
 static void tick_turn(Colonist *colonist, const ColonistContext *context)
 {
     if (health_is_dead(&colonist->health)) {
@@ -6137,6 +6326,9 @@ static void tick_turn(Colonist *colonist, const ColonistContext *context)
     if (health_is_down(&colonist->health)) {
         end_draft(colonist, DRAFT_END_DOWN);
         lie_down(colonist, context);
+        colonist->work_hands = 0;
+        colonist->work_tools = 0;
+        colonist->aside = 0;
         return;
     }
     if (colonist_in_break(colonist)) {
@@ -6150,6 +6342,9 @@ static void tick_turn(Colonist *colonist, const ColonistContext *context)
     }
     if (colonist->attack_cooldown > 0) {
         colonist->attack_cooldown--;
+    }
+    if (task_takes_both_hands(colonist->task) && colonist_hands_locked(colonist) > 0) {
+        set_idle(colonist, context, 0); /* Its hands got locked: it leaves the job at once. */
     }
     if (colonist->move_progress == 0.0f) {
         if (colonist->move_pending) {
@@ -6167,6 +6362,7 @@ static void tick_turn(Colonist *colonist, const ColonistContext *context)
             decide(colonist, context);
         }
     }
+    ready_hands(colonist, context);
 
     if (colonist_is_moving(colonist)) {
         walk(colonist, context);

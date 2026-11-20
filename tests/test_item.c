@@ -1258,12 +1258,14 @@ static void test_item_picked_up_by_id(void)
     CHECK_EQ_INT(load.count, 1);
     CHECK(load.forbidden);
     CHECK(items_by_id(&items, id) == NULL); /* Held. */
+    CHECK(items_id_held(&items, id));
     CHECK_EQ_INT(items_pick_up_item(&items, id, &load), 0);
     CHECK(!items_any_forbidden(&items, 2, 2, 0));
     CHECK_EQ_INT(items_get(&items, 2, 2, 0).count, 2);
     CHECK_EQ_INT(items_put(&items, 5, 5, 0, &load), 1);
     const Item *put = items_by_id(&items, id);
     REQUIRE(put != NULL);
+    CHECK(!items_id_held(&items, id));
     CHECK_EQ_INT((int)put->tile, 5 * 8 + 5);
     CHECK(put->forbidden);
     CHECK(items_forbidden(&items, 5, 5, 0));

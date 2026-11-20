@@ -245,10 +245,21 @@ static void card_for(App *app, AppTool tool, int type, Card *card)
         card_add_text(card, CARD_TITLE, tr("inspector.move"));
         card_add_text(card, CARD_DIM, tr("hud.tool.move_help"));
         break;
-    case APP_TOOL_CARRY:
+    case APP_TOOL_CARRY: {
         card_add_text(card, CARD_TITLE, tr("inspector.carry"));
         card_add_text(card, CARD_DIM, tr("hud.tool.carry_help"));
+        /* Over an item the settler would not carry: why. */
+        ItemId item = app->selected_count == 1 && app->hover_valid
+                          ? app_item_under(app, app->ui.mouse_x, app->ui.mouse_y)
+                          : ITEM_ID_NONE;
+        CarryRefusal refusal = item.slot != UINT32_MAX
+                                   ? game_carry_refusal(&app->game, app->selected[0], item)
+                                   : CARRY_REFUSAL_NONE;
+        if (refusal != CARRY_REFUSAL_NONE) {
+            card_add_text(card, CARD_WARNING, tr(carry_refusal_key(refusal)));
+        }
         break;
+    }
     case APP_TOOL_ATTACK:
         card_add_text(card, CARD_TITLE, tr("inspector.attack"));
         card_add_text(card, CARD_DIM, tr("hud.tool.attack_help"));

@@ -455,6 +455,82 @@ static void test_a_settler_with_something_in_hand_only_hauls(void)
     game_shutdown(&game);
 }
 
+/* Gathering takes both hands (docs/CARRYING.md §6.3): what fills them is
+ * set aside at the settler's feet, still its own, and picked up again once
+ * the work is over; a spear stays under its arm. */
+static void test_work_sets_things_aside(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    add_ripe_bramble(&game.map, 12, 10);
+    add_ripe_bramble(&game.map, 12, 12);
+    int zone = gather_zone_create(&game.gather_zones, &game.map, 12, 10, 12, 12, 0);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_BLACKBERRIES, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_BLACKBERRIES, GATHER_FOREVER);
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DEFAULT;
+    REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_FLAKE, 1)));
+    REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_CHOPPER, 1)));
+    REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
+    int flake = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE));
+    int chopper = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER));
+    int spear = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
+    REQUIRE(colonist_set_lock(colonist, chopper, CARRY_LOCK_KEPT));
+    CHECK_EQ_INT(colonist_hands_needed(colonist), 0);
+    bool working = false;
+    for (int tick = 0; tick < 1200 && !working; tick++) {
+        game_tick(&game);
+        working = colonist->work_hands > 0;
+    }
+    REQUIRE(working);
+    CHECK(colonist->task == TASK_WORK);
+    CHECK_EQ_INT(colonist->work_hands, 2);
+    CHECK_EQ_INT(colonist->work_tools, 0); /* Bare hands. */
+    CHECK_EQ_UINT(colonist->aside, (1u << flake) | (1u << chopper));
+    CarryArrangement arrangement;
+    int slots[COLONIST_TOOL_MAX];
+    colonist_carry_arrangement(colonist, &arrangement, slots);
+    CHECK_EQ_UINT(arrangement.working, (1u << CARRY_RIGHT_HAND) | (1u << CARRY_LEFT_HAND));
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        if (slots[i] == spear) {
+            CHECK_EQ_INT(arrangement.kept_place[i], CARRY_UNDER_RIGHT_ARM);
+        }
+    }
+    /* Set aside, not set down: nothing lies on the ground. */
+    CHECK_EQ_INT(count_in(&game, 0, 0, 47, 47, ITEM_FLAKE), 0);
+    CHECK_EQ_INT(count_in(&game, 0, 0, 47, 47, ITEM_CHOPPER), 0);
+    /* Once the work is over, all of it is carried again. */
+    bool done = false;
+    for (int tick = 0; tick < 3000 && !done; tick++) {
+        game_tick(&game);
+        done = colonist->task != TASK_WORK;
+    }
+    REQUIRE(done);
+    game_tick(&game); /* Its next tick. */
+    CHECK_EQ_INT(colonist->work_hands, 0);
+    CHECK_EQ_INT(colonist->aside, 0);
+    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE)) == flake);
+    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER)) == chopper);
+    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR)) == spear);
+    colonist_carry_arrangement(colonist, &arrangement, NULL);
+    CHECK_EQ_UINT(arrangement.working, 0u);
+
+    /* Its hands locked while it gathers: it leaves the job at once. */
+    working = false;
+    for (int tick = 0; tick < 3000 && !working; tick++) {
+        game_tick(&game);
+        working = colonist->task == TASK_WORK && colonist->work_hands > 0;
+    }
+    REQUIRE(working);
+    REQUIRE(game_set_carry_lock(&game, game_colonist_id_at(&game, 0), spear, CARRY_LOCK_IN_HAND));
+    game_tick(&game);
+    CHECK(colonist->task != TASK_WORK);
+    CHECK_EQ_INT(colonist->aside, 0);
+    game_shutdown(&game);
+}
+
 static void test_a_carry_order_fetches_and_locks(void)
 {
     Game game;
@@ -503,6 +579,59 @@ static void test_a_carry_order_fetches_and_locks(void)
     run_ticks(&game, 900);
     CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_HAND_AXE)) < 0);
     CHECK(colonist->task != TASK_MOVE);
+    game_shutdown(&game);
+}
+
+/* Why a Carry order is refused (docs/CARRYING.md §7.2). */
+static void test_carry_refusals(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_hauler(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    EntityId id = game_colonist_id_at(&game, 0);
+    items_add(&game.items, 15, 10, 0, item_stack_pristine(ITEM_COBBLE, 1));
+    ItemId cobble =
+        items_id(&game.items, items_first(&game.items, map_index(&game.map, 15, 10, 0)));
+    CHECK_EQ_INT(game_carry_refusal(&game, id, cobble), CARRY_REFUSAL_NONE);
+    CHECK(game_can_carry(&game, id, cobble));
+    CHECK_EQ_INT(game_carry_refusal(&game, ENTITY_NONE, cobble), CARRY_REFUSAL_DOWN);
+    /* Both hands kept: no hand left for a cobble. */
+    REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_HAND_AXE, 1)));
+    REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_CHOPPER, 1)));
+    REQUIRE(colonist_set_lock(colonist, colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_HAND_AXE)),
+                              CARRY_LOCK_IN_HAND));
+    REQUIRE(colonist_set_lock(colonist, colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER)),
+                              CARRY_LOCK_IN_HAND));
+    CHECK_EQ_INT(game_carry_refusal(&game, id, cobble), CARRY_REFUSAL_NO_ROOM);
+    CHECK(!game_order_carry(&game, id, cobble));
+    colonist_drop_tools(colonist, &game.items, &game.map);
+    /* Walled off: out of reach. */
+    for (int y = 13; y <= 17; y++) {
+        for (int x = 28; x <= 32; x++) {
+            if (x == 28 || x == 32 || y == 13 || y == 17) {
+                map_set_rock(&game.map, x, y, 0, ROCK_GRANITE);
+            }
+        }
+    }
+    regions_update(&game.regions, &game.map);
+    items_add(&game.items, 30, 15, 0, item_stack_pristine(ITEM_FLAKE, 1));
+    ItemId flake = items_id(&game.items, items_first(&game.items, map_index(&game.map, 30, 15, 0)));
+    CHECK_EQ_INT(game_carry_refusal(&game, id, flake), CARRY_REFUSAL_UNREACHABLE);
+    CHECK(!game_order_carry(&game, id, flake));
+    /* Held by another settler: in its load. */
+    Colonist *other = spawn_hauler(&game, 14, 10);
+    REQUIRE(other != NULL);
+    REQUIRE(items_pick_up_item(&game.items, cobble, &other->carried) == 1);
+    CHECK_EQ_INT(game_carry_refusal(&game, id, cobble), CARRY_REFUSAL_HELD);
+    /* Gone: used up. */
+    items_use_up(&game.items, &other->carried, 1);
+    CHECK_EQ_INT(game_carry_refusal(&game, id, cobble), CARRY_REFUSAL_GONE);
+    for (int refusal = CARRY_REFUSAL_DOWN; refusal < CARRY_REFUSAL_COUNT; refusal++) {
+        CHECK(carry_refusal_key((CarryRefusal)refusal) != NULL);
+    }
+    CHECK(carry_refusal_key(CARRY_REFUSAL_NONE) == NULL);
     game_shutdown(&game);
 }
 
@@ -1262,6 +1391,8 @@ int main(void)
     RUN_TEST(test_tools_in_the_way_are_set_down);
     RUN_TEST(test_locked_items_stay_on_the_settler);
     RUN_TEST(test_a_settler_with_something_in_hand_only_hauls);
+    RUN_TEST(test_work_sets_things_aside);
+    RUN_TEST(test_carry_refusals);
     RUN_TEST(test_a_carry_order_fetches_and_locks);
     RUN_TEST(test_items_of_the_load_can_be_kept_or_dropped);
     RUN_TEST(test_items_of_the_load_kept_in_hand);

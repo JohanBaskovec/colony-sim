@@ -483,6 +483,14 @@ typedef struct Colonist {
      * the locks: it goes back where it fits best when it ends. */
     bool wielding;
     int8_t wielded;
+    /* While its action needs the hands (docs/CARRYING.md §6.3), worked out
+     * on each of its ticks: how many (0: none, the rest is then 0), the
+     * tools in use and the kept items set aside, a bit per slot of `tools`;
+     * the load is set aside too. Set aside, an item lies at its feet and is
+     * still its own: picked up again once the action is over. */
+    uint8_t work_hands;
+    uint8_t work_tools;
+    uint8_t aside;
     int tools_broken;       /* Tools worn out so far (for the player's information). */
     int strength;           /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
     float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
@@ -900,10 +908,30 @@ bool colonist_drop_load_item(Colonist *colonist, const ColonistContext *context,
 /* The player's Carry order (docs/CARRYING.md §7.2): walks to the item lying
  * on `tile` (as colonist_order_move()) and, there or next to it, takes it
  * and keeps it, locked on the colonist (a free kept item of its type is set
- * down). Refused (false) like a move, or when it cannot keep it
- * (colonist_can_keep()). */
+ * down). Refused (false) for any reason of colonist_carry_refusal(). */
 bool colonist_order_carry(Colonist *colonist, const ColonistContext *context, ItemId item,
                           TilePos tile);
+
+/* Why a Carry order would be refused, for the player (docs/CARRYING.md §7.2). */
+typedef enum CarryRefusal {
+    CARRY_REFUSAL_NONE,
+    CARRY_REFUSAL_DOWN,        /* The settler cannot move (or is gone). */
+    CARRY_REFUSAL_GONE,        /* No such item any more. */
+    CARRY_REFUSAL_HELD,        /* Another settler holds it (handing over comes later). */
+    CARRY_REFUSAL_NO_ROOM,     /* No slot or no place for it beside its locked items. */
+    CARRY_REFUSAL_UNREACHABLE, /* The settler cannot get there. */
+    CARRY_REFUSAL_COUNT
+} CarryRefusal;
+
+/* Why the colonist could not carry `item` lying on `tile`: CARRY_REFUSAL_NONE
+ * when it can. `plan_map` is the map as the settlers know it (paths), `map`
+ * the real one (connectivity regions, as colonist_order_move()). */
+CarryRefusal colonist_carry_refusal(const Colonist *colonist, const Items *items, const Map *map,
+                                    const Map *plan_map, const Regions *regions, ItemId item,
+                                    TilePos tile);
+
+/* The translation key of a refusal's reason, NULL for CARRY_REFUSAL_NONE. */
+const char *carry_refusal_key(CarryRefusal refusal);
 
 /*
  * Weapons (docs/COMBAT.md §7). colonist_primary_weapon() is the slot in
@@ -1029,8 +1057,15 @@ int colonist_carry_capacity(const Colonist *colonist, ItemType type);
 /* Where the colonist carries its tools and its load. The kept items of the
  * arrangement are its filled slots of `tools`, the weapon it wields first:
  * `slots` (may be NULL; COLONIST_TOOL_MAX entries) gets the slot of each,
- * -1 after the last. */
+ * -1 after the last. While its action needs the hands (`work_hands`), the
+ * arrangement is the work's (carry_arrange_working()): no load, the tools
+ * in use in hand, the hands of the work kept empty (`working`), the items
+ * set aside left out. */
 void colonist_carry_arrangement(const Colonist *colonist, CarryArrangement *out, int *slots);
+
+/* Hands an action takes (docs/CARRYING.md §6.3): both for blows, cutting and
+ * gathering, one for eating, none otherwise. */
+int colonist_action_hands(ColonistAction action);
 
 /*
  * Before picking up a load of `type` (ITEM_NONE: none) of `wanted` items in
@@ -1046,6 +1081,9 @@ int colonist_make_room(Colonist *colonist, Items *items, const Map *map, ItemTyp
 float colonist_load_speed_factor(const Colonist *colonist);
 
 NeedLevel need_level(float value);
+
+/* Hands its action under way takes (colonist_action_hands()). */
+int colonist_hands_needed(const Colonist *colonist);
 
 /* The action under way and, when it needs one, the tool in hand (written to
  * `tool` when not NULL; ITEM_NONE without a tool). Only a colonist standing at

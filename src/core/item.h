@@ -577,6 +577,9 @@ int items_pick_up_item(Items *items, ItemId id, ItemStack *load);
 /* The item lying on the ground with that id, NULL when gone or in a load. */
 const Item *items_by_id(const Items *items, ItemId id);
 
+/* Whether the item with that id is in a load (held by someone). */
+bool items_id_held(const Items *items, ItemId id);
+
 /* The item drawn at the point (x, y) of level z, in tiles (the top left of
  * tile 0 at 0): the newest one whose picture (item_drawn_size(), turned
  * any way: a circle) holds the point, on its tile or a neighbor; the

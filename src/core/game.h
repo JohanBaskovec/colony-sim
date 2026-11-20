@@ -747,9 +747,11 @@ bool game_cancel_single_item_move(Game *game, ItemId id);
 
 /* The player's Carry order (docs/CARRYING.md §7.2, colonist_order_carry()):
  * the colonist fetches the item lying on an explored tile and keeps it,
- * locked. game_can_carry() tells whether it could keep it (not down, a slot
- * and a place for it beside its locked items). */
+ * locked. game_carry_refusal() tells why it would be refused
+ * (colonist_carry_refusal(); an item on a tile not explored cannot be
+ * reached), game_can_carry() whether it would not. */
 bool game_order_carry(Game *game, EntityId colonist, ItemId item);
+CarryRefusal game_carry_refusal(const Game *game, EntityId colonist, ItemId item);
 bool game_can_carry(const Game *game, EntityId colonist, ItemId item);
 
 /* Sets down where the colonist stands the item it keeps at `index` of its

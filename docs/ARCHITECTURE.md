@@ -959,14 +959,27 @@ through a `KeptSet` (its kept items, the one wielded first, and the masks
 in hand and gripped), and `colonist_carry_arrangement()` gives the slot of
 each kept item arranged (the Gear tab's rows). The Carry order is a move with an item to
 take on arrival (`Colonist.take_item`, `colonist_order_carry()`), kept
-locked. An item of the load locked becomes a kept item
+locked; `colonist_carry_refusal()` (`CarryRefusal`) says why one would be
+refused, for the item window's *Carried by...* list and the Carry tool's
+card. An item of the load locked becomes a kept item
 (`colonist_keep_load_item()`, taken out with `items_load_take()`); a free
 kept item is one per type, locked ones any number. What the player drops is
-forbidden. Above the weight limit, walking speed is multiplied by limit / load
-(at least `COLONIST_MIN_LOAD_SPEED`). If the destination stops
-accepting the items on the way (filter changed, zone removed), it looks for
-another storage tile, else drops its load. Still to come: actions needing
-the hands, the player's locks and Carry order (`docs/CARRYING.md` §6.3, §7).
+forbidden. **Work needs the hands**: each `ColonistAction` takes two hands,
+one or none (`colonist_action_hands()`); on each of its ticks, before
+walking or acting, the colonist works out the hands its action takes
+(`Colonist.work_hands`), the tools it uses (`work_tools`) and what that
+leaves without a place (`aside`), with `carry_arrange_working()`: no load,
+the tools in use in hand, the other hands of the work kept empty
+(`CarryArrangement.working`). What is left out is **set aside**: a state,
+not items put on the ground (they and the load are still the colonist's,
+counted at its feet, and nothing needs reserving), over once no action
+needs the hands, before it walks off. At a job, free tools of no use to it
+that find no place beside its tools in hand are set down for good, on the
+workstation's tile when crafting. While something is kept in hand, a job
+needing both hands is left at once. Above the weight limit, walking speed
+is multiplied by limit / load (at least `COLONIST_MIN_LOAD_SPEED`). If the
+destination stops accepting the items on the way (filter changed, zone
+removed), it looks for another storage tile, else drops its load.
 
 **Item moves** (`core/item_move.h`): the player can order the items of a
 tile carried to any tile a settler can stand on (`game_order_item_move()`,

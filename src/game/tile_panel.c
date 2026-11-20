@@ -16,6 +16,9 @@ typedef struct ThingClick {
     bool tile; /* The tile's items together. */
     bool item; /* One item of the tile's list: `pick`. */
     ItemPick pick;
+    bool carry; /* The Carry order for `carried` to `carrier`. */
+    ItemId carried;
+    EntityId carrier;
 } ThingClick;
 
 typedef struct ThingRows {
@@ -229,8 +232,49 @@ static void box_item_rows(UiLayout *layout, const ThingRows *rows)
     }
 }
 
+/* The settlers who may carry the item (docs/CARRYING.md §7.2): a click on
+ * one gives it the Carry order; those who cannot are dimmed, the reason in
+ * their tooltip. */
+static void carried_by_rows(UiLayout *layout, const ThingRows *rows)
+{
+    const Game *game = &rows->app->game;
+    ItemPick pick = rows->app->selected_item;
+    ItemId id = game_pick_real_item(game, &pick);
+    if (id.slot == UINT32_MAX) {
+        return; /* Only remembered there. */
+    }
+    bool heading = false;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        EntityId colonist_id = game_colonist_id_at(game, slot);
+        const Colonist *colonist = game_colonist_const(game, colonist_id);
+        if (colonist == NULL || health_is_dead(&colonist->health)) {
+            continue;
+        }
+        if (!heading) {
+            ui_layout_label(layout, tr("tile_panel.carried_by"), 0.0f, true);
+            heading = true;
+        }
+        CarryRefusal refusal = game_carry_refusal(game, colonist_id, id);
+        SDL_FRect row = {layout->x, layout->y, layout->width, layout->row};
+        bool clicked =
+            ui_layout_link(layout, colonist->name, UI_LAYOUT_INDENT, refusal != CARRY_REFUSAL_NONE);
+        if (layout->draw && ui_hovered(layout->ui, row)) {
+            const char *line = refusal != CARRY_REFUSAL_NONE
+                                   ? tr(carry_refusal_key(refusal))
+                                   : tr("tile_panel.carried_by.description");
+            ui_tooltip(layout->ui, &line, 1);
+        }
+        if (clicked && refusal == CARRY_REFUSAL_NONE) {
+            rows->click->carry = true;
+            rows->click->carried = id;
+            rows->click->carrier = colonist_id;
+        }
+    }
+}
+
 /* What there is to know of one item: its weight, quality and condition, when
- * it rots away, whether it lies where it fell, and what else lies with it. */
+ * it rots away, whether it lies where it fell, what else lies with it, and
+ * who may carry it. */
 static void single_item_rows(UiLayout *layout, const ThingRows *rows)
 {
     const Game *game = &rows->app->game;
@@ -274,6 +318,7 @@ static void single_item_rows(UiLayout *layout, const ThingRows *rows)
     if (item->forbidden) {
         ui_layout_label(layout, tr("tile_panel.left_alone"), 0.0f, true);
     }
+    carried_by_rows(layout, rows);
 }
 
 /* Items of a tile listed in the inspector at most. */
@@ -966,5 +1011,7 @@ void tile_panel_draw(App *app)
         app_select_item(app, click.pick);
     } else if (click.tile) {
         app_select_tile_items(app, rows.x, rows.y, rows.z);
+    } else if (click.carry) {
+        game_order_carry(&app->game, click.carrier, click.carried);
     }
 }

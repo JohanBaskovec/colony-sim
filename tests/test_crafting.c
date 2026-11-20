@@ -384,6 +384,50 @@ static void test_tool_quality_sets_the_pace(void)
     CHECK_NEAR(superb, standard + worked * 0.2f * (float)COLONIST_WORK_SPEED, 1.0);
 }
 
+/* At a station, the tool in use in hand: a free tool of no use to the
+ * craft that finds no place beside it is set down on the station's tile,
+ * one that fits but fills the other hand the work takes is set aside
+ * (docs/CARRYING.md §6.3, §6.4). */
+static void test_crafting_sets_tools_down_at_the_station(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 14, 10);
+    colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD, 0));
+    colonist_add_tool(colonist, item_stack_pristine(ITEM_FLAKE, 1));
+    colonist_add_tool(colonist, item_stack_pristine(ITEM_CHOPPER, 1));
+    int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
+    items_add(&game.items, 15, 10, 0, stones(ITEM_FLINT, 1, TEST_QUALITY_FINE));
+    workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
+    bool working = false;
+    for (int tick = 0; tick < 1200 && !working; tick++) {
+        game_tick(&game);
+        working = colonist->task == TASK_CRAFT && colonist->work_hands > 0;
+    }
+    REQUIRE(working);
+    int hammer = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
+    int flake = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE));
+    REQUIRE(hammer >= 0);
+    REQUIRE(flake >= 0);
+    CHECK_EQ_UINT(colonist->work_tools, 1u << hammer);
+    CHECK_EQ_UINT(colonist->aside, 1u << flake);
+    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER)) < 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_CHOPPER], 1);
+    CHECK_EQ_INT(items_get_of(&game.items, 14, 10, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count +
+                     items_get_of(&game.items, 13, 10, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count +
+                     items_get_of(&game.items, 15, 10, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count +
+                     items_get_of(&game.items, 14, 9, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count +
+                     items_get_of(&game.items, 14, 11, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count,
+                 1);
+    CarryArrangement arrangement;
+    int slots[COLONIST_TOOL_MAX];
+    colonist_carry_arrangement(colonist, &arrangement, slots);
+    CHECK_EQ_INT(arrangement.kept_place[0], CARRY_RIGHT_HAND); /* The hammer, first slot. */
+    CHECK_EQ_INT(slots[0], hammer);
+    CHECK_EQ_UINT(arrangement.working, 1u << CARRY_LEFT_HAND);
+    game_shutdown(&game);
+}
+
 static void test_tools_wear_and_break(void)
 {
     Game game;
@@ -1036,6 +1080,7 @@ int main(void)
     RUN_TEST(test_no_zone_under_a_station);
     RUN_TEST(test_tool_quality_sets_the_pace);
     RUN_TEST(test_tools_wear_and_break);
+    RUN_TEST(test_crafting_sets_tools_down_at_the_station);
     RUN_TEST(test_better_tool_close_by_is_swapped);
     RUN_TEST(test_knapper_takes_a_cobble_as_hammer_then_strikes_flakes);
     RUN_TEST(test_knapping_cobbles_takes_two);

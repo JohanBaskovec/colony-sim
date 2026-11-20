@@ -1683,6 +1683,16 @@ const Item *items_by_id(const Items *items, ItemId id)
                : NULL;
 }
 
+bool items_id_held(const Items *items, ItemId id)
+{
+    if (id.slot >= items->pool_used) {
+        return false;
+    }
+    const Item *item = &items->pool[id.slot];
+    return item->type != ITEM_NONE && item->generation == id.generation &&
+           item->tile == ITEM_TILE_HELD;
+}
+
 ItemId items_at_point(const Items *items, float x, float y, int z)
 {
     int tx = (int)floorf(x), ty = (int)floorf(y);

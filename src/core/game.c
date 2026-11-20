@@ -3461,20 +3461,36 @@ bool game_order_carry(Game *game, EntityId colonist_id, ItemId item)
 {
     Colonist *colonist = game_colonist(game, colonist_id);
     TilePos tile;
-    if (colonist == NULL || !item_tile(game, item, &tile) ||
-        !game_tile_explored(game, tile.x, tile.y, tile.z)) {
+    if (colonist == NULL || game_carry_refusal(game, colonist_id, item) != CARRY_REFUSAL_NONE ||
+        !item_tile(game, item, &tile)) {
         return false;
     }
     ColonistContext context = colonist_context(game, colonist_id.index);
     return colonist_order_carry(colonist, &context, item, tile);
 }
 
-bool game_can_carry(const Game *game, EntityId colonist_id, ItemId item)
+CarryRefusal game_carry_refusal(const Game *game, EntityId colonist_id, ItemId item)
 {
     const Colonist *colonist = game_colonist_const(game, colonist_id);
-    const Item *lying = items_by_id(&game->items, item);
-    return colonist != NULL && lying != NULL && !colonist_is_down(colonist) &&
-           colonist_can_keep(colonist, (ItemType)lying->type, 1, CARRY_LOCK_KEPT);
+    if (colonist == NULL) {
+        return CARRY_REFUSAL_DOWN;
+    }
+    if (items_by_id(&game->items, item) == NULL) {
+        return items_id_held(&game->items, item) ? CARRY_REFUSAL_HELD : CARRY_REFUSAL_GONE;
+    }
+    TilePos tile;
+    item_tile(game, item, &tile);
+    CarryRefusal refusal = colonist_carry_refusal(colonist, &game->items, &game->map,
+                                                  game_view_map(game), &game->regions, item, tile);
+    if (refusal == CARRY_REFUSAL_NONE && !game_tile_explored(game, tile.x, tile.y, tile.z)) {
+        return CARRY_REFUSAL_UNREACHABLE;
+    }
+    return refusal;
+}
+
+bool game_can_carry(const Game *game, EntityId colonist_id, ItemId item)
+{
+    return game_carry_refusal(game, colonist_id, item) == CARRY_REFUSAL_NONE;
 }
 
 bool game_put_down(Game *game, EntityId colonist_id, int index)

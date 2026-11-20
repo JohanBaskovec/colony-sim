@@ -26,6 +26,9 @@ typedef struct Search {
     ItemType load;
     uint32_t in_hand; /* Bit i: kept item i is kept in a hand. */
     uint32_t grip;    /* Bit i: kept item i is held in both hands. */
+    uint32_t work;    /* Bit i: kept item i is a tool in use (in a hand). */
+    int work_hands;   /* Hands the work takes, those holding its tools included. */
+    unsigned working; /* Bit per hand (CarryPlace) kept empty for the work. */
     int8_t kept_place[CARRY_KEPT_MAX];
 } Search;
 
@@ -139,7 +142,7 @@ bool carry_place_takes(CarryPlace place, ItemType type)
  * it and bears its weight, but for loose items. */
 static int place_room_for(const Search *search, CarryPlace place, ItemType type)
 {
-    if (!carry_place_usable(search->body, place)) {
+    if (!carry_place_usable(search->body, place) || (search->working & (1u << place))) {
         return 0;
     }
     float share = item_share(place, type);
@@ -186,10 +189,12 @@ static bool in_load(const Search *search, CarryPlace place)
     return (search->load_places & (1u << place)) != 0;
 }
 
-/* Whether a place is busy: holding something, or kept for the load. */
+/* Whether a place is busy: holding something, kept for the load or for the
+ * work. */
 static bool busy(const Search *search, CarryPlace place)
 {
-    return search->places[place].items > 0 || in_load(search, place);
+    return search->places[place].items > 0 || in_load(search, place) ||
+           (search->working & (1u << place)) != 0;
 }
 
 /* A hand free to steady the shoulders: usable, empty, not kept for the
@@ -365,6 +370,28 @@ static bool better(Candidate a, Candidate b)
     return a.free_hands > b.free_hands;
 }
 
+/* Keeps empty the hands the work takes beside those holding its tools: the
+ * better arm's first. */
+static void reserve_work_hands(Search *search, int kept_count)
+{
+    int taken = 0;
+    for (int i = 0; i < kept_count; i++) {
+        if ((search->work & (1u << i)) && search->kept_place[i] >= 0) {
+            taken += search->kept_place[i] == CARRY_BOTH_HANDS ? 2 : 1;
+        }
+    }
+    bool right_first = search->body->arm[CARRY_RIGHT] >= search->body->arm[CARRY_LEFT];
+    CarryPlace order[2] = {right_first ? CARRY_RIGHT_HAND : CARRY_LEFT_HAND,
+                           right_first ? CARRY_LEFT_HAND : CARRY_RIGHT_HAND};
+    for (int i = 0; i < 2 && taken < search->work_hands; i++) {
+        if (carry_place_usable(search->body, order[i]) && !busy(search, order[i]) &&
+            !busy(search, CARRY_BOTH_HANDS)) {
+            search->working |= 1u << order[i];
+            taken++;
+        }
+    }
+}
+
 /* Tries the load in the places of `subset`; fills `search` and the load
  * per place. */
 static Candidate try_subset(Search *search, const ItemType *kept, int kept_count, int load_count,
@@ -375,14 +402,20 @@ static Candidate try_subset(Search *search, const ItemType *kept, int kept_count
     for (int i = 0; i < kept_count; i++) {
         search->kept_place[i] = -1;
     }
-    /* What is held with both hands first, then those kept in hand: the others
-     * go around them. */
-    for (int round = 0; round < 3; round++) {
+    /* What is held with both hands first, then those kept in hand, then the
+     * tools in use and the hands the work keeps empty: the others go around
+     * them. */
+    for (int round = 0; round < 4; round++) {
+        if (round == 3) {
+            reserve_work_hands(search, kept_count);
+        }
         for (int i = 0; i < kept_count; i++) {
-            bool grip = (search->grip & (1u << i)) != 0;
-            bool in_hand = !grip && (search->in_hand & (1u << i)) != 0;
-            if ((round == 0 && !grip) || (round == 1 && !in_hand) ||
-                (round == 2 && (grip || in_hand))) {
+            uint32_t bit = 1u << i;
+            bool grip = (search->grip & bit) != 0;
+            bool work = !grip && (search->work & bit) != 0;
+            bool in_hand = !grip && !work && (search->in_hand & bit) != 0;
+            if ((round == 0 && !grip) || (round == 1 && !in_hand) || (round == 2 && !work) ||
+                (round == 3 && (grip || work || in_hand))) {
                 continue;
             }
             if (!place_kept(search, i, kept[i])) {
@@ -494,11 +527,11 @@ int carry_arrange_held(const CarryBody *body, const ItemType *kept, int kept_cou
     return carry_arrange_gripped(body, kept, kept_count, in_hand, 0, load, load_count, out);
 }
 
-int carry_arrange_gripped(const CarryBody *body, const ItemType *kept, int kept_count,
-                          uint32_t in_hand, uint32_t grip, ItemType load, int load_count,
-                          CarryArrangement *out)
+static int arrange(const CarryBody *body, const ItemType *kept, int kept_count, uint32_t in_hand,
+                   uint32_t grip, uint32_t work, int work_hands, ItemType load, int load_count,
+                   CarryArrangement *out)
 {
-    in_hand |= grip;
+    in_hand |= grip | work;
     if (kept_count > CARRY_KEPT_MAX) {
         kept_count = CARRY_KEPT_MAX;
     }
@@ -526,8 +559,13 @@ int carry_arrange_gripped(const CarryBody *body, const ItemType *kept, int kept_
     /* Every subset of the places the load takes, the empty one first. */
     unsigned subset = 0;
     do {
-        Search search = {
-            .body = body, .load_places = subset, .load = load, .in_hand = in_hand, .grip = grip};
+        Search search = {.body = body,
+                         .load_places = subset,
+                         .load = load,
+                         .in_hand = in_hand,
+                         .grip = grip,
+                         .work = work,
+                         .work_hands = work_hands};
         if (rules_hold(&search)) {
             uint32_t left_out;
             int per_place[CARRY_PLACE_COUNT];
@@ -561,6 +599,7 @@ int carry_arrange_gripped(const CarryBody *body, const ItemType *kept, int kept_
         out->load = placed;
         out->left_out = best_left_out;
         out->hold = hold;
+        out->working = best_search.working;
         for (int i = 0; i < CARRY_KEPT_MAX; i++) {
             out->kept_place[i] = -1;
         }
@@ -579,6 +618,22 @@ int carry_arrange_gripped(const CarryBody *body, const ItemType *kept, int kept_
         finish(&best_search, out);
     }
     return placed;
+}
+
+int carry_arrange_gripped(const CarryBody *body, const ItemType *kept, int kept_count,
+                          uint32_t in_hand, uint32_t grip, ItemType load, int load_count,
+                          CarryArrangement *out)
+{
+    return arrange(body, kept, kept_count, in_hand, grip, 0, 0, load, load_count, out);
+}
+
+void carry_arrange_working(const CarryBody *body, const ItemType *kept, int kept_count,
+                           uint32_t in_hand, uint32_t grip, uint32_t work, int hands,
+                           CarryArrangement *out)
+{
+    work &= ~grip;
+    hands = hands < 0 ? 0 : hands > 2 ? 2 : hands;
+    arrange(body, kept, kept_count, in_hand & ~work, grip, work, hands, ITEM_NONE, 0, out);
 }
 
 int carry_capacity(const CarryBody *body, const ItemType *kept, int kept_count, ItemType type)

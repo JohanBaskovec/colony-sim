@@ -288,6 +288,56 @@ static void test_gripped_with_both_hands(void)
     CHECK_EQ_INT(arrangement.left_out, 1u);
 }
 
+/* Working (docs/CARRYING.md §6.3): the tools in use in hand, the hands the
+ * action takes kept empty, the rest elsewhere or set aside (left out). */
+static void test_working_hands(void)
+{
+    CarryBody body = standard_body();
+    CarryArrangement arrangement;
+    unsigned right = 1u << CARRY_RIGHT_HAND, left = 1u << CARRY_LEFT_HAND;
+    /* Nothing kept: gathering takes both hands, eating the better arm's. */
+    carry_arrange_working(&body, NULL, 0, 0u, 0u, 0u, 2, &arrangement);
+    CHECK_EQ_UINT(arrangement.working, right | left);
+    CHECK_EQ_INT(arrangement.load, 0);
+    carry_arrange_working(&body, NULL, 0, 0u, 0u, 0u, 1, &arrangement);
+    CHECK_EQ_UINT(arrangement.working, right);
+    CarryBody hurt = {.weight = 40.0f, .arm = {0.5f, 1.0f}};
+    carry_arrange_working(&hurt, NULL, 0, 0u, 0u, 0u, 1, &arrangement);
+    CHECK_EQ_UINT(arrangement.working, left);
+    /* The tool in use in the better hand, the other hand kept for the work;
+     * a spear under an arm; another short tool has no place left. */
+    ItemType kept[] = {ITEM_FLAKE, ITEM_THRUSTING_SPEAR, ITEM_HAND_AXE};
+    carry_arrange_working(&body, kept, 3, 0u, 0u, 4u, 2, &arrangement);
+    CHECK_EQ_INT(arrangement.kept_place[2], CARRY_RIGHT_HAND);
+    CHECK_EQ_UINT(arrangement.working, left);
+    CHECK_EQ_INT(arrangement.kept_place[1], CARRY_UNDER_RIGHT_ARM);
+    CHECK_EQ_UINT(arrangement.left_out, 1u);
+    /* Without the work's hands, both short tools have a hand. */
+    carry_arrange_working(&body, kept, 3, 0u, 0u, 4u, 0, &arrangement);
+    CHECK_EQ_UINT(arrangement.working, 0u);
+    CHECK_EQ_UINT(arrangement.left_out, 0u);
+    CHECK_EQ_INT(arrangement.kept_place[2], CARRY_RIGHT_HAND);
+    /* Gathering, no tool: both hands empty, the places under the arms
+     * stay (no armful), the short ones are set aside. */
+    carry_arrange_working(&body, kept, 3, 0u, 0u, 0u, 2, &arrangement);
+    CHECK_EQ_UINT(arrangement.working, right | left);
+    CHECK_EQ_INT(arrangement.kept_place[1], CARRY_UNDER_RIGHT_ARM);
+    CHECK_EQ_UINT(arrangement.left_out, 5u);
+    /* What is kept in hand keeps its hand: eating takes the other one... */
+    ItemType spear = ITEM_THRUSTING_SPEAR;
+    carry_arrange_working(&body, &spear, 1, 1u, 0u, 0u, 1, &arrangement);
+    CHECK_EQ_INT(arrangement.kept_place[0], CARRY_RIGHT_HAND);
+    CHECK_EQ_UINT(arrangement.working, left);
+    /* ...and the work lacks a hand rather than set it aside. */
+    carry_arrange_working(&body, &spear, 1, 1u, 0u, 0u, 2, &arrangement);
+    CHECK_EQ_INT(arrangement.kept_place[0], CARRY_RIGHT_HAND);
+    CHECK_EQ_UINT(arrangement.left_out, 0u);
+    CHECK_EQ_UINT(arrangement.working, left);
+    /* The ordinary arrangements keep no hand. */
+    carry_arrange(&body, kept, 3, ITEM_NONE, 0, &arrangement);
+    CHECK_EQ_UINT(arrangement.working, 0u);
+}
+
 static void test_strength(void)
 {
     CarryBody strong = {.weight = 60.0f, .arm = {1.0f, 1.0f}};
@@ -315,6 +365,7 @@ int main(void)
     RUN_TEST(test_kept_items);
     RUN_TEST(test_items_kept_in_hand);
     RUN_TEST(test_gripped_with_both_hands);
+    RUN_TEST(test_working_hands);
     RUN_TEST(test_strength);
     return test_summary();
 }
