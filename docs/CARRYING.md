@@ -299,14 +299,10 @@ their own, folded and unfolded the same way (§8).
 
 ## 8. Later
 
-- **Mobilization** (`docs/COMBAT.md` §7, §8): a mobilized settler
-  **wields** one weapon (its only one, its primary weapon, else the best),
-  in the hands it takes; the player can change it, among those it carries or
-  lying within a tile. Drawing takes the time of §6.4. A primary weapon
-  button (two crossed blades) on the weapons' rows of the Gear tab.
-- **Self-defense**: attacked, a settler draws its weapon; what fills the
-  hands the weapon needs is dropped at once (not set aside), and picked up
-  after the fight.
+- **Self-defense**: attacked, a settler draws its weapon (done,
+  `docs/COMBAT.md` §7); what fills the hands the weapon needs should be set
+  aside and picked up after the fight (today the load is put down and free
+  tools that no longer fit are set down).
 - **Containers** (baskets, bags, packs) take a place (a basket in a hand, a
   bag slung, a pack on a new **back** place) and are places themselves, with
   their own room and weight: **sub-places**. The hand holding a basket holds
@@ -349,5 +345,6 @@ their own, folded and unfolded the same way (§8).
    buttons; the Carry action. Left for later: the item window's
    *Carried by...*, the reasons of a refused Carry, leaving the current job at
    once when the hands get locked (only the next jobs are limited).
-4. Later steps: containers, then drafting and self-defense with weapons
-   (§8).
+4. Drafting and wielding weapons are done (`docs/COMBAT.md` §7, §8: a
+   weapon wielded is placed first, a two-handed one held with both hands,
+   `carry_arrange_gripped()`). Later: containers.

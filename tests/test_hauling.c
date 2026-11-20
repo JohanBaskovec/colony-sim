@@ -340,7 +340,7 @@ static void test_tools_in_the_way_are_set_down(void)
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_CHOPPER, 1)));
     CHECK_EQ_INT(colonist_make_room(colonist, &game.items, &game.map, ITEM_NONE, 0, 0), 1);
     CarryArrangement arrangement;
-    colonist_carry_arrangement(colonist, &arrangement);
+    colonist_carry_arrangement(colonist, &arrangement, NULL);
     CHECK_EQ_INT((int)arrangement.left_out, 0);
     game_shutdown(&game);
 }

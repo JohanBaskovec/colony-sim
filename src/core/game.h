@@ -769,6 +769,25 @@ bool game_can_draft(const Game *game, EntityId colonist);
 bool game_is_drafted(const Game *game, EntityId colonist);
 int game_set_drafted(Game *game, const EntityId *ids, int count, bool drafted);
 
+/* A weapon a mobilized colonist may wield (docs/COMBAT.md §8): its fists
+ * (slot -1, no item), one it keeps (its slot in the tools) or one lying
+ * within a tile of it (its item). */
+typedef struct WeaponChoice {
+    int slot;
+    ItemId item;
+    ItemType type; /* ITEM_NONE for its fists. */
+} WeaponChoice;
+
+/* What the colonist may wield: its fists, the weapons it keeps that it can
+ * wield, those lying on an explored tile within a tile of it (one of items
+ * alike: same type, quality and condition). Returns how
+ * many were written (at most `capacity`). game_wielded_choice() is the slot
+ * of the weapon it wields, -1 for its fists or none; game_wield() wields
+ * one (colonist_wield(), colonist_wield_item()). */
+int game_weapon_choices(const Game *game, EntityId colonist, WeaponChoice *out, int capacity);
+int game_wielded_choice(const Game *game, EntityId colonist);
+bool game_wield(Game *game, EntityId colonist, WeaponChoice choice);
+
 /* The same for the item at `index` of the colonist's load: kept, locked
  * (colonist_keep_load_item(): its slot in the tools, -1 when refused;
  * game_can_keep_load_item() tells whether one could be kept so), or dropped,

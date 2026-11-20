@@ -1673,7 +1673,7 @@ static void test_carry_capacity(void)
     CHECK_EQ_INT(colonist_carry_capacity(&colonist, ITEM_NONE), 0);
     CarryArrangement arrangement;
     colonist.carried = item_stack_pristine(ITEM_WOOD, 5);
-    colonist_carry_arrangement(&colonist, &arrangement);
+    colonist_carry_arrangement(&colonist, &arrangement, NULL);
     CHECK_EQ_INT(arrangement.load, 5);
     CHECK(arrangement.steadying >= 0);
     colonist.carried = (ItemStack){.type = ITEM_NONE};

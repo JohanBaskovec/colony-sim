@@ -2694,6 +2694,28 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         batch_flush(renderer);
         break;
     }
+    case RENDER_ICON_CHANGE_WEAPON: { /* A blade, an arrow over it, one under it. */
+        SDL_Color blade = {226, 228, 232, 255}, guard = {150, 98, 52, 255};
+        SDL_Color arrow = {120, 200, 120, 255};
+        float cx = rect.x + w * 0.5f;
+        batch_bar(renderer, blade, cx - w * 0.14f, rect.y + h * 0.66f, cx + w * 0.16f,
+                  rect.y + h * 0.3f, w * 0.06f);
+        batch_bar(renderer, guard, cx - w * 0.28f, rect.y + h * 0.82f, cx - w * 0.14f,
+                  rect.y + h * 0.66f, w * 0.05f);
+        batch_bar(renderer, guard, cx - w * 0.24f, rect.y + h * 0.58f, cx - w * 0.04f,
+                  rect.y + h * 0.74f, w * 0.035f);
+        for (int side = 0; side < 2; side++) { /* Right along the top, left along the bottom. */
+            float sign = side == 0 ? 1.0f : -1.0f;
+            float y = rect.y + h * (side == 0 ? 0.14f : 0.9f);
+            float from = cx - sign * w * 0.36f, to = cx + sign * w * 0.26f;
+            batch_bar(renderer, arrow, from, y, to, y, h * 0.035f);
+            SDL_FPoint head[3] = {
+                {to + sign * w * 0.14f, y}, {to, y - h * 0.09f}, {to, y + h * 0.09f}};
+            batch_shape(renderer, arrow, head, 3);
+        }
+        batch_flush(renderer);
+        break;
+    }
     case RENDER_ICON_IN_HAND: { /* A fist closed on an upright handle. */
         SDL_Color skin = {222, 184, 150, 255}, crease = {150, 108, 80, 255};
         float cx = rect.x + w * 0.5f;

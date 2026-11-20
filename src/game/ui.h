@@ -123,6 +123,7 @@ typedef struct Ui {
     SDL_FRect popup_anchor;
     char popup_options[UI_POPUP_OPTIONS][UI_POPUP_OPTION_SIZE];
     int popup_count;
+    bool popup_upward; /* Always above its button. */
     int popup_selected;
     int popup_scroll;    /* First option shown (-1: keep the selected one in view). */
     int popup_visible;   /* Options shown at the last frame. */
@@ -258,6 +259,16 @@ float ui_dropdown_width(Ui *ui, const char *const *options, int count);
  */
 int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int count,
                 int selected);
+
+/* The list of a dropdown, opened by any button at `anchor` (an icon
+ * button...): `clicked` (the button's click this frame) opens it, on the
+ * roomier side of the button, or closes it. Call it every frame the button
+ * is drawn; `upward`: always above the button. Returns the option picked
+ * (at the frame after the click), -1 otherwise. ui_popup_open() tells
+ * whether the list of `id` is open. */
+int ui_popup_list(Ui *ui, int id, SDL_FRect anchor, bool clicked, bool upward,
+                  const char *const *options, int count, int selected);
+bool ui_popup_open(const Ui *ui, int id);
 
 /* Draws the open dropdown list, if any, over everything else but the
  * tooltip; call it at the end of the frame, before ui_draw_tooltip(). */

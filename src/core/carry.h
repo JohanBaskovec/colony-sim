@@ -49,6 +49,7 @@ typedef enum CarryHold {
     CARRY_HOLD_CUPPED, /* Loose items. */
     CARRY_HOLD_DRAGGED,
     CARRY_HOLD_SHOULDERS, /* Holding a heavy limp load on the shoulders by its legs. */
+    CARRY_HOLD_GRIP,      /* Both hands on one item wielded (a two-handed weapon). */
 } CarryHold;
 
 /* Places' room and weight (docs/CARRYING.md §3, tuning). Room is a share of
@@ -102,10 +103,11 @@ typedef struct CarryEntry {
 typedef struct CarryArrangement {
     CarryEntry entries[CARRY_ENTRY_MAX];
     int entry_count;
-    int load;          /* Items of the load placed. */
-    uint32_t left_out; /* Bit i: kept item i fits nowhere. */
-    CarryHold hold;    /* What both hands do. */
-    int steadying;     /* The hand (CarryPlace) steadying the shoulders, or -1. */
+    int load;                          /* Items of the load placed. */
+    uint32_t left_out;                 /* Bit i: kept item i fits nowhere. */
+    int8_t kept_place[CARRY_KEPT_MAX]; /* Kept item i's CarryPlace, -1 when left out. */
+    CarryHold hold;                    /* What both hands do. */
+    int steadying;                     /* The hand (CarryPlace) steadying the shoulders, or -1. */
 } CarryArrangement;
 
 /* Whether the body can use a place: a hand or under an arm needs that arm
@@ -141,6 +143,16 @@ int carry_arrange_held(const CarryBody *body, const ItemType *kept, int kept_cou
                        uint32_t in_hand, ItemType load, int load_count, CarryArrangement *out);
 int carry_capacity_held(const CarryBody *body, const ItemType *kept, int kept_count,
                         uint32_t in_hand, ItemType type);
+
+/* The same, with the kept items of the mask `grip` (a part of `in_hand`)
+ * held in both hands, as a weapon wielded with both (docs/COMBAT.md §7):
+ * placed first, alone in both hands, which leaves the places under the arms
+ * free (unlike an armful) but no hand to steady the shoulders. */
+int carry_arrange_gripped(const CarryBody *body, const ItemType *kept, int kept_count,
+                          uint32_t in_hand, uint32_t grip, ItemType load, int load_count,
+                          CarryArrangement *out);
+int carry_capacity_gripped(const CarryBody *body, const ItemType *kept, int kept_count,
+                           uint32_t in_hand, uint32_t grip, ItemType type);
 
 /* How many hands (0 to 2) the items kept in hand take in an arrangement
  * (an item in both hands takes two). Items of the same type as one kept in

@@ -949,6 +949,164 @@ static void test_draft_ends(void)
     game_shutdown(&game);
 }
 
+/* Mobilized, a settler wields its primary weapon, else its best one, after
+ * drawing it; demobilized, it no longer wields it (docs/COMBAT.md §7, §8). */
+static void test_drafted_settler_wields(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    REQUIRE(settler != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_HAND_AXE, 1)));
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
+    int axe = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_HAND_AXE));
+    int spear = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
+    CHECK_EQ_INT(colonist_wielded(settler), -1);
+    /* Kept: a spear in both hands leaves no hand for it, but it is locked. */
+    REQUIRE(colonist_set_lock(settler, axe, CARRY_LOCK_KEPT));
+    REQUIRE(game_set_drafted(&game, &id, 1, true) == 1);
+    CHECK(settler->wielding);
+    CHECK_EQ_INT(colonist_wielded(settler), spear);              /* The best. */
+    CHECK_EQ_INT(settler->attack_cooldown, COLONIST_DRAW_TICKS); /* From under an arm. */
+    CarryArrangement arrangement;
+    int slots[COLONIST_TOOL_MAX];
+    colonist_carry_arrangement(settler, &arrangement, slots);
+    CHECK_EQ_INT(slots[0], spear);
+    CHECK_EQ_INT(arrangement.kept_place[0], CARRY_BOTH_HANDS);
+    CHECK_EQ_INT(arrangement.hold, CARRY_HOLD_GRIP);
+    CHECK_EQ_INT(colonist_hands_locked(settler), 0); /* Not the player's locks. */
+    float skill, power;
+    CHECK_EQ_INT(colonist_attack(settler, &skill, &power), ATTACK_SPEAR_THRUST);
+    /* Demobilized: back under its arm. */
+    REQUIRE(game_set_drafted(&game, &id, 1, false) == 1);
+    CHECK(!settler->wielding);
+    CHECK_EQ_INT(colonist_wielded(settler), -1);
+    /* The primary one, drawn from the hand: no wait. */
+    REQUIRE(colonist_set_primary_weapon(settler, axe, true));
+    settler->attack_cooldown = 0;
+    REQUIRE(game_set_drafted(&game, &id, 1, true) == 1);
+    CHECK_EQ_INT(colonist_wielded(settler), axe);
+    CHECK_EQ_INT(settler->attack_cooldown, 0);
+    CHECK_EQ_INT(colonist_attack(settler, &skill, &power), ATTACK_AXE_CHOP);
+    /* Its fists, chosen: no weapon. */
+    WeaponChoice fists = {-1, ITEM_ID_NONE, ITEM_NONE};
+    CHECK(game_wield(&game, id, fists));
+    CHECK(settler->wielding);
+    CHECK_EQ_INT(colonist_wielded(settler), -1);
+    CHECK_EQ_INT(colonist_attack(settler, &skill, &power), ATTACK_FISTS);
+    game_shutdown(&game);
+}
+
+/* The Change weapon list: its fists, the weapons it keeps, those lying
+ * within a tile; one taken from the ground becomes a kept item, locked. */
+static void test_change_weapon(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    REQUIRE(settler != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_HAND_AXE, 1)));
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_TWIGS, 1)));
+    int x = settler->x, y = settler->y;
+    for (int dy = -2; dy <= 2; dy++) { /* Only what the test lays there. */
+        for (int dx = -2; dx <= 2; dx++) {
+            items_clear(&game.items, x + dx, y + dy, 0);
+        }
+    }
+    REQUIRE(items_add(&game.items, x + 1, y + 1, 0, item_stack_pristine(ITEM_FLINT, 1)) == 1);
+    REQUIRE(items_add(&game.items, x - 1, y, 0, item_stack_pristine(ITEM_FLINT, 2)) == 2);
+    REQUIRE(items_add(&game.items, x, y + 1, 0, item_stack_pristine(ITEM_GRASS, 1)) == 1);
+    REQUIRE(items_add(&game.items, x + 2, y, 0, item_stack_pristine(ITEM_COBBLE, 1)) == 1);
+    REQUIRE(game_set_drafted(&game, &id, 1, true) == 1);
+    WeaponChoice choices[16];
+    int count = game_weapon_choices(&game, id, choices, 16);
+    /* Fists, the axe, a flint (alike, the three are one line; the cobble is
+     * two tiles away). */
+    REQUIRE(count == 3);
+    CHECK_EQ_INT(choices[0].type, ITEM_NONE);
+    CHECK_EQ_INT(choices[1].type, ITEM_HAND_AXE);
+    CHECK(choices[1].item.slot == UINT32_MAX);
+    CHECK_EQ_INT(choices[2].type, ITEM_FLINT);
+    CHECK(choices[2].item.slot != UINT32_MAX);
+    CHECK_EQ_INT(game_wielded_choice(&game, id), choices[1].slot);
+    /* The flint, taken up. */
+    settler->attack_cooldown = 0;
+    REQUIRE(game_wield(&game, id, choices[2]));
+    int flint = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_FLINT));
+    REQUIRE(flint >= 0);
+    CHECK_EQ_INT(colonist_wielded(settler), flint);
+    CHECK_EQ_INT(settler->tool_locks[flint], CARRY_LOCK_KEPT);
+    CHECK_EQ_INT(items_count_at(&game.items, x + 1, y + 1, 0, ITEM_FLINT) +
+                     items_count_at(&game.items, x - 1, y, 0, ITEM_FLINT),
+                 2);
+    CHECK_EQ_INT(settler->attack_cooldown, COLONIST_DRAW_GROUND_TICKS);
+    CHECK(!game_wield(&game, id, choices[2])); /* Gone from the ground. */
+    /* Not mobilized: no choosing. */
+    REQUIRE(game_set_drafted(&game, &id, 1, false) == 1);
+    CHECK(!game_wield(&game, id, choices[1]));
+    game_shutdown(&game);
+}
+
+/* Hands locked by other items: a two-handed weapon cannot be wielded, and
+ * mobilization takes the best one that can. */
+static void test_wielding_with_locked_hands(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    REQUIRE(settler != NULL);
+    EntityId id = game_colonist_id_at(&game, 0);
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_HAND_AXE, 1)));
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_COBBLE, 1)));
+    int spear = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
+    int axe = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_HAND_AXE));
+    int cobble = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_COBBLE));
+    REQUIRE(colonist_set_lock(settler, cobble, CARRY_LOCK_IN_HAND));
+    CHECK(!colonist_can_wield(settler, spear));
+    CHECK(colonist_can_wield(settler, axe));
+    CHECK(colonist_can_wield(settler, -1));
+    CHECK_EQ_INT(colonist_weapon(settler), axe);
+    REQUIRE(game_set_drafted(&game, &id, 1, true) == 1);
+    CHECK_EQ_INT(colonist_wielded(settler), axe);
+    /* Both hands now taken: nothing more kept in hand. */
+    CHECK(!colonist_can_keep(settler, ITEM_FLAKE, 1, CARRY_LOCK_IN_HAND));
+    WeaponChoice choice = {spear, ITEM_ID_NONE, ITEM_THRUSTING_SPEAR};
+    CHECK(!game_wield(&game, id, choice));
+    /* Freed, the spear can be. */
+    REQUIRE(colonist_set_lock(settler, cobble, CARRY_LOCK_NONE));
+    CHECK(game_wield(&game, id, choice));
+    CHECK_EQ_INT(colonist_wielded(settler), spear);
+    game_shutdown(&game);
+}
+
+/* Struck, a settler draws its best weapon to defend itself, and puts it
+ * back once the fight is over. */
+static void test_self_defense_draws(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *settler = spawn_settler(&game, 20, 20);
+    EntityId boar_id;
+    Animal *boar = spawn_animal(&game, ANIMAL_BOAR, 23, 20, &boar_id);
+    REQUIRE(settler != NULL && boar != NULL);
+    REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
+    REQUIRE(colonist_provoke(settler, (Combatant){COMBATANT_ANIMAL, boar_id}));
+    run_ticks(&game, 5);
+    REQUIRE(settler->task == TASK_FIGHT);
+    CHECK(settler->wielding);
+    CHECK_EQ_INT(colonist_wielded(settler), 0);
+    /* The boar dead, the fight ends. */
+    health_hurt(&boar->health, HEAD, INJURY_CUT, 1000.0f);
+    REQUIRE(health_is_dead(&boar->health));
+    run_ticks(&game, 2 * TICKS_PER_SECOND);
+    CHECK(settler->task != TASK_FIGHT);
+    CHECK(!settler->wielding);
+    game_shutdown(&game);
+}
+
 /* An animal that loses its enemy (dead, or far away) is left in peace. */
 static void test_enemy_forgotten(void)
 {
@@ -1596,5 +1754,9 @@ int main(void)
     RUN_TEST(test_drafted_settler_ignores_its_needs);
     RUN_TEST(test_who_can_be_drafted);
     RUN_TEST(test_draft_ends);
+    RUN_TEST(test_drafted_settler_wields);
+    RUN_TEST(test_change_weapon);
+    RUN_TEST(test_wielding_with_locked_hands);
+    RUN_TEST(test_self_defense_draws);
     return test_summary();
 }

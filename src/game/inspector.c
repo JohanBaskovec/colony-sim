@@ -239,6 +239,46 @@ void inspector_draft_action(App *app, int slot)
     render_tool_icon(app->renderer, icon, RENDER_ICON_DRAFT);
 }
 
+/* Tells the dropdowns apart (ui_popup_list()). */
+#define CHANGE_WEAPON_POPUP_ID 0x7EA900
+
+void inspector_change_weapon_action(App *app, int slot)
+{
+    EntityId id = app->selected[0];
+    WeaponChoice choices[UI_POPUP_OPTIONS];
+    int count = game_weapon_choices(&app->game, id, choices, UI_POPUP_OPTIONS);
+    char texts[UI_POPUP_OPTIONS][UI_POPUP_OPTION_SIZE];
+    const char *options[UI_POPUP_OPTIONS];
+    int wielded = game_wielded_choice(&app->game, id), selected = -1;
+    for (int i = 0; i < count; i++) {
+        const WeaponChoice *choice = &choices[i];
+        if (choice->type == ITEM_NONE) {
+            SDL_strlcpy(texts[i], tr("inspector.weapon.fists"), sizeof(texts[i]));
+        } else if (choice->item.slot != UINT32_MAX) {
+            TR_FORMAT(texts[i], sizeof(texts[i]), tr("inspector.weapon.on_ground"),
+                      tr(item_def(choice->type)->name_key));
+        } else {
+            SDL_strlcpy(texts[i], tr(item_def(choice->type)->name_key), sizeof(texts[i]));
+        }
+        if (choice->item.slot == UINT32_MAX && choice->slot == wielded) {
+            selected = i;
+        }
+        options[i] = texts[i];
+    }
+    const char *lines[2] = {tr("inspector.change_weapon"),
+                            tr("inspector.change_weapon.description")};
+    SDL_FRect button, icon;
+    bool open = ui_popup_open(&app->ui, CHANGE_WEAPON_POPUP_ID);
+    int clicked = action_click(app, slot, open, &button, &icon, lines, open ? 0 : 2);
+    /* Upward: the button is at the bottom of the screen. */
+    int picked = ui_popup_list(&app->ui, CHANGE_WEAPON_POPUP_ID, button, clicked == SDL_BUTTON_LEFT,
+                               true, options, count, selected);
+    if (picked >= 0 && picked < count) {
+        game_wield(&app->game, id, choices[picked]);
+    }
+    render_tool_icon(app->renderer, icon, RENDER_ICON_CHANGE_WEAPON);
+}
+
 void inspector_follow_action(App *app, int slot, FollowKind kind, EntityId id)
 {
     bool lit = app_is_following(app, kind, id);

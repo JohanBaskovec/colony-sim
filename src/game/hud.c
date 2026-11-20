@@ -1167,6 +1167,7 @@ static const char *carry_place_name(CarryPlace place, CarryHold hold)
         case CARRY_HOLD_ARMFUL: return tr("carry.hold.armful");
         case CARRY_HOLD_CUPPED: return tr("carry.hold.cupped");
         case CARRY_HOLD_DRAGGED: return tr("carry.hold.dragged");
+        case CARRY_HOLD_GRIP: return tr("carry.hold.grip");
         case CARRY_HOLD_NONE:
         case CARRY_HOLD_SHOULDERS: break;
         }
@@ -1183,7 +1184,9 @@ static void carry_item_text(char *out, size_t size, const Colonist *colonist, It
     float kilograms =
         index >= 0 ? item_stack_mass(colonist->tools[index]) : item_stack_weight(type, 1);
     hud_weight_text(weight, sizeof(weight), kilograms);
-    TR_FORMAT(out, size, tr("hud.gear.item"), tr(item_def(type)->name_key), weight);
+    bool wielded = index >= 0 && index == colonist_wielded(colonist);
+    TR_FORMAT(out, size, tr(wielded ? "hud.gear.item_wielded" : "hud.gear.item"),
+              tr(item_def(type)->name_key), weight);
 }
 
 /* What a click on the Gear tab asks of an item, applied after the rows. */
@@ -1232,17 +1235,6 @@ static bool gear_button(UiLayout *layout, App *app, float x, RenderIcon icon, bo
 
 /* The slot in the colonist's tools of a kept item's entry: the first of its
  * type not given a row yet (several locked items may share a type). */
-static int kept_index(const Colonist *colonist, const CarryEntry *entry, uint8_t *rows)
-{
-    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
-        if (!rows[i] && colonist->tools[i].count > 0 && colonist->tools[i].type == entry->type) {
-            rows[i] = 1;
-            return i;
-        }
-    }
-    return -1;
-}
-
 /* A row of an item a colonist carries, `indent` in: its text and, when the
  * colonist can act (`buttons`), its buttons: keep on the settler, keep in
  * hand, drop (docs/CARRYING.md §7.1). `index`: the item's in the load
@@ -1429,10 +1421,10 @@ static void gear_rows(UiLayout *layout, void *userdata)
     /* Items under their branch's name, a step in. */
     float indent = layout->button_height + UI_LAYOUT_GAP + UI_LAYOUT_INDENT;
     GearAction action = {GEAR_CLICK_NONE, false, -1};
-    uint8_t kept_rows[COLONIST_TOOL_MAX] = {0}; /* Kept items given a row so far. */
-    int load_rows = 0;                          /* Items of the load given a row so far. */
+    int load_rows = 0; /* Items of the load given a row so far. */
     CarryArrangement arrangement;
-    colonist_carry_arrangement(colonist, &arrangement);
+    int slots[COLONIST_TOOL_MAX]; /* The slot in the tools of each kept item arranged. */
+    colonist_carry_arrangement(colonist, &arrangement, slots);
     CarryBody body = colonist_carry_body(colonist);
     for (int place = 0; place < CARRY_PLACE_COUNT; place++) {
         const char *name = carry_place_name((CarryPlace)place, arrangement.hold);
@@ -1457,23 +1449,26 @@ static void gear_rows(UiLayout *layout, void *userdata)
         }
         bool open = !app->gear_branch_folded[place];
         gear_branch_row(layout, name, state, items, open, place, &action);
+        /* A row per item, each its own buttons: the kept ones, then the load. */
+        for (int i = 0; items && open && i < COLONIST_TOOL_MAX; i++) {
+            int slot = slots[i];
+            if (slot >= 0 && arrangement.kept_place[i] == place) {
+                carry_item_text(line, sizeof(line), colonist, (ItemType)colonist->tools[slot].type,
+                                slot);
+                gear_row(layout, app, colonist, line, indent, false, slot, buttons, &action);
+            }
+        }
         for (int i = 0; items && i < arrangement.entry_count; i++) {
             const CarryEntry *entry = &arrangement.entries[i];
-            if (entry->place != place) {
+            if (entry->place != place || entry->kept) {
                 continue;
             }
-            for (int n = 0; n < entry->count; n++) { /* A row per item, each its own buttons. */
+            for (int n = 0; n < entry->count && load_rows < colonist->carried.count; n++) {
                 /* Indexes run on while folded, to stay those of the items. */
-                int index = entry->kept ? kept_index(colonist, entry, kept_rows) : load_rows;
-                if (index < 0 || (!entry->kept && index >= colonist->carried.count)) {
-                    break;
-                }
-                load_rows += entry->kept ? 0 : 1;
+                int index = load_rows++;
                 if (open) {
-                    carry_item_text(line, sizeof(line), colonist, (ItemType)entry->type,
-                                    entry->kept ? index : -1);
-                    gear_row(layout, app, colonist, line, indent, !entry->kept, index, buttons,
-                             &action);
+                    carry_item_text(line, sizeof(line), colonist, (ItemType)entry->type, -1);
+                    gear_row(layout, app, colonist, line, indent, true, index, buttons, &action);
                 }
             }
         }
@@ -1481,9 +1476,9 @@ static void gear_rows(UiLayout *layout, void *userdata)
 
     /* The items that found no place: tools set down at the next load, items
      * of the load over the limits. */
-    int seen = 0, unplaced = 0;
-    for (int tool = 0; tool < COLONIST_TOOL_MAX; tool++) {
-        if (colonist->tools[tool].count > 0 && (arrangement.left_out & (1u << seen++))) {
+    int unplaced = 0;
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        if (slots[i] >= 0 && (arrangement.left_out & (1u << i))) {
             unplaced++;
         }
     }
@@ -1494,9 +1489,9 @@ static void gear_rows(UiLayout *layout, void *userdata)
         bool open = !app->gear_branch_folded[GEAR_BRANCH_NO_PLACE];
         gear_branch_row(layout, tr("hud.gear.no_place"), count, true, open, GEAR_BRANCH_NO_PLACE,
                         &action);
-        seen = 0;
-        for (int tool = 0; open && tool < COLONIST_TOOL_MAX; tool++) {
-            if (colonist->tools[tool].count > 0 && (arrangement.left_out & (1u << seen++))) {
+        for (int i = 0; open && i < COLONIST_TOOL_MAX; i++) {
+            int tool = slots[i];
+            if (tool >= 0 && (arrangement.left_out & (1u << i))) {
                 carry_item_text(line, sizeof(line), colonist, (ItemType)colonist->tools[tool].type,
                                 tool);
                 gear_row(layout, app, colonist, line, indent, false, tool, buttons, &action);
@@ -1880,7 +1875,10 @@ void hud_inspect_colonists(App *app)
             inspector_carry_action(app, slot++);
         }
         if (draftable) {
-            inspector_draft_action(app, slot);
+            inspector_draft_action(app, slot++);
+        }
+        if (colonist->drafted) {
+            inspector_change_weapon_action(app, slot);
         }
         const char *labels[SECTION_COUNT - 1];
         for (int i = 1; i < SECTION_COUNT; i++) {

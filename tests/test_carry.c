@@ -248,6 +248,43 @@ static void test_items_kept_in_hand(void)
     CHECK_EQ_INT(carry_hands_taken(&arrangement, tools, 2, 3u), 1);
 }
 
+/* A weapon wielded with both hands (docs/COMBAT.md §7): alone in both
+ * hands, the places under the arms left free (no armful), no hand for
+ * anything else nor to steady the shoulders. */
+static void test_gripped_with_both_hands(void)
+{
+    CarryBody body = standard_body();
+    CarryArrangement arrangement;
+    ItemType kept[] = {ITEM_THRUSTING_SPEAR, ITEM_THROWING_SPEAR, ITEM_HAND_AXE};
+    carry_arrange_gripped(&body, kept, 3, 0u, 1u, ITEM_NONE, 0, &arrangement);
+    CHECK_EQ_INT(arrangement.hold, CARRY_HOLD_GRIP);
+    CHECK_EQ_INT(arrangement.kept_place[0], CARRY_BOTH_HANDS);
+    CHECK_EQ_INT(arrangement.kept_place[1], CARRY_UNDER_RIGHT_ARM); /* Still free. */
+    CHECK(arrangement.kept_place[2] != CARRY_RIGHT_HAND &&
+          arrangement.kept_place[2] != CARRY_LEFT_HAND);
+    CHECK_EQ_INT(arrangement.kept_place[3], -1); /* No such item. */
+    CHECK_EQ_INT(carry_hands_taken(&arrangement, kept, 3, 1u), 2);
+    /* A load goes under the arms or on the shoulders, never in the hands. */
+    int branches = carry_arrange_gripped(&body, kept, 1, 0u, 1u, ITEM_BRANCHES, 20, &arrangement);
+    CHECK(branches > 0);
+    CHECK_EQ_INT(load_in(&arrangement, CARRY_BOTH_HANDS), 0);
+    CHECK_EQ_INT(load_in(&arrangement, CARRY_RIGHT_HAND) + load_in(&arrangement, CARRY_LEFT_HAND),
+                 0);
+    CHECK_EQ_INT(arrangement.steadying, -1);
+    CHECK_EQ_INT(carry_capacity_gripped(&body, kept, 1, 0u, 1u, ITEM_BRANCHES), branches);
+    /* Cobbles take an armful or a hand: none left. */
+    CHECK_EQ_INT(carry_arrange_gripped(&body, kept, 1, 0u, 1u, ITEM_COBBLE, 5, &arrangement), 1);
+    CHECK(arrangement.hold == CARRY_HOLD_DRAGGED || arrangement.left_out == 0);
+    /* Something else kept in hand finds no hand. */
+    ItemType two[] = {ITEM_THRUSTING_SPEAR, ITEM_COBBLE};
+    carry_arrange_gripped(&body, two, 2, 2u, 1u, ITEM_NONE, 0, &arrangement);
+    CHECK_EQ_INT(arrangement.left_out, 2u);
+    /* With one arm, no grip. */
+    CarryBody one_arm = {.weight = 40.0f, .arm = {0.0f, 1.0f}};
+    carry_arrange_gripped(&one_arm, kept, 1, 0u, 1u, ITEM_NONE, 0, &arrangement);
+    CHECK_EQ_INT(arrangement.left_out, 1u);
+}
+
 static void test_strength(void)
 {
     CarryBody strong = {.weight = 60.0f, .arm = {1.0f, 1.0f}};
@@ -274,6 +311,7 @@ int main(void)
     RUN_TEST(test_a_lost_arm);
     RUN_TEST(test_kept_items);
     RUN_TEST(test_items_kept_in_hand);
+    RUN_TEST(test_gripped_with_both_hands);
     RUN_TEST(test_strength);
     return test_summary();
 }

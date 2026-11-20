@@ -8,6 +8,7 @@
 #include "core/sun.h"
 #include "core/tree.h"
 #include "core/util.h"
+#include "core/weapon.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -2950,6 +2951,10 @@ uint64_t game_hash(const Game *game)
         if (c->drafted) { /* Only then: hashes of games without it stay as they were. */
             hash = hash_fnv1a64(hash, &c->drafted, sizeof(c->drafted));
         }
+        if (c->wielding) {
+            int32_t wield[2] = {c->wielding, c->wielded};
+            hash = hash_fnv1a64(hash, wield, sizeof(wield));
+        }
         if (!combatant_is_none(c->enemy) || c->attack_cooldown > 0) {
             /* Only then: hashes of games without fights stay as they were. */
             int32_t fight[4] = {c->enemy.kind, (int32_t)c->enemy.id.index,
@@ -3504,6 +3509,66 @@ int game_set_drafted(Game *game, const EntityId *ids, int count, bool drafted)
         changed += colonist_set_drafted(colonist, &context, drafted) ? 1 : 0;
     }
     return changed;
+}
+
+int game_weapon_choices(const Game *game, EntityId colonist_id, WeaponChoice *out, int capacity)
+{
+    const Colonist *colonist = game_colonist_const(game, colonist_id);
+    if (colonist == NULL || capacity <= 0) {
+        return 0;
+    }
+    int count = 0;
+    out[count++] = (WeaponChoice){-1, ITEM_ID_NONE, ITEM_NONE}; /* Its fists. */
+    for (int i = 0; i < COLONIST_TOOL_MAX && count < capacity; i++) {
+        if (item_is_weapon((ItemType)colonist->tools[i].type) && colonist_can_wield(colonist, i)) {
+            out[count++] = (WeaponChoice){i, ITEM_ID_NONE, (ItemType)colonist->tools[i].type};
+        }
+    }
+    /* Then those lying on its tile and around it, row by row. */
+    const Items *items = &game->items;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            int x = colonist->x + dx, y = colonist->y + dy, z = colonist->z;
+            if (!map_in_bounds(&game->map, x, y, z) || !game_tile_explored(game, x, y, z)) {
+                continue;
+            }
+            for (const Item *item = items_first(items, map_index(&game->map, x, y, z));
+                 item != NULL && count < capacity; item = items_next(items, item)) {
+                ItemId id = items_id(items, item);
+                if (!colonist_can_wield_item(colonist, items, id)) {
+                    continue;
+                }
+                bool alike = false; /* One line for items alike (a heap of cobbles). */
+                for (int i = 0; i < count && !alike; i++) {
+                    const Item *listed = items_by_id(items, out[i].item);
+                    alike = listed != NULL && listed->type == item->type &&
+                            listed->quality == item->quality &&
+                            listed->hit_points == item->hit_points;
+                }
+                if (!alike) {
+                    out[count++] = (WeaponChoice){-1, id, (ItemType)item->type};
+                }
+            }
+        }
+    }
+    return count;
+}
+
+int game_wielded_choice(const Game *game, EntityId colonist_id)
+{
+    const Colonist *colonist = game_colonist_const(game, colonist_id);
+    return colonist != NULL && colonist->wielding ? colonist_wielded(colonist) : -1;
+}
+
+bool game_wield(Game *game, EntityId colonist_id, WeaponChoice choice)
+{
+    Colonist *colonist = game_colonist(game, colonist_id);
+    if (colonist == NULL) {
+        return false;
+    }
+    ColonistContext context = colonist_context(game, colonist_id.index);
+    return choice.item.slot != UINT32_MAX ? colonist_wield_item(colonist, &context, choice.item)
+                                          : colonist_wield(colonist, &context, choice.slot);
 }
 
 bool game_can_keep_load_item(const Game *game, EntityId colonist_id, CarryLock lock)

@@ -249,6 +249,11 @@
 /* A settler ordered to a spot stays this long once there before it takes up
  * its life again (5 s): long enough to look around and give the next order. */
 #define COLONIST_MOVE_HOLD_TICKS 300
+/* Drawing a weapon into the hands (docs/CARRYING.md §6.4, tuning): from
+ * under an arm or the shoulders, slung, or taken up from the ground. */
+#define COLONIST_DRAW_TICKS 30
+#define COLONIST_DRAW_SLUNG_TICKS 120
+#define COLONIST_DRAW_GROUND_TICKS 60
 /* No limit to how far an order may send a settler. */
 #define COLONIST_MOVE_MAX_COST 1.0e9f
 #define COLONIST_IDLE_MIN_TICKS 120
@@ -472,6 +477,12 @@ typedef struct Colonist {
     /* The slot in `tools` of its primary weapon (docs/COMBAT.md §7), -1 for
      * none; see colonist_primary_weapon(). */
     int8_t primary_weapon;
+    /* A weapon in its hands, ready to strike (docs/COMBAT.md §7): while
+     * `wielding` (mobilized, or defending itself), `wielded` is its slot in
+     * `tools`, -1 for its fists; see colonist_wielded(). A state apart from
+     * the locks: it goes back where it fits best when it ends. */
+    bool wielding;
+    int8_t wielded;
     int tools_broken;       /* Tools worn out so far (for the player's information). */
     int strength;           /* COLONIST_STRENGTH_MIN..COLONIST_STRENGTH_MAX. */
     float max_carry_weight; /* Kilograms carried without slowing down (from strength). */
@@ -908,6 +919,27 @@ bool colonist_set_primary_weapon(Colonist *colonist, int index, bool primary);
 int colonist_weapon(const Colonist *colonist);
 
 /*
+ * Wielding (docs/COMBAT.md §7). colonist_wielded() is the slot of the weapon
+ * in its hands, -1 when none (its fists, or not wielding; or what its arms
+ * can no longer wield). colonist_can_wield() tells whether it could wield
+ * the weapon in `slot` (-1: its fists, always): a weapon its arms can hold,
+ * and hands not all locked by other items. A mobilized colonist wields at
+ * once colonist_weapon(), and one defending itself too; it waits the
+ * drawing time before its first blow.
+ *
+ * colonist_wield() makes a mobilized colonist wield the weapon in `slot`
+ * (-1: its fists); colonist_wield_item() takes up a weapon lying within a
+ * tile of it (it becomes a kept item, locked) and wields it;
+ * colonist_can_wield_item() tells whether it could. The load is put down,
+ * the free kept items that no longer fit are set down.
+ */
+int colonist_wielded(const Colonist *colonist);
+bool colonist_can_wield(const Colonist *colonist, int slot);
+bool colonist_wield(Colonist *colonist, const ColonistContext *context, int slot);
+bool colonist_can_wield_item(const Colonist *colonist, const Items *items, ItemId id);
+bool colonist_wield_item(Colonist *colonist, const ColonistContext *context, ItemId id);
+
+/*
  * Mobilization (docs/COMBAT.md §8). colonist_can_draft(): not dead, down, in
  * a mental break or fleeing. colonist_set_drafted() mobilizes it (what it
  * did is given up: asleep, it wakes up) or demobilizes it (it takes up its
@@ -983,8 +1015,11 @@ CarryBody colonist_carry_body(const Colonist *colonist);
  * over every place is carried on the shoulders or dragged), 0 for no type. */
 int colonist_carry_capacity(const Colonist *colonist, ItemType type);
 
-/* Where the colonist carries its tools and its load. */
-void colonist_carry_arrangement(const Colonist *colonist, CarryArrangement *out);
+/* Where the colonist carries its tools and its load. The kept items of the
+ * arrangement are its filled slots of `tools`, the weapon it wields first:
+ * `slots` (may be NULL; COLONIST_TOOL_MAX entries) gets the slot of each,
+ * -1 after the last. */
+void colonist_carry_arrangement(const Colonist *colonist, CarryArrangement *out, int *slots);
 
 /*
  * Before picking up a load of `type` (ITEM_NONE: none) of `wanted` items in

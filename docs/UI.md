@@ -124,7 +124,7 @@ become tabs:
 
 | Selection           | Summary                                       | Tabs (now; later)                                 | Actions                       |
 |---------------------|-----------------------------------------------|---------------------------------------------------|-------------------------------|
-| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social, Journal; Log | Move, Follow, Carry (a click on an item: `docs/CARRYING.md` §7.2), Mobilize / Demobilize (`docs/COMBAT.md` §8; later: attack) |
+| One colonist        | Name, age, current action, needs and mood at a glance | Needs, Health, Mood, Character, Knowledge, Gear, Social, Journal; Log | Move, Follow, Carry (a click on an item: `docs/CARRYING.md` §7.2), Mobilize / Demobilize, and for one mobilized settler Change weapon (a list upward: `docs/COMBAT.md` §8; later: attack) |
 | Several colonists   | How many, their names                         | —                                                 | Move                          |
 | Workstation         | Name, state (forbidden, fire, work in progress), bill count | Bills; Fire (hearth)                 | Forbid, build another, delete |
 | Stockpile zone      | Name, priority, size, "left alone" when forbidden | Storage (filters)                             | Forbid, build another, delete |

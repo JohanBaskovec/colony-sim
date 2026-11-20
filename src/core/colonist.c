@@ -47,6 +47,7 @@ void colonist_init(Colonist *colonist, const char *name, int age, int x, int y, 
     colonist->task = TASK_IDLE;
     colonist->take_item = ITEM_ID_NONE;
     colonist->primary_weapon = -1;
+    colonist->wielded = -1;
     colonist->haul_item = ITEM_ID_NONE;
     for (int need = 0; need < NEED_COUNT; need++) {
         colonist->needs[need] = 1.0f;
@@ -313,6 +314,9 @@ static bool keep_in_slot(Colonist *colonist, ItemStack tool)
             if (colonist->primary_weapon == i) {
                 colonist->primary_weapon = -1; /* That one broke: a new item. */
             }
+            if (colonist->wielded == i) {
+                colonist->wielded = -1; /* Its fists, till it wields another. */
+            }
             return true;
         }
     }
@@ -343,6 +347,9 @@ bool colonist_swap_tool(Colonist *colonist, ItemStack tool, ItemStack *replaced)
     if (colonist->primary_weapon == index) {
         colonist->primary_weapon = -1; /* Not expected: a primary weapon is locked. */
     }
+    if (colonist->wielded == index) {
+        colonist->wielded = -1;
+    }
     return true;
 }
 
@@ -357,6 +364,7 @@ void colonist_drop_tools(Colonist *colonist, Items *items, const Map *map)
         }
     }
     colonist->primary_weapon = -1;
+    colonist->wielded = -1;
 }
 
 /* Index of the tool the colonist works with for a use among `allowed`, or -1
@@ -422,28 +430,80 @@ static float tools_weight(const Colonist *colonist)
     return weight;
 }
 
-/* The types of the carried tools (one item each), but the one at `skip`;
- * their indexes in `tools` in `index` (may be NULL), those kept in hand in
- * `in_hand` (bit per kept item; may be NULL). */
-static int kept_items(const Colonist *colonist, int skip, ItemType *kept, int *index,
-                      uint32_t *in_hand)
+/* Whether its arms can wield a weapon: one usable arm, or two for a weapon
+ * taking both hands. */
+static bool can_wield(const Colonist *colonist, const WeaponDef *def)
 {
-    int count = 0;
-    if (in_hand != NULL) {
-        *in_hand = 0;
+    CarryBody body = colonist_carry_body(colonist);
+    int arms = (body.arm[CARRY_RIGHT] >= CARRY_ARM_MIN ? 1 : 0) +
+               (body.arm[CARRY_LEFT] >= CARRY_ARM_MIN ? 1 : 0);
+    return arms >= def->hands;
+}
+
+int colonist_wielded(const Colonist *colonist)
+{
+    int slot = colonist->wielded;
+    if (!colonist->wielding || slot < 0 || slot >= COLONIST_TOOL_MAX ||
+        colonist->tools[slot].count == 0) {
+        return -1;
+    }
+    const WeaponDef *def = weapon_def((ItemType)colonist->tools[slot].type);
+    return def != NULL && can_wield(colonist, def) ? slot : -1;
+}
+
+/* What a colonist keeps, for an arrangement: an item per filled slot of
+ * `tools` (the weapon wielded first), their slots, and as bits per entry
+ * those kept in hand and the one held with both hands (a two-handed weapon
+ * wielded). */
+typedef struct KeptSet {
+    ItemType types[COLONIST_TOOL_MAX];
+    int slots[COLONIST_TOOL_MAX];
+    int count;
+    uint32_t in_hand;
+    uint32_t grip;
+} KeptSet;
+
+static void kept_set_add(KeptSet *set, const Colonist *colonist, int slot, bool wielded)
+{
+    uint32_t bit = 1u << set->count;
+    ItemType type = (ItemType)colonist->tools[slot].type;
+    if (wielded && weapon_def(type)->hands >= 2) {
+        set->grip |= bit;
+    } else if (wielded || colonist->tool_locks[slot] == CARRY_LOCK_IN_HAND) {
+        set->in_hand |= bit;
+    }
+    set->types[set->count] = type;
+    set->slots[set->count++] = slot;
+}
+
+/* The kept items but the one in slot `skip` (-1: all), with the weapon in
+ * slot `wielded` wielded (-1: none). */
+static void kept_set_wielding(const Colonist *colonist, int skip, int wielded, KeptSet *set)
+{
+    set->count = 0;
+    set->in_hand = 0;
+    set->grip = 0;
+    if (wielded >= 0 && wielded != skip) {
+        kept_set_add(set, colonist, wielded, true);
     }
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
-        if (i != skip && colonist->tools[i].count > 0) {
-            if (index != NULL) {
-                index[count] = i;
-            }
-            if (in_hand != NULL && colonist->tool_locks[i] == CARRY_LOCK_IN_HAND) {
-                *in_hand |= 1u << count;
-            }
-            kept[count++] = (ItemType)colonist->tools[i].type;
+        if (i != skip && i != wielded && colonist->tools[i].count > 0) {
+            kept_set_add(set, colonist, i, false);
         }
     }
-    return count;
+}
+
+static void kept_set(const Colonist *colonist, int skip, KeptSet *set)
+{
+    kept_set_wielding(colonist, skip, colonist_wielded(colonist), set);
+}
+
+static int arrange_kept(const Colonist *colonist, const KeptSet *set, ItemType load, int load_count,
+                        CarryArrangement *out)
+{
+    CarryBody body = colonist_carry_body(colonist);
+    return carry_arrange_gripped(&body, set->types, set->count, set->in_hand, set->grip, load,
+                                 load_count, out);
 }
 
 float colonist_work_speed(const Colonist *colonist, KnowledgeType knowledge)
@@ -534,58 +594,55 @@ int colonist_carry_capacity(const Colonist *colonist, ItemType type)
     if (type == ITEM_NONE || item_def(type) == NULL) {
         return 0;
     }
-    CarryBody body = colonist_carry_body(colonist);
-    ItemType kept[COLONIST_TOOL_MAX];
-    uint32_t in_hand;
-    int count = kept_items(colonist, -1, kept, NULL, &in_hand);
-    int capacity = carry_capacity_held(&body, kept, count, in_hand, type);
+    KeptSet set;
+    kept_set(colonist, -1, &set);
+    int capacity = arrange_kept(colonist, &set, type, UINT16_MAX, NULL);
     return capacity < 1 ? 1 : capacity > UINT16_MAX ? UINT16_MAX : capacity;
 }
 
-void colonist_carry_arrangement(const Colonist *colonist, CarryArrangement *out)
+void colonist_carry_arrangement(const Colonist *colonist, CarryArrangement *out, int *slots)
 {
-    CarryBody body = colonist_carry_body(colonist);
-    ItemType kept[COLONIST_TOOL_MAX];
-    uint32_t in_hand;
-    int count = kept_items(colonist, -1, kept, NULL, &in_hand);
-    carry_arrange_held(&body, kept, count, in_hand, (ItemType)colonist->carried.type,
-                       colonist->carried.count, out);
+    KeptSet set;
+    kept_set(colonist, -1, &set);
+    arrange_kept(colonist, &set, (ItemType)colonist->carried.type, colonist->carried.count, out);
+    if (slots != NULL) {
+        for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+            slots[i] = i < set.count ? set.slots[i] : -1;
+        }
+    }
 }
 
 int colonist_make_room(Colonist *colonist, Items *items, const Map *map, ItemType type, int wanted,
                        ItemTypeMask keep)
 {
     int set_down = 0;
-    CarryBody body = colonist_carry_body(colonist);
+    int wielded = colonist_wielded(colonist);
     for (;;) {
-        ItemType kept[COLONIST_TOOL_MAX];
-        int index[COLONIST_TOOL_MAX];
-        uint32_t in_hand;
-        int count = kept_items(colonist, -1, kept, index, &in_hand);
+        KeptSet set;
+        kept_set(colonist, -1, &set);
         CarryArrangement arrangement;
-        int fits = carry_arrange_held(&body, kept, count, in_hand, type, wanted, &arrangement);
+        int fits = arrange_kept(colonist, &set, type, wanted, &arrangement);
         int drop = -1;
-        for (int i = 0; i < count && drop < 0; i++) {
-            if ((arrangement.left_out & (1u << i)) && !(keep & ITEM_TYPE_BIT(kept[i])) &&
-                colonist->tool_locks[index[i]] == CARRY_LOCK_NONE) {
-                drop = index[i];
+        for (int i = 0; i < set.count && drop < 0; i++) {
+            if ((arrangement.left_out & (1u << i)) && !(keep & ITEM_TYPE_BIT(set.types[i])) &&
+                colonist->tool_locks[set.slots[i]] == CARRY_LOCK_NONE && set.slots[i] != wielded) {
+                drop = set.slots[i];
             }
         }
         if (drop < 0 && type != ITEM_NONE && fits < wanted) {
             int best = fits;
-            for (int i = 0; i < count; i++) {
-                if ((keep & ITEM_TYPE_BIT(kept[i])) ||
-                    colonist->tool_locks[index[i]] != CARRY_LOCK_NONE) {
+            for (int i = 0; i < set.count; i++) {
+                if ((keep & ITEM_TYPE_BIT(set.types[i])) ||
+                    colonist->tool_locks[set.slots[i]] != CARRY_LOCK_NONE ||
+                    set.slots[i] == wielded) {
                     continue; /* What the player wants kept is never set down. */
                 }
-                ItemType others[COLONIST_TOOL_MAX];
-                uint32_t others_in_hand;
-                int others_count = kept_items(colonist, index[i], others, NULL, &others_in_hand);
-                int without = carry_arrange_held(&body, others, others_count, others_in_hand, type,
-                                                 wanted, NULL);
+                KeptSet others;
+                kept_set(colonist, set.slots[i], &others);
+                int without = arrange_kept(colonist, &others, type, wanted, NULL);
                 if (without > best) {
                     best = without;
-                    drop = index[i];
+                    drop = set.slots[i];
                 }
             }
         }
@@ -600,14 +657,12 @@ int colonist_make_room(Colonist *colonist, Items *items, const Map *map, ItemTyp
     }
 }
 
-/* Whether every kept item of the mask `locked` fits (kept[] and in_hand as
- * kept_items()): an item kept in hand that finds no hand is left out. */
-static bool kept_arrangement_holds(const Colonist *colonist, const ItemType *kept, int count,
-                                   uint32_t in_hand, uint32_t locked)
+/* Whether every kept item of the mask `locked` (bits per entry of `set`)
+ * fits: an item kept in hand that finds no hand is left out. */
+static bool kept_arrangement_holds(const Colonist *colonist, const KeptSet *set, uint32_t locked)
 {
-    CarryBody body = colonist_carry_body(colonist);
     CarryArrangement arrangement;
-    carry_arrange_held(&body, kept, count, in_hand, ITEM_NONE, 0, &arrangement);
+    arrange_kept(colonist, set, ITEM_NONE, 0, &arrangement);
     return (arrangement.left_out & locked) == 0;
 }
 
@@ -620,11 +675,9 @@ bool colonist_set_lock(Colonist *colonist, int index, CarryLock lock)
     if (lock == CARRY_LOCK_IN_HAND) {
         uint8_t before = colonist->tool_locks[index];
         colonist->tool_locks[index] = CARRY_LOCK_IN_HAND;
-        ItemType kept[COLONIST_TOOL_MAX];
-        int slots[COLONIST_TOOL_MAX];
-        uint32_t in_hand;
-        int count = kept_items(colonist, -1, kept, slots, &in_hand);
-        bool holds = kept_arrangement_holds(colonist, kept, count, in_hand, in_hand);
+        KeptSet set;
+        kept_set(colonist, -1, &set);
+        bool holds = kept_arrangement_holds(colonist, &set, set.in_hand | set.grip);
         colonist->tool_locks[index] = before;
         if (!holds) {
             return false;
@@ -665,45 +718,175 @@ bool colonist_set_primary_weapon(Colonist *colonist, int index, bool primary)
     return true;
 }
 
-/* Whether its arms can wield a weapon: one usable arm, or two for a weapon
- * taking both hands. */
-static bool can_wield(const Colonist *colonist, const WeaponDef *def)
+/* Whether a weapon of `type` can be wielded (the one in `slot`, or -1 for
+ * one taken up): its hands are not locked by other items kept in hand, and
+ * there is a slot for one taken up. Other locked items may find no place
+ * while it is wielded: they stay on the settler. */
+static bool wield_fits(const Colonist *colonist, ItemType type, int slot)
 {
-    CarryBody body = colonist_carry_body(colonist);
-    int arms = (body.arm[CARRY_RIGHT] >= CARRY_ARM_MIN ? 1 : 0) +
-               (body.arm[CARRY_LEFT] >= CARRY_ARM_MIN ? 1 : 0);
-    return arms >= def->hands;
+    const WeaponDef *def = weapon_def(type);
+    if (def == NULL || !can_wield(colonist, def)) {
+        return false;
+    }
+    KeptSet set = {.count = 1};
+    set.types[0] = type;
+    set.slots[0] = slot;
+    if (def->hands >= 2) {
+        set.grip = 1u;
+    } else {
+        set.in_hand = 1u;
+    }
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        if (i != slot && colonist->tools[i].count > 0 &&
+            colonist->tool_locks[i] != CARRY_LOCK_NONE) {
+            if (set.count == COLONIST_TOOL_MAX) {
+                return false; /* No slot for one taken up. */
+            }
+            kept_set_add(&set, colonist, i, false);
+        }
+    }
+    CarryArrangement arrangement;
+    arrange_kept(colonist, &set, ITEM_NONE, 0, &arrangement);
+    return (arrangement.left_out & (set.grip | set.in_hand)) == 0;
+}
+
+bool colonist_can_wield(const Colonist *colonist, int slot)
+{
+    if (slot == -1) {
+        return true; /* Its fists. */
+    }
+    return slot >= 0 && slot < COLONIST_TOOL_MAX && colonist->tools[slot].count > 0 &&
+           wield_fits(colonist, (ItemType)colonist->tools[slot].type, slot);
 }
 
 int colonist_weapon(const Colonist *colonist)
 {
     int primary = colonist_primary_weapon(colonist);
-    if (primary >= 0 && can_wield(colonist, weapon_def((ItemType)colonist->tools[primary].type))) {
+    if (primary >= 0 && colonist_can_wield(colonist, primary)) {
         return primary;
     }
     int best = -1;
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
-        const WeaponDef *def = weapon_def((ItemType)colonist->tools[i].type);
-        if (colonist->tools[i].count > 0 && def != NULL && can_wield(colonist, def) &&
-            (best < 0 || weapon_better(colonist->tools[i], colonist->tools[best]))) {
+        if (colonist->tools[i].count > 0 && item_is_weapon((ItemType)colonist->tools[i].type) &&
+            (best < 0 || weapon_better(colonist->tools[i], colonist->tools[best])) &&
+            colonist_can_wield(colonist, i)) {
             best = i;
         }
     }
     return best;
 }
 
-int colonist_hands_locked(const Colonist *colonist)
+/* Ticks to draw the weapon in `slot` into its hands, by where it is
+ * (docs/CARRYING.md §6.4): none from a hand, more from under an arm or the
+ * shoulders, more still slung. */
+static int draw_ticks(const Colonist *colonist, int slot)
 {
-    ItemType kept[COLONIST_TOOL_MAX];
-    uint32_t in_hand;
-    int count = kept_items(colonist, -1, kept, NULL, &in_hand);
-    if (in_hand == 0) {
+    if (slot < 0 || slot == colonist_wielded(colonist)) {
         return 0;
     }
-    CarryBody body = colonist_carry_body(colonist);
+    KeptSet set;
+    kept_set(colonist, -1, &set);
     CarryArrangement arrangement;
-    carry_arrange_held(&body, kept, count, in_hand, ITEM_NONE, 0, &arrangement);
-    return carry_hands_taken(&arrangement, kept, count, in_hand);
+    arrange_kept(colonist, &set, (ItemType)colonist->carried.type, colonist->carried.count,
+                 &arrangement);
+    for (int i = 0; i < set.count; i++) {
+        if (set.slots[i] != slot) {
+            continue;
+        }
+        switch (arrangement.kept_place[i]) {
+        case CARRY_RIGHT_HAND:
+        case CARRY_LEFT_HAND:
+        case CARRY_BOTH_HANDS: return 0;
+        case CARRY_SLUNG: return COLONIST_DRAW_SLUNG_TICKS;
+        default: return COLONIST_DRAW_TICKS; /* Under an arm, on the shoulders, set aside. */
+        }
+    }
+    return COLONIST_DRAW_TICKS;
+}
+
+/* Takes the weapon in `slot` (-1: its fists) in its hands; its first blow
+ * waits `ticks` (drawing it). The load is put down, the free kept items
+ * that no longer fit are set down. */
+static void wield(Colonist *colonist, const ColonistContext *context, int slot, int ticks)
+{
+    if (colonist->carried.count > 0) {
+        items_drop_load(context->items, context->map, colonist->x, colonist->y, colonist->z,
+                        &colonist->carried);
+    }
+    colonist->wielding = true;
+    colonist->wielded = (int8_t)slot;
+    if (ticks > colonist->attack_cooldown) {
+        colonist->attack_cooldown = ticks;
+    }
+    colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, 0);
+}
+
+/* The weapon goes back where it fits best, its lock as it was. */
+static void unwield(Colonist *colonist)
+{
+    colonist->wielding = false;
+    colonist->wielded = -1;
+}
+
+bool colonist_wield(Colonist *colonist, const ColonistContext *context, int slot)
+{
+    if (!colonist->drafted || colonist_is_down(colonist) || !colonist_can_wield(colonist, slot)) {
+        return false;
+    }
+    if (colonist->wielding && colonist->wielded == slot) {
+        return true;
+    }
+    wield(colonist, context, slot, draw_ticks(colonist, slot));
+    return true;
+}
+
+bool colonist_can_wield_item(const Colonist *colonist, const Items *items, ItemId id)
+{
+    const Item *item = items_by_id(items, id);
+    if (item == NULL || item->tile == ITEM_TILE_HELD || !item_is_weapon((ItemType)item->type)) {
+        return false;
+    }
+    int x = (int)(item->tile % (uint32_t)items->width);
+    int y = (int)(item->tile / (uint32_t)items->width % (uint32_t)items->height);
+    int z = (int)(item->tile / ((uint32_t)items->width * (uint32_t)items->height));
+    return z == colonist->z && abs(x - colonist->x) <= 1 && abs(y - colonist->y) <= 1 &&
+           wield_fits(colonist, (ItemType)item->type, -1);
+}
+
+static bool take_from_load(Items *items, ItemStack *load, int index, ItemStack *item);
+static int keep_locked(Colonist *colonist, Items *items, const Map *map, ItemStack item,
+                       CarryLock lock);
+
+bool colonist_wield_item(Colonist *colonist, const ColonistContext *context, ItemId id)
+{
+    if (!colonist->drafted || colonist_is_down(colonist) ||
+        !colonist_can_wield_item(colonist, context->items, id)) {
+        return false;
+    }
+    ItemStack load = {.type = ITEM_NONE}, taken;
+    if (items_pick_up_item(context->items, id, &load) != 1 ||
+        !take_from_load(context->items, &load, 0, &taken)) {
+        return false;
+    }
+    int slot = keep_locked(colonist, context->items, context->map, taken, CARRY_LOCK_KEPT);
+    if (slot < 0) { /* Not expected: wield_fits() counted the slots. */
+        items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z, taken);
+        return false;
+    }
+    wield(colonist, context, slot, COLONIST_DRAW_GROUND_TICKS);
+    return true;
+}
+
+int colonist_hands_locked(const Colonist *colonist)
+{
+    KeptSet set;
+    kept_set_wielding(colonist, -1, -1, &set); /* The player's locks only. */
+    if ((set.in_hand | set.grip) == 0) {
+        return 0;
+    }
+    CarryArrangement arrangement;
+    arrange_kept(colonist, &set, ITEM_NONE, 0, &arrangement);
+    return carry_hands_taken(&arrangement, set.types, set.count, set.in_hand | set.grip);
 }
 
 bool colonist_can_keep(const Colonist *colonist, ItemType type, int count, CarryLock lock)
@@ -712,30 +895,33 @@ bool colonist_can_keep(const Colonist *colonist, ItemType type, int count, Carry
         (unsigned)lock >= CARRY_LOCK_COUNT) {
         return false;
     }
-    ItemType kept[COLONIST_TOOL_MAX];
-    uint32_t in_hand = 0, locked = 0;
-    int kept_count = 0;
-    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
-        const ItemStack *tool = &colonist->tools[i];
-        if (tool->count == 0 || colonist->tool_locks[i] == CARRY_LOCK_NONE) {
-            continue; /* Free ones would be set down. */
+    /* Free ones would be set down; the weapon wielded stays in the hands. */
+    KeptSet all, set = {.count = 0};
+    kept_set(colonist, -1, &all);
+    int wielded = colonist_wielded(colonist);
+    for (int i = 0; i < all.count; i++) {
+        uint32_t bit = 1u << i;
+        if (colonist->tool_locks[all.slots[i]] == CARRY_LOCK_NONE && all.slots[i] != wielded) {
+            continue;
         }
-        if (colonist->tool_locks[i] == CARRY_LOCK_IN_HAND) {
-            in_hand |= 1u << kept_count;
-        }
-        kept[kept_count++] = (ItemType)tool->type;
+        uint32_t to = 1u << set.count;
+        set.in_hand |= (all.in_hand & bit) ? to : 0;
+        set.grip |= (all.grip & bit) ? to : 0;
+        set.types[set.count] = all.types[i];
+        set.slots[set.count++] = all.slots[i];
     }
-    if (kept_count + count > COLONIST_TOOL_MAX) {
+    if (set.count + count > COLONIST_TOOL_MAX) {
         return false; /* No slot left for them. */
     }
     for (int i = 0; i < count; i++) {
         if (lock == CARRY_LOCK_IN_HAND) {
-            in_hand |= 1u << kept_count;
+            set.in_hand |= 1u << set.count;
         }
-        kept[kept_count++] = type;
+        set.types[set.count] = type;
+        set.slots[set.count++] = -1;
     }
-    locked = kept_count >= 32 ? ~0u : (1u << kept_count) - 1u;
-    return kept_arrangement_holds(colonist, kept, kept_count, in_hand, locked);
+    uint32_t locked = set.count >= 32 ? ~0u : (1u << set.count) - 1u;
+    return kept_arrangement_holds(colonist, &set, locked);
 }
 
 /* Keeps an item locked, in an empty slot, else in the slot of a free kept
@@ -767,6 +953,9 @@ static int keep_locked(Colonist *colonist, Items *items, const Map *map, ItemSta
     colonist->tool_locks[slot] = (uint8_t)lock;
     if (colonist->primary_weapon == slot) {
         colonist->primary_weapon = -1; /* That one broke: a new item. */
+    }
+    if (colonist->wielded == slot) {
+        colonist->wielded = -1;
     }
     return slot;
 }
@@ -840,6 +1029,9 @@ bool colonist_put_down(Colonist *colonist, Items *items, const Map *map, int ind
     colonist->tool_locks[index] = CARRY_LOCK_NONE;
     if (colonist->primary_weapon == index) {
         colonist->primary_weapon = -1;
+    }
+    if (colonist->wielded == index) {
+        colonist->wielded = -1; /* Put down: its fists. */
     }
     return true;
 }
@@ -1197,13 +1389,18 @@ bool colonist_set_drafted(Colonist *colonist, const ColonistContext *context, bo
     colonist->drafted = drafted;
     colonist->draft_end = DRAFT_END_NONE;
     colonist->chat_ticks = 0;
-    if (colonist->task == TASK_FIGHT) {
-        return true; /* Fights on, mobilized or not. */
-    }
-    /* Mobilized, it drops what it did (asleep, it wakes up) and stands there;
-     * demobilized, it takes up its life at once, unless sent somewhere. */
-    if (drafted || colonist->task != TASK_MOVE) {
+    if (colonist->task != TASK_FIGHT && (drafted || colonist->task != TASK_MOVE)) {
+        /* Mobilized, it drops what it did (asleep, it wakes up) and stands
+         * there; demobilized, it takes up its life at once, unless sent
+         * somewhere. A fight goes on. */
         set_idle(colonist, context, 0);
+    }
+    if (drafted && !colonist->wielding) {
+        /* Its only weapon, its primary one, else the best (docs/COMBAT.md §8). */
+        int weapon = colonist_weapon(colonist);
+        wield(colonist, context, weapon, draw_ticks(colonist, weapon));
+    } else if (!drafted && colonist->task != TASK_FIGHT) {
+        unwield(colonist);
     }
     return true;
 }
@@ -5598,7 +5795,8 @@ AttackType colonist_attack(const Colonist *colonist, float *skill, float *power)
     if (arms < COMBAT_LIMB_MIN) {
         return ATTACK_NONE;
     }
-    int weapon = colonist_weapon(colonist);
+    /* The weapon in its hands; not ready yet, the one it would draw. */
+    int weapon = colonist->wielding ? colonist_wielded(colonist) : colonist_weapon(colonist);
     const WeaponDef *def = weapon >= 0 ? weapon_def((ItemType)colonist->tools[weapon].type) : NULL;
     if (def != NULL) {
         type = (AttackType)def->attack;
@@ -5692,6 +5890,11 @@ static void engage(Colonist *colonist, const ColonistContext *context)
     if (colonist->task != TASK_FIGHT) {
         begin_task(colonist, context, TASK_FIGHT);
         path_clear(&colonist->path);
+        if (!colonist->wielding) { /* Draws its weapon to defend itself. */
+            int weapon = colonist_weapon(colonist);
+            wield(colonist, context, weapon, draw_ticks(colonist, weapon));
+            attack = colonist_attack(colonist, &skill, &power);
+        }
     }
     if (combat_can_strike(context->map, here, there, COMBAT_REACH_ADJACENT)) {
         if (colonist->attack_cooldown <= 0 && context->combat != NULL) {
@@ -5761,6 +5964,7 @@ static void lie_down(Colonist *colonist, const ColonistContext *context)
     if (colonist->task == TASK_DOWN) {
         return;
     }
+    unwield(colonist);
     begin_task(colonist, context, TASK_DOWN);
     path_clear(&colonist->path);
     colonist->move_progress = 0.0f;
@@ -5795,6 +5999,9 @@ static void tick_turn(Colonist *colonist, const ColonistContext *context)
     }
     if (colonist->task == TASK_DOWN) {
         set_idle(colonist, context, 0); /* Gets up. */
+    }
+    if (colonist->wielding && !colonist->drafted && colonist->task != TASK_FIGHT) {
+        unwield(colonist); /* The fight, or its mobilization, is over. */
     }
     if (colonist->attack_cooldown > 0) {
         colonist->attack_cooldown--;

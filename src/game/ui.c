@@ -544,11 +544,6 @@ float ui_dropdown_width(Ui *ui, const char *const *options, int count)
 
 int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int count, int selected)
 {
-    int picked = -1;
-    if (ui->picked_id == id) {
-        picked = ui->picked_option;
-        ui->picked_id = 0;
-    }
     count = SDL_clamp(count, 0, UI_POPUP_OPTIONS);
     bool open = ui->popup_id == id;
     bool clicked = button_frame(ui, rect, open);
@@ -558,10 +553,24 @@ int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int 
         ui_label(ui, options[selected], rect.x + ui->theme.button_padding, text_y);
     }
     ui_label_dim(ui, "▾", rect.x + rect.w - dropdown_arrow_width(ui), text_y);
+    return ui_popup_list(ui, id, rect, clicked, false, options, count, selected);
+}
+
+int ui_popup_list(Ui *ui, int id, SDL_FRect anchor, bool clicked, bool upward,
+                  const char *const *options, int count, int selected)
+{
+    int picked = -1;
+    if (ui->picked_id == id) {
+        picked = ui->picked_option;
+        ui->picked_id = 0;
+    }
+    count = SDL_clamp(count, 0, UI_POPUP_OPTIONS);
+    bool open = ui->popup_id == id;
     if (clicked && open) {
         ui->popup_id = 0;
     } else if (clicked && ui->popup_closed_id != id) {
         ui->popup_id = id;
+        ui->popup_upward = upward;
         ui->popup_count = count;
         ui->popup_selected = selected;
         ui->popup_scroll = -1;
@@ -571,9 +580,14 @@ int ui_dropdown(Ui *ui, int id, SDL_FRect rect, const char *const *options, int 
     }
     if (ui->popup_id == id) {
         ui->popup_seen = true;
-        ui->popup_anchor = rect; /* Follows the window when it moves or scrolls. */
+        ui->popup_anchor = anchor; /* Follows the window when it moves or scrolls. */
     }
     return picked;
+}
+
+bool ui_popup_open(const Ui *ui, int id)
+{
+    return id != 0 && ui->popup_id == id;
 }
 
 void ui_draw_popup(Ui *ui)
@@ -595,7 +609,8 @@ void ui_draw_popup(Ui *ui)
     /* As many options as fit on the roomier side of the button. */
     float below = ui->screen_height - (ui->popup_anchor.y + ui->popup_anchor.h);
     float above = ui->popup_anchor.y;
-    int visible = SDL_clamp((int)(SDL_max(below, above) / row), 1, ui->popup_count);
+    float room = ui->popup_upward ? above : SDL_max(below, above);
+    int visible = SDL_clamp((int)(room / row), 1, ui->popup_count);
     int most = ui->popup_count - visible;
     if (ui->popup_scroll < 0) {
         ui->popup_scroll = SDL_clamp(ui->popup_selected - visible / 2, 0, most);
@@ -605,7 +620,7 @@ void ui_draw_popup(Ui *ui)
     float height = row * (float)visible;
     float x = SDL_min(ui->popup_anchor.x, ui->screen_width - width);
     float y = ui->popup_anchor.y + ui->popup_anchor.h;
-    if (y + height > ui->screen_height) {
+    if (ui->popup_upward || y + height > ui->screen_height) {
         y = ui->popup_anchor.y - height; /* Above the button. */
     }
     SDL_FRect box = {SDL_max(0.0f, x), SDL_max(0.0f, y), width, height};

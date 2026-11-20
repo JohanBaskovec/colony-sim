@@ -923,7 +923,12 @@ tools that fit nowhere, then those in the way of the load, never those of
 its job nor those the player locked. Each kept item has a lock
 (`Colonist.tool_locks`, `CarryLock`): kept on the settler, or kept in hand
 (placed first, in a hand: `carry_arrange_held()`); while something is kept
-in hand, only hauling jobs start. The Carry order is a move with an item to
+in hand, only hauling jobs start. A weapon wielded (`Colonist.wielding`,
+`docs/COMBAT.md` §7) is placed before everything, held with both hands when
+it takes two (`carry_arrange_gripped()`); the colonist's arrangements all go
+through a `KeptSet` (its kept items, the one wielded first, and the masks
+in hand and gripped), and `colonist_carry_arrangement()` gives the slot of
+each kept item arranged (the Gear tab's rows). The Carry order is a move with an item to
 take on arrival (`Colonist.take_item`, `colonist_order_carry()`), kept
 locked. An item of the load locked becomes a kept item
 (`colonist_keep_load_item()`, taken out with `items_load_take()`); a free

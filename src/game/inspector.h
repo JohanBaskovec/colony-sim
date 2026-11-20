@@ -76,6 +76,11 @@ void inspector_carry_action(App *app, int slot);
  * then): app_toggle_draft(). */
 void inspector_draft_action(App *app, int slot);
 
+/* Change weapon, for one mobilized settler: a list upward of its fists, the
+ * weapons it keeps and those lying within a tile (game_weapon_choices());
+ * the one picked is wielded. */
+void inspector_change_weapon_action(App *app, int slot);
+
 /* Follow the selected settler or animal (`kind`, `id`): lit while the camera
  * follows it, a click starts or stops it (app_toggle_follow()). */
 void inspector_follow_action(App *app, int slot, FollowKind kind, EntityId id);

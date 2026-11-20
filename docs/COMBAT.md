@@ -10,9 +10,9 @@ Status: step A is implemented (the module, animals fighting and fleeing,
 settlers' self-defense, a debug tool), and the carnivores that use it
 (`docs/ROADMAP.md` M5 *Wildlife, step 2*, §6). Weapons (§7) are implemented
 (step 1 of §9: `core/weapon.h`, the primary weapon), and so is the
-mobilization itself (step 2: the state, its end, the button, key and marks);
-wielding (step 3) and the *Attack* order (step 4) are designed, not
-implemented. Values marked
+mobilization (step 2: the state, its end, the button, key and marks) and
+wielding (step 3: the weapon in hand, drawing, the *Change weapon* list);
+the *Attack* order (step 4) is designed, not implemented. Values marked
 *(tuning)* are first guesses.
 
 ## 1. Principles
@@ -101,9 +101,10 @@ cornered, takes it).
   prey), a settler waits. Those down keep their tile.
 - **Settlers.** A settler struck by an animal drops what it was doing
   (waking if it slept): it fights back, or flees to a tile far from it when
-  past its nerve (cornered: it fights). It strikes with its weapon
+  past its nerve (cornered: it fights). It draws its weapon
   (`colonist_weapon()`: its primary weapon, else the best it keeps, among
-  those its arms can wield), else its fists. It stops when the animal is dead or far
+  those its arms and hands can wield; §7 *Wielded*), else fights with its
+  fists, and puts it back when the fight ends. It stops when the animal is dead or far
   (20 tiles); the player's move order ends the fight too.
 - A notice tells the player a settler is under attack.
 
@@ -178,9 +179,9 @@ spears are thrown later (ranged weapons). A weapon's **worth**, to pick the
 best, is its damage × accuracy ÷ interval, times its quality factor and its
 condition; on a tie, the better quality, then the less worn.
 
-- **Weapons kept.** For now a settler fights with the weapons it keeps (its
-  tools and the items locked on it), not with those of a load it hauls; the
-  drawing time comes with wielding (step 3).
+- **Weapons kept.** A settler fights with the weapons it keeps (its tools
+  and the items locked on it), not with those of a load it hauls (the load
+  is put down when it wields).
 - **Primary weapon.** A button with two crossed blades on each weapon's row
   of the Gear tab (`docs/CARRYING.md` §7.3) makes it the settler's primary
   weapon: one per settler, that very item. It also locks it *kept on the
@@ -193,6 +194,22 @@ condition; on a tie, the better quality, then the less worn.
   down, not forbidden; free kept items that no longer fit are set down).
   **Drawing** takes time by where the weapon was: none from a hand, half a
   second from under an arm or the shoulders, two seconds slung *(tuning)*.
+
+Implemented (step 3): `Colonist.wielding` and `wielded` (a slot of its
+tools, -1 for its fists), `colonist_wielded()`. The arrangement
+(`core/carry.h`) places the weapon wielded first: a one-handed weapon in the
+better arm's hand, a two-handed one held with both hands
+(`carry_arrange_gripped()`, `CARRY_HOLD_GRIP`), which leaves the places under
+the arms free (unlike an armful) but no hand to steady the shoulders. A
+weapon can be wielded (`colonist_can_wield()`) when the arms can hold it and
+no item kept in hand takes the hands it needs; other locked items that find
+no place while it is wielded stay on the settler (the Gear tab lists them
+under *No place*), free ones are set down. The first blow waits the drawing
+time (the attack cooldown): `COLONIST_DRAW_TICKS` (half a second) from under
+an arm or the shoulders, `COLONIST_DRAW_SLUNG_TICKS` slung, none from a
+hand, `COLONIST_DRAW_GROUND_TICKS` (one second) for one taken up from the
+ground. A weapon wielded whose arms fail (an arm broken) leaves the settler
+its fists.
 
 ## 8. Mobilization (step 2 implemented)
 
@@ -226,7 +243,8 @@ when all are mobilized.
   (mental break), flees, is knocked out or dies (a notice says why). Its
   weapon is then no longer wielded (§7), and it goes back to its life.
 - **Seen.** A mark on the settler on the map and in the colonist bar; the
-  activity *Mobilized* (with what it does: moving, attacking).
+  activity *Mobilized* (with what it does: moving, attacking). The Gear tab
+  says which item is in hand to fight.
 - **Self-defense** (not mobilized) follows the same choice of weapon: the
   primary, else the best one carried, with the drawing time.
 
@@ -236,7 +254,13 @@ button (a round shield before a spear, lit when all are mobilized) for one
 or several settlers, the key `APP_KEY_DRAFT` (B on QWERTY), the shield over
 the settler's head on the map and on its portrait in the colonist bar, the
 activity *Mobilized* (*moving*, *fighting*) and the notices of its end.
-Until step 4, a mobilized settler struck by an animal still walks up to it
+Step 3: mobilized, it wields `colonist_weapon()` at once; the *Change
+weapon* action (a blade between two arrows), for one mobilized settler,
+opens its list upward (`ui_popup_list()`): its fists, the weapons it keeps
+and can wield, and those lying on an explored tile within a tile of it (one
+line for items alike), `game_weapon_choices()`; the one picked is wielded
+(`game_wield()`; one from the ground is taken up, kept and locked:
+`colonist_wield_item()`). Until step 4, a mobilized settler struck by an animal still walks up to it
 and fights as in self-defense (without fleeing from fear), and it does not
 yet strike an enemy that merely comes in reach.
 
@@ -247,7 +271,7 @@ yet strike an enemy that merely comes in reach.
   weapon carried.
 2. *(done)* Mobilization (§8): the state, needs ignored, waking up, the end
   conditions and their notices, the button and key, the marks on screen.
-3. Wielding: the weapon in hand at mobilization, the drawing time, the
+3. *(done)* Wielding: the weapon in hand at mobilization, the drawing time, the
   *Change weapon* list (with the weapons lying within a tile).
 4. The *Attack* order, and striking enemies in reach while mobilized.
 
