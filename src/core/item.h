@@ -105,6 +105,9 @@ typedef enum ItemCategory {
     ITEM_CATEGORY_COUNT
 } ItemCategory;
 
+/* Wood species (core/wood.h): a bit per tree species, 0 for none. */
+typedef uint16_t WoodMask;
+
 /* Bit mask with one bit per ItemType. */
 typedef uint64_t ItemTypeMask;
 _Static_assert(ITEM_TYPE_COUNT <= 64, "item types must fit in an ItemTypeMask");
@@ -173,6 +176,11 @@ typedef struct ItemDef {
      * ITEM_ROT_REFERENCE_CELSIUS before it has rotted away; 0: never rots.
      * A type never both rots and transforms. */
     float rot_days;
+    /* Made of wood: carries the species of its trees (ItemStack.woods,
+     * docs/TREES.md §6), named by them with `wood_name_key` ("{0} branches",
+     * "Branches de {0}": wood_item_name()). */
+    bool wooden;
+    const char *wood_name_key;
 } ItemDef;
 
 /* Rot runs at ×1 at this temperature in the open, twice as fast every
@@ -210,6 +218,10 @@ typedef struct ItemStack {
     /* Non-zero for items the player forbade the settlers: they never share a
      * stack with allowed ones. */
     uint8_t forbidden;
+    /* Wooden items (ItemDef.wooden): the species of their wood, every one
+     * they were made from (core/wood.h); 0 for other types, or wood of no
+     * known species. Items of different species never share a stack. */
+    WoodMask woods;
     /* A load in hand (see items_pick_up()): the very items, a list in the
      * item pool (slot + 1 of the first), the fields above their summary. 0
      * for a stack that is only numbers (what to add, what a tile holds):
@@ -233,6 +245,7 @@ typedef struct Item {
     uint16_t generation; /* Bumped whenever the slot is freed. */
     uint8_t angle;       /* How it is turned, in 1/256 of a turn. */
     uint8_t forbidden;   /* Non-zero: the player forbade it (see items_forbidden()). */
+    WoodMask woods;      /* As ItemStack.woods. */
     uint32_t next;       /* Next item of the same tile: slot + 1, 0 for none. */
     uint32_t tile;       /* Tile index, ITEM_TILE_HELD for an item in a load. */
 } Item;
@@ -346,7 +359,8 @@ int item_stack_limit(ItemType type);
 /* Kilograms of `count` items of a type. */
 float item_stack_weight(ItemType type, int count);
 
-/* What the stack weighs, kilograms: its whole weight less what was eaten. */
+/* What the stack weighs, kilograms: its whole weight (by its wood species,
+ * core/wood.h) less what was eaten. */
 float item_stack_mass(ItemStack stack);
 
 /* An animal eats up to `kg` from one item of the stack (the stack's count is
@@ -608,23 +622,38 @@ long item_rot_left(const Item *item);
 int items_list(const Items *items, size_t index, ItemOrder order, const Item **out, int capacity);
 
 /* What of a tile's group of a type is wanted (a bill's ingredients): a
- * quality range, and the items that rot away soonest first. */
+ * quality range, the items that rot away soonest first, and for wooden
+ * items the species allowed (item_woods_allowed()). */
 typedef struct ItemChoice {
     int min_quality;
     int max_quality;
     bool soonest_rot;
+    WoodMask woods; /* 0: any. */
 } ItemChoice;
 
 /* Any item of the stack, the newest first. */
-#define ITEM_CHOICE_ANY ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false})
+#define ITEM_CHOICE_ANY ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false, 0})
 
-/* Items of the tile's newest group of allowed items of `type` whose quality
- * lies in the choice's range. */
+/* Whether items of a stack are of the species `allowed` (0: any): always for
+ * types not of wood; wooden ones of known species, all among them. */
+bool item_woods_allowed(ItemStack stack, WoodMask allowed);
+
+/* The newest group of allowed items of a tile among `types` whose species
+ * are allowed (item_woods_allowed()); an empty stack for none. */
+ItemStack items_get_allowed_of_woods(const Items *items, int x, int y, int z, ItemTypeMask types,
+                                     WoodMask allowed);
+
+/* Gives every item of a load the species `woods` (a load of wood delivered
+ * to a site that holds another species: the structure is of both). */
+void items_load_set_woods(Items *items, ItemStack *load, WoodMask woods);
+
+/* Items of the tile's newest group of allowed items of `type` of allowed
+ * species whose quality lies in the choice's range. */
 int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, ItemChoice choice);
 
 /* Hours until the first item of the tile's newest group of allowed items of
- * `type` in the choice's range rots away, at rot ×1 (item_stack_rot_hours()); negative
- * when none rots. */
+ * `type` (of allowed species) in the choice's range rots away, at rot ×1 (item_stack_rot_hours());
+ * negative when none rots. */
 float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemType type,
                               ItemChoice choice);
 
@@ -647,6 +676,11 @@ int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int c
  * for: ordinary items, each of its own quality and condition (60 to 100 %,
  * from a hash of the tile, not a random stream). Returns how many. */
 int items_add_natural(Items *items, int x, int y, int z, ItemType type, int count);
+
+/* The same, of wood of the species `woods` (wooden types only: ignored for
+ * the others). */
+int items_add_natural_wood(Items *items, int x, int y, int z, ItemType type, int count,
+                           WoodMask woods);
 
 /* Items of a type lying on a tile (bodies left out). */
 int items_count_type(const Items *items, int x, int y, int z, ItemType type);

@@ -5,6 +5,7 @@
 #include "core/temperature.h"
 #include "core/tree.h"
 #include "core/util.h"
+#include "core/wood.h"
 
 #include <limits.h>
 #include <math.h>
@@ -1298,7 +1299,9 @@ bool map_init(Map *map, int width, int height, int depth)
     map->structure_part = calloc(count, 1);
     map->structure_quality = calloc(count, 1);
     map->structure_hit_points = calloc(count, sizeof(*map->structure_hit_points));
+    map->structure_woods = calloc(count, sizeof(*map->structure_woods));
     map->roof_quality = calloc(count, 1);
+    map->roof_woods = calloc(count, sizeof(*map->roof_woods));
     map->forbidden = calloc(count, 1);
     map->doors = calloc(count, 1);
     size_t blocks = (size_t)((width + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK) *
@@ -1311,7 +1314,7 @@ bool map_init(Map *map, int width, int height, int depth)
         map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
         map->tree_species == NULL || map->structure == NULL || map->structure_part == NULL ||
         map->structure_quality == NULL || map->structure_hit_points == NULL ||
-        map->roof_quality == NULL) {
+        map->structure_woods == NULL || map->roof_quality == NULL || map->roof_woods == NULL) {
         map_free(map);
         return false;
     }
@@ -1342,7 +1345,9 @@ void map_free(Map *map)
     free(map->structure_part);
     free(map->structure_quality);
     free(map->structure_hit_points);
+    free(map->structure_woods);
     free(map->roof_quality);
+    free(map->roof_woods);
     free(map->forbidden);
     free(map->light_stamps);
     free(map->light_solid_stamps);
@@ -1573,7 +1578,7 @@ static void clear_forbidden(Map *map, size_t index, unsigned bits)
 
 /* Puts a structure tile (or none) on a tile: counts, plant, topology. */
 static void set_tile_structure(Map *map, int x, int y, int z, StructureType type, uint8_t part,
-                               ItemQuality quality, int hit_points)
+                               ItemQuality quality, int hit_points, WoodMask woods)
 {
     size_t index = map_index(map, x, y, z);
     StructureType old = (StructureType)map->structure[index];
@@ -1593,6 +1598,7 @@ static void set_tile_structure(Map *map, int x, int y, int z, StructureType type
     map->structure_part[index] = part;
     map->structure_quality[index] = (uint8_t)quality;
     map->structure_hit_points[index] = (uint16_t)hit_points;
+    map->structure_woods[index] = woods;
     log_build_change(map, x, y, z);
     if (type != STRUCTURE_NONE) {
         map->plants[index] = (Plant){0}; /* Trampled, cut or dug out by the builders. */
@@ -1647,13 +1653,19 @@ void map_remove_structure(Map *map, int x, int y, int z)
         int px = origin_x + part * direction_dx(direction);
         int py = origin_y + part * direction_dy(direction);
         if (map_structure(map, px, py, z) == type) {
-            set_tile_structure(map, px, py, z, STRUCTURE_NONE, 0, ITEM_QUALITY_WORST, 0);
+            set_tile_structure(map, px, py, z, STRUCTURE_NONE, 0, ITEM_QUALITY_WORST, 0, 0);
         }
     }
 }
 
 bool map_place_structure(Map *map, int x, int y, int z, StructureType type, Direction direction,
                          ItemQuality quality)
+{
+    return map_place_structure_wood(map, x, y, z, type, direction, quality, 0);
+}
+
+bool map_place_structure_wood(Map *map, int x, int y, int z, StructureType type,
+                              Direction direction, ItemQuality quality, WoodMask woods)
 {
     if (type == STRUCTURE_NONE || (unsigned)type >= STRUCTURE_TYPE_COUNT ||
         structure_is_roof(type) || /* See map_set_roof(). */
@@ -1678,7 +1690,9 @@ bool map_place_structure(Map *map, int x, int y, int z, StructureType type, Dire
     if (same) {
         size_t head = map_index(map, x, y, z);
         map->structure_quality[head] = (uint8_t)quality;
-        map->structure_hit_points[head] = (uint16_t)structure_max_hit_points(type, quality);
+        map->structure_woods[head] = woods;
+        map->structure_hit_points[head] =
+            (uint16_t)structure_wood_max_hit_points(type, quality, woods);
         return true;
     }
     for (int part = 0; part < length; part++) {
@@ -1689,7 +1703,8 @@ bool map_place_structure(Map *map, int x, int y, int z, StructureType type, Dire
         set_tile_structure(map, x + part * dx, y + part * dy, z, type,
                            (uint8_t)((unsigned)direction | ((unsigned)part << PART_INDEX_SHIFT)),
                            head ? quality : ITEM_QUALITY_WORST,
-                           head ? structure_max_hit_points(type, quality) : 0);
+                           head ? structure_wood_max_hit_points(type, quality, woods) : 0,
+                           head ? woods : 0);
     }
     return true;
 }
@@ -1721,16 +1736,36 @@ int map_structure_hit_points(const Map *map, int x, int y, int z)
     return map->structure_hit_points[map_index(map, origin_x, origin_y, z)];
 }
 
+WoodMask map_structure_woods(const Map *map, int x, int y, int z)
+{
+    int origin_x, origin_y;
+    if (!map_structure_origin(map, x, y, z, &origin_x, &origin_y)) {
+        return 0;
+    }
+    return map->structure_woods[map_index(map, origin_x, origin_y, z)];
+}
+
+int map_structure_max_hit_points(const Map *map, int x, int y, int z)
+{
+    int origin_x, origin_y;
+    if (!map_structure_origin(map, x, y, z, &origin_x, &origin_y)) {
+        return 0;
+    }
+    size_t index = map_index(map, origin_x, origin_y, z);
+    return structure_wood_max_hit_points((StructureType)map->structure[index],
+                                         (ItemQuality)map->structure_quality[index],
+                                         map->structure_woods[index]);
+}
+
 void map_set_structure_hit_points(Map *map, int x, int y, int z, int hit_points)
 {
     int origin_x, origin_y;
     if (!map_structure_origin(map, x, y, z, &origin_x, &origin_y)) {
         return;
     }
-    size_t index = map_index(map, origin_x, origin_y, z);
-    StructureType type = (StructureType)map->structure[index];
-    int max = structure_max_hit_points(type, (ItemQuality)map->structure_quality[index]);
-    map->structure_hit_points[index] = (uint16_t)clampi(hit_points, 1, max);
+    int max = map_structure_max_hit_points(map, x, y, z);
+    map->structure_hit_points[map_index(map, origin_x, origin_y, z)] =
+        (uint16_t)clampi(hit_points, 1, max);
 }
 
 StructureType map_structure(const Map *map, int x, int y, int z)
@@ -1932,7 +1967,18 @@ ItemQuality map_roof_quality(const Map *map, int x, int y, int z)
                                        : ITEM_QUALITY_WORST;
 }
 
+WoodMask map_roof_woods(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) ? map->roof_woods[map_index(map, x, y, z)] : 0;
+}
+
 void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality)
+{
+    map_set_roof_wood(map, x, y, z, roof, quality, 0);
+}
+
+void map_set_roof_wood(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality,
+                       WoodMask woods)
 {
     Terrain terrain = roof_terrain(roof);
     if (!map_in_bounds(map, x, y, z) || (roof != STRUCTURE_NONE && terrain == TERRAIN_COUNT)) {
@@ -1951,6 +1997,7 @@ void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality
         roof != STRUCTURE_NONE
             ? (uint8_t)clampi((int)quality, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST)
             : 0;
+    map->roof_woods[index] = roof != STRUCTURE_NONE ? woods : 0;
     map_set_terrain(map, x, y, z, roof != STRUCTURE_NONE ? terrain : TERRAIN_OPEN);
     log_build_change(map, x, y, z); /* Roofs, warmth. */
 }
@@ -2320,7 +2367,9 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     dst->structure_part[index] = src->structure_part[index];
     dst->structure_quality[index] = src->structure_quality[index];
     dst->structure_hit_points[index] = src->structure_hit_points[index];
+    dst->structure_woods[index] = src->structure_woods[index];
     dst->roof_quality[index] = src->roof_quality[index];
+    dst->roof_woods[index] = src->roof_woods[index];
     dst->forbidden[index] = src->forbidden[index];
     dst->doors[index] = src->doors[index];
 }
@@ -2361,6 +2410,14 @@ uint64_t map_hash(const Map *map)
         hash_fnv1a64(hash, map->structure_hit_points, count * sizeof(*map->structure_hit_points));
     if (map->roof_count > 0) { /* Hashes of maps without roofs stay as they were. */
         hash = hash_fnv1a64(hash, map->roof_quality, count);
+    }
+    /* The species of structures and roofs: those of no known species leave
+     * the hash as it was. */
+    for (size_t i = 0; i < count; i++) {
+        if (map->structure_woods[i] != 0 || map->roof_woods[i] != 0) {
+            uint64_t at[2] = {i, (uint64_t)map->structure_woods[i] << 16 | map->roof_woods[i]};
+            hash = hash_fnv1a64(hash, at, sizeof(at));
+        }
     }
     if (map->forbidden_count > 0) { /* Likewise without anything forbidden. */
         hash = hash_fnv1a64(hash, map->forbidden, count);
@@ -2521,11 +2578,16 @@ int map_litter(const Map *map, int x, int y, int z, ItemType type)
 
 bool map_add_litter(Map *map, int x, int y, int z, ItemType type)
 {
+    return map_add_litter_wood(map, x, y, z, type, 0);
+}
+
+bool map_add_litter_wood(Map *map, int x, int y, int z, ItemType type, WoodMask woods)
+{
     int max;
     uint8_t *layer = litter_layer(map, type, &max);
     if (litter_is_items(map, type)) {
         return map_in_bounds(map, x, y, z) && litter_items(map, x, y, z, type) < max &&
-               items_add_natural(map->litter, x, y, z, type, 1) == 1;
+               items_add_natural_wood(map->litter, x, y, z, type, 1, woods) == 1;
     }
     if (layer == NULL || !map_in_bounds(map, x, y, z) || layer[map_index(map, x, y, z)] >= max) {
         return false;
@@ -2739,6 +2801,33 @@ int map_ground_level(const Map *map, int x, int y)
     return 0;
 }
 
+/* The species of the tree over a tile, from the crowns (Map.tree_species)
+ * nearest above it: what the branches lying there fell from (PLANT_NONE when
+ * no crown is near). */
+static PlantType tree_over(const Map *map, int x, int y, int z)
+{
+    for (int ring = 0; ring <= TREE_MAX_REACH; ring++) {
+        for (int dz = 1; dz <= TREE_MAX_LEVELS && z + dz < map->depth; dz++) {
+            for (int dy = -ring; dy <= ring; dy++) {
+                for (int dx = -ring; dx <= ring; dx++) {
+                    if ((abs(dx) != ring && abs(dy) != ring) ||
+                        !map_in_bounds(map, x + dx, y + dy, z + dz)) {
+                        continue;
+                    }
+                    size_t index = map_index(map, x + dx, y + dy, z + dz);
+                    bool tree =
+                        map->rock[index] == ROCK_WOOD ||
+                        (map->rock[index] == ROCK_NONE && terrain_is_foliage(map->terrain[index]));
+                    if (tree && plant_is_tree(map->tree_species[index])) {
+                        return (PlantType)map->tree_species[index];
+                    }
+                }
+            }
+        }
+    }
+    return PLANT_NONE;
+}
+
 void map_litter_to_items(Map *map, Items *items)
 {
     struct {
@@ -2755,7 +2844,11 @@ void map_litter_to_items(Map *map, Items *items)
                 size_t index = map_index(map, x, y, z);
                 for (size_t k = 0; k < sizeof(kinds) / sizeof(kinds[0]); k++) {
                     if (kinds[k].layer[index] != 0) {
-                        items_add_natural(items, x, y, z, kinds[k].type, kinds[k].layer[index]);
+                        /* Branches of the species of the crown they fell from. */
+                        WoodMask woods =
+                            kinds[k].type == ITEM_BRANCHES ? wood_bit(tree_over(map, x, y, z)) : 0;
+                        items_add_natural_wood(items, x, y, z, kinds[k].type, kinds[k].layer[index],
+                                               woods);
                         kinds[k].layer[index] = 0;
                     }
                 }

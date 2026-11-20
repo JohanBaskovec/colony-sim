@@ -69,6 +69,7 @@ set(COLONY_UNIT_TESTS
     test_structures
     test_sun
     test_tile_light
+    test_wood
     test_work
     test_workstation
     test_worldgen)

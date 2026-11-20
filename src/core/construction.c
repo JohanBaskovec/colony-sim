@@ -2,6 +2,7 @@
 
 #include "core/knowledge.h"
 #include "core/util.h"
+#include "core/wood.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -486,6 +487,30 @@ void construction_set_priority(Constructions *constructions, int index, int prio
     }
 }
 
+void construction_set_wood_choice(Constructions *constructions, int index, WoodMask woods)
+{
+    ConstructionSite *site = site_get(constructions, index);
+    woods &= WOOD_ALL;
+    if (site != NULL && site->wood_choice != woods) {
+        site->wood_choice = woods;
+        constructions->revision++; /* Settlers who found nothing to do look again. */
+    }
+}
+
+/* The loads' species: each holds items of the same ones (see
+ * construction_deliver_load()). */
+WoodMask construction_woods(const ConstructionSite *site)
+{
+    WoodMask woods = 0;
+    for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        const ItemDef *def = item_def((ItemType)site->delivered[slot].type);
+        if (site->delivered[slot].count > 0 && def != NULL && def->wooden) {
+            woods |= site->delivered[slot].woods;
+        }
+    }
+    return woods;
+}
+
 bool construction_forbidden(const ConstructionSite *site, const Map *map)
 {
     if (site->forbidden) {
@@ -537,7 +562,21 @@ int construction_deliver_load(Constructions *constructions, Items *items, int in
     if (slot < 0) {
         return 0;
     }
-    int moved = items_load_move(items, load, &site->delivered[slot], missing);
+    ItemStack *into = &site->delivered[slot];
+    const ItemDef *def = item_def((ItemType)load->type);
+    if (into->count > 0 && def != NULL && def->wooden && into->woods != load->woods) {
+        /* Another species: what goes in and what is in are of both from now
+         * on, as the structure will be (a load holds a single group). */
+        WoodMask both = into->woods | load->woods;
+        ItemStack part = {.type = ITEM_NONE};
+        items_load_move(items, load, &part, missing);
+        items_load_set_woods(items, &part, both);
+        items_load_set_woods(items, into, both);
+        int moved = items_load_move(items, &part, into, missing);
+        constructions->revision++;
+        return moved;
+    }
+    int moved = items_load_move(items, load, into, missing);
     if (moved > 0) {
         constructions->revision++;
     }
@@ -563,10 +602,15 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
         taken.count = (uint16_t)(stack.count < missing ? stack.count : missing);
         ItemStack *into = &site->delivered[slot];
         if (into->count > 0) {
-            /* Materials of any quality go into the same structure. */
+            /* Materials of any quality and species go into the same structure. */
             uint8_t lowest = into->quality < taken.quality ? into->quality : taken.quality;
             into->quality = lowest;
             taken.quality = lowest;
+            const ItemDef *def = item_def((ItemType)stack.type);
+            if (def != NULL && def->wooden) {
+                into->woods |= taken.woods;
+                taken.woods = into->woods;
+            }
         }
         item_stack_merge(into, taken);
         constructions->revision++;
@@ -710,6 +754,7 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
         }
     }
     ItemQuality cap = structure_quality_cap(type, materials);
+    WoodMask woods = construction_woods(site);
     use_up_materials(constructions, items, index);
     if (refresh) {
         map_set_structure_hit_points(map, x, y, z, INT16_MAX);
@@ -717,10 +762,10 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
     }
     ItemQuality quality = knowledge_product_score(level, rng);
     if (structure_is_roof(type)) {
-        map_set_roof(map, x, y, z, type, quality < cap ? quality : cap);
+        map_set_roof_wood(map, x, y, z, type, quality < cap ? quality : cap, woods);
         return true;
     }
-    map_place_structure(map, x, y, z, type, direction, quality < cap ? quality : cap);
+    map_place_structure_wood(map, x, y, z, type, direction, quality < cap ? quality : cap, woods);
     for (int part = 0; structure_blocks(type) && items != NULL && part < structure_length(type);
          part++) {
         clear_items(map, items, x + part * direction_dx(direction),
@@ -757,6 +802,11 @@ bool construction_finish_now(Constructions *constructions, Map *map, Items *item
                                                  ? (ItemType)site->delivered[slot].type
                                                  : construction_material(site, slot),
                                              missing, ITEM_QUALITY_STANDARD, UINT16_MAX);
+            const ItemDef *def = item_def((ItemType)made.type);
+            if (def != NULL && def->wooden) { /* Of the species delivered, or chosen. */
+                made.woods = site->delivered[slot].count > 0 ? site->delivered[slot].woods
+                                                             : site->wood_choice;
+            }
             if (items != NULL) {
                 construction_deliver_load(constructions, items, index, &made);
                 items_use_up(items, &made, made.count); /* (Nothing left: no more missing.) */
@@ -798,7 +848,7 @@ int constructions_wear_day(Constructions *constructions, Map *map, Items *items)
                     continue;
                 }
                 map_set_structure_hit_points(map, x, y, z, hit_points);
-                int max = structure_max_hit_points(type, map_structure_quality(map, x, y, z));
+                int max = map_structure_max_hit_points(map, x, y, z);
                 if ((float)hit_points < (float)max * STRUCTURE_REFRESH_BELOW &&
                     site == CONSTRUCTION_NONE) {
                     constructions_place_refresh(constructions, map, x, y, z);

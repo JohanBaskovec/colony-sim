@@ -6,6 +6,7 @@
 #include "core/game.h"
 #include "core/gather_zone.h"
 #include "core/pathfinding.h"
+#include "core/wood.h"
 #include "core/worldgen.h"
 
 #include "test_framework.h"
@@ -1467,6 +1468,65 @@ static void test_litter_in_a_new_world(void)
     map_free(&map);
 }
 
+/* Logs and branches carry the species of their tree (docs/TREES.md §6):
+ * felled, shed in a running game, or lying in a new world's layers when the
+ * game starts (the crown over them). */
+static void test_wood_keeps_the_species(void)
+{
+    Map map;
+    Items items;
+    REQUIRE(init_world(&map, &items));
+    map.plants[map_index(&map, 10, 2, 0)] = (Plant){.type = PLANT_BEECH, .growth = GROWN};
+    tree_build(&map, 10, 2, 0);
+    TreeFall fall = tree_fell(&map, &items, 10, 2, 0, item_stack_pristine(ITEM_WOOD, 6));
+    REQUIRE(fall.length > 0);
+    int logs = 0, branches = 0;
+    for (int y = 0; y < SIZE; y++) {
+        for (int x = 0; x < SIZE; x++) {
+            ItemStack wood = items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_WOOD));
+            ItemStack branch = items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_BRANCHES));
+            CHECK(wood.count == 0 || wood.woods == wood_bit(PLANT_BEECH));
+            CHECK(branch.count == 0 || branch.woods == wood_bit(PLANT_BEECH));
+            logs += wood.count;
+            branches += branch.count;
+        }
+    }
+    CHECK_EQ_INT(logs, 6);
+    CHECK_EQ_INT(branches, tree_def(PLANT_BEECH)->crown_branches);
+
+    /* A new world's branches, under an ash, become ash branches. */
+    Map world;
+    Items litter;
+    REQUIRE(init_world(&world, &litter));
+    world.plants[map_index(&world, 6, 6, 0)] = (Plant){.type = PLANT_ASH, .growth = GROWN};
+    tree_build(&world, 6, 6, 0);
+    REQUIRE(map_add_litter(&world, 7, 6, 0, ITEM_BRANCHES));   /* Layers: no species. */
+    REQUIRE(map_add_litter(&world, 15, 15, 0, ITEM_BRANCHES)); /* Under no crown. */
+    map_litter_to_items(&world, &litter);
+    CHECK_EQ_INT(items_get(&litter, 7, 6, 0).woods, wood_bit(PLANT_ASH));
+    CHECK_EQ_INT(items_get(&litter, 15, 15, 0).type, ITEM_BRANCHES);
+    CHECK_EQ_INT(items_get(&litter, 15, 15, 0).woods, 0);
+    /* In a running game, what a tree sheds is of its species. */
+    for (uint32_t pick = 0; pick < 40; pick++) {
+        tree_shed(&world, 6, 6, 0, ITEM_BRANCHES, pick);
+    }
+    int shed = 0;
+    for (int y = 0; y < SIZE; y++) {
+        for (int x = 0; x < SIZE; x++) {
+            ItemStack branch = items_get_of(&litter, x, y, 0, ITEM_TYPE_BIT(ITEM_BRANCHES));
+            if (branch.count > 0 && (x != 15 || y != 15)) {
+                CHECK_EQ_INT(branch.woods, wood_bit(PLANT_ASH));
+                shed += branch.count;
+            }
+        }
+    }
+    CHECK(shed > 1);
+    items_free(&litter);
+    map_free(&world);
+    items_free(&items);
+    map_free(&map);
+}
+
 /* The litter of a felled tree's foliage falls to the ground (what does not
  * fit lies as items). */
 static void test_felling_drops_the_litter_of_the_foliage(void)
@@ -1636,6 +1696,7 @@ int main(void)
     RUN_TEST(test_shedding_by_age);
     RUN_TEST(test_litter_in_a_new_world);
     RUN_TEST(test_felling_drops_the_litter_of_the_foliage);
+    RUN_TEST(test_wood_keeps_the_species);
     RUN_TEST(test_gathering_on_trees);
     RUN_TEST(test_hauler_climbs_for_nuts_on_the_foliage);
     RUN_TEST(test_trees_shed_in_the_game);

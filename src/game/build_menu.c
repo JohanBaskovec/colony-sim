@@ -1,6 +1,7 @@
 #include "game/build_menu.h"
 
 #include "core/i18n.h"
+#include "game/hud.h"
 #include "game/layout.h"
 #include "game/render.h"
 
@@ -164,6 +165,10 @@ static void structure_card(App *app, StructureType type, Card *card)
                       "menu.card.knowledge.none", false);
     }
     card_add_text(card, CARD_TEXT, tr(def->description_key));
+    if (structure_wooden_material(type) != ITEM_NONE) {
+        hud_wood_text(card_add(card, CARD_DIM), TEXT_SIZE, app->structure_woods[type]);
+        card_add_text(card, CARD_DIM, tr("wood.choose"));
+    }
     if (structure_is_roof(type)) {
         char range[16];
         tr_integer(range, sizeof(range), ROOF_SUPPORT_RANGE);
@@ -423,6 +428,30 @@ static void draw_categories(App *app, const ScreenLayout *layout)
     }
 }
 
+/* Tells the lists of species apart (ui_popup_list()), + the structure type. */
+#define WOOD_POPUP_ID 0x3D0D00
+
+/* The species a structure is planned of: the list opened by a right click on
+ * its icon (docs/TREES.md §6.4); picking one also takes up the tool. */
+static void wood_popup(App *app, int type, SDL_FRect rect, bool clicked)
+{
+    ItemType wooden = structure_wooden_material((StructureType)type);
+    if (wooden == ITEM_NONE) {
+        return;
+    }
+    HudWoodChoices choices; /* Counted only when the list opens. */
+    hud_wood_choices(clicked ? &app->game.items : NULL, wooden, app->structure_woods[type],
+                     &choices);
+    int picked = ui_popup_list(&app->ui, WOOD_POPUP_ID + type, rect, clicked, true, choices.options,
+                               choices.count, choices.selected);
+    if (picked >= 0 && picked < choices.count) {
+        app->structure_woods[type] = choices.values[picked];
+        if (!app_tool_active(app, APP_TOOL_STRUCTURE, type)) {
+            app_toggle_tool(app, APP_TOOL_STRUCTURE, type);
+        }
+    }
+}
+
 /* The icons of the open category, right of the column, along the bar. */
 static void draw_icons(App *app, const ScreenLayout *layout)
 {
@@ -441,8 +470,13 @@ static void draw_icons(App *app, const ScreenLayout *layout)
     for (int i = 0; i < count; i++) {
         const MenuEntry *entry = &entries[i];
         SDL_FRect rect = {row.x + gap + (float)i * (icon + gap), row.y + gap, icon, icon};
-        if (ui_icon_button(ui, rect, app_tool_active(app, entry->tool, entry->type))) {
+        bool active = app_tool_active(app, entry->tool, entry->type);
+        int clicked = ui_icon_button_click(ui, rect, active);
+        if (clicked == SDL_BUTTON_LEFT) {
             app_toggle_tool(app, entry->tool, entry->type);
+        }
+        if (entry->tool == APP_TOOL_STRUCTURE) {
+            wood_popup(app, entry->type, rect, clicked == SDL_BUTTON_RIGHT);
         }
         entry_icon(app, entry,
                    (SDL_FRect){rect.x + inset, rect.y + inset, rect.w - 2.0f * inset,

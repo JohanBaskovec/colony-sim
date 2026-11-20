@@ -386,10 +386,13 @@ typedef struct App {
     bool pan_blocked;
 
     AppTool tool;
-    DesignationType tool_type;     /* For APP_TOOL_DESIGNATE. */
-    int zone_mode;                 /* For the zone tools: APP_ZONE_ADD... */
-    WorkstationType build_type;    /* For APP_TOOL_BUILD. */
-    StructureType structure_type;  /* For APP_TOOL_STRUCTURE. */
+    DesignationType tool_type;    /* For APP_TOOL_DESIGNATE. */
+    int zone_mode;                /* For the zone tools: APP_ZONE_ADD... */
+    WorkstationType build_type;   /* For APP_TOOL_BUILD. */
+    StructureType structure_type; /* For APP_TOOL_STRUCTURE. */
+    /* The species each type is planned of (right click on its icon in the
+     * build menu; 0: any wood). */
+    WoodMask structure_woods[STRUCTURE_TYPE_COUNT];
     Direction structure_direction; /* For APP_TOOL_STRUCTURE: where a bed's foot goes. */
     ItemType debug_item;           /* For APP_TOOL_DEBUG: what is spawned. */
     bool debug_item_max;           /* ... a full stack of it, else one item. */

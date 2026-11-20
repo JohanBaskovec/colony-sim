@@ -172,22 +172,32 @@ Moderate effects, from the woods' known character:
 | Wild pear | ×1.05 | ×1.05 | +0 | ×1.0 | ×1.10 | hard, fine-grained |
 | Hazel | ×0.85 | ×1.15 | +8 | ×1.0 | ×0.90 | straight supple rods: spears, sticks |
 
-- **Weight**: of the item (logs, branches and what is made from them), so of
-  loads and of a weapon's swing.
-- **Toughness**: the maximum hit points of tools, weapons and structures.
-- **Shafts**: quality points added to spears and digging sticks (still
-  within `ITEM_QUALITY_CAP_BONUS` of the materials).
-- **Weathering**: how fast a structure wears out of doors.
-- **Fuel**: how long a log or a branch burns on a fire.
+- **Weight**: of the item (logs, branches and what is made from them,
+  `item_stack_mass()`), so of loads. How many a settler carries stays per
+  type, and weapons have no weight in the swing yet (§10).
+- **Toughness**: how long a wooden tool lasts (`tool_wear_ticks()`: the
+  ticks of use per hit point lost, × the toughness; weapons do not wear in
+  combat yet) and the maximum hit points of a wooden structure
+  (`structure_wood_max_hit_points()`).
+- **Shafts**: quality points added to spears and digging sticks when made
+  (not when hardened), still within the recipe's cap
+  (`ITEM_QUALITY_CAP_BONUS` over the materials).
+- **Weathering**: how fast a structure wears out of doors. Recorded only:
+  wooden structures do not wear by themselves yet (only beds pack down,
+  §10).
+- **Fuel**: how long a log or a branch burns on a fire
+  (`hearth_stack_fuel_value()`).
 
 An item of several species takes the mean of their values (the shares of
-each are not kept: a bit per species).
+each are not kept: a bit per species). The values live in `core/wood.h`
+(`WoodDef`, `wood_weight()`...).
 
 ### 6.3 Names
 
-The species is in the name: *Oak branches*, *Beech log*, *Ash thrusting
-spear*; in French *Branches de chêne*, *Bûche de hêtre*, *Épieu en frêne*.
-Each type that carries a species has a pattern key (`item.branches.wood`:
+The species is in the name: *Oak branches*, *Beech wood*, *Ash thrusting
+spear*; in French *Branches de chêne*, *Bois de hêtre*, *Épieu en frêne*
+(`wood_item_name()`, `hud_item_name()` in the frontend).
+Each type that carries a species has a pattern key (`item.branches.of_wood`:
 "{0} branches", "Branches de {0}"), and each species a translated noun
 (`wood.oak`: "oak", "chêne"); several species are listed with a list key
 (`wood.list.two`: "{0} and {1}", "{0} et {1}"): *Épieu en frêne et chêne*.
@@ -197,19 +207,32 @@ with a vowel (maple, alder) would need a form of their own (§10).
 ### 6.4 Constructions
 
 A structure keeps the species of its wood: the delivered materials of its
-site keep their `woods`, and the built structure records them (a
-`uint16_t` per tile, like its quality and hit points). Its toughness gives
-its hit points, its weathering its wear. Its panel shows them
-(*Wood: oak, ash*); structures all of wood are named by it (*Oak prop*,
-*Échelle en frêne*).
+site keep their `woods`, and the built structure records them on its head
+(`Map.structure_woods`, `Map.roof_woods` for roofs: a `uint16_t` per tile,
+like its quality and hit points; copied into the known map, hashed only
+where set). Its toughness gives its hit points
+(`map_structure_max_hit_points()`). Its panel and tooltip show them
+(*Wood: oak and ash*); names stay those of the type for now (§10).
 
-**Choosing the species.** A right click on a structure's card in the build
+A load of another species than what a site holds goes in all the same: the
+items brought and the items already there all take both species (a
+delivered slot is a single load, of a single group), and so does the
+structure. Nobody is left holding wood a site will not take. A site
+finished at once (debug) is of the species chosen.
+
+**Choosing the species.** A right click on a structure's icon in the build
 menu opens a list (`ui_popup_list()`): *Any wood* (the default), then each
-species, with how many branches of it the colony knows of. The choice goes
-with the blueprints placed after it. A blueprint's panel has the same
-choice, until its wood is delivered. Haulers then bring only branches of the
-chosen species (`ConstructionSite.wood_choice`, a mask, 0 for any). Bills
-get the same choice for their wooden ingredients.
+species, with how many branches of it lie about (not forbidden,
+`wood_count_lying()`). The choice is kept per structure type
+(`App.structure_woods`) and goes with the blueprints placed after it
+(`game_place_structure_rect_wood()`); the card shows it. A blueprint's
+panel has the same choice (an action button showing a branch) and shows
+the species brought so far. Haulers then bring only branches of the chosen
+species (`ConstructionSite.wood_choice`, a mask, 0 for any), from under
+other species on the same tile too. Bills get the same choice for their
+wooden ingredients (`Bill.woods`, through `ItemChoice.woods`), a dropdown
+in the bill's details. Workstation sites do not record their species yet
+(§10).
 
 ## 7. Foliage that holds items
 
@@ -280,9 +303,10 @@ Each step is a commit of its own, with its tests and docs.
    (and eaten there by boars and deer), sapling sprites, bark and leaf
    colours by species, turning as the leaves fall. A hazel is felled like
    the other trees (it used to stand through the felling).
-3. **The wood species on items** (§6): `woods` on items and stacks, names,
-   effects, inherited by recipes, kept by structures, chosen by right click
-   in the build menu, the blueprint's panel and bills.
+3. **The wood species on items** (§6, done): `woods` on items and stacks,
+   names, effects, inherited by recipes, kept by structures and roofs (with
+   their hit points), chosen by right click in the build menu, the
+   blueprint's panel and bills.
 4. **Foliage holding items** (§7): attached items, fruit and dead wood in
    the crowns, their falls, picking from the ground and by climbing, the
    one-by-one list of a block.
@@ -293,7 +317,14 @@ Each step is a commit of its own, with its tests and docs.
   acorns eaten by settlers after leaching.
 - Beating a tree with a long pole to bring nuts and chestnuts down.
 - Falling from a tree (a climber may slip: a fall of one or more levels).
-- Stockpile, bill and felling filters by species (*fell only the birches*).
+- Stockpile and felling filters by species (*fell only the birches*).
+- Wooden structures weathering out of doors (the species' weathering is
+  recorded, §6.2), weapons whose weight changes the swing, wear of weapons
+  in combat.
+- Structures and roofs named by their species (*Oak prop*, *Échelle en
+  frêne*); workstations keeping the species of their site.
+- The counts of the species lists from what the colony has seen (they count
+  every branch lying about for now, fog or not).
 - Bark and bast: birch bark as tinder that lights even wet, lime bast for
   cords.
 - More species (lime, willow, alder, elm, pine, yew for bows), with the

@@ -1,6 +1,7 @@
 #include "core/hearth.h"
 
 #include "core/util.h"
+#include "core/wood.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -22,6 +23,13 @@ float hearth_fuel_value(ItemType type)
     }
     /* What dries burns as it would dry: the water in it gives no heat. */
     return def->transforms_into != ITEM_NONE ? item_def(def->transforms_into)->weight : def->weight;
+}
+
+float hearth_stack_fuel_value(ItemStack stack)
+{
+    float value = hearth_fuel_value((ItemType)stack.type);
+    return value > 0.0f && item_def((ItemType)stack.type)->wooden ? value * wood_fuel(stack.woods)
+                                                                  : value;
 }
 
 float hearth_fuel_wanted(const Workstation *station)
@@ -48,7 +56,7 @@ int hearth_fuel_items_wanted(const Workstation *station, ItemType type)
 int hearth_add_fuel(Workstations *workstations, int index, ItemStack stack)
 {
     Workstation *station = workstation_get(workstations, index);
-    float value = hearth_fuel_value((ItemType)stack.type);
+    float value = hearth_stack_fuel_value(stack);
     if (!hearth_is(station) || value <= 0.0f || stack.count == 0) {
         return 0;
     }

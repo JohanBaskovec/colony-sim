@@ -59,6 +59,7 @@ add_library(colony_core STATIC
     stockpile.c
     tool.c
     weapon.c
+    wood.c
     structure.c
     sun.c
     util.c

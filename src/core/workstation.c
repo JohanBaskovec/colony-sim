@@ -333,6 +333,17 @@ bool workstation_set_bill_max_level(Workstations *workstations, int index, int b
     return true;
 }
 
+bool workstation_set_bill_woods(Workstations *workstations, int index, int bill, WoodMask woods)
+{
+    Bill *entry = get_bill(workstations, index, bill);
+    if (entry == NULL) {
+        return false;
+    }
+    entry->woods = woods;
+    workstations->revision++;
+    return true;
+}
+
 bool workstation_set_bill_quality_range(Workstations *workstations, int index, int bill, int low,
                                         int high)
 {
@@ -552,6 +563,9 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
             if (bill->min_quality != ITEM_QUALITY_WORST || bill->max_quality != ITEM_QUALITY_BEST) {
                 uint8_t range[2] = {bill->min_quality, bill->max_quality};
                 hash = hash_fnv1a64(hash, range, sizeof(range));
+            }
+            if (bill->woods != 0) {
+                hash = hash_fnv1a64(hash, &bill->woods, sizeof(bill->woods));
             }
             if (bill->worker != BILL_WORKER_ANYONE) {
                 uint32_t worker[3] = {bill->worker, bill->colonist.index,

@@ -20,6 +20,7 @@
 #define QUALITY_STEP 5         /* Quality points per notch of the ingredient slider. */
 #define DROPDOWN_ID 100        /* + 2 per bill, + 1 for the settler's. */
 #define RADIUS_SLIDER_ID 7000  /* + the bill. */
+#define WOOD_DROPDOWN_ID 8000  /* + the bill. */
 
 /* What the player clicked, applied after the rows (deleting shifts bills). */
 typedef enum ActionType {
@@ -33,6 +34,7 @@ typedef enum ActionType {
     ACTION_SET_COLONIST,
     ACTION_SET_LEVELS,
     ACTION_SET_QUALITY,
+    ACTION_SET_WOODS,
     ACTION_TOGGLE_PAUSE,
     ACTION_SET_RADIUS,
     ACTION_ADD_BILL,
@@ -48,8 +50,10 @@ typedef enum ActionType {
 typedef struct Action {
     ActionType type;
     int bill;
-    int value;  /* Target, level or radius change, item type, recipe, knowledge, worker mode. */
-    int value2; /* ACTION_SET_LEVELS/QUALITY: the highest (value is the lowest). */
+    /* Target, level or radius change, item type, recipe, knowledge, worker
+     * mode, species of wood. */
+    int value;
+    int value2;        /* ACTION_SET_LEVELS/QUALITY: the highest (value is the lowest). */
     EntityId colonist; /* ACTION_SET_COLONIST. */
 } Action;
 
@@ -553,6 +557,47 @@ static void bill_quality_row(UiLayout *layout, const Bill *bill, int index, Acti
     layout->y += layout->row;
 }
 
+/* The first wooden ingredient of a recipe (ITEM_NONE: none). */
+static ItemType wooden_input(const RecipeDef *def)
+{
+    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
+        const ItemDef *input = item_def(def->inputs[i]);
+        if (def->inputs[i] != ITEM_NONE && input != NULL && input->wooden) {
+            return def->inputs[i];
+        }
+    }
+    return ITEM_NONE;
+}
+
+/* The species the wooden ingredients of a bill may be of (docs/TREES.md
+ * §6.4). */
+static void bill_wood_row(UiLayout *layout, const Game *game, const Bill *bill, int index,
+                          ItemType type, Action *action)
+{
+    Ui *ui = layout->ui;
+    ui_layout_label(layout, tr("bill.wood"), 0.0f, true);
+    HudWoodChoices choices;
+    hud_wood_choices(&game->items, type, bill->woods, &choices);
+    char several[TEXT_SIZE];
+    if (choices.selected < 0) { /* Several species: shown as they are. */
+        wood_list_name(bill->woods, several, sizeof(several));
+        choices.options[0] = several;
+        choices.selected = 0;
+    }
+    float width = ui_dropdown_width(ui, choices.options, choices.count);
+    ui_layout_measure(layout, width);
+    if (layout->draw) {
+        int picked = ui_dropdown(ui, WOOD_DROPDOWN_ID + index,
+                                 (SDL_FRect){layout->x, layout->y, width, layout->button_height},
+                                 choices.options, choices.count, choices.selected);
+        if (picked >= 0 && picked < choices.count) {
+            *action =
+                (Action){.type = ACTION_SET_WOODS, .bill = index, .value = choices.values[picked]};
+        }
+    }
+    layout->y += layout->row;
+}
+
 /* A slider for how far inputs are looked for, in the notches of a stockpile's; the tiles the
  * settlers reach within it are outlined on the map while the pointer is on it. */
 static void bill_radius_row(UiLayout *layout, App *app, const Workstation *station,
@@ -861,6 +906,10 @@ static void bill_rows(UiLayout *layout, void *userdata)
     bill_radius_row(layout, rows->app, rows->station, bill, index, &rows->action);
     if (def->inputs[0] != ITEM_NONE) {
         bill_quality_row(layout, bill, index, &rows->action);
+    }
+    ItemType wooden = wooden_input(def);
+    if (wooden != ITEM_NONE) {
+        bill_wood_row(layout, rows->game, bill, index, wooden, &rows->action);
     }
     if (def->inputs[1] != ITEM_NONE) {
         layout->y += GAP;
@@ -1299,6 +1348,11 @@ static void apply(App *app, int index, const Action *action)
         if (bill != NULL) {
             workstation_set_bill_quality_range(workstations, index, action->bill, action->value,
                                                action->value2);
+        }
+        break;
+    case ACTION_SET_WOODS:
+        if (bill != NULL) {
+            workstation_set_bill_woods(workstations, index, action->bill, (WoodMask)action->value);
         }
         break;
     case ACTION_TOGGLE_PAUSE:

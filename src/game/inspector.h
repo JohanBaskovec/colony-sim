@@ -113,6 +113,12 @@ void inspector_zone_edit_actions(App *app, int slot, AppTool tool, RenderIcon ex
  * True when it changes, with the new one in *changed. */
 bool inspector_priority_action(App *app, int slot, int priority, int *changed);
 
+/* The species of wood a site is to be built of (docs/TREES.md §6.4): its
+ * `type` of wood on the button; a click opens a list upward of "Any wood"
+ * and each species (with how many of `type` lie about). True when one is
+ * picked, its species in *picked. */
+bool inspector_wood_action(App *app, int slot, ItemType type, WoodMask current, WoodMask *picked);
+
 /* Delete what is selected: true when clicked. `shortcut`: the tooltip tells
  * that APP_KEY_CANCEL does the same (app_cancel_selection()). */
 bool inspector_delete_action(App *app, int slot, const char *description, bool shortcut);

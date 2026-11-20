@@ -2,6 +2,7 @@
 
 #include "core/i18n.h"
 #include "core/util.h"
+#include "core/wood.h"
 #include "core/workstation.h"
 
 #include <math.h>
@@ -268,13 +269,10 @@ static ItemStack product(ItemType type, int count, double level, Rng *rng, ItemQ
     return stack;
 }
 
-int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
-                 ItemStack out[RECIPE_PRODUCT_MAX])
+/* The products of recipe_craft(), before the wood species. */
+static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack input, double level,
+                          Rng *rng, ItemStack out[RECIPE_PRODUCT_MAX])
 {
-    const RecipeDef *def = recipe_def(recipe);
-    if (def == NULL) {
-        return 0;
-    }
     ItemQuality cap = recipe_quality_cap(recipe, input);
     switch (recipe) {
     case RECIPE_FLAKES:
@@ -317,4 +315,33 @@ int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
     }
     default: out[0] = product(def->product, 1, level, rng, cap); return 1;
     }
+}
+
+int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
+                 ItemStack out[RECIPE_PRODUCT_MAX])
+{
+    const RecipeDef *def = recipe_def(recipe);
+    if (def == NULL) {
+        return 0;
+    }
+    int count = craft_products(recipe, def, input, level, rng, out);
+    /* What is made of wood keeps every species of its material
+     * (docs/TREES.md §6); a new shaft is as good as its wood makes it, within
+     * the material's cap (hardening keeps the shaft's quality). */
+    bool hardening = recipe == RECIPE_HARDEN_THROWING_SPEAR ||
+                     recipe == RECIPE_HARDEN_THRUSTING_SPEAR ||
+                     recipe == RECIPE_HARDEN_DIGGING_STICK;
+    for (int i = 0; i < count; i++) {
+        if (!item_def((ItemType)out[i].type)->wooden) {
+            continue;
+        }
+        out[i].woods = item_def((ItemType)input.type)->wooden ? input.woods : 0;
+        if (!hardening && out[i].count > 0) {
+            int quality = out[i].quality + wood_shafts(out[i].woods);
+            int cap = recipe_quality_cap(recipe, input);
+            out[i].quality = (uint8_t)clampi(quality, ITEM_QUALITY_WORST,
+                                             quality > out[i].quality ? cap : ITEM_QUALITY_BEST);
+        }
+    }
+    return count;
 }

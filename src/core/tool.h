@@ -66,6 +66,10 @@ int tool_best(const ItemStack *tools, int count, ToolUse use, ItemTypeMask allow
 /* The best speed factor any tool can give for a use (best type, best quality). */
 float tool_best_possible_factor(ToolUse use);
 
+/* Ticks of work for a tool to lose a hit point: TOOL_WEAR_TICKS, longer for
+ * one of a tough wood (core/wood.h: wood_toughness()). */
+int tool_wear_ticks(ItemStack tool);
+
 /* Takes one hit point from a tool; returns true when it breaks (the stack is
  * then emptied). Items that cannot be damaged never wear. */
 bool tool_wear(ItemStack *tool);

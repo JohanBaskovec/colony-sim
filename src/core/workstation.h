@@ -125,6 +125,8 @@ typedef struct Bill {
      * (each item's own: docs/ITEMS.md); ITEM_QUALITY_WORST..BEST: any. */
     uint8_t min_quality;
     uint8_t max_quality;
+    /* Wooden ingredients only of these species (docs/TREES.md §6.4); 0: any. */
+    WoodMask woods;
 } Bill;
 
 #define WORKSTATION_MAX 64
@@ -257,6 +259,9 @@ bool workstation_set_bill_input_radius(Workstations *workstations, int index, in
  * ITEM_QUALITY_WORST..ITEM_QUALITY_BEST, swapped when crossed. */
 bool workstation_set_bill_quality_range(Workstations *workstations, int index, int bill, int low,
                                         int high);
+
+/* Sets the species a bill's wooden ingredients may be of (0: any). */
+bool workstation_set_bill_woods(Workstations *workstations, int index, int bill, WoodMask woods);
 
 /* Whether the settler `who`, at `level` in the recipe's knowledge, may take
  * the bill as far as the player's choice of workers goes (the level only

@@ -296,6 +296,30 @@ void inspector_change_weapon_action(App *app, int slot)
     render_tool_icon(app->renderer, icon, RENDER_ICON_CHANGE_WEAPON);
 }
 
+/* Tells the list of species apart (ui_popup_list()). */
+#define WOOD_POPUP_ID 0x3D0E00
+
+bool inspector_wood_action(App *app, int slot, ItemType type, WoodMask current, WoodMask *picked)
+{
+    char title[HUD_WOOD_TEXT_SIZE];
+    hud_wood_text(title, sizeof(title), current);
+    const char *lines[2] = {title, tr("wood.choose.description")};
+    SDL_FRect button, icon;
+    bool open = ui_popup_open(&app->ui, WOOD_POPUP_ID);
+    int clicked = action_click(app, slot, open, &button, &icon, lines, open ? 0 : 2);
+    HudWoodChoices choices; /* Counted only when the list opens. */
+    hud_wood_choices(clicked != 0 ? &app->game.items : NULL, type, current, &choices);
+    /* Upward: the button is at the bottom of the screen. */
+    int chosen = ui_popup_list(&app->ui, WOOD_POPUP_ID, button, clicked != 0, true, choices.options,
+                               choices.count, choices.selected);
+    render_item_icon(app->renderer, app->sprites, icon, type);
+    if (chosen >= 0 && chosen < choices.count) {
+        *picked = choices.values[chosen];
+        return *picked != current;
+    }
+    return false;
+}
+
 void inspector_follow_action(App *app, int slot, FollowKind kind, EntityId id)
 {
     bool lit = app_is_following(app, kind, id);

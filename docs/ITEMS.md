@@ -61,8 +61,10 @@ lets items overlap (a heap).
 - **`Item`** (about 32 bytes): type, quality, hit points, progress (drying
   or rot), eaten, corpse; where it is (`ItemPlace`: on the ground, carried,
   a tool, delivered to a site, on a workstation, a hearth's fuel...) with its
-  tile or its holder; spot and angle; flags (forbidden); the link to the next
-  item of the same place.
+  tile or its holder; spot and angle; flags (forbidden); the species of its
+  wood (`Item.woods`, docs/TREES.md §6: like the forbidden flag and the
+  corpse, it keeps groups apart); the link to the next item of the same
+  place.
 - **The item pool**: a fixed array grown on demand, items named by
   generational ids (like settlers: an id of an item gone is told apart), a
   free list. About 1 MB for 35 000 items.

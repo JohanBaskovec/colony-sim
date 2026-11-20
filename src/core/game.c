@@ -4135,14 +4135,18 @@ typedef struct StructurePlacing {
     Game *game;
     StructureType type;
     Direction direction;
+    WoodMask woods;
     int placed;
 } StructurePlacing;
 
 static void place_planned(int x, int y, int z, bool allowed, void *userdata)
 {
     StructurePlacing *placing = userdata;
-    if (allowed && game_place_structure(placing->game, placing->type, x, y, z,
-                                        placing->direction) != CONSTRUCTION_NONE) {
+    int index =
+        allowed ? game_place_structure(placing->game, placing->type, x, y, z, placing->direction)
+                : CONSTRUCTION_NONE;
+    if (index != CONSTRUCTION_NONE) {
+        construction_set_wood_choice(&placing->game->constructions, index, placing->woods);
         placing->placed++;
     }
 }
@@ -4150,7 +4154,13 @@ static void place_planned(int x, int y, int z, bool allowed, void *userdata)
 int game_place_structure_rect(Game *game, StructureType type, Direction direction, int x0, int y0,
                               int x1, int y1, int z)
 {
-    StructurePlacing placing = {game, type, direction, 0};
+    return game_place_structure_rect_wood(game, type, direction, x0, y0, x1, y1, z, 0);
+}
+
+int game_place_structure_rect_wood(Game *game, StructureType type, Direction direction, int x0,
+                                   int y0, int x1, int y1, int z, WoodMask woods)
+{
+    StructurePlacing placing = {game, type, direction, woods, 0};
     game_plan_structure_rect(game, type, direction, x0, y0, x1, y1, z, place_planned, &placing);
     return placing.placed;
 }

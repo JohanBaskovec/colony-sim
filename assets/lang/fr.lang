@@ -258,6 +258,34 @@ item.throwing_spear_hardened = Lance de jet durcie au feu
 item.thrusting_spear_hardened = Épieu durci au feu
 item.digging_stick = Bâton à fouir
 item.digging_stick_hardened = Bâton à fouir durci au feu
+
+# Wood species (docs/TREES.md §6): the name of each as a material, and of the
+# items made of it ({0}: the species, or a list of them).
+wood.oak = chêne
+wood.beech = hêtre
+wood.chestnut = châtaignier
+wood.ash = frêne
+wood.birch = bouleau
+wood.wild_apple = pommier
+wood.wild_pear = poirier
+wood.hazel = noisetier
+wood.list.two = {0} et {1}
+wood.list.more = {0}, {1}
+wood.any = N’importe quel bois
+wood.any_short = n’importe lequel
+wood.choice = {0} ({1})
+wood.material = Bois : {0}
+wood.choose = Clic droit : choisir le bois
+wood.choose.description = L’essence de bois que les porteurs apportent pour l’ouvrage : chacune résiste différemment (le frêne et le noisetier le mieux, le bouleau et le châtaignier le moins)
+bill.wood = Bois des ingrédients
+item.wood.of_wood = Bois de {0}
+item.branches.of_wood = Branches de {0}
+item.throwing_spear.of_wood = Lance de jet en {0}
+item.thrusting_spear.of_wood = Épieu en {0}
+item.throwing_spear_hardened.of_wood = Lance de jet en {0} durcie au feu
+item.thrusting_spear_hardened.of_wood = Épieu en {0} durci au feu
+item.digging_stick.of_wood = Bâton à fouir en {0}
+item.digging_stick_hardened.of_wood = Bâton à fouir en {0} durci au feu
 item.roasted_rhizomes = Rhizomes rôtis
 item.roasted_carrots = Carottes sauvages rôties
 item.wood_sorrel = Feuilles d’oxalis

@@ -482,10 +482,14 @@ typedef struct Map {
     uint8_t *structure_part;
     uint8_t *structure_quality;
     uint16_t *structure_hit_points;
+    /* The species of the wood a structure was built of (WoodMask, on its
+     * head, docs/TREES.md §6.4), 0 when of no known species. */
+    uint16_t *structure_woods;
     int structure_counts[STRUCTURE_TYPE_COUNT]; /* Tiles holding each type. */
     /* The quality of each built roof (a terrain, see map_roof()), 0 elsewhere. */
     uint8_t *roof_quality;
-    int roof_count; /* Built roof tiles. */
+    uint16_t *roof_woods; /* Likewise, the species of each built roof. */
+    int roof_count;       /* Built roof tiles. */
     /* What each door does (MAP_DOOR_* bits, 0 elsewhere): kept open by the
      * player, somebody in the doorway. See map_door_open_at(). */
     uint8_t *doors;
@@ -829,6 +833,10 @@ void map_topology_changed(Map *map);
  * when a tile is out of bounds. */
 bool map_place_structure(Map *map, int x, int y, int z, StructureType type, Direction direction,
                          ItemQuality quality);
+/* map_place_structure() of wood of the species `woods` (Map.structure_woods):
+ * its hit points are × their toughness (structure_wood_max_hit_points()). */
+bool map_place_structure_wood(Map *map, int x, int y, int z, StructureType type,
+                              Direction direction, ItemQuality quality, WoodMask woods);
 
 /* map_place_structure() of standard quality, facing south; STRUCTURE_NONE
  * removes the structure covering the tile (map_remove_structure()). */
@@ -851,6 +859,10 @@ Direction map_structure_direction(const Map *map, int x, int y, int z);
  * without one or out of bounds). */
 ItemQuality map_structure_quality(const Map *map, int x, int y, int z);
 int map_structure_hit_points(const Map *map, int x, int y, int z);
+/* The species of its wood (0 without a structure or of no known species) and
+ * the hit points it has in perfect condition. */
+WoodMask map_structure_woods(const Map *map, int x, int y, int z);
+int map_structure_max_hit_points(const Map *map, int x, int y, int z);
 
 /* Sets the hit points of the structure covering a tile, clamped to 1..its
  * maximum (nothing without a structure). */
@@ -864,12 +876,16 @@ StructureType map_structure(const Map *map, int x, int y, int z);
  * level above its walls: it covers the tiles under it (map_roof_over()). */
 StructureType map_roof(const Map *map, int x, int y, int z);
 ItemQuality map_roof_quality(const Map *map, int x, int y, int z);
+WoodMask map_roof_woods(const Map *map, int x, int y, int z); /* Its species (Map.roof_woods). */
 
 /* Builds a roof (a type for which structure_is_roof()) of a quality as the
  * floor of an open tile, or removes the roof of a tile (STRUCTURE_NONE: the
  * tile is open again). Other types, tiles with something else on them and
  * out-of-bounds tiles are ignored. */
 void map_set_roof(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality);
+/* map_set_roof() of wood of the species `woods`. */
+void map_set_roof_wood(Map *map, int x, int y, int z, StructureType roof, ItemQuality quality,
+                       WoodMask woods);
 
 /* Whether a roof on the tile would rest on something: a wall (a structure
  * that blocks movement: walls, props) or rock within ROOF_SUPPORT_RANGE
@@ -1097,6 +1113,11 @@ int map_litter(const Map *map, int x, int y, int z, ItemType type);
  * bounds or for another type. Does not look at what the tile is (see
  * tree_shed()). */
 bool map_add_litter(Map *map, int x, int y, int z, ItemType type);
+
+/* The same, the item of wood of the species `woods` (core/wood.h) in a
+ * running game (a new world's layers keep no species: map_litter_to_items()
+ * gives branches the species of the crown over them). */
+bool map_add_litter_wood(Map *map, int x, int y, int z, ItemType type, WoodMask woods);
 
 /* Takes all the branches, twigs or nuts of a tile; returns how many were there. */
 int map_take_litter(Map *map, int x, int y, int z, ItemType type);

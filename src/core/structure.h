@@ -141,6 +141,15 @@ int structure_length(StructureType type);
  * 0 for STRUCTURE_NONE. */
 int structure_max_hit_points(StructureType type, ItemQuality quality);
 
+/* The first wooden material of a type (ItemDef.wooden: branches), whose
+ * species the player may choose (docs/TREES.md §6.4); ITEM_NONE when it
+ * takes none. */
+ItemType structure_wooden_material(StructureType type);
+
+/* structure_max_hit_points() of a structure built of wood of the species
+ * `woods` (ItemStack.woods): × their toughness (core/wood.h; ×1 for 0). */
+int structure_wood_max_hit_points(StructureType type, ItemQuality quality, WoodMask woods);
+
 /* Best quality a structure can have with materials of these qualities: their
  * average + ITEM_QUALITY_CAP_BONUS points, among the materials that have a quality (grass and twigs
  * do not cap). `delivered` holds one stack per material slot. */

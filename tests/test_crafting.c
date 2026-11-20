@@ -1,5 +1,7 @@
 /* Building workstations, carried tools and crafting through bills (colonists in a game). */
 #include "core/game.h"
+#include "core/util.h"
+#include "core/wood.h"
 
 #include "test_framework.h"
 #include "test_settlers.h"
@@ -580,6 +582,46 @@ static void test_spears_need_a_cutting_tool_and_straight_branches(void)
     game_shutdown(&game);
 }
 
+/* docs/TREES.md §6.4: a bill may want its wooden ingredients of some species
+ * only; what is made of them keeps the species. */
+static void test_bills_choose_the_wood(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_THROWING_SPEAR);
+    REQUIRE(bill >= 0);
+    const Bill *entry = &workstation_get_const(&game.workstations, index)->bills[bill];
+    CHECK_EQ_INT(entry->woods, 0);
+    uint64_t before = workstations_hash(&game.workstations, HASH_FNV1A64_INIT);
+    CHECK(workstation_set_bill_woods(&game.workstations, index, bill, wood_bit(PLANT_ASH)));
+    CHECK_EQ_INT(entry->woods, wood_bit(PLANT_ASH));
+    CHECK(workstations_hash(&game.workstations, HASH_FNV1A64_INIT) != before);
+    CHECK(!workstation_set_bill_woods(&game.workstations, index, 9, 0));
+    ItemStack oak = item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_STANDARD, 20);
+    oak.woods = wood_bit(PLANT_OAK);
+    ItemStack ash = oak;
+    ash.woods = wood_bit(PLANT_ASH);
+    items_add(&game.items, 16, 10, 0, oak); /* Nearest, not wanted. */
+    items_add(&game.items, 24, 10, 0, ash);
+    items_add(&game.items, 16, 12, 0, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    run_ticks(&game, 7000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_THROWING_SPEAR], 1);
+    CHECK_EQ_INT(items_count_at(&game.items, 16, 10, 0, ITEM_BRANCHES), 1);
+    CHECK_EQ_INT(items_count_at(&game.items, 24, 10, 0, ITEM_BRANCHES), 0);
+    ItemStack spear = {.type = ITEM_NONE};
+    for (int y = 0; y < game.map.height && spear.type == ITEM_NONE; y++) {
+        for (int x = 0; x < game.map.width && spear.type == ITEM_NONE; x++) {
+            spear = items_get_of(&game.items, x, y, 0, ITEM_TYPE_BIT(ITEM_THROWING_SPEAR));
+        }
+    }
+    CHECK_EQ_INT(spear.type, ITEM_THROWING_SPEAR);
+    CHECK_EQ_INT(spear.woods, wood_bit(PLANT_ASH));
+    game_shutdown(&game);
+}
+
 static void test_removing_a_station_drops_its_input(void)
 {
     Game game;
@@ -1001,6 +1043,7 @@ int main(void)
     RUN_TEST(test_bill_until_in_storage);
     RUN_TEST(test_interrupted_craft_resumes);
     RUN_TEST(test_spears_need_a_cutting_tool_and_straight_branches);
+    RUN_TEST(test_bills_choose_the_wood);
     RUN_TEST(test_removing_a_station_drops_its_input);
     RUN_TEST(test_removing_a_colonist_drops_its_tools);
     RUN_TEST(test_missing_tools_and_inputs_are_reported);

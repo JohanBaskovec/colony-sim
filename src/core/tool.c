@@ -1,6 +1,7 @@
 #include "core/tool.h"
 
 #include "core/util.h"
+#include "core/wood.h"
 
 /* Speed factors by job and tool (docs/KNOWLEDGE.md §2.3). */
 static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
@@ -102,6 +103,13 @@ float tool_best_possible_factor(ToolUse use)
         best = factor > best ? factor : best;
     }
     return best;
+}
+
+int tool_wear_ticks(ItemStack tool)
+{
+    const ItemDef *def = item_def((ItemType)tool.type);
+    float toughness = def != NULL && def->wooden ? wood_toughness(tool.woods) : 1.0f;
+    return (int)((float)TOOL_WEAR_TICKS * toughness + 0.5f);
 }
 
 bool tool_wear(ItemStack *tool)

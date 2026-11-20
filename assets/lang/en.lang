@@ -261,6 +261,34 @@ item.throwing_spear_hardened = Fire-hardened throwing spear
 item.thrusting_spear_hardened = Fire-hardened thrusting spear
 item.digging_stick = Digging stick
 item.digging_stick_hardened = Fire-hardened digging stick
+
+# Wood species (docs/TREES.md §6): the name of each as a material, and of the
+# items made of it ({0}: the species, or a list of them).
+wood.oak = oak
+wood.beech = beech
+wood.chestnut = sweet chestnut
+wood.ash = ash
+wood.birch = birch
+wood.wild_apple = wild apple
+wood.wild_pear = wild pear
+wood.hazel = hazel
+wood.list.two = {0} and {1}
+wood.list.more = {0}, {1}
+wood.any = Any wood
+wood.any_short = any
+wood.choice = {0} ({1})
+wood.material = Wood: {0}
+wood.choose = Right click: choose the wood
+wood.choose.description = The species of wood the haulers bring for it: each lasts differently (ash and hazel the toughest, birch and sweet chestnut the least)
+bill.wood = Wood of the ingredients
+item.wood.of_wood = {0} wood
+item.branches.of_wood = {0} branches
+item.throwing_spear.of_wood = {0} throwing spear
+item.thrusting_spear.of_wood = {0} thrusting spear
+item.throwing_spear_hardened.of_wood = Fire-hardened {0} throwing spear
+item.thrusting_spear_hardened.of_wood = Fire-hardened {0} thrusting spear
+item.digging_stick.of_wood = {0} digging stick
+item.digging_stick_hardened.of_wood = Fire-hardened {0} digging stick
 item.roasted_rhizomes = Roasted rhizomes
 item.roasted_carrots = Roasted wild carrots
 item.wood_sorrel = Wood sorrel leaves

@@ -817,9 +817,9 @@ static void test_bill_ingredient_quality(void)
                  4);
     CHECK_EQ_INT(carrots_left(&game, 20, 12), 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_WILD_CARROTS], 8);
-    CHECK_EQ_INT(
-        items_count_chosen(&game.items, 16, 12, 0, ITEM_WILD_CARROTS, (ItemChoice){80, 100, false}),
-        4);
+    CHECK_EQ_INT(items_count_chosen(&game.items, 16, 12, 0, ITEM_WILD_CARROTS,
+                                    (ItemChoice){80, 100, false, 0}),
+                 4);
     game_shutdown(&game);
 }
 

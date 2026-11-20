@@ -4,6 +4,7 @@
 #include "core/i18n.h"
 #include "core/map.h"
 #include "core/util.h"
+#include "core/wood.h"
 
 #include <limits.h>
 #include <math.h>
@@ -66,7 +67,8 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_NONE] = {DEF("none", NULL, ITEM_CATEGORY_COUNT, 0.0f, 0.0f, 0.0f, 0, false, false)},
     [ITEM_WOOD] = {DEF("wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 7.0f, 20.0f, 0.0f, 60,
                        true, true),
-                   .length_cm = 70, .form = ITEM_FORM_RIGID},
+                   .length_cm = 70, .form = ITEM_FORM_RIGID, .wooden = true,
+                   .wood_name_key = N_("item.wood.of_wood")},
     [ITEM_STONE_BLOCK] = {DEF("stone_block", N_("item.stone_block"), ITEM_CATEGORY_RESOURCES, 20.0f,
                               20.0f, 0.0f, 150, false, false),
                           .length_cm = 40, .form = ITEM_FORM_RIGID},
@@ -79,7 +81,8 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                      .length_cm = 10, .form = ITEM_FORM_RIGID},
     [ITEM_BRANCHES] = {DEF("branches", N_("item.branches"), ITEM_CATEGORY_RESOURCES, 1.5f, 10.0f,
                            0.0f, 20, true, true),
-                       .length_cm = 150, .form = ITEM_FORM_RIGID},
+                       .length_cm = 150, .form = ITEM_FORM_RIGID, .wooden = true,
+                       .wood_name_key = N_("item.branches.of_wood")},
     [ITEM_TWIGS] = {DEF("twigs", N_("item.twigs"), ITEM_CATEGORY_RESOURCES, 0.2f, 2.0f, 0.0f, 10,
                         false, true),
                     .length_cm = 40, .form = ITEM_FORM_BUNDLE, .wets_into = ITEM_WET_TWIGS},
@@ -111,19 +114,22 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                        .length_cm = 15, .form = ITEM_FORM_RIGID},
     [ITEM_THROWING_SPEAR] = {DEF("throwing_spear", N_("item.throwing_spear"), ITEM_CATEGORY_WEAPONS,
                                  0.8f, 10.0f, 0.0f, 50, true, true),
-                             .length_cm = 180, .form = ITEM_FORM_RIGID},
+                             .length_cm = 180, .form = ITEM_FORM_RIGID, .wooden = true,
+                             .wood_name_key = N_("item.throwing_spear.of_wood")},
     [ITEM_THRUSTING_SPEAR] = {DEF("thrusting_spear", N_("item.thrusting_spear"),
                                   ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 70, true, true),
-                              .length_cm = 220, .form = ITEM_FORM_RIGID},
+                              .length_cm = 220, .form = ITEM_FORM_RIGID, .wooden = true,
+                              .wood_name_key = N_("item.thrusting_spear.of_wood")},
     [ITEM_THROWING_SPEAR_HARDENED] = {DEF("throwing_spear_hardened",
                                           N_("item.throwing_spear_hardened"), ITEM_CATEGORY_WEAPONS,
                                           0.8f, 10.0f, 0.0f, 75, true, true),
-                                      .length_cm = 180, .form = ITEM_FORM_RIGID},
-    [ITEM_THRUSTING_SPEAR_HARDENED] = {DEF("thrusting_spear_hardened",
-                                           N_("item.thrusting_spear_hardened"),
-                                           ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 105, true,
-                                           true),
-                                       .length_cm = 220, .form = ITEM_FORM_RIGID},
+                                      .length_cm = 180, .form = ITEM_FORM_RIGID, .wooden = true,
+                                      .wood_name_key = N_("item.throwing_spear_hardened.of_wood")},
+    [ITEM_THRUSTING_SPEAR_HARDENED] =
+        {DEF("thrusting_spear_hardened", N_("item.thrusting_spear_hardened"),
+             ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 105, true, true),
+         .length_cm = 220, .form = ITEM_FORM_RIGID, .wooden = true,
+         .wood_name_key = N_("item.thrusting_spear_hardened.of_wood")},
     [ITEM_HAZELNUTS] = {DEF("hazelnuts", N_("item.hazelnuts"), ITEM_CATEGORY_FOOD, 0.1f, 0.4f,
                             0.075f, 100, true, true),
                         .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 90.0f},
@@ -147,11 +153,13 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                                .length_cm = 30, .form = ITEM_FORM_RIGID, .rot_days = 15.0f},
     [ITEM_DIGGING_STICK] = {DEF("digging_stick", N_("item.digging_stick"), ITEM_CATEGORY_TOOLS,
                                 1.0f, 6.0f, 0.0f, 40, true, true),
-                            .length_cm = 100, .form = ITEM_FORM_RIGID},
+                            .length_cm = 100, .form = ITEM_FORM_RIGID, .wooden = true,
+                            .wood_name_key = N_("item.digging_stick.of_wood")},
     [ITEM_DIGGING_STICK_HARDENED] = {DEF("digging_stick_hardened",
                                          N_("item.digging_stick_hardened"), ITEM_CATEGORY_TOOLS,
                                          1.0f, 6.0f, 0.0f, 60, true, true),
-                                     .length_cm = 100, .form = ITEM_FORM_RIGID},
+                                     .length_cm = 100, .form = ITEM_FORM_RIGID, .wooden = true,
+                                     .wood_name_key = N_("item.digging_stick_hardened.of_wood")},
     [ITEM_ROASTED_RHIZOMES] = {DEF("roasted_rhizomes", N_("item.roasted_rhizomes"),
                                    ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.07f, 15, true, true),
                                .length_cm = 30, .form = ITEM_FORM_RIGID, .rot_days = 4.0f},
@@ -330,7 +338,8 @@ float item_stack_mass(ItemStack stack)
     if (def == NULL || stack.type == ITEM_NONE) {
         return 0.0f;
     }
-    float whole = def->weight * (float)stack.count;
+    float whole =
+        def->weight * (float)stack.count * (def->wooden ? wood_weight(stack.woods) : 1.0f);
     return whole * (1.0f - (float)stack.eaten / (float)ITEM_EATEN_FULL);
 }
 
@@ -404,7 +413,8 @@ float item_stack_eat(ItemStack *stack, float kg)
 
 bool item_stacks_match(ItemStack a, ItemStack b)
 {
-    return a.type == b.type && a.corpse == b.corpse && (a.forbidden != 0) == (b.forbidden != 0);
+    return a.type == b.type && a.corpse == b.corpse && a.woods == b.woods &&
+           (a.forbidden != 0) == (b.forbidden != 0);
 }
 
 int item_hit_points_at_percent(ItemType type, int percent)
@@ -587,11 +597,11 @@ static size_t level_of(const Items *items, size_t index)
 }
 
 /* Whether an item belongs to the same stack as the summary: same type, same
- * dead one, forbidden or not alike. */
+ * dead one, same wood species, forbidden or not alike. */
 static bool item_matches(const Item *item, const ItemStack *stack)
 {
     return item->type == stack->type && item->corpse == stack->corpse &&
-           (item->forbidden != 0) == (stack->forbidden != 0);
+           item->woods == stack->woods && (item->forbidden != 0) == (stack->forbidden != 0);
 }
 
 /* Counts an item lying on its tile in (sign 1) or out (sign -1) of the
@@ -623,6 +633,7 @@ static ItemStack group_of(const Items *items, size_t index, ItemStack key)
     }
     return (ItemStack){.type = key.type,
                        .corpse = key.corpse,
+                       .woods = key.woods,
                        .forbidden = key.forbidden != 0,
                        .count = (uint16_t)(count < UINT16_MAX ? count : UINT16_MAX),
                        .quality = (uint8_t)((quality + count / 2) / count),
@@ -634,8 +645,11 @@ static ItemStack group_of(const Items *items, size_t index, ItemStack key)
 /* An item as the key of its group. */
 static ItemStack key_of(const Item *item)
 {
-    return (ItemStack){
-        .type = item->type, .corpse = item->corpse, .forbidden = item->forbidden != 0, .count = 1};
+    return (ItemStack){.type = item->type,
+                       .corpse = item->corpse,
+                       .woods = item->woods,
+                       .forbidden = item->forbidden != 0,
+                       .count = 1};
 }
 
 /* What the items of the tile at `index` are forbidden as (Items.forbidden). */
@@ -1003,6 +1017,7 @@ static ItemStack valid_batch(ItemStack batch)
     valid.progress = progress;
     valid.eaten = (uint16_t)clampi(eaten, 0, ITEM_EATEN_FULL - 1);
     valid.corpse = corpse;
+    valid.woods = ITEM_DEFS[type].wooden ? batch.woods : 0;
     valid.forbidden = batch.forbidden != 0;
     return valid;
 }
@@ -1048,6 +1063,7 @@ static uint32_t new_item(Items *items, const ItemStack *batch, uint32_t tile)
                        .progress = batch->progress,
                        .eaten = batch->eaten,
                        .corpse = batch->corpse,
+                       .woods = batch->woods,
                        .forbidden = batch->forbidden,
                        .generation = item->generation,
                        .tile = tile};
@@ -1115,6 +1131,7 @@ static void refresh_load(const Items *items, ItemStack *load)
     }
     *load = (ItemStack){.type = head->type,
                         .corpse = head->corpse,
+                        .woods = head->woods,
                         .forbidden = head->forbidden != 0,
                         .count = (uint16_t)(count < UINT16_MAX ? count : UINT16_MAX),
                         .quality = (uint8_t)((quality + count / 2) / count),
@@ -1261,6 +1278,53 @@ void items_load_set_forbidden(Items *items, ItemStack *load, bool forbidden)
     refresh_load(items, load);
 }
 
+bool item_woods_allowed(ItemStack stack, WoodMask allowed)
+{
+    const ItemDef *def = item_def((ItemType)stack.type);
+    return allowed == 0 || def == NULL || !def->wooden ||
+           (stack.woods != 0 && (stack.woods & ~allowed) == 0);
+}
+
+/* The newest group of allowed items of `types` at `index` whose species are
+ * allowed. */
+static ItemStack newest_of_woods(const Items *items, size_t index, ItemTypeMask types,
+                                 WoodMask allowed)
+{
+    ItemStack newest = newest_of(items, index, types, true);
+    if (newest.type == ITEM_NONE || item_woods_allowed(newest, allowed) || !items->mixed[index]) {
+        return item_woods_allowed(newest, allowed) ? newest : (ItemStack){.type = ITEM_NONE};
+    }
+    for (const Item *item = slot_item(items, items->heads[index]); item != NULL;
+         item = slot_item(items, item->next)) {
+        if ((types & ITEM_TYPE_BIT(item->type)) && !item->forbidden &&
+            item_woods_allowed(item_as_stack(item), allowed)) {
+            return group_of(items, index, key_of(item));
+        }
+    }
+    return (ItemStack){.type = ITEM_NONE};
+}
+
+ItemStack items_get_allowed_of_woods(const Items *items, int x, int y, int z, ItemTypeMask types,
+                                     WoodMask allowed)
+{
+    if (!in_bounds(items, x, y, z)) {
+        return (ItemStack){.type = ITEM_NONE};
+    }
+    return newest_of_woods(items, index_of(items, x, y, z), types, allowed);
+}
+
+void items_load_set_woods(Items *items, ItemStack *load, WoodMask woods)
+{
+    if (load->count == 0 || load->type == ITEM_NONE || !ITEM_DEFS[load->type].wooden) {
+        return;
+    }
+    materialize(items, load);
+    for (uint32_t slot = load->held; slot != 0; slot = items->pool[slot - 1].next) {
+        items->pool[slot - 1].woods = woods;
+    }
+    refresh_load(items, load);
+}
+
 static bool chosen(const Item *item, const ItemStack *stack, ItemChoice choice)
 {
     return item_matches(item, stack) && item->quality >= choice.min_quality &&
@@ -1273,7 +1337,7 @@ int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, I
         return 0;
     }
     size_t index = index_of(items, x, y, z);
-    ItemStack stack = newest_of(items, index, ITEM_TYPE_BIT(type), true);
+    ItemStack stack = newest_of_woods(items, index, ITEM_TYPE_BIT(type), choice.woods);
     if (stack.type == ITEM_NONE) {
         return 0;
     }
@@ -1292,7 +1356,7 @@ float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemType 
         return -1.0f;
     }
     size_t index = index_of(items, x, y, z);
-    ItemStack stack = newest_of(items, index, ITEM_TYPE_BIT(type), true);
+    ItemStack stack = newest_of_woods(items, index, ITEM_TYPE_BIT(type), choice.woods);
     if (stack.type == ITEM_NONE) {
         return -1.0f;
     }
@@ -1337,16 +1401,18 @@ int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int c
                          ItemChoice choice, ItemStack *load)
 {
     if (choice.min_quality <= ITEM_QUALITY_WORST && choice.max_quality >= ITEM_QUALITY_BEST &&
-        !choice.soonest_rot) {
+        !choice.soonest_rot && choice.woods == 0) {
         return items_pick_up_of(items, x, y, z, ITEM_TYPE_BIT(type), count, load);
     }
     if (!in_bounds(items, x, y, z) || count <= 0) {
         return 0;
     }
     size_t index = index_of(items, x, y, z);
-    const ItemStack stack = load_held(load) ? matching_group(items, index, *load)
-                                            : newest_of(items, index, ITEM_TYPE_BIT(type), true);
-    if (stack.type != type || (load_held(load) && !item_stacks_match(*load, stack))) {
+    const ItemStack stack = load_held(load)
+                                ? matching_group(items, index, *load)
+                                : newest_of_woods(items, index, ITEM_TYPE_BIT(type), choice.woods);
+    if (stack.type != type || (load_held(load) && !item_stacks_match(*load, stack)) ||
+        !item_woods_allowed(stack, choice.woods)) {
         return 0;
     }
     materialize(items, load);
@@ -1713,6 +1779,7 @@ ItemStack item_as_stack(const Item *item)
                        .progress = item->progress,
                        .eaten = item->eaten,
                        .corpse = item->corpse,
+                       .woods = item->woods,
                        .forbidden = item->forbidden != 0};
 }
 
@@ -1771,11 +1838,18 @@ int items_list(const Items *items, size_t index, ItemOrder order, const Item **o
 
 int items_add_natural(Items *items, int x, int y, int z, ItemType type, int count)
 {
+    return items_add_natural_wood(items, x, y, z, type, count, 0);
+}
+
+int items_add_natural_wood(Items *items, int x, int y, int z, ItemType type, int count,
+                           WoodMask woods)
+{
     if (!in_bounds(items, x, y, z) || !is_item_type(type) || count <= 0) {
         return 0;
     }
+    woods = ITEM_DEFS[type].wooden ? woods : 0;
     size_t index = index_of(items, x, y, z);
-    ItemStack key = {.type = type, .count = 1};
+    ItemStack key = {.type = type, .count = 1, .woods = woods};
     int room = tile_room(items, index, &key);
     count = count < room ? count : room;
     int added = 0;
@@ -1786,6 +1860,7 @@ int items_add_natural(Items *items, int x, int y, int z, ItemType type, int coun
         int percent = 60 + (int)((h >> 16) % 41u);
         ItemStack batch =
             item_stack_make(type, 1, quality, item_hit_points_at_percent(type, percent));
+        batch.woods = woods;
         uint32_t slot = new_item(items, &batch, (uint32_t)index);
         if (slot == 0) {
             break;
@@ -1935,6 +2010,7 @@ static void transform(Items *items, Item *item, ItemType to)
     item->progress = 0;
     item->eaten = 0;
     item->corpse = 0;
+    item->woods = ITEM_DEFS[to].wooden ? item->woods : 0;
     items->totals[from]--;
     items->totals[to]++;
 }
@@ -2094,10 +2170,10 @@ ItemsCheck items_check(const Items *items)
                 head != NULL ? group_of(items, i, key_of(head)) : (ItemStack){.type = ITEM_NONE};
             const ItemStack *stack = &items->stacks[i];
             if (stack->type != expected.type || stack->count != expected.count ||
-                stack->corpse != expected.corpse || stack->forbidden != expected.forbidden ||
-                stack->quality != expected.quality || stack->hit_points != expected.hit_points ||
-                stack->progress != expected.progress || stack->eaten != expected.eaten ||
-                stack->held != 0) {
+                stack->corpse != expected.corpse || stack->woods != expected.woods ||
+                stack->forbidden != expected.forbidden || stack->quality != expected.quality ||
+                stack->hit_points != expected.hit_points || stack->progress != expected.progress ||
+                stack->eaten != expected.eaten || stack->held != 0) {
                 found(&check, "a tile's summary is not its newest group", (long)i);
             }
             bool mixed = false;
@@ -2162,7 +2238,7 @@ bool items_check_load(const Items *items, ItemStack load)
     for (const Item *item = slot_item(items, load.held); item != NULL;
          item = slot_item(items, item->next)) {
         if (++count > (long)items->pool_used || item->tile != ITEM_TILE_HELD ||
-            item->type != load.type || item->corpse != load.corpse ||
+            item->type != load.type || item->corpse != load.corpse || item->woods != load.woods ||
             (item->forbidden != 0) != (load.forbidden != 0)) {
             return false;
         }
@@ -2218,6 +2294,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
             if (item->forbidden) { /* Hashes without anything forbidden stay as they were. */
                 hash = hash_fnv1a64(hash, &item->forbidden, sizeof(item->forbidden));
             }
+            if (item->woods != 0) {
+                hash = hash_fnv1a64(hash, &item->woods, sizeof(item->woods));
+            }
         }
     }
     /* Items in loads, by slot. */
@@ -2235,6 +2314,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
         hash = hash_fnv1a64(hash, &item->corpse, sizeof(item->corpse));
         if (item->forbidden) {
             hash = hash_fnv1a64(hash, &item->forbidden, sizeof(item->forbidden));
+        }
+        if (item->woods != 0) {
+            hash = hash_fnv1a64(hash, &item->woods, sizeof(item->woods));
         }
     }
     return hash;

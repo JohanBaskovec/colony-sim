@@ -2,6 +2,7 @@
 
 #include "core/i18n.h"
 #include "core/util.h"
+#include "core/wood.h"
 
 /*
  * Materials, for a tile of about 1 m × 1 m (branches: 1.5 kg, dry grass: an
@@ -185,6 +186,28 @@ int structure_max_hit_points(StructureType type, ItemQuality quality)
         return 0;
     }
     int hit_points = (int)((float)def->max_hit_points * quality_hit_points_factor(quality) + 0.5f);
+    return hit_points > 1 ? hit_points : 1;
+}
+
+ItemType structure_wooden_material(StructureType type)
+{
+    const StructureDef *def = structure_def(type);
+    for (int slot = 0; def != NULL && slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
+        const ItemDef *item = item_def((ItemType)def->materials[slot].type);
+        if (def->materials[slot].count > 0 && item != NULL && item->wooden) {
+            return (ItemType)def->materials[slot].type;
+        }
+    }
+    return ITEM_NONE;
+}
+
+int structure_wood_max_hit_points(StructureType type, ItemQuality quality, WoodMask woods)
+{
+    int hit_points = structure_max_hit_points(type, quality);
+    if (woods == 0 || hit_points <= 0) {
+        return hit_points;
+    }
+    hit_points = (int)((float)hit_points * wood_toughness(woods) + 0.5f);
     return hit_points > 1 ? hit_points : 1;
 }
 

@@ -932,6 +932,10 @@ void game_plan_structure_rect(const Game *game, StructureType type, Direction di
  * shown). Returns how many sites were placed. */
 int game_place_structure_rect(Game *game, StructureType type, Direction direction, int x0, int y0,
                               int x1, int y1, int z);
+/* game_place_structure_rect() of sites to be built of the species `woods`
+ * (ConstructionSite.wood_choice, 0: any). */
+int game_place_structure_rect_wood(Game *game, StructureType type, Direction direction, int x0,
+                                   int y0, int x1, int y1, int z, WoodMask woods);
 
 /* Removes a construction site; its delivered materials are dropped on its
  * tile. */

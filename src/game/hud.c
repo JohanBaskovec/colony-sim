@@ -5,6 +5,7 @@
 #include "core/i18n.h"
 #include "core/temperature.h"
 #include "core/tree.h"
+#include "core/wood.h"
 #include "game/animals_panel.h"
 #include "game/scenarios_panel.h"
 #include "game/attributes_panel.h"
@@ -134,6 +135,62 @@ static void movement_keys_label(char *out, size_t size)
 }
 
 /* "21 kg", "0.3 kg": one decimal only for small, non-whole weights. */
+const char *hud_item_name(ItemStack stack)
+{
+    static char names[4][96];
+    static int next;
+    char *name = names[next];
+    next = (next + 1) % 4;
+    wood_item_name((ItemType)stack.type, stack.woods, name, sizeof(names[0]));
+    return name;
+}
+
+void hud_wood_choices(const Items *items, ItemType type, WoodMask current, HudWoodChoices *out)
+{
+    int counts[WOOD_SPECIES_COUNT] = {0};
+    if (items != NULL) {
+        wood_count_lying(items, type, counts);
+    }
+    out->count = 0;
+    out->selected = current == 0 ? 0 : -1;
+    out->values[out->count] = 0;
+    SDL_strlcpy(out->texts[out->count], tr("wood.any"), sizeof(out->texts[0]));
+    out->count++;
+    for (int i = 0; i < WOOD_SPECIES_COUNT; i++) {
+        WoodMask bit = (WoodMask)(1u << (unsigned)i);
+        char name[64], number[16];
+        wood_list_name(bit, name, sizeof(name));
+        tr_integer(number, sizeof(number), counts[i]);
+        char *text = out->texts[out->count];
+        if (items != NULL) {
+            TR_FORMAT(text, sizeof(out->texts[0]), tr("wood.choice"), name, number);
+        } else {
+            SDL_strlcpy(text, name, sizeof(out->texts[0]));
+        }
+        if (text[0] >= 'a' && text[0] <= 'z') {
+            text[0] = (char)(text[0] - 'a' + 'A');
+        }
+        if (current == bit) {
+            out->selected = out->count;
+        }
+        out->values[out->count++] = bit;
+    }
+    for (int i = 0; i < out->count; i++) {
+        out->options[i] = out->texts[i];
+    }
+}
+
+void hud_wood_text(char *out, size_t size, WoodMask woods)
+{
+    char list[256];
+    if (woods == 0) {
+        SDL_strlcpy(list, tr("wood.any_short"), sizeof(list));
+    } else {
+        wood_list_name(woods, list, sizeof(list));
+    }
+    TR_FORMAT(out, size, tr("wood.material"), list);
+}
+
 void hud_weight_text(char *out, size_t size, float kilograms)
 {
     char number[32];
@@ -201,9 +258,8 @@ static void add_item_condition_line(Panel *panel, ItemStack stack)
 
 bool hud_structure_condition_text(char *out, size_t size, const Map *map, int x, int y, int z)
 {
-    StructureType type = map_structure(map, x, y, z);
     ItemQuality quality = map_structure_quality(map, x, y, z);
-    int max = structure_max_hit_points(type, quality);
+    int max = map_structure_max_hit_points(map, x, y, z);
     if (max <= 0) {
         return false;
     }
@@ -526,7 +582,7 @@ static void build_tile_panel(App *app, Panel *panel)
             tr_integer(a, sizeof(a), groups[i].count);
             hud_weight_text(weight, sizeof(weight), item_stack_mass(groups[i]));
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("tile_panel.group"),
-                      tr(item_def((ItemType)groups[i].type)->name_key), a, weight);
+                      hud_item_name(groups[i]), a, weight);
         }
         if (items_forbidden(game_view_items(&app->game), x, y, z)) {
             panel_add_text(panel, tr("tile_panel.left_alone"));
@@ -538,8 +594,8 @@ static void build_tile_panel(App *app, Panel *panel)
         char weight[32];
         tr_integer(a, sizeof(a), stack.count);
         hud_weight_text(weight, sizeof(weight), item_stack_mass(stack));
-        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"),
-                  tr(item_def((ItemType)stack.type)->name_key), a, weight);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.items"), hud_item_name(stack), a,
+                  weight);
         const Corpse *corpse = corpses_get(&app->game.corpses, stack.corpse);
         if (corpse != NULL && corpse->kind == CORPSE_SETTLER) {
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("tile_panel.body"),
@@ -576,6 +632,9 @@ static void build_tile_panel(App *app, Panel *panel)
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.structure"),
                   tr(structure_def(structure)->name_key));
         add_structure_condition_line(panel, map, x, y, z);
+        if (map_structure_woods(map, x, y, z) != 0) {
+            hud_wood_text(panel_add(panel), HUD_LINE_SIZE, map_structure_woods(map, x, y, z));
+        }
         if (map_forbidden(map, x, y, z, MAP_FORBID_STRUCTURE)) {
             bool locked = structure == STRUCTURE_DOOR || structure == STRUCTURE_LADDER;
             panel_add_text(panel, tr(locked ? "tile_panel.locked" : "tile_panel.left_alone"));
@@ -1172,12 +1231,16 @@ static void carry_item_text(char *out, size_t size, const Colonist *colonist, It
                             int index)
 {
     char weight[32];
-    float kilograms =
-        index >= 0 ? item_stack_mass(colonist->tools[index]) : item_stack_weight(type, 1);
-    hud_weight_text(weight, sizeof(weight), kilograms);
+    /* One item of the tool, or of the load (its species too). */
+    ItemStack one = index >= 0 ? colonist->tools[index] : (ItemStack){.type = (uint8_t)type};
+    if (index < 0 && colonist->carried.type == type) {
+        one = colonist->carried;
+    }
+    one.count = 1;
+    hud_weight_text(weight, sizeof(weight), item_stack_mass(one));
     bool wielded = index >= 0 && index == colonist_wielded(colonist);
     TR_FORMAT(out, size, tr(wielded ? "hud.gear.item_wielded" : "hud.gear.item"),
-              tr(item_def(type)->name_key), weight);
+              hud_item_name(one), weight);
 }
 
 /* What a click on the Gear tab asks of an item, applied after the rows. */

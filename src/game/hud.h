@@ -8,6 +8,7 @@
 #ifndef COLONY_GAME_HUD_H
 #define COLONY_GAME_HUD_H
 
+#include "core/wood.h"
 #include "game/app.h"
 #include "game/ui_layout.h"
 
@@ -33,6 +34,29 @@ void hud_quality_text(char *out, size_t size, ItemQuality quality);
 bool hud_structure_condition_text(char *out, size_t size, const Map *map, int x, int y, int z);
 /* "21 kg", "0.3 kg" (see the tile readout). */
 void hud_weight_text(char *out, size_t size, float kilograms);
+/* The name of the items of a stack, their wood species in it ("Oak
+ * branches", core/wood.h): a buffer of its own for each of the last four
+ * calls, so that a line can name a few. */
+const char *hud_item_name(ItemStack stack);
+
+/* The species of wood one may choose for a site or a bill (docs/TREES.md
+ * §6.4): "Any wood", then each species with how many items of `type` lie
+ * about of it ("Oak (12)"; without the counts for NULL items: no need to
+ * look through them every frame while the list is closed); `selected` is
+ * the option of `current` (-1 for several species). */
+#define HUD_WOOD_CHOICES (WOOD_SPECIES_COUNT + 1)
+typedef struct HudWoodChoices {
+    int count;
+    int selected;
+    WoodMask values[HUD_WOOD_CHOICES];
+    char texts[HUD_WOOD_CHOICES][96];
+    const char *options[HUD_WOOD_CHOICES];
+} HudWoodChoices;
+void hud_wood_choices(const Items *items, ItemType type, WoodMask current, HudWoodChoices *out);
+
+/* "Wood: oak and ash", "Wood: any" (woods 0). */
+#define HUD_WOOD_TEXT_SIZE 256
+void hud_wood_text(char *out, size_t size, WoodMask woods);
 
 /* "Rots away in about ..." for `hours` left (item_stack_rot_hours()), or
  * that it keeps while frozen (negative hours). */

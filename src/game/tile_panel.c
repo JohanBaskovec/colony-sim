@@ -134,11 +134,10 @@ static void thing_title(const ThingRows *rows, char *out, size_t size)
         } else if (corpse != NULL && corpse->kind == CORPSE_SETTLER) {
             TR_FORMAT(out, size, tr("tile_panel.body"), corpse->colonist.name);
         } else if (stack.type != ITEM_NONE) {
-            SDL_strlcpy(out, tr(item_def((ItemType)stack.type)->name_key), size);
+            SDL_strlcpy(out, hud_item_name(stack), size);
         } else { /* Only items lying where they fell: the newest one's name. */
             const Item *item = items_first(game_view_items(game), map_index(map, x, y, z));
-            SDL_strlcpy(out, item != NULL ? tr(item_def((ItemType)item->type)->name_key) : "",
-                        size);
+            SDL_strlcpy(out, item != NULL ? hud_item_name(item_as_stack(item)) : "", size);
         }
         break;
     }
@@ -158,7 +157,7 @@ static void thing_title(const ThingRows *rows, char *out, size_t size)
         if (corpse != NULL && corpse->kind == CORPSE_SETTLER) {
             TR_FORMAT(out, size, tr("tile_panel.body"), corpse->colonist.name);
         } else if (item != NULL) {
-            SDL_strlcpy(out, tr(item_def((ItemType)item->type)->name_key), size);
+            SDL_strlcpy(out, hud_item_name(item_as_stack(item)), size);
         }
         break;
     }
@@ -325,7 +324,7 @@ static void item_list_rows(UiLayout *layout, const ThingRows *rows, bool alone)
     for (int i = 0; i < shown; i++) {
         ItemStack one = item_as_stack(list[i]);
         char condition[TEXT_SIZE], line[TEXT_SIZE];
-        const char *name = tr(item_def((ItemType)one.type)->name_key);
+        const char *name = hud_item_name(one);
         if (!hud_item_condition_text(condition, sizeof(condition), one)) {
             SDL_strlcpy(condition, "", sizeof(condition));
         }
@@ -447,6 +446,10 @@ static void thing_rows(UiLayout *layout, void *userdata)
         if (hud_structure_condition_text(text, sizeof(text), map, x, y, z)) {
             ui_layout_label(layout, text, 0.0f, false);
         }
+        if (map_structure_woods(map, x, y, z) != 0) {
+            hud_wood_text(text, sizeof(text), map_structure_woods(map, x, y, z));
+            ui_layout_label(layout, text, 0.0f, false);
+        }
         if (structure_is_bed(structure)) {
             hud_bed_owner_text(rows->app, text, sizeof(text), x, y, z);
             ui_layout_label(layout, text, 0.0f, false);
@@ -462,6 +465,10 @@ static void thing_rows(UiLayout *layout, void *userdata)
         hud_quality_text(quality, sizeof(quality), map_roof_quality(map, x, y, z));
         TR_FORMAT(text, sizeof(text), tr("hud.item_quality"), quality);
         ui_layout_label(layout, text, 0.0f, false);
+        if (map_roof_woods(map, x, y, z) != 0) {
+            hud_wood_text(text, sizeof(text), map_roof_woods(map, x, y, z));
+            ui_layout_label(layout, text, 0.0f, false);
+        }
         order_row(layout, game, x, y, z);
         break;
     }
@@ -475,6 +482,13 @@ static void thing_rows(UiLayout *layout, void *userdata)
             if (hud_site_line(site, line, text, sizeof(text))) {
                 ui_layout_label(layout, text, 0.0f, false);
             }
+        }
+        if (site->workstation == 0 &&
+            structure_wooden_material((StructureType)site->type) != ITEM_NONE) {
+            /* What was brought so far, else what is wanted. */
+            WoodMask delivered = construction_woods(site);
+            hud_wood_text(text, sizeof(text), delivered != 0 ? delivered : site->wood_choice);
+            ui_layout_label(layout, text, 0.0f, false);
         }
         if (gather_clear_work(map, x, y, z) > 0.0f) {
             TR_FORMAT(
@@ -497,8 +511,8 @@ static void thing_rows(UiLayout *layout, void *userdata)
             for (int i = 0; i < group_count; i++) {
                 tr_integer(count, sizeof(count), groups[i].count);
                 hud_weight_text(weight, sizeof(weight), item_stack_mass(groups[i]));
-                TR_FORMAT(text, sizeof(text), tr("tile_panel.group"),
-                          tr(item_def((ItemType)groups[i].type)->name_key), count, weight);
+                TR_FORMAT(text, sizeof(text), tr("tile_panel.group"), hud_item_name(groups[i]),
+                          count, weight);
                 ui_layout_label(layout, text, 0.0f, false);
             }
         } else if (stack.type != ITEM_NONE) {
@@ -800,8 +814,17 @@ static void thing_actions(App *app, const ThingRows *rows)
                                          : CONSTRUCTION_NONE;
     const ConstructionSite *found = construction_get(&game->constructions, site);
     int priority;
-    if (found != NULL && inspector_priority_action(app, slot, found->priority, &priority)) {
+    if (found != NULL && inspector_priority_action(app, slot++, found->priority, &priority)) {
         construction_set_priority(&game->constructions, site, priority);
+    }
+    found = construction_get(&game->constructions, site);
+    ItemType wooden = found != NULL && found->workstation == 0
+                          ? structure_wooden_material((StructureType)found->type)
+                          : ITEM_NONE;
+    WoodMask woods;
+    if (wooden != ITEM_NONE &&
+        inspector_wood_action(app, slot, wooden, found->wood_choice, &woods)) {
+        construction_set_wood_choice(&game->constructions, site, woods);
     }
 }
 

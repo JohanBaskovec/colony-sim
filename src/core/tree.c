@@ -1,6 +1,7 @@
 #include "core/tree.h"
 
 #include "core/game_clock.h"
+#include "core/wood.h"
 
 #include <math.h>
 #include <string.h>
@@ -669,10 +670,12 @@ bool tree_shed(Map *map, int x, int y, int z, ItemType item, uint32_t pick)
                         continue;
                     }
                     int tx = x + dx, ty = y + dy, tz = z + dz;
-                    /* Through the crown, down to the first floor below it. */
+                    /* Through the crown, down to the first floor below it:
+                     * branches of its species. */
                     int level = litter_landing_level(map, tx, ty, tz);
+                    WoodMask woods = wood_bit((PlantType)map->plants[map_index(map, x, y, z)].type);
                     return level >= 0 && holds_litter(map, tx, ty, level) &&
-                           map_add_litter(map, tx, ty, level, item);
+                           map_add_litter_wood(map, tx, ty, level, item, woods);
                 }
             }
         }
@@ -815,14 +818,20 @@ TreeFall tree_fell(Map *map, Items *items, int x, int y, int z, ItemStack wood)
             tree_fall_band_tile(x, y, size, fall.direction, i, j, &tx, &ty);
             StructureType type = map_structure(map, tx, ty, z);
             if (type != STRUCTURE_NONE) {
-                int max = structure_max_hit_points(type, map_structure_quality(map, tx, ty, z));
+                int max = map_structure_max_hit_points(map, tx, ty, z);
                 int damage = max * TREE_FALL_DAMAGE_PERCENT / 100;
                 map_set_structure_hit_points(map, tx, ty, z,
                                              map_structure_hit_points(map, tx, ty, z) - damage);
             }
         }
     }
+    /* Logs and branches of its species. */
+    WoodMask woods = wood_bit((PlantType)plant->type);
+    if (item_def((ItemType)wood.type) != NULL && item_def((ItemType)wood.type)->wooden) {
+        wood.woods = woods;
+    }
     ItemStack branches = item_stack_pristine(ITEM_BRANCHES, tree_crown_yield(plant, ITEM_BRANCHES));
+    branches.woods = woods;
     /* Green twigs, wet with sap: they dry like those picked from wet ground. */
     ItemStack twigs = item_stack_pristine(ITEM_WET_TWIGS, tree_crown_yield(plant, ITEM_TWIGS));
     branches.quality = twigs.quality = ITEM_QUALITY_STANDARD;

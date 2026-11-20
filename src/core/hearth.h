@@ -85,6 +85,10 @@ bool hearth_is(const Workstation *station);
 /* Kilograms of fuel one item of this type gives, 0 when it is no fuel. */
 float hearth_fuel_value(ItemType type);
 
+/* The same for an item of a stack: logs and branches by their wood species
+ * (core/wood.h: wood_fuel(), beech burning longest). */
+float hearth_stack_fuel_value(ItemStack stack);
+
 /* Kilograms of fuel the hearth wants brought now: none unless it is kept
  * burning and its fuel, counting what is on its way, is below the refuel
  * mark; then enough to fill it. */

@@ -1,6 +1,7 @@
 /* Structures in a running game: placing, building, sleeping in beds, taking
  * apart (core/construction.h, core/structure.h, core/colonist.h). */
 #include "core/game.h"
+#include "core/wood.h"
 
 #include "test_framework.h"
 #include "test_settlers.h"
@@ -394,6 +395,59 @@ static void test_haulers_share_a_site(void)
     CHECK(construction_materials_complete(site));
     CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 1);
     CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 6);
+    game_shutdown(&game);
+}
+
+/* docs/TREES.md §6.4: haulers bring the wood of the species the player chose
+ * for a site, even from under another species on the same tile; the
+ * structure keeps it. */
+static void test_haulers_bring_the_chosen_wood(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    ItemStack ash = item_stack_pristine(ITEM_BRANCHES, 5);
+    ash.woods = wood_bit(PLANT_ASH);
+    ItemStack oak = ash;
+    oak.woods = wood_bit(PLANT_OAK);
+    items_add(&game.items, 11, 10, 0, ash); /* Nearest, but not wanted. */
+    items_add(&game.items, 20, 10, 0, oak);
+    items_add(&game.items, 20, 10, 0, ash); /* On top of the oak. */
+    items_add(&game.items, 14, 10, 0, item_stack_pristine(ITEM_GRASS, 24));
+    int index = game_place_structure(&game, STRUCTURE_WALL, 10, 14, 0, DIRECTION_SOUTH);
+    REQUIRE(index != CONSTRUCTION_NONE);
+    construction_set_wood_choice(&game.constructions, index, wood_bit(PLANT_OAK));
+    CHECK(run_until_built(&game, 10, 14, 8 * TICKS_PER_HOUR));
+    CHECK_EQ_INT(map_structure_woods(&game.map, 10, 14, 0), wood_bit(PLANT_OAK));
+    CHECK_EQ_INT(items_count_at(&game.items, 11, 10, 0, ITEM_BRANCHES), 5);
+    CHECK_EQ_INT(items_count_at(&game.items, 20, 10, 0, ITEM_BRANCHES), 5); /* The ash. */
+    CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 10);
+
+    /* Nothing of the species chosen: nobody brings anything. */
+    index = game_place_structure(&game, STRUCTURE_PROP, 16, 14, 0, DIRECTION_SOUTH);
+    REQUIRE(index != CONSTRUCTION_NONE);
+    construction_set_wood_choice(&game.constructions, index, wood_bit(PLANT_BIRCH));
+    run_ticks(&game, 2 * TICKS_PER_HOUR);
+    const ConstructionSite *site = construction_get(&game.constructions, index);
+    REQUIRE(site != NULL);
+    CHECK_EQ_INT(site->delivered[0].count, 0);
+    /* Any species: it is built of ash. */
+    construction_set_wood_choice(&game.constructions, index, 0);
+    CHECK(run_until_built(&game, 16, 14, 8 * TICKS_PER_HOUR));
+    CHECK_EQ_INT(map_structure_woods(&game.map, 16, 14, 0), wood_bit(PLANT_ASH));
+    CHECK_EQ_INT(items_check(&game.items).problems, 0);
+
+    /* Planned with a choice (the build menu's). */
+    CHECK_EQ_INT(game_place_structure_rect_wood(&game, STRUCTURE_PROP, DIRECTION_SOUTH, 30, 30, 31,
+                                                30, 0, wood_bit(PLANT_HAZEL)),
+                 2);
+    for (int x = 30; x <= 31; x++) {
+        site =
+            construction_get(&game.constructions, construction_at(&game.constructions, x, 30, 0));
+        REQUIRE(site != NULL);
+        CHECK_EQ_INT(site->wood_choice, wood_bit(PLANT_HAZEL));
+    }
     game_shutdown(&game);
 }
 
@@ -866,5 +920,6 @@ int main(void)
     RUN_TEST(test_taking_apart_a_bed_being_refreshed);
     RUN_TEST(test_roofing_a_hut);
     RUN_TEST(test_taking_a_roof_apart);
+    RUN_TEST(test_haulers_bring_the_chosen_wood);
     return test_summary();
 }

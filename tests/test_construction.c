@@ -3,6 +3,7 @@
 #include "core/knowledge.h"
 #include "core/structure.h"
 #include "core/tree.h"
+#include "core/wood.h"
 
 #include "test_framework.h"
 
@@ -229,8 +230,8 @@ static void test_delivering_loads(void)
     ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
     REQUIRE(constructions_remove(&constructions, index, returned) == 1);
     items_drop_load(&items, &map, 3, 3, 0, &returned[0]);
-    ItemChoice fine_only = {TEST_QUALITY_FINE, TEST_QUALITY_FINE, false};
-    ItemChoice crude_only = {TEST_QUALITY_CRUDE, TEST_QUALITY_CRUDE, false};
+    ItemChoice fine_only = {TEST_QUALITY_FINE, TEST_QUALITY_FINE, false, 0};
+    ItemChoice crude_only = {TEST_QUALITY_CRUDE, TEST_QUALITY_CRUDE, false, 0};
     CHECK_EQ_INT(items_count_chosen(&items, 3, 3, 0, ITEM_BRANCHES, fine_only), 3);
     CHECK_EQ_INT(items_count_chosen(&items, 3, 3, 0, ITEM_BRANCHES, crude_only), 2);
     CHECK_EQ_INT(items.held_count, 2);
@@ -944,6 +945,106 @@ static void test_fibres_stand_in_for_grass(void)
     free_world(&map, &constructions, &items);
 }
 
+/* docs/TREES.md §6.4: a structure keeps the species of its wood; loads of
+ * another species go in all the same (the structure is then of both); the
+ * species' toughness changes its hit points. */
+static void test_wooden_structures(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    WoodMask oak = wood_bit(PLANT_OAK), ash = wood_bit(PLANT_ASH);
+    int index = constructions_place(&constructions, &map, STRUCTURE_WALL, 2, 2, 0, DIRECTION_SOUTH);
+    construction_set_wood_choice(&constructions, index, oak | 0x8000u);
+    const ConstructionSite *site = construction_get(&constructions, index);
+    CHECK_EQ_INT(site->wood_choice, oak); /* Unknown bits dropped. */
+
+    ItemStack oak_branches = item_stack_make(ITEM_BRANCHES, 3, ITEM_QUALITY_STANDARD, 20);
+    oak_branches.woods = oak;
+    ItemStack ash_branches = oak_branches;
+    ash_branches.woods = ash;
+    ItemStack first = load_of(&items, 1, 1, oak_branches);
+    ItemStack second = load_of(&items, 1, 2, ash_branches);
+    REQUIRE(first.held != 0 && second.held != 0);
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, index, &first), 3);
+    CHECK_EQ_INT(construction_woods(site), oak);
+    /* Another species: only what is missing goes in, of both species now. */
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, index, &second), 2);
+    CHECK_EQ_INT(second.count, 1);
+    CHECK_EQ_INT(second.woods, ash); /* What is left in hand stays as it was. */
+    CHECK_EQ_INT(site->delivered[0].count, 5);
+    CHECK_EQ_INT(construction_woods(site), oak | ash);
+    CHECK(items_check_load(&items, site->delivered[0]));
+    CHECK(items_check_load(&items, second));
+    ItemStack grass = load_of(&items, 1, 3, item_stack_pristine(ITEM_GRASS, 24));
+    CHECK_EQ_INT(construction_deliver_load(&constructions, &items, index, &grass), 24);
+    CHECK(construction_add_work(&constructions, &map, &items, NULL, index, 1.0e6f,
+                                KNOWLEDGE_LEVEL_MAX, NULL));
+    CHECK_EQ_INT(map_structure_woods(&map, 2, 2, 0), oak | ash);
+    ItemQuality quality = map_structure_quality(&map, 2, 2, 0);
+    int plain = structure_max_hit_points(STRUCTURE_WALL, quality);
+    int tough = map_structure_max_hit_points(&map, 2, 2, 0);
+    CHECK_EQ_INT(tough, (int)((float)plain * (1.10f + 1.30f) / 2.0f + 0.5f));
+    CHECK(tough > plain);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2, 0), tough); /* In perfect condition. */
+    map_set_structure_hit_points(&map, 2, 2, 0, INT16_MAX);
+    CHECK_EQ_INT(map_structure_hit_points(&map, 2, 2, 0), tough);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+
+    /* Numbers (no items): the species join likewise. */
+    int prop = constructions_place(&constructions, &map, STRUCTURE_PROP, 9, 2, 0, DIRECTION_SOUTH);
+    ItemStack birch = item_stack_pristine(ITEM_BRANCHES, 3);
+    birch.woods = wood_bit(PLANT_BIRCH);
+    CHECK_EQ_INT(construction_deliver(&constructions, prop, birch), 3);
+    CHECK_EQ_INT(construction_deliver(&constructions, prop, oak_branches), 3);
+    CHECK_EQ_INT(construction_woods(construction_get(&constructions, prop)),
+                 wood_bit(PLANT_BIRCH) | oak);
+    CHECK(construction_add_work(&constructions, &map, NULL, NULL, prop, 1.0e6f, KNOWLEDGE_LEVEL_MAX,
+                                NULL));
+    CHECK_EQ_INT(map_structure_woods(&map, 9, 2, 0), wood_bit(PLANT_BIRCH) | oak);
+    /* Birch is less tough than plain wood, oak more: their mean. */
+    CHECK_EQ_INT(map_structure_max_hit_points(&map, 9, 2, 0),
+                 structure_wood_max_hit_points(STRUCTURE_PROP, map_structure_quality(&map, 9, 2, 0),
+                                               wood_bit(PLANT_BIRCH) | oak));
+
+    /* Finished at once (debug): made of the species chosen. */
+    int door = constructions_place(&constructions, &map, STRUCTURE_DOOR, 12, 2, 0, DIRECTION_SOUTH);
+    construction_set_wood_choice(&constructions, door, wood_bit(PLANT_HAZEL));
+    CHECK(construction_finish_now(&constructions, &map, &items, NULL, door, KNOWLEDGE_LEVEL_MAX,
+                                  NULL));
+    CHECK_EQ_INT(map_structure_woods(&map, 12, 2, 0), wood_bit(PLANT_HAZEL));
+
+    /* Removed: the species go with it; a plain structure has none. */
+    map_remove_structure(&map, 2, 2, 0);
+    CHECK_EQ_INT(map_structure_woods(&map, 2, 2, 0), 0);
+    CHECK_EQ_INT(map_structure_max_hit_points(&map, 2, 2, 0), 0);
+    map_set_structure(&map, 2, 2, 0, STRUCTURE_WALL);
+    CHECK_EQ_INT(map_structure_woods(&map, 2, 2, 0), 0);
+    CHECK_EQ_INT(map_structure_max_hit_points(&map, 2, 2, 0),
+                 structure_max_hit_points(STRUCTURE_WALL, ITEM_QUALITY_STANDARD));
+
+    /* Roofs keep theirs too; a known map copies them; the hash sees them. */
+    uint64_t before = map_hash(&map);
+    map_set_roof_wood(&map, 4, 4, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD, ash);
+    CHECK_EQ_INT(map_roof(&map, 4, 4, 1), STRUCTURE_ROOF);
+    CHECK_EQ_INT(map_roof_woods(&map, 4, 4, 1), ash);
+    Map copy;
+    REQUIRE(map_init(&copy, 16, 16, 2));
+    map_copy_tile(&copy, &map, map_index(&map, 4, 4, 1));
+    map_copy_tile(&copy, &map, map_index(&map, 9, 2, 0));
+    CHECK_EQ_INT(map_roof_woods(&copy, 4, 4, 1), ash);
+    CHECK_EQ_INT(map_structure_woods(&copy, 9, 2, 0), wood_bit(PLANT_BIRCH) | oak);
+    map_free(&copy);
+    uint64_t roofed = map_hash(&map);
+    map_set_roof_wood(&map, 4, 4, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD, oak);
+    CHECK(map_hash(&map) != roofed);
+    map_set_roof(&map, 4, 4, 1, STRUCTURE_NONE, ITEM_QUALITY_WORST);
+    CHECK_EQ_INT(map_roof_woods(&map, 4, 4, 1), 0);
+    CHECK(map_hash(&map) == before); /* As it was. */
+    free_world(&map, &constructions, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -967,5 +1068,6 @@ int main(void)
     RUN_TEST(test_roof_layer);
     RUN_TEST(test_roof_sites);
     RUN_TEST(test_ladders_need_a_cliff);
+    RUN_TEST(test_wooden_structures);
     return test_summary();
 }

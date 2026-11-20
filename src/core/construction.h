@@ -71,6 +71,10 @@ typedef struct ConstructionSite {
      * (JOB_PRIORITY_HIGHEST..JOB_PRIORITY_LOWEST, core/work.h); a
      * workstation's site passes it on to the station. */
     uint8_t priority;
+    /* The species the player wants it built of (docs/TREES.md §6.4): haulers
+     * bring wooden materials only of these; 0: any. Loads of several
+     * species may still go into one structure: it is then of all of them. */
+    WoodMask wood_choice;
 } ConstructionSite;
 
 typedef struct Constructions {
@@ -241,6 +245,14 @@ void construction_set_forbidden(Constructions *constructions, int index, bool fo
 
 /* Sets a site's priority (clamped, see ConstructionSite.priority). */
 void construction_set_priority(Constructions *constructions, int index, int priority);
+
+/* Sets the species a site is to be built of (ConstructionSite.wood_choice,
+ * 0: any). What was delivered stays. */
+void construction_set_wood_choice(Constructions *constructions, int index, WoodMask woods);
+
+/* The species of the wooden materials delivered to a site so far (and so of
+ * the structure it will be). */
+WoodMask construction_woods(const ConstructionSite *site);
 
 /* Whether the site is forbidden itself or touches something the player forbade
  * (see map_forbidden()): the structure a refresh site is on, a plant to clear

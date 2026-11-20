@@ -1834,8 +1834,9 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         int x0, y0, x1, y1;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
         if (game_structure_buildable(&app->game, app->structure_type)) {
-            game_place_structure_rect(&app->game, app->structure_type, app->structure_direction, x0,
-                                      y0, x1, y1, z);
+            game_place_structure_rect_wood(&app->game, app->structure_type,
+                                           app->structure_direction, x0, y0, x1, y1, z,
+                                           app->structure_woods[app->structure_type]);
         }
     } else if (app->tool == APP_TOOL_FORBID) {
         int x0, y0, x1, y1;

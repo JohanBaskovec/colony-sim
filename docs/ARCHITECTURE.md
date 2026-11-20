@@ -83,6 +83,7 @@ simulation:
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
 | `tile_box`   | Box of tiles holding every tile of a sparse layer (designations, gathering zones, a region), so that scans skip the rest of the map |
 | `tree`       | Trees in the volume: a trunk of solid wood and floors of foliage built into the map as the tree grows, finding the tree of a tile, where a felled tree falls (aimed away from structures) and what it leaves along its length |
+| `wood`       | Wood species (`WoodMask`, a bit per tree species, on items, stacks, structures and roofs): their effects (weight, toughness, shafts, weathering, fuel; a mix takes the mean), species lists and item names, counts by species |
 | `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths, the microclimate under the sky (sun, shade, evaporation, heat stored in the ground) |
 | `soil`       | The water in the ground of each tile (a bucket by terrain: rain and snowmelt, interception by crowns, drainage, evaporation and transpiration, banks near water), and what the microclimate needs from it (see `docs/CLIMATE.md`) |

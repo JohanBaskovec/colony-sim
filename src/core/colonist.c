@@ -386,13 +386,13 @@ float colonist_tool_factor(const Colonist *colonist, ToolUse use, ItemTypeMask a
 }
 
 /* One tick of work with a carried tool: it loses a hit point every
- * TOOL_WEAR_TICKS, and breaks at 0. */
+ * tool_wear_ticks() (by its wood), and breaks at 0. */
 static void wear_tool(Colonist *colonist, int index)
 {
     if (index < 0 || colonist->tools[index].count == 0) {
         return;
     }
-    if (++colonist->tool_wear[index] < TOOL_WEAR_TICKS) {
+    if (++colonist->tool_wear[index] < tool_wear_ticks(colonist->tools[index])) {
         return;
     }
     colonist->tool_wear[index] = 0;
@@ -3122,6 +3122,8 @@ typedef struct FetchSearch {
     bool by_item;
     ItemChoice choice;
     float max_rot_hours;
+    /* Wooden items only of these species (0: any; docs/TREES.md §6.4). */
+    WoodMask woods;
 } FetchSearch;
 
 static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
@@ -3130,9 +3132,9 @@ static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
     const FetchSearch *search = userdata;
     ItemStack stack = items_get_allowed(search->items, x, y, z);
     if (stack.type != ITEM_NONE && items_mixed(search->items, x, y, z)) {
-        stack = search->match.count > 0
-                    ? items_get_group(search->items, x, y, z, search->match)
-                    : items_get_allowed_of(search->items, x, y, z, search->types);
+        stack = search->match.count > 0 ? items_get_group(search->items, x, y, z, search->match)
+                                        : items_get_allowed_of_woods(search->items, x, y, z,
+                                                                     search->types, search->woods);
     }
     if (stack.type != ITEM_NONE && search->by_item && (search->types & ITEM_TYPE_BIT(stack.type))) {
         ItemType type = (ItemType)stack.type;
@@ -3150,6 +3152,7 @@ static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
     return stack.type != ITEM_NONE && (search->types & ITEM_TYPE_BIT(stack.type)) &&
            stack.quality >= search->min_quality && stack.count >= search->min_count &&
            (search->match.count == 0 || item_stacks_match(stack, search->match)) &&
+           item_woods_allowed(stack, search->woods) &&
            (search->min_factor <= 0.0f ||
             tool_speed_factor(search->use, stack) > search->min_factor) &&
            !reservations_taken_by_other(search->reservations, RESERVATION_HAUL_SOURCE,
@@ -3192,7 +3195,8 @@ static FetchSearch fetch_search(const ColonistContext *context, ItemTypeMask typ
                           0.0f,
                           false,
                           ITEM_CHOICE_ANY,
-                          -1.0f};
+                          -1.0f,
+                          0};
     return search;
 }
 
@@ -3203,7 +3207,7 @@ static ItemChoice bill_choice(const Bill *bill, ItemType type)
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
     int low = def != NULL && def->input_min_quality > bill->min_quality ? def->input_min_quality
                                                                         : bill->min_quality;
-    return (ItemChoice){low, bill->max_quality, item_rots(type)};
+    return (ItemChoice){low, bill->max_quality, item_rots(type), bill->woods};
 }
 
 /* Hours of rot (x1) the ingredient that rots away soonest has left, among
@@ -3911,6 +3915,7 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
         }
         ItemType type = construction_material(site, slot);
         FetchSearch search = fetch_search(context, construction_material_types(site, slot));
+        search.woods = site->wood_choice;
         if (start_fetch(colonist, context, &search, current_tile(colonist),
                         COLONIST_WORK_SEARCH_MAX_COST, false)) {
             int load = colonist_carry_capacity(colonist, type);
@@ -4054,7 +4059,10 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
                              ? ITEM_TYPE_BIT(colonist->carried.type)
                              : construction_material_types(site, colonist->supply_slot);
     ItemStack stack =
-        items_get_allowed_of(context->items, colonist->x, colonist->y, colonist->z, types);
+        colonist->carried.count > 0
+            ? items_get_allowed_of(context->items, colonist->x, colonist->y, colonist->z, types)
+            : items_get_allowed_of_woods(context->items, colonist->x, colonist->y, colonist->z,
+                                         types, site->wood_choice);
     if (colonist->supply_promised <= 0 ||
         !(construction_material_types(site, colonist->supply_slot) & ITEM_TYPE_BIT(stack.type)) ||
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
@@ -4070,9 +4078,8 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
     if (wanted <= 0) {
         return false;
     }
-    return items_pick_up_of(context->items, colonist->x, colonist->y, colonist->z,
-                            ITEM_TYPE_BIT(stack.type), stack.count < wanted ? stack.count : wanted,
-                            &colonist->carried) > 0;
+    return items_pick_up_group(context->items, colonist->x, colonist->y, colonist->z, stack,
+                               stack.count < wanted ? stack.count : wanted, &colonist->carried) > 0;
 }
 
 /* A blocking structure or a workstation was built: zones lose its tiles
