@@ -15,7 +15,7 @@
 #include <SDL3/SDL.h>
 
 /* The ground of the level shown (Camera.level): terrain seen from above with
- * its grass, the cut face of rock walls, slopes, the edges of drops. Open space is left as it is:
+ * the cut face of rock walls, slopes, the edges of drops. Open space is left as it is:
  * the levels below show there (render_below_begin()). */
 void render_map(SDL_Renderer *renderer, Sprites *sprites, const Map *map, const Camera *camera);
 

@@ -2376,8 +2376,8 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
 - Tiles and item shapes are batched: they are accumulated as quads
   and sent with a few `SDL_RenderGeometry()` calls instead of one fill per
   rectangle (zoomed out, a 1280 × 720 window shows about 57,000 tiles).
-- Ground tiles: tile textures (`sprite_ground()`, `sprite_wall()`,
-  `sprite_grass()`) for the terrains seen from
+- Ground tiles: tile textures (`sprite_ground()`, `sprite_wall()`) for the
+  terrains seen from
   above (also sand, gravel, rough stone, the foliage of trees and the thatch
   of built roofs, which are terrains), and the cut face of granite, sandstone
   and earth walls seen from inside them; terrains without a texture would be
@@ -2389,10 +2389,11 @@ runtime; strings returned by `tr()` are therefore not cached across frames.
   neighbor in the atlas (`sprites_draw_tile()` draws the inside only). The
   ground is loose and lit from the upper left (crumbs, pebbles with their
   shadow); walls are flat, dense and much darker, so that they never read as
-  ground. Grass is a transparent texture over the ground, in 4 stages by
-  growth (short sparse blades to a cover hiding the soil). `render_map()`
-  draws in three passes: flat colors (trunks), then textures and grass (one
-  sprite batch), then what goes over the ground (slopes, drop edges).
+  ground. Grass is a plant sprite like the others (a tuft, five stages by
+  growth, from a few sprouts to a tall tuft in seed), no longer a texture
+  over the ground. `render_map()` draws in three passes: flat colors
+  (trunks), then textures (one sprite batch), then what goes over the
+  ground (slopes, drop edges).
 - Sprites (`game/sprites.h`): 128 sprite pixels per tile (the largest zoom
   shows them 1:1). `tools/generate_sprites.py` draws them procedurally
   (Pillow, 4× supersampling) into `assets/sprites/`; run it again after

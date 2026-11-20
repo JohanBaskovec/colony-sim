@@ -37,6 +37,8 @@ SCRIPTED = {
     "wild_carrot_0.png", "wild_carrot_1.png", "wild_carrot_2.png",
     "cattail_0.png", "cattail_1.png", "cattail_2.png", "cattail_3.png", "cattail_4.png",
     "nettle_0.png", "nettle_1.png", "nettle_2.png",
+    # Grass is a tuft in five stages now (a plant sprite), no longer a texture over the ground.
+    "grass_0.png", "grass_1.png", "grass_2.png", "grass_3.png", "grass_4.png",
     # The common reed (PLANT_REED) is common_reed_N.png now: its old reed_N.png is not
     # written any more.
     "reed_0.png", "reed_1.png", "reed_2.png",

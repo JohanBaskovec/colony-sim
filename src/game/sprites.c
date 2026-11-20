@@ -53,6 +53,7 @@ typedef struct PlantSprites {
 static const PlantSprites PLANT_SPRITES[] = {
     {PLANT_TREE, "tree", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
     {PLANT_HAZEL, "hazel", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
+    {PLANT_GRASS, "grass", PLANT_GROWTH_STAGES, PLANT_GROWTH_STAGES, false},
     {PLANT_BRAMBLE, "bramble", PLANT_GROWTH_STAGES, PLANT_GROWTH_STAGES, true},
     {PLANT_WILD_GARLIC, "wild_garlic", 3, PLANT_GROWTH_STAGES, false},
     {PLANT_NETTLE, "nettle", 3, PLANT_GROWTH_STAGES, false},
@@ -71,7 +72,7 @@ static const PlantSprites PLANT_SPRITES[] = {
 };
 /* Sum of the sizes (twice for plants with a food variant), checked when the
  * sprites are loaded. */
-#define PLANT_SPRITE_COUNT 65
+#define PLANT_SPRITE_COUNT 70
 
 /* Tools with a sprite, and their file names. */
 static const ItemType TOOL_TYPES[] = {ITEM_COBBLE, ITEM_CHOPPER, ITEM_FLAKE, ITEM_HAND_AXE};
@@ -132,7 +133,6 @@ static const char *const WALL_NAMES[] = {"granite", "sandstone", "earth"};
 #define GROUND_SPRITE_COUNT 14
 #define BARE_CROWN_FIRST 11 /* Index of the first bare crown among the ground sprites. */
 #define WALL_SPRITE_COUNT 3
-#define GRASS_SPRITE_COUNT 4 /* Growth stages. */
 
 enum {
     PLANT_FIRST = 0,
@@ -148,8 +148,7 @@ enum {
     ANIMAL_FIRST = ITEM_FIRST + ITEM_SPRITE_COUNT,
     GROUND_FIRST = ANIMAL_FIRST + ANIMAL_SPRITE_COUNT,
     WALL_FIRST = GROUND_FIRST + GROUND_SPRITE_COUNT,
-    GRASS_FIRST = WALL_FIRST + WALL_SPRITE_COUNT,
-    SPRITE_COUNT = GRASS_FIRST + GRASS_SPRITE_COUNT
+    SPRITE_COUNT = WALL_FIRST + WALL_SPRITE_COUNT
 };
 SDL_COMPILE_TIME_ASSERT(tool_sprites, SDL_arraysize(TOOL_TYPES) == EYES_FIRST - TOOL_FIRST &&
                                           SDL_arraysize(TOOL_NAMES) == SDL_arraysize(TOOL_TYPES));
@@ -308,12 +307,6 @@ SpriteId sprite_wall(RockType rock)
     return -1;
 }
 
-SpriteId sprite_grass(float growth)
-{
-    return GRASS_FIRST +
-           clampi((int)(growth * (float)GRASS_SPRITE_COUNT), 0, GRASS_SPRITE_COUNT - 1);
-}
-
 /* File name (without directory nor extension) of a sprite. */
 static void sprite_file_name(SpriteId id, char *out, size_t size)
 {
@@ -371,10 +364,8 @@ static void sprite_file_name(SpriteId id, char *out, size_t size)
             ANIMAL_POSE_NAMES[index % ANIMAL_POSE_COUNT]);
     } else if (id < WALL_FIRST) {
         SDL_snprintf(out, size, "ground_%s", GROUND_NAMES[id - GROUND_FIRST]);
-    } else if (id < GRASS_FIRST) {
-        SDL_snprintf(out, size, "wall_%s", WALL_NAMES[id - WALL_FIRST]);
     } else {
-        SDL_snprintf(out, size, "grass_%d", id - GRASS_FIRST);
+        SDL_snprintf(out, size, "wall_%s", WALL_NAMES[id - WALL_FIRST]);
     }
 }
 

@@ -695,7 +695,7 @@ static SDL_FColor seedling_color(float bare)
                         lerpf(1.0f, BARE_SEEDLING_TINT_B, bare), 1.0f};
 }
 
-/* Second pass: tile textures, then grass over the ground. */
+/* Second pass: tile textures. */
 static void ground_textures(const Map *map, int x, int y, int z, size_t index,
                             const SDL_FRect *tile, void *userdata)
 {
@@ -719,10 +719,6 @@ static void ground_textures(const Map *map, int x, int y, int z, size_t index,
         }
     } else {
         sprites_draw_tile(pass->sprites, sprite_ground(terrain), tile, WHITE);
-    }
-    const Plant *plant = &map->plants[index];
-    if (plant->type == PLANT_GRASS) {
-        sprites_draw_tile(pass->sprites, sprite_grass(plant->growth), tile, WHITE);
     }
 }
 
@@ -4004,7 +4000,7 @@ static void render_plant(Sprites *sprites, const Camera *camera, const Map *map,
     SpriteId id =
         sprite_plant((PlantType)plant->type, plant_growth_stage(plant), plant_has_food(plant));
     if (id < 0) {
-        return; /* Grass is part of the ground. */
+        return; /* A grown tree: trunk and foliage tiles. */
     }
     float sx, sy;
     camera_world_to_screen(camera, (float)x + 0.5f, (float)(y + 1), &sx, &sy);

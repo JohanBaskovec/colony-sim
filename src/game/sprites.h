@@ -6,7 +6,7 @@
  *
  * Scale: SPRITE_PIXELS_PER_TILE sprite pixels per tile. A sprite is anchored by
  * the middle of its bottom edge and may overflow its tile upward and sideways;
- * tile textures (ground, walls, grass) cover exactly one tile.
+ * tile textures (ground, walls) cover exactly one tile.
  */
 #ifndef COLONY_GAME_SPRITES_H
 #define COLONY_GAME_SPRITES_H
@@ -23,8 +23,8 @@
 typedef int SpriteId;
 
 /* A plant at a growth stage (0 .. PLANT_GROWTH_STAGES - 1), bearing food or
- * not; -1 for plants without a sprite (grass is part of the ground, a tree
- * past its sapling stages is trunk and foliage tiles). */
+ * not; -1 for plants without a sprite (a tree past its sapling stages is
+ * trunk and foliage tiles). */
 SpriteId sprite_plant(PlantType type, int stage, bool fruit);
 /* How a character is seen: from the front, from the side (facing right:
  * mirror it when it faces left) or from behind. */
@@ -74,13 +74,11 @@ SpriteId sprite_animal(AnimalSpecies species, AnimalSex sex, AnimalPose pose);
 /* Tile textures, drawn with sprites_draw_tile(), the same on every tile of
  * their kind (they tile seamlessly): the ground of a terrain seen from above,
  * the cut face of a rock wall seen from inside it (dark and flat, unlike any
- * ground), and grass over the ground, taller with its growth (0 .. 1). -1 for
- * terrains and rocks without a texture. */
+ * ground). -1 for terrains and rocks without a texture. */
 SpriteId sprite_ground(Terrain terrain);
 /* The crown of foliage in winter: bare branches (-1 for any other terrain). */
 SpriteId sprite_ground_bare(Terrain terrain);
 SpriteId sprite_wall(RockType rock);
-SpriteId sprite_grass(float growth);
 
 typedef struct Sprites Sprites;
 
