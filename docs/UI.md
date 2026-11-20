@@ -364,7 +364,7 @@ attribute, 5 knowledge levels per click; knowledge at level 0 is listed too) and
 Temperature row (- and +: 5 degrees off or on the air's, all along). On the command
 line: `--debug character_editor` and `--debug god_mode`.
 
-The debug windows (F2 test scenarios, F4 cheats, F5 items, F6 animals) and the debug readout (F3) have no
+The debug windows (F2 test scenarios, F4 cheats, F5 items, F6 animals, F7 visual) and the debug readout (F3) have no
 buttons: keyboard only. The readout goes to the top right corner. With
 vision, F4 gets Reveal map and See everything. Both there, with the option
 that veils what the selected settler does not see (what no settler sees when
@@ -376,7 +376,10 @@ flat bare world of 96×96 tiles (same seed, debug flags and clock speed kept, no
 fog of war, the view at its middle): *Hungry wolves and roe deer* (a pack of four
 wolves ten tiles from a herd of three does, no settlers) and *Hungry wolves and
 two settlers* (settlers with random characters, one bare-handed and one with a
-thrusting spear, no other animals).
+thrusting spear, no other animals). F7, the visual debug menu, has three sliders (steps of
+5 percent, from 0 to 100, kept for the session) and a *Default values* button: how dark
+what is out of view gets under the fog of war (75 percent by default, 100: black), and how
+blurred (50) and how dark (60) the levels below the one shown are, for playtests.
 
 ## Theme, scale and accessibility
 

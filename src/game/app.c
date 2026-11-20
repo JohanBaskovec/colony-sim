@@ -765,6 +765,7 @@ bool app_init(App *app, const CliOptions *options)
     app->structure_direction = DIRECTION_SOUTH; /* Beds' heads at the top. */
     /* Zeroed is a valid item id (slot 0): these name no item. */
     app->debug_held = ITEM_ID_NONE;
+    app->tuning = render_tuning_default();
     app->move_item_id = ITEM_ID_NONE;
     app->selected_item.id = ITEM_ID_NONE;
     log_set_sink(sdl_log_sink, NULL);
@@ -911,6 +912,7 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
     case APP_WINDOW_ITEMS: app->show_items_menu = false; break;
     case APP_WINDOW_ANIMALS: app->show_animals_menu = false; break;
+    case APP_WINDOW_VISUAL: app->show_visual_menu = false; break;
     case APP_WINDOW_SCENARIOS: app->show_scenarios_menu = false; break;
     case APP_WINDOW_GAME_MENU: app->show_game_menu = false; break;
     case APP_WINDOW_SETTINGS:
@@ -1056,6 +1058,7 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_DEBUG_MENU: app->show_debug_menu = !app->show_debug_menu; return;
     case APP_KEY_ITEMS_MENU: app->show_items_menu = !app->show_items_menu; return;
     case APP_KEY_ANIMALS_MENU: app->show_animals_menu = !app->show_animals_menu; return;
+    case APP_KEY_VISUAL_MENU: app->show_visual_menu = !app->show_visual_menu; return;
     case APP_KEY_SCENARIOS_MENU: app->show_scenarios_menu = !app->show_scenarios_menu; return;
     case APP_KEY_TEMPERATURE: app_toggle_temperature_view(app); return;
     case APP_KEY_LIGHT: app_toggle_light_view(app); return;
@@ -1894,7 +1897,8 @@ static void render_frame(App *app)
 
     /* The levels below, through open space: those seen somewhere, the deepest first. */
     uint32_t levels;
-    if (render_below_begin(app->renderer, game_view_map(&app->game), &app->camera, &levels)) {
+    if (render_below_begin(app->renderer, game_view_map(&app->game), &app->camera, &app->tuning,
+                           &levels)) {
         for (int z = 0; z < app->camera.level; z++) {
             if ((levels & (1u << z)) == 0) {
                 continue;
@@ -1914,7 +1918,7 @@ static void render_frame(App *app)
             while (next < app->camera.level && (levels & (1u << next)) == 0) {
                 next++;
             }
-            render_below_shade(app->renderer, z, next);
+            render_below_shade(app->renderer, &app->tuning, z, next);
         }
         render_below_end(app->renderer);
     }
@@ -1930,7 +1934,7 @@ static void render_frame(App *app)
     render_world_sprites(app->renderer, app->sprites, &app->game, &app->camera, app->selected,
                          app->selected_count, app->selected_animal);
     if (app->game.fog_on) {
-        render_fog(app->renderer, &app->game, &app->camera);
+        render_fog(app->renderer, &app->game, &app->camera, &app->tuning);
     }
     render_ramp_markers(app->renderer, game_view_map(&app->game), &app->camera);
     render_forbidden_markers(app->renderer, &app->game, &app->camera);

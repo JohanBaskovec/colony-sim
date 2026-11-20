@@ -41,13 +41,19 @@ static const SDL_Color RING_COLOR = {120, 84, 50, 255};
 #define TREE_DETAIL_MIN_ZOOM 10.0f
 
 /* Levels below the one shown (render_below_begin()): drawn this many times
- * smaller, then stretched back with smoothing (a blur), and veiled towards
- * BELOW_HAZE the deeper they are. What lies `depth` levels down keeps
- * BELOW_FLOOR + (1 - BELOW_FLOOR) * BELOW_DECAY^depth of its color: a little
- * less each level, never less than BELOW_FLOOR (never all dark). */
-#define BELOW_SCALE 3
-#define BELOW_FLOOR 0.4f
+ * smaller (1 at no blur, BELOW_SCALE_MAX at the most), then stretched back with
+ * smoothing (a blur), and veiled towards BELOW_HAZE the deeper they are. What
+ * lies `depth` levels down keeps (1 - dark)^h(depth) of its color, `dark` being
+ * RenderTuning.below_dark (0 .. 1) and h(depth) the way the veil deepens: a
+ * little less each level, h(0) = 0 and h = 1 for the deepest. At the default
+ * (RENDER_TUNING_BELOW_DARK, 1 - BELOW_FLOOR) it is the game's look, BELOW_FLOOR +
+ * (1 - BELOW_FLOOR) * BELOW_DECAY^depth, never all dark; at 1 everything below
+ * is black. */
+#define BELOW_SCALE_MAX 5.0f
 #define BELOW_DECAY 0.8f
+#define BELOW_FLOOR 0.4f /* The color kept by the deepest levels at the default. */
+/* The fog's veil: the color, and the opacity at fog_dark 100. */
+static const SDL_Color FOG_VEIL = {14, 16, 28, 255};
 static const SDL_Color BELOW_HAZE = {14, 16, 24, 255};
 static const SDL_Color BELOW_ABYSS = {14, 16, 24, 255}; /* Open space to the bottom. */
 /* Edges of the ground over a drop to the levels below. */
@@ -553,22 +559,43 @@ static uint32_t below_fill_view(const Map *map, const Camera *camera)
     return levels;
 }
 
-/* How much of its color what lies `depth` levels below the level shown keeps. */
-static float below_brightness(int depth)
+RenderTuning render_tuning_default(void)
 {
-    return BELOW_FLOOR + (1.0f - BELOW_FLOOR) * powf(BELOW_DECAY, (float)depth);
+    return (RenderTuning){.fog_dark = RENDER_TUNING_FOG_DARK,
+                          .below_blur = RENDER_TUNING_BELOW_BLUR,
+                          .below_dark = RENDER_TUNING_BELOW_DARK};
+}
+
+static float percent(int value)
+{
+    return (float)clampi(value, 0, 100) / 100.0f;
+}
+
+/* How much of its color what lies `depth` levels below the level shown keeps. */
+static float below_brightness(const RenderTuning *tuning, int depth)
+{
+    float reference = BELOW_FLOOR + (1.0f - BELOW_FLOOR) * powf(BELOW_DECAY, (float)depth);
+    float h = logf(reference) / logf(BELOW_FLOOR);
+    return powf(1.0f - percent(tuning->below_dark), h);
+}
+
+/* How many times smaller the levels below are drawn. */
+static float below_scale(const RenderTuning *tuning)
+{
+    return 1.0f + percent(tuning->below_blur) * (BELOW_SCALE_MAX - 1.0f);
 }
 
 bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera,
-                        uint32_t *levels)
+                        const RenderTuning *tuning, uint32_t *levels)
 {
+    const float scale = below_scale(tuning);
     SDL_COMPILE_TIME_ASSERT(below_levels_fit, MAP_MAX_LEVELS <= 32);
     *levels = 0;
     if (camera->level <= 0 || camera->level >= map->depth) {
         return false;
     }
-    int width = (int)ceilf(camera->viewport_width / (float)BELOW_SCALE);
-    int height = (int)ceilf(camera->viewport_height / (float)BELOW_SCALE);
+    int width = (int)ceilf(camera->viewport_width / scale);
+    int height = (int)ceilf(camera->viewport_height / scale);
     if (width <= 0 || height <= 0) {
         return false;
     }
@@ -592,8 +619,7 @@ bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *ca
     if (!SDL_SetRenderTarget(renderer, below_texture)) {
         return false;
     }
-    SDL_SetRenderScale(renderer, below_saved_scale_x / (float)BELOW_SCALE,
-                       below_saved_scale_y / (float)BELOW_SCALE);
+    SDL_SetRenderScale(renderer, below_saved_scale_x / scale, below_saved_scale_y / scale);
     SDL_SetRenderDrawColor(renderer, BELOW_ABYSS.r, BELOW_ABYSS.g, BELOW_ABYSS.b, 255);
     SDL_RenderClear(renderer);
     below_active = true;
@@ -607,9 +633,13 @@ bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *ca
  * after it: a shade that takes it from its brightness to that of the next
  * level gives every level exactly below_brightness() of its depth, whichever
  * levels lie between. */
-void render_below_shade(SDL_Renderer *renderer, int level, int next_level)
+void render_below_shade(SDL_Renderer *renderer, const RenderTuning *tuning, int level,
+                        int next_level)
 {
-    float kept = below_brightness(below_shown - level) / below_brightness(below_shown - next_level);
+    /* With nothing kept at all (below_dark 100) a level drawn after one that is
+     * to be black has nothing left to darken: the last veil does it. */
+    float next = below_brightness(tuning, below_shown - next_level);
+    float kept = next > 0.0f ? below_brightness(tuning, below_shown - level) / next : 1.0f;
     float alpha = clampf(1.0f - kept, 0.0f, 1.0f);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, BELOW_HAZE.r, BELOW_HAZE.g, BELOW_HAZE.b,
@@ -2717,12 +2747,14 @@ static bool fog_tile_seen(const Game *game, const Camera *camera, int x, int y)
     return level >= 0 && vision_seen(&game->vision, x, y, level);
 }
 
-void render_fog(SDL_Renderer *renderer, const Game *game, const Camera *camera)
+void render_fog(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                const RenderTuning *tuning)
 {
     const Map *map = game_view_map(game);
     const int z = camera->level; /* The level shown. */
     TileRect visible = camera_visible_tiles(camera, map->width, map->height);
-    SDL_Color veil = {14, 16, 28, 165}; /* The same dim light by day and by night. */
+    SDL_Color veil = FOG_VEIL; /* The same dim light by day and by night. */
+    veil.a = (Uint8)SDL_lroundf(percent(tuning->fog_dark) * 255.0f);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
             int level = map_view_level(map, x, y, z); /* What is drawn there. */

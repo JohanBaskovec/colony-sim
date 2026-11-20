@@ -142,6 +142,7 @@ simulation:
 | `work_panel`   | Work priorities grid (colonists × work types), a docked main window     |
 | `debug_panel`  | Debug menu (F4): a check box per cheat (`GameDebug`), one-shot commands (knowledge, time, discord among the settlers, forgetting the debug opinions), the chats counted so far, the debug tool (move settlers) |
 | `scenarios_panel` | Test scenarios menu (F2): a button per scenario; a click asks `App` to load it, which `app_run()` does at the start of the next frame (never while windows are being drawn), forgetting selection, tools and notices |
+| `visual_panel` | Visual debug menu (F7): sliders (steps of 5 percent) for the darkness of what is out of view and the blur and darkening of the levels below (`RenderTuning`, `App.tuning`, read by `render_fog()` and the levels-below pass of `render_frame()`), and a button back to the defaults; the values last for the session |
 | `animals_panel` | Animals menu (F6): a Female and a Male button per species, which arm the debug tool to put one on every clicked tile |
 | `items_panel`  | Items menu (F5): every item with a 1× and a Max button, which arm the debug tool to drop it on the next clicked tile |
 | `text`         | SDL3_ttf text rendering with an LRU cache of laid-out strings           |
@@ -2558,7 +2559,13 @@ whatever the depth, on an offscreen image three times smaller then stretched
 back with smoothing (a cheap blur). After each level a veil of haze makes up
 the difference with the next level drawn, so that what lies d levels down
 keeps `BELOW_FLOOR + (1 - BELOW_FLOOR) * BELOW_DECAY^d` of its color: a little
-darker with each level, never black. (Drawing every level in full, as before,
+darker with each level, never black. The blur and the darkening are set by
+`RenderTuning` (`App.tuning`, the visual debug menu, F7): the image is
+`1 + blur × 4` times smaller (3 by default, 1: no blur) and a level d down
+keeps `(1 - dark)^h(d)` of its color, where `h` is the curve that gives the
+above at the default `dark` of 60 percent (the game's look) and 1 gives
+black. The same struct sets the opacity of the fog's veil (`render_fog()`,
+75 percent by default). (Drawing every level in full, as before,
 cost a quarter of the frame rate at the surface level, the ground under it
 drawn though hidden, and had to stop 6 levels down.) The ground of the level shown has a
 dark edge over each drop, and slopes are lit towards the higher side.

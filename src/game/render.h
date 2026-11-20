@@ -20,8 +20,28 @@
 void render_map(SDL_Renderer *renderer, Sprites *sprites, const Map *map, const Camera *camera);
 
 /*
+ * What the visual debug menu (game/visual_panel.h) sets: how the view looks, in
+ * percent (0 .. 100). The defaults are the game's own look.
+ * - `fog_dark`: how dark what is out of view gets (render_fog()), 100: black.
+ * - `below_blur`: how blurred the levels below are, 0: sharp.
+ * - `below_dark`: how dark the levels below get, 0: not at all, 100: black (each
+ *   level down is darker than the one over it, see render_below_shade()).
+ */
+#define RENDER_TUNING_FOG_DARK 75
+#define RENDER_TUNING_BELOW_BLUR 50
+#define RENDER_TUNING_BELOW_DARK 60
+typedef struct RenderTuning {
+    int fog_dark;
+    int below_blur;
+    int below_dark;
+} RenderTuning;
+
+/* The game's own look. */
+RenderTuning render_tuning_default(void);
+
+/*
  * The levels below the one shown, seen through open space however deep:
- * blurred and veiled a little more with each level, never all dark.
+ * blurred and veiled a little more with each level (RenderTuning).
  * render_below_begin() works out the level seen on each visible tile
  * (map_view_level()) and sets `levels` to those seen somewhere (bit z for
  * level z); it returns false when no level below is seen (nothing to draw).
@@ -34,8 +54,9 @@ void render_map(SDL_Renderer *renderer, Sprites *sprites, const Map *map, const 
  * shown after the last): it veils what is already drawn.
  */
 bool render_below_begin(SDL_Renderer *renderer, const Map *map, const Camera *camera,
-                        uint32_t *levels);
-void render_below_shade(SDL_Renderer *renderer, int level, int next_level);
+                        const RenderTuning *tuning, uint32_t *levels);
+void render_below_shade(SDL_Renderer *renderer, const RenderTuning *tuning, int level,
+                        int next_level);
 void render_below_end(SDL_Renderer *renderer);
 
 /* A triangle on every ramp of the level shown: pointing up on a ramp that
@@ -90,7 +111,8 @@ void render_moisture(SDL_Renderer *renderer, const Game *game, const Camera *cam
 /* The fog of war on the level shown: tiles that were seen but are not in view
  * now are veiled (what nobody has seen is not drawn: the known world has
  * nothing there). */
-void render_fog(SDL_Renderer *renderer, const Game *game, const Camera *camera);
+void render_fog(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                const RenderTuning *tuning);
 
 /* Debug: veils the tiles of the level shown that the settler in `slot` does
  * not see (slot -1: that nobody sees), as the vision tracks them

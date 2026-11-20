@@ -27,6 +27,7 @@
 #include "game/stockpile_panel.h"
 #include "game/tile_panel.h"
 #include "game/view_controls.h"
+#include "game/visual_panel.h"
 #include "game/work_panel.h"
 
 #include <limits.h>
@@ -1724,7 +1725,8 @@ static void help_window(App *app)
               app_key_name(APP_KEY_LEVEL_UP), app_key_name(APP_KEY_LEVEL_DOWN));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.debug"),
               app_key_name(APP_KEY_DEBUG_MENU), app_key_name(APP_KEY_ITEMS_MENU),
-              app_key_name(APP_KEY_ANIMALS_MENU), app_key_name(APP_KEY_SCENARIOS_MENU));
+              app_key_name(APP_KEY_ANIMALS_MENU), app_key_name(APP_KEY_SCENARIOS_MENU),
+              app_key_name(APP_KEY_VISUAL_MENU));
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_HELP, tr("help.title"), UI_PLACE_CENTER, panel_rows,
                      &help, &open);
@@ -1743,6 +1745,7 @@ static void draw_window(App *app, AppWindow window)
     case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
     case APP_WINDOW_ITEMS: items_panel_draw(app); break;
     case APP_WINDOW_ANIMALS: animals_panel_draw(app); break;
+    case APP_WINDOW_VISUAL: visual_panel_draw(app); break;
     case APP_WINDOW_SCENARIOS: scenarios_panel_draw(app); break;
     case APP_WINDOW_GAME_MENU: game_menu_draw(app); break;
     case APP_WINDOW_SETTINGS: settings_window_draw(app); break;
@@ -1784,6 +1787,9 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     }
     if (app->show_animals_menu) {
         out[count++] = APP_WINDOW_ANIMALS;
+    }
+    if (app->show_visual_menu) {
+        out[count++] = APP_WINDOW_VISUAL;
     }
     if (app->show_scenarios_menu) {
         out[count++] = APP_WINDOW_SCENARIOS;

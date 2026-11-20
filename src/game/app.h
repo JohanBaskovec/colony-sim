@@ -11,6 +11,7 @@
 #include "core/settings.h"
 #include "core/test_scenario.h"
 #include "game/localization.h"
+#include "game/render.h"
 #include "game/sprites.h"
 #include "game/text.h"
 #include "game/ui.h"
@@ -78,6 +79,7 @@ typedef enum AppTool {
 #define APP_KEY_DEBUG_MENU SDL_SCANCODE_F4     /* Cheats (game/debug_panel.h). */
 #define APP_KEY_ITEMS_MENU SDL_SCANCODE_F5     /* Spawning items (game/items_panel.h). */
 #define APP_KEY_ANIMALS_MENU SDL_SCANCODE_F6   /* Spawning animals (game/animals_panel.h). */
+#define APP_KEY_VISUAL_MENU SDL_SCANCODE_F7    /* Visual debug (game/visual_panel.h). */
 #define APP_KEY_TEMPERATURE SDL_SCANCODE_H     /* Temperature view on or off. */
 #define APP_KEY_LIGHT SDL_SCANCODE_G           /* Light view on or off. */
 #define APP_KEY_MOISTURE SDL_SCANCODE_K        /* Soil moisture view on or off. */
@@ -125,6 +127,7 @@ typedef enum AppWindow {
     APP_WINDOW_DEBUG,          /* Debug menu (cheats). */
     APP_WINDOW_ITEMS,          /* Items menu (debug). */
     APP_WINDOW_ANIMALS,        /* Animals menu (debug). */
+    APP_WINDOW_VISUAL,         /* Visual debug menu. */
     APP_WINDOW_SCENARIOS,      /* Test scenarios menu (debug). */
     APP_WINDOW_GAME_MENU,
     APP_WINDOW_SETTINGS, /* Settings (game/settings_window.h), from the game menu. */
@@ -254,6 +257,8 @@ typedef struct App {
     bool show_debug_menu;     /* Debug menu (game/debug_panel.h). */
     bool show_items_menu;     /* Items menu (game/items_panel.h). */
     bool show_animals_menu;   /* Animals menu (game/animals_panel.h). */
+    bool show_visual_menu;    /* Visual debug menu (game/visual_panel.h). */
+    RenderTuning tuning;      /* What it sets: the fog, the levels below. */
     bool show_scenarios_menu; /* Test scenarios menu (game/scenarios_panel.h). */
     int pending_scenario;  /* A test scenario to load before the next update (TestScenario + 1, 0:
                               none). */

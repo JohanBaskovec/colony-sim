@@ -34,6 +34,7 @@ add_executable(colony_sim
     ui.c
     ui_layout.c
     view_controls.c
+    visual_panel.c
     work_panel.c)
 
 target_link_libraries(colony_sim PRIVATE colony_core SDL3_ttf::SDL3_ttf SDL3::SDL3)
