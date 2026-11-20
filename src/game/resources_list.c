@@ -21,24 +21,25 @@ typedef struct ListLayout {
     float indent; /* Item lines, under the header's arrow. */
 } ListLayout;
 
-static long category_total(const Game *game, ItemCategory category)
+static long category_total(const App *app, ItemCategory category)
 {
     long total = 0;
     for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
         if (item_def((ItemType)type)->category == category) {
-            total += game->stock[type];
+            total += app->stock[type];
         }
     }
     return total;
 }
 
-/* The groups with something in stock, each followed by its items unless folded. */
+/* The groups with something in storage, each followed by its items unless folded. What lies
+ * on a workstation, in a hauler's hands or on the ground is not listed: only the items in the
+ * stockpiles (and, one day, in containers). */
 static int list_rows(const App *app, Row rows[MAX_ROWS])
 {
-    const Game *game = &app->game;
     int count = 0;
     for (int category = 0; category < ITEM_CATEGORY_COUNT; category++) {
-        if (category_total(game, (ItemCategory)category) == 0) {
+        if (category_total(app, (ItemCategory)category) == 0) {
             continue;
         }
         rows[count++] = (Row){true, (ItemCategory)category, ITEM_NONE};
@@ -47,7 +48,7 @@ static int list_rows(const App *app, Row rows[MAX_ROWS])
         }
         for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
             if (item_def((ItemType)type)->category == (ItemCategory)category &&
-                game->stock[type] > 0) {
+                app->stock[type] > 0) {
                 rows[count++] = (Row){false, (ItemCategory)category, (ItemType)type};
             }
         }
@@ -82,9 +83,9 @@ static void row_text(Ui *ui, const ListLayout *list, float left, float y, const 
 }
 
 /* "Food for 3 days" for the food of the `counted` types in stock. */
-static void food_days_text(const Game *game, ItemTypeMask counted, char *out, size_t size)
+static void food_days_text(const App *app, ItemTypeMask counted, char *out, size_t size)
 {
-    long days = gather_food_days(counted, game->stock, game_daily_food(game));
+    long days = gather_food_days(counted, app->stock, game_daily_food(&app->game));
     if (days == 0) {
         SDL_strlcpy(out, tr("resources.food_days.less"), size);
         return;
@@ -96,44 +97,31 @@ static void food_days_text(const Game *game, ItemTypeMask counted, char *out, si
 
 static void header_tooltip(App *app, ItemCategory category)
 {
-    const Game *game = &app->game;
     char food[TEXT_SIZE];
     const char *lines[3];
     int count = 0;
     lines[count++] = tr(item_category_name_key(category));
     if (category == ITEM_CATEGORY_FOOD) {
-        food_days_text(game, item_types_in_category(ITEM_CATEGORY_FOOD), food, sizeof(food));
+        food_days_text(app, item_types_in_category(ITEM_CATEGORY_FOOD), food, sizeof(food));
         lines[count++] = food;
     }
     lines[count++] = tr(app->resources_folded[category] ? "resources.unfold" : "resources.fold");
     ui_tooltip(&app->ui, lines, count);
 }
 
-/* Where the items of a type lie, their weight, and the days of food they make. */
+/* The weight of the items of a type stored, and the days of food they make. */
 static void item_tooltip(App *app, ItemType type)
 {
-    const Game *game = &app->game;
-    static const char *const PLACE_KEYS[] = {N_("resources.stored"), N_("resources.on_stations"),
-                                             N_("resources.hauled")};
-    const long *places[] = {game->stock_stored, game->stock_on_stations, game->stock_hauled};
-    char texts[5][TEXT_SIZE], value[32];
-    const char *lines[6];
+    char texts[3][TEXT_SIZE], value[32];
+    const char *lines[3];
     int count = 0;
     lines[count++] = tr(item_def(type)->name_key);
-    for (int i = 0; i < (int)SDL_arraysize(places); i++) {
-        if (places[i][type] > 0) {
-            number(places[i][type], value, sizeof(value));
-            TR_FORMAT(texts[count], sizeof(texts[count]), tr(PLACE_KEYS[i]), value);
-            lines[count] = texts[count];
-            count++;
-        }
-    }
-    tr_decimal(value, sizeof(value), item_stack_weight(type, (int)game->stock[type]), 1);
+    tr_decimal(value, sizeof(value), item_stack_weight(type, (int)app->stock[type]), 1);
     TR_FORMAT(texts[count], sizeof(texts[count]), tr("resources.weight"), value);
     lines[count] = texts[count];
     count++;
     if (item_def(type)->nutrition > 0.0f) {
-        food_days_text(game, ITEM_TYPE_BIT(type), texts[count], sizeof(texts[count]));
+        food_days_text(app, ITEM_TYPE_BIT(type), texts[count], sizeof(texts[count]));
         lines[count] = texts[count];
         count++;
     }
@@ -155,8 +143,8 @@ static int draw_row(App *app, const ListLayout *list, const Row *row, float y)
         float text_y = y + SDL_floorf((list->row_height - line) * 0.5f);
         ui_label_dim(ui, folded ? "▸" : "▾", list->x + list->padding, text_y);
         row_text(ui, list, list->x + list->padding + list->indent, y,
-                 tr(item_category_name_key(row->category)),
-                 category_total(&app->game, row->category), false);
+                 tr(item_category_name_key(row->category)), category_total(app, row->category),
+                 false);
         if (hovered) {
             header_tooltip(app, row->category);
         }
@@ -168,7 +156,7 @@ static int draw_row(App *app, const ListLayout *list, const Row *row, float y)
     ui_fill(ui, well, ui->theme.colors[THEME_ICON_WELL]);
     render_item_icon(app->renderer, app->sprites, well, row->type);
     row_text(ui, list, left + icon + ui->theme.gap, y, tr(item_def(row->type)->name_key),
-             app->game.stock[row->type], true);
+             app->stock[row->type], true);
     if (hovered) {
         item_tooltip(app, row->type);
     }
@@ -181,7 +169,6 @@ void resources_list_draw(App *app, float bottom)
     const Theme *theme = &ui->theme;
     ScreenLayout screen;
     layout_screen(ui, &screen);
-    game_update_stock(&app->game); /* Up to date even while paused. */
 
     float line = (float)text_line_height(ui->text);
     ListLayout list = {

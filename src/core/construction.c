@@ -575,7 +575,8 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
     return 0;
 }
 
-/* A blocking structure leaves no room for items: they go next door. */
+/* A blocking structure leaves no room for items: they go next door (a last resort: the
+ * builder cleared the tile when the work began, construction_clear_items()). */
 static void clear_items(Map *map, Items *items, int x, int y, int z)
 {
     if (items_get(items, x, y, z).count == 0) {
@@ -589,6 +590,56 @@ static void clear_items(Map *map, Items *items, int x, int y, int z)
             items_move_all(items, map, x, y, z, x + DX[i], y + DY[i], z, true);
             return;
         }
+    }
+}
+
+/* Whether (x, y, z) is one of the site's own tiles. */
+static bool is_site_tile(const ConstructionSite *site, int x, int y, int z)
+{
+    for (int part = 0; part < construction_length(site); part++) {
+        int sx, sy, sz;
+        construction_tile(site, part, &sx, &sy, &sz);
+        if (sx == x && sy == y && sz == z) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* The items lying on one tile of a site go to a passable tile next to it that is
+ * not one of the site's own. No such room: what lies there stays. */
+static void clear_tile_items(const ConstructionSite *site, const Map *map, Items *items, int x,
+                             int y, int z)
+{
+    if (items_get(items, x, y, z).count == 0) {
+        return;
+    }
+    static const int DX[4] = {0, 1, 0, -1};
+    static const int DY[4] = {-1, 0, 1, 0};
+    for (int i = 0; i < 4; i++) {
+        if (map_is_passable(map, x + DX[i], y + DY[i], z) &&
+            !is_site_tile(site, x + DX[i], y + DY[i], z)) {
+            items_move_all(items, map, x, y, z, x + DX[i], y + DY[i], z, true);
+            return;
+        }
+    }
+}
+
+bool construction_takes_tiles(const ConstructionSite *site)
+{
+    return construction_workstation(site) != WORKSTATION_TYPE_COUNT ||
+           structure_blocks((StructureType)site->type);
+}
+
+void construction_clear_items(const ConstructionSite *site, const Map *map, Items *items)
+{
+    if (site == NULL || items == NULL || !construction_takes_tiles(site)) {
+        return;
+    }
+    for (int part = 0; part < construction_length(site); part++) {
+        int x, y, z;
+        construction_tile(site, part, &x, &y, &z);
+        clear_tile_items(site, map, items, x, y, z);
     }
 }
 
@@ -673,7 +724,7 @@ bool construction_add_work(Constructions *constructions, Map *map, Items *items,
     for (int part = 0; structure_blocks(type) && items != NULL && part < structure_length(type);
          part++) {
         clear_items(map, items, x + part * direction_dx(direction),
-                    y + part * direction_dy(direction), z);
+                    y + part * direction_dy(direction), z); /* (Normally done at the start.) */
     }
     return true;
 }

@@ -274,6 +274,34 @@ static void test_builder_brings_materials_and_builds_a_wall(void)
     game_shutdown(&game);
 }
 
+/* The builder pushes what lies on the site next door as soon as the work begins, long before
+ * the wall stands. */
+static void test_the_builder_clears_the_site_first(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_rested(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    items_add(&game.items, 12, 10, 0, item_stack_pristine(ITEM_BRANCHES, 6));
+    items_add(&game.items, 14, 10, 0, item_stack_pristine(ITEM_GRASS, 30));
+    int index = game_place_structure(&game, STRUCTURE_WALL, 10, 14, 0, DIRECTION_SOUTH);
+    REQUIRE(index != CONSTRUCTION_NONE);
+    items_add(&game.items, 10, 14, 0, item_stack_pristine(ITEM_COBBLE, 3)); /* In the way. */
+    bool cleared_while_building = false;
+    for (int i = 0; i < 8 * TICKS_PER_HOUR && map_structure(&game.map, 10, 14, 0) == STRUCTURE_NONE;
+         i++) {
+        game_tick(&game);
+        const ConstructionSite *site = construction_get(&game.constructions, index);
+        if (site != NULL && site->progress > 0.0f && map_structure(&game.map, 10, 14, 0) == 0) {
+            cleared_while_building = items_get(&game.items, 10, 14, 0).count == 0;
+            break;
+        }
+    }
+    CHECK(cleared_while_building);
+    CHECK_EQ_INT(game.items.totals[ITEM_COBBLE], 3);
+    game_shutdown(&game);
+}
+
 /* Only one kind of work: the others disabled. */
 static void only_work(Colonist *colonist, WorkType type)
 {
@@ -818,6 +846,7 @@ int main(void)
     RUN_TEST(test_a_new_plan_replaces_the_one_in_progress);
     RUN_TEST(test_cancelling_gives_materials_back);
     RUN_TEST(test_builder_brings_materials_and_builds_a_wall);
+    RUN_TEST(test_the_builder_clears_the_site_first);
     RUN_TEST(test_ground_bedding_needs_no_material);
     RUN_TEST(test_settlers_sleep_on_a_ground_bedding);
     RUN_TEST(test_haulers_bring_materials);

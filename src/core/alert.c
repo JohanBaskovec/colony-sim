@@ -15,7 +15,7 @@ static void count_for(Alert *alert, EntityId id)
     alert->count++;
 }
 
-/* Whether the food lying in the colony lasts less than ALERT_FOOD_DAYS. */
+/* Whether the food in store lasts less than ALERT_FOOD_DAYS. */
 static bool food_runs_short(const Game *game)
 {
     ItemTypeMask food = 0;
@@ -24,8 +24,7 @@ static bool food_runs_short(const Game *game)
             food |= ITEM_TYPE_BIT(type);
         }
     }
-    return gather_food_days(food, game_view_items(game)->totals, game_daily_food(game)) <
-           ALERT_FOOD_DAYS;
+    return gather_food_days(food, game->stock, game_daily_food(game)) < ALERT_FOOD_DAYS;
 }
 
 void alerts_compute(const Game *game, Alerts *out)

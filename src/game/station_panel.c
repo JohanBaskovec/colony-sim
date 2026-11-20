@@ -3,6 +3,7 @@
 #include "core/game_clock.h"
 #include "core/hearth.h"
 #include "core/i18n.h"
+#include "core/stockpile.h"
 #include "core/work.h"
 #include "game/hud.h"
 #include "game/inspector.h"
@@ -18,8 +19,7 @@
 #define QUALITY_SLIDER_ID 6000 /* + the bill. */
 #define QUALITY_STEP 5         /* Quality points per notch of the ingredient slider. */
 #define DROPDOWN_ID 100        /* + 2 per bill, + 1 for the settler's. */
-#define RADIUS_STEP 10
-#define RADIUS_BIG_STEP 50
+#define RADIUS_SLIDER_ID 7000  /* + the bill. */
 
 /* What the player clicked, applied after the rows (deleting shifts bills). */
 typedef enum ActionType {
@@ -34,7 +34,7 @@ typedef enum ActionType {
     ACTION_SET_LEVELS,
     ACTION_SET_QUALITY,
     ACTION_TOGGLE_PAUSE,
-    ACTION_ADD_RADIUS,
+    ACTION_SET_RADIUS,
     ACTION_ADD_BILL,
     ACTION_TOGGLE_ADD_LIST,
     ACTION_PICK_RECIPE,
@@ -553,27 +553,37 @@ static void bill_quality_row(UiLayout *layout, const Bill *bill, int index, Acti
     layout->y += layout->row;
 }
 
-/* -/+ for how far inputs are looked for. */
-static void bill_radius_row(UiLayout *layout, const Bill *bill, int index, Action *action)
+/* A slider for how far inputs are looked for, in the notches of a stockpile's; the tiles the
+ * settlers reach within it are outlined on the map while the pointer is on it. */
+static void bill_radius_row(UiLayout *layout, App *app, const Workstation *station,
+                            const Bill *bill, int index, Action *action)
 {
     Ui *ui = layout->ui;
     char text[TEXT_SIZE], radius[16];
-    tr_integer(radius, sizeof(radius), bill->input_radius);
-    TR_FORMAT(text, sizeof(text), tr("bill.input_radius"), radius);
-    const char *minus = "−", *plus = "+";
-    float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
-    float pair = 2.0f * small + 2.0f;
-    ui_layout_measure(layout, pair + GAP + ui_text_width(ui, text));
-    float x = layout->x;
-    int step = (SDL_GetModState() & SDL_KMOD_SHIFT) ? RADIUS_BIG_STEP : RADIUS_STEP;
-    if (ui_layout_button_sized(layout, x, small, minus)) {
-        *action = (Action){.type = ACTION_ADD_RADIUS, .bill = index, .value = -step};
+    if (bill->input_radius == 0) {
+        SDL_strlcpy(text, tr("bill.input_radius_none"), sizeof(text));
+    } else {
+        tr_integer(radius, sizeof(radius), bill->input_radius);
+        TR_FORMAT(text, sizeof(text), tr("bill.input_radius"), radius);
     }
-    if (ui_layout_button_sized(layout, x + small + 2.0f, small, plus)) {
-        *action = (Action){.type = ACTION_ADD_RADIUS, .bill = index, .value = step};
-    }
+    ui_layout_label(layout, text, 0.0f, true);
+    ui_layout_measure(layout, LEVEL_SLIDER_WIDTH);
+    /* The notches of a stockpile's radius slider, but the last (unlimited). */
+    const int steps = stockpile_radius_steps() - 1;
+    int step = SDL_min(stockpile_radius_step(bill->input_radius), steps - 1);
+    SDL_FRect track = {layout->x, layout->y, layout->width, layout->row};
     if (layout->draw) {
-        ui_label(ui, text, x + pair + GAP, layout->y + layout->text_offset);
+        int id = RADIUS_SLIDER_ID + index;
+        if (ui_slider(ui, id, track, steps, &step)) {
+            *action = (Action){
+                .type = ACTION_SET_RADIUS, .bill = index, .value = stockpile_radius_of_step(step)};
+        }
+        if (ui_slider_engaged(ui, id, track)) {
+            app->area_preview = (AreaPreview){
+                .kind = AREA_PREVIEW_REACH,
+                .from = {(int16_t)station->x, (int16_t)station->y, (int16_t)station->z},
+                .cost = stockpile_radius_of_step(step)};
+        }
     }
     layout->y += layout->row;
 }
@@ -848,7 +858,7 @@ static void bill_rows(UiLayout *layout, void *userdata)
     heading_row(layout, "bill.heading.worker");
     bill_worker_rows(layout, rows->game, bill, index, &rows->action);
     layout->y += GAP;
-    bill_radius_row(layout, bill, index, &rows->action);
+    bill_radius_row(layout, rows->app, rows->station, bill, index, &rows->action);
     if (def->inputs[0] != ITEM_NONE) {
         bill_quality_row(layout, bill, index, &rows->action);
     }
@@ -1296,10 +1306,9 @@ static void apply(App *app, int index, const Action *action)
             workstation_set_bill_paused(workstations, index, action->bill, !bill->paused);
         }
         break;
-    case ACTION_ADD_RADIUS:
+    case ACTION_SET_RADIUS:
         if (bill != NULL) {
-            workstation_set_bill_input_radius(workstations, index, action->bill,
-                                              bill->input_radius + action->value);
+            workstation_set_bill_input_radius(workstations, index, action->bill, action->value);
         }
         break;
     case ACTION_ADD_BILL:
@@ -1346,7 +1355,6 @@ void station_panel_draw(App *app)
     if (station == NULL) {
         return;
     }
-    game_update_stock(&app->game); /* Up to date even while paused. */
     const char *title = tr(workstation_def((WorkstationType)station->type)->name_key);
     StationRows rows = {app, RECIPE_COUNT, &app->game, station, {.type = ACTION_NONE, .bill = -1}};
     bool open = inspector_box(app, INSPECT_STATION, title, summary_rows, &rows);

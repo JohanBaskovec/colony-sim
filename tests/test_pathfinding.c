@@ -218,6 +218,30 @@ static void test_reachable_count(void)
     cleanup(&map, &finder, &path);
 }
 
+/* The tiles of a level a settler reaches within a cost, as the outline of a bill's ingredient
+ * range shows them: a wall cuts the area, the cost bounds it. */
+static void test_reachable_on_level(void)
+{
+    Map map;
+    Pathfinder finder;
+    REQUIRE(make_open_map(&map, &finder, 16));
+    uint8_t mask[16 * 16];
+    CHECK_EQ_UINT(pathfinder_reachable_on_level(&finder, &map, tile(8, 8), 3.0f, 0, mask),
+                  pathfinder_reachable_count(&finder, &map, tile(8, 8), 3.0f));
+    CHECK(mask[8 * 16 + 8] == 1 && mask[8 * 16 + 11] == 1); /* Three tiles straight. */
+    CHECK(mask[8 * 16 + 12] == 0 && mask[0] == 0);          /* Too far. */
+    /* A wall, but for a gap far from the start: what lies behind it is out of reach. */
+    wall_column(&map, 10, 0, 14);
+    size_t reached = pathfinder_reachable_on_level(&finder, &map, tile(8, 8), 4.0f, 0, mask);
+    CHECK(reached > 0);
+    CHECK(mask[8 * 16 + 9] == 1);
+    CHECK(mask[8 * 16 + 11] == 0 && mask[8 * 16 + 10] == 0);
+    /* A level that does not exist: nothing. */
+    CHECK_EQ_UINT(pathfinder_reachable_on_level(&finder, &map, tile(8, 8), 4.0f, 5, mask), 0);
+    Path path = {0};
+    cleanup(&map, &finder, &path);
+}
+
 /* Plains on level 0 over x < 8; a hill over x >= 8: earth on level 0 under
  * a floor on level 1. */
 static void make_hill(Map *map)
@@ -531,6 +555,7 @@ int main(void)
     RUN_TEST(test_cost_limit);
     RUN_TEST(test_find_nearest_matching_tile);
     RUN_TEST(test_reachable_count);
+    RUN_TEST(test_reachable_on_level);
     RUN_TEST(test_paths_climb_slopes);
     RUN_TEST(test_paths_climb_ladders);
     RUN_TEST(test_animals_open_no_door_and_climb_no_ladder);

@@ -23,6 +23,14 @@ static bool init_flat_game(Game *game)
     return true;
 }
 
+/* Plenty of food in a stockpile (the count is up to date). */
+static void store_food(Game *game)
+{
+    REQUIRE(stockpile_create(&game->stockpiles, &game->map, 4, 4, 6, 6, 0) != STOCKPILE_NONE);
+    items_add(&game->items, 5, 5, 0, item_stack_pristine(ITEM_BLACKBERRIES, 400));
+    game_update_stock(game);
+}
+
 /* A settler with every need met, and food for many days in the colony. */
 static Colonist *spawn_fed(Game *game, int x, int y)
 {
@@ -50,7 +58,7 @@ static void test_settlers_in_danger(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 5, 5, 0, item_stack_pristine(ITEM_BLACKBERRIES, 400));
+    store_food(&game);
     Colonist *a = spawn_fed(&game, 10, 10);
     Colonist *b = spawn_fed(&game, 11, 10);
     REQUIRE(a != NULL && b != NULL);
@@ -84,7 +92,7 @@ static void test_settlers_in_need_are_counted(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 5, 5, 0, item_stack_pristine(ITEM_BLACKBERRIES, 400));
+    store_food(&game);
     Colonist *a = spawn_fed(&game, 10, 10);
     Colonist *b = spawn_fed(&game, 11, 10);
     Colonist *c = spawn_fed(&game, 12, 10);
@@ -144,7 +152,13 @@ static void test_no_food_in_the_colony(void)
     REQUIRE(none != NULL);
     CHECK(entity_id_is_none(none->first)); /* Nobody in particular. */
 
+    /* Food lying about does not count: it has to be in a stockpile. */
     items_add(&game.items, 5, 5, 0, item_stack_pristine(ITEM_BLACKBERRIES, 400));
+    game_update_stock(&game);
+    alerts_compute(&game, &alerts);
+    CHECK(find(&alerts, ALERT_NO_FOOD) != NULL);
+    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 4, 4, 6, 6, 0) != STOCKPILE_NONE);
+    game_update_stock(&game);
     alerts_compute(&game, &alerts);
     CHECK(find(&alerts, ALERT_NO_FOOD) == NULL);
     game_shutdown(&game);
@@ -154,7 +168,7 @@ static void test_a_breakdown_is_an_alert(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    items_add(&game.items, 5, 5, 0, item_stack_pristine(ITEM_BLACKBERRIES, 400));
+    store_food(&game);
     Colonist *a = spawn_fed(&game, 10, 10);
     REQUIRE(a != NULL);
     a->mood.break_type = MOOD_BREAK_SULK;

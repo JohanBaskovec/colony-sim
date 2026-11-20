@@ -666,6 +666,28 @@ void gather_zone_set_group_target(GatherZones *zones, int index, GatherGroup gro
     }
 }
 
+void gather_zone_apply_group_order(GatherZones *zones, int index, GatherGroup group)
+{
+    GatherGroupOrder *group_order = get_group_order(zones, index, group);
+    if (group_order == NULL) {
+        return;
+    }
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        if (!(GROUP_DEFS[group].members & GATHER_RESOURCE_BIT(r))) {
+            continue;
+        }
+        GatherOrder *order = &zones->list[index].orders[r];
+        GatherUnit unit = (GatherUnit)group_order->unit;
+        order->mode = group_order->mode;
+        order->unit = (uint8_t)(unit_allowed(unit, gather_resource_is_food((GatherResource)r))
+                                    ? unit
+                                    : GATHER_UNIT_ITEMS);
+        order->target = group_order->target;
+        order->done = 0;
+    }
+    changed(zones);
+}
+
 /* Sets the full harvest option of the resources among `members`. */
 static void set_ripe_only_of(GatherZones *zones, int index, GatherResourceMask members,
                              bool ripe_only)

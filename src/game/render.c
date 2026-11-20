@@ -4230,6 +4230,42 @@ void render_world_sprites(SDL_Renderer *renderer, Sprites *sprites, const Game *
     render_chat_bubbles(renderer, game, camera);
 }
 
+void render_area_outline(SDL_Renderer *renderer, const Camera *camera, int width, int height,
+                         AreaContains contains, const void *area)
+{
+    TileRect visible = camera_visible_tiles(camera, width, height);
+    const SDL_Color white = {255, 255, 255, 240}, shadow = {0, 0, 0, 110};
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            if (!contains(area, x, y)) {
+                continue;
+            }
+            SDL_FRect tile = tile_rect(camera, x, y);
+            float t = SDL_max(2.0f, floorf(tile.w * 0.08f));
+            /* Left, right, top, bottom: the sides facing out of the area. */
+            const bool open[4] = {!contains(area, x - 1, y), !contains(area, x + 1, y),
+                                  !contains(area, x, y - 1), !contains(area, x, y + 1)};
+            const SDL_FRect edges[4] = {{tile.x, tile.y, t, tile.h},
+                                        {tile.x + tile.w - t, tile.y, t, tile.h},
+                                        {tile.x, tile.y, tile.w, t},
+                                        {tile.x, tile.y + tile.h - t, tile.w, t}};
+            for (int i = 0; i < 4; i++) {
+                if (!open[i]) {
+                    continue;
+                }
+                /* A dark line inside the white one: seen on pale ground too. */
+                SDL_FRect inner = edges[i];
+                inner.x += i < 2 ? (i == 0 ? t : -1.0f) : 0.0f;
+                inner.y += i >= 2 ? (i == 2 ? t : -1.0f) : 0.0f;
+                inner.w = i < 2 ? 1.0f : inner.w;
+                inner.h = i >= 2 ? 1.0f : inner.h;
+                fill(renderer, white, &edges[i]);
+                fill(renderer, shadow, &inner);
+            }
+        }
+    }
+}
+
 void render_selection_box(SDL_Renderer *renderer, float x0, float y0, float x1, float y1)
 {
     SDL_FRect rect = {SDL_min(x0, x1), SDL_min(y0, y1), SDL_fabsf(x1 - x0), SDL_fabsf(y1 - y0)};

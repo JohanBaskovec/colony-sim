@@ -187,6 +187,20 @@ typedef enum NewGameStage {
     NEW_GAME_STAGE_GENERATE, /* ...it was shown: the world is made before the next frame. */
 } NewGameStage;
 
+/* What the outline of an area setting is about. */
+typedef enum AreaPreviewKind {
+    AREA_PREVIEW_NONE,
+    AREA_PREVIEW_STOCKPILE, /* The tiles a stockpile takes items from (its radius). */
+    AREA_PREVIEW_REACH,     /* The tiles within a walking cost of a workstation (a bill's range). */
+} AreaPreviewKind;
+
+typedef struct AreaPreview {
+    AreaPreviewKind kind;
+    int stockpile; /* AREA_PREVIEW_STOCKPILE: its index. */
+    TilePos from;  /* AREA_PREVIEW_REACH: where the walk starts. */
+    int cost;      /* AREA_PREVIEW_REACH: how far. */
+} AreaPreview;
+
 typedef struct App {
     SDL_Window *window;
     SDL_Renderer *renderer;
@@ -335,6 +349,21 @@ typedef struct App {
      * tell a double click (centers the view on the colonist). */
     EntityId bar_last_click;
     Uint64 bar_last_click_ms;
+    /* The stock counted afresh each frame (game_count_stock()): what the resources list, the
+     * bills and the gathering zones show. */
+    long stock[ITEM_TYPE_COUNT];
+    /* The area a panel setting reaches, outlined in white on the map while the pointer is on
+     * (or drags) that setting: the stockpile radius slider, a bill's ingredient range. Set by the
+     * panel while it draws, shown by the next frame's world, then forgotten. */
+    AreaPreview area_preview;
+    /* The tiles a settler reaches on the level shown within the preview's cost (kept while
+     * it is the same, see area_outline_update()). */
+    uint8_t *reach_mask;
+    size_t reach_capacity;
+    AreaPreview reach_key;
+    int reach_level;
+    uint32_t reach_revision;
+    bool reach_valid;
     /* Resources list (game/resources_list.h): the groups folded. */
     bool resources_folded[ITEM_CATEGORY_COUNT];
     /* A middle/right button press that started on a panel does not pan the view. */

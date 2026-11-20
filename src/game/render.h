@@ -186,6 +186,14 @@ void render_selection_box(SDL_Renderer *renderer, float x0, float y0, float x1, 
 void render_tile_outline(SDL_Renderer *renderer, const Camera *camera, int x, int y,
                          SDL_Color color);
 
+/* Whether tile (x, y) of the level shown is in an area (a reach, a radius). */
+typedef bool (*AreaContains)(const void *area, int x, int y);
+
+/* A white outline around the tiles of the level shown that `contains` accepts, on the
+ * visible part of a map of `width` x `height` tiles: the edges of the area, not its tiles. */
+void render_area_outline(SDL_Renderer *renderer, const Camera *camera, int width, int height,
+                         AreaContains contains, const void *area);
+
 /* Thick outline of a selected tile (a structure). */
 void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, int y);
 

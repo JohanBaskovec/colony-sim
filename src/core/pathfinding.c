@@ -492,3 +492,24 @@ size_t pathfinder_reachable_count(Pathfinder *finder, const Map *map, TilePos st
     search(finder, map, start, &target, max_cost);
     return finder->last_expanded;
 }
+
+size_t pathfinder_reachable_on_level(Pathfinder *finder, const Map *map, TilePos start,
+                                     float max_cost, int z, uint8_t *mask)
+{
+    if (mask == NULL || z < 0 || z >= map->depth) {
+        return 0;
+    }
+    size_t level = (size_t)map->width * (size_t)map->height;
+    memset(mask, 0, level);
+    SearchGoal target = {NULL, NULL, NULL, NULL}; /* Never reached: floods the whole area. */
+    search(finder, map, start, &target, max_cost);
+    size_t count = 0;
+    const PathNode *nodes = finder->nodes + (size_t)z * level;
+    for (size_t i = 0; i < level; i++) {
+        if (nodes[i].closed_stamp == finder->stamp) {
+            mask[i] = 1;
+            count++;
+        }
+    }
+    return count;
+}

@@ -2013,6 +2013,7 @@ static void test_gathering_zone_keeps_the_worker_busy(void)
     game_shutdown(&game);
 }
 
+/* "Until N": only what lies in a stockpile counts, so what is gathered counts once hauled. */
 static void test_gathering_zone_stops_at_its_targets(void)
 {
     Game game;
@@ -2022,7 +2023,8 @@ static void test_gathering_zone_stops_at_its_targets(void)
     }
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
-    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    int pile = stockpile_create(&game.stockpiles, &game.map, 20, 22, 22, 23, 0);
+    REQUIRE(pile != STOCKPILE_NONE);
     int zone = gather_zone_create(&game.gather_zones, &game.map, 23, 20, 25, 20, 0);
     REQUIRE(zone != GATHER_ZONE_NONE);
     gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZELNUTS, true);
@@ -2030,17 +2032,25 @@ static void test_gathering_zone_stops_at_its_targets(void)
     gather_zone_set_target(&game.gather_zones, zone, GATHER_HAZELNUTS, MAP_NUTS_MAX + 2);
     gather_zone_set_group_mode(&game.gather_zones, zone, GATHER_GROUP_FOOD, GATHER_FOREVER);
     float tile_work = gather_job_work_needed(&game.map, 23, 20, 0, GATHER_JOB_NUTS);
-    run_ticks(&game, walk_ticks(5) + (int)(tile_work * 5.0f));
-    /* Two tiles' nuts in the colony: done. */
-    CHECK_EQ_INT((int)game.items.totals[ITEM_HAZELNUTS], 2 * MAP_NUTS_MAX);
+    run_ticks(&game, walk_ticks(5) + (int)(tile_work * 5.0f) + 4 * TICKS_PER_HOUR);
+    /* At least two tiles' nuts in storage (a third may have been gathered before the first
+     * were hauled): done. */
+    CHECK(game.stock[ITEM_HAZELNUTS] >= 2 * MAP_NUTS_MAX);
+    CHECK(game.stock[ITEM_HAZELNUTS] <= 3 * MAP_NUTS_MAX);
+    CHECK_EQ_INT(game.items.totals[ITEM_HAZELNUTS], game.stock[ITEM_HAZELNUTS]);
     CHECK(colonist->task != TASK_WORK);
     CHECK_EQ_INT(game.gather_zones.wanting_cells, 0);
-    /* Some taken away (eaten): the zone wants more. */
-    for (int x = 23; x <= 25; x++) {
-        items_remove(&game.items, x, 20, 0, MAP_NUTS_MAX);
+    /* What lies on the ground does not count: only the stored nuts do. */
+    for (int y = 22; y <= 23; y++) {
+        for (int x = 20; x <= 22; x++) {
+            items_remove(&game.items, x, y, 0, 3 * MAP_NUTS_MAX);
+        }
     }
-    run_ticks(&game, walk_ticks(5) + (int)(tile_work * 3.0f));
-    CHECK_EQ_INT((int)game.items.totals[ITEM_HAZELNUTS], MAP_NUTS_MAX);
+    items_add(&game.items, 30, 30, 0, item_stack_pristine(ITEM_HAZELNUTS, 50));
+    run_ticks(&game, GAME_STOCK_INTERVAL + 2);
+    CHECK_EQ_INT(game.stock[ITEM_HAZELNUTS], 0);
+    CHECK((gather_zone_get(&game.gather_zones, zone)->wanted &
+           GATHER_RESOURCE_BIT(GATHER_HAZELNUTS)) != 0);
     game_shutdown(&game);
 }
 

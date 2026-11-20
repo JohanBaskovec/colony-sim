@@ -423,7 +423,7 @@ void stockpile_set_radius(Stockpiles *stockpiles, int index, int radius)
     if (!is_valid(stockpiles, index)) {
         return;
     }
-    radius = radius <= 0 || radius > STOCKPILE_RADIUS_MAX
+    radius = radius < 0 || radius > STOCKPILE_RADIUS_MAX
                  ? STOCKPILE_RADIUS_UNLIMITED
                  : clampi(radius, STOCKPILE_RADIUS_MIN, STOCKPILE_RADIUS_MAX);
     if (stockpiles->list[index].radius != radius) {
@@ -443,6 +443,9 @@ bool stockpile_in_radius(const Stockpile *stockpile, int x, int y, int z)
     if (stockpile->radius == STOCKPILE_RADIUS_UNLIMITED) {
         return true;
     }
+    if (stockpile->radius == 0) {
+        return false; /* Takes nothing. */
+    }
     int dx = outside(x, stockpile->min_x, stockpile->max_x);
     int dy = outside(y, stockpile->min_y, stockpile->max_y);
     int dz = outside(z, stockpile->min_z, stockpile->max_z);
@@ -451,13 +454,12 @@ bool stockpile_in_radius(const Stockpile *stockpile, int x, int y, int z)
 
 /* Every tile up to 20, then by 2, 4 and 8, unlimited last. */
 static const int RADIUS_STEPS[] = {
-    2,  3,   4,   5,   6,   7,   8,   9,   10,  11,
-    12, 13,  14,  15,  16,  17,  18,  19,  20,  22,
-    24, 26,  28,  30,  32,  34,  36,  38,  40,  44,
-    48, 52,  56,  60,  64,  68,  72,  76,  80,  88,
-    96, 104, 112, 120, 128, 136, 144, 152, 160, STOCKPILE_RADIUS_UNLIMITED};
+    0,  1,  2,  3,  4,   5,   6,   7,   8,   9,   10,  11,  12,
+    13, 14, 15, 16, 17,  18,  19,  20,  22,  24,  26,  28,  30,
+    32, 34, 36, 38, 40,  44,  48,  52,  56,  60,  64,  68,  72,
+    76, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, STOCKPILE_RADIUS_UNLIMITED};
 #define RADIUS_STEP_COUNT ((int)(sizeof(RADIUS_STEPS) / sizeof(RADIUS_STEPS[0])))
-_Static_assert(STOCKPILE_RADIUS_MIN == 2 && STOCKPILE_RADIUS_MAX == 160,
+_Static_assert(STOCKPILE_RADIUS_MIN == 0 && STOCKPILE_RADIUS_MAX == 160,
                "RADIUS_STEPS goes from the minimum to the maximum");
 
 int stockpile_radius_steps(void)

@@ -82,9 +82,10 @@ typedef enum BillMode {
 #define BILL_TARGET_DEFAULT 1
 
 /* How far from the station a bill's inputs are searched for, in travel cost
- * (about one per tile on open ground). */
-#define BILL_INPUT_RADIUS_MIN 10
-#define BILL_INPUT_RADIUS_MAX 250
+ * (about one per tile on open ground); 0: nowhere, nothing is made. The slider offers the
+ * radii of a stockpile's (stockpile_radius_of_step()), up to STOCKPILE_RADIUS_MAX. */
+#define BILL_INPUT_RADIUS_MIN 0
+#define BILL_INPUT_RADIUS_MAX 160
 #define BILL_INPUT_RADIUS_DEFAULT 80
 
 /* Worker levels a bill accepts by default (BILL_WORKER_LEVEL): everyone who

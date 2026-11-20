@@ -631,6 +631,7 @@ stockpile.allow_none = None
 stockpile.radius.one = Takes items within {0} tile
 stockpile.radius.other = Takes items within {0} tiles
 stockpile.radius_unlimited = Takes items from any distance
+stockpile.radius_none = Takes no items
 # {0} = lowest accepted quality grade, {1} = highest
 stockpile.quality = Quality: {0} to {1}
 # {0} = lowest accepted hit points (e.g. 50%), {1} = highest
@@ -641,8 +642,6 @@ gather_zone.name = Gathering zone {0}
 # {0} = number of tiles
 gather_zone.tiles.one = {0} tile
 gather_zone.tiles.other = {0} tiles
-gather_zone.hint = Tick what to gather here; items lying in the colony count
-gather_zone.hint_group = A group's setting limits each of its resources
 # {0} = priority number, 1 (highest) to 10
 gather_zone.priority = Priority: {0}
 gather_zone.priority_hint = (1 = gathered first, before nearer zones)
@@ -678,8 +677,17 @@ gather_zone.unit.items = in the colony
 gather_zone.unit.food_days = days of food
 # {0} = items gathered by this order so far
 gather_zone.progress.done = Gathered: {0}
-# {0} = how many lie in the colony now, in the unit shown before it (items or days of food)
-gather_zone.progress.now = Now: {0}
+# {0} = how many days of food the colony has (the "In the colony" column of an order counted in days)
+gather_zone.in_colony.days.one = {0} day
+gather_zone.in_colony.days.other = {0} days
+# Column titles of the resources of a zone
+gather_zone.column.name = Name
+gather_zone.column.available = Available
+gather_zone.column.goal = Goal
+gather_zone.column.in_colony = In the colony
+# The button of a group giving its goal to each of its resources: its tooltip
+gather_zone.apply_all = Apply to all
+gather_zone.apply_all.description = Gives each resource of the group the group's goal: mode, number and unit
 # Full harvest option (a plant with rays): its tooltip
 gather_zone.ripe.title = Wait for the full harvest
 gather_zone.ripe.on = On
@@ -688,11 +696,6 @@ gather_zone.ripe.partial = On for some resources only
 gather_zone.ripe.fruit = Food, branches, twigs: only from plants with everything ready (every fruit ripe)
 gather_zone.ripe.grown = Trees, grass: only fully grown
 gather_zone.ripe.all = Applies to every harvest of the zone
-# Enabled resource of which the zone holds nothing now (stones run out, food out of season)
-gather_zone.warning.none_left = Nothing of it to gather in this zone now
-# {0} = how many items of a resource the zone holds now (wood of the trees, stones in the ground...)
-gather_zone.available.one = {0} available
-gather_zone.available.other = {0} available
 
 # Workstations
 workstation.crafting_spot = Crafting spot
@@ -863,11 +866,12 @@ bill.mode.forever = Forever
 bill.progress.done = Completed: {0}
 # {0} = products lying in the colony
 bill.progress.in_colony = {0} in the colony
-# {0} = products in stock (stored, or on their way to storage)
+# {0} = products in stock (lying in a stockpile)
 bill.progress.in_stock = {0} in stock
 # How far from the station inputs are looked for, between -/+ buttons.
 # {0} = distance in tiles
 bill.input_radius = Ingredients within {0} tiles
+bill.input_radius_none = No ingredients taken: nothing will be made
 # Range of worker levels in the recipe's knowledge, between -/+ buttons that
 # change the lowest level (before) and the highest one (after).
 # {0} = lowest level, {1} = highest level
@@ -1300,9 +1304,6 @@ resources.none = Nothing in stock
 resources.none.description = Items lying in stockpiles are listed here, by group
 resources.fold = Click to fold the group
 resources.unfold = Click to unfold the group
-resources.stored = In stockpiles: {0}
-resources.on_stations = On workstations, waiting for a hauler: {0}
-resources.hauled = Being hauled: {0}
 resources.weight = Weight: {0} kg
 resources.food_days.one = Food for {0} day
 resources.food_days.other = Food for {0} days
@@ -1339,7 +1340,7 @@ alert.exhausted.other = {0} colonists exhausted
 alert.exhausted.description = Their rest need is critical. They sleep at night, in a bed if they have one, else on the ground (where rest comes back more slowly)
 alert.no_food.one = Food will not last a day
 alert.no_food.other = Food will not last a day
-alert.no_food.description = The food lying in the colony makes less than a day of meals. Set up gathering zones for food
+alert.no_food.description = The food in stockpiles makes less than a day of meals. Set up gathering zones for food
 alert.breakdown.one = {0} colonist breaking down
 alert.breakdown.other = {0} colonists breaking down
 alert.breakdown.description = Their mood is too low: they sulk, wander off or binge on the colony's food for a while. See the Mood tab

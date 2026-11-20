@@ -173,6 +173,16 @@ int construction_length(const ConstructionSite *site);
  * a structure. */
 WorkstationType construction_workstation(const ConstructionSite *site);
 
+/* Whether the built thing takes its tiles from the items and the zones: a workstation or a
+ * blocking structure (not a floor, a roof...). */
+bool construction_takes_tiles(const ConstructionSite *site);
+
+/* Clears what lies on the tiles of a site that takes them (construction_takes_tiles()): the
+ * items go to a passable tile next to them, not one of the site's own; where there is no room
+ * they stay. The builder does it as the work begins (and again on each tick of work, for what
+ * was put down meanwhile), not when it is done. */
+void construction_clear_items(const ConstructionSite *site, const Map *map, Items *items);
+
 /* Knowledge the work uses (and teaches); KNOWLEDGE_NONE when none. */
 KnowledgeType construction_knowledge(const ConstructionSite *site);
 

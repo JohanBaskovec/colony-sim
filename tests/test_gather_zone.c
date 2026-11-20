@@ -619,6 +619,48 @@ static void test_group_orders(void)
     free_world(&map, &zones, &items);
 }
 
+/* "Apply to all": each resource of a group takes the group's mode, unit and target. */
+static void test_apply_the_group_order_to_its_resources(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    int index = gather_zone_create(&zones, &map, 0, 0, 1, 0, 0);
+    const GatherZone *zone = gather_zone_get(&zones, index);
+    gather_zone_set_group_enabled(&zones, index, GATHER_GROUP_FOOD, true);
+    gather_zone_set_enabled(&zones, index, GATHER_MUSHROOMS, false);
+    gather_zone_set_ripe_only(&zones, index, GATHER_BLACKBERRIES, true);
+    gather_zone_set_mode(&zones, index, GATHER_HAZELNUTS, GATHER_FOREVER);
+    gather_zone_set_group_mode(&zones, index, GATHER_GROUP_FOOD, GATHER_UNTIL);
+    gather_zone_set_group_unit(&zones, index, GATHER_GROUP_FOOD, GATHER_UNIT_ITEMS);
+    gather_zone_set_group_target(&zones, index, GATHER_GROUP_FOOD, 42);
+    gather_zone_apply_group_order(&zones, index, GATHER_GROUP_FOOD);
+    GatherResourceMask food = gather_group_def(GATHER_GROUP_FOOD)->members;
+    for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+        if (food & GATHER_RESOURCE_BIT(r)) {
+            CHECK_EQ_INT(zone->orders[r].mode, GATHER_UNTIL);
+            CHECK_EQ_INT(zone->orders[r].unit, GATHER_UNIT_ITEMS);
+            CHECK_EQ_INT(zone->orders[r].target, 42);
+        }
+    }
+    /* What is on or off, and the full harvest, stay. */
+    CHECK(!zone->orders[GATHER_MUSHROOMS].enabled);
+    CHECK(zone->orders[GATHER_BLACKBERRIES].ripe_only);
+    /* Days of food go to the food resources, which may count them. */
+    gather_zone_set_group_unit(&zones, index, GATHER_GROUP_FOOD, GATHER_UNIT_FOOD_DAYS);
+    gather_zone_set_group_target(&zones, index, GATHER_GROUP_FOOD, 7);
+    gather_zone_apply_group_order(&zones, index, GATHER_GROUP_FOOD);
+    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].unit, GATHER_UNIT_FOOD_DAYS);
+    CHECK_EQ_INT(zone->orders[GATHER_HAZELNUTS].target, 7);
+    /* Resources of the other groups are left alone. */
+    CHECK(zone->orders[GATHER_GRASS].mode != GATHER_UNTIL ||
+          zone->orders[GATHER_GRASS].target != 7);
+    gather_zone_apply_group_order(&zones, index, GATHER_GROUP_NONE); /* Ignored. */
+    gather_zone_apply_group_order(&zones, 9, GATHER_GROUP_FOOD);
+    free_world(&map, &zones, &items);
+}
+
 static void test_days_of_food(void)
 {
     Map map;
@@ -1258,6 +1300,7 @@ int main(void)
     RUN_TEST(test_fully_grown_plants_only);
     RUN_TEST(test_full_harvest);
     RUN_TEST(test_group_orders);
+    RUN_TEST(test_apply_the_group_order_to_its_resources);
     RUN_TEST(test_days_of_food);
     RUN_TEST(test_food_in_season);
     RUN_TEST(test_felling_a_tree);

@@ -157,7 +157,7 @@ Every choice a settler makes reads the colony's picture, never the real map:
   arrival, when it sees the thing, it finds out whether it is still there: if
   not, the order falls and it chooses something else.
 - **What the colony has** (the resources list, the food alert, bills "until N
-  lie in the colony", the targets of gathering zones) counts what the colony
+  in stock", the targets of gathering zones; all count what lies in stockpiles) counts what the colony
   knows: items last seen in a stockpile out of view still count (decided:
   the known world's items, `game_view_items()`, even where the settlers have
   not looked for a while). Implemented with the fog.

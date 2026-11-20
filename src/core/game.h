@@ -46,6 +46,9 @@
 /* Each plant grows once per interval; the map is covered slice by slice, a
  * little every tick. */
 #define GAME_PLANT_UPDATE_INTERVAL TICKS_PER_HOUR
+/* Ticks between counts of the stock when no bill needs it every tick (gathering zones' targets,
+ * the food alert). */
+#define GAME_STOCK_INTERVAL 30
 /* The water a new world's ground starts with: this share of its useful water
  * (0 wilting .. 1 field capacity), the banks wetter (docs/CLIMATE.md §3.6). */
 #define GAME_SOIL_START_SHARE 0.8f
@@ -219,19 +222,14 @@ typedef struct Game {
      * sight while they do (MAP_DOOR_PASSING), not part of game_hash(). */
     uint32_t passing_doors[OCCUPANCY_BEINGS];
     int passing_door_count;
-    /* Items in stock per type, what "until N in stock" bills count: lying in a
-     * stockpile that accepts them, or on their way there (lying on a
-     * workstation, where crafts drop their products, or carried by a hauler),
-     * so that crafters do not make more while the last ones wait for a
-     * hauler. Refreshed at the start of each tick while some bill counts it
-     * (see game_update_stock()), not part of game_hash(). */
+    /* Items in stock per type: what lies in a stockpile that accepts them (what
+     * "until N in stock" bills, gathering zones that gather until N and the food
+     * alert count; the resources list shows it too). Items on a workstation, carried
+     * or on the ground are not in stock. Refreshed by game_update_stock() at
+     * the start of each tick while some bill counts it, every GAME_STOCK_INTERVAL
+     * ticks otherwise; not part of game_hash(). */
     long stock[ITEM_TYPE_COUNT];
-    /* Where the stock lies (the three add up to `stock`), refreshed with it:
-     * for the player only. */
-    long stock_stored[ITEM_TYPE_COUNT];      /* In stockpiles that accept them. */
-    long stock_on_stations[ITEM_TYPE_COUNT]; /* On workstations, out of storage. */
-    long stock_hauled[ITEM_TYPE_COUNT];      /* Carried by haulers. */
-    Notices notices;                         /* Messages for the player, not part of game_hash(). */
+    Notices notices; /* Messages for the player, not part of game_hash(). */
     /* Who knew what at the last count (see GAME_KNOWLEDGE_CHECK_TICKS):
      * settlers mastering each knowledge, and whether anyone had it at
      * KNOWLEDGE_DISCOVERED_LEVEL. Only used for notices. */
@@ -248,8 +246,11 @@ void game_default_params(NewGameParams *params);
 /* Generates a new world. On failure the game is left empty (safe to shut down). */
 bool game_init(Game *game, const NewGameParams *params);
 
-/* Recomputes Game.stock and where it lies (game_tick() does it first thing when a bill needs
- * it; the frontend calls it before showing the stock). */
+/* Counts the stock (see Game.stock) into `stock` without touching the game: what the
+ * frontend shows, up to date every frame, whatever the simulation last counted. */
+void game_count_stock(const Game *game, long stock[ITEM_TYPE_COUNT]);
+/* Recomputes Game.stock (for the simulation: game_tick() does it, on a schedule of the tick
+ * only). */
 void game_update_stock(Game *game);
 void game_shutdown(Game *game);
 

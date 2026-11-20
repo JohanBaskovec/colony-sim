@@ -286,6 +286,9 @@ bool ui_range_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *low, int *h
  * to the next. Returns true when *value changed.
  */
 bool ui_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *value);
+/* Whether the pointer is on a slider's track (`rect`, as given to ui_slider()) or the slider is
+ * being dragged. */
+bool ui_slider_engaged(const Ui *ui, int id, SDL_FRect rect);
 
 /*
  * Slider choosing a step 0..steps-1 along a vertical track, 0 at the bottom.

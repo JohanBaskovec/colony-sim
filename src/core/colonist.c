@@ -2559,6 +2559,9 @@ static float soonest_ingredient(const ColonistContext *context, const Workstatio
 static bool fetch_input(Colonist *colonist, const ColonistContext *context,
                         const Workstation *station, const Bill *bill)
 {
+    if (bill->input_radius == 0) {
+        return false; /* Looked for nowhere: nothing is made. */
+    }
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
     for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
         ItemType type = def->inputs[i];
@@ -3364,8 +3367,7 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
  * (one may have been laid on the site meanwhile). */
 static void structure_built(const ColonistContext *context, const ConstructionSite *site)
 {
-    bool takes_tiles = construction_workstation(site) != WORKSTATION_TYPE_COUNT ||
-                       structure_blocks((StructureType)site->type);
+    bool takes_tiles = construction_takes_tiles(site);
     for (int part = 0; takes_tiles && part < construction_length(site); part++) {
         int x, y, z;
         construction_tile(site, part, &x, &y, &z);
@@ -3440,6 +3442,7 @@ static void construction_job(Colonist *colonist, const ColonistContext *context)
     if (clear_site_first(colonist, context, clearing)) {
         return;
     }
+    construction_clear_items(clearing, context->map, context->items);
     ConstructionSite done = *site; /* Gone from the list once built. */
     KnowledgeType knowledge = construction_knowledge(site);
     float speed = colonist_work_speed(colonist, knowledge) *

@@ -673,6 +673,49 @@ static void test_workstation_site(void)
     free_world(&map, &constructions, &items);
 }
 
+/* Items lying where a workstation or a wall is to stand are pushed next door as the work
+ * begins, not when it is done; a floor-like site leaves them alone. */
+static void test_the_builder_clears_the_items(void)
+{
+    Map map;
+    Constructions constructions;
+    Items items;
+    REQUIRE(init_world(&map, &constructions, &items));
+    int station =
+        constructions_place_workstation(&constructions, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
+    int wall =
+        constructions_place(&constructions, &map, STRUCTURE_WALL, 10, 10, 0, DIRECTION_SOUTH);
+    int bed =
+        constructions_place(&constructions, &map, STRUCTURE_GRASS_BED, 12, 3, 0, DIRECTION_SOUTH);
+    REQUIRE(station != CONSTRUCTION_NONE && wall != CONSTRUCTION_NONE && bed != CONSTRUCTION_NONE);
+    CHECK(construction_takes_tiles(construction_get(&constructions, station)));
+    CHECK(construction_takes_tiles(construction_get(&constructions, wall)));
+    CHECK(!construction_takes_tiles(construction_get(&constructions, bed)));
+    items_add(&items, 3, 4, 0, item_stack_pristine(ITEM_COBBLE, 3));
+    items_add(&items, 10, 10, 0, item_stack_pristine(ITEM_BRANCHES, 2));
+    items_add(&items, 12, 3, 0, item_stack_pristine(ITEM_GRASS, 4));
+
+    construction_clear_items(construction_get(&constructions, station), &map, &items);
+    construction_clear_items(construction_get(&constructions, wall), &map, &items);
+    construction_clear_items(construction_get(&constructions, bed), &map, &items);
+    CHECK_EQ_INT(items_get(&items, 3, 4, 0).count, 0);
+    CHECK_EQ_INT(items_get(&items, 10, 10, 0).count, 0);
+    CHECK_EQ_INT(items_get(&items, 12, 3, 0).count, 4); /* Nothing is built on it. */
+    /* Nothing lost, and it lies next to the site. */
+    CHECK_EQ_INT(items.totals[ITEM_COBBLE], 3);
+    CHECK_EQ_INT(items.totals[ITEM_BRANCHES], 2);
+    int cobbles = 0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            ItemStack stack = items_get(&items, 3 + dx, 4 + dy, 0);
+            cobbles += stack.type == ITEM_COBBLE ? stack.count : 0;
+        }
+    }
+    CHECK_EQ_INT(cobbles, 3);
+    CHECK_EQ_INT(items_check(&items).problems, 0);
+    free_world(&map, &constructions, &items);
+}
+
 static void test_roof_layer(void)
 {
     const StructureDef *def = structure_def(STRUCTURE_ROOF);
@@ -919,6 +962,7 @@ int main(void)
     RUN_TEST(test_bed_sites);
     RUN_TEST(test_promises);
     RUN_TEST(test_workstation_site);
+    RUN_TEST(test_the_builder_clears_the_items);
     RUN_TEST(test_fibres_stand_in_for_grass);
     RUN_TEST(test_roof_layer);
     RUN_TEST(test_roof_sites);

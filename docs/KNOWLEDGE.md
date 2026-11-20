@@ -477,9 +477,9 @@ with its own use.
 Everything the land offers is gathered in **gathering zones**: the player
 draws a zone, then ticks the resources to take there (wood, each wild food
 of §7, grass and the other fibres). Each ticked resource is
-gathered N times, until N lie in the colony (items lying anywhere count, as
+gathered N times, until N lie in store (items lying in stockpiles count, as
 for bills), or forever; food may also be gathered until the colony has N days
-of food (the nutrition of the food lying in the colony over what all the
+of food (the nutrition of the food in stockpiles over what all the
 settlers eat in a day, whole days; rot is ignored). Resources come in groups
 (wood; food; fibres), and a group's order
 limits each of its resources: a resource is gathered only while its own order

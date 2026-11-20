@@ -508,9 +508,11 @@ static void test_bill_until_in_storage(void)
     workstation_set_bill_mode(&game.workstations, index, bill, BILL_UNTIL_STOCK);
     workstation_set_bill_target(&game.workstations, index, bill, 5);
     run_ticks(&game, 8000);
-    /* 3 flakes, 3 more: 6 in stock, then it stops. They end up in storage. */
-    CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 6);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_FLINT], 8);
+    /* Only what is stored counts: crafts go on while the last flakes wait for a hauler, so the
+     * bill may overshoot, but it stops once 5 or more are in storage; they all end up there. */
+    CHECK(game.stock[ITEM_FLAKE] >= 5);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], (int)game.stock[ITEM_FLAKE]);
+    CHECK(game.items.totals[ITEM_FLINT] < 10);
     CHECK_EQ_INT(stockpile_at(&game.stockpiles, 14, 10, 0), STOCKPILE_NONE);
     CHECK(items_get(&game.items, 14, 10, 0).type != ITEM_FLAKE);
     game_shutdown(&game);
@@ -764,13 +766,22 @@ static void test_bill_input_radius(void)
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 0);
     CHECK_EQ_INT(items_get(&game.items, 40, 12, 0).type, ITEM_FLINT);
 
+    /* A radius of 0 takes nothing, even from the tile of the station: nothing is made. */
+    workstation_set_bill_input_radius(&game.workstations, index, bill, 0);
+    CHECK_EQ_INT(game.workstations.list[index].bills[bill].input_radius, BILL_INPUT_RADIUS_MIN);
+    items_add(&game.items, 10, 12, 0, stones(ITEM_FLINT, 1, TEST_QUALITY_FINE));
+    run_ticks(&game, 3000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 0);
+
     workstation_set_bill_input_radius(&game.workstations, index, bill, 40);
     run_ticks(&game, 4000);
     CHECK(game.items.totals[ITEM_FLAKE] > 0);
     game_shutdown(&game);
 }
 
-static void test_stock_counts_stored_and_waiting_items(void)
+/* The stock is what lies in a stockpile that accepts it: not what waits on a workstation, is
+ * carried or lies in the wild. */
+static void test_stock_counts_only_stored_items(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
@@ -785,23 +796,25 @@ static void test_stock_counts_stored_and_waiting_items(void)
     hauler->task = TASK_HAUL;
     hauler->carried = item_stack_pristine(ITEM_FLAKE, 1);
     game_update_stock(&game);
-    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 2 + 3 + 1);
-    CHECK_EQ_INT((int)game.stock_stored[ITEM_FLAKE], 2);
-    CHECK_EQ_INT((int)game.stock_on_stations[ITEM_FLAKE], 3);
-    CHECK_EQ_INT((int)game.stock_hauled[ITEM_FLAKE], 1);
+    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 2);
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 2 + 3 + 7);
+    /* The frontend counts it without touching the game's. */
+    long counted[ITEM_TYPE_COUNT];
+    items_add(&game.items, 21, 20, 0, item_stack_pristine(ITEM_FLAKE, 4));
+    game_count_stock(&game, counted);
+    CHECK_EQ_INT((int)counted[ITEM_FLAKE], 2 + 4);
+    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 2);
 
     /* Counted afresh: nothing is left over from the last count. */
-    items_remove(&game.items, 14, 10, 0, 3);
-    hauler->task = TASK_IDLE;
+    items_remove(&game.items, 20, 20, 0, 2);
     game_update_stock(&game);
-    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 2);
-    CHECK_EQ_INT((int)game.stock_on_stations[ITEM_FLAKE], 0);
-    CHECK_EQ_INT((int)game.stock_hauled[ITEM_FLAKE], 0);
+    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 4);
     game_shutdown(&game);
 }
 
-static void test_until_stock_ignores_items_out_of_storage(void)
+/* "Until N in stock" counts what lies in a stockpile only: what waits on the station does not
+ * count, so the bill goes on (the next crafts begin while nobody has hauled the last ones). */
+static void test_until_stock_counts_only_what_is_stored(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
@@ -811,15 +824,15 @@ static void test_until_stock_ignores_items_out_of_storage(void)
     game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_HAULING,
                            WORK_PRIORITY_DISABLED);
     int index = built_station(&game, WORKSTATION_KNAPPING_SPOT, 14, 10);
-    items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 10, TEST_QUALITY_FINE));
+    items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 30, TEST_QUALITY_FINE));
     items_add(&game.items, 44, 44, 0, item_stack_pristine(ITEM_FLAKE, 9)); /* Not in stock. */
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     workstation_set_bill_mode(&game.workstations, index, bill, BILL_UNTIL_STOCK);
     workstation_set_bill_target(&game.workstations, index, bill, 5);
     run_ticks(&game, 8000);
-    /* The flakes made wait on the station (nobody hauls) and count: 3 + 3. */
-    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 6);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 9 + 6);
+    /* Nobody hauls: no flake is stored, so the bill makes more than 5 (the 9 are not counted). */
+    CHECK_EQ_INT((int)game.stock[ITEM_FLAKE], 0);
+    CHECK(game.items.totals[ITEM_FLAKE] > 9 + 6);
     game_shutdown(&game);
 }
 
@@ -989,8 +1002,8 @@ int main(void)
     RUN_TEST(test_bill_specific_worker);
     RUN_TEST(test_paused_bill);
     RUN_TEST(test_bill_input_radius);
-    RUN_TEST(test_stock_counts_stored_and_waiting_items);
-    RUN_TEST(test_until_stock_ignores_items_out_of_storage);
+    RUN_TEST(test_stock_counts_only_stored_items);
+    RUN_TEST(test_until_stock_counts_only_what_is_stored);
     RUN_TEST(test_crafts_make_the_station_dirty);
     RUN_TEST(test_grass_under_a_free_station_is_uprooted);
     RUN_TEST(test_plants_are_cleared_before_building);

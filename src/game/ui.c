@@ -758,6 +758,11 @@ bool ui_slider(Ui *ui, int id, SDL_FRect rect, int steps, int *value)
     return *value != old;
 }
 
+bool ui_slider_engaged(const Ui *ui, int id, SDL_FRect rect)
+{
+    return ui_hovered(ui, rect) || (ui->active_slider == id && ui->mouse_down);
+}
+
 /* Step under a vertical position, 0 at the bottom of the track (inset by
  * half a handle). */
 static int vertical_step_at(SDL_FRect rect, float handle, int steps, float y)

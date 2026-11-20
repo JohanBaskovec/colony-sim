@@ -134,7 +134,7 @@ simulation:
 | `settings_window` | Settings (from the game menu): interface size, colors, language, applied at once and saved |
 | `inspector`    | Bottom left: summary box of the selection, tabs opening a panel above it, action buttons beside it; dispatches to the panels below (colonists: `hud`) |
 | `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (radius slider, condition sliders, filters); build another, delete |
-| `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, a mode dropdown with target, unit and progress; warnings); build another, delete |
+| `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, column titles; a goal made of a mode dropdown, target and unit, then what lies in the colony; an apply to all button on a group; warnings); build another, delete |
 | `station_panel` | Workstation in the inspector: state, fire, work in progress; Bills (the active bills, and two windows docked to the right of the tab: the recipes to add, and the details of the one picked) and (hearths) Fire tabs; forbid, build another, delete |
 | `animal_panel` | The selected wild animal in the inspector (`App.selected_animal`): what it is called as title (a hind, a stag), species, sex, activity, needs as bars with tooltips, herd, health |
 | `journal_panel` | The Journal tab of a settler or an animal: five filter check boxes (`App.journal_hidden`; routine thoughts under Routine only), the entries newest first with their date, sentences built from the facts of `core/journal.h` (wording per language: verb by the strike mark, part and injury phrases, the owner's and the attacker's phrases by species; social sentences from topic, story and know-how phrases, with French elision before a vowel; a thought as a full sentence, its tooltip on hover) |
@@ -1333,11 +1333,11 @@ asks for what the land offers: felling trees, picking and digging up wild
 food, taking branches and twigs, cutting grass and picking up stones. Designations are left for
 single-tile orders (mining). A zone holds one order per resource
 (`GatherOrder`): off by default, and when enabled it gathers N items and stops
-(counted by the order itself), or gathers until the items lying in the colony
-(`Items.totals`, as for bills; grass counts fresh and dry) reach a target, or
+(counted by the order itself), or gathers until the items in store
+(`Game.stock`, as for bills: what lies in stockpiles; grass counts fresh and dry) reach a target, or
 gathers forever. Food may count days of food instead of items
-(`GatherUnit`): `gather_food_days()` divides the nutrition of the food lying
-in the colony by what the settlers eat in a day (`gather_daily_food()`, from
+(`GatherUnit`): `gather_food_days()` divides the nutrition of the food in store
+by what the settlers eat in a day (`gather_daily_food()`, from
 `NEED_FOOD_DECAY_PER_TICK`; the game passes it to `gather_zones_update()`).
 Resources belong to groups (`GatherGroup`: wood, food, fibres), each with an order of its own (`GatherGroupOrder`, always on: food
 until 5 days of food by default, the others forever; the food resources start
@@ -1454,7 +1454,9 @@ search each time. Grass
 or another plant but a tree on the tile is cleared first (see *Clearing plants* below). When it
 is done the site is gone, the structure appears; a blocking one pushes the
 items of its tile next door and takes the tile out of stockpiles and
-gathering zones, and a colonist left standing on it steps aside at its next
+gathering zones (the builder already moved the items of a workstation's or a blocking
+structure's tiles aside as the work began: `construction_clear_items()`, on each tick of
+work, to a tile that is not one of the site's own), and a colonist left standing on it steps aside at its next
 tick. The cancel tool removes sites (their materials are dropped), and so
 does a new plan on a site in progress, which replaces it
 (`construction_can_replace_structure()`, `game_place_structure()`; the very
@@ -1735,7 +1737,11 @@ craft in progress.
 A built station carries up to `WORKSTATION_BILL_MAX` **bills**: a recipe
 (`core/recipe.h`), a mode (do N times, until N in stock, forever), the input
 types allowed, how far inputs are searched for (`input_radius`, a travel cost
-from the station, 80 by default), who may work on it (`BillWorker`: anyone,
+from the station, 80 by default, set with a slider; while the pointer is on it the
+frontend outlines in white the tiles of the level shown that a settler reaches
+on foot within it: `pathfinder_reachable_on_level()`, kept in `App.reach_mask`;
+the stockpile's radius slider does the same with `stockpile_in_radius()`,
+both through `App.area_preview` and `render_area_outline()`), who may work on it (`BillWorker`: anyone,
 settlers whose level in the recipe's knowledge lies in `min_level`..`max_level`
 (inclusive, 0..100 by default: beginners for cheap things, masters for the
 best ones), or one settler, `Bill.colonist`, a generational handle that no
@@ -1753,17 +1759,16 @@ rots away soonest (`items_soonest_rot_hours()`), then fetches from the nearest
 heap holding one that rots within six hours of it, and picks up the soonest
 to rot first; when none of those can be reached, any heap in range will do.
 
-"Until N" counts `Game.stock`: items lying in a stockpile that accepts them,
-plus those on their way there, lying on a workstation tile (where products
-are dropped) or carried by a hauler. Counting only stored items would let a
-crafter make more while the last ones wait for a hauler; counting every item
-on the map (as gathering zones do) would count tools lost in the wild.
-`game_update_stock()` scans the stockpiles (their bounding boxes), the
-stations and the colonists; `game_tick()` only calls it while some bill is in
-"until N" mode (it costs as much as the rest of a small colony's tick). It
-also keeps where the stock lies (`stock_stored`, `stock_on_stations`,
-`stock_hauled`, adding up to `stock`) for the resources list, which
-refreshes it every frame.
+"Until N" counts `Game.stock`: items lying in a stockpile that accepts them, and
+nothing else (not what waits on a workstation, is carried or lies in the wild: a
+crafter may therefore start more crafts while the last products wait for a hauler).
+Gathering zones' targets, the food alert and the resources list count the same
+stock. `game_count_stock()` scans the stockpiles (their bounding boxes) without
+touching the game (the frontend does it every frame into `App.stock`);
+`game_update_stock()` keeps the simulation's copy: every tick while some bill is in
+"until N" mode (it costs as much as the rest of a small colony's tick), else every
+`GAME_STOCK_INTERVAL` ticks, on a schedule of the tick only, so that the frontend's
+counts never reach the simulation.
 
 Bills are worked through from the top: a crafter takes the first one that
 is not paused, wants more, whose recipe it knows at a level the bill accepts

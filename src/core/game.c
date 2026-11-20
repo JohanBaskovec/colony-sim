@@ -681,40 +681,17 @@ static bool stock_counted(const Game *game)
     return false;
 }
 
-void game_update_stock(Game *game)
+void game_count_stock(const Game *game, long stock[ITEM_TYPE_COUNT])
 {
     /* What the colony has is what it knows of: the known world under the fog,
      * so that items out of view count as they were last seen. */
-    const Items *items = game_view_items(game);
-    memset(game->stock_stored, 0, sizeof(game->stock_stored));
-    memset(game->stock_on_stations, 0, sizeof(game->stock_on_stations));
-    memset(game->stock_hauled, 0, sizeof(game->stock_hauled));
-    stockpiles_count_stored(&game->stockpiles, items, game->stock_stored);
-    for (int index = 0; index < WORKSTATION_MAX; index++) {
-        const Workstation *station = workstation_get_const(&game->workstations, index);
-        if (station == NULL) {
-            continue;
-        }
-        ItemStack groups[8];
-        int count = items_groups(items, station->x, station->y, station->z, groups, 8);
-        for (int i = 0; i < count; i++) {
-            if (stockpile_storage_priority(&game->stockpiles, station->x, station->y, station->z,
-                                           groups[i]) == 0) {
-                game->stock_on_stations[groups[i].type] += groups[i].count; /* Not stored. */
-            }
-        }
-    }
-    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
-        const Colonist *colonist = &game->colonists[slot];
-        if (!entity_id_is_none(game_colonist_id_at(game, slot)) && colonist->task == TASK_HAUL &&
-            colonist->carried.count > 0) {
-            game->stock_hauled[colonist->carried.type] += colonist->carried.count;
-        }
-    }
-    for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
-        game->stock[type] =
-            game->stock_stored[type] + game->stock_on_stations[type] + game->stock_hauled[type];
-    }
+    memset(stock, 0, sizeof(long) * ITEM_TYPE_COUNT);
+    stockpiles_count_stored(&game->stockpiles, game_view_items(game), stock);
+}
+
+void game_update_stock(Game *game)
+{
+    game_count_stock(game, game->stock);
 }
 
 void game_shutdown(Game *game)
@@ -2689,7 +2666,8 @@ void game_tick(Game *game)
         finish_constructions_now(game);
     }
     regions_update(&game->regions, &game->map); /* Nothing to do unless the map changed. */
-    if (stock_counted(game)) {
+    /* Every tick for the bills that count it, else now and then. */
+    if (game->clock.tick % GAME_STOCK_INTERVAL == 0 || stock_counted(game)) {
         game_update_stock(game);
     }
     tile_light_tick(&game->light, &game->map, game->clock.tick);
@@ -2721,8 +2699,8 @@ void game_tick(Game *game)
         fade_knowledge(game);
     }
     beds_forget_missing(&game->beds, &game->map); /* Beds taken apart or fallen apart. */
-    /* What gathering zones want, from what lies in the colony now. */
-    gather_zones_update(&game->gather_zones, game_view_items(game)->totals, game_daily_food(game));
+    /* What gathering zones want, from what the colony has in store. */
+    gather_zones_update(&game->gather_zones, game->stock, game_daily_food(game));
     item_moves_prune(&game->item_moves, &game->items, item_move_busy, game); /* Emptied sources. */
     hurt_under_felled_trees(game); /* (Felled by the debug tools.) */
     sweep_occupancy(game);

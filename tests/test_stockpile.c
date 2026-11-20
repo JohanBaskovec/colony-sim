@@ -465,8 +465,14 @@ static void test_radius(void)
     CHECK(stockpile_in_radius(pile, 6, 2, 4));   /* 2 tiles and 4 levels: 4.47. */
     CHECK(!stockpile_in_radius(pile, 6, 2, 5));  /* 2 tiles and 5 levels: 5.39. */
 
+    stockpile_set_radius(&s, a, 0); /* Takes nothing: not even what lies in its box. */
+    CHECK_EQ_INT(pile->radius, 0);
+    CHECK(!stockpile_in_radius(pile, 3, 3, 0));
     stockpile_set_radius(&s, a, 1);
-    CHECK_EQ_INT(pile->radius, STOCKPILE_RADIUS_MIN);
+    CHECK_EQ_INT(pile->radius, 1);
+    CHECK(stockpile_in_radius(pile, 3, 3, 0));
+    stockpile_set_radius(&s, a, -3);
+    CHECK_EQ_INT(pile->radius, STOCKPILE_RADIUS_UNLIMITED);
     stockpile_set_radius(&s, a, STOCKPILE_RADIUS_MAX + 1);
     CHECK_EQ_INT(pile->radius, STOCKPILE_RADIUS_UNLIMITED);
     CHECK(stockpile_in_radius(pile, 1000, -1000, 50));

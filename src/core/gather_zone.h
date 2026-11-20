@@ -8,10 +8,10 @@
  * Each tile belongs to at most one zone (dense layer of zone ids, the size of
  * the map). A zone holds one order per resource, off by default. An enabled
  * order either gathers a number of items and stops, or gathers until the
- * colony has a target number of the resource (items lying anywhere on the map
- * count, stored or not, like bills: see core/workstation.h), or gathers
- * forever. Food may instead be gathered until the colony has a number of days
- * of food: the nutrition of the food lying in the colony over what all the
+ * colony has a target number of the resource (items lying in stockpiles count,
+ * as for bills: Game.stock), or gathers forever. Food may instead be gathered
+ * until the colony has a number of days of food: the nutrition of the food in
+ * store over what all the
  * settlers eat in a day (gather_food_days()).
  *
  * Resources come in groups (wood, food, fibres), each
@@ -344,6 +344,9 @@ void gather_zone_set_group_enabled(GatherZones *zones, int index, GatherGroup gr
 void gather_zone_set_group_mode(GatherZones *zones, int index, GatherGroup group, GatherMode mode);
 void gather_zone_set_group_unit(GatherZones *zones, int index, GatherGroup group, GatherUnit unit);
 void gather_zone_set_group_target(GatherZones *zones, int index, GatherGroup group, int target);
+/* Gives each resource of a group the group's mode, unit and target (their counts start over;
+ * what is on or off and the full harvest options stay as they are). */
+void gather_zone_apply_group_order(GatherZones *zones, int index, GatherGroup group);
 void gather_zone_set_group_ripe_only(GatherZones *zones, int index, GatherGroup group,
                                      bool ripe_only);
 

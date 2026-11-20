@@ -135,4 +135,10 @@ bool pathfinder_find_nearest_in_box(Pathfinder *finder, const Map *map, TilePos 
 size_t pathfinder_reachable_count(Pathfinder *finder, const Map *map, TilePos start,
                                   float max_cost);
 
+/* The same for the tiles of level `z` only: sets `mask` (width x height bytes, y * width + x) to 1
+ * where `start` reaches within `max_cost`, 0 elsewhere, and returns how many. 0 for an invalid
+ * level. */
+size_t pathfinder_reachable_on_level(Pathfinder *finder, const Map *map, TilePos start,
+                                     float max_cost, int z, uint8_t *mask);
+
 #endif /* COLONY_CORE_PATHFINDING_H */

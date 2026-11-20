@@ -2,6 +2,7 @@
 
 #include "core/i18n.h"
 #include "core/log.h"
+#include "core/pathfinding.h"
 #include "core/scenario.h"
 #include "core/tree.h"
 #include "core/util.h"
@@ -905,6 +906,7 @@ void app_shutdown(App *app)
     if (app->game_ready) {
         game_shutdown(&app->game);
     }
+    SDL_free(app->reach_mask);
     text_renderer_destroy(app->title_text);
     text_renderer_destroy(app->title_subtext);
     text_renderer_destroy(app->text);
@@ -2070,6 +2072,84 @@ static void render_world(App *app, bool markers)
     render_weather(app->renderer, &app->game, &app->camera, SDL_GetTicks());
 }
 
+/* ---- Outline of the area a setting reaches ------------------------------------ */
+
+typedef struct StockpileArea {
+    const Stockpile *stockpile;
+    int z, width, height;
+} StockpileArea;
+
+static bool stockpile_area_contains(const void *area, int x, int y)
+{
+    const StockpileArea *a = area;
+    return x >= 0 && y >= 0 && x < a->width && y < a->height &&
+           stockpile_in_radius(a->stockpile, x, y, a->z);
+}
+
+typedef struct ReachArea {
+    const uint8_t *mask;
+    int width, height;
+} ReachArea;
+
+static bool reach_contains(const void *area, int x, int y)
+{
+    const ReachArea *a = area;
+    return x >= 0 && y >= 0 && x < a->width && y < a->height && a->mask[y * a->width + x] != 0;
+}
+
+/* The tiles of the level shown a settler reaches on foot from the preview's workstation within
+ * its cost, worked out again only when the start, the cost, the level or the map's ground
+ * changed. NULL when there is no room. */
+static const uint8_t *reach_mask(App *app, const Map *map, const AreaPreview *preview)
+{
+    const int level = app->camera.level;
+    if (!app->reach_valid || app->reach_key.from.x != preview->from.x ||
+        app->reach_key.from.y != preview->from.y || app->reach_key.from.z != preview->from.z ||
+        app->reach_key.cost != preview->cost || app->reach_level != level ||
+        app->reach_revision != map->topology_revision) {
+        size_t size = (size_t)map->width * (size_t)map->height;
+        if (app->reach_capacity < size) {
+            uint8_t *grown = SDL_realloc(app->reach_mask, size);
+            if (grown == NULL) {
+                return NULL;
+            }
+            app->reach_mask = grown;
+            app->reach_capacity = size;
+        }
+        pathfinder_reachable_on_level(&app->game.pathfinder, map, preview->from,
+                                      (float)preview->cost, level, app->reach_mask);
+        app->reach_key = *preview;
+        app->reach_level = level;
+        app->reach_revision = map->topology_revision;
+        app->reach_valid = true;
+    }
+    return app->reach_mask;
+}
+
+/* Draws what a panel asked to be outlined on its last frame, then forgets it: the panel asks
+ * again as long as the pointer is on its setting. */
+static void draw_area_preview(App *app)
+{
+    const Map *map = &app->game.map;
+    AreaPreview preview = app->area_preview;
+    app->area_preview.kind = AREA_PREVIEW_NONE;
+    if (preview.kind == AREA_PREVIEW_STOCKPILE) {
+        const Stockpile *stockpile = stockpile_get(&app->game.stockpiles, preview.stockpile);
+        if (stockpile != NULL) {
+            StockpileArea area = {stockpile, app->camera.level, map->width, map->height};
+            render_area_outline(app->renderer, &app->camera, map->width, map->height,
+                                stockpile_area_contains, &area);
+        }
+    } else if (preview.kind == AREA_PREVIEW_REACH) {
+        const uint8_t *mask = reach_mask(app, map, &preview);
+        if (mask != NULL) {
+            ReachArea area = {mask, map->width, map->height};
+            render_area_outline(app->renderer, &app->camera, map->width, map->height,
+                                reach_contains, &area);
+        }
+    }
+}
+
 static void render_frame(App *app)
 {
     SDL_SetRenderDrawColor(app->renderer, 10, 10, 12, 255);
@@ -2089,6 +2169,7 @@ static void render_frame(App *app)
         }
         return;
     }
+    game_count_stock(&app->game, app->stock);
     if (app->show_temperature) {
         render_temperature(app->renderer, &app->game, &app->camera, &app->ui.theme);
     }
@@ -2102,6 +2183,7 @@ static void render_frame(App *app)
         render_vision(app->renderer, &app->game, &app->camera,
                       app->selected_count > 0 ? (int)app->selected[0].index : -1);
     }
+    draw_area_preview(app);
     if (app->hover_valid) {
         render_tile_outline(app->renderer, &app->camera, app->hover_x, app->hover_y, HOVER_COLOR);
     }

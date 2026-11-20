@@ -21,6 +21,7 @@ typedef enum ActionType {
     ACTION_ADD_TARGET,
     ACTION_FOLD,
     ACTION_ADD_PRIORITY,
+    ACTION_APPLY_ALL, /* A group's goal to each of its resources. */
 } ActionType;
 
 /* What an action or a row is about: a resource, a group, or the whole zone
@@ -71,8 +72,9 @@ typedef struct Columns {
     float mode;      /* Start of the mode dropdown. */
     float target;    /* Start of -, the target, +. */
     float unit;      /* Start of the unit (dropdown or label). */
-    float progress;  /* Start of the progress. */
-    float mode_width, small, number, unit_width;
+    float colony;    /* Start of what lies in the colony. */
+    float apply;     /* Start of the apply to all button of a group. */
+    float colony_width, mode_width, small, number, unit_width;
     const char *modes[GATHER_MODE_COUNT];
     const char *units[GATHER_UNIT_COUNT];
 } Columns;
@@ -83,7 +85,7 @@ typedef struct OrderView {
     GatherUnit unit;
     int target;
     bool food;     /* The unit may be days of food. */
-    long done;     /* Gathered so far. */
+    long done;     /* Gathered so far (GATHER_DO_COUNT). */
     long in_items; /* Lying in the colony. */
     long in_days;  /* Days of food in the colony. */
 } OrderView;
@@ -205,51 +207,80 @@ static bool ripe_button(UiLayout *layout, float x, float size, UiCheck state, bo
     return clicked;
 }
 
+/* An arrow down onto a list: what a group gives to each of its resources. */
+static void draw_apply_icon(Ui *ui, SDL_FRect rect)
+{
+    SDL_Renderer *renderer = ui->renderer;
+    SDL_Color color = ui->theme.colors[THEME_TEXT];
+    float size = SDL_min(rect.w, rect.h);
+    float cx = rect.x + rect.w * 0.32f, top = rect.y + rect.h * 0.22f;
+    float bottom = rect.y + rect.h * 0.62f;
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderLine(renderer, cx, top, cx, bottom);
+    SDL_RenderLine(renderer, cx + 1.0f, top, cx + 1.0f, bottom);
+    triangle(renderer, (SDL_FPoint){cx - 0.17f * size, bottom - 0.04f * size},
+             (SDL_FPoint){cx + 1.0f + 0.17f * size, bottom - 0.04f * size},
+             (SDL_FPoint){cx + 0.5f, bottom + 0.18f * size}, color);
+    /* The resources it reaches: lines to the right. */
+    float left = rect.x + rect.w * 0.56f, right = rect.x + rect.w * 0.84f;
+    for (int i = 0; i < 3; i++) {
+        float y = rect.y + rect.h * (0.30f + 0.2f * (float)i);
+        SDL_RenderLine(renderer, left, y, right, y);
+        SDL_RenderLine(renderer, left, y + 1.0f, right, y + 1.0f);
+    }
+}
+
+/* The "apply to all" button of a group, with its tooltip; true when clicked. */
+static bool apply_button(UiLayout *layout, float x, float size)
+{
+    if (!layout->draw) {
+        return false;
+    }
+    Ui *ui = layout->ui;
+    SDL_FRect rect = {x, layout->y, size, layout->button_height};
+    bool clicked = ui_icon_button(ui, rect, false);
+    draw_apply_icon(ui, rect);
+    if (ui_hovered(ui, rect)) {
+        const char *lines[2] = {tr("gather_zone.apply_all"),
+                                tr("gather_zone.apply_all.description")};
+        ui_tooltip(ui, lines, 2);
+    }
+    return clicked;
+}
+
 /* ---- Rows ------------------------------------------------------------------- */
 
 /* How many items a subject holds in the zone now. */
 static const char *available_text(char *out, size_t size, long available)
 {
-    char number[16];
-    tr_integer(number, sizeof(number), available);
-    TR_FORMAT(out, size, tr_plural("gather_zone.available", available), number);
+    tr_integer(out, size, available);
     return out;
 }
 
-/* How far an order has got: gathered so far, or what lies in the colony (in
- * its unit when it gathers until a number). */
-static const char *progress_text(char *out, size_t size, const OrderView *order)
+/* What lies in the colony: items, or days of food when the order counts them. */
+static const char *colony_text(char *out, size_t size, const OrderView *order)
 {
     char number[16];
-    switch (order->mode) {
-    case GATHER_DO_COUNT:
-        tr_integer(number, sizeof(number), order->done);
-        TR_FORMAT(out, size, tr("gather_zone.progress.done"), number);
-        break;
-    case GATHER_UNTIL:
-        tr_integer(number, sizeof(number),
-                   order->unit == GATHER_UNIT_FOOD_DAYS ? order->in_days : order->in_items);
-        TR_FORMAT(out, size, tr("gather_zone.progress.now"), number);
-        break;
-    default:
-        tr_integer(number, sizeof(number), order->in_items);
-        TR_FORMAT(out, size, tr("bill.progress.in_colony"), number);
-        break;
+    if (order->mode == GATHER_UNTIL && order->unit == GATHER_UNIT_FOOD_DAYS) {
+        tr_integer(number, sizeof(number), order->in_days);
+        TR_FORMAT(out, size, tr_plural("gather_zone.in_colony.days", order->in_days), number);
+    } else {
+        tr_integer(out, size, order->in_items);
     }
     return out;
 }
 
-/* The mode dropdown, the target with -/+ and the unit, then the progress, on
- * the current row (it does not advance). */
+/* The goal: the mode dropdown, the target with -/+ and the unit (when gathering a number, how
+ * many were gathered so far where the unit goes), then what lies in the colony, on the current
+ * row (it does not advance). */
 static void order_controls(UiLayout *layout, const Columns *columns, Subject subject,
                            const OrderView *order, Action *action)
 {
     Ui *ui = layout->ui;
     float left = layout->x;
-    char progress[TEXT_SIZE];
-    progress_text(progress, sizeof(progress), order);
-    float progress_x = order->mode == GATHER_FOREVER ? columns->target : columns->progress;
-    ui_layout_measure(layout, progress_x + ui_text_width(ui, progress));
+    char in_colony[TEXT_SIZE];
+    colony_text(in_colony, sizeof(in_colony), order);
+    ui_layout_measure(layout, columns->colony + columns->colony_width);
     if (!layout->draw) {
         return;
     }
@@ -278,6 +309,12 @@ static void order_controls(UiLayout *layout, const Columns *columns, Subject sub
             *action = (Action){ACTION_ADD_TARGET, subject, step};
         }
     }
+    if (order->mode == GATHER_DO_COUNT) {
+        char number[16], done[TEXT_SIZE];
+        tr_integer(number, sizeof(number), order->done);
+        TR_FORMAT(done, sizeof(done), tr("gather_zone.progress.done"), number);
+        ui_label_dim(ui, done, left + columns->unit, layout->y + layout->text_offset);
+    }
     if (order->mode == GATHER_UNTIL) {
         float x = left + columns->unit;
         if (order->food) {
@@ -291,13 +328,13 @@ static void order_controls(UiLayout *layout, const Columns *columns, Subject sub
             ui_label(ui, columns->units[GATHER_UNIT_ITEMS], x, layout->y + layout->text_offset);
         }
     }
-    ui_label_dim(ui, progress, left + progress_x, layout->y + layout->text_offset);
+    ui_label_dim(ui, in_colony, left + columns->colony, layout->y + layout->text_offset);
 }
 
 static OrderView resource_view(const ZoneRows *rows, const GatherOrder *order,
                                GatherResource resource)
 {
-    const long *totals = game_view_items(&rows->app->game)->totals;
+    const long *totals = rows->app->stock;
     return (OrderView){
         .mode = (GatherMode)order->mode,
         .unit = (GatherUnit)order->unit,
@@ -311,7 +348,7 @@ static OrderView resource_view(const ZoneRows *rows, const GatherOrder *order,
 
 static OrderView group_view(const ZoneRows *rows, const GatherGroupOrder *order, GatherGroup group)
 {
-    const long *totals = game_view_items(&rows->app->game)->totals;
+    const long *totals = rows->app->stock;
     return (OrderView){
         .mode = (GatherMode)order->mode,
         .unit = (GatherUnit)order->unit,
@@ -362,9 +399,6 @@ static void resource_rows(UiLayout *layout, ZoneRows *rows, GatherResource resou
     if (!game_gather_job_known(&rows->app->game, def->job)) {
         ui_layout_label(layout, tr("hud.tool.unavailable"), warning_indent, true);
     }
-    if (rows->available[resource] == 0) {
-        ui_layout_label(layout, tr("gather_zone.warning.none_left"), warning_indent, true);
-    }
 }
 
 /* A group: fold button, tri-state check box and name, what its resources hold,
@@ -406,9 +440,13 @@ static void group_rows(UiLayout *layout, ZoneRows *rows, GatherGroup group)
                                     check_of(gather_zone_ripe_mask(zone), options), false)) {
         rows->action = (Action){ACTION_TOGGLE_RIPE, subject, 0};
     }
+    ui_layout_measure(layout, columns->apply + columns->icon);
     if (enabled != UI_UNCHECKED) {
         OrderView view = group_view(rows, &zone->groups[group], group);
         order_controls(layout, columns, subject, &view, &rows->action);
+        if (apply_button(layout, layout->x + columns->apply, columns->icon)) {
+            rows->action = (Action){ACTION_APPLY_ALL, subject, 0};
+        }
     }
     layout->y += layout->row;
     for (int r = 0; !folded && r < GATHER_RESOURCE_COUNT; r++) {
@@ -490,12 +528,29 @@ static void measure_columns(Ui *ui, const UiLayout *layout, const long *availabl
     tr_integer(widest, sizeof(widest), GATHER_TARGET_MAX);
     columns->number = SDL_ceilf(ui_button_width(ui, widest));
 
+    /* What lies in the colony: the title, or the widest of a big count in either unit. */
+    OrderView widest_order = {.mode = GATHER_UNTIL, .unit = GATHER_UNIT_FOOD_DAYS, .in_days = 9999};
+    float colony = ui_text_width(ui, tr("gather_zone.column.in_colony"));
+    colony = SDL_max(colony, ui_text_width(ui, colony_text(count, sizeof(count), &widest_order)));
+    widest_order.in_items = 99999;
+    widest_order.unit = GATHER_UNIT_ITEMS;
+    colony = SDL_max(colony, ui_text_width(ui, colony_text(count, sizeof(count), &widest_order)));
+    columns->colony_width = SDL_ceilf(colony);
+    names = SDL_max(names, ui_text_width(ui, tr("gather_zone.column.name")));
+    counts = SDL_max(counts, ui_text_width(ui, tr("gather_zone.column.available")));
+
     columns->available = columns->icon + GAP + SDL_ceilf(names) + GAP;
     columns->ripe = columns->available + SDL_ceilf(counts) + GAP;
     columns->mode = columns->ripe + columns->icon + GAP;
     columns->target = columns->mode + columns->mode_width + GAP;
+    /* The unit's room also holds the count gathered so far. */
     columns->unit = columns->target + 2.0f * columns->small + columns->number + 4.0f + GAP;
-    columns->progress = columns->unit + columns->unit_width + GAP;
+    char gathered[TEXT_SIZE], gathered_number[16];
+    tr_integer(gathered_number, sizeof(gathered_number), GATHER_TARGET_MAX);
+    TR_FORMAT(gathered, sizeof(gathered), tr("gather_zone.progress.done"), gathered_number);
+    float unit_room = SDL_max(columns->unit_width, ui_text_width(ui, gathered));
+    columns->colony = columns->unit + SDL_ceilf(unit_room) + GAP;
+    columns->apply = columns->colony + columns->colony_width + GAP;
 }
 
 /* Size and priority. */
@@ -519,14 +574,22 @@ static void resources_rows(UiLayout *layout, void *userdata)
     ZoneRows *rows = userdata;
     Ui *ui = layout->ui;
     const GatherZone *zone = gather_zone_get(&rows->app->game.gather_zones, rows->index);
-    ui_layout_label(layout, tr("gather_zone.hint"), 0.0f, true);
-    ui_layout_label(layout, tr("gather_zone.hint_group"), 0.0f, true);
 
     measure_columns(ui, layout, rows->available, &rows->columns);
     /* The whole zone's full harvest option heads its column. */
     if (ripe_button(layout, layout->x + rows->columns.ripe, rows->columns.icon,
                     check_of(gather_zone_ripe_mask(zone), gather_ripe_options()), true)) {
         rows->action = (Action){ACTION_TOGGLE_RIPE, WHOLE_ZONE, 0};
+    }
+    ui_layout_measure(layout, rows->columns.colony + rows->columns.colony_width);
+    if (layout->draw) {
+        const Columns *columns = &rows->columns;
+        float text_y = layout->y + layout->text_offset;
+        ui_label_dim(ui, tr("gather_zone.column.name"), layout->x + columns->icon + GAP, text_y);
+        ui_label_dim(ui, tr("gather_zone.column.available"), layout->x + columns->available,
+                     text_y);
+        ui_label_dim(ui, tr("gather_zone.column.goal"), layout->x + columns->mode, text_y);
+        ui_label_dim(ui, tr("gather_zone.column.in_colony"), layout->x + columns->colony, text_y);
     }
     layout->y += layout->row;
     for (size_t i = 0; i < SDL_arraysize(ENTRIES); i++) {
@@ -607,6 +670,11 @@ static void apply(App *app, int index, const Action *action)
         break;
     case ACTION_ADD_PRIORITY:
         gather_zone_set_priority(zones, index, zone->priority + action->value);
+        break;
+    case ACTION_APPLY_ALL:
+        if (is_group) {
+            gather_zone_apply_group_order(zones, index, subject.group);
+        }
         break;
     case ACTION_NONE: break;
     }

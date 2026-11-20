@@ -16,6 +16,7 @@
 #define RADIUS_SLIDER_ID 3
 
 typedef struct StockpileRows {
+    App *app;
     Stockpiles *stockpiles;
     int index;
     const Stockpile *stockpile;
@@ -70,6 +71,8 @@ static void radius_rows(UiLayout *layout, StockpileRows *rows)
     char text[TEXT_SIZE], number[16];
     if (stockpile->radius == STOCKPILE_RADIUS_UNLIMITED) {
         SDL_strlcpy(text, tr("stockpile.radius_unlimited"), sizeof(text));
+    } else if (stockpile->radius == 0) {
+        SDL_strlcpy(text, tr("stockpile.radius_none"), sizeof(text));
     } else {
         tr_integer(number, sizeof(number), stockpile->radius);
         TR_FORMAT(text, sizeof(text), tr_plural("stockpile.radius", stockpile->radius), number);
@@ -77,10 +80,16 @@ static void radius_rows(UiLayout *layout, StockpileRows *rows)
     ui_layout_label(layout, text, 0.0f, false);
     ui_layout_measure(layout, SLIDER_MIN_WIDTH);
     int step = stockpile_radius_step(stockpile->radius);
-    if (layout->draw && ui_slider(layout->ui, RADIUS_SLIDER_ID,
-                                  (SDL_FRect){layout->x, layout->y, layout->width, layout->row},
-                                  stockpile_radius_steps(), &step)) {
-        stockpile_set_radius(rows->stockpiles, rows->index, stockpile_radius_of_step(step));
+    SDL_FRect track = {layout->x, layout->y, layout->width, layout->row};
+    if (layout->draw) {
+        if (ui_slider(layout->ui, RADIUS_SLIDER_ID, track, stockpile_radius_steps(), &step)) {
+            stockpile_set_radius(rows->stockpiles, rows->index, stockpile_radius_of_step(step));
+        }
+        if (ui_slider_engaged(layout->ui, RADIUS_SLIDER_ID, track)) {
+            /* The tiles it takes items from, outlined on the map. */
+            rows->app->area_preview =
+                (AreaPreview){.kind = AREA_PREVIEW_STOCKPILE, .stockpile = rows->index};
+        }
     }
     layout->y += layout->row;
 }
@@ -207,7 +216,7 @@ void stockpile_panel_draw(App *app)
     char number[16], title[TEXT_SIZE];
     tr_integer(number, sizeof(number), stockpile->number);
     TR_FORMAT(title, sizeof(title), tr("stockpile.name"), number);
-    StockpileRows rows = {stockpiles, index, stockpile, stockpile->allowed};
+    StockpileRows rows = {app, stockpiles, index, stockpile, stockpile->allowed};
     bool open = inspector_box(app, INSPECT_STOCKPILE, title, summary_rows, &rows);
     const char *tabs[1] = {tr("inspector.tab.storage")};
     if (inspector_tabs(app, tabs, 1) == 0) {

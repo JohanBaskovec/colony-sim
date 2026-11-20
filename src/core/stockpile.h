@@ -26,9 +26,10 @@
 
 /* How far a stockpile takes items from (Stockpile.radius): tiles in a
  * straight line from the item to the zone's bounding box, a level counting
- * as a tile. STOCKPILE_RADIUS_UNLIMITED: from anywhere. */
-#define STOCKPILE_RADIUS_UNLIMITED 0
-#define STOCKPILE_RADIUS_MIN 2
+ * as a tile. STOCKPILE_RADIUS_UNLIMITED: from anywhere; 0: from nowhere (the zone
+ * takes nothing, the items already in it stay). */
+#define STOCKPILE_RADIUS_UNLIMITED (-1)
+#define STOCKPILE_RADIUS_MIN 0
 #define STOCKPILE_RADIUS_MAX 160
 #define STOCKPILE_RADIUS_DEFAULT 32
 
@@ -149,7 +150,7 @@ bool stockpile_accepts(const Stockpile *stockpile, ItemStack stack);
 /* Clamped to STOCKPILE_PRIORITY_HIGHEST..STOCKPILE_PRIORITY_LOWEST. */
 void stockpile_set_priority(Stockpiles *stockpiles, int index, int priority);
 
-/* Clamped to STOCKPILE_RADIUS_MIN..STOCKPILE_RADIUS_MAX; 0 (or less), or
+/* Clamped to STOCKPILE_RADIUS_MIN..STOCKPILE_RADIUS_MAX; a negative one, or
  * more than the maximum: STOCKPILE_RADIUS_UNLIMITED. */
 void stockpile_set_radius(Stockpiles *stockpiles, int index, int radius);
 
@@ -157,8 +158,9 @@ void stockpile_set_radius(Stockpiles *stockpiles, int index, int radius);
 bool stockpile_in_radius(const Stockpile *stockpile, int x, int y, int z);
 
 /* The radii a slider offers, finer near the zone: steps 0 ..
- * stockpile_radius_steps() - 1, the last one unlimited. The step of a radius
- * is the nearest one offered. */
+ * stockpile_radius_steps() - 1 from STOCKPILE_RADIUS_MIN to STOCKPILE_RADIUS_MAX, the last
+ * one unlimited (a bill's ingredient range uses the same without the last). The step of a
+ * radius is the nearest one offered. */
 int stockpile_radius_steps(void);
 int stockpile_radius_of_step(int step);
 int stockpile_radius_step(int radius);
