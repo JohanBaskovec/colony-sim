@@ -94,6 +94,7 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
     memcpy(dst->slope + first, map->slope + first, count);
     memcpy(dst->water + first, map->water + first, count * sizeof(*map->water));
     memcpy(dst->pore + first, map->pore + first, count * sizeof(*map->pore));
+    memcpy(dst->mud + first, map->mud + first, count);
     memcpy(dst->plants + first, map->plants + first, count * sizeof(*map->plants));
     memcpy(dst->cobbles + first, map->cobbles + first, count);
     memcpy(dst->flint + first, map->flint + first, count);

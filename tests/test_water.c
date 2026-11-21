@@ -306,6 +306,11 @@ static void test_the_land_beyond_shares_the_weather(void)
     REQUIRE(water_step(&water, &map));
     CHECK_EQ_UINT(water.active_count, 0);
     CHECK_EQ_INT(water.edge_in, 0);
+    /* Water from under the ground (a spring on the edge) is the edge tile's
+     * own: the land beyond does not get it too. */
+    CHECK_EQ_INT(water_exchange_here(&water, &map, map_index(&map, 0, 7, 0), 3 * WATER_FINE),
+                 3 * WATER_FINE);
+    CHECK_EQ_INT(water_beyond_edge(&water, 0, 7, 0, -1, 0), 598 * WATER_FINE);
     water_free(&water);
     map_free(&map);
 }

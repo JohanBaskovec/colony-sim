@@ -232,7 +232,7 @@ static int64_t exchange_free(Pass *pass, size_t index, int64_t amount)
             return amount;
         }
     }
-    return water_exchange(pass->flow, map, index, (int32_t)fine) / PER_PORE;
+    return water_exchange_here(pass->flow, map, index, (int32_t)fine) / PER_PORE;
 }
 
 /* Water coming out of the ground onto an open tile: into the root zone of
@@ -609,7 +609,7 @@ static void spread_pending(GroundWater *ground, Map *map, Water *flow, uint32_t 
             }
             int64_t give = share + (rest > 0 ? 1 : rest < 0 ? -1 : 0);
             rest -= rest > 0 ? 1 : rest < 0 ? -1 : 0;
-            done += water_exchange(flow, map, index, (int32_t)give);
+            done += water_exchange_here(flow, map, index, (int32_t)give);
         }
     }
     /* What could not be taken stays owed (whole units of the ground). */
@@ -636,6 +636,51 @@ float groundwater_share(const Map *map, size_t index)
 {
     uint32_t room = map_pore_room_at(map, index);
     return room > 0 ? (float)map->pore[index] / (float)room : 0.0f;
+}
+
+bool groundwater_dig_floods(const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    if (map->rock[index] == ROCK_NONE || map->rock[index] == ROCK_WOOD) {
+        return false;
+    }
+    int64_t floor = (int64_t)z * GROUNDWATER_LEVEL;
+    int64_t head = groundwater_head(map, x, y, z);
+    if (head != GROUNDWATER_NO_HEAD &&
+        head - floor >= (int64_t)GROUNDWATER_FLOOD_MM * MAP_PORE_FINE) {
+        return true;
+    }
+    static const int DX[4] = {1, 0, -1, 0};
+    static const int DY[4] = {0, 1, 0, -1};
+    for (int d = 0; d < 4; d++) {
+        int nx = x + DX[d], ny = y + DY[d];
+        if (!map_in_bounds(map, nx, ny, z)) {
+            continue;
+        }
+        size_t n = map_index(map, nx, ny, z);
+        if (map->rock[n] == ROCK_NONE && !map_stops_light_at(map, n) &&
+            map->terrain[n] != TERRAIN_OPEN && map_water_depth_at(map, n) >= GROUNDWATER_FLOOD_MM) {
+            return true;
+        }
+    }
+    return false;
+}
+
+float groundwater_moisture(const Map *map, size_t index)
+{
+    RockType type = (RockType)map->rock[index];
+    float room = (float)rock_pore_room(type), capacity = (float)rock_pore_capacity(type);
+    if (room <= 0.0f) {
+        return -1.0f;
+    }
+    float pore = (float)map->pore[index];
+    if (pore <= capacity) {
+        return capacity > 0.0f ? pore / capacity : 1.0f;
+    }
+    return 1.0f + (pore - capacity) / (room - capacity);
 }
 
 const char *groundwater_dampness_key(const Map *map, size_t index)

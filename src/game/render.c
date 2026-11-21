@@ -1,6 +1,7 @@
 #include "game/render.h"
 
 #include "core/fire_light.h"
+#include "core/groundwater.h"
 #include "core/hearth.h"
 #include "core/shadow.h"
 #include "core/sky.h"
@@ -918,6 +919,41 @@ void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera)
                 SDL_FRect tall = {cx - size * 0.3f, cy - size * 0.5f, size * 0.6f, size};
                 batch_quad(renderer, color, &wide);
                 batch_quad(renderer, color, &tall);
+            }
+        }
+    }
+    batch_flush(renderer);
+}
+
+#define MUD_PUDDLES_MAX 3
+
+void render_mud(SDL_Renderer *renderer, const Map *map, const Camera *camera)
+{
+    const int z = camera->level; /* The level shown. */
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    float pixels = camera->zoom;
+    const SDL_Color veil = {62, 44, 28, 120};
+    const SDL_Color sheen = {150, 156, 160, 70};
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            if (!map_mud_at(map, map_index(map, x, y, z)) || !tile_seen(x, y, z)) {
+                continue;
+            }
+            float left, top;
+            camera_world_to_screen(camera, (float)x, (float)y, &left, &top);
+            SDL_FRect tile = {left, top, pixels, pixels};
+            batch_quad(renderer, veil, &tile);
+            int puddles = 1 + (int)(tile_hash(x, y, 99) % MUD_PUDDLES_MAX);
+            for (int i = 0; i < puddles; i++) {
+                uint32_t h = tile_hash(x, y, 100 + i);
+                float width = pixels * (0.18f + 0.16f * (float)(h & 0xffu) / 255.0f);
+                float cx = left + pixels * (0.2f + 0.6f * (float)((h >> 8) & 0xffu) / 255.0f);
+                float cy = top + pixels * (0.2f + 0.6f * (float)((h >> 16) & 0xffu) / 255.0f);
+                SDL_FRect wide = {cx - width * 0.5f, cy - width * 0.15f, width, width * 0.3f};
+                SDL_FRect core = {cx - width * 0.3f, cy - width * 0.22f, width * 0.6f,
+                                  width * 0.44f};
+                batch_quad(renderer, sheen, &wide);
+                batch_quad(renderer, sheen, &core);
             }
         }
     }
@@ -1895,6 +1931,44 @@ void render_items(SDL_Renderer *renderer, Sprites *sprites, const Game *game, co
     icon_flush(renderer);
 }
 
+/* A blue drop in the top right corner of a tile: digging there lets water
+ * in (designation_lets_water_in()). */
+static void render_water_warning(SDL_Renderer *renderer, const SDL_FRect *tile)
+{
+    static const SDL_Color RIM = {16, 28, 48, 230};
+    static const SDL_Color DROP = {70, 150, 235, 240};
+    float radius = SDL_max(2.5f, tile->w * 0.13f);
+    float cx = tile->x + tile->w - radius * 1.6f, cy = tile->y + radius * 2.4f;
+    for (int pass = 0; pass < 2; pass++) {
+        float r = pass == 0 ? radius + 1.0f : radius;
+        SDL_Color color = pass == 0 ? RIM : DROP;
+        SDL_FPoint tip[3] = {
+            {cx, cy - r * 2.1f}, {cx + r * 0.87f, cy - r * 0.5f}, {cx - r * 0.87f, cy - r * 0.5f}};
+        batch_shape(renderer, color, tip, 3);
+        batch_disc(renderer, color, cx, cy, r);
+    }
+}
+
+void render_designation_warnings(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                                 int x0, int y0, int x1, int y1, DesignationType type)
+{
+    const Map *map = game_view_map(game);
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    int left = SDL_max(SDL_min(x0, x1), visible.x0),
+        right = SDL_min(SDL_max(x0, x1), visible.x1 - 1);
+    int top = SDL_max(SDL_min(y0, y1), visible.y0),
+        bottom = SDL_min(SDL_max(y0, y1), visible.y1 - 1);
+    for (int y = top; y <= bottom; y++) {
+        for (int x = left; x <= right; x++) {
+            if (designation_lets_water_in(map, type, x, y, camera->level)) {
+                SDL_FRect tile = tile_rect(camera, x, y);
+                render_water_warning(renderer, &tile);
+            }
+        }
+    }
+    batch_flush(renderer);
+}
+
 void render_designations(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {
     const int z = camera->level; /* The level shown. */
@@ -1915,6 +1989,9 @@ void render_designations(SDL_Renderer *renderer, const Game *game, const Camera 
             SDL_FRect tile = tile_rect(camera, x, y);
             SDL_FRect mark = inset(&tile, 0.8f);
             outline(renderer, mark, thickness, DESIGNATION_COLORS[type]);
+            if (tile.w >= 10.0f && designation_lets_water_in(map, type, x, y, z)) {
+                render_water_warning(renderer, &tile);
+            }
 
             float progress = designation_progress_fraction(designations, map, x, y, z);
             if (progress > 0.0f && tile.w >= 6.0f) {
@@ -1927,6 +2004,7 @@ void render_designations(SDL_Renderer *renderer, const Game *game, const Camera 
             }
         }
     }
+    batch_flush(renderer);
 }
 
 void render_designation_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
@@ -3067,12 +3145,22 @@ void render_moisture(SDL_Renderer *renderer, const Game *game, const Camera *cam
     TileRect visible = camera_visible_tiles(camera, game->map.width, game->map.height);
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
-            if (!game_tile_seen(game, x, y, z) ||
-                soil_moisture_key(&game->soil, &game->map, x, y, z) == NULL) {
-                continue; /* Out of view, or no rooting ground (water, stone, floors). */
+            if (!game_tile_seen(game, x, y, z)) {
+                continue;
             }
-            SDL_Color color =
-                moisture_color(theme, soil_moisture(&game->soil, &game->map, x, y, z));
+            /* Rooting ground, or the water in a block of rock (the walls of a
+             * gallery, the inside of the ground where the level cuts it). */
+            float moisture = -1.0f;
+            size_t index = map_index(&game->map, x, y, z);
+            if (soil_moisture_key(&game->soil, &game->map, x, y, z) != NULL) {
+                moisture = soil_moisture(&game->soil, &game->map, x, y, z);
+            } else if (game->map.rock[index] != ROCK_WOOD) {
+                moisture = groundwater_moisture(&game->map, index);
+            }
+            if (moisture < 0.0f) {
+                continue; /* Water, built floors, trunks, open space. */
+            }
+            SDL_Color color = moisture_color(theme, moisture);
             color.a = 130;
             SDL_FRect tile = tile_rect(camera, x, y);
             batch_quad(renderer, color, &tile);

@@ -125,6 +125,11 @@ bool designation_ground_free(const Constructions *constructions, const Workstati
                              const Stockpiles *stockpiles, DesignationType type, int x, int y,
                              int z);
 
+/* Whether carrying out a digging order of this type on (x, y, z) would let
+ * water in (groundwater_dig_floods() on the block it digs out: the tile
+ * itself, the block under it for a hole dug down); false for other orders. */
+bool designation_lets_water_in(const Map *map, DesignationType type, int x, int y, int z);
+
 /* Whether the order on the tile digs (earth, rock, a ramp) and has to wait:
  * carrying it out now would leave a ceiling around without support. */
 bool designation_waits_for_support(const Designations *designations, const Map *map, int x, int y,

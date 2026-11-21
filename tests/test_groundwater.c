@@ -165,6 +165,50 @@ static void test_digging_frees_pore_water(void)
 
 /* Layers written directly (tests, scenarios) move no water: the pores keep
  * within the room of the rock written, none where there is no rock. */
+static void test_moisture_of_a_block(void)
+{
+    Map map;
+    REQUIRE(ground_world(&map, 16, 4, 2, ROCK_EARTH));
+    size_t tile = map_index(&map, 5, 5, 1);
+    map.pore[tile] = 0;
+    CHECK_NEAR(groundwater_moisture(&map, tile), 0.0, 1e-6);
+    map.pore[tile] = (uint16_t)rock_pore_capacity(ROCK_EARTH);
+    CHECK_NEAR(groundwater_moisture(&map, tile), 1.0, 1e-6);
+    map.pore[tile] = (uint16_t)rock_pore_room(ROCK_EARTH);
+    CHECK_NEAR(groundwater_moisture(&map, tile), 2.0, 1e-6);
+    map.pore[tile] = (uint16_t)(750 * MAP_PORE_FINE); /* Half way from 600 to 900 mm. */
+    CHECK_NEAR(groundwater_moisture(&map, tile), 1.5, 1e-3);
+    CHECK_NEAR(groundwater_moisture(&map, map_index(&map, 5, 5, 3)), -1.0, 1e-6); /* Open. */
+    map_free(&map);
+}
+
+/* Digging under the water table or beside a lake lets water in; above the
+ * table, beside dry ground, it does not. */
+static void test_digging_that_lets_water_in(void)
+{
+    Map map;
+    REQUIRE(ground_world(&map, 16, 6, 4, ROCK_EARTH));
+    for (int y = 0; y < 8; y++) { /* The table half way up level 2 in the north. */
+        for (int x = 0; x < 16; x++) {
+            groundwater_lay_table(&map, x, y, 2 * GROUNDWATER_LEVEL + GROUNDWATER_LEVEL / 2);
+        }
+    }
+    CHECK(groundwater_dig_floods(&map, 5, 3, 1));
+    CHECK(groundwater_dig_floods(&map, 5, 3, 2));   /* 1 m of water over its floor. */
+    CHECK(!groundwater_dig_floods(&map, 5, 3, 3));  /* Above the table. */
+    CHECK(!groundwater_dig_floods(&map, 5, 12, 2)); /* No table in the south. */
+    CHECK(!groundwater_dig_floods(&map, 5, 3, 4));  /* Open: nothing to dig. */
+
+    /* A pool on level 3 in the south: the blocks beside it. */
+    dig(&map, 8, 12, 3);
+    map_set_water(&map, 8, 12, 3, 500);
+    CHECK(groundwater_dig_floods(&map, 9, 12, 3));
+    CHECK(!groundwater_dig_floods(&map, 10, 12, 3));
+    map_set_water(&map, 8, 12, 3, GROUNDWATER_FLOOD_MM / 2); /* A puddle. */
+    CHECK(!groundwater_dig_floods(&map, 9, 12, 3));
+    map_free(&map);
+}
+
 static void test_direct_writes_keep_pores_within_their_room(void)
 {
     Map map;
@@ -493,6 +537,8 @@ int main(void)
     RUN_TEST(test_a_table_laid_and_its_heads);
     RUN_TEST(test_digging_frees_pore_water);
     RUN_TEST(test_direct_writes_keep_pores_within_their_room);
+    RUN_TEST(test_moisture_of_a_block);
+    RUN_TEST(test_digging_that_lets_water_in);
     RUN_TEST(test_water_soaks_down_and_stops_over_clay);
     RUN_TEST(test_tables_even_out);
     RUN_TEST(test_a_gallery_under_the_table_fills);

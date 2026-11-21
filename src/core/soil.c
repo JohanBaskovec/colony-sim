@@ -14,11 +14,11 @@ static int imin(int a, int b)
 
 /* docs/CLIMATE.md §3 (tuning): mm of water in the root zone. */
 static const SoilDef SOIL_DEFS[TERRAIN_COUNT] = {
-    [TERRAIN_SILT] = {60.0f, 200.0f, 280.0f, 0.03f, 6.0f},
-    [TERRAIN_SAND] = {8.0f, 40.0f, 90.0f, 0.25f, 40.0f},
-    [TERRAIN_GRAVEL] = {12.0f, 55.0f, 100.0f, 0.18f, 25.0f},
-    [TERRAIN_SOIL] = {40.0f, 140.0f, 200.0f, 0.06f, 12.0f},
-    [TERRAIN_RICH_SOIL] = {55.0f, 180.0f, 250.0f, 0.05f, 15.0f},
+    [TERRAIN_SILT] = {60.0f, 200.0f, 280.0f, 0.03f, 6.0f, true},
+    [TERRAIN_SAND] = {8.0f, 40.0f, 90.0f, 0.25f, 40.0f, false},
+    [TERRAIN_GRAVEL] = {12.0f, 55.0f, 100.0f, 0.18f, 25.0f, false},
+    [TERRAIN_SOIL] = {40.0f, 140.0f, 200.0f, 0.06f, 12.0f, true},
+    [TERRAIN_RICH_SOIL] = {55.0f, 180.0f, 250.0f, 0.05f, 15.0f, true},
 };
 
 const SoilDef *soil_def(Terrain terrain)
@@ -452,6 +452,30 @@ static void free_water_hour(Soil *soil, Map *map, Water *water, size_t index, co
     water_exchange(water, map, top, fine_of(change));
 }
 
+/* Mud on a tile of rooting ground (Map.mud), from its water this hour. */
+static void update_mud(Map *map, size_t index, const SoilDef *def, float water, bool frozen)
+{
+    float moisture = soil_moisture_of(def, water);
+    bool mud = map_mud_at(map, index) ? moisture >= SOIL_MUD_UNTIL : moisture >= SOIL_MUD_FROM;
+    map_set_mud(map, index, def->mud && !frozen && mud);
+}
+
+void soil_settle_mud(const Soil *soil, Map *map, const float *temperature)
+{
+    if (soil->water == NULL) {
+        return;
+    }
+    for (size_t i = 0; i < map_tile_count(map); i++) {
+        const SoilDef *def = tile_def(map, i);
+        if (def == NULL || soil->water[i] == 0.0f) {
+            map_set_mud(map, i, false);
+            continue;
+        }
+        map_set_mud(map, i, false); /* Turned to mud from firm ground. */
+        update_mud(map, i, def, soil->water[i], temperature != NULL && temperature[i] < 0.0f);
+    }
+}
+
 void soil_update(Soil *soil, Map *map, Water *flow, size_t first, size_t last, const SoilHour *hour,
                  const float *temperature)
 {
@@ -491,6 +515,7 @@ void soil_update(Soil *soil, Map *map, Water *flow, size_t first, size_t last, c
                 continue; /* The rain goes through to the ground. */
             }
             soil->evap[i] = open_water ? 255 : 0;
+            map_set_mud(map, i, false);
             if (flow != NULL) {
                 free_water_hour(soil, map, flow, i, hour, input, covered, sun, temperature);
             }
@@ -560,6 +585,7 @@ void soil_update(Soil *soil, Map *map, Water *flow, size_t first, size_t last, c
             water += SOIL_DEW_MM;
         }
         soil->water[i] = water;
+        update_mud(map, i, def, water, frozen || (temperature != NULL && temperature[i] < 0.0f));
         float share = hour->pet > 0.0f ? lost / hour->pet : 0.0f;
         soil->evap[i] = (uint8_t)lroundf(clampf(share, 0.0f, 1.0f) * 255.0f);
     }

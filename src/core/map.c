@@ -778,6 +778,11 @@ void map_set_pore(Map *map, size_t index, uint32_t pore)
     map->pore[index] = (uint16_t)(pore < room ? pore : room);
 }
 
+void map_set_mud(Map *map, size_t index, bool mud)
+{
+    map->mud[index] = mud && map->rock[index] == ROCK_NONE;
+}
+
 const PlantDef *plant_def(PlantType plant)
 {
     return ((unsigned)plant < PLANT_COUNT) ? &PLANT_DEFS[plant] : NULL;
@@ -1319,6 +1324,7 @@ bool map_init(Map *map, int width, int height, int depth)
     map->slope = calloc(count, 1);
     map->water = calloc(count, sizeof(*map->water));
     map->pore = calloc(count, sizeof(*map->pore));
+    map->mud = calloc(count, sizeof(*map->mud));
     map->plants = calloc(count, sizeof(Plant));
     map->cobbles = calloc(count, 1);
     map->flint = calloc(count, 1);
@@ -1341,11 +1347,12 @@ bool map_init(Map *map, int width, int height, int depth)
     map->light_solid_stamps = calloc(blocks, sizeof(*map->light_solid_stamps));
     if (map->light_stamps == NULL || map->light_solid_stamps == NULL || map->doors == NULL ||
         map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL ||
-        map->water == NULL || map->pore == NULL || map->plants == NULL || map->cobbles == NULL ||
-        map->flint == NULL || map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
-        map->tree_species == NULL || map->structure == NULL || map->structure_part == NULL ||
-        map->structure_quality == NULL || map->structure_hit_points == NULL ||
-        map->structure_woods == NULL || map->roof_quality == NULL || map->roof_woods == NULL) {
+        map->water == NULL || map->pore == NULL || map->mud == NULL || map->plants == NULL ||
+        map->cobbles == NULL || map->flint == NULL || map->branches == NULL || map->twigs == NULL ||
+        map->nuts == NULL || map->tree_species == NULL || map->structure == NULL ||
+        map->structure_part == NULL || map->structure_quality == NULL ||
+        map->structure_hit_points == NULL || map->structure_woods == NULL ||
+        map->roof_quality == NULL || map->roof_woods == NULL) {
         map_free(map);
         return false;
     }
@@ -1367,6 +1374,7 @@ void map_free(Map *map)
     free(map->slope);
     free(map->water);
     free(map->pore);
+    free(map->mud);
     free(map->plants);
     free(map->cobbles);
     free(map->flint);
@@ -1531,6 +1539,7 @@ void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
         return;
     }
     map->terrain[index] = (uint8_t)terrain;
+    map->mud[index] = 0; /* The soil works it out again. */
     /* Floors stop the light (a built roof another way than the ground);
      * foliage lets some through; two kinds of ground change nothing. */
     bool floor_before = old != TERRAIN_OPEN && !terrain_is_foliage(old);
@@ -1569,6 +1578,7 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
     RockType old_rock = (RockType)map->rock[index];
     uint32_t pore = map->pore[index];
     map->rock[index] = (uint8_t)rock;
+    map->mud[index] = 0;
     /* Water in the ground (docs/WATER.md §5): rock filling a tile takes its
      * free water into its pores as far as they have room (the rest is
      * lost); a tile dug out leaves the water it held above its field
@@ -1840,6 +1850,7 @@ void map_topology_changed(Map *map)
             if (map->pore[i] > room) {
                 map->pore[i] = (uint16_t)room;
             }
+            map->mud[i] = map->mud[i] && map->rock[i] == ROCK_NONE;
         }
     }
     light_changed_everywhere(map, true);
@@ -1851,6 +1862,9 @@ float map_move_cost_at(const Map *map, size_t index)
         return 0.0f;
     }
     float cost = TERRAIN_DEFS[map->terrain[index]].move_cost;
+    if (map->mud[index] != 0) {
+        cost *= MAP_MUD_MOVE_COST;
+    }
     if (map->water[index] != 0) {
         cost *= water_move_factor(water_class_of(map_water_depth_at(map, index)));
     }
@@ -2426,6 +2440,7 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     dst->rock[index] = src->rock[index];
     dst->slope[index] = src->slope[index];
     dst->pore[index] = src->pore[index];
+    dst->mud[index] = src->mud[index];
     if (dst->water[index] != src->water[index]) {
         dst->water[index] = src->water[index];
         dst->water_revision++;
@@ -2537,6 +2552,10 @@ void map_serialize(Serializer *s, Map *map)
     for (size_t i = 0; s->reading && i < count; i++) {
         map_set_pore(map, i, map->pore[i]); /* Within the room of its rock. */
     }
+    ser_layer_u8(s, map->mud, count);
+    for (size_t i = 0; s->reading && i < count; i++) {
+        map_set_mud(map, i, map->mud[i] != 0);
+    }
     ser_int(s, &map->slope_count);
     plants_serialize(s, map, count);
     ser_layer_u8(s, map->cobbles, count);
@@ -2631,6 +2650,12 @@ uint64_t map_hash(const Map *map)
     for (size_t i = 0; i < count; i++) { /* Maps without pore water hash as they did. */
         if (map->pore[i] != 0) {
             uint64_t at[2] = {i, (uint64_t)map->pore[i] << 32};
+            hash = hash_fnv1a64(hash, at, sizeof(at));
+        }
+    }
+    for (size_t i = 0; i < count; i++) { /* Maps without mud hash as they did. */
+        if (map->mud[i] != 0) {
+            uint64_t at[2] = {i, 3ULL << 48};
             hash = hash_fnv1a64(hash, at, sizeof(at));
         }
     }

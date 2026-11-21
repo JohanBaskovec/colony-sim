@@ -1221,7 +1221,7 @@ static void weather_beyond(Water *water, int x, int y, int z, int32_t change)
     }
 }
 
-int32_t water_exchange(Water *water, Map *map, size_t index, int32_t fine)
+static int32_t exchange(Water *water, Map *map, size_t index, int32_t fine, bool weather)
 {
     if (fine == 0 || map->rock[index] != ROCK_NONE) {
         return 0;
@@ -1238,7 +1238,7 @@ int32_t water_exchange(Water *water, Map *map, size_t index, int32_t fine)
     set_level(water, map, index, after);
     int x, y, z;
     map_tile_of(map, index, &x, &y, &z);
-    if (x == 0 || y == 0 || x + 1 == water->width || y + 1 == water->height) {
+    if (weather && (x == 0 || y == 0 || x + 1 == water->width || y + 1 == water->height)) {
         weather_beyond(water, x, y, z, after - before);
     }
     uint32_t number = water_block_of(water, x, y, z);
@@ -1264,6 +1264,16 @@ int32_t water_exchange(Water *water, Map *map, size_t index, int32_t fine)
         (void)wake_number(water, map, number); /* Merged at the next step. */
     }
     return after - before;
+}
+
+int32_t water_exchange(Water *water, Map *map, size_t index, int32_t fine)
+{
+    return exchange(water, map, index, fine, true);
+}
+
+int32_t water_exchange_here(Water *water, Map *map, size_t index, int32_t fine)
+{
+    return exchange(water, map, index, fine, false);
 }
 
 void water_settle(Water *water, Map *map)

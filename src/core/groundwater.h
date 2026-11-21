@@ -117,7 +117,7 @@ void groundwater_lay_table(Map *map, int x, int y, int64_t head);
 
 /* One hour of the porous tiles first .. last - 1 (indices in the map). The
  * free water it gives or takes goes through the flow (`flow`,
- * water_exchange(); NULL: set on the map), which also tells whether the
+ * water_exchange_here(); NULL: set on the map), which also tells whether the
  * edges are sealed. Water seeping out onto a floor of rooting ground goes
  * into its root zone (`soil`, NULL: none) as far as it has room, then lies
  * on it. */
@@ -129,11 +129,21 @@ void groundwater_update(GroundWater *ground, Map *map, Water *flow, Soil *soil, 
  * statistics of the hour become those of the last. */
 void groundwater_end_hour(GroundWater *ground, Map *map, Water *flow);
 
+/* Whether digging out the solid tile (x, y, z) lets water in (docs/WATER.md
+ * §5.5): the water table stands GROUNDWATER_FLOOD_MM or more over its floor
+ * (the gallery fills up to it), or open water beside it on its level stands
+ * that deep (a lake or the river pours in). */
+#define GROUNDWATER_FLOOD_MM WATER_SHALLOWS_MM
+bool groundwater_dig_floods(const Map *map, int x, int y, int z);
+
 /* How wet a solid tile is: the share of its room filled (0 .. 1), and in
  * words, a translation key (dry, damp, wet, soaked), NULL where it is not
  * porous. */
 float groundwater_share(const Map *map, size_t index);
 const char *groundwater_dampness_key(const Map *map, size_t index);
+/* The same on the soil's scale (soil_moisture_of(), for the moisture view):
+ * 0 dry to 1 at its field capacity, 2 full; -1 where it is not porous. */
+float groundwater_moisture(const Map *map, size_t index);
 
 uint64_t groundwater_hash(const GroundWater *ground, uint64_t hash);
 

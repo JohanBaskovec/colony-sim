@@ -5,7 +5,7 @@
 #include "game/layout.h"
 #include "game/render.h"
 
-#define TEXT_SIZE 256
+#define TEXT_SIZE 512 /* The longest descriptions (French) run past 300 bytes. */
 #define MAX_ROW_BUTTONS 16
 #define CARD_LINES 10
 #define CARD_WRAPPED_LINES 32

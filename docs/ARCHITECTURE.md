@@ -352,7 +352,11 @@ sleeping block is kept per block and spread at the end of the hour
 generation lays the layers (earth, beds of sand and gravel, lenses of clay,
 stone) and a flat water table at the lakes' level (`lay_water_table()`).
 The soil's root zone drains into the block under its floor and is drawn up
-by it (`docs/CLIMATE.md` §3.5).
+by it (`docs/CLIMATE.md` §3.5). Soaked soil turns to mud (`Map.mud`, set by the
+soil each hour), which `map_move_cost_at()` slows by `MAP_MUD_MOVE_COST`.
+Ground water reaching the surface goes through `water_exchange_here()`,
+not `water_exchange()`: the land beyond the edges shares the weather, not
+the springs.
 
 **Rain and the flow** (docs/WATER.md §3.5, §4.3): the soil's hourly slices
 (`soil_update()`, given `Game.water`) give or take the free water of each

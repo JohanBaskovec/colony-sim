@@ -768,6 +768,7 @@ bool game_init(Game *game, const NewGameParams *params)
         game_shutdown(game);
         return false;
     }
+    soil_settle_mud(&game->soil, &game->map, game->temperatures.celsius);
     leaf_settle(game);
     /* The light of the world was worked out with it (the plants are set where
      * they can live all year); brought up to date at the end. */

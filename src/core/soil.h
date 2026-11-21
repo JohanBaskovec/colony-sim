@@ -35,14 +35,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* The bucket of a terrain, in mm of water in the root zone, and how fast it
- * drains above its capacity (share an hour) and takes rain in (mm an hour). */
+/* The bucket of a terrain, in mm of water in the root zone, how fast it
+ * drains above its capacity (share an hour) and takes rain in (mm an hour),
+ * and whether it turns to mud when soaked (soil and silt; not sand nor
+ * gravel). */
 typedef struct SoilDef {
     float wilting;
     float capacity;
     float saturation;
     float drainage;
     float intake;
+    bool mud;
 } SoilDef;
 
 /* NULL for what is not rooting ground (water, stone, open space, roofs,
@@ -75,6 +78,11 @@ float soil_water_for(const SoilDef *def, float moisture);
  * SOIL_RISE_RATE of the gap an hour. */
 #define SOIL_RISE_FROM 0.5f
 #define SOIL_RISE_RATE 0.08f
+/* Mud (docs/WATER.md §5.5, Map.mud): a floor of muddy ground not frozen
+ * turns to mud once its moisture reaches SOIL_MUD_FROM, and firms up again
+ * below SOIL_MUD_UNTIL (so that it does not flicker from hour to hour). */
+#define SOIL_MUD_FROM 1.8f
+#define SOIL_MUD_UNTIL 1.6f
 /* Plants close their pores below this moisture: what they transpire falls
  * in proportion below it. */
 #define SOIL_DRY_BELOW 0.5f
@@ -134,6 +142,10 @@ typedef struct Soil {
 /* Every tile of rooting ground at `share` of its useful water (0: wilting,
  * 1: field capacity), the banks at their target. */
 bool soil_init(Soil *soil, const Map *map, float share);
+/* Sets the mud of every tile (Map.mud) from the water in its ground as it
+ * is, with `temperature` the temperature of each tile (NULL: no frost): a
+ * new game starts with its soaked ground muddy. */
+void soil_settle_mud(const Soil *soil, Map *map, const float *temperature);
 /* Allocated for the map, nothing worked out (for loading a save). */
 bool soil_init_empty(Soil *soil, const Map *map);
 void soil_free(Soil *soil);
@@ -163,8 +175,9 @@ void soil_look_up(Soil *soil, const Map *map, size_t first, size_t last);
  * snowmelt lies on it as free water, frozen ground takes none; free water
  * soaks into rooting ground (a pond's bed too, not a lake's bed of silt) and
  * evaporates first (the ground under it does not); rain on stone, roofs and
- * open water adds to their free water. Changes the map's free water only
- * (water_exchange()). */
+ * open water adds to their free water. Changes the map's free water
+ * (water_exchange()), its pore water (drainage, capillary rise) and its mud
+ * (map_set_mud()) only. */
 void soil_update(Soil *soil, Map *map, Water *flow, size_t first, size_t last, const SoilHour *hour,
                  const float *temperature);
 

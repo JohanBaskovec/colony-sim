@@ -483,6 +483,10 @@ typedef struct Map {
      * (map_pore_room_at()), always 0 where there is no rock. Moved by
      * core/groundwater.h; set with map_set_pore() once a game runs. */
     uint16_t *pore;
+    /* 1 where a floor of soil is mud (docs/WATER.md §5.5): its root zone
+     * saturated, not frozen (set by core/soil.h with map_set_mud()); walked
+     * at MAP_MUD_MOVE_COST. Changing a tile's terrain or rock clears it. */
+    uint8_t *mud;
     int slope_count; /* Slope tiles. */
     Plant *plants;
     /* Stones lying about each tile, that gathering takes one by one: cobbles
@@ -867,7 +871,8 @@ static inline void map_tile_of(const Map *map, size_t index, int *x, int *y, int
  * change that leaves the tile as passable as before (granite to sandstone)
  * is not a topology change. map_topology_changed() also brings the pore
  * water of every tile within the room of its rock (none without rock): a
- * direct write moves no water in or out of the ground.
+ * direct write moves no water in or out of the ground (and there is no mud
+ * under rock).
  */
 void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain);
 void map_set_rock(Map *map, int x, int y, int z, RockType rock);
@@ -1259,6 +1264,13 @@ static inline uint32_t rock_pore_capacity(RockType rock)
 {
     return (unsigned)rock < ROCK_COUNT ? ROCK_DEFS[rock].pore_capacity : 0;
 }
+/* Mud slows walking by this factor (docs/WATER.md §5.5, tuning). */
+#define MAP_MUD_MOVE_COST 1.3f
+static inline bool map_mud_at(const Map *map, size_t index)
+{
+    return map->mud[index] != 0;
+}
+void map_set_mud(Map *map, size_t index, bool mud);
 static inline uint32_t map_pore_room_at(const Map *map, size_t index)
 {
     return rock_pore_room((RockType)map->rock[index]);

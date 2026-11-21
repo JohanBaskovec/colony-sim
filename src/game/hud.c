@@ -562,6 +562,9 @@ static void build_tile_panel(App *app, Panel *panel)
     if (map_is_slope(map, x, y, z)) {
         panel_add_text(panel, tr("hud.tile.slope"));
     }
+    if (map_mud_at(map, index)) {
+        panel_add_text(panel, tr("hud.tile.mud"));
+    }
 
     if (map->rock[index] == ROCK_WOOD) { /* Not a rock wall: a tree's trunk. */
         panel_add_text(panel, tr(rock_def(ROCK_WOOD)->name_key));

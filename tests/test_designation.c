@@ -1,5 +1,6 @@
 #include "core/designation.h"
 #include "core/gather_zone.h"
+#include "core/groundwater.h"
 #include "core/i18n.h"
 #include "core/util.h"
 
@@ -556,6 +557,33 @@ static void test_harvest_and_uproot_orders(void)
     free_world(&map, &d);
 }
 
+/* The warning before digging into water goes by the block each order digs
+ * out: the tile itself, the block under it for a hole dug down. */
+static void test_orders_that_let_water_in(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 16, 16, 3));
+    for (size_t i = 0; i < map_tile_count(&map); i++) {
+        int x, y, z;
+        map_tile_of(&map, i, &x, &y, &z);
+        map.rock[i] = (uint8_t)(z < 2 ? ROCK_EARTH : ROCK_NONE);
+        map.terrain[i] = (uint8_t)(z <= 2 ? TERRAIN_SOIL : TERRAIN_OPEN);
+        map.pore[i] = (uint16_t)rock_pore_capacity((RockType)map.rock[i]);
+    }
+    map_topology_changed(&map);
+    for (int y = 0; y < 16; y++) { /* The table half way up level 1 in the west. */
+        for (int x = 0; x < 8; x++) {
+            groundwater_lay_table(&map, x, y, GROUNDWATER_LEVEL + GROUNDWATER_LEVEL / 2);
+        }
+    }
+    CHECK(designation_lets_water_in(&map, DESIGNATION_DIG_DOWN, 4, 4, 2));
+    CHECK(designation_lets_water_in(&map, DESIGNATION_DIG, 4, 4, 1));
+    CHECK(designation_lets_water_in(&map, DESIGNATION_MINE, 4, 4, 1));
+    CHECK(!designation_lets_water_in(&map, DESIGNATION_CHOP, 4, 4, 1));
+    CHECK(!designation_lets_water_in(&map, DESIGNATION_DIG_DOWN, 12, 4, 2)); /* No table. */
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_harvest_and_uproot_orders);
@@ -571,6 +599,7 @@ int main(void)
     RUN_TEST(test_taking_structures_apart);
     RUN_TEST(test_earth_is_dug_rock_is_mined);
     RUN_TEST(test_soft_ground_is_dug_like_earth);
+    RUN_TEST(test_orders_that_let_water_in);
     RUN_TEST(test_ramps_are_cut_into_banks);
     RUN_TEST(test_ramps_need_bare_ground);
     RUN_TEST(test_digging_down);

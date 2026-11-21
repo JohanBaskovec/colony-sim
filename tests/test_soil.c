@@ -617,6 +617,72 @@ static void test_a_high_water_table_keeps_the_ground_wet(void)
     }
 }
 
+/* Soaked soil turns to mud and slows walking; it firms up only once well
+ * below the point it turned at; sand and frozen ground make none. */
+static void test_soaked_soil_turns_to_mud(void)
+{
+    Map map;
+    flat_map(&map, 2);
+    map_set_terrain(&map, 3, 3, 0, TERRAIN_SAND);
+    Soil soil;
+    REQUIRE(soil_init(&soil, &map, 1.0f));
+    const SoilDef *loam = soil_def(TERRAIN_SOIL), *sand = soil_def(TERRAIN_SAND);
+    float dry_cost = map_move_cost(&map, 8, 8, 0);
+    for (size_t i = 0; i < map_level_tile_count(&map); i++) {
+        soil.water[i] = map.terrain[i] == TERRAIN_SAND ? sand->saturation : loam->saturation;
+    }
+    SoilHour still = {0};
+    run_hours(&soil, &map, &still, 1);
+    CHECK(map_mud_at(&map, map_index(&map, 8, 8, 0)));
+    CHECK(!map_mud_at(&map, map_index(&map, 3, 3, 0))); /* Sand drains, no mud. */
+    CHECK_NEAR(map_move_cost(&map, 8, 8, 0), dry_cost * MAP_MUD_MOVE_COST, 1e-5);
+
+    /* Between the two thresholds: mud stays mud, firm ground stays firm. */
+    size_t muddy = map_index(&map, 8, 8, 0), firm = map_index(&map, 9, 8, 0);
+    soil.water[muddy] = soil.water[firm] = soil_water_for(loam, 1.75f);
+    map_set_mud(&map, firm, false);
+    run_hours(&soil, &map, &still, 1);
+    CHECK(soil_moisture(&soil, &map, 8, 8, 0) < SOIL_MUD_FROM);
+    CHECK(soil_moisture(&soil, &map, 8, 8, 0) > SOIL_MUD_UNTIL);
+    CHECK(map_mud_at(&map, muddy));
+    CHECK(!map_mud_at(&map, firm));
+    soil.water[muddy] = soil_water_for(loam, SOIL_MUD_UNTIL);
+    run_hours(&soil, &map, &still, 1);
+    CHECK(!map_mud_at(&map, muddy));
+    CHECK_NEAR(map_move_cost(&map, 8, 8, 0), dry_cost, 1e-5);
+
+    /* Frozen ground is hard. */
+    size_t count = map_tile_count(&map);
+    float *cold = malloc(count * sizeof(*cold));
+    REQUIRE(cold != NULL);
+    for (size_t i = 0; i < count; i++) {
+        cold[i] = -5.0f;
+    }
+    soil.water[muddy] = loam->saturation;
+    soil_update(&soil, &map, NULL, 0, map_level_tile_count(&map), &still, cold);
+    CHECK(!map_mud_at(&map, muddy));
+    soil_update(&soil, &map, NULL, 0, map_level_tile_count(&map), &still, NULL);
+    CHECK(map_mud_at(&map, muddy));
+
+    /* Settled at once (a new game): soaked ground is mud, the rest firm. */
+    soil.water[firm] = loam->saturation;
+    soil.water[muddy] = loam->capacity;
+    map_set_mud(&map, muddy, true);
+    soil_settle_mud(&soil, &map, NULL);
+    CHECK(map_mud_at(&map, firm));
+    CHECK(!map_mud_at(&map, muddy));
+    soil_settle_mud(&soil, &map, cold);
+    CHECK(!map_mud_at(&map, firm));
+    soil.water[muddy] = loam->saturation;
+
+    /* Building on it or digging it clears the mud. */
+    map_set_terrain(&map, 8, 8, 0, TERRAIN_ROUGH_STONE);
+    CHECK(!map_mud_at(&map, muddy));
+    free(cold);
+    soil_free(&soil);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_buckets_by_terrain);
@@ -637,5 +703,6 @@ int main(void)
     RUN_TEST(test_rain_on_lakes_and_ponds);
     RUN_TEST(test_the_root_zone_drains_into_the_ground);
     RUN_TEST(test_a_high_water_table_keeps_the_ground_wet);
+    RUN_TEST(test_soaked_soil_turns_to_mud);
     return test_summary();
 }

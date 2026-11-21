@@ -2177,6 +2177,7 @@ static void render_world(App *app, bool markers)
             Camera below = app->camera;
             below.level = z;
             render_map(app->renderer, app->sprites, game_view_map(&app->game), &below);
+            render_mud(app->renderer, game_view_map(&app->game), &below);
             render_snow_cover(app->renderer, &app->game, &below);
             render_gather_zones(app->renderer, &app->game, &below, GATHER_ZONE_NONE);
             render_stockpiles(app->renderer, &app->game, &below, STOCKPILE_NONE);
@@ -2194,6 +2195,7 @@ static void render_world(App *app, bool markers)
         render_below_end(app->renderer);
     }
     render_map(app->renderer, app->sprites, game_view_map(&app->game), &app->camera);
+    render_mud(app->renderer, game_view_map(&app->game), &app->camera);
     render_dirt(app->renderer, game_view_dirt(&app->game), &app->camera);
     render_snow_cover(app->renderer, &app->game, &app->camera);
     render_blood(app->renderer, &app->game, &app->camera);
@@ -2391,6 +2393,8 @@ static void render_frame(App *app)
             render_forbid_area(app->renderer, &app->camera, x0, y0, x1, y1, !app->forbid_allows);
         } else {
             render_designation_area(app->renderer, &app->camera, x0, y0, x1, y1, app->tool_type);
+            render_designation_warnings(app->renderer, &app->game, &app->camera, x0, y0, x1, y1,
+                                        app->tool_type);
         }
     } else if (app->box_selecting) {
         float start_x, start_y;

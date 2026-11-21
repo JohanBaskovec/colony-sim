@@ -1,6 +1,7 @@
 #include "core/worldgen.h"
 
 #include "core/game_clock.h"
+#include "core/groundwater.h"
 #include "core/shadow.h"
 #include "core/sun.h"
 #include "core/temperature.h"
@@ -786,6 +787,43 @@ static void test_generated_plants_live_all_year(void)
     }
 }
 
+/* The water table at rest (docs/WATER.md §5.3): flat, at the lakes' level,
+ * under the plains; a flat world has none. */
+static void test_the_water_table_at_the_lakes_level(void)
+{
+    long plains = 0;
+    for (uint64_t seed = 1; seed <= 3; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        int s = map.surface_level;
+        int64_t lakes =
+            (int64_t)s * GROUNDWATER_LEVEL - (int64_t)WORLDGEN_LAKE_DEPTH_MM * MAP_PORE_FINE;
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                if (map_ground_level(&map, x, y) != s || map.water[map_index(&map, x, y, s)] > 0 ||
+                    map.rock[map_index(&map, x, y, s - 1)] != ROCK_EARTH) {
+                    continue; /* Plains over earth only. */
+                }
+                plains++;
+                CHECK(llabs(groundwater_head(&map, x, y, s - 1) - lakes) <= 4 * MAP_PORE_FINE);
+                CHECK(groundwater_head(&map, x, y, s - 1) < (int64_t)s * GROUNDWATER_LEVEL);
+            }
+        }
+        map_free(&map);
+    }
+    CHECK(plains > 1000);
+
+    WorldGenParams flat = params_for_seed(4);
+    flat.flat = true;
+    Map map;
+    REQUIRE(worldgen_generate(&map, &flat));
+    for (size_t i = 0; i < map_tile_count(&map); i++) {
+        CHECK(map.pore[i] <= rock_pore_capacity((RockType)map.rock[i]));
+    }
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_same_seed_gives_identical_map);
@@ -794,6 +832,7 @@ int main(void)
     RUN_TEST(test_tiles_are_valid_and_consistent);
     RUN_TEST(test_maps_are_mostly_usable_land);
     RUN_TEST(test_ground_layers);
+    RUN_TEST(test_the_water_table_at_the_lakes_level);
     RUN_TEST(test_stones);
     RUN_TEST(test_relief);
     RUN_TEST(test_hill_height);

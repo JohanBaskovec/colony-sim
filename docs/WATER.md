@@ -637,23 +637,35 @@ water table comes close to it.
 - **Digging.** A dug block leaves the pore water it held above its field
   capacity as free water in the new cell (what it held against gravity
   stays in the spoil: digging dry earth does not make a pond). A gallery dug below the water table fills at the seepage rate:
-  slowly in granite (a drip), in hours in earth, very fast in gravel. The
-  diggers (`core/designation.h`) are warned before they dig into a soaked
-  block next to a lake: the walls of a gallery show how damp they are
-  (dry, damp, wet, dripping, from the share of their room).
+  slowly in granite (a drip), in hours in earth, very fast in gravel. A
+  digging order on a block that would let water in shows a blue drop
+  (`designation_lets_water_in()`, `groundwater_dig_floods()`): the water
+  table stands 10 cm or more over the floor the gallery would have, or open
+  water that deep lies beside it. The inspector tells how damp a block is
+  (dry, damp, wet, soaked, from the share of its room).
 - **Wells.** A shaft dug down to below the water table fills up to it: a
   well (drawing water from it needs a bucket, with containers, M4).
-- **Cellars.** A cellar dug in a clay hillside stays dry, one dug under a
-  meadow by the river floods in spring.
-- **Mud.** A floor of soil whose bucket is saturated is mud: walked at ×1.3
-  *(tuning)*.
+- **Cellars.** The water table lies at the lakes' level, 1.6 m under the
+  plains (§5.3): a cellar dug one level down in the plains reaches 40 cm
+  under it and floods to there in a day; one dug in a hill stays dry. *(A
+  table falling away from open water was tried, so that cellars in the
+  plains stay dry: it is not at rest. The beds of sand and gravel carry the
+  lakes' level under the whole plain within days, at a high cost. Keeping
+  water out of a cellar, lining it with clay or draining it, is for W5.)*
+- **Mud.** A floor of soil, rich soil or silt (not sand nor gravel) whose
+  root zone reaches moisture 1.8 turns to mud, firm again below 1.6, never
+  while frozen (`Map.mud`, set by the soil each hour, `soil_settle_mud()` at
+  the start): walked at ×1.3 *(tuning)*, drawn as a wet brown veil with a
+  few glistening puddles, told by the inspector. A few hours of heavy rain
+  turn most of the soil to mud; it firms up within half a day once it stops,
+  but in the wet hollows.
 - **Views.** The moisture view (key K) shows the blocks too: the walls of
   galleries on the level shown, and the inside of the ground when the
   view cuts through it.
 - **Later**: soaked earth caving in more easily, deep roots of trees
   drawing from the blocks, frost heave.
 
-### 5.6 As built (W4a–W4c), and what is left
+### 5.6 As built (W4), and what is left
 
 `core/groundwater.h` and `Map.pore` (a `uint16_t` per tile, in 1/64 mm,
 `MAP_PORE_FINE`), saved with the map:
@@ -701,21 +713,31 @@ water table comes close to it.
   wet, soaked, with the share of its room).
 - **Layers written directly** (tests, scenarios) move no water:
   `map_topology_changed()` brings every pore within the room of its rock.
+- **The edges.** Free water the ground gives or takes on an edge tile goes
+  through `water_exchange_here()`: the land beyond does not get it too, as
+  it gets the weather (`water_exchange()`). It did at first: a spring on an
+  edge tile was copied into the basin beyond, which poured it back, and
+  water came in without end (the free water of a map doubled in ten days).
+- **W4d**: mud (§5.5), the moisture view colouring the porous blocks on the
+  level shown on the same scale as the soil (`groundwater_moisture()`: 0
+  dry, 1 at field capacity, 2 full: the walls of galleries, the inside of
+  the ground where the level cuts it), the blue drop on digging orders that
+  let water in.
 
-Cost (`bench_simulation 12 4 1`, against W3c-3 on the same machine): 8.8 s
-of processor time instead of 7.25 s (+21 %), p50 25 µs a tick instead of
+Cost (`bench_simulation 12 4 1`, against W3c-3 on the same machine): 8.4 s
+of processor time instead of 7.25 s (+16 %), p50 24 µs a tick instead of
 18. The hourly pass over every solid tile is most of it: tiles holding
 nothing above their field capacity beside others alike are skipped, but a
 saturated tile still works out its head by walking up to the top of its
 table, for each of its neighbours. The surface water costs less than before
-(962 blocks woken instead of 1 232): springs fall to the foot of their cliff
+(932 blocks woken instead of 1 232): springs fall to the foot of their cliff
 and lakes are fed per block. Left to try if it matters: a head per column
 and hour, worked out once.
 
-Left for **W4d**: mud on a saturated floor, wells (a shaft filling is
-already there; drawing from it needs containers), the moisture view showing
-the walls of galleries and the inside of the ground, the diggers' warning
-before a soaked block next to a lake, items from clay and gravel.
+Left for later: drawing water from a well (a shaft filling is already
+there; drawing needs containers, M4), items from clay, gravel and sand (with
+pottery and paths), keeping water out of a cellar (W5), muddy feet carrying
+dirt indoors.
 
 ## 6. What water changes
 
@@ -1049,8 +1071,12 @@ Each step is tested, measured against the baseline (`bench_simulation`,
      rise, the banks only over no ground, cracks into the block under them,
      the inspector's row. Tests: the root zone draining, a high table
      keeping the ground wet.
-   - **W4d, what it changes**: mud, wells, the moisture view, the diggers'
-     warning, clay and gravel items (§5.6).
+   - **W4d, what it changes (done)**: mud, the moisture view of the
+     blocks, the diggers' warning; a spring on an edge tile no longer
+     copied beyond the edge. Tests: soaked soil turning to mud and firming
+     up, frost, sand; the moisture of a block; digging that lets water in
+     and the block each order digs; the table at the lakes' level. Wells
+     (drawing) and clay and gravel items later (§5.6).
 6. **W5, water in play.** Floodgates, dams of earth, cisterns, irrigation
    ditches (with farming), floating items carried away, alerts (the river
    rising, a gallery flooding), settlers keeping out of rising water.

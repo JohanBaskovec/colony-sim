@@ -55,7 +55,8 @@ Saved: the map and all its layers, revisions and logs; every module of
 crowns, corpses, stockpiles, workstations and bills, construction sites,
 beds, reservations, item moves, the clock's tick, every random stream,
 temperatures, soil, the water's active blocks and their flows, the land
-beyond the map's edges, the pore water of the ground (`Map.pore`) with the
+beyond the map's edges, the pore water of the ground (`Map.pore`) and the
+mud (`Map.mud`) with the
 water table beyond the edges and what the ground gave to sleeping lakes
 this hour (`GroundWater.pending`), the light's
 sweeps, the vision and the known world while the fog is on, weather, the

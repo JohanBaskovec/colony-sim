@@ -220,6 +220,11 @@ size_t water_surface_index(const Map *map, size_t index);
  * change of class in a sleeping block (an active one tells it as the flow does). Returns the change
  * made. False never: a block that cannot wake (out of memory) wakes at the next change. */
 int32_t water_exchange(Water *water, Map *map, size_t index, int32_t fine);
+/* The same for water that comes from or goes to under the map's ground
+ * (core/groundwater.h): on an edge tile the land beyond does not get it too,
+ * as it gets the weather (the ground trades with the land beyond on its
+ * own). */
+int32_t water_exchange_here(Water *water, Map *map, size_t index, int32_t fine);
 
 /* The water of a tile in mm, with its fraction. */
 float water_mm_at(const Water *water, const Map *map, size_t index);

@@ -1,6 +1,7 @@
 #include "core/designation.h"
 
 #include "core/gather_zone.h"
+#include "core/groundwater.h"
 #include "core/i18n.h"
 #include "core/tree.h"
 #include "core/util.h"
@@ -194,6 +195,17 @@ void designation_target(const Map *map, int *x, int *y, int *z)
         *x = tree.x;
         *y = tree.y;
         *z = tree.z;
+    }
+}
+
+bool designation_lets_water_in(const Map *map, DesignationType type, int x, int y, int z)
+{
+    switch (type) {
+    case DESIGNATION_MINE:
+    case DESIGNATION_DIG:
+    case DESIGNATION_DIG_RAMP: return groundwater_dig_floods(map, x, y, z);
+    case DESIGNATION_DIG_DOWN: return groundwater_dig_floods(map, x, y, z - 1);
+    default: return false;
     }
 }
 

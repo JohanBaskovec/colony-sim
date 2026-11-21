@@ -73,12 +73,20 @@ void render_forbidden_markers(SDL_Renderer *renderer, const Game *game, const Ca
  * is outlined. */
 void render_item_moves(SDL_Renderer *renderer, const Game *game, const Camera *camera);
 
+/* Blue drops on the tiles of a rectangle where an order of this type would
+ * let water in (designation_lets_water_in()), on the level shown. */
+void render_designation_warnings(SDL_Renderer *renderer, const Game *game, const Camera *camera,
+                                 int x0, int y0, int x1, int y1, DesignationType type);
+
 /* Rectangle of tiles being forbidden (red) or allowed (green) with the tool. */
 void render_forbid_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                         int y1, bool forbid);
 
 /* Dark spots on dirty tiles. */
 void render_dirt(SDL_Renderer *renderer, const Dirt *dirt, const Camera *camera);
+
+/* Mud (Map.mud): a wet brown veil with a few glistening puddles. */
+void render_mud(SDL_Renderer *renderer, const Map *map, const Camera *camera);
 
 /* Snow lying on open ground (Weather.snow), under everything on it. */
 void render_snow_cover(SDL_Renderer *renderer, const Game *game, const Camera *camera);
